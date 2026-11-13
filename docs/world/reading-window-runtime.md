@@ -112,7 +112,7 @@ only for a player viewer (no dead check). Action 94 (set a written item's first 
   every text of the panel has an explicit size (none under 9 px); the header lines (a telegram's form in Courier10, a newspaper's masthead in its
   fonts) are one label each at their original font's size with the text-only whole factor for a font under 9 px (Garmond8 → 16 px, Garmond6 → 12 px:
   `AreaReadingText.HeaderLinePx`, `AreaUiScale.TextOnlyFactor`; `AreaReadingView.HeaderFonts`). Tests `AreaReadingTextTests`, `AreaUiScaleTests`.
-- **Original look (ARC-UI-1877, ledger WR17–WR23):** when the window's art and fonts read (the arts 494, 231, 477, 489, 487, 491, 633, 495, 496 and the fonts the texts need, all or nothing) the
+- **Original look (ARC-UI-1877, ledger WR17–WR23):** when the window's art and fonts read (the arts 494, 231, 477, 489, 487, 491, 633, 495, 496 and the fonts 479–485 and 497, all or nothing; a markup font that did not read draws in 497) the
   window is the original's: 800 × 399 docked under the top strip at the bars' whole factor, the frame 494 at (0, 0), the background art of the kind at (132, 0) (a picture's own art; 817 for the
   alternate newspaper prototype), the hero's round view in the lens (art 231 over (25, 24, 89 × 89); a left release inside it closes the window) and a book's previous and next buttons (arts 495 and
   496 at (213, 77) and (675, 77), shown only when there is such a page). The text is the game's own in the original's fonts (`AreaReadingFlow`): a book flows its messages over pages of 200 × 290 at

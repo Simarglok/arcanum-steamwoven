@@ -27,7 +27,7 @@ public sealed class AreaReadingData
 
 public sealed record AreaReadingDataLoad(AreaReadingDataStatus Status, AreaReadingData? Data, string Detail);
 
-/// <summary>ARC-UI-1877: one message of the original-look window: its decoded text (after the markup), the font art the markup names (0 when none) and
+/// <summary>ARC-UI-1877: one message of the original-look window: its text as stored, one character a byte (after the markup), the font art the markup names (0 when none) and
 /// whether it is centred.</summary>
 public sealed record AreaReadingMessage(string Text, int Font, bool Centred);
 
@@ -102,7 +102,7 @@ public static class AreaReading
         if (!document.Readable || document.Subtype is not { } subtype) return null;
         var header = document.Header.Select(h => Decode(h.Text, profile)).ToArray();
         var headerFonts = document.Header.Select(h => document.Subtype == WrittenSubtype.Telegram ? TelegramFont : h.Font).ToArray();
-        var art = ArtDocument(document, subtype, texts, profile, rules);
+        var art = ArtDocument(document, subtype, texts, rules);
         if (subtype == WrittenSubtype.Picture)
             return new(subtype, document.BackgroundArt, header, "", "", 0, 1, document.PictureArt, "the picture is interface art " + document.PictureArt + " (not drawn here)", headerFonts, art);
         var body = document.Body.Select(m => (m.Centered ? "[centred] " : "") + Decode(m.Text, profile)).ToList();
@@ -119,9 +119,10 @@ public static class AreaReading
     }
 
     /// <summary>ARC-UI-1877: the structure the original-look window draws (decoded messages, fonts, centring, the newspaper's filler).</summary>
-    private static AreaReadingArtDocument ArtDocument(WrittenDocument document, WrittenSubtype subtype, WrittenTexts texts, MesTextProfile profile, WrittenRuleProfile? rules)
+    private static AreaReadingArtDocument ArtDocument(WrittenDocument document, WrittenSubtype subtype, WrittenTexts texts, WrittenRuleProfile? rules)
     {
-        AreaReadingMessage Message(WrittenMessage message) => new(Decode(message.Text, profile), message.Font, message.Centered);
+        // The art fonts draw the game's bytes (a glyph is the frame of byte − 31), so the text stays the Latin-1 string as stored, not the viewer's decoded text.
+        AreaReadingMessage Message(WrittenMessage message) => new(message.Text, message.Font, message.Centered);
         var body = document.Body.Select(Message).ToArray();
         var fillers = subtype == WrittenSubtype.Newspaper
             ? texts.NewspaperFiller(document.StartLine, NewspaperFillerForArt, rules).Select(Message).ToArray() : [];

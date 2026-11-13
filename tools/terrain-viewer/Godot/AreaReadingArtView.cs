@@ -20,6 +20,7 @@ public partial class AreaReadingArtView : Control
     private IReadOnlyList<AreaReadingPage> _pages = [];
     private IReadOnlyList<AreaReadingLine> _single = [];
     private int _spread;
+    private Texture2D? _picture;
     private int _hoverPage = -2, _pressedPage = -2;
     // The round view of the hero shows under the lens, so the frame art leaves its square out (the original's copy replaces it, as in the logbook's side panel).
     private bool _lensCut;
@@ -76,12 +77,14 @@ public partial class AreaReadingArtView : Control
         // The generated interface paints the window's frames at this window's own device scale (the control's scale, the canvas transform's and the viewport's stretch), and the view redraws
         // when a worker's finished frame replaces the one it drew (it draws the textures in its own _Draw).
         _onTextureChanged ??= () => { if (GodotObject.IsInstanceValid(this)) QueueRedraw(); };
-        foreach (var texture in art.Values.SelectMany(frames => frames))
-        {
-            if (texture is not HdInterfaceTexture hd) continue;
-            hd.ScaleSource = DeviceScale;
-            if (_watched.Add(hd)) hd.Changed += _onTextureChanged;
-        }
+        foreach (var texture in art.Values.SelectMany(frames => frames)) Watch(texture);
+    }
+
+    private void Watch(Texture2D? texture)
+    {
+        if (texture is not HdInterfaceTexture hd || _onTextureChanged is null) return;
+        hd.ScaleSource = DeviceScale;
+        if (_watched.Add(hd)) hd.Changed += _onTextureChanged;
     }
 
     private readonly HashSet<HdInterfaceTexture> _watched = [];
@@ -109,6 +112,9 @@ public partial class AreaReadingArtView : Control
         _view = view;
         _spread = 0;
         AreaArtFont FontOf(int number) => Face(number).Font;
+        // A picture's art (the written item's own number) is read when the window shows it, not inside the draw, and watched like the others.
+        _picture = document.Subtype == WrittenSubtype.Picture ? Picture?.Invoke(document.BackgroundArt)?.FirstOrDefault() : null;
+        Watch(_picture);
         if (document.Subtype == WrittenSubtype.Book) { _pages = AreaReadingFlow.BookPages(document.Body, FontOf); _single = []; }
         else { _pages = []; _single = AreaReadingFlow.Single(document, FontOf); }
         Visible = true;
@@ -123,7 +129,7 @@ public partial class AreaReadingArtView : Control
 
     public void CloseView()
     {
-        Visible = false; _view = null; _lensCut = false; _pages = []; _single = []; _spread = 0;
+        Visible = false; _view = null; _lensCut = false; _pages = []; _single = []; _spread = 0; _picture = null;
         (_hoverPage, _pressedPage) = (-2, -2);
     }
 
@@ -165,7 +171,7 @@ public partial class AreaReadingArtView : Control
         _drawnScale = DeviceScale();
         if (Texture(AreaReadingArtLayout.FrameArt) is { } frame) Frame(frame);
         var corner = AreaReadingArtLayout.BackgroundCorner;
-        var background = document.Subtype == WrittenSubtype.Picture ? Picture?.Invoke(document.BackgroundArt)?.FirstOrDefault() : Texture(document.BackgroundArt);
+        var background = document.Subtype == WrittenSubtype.Picture ? _picture : Texture(document.BackgroundArt);
         if (background is not null) DrawTextureRect(background, new Rect2(corner.X, corner.Y, background.GetWidth(), background.GetHeight()), false);
         // The lens's art over the copy of the game view (the view-window mode's copy, then the art, as in the logbook).
         if (Texture(AreaReadingArtLayout.LensArt) is { } lens)

@@ -178,7 +178,7 @@ public static class AreaReadingFlow
     }
 
     /// <summary>0x56C800: the fit test. The whole text when its height fits <paramref name="rect"/> (<see cref="Fit.Amount"/> the height); else the longest prefix that ends after a space or a line
-    /// feed (the last character of the text is not a break) whose height, measured without that break character, still fits (<see cref="Fit.Amount"/> the characters drawn, 0 when no break fits).</summary>
+    /// feed (every character is tried, the last included: the loop's bound is the length) whose height, measured without that break character, still fits (<see cref="Fit.Amount"/> the characters drawn, 0 when no break fits).</summary>
     public static Fit FitText(AreaArtFont font, int fontArt, string text, bool centred, AreaReadingRect rect)
     {
         ArgumentNullException.ThrowIfNull(font);
@@ -186,7 +186,7 @@ public static class AreaReadingFlow
         var whole = Height(font, text, rect.Width);
         if (rect.Height >= whole) return new(true, whole, Draw(font, fontArt, text, rect, centred));
         var cut = 0;
-        for (var i = 0; i < text.Length - 1; i++)
+        for (var i = 0; i < text.Length; i++)
         {
             if (text[i] is not (' ' or '\n')) continue;
             if (rect.Height < Height(font, text[..i], rect.Width)) break;

@@ -279,13 +279,14 @@ public partial class TerrainViewerApp
             var artSpreads = shownLook.Spreads;
             if (shownLook.HasNext) { InventoryKey(Key.Right); Require(shownLook.SpreadIndex == 1 && _readingSounds.Last() == BookPageSound, "Right turned a spread (3010)"); InventoryKey(Key.Left); Require(shownLook.SpreadIndex == 0, "Left turned back"); }
             else Require(view!.Subtype != WrittenSubtype.Book || artSpreads == 1, "a book with no next button has one spread");
-            await ReadingLookCaptureAsync(session, data, readable.Select(p => p.Value).ToArray());
             InventoryKey(Key.Escape);
             Require(ReadingOpen, "Escape does not close the reading window");
             Require(MainMenuOpen, "Escape opened the menu"); InventoryKey(Key.Escape); Require(ReadingOpen && !MainMenuOpen, "Escape continued play: the window is still open");
             CloseReadingByPlayer();
             Require(!ReadingOpen && _readingSounds.Last() == BookCloseSound, "the player's close closed it (3009)");
             Require(session.Version.Revision == revision, "the live session is untouched");
+            // ARC-UI-1877: the opt-in captures open and close their own windows, so they run after the checks above.
+            await ReadingLookCaptureAsync(session, data, readable.Select(p => p.Value).ToArray());
             GD.Print("ARC-UI-049 native-smoke reading PASS " + System.Text.Json.JsonSerializer.Serialize(new {
                 Data = _readingData.Detail, Readable = readable.Length, Views = views, WithUseScript = scripted, Item = chosen.Key, Subtype = view!.Subtype.ToString(),
                 Spreads = view.Spreads, ArtSpreads = artSpreads, Look = _readingPanel!.ArtMode ? "original" : "diagnostic", Composed = composition.Composed, Lines = composition.Lines, Pages = composition.Pages,
@@ -315,11 +316,13 @@ public partial class TerrainViewerApp
             {
                 var book = AreaReadingFlow.BookPages(art.Body, FontOf);
                 pages += book.Count;
-                if (book.Count > AreaReadingArtLayout.MaxPages) outside++;
                 placed = book.SelectMany(page => page.Lines).ToArray();
             }
             else placed = AreaReadingFlow.Single(art, FontOf);
             composed++; lines += placed.Count;
+            // A document with text and no line drawn would be a wrong flow (a font without height, a rectangle too small): counted with the lines outside the window.
+            var hasText = art.Subtype != WrittenSubtype.Picture && (art.Body.Any(message => message.Text.Length > 0) || art.Joined.Length > 0);
+            if (hasText && placed.Count == 0) outside++;
             foreach (var line in placed)
             {
                 var font = FontOf(line.Font);

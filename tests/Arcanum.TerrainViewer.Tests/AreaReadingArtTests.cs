@@ -125,6 +125,10 @@ public sealed class AreaReadingArtTests
         Assert.AreEqual((false, 6, 2), (feed.Whole, feed.Amount, feed.Lines.Count));
         var end = AreaReadingFlow.FitText(font, 481, "ab cd ", false, new(0, 0, 100, 5));
         Assert.IsFalse(end.Whole);
+        // The scan tries the last character too (the loop's bound is the length, 0x56C800): the text "ab cd\n" measures two lines (the line feed adds one) and a rectangle of one line keeps
+        // all of it, cut at the line feed after "ab cd"; stopping one short would keep "ab " only.
+        var last = AreaReadingFlow.FitText(font, 481, "ab cd\n", false, new(0, 0, 100, 10));
+        Assert.AreEqual((false, 6, 1), (last.Whole, last.Amount, last.Lines.Count));
     }
 
     [TestMethod]
@@ -146,8 +150,7 @@ public sealed class AreaReadingArtTests
         var rest = pages[0].Next!.Value;
         Assert.IsTrue(rest.Offset > 0 && rest.Offset % 5 == 0, "it is cut after a space: offset " + rest.Offset);
         // The messages' lines follow one another: the second message starts under the first.
-        var first = pages[0].Lines.TakeWhile(l => l.Y < 57 + 290).Count();
-        Assert.IsTrue(first > 0);
+        Assert.AreEqual(57 + 7 * 10, pages[0].Lines[7].Y, "the first message takes seven lines and the second starts right under it");
     }
 
     [TestMethod]
@@ -259,7 +262,7 @@ public sealed class AreaReadingArtTests
     public void A_view_carries_the_structure_the_original_look_draws()
     {
         var texts = WrittenTexts.Create(
-            Mes("{100}{12 First}{101}{1c Second}{300}{No markup}"),
+            Mes("{100}{12 First}{101}{1c Second}"),
             Mes("{200}{Note A}{201}{Note B}"),
             Mes("{0}{Mast A}{1}{Mast B}{2}{Mast C}{3}{Mast D}{4}{Mast E}{5}{Mast F}{10}{2 Filler ten}{11}{2 Filler eleven}{1300}{3 Headline}{1301}{4 Column}"),
             Mes(string.Concat(Enumerable.Range(1000, 12).Select(n => $"{{{n}}}{{H{n}}}")) + "{1012}{ STOP}{400}{Arrive}"),
