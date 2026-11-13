@@ -1008,11 +1008,11 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     /// reaction by AI parameter 9 (<see cref="GameSessionOwner.ReactToPcHit"/>, ARC-WORLD-021's profile: added in the Original setting, taken in Steamwoven; an accidental one
     /// changes nothing); then the follow check runs with the follower limit ignored (<see cref="GameSessionOwner.CheckFollowerAfterHit"/>, 0x4AD950): a refusal makes the
     /// follower leave and sets NPC flag 0x20 (JILTED) and it says the refusal line of its reason (ARC-AI-1585: through <see cref="FollowerSpeaks"/>; the range is also traced), and a follower that stays (the check passed, or the leave was refused) says the accidental-attack line (lines 2300-2399) one time in three
-    /// (0x413DF0, through <see cref="FollowerSpeaks"/>) when it is active (0x4AD800 is not read yet: the active test 0x45D790 stands for it). The leave is seen by
+    /// (0x413DF0, through <see cref="FollowerSpeaks"/>) when it is active (0x45D790; the can-speak test 0x4AD800 with flag 1 is the speaker's: its tail skips the combat focus and the interrupt, <see cref="Arcanum.Simulation.Reaction.CanSpeakRules.Tail"/>). The leave is seen by
     /// <see cref="ObserveLeaves"/> at the next look. Without the check's facts (the scene gives none) only the reaction changes.
     /// </summary>
     [OriginalFunction(0x413DF0, OriginalFunctionScope.Partial)]
-    private void HitFollower(string victim, bool deliberate)
+    internal void HitFollower(string victim, bool deliberate)
     {
         var changed = false;
         if (deliberate && ReactionFacts(victim) is { } facts && Row(victim) is { } row)
@@ -1064,6 +1064,20 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     public Action<string, LoyaltyLines>? FollowerSpeaks { get; set; }
 
     private void Speak(string follower, LoyaltyLines lines) => FollowerSpeaks?.Invoke(follower, lines);
+
+    /// <summary>
+    /// ARC-AI-1677: a follower that left by the loyalty step (<see cref="GameSessionOwner.RunLoyaltyStep"/>, not by the hero's hit) sets JILTED and, when it is active and a line
+    /// callback exists, says the refusal line of its reason (the same line as the hit's leave) through <see cref="FollowerSpeaks"/>. Returns the line range asked, or null when the step did not leave, the
+    /// follower is not active or nobody listens. The can-speak test with flag 1 (its head and the viewer's float, <see cref="Arcanum.Simulation.Reaction.CanSpeakRules.Tail"/> for the rest) is the speaker's.
+    /// </summary>
+    /// <remarks>The leave branch of 0x4AC380 (its registry row names the step rule): JILTED, the active test 0x45D790, then 0x413A90.</remarks>
+    public LoyaltyLines? SayLoyaltyLeave(string follower, LoyaltyStepResult step)
+    {
+        ArgumentNullException.ThrowIfNull(follower);
+        if (step.RefusalLines is not { } lines || FollowerSpeaks is null || !Active(follower)) return null;
+        Speak(follower, lines);
+        return lines;
+    }
 
     /// <summary>
     /// ARC-AI-1527 (0x4B6B90 → 0x4AE9E0, the end of one attack): the combat taunt of the PC's followers. <see cref="FollowerRules.TauntKindOf"/> asks the kind of the attack's facts; then

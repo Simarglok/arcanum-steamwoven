@@ -164,11 +164,21 @@ public partial class TerrainViewerApp
             var victim = step.Victim == SessionSpellCaster.Hero ? HeroFloater : step.Victim;
             var attacker = step.Attacker is null ? victim : step.Attacker == SessionSpellCaster.Hero ? HeroFloater : step.Attacker;
             Float(AreaCombatFloaters.Of(step, FloaterSideOf(victim)), attacker, victim);
-            // ARC-AI-1638 (0x4B4390 asks 0x4AEAB0 for every damage): a follower a spell, trap or burn step brings below a fifth says its near-death line; a script's step asked it already in its answer.
-            if (!step.FromScript && step.Victim != SessionSpellCaster.Hero && FollowerHurt(step.Victim, step.Life) is { } near)
-                GD.Print($"ARC-AI-1638 near-death follower={near.Speaker} lines={near.Lines.First}-{near.Lines.Last} after-cast-step attacker={step.Attacker ?? "-"}");
         }
         foreach (var award in caster.TakeExperienceAwards()) LevelAreaFollowers(award);
+    }
+
+    // ARC-AI-1638, ARC-AI-1680 (0x4B4390 asks 0x4AEAB0 inside the damage step, at the moment of each hit):
+    /// <summary>
+    /// The cast host's callback for a spell, trap or burn step that has just landed. A follower it brings below a fifth says its near-death line then, so its can-speak gate reads
+    /// the state after this step and not after a later step of the same frame; a script's step asked it already in its answer.
+    /// </summary>
+    private void AskNearDeathOfCastStep(SessionSpellDamageStep step)
+    {
+        // A caster left over from another session (a quick load) asks nothing against the new one.
+        if (step.FromScript || step.Victim == SessionSpellCaster.Hero || _spellCaster is not { } caster || !ReferenceEquals(caster.Owner, _areaSession)) return;
+        if (FollowerHurt(step.Victim, step.Life) is { } near)
+            GD.Print($"ARC-AI-1638 near-death follower={near.Speaker} lines={near.Lines.First}-{near.Lines.Last} at-cast-step attacker={step.Attacker ?? "-"}");
     }
 
     /// <summary>Each frame: a new scene drops the lines; otherwise they rise (every 50 ms or more) and are drawn where their objects are.</summary>
