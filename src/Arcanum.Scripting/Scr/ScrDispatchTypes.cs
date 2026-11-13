@@ -29,7 +29,7 @@ public enum ScrSource { Object, Tile, Sector }
 /// <summary>The attachment points (0..35) the dispatcher treats by name.</summary>
 public static class ScrPoint
 {
-    public const int Examine = 0, Destroy = 2, Use = 1, Dialog = 9, FirstHeartbeat = 10, Dying = 12, EnterCombat = 13, ExitCombat = 14, Heartbeat = 19, TakingDamage = 23, LeaderSleeping = 29, Bust = 30, DialogOverride = 31, Count = 36,
+    public const int Examine = 0, Destroy = 2, Use = 1, Dialog = 9, FirstHeartbeat = 10, Dying = 12, EnterCombat = 13, ExitCombat = 14, Raise = 18, Heartbeat = 19, TakingDamage = 23, LeaderSleeping = 29, Bust = 30, DialogOverride = 31, Count = 36,
         // ARC-MAGIC-042 (TI4): the weapon's hit (7) and miss (8) points, run for a thrown item's strike or landing.
         Hit = 7, Miss = 8,
         // ARC-SCRIPT-1483: the attacker's critter-hits point (26) and the weapon's critical-hit point (34), run from the hit step with the hit point (7).
@@ -271,6 +271,22 @@ public interface IScrCritterStateQueries
 
     /// <summary>Obj is monster of type (c19, ARC-SCRIPT-1771, case 19, ledger CS13): the art id stored in object field 0x18 is a monster art (type 0xC, the top four bits) whose monster number (bits 23..27, 0x503F20) equals the number; false for any other art; null for an object the host does not know or whose art field it cannot read.</summary>
     bool? IsMonsterOfType(ScrObjectRef obj, int type);
+}
+
+/// <summary>
+/// ARC-SCRIPT-1772 (ledger CQ1–CQ3): the getters of <see cref="ScrAdmissionSet.CritterFieldActions"/>. The original answers each from the object's own field when the object is an NPC (type 0x10) and 0 for every other object type (0x45D010 social class field 0x128,
+/// 0x45D290 origin field 0x123, 0x45D080 faction field 0x124). A host whose admission set holds one of them implements this interface. An answer is null when the host does not know the object (the dispatch ends not modelled, nothing applied).
+/// </summary>
+public interface IScrCritterFieldQueries
+{
+    /// <summary>Get social class (38): the NPC's social class (field 0x128), 0 for any other object type.</summary>
+    int? SocialClassOf(ScrObjectRef obj);
+
+    /// <summary>Get origin (39): the NPC's origin (field 0x123) as it is now (a dialog action's set origin over the map data's), 0 for any other object type.</summary>
+    int? OriginOf(ScrObjectRef obj);
+
+    /// <summary>Get faction (89): the NPC's faction (field 0x124) as it is now (a script's set faction over the map data's), 0 for any other object type.</summary>
+    int? FactionOf(ScrObjectRef obj);
 }
 
 /// <summary>
@@ -531,6 +547,10 @@ public enum ScrObjectStateChange
     DestroyItemNamed,
     /// <summary>ARC-SCRIPT-1164 (E5-b, ledger WO8): toggle item inventory display (127) of <see cref="ScrObjectStateRequest.Object"/> (the first object of operand 0, an item of type 5..14): bit 0x10 of its item flags (field 0x57) is flipped.</summary>
     ToggleItemInventoryDisplay,
+    /// <summary>ARC-SCRIPT-1772 (ledger CQ4, exe 0x447220 case 0x39): toggle invulnerability (57) of each object of its operand in list order: object flag 0x400000 (field 0x13) is set when clear and cleared when set, by the plain flag write (0x4EFF50, 0x4EFEE0 over 0x43D0E0, 0x43D280).</summary>
+    ToggleInvulnerability,
+    /// <summary>ARC-SCRIPT-1772 (ledger CQ5, case 0x5C): rename (92) of <see cref="ScrObjectStateRequest.Object"/>, the first object of operand 0: its name number (field 0x16, the class the name conditions compare, not display text) becomes <see cref="ScrObjectStateRequest.Value"/> as read, with no type test.</summary>
+    Rename,
 }
 
 /// <summary>ARC-SCRIPT-1164 (E5-b): which game state a <see cref="ScrWorldRequest"/> changes.</summary>
@@ -1037,6 +1057,8 @@ public sealed record ScrRunOptions
             throw new ArgumentException("A set with the animal condition needs a host that implements IScrCritterQueries.", nameof(Admission));
         if (host is not IScrCritterStateQueries && Admission.Conditions.Any(c => ScrAdmissionSet.CritterStateConditions.Contains(c) || ScrAdmissionSet.CritterTailQueryConditions.Contains(c)))
             throw new ArgumentException("A set with a critter-state condition (or bad associates, monster of type) needs a host that implements IScrCritterStateQueries.", nameof(Admission));
+        if (host is not IScrCritterFieldQueries && Admission.Actions.Any(ScrAdmissionSet.CritterFieldActions.Contains))
+            throw new ArgumentException("A set with a critter getter (social class, origin, faction) needs a host that implements IScrCritterFieldQueries.", nameof(Admission));
         if (host is not IScrStatAdjustQueries && Admission.Actions.Contains(ScrCatalogue.Action.AdjustStat))
             throw new ArgumentException("A set with adjust stat needs a host that implements IScrStatAdjustQueries.", nameof(Admission));
         if (host is not IScrMagickTechQueries && Admission.Actions.Contains(ScrCatalogue.Action.GetMagickTechAdjustment))

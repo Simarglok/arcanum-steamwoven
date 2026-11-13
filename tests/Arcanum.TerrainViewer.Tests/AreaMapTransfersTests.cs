@@ -36,6 +36,33 @@ public sealed class AreaMapTransfersTests
         [77] = new(77, 5076, "elsewhere"),
     };
 
+    // ARC-WORLD-1805 (TT18, TT20): a door or window is no use trigger of the map transfers; the door's use node queues the teleport its script asked for.
+    [TestMethod]
+    public void A_door_is_no_use_trigger_and_its_scripts_teleport_is_queued_through_the_door_entry()
+    {
+        var (map, row) = Load();
+        var asDoor = Use(row, 77, new(5, 6)) with { Object = new(WorldSectorCoordinate.TryFromId(row.Key.Sector!.Value, out var sector) ? sector : default, row.Key.SourceIndex, row.Key.ObjectIdSha256, AreaMapTransfers.PortalObjectType, row.PrototypeNumber) };
+        var transfers = new AreaMapTransfers(map, Set(map, asDoor, asDoor with { Guards = MapTransitionGuard.ConditionalPath, Script = 11, Chain = [11] }), Destinations(map));
+        Assert.AreEqual(0, transfers.Triggers.Count);
+        Assert.AreEqual(0, transfers.ScriptedTriggers.Count);
+        Assert.AreEqual(0, transfers.Unmatched);
+        var pc = new ScrObjectRef(map.RuntimeMap, "pc");
+        Assert.AreEqual(AreaUseOutcome.NotATrigger, transfers.RequestUse(row.Key, new(row.WorldX!.Value, row.WorldY!.Value)).Outcome);
+        var elsewhere = new ScrTeleport(pc, 5076, 5, 6);
+        Assert.IsNull(transfers.DoorTeleportRefusal(row, elsewhere));
+        Assert.IsNotNull(transfers.DoorTeleportRefusal(row, new(pc, 5001, 1, 1)), "a map the mode cannot open refuses");
+        var queued = transfers.QueueDoorTeleport(row, 710, elsewhere);
+        Assert.AreEqual(AreaUseOutcome.Accepted, queued.Outcome, queued.Reason);
+        Assert.AreEqual(new AreaMapTransfer(queued.Site!, map.RuntimeMap, new(77, 5076, "elsewhere"), new(5, 6), row.Key), transfers.Pending);
+        Assert.AreEqual((MapTransitionTrigger.Use, 710), (transfers.Pending!.Site.Trigger, transfers.Pending.Site.Script));
+        // TR4: while the hero's change is pending, another request is refused and its teleport dropped (no refusal asked of the caller).
+        Assert.AreEqual(AreaUseOutcome.TransitionPending, transfers.QueueDoorTeleport(row, 710, elsewhere).Outcome);
+        Assert.IsNull(transfers.DoorTeleportRefusal(row, new(pc, 5001, 1, 1)));
+        Assert.AreEqual(77, transfers.Clear()!.To.Runtime);
+        Assert.AreEqual(AreaUseOutcome.DestinationUnavailable, transfers.QueueDoorTeleport(row, 710, new(pc, 5001, 1, 1)).Outcome);
+        Assert.IsNull(transfers.Pending);
+    }
+
     [TestMethod]
     public void A_use_within_range_queues_one_transfer_to_a_map_the_mode_can_open()
     {

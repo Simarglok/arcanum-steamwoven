@@ -6,18 +6,18 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace Arcanum.TerrainViewer.Tests;
 
-/// <summary>ARC-SCRIPT-1163 (E5-a, ledger NS1–NS8): the use, placed, heartbeat and dying sets hold the eight NPC state actions the area hosts apply and not change art number (59); the opt-in check counts the installed scripts
+/// <summary>ARC-SCRIPT-1163 (E5-a, ledger NS1–NS8): the use, placed, heartbeat and dying sets hold the nine NPC state actions the area hosts apply (change art number 59 since ARC-SCRIPT-1735); the opt-in check counts the installed scripts
 /// that use one of the nine actions and how many each set admits whole.</summary>
 [TestClass]
 public sealed class AreaNpcStateScriptAdmissionTests
 {
     [TestMethod]
-    public void The_use_placed_heartbeat_and_dying_sets_hold_the_eight_applied_actions_and_not_change_art()
+    public void The_use_placed_heartbeat_and_dying_sets_hold_the_nine_applied_actions_change_art_included()
     {
         foreach (var set in new[] { AreaUseScriptHost.Admission, AreaUseScriptHost.PlacedAdmission, AreaUseScriptHost.HeartbeatAdmission, AreaUseScriptHost.DyingAdmission })
         {
             foreach (var action in ScrAdmissionSet.NpcStateHostActions) Assert.IsTrue(set.Actions.Contains(action), $"{set.Id}: action {action}");
-            Assert.IsFalse(set.Actions.Contains(ScrCatalogue.Action.ChangeArtNumber), set.Id);
+            Assert.IsTrue(set.Actions.Contains(ScrCatalogue.Action.ChangeArtNumber), set.Id);
             Assert.IsTrue(set.IsSubsetOfBesidesStores(ScrAdmissionSet.S58), set.Id);
         }
         // The dialog host does not apply the requests yet: its sets stay without them.
@@ -57,6 +57,8 @@ public sealed class AreaNpcStateScriptAdmissionTests
         // ARC-SCRIPT-1279 (the four item commands got a host): the placed set admits 123 and the dying set 150 (3 more each); the use and heartbeat sets stay at 56 and 91.
         // ARC-SCRIPT-1359 (set S38, get location 95): the heartbeat set admits 94 and the dying set 153 (3 more each, among them the Crash Site agent's heartbeat 1717).
         // ARC-SCRIPT-1481 (set S43, the vitals commands and the use set's heal, destroy and magick-tech commands): the dying set admits one more.
-        Assert.AreEqual((270, 208, 56, 123, 94, 154), (withState, counts["S36"], counts["use"], counts["placed"], counts["heartbeat"], counts["dying"]));
+        // ARC-SCRIPT-1735 (change art number got its host, ledger NS5, NS9): the use set admits 85 (29 more), the placed set 163 (40 more), the heartbeat set 97 (3 more) and the dying set 205 (51 more), and with the set the later condition sets (S53 to S55) the placed set 168, the heartbeat set 98 and the dying set 214; whether a run applies is the host's, which refuses a
+        // target it cannot draw with another art before anything applies.
+        Assert.AreEqual((270, 208, 85, 168, 98, 214), (withState, counts["S36"], counts["use"], counts["placed"], counts["heartbeat"], counts["dying"]));
     }
 }

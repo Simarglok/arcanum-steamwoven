@@ -71,6 +71,9 @@ public sealed record AreaAiScene
     public Func<string, AreaObjectAttackTarget?>? ObjectAttackTarget { get; init; }
     /// <summary>The hero's world cell now, or null without a hero on this map.</summary>
     public required Func<CellCoord?> HeroCell { get; init; }
+    /// <summary>ARC-SCRIPT-1773 (CS5, AW3): the hero's current facing as the object rotation 0..7 (the octant the sight check compares: <see cref="GridActorMath.Octant"/>), for a sight check with the hero as the observer
+    /// (<see cref="AreaAiHost.ScriptCanSee"/>); null (the provider, or its answer): the hero's facing is not known, and that check stops as not modelled.</summary>
+    public Func<int?>? HeroRotation { get; init; }
     /// <summary>ARC-DEV-116 (MIG11 S5): whether the map list holds a map (the destination of an NPC's change of place, the original's map list lookup);
     /// null: only the shown map is listed.</summary>
     public Func<int, bool>? MapListed { get; init; }
@@ -130,6 +133,9 @@ public sealed record AreaAiScene
     /// <summary>ARC-WORLD-109: an NPC's map data's advancement sheet and its effects' modifiers (its skills for a skill attempt), or null
     /// when they cannot be read; null: no NPC has skills, so its heal attempt is refused.</summary>
     public Func<string, (SessionNpcAdvancement Loaded, AdvancementModifiers Modifiers)?>? NpcSheet { get; init; }
+    /// <summary>ARC-COMBAT-1776 (0x42A4E0): the lock a pick-locks goal's target names (a door, window or container of the shown map, by the goal's target string), as the session picks it: the object, its T0 lock facts, the lock's difficulty and the
+    /// light at it; null (the provider, or its answer) for a target that is none or gone. Null delegate: no NPC picks a lock, and the attempt names it a gap.</summary>
+    public Func<string, SessionPickLockTarget?>? PickLockTarget { get; init; }
     /// <summary>ARC-DEV-246 (MIG13 S14l, GT208): the victim's catching-thief script (point 11) after a noticed pick pocket, with the NPC thief as the triggerer; true when the consequences go on ("run default", or no script); false when the script's answer, or a run the viewer cannot finish, stops them; null: no script runs.</summary>
     public Func<string, string, bool>? CatchingThief { get; init; }
     /// <summary>ARC-DEV-258 (MIG13 S14n, GT63): launches the projectile of a generic item (a grenade) an NPC threw: the thrower, its shot, the thrower's tile and the throw's location; true when the
@@ -247,6 +253,8 @@ public sealed record AreaAiNotice(AreaAiNoticeKind Kind, string Npc, string? Tar
     public SessionHealResult? Heal { get; init; }
     /// <summary>ARC-DEV-246: what an NPC's pick pocket did (<see cref="AreaAiNoticeKind.Skill"/> with the pick pocket skill).</summary>
     public SessionNpcPickPocketResult? PickPocket { get; init; }
+    /// <summary>ARC-COMBAT-1776 (<see cref="AreaAiNoticeKind.Skill"/> with the pick-locks skill): the session's answer of an NPC's pick of a lock (<see cref="GameSessionOwner.PickLockByNpc"/>); null when the host did not ask it (no sheet or no lock target).</summary>
+    public SessionPickLockResult? PickLock { get; init; }
     /// <summary>ARC-WORLD-113: the thrown item and the session's throw (<see cref="AreaAiNoticeKind.Throw"/>; the struck critter in
     /// <see cref="Target"/>, its attack in <see cref="Result"/>); ARC-WORLD-108: the used item (<see cref="AreaAiNoticeKind.ItemUse"/>).</summary>
     public string? Item { get; init; }
@@ -317,7 +325,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     // at their raw rate: NPC ART is not read yet.
     private static readonly (int Frames, int ActionFrame, int RawFramesPerSecond) FixedSkillArt = FixedAttackArt;
     // ARC-WORLD-109: object flag 0x10000 and critter flags stunned and paralysed refuse an action's turn and start (0x42C0F0, 0x42CB10).
-    private const uint ActionRefusedObject = 0x10000, StunnedCritter = 0x20, ParalysedCritter = 0x40;
+    private const uint ActionRefusedObject = 0x10000, StunnedCritter = 0x20, ParalysedCritter = 0x40, BlindedCritter = 0x80, ProwlingCritter = 0x1;
     // ARC-DEV-135 (MIG13 S5): the levels of the host's own interrupts (GS20): the AI tick's far path, the follower catch-up and the waypoint and standpoint moves interrupt at 4
     // (TL42), a follower's removal from the party at 5 (0x45E040).
     private const int FarPathLevel = 4, LeaveLevel = 5;
@@ -336,6 +344,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     private readonly Dictionary<string, AreaAiNpc> _followers;
     // ARC-WORLD-119: the companions the hero led at the host's last look (ObserveLeaves).
     private readonly HashSet<string> _led;
+    // ARC-WORLD-1840: the leader each NPC of the map had at the host's last look (ObserveLeaves).
+    private readonly Dictionary<string, string> _npcLeaders = new(StringComparer.Ordinal);
     // ARC-DEV-134 (MIG13 S4): the runs are the session's goal table (GameSessionOwner.QueryGoals); the host keeps none. The steps taken since TakeSteps.
     private int _steps;
     private readonly Dictionary<string, AreaAiTrace> _traces = new(StringComparer.Ordinal);
@@ -399,6 +409,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         _npcs = scene.Npcs.ToDictionary(n => n.Entity, StringComparer.Ordinal);
         _followers = (scene.Followers?.Npcs ?? []).Where(n => !_npcs.ContainsKey(n.Entity)).ToDictionary(n => n.Entity, StringComparer.Ordinal);
         _led = _followers.Keys.Where(f => _session.QueryCompanion(f).LedByPc).ToHashSet(StringComparer.Ordinal);
+        // ARC-WORLD-1840: the NPCs of the map with a leader (an NPC summoner's summon, a script's group) at the first look.
+        foreach (var npc in _npcs.Keys) if (_session.QueryLeader(npc) is { } leader) _npcLeaders[npc] = leader;
         RestoreMovers();
         RestoreQueuedCasts();
     }
@@ -902,6 +914,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         foreach (var (entity, npc) in followers) _followers[entity] = npc;
         foreach (var npc in scene.Npcs) if (_npcs.ContainsKey(npc.Entity)) Movers.Rekey(npc.Entity, npc.Row.Key, npc.Origin);
         _led.RemoveWhere(entity => !_followers.ContainsKey(entity));
+        foreach (var gone in _npcLeaders.Keys.Where(entity => !_npcs.ContainsKey(entity)).ToArray()) _npcLeaders.Remove(gone);
         _scene = scene with { Npcs = [.. _npcs.Values] };
         // A row the host did not hold stands where the session recorded the NPC, as in a host built for it (the first step would overwrite the place).
         if (added.Count > 0) RestorePlaces(added);
@@ -1220,6 +1233,18 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
             if (RunOf(companion) is null) continue;
             if (InterruptRuns(companion, LeaveLevel)) (dropped ??= []).Add(companion);
         }
+        // ARC-WORLD-1840: an NPC of the map that left the leader it had (a summon's END, a forced leave, or a join under another leader, whose first half is that leave: 0x45DE90 → 0x45DFC0
+        // → 0x45E040) is interrupted the same way; a join of an NPC that had no leader interrupts nothing.
+        foreach (var npc in _npcs.Keys)
+        {
+            var now = _session.QueryLeader(npc);
+            var before = _npcLeaders.GetValueOrDefault(npc);
+            if (now is null) _npcLeaders.Remove(npc); else _npcLeaders[npc] = now;
+            if (before is null || before == now) continue;
+            Trace(npc).Event = now is null ? "left its leader" : $"left {before} for {now}";
+            if (RunOf(npc) is null) continue;
+            if (InterruptRuns(npc, LeaveLevel)) (dropped ??= []).Add(npc);
+        }
         return dropped ?? (IReadOnlyList<string>)[];
     }
 
@@ -1346,7 +1371,9 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         Tile(npc) is not { } at || _session.QuerySectorLoaded(new(_scene.RuntimeMap), ResidentSector.Of(at)) != false;
     /// <summary>ARC-DEV-105 (MIG9 S5, 0x4AD4D0): the follower catch-up's tests as the original reads them: a PC leader, its distance, the NPC flag
     /// WAITING_HERE (field 0x118, 0x8; ours also a waiting standing), the critter flag paralysed (field 0xDA, 0x40) and active (0x45D790).</summary>
-    public AiCatchUpFacts CatchUp(string npc) => new(Leader(npc) == Pc, DistanceToPc(npc),
+    /// ARC-WORLD-1840: the original reads the chain's player character (0x45DDA0), so a follower of a companion catches up too; the host moves only the hero's companions (the follower
+    /// source's jump), so an NPC of the map whose chain reaches the hero through another leader answers no PC leader here (#1322's catch-up tail) instead of losing its run each far tick.
+    public AiCatchUpFacts CatchUp(string npc) => new(Leader(npc) == Pc || _followers.ContainsKey(npc) && PcLeader(npc) == Pc, DistanceToPc(npc),
         (Fields(npc)?.Npc is { } fields && (fields.Flags & WaitingHereNpc) != 0) || Waiting(npc),
         Paralysed(npc), Active(npc));
     /// <summary>ARC-DEV-105 (MIG9 S5, 0x4AD4D0 then 0x43E770): the follower's goal run ends (the original's interrupt at priority 4), then it
@@ -1922,7 +1949,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     private AreaTrapWalker? TrapWalker(string id)
     {
         if (id == Pc) return null;
-        var led = Leader(id) == Pc;
+        // TT2: an NPC with a player character at the top of its chain (0x45DDA0).
+        var led = PcLeader(id) == Pc;
         SessionNpcSpot? spot = _scene.NpcSheet?.Invoke(id) is { } sheet && RawBuild(id)?.Target is { } life ? new(life, sheet.Loaded, sheet.Modifiers, led) : null;
         return new(id, led, spot);
     }
@@ -2202,6 +2230,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
 
     /// <summary>ARC-AI-1519: critter flag 0x20 (the stun condition, or the flag the data or a spell wrote), without paralysis 0x40, as the sight and hearing checks read it.</summary>
     private bool Stunned(string id) =>
+        id == Pc ? (HeroLifeState()?.Conditions.HasFlag(LifeConditions.Stunned) ?? false) || (_session.QueryObjectFlags(Pc).Critter(0) & unchecked((int)StunnedCritter)) != 0 :
         (LifeState(id)?.Conditions.HasFlag(LifeConditions.Stunned) ?? false) || Fields(id)?.Critter is { } critter && (CritterFlagsOf(id, critter.Flags) & StunnedCritter) != 0;
 
     public bool Paralysed(string id) => (_session.QueryObjectFlags(id).Critter(id == Pc ? 0 : unchecked((int)(Fields(id)?.Critter?.Flags ?? 0))) & ParalysedCritter) != 0
@@ -2620,8 +2649,9 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         var result = _session.MakePeace(_session.Version, new SessionPeaceRequest { Entity = npc, Other = other, Facts = OrderFacts(npc) });
         Trace(npc).Setter = $"spell peace {with} {result.Disposition} {result.Failure}";
         if (result.Failure != GameSessionFailure.None) return false;
-        var head = Leader(with) ?? with;
-        InterruptRunsWhere(npc, 5, r => r.Bottom is { Goal: GoalType.Attack or GoalType.AttemptAttack, Target: { } at } && (at == head || Leader(at) == head));
+        // 0x4AA300 and its interrupt 0x44E050 both read the chain's player character (0x45DDA0).
+        var head = PcLeader(with) ?? with;
+        InterruptRunsWhere(npc, 5, r => r.Bottom is { Goal: GoalType.Attack or GoalType.AttemptAttack, Target: { } at } && (at == head || PcLeader(at) == head));
         if (result.Steps.Count > 0)
             foreach (var follower in result.Steps[0].Followers)
                 InterruptRunsWhere(follower, 5, r => r.Bottom is { Goal: GoalType.Attack or GoalType.AttemptAttack, Target: { } at } && at == npc);
@@ -2907,11 +2937,26 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         return result.Check?.Success == true && result.Disposition == GameSessionDisposition.Changed;
     }
 
-    /// <summary>The pick-locks attempt (0x42A4E0). NOT READY: an NPC's lock picking (the session's is the hero's) does nothing.</summary>
+    /// <summary>
+    /// The pick-locks attempt (0x42A4E0, ledger PL1, PL3–PL5): the session's <see cref="GameSessionOwner.PickLockByNpc"/> with the NPC's sheet, the lock the scene names (<see cref="AreaAiScene.PickLockTarget"/>) and the lockpicks
+    /// the goal's tool item is when the NPC holds them (anything else, or none: it picks without, as a follower, the AI and a script may). The attempt charges no action points (the goal's own was paid) and has no fate. Witnesses (PL6)
+    /// and the hand-over line are the viewer's: the notice carries the answer. NOT READY: the NPC's lock pick without a scene that names the lock does nothing, and the NPC's wear of its lockpicks is none (PL4).
+    /// </summary>
+    [OriginalFunction(0x42A4E0, OriginalFunctionScope.Partial)]
     public void AttemptPickLocks(string id, string target, string? item)
     {
-        Trace(id).Skill = $"pick locks {target}: not ready";
-        _notices.Add(new(AreaAiNoticeKind.Skill, id, target) { Skill = AiExecutorRules.PickLocksSkill });
+        string? refusal = null;
+        SessionPickLockResult? result = null;
+        if (Build(id) is not { } picker || _scene.NpcSheet?.Invoke(id) is not { } sheet) refusal = "no sheet";
+        else if (_scene.PickLockTarget?.Invoke(target) is not { } lockTarget) refusal = "no lock target";
+        else
+        {
+            var lockpick = item is not null && _scene.Combat.HeldItemFields(_session, id, item) is { } fields ? AreaLockpicks.From(item, fields) : null;
+            result = _session.PickLockByNpc(_session.Version, new SessionNpcSkillUser(picker.Target, sheet.Loaded, sheet.Modifiers, _session.QueryCompanion(id).LedByPc), lockTarget, lockpick);
+        }
+        Trace(id).Skill = result is null ? $"pick locks {target}: {refusal}"
+            : $"pick locks {target} {result.Disposition} {result.Failure} success={result.Check?.Success} critical={result.Check?.Critical} result={result.Outcome?.Result}";
+        _notices.Add(new(AreaAiNoticeKind.Skill, id, target) { Skill = AiExecutorRules.PickLocksSkill, PickLock = result });
     }
 
     // The heal: the healer's sheet, the target's life and the held healing item; null with the refusal when the session is not asked.
@@ -3243,9 +3288,11 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         if (NpcCombatMode(npc) is { } context) _session.SetCombatMode(_session.Version, SessionCombatant.Critter(npc), false, context);
     }
 
-    [OriginalFunction(0x45DE00, OriginalFunctionScope.Partial)]
-    [OriginalFunction(0x45DDA0, OriginalFunctionScope.Partial)]
-    public string? Leader(string npc) => npc != Pc && _session.QueryCompanion(npc).LedByPc ? Pc : null;
+    /// <summary>ARC-WORLD-1840: the critter's own leader (0x45DE00): the hero, an NPC leader (a summoner, a script's group) or none (the session's <see cref="GameSessionOwner.QueryLeader"/>).</summary>
+    public string? Leader(string npc) => npc == Pc ? null : _session.QueryLeader(npc);
+
+    /// <summary>ARC-WORLD-1840: the player character at the top of the critter's chain of leaders (0x45DDA0): the hero for a follower of the hero or of anyone the hero leads, else null.</summary>
+    public string? PcLeader(string npc) => npc == Pc ? null : _session.QueryPcLeader(npc);
     public bool Waiting(string npc) => _session.QueryCompanion(npc).WaitBit;
     public void LoyaltyCheck(string npc) { }
     /// <summary>ARC-DEV-170 (B06): the routine of a leaderless NPC (the non-combat perform's branch, 0x4AC583): the unforced waypoint step, the unforced standpoint step when it answered 0
@@ -3592,6 +3639,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         var state = LifeState(id) ?? build.Loaded;
         var danger = _session.QueryDanger(id);
         var leader = Leader(id);
+        var pcLeader = PcLeader(id);
         var npcConcealed = _session.IsConcealed(SessionCombatant.Critter(id));
         return new HostilityCritter
         {
@@ -3612,7 +3660,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
             KillOnSight = (npc.Flags & KillOnSightNpc) != 0, KosOverride = (NpcFlagsOf(id, npc.Flags) & KosOverrideNpc) != 0,
             Perception = build.EffectiveStat(CharacterStat.Perception, state), Intelligence = build.EffectiveStat(CharacterStat.Intelligence, state),
             Level = build.Level, Alignment = critter.BaseStats.Count > AreaCompanionData.AlignmentStat ? critter.BaseStats[AreaCompanionData.AlignmentStat] : 0,
-            HealthPercent = status is null ? 0 : Percent(status), Leader = leader, PcLeader = leader,
+            HealthPercent = status is null ? 0 : Percent(status), Leader = leader, PcLeader = pcLeader,
             // ARC-AI-1560 (critter flag 0x1, 0x45EDE0, for any critter): a follower the hero's sneak hides is heard at the silent level and refused unseen when it prowls as a master.
             Concealed = npcConcealed, MasterProwler = npcConcealed && NpcSkill(id, Skill.Prowling)?.Training >= SkillTraining.Master,
         };
@@ -3622,13 +3670,16 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
 
     public int Distance(string from, string to) => Tile(from) is { } a && Tile(to) is { } b ? AiExecutorRules.Distance(a, b) : int.MaxValue;
 
-    /// <summary>One faction (0x45D110) as far as this host knows: the hero and its followers, followers of one leader, or one non-zero
-    /// faction; the PC's reputations granting a faction are not read here.</summary>
+    /// <summary>One faction (0x45D110) as far as this host knows: the hero and every critter whose chain of leaders reaches it; two NPCs under the same player character, one the other's leader,
+    /// or two followers of one leader (ARC-WORLD-1840: NPC leaders too); else one non-zero faction. The PC's reputations granting a faction are not read here.</summary>
     public bool FactionSame(string a, string b)
     {
         if (a == b) return a != Pc;
-        if (a == Pc || b == Pc) return Leader(a == Pc ? b : a) == Pc;
-        if (Leader(a) is { } la && la == Leader(b)) return true;
+        if (a == Pc || b == Pc) return PcLeader(a == Pc ? b : a) == Pc;
+        if (PcLeader(a) is { } pa && pa == PcLeader(b)) return true;
+        var la = Leader(a);
+        var lb = Leader(b);
+        if (la == b || lb == a || la is not null && la == lb) return true;
         return Faction(a) is { } fa && fa != 0 && fa == Faction(b);
     }
 
@@ -3671,7 +3722,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     // (ARC-DEV-075: only a home the resolver cannot read), is not in a flee test's party count.
     [OriginalFunction(0x441260, OriginalFunctionScope.Partial)]
     public IReadOnlyList<string> Followers(string id) =>
-        id == Pc ? _session.QueryParty().Followers.Select(f => f.Entity).Where(f => Find(f) is not null).ToArray() : [];
+        (id == Pc ? _session.QueryParty().Followers.Select(f => f.Entity) : _session.QueryFollowers(id)).Where(f => Find(f) is not null).ToArray();
 
     /// <summary>
     /// ARC-WORLD-1160 (E3-a; ledger RT2 and SWB4): the NPCs near the hero as the combat-mode exit gate reads them: each active NPC of the shown map that is in the combat-focus state
@@ -3716,7 +3767,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         {
             if (id == Pc || Gone(id) || DeadCritter(id) || Tile(id) is not { } there) continue;
             if (Math.Max(Math.Abs(there.X - at.X), Math.Abs(there.Y - at.Y)) > TrapDeviceRules.AlarmRadius) continue;
-            if ((SpellFlagsOf(id, Fields(id)?.Object.SpellFlags ?? 0) & MindControlledSpell) != 0 || Leader(id) == Pc) continue;
+            if ((SpellFlagsOf(id, Fields(id)?.Object.SpellFlags ?? 0) & MindControlledSpell) != 0 || PcLeader(id) == Pc) continue;
             if (See(id, Pc).Excess != 0 && Hear(id, Pc, Loudness.Silent).Excess != 0) continue;
             AttackEvent(Pc, id, loudness: Loudness.Silent);
             alerted.Add(id);
@@ -3732,32 +3783,54 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         Tile(observer) is { } from && Tile(target) is { } to ? SeeFacing(observer, target, AreaCombatHost.Facing(from, to)) : See(observer, target);
 
     /// <summary>
-    /// ARC-SCRIPT-1733 (CS5, exe 0x4451B0 case 28 → 0x4AF260): whether a script's obj can see obj holds: the sight check of an NPC this host holds sight facts of toward an NPC or the hero, which needs nothing more than the NPC's own facing (excess 0). Null for an observer that
-    /// is the hero (its facing is not tracked here, <see cref="SeeToward"/>) or that is not an NPC of this host, and for a target it holds no facts of: the script stops as not modelled.
+    /// ARC-SCRIPT-1733 / ARC-SCRIPT-1773 (CS5, exe 0x4451B0 case 28 → 0x4AF260): whether a script's obj can see obj holds: the sight check of an NPC or the hero this host holds sight facts of toward an NPC or the hero, which needs nothing more than the observer's own
+    /// facing (excess 0). An NPC's facing is its mover's; the hero's is the scene's <see cref="AreaAiScene.HeroRotation"/> (the hero's conditions come from its life state, the sleeping bit from the session's flags: <see cref="SightFacts"/>). Null (the script stops as not
+    /// modelled) for an observer or target it holds no facts of, a hero observer when the scene gives no hero facing, a hero observer and a target that is concealed (the hero's check reads the margin of a prowling target, which is not built for it, <see cref="HeroSeesProwler"/>), the
+    /// hero toward itself, and while the scene has no line-of-fire map.
     /// </summary>
     public bool? ScriptCanSee(string observer, string target) =>
-        observer == Pc || Find(observer) is null || Find(target) is null || _scene.LineOfFire?.Invoke() is null ? null : See(observer, target).Excess == 0;
+        ScriptAware(observer, target) && (observer != Pc || _scene.HeroRotation?.Invoke() is not null) ? See(observer, target).Excess == 0 : null;
 
-    /// <summary>ARC-SCRIPT-1733 (CS6, case 29 → 0x4AF470 with loudness 1): the hearing check of an NPC toward an NPC or the hero at the normal loudness; null as <see cref="ScriptCanSee"/>.</summary>
+    /// <summary>ARC-SCRIPT-1733 / ARC-SCRIPT-1773 (CS6, case 29 → 0x4AF470 with loudness 1): the hearing check of an NPC or the hero toward an NPC or the hero at the normal loudness; null as <see cref="ScriptCanSee"/> (hearing needs no facing).</summary>
     public bool? ScriptCanHear(string listener, string source) =>
-        listener == Pc || Find(listener) is null || Find(source) is null || _scene.LineOfFire?.Invoke() is null ? null : Hear(listener, source, Loudness.Normal).Excess == 0;
+        ScriptAware(listener, source) ? Hear(listener, source, Loudness.Normal).Excess == 0 : null;
+
+    // What both script checks need: facts of both ends, a line-of-fire map, and for the hero as the observer no prowling target (its margin is not built, ARC-SCRIPT-1773) and not itself.
+    private bool ScriptAware(string from, string to) =>
+        Find(from) is not null && Find(to) is { } target && _scene.LineOfFire?.Invoke() is not null && (from != Pc || (to != Pc && !HeroSeesProwler(to, target)));
+
+    // The hero's own check reads the prowling margin of its target (0x4C62E0 with the target as the prowler: ledger AW4); this host builds it for a concealed hero toward an NPC, and for a concealed follower toward an NPC observer, not toward the hero:
+    // a concealed target and an NPC with the prowling bit of its own flags (0xDA bit 0x1) refuse.
+    private bool HeroSeesProwler(string to, HostilityCritter target) =>
+        target.Concealed || (CritterFlagsOf(to, Fields(to)?.Critter?.Flags ?? 0) & ProwlingCritter) != 0;
+
+    // The observer's rotation for a sight check: the turned one when the caller gives it, else the hero's own facing (<see cref="AreaAiScene.HeroRotation"/>, ARC-SCRIPT-1773) or the NPC's mover's.
+    private int ObserverRotation(string observer, NeighborDirection? facing) =>
+        facing is { } turned ? GridActorMath.Octant(turned)
+        : observer == Pc && _scene.HeroRotation?.Invoke() is { } hero ? hero & 7
+        : GridActorMath.Octant(Movers.FacingOf(observer, NeighborDirection.XPlus));
+
+    // ARC-SCRIPT-1773 (AW2, 0x45D800): the observer refused for being down: unconscious, and the dead hero (0x4AF260 starts with that test; the hero's dead state is a fact the rules have no field for).
+    private static bool Down(string observer, HostilityCritter? facts) => facts?.Unconscious == true || (observer == Pc && facts?.Dead == true);
 
     private AwarenessResult SeeFacing(string observer, string target, NeighborDirection? facing)
     {
         if (Tile(observer) is not { } at || Tile(target) is not { } there || _scene.LineOfFire?.Invoke() is not { } map) return new(AwarenessRules.NotPerceived, AwarenessReason.State);
         var facts = Find(observer);
         var stunned = Stunned(observer);
-        var blinded = Blinded(observer);
+        var blinded = observer == Pc ? (HeroLifeState()?.Conditions.HasFlag(LifeConditions.Blinded) ?? false) || (_session.QueryObjectFlags(Pc).Critter(0) & unchecked((int)BlindedCritter)) != 0 : Blinded(observer);
+        var rotation = ObserverRotation(observer, facing);
+        var sleeping = observer == Pc ? (_session.QueryObjectFlags(Pc).Critter(0) & unchecked((int)SleepingFlag)) != 0 : facts?.Asleep ?? false;
         var sight = new SightFacts
         {
             Perception = Math.Clamp(facts?.Perception ?? 0, 0, AwarenessRules.MaxPerception),
-            Rotation = GridActorMath.Octant(facing ?? Movers.FacingOf(observer, NeighborDirection.XPlus)),
+            Rotation = rotation,
             // ARC-AI-1519 (VBG8): the refusal flags 0x10A0 are stunned 0x20, blinded 0x80 and sleeping 0x1000, not paralysis 0x40; Perception 20 or more (0x4B0EE0) sees the invisible.
-            Stunned = stunned, Blinded = blinded, Sleeping = facts?.Asleep ?? false, Unconscious = facts?.Unconscious ?? false,
+            Stunned = stunned, Blinded = blinded, Sleeping = sleeping, Unconscious = Down(observer, facts),
             ExtraordinaryPerception = (facts?.Perception ?? 0) >= AwarenessRules.ExtraordinaryPerceptionMin,
             TargetInvisible = Find(target) is { } seen && (seen.ObjectInvisible || seen.InvisibleSpell), DetectsInvisible = facts?.DetectsInvisible ?? false,
             // The margin is read only where the sight check gets as far as Perception (not for a stunned, blinded, sleeping or unconscious observer, nor one facing away).
-            ProwlingMargin = facts is { Asleep: false, Unconscious: false } && !stunned && !blinded && AwarenessRules.Faces(at, GridActorMath.Octant(facing ?? Movers.FacingOf(observer, NeighborDirection.XPlus)), there)
+            ProwlingMargin = !Down(observer, facts) && !sleeping && !stunned && !blinded && AwarenessRules.Faces(at, rotation, there)
                 ? ProwlingMargin(observer, target, at, there, facts, map, true) : 0,
         };
         var (offsetX, offsetY) = ObserverOffset(observer);
@@ -3826,12 +3899,13 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         if (Tile(observer) is not { } at || Tile(target) is not { } there || _scene.LineOfFire?.Invoke() is not { } map) return new(AwarenessRules.NotPerceived, AwarenessReason.State);
         var facts = Find(observer);
         var stunned = Stunned(observer);
+        var sleeping = observer == Pc ? (_session.QueryObjectFlags(Pc).Critter(0) & unchecked((int)SleepingFlag)) != 0 : facts?.Asleep ?? false;
         var hearing = new HearingFacts
         {
             Perception = Math.Clamp(facts?.Perception ?? 0, 0, AwarenessRules.MaxPerception),
             // ARC-AI-1519 (VBG8): hearing refuses critter flag 0x20 only; a paralysed observer still hears.
-            Stunned = stunned, Sleeping = facts?.Asleep ?? false, Unconscious = facts?.Unconscious ?? false,
-            ProwlingMargin = facts is { Unconscious: false } && !stunned ? ProwlingMargin(observer, target, at, there, facts, map, false) : 0,
+            Stunned = stunned, Sleeping = sleeping, Unconscious = Down(observer, facts),
+            ProwlingMargin = facts is { Unconscious: false } && !Down(observer, facts) && !stunned ? ProwlingMargin(observer, target, at, there, facts, map, false) : 0,
         };
         var (offsetX, offsetY) = ObserverOffset(observer);
         return AwarenessRules.Hear(hearing, at, offsetX, offsetY, there, loudness, new SoundMap(map), _session.Rules.Combat);
@@ -3916,6 +3990,9 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
 
     // ARC-MAGIC-027: the NPC's combat values under its effect list (speed, strength and the rest, resistances), for the readers of its combat values.
     private SessionCritterCombat? Build(string id) => RawBuild(id) is { } combat ? _session.WithNpcEffects(combat) : null;
+
+    // ARC-SCRIPT-1773: the hero's conditions (stunned, blinded) as the session's life state has them, for the sight and hearing checks with the hero as the observer.
+    private LifeState? HeroLifeState() => _session.QueryHeroLife()?.Record.State;
 
     private LifeState? LifeState(string id) => RawBuild(id) is { } build ? _session.QueryLife(build.Target).View?.Record.State : null;
 

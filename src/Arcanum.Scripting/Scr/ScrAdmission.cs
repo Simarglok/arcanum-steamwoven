@@ -363,8 +363,9 @@ public sealed class ScrAdmissionSet
     public static IReadOnlyList<int> NpcStateActions { get; } = [ScrCatalogue.Action.CritterDisband, ScrCatalogue.Action.SetReaction, ScrCatalogue.Action.AdjustReaction, ScrCatalogue.Action.SetDayStandpoint,
         ScrCatalogue.Action.SetNightStandpoint, ScrCatalogue.Action.SetDayStandpointEx, ScrCatalogue.Action.SetNightStandpointEx, ScrCatalogue.Action.ChangeArtNumber, ScrCatalogue.Action.ChangeScript];
 
-    /// <summary>The actions of <see cref="NpcStateActions"/> the area hosts apply (all but change art number 59, which needs a per-object art overlay the viewer does not have).</summary>
-    public static IReadOnlyList<int> NpcStateHostActions { get; } = [.. NpcStateActions.Where(a => a != ScrCatalogue.Action.ChangeArtNumber)];
+    /// <summary>The actions of <see cref="NpcStateActions"/> the area hosts apply: all nine since ARC-SCRIPT-1735 (change art number 59 writes the session's object art field, <see cref="Arcanum.Session.SessionObjectArt"/>, which the viewer draws; the host refuses a
+    /// run whose target it cannot draw with another art).</summary>
+    public static IReadOnlyList<int> NpcStateHostActions { get; } = NpcStateActions;
 
     /// <summary>
     /// The NPC state set (ARC-SCRIPT-1163, plan slice E5-a, ledger NS1–NS8): <see cref="S35"/> plus critter disband (22), set reaction (30), adjust reaction (31), set day standpoint (45), set night standpoint (46), change art number (59), change script (99) and the extended
@@ -467,11 +468,21 @@ public sealed class ScrAdmissionSet
     public static ScrAdmissionSet S55 { get; } = new("S55", S54.Conditions.Concat([ScrCatalogue.Condition.IsPolymorphed, ScrCatalogue.Condition.IsShrunk, ScrCatalogue.Condition.HasMirrorImage]),
         S54.Actions.Concat([ScrCatalogue.Action.PlaySpellEyeCandy, ScrCatalogue.Action.StopScriptEyeCandy]), S54.ValueKinds, S54.FocusKinds, counterIndexWraps: true);
 
+    /// <summary>The getters the set <see cref="S56"/> adds, which a host answers through <see cref="IScrCritterFieldQueries"/> (ARC-SCRIPT-1772, ledger CQ1–CQ3): get social class (38), get origin (39) and get faction (89); each stores an NPC field into its number operand 1.</summary>
+    public static IReadOnlyList<int> CritterFieldActions { get; } = [ScrCatalogue.Action.GetSocialClass, ScrCatalogue.Action.GetOrigin, ScrCatalogue.Action.GetFaction];
+
     /// <summary>
-    /// The slide set (ARC-RENDER-1171, ledger SS3, SS4): <see cref="S55"/> plus queue slide (131) and end game and play slides (132), which hand <see cref="ScrSlideRequest"/> effects to the host in action order.
+    /// The critter getters and writes set (ARC-SCRIPT-1772, ledger CQ1–CQ8; the script census group CRQ, the part <see cref="S53"/> left): <see cref="S55"/> plus the getters of <see cref="CritterFieldActions"/>, toggle invulnerability (57, flips object flag 0x400000,
+    /// which condition 30 reads) and rename (92, writes the object's name number, field 0x16), exe 0x447220 cases 0x26, 0x27, 0x39, 0x59 and 0x5C.
+    /// </summary>
+    public static ScrAdmissionSet S56 { get; } = new("S56", S55.Conditions, S55.Actions.Concat(CritterFieldActions).Concat([ScrCatalogue.Action.ToggleInvulnerability, ScrCatalogue.Action.Rename]),
+        S55.ValueKinds, S55.FocusKinds, counterIndexWraps: true);
+
+    /// <summary>
+    /// The slide set (ARC-RENDER-1171, ledger SS3, SS4): <see cref="S56"/> plus queue slide (131) and end game and play slides (132), which hand <see cref="ScrSlideRequest"/> effects to the host in action order.
     /// Queue slide is the one command of the engine-run slide scripts 997 to 999 and of the ending scripts they call (2921 to 2928); end game is the last line of three movie scripts (1105, 2862, 2863, 3061).
     /// </summary>
-    public static ScrAdmissionSet S58 { get; } = new("S58", S55.Conditions, S55.Actions.Concat([ScrCatalogue.Action.QueueSlide, ScrCatalogue.Action.EndGame]), S55.ValueKinds, S55.FocusKinds, counterIndexWraps: true);
+    public static ScrAdmissionSet S58 { get; } = new("S58", S56.Conditions, S56.Actions.Concat([ScrCatalogue.Action.QueueSlide, ScrCatalogue.Action.EndGame]), S56.ValueKinds, S56.FocusKinds, counterIndexWraps: true);
 
     /// <summary>
     /// The set the engine runs the slide scripts with (ARC-RENDER-1171, ledger SS2): true, equal, less or equal, local and global flag and PC quest state conditions; the control and arithmetic actions, call script
@@ -716,6 +727,8 @@ public static class ScrAdmission
             if (!condition && type == ScrCatalogue.Action.GetLocation && slot is 1 or 2 && (ScrValueKind)kind == ScrValueKind.Number) return Refuse(ScrRefusalCode.WriteToNumber);
             // Get hit points and get fatigue points store into their number operands 1 and 2 (ARC-SCRIPT-1481, VT1, VT2).
             if (!condition && type is ScrCatalogue.Action.GetHitPoints or ScrCatalogue.Action.GetFatiguePoints && slot is 1 or 2 && (ScrValueKind)kind == ScrValueKind.Number) return Refuse(ScrRefusalCode.WriteToNumber);
+            // Get social class, get origin and get faction store into their number operand 1 (ARC-SCRIPT-1772, CQ1–CQ3).
+            if (!condition && type is ScrCatalogue.Action.GetSocialClass or ScrCatalogue.Action.GetOrigin or ScrCatalogue.Action.GetFaction && slot == 1 && (ScrValueKind)kind == ScrValueKind.Number) return Refuse(ScrRefusalCode.WriteToNumber);
             // Get area stores into its number operand 1 (ARC-SCRIPT-050, GA1).
             if (!condition && type == ScrCatalogue.Action.GetArea && slot == 1 && (ScrValueKind)kind == ScrValueKind.Number) return Refuse(ScrRefusalCode.WriteToNumber);
             // Slot 0 of these types is itself an index, a store or a jump target.

@@ -50,6 +50,29 @@ a door or window in map mode picks its lock, walking within range 1 first (the u
 else, a key press, the window's focus loss, a follower walk order, a map change or a reload cancels it. The HUD reports "the lock opens", "locked it", "the lock jams" or "the pick failed". The viewer passes the light at the portal's cell (ARC-WORLD-1149, [FR-LIGHT-011](../rendering/area-lighting.md#light-level-for-checks-arc-world-1149));
 in a turn-based round (ARC-COMBAT-020) it passes the round's world, so the pick charges its 4 action points on the hero's subturn.
 
+## An NPC as the user (ARC-COMBAT-1776)
+
+Follower Skills slice 1 (the chooser and the options row are slice 2): `PickLockByNpc(version, user, target, lockpick?)` in
+[`GameSessionFollowerSkills.cs`](../../src/Arcanum.Session/GameSessionFollowerSkills.cs) is the same check, outcome, lock write, Lock event and
+generator draws as `PickLock` (they share `PickLockStep`), for an NPC that is the user (`SessionNpcSkillUser`: its life target, its map data's
+advancement sheet and its effects' modifiers, as the NPC heal's and pick pocket's). It differs as the original does (SC12, SC14, PL4, PL5):
+
+- the NPC's own pick-locks level and training (`QueryNpcSkills`), its own extraordinary intelligence, its injuries from its life record; **no
+  local-PC difficulty term** (the Easy and Hard changes of effectiveness are the PC's) and **no fate** (a PC's only);
+- its own lockpicks (generic item flag 0x02, the bonus as stored, the condition for a critical failure), or none: a follower, the AI and a script
+  pick without them (PL4, PL7); the session does not check that the NPC holds them (the host reads its holder), but refuses a use script, a
+  destroyed item and one the hero holds (`ItemNotAvailable`);
+- no action points (the PC's use paid them in a round, or the AI goal paid its own) and no hero is needed;
+- refused, typed: a user that is the hero, whose sheet or modifiers do not hold or that is dead (`PickLockUnavailable`), an invalid object,
+  difficulty or light (`InvalidOpenable`), lockpicks that are none or out of bounds (`InvalidLockpick`), with a use script
+  (`ItemScriptUnsupported`), destroyed or the hero's (`ItemNotAvailable`), the version.
+
+The AI host's pick-locks attempt (`AreaAiHost.AttemptPickLocks`, goal 67 node 2, 0x42A4E0) is this call: the lock is what the scene names
+(`AreaAiScene.PickLockTarget`, the viewer's: a door or window by its entity, a container by its "inv:" string, at the light of its cell; `AreaPortals.PickTarget`,
+`AreaContainerLoot.PickTarget`), the lockpicks are the goal's tool item when the NPC holds them. A scene without the provider, or a target it does not know,
+refuses the attempt (the trace says "no lock target") and changes nothing. The answer is carried by the skill notice (`AreaAiNotice.PickLock`).
+Disarm Traps by an NPC: [trap state](trap-state-runtime.md).
+
 ## Containers in the viewer (ARC-UI-1127)
 
 Armed lockpicks (the item cursor of the lockpicks, interface mode 16) on a container of the map (E8-g): the press starts the same skill goal 33 (skill 14) with the container's loot target string, so the hero walks within range 1, turns and the pick runs at the frame's next safe point. The pick is the session's on the container's lock identity, its T0 baseline and its lock level (field 57, slot 37 as a portal's field 47), at the light of the container's cell (`AreaContainerLoot.Pick`; code `TerrainViewerAreaContainerPick.cs`). Nothing opens: the next press opens the picked container through the window's admission ([lock state](lock-state-runtime.md)). Smoke: stage `item-aim`, step 7 (the nearest locked container of the town sector without an unlock script: the pick result, and the container's open attempt follows it).
@@ -58,9 +81,9 @@ Armed lockpicks (the item cursor of the lockpicks, interface mode 16) on a conta
 
 - **Witnesses** (PL6): the session reports whether the original calls them; nobody acts on it (no NPC sight, hearing, reaction or
   attack is wired to it, the AI hostility slice does not exist yet).
-- **Not modelled:** the best-follower substitution and its line (PL5), the timed pick-lock goal of the AI, scripts and dialog
-  services with its apprentice speed-up (PL3), the floating text and its messages, the multiplayer packets, keys (the session holds
-  none, ARC-WORLD-050).
+- **Not modelled:** the best-follower substitution and its line (PL5, slice 2 of Follower Skills, #1738), the witnesses and the floating
+  text of an NPC's pick, the multiplayer packets, keys (the session holds none, ARC-WORLD-050). The NPC's pick itself is built since
+  ARC-COMBAT-1776 ([above](#an-npc-as-the-user-arc-combat-1776)); the timed pick-lock goal's animation loops are the AI host's (ARC-AI-1524).
 
 ## Real-data census
 
@@ -74,6 +97,7 @@ Armed lockpicks (the item cursor of the lockpicks, interface mode 16) on a conta
 
 `tests/Arcanum.Simulation.Tests/Skills/PickLockRulesTests.cs`, `tests/Arcanum.Session.Tests/PickLockStateTests.cs` (unlock and
 relock, lock, jam and its day relock, fate without lockpicks, junk pile, refusals, the turn-based charge),
+`tests/Arcanum.Session.Tests/FollowerSkillsStateTests.cs` (an NPC as the user of a pick and of a disarm), `tests/Arcanum.TerrainViewer.Tests/AreaAiSkillTests.cs` (the AI host's attempt),
 `tests/Arcanum.TerrainViewer.Tests/AreaPickLockTests.cs`, the viewer self-test (the pick button) and the native smoke
 (`ARC-SKILLS-006 native-smoke pick PASS` on a map with a locked door and the halfling-male hero).
 
