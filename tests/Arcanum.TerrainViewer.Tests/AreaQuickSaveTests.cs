@@ -57,6 +57,39 @@ public sealed class AreaQuickSaveTests
         Assert.IsNull(heroless.Experience, "a save without a hero takes no hero tables");
     }
 
+    // ARC-MAGIC-1724: a hero saved without a stored age (a save of schema 98 or before decodes so) gets its prototype's age at the load, once, and only from its own tables.
+    [TestMethod]
+    public void A_loaded_hero_without_a_stored_age_takes_its_prototypes_age_from_its_tables()
+    {
+        var definition = new SessionHeroDefinition(16089, Arcanum.Simulation.Character.CharacterRace.HalfElf, Arcanum.Simulation.Character.CharacterGender.Male,
+            [8, 8, 8, 8, 8, 8, 8, 8, 0, 0], 1, 5, 0, null, null, 385, []);
+        var unread = new AreaHeroLoad(AreaHeroStatus.Ready, AreaStartingHero.Find("half-elf-male")!, definition, 2352, 0, null, "synthetic");
+        var tables = unread with { Definition = definition with { Age = 31 } };
+        using (var hero = AreaTransitionCoordinator.CreateSession(Clock(), Guid.NewGuid(), Module, new AreaStepCell(92928, 82560), 1, unread).Owner!)
+        {
+            Assert.IsNull(hero.QueryHeroStoredAge());
+            Assert.IsTrue(AreaQuickSave.Save(hero, Outside, Slot()).Saved);
+        }
+        using var placeholder = Session();
+        using var loaded = AreaQuickSave.Load(Slot(), placeholder, _ => null).Owner!;
+        Assert.IsNull(loaded.QueryHeroStoredAge());
+        // Tables that are missing, not ready, another prototype's, or without an age leave it unread and say why.
+        StringAssert.Contains(AreaQuickSave.FillHeroAge(loaded, null)!, "not read");
+        StringAssert.Contains(AreaQuickSave.FillHeroAge(loaded, tables with { Status = AreaHeroStatus.TableUnavailable })!, "not read");
+        StringAssert.Contains(AreaQuickSave.FillHeroAge(loaded, tables with { Definition = definition with { Prototype = 1, Age = 31 } })!, "not read");
+        StringAssert.Contains(AreaQuickSave.FillHeroAge(loaded, unread)!, "has none");
+        Assert.IsNull(loaded.QueryHeroStoredAge());
+        var before = loaded.Version.Revision;
+        StringAssert.Contains(AreaQuickSave.FillHeroAge(loaded, tables)!, "age 31");
+        Assert.AreEqual(31, loaded.QueryHeroStoredAge());
+        Assert.AreEqual(before + 1, loaded.Version.Revision);
+        // Stored now: a second call does nothing, and a later age never takes the prototype's back.
+        Assert.IsNull(AreaQuickSave.FillHeroAge(loaded, tables with { Definition = definition with { Age = 44 } }));
+        Assert.AreEqual(31, loaded.QueryHeroStoredAge());
+        // A session without a hero has nothing to fill.
+        Assert.IsNull(AreaQuickSave.FillHeroAge(placeholder, tables));
+    }
+
     // ARC-SCRIPT-006: dialog consequences are session state, so the quick-save file carries them.
     [TestMethod]
     public void DialogConsequencesComeBackWithAQuickLoad()

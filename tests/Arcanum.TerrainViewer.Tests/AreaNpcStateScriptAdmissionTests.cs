@@ -18,7 +18,7 @@ public sealed class AreaNpcStateScriptAdmissionTests
         {
             foreach (var action in ScrAdmissionSet.NpcStateHostActions) Assert.IsTrue(set.Actions.Contains(action), $"{set.Id}: action {action}");
             Assert.IsFalse(set.Actions.Contains(ScrCatalogue.Action.ChangeArtNumber), set.Id);
-            Assert.IsTrue(set.IsSubsetOfBesidesStores(ScrAdmissionSet.S53), set.Id);
+            Assert.IsTrue(set.IsSubsetOfBesidesStores(ScrAdmissionSet.S55), set.Id);
         }
         // The dialog host does not apply the requests yet: its sets stay without them.
         foreach (var set in new[] { AreaScriptHost.Admission, AreaScriptHost.SkillAdmission, AreaScriptHost.TalkAdmission, AreaScriptHost.SkillTalkAdmission })

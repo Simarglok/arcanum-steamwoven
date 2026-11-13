@@ -57,7 +57,7 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
     /// (29) of <see cref="ScrAdmissionSet.S23"/>. ARC-MAGIC-030 (MT21b): plus the spell conditions body spell (14), influenced by spell (35), knows spell (48) and mastered spell college (49)
     /// and give spell mastery in college (112) of <see cref="ScrAdmissionSet.S31"/>, which the use host answers and this host writes. ARC-SCRIPT-1563 (GT194–GT196): plus damage (60), apply unresistable damage (138) and heal hit points (75) of
     /// <see cref="ScrAdmissionSet.S30"/>, which <see cref="Apply"/> hands to the use host's session path (a talk's poison script 1059, a deferred call's poison chain). ARC-SCRIPT-1620 (TI6): plus attack (36) of <see cref="ScrAdmissionSet.S33"/>, which <see cref="Apply"/> hands to the use host's AI path (the PC or an NPC of the shown map as the attacker).
-    /// ARC-SCRIPT-1733 (CS1–CS12): plus obj is animal (37), obj is in combat (31) and the nine critter-state conditions of <see cref="ScrAdmissionSet.CritterStateConditions"/>, which the use host answers.
+    /// ARC-SCRIPT-1733 (CS1–CS12): plus obj is animal (37), obj is in combat (31) and the nine critter-state conditions of <see cref="ScrAdmissionSet.CritterStateConditions"/>, which the use host answers. ARC-SCRIPT-1771 (CS12–CS14): plus the three of <see cref="ScrAdmissionSet.CritterTailConditions"/>.
     /// ARC-SCRIPT-1168: plus the six cast actions (48, 61, 118, 121, 122, 136) of <see cref="ScrAdmissionSet.S29"/>, which <see cref="Apply"/> hands to the use host's cast path (the PC or an NPC of the shown map as caster or target).
     /// </summary>
     public static ScrAdmissionSet TalkAdmission { get; } = WithQueries("S3-area-talk-queries", Admission);
@@ -67,7 +67,7 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
 
     private static ScrAdmissionSet WithQueries(string id, ScrAdmissionSet set) => new(id,
         set.Conditions.Concat(ScrAdmissionSet.ObjectQueryConditions).Concat(ScrAdmissionSet.ObjectStateQueryConditions).Concat(ScrAdmissionSet.SpellQueryConditions)
-            .Concat(ScrAdmissionSet.CritterQueryConditions).Concat(ScrAdmissionSet.CritterStateConditions),
+            .Concat(ScrAdmissionSet.CritterQueryConditions).Concat(ScrAdmissionSet.CritterStateConditions).Concat(ScrAdmissionSet.CritterTailConditions),
         set.Actions.Concat([ScrCatalogue.Action.Random, ScrCatalogue.Action.FloatLine, ScrCatalogue.Action.GetArea, ScrCatalogue.Action.GetReaction, ScrCatalogue.Action.GiveSpellMastery,
             ScrCatalogue.Action.Damage, ScrCatalogue.Action.DamageUnresistable, ScrCatalogue.Action.HealHitPoints, ScrCatalogue.Action.Attack,
             ScrCatalogue.Action.CastSpell, ScrCatalogue.Action.CastSpellOn, ScrCatalogue.Action.CastFreeSpell, ScrCatalogue.Action.CastUnresistableSpellBy, ScrCatalogue.Action.CastFreeUnresistableSpell,
@@ -174,6 +174,9 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
     public bool? IsInvulnerable(ScrObjectRef obj) => Answering.IsInvulnerable(obj);
     public bool? IsUndead(ScrObjectRef obj) => Answering.IsUndead(obj);
     public bool? IsProwling(ScrObjectRef obj) => Answering.IsProwling(obj);
+    // ARC-SCRIPT-1771: bad associates (CS12) and monster of type (CS13) are the shown map's use host's answers too; obj is within range (CS14) reads only the object's location (IScrWorldQueries).
+    public bool? HasBadAssociates(ScrObjectRef obj) => Answering.HasBadAssociates(obj);
+    public bool? IsMonsterOfType(ScrObjectRef obj, int type) => Answering.IsMonsterOfType(obj, type);
     public bool? IsInfluencedBy(ScrObjectRef obj, int spell) => Answering.IsInfluencedBy(obj, spell);
     public bool? KnowsSpell(ScrObjectRef obj, int spell) => Answering.KnowsSpell(obj, spell);
     public int? MasteredCollege(ScrObjectRef obj) => Answering.MasteredCollege(obj);
