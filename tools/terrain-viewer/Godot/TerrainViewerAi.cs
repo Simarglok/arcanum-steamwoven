@@ -825,6 +825,8 @@ public partial class TerrainViewerApp
                     // ARC-RENDER-1485: the gate's re-wield (or a pickup's CHECK_WIELD) changed what the NPC wears: its body shows the new weapon and shield (0x465020), so it is drawn again.
                     GD.Print($"ARC-RENDER-1485 ai-rewield npc={notice.Npc} shown={host.ShownWeapon(notice.Npc)}");
                     RewieldedNpcs(host).Add(notice.Npc);
+                    // ARC-MAGIC-1684: a line a moved item's wield or insert script printed goes to the message window.
+                    PostNpcPickupLines(notice);
                     redraw = true;
                     break;
                 case AreaAiNoticeKind.Skill:
