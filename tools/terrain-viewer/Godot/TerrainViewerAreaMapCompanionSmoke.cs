@@ -185,12 +185,23 @@ public partial class TerrainViewerApp
             var host = AreaAiHostNow();
             Require(host is not null && host.RunCompanions.Contains(companion.Entity), "the AI host runs the visitor's walk");
             var resolved = host!.Find(companion.Entity) is not null;
-            // The hero's attack: the attacker's followers are told, the victim weighs fleeing against the hero's party, witnesses hear it.
-            host.HeroAttacked(entity);
             _areaSmokeTime *= 20; _worldTestTime = SimulationTime.At(_areaSmokeTime, 20);
             var hostMs = 30_000_000L;
             TickAreaClock(hostMs);
             var frames = 0;
+            // ARC-BUG-1500: the victim has just been folded in, so its first tick runs the standpoint step, which since ARC-AI-1313 starts the wander goal (65/66, priority 3) of a wanderer, and the AI gate
+            // leaves an NPC whose main run has a priority above 2 busy (0x4233D0, GS20): the tick's pass in that same frame was lost and the visitor killed the NPC before its next tick. The original does the
+            // same; its hit's reaction ends the wander before the victim thinks, which this smoke's stand-in for the hit (the attack event alone) does not. So the victim takes its first tick, its wander
+            // (a run that restarts every 300 ms while no tile is accepted) is ended as the hit would end it, and only then the hero attacks: the check is the fight, not the wander.
+            for (var settle = 0; settle < 20 && host.TraceOf(entity)?.Route is null; settle++)
+            {
+                _areaSmokeTime++;
+                TickAreaClock(hostMs += 50);
+                WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .05, true, SimulationTime.At(_areaSmokeTime, 20));
+            }
+            if (host.RunOf(entity) is { Bottom.Goal: Arcanum.Simulation.Goals.GoalType.Wander or Arcanum.Simulation.Goals.GoalType.WanderSeekDarkness }) host.InterruptAnimations(entity);
+            // The hero's attack: the attacker's followers are told, the victim weighs fleeing against the hero's party, witnesses hear it.
+            host.HeroAttacked(entity);
             // Its bite on the hero: the victim's followers are told.
             for (; frames < 4000 && host.TraceOf(entity)?.Hit is null; frames++)
             {
