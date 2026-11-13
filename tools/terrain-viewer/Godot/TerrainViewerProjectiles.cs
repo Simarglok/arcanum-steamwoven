@@ -252,7 +252,10 @@ public partial class TerrainViewerApp
     /// <summary>
     /// ARC-DEV-258 (MIG13 S14n, GT63): the flight of a generic item (a grenade) an NPC threw: from the thrower's tile to the throw's location, free from the start (no target, a stray strike
     /// on a critter on the way ends it there), drawn on the size arc of a thrown item that is no weapon, with the item's own art; it lands where it ends and the item's event (its spell) goes off there.
-    /// False when the thrower has no row on the shown map, the item has no row and is no item the session made (ARC-DEV-315: a made item's art is its prototype's), or the flight did not launch (the AI host then lands the item at once).
+    /// ARC-COMBAT-1717 (PF1, PF6, PF7, PF10, TW3): a thrown weapon whose check the session decided at the throw (<see cref="GameSessionOwner.QueryNpcShot"/>) flies as the NPC's arrow does: to the struck critter's
+    /// tile when it hit (the AI host strikes where the flight meets it, <see cref="AreaAiHost.LandShot"/>), free to the scatter tile when it missed (a stray critter or object on the way takes a forced hit), drawn with the
+    /// item's own art unfaced, not on the size arc (the parent item is a weapon); the item lands where it ends and its event goes off there. False when the thrower has no row on the shown map, the item has no row and
+    /// is no item the session made (ARC-DEV-315: a made item's art is its prototype's), the struck critter has none, or the flight did not launch (the AI host then lands the item at once, a decided hit striking first).
     /// </summary>
     private bool AiLaunchThrown(string thrower, SessionShot shot, CellCoord from, CellCoord destination)
     {
@@ -262,19 +265,36 @@ public partial class TerrainViewerApp
         // ARC-DEV-315: an item the session made has no row; it is a copy of its prototype, so its art is the prototype's current art.
         uint? art = map.TryGetRow(thrown.Item, out var itemRow) ? (Number(itemRow, CurrentArtSlot) is { } own ? own : null)
             : AreaMadeItems.Art(owner, thrown.Item, prototype => PrototypeItems()?.Item(prototype)?.Art, thrower);
+        // ARC-COMBAT-1717: a thrown weapon carries the check decided at the throw; the hit's target is the struck critter (the hero, or an NPC of the shown map).
+        var decided = owner.QueryNpcShot(shot);
+        var weapon = decided is not null;
+        // An unchecked flight of a weapon (a throw at a location) is no size arc either: its parent item is a weapon (PF11).
+        var isWeapon = weapon || map.TryGetRow(thrown.Item, out var parent) && parent.Type == 5;
+        var hit = decided is { Hit: true };
+        var aimedId = hit ? decided!.Value.Target == SessionNpcShotFacts.HeroTarget ? Arcanum.Simulation.Ai.AiSchedulerRules.Pc : decided.Value.Target : null;
+        var aimed = row;
+        if (aimedId is not null && aimedId != Arcanum.Simulation.Ai.AiSchedulerRules.Pc && !map.TryGetRow(aimedId, out aimed!)) return false;
+        if (aimedId == Arcanum.Simulation.Ai.AiSchedulerRules.Pc) aimed = HeroRow;
+        // PF14: the weapon's projectile art is a scenery art faced in the flight's direction (the hero's thrown dagger flies so); without one the item's own art flies as it lies.
+        if (weapon && decided!.Value.ThrownArt is { } missile) art = ProjectileRules.FacedArt(missile, direction) ?? art;
         var projectile = new AreaProjectile
         {
-            Shot = shot, Owner = owner, Map = CurrentAreaMap, Target = row, Thrower = row, Destination = destination, Art = art,
-            Flight = new(from, from, [(0, 0)], 1, from, 0, 0, 0), State = new(false, true, thrown.Range), Thrown = thrown, Targetless = true, SizeArc = true,
-            Launched = new(thrower, false, false, null, thrower),
+            Shot = shot, Owner = owner, Map = CurrentAreaMap, Target = aimed, Thrower = row, Shooter = weapon ? row : null, Destination = destination, Art = art,
+            Flight = new(from, from, [(0, 0)], 1, from, 0, 0, 0), State = new(hit, !hit, thrown.Range), Thrown = thrown, Targetless = !hit, SizeArc = !isWeapon,
+            Launched = new(aimedId ?? thrower, false, false, weapon ? thrower : null, thrower),
         };
-        if (!ProjectileHost().Launch(projectile, from, null))
+        // A weapon's refused launch leaves its shot to the AI host (the hit strikes at once, the item lands); a generic item's ends it (the item stays on the thrower's cell).
+        _npcShotLaunching = weapon ? shot.Id : null;
+        bool launched;
+        try { launched = ProjectileHost().Launch(projectile, from, hit && aimedId != Arcanum.Simulation.Ai.AiSchedulerRules.Pc ? aimedId : null); }
+        finally { _npcShotLaunching = null; }
+        if (!launched)
         {
             GD.Print($"ARC-DEV-258 npc-throw-not-launched shot={shot.Id} thrower={thrower}");
             return false;
         }
         GD.Print($"ARC-DEV-258 npc-throw-launch shot={shot.Id} thrower={thrower} item={thrown.Item} range={thrown.Range} from={from.X},{from.Y} to={destination.X},{destination.Y} direction={direction}"
-            + $" art={(art is { } a ? $"0x{a:X8}" : "none")}");
+            + $" art={(art is { } a ? $"0x{a:X8}" : "none")}" + (weapon ? $" weapon check={(hit ? "hit " + aimedId : "miss")}" : ""));
         SyncAreaProjectileBodies();
         return true;
     }
@@ -354,8 +374,11 @@ public partial class TerrainViewerApp
         if (crossed.Strike is ProjectileStrikeKind.RangeEnd or ProjectileStrikeKind.DestinationEnd && projectile.Returns)
         {
             var events = ShotEndEvents(projectile);
+            var scripts = projectile.Owner.QueryShotEndScripts(projectile.Shot);
             Ended(projectile, crossed.Strike, null, "turned back");
             var turned = TurnBack(projectile);
+            // ARC-COMBAT-1719: the boomerang's first end turns it back (0x4B2690), then the weapon's hit (7) or miss (8) script runs, then the item event.
+            RunShotEndScripts(projectile, scripts, crossed.Strike == ProjectileStrikeKind.DestinationEnd);
             FireShotEnd(projectile, events);
             return turned ? ProjectileCrossResult.Turned : ProjectileCrossResult.Ended;
         }
@@ -434,7 +457,7 @@ public partial class TerrainViewerApp
         // The item event of the strike's end is asked while the shot is in flight (a struck thrown shot waits for its landing and asks nothing more).
         var events = ShotEndEvents(projectile);
         // ARC-DEV-258 (MIG13 S14n): an NPC's thrown item ends where it meets something: it lands on the tile left and its own event goes off there (GT63); the item's hit on the struck object is not ready.
-        if (projectile.Thrower is not null)
+        if (projectile.Thrower is not null && projectile.Shooter is null)
         {
             Ended(projectile, kind, struck.Key.Kind + ":" + struck.Key.SourceIndex, "an NPC's thrown item met an object: its hit is not ready");
             EndOnTile(projectile);
@@ -450,17 +473,26 @@ public partial class TerrainViewerApp
             var struckId = struckHero ? Arcanum.Simulation.Ai.AiSchedulerRules.Pc : AreaConversationState.EntityId(struck);
             var shooterId = AreaConversationState.EntityId(shooter);
             _projectileHost?.Finish(projectile);
+            // ARC-COMBAT-1717 (PF8, PF10): a thrown weapon lands on the tile left after its strike (the shot stays in the session for the landing) and its item event goes off there.
+            var thrownWeapon = projectile.Thrown is not null;
             if (AreaAiHostNow() is not { } ai)
             {
-                owner.EndShot(projectile.Shot);
+                if (!thrownWeapon) owner.EndShot(projectile.Shot);
                 Ended(projectile, kind, null, $"an NPC's shot met {(struckCritter ? "a critter" : $"an object of type {struck.Type}")} without the AI host: no strike");
+                if (thrownWeapon) { EndOnTile(projectile); FireShotEnd(projectile, events); }
                 return ProjectileCrossResult.Ended;
             }
             // ARC-COMBAT-1140 (PF8, RH5): an object or a wall the arrow meets takes it as a forced hit (the damage step of an object, its break and the trap and BUST script of it).
-            if (!struckCritter) return NpcShotOnObject(projectile, kind, struck, ai, shooterId);
+            if (!struckCritter)
+            {
+                var onObject = NpcShotOnObject(projectile, kind, struck, ai, shooterId);
+                if (thrownWeapon) { EndOnTile(projectile); FireShotEnd(projectile, events); }
+                return onObject;
+            }
             var landed = ai.LandShot(shooterId, projectile.Shot, struckId);
             _npcShotStrikesForSelfTest.Add((projectile.Shot.Id, struckId, landed?.Disposition ?? GameSessionDisposition.Rejected, landed?.Life?.HitPointDamage));
             Ended(projectile, kind, struckId, $"an NPC's shot: disposition={landed?.Disposition} failure={landed?.Failure} outcome={landed?.Resolution?.Outcome} damage={landed?.Life?.HitPointDamage}");
+            if (thrownWeapon) { EndOnTile(projectile); FireShotEnd(projectile, events); }
             return ProjectileCrossResult.Ended;
         }
         ProjectileCrossResult end;
@@ -532,7 +564,8 @@ public partial class TerrainViewerApp
         }
         if (IsAreaCompanion(struck.Key) || ObjectTargets()?.Target(owner, struck.Key, AreaTrapped) is not { Refusal: null, Object: { } objectTarget } target || target.Kind is DamageableObjectKind.Item)
         {
-            owner.EndShot(projectile.Shot);
+            // ARC-COMBAT-1717: a thrown weapon's shot stays for its landing (the caller's).
+            if (projectile.Thrown is null) owner.EndShot(projectile.Shot);
             Ended(projectile, kind, null, $"an NPC's shot met an object of type {struck.Type} it cannot strike: no strike");
             return ProjectileCrossResult.Ended;
         }
@@ -617,10 +650,13 @@ public partial class TerrainViewerApp
     private void EndProjectile(AreaProjectile projectile, ProjectileStrikeKind kind, string? struck, string why, bool land = false, bool fireEnd = false)
     {
         var events = fireEnd ? ShotEndEvents(projectile) : [];
+        var scripts = fireEnd ? projectile.Owner.QueryShotEndScripts(projectile.Shot) : null;
         _projectileHost?.Finish(projectile);
         // ARC-COMBAT-1223 (PS5, PF9; 0x4B2870): the end at the destination (a shot without a target) runs the weapon's hit script (point 7), the range end its miss script (point 8).
         if (land) EndOnTile(projectile, !fireEnd ? null : kind == ProjectileStrikeKind.DestinationEnd ? Arcanum.Scripting.Scr.ScrPoint.Hit : Arcanum.Scripting.Scr.ScrPoint.Miss);
         else projectile.Owner.EndShot(projectile.Shot);
+        // ARC-COMBAT-1719: the weapon's scripts of a shot that is not the hero's thrown item (its own are the thrown-item host's) and the critical points, then the item event.
+        RunShotEndScripts(projectile, scripts, kind == ProjectileStrikeKind.DestinationEnd);
         Ended(projectile, kind, struck, why);
         if (kind == ProjectileStrikeKind.RangeEnd) { _attackNotice = "the shot flew past"; RefreshAreaStatus(); }
         else if (kind == ProjectileStrikeKind.DestinationEnd && projectile.Returns) { _attackNotice = "the boomerang is back"; RefreshAreaStatus(); }
@@ -632,6 +668,40 @@ public partial class TerrainViewerApp
     /// (<see cref="GameSessionOwner.QueryShotEndItemEvents"/>), asked while the shot is still in flight; none for a shot of a hand without an item.</summary>
     private static IReadOnlyList<SessionItemEvent> ShotEndEvents(AreaProjectile projectile) =>
         projectile.Owner.QueryShotEndItemEvents(projectile.Shot, projectile.Flight.Tile);
+
+    /// <summary>
+    /// ARC-COMBAT-1719 (0x4B2870, ledger PF9, PS5, CP4): the weapon's scripts at an end of a projectile's flight without a strike (<paramref name="facts"/>, asked before the end:
+    /// <see cref="GameSessionOwner.QueryShotEndScripts"/>), through the shown map's use-script host (<see cref="AreaUseScriptHost.RunCombatPoint"/>) in the original's order (<see cref="AreaShotEndScripts.Points"/>): the shooter is the
+    /// triggerer, the weapon the attachee and the shot's target (none for a scattered throw) the extra object; the answers cancel nothing. A flight of another session or map, or a shot with no weapon item, runs nothing; a run the host refuses
+    /// is said and the end goes on.
+    /// </summary>
+    private void RunShotEndScripts(AreaProjectile projectile, SessionShotEndScripts? facts, bool destination)
+    {
+        if (facts is not { } ends || !ReferenceEquals(projectile.Owner, _areaSession) || projectile.Map != CurrentAreaMap) return;
+        if (_areaSession is not { } owner || _readyArea is not { } area || UseScriptHost(area.Snapshot) is not { } host) return;
+        static bool IsHero(string id) => id == SessionSpellCaster.Hero || id == Arcanum.Simulation.Ai.AiSchedulerRules.Pc;
+        var hero = IsHero(ends.Attacker);
+        // A carried item's row is read by identity from the map the hero took it on, a thrown one that lies on the ground from the map it came from; an NPC's weapon is a row of the shown map.
+        var map = CurrentAreaMap;
+        var carried = hero ? owner.QueryPcInventory().FirstOrDefault(held => held.Entity == ends.Weapon) : default;
+        var isCarried = carried.Entity is not null;
+        var placed = hero && !isCarried ? owner.QueryPlacedItems().FirstOrDefault(item => item.Entity == ends.Weapon) : null;
+        var weaponMap = isCarried ? carried.Origin.RuntimeMap : placed is not null ? (placed.Origin ?? placed.Map).RuntimeMap : map;
+        // 0x4B2870: the critical points ask that the parent item is a weapon (object type 5); an item the session does not list counts as the wielded weapon, an NPC's as a weapon.
+        var isWeapon = !hero || (isCarried ? carried.Kind.Type : placed?.Kind.Type ?? SessionItemType.Weapon) == SessionItemType.Weapon;
+        Arcanum.Scripting.Scr.ScrObjectRef Ref(string id) => IsHero(id) ? host.Pc : new(map, ScriptCodeOfCast(id));
+        var weaponRef = new Arcanum.Scripting.Scr.ScrObjectRef(weaponMap, ends.Weapon);
+        var attackerRef = Ref(ends.Attacker);
+        var targetRef = ends.Target is { } target ? Ref(target) : (Arcanum.Scripting.Scr.ScrObjectRef?)null;
+        var points = AreaShotEndScripts.Points(destination, ends.Critical, isWeapon, hero && ends.Thrown);
+        foreach (var point in points)
+        {
+            var ran = Awarded(host, host.RunCombatPoint(point, weaponRef, attackerRef, targetRef, owner.Rules.Scripts));
+            if (ran.Run is not null)
+                GD.Print($"ARC-COMBAT-1719 shot-end-script shot={projectile.Shot.Id} point={point} attacker={ends.Attacker} weapon={ends.Weapon} target={ends.Target ?? "none"} outcome={ran.Outcome} run={ran.Run.Outcome} stop={ran.Run.Stop} detail={ran.Detail}");
+        }
+        if (points.Count > 0) RefreshAreaStatus();
+    }
 
     /// <summary>ARC-DEV-140 (B14): fires the item event of a shot's end through the map's cast host (0x4CBDB0 → 0x4CB830, after the projectile's end placed
     /// the item): the item's own spells with the attacks-a-location trigger (0x800000) start as runs aimed at the tile, so a thrown grenade explodes where it

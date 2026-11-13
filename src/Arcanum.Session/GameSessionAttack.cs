@@ -125,6 +125,9 @@ public sealed class SessionCritterCombat
     /// <summary>ARC-DEV-358: the spell flags (<c>obj_f_spell_flags</c>) the map data or prototype stores for this NPC; the body spell reads them with the session's written change.</summary>
     internal int DataSpellFlags { get; init; }
 
+    /// <summary>ARC-COMBAT-1720: whether the critter is under magnetic inversion (its spell flag 0x400000 at the combat build), for a weapon re-wield's target (<see cref="SessionWieldTarget"/>).</summary>
+    public bool MagneticInversion => _flags.HasFlag(CombatantFlags.MagneticInversion);
+
     /// <summary>
     /// ARC-MAGIC-056 (MA-9, Tempus Fugit): the speed change the NPC reads (+10 holding the spell, -10 otherwise while some critter holds it, else 0:
     /// <see cref="GameSessionOwner.TempusFugitShiftOf"/>); the session sets it where it hands the NPC out under its effects (<see cref="GameSessionOwner.WithNpcEffects"/>).
@@ -707,9 +710,9 @@ public sealed partial class GameSessionOwner
             MagickTechAptitude = aptitude,
             ArmorClass = AttackRules.ArmorClass(0, equipment.ArmorClassAdjustment, snapshot.GetEffective(CharacterStat.AcAdjustment), value => value,
                 _rules.Combat),
-            // ARC-MAGIC-027: the hero's durable effects' resistance changes (the innate entries' are not modelled).
+            // ARC-MAGIC-027: the hero's durable effects' resistance changes, under the innate effects' (ARC-MAGIC-1700).
             Resistances = CombatantRules.Resistances(HeroStoredResistances().Damage, equipment.Resistances, snapshot.GetEffective(CharacterStat.Constitution), false,
-                EffectDomain.Resistances(_effects.Entries, _effects.Definitions)),
+                HeroEffectResistances()),
             Conditions = CombatantRules.Conditions(status, state, facts.Traits, CombatantFlags.None),
             LightEmission = equipment.Light,
             DodgeLevel = skills[Skill.Dodge].Level,

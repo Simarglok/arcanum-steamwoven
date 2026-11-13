@@ -80,6 +80,15 @@ public partial class TerrainViewerApp
         {
             OpenInventory(body.Entity);
             Require(InventoryOpen && InventoryActive, "the window on the body opens");
+            // ARC-UI-1194: with ARC_AREA_WINDOW_ART the body window's doll view (the loot doll 349 over the loot art) is checked in the generated interface and captured.
+            if (WindowArtSmokeRequested)
+            {
+                Require(_inventoryPanel is { ArtMode: true } && _inventoryPanel.GridAreaForSelfTest is { TogglesShown: true }, "the body window shows the original's look with its doll toggles");
+                var bodyArea = _inventoryPanel!.GridAreaForSelfTest;
+                bodyArea.SetBodyDoll(true);
+                await WindowArtSmokeAsync("loot-doll", bodyArea, [AreaLootArtLayout.LootArt, AreaLootArtLayout.DollViewArt, AreaInventoryHole.LootArt]);
+                bodyArea.SetBodyDoll(false);
+            }
             var before = session.QueryPcInventory().Count;
             TakeAllFromBody();
             var movedFirst = plain.Where(entity => session.QueryPcInventory().Any(item => item.Entity == entity)).ToArray();
@@ -111,6 +120,14 @@ public partial class TerrainViewerApp
             var leftLast = Listed().Where(Plain).Select(item => item.Entity).ToArray();
             Require(leftLast.Length < leftFirst.Length, $"with room the next Take all takes more ({leftLast.Length} left of {leftFirst.Length})");
             Require(Waiting() == baselineUnplaced, "no item outside the grid at the end");
+            // ARC-UI-1194: with ARC_AREA_WINDOW_ART the hero's own inventory window (the pack, the doll and the lens 233) is checked and captured too.
+            if (WindowArtSmokeRequested)
+            {
+                if (InventoryOpen) EndInventory();
+                OpenInventory();
+                Require(_inventoryPanel is { ArtMode: true }, "the own window shows the original's look");
+                await WindowArtSmokeAsync("inventory", _inventoryPanel!.GridAreaForSelfTest, [AreaInventoryArtLayout.PackArt, AreaInventoryArtLayout.DollArt, AreaInventoryHole.InventoryArt]);
+            }
             GD.Print($"ARC-DEV-333 loot-room body={body.Entity} plain={plain.Length} frameRows={height} predicted={predicted} moved={movedFirst.Length} left={leftFirst.Length} later={leftLast.Length} pc={before}->{pcAfterFirst}");
         }
         finally

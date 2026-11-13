@@ -170,7 +170,11 @@ public sealed partial class GameSessionOwner
             // ARC-WORLD-062: no decay event. The original creates the product on the tile (0x4ED8B0) and a refused transfer (0x4617F0)
             // leaves it there; neither reaches the schedule 0x468090, so it lies until someone moves it (ledger ID9).
             if (unit.Ground) CreateMadeItem(new(unit.Entity, kind, SessionCreatePlace.Ground, weight, complexity, Map: _actor.Map, Cell: crafterCell!.Value, Source: SessionPlacedSource.Made));
-            else if (unit.NewObject) CreateMadeItem(new(unit.Entity, kind, SessionCreatePlace.NpcList, weight, complexity, Holder: npc));
+            else if (unit.NewObject)
+            {
+                CreateMadeItem(new(unit.Entity, kind, SessionCreatePlace.NpcList, weight, complexity, Holder: npc));
+                StoreInsertPlace(npc, unit.Entity);
+            }
             if (ammo is { } a) AddAmmoUnits(unit.Entity, a.AmmoType, a.Units);
         }
         Revise();
