@@ -35,6 +35,8 @@ public sealed class AreaSceneryHost : IAiSceneryWorld, IGoalStepHost
     private readonly Dictionary<string, (SceneryLoop Loop, bool Burning, string? Source, bool Begun)> _created = new(StringComparer.Ordinal);
     // ARC-RENDER-1781: the object offset of a scenery whose loop was killed by an art change (the object keeps the offset its frame deltas moved it by, AS6); a loop that takes over later starts from it.
     private readonly Dictionary<string, (int X, int Y)> _resting = new(StringComparer.Ordinal);
+    // ARC-RENDER-1781: the entities whose loop an art change killed since the last take (the loop's end node stops the run's sound, 0x42DED0).
+    private readonly List<string> _killedByArt = [];
     private bool _changed, _createdChanged;
     // ARC-RENDER-1126: the map's loops whose begin node ran since the last take (the loop sound's decision point).
     private readonly List<string> _soundBegins = [];
@@ -218,10 +220,11 @@ public sealed class AreaSceneryHost : IAiSceneryWorld, IGoalStepHost
         if (decision == SceneryRestart.Kill)
         {
             _session.KillGoals(entity);
-            if (_byEntity.Remove(entity)) { _animation.Remove(entity); _resting[entity] = offset; }
+            if (_byEntity.Remove(entity)) { _animation.Remove(entity); _resting[entity] = offset; _killedByArt.Add(entity); }
             _changed = true;
         }
-        else if (decision == SceneryRestart.Start && frames.Count >= 2)
+        // A stoned scenery's begin node refuses the loop (AS3, spell flag 0x10000): the loop is not started for it, as at the load.
+        else if (decision == SceneryRestart.Start && frames.Count >= 2 && (AreaSceneryAnimation.SpellFlags(row) & SceneryAnimationRules.Stoned) == 0)
         {
             var running = _session.QueryGoals().MainRunOf(entity) is not null;
             // The run that exists keeps its stored delay (the begin node read it from the art the run was started with); a run started now reads the new art.
@@ -233,6 +236,15 @@ public sealed class AreaSceneryHost : IAiSceneryWorld, IGoalStepHost
             _changed = true;
         }
         return decision;
+    }
+
+    /// <summary>ARC-RENDER-1781: the entities whose loop an art change killed since the last call (the viewer stops their looping voice: the end node stops the run's sound).</summary>
+    public IReadOnlyList<string> TakeKilledByArt()
+    {
+        if (_killedByArt.Count == 0) return [];
+        var killed = _killedByArt.ToArray();
+        _killedByArt.Clear();
+        return killed;
     }
 
     /// <summary>ARC-RENDER-1781: the frame and the object offset the scenery shows by its loop, or by the offset its killed loop left (frame 0); null when the host never knew a loop of it.</summary>

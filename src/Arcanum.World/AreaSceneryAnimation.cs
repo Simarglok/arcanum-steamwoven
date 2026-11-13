@@ -77,6 +77,7 @@ public sealed class AreaSceneryAnimation
     /// <summary>The object flags (field 18), the scenery flags (36) and the spell flags (19) of the row, as the start rule reads them (0 when absent).</summary>
     public static uint ObjectFlags(AreaObjectRecord row) => Flags(row, ObjectFlagsSlot);
     public static uint SceneryFlags(AreaObjectRecord row) => Flags(row, SceneryFlagsSlot);
+    public static uint SpellFlags(AreaObjectRecord row) => Flags(row, SpellFlagsSlot);
 
     private static uint Flags(AreaObjectRecord row, int slot) =>
         row.EffectiveFields.FirstOrDefault(f => f.Slot == slot && f.Presence == AreaPresence.Value)?.Number is { } value ? unchecked((uint)value) : 0;

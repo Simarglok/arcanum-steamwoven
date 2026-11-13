@@ -315,6 +315,24 @@ public sealed class AreaSceneryAnimationTests
     }
 
     [TestMethod]
+    public void A_stoned_scenery_gets_no_new_loop_and_a_killed_loop_is_reported_for_its_voice()
+    {
+        var (plan, row) = Scenery(frames: 1, fps: 8);
+        using var f = new Fixture(plan, row);
+        var stoned = Body(0, scenery: 0) with { EffectiveFields = [.. row.EffectiveFields, Field(19, SceneryAnimationRules.Stoned)] };
+        Assert.AreEqual(SceneryRestart.Start, f.Host.Reframe(stoned, NewArt(stoned, 4), 8));
+        Assert.AreEqual(0, f.Animation.Loops.Count, "the begin node refuses a stoned object (AS3)");
+        Assert.AreEqual(0, f.Host.Running);
+        var (plan2, row2) = Scenery(frames: 4, fps: 8);
+        using var g = new Fixture(plan2, row2);
+        g.Host.Start();
+        Assert.AreEqual(0, g.Host.TakeKilledByArt().Count);
+        g.Host.Reframe(row2, NewArt(row2, 1), 8);
+        CollectionAssert.AreEqual(new[] { AreaUseScriptHost.EntityId(row2) }, g.Host.TakeKilledByArt().ToArray());
+        Assert.AreEqual(0, g.Host.TakeKilledByArt().Count, "taken once");
+    }
+
+    [TestMethod]
     public void The_begin_node_of_each_loop_is_reported_once_for_its_looping_sound()
     {
         // ARC-RENDER-1126 (0x42DA50): the begin node is where the original starts the scenery's looping sound; the host reports the begin and the viewer decides.
