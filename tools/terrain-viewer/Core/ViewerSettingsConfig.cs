@@ -34,6 +34,7 @@ public static class ViewerSettingsConfig
     public const string CombatTaunts = "combat taunts";
     public const string ViolenceFilter = "violence filter";
     public const string Brightness = "brightness";
+    public const string AutoSwitch = "auto switch";
     public const string EffectsVolume = "effects volume";
     public const string VoiceVolume = "voice volume";
     public const string MusicVolume = "music volume";
@@ -46,7 +47,7 @@ public static class ViewerSettingsConfig
     public const string TouchSchemeLine = "touch scheme";
     public const string PromptStyleLine = "prompt style";
 
-    private static readonly string[] GameLines = [Difficulty, TurnBased, AutoAttack, TextFloaters, FloatSpeed, CombatTaunts, ViolenceFilter, Brightness, HdInterface, GeneratedInterface, HdPack, HdPackPath, PadSchemeLine, TouchSchemeLine, PromptStyleLine];
+    private static readonly string[] GameLines = [Difficulty, TurnBased, AutoAttack, TextFloaters, FloatSpeed, CombatTaunts, ViolenceFilter, Brightness, AutoSwitch, HdInterface, GeneratedInterface, HdPack, HdPackPath, PadSchemeLine, TouchSchemeLine, PromptStyleLine];
     private static readonly string[] AudioLines = [EffectsVolume, VoiceVolume, MusicVolume];
 
     private static int? Int(ArcanumConfigRead read, string name, int minimum, int maximum)
@@ -90,6 +91,7 @@ public static class ViewerSettingsConfig
             CombatTaunts = Flag(read, CombatTaunts) ?? defaults.CombatTaunts,
             ViolenceFilter = Flag(read, ViolenceFilter) ?? defaults.ViolenceFilter,
             Brightness = Int(read, Brightness, 0, BrightnessRules.Max) ?? defaults.Brightness,
+            AutoSwitchWeapons = Flag(read, AutoSwitch) ?? defaults.AutoSwitchWeapons,
             HdInterface = hdInterface,
             // The generated interface draws through the HD interface, so it is on only with it (the options line writes both).
             GeneratedInterface = (Flag(read, GeneratedInterface) ?? false) && hdInterface,
@@ -110,7 +112,7 @@ public static class ViewerSettingsConfig
         return
         [
             new(Difficulty, Number(settings.Difficulty)), new(TurnBased, Flag(settings.TurnBased)), new(AutoAttack, Flag(settings.AutoAttack)),
-            new(TextFloaters, Number(settings.Floats)), new(FloatSpeed, Number(settings.FloatSpeed)), new(CombatTaunts, Flag(settings.CombatTaunts)),
+            new(TextFloaters, Number(settings.Floats)), new(FloatSpeed, Number(settings.FloatSpeed)), new(CombatTaunts, Flag(settings.CombatTaunts)), new(AutoSwitch, Flag(settings.AutoSwitchWeapons)),
             new(ViolenceFilter, Flag(settings.ViolenceFilter)), new(Brightness, Number(settings.Brightness)),
             new(HdInterface, Flag(settings.HdInterface)), new(GeneratedInterface, Flag(settings.GeneratedInterface && settings.HdInterface)),
             new(HdPack, HdPackSourceResolver.ModeName(settings.HdPackSource)), new(HdPackPath, path),

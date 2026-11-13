@@ -60,7 +60,7 @@ public sealed record AreaOptionControl(AreaOption Option, AreaOptionsPage Page, 
 public static class AreaOptionTable
 {
     public const string NoModules = "one module is offered; choosing a module is not built";
-    public const string NoAutoSwitch = "switching weapons by itself is not built";
+    public const string NoAutoSwitch = "its options row is not built yet; the setting is the settings file's auto switch line";
     public const string NoFollowerSkills = "followers do not use skills on their own yet";
     public const string NoTextDuration = "text bubbles are not built";
     public const string NoFastTurnBased = "Fast Turn Based is not built";
@@ -226,6 +226,8 @@ public sealed record AreaGameSettings
         get => _brightness;
         init => _brightness = value is < 0 or > BrightnessRules.Max ? throw new ArgumentOutOfRangeException(nameof(value)) : value;
     }
+    /// <summary>ARC-COMBAT-1720: the "auto switch" setting (OH3, getter 0x4B8330; the original never registers it, so it reads 0 until written: default off): the hero's weapon wearing out wields the best remaining weapon for the target (0x4B83E0). The settings file's <c>auto switch</c> line; the options window shows no row yet (the Game page's eight slots are full, issue 1729).</summary>
+    public bool AutoSwitchWeapons { get; init; }
 
     /// <summary>The "float speed" (a step of speed + 1 px).</summary>
     public int FloatSpeed

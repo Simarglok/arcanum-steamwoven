@@ -117,9 +117,14 @@ or the triggerer alone for radius 0, none without a triggerer):
   then the victim's taking-damage script is asked with the shooter as the attacker, the damage step takes the amount in the
   normal slot and the hit effect of a PC or NPC victim runs. The victim's result carries the damage step's own outcome and
   the shooter. The player credit of a PC-placed trap is lost in a shot (the result's `Killer` is null: the strike's context
-  names the shooter as the damage source, TT15). The strike also calls the shooter's critter-hits script point (0x4B2F60, not run) and the sound cue draws one random (0x4F0BF0, not drawn: the project draws no sound cues). The hit effect (0x4B6930) runs whatever the damage step did, a veto and an invulnerable target included. PROJECT: the missile is not drawn or flown, so a victim that would leave its
-  line, a kill before the strike and a save during the flight are not modelled ([#1635](https://github.com/Simarglok/arcanum-steamwoven/issues/1635) draws the flight); a PC victim's
-  armed critical-miss fate (0x4F5270) is not applied. The host lists the shooter candidates around the triggerer
+  names the shooter as the damage source, TT15). The strike also calls the shooter's critter-hits script point (0x4B2F60, not run) and the sound cue draws one random (0x4F0BF0, not drawn: the project draws no sound cues). The hit effect (0x4B6930) runs whatever the damage step did, a veto and an invulnerable target included.
+  ARC-TECHNOLOGY-1635 (the missile): the strike does not follow the dispatcher when the host flies the missile (`SessionSpellCaster.LaunchTrapShot`, set by the viewer): after the spell the session makes a shot of its own
+  (`GameSessionOwner.BeginTrapShot`: shooter object, victim, amount; the 16 shots in flight are shared with the hero's and the NPCs' shots, so a full budget strikes at once and, while trap missiles fly, a hero's own ranged attack or throw can be refused for the budget) and the host launches one projectile of the default art (scenery art 0, faced along its line, drawn)
+  from the shooter object's tile to the victim's location. Where the missile meets the victim on the line (`SessionSpellCaster.StrikeTrapShot`) the event and the damage described above run; a victim that left the line is
+  not struck: the missile flies on past its destination (as a miss), strikes another living critter by the shared stray rule (the same strike with the shooter as attacker) or ends at its range of 20 tiles with nothing struck.
+  The session's shot is saved with the missile (`flights.trapShots`, schema 100: shooter, victim, amount) and strikes after a load. The hero victim's armed critical-miss fate (0x4F5270 kind 3, ledger TT15) makes the hit a
+  miss that pops on the shooter's own tile (`SessionTrapHit.Missed`: the fate is used up, a third d100 of the critical-miss procedure is drawn, no event, no damage; the spell is cast all the same). Not built: a missile that
+  meets an object other than a critter on its free flight strikes none ([#1760](https://github.com/Simarglok/arcanum-steamwoven/issues/1760)). Without a host that flies (no launch hook, or a launch the host refuses) the strike follows the dispatcher at once, as it did. The smoke stage `ranged` has a trap-shot leg on the real map: a scenery, portal or trap object 3..8 cells from the hero shoots through the cast host; the missile is drawn and strikes the hero for exactly the drawn amount, a hero moved off the line is not struck, and a shot saved in flight with F7 strikes after F8 as the live one did. The host lists the shooter candidates around the triggerer
   (`AreaTrapShooters.Candidates`: the objects of types wall, portal, scenery and trap in the isometric window of the game
   view, each with its use script and counters, the square query's order); without a triggerer it lists none.
 - **Spell**: 30000, and any damage or shot with a top byte, starts the spell at the victim
@@ -139,7 +144,15 @@ The attack event (0x4A9650, ledger [VB2-2 gap d](../research/ledger/npc-ai.md#pa
 map: type, tile and object flags; the busted state, 0x43F630, is not read), so `Find` answers an object of kind `Object` or `Wall`, its tile answers `Tile` and `Distance`, and the focus is
 valid as the original's validity test 0x4AB990 keeps it (a wall or a busted one is not, a destroyed, off, not drawn or invulnerable one is gone). An NPC victim of such an attacker
 is asked into COMBAT_FOCUS on it through the setter with no alert sound and the event returns (`AreaAiHost.AttackEvent`, plan `VictimFightsObject`); a victim of any other kind does
-nothing more. What the NPC then does with an object as its focus (the original's attack goal on a non-critter) is not built in the host: it keeps the focus and its pass finds no attack ([#1636](https://github.com/Simarglok/arcanum-steamwoven/issues/1636)).
+nothing more.
+
+ARC-AI-1636: the NPC then fights the object. The danger update keeps the focus while 0x4AB990 does (the object whole, not a wall, within the leash), and the viewer fills the busted state of the shooter object
+(`AreaAiObjectFacts.Busted`, 0x43F630 through `AreaObjectTargets.IsBusted`: a portal's or container's lock-domain busted bit 0x80, a scenery's or trap's busted condition; a destroyed object answers 0), so a break drops
+the focus on the next pass (calm down, or the next target). Combat perform (0x4AC6E0) starts the attack goal on the object as on a critter; the goal's tests read a type 15 or 16 only for death (0x429450, 0x4294F0:
+`AreaAiHost.DeadCritter` answers false for an object) and the object's flags 0x1 and 0x2 for its presence (`Gone`). The goal walks next to the object and its hit step is the session's object attack
+(`AreaAiHost.HitObjectFocus` → `GameSessionOwner.AttackObjectByNpc`, no skill roll, the viewer's `AreaAiScene.ObjectStruck` follow-up as for a blocker of the line of fire), after which the attack event of the record (0x4B3170 → 0x4A9650)
+goes out for the object as victim. Not built ([#1755](https://github.com/Simarglok/arcanum-steamwoven/issues/1755), [#1756](https://github.com/Simarglok/arcanum-steamwoven/issues/1756)): the attack animation reads the object's art (0x42B9C0 node 5 reads the target's art and flag 0x80), which the host takes as a standing critter's, and the NPC's spell and item choice for an
+object target (0x4ABC70 reads no target type) runs over the cast host's targets unchanged.
 
 ## Viewer (ARC-WORLD-110)
 
@@ -258,8 +271,7 @@ The hero's disarm traps press (E6-a second half; ledger [SP3](../research/ledger
   attack's trap trigger in the viewer,
   and the drawing of a spotted trap object (the area data resolves no body for a don't-draw
   object yet).
-- The shot's missile (TT15: the default projectile art flying from the shooter's tile, the strike where it meets the victim, the
-  shot in flight across a save) and the shooter list's exact rectangle around the triggerer (TT12); the floating line and the eye candy of a fired run, and the damage effect (TT14),
+- The shooter list's exact rectangle around the triggerer (TT12); the floating line and the eye candy of a fired run, and the damage effect (TT14),
   are the host's presentation.
 - Trap devices placed by the player (ARC-TECHNOLOGY-011/012, ledger TP1–TP8) and the
   multiplayer per-player lists.
