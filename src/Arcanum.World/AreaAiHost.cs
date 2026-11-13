@@ -2337,7 +2337,9 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
 
     /// <summary>
     /// ARC-MAGIC-035: peace (0x4AA300) of an NPC with the side of <paramref name="with"/> (an animal's charm): the session's peace (focus and last attacker cleared, the danger state NONE, the followers' lists), then the host's
-    /// part of it: the NPC's attack run (goal 18 or 19) at that side is interrupted at level 5, as the helper 0x44E050 does. False: the NPC is not run here or the session refused.
+    /// part of it. ARC-AI-1522 (ledger VB2-3): the head is the leader of <paramref name="with"/> (the hero for a follower of the hero), else <paramref name="with"/> itself; the NPC's attack run (goal 18 or 19) whose target is the head
+    /// or anyone led by it is interrupted at level 5 (0x44E050), and for a head with followers (the hero's party) each follower's attack run at the NPC itself is interrupted at level 5 too (0x44E0E0, after the follower forgot the NPC).
+    /// False: the NPC is not run here or the session refused.
     /// </summary>
     public bool SpellPeace(string npc, string with)
     {
@@ -2345,9 +2347,11 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         var result = _session.MakePeace(_session.Version, new SessionPeaceRequest { Entity = npc, Other = other, Facts = OrderFacts(npc) });
         Trace(npc).Setter = $"spell peace {with} {result.Disposition} {result.Failure}";
         if (result.Failure != GameSessionFailure.None) return false;
-        // The head is the hero for the hero's side (the hero or a follower of it), else the other itself.
-        if (RunOf(npc) is { Bottom: { Goal: GoalType.Attack or GoalType.AttemptAttack, Target: { } at } } run && (at == with || with == Pc && Leader(at) == Pc))
-            InterruptRunsWhere(npc, 5, r => r.Handle == run.Handle);
+        var head = Leader(with) ?? with;
+        InterruptRunsWhere(npc, 5, r => r.Bottom is { Goal: GoalType.Attack or GoalType.AttemptAttack, Target: { } at } && (at == head || Leader(at) == head));
+        if (result.Steps.Count > 0)
+            foreach (var follower in result.Steps[0].Followers)
+                InterruptRunsWhere(follower, 5, r => r.Bottom is { Goal: GoalType.Attack or GoalType.AttemptAttack, Target: { } at } && at == npc);
         return true;
     }
 
