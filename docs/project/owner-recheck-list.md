@@ -1086,7 +1086,7 @@ The window is drawn from the build 0x57B4F0 ([sleep window](../world/sleep-windo
 | 1 | Press `S` in the wilderness. | The window stands at the right edge of the play view (573, 42) with eight rows: a round button and a line each (one hour ... until healed). | open |
 | 2 | Look at the button frames and the line colour. | Idle, lit under the pointer, down while pressed; the lines are white in the small font. | open |
 | 3 | Do the same in a town-map sector with the wait marker. | Seven rows (the wait lengths, no until healed). | open |
-| 4 | Press a button and watch the window. | The rest runs; the original keeps the buttons visible (ours hide them, issue #1511). | open |
+| 4 | Press a button and watch the window. | The rest runs; the buttons stay visible, and a second press on another length restarts the rest (ARC-UI-1511). | open |
 
 Known differences (documented, not bugs): a button takes the pointer on its art's rectangle, not its opaque pixels; the controller's focus row is lit.
 

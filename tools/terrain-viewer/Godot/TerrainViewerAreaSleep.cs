@@ -38,6 +38,8 @@ public partial class TerrainViewerApp
     private readonly AreaRestFade _restFade = new();
     // Once per rest (flag 0x6834E0, SWB11): the screen faded and the hourly light apply switched off.
     private bool _restDark;
+    // How many presses ran the press's work (event 29 and the demaintain) in this window: a second press restarts the rest and runs them again (issue #1511).
+    private int _restPresses;
     private long _clockHostMs;
     // Native observation: the steps that ran, the hours they jumped and what each healed, for the self-test and the smoke.
     private readonly List<string> _restLog = [];
@@ -155,7 +157,7 @@ public partial class TerrainViewerApp
         var texts = SleepTexts();
         var rest = new AreaRestRun(opening.Wait);
         var labels = Enumerable.Range(0, AreaRestRules.ButtonCount(opening.Wait)).Select(i => texts.Label(i, opening.Wait)).ToArray();
-        _rest = rest; _restSession = session; _restLog.Clear(); _restBed = bed;
+        _rest = rest; _restSession = session; _restLog.Clear(); _restPresses = 0; _restBed = bed;
         if (!OpenWindowMode(InterfaceMode.Sleep, () => _sleepPanel!.Open(labels, opening.Wait), () => _sleepPanel!.CloseView()))
         {
             // A refused mode change takes the hero out of the bed again (SWB6).
@@ -213,13 +215,13 @@ public partial class TerrainViewerApp
         RefreshAreaStatus();
     }
 
-    /// <summary>A left click on a length (SWB8): the pending step is removed and the first is due 50 ms later; the screen fades out once; script event 29 runs on the direct followers; then the sleeper's maintained spells end
+    /// <summary>A left click on a length (SWB8; the buttons stay, so a second click restarts the chain, issue #1511): the pending step is removed and the first is due 50 ms later; the screen fades out once per rest (<c>_restDark</c>, flag 0x6834E0); script event 29 runs on the direct followers; then the sleeper's maintained spells end
     /// (0x457450, ledger UE6, ARC-MAGIC-1161: the sleeper only, no interrupt of its actions, in the wait window too).</summary>
     private void SleepPressed(int button)
     {
         if (!SleepOpen || _rest is not { } rest || _areaSession is not { } session || !ReferenceEquals(_restSession, session)) return;
         if (!rest.Press(button, _clockHostMs)) return;
-        _sleepPanel!.HideButtons();
+        _restPresses++;
         if (!_restDark) { _restDark = true; _restFade.Out(_clockHostMs); }
         RunLeaderSleeping(session);
         var caster = SpellCasterNow();
@@ -272,7 +274,7 @@ public partial class TerrainViewerApp
     private void EndSleep()
     {
         if (!SleepOpen && _rest is null) return;
-        _rest?.Clear();
+        _rest?.Clear(); _restPresses = 0;
         // The close takes the hero out of his bed (SWB12, SWB16).
         if (_restBed is { } bed) { _bedOccupancy.Unseat(bed, AreaScriptHost.PcCode); _restBed = null; }
         if (_restDark)
@@ -338,5 +340,6 @@ public partial class TerrainViewerApp
     internal AreaBedOccupancy BedOccupancyForSelfTest => _bedOccupancy;
     internal string? SleepStatusForSelfTest => _sleepStatus;
     internal void SleepPressedForSelfTest(int button) => SleepPressed(button);
+    internal int RestPressesForSelfTest => _restPresses;
     internal void TickSleepForSelfTest(long hostMs) { _clockHostMs = hostMs; TickSleep(hostMs); }
 }

@@ -121,6 +121,21 @@ public sealed class AreaRestTests
     }
 
     [TestMethod]
+    public void A_press_in_the_middle_of_a_running_chain_restarts_it_with_the_new_length()
+    {
+        // Issue #1511 (SWB8): the window stays, so a click during the rest removes the pending step and re-adds the first 50 ms later with the new length.
+        var run = new AreaRestRun(wait: false);
+        Assert.IsTrue(run.Press(4, 0));
+        Assert.IsTrue(run.TakeDue(50));
+        Assert.AreEqual(AreaRestEnd.Continue, run.Finish(50, hourAfterJump: 12, sleeperDead: false, sleeperHasHitPointDamage: false));
+        Assert.AreEqual((23, 250L, true), (run.Code, run.DueMs, run.Pending));
+        Assert.IsTrue(run.Press(1, 120));
+        Assert.AreEqual((2, 170L, true, true), (run.Code, run.DueMs, run.Pending, run.Pressed));
+        Assert.IsFalse(run.TakeDue(169));
+        Assert.IsTrue(run.TakeDue(170));
+    }
+
+    [TestMethod]
     public void A_code_rest_keeps_its_code_until_the_end_test_stops_it()
     {
         var run = new AreaRestRun(wait: false);
