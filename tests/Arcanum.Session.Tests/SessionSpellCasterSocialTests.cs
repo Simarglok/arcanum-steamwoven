@@ -13,10 +13,10 @@ namespace Arcanum.Session.Tests;
 [TestClass]
 public sealed class SessionSpellCasterSocialTests
 {
-    private const string Target = "oid:target";
+    private const string Target = "oid:target", Mage = "oid:mage";
     private const string Hero = SessionSpellCaster.Hero;
     private const int Charmed = 0x800000, MindControlled = 0x8000000, Undead = 0x4, Fleeing = 0x10, Blinded = 0x80;
-    private static readonly SpellLocation HeroTile = new(5, 5), TargetTile = new(8, 5);
+    private static readonly SpellLocation HeroTile = new(5, 5), TargetTile = new(8, 5), MageTile = new(11, 5);
 
     private sealed class Map(GameSessionOwner owner, SpellCastCritter critter, int dataSpellFlags = 0, int dataCritterFlags = 0) : ISpellCastMap
     {
@@ -24,6 +24,7 @@ public sealed class SessionSpellCasterSocialTests
         {
             Hero => new(id, SpellTargetObject.Pc, HeroTile, HitPoints: owner.QueryHeroLife()!.Status.HitPoints),
             Target => new(id, SpellTargetObject.Npc, TargetTile, SpellFlags: dataSpellFlags, CritterFlags: dataCritterFlags, HitPoints: 5),
+            Mage => new(id, SpellTargetObject.Npc, MageTile, HitPoints: 5),
             _ => null,
         };
         public IReadOnlyList<SpellTargetObject> ObjectsInSquare(SpellLocation centre, int radius, int typeMask) => [];
@@ -34,7 +35,7 @@ public sealed class SessionSpellCasterSocialTests
         public int Direction(SpellLocation from, SpellLocation to) => 0;
         public IReadOnlyList<SpellTargetObject> Party(SpellTargetObject source) => [];
         public SpellLineOfFire LineOfFire(SpellObjectFacts parent, SpellLocation tile) => new(0, null);
-        public SpellCastCritter? Critter(string entity) => entity == Target ? critter with { SpellFlags = dataSpellFlags, CritterFlags = dataCritterFlags } : null;
+        public SpellCastCritter? Critter(string entity) => entity == Target ? critter with { SpellFlags = dataSpellFlags, CritterFlags = dataCritterFlags } : entity == Mage ? MageCritter() : null;
         public CombatWeapon WieldedWeapon(string entity) => CombatWeapon.Unarmed();
         public IReadOnlyList<SpellAcidItem> WornItems(string entity) => [];
         public (Combatant Combatant, AttackTargetKind Kind)? ObjectCombat(string id) => null;
@@ -68,6 +69,14 @@ public sealed class SessionSpellCasterSocialTests
         public int? Redirect(string target, uint critterFlag, int minimumIntelligence) { Calls.Add($"redirect {target} {critterFlag} {minimumIntelligence}"); return RedirectAnswer; }
     }
 
+    // ARC-MAGIC-1841: an NPC caster with every primary stat 20 (intelligence and willpower high enough for any spell level).
+    private static SpellCastCritter MageCritter()
+    {
+        var stats = AttackStateTests.Stats(strength: 20, dexterity: 20, constitution: 20, willpower: 20, level: 20);
+        for (var i = 0; i < 8; i++) stats[i] = 20;
+        return new(SessionCritterCombat.From(Mage, AttackStateTests.Npc(stats: stats, critterFlags: 0)).Combat!, 0, 0, 0, 0, 0);
+    }
+
     private static SpellCastCritter TargetCritter()
     {
         var fields = AttackStateTests.Npc(stats: AttackStateTests.Stats(willpower: 9), critterFlags: 0);
@@ -99,11 +108,11 @@ public sealed class SessionSpellCasterSocialTests
         return (owner, caster, social);
     }
 
-    private static int Cast(GameSessionOwner owner, SessionSpellCaster caster, SessionSpellRecord record, string to = Target)
+    private static int Cast(GameSessionOwner owner, SessionSpellCaster caster, SessionSpellRecord record, string to = Target, string from = Hero)
     {
-        var hero = caster.Facts(Hero)!;
+        var hero = caster.Facts(from)!;
         var at = caster.Facts(to)!;
-        var started = owner.StartSpellRun(owner.Version, new(new(record.Data.Number, hero, hero, at, at.Location, ParentIsLocalPlayer: true)), record.Run, caster.InvocationWorld(), owner.SpellRolls);
+        var started = owner.StartSpellRun(owner.Version, new(new(record.Data.Number, hero, hero, at, at.Location, ParentIsLocalPlayer: from == Hero)), record.Run, caster.InvocationWorld(), owner.SpellRolls);
         Assert.AreEqual(GameSessionDisposition.Changed, started.Disposition, $"{started.Failure} {started.Creation?.Status} {started.Creation?.Check}");
         var run = started.Creation!.Run!.Id;
         caster.StartGoal(run, new NoCombat());
@@ -196,6 +205,64 @@ public sealed class SessionSpellCasterSocialTests
         Assert.AreEqual(0, host.Calls.Count, "no reaction at the end");
         Assert.IsTrue(owner.QueryDanger(Target).Flags.HasFlag(DangerFlags.NoFlee));
         Assert.IsTrue(Social_(caster).Any(e => e.Value == SessionSpellCaster.SocialLeave), Trail(caster));
+    }
+
+    // ARC-MAGIC-1841 (#1322, SO8 (2) closed): the forced join is under the run's parent whoever it is (0x45DE90 tests only the joiner's type): an NPC caster's target follows it, no reaction toward the hero
+    // is given (the caster is no hero), and the end leaves it with no leader.
+    [TestMethod]
+    public void Mind_control_by_an_npc_makes_the_target_its_forced_follower_and_the_end_leaves_it_leaderless()
+    {
+        var record = Flag(SessionSpellCaster.SpellFlagsField, MindControlled);
+        var (owner, caster, host) = Session(record);
+        using var _ = owner;
+        var run = Cast(owner, caster, record, from: Mage);
+        Assert.AreEqual(0, host.Calls.Count, "no reaction toward the hero from an NPC caster");
+        Assert.AreEqual(Mage, owner.QueryLeader(Target), Trail(caster));
+        CollectionAssert.AreEqual(new[] { Target }, owner.QueryFollowers(Mage).ToArray());
+        Assert.AreEqual(CompanionStanding.Free, owner.QueryCompanion(Target).Standing, "the hero does not lead it");
+        CollectionAssert.AreEqual(new[] { SessionSpellCaster.SocialJoin, SessionSpellCaster.SocialNoFlee }, Social_(caster).Select(e => e.Value).ToArray(), Trail(caster));
+        EndComponent(owner, caster, run);
+        Assert.IsNull(owner.QueryLeader(Target));
+        Assert.AreEqual(0, owner.QueryFollowers(Mage).Count);
+        Assert.IsTrue(Social_(caster).Any(e => e.Value == SessionSpellCaster.SocialLeave), Trail(caster));
+    }
+
+    [TestMethod]
+    public void A_hero_companion_dominated_by_an_npc_leaves_the_hero_for_it_and_the_end_leaves_it_with_no_leader()
+    {
+        var record = Flag(SessionSpellCaster.SpellFlagsField, MindControlled);
+        var (owner, caster, host) = Session(record);
+        using var __ = owner;
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.ForceJoinParty(owner.Version, Target).Disposition);
+        var run = Cast(owner, caster, record, from: Mage);
+        Assert.AreEqual(Mage, owner.QueryLeader(Target), Trail(caster));
+        Assert.AreEqual(0, host.Calls.Count, "no reaction toward the hero");
+        Assert.IsTrue(Social_(caster).Any(e => e.Value == SessionSpellCaster.SocialJoin), Trail(caster));
+        Assert.AreEqual(0, owner.QueryParty().Followers.Count, "the join first left the hero (0x45DE90 → 0x45DFC0)");
+        EndComponent(owner, caster, run);
+        Assert.IsNull(owner.QueryLeader(Target), "the forced leave at the end leaves it with no leader, not back with the hero");
+        Assert.AreEqual(CompanionStanding.Free, owner.QueryCompanion(Target).Standing);
+    }
+
+    [TestMethod]
+    public void The_hero_dominating_a_follower_of_an_npc_takes_it_from_the_npc_and_a_cycle_of_leaders_is_refused()
+    {
+        var record = Flag(SessionSpellCaster.SpellFlagsField, MindControlled);
+        var (owner, caster, _) = Session(record);
+        using var __ = owner;
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.ForceJoinLeader(owner.Version, Target, Mage).Disposition);
+        var run = Cast(owner, caster, record);
+        Assert.AreEqual(Hero, owner.QueryLeader(Target), Trail(caster));
+        Assert.AreEqual(0, owner.QueryFollowers(Mage).Count, "the join first left the mage");
+        EndComponent(owner, caster, run);
+        Assert.IsNull(owner.QueryLeader(Target));
+        // The mage follows the target; the mage dominating the target would close a cycle: refused (a Steamwoven choice: the original's chain query would never end), the leaders unchanged.
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.ForceJoinLeader(owner.Version, Mage, Target).Disposition);
+        var cycle = Cast(owner, caster, record, from: Mage);
+        Assert.IsNull(owner.QueryLeader(Target));
+        Assert.AreEqual(Target, owner.QueryLeader(Mage));
+        Assert.IsTrue(Social_(caster).Contains(new(SpellCastEventKind.SocialEffect, cycle, SessionSpellCaster.SocialRefused, Target, SessionSpellCaster.SocialJoin)), Trail(caster));
+        Assert.AreEqual(MindControlled, owner.QueryObjectFlags(Target).SpellSet & MindControlled, "the flag is still written");
     }
 
     [TestMethod]
