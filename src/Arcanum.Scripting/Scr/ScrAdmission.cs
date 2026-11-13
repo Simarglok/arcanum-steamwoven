@@ -363,8 +363,9 @@ public sealed class ScrAdmissionSet
     public static IReadOnlyList<int> NpcStateActions { get; } = [ScrCatalogue.Action.CritterDisband, ScrCatalogue.Action.SetReaction, ScrCatalogue.Action.AdjustReaction, ScrCatalogue.Action.SetDayStandpoint,
         ScrCatalogue.Action.SetNightStandpoint, ScrCatalogue.Action.SetDayStandpointEx, ScrCatalogue.Action.SetNightStandpointEx, ScrCatalogue.Action.ChangeArtNumber, ScrCatalogue.Action.ChangeScript];
 
-    /// <summary>The actions of <see cref="NpcStateActions"/> the area hosts apply (all but change art number 59, which needs a per-object art overlay the viewer does not have).</summary>
-    public static IReadOnlyList<int> NpcStateHostActions { get; } = [.. NpcStateActions.Where(a => a != ScrCatalogue.Action.ChangeArtNumber)];
+    /// <summary>The actions of <see cref="NpcStateActions"/> the area hosts apply: all nine since ARC-SCRIPT-1735 (change art number 59 writes the session's object art field, <see cref="Arcanum.Session.SessionObjectArt"/>, which the viewer draws; the host refuses a
+    /// run whose target it cannot draw with another art).</summary>
+    public static IReadOnlyList<int> NpcStateHostActions { get; } = NpcStateActions;
 
     /// <summary>
     /// The NPC state set (ARC-SCRIPT-1163, plan slice E5-a, ledger NS1–NS8): <see cref="S35"/> plus critter disband (22), set reaction (30), adjust reaction (31), set day standpoint (45), set night standpoint (46), change art number (59), change script (99) and the extended
@@ -466,6 +467,16 @@ public sealed class ScrAdmissionSet
     /// </summary>
     public static ScrAdmissionSet S55 { get; } = new("S55", S54.Conditions.Concat([ScrCatalogue.Condition.IsPolymorphed, ScrCatalogue.Condition.IsShrunk, ScrCatalogue.Condition.HasMirrorImage]),
         S54.Actions.Concat([ScrCatalogue.Action.PlaySpellEyeCandy, ScrCatalogue.Action.StopScriptEyeCandy]), S54.ValueKinds, S54.FocusKinds, counterIndexWraps: true);
+
+    /// <summary>The getters the set <see cref="S56"/> adds, which a host answers through <see cref="IScrCritterFieldQueries"/> (ARC-SCRIPT-1772, ledger CQ1–CQ3): get social class (38), get origin (39) and get faction (89); each stores an NPC field into its number operand 1.</summary>
+    public static IReadOnlyList<int> CritterFieldActions { get; } = [ScrCatalogue.Action.GetSocialClass, ScrCatalogue.Action.GetOrigin, ScrCatalogue.Action.GetFaction];
+
+    /// <summary>
+    /// The critter getters and writes set (ARC-SCRIPT-1772, ledger CQ1–CQ8; the script census group CRQ, the part <see cref="S53"/> left): <see cref="S55"/> plus the getters of <see cref="CritterFieldActions"/>, toggle invulnerability (57, flips object flag 0x400000,
+    /// which condition 30 reads) and rename (92, writes the object's name number, field 0x16), exe 0x447220 cases 0x26, 0x27, 0x39, 0x59 and 0x5C.
+    /// </summary>
+    public static ScrAdmissionSet S56 { get; } = new("S56", S55.Conditions, S55.Actions.Concat(CritterFieldActions).Concat([ScrCatalogue.Action.ToggleInvulnerability, ScrCatalogue.Action.Rename]),
+        S55.ValueKinds, S55.FocusKinds, counterIndexWraps: true);
 
     /// <summary>The conditions of <see cref="S51"/> and <see cref="S52"/> a host answers through <see cref="IScrCritterQueries"/>.</summary>
     public static IReadOnlySet<int> CritterQueryConditions { get; } = new HashSet<int> { ScrCatalogue.Condition.IsAnimal, ScrCatalogue.Condition.IsInCombat };
@@ -700,6 +711,8 @@ public static class ScrAdmission
             if (!condition && type == ScrCatalogue.Action.GetLocation && slot is 1 or 2 && (ScrValueKind)kind == ScrValueKind.Number) return Refuse(ScrRefusalCode.WriteToNumber);
             // Get hit points and get fatigue points store into their number operands 1 and 2 (ARC-SCRIPT-1481, VT1, VT2).
             if (!condition && type is ScrCatalogue.Action.GetHitPoints or ScrCatalogue.Action.GetFatiguePoints && slot is 1 or 2 && (ScrValueKind)kind == ScrValueKind.Number) return Refuse(ScrRefusalCode.WriteToNumber);
+            // Get social class, get origin and get faction store into their number operand 1 (ARC-SCRIPT-1772, CQ1–CQ3).
+            if (!condition && type is ScrCatalogue.Action.GetSocialClass or ScrCatalogue.Action.GetOrigin or ScrCatalogue.Action.GetFaction && slot == 1 && (ScrValueKind)kind == ScrValueKind.Number) return Refuse(ScrRefusalCode.WriteToNumber);
             // Get area stores into its number operand 1 (ARC-SCRIPT-050, GA1).
             if (!condition && type == ScrCatalogue.Action.GetArea && slot == 1 && (ScrValueKind)kind == ScrValueKind.Number) return Refuse(ScrRefusalCode.WriteToNumber);
             // Slot 0 of these types is itself an index, a store or a jump target.

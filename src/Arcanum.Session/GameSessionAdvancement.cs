@@ -199,7 +199,7 @@ internal sealed class AdvancementDomain(SessionAutoLevelRules? rules)
     /// (innate ones included), the skill changes of its race and gender effects (ARC-SKILLS-002) and of its durable effects, the
     /// maxima changes of its durable effects, and its poison level.
     /// </summary>
-    internal static AdvancementModifiers HeroModifiers(HeroDomain hero, EffectDomain effects, int poisonLevel)
+    internal static AdvancementModifiers HeroModifiers(HeroDomain hero, EffectDomain effects, int poisonLevel, IEnumerable<SessionEffectDefinition>? innate = null)
     {
         var applied = hero.Stats.Query(new(0)).Snapshot!.AppliedEffects;
         var changes = effects.Entries.SelectMany(entry => effects.Definitions[entry.Number].Changes).ToArray();
@@ -210,7 +210,7 @@ internal sealed class AdvancementDomain(SessionAutoLevelRules? rules)
             .. changes.Where(c => c.Kind == kind).Select(c => new SkillModifier(c.Attribute, EffectDomain.Operator(c.Operator), c.Value)),
         ];
         return new([.. applied.SelectMany(effect => effect.Definition.Modifiers)], [.. Skills(EffectAttributeKind.BasicSkill, false)],
-            [.. Skills(EffectAttributeKind.TechSkill, true)], effects.Maximum(EffectSpecial.MaxHitPoints), effects.Maximum(EffectSpecial.MaxFatigue),
+            [.. Skills(EffectAttributeKind.TechSkill, true)], effects.Maximum(EffectSpecial.MaxHitPoints, innate), effects.Maximum(EffectSpecial.MaxFatigue, innate),
             poisonLevel);
     }
 }

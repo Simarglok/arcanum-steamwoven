@@ -48,6 +48,22 @@ public sealed class AreaTrapsTests
         return bytes;
     }
 
+    // ARC-WORLD-1805: the installed teleporting doors' script shape: line 0 teleports the triggerer (focus kind 0) to a literal map, x and y, line 1 ends with the given action.
+    private static byte[] TeleportProgram(int map, int x, int y, int finalAction)
+    {
+        var bytes = new byte[64 + 2 * 132];
+        BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(52), 2);
+        BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(56), 2);
+        var at = 64 + 44;
+        BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(at), ScrCatalogue.Action.Teleport);
+        bytes[at + 4] = 0; bytes[at + 5] = 3; bytes[at + 6] = 3; bytes[at + 7] = 3;
+        BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(at + 12 + 4), map);
+        BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(at + 12 + 8), x);
+        BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(at + 12 + 12), y);
+        BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(64 + 132 + 44), finalAction);
+        return bytes;
+    }
+
     // 30001: a non-magical normal-damage trap on the triggerer alone; 30004: a fire trap that removes itself (0x4); 30002: a shot;
     // 30007: the trap that does nothing; 709: an ordinary trap script (0x1) that runs default; 700: no trap.
     private static void WithContent(Action<ScriptContent> test)
@@ -70,6 +86,8 @@ public sealed class AreaTrapsTests
             Write("scr/30007none.scr", Program(0x1, skip));
             Write("scr/00709trap.scr", Program(0x1, ScrCatalogue.Action.ReturnRunDefault));
             Write("scr/00700plain.scr", Program(0, skip));
+            Write("scr/00710port.scr", TeleportProgram(5076, 5, 6, ScrCatalogue.Action.ReturnRunDefault));
+            Write("scr/00711port.scr", TeleportProgram(5076, 5, 6, skip));
             using var content = ScriptContent.Open(ContentMountPlan.Discover(root.FullName, "Syn").Plan!).Content!;
             test(content);
         }
@@ -232,6 +250,44 @@ public sealed class AreaTrapsTests
             Assert.IsFalse(AreaUseScriptHost.UseStops(unmet), "an unmet native trap does not keep the door shut");
             // A run the host did not apply (an object that is no row of the map) stops nothing.
             Assert.IsFalse(AreaUseScriptHost.UseStops(host.RunUseScript("oid:nobody", pc, pc, session.Rules.Scripts)));
+        });
+    }
+
+    // ARC-WORLD-1805 (TT18, TT20): a teleport a door's use script asks for is a request the script records, the opener's own (the triggerer): the caller that can queue the hero's change of place takes it and the door goes on as the script's answer says.
+    [TestMethod]
+    public void A_doors_use_script_teleport_of_the_hero_is_taken_by_a_caller_that_queues_it_and_the_answer_still_decides_the_door()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.CreateWithHero();
+            var effects = new Effects();
+            var runDefault = Row(1, 1, 710);
+            var skipping = Row(2, 1, 711);
+            var (host, _) = Hosts(session, content, () => effects.Side, null, runDefault, skipping);
+            var pc = host.Pc;
+            var asked = new List<ScrTeleport>();
+            var opens = host.RunUseScript(AreaUseScriptHost.EntityId(runDefault), pc, pc, session.Rules.Scripts, teleport => { asked.Add(teleport); return null; });
+            Assert.AreEqual(AreaScriptedUseOutcome.Teleport, opens.Outcome, opens.Detail);
+            Assert.AreEqual((5076, 5, 6), (opens.Teleport!.CatalogueMap, opens.Teleport.X, opens.Teleport.Y));
+            Assert.AreEqual(pc, opens.Teleport.Object, "the triggerer is the hero");
+            Assert.AreEqual(1, asked.Count);
+            Assert.IsFalse(AreaUseScriptHost.UseStops(opens), "run default: the door opens first, the teleport is only a request");
+            var shut = host.RunUseScript(AreaUseScriptHost.EntityId(skipping), pc, pc, session.Rules.Scripts, _ => null);
+            Assert.AreEqual(AreaScriptedUseOutcome.Teleport, shut.Outcome, shut.Detail);
+            Assert.IsTrue(AreaUseScriptHost.UseStops(shut), "skip default keeps the door shut, the request standing");
+            // A caller that cannot take it leaves the run unapplied and the door opens as before.
+            var refused = host.RunUseScript(AreaUseScriptHost.EntityId(skipping), pc, pc, session.Rules.Scripts, _ => "no map");
+            Assert.AreEqual(AreaScriptedUseOutcome.TeleportRefused, refused.Outcome, refused.Detail);
+            Assert.IsFalse(AreaUseScriptHost.UseStops(refused));
+            // No caller: the run is refused as before (a use component's script).
+            var plain = host.RunUseScript(AreaUseScriptHost.EntityId(runDefault), pc, pc, session.Rules.Scripts);
+            Assert.AreEqual(AreaScriptedUseOutcome.TeleportRefused, plain.Outcome, plain.Detail);
+            Assert.IsFalse(AreaUseScriptHost.UseStops(plain));
+            // An NPC opener's own teleport is not modelled (it moves another object than the hero): the run is not applied, the door opens.
+            var npc = new ScrObjectRef(1, "oid:thug");
+            var other = host.RunUseScript(AreaUseScriptHost.EntityId(skipping), npc, npc, session.Rules.Scripts, _ => null);
+            Assert.AreEqual(AreaScriptedUseOutcome.EffectsRejected, other.Outcome, other.Detail);
+            Assert.IsFalse(AreaUseScriptHost.UseStops(other), "an unapplied run stops nothing");
         });
     }
 

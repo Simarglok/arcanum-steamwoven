@@ -75,6 +75,8 @@ public partial class TerrainViewerApp
         await Click(px + 2, py + 2);
         Require(panel.View is { Page: 0 } && _schematicSounds.Count == soundsBefore, "a click on the hidden previous button does nothing");
         await Capture(verifyHd ? "-hd" : "-original");
+        // ARC-UI-1199: with ARC_AREA_WINDOW_ART (the shared opt-in part of the window smokes) the window's frames are checked in the generated interface (see SchematicWindowArtSmokeAsync).
+        if (WindowArtSmokeRequested && !verifyHd) await SchematicWindowArtSmokeAsync(panel);
         // A discipline tab: Chemistry (1) then back to Herbology (0): the tab keeps the page 0 and the window follows.
         var (dx, dy) = AreaSchematicWindowLayout.DisciplineTab(1);
         await Click(dx + 4, dy + 4);
@@ -136,5 +138,24 @@ public partial class TerrainViewerApp
             if (verifyHd) { _gameSettings = _gameSettings with { HdInterface = savedInterfaceHd }; SyncInterfaceHd(); }
         }
         GD.Print($"ARC-UI-142 native-smoke schematic-look PASS art={content!.Detail} pages={pages}");
+    }
+
+    // ARC-UI-1199: the open schematic window's drawn frames in the generated interface (ARC_AREA_WINDOW_ART=legacy|hd|generated, with ARC_HD_PACK for the last two): the base (365), the
+    // lens (231, drawn over the round view), the two list buttons (6), the assemble button (357, idle), the eight discipline tabs (the shown one's pressed frame, the others' idle one) and the page
+    // buttons that are shown (372, 373). In `generated` every one is generated chrome at round(size x paint scale) pixels of the window's own device scale, again after a bigger window (1600 × 1200); in `hd` and
+    // `legacy` none is. The assemble face (358 to 360), the found and missing tints (830, 831) and the record's art stay pictures. ARC_AREA_WINDOW_CAPTURE=PREFIX saves the viewport as PREFIX-schematics-MODE[-big|-back].png.
+    private Task SchematicWindowArtSmokeAsync(AreaSchematicsPanel panel)
+    {
+        if (_schematicArtLook is not { } look) throw new InvalidOperationException("ARC-UI-1199 schematic window art smoke: the window's look is not built");
+        var view = panel.View!;
+        var arts = new List<int> { AreaSchematicWindowLayout.BackgroundArt, AreaSchematicWindowLayout.RoundViewArt, AreaSchematicWindowLayout.ListTabArt, AreaSchematicWindowLayout.AssembleArt };
+        for (var d = 0; d < AreaSchematicWindowLayout.Disciplines; d++) arts.Add(AreaSchematicWindowLayout.DisciplineArt(d));
+        if (view.Page > 0) arts.Add(AreaSchematicWindowLayout.PreviousArt);
+        if (view.Page < view.Pages - 1) arts.Add(AreaSchematicWindowLayout.NextArt);
+        int FrameOf(int art) => Enumerable.Range(0, AreaSchematicWindowLayout.Disciplines).Any(d => AreaSchematicWindowLayout.DisciplineArt(d) == art && d == view.Discipline)
+            ? Math.Min(1, look.Frames[art].Length - 1) : 0;
+        return WindowArtSmokeAsync("schematics", () => arts.Select(art => look.Frames[art][FrameOf(art)] as HdInterfaceTexture
+            ?? throw new InvalidOperationException($"ARC-UI-1199 schematic window art smoke: art {art} is no interface texture")).ToArray(),
+            arts, panel.ArtView.DeviceScale, () => panel.ArtMode && panel.ArtViewForSelfTest.Visible, new Vector2I(1600, 1200)); // the window's whole factor steps to 2 only from 1200 high
     }
 }

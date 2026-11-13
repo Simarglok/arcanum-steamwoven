@@ -18,7 +18,7 @@ public sealed partial class FunctionRegistryTests
     private static readonly string[] AddressMethodClasses = ["host", "reference"];
 
     /// <summary>Number of <c>pending</c> rows in the file; lower it when a row is closed, never raise it (a new address-naming method is marked or exempt).</summary>
-    private const int PendingCeiling = 744;
+    private const int PendingCeiling = 743;
 
     /// <summary>A method (or, for overloads, the member name in one file) whose summary names a census function.</summary>
     private sealed record AddressMethod(string File, string Member, bool Marked, int Line, IReadOnlyList<uint> Addresses);

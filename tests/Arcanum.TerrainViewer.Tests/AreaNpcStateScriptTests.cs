@@ -12,7 +12,7 @@ namespace Arcanum.TerrainViewer.Tests;
 
 /// <summary>ARC-SCRIPT-1163 (E5-a, ledger NS1–NS8): the NPC state actions through the use-script host's heartbeat run over an invented content stack and map (no original data): critter disband lets a follower go through
 /// the session's party, set and adjust reaction go to the AI host's delegate, the standpoints and the teleport map are the session's object fields that the AI host's route facts read, change script writes an
-/// attachment slot as a map change, and change art number is refused (no host applies it).</summary>
+/// attachment slot as a map change, and change art number (ARC-SCRIPT-1735) writes the session's object art field of a scenery.</summary>
 [TestClass]
 public sealed class AreaNpcStateScriptTests
 {
@@ -31,6 +31,24 @@ public sealed class AreaNpcStateScriptTests
         };
         return new(Key(index), 0, 16, 0, "p", "p", "r", "s", AreaScope.Core, null, 10 + index, 20, Arcanum.Data.Area.AreaDisposition.BodyEligibleConditionally, [], fields, true, true, true);
     }
+
+    // ARC-SCRIPT-1735: a scenery (type 3) of the shown map whose current art is <paramref name="art"/> and whose use script is <paramref name="script"/> (attachment point 1); an NPC row takes the same art through its own current art field (slot 0).
+    private static AreaObjectRecord Scenery(int index, int script, uint art, uint flags = 0, int type = 3)
+    {
+        var fields = new List<AreaFieldValue>
+        {
+            new(0, AreaPresence.Value, AreaValueOrigin.Instance, art, [], null),
+            new(31, AreaPresence.Array, AreaValueOrigin.Instance, null, [new(1, [0, 0, script])], null),
+            new(18, AreaPresence.Value, AreaValueOrigin.Instance, flags, [], null),
+        };
+        return new(Key(index), 0, type, 0, "p", "p", "r", "s", AreaScope.Core, null, 10 + index, 20, Arcanum.Data.Area.AreaDisposition.BodyEligibleConditionally, [], fields, true, true, true);
+    }
+
+    // The art id of a scenery: class 4, kind bits 6..10, number bits 19..27, frame bits 14..18.
+    private static uint SceneryArt(uint number, uint frame = 0) => (4u << 28) | (number << 19) | (frame << 14) | (3u << 6);
+
+    // ARC-SCRIPT-1779: the art id of an item: class 6, the number in bits 17..27, the armour coverage in bits 14..16, the subtype in bits 6..9 and the item type in the low four bits (place bits 12..13 are 0, the ground art).
+    private static uint ItemArt(uint number, uint type, uint coverage = 0, uint subtype = 2) => (6u << 28) | (number << 17) | (coverage << 14) | (subtype << 6) | type;
 
     private readonly record struct Clause(int Type, params (byte Kind, int Value)[] Operands);
     private static (byte, int) N(int value) => (Number, value);
@@ -75,6 +93,10 @@ public sealed class AreaNpcStateScriptTests
             Write("scr/00824dialog.scr", Program(Do(new(ScrCatalogue.Action.ChangeScript, (Attachee, -1), N(ScrPoint.Dialog), N(1200))), Do(Run)));
             Write("scr/00826lowmap.scr", Program(Do(new(ScrCatalogue.Action.SetDayStandpointEx, (Attachee, -1), N(10), N(20), N(0))), Do(Run)));
             Write("scr/00825art.scr", Program(Do(new(ScrCatalogue.Action.ChangeArtNumber, (Attachee, -1), N(4))), Do(Run)));
+            Write("scr/00828standart.scr", Program(Do(new(ScrCatalogue.Action.SetDayStandpoint, (Attachee, -1), N(480), N(521))),
+                Do(new(ScrCatalogue.Action.ChangeArtNumber, (Attachee, -1), N(4))), Do(Run)));
+            Write("scr/00827art9.scr", Program(Do(new(ScrCatalogue.Action.ChangeArtNumber, (Attachee, -1), N(9))), Do(Run)));
+            Write("scr/00829art25.scr", Program(Do(new(ScrCatalogue.Action.ChangeArtNumber, (Attachee, -1), N(25))), Do(Run)));
             using var content = ScriptContent.Open(ContentMountPlan.Discover(root.FullName, "Syn").Plan!).Content!;
             test(content);
         }
@@ -183,13 +205,117 @@ public sealed class AreaNpcStateScriptTests
     }
 
     [TestMethod]
-    public void Change_art_number_is_refused_because_no_host_applies_it()
+    public void Change_art_number_writes_the_new_art_id_of_a_scenery_with_frame_zero_and_a_return_to_the_data_art_clears_it()
+    {
+        // NS5, NS9: the number bits (19..27) are replaced and the frame bits (14..18) cleared, only when the ART file exists; the id the map data gives is the baseline (the record goes).
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var framed = SceneryArt(9, 3);
+            var scenery = Scenery(1, 825, framed);
+            var entity = AreaUseScriptHost.EntityId(scenery);
+            var map = new SessionMapId(1);
+            var asked = new List<uint>();
+            var world = new AreaScriptWorld(() => null, _ => false, _ => null, () => null, ArtExists: aid => { asked.Add(aid); return true; });
+            Assert.IsNull(session.QueryObjectArt(map, entity));
+            { var first = Host(session, content, world, scenery).Run(scenery, session.Rules.Scripts); Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, first.Outcome, first.Detail); }
+            Assert.AreEqual(SceneryArt(4), session.QueryObjectArt(map, entity), "number 4, frame 0");
+            CollectionAssert.AreEqual(new[] { SceneryArt(4) }, asked.Distinct().ToArray(), "the test of the file is for the new id (the refusal pass and the apply pass both ask)");
+            CollectionAssert.AreEqual(new[] { (entity, SceneryArt(4)) }, session.QueryObjectArts(map).ToArray());
+            // Returning to the art id the map data gives clears the record.
+            Assert.AreEqual(GameSessionDisposition.Changed, session.SetObjectArt(session.Version, map, entity, framed, framed).Disposition);
+            Assert.IsNull(session.QueryObjectArt(map, entity), "the id of the map data is the baseline");
+            var plain = Scenery(2, 827, SceneryArt(9));
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, Host(session, content, world, plain).Run(plain, session.Rules.Scripts).Outcome);
+            Assert.IsNull(session.QueryObjectArt(map, AreaUseScriptHost.EntityId(plain)), "the same art id writes nothing");
+        });
+    }
+
+    [TestMethod]
+    public void Change_art_number_writes_the_ground_art_of_an_item_by_the_number_range_of_its_type_and_leaves_the_rest_as_it_is()
+    {
+        // AN10 (0x502830): types 0 and 1 and an armour without coverage allow 20 numbers (the id is kept past them, so nothing changes), every other type 1,000; the type, subtype, coverage and place bits stay and the file test applies as for a scenery.
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var map = new SessionMapId(1);
+            var any = new AreaScriptWorld(() => null, _ => false, _ => null, () => null, ArtExists: _ => true);
+            var none = new AreaScriptWorld(() => null, _ => false, _ => null, () => null, ArtExists: _ => false);
+            // A weapon art (type 0, 20 numbers): number 4 is taken.
+            var weapon = Scenery(1, 825, ItemArt(9, 0), type: 5);
+            var weaponEntity = AreaUseScriptHost.EntityId(weapon);
+            { var run = Host(session, content, any, weapon).Run(weapon, session.Rules.Scripts); Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, run.Outcome, run.Detail); }
+            Assert.AreEqual(ItemArt(4, 0), session.QueryObjectArt(map, weaponEntity));
+            // Number 25 is past 20: the id is kept (the original logs "Range exceeded"), so the written id is the old one and the record is the same as the data's: none.
+            var narrow = Scenery(2, 829, ItemArt(9, 1), type: 14);
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, Host(session, content, any, narrow).Run(narrow, session.Rules.Scripts).Outcome);
+            Assert.IsNull(session.QueryObjectArt(map, AreaUseScriptHost.EntityId(narrow)), "25 is out of the range of type 1");
+            var coverless = Scenery(3, 829, ItemArt(9, 2), type: 7);
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, Host(session, content, any, coverless).Run(coverless, session.Rules.Scripts).Outcome);
+            Assert.IsNull(session.QueryObjectArt(map, AreaUseScriptHost.EntityId(coverless)), "an armour without coverage: 20 numbers");
+            // Type 4 (range 1,000) and an armour with coverage take 25; the coverage and subtype bits stay.
+            var wide = Scenery(4, 829, ItemArt(9, 4, subtype: 3), type: 9);
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, Host(session, content, any, wide).Run(wide, session.Rules.Scripts).Outcome);
+            Assert.AreEqual(ItemArt(25, 4, subtype: 3), session.QueryObjectArt(map, AreaUseScriptHost.EntityId(wide)));
+            var ring = Scenery(5, 829, ItemArt(9, 2, coverage: 5), type: 7);
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, Host(session, content, any, ring).Run(ring, session.Rules.Scripts).Outcome);
+            Assert.AreEqual(ItemArt(25, 2, coverage: 5), session.QueryObjectArt(map, AreaUseScriptHost.EntityId(ring)));
+            // No ART file for the new id: nothing is written. Without the art index the run is left unapplied. A destroyed item (object flag 0x1) is left as it is.
+            var missing = Scenery(6, 825, ItemArt(9, 0), type: 5);
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, Host(session, content, none, missing).Run(missing, session.Rules.Scripts).Outcome);
+            Assert.IsNull(session.QueryObjectArt(map, AreaUseScriptHost.EntityId(missing)));
+            Assert.AreEqual(AreaScriptedUseOutcome.EffectsRejected, Host(session, content, null, missing).Run(missing, session.Rules.Scripts).Outcome);
+            var gone = Scenery(7, 825, ItemArt(9, 0), flags: 1, type: 5);
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, Host(session, content, any, gone).Run(gone, session.Rules.Scripts).Outcome);
+            Assert.IsNull(session.QueryObjectArt(map, AreaUseScriptHost.EntityId(gone)));
+            // An item row whose art is not of the item class is refused (the viewer cannot draw it), like any object of no modelled kind.
+            var odd = Scenery(8, 825, SceneryArt(9), type: 14);
+            Assert.AreEqual(AreaScriptedUseOutcome.EffectsRejected, Host(session, content, any, odd).Run(odd, session.Rules.Scripts).Outcome);
+            // A second run on the changed item works from its current art (number 4 again is the same id: no record change); the data's id returns it to the baseline.
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, Host(session, content, any, weapon).Run(weapon, session.Rules.Scripts).Outcome);
+            Assert.AreEqual(ItemArt(4, 0), session.QueryObjectArt(map, weaponEntity));
+            Assert.AreEqual(GameSessionDisposition.Changed, session.SetObjectArt(session.Version, map, weaponEntity, ItemArt(9, 0), ItemArt(9, 0)).Disposition);
+            Assert.IsNull(session.QueryObjectArt(map, weaponEntity));
+        });
+    }
+
+    [TestMethod]
+    public void Change_art_number_changes_nothing_for_a_missing_art_file_a_destroyed_scenery_and_a_critter_art_and_refuses_what_it_cannot_draw()
     {
         WithContent(content =>
         {
             using var session = ConversationSessionFixture.Create();
-            var npc = Row(1, 825);
-            Assert.AreEqual(AreaScriptedUseOutcome.Refused, Host(session, content, null, npc).RunHeartbeat(npc, ScrPoint.Heartbeat, session.Rules.Scripts).Outcome);
+            var map = new SessionMapId(1);
+            var none = new AreaScriptWorld(() => null, _ => false, _ => null, () => null, ArtExists: _ => false);
+            var any = new AreaScriptWorld(() => null, _ => false, _ => null, () => null, ArtExists: _ => true);
+            // 0x502220: no ART file for the new id, nothing is written (the run goes on).
+            var scenery = Scenery(1, 825, SceneryArt(9));
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, Host(session, content, none, scenery).Run(scenery, session.Rules.Scripts).Outcome);
+            Assert.IsNull(session.QueryObjectArt(map, AreaUseScriptHost.EntityId(scenery)));
+            // Without the module's art index the run is left unapplied.
+            Assert.AreEqual(AreaScriptedUseOutcome.EffectsRejected, Host(session, content, null, scenery).Run(scenery, session.Rules.Scripts).Outcome);
+            // 0x43EB30: an object destroyed in its map data (object flag 0x1) is left as it is.
+            var destroyed = Scenery(2, 825, SceneryArt(9), flags: 1);
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, Host(session, content, any, destroyed).Run(destroyed, session.Rules.Scripts).Outcome);
+            Assert.IsNull(session.QueryObjectArt(map, AreaUseScriptHost.EntityId(destroyed)));
+            // A destroyed container (not drawable with another art) is left alone, not refused: the destroyed test comes before the type test.
+            var destroyedContainer = Scenery(8, 825, (7u << 28) | (5u << 19), flags: 1, type: 2);
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, Host(session, content, any, destroyedContainer).Run(destroyedContainer, session.Rules.Scripts).Outcome);
+            // A critter class (the NPC's body art is class 2) answers the id 0 in the number setter: nothing changes; a unique NPC's art (class 13) and a container are not drawn with another art: the run is refused before anything applies.
+            var critter = Scenery(3, 825, (2u << 28) | 5u, type: 16);
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, Host(session, content, any, critter).Run(critter, session.Rules.Scripts).Outcome);
+            Assert.IsNull(session.QueryObjectArt(map, AreaUseScriptHost.EntityId(critter)));
+            var unique = Scenery(4, 825, (13u << 28) | (5u << 20), type: 16);
+            Assert.AreEqual(AreaScriptedUseOutcome.EffectsRejected, Host(session, content, any, unique).Run(unique, session.Rules.Scripts).Outcome);
+            var container = Scenery(5, 825, (7u << 28) | (5u << 19), type: 2);
+            Assert.AreEqual(AreaScriptedUseOutcome.EffectsRejected, Host(session, content, any, container).Run(container, session.Rules.Scripts).Outcome);
+            // A refused change art number leaves the run's other effects unapplied too: the same script (a day standpoint, then the art change) writes the standpoint for a critter art (no change) and not for a unique NPC's art (refused).
+            var okNpc = Scenery(6, 828, (2u << 28) | 5u, type: 16);
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, Host(session, content, any, okNpc).Run(okNpc, session.Rules.Scripts).Outcome);
+            Assert.AreEqual(new AreaRouteLocation(480, 521), AreaUseScriptHost.Standpoint(session, 1, AreaUseScriptHost.EntityId(okNpc), day: true), "the control: the standpoint is written when the art change is a no-op");
+            var refusedNpc = Scenery(7, 828, (13u << 28) | (5u << 20), type: 16);
+            Assert.AreEqual(AreaScriptedUseOutcome.EffectsRejected, Host(session, content, any, refusedNpc).Run(refusedNpc, session.Rules.Scripts).Outcome);
+            Assert.IsNull(AreaUseScriptHost.Standpoint(session, 1, AreaUseScriptHost.EntityId(refusedNpc), day: true), "nothing applied before the refused art change");
         });
     }
 }

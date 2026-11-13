@@ -141,7 +141,7 @@ public sealed partial class GameSessionOwner
     {
         var hero = _hero!;
         var poison = _life.Hero is { } life ? life.State.PoisonLevel : 0;
-        return SessionSkills.Of(AdvancementDomain.HeroSheet(hero.State), AdvancementDomain.HeroModifiers(hero, _effects, poison));
+        return SessionSkills.Of(AdvancementDomain.HeroSheet(hero.State), AdvancementDomain.HeroModifiers(hero, _effects, poison, HeroInnateRules()));
     }
 
     /// <summary>The hero's training in the skill of the weapon it wields (melee bare-handed), for the weapon speed.</summary>
