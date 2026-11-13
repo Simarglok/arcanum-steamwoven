@@ -132,6 +132,37 @@ public partial class TerrainViewerApp
             Require(!ReferenceEquals(beforeQuick, _areaSession) && _quickSaveStatus?.EndsWith(" from slot0000", StringComparison.Ordinal) == true,
                 "F8 loaded the newer numbered save, not the auto-save: " + _quickSaveStatus);
 
+            // ARC-UI-1504: with the load screen on, the window loads behind the screen: it stays until the load ran and then closes; a damaged save keeps it, with the reason.
+            _loadScreenDeferForSelfTest = true;
+            try
+            {
+                OpenSaveList(AreaSaveListMode.Load);
+                var beforeScreen = _areaSession; var screens = _transitionLoads;
+                InventoryKey(Key.Down); InventoryKey(Key.Enter);
+                Require(SaveListOpen && _pendingLoad is not null && ReferenceEquals(beforeScreen, _areaSession) && _transitionScreen is { Loading: true, Alpha: >= 1 } && _transitionLoads == screens + 1,
+                    "Return raised the load screen before the load ran");
+                TickTransitionScreen(100);
+                Require(SaveListOpen && _pendingLoad is not null && ReferenceEquals(beforeScreen, _areaSession), "a frame drew the screen before the load ran");
+                TickTransitionScreen(100);
+                Require(!SaveListOpen && _pendingLoad is null && !_transitionScreen.Covering && !ReferenceEquals(beforeScreen, _areaSession)
+                    && _quickSaveStatus?.StartsWith("Load quick loaded", StringComparison.Ordinal) == true, "the load ran, the window closed and the screen went: " + _quickSaveStatus);
+                var intact = System.IO.File.ReadAllBytes(library.Slot("slot0000").Path);
+                try
+                {
+                    System.IO.File.WriteAllText(library.Slot("slot0000").Path, "{\"format\":\"arcanum-steamwoven-session\",");
+                    OpenSaveList(AreaSaveListMode.Load);
+                    var kept = _areaSession;
+                    InventoryKey(Key.Down); InventoryKey(Key.Enter);
+                    TickTransitionScreen(100); TickTransitionScreen(100);
+                    Require(SaveListOpen && _pendingLoad is null && !_transitionScreen.Covering && ReferenceEquals(kept, _areaSession) && _quickSaveStatus?.Contains("FAILED", StringComparison.Ordinal) == true,
+                        "a refused load cleared the screen, kept the window and the game: " + _quickSaveStatus);
+                    InventoryKey(Key.Escape);
+                    Require(!SaveListOpen, "Escape closed the load window");
+                }
+                finally { System.IO.File.WriteAllBytes(library.Slot("slot0000").Path, intact); }
+            }
+            finally { _loadScreenDeferForSelfTest = false; }
+
             // A delete asks first; Return deletes; the selection is cleared and the list keeps the auto-save.
             OpenSaveList(AreaSaveListMode.Load);
             Require(_saveListPanel.RowsForSelfTest.SequenceEqual(["[auto] Auto-Save", "Synthetic start"]), "the auto-save stays first");
@@ -143,7 +174,7 @@ public partial class TerrainViewerApp
             InventoryKey(Key.Escape);
             Require(!SaveListOpen, "Escape closed the load window");
             return $"new save closes, overwrite asked (row activation ignored, no then yes) keeping the description, keys owned, F7 auto-save details, " +
-                $"preview {(framed ? "written and shown" : "skipped headless")}, auto-save first and not deletable, load by row, F8 newest (auto then numbered), " +
+                $"preview {(framed ? "written and shown" : "skipped headless")}, auto-save first and not deletable, load by row, F8 newest (auto then numbered), load behind the screen (done, refused), " +
                 "delete asked and selection cleared";
         }
         finally

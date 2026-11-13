@@ -80,9 +80,9 @@ public sealed partial class SessionSpellCaster
     /// <summary>
     /// 0x459290 with 0x4593F0 (the script action 130 "stop spell on object"): the first active run, in slot order, of <paramref name="spell"/> whose target object, run list (+0x130) or summoned list (+0x134) holds
     /// <paramref name="obj"/> is interrupted (0x457110, <see cref="SpellRunSystem.Interrupt"/>: the maintained run's END, or its callbacks). The answer is whether such a run was found, even when the interrupt then changed nothing
-    /// (the original answers 1 after calling the interrupt). A run that is not active, another spell and a null object find none. The script action itself is not in the interpreter's sets yet (a follow-up of the script lane).
+    /// (the original answers 1 after calling the interrupt). A run that is not active, another spell and a null object find none. The script action is the interpreter's action 130 of set S42 (ARC-SCRIPT-1294), which the AI host's `ScriptStopSpell` answers.
     /// </summary>
-    [OriginalFunction(0x4593F0, OriginalFunctionScope.Partial)]
+    [OriginalFunction(0x4593F0, OriginalFunctionScope.Full)]
     public bool StopSpellOnObject(int spell, string obj)
     {
         ArgumentNullException.ThrowIfNull(obj);
