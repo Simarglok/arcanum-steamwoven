@@ -96,7 +96,7 @@ public sealed class TeleportedMarkStateTests
         using var owner = Create();
         Changed(owner.ApplyChanges(owner.Version, null, [Mark(Cave, Virgil, 10, 20, NeighborDirection.YPlus)]), owner, 1);
         var text = GameSessionSnapshotCodec.Encode(owner.Capture());
-        StringAssert.Contains(text, "\"schemaVersion\":99,");
+        StringAssert.Contains(text, "\"schemaVersion\":100,");
         StringAssert.Contains(text, "\"property\":\"obj.teleported\",\"map\":80,\"value\":");
         using var restored = Restore(Decode(text));
         Assert.AreEqual(text, GameSessionSnapshotCodec.Encode(restored.Capture()));

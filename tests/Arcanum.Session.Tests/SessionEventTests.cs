@@ -370,7 +370,7 @@ public sealed class SessionEventTests
         const string events = ",\"events\":{\"registry\":1,\"nextSequence\":3,\"pending\":[" +
             "{\"sequence\":1,\"kind\":\"life.npc.fatigue\",\"deadlineMs\":54080000,\"entities\":[{\"map\":79,\"entity\":\"oid:wolf\"}],\"values\":[54000000]}," +
             "{\"sequence\":2,\"kind\":\"life.npc.resting\",\"deadlineMs\":57600000,\"entities\":[{\"map\":79,\"entity\":\"oid:wolf\"}],\"values\":[54000000]}]}";
-        StringAssert.Contains(text, events + NoHotkeys + NoScripts + NoResidency + NoGoals + NoSpells + NoNewspaper + NoGenerators + NoFlights + NoEncounters + NoBarLights + ",\"lighting\":null}");
+        StringAssert.Contains(text, events + NoHotkeys + NoScripts + NoResidency + NoGoals + NoSpells + NoNewspaper + NoGenerators + NoFlights + NoEncounters + NoBarLights + NoGamblingRoll + ",\"lighting\":null}");
 
         foreach (var mode in new[] { RuleMode.Steamwoven, RuleMode.Original })
         {

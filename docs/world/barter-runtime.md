@@ -332,8 +332,22 @@ dialog start), [BW6](../research/ledger/ui-audio.md#barter-window-art-arc-ui-064
 - **Buy-object script** (point 17): not run; a merchant that has one refuses every sale below Expert haggle. The original runs it at
   every sale quote (twice below Expert), so its side effects repeat on hover.
 - **Count dialog** for stacks: a stack trades whole. **Quote and refusal lines** (`gd_npc_*` 800–1499 and 4600, "not enough money" from
-  `gd_cls_*`): the window prints its own text. **Gambling** (FR-ITEM-019): the window has no gamble slot (ARC-UI-064's original look draws
-  the gamble box in its off art; an item released on it goes back).
+  `gd_cls_*`): the window prints its own text. **Gambling** (FR-ITEM-019): see [Gambling](#gambling-arc-ui-1740); the opening shop's docked window has no bet box yet.
 - **Paperdoll**: the merchant's worn items are not offered (the original reaches them only through its paperdoll); the follower menu and
   follower cycling open nothing.
 - The uninitialised "buys everything" flag of a set without a buy line and of an out-of-range source (BT8): read as 0 (buys nothing).
+
+## Gambling (ARC-UI-1740)
+
+FR-ITEM-019, read in the executable ([ledger](../research/ledger/items.md#gambling-bets-arc-ui-1740)). A merchant's ware held over the bet box
+(only the merchant's: the hero's own item is put back silently) runs the gate once as it enters (`AreaBarter.CheckGamble`): the
+`GamblingRules.Gate` refusals in the original's order (the hero's side, a merchant without Gambling points, a price above the hero's limit
+`GamblingRules.PriceLimit`, too few coins, a worn item below Expert and a "won't sell" item below Master, both by the hero's training) each
+print the merchant's line of its category; a passing ware prints the training warning line when it needs one and the confirm line with the price.
+The lines come from the player's generated NPC files (one draw each); without them the window prints a plain text.
+
+A release on the box bets (`AreaBarter.Gamble`, the session's `GameSessionOwner.Gamble`): the Gambling check of the hero against the merchant's level
+on the saved d100; a win moves the item for nothing and costs the merchant the item's worth in reaction (`GamblingRules.WonReaction`), a loss moves it
+for the unit price like a buy. A stack goes whole. The saved roll is thrown at the first barter window (`GameSessionOwner.EnsureGamblingRoll`), the
+check's own draw replaces it for the next bet, and the roll is part of the snapshot (schema 100). A refused move (no room, a script, too few coins for
+a lost stack) leaves the roll, the generator and the fate as they were.

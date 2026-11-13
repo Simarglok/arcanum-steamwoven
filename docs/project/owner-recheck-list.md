@@ -1188,3 +1188,14 @@ Known differences (documented, not bugs):
 - The curved flourishes at the corners of the original's boxes are not drawn; the ring around the round view is three units wide, narrower than the original's.
 - The follower's plates keep a little of the old wood at their inner ends; the barter doll and the doll cover are not built yet.
 
+## ARC-UI-1740 — Gambling: bets in the barter window (2026-11-13)
+
+The rules are in [barter](../world/barter-runtime.md#gambling-arc-ui-1740). Start a game, spend skill points on Gambling for the hero and talk to a merchant who has Gambling points (most shops do).
+
+| # | Step | Expected | Status |
+| --- | --- | --- | --- |
+| 1 | Open barter and drag one of your own items onto the bet box on the right of the window. | The box stays in its rest art, the item goes back to your grid, nothing is printed. | open |
+| 2 | Drag one of the merchant's wares over the box without releasing. | The box changes to the lit art and the merchant's confirm line with the price shows in the quote line; a very expensive ware (above your limit) or a hero with too little money shows the dark art and the merchant's refusal line instead. | open |
+| 3 | Release the ware on the box. | The merchant says a won or lost line. A win gives the ware for nothing, a loss takes its price in coins and gives the ware; the trade sound plays once; the box returns to rest. | open |
+| 4 | Open barter once, close it and save; bet and note the result; load that save, open barter and bet the same ware. | The outcome is the same win or loss as the first time (the roll is saved, reloading does not reroll). | open |
+

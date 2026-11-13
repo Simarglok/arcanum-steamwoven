@@ -76,7 +76,7 @@ internal static class SessionFixtures
     // and recorded lighting (scheme 1 at 15:00), with an empty party and inventory, no hero, no roll from seed 0 and no life record.
     internal const string LightingTail = ",\"lighting\":{\"schemeId\":1,\"hour\":15}}";
     internal const string GoldenJson =
-        "{\"format\":\"arcanum-steamwoven-session\",\"schemaVersion\":99," +
+        "{\"format\":\"arcanum-steamwoven-session\",\"schemaVersion\":100," +
         "\"world\":\"11111111-1111-1111-1111-111111111111\",\"module\":\"22222222-2222-2222-2222-222222222222\",\"revision\":2," +
         "\"clock\":{\"schemaVersion\":1,\"policyId\":\"steamwoven-normalized-clock-v1\"," +
         "\"sourceRevision\":\"9bd80511f8663a41a25a20a701959e394e0065e4ffc68a8dc69fe19c23678d52\"," +
@@ -86,7 +86,7 @@ internal static class SessionFixtures
         "\"flags\":{\"revision\":0,\"entries\":[{\"flag\":3,\"value\":false},{\"flag\":7,\"value\":true},{\"flag\":9,\"value\":null}]}," +
         "\"actor\":{\"map\":79,\"x\":100,\"y\":200,\"facing\":\"XPlus\"}," +
         "\"maps\":[{\"map\":79,\"changes\":[{\"scope\":\"sector\",\"sector\":5,\"property\":\"door.open\",\"value\":1}," +
-        "{\"scope\":\"entity\",\"entity\":\"npc-1\",\"property\":\"hp\",\"value\":12}]}]" + EmptyStory + EmptyParty + NoHero + EmptyInventory + NoEquipment + NoDurability + NoSchematics + NoEffects + NoExperience + NoAdvancement + FreshRandom + NoLife + NoReactions + NoCombat + NoCombatMode + NoConcealment + NoDanger + NoSound + NoEvents + NoHotkeys + NoScripts + NoResidency + NoGoals + NoSpells + NoNewspaper + NoGenerators + NoFlights + NoEncounters + NoBarLights + LightingTail;
+        "{\"scope\":\"entity\",\"entity\":\"npc-1\",\"property\":\"hp\",\"value\":12}]}]" + EmptyStory + EmptyParty + NoHero + EmptyInventory + NoEquipment + NoDurability + NoSchematics + NoEffects + NoExperience + NoAdvancement + FreshRandom + NoLife + NoReactions + NoCombat + NoCombatMode + NoConcealment + NoDanger + NoSound + NoEvents + NoHotkeys + NoScripts + NoResidency + NoGoals + NoSpells + NoNewspaper + NoGenerators + NoFlights + NoEncounters + NoBarLights + NoGamblingRoll + LightingTail;
 
     internal const string QuelledRumors = ",\"quelledRumors\":[]";
     internal const string NoReputations = ",\"reputations\":[]";
@@ -156,6 +156,8 @@ internal static class SessionFixtures
     // ARC-WORLD-1159 (schema 97): the encounters section of a new game (no row used), written after the flights section.
     // ARC-UI-1542 (schema 98): no lit state recorded, written between the encounters and the lighting sections.
     internal const string NoBarLights = ",\"barLights\":null";
+    // ARC-UI-1740 (schema 100): no gambling roll thrown yet, written between the bar lights and the lighting sections.
+    internal const string NoGamblingRoll = ",\"gamblingRoll\":null";
     // ARC-MAGIC-1658 (schema 99): the hero's stored resistance array and age, at the end of the hero section (a hero that has none written and whose age was not read).
     internal const string NoHeroStoredKeys = ",\"resistances\":[0,0,0,0,0],\"age\":null";
     internal const string NoEncounters = ",\"encounters\":{\"uses\":[]}";

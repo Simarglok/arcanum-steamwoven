@@ -509,7 +509,9 @@ src/Arcanum.World/AreaAiHostRoutes.cs,RelocateAlongPath,pending,
 src/Arcanum.World/AreaAiHostRoutes.cs,RelocateToRandomTile,pending,
 src/Arcanum.World/AreaAiHostRoutes.cs,ScriptProne,pending,
 src/Arcanum.World/AreaAiHostRoutes.cs,ScriptSteal,pending,
+src/Arcanum.World/AreaBarter.cs,CheckGamble,exempt,host
 src/Arcanum.World/AreaBarter.cs,Deals,pending,
+src/Arcanum.World/AreaBarter.cs,Gamble,exempt,host
 src/Arcanum.World/AreaBarter.cs,HeroCanTrade,pending,
 src/Arcanum.World/AreaBarter.cs,Open,pending,
 src/Arcanum.World/AreaBeds.cs,IsBedArt,exempt,reference
@@ -520,6 +522,7 @@ src/Arcanum.World/AreaCombatRound.cs,Step,pending,
 src/Arcanum.World/AreaCompanionOrders.cs,Issue,pending,
 src/Arcanum.World/AreaCompanions.cs,JumpTo,pending,
 src/Arcanum.World/AreaContainerLoot.cs,Close,pending,
+src/Arcanum.World/AreaConversation.cs,PickLine,exempt,host
 src/Arcanum.World/AreaConversation.cs,SayFollowerLine,exempt,host
 src/Arcanum.World/AreaDoorHost.cs,Open,pending,
 src/Arcanum.World/AreaDropMap.cs,HasCritter,pending,
@@ -638,6 +641,7 @@ tools/research/Arcanum.CrashSiteProbe/CombatCensusProbe.cs,CcEffectTokens,pendin
 tools/terrain-viewer/Core/AreaArtText.cs,Blend,pending,
 tools/terrain-viewer/Core/AreaBarterArt.cs,Background,pending,
 tools/terrain-viewer/Core/AreaBarterArt.cs,CycleHit,exempt,reference
+tools/terrain-viewer/Core/AreaBarterArt.cs,GambleBoxArt,exempt,host
 tools/terrain-viewer/Core/AreaBarterArt.cs,Quote,pending,
 tools/terrain-viewer/Core/AreaBarterArt.cs,Release,pending,
 tools/terrain-viewer/Core/AreaBarterArt.cs,RightRelease,pending,
@@ -735,7 +739,9 @@ tools/terrain-viewer/Godot/TerrainViewerAi.cs,UseScriptOfCast,pending,
 tools/terrain-viewer/Godot/TerrainViewerAreaBarter.cs,BarterArt,pending,
 tools/terrain-viewer/Godot/TerrainViewerAreaBarter.cs,BarterCycle,exempt,reference
 tools/terrain-viewer/Godot/TerrainViewerAreaBarter.cs,BarterCycleSpeaker,exempt,reference
+tools/terrain-viewer/Godot/TerrainViewerAreaBarter.cs,BarterGambleEntered,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAreaBarter.cs,BarterPointerStill,pending,
+tools/terrain-viewer/Godot/TerrainViewerAreaBarter.cs,Gamble,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAreaContainerLoot.cs,CloseContainer,pending,
 tools/terrain-viewer/Godot/TerrainViewerAreaEncounters.cs,EncounterSiteNow,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAreaEncounters.cs,HandleEncounterNotices,exempt,host

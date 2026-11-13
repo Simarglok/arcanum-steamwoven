@@ -515,6 +515,19 @@ public sealed class AreaConversationHost
     /// </summary>
     public string? SayFollowerLine(AreaSpeaker speaker, LoyaltyLines lines)
     {
+        var text = PickLine(speaker, lines);
+        if (text is not null) Scripts.Float(Scripts.Object(speaker), text);
+        return text;
+    }
+
+    /// <summary>
+    /// ARC-UI-1740 (0x418780 behind the phrase generators 0x414020 and its twins): a random line of <paramref name="lines"/> of the plain NPC files for the
+    /// speaker, its own override line first, as <see cref="SayFollowerLine"/> reads it but not floated: the barter window prints it on its quote line. The
+    /// text is read from the player's generated files and never stored. Returns null when nothing can be said (a speaker this host does not hold, texts that
+    /// did not load, a range without an entry, a refused roll). The line pick draws one random number of the session generator.
+    /// </summary>
+    public string? PickLine(AreaSpeaker speaker, LoyaltyLines lines)
+    {
         ArgumentNullException.ThrowIfNull(speaker);
         if (!Speakers.Contains(speaker)) return null;
         DialogGenericGreetingResult said;
@@ -530,9 +543,7 @@ public sealed class AreaConversationHost
         {
             return null;
         }
-        if (said.Status != DialogGenericGreetingStatus.Said) return null;
-        Scripts.Float(Scripts.Object(speaker), said.Text);
-        return said.Text;
+        return said.Status == DialogGenericGreetingStatus.Said ? said.Text : null;
     }
 
     /// <summary>
