@@ -69,7 +69,7 @@ public sealed class AreaExtraArt : IDisposable
     }
 
     /// <summary>
-    /// ARC-SCRIPT-1735 (ledger NS5, 0x502220): whether the art id names an ART file of the content stack: the id resolves to a path (a scenery, container, item or eye-candy class with a numbered entry) and a file of that path is found.
+    /// ARC-SCRIPT-1735 (ledger NS5, the original's ART file test): whether the art id names an ART file of the content stack: the id resolves to a path (a scenery, container, item or eye-candy class with a numbered entry) and a file of that path is found.
     /// The file is not read; an id of another class (tile, wall, critter, monster, portal) names none in this project's reading.
     /// </summary>
     public bool Exists(uint aid)

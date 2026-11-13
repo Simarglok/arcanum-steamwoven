@@ -8,7 +8,7 @@ namespace Arcanum.Data.Area;
 /// </summary>
 public static class ObjectArtNumber
 {
-    /// <summary>The art class of an id: the top four bits (0x502700, read inline by the project's code).</summary>
+    /// <summary>The art class of an id: the top four bits (the original's class helper, read inline here).</summary>
     public static int Class(uint aid) => (int)(aid >> 28);
 
     /// <summary>The classes whose number setter answers 0 (tile 0, wall 1, critter 2 and monster 12): the original builds the id 0 for them, which names no ART of this project's reading.</summary>
