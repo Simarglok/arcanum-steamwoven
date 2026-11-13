@@ -51,6 +51,21 @@ public static class AreaHoverWindow
     public const int LevelMessage = 0, ReactionMessage = 1, DeadMessage = 0x10, AlignmentMessage = 0x24, SneakMessage = 0x25, SneakSeenMessage = 0x2A, SneakHiddenMessage = 0x26;
     /// <summary>The object type of an NPC (field 0x14F = 16): only an NPC has the left part of the second line.</summary>
     public const int NpcType = CombatFieldReader.NpcType;
+
+    /// <summary>The original's stat numbers a hovered critter's window reads from its stored base stats: level (17), alignment (19) and race (27, the image).</summary>
+    public const int LevelStat = 17, AlignmentStat = 19, RaceStat = 27;
+
+    /// <summary>
+    /// ARC-MAGIC-1551: a hovered critter's level, alignment and race from its fields (the stored base stats, which a caller lays the entries a TraitIdx spell wrote over: <see cref="AreaWrittenCritterFields"/>);
+    /// <paramref name="savedLevel"/> (a follower's saved sheet) replaces the stored level. A stat the fields do not hold reads 0, the race -1 (no race image).
+    /// </summary>
+    public static (int Level, int Alignment, int Race) CritterStats(CombatFields fields, int? savedLevel)
+    {
+        ArgumentNullException.ThrowIfNull(fields);
+        var stats = fields.Critter?.BaseStats;
+        return (savedLevel ?? (stats is not null && stats.Count > LevelStat ? stats[LevelStat] : 0), stats is not null && stats.Count > AlignmentStat ? stats[AlignmentStat] : 0,
+            stats is not null && stats.Count > RaceStat ? stats[RaceStat] : -1);
+    }
     /// <summary>The alignment stat's range (stat 19, the minimum table 0x5B5194 and the maximum table 0x5B5204: −1000..1000) cut into six bands
     /// (<see cref="AlignmentBands"/>) the alignment image follows; its arts by band (table 0x5C6FCC), evil to good.</summary>
     public const int AlignmentMinimum = -1000, AlignmentMaximum = 1000, AlignmentBands = 6;
