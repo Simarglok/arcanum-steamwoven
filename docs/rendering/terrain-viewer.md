@@ -3010,6 +3010,17 @@ inventory source of its own whose set the project admits and combat values is sc
 best items through the production event world, and the session's list shows the slots its record names (SKIP on a map without such an
 NPC; [NPC best items](../world/barter-runtime.md#npc-best-items-after-a-regeneration-arc-world-103)).
 
+
+### Item identify and repair windows (ARC-UI-1731)
+
+A dialog reply `ii` or `ri` ends the talk (the original's interface-mode change, ledger WN1, WN2) and the viewer opens the **item identify window** (the interface mode `InventoryKind5`) or the
+**item repair window** (`InventoryKind6`) over the area session once nothing else owns input and the barter data is loaded
+([contract](../world/item-service-runtime.md), ledger IS1–IS7). The window is a PROJECT diagnostic list (`AreaItemServicePanel`: the hero's items, one button each with its quote, the hero's
+gold, the NPC's name and the last message); the first click on an item selects and quotes it, the next click on the same item pays and does the service through the model
+(`AreaItemService`, [`TerrainViewerAreaItemService.cs`](../../tools/terrain-viewer/Godot/TerrainViewerAreaItemService.cs)). Like the barter window it is modal (gate closed, clock paused, a walk stopped),
+is the inventory family at Escape (the limited in-play menu opens and closes it), and closes with a replaced session, a dead hero or a map change; the NPC is held as the talk partner while it is open. The viewer's
+self-test stage `AreaItemService` covers both windows over a synthetic hero and merchant (identify, two clicks, Escape, repair, a replaced session); `ARC_UI_ITEM_SERVICE_CAPTURE` (a folder) saves a PNG
+of each step for a graphics comparison. The original look is [#1765](https://github.com/Simarglok/arcanum-steamwoven/issues/1765).
 ### Reading window (ARC-UI-049)
 
 The inventory window shows a `Read:` button for each written item the hero holds; the session decides the use

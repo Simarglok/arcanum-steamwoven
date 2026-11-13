@@ -47,7 +47,8 @@ condition for it, although `RepairWithSkill` accepts one the hero holds.
 
 ## Boundaries (NOT READY)
 
-- **Not modelled:** the paid repair service of a merchant (the trade window, its quote and payment: the barter window task planned next in the skills lane), the dialog, AI
+- **Paid service (ARC-UI-1731):** the NPC's paid repair is `RepairForService` with the window of [item service runtime](item-service-runtime.md) (the quote, the NPC's forced run, the payment).
+- **Not modelled:** AI
   and script uses of the skill, repairing an item an NPC holds or one in a container, the floating text and its messages, the
   multiplayer records.
 - The broken bit of the inventory art stays set after a master's mending, as in the original; the viewer draws no item art.

@@ -125,7 +125,7 @@ public partial class TerrainViewerApp
     {
         if (!FateOpen) return;
         // Another interface window (the sheet, the inventory, the logbook, the schematics, the sleep window ...), the dialog and the panels that take the screen close it.
-        var covered = WorldModal || ConversationOpen || BarterOpen || ReadingOpen || WorldMapOpen;
+        var covered = WorldModal || ConversationOpen || BarterOpen || ItemServiceOpen || ReadingOpen || WorldMapOpen;
         if (_areaSession is not { } session || !ReferenceEquals(session, _fateSession) || session.QueryHero() is null || HeroDownState().Dead || covered)
         {
             CloseFate();
