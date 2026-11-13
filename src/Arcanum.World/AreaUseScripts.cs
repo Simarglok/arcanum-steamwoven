@@ -489,8 +489,10 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     private readonly record struct ObjectBook(SpellBook? Book);
 
     // The loaded advancement of an NPC row as its map data gives it (the effects change no sheet value), null when its fields give no admissible sheet.
+    // ARC-MAGIC-1475: the base stats a spell wrote into the NPC lie over its stored ones (the sheet a script reads and the one a recruit is seeded from).
     private SessionNpcAdvancement? AdvancementOf(ScrObjectRef npc) =>
-        Row(npc) is { } row && Arcanum.Data.Combat.CombatFieldReader.Read(row).Fields is { } fields ? AreaAdvancement.Npc(npc.Code, fields, _ => null)?.Loaded : null;
+        Row(npc) is { } row && Arcanum.Data.Combat.CombatFieldReader.Read(row).Fields is { } fields
+            ? AreaAdvancement.Npc(_session, npc.Code, fields, _ => null)?.Loaded : null;
 
     // An object's tile: the PC's live cell (the session's placement without a world), an NPC's live cell (ARC-SCRIPT-047), a row's world cell.
     private CellCoord? Place(ScrObjectRef obj)
