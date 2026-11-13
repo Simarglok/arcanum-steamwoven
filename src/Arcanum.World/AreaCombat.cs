@@ -277,6 +277,15 @@ public sealed class AreaCombatHost : IAreaEventObjects
         return piles;
     }
 
+    /// <summary>ARC-AI-1486: the named container as a standing junk pile of the map's data on a map this host covers, with the items its seed lists in it (the barter's added items are not a seed's), or null.</summary>
+    public (Arcanum.Simulation.Movement.CellCoord Cell, IReadOnlyList<string> SeedItems)? MapJunkPileNamed(GameSessionOwner session, int runtimeMap, string container)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        ArgumentNullException.ThrowIfNull(container);
+        if (!Held(runtimeMap, out var map) || map.Seed.Holders.FirstOrDefault(holder => holder.Entity == container && holder.Kind == SessionHolderKind.Container) is not { } found) return null;
+        return AreaContainerLoot.MapJunkPile(session, map, container) is { } pile ? (pile.Cell, found.Items) : null;
+    }
+
     /// <summary>ARC-AI-1486: the standing junk pile of the map's data on a map this host covers whose seed lists <paramref name="item"/> in it (the session's current list tells whether the item is still there), or null.</summary>
     public (string Entity, CellCoord Cell, SessionObjectTarget Target)? MapJunkPileHolding(GameSessionOwner session, int runtimeMap, string item)
     {

@@ -100,9 +100,10 @@ public sealed partial class AreaAiHost
         if (view.JunkPiles.FirstOrDefault(listed => listed.Entity == pile) is not { } found)
         {
             // ARC-AI-1486: a junk pile of the map's data: the first item of the kind in its container's current list (an item of a pile is never in flight).
-            if (!_scene.Combat.MapJunkPiles(_session, _scene.RuntimeMap, _ => true).Any(listed => listed.Entity == pile)) return null;
+            if (_scene.Combat.MapJunkPileNamed(_session, _scene.RuntimeMap, pile) is not { } named) return null;
+            // Only the seed's items: one a barter sold into the container is not the transfer's (the pile's pickup names seed items).
             foreach (var item in _session.QueryHolderItems(pile) ?? [])
-                if (KindOf(item.Facts.Kind.Type) == kind) return Describe(_searchNpc, view, item, 0, off: false);
+                if (KindOf(item.Facts.Kind.Type) == kind && named.SeedItems.Contains(item.Entity, StringComparer.Ordinal)) return Describe(_searchNpc, view, item, 0, off: false);
             return null;
         }
         foreach (var item in found.Items)

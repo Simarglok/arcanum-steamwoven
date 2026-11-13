@@ -483,7 +483,7 @@ public sealed class AreaAiShotTests
 
     // ARC-AI-1486: the map's own junk piles (containers of prototype 3043 named 3023) are searched as the session's are; the item leaves its container and the emptied pile dissolves at once (JP5).
     [TestMethod]
-    public void The_search_reads_a_junk_pile_of_the_maps_data_and_the_pickup_dissolves_the_pile_it_leaves_with_one_item()
+    public void The_search_reads_a_junk_pile_of_the_maps_data_and_passes_it_over_when_its_first_item_is_not_pickable()
     {
         var (session, host, npc, _) = Open(null, mapPile: (9, new(12, 22), [PileItem(10, flags: 0x80000), PileItem(11), PileItem(12)]));
         CollectionAssert.AreEqual(new[] { Entity(9) }, host.JunkPiles(npc, 10).ToArray());
@@ -527,6 +527,8 @@ public sealed class AreaAiShotTests
         Assert.IsTrue(host.SearchItems(npc));
         open = true;
         var notices = Run(host, npc);
+        Assert.IsNull(host.RunOf(npc), "the run ended");
+        Assert.AreEqual("pickup " + Entity(10) + ": loot window open", host.TraceOf(npc)?.Item);
         Assert.IsFalse(session.QueryHolderItems(npc)!.Any(item => item.Entity == Entity(10)), "the goal's end reads the switch (0x42AA70): the item stays in its pile");
         Assert.AreEqual(0, notices.Count(n => n.Kind == AreaAiNoticeKind.PickUp));
         Assert.AreEqual(SessionObjectCondition.Whole, session.QueryObjectCondition(new(1), Entity(9), DamageableObjectKind.Container));
