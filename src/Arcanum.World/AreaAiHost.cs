@@ -216,7 +216,7 @@ public sealed record AreaAiNotice(AreaAiNoticeKind Kind, string Npc, string? Tar
 {
     /// <summary>ARC-DEV-206 (GR12, <see cref="AreaAiNoticeKind.Entered"/>): the world cell the NPC was placed on.</summary>
     public CellCoord? Cell { get; init; }
-    /// <summary>ARC-AI-1655 (<see cref="AreaAiNoticeKind.PickUp"/>, <see cref="AreaAiNoticeKind.PickUpDeclined"/>): the lines the item's get or insert-item script printed, for the message window.</summary>
+    /// <summary>ARC-AI-1655 (<see cref="AreaAiNoticeKind.PickUp"/>, <see cref="AreaAiNoticeKind.PickUpDeclined"/>; ARC-MAGIC-1684, <see cref="AreaAiNoticeKind.Rewield"/>): the lines the item's get or insert-item script (or the scripts of the items a re-wield moved) printed, for the message window.</summary>
     public IReadOnlyList<SessionScriptMessage> Messages { get; init; } = [];
     public SessionAttackResult? Result { get; init; }
     public int Sound { get; init; }
@@ -1379,7 +1379,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         var result = _session.RewieldNpc(_session.Version, npc, allSlots, _events as ISessionRestockWorld);
         Trace(npc).Item = $"rewield {(allSlots ? "all" : "weapon")} {result.Disposition} {result.Failure} " + string.Join(", ", result.Steps.Select(step => $"{step.Slot} off={step.TakenOff ?? "-"} on={step.Wielded ?? "-"}"));
         // ARC-RENDER-1485: a changed worn item changes the weapon part and shield bit the NPC's body shows (0x465020, ShownWeapon); the viewer draws its body again.
-        if (result.Disposition == GameSessionDisposition.Changed) _notices.Add(new(AreaAiNoticeKind.Rewield, npc, null));
+        // ARC-MAGIC-1684: the lines the moved items' scripts printed go to the message window with the notice.
+        if (result.Disposition == GameSessionDisposition.Changed) _notices.Add(new(AreaAiNoticeKind.Rewield, npc, null) { Messages = result.Messages });
     }
     // ARC-DEV-301: the gate's demaintain (0x4A8570 step 15 → 0x457450) ends the NPC's maintained spell runs through the cast host.
     public void EndMaintainedSpells(string npc) => _scene.Spells?.Invoke()?.EndMaintainedSpells(npc);

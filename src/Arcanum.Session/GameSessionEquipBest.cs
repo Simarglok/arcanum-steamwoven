@@ -1,3 +1,4 @@
+using Arcanum.Scripting.GlobalFlags;
 using Arcanum.Simulation;
 using Arcanum.Simulation.Character;
 using Arcanum.Simulation.Combat;
@@ -27,7 +28,11 @@ public sealed record SessionEquipBestStep(EquipmentSlot Slot, string? TakenOff, 
 
 /// <summary>Outcome of <see cref="GameSessionOwner.EquipBest"/>: the steps in slot order (none when refused).</summary>
 public sealed record EquipBestResult(GameSessionDisposition Disposition, GameSessionFailure Failure, IReadOnlyList<SessionEquipBestStep> Steps,
-    GameSessionVersion Version);
+    GameSessionVersion Version)
+{
+    /// <summary>ARC-MAGIC-1684: the printed lines of the item event scripts an NPC's re-wield ran, in order.</summary>
+    public IReadOnlyList<SessionScriptMessage> Messages { get; init; } = [];
+}
 
 public sealed partial class GameSessionOwner
 {
@@ -109,17 +114,22 @@ public sealed partial class GameSessionOwner
         var step = new StepRecord(slot);
         int? keptWorth = null;
         var start = plan.Worn.GetValueOrDefault(slot);
+        var runsBefore = plan.RunCount;
         if (plan.Worn.TryGetValue(slot, out var current))
         {
             var facts = plan.Facts[current.Entity];
             if (slot != EquipmentSlot.Weapon && plan.Eligible(current.Entity, facts, slot)) keptWorth = EquipmentChoice.Worth(plan.Candidate(current.Entity));
             else plan.TakeOff(slot, step);
         }
+        var tookOffByScripts = plan.RunCount != runsBefore;
         var held = plan.Held;
         var candidates = held.Select(plan.Candidate).ToArray();
+        // ARC-MAGIC-1684: the choice reads the wearer's stats as the earlier steps' scripts left them (a plan whose scripts moved them is not one this call can make).
+        plan.CheckChooser();
         var best = EquipmentChoice.ChooseBest(slot, candidates, i => plan.Eligible(held[i], plan.Facts[held[i]], slot), keptWorth, plan.Wielder);
         if (best is { } index) plan.Wield(held[index], slot, step);
-        // An unsupported choice leaves the slot as the call found it: an item taken off for it goes back on.
+        // An unsupported choice leaves the slot as the call found it: an item taken off for it goes back on. A take-off whose scripts ran cannot go back: that item is then wielded no further and the plan starts again (ARC-MAGIC-1684).
+        if (step.Unsupported is not null && start is not null && step.TakenOff == start.Entity && tookOffByScripts) throw new BestPlan.ScriptBlocked(start.Entity);
         if (step.Unsupported is not null && start is not null && step.TakenOff == start.Entity)
         {
             plan.Worn[slot] = start;
@@ -163,6 +173,69 @@ public sealed partial class GameSessionOwner
         internal sealed class Refused(GameSessionFailure failure) : Exception
         {
             internal GameSessionFailure Failure { get; } = failure;
+        }
+
+        /// <summary>ARC-MAGIC-1684: the scripts of the item <see cref="Entity"/> cannot be applied in this plan (a run the session cannot apply, a move that cannot be undone, a choice read after the scripts moved the wearer's stats): the plan starts again
+        /// without running that item's scripts.</summary>
+        internal sealed class ScriptBlocked(string entity) : Exception
+        {
+            internal string Entity { get; } = entity;
+        }
+
+        /// <summary>ARC-MAGIC-1684: the scripts of the whole plan cannot be applied (the wearer's stats do not fit the character rules, the runs' changes do not fit the session): the plan starts again without running any.</summary>
+        internal sealed class ScriptsRefused : Exception;
+
+        // ARC-MAGIC-1684: an NPC's plan with the item event scripts of its moves (IE3-IE6): the runs they make, the NPC as their triggerer, the items whose scripts are not run, the values the choice reads at the start and the item
+        // that ran last. Without the runs an item with a move script is not moved (the hero's plan, and an NPC's whose host gives no script context).
+        private ItemScriptRuns? _runs;
+        private string _npc = string.Empty;
+        private HashSet<string> _blocked = [];
+        private (int DamageBonus, int Aptitude, bool ExtraordinaryIntelligence) _chooserStart;
+        private string? _lastRun;
+        private readonly GlobalFlagVersion _flags = owner._flags.Version;
+
+        /// <summary>The runs of the plan's moves, so far (the commit applies them with the plan).</summary>
+        internal ItemScriptRuns? Runs => _runs;
+
+        /// <summary>The number of script runs made so far.</summary>
+        internal int RunCount => _runs?.Runs.Count ?? 0;
+
+        internal void UseRuns(ItemScriptRuns runs, string npc, HashSet<string> blocked, (int, int, bool) chooser)
+        {
+            (_runs, _npc, _blocked, _chooserStart) = (runs, npc, blocked, chooser);
+        }
+
+        // Whether the item's move scripts can be left to the plan: it has none, or the plan runs them and has not given them up.
+        private bool Runnable(string entity, IReadOnlyList<int> points) => !EquipmentDomain.MoveScripts.Any(points.Contains) || _runs is not null && !_blocked.Contains(entity);
+
+        private void Run(int point, string entity)
+        {
+            _runs!.Run(point, entity, _npc, null);
+            Fresh();
+            _lastRun = entity;
+            if (_runs.Failure != GameSessionFailure.None) throw new ScriptBlocked(entity);
+        }
+
+        // IE3: a removal unwields a worn item (wield off) and then runs remove item; IE4: an insertion wields an item put into a wear slot (wield on) and then runs insert item. Only the points the item carries run.
+        private void RemovalRuns(string entity, IReadOnlyList<int> points, bool worn)
+        {
+            if (_runs is null) return;
+            if (worn && points.Contains(SessionScriptPoint.WieldOff)) Run(SessionScriptPoint.WieldOff, entity);
+            if (points.Contains(SessionScriptPoint.RemoveItem)) Run(SessionScriptPoint.RemoveItem, entity);
+        }
+
+        private void InsertionRuns(string entity, IReadOnlyList<int> points, bool wield)
+        {
+            if (_runs is null) return;
+            if (wield && points.Contains(SessionScriptPoint.WieldOn)) Run(SessionScriptPoint.WieldOn, entity);
+            if (points.Contains(SessionScriptPoint.InsertItem)) Run(SessionScriptPoint.InsertItem, entity);
+        }
+
+        /// <summary>The values the best-items choice reads of the wearer, as the earlier scripts left them, against the ones the plan started from.</summary>
+        internal void CheckChooser()
+        {
+            if (_runs is null || _lastRun is null || _runs.NpcEffectChanges == 0) return;
+            if (_runs.ChooserReads() != _chooserStart) throw new ScriptBlocked(_lastRun);
         }
 
         /// <summary>The hero's held items with the host's facts.</summary>
@@ -213,13 +286,16 @@ public sealed partial class GameSessionOwner
         internal void TakeOff(EquipmentSlot slot, StepRecord step)
         {
             var current = Worn[slot];
-            // ARC-SCRIPT-042: a worn item with item event scripts stays (this call runs no scripts).
-            if (current.ScriptPoints.Count > 0) { step.Unsupported = current.Entity; step.Failure = GameSessionFailure.ItemScriptUnsupported; return; }
+            // ARC-SCRIPT-042: a worn item with item event scripts stays when this plan runs none (ARC-MAGIC-1684: an NPC's plan runs them).
+            if (!Runnable(current.Entity, current.ScriptPoints)) { step.Unsupported = current.Entity; step.Failure = GameSessionFailure.ItemScriptUnsupported; return; }
             // ARC-MAGIC-022: nor does it run a marked item's unwear.
             if (current.ItemSpells) { step.Unsupported = current.Entity; step.Failure = GameSessionFailure.ItemEffectUnsupported; return; }
             if (EquipmentRules.CheckRemove(current.Item) is var refusal and not EquipmentRefusal.None) { step.Refusal = refusal; return; }
             var verdict = Insert(current);
             if (verdict != SessionInsertVerdict.Accepted) { step.Verdict = verdict; return; }
+            // IE6 (take off): after the insert check accepts, the removal and the insertion at the pack.
+            RemovalRuns(current.Entity, current.ScriptPoints, worn: true);
+            InsertionRuns(current.Entity, current.ScriptPoints, wield: false);
             Worn.Remove(slot);
             step.TakenOff = current.Entity;
         }
@@ -230,10 +306,11 @@ public sealed partial class GameSessionOwner
             Worn.TryGetValue(slot, out var current);
             if (current?.Entity == entity) return;
             var facts = Facts[entity];
-            var unsupported = EquipmentDomain.MoveScripts.Any(facts.ScriptPoints.Contains) ? GameSessionFailure.ItemScriptUnsupported
+            var points = EquipmentDomain.MovePoints(facts.ScriptPoints);
+            var unsupported = !Runnable(entity, points) ? GameSessionFailure.ItemScriptUnsupported
                 : facts.HasItemSpells ? GameSessionFailure.ItemEffectUnsupported : GameSessionFailure.None;
             if (unsupported != GameSessionFailure.None) { step.Unsupported = entity; step.Failure = unsupported; return; }
-            if (current?.ScriptPoints.Count > 0) { step.Unsupported = current.Entity; step.Failure = GameSessionFailure.ItemScriptUnsupported; return; }
+            if (current is not null && !Runnable(current.Entity, current.ScriptPoints)) { step.Unsupported = current.Entity; step.Failure = GameSessionFailure.ItemScriptUnsupported; return; }
             if (current?.ItemSpells == true) { step.Unsupported = current.Entity; step.Failure = GameSessionFailure.ItemEffectUnsupported; return; }
             var worn = Worn.ToDictionary(pair => pair.Key, pair => pair.Value.Item);
             var refusal = EquipmentRules.CheckWear(facts.Item, slot, Wearer, worn);
@@ -246,14 +323,27 @@ public sealed partial class GameSessionOwner
             if (refusal == EquipmentRefusal.None) refusal = EquipmentRules.CheckRemove(facts.Item);
             if (refusal == EquipmentRefusal.None && current is not null) refusal = EquipmentRules.CheckRemove(current.Item);
             if (refusal != EquipmentRefusal.None) { step.Refusal = refusal; return; }
+            var previous = Worn.Values.FirstOrDefault(worn => worn.Entity == entity);
+            // IE6 (ARC-MAGIC-1684, an NPC's plan): the item leaves where it was (a worn ring is unwielded first), the occupant is removed and asked the insert check; accepted, the occupant goes to the pack and the item is
+            // wielded; refused, both go back (the item where it was, the occupant into the slot) and the scripts of both moves have run.
+            RemovalRuns(entity, points, previous is not null);
             if (current is not null)
             {
+                RemovalRuns(current.Entity, current.ScriptPoints, worn: true);
                 var verdict = Insert(current);
-                if (verdict != SessionInsertVerdict.Accepted) { step.Verdict = verdict; return; }
+                if (verdict != SessionInsertVerdict.Accepted)
+                {
+                    InsertionRuns(entity, points, wield: previous is not null);
+                    InsertionRuns(current.Entity, current.ScriptPoints, wield: true);
+                    step.Verdict = verdict;
+                    return;
+                }
+                InsertionRuns(current.Entity, current.ScriptPoints, wield: false);
                 step.TakenOff ??= current.Entity;
             }
-            if (Worn.Values.FirstOrDefault(worn => worn.Entity == entity) is { } previous) Worn.Remove(previous.Slot);
-            Worn[slot] = new(slot, entity, facts.Item);
+            InsertionRuns(entity, points, wield: true);
+            if (previous is not null) Worn.Remove(previous.Slot);
+            Worn[slot] = new(slot, entity, facts.Item) { ScriptPoints = points };
             step.Wielded = entity;
         }
 
@@ -268,7 +358,7 @@ public sealed partial class GameSessionOwner
         internal void Fresh()
         {
             owner.ThrowIfDisposed();
-            if (owner._revision != _revision || owner._inventory.SeedGeneration != _seeds) throw new Refused(GameSessionFailure.StaleVersion);
+            if (owner._revision != _revision || owner._inventory.SeedGeneration != _seeds || owner._flags.Version != _flags) throw new Refused(GameSessionFailure.StaleVersion);
         }
     }
 

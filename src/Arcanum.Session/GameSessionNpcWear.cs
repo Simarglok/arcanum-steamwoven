@@ -31,7 +31,18 @@ public sealed record SessionNpcWielder(EquipmentWearer Wearer, EquipmentChooser 
 /// item's facts disagree with the session's list: another kind, or no wear facts for a worn item), <see cref="GameSessionFailure.StaleVersion"/>
 /// (a host callback changed the session).
 /// </summary>
-public sealed record SessionNpcWield(GameSessionFailure Failure, IReadOnlyList<SessionEquipBestStep> Steps);
+public sealed record SessionNpcWield(GameSessionFailure Failure, IReadOnlyList<SessionEquipBestStep> Steps)
+{
+    /// <summary>ARC-MAGIC-1684: the printed lines of the item event scripts the wield ran, in order (the regeneration shows none).</summary>
+    public IReadOnlyList<SessionScriptMessage> Messages { get; init; } = [];
+}
+
+/// <summary>
+/// ARC-MAGIC-1684: what the item event scripts of an NPC's best-items wield need of the host (<see cref="ISessionRestockWorld.NpcWieldScripts"/>): the shown map's item script host, the NPC's life target (its effect list, which the
+/// scripts change, and the life rules those changes meet) and its stored stats as the host holds them (the 28 values of the setter's array with what a spell wrote laid over; the session lays an advancement record's sheet over them).
+/// The answers must not call back into the owner.
+/// </summary>
+public sealed record SessionNpcWieldScripts(ISessionItemScriptHost Host, SessionLifeTarget Target, IReadOnlyList<int> Stored);
 
 public sealed partial class GameSessionOwner
 {
@@ -64,8 +75,10 @@ public sealed partial class GameSessionOwner
     {
         var planned = PlanNpcWield(world, map, seed, npc, Enum.GetValues<EquipmentSlot>());
         if (planned.Failure != GameSessionFailure.None) return new(planned.Failure, []);
+        // ARC-MAGIC-1684: the scripts' changes are applied with the wield, in the regeneration's one revision.
+        planned.Runs?.Commit();
         _inventory.NpcWorn[npc] = planned.Record!;
-        return new(GameSessionFailure.None, planned.Steps);
+        return new(GameSessionFailure.None, planned.Steps) { Messages = planned.Runs?.Messages ?? [] };
     }
 
     /// <summary>
@@ -84,22 +97,42 @@ public sealed partial class GameSessionOwner
         if (!NpcHolderSeed(npc, out var map, out var seed, out _)) return RejectBest(UnseededHolder());
         var planned = PlanNpcWield(world, map, seed, npc, allSlots ? Enum.GetValues<EquipmentSlot>() : [EquipmentSlot.Weapon]);
         if (planned.Failure != GameSessionFailure.None) return RejectBest(planned.Failure);
-        if (!planned.Changed) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, planned.Steps, Version);
+        // ARC-MAGIC-1684: the scripts of a step whose move was refused (both moves ran) may still have changed the session.
+        var scripted = planned.Runs?.Changes == true;
+        if (!planned.Changed && !scripted) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, planned.Steps, Version) { Messages = planned.Runs?.Messages ?? [] };
         if (_revision == long.MaxValue) return RejectBest(GameSessionFailure.RevisionExhausted);
         // A first record for an NPC the session never dressed counts against the saved budget (a save holds at most MaxNpcWorn, as the restock's wield checks).
-        if (!_inventory.NpcWorn.ContainsKey(npc) && _inventory.NpcWorn.Count >= SessionInventoryState.MaxNpcWorn) return RejectBest(GameSessionFailure.BudgetExceeded);
-        _inventory.NpcWorn[npc] = planned.Record!;
+        if (planned.Changed && !_inventory.NpcWorn.ContainsKey(npc) && _inventory.NpcWorn.Count >= SessionInventoryState.MaxNpcWorn) return RejectBest(GameSessionFailure.BudgetExceeded);
+        planned.Runs?.Commit();
+        if (planned.Changed) _inventory.NpcWorn[npc] = planned.Record!;
         Revise();
-        return new(GameSessionDisposition.Changed, GameSessionFailure.None, planned.Steps, Version);
+        return new(GameSessionDisposition.Changed, GameSessionFailure.None, planned.Steps, Version) { Messages = planned.Runs?.Messages ?? [] };
     }
 
-    // One NPC wield over <slots>: the plan with the worn record it would write and whether a worn item differs from what the NPC wears now.
-    private (GameSessionFailure Failure, IReadOnlyList<SessionEquipBestStep> Steps, SortedDictionary<EquipmentSlot, string>? Record, bool Changed)
-        PlanNpcWield(ISessionRestockWorld world, SessionMapId map, InventoryDomain.Seed seed, string npc, IReadOnlyList<EquipmentSlot> slots)
+    // One NPC wield over <slots>, planned and not applied: the steps, the worn record it would write, whether a worn item differs from what the NPC wears now, and (ARC-MAGIC-1684) the runs of the item event scripts of its moves.
+    private sealed record NpcWieldPlan(GameSessionFailure Failure, IReadOnlyList<SessionEquipBestStep> Steps, SortedDictionary<EquipmentSlot, string>? Record, bool Changed, ItemScriptRuns? Runs = null);
+
+    // ARC-MAGIC-1684: the plan with the scripts of its moves (IE3-IE6) when the host gives their context; a script the session cannot apply gives up that item's scripts (the item is not moved, as before the scripts were run) and the plan
+    // starts again, and one the whole plan cannot apply (the wearer's stats, the runs' changes) gives up all of them.
+    private NpcWieldPlan PlanNpcWield(ISessionRestockWorld world, SessionMapId map, InventoryDomain.Seed seed, string npc, IReadOnlyList<EquipmentSlot> slots)
+    {
+        var given = world.NpcWieldScripts(map, npc);
+        ThrowIfDisposed();
+        var blocked = new HashSet<string>(StringComparer.Ordinal);
+        while (true)
+        {
+            try { return PlanNpcWieldOnce(world, map, seed, npc, slots, given, blocked); }
+            catch (BestPlan.ScriptBlocked item) when (given is not null) { if (!blocked.Add(item.Entity)) given = null; }
+            catch (BestPlan.ScriptsRefused) when (given is not null) { given = null; }
+        }
+    }
+
+    private NpcWieldPlan PlanNpcWieldOnce(ISessionRestockWorld world, SessionMapId map, InventoryDomain.Seed seed, string npc, IReadOnlyList<EquipmentSlot> slots,
+        SessionNpcWieldScripts? scripts, HashSet<string> blocked)
     {
         if (world.RestockWielder(map, npc) is not { Wearer: not null, Chooser: not null, Items: not null, ArtCheck: not null } wielder)
-            return (GameSessionFailure.EquipmentUnavailable, [], null, false);
-        if (!ValidChooser(wielder.Chooser)) return (GameSessionFailure.InvalidEquipment, [], null, false);
+            return new(GameSessionFailure.EquipmentUnavailable, [], null, false);
+        if (!ValidChooser(wielder.Chooser)) return new(GameSessionFailure.InvalidEquipment, [], null, false);
         var current = _inventory.Current(seed, seed.Holders[npc], item => DroppedCell(map, seed, item)).ToArray();
         var insert = world.RestockInsertCheck(map, npc);
         var listed = current.ToDictionary(item => item.Entity, StringComparer.Ordinal);
@@ -141,13 +174,27 @@ public sealed partial class GameSessionOwner
                 };
                 before[slot] = item.Entity;
             }
+            // ARC-MAGIC-1684: the runs of the moves' item event scripts, the NPC as their triggerer; only a plan with an item that has a move script makes any.
+            if (scripts is not null && plan.Facts.Values.Any(facts => EquipmentDomain.MoveScripts.Any(facts.ScriptPoints.Contains)))
+            {
+                var items = plan.Facts.ToDictionary(pair => pair.Key, pair => pair.Value.Item.MagickTechComplexity, StringComparer.Ordinal);
+                var runs = new ItemScriptRuns(this, scripts.Host, map.RuntimeMap, items, new NpcWearer(npc, scripts.Target, NpcStatsOverSheet(npc, scripts.Stored))) { NpcTriggerer = true };
+                if (runs.ChooserReads() is not { } reads) throw new BestPlan.ScriptsRefused();
+                plan.UseRuns(runs, npc, blocked, reads);
+            }
             foreach (var slot in slots) WieldBest(plan, slot);
+            plan.Fresh();
+            if (plan.Runs is { } made)
+            {
+                made.Prepare();
+                if (made.Failure != GameSessionFailure.None) throw new BestPlan.ScriptsRefused();
+            }
         }
-        catch (BestPlan.Refused refused) { return (refused.Failure, [], null, false); }
+        catch (BestPlan.Refused refused) { return new(refused.Failure, [], null, false); }
         var record = new SortedDictionary<EquipmentSlot, string>();
         foreach (var (slot, worn) in plan.Worn) record[slot] = worn.Entity;
         var changed = record.Count != before.Count || record.Any(pair => !before.TryGetValue(pair.Key, out var entity) || entity != pair.Value);
-        return (GameSessionFailure.None, Array.AsReadOnly(plan.Steps.ToArray()), record, changed);
+        return new(GameSessionFailure.None, Array.AsReadOnly(plan.Steps.ToArray()), record, changed, plan.Runs);
     }
 
     // The bounds the choice's weapon score reads: skill levels 0..20, the aptitude's range, a damage bonus the combat rules admit.
