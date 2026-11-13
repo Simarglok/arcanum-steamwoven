@@ -341,6 +341,9 @@ public interface IAiGoalWorld : IItemUseWorld
     /// </summary>
     IReadOnlyList<GoalRun> RunsOf(string id) => [];
 
+    /// <summary>ARC-UI-1737 (ledger OH2): the "violence filter" setting, read when the dying goal's art node runs (0x42BC10 reads the global then, not when the kill was made). The default is off, as a world without the setting.</summary>
+    bool ViolenceFilter => false;
+
     /// <summary>The object's tile, also for one destroyed or switched off (its location is kept); null when the world does not
     /// know it.</summary>
     CellCoord? Tile(string id);

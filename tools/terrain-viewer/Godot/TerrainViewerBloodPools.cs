@@ -81,7 +81,7 @@ public partial class TerrainViewerApp
         if (_worldActor.Session is not AreaGridSession hero) return null;
         var world = hero.Chart.ToWorld(hero.State.CommittedCell);
         var cell = new CellCoord(checked((int)world.X), checked((int)world.Y));
-        return (cell, 0, 0, new BloodPoolFacts(0, 0, 0, TileBlocks(cell), false));
+        return (cell, 0, 0, new BloodPoolFacts(0, 0, 0, TileBlocks(cell), _gameSettings.ViolenceFilter));
     }
 
     // Where an NPC of the shown map lies and what its map data says (null when its row or fields do not read).
@@ -92,7 +92,7 @@ public partial class TerrainViewerApp
         var cell = moved is not null ? new CellCoord(moved.MapX, moved.MapY) : new CellCoord(checked((int)x), checked((int)y));
         var offsetX = moved is null ? (int)(Number(row, OffsetXSlot) ?? 0) : 0;
         var offsetY = moved is null ? (int)(Number(row, OffsetYSlot) ?? 0) : 0;
-        return (cell, offsetX, offsetY, new BloodPoolFacts(fields.Critter?.Flags ?? 0, fields.Critter?.Flags2 ?? 0, fields.Object.SpellFlags, TileBlocks(cell), false));
+        return (cell, offsetX, offsetY, new BloodPoolFacts(fields.Critter?.Flags ?? 0, fields.Critter?.Flags2 ?? 0, fields.Object.SpellFlags, TileBlocks(cell), _gameSettings.ViolenceFilter));
     }
 
     // 0x4D7110 on the step evidence: a tile it settles as not open blocks; one it cannot speak for does not (the critter stood there).

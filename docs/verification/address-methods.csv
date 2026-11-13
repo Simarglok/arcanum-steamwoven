@@ -1,6 +1,7 @@
 file,member,state,class
 src/Arcanum.Data/Area/AreaMapPlans.cs,CatalogueNumbers,pending,
 src/Arcanum.Data/Audio/MainMenuSound.cs,Choose,pending,
+src/Arcanum.Data/Characters/AutoLevelTables.cs,NamedSchemes,exempt,host
 src/Arcanum.Data/Characters/BackgroundTable.cs,Block,pending,
 src/Arcanum.Data/Characters/InventorySourceBuyRules.cs,LootLineCoins,pending,
 src/Arcanum.Data/Lighting/ObjectLights.cs,IsDayHour,pending,
@@ -36,6 +37,7 @@ src/Arcanum.Scripting/Dialog/DialogConversation.cs,ReadStore,pending,
 src/Arcanum.Scripting/Dialog/DialogConversation.cs,ReadWorldFact,pending,
 src/Arcanum.Scripting/Dialog/DialogConversation.cs,SchematicsCommand,pending,
 src/Arcanum.Scripting/Dialog/DialogConversation.cs,Store,pending,
+src/Arcanum.Scripting/Dialog/DialogConversationHealer.cs,FormatName,exempt,reference
 src/Arcanum.Scripting/Dialog/DialogConversationNewspaper.cs,PunctuatedHeadline,exempt,host
 src/Arcanum.Scripting/Dialog/DialogGreeting.cs,Comment,exempt,host
 src/Arcanum.Scripting/Dialog/DialogGreeting.cs,MissingLine,pending,
@@ -511,6 +513,8 @@ src/Arcanum.World/AreaAiHost.cs,UsedItem,pending,
 src/Arcanum.World/AreaAiHostGenerators.cs,Spawn,exempt,host
 src/Arcanum.World/AreaAiHostGround.cs,LooseItems,exempt,host
 src/Arcanum.World/AreaAiHostGround.cs,StartPickup,exempt,host
+src/Arcanum.World/AreaAiHostHealer.cs,HealerCast,exempt,host
+src/Arcanum.World/AreaAiHostHealer.cs,HealerService,exempt,host
 src/Arcanum.World/AreaAiHostRoutes.cs,RelocateAlongPath,pending,
 src/Arcanum.World/AreaAiHostRoutes.cs,RelocateToRandomTile,pending,
 src/Arcanum.World/AreaAiHostRoutes.cs,ScriptProne,pending,
@@ -521,6 +525,7 @@ src/Arcanum.World/AreaBarter.cs,Open,pending,
 src/Arcanum.World/AreaBeds.cs,IsBedArt,exempt,reference
 src/Arcanum.World/AreaBeds.cs,OccupiedFrame,exempt,host
 src/Arcanum.World/AreaCharacterSheetTexts.cs,DerivedName,pending,
+src/Arcanum.World/AreaCharacterSheetTexts.cs,SchemeNumbers,exempt,host
 src/Arcanum.World/AreaCombat.cs,NpcHolder,pending,
 src/Arcanum.World/AreaCombatRound.cs,Step,pending,
 src/Arcanum.World/AreaCompanionOrders.cs,Issue,pending,
@@ -657,6 +662,7 @@ tools/terrain-viewer/Core/AreaBarterArt.cs,Release,pending,
 tools/terrain-viewer/Core/AreaBarterArt.cs,RightRelease,pending,
 tools/terrain-viewer/Core/AreaBarterArt.cs,Step,exempt,reference
 tools/terrain-viewer/Core/AreaCharacterSheetArt.cs,RegionAt,pending,
+tools/terrain-viewer/Core/AreaCharacterSheetSchemes.cs,Row,exempt,reference
 tools/terrain-viewer/Core/AreaCharacterSheetSpells.cs,HitAt,pending,
 tools/terrain-viewer/Core/AreaCursor.cs,Art,pending,
 tools/terrain-viewer/Core/AreaDialogBox.cs,Buttons,pending,
@@ -726,6 +732,12 @@ tools/terrain-viewer/Core/AreaSaveListArt.cs,RowAt,pending,
 tools/terrain-viewer/Core/AreaSaveListArt.cs,ScrollTop,pending,
 tools/terrain-viewer/Core/AreaSaveListArt.cs,Unread,pending,
 tools/terrain-viewer/Core/AreaSaveListArt.cs,Wrapped,pending,
+tools/terrain-viewer/Core/AreaSheetScrollBar.cs,Drag,exempt,reference
+tools/terrain-viewer/Core/AreaSheetScrollBar.cs,DrawnThumbTop,exempt,reference
+tools/terrain-viewer/Core/AreaSheetScrollBar.cs,PartAt,exempt,reference
+tools/terrain-viewer/Core/AreaSheetScrollBar.cs,PressArrow,exempt,reference
+tools/terrain-viewer/Core/AreaSheetScrollBar.cs,PressTrack,exempt,reference
+tools/terrain-viewer/Core/AreaSheetScrollBar.cs,public,exempt,reference
 tools/terrain-viewer/Core/AreaTextFonts.cs,Centred,pending,
 tools/terrain-viewer/Core/AreaTextFonts.cs,Place,pending,
 tools/terrain-viewer/Core/AreaTownMapArt.cs,ToLocation,pending,
@@ -738,6 +750,7 @@ tools/terrain-viewer/Core/HeroAttackArt.cs,Clip,pending,
 tools/terrain-viewer/Godot/AreaCharacterArtDraw.cs,Centred,pending,
 tools/terrain-viewer/Godot/AreaCharacterArtDraw.cs,Character,pending,
 tools/terrain-viewer/Godot/AreaCharacterSheetArtView.cs,HitAt,pending,
+tools/terrain-viewer/Godot/AreaCharacterSheetSchemesView.cs,ArrowFrame,exempt,reference
 tools/terrain-viewer/Godot/AreaCharacterSheetSpellsView.cs,Greyed,pending,
 tools/terrain-viewer/Godot/AreaFollowerPortraits.cs,ResetPanel,exempt,reference
 tools/terrain-viewer/Godot/AreaLogbookArtView.cs,Turn,pending,
@@ -783,6 +796,7 @@ tools/terrain-viewer/Godot/TerrainViewerAreaQuickSave.cs,RouteQuickSaveOverWindo
 tools/terrain-viewer/Godot/TerrainViewerAreaReading.cs,ItemUseScript,pending,
 tools/terrain-viewer/Godot/TerrainViewerAreaReading.cs,ReadItem,pending,
 tools/terrain-viewer/Godot/TerrainViewerAreaSchematicArt.cs,SchematicSlotEntry,pending,
+tools/terrain-viewer/Godot/TerrainViewerAreaSheet.cs,PressScheme,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAreaSheetArt.cs,SheetHoverEntry,pending,
 tools/terrain-viewer/Godot/TerrainViewerAreaSleep.cs,ApplyBedUse,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAreaSleep.cs,BedScriptAnswer,exempt,host

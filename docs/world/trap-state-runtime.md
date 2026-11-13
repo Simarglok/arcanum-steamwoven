@@ -264,8 +264,8 @@ The hero's disarm traps press (E6-a second half; ledger [SP3](../research/ledger
 
 ## Not modelled here
 
-- The follower who disarms instead of the hero (SP3, 0x57A620). An NPC's or a companion's use of a trapped object other than a door its opener goal pushes
-  (the original's use node 0x428A10 meets the trap of any target it runs the use script of, TT18; a trapped container's opening by an NPC and the NPCs' other uses are not built, no NPC use goal for them exists: [#1688](https://github.com/Simarglok/arcanum-steamwoven/issues/1688); the door's own use script and its trap are run by the node since ARC-WORLD-1668).
+- The follower who disarms instead of the hero (SP3, 0x57A620).
+- An NPC's or a companion's use of a trapped object other than a door is **not a gap**: the original has no such use (ledger [TT19](../research/ledger/technology.md#trap-state-arc-world-076), ARC-WORLD-1688). The use goals 38 and 81 are built only by the hero's click, and goal 12, the one use goal an NPC runs, ends unless its target is a portal, so the use node's container, creature and bed branches have no NPC caller; what an NPC does with a container is the pickup goal 15/16 (junk piles, [NPC pickup](../research/ledger/npc-ai.md#npc-ground-pickup-built-arc-ai-1309)). The door's own use script and its trap are run by the node since ARC-WORLD-1668. What stays open for the door use is a conversation or a teleport that the door's use script asks for ([#1805](https://github.com/Simarglok/arcanum-steamwoven/issues/1805)).
 - The 30002 trap in the viewer (with its shot), an ordinary trap script on a step, and the
   route cost of a known trap (DC8) on the PC's route (the drop map's route has it), the
   attack's trap trigger in the viewer,

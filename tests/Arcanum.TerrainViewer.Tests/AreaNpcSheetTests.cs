@@ -54,6 +54,18 @@ public sealed class AreaNpcSheetTests
         Assert.IsNull(view.ToNextLevel, "no experience table in this session");
     }
 
+    /// <summary>ARC-UI-1742 (ledger ALP7): the NPC sheet names the NPC's own scheme (the stored field's, 62 here); a scheme the session saved for it wins.</summary>
+    [TestMethod]
+    public void The_sheet_carries_the_npcs_own_scheme_and_the_sessions_saved_one_wins()
+    {
+        using var session = Session();
+        var fields = Npc();
+        var loaded = AreaAdvancement.Npc("oid:virgil", fields, Effect)!.Value;
+        Assert.AreEqual(62, AreaNpcSheet.Build(session, "Virgil", fields, loaded, null, null, AreaHoverIndex.TextProfile)!.AutoLevelScheme);
+        Assert.AreEqual(GameSessionDisposition.Changed, session.SetAutoLevelScheme(session.Version, SessionSchemeTarget.ForNpc(loaded.Loaded), 70).Disposition);
+        Assert.AreEqual(70, AreaNpcSheet.Build(session, "Virgil", fields, loaded, null, null, AreaHoverIndex.TextProfile)!.AutoLevelScheme);
+    }
+
     private static int Speed(AreaNpcSheetPages pages) => pages.View.Secondary.Single(value => value.Label == AreaCharacterSheet.Label(CharacterStat.Speed)).Value;
 
     [TestMethod]
