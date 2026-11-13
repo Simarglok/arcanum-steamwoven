@@ -16,7 +16,7 @@ namespace Arcanum.World;
 /// point of the map's speakers is modelled; everything the viewer does not model answers "no" (no generator, no trap,
 /// alive and free, not jilted).
 /// </summary>
-public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueries, IScrWorldQueries, IScrObjectStateQueries, IScrAreaQueries, IScrStoreQueries, IScrReactionQueries, IScrSpellQueries, IScrStoryQueries
+public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueries, IScrWorldQueries, IScrObjectStateQueries, IScrAreaQueries, IScrStoreQueries, IScrReactionQueries, IScrSpellQueries, IScrStoryQueries, IScrItemQueries
 {
     /// <summary>The PC as the scripts see it; the viewer has one.</summary>
     public const string PcCode = SessionEventKinds.PlayerEntity;
@@ -85,10 +85,23 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
     public ScrAdmissionSet AdmissionFor(ScrObjectRef? attachee) =>
         attachee is { } obj && _state.IsCarried(obj.Code) ? (_session.QueryHero() is null ? Admission : SkillAdmission) : RunAdmission;
 
-    /// <summary>ARC-MAGIC-041 (TI8): the set a deferred call of the event queue runs under: <see cref="AdmissionFor"/> plus wields an item named (21, which <see cref="WieldedItemName"/> answers for the hero without a use host) and use ammunition units (135), which the call of the powered shield's
-    /// script uses (<see cref="Apply"/> spends the cells through the session). A dialog script does not get it.</summary>
+    /// <summary>ARC-MAGIC-041 (TI8): the set a deferred call of the event queue runs under: <see cref="AdmissionFor"/> plus wields an item named (21, which <see cref="WieldedItemName"/> answers for the hero without a use host) and use ammunition units (135
+    /// script uses (<see cref="Apply"/> spends the cells through the session). A dialog script does not get it. ARC-SCRIPT-1482 (ledger WE2, WE4): plus the magick-tech adjustment (91, the ratio of a worn item for the hero, <see cref="PowerRatio"/>) and
+    /// play script eye candy (120, presentation only), which the deferred poison scripts of the wield-on items use; their damage (60, 138) and heal (75) come from <see cref="AdmissionFor"/> (ARC-SCRIPT-1563: the talk set holds them while the shown
+    /// map's use host answers, and <see cref="Apply"/> hands them to it).</summary>
     public ScrAdmissionSet CallAdmissionFor(ScrObjectRef? attachee) => AmmoSets.GetOrAdd(AdmissionFor(attachee), set => new(set.Id + "-ammo",
-        set.Conditions.Append(ScrCatalogue.Condition.IsWieldingItem), set.Actions.Append(ScrCatalogue.Action.UseAmmoUnits), set.ValueKinds, set.FocusKinds, set.CounterIndexWraps));
+        set.Conditions.Append(ScrCatalogue.Condition.IsWieldingItem),
+        set.Actions.Append(ScrCatalogue.Action.UseAmmoUnits).Append(ScrCatalogue.Action.MagickTechAdjustment).Append(ScrCatalogue.Action.PlayScriptEyeCandy),
+        set.ValueKinds, set.FocusKinds, set.CounterIndexWraps));
+
+    /// <summary>ARC-SCRIPT-1482 (WE2): a worn item's power ratio for the PC (<see cref="GameSessionOwner.QueryWornPowerRatio"/>), the item found by its entity alone (a deferred call's item role keeps the map it was scheduled on after the hero travelled, as every role but the PC's and its followers' does); null for any other item or owner (the run stops, as for an object the host does not know).</summary>
+    public int? PowerRatio(ScrObjectRef item, ScrObjectRef owner) => owner == Pc ? _session.QueryWornPowerRatio(item.Code) : null;
+
+    /// <summary>No set of this host holds the identified condition: the host knows no object's identified state.</summary>
+    public bool? IsIdentified(ScrObjectRef obj) => null;
+
+    /// <summary>No set of this host holds the rewielding condition: no rewield runs here.</summary>
+    public bool ItemsBeingRewielded() => false;
 
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<ScrAdmissionSet, ScrAdmissionSet> AmmoSets = new();
 

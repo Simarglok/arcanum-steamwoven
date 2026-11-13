@@ -238,6 +238,19 @@ public sealed partial class GameSessionOwner
     public SessionEquipmentState QueryEquipment() { ThrowIfDisposed(); return _equipment.Capture(); }
 
     /// <summary>
+    /// ARC-SCRIPT-1482 (ledger WE2, EQ9): the power ratio of a worn item for the hero, which the magick-tech adjustment (91) of a deferred item script reads: 100 for a neutral item, else <c>100 × power / complexity</c> under the hero's
+    /// current aptitude. Null for an item the hero does not wear and without a hero.
+    /// </summary>
+    public int? QueryWornPowerRatio(string entity)
+    {
+        ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(entity);
+        if (_hero is null) return null;
+        var worn = _equipment.Worn.Values.FirstOrDefault(item => item.Entity == entity);
+        return worn is null ? null : EquipmentRules.EffectivePowerRatio(worn.Item.MagickTechComplexity, HeroAptitude());
+    }
+
+    /// <summary>
     /// ARC-DEV-335 (V7d, ledger EQ12, LT12): the size of the light the hero gives off from the worn items (the source's 0x467E80): the
     /// largest worn light, each shrinking with the item's effective power ratio for the hero's magick/tech aptitude, so it follows
     /// wear, take-off and the item's condition at once. None without a hero. Cheaper than <see cref="QueryHeroEquipmentCombat"/>, which also

@@ -205,6 +205,7 @@ src/Arcanum.Session/GameSessionSpellRuns.cs,SpendItemCharge,pending,
 src/Arcanum.Session/GameSessionSpellRuns.cs,StartSpellRun,pending,
 src/Arcanum.Session/GameSessionSpellRuns.cs,StopMaintainedSpell,pending,
 src/Arcanum.Session/GameSessionSpellRuns.cs,TellCritterRunEnds,pending,
+src/Arcanum.Session/GameSessionStealth.cs,EndConcealmentForAttackEvent,exempt,host
 src/Arcanum.Session/GameSessionTeleportMap.cs,SetTeleportMap,exempt,reference
 src/Arcanum.Session/GameSessionTownMaps.cs,IsTownMapCellRevealed,pending,
 src/Arcanum.Session/GameSessionTraitArt.cs,WriteTraitArt,pending,
@@ -248,6 +249,7 @@ src/Arcanum.Session/SessionSpellCasterItems.cs,UseItem,pending,
 src/Arcanum.Session/SessionSpellCasterItems.cs,WithdrawItemSpells,pending,
 src/Arcanum.Session/SessionSpellCasterScript.cs,CastByScript,pending,
 src/Arcanum.Session/SessionSpellCasterScriptDamage.cs,ApplyScriptDamage,pending,
+src/Arcanum.Session/SessionSpellCasterSocial.cs,EndFleeGoals,exempt,host
 src/Arcanum.Session/SessionSpellCasterSummon.cs,DestroyCreated,pending,
 src/Arcanum.Session/SessionSpellCasterTeleport.cs,PayTeleportCost,pending,
 src/Arcanum.Session/SessionSpellCasterTeleport.cs,TeleportAllowedFor,pending,
@@ -459,9 +461,11 @@ src/Arcanum.World/AreaAiHost.cs,ScriptAttack,pending,
 src/Arcanum.World/AreaAiHost.cs,ScriptReaction,exempt,host
 src/Arcanum.World/AreaAiHost.cs,SearchItems,exempt,host
 src/Arcanum.World/AreaAiHost.cs,SeeToward,pending,
+src/Arcanum.World/AreaAiHost.cs,SetNoFlee,exempt,host
 src/Arcanum.World/AreaAiHost.cs,ShownWeapon,pending,
 src/Arcanum.World/AreaAiHost.cs,SneakExcess,pending,
 src/Arcanum.World/AreaAiHost.cs,SpellAttacked,pending,
+src/Arcanum.World/AreaAiHost.cs,SpellEndFleeGoals,exempt,host
 src/Arcanum.World/AreaAiHost.cs,SpellFlee,pending,
 src/Arcanum.World/AreaAiHost.cs,SpellPeace,pending,
 src/Arcanum.World/AreaAiHost.cs,SpellReaction,pending,

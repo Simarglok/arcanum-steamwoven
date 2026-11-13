@@ -141,6 +141,44 @@ public sealed class StealthStateTests
         Assert.AreEqual((-50, -50), (asleep.Difficulty!.Awareness, asleep.Difficulty.Total - hearing.Difficulty.Total));
     }
 
+    // ARC-AI-1517 (0x4A9650 → 0x45EE30, VBG6): the attack event's concealment step the host runs for any attacker.
+    [TestMethod]
+    public void TheAttackEventsConcealmentStepEndsTheHerosGroupForAHeroOrFollowerVictimInOneRevisionAndNoOtherVictim()
+    {
+        using var owner = Owner();
+        owner.ToggleHeroConcealment(owner.Version);
+        var revision = owner.Version.Revision;
+        Assert.AreEqual(GameSessionDisposition.NoChange, owner.EndConcealmentForAttackEvent(owner.Version, SessionCombatant.Critter(Stranger)).Disposition, "a stranger is no PC group");
+        Assert.AreEqual((true, true, revision), (owner.IsConcealed(SessionCombatant.Hero), owner.IsConcealed(SessionCombatant.Critter(Pal)), owner.Version.Revision));
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.EndConcealmentForAttackEvent(owner.Version, SessionCombatant.Critter(Pal)).Disposition);
+        Assert.AreEqual((false, 0, revision + 1), (owner.QueryConcealment().Hero, owner.QueryConcealment().Npcs.Count, owner.Version.Revision), "a follower victim: the hero and every follower");
+        Assert.AreEqual(GameSessionDisposition.NoChange, owner.EndConcealmentForAttackEvent(owner.Version, SessionCombatant.Hero).Disposition, "nothing left to end");
+        owner.ToggleHeroConcealment(owner.Version);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.EndConcealmentForAttackEvent(owner.Version, SessionCombatant.Hero).Disposition);
+        Assert.AreEqual((false, 0), (owner.QueryConcealment().Hero, owner.QueryConcealment().Npcs.Count), "a hero victim: the same group");
+    }
+
+    [TestMethod]
+    public void TheAttackEventsConcealmentStepOnAWaitingFollowerEndsTheHerosGroupAndLeavesTheWaitingOneAlone()
+    {
+        using var owner = Owner();
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.ForceJoinParty(owner.Version, Stranger).Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.WaitParty(owner.Version, Pal).Disposition);
+        owner.ToggleHeroConcealment(owner.Version);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.EndConcealmentForAttackEvent(owner.Version, SessionCombatant.Critter(Pal)).Disposition);
+        Assert.AreEqual((false, false), (owner.IsConcealed(SessionCombatant.Hero), owner.IsConcealed(SessionCombatant.Critter(Stranger))), "the hero and the follower list");
+    }
+
+    [TestMethod]
+    public void TheAttackEventsConcealmentStepIsRefusedForAStaleVersion()
+    {
+        using var owner = Owner();
+        var stale = owner.Version;
+        owner.ToggleHeroConcealment(owner.Version);
+        Assert.AreEqual(GameSessionFailure.StaleVersion, owner.EndConcealmentForAttackEvent(stale, SessionCombatant.Hero).Failure);
+        Assert.IsTrue(owner.IsConcealed(SessionCombatant.Hero));
+    }
+
     [TestMethod]
     public void AWaitingFollowerKeepsItsOwnStateAndUnwaitingCopiesTheHerosAgain()
     {
