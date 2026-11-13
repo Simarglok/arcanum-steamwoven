@@ -227,7 +227,8 @@ public sealed class NpcWearStateTests
         Assert.AreEqual(SessionRestockOutcome.Regenerated, done.Outcome);
         Assert.AreEqual(GameSessionFailure.EquipmentUnavailable, done.Wield!.Failure);
         Assert.IsNull(owner.QueryNpcWorn("guard"));
-        CollectionAssert.AreEqual(new[] { ("ring", 1001), ("helmet", 3), ("made:1", -1), ("made:2", -1), ("made:3", -1) }, Locations(owner));
+        CollectionAssert.AreEqual(new[] { ("ring", 1001), ("helmet", 3), ("made:1", -1), ("made:2", 1), ("made:3", 2) }, Locations(owner));
+        // ARC-AI-1698: the restock's created items (the gold pile apart) took the first free places of the grid at their insert.
     }
 
     [TestMethod]

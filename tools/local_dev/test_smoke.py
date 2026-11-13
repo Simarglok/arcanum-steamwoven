@@ -524,8 +524,9 @@ class ExecuteTests(unittest.TestCase):
     def test_transfer_needs_the_visitor_fight_pass_line_too(self) -> None:
         # ARC-DEV-1556: the stage's own PASS line comes before the visitor-fight sub-check, which can print NONE or NO-TARGET.
         steps = [smoke.Step("stages", "window", ("g",), requires=("transfer",))]
-        own, fight = smoke.STAGE_PASS["transfer"], smoke.STAGE_ALSO_PASS["transfer"][0]
-        code, _, lines = self.run_steps(steps, {}, {"stages": f"{own} {{}}\n{fight} {{}}\n"})
+        own = smoke.STAGE_PASS["transfer"]
+        every = "".join(f"{marker} {{}}\n" for marker in smoke.STAGE_ALSO_PASS["transfer"])
+        code, _, lines = self.run_steps(steps, {}, {"stages": f"{own} {{}}\n{every}"})
         self.assertEqual((code, lines[-1]), (0, "SMOKE PASS 1 of 1 steps passed"))
         for reason in ("ARC-DEV-065 native-smoke visitor-fight NO-TARGET map=79",
                        "ARC-DEV-065 native-smoke visitor-fight NONE (no hero)", ""):

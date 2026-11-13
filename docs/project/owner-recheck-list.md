@@ -184,7 +184,7 @@ Known differences (documented, not bugs):
 | # | Step | Expected (from the original executable) | Status |
 | --- | --- | --- | --- |
 | 1 | Make a creature back off or flee from a target (a scared or surrendering NPC, a follower ordered to back off) in open ground. | It walks away along a tile found by the away-path search (0x41F6C0). Ours finds no away tile, so the back-off ends at once. | open |
-| 2 | Talk to a teacher, then to a healer, a rumor monger and a newspaper vendor (a reply that opens a skill list, a cure, a rumor or a paper). | The replies marked for trainers, healers, rumors, town directions and newspapers show their generated lines and offers; training by an apprentice costs 100 gold (0x418CA0..0x41A8C0). Ours now builds the trainer's `t:` reply (ARC-SCRIPT-1150: the skill menu, the price on the reaction scale, the payment and the training); the rumor monger's `r:` reply too (ARC-SCRIPT-1304: one rumor of its list, for gold when it names a price, told in the NPC's words and written to the logbook); the news reply `c:` too (ARC-SCRIPT-1321: the story line of the story state, then the one way on); the healer reply is still refused as unsupported. | open |
+| 2 | Talk to a teacher, then to a healer, a rumor monger and a newspaper vendor (a reply that opens a skill list, a cure, a rumor or a paper). | The replies marked for trainers, healers, rumors, town directions and newspapers show their generated lines and offers; training by an apprentice costs 100 gold (0x418CA0..0x41A8C0). Ours now builds the trainer's `t:` reply (ARC-SCRIPT-1150: the skill menu, the price on the reaction scale, the payment and the training); the rumor monger's `r:` reply too (ARC-SCRIPT-1304: one rumor of its list, for gold when it names a price, told in the NPC's words and written to the logbook); the news reply `c:` too (ARC-SCRIPT-1321: the story line of the story state, then the one way on); the town directions replies `d:`/`x:` too (ARC-SCRIPT-1533) and the quest-state reply `q:` (ARC-SCRIPT-1532); the healer reply is still refused as unsupported. | open |
 | 3 | Start a talk with an NPC that is hostile on sight, then with one that cannot speak to you (too evil, too good, party full). | A hostile NPC answers with its race line and the talk ends; an NPC that cannot speak refuses with the line of its reason range (0x412FD0, 0x413A90). Ours opens the talk first. | open |
 | 4 | Ask a talkative NPC for money (a dialog money request), once with enough gold and once without. | The request, payment and no-money steps run from the reply (0x418A40, 0x418B30, 0x418C40). Ours has no such reply state. | open |
 | 5 | Save while combat music plays (any fight), reload that save and leave the fight. | In the Original setting the pre-combat music and ambient schemes are lost by the save (original bug SN18, 0x41B1D0); Steamwoven keeps them, so compare which music returns. | open |
@@ -1169,3 +1169,22 @@ The original shows the load screen for every successful load of a save, the save
 | 2 | Open the in-play menu, Load Game and choose a save on the shown map. | The same black screen with the clock, then the window is closed and the game is the saved one. | open |
 | 3 | The same with a save whose file is damaged (copy one and break it). | The screen goes at once, the load window stays with the reason (F8: the running game stays, the message window says the load failed). | open |
 | 4 | Press F8 with no save at all. | No black screen; only the two notes, as before. | open |
+
+## ARC-UI-1194 — Generated interface: the loot, barter and steal windows (S4, 2026-11-13)
+
+The rules are in [viewer slice S4](../rendering/hd-interface-density.md#viewer-slice-s4-arc-ui-1194). Set the HD interface line on the launcher screen to **Generated (experimental)**,
+start a game and open a container, a body (the toggles under the picture switch to the doll), pick a pocket and talk to a merchant for the barter window. Compare with **HD** and **Legacy**.
+
+| # | Step | Expected | Status |
+| --- | --- | --- | --- |
+| 1 | Open a chest in a 1280 × 800 window. | The ring of the round view, the box of the image with its six rivets and the grid with its chain are drawn by code in the same places as in HD; the grid's cells, Take all and every click land where they did. | open |
+| 2 | Open a body and press the doll toggle. | The doll view (nine slots, two curved pits) is drawn by code; worn items sit on their slots as before. | open |
+| 3 | Talk to a merchant and open barter; with a follower in the party open it again. | The medallion stays a picture, the merchant's image, name and quote sit in their boxes; a follower's window keeps its two cycle buttons on their plates. | open |
+| 4 | Make the window bigger and smaller while one of these windows is open. | The frames redraw at the new size (the previous picture stays until it is ready); lines stay one unit wide. | open |
+| 5 | Open the inventory and one of these windows in turn. | The ring of the round view looks the same in both (the paper doll's ring is generated too now). | open |
+
+Known differences (documented, not bugs):
+
+- The curved flourishes at the corners of the original's boxes are not drawn; the ring around the round view is three units wide, narrower than the original's.
+- The follower's plates keep a little of the old wood at their inner ends; the barter doll and the doll cover are not built yet.
+

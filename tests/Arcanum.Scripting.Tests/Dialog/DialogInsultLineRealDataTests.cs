@@ -9,7 +9,7 @@ namespace Arcanum.Scripting.Tests.Dialog;
 
 /// <summary>
 /// ARC-SCRIPT-1505 opt-in check (<c>DAT_ROOT</c>, the game folder): every installed NPC node that is exactly <c>i:</c> is admitted and says the race line 1000, the
-/// generated NPC class files hold that group, and the installed data holds no NPC <c>m:</c> or <c>r:</c> node (the forms this slice leaves out). Only counts and
+/// generated NPC class files hold that group, and the installed data holds no NPC <c>m:</c> or <c>r:</c> node (the forms of ARC-SCRIPT-1535, built from synthetic data only). Only counts and
 /// shapes are compared, never text.
 /// </summary>
 [TestClass]

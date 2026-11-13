@@ -79,6 +79,7 @@ public sealed partial class GameSessionOwner
         // ARC-MAGIC-1684: the scripts' changes are applied with the wield, in the regeneration's one revision.
         planned.Runs?.Commit();
         _inventory.NpcWorn[npc] = planned.Record!;
+        foreach (var worn in planned.Record!.Values) _inventory.ForgetSlot(worn);
         return new(GameSessionFailure.None, planned.Steps) { Messages = planned.Runs?.Messages ?? [] };
     }
 
@@ -105,7 +106,11 @@ public sealed partial class GameSessionOwner
         // A first record for an NPC the session never dressed counts against the saved budget (a save holds at most MaxNpcWorn, as the restock's wield checks).
         if (planned.Changed && !_inventory.NpcWorn.ContainsKey(npc) && _inventory.NpcWorn.Count >= SessionInventoryState.MaxNpcWorn) return RejectBest(GameSessionFailure.BudgetExceeded);
         planned.Runs?.Commit();
-        if (planned.Changed) _inventory.NpcWorn[npc] = planned.Record!;
+        if (planned.Changed)
+        {
+            _inventory.NpcWorn[npc] = planned.Record!;
+            foreach (var worn in planned.Record!.Values) _inventory.ForgetSlot(worn);
+        }
         Revise();
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, planned.Steps, Version) { Messages = planned.Runs?.Messages ?? [] };
     }

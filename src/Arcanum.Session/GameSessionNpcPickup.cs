@@ -159,6 +159,7 @@ public sealed partial class GameSessionOwner
             var given = placed is null || placed.Source is SessionPlacedSource.Kit or SessionPlacedSource.Pc;
             _inventory.AddToNpc(npc, new SessionMadeItem(item, facts.Kind, given ? 0 : facts.Complexity));
             if (ammo is { } added) _inventory.Ammo[item] = added;
+            StoreInsertPlace(npc, item);
             MarkCheckWield(npc);
         }
         if (pile is not null) _inventory.Objects.LeaveItem(item);
