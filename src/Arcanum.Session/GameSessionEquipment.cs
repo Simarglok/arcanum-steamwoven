@@ -237,6 +237,14 @@ public sealed partial class GameSessionOwner
     /// <summary>The hero's worn items in slot order (empty without a hero).</summary>
     public SessionEquipmentState QueryEquipment() { ThrowIfDisposed(); return _equipment.Capture(); }
 
+    /// <summary>ARC-SCRIPT-1562 (ledger CP7, CP8): the magick-tech complexity of a worn item as the hero's equipment holds it (a made or kit item has no map row); null for an item the hero does not wear and without a hero.</summary>
+    public int? QueryWornComplexity(string entity)
+    {
+        ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(entity);
+        return _hero is null ? null : _equipment.Worn.Values.FirstOrDefault(item => item.Entity == entity)?.Item.MagickTechComplexity;
+    }
+
     /// <summary>
     /// ARC-SCRIPT-1482 (ledger WE2, EQ9): the power ratio of a worn item for the hero, which the magick-tech adjustment (91) of a deferred item script reads: 100 for a neutral item, else <c>100 × power / complexity</c> under the hero's
     /// current aptitude. Null for an item the hero does not wear and without a hero.

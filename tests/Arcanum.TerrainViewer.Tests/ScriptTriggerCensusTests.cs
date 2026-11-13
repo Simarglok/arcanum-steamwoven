@@ -110,6 +110,8 @@ public sealed class ScriptTriggerCensusTests
         // ARC-SCRIPT-050: the talk set admits 115 of the 180 dialog rows (52 before float line, get area, random, the guard conditions and obj is dead).
         Assert.AreEqual(180, rows[ScrPoint.Dialog]);
         Assert.IsTrue(admitted[ScrPoint.Dialog] >= 115, admitted[ScrPoint.Dialog].ToString());
+        // ARC-SCRIPT-1562: the combat-point set admits 24 of the 26 hit rows (2 before: the rest stopped at 91, 80 and condition 37), all 18 critter-hits rows and 3 of the 4 critical-hit rows (the others stop at obj is in combat, 31, and adjust stat, 137).
+        Assert.IsTrue(admitted[ScrPoint.Hit] >= 24 && admitted[ScrPoint.CritterHits] == 18 && admitted[ScrPoint.CriticalHit] >= 3, $"{admitted[ScrPoint.Hit]}, {admitted[ScrPoint.CritterHits]}, {admitted[ScrPoint.CriticalHit]}");
     }
 
     /// <summary>

@@ -472,9 +472,14 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     /// </summary>
     public int? MagickCancelPercent(ScrObjectRef item, ScrObjectRef attacker, ScrObjectRef target)
     {
-        if (ComplexityOf(item) is not { } complexity || CritterAptitude(attacker) is not { } from || CritterAptitude(target) is not { } to) return null;
-        if (!from.Critter || !to.Critter) return 0;
-        return from.Aptitude is { } a && to.Aptitude is { } b ? Arcanum.Simulation.Combat.AttackRules.MagickCancelChance(complexity, a, b) : null;
+        // The original's order: the attacker's type, then the target's (neither a critter: no chance, whatever the item); only then the aptitudes. A critter's aptitude is the attack path's, clamped to the aptitude range.
+        if (CritterAptitude(attacker) is not { } from) return null;
+        if (!from.Critter) return 0;
+        if (CritterAptitude(target) is not { } to) return null;
+        if (!to.Critter) return 0;
+        if (ComplexityOf(item) is not { } complexity || from.Aptitude is not { } a || to.Aptitude is not { } b) return null;
+        var (min, max) = (Arcanum.Simulation.Equipment.EquipmentLimits.MinAptitude, Arcanum.Simulation.Equipment.EquipmentLimits.MaxAptitude);
+        return Arcanum.Simulation.Combat.AttackRules.MagickCancelChance(complexity, Math.Clamp(a, min, max), Math.Clamp(b, min, max));
     }
 
     private const uint AnimalCritterFlag = 0x8;
@@ -502,8 +507,10 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         return (true, obj.Map == _shownMap ? _world?.Aptitude?.Invoke(obj.Code) : null);
     }
 
-    // The magick-tech complexity of an item the host has a row for (the item in use is a row of its origin map); null for an item without one (a made or kit item: not modelled).
-    private int? ComplexityOf(ScrObjectRef item) => Row(item) is { } row && Arcanum.Data.Combat.CombatFieldReader.Read(row).Fields?.Item is { } fields ? fields.MagickTechComplexity : null;
+    // The magick-tech complexity of an item the host has a row for (the item in use is a row of its origin map), else of an item the hero wears (a made or kit item has no row, ARC-SCRIPT-1562); null for any other (not modelled).
+    private int? ComplexityOf(ScrObjectRef item) => Row(item) is { } row
+        ? Arcanum.Data.Combat.CombatFieldReader.Read(row).Fields?.Item is { } fields ? fields.MagickTechComplexity : null
+        : _session.QueryWornComplexity(item.Code);
 
     /// <summary>The identified test is not answered by the use host (its set holds no condition that asks it).</summary>
     public bool? IsIdentified(ScrObjectRef obj) => null;
