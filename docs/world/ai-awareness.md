@@ -42,6 +42,12 @@ session state, no caller yet. The line of fire is ARC-COMBAT-012's
   (ARC-SKILLS-008). `WithProwlerLine` carries the line traced from the observer to the prowler's tile
   into the sight difficulty's facts (a blocker hides the prowler, else the cost is the cover). The
   margin is 0 when the target is not concealed (sight) or not moving silently (hearing).
+  ARC-AI-1518: `AreaAiHost.See`/`SeeToward` and `Hear` ask it for a concealed hero (the observer's
+  conditions and dark sight, the light at the hero, the line's blocker or cover for sight; the hero's
+  carried light and worn armour's silent-move adjustments come from the session), so a sneaking hero
+  is seen and heard from less far. The scan hears a concealed hero at the silent level, remembers it
+  and `AreaAiHost.UpdateDanger` turns the scanner toward it when nothing else was found; the validity
+  test refuses an unseen master prowler. A concealed follower has no margin yet (issue #1560).
 - **Clear shot** (`LineOfFireRules.ClearShot`, AW8): cover below 26 and no blocker but the target, the
   test of the two attack-goal callbacks; their weapon, reach and goal handling are slice I7's.
 

@@ -160,6 +160,8 @@ public enum AiRollPurpose
     PleaseMoveStart,
     /// <summary>ARC-AI-1313 (0x425930, 0x425D60): the wander goal's tile offset, −radius..radius drawn twice (x, then y) around its tether.</summary>
     WanderOffset,
+    /// <summary>ARC-AI-1515 (0x4A9650, 0x4CEF00): a follower the PC hit that stays says its accidental-attack line on 1 of 1..3 (0x413DF0).</summary>
+    FollowerHitLine,
 }
 
 /// <summary>The AI's random source: one inclusive range draw per call, the original's range draw (0x4CEF00); equal bounds
