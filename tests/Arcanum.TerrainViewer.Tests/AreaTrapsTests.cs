@@ -24,7 +24,7 @@ public sealed class AreaTrapsTests
     private static AreaObjectKey Key(int index) => new(new string('a', 64), 1, AreaSourceKind.Mobile, 1, index, index * 100L, new string((char)('a' + index), 64), 100);
 
     // A row with a use slot (point 1: local flags, counters, script) and object flags on (x, 20).
-    private static AreaObjectRecord Row(int index, int type, int script, uint counters = 0, long x = 0, uint objectFlags = 0, long? difficulty = null)
+    private static AreaObjectRecord Row(int index, int type, int script, uint counters = 0, long x = 0, uint objectFlags = 0, long? difficulty = null, long y = 20)
     {
         var fields = new List<AreaFieldValue>
         {
@@ -32,7 +32,7 @@ public sealed class AreaTrapsTests
             new(18, AreaPresence.Value, AreaValueOrigin.Instance, objectFlags, [], null),
         };
         if (difficulty is { } hard) fields.Add(new(37, AreaPresence.Value, AreaValueOrigin.Instance, hard, [], null));
-        return new(Key(index), 0, type, 0, "p", "p", "r", "s", AreaScope.Core, null, x == 0 ? 10 + index : x, 20,
+        return new(Key(index), 0, type, 0, "p", "p", "r", "s", AreaScope.Core, null, x == 0 ? 10 + index : x, y,
             Arcanum.Data.Area.AreaDisposition.BodyEligibleConditionally, [], fields, true, true, true);
     }
 
@@ -80,7 +80,16 @@ public sealed class AreaTrapsTests
     {
         public List<(AreaObjectRecord Row, NativeTrapRun Run, int Counters, int Flags)> Calls { get; } = [];
         public int SpellFlags { get; set; } = spellFlags;
-        public AreaTrapEffects Side => new((row, run, counters, flags) => { Calls.Add((row, run, counters, flags)); return SessionTrapEffectResult.None; }, SpellFlags);
+        public AreaTrapEffects Side => new((row, run, counters, flags) => { Calls.Add((row, run, counters, flags)); return SessionTrapEffectResult.None; }, SpellFlags)
+        {
+            ApplyByCritter = ByCritter ? (entity, row, run, counters, flags) => { Triggerers.Add(entity); Calls.Add((row, run, counters, flags)); return SessionTrapEffectResult.None; } : null,
+            SpellFlagsOf = entity => WalkerFlags.GetValueOrDefault(entity),
+        };
+
+        // ARC-WORLD-1469: the critters' side of the cast host: who the triggerer of each fired native run was, and each critter's spell flags.
+        public bool ByCritter { get; set; } = true;
+        public List<string> Triggerers { get; } = [];
+        public Dictionary<string, int> WalkerFlags { get; } = [];
     }
 
     private static (AreaUseScriptHost Host, AreaTraps Traps) Hosts(GameSessionOwner session, ScriptContent content, Func<AreaTrapEffects?> effects,
@@ -490,6 +499,197 @@ public sealed class AreaTrapsTests
         var sheet = new Arcanum.Simulation.Character.AdvancementSheet(Arcanum.Simulation.Character.CharacterRace.Human, false, [8, 8, 8, 8, 20, 20, 8, 8], 0, 0, 1, 0,
             [.. basic], [.. new int[4]], [.. new int[16]], [.. new int[8]], 0, 0, 0, 0);
         return (new SessionNpcAdvancement(id, sheet, 0), Arcanum.Simulation.Character.AdvancementModifiers.None);
+    }
+
+    // ARC-WORLD-1469 (ledger TT9, TT8, TT7): the meeting of an NPC or a companion with a trap object under its step and with a trapped object it uses.
+    private static AreaTrapWalker Free(string entity = "oid:npc") => new(entity, false, null);
+    private static AreaTrapWalker Led(string entity = "oid:companion") => new(entity, true, null);
+
+    [TestMethod]
+    public void A_free_npc_s_step_sets_off_a_trap_object_it_knows_with_itself_as_the_triggerer_and_ends_its_walk()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var effects = new Effects();
+            var trap = Row(1, TrapObject, 30004, 0x0000_0201, x: 50, objectFlags: TrapRules.DontDrawFlag);
+            var (host, traps) = Hosts(session, content, () => effects.Side, null, trap);
+            Assert.IsNull(traps.StepNpc(Free(), new(51, 20)), "no trap object there");
+            var fired = traps.StepNpc(Free("oid:thug"), Cell(trap))!;
+            Assert.IsTrue(fired is { Cause: SessionTrapCause.Step, Outcome: SessionTrapOutcome.Fired, EndsWalk: true, Result.State.Removed: true }, fired.Describe());
+            CollectionAssert.AreEqual(new[] { "oid:thug" }, effects.Triggerers, "the walker is the triggerer of the run");
+            Assert.AreEqual(1, effects.Calls.Count);
+            Assert.AreEqual(0, effects.Calls.Count(c => c.Row != trap), "only the trap's own effect");
+            Assert.IsNull(traps.StepNpc(Free(), Cell(trap)), "the trap object is gone");
+            Assert.AreEqual(false, host.IsTrap(trap));
+        });
+    }
+
+    [TestMethod]
+    public void A_walker_whose_spell_flags_step_over_traps_sets_none_off_and_without_the_critter_side_no_trap_is_met()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var effects = new Effects();
+            var trap = Row(1, TrapObject, 30004, 0x0000_0201, x: 50, objectFlags: TrapRules.DontDrawFlag);
+            var (_, traps) = Hosts(session, content, () => effects.Side, null, trap);
+            effects.WalkerFlags["oid:ghost"] = TrapRules.StepImmuneSpellFlags & 0x2;
+            var over = traps.StepNpc(Free("oid:ghost"), Cell(trap))!;
+            Assert.IsTrue(over is { Outcome: SessionTrapOutcome.SteppedOver, EndsWalk: false }, over.Describe());
+            Assert.AreEqual(0, effects.Calls.Count);
+            effects.ByCritter = false;
+            Assert.IsNull(traps.StepNpc(Free(), Cell(trap)), "a cast host that cannot take a critter's trap meets none: no trap is consumed without its effect");
+        });
+    }
+
+    [TestMethod]
+    public void A_trap_the_pc_did_not_place_is_known_to_a_free_npc_and_only_a_led_one_spots_it_and_marks_it_for_the_player()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var effects = new Effects();
+            var plain = Row(1, TrapObject, 30001, x: 60, objectFlags: TrapRules.DontDrawFlag);
+            var (host, traps) = Hosts(session, content, () => effects.Side, null, plain);
+            // The detect flag of the player's spells spots without a roll for an observer that does not know the trap: a companion does not know a trap nobody spotted, so it spots it and marks it for the player.
+            effects.SpellFlags = Detect;
+            var led = traps.StepNpc(Led(), Cell(plain))!;
+            Assert.IsTrue(led is { Outcome: SessionTrapOutcome.Spotted, EndsWalk: true }, led.Describe());
+            Assert.AreEqual(0, effects.Calls.Count);
+            Assert.IsTrue(host.TrapState(plain)!.Value.Spotted, "a companion marks it: the player knows it");
+            var after = traps.StepNpc(Led("oid:other"), Cell(plain))!;
+            Assert.IsTrue(after is { Outcome: SessionTrapOutcome.Fired }, "a known trap fires on the next step: " + after.Describe());
+            CollectionAssert.AreEqual(new[] { "oid:other" }, effects.Triggerers);
+            // A free NPC knows every trap the PC did not place: no spot attempt, the trap goes off.
+            var other = Row(2, TrapObject, 30001, x: 61, objectFlags: TrapRules.DontDrawFlag);
+            var (_, otherTraps) = Hosts(session, content, () => effects.Side, null, other);
+            var free = otherTraps.StepNpc(Free("oid:free"), Cell(other))!;
+            Assert.IsTrue(free is { Outcome: SessionTrapOutcome.Fired }, free.Describe());
+        });
+    }
+
+    [TestMethod]
+    public void A_trap_the_pc_placed_is_unknown_to_a_free_npc_which_spots_it_without_marking_and_known_to_a_led_one_which_sets_it_off()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var effects = new Effects(Detect);
+            var placed = Row(1, TrapObject, 30001, x: 60, objectFlags: TrapRules.PlacedByPcFlag | TrapRules.DontDrawFlag);
+            var (host, traps) = Hosts(session, content, () => effects.Side, null, placed);
+            var free = traps.StepNpc(Free(), Cell(placed))!;
+            Assert.IsTrue(free is { Outcome: SessionTrapOutcome.Spotted, EndsWalk: true }, free.Describe());
+            Assert.IsFalse(host.TrapState(placed)!.Value.Spotted, "a free NPC marks nothing (TT4)");
+            Assert.AreEqual(0, effects.Calls.Count);
+            var led = traps.StepNpc(Led(), Cell(placed))!;
+            Assert.IsTrue(led is { Outcome: SessionTrapOutcome.Fired }, "the PC's own trap is known to its companion: " + led.Describe());
+        });
+    }
+
+    [TestMethod]
+    public void An_unknown_trap_met_by_a_walker_without_a_sheet_fires_as_a_missed_spot_does()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var effects = new Effects();
+            var placed = Row(1, TrapObject, 30001, x: 60, objectFlags: TrapRules.PlacedByPcFlag | TrapRules.DontDrawFlag);
+            var (_, traps) = Hosts(session, content, () => effects.Side, null, placed);
+            var draws = session.QueryRandom().Draws;
+            var met = traps.StepNpc(Free(), Cell(placed))!;
+            Assert.IsTrue(met is { Outcome: SessionTrapOutcome.Fired, EndsWalk: true }, met.Describe());
+            Assert.AreEqual(draws, session.QueryRandom().Draws, "no sheet, no spot roll");
+            Assert.AreEqual(1, effects.Calls.Count);
+        });
+    }
+
+    [TestMethod]
+    public void A_trapped_object_an_npc_uses_fires_on_it_and_stops_the_use_and_an_untrapped_one_goes_on()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var effects = new Effects();
+            var door = Row(1, Scenery, 30001, 0x0000_0503, objectFlags: 0);
+            var plain = Row(2, Scenery, 700);
+            var (_, traps) = Hosts(session, content, () => effects.Side, null, door, plain);
+            Assert.IsNull(traps.UseNpc(plain, Free()), "an ordinary use script is no trap");
+            var used = traps.UseNpc(door, Free("oid:opener"))!;
+            Assert.IsTrue(used is { Cause: SessionTrapCause.Use, Outcome: SessionTrapOutcome.Fired, Cancels: true }, used.Describe());
+            CollectionAssert.AreEqual(new[] { "oid:opener" }, effects.Triggerers);
+            effects.ByCritter = false;
+            Assert.IsNull(traps.UseNpc(door, Free()), "no critter side: the trap is not consumed");
+        });
+    }
+
+    [TestMethod]
+    public void A_walker_with_a_sheet_rolls_its_own_spot_trap_on_an_unknown_trap_it_steps_on_and_a_step_that_did_not_begin_meets_nothing()
+    {
+        WithContent(content =>
+        {
+            AreaTraps? traps = null;
+            var effects = new Effects();
+            var scene = AreaAiRouteTests.Open(AreaAiRouteTests.Npc(0, [], 0, (10, 20), (10, 20)), traps: () => traps, sheet: MasterSheet);
+            var placed = Row(1, TrapObject, 30001, x: 11, objectFlags: TrapRules.PlacedByPcFlag | TrapRules.DontDrawFlag);
+            (_, traps) = Hosts(scene.Session, content, () => effects.Side, null, placed);
+            Assert.IsFalse(scene.Host.StepMeetsTrap(scene.Npc, new(11, 20)), "no step began: the trap is not met");
+            Assert.AreEqual(0, effects.Calls.Count);
+            scene.Host.BeginStep(scene.Npc, new(11, 20), false);
+            var draws = scene.Session.QueryRandom().Draws;
+            Assert.IsTrue(scene.Host.StepMeetsTrap(scene.Npc, new(11, 20)), "the trap is spotted or goes off, so the walk ends");
+            Assert.IsTrue(scene.Session.QueryRandom().Draws > draws, "the entry point's spot attempt rolls the NPC's own skill (a free NPC does not know the PC's plate)");
+            Assert.IsFalse(scene.Host.StepMeetsTrap(scene.Npc, new(11, 20)), "one meeting per begun step");
+        });
+    }
+
+    [TestMethod]
+    public void An_npc_that_uses_a_trapped_object_through_the_ai_host_meets_its_trap_and_the_meeting_is_taken_once()
+    {
+        WithContent(content =>
+        {
+            AreaTraps? traps = null;
+            var effects = new Effects();
+            var scene = AreaAiRouteTests.Open(AreaAiRouteTests.Npc(0, [], 0, (10, 20), (10, 20)), traps: () => traps, sheet: MasterSheet);
+            var door = Row(1, Scenery, 30001, 0x0000_0503);
+            var plain = Row(2, Scenery, 700);
+            (_, traps) = Hosts(scene.Session, content, () => effects.Side, null, door, plain);
+            Assert.IsFalse(scene.Host.TrapMetByUse(scene.Npc, plain), "no trap: the use goes on");
+            Assert.AreEqual(0, scene.Host.TakeTrapMeetings().Count);
+            Assert.IsTrue(scene.Host.TrapMetByUse(scene.Npc, door), "a trap that fires stops the use");
+            CollectionAssert.AreEqual(new[] { scene.Npc }, effects.Triggerers);
+            Assert.AreEqual(1, scene.Host.TakeTrapMeetings().Count);
+            Assert.IsFalse(scene.Host.TrapMetByUse(Arcanum.Simulation.Ai.AiSchedulerRules.Pc, door), "the hero's use is the viewer's own");
+        });
+    }
+
+    [TestMethod]
+    public void An_npc_s_walk_goal_ends_on_the_tile_of_the_trap_object_it_stepped_on_and_the_trap_fires_once()
+    {
+        WithContent(content =>
+        {
+            AreaTraps? traps = null;
+            var effects = new Effects();
+            var scene = AreaAiRouteTests.Open(AreaAiRouteTests.Npc(0, [], 0, (16, 20), (16, 20)), traps: () => traps, sheet: MasterSheet);
+            var plate = Row(1, TrapObject, 30004, 0x0000_0201, x: 12, y: 18, objectFlags: TrapRules.DontDrawFlag);
+            AreaUseScriptHost host;
+            (host, traps) = Hosts(scene.Session, content, () => effects.Side, null, plate);
+            scene.Host.RunRoutine(scene.Npc);
+            Assert.IsNotNull(scene.Host.RunOf(scene.Npc), scene.Host.TraceOf(scene.Npc)?.Route);
+            var frames = new Arcanum.World.FrameStep(scene.Session, AreaAiTestSteps.NoAi).WithAi(scene.Host);
+            for (var n = 0; n < 2000 && effects.Calls.Count == 0; n++) frames.AdvanceHost(50);
+            Assert.AreEqual(1, effects.Calls.Count, "the trap fired once: " + scene.Host.TraceOf(scene.Npc)?.Step);
+            Assert.AreEqual(new CellCoord(12, 18), scene.Host.Tile(scene.Npc), "the step that met the trap put the NPC on its tile, short of its standpoint");
+            var walk = scene.Host.RunOf(scene.Npc)!.Frames.Last(frame => frame.Goal == Arcanum.Simulation.Goals.GoalType.AttemptMove);
+            Assert.AreEqual(walk.Path.Length, walk.PathIndex, "the walk goal's path index is its length: the walk ends on the trap's tile (TT9)");
+            CollectionAssert.AreEqual(new[] { scene.Npc }, effects.Triggerers);
+            Assert.IsTrue(host.TrapState(plate)!.Value.Removed, "an auto-removing trap is gone");
+            for (var n = 0; n < 2000 && scene.Host.RunOf(scene.Npc) is not null; n++) frames.AdvanceHost(50);
+            Assert.AreEqual(1, effects.Calls.Count, "the trap is gone: the walk on to the standpoint meets nothing");
+            var meetings = scene.Host.TakeTrapMeetings();
+            Assert.AreEqual(1, meetings.Count);
+            Assert.AreEqual(0, scene.Host.TakeTrapMeetings().Count, "taken once");
+        });
     }
 
     [TestMethod]
