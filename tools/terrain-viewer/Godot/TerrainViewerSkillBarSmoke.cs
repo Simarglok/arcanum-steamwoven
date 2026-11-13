@@ -30,6 +30,8 @@ public partial class TerrainViewerApp
         Require(_gameBar.IsOn(AreaBarButton.Skills) && !_gameBar.IsOn(AreaBarButton.Spells) && _messageLog.PaneMode && view is { Visible: true },
             $"K turned Skills down and the strip draws the skill pane: {_gameBarNotice}");
         Require(view!.BackgroundForSelfTest == Art(SkillPaneRules.BackgroundArt)?[0], "the pane draws the background art 274");
+        // ARC-UI-1200: the opt-in generated-chrome part (ARC_AREA_WINDOW_ART): the pane's background draws as the mode under test says.
+        if (WindowArtSmokeRequested) { await PaneArtSmokeAsync("skill-pane", () => view.BackgroundForSelfTest, SkillPaneRules.BackgroundArt); await frames(3); }
         Require(_spellBarView is not { Visible: true } && _spellPane?.Shown != true, "the spell pane is away");
         var buttons = Enumerable.Range(0, SkillPaneRules.Buttons).ToArray();
         Require(buttons.All(b => view.ButtonArtForSelfTest(b) is { } art && Art(SkillPaneRules.ButtonArt(b)!.Value)!.Contains(art)), "every skill button draws its art");
