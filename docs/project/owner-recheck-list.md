@@ -1076,3 +1076,23 @@ design (the chance is 5 per cent of each firing, one firing per 300 to 700 game 
 | 4 | Look at where the creatures stand against the party. | Two rings: one side west of the party's tile or north of it, about six tiles away, in small columns of three. Ours do not turn toward the party (a known gap). | open |
 | 5 | Meet a second group in the same encounter (a table row with two creature kinds). | The first creature of the second kind is missing (the original destroys it, a quirk kept). | open |
 | 6 | Try the same in a town sector and while standing in a named area. | No encounter happens there. | open |
+
+## ARC-UI-1364 — top strip buttons lit by game events and the Map button's face (2026-11-13)
+
+The rules are in [bar buttons lit by game events](../rendering/terrain-viewer.md#bar-buttons-lit-by-game-events-arc-ui-1364) (ledger GB13–GB15). Compare them in both games with the interface bars on.
+
+| # | Step | Expected (from the original executable and data) | Status |
+| --- | --- | --- | --- |
+| 1 | Gain a level (kill something, or finish a quest) with the character sheet closed. | The level-up sound and message appear and the Character button turns red (the lit art). | open |
+| 2 | Open the character sheet (the button or `C`). | The Character button goes back to its normal look. | open |
+| 3 | Gain a level while the sheet is open, then close it. | The button stays normal. | open |
+| 4 | Take or drop an object on the ground, or have one given to you, with the inventory closed. | The Inventory button lights; opening the inventory puts it out. | open |
+| 5 | Accept or complete a quest, add or lose a blessing or a curse, or gain a reputation, with the logbook closed. | The Logbook button lights; opening the logbook puts it out. | open |
+| 6 | Learn a new world-map area (a dialog or script that reveals one) while standing in the wilderness. | The Map button (the blue globe in the wilderness) lights until the world map is opened. | open |
+| 7 | Walk from the wilderness into a town with a town map, and out again. | In the town the Map button shows its town art; in the wilderness the blue globe. The map opens on the town map in the town. | open |
+| 8 | Save with a button lit and load the save. | The original restores the lit button; ours starts with all buttons normal (a known difference, see below). | open |
+
+Known differences (documented, not bugs):
+
+- The lit state is not in our save (issue [#1542](https://github.com/Simarglok/arcanum-steamwoven/issues/1542)).
+- The original blocks no map entry by the button's art: going to the world map is not tied to the blue globe being shown (ledger GB15), so nothing is blocked here either.

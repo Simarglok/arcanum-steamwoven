@@ -45,6 +45,8 @@ public partial class TerrainViewerApp
     {
         // ARC-MAGIC-026: a drop of the maintain bar's open count ends the closed slots' spells whether the bars show or not.
         SyncMaintainClosing();
+        // ARC-UI-1364: the buttons' lights follow the session whether the bars show or not (the original's art words live on).
+        SyncBarLights();
         // ARC-UI-1111: the clock's chain runs under the session whether the bars show or not (the original's interface stays made).
         SyncGameClock();
         if (!GameBarActive)
