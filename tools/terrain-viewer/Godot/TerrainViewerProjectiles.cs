@@ -481,7 +481,7 @@ public partial class TerrainViewerApp
         {
             if (ObjectTargets()?.Target(owner, target.Row.Key, AreaTrapped) is { Refusal: null } now) target = now;
             var result = owner.LandShotOnObject(owner.Version, projectile.Shot,
-                target.Attack(1, null, AreaCombatHost.HeroWorn(owner, _areaKitDurability)) with { DropMap = AreaDropMapNow(), TakingDamage = () => TakingDamageGoesOn(target.Entity, SessionSpellCaster.Hero) });
+                target.Attack(1, null, AreaCombatHost.HeroWorn(owner, _areaKitDurability)) with { DropMap = AreaDropMapNow(), TakingDamage = () => TakingDamageGoesOn(target.Entity, SessionSpellCaster.Hero), HitScripts = HeroHitScripts(target.Entity) });
             Ended(projectile, kind, target.Entity, $"disposition={result.Disposition} failure={result.Failure} outcome={result.Resolution?.Outcome}"
                 + $" damage={result.Object?.Damage}");
             end = StruckEnd(projectile, result.Disposition != GameSessionDisposition.Rejected && result.Resolution?.Outcome is Arcanum.Simulation.Combat.AttackOutcome.Hit or Arcanum.Simulation.Combat.AttackOutcome.CriticalHit, target.Entity);

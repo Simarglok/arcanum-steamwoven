@@ -645,7 +645,9 @@ public static partial class AiExecutorRules
         if (!Check(world, owner, cost)) return new(Move.Kill, Reason: AiExecutorReason.Unpaid);
         Consume(world, owner, cost);
         var ms = world.BeginStep(owner, next, running);
-        return new(Move.Next, 1, Delay: Math.Max(ms, 1), Top: goal with { PathIndex = goal.PathIndex + 1 });
+        // ARC-WORLD-1469 (TT9): a trap object on the tile the step started onto is met at once; a spotted or fired trap ends the walk on that tile (the original's path index := its length).
+        var trapped = world.StepMeetsTrap(owner, next);
+        return new(Move.Next, 1, Delay: Math.Max(ms, 1), Top: goal with { PathIndex = trapped ? goal.Path.Length : goal.PathIndex + 1 });
     }
 
     // ---- the flight (goals 25, 52) ----

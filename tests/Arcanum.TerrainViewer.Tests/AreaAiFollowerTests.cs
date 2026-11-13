@@ -1,4 +1,6 @@
 using Arcanum.Data.Area;
+using Arcanum.Data.Characters;
+using Arcanum.Data.Messages;
 using Arcanum.Data.Traversal;
 using Arcanum.Session;
 using Arcanum.Simulation.Ai;
@@ -112,7 +114,8 @@ public sealed class AreaAiFollowerTests
     }
 
     private static Scene Open(bool companionWaits = false, bool followers = true, CellCoord? companionAt = null, CellCoord? corner = null,
-        CellCoord? companionHome = null, bool healer = false, uint enemyFlags = 0, bool free = false, bool visitor = false, bool onDemand = false, bool homeless = false, string? dialogPartner = null, Action<string>? dialogEnded = null, Func<string, int?>? alertedSound = null)
+        CellCoord? companionHome = null, bool healer = false, uint enemyFlags = 0, bool free = false, bool visitor = false, bool onDemand = false, bool homeless = false, string? dialogPartner = null, Action<string>? dialogEnded = null, Func<string, int?>? alertedSound = null,
+        PartyConsentFacts? joinFacts = null, Func<string, PartyConsentFacts?>? followFacts = null, AiParameterTable? table = null)
     {
         var identity = new GlobalFlagIdentity(new WorldId(Guid.NewGuid()), new ModuleId(Guid.NewGuid()));
         var hero = new SessionHeroDefinition(16089, CharacterRace.Human, CharacterGender.Male, [8, 8, 8, 8, 8, 8, 8, 8, 0, 0], 1, 5, 0, null, null, 0, []);
@@ -137,7 +140,8 @@ public sealed class AreaAiFollowerTests
         Assert.AreEqual(GameSessionFailure.None, inventory.Attach(session));
         if (visitor && onDemand)
             Assert.AreEqual(GameSessionDisposition.Changed, session.SetMapChange(session.Version, new(2), AreaCompanionPlacement.MapKey(Entity(1)), 1).Disposition);
-        Assert.AreEqual(GameSessionDisposition.Changed, session.ForceJoinParty(session.Version, Entity(1)).Disposition);
+        // ARC-AI-1515: a follower that joined by the check (not forced) can be refused by a later follow check; a forced one is accepted at once.
+        Assert.AreEqual(GameSessionDisposition.Changed, (joinFacts is null ? session.ForceJoinParty(session.Version, Entity(1)) : session.JoinParty(session.Version, Entity(1), joinFacts, force: false)).Disposition);
         if (companionWaits) Assert.AreEqual(GameSessionDisposition.Changed, session.WaitParty(session.Version, Entity(1)).Disposition);
         // ARC-WORLD-119: a companion released before the host is built.
         if (free) Assert.AreEqual(GameSessionDisposition.Changed, session.LeaveParty(session.Version, Entity(1), new PartyLeave(Force: true)).Disposition);
@@ -169,7 +173,7 @@ public sealed class AreaAiFollowerTests
             Followers = followers ? walks : null,
             ConversationPartner = dialogPartner is null ? null : () => dialogPartner, ConversationEnded = dialogEnded,
             NpcSheet = entity => combat.Fields(entity) is { } fields ? AreaAdvancement.Npc(entity, fields, _ => null) : null,
-            AlertedSound = alertedSound,
+            AlertedSound = alertedSound, FollowFacts = followFacts, Parameters = table,
         };
         var host = new AreaAiHost(session, scene, new AreaEventWorld(() => combat, () => null), new AreaCombatWorld(1, () => [], _ => null));
         return new(session, host, walks, Entity(0), Entity(1)) { Combat = combat };
@@ -918,5 +922,92 @@ public sealed class AreaAiFollowerTests
         Assert.IsNull(host.RunOf(companion)?.Bottom.Sound, "no alerted sound without the danger update's call");
         var plain = Run(host, companion);
         Assert.IsFalse(plain.Any(n => n.Kind == AreaAiNoticeKind.Sound), "nothing played");
+    }
+
+    // ARC-AI-1515 (0x4A9650, follower branch of the PC attacker, VBG4): the hero's hit on its own follower changes the reaction by AI parameter 9 and runs the
+    // follow check (limit ignored); a refusal makes it leave with NPC flag 0x20 and its refusal line; a follower that stays says the accidental line one time in three.
+    private static readonly FollowThresholds Thresholds = new(DislikeReaction: 40, MaxAlignmentAbove: 100, MaxAlignmentBelow: 100, LevelGate: 10);
+    private static PartyConsentFacts Consent(int reaction) => new(false, PersuasionTraining.None, 8, 0, 1, null, reaction, Thresholds, 0, 1, 2);
+    private static AiParameterTable Parameter9(int value)
+    {
+        var row = string.Join(' ', Enumerable.Range(0, 17).Select(i => i == 9 ? value : 0));
+        return AiParameterTable.Create(MesFile.Parse(System.Text.Encoding.ASCII.GetBytes("{0}{" + row + "}")).File!, null);
+    }
+
+    private static Scene OpenFollowerHit(int reaction, int param9 = 5) =>
+        Open(joinFacts: Consent(100), followFacts: entity => Consent(reaction), table: Parameter9(param9));
+
+    private static void AssertLeft(Scene scene, bool left)
+    {
+        var record = scene.Session.QueryCompanion(scene.Companion);
+        Assert.AreEqual(left, !record.LedByPc, $"the follower {(left ? "left" : "stayed")}: {scene.Host.TraceOf(scene.Companion)?.FollowerHit}");
+        Assert.AreEqual(left, record.Jilted, "the leave sets JILTED (NPC flag 0x20)");
+    }
+
+    [TestMethod]
+    public void A_melee_or_ranged_hit_on_a_follower_that_refuses_to_follow_makes_it_leave_jilted_with_the_refusal_line()
+    {
+        // The hero's melee swing, its ranged missile and its thrown item all raise the same attack event through HeroAttacked.
+        var scene = OpenFollowerHit(reaction: 40);
+        Assert.IsTrue(scene.Session.QueryCompanion(scene.Companion).LedByPc);
+        scene.Host.HeroAttacked(scene.Companion);
+        AssertLeft(scene, left: true);
+        StringAssert.Contains(scene.Host.TraceOf(scene.Companion)!.FollowerHit!, "reaction-changed=True");
+        StringAssert.Contains(scene.Host.TraceOf(scene.Companion)!.FollowerHit!, "left jilted, refusal lines 1800-1899 (Dislike)");
+    }
+
+    [TestMethod]
+    public void An_area_spell_that_catches_a_follower_runs_the_same_check_through_the_spell_notice()
+    {
+        var scene = OpenFollowerHit(reaction: 40);
+        scene.Host.SpellAttacked(Pc, scene.Companion);
+        AssertLeft(scene, left: true);
+        StringAssert.Contains(scene.Host.TraceOf(scene.Companion)!.FollowerHit!, "refusal lines 1800-1899");
+    }
+
+    [TestMethod]
+    public void A_follower_that_passes_the_check_stays_and_says_the_accidental_line_one_time_in_three()
+    {
+        var spoke = 0;
+        var scene = OpenFollowerHit(reaction: 100);
+        for (var hit = 0; hit < 60; hit++)
+        {
+            scene.Host.HeroAttacked(scene.Companion);
+            AssertLeft(scene, left: false);
+            var trace = scene.Host.TraceOf(scene.Companion)!.FollowerHit!;
+            StringAssert.Contains(trace, "reaction-changed=True");
+            StringAssert.Contains(trace, "stays (Accepted)");
+            if (trace.Contains("accidental-attack lines 2300-2399")) spoke++;
+        }
+        Assert.IsTrue(spoke is > 5 and < 40, $"one time in three of 60 hits: {spoke}");
+    }
+
+    [TestMethod]
+    public void A_forced_follower_is_accepted_by_the_check_whatever_its_reaction()
+    {
+        // The check accepts a forced follower before the reaction step (0x4AD950); the session test holds the refused leave (extraordinary charisma).
+        var forced = Open(followFacts: entity => Consent(0), table: Parameter9(5));
+        forced.Host.HeroAttacked(forced.Companion);
+        AssertLeft(forced, left: false);
+        StringAssert.Contains(forced.Host.TraceOf(forced.Companion)!.FollowerHit!, "stays (Accepted)");
+    }
+
+    [TestMethod]
+    public void Without_follow_facts_the_hit_changes_the_reaction_only()
+    {
+        var scene = Open(joinFacts: Consent(100), table: Parameter9(5));
+        scene.Host.HeroAttacked(scene.Companion);
+        AssertLeft(scene, left: false);
+        StringAssert.Contains(scene.Host.TraceOf(scene.Companion)!.FollowerHit!, "follow check: no facts");
+    }
+
+    [TestMethod]
+    public void A_free_former_follower_is_no_follower_so_the_hit_runs_no_check()
+    {
+        var scene = Open(free: true, followFacts: entity => Consent(0), table: Parameter9(5));
+        scene.Host.HeroAttacked(scene.Companion);
+        Assert.IsFalse(scene.Session.QueryCompanion(scene.Companion).Jilted);
+        Assert.IsNull(scene.Host.TraceOf(scene.Companion)?.FollowerHit);
+        Assert.IsNotNull(scene.Host.TraceOf(scene.Companion)?.Event, "the hit reached the host's attack event");
     }
 }

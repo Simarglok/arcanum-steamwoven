@@ -622,7 +622,7 @@ Known differences (documented, not bugs):
 - A new game still waits for the start map, which begins to load when the New Game window opens.
 - The main thread is busy while the start map is published, for about a second after the load ends, so the menu may answer late then (O6 of the diagnosis).
 - The menu's music was silent until the start map was loaded; ARC-UI-139 (below) plays it from the start without a scene.
-- A load of a save whose map is the one already shown (F8 on the same map) is one synchronous step, so its load screen is not seen; the original shows it (ARC-UI-1362, issue #1504).
+- A load of a save whose map is the one already shown (F8 on the same map) shows the load screen for a frame or two only, as the load itself is short; ARC-UI-1504 recheck below.
 
 ## ARC-UI-139 — The main menu's music plays without a scene (follow-up of ARC-DEV-387, 2026-11-11)
 
@@ -785,12 +785,27 @@ The rules are in [trap state](../world/trap-state-runtime.md) (the Spot item and
 | 1 | With the powered shield worn and charges in the pack, walk over hidden traps many times (reload between tries). Repeat with the shield taken off. | With the shield worn and charges in the pack a technologist spots traps more often: its (negative) aptitude is a bonus on the roll. Without charges, or with the shield off, the odds are the ordinary ones. | open |
 | 2 | Do the same with a magickal hero (positive aptitude) wearing the shield. | No bonus: a positive aptitude clears the modifier. | open |
 | 3 | Walk with a companion across a hidden trap, in daylight and then in the dark. | The companion sometimes spots the trap with its own roll and stops before it; the trap then shows as known to you. A companion with a better Spot Trap skill spots more often; darkness makes an untrained companion worse. | open |
-| 4 | Let a companion walk onto a trap it did not spot. | It walks on. Known difference: Steamwoven does not set the trap off on a companion yet (the original does). | open |
+| 4 | Let a companion walk onto a trap it did not spot. | The trap goes off on the companion as the triggerer (its damage or spell reaches the companion, and others in the trap's square). See also the ARC-WORLD-1469 section. | open |
 
 Known differences (documented, not bugs):
 
-- An NPC's or a companion's step onto a trap object, and its use of a trapped object, do not meet the trap yet; only the spot attempt on the walk check is built.
 - A companion's spot attempt is made by its walk check before each step, on the AI host's walk and on its own follow walk alike.
+
+## ARC-WORLD-1469 — NPCs and companions set off traps under their steps (E6-a, firing half, 2026-11-13)
+
+The rules are in [trap state](../world/trap-state-runtime.md#npc-and-companion-meeting-arc-world-1469) and the [ledger TT17, TT18](../research/ledger/technology.md#trap-state-arc-world-076). Use a map with a trap plate on a route an NPC walks (a plate you know, and one you do not), a companion in the party, and a trapped door on an NPC's route if you have one, in both games.
+
+| # | Step | Expected (from the original executable) | Status |
+| --- | --- | --- | --- |
+| 1 | Watch an NPC whose route crosses a known trap plate. | The NPC steps on it, the trap goes off with the NPC as the triggerer (a radius 0 trap hurts only the NPC; a larger one hurts everybody in its square, you included), and the NPC stops on that tile; an auto-removing plate is gone afterwards. | open |
+| 2 | Lead a companion over a plate neither of you spotted, many times. | The companion sometimes spots it with its own roll, stops and marks it for you; otherwise the trap goes off on the companion. A trap you placed yourself is known to the companion: it goes off at once. | open |
+| 3 | Give a hero the Detect Traps spell and let a free NPC walk toward a plate you placed. | The NPC does not know your plate: it spots it without a roll before the step, stops short of it and marks nothing, so it stays unknown to you. | open |
+| 4 | Let an NPC open a trapped door on its route. | The trap meets the NPC (spotted, or it goes off), and the door stays shut for that try. | open |
+
+Known differences (documented, not bugs):
+
+- The trap meets a walker when its step starts, not when it arrives (as for the hero); a relocation (a far NPC placed on its standpoint, a knockback slide) meets none.
+- A companion on its own follow walk is not stopped at the trap; the hero's own use of a trapped door does not meet its trap yet; an NPC's other uses of trapped objects are not built.
 
 ## ARC-SKILLS-1156 — Disarming a trap from the hotkey bar (E6-a, disarm half, 2026-11-12)
 
@@ -1129,3 +1144,16 @@ Known differences (documented, not bugs):
 
 - The lit state is not in our save (issue [#1542](https://github.com/Simarglok/arcanum-steamwoven/issues/1542)).
 - The original blocks no map entry by the button's art: going to the world map is not tied to the blue globe being shown (ledger GB17), so nothing is blocked here either.
+
+| 4 | Press F8 with a save on the map already shown. | Superseded by ARC-UI-1504 below: the screen shows for a moment. | open |
+
+## ARC-UI-1504 — Load screen for a load of the map already shown (2026-11-13)
+
+The original shows the load screen for every successful load of a save, the saved map being the one already open too; the viewer's load of the shown map is one step, so it now raises the screen first and runs the load a frame or two later (F8, the load window of the in-play menu, Last Save).
+
+| # | Step | Expected (from the original executable and data) | Status |
+| --- | --- | --- | --- |
+| 1 | In play press F8 with the newest save on the map already shown. | The screen goes black with the clock in the top-right corner for a moment (a frame or two, longer on a big map), then the game shows the saved state. The keys do nothing meanwhile. | open |
+| 2 | Open the in-play menu, Load Game and choose a save on the shown map. | The same black screen with the clock, then the window is closed and the game is the saved one. | open |
+| 3 | The same with a save whose file is damaged (copy one and break it). | The screen goes at once, the load window stays with the reason (F8: the running game stays, the message window says the load failed). | open |
+| 4 | Press F8 with no save at all. | No black screen; only the two notes, as before. | open |

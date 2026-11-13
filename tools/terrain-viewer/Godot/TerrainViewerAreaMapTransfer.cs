@@ -288,7 +288,9 @@ public partial class TerrainViewerApp
             // ARC-SCRIPT-1163 (E5-a): a script's set and adjust reaction go through the AI host's reaction change of an NPC toward the hero.
             ScriptReaction: (npc, value, set) => AreaAiHostNow()?.ScriptReaction(npc, value, set) ?? "no AI host",
             // ARC-SCRIPT-1164 (E5-b): a script's set lock state, toggle open or closed and obj is open read the shown map's portals and containers.
-            Openable: ScriptOpenable);
+            Openable: ScriptOpenable,
+            // ARC-SCRIPT-1294 (RM6): a script's stop spell on object interrupts the first run of the spell that holds the object, in the cast host.
+            ScriptStopSpell: (obj, spell) => AreaAiHostNow()?.ScriptStopSpell(obj, spell) ?? "no AI host");
         var inventory = _inventoryHost;
         var host = new AreaUseScriptHost(owner, snapshot.RuntimeMap, snapshot.Objects, inventory?.Maps ?? [], content, world)
         {

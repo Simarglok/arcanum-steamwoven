@@ -437,7 +437,7 @@ The census is a data answer; each slice keeps its own contract and checks.
   are in S31, 48 and 49 occur only on lines no run reaches. No type of E5-a or E5-b is among the
   spell conditions and actions, so those slices do not gate the spell hooks. The spell *effect* and
   state types the census adds as the E4-g slice (play spell eye candy a104, stop script eye candy
-  a124, stop spell a130, get magictech adjustment a80, polymorphed, shrunk and mirror image c12,
+  a124, stop spell a130 (done since ARC-SCRIPT-1294, set S42), get magictech adjustment a80, polymorphed, shrunk and mirror image c12,
   c13, c16) block 78 roots (145 sites, 18 maps); 39 roots (62 sites) alone. Blessing and curse (a25 to a28, c8, c9) are in E5-c, which the
   plan already made the prerequisite of the spell hooks.
 - **MA-10, the raise hook (#1167).** The resurrect point (18) carries 15 placed sites with 13

@@ -29,6 +29,8 @@ public sealed record SessionNpcAttack(SessionCritterCombat Attacker)
     public SessionLineOfFire? LineOfFire { get; init; }
     /// <summary>ARC-DEV-261 (GT198–GT199): the host's taking-damage script (point 0x17) of whoever takes the damage, as <see cref="SessionAttack.TakingDamage"/>: the recipient in (the target, or the attacker on a critical self-hit), whether the damage goes on out.</summary>
     public Func<DamageRecipient, bool>? TakingDamage { get; init; }
+    /// <summary>ARC-SCRIPT-1483 (CP1–CP3): the host's combat-point scripts (hit 7, critter hits 26, critical hit 34) of a resolved hit, as <see cref="SessionAttack.HitScripts"/>; an NPC's shot that flies asks at its strike.</summary>
+    public Action<SessionHitScriptEvent>? HitScripts { get; init; }
     /// <summary>ARC-DEV-282 (PF1, PF2): the host can fly a shot. A bow or firearms attack whose wielded weapon has a projectile art (<see cref="SessionWearItem.MissileArt"/>) is then decided now and its hit's damage waits for the strike (<see cref="GameSessionOwner.LandNpcShot"/>); the result names the shots in flight. Without it (or without the art) the attack lands at once, as ARC-DEV-273's.</summary>
     public bool Flight { get; init; }
     /// <summary>ARC-MAGIC-1188: the trigger host the damage step's item events fire through (as <see cref="SessionAttack.ItemTriggers"/>, ARC-MAGIC-023): the attacker's worn items fire "damages opponent", "target hit" and the knockdown events, the victim's (an NPC's, or the hero's from the session) "parent hit" and the others (0x4B4390 for any attacker, IC2); a host of this session. Null: they fire nothing, as before ARC-MAGIC-1188.</summary>
@@ -56,6 +58,8 @@ public sealed record SessionNpcThrow(SessionCritterCombat Thrower, string Item, 
     public Arcanum.Simulation.Items.IDropMap? DropMap { get; init; }
     /// <summary>ARC-DEV-261: as <see cref="SessionNpcAttack.TakingDamage"/>.</summary>
     public Func<DamageRecipient, bool>? TakingDamage { get; init; }
+    /// <summary>ARC-SCRIPT-1483: as <see cref="SessionNpcAttack.HitScripts"/>.</summary>
+    public Action<SessionHitScriptEvent>? HitScripts { get; init; }
     /// <summary>ARC-MAGIC-1188: as <see cref="SessionNpcAttack.ItemTriggers"/>, for the attack on the struck critter (the thrown item is the event's weapon; the thrower's worn items exclude it).</summary>
     public ISessionItemTriggers? ItemTriggers { get; init; }
 }
@@ -160,6 +164,7 @@ public sealed partial class GameSessionOwner
             TargetCell = request.StruckHero ? null : request.StruckCell,
             DropMap = request.DropMap,
             TakingDamage = request.TakingDamage,
+            HitScripts = request.HitScripts,
             ItemTriggers = request.ItemTriggers,
         };
         var result = NpcAttack(expected, attack,
@@ -413,6 +418,9 @@ public sealed partial class GameSessionOwner
             }
             attackerSide = attackerSide with { Worn = attack.AttackerWorn?.Where(pair => pair.Key != EquipmentSlot.Weapon).ToDictionary(pair => pair.Key, pair => pair.Value) };
         }
+        // ARC-SCRIPT-1483 (CP1–CP3): the hit's combat-point scripts run before the damage step; a shot that flies asks at its strike.
+        if (resolution.Refusal == AttackRefusal.None && !flies && (resolution.Outcome is AttackOutcome.Hit or AttackOutcome.CriticalHit))
+            attack.HitScripts?.Invoke(new(arrow?.WeaponItem ?? throwing?.Item ?? attack.AttackerWorn?.GetValueOrDefault(EquipmentSlot.Weapon)?.Entity, resolution.Outcome == AttackOutcome.CriticalHit, arrow is not null || throwing is not null, throwing is not null));
         // ARC-DEV-261 (GT198): a prevented damage asks the victim's script too (it comes before the invulnerable gate); its answer cannot change the outcome.
         if (resolution.Refusal == AttackRefusal.None && resolution.Damage is { Prevented: not DamagePrevention.None } blocked) attack.TakingDamage?.Invoke(blocked.Recipient);
         if (resolution.Refusal != AttackRefusal.None || LifeDamage.FromAttack(resolution) is not { } damage)

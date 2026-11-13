@@ -215,6 +215,17 @@ public sealed partial class AreaAiHost
     private const int ScriptProneLevel = 4;
 
     /// <summary>
+    /// ARC-SCRIPT-1294 (RM5, RM6): a script's stop spell on object (action 130) of <paramref name="spell"/> on <paramref name="obj"/> (an object of the shown map, the PC as its scheduler id): the cast host finds the first active run of the
+    /// spell, in slot order, that holds the object as its target or in its run or summoned list, and interrupts it through the run rules; the script never sees the answer. The text says what happened.
+    /// </summary>
+    public string ScriptStopSpell(string obj, int spell)
+    {
+        if (_scene.Spells?.Invoke() is not { } spells) return "no cast host";
+        var run = spells.FindRunOnObject(spell, obj)?.Id;
+        return spells.StopSpellOnObject(spell, obj) ? $"stopped, run {run}" : "no run of the spell holds the object";
+    }
+
+    /// <summary>
     /// ARC-DEV-241 (MIG13 S14f, GT183/GT184): a script's cast of <paramref name="spell"/> at <paramref name="target"/> (an NPC of this host or the PC's scheduler id) by <paramref name="caster"/>, an NPC of this host, or by
     /// none (<c>null</c>: 61, 136 or an absent caster handle). The cast host's script entry point (<see cref="SessionSpellCaster.CastByScript"/>: no cost, no line of fire, free and unresistable flags) starts the run; with
     /// a caster its casting goal, 26 or 82 by the record's casting animation, starts as perform's cast does (queued under a running cast, refused at depth 4 or in a round, replacing the other runs by the generic
