@@ -808,10 +808,14 @@ toggle open or closed 88, set written start 94, toggle sector blocked 106, toggl
 ## Get location and the Molochean agent's heartbeat (ARC-SCRIPT-1359, set S38)
 
 `ScrAdmissionSet.S38` is S37 plus get location (95), which writes the first object's tile x and y into number operands 1 and 2 (32 bits each) through `IScrWorldQueries.Location`; an absent object or one without a place stops the run as distance
-between (71) does, and a literal in operand 1 or 2 is refused. The interpreter runs at most S38. Ledger [GL1–GL2](../research/ledger/scripts.md#get-location-and-the-crash-site-molochean-agent-arc-script-1359). The
+between (71) does, and a literal in operand 1 or 2 is refused. The interpreter runs at most S40 (S38 plus loop break, see below). Ledger [GL1–GL2](../research/ledger/scripts.md#get-location-and-the-crash-site-molochean-agent-arc-script-1359). The
 heartbeat set (`AreaUseScriptHost.HeartbeatAdmission`, and the dying set built on it) holds it: with global flag 2323 set, the Crash Site agent's heartbeat 1717 sets the day and night standpoints, reads where it stands and runs to its tile (run to 74 is in the set since
 ARC-DEV-231) through the AI host's goal start, so it is admitted whole. Tests: `ScrHeartbeatWorldTests` (the action and the set), `AreaHeartbeatScriptTests` (a 1717-shaped script over the host and, with `DAT_ROOT`, the installed agent).
 Not built: the use, tile, sector and talk sets (tile script 2080 also uses 95).
+
+## Loop break (ARC-SCRIPT-1166, set S40)
+
+`ScrAdmissionSet.S40` is S38 plus loop break (20), which ends the run's running loop at once: it clears the list, leaves the current looped object as it is and jumps to the line after the loop end that the empty-list search finds (`ScrAdmission.AfterLoopEnd`, the original's 0x44BC60: from the line after the loop for, the first line whose condition is "true" and whose true action is loop end, so the line after it; without one, the line after the end, which ends the run). Without a running loop it does nothing and the run goes on with the next line (the original logs an error). A new loop for can start after a break. The region admission treats a break like a loop end: its successors are the next line and the line after the loop end of any loop for of the script. Ledger [PG15](../research/ledger/scripts.md). The use, placed (tile and sector), heartbeat and dying host sets hold it beside loop for and loop end; the dialog host runs no loops. Of the 22 installed scripts that carry a loop break, S40 admits 12 whole, the placed and dying sets 7 each, the heartbeat set 1 and the use set none (the others hold commands of other slices; `AreaLoopBreakScriptAdmissionTests`, with `DAT_ROOT`). Tests: `ScrWorldTests` (the interpreter and the region), `AreaUseScriptHostTests` (a sector script's loop over the vicinity ends at the first marker). Call script at (55) stays refused: it occurs once, on a line no run reaches.
 
 ## Checks
 
@@ -923,7 +927,7 @@ Not built: the use, tile, sector and talk sets (tile script 2080 also uses 95).
   an NPC's first-heartbeat and heartbeat scripts from the AI host (set "S2-area-heartbeat-state-kill", since ARC-SCRIPT-047
   "S2-area-heartbeat-state-kill-talk", since ARC-SCRIPT-049 "S2-area-heartbeat-state-kill-talk-world"); combat is a later slice. Which points the original fires and which have no host here: the
   [script trigger audit](../research/script-trigger-audit.md).
-- Not in any admitted set yet: focus groups other than the vicinity's scenery and critters (conditions over a list kind in neither), loop break, reactions and most other world
+- Not in any admitted set yet: focus groups other than the vicinity's scenery and critters (conditions over a list kind in neither), reactions (loop break since ARC-SCRIPT-1166) and most other world
   actions; create object makes items only (ARC-WORLD-081).
   Admitted since S4: teleport and fade-and-teleport (S4), set auto-level scheme (S8), start schematic UI (S9), the reading
   actions (S10), the skill commands (S11), call script, assign object and get object type (S12), set PC quest state, mark map

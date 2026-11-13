@@ -283,6 +283,8 @@ public partial class TerrainViewerApp
         var next = origin with { AreaMapName = map.Name, AreaMapArrival = new(actor.Cell.X, actor.Cell.Y), AreaMapSector = null };
         GD.Print("ARC-WORLD-038 quick-load map " + System.Text.Json.JsonSerializer.Serialize(new { From = _readyArea.Snapshot.RuntimeMap, To = map, actor.Cell }));
         SetQuickStatus($"{status}; loading '{map.Name}'");
+        // ARC-UI-1362: a load that opens another map shows the load screen (black with the clock) until that map is there, as a change of place does (PS29, LS4).
+        BeginTransitionLoad();
         _lastLoad = LoadTransferAsync(next);
     }
 

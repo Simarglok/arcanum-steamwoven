@@ -2080,8 +2080,8 @@ and layout (below), the other windows the project's.
   runtime number, through the game's map list) and that map loads as the scene the load runs on (the saved cell as the arrival tile, a map
   too large to load whole opening its window around it; no hero, default data rules), then the save loads into it as a load on a published scene
   does (`SceneFlowKind.LoadSave`, `ARC-DEV-387 save chosen before any scene`, one map load instead of the start map's and then the save's). While it
-  loads the menu stays, with the note "loading the save…", and takes no input; it goes when the save is in, and comes back with the reason
-  when the save does not load. A save chosen while the start map is already loading replaces that load. The start map loads when a new game's
+  loads the screen is black with the original's clock in the top-right corner (ARC-UI-1362, the change of place's load screen), the menu under it
+  takes no input and has no wait note; it goes when the save is in, and the menu comes back with the reason when the save does not load. A save chosen while the start map is already loading replaces that load. The start map loads when a new game's
   way begins; a choice that needs it is held as above. **The save folder follows the launch map (ARC-DEV-407):** the load window and Last Save read
   `saves/map` from the start, not only once a scene stands (`AreaSaveFolder`; the lazy start used to read the Crash Site folder `saves`, so the Load Game list was
   empty until the start map had loaded, bug reports 2026-11-11). Not changed: the exterior mode (no `--area-map`) loads the start scene at once and
