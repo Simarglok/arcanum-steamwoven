@@ -1308,7 +1308,8 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
         _itemEvents.AddRange(healed.ItemEvents);
         if (healed.Disposition == GameSessionDisposition.Changed)
             _log.Add(new(SpellCastEventKind.Healed, run.Id, (_owner.QueryLife(who).View?.Status.HitPoints ?? 0) - before, target.Id));
-        else if (healed.Outcome is { } outcome && outcome.Events.HasFlag(LifeEvents.ResurrectionRefused)) RaiseRefusedFeedback(run, target.Id);
+        // The scar removal that comes first in the applier can change the state of a refused raise (disposition Changed): the feedback follows the refusal either way.
+        if (healed.Outcome is { } outcome && outcome.Events.HasFlag(LifeEvents.ResurrectionRefused)) RaiseRefusedFeedback(run, target.Id);
     }
 
     /// <summary>

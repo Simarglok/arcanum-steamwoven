@@ -48,10 +48,10 @@ public sealed class SessionSpellCasterRaiseTests
         SessionSpellRecords.Translate(Record(number: 3, beginTargets: 0x1, info: SpellInfo.Friendly,
             components: [new(SpellAction.Begin, SpellComponentType.Heal, new SpellArea(0x1, 0, 0, 0, -1), 0, 0, new DamageData(0, 5, 5, flags))]));
 
-    private static (GameSessionOwner Owner, SessionSpellCaster Caster, SessionLifeTarget Target) Session(SessionSpellRecord record, bool dead)
+    private static (GameSessionOwner Owner, SessionSpellCaster Caster, SessionLifeTarget Target) Session(SessionSpellRecord record, bool dead, uint critterFlags = 0)
     {
         var owner = HeroStateTests.CreateWith(HeroStateTests.HalfElf());
-        var fields = AttackStateTests.Npc(stats: AttackStateTests.Stats(), critterFlags: 0);
+        var fields = AttackStateTests.Npc(stats: AttackStateTests.Stats(), critterFlags: critterFlags);
         var critter = new SpellCastCritter(SessionCritterCombat.From(Npc, fields).Combat!, 0, 0, 0, 0, 0);
         var caster = new SessionSpellCaster(owner, n => n == 3 ? record : null, new Map(owner, critter), new Events());
         if (dead) Assert.AreEqual(GameSessionDisposition.Changed, owner.ApplyDamage(owner.Version, critter.Combat.Target, new LifeDamage { HitPoints = 100_000 }).Disposition);
@@ -170,5 +170,18 @@ public sealed class SessionSpellCasterRaiseTests
         var start = caster.Log.Count;
         Heal(caster);
         Assert.IsFalse(caster.Log.Skip(start).Any(e => e.Kind is SpellCastEventKind.Message or SpellCastEventKind.EyeCandyAdded));
+    }
+
+    [TestMethod]
+    public void A_raise_the_flags_refuse_shows_the_feedback_without_asking_the_script_to_allow_it()
+    {
+        // RZ2: the flag refusal (0x1000000, unresurrectable) goes to the same feedback; the script is asked first either way.
+        var (owner, caster, target) = Session(Spell(SpellDamageFlags.Raise | SpellDamageFlags.Full), dead: true, critterFlags: 0x1000000);
+        using var _ = owner;
+        caster.RaiseScript = (_, _) => true;
+        var start = caster.Log.Count;
+        Heal(caster);
+        Assert.IsTrue(Dead(owner, target));
+        CollectionAssert.AreEqual(new[] { SpellCastEventKind.Message, SpellCastEventKind.EyeCandyAdded }, caster.Log.Skip(start).Select(e => e.Kind).ToArray());
     }
 }
