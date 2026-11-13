@@ -64,6 +64,9 @@ public sealed class InterfaceStampTests
         Assert.AreNotEqual(reputation.Logbook, blessing.Logbook, "a blessing moves it");
         Assert.AreEqual(GameSessionDisposition.Changed, owner.RemoveHeroBlessing(owner.Version, SessionBlessingKind.Blessing, 60).Disposition);
         Assert.AreNotEqual(blessing.Logbook, owner.QueryHeroInterfaceStamp()!.Value.Logbook, "and its removal");
+        var beforeCurse = owner.QueryHeroInterfaceStamp()!.Value;
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.AddHeroBlessing(owner.Version, SessionBlessingKind.Curse, 60, Nothing).Disposition);
+        Assert.AreNotEqual(beforeCurse.Logbook, owner.QueryHeroInterfaceStamp()!.Value.Logbook, "a curse moves it");
         Assert.AreEqual(start.Inventory, owner.QueryHeroInterfaceStamp()!.Value.Inventory);
     }
 

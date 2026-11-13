@@ -2668,8 +2668,8 @@ sector, as the 1.0.7.4 executable's light callbacks do (0x556A90, 0x556B70; ledg
 | Map | 195 (world face; the town face 558 is lit by no single player event) | a newly known world-map area | the map window open |
 
 A light is not stored while the button's own window is open. The session answers `QueryHeroInterfaceStamp` (three process-local stamps over the logbook,
-held list and known areas) and the viewer lights on a difference after each revision, because the session's writes are many and spread; a quest set again
-moves its time and lights as the original's write does. A new session (a new game or a load) takes its first stamps as the baseline and clears the lights.
+held list and known areas) and the viewer lights on a difference after each revision, because the session's writes are many and spread; a quest request not above the quest's state changes nothing in the session and
+lights nothing, where the original's write lights (known difference, issue [#1554](https://github.com/Simarglok/arcanum-steamwoven/issues/1554)). A light that waits (a world map light while the town face shows) is drawn when the face changes, as the original's redraw does. A new session (a new game or a load) takes its first stamps as the baseline and clears the lights; a map transfer keeps the session, so it keeps the lights too. The character sheet of an NPC or a companion is not the hero's and puts nothing out.
 The Map button shows art 193 (the town face) in a sector with a town map and art 194 (the world map, the owner's "blue globe") in any other, the
 original's rule at sector entry (0x564F60: the sector's town map number, 0 for none); the sector is read per frame, which gives the same face.
 **The original blocks nothing by this mode:** the world map gate never reads it (ledger GB15), so no entry is gated here either. `ARC_AREA_MAP_SMOKE_ONLY=bar`

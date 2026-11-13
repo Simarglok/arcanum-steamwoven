@@ -46,7 +46,7 @@ public sealed class AreaBarLights
     /// current mode's); null for a button the lights do not touch (it keeps its layout art).</summary>
     public int? ArtOf(AreaBarButton button) => SlotOf(button, MapMode) is { } slot ? (IsLit(slot) ? LitArt : IdleArt)[(int)slot] : null;
 
-    /// <summary>The light callback 0x556A90: <paramref name="lit"/> stores the slot's lit art unless <paramref name="windowOpen"/> (the slot's
+    /// <summary>The light callback (GB13): <paramref name="lit"/> stores the slot's lit art unless <paramref name="windowOpen"/> (the slot's
     /// own test, see the class); not lit stores the idle art whatever is open. True when the stored state changed.</summary>
     public bool Light(AreaLightSlot slot, bool lit, bool windowOpen)
     {
@@ -57,7 +57,7 @@ public sealed class AreaBarLights
         return true;
     }
 
-    /// <summary>The map callback 0x556B70: the Map button's face (<see cref="AreaLightSlot.TownMap"/> or <see cref="AreaLightSlot.WorldMap"/>).
+    /// <summary>The map callback (GB13): the Map button's face (<see cref="AreaLightSlot.TownMap"/> or <see cref="AreaLightSlot.WorldMap"/>).
     /// True when the mode changed.</summary>
     public bool SetMapMode(AreaLightSlot mode)
     {
@@ -67,7 +67,7 @@ public sealed class AreaBarLights
         return true;
     }
 
-    /// <summary>The initial state (0x549B70, 0x549F00): every slot idle, the town map's face. True when anything was lit or the mode differed.</summary>
+    /// <summary>The initial state (GB13): every slot idle, the town map's face. True when anything was lit or the mode differed.</summary>
     public bool Reset()
     {
         var changed = MapMode != AreaLightSlot.TownMap || _lit.Any(lit => lit);

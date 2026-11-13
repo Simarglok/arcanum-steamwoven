@@ -27,17 +27,17 @@ public partial class TerrainViewerApp
     /// <summary>The lights lit since the app started (for the logs and the smoke).</summary>
     internal int BarLightsLitForSelfTest => _barLightsLit;
 
-    /// <summary>Whether the slot's own window is open (the light callback's test, 0x556A90).</summary>
+    /// <summary>Whether the slot's own window is open (the light callback's test, GB13). The sheet counts only for the hero's own (an NPC's or companion's sheet is another window of the same mode).</summary>
     private bool BarLightWindowOpen(AreaLightSlot slot) => slot switch
     {
-        AreaLightSlot.Character => SheetOpen,
+        AreaLightSlot.Character => SheetOpen && _sheetNpc is null,
         AreaLightSlot.Logbook => LogbookOpen,
-        // The barter window is the inventory window in its barter mode (0x5727B0), so the same flag.
+        // The barter window is the inventory window in its barter mode (GB14), so the same flag.
         AreaLightSlot.Inventory => InventoryOpen || BarterOpen,
         _ => WorldMapOpen,
     };
 
-    /// <summary>Lights a slot (the callback 0x556A90 with the flag set); true when that changed it.</summary>
+    /// <summary>Lights a slot (the callback of GB13 with the flag set); true when that changed it.</summary>
     private bool TryLight(AreaLightSlot slot)
     {
         if (!_gameBar.Lights.Light(slot, true, BarLightWindowOpen(slot))) return false;
@@ -46,7 +46,7 @@ public partial class TerrainViewerApp
         return true;
     }
 
-    /// <summary>A level-up of the hero lights the Character button unless the sheet is open (0x4A69C0, 0x556A90 case 0).</summary>
+    /// <summary>A level-up of the hero lights the Character button unless the sheet is open (GB14).</summary>
     private void LightCharacterForLevelUp()
     {
         if (TryLight(AreaLightSlot.Character)) _gameBarPanel?.Render();
@@ -56,11 +56,9 @@ public partial class TerrainViewerApp
     /// light of every slot whose window is open, and sets the Map button's face from the hero's sector.</summary>
     private void SyncBarLights()
     {
-        if (_areaSession is not { } session)
-        {
-            if (_barLightsSession is not null) { _barLightsSession = null; _barLightsStamp = null; _barLightsRevision = -1; if (_gameBar.Lights.Reset()) _gameBarPanel?.Render(); }
-            return;
-        }
+        // No session between two maps of a transfer (the scene loads while the carried session is held back): the lights and the baseline stay, so the
+        // carried session comes back to them; only a different session (a new game, a load) starts afresh.
+        if (_areaSession is not { } session) return;
         var changed = false;
         if (!ReferenceEquals(session, _barLightsSession))
         {
@@ -82,6 +80,7 @@ public partial class TerrainViewerApp
                 }
                 _barLightsStamp = stamp;
             }
+            else _barLightsStamp = null;
         }
         foreach (var slot in new[] { AreaLightSlot.Character, AreaLightSlot.Logbook, AreaLightSlot.Inventory, AreaLightSlot.WorldMap })
             if (BarLightWindowOpen(slot)) changed |= _gameBar.Lights.Light(slot, false, true);

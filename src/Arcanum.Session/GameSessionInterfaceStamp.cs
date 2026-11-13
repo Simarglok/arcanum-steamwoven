@@ -17,7 +17,7 @@ public sealed partial class GameSessionOwner
     /// <summary>
     /// ARC-UI-1364: the stamps of the hero's logbook, held list and known areas (null for a session without a hero). The original lights the
     /// top strip's buttons at the writes themselves; the session's writes are many and spread, so the host reads these after each revision
-    /// instead and lights on a difference (a quest set again to the same state still moves its time, as the original's write lights it).
+    /// instead and lights on a difference. A quest request that is not above the quest's state changes nothing here (the session's quest rule), so it lights nothing, where the original's write lights (issue 1554).
     /// </summary>
     public SessionInterfaceStamp? QueryHeroInterfaceStamp()
     {
