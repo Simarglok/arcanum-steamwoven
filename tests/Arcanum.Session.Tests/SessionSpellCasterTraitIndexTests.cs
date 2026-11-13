@@ -96,8 +96,11 @@ public sealed class SessionSpellCasterTraitIndexTests
         Spell(DexMinusOne, StatField, 1, -1), Spell(DexMinusTwo, StatField, 1, -2), Spell(DexMinusMany, StatField, 1, -20), Spell(DexPlusFive, StatField, 1, 5),
         Spell(IntPlus, StatField, 4, 1), Spell(DerivedPlus, StatField, 9, 3), Spell(CharismaPlus, StatField, 7, 1),
         Spell(BadIndex, StatField, 28, 1), Spell(BadField, 99, 0, 1), Spell(StrengthPlus, StatField, 0, 1), Spell(LevelPlus, StatField, 17, 1), Spell(StrengthMinusOne, StatField, 0, -1), Spell(StrengthMinusTen, StatField, 0, -10),
+        Spell(GenderToFemale, StatField, 26, -1), Spell(GenderToMale, StatField, 26, 1), Spell(RaceDwarf, StatField, 27, 1), Spell(RaceTooHigh, StatField, 27, 50), Spell(RaceHuman, StatField, 27, -5), Spell(ConstitutionPlusMany, StatField, 2, 30),
         IntMinusOne, IntMinusTwo, IntMinusMany, Stat25MinusMany, WillMinusOne, WillMinusTwo, LevelMinusMany, LevelPlusMany, ExperiencePlusMany, AlignmentPlusMany, AlignmentMinusMany, FatePlusMany, UnspentMinusMany, Stat25PlusMany,
     }.ToDictionary(r => r.Data.Number);
+
+    private const int GenderToFemale = 270, GenderToMale = 271, RaceDwarf = 272, RaceTooHigh = 273, RaceHuman = 274, ConstitutionPlusMany = 275;
 
     private static (GameSessionOwner Owner, SessionSpellCaster Caster) Session(CombatFields? fields = null)
     {
@@ -251,22 +254,192 @@ public sealed class SessionSpellCasterTraitIndexTests
         Assert.AreEqual(version, owner.Version);
     }
 
-    [TestMethod]
-    public void The_stats_whose_setter_does_more_than_store_are_not_ready_with_the_reason_in_the_ledger()
+    // ARC-MAGIC-1508 (ledger RM3b, setter case 0x18 → 0x4B0EE0, 0x4B1350): stat 24 is the NPC's poison level, the life state's in the session.
+    private static (GameSessionOwner Owner, SessionSpellCaster Caster) PoisonSession(int stored, int constitution, int number, int value, CombatFields? fields = null)
     {
-        // Poison (the poison timer and the life state), gender and race (the innate effect swap): each is read and not written (magick and tech points run the rewield, ARC-MAGIC-1507, below).
-        foreach (var index in new[] { 24, 26, 27 })
-        {
-            var (owner, _) = Session();
-            using var _o = owner;
-            var number = 400 + index;
-            var records = new Dictionary<int, SessionSpellRecord>(Records) { [number] = Spell(number, StatField, index, 1) };
-            var tried = new SessionSpellCaster(owner, n => records.GetValueOrDefault(n), new Map(owner, RatFields()), new Events());
-            var version = owner.Version;
-            Assert.IsNull(tried.Apply(Run(number), 0, At(Rat, SpellTargetObject.Npc)).JumpTo, $"stat {index}");
-            Assert.AreEqual(version, owner.Version, $"stat {index}");
-            Assert.IsTrue(NotReady(tried), $"stat {index}");
-        }
+        var owner = CreateWith(HalfElf());
+        var rat = fields ?? AttackStateTests.Npc(AttackStateTests.Stats(constitution: constitution, poison: stored), resistances: [0, 0, 0, 0, 0]);
+        var records = new Dictionary<int, SessionSpellRecord>(Records) { [number] = Spell(number, StatField, 24, value) };
+        return (owner, new SessionSpellCaster(owner, n => records.GetValueOrDefault(n), new Map(owner, rat), new Events()));
+    }
+
+    private static int Poison(GameSessionOwner owner, SessionSpellCaster caster) => owner.QueryLife(caster.LifeTarget(Rat)!).View!.Record.State.PoisonLevel;
+
+    [TestMethod]
+    public void Poison_adds_to_the_loaded_level_in_the_life_state_and_sets_the_poison_timers()
+    {
+        var (owner, caster) = PoisonSession(stored: 40, constitution: 3, number: 450, value: 60);
+        using var _ = owner;
+        Assert.AreEqual(40, Poison(owner, caster), "the map data's entry is the level the NPC loads with");
+        Assert.AreEqual(SpellComponentOutcome.None, caster.Apply(Run(450), 0, At(Rat, SpellTargetObject.Npc)));
+        Assert.AreEqual(100, Poison(owner, caster));
+        Assert.IsTrue(owner.QueryLife(caster.LifeTarget(Rat)!).View!.Recorded, "the NPC got a life record");
+        Assert.IsTrue(owner.QueryCritterIndexedWrites(Rat).IsEmpty, "no stored entry is written: the life state is the level");
+        CollectionAssert.AreEqual(new[] { new SpellCastEvent(SpellCastEventKind.TraitIndexWritten, 1, StatField, Rat, 24) }, caster.Log.ToArray());
+        CollectionAssert.AreEquivalent(new[] { SessionEventKinds.NpcPoisonDamage, SessionEventKinds.NpcPoisonRecovery }, owner.QueryEvents().Select(e => e.Kind).ToArray(), "a positive level schedules the damage and recovery ticks (0x4B1350)");
+        caster.Apply(Run(450), 0, At(Rat, SpellTargetObject.Npc));
+        Assert.AreEqual(160, Poison(owner, caster), "the second write reads the level the first left");
+        Assert.AreEqual(2, owner.QueryEvents().Count, "one pending timer per kind");
+        Assert.IsFalse(NotReady(caster));
+    }
+
+    [TestMethod]
+    public void Poison_is_clamped_to_0_and_1000_and_a_cure_stops_at_zero_without_timers()
+    {
+        var (owner, caster) = PoisonSession(stored: 900, constitution: 3, number: 451, value: 500);
+        using var _ = owner;
+        caster.Apply(Run(451), 0, At(Rat, SpellTargetObject.Npc));
+        Assert.AreEqual(1000, Poison(owner, caster));
+        var (cured, curer) = PoisonSession(stored: 30, constitution: 3, number: 452, value: -500);
+        using var _c = cured;
+        curer.Apply(Run(452), 0, At(Rat, SpellTargetObject.Npc));
+        Assert.AreEqual(0, Poison(cured, curer));
+        Assert.AreEqual(0, cured.QueryEvents().Count, "a level of 0 schedules nothing");
+        var (wrapped, wrapper) = PoisonSession(stored: 10, constitution: 3, number: 453, value: int.MaxValue);
+        using var _w = wrapped;
+        wrapper.Apply(Run(453), 0, At(Rat, SpellTargetObject.Npc));
+        Assert.AreEqual(0, Poison(wrapped, wrapper), "the 32-bit sum 10 + 2147483647 wraps negative and clamps to 0");
+    }
+
+    [TestMethod]
+    public void An_effective_constitution_of_twenty_or_more_makes_the_poison_level_zero()
+    {
+        var (owner, caster) = PoisonSession(stored: 0, constitution: 20, number: 454, value: 300);
+        using var _ = owner;
+        Assert.AreEqual(SpellComponentOutcome.None, caster.Apply(Run(454), 0, At(Rat, SpellTargetObject.Npc)));
+        Assert.AreEqual(0, Poison(owner, caster), "0x4B0EE0: the setter stores 0");
+        Assert.AreEqual(0, owner.QueryEvents().Count);
+        Assert.IsFalse(NotReady(caster));
+    }
+
+    [TestMethod]
+    public void The_poison_level_is_saved_with_the_life_state_and_restored()
+    {
+        var (owner, caster) = PoisonSession(stored: 0, constitution: 3, number: 455, value: 250);
+        using var _ = owner;
+        caster.Apply(Run(455), 0, At(Rat, SpellTargetObject.Npc));
+        using var restored = Restore(Decode(GameSessionSnapshotCodec.Encode(owner.Capture())));
+        Assert.AreEqual(250, restored.QueryLife(caster.LifeTarget(Rat)!).View!.Record.State.PoisonLevel);
+        Assert.AreEqual(2, restored.QueryEvents().Count);
+    }
+
+    // ARC-MAGIC-1509 (ledger RM3b; exe read 0x4B0980 cases 2 and 3 with the table 0x4B0E74, 0x4EA2E0, 0x4B0FD0): gender and race remove the first innate entry of their cause before the store and add the new innate effect after it.
+    // Gender 0 (a woman) adds effect 0x14A with the gender cause, gender 1 nothing; a race adds effect 0x40 + race with the race cause.
+    private static readonly SessionEffectDefinition Female = new(330, [new(EffectAttributeKind.Stat, 11, EffectChangeOperator.Add, 1)]),
+        DwarfEffect = new(65, [new(EffectAttributeKind.Stat, 11, EffectChangeOperator.Add, 2)]), HumanEffect = new(64, [new(EffectAttributeKind.Stat, 11, EffectChangeOperator.Add, 3)]);
+
+    private static (GameSessionOwner Owner, SessionSpellCaster Caster, SessionLifeTarget Target) Innate(bool rules = true, int gender = 1, int race = 0)
+    {
+        var fields = AttackStateTests.Npc(AttackStateTests.Stats(dexterity: 10, gender: gender, race: race), resistances: [10, 0, 0, 0, 5], skills: [2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+        var (owner, caster) = Session(fields);
+        if (rules) owner.AttachInnateEffects([Female, DwarfEffect, HumanEffect]);
+        return (owner, caster, SessionCritterCombat.From(Rat, fields).Combat!.Target);
+    }
+
+    private static (int Number, EffectCause Cause)[] Held(GameSessionOwner owner, SessionLifeTarget target) => [.. owner.QueryNpcEffects(target)!.Entries.Select(e => (e.Number, e.Cause))];
+
+    [TestMethod]
+    public void A_man_made_a_woman_takes_the_female_effect_with_the_gender_cause_and_loses_the_old_gender_entry()
+    {
+        var (owner, caster, target) = Innate();
+        using var _ = owner;
+        // An old gender entry (any number) and an unrelated entry: the removal takes the first entry of the gender cause alone (0x4EA2E0).
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.AddNpcEffect(owner.Version, target, DwarfEffect, EffectCause.Gender).Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.AddNpcEffect(owner.Version, target, HumanEffect, EffectCause.Race).Disposition);
+        Assert.AreEqual(SpellComponentOutcome.None, caster.Apply(Run(GenderToFemale), 0, At(Rat, SpellTargetObject.Npc)));
+        Assert.AreEqual(0, owner.QueryCritterIndexedWrites(Rat).Stats[26]);
+        CollectionAssert.AreEqual(new[] { (64, EffectCause.Race), (330, EffectCause.Gender) }, Held(owner, target));
+        Assert.IsFalse(NotReady(caster));
+    }
+
+    [TestMethod]
+    public void A_woman_made_a_man_loses_the_gender_entry_and_adds_none()
+    {
+        var (owner, caster, target) = Innate(gender: 0);
+        using var _ = owner;
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.AddNpcEffect(owner.Version, target, Female, EffectCause.Gender).Disposition);
+        Assert.AreEqual(SpellComponentOutcome.None, caster.Apply(Run(GenderToMale), 0, At(Rat, SpellTargetObject.Npc)));
+        Assert.AreEqual(1, owner.QueryCritterIndexedWrites(Rat).Stats[26]);
+        Assert.AreEqual(0, Held(owner, target).Length);
+        // A man made a man (a store of the same value) removes nothing and adds nothing; the same value is no change in the stat.
+        Assert.AreEqual(SpellComponentOutcome.None, caster.Apply(Run(GenderToMale), 0, At(Rat, SpellTargetObject.Npc)));
+        Assert.AreEqual(0, Held(owner, target).Length);
+    }
+
+    [TestMethod]
+    public void A_woman_made_a_woman_again_moves_her_female_entry_to_the_end_of_the_list()
+    {
+        // The setter removes before the store whatever the value, then adds: the entry is re-added after the entries that were behind it.
+        var (owner, caster, target) = Innate(gender: 0);
+        using var _ = owner;
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.AddNpcEffect(owner.Version, target, Female, EffectCause.Gender).Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.AddNpcEffect(owner.Version, target, HumanEffect, EffectCause.Race).Disposition);
+        // Gender 0 is stored already: a store of -1 clamps to 0 (a lowering of nothing).
+        Assert.AreEqual(SpellComponentOutcome.None, caster.Apply(Run(GenderToFemale), 0, At(Rat, SpellTargetObject.Npc)));
+        CollectionAssert.AreEqual(new[] { (64, EffectCause.Race), (330, EffectCause.Gender) }, Held(owner, target));
+    }
+
+    [TestMethod]
+    public void A_race_change_swaps_the_race_effect_and_changes_the_range_of_the_other_stats()
+    {
+        var (owner, caster, target) = Innate();
+        using var _ = owner;
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.AddNpcEffect(owner.Version, target, HumanEffect, EffectCause.Race).Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.AddNpcEffect(owner.Version, target, Female, EffectCause.Gender).Disposition);
+        Assert.AreEqual(SpellComponentOutcome.None, caster.Apply(Run(RaceDwarf), 0, At(Rat, SpellTargetObject.Npc)));
+        Assert.AreEqual(1, owner.QueryCritterIndexedWrites(Rat).Stats[27]);
+        CollectionAssert.AreEqual(new[] { (330, EffectCause.Gender), (65, EffectCause.Race) }, Held(owner, target));
+        // The race is stored where the stat ranges read it: a dwarf's constitution goes to 21 where a human's stops at 20.
+        Assert.AreEqual(SpellComponentOutcome.None, caster.Apply(Run(ConstitutionPlusMany), 0, At(Rat, SpellTargetObject.Npc)));
+        Assert.AreEqual(21, owner.QueryCritterIndexedWrites(Rat).Stats[2]);
+    }
+
+    [TestMethod]
+    public void A_race_back_to_human_takes_the_human_effect()
+    {
+        var (owner, caster, target) = Innate(race: 1);
+        using var _ = owner;
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.AddNpcEffect(owner.Version, target, DwarfEffect, EffectCause.Race).Disposition);
+        Assert.AreEqual(SpellComponentOutcome.None, caster.Apply(Run(RaceHuman), 0, At(Rat, SpellTargetObject.Npc)));
+        Assert.AreEqual(0, owner.QueryCritterIndexedWrites(Rat).Stats[27], "clamped to the minimum 0");
+        CollectionAssert.AreEqual(new[] { (64, EffectCause.Race) }, Held(owner, target));
+    }
+
+    [TestMethod]
+    public void A_gender_or_race_swap_without_the_effects_rule_or_for_the_races_eleventh_slot_is_not_ready_and_writes_nothing()
+    {
+        // No rule attached: the effect cannot be added, so nothing is removed or stored.
+        var (owner, caster, target) = Innate(rules: false);
+        using var _o = owner;
+        var version = owner.Version;
+        Assert.IsNull(caster.Apply(Run(GenderToFemale), 0, At(Rat, SpellTargetObject.Npc)).JumpTo);
+        Assert.IsNull(caster.Apply(Run(RaceDwarf), 0, At(Rat, SpellTargetObject.Npc)).JumpTo);
+        Assert.AreEqual(2, caster.Log.Count(e => e.Kind == SpellCastEventKind.ComponentNotReady));
+        Assert.AreEqual(version, owner.Version);
+        // A male made a man needs no rule (nothing to add): only the removal and the store run.
+        Assert.AreEqual(SpellComponentOutcome.None, caster.Apply(Run(GenderToMale), 0, At(Rat, SpellTargetObject.Npc)));
+        // Race 11 (the table's last slot) is a race the character rules do not have: not ready even with the rules.
+        var (owner2, caster2, _) = Innate();
+        using var _o2 = owner2;
+        var version2 = owner2.Version;
+        Assert.IsNull(caster2.Apply(Run(RaceTooHigh), 0, At(Rat, SpellTargetObject.Npc)).JumpTo);
+        Assert.AreEqual(version2, owner2.Version);
+        Assert.IsTrue(NotReady(caster2));
+        Assert.AreEqual(1, owner.QueryCritterIndexedWrites(Rat).Stats[26]);
+        Assert.AreEqual(0, Held(owner, target).Length);
+    }
+
+    [TestMethod]
+    public void The_innate_rules_the_host_attaches_are_checked()
+    {
+        var (owner, _, _) = Innate(rules: false);
+        using var _o = owner;
+        Assert.ThrowsExactly<ArgumentException>(() => owner.AttachInnateEffects([new(158, [new(EffectAttributeKind.Stat, 11, EffectChangeOperator.Add, 1)])]));
+        Assert.ThrowsExactly<ArgumentException>(() => owner.AttachInnateEffects([new(75, [new(EffectAttributeKind.Stat, 11, EffectChangeOperator.Add, 1)])]));
+        owner.AttachInnateEffects([Female]);
+        Assert.AreEqual(Female, owner.InnateRule(330));
+        owner.AttachInnateEffects(null);
+        Assert.IsNull(owner.InnateRule(330));
     }
 
     [TestMethod]
