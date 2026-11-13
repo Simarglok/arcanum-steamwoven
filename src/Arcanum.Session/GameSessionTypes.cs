@@ -199,7 +199,7 @@ public enum GameSessionFailure
 {
     None, InvalidDescriptor, ClockRejected, FlagsRejected, InvalidActor, InvalidMap, InvalidChangeKey,
     BudgetExceeded, StaleVersion, RevisionExhausted, UnsupportedSchema, WrongWorld, WrongModule,
-    IncompatibleClockProfile, InvalidSnapshot, InvalidQuest, InvalidQuestState, InvalidRumor, InvalidReputation, InvalidLighting, InvalidBarLights,
+    IncompatibleClockProfile, InvalidSnapshot, InvalidQuest, InvalidQuestState, InvalidRumor, InvalidReputation, InvalidLighting, InvalidBarLights, InvalidGamblingRoll,
     // Party domain (ARC-WORLD-013).
     InvalidCompanion, InvalidConsentFacts, ConsentRefused, LeaveRefused, NotInParty, NotWaiting,
     // Inventory domain (ARC-WORLD-014).
@@ -289,6 +289,8 @@ public enum GameSessionFailure
     // Pick pocket (ARC-SKILLS-010): no living hero to steal; a victim's facts outside their bounds, or a victim that is not a living NPC;
     // in a turn-based round, not the hero's turn or too few action points.
     PickPocketUnavailable, InvalidPickPocketVictim, PickPocketOutOfTurn,
+    // Gambling (ARC-UI-1740): no living hero to bet.
+    GamblingUnavailable,
     // Script stores (ARC-DEV-098): an index outside the store's bounds; a PC flag or variable of a session without a hero (the accessors act only on a PC, SA14).
     InvalidScriptIndex, PcScriptsUnavailable,
     // Sector cache (ARC-DEV-104): a touch with a negative cell, or more distinct sectors than the cache has slots.
@@ -677,8 +679,9 @@ public sealed class GameSessionSnapshot
     /// Schema 98 adds the lit state of the top strip's buttons and the Map button's face (<see cref="BarLights"/>, ARC-UI-1542).
     /// Schema 99 adds the hero's stored resistance array and stored age (<see cref="SessionHeroState.Resistances"/>, <see cref="SessionHeroState.Age"/>, ARC-MAGIC-1658).
     /// Schema 100 adds the native traps' shots in flight to the flights section (<see cref="SessionFlightState.TrapShots"/>, ARC-TECHNOLOGY-1635).
-    /// Schemas 1..55 are refused, not migrated; schemas 56 to 99 are upgraded on decode (ARC-UI-037).</summary>
-    public const int CurrentSchemaVersion = 101;
+    /// Schema 101 adds the saved gambling roll (<see cref="GamblingRoll"/>, ARC-UI-1740). Schema 102 adds the followers of NPC leaders (<see cref="SessionPartyState.NpcLed"/>, ARC-WORLD-1840).
+    /// Schemas 1..55 are refused, not migrated; schemas 56 to 101 are upgraded on decode (ARC-UI-037).</summary>
+    public const int CurrentSchemaVersion = 102;
 
     internal GameSessionSnapshot(int schemaVersion, GlobalFlagIdentity identity, long revision,
         SessionClockState clock, SessionFlagState flags, ActorPlacement actor, SessionMapState[] maps, SessionStoryState story,
@@ -686,7 +689,7 @@ public sealed class GameSessionSnapshot
         SessionEffectState effects, SessionExperienceState experience, SessionAdvancementState advancement, SessionRandomState random,
         SessionLifeState life, SessionReactionState reactions, SessionCombatRound? combat, SessionCombatModeState combatMode,
         SessionConcealmentState concealment, SessionDangerState danger, SessionEventState events, SessionLightingState? lighting, SessionSoundState sound,
-        SessionHotkeyState? hotkeys = null, SessionObjectRecords? objects = null, SessionScriptState? scripts = null, SessionResidencyState? residency = null, SessionGoalState? goals = null, SessionSpellState? spells = null, SessionNewspaperState? newspaper = null, SessionFlightState? flights = null, SessionGeneratorState? generators = null, SessionEncounterState? encounters = null, SessionBarLightsState? barLights = null)
+        SessionHotkeyState? hotkeys = null, SessionObjectRecords? objects = null, SessionScriptState? scripts = null, SessionResidencyState? residency = null, SessionGoalState? goals = null, SessionSpellState? spells = null, SessionNewspaperState? newspaper = null, SessionFlightState? flights = null, SessionGeneratorState? generators = null, SessionEncounterState? encounters = null, SessionBarLightsState? barLights = null, int? gamblingRoll = null)
     {
         SchemaVersion = schemaVersion; Identity = identity; Revision = revision;
         Clock = clock; Flags = flags; Actor = actor; Maps = Array.AsReadOnly(maps); Story = story; Party = party;
@@ -702,6 +705,7 @@ public sealed class GameSessionSnapshot
         Generators = generators ?? SessionGeneratorState.Empty;
         Encounters = encounters ?? SessionEncounterState.Empty;
         BarLights = barLights;
+        GamblingRoll = gamblingRoll;
     }
 
     public int SchemaVersion { get; }
@@ -772,6 +776,9 @@ public sealed class GameSessionSnapshot
     public SessionEncounterState Encounters { get; }
     /// <summary>The lit state of the top strip's buttons, or null when none was recorded (a session whose host never lit a button, or a save of schema 97 or older: all idle, ARC-UI-1542).</summary>
     public SessionBarLightsState? BarLights { get; }
+
+    /// <summary>The skill module's pre-thrown gambling roll 1..100 (the original's one saved roll, 0x4C5DE0, ledger SR12, PS14), or null when none was thrown yet (a new session before its first barter window, or a save of schema 100 or older, ARC-UI-1740).</summary>
+    public int? GamblingRoll { get; }
 }
 
 internal static class SessionValidation
@@ -785,6 +792,8 @@ internal static class SessionValidation
     internal static bool Entity(string? entity) => Code(entity, MaxEntityCharacters);
 
     internal static bool Lighting(SessionLightingState lighting) => lighting.SchemeId >= 1 && lighting.Hour is >= 0 and <= 23;
+
+    internal static bool GamblingRoll(int roll) => roll is >= 1 and <= 100;
 
     internal static bool BarLights(SessionBarLightsState lights) => lights.LitMask is >= 0 and <= 31 && lights.MapMode is 2 or 3;
 

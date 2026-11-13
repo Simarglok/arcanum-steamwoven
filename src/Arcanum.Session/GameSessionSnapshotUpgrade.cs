@@ -623,8 +623,14 @@ public static partial class GameSessionSnapshotCodec
         {
             AddField(Section(root, "flights"), "$.flights", "trapShots", new JsonArray());
         },
-        // ARC-WORLD-1840 (schema 101): the party section gains the followers of NPC leaders. No older build made an NPC lead anyone (the hero was the one leader), so the list is empty.
-        [100] = root => AddField(Section(root, "party"), "$.party", "npcLed", new JsonArray()),
+        // ARC-UI-1740 (schema 101): the skill module's pre-thrown gambling roll. No older build held one (there was no gambling), so the step adds null: the next barter window throws the first.
+        [100] = root =>
+        {
+            if (root.ContainsKey("gamblingRoll")) throw new DecodeException(SnapshotDecodeFailure.UnknownField, "$.gamblingRoll");
+            root.Add("gamblingRoll", null);
+        },
+        // ARC-WORLD-1840 (schema 102): the party section gains the followers of NPC leaders. No older build made an NPC lead anyone (the hero was the one leader), so the list is empty.
+        [101] = root => AddField(Section(root, "party"), "$.party", "npcLed", new JsonArray()),
     };
 
     /// <summary>The schemas with an upgrade step to the next one, ascending: every schema from
