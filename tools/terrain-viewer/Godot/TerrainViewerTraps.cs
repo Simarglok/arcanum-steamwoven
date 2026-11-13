@@ -31,6 +31,9 @@ public partial class TerrainViewerApp
             {
                 // ARC-DEV-260: a trap set off by a ranged attack or by damage with no attacker has no triggerer.
                 ApplyWithoutTriggerer = (row, run, counters, flags) => caster.ApplyTrapEffect(TrapFiring(map, row, null, run, counters, flags)),
+                // ARC-WORLD-1469 (TT8, TT9): an NPC or a companion that stepped on a trap object or used a trapped one is the triggerer, and its spell flags gate the step.
+                ApplyByCritter = (entity, row, run, counters, flags) => caster.ApplyTrapEffect(TrapFiring(map, row, entity, run, counters, flags)),
+                SpellFlagsOf = entity => caster.SpellFlags(new(entity, 0)),
                 // ARC-TECHNOLOGY-1619 (TT12, TT15): a 30002 shot lists its shooter candidates around the triggerer and shoots.
                 ListsShooters = true,
             }

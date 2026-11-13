@@ -45,6 +45,19 @@ public sealed class AreaAiObjectAttackerTests
     }
 
     [TestMethod]
+    public void An_object_victim_of_a_critters_attack_event_stops_at_the_object_victim_exit()
+    {
+        // The scene's objects are victims now too (the original's 0x4A9650 tells the attacker's followers, then stops for a victim that is no critter): no focus, no reaction.
+        var (f, host) = Open(new(3, ShooterCell));
+        using var _ = f;
+
+        host.SpellAttacked(f.A, Shooter);
+
+        Assert.AreEqual(nameof(AttackEventStop.ObjectVictim), host.TraceOf(Shooter)?.Event);
+        Assert.AreEqual(DangerState.None, f.Session.QueryDanger(f.B).State);
+    }
+
+    [TestMethod]
     public void A_victim_that_is_not_an_npc_gets_no_focus()
     {
         var (f, host) = Open(new(3, ShooterCell));

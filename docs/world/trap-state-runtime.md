@@ -117,7 +117,7 @@ or the triggerer alone for radius 0, none without a triggerer):
   then the victim's taking-damage script is asked with the shooter as the attacker, the damage step takes the amount in the
   normal slot and the hit effect of a PC or NPC victim runs. The victim's result carries the damage step's own outcome and
   the shooter. The player credit of a PC-placed trap is lost in a shot (the result's `Killer` is null: the strike's context
-  names the shooter as the damage source, TT15). PROJECT: the missile is not drawn or flown, so a victim that would leave its
+  names the shooter as the damage source, TT15). The strike also calls the shooter's critter-hits script point (0x4B2F60, not run) and the sound cue draws one random (0x4F0BF0, not drawn: the project draws no sound cues). The hit effect (0x4B6930) runs whatever the damage step did, a veto and an invulnerable target included. PROJECT: the missile is not drawn or flown, so a victim that would leave its
   line, a kill before the strike and a save during the flight are not modelled ([#1635](https://github.com/Simarglok/arcanum-steamwoven/issues/1635) draws the flight); a PC victim's
   armed critical-miss fate (0x4F5270) is not applied. The host lists the shooter candidates around the triggerer
   (`AreaTrapShooters.Candidates`: the objects of types wall, portal, scenery and trap in the isometric window of the game

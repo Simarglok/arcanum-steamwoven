@@ -140,8 +140,18 @@ public sealed partial class SessionSpellCaster
         // The projectile's end: the attack event of the shooter object (0x4B2690), then the hit.
         AiNotice?.Invoke(shooter, victim);
         var (hit, step, hitPoints) = TrapDamage(effect, amount, victim, shooter, killer: null, hitEffectFirst: false);
-        // 0x4B6930: the hit effect of a PC or NPC victim.
-        if (step is not null && hit != SessionTrapHit.Prevented && Kind(new SpellRunObject(victim, _map.Object(victim)?.Type ?? 0)) == AttackTargetKind.Critter) TrapDamageHit(victim, step);
+        // 0x4B6930 runs after the hit whatever the damage step did: for a PC or NPC victim the damage effect (a positive amount) or the critter hit (none) asks an entangled victim's save again. A veto and an invulnerable
+        // target leave the slots as drawn (0x4B4390 returns early), a nigh-invulnerable critter's are zeroed.
+        if (Kind(new SpellRunObject(victim, _map.Object(victim)?.Type ?? 0)) == AttackTargetKind.Critter)
+        {
+            var positive = hit switch
+            {
+                SessionTrapHit.Vetoed => amount > 0,
+                SessionTrapHit.Prevented => step!.Prevented != DamagePrevention.NighInvulnerable && amount > 0,
+                _ => step is { Final: var final } && (final.Normal > 0 || final.Poison > 0 || final.Electrical > 0 || final.Fire > 0),
+            };
+            if (positive) DamageEffect(victim); else CritterHit(victim);
+        }
         return new(victim, hit, amount, step, hitPoints, shooter, spell, run);
     }
 
