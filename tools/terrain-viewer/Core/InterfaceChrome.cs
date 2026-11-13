@@ -110,9 +110,9 @@ public static class InterfaceChromeRecipes
             yield return new ChromeRecipe(tabs[i], ChromeKind.Tab, ChromeMaterial.Wood, ChromeSides.None,
                 [new ChromePlate(0, 0, 27, 41, ChromeMaterial.PageEdge, Bevel: false), new ChromePlate(27, 0, 11, 41, ChromeMaterial.WoodDark, Bevel: false)],
                 OriginX: AreaLogbookArtLayout.Tabs[i].X - AreaLogbookArtLayout.BookCorner.X, OriginY: AreaLogbookArtLayout.Tabs[i].Y - AreaLogbookArtLayout.BookCorner.Y);
-        yield return new ChromeRecipe("pageturn_l.art", ChromeKind.Panel, ChromeMaterial.Parchment, ChromeSides.None, [new ChromeGlyph(0, 0, 18, 22)],
+        yield return new ChromeRecipe("pageturn_l.art", ChromeKind.Panel, ChromeMaterial.Parchment, ChromeSides.None, [new ChromeGlyph(0, 0, 18, 22)], Holes: ChromeHoles.None,
             OriginX: AreaLogbookArtLayout.PreviousCorner.X - AreaLogbookArtLayout.BookCorner.X, OriginY: AreaLogbookArtLayout.PreviousCorner.Y - AreaLogbookArtLayout.BookCorner.Y);
-        yield return new ChromeRecipe("pageturn_r.art", ChromeKind.Panel, ChromeMaterial.Parchment, ChromeSides.None, [new ChromeGlyph(0, 0, 18, 22)],
+        yield return new ChromeRecipe("pageturn_r.art", ChromeKind.Panel, ChromeMaterial.Parchment, ChromeSides.None, [new ChromeGlyph(0, 0, 18, 22)], Holes: ChromeHoles.None,
             OriginX: AreaLogbookArtLayout.NextCorner.X - AreaLogbookArtLayout.BookCorner.X, OriginY: AreaLogbookArtLayout.NextCorner.Y - AreaLogbookArtLayout.BookCorner.Y);
     }
 
@@ -467,7 +467,7 @@ public static class InterfaceChromeRenderer
         var inks = new List<int>[3] { [], [], [] };
         for (var i = 0; i < paper.Length; i++)
         {
-            if (!paper[i]) continue;
+            if (!paper[i] || c.Legacy[i * 4 + 3] == 0) continue;
             for (var k = 0; k < 3; k++) inks[k].Add(c.Legacy[i * 4 + k]);
         }
         var median = inks.Select(list => { list.Sort(); return list.Count == 0 ? 255f : Math.Max(24, list[list.Count / 2]); }).ToArray();
@@ -545,7 +545,7 @@ public static class InterfaceChromeRenderer
         if (rs.Count == 0) return;
         rs.Sort(); gs.Sort(); bs.Sort();
         float mr = Math.Max(24, rs[rs.Count / 2]), mg = Math.Max(24, gs[gs.Count / 2]), mb = Math.Max(24, bs[bs.Count / 2]);
-        static float Departure(float ratio) => MathF.Abs(ratio - 1) <= 0.1f ? 0 : ratio - 1 - MathF.Sign(ratio - 1) * 0.1f;
+        static float Departure(float ratio) => MathF.Abs(ratio - 1) <= 0.1f ? 0 : MathF.Min(ratio - 1 - MathF.Sign(ratio - 1) * 0.1f, 0.12f);
         int x0 = c.Edge(glyph.X), y0 = c.Edge(glyph.Y), x1 = c.Edge(glyph.X + glyph.Width), y1 = c.Edge(glyph.Y + glyph.Height);
         for (var y = Math.Max(0, y0); y < Math.Min(c.H, y1); y++)
         for (var x = Math.Max(0, x0); x < Math.Min(c.W, x1); x++)

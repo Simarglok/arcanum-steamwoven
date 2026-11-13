@@ -681,7 +681,7 @@ public sealed class InterfaceChromeTests
             var recipe = Recipe(tabs[i]);
             Assert.AreEqual(ChromeKind.Tab, recipe.Kind);
             Assert.AreEqual(AreaLogbookArtLayout.Tabs[i].X - AreaLogbookArtLayout.BookCorner.X, recipe.OriginX, $"{tabs[i]} stands where the layout puts tab {i}");
-            Assert.AreEqual(AreaLogbookArtLayout.Tabs[i].Y, recipe.OriginY);
+            Assert.AreEqual(AreaLogbookArtLayout.Tabs[i].Y - AreaLogbookArtLayout.BookCorner.Y, recipe.OriginY);
         }
         Assert.AreEqual(AreaLogbookArtLayout.PreviousCorner.X - AreaLogbookArtLayout.BookCorner.X, Recipe("pageturn_l.art").OriginX);
         Assert.AreEqual(AreaLogbookArtLayout.NextCorner.X - AreaLogbookArtLayout.BookCorner.X, Recipe("pageturn_r.art").OriginX);
@@ -756,6 +756,7 @@ public sealed class InterfaceChromeTests
         var withGlyph = InterfaceChromeRenderer.Render(Recipe("pageturn_l.art"), 18, 22, legacy, [], 0, 2);
         var plain = InterfaceChromeRenderer.Render(new ChromeRecipe("t.art", ChromeKind.Panel, ChromeMaterial.Parchment, ChromeSides.None, [], OriginX: Recipe("pageturn_l.art").OriginX, OriginY: Recipe("pageturn_l.art").OriginY), 18, 22, legacy, [], 0, 2);
         Assert.AreEqual(Pixel(plain, 36, 2, 2), Pixel(withGlyph, 36, 2, 2), "the grain of the Legacy ground is not copied");
+        // A lighter pixel of the Legacy picture lifts the ground by a few percent at most (here the grain is far below the dead zone, so nothing at all).
         var mark = Pixel(withGlyph, 36, 19, 20);
         var ground = Pixel(plain, 36, 19, 20);
         Assert.IsTrue(mark.R < ground.R * 0.6 && mark.G < ground.G * 0.6, $"the mark {mark} is much darker than the ground {ground}");
@@ -791,7 +792,9 @@ public sealed class InterfaceChromeTests
             var edge = Pixel(a, 138, 33 * 3 + 2, 12 * 3);
             var beyond = Pixel(a, 138, 34 * 3 + 1, 12 * 3);
             Assert.IsTrue(Luma(edge) < Luma(paper) * 0.8, $"edge {edge} against paper {paper}");
-            Assert.IsTrue(Luma(beyond) < Luma(Pixel(a, 138, 42 * 3, 12 * 3)) * 1.3 + 1, "beyond the edge there is a shadow, not more paper");
+            // The same pixel of a frame with no paper at all is the bare ground: the paper's shadow darkens it.
+            var bare = InterfaceChromeRenderer.Render(Recipe("tab_quest.art"), 46, 41, Flat(46, 41, (50, 45, 40)), [], frame, 3);
+            Assert.IsTrue(Luma(beyond) < Luma(Pixel(bare, 138, 34 * 3 + 1, 12 * 3)) * 0.7, $"beyond the edge the ground is in the paper's shadow: {beyond} against {Pixel(bare, 138, 34 * 3 + 1, 12 * 3)}");
             for (var i = 3; i < a.Length; i += 4) Assert.AreEqual(255, a[i]);
         }
     }
