@@ -26,6 +26,9 @@ public partial class TerrainViewerApp
     private Task<AreaRestTexts>? _sleepTextsTask;
     private string? _sleepTextsModule;
     private AreaRestTexts? _sleepTexts;
+    // ARC-UI-1363: the original's window art (565, 293 and the font 229), read once for a module in the background.
+    private Task<AreaSleepContent>? _sleepArtTask;
+    private AreaSleepContent? _sleepArt;
     // The open window's chain, the session it opened in (a replaced session closes it) and the host time of the last frame (the steps run on it).
     private AreaRestRun? _rest;
     private GameSessionOwner? _restSession;
@@ -46,8 +49,25 @@ public partial class TerrainViewerApp
     {
         if (_sleepTextsModule == arguments.ModulePath) return;
         _sleepTextsModule = arguments.ModulePath; _sleepTexts = null;
+        _sleepArt = null; _sleepPanel?.ClearArt();
         var module = arguments.ModulePath;
         _sleepTextsTask = SelfTestBootstrap || module is null ? null : Task.Run(() => AreaRestTexts.Load(module));
+        _sleepArtTask = SelfTestBootstrap || module is null ? Task.FromResult(AreaSleepContent.Empty("self-test: no game folder")) : Task.Run(() => AreaSleepContent.Load(module));
+    }
+
+    /// <summary>ARC-UI-1363: gives the panel the original's art once it has read (the next opening is drawn in the original's look); a window opened before that, or with art that did not read, is the plain panel.</summary>
+    private void AdoptSleepArt()
+    {
+        if (_sleepPanel is null) return;
+        if (_sleepArt is null && _sleepArtTask is { IsCompleted: true } task)
+        {
+            _sleepArt = task.IsCompletedSuccessfully ? task.Result : AreaSleepContent.Empty("load threw " + (task.Exception?.GetBaseException().GetType().Name ?? "cancelled"));
+            GD.Print($"ARC-UI-1363 sleep window art ready={_sleepArt.Ready} {_sleepArt.Detail}");
+        }
+        if (_sleepArt is not { Ready: true } content || _sleepPanel.ArtSet) return;
+        var frames = AreaSleepLayout.ArtNumbers.Where(number => number != AreaSleepLayout.FontArt)
+            .ToDictionary(number => number, number => content.Art[number].Frames.Select(frame => (Texture2D)InterfaceHd.Texture(frame, premultipliedAlpha: true)).ToArray());
+        _sleepPanel.SetArt(frames, new AreaArtFontFace(content.Art[AreaSleepLayout.FontArt].Frames));
     }
 
     private AreaRestTexts SleepTexts()
@@ -126,7 +146,9 @@ public partial class TerrainViewerApp
         {
             _sleepPanel = new AreaSleepPanel(); AddChild(_sleepPanel);
             _sleepPanel.ButtonPressed += SleepPressed;
+            _sleepPanel.SoundRequested += id => PlayBarSound(id, "sleep button");
         }
+        AdoptSleepArt();
         CloseOtherInterfaceWindows();
         // A quick key held across the window must not act on its release afterwards (its press predates the window).
         QuarantineWorld(); _quickKeys.Reset();
@@ -268,6 +290,7 @@ public partial class TerrainViewerApp
     /// <summary>Per frame: a replaced session or a session that cannot show it closes the window; the cover is cleared at once with it (a load closes the window and its events).</summary>
     private void SyncAreaSleep()
     {
+        _sleepPanel?.PlaceView();
         if (_rest is not null && (!SleepActive || !ReferenceEquals(_restSession, _areaSession)))
         {
             _restDark = false; _restFade.Reset();
@@ -308,6 +331,8 @@ public partial class TerrainViewerApp
     internal bool SleepOpenForSelfTest => SleepOpen;
     internal AreaRestRun? RestForSelfTest => _rest;
     internal AreaSleepPanel? SleepPanelForSelfTest => _sleepPanel;
+    /// <summary>The window's art content has read and is ready (it reads in the background; false in the self-test).</summary>
+    internal bool SleepArtReadyForSelfTest => _sleepArtTask is { IsCompleted: true, IsCompletedSuccessfully: true } task && task.Result.Ready;
     internal IReadOnlyList<string> RestLogForSelfTest => _restLog;
     internal void OpenSleepForSelfTest(AreaObjectKey? bed = null) => OpenSleep(bed);
     internal AreaBedOccupancy BedOccupancyForSelfTest => _bedOccupancy;
