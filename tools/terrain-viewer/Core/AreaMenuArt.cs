@@ -160,6 +160,10 @@ public sealed class AreaArtFont
 
     public AreaArtFont(IReadOnlyList<AreaInterfaceFrame> frames) => _frames = frames ?? throw new ArgumentNullException(nameof(frames));
 
+    /// <summary>ARC-UI-1877 (ledger WR21): the height of a line of this font as the text draw 0x535570 steps it, the height of the space glyph (frame 1); a font
+    /// without a space frame or with an empty one uses its tallest glyph.</summary>
+    public int LineHeight => _frames.Count > 1 && _frames[1].Height > 0 ? _frames[1].Height : _frames.Count == 0 ? 0 : _frames.Max(frame => frame.Height);
+
     public AreaArtGlyph? Glyph(char character)
     {
         var frame = character - FirstFrameCharacter;
