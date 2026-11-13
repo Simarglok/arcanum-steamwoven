@@ -72,7 +72,7 @@ Order: E1-e before E1-f (one writer in the Summon and AI files); E6, MA-9 and MA
 | **MA-10** Raise script hook | The resurrect script (point 0x12) through the SCR dispatcher | edge of 58, 64 | S | the SCR dispatcher (E5) | scripts | FR-MAGIC-007 |
 | **E1-f** AI summoning and AI parity (**summon half built, ARC-MAGIC-1169**: an NPC summoner's faction and alignment, the AIRedirect component; the `ai-cast` pass over the 80 is [#1835](https://github.com/Simarglok/arcanum-steamwoven/issues/1835)) | The AI's summon list and one pass of `ai-cast` over every AI priority of the 80 (an NPC casting a spell must act like the hero's cast) | 60 spells carry an AI priority | M | E1-e | AI host | FR-AI-002 |
 
-MA-10 is done (ARC-MAGIC-1167): the raise script runs through the dispatcher before the life step ([ledger RZ1–RZ3](ledger/spell-runs.md)); the refusal feedback (message 605, resisted effect) is [#1838](https://github.com/Simarglok/arcanum-steamwoven/issues/1838).
+MA-10 is done (ARC-MAGIC-1167): the raise script runs through the dispatcher before the life step ([ledger RZ1–RZ3](ledger/spell-runs.md)); the refusal feedback (message 605, resisted effect) is built too (ARC-MAGIC-1838, [RZ3](ledger/spell-runs.md)).
 
 ### By college
 
