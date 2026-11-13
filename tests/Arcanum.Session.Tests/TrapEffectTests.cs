@@ -194,12 +194,59 @@ public sealed class TrapEffectTests
         var none = caster.ApplyTrapEffect(Firing(30002, Counters(90, 5, 8, 2), 0) with { Shooters = [new(Box, 30007, Counters(0, 4, 0, 0))] });
         Assert.AreEqual((SessionTrapHit.NoShooter, SpellCastAttemptOutcome.Nothing, (string?)null),
             (none.Victims.Single().Hit, none.Victims.Single().Spell, none.Victims.Single().Shooter));
-        var shot = caster.ApplyTrapEffect(Firing(30002, Counters(90, 5, 8, 2), 0) with { Shooters = [new(Box, 30007, Counters(0, 5, 0, 0))] })
-            .Victims.Single();
-        Assert.AreEqual((SessionTrapHit.ShotNotReady, Box, 0, SpellCastAttemptOutcome.Nothing), (shot.Hit, shot.Shooter, shot.Amount, shot.Spell),
-            "the shot is not ready: neither its damage nor its spell is applied");
-        Assert.AreEqual(draws, owner.QueryRandom().Draws, "nothing drawn");
-        Assert.AreEqual(0, owner.QuerySpellRuns().Runs.Count(), "no run started");
+        Assert.AreEqual(draws, owner.QueryRandom().Draws, "no shooter: nothing drawn");
+        Assert.AreEqual(0, owner.QuerySpellRuns().Runs.Count(), "no spell either");
+    }
+
+    [TestMethod]
+    public void A_shot_draws_its_amount_then_the_dispatchers_two_d100_casts_its_spell_then_raises_the_shooters_event_and_then_hits()
+    {
+        // ARC-TECHNOLOGY-1619 (TT15): 0x4BCDC0 draws the slot, 0x4B3170 the hit location and the technology-failure roll; the spell comes when the dispatcher returns, the missile's end raises the attack event of the shooter object, and
+        // the hit follows it.
+        var (owner, caster, _) = Session();
+        using var __ = owner;
+        var before = HeroHitPoints(owner);
+        var draws = owner.QueryRandom().Draws;
+        var seen = new List<(string? Attacker, string Victim, int HitPoints, int Runs)>();
+        caster.AiNotice = (attacker, victim) => seen.Add((attacker, victim, HeroHitPoints(owner), owner.QuerySpellRuns().Runs.Count()));
+        var result = caster.ApplyTrapEffect(Firing(30002, Counters(90, 5, 8, 2), 0, objectFlags: TrapRules.PlacedByPcFlag) with { Shooters = [new(Box, 30007, Counters(0, 5, 0, 0))] });
+        var shot = result.Victims.Single();
+        Assert.AreEqual(draws + 3, owner.QueryRandom().Draws, "the amount, the hit location and the technology-failure roll");
+        Assert.AreEqual((SessionTrapHit.Damaged, Box, SpellCastAttemptOutcome.Started), (shot.Hit, shot.Shooter, shot.Spell));
+        Assert.IsTrue(shot.Amount is >= 2 and <= 8);
+        Assert.AreEqual(new DamageByType(shot.Amount, 0, 0, 0, 0), shot.Step!.Rolled, "normal damage only: the script's type");
+        Assert.AreEqual(before - shot.Amount, HeroHitPoints(owner));
+        CollectionAssert.AreEqual(new[] { ((string?)Box, Hero, before, 1) }, seen, "one event, from the shooter object, after the spell and before the damage");
+        Assert.AreEqual(Hero, owner.QuerySpellRuns()[shot.SpellRun!.Value]!.Target?.Id);
+        Assert.IsNull(result.Killer, "the shot's context is rebuilt at the strike: a PC-placed trap's credit is lost");
+    }
+
+    [TestMethod]
+    public void A_shot_victims_taking_damage_script_is_asked_with_the_shooter_and_a_veto_cancels_the_hit_only()
+    {
+        var (owner, caster, _) = Session();
+        using var __ = owner;
+        var asked = new List<(string Victim, string? Attacker)>();
+        caster.TakingDamage = (victim, attacker) => { asked.Add((victim, attacker)); return false; };
+        var events = 0;
+        caster.AiNotice = (_, _) => events++;
+        var before = HeroHitPoints(owner);
+        var shot = caster.ApplyTrapEffect(Firing(30002, Counters(90, 5, 8, 2), 0) with { Shooters = [new(Box, 30007, Counters(0, 5, 0, 0))] }).Victims.Single();
+        CollectionAssert.AreEqual(new[] { (Hero, (string?)Box) }, asked);
+        Assert.AreEqual((SessionTrapHit.Vetoed, 0, 1, SpellCastAttemptOutcome.Started), (shot.Hit, shot.HitPointDamage, events, shot.Spell));
+        Assert.AreEqual(before, HeroHitPoints(owner));
+    }
+
+    [TestMethod]
+    public void A_shot_at_the_hero_and_an_npc_in_one_square_raises_an_event_for_each_victim()
+    {
+        var (owner, caster, _) = Session();
+        using var __ = owner;
+        var seen = new List<(string? Attacker, string Victim)>();
+        caster.AiNotice = (attacker, victim) => seen.Add((attacker, victim));
+        var result = caster.ApplyTrapEffect(Firing(30002, Counters(0, 5, 4, 4), TrapRules.SquareTwoFlag) with { Shooters = [new(Box, 30007, Counters(0, 5, 0, 0))] });
+        CollectionAssert.AreEqual(new[] { ((string?)Box, Guard), (Box, Hero) }, seen, "the map's order");
+        Assert.IsTrue(result.Victims.All(v => v.Hit == SessionTrapHit.Damaged && v.Shooter == Box));
     }
 
     [TestMethod]
