@@ -46,13 +46,14 @@ public sealed class AreaGameOptionsTests
         Assert.AreEqual(6, defaults["text duration"]);
         Assert.AreEqual(2, defaults["float speed"]);
         Assert.AreEqual(1, defaults["text floaters"], "CH10: messages only");
+        Assert.AreEqual(1, defaults["combat taunts"], "OH5: the original registers combat taunts on");
         Assert.AreEqual(5, defaults["music volume"]);
         Assert.AreEqual(9, AreaOptionTable.Of(AreaOption.Brightness).Max, "brightness's record sets its slider's top");
         Assert.AreEqual(10, AreaOptionTable.Of(AreaOption.Effects).Max, "a slider's default top");
         Assert.AreEqual((int)RuleMode.Steamwoven, defaults["rules"], "Steamwoven is the default mode");
         CollectionAssert.AreEqual(new[]
             {
-                AreaOption.Difficulty, AreaOption.DefaultCombatMode, AreaOption.AutoAttack, AreaOption.AlwaysRun, AreaOption.Floats, AreaOption.FloatSpeed,
+                AreaOption.Difficulty, AreaOption.DefaultCombatMode, AreaOption.AutoAttack, AreaOption.AlwaysRun, AreaOption.Floats, AreaOption.FloatSpeed, AreaOption.CombatTaunts,
                 AreaOption.Effects, AreaOption.Voice, AreaOption.Music, AreaOption.Rules, AreaOption.EvidenceLog, AreaOption.TestTask, AreaOption.ControlScheme, AreaOption.PromptStyle,
             },
             AreaOptionTable.All.Where(c => c.Shown).Select(c => c.Option).ToArray(), "only the controls with a function are shown");
@@ -109,10 +110,10 @@ public sealed class AreaGameOptionsTests
         var menu = Options();
         menu.Type('v');
         Assert.AreEqual(AreaOptionsPage.Video, menu.Page, "ARC-UI-021: the Video page");
-        CollectionAssert.AreEqual(new[] { AreaOption.Floats, AreaOption.FloatSpeed, AreaOption.PromptStyle }, menu.Controls.Select(c => c.Option).ToArray());
+        CollectionAssert.AreEqual(new[] { AreaOption.Floats, AreaOption.FloatSpeed, AreaOption.CombatTaunts, AreaOption.PromptStyle }, menu.Controls.Select(c => c.Option).ToArray());
         CollectionAssert.AreEqual(new[]
         {
-            "Brightness: " + AreaOptionTable.NoBrightness, "Text Duration: " + AreaOptionTable.NoTextDuration, "Combat Taunts: " + AreaOptionTable.NoTaunts,
+            "Brightness: " + AreaOptionTable.NoBrightness, "Text Duration: " + AreaOptionTable.NoTextDuration,
         }, menu.HiddenNotes.ToArray());
         Assert.AreEqual(new AreaMenuCommand(AreaMenuCommandKind.ChangeOption, Option: AreaOption.Floats, Value: 2), menu.Change(0, 1), "Minimal to Verbose");
         menu.SetOptions(Values with { Floats = 2 });
@@ -237,7 +238,8 @@ public sealed class AreaGameOptionsTests
         Assert.AreEqual(new AreaMenuCommand(AreaMenuCommandKind.ChangeOption, Option: AreaOption.ControlScheme, Value: 1), menu.Change(7, 1));
         Assert.AreEqual(new AreaMenuCommand(AreaMenuCommandKind.ChangeOption, Option: AreaOption.ControlScheme, Value: 3), menu.Change(7, -1), "the list wraps back to its last value");
         menu.Type('v');
-        Assert.AreEqual(new AreaMenuCommand(AreaMenuCommandKind.ChangeOption, Option: AreaOption.PromptStyle, Value: 1), menu.Change(2, 1));
+        Assert.AreEqual(new AreaMenuCommand(AreaMenuCommandKind.ChangeOption, Option: AreaOption.CombatTaunts, Value: 0), menu.Change(2, 1), "ARC-AI-1527: the combat taunts line is on by default; On wraps to Off");
+        Assert.AreEqual(new AreaMenuCommand(AreaMenuCommandKind.ChangeOption, Option: AreaOption.PromptStyle, Value: 1), menu.Change(3, 1));
     }
 
     [TestMethod]

@@ -91,8 +91,9 @@ public partial class TerrainViewerApp
             var critterLife = HoverLife(hit);
             var facts = HoverCritterFacts(hit, row, critterLife);
             portrait = facts is { ViewerDetectsAlignment: true } ? null : HoverPortrait(hit);
-            var image = portrait is not null ? null : CombatFieldReader.Read(row).Fields is { Critter: { } critter } fields
-                ? AreaLootArtLayout.HolderImage(fields.Object.Type, critter.Flags, critter.BaseStats.Count > 27 ? critter.BaseStats[27] : -1, 0) : null;
+            // ARC-MAGIC-1551: the race of the image is the stored stat 27 with the entries a TraitIdx spell wrote over it.
+            var image = portrait is not null ? null : AreaWrittenCritterFields.Read(_areaSession, row) is { Critter: { } critter } fields
+                ? AreaLootArtLayout.HolderImage(fields.Object.Type, critter.Flags, AreaHoverWindow.CritterStats(fields, null).Race, 0) : null;
             entry = facts is { } critterFacts ? AreaHoverWindow.CritterWindow(name, image, critterFacts, _gameBarContent?.Texts) : AreaHoverWindow.Window(kind, name, image);
             _hoverWindowDead = facts is { Dead: true };
             // ARC-UI-124 (OH7, OH11, OH19): with the hero in combat mode the combat panel takes the image's place on a living critter's window.
@@ -159,11 +160,10 @@ public partial class TerrainViewerApp
     /// </summary>
     private AreaHoverCritter? HoverCritterFacts(AreaObjectKey key, AreaObjectRecord row, (AreaLife Life, bool PcSide)? life)
     {
-        if (_areaSession is not { } session || CombatFieldReader.Read(row).Fields is not { Critter: { } critter } fields) return null;
-        var stats = critter.BaseStats;
+        // ARC-MAGIC-1551: the stored level and alignment with the entries a TraitIdx spell wrote over them.
+        if (_areaSession is not { } session || AreaWrittenCritterFields.Read(session, row) is not { Critter: not null } fields) return null;
         var entity = HoverEntity(key);
-        var level = entity is not null && session.QueryNpcAdvancement(entity) is { } saved ? saved.Sheet.Level : stats.Count > HoverLevelStat ? stats[HoverLevelStat] : 0;
-        var alignment = stats.Count > HoverAlignmentStat ? stats[HoverAlignmentStat] : 0;
+        var (level, alignment, _) = AreaHoverWindow.CritterStats(fields, entity is not null && session.QueryNpcAdvancement(entity) is { } saved ? saved.Sheet.Level : null);
         var type = fields.Object.Type;
         var sneaks = session.IsConcealed(SessionCombatant.Hero);
         var npc = type == AreaHoverWindow.NpcType && entity is not null;
@@ -173,7 +173,7 @@ public partial class TerrainViewerApp
         return new(type, life is { Life.Health: <= 0 }, level, alignment, reaction, sneaks, excess, detects);
     }
 
-    private const int HoverLevelStat = 17, HoverAlignmentStat = 19, HoverDetectingAlignment = 0x80;
+    private const int HoverDetectingAlignment = 0x80;
 
     /// <summary>
     /// ARC-UI-124 (OH19): the combat panel (0x554830) of a hovered critter, read when the pointer enters it, while the hero is in combat

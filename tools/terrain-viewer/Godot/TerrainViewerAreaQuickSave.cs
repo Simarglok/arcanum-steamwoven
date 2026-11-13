@@ -222,6 +222,8 @@ public partial class TerrainViewerApp
 
     // An automated run (self-test, smoke) loads at once, as every smoke that loads expects its result in the same step; the smoke of this change turns the screen on.
     private bool _loadScreenDeferForSelfTest;
+    /// <summary>ARC-UI-1574: the self-test makes the pending load throw, as a faulty load would.</summary>
+    private Action? _pendingLoadFaultForSelfTest;
     private bool LoadScreenDeferred => !ViewerAutomatedStorage.Automated || _loadScreenDeferForSelfTest;
 
     /// <summary>The player's load of a save (F8, the load window, the menu's Last Save): like <see cref="LoadGame"/> but behind the load screen. The result goes to
@@ -232,7 +234,8 @@ public partial class TerrainViewerApp
         // With no save listed the original's quick load returns before its load function (no load, no screen); a busy viewer refuses in LoadGame.
         // A queued transfer is superseded by the load at once (LoadGame), as before, so it shows no screen of its own.
         var showable = QuickBusyReason() == QuickBusy.None && !TransitionFadePending && slot.Exists;
-        if (!LoadScreenDeferred || !showable) { var ok = LoadGame(slot, prefix, heroTables, messages); done?.Invoke(ok); return; }
+        // ARC-UI-1574: a player's load refuses while another waits for its screen (it must not drop the first); only a load that is not a player's supersedes it.
+        if (!LoadScreenDeferred || !showable) { var ok = LoadGame(slot, prefix, heroTables, messages, supersedePending: false); done?.Invoke(ok); return; }
         BeginTransitionLoad();
         _pendingLoad = new(slot, prefix, heroTables, messages, done);
     }
@@ -249,15 +252,29 @@ public partial class TerrainViewerApp
         if (_pendingLoad is not { } pending) return;
         _pendingLoad = null;
         var ok = false;
-        try { ok = LoadGame(pending.Slot, pending.Prefix, pending.HeroTables, pending.Messages); }
+        try { _pendingLoadFaultForSelfTest?.Invoke(); ok = LoadGame(pending.Slot, pending.Prefix, pending.HeroTables, pending.Messages, supersedePending: false); }
+        // ARC-UI-1574: a load that threw ends as a refused one for its window or menu (the notice, the callback); the world fault is still the observation's.
+        catch (Exception error) { SetQuickStatus(pending.Prefix + "load FAILED: " + error.GetType().Name); throw; }
         finally
         {
             // A refusal clears the screen and keeps the game; a load that opens another map keeps it until that map is there (StartMapTransfers).
             // (a transfer that began meanwhile owns the screen: only the load's own is cleared)
             if (!ok) { if (_mapHandoff is null && !TransitionFadePending) ClearTransition(); }
             else if (_mapHandoff is null) ReleaseTransition();
+            pending.Done?.Invoke(ok);
         }
-        pending.Done?.Invoke(ok);
+    }
+
+    /// <summary>ARC-UI-1574: a load that is not a player's (the death reload, a smoke, the menu's save choice) lands inside the window of a pending load: the pending one is
+    /// superseded, as a queued transfer is, not the reason to refuse it: its screen goes, its window or menu is told it did not load.</summary>
+    private void SupersedePendingLoad(string prefix)
+    {
+        if (_pendingLoad is not { } stale) return;
+        _pendingLoad = null;
+        GD.Print("ARC-UI-1574 pending load superseded by " + prefix.Trim());
+        if (_mapHandoff is null && !TransitionFadePending) ClearTransition();
+        SetQuickStatus(stale.Prefix + "load superseded");
+        stale.Done?.Invoke(false);
     }
 
     /// <summary>Loads one save of the list. True when the loaded session was adopted or its map load started; on false the running
@@ -266,9 +283,10 @@ public partial class TerrainViewerApp
     /// tables a hero save takes (<see cref="AreaQuickSave.Load"/>), and the loaded hero's own tables are adopted with it.</param>
     /// <param name="messages">ARC-DEV-168: the original's messages in the message window (F8's notes around the result, or the result alone
     /// for the load window and the main menu's last save); none for a load that is not a player's (a smoke, the death reload).</param>
-    private bool LoadGame(GameSessionSaveSlot slot, string prefix, AreaHeroLoad? heroTables = null, AreaLoadMessageRoute messages = AreaLoadMessageRoute.None)
+    private bool LoadGame(GameSessionSaveSlot slot, string prefix, AreaHeroLoad? heroTables = null, AreaLoadMessageRoute messages = AreaLoadMessageRoute.None, bool supersedePending = true)
     {
         using var span = PerfProbe.Span("game.load");
+        if (supersedePending) SupersedePendingLoad(prefix);
         // A load supersedes a queued transfer; it waits only for a reset/reload.
         var busy = QuickBusyReason();
         if (busy is QuickBusy.NoActor or QuickBusy.Lifecycle or QuickBusy.MapLoading or QuickBusy.LoadPending) { SetQuickStatus(prefix + "quick load refused: " + Describe(busy)); return false; }

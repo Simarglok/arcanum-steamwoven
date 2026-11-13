@@ -1062,7 +1062,7 @@ lands (red lines over the hero) or is dodged (a white dodge); at level 1 the num
 it prints `ARC-UI-021 native-smoke floaters PASS`. Since ARC-COMBAT-1138 the stage also checks a script's damage on a map object (a door, container or scenery with hit points to spare): `HT N` in white over it, N what the
 object lost after its material (`ARC-COMBAT-1138 floaters object-damage`; its capture hides the diagnostic HUD). Not done: spell blinding, the draw offsets of the boxes' objects (the hero's while walking), the
 original's font art 229, text
-bubbles (Text Duration) and combat taunts. Original visual parity NOT VERIFIED.
+bubbles (Text Duration). Original visual parity NOT VERIFIED. ARC-AI-1527: the PC's followers' comment lines (the combat taunt at the end of the hero's hit, the near-death line of a hurt follower, the complaint's upset line) float as white lines over the follower through the script float queue, with a random line of the player's generated NPC files (no text is stored).
 
 ### Inventory window, pickup and loot (ARC-UI-004)
 
@@ -2316,8 +2316,7 @@ project's, except as below.
   letters G, V, S, D); the window opens at the Game page each time. The letters act as in the other menu windows, in both
   rule modes; the original's options window ignores them (an original bug: its hotkey path runs such buttons only in
   the in-play windows, OP7), which the owner chose to fix everywhere without a switch (2026-10-28). The Video page (ARC-UI-021) shows Floats and
-  Float Speed, the [floating text](#floating-text-arc-ui-021)'s level and speed; its Brightness, Text Duration and Combat
-  Taunts are hidden with their reasons (no gamma control, text bubbles or combat taunts).
+  Float Speed, the [floating text](#floating-text-arc-ui-021)'s level and speed, and Combat Taunts (ARC-AI-1527, default on, the settings file's `combat taunts` line: the followers' comment lines); its Brightness and Text Duration are hidden with their reasons (no gamma control, no text bubbles).
 - **Controls.** Each control shows its `options_ui.mes` label (message 100 + 100 × page + slot) and its value: a
   list's text from its value file (`OptionsDifficulty.mes`, `OptionsCombatMode.mes`, `OptionsOffOn.mes`), a slider as
   `N/10`. Game: Difficulty (Easy, Moderate, Hard), Default Combat Mode (Real Time, Turn Based), Auto Attack, Always

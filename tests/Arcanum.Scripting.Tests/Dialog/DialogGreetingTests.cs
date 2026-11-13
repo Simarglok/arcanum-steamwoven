@@ -324,6 +324,46 @@ public sealed class DialogGreetingTests
         Assert.AreEqual(DialogGenericGreetingStatus.Failed, Generic(Greeter(Facts(), rolls: [ 101 ])).Status, "a roll out of its range");
     }
 
+    // ARC-AI-1527 (0x413F50, 0x414370, 0x414490): a follower's comment line is a plain NPC line of the comment's range, said by the follower to the PC.
+    private static DialogGenericGreetingResult Comment(FakeGreeter greeter, int first, int last) =>
+        DialogFollowerComment.Say(greeter, new DialogReactionQuery(new DialogParticipantId(900), new DialogParticipantId(800)), first, last, new DialogSpeakerNames("Ada", "Bram"),
+            DialogTextEncoding.Windows1252, 4096);
+
+    [TestMethod]
+    public void A_follower_comment_picks_a_stored_entry_of_its_range_from_the_npc_file_of_the_gender_pair_and_expands_the_names()
+    {
+        var files = Files((GeneratedDialogFile.NpcMaleToMale, "{2399}{before}{2400}{kind0 @pcname@ from @npcname@}{2401}{kind0 b}{2500}{kind1}"),
+            (GeneratedDialogFile.NpcFemaleToMale, "{2400}{woman says}"));
+        var first = Comment(Greeter(Facts(), files, rolls: [ 0 ]), 2400, 2499);
+        Assert.AreEqual((DialogGenericGreetingStatus.Said, "kind0 Ada from Bram"), (first.Status, first.Text), "the generated line has its name tokens expanded (0x416B00)");
+        Assert.AreEqual(new DialogLineOrigin(DialogLineOriginKind.Generated, 2400, GeneratedDialogFile.NpcMaleToMale), first.Origin);
+        var second = Greeter(Facts(), files, rolls: [ 1 ]);
+        Assert.AreEqual("kind0 b", Comment(second, 2400, 2499).Text);
+        CollectionAssert.AreEqual(new[] { (DialogGreetingRoll.Line, 0, 1) }, second.Asked.ToArray(), "one pick over the stored entries of the range, no reputation roll");
+        Assert.AreEqual("kind1", Comment(Greeter(Facts(), files, rolls: [ 0 ]), 2500, 2599).Text, "kind 1's range");
+        var woman = Comment(Greeter(Facts() with { NpcMale = false }, files, rolls: [ 0 ]), 2400, 2499);
+        Assert.AreEqual((GeneratedDialogFile.NpcFemaleToMale, "woman says"), (woman.Origin!.File, woman.Text), "a female speaker to a male PC reads the f2m file");
+    }
+
+    [TestMethod]
+    public void A_follower_comment_says_the_speakers_own_override_line_first_raw_and_nothing_for_a_range_without_a_line()
+    {
+        // 11999 + first / 100: the taunt 12023 and 12024, the near-death line 12054, the upset lines 12047..12050.
+        foreach (var (first, number) in new[] { (2400, 12023), (2500, 12024), (5500, 12054), (4800, 12047), (5100, 12050) })
+        {
+            var said = Comment(Greeter(Facts(), overrides: Read(Record(number.ToString(), "own @pcname@", alternate: "own alt"))), first, first + 99);
+            Assert.AreEqual(("own @pcname@", DialogLineOriginKind.Override, number), (said.Text, said.Origin!.Kind, said.Origin.Number), $"line {first}");
+        }
+        var empty = GeneratedDialogFiles.Create(new MesFile?[GeneratedDialogFiles.Count]);
+        Assert.AreEqual(DialogGenericGreetingStatus.NoLine, Comment(Greeter(Facts(), empty, rolls: [ 0 ]), 5500, 5599).Status, "an absent file says nothing");
+        Assert.AreEqual(DialogGenericGreetingStatus.NoLine, Comment(Greeter(Facts(), Files((GeneratedDialogFile.NpcMaleToMale, "{9}{x}")), rolls: [ 0 ]), 5500, 5599).Status,
+            "Steamwoven: no stored entry in the range");
+        Assert.AreEqual(DialogGenericGreetingStatus.FactsUnknown, Comment(Greeter(null), 2400, 2499).Status);
+        var refused = Greeter(Facts(), Files((GeneratedDialogFile.NpcMaleToMale, "{2400}{x}")));
+        refused.Refuse = true;
+        Assert.AreEqual(DialogGenericGreetingStatus.Failed, Comment(refused, 2400, 2499).Status, "a refused roll");
+    }
+
     internal static DialogGreetingFacts Facts() => new(true, true, false, 0, 0, 0, DialogReactionCategory.Neutral, false);
 
     private static DialogConversation Start(string greeting, IDialogGreetingPort? port, string extra = "", Ports? ports = null, string action = "",

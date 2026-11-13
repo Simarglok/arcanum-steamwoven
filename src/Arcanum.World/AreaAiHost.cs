@@ -12,6 +12,7 @@ using Arcanum.Simulation.Equipment;
 using Arcanum.Simulation.Magic;
 using Arcanum.Simulation.Movement;
 using Arcanum.Simulation.Navigation;
+using Arcanum.Simulation.Party;
 using Arcanum.Simulation.Reaction;
 using Arcanum.Simulation.Skills;
 using Arcanum.Simulation.Traps;
@@ -1043,13 +1044,48 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     }
 
     /// <summary>
+    /// ARC-AI-1527 (FR-DIALOG-003, VB4-1..VB4-5): the viewer's line speaker for a follower comment: the follower's session entity and the message range it says a random line of (the taunt, the upset line, the near-death line;
+    /// 0x413F50, 0x414370, 0x414490). The viewer reads the line text from the module's generated files and floats it over the follower. Null: the comment is chosen but nobody says it (a host without line texts).
+    /// </summary>
+    public Action<string, LoyaltyLines>? FollowerSpeaks { get; set; }
+
+    private void Speak(string follower, LoyaltyLines lines) => FollowerSpeaks?.Invoke(follower, lines);
+
+    /// <summary>
+    /// ARC-AI-1527 (0x4B6B90 → 0x4AE9E0, the end of one attack): the combat taunt of the PC's followers. <see cref="FollowerRules.TauntKindOf"/> asks the kind of the attack's facts; then
+    /// <see cref="FollowerRules.Taunt"/> draws (half the time none) one of the PC's following followers, in the party's order (a follower this host does not resolve is a null entry, FO17), which says its line
+    /// through <see cref="FollowerSpeaks"/>. Returns the comment chosen, or null. The facts' setting is the "combat taunts" option; the attacker is the hero.
+    /// </summary>
+    public FollowerComment? AttackEnded(TauntFacts facts)
+    {
+        ArgumentNullException.ThrowIfNull(facts);
+        if (FollowerRules.TauntKindOf(facts) is not { } kind) return null;
+        var followers = _session.QueryParty().Followers.Where(f => f.Standing == CompanionStanding.Following).Select(f => Find(f.Entity)).ToArray();
+        if (FollowerRules.Taunt(kind, followers, _session.AiRolls) is not { } comment) return null;
+        Speak(comment.Speaker, comment.Lines);
+        return comment;
+    }
+
+    /// <summary>
+    /// ARC-AI-1527 (0x4AEAB0, from the damage step 0x4B4390): a critter that took <paramref name="hitPointsBefore"/> − <paramref name="hitPointsAfter"/> hit points of <paramref name="maximum"/> in a hit says its near-death
+    /// line when it is a follower of the PC and its hit-point percent fell from 20 or more to below (<see cref="FollowerRules.NearDeathOfHit"/>, a killed critter says nothing: FO16). Returns the comment, or null.
+    /// </summary>
+    public FollowerComment? Hurt(string critter, int hitPointsBefore, int hitPointsAfter, int maximum, bool died)
+    {
+        ArgumentNullException.ThrowIfNull(critter);
+        if (critter == Pc || !_session.QueryCompanion(critter).LedByPc) return null;
+        if (FollowerRules.NearDeathOfHit(critter, true, hitPointsBefore, hitPointsAfter, maximum, died) is not { } comment) return null;
+        Speak(comment.Speaker, comment.Lines);
+        return comment;
+    }
+
+    /// <summary>
     /// ARC-WORLD-115 (I9 host part): tell followers (0x4A9B80, <see cref="FollowerRules.TellFollowers"/>) of <paramref name="leader"/>
     /// about <paramref name="other"/>: the leader's direct followers in its follower array's order (only the hero leads here: the
     /// party's followers that follow it, not the waiting ones, that stand on this map), each through the follower rule (never ordered,
     /// never accidental here: the host's attacks are deliberate). A lock or focus and a complaint's −5 toward the hero go through the
     /// session (<see cref="GameSessionOwner.ApplyFollowerRule"/>); the reaction to an attack by the other (case 5) is
-    /// <see cref="MoraleRules.ReactToAttack"/> through the setter, as a victim's. The complaint's upset line is not floated (the line
-    /// texts are the host's, not read yet).
+    /// <see cref="MoraleRules.ReactToAttack"/> through the setter, as a victim's. The complaint's upset line is said through <see cref="FollowerSpeaks"/> (ARC-AI-1527).
     /// </summary>
     private void TellFollowers(string leader, string other, FollowerSide side)
     {
@@ -1067,6 +1103,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
                     React(follower, other);
                     break;
                 case FollowerRuleStep.Lock or FollowerRuleStep.Focus or FollowerRuleStep.Complain:
+                    // ARC-AI-1527 (0x414370): the complaint's upset line is the follower's, said whether or not the reaction step below can run.
+                    if (outcome.Line is { } upset) Speak(follower, upset);
                     var facts = ReactionFacts(follower);
                     if (outcome.Step == FollowerRuleStep.Complain && facts is null) break;
                     var result = _session.ApplyFollowerRule(_session.Version, new SessionFollowerRuleRequest

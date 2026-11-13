@@ -164,4 +164,29 @@ public sealed class AreaSpellCastObjectDamageTests
         CollectionAssert.AreEqual(new[] { (chest, (string?)"torch") }, asked);
         Assert.AreEqual(0, f.Map.TakeObjectHits().Count, "the object took nothing");
     }
+
+    [TestMethod]
+    public void AScriptsEntityOfAnObjectFindsItsCastId()
+    {
+        // ARC-SCRIPT-1576: a mobile row with no session entity is row:Mobile:N here but oid:digest in the script host; a sector static is the same in both.
+        var f = Create();
+        var scenery = f.Rows[2];
+        var scriptName = AreaUseScriptHost.EntityId(scenery);
+        Assert.AreEqual("oid:" + scenery.Key.ObjectIdSha256, scriptName);
+        Assert.AreNotEqual(scriptName, f.Map.Id(scenery));
+        Assert.AreEqual(f.Map.Id(scenery), f.Map.CastIdOfScriptEntity(scriptName));
+        Assert.AreEqual(f.Map.Id(scenery), f.Map.CastIdOfScriptEntity(f.Map.Id(scenery)), "the cast id itself passes through");
+        var door = f.Rows[0];
+        Assert.AreEqual(f.Map.Id(door), f.Map.CastIdOfScriptEntity(AreaUseScriptHost.EntityId(door)));
+        Assert.AreEqual("oid:nowhere", f.Map.CastIdOfScriptEntity("oid:nowhere"), "an unknown entity passes through and finds no run");
+        Assert.AreEqual(SessionSpellCaster.Hero, f.Caster.CastIdOf(SessionSpellCaster.Hero));
+        Assert.AreEqual(f.Map.Id(scenery), f.Caster.CastIdOf(scriptName), "the caster asks its map");
+
+        var session = ConversationSessionFixture.Create();
+        AreaObjectRecord Static(long sector) => Row(2, 3) with { Key = Key(2) with { Kind = AreaSourceKind.Static, Sector = sector } };
+        var sector = Static(5);
+        var map = new AreaSpellCastMap(session, 1, Steps(), [sector], new AreaCombatHost(new AreaInventoryHost([])), () => null, () => null);
+        Assert.AreEqual("sector:5:2", AreaUseScriptHost.EntityId(sector));
+        Assert.AreEqual(map.Id(sector), map.CastIdOfScriptEntity("sector:5:2"), "a sector object is named alike");
+    }
 }

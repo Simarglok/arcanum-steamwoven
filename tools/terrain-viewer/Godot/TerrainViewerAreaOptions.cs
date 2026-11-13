@@ -40,7 +40,7 @@ public partial class TerrainViewerApp
     /// <summary>The values the options window shows: the host's settings as they are now.</summary>
     private AreaGameOptions CurrentGameOptions() => new(_gameSettings.Difficulty, _turnBasedSetting ? 1 : 0, _gameSettings.AutoAttack, _alwaysRunOption,
         _audioVolumes.Effects, _audioVolumes.Voice, _audioVolumes.Music, _ruleMode, _gameSettings.Floats, _gameSettings.FloatSpeed,
-        EvidenceRecording, EvidenceRecording ? _evidenceTask : 0, _gameSettings.Controls);
+        EvidenceRecording, EvidenceRecording ? _evidenceTask : 0, _gameSettings.Controls, _gameSettings.CombatTaunts);
 
     /// <summary>The options texts, read once a run (the game's files, or the project's with the reason).</summary>
     private AreaOptionsTexts OptionsTexts()
@@ -88,6 +88,11 @@ public partial class TerrainViewerApp
                 var floater = AreaOptionTable.Of(option);
                 if (value < 0 || value > floater.Limit) { refused = "out of range"; break; }
                 SaveGameSettings(option == AreaOption.Floats ? _gameSettings with { Floats = value } : _gameSettings with { FloatSpeed = value });
+                break;
+            // ARC-AI-1527: the combat taunts setting (OH5): the end of a hit asks the followers' comment (the host reads the saved setting at each hit).
+            case AreaOption.CombatTaunts:
+                if (value is not (0 or 1)) { refused = "out of range"; break; }
+                SaveGameSettings(_gameSettings with { CombatTaunts = value == 1 });
                 break;
             case AreaOption.AlwaysRun: SetAlwaysRun(value == 1); break;
             case AreaOption.Effects: PaletteVolumeChanged(AudioChannel.Effects, value); break;

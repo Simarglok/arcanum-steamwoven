@@ -261,6 +261,8 @@ The session's plan carries each presentation step; the viewer's hosts answer the
   the map already shown (ARC-UI-1504) is one synchronous step of the viewer, so the screen is raised first and the load runs on a later frame,
   after the screen was drawn at least once (the player's loads only: F8, the load window, Last Save; the smokes, the death reload and a menu
   flow that already shows the screen load at once); it goes with the load, or at once when the load is refused, and while it stands the keys and
-  the menu take no input. No clock frame turns during the load itself, as the step is short (the map's own load time decides the rest).
+  the menu take no input. A load that throws ends as a refused one: the screen goes and the window or menu is told (ARC-UI-1574), and a load that is not a player's
+  (the death reload, a smoke) landing in the window of a pending load supersedes it as a queued transfer is, while a second player's load is still refused.
+  No clock frame turns during the load itself, as the step is short (the map's own load time decides the rest).
 - **Not here.** The new game's own fade-out and its two movies (flag 0x45, AreaNewGameStart), the homecoming of a former follower (flag 0, no
   presentation), and the 3 × 3 pre-cache.
