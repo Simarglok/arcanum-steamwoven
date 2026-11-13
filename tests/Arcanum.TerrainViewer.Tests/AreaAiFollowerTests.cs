@@ -1540,4 +1540,46 @@ public sealed class AreaAiFollowerTests
         Assert.IsNull(scene.Host.SayLoyaltyLeave(scene.Companion, step));
         Assert.AreEqual(0, said.Count);
     }
+
+    // ARC-AI-1685 (0x4AC380 → 0x414290): a stay with a leader-check warning says the warning line of its range, when the follower is active.
+    private static LoyaltyStepResult Warned(LeaderWarning warning) =>
+        new(LoyaltyStepKind.Stayed, FollowConsent.Accepted, false, warning, CompanionLoyalty.None);
+
+    [TestMethod]
+    [DataRow(LeaderWarning.TooGood, 5200, 5299)]
+    [DataRow(LeaderWarning.TooBad, 5300, 5399)]
+    [DataRow(LeaderWarning.LowReaction, 5400, 5499)]
+    public void A_follower_with_a_loyalty_warning_says_the_line_of_its_range(LeaderWarning warning, int first, int last)
+    {
+        var scene = OpenFollowerHit(reaction: 100);
+        var said = Listen(scene);
+        Assert.AreEqual(new LoyaltyLines(first, last), scene.Host.SayLoyaltyWarning(scene.Companion, Warned(warning)));
+        CollectionAssert.AreEqual(new[] { (scene.Companion, new LoyaltyLines(first, last)) }, said);
+    }
+
+    [TestMethod]
+    public void A_paralysed_follower_with_a_loyalty_warning_says_nothing()
+    {
+        var scene = OpenFollowerHit(reaction: 100);
+        var said = Listen(scene);
+        scene.Session.WriteObjectFlag(scene.Session.Version, scene.Companion, SessionObjectFlagField.Critter, SessionSpellCaster.ParalysedCritterFlag, true);
+        Assert.IsNull(scene.Host.SayLoyaltyWarning(scene.Companion, Warned(LeaderWarning.TooGood)));
+        Assert.AreEqual(0, said.Count);
+    }
+
+    [TestMethod]
+    public void A_loyalty_step_without_a_warning_says_no_warning_line()
+    {
+        var scene = OpenFollowerHit(reaction: 100);
+        var said = Listen(scene);
+        Assert.IsNull(scene.Host.SayLoyaltyWarning(scene.Companion, Warned(LeaderWarning.None)));
+        Assert.AreEqual(0, said.Count);
+    }
+
+    [TestMethod]
+    public void A_loyalty_warning_is_not_said_when_nobody_listens()
+    {
+        var scene = OpenFollowerHit(reaction: 100);
+        Assert.IsNull(scene.Host.SayLoyaltyWarning(scene.Companion, Warned(LeaderWarning.LowReaction)));
+    }
 }
