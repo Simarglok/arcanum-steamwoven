@@ -176,10 +176,11 @@ public sealed partial class GameSessionOwner
     /// container's list (0x578EA0 moves a sold item into the shown object: <see cref="GiveItemToNpc"/>'s rules with the container as
     /// holder; units of ammunition join its first stack of the type, which the original's lookup never finds, AMA5); the coins still come
     /// from the NPC. With <paramref name="identify"/> (a merchant that is not a follower, BT5) a whole item that moved is marked identified
-    /// in the move's revision; a full identified budget refuses before any effect.
+    /// in the move's revision; a full identified budget refuses before any effect. ARC-MAGIC-1743: with <paramref name="scripts"/> a sold item with item event scripts runs them as the move does
+    /// (<see cref="GiveItemToNpc"/>); without a host it is refused (<see cref="GameSessionFailure.ItemScriptUnsupported"/>).
     /// </summary>
     public InventoryMutationResult BarterSell(GameSessionVersion expected, string npc, string item, int count, int unitPrice, SessionItemKind newStackKind,
-        SessionInsertCheck npcInsert, string? container = null, bool identify = false)
+        SessionInsertCheck npcInsert, string? container = null, bool identify = false, ISessionItemScriptHost? scripts = null)
     {
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(npcInsert);
@@ -203,10 +204,11 @@ public sealed partial class GameSessionOwner
         }
         var into = container ?? npc;
         var kind = container is null ? SessionHolderKind.Npc : SessionHolderKind.Container;
-        var moved = stack ? GiveAmmoTo(into, kind, item, count, newStackKind, npcInsert) : GiveItemTo(into, kind, item, npcInsert, identify);
+        var moved = stack ? GiveAmmoTo(into, kind, item, count, newStackKind, npcInsert) : GiveItemTo(into, kind, item, npcInsert, identify, scripts: scripts);
         if (moved.Disposition != GameSessionDisposition.Changed || total == 0) return moved;
         var paid = TakeGoldFromNpc(Version, npc, (int)total);
-        return paid.Disposition == GameSessionDisposition.Changed ? moved with { Version = Version } : paid with { Item = moved.Item, Version = Version };
+        return paid.Disposition == GameSessionDisposition.Changed ? moved with { Version = Version }
+            : paid with { Item = moved.Item, Version = Version, Scripts = moved.Scripts, InsertScript = moved.InsertScript, Messages = moved.Messages };
     }
 
     private static bool ValidContainer(string? container, string npc) => container is null ||

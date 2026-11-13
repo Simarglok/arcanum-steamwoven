@@ -274,7 +274,7 @@ public sealed class AreaBarter
         if (line.Quote.Price == 0 && !Merchant.Follower) return Refused($"won't buy ({line.Quote.Refusal})");
         var price = Merchant.Follower ? 0 : TradeRules.SalePayment(line.Quote.Price, _session.QueryNpcGold(Merchant.Entity) ?? 0);
         var result = _session.BarterSell(_session.Version, Merchant.Entity, entity, line.Count, price, line.Kind, AreaInventoryHost.DiagnosticInsertCheck,
-            Merchant.Container, identify: !Merchant.Follower);
+            Merchant.Container, identify: !Merchant.Follower, scripts: _inventory.ItemScripts(_session));
         return Settle(TradeDirection.PcSells, line with { Quote = line.Quote with { Price = price } }, result);
     }
 
