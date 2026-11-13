@@ -1971,6 +1971,8 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         if (_world?.ArtExists is not { } exists) return new($"change art number of {obj.Code} needs the module's art index", null, baseline);
         // 0x502220: the new id is written only when its ART file exists.
         if (!exists(next)) return new(null, null, baseline);
+        // An id equal to the current one (a number out of range keeps it) writes nothing: no record moves and no revision.
+        if (next == current) return new(null, null, baseline);
         return new(null, next, baseline);
     }
 
