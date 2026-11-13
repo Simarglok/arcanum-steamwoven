@@ -595,4 +595,268 @@ public sealed class SessionSpellCasterTraitIndexTests
         Assert.AreEqual(GameSessionDisposition.Changed, owner.AddItemToNpc(owner.Version, Rat, kind, _ => SessionInsertVerdict.Accepted).Disposition);
         Assert.AreEqual(450, owner.QueryNpcCarry(Exterior, target, stats, 3)!.Weight);
     }
+
+    // ---- ARC-MAGIC-1510: the hero and a follower whose stats the advancement record holds ----
+
+    // The half-elf hero (dexterity effect +1) with a basic skill keyed on dexterity at 2 points, the first college at rank <colleges>, the first tech discipline at degree <degree>.
+    private static SessionHeroDefinition SkilledHero(int[]? stats = null, int college = 0, int degree = 0)
+    {
+        var basic = new int[12];
+        basic[0] = 2;
+        var colleges = new int[16];
+        colleges[0] = college;
+        var degrees = new int[8];
+        degrees[0] = degree;
+        return HalfElf(stats ?? [8, 10, 8, 8, 8, 8, 8, 8, 0, 0]) with { Advancement = SessionHeroAdvancement.None with { BasicSkills = [.. basic], Colleges = [.. colleges], TechDegrees = [.. degrees] } };
+    }
+
+    private static (GameSessionOwner Owner, SessionSpellCaster Caster) HeroSession(SessionHeroDefinition hero, bool experience = false, IReadOnlyDictionary<int, SessionSpellRecord>? records = null)
+    {
+        var made = GameSessionOwner.Create(Descriptor() with { Hero = hero, Experience = experience ? ExperienceStateTests.Rules() : null });
+        Assert.AreEqual(GameSessionFailure.None, made.Failure);
+        var owner = made.Owner!;
+        var spells = records ?? Records;
+        return (owner, new SessionSpellCaster(owner, n => spells.GetValueOrDefault(n), new Map(owner, RatFields()), new Events()));
+    }
+
+    private static SpellComponentOutcome CastOnHero(SessionSpellCaster caster, int spell) => caster.Apply(Run(spell), 0, At(Hero, SpellTargetObject.Pc));
+
+    [TestMethod]
+    public void The_heros_base_stat_takes_its_stored_value_plus_the_component_and_is_clamped_to_the_races_range()
+    {
+        var (owner, caster) = HeroSession(SkilledHero());
+        using var _ = owner;
+        var version = owner.Version;
+        Assert.AreEqual(SpellComponentOutcome.None, CastOnHero(caster, DexPlusFive));
+        Assert.AreEqual(15, owner.QueryHero()!.Stats[1], "stored 10 + 5, the effect's +1 is not part of the base");
+        Assert.AreEqual(16, owner.QueryHeroStats(new(0))!.Value.Snapshot!.GetEffective(CharacterStat.Dexterity));
+        Assert.AreEqual(version.Revision + 1, owner.Version.Revision, "one revision");
+        CollectionAssert.AreEqual(new[] { new SpellCastEvent(SpellCastEventKind.TraitIndexWritten, 1, StatField, Hero, 1) }, caster.Log.ToArray());
+        // A half-elf's dexterity is capped at 21: 15 + 5 + 5 stops there.
+        CastOnHero(caster, DexPlusFive);
+        CastOnHero(caster, DexPlusFive);
+        Assert.AreEqual(21, owner.QueryHero()!.Stats[1]);
+        Assert.IsFalse(NotReady(caster));
+    }
+
+    [TestMethod]
+    public void The_heros_strength_write_changes_its_encumbrance_through_the_revision_as_every_strength_change_does()
+    {
+        var (owner, caster) = HeroSession(SkilledHero());
+        using var _ = owner;
+        Assert.AreEqual(SpellComponentOutcome.None, CastOnHero(caster, StrengthPlus));
+        Assert.AreEqual(9, owner.QueryHero()!.Stats[0]);
+        Assert.IsFalse(NotReady(caster));
+    }
+
+    [TestMethod]
+    public void Lowering_a_heros_stat_is_refused_when_a_skill_keyed_on_it_needs_the_higher_value_reading_the_effective_stat_after_the_write()
+    {
+        var (owner, caster) = HeroSession(SkilledHero());
+        using var _ = owner;
+        // Dexterity 10 (effective 11) down to 9 (effective 10) still holds the skill of 2 points; down to 1 (effective 2) does not.
+        CastOnHero(caster, DexMinusOne);
+        Assert.AreEqual(9, owner.QueryHero()!.Stats[1]);
+        var version = owner.Version;
+        CastOnHero(caster, DexMinusMany);
+        Assert.AreEqual(version, owner.Version, "the guard refuses: nothing written");
+        Assert.AreEqual(9, owner.QueryHero()!.Stats[1]);
+        Assert.AreEqual(new SpellCastEvent(SpellCastEventKind.TraitIndexRefused, 1, 0, Hero, 1), caster.Log.Last());
+        // The stat the guard asked the character owner about is back at its base.
+        Assert.AreEqual(10, owner.QueryHeroStats(new(0))!.Value.Snapshot!.GetEffective(CharacterStat.Dexterity));
+        Assert.IsFalse(NotReady(caster));
+    }
+
+    [TestMethod]
+    public void Lowering_a_heros_intelligence_is_refused_by_a_known_spell_rank_or_a_tech_degree()
+    {
+        // The first college at rank 3 wants intelligence 5: 8 down to 6 holds, down to 4 does not (reason 1).
+        var (owner, caster) = HeroSession(SkilledHero(college: 3));
+        using var _ = owner;
+        CastOnHero(caster, IntMinusTwo.Data.Number);
+        Assert.AreEqual(6, owner.QueryHero()!.Stats[4]);
+        var version = owner.Version;
+        CastOnHero(caster, IntMinusTwo.Data.Number);
+        Assert.AreEqual(version, owner.Version);
+        Assert.AreEqual(new SpellCastEvent(SpellCastEventKind.TraitIndexRefused, 1, 1, Hero, 4), caster.Log.Last());
+        // Degree 4 of the first discipline wants intelligence 13: 14 down to 13 holds, down to 12 does not (reason 2).
+        var (second, tried) = HeroSession(SkilledHero([8, 10, 8, 8, 14, 8, 8, 8, 0, 0], degree: 4));
+        using var _s = second;
+        CastOnHero(tried, IntMinusOne.Data.Number);
+        Assert.AreEqual(13, second.QueryHero()!.Stats[4]);
+        CastOnHero(tried, IntMinusOne.Data.Number);
+        Assert.AreEqual(13, second.QueryHero()!.Stats[4]);
+        Assert.AreEqual(new SpellCastEvent(SpellCastEventKind.TraitIndexRefused, 1, 2, Hero, 4), tried.Log.Last());
+        Assert.IsFalse(NotReady(caster) || NotReady(tried));
+    }
+
+    [TestMethod]
+    public void The_heros_alignment_fate_points_and_unspent_points_are_stored_after_the_clamp()
+    {
+        var (owner, caster) = HeroSession(SkilledHero());
+        using var _ = owner;
+        CastOnHero(caster, AlignmentPlusMany.Data.Number);
+        Assert.AreEqual(1000, owner.QueryHero()!.Alignment);
+        CastOnHero(caster, AlignmentMinusMany.Data.Number);
+        Assert.AreEqual(-1000, owner.QueryHero()!.Alignment);
+        CastOnHero(caster, FatePlusMany.Data.Number);
+        Assert.AreEqual(100, owner.QueryHero()!.Fate.Points);
+        Assert.AreEqual(100, owner.QueryHeroFate()!.Value.Points);
+        CastOnHero(caster, UnspentMinusMany.Data.Number);
+        Assert.AreEqual(0, owner.QueryHero()!.UnspentPoints, "5 - 10 clamped to 0");
+        Assert.IsFalse(NotReady(caster));
+        Assert.IsFalse(caster.Log.Any(e => e.Kind == SpellCastEventKind.TraitIndexRefused));
+    }
+
+    [TestMethod]
+    public void A_heros_level_or_experience_that_reaches_no_level_is_stored_and_one_that_does_is_not_ready()
+    {
+        var (owner, caster) = HeroSession(SkilledHero(), experience: true);
+        using var _ = owner;
+        CastOnHero(caster, LevelPlus);
+        Assert.AreEqual(2, owner.QueryHero()!.Level, "level 1 + 1; 0 experience reaches no level of the table");
+        var version = owner.Version;
+        // 2,100,000,000 experience clamped to 2,000,000,000 would run the recalculation 0x4A69C0 up to level 50 (messages, scheme, followers' step): not ready, nothing written.
+        Assert.IsNull(CastOnHero(caster, ExperiencePlusMany.Data.Number).JumpTo);
+        Assert.AreEqual(0, owner.QueryHero()!.Experience);
+        // Level 0 with 0 experience already reaches level 1: the recalculation would raise it again.
+        Assert.IsNull(CastOnHero(caster, LevelMinusMany.Data.Number).JumpTo);
+        Assert.AreEqual(2, owner.QueryHero()!.Level);
+        Assert.AreEqual(2, caster.Log.Count(e => e.Kind == SpellCastEventKind.ComponentNotReady && e.Value == (int)SpellComponentType.TraitIdx));
+        Assert.AreEqual(version.Revision, owner.Version.Revision);
+    }
+
+    [TestMethod]
+    public void A_heros_level_is_not_ready_without_the_experience_table()
+    {
+        var (owner, caster) = HeroSession(SkilledHero());
+        using var _ = owner;
+        var version = owner.Version;
+        Assert.IsNull(CastOnHero(caster, LevelPlus).JumpTo);
+        Assert.AreEqual(1, owner.QueryHero()!.Level);
+        Assert.AreEqual(version, owner.Version);
+        Assert.IsTrue(NotReady(caster));
+    }
+
+    [TestMethod]
+    public void What_the_heros_state_does_not_hold_is_not_ready_and_a_derived_stat_is_read_not_written()
+    {
+        // Magick and tech points (the rewield runs the worn items' scripts), poison, gender, race, stat 25 and a resistance (the hero stores none).
+        foreach (var index in new[] { 22, 23, 24, 25, 26, 27 })
+        {
+            var number = 600 + index;
+            var records = new Dictionary<int, SessionSpellRecord>(Records) { [number] = Spell(number, StatField, index, 1) };
+            var (owner, caster) = HeroSession(SkilledHero(), records: records);
+            using var _ = owner;
+            var version = owner.Version;
+            Assert.IsNull(CastOnHero(caster, number).JumpTo, $"stat {index}");
+            Assert.AreEqual(version, owner.Version, $"stat {index}");
+            Assert.IsTrue(NotReady(caster), $"stat {index}");
+        }
+        var (hero, cast) = HeroSession(SkilledHero());
+        using var _h = hero;
+        var before = hero.Version;
+        Assert.AreEqual(SpellComponentOutcome.None, CastOnHero(cast, DerivedPlus), "stats 8 to 16 are read, not written");
+        Assert.AreEqual(before, hero.Version);
+        Assert.AreEqual(0, cast.Log.Count);
+        Assert.IsNull(CastOnHero(cast, FirePlus).JumpTo);
+        Assert.IsNull(CastOnHero(cast, BadIndex).JumpTo);
+    }
+
+    // The follower's record: the rat's sheet (the stored fields of RatFields) with dexterity 12, level 1, 3 unspent points and the basic skill keyed on dexterity at <skill> points; college 0 at rank 5 so that mastery can create the record.
+    private static SessionNpcAdvancement FollowerRecord(int skill = 0)
+    {
+        var stats = RatFields().Critter!.BaseStats.ToArray();
+        stats[1] = 12;
+        stats[21] = 3;
+        var basic = new int[12];
+        basic[0] = skill;
+        var colleges = new int[16];
+        colleges[0] = 5;
+        var sheet = new AdvancementSheet((CharacterRace)stats[27], false, [.. stats.Take(8)], stats[22], stats[23], stats[17], stats[21], [.. basic], [.. new int[4]], [.. colleges], [.. new int[8]], 0, 0, 0, 0);
+        return new(Rat, sheet, 0);
+    }
+
+    private static (GameSessionOwner Owner, SessionSpellCaster Caster) Recorded(int skill = 0)
+    {
+        var (owner, caster) = Session();
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.MasterNpcCollege(owner.Version, FollowerRecord(skill), 0).Disposition);
+        Assert.IsNotNull(owner.QueryNpcAdvancement(Rat));
+        return (owner, caster);
+    }
+
+    [TestMethod]
+    public void A_followers_stat_in_its_advancement_record_is_read_from_the_record_and_written_to_it_and_to_the_indexed_stats()
+    {
+        var (owner, caster) = Recorded();
+        using var _ = owner;
+        var version = owner.Version;
+        // The record holds dexterity 12 (the stored field says 10): 12 + 5 = 17 on both.
+        Assert.AreEqual(SpellComponentOutcome.None, caster.Apply(Run(DexPlusFive), 0, At(Rat, SpellTargetObject.Npc)));
+        Assert.AreEqual(17, owner.QueryNpcAdvancement(Rat)!.Sheet.Stats[1]);
+        Assert.AreEqual(17, owner.QueryCritterIndexedWrites(Rat).Stats[1]);
+        Assert.AreEqual(version.Revision + 1, owner.Version.Revision, "one revision for both");
+        CollectionAssert.AreEqual(new[] { new SpellCastEvent(SpellCastEventKind.TraitIndexWritten, 1, StatField, Rat, 1) }, caster.Log.ToArray());
+        // Level and unspent points are the sheet's too.
+        caster.Apply(Run(LevelPlus), 0, At(Rat, SpellTargetObject.Npc));
+        Assert.AreEqual(2, owner.QueryNpcAdvancement(Rat)!.Sheet.Level);
+        caster.Apply(Run(UnspentMinusMany.Data.Number), 0, At(Rat, SpellTargetObject.Npc));
+        Assert.AreEqual(0, owner.QueryNpcAdvancement(Rat)!.Sheet.UnspentPoints, "3 - 10 clamped to 0");
+        Assert.AreEqual(0, owner.QueryCritterIndexedWrites(Rat).Stats[21]);
+        // The rest of the record stays as it was.
+        Assert.AreEqual(5, owner.QueryNpcAdvancement(Rat)!.Sheet.Colleges[0]);
+        Assert.IsFalse(NotReady(caster));
+    }
+
+    [TestMethod]
+    public void The_stats_a_record_does_not_hold_and_the_resistances_stay_the_stored_fields_writes()
+    {
+        var (owner, caster) = Recorded();
+        using var _ = owner;
+        var sheet = owner.QueryNpcAdvancement(Rat)!.Sheet;
+        caster.Apply(Run(AlignmentPlusMany.Data.Number), 0, At(Rat, SpellTargetObject.Npc));
+        caster.Apply(Run(FirePlus), 0, At(Rat, SpellTargetObject.Npc));
+        Assert.AreEqual(1000, owner.QueryCritterIndexedWrites(Rat).Stats[19]);
+        Assert.AreEqual(25, owner.QueryCritterIndexedWrites(Rat).Resistances[1]);
+        Assert.AreEqual(sheet, owner.QueryNpcAdvancement(Rat)!.Sheet, "the record holds neither");
+        Assert.IsFalse(NotReady(caster));
+    }
+
+    [TestMethod]
+    public void A_lowering_of_a_records_stat_asks_the_guards_with_the_records_skills()
+    {
+        // The stored skill has 2 points keyed on dexterity (a lowering to 1 is refused for a follower with no record); the record has none, so dexterity goes down to the minimum.
+        var (owner, caster) = Recorded(skill: 0);
+        using var _ = owner;
+        caster.Apply(Run(DexMinusMany), 0, At(Rat, SpellTargetObject.Npc));
+        Assert.AreEqual(1, owner.QueryNpcAdvancement(Rat)!.Sheet.Stats[1]);
+        Assert.AreEqual(1, owner.QueryCritterIndexedWrites(Rat).Stats[1]);
+        Assert.IsFalse(caster.Log.Any(e => e.Kind == SpellCastEventKind.TraitIndexRefused));
+        // With the skill in the record the guard refuses, nothing written.
+        var (kept, tried) = Recorded(skill: 2);
+        using var _k = kept;
+        var version = kept.Version;
+        tried.Apply(Run(DexMinusMany), 0, At(Rat, SpellTargetObject.Npc));
+        Assert.AreEqual(version, kept.Version);
+        Assert.AreEqual(12, kept.QueryNpcAdvancement(Rat)!.Sheet.Stats[1]);
+        Assert.AreEqual(new SpellCastEvent(SpellCastEventKind.TraitIndexRefused, 1, 0, Rat, 1), tried.Log.Last());
+    }
+
+    [TestMethod]
+    public void The_records_write_refuses_what_is_no_record_or_no_sheet_stat_and_a_stale_version()
+    {
+        var (owner, _) = Session();
+        using var _o = owner;
+        var map = Exterior;
+        Assert.AreEqual(GameSessionFailure.InvalidAdvancement, owner.WriteNpcAdvancementStat(owner.Version, map, Rat, 1, 15).Failure, "no record");
+        var (recorded, _) = Recorded();
+        using var _r = recorded;
+        Assert.AreEqual(GameSessionFailure.InvalidAdvancement, recorded.WriteNpcAdvancementStat(recorded.Version, map, Rat, 19, 15).Failure, "alignment is not the sheet's");
+        Assert.AreEqual(GameSessionFailure.InvalidAdvancement, recorded.WriteNpcAdvancementStat(recorded.Version, map, Rat, 1, 99).Failure, "outside the race's range");
+        var stale = recorded.Version;
+        Assert.AreEqual(GameSessionDisposition.Changed, recorded.WriteNpcAdvancementStat(stale, map, Rat, 1, 15).Disposition);
+        Assert.AreEqual(GameSessionFailure.StaleVersion, recorded.WriteNpcAdvancementStat(stale, map, Rat, 1, 16).Failure);
+        Assert.AreEqual(15, recorded.QueryNpcAdvancement(Rat)!.Sheet.Stats[1], "a refusal changes nothing");
+        Assert.AreEqual(GameSessionDisposition.NoChange, recorded.WriteNpcAdvancementStat(recorded.Version, map, Rat, 1, 15).Disposition);
+    }
 }
