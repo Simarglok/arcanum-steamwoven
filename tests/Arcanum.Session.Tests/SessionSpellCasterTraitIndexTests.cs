@@ -10,6 +10,7 @@ using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Equipment;
 using Arcanum.Simulation.Events;
 using Arcanum.Simulation.Magic;
+using Arcanum.World;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using static Arcanum.Session.Tests.HeroStateTests;
 using static Arcanum.Session.Tests.InventoryStateTests;
@@ -434,6 +435,22 @@ public sealed partial class SessionSpellCasterTraitIndexTests
         Assert.AreEqual(0, Held(owner, target).Length);
     }
 
+    // ARC-MAGIC-1631 (ledger RM3b): the setter stores race 11 (clamp maximum 11) and adds effect 75, but every race-keyed table of the original has eleven rows, so an NPC of race 11 would read past them
+    // (the reaction table 0x5B684C: row 11 is text and pointers): the component stays not ready and the store that only reaches 11 by an addend leaves the race, its effect and the version as they were (the host cannot attach a rule for effect 75, so the guard and the missing rule refuse alike).
+    [TestMethod]
+    public void An_orc_pushed_by_one_to_race_11_is_not_ready_and_keeps_its_race_and_race_effect()
+    {
+        var (owner, caster, target) = Innate(race: 10);
+        using var _o = owner;
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.AddNpcEffect(owner.Version, target, DwarfEffect, EffectCause.Race).Disposition);
+        var version = owner.Version;
+        Assert.IsNull(caster.Apply(Run(RaceDwarf), 0, At(Rat, SpellTargetObject.Npc)).JumpTo);
+        Assert.IsTrue(NotReady(caster));
+        Assert.AreEqual(version, owner.Version);
+        Assert.IsFalse(owner.QueryCritterIndexedWrites(Rat).Stats.ContainsKey(27), "nothing stored: the race stays the map's 10");
+        CollectionAssert.AreEqual(new[] { (65, EffectCause.Race) }, Held(owner, target));
+    }
+
     [TestMethod]
     public void The_innate_rules_the_host_attaches_are_checked()
     {
@@ -840,6 +857,45 @@ public sealed partial class SessionSpellCasterTraitIndexTests
         Assert.AreEqual(GameSessionFailure.None, pass.Failure);
         Assert.AreEqual(SessionNpcEncumbranceEndReason.LevelUnreadable, pass.NpcEncumbranceEnds.Single().Reason);
         Assert.AreEqual(0, RatTimers(owner).Length);
+    }
+
+    // ARC-MAGIC-1686: a timer of the NPC on another map (the one-map rule) makes the next schedule not ready (CanScheduleNpcEncumbrance), so the chain ends with NotScheduled.
+    private static void MakeNextScheduleNotReady(GameSessionOwner owner)
+    {
+        var elsewhere = owner.QueryActor().Map.RuntimeMap + 1;
+        Assert.IsTrue(owner.ScheduleFocusWipe(Rat, elsewhere, owner.QueryClockSnapshot().GameTimestampMs), "a stray timer of the NPC on another map");
+    }
+
+    [TestMethod]
+    public void An_npc_with_a_timer_on_another_map_reports_its_chain_end_as_not_scheduled()
+    {
+        var (owner, caster, target) = Carrying(3, [800]);
+        using var _ = owner;
+        caster.Apply(Run(StrengthMinusOne), 0, At(Rat, SpellTargetObject.Npc));
+        MakeNextScheduleNotReady(owner);
+        owner.AdvanceGameTime(owner.QueryClockSnapshot().Token, 60_000, ClockAdvanceReason.OrdinaryAdvance);
+        var pass = owner.ProcessEvents(new RatWorld(target, RatStats(owner, 2)));
+        Assert.AreEqual(GameSessionFailure.None, pass.Failure);
+        Assert.AreEqual(0, RatTimers(owner).Length, "level 5 asked for another timer and the schedule was not ready");
+        var end = pass.NpcEncumbranceEnds.Single();
+        Assert.AreEqual(SessionNpcEncumbranceEndReason.NotScheduled, end.Reason);
+        Assert.AreEqual(Rat, end.Entity);
+    }
+
+    [TestMethod]
+    public void The_frame_step_report_carries_the_npc_encumbrance_chain_ends_of_its_passes()
+    {
+        var (owner, caster, target) = Carrying(3, [800]);
+        using var _ = owner;
+        caster.Apply(Run(StrengthMinusOne), 0, At(Rat, SpellTargetObject.Npc));
+        MakeNextScheduleNotReady(owner);
+        var step = new FrameStep(owner, new RatWorld(target, RatStats(owner, 2)));
+        Assert.AreEqual(0, step.Jump(59_999).NpcEncumbranceEnds.Count, "not yet due");
+        var report = step.Jump(1);
+        Assert.AreEqual(SessionNpcEncumbranceEndReason.NotScheduled, report.NpcEncumbranceEnds.Single().Reason);
+        Assert.AreEqual(Rat, report.NpcEncumbranceEnds.Single().Entity);
+        Assert.AreSame(report, step.Last);
+        Assert.AreEqual(0, step.Jump(1).NpcEncumbranceEnds.Count, "the ends of one call are not carried to the next");
     }
 
     [TestMethod]

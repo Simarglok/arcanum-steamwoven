@@ -405,4 +405,140 @@ public sealed class InterfaceChromeTests
         foreach (var file in new[] { "inventor.art", "pdoll.art" })
             Assert.AreEqual(ChromeKind.Panel, InterfaceChromeRecipes.All.Single(r => r.File == file).Kind);
     }
+
+    // ARC-UI-1194: the loot, barter and steal windows' frames.
+    private static readonly string[] LootWindowFrames = ["loot.art", "barter.art", "barter_follower.art", "loot_pd.art", "lns_bart.art", "lns_loot.art", "lns_papr.art"];
+
+    [TestMethod]
+    public void The_loot_barter_and_steal_frames_and_lenses_have_recipes_and_the_state_boxes_stay_art()
+    {
+        var names = InterfaceChromeRecipes.All.Select(r => r.File).ToArray();
+        CollectionAssert.IsSubsetOf(LootWindowFrames, names);
+        foreach (var file in LootWindowFrames) Assert.AreEqual(ChromeKind.Panel, InterfaceChromeRecipes.All.Single(r => r.File == file).Kind);
+        // The drop, use and gamble boxes carry their state in their glow and corners: art, as in the inventory (ARC-UI-148).
+        foreach (var file in new[] { "gamble_box_on.art", "gamble_box_off.art", "gamble_box_ill.art", "use_box_ill.art", "drop_ill.art" })
+            CollectionAssert.DoesNotContain(names, file);
+    }
+
+    [TestMethod]
+    public void The_loot_window_recipes_paint_in_bounds_deterministically_at_whole_and_fractional_scales()
+    {
+        // Synthetic frames of the windows' sizes (no game art): wood colour, with the square hole the loot and follower frames have at (16, 17) of 89.
+        foreach (var (file, w, h, hole) in new[] { ("loot.art", 358, 400, true), ("barter.art", 358, 400, false), ("barter_follower.art", 358, 400, true), ("loot_pd.art", 358, 266, false), ("pdoll.art", 358, 400, false) })
+        {
+            var legacy = Frame(w, h, holes: false);
+            if (hole)
+                for (var y = 17; y < 106; y++)
+                for (var x = 16; x < 105; x++) legacy[(y * w + x) * 4 + 3] = 0;
+            var recipe = InterfaceChromeRecipes.All.Single(r => r.File == file);
+            foreach (var scale in new[] { 1.0, 1.345, 2.0, 2.5 })
+            {
+                var a = InterfaceChromeRenderer.Render(recipe, w, h, legacy, [], 0, scale);
+                var (pw, ph) = InterfaceChromeRenderer.PixelSize(w, h, scale);
+                Assert.AreEqual(pw * ph * 4, a.Length, $"{file} at {scale}");
+                CollectionAssert.AreEqual(a, InterfaceChromeRenderer.Render(recipe, w, h, legacy, [], 0, scale), $"{file} deterministic at {scale}");
+                // The silhouette is the Legacy one: a frame without a hole is opaque in every pixel; one with the 89 x 89 hole is opaque everywhere more than two pixels
+                // outside the hole's box and clear in the hole's middle.
+                Assert.AreEqual(hole ? 0 : 255, Pixel(a, pw, (int)(60.5 * scale), (int)(61.5 * scale)).A, $"{file} middle of the round view at {scale}");
+                int x0 = (int)(16 * scale) - 2, x1 = (int)Math.Ceiling(105 * scale) + 2, y0 = (int)(17 * scale) - 2, y1 = (int)Math.Ceiling(106 * scale) + 2;
+                for (var y = 0; y < ph; y++)
+                for (var x = 0; x < pw; x++)
+                    if (!hole || x < x0 || x >= x1 || y < y0 || y >= y1)
+                        Assert.AreEqual(255, a[(y * pw + x) * 4 + 3], $"{file} is opaque at ({x}, {y}) at {scale}");
+            }
+        }
+    }
+
+    [TestMethod]
+    public void A_closed_grid_also_draws_the_line_of_its_last_column_and_row()
+    {
+        // Three columns and two rows of 8 from (2, 2): closed, lines at x = 9, 17, 25 and y = 9, 17; open, only x = 9, 17 and y = 9.
+        var legacy = Frame(48, 28, holes: false);
+        foreach (var scale in new[] { 1, 3 })
+        {
+            var w = 48 * scale;
+            var open = InterfaceChromeRenderer.Render(Panel(new ChromeSunk(0, 0, 40, 22, ChromeMaterial.Pit), new ChromeGrid(2, 2, 3, 2, 8)), 48, 28, legacy, [], 0, scale);
+            var closed = InterfaceChromeRenderer.Render(Panel(new ChromeSunk(0, 0, 40, 22, ChromeMaterial.Pit), new ChromeGrid(2, 2, 3, 2, 8, true)), 48, 28, legacy, [], 0, scale);
+            var (line, pit) = ((48, 54, 64, 255), (3, 3, 5, 255));
+            Assert.AreEqual(pit, Pixel(open, w, 25 * scale, 4 * scale), "open: no line on the last column");
+            Assert.AreEqual(line, Pixel(closed, w, 25 * scale, 4 * scale), "closed: the last column has its line");
+            Assert.AreEqual(pit, Pixel(open, w, 12 * scale, 17 * scale), "open: no line on the last row");
+            Assert.AreEqual(line, Pixel(closed, w, 12 * scale, 17 * scale), "closed: the last row has its line");
+            foreach (var x in new[] { 9, 17 }) Assert.AreEqual(Pixel(open, w, x * scale, 4 * scale), Pixel(closed, w, x * scale, 4 * scale), "the inner lines are the same");
+            Assert.AreEqual(line, Pixel(closed, w, 25 * scale + scale - 1, 4 * scale), "a line is as wide as the scale at its cell's last pixel");
+        }
+    }
+
+    [TestMethod]
+    public void A_round_keep_copies_only_its_inscribed_circle()
+    {
+        var legacy = Frame(40, 40, holes: false);
+        const int scale = 2;
+        var picture = new byte[80 * 80 * 4];
+        for (var i = 0; i < picture.Length; i += 4) (picture[i], picture[i + 1], picture[i + 2], picture[i + 3]) = (200, 10, 10, 255);
+        var square = InterfaceChromeRenderer.Render(Panel(new ChromeKeep(4, 4, 32, 32)), 40, 40, legacy, picture, 0, scale);
+        var round = InterfaceChromeRenderer.Render(Panel(new ChromeKeep(4, 4, 32, 32, true)), 40, 40, legacy, picture, 0, scale);
+        Assert.AreEqual((200, 10, 10, 255), Pixel(square, 80, 4 * scale + 1, 4 * scale + 1), "a square keep copies its corner");
+        Assert.AreEqual((200, 10, 10, 255), Pixel(round, 80, 20 * scale, 20 * scale), "a round keep copies its middle");
+        Assert.AreNotEqual((200, 10, 10, 255), Pixel(round, 80, 4 * scale + 1, 4 * scale + 1), "a round keep leaves its corner to the generated wood");
+        Assert.AreEqual((200, 10, 10, 255), Pixel(round, 80, 4 * scale + 2, 20 * scale), "the circle reaches the rectangle's side");
+        Assert.AreEqual(Pixel(square, 80, 2, 2), Pixel(round, 80, 2, 2), "outside the rectangle the two agree");
+    }
+
+    // An opaque frame of 60 × 60 with a square transparent hole of 40 at (10, 10) (the loot window's round view).
+    private static byte[] SquareHoleFrame()
+    {
+        var rgba = Frame(60, 60, holes: false);
+        for (var y = 10; y < 50; y++)
+        for (var x = 10; x < 50; x++) rgba[(y * 60 + x) * 4 + 3] = 0;
+        return rgba;
+    }
+
+    [TestMethod]
+    public void A_round_view_lays_its_ring_around_the_circle_and_spares_the_square_rim()
+    {
+        var legacy = SquareHoleFrame();
+        const int scale = 4;
+        var plain = InterfaceChromeRenderer.Render(Panel(), 60, 60, legacy, [], 0, scale);
+        var view = InterfaceChromeRenderer.Render(Panel(new ChromeRoundView(30, 30, 20)), 60, 60, legacy, [], 0, scale);
+        var w = 60 * scale;
+        // Without the part the square hole gets the square rim: ink in its first unit just outside, near a corner (far from the circle's ring).
+        Assert.AreNotEqual(Pixel(view, w, 9 * scale + 2, 12 * scale), Pixel(plain, w, 9 * scale + 2, 12 * scale), "the square rim is not drawn around the round view");
+        // The ring: just outside the circle's side, 1.5 units beyond the square's edge it is brass, beyond the ring it is the frame's wood again.
+        var ring = Pixel(view, w, 30 * scale, 10 * scale - 2);
+        Assert.AreEqual(255, ring.A);
+        Assert.AreNotEqual(Pixel(plain, w, 30 * scale, 10 * scale - 2), ring, "the ring paints the band beyond the square's side");
+        Assert.AreEqual(Pixel(plain, w, 30 * scale, 10 * scale - 5 * scale), Pixel(view, w, 30 * scale, 10 * scale - 5 * scale), "beyond the ring the wood is the frame's");
+        Assert.AreEqual(0, Pixel(view, w, 30 * scale, 30 * scale).A, "the hole stays transparent");
+    }
+
+    [TestMethod]
+    public void A_round_view_smooths_a_circle_that_touches_the_frames_sides_and_a_frame_may_keep_its_opaque_box()
+    {
+        // A lens: 40 × 40, a transparent circle of radius 20 (the hole finder takes it for the outside of the frame, so only the part's circle shapes it).
+        var lens = new byte[40 * 40 * 4];
+        for (var y = 0; y < 40; y++)
+        for (var x = 0; x < 40; x++)
+        {
+            double dx = x + 0.5 - 20, dy = y + 0.5 - 20;
+            var i = (y * 40 + x) * 4;
+            (lens[i], lens[i + 1], lens[i + 2], lens[i + 3]) = dx * dx + dy * dy < 400 ? ((byte)0, (byte)0, (byte)0, (byte)0) : ((byte)90, (byte)60, (byte)30, (byte)255);
+        }
+        var shaped = InterfaceChromeRenderer.Render(Panel(new ChromeRoundView(20, 20, 20)), 40, 40, lens, [], 0, 3);
+        Assert.AreEqual(0, Pixel(shaped, 120, 60, 60).A, "the lens is clear in the middle");
+        Assert.AreEqual(255, Pixel(shaped, 120, 3, 3).A, "and opaque in the corner");
+        // The ring is brass between the circle and the corner, its outer half lit on the upper left and shaded on the lower right.
+        var lit = Pixel(shaped, 120, 60 - 47, 60 - 47);
+        var shade = Pixel(shaped, 120, 60 + 47, 60 + 47);
+        Assert.IsTrue(lit.R + lit.G + lit.B > shade.R + shade.G + shade.B, $"{lit} lit against {shade}");
+        // A frame whose box behind the live view is opaque keeps it: no shaping.
+        var opaque = Frame(40, 40, holes: false);
+        var kept = InterfaceChromeRenderer.Render(Panel(new ChromeRoundView(20, 20, 15, false)), 40, 40, opaque, [], 0, 3);
+        Assert.AreEqual(255, Pixel(kept, 120, 60, 60).A, "Shape false keeps what the Legacy frame has inside");
+        var smoothed = InterfaceChromeRenderer.Render(Panel(new ChromeRoundView(20, 20, 15)), 40, 40, opaque, [], 0, 3);
+        Assert.AreEqual(255, Pixel(smoothed, 120, 60, 60).A, "Shape true leaves the Legacy alpha deep inside the circle alone");
+        // 45 device pixels is the circle's radius at scale 3 (15 units); a pixel 0.2 inside the edge turns mostly transparent, one 4 outside is untouched.
+        Assert.IsTrue(Pixel(smoothed, 120, 60 + 44, 60).A < 255, "the circle's edge pixel is smoothed");
+        Assert.AreEqual(255, Pixel(smoothed, 120, 60 + 49, 60).A, "outside the circle the frame is opaque");
+    }
 }

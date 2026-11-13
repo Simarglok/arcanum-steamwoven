@@ -101,6 +101,9 @@ public sealed record FrameStepReport(int Steps, int Passes, int Fired, int Dropp
     /// <summary>ARC-WORLD-096: the restock events that came due, in firing order.</summary>
     public IReadOnlyList<SessionRestockFiring> Restocks { get; init; } = [];
 
+    /// <summary>ARC-MAGIC-1686: the NPC encumbrance timers whose chain ended for want of a level reading or a free schedule (<see cref="SessionNpcEncumbranceEndReason"/>), in firing order; a chain that ends below level 4 is not listed.</summary>
+    public IReadOnlyList<SessionNpcEncumbranceEnd> NpcEncumbranceEnds { get; init; } = [];
+
     /// <summary>The clocks at the end of the call.</summary>
     public FrameClocks Clocks { get; init; }
 
@@ -286,6 +289,7 @@ public sealed class FrameStep
             tally.Waits.AddRange(result.Waits);
             tally.Decays.AddRange(result.Decays);
             tally.Restocks.AddRange(result.Restocks);
+            tally.NpcEncumbranceEnds.AddRange(result.NpcEncumbranceEnds);
             tally.BudgetLeft = outcome.BudgetExhausted;
             // MIG12 S8: the real-time steps that came due run after the pass, outside it; a step that jumped the clocks lets the next pass fire
             // the events that became due (the original's later lists see a real-time handler's jump, TL20).
@@ -368,6 +372,7 @@ public sealed class FrameStep
         public List<SessionWaitFiring> Waits { get; } = [];
         public List<SessionDecayFiring> Decays { get; } = [];
         public List<SessionRestockFiring> Restocks { get; } = [];
+        public List<SessionNpcEncumbranceEnd> NpcEncumbranceEnds { get; } = [];
 
         public FrameStepReport Report(FrameStep step, int hourBefore, int participants)
         {
@@ -375,7 +380,7 @@ public sealed class FrameStep
             return new(Steps, Passes, Fired, Dropped, Calls, CallsRun, Coalesced, BudgetLeft, step._session.QueryEvents().Count,
                 step.NextDeadline(clock.GameTimestampMs))
             {
-                Waits = Waits.ToArray(), Decays = Decays.ToArray(), Restocks = Restocks.ToArray(),
+                Waits = Waits.ToArray(), Decays = Decays.ToArray(), Restocks = Restocks.ToArray(), NpcEncumbranceEnds = NpcEncumbranceEnds.ToArray(),
                 Clocks = step._session.QueryFrameClocks(), HourChanged = clock.Hour != hourBefore, Participants = participants,
                 RealSteps = RealSteps.ToArray(), RealStepsUnhandled = RealStepsUnhandled, RealStepsRefused = RealStepsRefused,
                 GoalSteps = GoalSteps.ToArray(), GoalStepsUnhandled = GoalStepsUnhandled, GoalStepsRefused = GoalStepsRefused,

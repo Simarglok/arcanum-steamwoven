@@ -1,6 +1,7 @@
 using Arcanum.Data.Area;
 using Arcanum.Data.Combat;
 using Arcanum.Session;
+using Arcanum.Simulation;
 using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Equipment;
 using Arcanum.Simulation.Locks;
@@ -175,6 +176,25 @@ public sealed class AreaObjectTargets
         IReadOnlyList<(AreaObjectKey Key, string Entity, CellCoord World)> result = _switchedOn is { } previous && previous.Npcs.SequenceEqual(list) ? previous.Npcs : list;
         _switchedOn = (version, result);
         return result;
+    }
+
+    /// <summary>
+    /// ARC-AI-1636 (0x43F630, the AI's busted test of a focus): whether the shown map's object <paramref name="key"/> is busted now. Not for a destroyed or switched-off object (the original's test answers 0 once object flag 0x1 is set, and
+    /// the AI reads those as gone first). A portal or container reads its lock domain's busted bit 0x80 (a window the hits broke, or the map data's); a scenery or trap its busted condition (the stored flag 0x2 of its type flags
+    /// at T0, or the break the session recorded). Any other row, a wall (answered 0 by the original: its validity is the wall rule's) or an object whose fields give no baseline is not busted.
+    /// </summary>
+    [OriginalFunction(0x43F630, OriginalFunctionScope.Partial)]
+    public bool IsBusted(GameSessionOwner session, AreaObjectKey key, Func<AreaObjectRecord, bool>? trapped = null)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        if (!_objects.TryGetValue(key, out var found) || Target(session, key, trapped) is not { Object: { } target }) return false;
+        return found.Kind switch
+        {
+            DamageableObjectKind.Scenery or DamageableObjectKind.Trap => session.QueryObject(target).Condition == SessionObjectCondition.Busted,
+            DamageableObjectKind.Portal or DamageableObjectKind.Container => target.Baseline.Openable is { } baseline
+                && (session.QueryOpenable(new SessionOpenable(target.Map, target.Entity), baseline).Flags & LockRules.BustedBit) != 0,
+            _ => false,
+        };
     }
 
     /// <summary>ARC-RENDER-033: the scenery and traps the session busted (they take their destroyed ART).</summary>

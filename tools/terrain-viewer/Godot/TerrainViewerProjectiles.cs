@@ -358,8 +358,11 @@ public partial class TerrainViewerApp
         if (crossed.Strike is ProjectileStrikeKind.RangeEnd or ProjectileStrikeKind.DestinationEnd && projectile.Returns)
         {
             var events = ShotEndEvents(projectile);
+            var scripts = projectile.Owner.QueryShotEndScripts(projectile.Shot);
             Ended(projectile, crossed.Strike, null, "turned back");
             var turned = TurnBack(projectile);
+            // ARC-COMBAT-1719: the boomerang's first end turns it back (0x4B2690), then the weapon's hit (7) or miss (8) script runs, then the item event.
+            RunShotEndScripts(projectile, scripts, crossed.Strike == ProjectileStrikeKind.DestinationEnd);
             FireShotEnd(projectile, events);
             return turned ? ProjectileCrossResult.Turned : ProjectileCrossResult.Ended;
         }
@@ -625,10 +628,13 @@ public partial class TerrainViewerApp
     private void EndProjectile(AreaProjectile projectile, ProjectileStrikeKind kind, string? struck, string why, bool land = false, bool fireEnd = false)
     {
         var events = fireEnd ? ShotEndEvents(projectile) : [];
+        var scripts = fireEnd ? projectile.Owner.QueryShotEndScripts(projectile.Shot) : null;
         _projectileHost?.Finish(projectile);
         // ARC-COMBAT-1223 (PS5, PF9; 0x4B2870): the end at the destination (a shot without a target) runs the weapon's hit script (point 7), the range end its miss script (point 8).
         if (land) EndOnTile(projectile, !fireEnd ? null : kind == ProjectileStrikeKind.DestinationEnd ? Arcanum.Scripting.Scr.ScrPoint.Hit : Arcanum.Scripting.Scr.ScrPoint.Miss);
         else projectile.Owner.EndShot(projectile.Shot);
+        // ARC-COMBAT-1719: the weapon's scripts of a shot that is not the hero's thrown item (its own are the thrown-item host's) and the critical points, then the item event.
+        RunShotEndScripts(projectile, scripts, kind == ProjectileStrikeKind.DestinationEnd);
         Ended(projectile, kind, struck, why);
         if (kind == ProjectileStrikeKind.RangeEnd) { _attackNotice = "the shot flew past"; RefreshAreaStatus(); }
         else if (kind == ProjectileStrikeKind.DestinationEnd && projectile.Returns) { _attackNotice = "the boomerang is back"; RefreshAreaStatus(); }
@@ -640,6 +646,40 @@ public partial class TerrainViewerApp
     /// (<see cref="GameSessionOwner.QueryShotEndItemEvents"/>), asked while the shot is still in flight; none for a shot of a hand without an item.</summary>
     private static IReadOnlyList<SessionItemEvent> ShotEndEvents(AreaProjectile projectile) =>
         projectile.Owner.QueryShotEndItemEvents(projectile.Shot, projectile.Flight.Tile);
+
+    /// <summary>
+    /// ARC-COMBAT-1719 (0x4B2870, ledger PF9, PS5, CP4): the weapon's scripts at an end of a projectile's flight without a strike (<paramref name="facts"/>, asked before the end:
+    /// <see cref="GameSessionOwner.QueryShotEndScripts"/>), through the shown map's use-script host (<see cref="AreaUseScriptHost.RunCombatPoint"/>) in the original's order (<see cref="AreaShotEndScripts.Points"/>): the shooter is the
+    /// triggerer, the weapon the attachee and the shot's target (none for a scattered throw) the extra object; the answers cancel nothing. A flight of another session or map, or a shot with no weapon item, runs nothing; a run the host refuses
+    /// is said and the end goes on.
+    /// </summary>
+    private void RunShotEndScripts(AreaProjectile projectile, SessionShotEndScripts? facts, bool destination)
+    {
+        if (facts is not { } ends || !ReferenceEquals(projectile.Owner, _areaSession) || projectile.Map != CurrentAreaMap) return;
+        if (_areaSession is not { } owner || _readyArea is not { } area || UseScriptHost(area.Snapshot) is not { } host) return;
+        static bool IsHero(string id) => id == SessionSpellCaster.Hero || id == Arcanum.Simulation.Ai.AiSchedulerRules.Pc;
+        var hero = IsHero(ends.Attacker);
+        // A carried item's row is read by identity from the map the hero took it on, a thrown one that lies on the ground from the map it came from; an NPC's weapon is a row of the shown map.
+        var map = CurrentAreaMap;
+        var carried = hero ? owner.QueryPcInventory().FirstOrDefault(held => held.Entity == ends.Weapon) : default;
+        var isCarried = carried.Entity is not null;
+        var placed = hero && !isCarried ? owner.QueryPlacedItems().FirstOrDefault(item => item.Entity == ends.Weapon) : null;
+        var weaponMap = isCarried ? carried.Origin.RuntimeMap : placed is not null ? (placed.Origin ?? placed.Map).RuntimeMap : map;
+        // 0x4B2870: the critical points ask that the parent item is a weapon (object type 5); an item the session does not list counts as the wielded weapon, an NPC's as a weapon.
+        var isWeapon = !hero || (isCarried ? carried.Kind.Type : placed?.Kind.Type ?? SessionItemType.Weapon) == SessionItemType.Weapon;
+        Arcanum.Scripting.Scr.ScrObjectRef Ref(string id) => IsHero(id) ? host.Pc : new(map, ScriptCodeOfCast(id));
+        var weaponRef = new Arcanum.Scripting.Scr.ScrObjectRef(weaponMap, ends.Weapon);
+        var attackerRef = Ref(ends.Attacker);
+        var targetRef = ends.Target is { } target ? Ref(target) : (Arcanum.Scripting.Scr.ScrObjectRef?)null;
+        var points = AreaShotEndScripts.Points(destination, ends.Critical, isWeapon, hero && ends.Thrown);
+        foreach (var point in points)
+        {
+            var ran = Awarded(host, host.RunCombatPoint(point, weaponRef, attackerRef, targetRef, owner.Rules.Scripts));
+            if (ran.Run is not null)
+                GD.Print($"ARC-COMBAT-1719 shot-end-script shot={projectile.Shot.Id} point={point} attacker={ends.Attacker} weapon={ends.Weapon} target={ends.Target ?? "none"} outcome={ran.Outcome} run={ran.Run.Outcome} stop={ran.Run.Stop} detail={ran.Detail}");
+        }
+        if (points.Count > 0) RefreshAreaStatus();
+    }
 
     /// <summary>ARC-DEV-140 (B14): fires the item event of a shot's end through the map's cast host (0x4CBDB0 → 0x4CB830, after the projectile's end placed
     /// the item): the item's own spells with the attacks-a-location trigger (0x800000) start as runs aimed at the tile, so a thrown grenade explodes where it

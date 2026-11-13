@@ -170,6 +170,56 @@ public sealed class AreaCombatPointScriptTests
             });
     }
 
+    // ARC-COMBAT-1719 (0x4B2870): the two ends of a flight run the weapon's hit (7) and miss (8) scripts, and for a critical weapon shot the critical-hit (34) and critical-miss (35) ones, as the swing's do.
+    [TestMethod]
+    public void The_miss_and_critical_miss_scripts_are_the_weapon_s_with_the_shooter_as_triggerer_and_the_target_as_extra()
+    {
+        foreach (var point in new[] { ScrPoint.Miss, ScrPoint.CriticalMiss })
+            WithContent(content =>
+            {
+                using var session = ConversationSessionFixture.Create();
+                var weapon = Row(1, WeaponType, 911, point);
+                var attacker = Row(2, NpcType, 0, ScrPoint.Heartbeat);
+                var host = Host(session, content, null, weapon, attacker);
+                var ran = host.RunCombatPoint(point, Ref(weapon), Ref(attacker), host.Pc, session.Rules.Scripts);
+                Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, ran.Outcome, $"point {point}: {ran.Detail}");
+                Assert.AreEqual((ScrOutcome.RunDefault, 911), (ran.Run!.Outcome, ran.Run.Script));
+                Assert.IsTrue(Flag(session, AttackerIsNpc), $"point {point}: the triggerer is the shooter");
+                Assert.IsTrue(Flag(session, VictimIsPc), $"point {point}: the extra object is the target");
+                Assert.IsTrue(Flag(session, AttacheeIsWeapon), $"point {point}: the attachee is the weapon");
+            });
+    }
+
+    [TestMethod]
+    public void A_shot_with_no_target_runs_the_miss_point_with_no_extra_object_and_each_end_reads_its_own_slot()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var onlyMiss = Row(1, WeaponType, 915, ScrPoint.Miss);
+            var shooter = Row(2, NpcType, 0, ScrPoint.Heartbeat);
+            var host = Host(session, content, null, onlyMiss, shooter);
+            var rules = session.Rules.Scripts;
+            Assert.IsNull(host.RunCombatPoint(ScrPoint.Hit, Ref(onlyMiss), Ref(shooter), null, rules).Run, "the hit slot is empty");
+            Assert.IsNull(host.RunCombatPoint(ScrPoint.CriticalMiss, Ref(onlyMiss), Ref(shooter), null, rules).Run, "the critical-miss slot is empty");
+            Assert.IsFalse(Flag(session, CriticalSeen));
+            Assert.IsNotNull(host.RunCombatPoint(ScrPoint.Miss, Ref(onlyMiss), Ref(shooter), null, rules).Run);
+            Assert.IsTrue(Flag(session, CriticalSeen), "the miss slot's script 915 ran with no extra object");
+        });
+    }
+
+    [TestMethod]
+    public void A_flight_s_end_runs_the_hit_or_miss_point_then_the_critical_one_for_a_weapon_and_the_hero_s_thrown_item_only_the_critical_one()
+    {
+        CollectionAssert.AreEqual(new[] { ScrPoint.Hit }, AreaShotEndScripts.Points(destination: true, critical: false, weapon: true, thrownByHero: false).ToArray());
+        CollectionAssert.AreEqual(new[] { ScrPoint.Miss }, AreaShotEndScripts.Points(destination: false, critical: false, weapon: true, thrownByHero: false).ToArray());
+        CollectionAssert.AreEqual(new[] { ScrPoint.Hit, ScrPoint.CriticalHit }, AreaShotEndScripts.Points(true, true, true, false).ToArray());
+        CollectionAssert.AreEqual(new[] { ScrPoint.Miss, ScrPoint.CriticalMiss }, AreaShotEndScripts.Points(false, true, true, false).ToArray());
+        CollectionAssert.AreEqual(new[] { ScrPoint.Hit }, AreaShotEndScripts.Points(true, true, false, false).ToArray(), "a critical shot of an item that is no weapon runs no critical point");
+        CollectionAssert.AreEqual(new[] { ScrPoint.CriticalMiss }, AreaShotEndScripts.Points(false, true, true, true).ToArray(), "the hero's thrown item's hit and miss are the thrown-item host's");
+        Assert.AreEqual(0, AreaShotEndScripts.Points(false, false, true, true).Count);
+    }
+
     [TestMethod]
     public void The_critter_hits_script_is_the_attacker_s_with_the_victim_as_triggerer()
     {
