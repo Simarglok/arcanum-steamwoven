@@ -247,7 +247,7 @@ STAGE_NEEDS: dict[str, StageNeeds] = {
     "indoor-fade": _needs(**_MAIN_ONLY, sector=TOWN, only_sector=True),
     "critter-fall": _needs(own=True),  # fails in a longer list ("ran over at least two cells"), passes alone
     "save-resume": _needs(), "cast-multi": _needs(map=RUINS, only_map=True), "grenade": _needs(map=CAVE),
-    # ai-react: a bystander the witness rule sends fleeing (a human near the hit, ARC-DEV-1577) exists in the town, not at the Crash Site (the animals protect one another: NONE); elven ruins and the cave: the spell did not land (2026-11-13)
+    # ai-react: a bystander the witness rule sends fleeing (a human near the hit, ARC-DEV-1577) exists in the town, not at the Crash Site (the animals protect one another: NONE); elven ruins and the cave: the spell lands (ARC-DEV-1660: the victim must have a clear line of fire, the cast refuses without one, spell.mes 604) but no calm bystander the rule sends fleeing stands near the hit: NONE (2026-11-13)
     "companion-click": _needs(), "npc-shot": _needs(sector=TOWN), "ai-react": _needs(**_MAIN_ONLY, sector=TOWN, only_sector=True, own=True), "please-move": _needs(),
     "placement-census": _needs(),  # passes after the other AI stages (ARC-DEV-1187: baseline loads at the stage boundaries, a companion is no NPC row)
     "inv-carry": _needs(debug=True, own=True),  # a dead body with an item; NONE at the Crash Site was seen

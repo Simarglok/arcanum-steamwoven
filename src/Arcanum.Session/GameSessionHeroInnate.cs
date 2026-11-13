@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using Arcanum.Data.Characters;
+using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Character;
 using Arcanum.Simulation.Skills;
 
@@ -88,8 +89,8 @@ public sealed partial class GameSessionOwner
     /// ARC-MAGIC-1658 (cases 2 and 3 of the setter's table, 0x4B0E74): the removal of the first entry of the gender cause (9) or race cause (0) (0x4EA2E0), then the store, then the add of the race's effect <c>0x40 + race</c> (race cause) or, for
     /// gender 0, effect 0x14A (gender cause), through 0x4E9F70; each moves the hero's damage by the change of its maximums as every effect step does (<c>PrepareEffects</c>, current hit points and fatigue stay, never below no damage). The hero's
     /// race, gender, innate stat effects and innate skill changes are the state's, and its character owner is built from them, so the owner is built again from the new state and the durable entries are applied to it again, and the
-    /// effects of the old race leave with it. The rules of the effects are the ones attached with <see cref="AttachInnateEffects"/> (their stat changes and, as at the hero's creation, their basic and tech skill changes; the other changes of an innate effect
-    /// are not modelled for the hero). Refused, in order: no hero (<see cref="GameSessionFailure.InvalidHero"/>), a gender outside 0..1 or a race outside the character rules' ten (the table's 11 has none:
+    /// effects of the old race leave with it. The rules of the effects are the ones attached with <see cref="AttachInnateEffects"/> (their stat changes and, as at the hero's creation, their basic and tech skill changes; ARC-MAGIC-1700: their resistance changes are read from the rules at each question, <c>HeroEffectResistances</c>, so
+    /// a swap moves the hero's resistances with the entry; the other changes of an innate effect, the special values and the age change, are not modelled for the hero). Refused, in order: no hero (<see cref="GameSessionFailure.InvalidHero"/>), a gender outside 0..1 or a race outside the character rules' ten (the table's 11 has none:
     /// <see cref="GameSessionFailure.InvalidChangeKey"/>), the rule of the effect to add not attached (<see cref="GameSessionFailure.EffectsUnavailable"/>), a stored stat the new race's ranges do not admit or more skill changes than a
     /// cause holds (<see cref="GameSessionFailure.InvalidHero"/>), a durable effect, blessing or curse whose number is the new innate effect's, the life rules or the event budget (<see cref="GameSessionFailure.InvalidEffect"/>,
     /// <see cref="GameSessionFailure.EventBudgetExceeded"/>), the version, the revision. Nothing is written for a refusal.
@@ -108,6 +109,17 @@ public sealed partial class GameSessionOwner
             after.InnateSkills.SequenceEqual(before.InnateSkills) && !prepared.LifeChanged;
         ApplyEffects(prepared);
         return same ? NoChange() : Changed();
+    }
+
+    /// <summary>
+    /// ARC-MAGIC-1700: the resistance changes the hero's resistance readers lay over the stored array, the worn armour and the poison bonus (the original's combat resistance getter reads the whole effect list, the innate entries first): the changes of the innate
+    /// effects of the hero's race and gender (<c>64 + race</c>, then 330 for a woman; the rules are the ones attached with <see cref="AttachInnateEffects"/>, a number without an attached rule has none) and then the durable entries' in list order.
+    /// <paramref name="state"/> is the hero state the innate entries are taken from (the live one by default; a trial of a race or gender swap passes the state it ends with).
+    /// </summary>
+    private EffectResistances HeroEffectResistances(IEnumerable<SessionEffect>? entries = null, IReadOnlyDictionary<int, SessionEffectDefinition>? definitions = null, SessionHeroState? state = null)
+    {
+        var innate = (state ?? _hero?.State) is { } held ? EffectDomain.Innate(held).Select(entry => InnateRule(entry.Number)).OfType<SessionEffectDefinition>() : [];
+        return EffectDomain.Resistances(entries ?? _effects.Entries, definitions ?? _effects.Definitions, innate);
     }
 
     private static bool SameEffect(StatEffectDefinition? a, StatEffectDefinition? b) =>

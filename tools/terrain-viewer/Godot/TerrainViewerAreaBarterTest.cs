@@ -425,6 +425,8 @@ public partial class TerrainViewerApp
             await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
             Require(area.Held is null && panel.ArtView!.LootGrid.Any(item => item.Entity == ware.Entity), "released on its own grid it went back");
         }
+        // ARC-UI-1194: with ARC_AREA_WINDOW_ART the window's frames (its background, the lens, the pack) are checked in the generated interface and captured.
+        await WindowArtSmokeAsync("barter", area, [background, AreaInventoryHole.BarterArt, AreaInventoryArtLayout.PackArt]);
         if (System.Environment.GetEnvironmentVariable("ARC_AREA_BARTER_CAPTURE") is { Length: > 0 } capture)
         {
             await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
