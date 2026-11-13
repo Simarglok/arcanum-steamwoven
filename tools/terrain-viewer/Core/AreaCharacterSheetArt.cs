@@ -57,7 +57,10 @@ public static class AreaCharacterSheetArtLayout
             AreaCharacterSheetPagesLayout.TechPlusArt, AreaCharacterSheetPagesLayout.TechMinusArt];
 
     public static IReadOnlyList<int> SpellsPageArtNumbers { get; } =
-        [AreaCharacterSheetSpellsLayout.BackgroundArt, AreaCharacterSheetSpellsLayout.PlusArt, AreaCharacterSheetSpellsLayout.MinusArt];
+        [AreaCharacterSheetSpellsLayout.BackgroundArt, AreaCharacterSheetSpellsLayout.PlusArt, AreaCharacterSheetSpellsLayout.MinusArt, .. AreaCharacterSheetSpellsLayout.CollegeArtNumbers];
+
+    /// <summary>ARC-UI-1784: the arts of the schemes page the generated interface draws (its background; the scroll bar's arrows and thumb stay pictures).</summary>
+    public static IReadOnlyList<int> SchemesPageArtNumbers { get; } = [AreaCharacterSheetSchemesLayout.BackgroundArt];
 
     public static IReadOnlyList<int> AllArtNumbers { get; } =
         [.. ArtNumbers.Concat([SchemesTabArt]).Concat(AreaCharacterSheetPagesLayout.ArtNumbers).Concat(AreaCharacterSheetSpellsLayout.ArtNumbers)

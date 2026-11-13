@@ -136,9 +136,12 @@ public partial class TerrainViewerApp
                 .Select(bed => (bed.Key, new CellCoord(checked((int)bed.Row.WorldX!.Value), checked((int)bed.Row.WorldY!.Value))))];
 
     // ARC-AI-1655: the lines an NPC's pickup made the item's scripts print, as the message window posts any script's printed line.
-    private void PostNpcPickupLines(AreaAiNotice notice)
+    private void PostNpcPickupLines(AreaAiNotice notice) => PostScriptLines(notice.Messages);
+
+    // ARC-AI-1655, ARC-MAGIC-1745: printed lines of item scripts an NPC's move ran (pickup, wield, rewield, regeneration's best-items wield), posted as any script's printed line.
+    private void PostScriptLines(IEnumerable<SessionScriptMessage> lines)
     {
-        foreach (var entry in AreaScriptMessages.Entries(notice.Messages.Select(message => new AreaPrintedLine(message.Kind, message.Text)))) PostMessage(entry, "script line");
+        foreach (var entry in AreaScriptMessages.Entries(lines.Select(message => new AreaPrintedLine(message.Kind, message.Text)))) PostMessage(entry, "script line");
     }
 
     /// <summary>The scene the shown window gives the AI host: its chart and evidence, the rows its map data holds (the companions and the NPCs the party leads

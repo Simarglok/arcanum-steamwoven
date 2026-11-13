@@ -108,6 +108,8 @@ public partial class TerrainViewerApp
             _createdInventoryDone[entity] = result;
             GD.Print($"ARC-DEV-386 created-critter-inventory entity={entity} disposition={result.Disposition} failure={result.Failure} outcome={done?.Outcome} coins={done?.Coins} items={done?.Created.Count ?? 0} " +
                 $"refused={done?.Refused ?? 0} skipped={done?.Skipped ?? 0} wield-steps={done?.Wield?.Steps.Count ?? 0}");
+            // ARC-MAGIC-1745: the lines the item scripts of the created critter's best-items wield printed.
+            PostScriptLines(done?.Wield?.Messages ?? []);
         }
     }
 
