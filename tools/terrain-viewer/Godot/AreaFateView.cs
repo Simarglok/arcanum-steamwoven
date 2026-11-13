@@ -17,6 +17,9 @@ public partial class AreaFateView : Control
     private AreaArtFontFace? _font;
     private AreaFateTexts _texts = AreaFateTexts.Project("not set");
     private readonly AreaFateButtons _buttons = new();
+    // ARC-UI-1200: the generated interface paints the window's frames and buttons at the window's own device scale (claimed at every draw).
+    private AreaDeviceScale? _claim;
+    private AreaDeviceScale Claim => _claim ??= new(this);
 
     /// <summary>A button was pressed: the kind and whether it is now down (arm) or up (undo).</summary>
     public event Action<int, bool>? KindToggled;
@@ -38,6 +41,10 @@ public partial class AreaFateView : Control
     internal Rect2 WindowRectForSelfTest => new(GlobalPosition, Size * Scale);
     internal string LineForSelfTest(int kind) => _texts.Line(kind);
     internal int FrameForSelfTest(int kind) => AreaGameBarLayout.Frame(_buttons.Look(kind), ButtonFrames());
+    /// <summary>ARC-UI-1200: the window's device scale (what its generated frames are painted at) and its textures by art number, every frame (the native smoke).</summary>
+    internal float DeviceScale() => Claim.Current();
+    internal IReadOnlyList<(int Art, HdInterfaceTexture Texture)> TexturesForSelfTest(IEnumerable<int> arts) =>
+        [.. arts.Where(_art.ContainsKey).SelectMany(number => _art[number].OfType<HdInterfaceTexture>().Select(texture => (number, texture)))];
 
     public override void _Ready()
     {
@@ -50,6 +57,7 @@ public partial class AreaFateView : Control
 
     public void SetArt(IReadOnlyDictionary<int, Texture2D[]> art, AreaArtFontFace font, AreaFateTexts texts)
     {
+        Claim.Release();
         _art = art ?? throw new ArgumentNullException(nameof(art));
         _font = font ?? throw new ArgumentNullException(nameof(font));
         _texts = texts ?? throw new ArgumentNullException(nameof(texts));
@@ -60,6 +68,7 @@ public partial class AreaFateView : Control
     /// <summary>Forgets the art and the lines (the module changed); the host sets them again when the new ones have read.</summary>
     public void ClearArt()
     {
+        Claim.Release();
         _art = new Dictionary<int, Texture2D[]>(); _font = null; _texts = AreaFateTexts.Project("not set");
         QueueRedraw();
     }
@@ -109,6 +118,7 @@ public partial class AreaFateView : Control
     public override void _Draw()
     {
         if (_font is not { } font) return;
+        Claim.Claim(_art, AreaFateLayout.BackgroundArt, AreaFateLayout.ButtonArt);
         if (AreaCharacterArtDraw.Art(_art, AreaFateLayout.BackgroundArt) is { } window)
             DrawTextureRect(window, new Rect2(0, 0, window.GetWidth(), window.GetHeight()), false);
         var frames = ButtonFrames();
@@ -122,6 +132,8 @@ public partial class AreaFateView : Control
             AreaCharacterArtDraw.Lines(this, (tx, ty, width - tx, AreaFateLayout.RowStep), _texts.Line(kind), font, AreaFateLayout.TextColour);
         }
     }
+
+    public override void _ExitTree() => _claim?.Release();
 
     public override void _Notification(int what)
     {
