@@ -2308,7 +2308,7 @@ project's, except as below.
   arrows 667 and 668 at (+6, +21) and (+180, +21), a slider's bar 623 `SkilGauge` at (+47, +24) as wide as value × 120 / top, a
   list's value centred in red `Flare12Font` at (+47, +30). An arrow is a push button: the pointer over it shows its lit frame, a
   press its down frame with sound 3000, the release over it plays 3001 and changes the value. PROJECT: the shown controls take the
-  page's first slots in order (the Rules line the Game page's fifth, at (531, 122), then the evidence log's two lines (ARC-GPAD-1376), with it the eight slots of the page; the Controls line (ARC-GPAD-1463) is the Game page's eighth and last; ARC-GPAD-1374's Prompt style line is the Video page's third, after the floats; ARC-UI-146 removed the HD graphics, HD interface and HD pack lines that stood after Rules, they are the [launcher screen](#launcher-screen-arc-ui-014)'s); the control with the keyboard or controller
+  page's first slots in order (the Rules line the Game page's sixth, after Auto Switch Weapons (ARC-COMBAT-1738), then the Controls line (ARC-GPAD-1463), the page's seventh and last; the controller test's evidence log and test task lines (ARC-GPAD-1376) are the Video page's last two since ARC-COMBAT-1738; ARC-GPAD-1374's Prompt style line is the Video page's third, after the floats; ARC-UI-146 removed the HD graphics, HD interface and HD pack lines that stood after Rules, they are the [launcher screen](#launcher-screen-arc-ui-014)'s); the control with the keyboard or controller
   focus has its label lit in the page buttons' hover red; a text is one line. The line at the top names the hidden controls and the
   notice. Without the game's art (the synthetic self-tests) the whole window is the project's panel.
 
@@ -2319,10 +2319,10 @@ project's, except as below.
   Float Speed, the [floating text](#floating-text-arc-ui-021)'s level and speed, and Combat Taunts (ARC-AI-1527, default on, the settings file's `combat taunts` line: the followers' comment lines); its Brightness and Text Duration are hidden with their reasons (no gamma control, no text bubbles).
 - **Controls.** Each control shows its `options_ui.mes` label (message 100 + 100 × page + slot) and its value: a
   list's text from its value file (`OptionsDifficulty.mes`, `OptionsCombatMode.mes`, `OptionsOffOn.mes`), a slider as
-  `N/10`. Game: Difficulty (Easy, Moderate, Hard), Default Combat Mode (Real Time, Turn Based), Auto Attack, Always
-  Run and the project's Rules line (ARC-UI-014, below). Video: Floats (Never, Minimal, Verbose) and Float Speed (0–10). Sound: Effects, Voice and Music (0–10). The arrows (or Left and Right on the focused control, which Up and Down or
+  `N/10`. Game: Difficulty (Easy, Moderate, Hard), Default Combat Mode (Real Time, Turn Based), Auto Attack, Auto Switch Weapons (Off, On; default Off, ARC-COMBAT-1738), Always
+  Run and the project's Rules and Controls lines (ARC-UI-014, ARC-GPAD-1463, below). Video: Floats (Never, Minimal, Verbose), Float Speed (0–10), Combat Taunts, the Prompt style and, last, the controller test's Evidence Log and Test Task lines (moved from the Game page by ARC-COMBAT-1738, issue 1729). Sound: Effects, Voice and Music (0–10). The arrows (or Left and Right on the focused control, which Up and Down or
   a click on an arrow choose, or a controller's confirm) change the value at once, as the original's setters run on each step: a list wraps around at either end, a
-  slider stops there. Hidden with their reasons: Module (one module), Violence Filter, Auto Switch Weapons (its setting is the settings file's `auto switch` line since ARC-COMBAT-1720; no free slot on the Game page, issue 1729), Follower
+  slider stops there. Hidden with their reasons: Module (one module), Violence Filter, Follower
   Skills, and the third combat mode Fast Turn Based (the list cycles Real Time and Turn Based).
 - **What each setting does.** Difficulty is the session's difficulty (its skill and experience readers, ARC-WORLD-030;
   a new game or a load takes the setting). Default Combat Mode is the turn-based setting Space also toggles: with a
@@ -2362,7 +2362,7 @@ while a control has the focus, the pointer lighting Sound and a click on it show
 saves the Game page's picture to an ignored path; ARC-UI-061: the controls at the first slots on the Game and Sound pages, the
 pointer lighting Music's left arrow, a press showing it down with 3000 and the release over it playing 3001 and lowering the music, a release away from it changing nothing;
 the capture also saves the Sound page next to it with `-sound` before the extension). Not done: Brightness, Text Duration,
-Module, Violence Filter, Auto Switch Weapons, Follower Skills and Fast Turn Based (no function yet).
+Module, Violence Filter, Follower Skills (issues 1776 and 1777) and Fast Turn Based (no function yet).
 
 ### New-character window (ARC-UI-030)
 

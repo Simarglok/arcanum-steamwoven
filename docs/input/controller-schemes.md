@@ -242,7 +242,7 @@ The Godot-free parts of §0 live in `src/Arcanum.Input` and are tested in `tests
 The viewer hosts the core (`tools/terrain-viewer/Godot/TerrainViewerControllers.cs`, the Godot-free `ControllerFoundation` and
 `PromptStrip` in `src/Arcanum.Input`):
 
-- **Scheme selector.** One **Controls** line, the Game page's eighth and last slot of the Options window (ARC-GPAD-1463; owner request
+- **Scheme selector.** One **Controls** line, the Game page's last slot of the Options window (the seventh since ARC-COMBAT-1738) (ARC-GPAD-1463; owner request
   2026-11-12: one line instead of three), in the main menu and in play, the pattern of the removed HD lines: Original, A Direct, B Pointer,
   C Touch+pad (`ControlChoice`). C uses the pad itself for walking and hotkeys, so it is chosen instead of a pad scheme, not beside one; an
   old settings file with both on reads as C. The glyph family override is the Video page's `Prompt style` line (Auto, Xbox, PlayStation,
@@ -271,7 +271,7 @@ The viewer hosts the core (`tools/terrain-viewer/Godot/TerrainViewerControllers.
 ## Evidence log (ARC-GPAD-1376, merged)
 
 The metrics source of the human test (§0.8, §5). Off at every start and never saved; the owner turns it on for a test session
-in the game's Options window (Game page, **Evidence Log** line) and sets the **Test Task** line (None, Task 1 to 8 of §5) before each
+in the game's Options window (Video page, **Evidence Log** line, its last two lines since ARC-COMBAT-1738) and sets the **Test Task** line (None, Task 1 to 8 of §5) before each
 task, so the log carries the task's start and end. While on, the viewer writes one file per session, `evidence-yyyyMMdd-HHmmss.jsonl`
 (UTC in the name only), under `user://evidence/` of the device (the isolated folder in an automated run, `EVIDENCE_LOG_TEST_DIR` for
 tests). Nothing is sent anywhere; the owner copies the file by hand (on the ROG Xbox Ally X and the Mac the folder is the game's

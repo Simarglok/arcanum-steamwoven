@@ -1201,3 +1201,13 @@ start a game and press `C`. Compare with **HD** and **Legacy**.
 | 3 | Press + and − on a stat and on a skill with points to spend. | The buttons show their hover and down looks; the numbers change as before. | open |
 | 4 | Resize the window and open the sheet again. | The frames are sharp at the new size, no seam between the window and the pages. | open |
 | 5 | Open an NPC's sheet in a dialog (reply `c-e`). | The same look, with no + or − buttons. | open |
+
+## ARC-COMBAT-1738 — Auto Switch Weapons option and its re-wield cases (2026-11-13)
+
+The rules are in the [ledger OH3](../research/ledger/ui-audio.md#hidden-options-arc-res-1107) and [equipment runtime](../world/equipment-runtime.md). Start a game with a hero who carries two weapons.
+
+| # | Step | Expected | Status |
+| --- | --- | --- | --- |
+| 1 | Open Options (main menu and in play), Game page. | Auto Switch Weapons is the fourth line after Auto Attack, Off at the first start. Evidence Log and Test Task are now the last lines of the Video page. | open |
+| 2 | Turn Auto Switch Weapons On, wield a bow with no arrows (or a gun with no bullets) and attack. | The attack does not shoot, and the hero wields the best other weapon at once; with the option Off nothing changes. | open |
+| 3 | With it On, let an enemy with a critical hit (drop weapon or destroy weapon) strike the hero. | The hero's lost weapon is replaced by the best weapon left; with the option Off the hand stays empty. | open |

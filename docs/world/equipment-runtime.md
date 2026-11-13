@@ -131,8 +131,8 @@ its weapon wore out (0x4B83E0 → 0x465170): the weapon slot only, the same plan
 call is given (`SessionWieldTarget`: its cell distance and magnetic inversion): an eligible weapon that reaches the target wins over a stronger one that
 does not, and with no usable weapon the slot stays empty (NoChange). The gates of 0x4B83E0 are the host's: the "auto switch" setting (the settings
 file's `auto switch` line, default off: the original never registers it) and the lost weapon the PC's own; the viewer asks right after an attack whose
-wear step (`SessionWearStepKind.AttackerWeapon`) broke or deleted the hero's weapon, on a critter or an object. The callers for no ammunition (0x4B3170)
-and for a struck PC's lost weapon (0x4B4390) are not built.
+wear step (`SessionWearStepKind.AttackerWeapon`) broke or deleted the hero's weapon, on a critter or an object. ARC-COMBAT-1738 adds the other two callers: an attack the ammunition check refused (`AttackRefusal.OutOfAmmunition`, 0x4B3170, the struck object as the target)
+and a strike that took the struck hero's weapon (0x4B4390: the "drop weapon" critical that dropped it, the "destroy weapon" and "explode weapon" criticals, the "damage weapon" critical that broke it; `AreaHeroWeaponLoss`, the attacker as the hint) from an NPC's hit, arrow or throw (`AiHit`). Not built: a critical self-hit of the hero's own attack, a hit by a spell, a trap or a script, and the attacker's magnetic inversion for the hint (false); the options window's Auto Switch Weapons line writes the setting at once.
 
 Since ARC-WORLD-103 the same plan dresses an NPC at the end of its regeneration (0x463E20 → 0x4654F0, ledger RK15), with the NPC's
 wearer and chooser from the host and its list in place of the hero's items; the session then keeps what the NPC wears
