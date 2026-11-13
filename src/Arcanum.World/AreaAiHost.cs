@@ -57,6 +57,9 @@ public sealed record AreaAiScene
     public Func<CellCoord, int>? CellLight { get; init; }
     /// <summary>ARC-WORLD-1162 (SWB17–SWB21): the beds of the shown map and who lies in them, shared with the hero's rest; null: the map has none, so an NPC at its standpoint finds no bed.</summary>
     public AreaAiBeds? Beds { get; init; }
+    /// <summary>ARC-TECHNOLOGY-1619 (VB2-2 gap d): what the host knows of an object other than a critter by its session entity (a trap's shooter object, a scenery, a door): the facts the hostility rules read of it (its type, tile, object
+    /// flags and busted state), or null for an id that names none. Null delegate: no such object is known, so an attack event of one ends at <see cref="AttackEventStop.Missing"/>.</summary>
+    public Func<string, AreaAiObjectFacts?>? ObjectFacts { get; init; }
     /// <summary>The hero's world cell now, or null without a hero on this map.</summary>
     public required Func<CellCoord?> HeroCell { get; init; }
     /// <summary>ARC-DEV-116 (MIG11 S5): whether the map list holds a map (the destination of an NPC's change of place, the original's map list lookup);
@@ -180,6 +183,19 @@ public interface IAreaAiFollowers
     /// <summary>ARC-DEV-105 (MIG9 S5): moves the companion onto the world cell <paramref name="cell"/> at once (the follower catch-up, 0x4AD4D0);
     /// false when it is not here or its walk refuses the cell. A follower source without the move refuses it.</summary>
     bool Jump(string entity, CellCoord cell) => false;
+}
+
+/// <summary>
+/// ARC-TECHNOLOGY-1619: an object other than a critter as the hostility rules read it (the original's object type and flags): its type (0 wall, 1 portal, 2 container, 3 scenery, 17 trap object and so on), the world tile it stands on and
+/// the object flags 0x1 destroyed, 0x2 off, 0x100 don't draw and 0x400000 invulnerable, and 0x43F630's busted state.
+/// </summary>
+public sealed record AreaAiObjectFacts(int Type, CellCoord Cell)
+{
+    public bool Destroyed { get; init; }
+    public bool Off { get; init; }
+    public bool DontDraw { get; init; }
+    public bool Invulnerable { get; init; }
+    public bool Busted { get; init; }
 }
 
 /// <summary>What the AI host tells the viewer: an NPC's attack swing (its pose), the hit's result, a step, a sound, (ARC-WORLD-099)
@@ -968,6 +984,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         // ARC-WORLD-115: then the victim's followers (side victim, the attacker the other), before the noise.
         if (plan.TellsVictimFollowers) TellFollowers(victim, attacker, FollowerSide.Victim);
         if (plan.RaisesNoise) Witnesses(attacker, victim, loudness);
+        // ARC-TECHNOLOGY-1619 (VB2-2 gap d, 0x4A9650 → 0x4AABE0): an NPC victim of an object that is no critter (a trap's shooter) is asked into COMBAT_FOCUS on it, with no alert sound, and the event returns.
+        if (plan.VictimFightsObject) { SetDanger(victim, DangerState.CombatFocus, attacker); return; }
         if (plan.Stop != AttackEventStop.None) return;
         _session.ApplyAttackEvent(_session.Version, new SessionAttackEventRequest { Attacker = Combatant(attacker)!, Victim = victim, Plan = plan });
         if (plan.TurnsVictim && Tile(attacker) is { } there && TryNpc(victim, out var npc)) FaceNpc(npc, there, keepStep: true);
@@ -1685,8 +1703,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     public CellCoord? Tile(string id)
     {
         if (id == Pc) return _scene.HeroCell();
-        // ARC-AI-1309: an item an NPC's pickup goal walks to lies on a cell of the shown map (its own, or its junk pile's).
-        return _npcs.TryGetValue(id, out var npc) ? Movers.CellOf(id, npc.Origin) : CompanionCell(id) ?? PickupCell(id);
+        // ARC-AI-1309: an item an NPC's pickup goal walks to lies on a cell of the shown map (its own, or its junk pile's). ARC-TECHNOLOGY-1619: an object that is no critter (a trap's shooter) stands on its own tile.
+        return _npcs.TryGetValue(id, out var npc) ? Movers.CellOf(id, npc.Origin) : CompanionCell(id) ?? PickupCell(id) ?? _scene.ObjectFacts?.Invoke(id)?.Cell;
     }
 
     /// <summary>ARC-WORLD-1158: where a critter of this host's map lies now (its body's cell for the Decay Dead Bodies event); null for another map or a critter the host does not hold.</summary>
@@ -3368,6 +3386,16 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     public bool Exists(string id) =>
         id == Pc || !Gone(id) && !(id.StartsWith(SessionCreatedObject.CritterPrefix, StringComparison.Ordinal) && _session.QueryCreatedObject(id) is null);
 
+    // ARC-TECHNOLOGY-1619 (0x4A9650, 0x4AB990): an object that is no critter (a wall, a door, a container, a scenery, a trap object) as the hostility rules read it: its object flags and busted state; null for an id the scene names none for.
+    private HostilityCritter? ObjectFound(string id) =>
+        _scene.ObjectFacts?.Invoke(id) is { } facts
+            ? new HostilityCritter
+            {
+                Id = id, Kind = facts.Type == 0 ? HostilityKind.Wall : HostilityKind.Object, Destroyed = facts.Destroyed, Off = facts.Off, DontDraw = facts.DontDraw,
+                Invulnerable = facts.Invulnerable, Busted = facts.Busted,
+            }
+            : null;
+
     public HostilityCritter? Find(string id)
     {
         if (id == Pc)
@@ -3389,12 +3417,13 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
                 Concealed = concealed, MasterProwler = concealed && _session.QueryHeroSkills()?[Skill.Prowling].Training >= SkillTraining.Master,
             };
         }
-        if (!_npcs.ContainsKey(id) && CompanionCell(id) is null) return null;
+        if (!_npcs.ContainsKey(id) && CompanionCell(id) is null) return ObjectFound(id);
         if (Fields(id) is not { Critter: { } critter, Npc: { } npc } fields || Build(id) is not { } build) return null;
         var status = Status(id);
         var state = LifeState(id) ?? build.Loaded;
         var danger = _session.QueryDanger(id);
         var leader = Leader(id);
+        var npcConcealed = _session.IsConcealed(SessionCombatant.Critter(id));
         return new HostilityCritter
         {
             Id = id, Kind = HostilityKind.Npc,
@@ -3415,6 +3444,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
             Perception = build.EffectiveStat(CharacterStat.Perception, state), Intelligence = build.EffectiveStat(CharacterStat.Intelligence, state),
             Level = build.Level, Alignment = critter.BaseStats.Count > AreaCompanionData.AlignmentStat ? critter.BaseStats[AreaCompanionData.AlignmentStat] : 0,
             HealthPercent = status is null ? 0 : Percent(status), Leader = leader, PcLeader = leader,
+            // ARC-AI-1560 (critter flag 0x1, 0x45EDE0, for any critter): a follower the hero's sneak hides is heard at the silent level and refused unseen when it prowls as a master.
+            Concealed = npcConcealed, MasterProwler = npcConcealed && NpcSkill(id, Skill.Prowling)?.Training >= SkillTraining.Master,
         };
     }
 
@@ -3557,12 +3588,23 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     /// ARC-AI-1518 (ledger AW4, AW5): the margin 0..100 by which a concealed hero lowers the observer's
     /// Perception in one sight or hearing check, from the session's stealth facts (<see cref="GameSessionOwner.HeroProwlingMargin"/>) and
     /// the observer's own: its conditions, dark sight, the light at the hero, and for sight the line from the observer to the hero (a
-    /// blocker hides the prowler, else the line's cover). 0 for any other target, or a hero that is not concealed. A concealed follower
-    /// is not handled here (it has no margin yet).
+    /// blocker hides the prowler, else the line's cover). ARC-AI-1560: the same for a concealed follower as the target, from its own
+    /// prowling level and training, light and worn armour (<see cref="GameSessionOwner.NpcProwlingMargin"/>); a follower with no sheet or
+    /// build here gives 0. 0 for a target that is not concealed.
     /// </summary>
     private int ProwlingMargin(string observer, string target, CellCoord at, CellCoord there, HostilityCritter? facts, ILineOfFireMap<AreaObjectRecord> map, bool seeing)
     {
-        if (target != Pc || observer == Pc || !_session.IsConcealed(SessionCombatant.Hero)) return 0;
+        if (observer == Pc || observer == target) return 0;
+        SessionNpcProwler? prowler = null;
+        if (target == Pc)
+        {
+            if (!_session.IsConcealed(SessionCombatant.Hero)) return 0;
+        }
+        else
+        {
+            if (!_session.IsConcealed(SessionCombatant.Critter(target)) || Build(target) is not { } build || _scene.NpcSheet?.Invoke(target) is not { } sheet) return 0;
+            prowler = new(build, sheet.Loaded, sheet.Modifiers);
+        }
         var perception = Math.Clamp(facts?.Perception ?? 0, 0, AwarenessRules.MaxPerception);
         var (offsetX, offsetY) = ObserverOffset(observer);
         var trace = seeing ? LineOfFireRules.Trace(at, offsetX, offsetY, there, map, _session.Rules.Combat) : null;
@@ -3578,7 +3620,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
             ObserverDarkSight = ((Fields(observer)?.Critter?.Flags2 ?? 0) & DarkSight2) != 0,
         };
         if (trace is not null) observerFacts = AwarenessRules.WithProwlerLine(observerFacts, trace);
-        return _session.HeroProwlingMargin(perception, observerFacts, seeing).Margin;
+        return (prowler is null ? _session.HeroProwlingMargin(perception, observerFacts, seeing) : _session.NpcProwlingMargin(prowler, perception, observerFacts, seeing)).Margin;
     }
 
     private const int OffsetXSlot = 2, OffsetYSlot = 3;
