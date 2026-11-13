@@ -262,6 +262,13 @@ public sealed class AreaTalkQueryTests
             using var noHeal = Create(content, 793, (7, false), damage: (_, _, _, _) => "damaged");
             Assert.IsFalse(noHeal.Host.Apply(noHeal.Run().Effects));
             Assert.IsFalse(noHeal.Flag);
+            // Heal with no damage in the world's hands the other way round: the heal request alone refuses.
+            using var noDamage = Create(content, 793, (7, false), heal: (_, _) => "healed");
+            Assert.IsFalse(noDamage.Host.Apply(noDamage.Run().Effects));
+            Assert.IsFalse(noDamage.Flag);
+            // A use host of another map answers nothing for this talk: the set is the plain one and refuses at the first damage line's earlier command or at it.
+            using var otherMap = Create(content, 793, (7, false), useMap: Map + 1, damage: (_, _, _, _) => "damaged", heal: (_, _) => "healed");
+            Assert.AreEqual(ScrOutcome.Refused, otherMap.Run().Outcome);
             // No use host of the map: the talk set is the plain one and the run is refused at the first damage action.
             using var noQueries = Create(content, 793, (7, false), damage: (_, _, _, _) => "damaged", heal: (_, _) => "healed");
             noQueries.Host.QueryHost = null;

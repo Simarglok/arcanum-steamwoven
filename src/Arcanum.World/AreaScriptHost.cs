@@ -434,10 +434,12 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
         // original does nothing for an object that is not a PC or NPC). The spell-book rule decides; a session that cannot take the change stops the later steps.
         // ARC-SCRIPT-1563 (GT194–GT196): a script's damage and heal apply here too, in the action order of the requests: the use host's session path (victim, amount, type, unresistable; the victim's taking-damage script is asked, GT198).
         // The dialog opens after this (X11: the dialog action ends the run), so a talk's damage lands before the window.
+        // The use host is taken once: the damage's own effects (a victim's script, a death) may move what QueryHost answers.
+        var damageHost = Queries;
         foreach (var request in effects.ObjectStates)
         {
-            if (request.Change is ScrObjectStateChange.Damage or ScrObjectStateChange.DamageUnresistable) { Queries!.ApplyScriptDamage(request); LastDamage = Queries.LastDamage; continue; }
-            if (request.Change == ScrObjectStateChange.HealHitPoints) { Queries!.ApplyScriptHeal(request); LastHeal = Queries.LastHeal; continue; }
+            if (request.Change is ScrObjectStateChange.Damage or ScrObjectStateChange.DamageUnresistable) { damageHost!.ApplyScriptDamage(request); LastDamage = damageHost.LastDamage; continue; }
+            if (request.Change == ScrObjectStateChange.HealHitPoints) { damageHost!.ApplyScriptHeal(request); LastHeal = damageHost.LastHeal; continue; }
             if (request.Change != ScrObjectStateChange.GiveSpellMastery) continue;
             if (request.Object == Pc) { if (!AreaScriptSpells.GiveMastery(_session, null, request.Value)) return false; }
             else if (request.Object.Map == _map.RuntimeMap && _npcAdvancement?.Invoke(request.Object.Code) is { } npc && !AreaScriptSpells.GiveMastery(_session, npc, request.Value)) return false;
