@@ -155,6 +155,26 @@ public sealed class AreaDeferredItemDamageTests
         });
     }
 
+    // ARC-SCRIPT-1662 (WE2; exe 0x4614A0, 0x461540): a deferred call's owner that is no critter (a container of the shown map) reads a ratio of 100, through the use host that answers; without it the run still stops.
+    [TestMethod]
+    public void The_script_reads_a_ratio_of_100_for_a_container_owner_while_the_use_host_answers()
+    {
+        var container = new Arcanum.Data.Area.AreaObjectRecord(new(new string('a', 64), 1, Arcanum.Data.Area.AreaSourceKind.Mobile, 1, 1, 100L, new string('b', 64), 100), 0, 2, 0, "p", "p", "r", "s",
+            Arcanum.Data.Area.AreaScope.Core, null, 10, 20, Arcanum.Data.Area.AreaDisposition.BodyEligibleConditionally, [], [], true, true, true);
+        var entity = AreaUseScriptHost.EntityId(container);
+        With(UseHost.WithDamage, complexity: 60, (host, session, pc, ring, _) =>
+        {
+            var owner = new Arcanum.Scripting.Scr.ScrObjectRef(pc.Map.RuntimeMap, entity);
+            Assert.IsNull(host.Scripts.PowerRatio(new(ring.Map.RuntimeMap, "ring"), owner), "the shown map's use host holds no row of this container");
+            var useHost = new AreaUseScriptHost(session, pc.Map.RuntimeMap, [container], [], null, new AreaScriptWorld(() => new(12, 20), _ => false, _ => null, () => null));
+            host.Scripts.QueryHost = () => useHost;
+            Assert.AreEqual(100, host.Scripts.PowerRatio(new(ring.Map.RuntimeMap, "ring"), owner));
+            Assert.AreNotEqual(100, host.Scripts.PowerRatio(new(ring.Map.RuntimeMap, "ring"), new(pc.Map.RuntimeMap, pc.Entity)), "the hero's own ratio of the complexity 60 is no neutral one");
+            host.Scripts.QueryHost = null;
+            Assert.IsNull(host.Scripts.PowerRatio(new(ring.Map.RuntimeMap, "ring"), owner), "without a use host of the map the run stops as before");
+        });
+    }
+
     [TestMethod]
     public void Damage_and_heal_of_hit_points_go_to_the_hooks_in_action_order_for_the_pc_only()
     {
