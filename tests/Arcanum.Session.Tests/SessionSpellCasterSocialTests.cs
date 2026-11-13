@@ -63,6 +63,7 @@ public sealed class SessionSpellCasterSocialTests
         public bool Peace(string npc, string with) => Record($"peace {npc} {with}");
         public bool Flee(string npc, string from) => Record($"flee {npc} {from}");
         public bool StopFleeing(string npc) => Record($"stop-fleeing {npc}");
+        public void EndFleeGoals(string npc) => Record($"end-flee-goals {npc}");
     }
 
     private static SpellCastCritter TargetCritter()
@@ -185,6 +186,21 @@ public sealed class SessionSpellCasterSocialTests
         Assert.AreEqual(0, host.Calls.Count, "no reaction at the end");
         Assert.IsTrue(owner.QueryDanger(Target).Flags.HasFlag(DangerFlags.NoFlee));
         Assert.IsTrue(Social_(caster).Any(e => e.Value == SessionSpellCaster.SocialLeave), Trail(caster));
+    }
+
+    [TestMethod]
+    public void Mind_control_of_a_fleeing_npc_stops_the_fleeing_first_and_the_host_ends_its_flee_goals()
+    {
+        // ARC-AI-1513 (0x4AF1D0 runs 0x4AF170 first): the controlled NPC in FLEE goes to NONE in the same revision as NO_FLEE and the host is asked to end its flee goals.
+        var record = Flag(SessionSpellCaster.SpellFlagsField, MindControlled);
+        var (owner, caster, host) = Session(record);
+        using var _ = owner;
+        var flee = owner.SetDangerState(owner.Version, new SessionDangerRequest { Entity = Target, State = DangerState.Flee, Target = SessionCombatant.Hero });
+        Assert.AreEqual(DangerState.Flee, owner.QueryDanger(Target).State, "setup: " + flee.Disposition);
+        Cast(owner, caster, record);
+        var danger = owner.QueryDanger(Target);
+        Assert.AreEqual((DangerState.None, true), (danger.State, danger.Flags.HasFlag(DangerFlags.NoFlee)), Trail(caster));
+        CollectionAssert.Contains(host.Calls, $"end-flee-goals {Target}");
     }
 
     [TestMethod]

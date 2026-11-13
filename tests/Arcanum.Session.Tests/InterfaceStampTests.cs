@@ -95,4 +95,46 @@ public sealed class InterfaceStampTests
         Assert.AreNotEqual(start.Inventory, taken.Inventory);
         Assert.AreEqual((start.Logbook, start.Areas), (taken.Logbook, taken.Areas));
     }
+
+    // ARC-WORLD-1554 (ledger SQ16): the original's public quest setter passes a request to the internal setter, the one that lights the Logbook button, only while the effective state is below it and is not a final one, so a repeated or lower request writes and lights nothing.
+    [TestMethod]
+    public void A_repeated_or_lower_quest_request_changes_nothing_and_the_logbook_stamp_stays()
+    {
+        using var owner = Owner();
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.SetQuestState(owner.Version, 1001, SessionQuestState.Achieved).Disposition);
+        var stamp = owner.QueryHeroInterfaceStamp()!.Value;
+        var revision = owner.Version.Revision;
+        var time = owner.QueryQuest(1001)!.Value.TimestampMs;
+        Advance(owner, 60_000);
+        foreach (var request in new[] { SessionQuestState.Achieved, SessionQuestState.Accepted, SessionQuestState.Mentioned, SessionQuestState.Unknown })
+        {
+            Assert.AreEqual(GameSessionDisposition.NoChange, owner.SetQuestState(owner.Version, 1001, request).Disposition, request.ToString());
+            Assert.AreEqual(stamp, owner.QueryHeroInterfaceStamp(), request + ": no write, no light");
+        }
+        Assert.AreEqual(revision, owner.Version.Revision);
+        Assert.AreEqual(time, owner.QueryQuest(1001)!.Value.TimestampMs, "the stored time is not rewritten");
+    }
+
+    // A botched request also sets the quest's shared state to Botched, which is what the unbotch needs. The internal setter lights only when the stored state less the botched bit is not 0, and the unbotch function the same: a mark on a quest the PC never held changes nothing the logbook shows.
+    [TestMethod]
+    public void A_botched_mark_on_a_quest_with_no_stored_state_lights_nothing_and_on_a_held_quest_it_does()
+    {
+        using var owner = Owner();
+        var start = owner.QueryHeroInterfaceStamp()!.Value;
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.SetQuestState(owner.Version, 1003, SessionQuestState.Botched).Disposition);
+        Assert.AreEqual(SessionQuestState.Botched, owner.QueryQuest(1003)!.Value.Effective);
+        Assert.AreEqual(start, owner.QueryHeroInterfaceStamp(), "state 0 with the mark: the original's test (state less the mark is 0) does not light");
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.UnbotchQuest(owner.Version, 1003).Disposition);
+        Assert.AreEqual(start, owner.QueryHeroInterfaceStamp(), "and the unbotch of it lights nothing either");
+
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.SetQuestState(owner.Version, 1004, SessionQuestState.Accepted).Disposition);
+        var held = owner.QueryHeroInterfaceStamp()!.Value;
+        Advance(owner, 1_000);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.SetQuestState(owner.Version, 1004, SessionQuestState.Botched).Disposition);
+        var botched = owner.QueryHeroInterfaceStamp()!.Value;
+        Assert.AreNotEqual(held.Logbook, botched.Logbook, "a mark on an accepted quest lights");
+        Advance(owner, 1_000);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.UnbotchQuest(owner.Version, 1004).Disposition);
+        Assert.AreNotEqual(botched.Logbook, owner.QueryHeroInterfaceStamp()!.Value.Logbook, "and the unbotch of it does");
+    }
 }

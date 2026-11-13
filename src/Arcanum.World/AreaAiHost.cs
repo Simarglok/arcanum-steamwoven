@@ -592,6 +592,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         _steppedThisFrame.Clear();
         _nowMs = Math.Max(_nowMs, nowMs);
         ClaimSessionEnds();
+        DrainFleeInterrupts();
         Movers.Settle(_nowMs);
         ObserveLeaves();
         ObserveRound();
@@ -2304,9 +2305,45 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         };
     }
 
+    /// <summary>
+    /// ARC-AI-1513 (ledger VB2-7): set no-flee (0x4AF1D0) as the move-away goal's nodes ask it: the session first stops the fleeing (FLEE to NONE through the setter) and sets NO_FLEE in one revision; an NPC that was
+    /// in FLEE has its flee runs ended (the interrupt of 0x4AF170, which the original runs in the FLEE state only). Not run for the hero or an NPC the session does not know.
+    /// </summary>
     public void SetNoFlee(string id)
     {
-        if (id != Pc) _session.SetNoFlee(_session.Version, id);
+        if (id == Pc) return;
+        var fleeing = _session.QueryDanger(id).State == DangerState.Flee;
+        var result = _session.SetNoFlee(_session.Version, id, SetterFacts(id));
+        if (fleeing && result.Failure == GameSessionFailure.None) InterruptFleeRuns(id);
+    }
+
+    /// <summary>ARC-AI-1513: the flee-goal interrupt of stop fleeing (0x44E4D0, goal 25) for the start of mind control, which has set no-flee through the session: every run of the NPC whose bottom or top goal is flee ends. False: the NPC is not run here.</summary>
+    public bool SpellEndFleeGoals(string npc)
+    {
+        if (npc == Pc || !TryNpc(npc, out _)) return false;
+        InterruptFleeRuns(npc);
+        return true;
+    }
+
+    // The flee runs end at level 6. While the spell system holds the table (the start of mind control runs inside a spell run) the session refuses the interrupt: the NPC waits and its runs end when the table frees,
+    // at the next step of this host (DrainFleeInterrupts).
+    private readonly HashSet<string> _fleeInterruptsPending = [];
+
+    private void InterruptFleeRuns(string npc)
+    {
+        _fleeInterruptsPending.Remove(npc);
+        foreach (var run in RunsOf(npc).Where(r => !AiExecutorRules.IsOverlayRunGoal(r.Bottom.Goal) && (r.Bottom.Goal == GoalType.Flee || r.Frames[^1].Goal == GoalType.Flee)).ToArray())
+        {
+            var change = _session.InterruptGoal(run.Handle, GoalInterruptRules.MaxLevel);
+            if (change.Failure == SessionGoalFailure.PassInProgress) _fleeInterruptsPending.Add(npc);
+            else EndNodes(change.Steps);
+        }
+    }
+
+    private void DrainFleeInterrupts()
+    {
+        if (_fleeInterruptsPending.Count == 0) return;
+        foreach (var npc in _fleeInterruptsPending.ToArray()) InterruptFleeRuns(npc);
     }
 
     // ARC-MAGIC-035: the interrupt of the helpers 0x44E050 and 0x44E4D0 ends only the runs that test true, not every run of the NPC (an eye candy or a burning run beside it is left): each at the level, with its end nodes.
