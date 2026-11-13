@@ -135,7 +135,8 @@ public partial class TerrainViewerApp
     {
         if (_createdCritters is not null && ReferenceEquals(_createdCrittersSession, session)) return _createdCritters;
         _createdCrittersSession = session; _createdCrittersRevision = -1;
-        return _createdCritters = new(session, read);
+        // ARC-WORLD-1526: a monster generator's copy is built from the generator's own row, which the resolver finds by identity (the generator stands on the map the copy was made on).
+        return _createdCritters = new(session, read, (entity, map) => _inventoryHost?.Resolver.Resolve(entity, map) is { Status: RecordStatus.Found, Record: { } record } ? record.Row : null);
     }
 
     // ARC-DEV-370 (E1-c2): the body art of each critter art id the session's created critters name (read once per set of art archives, kept across window moves: a refusal is kept and said once). The T0

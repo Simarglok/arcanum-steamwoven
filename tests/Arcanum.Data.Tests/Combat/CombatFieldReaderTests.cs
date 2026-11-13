@@ -410,6 +410,54 @@ public sealed class CombatFieldReaderTests
             Assert.AreEqual(CreatedRowFailure.InvalidArguments, CreatedObjectRows.Critter(files, prototype, entity, map, x, y).Failure, $"{prototype} {entity} {map} {x} {y}");
     }
 
+    // ARC-WORLD-1526 (ledger GS5, VB4-9): a monster generator's copy is a copy of the generator OBJECT: its instance fields stay, the generator's marks go (0x4BA720) and the copy gets its place.
+    [TestMethod]
+    public void A_generator_copys_row_is_the_generator_objects_row_unmarked_and_placed()
+    {
+        var files = Files((29001, Npc, NpcValues()));
+        var prototypeRow = CreatedObjectRows.Critter(files, 29001, "oid:critter:7", 3, 412, 377).Row!;
+        // The generator: its own instance fields over the prototype: a faction, an art, the generator's marks on both flag words, its packed settings.
+        AreaFieldValue Value(int slot, long number) => new(slot, AreaPresence.Value, AreaValueOrigin.Instance, number, [], null);
+        var own = new[] { Value(0, 77), Value(1, 5L | (9L << 32)), Value(18, 0x400002L | 0x1000), Value(69, 0x80000L | 0x1306), Value(81, 22), Value(90, 0x1234) };
+        var effective = prototypeRow.EffectiveFields.Where(f => own.All(o => o.Slot != f.Slot)).Concat(own).OrderBy(f => f.Slot).ToArray();
+        var generator = prototypeRow with { DirectFields = own, EffectiveFields = effective };
+
+        var made = CreatedObjectRows.CritterFrom(generator, "oid:critter:9", 3, 50, 60);
+        Assert.AreEqual(CreatedRowFailure.None, made.Failure);
+        var row = made.Row!;
+        Assert.AreEqual((Npc, 29001, 3, 50L, 60L), (row.Type, row.PrototypeNumber, row.Key.RuntimeMap, row.WorldX, row.WorldY));
+        Assert.AreEqual("oid:critter:9", "oid:" + row.Key.ObjectIdSha256);
+        var packed = 50L | (60L << 32);
+        long Direct(int slot) => row.DirectFields.Single(f => f.Slot == slot).Number!.Value;
+        long Effective(int slot) => row.EffectiveFields.Single(f => f.Slot == slot).Number!.Value;
+        // The generator's instance fields are the copy's (its art, faction and packed dword), not the prototype's.
+        Assert.AreEqual((77L, 22L, 0x1234L), (Direct(0), Direct(81), Direct(90)));
+        Assert.AreEqual((77L, 22L, 0x1234L), (Effective(0), Effective(81), Effective(90)));
+        // The unmarking (0x4BA720: NPC flag 0x80000, object flags 0x400002), OF_DYNAMIC, the place and both standpoints; no NPC flag 0x2 (a copy has its template's flags).
+        Assert.AreEqual((0x1000L | 0x2000, 0x1306L), (Direct(18), Direct(69)));
+        Assert.AreEqual((packed, packed, packed), (Direct(1), Direct(78), Direct(79)));
+        CollectionAssert.AreEqual(row.EffectiveFields.Select(f => f.Slot).Order().ToArray(), row.EffectiveFields.Select(f => f.Slot).ToArray());
+        // The prototype's own fields that the generator does not override are still read through (the stats), and the combat fields read the copy's faction.
+        var fromRow = CombatFieldReader.Read(row);
+        Assert.AreEqual(CombatFieldFailure.None, fromRow.Failure, fromRow.Detail?.ToString());
+        Assert.AreEqual(CombatFieldReader.ReadPrototype(files, 29001).Fields!.Critter!.BaseStats[0], fromRow.Fields!.Critter!.BaseStats[0]);
+        Assert.AreEqual(22, fromRow.Fields.Npc!.Faction);
+        Assert.AreEqual(0u, fromRow.Fields.Npc.Flags & 0x80000, "the copy is no generator");
+        // The template is untouched.
+        Assert.AreEqual(0x400002L | 0x1000, generator.DirectFields.Single(f => f.Slot == 18).Number);
+    }
+
+    [TestMethod]
+    public void A_generator_copys_row_refuses_a_template_that_is_no_critter_and_bad_arguments()
+    {
+        var files = Files((29001, Npc, NpcValues()), (6218, Weapon, WeaponValues()));
+        var npc = CreatedObjectRows.Critter(files, 29001, "oid:critter:1", 3, 5, 5).Row!;
+        var weapon = npc with { Type = Weapon };
+        Assert.AreEqual(CreatedRowFailure.NotACritter, CreatedObjectRows.CritterFrom(weapon, "oid:critter:2", 3, 5, 5).Failure);
+        foreach (var (entity, map, x, y) in new[] { ("critter:2", 3, 5, 5), ("oid:", 3, 5, 5), ("oid:critter:2", 0, 5, 5), ("oid:critter:2", 3, -1, 5), ("oid:critter:2", 3, 5, -1) })
+            Assert.AreEqual(CreatedRowFailure.InvalidArguments, CreatedObjectRows.CritterFrom(npc, entity, map, x, y).Failure, $"{entity} {map} {x} {y}");
+    }
+
     private static (CombatFieldFailure, int) Refusal(CombatFieldRead read)
     {
         Assert.IsNull(read.Fields);
