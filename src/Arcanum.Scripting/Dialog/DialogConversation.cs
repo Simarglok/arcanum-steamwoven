@@ -308,8 +308,8 @@ public sealed partial class DialogConversation
         }
         if (plan.InsultLine)
         {
-            // ARC-SCRIPT-1505 (ledger INS1): the insulted line, the NPC's class line 1000; the node's replies follow as for a plain line.
-            if (!NpcTalkLine(InsultGroup, null, out var insulted))
+            // ARC-SCRIPT-1505 (ledger INS1): the insulted line, the NPC's race line 1000; the node's replies follow as for a plain line.
+            if (!NpcRaceTalkLine(InsultGroup, out var insulted))
             {
                 return;
             }
@@ -940,7 +940,7 @@ public sealed partial class DialogConversation
     /// <summary>
     /// The reply step's hostile check (0x413130, ledger HR1–HR3, ARC-DEV-193): after the picked reply's action string returned 1 (no FL, JO, UW,
     /// ET or SU in it) the hostility port is asked whether the NPC is alive and kill-on-sight toward the PC now; when it is, the NPC speaks a
-    /// generated line (class group 1000, ARC-SCRIPT-1505) and the talk ends as <see cref="DialogEndKind.HostileRefusal"/> before the insult and the
+    /// generated line (race group 1000, ARC-SCRIPT-1505) and the talk ends as <see cref="DialogEndKind.HostileRefusal"/> before the insult and the
     /// reply's transition. Without the port the check is not made. False when the talk ended or failed.
     /// </summary>
     [OriginalFunction(0x413130, OriginalFunctionScope.Partial)]
@@ -973,7 +973,7 @@ public sealed partial class DialogConversation
     }
 
     /// <summary>
-    /// ARC-SCRIPT-1505 (ledger INS2, HR3): the NPC's last words after an insult that ends the talk or a refusal to talk on, its class line 1000
+    /// ARC-SCRIPT-1505 (ledger INS2, HR3): the NPC's last words after an insult that ends the talk or a refusal to talk on, its race line 1000
     /// (no replies, end state 4). Without the greeting port, or when its facts are unknown, the line stays as it was. False when the line could not be picked (the conversation failed).
     /// </summary>
     private bool SpeakLastWords()
@@ -982,7 +982,7 @@ public sealed partial class DialogConversation
         {
             return true;
         }
-        if (!NpcTalkLine(InsultGroup, null, out var last))
+        if (!NpcRaceTalkLine(InsultGroup, out var last))
         {
             return false;
         }
@@ -997,7 +997,7 @@ public sealed partial class DialogConversation
     /// <summary>
     /// The insult of a picked Player <c>i:</c> reply (0x4191E0): the NPC's reaction changes by <see cref="InsultReaction"/>
     /// through the reaction port (the PC's adjustment effects and skips are the owner's), then the effective reaction is read;
-    /// at most <see cref="InsultEndsAtOrBelow"/> the NPC ends the talk with its generated class line 1000 (ARC-SCRIPT-1505, with the greeting port;
+    /// at most <see cref="InsultEndsAtOrBelow"/> the NPC ends the talk with its generated race line 1000 (ARC-SCRIPT-1505, with the greeting port;
     /// <see cref="DialogEndKind.Insulted"/>), otherwise the reply's own transition follows. False when the talk ended or stopped.
     /// </summary>
     [OriginalFunction(0x4191E0, OriginalFunctionScope.Partial)]
@@ -1434,7 +1434,7 @@ public sealed partial class DialogConversation
             }
             else if (marker is { Letter: 'i' } && exact && _ports.Greeting is not null && withReplies && !nested)
             {
-                // ARC-SCRIPT-1505 (ledger INS1): an NPC node that is exactly "i:" says the NPC's class line 1000 (0x416840 → 0x4185F0), picked when the node is entered.
+                // ARC-SCRIPT-1505 (ledger INS1): an NPC node that is exactly "i:" says the NPC's race line 1000 (0x416840 → 0x4185F0), picked when the node is entered.
                 insultLine = true;
                 text = string.Empty;
             }

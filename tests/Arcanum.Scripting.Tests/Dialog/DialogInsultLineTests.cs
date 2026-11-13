@@ -7,7 +7,7 @@ namespace Arcanum.Scripting.Tests.Dialog;
 
 /// <summary>
 /// ARC-SCRIPT-1505 (ledger INS1, INS2): the NPC's generated line of the insult as read in the executable: an NPC node that is exactly <c>i:</c> says the NPC's
-/// class line 1000 (0x416840 → 0x4185F0) and keeps its replies, and a Player <c>i:</c> reply that ends the talk shows the same line as the NPC's last words
+/// race line 1000 (0x416840 → 0x4185F0) and keeps its replies, and a Player <c>i:</c> reply that ends the talk shows the same line as the NPC's last words
 /// (0x4191E0), over invented generated-dialog files whose entries name their own number and file.
 /// </summary>
 [TestClass]
@@ -33,14 +33,14 @@ public sealed class DialogInsultLineTests
         $"{{10}}{{{npcText}}}{{}}{{}}{{}}{{}}{{{npcAction}}}{reply}{{20}}{{Next node.}}{{}}{{}}{{}}{{}}{{}}";
 
     [TestMethod]
-    public void An_npc_node_that_is_exactly_i_says_the_class_line_1000_and_keeps_its_replies()
+    public void An_npc_node_that_is_exactly_i_says_the_race_line_1000_and_keeps_its_replies()
     {
         foreach (var marker in new[] { "i:", "I:" })
         {
             var rig = new Rig();
             var conversation = rig.Start(Nodes(marker, npcAction: "LF 3 1"));
             Assert.AreEqual(DialogConversationPhase.AwaitingSelection, conversation.Phase, marker);
-            Assert.AreEqual("1000 cls_m2m costs %d", conversation.NpcLine!.Text, "the NPC's class line 1000 of the file by the two genders");
+            Assert.AreEqual("1000 rce_m2m costs %d", conversation.NpcLine!.Text, "the NPC's race line 1000 of the file by the two genders (the PC's race is the NPC's, so the first block)");
             Assert.AreEqual((DialogLineOriginKind.Generated, 1000), (conversation.NpcLine.Origin!.Kind, conversation.NpcLine.Origin.Number));
             Assert.AreEqual(new DialogNodeId(10), conversation.NpcLine.Node);
             CollectionAssert.AreEqual(new[] { "LF:3:1:900" }, rig.Ports.Commands, "the node's action ran before its line");
@@ -75,13 +75,13 @@ public sealed class DialogInsultLineTests
     }
 
     [TestMethod]
-    public void An_insult_that_ends_the_talk_shows_the_class_line_1000_as_the_last_words()
+    public void An_insult_that_ends_the_talk_shows_the_race_line_1000_as_the_last_words()
     {
         var rig = new Rig(reaction: 30);
         var conversation = rig.Start(Nodes("?", reply: "{11}{I:}{}{1}{}{-7}{}"));
         Assert.AreEqual(DialogConversationSelectStatus.Ended, conversation.Select(conversation.Options.Single().Token).Status);
         Assert.AreEqual(new DialogConversationEnd(DialogEndKind.Insulted, null), conversation.End);
-        Assert.AreEqual("1000 cls_m2m costs %d", conversation.NpcLine!.Text, "the NPC's class line 1000 replaces the line it said");
+        Assert.AreEqual("1000 rce_m2m costs %d", conversation.NpcLine!.Text, "the NPC's race line 1000 replaces the line it said");
         Assert.AreEqual((DialogLineOriginKind.Generated, 1000), (conversation.NpcLine.Origin!.Kind, conversation.NpcLine.Origin.Number));
         Assert.AreEqual(0, conversation.Options.Count, "no replies after the last words");
     }
@@ -108,7 +108,7 @@ public sealed class DialogInsultLineTests
             new DialogConversationPorts(rig.Ports, rig.Ports, Owner(), rig.World, Greeting: rig.Greeter, Hostile: new KillOnSight()));
         Assert.AreEqual(DialogConversationSelectStatus.Ended, conversation.Select(conversation.Options.Single().Token).Status);
         Assert.AreEqual(new DialogConversationEnd(DialogEndKind.HostileRefusal, null), conversation.End);
-        Assert.AreEqual("1000 cls_m2m costs %d", conversation.NpcLine!.Text);
+        Assert.AreEqual("1000 rce_m2m costs %d", conversation.NpcLine!.Text);
     }
 
     private sealed class KillOnSight : IDialogHostilePort

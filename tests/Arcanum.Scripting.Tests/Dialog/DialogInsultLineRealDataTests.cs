@@ -8,7 +8,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 namespace Arcanum.Scripting.Tests.Dialog;
 
 /// <summary>
-/// ARC-SCRIPT-1505 opt-in check (<c>DAT_ROOT</c>, the game folder): every installed NPC node that is exactly <c>i:</c> is admitted and says the class line 1000, the
+/// ARC-SCRIPT-1505 opt-in check (<c>DAT_ROOT</c>, the game folder): every installed NPC node that is exactly <c>i:</c> is admitted and says the race line 1000, the
 /// generated NPC class files hold that group, and the installed data holds no NPC <c>m:</c> or <c>r:</c> node (the forms this slice leaves out). Only counts and
 /// shapes are compared, never text.
 /// </summary>
@@ -16,7 +16,7 @@ namespace Arcanum.Scripting.Tests.Dialog;
 public sealed class DialogInsultLineRealDataTests
 {
     [TestMethod, TestCategory("RealData"), TestCategory("DlgRealData")]
-    public void Every_installed_npc_i_node_says_the_class_line_1000_and_no_npc_m_or_r_node_exists()
+    public void Every_installed_npc_i_node_says_the_race_line_1000_and_no_npc_m_or_r_node_exists()
     {
         var root = Environment.GetEnvironmentVariable("DAT_ROOT");
         if (string.IsNullOrWhiteSpace(root)) Assert.Fail("DAT_ROOT is required for the opt-in insult-line check; this is not a synthetic pass.");
@@ -24,7 +24,7 @@ public sealed class DialogInsultLineRealDataTests
         Assert.AreEqual(ContentMountStatus.Ready, discovery.Status, discovery.Detail);
         using var stack = ContentStack.Open(discovery.Plan!).Stack!;
         var generated = GeneratedDialogFiles.Load(stack).Files!;
-        var greeter = new DialogGreetingTests.FakeGreeter(new DialogGreetingFacts(true, true, false, 0, 1, 0, DialogReactionCategory.Neutral, true),
+        var greeter = new DialogGreetingTests.FakeGreeter(new DialogGreetingFacts(true, true, false, 0, 0, 0, DialogReactionCategory.Neutral, true),
             new DialogGreetingSources(generated, new MesFile?[4], null), [], DialogRuleProfile.Original, []);
 
         int nodes = 0, files = 0, spoken = 0, moneyNodes = 0, rumorNodes = 0;
@@ -50,17 +50,17 @@ public sealed class DialogInsultLineRealDataTests
                 if (attempt.Phase is not (DialogConversationPhase.AwaitingSelection or DialogConversationPhase.Ended)) continue;
                 spoken++;
                 Assert.IsTrue(attempt.NpcLine!.Origin is { Kind: DialogLineOriginKind.Generated or DialogLineOriginKind.MissingLine or DialogLineOriginKind.Empty }, $"{key} {record.Id}");
-                if (attempt.NpcLine.Origin!.Kind == DialogLineOriginKind.Generated) Assert.IsTrue(attempt.NpcLine.Origin.Number is >= 1000 and < 2000, $"{key} {record.Id}: the class group 1000 (+ 50 x the social class)");
+                if (attempt.NpcLine.Origin!.Kind == DialogLineOriginKind.Generated) Assert.IsTrue(attempt.NpcLine.Origin.Number is >= 1000 and < 2000, $"{key} {record.Id}: the race group 1000 (+ 50 x the PC's race block)");
             }
             if (any) files++;
         }
         Console.WriteLine($"INSULT-LINE|NPC i: nodes {nodes}|files {files}|spoken {spoken}|NPC m: {moneyNodes}|NPC r: {rumorNodes}");
         Assert.AreEqual((15, 9), (nodes, files), "15 NPC nodes in 9 files");
-        Assert.IsTrue(spoken > 0, "an installed node says its line");
+        Assert.AreEqual(13, spoken, "13 of the 15 nodes run to their line (the other two stop at a later field outside the subset)");
         Assert.AreEqual((0, 0), (moneyNodes, rumorNodes), "no installed NPC node starts with m: or r:");
 
-        foreach (var file in Enum.GetValues<GeneratedDialogFile>().Where(f => GeneratedDialogFiles.Names[(int)f].StartsWith("gd_cls_m", StringComparison.Ordinal)
-                     || GeneratedDialogFiles.Names[(int)f].StartsWith("gd_cls_f", StringComparison.Ordinal)))
-            Assert.IsTrue(generated.RunLength(file, 1000, 1049) > 0, $"{file} holds the class line 1000");
+        foreach (var file in Enum.GetValues<GeneratedDialogFile>().Where(f => GeneratedDialogFiles.Names[(int)f].StartsWith("gd_rce_m", StringComparison.Ordinal)
+                     || GeneratedDialogFiles.Names[(int)f].StartsWith("gd_rce_f", StringComparison.Ordinal)))
+            Assert.IsTrue(generated.RunLength(file, 1000, 1049) > 0, $"{file} holds the race line 1000");
     }
 }

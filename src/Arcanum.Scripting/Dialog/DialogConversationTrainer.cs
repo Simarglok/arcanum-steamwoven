@@ -15,7 +15,10 @@ public sealed partial class DialogConversation
     private const int TrainerTier = 1, TrainerBasePrice = 100, MaxTrainerSkill = 15;
 
     // The NPC line groups of the talk (0x418CA0: 3000, 0x418A40: 1000, 0x418C40: 2000, 4000, 5000, 0x418F30: 6000) and the PC answers.
-    private const int MenuGroup = 3000, QuoteGroup = 1000, InsultGroup = 1000, NoGoldGroup = 2000, TrainedGroup = 4000, RefusedGroup = 5000, DoneGroup = 6000;
+    private const int MenuGroup = 3000, QuoteGroup = 1000, NoGoldGroup = 2000, TrainedGroup = 4000, RefusedGroup = 5000, DoneGroup = 6000;
+
+    // The race group of the NPC's insulted line and last words (0x416840, 0x4191E0, 0x413130 call the race generator with 1000).
+    private const int InsultGroup = 1000;
 
     private sealed record TrainerTalk(ReplyPlan Reply, StepPlan? Target, DialogOperationSource Source);
 
@@ -341,6 +344,19 @@ public sealed partial class DialogConversation
             return false;
         }
         option = new TrainerOption(text, origin, default);
+        return true;
+    }
+
+    // The NPC's line of a race group through the same sources (the race generator, ARC-SCRIPT-1505): the insulted line and the last words.
+    private bool NpcRaceTalkLine(int group, out DialogNpcLine line)
+    {
+        line = new DialogNpcLine(CurrentNode, string.Empty);
+        if (!GenerateTalkLine((facts, sources, port) =>
+                DialogGreeting.NpcRaceGroup(group, facts, sources, port, _request.Names, _request.Encoding, _options.MaxTextBytes), out var text, out var origin))
+        {
+            return false;
+        }
+        line = new DialogNpcLine(CurrentNode, text, origin);
         return true;
     }
 

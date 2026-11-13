@@ -102,7 +102,7 @@ whatever the PC gender, as in the source): Player `a e f k n s w y` (exact) are 
 `Generated` with their normal transition (their text is a generated phrase, [below](#generated-phrases-arc-script-043)); exact `i:` (ARC-WORLD-043) is the original's **insult**: offered as `Generated` with its normal transition, and
 picking it runs the reply's action, then a `ReactionCommand` of −10 (`DialogConversation.InsultReaction`) through the world
 port, then reads the effective reaction; at most 20 (`InsultEndsAtOrBelow`) the talk ends as `Ended(Insulted)` with no SCR
-continuation (the NPC's last words are its class line 1000 with the greeting port, [below](#insult-line-arc-script-1505)), above 20 its transition follows (0x4191E0). Without a world port, or
+continuation (the NPC's last words are its race line 1000 with the greeting port, [below](#insult-line-arc-script-1505)), above 20 its transition follows (0x4191E0). Without a world port, or
 with an action ending in `JO`/`UW`/`FL`/`ET` (the original then skips the insult, read for FL), it is offered blocked. `b h l p` (exact) and
 `c z` (prefix) are offered blocked as
 `UnsupportedInteraction`, and so is a prefix `t` without the [trainer ports](#trainer-reply-arc-script-1150) and a prefix `r` without the [rumor ports](#rumor-reply-arc-script-1304); with them `t:` is the trainer reply and `r:` the rumor reply; `d q u x` have state-dependent visibility and make the step a
@@ -331,7 +331,7 @@ With the optional `IDialogHostilePort` (`DialogConversationPorts.Hostile`) the r
   `FinalLine`, `Join`, `ExpertTeacher` and `Schematics`.
 - **What.** `Hostile(npc, pc)` answers whether the NPC is alive and the AI turns kill-on-sight toward the PC now (0x45D8D0, 0x4AE120; the will-kos script included in the
   original). True: the NPC speaks a generated line (race line group 1000, 0x4185F0) and the talk ends at once without the reply's own transition; the conversation ends as
-  `Ended(HostileRefusal)` with no SCR continuation and the NPC's line is its class line 1000 ([below](#insult-line-arc-script-1505), ARC-SCRIPT-1505; without the greeting port the line stays the previous one). The insult
+  `Ended(HostileRefusal)` with no SCR continuation and the NPC's line is its race line 1000 ([below](#insult-line-arc-script-1505), ARC-SCRIPT-1505; without the greeting port the line stays the previous one). The insult
   of an `i:` reply comes after the check (DR5), so a hostile NPC ends the talk before the reaction change. A throwing port fails the conversation (`QueryException`).
 - **AREA viewer.** `AreaConversationHost.NpcHostile` is set by the viewer to the shown map's AI host (`AreaAiHost.HostileToHero`: the speaker is a known critter that is not dead and
   `HostilityRules.KillOnSight` toward the hero is not `No`); like `CO` it needs the AI host (`HeroAttackAvailable`), without it the port is not offered. `Rebind` keeps it.
@@ -580,16 +580,15 @@ installed story talk tells an installed line).
 
 ## Insult line (ARC-SCRIPT-1505)
 
-With the greeting port (the lines and files, as for the [generated phrases](#generated-phrases-arc-script-043)) the NPC's class line 1000 is spoken in three places
+With the greeting port (the lines and files, as for the [generated phrases](#generated-phrases-arc-script-043)) the NPC's race line 1000 is spoken in two places
 ([ledger INS1–INS4](../research/ledger/social.md#insult-line-arc-script-1505)): an NPC node whose whole text is `i:` (either case; 15 installed nodes in 9 files) says it as
 the node's line after the node's action ran, and the node's replies are offered as for a plain line (`StepPlan.InsultLine`, the line is picked when the node is entered with
-the `Line` roll of the greeting port: the NPC's class group 1000 + 50 × its social class, the dumb file for a dumb NPC, the override record, names substituted); and the NPC's last
+the `Line` roll of the greeting port: the race group 1000 + 50 × (0 when the PC's race is the NPC's, else the PC's race + 1), the dumb file for a dumb NPC, the override record 10999 + 1, names substituted; the race generator, not the class one); and the NPC's last
 words when a Player `i:` reply ends the talk (the reaction at most 20) or when the hostile check turns the NPC on the PC, which replace the NPC's line before the talk ends as
 `Ended(Insulted)` or `Ended(HostileRefusal)` (no replies, no SCR continuation). Without the greeting port a node `i:` stays a frontier (`UnsupportedGeneratedText`) and the last words
 are not changed. An `i:` node that is planned without its replies (the target of a final line, a greeting slot's node) stays a frontier, as the line is picked at the node's entry. The NPC lines `m:` and `r:`
 are not built (no installed node has either, [#1535](https://github.com/Simarglok/arcanum-steamwoven/issues/1535)). The dialog's item hand-over to the PC (`IN -n`) runs the hero's room test and lays a refused item on the hero's tile since
-ARC-WORLD-1131, so it is not open any more. Tests: `DialogInsultLineTests` (synthetic) and the opt-in `DialogInsultLineRealDataTests` (`DAT_ROOT`: 15 nodes in 9 files, 13 of them say a line at their
-entry, and no node starts with `m:` or `r:`).
+ARC-WORLD-1131, so it is not open any more. Tests: `DialogInsultLineTests` (synthetic) and the opt-in `DialogInsultLineRealDataTests` (`DAT_ROOT`: 15 nodes in 9 files, and no node starts with `m:` or `r:`).
 
 ## Barter reply (ARC-UI-050)
 
