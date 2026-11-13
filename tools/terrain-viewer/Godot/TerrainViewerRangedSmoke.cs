@@ -172,6 +172,9 @@ public partial class TerrainViewerApp
             var flights = session.QueryHeroAttack() is { Skill: CombatSkill.Bow } ? await Projectiles() : "NONE (a critical miss took the bow)";
             // ARC-DEV-288: while the lent bow is still wielded; the load replaces the session, so the sub-steps after it run on the loaded one (it holds the lent bow too).
             var savedFlight = session.QueryHeroAttack() is { Skill: CombatSkill.Bow } ? await SavedFlight() : "NONE (a critical miss took the bow)";
+            // ARC-TECHNOLOGY-1635: a trap's shot of the default projectile art (the lent bow's), on the session the saved-flight leg left.
+            var trapShots = session.QueryHeroAttack() is { Skill: CombatSkill.Bow } ? await TrapShotSmokeLegAsync(map, pick.Hero, Shootings(pick.Target, 3, 6).Take(40).ToArray()) : "NONE (a critical miss took the bow)";
+            session = _areaSession!;
             var pairs = session.QueryHeroAttack() is { Skill: CombatSkill.Bow } ? await ExpertShots() : "NONE (a critical miss took the bow)";
             var throws = session.QueryHeroAttack() is { Skill: CombatSkill.Bow } ? await Throws() : "NONE (a critical miss took the bow)";
             var boomerangs = session.QueryEquipment().Worn.Any(w => w.Slot == EquipmentSlot.Weapon && w.Entity == wielded.Entity) ? await Boomerangs()
@@ -182,7 +185,7 @@ public partial class TerrainViewerApp
             GD.Print("ARC-COMBAT-015 native-smoke ranged PASS " + System.Text.Json.JsonSerializer.Serialize(new {
                 Map = _readyMapName, Target = pick.Target.Entity, Hero = new[] { pick.Hero.X, pick.Hero.Y }, Shot = first,
                 Approach = second ?? (object)(stillBow ? "NONE (no cell 12..16 away, or the Original setting)" : "NONE (the first shot's critical miss took the bow)"), Npcs = npcs.Length,
-                Projectiles = flights, ExpertShots = pairs, Throws = throws, Boomerangs = boomerangs, CursorThrows = cursorThrows, SavedFlight = savedFlight,
+                Projectiles = flights, TrapShots = trapShots, ExpertShots = pairs, Throws = throws, Boomerangs = boomerangs, CursorThrows = cursorThrows, SavedFlight = savedFlight,
                 Parity = "NOT_VERIFIED (rules read in the original executable; no original-runtime run)" }));
         }
         finally

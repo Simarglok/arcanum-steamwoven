@@ -232,7 +232,7 @@ public partial class TerrainViewerApp
     }
     private void ToggleWorldSettings()
     {
-        if (!_worldInitialized || !IsWorld || _worldPanel is null || ConversationOpen || InventoryOpen || SheetOpen || LogbookOpen || SchematicsOpen || BarterOpen || ReadingOpen || SleepOpen || WorldMapOpen || SaveListOpen || MainMenuOpen) return;
+        if (!_worldInitialized || !IsWorld || _worldPanel is null || ConversationOpen || InventoryOpen || SheetOpen || LogbookOpen || SchematicsOpen || BarterOpen || ItemServiceOpen || ReadingOpen || SleepOpen || WorldMapOpen || SaveListOpen || MainMenuOpen) return;
         QuarantineWorld();
         if (_worldPanel.IsOpen) { _worldPanel.Hide(); GetViewport().GuiReleaseFocus(); _visualKeyNotice = null; }
         else { _worldPanel.Open(_worldSettings); BindWorldZoom(); BindWorldPaletteSummary(); BindAreaAmbientPalette(); _overlayPanelState = null; SyncPassabilityOverlay(); }
@@ -400,6 +400,7 @@ public partial class TerrainViewerApp
         if (LogbookOpen) { HandleLogbookPulse(intent); return; }
         if (SchematicsOpen) { HandleSchematicsPulse(intent); return; }
         if (BarterOpen) { HandleBarterPulse(intent); return; }
+        if (ItemServiceOpen) { HandleItemServicePulse(intent); return; }
         if (ReadingOpen) { HandleReadingPulse(intent); return; }
         if (SleepOpen) { HandleSleepPulse(intent); return; }
         if (WorldMapOpen) { HandleWorldMapPulse(intent); return; }
@@ -1013,6 +1014,13 @@ public partial class TerrainViewerApp
         if (BarterOpen && input is InputEventKey barterKey)
         {
             HandleBarterKey(barterKey);
+            GetViewport().SetInputAsHandled();
+            return;
+        }
+        // ARC-UI-1731: the open item identify or repair window owns every key (Escape opens the menu, which closes it).
+        if (ItemServiceOpen && input is InputEventKey serviceKey)
+        {
+            HandleItemServiceKey(serviceKey);
             GetViewport().SetInputAsHandled();
             return;
         }

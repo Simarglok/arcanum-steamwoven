@@ -1072,7 +1072,7 @@ public static partial class GameSessionSnapshotCodec
             }
             else w.WriteNull("barLights");
 
-            // ARC-UI-1740 (schema 100): the skill module's pre-thrown gambling roll, or null before the first one.
+            // ARC-UI-1740 (schema 101): the skill module's pre-thrown gambling roll, or null before the first one.
             if (snapshot.GamblingRoll is { } gamblingRoll) w.WriteNumber("gamblingRoll", gamblingRoll);
             else w.WriteNull("gamblingRoll");
 

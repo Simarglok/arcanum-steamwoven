@@ -26,7 +26,7 @@ public sealed record SessionGambleResult(GameSessionDisposition Disposition, Gam
 
 public sealed partial class GameSessionOwner
 {
-    // ARC-UI-1740 (schema 100): the skill module's pre-thrown gambling roll 1..100, or null before the first one (SR12, PS14).
+    // ARC-UI-1740 (schema 101): the skill module's pre-thrown gambling roll 1..100, or null before the first one (SR12, PS14).
     private int? _gamblingRoll;
 
     /// <summary>ARC-UI-1740: the saved gambling roll the next bet's check will use, or null when none was thrown yet.</summary>

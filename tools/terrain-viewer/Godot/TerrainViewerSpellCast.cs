@@ -147,6 +147,8 @@ public partial class TerrainViewerApp
         _spellCaster.AiNotice = (attacker, victim) => _aiHost?.SpellAttacked(attacker, victim);
         // ARC-DEV-292: and a damage that took effect on an NPC gives it its immediate AI pass (0x4B52FC), after the life step.
         _spellCaster.AiStruck = victim => _aiHost?.Struck(victim);
+        // ARC-TECHNOLOGY-1635 (TT15): a trap's shot flies as a projectile and strikes where it meets the victim.
+        _spellCaster.LaunchTrapShot = LaunchTrapShotFlight;
         // ARC-MAGIC-035 (MA-4): the social and AI flags (charm and mind control's reactions and peace, fear's flight) run through the AI host.
         _spellCaster.Social = new AreaSpellSocial(() => _aiHost);
         // ARC-MAGIC-038 (MA-5 second half): the teleport types of the Movement component (the anti-teleport test, the area helper) ask the world-map data and the shown map.

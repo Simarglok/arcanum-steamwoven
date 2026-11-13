@@ -9,7 +9,8 @@ namespace Arcanum.Session.Tests;
 [TestClass]
 public sealed class SnapshotUpgradeTests
 {
-    private const string Current = "\"schemaVersion\":100,\"world\"";
+    private const string Current = "\"schemaVersion\":101,\"world\"";
+    private const string Current100 = "\"schemaVersion\":100,\"world\"";
     private const string Current99 = "\"schemaVersion\":99,\"world\"";
     private const string Current98 = "\"schemaVersion\":98,\"world\"";
     private const string Current97 = "\"schemaVersion\":97,\"world\"";
@@ -287,6 +288,23 @@ public sealed class SnapshotUpgradeTests
         return text.Replace(NoBarLights, "").Replace(Current98, Current97);
     }
 
+    // ARC-TECHNOLOGY-1635: the schema 99 text of a schema 100 one with no trap shot in flight: the flights section loses its closing empty list. A text with a trap shot in flight has no older literal: no build before flew one.
+    internal static string Schema99(string text)
+    {
+        text = Schema100(text);
+        StringAssert.Contains(text, Current100);
+        Assert.AreEqual(1, text.Split(NoFlights).Length - 1, "the flights section is a new game's (no projectile, no missile, no trap shot)");
+        return text.Replace(NoFlights, NoFlights84).Replace(Current100, Current99);
+    }
+
+    // ARC-UI-1740: the schema 100 text of a schema 101 one whose session threw no gambling roll: the text loses the null gambling roll section. A text with a roll has no older literal: no build before saved one.
+    internal static string Schema100(string text)
+    {
+        StringAssert.Contains(text, Current);
+        Assert.AreEqual(1, text.Split(NoGamblingRoll).Length - 1, "the gambling roll section is a session's with none thrown");
+        return text.Replace(NoGamblingRoll, "").Replace(Current, Current100);
+    }
+
     // ARC-MAGIC-1658: the schema 98 text of a schema 99 one whose hero (if any) has no resistance written and no age read: the hero section loses its two closing keys. A text with a written resistance or a read age has no older literal:
     // no build before kept either.
     internal static string Schema98(string text)
@@ -295,14 +313,6 @@ public sealed class SnapshotUpgradeTests
         StringAssert.Contains(text, Current99);
         Assert.IsTrue(text.Contains("\"hero\":null") || text.Split(NoHeroStoredKeys).Length == 2, "the hero holds none written");
         return text.Replace(NoHeroStoredKeys, "").Replace(Current99, Current98);
-    }
-
-    // ARC-UI-1740: the schema 99 text of a schema 100 one whose session threw no gambling roll: the text loses the null gambling roll section. A text with a roll has no older literal: no build before saved one.
-    internal static string Schema99(string text)
-    {
-        StringAssert.Contains(text, Current);
-        Assert.AreEqual(1, text.Split(NoGamblingRoll).Length - 1, "the gambling roll section is a session's with none thrown");
-        return text.Replace(NoGamblingRoll, "").Replace(Current, Current99);
     }
 
     internal static string Schema95(string text)
@@ -337,8 +347,8 @@ public sealed class SnapshotUpgradeTests
     {
         text = Schema84(text);
         StringAssert.Contains(text, Current84);
-        Assert.AreEqual(1, text.Split(NoFlights).Length - 1, "the flights section is a new game's (no projectile, no missile, the counters 0)");
-        return text.Replace(NoFlights, NoFlights80).Replace(Current84, Current83);
+        Assert.AreEqual(1, text.Split(NoFlights84).Length - 1, "the flights section is a new game's (no projectile, no missile, the counters 0)");
+        return text.Replace(NoFlights84, NoFlights80).Replace(Current84, Current83);
     }
 
     // ARC-UI-104: the schema 80 text of a schema 81 one: the story section loses its empty list of town notes at its end.
@@ -724,6 +734,6 @@ public sealed class SnapshotUpgradeTests
         Fails(With("\"format\":\"arcanum-steamwoven-session\"", "\"format\":\"other-save\""), SnapshotDecodeFailure.WrongFormat, "$.format");
         // Schemas older than the oldest readable one, and newer ones, stay refused.
         Fails(GoldenJson.Replace(Current, "\"schemaVersion\":55,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
-        Fails(GoldenJson.Replace(Current, "\"schemaVersion\":101,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
+        Fails(GoldenJson.Replace(Current, "\"schemaVersion\":102,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
     }
 }

@@ -5,7 +5,7 @@ namespace Arcanum.Session.Tests;
 
 /// <summary>
 /// ARC-DEV-230 (schema 74, ledger NQ1–NQ5): the newspaper issue queue of the original (25 words, the count; the head is word 4) as session state: the queue rule of the dialog action
-/// <c>np</c> (0x4BF140), the save and load of the table, the upgrade from schema 73 and the refusal of tables a build cannot write. Issue numbers are invented.
+/// <c>np</c> (0x4BF140), the save and load of the table, the upgrade from schema 73 and the tables a pop leaves. Issue numbers are invented.
 /// </summary>
 [TestClass]
 public sealed class NewspaperStateTests
@@ -27,7 +27,8 @@ public sealed class NewspaperStateTests
         var queue = owner.QueryNewspaper();
         Assert.AreEqual(5, queue.Count);
         CollectionAssert.AreEqual(Table(), Words(owner));
-        Assert.IsTrue(queue.IsCanonical);
+        Assert.IsTrue(queue.IsValid);
+        Assert.AreEqual(5000, queue.HeadIssue);
     }
 
     [TestMethod]
@@ -139,7 +140,7 @@ public sealed class NewspaperStateTests
         var upgraded = GameSessionSnapshotCodec.TryDecode(older);
         Assert.AreEqual(SnapshotDecodeFailure.None, upgraded.Failure, upgraded.Path);
         Assert.AreEqual(current, GameSessionSnapshotCodec.Encode(upgraded.Snapshot!));
-        var twice = GameSessionSnapshotCodec.TryDecode(SnapshotUpgradeTests.WithoutCritterEffects(current).Replace(NoEncounters, "").Replace(NoBarLights, "").Replace(NoGamblingRoll, "").Replace(NoHeroStoredKeys, "").Replace(SnapshotUpgradeTests.NoCreated, "}").Replace(NoHeroKeys, "").Replace(NoTownMapCells, "").Replace("\"schemaVersion\":100,\"world\"", "\"schemaVersion\":73,\"world\""));
+        var twice = GameSessionSnapshotCodec.TryDecode(SnapshotUpgradeTests.WithoutCritterEffects(current).Replace(NoEncounters, "").Replace(NoBarLights, "").Replace(NoGamblingRoll, "").Replace(NoHeroStoredKeys, "").Replace(SnapshotUpgradeTests.NoCreated, "}").Replace(NoHeroKeys, "").Replace(NoTownMapCells, "").Replace("\"schemaVersion\":101,\"world\"", "\"schemaVersion\":73,\"world\""));
         Assert.AreEqual((SnapshotDecodeFailure.UnknownField, "$.newspaper"), (twice.Failure, twice.Path));
         // A schema 73 save of the oldest readable chain reaches the same state.
         var chain = GameSessionSnapshotCodec.TryDecode(SnapshotUpgradeTests.Schema72(current));
@@ -159,7 +160,7 @@ public sealed class NewspaperStateTests
         Assert.AreEqual(SnapshotDecodeFailure.OutOfRange, GameSessionSnapshotCodec.TryDecode(With(",\"newspaper\":{\"entries\":[-1,-1,-1,-1,5000" + Zeros + "],\"count\":4}")).Failure, "a count below the head's place");
         Assert.AreEqual(SnapshotDecodeFailure.OutOfRange, GameSessionSnapshotCodec.TryDecode(With(",\"newspaper\":{\"entries\":[-1,-1,-1,-1,5000" + Zeros + "],\"count\":26}")).Failure, "a count above the table");
         Assert.AreEqual(SnapshotDecodeFailure.MissingField, GameSessionSnapshotCodec.TryDecode(With(",\"newspaper\":{\"entries\":[]}")).Failure);
-        // A table a build that cannot pop never writes is a refused restore: a reserved word that is not -1, and a word past the count that is not 0.
+        // ARC-UI-1739 (ledger NQ10): a pop leaves a head behind in the reserved words and a stale word past the count, so such tables load and read back as they are.
         foreach (var text in new[]
         {
             With(",\"newspaper\":{\"entries\":[0,-1,-1,-1,5000" + Zeros + "],\"count\":5}"),
@@ -168,7 +169,10 @@ public sealed class NewspaperStateTests
         {
             var decoded = GameSessionSnapshotCodec.TryDecode(text);
             Assert.AreEqual(SnapshotDecodeFailure.None, decoded.Failure, decoded.Path);
-            Assert.AreEqual(GameSessionFailure.InvalidSnapshot, GameSessionOwner.Restore(decoded.Snapshot!, RestoreOptions()).Failure);
+            var restored = GameSessionOwner.Restore(decoded.Snapshot!, RestoreOptions());
+            Assert.AreEqual(GameSessionFailure.None, restored.Failure);
+            Assert.AreEqual(text, GameSessionSnapshotCodec.Encode(restored.Owner!.Capture()));
+            restored.Owner.Dispose();
         }
     }
 

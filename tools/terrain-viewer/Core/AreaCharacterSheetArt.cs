@@ -44,8 +44,24 @@ public static class AreaCharacterSheetArtLayout
     public static IReadOnlyList<int> ArtNumbers { get; } =
         [BackgroundArt, MinusArt, PlusArt, SkillsTabArt, TechTabArt, SpellsTabArt, AlignmentArt, AptitudeArt, LabelFontArt, FlareFontArt, CloisterFontArt];
 
+    /// <summary>ARC-UI-1195: the arts the generated interface draws for the window itself (the background, the + and − buttons, the four tabs) and for each page
+    /// (the page's background and its buttons); the native smoke checks that every frame of them draws generated chrome.</summary>
+    public static IReadOnlyList<int> WindowArtNumbers { get; } = [BackgroundArt, MinusArt, PlusArt, SkillsTabArt, TechTabArt, SpellsTabArt, SchemesTabArt];
+
+    public static IReadOnlyList<int> SkillsPageArtNumbers { get; } =
+        [AreaCharacterSheetPagesLayout.SkillsBackgroundArt, .. Enumerable.Range(AreaCharacterSheetPagesLayout.GroupTabArtBase, AreaCharacterSheetPagesLayout.Groups),
+            AreaCharacterSheetPagesLayout.SkillPlusArt, AreaCharacterSheetPagesLayout.SkillMinusArt];
+
+    public static IReadOnlyList<int> TechPageArtNumbers { get; } =
+        [AreaCharacterSheetPagesLayout.TechBackgroundArt, .. Enumerable.Range(AreaCharacterSheetPagesLayout.DisciplineArtBase, AreaCharacterSheetPagesLayout.Disciplines),
+            AreaCharacterSheetPagesLayout.TechPlusArt, AreaCharacterSheetPagesLayout.TechMinusArt];
+
+    public static IReadOnlyList<int> SpellsPageArtNumbers { get; } =
+        [AreaCharacterSheetSpellsLayout.BackgroundArt, AreaCharacterSheetSpellsLayout.PlusArt, AreaCharacterSheetSpellsLayout.MinusArt];
+
     public static IReadOnlyList<int> AllArtNumbers { get; } =
-        [.. ArtNumbers.Concat([SchemesTabArt]).Concat(AreaCharacterSheetPagesLayout.ArtNumbers).Concat(AreaCharacterSheetSpellsLayout.ArtNumbers).Distinct()];
+        [.. ArtNumbers.Concat([SchemesTabArt]).Concat(AreaCharacterSheetPagesLayout.ArtNumbers).Concat(AreaCharacterSheetSpellsLayout.ArtNumbers)
+            .Concat(AreaCharacterSheetSchemesLayout.ArtNumbers).Distinct()];
 
     /// <summary>The colour of a font colour (the init indexes the channel tables with these 0..255 values).</summary>
     public static (byte R, byte G, byte B) Rgb(AreaSheetColour colour) => colour switch
@@ -227,6 +243,10 @@ public sealed record AreaCharacterSheetArtContent(IReadOnlyDictionary<int, AreaI
     /// <summary>ARC-UI-077: true when the spells page's arts read too (art 31, the college tabs, the 80 spell icons, the level font): that page then
     /// shows the original look.</summary>
     public bool SpellsReady => PagesReady && AreaCharacterSheetSpellsLayout.ArtNumbers.All(number => Art.TryGetValue(number, out var load)
+        && load.Status == AreaInterfaceArtStatus.Ready && load.Frames.Count > 0);
+
+    /// <summary>ARC-UI-1742: true when the scheme page's arts read too (art 567, the scroll bar's arrows and thumb): that page then shows the original look.</summary>
+    public bool SchemesReady => PagesReady && AreaCharacterSheetSchemesLayout.ArtNumbers.All(number => Art.TryGetValue(number, out var load)
         && load.Status == AreaInterfaceArtStatus.Ready && load.Frames.Count > 0);
 
     public static AreaCharacterSheetArtContent Empty(string reason) => new(new Dictionary<int, AreaInterfaceArtLoad>(), AreaCharacterSheetTexts.Project(reason), reason);

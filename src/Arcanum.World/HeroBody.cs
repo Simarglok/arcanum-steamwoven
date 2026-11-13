@@ -133,6 +133,9 @@ public readonly record struct HeroBody(int Body, int Gender, int Armor = 0, int 
     /// body, 0x503EA0, for 1 or 2).</summary>
     public int GaitRateBonus => Body is 1 or 2 ? 4 : 0;
 
+    /// <summary>ARC-COMBAT-1741: the stunned animation (goal 57).</summary>
+    public const uint StunnedAnimation = 23;
+
     /// <summary>
     /// The fixed human's art selector with this body, gender, armour part and palette, the same animation, and the weapon and shield the
     /// file of that animation shows (ARC-RENDER-037, MA2): the stand both, the walk the weapon only, the attacks (20, 21) both (the
@@ -148,6 +151,8 @@ public readonly record struct HeroBody(int Body, int Gender, int Armor = 0, int 
             1 => (Weapon, 0),
             WeaponArtRules.AttackAnimation or WeaponArtRules.LowAttackAnimation => (Weapon == 0 ? (int)(humanSelector & 15) : Weapon, Shield),
             >= 6 and <= 19 => (0, 0),
+            // ARC-COMBAT-1741 (N1): the stunned animation names the unarmed weapon letter and no shield whatever the body wields.
+            StunnedAnimation => (WeaponArtRules.Unarmed, 0),
             _ => (Weapon, Shield),
         };
         return (humanSelector & ~0x0FF8003Fu) | BodyBits | ((uint)shield << 19) | (uint)weapon;

@@ -85,26 +85,37 @@ public partial class TerrainViewerApp
 
     private void OpenBarter(AreaConversationHost host, string entity, int speaker)
     {
+        var (barter, refusal) = BarterModel(host, entity, speaker, substitute: true, "ARC-UI-050 barter");
+        if (barter is null) { _barterStatus = refusal; RefreshAreaStatus(); return; }
+        OpenBarterWindow(barter);
+    }
+
+    /// <summary>The barter model of a speaker over the area session (the window's, and ARC-UI-1731 the item identify and repair windows' item
+    /// facts); null with the reason when the open is refused. With <paramref name="substitute"/> the merchant's substitute container is found
+    /// (ARC-WORLD-090, BT4), which only the barter window shows.</summary>
+    private (AreaBarter? Barter, string? Refusal) BarterModel(AreaConversationHost host, string entity, int speaker, bool substitute, string tag)
+    {
         var session = _areaSession!;
-        string Refuse(string why) { _barterStatus = why; GD.Print($"ARC-UI-050 barter refused: {why}"); RefreshAreaStatus(); return why; }
-        if (!AreaBarter.HeroCanTrade(session)) { Refuse("no living hero"); return; }
-        if (_barterData is not { Data: { } data }) { Refuse($"no barter data ({_barterData?.Status}: {_barterData?.Detail})"); return; }
-        if (speaker < 0 || speaker >= host.Speakers.Count || CombatFieldReader.Read(host.Speakers[speaker].Row).Fields is not { } fields) { Refuse("no data of the merchant"); return; }
+        (AreaBarter?, string?) Refuse(string why) { GD.Print($"{tag} refused: {why}"); return (null, why); }
+        if (!AreaBarter.HeroCanTrade(session)) return Refuse("no living hero");
+        if (_barterData is not { Data: { } data }) return Refuse($"no barter data ({_barterData?.Status}: {_barterData?.Detail})");
+        if (speaker < 0 || speaker >= host.Speakers.Count || CombatFieldReader.Read(host.Speakers[speaker].Row).Fields is not { } fields) return Refuse("no data of the merchant");
         // ARC-DEV-297 (NR2): the window's name is the examine rule for the PC (0x441B60 at the open): the merchant's own description once it remembers the hero.
         var name = AreaHoverIndex.Text(host.Speakers[speaker].Row, _hoverNames?.Catalog, WindowRecognition(host.Speakers[speaker].Row)) ?? "merchant";
-        if (AreaBarterMerchant.From(entity, name, fields, data, session.QueryCompanion(entity).LedByPc) is not { } merchant) { Refuse("the speaker is not an NPC"); return; }
+        if (AreaBarterMerchant.From(entity, name, fields, data, session.QueryCompanion(entity).LedByPc) is not { } merchant) return Refuse("the speaker is not an NPC");
         var inventory = _inventoryHost ?? new AreaInventoryHost([]);
         // ARC-WORLD-090: the substitute container of a merchant without a leader within 20 tiles of where it talked (BT4).
         var talker = host.Speakers[speaker];
-        merchant = merchant.WithSubstitute(inventory.Maps.FirstOrDefault(map => map.TryGetRow(entity, out _))?.Substitute(entity),
-            new(checked((int)talker.WorldX), checked((int)talker.WorldY)), data);
+        if (substitute)
+            merchant = merchant.WithSubstitute(inventory.Maps.FirstOrDefault(map => map.TryGetRow(entity, out _))?.Substitute(entity),
+                new(checked((int)talker.WorldX), checked((int)talker.WorldY)), data);
         var state = host.State;
-        OpenBarterWindow(new AreaBarter(session, inventory, data, merchant, () => state.Reaction(speaker),
+        return (new AreaBarter(session, inventory, data, merchant, () => state.Reaction(speaker),
             delta => session.AdjustReaction(session.Version, entity, state.NpcFacts(), state.PcFactsFor(speaker), delta).Disposition == GameSessionDisposition.Changed,
             (item, kind) => inventory.Maps.Any(map => map.TryGetRow(item, out _)) ? inventory.Name(item, _hoverNames?.Catalog) : AreaInventoryHost.KindName(kind, _hoverNames?.Catalog),
             // ARC-UI-1740: the merchant's Gambling skill from its sheet, and its generated lines for the bet (the gate's refusals, the confirm, the won and lost lines).
             merchantGambling: () => AreaFollowerSheet(entity) is { } sheet ? session.QueryNpcSkills(sheet.Loaded, sheet.Modifiers)[Arcanum.Simulation.Skills.Skill.Gambling] : null,
-            npcLine: category => host.PickLine(host.Speakers[speaker], new(GamblingRules.LineRange(category).First, GamblingRules.LineRange(category).Last))));
+            npcLine: category => host.PickLine(host.Speakers[speaker], new(GamblingRules.LineRange(category).First, GamblingRules.LineRange(category).Last))), null);
     }
 
     /// <summary>Shows the window over the area session for <paramref name="barter"/> (the dialog path above, or a self-test's model), after
@@ -275,13 +286,40 @@ public partial class TerrainViewerApp
     {
         var speaker = host.Speakers.FirstOrDefault(candidate => AreaConversationState.EntityId(candidate.Row) == entity);
         if (speaker is null || !SpeakerPresent(speaker)) return null;
-        var fields = _combatHost?.Fields(entity);
-        var written = session.QueryObjectFlags(entity);
-        var critter = unchecked((uint)written.Critter(unchecked((int)(fields?.Critter?.Flags ?? 0))));
-        var spell = unchecked((uint)written.Spell(unchecked((int)(fields?.Object.SpellFlags ?? 0))));
+        var (critter, spell) = FollowerFlagWords(session, entity);
         var head = CanSpeakRules.Head(new CanSpeakFacts(StunnedParalysedOrMute: (critter & 0x2060) != 0, Asleep: (critter & 0x1000) != 0, Stoned: (spell & 0x10000) != 0,
             Dead: SpeakerDead(speaker), SpokenWithDead: (spell & unchecked((uint)SessionSpellCaster.SpokenWithDeadSpellFlag)) != 0));
         return head is { } answer && answer != CanSpeakRules.Free || (critter & 0x20000008) != 0 || (spell & 0x4000) != 0 ? null : speaker;
+    }
+
+    /// <summary>The critter flags and the spell flags of a follower now: the session's writes over the stored fields.</summary>
+    private (uint Critter, uint Spell) FollowerFlagWords(GameSessionOwner session, string entity)
+    {
+        var fields = _combatHost?.Fields(entity);
+        var written = session.QueryObjectFlags(entity);
+        return (unchecked((uint)written.Critter(unchecked((int)(fields?.Critter?.Flags ?? 0)))),
+            unchecked((uint)written.Spell(unchecked((int)(fields?.Object.SpellFlags ?? 0)))));
+    }
+
+    /// <summary>ARC-UI-1736 (FP8, FP11): what a follower's order menu draws greyed: Wait for a mind-controlled follower (spell flag 0x8000000), Inventory when the
+    /// can-open test (0x575080, <see cref="BarterCycleSpeaker"/>) fails.</summary>
+    private (bool MindControlled, bool CanOpenInventory) FollowerMenuFacts(string entity)
+    {
+        if (_areaSession is not { } session || _conversationHost is not { } host) return (false, false);
+        AdmitCompanionSpeakers();
+        var (_, spell) = FollowerFlagWords(session, entity);
+        return ((spell & AreaFollowerPanelRules.MindControlledSpellFlag) != 0, BarterCycleSpeaker(host, session, entity) is not null);
+    }
+
+    /// <summary>ARC-UI-1736 (FP11, 0x56AB09–0x56AB67): the menu's Inventory row opens the follower's barter-style inventory (BW1, mode 1) when the can-open test
+    /// passes; the window opens through the pending open the dialog's <c>b:</c> reply uses.</summary>
+    private void OpenFollowerInventory(string entity)
+    {
+        if (_areaSession is not { } session || _conversationHost is not { } host || !BarterActive) return;
+        AdmitCompanionSpeakers();
+        if (BarterCycleSpeaker(host, session, entity) is not { } speaker) { _companionNotice = "inventory: the follower cannot be opened now"; RefreshReadyStatus(); return; }
+        GD.Print($"ARC-UI-1736 follower inventory entity={entity}");
+        _barterPending = (session, host, entity, speaker.Index);
     }
 
     /// <summary>ARC-DEV-339 (B54): the arrange button of the barter window (IW30) lays the hero's items out as the own window's does; the

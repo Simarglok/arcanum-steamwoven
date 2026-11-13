@@ -8,7 +8,7 @@ using static Arcanum.Session.Tests.SessionFixtures;
 
 namespace Arcanum.Session.Tests;
 
-// ARC-UI-1740 (FR-ITEM-019, ledger BT6, SR12, PS14; schema 100): the saved gambling roll and the bet over the synthetic seed of InventoryStateTests (virgil
+// ARC-UI-1740 (FR-ITEM-019, ledger BT6, SR12, PS14; schema 101): the saved gambling roll and the bet over the synthetic seed of InventoryStateTests (virgil
 // alive with a ring, a sword, a worn vest and a ring copy; the merchant with 5 coins) and a half-elf hero with 385 gold. Entities and numbers are invented.
 // A hero of 5 Gambling points (level 20, intelligence 20) against a merchant of level 0 has the capped effectiveness 95 and wins on a roll of 95 or less (a
 // seed whose first roll is at most 90 is chosen); a hero of 0 points against a merchant of level 20 has effectiveness 0 and loses on every roll (a roll is at least 1).
@@ -195,8 +195,8 @@ public sealed class GamblingStateTests
     {
         using var owner = Gambler(0);
         var current = GameSessionSnapshotCodec.Encode(owner.Capture());
-        var older = SnapshotUpgradeTests.Schema99(current);
-        StringAssert.Contains(older, "\"schemaVersion\":99,");
+        var older = SnapshotUpgradeTests.Schema100(current);
+        StringAssert.Contains(older, "\"schemaVersion\":100,");
         Assert.IsFalse(older.Contains("gamblingRoll", StringComparison.Ordinal));
         var upgraded = GameSessionSnapshotCodec.TryDecode(older);
         Assert.AreEqual(SnapshotDecodeFailure.None, upgraded.Failure, upgraded.Path);

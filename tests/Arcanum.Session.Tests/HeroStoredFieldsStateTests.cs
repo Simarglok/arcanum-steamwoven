@@ -44,7 +44,7 @@ public sealed class HeroStoredFieldsStateTests
         Assert.IsNotNull(result.Snapshot, result.Failure + " " + result.Path);
         Assert.AreEqual(current, GameSessionSnapshotCodec.Encode(result.Snapshot));
         // A schema 98 text that already holds the keys is not one any build wrote.
-        var tainted = GameSessionSnapshotCodec.TryDecode(current.Replace("\"schemaVersion\":100,", "\"schemaVersion\":98,"));
+        var tainted = GameSessionSnapshotCodec.TryDecode(SnapshotUpgradeTests.Schema99(current).Replace("\"schemaVersion\":99,", "\"schemaVersion\":98,"));
         Assert.AreEqual(SnapshotDecodeFailure.UnknownField, tainted.Failure);
         Assert.AreEqual("$.hero.resistances", tainted.Path);
         // A session without a hero has nothing to add.

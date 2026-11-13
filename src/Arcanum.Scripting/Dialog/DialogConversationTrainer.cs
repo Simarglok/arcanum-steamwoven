@@ -22,9 +22,9 @@ public sealed partial class DialogConversation
 
     private sealed record TrainerTalk(ReplyPlan Reply, StepPlan? Target, DialogOperationSource Source, FollowPlan? Yes = null);
 
-    private enum TrainerChoiceKind { Skill, Pay, PayRumor, Follow, Area, More, PayDirections, PayFollow }
+    private enum TrainerChoiceKind { Skill, Pay, PayRumor, Follow, Area, More, PayDirections, PayFollow, NewsHeadline, NewsBack, NewsBuy, PayNews, HealMenu, HealService, HealSpell, PayHealService, PayHealSpell }
 
-    private readonly record struct TrainerChoice(TrainerChoiceKind Kind, int Skill = 0, int Price = 0, int Rumor = 0, int Area = 0, int Offset = 0);
+    private readonly record struct TrainerChoice(TrainerChoiceKind Kind, int Skill = 0, int Price = 0, int Rumor = 0, int Area = 0, int Offset = 0, int Issue = 0, int Spell = 0, bool NoLeader = false);
 
     private sealed record TrainerOption(string Text, DialogLineOrigin? Origin, TrainerChoice Choice);
 
@@ -221,9 +221,9 @@ public sealed partial class DialogConversation
             var reply = _talk!.Reply;
             var rumor = reply.Rumor is not null;
             var directions = reply.Directions;
-            var letter = _talk!.Yes is not null ? 'm' : directions is { } d ? (d.Learn ? 'x' : 'd') : rumor ? 'r' : reply.Story ? 'c' : 't';
+            var letter = _talk!.Yes is not null ? 'm' : directions is { } d ? (d.Learn ? 'x' : 'd') : rumor ? 'r' : reply.Story ? 'c' : reply.Newspaper ? 'p' : reply.Healer ? 'h' : 't';
             offers.Add(new DialogOption(index + 1, response, -1, DialogOptionTextKind.Generated, option.Text, new DialogGeneratedMarker(letter),
-                follow ? reply.Transition : directions is not null ? DialogOptionTransition.DirectionsStep : rumor ? DialogOptionTransition.RumorStep : DialogOptionTransition.TrainerStep,
+                follow ? reply.Transition : directions is not null ? DialogOptionTransition.DirectionsStep : rumor ? DialogOptionTransition.RumorStep : reply.Newspaper ? DialogOptionTransition.NewspaperStep : reply.Healer ? DialogOptionTransition.HealerStep : DialogOptionTransition.TrainerStep,
                 follow && reply.Target is not null ? new DialogNodeId(reply.Target.Id) : null,
                 follow ? reply.ScriptLine : null,
                 new DialogOptionToken(_identity, Turn, _generation, response), null, option.Origin));
@@ -249,6 +249,17 @@ public sealed partial class DialogConversation
             case TrainerChoiceKind.PayRumor:
                 PayAndTell(choice);
                 return Result();
+            case TrainerChoiceKind.HealMenu:
+                PresentHealerMenu(choice.Skill);
+                return Result();
+            case TrainerChoiceKind.HealService:
+            case TrainerChoiceKind.HealSpell:
+                PresentHealerChoice(choice);
+                return Result();
+            case TrainerChoiceKind.PayHealService:
+            case TrainerChoiceKind.PayHealSpell:
+                PayAndHeal(choice);
+                return Result();
             case TrainerChoiceKind.Area:
                 PresentArea(choice.Area, choice.Price);
                 return Result();
@@ -260,6 +271,18 @@ public sealed partial class DialogConversation
                 return Result();
             case TrainerChoiceKind.PayFollow:
                 PayAndFollow(choice);
+                return Result();
+            case TrainerChoiceKind.NewsHeadline:
+                PresentNewspaperHeadline();
+                return Result();
+            case TrainerChoiceKind.NewsBack:
+                PresentNewspaperBack();
+                return Result();
+            case TrainerChoiceKind.NewsBuy:
+                PresentNewspaperQuote(choice.Issue);
+                return Result();
+            case TrainerChoiceKind.PayNews:
+                PayAndGiveNewspaper(choice);
                 return Result();
             default:
                 // The way out: the reply's own response (0x414810 case 0, 1 or 2 on the value the reply was built with), its action not run again.

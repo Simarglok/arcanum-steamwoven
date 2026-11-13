@@ -11,10 +11,11 @@ namespace Arcanum.World;
 
 /// <summary>
 /// ARC-UI-088: an NPC's character sheet for the dialog action <c>ce</c> (the original's window mode 2, ledger CHW24): the main page's view, the
-/// skills, tech and stats pages and the sheet the spells page is built from. Read-only: no + or − button anywhere.
+/// skills, tech and stats pages and the sheet the spells page is built from, and the NPC's auto-level scheme (ARC-UI-1742: the scheme page names it and
+/// lists the schemes without a press, ledger ALP7). Read-only: no + or − button anywhere.
 /// </summary>
 public sealed record AreaNpcSheetPages(string Entity, AreaCharacterSheetView View, AreaSkillsPageView Skills, AreaStatsPageView Stats, AreaTechPageView Tech,
-    AdvancementSheet Sheet, AdvancementModifiers Modifiers)
+    AdvancementSheet Sheet, AdvancementModifiers Modifiers, int AutoLevelScheme = 0)
 {
     /// <summary>The spells page of <paramref name="college"/> (0..15) from the NPC's spell book.</summary>
     public AreaSpellsPageView Spells(SpellData? data, int college, System.Collections.Immutable.ImmutableArray<int> willpower) =>
@@ -44,7 +45,9 @@ public static class AreaNpcSheet
         // ARC-MAGIC-1475: the base stats and resistances a spell wrote into the NPC lie over its stored fields (experience, alignment, gender, the resistance lines).
         fields = session.QueryCritterIndexedWrites(entity).Apply(fields);
         if (fields.Critter is not { } critter) return null;
-        var sheet = (session.QueryNpcAdvancement(entity) ?? loaded.Loaded).Sheet;
+        // ARC-UI-1742: the scheme the sheet's scheme page names is the NPC's own, the session's saved record's over its map data's.
+        var record = session.QueryNpcAdvancement(entity) ?? loaded.Loaded;
+        var sheet = record.Sheet;
         var modifiers = loaded.Modifiers;
         var stored = critter.BaseStats;
         int Stored(int index) => index < stored.Count ? stored[index] : 0;
@@ -98,7 +101,7 @@ public static class AreaNpcSheet
             return new AreaTechRow(discipline, degree, TechDegreeRules.CountingDegree(degree, intelligence),
                 TechDegreeRules.EffectiveExpertise(degree, intelligence, []), degree);
         })], false);
-        return new(entity, view, skills, stats, tech, sheet, modifiers);
+        return new(entity, view, skills, stats, tech, sheet, modifiers, record.AutoLevelScheme);
     }
 
     /// <summary>The mark of a stat's colour (0x55B2A0): the effects' changes of the base value, green above it, red below.</summary>

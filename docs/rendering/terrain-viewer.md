@@ -1484,7 +1484,7 @@ combined freely (sprites HD with a Legacy interface, or the reverse). The third 
 version 1–4 files read it as off) is the experimental [generated interface](hd-interface-density.md#viewer-slice-s1-arc-ui-140): it keeps the
 HD interface on and draws the chrome of the two HUD strips and the bar buttons by code, with the pictures from the HD redraw (else from the
 Legacy frame); only the drawing changes, every frame keeps its Legacy size, place, alpha test and hit area. ARC-UI-141 paints the chrome at
-the window's exact whole device scale on a worker (the first draw no longer stalls), see [S2](hd-interface-density.md#viewer-slice-s2-arc-ui-141); ARC-UI-148 adds the inventory window's two frames at that window's own (fractional) device scale, see [S3](hd-interface-density.md#viewer-slice-s3-arc-ui-148) and the [plan for the other windows](hd-interface-density.md#generated-windows-plan-arc-ui-148155); ARC-UI-1194 adds the loot, barter and steal windows and the three lenses, see [S4](hd-interface-density.md#viewer-slice-s4-arc-ui-1194). **HD pack: Auto/Game/Custom** (ARC-DEV-350, default Auto) is the
+the window's exact whole device scale on a worker (the first draw no longer stalls), see [S2](hd-interface-density.md#viewer-slice-s2-arc-ui-141); ARC-UI-148 adds the inventory window's two frames at that window's own (fractional) device scale, see [S3](hd-interface-density.md#viewer-slice-s3-arc-ui-148) and the [plan for the other windows](hd-interface-density.md#generated-windows-plan-arc-ui-148155); ARC-UI-1194 adds the loot, barter and steal windows and the three lenses, see [S4](hd-interface-density.md#viewer-slice-s4-arc-ui-1194); ARC-UI-1195 adds the character sheet, see [S5](hd-interface-density.md#viewer-slice-s5-arc-ui-1195). **HD pack: Auto/Game/Custom** (ARC-DEV-350, default Auto) is the
 third project line: where the active pack is read from, saved in the same file (`hdPack`, `hdPackPath`; file version 4, version 1–3 files
 read it as Auto). Auto prefers the player's iCloud pack folder (macOS, only when that folder exists on this device) when the pack in it
 is whole, and falls back to the installed copy in the game's own `user://hd-packs`; Game reads the installed copy alone; Custom opens the
@@ -1880,7 +1880,7 @@ values (name, level, points, experience to the next level from its stored experi
 `AutoLevelRules.DerivedStat`, stored resistances with the constitution bonus under the NPC's effect list (the session's, else the map data's; the Magick line shows the `resistmagic` changes too, ARC-UI-1145), hit points and fatigue from its life, skills, spell book and tech degrees), no +
 or − on any page (`ReadOnly` of the art view and pages), the next spell grey, no editor snapshot, no pause; a monstrous NPC shows no race or gender. The sheet is the
 talk's moment: the session's later changes do not rebuild it. A release in the close rectangle or `C` closes it, the dialog does not resume, and the next `C`
-opens the hero's sheet. Not built: the follower arrows, the scheme page (the NOT READY note), the portrait or race icon (the slot stays empty), the NPC's worn
+opens the hero's sheet. The scheme page is built (ARC-UI-1742, below): the NPC's scheme name shows and the list scrolls, the rows answer nothing (ALP7). Not built: the follower arrows, the portrait or race icon (the slot stays empty), the NPC's worn
 armour in its resistances; the item windows `ii` and `ri` of the same reply family stay blocked. Known gaps: a stat's colour counts every effect of the NPC (the
 hero's excludes its innate race, background, class and gender causes, which the session's NPC record does not keep); the experience to the next level uses the
 experience stored in the map file against the session's level (a follower the session levelled after the file was written shows an inflated figure); the
@@ -1895,7 +1895,16 @@ target string, and the pick is the session's on the container's lock (`TerrainVi
 (steps 6 to 8, run on the town sector). NOT READY: the container window of See Contents and the item description window (their interaction is not read), the question window for a junk pile's and a container's
 stacks, poison sources.
 
-**Not yet in the original's look:** the auto-level schemes tab (a NOT READY note); the age line (the session has no age); the race icons as portrait fallback; a button takes the pointer on its rectangle, not on its opaque pixels. The creation editor (window 14) keeps the diagnostic
+**Scheme page (ARC-UI-1742, ledger [ALP1–ALP15](../research/ledger/character.md#character-sheet-scheme-page-arc-ui-1742)):** the fourth tab shows the original's page (art 567):
+the shown critter's scheme name centred in blue at the top, then fifteen rows of the schemes whose name exists in `mes/userlevelname.mes` and `mes/gamelevelname.mes` (scheme 0
+first, 59 in the installed game) in white, the hovered row in blue, and the original's scroll bar (arts 317, 318, 238, 787, 240; arrows by 1, track by 5, wheel by 3, a dragged thumb)
+when the list is longer than fifteen. A release on a row writes the hero's scheme through `AreaSchemesPage.Choose` (no cost, no sound; the next level step runs it, AL12) and the
+list keeps its place while the sheet stays open. The NPC sheet (mode 2) names the NPC's scheme and scrolls the list; its rows answer nothing. Model: `AreaSchemesPage` (World),
+`AreaCharacterSheetSchemes`/`AreaSheetScrollBar` (Core, Godot-free), `AreaCharacterSheetSchemesView` (Godot). F0: the thumb arts are stretched from 11 to the bar's 17 pixels.
+The creation editor (window 14) keeps the NOT READY note ([#1792](https://github.com/Simarglok/arcanum-steamwoven/issues/1792)); the age line and the race icon are [#1791](https://github.com/Simarglok/arcanum-steamwoven/issues/1791). Native smoke: the sheet art stage (`--stages map`) and the
+item-aim stage (NPC page) print `PASS` lines for the page.
+
+**Not yet in the original's look:** the age line (the session has no age); the race icons as portrait fallback; a button takes the pointer on its rectangle, not on its opaque pixels. The creation editor (window 14) shows the schemes tab's NOT READY note and keeps the diagnostic
 look. Without a game folder (the synthetic self-tests) or when an art does not read, the whole sheet is the diagnostic panel above.
 Native smoke: `./arcanum smoke pr --stages map --map "elven ruins" --hero elf-female` prints `ARC-UI-075 native-smoke sheet art PASS`
 (`ARC_AREA_SHEET_CAPTURE=PATH.png` saves readbacks `PATH-skills.png`, `PATH-tech.png`, `PATH-spells.png`).
@@ -2290,8 +2299,7 @@ picture with the slides' music and its voice; ARC-WORLD-120: a newer save of ano
 original's dialog box asks over the slide with the hero's own save, the pointer over the check lights it and a left click
 on it loads the save, which fades in with its hero alive; the loaded hero killed under Original,
 Escape ending the show, the start map loaded again with a fresh session and the main menu reopened, without the box). `ARC_AREA_DEATH_CAPTURE=PATH.png` saves the shown
-slide with the box (original art: never into git). Not done: script-queued slides, the end-game and credits slides, the hero's dying
-animation.
+slide with the box (original art: never into git). Not done: script-queued slides, the end-game and credits slides, the hero's bloody dying animations (17–19 by the killing blow). Since ARC-COMBAT-1741 the dying goal (31) lasts while the hero's fall plays and the death's 5 s count from its end (`IAreaDeathHost.HeroDying`).
 
 ### Options window (ARC-UI-013)
 
@@ -2308,7 +2316,7 @@ project's, except as below.
   arrows 667 and 668 at (+6, +21) and (+180, +21), a slider's bar 623 `SkilGauge` at (+47, +24) as wide as value × 120 / top, a
   list's value centred in red `Flare12Font` at (+47, +30). An arrow is a push button: the pointer over it shows its lit frame, a
   press its down frame with sound 3000, the release over it plays 3001 and changes the value. PROJECT: the shown controls take the
-  page's first slots in order (the Rules line the Game page's fifth, at (531, 122), then the evidence log's two lines (ARC-GPAD-1376), with it the eight slots of the page; the Controls line (ARC-GPAD-1463) is the Game page's eighth and last; ARC-GPAD-1374's Prompt style line is the Video page's third, after the floats; ARC-UI-146 removed the HD graphics, HD interface and HD pack lines that stood after Rules, they are the [launcher screen](#launcher-screen-arc-ui-014)'s); the control with the keyboard or controller
+  page's first slots in order (the Violence Filter (ARC-UI-1737) is the Game page's second line and the Rules line its sixth; ARC-UI-1737 moved the Controls line (ARC-GPAD-1463), ARC-GPAD-1374's Prompt style line and the evidence log's two lines (ARC-GPAD-1376) to the Video page, which holds Brightness, Floats, Float Speed, Combat Taunts, Controls, Prompt style, Evidence Log and Test Task, the eight slots of a page, so the Game page keeps its two free slots for Auto Switch Weapons and Follower Skills; ARC-UI-146 removed the HD graphics, HD interface and HD pack lines that stood after Rules, they are the [launcher screen](#launcher-screen-arc-ui-014)'s); the control with the keyboard or controller
   focus has its label lit in the page buttons' hover red; a text is one line. The line at the top names the hidden controls and the
   notice. Without the game's art (the synthetic self-tests) the whole window is the project's panel.
 
@@ -2316,13 +2324,13 @@ project's, except as below.
   letters G, V, S, D); the window opens at the Game page each time. The letters act as in the other menu windows, in both
   rule modes; the original's options window ignores them (an original bug: its hotkey path runs such buttons only in
   the in-play windows, OP7), which the owner chose to fix everywhere without a switch (2026-10-28). The Video page (ARC-UI-021) shows Floats and
-  Float Speed, the [floating text](#floating-text-arc-ui-021)'s level and speed, and Combat Taunts (ARC-AI-1527, default on, the settings file's `combat taunts` line: the followers' comment lines); its Brightness and Text Duration are hidden with their reasons (no gamma control, no text bubbles).
+  Float Speed, the [floating text](#floating-text-arc-ui-021)'s level and speed, and Combat Taunts (ARC-AI-1527, default on, the settings file's `combat taunts` line: the followers' comment lines); ARC-UI-1737 adds Brightness first (0–9, default 0, the `brightness` line; the final colour multiply 1.0 + 0.1 × the value over the whole picture, interface and fades included, drawn by `AreaBrightnessLayer` and hidden at 0 so the picture is today's byte for byte; ledger OH1) and the Game page's Violence Filter (off/on, default off, the `violence filter` line; ledger OH2: no pool of blood, a dying critter falls down plainly, the hit's blood effect index is the clean one); Text Duration is hidden with its reason (no text bubbles).
 - **Controls.** Each control shows its `options_ui.mes` label (message 100 + 100 × page + slot) and its value: a
   list's text from its value file (`OptionsDifficulty.mes`, `OptionsCombatMode.mes`, `OptionsOffOn.mes`), a slider as
-  `N/10`. Game: Difficulty (Easy, Moderate, Hard), Default Combat Mode (Real Time, Turn Based), Auto Attack, Always
-  Run and the project's Rules line (ARC-UI-014, below). Video: Floats (Never, Minimal, Verbose) and Float Speed (0–10). Sound: Effects, Voice and Music (0–10). The arrows (or Left and Right on the focused control, which Up and Down or
+  `N/10`. Game: Difficulty (Easy, Moderate, Hard), Violence Filter, Default Combat Mode (Real Time, Turn Based), Auto Attack, Always
+  Run and the project's Rules line (ARC-UI-014, below). Video: Brightness (0–9), Floats (Never, Minimal, Verbose) and Float Speed (0–10). Sound: Effects, Voice and Music (0–10). The arrows (or Left and Right on the focused control, which Up and Down or
   a click on an arrow choose, or a controller's confirm) change the value at once, as the original's setters run on each step: a list wraps around at either end, a
-  slider stops there. Hidden with their reasons: Module (one module), Violence Filter, Auto Switch Weapons, Follower
+  slider stops there. Hidden with their reasons: Module (one module), Auto Switch Weapons (its setting is the settings file's `auto switch` line since ARC-COMBAT-1720; the Game page now has the free slots, ARC-UI-1737, the row is issue 1729), Follower
   Skills, and the third combat mode Fast Turn Based (the list cycles Real Time and Turn Based).
 - **What each setting does.** Difficulty is the session's difficulty (its skill and experience readers, ARC-WORLD-030;
   a new game or a load takes the setting). Default Combat Mode is the turn-based setting Space also toggles: with a
@@ -2359,10 +2367,10 @@ Done back to the main menu, a new game as the first hero beginning under the Ori
 step reaching the session, the default combat mode going through the hero's turn-based switch and back, Rules back to
 Steamwoven on the session, the O key closing the menu; ARC-UI-059: the art read, the page labels at their places, none lit
 while a control has the focus, the pointer lighting Sound and a click on it showing the Sound page; `ARC_AREA_OPTIONS_CAPTURE=PATH`
-saves the Game page's picture to an ignored path; ARC-UI-061: the controls at the first slots on the Game and Sound pages, the
+saves the Video page's picture to an ignored path (the Game page's next to it with `-game`); ARC-UI-061: the controls at the first slots on the Game and Sound pages, the
 pointer lighting Music's left arrow, a press showing it down with 3000 and the release over it playing 3001 and lowering the music, a release away from it changing nothing;
-the capture also saves the Sound page next to it with `-sound` before the extension). Not done: Brightness, Text Duration,
-Module, Violence Filter, Auto Switch Weapons, Follower Skills and Fast Turn Based (no function yet).
+the capture also saves the Sound page next to it with `-sound` before the extension). ARC-UI-1737: the Violence Filter line is saved at once, and the Brightness pixel check reads the same frame at 0, 5 and 9 and requires every steady sample to equal the original's ramp (`BrightnessRules.Apply`) and the frame at 0 again to be the first one; the `critter-fall` stage checks no pool and the fall-down with `ARC_CRITTER_FALL_FILTER=1` (and `ARC_CRITTER_FALL_BRIGHTNESS=N`, `ARC_CRITTER_FALL_CAPTURE=PATH` for the capture series). Not done: Text Duration,
+Module, Auto Switch Weapons, Follower Skills and Fast Turn Based (no function yet).
 
 ### New-character window (ARC-UI-030)
 
@@ -3009,6 +3017,17 @@ inventory source of its own whose set the project admits and combat values is sc
 best items through the production event world, and the session's list shows the slots its record names (SKIP on a map without such an
 NPC; [NPC best items](../world/barter-runtime.md#npc-best-items-after-a-regeneration-arc-world-103)).
 
+
+### Item identify and repair windows (ARC-UI-1731)
+
+A dialog reply `ii` or `ri` ends the talk (the original's interface-mode change, ledger WN1, WN2) and the viewer opens the **item identify window** (the interface mode `InventoryKind5`) or the
+**item repair window** (`InventoryKind6`) over the area session once nothing else owns input and the barter data is loaded
+([contract](../world/item-service-runtime.md), ledger IS1–IS7). The window is a PROJECT diagnostic list (`AreaItemServicePanel`: the hero's items, one button each with its quote, the hero's
+gold, the NPC's name and the last message); the first click on an item selects and quotes it, the next click on the same item pays and does the service through the model
+(`AreaItemService`, [`TerrainViewerAreaItemService.cs`](../../tools/terrain-viewer/Godot/TerrainViewerAreaItemService.cs)). Like the barter window it is modal (gate closed, clock paused, a walk stopped),
+is the inventory family at Escape (the limited in-play menu opens and closes it), and closes with a replaced session, a dead hero or a map change; the NPC is held as the talk partner while it is open. The viewer's
+self-test stage `AreaItemService` covers both windows over a synthetic hero and merchant (identify, two clicks, Escape, repair, a replaced session); `ARC_UI_ITEM_SERVICE_CAPTURE` (a folder) saves a PNG
+of each step for a graphics comparison. The original look is [#1765](https://github.com/Simarglok/arcanum-steamwoven/issues/1765).
 ### Reading window (ARC-UI-049)
 
 The inventory window shows a `Read:` button for each written item the hero holds; the session decides the use

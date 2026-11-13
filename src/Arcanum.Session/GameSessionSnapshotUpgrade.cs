@@ -618,8 +618,13 @@ public static partial class GameSessionSnapshotCodec
                 hero.Add("age", null);
             }
         },
-        // ARC-UI-1740 (schema 100): the skill module's pre-thrown gambling roll. No older build held one (there was no gambling), so the step adds null: the next barter window throws the first.
+        // ARC-TECHNOLOGY-1635 (schema 100): the flights section gains the native traps' shots in flight. No older build flew a trap's shot (it struck at once), so the list is empty.
         [99] = root =>
+        {
+            AddField(Section(root, "flights"), "$.flights", "trapShots", new JsonArray());
+        },
+        // ARC-UI-1740 (schema 101): the skill module's pre-thrown gambling roll. No older build held one (there was no gambling), so the step adds null: the next barter window throws the first.
+        [100] = root =>
         {
             if (root.ContainsKey("gamblingRoll")) throw new DecodeException(SnapshotDecodeFailure.UnknownField, "$.gamblingRoll");
             root.Add("gamblingRoll", null);

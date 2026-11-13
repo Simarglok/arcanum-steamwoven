@@ -1547,6 +1547,8 @@ public sealed partial class GameSessionOwner : IDisposable
         _passWorld = world;
         // ARC-WORLD-1159: a host with the encounter tables starts the Random Encounters chain with its first pass.
         ArmRandomEncounter();
+        // ARC-UI-1739: so does a host with the newspaper texts start the Newspapers chain.
+        ArmNewspaper();
         // ARC-DEV-104: a pass that threw leaves no fold ticks behind for this one.
         _passFoldTicks = null;
         _passFirings = firings;
@@ -2991,6 +2993,14 @@ public sealed partial class GameSessionOwner : IDisposable
                 converted.Add(new(pending.Sequence, pending.Kind, kind.Domain, pending.DeadlineMs, 0, new(pending.Entities, pending.Values)));
                 continue;
             }
+            if (pending.Kind == SessionEventKinds.Newspaper)
+            {
+                // A Newspapers event (ARC-UI-1739): global, set no later than the saved clock, at most a day before its deadline (the first one is the time left to midnight, the chain's others a whole day).
+                var delay = pending.DeadlineMs - pending.Values[0];
+                if (!pending.Entities.IsEmpty || pending.Values[0] < 0 || pending.Values[0] > clockMs || delay is < 1 or > SessionEventKinds.NewspaperDayMs) return GameSessionFailure.InvalidEvents;
+                converted.Add(new(pending.Sequence, pending.Kind, kind.Domain, pending.DeadlineMs, 0, new(pending.Entities, pending.Values)));
+                continue;
+            }
             if (pending.Kind == SessionEventKinds.SpellRun)
             {
                 // ARC-DEV-210: [game ms it was set at, run slot, code]; global, so no entity; the run is in the saved table and the deadline is not before its setting.
@@ -3018,6 +3028,7 @@ public sealed partial class GameSessionOwner : IDisposable
             converted.Count(e => e.Kind == SessionEventKinds.ItemDecay) > SessionEventKinds.MaxItemDecays ||
             converted.Count(e => e.Kind == SessionEventKinds.BodyDecay) > SessionEventKinds.MaxBodyDecays ||
             converted.Count(e => e.Kind == SessionEventKinds.RandomEncounter) > SessionEventKinds.MaxRandomEncounters ||
+            converted.Count(e => e.Kind == SessionEventKinds.Newspaper) > SessionEventKinds.MaxNewspapers ||
             converted.Count(e => e.Kind == SessionEventKinds.FocusWipe) > SessionEventKinds.MaxFocusWipes ||
             converted.Count(e => e.Kind == SessionEventKinds.Restock) > SessionEventKinds.MaxRestocks ||
             converted.Count(e => e.Kind == SessionEventKinds.TrapDevice) > SessionEventKinds.MaxTrapDevices ||

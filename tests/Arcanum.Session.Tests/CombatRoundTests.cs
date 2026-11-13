@@ -368,6 +368,26 @@ public sealed class CombatRoundTests
             Ok(Check(owner, world), owner).Events.ToArray());
     }
 
+    // ARC-COMBAT-1741: the hero's stun run lasts its animation now, and in a round only the skipped turns count it down (GT27, 0x427000): a hero the round skips loses 3 each time.
+    [TestMethod]
+    public void ARoundThatSkipsAStunnedHeroTakesThreeOffItsStunCountdown()
+    {
+        using var owner = Owner();
+        var world = Fight();
+        Ok(owner.StartCombatRound(owner.Version, world), owner);
+        Ok(owner.EndCombatTurn(owner.Version, Wolf, world), owner);
+        Ok(owner.EndCombatTurn(owner.Version, Bandit, world), owner);
+        Assert.AreEqual(GameSessionDisposition.Changed,
+            owner.ApplyDamage(owner.Version, SessionLifeTarget.Hero, new LifeDamage { Effects = CriticalHitEffects.Stun }).Disposition);
+        var before = owner.QueryGoals().RunsOf("pc").Single(run => run.Bottom.Goal == Arcanum.Simulation.Goals.GoalType.AnimateStunned).Bottom.Count;
+        Check(owner, world); // turn 2 begins on the wolf
+        owner.EndCombatTurn(owner.Version, Wolf, world);
+        owner.EndCombatTurn(owner.Version, Bandit, world); // the next subturn reaches the hero, which cannot act
+        Check(owner, world);
+        var after = owner.QueryGoals().RunsOf("pc").SingleOrDefault(run => run.Bottom.Goal == Arcanum.Simulation.Goals.GoalType.AnimateStunned);
+        Assert.IsTrue(after is null || after.Bottom.Count <= before - 3, $"the skipped hero's countdown fell from {before} to {after?.Bottom.Count}");
+    }
+
     [TestMethod]
     public void AHeroKilledOnItsSubturnDoesNotHoldTheRound()
     {

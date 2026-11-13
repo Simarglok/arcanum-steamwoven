@@ -135,3 +135,7 @@ smoke reads a newspaper template (the first readable prototype with text and no 
   the original's script call makes at attachment point 1, a teleport from an item's use script.
 - The original's art, fonts, pixel layout, newspaper columns and picture drawing; a scenery click that reads in place (the
   original has none: plaques on maps come through scripts, WR16).
+
+## Where the player gets a newspaper (ARC-UI-1739)
+
+A printed newspaper reaches the pack through the vendor's dialog reply (`p:`; [vendor reply](../scripting/dialog-conversation-runtime.md#newspaper-vendor-reply-arc-ui-1739), ledger [NP1–NP8](../research/ledger/scripts.md#newspaper-vendor-and-daily-event-arc-ui-1739)): the new item (prototype 14084, the executable's 14064) holds the bought issue as its written start line, and the use path above reads it from that line (WR1: the headline and the next nine messages). The queue that picks the shown issue is the session's, popped once a game day by the Newspapers event ([event queue](game-event-queue-runtime.md#daily-newspaper-event-arc-ui-1739)).

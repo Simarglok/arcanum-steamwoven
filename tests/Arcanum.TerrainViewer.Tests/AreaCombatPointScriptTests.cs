@@ -298,7 +298,7 @@ public sealed class AreaCombatPointScriptTests
     {
         var set = AreaUseScriptHost.CombatPointAdmission;
         Assert.IsTrue(AreaUseScriptHost.PlacedAdmission.IsSubsetOf(set), "everything the placed set runs");
-        Assert.IsTrue(set.IsSubsetOfBesidesStores(ScrAdmissionSet.S52), "the interpreter's largest set holds it");
+        Assert.IsTrue(set.IsSubsetOfBesidesStores(ScrAdmissionSet.S53), "the interpreter's largest set holds it");
         foreach (var action in new[] { ScrCatalogue.Action.Damage, ScrCatalogue.Action.DamageUnresistable, ScrCatalogue.Action.CastSpell, ScrCatalogue.Action.CastFreeSpell,
             ScrCatalogue.Action.MagickTechAdjustment, ScrCatalogue.Action.GetMagickTechAdjustment, ScrCatalogue.Action.PlayScriptEyeCandy })
             Assert.IsTrue(set.Actions.Contains(action), "action " + action);
@@ -582,7 +582,8 @@ public sealed class AreaCombatPointScriptTests
         Assert.IsTrue(AreaUseScriptHost.CombatPointAdmission.Conditions.Contains(ScrCatalogue.Condition.IsInCombat));
         Assert.IsTrue(AreaUseScriptHost.CombatPointAdmission.Actions.Contains(ScrCatalogue.Action.AdjustStat));
         Assert.IsFalse(AreaUseScriptHost.PlacedAdmission.Actions.Contains(ScrCatalogue.Action.AdjustStat));
-        Assert.IsFalse(AreaUseScriptHost.PlacedAdmission.Conditions.Contains(ScrCatalogue.Condition.IsInCombat));
+        // ARC-SCRIPT-1733: obj is in combat and the critter-state conditions are in the placed set too since the set S53; adjust stat stays the combat points' alone.
+        Assert.IsTrue(AreaUseScriptHost.PlacedAdmission.Conditions.Contains(ScrCatalogue.Condition.IsInCombat));
     }
 
     [TestMethod]
