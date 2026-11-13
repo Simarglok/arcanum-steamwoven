@@ -306,6 +306,15 @@ public sealed partial class DialogConversation
             Greet(plan, greeting, previous);
             return;
         }
+        if (plan.InsultLine)
+        {
+            // ARC-SCRIPT-1505 (ledger INS1): the insulted line, the NPC's race line 1000; the node's replies follow as for a plain line.
+            if (!NpcRaceTalkLine(InsultGroup, out var insulted))
+            {
+                return;
+            }
+            NpcLine = insulted;
+        }
         BuildOffers(plan);
     }
 
@@ -931,7 +940,7 @@ public sealed partial class DialogConversation
     /// <summary>
     /// The reply step's hostile check (0x413130, ledger HR1–HR3, ARC-DEV-193): after the picked reply's action string returned 1 (no FL, JO, UW,
     /// ET or SU in it) the hostility port is asked whether the NPC is alive and kill-on-sight toward the PC now; when it is, the NPC speaks a
-    /// generated line (group 1000, not loaded) and the talk ends as <see cref="DialogEndKind.HostileRefusal"/> before the insult and the
+    /// generated line (race group 1000, ARC-SCRIPT-1505) and the talk ends as <see cref="DialogEndKind.HostileRefusal"/> before the insult and the
     /// reply's transition. Without the port the check is not made. False when the talk ended or failed.
     /// </summary>
     [OriginalFunction(0x413130, OriginalFunctionScope.Partial)]
@@ -955,14 +964,40 @@ public sealed partial class DialogConversation
         {
             return true;
         }
+        if (!SpeakLastWords())
+        {
+            return false;
+        }
         Finish(new DialogConversationEnd(DialogEndKind.HostileRefusal, null));
         return false;
     }
 
     /// <summary>
+    /// ARC-SCRIPT-1505 (ledger INS2, HR3): the NPC's last words after an insult that ends the talk or a refusal to talk on, its race line 1000
+    /// (no replies, end state 4). Without the greeting port, or when its facts are unknown, the line stays as it was. False when the line could not be picked (the conversation failed).
+    /// </summary>
+    private bool SpeakLastWords()
+    {
+        if (_ports.Greeting is null)
+        {
+            return true;
+        }
+        if (!NpcRaceTalkLine(InsultGroup, out var last))
+        {
+            return false;
+        }
+        // A host whose facts are unknown picks no line (origin null): the line stays as it was rather than going blank.
+        if (last.Origin is not null)
+        {
+            NpcLine = last;
+        }
+        return true;
+    }
+
+    /// <summary>
     /// The insult of a picked Player <c>i:</c> reply (0x4191E0): the NPC's reaction changes by <see cref="InsultReaction"/>
     /// through the reaction port (the PC's adjustment effects and skips are the owner's), then the effective reaction is read;
-    /// at most <see cref="InsultEndsAtOrBelow"/> the NPC ends the talk with a generated line (not loaded,
+    /// at most <see cref="InsultEndsAtOrBelow"/> the NPC ends the talk with its generated race line 1000 (ARC-SCRIPT-1505, with the greeting port;
     /// <see cref="DialogEndKind.Insulted"/>), otherwise the reply's own transition follows. False when the talk ended or stopped.
     /// </summary>
     [OriginalFunction(0x4191E0, OriginalFunctionScope.Partial)]
@@ -974,6 +1009,10 @@ public sealed partial class DialogConversation
         }
         if (value <= InsultEndsAtOrBelow)
         {
+            if (!SpeakLastWords())
+            {
+                return false;
+            }
             Finish(new DialogConversationEnd(DialogEndKind.Insulted, null));
             return false;
         }
@@ -1382,6 +1421,7 @@ public sealed partial class DialogConversation
                 ? $"{(char)raw[0]}:{(raw.Count > 2 ? "+" : string.Empty)}" : string.Empty;
             var marker = DialogText.Marker(markerText, out var exact);
             GreetingPlan? greeting = null;
+            var insultLine = false;
             if (marker is { Letter: 'g' } && _ports.Greeting is not null && withReplies && !nested)
             {
                 // ARC-WORLD-058: the greeting's slot targets are planned now, so a slot never half-runs a node.
@@ -1390,6 +1430,12 @@ public sealed partial class DialogConversation
                 {
                     return null;
                 }
+                text = string.Empty;
+            }
+            else if (marker is { Letter: 'i' } && exact && _ports.Greeting is not null && withReplies && !nested)
+            {
+                // ARC-SCRIPT-1505 (ledger INS1): an NPC node that is exactly "i:" says the NPC's race line 1000 (0x416840 → 0x4185F0), picked when the node is entered.
+                insultLine = true;
                 text = string.Empty;
             }
             else if (marker is { Letter: 'g' or 'm' or 'r' } || marker is { Letter: 'i' } && exact)
@@ -1427,7 +1473,7 @@ public sealed partial class DialogConversation
                 }
                 replies.Add(reply);
             }
-            return new StepPlan(npc, action, DialogText.Substitute(text, _request.Names), replies.AsReadOnly(), greeting);
+            return new StepPlan(npc, action, DialogText.Substitute(text, _request.Names), replies.AsReadOnly(), greeting, insultLine);
         }
         catch (DialogOperationParseException exception)
         {
@@ -1819,7 +1865,7 @@ public sealed partial class DialogConversation
     }
 
     private sealed record StepPlan(DlgRecord Npc, IReadOnlyList<ConversationOperation> Action, string NpcText, IReadOnlyList<ReplyPlan> Replies,
-        GreetingPlan? Greeting = null);
+        GreetingPlan? Greeting = null, bool InsultLine = false);
 
     /// <summary>A greeting's slots and the planned nodes of its jump and floating slots.</summary>
     private sealed record GreetingPlan(DialogGreetingSlot[] Slots, IReadOnlyDictionary<int, StepPlan> Jumps, IReadOnlyDictionary<int, StepPlan> Floats);
