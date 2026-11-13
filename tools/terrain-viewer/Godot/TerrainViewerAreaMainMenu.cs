@@ -126,6 +126,7 @@ public partial class TerrainViewerApp
         if (_mainMenuPanel.GetParent() == this) MoveChild(_mainMenuPanel, GetChildCount() - 1);
         _mainMenu = new AreaMainMenu(texts, root == AreaMenuWindow.Main && !early ? NewGameRefusal() : null, root, reopened);
         _mainMenu.IntroRefusal = MovieRefusal();
+        _mainMenu.CreditsRefusal = CreditsRefusal();
         _mainMenuStatus = null;
         GD.Print($"ARC-UI-011 main menu open window={root} reopened={reopened} newGame={_mainMenu.NewGameRefusal ?? "ready"}");
         // ARC-UI-139: the main menu's soundtrack (the shop map's sector pair, ARC-DEV-332) plays through the scheme player without a session or a
@@ -373,6 +374,11 @@ public partial class TerrainViewerApp
                 // ARC-RENDER-1170 (0x5445F0): movies 1 and 7, then the window shows again; the menu stands under the movies.
                 if (PlayMovies([1, 7], 0, () => { RenderMainMenu(); RefreshAreaStatus(); }, "view intro")) { _mainMenuPanel!.CloseView(); return; }
                 _mainMenu.Notice = AreaMainMenu.NoIntro;
+                break;
+            case AreaMenuCommandKind.Credits:
+                // ARC-RENDER-1171 (0x544640): the slides of script 999 show over the menu, which stands under them.
+                if (StartCredits(out var creditsRefused)) return;
+                _mainMenu.Notice = creditsRefused;
                 break;
             case AreaMenuCommandKind.StartNewGame:
                 // ARC-RENDER-1170: the new game's movies (1 and 7) play before the start, which then runs as ever.

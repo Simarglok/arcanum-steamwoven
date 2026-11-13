@@ -44,7 +44,8 @@ public interface ISpellSocialHost
 /// Any other object: the plain write.</item>
 /// <item><b>Mind controlled</b>, set: without a caster the plain write; with one, **nothing at all** for an object that is no NPC (the flag is not written, SO3); for an NPC the reaction <c>−50</c> toward the hero when the
 /// caster is the hero and the NPC does not hold the summoned spell flag (0x4000), then the flag, then the NPC joins the caster as a forced follower (0x45DE90), then no-flee for good (0x4AF1D0). Clear, on an NPC: the flag, then a forced
-/// leave (0x45DFC0); the reaction is not given back. The party has the hero as the one leader: a caster that is no hero gets no follower (named).</item>
+/// leave (0x45DFC0); the reaction is not given back. ARC-MAGIC-1841: the caster is any object the run names as its parent (<see cref="GameSessionOwner.ForceJoinLeader"/>; 0x45DE90 does not test the leader's type): an NPC's summon follows it, and a companion an NPC dominates
+/// leaves the hero for it.</item>
 /// <item><b>Fleeing</b>, on an NPC: the flee function (0x4AF130); off: the stop-fleeing function (0x4AF170); **neither writes the critter flag in the original's closing write** (the setter keeps the state; the session's danger
 /// record is that state), and on the hero nothing happens.</item>
 /// <item><b>Blinded</b>: set, the function 0x4B81B0 writes the critter flag when it is not set (the session's blinded life condition, <see cref="GameSessionOwner.SetBlinded"/>); clear, the plain write.</item>
@@ -57,7 +58,7 @@ public sealed partial class SessionSpellCaster
     public ISpellSocialHost? Social { get; set; }
 
     /// <summary>The detail codes of a <see cref="SpellCastEventKind.SocialEffect"/> line (its <see cref="SpellCastEvent.Value"/>): the reaction change (detail: the delta), peace, flee, stop fleeing, a forced join, a forced leave, no-flee for good, a blinded
-    /// condition written (detail 1 on, 0 off), the original's no-ops (<see cref="SocialIgnored"/>) and a step the session does not model (<see cref="SocialNotModelled"/>, detail: 1 a leader that is no hero) or a host that did not run
+    /// condition written (detail 1 on, 0 off), the original's no-ops (<see cref="SocialIgnored"/>) and a step the session does not model (<see cref="SocialNotModelled"/>; since ARC-MAGIC-1841 no step logs it) or a host that did not run
     /// the step (<see cref="SocialRefused"/>, detail: the effect it was asked); the AI redirect (<see cref="SocialRedirect"/>, detail: how many NPCs were turned on the target).</summary>
     public const int SocialReaction = 1, SocialPeace = 2, SocialFlee = 3, SocialStopFleeing = 4, SocialJoin = 5, SocialLeave = 6, SocialNoFlee = 7, SocialBlinded = 8, SocialIgnored = 9, SocialNotModelled = 10, SocialRefused = 11, SocialRedirect = 12;
 
@@ -147,13 +148,10 @@ public sealed partial class SessionSpellCaster
             // −50 toward the hero comes first, from a caster that is the hero, unless the NPC is a summoned creature (spell flag 0x4000); it reads the NPC before the flag is written.
             if (parent == Hero && (CurrentFlags(id, SessionObjectFlagField.Spell) & SpellTargetObject.Summoned) == 0) Reaction(run, id, MindControlReaction);
             if (!WriteFlag(run, id, SessionObjectFlagField.Spell, mask, true)) return true;
-            // The forced join (0x45DE90 with force 1) and no-flee for good (0x4AF1D0). The party has the hero as its one leader.
-            if (parent == Hero)
-            {
-                if (_owner.ForceJoinParty(_owner.Version, id).Disposition != GameSessionDisposition.Rejected) SocialLine(run, SocialJoin, id);
-                else SocialLine(run, SocialRefused, id, SocialJoin);
-            }
-            else SocialLine(run, SocialNotModelled, id, 1);
+            // The forced join (0x45DE90 with force 1) under the caster, whoever it is (ARC-MAGIC-1841: an NPC's summon follows its summoner, a companion dominated by an NPC leaves the hero for it),
+            // and no-flee for good (0x4AF1D0).
+            if (_owner.ForceJoinLeader(_owner.Version, id, parent).Disposition != GameSessionDisposition.Rejected) SocialLine(run, SocialJoin, id);
+            else SocialLine(run, SocialRefused, id, SocialJoin);
             // No-flee first stops fleeing (ARC-AI-1513): an NPC in FLEE goes to NONE in the same revision and the host ends its flee goals.
             var fleeing = _owner.QueryDanger(id).State == DangerState.Flee;
             if (_owner.SetNoFlee(_owner.Version, id).Disposition != GameSessionDisposition.Rejected)

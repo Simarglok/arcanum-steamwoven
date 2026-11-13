@@ -28,6 +28,8 @@ public enum AreaMenuRole
     NewCharacter,
     /// <summary>ARC-RENDER-1170: "View Intro" (window 5): plays the intro movies (1 and 7, 0x5445F0), then the menu shows again.</summary>
     ViewIntro,
+    /// <summary>ARC-RENDER-1171: "Credits" (window 2, 0x544640): the credits slide show (script 999), then the menu shows again.</summary>
+    Credits,
     /// <summary>A button the original has whose function Steamwoven does not have yet; hidden (FR-UI-001).</summary>
     Unavailable,
 }
