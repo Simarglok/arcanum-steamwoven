@@ -1118,7 +1118,7 @@ public partial class TerrainViewerApp
             else GD.Print("ARC-AI-1527 native-smoke ai-follower-lines text PASS");
             GD.Print($"ARC-AI-1527 native-smoke ai-follower-lines PASS said={_followerLinesSaid - linesBefore}");
 
-            // ARC-AI-1638: a real burn step (the cast host's damage step, drained by TickCasterDamage) that takes the follower from a fifth of its hit points or more to below it floats the near-death line once.
+            // ARC-AI-1638, ARC-AI-1680: a real burn step (the cast host's damage step, whose near-death ask is the host's callback as the step lands; TickCasterDamage only floats its damage) that takes the follower from a fifth of its hit points or more to below it floats the near-death line once.
             if (SpellCasterNow() is { } burner && _combatHost.Build(session, map.RuntimeMap, follower).Combat?.Target is { } burnTarget && session.QueryLife(burnTarget).View is { } burnView)
             {
                 burner.TakeDamageSteps();

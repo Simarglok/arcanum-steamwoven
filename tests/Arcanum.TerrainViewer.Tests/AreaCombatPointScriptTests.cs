@@ -348,6 +348,39 @@ public sealed class AreaCombatPointScriptTests
         });
     }
 
+    // ARC-SCRIPT-1662 (WE2, CP8; exe 0x4614A0, 0x461540): an owner that is neither the PC nor an NPC (scenery, a container) has its complexity as the item's power: the ratio is 100 whatever the item's complexity, and a run of the ratio script
+    // with such a wielder stores 100 x 100 / 100 instead of stopping.
+    [TestMethod]
+    public void The_power_ratio_for_a_scenery_or_container_owner_is_100_and_the_run_goes_on()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.CreateWithHero(1);
+            var weapon = Row(1, WeaponType, 917, ScrPoint.Hit, 60);
+            var neutral = Row(2, WeaponType, 917, ScrPoint.Hit, 0);
+            var scenery = Row(3, 3, 0, ScrPoint.Heartbeat);
+            var container = Row(4, 2, 0, ScrPoint.Heartbeat);
+            var victim = Row(5, NpcType, 0, ScrPoint.Heartbeat);
+            var damaged = new List<(string Victim, int Amount, int Type)>();
+            var host = HostWith(session, content, damaged, null, weapon, neutral, scenery, container, victim);
+            var aptitude = session.QueryHeroScriptStat(GameSessionOwner.ScriptStatAptitude)!.Value;
+            Assert.AreNotEqual(100, Arcanum.Simulation.Equipment.EquipmentRules.EffectivePowerRatio(60, aptitude), "the hero reads the same item as no neutral one");
+            foreach (var owner in new[] { scenery, container })
+            {
+                Assert.AreEqual(100, host.PowerRatio(Ref(weapon), Ref(owner)));
+                Assert.AreEqual(100, host.PowerRatio(Ref(neutral), Ref(owner)), "a complexity of 0 reads 100 as well");
+                damaged.Clear();
+                var ran = host.RunCombatPoint(ScrPoint.Hit, Ref(weapon), Ref(owner), Ref(victim), session.Rules.Scripts);
+                Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, ran.Outcome, ran.Detail);
+                Assert.AreEqual(100, damaged.Single().Amount, "100 x the ratio of 100 / 100");
+            }
+            // An owner the host holds no row for, an NPC whose aptitude is unknown and an item it does not know still stop the run.
+            Assert.IsNull(host.PowerRatio(Ref(weapon), new(1, "oid:nobody")));
+            Assert.IsNull(host.PowerRatio(Ref(weapon), Ref(victim)));
+            Assert.IsNull(host.PowerRatio(new(1, "oid:made"), Ref(scenery)));
+        });
+    }
+
     [TestMethod]
     public void Obj_is_animal_reads_the_victim_s_critter_flags_and_is_false_for_the_hero_and_for_other_objects()
     {
