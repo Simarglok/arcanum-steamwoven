@@ -122,6 +122,10 @@ public partial class TerrainViewerApp
     /// <summary>Whether the loot window shows a container of the map (an item's decay then waits, ledger ID6).</summary>
     private bool ContainerLootOpen => InventoryOpen && _containerLootSession is not null && ReferenceEquals(_containerLootSession, _areaSession);
 
+    /// <summary>The loot window shows a container: a container of the map (also the See Contents window) or a junk pile the session made. The original's pickup switch (0x5E8800) is lowered while it
+    /// does (0x5727B0, 0x573440): an item's decay waits (ID6) and no NPC starts a pickup (ARC-AI-1486).</summary>
+    private bool LootWindowOnContainer => InventoryOpen && _inventoryPanel is { } panel && SessionJunkPile.Number(panel.Holder) is not null || ContainerLootOpen;
+
     private void PlayContainerSound(AreaObjectRecord row, OpenableSoundAction action)
     {
         if (row is not { WorldX: { } x, WorldY: { } y } || ObjectSoundReader.Read(row).Fields is not { } fields) return;

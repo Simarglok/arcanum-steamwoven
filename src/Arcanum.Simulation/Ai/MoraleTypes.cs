@@ -66,7 +66,7 @@ public enum FleeSpellOutcome
 public readonly record struct FleeSpellStep(FleeSpellOutcome Outcome, DangerFlags Flags);
 
 /// <summary>Stop fleeing (0x4AF170) for one object: whether the setter is asked for NONE (an NPC in FLEE; SURRENDER is kept) and
-/// whether the NPC's flee goals (type 25) are interrupted (any NPC, whatever its state).</summary>
+/// whether the NPC's flee goals (type 25) are interrupted (the same case: only an NPC that was in FLEE).</summary>
 public readonly record struct StopFleeingStep(bool RequestsNone, bool InterruptsFleeGoals);
 
 /// <summary>Where a back-off run (0x4AC7B0) stands before its path request.</summary>

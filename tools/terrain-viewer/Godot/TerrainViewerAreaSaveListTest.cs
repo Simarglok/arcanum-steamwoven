@@ -160,6 +160,40 @@ public partial class TerrainViewerApp
                     Require(!SaveListOpen, "Escape closed the load window");
                 }
                 finally { System.IO.File.WriteAllBytes(library.Slot("slot0000").Path, intact); }
+
+                // ARC-UI-1574: a load that throws still ends as a refused one: the screen goes and the window is told (it stays, with the reason).
+                OpenSaveList(AreaSaveListMode.Load);
+                var faulted = _areaSession;
+                InventoryKey(Key.Down); InventoryKey(Key.Enter);
+                Require(SaveListOpen && _pendingLoad is not null, "the load waits for its screen before the fault");
+                _pendingLoadFaultForSelfTest = () => throw new InvalidOperationException("self-test fault");
+                var threw = false;
+                try { RunPendingLoad(); } catch (InvalidOperationException) { threw = true; } finally { _pendingLoadFaultForSelfTest = null; }
+                Require(threw && SaveListOpen && _pendingLoad is null && !_transitionScreen.Covering && ReferenceEquals(faulted, _areaSession)
+                    && _quickSaveStatus?.Contains("FAILED", StringComparison.Ordinal) == true,
+                    "a load that threw cleared the screen and told the window: " + _quickSaveStatus);
+                InventoryKey(Key.Escape);
+                Require(!SaveListOpen, "Escape closed the load window after the fault");
+
+                // ARC-UI-1574: a load that is not a player's (the death reload, a smoke) landing in the window of a pending load supersedes it, not refuses.
+                OpenSaveList(AreaSaveListMode.Load);
+                var superseded = _areaSession;
+                InventoryKey(Key.Down); InventoryKey(Key.Enter);
+                Require(SaveListOpen && _pendingLoad is not null, "the load waits for its screen before the second load");
+                Require(LoadGame(library.Slot("slot0000"), "smoke ") && _pendingLoad is null && !_transitionScreen.Covering && !ReferenceEquals(superseded, _areaSession),
+                    "a load inside the window of a pending load was made, not refused: " + _quickSaveStatus);
+                if (SaveListOpen) InventoryKey(Key.Escape);
+                Require(!SaveListOpen, "the load window is closed after the superseding load");
+                // A player's load inside the window is still refused (F8 twice does not drop the first).
+                var pendingBefore = _areaSession;
+                OpenSaveList(AreaSaveListMode.Load);
+                InventoryKey(Key.Down); InventoryKey(Key.Enter);
+                var firstPending = _pendingLoad;
+                QuickKey(Key.F8);
+                Require(firstPending is not null && ReferenceEquals(_pendingLoad, firstPending) && ReferenceEquals(pendingBefore, _areaSession), "F8 inside the window of a pending load was refused");
+                TickTransitionScreen(100); TickTransitionScreen(100);
+                Require(_pendingLoad is null && !_transitionScreen.Covering, "the first load ran after the refused F8");
+                if (SaveListOpen) InventoryKey(Key.Escape);
             }
             finally { _loadScreenDeferForSelfTest = false; }
 

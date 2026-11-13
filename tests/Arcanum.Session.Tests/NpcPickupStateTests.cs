@@ -85,14 +85,31 @@ public sealed class NpcPickupStateTests
     public void AnItemOfAJunkPileLeavesThePileForTheNpc()
     {
         using var owner = Open();
+        owner.PlaceHeroItem("kit:1", There);
         owner.PlaceHeroItem("kit:2", There);
         owner.PlaceHeroItem("kit:3", There);
         var pile = owner.QueryJunkPiles().Single();
-        CollectionAssert.AreEquivalent(new[] { "kit:2", "kit:3" }, pile.Items.Select(item => item.Entity).ToArray());
+        CollectionAssert.AreEquivalent(new[] { "kit:1", "kit:2", "kit:3" }, pile.Items.Select(item => item.Entity).ToArray());
         var result = owner.PickUpItemByNpc(owner.Version, Npc, "kit:2", Accept);
         Assert.AreEqual(GameSessionDisposition.Changed, result.Disposition, result.Failure.ToString());
         CollectionAssert.Contains(Listed(owner), "kit:2");
-        CollectionAssert.AreEqual(new[] { "kit:3" }, owner.QueryJunkPiles().SelectMany(p => p.Items).Select(item => item.Entity).ToArray());
+        CollectionAssert.AreEquivalent(new[] { "kit:1", "kit:3" }, owner.QueryJunkPiles().SelectMany(p => p.Items).Select(item => item.Entity).ToArray(), "a pile of two stays");
+    }
+
+    // ARC-AI-1486 (JP5, 0x467860 at 0x467C26): the removal checks the container an item left (no loot window is open: the goal's end tested the switch).
+    [TestMethod]
+    public void ATwoItemJunkPileDissolvesAtTheNpcsPickupAndReleasesTheOtherItemWithANewDecay()
+    {
+        using var owner = Open();
+        owner.PlaceHeroItem("kit:2", There);
+        owner.PlaceHeroItem("kit:3", There);
+        var revision = owner.Version.Revision;
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItemByNpc(owner.Version, Npc, "kit:2", Accept).Disposition);
+        Assert.AreEqual(revision + 1, owner.Version.Revision, "one revision, the dissolve in it");
+        Assert.AreEqual(0, owner.QueryJunkPiles().Count, "the pile with one item left goes");
+        Assert.IsTrue(owner.QueryPlacedItems().Any(item => item.Entity == "kit:3" && item.Cell == There), "the last item lies on the pile's cell again");
+        Assert.IsTrue(owner.QueryItemDecays().Any(decay => decay.Entity == "kit:3"), "with a decay of its own");
+        CollectionAssert.Contains(Listed(owner), "kit:2");
     }
 
     [TestMethod]

@@ -36,6 +36,7 @@ src/Arcanum.Scripting/Dialog/DialogConversation.cs,ReadStore,pending,
 src/Arcanum.Scripting/Dialog/DialogConversation.cs,ReadWorldFact,pending,
 src/Arcanum.Scripting/Dialog/DialogConversation.cs,SchematicsCommand,pending,
 src/Arcanum.Scripting/Dialog/DialogConversation.cs,Store,pending,
+src/Arcanum.Scripting/Dialog/DialogGreeting.cs,Comment,exempt,host
 src/Arcanum.Scripting/Dialog/DialogGreeting.cs,MissingLine,pending,
 src/Arcanum.Scripting/Dialog/DialogGreeting.cs,ParseSlots,pending,
 src/Arcanum.Session/GameSessionAdvancement.cs,LevelFollower,pending,
@@ -258,6 +259,7 @@ src/Arcanum.Session/SessionSpellCasterTrapDevices.cs,CastAtTileWithoutCaster,pen
 src/Arcanum.Session/SessionSpellCasterTrapDevices.cs,UseScriptTrapDevice,pending,
 src/Arcanum.Session/SessionSpellCasterTrapDevices.cs,UseTrapDevice,pending,
 src/Arcanum.Session/SessionSpellCasterTraps.cs,ApplyTrapEffect,pending,
+src/Arcanum.Session/SessionSpellCasterTraps.cs,TrapShot,exempt,host
 src/Arcanum.Simulation/Ai/AwarenessRules.cs,SoundStepCost,pending,
 src/Arcanum.Simulation/Ai/AwarenessRules.cs,WithProwlerLine,pending,
 src/Arcanum.Simulation/Ai/DangerRules.cs,PurgeEnemies,exempt,reference
@@ -410,6 +412,7 @@ src/Arcanum.Simulation/Traps/TrapRules.cs,SpotItemModifier,exempt,reference
 src/Arcanum.World/AreaAiHost.cs,Active,pending,
 src/Arcanum.World/AreaAiHost.cs,AnimationPriority,pending,
 src/Arcanum.World/AreaAiHost.cs,ApplyStop,pending,
+src/Arcanum.World/AreaAiHost.cs,AttackEnded,exempt,host
 src/Arcanum.World/AreaAiHost.cs,AttemptPickLocks,pending,
 src/Arcanum.World/AreaAiHost.cs,BeginAttack,pending,
 src/Arcanum.World/AreaAiHost.cs,BlastRadius,pending,
@@ -434,6 +437,7 @@ src/Arcanum.World/AreaAiHost.cs,HitEffect,pending,
 src/Arcanum.World/AreaAiHost.cs,HitFollower,exempt,host
 src/Arcanum.World/AreaAiHost.cs,HitReached,pending,
 src/Arcanum.World/AreaAiHost.cs,HostileToHero,pending,
+src/Arcanum.World/AreaAiHost.cs,Hurt,exempt,host
 src/Arcanum.World/AreaAiHost.cs,IdleRestart,pending,
 src/Arcanum.World/AreaAiHost.cs,InterruptForHold,pending,
 src/Arcanum.World/AreaAiHost.cs,ItemHolder,pending,
@@ -509,6 +513,7 @@ src/Arcanum.World/AreaCombatRound.cs,Step,pending,
 src/Arcanum.World/AreaCompanionOrders.cs,Issue,pending,
 src/Arcanum.World/AreaCompanions.cs,JumpTo,pending,
 src/Arcanum.World/AreaContainerLoot.cs,Close,pending,
+src/Arcanum.World/AreaConversation.cs,SayFollowerLine,exempt,host
 src/Arcanum.World/AreaDoorHost.cs,Open,pending,
 src/Arcanum.World/AreaDropMap.cs,HasCritter,pending,
 src/Arcanum.World/AreaDropMap.cs,Path,pending,
@@ -563,6 +568,7 @@ src/Arcanum.World/AreaRestock.cs,GeneratedOnceFacts,pending,
 src/Arcanum.World/AreaRestock.cs,GeneratesAtCreation,pending,
 src/Arcanum.World/AreaRestock.cs,Item,pending,
 src/Arcanum.World/AreaRestock.cs,Merchant,pending,
+src/Arcanum.World/AreaRestock.cs,NpcLight,exempt,host
 src/Arcanum.World/AreaRestock.cs,Schedule,pending,
 src/Arcanum.World/AreaRestock.cs,Set,pending,
 src/Arcanum.World/AreaRestock.cs,Vicinity,pending,
@@ -595,6 +601,7 @@ src/Arcanum.World/AreaUseScripts.cs,IsTrap,pending,
 src/Arcanum.World/AreaUseScripts.cs,RunBed,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,RunBust,pending,
 src/Arcanum.World/AreaUseScripts.cs,RunCombatPoint,exempt,host
+src/Arcanum.World/AreaUseScripts.cs,RunDangerPoint,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,RunDying,pending,
 src/Arcanum.World/AreaUseScripts.cs,RunExamine,pending,
 src/Arcanum.World/AreaUseScripts.cs,RunHeartbeat,pending,
@@ -711,6 +718,7 @@ tools/terrain-viewer/Godot/AreaSaveListArtView.cs,Render,pending,
 tools/terrain-viewer/Godot/AreaSchematicsPanel.cs,UpdateRoundView,pending,
 tools/terrain-viewer/Godot/AreaWorldMapArtView.cs,AcceptNoteEdit,pending,
 tools/terrain-viewer/Godot/TerrainCanvasArea.cs,AreaBodyRect,pending,
+tools/terrain-viewer/Godot/TerrainViewerAi.cs,AiObjectFacts,exempt,reference
 tools/terrain-viewer/Godot/TerrainViewerAi.cs,RunHitScripts,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAi.cs,UseScriptOfCast,pending,
 tools/terrain-viewer/Godot/TerrainViewerAreaBarter.cs,BarterArt,pending,
@@ -738,6 +746,7 @@ tools/terrain-viewer/Godot/TerrainViewerAreaMapTransfer.cs,RunMapEnteredSteps,pe
 tools/terrain-viewer/Godot/TerrainViewerAreaPanelArt.cs,HoverPortrait,pending,
 tools/terrain-viewer/Godot/TerrainViewerAreaPickPocket.cs,ArmPickPocketFromBar,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAreaPickPocket.cs,HeroFaceSkill,pending,
+tools/terrain-viewer/Godot/TerrainViewerAreaPortals.cs,HeroDoorTrap,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAreaPortals.cs,HeroDoorUse,pending,
 tools/terrain-viewer/Godot/TerrainViewerAreaPortals.cs,OpenerDoorTrap,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAreaQuickSave.cs,RouteQuickSaveOverWindow,pending,
@@ -776,6 +785,10 @@ tools/terrain-viewer/Godot/TerrainViewerEyeCandy.cs,PlayEyeCandy,pending,
 tools/terrain-viewer/Godot/TerrainViewerEyeCandy.cs,RemoveEyeCandy,pending,
 tools/terrain-viewer/Godot/TerrainViewerEyeCandy.cs,StartCastEyeCandy,pending,
 tools/terrain-viewer/Godot/TerrainViewerEyeCandy.cs,SyncEyeCandyBodies,pending,
+tools/terrain-viewer/Godot/TerrainViewerFollowerComments.cs,FollowerAttackComments,exempt,host
+tools/terrain-viewer/Godot/TerrainViewerFollowerComments.cs,FollowerCanSpeak,exempt,host
+tools/terrain-viewer/Godot/TerrainViewerFollowerComments.cs,FollowerHurt,exempt,host
+tools/terrain-viewer/Godot/TerrainViewerFollowerComments.cs,SayFollowerLine,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerHeldThrow.cs,GameCursorPress,pending,
 tools/terrain-viewer/Godot/TerrainViewerHeldThrow.cs,HeroBeginThrow,pending,
 tools/terrain-viewer/Godot/TerrainViewerHeldThrow.cs,HeroThrowItem,pending,

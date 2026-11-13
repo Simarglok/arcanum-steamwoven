@@ -30,6 +30,7 @@ public static class ViewerSettingsConfig
     public const string AlwaysRun = "always run";
     public const string TextFloaters = "text floaters";
     public const string FloatSpeed = "float speed";
+    public const string CombatTaunts = "combat taunts";
     public const string EffectsVolume = "effects volume";
     public const string VoiceVolume = "voice volume";
     public const string MusicVolume = "music volume";
@@ -42,7 +43,7 @@ public static class ViewerSettingsConfig
     public const string TouchSchemeLine = "touch scheme";
     public const string PromptStyleLine = "prompt style";
 
-    private static readonly string[] GameLines = [Difficulty, TurnBased, AutoAttack, TextFloaters, FloatSpeed, HdInterface, GeneratedInterface, HdPack, HdPackPath, PadSchemeLine, TouchSchemeLine, PromptStyleLine];
+    private static readonly string[] GameLines = [Difficulty, TurnBased, AutoAttack, TextFloaters, FloatSpeed, CombatTaunts, HdInterface, GeneratedInterface, HdPack, HdPackPath, PadSchemeLine, TouchSchemeLine, PromptStyleLine];
     private static readonly string[] AudioLines = [EffectsVolume, VoiceVolume, MusicVolume];
 
     private static int? Int(ArcanumConfigRead read, string name, int minimum, int maximum)
@@ -83,6 +84,7 @@ public static class ViewerSettingsConfig
         {
             Floats = Int(read, TextFloaters, 0, FloaterRules.MaxLevel) ?? defaults.Floats,
             FloatSpeed = Int(read, FloatSpeed, 0, FloaterRules.MaxSpeed) ?? defaults.FloatSpeed,
+            CombatTaunts = Flag(read, CombatTaunts) ?? defaults.CombatTaunts,
             HdInterface = hdInterface,
             // The generated interface draws through the HD interface, so it is on only with it (the options line writes both).
             GeneratedInterface = (Flag(read, GeneratedInterface) ?? false) && hdInterface,
@@ -103,7 +105,7 @@ public static class ViewerSettingsConfig
         return
         [
             new(Difficulty, Number(settings.Difficulty)), new(TurnBased, Flag(settings.TurnBased)), new(AutoAttack, Flag(settings.AutoAttack)),
-            new(TextFloaters, Number(settings.Floats)), new(FloatSpeed, Number(settings.FloatSpeed)),
+            new(TextFloaters, Number(settings.Floats)), new(FloatSpeed, Number(settings.FloatSpeed)), new(CombatTaunts, Flag(settings.CombatTaunts)),
             new(HdInterface, Flag(settings.HdInterface)), new(GeneratedInterface, Flag(settings.GeneratedInterface && settings.HdInterface)),
             new(HdPack, HdPackSourceResolver.ModeName(settings.HdPackSource)), new(HdPackPath, path),
             new(PadSchemeLine, Choice(settings.Controls.Pad)), new(TouchSchemeLine, Choice(settings.Controls.Touch)), new(PromptStyleLine, Choice(settings.Controls.Prompts)),

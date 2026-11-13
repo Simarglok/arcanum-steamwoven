@@ -74,6 +74,32 @@ public sealed class AreaDoorHostTests
         Assert.AreEqual(2, asked.Count);
     }
 
+    // ARC-WORLD-1581 (TT18, TT7, 0x428A10): the hero's use node charges first, then the door's trap meets the hero; a trap that stops the use ends the run with the door shut, and a refused charge never meets the trap.
+    [TestMethod]
+    public void TheUseNodeOfTheHeroChargesThenAsksTheDoorsTrapAndATrapThatStopsTheUseEndsTheRun()
+    {
+        using var f = Open();
+        var log = new List<string>();
+        var charged = true;
+        var stops = false;
+        f.Host.HeroUse = portal => { log.Add("charge " + portal.Entity); return charged; };
+        f.Host.HeroTrap = portal => { log.Add("trap " + portal.Entity); return stops; };
+        Assert.IsTrue(f.Host.UseDoor(AreaHeroRunsHost.Hero, DoorA), "no trap stops the use");
+        stops = true;
+        Assert.IsFalse(f.Host.UseDoor(AreaHeroRunsHost.Hero, DoorA), "the trap stops it: the hero's run ends");
+        charged = false;
+        Assert.IsFalse(f.Host.UseDoor(AreaHeroRunsHost.Hero, DoorA), "a refused charge ends the run before any trap");
+        CollectionAssert.AreEqual(new[] { "charge " + DoorA, "trap " + DoorA, "charge " + DoorA, "trap " + DoorA, "charge " + DoorA }, log);
+        Assert.IsTrue(f.Host.UseDoor(AreaHeroRunsHost.Hero, "oid:not-a-door"), "a door of another window is not this host's");
+        f.Host.HeroUse = null; f.Host.HeroTrap = null;
+        Assert.IsTrue(f.Host.UseDoor(AreaHeroRunsHost.Hero, DoorA), "no hero ports: the use goes on as before");
+        var asked = new List<string>();
+        f.Host.OpenerTrap = (opener, _) => { asked.Add(opener); return false; };
+        f.Host.HeroTrap = _ => true;
+        Assert.IsTrue(f.Host.UseDoor("oid:thug", DoorA), "an NPC opener does not meet the hero's port");
+        CollectionAssert.AreEqual(new[] { "oid:thug" }, asked);
+    }
+
     [TestMethod]
     public void AnOpenedDoorWritesItsFramesOneByOneThenClosesByItselfAfterOneAndAHalfSeconds()
     {

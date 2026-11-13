@@ -21,7 +21,7 @@ reputation owners' (`HostilityRules.Upset`, `ReputationRules.OriginSame`, the wo
 | `AttackOrderRefused` | broadcast type 10 | Outside the PC's combat mode a target whose PC leader is the PC is refused; a PC target is not. |
 | `UpsetLines` | 0x414370 | GOOD 4900–4999, ORIGIN 5000–5099, FACTION 5100–5199, PARTY 4800–4899 (FO18). |
 | `TauntKindOf`, `Taunt` | 0x4B6B90, 0x4AE9E0 | With the "combat taunts" setting, a PC attacker, a struck object outside the PC's party and a hit: kind 0 (critical on the aimed object, 2400–2499) or kind 1 (another object under record flag 0x8, 2500–2599). Then `random(1, 2)` (`ai.TauntSpeak`) must not be 1, a follower is drawn by `random(0, n − 1)` (`ai.TauntFollower`, no draw for one) and must be active. |
-| `NearDeath` | 0x4AEAB0 | A hit with hit-point damage on a critter with a PC leader taking it from at least 20 % to below: 5500–5599 toward its PC leader. |
+| `NearDeath` | 0x4AEAB0 | A hit with hit-point damage on a critter with a PC leader taking it from at least 20 % to below: 5500–5599 toward its PC leader (asked by `AreaAiHost.Hurt`, ARC-AI-1527). |
 | `Active` | 0x45D790 | Not destroyed or off, dead, unconscious, stunned or paralysed (`HostilityCritter.Stunned`, critter flags 0x20, 0x40), or stoned. |
 
 ## Session (`GameSessionOwner`)
@@ -69,9 +69,16 @@ FO7, FO8 and FO14, the stage's switches, are read where the leave, the danger up
   item is ignored at its attack event; a door or scenery has no session entity, so no target). The viewer sends no curse: the
   typed order text (the Enter chat and `broadcast.mes`) is not read, so only tests reach it.
 - **The attack event in full.** The AI host's attack events run the fan-out (ARC-WORLD-115) and, since ARC-WORLD-119, the curse's;
-  its race insult is not floated. The comment lines are rules the attack resolution and the damage step do not
-  call yet; the "combat taunts" setting is not in the options (ARC-UI-013), and the line texts and the race-line selection are the
-  host's.
+  its race insult is not floated. The comment lines (ARC-AI-1527) are asked by the host: `AreaAiHost.AttackEnded` (the taunt kind
+  and draw, 0x4B6B90 → 0x4AE9E0) at the end of the hero's hit, `AreaAiHost.Hurt` (the near-death line, 0x4AEAB0) after each critter
+  hit the viewer resolves (the attack damage path of 0x4B4390) and after a script's damage, and the complaint's upset line in
+  `TellFollowers`. Each names the speaker and the message range (`AreaAiHost.FollowerSpeaks`); the viewer asks the can-speak head
+  (0x4AD800, `CanSpeakRules.Head` and the unconscious test) and `AreaConversationHost.SayFollowerLine` reads a random line of the
+  range (`DialogFollowerComment.Say`: the speaker's own override line 11999 + range / 100 first, else the `gd_npc_*` file of the
+  speaker's and the PC's genders, the names expanded) and floats it over the follower as a white script line. The "combat taunts"
+  setting is on the options window's Video page (default on, the settings file's `combat taunts` line). The line texts are the
+  player's and are never stored; no voice is played. NOT READY: a stray hit's taunt (kind 1: the writer of record flag 0x8 is not
+  traced), the near-death line of spell, trap and burn damage, the race-line selection.
 - **World-map travel.** Its window's stop attacking for the hero on opening and allow attacking on return (FO5, FO6) are the
   travel host's calls of `StopAttacking` and `AllowAttacking` with the hero; the W panel does not make them yet.
 - **Mind control.** The order reads `CompanionOrderFacts.MindControlled` and the curse's leave the same fact; a controlling spell

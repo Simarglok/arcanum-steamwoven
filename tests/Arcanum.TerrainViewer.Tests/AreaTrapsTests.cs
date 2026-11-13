@@ -176,6 +176,26 @@ public sealed class AreaTrapsTests
         });
     }
 
+    // ARC-WORLD-1581 (TT18, TT7): the hero's door use node meets the door's trap through the same entry point a container's use does; a door (type 1) carries a trap as any other object.
+    [TestMethod]
+    public void A_trapped_door_meets_the_hero_on_its_use_and_stays_shut_when_the_trap_goes_off()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var effects = new Effects();
+            var door = Row(1, 1, 30004, 0x0000_0201);
+            var (host, traps) = Hosts(session, content, () => effects.Side, null, door);
+            Assert.AreEqual(new SessionTrapBaseline(TrapCarrier.TrappedObject, 30004, 0x5, 0x0000_0201, 0), host.TrapBaseline(door));
+            var met = traps.Use(door)!;
+            Assert.IsTrue(met is { Cause: SessionTrapCause.Use, Outcome: SessionTrapOutcome.Fired, Cancels: true, Result.State.Removed: true }, met.Describe());
+            Assert.AreEqual(1, effects.Calls.Count);
+            Assert.AreSame(door, effects.Calls[0].Row);
+            Assert.AreEqual(0, effects.Triggerers.Count, "the hero's own effect, not a critter's");
+            Assert.IsNull(traps.Use(door), "the trap is gone: the door opens as any other");
+        });
+    }
+
     [TestMethod]
     public void A_removed_trap_leaves_the_use_slot_empty()
     {
@@ -264,6 +284,22 @@ public sealed class AreaTrapsTests
             var none = traps.Use(Row(2, Scenery, 30007))!;
             Assert.IsTrue(none is { Outcome: SessionTrapOutcome.Fired, Effect: null, Cancels: true }, none.Describe());
             Assert.AreEqual(0, effects.Calls.Count);
+        });
+    }
+
+    [TestMethod]
+    public void The_shot_is_met_and_applied_once_the_host_lists_its_shooters()
+    {
+        // ARC-TECHNOLOGY-1619 (TT12, TT15): a host that lists the shooter candidates (AreaTrapEffects.ListsShooters) meets a 30002 trap as any native trap; the effect is the cast host's.
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var effects = new Effects(0);
+            var shotRow = Row(1, Scenery, 30002);
+            var (_, traps) = Hosts(session, content, () => effects.Side with { ListsShooters = true }, null, shotRow);
+            var met = traps.Use(shotRow)!;
+            Assert.IsTrue(met is { Outcome: SessionTrapOutcome.Fired, Cancels: true }, met.Describe());
+            CollectionAssert.AreEqual(new[] { 30002 }, effects.Calls.Select(c => c.Run.Script).ToArray());
         });
     }
 

@@ -12,6 +12,7 @@ using Arcanum.Simulation.Equipment;
 using Arcanum.Simulation.Magic;
 using Arcanum.Simulation.Movement;
 using Arcanum.Simulation.Navigation;
+using Arcanum.Simulation.Party;
 using Arcanum.Simulation.Reaction;
 using Arcanum.Simulation.Skills;
 using Arcanum.Simulation.Traps;
@@ -52,10 +53,16 @@ public sealed record AreaAiScene
     /// <summary>ARC-DEV-137 (MIG13 S6): the ART of an NPC's animation (frames and rate) for the critter-state goals' timing; null (the provider, or its answer) when the header does not read or
     /// the viewer cannot read that animation (the stun's 23 is not read yet: the stun then ends at once, GT26).</summary>
     public Func<string, int, AiAnimationClip?>? AnimationClip { get; init; }
+    /// <summary>ARC-AI-1486 (the item system's pickup switch 0x5E8800, lowered by 0x468190 when an inventory window opens in loot or See Contents mode on a container, 0x5727B0; raised by 0x468180 at its close,
+    /// 0x573440): whether such a window is open now (a container of the map or a junk pile). While it is, no NPC starts a pickup (<see cref="AreaAiHost.NpcPickupsOn"/>); null: no window is ever open.</summary>
+    public Func<bool>? LootWindowOpen { get; init; }
     /// <summary>ARC-AI-1313 (0x4D9240 at the dark wander's node 0x425D60): the light level 0..255 at a world cell, as the viewer's lighting answers it for a light-aware check; null: full light everywhere, so the dark wander accepts every tile.</summary>
     public Func<CellCoord, int>? CellLight { get; init; }
     /// <summary>ARC-WORLD-1162 (SWB17–SWB21): the beds of the shown map and who lies in them, shared with the hero's rest; null: the map has none, so an NPC at its standpoint finds no bed.</summary>
     public AreaAiBeds? Beds { get; init; }
+    /// <summary>ARC-TECHNOLOGY-1619 (VB2-2 gap d): what the host knows of an object other than a critter by its session entity (a trap's shooter object, a scenery, a door): the facts the hostility rules read of it (its type, tile, object
+    /// flags and busted state), or null for an id that names none. Null delegate: no such object is known, so an attack event of one ends at <see cref="AttackEventStop.Missing"/>.</summary>
+    public Func<string, AreaAiObjectFacts?>? ObjectFacts { get; init; }
     /// <summary>The hero's world cell now, or null without a hero on this map.</summary>
     public required Func<CellCoord?> HeroCell { get; init; }
     /// <summary>ARC-DEV-116 (MIG11 S5): whether the map list holds a map (the destination of an NPC's change of place, the original's map list lookup);
@@ -179,6 +186,19 @@ public interface IAreaAiFollowers
     /// <summary>ARC-DEV-105 (MIG9 S5): moves the companion onto the world cell <paramref name="cell"/> at once (the follower catch-up, 0x4AD4D0);
     /// false when it is not here or its walk refuses the cell. A follower source without the move refuses it.</summary>
     bool Jump(string entity, CellCoord cell) => false;
+}
+
+/// <summary>
+/// ARC-TECHNOLOGY-1619: an object other than a critter as the hostility rules read it (the original's object type and flags): its type (0 wall, 1 portal, 2 container, 3 scenery, 17 trap object and so on), the world tile it stands on and
+/// the object flags 0x1 destroyed, 0x2 off, 0x100 don't draw and 0x400000 invulnerable, and 0x43F630's busted state.
+/// </summary>
+public sealed record AreaAiObjectFacts(int Type, CellCoord Cell)
+{
+    public bool Destroyed { get; init; }
+    public bool Off { get; init; }
+    public bool DontDraw { get; init; }
+    public bool Invulnerable { get; init; }
+    public bool Busted { get; init; }
 }
 
 /// <summary>What the AI host tells the viewer: an NPC's attack swing (its pose), the hit's result, a step, a sound, (ARC-WORLD-099)
@@ -967,6 +987,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         // ARC-WORLD-115: then the victim's followers (side victim, the attacker the other), before the noise.
         if (plan.TellsVictimFollowers) TellFollowers(victim, attacker, FollowerSide.Victim);
         if (plan.RaisesNoise) Witnesses(attacker, victim, loudness);
+        // ARC-TECHNOLOGY-1619 (VB2-2 gap d, 0x4A9650 → 0x4AABE0): an NPC victim of an object that is no critter (a trap's shooter) is asked into COMBAT_FOCUS on it, with no alert sound, and the event returns.
+        if (plan.VictimFightsObject) { SetDanger(victim, DangerState.CombatFocus, attacker); return; }
         if (plan.Stop != AttackEventStop.None) return;
         _session.ApplyAttackEvent(_session.Version, new SessionAttackEventRequest { Attacker = Combatant(attacker)!, Victim = victim, Plan = plan });
         if (plan.TurnsVictim && Tile(attacker) is { } there && TryNpc(victim, out var npc)) FaceNpc(npc, there, keepStep: true);
@@ -1025,13 +1047,48 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     }
 
     /// <summary>
+    /// ARC-AI-1527 (FR-DIALOG-003, VB4-1..VB4-5): the viewer's line speaker for a follower comment: the follower's session entity and the message range it says a random line of (the taunt, the upset line, the near-death line;
+    /// 0x413F50, 0x414370, 0x414490). The viewer reads the line text from the module's generated files and floats it over the follower. Null: the comment is chosen but nobody says it (a host without line texts).
+    /// </summary>
+    public Action<string, LoyaltyLines>? FollowerSpeaks { get; set; }
+
+    private void Speak(string follower, LoyaltyLines lines) => FollowerSpeaks?.Invoke(follower, lines);
+
+    /// <summary>
+    /// ARC-AI-1527 (0x4B6B90 → 0x4AE9E0, the end of one attack): the combat taunt of the PC's followers. <see cref="FollowerRules.TauntKindOf"/> asks the kind of the attack's facts; then
+    /// <see cref="FollowerRules.Taunt"/> draws (half the time none) one of the PC's following followers, in the party's order (a follower this host does not resolve is a null entry, FO17), which says its line
+    /// through <see cref="FollowerSpeaks"/>. Returns the comment chosen, or null. The facts' setting is the "combat taunts" option; the attacker is the hero.
+    /// </summary>
+    public FollowerComment? AttackEnded(TauntFacts facts)
+    {
+        ArgumentNullException.ThrowIfNull(facts);
+        if (FollowerRules.TauntKindOf(facts) is not { } kind) return null;
+        var followers = _session.QueryParty().Followers.Where(f => f.Standing == CompanionStanding.Following).Select(f => Find(f.Entity)).ToArray();
+        if (FollowerRules.Taunt(kind, followers, _session.AiRolls) is not { } comment) return null;
+        Speak(comment.Speaker, comment.Lines);
+        return comment;
+    }
+
+    /// <summary>
+    /// ARC-AI-1527 (0x4AEAB0, from the damage step 0x4B4390): a critter that took <paramref name="hitPointsBefore"/> − <paramref name="hitPointsAfter"/> hit points of <paramref name="maximum"/> in a hit says its near-death
+    /// line when it is a follower of the PC and its hit-point percent fell from 20 or more to below (<see cref="FollowerRules.NearDeathOfHit"/>, a killed critter says nothing: FO16). Returns the comment, or null.
+    /// </summary>
+    public FollowerComment? Hurt(string critter, int hitPointsBefore, int hitPointsAfter, int maximum, bool died)
+    {
+        ArgumentNullException.ThrowIfNull(critter);
+        if (critter == Pc || !_session.QueryCompanion(critter).LedByPc) return null;
+        if (FollowerRules.NearDeathOfHit(critter, true, hitPointsBefore, hitPointsAfter, maximum, died) is not { } comment) return null;
+        Speak(comment.Speaker, comment.Lines);
+        return comment;
+    }
+
+    /// <summary>
     /// ARC-WORLD-115 (I9 host part): tell followers (0x4A9B80, <see cref="FollowerRules.TellFollowers"/>) of <paramref name="leader"/>
     /// about <paramref name="other"/>: the leader's direct followers in its follower array's order (only the hero leads here: the
     /// party's followers that follow it, not the waiting ones, that stand on this map), each through the follower rule (never ordered,
     /// never accidental here: the host's attacks are deliberate). A lock or focus and a complaint's −5 toward the hero go through the
     /// session (<see cref="GameSessionOwner.ApplyFollowerRule"/>); the reaction to an attack by the other (case 5) is
-    /// <see cref="MoraleRules.ReactToAttack"/> through the setter, as a victim's. The complaint's upset line is not floated (the line
-    /// texts are the host's, not read yet).
+    /// <see cref="MoraleRules.ReactToAttack"/> through the setter, as a victim's. The complaint's upset line is said through <see cref="FollowerSpeaks"/> (ARC-AI-1527).
     /// </summary>
     private void TellFollowers(string leader, string other, FollowerSide side)
     {
@@ -1049,6 +1106,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
                     React(follower, other);
                     break;
                 case FollowerRuleStep.Lock or FollowerRuleStep.Focus or FollowerRuleStep.Complain:
+                    // ARC-AI-1527 (0x414370): the complaint's upset line is the follower's, said whether or not the reaction step below can run.
+                    if (outcome.Line is { } upset) Speak(follower, upset);
                     var facts = ReactionFacts(follower);
                     if (outcome.Step == FollowerRuleStep.Complain && facts is null) break;
                     var result = _session.ApplyFollowerRule(_session.Version, new SessionFollowerRuleRequest
@@ -1638,8 +1697,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     public CellCoord? Tile(string id)
     {
         if (id == Pc) return _scene.HeroCell();
-        // ARC-AI-1309: an item an NPC's pickup goal walks to lies on a cell of the shown map (its own, or its junk pile's).
-        return _npcs.TryGetValue(id, out var npc) ? Movers.CellOf(id, npc.Origin) : CompanionCell(id) ?? PickupCell(id);
+        // ARC-AI-1309: an item an NPC's pickup goal walks to lies on a cell of the shown map (its own, or its junk pile's). ARC-TECHNOLOGY-1619: an object that is no critter (a trap's shooter) stands on its own tile.
+        return _npcs.TryGetValue(id, out var npc) ? Movers.CellOf(id, npc.Origin) : CompanionCell(id) ?? PickupCell(id) ?? _scene.ObjectFacts?.Invoke(id)?.Cell;
     }
 
     /// <summary>ARC-WORLD-1158: where a critter of this host's map lies now (its body's cell for the Decay Dead Bodies event); null for another map or a critter the host does not hold.</summary>
@@ -2416,22 +2475,25 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     }
 
     /// <summary>
-    /// ARC-MAGIC-035: stop fleeing (0x4AF170): an NPC in FLEE goes to NONE through the setter, then every run of the NPC whose bottom or top goal is flee (25) is ended at level 6 whatever its state was
-    /// (the helper 0x44E4D0; an eye candy or a burning run is left). False: the NPC is not run here or the session refused.
+    /// ARC-MAGIC-035: stop fleeing (0x4AF170): an NPC in FLEE goes to NONE through the setter, then every run of the NPC whose bottom or top goal is flee (25) is ended at level 6
+    /// (the helper 0x44E4D0; an eye candy or a burning run is left). Both steps are the FLEE state's only (<see cref="MoraleRules.StopFleeing"/>, issue #1595): an NPC in another state keeps its flee runs.
+    /// False: the NPC is not run here or the session refused.
     /// </summary>
     public bool SpellStopFleeing(string npc)
     {
         if (npc == Pc || !TryNpc(npc, out _)) return false;
+        // The state is read before the setter: 0x4AF170 does everything inside its FLEE branch.
+        var stop = MoraleRules.StopFleeing(new HostilityCritter { Id = npc, Kind = HostilityKind.Npc }, _session.QueryDanger(npc).State);
         var result = _session.StopFleeing(_session.Version, npc, SetterFacts(npc));
         // The flee goals end whatever the setter did (0x4AF170 calls 0x44E4D0 after it), so a refused setter does not keep them: only the runs whose bottom or top goal is 25 end, at level 6.
-        InterruptRunsWhere(npc, GoalInterruptRules.MaxLevel, r => r.Bottom.Goal == GoalType.Flee || r.Frames[^1].Goal == GoalType.Flee);
+        if (stop.InterruptsFleeGoals) InterruptFleeRuns(npc);
         return result.Failure == GameSessionFailure.None;
     }
 
     /// <summary>
     /// ARC-AI-1134 (ledger DY3, DY7): the kill notification (0x4AA1B0) of an NPC whose death the session processed (<see cref="GameSessionOwner.KillNotice"/>, after the combat focus := killer):
     /// <see cref="MoraleRules.KillNotification"/> over this host's world (the victim stops fleeing; for a PC killer, the live NPCs of the victim's faction in the 7 × 7 square centred on the killer whose combat focus is the killer start backing off) applied in one
-    /// revision, then every run of the victim whose bottom or top goal is flee ends at level 6 (the stop-fleeing helper's interrupt, as <see cref="SpellStopFleeing"/>). False: the victim is not run here, or the world
+    /// revision, then, when the victim was in FLEE, every run of the victim whose bottom or top goal is flee ends at level 6 (the stop-fleeing helper's interrupt, as <see cref="SpellStopFleeing"/>). False: the victim is not run here, or the world
     /// no longer knows it, or the session refused the plan.
     /// </summary>
     public bool NoticeKill(string victim, string? killer)
@@ -2444,7 +2506,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         {
             Victim = SessionCombatant.Critter(victim), Plan = plan, VictimFacts = SetterFacts(victim),
         });
-        InterruptRunsWhere(victim, GoalInterruptRules.MaxLevel, r => r.Bottom.Goal == GoalType.Flee || r.Frames[^1].Goal == GoalType.Flee);
+        // Only a victim that was in FLEE loses its flee runs (the plan read the state before the session applied it).
+        if (plan.VictimStopsFleeing.InterruptsFleeGoals) InterruptFleeRuns(victim);
         return result.Failure == GameSessionFailure.None;
     }
 
@@ -3317,6 +3380,16 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     public bool Exists(string id) =>
         id == Pc || !Gone(id) && !(id.StartsWith(SessionCreatedObject.CritterPrefix, StringComparison.Ordinal) && _session.QueryCreatedObject(id) is null);
 
+    // ARC-TECHNOLOGY-1619 (0x4A9650, 0x4AB990): an object that is no critter (a wall, a door, a container, a scenery, a trap object) as the hostility rules read it: its object flags and busted state; null for an id the scene names none for.
+    private HostilityCritter? ObjectFound(string id) =>
+        _scene.ObjectFacts?.Invoke(id) is { } facts
+            ? new HostilityCritter
+            {
+                Id = id, Kind = facts.Type == 0 ? HostilityKind.Wall : HostilityKind.Object, Destroyed = facts.Destroyed, Off = facts.Off, DontDraw = facts.DontDraw,
+                Invulnerable = facts.Invulnerable, Busted = facts.Busted,
+            }
+            : null;
+
     public HostilityCritter? Find(string id)
     {
         if (id == Pc)
@@ -3338,12 +3411,13 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
                 Concealed = concealed, MasterProwler = concealed && _session.QueryHeroSkills()?[Skill.Prowling].Training >= SkillTraining.Master,
             };
         }
-        if (!_npcs.ContainsKey(id) && CompanionCell(id) is null) return null;
+        if (!_npcs.ContainsKey(id) && CompanionCell(id) is null) return ObjectFound(id);
         if (Fields(id) is not { Critter: { } critter, Npc: { } npc } fields || Build(id) is not { } build) return null;
         var status = Status(id);
         var state = LifeState(id) ?? build.Loaded;
         var danger = _session.QueryDanger(id);
         var leader = Leader(id);
+        var npcConcealed = _session.IsConcealed(SessionCombatant.Critter(id));
         return new HostilityCritter
         {
             Id = id, Kind = HostilityKind.Npc,
@@ -3364,6 +3438,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
             Perception = build.EffectiveStat(CharacterStat.Perception, state), Intelligence = build.EffectiveStat(CharacterStat.Intelligence, state),
             Level = build.Level, Alignment = critter.BaseStats.Count > AreaCompanionData.AlignmentStat ? critter.BaseStats[AreaCompanionData.AlignmentStat] : 0,
             HealthPercent = status is null ? 0 : Percent(status), Leader = leader, PcLeader = leader,
+            // ARC-AI-1560 (critter flag 0x1, 0x45EDE0, for any critter): a follower the hero's sneak hides is heard at the silent level and refused unseen when it prowls as a master.
+            Concealed = npcConcealed, MasterProwler = npcConcealed && NpcSkill(id, Skill.Prowling)?.Training >= SkillTraining.Master,
         };
     }
 
@@ -3506,12 +3582,23 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     /// ARC-AI-1518 (ledger AW4, AW5): the margin 0..100 by which a concealed hero lowers the observer's
     /// Perception in one sight or hearing check, from the session's stealth facts (<see cref="GameSessionOwner.HeroProwlingMargin"/>) and
     /// the observer's own: its conditions, dark sight, the light at the hero, and for sight the line from the observer to the hero (a
-    /// blocker hides the prowler, else the line's cover). 0 for any other target, or a hero that is not concealed. A concealed follower
-    /// is not handled here (it has no margin yet).
+    /// blocker hides the prowler, else the line's cover). ARC-AI-1560: the same for a concealed follower as the target, from its own
+    /// prowling level and training, light and worn armour (<see cref="GameSessionOwner.NpcProwlingMargin"/>); a follower with no sheet or
+    /// build here gives 0. 0 for a target that is not concealed.
     /// </summary>
     private int ProwlingMargin(string observer, string target, CellCoord at, CellCoord there, HostilityCritter? facts, ILineOfFireMap<AreaObjectRecord> map, bool seeing)
     {
-        if (target != Pc || observer == Pc || !_session.IsConcealed(SessionCombatant.Hero)) return 0;
+        if (observer == Pc || observer == target) return 0;
+        SessionNpcProwler? prowler = null;
+        if (target == Pc)
+        {
+            if (!_session.IsConcealed(SessionCombatant.Hero)) return 0;
+        }
+        else
+        {
+            if (!_session.IsConcealed(SessionCombatant.Critter(target)) || Build(target) is not { } build || _scene.NpcSheet?.Invoke(target) is not { } sheet) return 0;
+            prowler = new(build, sheet.Loaded, sheet.Modifiers);
+        }
         var perception = Math.Clamp(facts?.Perception ?? 0, 0, AwarenessRules.MaxPerception);
         var (offsetX, offsetY) = ObserverOffset(observer);
         var trace = seeing ? LineOfFireRules.Trace(at, offsetX, offsetY, there, map, _session.Rules.Combat) : null;
@@ -3527,7 +3614,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
             ObserverDarkSight = ((Fields(observer)?.Critter?.Flags2 ?? 0) & DarkSight2) != 0,
         };
         if (trace is not null) observerFacts = AwarenessRules.WithProwlerLine(observerFacts, trace);
-        return _session.HeroProwlingMargin(perception, observerFacts, seeing).Margin;
+        return (prowler is null ? _session.HeroProwlingMargin(perception, observerFacts, seeing) : _session.NpcProwlingMargin(prowler, perception, observerFacts, seeing)).Margin;
     }
 
     private const int OffsetXSlot = 2, OffsetYSlot = 3;

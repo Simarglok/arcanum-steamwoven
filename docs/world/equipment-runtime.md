@@ -261,7 +261,7 @@ Plan slice S8 of the [dispatcher research](../research/scr-event-dispatcher.md#1
 - **Poisoning items (ARC-SCRIPT-1482).** The installed wield-on poisoning items (callers 30088, 30103, 30115, 30147, 30165, 30197)
   run inside this set: they add effects and only *schedule* their poison script with call script in (54), which the move puts in the
   session's event queue. The damage is the deferred call's: `AreaScriptHost.CallAdmissionFor` holds the magick-tech adjustment
-  (`GameSessionOwner.QueryWornPowerRatio`, a worn item's ratio) and the eye candy, and its damage (60, 138) and heal hit points (75)
+  (`GameSessionOwner.QueryWornPowerRatio`, a worn item's ratio), the eye candy and, since ARC-SCRIPT-1586, the vitals questions get hit points and get fatigue points (107, 108), which the scripts 2677, 2679, 2681 and 2682 read after their first damage, and its damage (60, 138) and heal hit points (75)
   of the hero come from the talk set while the shown map's use host answers: they go through the use host's session path, no
   attacker (ARC-SCRIPT-1563, ledger [PZ11](../research/ledger/combat.md#poison-sources-arc-res-1329)). The item-event set itself has no damage action and needs none.
 - **Item questions.** The identified test is the host's (`ISessionItemScriptHost.IsIdentified`); the power ratio of the
@@ -300,7 +300,7 @@ times; wield off reaches the same script's removal loop through call-ex, which r
 - **Other paths.** Giving a worn item with item event points to an NPC (ARC-WORLD-071) and throwing such a wielded weapon
   (ARC-COMBAT-017) are refused (`ItemScriptUnsupported`), as those paths run no item events; a worn item deleted by wear or destruction,
   a weapon a critical miss drops (ARC-COMBAT-009) and an item whose first break takes it off (ARC-WORLD-053) leave the slot without their
-  wield-off and remove-item scripts (their effects stay); item spells on wear are still refused; NPC equipment runs no events; the effect list's bound (`SessionEffectLimits.MaxHeroEffects`, 1024 entries since ARC-DEV-366, which raised it from 64 for the tech books' one entry per
+  wield-off and remove-item scripts (their effects stay); item spells on wear are still refused; NPC equipment runs no item event scripts (wield on and off, #1644; the carried light of an NPC the session recalculated is `AreaRestockHost.NpcLight`, ARC-MAGIC-1561); the effect list's bound (`SessionEffectLimits.MaxHeroEffects`, 1024 entries since ARC-DEV-366, which raised it from 64 for the tech books' one entry per
   point of intelligence)
   refuses a move whose adds would pass it (the original has no bound). ARC-DEV-366: an item script may read the hero's stat (get stat, 33; see
   [tech books](inventory-runtime.md#tech-books-arc-dev-366)); the viewer's host answers effect rules from the hero's effect tables.
