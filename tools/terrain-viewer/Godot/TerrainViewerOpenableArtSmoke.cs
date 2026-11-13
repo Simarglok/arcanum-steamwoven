@@ -106,7 +106,7 @@ public partial class TerrainViewerApp
         else GD.Print($"ARC-SCRIPT-1778 native-smoke object-art-openable NONE (container part: {containers.Length} containers with art, none takes another's number into an ART of two frames)");
 
         // ---- a door or window ----
-        var rows = area.Snapshot.Objects.Where(row => row.Type == 1).ToDictionary(row => row.Key);
+        var rows = PortalRows(area);
         var doors = portals.All.Where(p => p.ArtId is null && p.Frames.Count > 1 && !p.UnlockScript && session.QueryOpenable(portals.Openable(p), p.Baseline).Frame == p.Baseline.Frame
             && p.Baseline.Frame == 0 && _areaDoors?.GoalOf(p) is null && rows.ContainsKey(p.Key) && Number(rows[p.Key], CurrentArtSlot) is { } own && own >> 28 == 3
             && overlay.Bodies.ContainsKey(p.Key)).OrderBy(p => p.Entity, StringComparer.Ordinal).ToArray();

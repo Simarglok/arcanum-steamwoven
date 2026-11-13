@@ -100,6 +100,24 @@ public sealed class AreaDoorHostTests
         CollectionAssert.AreEqual(new[] { "oid:thug" }, asked);
     }
 
+    // ARC-SCRIPT-1778 (ledger AN12): a portal a script gave another art is read with that art's facts by the door host (found by entity at each call), the open frame is the new art's, and the map's own entry returns.
+    [TestMethod]
+    public void ARetargetedDoorOpensToTheNewArtsLastFrameAndTheMapsOwnArtReturns()
+    {
+        using var f = Open(flagsA: LockRules.StaysOpenBit);
+        Assert.AreEqual(3, f.A.OpenFrame);
+        Assert.IsTrue(f.Portals.Retarget(f.A.Key, 0x3000_0400u, new(true, 0, 7), 10, []));
+        Assert.IsFalse(f.Portals.Retarget(f.A.Key, 0x3000_0400u, new(true, 0, 7), 10, []), "the same art again changes nothing");
+        Assert.AreEqual(0x3000_0400u, f.Host.PortalOf(DoorA)!.ArtId, "the door host reads the retargeted portal");
+        Assert.AreEqual(6, f.Portals.ByEntity(DoorA)!.OpenFrame, "rotation 0 steps through frames 4..6");
+        Assert.IsTrue(f.Host.Open(f.Portals.ByEntity(DoorA)!, "hero"));
+        f.Run(6000);
+        Assert.AreEqual(6, f.Portals.Frame(f.Session, f.Portals.ByEntity(DoorA)!), "the open run ends on the new art's last open frame");
+        Assert.IsTrue(f.Portals.Retarget(f.A.Key, null, new(false, 0, 1), 0, []));
+        Assert.IsNull(f.Portals.ByEntity(DoorA)!.ArtId);
+        Assert.AreEqual(3, f.Portals.ByEntity(DoorA)!.OpenFrame, "the map's own art returns");
+    }
+
     [TestMethod]
     public void AnOpenedDoorWritesItsFramesOneByOneThenClosesByItselfAfterOneAndAHalfSeconds()
     {

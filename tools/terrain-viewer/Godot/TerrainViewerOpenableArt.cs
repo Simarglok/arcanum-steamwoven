@@ -30,6 +30,17 @@ public partial class TerrainViewerApp
         return facts;
     }
 
+    // The door and window rows of the shown map by key, read once per map (a portal with a script's art is drawn at every frame).
+    private (AreaLoadResult Area, Dictionary<AreaObjectKey, AreaObjectRecord> Rows)? _portalRows;
+
+    private Dictionary<AreaObjectKey, AreaObjectRecord> PortalRows(AreaLoadResult area)
+    {
+        if (_portalRows is { } known && ReferenceEquals(known.Area, area)) return known.Rows;
+        var rows = area.Snapshot.Objects.Where(row => row.Type == CombatFieldReader.PortalType).ToDictionary(row => row.Key);
+        _portalRows = (area, rows);
+        return rows;
+    }
+
     /// <summary>The art id a script wrote for the object of the shown map (AN8, AN10), null while it has the art its data gives.</summary>
     private uint? WrittenArt(string entity) => _areaSession is { } session && _readyArea is { } area ? session.QueryObjectArt(new SessionMapId(area.Snapshot.RuntimeMap), entity) : null;
 

@@ -333,7 +333,7 @@ public partial class TerrainViewerApp
             if (portal.ArtId is not null)
             {
                 if ((portal.Visual(frame) ?? portal.Visual(0)) is not { } newArt || !overlay.Bodies.TryGetValue(portal.Key, out var changed) || !overlay.Visuals.TryGetValue(changed.Visual, out var old)) continue;
-                bodies[portal.Key] = AreaScenePlan.PortalArtFrame(changed, area.Snapshot.Objects.Single(o => o.Key == portal.Key), old, newArt);
+                bodies[portal.Key] = AreaScenePlan.PortalArtFrame(changed, PortalRows(area)[portal.Key], old, newArt);
                 continue;
             }
             if (portal.Frames.Count < 2) continue;
