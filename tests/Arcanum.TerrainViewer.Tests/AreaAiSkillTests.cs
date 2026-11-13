@@ -82,11 +82,11 @@ public sealed class AreaAiSkillTests
         return new(session, host, Entity(0), Entity(1));
     }
 
-    // Steps the host frame by frame (50 ms) until the NPC's run ends; the notices it gave.
+    // Steps the host frame by frame (50 ms, at most 20 s: the pick-locks loops take 13.2 s) until the NPC's run ends; the notices it gave.
     private static List<AreaAiNotice> Run(AreaAiHost host, string npc, ref long now)
     {
         var notices = new List<AreaAiNotice>();
-        for (var frame = 0; frame < 200 && (frame == 0 || host.RunOf(npc) is not null); frame++)
+        for (var frame = 0; frame < 400 && (frame == 0 || host.RunOf(npc) is not null); frame++)
         {
             host.Frames().AdvanceHost(50); now += 50;
             notices.AddRange(host.DrainNotices());
@@ -201,9 +201,9 @@ public sealed class AreaAiSkillTests
         host.PerformSkill(npc, npc, AiExecutorRules.PickLocksSkill, null);
         host.Frames().StepDue();
         Assert.AreEqual(GoalType.AttemptPickLocks, host.RunOf(npc)?.Top.Goal, "goal 67 replaces goal 33");
-        // The stand-in art's 9 frames give 9 / 7 + 1 = 2 loops of the pick-locks animation, the attempt after them.
+        // The stand-in art's 15 frames per second and 9 frames give 15 x 10 / 7 + 1 = 22 loops of the pick-locks animation (ARC-AI-1524, 0x436220), the attempt after them: 22 x 9 / 15 = 13.2 s.
         var swing = host.BeginAction(npc, AiActionAnimation.PickLocks);
-        Assert.AreEqual((AiActionStart.Started, 1200, 0), (swing.Start, swing.ActionFrameMs, swing.RestMs));
+        Assert.AreEqual((AiActionStart.Started, 13200, 0), (swing.Start, swing.ActionFrameMs, swing.RestMs));
         var locks = Run(host, npc, ref now).Single(n => n.Kind == AreaAiNoticeKind.Skill);
         Assert.AreEqual(AiExecutorRules.PickLocksSkill, locks.Skill);
         Assert.AreEqual(before, session.Version, "neither attempt changed the session");
