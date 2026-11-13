@@ -444,6 +444,14 @@ public sealed partial class GameSessionOwner
     public Func<SessionTakingDamageRequest, bool>? TakingDamageScript { get; set; }
 
     /// <summary>
+    /// ARC-AI-1530 (exe read 2026-11-13, ledger VB2-6): the host's enter-combat (slot 13, 0x4AAE29) and exit-combat (slot 14, 0x4AAF32) script of an NPC the danger setter 0x4AABE0 has just put into or taken out of FIGHT, the target (the
+    /// new one, or the requested one on an exit, none when it has none) as the triggerer and the NPC as the attachee. It runs after the setter's writes are committed and its answer is ignored, as the original's: for an entering call the state bits are
+    /// written before it and rules 8 (the reaction lowered toward the hero) and 9 (the focus := the target) after it, so the session holds those two back until the script has run. With a host set, every setter call of the session (the host's own, the attack
+    /// event, the follower rule, the orders) asks it; the host runs inside the commit, after the revision: it may write the session. None set: no script and the rules are written with the rest.
+    /// </summary>
+    public Action<SessionDangerHook>? DangerHookScript { get; set; }
+
+    /// <summary>
     /// ARC-AI-1134 (exe read 2026-11-12, ledger DY3, DY7): the host's kill notification (0x4AA1B0 inside the kill 0x45DA20) of an NPC whose death the life step processed (the dying script allowed it). The session has already
     /// written the victim's combat focus (field 0x11B) := the killer and committed the step's revision; the host then runs <see cref="Arcanum.Simulation.Ai.MoraleRules.KillNotification"/> over its world and applies the plan
     /// (<see cref="ApplyKillNotification"/>), and ends the victim's flee goals. The request names the NPC, the map its step ran on and the killer (<see cref="SessionSpellCaster.Hero"/> for the hero, none for a damage with no source).

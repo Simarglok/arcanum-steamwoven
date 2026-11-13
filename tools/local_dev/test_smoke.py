@@ -179,6 +179,10 @@ class PlanTests(unittest.TestCase):
         sources = "\n".join(path.read_text(encoding="utf-8") for path in (REPO / smoke.VIEWER).glob("*.cs"))
         for stage, marker in smoke.STAGE_PASS.items():
             self.assertIn('"' + marker, sources.replace('$"', '"'), stage)
+        for stage, markers in smoke.STAGE_ALSO_PASS.items():  # ARC-DEV-1556
+            self.assertIn(stage, smoke.STAGE_PASS)
+            for marker in markers:
+                self.assertIn('"' + marker, sources.replace('$"', '"'), stage)
         known = set(smoke.map_stages())
         for group in (smoke.HERO_STAGES, smoke.MENU_STAGES, smoke.ALONE_STAGES, smoke.BATTERY_ALSO, smoke.BATTERY_STAGES):
             self.assertLessEqual(set(group), known)
@@ -514,6 +518,21 @@ class ExecuteTests(unittest.TestCase):
         self.assertEqual((code, len(calls)), (130, 2))
         self.assertEqual(lines[-1], "SMOKE FAIL 1 of 3 steps passed")
 
+
+    def test_transfer_needs_the_visitor_fight_pass_line_too(self) -> None:
+        # ARC-DEV-1556: the stage's own PASS line comes before the visitor-fight sub-check, which can print NONE or NO-TARGET.
+        steps = [smoke.Step("stages", "window", ("g",), requires=("transfer",))]
+        own, fight = smoke.STAGE_PASS["transfer"], smoke.STAGE_ALSO_PASS["transfer"][0]
+        code, _, lines = self.run_steps(steps, {}, {"stages": f"{own} {{}}\n{fight} {{}}\n"})
+        self.assertEqual((code, lines[-1]), (0, "SMOKE PASS 1 of 1 steps passed"))
+        for reason in ("ARC-DEV-065 native-smoke visitor-fight NO-TARGET map=79",
+                       "ARC-DEV-065 native-smoke visitor-fight NONE (no hero)", ""):
+            code, _, lines = self.run_steps(steps, {}, {"stages": f"{own} {{}}\n{reason}\n"})
+            self.assertEqual(code, 1, reason)
+            self.assertTrue(any(line.startswith(f"  FAIL exit={smoke.STAGE_NOT_RUN} stages not run: transfer ") for line in lines), lines)
+            if reason:
+                self.assertIn("  viewer: " + reason, lines)
+        self.assertEqual(smoke.stages_not_run(None, ("transfer", "cast"))[0], ["transfer", "cast"])
 
     def test_a_requested_stage_without_its_pass_line_fails_its_smoke(self) -> None:
         steps = [smoke.Step("stages", "window", ("g",), requires=("ai", "cast")), smoke.Step("main", "window", ("g",))]
