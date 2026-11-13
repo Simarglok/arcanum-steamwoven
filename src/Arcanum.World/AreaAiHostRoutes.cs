@@ -414,7 +414,7 @@ public sealed partial class AreaAiHost
         var follower = _followers.ContainsKey(npc);
         if (!follower && !_npcs.ContainsKey(npc)) return (0, "not run by the host");
         if (Tile(npc) is not { } from) return (0, "no tile");
-        var tiles = ImmediatePathWalk.Tiles(map, from, destination, Leader(npc) is null ? DropOwner.Npc : DropOwner.PcSide);
+        var tiles = ImmediatePathWalk.Tiles(map, from, destination, PcLeader(npc) is null ? DropOwner.Npc : DropOwner.PcSide);
         if (tiles.Count == 0) return (0, "no route");
         var last = tiles[^1];
         if (!PlaceHeld(last)) return (tiles.Count, $"arrival {last.X},{last.Y} not held by the shown map");
@@ -458,7 +458,7 @@ public sealed partial class AreaAiHost
         if (!_followers.ContainsKey(npc) && !_npcs.ContainsKey(npc)) return (0, "not run by the host");
         if (Tile(npc) is not { } from) return (0, "no tile");
         if (radius < 0 || direction is < 0 or > DropPlacementRules.MaxDirection) return (0, $"radius {radius} direction {direction} out of range");
-        var chosen = DropPlacementRules.PlaceOnce(from, radius, Leader(npc) is null ? DropOwner.Npc : DropOwner.PcSide, map, direction);
+        var chosen = DropPlacementRules.PlaceOnce(from, radius, PcLeader(npc) is null ? DropOwner.Npc : DropOwner.PcSide, map, direction);
         if (chosen is not { } to) return (0, "a step of the radius walk leaves the map");
         return to == from ? (0, "the placement kept the tile") : RelocateAlongPath(npc, to, map);
     }

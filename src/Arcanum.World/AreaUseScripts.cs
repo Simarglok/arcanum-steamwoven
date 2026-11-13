@@ -132,7 +132,7 @@ public readonly record struct AreaPrintedLine(int Type, string Text);
 /// The PC's reputations are the session's (ARC-WORLD-044); no other object has one. Everything else the viewer does not model
 /// answers "no", as for the dialog and item hosts.
 /// </summary>
-public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrObjectQueries, IScrWorldQueries, IScrObjectStateQueries, IScrAreaQueries, IScrStoreQueries, IScrStatQueries, IScrSpellQueries, IScrStoryQueries, IScrVitalQueries, IScrItemQueries, IScrMagickTechQueries, IScrCritterQueries, IScrCritterStateQueries, IScrStatAdjustQueries
+public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrObjectQueries, IScrWorldQueries, IScrObjectStateQueries, IScrAreaQueries, IScrStoreQueries, IScrStatQueries, IScrSpellQueries, IScrStoryQueries, IScrVitalQueries, IScrItemQueries, IScrMagickTechQueries, IScrCritterQueries, IScrCritterStateQueries, IScrCritterFieldQueries, IScrStatAdjustQueries
 {
     /// <summary>Map-change keys of an object's use slot.</summary>
     public const string LocalFlagsProperty = "use.lf", CountersProperty = "use.counters", ScriptProperty = "use.script";
@@ -182,6 +182,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     /// ARC-SCRIPT-1241: plus fade (103) of <see cref="ScrAdmissionSet.S35"/>, which jumps the game clock and hands its movie to the viewer (<see cref="TakeFades"/>); the use script 2862 of the Vendigroth
     /// underground and the dying scripts 2863 and 3061 of Kerghan carry it, and the placed and dying sets are built on this one.
     /// ARC-SCRIPT-1620 (TI6): plus attack (36, 0x447D2F), which raises the attack event of the first object of operand 1 on each object of operand 0 through the AI host (<see cref="AreaScriptWorld.ScriptAttack"/>); 79 installed scripts use it (111 clauses), and the heartbeat set admits it too.
+    /// ARC-SCRIPT-1772 (CQ1–CQ8): plus the critter getters get social class (38), get origin (39) and get faction (89), toggle invulnerability (57) and rename (92) of <see cref="ScrAdmissionSet.S56"/> (<see cref="CritterFieldWriteActions"/>), which the placed, heartbeat, dying and combat-point sets admit too.
     /// </summary>
     public static ScrAdmissionSet Admission { get; } = new("S4-area-use-reading-objects-story-world", ScrAdmissionSet.S4.Conditions.Concat(ScrAdmissionSet.SpellQueryConditions).Concat(ScrAdmissionSet.StoryConditions).Concat(ScrAdmissionSet.WorldObjectConditions)
             .Concat(ScrAdmissionSet.CritterQueryConditions).Concat(ScrAdmissionSet.CritterStateConditions).Concat(ScrAdmissionSet.CritterTailConditions),
@@ -191,7 +192,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
                 ScrCatalogue.Action.SetPcQuestState, ScrCatalogue.Action.MarkMapLocation, ScrCatalogue.Action.SetRumor,
                 ScrCatalogue.Action.AddReputation, ScrCatalogue.Action.RemoveReputation,
                 ScrCatalogue.Action.Random, ScrCatalogue.Action.LoopFor, ScrCatalogue.Action.LoopEnd, ScrCatalogue.Action.LoopBreak, ScrCatalogue.Action.CreateObject, ScrCatalogue.Action.GetStat,
-                ScrCatalogue.Action.UnfogTownMap, ScrCatalogue.Action.GiveSpellMastery, ScrCatalogue.Action.Attack, .. ItemUseVitalActions, .. EyeCandyActions, .. ScrAdmissionSet.StoryActions, ScrCatalogue.Action.Fade, .. ScrAdmissionSet.NpcStateHostActions, .. ScrAdmissionSet.WorldObjectHostActions]),
+                ScrCatalogue.Action.UnfogTownMap, ScrCatalogue.Action.GiveSpellMastery, ScrCatalogue.Action.Attack, .. CritterFieldWriteActions, .. ItemUseVitalActions, .. EyeCandyActions, .. ScrAdmissionSet.StoryActions, ScrCatalogue.Action.Fade, .. ScrAdmissionSet.NpcStateHostActions, .. ScrAdmissionSet.WorldObjectHostActions]),
         ScrAdmissionSet.S4.ValueKinds.Concat(ScrAdmissionSet.StoreValueKinds),
         ScrAdmissionSet.S4.FocusKinds.Concat([ScrFocusKind.LocalObject, ScrFocusKind.CurrentLoopedObject, ScrFocusKind.EverySceneryInVicinity]),
         counterIndexWraps: true);
@@ -201,6 +202,9 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     private static int[] ItemUseVitalActions => [ScrCatalogue.Action.GetHitPoints, ScrCatalogue.Action.GetFatiguePoints, ScrCatalogue.Action.HealPoison, ScrCatalogue.Action.HealHitPoints,
         ScrCatalogue.Action.HealFatigue, ScrCatalogue.Action.MagickTechAdjustment, ScrCatalogue.Action.PlayScriptEyeCandy, ScrCatalogue.Action.Destroy];
 
+    /// <summary>ARC-SCRIPT-1772 (CQ1–CQ5): the critter getters (38, 39, 89; <see cref="ScrAdmissionSet.CritterFieldActions"/>), toggle invulnerability (57) and rename (92) of <see cref="ScrAdmissionSet.S56"/>, which the use set and so the placed, combat-point, dying and
+    /// heartbeat sets admit: the getters are answered here (<see cref="IScrCritterFieldQueries"/>), the two writes go through the session for the PC and an NPC (<see cref="ObjectStateRefusal"/> refuses the rest).</summary>
+    private static int[] CritterFieldWriteActions => [.. ScrAdmissionSet.CritterFieldActions, ScrCatalogue.Action.ToggleInvulnerability, ScrCatalogue.Action.Rename];
     /// <summary>ARC-SCRIPT-1734 (WE11, WE12): play spell eye candy (104) and stop script eye candy (124) of <see cref="ScrAdmissionSet.S55"/>, which the use set admits beside play script eye candy (120): the run's result hands them on as eye candy requests and no host shows them yet (#1592).</summary>
     private static int[] EyeCandyActions => [ScrCatalogue.Action.PlaySpellEyeCandy, ScrCatalogue.Action.StopScriptEyeCandy];
 
@@ -252,7 +256,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         ScrAdmissionSet.S2.Actions.Concat([ScrCatalogue.Action.ToggleState, ScrCatalogue.Action.Kill, ScrCatalogue.Action.LoopFor, ScrCatalogue.Action.LoopEnd, ScrCatalogue.Action.LoopBreak,
             ScrCatalogue.Action.GetObjectType, ScrCatalogue.Action.CallScriptEx, ScrCatalogue.Action.Dialog, ScrCatalogue.Action.CallScriptIn,
             ScrCatalogue.Action.DistanceBetween, ScrCatalogue.Action.GetLocation, ScrCatalogue.Action.SetFaction, ScrCatalogue.Action.WalkTo, ScrCatalogue.Action.RunTo,
-            ScrCatalogue.Action.HealFatigue, ScrCatalogue.Action.PerformAnimation, ScrCatalogue.Action.StealCoins, ScrCatalogue.Action.BecomeProne, ScrCatalogue.Action.GiveSpellMastery, ScrCatalogue.Action.Attack, .. ScrAdmissionSet.StoryActions, .. ScrAdmissionSet.NpcStateHostActions, .. ScrAdmissionSet.WorldObjectHostActions, .. CastActions, .. StopSpellActions, .. DamageActions, .. EyeCandyActions]),
+            ScrCatalogue.Action.HealFatigue, ScrCatalogue.Action.PerformAnimation, ScrCatalogue.Action.StealCoins, ScrCatalogue.Action.BecomeProne, ScrCatalogue.Action.GiveSpellMastery, ScrCatalogue.Action.Attack, .. CritterFieldWriteActions, .. ScrAdmissionSet.StoryActions, .. ScrAdmissionSet.NpcStateHostActions, .. ScrAdmissionSet.WorldObjectHostActions, .. CastActions, .. StopSpellActions, .. DamageActions, .. EyeCandyActions]),
         ScrAdmissionSet.S2.ValueKinds.Concat(ScrAdmissionSet.StoreValueKinds),
         ScrAdmissionSet.S3.FocusKinds.Concat([ScrFocusKind.CurrentLoopedObject, ScrFocusKind.EveryoneInVicinity, ScrFocusKind.AnyoneInVicinity]));
 
@@ -614,6 +618,23 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         if (IsPc(obj)) return _session.QueryHero() is not null && _session.IsConcealed(SessionCombatant.Hero);
         if (Row(obj) is not { } row) return null;
         return row.Type == NpcType && (_session.IsConcealed(SessionCombatant.Critter(obj.Code)) || NpcCritterBit(obj, ProwlingCritterFlag) == true);
+    }
+
+    /// <summary>ARC-SCRIPT-1772 (CQ1, exe read 2026-11-13: action 38 at 0x447220 case 0x26, 0x45D010): an NPC's social class (field 0x128, the map data's; no script or action writes it), 0 for the PC and any other object type; null for an object this host has no row for.</summary>
+    public int? SocialClassOf(ScrObjectRef obj) => NpcField(obj, row => row.EffectiveFields.FirstOrDefault(field => field.Slot == SocialClassSlot) is { Presence: AreaPresence.Value, Number: { } n } && n is >= int.MinValue and <= int.MaxValue ? (int)n : 0);
+
+    /// <summary>ARC-SCRIPT-1772 (CQ2, case 0x27, 0x45D290): an NPC's origin (field 0x123) as it is now, a dialog action's set origin over the map data's (<see cref="AreaConversationHost.Scope(AreaObjectRecord, GameSessionOwner)"/>), 0 for the PC and any other object type; null for an object this host has no row for.</summary>
+    public int? OriginOf(ScrObjectRef obj) => NpcField(obj, row => AreaConversationHost.Scope(row, _session).Origin);
+
+    /// <summary>ARC-SCRIPT-1772 (CQ3, case 0x59, 0x45D080): an NPC's faction (field 0x124) as it is now, a script's set faction over the map data's (<see cref="Faction"/>), 0 for the PC and any other object type; null for an object this host has no row for.</summary>
+    public int? FactionOf(ScrObjectRef obj) => NpcField(obj, row => AreaConversationHost.Scope(row, _session).Faction);
+
+    // The three getters read a field only of an object whose type is NPC (0x10) and answer 0 for any other type, the PC included.
+    private int? NpcField(ScrObjectRef obj, Func<AreaObjectRecord, int> read)
+    {
+        if (IsPc(obj)) return 0;
+        if (Row(obj) is not { } row) return null;
+        return row.Type == NpcType ? read(row) : 0;
     }
 
     /// <summary>
@@ -992,7 +1013,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
 
     // SG3: the object's own name number (field 22) and spell flags (field 20) of any type, from its row's effective fields.
     // The PC has no row: its name number is not modelled and reads 0, its spell flags none.
-    public int NameOf(ScrObjectRef obj) => Row(obj) is { } row ? NameOf(row) : 0;
+    public int NameOf(ScrObjectRef obj) => Row(obj) is { } row ? NameOf(_session, row) : 0;
 
     public bool IsMindControlled(ScrObjectRef obj) => Row(obj) is { } row && IsMindControlled(row);
 
@@ -1002,7 +1023,17 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     /// <summary>SG3 (and the dialog's PA condition, ARC-DEV-227): whether a row's own spell flags (field 20) carry the mind-controlled bit.</summary>
     public static bool IsMindControlled(AreaObjectRecord row) => Number(row, SpellFlagsSlot) is { } flags && (unchecked((uint)flags) & MindControlledFlag) != 0;
 
-    private const int SpellFlagsSlot = 19, NameSlot = 21;
+    /// <summary>
+    /// ARC-SCRIPT-1772 (CQ5): <see cref="NameOf(AreaObjectRecord)"/> with the name number a script's rename gave an NPC (<see cref="SessionNpcName.Property"/>, kept only while it differs from the map data's), which the name conditions and the dialog's follower-named test
+    /// read; every other row keeps its own.
+    /// </summary>
+    public static int NameOf(GameSessionOwner session, AreaObjectRecord row)
+    {
+        ArgumentNullException.ThrowIfNull(session); ArgumentNullException.ThrowIfNull(row);
+        return row.Type == NpcType && session.QueryMapChange(new SessionMapId(row.Key.RuntimeMap), SessionNpcName.Key(EntityId(row))) is { } renamed ? unchecked((int)renamed) : NameOf(row);
+    }
+
+    private const int SpellFlagsSlot = 19, NameSlot = 21, SocialClassSlot = 85;
 
     private static long? Number(AreaObjectRecord row, int slot) =>
         row.EffectiveFields.FirstOrDefault(field => field.Slot == slot) is { Presence: AreaPresence.Value, Number: { } n } && n is >= int.MinValue and <= uint.MaxValue ? n : null;
@@ -1838,6 +1869,24 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
                 if (set.Disposition == GameSessionDisposition.Rejected) return false;
                 continue;
             }
+            if (request.Change == ScrObjectStateChange.ToggleInvulnerability)
+            {
+                // CQ4: the flag 0x400000 of the hero or an NPC (ObjectStateRefusal checked the object) is flipped over the state the session has now, so the writes of a run with the same object twice follow each other.
+                var stored = IsPc(request.Object) ? 0 : unchecked((int)(Number(Row(request.Object)!, ObjectFlagsSlot) ?? 0));
+                var flipped = _session.WriteObjectFlag(_session.Version, request.Object.Code, SessionObjectFlagField.Object, unchecked((int)InvulnerableObjectFlag), IsInvulnerable(request.Object) != true,
+                    dataHas: (unchecked((uint)stored) & InvulnerableObjectFlag) != 0);
+                if (flipped.Disposition == GameSessionDisposition.Rejected) return false;
+                continue;
+            }
+            if (request.Change == ScrObjectStateChange.Rename)
+            {
+                // CQ5: an NPC's name number (ObjectStateRefusal checked the object); a number equal to its map data's clears the key.
+                if (Row(request.Object) is not { Type: NpcType } renamed) continue;
+                var written = _session.ApplyChanges(_session.Version, null, [new(new SessionMapId(request.Object.Map),
+                    SessionNpcName.Key(request.Object.Code), request.Value == NameOf(renamed) ? null : request.Value)]);
+                if (written.Disposition == GameSessionDisposition.Rejected) return false;
+                continue;
+            }
             // ARC-SCRIPT-1360: the original flips the object flag "off" itself. An NPC the map data stores off is switched on (and off again) through the session's object-flag change over
             // the data's; one the data stores on keeps the toggle key.
             if (Row(request.Object) is { Type: NpcType } toggledNpc && ((Number(toggledNpc, ObjectFlagsSlot) ?? 0) & OffObjectFlag) != 0)
@@ -2289,6 +2338,20 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
                     return $"set faction of {request.Object.Code} is not modelled (only an NPC of the shown map)";
                 if (!IsPc(request.Object) && Row(request.Object) is null)
                     return $"set faction of {request.Object.Code} is not modelled (no loaded row)";
+                continue;
+            }
+            // ARC-SCRIPT-1772 (CQ4): toggle invulnerability writes the object flags (field 0x13), which the session keeps for the hero and a mobile NPC; any other object type is not modelled (its flags are the map data's).
+            if (request.Change == ScrObjectStateChange.ToggleInvulnerability)
+            {
+                if (IsPc(request.Object)) { if (_session.QueryHero() is null) return "toggle invulnerability of the PC needs a hero"; continue; }
+                if (Row(request.Object) is not { Type: NpcType }) return $"toggle invulnerability of {request.Object.Code} is not modelled (only the PC or an NPC)";
+                continue;
+            }
+            // ARC-SCRIPT-1772 (CQ5): rename writes the name number (field 0x16), which the session keeps for an NPC (SessionNpcName) and the name readers consult; the PC's name number is not modelled and any other object type's is the map data's.
+            if (request.Change == ScrObjectStateChange.Rename)
+            {
+                if (IsPc(request.Object)) return "rename of the PC is not modelled (the hero's name number is not kept)";
+                if (Row(request.Object) is not { Type: NpcType }) return $"rename of {request.Object.Code} is not modelled (only an NPC)";
                 continue;
             }
             // ARC-SCRIPT-1164 (E5-b, WO1, WO3, WO4): lock state and the open toggle act on a portal or container of the shown map (any other object type does nothing, as in the original), create item on the PC or an NPC with an

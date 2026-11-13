@@ -1,4 +1,5 @@
 using Arcanum.Scripting.GlobalFlags;
+using Arcanum.Scripting.Scr;
 using Arcanum.Simulation;
 using Arcanum.Simulation.Character;
 using Arcanum.Simulation.Combat;
@@ -39,6 +40,9 @@ public sealed record EquipBestResult(GameSessionDisposition Disposition, GameSes
 {
     /// <summary>ARC-MAGIC-1684: the printed lines of the item event scripts an NPC's re-wield ran, in order.</summary>
     public IReadOnlyList<SessionScriptMessage> Messages { get; init; } = [];
+
+    /// <summary>ARC-MAGIC-1830: the eye candy requests of those scripts, in order, for the host to play.</summary>
+    public IReadOnlyList<ScrEyeCandy> EyeCandies { get; init; } = [];
 }
 
 public sealed partial class GameSessionOwner

@@ -1,3 +1,4 @@
+using Arcanum.Scripting.Scr;
 using Arcanum.Simulation.Equipment;
 
 namespace Arcanum.Session;
@@ -35,6 +36,9 @@ public sealed record SessionNpcWield(GameSessionFailure Failure, IReadOnlyList<S
 {
     /// <summary>ARC-MAGIC-1684: the printed lines of the item event scripts the wield ran, in order (the viewer posts them for the restock event and a created critter's stocking, ARC-MAGIC-1745).</summary>
     public IReadOnlyList<SessionScriptMessage> Messages { get; init; } = [];
+
+    /// <summary>ARC-MAGIC-1830: the eye candy requests of those scripts (action 120 and its kin), in order, for the viewer to play on the NPC as it plays any script's eye candy.</summary>
+    public IReadOnlyList<ScrEyeCandy> EyeCandies { get; init; } = [];
 }
 
 /// <summary>
@@ -80,7 +84,7 @@ public sealed partial class GameSessionOwner
         planned.Runs?.Commit();
         _inventory.NpcWorn[npc] = planned.Record!;
         foreach (var worn in planned.Record!.Values) _inventory.ForgetSlot(worn);
-        return new(GameSessionFailure.None, planned.Steps) { Messages = planned.Runs?.Messages ?? [] };
+        return new(GameSessionFailure.None, planned.Steps) { Messages = planned.Runs?.Messages ?? [], EyeCandies = planned.Runs?.EyeCandies ?? [] };
     }
 
     /// <summary>
@@ -101,7 +105,7 @@ public sealed partial class GameSessionOwner
         if (planned.Failure != GameSessionFailure.None) return RejectBest(planned.Failure);
         // ARC-MAGIC-1684: the scripts of a step whose move was refused (both moves ran) may still have changed the session.
         var scripted = planned.Runs?.Changes == true;
-        if (!planned.Changed && !scripted) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, planned.Steps, Version) { Messages = planned.Runs?.Messages ?? [] };
+        if (!planned.Changed && !scripted) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, planned.Steps, Version) { Messages = planned.Runs?.Messages ?? [], EyeCandies = planned.Runs?.EyeCandies ?? [] };
         if (_revision == long.MaxValue) return RejectBest(GameSessionFailure.RevisionExhausted);
         // A first record for an NPC the session never dressed counts against the saved budget (a save holds at most MaxNpcWorn, as the restock's wield checks).
         if (planned.Changed && !_inventory.NpcWorn.ContainsKey(npc) && _inventory.NpcWorn.Count >= SessionInventoryState.MaxNpcWorn) return RejectBest(GameSessionFailure.BudgetExceeded);
@@ -112,7 +116,7 @@ public sealed partial class GameSessionOwner
             foreach (var worn in planned.Record!.Values) _inventory.ForgetSlot(worn);
         }
         Revise();
-        return new(GameSessionDisposition.Changed, GameSessionFailure.None, planned.Steps, Version) { Messages = planned.Runs?.Messages ?? [] };
+        return new(GameSessionDisposition.Changed, GameSessionFailure.None, planned.Steps, Version) { Messages = planned.Runs?.Messages ?? [], EyeCandies = planned.Runs?.EyeCandies ?? [] };
     }
 
     // One NPC wield over <slots>, planned and not applied: the steps, the worn record it would write, whether a worn item differs from what the NPC wears now, and (ARC-MAGIC-1684) the runs of the item event scripts of its moves.
