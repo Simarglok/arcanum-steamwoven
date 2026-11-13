@@ -93,7 +93,7 @@ public sealed partial class GameSessionOwner
     }
 
     /// <summary>
-    /// ARC-SCRIPT-1773 (CS4; exe 0x567400 → 0x567420, the dialog slot word +0x1850): whether the PC is in a dialog now. The original keeps one dialog slot for the PC (single player), set at the dialog start (0x567460) and cleared at its close (0x5678D0); the
+    /// ARC-SCRIPT-1773 (ledger CS4, the dialog layer's slot word of the PC): whether the PC is in a dialog now. The original keeps one dialog slot for the PC (single player), set at the dialog start and cleared at its close; the
     /// span is the one in which an NPC's conversation slot is open (<see cref="SessionReaction.InConversation"/>: the start opens it, every exit closes it), so a slot open on any NPC tells it.
     /// </summary>
     public bool QueryDialogOpen()
