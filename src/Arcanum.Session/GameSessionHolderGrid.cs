@@ -89,9 +89,32 @@ public sealed partial class GameSessionOwner
         var container = _inventory.Seeds.Values.Any(seed => seed.Holders.TryGetValue(holder, out var row) && row.Kind == SessionHolderKind.Container);
         // 0x462930 finds another item of the list with the item's prototype (never the item itself).
         if (kind.Type == SessionItemType.Ammo && (container ? ContainerStacks(holder) : NpcStacks(holder)).Any(pair => pair.Prototype == kind.Prototype && pair.Stack.Entity != item.Entity)) return true;
+        return HolderFreeSlotFor(holder, item, container) >= 0;
+    }
+
+    // The first free place of the holder's grid for the item (InventoryGridRules.HolderFreeSlot over the list without the item's own entry), -1 when none.
+    private int HolderFreeSlotFor(string holder, SessionInventoryItem item, bool container)
+    {
         var list = (QueryHolderItems(holder) ?? []).Where(listed => listed.Entity != item.Entity)
             .Select(listed => { var (listedWidth, listedHeight) = GridSize(listed.Entity); return new InventoryGridRules.HolderListItem(listed.Facts.InventoryLocation, listedWidth, listedHeight); }).ToArray();
         var (width, height) = GridSize(item.Entity);
-        return InventoryGridRules.HolderFreeSlot(list, container ? InventoryGridRules.ContainerRows : InventoryGridRules.CritterRows, width, height) >= 0;
+        return InventoryGridRules.HolderFreeSlot(list, container ? InventoryGridRules.ContainerRows : InventoryGridRules.CritterRows, width, height);
+    }
+
+    /// <summary>
+    /// ARC-AI-1698 (0x466640 after the room test 0x466510 → 0x4664C0, ledger NL8): the original's insert writes the free place the room test found into the inserted item's inventory location
+    /// (field 0x5E), so the item keeps it whatever else leaves the list. Called right after an item entered an NPC's list as an item of its own (not merged into an ammunition stack): the first free place of
+    /// the grid as the list lies now (<see cref="HolderFreeSlotFor"/>, the same as <see cref="QueryHolderRoom"/> searches) goes to the inventory's map of holder slots (saved with the inventory section,
+    /// schema 95, no schema step; the wear record of an NPC drops the slot of an item it puts on), where <see cref="SessionInventoryState.Current"/> reads it for the list's location. No place found, a worn item, a gold pile or a key (the original's insert folds those into the coin count and the key ring, no list place), or a save already keeping the slots of
+    /// <see cref="SessionInventoryState.MaxHolderSlots"/> other holders leaves the item without one (the earlier first-free-place derivation answers for it). Writes no revision (the caller's insert holds the one).
+    /// </summary>
+    private void StoreInsertPlace(string npc, string item)
+    {
+        if (QueryHolderItems(npc)?.FirstOrDefault(listed => listed.Entity == item) is not { } listed || listed.Facts.Worn || listed.Facts.Kind.Type is SessionItemType.Gold or SessionItemType.Key) return;
+        if (!_inventory.HolderSlots.TryGetValue(npc, out var slots) && _inventory.HolderSlots.Count >= SessionInventoryState.MaxHolderSlots) return;
+        var slot = HolderFreeSlotFor(npc, listed, container: false);
+        if (slot < 0) return;
+        if (slots is null) _inventory.HolderSlots[npc] = slots = new(StringComparer.Ordinal);
+        slots[item] = slot;
     }
 }
