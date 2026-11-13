@@ -18,17 +18,19 @@ public partial class TerrainViewerApp
     // first tick, driven here by the host's own steps) finds a leaderless NPC whose teleport map (the map the hero carried it from, FM6) is another map and
     // asks for its change of place there, and the frame's ping carries it out: it stands on its home map again, no longer on the destination, which
     // the hero never left.
-    private void SendAreaMapFormerFollowerHome()
+    // ARC-AI-1695: with <paramref name="led"/> the same homecoming is checked for the NPC without a dialog the follow smoke force-joined next to the dialog companion (its own PASS line; no return trip follows).
+    private void SendAreaMapFormerFollowerHome(string? led = null)
     {
-        static void Require(bool value, string why)
+        var tag = led is null ? "ARC-DEV-116 follower-home" : "ARC-AI-1695 led-home";
+        void Require(bool value, string why)
         {
             if (value) return;
-            GD.Print("ARC-DEV-116 follower-home smoke FAIL: " + why);
-            throw new InvalidOperationException("AREA_MAP_FOLLOWER_HOME_FAILED");
+            GD.Print(tag + " smoke FAIL: " + why);
+            throw new InvalidOperationException(led is null ? "AREA_MAP_FOLLOWER_HOME_FAILED" : "AREA_MAP_LED_HOME_FAILED");
         }
-        if (_smokeCompanion is not { } entity || _areaSession is not { } session || session.QueryHero() is null
+        if ((led ?? _smokeCompanion) is not { } entity || _areaSession is not { } session || session.QueryHero() is null
             || _areaCompanions?.Companions.SingleOrDefault(c => c.Entity == entity) is not { } companion || companion.Template.Home.RuntimeMap == CurrentAreaMap)
-        { GD.Print($"ARC-DEV-116 native-smoke follower-home NONE (no visitor here: map {_readyMapName}, hero {_areaSession?.QueryHero() is not null})"); return; }
+        { GD.Print($"{tag.Replace(" ", " native-smoke ")} NONE (no visitor here: map {_readyMapName}, hero {_areaSession?.QueryHero() is not null})"); return; }
         var home = companion.Template.Home;
         // ARC-DEV-351 (TG9, RL27): the carry gave it the original's teleported mark on this map; the open of this map took it off and notified it on the arrival cell.
         Require(session.QueryTeleportedMarks(new(CurrentAreaMap)).All(mark => mark.Entity != entity), "the open of the destination took the carried follower's mark off");
@@ -60,8 +62,8 @@ public partial class TerrainViewerApp
             // ARC-DEV-351 (TG9): sent home alone while its map is closed, it left the original's teleported mark there, on the cell it was written on; the open of that map notifies it.
             var mark = session.QueryTeleportedMarks(home).SingleOrDefault(m => m.Entity == entity);
             Require(mark.Entity == entity && (where.Placement is not { } placement || placement.World == mark.Cell), $"the homecoming left its teleported mark on the home map: {string.Join(";", session.QueryTeleportedMarks(home))}");
-            _formerFollowerMarkForSmoke = (entity, home);
-            GD.Print("ARC-DEV-116 native-smoke follower-home PASS " + System.Text.Json.JsonSerializer.Serialize(new {
+            if (led is null) _formerFollowerMarkForSmoke = (entity, home);
+            GD.Print((led is null ? "ARC-DEV-116 native-smoke follower-home PASS " : "ARC-AI-1695 native-smoke led-home PASS ") + System.Text.Json.JsonSerializer.Serialize(new {
                 Visitor = companion.Speaker.ScriptId, From = shown, Home = home.RuntimeMap, At = where.Placement is { } placed ? $"{placed.World.X},{placed.World.Y}" : "its stored cell",
                 Route = route }));
         }
