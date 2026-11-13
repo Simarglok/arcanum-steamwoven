@@ -596,7 +596,9 @@ src/Arcanum.World/AreaTraps.cs,WalkCheckNpc,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,AreaOf,pending,
 src/Arcanum.World/AreaUseScripts.cs,DyingStops,pending,
 src/Arcanum.World/AreaUseScripts.cs,ExamineSkips,pending,
+src/Arcanum.World/AreaUseScripts.cs,IsAnimal,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,IsTrap,pending,
+src/Arcanum.World/AreaUseScripts.cs,MagickCancelPercent,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,RunBed,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,RunBust,pending,
 src/Arcanum.World/AreaUseScripts.cs,RunCombatPoint,exempt,host
