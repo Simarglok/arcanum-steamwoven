@@ -209,6 +209,12 @@ class PlanTests(unittest.TestCase):
         # ARC-DEV-404: the hover stage's item window draws the lines after the name, which the original draws only for a valid local PC.
         hover = self.plan("pr", "--stages", "hover", "--no-build")[0]
         self.assertEqual(hover.command[hover.command.index("--hero") + 1], smoke.AUTO_HERO)
+        # ARC-DEV-1547: transfer runs the visitor-fight sub-check, which prints NONE (no hero) while the stage's own PASS line
+        # still comes, so the stage gets a hero (and is refused with --main-menu) instead of passing without the check.
+        for stage in ("transfer", "follower-home"):
+            run = self.plan("pr", "--stages", stage, "--no-build")[0]
+            self.assertEqual(run.command[run.command.index("--hero") + 1], smoke.AUTO_HERO, stage)
+            self.assertIn(stage, smoke.HERO_STAGES)
         battery = self.plan("map", "elven ruins", "--no-build")[0]  # the whole battery plays the hero's stages
         self.assertEqual(battery.command[battery.command.index("--hero") + 1], "elf-female")  # the chain's hero there
         cave = self.plan("map", "crash site cave", "--stages", "junk", "--no-build")[0]
