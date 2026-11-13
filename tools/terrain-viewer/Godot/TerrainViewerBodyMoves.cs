@@ -27,7 +27,7 @@ public partial class TerrainViewerApp
     private readonly HashSet<AreaFrameKey> _bodyWalkFrames = [];
     // ARC-RENDER-038: the armed ARTs read so far, and (smoke observation) the NPC attack frames and armed stands drawn.
     private readonly Dictionary<(AreaEntryIdentity Entry, int Palette, int Animation, int Weapon, int Shield), AreaBodyArmedLoad> _armedArts = [];
-    private int _npcAttackDraws, _npcArmedStandDraws;
+    private int _npcAttackDraws, _npcArmedStandDraws, _npcArmedWalkDraws;
     private readonly HashSet<AreaFrameKey> _npcAttackFrames = [];
     // ARC-RENDER-038: what the last AI mover drawing showed armed (a weapon shown or put away is drawn once).
     private long _aiArmedDrawn;
@@ -68,7 +68,8 @@ public partial class TerrainViewerApp
             var octant = DiagnosticGridActor.Octant(mover.Facing);
             if (action == ActorDiagnosticAction.Idle && ArmedBody(host, npc, command, visual, octant, now) is { } armed) { cycle.Observe(action, now); drawn.Add(armed); continue; }
             var cell = mover.Cell;
-            drawn.Add(AnimateBody(command, npc.Row, visual, action, octant, now, cycle, keepT0Until: false, gait: (k, r, a, f) => NoteGaitFrame(k, r, a, f, cell)));
+            drawn.Add(AnimateBody(command, npc.Row, visual, action, octant, now, cycle, keepT0Until: false, gait: (k, r, a, f) => NoteGaitFrame(k, r, a, f, cell),
+                walkArt: action is ActorDiagnosticAction.Walk or ActorDiagnosticAction.Run ? ArmedWalk(host, npc, visual) : null));
         }
         return drawn.AsReadOnly();
     }
@@ -99,12 +100,14 @@ public partial class TerrainViewerApp
             load = ArmedArt(area, visual, npc, art.Animation, art.Weapon, art.Shield);
             frame = pose.Frame; attack = true;
         }
-        else if (host.ShownWeapon(npc.Entity) is { Weapon: > 0 } shown)
+        else
         {
+            // ARC-RENDER-1485: the stand shows the weapon part of 0x465020 in and out of combat mode (none out of it, over the weapon letter of the map art); an ART of another weapon than none is not a stand of none.
+            var shown = host.ShownWeapon(npc.Entity);
             load = ArmedArt(area, visual, npc, AreaBodyMoveArt.Stand, shown.Weapon, shown.Shield);
+            if (shown.Weapon == 0 && load.Weapon != 0) return null;
             frame = 0; attack = false;
         }
-        else return null;
         if (load.Art is not { } read) return null;
         try
         {
@@ -121,6 +124,20 @@ public partial class TerrainViewerApp
             GD.Print($"ARC-RENDER-038 npc-armed-art npc={npc.Entity} status=Unreadable detail={error.GetType().Name} {error.Message}");
             return null;
         }
+    }
+
+    /// <summary>
+    /// ARC-RENDER-1485: the walk ART of an NPC the AI walks, with the weapon part its body shows now (<see cref="AreaAiHost.ShownWeapon"/>, 0x465020: the wielded weapon in combat mode, none out of
+    /// it; the walk keeps the weapon and clears the shield, MA2) in place of the weapon letter of its map art. Null when the ART with that very weapon cannot be read (the walk of its map art is drawn then).
+    /// </summary>
+    private AreaBodyArt? ArmedWalk(AreaAiHost host, AreaAiNpc npc, AreaVisualRecord visual)
+    {
+        if (_readyArea is not { } area) return null;
+        var weapon = host.ShownWeapon(npc.Entity).Weapon;
+        var load = ArmedArt(area, visual, npc, AreaBodyMoveArt.Walk, weapon, 0);
+        if (load is not { Art: { } art, Animation: AreaBodyMoveArt.Walk } || load.Weapon != weapon) return null;
+        _npcArmedWalkDraws++; // any weapon part, none included: the path is the one that draws the weapon a re-wield gives
+        return art;
     }
 
     /// <summary>ARC-RENDER-038: the body's armed ART for an animation, weapon part and shield (read once; the load names the file the
@@ -153,7 +170,7 @@ public partial class TerrainViewerApp
 
     // One body: its gait clock, then its pose (a companion that has not moved yet keeps its T0 frame and facing, as before it joined).
     private AreaDrawCommand AnimateBody(AreaDrawCommand command, AreaObjectRecord row, AreaVisualRecord visual, ActorDiagnosticAction action,
-        int octant, long now, AreaBodyCycle cycle, bool keepT0Until, Action<AreaObjectKey, AreaObjectRecord, ActorDiagnosticAction, int>? gait = null)
+        int octant, long now, AreaBodyCycle cycle, bool keepT0Until, Action<AreaObjectKey, AreaObjectRecord, ActorDiagnosticAction, int>? gait = null, AreaBodyArt? walkArt = null)
     {
         if (command.Identity is not { } key || _readyArea is not { } area) return command;
         var elapsed = cycle.Observe(action, now);
@@ -164,12 +181,16 @@ public partial class TerrainViewerApp
             _bodyMoves[(visual.Entry, visual.RequestedPalette)] = moves;
             GD.Print($"ARC-WORLD-111 body-moves object={key.SourceIndex} status={moves.Status} detail={moves.Detail}");
         }
+        // ARC-RENDER-1485: the walk of the weapon the NPC shows (the move ARTs kept are the body's own).
+        // A run the body has no ART for is drawn as its walk (MA1), so the armed walk too.
+        var drawnMoves = walkArt is not null && moves.Status == AreaBodyMoveStatus.Ready && (action == ActorDiagnosticAction.Walk || action == ActorDiagnosticAction.Run && moves.Run is null)
+            ? moves with { Walk = walkArt } : moves;
         // ARC-RENDER-1126 (0x4305D0): the walk or run frame the cycle is on, for the footsteps (frames 3 and 8).
-        if (gait is not null && moves.Status == AreaBodyMoveStatus.Ready && moves.For(action) is { } gaitArt)
+        if (gait is not null && moves.Status == AreaBodyMoveStatus.Ready && drawnMoves.For(action) is { } gaitArt)
             gait(key, row, action, AreaBodyMoveArt.CycleFrame(action == ActorDiagnosticAction.Idle ? 0 : elapsed, gaitArt.FramesPerSecond, gaitArt.FramesPerGroup));
         try
         {
-            var (moved, pose) = AreaBodyMoveArt.Animate(command, row, visual, moves, action, octant, elapsed, cycle.Moved);
+            var (moved, pose) = AreaBodyMoveArt.Animate(command, row, visual, drawnMoves, action, octant, elapsed, cycle.Moved);
             if (pose is null) return command;
             ((AreaFrameOverlay)AreaFrames()).Add(pose.Key, pose.Frame);
             if (action != ActorDiagnosticAction.Idle) { _bodyWalkDraws++; _bodyWalkFrames.Add(pose.Key); }
@@ -177,6 +198,14 @@ public partial class TerrainViewerApp
         }
         catch (Exception error) when (error is Arcanum.Data.ArtException or ArgumentException or InvalidOperationException)
         {
+            // ARC-RENDER-1485: the armed walk that decodes no frame for this facing is not drawn again; the body draws its own walk (the move ARTs of the body stay).
+            if (!ReferenceEquals(drawnMoves, moves))
+            {
+                foreach (var known in _armedArts.Where(entry => ReferenceEquals(entry.Value.Art, walkArt)).Select(entry => entry.Key).ToArray())
+                    _armedArts[known] = _armedArts[known] with { Status = AreaBodyMoveStatus.Unreadable, Art = null, Detail = error.Message };
+                GD.Print($"ARC-RENDER-1485 npc-armed-walk object={key.SourceIndex} status=Unreadable detail={error.GetType().Name} {error.Message}");
+                return AnimateBody(command, row, visual, action, octant, now, cycle, keepT0Until, gait: null, walkArt: null);
+            }
             // An ART that decodes no frame for this facing: the body keeps its T0 frame from now on.
             _bodyMoves[(visual.Entry, visual.RequestedPalette)] = moves with { Status = AreaBodyMoveStatus.Unreadable, Detail = error.Message };
             GD.Print($"ARC-WORLD-111 body-moves object={key.SourceIndex} status=Unreadable detail={error.GetType().Name} {error.Message}");

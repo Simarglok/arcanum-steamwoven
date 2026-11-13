@@ -84,7 +84,7 @@ public static class AreaGameBarLayout
 
     /// <summary>Every interface art number the bars draw (the clock's, ARC-UI-1111, among them).</summary>
     public static IReadOnlyList<int> ArtNumbers { get; } =
-        [TopArt, BottomArt, .. Buttons.Select(spec => spec.Art).Distinct(), HealthVialArt, PoisonedVialArt, FatigueVialArt, EmptyVialArt, .. AreaClockLayout.ArtNumbers];
+        [TopArt, BottomArt, .. Buttons.Select(spec => spec.Art).Distinct(), HealthVialArt, PoisonedVialArt, FatigueVialArt, EmptyVialArt, .. AreaClockLayout.ArtNumbers, .. AreaExperienceStripLayout.ArtNumbers];
 
     /// <summary>The frame a button draws (GB4): idle frame 0; down advances one frame and hovered two, each step wrapping to frame 0
     /// past the art's last frame (so a two-frame art shows frame 0 when hovered, a one-frame art always frame 0).</summary>

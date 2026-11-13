@@ -6,8 +6,8 @@ namespace Arcanum.TerrainViewer;
 /// The sleep and wait window (mode 6, <see cref="Arcanum.World.AreaRestRules"/>): one button for each length of the rest (eight, seven in the wait window) with the
 /// labels of the game's <c>sleepUI.mes</c> (the project's English text when it does not read), and the screen fade the rest starts (a black cover under the windows and the bars). ARC-UI-1363: the window is
 /// drawn in the original's look (<see cref="AreaSleepView"/>: art 565 at (573, 42), buttons of art 293, font art 229) once its art has read; until then (and in the self-test, which has no game folder)
-/// a plain project panel stands in with the same buttons. The window takes no keys of its own (S, a window key or Escape come through the game's global keys). A press hides the buttons (project:
-/// the original's handler, 0x57B710, hides none) and the window stays until the rest ends.
+/// a plain project panel stands in with the same buttons. The window takes no keys of its own (S, a window key or Escape come through the game's global keys). A press hides nothing (the original's
+/// handler, 0x57B710): the buttons stay, a second press restarts the rest, and the window stays until the rest ends.
 /// </summary>
 public partial class AreaSleepPanel : CanvasLayer
 {
@@ -19,15 +19,12 @@ public partial class AreaSleepPanel : CanvasLayer
     private readonly List<Button> _buttonList = [];
     private AreaSleepView _view = null!;
     private IReadOnlyList<string> _labels = [];
-    private bool _buttonsShown;
 
     /// <summary>A button was pressed (0-based).</summary>
     public event Action<int>? ButtonPressed;
     /// <summary>An interface sound of the original-look buttons (3000 press, 3001 release).</summary>
     public event Action<int>? SoundRequested;
     public bool IsOpen => Visible;
-    /// <summary>True while the buttons are shown (before the first press).</summary>
-    public bool ButtonsShown => _buttonsShown;
     /// <summary>The original's art and font are set (the window is drawn in the original's look when it opens).</summary>
     public bool ArtSet => _view.ArtSet;
     /// <summary>The open window is drawn in the original's look (art 565), not as the plain stand-in panel.</summary>
@@ -72,7 +69,6 @@ public partial class AreaSleepPanel : CanvasLayer
         foreach (var button in _buttonList) button.QueueFree();
         _buttonList.Clear();
         _labels = labels;
-        _buttonsShown = true;
         Show(); _fadeLayer.Visible = _fade.Color.A > 0;
         if (_view.ArtSet)
         {
@@ -107,15 +103,6 @@ public partial class AreaSleepPanel : CanvasLayer
     /// <summary>The window closes (the fade goes with it: the viewer fades the screen back in on its own cover until it is clear).</summary>
     public void CloseView() { Hide(); _view.CloseView(); GetViewport().GuiReleaseFocus(); }
 
-    /// <summary>A press hides the buttons (project, SWB8).</summary>
-    public void HideButtons()
-    {
-        _buttonsShown = false;
-        _buttons.Visible = false;
-        _view.HideButtons();
-        GetViewport().GuiReleaseFocus(); CallDeferred(nameof(Fit));
-    }
-
     private void Fit() => _panel.Size = new Vector2(_panel.CustomMinimumSize.X, 0);
 
     /// <summary>The cover's alpha, 0 to 1, and whether the window's own panel is shown: the cover outlives the window while it fades in.</summary>
@@ -137,7 +124,7 @@ public partial class AreaSleepPanel : CanvasLayer
     {
         if (_view.Visible)
         {
-            if (_buttonsShown && _labels.Count > 0) _view.Focus = Math.Clamp(_view.Focus is { } at ? at + direction : 0, 0, _labels.Count - 1);
+            if (_labels.Count > 0) _view.Focus = Math.Clamp(_view.Focus is { } at ? at + direction : 0, 0, _labels.Count - 1);
             return;
         }
         if (!_buttons.Visible || _buttonList.Count == 0) return;

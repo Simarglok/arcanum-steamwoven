@@ -662,6 +662,11 @@ public partial class TerrainViewerApp
                     SyncAreaInventory();
                     redraw = true;
                     break;
+                case AreaAiNoticeKind.Rewield:
+                    // ARC-RENDER-1485: the gate's re-wield (or a pickup's CHECK_WIELD) changed what the NPC wears: its body shows the new weapon and shield (0x465020), so it is drawn again.
+                    GD.Print($"ARC-RENDER-1485 ai-rewield npc={notice.Npc} shown={host.ShownWeapon(notice.Npc)}");
+                    redraw = true;
+                    break;
                 case AreaAiNoticeKind.Skill:
                     // ARC-WORLD-109: a skill attempt at its action frame; a heal changes a body's life and the healer's item.
                     _aiSkills++;
