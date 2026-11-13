@@ -91,19 +91,23 @@ public partial class TerrainViewerApp
     /// NPC's heartbeat asks for opens at once over an open window and the window leaves through its leave case, as it does for the player's key.
     /// The viewer ran the window's End routine (its sounds, its session close) and then opens the new one. Returns true when the way is clear: no
     /// window is open or the open ones left. False (and logged) when the opener refuses for the hero's state (SA52: the opener returns before it pops,
-    /// so the window stays), when a dialog is open (the dialog opener refuses at once while the PC's mode is 3, 0x567460; the other openers wait for
-    /// a dialog's end here as they did, a dialog ends by the player's choice) or when a window would not leave.
+    /// so the window stays), when a dialog is open and the opener is the dialog's own (the dialog opener refuses at once while the PC's mode is 3,
+    /// 0x567460) or when a window would not leave. ARC-UI-1467: a dialog that is open is the top mode like any other, so a reading or schematic
+    /// opener pops it: its leave case (0x5678D0) ends the dialog (state cleared, hook and text freed, nothing resumed, no script run) and the window
+    /// opens in its place; <see cref="EndConversation()"/> is that leave.
     /// </summary>
     private bool ClearWindowsForProgrammaticOpen(InterfaceMode mode, string who)
     {
         if (!AnyWindowOpen && !FateOpen) return true;
-        if (ConversationOpen) return false;
+        if (ConversationOpen && mode == InterfaceMode.Dialog) return false;
         if (WindowRefusedForHero(mode))
         {
             GD.Print($"ARC-UI-1125 {who} refused for the hero; the open window stays (stack {StackText()})");
             return false;
         }
         GD.Print($"ARC-UI-1125 {who} replaces the open window (stack {StackText()})");
+        // ARC-UI-1467: the dialog is popped with the rest, without resuming its script (the original's leave case runs none).
+        if (ConversationOpen) EndConversation();
         CloseOtherInterfaceWindows();
         return !AnyWindowOpen;
     }

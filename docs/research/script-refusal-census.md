@@ -425,7 +425,7 @@ The census is a data answer; each slice keeps its own contract and checks.
   (a97 and a105 are live, a96 and a98 only on unreached lines) are the bulk; global quest state (c7, 6
   roots, all on the main map) and give quest XP (a63, 1 root) are rare. Rumors are 8, 2 and 3
   roots (c40, c41, a51). Quests 1009, 1013 and 1040 are the ones that touch c7.
-- **E5-e, loops and calls (#1166).** `loop_break` (a20): 17 roots, 68 sites (65 on the main map,
+- **E5-e, loops and calls (#1166; done, set S40, [PG15](ledger/scripts.md)).** `loop_break` (a20): 17 roots, 68 sites (65 on the main map,
   24 at the heartbeat), 7 roots (42 sites) alone. `call script at` (a55) occurs on one line no run
   reaches and is not blocked by anything: the slice is `loop break` alone and is an S slice.
 - **E7-b, media actions.** Newspapers (a85, a86 queue and float headline: 8 and 1 roots) and

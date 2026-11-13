@@ -135,7 +135,7 @@ public partial class TerrainViewerApp
                 {
                     if (BeginSaveSceneFlow(command.Name!, "Load ") is { } sceneRefused) { RefreshSaveList(command.Name, sceneRefused); return; }
                     EndSaveList(finished: false);
-                    ShowSaveLoadingNotice();
+                    ShowSaveLoadingMenu();
                     return;
                 }
                 if (LoadGame(slot, "Load ", _mainMenu is { Root: AreaMenuWindow.Main } ? MainMenuTables() : null, AreaLoadMessageRoute.Result)) { EndSaveList(finished: true); return; }

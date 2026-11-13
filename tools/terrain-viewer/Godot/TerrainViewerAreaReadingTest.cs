@@ -172,6 +172,16 @@ public partial class TerrainViewerApp
             Require(ConversationOpen && WindowPanelsMatchStack, "a dialog opened over a dialog is refused");
             _conversationPanel!.LeaveForSelfTest.EmitSignal(BaseButton.SignalName.Pressed);
             Require(!ConversationOpen && !WorldModal, "the dialog closed");
+            // ARC-UI-1467: the reading opener pops the dialog too (0x56BC00 pops the top mode, whose leave case 0x5678D0 ends the dialog; nothing resumes): a script's
+            // plaque asked for while a dialog is open ends the dialog and opens at once; the dialog opener keeps refusing over a dialog.
+            BeginConversation(_selfTestStandInSpeaker, replaceWindows: true);
+            Require(ConversationOpen && !ReadingOpen, "a dialog is open for the plaque");
+            QueueScriptReadings([new(ScrReadingKind.Plaque, 500, pc)]);
+            TakeScriptReadings();
+            Require(ReadingOpen && !ConversationOpen && WindowPanelsMatchStack && StackText() == "Game>Book" && _readingScriptOpen is null,
+                "the plaque ended the open dialog and opened in its place: " + StackText());
+            CloseReadingByPlayer();
+            Require(!ReadingOpen && !ConversationOpen && !WorldModal, "the plaque closed and the dialog did not come back");
             _selfTestStandInSpeaker = null;
 
             // Action 65 with a picture art outside 0..4095: refused in both modes (the original draws out of bounds).
@@ -187,7 +197,7 @@ public partial class TerrainViewerApp
             ReadItem(bookEntity);
             Require(!ReadingOpen, "a dead hero: nothing reads");
             return "Read buttons, schematic document registered (89, gone), book replaces the inventory (3008, modal), page turns with 3010 and bounds, " +
-                "keys owned, Escape (3009), book kept, script plaque waits for the palette then opens, controller cancel, picture art refused, dead hero refused";
+                "keys owned, Escape (3009), book kept, script plaque waits for the palette then opens (and ends an open dialog, #1467), controller cancel, picture art refused, dead hero refused";
         }
         finally
         {

@@ -6,7 +6,7 @@ namespace Arcanum.Scripting.Scr;
 /// One run of an admitted program (ARC-RES-042 E7–E11): fresh local variables, the attachment's local flags and
 /// counters in a private copy, a line loop with the original's budget, and every global change kept in an overlay that
 /// the run itself reads back and the result hands to the caller. It supports exactly the commands of
-/// <see cref="ScrAdmissionSet.S38"/>.
+/// <see cref="ScrAdmissionSet.S40"/>.
 /// </summary>
 internal sealed class ScrInterpreter
 {
@@ -847,6 +847,14 @@ internal sealed class ScrInterpreter
                 if (++_loopIndex < running.Count) { _looped = running[_loopIndex]; return (Step.Jump, _loopReturn); }
                 _loop = null;
                 return (Step.Next, 0);
+            }
+            case ScrCatalogue.Action.LoopBreak:
+            {
+                // PG15 (0x447220 entry 20): without a running loop nothing happens (the original logs an error); otherwise the loop is cleared (the current
+                // looped object stays as it is) and the run goes on after the first loop end following the loop for (0x44BC60, the empty list's search).
+                if (_loop is null) return (Step.Next, 0);
+                _loop = null;
+                return (Step.Jump, ScrAdmission.AfterLoopEnd(_admitted.Program, _loopReturn - 1));
             }
             case ScrCatalogue.Action.CreateObject:
             {

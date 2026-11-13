@@ -44,10 +44,14 @@ public partial class TerrainViewerApp
             ? new AreaMapRuntime(loaded.Snapshot, mapSteps, loaded.Plan.Chart) : _areaTransitions!.Current;
         var inventory = _inventoryHost!.Maps.Single(m => m.RuntimeMap == map.RuntimeMap);
         var commands = area.Plan.Commands.Where(c => c.Identity is not null).ToDictionary(c => c.Identity!.Value);
+        // ARC-BUG-1502: an NPC the map data stores off (or a script switched off or destroyed) is neither drawn nor picked, so it is no cast target; the data's off flag (0x2) and the session's switched-off or destroyed NPCs decide, as the drawn set (AreaObjectTargets.Gone) does.
+        bool NpcHidden(string entity, AreaObjectRecord row) => AreaUseScriptHost.NpcOff(session, map.RuntimeMap, entity,
+                row.EffectiveFields.FirstOrDefault(f => f.Slot == 18) is { Presence: AreaPresence.Value, Number: { } dataFlags } ? dataFlags : 0)
+            || AreaUseScriptHost.Destroyed(session, map.RuntimeMap, entity);
         var npcs = session.QueryMapInventory(new(map.RuntimeMap))!.Holders
             .Where(h => h.Kind == SessionHolderKind.Npc && !h.Dead && session.QueryCompanion(h.Entity).Standing == CompanionStanding.Free)
             .Select(h => (Holder: h, Row: inventory.Row(h.Entity), Build: _combatHost.Build(session, map.RuntimeMap, h.Entity)))
-            .Where(c => c.Build.Combat is not null && commands.ContainsKey(c.Row.Key) && c.Row.Scope == AreaScope.Core && c.Row.WorldX is not null && c.Row.WorldY is not null)
+            .Where(c => c.Build.Combat is not null && commands.ContainsKey(c.Row.Key) && !NpcHidden(c.Holder.Entity, c.Row) && c.Row.Scope == AreaScope.Core && c.Row.WorldX is not null && c.Row.WorldY is not null)
             .OrderBy(c => c.Holder.Entity, StringComparer.Ordinal).ToArray();
         static CellCoord WorldOf(AreaObjectRecord row) => new(checked((int)row.WorldX!.Value), checked((int)row.WorldY!.Value));
         static int Distance(CellCoord a, CellCoord b) => Math.Max(Math.Abs(a.X - b.X), Math.Abs(a.Y - b.Y));
