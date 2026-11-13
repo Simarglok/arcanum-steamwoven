@@ -292,7 +292,9 @@ public partial class TerrainViewerApp
             // ARC-SCRIPT-1294 (RM6): a script's stop spell on object interrupts the first run of the spell that holds the object, in the cast host.
             ScriptStopSpell: (obj, spell) => AreaAiHostNow()?.ScriptStopSpell(obj, spell) ?? "no AI host",
             // ARC-SCRIPT-1481: get hit points, get fatigue points and get stat 24 of an NPC read the session's life; heal fatigue (the hero's) and heal poison go through its life step.
-            Vitals: ScriptVitals, ScriptHealLife: HealLifeByScript);
+            Vitals: ScriptVitals, ScriptHealLife: HealLifeByScript,
+            // ARC-SCRIPT-1620 (TI6): a script's attack (36) raises the attack event of the attacker on the victim in the AI host, no fan-out (flags 2).
+            ScriptAttack: (attacker, victim) => AreaAiHostNow() is { } ai ? $"{ai.ScriptAttack(attacker, victim)}" : "no AI host");
 
         var inventory = _inventoryHost;
         var host = new AreaUseScriptHost(owner, snapshot.RuntimeMap, snapshot.Objects, inventory?.Maps ?? [], content, world)

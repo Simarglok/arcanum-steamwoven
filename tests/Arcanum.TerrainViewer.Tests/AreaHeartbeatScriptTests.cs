@@ -134,6 +134,10 @@ public sealed class AreaHeartbeatScriptTests
             Write("scr/00797caston.scr", Program(Do(new(ScrCatalogue.Action.CastUnresistableSpellOn, N(8), (Player, 0))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
             // ARC-SCRIPT-1294 (RM6): 807 stops spell 11 on its attachee; 808 stops spell 12 on the player.
             Write("scr/00807stopspell.scr", Program(Do(new(ScrCatalogue.Action.StopSpellOnObject, N(11), (Attachee, -1))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
+            // ARC-SCRIPT-1620 (TI6): 809 has its attachee attack the player (the victims first, the attacker second, as 36 reads them), 810 has the player attack its attachee (the shape of the dialog script 1000's lines), then both run the default.
+            Write("scr/00809attacks.scr", Program(Do(new(ScrCatalogue.Action.Attack, (Player, 0), (Attachee, -1))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
+            Write("scr/00810attacked.scr", Program(Do(new(ScrCatalogue.Action.Attack, (Attachee, -1), (Player, 0))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
+            Write("scr/00811walkattack.scr", Program(Do(new(ScrCatalogue.Action.WalkTo, (Attachee, -1), N(40), N(50))), Do(new(ScrCatalogue.Action.Attack, (Player, 0), (Attachee, -1))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
             Write("scr/00808stoppc.scr", Program(Do(new(ScrCatalogue.Action.StopSpellOnObject, N(12), (Player, 0))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
             // ARC-SCRIPT-1360: 806 has the shape of 2787, the heartbeat of the NPC in the first building: PC quest 1158 unknown: run the default; else switch the attachee on (toggle state) and remove the script.
             Write("scr/00806quest.scr", Program(
@@ -476,6 +480,55 @@ public sealed class AreaHeartbeatScriptTests
             Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, pcHost.RunHeartbeat(byPc, ScrPoint.Heartbeat, session.Rules.Scripts).Outcome);
             CollectionAssert.AreEqual(new[] { ((string?)Arcanum.Simulation.Ai.AiSchedulerRules.Pc, AreaUseScriptHost.EntityId(byPc), 9, false, false) }, asked);
             Assert.AreEqual(AreaScriptedUseOutcome.EffectsRejected, Host(session, content, null, by).RunHeartbeat(by, ScrPoint.Heartbeat, session.Rules.Scripts).Outcome, "no AI host: left unapplied");
+        });
+    }
+
+    [TestMethod]
+    public void A_script_attack_raises_the_attack_event_in_the_ai_host_for_a_critter_attacker_in_the_heartbeat_placed_and_dying_sets()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var asked = new List<(string Attacker, string Victim)>();
+            AreaScriptWorld World() => new(() => null, _ => false, _ => null, () => null, ScriptAttack: (attacker, victim) => { asked.Add((attacker, victim)); return "None"; });
+            foreach (var set in new[] { AreaUseScriptHost.Admission, AreaUseScriptHost.PlacedAdmission, AreaUseScriptHost.HeartbeatAdmission, AreaUseScriptHost.DyingAdmission })
+                Assert.IsTrue(set.Actions.Contains(ScrCatalogue.Action.Attack), set.Id);
+            // The NPC attacks the PC (the PC is a victim by its scheduler id), and the PC attacks the NPC.
+            var attacker = Row(1, 16, 809);
+            var host = new AreaUseScriptHost(session, 1, [attacker], [], content, World());
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, host.RunHeartbeat(attacker, ScrPoint.Heartbeat, session.Rules.Scripts).Outcome);
+            CollectionAssert.AreEqual(new[] { (AreaUseScriptHost.EntityId(attacker), Arcanum.Simulation.Ai.AiSchedulerRules.Pc) }, asked);
+            Assert.AreEqual("None", host.LastAttack);
+            asked.Clear();
+            var victim = Row(2, 16, 810);
+            var pcHost = new AreaUseScriptHost(session, 1, [victim], [], content, World());
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, pcHost.RunHeartbeat(victim, ScrPoint.Heartbeat, session.Rules.Scripts).Outcome);
+            CollectionAssert.AreEqual(new[] { (Arcanum.Simulation.Ai.AiSchedulerRules.Pc, AreaUseScriptHost.EntityId(victim)) }, asked);
+            // No AI host: the run is left unapplied.
+            Assert.AreEqual(AreaScriptedUseOutcome.EffectsRejected, Host(session, content, null, attacker).RunHeartbeat(attacker, ScrPoint.Heartbeat, session.Rules.Scripts).Outcome);
+        });
+    }
+
+    [TestMethod]
+    public void A_script_attack_by_an_object_that_is_no_critter_is_refused_whole_with_a_named_reason()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var asked = new List<(string Attacker, string Victim)>();
+            var walks = new List<string>();
+            // The scenery's script (type 3, 811) walks and then has the attachee attack the player (a taking-damage run, which any object type has): an object attacker waits for #1619 (VB2-2 gap d); the walk before it is not applied either.
+            var scenery = Row(1, 3, 811, point: ScrPoint.TakingDamage);
+            var host = new AreaUseScriptHost(session, 1, [scenery], [], content, new AreaScriptWorld(() => null, _ => false, _ => null, () => null,
+                ScriptWalk: (npc, cell, run) => { walks.Add(npc); return "started"; }, ScriptAttack: (attacker, victim) => { asked.Add((attacker, victim)); return "None"; }));
+            var run = host.RunTakingDamage(AreaUseScriptHost.EntityId(scenery), null, session.Rules.Scripts);
+            Assert.AreEqual(AreaScriptedUseOutcome.EffectsRejected, run.Outcome);
+            Assert.AreEqual(0, asked.Count + walks.Count);
+            StringAssert.Contains(run.Detail, "#1619");
+            var request = new ScrObjectStateRequest(ScrObjectStateChange.Attack, Ref(2), Other: Ref(1));
+            StringAssert.Contains(host.AttackRefusal(request)!, "non-critter");
+            Assert.IsNull(host.AttackRefusal(request with { Other = new ScrObjectRef(1, AreaScriptHost.PcCode) }));
+            StringAssert.Contains(host.AttackRefusal(request with { Other = new ScrObjectRef(2, "oid:other") })!, "another map");
         });
     }
 
