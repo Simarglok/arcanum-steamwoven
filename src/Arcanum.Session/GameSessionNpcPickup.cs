@@ -1,3 +1,4 @@
+using Arcanum.Scripting.Scr;
 using Arcanum.Simulation.Combat;
 
 namespace Arcanum.Session;
@@ -23,9 +24,15 @@ public sealed partial class GameSessionOwner
     /// does not have, <see cref="GameSessionFailure.ItemNotAvailable"/> for an item that is not in its list or a pile that is gone); the item then leaves that list like a loose seed item leaves the ground. A junk pile the item
     /// leaves, the session's or the map's, is checked as the removal does (0x467860 at 0x467C26, JP5): left with one item or none it dissolves at once (the last item is dropped again with a new decay event); the host has
     /// tested that no container's loot window is open (the goal's end 0x42AA70 reads the switch), so the check is never held back here. A pile of the map's data goes as a map change, which takes a revision of its own.
-    /// The room test of the NPC's grid is the host's verdict (ARC-AI-1654, <see cref="QueryHolderRoom"/>). NOT READY: the get and insert-item scripts of the item (#1655) and the item sound of a local picker.
+    /// ARC-AI-1655 (0x461810, 0x466640 end, ledger NL5/NL6): an item with a get (4) or insert-item (21) script needs <paramref name="scripts"/> (the shown map's item script host); without one it is refused as above. With one the original's order is
+    /// kept: the get script runs first with the NPC as the triggerer and the item as the attachee, before the insert check, and a skip-default answer leaves the item where it lies (<see cref="InventoryMutationResult.DeclinedBy"/>, nothing moved,
+    /// what the run did kept as in <see cref="Declined"/>); after the insertion the insert-item script runs (<see cref="InventoryMutationResult.InsertScript"/>, its result ignored, an ammunition item merged into a stack included) and a
+    /// line it prints is in <see cref="InventoryMutationResult.Messages"/> (the original posts it to the message window whoever picks the item up). The runs are under <see cref="SessionItemScripts.Admission"/>; a run the session cannot apply
+    /// (a script outside the set, an effect or an object other than the hero's and the move's items, a line that differs by gender, whose NPC's gender is not read) refuses the pickup before any effect
+    /// (<see cref="GameSessionFailure.ItemScriptUnsupported"/> or the run's own failure), the way the hero's pickup refuses it. The script host answers for the shown map's rows, so an item whose script row is another map's seed row is refused.
+    /// The room test of the NPC's grid is the host's verdict (ARC-AI-1654, <see cref="QueryHolderRoom"/>). NOT READY: the item's pickup spell executor (0x4CBAA0, not run for an NPC) and the item sound of a local picker. A made item (<c>made:n</c>) shows the session no script point, so none is run for it, as in the hero's pickup.
     /// </summary>
-    public InventoryMutationResult PickUpItemByNpc(GameSessionVersion expected, string npc, string item, SessionInsertCheck insertCheck, SessionObjectTarget? mapPile = null)
+    public InventoryMutationResult PickUpItemByNpc(GameSessionVersion expected, string npc, string item, SessionInsertCheck insertCheck, SessionObjectTarget? mapPile = null, ISessionItemScriptHost? scripts = null)
     {
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(insertCheck);
@@ -49,6 +56,7 @@ public sealed partial class GameSessionOwner
         if (pile is not null && pile.Map != _actor.Map) return RejectItem(GameSessionFailure.ItemNotAvailable);
         // What lies there: the hero's or a script's placed item, or a seed item that is loose and not taken.
         SessionItemFacts facts;
+        SessionItemFacts? scriptFacts = null;
         var placed = _inventory.PlacedItem(item);
         if (placed is not null)
         {
@@ -57,7 +65,11 @@ public sealed partial class GameSessionOwner
             // The scripts of a placed item are its origin seed row's (as TakePlaced reads them); a kit or made item has none the session knows.
             if (placed.Origin is { } origin && _inventory.Seeds.TryGetValue(origin, out var originSeed) && originSeed.Items.TryGetValue(item, out var listed) &&
                 (listed.Facts.HasScript(SessionScriptPoint.Get) || listed.Facts.HasScript(SessionScriptPoint.InsertItem)))
-                return RejectItem(GameSessionFailure.ItemScriptUnsupported);
+            {
+                // The script host answers for the shown map's rows (ARC-DEV-087): an item whose script row is another map's is not run, so it is refused.
+                if (origin != _actor.Map) return RejectItem(GameSessionFailure.ItemScriptUnsupported);
+                scriptFacts = listed.Facts;
+            }
         }
         else
         {
@@ -65,11 +77,14 @@ public sealed partial class GameSessionOwner
             if (!seed.Items.TryGetValue(item, out var row) || _inventory.Taken.Contains(item) || mapPile is null && LooseCell(_actor.Map, seed, item) is null)
                 return RejectItem(GameSessionFailure.ItemNotAvailable);
             facts = _inventory.WithAmmo(item, row.Facts);
+            scriptFacts = row.Facts;
             if (pile is not null && LooseCell(_actor.Map, seed, item) != pile.Cell) return RejectItem(GameSessionFailure.ItemNotAvailable);
         }
         if (pile is not null && !pile.Items.Any(entry => entry.Entity == item)) return RejectItem(GameSessionFailure.ItemNotAvailable);
         if (!InventoryDomain.Admitted(facts.Kind.Type)) return RejectItem(GameSessionFailure.ItemTypeUnsupported);
-        if (facts.HasScript(SessionScriptPoint.Get) || facts.HasScript(SessionScriptPoint.InsertItem)) return RejectItem(GameSessionFailure.ItemScriptUnsupported);
+        var hasGet = scriptFacts?.HasScript(SessionScriptPoint.Get) == true;
+        var hasInsert = scriptFacts?.HasScript(SessionScriptPoint.InsertItem) == true;
+        if ((hasGet || hasInsert) && scripts is null) return RejectItem(GameSessionFailure.ItemScriptUnsupported);
         // Ammunition merges into the NPC's stack of the prototype (AM1), else it enters the list as a stack of its own.
         SessionAmmoRecord? ammo = null, into = null;
         if (facts.Kind.Type == SessionItemType.Ammo)
@@ -88,14 +103,36 @@ public sealed partial class GameSessionOwner
         if (into is null && (_inventory.AddedTo(npc).Count + SeedItemCount(npc) >= SessionMapInventorySeed.MaxListLength || _inventory.NpcHeld >= _limits.MaxNpcItems))
             return RejectItem(GameSessionFailure.BudgetExceeded);
         if (_revision == long.MaxValue) return RejectItem(GameSessionFailure.RevisionExhausted);
-        var (revision, seeds, map) = (_revision, _inventory.SeedGeneration, _actor.Map);
+        var (revision, seeds, map, flagVersion) = (_revision, _inventory.SeedGeneration, _actor.Map, _flags.Version);
+        bool Stale() => _revision != revision || _inventory.SeedGeneration != seeds || _actor.Map != map || _flags.Version != flagVersion || _inventory.PlacedItem(item) != placed ||
+            !ReferenceEquals(_inventory.Objects.PileOf(item), pile) || !KnownNpc(npc) || _durability.Destroyed.Contains(item) || _inventory.Taken.Contains(item) && placed is null;
+        // ARC-AI-1655 (0x461810): the item's get script runs before the insert check, with the NPC as the triggerer; skip default leaves the item where it lies.
+        var runs = hasGet || hasInsert ? new ItemScriptRuns(this, scripts!, map.RuntimeMap, new Dictionary<string, int>(StringComparer.Ordinal) { [item] = facts.Complexity }) { NpcPickup = true } : null;
+        if (runs is not null && hasGet)
+        {
+            var gate = runs.Run(SessionScriptPoint.Get, item, npc, null);
+            ThrowIfDisposed();
+            if (Stale()) return RejectItem(GameSessionFailure.StaleVersion) with { Scripts = runs.Runs };
+            if (runs.Failure != GameSessionFailure.None) return RejectItem(runs.Failure) with { Scripts = runs.Runs };
+            if (gate?.Outcome == ScrOutcome.SkipDefault) return Declined(SessionScriptPoint.Get, runs);
+        }
         var verdict = insertCheck(new SessionInventoryItem(item, facts));
         ThrowIfDisposed();
-        // The callback changed nothing the move rests on: the revision, the attached seeds, the shown map, the item's place.
-        if (_revision != revision || _inventory.SeedGeneration != seeds || _actor.Map != map || _inventory.PlacedItem(item) != placed ||
-            !ReferenceEquals(_inventory.Objects.PileOf(item), pile) || !KnownNpc(npc) || _durability.Destroyed.Contains(item) || _inventory.Taken.Contains(item) && placed is null)
-            return RejectItem(GameSessionFailure.StaleVersion, verdict);
-        if (verdict != SessionInsertVerdict.Accepted) return RejectItem(GameSessionFailure.InsertRefused, verdict);
+        // The callback changed nothing the move rests on: the revision, the attached seeds, the shown map, the item's place (and, for a script run, the flags it read).
+        if (Stale()) return RejectItem(GameSessionFailure.StaleVersion, verdict) with { Scripts = runs?.Runs ?? [] };
+        if (verdict != SessionInsertVerdict.Accepted) return RejectItem(GameSessionFailure.InsertRefused, verdict) with { Scripts = runs?.Runs ?? [] };
+        // The insert-item script runs after the insertion and cannot cancel it (IF10); its admitted commands read nothing the move changes, so it runs here and is applied with the move, or the whole pickup is refused.
+        ScrRunResult? insertRun = null;
+        if (runs is not null)
+        {
+            if (hasInsert) insertRun = runs.Run(SessionScriptPoint.InsertItem, item, npc, null);
+            ThrowIfDisposed();
+            if (Stale()) return RejectItem(GameSessionFailure.StaleVersion, verdict) with { InsertScript = insertRun, Scripts = runs.Runs };
+            runs.Prepare();
+            if (runs.Failure != GameSessionFailure.None) return RejectItem(runs.Failure, verdict) with { InsertScript = insertRun, Scripts = runs.Runs };
+        }
+        // The runs' changes (flags, kept slots) apply before the move, so a merged item's deletion drops the slots its own run kept.
+        runs?.Commit();
         if (into is { } stack)
         {
             // The inserted stack's units join the held one and the inserted item is deleted (from a pile too, DestroyObject takes it out).
@@ -132,6 +169,6 @@ public sealed partial class GameSessionOwner
         if (pile is not null && _inventory.Objects.Pile(pile.Entity) is { } left) DissolveJunkPile(left);
         Revise();
         if (mapPile is not null && mapPileHolder is not null && _inventory.Seeds.TryGetValue(mapPile.Map, out var standing)) DissolveMapJunkPile(Version, mapPile, standing, mapPileHolder);
-        return new(GameSessionDisposition.Changed, GameSessionFailure.None, into?.Entity ?? item, verdict, Version);
+        return new(GameSessionDisposition.Changed, GameSessionFailure.None, into?.Entity ?? item, verdict, Version) { InsertScript = insertRun, Scripts = runs?.Runs ?? [], Messages = runs?.Messages ?? [] };
     }
 }

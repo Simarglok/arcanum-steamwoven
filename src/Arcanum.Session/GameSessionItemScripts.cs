@@ -190,6 +190,9 @@ public sealed partial class GameSessionOwner
             _reads = new(owner, host, this);
         }
 
+        /// <summary>ARC-AI-1655: the runs are an NPC's ground pickup, whose triggerer is the NPC: a printed line is read for an NPC triggerer (<see cref="ISessionItemScriptHost.PrintedLineForNpc"/>). Every other move keeps the hero's reading, whatever its triggerer.</summary>
+        internal bool NpcPickup { get; init; }
+
         /// <summary>ARC-MAGIC-1644 (IE7, WE6): the runs are the rewield's: the condition "items are being rewielded" answers true (0x5E87E8).</summary>
         internal bool Rewielding { get; init; }
 
@@ -215,7 +218,7 @@ public sealed partial class GameSessionOwner
                 extra is null ? null : new ScrObjectRef(_map, extra)), _reads, new() { Rules = _owner._rules.Scripts, Admission = SessionItemScripts.Admission });
             _owner.ThrowIfDisposed();
             _runs.Add(new(point, attachee, run));
-            Failure = _reads.UnknownFlag || _reads.UnknownObject ? GameSessionFailure.ItemScriptUnsupported : _owner.ItemScriptEffects(run, _host, _messages);
+            Failure = _reads.UnknownFlag || _reads.UnknownObject ? GameSessionFailure.ItemScriptUnsupported : _owner.ItemScriptEffects(run, _host, _messages, NpcPickup);
             if (Failure == GameSessionFailure.None) Failure = Accept(run);
             return run;
         }
@@ -431,7 +434,7 @@ public sealed partial class GameSessionOwner
     // What the session applies from an item script run: global flags, printed lines and (ARC-SCRIPT-042) effect changes, slots and eye
     // candy, which ItemScriptRuns checks. A script outside the admitted set, a trap object to destroy and anything else refuse the move; a
     // flag outside the session's domain and a line the host cannot show do too. Host reads only.
-    private GameSessionFailure ItemScriptEffects(ScrRunResult run, ISessionItemScriptHost scripts, List<SessionScriptMessage> messages)
+    private GameSessionFailure ItemScriptEffects(ScrRunResult run, ISessionItemScriptHost scripts, List<SessionScriptMessage> messages, bool npcTriggerer)
     {
         // A script file that exists but cannot be read is not the original's missing file: refused, not skipped. ARC-DEV-366: a question the
         // session cannot answer (get stat of a stat it does not hold, GS3) ends the dispatch as not modelled with nothing applied: refused too.
@@ -447,7 +450,7 @@ public sealed partial class GameSessionOwner
         }
         foreach (var line in effects.Lines)
         {
-            var printed = scripts.PrintedLine(line.Script, line.Line) ?? throw new InvalidOperationException("ITEM_SCRIPT_LINE_NULL");
+            var printed = (npcTriggerer ? scripts.PrintedLineForNpc(line.Script, line.Line) : scripts.PrintedLine(line.Script, line.Line)) ?? throw new InvalidOperationException("ITEM_SCRIPT_LINE_NULL");
             if (printed.Status == SessionPrintedLineStatus.Unsupported) return GameSessionFailure.ItemScriptUnsupported;
             if (printed.Status == SessionPrintedLineStatus.Shown) messages.Add(new(line.Script, line.Line, line.Kind, printed.Text ?? string.Empty));
         }

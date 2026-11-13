@@ -134,6 +134,12 @@ public partial class TerrainViewerApp
             : [.. transfers.Beds.Select(key => (Key: key, Row: transfers.Object(key))).Where(bed => bed.Row.WorldX is not null && bed.Row.WorldY is not null)
                 .Select(bed => (bed.Key, new CellCoord(checked((int)bed.Row.WorldX!.Value), checked((int)bed.Row.WorldY!.Value))))];
 
+    // ARC-AI-1655: the lines an NPC's pickup made the item's scripts print, as the message window posts any script's printed line.
+    private void PostNpcPickupLines(AreaAiNotice notice)
+    {
+        foreach (var entry in AreaScriptMessages.Entries(notice.Messages.Select(message => new AreaPrintedLine(message.Kind, message.Text)))) PostMessage(entry, "script line");
+    }
+
     /// <summary>The scene the shown window gives the AI host: its chart and evidence, the rows its map data holds (the companions and the NPCs the party leads
     /// left out) and the viewer's live providers. <paramref name="host"/> is the host the scene belongs to, for the line of fire's frame cache.</summary>
     private AreaAiScene BuildAiScene(GameSessionOwner session, AreaLoadResult area, AreaGridSession grid, AreaInventoryMap map, AreaCombatHost combat,
@@ -223,6 +229,8 @@ public partial class TerrainViewerApp
             CellLight = cell => AreaCellLightLevel(cell.X, cell.Y),
             // ARC-AI-1486: a loot window on a container lowers the item system's pickup switch (0x5E8800), so no NPC starts a pickup meanwhile.
             LootWindowOpen = () => LootWindowOnContainer,
+            // ARC-AI-1655: an NPC's pickup runs the item's get and insert-item scripts through the shown map's item script host.
+            ItemScripts = () => _inventoryHost?.ItemScripts(session),
         };
 
         static CellCoord World(Arcanum.Data.Traversal.AreaStepCell cell) => new(checked((int)cell.X), checked((int)cell.Y));
@@ -762,9 +770,17 @@ public partial class TerrainViewerApp
                 case AreaAiNoticeKind.PickUp:
                     // ARC-AI-1309: an NPC picked up an item (goal 16's end): the ground and the pile lose it, so the objects are drawn again.
                     _aiNotice = $"{AiName(notice.Npc)} picks up an item";
-                    GD.Print($"ARC-AI-1309 ai-pickup npc={notice.Npc} item={notice.Item}");
+                    GD.Print($"ARC-AI-1309 ai-pickup npc={notice.Npc} item={notice.Item} lines={notice.Messages.Count}");
+                    // ARC-AI-1655 (0x466640 end): a line the item's insert-item script printed goes to the message window whoever picked the item up.
+                    PostNpcPickupLines(notice);
                     SyncAreaInventory();
                     redraw = true;
+                    break;
+                case AreaAiNoticeKind.PickUpDeclined:
+                    // ARC-AI-1655 (0x461810): the item's get script answered skip default; the item stays, the run's lines and flag writes still happened.
+                    GD.Print($"ARC-AI-1655 ai-pickup-declined npc={notice.Npc} item={notice.Item} lines={notice.Messages.Count}");
+                    PostNpcPickupLines(notice);
+                    SyncAreaInventory();
                     break;
                 case AreaAiNoticeKind.Rewield:
                     // ARC-RENDER-1485: the gate's re-wield (or a pickup's CHECK_WIELD) changed what the NPC wears: its body shows the new weapon and shield (0x465020), so it is drawn again.

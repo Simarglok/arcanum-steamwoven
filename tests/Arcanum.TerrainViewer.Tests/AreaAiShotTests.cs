@@ -59,6 +59,58 @@ public sealed class AreaAiShotTests
 
     private sealed record Scene(GameSessionOwner Session, AreaAiHost Host, string Npc, string Bow);
 
+    /// <summary>ARC-AI-1655: an item script host for the NPC pickup tests: one script (print line 1 with the entry type 6, then return run default or skip default) on item 2 at one point; the NPC line is answered as text.</summary>
+    private sealed class PickupScripts : ISessionItemScriptHost
+    {
+        public const int ScriptNumber = 700;
+        public int Point { get; init; } = SessionScriptPoint.InsertItem;
+        public Arcanum.Data.Scripts.ScrProgram Program { get; init; } = Make(skip: false);
+        public List<string> Asked { get; } = [];
+
+        public static Arcanum.Data.Scripts.ScrProgram Make(bool skip)
+        {
+            const int lineSize = 132;
+            var actions = new[] { (Type: Arcanum.Data.Scripts.ScrCatalogue.Action.PrintLine, Operands: new[] { 1, 6 }),
+                (Type: skip ? Arcanum.Data.Scripts.ScrCatalogue.Action.ReturnSkipDefault : Arcanum.Data.Scripts.ScrCatalogue.Action.ReturnRunDefault, Operands: System.Array.Empty<int>()) };
+            var bytes = new byte[64 + actions.Length * lineSize];
+            System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(52), actions.Length);
+            System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(56), actions.Length);
+            for (var line = 0; line < actions.Length; line++)
+            {
+                // Always true, then the action; the false branch does nothing.
+                var slot = bytes.AsSpan(64 + line * lineSize + 44, 44);
+                System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(slot, actions[line].Type);
+                for (var i = 0; i < actions[line].Operands.Length; i++)
+                {
+                    slot[4 + i] = (byte)Arcanum.Data.Scripts.ScrValueKind.Number;
+                    System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(slot[(12 + 4 * i)..], actions[line].Operands[i]);
+                }
+            }
+            var read = Arcanum.Data.Scripts.ScrProgram.Read(bytes);
+            Assert.AreEqual(Arcanum.Data.Scripts.ScrReadStatus.Read, read.Status);
+            return read.Program!;
+        }
+
+        public Arcanum.Scripting.Scr.ScrSlot? Slot(Arcanum.Scripting.Scr.ScrObjectRef attachee, int point) => point == Point && attachee.Code == Entity(2) ? new(ScriptNumber, 0, 0) : null;
+        public Arcanum.Scripting.Scr.ScrScriptLookup Script(int number) => number == ScriptNumber ? Arcanum.Scripting.Scr.ScrScriptLookup.Of(Program) : Arcanum.Scripting.Scr.ScrScriptLookup.Missing;
+        public bool GlobalFlag(int index) => false;
+        public int StoryState() => throw new InvalidOperationException("not admitted");
+        public bool IsMonsterGenerator(Arcanum.Scripting.Scr.ScrObjectRef attachee) => false;
+        public Arcanum.Scripting.Scr.ScrDialogState DialogState(Arcanum.Scripting.Scr.ScrObjectRef attachee) => Arcanum.Scripting.Scr.ScrDialogState.Normal;
+        public Arcanum.Scripting.Scr.ScrTrapCheck CheckTrapBeforeUse(Arcanum.Scripting.Scr.ScrObjectRef triggerer, Arcanum.Scripting.Scr.ScrObjectRef attachee) => Arcanum.Scripting.Scr.ScrTrapCheck.NoTrap;
+        public bool IsTrapObject(Arcanum.Scripting.Scr.ScrObjectRef attachee) => false;
+        public Arcanum.Scripting.Scr.ScrObjectRef? Player() => new(1, SessionEventKinds.PlayerEntity);
+        public Arcanum.Scripting.Scr.ScrObjectRef? Leader(Arcanum.Scripting.Scr.ScrObjectRef critter) => null;
+        public bool IsJilted(Arcanum.Scripting.Scr.ScrObjectRef critter) => false;
+        public bool IsPc(Arcanum.Scripting.Scr.ScrObjectRef critter) => critter.Code == SessionEventKinds.PlayerEntity;
+        public SessionPrintedLine PrintedLine(int script, int line) => new(SessionPrintedLineStatus.Shown, "It hums for the hero.", "hero");
+        public SessionPrintedLine PrintedLineForNpc(int script, int line)
+        {
+            Asked.Add("npc line");
+            return new(SessionPrintedLineStatus.Shown, "It hums.", "npc");
+        }
+    }
+
     private sealed class NoScreen : IAreaRestockScreen
     {
         public int? ShownMap => null;
@@ -93,7 +145,7 @@ public sealed class AreaAiShotTests
         Func<AreaObjectRecord, AreaObjectAttackTarget?>? objectTarget = null, Func<string, AreaObjectRecord, SessionShot, CellCoord, CellCoord, bool>? launchAtObject = null,
         Action<string, AreaObjectRecord, AreaObjectAttackTarget?, SessionObjectAttackResult>? struck = null,
         IReadOnlyList<(AreaObjectRecord Row, SessionSeedItem Seed)>? ground = null, string? junkPiles = null, long bowUseArt = 0x60000000, long faction = 0, bool bystanderOnLine = true,
-        bool npcHome2 = false, int bowWeight = 15, Func<bool>? lootWindowOpen = null, (int Index, CellCoord At, IReadOnlyList<(AreaObjectRecord Row, SessionSeedItem Seed)> Items)? mapPile = null,
+        bool npcHome2 = false, int bowWeight = 15, Func<bool>? lootWindowOpen = null, ISessionItemScriptHost? itemScripts = null, (int Index, CellCoord At, IReadOnlyList<(AreaObjectRecord Row, SessionSeedItem Seed)> Items)? mapPile = null,
         int[]? slabRows = null)
     {
         var identity = new GlobalFlagIdentity(new WorldId(Guid.NewGuid()), new ModuleId(Guid.NewGuid()));
@@ -138,7 +190,7 @@ public sealed class AreaAiShotTests
             RuntimeMap = 1, Chart = new AreaChart(0, 0, new(0, 0), "TEST") { MinimumCell = -64, MaximumCell = 127 }, Steps = steps, Npcs = bystander ? [new(Entity(0), Npc(0, null, faction), NpcCell), new(Entity(3), Npc(3, BystanderCell, faction), BystanderCell)] : [new(Entity(0), Npc(0), NpcCell)], Combat = combat,
             HeroCell = () => HeroCell, LaunchShot = launch,
             LineOfFire = blockerRow is not null ? () => new Line(blockerRow) : bystander && bystanderOnLine ? () => new Line(Npc(3, BystanderCell)) : null,
-            ObjectTarget = objectTarget, LaunchShotAtObject = launchAtObject, ObjectStruck = struck, LootWindowOpen = lootWindowOpen,
+            ObjectTarget = objectTarget, LaunchShotAtObject = launchAtObject, ObjectStruck = struck, LootWindowOpen = lootWindowOpen, ItemScripts = itemScripts is null ? null : () => itemScripts,
         };
         // ARC-AI-1139: the restock host answers the NPC wield the AI gate's re-wield asks for (no barter data: the map's own rows are the items).
         var restock = new AreaRestockHost(session, inventory, null, new NoScreen());
@@ -419,9 +471,9 @@ public sealed class AreaAiShotTests
     }
 
     // ARC-AI-1309: the item search's ground. A loose weapon is a bow-shaped row (type 5) with the item flags and worth the search reads (fields 36 and 40) lying at a cell of the seed.
-    private static (AreaObjectRecord Row, SessionSeedItem Seed) Loose(int index, CellCoord at, uint flags = 0, int worth = 1, SessionItemType type = SessionItemType.Weapon, int weight = 3)
+    private static (AreaObjectRecord Row, SessionSeedItem Seed) Loose(int index, CellCoord at, uint flags = 0, int worth = 1, SessionItemType type = SessionItemType.Weapon, int weight = 3, int[]? scripts = null)
     {
-        return (Item(index, 0, flags, weight, worth, -1), new SessionSeedItem(Entity(index), new(BowKind with { Type = type, Prototype = BowPrototype + index }, weight, 0, -1, type == SessionItemType.Ammo ? 5 : null, []) { AmmoType = type == SessionItemType.Ammo ? 0 : null }, at));
+        return (Item(index, 0, flags, weight, worth, -1), new SessionSeedItem(Entity(index), new(BowKind with { Type = type, Prototype = BowPrototype + index }, weight, 0, -1, type == SessionItemType.Ammo ? 5 : null, scripts ?? []) { AmmoType = type == SessionItemType.Ammo ? 0 : null }, at));
     }
 
     // ARC-AI-1486: a junk pile of the map's data (a container row of prototype 3043, as the Crash Site cave's) and the item it holds (a bow-shaped weapon with no cell of its own).
@@ -581,6 +633,44 @@ public sealed class AreaAiShotTests
         CollectionAssert.AreEquivalent(new[] { Entity(2), Entity(4) }, ground);
         Assert.AreEqual(Entity(3), notices.Single(n => n.Kind == AreaAiNoticeKind.PickUp).Item);
         Assert.IsTrue(session.QueryDanger(npc).Flags.HasFlag(DangerFlags.CheckWield), "the insert asks for a re-wield");
+    }
+
+    // ARC-AI-1655 (0x466640 end, 0x461810): the item's insert-item script (21) runs when the NPC picks the item up, with the NPC as the triggerer; its printed line goes out in the pickup notice, and an item with a script is
+    // refused while the scene has no item script host.
+    [TestMethod]
+    public void An_item_with_an_insert_item_script_runs_it_at_the_npcs_pickup_and_the_notice_carries_its_line()
+    {
+        var scripts = new PickupScripts();
+        var (session, host, npc, _) = Open(null, ground: [Loose(2, new(13, 20), scripts: [SessionScriptPoint.InsertItem])], itemScripts: scripts);
+        Assert.AreEqual(GameSessionDisposition.Changed, session.SetAiSupportBits(session.Version, npc, DangerFlags.LookForWeapon).Disposition);
+        Assert.IsTrue(host.SearchItems(npc), host.TraceOf(npc)?.Item);
+        var notices = Run(host, npc);
+        Assert.IsTrue(session.QueryHolderItems(npc)!.Any(item => item.Entity == Entity(2)), host.TraceOf(npc)?.Item);
+        var picked = notices.Single(n => n.Kind == AreaAiNoticeKind.PickUp);
+        CollectionAssert.AreEqual(new[] { new SessionScriptMessage(PickupScripts.ScriptNumber, 1, 6, "It hums.") }, picked.Messages.ToArray());
+        CollectionAssert.Contains(scripts.Asked, "npc line");
+
+        var (blocked, noHost, blockedNpc, _) = Open(null, ground: [Loose(2, new(13, 20), scripts: [SessionScriptPoint.InsertItem])]);
+        Assert.AreEqual(GameSessionDisposition.Changed, blocked.SetAiSupportBits(blocked.Version, blockedNpc, DangerFlags.LookForWeapon).Disposition);
+        noHost.SearchItems(blockedNpc);
+        Run(noHost, blockedNpc);
+        Assert.IsFalse(blocked.QueryHolderItems(blockedNpc)!.Any(item => item.Entity == Entity(2)), "without a host the item stays: " + noHost.TraceOf(blockedNpc)?.Item);
+    }
+
+    // ARC-AI-1655: a get script (4) that answers skip default leaves the item on the ground; the notice says so and the item is not picked.
+    [TestMethod]
+    public void A_get_script_that_skips_the_default_leaves_the_item_where_it_lies()
+    {
+        var scripts = new PickupScripts { Point = SessionScriptPoint.Get, Program = PickupScripts.Make(skip: true) };
+        var (session, host, npc, _) = Open(null, ground: [Loose(2, new(13, 20), scripts: [SessionScriptPoint.Get])], itemScripts: scripts);
+        Assert.AreEqual(GameSessionDisposition.Changed, session.SetAiSupportBits(session.Version, npc, DangerFlags.LookForWeapon).Disposition);
+        Assert.IsTrue(host.SearchItems(npc), host.TraceOf(npc)?.Item);
+        var notices = Run(host, npc);
+        Assert.IsFalse(session.QueryHolderItems(npc)!.Any(item => item.Entity == Entity(2)));
+        CollectionAssert.Contains(session.QueryMapInventory(new SessionMapId(1))!.Ground.Select(g => g.Item.Entity).ToArray(), Entity(2));
+        Assert.AreEqual(0, notices.Count(n => n.Kind == AreaAiNoticeKind.PickUp));
+        Assert.AreEqual(1, notices.Count(n => n.Kind == AreaAiNoticeKind.PickUpDeclined));
+        Assert.AreEqual(1, notices.First(n => n.Kind == AreaAiNoticeKind.PickUpDeclined).Messages.Count);
     }
 
     [TestMethod]

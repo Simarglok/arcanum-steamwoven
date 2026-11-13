@@ -79,7 +79,15 @@ public sealed class AreaItemScriptHost : ISessionItemScriptHost
     public ScrObjectRef? Leader(ScrObjectRef critter) => !IsPc(critter) && _session.QueryCompanion(critter.Code).LedByPc ? Player() : null;
     public bool IsJilted(ScrObjectRef critter) => !IsPc(critter) && _session.QueryCompanion(critter.Code).Jilted;
 
-    public SessionPrintedLine PrintedLine(int script, int line)
+    public SessionPrintedLine PrintedLine(int script, int line) => ReadLine(script, line, npcTriggerer: false);
+
+    /// <summary>
+    /// ARC-AI-1655 (ledger IS2): a line for a run whose triggerer is an NPC: the original shows the text or the alternate text by the triggerer's gender, and the host does not read an NPC's gender, so only a line whose two texts
+    /// agree is shown (the hero's gender then does not matter); a line whose texts differ is <see cref="SessionPrintedLineStatus.Unsupported"/> and the session refuses the run.
+    /// </summary>
+    public SessionPrintedLine PrintedLineForNpc(int script, int line) => ReadLine(script, line, npcTriggerer: true);
+
+    private SessionPrintedLine ReadLine(int script, int line, bool npcTriggerer)
     {
         if (_content is null) return new(SessionPrintedLineStatus.NoDialog, string.Empty, "no script content");
         var read = _content.Dialog(script, _session.Rules.Data);
@@ -94,7 +102,9 @@ public sealed class AreaItemScriptHost : ISessionItemScriptHost
             // A file this reader refuses may still load in the original: not shown and not skipped.
             default: return new(SessionPrintedLineStatus.Unsupported, string.Empty, $"dialog {script}: {read.Status}");
         }
-        var alternate = (_session.QueryHeroDialogFacts() ?? AreaConversationProfile.Diagnostic.Pc).Gender != DialogPcGender.Male;
+        if (npcTriggerer && read.Document!.TryGetRecord(line, out var both) && both is not null && !both.Text.Bytes.SequenceEqual(both.AlternateText.Bytes))
+            return new(SessionPrintedLineStatus.Unsupported, string.Empty, $"line {line} differs by gender and the NPC's gender is not read");
+        var alternate = !npcTriggerer && (_session.QueryHeroDialogFacts() ?? AreaConversationProfile.Diagnostic.Pc).Gender != DialogPcGender.Male;
         var printed = ScrPrintedLine.Read(read.Document!, line, alternate, AreaConversationProfile.Diagnostic.Names);
         if (printed.Status != ScrPrintedLineStatus.Shown) return new(SessionPrintedLineStatus.Unsupported, string.Empty, printed.Detail);
         if (read.Document!.TryGetRecord(line, out var record) && record is not null &&
