@@ -360,6 +360,16 @@ public partial class TerrainViewerApp
                 for (var number = 0; number < 4000 && fact.Subtype != (int)kind; number++)
                     if (kind == WrittenSubtype.Plaque && session.QueryWrittenDocument(new((int)kind, number), data.Texts) is { Readable: true, Body.Count: > 0 }) fact = new((int)kind, number);
             if (fact.Subtype != (int)kind) { GD.Print($"ARC-UI-1877 reading capture {kind}: no document"); continue; }
+            if (kind == WrittenSubtype.Newspaper
+                && AreaReading.View(session.QueryWrittenDocument(fact, data.Texts), data.Texts, 0, AreaHoverIndex.TextProfile, session.Rules.Written) is { Art: { } paper })
+            {
+                var fonts = _readingArt!.Fonts.Values.Where(load => load.Status == AreaInterfaceArtStatus.Ready && load.Frames.Count > 0).ToDictionary(load => load.Number, load => new AreaArtFont(load.Frames));
+                AreaArtFont FontOf(int number) => fonts.TryGetValue(number, out var font) ? font : fonts[AreaReadingArtLayout.NoteFont];
+                GD.Print($"ARC-UI-1877 newspaper capture start={fact.TextStartLine} body={paper.Body.Count} fillers={paper.Fillers.Count}: "
+                    + string.Join(" | ", paper.Body.Select((m, i) => $"#{i} font={m.Font} len={m.Text.Length} h={AreaReadingFlow.Height(FontOf(m.Font), m.Text, 100)}")));
+                foreach (var line in AreaReadingFlow.Newspaper(paper, FontOf))
+                    GD.Print($"ARC-UI-1877 newspaper line font={line.Font} x={line.X} y={line.Y} glyphs={line.Glyphs.Count}");
+            }
             foreach (var look in new[] { "original", "diagnostic" })
             {
                 if (ReadingOpen) CloseReadingByPlayer();
