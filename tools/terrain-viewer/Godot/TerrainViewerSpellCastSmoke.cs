@@ -186,22 +186,25 @@ public partial class TerrainViewerApp
                 SpellSmokeTick();
                 WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .05, true, SimulationTime.At(_areaSmokeTime, 20));
             }
-            (int Starts, int Hp, int Fatigue, long Draws, int Frames) PlayOut()
+            (int Starts, int Hp, int Fatigue, long Draws, int Frames, bool Ended) PlayOut(int? waiting)
             {
                 var starts = _spellQueuedStarts;
-                var frames = 0;
+                var frames = 0; var ended = false; var killed = false;
                 for (; frames < 800 && (_spellGoal is not null || HeroRunsHost()?.CastRun is not null); frames++)
                 {
                     if (session.QueryLife(npc).View?.Status is { IsActive: false })
                     {
+                        killed = true;
                         session.Heal(session.Version, npc, new LifeHeal { Full = true, Fatigue = 1000, Resurrect = true });
                         PublishWorldSelection();
                     }
+                    // ARC-MAGIC-1399 (QC7): the kill of the target by the first cast ends the run queued on it before its goal starts; a run gone with the target alive is no such case.
+                    if (killed && waiting is { } w && _spellQueuedStarts == starts && session.QuerySpellRuns()[w] is null) ended = true;
                     Frame();
                 }
                 for (var flying = 0; flying < 400 && _spellMissiles.Count > 0; flying++) Frame();
                 Require(_spellGoal is null && _spellQueue.Count == 0 && HeroRunsHost()?.CastRun is null && _spellMissiles.Count == 0, $"the casts ended after {frames} frames");
-                return (_spellQueuedStarts - starts, session.QueryLife(npc).View!.Status.HitPoints, session.QueryHeroLife()!.Status.Fatigue, session.QueryRandom().Draws, frames);
+                return (_spellQueuedStarts - starts, session.QueryLife(npc).View!.Status.HitPoints, session.QueryHeroLife()!.Status.Fatigue, session.QueryRandom().Draws, frames, ended);
             }
             try
             {
@@ -225,10 +228,12 @@ public partial class TerrainViewerApp
                 Require(captured.Goals.Runs.Count(r => r.Owner == SessionSpellCaster.Hero && r.Frames.Length == (queue ? 2 : 1)) == 1
                     // After the release (node 3) the playing run began and an instant one is freed already: only a run still there is saved.
                     && captured.Spells.Runs.Any(r => r.Id == run) == (session.QuerySpellRuns()[run] is not null) && (node >= 3 || captured.Spells.Runs.Any(r => r.Id == run))
-                    && (queued is not { } q || captured.Spells.Runs.Any(r => r.Id == q)),
+                    // The queued run is saved while it lives; a kill by the released cast already ended it (ARC-MAGIC-1399, QC7).
+                    && (queued is not { } q || captured.Spells.Runs.Any(r => r.Id == q) == (session.QuerySpellRuns()[q] is not null) && (node >= 3 || session.QuerySpellRuns()[q] is not null)),
                     "the snapshot holds the hero's casting run, its queue and their spell runs");
-                var live = PlayOut();
-                Require(live.Starts == (queue ? 1 : 0), $"the live queued cast started once ({live.Starts})");
+                var live = PlayOut(queued);
+                // ARC-MAGIC-1399 (QC7): a cast that kills its target ends the run queued on it, so its goal does not start (see the cast stage's first part).
+                Require(live.Starts == (queue && !live.Ended ? 1 : 0), $"the live queued cast started once, unless the first killed the target ({live.Starts}, queued run ended {live.Ended})");
                 var running = _areaSession;
                 QuickKey(Key.F8);
                 if (_mapHandoff is not null) await (_lastLoad ?? Task.CompletedTask);
@@ -237,7 +242,7 @@ public partial class TerrainViewerApp
                 Require(HeroRunsHost()?.CastRun is { Top: { Goal: GoalType.AttemptSpell } held } run2 && held.Node == node && run2.Frames.Length == (queue ? 2 : 1), "after the load the hero's casting run is the saved one");
                 Frame();
                 Require(_spellGoal?.Run == run && _spellQueue.Count == (queue ? 1 : 0) && (queued is null || _spellQueue[0].Run == queued), $"the restored cast was adopted with its queue (goal {_spellGoal?.Run}, {_spellQueue.Count} queued)");
-                var restored = PlayOut();
+                var restored = PlayOut(queued);
                 Require(restored with { Frames = 0 } == live with { Frames = 0 }, $"the restored casts play as the live ones: {restored}, live {live}");
                 GD.Print($"ARC-DEV-318 native-smoke saved-cast PASS map={_readyMapName} spell={spell.Data.Number} node={node} queued={queue} hp={live.Hp} fatigue={live.Fatigue} draws={live.Draws}");
                 return new { Spell = spell.Data.Number, Node = node, Queued = queue, live.Hp, live.Fatigue };
@@ -321,8 +326,9 @@ public partial class TerrainViewerApp
             var revived = false;
             for (; frames < 800 && _spellGoal is not null; frames++)
             {
-                // The first cast may kill the NPC (the one with the fewest hit points): it is raised while the queued goal waits, so the queued cast plays at a
-                // living target (ARC-DEV-318: the queued goal is the frame beneath the first on the table, which starts it in the step the first pops).
+                // The first cast may kill the NPC (the one with the fewest hit points): it is raised while the queued goal waits, which keeps it alive for the
+                // script cast below; the kill has ended the queued run already (ARC-MAGIC-1399, QC7), so that goal then starts with no run. A surviving target lets the queued goal play
+                // (ARC-DEV-318: the queued goal is the frame beneath the first on the table, which starts it in the step the first pops).
                 if (second is { } waiting && _spellQueue.Any(q => q.Run == waiting) && session.QueryLife(npc).View?.Status is { IsActive: false })
                 {
                     session.Heal(session.Version, npc, new LifeHeal { Full = true, Fatigue = 1000, Resurrect = true });
@@ -335,9 +341,15 @@ public partial class TerrainViewerApp
                 WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .05, true, SimulationTime.At(_areaSmokeTime, 20));
             }
             Require(_spellGoal is null && _spellQueue.Count == 0, $"the goals ended after {frames} frames");
+            // ARC-MAGIC-1399 (QC7): a first cast that kills its target ends every queued run on it by event, which pays the run's BEGIN cost once and frees it, so the queued goal
+            // starts with no run and is refused; a target that survives lets the queued goal play. The weakest NPC of a map (a rat) dies of one cast, the others survive it.
+            var queuedPlayed = false;
             if (second is { } queued)
             {
-                Require(_spellQueuedStarts == queuedStarts + 1, "the queued cast's goal started after the first: " + _spellNotice);
+                queuedPlayed = _spellQueuedStarts == queuedStarts + 1;
+                Require(queuedPlayed != revived, revived
+                    ? "the first cast killed the target, so its queued cast ended with it and its goal did not start: " + _spellNotice
+                    : "the queued cast's goal started after the first: " + _spellNotice);
                 Require(session.QuerySpellRuns()[queued] is null, "the queued instant run is freed");
             }
             // ARC-MAGIC-018: a missile flies on after the goal until it arrives.
@@ -364,7 +376,7 @@ public partial class TerrainViewerApp
             else Require(_spellMissileEndsForSelfTest.Count == missileEnds, "a spell without a missile art launches none");
             // ARC-MAGIC-017: the cast entry's eye candy timed the goal and was drawn on the hero.
             var castEntry = SpellEyeCandyRules.EntryIndex(spell.Data.Number, SpellEyeCandyRules.Cast);
-            var goals = queue ? 2 : 1;
+            var goals = queuedPlayed ? 2 : 1;
             var untimed = _spellTargetFailedAtStart - failedAtStart;
             Require(_castTimingsForSelfTest.Count == Math.Min(timings + goals, 16) && untimed == 0, $"the goals recorded their eye-candy timing ({untimed} ended before it)");
             var timing = _castTimingsForSelfTest[^1];
@@ -392,7 +404,8 @@ public partial class TerrainViewerApp
             var heroAfter = session.QueryHeroLife()!.Status;
             var npcAfter = session.QueryLife(npc).View!.Status.HitPoints;
             Require(paid > 0 && heroAfter.Fatigue < heroBefore.Fatigue, $"the cast cost fatigue: paid {paid}, {heroBefore.Fatigue} -> {heroAfter.Fatigue}");
-            Require(log.Count(e => e.Kind == SpellCastEventKind.FatiguePaid) == goals, "each cast paid at its own BEGIN (SU13)");
+            // Each cast pays once: at its own BEGIN, or, for a queued cast whose target died first, when the kill ends its run (QC7).
+            Require(log.Count(e => e.Kind == SpellCastEventKind.FatiguePaid) == (queue ? 2 : 1), "each cast paid once (SU13, QC7)");
             Require(!Damaging(spell) || resisted || damaged > 0 && (revived || npcAfter == npcBefore - damaged) || npcAfter <= 0,
                 $"the NPC resists or takes the damage: damaged {damaged}, resisted {resisted}, hp {npcBefore} -> {npcAfter}");
             Require(session.QuerySpellRuns()[run] is null, "the instant run is freed");

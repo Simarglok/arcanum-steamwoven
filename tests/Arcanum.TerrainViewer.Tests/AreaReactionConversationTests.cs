@@ -68,7 +68,7 @@ public sealed class AreaReactionConversationTests
         var last = f.Host.Begin(f.Speaker).Conversation!;
         Assert.AreEqual(DialogConversationSelectStatus.Ended, last.Select(last.Options.Single(o => o.Marker is not null).Token).Status);
         Assert.AreEqual(new DialogConversationEnd(DialogEndKind.Insulted, null), last.End);
-        Assert.AreEqual("[the insult ended the dialog: the NPC's generated reply is not loaded]", AreaConversationText.Outcome(last));
+        Assert.AreEqual("[the insult ended the dialog with the NPC's last line]", AreaConversationText.Outcome(last));
         StringAssert.EndsWith(AreaConversationText.Effect(last.Effects.Last()), "RE adjust -10 (insult) [Applied]");
         Assert.AreEqual(20, f.Host.State.Reaction(0));
         f.Host.EndReaction();

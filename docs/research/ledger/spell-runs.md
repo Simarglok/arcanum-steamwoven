@@ -793,7 +793,7 @@ The activation 0x579FA0 → 0x57A0A0 is the hotkey bar's type-2 path ([IP7](#hot
 | SKP7 | drag start (0x57E5D0, hit test 0x557B60) | With no item held and no drag going on, a right press on a skill button in mode 2 (0x557B60 answers its index, 4 for none; it answers 4 outside mode 2) starts the hotkey drag of a type-2 entry with that index, after the bar's own entries and the spell pane's slots have been tried (HK15); the icon is the button's art 0x579F70. | Original |
 
 **F0 facts raised:** the skills pane of [FR-UI-002](../../requirements/ui-media-lifecycle.md#fr-ui-002) (0x551210 case 2, 0x54B5D0's
-mode-2 branches, 0x5508C0, 0x557B60: F1, implemented). Left at F0: the buttons' lit art the original sets from game events (0x556A90, GB).
+mode-2 branches, 0x5508C0, 0x557B60: F1, implemented). The buttons' lit art the original sets from game events (0x556A90) was read and built by ARC-UI-1364 (GB15–GB17).
 
 ## Spell destroy component (ARC-DEV-259)
 
