@@ -211,7 +211,7 @@ public sealed class AreaScenePlan
     }
 
     /// <summary>
-    /// ARC-SCRIPT-1778 (ledger AN10): <paramref name="command"/> (the T0 body of the portal <paramref name="body"/>, drawn from <paramref name="visual"/>) with a frame of another door or window ART a script's change art
+    /// ARC-SCRIPT-1778 (ledger AN16): <paramref name="command"/> (the T0 body of the portal <paramref name="body"/>, drawn from <paramref name="visual"/>) with a frame of another door or window ART a script's change art
     /// number gave it, <paramref name="frame"/> (an extra-art frame, which belongs to no object): placed from the frame's size and drawn hotspot about the anchor the T0 body was placed from, as <see cref="PortalFrame"/> does.
     /// </summary>
     public static AreaDrawCommand PortalArtFrame(AreaDrawCommand command, AreaObjectRecord body, AreaVisualRecord visual, AreaVisualRecord frame)

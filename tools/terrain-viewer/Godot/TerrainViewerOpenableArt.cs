@@ -7,7 +7,7 @@ using Arcanum.World;
 
 namespace Arcanum.TerrainViewer;
 
-// ARC-SCRIPT-1778 (ledger AN10, AN11, LK10, LK13, LW2): the art of the shown map's doors, windows and containers as a script's change art number (59) and the open frame leave it. A door or window or a container holds its open state in
+// ARC-SCRIPT-1778 (ledger AN16, AN17, LK10, LK13, LW2): the art of the shown map's doors, windows and containers as a script's change art number (59) and the open frame leave it. A door or window or a container holds its open state in
 // the frame of its art id (the session's frame), and the action writes the new art id with frame 0, so the drawn art is the art id the session holds (the new one, else the map's own) with the session's frame: a portal is given
 // the new art's frames (AreaPortals.Retarget, which the open steps, the passage rule and a script's toggle read), a container is drawn from its frame (its closed and open body, also on the map's own art: the lid was not drawn before).
 public partial class TerrainViewerApp
@@ -41,7 +41,7 @@ public partial class TerrainViewerApp
         return rows;
     }
 
-    /// <summary>The art id a script wrote for the object of the shown map (AN8, AN10), null while it has the art its data gives.</summary>
+    /// <summary>The art id a script wrote for the object of the shown map (AN8, AN16), null while it has the art its data gives.</summary>
     private uint? WrittenArt(string entity) => _areaSession is { } session && _readyArea is { } area ? session.QueryObjectArt(new SessionMapId(area.Snapshot.RuntimeMap), entity) : null;
 
     /// <summary>

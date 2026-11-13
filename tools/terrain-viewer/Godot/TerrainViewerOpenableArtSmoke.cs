@@ -10,7 +10,7 @@ namespace Arcanum.TerrainViewer;
 public partial class TerrainViewerApp
 {
     /// <summary>
-    /// ARC-SCRIPT-1778 (ledger AN10, AN11, LK10, LK13, LW2) native observation (part of the stage "object-art", only when named, with --hero, on a map window with the inventory active): a container and a door of the shown map take another art id the
+    /// ARC-SCRIPT-1778 (ledger AN16, AN17, LK10, LK13, LW2) native observation (part of the stage "object-art", only when named, with --hero, on a map window with the inventory active): a container and a door of the shown map take another art id the
     /// way a script's change art number writes it (the number of another container's or door's art in its own id, frame 0), and the view follows the session: the container is drawn closed and open from the new art (and from its own art when it
     /// has an open frame), the door's art facts and frames are the new art's (the open frame its steps end on), it is drawn from the new art closed and open, and the id of the map data returns both to their T0 bodies. The map's own state is left as it
     /// was. The script path (the plan, the frame reset to 0, the lock fields kept) is the host's unit tests'. ARC_AREA_OPENABLE_ART_CAPTURE=PREFIX saves the frames the view draws as PREFIX-NAME.png (never committed).

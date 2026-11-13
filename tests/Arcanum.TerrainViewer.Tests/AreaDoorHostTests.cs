@@ -100,7 +100,7 @@ public sealed class AreaDoorHostTests
         CollectionAssert.AreEqual(new[] { "oid:thug" }, asked);
     }
 
-    // ARC-SCRIPT-1778 (ledger AN12): a portal a script gave another art is read with that art's facts by the door host (found by entity at each call), the open frame is the new art's, and the map's own entry returns.
+    // ARC-SCRIPT-1778 (ledger AN18): a portal a script gave another art is read with that art's facts by the door host (found by entity at each call), the open frame is the new art's, and the map's own entry returns.
     [TestMethod]
     public void ARetargetedDoorOpensToTheNewArtsLastFrameAndTheMapsOwnArtReturns()
     {

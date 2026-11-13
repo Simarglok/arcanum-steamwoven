@@ -283,6 +283,8 @@ public partial class TerrainViewerApp : Node
                                 if (only?.Contains("object-art") == true) await RunAreaObjectArtStageAsync();
                                 // ARC-SCRIPT-1778: the same stage on a container and a door of the map (the new art closed and open, the new art's frames and open frame, the data's id returns the T0 body).
                                 if (only?.Contains("object-art") == true) await RunAreaOpenableArtStageAsync();
+                                // ARC-SCRIPT-1779 (AN10): with it, an item takes another ground art id: an NPC's item dropped next to the hero, and an item a T0 body draws where it lies.
+                                if (only?.Contains("object-art") == true) await RunAreaObjectArtItemsStageAsync();
                                 // ARC-DEV-370 (E1-c2): only when named, a critter the session creates by prototype is drawn, picked, moved by the AI's movers with a walk frame and gone once destroyed (--hero, a map window with the inventory).
                                 if (only?.Contains("created-critter") == true) await RunAreaCreatedCritterStageAsync();
                                 if (only?.Contains("trait-body") == true) await RunAreaTraitBodyStageAsync();

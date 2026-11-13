@@ -42,7 +42,8 @@ public sealed partial class GameSessionOwner
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(entity);
         var key = SessionObjectArt.Key(entity);
-        if (art == baseline) return ClearMapChange(expected, map, key);
+        // A mobile object's record (an item's, ARC-SCRIPT-1779) sits on the map it was written on, wherever the object stands now: the clear names that map.
+        if (art == baseline) return ClearMapChange(expected, QueryObjectRecordMap(key) ?? map, key);
         return SetMapChange(expected, map, key, art);
     }
 }

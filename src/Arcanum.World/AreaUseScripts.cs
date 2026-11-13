@@ -823,7 +823,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
 
     // The points whose slot a run writes back as map changes (SlotProperty). ARC-DEV-312: the dying point's slot is kept under scr12.* (no save schema step: the keys are strings).
     private static bool KeptAsMapChanges(int point) => point is ScrPoint.Examine or ScrPoint.Use or ScrPoint.Dialog or CatchingThiefPoint or ScrPoint.FirstHeartbeat or ScrPoint.Heartbeat or ScrPoint.TakingDamage or ScrPoint.LeaderSleeping or ScrPoint.Bust or ScrPoint.Dying
-        or ScrPoint.EnterCombat or ScrPoint.ExitCombat or ScrPoint.Hit or ScrPoint.CritterHits or ScrPoint.CriticalHit or ScrPoint.Miss or ScrPoint.CriticalMiss;
+        or ScrPoint.EnterCombat or ScrPoint.ExitCombat or ScrPoint.Raise or ScrPoint.Hit or ScrPoint.CritterHits or ScrPoint.CriticalHit or ScrPoint.Miss or ScrPoint.CriticalMiss;
 
     // The trap's view of the use slot: the loaded one under the session's script and counters; null without a use slot or for a stored
     // script number outside the catalogue's range (it names no script the content holds).
@@ -1289,6 +1289,41 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         finally { _dangerRunDepth--; _clicked = previous; }
     }
 
+    /// <summary>
+    /// ARC-MAGIC-1167 (magic audit MA-10, exe read 2026-11-13, ledger RZ1-RZ3): the raise script (attachment point 18, 0x12) of <paramref name="target"/>, a creature of the shown map that a heal with the raise bit is about to bring back:
+    /// the heal applier (0x4B58C0, the call at 0x4B5A46) runs it through the script dispatcher (0x441980) after it has computed the refusal by the creature's flags and before it tests that refusal, so it runs whether the flags refuse or not. The healer
+    /// (<paramref name="healer"/>, the heal record's parent; null for a heal with none) is the triggerer, the target the attachee, line 0, under <see cref="DyingAdmission"/> (the set of the other NPC point scripts); its slot is kept as map
+    /// changes (<see cref="SlotProperty"/>). The record's source (a critter parent's wielded weapon, 0x4B23B0) is the extra object in the original; it is none here (the spell host knows no weapon identity, and MG36 passes the caster no weapon). The caller reads <see cref="RaiseRefuses"/>.
+    /// A target that is not a row of the shown map, or has no script at the point, runs nothing (the raise goes on). The original has no guard; a script whose effects raise the same creature again reaches this call nested, so the depth is bounded
+    /// (<see cref="MaxDangerRunDepth"/>) and a deeper call runs nothing.
+    /// </summary>
+    public AreaScriptedUse RunRaise(string target, ScrObjectRef? healer, ScrRuleProfile rules)
+    {
+        ArgumentNullException.ThrowIfNull(target); ArgumentNullException.ThrowIfNull(rules);
+        var attachee = new ScrObjectRef(_shownMap, target);
+        if (Row(attachee) is not { } row || Slot(attachee, ScrPoint.Raise) is not { Script: > 0 }) return new(AreaScriptedUseOutcome.NoTeleport, null, [], null, "no script at the point");
+        if (_content is null) return new(AreaScriptedUseOutcome.ContentUnavailable, null, [], null, "no script content");
+        if (_raiseRunDepth >= MaxDangerRunDepth) return new(AreaScriptedUseOutcome.Refused, null, [], null, $"nested raise scripts: the depth bound {MaxDangerRunDepth} is reached");
+        var previous = _clicked;
+        _clicked = (target, row);
+        _raiseRunDepth++;
+        try
+        {
+            var run = ScrDispatcher.RunObject(new(ScrPoint.Raise, attachee, healer, null), this, new() { Rules = rules, Admission = DyingAdmission });
+            return Finish(run, _ => "a teleport from a raise script is not modelled", writeback => WriteObjectSlot(writeback, attachee));
+        }
+        finally { _raiseRunDepth--; _clicked = previous; }
+    }
+
+    private int _raiseRunDepth;
+
+    /// <summary>
+    /// ARC-MAGIC-1167 (RZ2): whether a raise run (<see cref="RunRaise"/>) refuses the raise: the dispatcher's "skip default" (return 0 of 0x441980, which the applier tests as <c>result == 0</c>, 0x4B5A4E), as for the taking-damage script
+    /// (<see cref="TakingDamageVetoes"/>): a script number whose file the content lacks, a trap script and a script that runs past its last line skip the default too. A run that was not applied (refused by the admission, effects the viewer
+    /// cannot apply, a teleport) refuses nothing: the raise goes on.
+    /// </summary>
+    public static bool RaiseRefuses(AreaScriptedUse ran) => TakingDamageVetoes(ran);
+
     /// <summary>ARC-AI-1634: how deep danger scripts may nest (the dispatcher's own call bound, <see cref="ScrRunOptions.MaxCallDepth"/>'s default).</summary>
     public const int MaxDangerRunDepth = 16;
 
@@ -1409,10 +1444,12 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     /// ARC-MAGIC-048 (E4-c, ledger CN6, CN7): the use script (attachment point 1) of <paramref name="target"/>, an object of the shown map, run through the script dispatcher (0x441980) with any triggerer (<paramref name="triggerer"/>;
     /// null: none) and any extra object (<paramref name="extra"/>), which is the seam the Use spell component (0x452ED0) needs: it passes the target in all three object pairs, so the object runs its own use script as if it had used itself. The attachee is the target,
     /// line 0, under <see cref="Admission"/>; its slot is kept as map changes (<see cref="SlotProperty"/>). An object that is not a row of the shown map, or has no use slot with a script, has none (no run: the original's dispatcher finds no
-    /// attachment). Not modelled: the trap preamble of the dispatcher's use point (0x4BBFE0, 0x4BBE40: a trapped target does not meet its trap here, <see cref="AreaTraps.Use"/> is the PC's) and a teleport the script asks for (it leaves
-    /// the run unapplied). One method per original address: the PC's use is <see cref="Run"/>.
+    /// attachment). Not modelled: the trap preamble of the dispatcher's use point (0x4BBFE0, 0x4BBE40: a trapped target does not meet its trap here, <see cref="AreaTraps.Use"/> is the PC's) and a teleport the script asks for
+    /// unless the caller takes it (<paramref name="teleportRefusal"/>; without one the run is left unapplied). One method per original address: the PC's use is <see cref="Run"/>.
+    /// ARC-WORLD-1805: a caller that can queue the hero's change of place (the door's use node for the hero, ledger TT18, TT20) passes <paramref name="teleportRefusal"/>, which names why it cannot take the asked teleport (or null);
+    /// a run that asked for one applied returns <see cref="AreaScriptedUseOutcome.Teleport"/> with it, for the caller to queue (the original's action only records the request, 0x447220 case 0x2C → 0x4D3380).
     /// </summary>
-    public AreaScriptedUse RunUseScript(string target, ScrObjectRef? triggerer, ScrObjectRef? extra, ScrRuleProfile rules)
+    public AreaScriptedUse RunUseScript(string target, ScrObjectRef? triggerer, ScrObjectRef? extra, ScrRuleProfile rules, Func<ScrTeleport, string?>? teleportRefusal = null)
     {
         ArgumentNullException.ThrowIfNull(target); ArgumentNullException.ThrowIfNull(rules);
         var attachee = new ScrObjectRef(_shownMap, target);
@@ -1424,22 +1461,23 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         try
         {
             var run = ScrDispatcher.RunObject(new(ScrPoint.Use, attachee, triggerer, extra), this, new() { Rules = rules, Admission = Admission });
-            return Finish(run, _ => "a teleport from a use component's script is not modelled", writeback => WriteObjectSlot(writeback, attachee));
+            return Finish(run, teleportRefusal ?? (_ => "a teleport from a use component's script is not modelled"), writeback => WriteObjectSlot(writeback, attachee));
         }
         finally { _clicked = previous; }
     }
 
     /// <summary>
     /// ARC-WORLD-1668 (ledger TT18, 0x428A10 → 0x441980 point 1): whether the use script a door's use node ran (<see cref="RunUseScript"/>, the opener as the triggerer and the extra object) stops the use: the dispatcher's answer 0, "skip default",
-    /// which includes a script that runs past its last line. A run that was not applied (refused by the admission, effects the viewer cannot apply, an unreadable or changed file, a requested teleport), an object with no use script and a native trap script the trap code left unmet stop nothing:
-    /// the use goes on (the original's node returns 1 for no attachment: 0x441980 answers 1).
+    /// which includes a script that runs past its last line. A run that was not applied (refused by the admission, effects the viewer cannot apply, an unreadable or changed file, a requested teleport the caller could not take), an object with no use script and a native trap script the trap code left unmet stop nothing:
+    /// the use goes on (the original's node returns 1 for no attachment: 0x441980 answers 1). ARC-WORLD-1805: a run that asked for a teleport the caller took (<see cref="AreaScriptedUseOutcome.Teleport"/>) answers as its script does: the teleport is only a request
+    /// the script recorded (0x4D3380), so "run default" lets the door open first and "skip default" keeps it shut, the request standing either way.
     /// </summary>
     public static bool UseStops(AreaScriptedUse ran)
     {
         ArgumentNullException.ThrowIfNull(ran);
         // The dispatcher's stop at a native trap script (30000..30007) is no answer of a script: the trap code runs those, and a trap whose meeting could not be made here (no cast host, a critter the host cannot apply
         // it for) was left unmet, so the use goes on as before and the door opens (a divergence: the original fires and, for a self-removing trap, consumes it).
-        return ran.Outcome is AreaScriptedUseOutcome.NoTeleport && ran.Run is { } run && run.Outcome == ScrOutcome.SkipDefault && run.Stop != ScrStop.TrapScript;
+        return ran.Outcome is AreaScriptedUseOutcome.NoTeleport or AreaScriptedUseOutcome.Teleport && ran.Run is { } run && run.Outcome == ScrOutcome.SkipDefault && run.Stop != ScrStop.TrapScript;
     }
 
     /// <summary>ARC-DEV-326: whether an examine run (<see cref="RunExamine"/>) leaves the object without a description: the dispatcher's
@@ -1711,17 +1749,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
                 continue;
             }
             if (request.Change == ScrObjectStateChange.HealHitPoints) { ApplyScriptHeal(request); continue; }
-            if (request.Change == ScrObjectStateChange.CastSpell)
-            {
-                // GT183/GT184: the target an NPC of the shown map or the PC; the caster an NPC of the shown map, the PC (ARC-DEV-244: the hero's casting goal) or none (a missing caster handle, 61 and 136). Another map's
-                // object and a non-NPC caster are left as they are.
-                LastCast = null;
-                var free = (request.Value2 & (int)ScrCastFlags.Free) != 0;
-                var unresistable = (request.Value2 & (int)ScrCastFlags.Unresistable) != 0;
-                if ((IsPc(request.Object) || ShownNpc(request.Object)) && (request.Other is not { } by || IsPc(by) || ShownNpc(by)))
-                    LastCast = _world!.ScriptCast!(request.Other is { } caster ? IsPc(caster) ? Arcanum.Simulation.Ai.AiSchedulerRules.Pc : caster.Code : null, IsPc(request.Object) ? Arcanum.Simulation.Ai.AiSchedulerRules.Pc : request.Object.Code, request.Value, free, unresistable);
-                continue;
-            }
+            if (request.Change == ScrObjectStateChange.CastSpell) { ApplyScriptCast(request); continue; }
             if (request.Change == ScrObjectStateChange.StopSpell)
             {
                 // RM6 (0x4593F0): the PC or any object of the shown map; the lookup finds a run only where one holds the object, and the run goes on whatever it answers.
@@ -1974,6 +2002,22 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         if (request.Other is { } attacker && (IsPc(request.Object) || StandsHere(request.Object))) LastAttack = _world!.ScriptAttack!(attacker.Code, request.Object.Code);
     }
 
+    /// <summary>ARC-SCRIPT-1168: whether the world gives the script cast (<see cref="ApplyScriptCast"/>) this host applies; the dialog host asks before it applies anything, so a run it cannot finish is refused whole.</summary>
+    public bool CanApplyScriptCast => _world?.ScriptCast is not null;
+
+    /// <summary>
+    /// One cast request of a run (the six cast actions 48, 61, 118, 121, 122, 136), applied (ARC-SCRIPT-1168: shared by the dialog host, <see cref="AreaScriptHost.Apply"/>). GT183/GT184: the target an NPC of the shown map or the PC; the caster an NPC of the
+    /// shown map, the PC (ARC-DEV-244: the hero's casting goal) or none (a missing caster handle, 61 and 136). Another map's object and a non-NPC caster are left as they are.
+    /// </summary>
+    public void ApplyScriptCast(ScrObjectStateRequest request)
+    {
+        LastCast = null;
+        var free = (request.Value2 & (int)ScrCastFlags.Free) != 0;
+        var unresistable = (request.Value2 & (int)ScrCastFlags.Unresistable) != 0;
+        if ((IsPc(request.Object) || ShownNpc(request.Object)) && (request.Other is not { } by || IsPc(by) || ShownNpc(by)))
+            LastCast = _world!.ScriptCast!(request.Other is { } caster ? IsPc(caster) ? Arcanum.Simulation.Ai.AiSchedulerRules.Pc : caster.Code : null, IsPc(request.Object) ? Arcanum.Simulation.Ai.AiSchedulerRules.Pc : request.Object.Code, request.Value, free, unresistable);
+    }
+
     // ARC-SCRIPT-1679 (FM1): an NPC standing on the shown map, told by identity: a row of the shown map, or the row of a carried follower named by its home map whose live cell the viewer gives here (the tile script's test of the same).
     private bool StandsHere(ScrObjectRef obj) => ShownNpc(obj) || obj.Map != _shownMap && !IsPc(obj) && Row(obj) is { Type: NpcType } && _world?.CritterCell?.Invoke(obj) is not null;
 
@@ -2005,10 +2049,10 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
             LastHeal = _world!.ScriptHeal!(IsPc(request.Object) ? Arcanum.Simulation.Ai.AiSchedulerRules.Pc : request.Object.Code, request.Value);
     }
 
-    // ARC-SCRIPT-1735 (E5-a tail, ledger NS5, NS9), ARC-SCRIPT-1778 (AN10, AN11): change art number (59) writes an object's art id (field 1). The plan of one request: what the run must refuse (an object the viewer cannot draw with
-    // another art), no change (the PC and the critter classes, a destroyed object, an id no ART file names), or the art id to keep. A scenery, a door or window and a container of a loaded map; the rest is refused so the run is left
-    // unapplied before anything applies. A door or window and a container hold their open state in the art id's frame (ledger LK10, LW2), which the action resets to 0 with the new id: the object is closed after it, whatever its frame was,
-    // and its lock fields stay (AN10).
+    // ARC-SCRIPT-1735 (E5-a tail, ledger NS5, NS9), ARC-SCRIPT-1779, ARC-SCRIPT-1778 (door and container rows of the change art number ledger): change art number (59) writes an object's art id (field 1). The plan of one request: what the run must
+    // refuse (an object the viewer cannot draw with another art), no change (the PC and the critter classes, a destroyed object, an id no ART file names, an id equal to the current one), or the art id to keep. Scenery of a loaded map, items with a
+    // loaded row, and a door or window and a container of the shown map; the rest is refused so the run is left unapplied before anything applies. A door or window and a container hold their open state in the art id's frame (ledger LK10, LW2),
+    // which the action resets to 0 with the new id: the object is closed after it, whatever its frame was and also when the id stays, and its lock fields stay.
     private const int ArtSlot = 0;
 
     private readonly record struct ArtChange(string? Refusal, uint? Art, uint Baseline, AreaScriptOpenable? Openable = null);
@@ -2026,9 +2070,12 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
             // A critter class (2 critter, 12 monster) answers the id 0: nothing changes. A unique NPC's art (13) takes a number, but the viewer draws an NPC from its body, not from one art id: not modelled.
             return ObjectArtNumber.IsCritterClass(baseline) ? default : new($"change art number of {obj.Code} is not modelled (an NPC of art class {ObjectArtNumber.Class(baseline)})", null, baseline);
         var portal = row.Type == Arcanum.Data.Combat.CombatFieldReader.PortalType; var container = row.Type == Arcanum.Data.Combat.CombatFieldReader.ContainerType;
-        if (row.Type != SceneryType && !portal && !container)
-            return new($"change art number of {obj.Code} is not modelled (only scenery, a door, a window and a container take a new art, not an object of type {row.Type})", null, baseline);
-        var expected = portal ? 3 : container ? 7 : 4;
+        // ARC-SCRIPT-1779: an item (types 5..14) takes the number in its own range (0x502830) and keeps the ground art as object field 1; its inventory art (field 0x5D) and its paper-doll art are other fields the action does not write.
+        var isItem = row.Type is >= FirstItemType and <= LastItemType;
+        if (row.Type != SceneryType && !isItem && !portal && !container)
+            return new($"change art number of {obj.Code} is not modelled (only scenery, items, a door, a window and a container take a new art, not an object of type {row.Type})", null, baseline);
+        if (isItem && _session.IsItemDestroyed(obj.Code)) return default;
+        var expected = portal ? 3 : container ? 7 : isItem ? 6 : 4;
         var current = _session.QueryObjectArt(new SessionMapId(obj.Map), obj.Code) ?? baseline;
         if (ObjectArtNumber.Class(current) != expected)
             return new($"change art number of {obj.Code} is not modelled (art class {ObjectArtNumber.Class(current)})", null, baseline);
@@ -2036,14 +2083,18 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         if (_world?.ArtExists is not { } exists) return new($"change art number of {obj.Code} needs the module's art index", null, baseline);
         // 0x502220: the new id is written only when its ART file exists.
         if (!exists(next)) return new(null, null, baseline);
-        if (!portal && !container) return new(null, next, baseline);
-        // The openable's lock identity and T0 baseline (the shown map's door or container); the frame reset needs them.
+        if (!portal && !container)
+        {
+            // An id equal to the current one (a number out of range keeps it) writes nothing: no record moves and no revision.
+            return next == current ? new(null, null, baseline) : new(null, next, baseline);
+        }
+        // The openable's lock identity and T0 baseline (the shown map's door or container); the frame reset needs them, and it runs also when the id stays.
         return OpenableOf(obj) is { } openable ? new(null, next, baseline, openable) : new($"change art number of {obj.Code} is not modelled (the object is not a door or container of the shown map)", null, baseline);
     }
 
     private ArtChange ArtPlan(ScrObjectStateRequest request) => ArtPlan(request.Object, request.Value);
 
-    // The change of one request, written as the object's art id (the data's id returns the object to its baseline) and, for a door, window or container, the closed frame (AN10). False when the session refuses.
+    // The change of one request, written as the object's art id (the data's id returns the object to its baseline) and, for a door, window or container, the closed frame (AN16). False when the session refuses.
     private bool ApplyArt(ScrObjectStateRequest request)
     {
         var plan = ArtPlan(request);

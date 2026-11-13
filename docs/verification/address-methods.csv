@@ -590,6 +590,7 @@ src/Arcanum.World/AreaLootArt.cs,Arrange,pending,
 src/Arcanum.World/AreaLootArt.cs,HolderImage,pending,
 src/Arcanum.World/AreaLootArt.cs,Release,pending,
 src/Arcanum.World/AreaLootArt.cs,RightRelease,pending,
+src/Arcanum.World/AreaMapTransfers.cs,QueueDoorTeleport,exempt,reference
 src/Arcanum.World/AreaNewCharacter.cs,BeginName,pending,
 src/Arcanum.World/AreaNewCharacter.cs,WieldStart,pending,
 src/Arcanum.World/AreaNpcSheet.cs,Mark,pending,
@@ -642,6 +643,7 @@ src/Arcanum.World/AreaUseScripts.cs,IsSurrendered,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,IsTrap,pending,
 src/Arcanum.World/AreaUseScripts.cs,MagickCancelPercent,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,MetPcBefore,exempt,host
+src/Arcanum.World/AreaUseScripts.cs,RaiseRefuses,exempt,reference
 src/Arcanum.World/AreaUseScripts.cs,RunBed,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,RunBust,pending,
 src/Arcanum.World/AreaUseScripts.cs,RunCombatPoint,exempt,host
@@ -650,6 +652,7 @@ src/Arcanum.World/AreaUseScripts.cs,RunDying,pending,
 src/Arcanum.World/AreaUseScripts.cs,RunExamine,pending,
 src/Arcanum.World/AreaUseScripts.cs,RunHeartbeat,pending,
 src/Arcanum.World/AreaUseScripts.cs,RunItemUse,pending,
+src/Arcanum.World/AreaUseScripts.cs,RunRaise,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,RunTakingDamage,pending,
 src/Arcanum.World/AreaUseScripts.cs,RunTrapScript,pending,
 src/Arcanum.World/AreaUseScripts.cs,RunUseScript,pending,
@@ -808,6 +811,7 @@ tools/terrain-viewer/Godot/TerrainViewerAreaPanelArt.cs,HoverPortrait,pending,
 tools/terrain-viewer/Godot/TerrainViewerAreaPickPocket.cs,ArmPickPocketFromBar,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAreaPickPocket.cs,HeroFaceSkill,pending,
 tools/terrain-viewer/Godot/TerrainViewerAreaPickPocket.cs,PickPocketOn,exempt,reference
+tools/terrain-viewer/Godot/TerrainViewerAreaPortals.cs,DoorUseScriptStops,exempt,reference
 tools/terrain-viewer/Godot/TerrainViewerAreaPortals.cs,HeroDoorScript,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAreaPortals.cs,HeroDoorUse,pending,
 tools/terrain-viewer/Godot/TerrainViewerAreaPortals.cs,OpenerDoorScript,exempt,host
