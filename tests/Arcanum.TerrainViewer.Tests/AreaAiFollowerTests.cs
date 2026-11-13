@@ -1132,6 +1132,60 @@ public sealed class AreaAiFollowerTests
         StringAssert.Contains(scene.Host.TraceOf(scene.Companion)!.FollowerHit!, "refusal lines 1800-1899 (Dislike)");
     }
 
+    // ARC-AI-1585 (AC1): the lines are said through the host's line speaker (the viewer floats them): the refusal line range of the reason, the accidental line range 2300-2399.
+    private static List<(string Speaker, LoyaltyLines Lines)> Listen(Scene scene)
+    {
+        var said = new List<(string, LoyaltyLines)>();
+        scene.Host.FollowerSpeaks = (speaker, lines) => said.Add((speaker, lines));
+        return said;
+    }
+
+    [TestMethod]
+    public void A_follower_that_leaves_after_a_hit_says_the_refusal_line_of_its_reason()
+    {
+        var scene = OpenFollowerHit(reaction: 40);
+        var said = Listen(scene);
+        scene.Host.HeroAttacked(scene.Companion);
+        AssertLeft(scene, left: true);
+        CollectionAssert.AreEqual(new[] { (scene.Companion, new LoyaltyLines(1800, 1899)) }, said);
+    }
+
+    [TestMethod]
+    public void A_paralysed_follower_that_leaves_says_no_refusal_line()
+    {
+        var scene = OpenFollowerHit(reaction: 40);
+        var said = Listen(scene);
+        Assert.AreEqual(GameSessionDisposition.Changed,
+            scene.Session.WriteObjectFlag(scene.Session.Version, scene.Companion, SessionObjectFlagField.Critter, SessionSpellCaster.ParalysedCritterFlag, true).Disposition);
+        scene.Host.HeroAttacked(scene.Companion);
+        AssertLeft(scene, left: true);
+        Assert.AreEqual(0, said.Count, "the can-speak test fails: no line");
+    }
+
+    [TestMethod]
+    public void A_follower_that_stays_after_a_stray_hit_says_the_accidental_line_one_time_in_three()
+    {
+        var scene = OpenFollowerHit(reaction: 100);
+        var said = Listen(scene);
+        for (var hit = 0; hit < 60; hit++)
+        {
+            scene.Host.HeroStrayAttacked(scene.Companion);
+            AssertLeft(scene, left: false);
+        }
+        Assert.IsTrue(said.Count is > 5 and < 40, $"one time in three of 60 hits: {said.Count}");
+        Assert.IsTrue(said.All(line => line == (scene.Companion, new LoyaltyLines(2300, 2399))));
+    }
+
+    [TestMethod]
+    public void A_paralysed_follower_that_stays_after_a_hit_says_no_accidental_line()
+    {
+        var scene = OpenFollowerHit(reaction: 100);
+        var said = Listen(scene);
+        scene.Session.WriteObjectFlag(scene.Session.Version, scene.Companion, SessionObjectFlagField.Critter, SessionSpellCaster.ParalysedCritterFlag, true);
+        for (var hit = 0; hit < 60; hit++) scene.Host.HeroStrayAttacked(scene.Companion);
+        Assert.AreEqual(0, said.Count);
+    }
+
     [TestMethod]
     public void A_forced_follower_is_accepted_by_the_check_whatever_its_reaction()
     {
