@@ -3,6 +3,7 @@ using Arcanum.Data.Characters;
 using Arcanum.Data.Combat;
 using Arcanum.Data.Content;
 using Arcanum.Data.Messages;
+using Arcanum.Session;
 using Arcanum.Simulation.Character;
 using Arcanum.Simulation.Party;
 
@@ -61,13 +62,14 @@ public sealed class AreaCompanionData
     /// names (fields 5..8), and its level and alignment as the stat getter reads them (ledger AP5): the stored stat, then
     /// every effect of its effect list that changes it (the source's aggregation, <see cref="EffectModifiers"/>), then the
     /// clamp; an effect number without a definition changes nothing, as in the original. Null with <paramref name="refusal"/>
-    /// when the fields do not read or the row is outside the table.
+    /// when the fields do not read or the row is outside the table. ARC-MAGIC-1551: with a <paramref name="session"/> the level and alignment a
+    /// TraitIdx spell wrote into the NPC lie over the stored ones (<see cref="AreaWrittenCritterFields"/>).
     /// </summary>
-    public AreaCompanionFacts? Facts(AreaSpeaker speaker, out string? refusal)
+    public AreaCompanionFacts? Facts(AreaSpeaker speaker, out string? refusal, GameSessionOwner? session = null)
     {
         ArgumentNullException.ThrowIfNull(speaker);
         var read = CombatFieldReader.Read(speaker.Row);
-        if (read.Fields is not { Critter: { } critter, Npc: { } npc }) { refusal = $"fields {read.Failure}"; return null; }
+        if (AreaWrittenCritterFields.Over(session, speaker.Row, read.Fields) is not { Critter: { } critter, Npc: { } npc }) { refusal = $"fields {read.Failure}"; return null; }
         if (Table.Lookup(npc) is not { Status: AiParameterLookupStatus.Found, Row: { } row }) { refusal = $"AI row {npc.AiData} outside the table"; return null; }
         var level = new List<EffectModifier>(); var alignment = new List<EffectModifier>();
         foreach (var entry in critter.Effects ?? [])
