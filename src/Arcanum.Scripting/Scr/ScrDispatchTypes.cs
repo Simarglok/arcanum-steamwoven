@@ -31,7 +31,9 @@ public static class ScrPoint
 {
     public const int Examine = 0, Destroy = 2, Use = 1, Dialog = 9, FirstHeartbeat = 10, Dying = 12, Heartbeat = 19, TakingDamage = 23, LeaderSleeping = 29, Bust = 30, DialogOverride = 31, Count = 36,
         // ARC-MAGIC-042 (TI4): the weapon's hit (7) and miss (8) points, run for a thrown item's strike or landing.
-        Hit = 7, Miss = 8;
+        Hit = 7, Miss = 8,
+        // ARC-SCRIPT-1483: the attacker's critter-hits point (26) and the weapon's critical-hit point (34), run from the hit step with the hit point (7).
+        CritterHits = 26, CriticalHit = 34;
 }
 
 /// <summary>
