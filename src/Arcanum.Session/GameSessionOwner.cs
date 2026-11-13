@@ -169,6 +169,7 @@ public sealed partial class GameSessionOwner : IDisposable
         if (!SessionValidation.Actor(snapshot.Actor)) return Rejected(GameSessionFailure.InvalidActor);
         if (snapshot.Lighting is { } lighting && !SessionValidation.Lighting(lighting)) return Rejected(GameSessionFailure.InvalidLighting);
         if (snapshot.BarLights is { } barLights && !SessionValidation.BarLights(barLights)) return Rejected(GameSessionFailure.InvalidBarLights);
+        if (snapshot.GamblingRoll is { } gamblingRoll && !SessionValidation.GamblingRoll(gamblingRoll)) return Rejected(GameSessionFailure.InvalidGamblingRoll);
         var limits = options.Limits ?? new GameSessionLimits();
         var failure = ImportMaps(snapshot.Maps, snapshot.Objects.State, limits, out var maps);
         if (failure != GameSessionFailure.None) return Rejected(failure);
@@ -294,7 +295,7 @@ public sealed partial class GameSessionOwner : IDisposable
             snapshot.Lighting, sink, events!, frame)
         { _rules = GameRules.For(options.Rules), _difficulty = options.Difficulty, _sound = sound, _danger = danger, _durability = durability, _foundSchematics = found,
           _reputationCatalog = options.Reputations ?? ReputationCatalog.Empty, _hotkeys = hotkeys, _recentActions = recentActions, _scripts = scripts, _pendingHistory = pendingHistory,
-          _spellRuns = spellTable, _maintainBar = maintainBar, _spellLastCost = snapshot.Spells.LastCost, _objectFlags = objectFlags, _traitArt = traitArt, _newspaper = snapshot.Newspaper, _generators = generators, _barLights = snapshot.BarLights };
+          _spellRuns = spellTable, _maintainBar = maintainBar, _spellLastCost = snapshot.Spells.LastCost, _objectFlags = objectFlags, _traitArt = traitArt, _newspaper = snapshot.Newspaper, _generators = generators, _barLights = snapshot.BarLights, _gamblingRoll = snapshot.GamblingRoll };
         foreach (var use in encounterUses) owner._encounterUses[use.Key] = use.Value;
         owner._danger.Here = () => owner._actor.Map;
         // ARC-DEV-208 (MIG14 S2): the saved runs and their steps (a run's step is re-created at its due time).
@@ -1813,7 +1814,7 @@ public sealed partial class GameSessionOwner : IDisposable
             new(clock.ProfileBinding, clock.GameTimestampMs, clock.PauseDisposition, clock.Revision, _frame.RealMs, _frame.AnimationMs),
             new(flags.Version.Revision, flags.Entries.ToArray()), _actor, maps, _story.Capture(), _party.Capture(), _hero?.State,
             _inventory.Capture(), _equipment.Capture(), _durability.Capture(), new(_foundSchematics), _effects.Capture(), _experience.Capture(), _advancement.Capture(),new(_random.Seed, _random.Draws), _life.Capture(), _reactions.Capture(), _combat.Round?.Capture(_combat.SubturnStarts), CaptureCombatMode(), CaptureConcealment(), _danger.CaptureBits(), CaptureEvents(), _lighting, _sound.Capture(),
-            QueryHotkeys(), _inventory.Objects.Capture().WithState(_maps.CaptureFields()).WithLinks(_danger.CaptureLinks()), _scripts.Capture(_hero), CaptureResidency(), CaptureGoals(), CaptureSpells(), CaptureNewspaper(), CaptureFlights(), CaptureGenerators(), CaptureEncounters(), _barLights);
+            QueryHotkeys(), _inventory.Objects.Capture().WithState(_maps.CaptureFields()).WithLinks(_danger.CaptureLinks()), _scripts.Capture(_hero), CaptureResidency(), CaptureGoals(), CaptureSpells(), CaptureNewspaper(), CaptureFlights(), CaptureGenerators(), CaptureEncounters(), _barLights, _gamblingRoll);
     }
 
     /// <summary>Idempotent; disposes the clock and flag owners with the session.</summary>
