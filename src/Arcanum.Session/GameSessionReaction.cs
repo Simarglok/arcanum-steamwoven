@@ -65,11 +65,11 @@ internal sealed class ReactionDomain
 
     /// <summary>The hero's side of a reaction (see <see cref="GameSessionOwner.QueryHeroReactionFacts"/>); the reaction, good and
     /// bad reaction effects are the hero's durable effects' (ARC-WORLD-029).</summary>
-    internal static ReactionPcFacts HeroFacts(HeroDomain hero, EffectDomain effects)
+    internal static ReactionPcFacts HeroFacts(HeroDomain hero, EffectDomain effects, IEnumerable<SessionEffectDefinition>? innate = null)
     {
         var stats = hero.Stats.Query(new(0)).Snapshot!;
-        return new(hero.State.Race, stats.GetEffective(CharacterStat.ReactionModifier), 0, effects.Special(EffectSpecial.Reaction),
-            effects.Special(EffectSpecial.GoodReaction), effects.Special(EffectSpecial.BadReaction),
+        return new(hero.State.Race, stats.GetEffective(CharacterStat.ReactionModifier), 0, effects.Special(EffectSpecial.Reaction, innate),
+            effects.Special(EffectSpecial.GoodReaction, innate), effects.Special(EffectSpecial.BadReaction, innate),
             stats.GetEffective(CharacterStat.Charisma) >= CharacterStatRules.ExtraordinaryThreshold);
     }
 }

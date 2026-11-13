@@ -305,7 +305,7 @@ public sealed partial class GameSessionOwner
         var adjusted = Simulation.Character.ExperienceRules.AdjustForDifficulty(amount, _difficulty);
         var life = _life.Hero!.Value.State;
         if (LifeRules.Evaluate(life, HeroLifeFacts(life)).IsDead) return null;
-        var gain = EffectModifiers.Apply(adjusted, _effects.Maximum(EffectSpecial.XpGain));
+        var gain = EffectModifiers.Apply(adjusted, _effects.Maximum(EffectSpecial.XpGain, HeroInnateRules()));
         var experience = (int)Math.Clamp(hero.Experience + (long)gain, SessionHeroLimits.MinExperience, SessionHeroLimits.MaxExperience);
         return RecalculateHero(experience, gain);
     }
@@ -325,7 +325,7 @@ public sealed partial class GameSessionOwner
         Func<int, int, int>? spend = null;
         if (_advancement.Rules is { } rules && rules.Scheme(schemeNumber) is { } scheme)
         {
-            var modifiers = AdvancementDomain.HeroModifiers(_hero, _effects, life.PoisonLevel);
+            var modifiers = AdvancementDomain.HeroModifiers(_hero, _effects, life.PoisonLevel, HeroInnateRules());
             spend = (level, unspent) =>
             {
                 var outcome = AutoLevelRules.Apply(sheet with { Level = level, UnspentPoints = unspent }, modifiers, scheme, null, npc: false,

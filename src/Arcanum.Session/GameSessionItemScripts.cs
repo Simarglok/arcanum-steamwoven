@@ -327,7 +327,7 @@ public sealed partial class GameSessionOwner
             _definitions[number] = definition;
             var entry = new SessionEffect(number, cause);
             _entries.Add(entry);
-            if (!EffectDomain.Bounded(_entries, _definitions)) return GameSessionFailure.InvalidEffect;
+            if (!EffectDomain.Bounded(_entries, _definitions, innate: _owner.HeroInnateRules())) return GameSessionFailure.InvalidEffect;
             _steps.Add(new(entry, -1));
             return GameSessionFailure.None;
         }
