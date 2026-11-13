@@ -58,6 +58,9 @@ public sealed record DialogConversationRequest(
 /// <paramref name="Purse"/> (ARC-SCRIPT-1304) reads the PC's own gold for a paid <c>r:</c> rumor, where <paramref name="Trainer"/> is not given (it answers the same read).
 /// The <c>r:</c> reply needs the <paramref name="Rumors"/> and <paramref name="Greeting"/> ports (the rumor state, the lines, texts and the draw); a paid one also the
 /// <paramref name="World"/>, <paramref name="Gold"/> and purse (the price on the reaction scale, the payment); without any of them the reply stays blocked.
+/// <paramref name="Directions"/> (ARC-SCRIPT-1533) admits the <c>d:</c> and <c>x:</c> directions replies; they also need the <paramref name="Areas"/> and
+/// <paramref name="Greeting"/> ports (the known areas, the lines), a paying one the <paramref name="World"/>, <paramref name="Gold"/> and purse, and <c>x:</c> the
+/// <paramref name="World"/> port's area marking; without any of them the reply stays a static frontier.
 /// </summary>
 public sealed record DialogConversationPorts(
     IDialogStateQueryPort LocalFlags,
@@ -96,7 +99,8 @@ public sealed record DialogConversationPorts(
     IDialogOriginPort? Origins = null,
     IDialogTrainerPort? Trainer = null,
     IDialogPcGoldPort? Purse = null,
-    IDialogWorldMapPort? WorldMap = null);
+    IDialogWorldMapPort? WorldMap = null,
+    IDialogDirectionsPort? Directions = null);
 
 public enum DialogReactionMode
 {
@@ -508,6 +512,24 @@ public interface IDialogPcGoldPort
     int PcGold(DialogGoldQuery query);
 }
 
+/// <summary>
+/// Where an area lies from the NPC (ARC-SCRIPT-1533, ledger DIR3): <see cref="Rotation"/> is the direction 0..7 from the NPC's location toward the area's
+/// (0x4B8D50; 5 when they coincide) and <see cref="Distance"/> the Chebyshev distance in tiles between them (0x4B96F0).
+/// </summary>
+public readonly record struct DialogBearing(int Rotation, long Distance);
+
+/// <summary>
+/// Directions seam (ARC-SCRIPT-1533, ledger DIR1–DIR7): what the <c>d:</c> and <c>x:</c> replies read of the world. <see cref="AreaName"/> is the area's name as the
+/// module's area table holds it (<c>mes\gamearea.mes</c>, 0x4CAE90), or null for a number outside the table (the original then reads a null name);
+/// <see cref="Bearing"/> is where the area lies from the speaking NPC (the NPC's location, 0x406DA0, against the area's, 0x4CAED0), or null when the owner cannot tell
+/// (an unknown NPC or an area outside the table). Calls are synchronous and serialized by the host; a thrown exception fails the conversation.
+/// </summary>
+public interface IDialogDirectionsPort
+{
+    string? AreaName(int area);
+    DialogBearing? Bearing(DialogParticipantId npc, int area);
+}
+
 /// <summary>Result of JO and UW.</summary>
 public enum DialogJoinResult
 {
@@ -703,6 +725,11 @@ public enum DialogOptionTransition
     /// <summary>ARC-SCRIPT-1321: a Player <c>c:</c> reply with the story and greeting ports: the reply's action runs, then the NPC tells the story line of the current story
     /// state and the PC's class line 1000 is the only way on, which follows the reply's own transition (ledger STY1).</summary>
     Story,
+    /// <summary>ARC-SCRIPT-1533: a Player <c>d:</c> or <c>x:</c> reply with the directions port: the reply's action runs, then the NPC's list of the unknown areas of its list replaces the
+    /// NPC line and the replies (states 0x12 and 0x15, ledger DIR1); its own transition is followed when the player leaves the talk.</summary>
+    Directions,
+    /// <summary>ARC-SCRIPT-1533: an option of the directions talk (an area, the more option, the price's yes) that stays inside it.</summary>
+    DirectionsStep,
     /// <summary>Generated interaction (barter, training, …) this runtime does not perform.</summary>
     Unsupported,
 }

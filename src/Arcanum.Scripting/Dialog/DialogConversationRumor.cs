@@ -100,14 +100,8 @@ public sealed partial class DialogConversation
     }
 
     /// <summary>The price screen (ledger RMR5): the same as the trainer's, with the reply's price on the reaction scale; yes pays and tells the drawn rumor.</summary>
-    private void PresentRumorQuote(int rumor, int basePrice)
-    {
-        if (ReadReactionValue(_talk!.Source) is not { } reaction) return;
-        var price = ReactionPrice(reaction, basePrice);
-        if (!NpcTalkLine(QuoteGroup, price, out var line)) return;
-        if (!PcTalkLine(1, 99, classLine: false, out var yes) || !PcTalkLine(100, 199, classLine: false, out var no)) return;
-        Present(line, [yes with { Choice = new TrainerChoice(TrainerChoiceKind.PayRumor, Price: price, Rumor: rumor) }, no with { Choice = new TrainerChoice(TrainerChoiceKind.Follow) }]);
-    }
+    private void PresentRumorQuote(int rumor, int basePrice) =>
+        PresentPriceScreen(basePrice, price => new TrainerChoice(TrainerChoiceKind.PayRumor, Price: price, Rumor: rumor));
 
     /// <summary>The payment, then the tale (ledger RMR6): too little own gold is the notice of line 2000, else the gold goes to the NPC and the rumor is told.
     /// The tale is built before the payment, so a failure there never follows a spent price (nothing between the payment and the telling can fail in the original).</summary>

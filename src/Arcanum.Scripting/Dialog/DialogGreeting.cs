@@ -322,6 +322,9 @@ internal static class DialogGreeting
             'a' => PcClassLine(context, pcDumb, 1000),
             'c' => PcLine(context, pcDumb, StoryPcLine + storyState, StoryPcLine + storyState),
             'b' => facts.NpcLedByPc ? PcLine(context, pcDumb, 1600, 1699) : PcLine(context, pcDumb, 300, 399),
+            // ARC-SCRIPT-1533: the directions replies' phrases (0x416C10: d: 1300..1399, x: 1400..1499).
+            'd' => PcLine(context, pcDumb, 1300, 1399),
+            'x' => PcLine(context, pcDumb, 1400, 1499),
             'f' => PcLine(context, pcDumb, 800, 899),
             'h' => PcLine(context, pcDumb, 700, 799),
             'i' => PcClassLine(context, pcDumb, 3000),
@@ -395,6 +398,14 @@ internal static class DialogGreeting
         if (line.Message is null) return new(GreetingOutcomeKind.Line, MissingLine(number, file), new(DialogLineOriginKind.MissingLine, number, file));
         return Text(context, line.Message.Bytes.ToArray(), new(DialogLineOriginKind.Generated, number, file), substitute: true);
     }
+
+    /// <summary>
+    /// ARC-SCRIPT-1533 (ledger DIR2, DIR5): a plain NPC line of the range <paramref name="first"/>..<paramref name="last"/> (0x418780: the directions lists' 100..199 and 500..599, the
+    /// direction lines 200..479 and 600..790), the NPC's own override record 11999 + <paramref name="first"/> / 100 first, else a pick of the NPC file by the two genders.
+    /// </summary>
+    public static GreetingOutcome NpcRange(int first, int last, DialogGreetingFacts facts, DialogGreetingSources sources, IDialogGreetingPort port,
+        DialogSpeakerNames names, DialogTextEncoding encoding, int maxTextBytes) =>
+        NpcLine(new Context(facts, sources, port, names, encoding, maxTextBytes), first, last);
 
     /// <summary>ARC-SCRIPT-1150: a PC line of the range <paramref name="first"/>..<paramref name="last"/> (the trainer talk's answers).</summary>
     public static GreetingOutcome PcRange(int first, int last, bool pcDumb, DialogGreetingFacts facts, DialogGreetingSources sources,

@@ -22,9 +22,9 @@ public sealed partial class DialogConversation
 
     private sealed record TrainerTalk(ReplyPlan Reply, StepPlan? Target, DialogOperationSource Source);
 
-    private enum TrainerChoiceKind { Skill, Pay, PayRumor, Follow }
+    private enum TrainerChoiceKind { Skill, Pay, PayRumor, Follow, Area, More, PayDirections }
 
-    private readonly record struct TrainerChoice(TrainerChoiceKind Kind, int Skill = 0, int Price = 0, int Rumor = 0);
+    private readonly record struct TrainerChoice(TrainerChoiceKind Kind, int Skill = 0, int Price = 0, int Rumor = 0, int Area = 0, int Offset = 0);
 
     private sealed record TrainerOption(string Text, DialogLineOrigin? Origin, TrainerChoice Choice);
 
@@ -177,14 +177,20 @@ public sealed partial class DialogConversation
         return Result();
     }
 
-    /// <summary>The price screen (ledger DTR5; the base price on the reaction scale) in the NPC's class line 1000, and the yes and no replies.</summary>
-    private void PresentQuote(int skill)
+    /// <summary>The price screen of a skill (ledger DTR5).</summary>
+    private void PresentQuote(int skill) => PresentPriceScreen(TrainerBasePrice, price => new TrainerChoice(TrainerChoiceKind.Pay, skill, price));
+
+    /// <summary>
+    /// The price screen (ledger DTR5, RMR5, DIR4; 0x418A40): the base price on the reaction scale in the NPC's class line 1000, and the yes and no replies; <paramref name="yes"/> makes
+    /// the choice of the yes reply from the shown price, the no reply leaves by the reply's response.
+    /// </summary>
+    private void PresentPriceScreen(int basePrice, Func<int, TrainerChoice> yes)
     {
         if (ReadReactionValue(_talk!.Source) is not { } reaction) return;
-        var price = ReactionPrice(reaction, TrainerBasePrice);
+        var price = ReactionPrice(reaction, basePrice);
         if (!NpcTalkLine(QuoteGroup, price, out var line)) return;
-        if (!PcTalkLine(1, 99, classLine: false, out var yes) || !PcTalkLine(100, 199, classLine: false, out var no)) return;
-        Present(line, [yes with { Choice = new TrainerChoice(TrainerChoiceKind.Pay, skill, price) }, no with { Choice = new TrainerChoice(TrainerChoiceKind.Follow) }]);
+        if (!PcTalkLine(1, 99, classLine: false, out var accept) || !PcTalkLine(100, 199, classLine: false, out var decline)) return;
+        Present(line, [accept with { Choice = yes(price) }, decline with { Choice = new TrainerChoice(TrainerChoiceKind.Follow) }]);
     }
 
     /// <summary>A notice (ledger DTR7, DTR8): one NPC line and the single way on, the PC line 600..699 (or the class line 1000 after a training).</summary>
@@ -214,8 +220,10 @@ public sealed partial class DialogConversation
             var follow = option.Choice.Kind == TrainerChoiceKind.Follow;
             var reply = _talk!.Reply;
             var rumor = reply.Rumor is not null;
-            offers.Add(new DialogOption(index + 1, response, -1, DialogOptionTextKind.Generated, option.Text, new DialogGeneratedMarker(rumor ? 'r' : reply.Story ? 'c' : 't'),
-                follow ? reply.Transition : rumor ? DialogOptionTransition.RumorStep : DialogOptionTransition.TrainerStep,
+            var directions = reply.Directions;
+            var letter = directions is { } d ? (d.Learn ? 'x' : 'd') : rumor ? 'r' : reply.Story ? 'c' : 't';
+            offers.Add(new DialogOption(index + 1, response, -1, DialogOptionTextKind.Generated, option.Text, new DialogGeneratedMarker(letter),
+                follow ? reply.Transition : directions is not null ? DialogOptionTransition.DirectionsStep : rumor ? DialogOptionTransition.RumorStep : DialogOptionTransition.TrainerStep,
                 follow && reply.Target is not null ? new DialogNodeId(reply.Target.Id) : null,
                 follow ? reply.ScriptLine : null,
                 new DialogOptionToken(_identity, Turn, _generation, response), null, option.Origin));
@@ -240,6 +248,15 @@ public sealed partial class DialogConversation
                 return Result();
             case TrainerChoiceKind.PayRumor:
                 PayAndTell(choice);
+                return Result();
+            case TrainerChoiceKind.Area:
+                PresentArea(choice.Area, choice.Price);
+                return Result();
+            case TrainerChoiceKind.More:
+                PresentAreas(choice.Offset);
+                return Result();
+            case TrainerChoiceKind.PayDirections:
+                PayAndTellWay(choice);
                 return Result();
             default:
                 // The way out: the reply's own response (0x414810 case 0, 1 or 2 on the value the reply was built with), its action not run again.

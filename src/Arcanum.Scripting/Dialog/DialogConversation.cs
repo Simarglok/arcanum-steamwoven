@@ -226,6 +226,9 @@ public sealed partial class DialogConversation
             case DialogOptionTransition.Story:
                 OpenStory(plan!);
                 return Result();
+            case DialogOptionTransition.Directions:
+                OpenDirections(plan!);
+                return Result();
             case DialogOptionTransition.Barter:
                 if (OpenBarter(plan!.Reply.Barter!.Value))
                 {
@@ -404,9 +407,11 @@ public sealed partial class DialogConversation
     {
         var offers = new List<DialogOption>();
         var plans = new Dictionary<int, OfferPlan>();
+        // The cap of five counts the replies whose conditions hold (0x414F50); a directions reply the PC has nothing to ask for is left out afterwards (0x414E60).
+        var eligible = 0;
         foreach (var reply in step.Replies)
         {
-            if (offers.Count == MaxEligible)
+            if (eligible == MaxEligible)
             {
                 break;
             }
@@ -418,6 +423,19 @@ public sealed partial class DialogConversation
             if (open == false)
             {
                 continue;
+            }
+            eligible++;
+            if (reply.Directions is { } directions)
+            {
+                var hidden = DirectionsHidden(directions);
+                if (hidden is null)
+                {
+                    return;
+                }
+                if (hidden == true)
+                {
+                    continue;
+                }
             }
             var block = reply.Block;
             StepPlan? target = null;
@@ -447,7 +465,8 @@ public sealed partial class DialogConversation
                 reply.TextKind,
                 text,
                 reply.Marker,
-                reply.Trainer is not null ? DialogOptionTransition.Trainer : reply.Rumor is not null ? DialogOptionTransition.Rumor : reply.Story ? DialogOptionTransition.Story : reply.Transition,
+                reply.Trainer is not null ? DialogOptionTransition.Trainer : reply.Rumor is not null ? DialogOptionTransition.Rumor : reply.Story ? DialogOptionTransition.Story
+                    : reply.Directions is not null ? DialogOptionTransition.Directions : reply.Transition,
                 reply.Target is null ? null : new DialogNodeId(reply.Target.Id),
                 reply.ScriptLine,
                 new DialogOptionToken(_identity, Turn, _generation, response),
@@ -1527,8 +1546,15 @@ public sealed partial class DialogConversation
         int[]? trainer = null;
         RumorOffer? rumor = null;
         var story = false;
+        DirectionsOffer? directions = null;
         var found = DialogText.Marker(text, out var exact);
-        if (found is { Letter: 'd' or 'q' or 'u' or 'x' })
+        if (found is { Letter: 'd' or 'x' })
+        {
+            // ARC-SCRIPT-1533: the directions replies (0x416C10): with the directions port, the known-area port and the lines the reply is built; its visibility (an area the PC does
+            // not know) is read when the offers are built. Without them it stays a static frontier, as the other replies whose visibility depends on state this runtime cannot read.
+            directions = ToDirections(found is { Letter: 'x' }, ParseDirectionsReply(text));
+        }
+        if (found is { Letter: 'q' or 'u' } || found is { Letter: 'd' or 'x' } && directions is null)
         {
             // Their visibility depends on world, quest or skill state this runtime cannot read.
             frontier = new DialogConversationFrontier(DialogFrontierKind.UnsupportedGeneratedText, node, Response: response);
@@ -1591,6 +1617,15 @@ public sealed partial class DialogConversation
             text = string.Empty;
             phrase = true;
             rumor = offer;
+        }
+        else if (directions is not null)
+        {
+            // ARC-SCRIPT-1533 (ledger DIR1): the original's directions reply (the prefix "d:" or "x:", either case, 0x416C10): a generated phrase (PC lines 1300..1399, 1400..1499) whose
+            // pick runs the reply's action and then lists the areas of the text the PC does not know (states 0x12 and 0x15, 0x414810); the reply's response is followed on leaving the talk.
+            kind = DialogOptionTextKind.Generated;
+            marker = found;
+            text = string.Empty;
+            phrase = true;
         }
         else if (found is { Letter: 'c' } && StoryAvailable)
         {
@@ -1702,7 +1737,7 @@ public sealed partial class DialogConversation
                 block = new DialogOptionBlock(DialogOptionBlockKind.UnsupportedInteraction, transfer.Source);
             }
         }
-        if (block is null && (trainer is not null || rumor is not null || story) && (transfer is not null || action?.Any(OpensWindow) == true))
+        if (block is null && (trainer is not null || rumor is not null || story || directions is not null) && (transfer is not null || action?.Any(OpensWindow) == true))
         {
             // A dialog transfer or a window in the same reply moves the dialog itself: outside this subset, as for b:.
             block = new DialogOptionBlock(DialogOptionBlockKind.UnsupportedInteraction, transfer?.Source ?? action!.First(OpensWindow).Source);
@@ -1769,7 +1804,8 @@ public sealed partial class DialogConversation
             }
         }
         return new ReplyPlan(record, gender.Value, record.IqValue!.Value, condition, kind, text, marker, transition, target, line, action, block,
-            block is null ? insult : null, block is null ? barter : null, block is null ? worldMap : null, phrase, block is null ? trainer : null, block is null ? rumor : null, block is null && story);
+            block is null ? insult : null, block is null ? barter : null, block is null ? worldMap : null, phrase, block is null ? trainer : null, block is null ? rumor : null, block is null && story,
+            block is null ? directions : null);
     }
 
     private static bool CheckTokens(string text, DialogNodeId node, DialogResponseId? response, out DialogConversationFrontier? frontier, out DialogConversationFailure? failure)
@@ -1927,7 +1963,8 @@ public sealed partial class DialogConversation
         bool Phrase = false,
         int[]? Trainer = null,
         RumorOffer? Rumor = null,
-        bool Story = false);
+        bool Story = false,
+        DirectionsOffer? Directions = null);
 
     private sealed record OfferPlan(ReplyPlan Reply, StepPlan? Target);
 }
