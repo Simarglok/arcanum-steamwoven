@@ -57,6 +57,8 @@ public partial class TerrainViewerApp
     {
         if (award?.LevelUps is not { Count: > 0 } levels) return;
         SyncLevelMessageSession();
+        // ARC-UI-1364 (GB15): the level-up lights the Character button as it is written, before its message is posted (0x4A69C0).
+        LightCharacterForLevelUp();
         _pendingLevelUps.AddRange(levels);
         FlushLevelUps(TimeSpan.FromSeconds(1));
     }

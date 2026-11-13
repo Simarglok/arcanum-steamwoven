@@ -1,3 +1,4 @@
+using Arcanum.Data.Area;
 using Arcanum.Session;
 using Arcanum.Simulation.Movement;
 using Arcanum.TerrainViewer.Core;
@@ -16,6 +17,23 @@ public partial class TerrainViewerApp
     // session record the destroy. Script 1724 reads: global flag 2323 is set (the story step the agent comes after), and the triggerer is named 6627 (the agent), then destroy; anything else
     // returns at once. The stage therefore sets the flag and picks the NPC named 6627 of the window. The agent's own heartbeat (script 1717: set day standpoint, get location, run to) is
     // admitted since ARC-SCRIPT-1359, so with the flag set it also runs the agent to its standpoint tile; the stage still orders its walk to an exit tile (an order retargets that run).
+    /// <summary>
+    /// ARC-BUG-1503: a stage's setup that switches on the NPCs of the AI host the map data stores off (object flag 0x2, ARC-SCRIPT-1360: the quest NPCs a heartbeat switches on once the story reaches
+    /// them) and that <paramref name="pick"/> names, the way a script's toggle state does: the session's object-flag change over the data's. Such an NPC is gone (not drawn, not walking) until then,
+    /// so a stage that needs one standing in the window has to switch it on. Returns how many it switched.
+    /// </summary>
+    private int SwitchOnStoredOffNpcs(GameSessionOwner session, AreaAiHost host, Func<string, bool> pick)
+    {
+        // Only the NPCs whose map data has the off bit: the ones a script's toggle state flips this way (a destroyed or script-switched-off NPC stays gone).
+        var stored = _readyArea!.Snapshot.Objects.Where(r => r.Type == 16 && r.EffectiveFields.FirstOrDefault(f => f.Slot == 18) is { Presence: AreaPresence.Value, Number: { } flags } && (flags & 0x2) != 0)
+            .Select(AreaUseScriptHost.EntityId).ToHashSet();
+        var switched = 0;
+        foreach (var npc in host.Scene.Npcs.Where(n => stored.Contains(n.Entity) && host.Gone(n.Entity) && pick(n.Entity)).Select(n => n.Entity).ToArray())
+            if (session.WriteObjectFlag(session.Version, npc, SessionObjectFlagField.Object, 0x2, false, dataHas: true).Disposition == GameSessionDisposition.Changed)
+            { switched++; GD.Print($"ARC-BUG-1503 switched on {npc}"); }
+        return switched;
+    }
+
     private async Task RunAreaNpcTileSmokeAsync()
     {
         static void Require(bool value, string why)
@@ -56,6 +74,13 @@ public partial class TerrainViewerApp
             host = AreaAiHostNow()!;
             // The agent: the living NPC named 6627 that is no follower, with the exit tile it is nearest to.
             var scripts = UseScriptHost(_readyArea.Snapshot);
+            // ARC-BUG-1503: the agent stands in the map data with the object flag off (0x2), like the 270 quest NPCs of the main map (ARC-SCRIPT-1360), and is gone until a script's toggle state
+            // flips the bit. The stage is about the tile script, not the story that brings the agent, so it switches the agent on as the toggle does.
+            if (scripts is not null && SwitchOnStoredOffNpcs(session, host, n => scripts.NameOf(new Arcanum.Scripting.Scr.ScrObjectRef(CurrentAreaMap, n)) == AgentName) > 0)
+            {
+                Frames(5);
+                host = AreaAiHostNow()!;
+            }
             var agents = scripts is null ? [] : host.Scene.Npcs.Where(n => !host.RunCompanions.Contains(n.Entity) && !host.Gone(n.Entity) && host.Tile(n.Entity) is not null
                 && scripts.NameOf(new Arcanum.Scripting.Scr.ScrObjectRef(CurrentAreaMap, n.Entity)) == AgentName).ToArray();
             if (agents.Length == 0)

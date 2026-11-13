@@ -183,7 +183,7 @@ public interface IAreaAiFollowers
 /// cast's play, its release and its goal's end, (ARC-WORLD-105) a missile launched at the play's action frame, (ARC-WORLD-109) a
 /// skill attempt at its action frame, (ARC-WORLD-113) a throw at its action frame, (ARC-WORLD-108) an item use's magic branch and (ARC-DEV-206, GR12)
 /// the cell an NPC the host moved was placed on (<see cref="AreaAiNotice.Cell"/>), for the tile's script.</summary>
-public enum AreaAiNoticeKind { Swing, Hit, Step, Sound, Fidget, Cast, Release, CastEnd, Missile, Skill, Throw, ItemUse, Entered, PickUp }
+public enum AreaAiNoticeKind { Swing, Hit, Step, Sound, Fidget, Cast, Release, CastEnd, Missile, Skill, Throw, ItemUse, Entered, PickUp, Rewield }
 
 /// <summary>ARC-WORLD-092: one notice for the viewer (the attack pose, the hit's sounds and status line, the redraw).</summary>
 public sealed record AreaAiNotice(AreaAiNoticeKind Kind, string Npc, string? Target)
@@ -1211,6 +1211,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     {
         var result = _session.RewieldNpc(_session.Version, npc, allSlots, _events as ISessionRestockWorld);
         Trace(npc).Item = $"rewield {(allSlots ? "all" : "weapon")} {result.Disposition} {result.Failure} " + string.Join(", ", result.Steps.Select(step => $"{step.Slot} off={step.TakenOff ?? "-"} on={step.Wielded ?? "-"}"));
+        // ARC-RENDER-1485: a changed worn item changes the weapon part and shield bit the NPC's body shows (0x465020, ShownWeapon); the viewer draws its body again.
+        if (result.Disposition == GameSessionDisposition.Changed) _notices.Add(new(AreaAiNoticeKind.Rewield, npc, null));
     }
     // ARC-DEV-301: the gate's demaintain (0x4A8570 step 15 → 0x457450) ends the NPC's maintained spell runs through the cast host.
     public void EndMaintainedSpells(string npc) => _scene.Spells?.Invoke()?.EndMaintainedSpells(npc);

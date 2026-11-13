@@ -245,6 +245,7 @@ Each section of the ledger lives in the file of its area; this index keeps one l
 | <a id="trap-state-arc-world-076"></a>[Trap state (ARC-WORLD-076)](ledger/technology.md#trap-state-arc-world-076) | [Technology](ledger/technology.md) | TT1–TT10 |
 | <a id="generators-encounter-creatures-and-body-decay-arc-res-1103"></a>[Generators, encounter creatures and body decay (ARC-RES-1103)](ledger/npc-ai.md#generators-encounter-creatures-and-body-decay-arc-res-1103) | [NPC AI](ledger/npc-ai.md) | PO1–PO12 |
 | <a id="partial-rows-by-risk-ai-slice-1-arc-res-1104"></a>[Partial rows by risk, AI slice 1 (ARC-RES-1104)](ledger/npc-ai.md#partial-rows-by-risk-ai-slice-1-arc-res-1104) | [NPC AI](ledger/npc-ai.md) | VA1–VA21, VAG1–VAG6 |
+| <a id="partial-rows-by-risk-ai-slice-2-arc-res-1104"></a>[Partial rows by risk, AI slice 2 (ARC-RES-1104)](ledger/npc-ai.md#partial-rows-by-risk-ai-slice-2-arc-res-1104) | [NPC AI](ledger/npc-ai.md) | VB1-1–VB4-20, VBG1–VBG18 |
 | <a id="spot-trap-roll-arc-magic-057"></a>[Spot trap roll (ARC-MAGIC-057)](ledger/technology.md#spot-trap-roll-arc-magic-057) | [Technology](ledger/technology.md) | SP1–SP3 |
 | <a id="trap-effects-arc-world-107"></a>[Trap effects (ARC-WORLD-107)](ledger/technology.md#trap-effects-arc-world-107) | [Technology](ledger/technology.md) | TT11–TT16 |
 | <a id="technology-item-scripts-and-generic-item-flags-arc-res-112"></a>[Technology item scripts and generic item flags (ARC-RES-112)](ledger/technology.md#technology-item-scripts-and-generic-item-flags-arc-res-112) | [Technology](ledger/technology.md) | TI1–TI10 |
@@ -263,6 +264,7 @@ Each section of the ledger lives in the file of its area; this index keeps one l
 | <a id="trainer-reply-arc-script-1150"></a>[Trainer reply (ARC-SCRIPT-1150)](ledger/social.md#trainer-reply-arc-script-1150) | [Reaction, reputation and companions](ledger/social.md) | DTR1–DTR9 |
 | <a id="rumor-reply-arc-script-1304"></a>[Rumor reply (ARC-SCRIPT-1304)](ledger/social.md#rumor-reply-arc-script-1304) | [Reaction, reputation and companions](ledger/social.md) | RMR1–RMR9 |
 | <a id="story-reply-arc-script-1321"></a>[Story reply (ARC-SCRIPT-1321)](ledger/social.md#story-reply-arc-script-1321) | [Reaction, reputation and companions](ledger/social.md) | STY1–STY4 |
+| <a id="insult-line-arc-script-1505"></a>[Insult line (ARC-SCRIPT-1505)](ledger/social.md#insult-line-arc-script-1505) | [Reaction, reputation and companions](ledger/social.md) | INS1–INS4 |
 | <a id="unchosen-pre-made-heroes-arc-world-114"></a>[Unchosen pre-made heroes (ARC-WORLD-114)](ledger/scripts.md#unchosen-pre-made-heroes-arc-world-114) | [Scripts and events](ledger/scripts.md) | PM1–PM3 |
 | <a id="script-triggers-arc-script-047"></a>[Script triggers (ARC-SCRIPT-047)](ledger/scripts.md#script-triggers-arc-script-047) | [Scripts and events](ledger/scripts.md) | TG1–TG8 |
 | <a id="heartbeat-world-questions-arc-script-049"></a>[Heartbeat world questions (ARC-SCRIPT-049)](ledger/scripts.md#heartbeat-world-questions-arc-script-049) | [Scripts and events](ledger/scripts.md) | HW1–HW4 |

@@ -31,6 +31,9 @@ public sealed record SpellCastCritter(SessionCritterCombat Combat, int StoredMag
     public IReadOnlyList<int>? StoredBasicSkills { get; init; }
 
     public IReadOnlyList<int>? StoredTechSkills { get; init; }
+
+    /// <summary>ARC-MAGIC-1476 (the TraitIdx component's intelligence guard, 0x4B02B0): the NPC's eight stored tech degrees (the last eight of its spell-and-tech values). Null when the host does not give them.</summary>
+    public IReadOnlyList<int>? StoredDegrees { get; init; }
 }
 
 /// <summary>
@@ -243,7 +246,7 @@ public enum SpellCastEventKind
     /// <summary>ARC-MAGIC-1295 (the TraitIdx component 0x452D80): an entry of the NPC <see cref="SpellCastEvent.Object"/>'s indexed field <see cref="SpellCastEvent.Value"/> (220 base stats, 31 resistances) was written; <see cref="SpellCastEvent.Detail"/> is the index.
     /// The new value is the session's (<see cref="GameSessionOwner.QueryCritterIndexedWrites"/>).</summary>
     TraitIndexWritten,
-    /// <summary>ARC-MAGIC-1295: the stat setter refused the lowering of base stat <see cref="SpellCastEvent.Detail"/> of <see cref="SpellCastEvent.Object"/> (a skill keyed on it needs the higher value, 0x4C6B50): nothing is written and the spell goes on.</summary>
+    /// <summary>ARC-MAGIC-1295: the stat setter refused the lowering of base stat <see cref="SpellCastEvent.Detail"/> of <see cref="SpellCastEvent.Object"/> (a skill keyed on it needs the higher value, 0x4C6B50; ARC-MAGIC-1476: <see cref="SpellCastEvent.Value"/> 1 a known spell rank needs it, 0x4B1B90 or 0x4B1C00, 2 a tech degree needs it, 0x4B02B0; 0 the skill): nothing is written and the spell goes on.</summary>
     TraitIndexRefused,
     /// <summary>ARC-MAGIC-1295: the session refused the TraitIdx write on <see cref="SpellCastEvent.Object"/> (the value is the <see cref="GameSessionFailure"/>): the spell goes on.</summary>
     TraitIndexNotSaved,

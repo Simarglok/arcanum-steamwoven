@@ -2080,8 +2080,8 @@ and layout (below), the other windows the project's.
   runtime number, through the game's map list) and that map loads as the scene the load runs on (the saved cell as the arrival tile, a map
   too large to load whole opening its window around it; no hero, default data rules), then the save loads into it as a load on a published scene
   does (`SceneFlowKind.LoadSave`, `ARC-DEV-387 save chosen before any scene`, one map load instead of the start map's and then the save's). While it
-  loads the menu stays, with the note "loading the save…", and takes no input; it goes when the save is in, and comes back with the reason
-  when the save does not load. A save chosen while the start map is already loading replaces that load. The start map loads when a new game's
+  loads the screen is black with the original's clock in the top-right corner (ARC-UI-1362, the change of place's load screen), the menu under it
+  takes no input and has no wait note; it goes when the save is in, and the menu comes back with the reason when the save does not load. A save chosen while the start map is already loading replaces that load. The start map loads when a new game's
   way begins; a choice that needs it is held as above. **The save folder follows the launch map (ARC-DEV-407):** the load window and Last Save read
   `saves/map` from the start, not only once a scene stands (`AreaSaveFolder`; the lazy start used to read the Crash Site folder `saves`, so the Load Game list was
   empty until the start map had loaded, bug reports 2026-11-11). Not changed: the exterior mode (no `--area-map`) loads the start scene at once and
@@ -2649,9 +2649,33 @@ it, Map opening the world map with the bars hidden and back with no hover, Comba
 the pane, Fate Points opening and closing its window (and, in the same smoke, the [Fate Point window](#fate-point-window-arc-ui-1112)'s own checks), a press on the strip's clock not reaching the world, every sound started, and the
 [clock](#clock-and-date-arc-ui-1111)). Not done: the
 hot-key bar (later slices; the vials since ARC-UI-020, the message log since ARC-UI-023, the vials' art, the follower frames
-and the hovered portrait since [ARC-UI-024](#panel-art-arc-ui-024); the skill pane since ARC-UI-1113), the town map, the
-buttons' lit art the original sets from game events (0x556A90), the toggle to the compact interface (the viewer shows the
+and the hovered portrait since [ARC-UI-024](#panel-art-arc-ui-024); the skill pane since ARC-UI-1113; the buttons' lit art since
+[ARC-UI-1364](#bar-buttons-lit-by-game-events-arc-ui-1364)), the town map, the toggle to the compact interface (the viewer shows the
 compact panel whenever its bars are not drawn).
+
+### Bar buttons lit by game events (ARC-UI-1364)
+
+The top strip's Character, Logbook, Inventory and Map buttons take their lit art from game events, and the Map button's face follows the hero's
+sector, as the 1.0.7.4 executable's light callbacks do (0x556A90, 0x556B70; ledger [GB15–GB17](../research/ledger/ui-audio.md#interface-bars-arc-ui-018)).
+`AreaBarLights` (Godot-free, `AreaGameBar.Lights`) keeps the original's five art words and map mode; the viewer applies the events to it each frame
+(`TerrainViewerBarLights.cs`, before the bars show or hide, so a hidden strip keeps its state):
+
+| Button | Lit art | Lit by | Put out by |
+| --- | --- | --- | --- |
+| Character | 561 `Char_ON` | a level-up of the hero (the level-up hook, as the message is posted) | the character sheet open |
+| Logbook | 560 | a change in the hero's quests, blessings, curses or reputations | the logbook open |
+| Inventory | 559 | an object entering or leaving the hero's held list (not an ammunition merge, not a move inside the list) | the inventory or barter window open |
+| Map | 195 (world face; the town face 558 is lit by no single player event) | a newly known world-map area | the map window open |
+
+A light is not stored while the button's own window is open. The session answers `QueryHeroInterfaceStamp` (three process-local stamps over the logbook,
+held list and known areas) and the viewer lights on a difference after each revision, because the session's writes are many and spread; a quest request not above the quest's state changes nothing in the session and
+lights nothing, where the original's write lights (known difference, issue [#1554](https://github.com/Simarglok/arcanum-steamwoven/issues/1554)). A light that waits (a world map light while the town face shows) is drawn when the face changes, as the original's redraw does. A new session (a new game or a load) takes its first stamps as the baseline and clears the lights; a map transfer keeps the session, so it keeps the lights too. The character sheet of an NPC or a companion is not the hero's and puts nothing out.
+The Map button shows art 193 (the town face) in a sector with a town map and art 194 (the world map, the owner's "blue globe") in any other, the
+original's rule at sector entry (0x564F60: the sector's town map number, 0 for none); the sector is read per frame, which gives the same face.
+**The original blocks nothing by this mode:** the world map gate never reads it (ledger GB17), so no entry is gated here either. `ARC_AREA_MAP_SMOKE_ONLY=bar`
+ends with `ARC-UI-1364 native-smoke bar-lights PASS` (a level-up, a quest, a taken object and a newly known area each light their button with the lit art
+on the button; the window opens put them out; a light with its window open is not stored). **Not done:** the lit state is not in the save (the original
+writes it, 0x54A1A0; a load starts idle: issue [#1542](https://github.com/Simarglok/arcanum-steamwoven/issues/1542)); the reputation and blessing events of other players (no network).
 
 ### Clock and date (ARC-UI-1111)
 
@@ -2684,6 +2708,28 @@ orders; with `DAT_ROOT` the arts' sizes in `AreaGameBarTests`). Native smoke, pa
 it writes no name, a press writes nothing and the release writes the line with the game's two labels and the day/month/year order,
 no sound plays, leaving it clears the entry, and an hour of game time later the window refreshes once. `ARC_AREA_BAR_CAPTURE=PREFIX`
 also saves the strip with and without the window and at three later hours for a graphics report (local files, never committed).
+
+### Experience strip (ARC-UI-1365)
+
+The experience progress strip of the bottom strip, under the hot-key bar, as the 1.0.7.4 executable draws it (ledger
+[GB13–GB14](../research/ledger/ui-audio.md#interface-bars-arc-ui-018), the draw 0x556C20); `AreaExperienceStrip.cs` (Core,
+Godot-free: `AreaExperienceStripLayout`) and `AreaExperienceStripView` on the bar panel.
+
+- **The pieces.** The hero's progress toward the next level in thousandths (the session's `QueryHeroExperience().Progress`, the rule of
+  0x4A6900) is scaled by 11/10; each full hundred draws one whole piece of the original's table in order (interface art 773–782 at their
+  places in the strip, from (211, 37) to (555, 37), at the art's own size), and a remainder above 0 draws the table's last row (art 772 at
+  (216, 47)) cut to the remainder's percent of its width. Nothing draws at the start of a level or without experience data. The art under
+  it is the strip's own (art 184), so nothing is repainted first (the original repaints the rectangle (211, 37) 384 × 14 from it).
+- **When it moves.** The view follows the session every frame. The original repaints at its bar refresh events and after an experience write
+  only when the character sheet is open (GB14); the viewer redraws at once. The arts are read from the player's game with the bars' other art;
+  without them the strip stays empty.
+
+Tests `AreaExperienceStripTests` (the table, the scaling, the whole and cut pieces, the edges, the 32-bit wrap) and `AreaGameBarTests`
+(the art numbers). Native smoke, part of `ARC_AREA_MAP_SMOKE_ONLY=bar` (prints `ARC-UI-1365 experience strip PASS`): a new hero starts at
+progress 0 with no pieces, an award of half the step draws the pieces the table gives for it with the widths the art says and shows on the
+pixels, and a second award of three tenths of the remainder draws more pieces without reaching the level.
+`ARC_AREA_BAR_CAPTURE=PREFIX` also saves the bottom strip before the strip and at the two progress values for a graphics report (local
+files, never committed).
 
 ### Fate Point window (ARC-UI-1112)
 

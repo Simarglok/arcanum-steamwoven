@@ -168,15 +168,16 @@ public partial class TerrainViewerApp
         _loadCancellation?.Cancel();
         _generation = _coordinator.BeginGeneration();
         GD.Print($"ARC-DEV-387 save chosen before any scene: its own map loads, not the start map save={saveName} startLoadInFlight={!_startLoadPending} (ms since start {Time.GetTicksMsec()})");
+        // ARC-UI-1362: the original closes the map and opens the saved one with the clock turning: black with the clock from the choice until the save is in.
+        BeginTransitionLoad();
         _lastLoad = LoadSaveSceneFlowAsync(flow, launch, SaveLibrary.Slot(saveName));
         return null;
     }
 
-    /// <summary>The menu's own words while the save's map loads (the original shows its load screen; here the menu stays).</summary>
-    private void ShowSaveLoadingNotice()
+    /// <summary>The menu's windows as they stand while the save's map loads under the load screen (ARC-UI-1362: no wait note, the screen is black with the clock).</summary>
+    private void ShowSaveLoadingMenu()
     {
-        if (_mainMenu is not { } menu) return;
-        menu.Notice = "loading the save…";
+        if (_mainMenu is null) return;
         RenderMainMenu();
     }
 
@@ -191,6 +192,7 @@ public partial class TerrainViewerApp
             _sceneFlow = null; _menuLoadingSave = false;
             // The start map's load that the save flow gave up is owed again: the next New Game window begins it.
             _startLoadPending = true;
+            ClearTransition(); // ARC-UI-1362: the menu comes back with the reason
             GD.Print("ARC-DEV-387 save refused before any scene: " + resolved.Refusal);
             if (_mainMenu is { } menu) { menu.Notice = resolved.Refusal; RenderMainMenu(); }
             return;
@@ -205,14 +207,17 @@ public partial class TerrainViewerApp
     private void FinishSaveSceneFlow(SceneFlowRequest flow)
     {
         _menuAwaitsScene = false; _menuLoadingSave = false;
-        if (_mainMenu is null) return;
+        if (_mainMenu is null) { ClearTransition(); return; } // ARC-UI-1362: the screen never outlives the menu it began for
         var name = flow.SaveName!;
         if (QuickKeysActive && LoadGame(SaveLibrary.Slot(name), flow.SavePrefix ?? "Load ", MainMenuTables(), AreaLoadMessageRoute.Result))
         {
             GD.Print($"ARC-DEV-387 save loaded on its own map save={name} (ms since start {Time.GetTicksMsec()})");
             EndMainMenu("save " + name);
+            // ARC-UI-1362: the save is in: the clock goes and the black gives the game back (a save that sent the hero to another map keeps it until that map is there).
+            if (_mapHandoff is not { Kind: not MapHandoffKind.Stream }) ReleaseTransition();
             return;
         }
+        ClearTransition(); // ARC-UI-1362: the load failed, the menu comes back with the reason
         var why = QuickKeysActive ? _quickSaveStatus : "the save's scene has no game session";
         // The menu comes back over the scene the save opened on, as an early menu attaches to its scene.
         _menuAwaitsScene = true;
@@ -227,6 +232,7 @@ public partial class TerrainViewerApp
         if (_menuLoadingSave)
         {
             _menuLoadingSave = false;
+            ClearTransition(); // ARC-UI-1362
             GD.Print("ARC-DEV-387 the save's map did not load: the menu stays");
             if (_mainMenu is { } loading) { loading.Notice = "the save's map did not load (" + _lastPublishedFailure + ")"; RenderMainMenu(); }
             return;
@@ -299,14 +305,18 @@ public partial class TerrainViewerApp
         var hero = before!.QueryHero()!.Prototype;
         var map = CurrentAreaMap;
         _menuAwaitsScene = true; // the menu stands as it did before any scene (the scene itself goes when the load begins)
+        var loadScreens = _transitionLoads;
         choose(10); choose(52);
-        require(_menuLoadingSave && _sceneFlow is { Kind: SceneFlowKind.LoadSave } && MainMenuOpen && _mainMenu!.Notice?.Contains("loading the save", StringComparison.Ordinal) == true,
-            $"Last Save is loading the save's own map: loading {_menuLoadingSave} flow {_sceneFlow?.Kind} {_mainMenu?.Notice}");
+        // ARC-UI-1362: the screen is black with the clock from the choice (no wait note on the menu).
+        require(_menuLoadingSave && _sceneFlow is { Kind: SceneFlowKind.LoadSave } && MainMenuOpen && _transitionScreen.Loading && _transitionScreen.Alpha >= 1 && string.IsNullOrEmpty(_mainMenu!.Notice),
+            $"Last Save is loading the save's own map under the load screen: loading {_menuLoadingSave} flow {_sceneFlow?.Kind} screen {_transitionScreen.Loading} {_transitionScreen.Alpha} note {_mainMenu?.Notice}");
         choose(50);
         require(_menuLoadingSave && _mainMenu!.Window == AreaMenuWindow.SinglePlayer, "the loading menu takes no other input");
         for (var i = 0; i < 6000 && (_menuLoadingSave || _sceneFlow is not null || MainMenuOpen); i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
         require(!MainMenuOpen && _mainMenu is null && !_menuLoadingSave && !_menuAwaitsScene && _sceneFlow is null,
             $"the save's load ended and the menu went: open {MainMenuOpen} loading {_menuLoadingSave} flow {_sceneFlow?.Kind} status {_quickSaveStatus}");
+        require(_transitionLoads == loadScreens + 1 && !_transitionScreen.Covering && _transitionPanel is { Visible: false },
+            $"the load screen showed once and went with the save's load: loads {_transitionLoads - loadScreens} covering {_transitionScreen.Covering}");
         require(_areaSession is { } loaded && !ReferenceEquals(loaded, before) && loaded.QueryHero()?.Prototype == hero && CurrentAreaMap == map && QuickKeysActive,
             $"the save's session is the running one on its own map: {_quickSaveStatus} map {CurrentAreaMap} (was {map})");
         GD.Print("ARC-DEV-387 native-smoke last-save-before-scene PASS " + System.Text.Json.JsonSerializer.Serialize(new { Map = map, Status = _quickSaveStatus }));

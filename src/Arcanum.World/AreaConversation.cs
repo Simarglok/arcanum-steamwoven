@@ -1193,8 +1193,8 @@ public static class AreaConversationText
         DialogConversationPhase.Ended when conversation.End!.Kind == DialogEndKind.ReturnToScript =>
             $"[dialog ended; the caller script would continue at SCR line {conversation.End.ScriptLine!.Value.Value} (not executed)]",
         DialogConversationPhase.Ended when conversation.End!.Kind == DialogEndKind.NpcFinalLine => "[dialog ended with the NPC's final line]",
-        DialogConversationPhase.Ended when conversation.End!.Kind == DialogEndKind.Insulted => "[the insult ended the dialog: the NPC's generated reply is not loaded]",
-        DialogConversationPhase.Ended when conversation.End!.Kind == DialogEndKind.HostileRefusal => "[the NPC turned hostile and ended the dialog: its generated reply is not loaded]",
+        DialogConversationPhase.Ended when conversation.End!.Kind == DialogEndKind.Insulted => "[the insult ended the dialog with the NPC's last line]",
+        DialogConversationPhase.Ended when conversation.End!.Kind == DialogEndKind.HostileRefusal => "[the NPC turned hostile and ended the dialog with its last line]",
         DialogConversationPhase.Ended => "[dialog closed]",
         DialogConversationPhase.AtFrontier => $"[stopped at a frontier: {conversation.Frontier!.Kind} at node {conversation.Frontier.Node.Value}{Where(conversation.Frontier.Source)}]",
         DialogConversationPhase.Failed => $"[failed: {conversation.Failure!.Kind} at node {conversation.Failure.Node.Value}{Where(conversation.Failure.Source)}]",

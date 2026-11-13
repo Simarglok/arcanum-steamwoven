@@ -163,6 +163,12 @@ public sealed class AreaUseScriptHostTests
                 Do(new(ScrCatalogue.Action.LoopFor, (15, 0))),
                 If(new(ScrCatalogue.Condition.IsNamed, (10, 0), N(1673)), new(ScrCatalogue.Action.CreateObject, N(10041), (10, 0)), new(0)),
                 Do(new(ScrCatalogue.Action.LoopEnd)), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
+            // 732 (ARC-SCRIPT-1166, E5-e, PG15): the generator's loop with a loop break at the first marker: a create next to every scenery up to and including the marker, then the lines after the loop end.
+            Write("scr/00732break.scr", Program(Do(new(ScrCatalogue.Action.AssignObject, (Attachee, 0), (Triggerer, 0))),
+                Do(new(ScrCatalogue.Action.LoopFor, (15, 0))),
+                Do(new(ScrCatalogue.Action.CreateObject, N(10041), (10, 0))),
+                If(new(ScrCatalogue.Condition.IsNamed, (10, 0), N(1673)), new(ScrCatalogue.Action.LoopBreak), new(0)),
+                Do(new(ScrCatalogue.Action.LoopEnd)), Do(new(ScrCatalogue.Action.SetGlobalFlag, N(67))), Do(Skip)));
             // 731 (ARC-DEV-371): create object prototype 20 (a critter of the test world) next to the attachee, then prototype 10 (an item), then the critter again.
             Write("scr/00731critters.scr", Program(Do(new(ScrCatalogue.Action.CreateObject, N(20), (Attachee, 0))), Do(new(ScrCatalogue.Action.CreateObject, N(10041), (Attachee, 0))),
                 Do(new(ScrCatalogue.Action.CreateObject, N(20), (Attachee, 0))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
@@ -483,6 +489,34 @@ public sealed class AreaUseScriptHostTests
             var refused = noWorld.RunPlaced(sector, session.Rules.Scripts);
             Assert.AreEqual(AreaScriptedUseOutcome.EffectsRejected, refused.Outcome, refused.Detail);
             StringAssert.Contains(refused.Detail, "no item prototype");
+        });
+    }
+
+    // ARC-SCRIPT-1166 (E5-e, PG15): the sector and heartbeat sets hold loop break; a sector script's loop over the PC's vicinity ends at the first marker and goes on after the loop end, and a use click's set holds it too.
+    [TestMethod]
+    public void A_loop_break_ends_a_sector_scripts_loop_at_the_first_marker_and_the_run_goes_on_after_the_loop_end()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            foreach (var set in new[] { AreaUseScriptHost.Admission, AreaUseScriptHost.PlacedAdmission, AreaUseScriptHost.HeartbeatAdmission, AreaUseScriptHost.DyingAdmission })
+                Assert.IsTrue(set.Actions.Contains(ScrCatalogue.Action.LoopBreak), set.Id);
+            Assert.IsFalse(AreaScriptHost.Admission.Actions.Contains(ScrCatalogue.Action.LoopBreak), "the dialog host has no loops");
+            var marker = Row(2, 3, 0, 1673);
+            var second = Row(3, 3, 0, 1673);
+            var herb = new AreaPrototypeItem(new(SessionItemType.Food, 10061, 7001, 10061), 0x1234, new(1));
+            var world = new AreaScriptWorld(() => new CellCoord(12, 22), _ => false, number => number == 10041 ? herb : null, () => new OpenMap());
+            var host = new AreaUseScriptHost(session, 1, [Gate(0), marker, second], [Inventory()], content, world);
+            var list = host.SceneryInVicinity(host.Pc);
+            Assert.AreEqual(3, list.Count);
+            var firstMarker = list.ToList().FindIndex(o => host.NameOf(o) == 1673);
+            var sector = new Arcanum.Data.Maps.MapPlacedScript(Arcanum.Data.Maps.MapTransitionTrigger.SectorEntry, new(0, 0), -1, new(0, 0), 0, 0, 732);
+            var ran = host.RunPlaced(sector, session.Rules.Scripts);
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, ran.Outcome, ran.Detail);
+            var created = host.TakeCreations();
+            Assert.AreEqual(firstMarker + 1, created.Count, "a create next to every scenery up to and including the first marker, none after it");
+            Assert.IsTrue(created.Count < 3);
+            Assert.IsTrue(host.GlobalFlag(67), "the line after the loop end ran");
         });
     }
 

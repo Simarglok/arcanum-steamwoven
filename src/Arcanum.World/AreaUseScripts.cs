@@ -161,6 +161,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     /// counter operand with any index. ARC-DEV-157 (bug B23): plus get stat (33) of <see cref="ScrAdmissionSet.S22"/>, answered for the PC only
     /// (<see cref="EffectiveStat"/>). ARC-DEV-205 (bug B22): plus unfog town map (113) of <see cref="ScrAdmissionSet.S24"/>, which reveals the town map
     /// in the session (<see cref="AreaScriptStory"/>); the wreck's sector script 3036 and one use script carry it (the census counts two scripts).
+    /// ARC-SCRIPT-1166: plus loop break (20) of <see cref="ScrAdmissionSet.S40"/>, which leaves the run's loop over the vicinity early.
     /// ARC-MAGIC-030 (MT21b, ledger SC1–SC6): plus the spell conditions body spell (14), influenced by spell (35), knows spell (48) and mastered spell college (49) of
     /// <see cref="ScrAdmissionSet.S31"/>, which this host answers (<see cref="IScrSpellQueries"/>), and give spell mastery in college (112), which it writes through the session.
     /// ARC-SCRIPT-1241: plus fade (103) of <see cref="ScrAdmissionSet.S35"/>, which jumps the game clock and hands its movie to the viewer (<see cref="TakeFades"/>); the use script 2862 of the Vendigroth
@@ -172,7 +173,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
                 ScrCatalogue.Action.CallScript, ScrCatalogue.Action.AssignObject, ScrCatalogue.Action.GetObjectType,
                 ScrCatalogue.Action.SetPcQuestState, ScrCatalogue.Action.MarkMapLocation, ScrCatalogue.Action.SetRumor,
                 ScrCatalogue.Action.AddReputation, ScrCatalogue.Action.RemoveReputation,
-                ScrCatalogue.Action.Random, ScrCatalogue.Action.LoopFor, ScrCatalogue.Action.LoopEnd, ScrCatalogue.Action.CreateObject, ScrCatalogue.Action.GetStat,
+                ScrCatalogue.Action.Random, ScrCatalogue.Action.LoopFor, ScrCatalogue.Action.LoopEnd, ScrCatalogue.Action.LoopBreak, ScrCatalogue.Action.CreateObject, ScrCatalogue.Action.GetStat,
                 ScrCatalogue.Action.UnfogTownMap, ScrCatalogue.Action.GiveSpellMastery, .. ScrAdmissionSet.StoryActions, ScrCatalogue.Action.Fade, .. ScrAdmissionSet.NpcStateHostActions, .. ScrAdmissionSet.WorldObjectHostActions]),
         ScrAdmissionSet.S4.ValueKinds.Concat(ScrAdmissionSet.StoreValueKinds),
         ScrAdmissionSet.S4.FocusKinds.Concat([ScrFocusKind.LocalObject, ScrFocusKind.CurrentLoopedObject, ScrFocusKind.EverySceneryInVicinity]),
@@ -214,11 +215,12 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     /// (33), and the actions call script in (54, through the session's queue), distance between (71) and set faction (134) of
     /// <see cref="ScrAdmissionSet.S18"/>. ARC-MAGIC-030 (MT21b): plus the spell conditions (14, 35, 48, 49) and give spell mastery in college (112) of <see cref="ScrAdmissionSet.S31"/>.
     /// ARC-SCRIPT-1359: plus get location (95) of <see cref="ScrAdmissionSet.S38"/> (the Crash Site Molochean agent's heartbeat 1717 reads where it stands before it runs to its tile).
+    /// ARC-SCRIPT-1166: plus loop break (20) of <see cref="ScrAdmissionSet.S40"/>.
     /// </summary>
     public static ScrAdmissionSet HeartbeatAdmission { get; } = new("S2-area-heartbeat-state-kill-talk-world",
         ScrAdmissionSet.S2.Conditions.Concat([ScrCatalogue.Condition.FollowingPc, ScrCatalogue.Condition.IsNamed, ScrCatalogue.Condition.IsDead,
             ScrCatalogue.Condition.IsSwitchedOff, ScrCatalogue.Condition.HasReputation, ScrCatalogue.Condition.PcQuestState, .. ScrAdmissionSet.SpellQueryConditions, .. ScrAdmissionSet.StoryConditions, .. ScrAdmissionSet.WorldObjectConditions]),
-        ScrAdmissionSet.S2.Actions.Concat([ScrCatalogue.Action.ToggleState, ScrCatalogue.Action.Kill, ScrCatalogue.Action.LoopFor, ScrCatalogue.Action.LoopEnd,
+        ScrAdmissionSet.S2.Actions.Concat([ScrCatalogue.Action.ToggleState, ScrCatalogue.Action.Kill, ScrCatalogue.Action.LoopFor, ScrCatalogue.Action.LoopEnd, ScrCatalogue.Action.LoopBreak,
             ScrCatalogue.Action.GetObjectType, ScrCatalogue.Action.CallScriptEx, ScrCatalogue.Action.Dialog, ScrCatalogue.Action.CallScriptIn,
             ScrCatalogue.Action.DistanceBetween, ScrCatalogue.Action.GetLocation, ScrCatalogue.Action.SetFaction, ScrCatalogue.Action.WalkTo, ScrCatalogue.Action.RunTo,
             ScrCatalogue.Action.HealFatigue, ScrCatalogue.Action.PerformAnimation, ScrCatalogue.Action.StealCoins, ScrCatalogue.Action.BecomeProne, ScrCatalogue.Action.GiveSpellMastery, .. ScrAdmissionSet.StoryActions, .. ScrAdmissionSet.NpcStateHostActions, .. ScrAdmissionSet.WorldObjectHostActions, .. CastActions, .. DamageActions]),
@@ -489,8 +491,10 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     private readonly record struct ObjectBook(SpellBook? Book);
 
     // The loaded advancement of an NPC row as its map data gives it (the effects change no sheet value), null when its fields give no admissible sheet.
+    // ARC-MAGIC-1475: the base stats a spell wrote into the NPC lie over its stored ones (the sheet a script reads and the one a recruit is seeded from).
     private SessionNpcAdvancement? AdvancementOf(ScrObjectRef npc) =>
-        Row(npc) is { } row && Arcanum.Data.Combat.CombatFieldReader.Read(row).Fields is { } fields ? AreaAdvancement.Npc(npc.Code, fields, _ => null)?.Loaded : null;
+        Row(npc) is { } row && Arcanum.Data.Combat.CombatFieldReader.Read(row).Fields is { } fields
+            ? AreaAdvancement.Npc(_session, npc.Code, fields, _ => null)?.Loaded : null;
 
     // An object's tile: the PC's live cell (the session's placement without a world), an NPC's live cell (ARC-SCRIPT-047), a row's world cell.
     private CellCoord? Place(ScrObjectRef obj)

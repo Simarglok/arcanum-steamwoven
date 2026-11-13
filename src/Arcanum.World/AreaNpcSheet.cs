@@ -40,8 +40,10 @@ public static class AreaNpcSheet
     {
         ArgumentNullException.ThrowIfNull(session);
         ArgumentNullException.ThrowIfNull(fields);
-        if (fields.Critter is not { } critter) return null;
         var entity = loaded.Loaded.Entity;
+        // ARC-MAGIC-1475: the base stats and resistances a spell wrote into the NPC lie over its stored fields (experience, alignment, gender, the resistance lines).
+        fields = session.QueryCritterIndexedWrites(entity).Apply(fields);
+        if (fields.Critter is not { } critter) return null;
         var sheet = (session.QueryNpcAdvancement(entity) ?? loaded.Loaded).Sheet;
         var modifiers = loaded.Modifiers;
         var stored = critter.BaseStats;
