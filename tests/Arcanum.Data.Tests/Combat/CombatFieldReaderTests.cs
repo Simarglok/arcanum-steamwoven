@@ -397,6 +397,20 @@ public sealed class CombatFieldReaderTests
         Assert.AreEqual(fromPrototype.Fields.Npc!.Faction, fromRow.Fields.Npc!.Faction);
     }
 
+    // ARC-MAGIC-1169 (E1-f, ledger SUM5): a Summon makes the experience worth and pool 0 and copies the summoner's alignment (stat 19) and, for an NPC summoner, its faction (field 292, slot 81); a PC summoner leaves the prototype's faction.
+    [TestMethod]
+    public void CreatedSummonRowTakesTheSummonersAlignmentAndAnNpcSummonersFaction()
+    {
+        var files = Files((29001, Npc, NpcValues()));
+        var npcSummoner = CombatFieldReader.Read(CreatedObjectRows.Critter(files, 29001, "oid:critter:7", 3, 412, 377, new(Alignment: -450, Faction: 31)).Row!).Fields!;
+        Assert.AreEqual((0, 0, 31), (npcSummoner.Npc!.ExperienceWorth, npcSummoner.Npc.ExperiencePool, npcSummoner.Npc.Faction));
+        Assert.AreEqual(-450, npcSummoner.Critter!.BaseStats[CreatedObjectRows.AlignmentStat]);
+        var pcSummoner = CombatFieldReader.Read(CreatedObjectRows.Critter(files, 29001, "oid:critter:8", 3, 412, 377, new(Alignment: 200)).Row!).Fields!;
+        Assert.AreEqual((0, 11, 200), (pcSummoner.Npc!.ExperienceWorth, pcSummoner.Npc.Faction, pcSummoner.Critter!.BaseStats[CreatedObjectRows.AlignmentStat]), "the prototype's faction 11 stays");
+        var unknown = CombatFieldReader.Read(CreatedObjectRows.Critter(files, 29001, "oid:critter:9", 3, 412, 377, new(null)).Row!).Fields!;
+        Assert.AreEqual((0, 11, 0), (unknown.Npc!.ExperienceWorth, unknown.Npc.Faction, unknown.Critter!.BaseStats[CreatedObjectRows.AlignmentStat]), "no known summoner: the prototype's alignment (0 here) and faction");
+    }
+
     [TestMethod]
     public void CreatedCritterRowRefusesWhatIsNoCritterOrNoPrototype()
     {

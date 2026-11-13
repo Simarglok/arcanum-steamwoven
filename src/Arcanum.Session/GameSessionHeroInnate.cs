@@ -90,7 +90,7 @@ public sealed partial class GameSessionOwner
     /// gender 0, effect 0x14A (gender cause), through 0x4E9F70; each moves the hero's damage by the change of its maximums as every effect step does (<c>PrepareEffects</c>, current hit points and fatigue stay, never below no damage). The hero's
     /// race, gender, innate stat effects and innate skill changes are the state's, and its character owner is built from them, so the owner is built again from the new state and the durable entries are applied to it again, and the
     /// effects of the old race leave with it. The rules of the effects are the ones attached with <see cref="AttachInnateEffects"/> (their stat changes and, as at the hero's creation, their basic and tech skill changes; ARC-MAGIC-1700: their resistance changes are read from the rules at each question, <c>HeroEffectResistances</c>, so
-    /// a swap moves the hero's resistances with the entry; the other changes of an innate effect, the special values and the age change, are not modelled for the hero). Refused, in order: no hero (<see cref="GameSessionFailure.InvalidHero"/>), a gender outside 0..1 or a race outside the character rules' ten (the table's 11 has none:
+    /// a swap moves the hero's resistances with the entry; ARC-MAGIC-1723: their special changes (maximum hit points and fatigue, reaction, good and bad reaction, experience gain) are read over the innate entries too, and each step of the swap moves the damage by them; the age change of an innate effect is not modelled for the hero). Refused, in order: no hero (<see cref="GameSessionFailure.InvalidHero"/>), a gender outside 0..1 or a race outside the character rules' ten (the table's 11 has none:
     /// <see cref="GameSessionFailure.InvalidChangeKey"/>), the rule of the effect to add not attached (<see cref="GameSessionFailure.EffectsUnavailable"/>), a stored stat the new race's ranges do not admit or more skill changes than a
     /// cause holds (<see cref="GameSessionFailure.InvalidHero"/>), a durable effect, blessing or curse whose number is the new innate effect's, the life rules or the event budget (<see cref="GameSessionFailure.InvalidEffect"/>,
     /// <see cref="GameSessionFailure.EventBudgetExceeded"/>), the version, the revision. Nothing is written for a refusal.
@@ -113,14 +113,20 @@ public sealed partial class GameSessionOwner
 
     /// <summary>
     /// ARC-MAGIC-1700: the resistance changes the hero's resistance readers lay over the stored array, the worn armour and the poison bonus (the original's combat resistance getter reads the whole effect list, the innate entries first): the changes of the innate
-    /// effects of the hero's race and gender (<c>64 + race</c>, then 330 for a woman; the rules are the ones attached with <see cref="AttachInnateEffects"/>, a number without an attached rule has none) and then the durable entries' in list order.
-    /// <paramref name="state"/> is the hero state the innate entries are taken from (the live one by default; a trial of a race or gender swap passes the state it ends with).
+    /// effects of the hero's race and gender (see <see cref="HeroInnateRules"/>) and then the durable entries' in list order.
     /// </summary>
-    private EffectResistances HeroEffectResistances(IEnumerable<SessionEffect>? entries = null, IReadOnlyDictionary<int, SessionEffectDefinition>? definitions = null, SessionHeroState? state = null)
-    {
-        var innate = (state ?? _hero?.State) is { } held ? EffectDomain.Innate(held).Select(entry => InnateRule(entry.Number)).OfType<SessionEffectDefinition>() : [];
-        return EffectDomain.Resistances(entries ?? _effects.Entries, definitions ?? _effects.Definitions, innate);
-    }
+    private EffectResistances HeroEffectResistances(IEnumerable<SessionEffect>? entries = null, IReadOnlyDictionary<int, SessionEffectDefinition>? definitions = null, IEnumerable<SessionEffectDefinition>? innate = null) =>
+        EffectDomain.Resistances(entries ?? _effects.Entries, definitions ?? _effects.Definitions, innate ?? HeroInnateRules());
+
+    /// <summary>
+    /// ARC-MAGIC-1700, ARC-MAGIC-1723: the rules of the hero's innate effects in list order (the race effect <c>64 + race</c>, then 330 for a woman; the rules are the ones attached with <see cref="AttachInnateEffects"/>, a number without an attached
+    /// rule has none). <paramref name="state"/> is the hero state the entries are taken from (the live one by default; a trial of a race or gender swap passes the state it ends with), <paramref name="without"/> a cause whose entry has left (the removal
+    /// that opens the setter's case, before the add).
+    /// </summary>
+    internal ImmutableArray<SessionEffectDefinition> HeroInnateRules(SessionHeroState? state = null, EffectCause? without = null) =>
+        (state ?? _hero?.State) is { } held
+            ? [.. EffectDomain.Innate(held).Where(entry => entry.Cause != without).Select(entry => InnateRule(entry.Number)).OfType<SessionEffectDefinition>()]
+            : [];
 
     private static bool SameEffect(StatEffectDefinition? a, StatEffectDefinition? b) =>
         a is null ? b is null : b is not null && a.EffectId == b.EffectId && a.Modifiers.SequenceEqual(b.Modifiers);
@@ -141,11 +147,13 @@ public sealed partial class GameSessionOwner
             if (rule is null) return GameSessionFailure.EffectsUnavailable;
         }
         // The removal: the innate stat effect and skill changes of the cause leave (a gender or race the state holds no effect for loses none).
-        var stages = new List<SessionHeroState>();
+        var stages = new List<HeroStage>();
         var kept = state.InnateSkills.Where(change => change.Cause != cause).ToImmutableArray();
         var removed = state.WithInnate(state.Race, state.Gender, gender ? state.RaceEffect : null, gender ? null : state.GenderEffect, kept);
         var heldEffect = gender ? state.GenderEffect is not null : state.RaceEffect is not null;
-        if (heldEffect || kept.Length != state.InnateSkills.Length) stages.Add(removed);
+        // ARC-MAGIC-1723: an entry that carries only resistance or special changes leaves too (it moves the maxima).
+        var left = HeroInnateRules(state, cause);
+        if (heldEffect || kept.Length != state.InnateSkills.Length || left.Length != HeroInnateRules(state).Length) stages.Add(new(removed, left));
         // The store and the add.
         var race = gender ? state.Race : (CharacterRace)value;
         var sex = gender ? value == 0 ? CharacterGender.Female : CharacterGender.Male : state.Gender;
@@ -156,10 +164,13 @@ public sealed partial class GameSessionOwner
             ? state.InnateSkills.Where(change => change.Cause == EffectCause.Race).Concat(rule is null ? [] : Skills(rule, cause))
             : (rule is null ? [] : (IEnumerable<SessionInnateSkillChange>)Skills(rule, cause)).Concat(state.InnateSkills.Where(change => change.Cause == EffectCause.Gender))];
         var final = state.WithInnate(race, sex, raceEffect, genderEffect, innateSkills);
-        stages.Add(final);
+        var innate = HeroInnateRules(final);
+        stages.Add(new(final, innate));
         // A durable effect, blessing or curse with the number of the innate effect now in the list would have been refused at its add (the list holds the innate entries first).
         if (_effects.Entries.Any(entry => EffectDomain.IsInnate(final, entry.Number)) || _effects.Blessings.Concat(_effects.Curses).Any(entry => EffectDomain.IsInnate(final, entry.Effect)))
             return GameSessionFailure.InvalidEffect;
+        // ARC-MAGIC-1723: the durable entries with the new innate ones stay within the bounds of the reaction and maximum changes (the innate entries cannot be removed, so no later removal is refused for them).
+        if (!EffectDomain.Bounded(_effects.Entries, _effects.Definitions, innate: innate)) return GameSessionFailure.InvalidEffect;
         return PrepareEffects([], new(_effects.Definitions), 0, stages, out prepared);
     }
 

@@ -91,6 +91,7 @@ public partial class TerrainViewerApp
                     GetViewport().GetTexture().GetImage().SavePng(System.IO.Path.ChangeExtension(lensShot, ".lens.png"));
                 }
                 GD.Print($"ARC-UI-073 native-smoke worldmap-art PASS offset={artView.Offset} max={max}");
+                await WorldMapWindowArtAsync("worldmap", artView);
                 // ARC-UI-133 (WM36): through the real pointer route (so an input layer over the hole would be seen), a left release in the PC lens closes the
                 // window and a press, or a release just outside the square, does not; the key W opens it again.
                 async Task LensFrames()
@@ -423,6 +424,16 @@ public partial class TerrainViewerApp
         }
     }
 
+    // ARC-UI-1197: with ARC_AREA_WINDOW_ART (the shared opt-in part of the window smokes) the open window's frame (art 138, the one the world map and the town map draw) is checked in
+    // the generated interface at the window's own device scale (the whole factor of the free area: 1 in a 1280 x 800 window, 2 in a 1920 x 1080 one), checked again after a resize and
+    // captured as PREFIX-worldmap|townmap-MODE[-STAGE].png (ARC_AREA_WINDOW_CAPTURE, local).
+    private async Task WorldMapWindowArtAsync(string window, AreaWorldMapArtView view)
+    {
+        if (!WindowArtSmokeRequested) return;
+        var found = view.TexturesForSelfTest([AreaWorldMapArtLayout.BackgroundArt]);
+        await WindowArtSmokeAsync(window, () => found.Select(pair => pair.Texture).ToArray(), found.Select(pair => pair.Art).ToArray(), view.DeviceScale, () => view.HasLook);
+    }
+
     // ARC-UI-084 native observation (stage "worldmap", the PC standing in a sector with a town map): W opens the town map centred on the party pixel;
     // the scroll clamps at both corners; Home centres; Z cycles the continent view and back; tiles were read as drawn; a whole map and a fogged one
     // are drawn and the frame holds lit pixels (and, fogged, dark ones). Prints counts only.
@@ -462,6 +473,7 @@ public partial class TerrainViewerApp
         Require(view.TownOffset == max, $"scrolling clamps at the south-east corner {view.TownOffset} vs {max}");
         _worldMapPanel.CentreOnParty();
         Require(view.TownOffset == AreaWorldMapArtLayout.CentreOn(view.TownParty.X, view.TownParty.Y, max), "Home centres on the party");
+        await WorldMapWindowArtAsync("townmap", view);
         // Z leaves for the continent view (when the picture is there) and comes back to the town map; the zoom button stays on it.
         if (view.ToggleKind())
         {

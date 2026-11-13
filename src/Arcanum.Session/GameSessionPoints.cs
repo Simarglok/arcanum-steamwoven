@@ -120,7 +120,7 @@ public sealed partial class GameSessionOwner
     private SessionPointResult RejectPoint(GameSessionFailure failure) => new(GameSessionDisposition.Rejected, failure, null, Version);
 
     private AdvancementModifiers PointModifiers() =>
-        AdvancementDomain.HeroModifiers(_hero!, _effects, _life.Hero is { } life ? life.State.PoisonLevel : 0);
+        AdvancementDomain.HeroModifiers(_hero!, _effects, _life.Hero is { } life ? life.State.PoisonLevel : 0, HeroInnateRules());
 
     private System.Collections.Immutable.ImmutableArray<int> SpellWillpower() => _advancement.Rules?.SpellWillpower ?? AutoLevelRules.DefaultSpellWillpower;
 

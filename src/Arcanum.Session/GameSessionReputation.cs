@@ -92,7 +92,7 @@ public sealed partial class GameSessionOwner
         ThrowIfDisposed();
         if (_hero is null) return null;
         var sum = QueryReputationReaction(npcOrigin, npcFaction);
-        return ReactionDomain.HeroFacts(_hero, _effects) with { ReputationAdjustment = (int)Math.Clamp(sum, int.MinValue, int.MaxValue) };
+        return ReactionDomain.HeroFacts(_hero, _effects, HeroInnateRules()) with { ReputationAdjustment = (int)Math.Clamp(sum, int.MinValue, int.MaxValue) };
     }
 
     // Beyond its range: no repeated number and no time after the saved clock or before an earlier entry's (the list is in the

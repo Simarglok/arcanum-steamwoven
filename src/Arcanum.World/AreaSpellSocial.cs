@@ -17,4 +17,6 @@ public sealed class AreaSpellSocial(Func<AreaAiHost?> host) : ISpellSocialHost
     public bool StopFleeing(string npc) => host()?.SpellStopFleeing(npc) == true;
 
     public void EndFleeGoals(string npc) => host()?.SpellEndFleeGoals(npc);
+
+    public int? Redirect(string target, uint critterFlag, int minimumIntelligence) => host()?.SpellRedirect(target, critterFlag, minimumIntelligence);
 }

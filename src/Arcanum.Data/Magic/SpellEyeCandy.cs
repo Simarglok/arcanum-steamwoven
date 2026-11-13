@@ -97,6 +97,19 @@ public sealed record SpellEyeCandyEntry(uint? Art, SpellEyeCandyFlags Flags, int
 public sealed record SpellEyeCandyRead(SpellDataStatus Status, SpellEyeCandyTable? Table, SpellDataRefusal? Refusal = null);
 
 /// <summary>
+/// ARC-SCRIPT-1592: how one eye-candy list is laid out in its file (the list record the module's loader 0x4CDB70 reads: 0x4CDB30 sets entries per group 1, message stride 1 and no sound offsets, a list's init changes them). The entries of a group are
+/// <paramref name="PerGroup"/> messages in a row, the next group starts <paramref name="FileStride"/> messages after the group before; the groups run from message 0 while the group's first message exists (0x4CDCD0). A list with sound offsets gives an entry
+/// without <c>Sound:</c> its group's first entry's sound plus its offset (0x4CDF3B).
+/// </summary>
+public sealed record EyeCandyListShape(string Path, int PerGroup, int FileStride, IReadOnlyList<int> SoundOffsets)
+{
+    /// <summary>The spell list (0x5E7568): six entries for each ten messages, with the sound offsets of 0x5B0DC8.</summary>
+    public static EyeCandyListShape Spell { get; } = new(SpellEyeCandyTable.Path, SpellEyeCandyTable.PerSpell, SpellEyeCandyTable.FileStride, SpellEyeCandyTable.SoundOffsets);
+    /// <summary>The script list (0x5E2FB0): the loader's defaults (the script module's init 0x4446E0 changes none of them): one entry per message, in a row from message 0, no sound offsets. A script's entry number is the message number.</summary>
+    public static EyeCandyListShape Script { get; } = new(SpellEyeCandyTable.ScriptPath, 1, 1, Array.Empty<int>());
+}
+
+/// <summary>
 /// ARC-MAGIC-017: <c>rules\SpellEyeCandy.mes</c> as the magic-tech init loads it (0x44F07C, list 0x5E7568 of the animation-effect
 /// module 0x4CDB70; ledger EC rows): six entries per spell — 0 cast, 1 projectile, 2 destination, 3 secondary destination,
 /// 4 secondary cast, 5 unnamed — read from messages <c>10·s + k</c>. The groups run from message 0 while message <c>10·s</c>
@@ -108,6 +121,9 @@ public sealed record SpellEyeCandyRead(SpellDataStatus Status, SpellEyeCandyTabl
 public sealed class SpellEyeCandyTable
 {
     public const string Path = "rules/SpellEyeCandy.mes";
+    /// <summary>ARC-SCRIPT-1592: the script eye-candy list (0x5E2FB0, loaded by the script module's init 0x4446E0) is the same module list over <c>rules\ScriptEyeCandy.mes</c>, laid out as <see cref="EyeCandyListShape.Script"/> (one entry per message):
+    /// its entry <c>n</c> is the number a script's play action names (0x44C7A0 passes it as the index).</summary>
+    public const string ScriptPath = "rules/ScriptEyeCandy.mes";
     public const int PerSpell = 6, FileStride = 10;
     public const int Cast = 0, Projectile = 1, Destination = 2, SecondaryDestination = 3, SecondaryCast = 4;
 
@@ -140,42 +156,50 @@ public sealed class SpellEyeCandyTable
     /// <summary>Reads the file from the first base source holding it (an init file, ARC-DATA-027), the parts' ART asked from the same
     /// stack through <see cref="ArtExists"/>.</summary>
     [OriginalFunction(0x4CDB70, OriginalFunctionScope.Partial)]
-    public static SpellEyeCandyRead Open(ContentStack stack, MesReaderOptions? options = null)
+    public static SpellEyeCandyRead Open(ContentStack stack, MesReaderOptions? options = null) => Open(stack, EyeCandyListShape.Spell, options);
+
+    /// <summary>ARC-SCRIPT-1592: <c>rules\ScriptEyeCandy.mes</c> read as the script list (<see cref="EyeCandyListShape.Script"/>: one entry per message).</summary>
+    public static SpellEyeCandyRead OpenScript(ContentStack stack, MesReaderOptions? options = null) => Open(stack, EyeCandyListShape.Script, options);
+
+    private static SpellEyeCandyRead Open(ContentStack stack, EyeCandyListShape shape, MesReaderOptions? options)
     {
+        var path = shape.Path;
         ArgumentNullException.ThrowIfNull(stack);
         options ??= new();
         options.Validate();
-        if (ContentPhase.Candidate(stack, Path, ContentLoadPhase.GameStart) is not { } source) return Refused(new(SpellDataStatus.FileMissing, Path));
-        if (source.Length > options.MaxBytes) return Refused(new(SpellDataStatus.FileRefused, Path, Token: nameof(MesParseStatus.TooLarge)));
+        if (ContentPhase.Candidate(stack, path, ContentLoadPhase.GameStart) is not { } source) return Refused(new(SpellDataStatus.FileMissing, path));
+        if (source.Length > options.MaxBytes) return Refused(new(SpellDataStatus.FileRefused, path, Token: nameof(MesParseStatus.TooLarge)));
         var read = stack.Read(source);
-        if (read.Status != ContentReadStatus.Read) return Refused(new(SpellDataStatus.FileUnreadable, Path, Token: read.Status.ToString()));
+        if (read.Status != ContentReadStatus.Read) return Refused(new(SpellDataStatus.FileUnreadable, path, Token: read.Status.ToString()));
         var parsed = MesFile.Parse(read.Bytes!, options);
-        if (parsed.Status != MesParseStatus.Parsed) return Refused(new(SpellDataStatus.FileRefused, Path, parsed.Number, $"{parsed.Status} line {parsed.Line}"));
+        if (parsed.Status != MesParseStatus.Parsed) return Refused(new(SpellDataStatus.FileRefused, path, parsed.Number, $"{parsed.Status} line {parsed.Line}"));
         var names = ReadNames(stack, options);
-        return Read(parsed.File!, aid => ArtExists(stack, names, aid));
+        return Read(parsed.File!, aid => ArtExists(stack, names, aid), shape);
     }
 
     /// <summary>The entries of a parsed file. <paramref name="artExists"/> answers whether the ART of one part's art id loads (the
     /// original's 0x502220); a line whose flagged part does not load keeps no art and no flags (0x4CE1A0).</summary>
-    public static SpellEyeCandyRead Read(MesFile file, Func<uint, bool> artExists)
+    public static SpellEyeCandyRead Read(MesFile file, Func<uint, bool> artExists, EyeCandyListShape? shape = null)
     {
         ArgumentNullException.ThrowIfNull(file);
         ArgumentNullException.ThrowIfNull(artExists);
-        // The count (0x4CDCD0): six entries for each message 10·s that exists, from 0 on.
+        shape ??= EyeCandyListShape.Spell;
+        var path = shape.Path;
+        // The count (0x4CDCD0): the entries of a group for each message the stride puts a group's first at that exists, from 0 on.
         var groups = 0;
-        while (file.Find(groups * FileStride) is not null) groups++;
-        if (groups == 0) return Refused(new(SpellDataStatus.FileEmpty, Path));
-        var entries = new SpellEyeCandyEntry[groups * PerSpell];
+        while (file.Find(groups * shape.FileStride) is not null) groups++;
+        if (groups == 0) return Refused(new(SpellDataStatus.FileEmpty, path));
+        var entries = new SpellEyeCandyEntry[groups * shape.PerGroup];
         for (var index = 0; index < entries.Length; index++)
         {
-            var number = index / PerSpell * FileStride + index % PerSpell;
+            var number = index / shape.PerGroup * shape.FileStride + index % shape.PerGroup;
             var text = SpellTexts.Text(file, number);
             // A missing or empty message is an entry without art (0x4CE2A0, 0x4CDE54).
             if (text is null || text.Length == 0) { entries[index] = SpellEyeCandyEntry.Empty; continue; }
             foreach (var c in text)
-                if (c > '\x7f') return Refused(new(SpellDataStatus.NonAsciiByte, Path, number, c.ToString()));
+                if (c > '\x7f') return Refused(new(SpellDataStatus.NonAsciiByte, path, number, c.ToString()));
             var cursor = new NamedKeyCursor(text);
-            var entry = Line(cursor, index, entries, artExists);
+            var entry = Line(cursor, index, entries, artExists, shape);
             if (cursor.Fault != NamedKeyFault.None)
                 return Refused(new(cursor.Fault switch
                 {
@@ -184,7 +208,7 @@ public sealed class SpellEyeCandyTable
                     NamedKeyFault.UnknownFlag => SpellDataStatus.UnknownFlag,
                     NamedKeyFault.MissingValue => SpellDataStatus.MissingValue,
                     _ => SpellDataStatus.TrailingSeparator,
-                }, Path, number, cursor.FaultToken));
+                }, path, number, cursor.FaultToken));
             entries[index] = entry;
         }
         return new(SpellDataStatus.Read, new(entries));
@@ -195,7 +219,7 @@ public sealed class SpellEyeCandyTable
     /// the blend's value shares the scale's temporary, so a line with <c>Scale:</c> but no <c>Blend:</c> is translucent too
     /// (0x4CDEFC). A flag list always replaces the flags (0x532630 clears its value first).</summary>
     [OriginalFunction(0x4CDDF0, OriginalFunctionScope.Partial)]
-    private static SpellEyeCandyEntry Line(NamedKeyCursor cursor, int index, SpellEyeCandyEntry[] entries, Func<uint, bool> artExists)
+    private static SpellEyeCandyEntry Line(NamedKeyCursor cursor, int index, SpellEyeCandyEntry[] entries, Func<uint, bool> artExists, EyeCandyListShape shape)
     {
         uint? art = null; var flags = SpellEyeCandyFlags.None; var sound = -1; int? light = null; (byte, byte, byte) color = (0, 0, 0); var speed = 0;
         if (cursor.NamedInt("Art:", out _) is { } number)
@@ -212,7 +236,7 @@ public sealed class SpellEyeCandyTable
             if (cursor.NamedName("Blend:", BlendNames, out _) is { } blend) shared = blend;
             if (cursor.Fault != NamedKeyFault.None) return SpellEyeCandyEntry.Empty;
             if (cursor.NamedInt("Sound:", out _) is { } named) sound = named;
-            else sound = GroupSound(index, entries);
+            else sound = GroupSound(index, entries, shape);
             flags = (SpellEyeCandyFlags)(cursor.NamedFlags("Flags:", FlagNames, FlagValues, out _, out _) ?? 0);
             if (cursor.Fault != NamedKeyFault.None) return SpellEyeCandyEntry.Empty;
             if (shared != 0) flags |= SpellEyeCandyFlags.Translucent;
@@ -237,12 +261,13 @@ public sealed class SpellEyeCandyTable
 
     // An entry without Sound: takes its group's first entry's sound plus its offset (0x4CDF3B; the original then drops a sound file that
     // does not exist, not modelled here).
-    private static int GroupSound(int index, SpellEyeCandyEntry[] entries)
+    private static int GroupSound(int index, SpellEyeCandyEntry[] entries, EyeCandyListShape shape)
     {
-        var place = index % PerSpell;
-        if (place == 0) return -1;
+        // The original adds the offset only for a list that has sound offsets (0x4CDF3B tests their count) and for an entry that is not its group's first.
+        var place = index % shape.PerGroup;
+        if (shape.SoundOffsets.Count == 0 || place == 0) return -1;
         var first = entries[index - place].Sound;
-        return first == -1 ? -1 : first + SoundOffsets[place];
+        return first == -1 ? -1 : first + shape.SoundOffsets[place];
     }
 
     // The parts the flags name must each load (0x4CE1A0): the foreground (variant 0), the background (1), the underlay (2).
