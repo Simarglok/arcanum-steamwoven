@@ -24,7 +24,7 @@ public sealed partial class GameSessionOwner
 {
     /// <summary>
     /// Whether the NPC's encumbrance timer can be scheduled now on <paramref name="map"/>: one is pending already (it is kept), or the queue and the life record budget have room, the NPC's life state is valid and its other timers
-    /// can follow it to this map (not inside an event pass, which refuses a move). The caller asks before it writes anything the timer belongs with.
+    /// have no other map. The caller asks before it writes anything the timer belongs with.
     /// </summary>
     internal bool CanScheduleNpcEncumbrance(SessionLifeTarget target, SessionMapId map)
     {
@@ -35,25 +35,23 @@ public sealed partial class GameSessionOwner
         var now = _clock.QueryClockSnapshot().GameTimestampMs;
         if (_events.Count >= _events.Limits.MaxPending || _events.NextSequence == long.MaxValue || now > long.MaxValue - MaxEncumbranceDelayMs) return false;
         if (!recorded && _life.Critters.Count >= _limits.MaxLifeRecords) return false;
-        return _passWorld is null || StrayMaps(target.Entity!, map.RuntimeMap).Length == 0;
+        // The NPC's timers lie on one map: one that lies on another map is not moved here (a life step moves them, the strength write does not), so the schedule is not ready.
+        return StrayMaps(target.Entity!, map.RuntimeMap).Length == 0;
     }
 
     private static long MaxEncumbranceDelayMs => Enumerable.Range(0, CarryRules.Levels).Max(level => CarryRules.DrainIntervalMs(level) ?? 0);
 
     /// <summary>
-    /// The schedule of the NPC's encumbrance timer (mode 1): after <paramref name="delayMs"/>, nothing while one is pending (WEA2). An NPC without a life record gets the record of its loaded state, and its
-    /// other timers on another map follow it to <paramref name="map"/> (the one-map rule, as a life step does). Not scheduled when <see cref="CanScheduleNpcEncumbrance"/> says no. No revision: it is part of the change that caused it.
+    /// The schedule of the NPC's encumbrance timer (mode 1): after <paramref name="delayMs"/>, nothing while one is pending (WEA2). An NPC without a life record gets the record of its loaded state. Not scheduled when <see cref="CanScheduleNpcEncumbrance"/> says no. No revision: it is part of the change that caused it.
     /// </summary>
     /// <remarks>The fatigue event schedule 0x45E820 with its match 0x45E8D0; the hero's form is in <c>GameSessionEncumbrance</c>.</remarks>
     internal void ScheduleNpcEncumbranceDrain(SessionLifeTarget target, SessionMapId map, long delayMs)
     {
         if (!CanScheduleNpcEncumbrance(target, map) || IsPending(SessionEventKinds.NpcEncumbrance, target.Entity)) return;
         if (Resolve(target, out var record, out _, out var recorded) != GameSessionFailure.None) return;
-        foreach (var stray in StrayMaps(target.Entity!, map.RuntimeMap))
-            if (_events.Relocate(stray, map.RuntimeMap, entity => entity.Code == target.Entity).Failure != GameEventFailure.None) return;
-        if (!recorded) _life.Critters[target.Entity!] = record;
         var now = _clock.QueryClockSnapshot().GameTimestampMs;
-        _events.ScheduleAfter(SessionEventKinds.NpcEncumbrance, new([new GameEventEntity(map.RuntimeMap, target.Entity!)], [now]), delayMs, EventClocks(now));
+        var scheduled = _events.ScheduleAfter(SessionEventKinds.NpcEncumbrance, new([new GameEventEntity(map.RuntimeMap, target.Entity!)], [now]), delayMs, EventClocks(now));
+        if (scheduled.Disposition == GameEventScheduleDisposition.Added && !recorded) _life.Critters[target.Entity!] = record;
     }
 
     /// <summary>

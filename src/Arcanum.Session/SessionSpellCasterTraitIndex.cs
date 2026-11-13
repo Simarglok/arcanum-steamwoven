@@ -103,7 +103,7 @@ public sealed partial class SessionSpellCaster
             if (_owner.QueryNpcCarry(map, critter.Combat.Target, stats, current) is not { } before || _owner.QueryNpcCarry(map, critter.Combat.Target, stats, next) is not { } after) return null;
             if (before.Level != after.Level)
             {
-                // Not ready: a level without the rule of effect 158 to add, and a level from 4 whose fatigue timer (ARC-MAGIC-1568) cannot be scheduled (the queue or the life record budget is full, the NPC's other timers cannot follow it).
+                // Not ready: a level without the rule of effect 158 to add, and a level from 4 whose fatigue timer (ARC-MAGIC-1568) cannot be scheduled (the queue or the life record budget is full, or the NPC's other timers lie on another map).
                 if (_owner.EncumbranceRule() is not { } rule || CarryRules.DrainIntervalMs(after.Level) is not null && !_owner.CanScheduleNpcEncumbrance(critter.Combat.Target, map)) return null;
                 (encumbrance, level) = (rule, after.Level);
             }

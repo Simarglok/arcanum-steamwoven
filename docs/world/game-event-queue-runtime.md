@@ -194,8 +194,7 @@ below 4 fatigue; nothing for a dead NPC, or one the pass world does not report),
 again with the interval of the level then: the level is read from the NPC's list in the map's seed against the carry weight of its
 stored strength (`ISessionNpcStatsWorld.StoredStats`, the viewer's combat host with the written entries laid over). A pass world that
 cannot give the stats (or an NPC the seed does not list) schedules no next one: the timer ends after one drain, the difference from the
-original (the hero's level is the session's own). The NPC's timers live on one map as the others do (they follow the NPC to the map
-the strength write happened on; the write is not ready inside an event pass when they would have to move), and `MaxPending` holds a
+original (the hero's level is the session's own). The NPC's timers live on one map as the others do (the strength write is not ready while another of its timers lies on another map), and `MaxPending` holds a
 fifth timer for each life record. A restore refuses one without a life record of its NPC, set after the saved clock, whose deadline is
 not its time plus one of the three intervals, or with another map than the NPC's other timers.
 

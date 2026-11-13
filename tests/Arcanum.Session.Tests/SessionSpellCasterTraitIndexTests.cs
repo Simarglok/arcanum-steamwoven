@@ -775,6 +775,19 @@ public sealed class SessionSpellCasterTraitIndexTests
     }
 
     [TestMethod]
+    public void The_npcs_timer_is_not_scheduled_again_when_the_level_has_fallen_below_4()
+    {
+        var (owner, caster, target) = Carrying(3, [800]);
+        using var _ = owner;
+        caster.Apply(Run(StrengthMinusOne), 0, At(Rat, SpellTargetObject.Npc));
+        // The world reports a strength of 20 (10000 carried): 800 is level 0 when the timer fires.
+        owner.AdvanceGameTime(owner.QueryClockSnapshot().Token, 60_000, ClockAdvanceReason.OrdinaryAdvance);
+        Assert.AreEqual(GameSessionFailure.None, owner.ProcessEvents(new RatWorld(target, RatStats(owner, 20).Select((v, i) => i == 0 ? 20 : v).ToArray())).Failure);
+        Assert.AreEqual(1, owner.QueryLifeRecord(Rat)!.Value.State.FatigueDamage, "it does not check the level before it drains");
+        Assert.AreEqual(0, RatTimers(owner).Length);
+    }
+
+    [TestMethod]
     public void A_world_without_the_stored_stats_lets_the_npcs_timer_end_after_one_drain()
     {
         var (owner, caster, target) = Carrying(3, [800]);
