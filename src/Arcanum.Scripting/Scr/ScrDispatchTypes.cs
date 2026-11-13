@@ -541,9 +541,13 @@ public enum ScrEffectChange { Add, Remove }
 /// </summary>
 public readonly record struct ScrEffectRequest(ScrEffectChange Change, ScrObjectRef Object, int Effect, int Cause = 0);
 
+/// <summary>ARC-SCRIPT-1734: which eye candy table an eye candy request names and what it does: <see cref="PlayScript"/> (action 120, entry of the script eye candy table), <see cref="PlaySpell"/> (action 104, 0x456E60: the spell eye candy
+/// entry number % 10 + number / 10 × 6 of the spell table) and <see cref="StopScript"/> (action 124, 0x44C800 → 0x4CD940: take the script eye candy of the number off the object).</summary>
+public enum ScrEyeCandyKind { PlayScript, PlaySpell, StopScript }
+
 /// <summary>ARC-SCRIPT-042: a play-script-eye-candy action (120, ledger WE4): the entry of the script eye-candy table and the object it
-/// plays on. Presentation only; the host shows it.</summary>
-public readonly record struct ScrEyeCandy(int Number, ScrObjectRef Object);
+/// plays on; ARC-SCRIPT-1734 adds play spell eye candy (104) and stop script eye candy (124, ledger WE7, WE8) in order with it (<see cref="Kind"/>), the number as read. Presentation only; the host shows it (no host plays any yet, #1592).</summary>
+public readonly record struct ScrEyeCandy(int Number, ScrObjectRef Object, ScrEyeCandyKind Kind = ScrEyeCandyKind.PlayScript);
 
 /// <summary>
 /// ARC-SKILLS-009: a use-item-with-skill action (79, ledger SX3, SX4) as the run asks for it: the source, the item (absent for a use
@@ -932,7 +936,7 @@ public sealed class ScrRunResult
 }
 
 /// <summary>How a dispatch runs: the rule mode's script switches, the admitted set (default <see cref="ScrAdmissionSet.S5"/>,
-/// at most <see cref="ScrAdmissionSet.S52"/>, admitted for the lines reachable from the event's line), the executed-line
+/// at most <see cref="ScrAdmissionSet.S53"/>, admitted for the lines reachable from the event's line), the executed-line
 /// budget and the call depth.</summary>
 public sealed record ScrRunOptions
 {
@@ -953,7 +957,7 @@ public sealed record ScrRunOptions
         ArgumentNullException.ThrowIfNull(Admission);
         if (MaxExecutedLines is <= 0 or > OriginalLineBudget) throw new ArgumentOutOfRangeException(nameof(MaxExecutedLines), "The line budget is 1..1000.");
         if (MaxCallDepth is < 1 or > 64) throw new ArgumentOutOfRangeException(nameof(MaxCallDepth), "The call depth is 1..64.");
-        if (!Admission.IsSubsetOf(ScrAdmissionSet.S52)) throw new ArgumentException("The interpreter runs only the commands of ScrAdmissionSet.S52.", nameof(Admission));
+        if (!Admission.IsSubsetOf(ScrAdmissionSet.S53)) throw new ArgumentException("The interpreter runs only the commands of ScrAdmissionSet.S53.", nameof(Admission));
     }
 
     // A set with a guard condition needs a host that answers it, checked before any event runs.

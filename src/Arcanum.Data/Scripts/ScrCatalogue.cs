@@ -89,7 +89,7 @@ public static class ScrCatalogue
     {
         public const int True = 0, LocalFlag = 3, Equal = 4, LessOrEqual = 5, PcQuestState = 6, HasItemNamed = 17, FollowingPc = 18, IsNamed = 20,
             IsWieldingItem = 21, IsDead = 22, IsAnimal = 37, IsInCombat = 31, IsSwitchedOff = 27, HasReputation = 33, Jilted = 39, GlobalFlag = 43, Identified = 47, ItemsBeingRewielded = 50,
-            HasBodySpell = 14, InfluencedBySpell = 35, KnowsSpell = 48, MasteredSpellCollege = 49,
+            HasBodySpell = 14, IsPolymorphed = 12, IsShrunk = 13, HasMirrorImage = 16, InfluencedBySpell = 35, KnowsSpell = 48, MasteredSpellCollege = 49,
             Daytime = 1, GlobalQuestState = 7, HasBlessing = 8, HasCurse = 9, RumorKnown = 40, RumorQuelled = 41,
             ObjIsOpen = 36, SectorIsBlocked = 45, MonsterGenDisabled = 46;
     }
@@ -114,7 +114,7 @@ public static class ScrCatalogue
             GetDaySinceStartup = 96, GetCurrentHour = 97, GetCurrentMinute = 98, GetHoursSinceStartup = 105, GrantFatePoint = 117, SetPcQuestUnbotched = 119,
             CritterDisband = 22, SetReaction = 30, AdjustReaction = 31, SetDayStandpoint = 45, SetNightStandpoint = 46, ChangeArtNumber = 59, ChangeScript = 99, SetDayStandpointEx = 140, SetNightStandpointEx = 141,
             TransferItem = 41, SetLockState = 53, CreateItem = 66, ToggleOpenClosed = 88, SetWrittenStart = 94, ToggleSectorBlocked = 106, ToggleMonsterGenerator = 110, TouchArt = 123,
-            DestroyItemNamed = 126, ToggleItemInventoryDisplay = 127, GetLocation = 95, StopSpellOnObject = 130, GetHitPoints = 107, GetFatiguePoints = 108, HealPoison = 128, AdjustStat = 137;
+            DestroyItemNamed = 126, ToggleItemInventoryDisplay = 127, GetLocation = 95, StopSpellOnObject = 130, PlaySpellEyeCandy = 104, StopScriptEyeCandy = 124, GetHitPoints = 107, GetFatiguePoints = 108, HealPoison = 128, AdjustStat = 137;
     }
 
     /// <summary>Script file flags.</summary>
