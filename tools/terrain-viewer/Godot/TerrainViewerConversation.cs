@@ -71,6 +71,9 @@ public partial class TerrainViewerApp
             // ARC-SCRIPT-1165 (E5-c): a dialog script's add blessing and add curse take their effect from the module's tables, as a use script's do.
             _conversationHost.Scripts.BlessingEffects = BlessingEffectOf;
             _conversationHost.Scripts.QueryHost = () => ReferenceEquals(_readyArea?.Snapshot, snapshot) ? UseScriptHost(snapshot) : null;
+            // ARC-SCRIPT-1482 (GT194–GT196, IT8): a deferred call's damage and heal of hit points (the wield-on items' poison scripts) go through the same damage step as a use script's.
+            _conversationHost.Scripts.ScriptDamage = DamageByScript;
+            _conversationHost.Scripts.ScriptHeal = HealHitPointsByScript;
         }
         else _conversationHost = null;
         if (_conversationPanel is null)

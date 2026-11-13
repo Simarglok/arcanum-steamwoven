@@ -16,7 +16,7 @@ namespace Arcanum.World;
 /// point of the map's speakers is modelled; everything the viewer does not model answers "no" (no generator, no trap,
 /// alive and free, not jilted).
 /// </summary>
-public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueries, IScrWorldQueries, IScrObjectStateQueries, IScrAreaQueries, IScrStoreQueries, IScrReactionQueries, IScrSpellQueries, IScrStoryQueries
+public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueries, IScrWorldQueries, IScrObjectStateQueries, IScrAreaQueries, IScrStoreQueries, IScrReactionQueries, IScrSpellQueries, IScrStoryQueries, IScrItemQueries
 {
     /// <summary>The PC as the scripts see it; the viewer has one.</summary>
     public const string PcCode = SessionEventKinds.PlayerEntity;
@@ -83,12 +83,40 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
     public ScrAdmissionSet AdmissionFor(ScrObjectRef? attachee) =>
         attachee is { } obj && _state.IsCarried(obj.Code) ? (_session.QueryHero() is null ? Admission : SkillAdmission) : RunAdmission;
 
-    /// <summary>ARC-MAGIC-041 (TI8): the set a deferred call of the event queue runs under: <see cref="AdmissionFor"/> plus wields an item named (21, which <see cref="WieldedItemName"/> answers for the hero without a use host) and use ammunition units (135), which the call of the powered shield's
-    /// script uses (<see cref="Apply"/> spends the cells through the session). A dialog script does not get it.</summary>
-    public ScrAdmissionSet CallAdmissionFor(ScrObjectRef? attachee) => AmmoSets.GetOrAdd(AdmissionFor(attachee), set => new(set.Id + "-ammo",
-        set.Conditions.Append(ScrCatalogue.Condition.IsWieldingItem), set.Actions.Append(ScrCatalogue.Action.UseAmmoUnits), set.ValueKinds, set.FocusKinds, set.CounterIndexWraps));
+    /// <summary>ARC-MAGIC-041 (TI8): the set a deferred call of the event queue runs under: <see cref="AdmissionFor"/> plus wields an item named (21, which <see cref="WieldedItemName"/> answers for the hero without a use host) and use ammunition units (135
+    /// script uses (<see cref="Apply"/> spends the cells through the session). A dialog script does not get it. ARC-SCRIPT-1482 (ledger WE2, WE4, GT194–GT196): plus the magick-tech adjustment (91, the ratio of a worn item for the hero,
+    /// <see cref="PowerRatio"/>) and play script eye candy (120, presentation only), which the deferred poison scripts of the wield-on items use, and, while <see cref="ScriptDamage"/> is set, damage (60), apply unresistable damage (138) and heal
+    /// hit points (75), which <see cref="Apply"/> hands to the hooks for the PC.</summary>
+    public ScrAdmissionSet CallAdmissionFor(ScrObjectRef? attachee) => (ScriptDamage is not null && ScriptHeal is not null ? DamageSets : AmmoSets).GetOrAdd(AdmissionFor(attachee), set => new(set.Id + (ScriptDamage is not null && ScriptHeal is not null ? "-item-damage" : "-item"),
+        set.Conditions.Append(ScrCatalogue.Condition.IsWieldingItem),
+        set.Actions.Append(ScrCatalogue.Action.UseAmmoUnits).Append(ScrCatalogue.Action.MagickTechAdjustment).Append(ScrCatalogue.Action.PlayScriptEyeCandy)
+            .Concat(ScriptDamage is not null && ScriptHeal is not null ? [ScrCatalogue.Action.Damage, ScrCatalogue.Action.DamageUnresistable, ScrCatalogue.Action.HealHitPoints] : []),
+        set.ValueKinds, set.FocusKinds, set.CounterIndexWraps));
 
-    private static readonly System.Collections.Concurrent.ConcurrentDictionary<ScrAdmissionSet, ScrAdmissionSet> AmmoSets = new();
+    /// <summary>
+    /// ARC-SCRIPT-1482 (GT194–GT196, ledger IT8): the viewer's damage step for a deferred call's damage (60) or unresistable damage (138) of the PC, as its use host's script damage (<see cref="AreaUseScriptHost"/>'s world, no attacker, the
+    /// taking-damage veto and the aftermath included): the victim (<see cref="Arcanum.Simulation.Ai.AiSchedulerRules.Pc"/>), the amount, the damage type (0 normal, 1 poison, 2 electrical, 3 fire, 4 fatigue) and whether it is unresistable in,
+    /// the text of what happened out. Both hooks set: damage is in the deferred set; none: a script that deals damage is refused, as before.
+    /// </summary>
+    public Func<string, int, int, bool, string>? ScriptDamage { get; set; }
+
+    /// <summary>ARC-SCRIPT-1482 (GT196): the viewer's hit-point heal for a deferred call's heal hit points (75) of the PC: the victim (<see cref="Arcanum.Simulation.Ai.AiSchedulerRules.Pc"/>) and the amount in, the text out.</summary>
+    public Func<string, int, string>? ScriptHeal { get; set; }
+
+    /// <summary>ARC-SCRIPT-1482: what the damage and heal hooks answered for the last <see cref="Apply"/>, in action order (empty when it had none).</summary>
+    public IReadOnlyList<string> LastHits => _lastHits;
+    private readonly List<string> _lastHits = [];
+
+    /// <summary>ARC-SCRIPT-1482 (WE2): a worn item's power ratio for the PC (<see cref="GameSessionOwner.QueryWornPowerRatio"/>); null for any other item or owner (the run stops, as for an object the host does not know).</summary>
+    public int? PowerRatio(ScrObjectRef item, ScrObjectRef owner) => owner == Pc && item.Map == _map.RuntimeMap ? _session.QueryWornPowerRatio(item.Code) : null;
+
+    /// <summary>No set of this host holds the identified condition: the host knows no object's identified state.</summary>
+    public bool? IsIdentified(ScrObjectRef obj) => null;
+
+    /// <summary>No set of this host holds the rewielding condition: no rewield runs here.</summary>
+    public bool ItemsBeingRewielded() => false;
+
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<ScrAdmissionSet, ScrAdmissionSet> AmmoSets = new(), DamageSets = new();
 
     /// <summary>
     /// ARC-SCRIPT-050: the shown map's use host (<see cref="AreaUseScriptHost"/>), which answers this host's object, world and area
@@ -404,6 +432,16 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
             var spent = _session.SpendAmmo(_session.Version, holder, use.AmmoType, use.Count);
             if (spent.Disposition == GameSessionDisposition.Rejected
                 && spent.Failure is GameSessionFailure.BudgetExceeded or GameSessionFailure.RevisionExhausted) return false;
+        }
+        // ARC-SCRIPT-1482 (GT194–GT196): each damage, unresistable damage and heal hit points request in action order, for the PC through the viewer's hooks (an NPC or object of the wearer's map is left as it is, as a
+        // request on another map's object is by the use host; no installed deferred poison script names one). The answers do not stop the run (GT154).
+        _lastHits.Clear();
+        foreach (var request in effects.ObjectStates)
+        {
+            if (request.Change is not (ScrObjectStateChange.Damage or ScrObjectStateChange.DamageUnresistable or ScrObjectStateChange.HealHitPoints)) continue;
+            if (!IsPc(request.Object) || ScriptDamage is null || ScriptHeal is null) continue;
+            _lastHits.Add(request.Change == ScrObjectStateChange.HealHitPoints ? ScriptHeal(Arcanum.Simulation.Ai.AiSchedulerRules.Pc, request.Value)
+                : ScriptDamage(Arcanum.Simulation.Ai.AiSchedulerRules.Pc, request.Value, request.Value2, request.Change == ScrObjectStateChange.DamageUnresistable));
         }
         // ARC-WORLD-039: deferred calls go to the session's queue in action order (the viewer pumps it); a refused request
         // stops the later steps, as a refused flag write does.
