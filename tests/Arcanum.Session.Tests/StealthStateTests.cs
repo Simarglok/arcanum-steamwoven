@@ -159,6 +159,17 @@ public sealed class StealthStateTests
     }
 
     [TestMethod]
+    public void TheAttackEventsConcealmentStepOnAWaitingFollowerEndsTheHerosGroupAndLeavesTheWaitingOneAlone()
+    {
+        using var owner = Owner();
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.ForceJoinParty(owner.Version, Stranger).Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.WaitParty(owner.Version, Pal).Disposition);
+        owner.ToggleHeroConcealment(owner.Version);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.EndConcealmentForAttackEvent(owner.Version, SessionCombatant.Critter(Pal)).Disposition);
+        Assert.AreEqual((false, false), (owner.IsConcealed(SessionCombatant.Hero), owner.IsConcealed(SessionCombatant.Critter(Stranger))), "the hero and the follower list");
+    }
+
+    [TestMethod]
     public void TheAttackEventsConcealmentStepIsRefusedForAStaleVersion()
     {
         using var owner = Owner();

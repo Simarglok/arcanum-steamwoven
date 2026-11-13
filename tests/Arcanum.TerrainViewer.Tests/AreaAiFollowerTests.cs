@@ -1035,6 +1035,18 @@ public sealed class AreaAiFollowerTests
     }
 
     [TestMethod]
+    public void The_script_attack_action_ends_the_concealment_too_in_one_revision()
+    {
+        var scene = Open();
+        scene.Session.ToggleHeroConcealment(scene.Session.Version);
+        var revision = scene.Session.Version.Revision;
+        scene.Host.ScriptAttack(scene.Enemy, Pc);
+        Assert.IsFalse(scene.Session.IsConcealed(SessionCombatant.Hero));
+        Assert.IsFalse(scene.Session.IsConcealed(SessionCombatant.Critter(scene.Companion)));
+        Assert.AreEqual(revision + 1, scene.Session.Version.Revision, "the concealment ended in one revision of its own (a PC victim writes nothing else)");
+    }
+
+    [TestMethod]
     public void A_hit_on_a_hero_that_is_not_sneaking_leaves_the_concealment_state_empty()
     {
         var scene = Open();
