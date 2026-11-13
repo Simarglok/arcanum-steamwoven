@@ -21,8 +21,8 @@ namespace Arcanum.Session;
 /// setter stores after the clamp alone for an NPC (ARC-MAGIC-1507 adds magick and tech points, 22 and 23, whose rewield <see cref="RewieldReady"/> accepts when no worn item has a wield script): level (17), experience (18, the level-up 0x4A69C0 is a PC's), alignment (19, the followers' re-check is a PC's), fate points (20), unspent points (21) and 25; the
 /// callbacks after the write (0x460860, 0x4601C0) are the user interface's. <b>Strength</b> (ARC-MAGIC-1506, case 0 of the setter) reads the encumbrance level before the store (0x45F790: the total weight of the NPC's list, 0x461410, and its carry weight, stat 8, which the new strength gives:
 /// <see cref="GameSessionOwner.QueryNpcCarry"/>) and, when the level changed, runs the recalculation 0x45F820 after it (<see cref="GameSessionOwner.RecalculateNpcEncumbrance"/>: every entry of effect 158 leaves the NPC's list, then one
-/// entry a level is added with the item cause, eight at the heaviest). Ready for an NPC the map's inventory seed lists; not ready when the NPC is no holder of it, when effect 158 has no rule to add, and when the new level has the
-/// fatigue timer (level 4 and above: 0x45E820 mode 1 is kept for the hero alone) or the old and new level are not both readable; nothing is written then. The level message is the local PC's and the animation speed
+/// entry a level is added with the item cause, eight at the heaviest). A new level from 4 up also schedules the NPC's encumbrance fatigue timer (ARC-MAGIC-1568, <see cref="SessionEventKinds.NpcEncumbrance"/>: 0x45E820 mode 1, one per NPC; it gives an NPC without a life record the record of its loaded state). Ready for an NPC the map's inventory seed lists; not ready when the NPC is no holder of it, when effect 158 has no rule to add, when that timer cannot be scheduled
+/// (the event queue or the life record budget is full) or the old and new level are not both readable; nothing is written then. The level message is the local PC's and the animation speed
 /// (0x436FA0) the host's. <b>Poison</b> (stat 24, ARC-MAGIC-1508) is the life state's level (<see cref="PoisonStat"/>). <b>Not ready</b> (issues name them): gender and race (the innate effect removal 0x4EA2E0 and add), an NPC whose stats the follower's advancement record
 /// holds, and a hero target (the hero's stats are the character owner's).</item>
 /// </list>
@@ -101,14 +101,14 @@ public sealed partial class SessionSpellCaster
             if (_owner.QueryNpcCarry(map, critter.Combat.Target, stats, current) is not { } before || _owner.QueryNpcCarry(map, critter.Combat.Target, stats, next) is not { } after) return null;
             if (before.Level != after.Level)
             {
-                // Not ready: the fatigue timer of a level from 4 (0x45E820 mode 1 is not kept for an NPC), and a level without the rule of effect 158 to add.
-                if (CarryRules.DrainIntervalMs(after.Level) is not null || _owner.EncumbranceRule() is not { } rule) return null;
+                // Not ready: a level without the rule of effect 158 to add, and a level from 4 whose fatigue timer (ARC-MAGIC-1568) cannot be scheduled (the queue or the life record budget is full, the NPC's other timers cannot follow it).
+                if (_owner.EncumbranceRule() is not { } rule || CarryRules.DrainIntervalMs(after.Level) is not null && !_owner.CanScheduleNpcEncumbrance(critter.Combat.Target, map)) return null;
                 (encumbrance, level) = (rule, after.Level);
             }
         }
         var written = _owner.WriteCritterStat(_owner.Version, map, obj.Id, data.Index, next);
         var outcome = Report(run, obj.Id, data, written);
-        if (encumbrance is not null && written.Disposition != GameSessionDisposition.Rejected && _owner.RecalculateNpcEncumbrance(critter.Combat.Target, encumbrance, level) is { Disposition: GameSessionDisposition.Rejected } failed)
+        if (encumbrance is not null && written.Disposition != GameSessionDisposition.Rejected && _owner.RecalculateNpcEncumbrance(critter.Combat.Target, map, encumbrance, level) is { Disposition: GameSessionDisposition.Rejected } failed)
             _log.Add(new(SpellCastEventKind.TraitIndexNotSaved, run.Id, (int)failed.Failure, obj.Id));
         return outcome;
     }

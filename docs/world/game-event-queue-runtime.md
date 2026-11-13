@@ -184,6 +184,21 @@ fatigue (`CarryRules.Drain` of `max(1, elapsed s / 80)` steps, never below 4 fat
 without a hero, with entities, set after the saved clock, or whose deadline is not its time plus one of the three intervals. See
 [encumbrance consequences](inventory-runtime.md#encumbrance-consequences-arc-world-087).
 
+**NPC encumbrance timer (ARC-MAGIC-1568).** The kind `life.npc.encumbrance` (also added to registry version 1 without a new
+version) is the same mode 1 of the fatigue timer for an NPC: game time, saved, scoped to the NPC's map, one entity (the NPC) and one
+value (the game time it was set at), one per NPC (`KeepExisting`, the key is the entity: the original's match 0x45E8D0 compares the mode
+and the object, so a second schedule adds nothing, WEA2). The NPC strength write of TraitIdx (ARC-MAGIC-1506) whose new level is 4, 5 or
+6 sets it with that level's interval, and gives an NPC without a life record the record of its loaded state (the timer reads the life state
+when it fires). When due it drains the NPC's fatigue as the hero's timer does (`CarryRules.Drain`, `max(1, elapsed s / 80)` steps, never
+below 4 fatigue; nothing for a dead NPC, or one the pass world does not report), reported in `SessionEventPassResult.Life`, and is set
+again with the interval of the level then: the level is read from the NPC's list in the map's seed against the carry weight of its
+stored strength (`ISessionNpcStatsWorld.StoredStats`, the viewer's combat host with the written entries laid over). A pass world that
+cannot give the stats (or an NPC the seed does not list) schedules no next one: the timer ends after one drain, the difference from the
+original (the hero's level is the session's own). The NPC's timers live on one map as the others do (they follow the NPC to the map
+the strength write happened on; the write is not ready inside an event pass when they would have to move), and `MaxPending` holds a
+fifth timer for each life record. A restore refuses one without a life record of its NPC, set after the saved clock, whose deadline is
+not its time plus one of the three intervals, or with another map than the NPC's other timers.
+
 **Magic-tech events (ARC-MAGIC-010).** The kind `magic.run` (also added to registry version 1 without a new version) is the
 original's magic-tech event (kind 5, ledger RP11–RP14): game time, **saved** since ARC-DEV-210 (the settled runs' ticks, `Saved`, schema 73; the events of a run that is cut are cut with it), global, any number, at most `SessionEventKinds.MaxSpellRunEvents`
 (1,024, a budget of about a tick and an interrupt for each of the 512 runs; interrupt and process events are not deduplicated) on
