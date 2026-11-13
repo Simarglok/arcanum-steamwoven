@@ -1,3 +1,4 @@
+using Arcanum.Simulation.Character;
 using Arcanum.Simulation.Clock;
 using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Equipment;
@@ -75,6 +76,14 @@ public sealed class NpcWearStateTests
             }, (_, _) => true);
     }
 
+    // ARC-MAGIC-1684: a world that also gives the item script context of the guard's wield.
+    private sealed class ScriptedWorld : World, ISessionRestockWorld
+    {
+        public NpcWieldItemScriptTests.Host Scripts { get; } = new();
+        public SessionLifeTarget Target { get; } = SessionCritterCombat.From("guard", AttackStateTests.Npc()).Combat!.Target;
+        public SessionNpcWieldScripts? NpcWieldScripts(SessionMapId map, string npc) => new(Scripts, Target, AttackStateTests.Stats());
+    }
+
     private static SessionMapInventorySeed Seed() => new(
         [
             new("guard", SessionHolderKind.Npc, false, true, [], ["purse", "club", "ring", "helmet"]),
@@ -142,6 +151,30 @@ public sealed class NpcWearStateTests
         Assert.AreEqual((GameSessionFailure.None, (SessionNpcWield?)null), (both[0].Wield!.Failure, both[1].Wield));
         CollectionAssert.AreEqual(new[] { (EquipmentSlot.Helmet, "helmet"), (EquipmentSlot.Ring1, "ring"), (EquipmentSlot.Weapon, "made:5"), (EquipmentSlot.Armor, "made:6") },
             Worn(owner));
+    }
+
+    [TestMethod]
+    public void A_regenerated_npcs_wield_runs_the_move_scripts_of_its_items_in_the_same_revision()
+    {
+        // ARC-MAGIC-1684 (IE4): the persistent helmet has a wield on script that adds a charm to the guard; the regeneration's wield puts it on and runs it, and the guard's effect list changes with the one revision.
+        using var owner = Owner();
+        var world = new ScriptedWorld();
+        var plain = world.Wear["helmet"]!;
+        world.Wear["helmet"] = plain with { ScriptPoints = [SessionScriptPoint.WieldOn] };
+        world.Scripts.Slots[("helmet", SessionScriptPoint.WieldOn)] = NpcWieldItemScriptTests.Mark;
+        var done = Fire(owner, world).Regenerations.Single();
+        Assert.AreEqual(GameSessionFailure.None, done.Wield!.Failure);
+        CollectionAssert.Contains(Worn(owner), (EquipmentSlot.Helmet, "helmet"), "the scripted helmet goes on");
+        Assert.AreEqual(new SessionItemScriptSlot("helmet", SessionScriptPoint.WieldOn, NpcWieldItemScriptTests.Mark, 0, 7), owner.QueryItemScriptSlots().Single());
+
+        // The same regeneration without the script context leaves the scripted helmet in the pack, as before.
+        using var bare = Owner();
+        var plainWorld = new World();
+        plainWorld.Wear["helmet"] = plain with { ScriptPoints = [SessionScriptPoint.WieldOn] };
+        var without = Fire(bare, plainWorld).Regenerations.Single();
+        Assert.AreEqual(GameSessionFailure.None, without.Wield!.Failure);
+        Assert.IsFalse(Worn(bare).Any(worn => worn.Item2 == "helmet"));
+        Assert.AreEqual(GameSessionFailure.ItemScriptUnsupported, without.Wield.Steps.Single(step => step.Unsupported == "helmet").Failure);
     }
 
     [TestMethod]
@@ -238,7 +271,7 @@ public sealed class NpcWearStateTests
         const string Saved = "\"npcWorn\":[{\"npc\":\"guard\",\"worn\":[{\"slot\":1000,\"item\":\"helmet\"},{\"slot\":1001,\"item\":\"ring\"}," +
             "{\"slot\":1004,\"item\":\"made:2\"},{\"slot\":1006,\"item\":\"made:3\"}]}]";
         StringAssert.Contains(text, ",\"generated\":[]," + Saved + ",\"itemFields\":[],\"holderSlots\":[]},\"objects\":{\"junkPiles\":[],\"bloodPools\":[],\"lastJunkNumber\":0,\"lastPoolNumber\":0,\"state\":[],\"links\":[],\"created\":[],\"lastCreatedNumber\":0}");
-        StringAssert.Contains(text, "\"schemaVersion\":100");
+        StringAssert.Contains(text, "\"schemaVersion\":101");
         using (var restored = Restore(Decode(text)))
         {
             Assert.AreEqual(text, GameSessionSnapshotCodec.Encode(restored.Capture()));

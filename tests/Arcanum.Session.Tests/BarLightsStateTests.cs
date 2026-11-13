@@ -40,10 +40,10 @@ public sealed class BarLightsStateTests
     {
         using var owner = Create();
         var none = GameSessionSnapshotCodec.Encode(owner.Capture());
-        StringAssert.Contains(none, NoBarLights + ",\"lighting\":");
+        StringAssert.Contains(none, NoBarLights + NoGamblingRoll + ",\"lighting\":");
         owner.RecordBarLights(Lit);
         var text = GameSessionSnapshotCodec.Encode(owner.Capture());
-        StringAssert.Contains(text, ",\"barLights\":{\"lit\":[false,true,false,false,true],\"mapMode\":3},\"lighting\":");
+        StringAssert.Contains(text, ",\"barLights\":{\"lit\":[false,true,false,false,true],\"mapMode\":3}" + NoGamblingRoll + ",\"lighting\":");
         var decoded = GameSessionSnapshotCodec.TryDecode(text);
         Assert.AreEqual(SnapshotDecodeFailure.None, decoded.Failure, decoded.Path);
         Assert.AreEqual(Lit, decoded.Snapshot!.BarLights);

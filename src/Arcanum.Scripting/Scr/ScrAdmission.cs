@@ -447,11 +447,31 @@ public sealed class ScrAdmissionSet
     /// </summary>
     public static ScrAdmissionSet S53 { get; } = new("S53", S52.Conditions.Concat(CritterStateConditions), S52.Actions, S52.ValueKinds, S52.FocusKinds, counterIndexWraps: true);
 
+    /// <summary>The conditions the set <see cref="S54"/> adds to <see cref="S53"/> (ARC-SCRIPT-1771, ledger CS12–CS16): obj has bad associates (11), obj is monster of type (19) and obj is within range (34).</summary>
+    public static IReadOnlyList<int> CritterTailConditions { get; } = [ScrCatalogue.Condition.BadAssociates, ScrCatalogue.Condition.MonsterOfType, ScrCatalogue.Condition.WithinRange];
+
+    /// <summary>The conditions of <see cref="CritterTailConditions"/> a host answers through <see cref="IScrCritterStateQueries"/> (obj is within range reads only the object's location, through <see cref="IScrWorldQueries"/>).</summary>
+    public static IReadOnlySet<int> CritterTailQueryConditions { get; } = new HashSet<int> { ScrCatalogue.Condition.BadAssociates, ScrCatalogue.Condition.MonsterOfType };
+
     /// <summary>
-    /// The slide set (ARC-RENDER-1171, ledger SS3, SS4): <see cref="S53"/> plus queue slide (131) and end game and play slides (132), which hand <see cref="ScrSlideRequest"/> effects to the host in action order.
+    /// The critter-state tail set (ARC-SCRIPT-1771, ledger CS12–CS16; the script census group CRQ, ARC-RES-1101): <see cref="S53"/> plus obj has bad associates (11, exe 0x4451B0 case 11 → 0x45F460), obj is monster of type (19, case 19: the art id of object field 0x18) and
+    /// obj is within range (34, case 34 → 0x4B96F0).
+    /// </summary>
+    public static ScrAdmissionSet S54 { get; } = new("S54", S53.Conditions.Concat(CritterTailConditions), S53.Actions, S53.ValueKinds, S53.FocusKinds, counterIndexWraps: true);
+
+    /// <summary>
+    /// The spell-state set (ARC-SCRIPT-1734, ledger SC18, WE11, WE12): <see cref="S54"/> plus the conditions obj is polymorphed (12, bit 0x20000), obj is shrunk (13, 0x80000) and obj has mirror image (16, 0x40000) of the object's spell flags
+    /// (<see cref="IScrSpellQueries"/>, as condition 14 reads its body bits), and the eye candy actions play spell eye candy (104, 0x456E60) and stop script eye candy (124, 0x44C800), which hand their number and object to the host as
+    /// <see cref="ScrEyeCandy"/> requests (presentation only).
+    /// </summary>
+    public static ScrAdmissionSet S55 { get; } = new("S55", S54.Conditions.Concat([ScrCatalogue.Condition.IsPolymorphed, ScrCatalogue.Condition.IsShrunk, ScrCatalogue.Condition.HasMirrorImage]),
+        S54.Actions.Concat([ScrCatalogue.Action.PlaySpellEyeCandy, ScrCatalogue.Action.StopScriptEyeCandy]), S54.ValueKinds, S54.FocusKinds, counterIndexWraps: true);
+
+    /// <summary>
+    /// The slide set (ARC-RENDER-1171, ledger SS3, SS4): <see cref="S55"/> plus queue slide (131) and end game and play slides (132), which hand <see cref="ScrSlideRequest"/> effects to the host in action order.
     /// Queue slide is the one command of the engine-run slide scripts 997 to 999 and of the ending scripts they call (2921 to 2928); end game is the last line of three movie scripts (1105, 2862, 2863, 3061).
     /// </summary>
-    public static ScrAdmissionSet S58 { get; } = new("S58", S53.Conditions, S53.Actions.Concat([ScrCatalogue.Action.QueueSlide, ScrCatalogue.Action.EndGame]), S53.ValueKinds, S53.FocusKinds, counterIndexWraps: true);
+    public static ScrAdmissionSet S58 { get; } = new("S58", S55.Conditions, S55.Actions.Concat([ScrCatalogue.Action.QueueSlide, ScrCatalogue.Action.EndGame]), S55.ValueKinds, S55.FocusKinds, counterIndexWraps: true);
 
     /// <summary>
     /// The set the engine runs the slide scripts with (ARC-RENDER-1171, ledger SS2): true, equal, less or equal, local and global flag and PC quest state conditions; the control and arithmetic actions, call script
@@ -483,9 +503,9 @@ public sealed class ScrAdmissionSet
     public static IReadOnlySet<int> StoryQueryActions { get; } = new HashSet<int> { ScrCatalogue.Action.GetDaySinceStartup, ScrCatalogue.Action.GetCurrentHour, ScrCatalogue.Action.GetCurrentMinute,
         ScrCatalogue.Action.GetHoursSinceStartup, ScrCatalogue.Action.SetGlobalQuestState, ScrCatalogue.Action.SetPcQuestUnbotched };
 
-    /// <summary>The conditions of <see cref="S31"/> a host answers through <see cref="IScrSpellQueries"/>.</summary>
+    /// <summary>The conditions of <see cref="S31"/> and <see cref="S53"/> a host answers through <see cref="IScrSpellQueries"/>.</summary>
     public static IReadOnlySet<int> SpellQueryConditions { get; } = new HashSet<int> { ScrCatalogue.Condition.HasBodySpell, ScrCatalogue.Condition.InfluencedBySpell, ScrCatalogue.Condition.KnowsSpell,
-        ScrCatalogue.Condition.MasteredSpellCollege };
+        ScrCatalogue.Condition.MasteredSpellCollege, ScrCatalogue.Condition.IsPolymorphed, ScrCatalogue.Condition.IsShrunk, ScrCatalogue.Condition.HasMirrorImage };
 
     /// <summary>The actions of <see cref="S15"/>, <see cref="S18"/> and <see cref="S19"/> a host answers through <see cref="IScrWorldQueries"/>.</summary>
     public static IReadOnlySet<int> WorldQueryActions { get; } = new HashSet<int>

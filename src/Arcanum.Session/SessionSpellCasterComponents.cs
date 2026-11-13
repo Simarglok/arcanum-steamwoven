@@ -49,6 +49,8 @@ public sealed partial class SessionSpellCaster
         [SpellComponentType.Trait64] = static (c, run, component, target) => c.Trait64Component(run, component, target),
         // ARC-MAGIC-1295: TraitIdx adds its value to an NPC's stored base stat (0x4B0980) or resistance (0x407340) (SessionSpellCasterTraitIndex.cs); Interrupt (a no-op in the original too, MG7) stays "not ready".
         [SpellComponentType.TraitIdx] = static (c, run, component, target) => c.TraitIndexComponent(run, component, target),
+        // ARC-MAGIC-1169 (E1-f): the AIRedirect component (0x451700) turns the NPCs near its target on it (SessionSpellCasterRedirect.cs).
+        [SpellComponentType.AIRedirect] = static (c, run, component, target) => c.AiRedirectComponent(run, component, target),
     };
 
     // Damage and Heal: the component's data on its target object; without the target object the component does nothing and is not "not ready" (its data is there).

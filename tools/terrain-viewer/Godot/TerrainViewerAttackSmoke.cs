@@ -131,6 +131,14 @@ public partial class TerrainViewerApp
                     _gameSettings = _gameSettings with { AutoSwitchWeapons = true };
                     Require(HeroWeaponWornOut(brokeWear, target.Row, false) == wielded.Entity, "auto switch on: the best weapon is wielded after a broken weapon");
                     Require(session.QueryEquipment().Worn.Any(w => w.Slot == Arcanum.Simulation.Equipment.EquipmentSlot.Weapon && w.Entity == wielded.Entity), "the hero wields it");
+                    // ARC-COMBAT-1738: the no-ammunition case (0x4B3170) and the struck hero's lost weapon (0x4B4390) reach the same re-wield.
+                    Require(HeroOutOfAmmunition(AttackRefusal.None, target.Row, false) is null, "a served attack calls no re-wield");
+                    Require(HeroOutOfAmmunition(AttackRefusal.OutOfAmmunition, target.Row, false) == wielded.Entity, "auto switch on: no ammunition wields the best weapon");
+                    var heroStruck = new SessionAttackResult(GameSessionDisposition.Changed, GameSessionFailure.None, null, DamageRecipient.Target, null, null, null, GameSessionFailure.None, session.Version)
+                        { Criticals = [new SessionCriticalStep(SessionCriticalStepKind.DropWeapon, DamageRecipient.Target, Arcanum.Simulation.Equipment.EquipmentSlot.Weapon, wielded.Entity, SessionCriticalStepOutcome.Dropped, null)] };
+                    Require(HeroWeaponLostToStrike(heroStruck, target.Row, false) == wielded.Entity, "auto switch on: a struck hero's dropped weapon wields the best weapon");
+                    _gameSettings = _gameSettings with { AutoSwitchWeapons = false };
+                    Require(HeroOutOfAmmunition(AttackRefusal.OutOfAmmunition, target.Row, false) is null && HeroWeaponLostToStrike(heroStruck, target.Row, false) is null, "auto switch off: the two cases change nothing");
                 }
                 finally { _gameSettings = savedSettings; }
                 GD.Print("ARC-COMBAT-1720 native-smoke auto-switch PASS weapon=" + wielded.Entity);

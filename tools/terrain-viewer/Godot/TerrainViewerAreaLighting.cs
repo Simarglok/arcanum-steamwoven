@@ -25,7 +25,9 @@ public partial class TerrainViewerApp
     // ARC-WORLD-092: its AI ticks run through the shown map's AI host; ARC-WORLD-096: its restock events through the restock host.
     private AreaEventWorld AreaEvents => _areaEventWorld ??= new AreaEventWorld(() => _combatHost, () => _conversationHost, AdmitCallAttachee,
         () => LootWindowOnContainer, () => _aiHost is { } ai && ReferenceEquals(ai.Session, _areaSession) ? ai : null,
-        () => _combatHost is not null && _worldActor.Session is AreaGridSession ? AreaCombatWorldNow() : null, RestockHostNow, EncounterHostNow, () => _readingData?.Data?.Texts);
+        () => _combatHost is not null && _worldActor.Session is AreaGridSession ? AreaCombatWorldNow() : null, RestockHostNow, EncounterHostNow, () => _readingData?.Data?.Texts,
+        // ARC-MAGIC-1684: an NPC's best-items wield (its regeneration, the AI gate's re-wield) runs its items' move scripts through the shown map's item script host.
+        () => _areaSession is { } session ? _inventoryHost?.ItemScripts(session) : null);
 
     // MIG12 S8: the host of the real-time steps the frame step hands out (the world-map journey's travel step, the turn-based event).
     private AreaRealStepHost? _realStepHost;
@@ -467,6 +469,9 @@ public partial class TerrainViewerApp
                 + $" postponed={restock.Postponed} schedule={restock.ScheduleFailure} regenerations="
                 + string.Join(",", restock.Regenerations.Select(r => $"{r.Outcome}:removed {r.Removed}:coins {r.Coins}:created {r.Created.Count}:refused {r.Refused}:skipped {r.Skipped}")));
         if (last.Restocks.Any(r => r.Regenerations.Count > 0)) SyncAreaInventory();
+        // ARC-MAGIC-1745: the lines the item scripts of an NPC's best-items wield printed at the end of its regeneration go to the message window.
+        foreach (var restock in last.Restocks)
+            foreach (var regeneration in restock.Regenerations) PostScriptLines(regeneration.Wield?.Messages ?? []);
         var refused = (_areaEventWorld?.CallRefusals ?? 0) > _loggedCallRefusals;
         _loggedCallRefusals = _areaEventWorld?.CallRefusals ?? 0;
         GD.Print($"ARC-WORLD-039 events steps={last.Steps} passes={last.Passes} fired={last.Fired} dropped={last.Dropped} calls={last.ScriptCallsRun}/{last.ScriptCalls}"

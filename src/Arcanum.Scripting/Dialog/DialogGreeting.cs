@@ -343,6 +343,9 @@ internal static class DialogGreeting
             't' => PcLine(context, pcDumb, 500, 599),
             'r' => PcClassLine(context, pcDumb, 2000),
             'w' => PcLine(context, pcDumb, 1800, 1899),
+            // ARC-SCRIPT-1798: the skill service reply u:N (0x419A00: PC lines 900..999, the skill's name filled in by the caller) and the spell reply z:N (0x419AC0: 1000..1099).
+            'u' => PcLine(context, pcDumb, 900, 999),
+            'z' => PcLine(context, pcDumb, 1000, 1099),
             'y' => PcLine(context, pcDumb, 1, 99),
             _ => null,
         };
