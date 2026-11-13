@@ -63,8 +63,9 @@ public partial class TerrainViewerApp
     {
         if (life is null || id == Arcanum.Simulation.Ai.AiSchedulerRules.Pc || _areaSession is not { } session || _aiHost is not { } host || !session.QueryCompanion(id).LedByPc
             || _combatHost?.Build(session, CurrentAreaMap, id).Combat is not { } combat || session.QueryLife(combat.Target).View is not { } view) return null;
-        var after = view.Status.HitPoints;
-        return host.Hurt(id, after + life.HitPointDamage, after, view.Status.MaxHitPoints, life.Events.HasFlag(LifeEvents.Died));
+        // ARC-AI-1638: the hit points before and after are the outcome's own (maximum minus the state's damage), so a second step queued in the same frame does not skew the first one's ratios.
+        var max = view.Status.MaxHitPoints;
+        return host.Hurt(id, max - life.Before.HitPointDamage, max - life.After.HitPointDamage, max, life.Events.HasFlag(LifeEvents.Died));
     }
 
     /// <summary>

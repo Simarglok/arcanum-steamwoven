@@ -42,7 +42,7 @@ public sealed partial class SessionSpellCaster
         if (LifeTarget(victim) is not { } target || LifeDamage.FromStep(step) is not { } packet) return new(false, 0, null, step);
         var applied = _owner.ApplyDamage(_owner.Version, target, packet, new(null, null));
         _itemEvents.AddRange(applied.ItemEvents);
-        if (applied.Outcome is { } scripted) QueueDamageStep(victim, step, scripted, null);
+        if (applied.Outcome is { } scripted) QueueDamageStep(victim, step, scripted, null, fromScript: true);
         FirePendingItems();
         Struck(victim, applied);
         return applied.Disposition == GameSessionDisposition.Changed && applied.Outcome is { } outcome ? new(true, outcome.HitPointDamage, outcome, step) : new(false, 0, null, step);
