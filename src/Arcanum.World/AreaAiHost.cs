@@ -3475,7 +3475,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
 
     /// <summary>
     /// ARC-AI-1520 (ledger AW18, VBG9): the observer's pixel offset (object fields 3 and 4) that the original adds to the start of the sight line
-    /// (0x4AF260 -> 0x4ADE00) and the sound line (0x4AF640): the offset of its map data plus, for an NPC the host walked, the screen shift its
+    /// and the sound line (ledger RA7, VB3-16, VB3-18): the offset of its map data plus, for an NPC the host walked, the screen shift its
     /// step has left (the pose's shift less the projection of its cell from the T0 cell, <see cref="AreaCritterLights.Stand"/>). The hero and an
     /// NPC this host does not walk stand at their cell centre (0, 0): the hero's step offset and a follower's are not tracked here.
     /// </summary>
