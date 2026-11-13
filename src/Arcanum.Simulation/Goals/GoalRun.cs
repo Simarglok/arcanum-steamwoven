@@ -111,7 +111,7 @@ public sealed record GoalFrame
 }
 
 /// <summary>
-/// ARC-DEV-143 (MIG13 S9b, docs/architecture/goal-table.md §3.5, GT68, GT70): the typed slots of an eye-candy goal (the original's slots 4, 8, 11, 14, 15 and 17): the art id of the entry's frame 0, the entry's index in the eye-candy table, the tag (the magic-tech
+/// ARC-DEV-143 (MIG13 S9b, docs/architecture/goal-table.md §3.5, GT68, GT70): the typed slots of an eye-candy goal (the original's slots 4, 8, 11, 14, 15 and 17): the art id of the entry's frame 0, the entry (the list and the index in it, <see cref="Arcanum.Simulation.Magic.EyeCandyEntryRef"/>; list 0 is the spell list the spells' runs and every earlier save hold), the tag (the magic-tech
 /// run's id, or −1) the callbacks and the removal compare, the frame the timing part shows now, the frame the background shows beside a foreground, and the object that caused it (the fire damage's source). A plain value, so a save can hold a stack unchanged (MIG14).
 /// </summary>
 public sealed record GoalEyeCandy(uint Art, int Entry, int Tag, string? Source = null, int Frame = 0, int BackgroundFrame = 0);

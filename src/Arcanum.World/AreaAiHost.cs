@@ -133,6 +133,9 @@ public sealed record AreaAiScene
     /// <summary>ARC-WORLD-109: an NPC's map data's advancement sheet and its effects' modifiers (its skills for a skill attempt), or null
     /// when they cannot be read; null: no NPC has skills, so its heal attempt is refused.</summary>
     public Func<string, (SessionNpcAdvancement Loaded, AdvancementModifiers Modifiers)?>? NpcSheet { get; init; }
+    /// <summary>ARC-COMBAT-1776 (0x42A4E0): the lock a pick-locks goal's target names (a door, window or container of the shown map, by the goal's target string), as the session picks it: the object, its T0 lock facts, the lock's difficulty and the
+    /// light at it; null (the provider, or its answer) for a target that is none or gone. Null delegate: no NPC picks a lock, and the attempt names it a gap.</summary>
+    public Func<string, SessionPickLockTarget?>? PickLockTarget { get; init; }
     /// <summary>ARC-DEV-246 (MIG13 S14l, GT208): the victim's catching-thief script (point 11) after a noticed pick pocket, with the NPC thief as the triggerer; true when the consequences go on ("run default", or no script); false when the script's answer, or a run the viewer cannot finish, stops them; null: no script runs.</summary>
     public Func<string, string, bool>? CatchingThief { get; init; }
     /// <summary>ARC-DEV-258 (MIG13 S14n, GT63): launches the projectile of a generic item (a grenade) an NPC threw: the thrower, its shot, the thrower's tile and the throw's location; true when the
@@ -250,6 +253,8 @@ public sealed record AreaAiNotice(AreaAiNoticeKind Kind, string Npc, string? Tar
     public SessionHealResult? Heal { get; init; }
     /// <summary>ARC-DEV-246: what an NPC's pick pocket did (<see cref="AreaAiNoticeKind.Skill"/> with the pick pocket skill).</summary>
     public SessionNpcPickPocketResult? PickPocket { get; init; }
+    /// <summary>ARC-COMBAT-1776 (<see cref="AreaAiNoticeKind.Skill"/> with the pick-locks skill): the session's answer of an NPC's pick of a lock (<see cref="GameSessionOwner.PickLockByNpc"/>); null when the host did not ask it (no sheet or no lock target).</summary>
+    public SessionPickLockResult? PickLock { get; init; }
     /// <summary>ARC-WORLD-113: the thrown item and the session's throw (<see cref="AreaAiNoticeKind.Throw"/>; the struck critter in
     /// <see cref="Target"/>, its attack in <see cref="Result"/>); ARC-WORLD-108: the used item (<see cref="AreaAiNoticeKind.ItemUse"/>).</summary>
     public string? Item { get; init; }
@@ -2911,11 +2916,26 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         return result.Check?.Success == true && result.Disposition == GameSessionDisposition.Changed;
     }
 
-    /// <summary>The pick-locks attempt (0x42A4E0). NOT READY: an NPC's lock picking (the session's is the hero's) does nothing.</summary>
+    /// <summary>
+    /// The pick-locks attempt (0x42A4E0, ledger PL1, PL3–PL5): the session's <see cref="GameSessionOwner.PickLockByNpc"/> with the NPC's sheet, the lock the scene names (<see cref="AreaAiScene.PickLockTarget"/>) and the lockpicks
+    /// the goal's tool item is when the NPC holds them (anything else, or none: it picks without, as a follower, the AI and a script may). The attempt charges no action points (the goal's own was paid) and has no fate. Witnesses (PL6)
+    /// and the hand-over line are the viewer's: the notice carries the answer. NOT READY: the NPC's lock pick without a scene that names the lock does nothing, and the NPC's wear of its lockpicks is none (PL4).
+    /// </summary>
+    [OriginalFunction(0x42A4E0, OriginalFunctionScope.Partial)]
     public void AttemptPickLocks(string id, string target, string? item)
     {
-        Trace(id).Skill = $"pick locks {target}: not ready";
-        _notices.Add(new(AreaAiNoticeKind.Skill, id, target) { Skill = AiExecutorRules.PickLocksSkill });
+        string? refusal = null;
+        SessionPickLockResult? result = null;
+        if (Build(id) is not { } picker || _scene.NpcSheet?.Invoke(id) is not { } sheet) refusal = "no sheet";
+        else if (_scene.PickLockTarget?.Invoke(target) is not { } lockTarget) refusal = "no lock target";
+        else
+        {
+            var lockpick = item is not null && _scene.Combat.HeldItemFields(_session, id, item) is { } fields ? AreaLockpicks.From(item, fields) : null;
+            result = _session.PickLockByNpc(_session.Version, new SessionNpcSkillUser(picker.Target, sheet.Loaded, sheet.Modifiers, _session.QueryCompanion(id).LedByPc), lockTarget, lockpick);
+        }
+        Trace(id).Skill = result is null ? $"pick locks {target}: {refusal}"
+            : $"pick locks {target} {result.Disposition} {result.Failure} success={result.Check?.Success} critical={result.Check?.Critical} result={result.Outcome?.Result}";
+        _notices.Add(new(AreaAiNoticeKind.Skill, id, target) { Skill = AiExecutorRules.PickLocksSkill, PickLock = result });
     }
 
     // The heal: the healer's sheet, the target's life and the held healing item; null with the refusal when the session is not asked.

@@ -216,6 +216,8 @@ public partial class TerrainViewerApp
             ObjectStruck = NpcObjectHit,
             // ARC-TECHNOLOGY-1619 (VB2-2 gap d): a trap's shooter object (an object that is no critter) as the attack event reads it.
             ObjectFacts = AiObjectFacts,
+            // ARC-COMBAT-1776 (0x42A4E0): the door, window or container a pick-locks goal's target string names, as the session picks it, at the light of its cell.
+            PickLockTarget = AiPickLockTarget,
             // ARC-AI-1636: an NPC's attack on the object it holds as its focus is the session's object attack on the map row the cast id names.
             ObjectAttackTarget = id => _areaSession is { } objectOwner && _spellCastMap?.Row(id) is { } objectRow && !IsAreaCompanion(objectRow.Key) ? ObjectTargets()?.Target(objectOwner, objectRow.Key, AreaTrapped) : null,
             // ARC-DEV-261 (GT198): the victims' taking-damage scripts (point 0x17) of the NPCs' attacks, throws and knockback bumps.
@@ -842,6 +844,12 @@ public partial class TerrainViewerApp
                     GD.Print($"ARC-WORLD-109 ai-skill npc={notice.Npc} skill={notice.Skill} target={notice.Target} disposition={notice.Heal?.Disposition.ToString() ?? "none"}"
                         + $" failure={notice.Heal?.Failure} success={notice.Heal?.Check?.Success} hp={notice.Heal?.Heal?.HitPoints} uses={notice.Heal?.UsesLeft}");
                     if (notice.Heal is { Disposition: GameSessionDisposition.Changed }) AiSpellTook();
+                    // ARC-COMBAT-1776: an NPC's pick of a lock (the session's answer); witnesses and the hand-over line are not built.
+                    if (notice.PickLock is { } pick)
+                    {
+                        _aiNotice = $"{AiName(notice.Npc)} picks a lock: {(pick.Disposition == GameSessionDisposition.Rejected ? $"refused ({pick.Failure})" : pick.Outcome!.Value.Result.ToString())}";
+                        GD.Print($"ARC-COMBAT-1776 ai-pick-lock npc={notice.Npc} target={notice.Target} disposition={pick.Disposition} failure={pick.Failure} success={pick.Check?.Success} result={pick.Outcome?.Result} locked={pick.State?.Locked}");
+                    }
                     break;
                 case AreaAiNoticeKind.Throw:
                     AiThrow(notice);

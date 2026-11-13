@@ -39,6 +39,9 @@ src/Arcanum.Scripting/Dialog/DialogConversation.cs,SchematicsCommand,pending,
 src/Arcanum.Scripting/Dialog/DialogConversation.cs,Store,pending,
 src/Arcanum.Scripting/Dialog/DialogConversationHealer.cs,FormatName,exempt,reference
 src/Arcanum.Scripting/Dialog/DialogConversationNewspaper.cs,PunctuatedHeadline,exempt,host
+src/Arcanum.Scripting/Dialog/DialogConversationServiceReply.cs,OpenService,exempt,host
+src/Arcanum.Scripting/Dialog/DialogConversationServiceReply.cs,ServiceOffered,exempt,host
+src/Arcanum.Scripting/Dialog/DialogConversationServiceReply.cs,ServiceText,exempt,host
 src/Arcanum.Scripting/Dialog/DialogGreeting.cs,Comment,exempt,host
 src/Arcanum.Scripting/Dialog/DialogGreeting.cs,MissingLine,pending,
 src/Arcanum.Scripting/Dialog/DialogGreeting.cs,ParseSlots,pending,
@@ -86,6 +89,8 @@ src/Arcanum.Session/GameSessionExperience.cs,RecordNpcKill,pending,
 src/Arcanum.Session/GameSessionFate.cs,HeroFateArmed,pending,
 src/Arcanum.Session/GameSessionFate.cs,QueryHeroFate,pending,
 src/Arcanum.Session/GameSessionFate.cs,UseHeroFate,pending,
+src/Arcanum.Session/GameSessionFollowerSkills.cs,PickLockByNpc,exempt,host
+src/Arcanum.Session/GameSessionFollowerSkills.cs,RollNpcDisarmTrap,exempt,host
 src/Arcanum.Session/GameSessionFollowers.cs,ApplyFollowerRule,pending,
 src/Arcanum.Session/GameSessionGeneratedOnce.cs,GenerateContainerOnce,pending,
 src/Arcanum.Session/GameSessionGoals.cs,InsertGoalAtBottom,pending,
@@ -103,6 +108,7 @@ src/Arcanum.Session/GameSessionHeroName.cs,SetHeroPlayerName,pending,
 src/Arcanum.Session/GameSessionHeroThrow.cs,SplitAmmoForThrow,pending,
 src/Arcanum.Session/GameSessionHeroThrow.cs,SplitAmmoRefusal,pending,
 src/Arcanum.Session/GameSessionHeroThrow.cs,ThrowHeroItem,pending,
+src/Arcanum.Session/GameSessionHeroWieldScripts.cs,PlanHeroRewield,exempt,host
 src/Arcanum.Session/GameSessionHolderGrid.cs,ArrangeHolderGrid,exempt,host
 src/Arcanum.Session/GameSessionHolderGrid.cs,QueryHolderRoom,exempt,host
 src/Arcanum.Session/GameSessionHolderGrid.cs,StoreInsertPlace,exempt,host
@@ -259,6 +265,7 @@ src/Arcanum.Session/SessionSpellCasterItems.cs,WithdrawItemSpells,pending,
 src/Arcanum.Session/SessionSpellCasterScript.cs,CastByScript,pending,
 src/Arcanum.Session/SessionSpellCasterScriptDamage.cs,ApplyScriptDamage,pending,
 src/Arcanum.Session/SessionSpellCasterSocial.cs,EndFleeGoals,exempt,host
+src/Arcanum.Session/SessionSpellCasterSocial.cs,Redirect,exempt,host
 src/Arcanum.Session/SessionSpellCasterSummon.cs,DestroyCreated,pending,
 src/Arcanum.Session/SessionSpellCasterTeleport.cs,PayTeleportCost,pending,
 src/Arcanum.Session/SessionSpellCasterTeleport.cs,TeleportAllowedFor,pending,
@@ -427,7 +434,6 @@ src/Arcanum.World/AreaAiHost.cs,Active,pending,
 src/Arcanum.World/AreaAiHost.cs,AnimationPriority,pending,
 src/Arcanum.World/AreaAiHost.cs,ApplyStop,pending,
 src/Arcanum.World/AreaAiHost.cs,AttackEnded,exempt,host
-src/Arcanum.World/AreaAiHost.cs,AttemptPickLocks,pending,
 src/Arcanum.World/AreaAiHost.cs,BeginAttack,pending,
 src/Arcanum.World/AreaAiHost.cs,BlastRadius,pending,
 src/Arcanum.World/AreaAiHost.cs,CanHealAndFight,pending,
@@ -519,6 +525,8 @@ src/Arcanum.World/AreaAiHostGround.cs,LooseItems,exempt,host
 src/Arcanum.World/AreaAiHostGround.cs,StartPickup,exempt,host
 src/Arcanum.World/AreaAiHostHealer.cs,HealerCast,exempt,host
 src/Arcanum.World/AreaAiHostHealer.cs,HealerService,exempt,host
+src/Arcanum.World/AreaAiHostRedirect.cs,SpellRedirect,exempt,host
+src/Arcanum.World/AreaAiHostRedirect.cs,Vicinity,exempt,host
 src/Arcanum.World/AreaAiHostRoutes.cs,RelocateAlongPath,pending,
 src/Arcanum.World/AreaAiHostRoutes.cs,RelocateToRandomTile,pending,
 src/Arcanum.World/AreaAiHostRoutes.cs,ScriptProne,pending,
@@ -778,6 +786,7 @@ tools/terrain-viewer/Godot/TerrainViewerAreaBarter.cs,BarterPointerStill,pending
 tools/terrain-viewer/Godot/TerrainViewerAreaBarter.cs,FollowerMenuFacts,exempt,reference
 tools/terrain-viewer/Godot/TerrainViewerAreaBarter.cs,Gamble,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAreaContainerLoot.cs,CloseContainer,pending,
+tools/terrain-viewer/Godot/TerrainViewerAreaContainerPick.cs,AiPickLockTarget,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAreaEncounters.cs,EncounterSiteNow,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAreaEncounters.cs,HandleEncounterNotices,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAreaFate.cs,FateToggled,exempt,host
