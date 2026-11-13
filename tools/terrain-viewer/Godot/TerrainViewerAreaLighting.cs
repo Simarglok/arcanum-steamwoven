@@ -25,7 +25,7 @@ public partial class TerrainViewerApp
     // ARC-WORLD-092: its AI ticks run through the shown map's AI host; ARC-WORLD-096: its restock events through the restock host.
     private AreaEventWorld AreaEvents => _areaEventWorld ??= new AreaEventWorld(() => _combatHost, () => _conversationHost, AdmitCallAttachee,
         () => LootWindowOnContainer, () => _aiHost is { } ai && ReferenceEquals(ai.Session, _areaSession) ? ai : null,
-        () => _combatHost is not null && _worldActor.Session is AreaGridSession ? AreaCombatWorldNow() : null, RestockHostNow, EncounterHostNow);
+        () => _combatHost is not null && _worldActor.Session is AreaGridSession ? AreaCombatWorldNow() : null, RestockHostNow, EncounterHostNow, () => _readingData?.Data?.Texts);
 
     // MIG12 S8: the host of the real-time steps the frame step hands out (the world-map journey's travel step, the turn-based event).
     private AreaRealStepHost? _realStepHost;
