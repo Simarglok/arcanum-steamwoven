@@ -316,6 +316,6 @@ public sealed class AreaVitalScriptTests
         foreach (var action in new[] { ScrCatalogue.Action.GetHitPoints, ScrCatalogue.Action.GetFatiguePoints, ScrCatalogue.Action.HealPoison, ScrCatalogue.Action.HealHitPoints,
             ScrCatalogue.Action.HealFatigue, ScrCatalogue.Action.MagickTechAdjustment, ScrCatalogue.Action.PlayScriptEyeCandy, ScrCatalogue.Action.Destroy, ScrCatalogue.Action.GetStat })
             Assert.IsTrue(AreaUseScriptHost.Admission.Actions.Contains(action), $"action {action}");
-        Assert.IsTrue(AreaUseScriptHost.Admission.IsSubsetOf(ScrAdmissionSet.S56));
+        Assert.IsTrue(AreaUseScriptHost.Admission.IsSubsetOf(ScrAdmissionSet.S58));
     }
 }
