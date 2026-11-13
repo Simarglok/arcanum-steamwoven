@@ -57,8 +57,8 @@ public sealed class AreaNpcStateScriptAdmissionTests
         // ARC-SCRIPT-1279 (the four item commands got a host): the placed set admits 123 and the dying set 150 (3 more each); the use and heartbeat sets stay at 56 and 91.
         // ARC-SCRIPT-1359 (set S38, get location 95): the heartbeat set admits 94 and the dying set 153 (3 more each, among them the Crash Site agent's heartbeat 1717).
         // ARC-SCRIPT-1481 (set S43, the vitals commands and the use set's heal, destroy and magick-tech commands): the dying set admits one more.
-        // ARC-SCRIPT-1735 (change art number got its host, ledger NS5, NS9): the use set admits 85 (29 more), the placed set 163 (40 more), the heartbeat set 97 (3 more) and the dying set 205 (51 more), and with the set S53 and S54 of ARC-SCRIPT-1733 and ARC-SCRIPT-1771 (the critter-state conditions) the placed set 165, the heartbeat set 98 and the dying set 211; whether a run applies is the host's, which refuses a
+        // ARC-SCRIPT-1735 (change art number got its host, ledger NS5, NS9): the use set admits 85 (29 more), the placed set 163 (40 more), the heartbeat set 97 (3 more) and the dying set 205 (51 more), and with the set the later condition sets (S53 to S55) the placed set 168, the heartbeat set 98 and the dying set 214; whether a run applies is the host's, which refuses a
         // target it cannot draw with another art before anything applies.
-        Assert.AreEqual((270, 208, 85, 165, 98, 211), (withState, counts["S36"], counts["use"], counts["placed"], counts["heartbeat"], counts["dying"]));
+        Assert.AreEqual((270, 208, 85, 168, 98, 214), (withState, counts["S36"], counts["use"], counts["placed"], counts["heartbeat"], counts["dying"]));
     }
 }
