@@ -25,7 +25,7 @@ Every rule was read in the retail 1.0.7.4 `Arcanum.exe` ([ledger SWB1–SWB13](.
   `mes\sleepUI.mes` (entries 0..7, the wait window's 12..18, the messages 9, 11 and 20; the project's English text when the file does not read,
   [`AreaRestTexts`](../../src/Arcanum.World/AreaRest.cs)).
 - **Press** (SWB8, [`AreaRestRun.Press`](../../src/Arcanum.World/AreaRest.cs)): the pending step is removed and the first is due 50 ms of real time
-  later; the buttons are hidden; once per rest the screen fades to black (2.0 s in 48 steps, `AreaRestFade`) and the hourly light apply is held
+  later; the buttons **stay** (the handler hides nothing) and a press during a rest restarts it: the pending step is removed and re-added, event 29 and the maintained-spell ending run again; once per rest the screen fades to black (2.0 s in 48 steps, `AreaRestFade`) and the hourly light apply is held
   until the stop; script event 29 (leader sleeping) runs on the hero's followers
   ([`AreaUseScriptHost.RunLeaderSleeping`](../../src/Arcanum.World/AreaUseScripts.cs), the heartbeat admission set, its answer decides nothing); then **the sleeper's maintained spells end**
   (ARC-MAGIC-1161, ledger UE6; the ending is queued by the press and told by the next frame pass of the cast host, before the first step is due: `SessionSpellCaster.EndMaintainedSpells` for the hero, 0x457450, so every run the hero is the source of ends but technology runs and item-trigger runs with no maintenance period; the
@@ -143,8 +143,7 @@ switch wakes a sleeper only when it is farther than its radius from the *current
 - The chain is the window's own deadline (50 ms, then 200 ms), not an entry of the session's event queue, which has no real-time kind.
 - **The window's look (ARC-UI-1363)** is the original's: art 565 at (573, 42) of its own size, a push button of art 293 and a line of `sleepUI.mes` (font art 229, white) for each length, as the build
   0x57B4F0 lays them out (below). Not compared with the original's picture yet ([owner re-check list](../project/owner-recheck-list.md#arc-ui-1363--the-sleep-and-wait-window-in-the-originals-look-2026-11-13)).
-  PROJECT: a button takes the pointer on its art's rectangle, not its opaque pixels; the controller's focus row is drawn lit; a press **hides the buttons and their lines** and keeps the window art
-  (the handler 0x57B710 hides nothing, so in the original the buttons stay and a second press restarts the rest; [issue #1511](https://github.com/Simarglok/arcanum-steamwoven/issues/1511)); the fade
+  PROJECT: a button takes the pointer on its art's rectangle, not its opaque pixels; the controller's focus row is drawn lit; a press hides nothing, as the handler 0x57B710 (ARC-UI-1511, [issue #1511](https://github.com/Simarglok/arcanum-steamwoven/issues/1511)): the buttons and their lines stay, and a second press restarts the rest; the fade
   covers the game view under the windows and the bars, its extent in the original is not checked. Until the window's art has read (in the background after the map opens) and in a run with no game
   folder, the plain project panel stands in with the same buttons.
 
