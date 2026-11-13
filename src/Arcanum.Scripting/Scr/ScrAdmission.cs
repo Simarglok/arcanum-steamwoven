@@ -419,6 +419,17 @@ public sealed class ScrAdmissionSet
     public static ScrAdmissionSet S43 { get; } = new("S43", S42.Conditions, S42.Actions.Concat([ScrCatalogue.Action.GetHitPoints, ScrCatalogue.Action.GetFatiguePoints, ScrCatalogue.Action.HealPoison]),
         S42.ValueKinds, S42.FocusKinds, counterIndexWraps: true);
 
+    /// <summary>
+    /// The combat-point set (ARC-SCRIPT-1562, ledger CP7–CP9): <see cref="S43"/> plus the condition obj is animal (37, <see cref="IScrCritterQueries"/>), get magick-tech adjustment (80, the cancel chance of an attack's item, attacker and target, <see cref="IScrMagickTechQueries"/>), the magick-tech
+    /// adjustment (91, an item's power ratio for its wielder, <see cref="IScrItemQueries"/>) and play script eye candy (120, a presentation effect): the commands the installed poison weapons' hit and critical-hit scripts (30032, 30076,
+    /// 30199) and the hunting weapons' (28007) need. The shown map's use host runs the combat points under the placed set plus the three actions and the condition.
+    /// </summary>
+    public static ScrAdmissionSet S51 { get; } = new("S51", S43.Conditions.Append(ScrCatalogue.Condition.IsAnimal), S43.Actions.Concat([ScrCatalogue.Action.GetMagickTechAdjustment, ScrCatalogue.Action.MagickTechAdjustment, ScrCatalogue.Action.PlayScriptEyeCandy]),
+        S43.ValueKinds, S43.FocusKinds, counterIndexWraps: true);
+
+    /// <summary>The conditions of <see cref="S51"/> a host answers through <see cref="IScrCritterQueries"/>.</summary>
+    public static IReadOnlySet<int> CritterQueryConditions { get; } = new HashSet<int> { ScrCatalogue.Condition.IsAnimal };
+
     /// <summary>The actions of <see cref="S43"/> a host answers through <see cref="IScrVitalQueries"/>.</summary>
     public static IReadOnlySet<int> VitalQueryActions { get; } = new HashSet<int> { ScrCatalogue.Action.GetHitPoints, ScrCatalogue.Action.GetFatiguePoints };
 
@@ -639,6 +650,8 @@ public static class ScrAdmission
             if (!condition && type == ScrCatalogue.Action.GetObjectType && slot == 1 && (ScrValueKind)kind == ScrValueKind.Number) return Refuse(ScrRefusalCode.WriteToNumber);
             // Random stores into its number operand 2 (ARC-WORLD-081, PG5).
             if (!condition && type == ScrCatalogue.Action.Random && slot == 2 && (ScrValueKind)kind == ScrValueKind.Number) return Refuse(ScrRefusalCode.WriteToNumber);
+            // Get magick-tech adjustment stores into its number operand 4 (ARC-SCRIPT-1562, CP7).
+            if (!condition && type == ScrCatalogue.Action.GetMagickTechAdjustment && slot == 4 && (ScrValueKind)kind == ScrValueKind.Number) return Refuse(ScrRefusalCode.WriteToNumber);
             // The magick-tech adjustment stores into its number operand 3 (ARC-SCRIPT-042, WE2).
             if (!condition && type == ScrCatalogue.Action.MagickTechAdjustment && slot == 3 && (ScrValueKind)kind == ScrValueKind.Number) return Refuse(ScrRefusalCode.WriteToNumber);
             // Distance between stores into its number operand 2 (ARC-SCRIPT-049, HW3).

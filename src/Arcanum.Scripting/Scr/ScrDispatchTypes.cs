@@ -214,6 +214,26 @@ public interface IScrItemQueries
 }
 
 /// <summary>
+/// ARC-SCRIPT-1562 (ledger CP9): the question of obj is animal (condition 37, 0x4451B0 case 0x25), which the weapon scripts of the hunting weapons ask of the victim. A host whose admission set holds condition 37 implements this interface.
+/// </summary>
+public interface IScrCritterQueries
+{
+    /// <summary>Whether the object is an NPC whose critter flags (0xDA) hold the animal bit 0x8 as the session has them; false for any other object (the original tests the object type 0x10 first); null when the host does not know the object (the run stops).</summary>
+    bool? IsAnimal(ScrObjectRef obj);
+}
+
+/// <summary>
+/// ARC-SCRIPT-1562 (ledger CP7): the question of get magick-tech adjustment (action 80, 0x44933F → 0x461620), which the combat-point scripts of the installed poison weapons ask before their damage: the chance, in percent, that the opposing
+/// aptitude of the target cancels the item's magick or technology in an attack by the attacker. A host whose admission set holds action 80 implements this interface.
+/// </summary>
+public interface IScrMagickTechQueries
+{
+    /// <summary>The percent chance of 0x461620 for <paramref name="item"/> (its magick-tech complexity), <paramref name="attacker"/> and <paramref name="target"/> (their aptitudes): 0 unless both are a PC or an NPC; null when the host does not know the
+    /// item or a critter's aptitude (the run stops, as for an object the host does not know).</summary>
+    int? MagickCancelPercent(ScrObjectRef item, ScrObjectRef attacker, ScrObjectRef target);
+}
+
+/// <summary>
 /// ARC-WORLD-081: what a host that runs <see cref="ScrAdmissionSet.S15"/> answers about the world around a run (ledger PG3, PG5). The
 /// interpreter asks only while a clause needs it.
 /// </summary>
@@ -890,7 +910,7 @@ public sealed class ScrRunResult
 }
 
 /// <summary>How a dispatch runs: the rule mode's script switches, the admitted set (default <see cref="ScrAdmissionSet.S5"/>,
-/// at most <see cref="ScrAdmissionSet.S43"/>, admitted for the lines reachable from the event's line), the executed-line
+/// at most <see cref="ScrAdmissionSet.S51"/>, admitted for the lines reachable from the event's line), the executed-line
 /// budget and the call depth.</summary>
 public sealed record ScrRunOptions
 {
@@ -911,7 +931,7 @@ public sealed record ScrRunOptions
         ArgumentNullException.ThrowIfNull(Admission);
         if (MaxExecutedLines is <= 0 or > OriginalLineBudget) throw new ArgumentOutOfRangeException(nameof(MaxExecutedLines), "The line budget is 1..1000.");
         if (MaxCallDepth is < 1 or > 64) throw new ArgumentOutOfRangeException(nameof(MaxCallDepth), "The call depth is 1..64.");
-        if (!Admission.IsSubsetOf(ScrAdmissionSet.S43)) throw new ArgumentException("The interpreter runs only the commands of ScrAdmissionSet.S43.", nameof(Admission));
+        if (!Admission.IsSubsetOf(ScrAdmissionSet.S51)) throw new ArgumentException("The interpreter runs only the commands of ScrAdmissionSet.S51.", nameof(Admission));
     }
 
     // A set with a guard condition needs a host that answers it, checked before any event runs.
@@ -928,6 +948,10 @@ public sealed record ScrRunOptions
             throw new ArgumentException("A set with get stat needs a host that implements IScrStatQueries.", nameof(Admission));
         if (host is not IScrItemQueries && (Admission.Conditions.Any(ScrAdmissionSet.ItemQueryConditions.Contains) || Admission.Actions.Contains(ScrCatalogue.Action.MagickTechAdjustment)))
             throw new ArgumentException("A set with the identified or rewielding condition or the magick-tech adjustment needs a host that implements IScrItemQueries.", nameof(Admission));
+        if (host is not IScrCritterQueries && Admission.Conditions.Any(ScrAdmissionSet.CritterQueryConditions.Contains))
+            throw new ArgumentException("A set with the animal condition needs a host that implements IScrCritterQueries.", nameof(Admission));
+        if (host is not IScrMagickTechQueries && Admission.Actions.Contains(ScrCatalogue.Action.GetMagickTechAdjustment))
+            throw new ArgumentException("A set with get magick-tech adjustment needs a host that implements IScrMagickTechQueries.", nameof(Admission));
         if (host is not IScrVitalQueries && Admission.Actions.Any(ScrAdmissionSet.VitalQueryActions.Contains))
             throw new ArgumentException("A set with get hit points or get fatigue points needs a host that implements IScrVitalQueries.", nameof(Admission));
         if (host is not IScrWorldQueries && (Admission.Actions.Any(ScrAdmissionSet.WorldQueryActions.Contains) || Admission.FocusKinds.Any(ScrAdmissionSet.WorldQueryFocusKinds.Contains)))
