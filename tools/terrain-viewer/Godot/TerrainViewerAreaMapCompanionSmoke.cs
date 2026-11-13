@@ -198,7 +198,8 @@ public partial class TerrainViewerApp
                 $"its body came from its home map's read as a led NPC's: {string.Join("; ", _unreadVisitors)}");
         GD.Print("ARC-AI-1695 native-smoke led-carry PASS " + System.Text.Json.JsonSerializer.Serialize(new {
             From = from, To = _readyMapName, SameMap = sameMap, Visiting = visiting, Home = companion.Template.Home.RuntimeMap, At = $"{cell.X},{cell.Y}", Distance = distance }));
-        if (visiting) SendAreaMapFormerFollowerHome(entity);
+        // The carry is reported again after the jump smoke: the released NPC is checked once (it stands on its home map afterwards).
+        if (visiting) { _smokeLedNpc = null; SendAreaMapFormerFollowerHome(entity); }
     }
 
     /// <summary>After the transfer smoke: the companion the follow smoke joined stands where the PC arrived and is drawn there.</summary>
