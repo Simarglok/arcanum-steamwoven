@@ -59,6 +59,12 @@ public sealed class AreaCombatHostIndexedWritesTests
         Assert.AreEqual((13, 50), (host.Critter(guard)!.Facts.Strength, host.Critter(guard)!.SheetResistances(8, 20).Damage.Fire), "by identity");
         Write(session, guard, false, 0, 14);
         Assert.AreEqual(14, host.Critter(1, guard)!.Facts.Strength, "a later write rebuilds again");
+        // The session-less build alone (no session worn set): the written values follow a later write and an unchanged signature keeps the cached build.
+        var sessionLess = host.Build(1, guard);
+        Assert.AreEqual(14, sessionLess.Combat!.Facts.Strength);
+        Assert.AreSame(sessionLess, host.Build(1, guard), "nothing new written: the cached build");
+        Write(session, guard, false, 0, 15);
+        Assert.AreEqual(15, host.Build(1, guard).Combat!.Facts.Strength);
     }
 
     [TestMethod]

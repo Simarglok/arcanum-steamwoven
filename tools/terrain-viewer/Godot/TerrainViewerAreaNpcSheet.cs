@@ -139,11 +139,10 @@ public partial class TerrainViewerApp
     {
         AreaNpcSheetPages? Refuse(string why) { _sheetNpcStatus = why; GD.Print($"ARC-UI-088 npc sheet refused: {why}"); return null; }
         var session = _areaSession!;
-        if (CombatFieldReader.Read(row).Fields is not { } stored) return Refuse("no data of the speaker");
-        // ARC-MAGIC-1475: the base stats and resistances a spell wrote into the NPC lie over its stored fields (the sheet and the pages built from it).
-        var fields = session.QueryCritterIndexedWrites(entity).Apply(stored);
+        if (CombatFieldReader.Read(row).Fields is not { } fields) return Refuse("no data of the speaker");
         if (_areaEffectRules is not { } effects) return Refuse("no effect rules (start with --hero)");
-        if (AreaAdvancement.Npc(entity, fields, effects) is not { } loaded) return Refuse("the speaker gives no admissible sheet");
+        // ARC-MAGIC-1475: the advancement starts from the base stats a spell wrote into the NPC; the sheet lays the written stats and resistances over the stored fields itself.
+        if (AreaAdvancement.Npc(session, entity, fields, effects) is not { } loaded) return Refuse("the speaker gives no admissible sheet");
         AdoptSkillTexts();
         var name = AreaHoverIndex.Text(row, _hoverNames?.Catalog) ?? entity;
         var life = _combatHost is { } combat ? AreaLife.Of(session, combat, entity) : null;

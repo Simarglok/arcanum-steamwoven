@@ -105,6 +105,8 @@ internal sealed class SessionMapChanges
     private readonly Dictionary<(string Entity, string Property), (SessionMapId Map, long Value)> _fields = [];
     private readonly Dictionary<(SessionMapId Map, string Entity, string Property), long> _statics = [];
     private readonly Dictionary<SessionMapId, int> _fieldCounts = [];
+    // ARC-MAGIC-1475: the entities that ever had an indexed critter write recorded (a superset: a removal leaves the entity in), so a read of an NPC with none skips its 33 lookups.
+    private readonly HashSet<string> _indexedWritten = new(StringComparer.Ordinal);
 
     /// <summary>Every recorded change, per-map and object fields together (the budget of the whole session).</summary>
     internal int Total { get; private set; }
@@ -131,6 +133,7 @@ internal sealed class SessionMapChanges
         if (ObjectStateVocabulary.Mobile(key))
         {
             var id = (key.Entity!, key.Property);
+            if (SessionCritterIndexedWrites.Owns(key.Property)) _indexedWritten.Add(key.Entity!);
             if (_fields.TryGetValue(id, out var old)) Count(_fieldCounts, old.Map, -1); else Total++;
             _fields[id] = (map, value);
             Count(_fieldCounts, map, 1);
@@ -212,6 +215,9 @@ internal sealed class SessionMapChanges
     /// <summary>ARC-DEV-103: every mobile object field, in no order (the residency's overlay reads the fields that move or flag a resident).</summary>
     internal IEnumerable<SessionObjectField> MobileFields() =>
         _fields.Select(pair => new SessionObjectField(pair.Key.Entity, pair.Key.Property, pair.Value.Map, pair.Value.Value));
+
+    /// <summary>ARC-MAGIC-1475: whether the entity may have an indexed critter write (false: certainly none; true: one was recorded at some time).</summary>
+    internal bool MayHaveIndexedWrites(string entity) => _indexedWritten.Contains(entity);
 
     /// <summary>The record of a mobile object field and its map, or none for a key that is not a mobile field or has no record.</summary>
     internal IReadOnlyList<(SessionMapId Map, long Value)> RecordsOf(string entity, string property) =>

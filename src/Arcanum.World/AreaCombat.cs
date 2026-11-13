@@ -269,7 +269,8 @@ public sealed class AreaCombatHost : IAreaEventObjects
             ? holder : null;
     }
 
-    /// <summary>ARC-WORLD-036: an NPC's stored fields on a map this host covers (a follower's loaded sheet), or null.</summary>
+    /// <summary>ARC-WORLD-036: an NPC's stored fields on a map this host covers (a follower's loaded sheet), or null. ARC-MAGIC-1475: the stored values as its row has
+    /// them, without what a spell wrote (<see cref="Fields(string)"/> lays that over); its callers read no stat or resistance.</summary>
     public CombatFields? Fields(int runtimeMap, string entity) =>
         Held(runtimeMap, out var map) && map.TryGetRow(entity, out var row) ? CombatFieldReader.Read(row).Fields : null;
 
