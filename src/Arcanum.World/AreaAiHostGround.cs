@@ -75,15 +75,37 @@ public sealed partial class AreaAiHost
         return found;
     }
 
-    /// <summary>ARC-AI-1309: the junk piles in the square, in the order the session made them (the containers named 3023; the map's own piles are not read here).</summary>
-    public IReadOnlyList<string> JunkPiles(string npc, int halfSize) =>
-        GroundView() is { } view && Tile(npc) is { } at ? view.JunkPiles.Where(pile => InSquare(at, pile.Cell, halfSize)).Select(pile => pile.Entity).ToArray() : [];
+    /// <summary>ARC-AI-1309: the junk piles in the square, in the order the session made them (the containers named 3023); ARC-AI-1486: then the map's own standing piles in the map's order (a container holder of the
+    /// map's seed of prototype 3043, such as the Crash Site cave's). The original's object list order was not read.</summary>
+    public IReadOnlyList<string> JunkPiles(string npc, int halfSize)
+    {
+        if (GroundView() is not { } view || Tile(npc) is not { } at) return [];
+        var made = view.JunkPiles.Where(pile => InSquare(at, pile.Cell, halfSize)).Select(pile => pile.Entity);
+        return [.. made, .. MapPilesIn(at, halfSize).Select(pile => pile.Entity)];
+    }
+
+    // The map's own standing junk piles whose cell lies in the square (the shown map's: a pickup is the actor map's transfer).
+    private IReadOnlyList<(string Entity, CellCoord Cell, SessionObjectTarget Target)> MapPilesIn(CellCoord center, int halfSize) =>
+        _scene.Combat.MapJunkPiles(_session, _scene.RuntimeMap, cell => InSquare(center, cell, halfSize));
+
+    // The standing junk pile of the map's data that lists the item now, with its cell and target; null when the item lies in none (or the shown map is not the actor's).
+    private (CellCoord Cell, SessionObjectTarget Target)? MapPileOf(string item) =>
+        _session.QueryActor().Map.RuntimeMap == _scene.RuntimeMap && _scene.Combat.MapJunkPileHolding(_session, _scene.RuntimeMap, item) is { } found ? (found.Cell, found.Target) : null;
 
     /// <summary>ARC-AI-1309 (0x4626B0): the first item of the kind in the pile's list, or null. Its object flag OFF is an item in flight (hidden until it lands).</summary>
     [OriginalFunction(0x4626B0, OriginalFunctionScope.Partial)]
     public AiGroundItem? FirstInPile(string pile, AiGroundKind kind)
     {
-        if (GroundView() is not { } view || view.JunkPiles.FirstOrDefault(listed => listed.Entity == pile) is not { } found) return null;
+        if (GroundView() is not { } view) return null;
+        if (view.JunkPiles.FirstOrDefault(listed => listed.Entity == pile) is not { } found)
+        {
+            // ARC-AI-1486: a junk pile of the map's data: the first item of the kind in its container's current list (an item of a pile is never in flight).
+            if (_scene.Combat.MapJunkPileNamed(_session, _scene.RuntimeMap, pile) is not { } named) return null;
+            // Only the seed's items: one a barter sold into the container is not the transfer's (the pile's pickup names seed items).
+            foreach (var item in _session.QueryHolderItems(pile) ?? [])
+                if (KindOf(item.Facts.Kind.Type) == kind && named.SeedItems.Contains(item.Entity, StringComparer.Ordinal)) return Describe(_searchNpc, view, item, 0, off: false);
+            return null;
+        }
         foreach (var item in found.Items)
             if (KindOf(item.Facts.Kind.Type) == kind)
                 return Describe(_searchNpc, view, item, 0, off: _session.QueryItemInFlight(item.Entity));
@@ -105,7 +127,8 @@ public sealed partial class AreaAiHost
         if (Build(npc) is not { } build || LifeState(npc) is not { } state) return SessionInsertVerdict.TooHeavy;
         var aptitude = Math.Clamp(build.EffectiveStat(CharacterStat.MagickTechAptitude, state), EquipmentLimits.MinAptitude, EquipmentLimits.MaxAptitude);
         var carry = build.EffectiveStat(CharacterStat.CarryWeight, state);
-        var held = view?.Holders.FirstOrDefault(listed => listed.Entity == npc)?.Items ?? [];
+        // The NPC's whole list: the shown map's view lists it, and a companion carried here from another map lists on its home map's seed, which the session's holder query finds (ARC-AI-1486).
+        var held = view?.Holders.FirstOrDefault(listed => listed.Entity == npc)?.Items ?? _session.QueryHolderItems(npc) ?? [];
         var total = CarryRules.TotalWeight(held.Select(CarriedBy), CarryHolder.Critter, aptitude);
         return CarryRules.Fits(total, CarryRules.ItemWeight(CarriedBy(item), CarryHolder.Critter, aptitude), carry) ? SessionInsertVerdict.Accepted : SessionInsertVerdict.TooHeavy;
     }
@@ -130,9 +153,11 @@ public sealed partial class AreaAiHost
         return false;
     }
 
-    /// <summary>The pickup switch of the item system (0x4681A0, global 0x5E8800): 1 from the item module's start, lowered only while an inventory window is open in loot mode on a container (0x468190, ID6), which this host
-    /// does not know (<see cref="InterfaceHoldsObject"/> answers false as well): always on.</summary>
-    public bool NpcPickupsOn => true;
+    /// <summary>ARC-AI-1486 (0x4681A0, global 0x5E8800, read by the starter 0x4356C0): the pickup switch of the item system, 1 from the item module's start. The window that opens in loot or See Contents mode on a
+    /// container lowers it by one (0x5727B0 → 0x468190; a window on a critter's body or on the hero's own list does not: the open tests the shown object's type 2) and its close raises it again (0x573440 → 0x468180).
+    /// The scene's <see cref="AreaAiScene.LootWindowOpen"/> says whether such a window is open: then no NPC starts a pickup (<see cref="AiStartRefusal.PickupsOff"/>) and the goal's end of one already under way fails
+    /// (0x42AA70 returns 0 when the switch reads 0, before the action point is charged: <see cref="PickUp"/>).</summary>
+    public bool NpcPickupsOn => _scene.LootWindowOpen?.Invoke() != true;
 
     private CellCoord? PickupCell(string id) => _pickupItems.TryGetValue(id, out var cell) ? cell : null;
 
@@ -140,18 +165,25 @@ public sealed partial class AreaAiHost
     private CellCoord? LyingCell(string id)
     {
         if (_session.QueryGroundItem(id) is { } lying && lying.Map.RuntimeMap == _scene.RuntimeMap) return lying.Cell;
-        return _session.QueryJunkPiles().FirstOrDefault(pile => pile.Map.RuntimeMap == _scene.RuntimeMap && pile.Items.Any(item => item.Entity == id))?.Cell;
+        return _session.QueryJunkPiles().FirstOrDefault(pile => pile.Map.RuntimeMap == _scene.RuntimeMap && pile.Items.Any(item => item.Entity == id))?.Cell ?? MapPileOf(id)?.Cell;
     }
 
     /// <summary>
     /// ARC-AI-1309 (goal 16 → 0x42A9B0 → 0x42AA70): the pickup. A target with object flags OFF or DESTROYED (0x13 &amp; 3) is not taken and neither is an item whose holder is no junk pile (an item that lies nowhere: no action point is charged). In a round the actor's 1 action point is spent first (0x4B7CD0: none left ends its subturn and the pickup fails); then the item moves
-    /// into the NPC's list (<see cref="GameSessionOwner.PickUpItemByNpc"/>, the insert check the carry weight of 0x466510) and a <see cref="AreaAiNoticeKind.PickUp"/> notice tells the viewer. NOT READY: the item's get and insert-item
-    /// scripts (an item with one is refused), the item sound of a local picker (0x4F0BF0) and the network round's flag.
+    /// into the NPC's list (<see cref="GameSessionOwner.PickUpItemByNpc"/>, the insert check the carry weight of 0x466510) and a <see cref="AreaAiNoticeKind.PickUp"/> notice tells the viewer. The goal's end reads the item switch first (0x4681A0: a loot window open on a container, <see cref="NpcPickupsOn"/>, fails it before any action point), and an item of a standing junk pile of the map's data leaves its container (ARC-AI-1486, <see cref="MapPileOf"/>). NOT READY: the item's get and insert-item
+    /// scripts (an item with one is refused, #1655), the room test of the NPC's grid (#1654), the item sound of a local picker (0x4F0BF0) and the network round's flag.
     /// </summary>
     [OriginalFunction(0x42AA70, OriginalFunctionScope.Partial)]
     public void PickUp(string id, string item)
     {
         if (!Walks(id)) return;
+        // ARC-AI-1486 (0x42AA70 reads the switch 0x4681A0 first): a loot window opened on a container since the walk started fails the pickup before anything is charged or moved.
+        if (!NpcPickupsOn)
+        {
+            _pickupItems.Remove(item);
+            Trace(id).Item = $"pickup {item}: loot window open";
+            return;
+        }
         // 0x42A9B0 and 0x42AA70 refuse an item that is gone or held by something that is no junk pile before they charge the action point.
         if (LyingCell(item) is null)
         {
@@ -165,7 +197,8 @@ public sealed partial class AreaAiHost
             Consume(id, 1);
         }
         var view = GroundView();
-        var result = _session.PickUpItemByNpc(_session.Version, id, item, moving => NpcInsertVerdict(id, view, moving));
+        // ARC-AI-1486: an item of a junk pile of the map's data leaves its container (the pile is named by its target).
+        var result = _session.PickUpItemByNpc(_session.Version, id, item, moving => NpcInsertVerdict(id, view, moving), MapPileOf(item)?.Target);
         Trace(id).Item = $"pickup {item} {result.Disposition} {result.Failure}";
         if (result.Disposition == GameSessionDisposition.Changed || LyingCell(item) is null) _pickupItems.Remove(item);
         if (result.Disposition == GameSessionDisposition.Changed) _notices.Add(new(AreaAiNoticeKind.PickUp, id, null) { Item = result.Item ?? item });

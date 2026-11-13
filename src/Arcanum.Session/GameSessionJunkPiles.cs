@@ -135,6 +135,12 @@ public sealed partial class GameSessionOwner
         if (target.Map != _actor.Map || !_inventory.Seeds.TryGetValue(target.Map, out var seed) ||
             !seed.Holders.TryGetValue(target.Entity, out var holder) || holder.Kind != SessionHolderKind.Container)
             return new(GameSessionDisposition.Rejected, GameSessionFailure.UnknownHolder, Version);
+        return DissolveMapJunkPile(expected, target, seed, holder);
+    }
+
+    // The check 0x463540 on a standing junk pile of the map's data (JP4, JP9): shared by the loot window's close and, since ARC-AI-1486, the removal of an item an NPC picked out of it (0x467860 at 0x467C26, JP5).
+    private GameSessionMutationResult DissolveMapJunkPile(GameSessionVersion expected, SessionObjectTarget target, InventoryDomain.Seed seed, SessionSeedHolder holder)
+    {
         if (ObjectState(target).Condition != SessionObjectCondition.Whole) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, Version);
         var items = _inventory.Current(seed, holder, entity => DroppedCell(target.Map, seed, entity), added: false).Select(item => item.Entity).ToArray();
         // The items a barter sold into a container are not spilled (not modelled), so such a pile is left as it is.

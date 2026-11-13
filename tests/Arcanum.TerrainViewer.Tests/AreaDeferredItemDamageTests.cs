@@ -185,6 +185,23 @@ public sealed class AreaDeferredItemDamageTests
     }
 
     [TestMethod]
+    public void The_use_host_reads_a_worn_item_with_no_map_row_for_the_combat_point_adjustments()
+    {
+        // ARC-SCRIPT-1562 (CP7, CP8): the hero's worn item has no row of the shown map (here the use host holds none): action 91 reads the session's worn ratio and action 80 its worn complexity under the hero's aptitude.
+        With(UseHost.WithDamage, complexity: 60, (host, session, pc, ring, _) =>
+        {
+            var use = host.Scripts.QueryHost!()!;
+            var item = new Arcanum.Scripting.Scr.ScrObjectRef(ring.Map.RuntimeMap, "ring");
+            Assert.AreEqual(session.QueryWornPowerRatio("ring"), use.PowerRatio(item, use.Pc));
+            Assert.AreEqual(60, session.QueryWornComplexity("ring"));
+            Assert.IsNull(session.QueryWornComplexity("stranger"));
+            var aptitude = session.QueryHeroScriptStat(GameSessionOwner.ScriptStatAptitude)!.Value;
+            Assert.AreEqual(Arcanum.Simulation.Combat.AttackRules.MagickCancelChance(60, aptitude, aptitude), use.MagickCancelPercent(item, use.Pc, use.Pc));
+            Assert.IsNull(use.MagickCancelPercent(new(item.Map, "stranger"), use.Pc, use.Pc), "an item neither a row nor worn is not known");
+        });
+    }
+
+    [TestMethod]
     public void Without_a_use_host_that_gives_damage_a_damaging_script_is_refused_and_the_set_follows_the_use_host()
     {
         With(UseHost.None, complexity: 0, (host, _, pc, ring, hits) =>

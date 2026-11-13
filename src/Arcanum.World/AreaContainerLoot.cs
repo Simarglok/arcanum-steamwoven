@@ -206,12 +206,22 @@ public static class AreaContainerLoot
         ArgumentNullException.ThrowIfNull(session);
         ArgumentNullException.ThrowIfNull(map);
         ArgumentNullException.ThrowIfNull(container);
+        return MapJunkPile(session, map, container) is { } found ? session.CloseMapJunkPile(session.Version, found.Target) : null;
+    }
+
+    /// <summary>
+    /// ARC-AI-1486: a junk pile of the map's data that still stands (a container holder of the map's seed of prototype 3043 that has not broken or dissolved, see <see cref="Lootable"/>), with the target
+    /// the session names it by and its cell; null for any other container, a pile with no cell or fields that do not read.
+    /// </summary>
+    public static (SessionObjectTarget Target, Arcanum.Simulation.Movement.CellCoord Cell)? MapJunkPile(GameSessionOwner session, AreaInventoryMap map, string container)
+    {
         if (!Lootable(session, map, container) || !map.TryGetRow(container, out var row) || row is not { WorldX: { } x, WorldY: { } y } ||
             CombatFieldReader.ReadBreakable(row).Fields is not { } fields) return null;
         var openable = AreaObjectTargets.ContainerBaseline(row, fields);
         if (!openable.JunkPile) return null;
-        var baseline = SessionObjectFacts.FromCombatFields(fields, new(checked((int)x), checked((int)y)), openable, false);
-        return baseline is null ? null : session.CloseMapJunkPile(session.Version, new(new(map.RuntimeMap), container, baseline));
+        var cell = new Arcanum.Simulation.Movement.CellCoord(checked((int)x), checked((int)y));
+        var baseline = SessionObjectFacts.FromCombatFields(fields, cell, openable, false);
+        return baseline is null ? null : (new SessionObjectTarget(new(map.RuntimeMap), container, baseline), cell);
     }
 
     /// <summary>Whether a left press on the object opens a container's loot window: a container holder of the map's seed that has not
