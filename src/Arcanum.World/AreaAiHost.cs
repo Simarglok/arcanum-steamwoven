@@ -2896,6 +2896,10 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         return new(null, castAnimation, Queued: queued == SpellCastQueueOutcome.Queued);
     }
 
+    /// <summary>ARC-RENDER-1544: puts the NPC into combat mode as the attack goal's start does (<see cref="BeginAttack"/>), for a caller that shows or tests what it wields.</summary>
+    public SessionCombatModeResult? EnterCombatMode(string npc) =>
+        NpcCombatMode(npc) is { } context ? _session.SetCombatMode(_session.Version, SessionCombatant.Critter(npc), true, context) : null;
+
     public void LeaveCombatMode(string npc)
     {
         if (NpcCombatMode(npc) is { } context) _session.SetCombatMode(_session.Version, SessionCombatant.Critter(npc), false, context);
