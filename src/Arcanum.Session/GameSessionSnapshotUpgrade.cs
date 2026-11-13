@@ -629,6 +629,8 @@ public static partial class GameSessionSnapshotCodec
             if (root.ContainsKey("gamblingRoll")) throw new DecodeException(SnapshotDecodeFailure.UnknownField, "$.gamblingRoll");
             root.Add("gamblingRoll", null);
         },
+        // ARC-WORLD-1840 (schema 102): the party section gains the followers of NPC leaders. No older build made an NPC lead anyone (the hero was the one leader), so the list is empty.
+        [101] = root => AddField(Section(root, "party"), "$.party", "npcLed", new JsonArray()),
     };
 
     /// <summary>The schemas with an upgrade step to the next one, ascending: every schema from

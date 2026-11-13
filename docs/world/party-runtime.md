@@ -13,7 +13,7 @@ follows the PC ([companion follow runtime](companion-follow-runtime.md)); other 
 diagnostic `follow.pc` key. Since ARC-WORLD-045 the session has the original's wait timer and follower loyalty
 ([below](#wait-timer-and-loyalty-arc-world-045)) and since ARC-WORLD-046 the out-of-combat orders
 ([companion orders](companion-orders-runtime.md)), whose wait order schedules the timer; the dialog `WA` action is not admitted,
-there are no NPC leaders other than the PC, and no generated line text (lines are named by their message range). Since ARC-DATA-033 the follow check and the max-followers stat
+NPC leaders other than the PC exist since ARC-WORLD-1840 ([below](#npc-leaders-arc-world-1840)), and there is no generated line text (lines are named by their message range). Since ARC-DATA-033 the follow check and the max-followers stat
 are checked in the retail executable ([ledger AP3, AP4](../research/ledger/npc-ai.md#ai-parameters-and-follow-consent-arc-data-033));
 the rest of the party state's numbers and order are earlier source claims, **NOT_VERIFIED** in the executable.
 
@@ -76,8 +76,51 @@ existing record may still change. New failures: `InvalidCompanion`, `InvalidCons
 
 Not stored yet: death and destruction (the original's kill notification and object destruction end the wait; here a dead or
 destroyed waiting NPC keeps its `Waiting` record, and its companion budget slot, with no timer: death removes the timer, a pass drops
-the timer of an NPC the host no longer reports), NPC leaders other than the PC,
+the timer of an NPC the host no longer reports),
 and the NPC flags an area record may carry at T0 (a new session starts with no records; Virgil's bits are clear, ARC-RES-026).
+
+## NPC leaders (ARC-WORLD-1840)
+
+Owner decision 2026-11-13 (#1322): an NPC leads followers as in the original, where every critter has a leader handle (field 0x119,
+read by 0x45DE00) and a follower array (field 0xF1), the join 0x45DE90 and the leave 0x45DFC0 / 0x45E040 work under any leader and
+0x45DDA0 walks the leaders up to a player character. The session keeps the hero's party as above and beside it the followers of
+leaders that are not the hero (`SessionNpcFollower`: entity, leader, forced; saved in `party.npcLed`, schema 102, grouped by leader in
+ordinal order, each leader's array in order, at most `MaxNpcFollowers` = 256). A critter has one leader: its hero record stands free
+while an NPC leads it.
+
+- `QueryLeader(critter)` (0x45DE00): the hero for a follower or waiting NPC of the hero, the NPC leader of a follower of an NPC, else
+  null; the hero has none. `QueryPcLeader(critter)` (0x45DDA0): the hero when the chain of leaders reaches it, else null (it starts at
+  the leader, so the hero itself answers null). `QueryFollowers(leader)`: the hero's array or an NPC leader's.
+- `ForceJoinLeader(entity, leader)` (the forced join 0x45DE90 with force 1): the hero's is `ForceJoinParty`. Under an NPC the joiner
+  first leaves the leader it has (a follower or waiting NPC of the hero leaves the party with the leave's side effects: concealment,
+  the no-attack order, the Tempus Fugit flag, a wait timer), then it is appended, forced, jilted cleared, the leader's concealment
+  taken (0x45EE30) and the leader's Tempus Fugit flag copied (TF3; an NPC leader's from the session's written flags only). Every join
+  of the hero's party leaves an NPC leader first. The hero follows no one, a critter does not lead itself, and a join that would close
+  a cycle of leaders is refused (`InvalidCompanion`): the original's chain query would not end on one. The unforced joins the session
+  models are the hero's (dialog, unwait), so every NPC-led follower is forced (the script follow, 0x447220, and mind control join with
+  force 1).
+- `LeaveParty` leaves an NPC leader too: out of its array, the Tempus Fugit flag cleared, the concealment ended; an unforced leave
+  reads `PartyLeave.LeaderCharisma` and `MindControlled` (the session does not hold an NPC's charisma). No jilted mark is written.
+- A destroyed critter (a created one) leaves its NPC leader (0x45E180), and the followers it led lose their leader without a leave of
+  their own (they keep their flags). The original leaves their handle naming the destroyed object (OM17); that the handle then
+  answers no leader is the session's reading, not read in the executable.
+- The AI host answers `Leader` and `PcLeader` from these and `Followers` for any critter; its call sites read the getter the
+  original's function reads (the trap alarm 0x4AA0D0, peace 0x4AA300 and its interrupt 0x44E050, the trap
+  avoidance of a drop 0x4BBFE0 and the trap observer read 0x45DDA0; the routine, the follow goal and the healer's free services read
+  0x45DE00), and a leave of an NPC leader (also the first half of a join under another leader) ends the follower's run as the hero's
+  leave does (`ObserveLeaves`). The catch-up (0x4AD4D0) reads the chain too, but the host can jump only the hero's companions onto the
+  hero, so an NPC of the map led through another leader does not catch up (NOT READY below, #1864).
+- A follower of an NPC is never concealed: 0x45EE30 gives the joiner its leader's concealment, but the session's concealment is the
+  hero party's (toggle, end on an attack, save), so a companion's summon does not sneak with it.
+- The leave of an NPC leader clears the follower's WAIT bit and removes its timer (the forced unwait 0x4AA8C0 inside 0x45DFC0).
+
+**NOT READY:** a waiting standing under an NPC leader (the original's wait 0x4AA7A0 keeps any leader; here the wait of an NPC-led
+follower sets the flag as for a leaderless NPC and the leave clears it); the catch-up of an NPC of the map whose chain reaches the hero
+through another leader; the concealment of NPC-led followers; an NPC leader's own charisma
+for the danger setter's extraordinary-charisma test (0x4AABE0 reads the leader's; the host reads only the hero's) and for its
+followers' unforced leave; the followers of a hero's companion travelling with the hero (the move list's followers of followers, GR14:
+the viewer carries only the hero's companions); the dying follower's leave (0x45DA20 leaves the leader and keeps the handle; the
+session keeps the hero's dead followers in the array as before, and an NPC's too). Tails: #1864.
 
 ## Wait timer and loyalty (ARC-WORLD-045)
 
