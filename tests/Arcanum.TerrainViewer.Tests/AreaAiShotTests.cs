@@ -3,6 +3,7 @@ using Arcanum.Data.Traversal;
 using Arcanum.Session;
 using Arcanum.Simulation.Ai;
 using Arcanum.Simulation.Combat;
+using Arcanum.Simulation.Equipment;
 using Arcanum.Scripting.GlobalFlags;
 using Arcanum.Simulation.Character;
 using Arcanum.Simulation.Movement;
@@ -31,12 +32,12 @@ public sealed class AreaAiShotTests
     private static AreaFieldValue Empty(int slot) => new(slot, AreaPresence.Empty, AreaValueOrigin.Instance, null, [], null);
 
     // A bow (type 5) wielded (location 1004): weight 15, normal damage 2..6, range 12, arrow ammunition (type 0), projectile art 0x20000.
-    private static AreaObjectRecord Item(int index, uint weaponFlags = 0, uint itemFlags = 0, int weight = 15, int worth = 1, int location = 1004) => new(Key(index), 0, 5, BowPrototype, "p", "p", "r", "s",
+    private static AreaObjectRecord Item(int index, uint weaponFlags = 0, uint itemFlags = 0, int weight = 15, int worth = 1, int location = 1004, long useArt = 0x60000000) => new(Key(index), 0, 5, BowPrototype, "p", "p", "r", "s",
         AreaScope.Core, null, null, null, Arcanum.Data.Area.AreaDisposition.BodyEligibleConditionally, [],
         [
             Field(0, 0x60000000), Field(18, 0), Field(19, 0), Field(21, 1), Field(22, 2), Field(25, 0), Field(26, 10), Field(27, 0), Field(28, 0), Field(29, 4),
             Array(30), Empty(31),
-            Field(36, itemFlags), Field(38, weight), Field(39, 0), Field(40, worth), Field(41, 0), Field(42, 0x60000000), Field(43, location), Field(44, 0x60000000), Field(45, 0),
+            Field(36, itemFlags), Field(38, weight), Field(39, 0), Field(40, worth), Field(41, 0), Field(42, 0x60000000), Field(43, location), Field(44, useArt), Field(45, 0),
             Field(46, 0), Field(49, 10000), Field(50, 10000), Field(51, 10000), Field(52, 10000), Field(53, 10000), Field(54, 0), Field(55, 0),
             Field(59, weaponFlags), Field(61, 0), Field(62, 0), Array(63, 2, 0, 0, 0, 0), Array(64, 6, 0, 0, 0, 0), Array(65, 0, 0, 0, 0, 0),
             Field(66, 10), Field(67, 0), Field(68, 12), Field(69, 0), Field(70, 0), Field(71, 0), Field(72, 0), Field(73, 1), Field(74, 0x20000),
@@ -91,7 +92,7 @@ public sealed class AreaAiShotTests
     private static Scene Open(Func<string, string, SessionShot, CellCoord, CellCoord, bool>? launch, bool bystander = false, AreaObjectRecord? blockerRow = null,
         Func<AreaObjectRecord, AreaObjectAttackTarget?>? objectTarget = null, Func<string, AreaObjectRecord, SessionShot, CellCoord, CellCoord, bool>? launchAtObject = null,
         Action<string, AreaObjectRecord, AreaObjectAttackTarget?, SessionObjectAttackResult>? struck = null,
-        IReadOnlyList<(AreaObjectRecord Row, SessionSeedItem Seed)>? ground = null, string? junkPiles = null)
+        IReadOnlyList<(AreaObjectRecord Row, SessionSeedItem Seed)>? ground = null, string? junkPiles = null, long bowUseArt = 0x60000000)
     {
         var identity = new GlobalFlagIdentity(new WorldId(Guid.NewGuid()), new ModuleId(Guid.NewGuid()));
         var hero = new SessionHeroDefinition(16089, CharacterRace.Human, CharacterGender.Male, [8, 8, 8, 8, 8, 8, 8, 8, 0, 0], 1, 5, 0, null, null, 0, []);
@@ -105,7 +106,7 @@ public sealed class AreaAiShotTests
             session.Dispose();
             session = GameSessionOwner.Restore(snapshot, new(snapshot.Identity, snapshot.Clock.Profile, new OwnerEpoch(Guid.NewGuid()))).Owner!;
         }
-        var rows = (bystander ? new[] { Npc(0), Item(1), Npc(3, BystanderCell) } : new[] { Npc(0), Item(1) }).Concat(ground?.Select(g => g.Row) ?? []).ToArray();
+        var rows = (bystander ? new[] { Npc(0), Item(1, useArt: bowUseArt), Npc(3, BystanderCell) } : new[] { Npc(0), Item(1, useArt: bowUseArt) }).Concat(ground?.Select(g => g.Row) ?? []).ToArray();
         var map = new AreaInventoryMap(1,
             new(bystander ? [new(Entity(0), SessionHolderKind.Npc, false, false, [], [Entity(1)]), new(Entity(3), SessionHolderKind.Npc, false, false, [], [])] : [new(Entity(0), SessionHolderKind.Npc, false, false, [], [Entity(1)])],
                 [new SessionSeedItem(Entity(1), new(BowKind, 15, 0, 1004, null, []), null), .. ground?.Select(g => g.Seed) ?? []]),
@@ -324,6 +325,24 @@ public sealed class AreaAiShotTests
         host.ReWield(npc, allSlots: false);
         Assert.AreEqual(0, session.QueryNpcWorn(npc)!.Worn.Count, host.TraceOf(npc)?.Item);
         Assert.AreEqual(-1, session.QueryHolderItems(npc)!.Single(item => item.Entity == bow).Facts.InventoryLocation, "the bow went to the pack");
+    }
+
+    // ARC-RENDER-1485 (0x465020): the weapon part the NPC's body shows follows what it wields. In combat mode it shows its bow (use-art subtype 4 here); the re-wield that takes the empty bow off shows bare hands (1), and the
+    // viewer is told (the Rewield notice) so it draws the body again. A re-wield that changes nothing tells nothing.
+    [TestMethod]
+    public void The_hosts_rewield_changes_the_weapon_the_body_shows_and_tells_the_viewer()
+    {
+        var (session, host, npc, _) = Open(null, bowUseArt: 0x60000000 | 4 << 6);
+        Assert.AreEqual(GameSessionDisposition.Changed, session.ForceJoinParty(session.Version, npc).Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, session.SetCombatMode(session.Version, SessionCombatant.Critter(npc), true, new SessionCombatModeContext { Facts = new() { Speed = 7, Life = new LifeFacts() } }).Disposition);
+        Assert.AreEqual((4, 0), host.ShownWeapon(npc), "it shows the bow it wields");
+        host.Hit(npc, AiSchedulerRules.Pc);
+        host.DrainNotices();
+        host.ReWield(npc, allSlots: false);
+        Assert.AreEqual((WeaponArtRules.Unarmed, 0), host.ShownWeapon(npc), "the empty bow is in the pack: bare hands");
+        Assert.AreEqual(1, host.DrainNotices().Count(n => n.Kind == AreaAiNoticeKind.Rewield && n.Npc == npc));
+        host.ReWield(npc, allSlots: false);
+        Assert.IsFalse(host.DrainNotices().Any(n => n.Kind == AreaAiNoticeKind.Rewield), "nothing changed, nothing told");
     }
 
     [TestMethod]

@@ -106,6 +106,49 @@ public sealed class AreaNpcSheetTests
         CollectionAssert.AreEqual(new[] { 10, 20, 5, 20, 0 }, Lines(), "the list gone: the stored lines again");
     }
 
+    /// <summary>ARC-MAGIC-1475 (AC1, AC2): the sheet reads the stored fields of the NPC with the entries a TraitIdx spell wrote laid over them: the alignment, experience and
+    /// resistance lines (fire 5 becomes 50, the Magick line 20 becomes 60), and the sheet the advancement is built from starts from a written primary stat.</summary>
+    [TestMethod]
+    public void The_sheet_reads_the_stats_and_resistances_a_spell_wrote_into_the_npc()
+    {
+        using var session = Session();
+        const string entity = "oid:virgil";
+        var map = session.QueryActor().Map;
+        var fields = Npc();
+        var loaded = AreaAdvancement.Npc(entity, fields, Effect)!.Value;
+        AreaNpcSheetPages Pages() => AreaNpcSheet.Build(session, "Virgil", fields, loaded, null, null, AreaHoverIndex.TextProfile)!;
+        Assert.AreEqual((-25, 40), (Pages().View.Alignment, Pages().View.Experience));
+        Assert.AreEqual(GameSessionDisposition.Changed, session.WriteCritterResistance(session.Version, map, entity, 1, 50).Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, session.WriteCritterResistance(session.Version, map, entity, 4, 60).Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, session.WriteCritterStat(session.Version, map, entity, 19, 300).Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, session.WriteCritterStat(session.Version, map, entity, 18, 90).Disposition);
+        var view = Pages().View;
+        CollectionAssert.AreEqual(new[] { 10, 60, 50, 20, 0 }, view.Resistances.Select(value => value.Value).ToArray(), "normal, magick, fire, poison, electrical: the written magick 60 and fire 50");
+        Assert.AreEqual((30, 90), (view.Alignment, view.Experience), "alignment 300 / 10 and the written experience");
+    }
+
+    /// <summary>ARC-MAGIC-1475 (AC1, AC2): the advancement a script reads and a recruit's record is seeded from starts from the written primary stat; the stored one without a session or a write.</summary>
+    [TestMethod]
+    public void The_advancement_of_an_npc_starts_from_the_stats_a_spell_wrote_and_a_seeded_record_keeps_them()
+    {
+        using var session = Session();
+        const string entity = "oid:virgil";
+        var map = session.QueryActor().Map;
+        var five = Npc();
+        var spellTech = new int[25];
+        spellTech[12] = 5; spellTech[16] = -1;
+        var fields = five with { Critter = five.Critter! with { SpellTech = spellTech } };
+        Assert.AreEqual(8, AreaAdvancement.Npc(session, entity, fields, _ => null)!.Value.Loaded.Sheet.Stats[0], "nothing written: the stored strength");
+        Assert.AreEqual(GameSessionDisposition.Changed, session.WriteCritterStat(session.Version, map, entity, 0, 13).Disposition);
+        Assert.AreEqual(8, AreaAdvancement.Npc(entity, fields, _ => null)!.Value.Loaded.Sheet.Stats[0], "no session: the stored fields as before");
+        var loaded = AreaAdvancement.Npc(session, entity, fields, _ => null)!.Value.Loaded;
+        Assert.AreEqual(13, loaded.Sheet.Stats[0], "the written strength");
+        // The record a script's mastery write seeds from it keeps the written stat.
+        Assert.IsTrue(AreaScriptSpells.GiveMastery(session, loaded, 12));
+        Assert.AreEqual(12, session.QueryNpcSpellBook(entity)!.MasteredCollege);
+        Assert.AreEqual(13, session.QueryNpcAdvancement(entity)!.Sheet.Stats[0], "the seeded record starts from the written strength");
+    }
+
     [TestMethod]
     public void A_monstrous_npc_shows_neither_race_nor_gender()
     {

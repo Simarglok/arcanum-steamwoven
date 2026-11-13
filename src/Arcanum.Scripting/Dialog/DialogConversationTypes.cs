@@ -760,10 +760,10 @@ public enum DialogEndKind
     /// <summary>The host closed an awaiting dialog without choosing a reply. No SCR continuation is implied.</summary>
     ClosedByHost,
     /// <summary>ARC-WORLD-043: an insult (a Player <c>i:</c> reply) left the NPC's reaction at 20 or below, so the NPC
-    /// answered with a generated line (not loaded) and ended the talk, as after FL: no SCR continuation follows.</summary>
+    /// answered with its race line 1000 (ARC-SCRIPT-1505, with the greeting port) and ended the talk, as after FL: no SCR continuation follows.</summary>
     Insulted,
     /// <summary>ARC-DEV-193: after the reply's action the NPC turned hostile toward the PC (alive and kill-on-sight, 0x413130, ledger HR1–HR3), so
-    /// it answered with a generated line (group 1000, not loaded) and ended the talk, as after FL: the reply's own transition (the next node, the
+    /// it answered with its race line 1000 (ARC-SCRIPT-1505, with the greeting port) and ended the talk, as after FL: the reply's own transition (the next node, the
     /// exit, the barter window) did not follow and no SCR continuation follows.</summary>
     HostileRefusal,
     /// <summary>ARC-TECHNOLOGY-006: SU: the dialog ended without another NPC line and the host opens the schematic window with the NPC
