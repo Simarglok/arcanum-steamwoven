@@ -1159,12 +1159,33 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         }
     }
 
-    // The reaction to an attack (0x4AA620 with the should-flee of 0x4AB2A0): a weighed reaction asks the setter.
+    // The reaction to an attack (0x4AA620 with the should-flee of 0x4AB2A0): a weighed reaction asks the setter; a surrendered NPC that keeps its surrender to another source runs the flee goal
+    // away from the new attacker (0x434980, ARC-AI-1521, VBG10); every NPC that is not dead then enters a running round (0x4B7E00).
     private void React(string npc, string attacker)
     {
-        var reaction = MoraleRules.ReactToAttack(this, npc, attacker, _session.AiRolls, _session.Rules.Combat);
-        Trace(npc).Reaction = $"{reaction.Reaction.Step} {reaction.Reaction.Request}";
-        if (reaction.Reaction is { Step: AttackReactionStep.Weigh, Request: { } state, Target: { } target }) SetDanger(npc, state, target);
+        var reaction = MoraleRules.ReactToAttack(this, npc, attacker, _session.AiRolls, _session.Rules.Combat).Reaction;
+        Trace(npc).Reaction = $"{reaction.Step} {reaction.Request}";
+        switch (reaction)
+        {
+            case { Step: AttackReactionStep.Weigh, Request: { } state, Target: { } target }:
+                SetDanger(npc, state, target);
+                break;
+            case { Step: AttackReactionStep.FleeGoal }:
+                // The starter's own gate, level-3 interrupt and duplicate test are the table's (Started); its answer is not read by the reaction.
+                // The surrendered NPC's floating line (0x413EA0 and the callback 0x5F8488 before the starter) is not shown by this host.
+                Started(npc, RunOf(npc), AiExecutorRules.StartFlee(this, npc, attacker, RunOf(npc)));
+                break;
+        }
+        if (reaction.JoinsRound) JoinRound(npc);
+    }
+
+    // The round entry (0x4B7E00): with a round running, an NPC not in its list is appended and the list re-sorted with the hero's party last (the session's AddCombatant);
+    // with no round, or when it is listed already, nothing changes. The round's current participant and its action points stay as they were.
+    private void JoinRound(string npc)
+    {
+        if (npc == Pc || _session.QueryCombatRound() is null) return;
+        var joined = _session.AddCombatant(_session.Version, SessionCombatant.Critter(npc));
+        if (joined.Disposition == GameSessionDisposition.Changed) Trace(npc).Reaction += " joined the round";
     }
 
     // ---- the pipeline's stages (ISessionAiWorld, IAiHost) ----
