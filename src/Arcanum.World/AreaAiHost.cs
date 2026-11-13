@@ -1967,6 +1967,10 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     public bool Stoned(string id) => (_session.QueryObjectFlags(id).Spell(id == Pc ? 0 : unchecked((int)(Fields(id)?.Object.SpellFlags ?? 0))) & StonedSpell) != 0
         && (id == Pc || Fields(id) is not null);
 
+    /// <summary>ARC-AI-1519: critter flag 0x20 (the stun condition, or the flag the data or a spell wrote), without paralysis 0x40, as the sight and hearing checks read it.</summary>
+    private bool Stunned(string id) =>
+        (LifeState(id)?.Conditions.HasFlag(LifeConditions.Stunned) ?? false) || Fields(id)?.Critter is { } critter && (CritterFlagsOf(id, critter.Flags) & StunnedCritter) != 0;
+
     public bool Paralysed(string id) => (_session.QueryObjectFlags(id).Critter(id == Pc ? 0 : unchecked((int)(Fields(id)?.Critter?.Flags ?? 0))) & ParalysedCritter) != 0
         && (id == Pc || Fields(id)?.Critter is not null);
 
@@ -3384,14 +3388,18 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     {
         if (Tile(observer) is not { } at || Tile(target) is not { } there || _scene.LineOfFire?.Invoke() is not { } map) return new(AwarenessRules.NotPerceived, AwarenessReason.State);
         var facts = Find(observer);
+        var stunned = Stunned(observer);
+        var blinded = Blinded(observer);
         var sight = new SightFacts
         {
             Perception = Math.Clamp(facts?.Perception ?? 0, 0, AwarenessRules.MaxPerception),
             Rotation = GridActorMath.Octant(facing ?? Movers.FacingOf(observer, NeighborDirection.XPlus)),
-            Stunned = facts?.Stunned ?? false, Sleeping = facts?.Asleep ?? false, Unconscious = facts?.Unconscious ?? false,
+            // ARC-AI-1519 (VBG8): the refusal flags 0x10A0 are stunned 0x20, blinded 0x80 and sleeping 0x1000, not paralysis 0x40; Perception 20 or more (0x4B0EE0) sees the invisible.
+            Stunned = stunned, Blinded = blinded, Sleeping = facts?.Asleep ?? false, Unconscious = facts?.Unconscious ?? false,
+            ExtraordinaryPerception = (facts?.Perception ?? 0) >= AwarenessRules.ExtraordinaryPerceptionMin,
             TargetInvisible = Find(target) is { } seen && (seen.ObjectInvisible || seen.InvisibleSpell), DetectsInvisible = facts?.DetectsInvisible ?? false,
-            // The margin is read only where the sight check gets as far as Perception (not for a stunned, sleeping or unconscious observer, nor one facing away).
-            ProwlingMargin = facts is { Stunned: false, Asleep: false, Unconscious: false } && AwarenessRules.Faces(at, GridActorMath.Octant(facing ?? Movers.FacingOf(observer, NeighborDirection.XPlus)), there)
+            // The margin is read only where the sight check gets as far as Perception (not for a stunned, blinded, sleeping or unconscious observer, nor one facing away).
+            ProwlingMargin = facts is { Asleep: false, Unconscious: false } && !stunned && !blinded && AwarenessRules.Faces(at, GridActorMath.Octant(facing ?? Movers.FacingOf(observer, NeighborDirection.XPlus)), there)
                 ? ProwlingMargin(observer, target, at, there, facts, map, true) : 0,
         };
         return AwarenessRules.See(sight, at, 0, 0, there, map, _session.Rules.Combat);
@@ -3428,11 +3436,13 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     {
         if (Tile(observer) is not { } at || Tile(target) is not { } there || _scene.LineOfFire?.Invoke() is not { } map) return new(AwarenessRules.NotPerceived, AwarenessReason.State);
         var facts = Find(observer);
+        var stunned = Stunned(observer);
         var hearing = new HearingFacts
         {
             Perception = Math.Clamp(facts?.Perception ?? 0, 0, AwarenessRules.MaxPerception),
-            Stunned = facts?.Stunned ?? false, Sleeping = facts?.Asleep ?? false, Unconscious = facts?.Unconscious ?? false,
-            ProwlingMargin = facts is { Stunned: false, Unconscious: false } ? ProwlingMargin(observer, target, at, there, facts, map, false) : 0,
+            // ARC-AI-1519 (VBG8): hearing refuses critter flag 0x20 only; a paralysed observer still hears.
+            Stunned = stunned, Sleeping = facts?.Asleep ?? false, Unconscious = facts?.Unconscious ?? false,
+            ProwlingMargin = facts is { Unconscious: false } && !stunned ? ProwlingMargin(observer, target, at, there, facts, map, false) : 0,
         };
         return AwarenessRules.Hear(hearing, at, 0, 0, there, loudness, new SoundMap(map), _session.Rules.Combat);
     }
