@@ -326,6 +326,31 @@ public sealed class WieldEventScriptTests
         Assert.IsTrue(owner.QueryMapInventory(Exterior)!.Holders.Single(holder => holder.Entity == "virgil").Items.Any(listed => listed.Entity == "kit:3"));
     }
 
+    // ARC-MAGIC-1743: the barter sale runs the same events; a run the session cannot apply refuses the sale with nothing changed.
+    [TestMethod]
+    public void A_barter_sale_of_a_worn_scripted_ring_runs_the_scripts_and_an_unappliable_run_refuses_it()
+    {
+        var (owner, host) = Owner();
+        using var _ = owner;
+        host.Slots[("kit:3", SessionScriptPoint.InsertItem)] = Record;
+        var ring = Wearable(3, Ring(1), SessionScriptPoint.WieldOn, SessionScriptPoint.WieldOff, SessionScriptPoint.InsertItem);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.Equip(owner.Version, "kit:3", EquipmentSlot.Ring1, ring, Drawn, Accept, host).Disposition);
+        Assert.AreEqual(GameSessionFailure.None, owner.AttachMapInventory(Exterior, InventoryStateTests.Seed()).Failure);
+        var kind = Kit[2].Kind;
+        // Wield off adds an effect to the item instead of the wearer: not an effect the session can apply, so nothing is sold.
+        var good = host.Programs[WieldOff];
+        host.Programs[WieldOff] = Program(Do(C(ScrCatalogue.Action.AddEffect, (Attachee, 0), N(Charm), N(5))), Do(C(ScrCatalogue.Action.ReturnRunDefault)));
+        var before = owner.Version;
+        var refused = owner.BarterSell(owner.Version, "virgil", "kit:3", 1, 0, kind, Accept, scripts: host);
+        Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.ItemScriptUnsupported, before, 10), (refused.Disposition, refused.Failure, owner.Version, Charms(owner)));
+        Assert.AreEqual(1, owner.QueryEquipment().Worn.Count);
+        host.Programs[WieldOff] = good;
+        Assert.AreEqual(GameSessionFailure.ItemScriptUnsupported, owner.BarterSell(owner.Version, "virgil", "kit:3", 1, 0, kind, Accept).Failure, "without a host");
+        var sold = owner.BarterSell(owner.Version, "virgil", "kit:3", 1, 0, kind, Accept, scripts: host);
+        Assert.AreEqual((GameSessionDisposition.Changed, 0, 0), (sold.Disposition, Charms(owner), owner.QueryEquipment().Worn.Count));
+        CollectionAssert.AreEqual(new[] { (25, "kit:3"), (21, "kit:3") }, sold.Scripts.Select(run => (run.Point, run.Attachee)).ToArray());
+    }
+
     [TestMethod]
     public void Equip_best_leaves_a_scripted_worn_item_in_its_slot()
     {

@@ -207,7 +207,8 @@ public sealed partial class GameSessionOwner
         var moved = stack ? GiveAmmoTo(into, kind, item, count, newStackKind, npcInsert) : GiveItemTo(into, kind, item, npcInsert, identify, scripts: scripts);
         if (moved.Disposition != GameSessionDisposition.Changed || total == 0) return moved;
         var paid = TakeGoldFromNpc(Version, npc, (int)total);
-        return paid.Disposition == GameSessionDisposition.Changed ? moved with { Version = Version } : paid with { Item = moved.Item, Version = Version };
+        return paid.Disposition == GameSessionDisposition.Changed ? moved with { Version = Version }
+            : paid with { Item = moved.Item, Version = Version, Scripts = moved.Scripts, InsertScript = moved.InsertScript, Messages = moved.Messages };
     }
 
     private static bool ValidContainer(string? container, string npc) => container is null ||

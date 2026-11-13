@@ -349,6 +349,8 @@ public sealed partial class GameSessionOwner
             runs = new ItemScriptRuns(this, scripts, shown.RuntimeMap, new Dictionary<string, int>(StringComparer.Ordinal) { [item] = complexity });
             if (wieldOff) runs.Run(SessionScriptPoint.WieldOff, item, SessionEventKinds.PlayerEntity, null);
             if (runs.Failure == GameSessionFailure.None && removeOwn) runs.Run(SessionScriptPoint.RemoveItem, item, SessionEventKinds.PlayerEntity, null);
+            // The insertion's triggerer is the recipient: an NPC reads its own printed line variant; a container is no critter, so its run keeps the hero's reading.
+            runs.NpcTriggerer = kind == SessionHolderKind.Npc;
             if (runs.Failure == GameSessionFailure.None && insertOwn) insertRun = runs.Run(SessionScriptPoint.InsertItem, item, npc, null);
             ThrowIfDisposed();
             if (_revision != revision || _actor.Map != shown || _flags.Version != flagVersion) return RejectItem(GameSessionFailure.StaleVersion, verdict) with { InsertScript = insertRun, Scripts = runs.Runs };
