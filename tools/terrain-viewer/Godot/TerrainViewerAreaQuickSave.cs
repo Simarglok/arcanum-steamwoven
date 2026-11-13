@@ -228,7 +228,8 @@ public partial class TerrainViewerApp
     private void LoadGameShown(GameSessionSaveSlot slot, string prefix, AreaHeroLoad? heroTables, AreaLoadMessageRoute messages, Action<bool>? done)
     {
         // With no save listed the original's quick load returns before its load function (no load, no screen); a busy viewer refuses in LoadGame.
-        var showable = QuickBusyReason() is QuickBusy.None or QuickBusy.TransferPending && !TransitionFadePending && slot.Exists;
+        // A queued transfer is superseded by the load at once (LoadGame), as before, so it shows no screen of its own.
+        var showable = QuickBusyReason() == QuickBusy.None && !TransitionFadePending && slot.Exists;
         if (!LoadScreenDeferred || !showable) { var ok = LoadGame(slot, prefix, heroTables, messages); done?.Invoke(ok); return; }
         BeginTransitionLoad();
         _pendingLoad = new(slot, prefix, heroTables, messages, done);
@@ -250,7 +251,8 @@ public partial class TerrainViewerApp
         finally
         {
             // A refusal clears the screen and keeps the game; a load that opens another map keeps it until that map is there (StartMapTransfers).
-            if (!ok) ClearTransition();
+            // (a transfer that began meanwhile owns the screen: only the load's own is cleared)
+            if (!ok) { if (_mapHandoff is null && !TransitionFadePending) ClearTransition(); }
             else if (_mapHandoff is null) ReleaseTransition();
         }
         pending.Done?.Invoke(ok);
