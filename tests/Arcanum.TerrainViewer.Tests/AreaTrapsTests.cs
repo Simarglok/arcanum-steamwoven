@@ -176,6 +176,26 @@ public sealed class AreaTrapsTests
         });
     }
 
+    // ARC-WORLD-1581 (TT18, TT7): the hero's door use node meets the door's trap through the same entry point a container's use does; a door (type 1) carries a trap as any other object.
+    [TestMethod]
+    public void A_trapped_door_meets_the_hero_on_its_use_and_stays_shut_when_the_trap_goes_off()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var effects = new Effects();
+            var door = Row(1, 1, 30004, 0x0000_0201);
+            var (host, traps) = Hosts(session, content, () => effects.Side, null, door);
+            Assert.AreEqual(new SessionTrapBaseline(TrapCarrier.TrappedObject, 30004, 0x5, 0x0000_0201, 0), host.TrapBaseline(door));
+            var met = traps.Use(door)!;
+            Assert.IsTrue(met is { Cause: SessionTrapCause.Use, Outcome: SessionTrapOutcome.Fired, Cancels: true, Result.State.Removed: true }, met.Describe());
+            Assert.AreEqual(1, effects.Calls.Count);
+            Assert.AreSame(door, effects.Calls[0].Row);
+            Assert.AreEqual(0, effects.Triggerers.Count, "the hero's own effect, not a critter's");
+            Assert.IsNull(traps.Use(door), "the trap is gone: the door opens as any other");
+        });
+    }
+
     [TestMethod]
     public void A_removed_trap_leaves_the_use_slot_empty()
     {
@@ -264,6 +284,22 @@ public sealed class AreaTrapsTests
             var none = traps.Use(Row(2, Scenery, 30007))!;
             Assert.IsTrue(none is { Outcome: SessionTrapOutcome.Fired, Effect: null, Cancels: true }, none.Describe());
             Assert.AreEqual(0, effects.Calls.Count);
+        });
+    }
+
+    [TestMethod]
+    public void The_shot_is_met_and_applied_once_the_host_lists_its_shooters()
+    {
+        // ARC-TECHNOLOGY-1619 (TT12, TT15): a host that lists the shooter candidates (AreaTrapEffects.ListsShooters) meets a 30002 trap as any native trap; the effect is the cast host's.
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var effects = new Effects(0);
+            var shotRow = Row(1, Scenery, 30002);
+            var (_, traps) = Hosts(session, content, () => effects.Side with { ListsShooters = true }, null, shotRow);
+            var met = traps.Use(shotRow)!;
+            Assert.IsTrue(met is { Outcome: SessionTrapOutcome.Fired, Cancels: true }, met.Describe());
+            CollectionAssert.AreEqual(new[] { 30002 }, effects.Calls.Select(c => c.Run.Script).ToArray());
         });
     }
 
@@ -522,6 +558,45 @@ public sealed class AreaTrapsTests
             Assert.AreEqual(0, effects.Calls.Count(c => c.Row != trap), "only the trap's own effect");
             Assert.IsNull(traps.StepNpc(Free(), Cell(trap)), "the trap object is gone");
             Assert.AreEqual(false, host.IsTrap(trap));
+        });
+    }
+
+    [TestMethod]
+    public void A_step_ends_its_walk_on_any_trap_object_the_mover_does_not_step_over_even_where_no_meeting_is_made()
+    {
+        // ARC-WORLD-1582 (TT17): the step function ends the walk on every trap object it lists, whatever the entry point answered.
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var effects = new Effects();
+            var shot = Row(1, TrapObject, 30002, 0x0000_0201, x: 50, objectFlags: TrapRules.DontDrawFlag);
+            var ordinary = Row(2, TrapObject, 700, x: 52, objectFlags: TrapRules.DontDrawFlag);
+            var native = Row(3, TrapObject, 30004, 0x0000_0201, x: 54, objectFlags: TrapRules.DontDrawFlag);
+            var gone = new HashSet<AreaObjectKey>();
+            var (host, traps) = Hosts(session, content, () => effects.Side, gone, shot, ordinary, native);
+            Assert.IsFalse(traps.StepEndsWalk(new(51, 20)), "no trap object there");
+            Assert.IsFalse(traps.StepEndsWalk(new(51, 20), Free()));
+            Assert.IsNull(traps.StepNpc(Free(), Cell(shot)), "the 30002 shot is no meeting");
+            Assert.IsNull(traps.StepNpc(Free(), Cell(ordinary)), "an ordinary script is no meeting on a step");
+            foreach (var row in new[] { shot, ordinary, native })
+            {
+                Assert.IsTrue(traps.StepEndsWalk(Cell(row)), "the hero's walk ends there");
+                Assert.IsTrue(traps.StepEndsWalk(Cell(row), Free()), "and a free NPC's");
+                Assert.IsTrue(traps.StepEndsWalk(Cell(row), Led()), "and a companion's");
+            }
+            effects.WalkerFlags["oid:ghost"] = TrapRules.StepImmuneSpellFlags & 0x2;
+            Assert.IsFalse(traps.StepEndsWalk(Cell(native), Free("oid:ghost")), "a mover with the step-over spell flags runs none of it");
+            effects.SpellFlags = 0x4;
+            Assert.IsFalse(traps.StepEndsWalk(Cell(native)), "nor does the hero with them");
+            effects.SpellFlags = 0;
+            effects.ByCritter = false;
+            Assert.IsTrue(traps.StepEndsWalk(Cell(native), Free()), "a cast host that cannot take a critter's trap still ends the walk");
+            // A trap object the session destroyed is not listed.
+            effects.ByCritter = true;
+            Assert.IsNotNull(traps.StepNpc(Free(), Cell(native)));
+            Assert.AreEqual(false, host.IsTrap(native), "the fired trap removed itself");
+            gone.Add(native.Key);
+            Assert.IsFalse(traps.StepEndsWalk(Cell(native)), "a trap object the session destroyed is not listed");
         });
     }
 

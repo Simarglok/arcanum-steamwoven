@@ -801,11 +801,13 @@ The rules are in [trap state](../world/trap-state-runtime.md#npc-and-companion-m
 | 2 | Lead a companion over a plate neither of you spotted, many times. | The companion sometimes spots it with its own roll, stops and marks it for you; otherwise the trap goes off on the companion. A trap you placed yourself is known to the companion: it goes off at once. | open |
 | 3 | Give a hero the Detect Traps spell and let a free NPC walk toward a plate you placed. | The NPC does not know your plate: it spots it without a roll before the step, stops short of it and marks nothing, so it stays unknown to you. | open |
 | 4 | Let an NPC open a trapped door on its route. | The trap meets the NPC (spotted, or it goes off), and the door stays shut for that try. | open |
+| 5 | Lead a companion that is walking after you (not fighting) over a plate it spots or sets off (ARC-WORLD-1582). | The companion stops on the plate's tile, then walks on after you from there. | open |
+| 6 | Walk yourself, and let an NPC walk, across a trap object whose script is not a native trap (an ordinary script plate, or the 30002 shot) (ARC-WORLD-1582). | The walk ends on that tile, as the original's (nothing else happens: no meeting is built for these); a mover with the step-over flags walks on. | open |
 
 Known differences (documented, not bugs):
 
 - The trap meets a walker when its step starts, not when it arrives (as for the hero); a relocation (a far NPC placed on its standpoint, a knockback slide) meets none.
-- A companion on its own follow walk is not stopped at the trap; the hero's own use of a trapped door does not meet its trap yet; an NPC's other uses of trapped objects are not built.
+- The hero's own use of a trapped door does not meet its trap yet; an NPC's other uses of trapped objects are not built.
 
 ## ARC-SKILLS-1156 — Disarming a trap from the hotkey bar (E6-a, disarm half, 2026-11-12)
 

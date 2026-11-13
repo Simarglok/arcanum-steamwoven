@@ -52,6 +52,13 @@ public sealed class AreaDoorHost : IAiDoorWorld, IGoalStepHost
     /// </summary>
     public Func<string, AreaPortal, bool>? OpenerTrap { get; set; }
 
+    /// <summary>
+    /// ARC-WORLD-1581 (ledger TT18, TT7): the same for the hero as opener. After <see cref="HeroUse"/> charged the action points (the viewer's model, CT3; the decompiled node shows no charge for a door target) the node runs the door's use script through the object entry
+    /// point with the hero as the triggerer, so a trapped door meets the hero (the portal in; true when the use stops: the trap was spotted now, a native run went off, or the session refused the meeting),
+    /// which ends the run and leaves the door shut (the points stay spent). Null: no trap is met, as before.
+    /// </summary>
+    public Func<AreaPortal, bool>? HeroTrap { get; set; }
+
     /// <summary>The session this host's doors belong to.</summary>
     public GameSessionOwner Session => _session;
 
@@ -128,7 +135,7 @@ public sealed class AreaDoorHost : IAiDoorWorld, IGoalStepHost
     }
 
     public bool UseDoor(string opener, string door) => Portal(door) is not { } portal
-        || (opener == AreaHeroRunsHost.Hero ? HeroUse?.Invoke(portal) != false : OpenerTrap?.Invoke(opener, portal) != true);
+        || (opener == AreaHeroRunsHost.Hero ? HeroUse?.Invoke(portal) != false && HeroTrap?.Invoke(portal) != true : OpenerTrap?.Invoke(opener, portal) != true);
 
     public bool DoorHeld(string door) => Portal(door) is { } portal && (State(portal).Flags & LockRules.MagicallyHeldBit) != 0;
 

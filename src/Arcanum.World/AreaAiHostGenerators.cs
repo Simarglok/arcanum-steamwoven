@@ -11,8 +11,7 @@ public sealed partial class AreaAiHost
     /// ARC-WORLD-1157 (E2-a, ledger PO2 to PO6): the spawner (0x4BA790) of a monster generator, called by the AI tick for an NPC with the generator bit that passed the heartbeat. It answers null (a refusal) only for an object that
     /// is no generator NPC or whose fields are unread; every other path answers the delay of the generator's next tick by its rate, also when nothing was made. The session decides and makes the copies
     /// (<see cref="GameSessionOwner.RunGenerator"/>: the room, the slot's block, the hour, the budget and the placement draws); this host reads the generator's record (its prototype, cell, packed settings and rate), the view
-    /// (the off-screen option's rectangle test, SZ6) and the tile classes of the spots (0x4D70B0 → 0x5038C0). The copies are created critters the viewer's sync hosts. The off-screen option's rectangle is the generator's drawn body when the viewer draws one, else its tile's (a limit). A copy is no generator (the host answers false for a critter that carries a generator mark). A copy carries its prototype's own fields: the generator
-    /// object's instance fields (its scripts, name or flags over the prototype) are not copied (a limit, ledger PO4: the copy is the whole object in the original).
+    /// (the off-screen option's rectangle test, SZ6) and the tile classes of the spots (0x4D70B0 → 0x5038C0). The copies are created critters the viewer's sync hosts. The off-screen option's rectangle is the generator's drawn body when the viewer draws one, else its tile's (a limit). A copy is no generator (the host answers false for a critter that carries a generator mark). The copy is built from the generator's own row (ARC-WORLD-1526, ledger GS5: its instance fields over the prototype, unmarked, see <see cref="AreaCreatedCritters"/>); the generator's held items are not copied (a limit, #1652).
     /// </summary>
     public long? Spawn(string npc)
     {

@@ -57,6 +57,55 @@ public sealed class AreaCreatedCrittersTests
         Assert.IsNull(f.Combat.Record(critter.Entity));
     }
 
+    // The placement's map for a generator of cap 1: the copy stands on the generator's own tile, nothing is asked of the map.
+    private sealed class NoStepMap : Arcanum.Simulation.Items.IDropMap
+    {
+        public CellCoord? Step(CellCoord from, int rotation) => null;
+        public Arcanum.Simulation.Items.DropPath Path(CellCoord from, CellCoord to, Arcanum.Simulation.Items.DropOwner owner) => Arcanum.Simulation.Items.DropPath.None;
+        public bool HasCritter(CellCoord cell) => false;
+    }
+
+    // ARC-WORLD-1526 (GS5): a monster generator's copy is built from the generator's row (its instance fields, unmarked), not from its prototype; without a known generator row it falls back to the prototype.
+    [TestMethod]
+    public void A_generators_copy_is_built_from_the_generators_row_and_falls_back_to_the_prototype()
+    {
+        using var f = AreaAiHostRebindTests.Open();
+        // The generator: the fixture's NPC with the generator's marks on both flag words and an instance faction.
+        AreaFieldValue Own(int slot, long number) => new(slot, AreaPresence.Value, AreaValueOrigin.Instance, number, [], null);
+        var generator = f.RowA with
+        {
+            DirectFields = [Own(18, 0x400002), Own(69, 0x80000), Own(81, 31)],
+            EffectiveFields = [.. f.RowA.EffectiveFields.Where(field => field.Slot is not (18 or 69 or 81)), Own(18, 0x400002), Own(69, 0x80000), Own(81, 31)],
+        };
+        var run = new SessionGeneratorRun
+        {
+            Entity = f.A, Map = new(Map), Cell = Spot, Prototype = Prototype, Rate = 3, DropMap = new NoStepMap(),
+            Packed = new Arcanum.Simulation.Ai.GeneratorSettings(Arcanum.Simulation.Ai.GeneratorSettings.ByDay, 9, 1, 5, 0).Pack(),
+        };
+        var copy = f.Session.RunGenerator(f.Session.Version, run).Made.Single();
+        Assert.AreEqual(f.A, copy.Summoner);
+        var scripted = Make(f, Spot);   // a critter no generator made: always the prototype's row.
+        var asked = new List<(string, int)>();
+        var missing = new Func<int, Arcanum.Data.Characters.PrototypeFile>(_ => new(Arcanum.Data.Characters.PrototypeFileStatus.Missing, null));
+        var built = new AreaCreatedCritters(f.Session, missing, (entity, map) => { asked.Add((entity, map)); return entity == f.A ? generator : null; });
+        built.Maps(new(Map));
+        CollectionAssert.AreEqual(new[] { (f.A, Map) }, asked, "only the generator's copy asks for a template");
+        var row = built.Row(new(Map), copy.Entity)!;
+        long Field(string _, int slot) => row.EffectiveFields.Single(field => field.Slot == slot).Number!.Value;
+        Assert.AreEqual((31L, 0L, 0x2000L), (Field("faction", 81), Field("npc flags", 69), Field("object flags", 18)), "the generator's faction, its marks cleared, dynamic set");
+        Assert.AreEqual((long)Spot.X | ((long)Spot.Y << 32), Field("location", 1));
+        Assert.IsNull(built.Row(new(Map), scripted.Entity), "a critter that is no generator's copy has no row without its prototype (the test's lookup has none)");
+        CollectionAssert.AreEqual(new[] { scripted.Entity }, built.Refused.Keys.ToArray());
+        // No template known (the generator's row unresolved): the copy falls back to its prototype's row, which this lookup does not have.
+        var fallback = new AreaCreatedCritters(f.Session, missing, (_, _) => null);
+        fallback.Maps(new(Map));
+        Assert.AreEqual(CreatedRowFailure.PrototypeMissing, fallback.Refused[copy.Entity]);
+        // A copy that is no generator's (no template given at all) behaves as before.
+        var plain = new AreaCreatedCritters(f.Session, missing);
+        plain.Maps(new(Map));
+        Assert.AreEqual(CreatedRowFailure.PrototypeMissing, plain.Refused[copy.Entity]);
+    }
+
     [TestMethod]
     public void The_ai_host_runs_a_created_critter_keeps_it_through_a_window_move_and_drops_it_when_destroyed()
     {

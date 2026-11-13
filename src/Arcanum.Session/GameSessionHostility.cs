@@ -118,9 +118,15 @@ public sealed partial class GameSessionOwner
         if (!SessionValidation.Entity(request.Entity) || request.Other is null || !ValidDangerHandle(request.Other) || request.Facts is null)
             return RejectPeace(GameSessionFailure.InvalidDangerTarget);
         if (!IsCurrent(expected)) return RejectPeace(GameSessionFailure.StaleVersion);
-        var plan = new DangerPlan(this);
-        var failure = PlanPeace(plan, request.Entity, request.Other, request.Facts, out var step);
-        return failure != GameSessionFailure.None ? RejectPeace(failure) : CommitPeace(plan, [step]);
+        // ARC-AI-1634: with a host for the exit script, the call is checked whole first (the script cuts the real run in two).
+        var steps = new List<SessionPeaceStep>();
+        GameSessionFailure Build(DangerPlan plan, List<SessionPeaceStep> into) =>
+            PlanPeace(plan, request.Entity, request.Other, request.Facts, (rest, step) => { into.Add(step); return GameSessionFailure.None; });
+        var refused = PreviewDanger(Build);
+        if (refused != GameSessionFailure.None) return RejectPeace(refused);
+        var real = new DangerPlan(this);
+        var failure = Build(real, steps);
+        return failure != GameSessionFailure.None ? RejectPeace(failure) : CommitPeace(real, steps);
     }
 
     /// <summary>
@@ -141,29 +147,51 @@ public sealed partial class GameSessionOwner
         if (request.Facts.Values.Any(facts => facts.CombatMode is { Facts: { } combat } && !ValidFacts(combat)))
             return RejectPeace(GameSessionFailure.InvalidDangerFacts);
         if (!IsCurrent(expected)) return RejectPeace(GameSessionFailure.StaleVersion);
-        var plan = new DangerPlan(this);
+        // ARC-AI-1634: with a host for the exit script, the call is checked whole first (a script cuts the real run in two, at each setter call).
+        var npcs = request.Combatant.IsHero ? _party.Order.ToArray() : [request.Combatant.Entity!];
+        GameSessionFailure Build(DangerPlan plan, List<SessionPeaceStep> into) => PlanStopAttacking(plan, npcs, 0, request.Facts, into);
+        var refused = PreviewDanger(Build);
+        if (refused != GameSessionFailure.None) return RejectPeace(refused);
         var steps = new List<SessionPeaceStep>();
-        foreach (var npc in request.Combatant.IsHero ? _party.Order.ToArray() : [request.Combatant.Entity!])
+        var real = new DangerPlan(this);
+        var failure = Build(real, steps);
+        return failure != GameSessionFailure.None ? RejectPeace(failure) : CommitPeace(real, steps);
+    }
+
+    // The dry run of a peace call: only with a host for the danger hooks (otherwise nothing cuts the plan); the failure the whole call would give, nothing written.
+    private GameSessionFailure PreviewDanger(Func<DangerPlan, List<SessionPeaceStep>, GameSessionFailure> build)
+    {
+        if (DangerHookScript is null) return GameSessionFailure.None;
+        var dry = new DangerPlan(this) { Inline = true };
+        var failure = build(dry, []);
+        return failure != GameSessionFailure.None ? failure : dry.Check();
+    }
+
+    // Stop attacking (0x4AA4A0) of npcs[index..] in order, each NPC's whole run before the next (the original's recursion over the follower array). An NPC with a focus makes peace with it (0x4AA300, whose exit script runs
+    // at its setter call, ARC-AI-1634: before the followers' loop, so before everything below), then the interrupt and the combat-mode exit; a follower of the hero then gets NO_ATTACK; the target lock is cleared.
+    private GameSessionFailure PlanStopAttacking(DangerPlan plan, string[] npcs, int index, IReadOnlyDictionary<string, SessionPeaceFacts> given, List<SessionPeaceStep> steps)
+    {
+        if (index >= npcs.Length) return GameSessionFailure.None;
+        var npc = npcs[index];
+        var facts = given.TryGetValue(npc, out var found) ? found : new SessionPeaceFacts();
+        GameSessionFailure Close(DangerPlan rest, SessionPeaceStep step)
         {
-            var facts = request.Facts.TryGetValue(npc, out var given) ? given : new SessionPeaceFacts();
-            var step = new SessionPeaceStep(npc);
-            if (plan.Get(npc).Focus is { } focus)
-            {
-                var failure = PlanPeace(plan, npc, focus, facts, out step);
-                var left = false;
-                if (failure == GameSessionFailure.None) failure = plan.LeaveCombatMode(npc, facts.CombatMode, out left);
-                if (failure != GameSessionFailure.None) return RejectPeace(failure);
-                step = step with { Interrupted = true, LeftCombatMode = left };
-            }
             if (LedByPc(npc))
             {
-                plan.Update(npc, record => record with { Flags = record.Flags | DangerFlags.NoAttack });
+                rest.Update(npc, record => record with { Flags = record.Flags | DangerFlags.NoAttack });
                 step = step with { NoAttack = true };
             }
-            plan.Update(npc, record => record with { Flags = record.Flags & ~DangerFlags.TargetLocked });
+            rest.Update(npc, record => record with { Flags = record.Flags & ~DangerFlags.TargetLocked });
             steps.Add(step);
+            return PlanStopAttacking(rest, npcs, index + 1, given, steps);
         }
-        return CommitPeace(plan, steps);
+        if (plan.Get(npc).Focus is not { } focus) return Close(plan, new SessionPeaceStep(npc));
+        return PlanPeace(plan, npc, focus, facts, (rest, step) =>
+        {
+            var failure = rest.LeaveCombatMode(npc, facts.CombatMode, out var left);
+            if (failure != GameSessionFailure.None && !rest.Continued) return failure;
+            return Close(rest, step with { Interrupted = true, LeftCombatMode = left });
+        });
     }
 
     /// <summary>
@@ -209,10 +237,11 @@ public sealed partial class GameSessionOwner
         return new(GameSessionFailure.None, HostilityRules.PickEnemy(enemies, valid, AiRolls));
     }
 
-    // Peace for one NPC into the plan (0x4AA300).
-    private GameSessionFailure PlanPeace(DangerPlan plan, string npc, SessionCombatant other, SessionPeaceFacts facts, out SessionPeaceStep step)
+    // Peace for one NPC into the plan (0x4AA300). <paramref name="then"/> takes the finished step and goes on with the call; the original runs the setter's exit script (slot 14) before the followers' loop, so with a host
+    // for the hook the loop and everything <paramref name="then"/> writes run on a fresh plan after the first part is committed and the script has run (ARC-AI-1634).
+    private GameSessionFailure PlanPeace(DangerPlan plan, string npc, SessionCombatant other, SessionPeaceFacts facts, Func<DangerPlan, SessionPeaceStep, GameSessionFailure> then)
     {
-        step = new(npc);
+        var step = new SessionPeaceStep(npc);
         var self = SessionCombatant.Critter(npc);
         var head = other.IsHero || LedByPc(other.Entity!) ? SessionCombatant.Hero : other;
         plan.Update(npc, record => record with { Focus = null, HitBy = null, Enemies = DangerRules.RemoveEnemy(record.Enemies, head) });
@@ -225,21 +254,24 @@ public sealed partial class GameSessionOwner
                 ReactionQuery.Standard, lower: false, out reaction);
             if (failure != GameSessionFailure.None) return failure;
         }
+        var queued = plan.HookCount;
         var calm = plan.Set(new SessionDangerRequest { Entity = npc, State = DangerState.None, Facts = facts.Setter }, false);
         if (calm.Failure != GameSessionFailure.None) return calm.Failure;
-        var followers = head.IsHero ? _party.Order.ToArray() : [];
-        foreach (var follower in followers)
+        return plan.Then(plan.HookCount > queued, rest =>
         {
-            plan.Update(follower, record => record with
+            var followers = head.IsHero ? _party.Order.ToArray() : [];
+            foreach (var follower in followers)
             {
-                Focus = record.Focus == self ? null : record.Focus,
-                HitBy = record.HitBy == self ? null : record.HitBy,
-                Enemies = DangerRules.RemoveEnemy(record.Enemies, self),
-            });
-            plan.Update(npc, record => record with { Enemies = DangerRules.RemoveEnemy(record.Enemies, SessionCombatant.Critter(follower)) });
-        }
-        step = step with { Head = head, Followers = followers, Transition = calm.Transition, Hook = calm.Hook, Reaction = reaction };
-        return GameSessionFailure.None;
+                rest.Update(follower, record => record with
+                {
+                    Focus = record.Focus == self ? null : record.Focus,
+                    HitBy = record.HitBy == self ? null : record.HitBy,
+                    Enemies = DangerRules.RemoveEnemy(record.Enemies, self),
+                });
+                rest.Update(npc, record => record with { Enemies = DangerRules.RemoveEnemy(record.Enemies, SessionCombatant.Critter(follower)) });
+            }
+            return then(rest, step with { Head = head, Followers = followers, Transition = calm.Transition, Hook = calm.Hook, Reaction = reaction });
+        });
     }
 
     private SessionPeaceResult CommitPeace(DangerPlan plan, IReadOnlyList<SessionPeaceStep> steps) =>

@@ -26,6 +26,21 @@ public static class AreaCompanionPlacement
 
     public static MapChangeKey Key(string entity) => MapChangeKey.ForEntity(entity, Property);
 
+    /// <summary>
+    /// ARC-AI-1622: an NPC the AI host walked before the hero took it into the party stands where the session recorded it (<see cref="GameSessionOwner.QueryNpcPlace"/>, written at each
+    /// step the host commits), not on its map row's T0 cell, which is where a group built from the row would start it. Records that place as the companion's cell (the group starts a
+    /// companion on it) when <paramref name="map"/> is where the NPC stands, no companion cell is recorded for it yet and a place is. Returns the session's failure, None otherwise.
+    /// </summary>
+    public static GameSessionFailure SeedFromNpcPlace(GameSessionOwner session, AreaCompanionTemplate template, SessionMapId map)
+    {
+        ArgumentNullException.ThrowIfNull(session); ArgumentNullException.ThrowIfNull(template);
+        var where = Where(session, template.Home, template.Entity);
+        if (where.Error is not null || where.Map != map || where.Placement is not null) return GameSessionFailure.None;
+        if (session.QueryNpcPlace(template.Entity) is not { } place || place.Map != map) return GameSessionFailure.None;
+        var result = session.ApplyChanges(session.Version, null, Edits(template, map, place.World, place.Facing));
+        return result.Disposition == GameSessionDisposition.Rejected ? result.Failure : GameSessionFailure.None;
+    }
+
     /// <summary>ARC-WORLD-017: on the NPC's home map, the runtime map it stands on while it is elsewhere (absent = home).</summary>
     public const string MapProperty = Arcanum.World.EntityHomes.AwayProperty;
 
@@ -326,6 +341,11 @@ public sealed class AreaCompanionGroup
         companion.AiRunning = running;
         return companion.Follow.WalkTo(next, companion.Grid.State.Time);
     }
+
+    /// <summary>ARC-WORLD-1582 (ledger TT17): the companion's own walk ends on the tile of a trap object it just stepped onto: its goal stops (a started step still ends at its cell centre)
+    /// and the follow goal plans again from there. False for a companion not here or one with no goal running.</summary>
+    public bool EndWalkOnTrap(string entity) =>
+        _companions.FirstOrDefault(c => c.Entity == entity) is { } companion && companion.Follow.EndWalkOnTrap(companion.Grid.State.Time);
 
     /// <summary>ARC-WORLD-115: the AI host's turn of a settled companion toward the chart cell <paramref name="toward"/> (its grid stands
     /// again on its cell with the new facing; a companion mid-step keeps its facing).</summary>

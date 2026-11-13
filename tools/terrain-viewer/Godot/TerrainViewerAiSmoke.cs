@@ -916,7 +916,7 @@ public partial class TerrainViewerApp
         _worldFocusSimulationForSelfTest = true;
         _aiForSmoke = true;
         var joined = false;
-        string? kit = null;
+        string? kit = null, ledJoined = null;
         var target = candidates[0];
         var enemy = target.Holder.Entity;
         var enemyLife = target.Build.Combat!.Target;
@@ -1107,6 +1107,17 @@ public partial class TerrainViewerApp
                 BackOff = AreaCompanionOrders.Describe(backOff!), Attack = AreaCompanionOrders.Describe(ordered!), Frames = orderFrames, Hit = orderHit,
                 Parity = "NOT_VERIFIED (rules read in the original executable; no original-runtime run)" }));
 
+            // ARC-AI-1527: a follower's comment line (here the near-death range, 0x4AEAB0) is chosen by the host, read from the player's generated NPC files
+            // (the can-speak head first, the speaker's own override line before the files) and floated over the follower as a white line.
+            var linesBefore = _followerLinesSaid;
+            var nearDeath = host.Hurt(follower, 10, 3, 20, died: false);
+            Require(nearDeath is { Lines: { First: 5500, Last: 5599 } } comment && comment.Speaker == follower, $"a hit from 50 % to 15 % made the follower comment: {nearDeath?.Lines}");
+            // The text comes from the player's generated files: a run whose texts did not load or whose files hold no entry of the range reports SKIP, not a failure.
+            var textsReady = _conversationHost?.GreetingTexts?.Status == AreaGreetingTextsStatus.Ready;
+            if (!textsReady || _followerLinesSaid != linesBefore + 1) GD.Print($"ARC-AI-1527 native-smoke ai-follower-lines SKIP textsReady={textsReady} said={_followerLinesSaid - linesBefore}");
+            else GD.Print("ARC-AI-1527 native-smoke ai-follower-lines text PASS");
+            GD.Print($"ARC-AI-1527 native-smoke ai-follower-lines PASS said={_followerLinesSaid - linesBefore}");
+
             // ARC-WORLD-119: the curse through the AI host (the viewer reads no typed order text, so the smoke sends it): the follower
             // leaves (its run ends, FO20), the hero's attack event on it runs in full and asks its reaction, then its pass runs; the
             // host is kept and runs it on as a free NPC.
@@ -1140,9 +1151,53 @@ public partial class TerrainViewerApp
                 map.RuntimeMap, Follower = template.Speaker.Row.PrototypeNumber, Target = target.Row.PrototypeNumber, Apart = apart, Walked = walked, Frames = frames,
                 Hit = trace!.Hit, Event = trace.Event,
                 Parity = "NOT_VERIFIED (rules read in the original executable; no original-runtime run)" }));
+
+            // ARC-AI-1622: an NPC of the map without a dialog that the hero leads (a Dominate Will target: the spell's force join) is a companion of the group and a follower the host
+            // runs, as a dialog NPC is; it walks up to the hero.
+            var speakerKeys = AreaConversationHost.FindSpeakers(area.Snapshot).Select(sp => sp.Row.Key).ToHashSet();
+            // The farthest one from the hero whose follow facts read (a template builds from them), so the walk up is a check of its own.
+            var heroNow = host.Tile(AiSchedulerRules.Pc)!.Value;
+            var led = candidates.Where(c => c.Holder.Entity != enemy && c.Row.Type == 16 && !speakerKeys.Contains(c.Row.Key)
+                    && MapCompanionFacts(new AreaSpeaker(AreaCompanionTemplate.LedMapNpcIndexBase, c.Row, 0, c.Row.WorldX!.Value, c.Row.WorldY!.Value)) is not null)
+                .OrderByDescending(c => Apart(c.Row.WorldX!.Value, c.Row.WorldY!.Value, heroNow.X, heroNow.Y)).FirstOrDefault();
+            if (led.Holder is null) GD.Print($"ARC-AI-1622 native-smoke ai-led-npc NONE map={map.RuntimeMap} (no living NPC without a dialog script with combat values)");
+            else
+            {
+                var dominated = led.Holder.Entity;
+                var ledJoin = session.ForceJoinParty(session.Version, dominated);
+                Require(ledJoin.Disposition != GameSessionDisposition.Rejected, "the NPC without a dialog was force-joined: " + ledJoin.Failure);
+                ledJoined = dominated;
+                for (var i = 0; i < 3; i++)
+                {
+                    _areaSmokeTime++;
+                    TickAreaClock(hostMs += 50);
+                    WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .05, true, SimulationTime.At(_areaSmokeTime, 20));
+                }
+                Require(_areaCompanions?.Companions.Any(c => c.Entity == dominated && c.Speaker.ScriptId == 0) == true, "the led NPC is a companion of the group");
+                // The party changed, so the map's host was built again (the stamp names who it runs): the one in hand is retired.
+                var ledHost = AreaAiHostNow()!;
+                Require(ledHost.RunCompanions.Contains(dominated) && ledHost.AiLifeTarget(dominated) is not null, "the host runs it as a follower (it does not count it as gone)");
+                var heroTile = ledHost.Tile(AiSchedulerRules.Pc)!.Value;
+                var before = AiExecutorRules.Distance(ledHost.Tile(dominated)!.Value, heroTile);
+                var ledFrames = 0;
+                for (; ledFrames < 600 && AiExecutorRules.Distance(ledHost.Tile(dominated)!.Value, ledHost.Tile(AiSchedulerRules.Pc)!.Value) > 4; ledFrames++)
+                {
+                    _areaSmokeTime++;
+                    TickAreaClock(hostMs += 50);
+                    WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .05, true, SimulationTime.At(_areaSmokeTime, 20));
+                }
+                var after = AiExecutorRules.Distance(ledHost.Tile(dominated)!.Value, ledHost.Tile(AiSchedulerRules.Pc)!.Value);
+                // Farther than 30 tiles from the hero (the original's follower catch-up, 0x4AD4D0) it is put on the hero's tile at once; nearer it walks up.
+                var rowApart = Apart(led.Row.WorldX!.Value, led.Row.WorldY!.Value, heroNow.X, heroNow.Y);
+                Require(after <= 4 || (rowApart <= 30 && after < before), $"the led NPC follows the hero: its map cell was {rowApart} tiles away, {before} -> {after} tiles after {ledFrames} frames");
+                GD.Print($"ARC-AI-1622 ai-led-npc {(rowApart > 30 ? "caught up from its map cell" : "walked up")} apart={rowApart}");
+                GD.Print("ARC-AI-1622 native-smoke ai-led-npc PASS " + System.Text.Json.JsonSerializer.Serialize(new { map.RuntimeMap, Led = led.Row.PrototypeNumber, RowApart = rowApart, Before = before, After = after, Frames = ledFrames,
+                    Parity = "NOT_VERIFIED (rules read in the original executable; no original-runtime run)" }));
+            }
         }
         finally
         {
+            if (ledJoined is not null) session.LeaveParty(session.Version, ledJoined, new PartyLeave(Force: true));
             // ARC-WORLD-116: a healing item the follower did not use up leaves it again.
             if (kit is not null && !session.IsItemDestroyed(kit)) session.RemoveItemFromNpc(session.Version, follower, kit);
             if (HeroInCombatMode) session.SetCombatMode(session.Version, SessionCombatant.Hero, false, SessionCombatModeContext.RealTime);

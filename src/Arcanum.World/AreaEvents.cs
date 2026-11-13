@@ -18,7 +18,7 @@ namespace Arcanum.World;
 /// diagnostic NPC facts, and the hero's or the diagnostic PC's facts); without a conversation host it has none. ARC-WORLD-096: a
 /// restock event runs through the viewer's restock host (<see cref="AreaRestockHost"/>); without one it waits a minute.
 /// </summary>
-public sealed class AreaEventWorld : ISessionScriptWorld, ISessionPartyEventWorld, ISessionLootWindowWorld, ISessionAiWorld, ISessionRestockWorld, ISessionBodyWorld, ISessionEncounterWorld
+public sealed class AreaEventWorld : ISessionScriptWorld, ISessionPartyEventWorld, ISessionLootWindowWorld, ISessionAiWorld, ISessionRestockWorld, ISessionBodyWorld, ISessionEncounterWorld, ISessionNpcStatsWorld
 {
     private readonly Func<IAreaEventObjects?> _combat;
     private readonly Func<AreaConversationHost?> _talk;
@@ -79,6 +79,11 @@ public sealed class AreaEventWorld : ISessionScriptWorld, ISessionPartyEventWorl
     /// <summary>ARC-WORLD-103: an NPC's best-items wield after its regeneration reads its combat values from the area's combat fields.</summary>
     public SessionNpcWielder? RestockWielder(SessionMapId map, string npc) => Restock?.Wielder(map, npc, _combat()?.Critter(npc));
 
+    /// <summary>ARC-MAGIC-1561: the carried light of an NPC whose worn items the session recalculated (<see cref="AreaRestockHost.NpcLight"/>); null: the saved light stands (also while the restock host loads).</summary>
+    public Arcanum.Data.Lighting.CarriedLightSize? NpcLight(SessionMapId map, string npc) => Restock?.NpcLight(map, npc, _combat());
+    /// <summary>ARC-MAGIC-1561: <see cref="NpcLight"/> for several NPCs of a map at once; null while the restock host loads (nothing is known yet: the caller must not keep the answer).</summary>
+    public IReadOnlyDictionary<string, Arcanum.Data.Lighting.CarriedLightSize>? NpcLights(SessionMapId map, IEnumerable<string> npcs) => Restock?.NpcLights(map, npcs, _combat());
+
     private readonly Action<SessionScriptCall>? _prepareCall;
 
     /// <summary>The reason the last refused call did not run, or null; <see cref="CallRefusals"/> counts the refusals.</summary>
@@ -90,6 +95,9 @@ public sealed class AreaEventWorld : ISessionScriptWorld, ISessionPartyEventWorl
         // ARC-DEV-076 (MIG3): by identity, wherever the object stands: a follower the session moved answers as on its home map.
         return _combat()?.Facts(entity);
     }
+
+    /// <summary>ARC-MAGIC-1568: the NPC's stored base stats by identity, from the shown map's combat host (null without one).</summary>
+    public IReadOnlyList<int>? StoredStats(SessionMapId map, string entity) => _combat()?.StoredStats(entity);
 
     public bool ObjectExists(SessionMapId map, string entity) =>
         entity == SessionEventKinds.PlayerEntity || _combat()?.HasObject(entity) == true;

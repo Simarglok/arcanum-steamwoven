@@ -149,7 +149,7 @@ public static class SessionEventKinds
     /// 1. ARC-SCRIPT-010 added <see cref="ScriptCall"/>, ARC-WORLD-029 <see cref="HeroEffectEnd"/>, ARC-WORLD-050
     /// <see cref="LockReset"/>, ARC-WORLD-045 <see cref="PartyWait"/>, ARC-COMBAT-008 <see cref="ObjectRespawn"/>, ARC-MAGIC-010
     /// <see cref="SpellRun"/> (saved with the settled runs since ARC-DEV-210, schema 73), ARC-WORLD-062 <see cref="ItemDecay"/>, ARC-WORLD-084 <see cref="AiTick"/>, ARC-WORLD-087
-    /// <see cref="HeroEncumbrance"/>, ARC-WORLD-094 <see cref="Restock"/> and MIG12 S8 the real-time <see cref="WorldMapStep"/> and
+    /// <see cref="HeroEncumbrance"/>, ARC-MAGIC-1568 <see cref="NpcEncumbrance"/>, ARC-WORLD-094 <see cref="Restock"/> and MIG12 S8 the real-time <see cref="WorldMapStep"/> and
     /// <see cref="TurnBasedStep"/> (not saved) and ARC-DEV-132 (MIG13 S3) the animation-domain <see cref="GoalStep"/> (not saved) without a new version:
     /// the life kinds are unchanged, and a build without a kind refuses a save holding one as an unknown kind.
     /// </summary>
@@ -206,6 +206,12 @@ public static class SessionEventKinds
     /// interval of the level (<see cref="Arcanum.Simulation.Items.CarryRules.DrainIntervalMs"/>).
     /// </summary>
     public const string HeroEncumbrance = "life.hero.encumbrance";
+    /// <summary>
+    /// An NPC's encumbrance fatigue timer (ARC-MAGIC-1568; mode 1 of the original's fatigue event 0x45E820, whose match 0x45E8D0 compares the mode and the object, so one per NPC and a pending one is kept):
+    /// scoped to the NPC's map, which keeps its timers on one map. Entity: the NPC; value: the game time it was scheduled at. Its delay is the drain interval of the NPC's level
+    /// (<see cref="Arcanum.Simulation.Items.CarryRules.DrainIntervalMs"/>). Added without a new registry version, as the kinds before it: a build without the kind refuses a save holding one.
+    /// </summary>
+    public const string NpcEncumbrance = "life.npc.encumbrance";
 
     /// <summary>Fatigue recovery: 80 game seconds (10 real seconds) after fatigue damage is set.</summary>
     public const long FatigueRecoveryDelayMs = 80_000;
@@ -216,10 +222,10 @@ public static class SessionEventKinds
     /// <summary>Resting: one game hour after hit-point damage is set.</summary>
     public const long RestingDelayMs = 3_600_000;
 
-    /// <summary>Pending events a session holds: four timers for each NPC life record and four for the hero (ARC-WORLD-087: its encumbrance timer), so a life step
+    /// <summary>Pending events a session holds: four timers for each NPC life record plus its encumbrance timer (ARC-MAGIC-1568) and four for the hero (ARC-WORLD-087: its encumbrance timer), so a life step
     /// can always set its timers, the deferred calls, the timed effects' ENDs, the Lock events, the wait timers, the respawns, the
     /// magic-tech events, the Item Decay events, the Decay Dead Bodies and Combat-Focus Wipe events (ARC-MAGIC-1146), the AI ticks, (ARC-WORLD-094) the restock events, the real-time steps and (ARC-DEV-132) one goal step per slot.</summary>
-    public const int MaxPending = 4 * GameSessionLimits.PolicyMaxLifeRecords + 4 + MaxScriptCalls + SessionEffectLimits.MaxTimedEffects
+    public const int MaxPending = 5 * GameSessionLimits.PolicyMaxLifeRecords + 4 + MaxScriptCalls + SessionEffectLimits.MaxTimedEffects
         + MaxLockResets + MaxWaitTimers + MaxObjectRespawns + MaxSpellRunEvents + MaxItemDecays + MaxBodyDecays + MaxRandomEncounters + MaxFocusWipes + MaxAiTicks + MaxRestocks + MaxTrapDevices + MaxRealSteps + MaxGoalSteps;
 
     /// <summary>
@@ -371,6 +377,8 @@ public static class SessionEventKinds
                 new EncumbranceDrainHandler(owner), Validate: payload => payload.Values[0] >= 0),
             Npc(NpcFatigue, LifeTimer.Fatigue), Npc(NpcPoisonDamage, LifeTimer.PoisonDamage),
             Npc(NpcPoisonRecovery, LifeTimer.PoisonRecovery), Npc(NpcResting, LifeTimer.Resting),
+            new(NpcEncumbrance, GameEventDomain.Game, GameEventPersistence.Saved, GameEventUniqueness.KeepExisting, GameEventScopeRule.EntityMap, 1, 1, 1, 0,
+                new NpcEncumbranceDrainHandler(owner), Validate: payload => payload.Values[0] >= 0 && AiTickNpc(payload.Entities[0].Code)),
             new(ScriptCall, GameEventDomain.Game, GameEventPersistence.Saved, GameEventUniqueness.Many, GameEventScopeRule.Global, 2, 4, 0, 0,
                 new ScriptCallHandler(owner), Validate: ScriptCallPayload),
             new(HeroEffectEnd, GameEventDomain.Game, GameEventPersistence.Saved, GameEventUniqueness.Many, GameEventScopeRule.Global, 0, 4, 0, 0,
@@ -593,6 +601,12 @@ internal sealed class EncumbranceDrainHandler(SessionEventSink sink) : IGameEven
 {
     public GameEventHandlerOutcome Handle(GameEventFiring firing, GameEventQueue queue) =>
         sink.Owner?.FireEncumbranceDrain(firing) ?? GameEventHandlerOutcome.Refused;
+}
+
+internal sealed class NpcEncumbranceDrainHandler(SessionEventSink sink) : IGameEventHandler
+{
+    public GameEventHandlerOutcome Handle(GameEventFiring firing, GameEventQueue queue) =>
+        sink.Owner?.FireNpcEncumbranceDrain(firing) ?? GameEventHandlerOutcome.Refused;
 }
 
 internal sealed class LockResetHandler(SessionEventSink sink) : IGameEventHandler

@@ -24,7 +24,7 @@ public partial class TerrainViewerApp
     private AreaEventWorld? _areaEventWorld;
     // ARC-WORLD-092: its AI ticks run through the shown map's AI host; ARC-WORLD-096: its restock events through the restock host.
     private AreaEventWorld AreaEvents => _areaEventWorld ??= new AreaEventWorld(() => _combatHost, () => _conversationHost, AdmitCallAttachee,
-        () => InventoryOpen && SessionJunkPile.Number(_inventoryPanel!.Holder) is not null || ContainerLootOpen, () => _aiHost is { } ai && ReferenceEquals(ai.Session, _areaSession) ? ai : null,
+        () => LootWindowOnContainer, () => _aiHost is { } ai && ReferenceEquals(ai.Session, _areaSession) ? ai : null,
         () => _combatHost is not null && _worldActor.Session is AreaGridSession ? AreaCombatWorldNow() : null, RestockHostNow, EncounterHostNow);
 
     // MIG12 S8: the host of the real-time steps the frame step hands out (the world-map journey's travel step, the turn-based event).
@@ -229,9 +229,41 @@ public partial class TerrainViewerApp
     // changes only with it, with the shown map's lighting and with the lighting toggle. The light follows the hero because the canvas makes
     // the lighting from the hero's placement at every submission.
     // ARC-MAGIC-1229: a signature of the live eye candy lights is part of the key, so a glow that starts or ends hands the canvas a source that has it or not.
-    private (CarriedLightSize Size, AreaLightingPlan? Lighting, bool Lit, int EyeCandy)? _carriedKey;
+    private (CarriedLightSize Size, AreaLightingPlan? Lighting, bool Lit, int EyeCandy, int Npcs)? _carriedKey;
 
     private void ResetCarriedLight() => _carriedKey = null;
+
+    // ARC-MAGIC-1561 (ledger RM3c, IE5): the carried light of an NPC whose worn items the session recalculated (its best-items wield, a magick or tech point write): the size the recalculation
+    // 0x467E80 gives (None: no light), at the NPC's T0 cell with the offsets of its row, where the AI host's step or the companion group stands it elsewhere. Read again when the session changes.
+    private readonly record struct NpcCarried(CarriedLightSize Size, long X, long Y, int OffsetX, int OffsetY);
+
+    private (GameSessionOwner? Session, AreaAiHost? Host, AreaAiScene Scene, IReadOnlyList<AreaAiNpc> Npcs, GameSessionVersion Version)? _npcLightRead;
+    private IReadOnlyDictionary<AreaObjectKey, NpcCarried> _npcLights = new Dictionary<AreaObjectKey, NpcCarried>();
+    private int _npcLightsKey;
+
+    private (IReadOnlyDictionary<AreaObjectKey, NpcCarried> Lights, int Key) NpcCarriedLights()
+    {
+        if (_areaSession is not { } session || _aiHost is not { } ai || !ReferenceEquals(ai.Session, session)) { _npcLightRead = null; return (_npcLights = new Dictionary<AreaObjectKey, NpcCarried>(), _npcLightsKey = 0); }
+        var read = (session, ai, ai.Scene, ai.Scene.Npcs, session.Version);
+        if (_npcLightRead is { } known && ReferenceEquals(known.Session, session) && ReferenceEquals(known.Host, ai) && ReferenceEquals(known.Scene, read.Item3) && ReferenceEquals(known.Npcs, read.Item4) && known.Version == read.Item5) return (_npcLights, _npcLightsKey);
+        var map = new SessionMapId(ai.Scene.RuntimeMap);
+        // The restock host still loading: nothing is known, nothing is kept (the saved lights stand) and the next frame asks again.
+        var found = AreaEvents.NpcLights(map, ai.Scene.Npcs.Select(npc => npc.Entity));
+        if (found is null) { _npcLightRead = null; return (_npcLights = new Dictionary<AreaObjectKey, NpcCarried>(), _npcLightsKey = 0); }
+        _npcLightRead = read;
+        var lights = new Dictionary<AreaObjectKey, NpcCarried>();
+        var hash = new HashCode();
+        foreach (var npc in ai.Scene.Npcs)
+        {
+            if (!found.TryGetValue(npc.Entity, out var size)) continue;
+            int Offset(int slot) => npc.Row.EffectiveFields.FirstOrDefault(f => f.Slot == slot && f.Presence == AreaPresence.Value)?.Number is { } n && n is >= int.MinValue and <= int.MaxValue ? (int)n : 0;
+            lights[npc.Row.Key] = new(size, npc.Origin.X, npc.Origin.Y, Offset(2), Offset(3));
+            hash.Add(npc.Row.Key); hash.Add(size);
+        }
+        _npcLights = lights;
+        _npcLightsKey = lights.Count == 0 ? 0 : hash.ToHashCode() | 1;
+        return (_npcLights, _npcLightsKey);
+    }
 
     private static CarriedLightSize CarriedSize(Arcanum.Simulation.Combat.LightEmission size) => size switch
     {
@@ -288,8 +320,9 @@ public partial class TerrainViewerApp
         var lit = _areaAmbient is { Enabled: true };
         var size = HeroCarriedSize();
         var glows = EyeCandyLightKey();
-        if (_carriedKey is { } known && known.Size == size && known.Lit == lit && known.EyeCandy == glows && ReferenceEquals(known.Lighting, lighting)) return;
-        _carriedKey = (size, lighting, lit, glows);
+        var npcs = NpcCarriedLights().Key;
+        if (_carriedKey is { } known && known.Size == size && known.Lit == lit && known.EyeCandy == glows && known.Npcs == npcs && ReferenceEquals(known.Lighting, lighting)) return;
+        _carriedKey = (size, lighting, lit, glows, npcs);
         _canvas.SetAreaCarried(CarriedLightSource(size, lighting, lit));
     }
 
@@ -302,7 +335,8 @@ public partial class TerrainViewerApp
         if (!lit || lighting is not { Local: { } local }) return null;
         var hero = size != CarriedLightSize.None && lighting.CarriedFrame is not null;
         // ARC-MAGIC-1229: a lit eye candy's glow is a carried light as well (it moves with its object).
-        if (!hero && local.CritterLights.Count == 0 && EyeCandyLightCount() == 0) return null;
+        var recalculated = NpcCarriedLights().Lights;
+        if (!hero && local.CritterLights.Count == 0 && EyeCandyLightCount() == 0 && recalculated.Count == 0) return null;
         return (placement, reach) =>
         {
             // A source made for another map's lighting (a map change this frame) draws nothing until the tick gives the canvas the new one.
@@ -331,6 +365,8 @@ public partial class TerrainViewerApp
             {
                 // A companion that stands on another map takes its light with it (its body is not drawn here).
                 if (absent?.Contains(critter.Object) == true) continue;
+                // ARC-MAGIC-1561: the saved primary light of a critter whose light the session recalculated gives way to the recalculated one (below).
+                if (critter.Primary && recalculated.ContainsKey(critter.Object)) continue;
                 if (!poses.TryGetValue(critter.Object, out var pose))
                 {
                     // At its T0 place: the cheap test first, so the many far critters of a map cost nothing per submission.
@@ -340,6 +376,15 @@ public partial class TerrainViewerApp
                 }
                 var stood = AreaCritterLights.Place(critter, pose);
                 if (Near(stood.X, stood.Y, stood.OffsetX, stood.OffsetY)) lights.Add(stood);
+            }
+            foreach (var (key, carried) in recalculated)
+            {
+                if (carried.Size == CarriedLightSize.None || lighting.CarriedFrame is null || absent?.Contains(key) == true) continue;
+                poses.TryGetValue(key, out var pose);
+                var (cellX, cellY, offsetX, offsetY) = AreaCritterLights.Stand(carried.X, carried.Y, carried.OffsetX, carried.OffsetY, poses.ContainsKey(key) ? pose : null);
+                if (!Near(cellX, cellY, offsetX, offsetY)) continue;
+                lights.Add(CarriedLightRules.ToLight(new CarriedLight(cellX, cellY, offsetX, offsetY, carried.Size)));
+                frames.TryAdd(CarriedLightRules.ArtNumber, lighting.CarriedFrame);
             }
             AddEyeCandyLights(lighting, local, placement, poses, absent, frames, lights, Near);
             return LightsNow(local, driver)?.WithCarried(frames, lights);

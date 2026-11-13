@@ -415,6 +415,45 @@ public sealed partial class GameSessionOwner
         // ARC-AI-1530: the hooks of the setter calls staged here, run after the commit in call order, each with the rules 8 and 9 it deferred.
         private readonly List<(SessionDangerHook Hook, LateRules? Late)> _hooks = [];
 
+        // ARC-AI-1634 (0x4AA300, 0x4AA4A0): a plan whose setter call queued a hook for the host cannot go on writing in the same revision, because the original runs the script inside the setter, before the plan's
+        // later writes (the followers' loop of peace, the combat-mode exit, NO_ATTACK and the unlock of stop attacking). Such a plan is cut at the call: <see cref="Then"/> keeps the rest, which runs on a fresh
+        // plan (the live state, the script's own writes included) once this one is committed and its script has run.
+        private Func<DangerPlan, GameSessionFailure>? _then;
+
+        // True for the dry run (<see cref="PreviewDanger"/>): the rest runs at once on the same plan and nothing is committed.
+        internal bool Inline { get; init; }
+
+        // True for the plan of a cut call's rest: it runs after a script that may have moved the state the dry run saw, so a step that needs facts the caller could not give for that new state is skipped, not failed
+        // (the original has no failure path there and finishes the call).
+        internal bool Continued { get; init; }
+
+        // How many hooks the plan holds, so that a caller can tell whether a setter call queued one.
+        internal int HookCount => _hooks.Count;
+
+        // The rest of a call after <paramref name="hooked"/>: run now when the setter queued no hook, else after this plan's commit and its script. A cut plan holds one rest at a time and the caller returns at once.
+        internal GameSessionFailure Then(bool hooked, Func<DangerPlan, GameSessionFailure> rest)
+        {
+            if (!hooked || Inline) return rest(this);
+            _then = rest;
+            return GameSessionFailure.None;
+        }
+
+        // The budget and revision checks of the plan as it stands, with nothing written (<see cref="Inline"/>): the failure the commit would give.
+        internal GameSessionFailure Check() =>
+            Commit(new SessionDangerResult(GameSessionDisposition.NoChange, GameSessionFailure.None, owner.Version), (r, _, _) => r, owner.RejectDanger, apply: false).Failure;
+
+        // The rest of a cut plan, on a fresh plan over the state the script left. The dry run checked the facts and budgets of the whole call, so a failure of the rest's commit (a budget a script moved) leaves
+        // the rest undone and does not reject the call, whose first part is committed, like the entering call's late rules; the steps the call reports are then those planned.
+        private void RunThen()
+        {
+            if (_then is not { } rest) return;
+            _then = null;
+            var next = new DangerPlan(owner) { Continued = true };
+            if (rest(next) != GameSessionFailure.None) return;
+            next.Commit(new SessionDangerResult(GameSessionDisposition.NoChange, GameSessionFailure.None, owner.Version),
+                (r, disposition, version) => r with { Disposition = disposition, Version = version }, owner.RejectDanger);
+        }
+
         // Rule 9 (focus := target) and rule 8 (the reaction lowered, with its facts) of an entering call, written after its enter-combat script; LockOn: the target lock (0x4AFBD0) asked
         // for the same call, which the original decides after the setter returned, so on the state and focus the script and the two rules left.
         internal sealed record LateRules(SessionCombatant? Target, bool WritesFocus, SessionDangerReaction? Reaction, bool LockOn = false);
@@ -629,7 +668,7 @@ public sealed partial class GameSessionOwner
 
         // Budgets, then the revision; an unchanged plan is NoChange with the caller's details.
         internal TResult Commit<TResult>(TResult result, Func<TResult, GameSessionDisposition, GameSessionVersion, TResult> with,
-            Func<GameSessionFailure, TResult> reject)
+            Func<GameSessionFailure, TResult> reject, bool apply = true)
         {
             var danger = owner._danger;
             var changed = _staged.Values.Where(record => !(danger.Records.TryGetValue(record.Entity, out var current) ? current.SameAs(record) : record.IsBaseline)).ToArray();
@@ -640,7 +679,11 @@ public sealed partial class GameSessionOwner
                 .Where(c => c.After != c.Before).Select(c => c.After).ToArray();
             var leaving = _leavesCombatMode.Where(owner._combat.Critters.Contains).ToArray();
             if (changed.Length == 0 && leaving.Length == 0 && writes.Length == 0 && armed.Length == 0)
+            {
+                // A cut plan always changed something (its setter call moved the state bits), so no hook is lost here; the rest of a plan that changed nothing still runs.
+                if (apply) RunThen();
                 return with(result, GameSessionDisposition.NoChange, owner.Version);
+            }
             var records = danger.Records.Count + changed.Count(record => !record.IsBaseline && !danger.Records.ContainsKey(record.Entity))
                 - changed.Count(record => record.IsBaseline && danger.Records.ContainsKey(record.Entity));
             var enemies = danger.Enemies + changed.Sum(record => record.Enemies.Count -
@@ -651,6 +694,7 @@ public sealed partial class GameSessionOwner
             if (added > 0 && owner._reactions.Records.Count + added > owner._limits.MaxReactionRecords)
                 return reject(GameSessionFailure.BudgetExceeded);
             if (owner._revision == long.MaxValue) return reject(GameSessionFailure.RevisionExhausted);
+            if (!apply) return with(result, GameSessionDisposition.Changed, owner.Version);
             foreach (var record in changed) danger.Put(record);
             foreach (var entity in leaving) owner._combat.Critters.Remove(entity);
             foreach (var write in writes)
@@ -661,7 +705,9 @@ public sealed partial class GameSessionOwner
             // ARC-WORLD-045 (OL17): a reaction drop of a follower arms its leader check in the same revision.
             foreach (var arm in armed) owner._party.Put(arm, false);
             owner.Revise();
-            RunHooks();
+            // The rest runs even when a host hook throws something that is not swallowed (RunHooks has run every hook by then, and the original goes on after a script); that error is raised after the rest.
+            try { RunHooks(); }
+            finally { RunThen(); }
             return with(result, GameSessionDisposition.Changed, owner.Version);
         }
 

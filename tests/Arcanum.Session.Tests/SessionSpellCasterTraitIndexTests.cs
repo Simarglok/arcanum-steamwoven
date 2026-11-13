@@ -4,8 +4,10 @@ using Arcanum.Data.Magic;
 using Arcanum.Scripting.Scr;
 using Arcanum.Simulation;
 using Arcanum.Simulation.Character;
+using Arcanum.Simulation.Clock;
 using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Equipment;
+using Arcanum.Simulation.Events;
 using Arcanum.Simulation.Magic;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using static Arcanum.Session.Tests.HeroStateTests;
@@ -708,18 +710,123 @@ public sealed class SessionSpellCasterTraitIndexTests
         CollectionAssert.AreEqual(new[] { EffectCause.Item, EffectCause.Item }, entries.Select(e => e.Cause).ToArray());
     }
 
-    [TestMethod]
-    public void A_level_with_the_fatigue_timer_is_not_ready_and_writes_nothing()
+    // ARC-MAGIC-1568 (0x45E820 mode 1, 0x45E8D0, 0x45E610): a new level from 4 schedules the NPC's encumbrance fatigue timer, one per NPC.
+    private static GameEvent[] RatTimers(GameSessionOwner owner) => owner.QueryEvents().Where(e => e.Kind == SessionEventKinds.NpcEncumbrance).ToArray();
+
+    private sealed class RatWorld(SessionLifeTarget target, IReadOnlyList<int>? stats) : ISessionNpcStatsWorld
     {
-        // 800 at strength 2 (1000 carried) is 80 %, level 5 (75 to 89 %): the timer of 0x45E820 mode 1, which the session keeps for the hero alone.
+        public LifeFacts? CritterFacts(SessionMapId map, string entity) => entity == Rat ? target.Facts : null;
+        public IReadOnlyList<int>? StoredStats(SessionMapId map, string entity) => entity == Rat ? stats : null;
+    }
+
+    private static IReadOnlyList<int> RatStats(GameSessionOwner owner, int strength)
+    {
+        var stats = RatFields().Critter!.BaseStats.ToArray();
+        stats[0] = strength;
+        return owner.QueryCritterIndexedWrites(Rat).OverStats(stats)!;
+    }
+
+    [TestMethod]
+    public void A_level_with_the_fatigue_timer_writes_and_schedules_the_npcs_timer_once()
+    {
+        // 800 at strength 3 is level 3; at 2 (1000 carried) it is 80 %, level 5: the entries and the 60 s timer; at 1 (500 carried) it is level 6, where the pending timer stays (WEA2).
         var (owner, caster, target) = Carrying(3, [800]);
         using var _ = owner;
-        var version = owner.Version;
-        Assert.IsNull(caster.Apply(Run(StrengthMinusOne), 0, At(Rat, SpellTargetObject.Npc)).JumpTo);
-        Assert.IsTrue(NotReady(caster));
-        Assert.AreEqual(version, owner.Version);
-        Assert.IsTrue(owner.QueryCritterIndexedWrites(Rat).IsEmpty);
-        Assert.AreEqual(0, Entries(owner, target));
+        Assert.AreEqual(SpellComponentOutcome.None, caster.Apply(Run(StrengthMinusOne), 0, At(Rat, SpellTargetObject.Npc)));
+        Assert.IsFalse(NotReady(caster));
+        Assert.AreEqual(2, owner.QueryCritterIndexedWrites(Rat).Stats[0]);
+        Assert.AreEqual(5, Entries(owner, target));
+        var timer = RatTimers(owner).Single();
+        Assert.AreEqual(Rat, timer.Payload.Entities[0].Code);
+        Assert.AreEqual(owner.QueryActor().Map.RuntimeMap, timer.Payload.Entities[0].Map);
+        Assert.AreEqual(60_000, timer.DeadlineMs - timer.Payload.Values[0]);
+        Assert.IsNotNull(owner.QueryLifeRecord(Rat), "the timer gave the NPC the record of its loaded state");
+        Assert.AreEqual(SpellComponentOutcome.None, caster.Apply(Run(StrengthMinusOne), 0, At(Rat, SpellTargetObject.Npc)));
+        Assert.AreEqual(1, owner.QueryCritterIndexedWrites(Rat).Stats[0]);
+        Assert.AreEqual(8, Entries(owner, target), "level 6: eight entries");
+        CollectionAssert.AreEqual(new[] { timer.DeadlineMs }, RatTimers(owner).Select(e => e.DeadlineMs).ToArray(), "the pending timer is kept");
+    }
+
+    [TestMethod]
+    public void A_level_below_4_schedules_no_npc_timer()
+    {
+        var (owner, caster, _) = Carrying(3, [300, 500]);
+        using var _o = owner;
+        caster.Apply(Run(StrengthPlus), 0, At(Rat, SpellTargetObject.Npc));
+        Assert.AreEqual(0, RatTimers(owner).Length);
+        Assert.IsNull(owner.QueryLifeRecord(Rat));
+    }
+
+    [TestMethod]
+    public void The_npcs_timer_drains_its_fatigue_and_is_scheduled_again_by_its_level()
+    {
+        var (owner, caster, target) = Carrying(3, [800]);
+        using var _ = owner;
+        caster.Apply(Run(StrengthMinusOne), 0, At(Rat, SpellTargetObject.Npc));
+        var world = new RatWorld(target, RatStats(owner, 2));
+        var before = owner.QueryLifeRecord(Rat)!.Value.State.FatigueDamage;
+        Assert.AreEqual(ClockMutationDisposition.Changed, owner.AdvanceGameTime(owner.QueryClockSnapshot().Token, 59_999, ClockAdvanceReason.OrdinaryAdvance).Disposition);
+        Assert.AreEqual(0, owner.ProcessEvents(world).Life.Count, "not yet due");
+        owner.AdvanceGameTime(owner.QueryClockSnapshot().Token, 1, ClockAdvanceReason.OrdinaryAdvance);
+        var pass = owner.ProcessEvents(world);
+        Assert.AreEqual(GameSessionFailure.None, pass.Failure);
+        Assert.AreEqual(before + 1, owner.QueryLifeRecord(Rat)!.Value.State.FatigueDamage, "max(1, 60 / 80) steps of the fatigue");
+        var next = RatTimers(owner).Single();
+        Assert.AreEqual(60_000, next.DeadlineMs - next.Payload.Values[0], "level 5 again");
+        Assert.IsTrue(owner.QueryEvents().Any(e => e.Kind == SessionEventKinds.NpcFatigue), "the fatigue write set the recovery");
+    }
+
+    [TestMethod]
+    public void The_npcs_timer_is_not_scheduled_again_when_the_level_has_fallen_below_4()
+    {
+        var (owner, caster, target) = Carrying(3, [800]);
+        using var _ = owner;
+        caster.Apply(Run(StrengthMinusOne), 0, At(Rat, SpellTargetObject.Npc));
+        // The world reports a strength of 20 (10000 carried): 800 is level 0 when the timer fires.
+        owner.AdvanceGameTime(owner.QueryClockSnapshot().Token, 60_000, ClockAdvanceReason.OrdinaryAdvance);
+        Assert.AreEqual(GameSessionFailure.None, owner.ProcessEvents(new RatWorld(target, RatStats(owner, 20).Select((v, i) => i == 0 ? 20 : v).ToArray())).Failure);
+        Assert.AreEqual(1, owner.QueryLifeRecord(Rat)!.Value.State.FatigueDamage, "it does not check the level before it drains");
+        Assert.AreEqual(0, RatTimers(owner).Length);
+    }
+
+    [TestMethod]
+    public void A_world_without_the_stored_stats_lets_the_npcs_timer_end_after_one_drain()
+    {
+        var (owner, caster, target) = Carrying(3, [800]);
+        using var _ = owner;
+        caster.Apply(Run(StrengthMinusOne), 0, At(Rat, SpellTargetObject.Npc));
+        owner.AdvanceGameTime(owner.QueryClockSnapshot().Token, 60_000, ClockAdvanceReason.OrdinaryAdvance);
+        Assert.AreEqual(GameSessionFailure.None, owner.ProcessEvents(new RatWorld(target, null)).Failure);
+        Assert.AreEqual(1, owner.QueryLifeRecord(Rat)!.Value.State.FatigueDamage);
+        Assert.AreEqual(0, RatTimers(owner).Length);
+    }
+
+    [TestMethod]
+    public void The_npcs_timer_does_nothing_for_a_dead_npc_and_is_not_scheduled_again()
+    {
+        var (owner, caster, target) = Carrying(3, [800]);
+        using var _ = owner;
+        caster.Apply(Run(StrengthMinusOne), 0, At(Rat, SpellTargetObject.Npc));
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.ApplyDamage(owner.Version, target, new LifeDamage { HitPoints = 1000 }).Disposition);
+        owner.AdvanceGameTime(owner.QueryClockSnapshot().Token, 60_000, ClockAdvanceReason.OrdinaryAdvance);
+        Assert.AreEqual(GameSessionFailure.None, owner.ProcessEvents(new RatWorld(target, RatStats(owner, 2))).Failure);
+        Assert.AreEqual(0, RatTimers(owner).Length);
+    }
+
+    [TestMethod]
+    public void The_npcs_timer_is_saved_and_restored_and_a_wrong_delay_is_refused()
+    {
+        var (owner, caster, _) = Carrying(3, [800]);
+        using var _o = owner;
+        caster.Apply(Run(StrengthMinusOne), 0, At(Rat, SpellTargetObject.Npc));
+        var text = GameSessionSnapshotCodec.Encode(owner.Capture());
+        using var restored = Restore(Decode(text));
+        CollectionAssert.AreEqual(RatTimers(owner).Select(e => (e.DeadlineMs, e.Payload.Entities[0].Code)).ToArray(), RatTimers(restored).Select(e => (e.DeadlineMs, e.Payload.Entities[0].Code)).ToArray());
+        Assert.AreEqual(text, GameSessionSnapshotCodec.Encode(restored.Capture()));
+        var timer = RatTimers(owner).Single();
+        var deadline = $"\"deadlineMs\":{timer.DeadlineMs}";
+        StringAssert.Contains(text, deadline);
+        Assert.AreEqual(GameSessionFailure.InvalidEvents, GameSessionOwner.Restore(Decode(text.Replace(deadline, $"\"deadlineMs\":{timer.DeadlineMs + 1}")), RestoreOptions()).Failure);
     }
 
     [TestMethod]

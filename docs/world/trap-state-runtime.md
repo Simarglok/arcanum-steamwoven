@@ -6,8 +6,8 @@ native trap scripts are applied since ARC-WORLD-107 ([Effects](#effects-arc-worl
 AREA viewer's PC meets traps on a use, before each step and on a step since ARC-WORLD-110
 ([Viewer](#viewer-arc-world-110)). The spot trap roll is made since ARC-MAGIC-057 ([ledger SP1–SP2](../research/ledger/technology.md#spot-trap-roll-arc-magic-057));
 the disarm roll and action are made since ARC-SKILLS-1156 ([Disarm](#disarm-arc-skills-1156)); the shot of
-script 30002, the drawing of a spotted trap object, the attack's trap trigger in the viewer
-and the trap devices (ARC-TECHNOLOGY-011/012) are later slices. NPCs and companions meet traps under their steps and on a door they open since ARC-WORLD-1469
+script 30002 is applied since ARC-TECHNOLOGY-1619 (the strike at once, without its missile: [Effects](#effects-arc-world-107));
+the drawing of a spotted trap object, the shot's missile and the trap devices (ARC-TECHNOLOGY-011/012) are later slices. NPCs and companions meet traps under their steps and on a door they open since ARC-WORLD-1469
 ([NPC and companion meeting](#npc-and-companion-meeting-arc-world-1469)). The rules
 follow the retail 1.0.7.4 executable as read in
 [ledger TT1–TT10](../research/ledger/technology.md#trap-state-arc-world-076) and
@@ -109,11 +109,20 @@ or the triggerer alone for radius 0, none without a triggerer):
   through the map (`ISpellCastMap.DamageObject`). The item events the step calls for fire
   before the victim's spell and the next victim, as inside the original's call. The hit's
   damage effect (TT14) is the host's to show.
-- **Shot** (30002): no shooter, no effect at all (no spell either); with a shooter the
-  result is `ShotNotReady` and nothing is applied yet: the shot (the dispatcher 0x4B3170
-  with a non-critter attacker, TT15), its draw and its spell are a later slice together, with the attack event that asks an NPC victim to fight the shooter object (ledger VB2-2 gap d; #1619). The
-  host lists the shooter candidates around the triggerer; without a triggerer it lists none.
-- **Spell**: 30000, and any damage with a top byte (a shot's comes with the shot slice), starts the spell at the victim
+- **Shot** (30002, ARC-TECHNOLOGY-1619, ledger TT15): no shooter, no effect at all (no draw, no spell either); with a shooter
+  the amount is drawn from the range (one draw), then the dispatcher's two d100 rolls (the hit location, the technology-failure
+  roll; a shot's hit is decided whatever they give), then the trap's top-byte spell is cast at the victim, then the missile's
+  strike follows at once: the attack event of the shooter object goes out (`SessionSpellCaster.AiNotice` with the shooter as
+  the attacker: an NPC victim goes to COMBAT_FOCUS on it, see [the AI host](#the-ai-host-and-the-shooter-object-arc-technology-1619)),
+  then the victim's taking-damage script is asked with the shooter as the attacker, the damage step takes the amount in the
+  normal slot and the hit effect of a PC or NPC victim runs. The victim's result carries the damage step's own outcome and
+  the shooter. The player credit of a PC-placed trap is lost in a shot (the result's `Killer` is null: the strike's context
+  names the shooter as the damage source, TT15). The strike also calls the shooter's critter-hits script point (0x4B2F60, not run) and the sound cue draws one random (0x4F0BF0, not drawn: the project draws no sound cues). The hit effect (0x4B6930) runs whatever the damage step did, a veto and an invulnerable target included. PROJECT: the missile is not drawn or flown, so a victim that would leave its
+  line, a kill before the strike and a save during the flight are not modelled ([#1635](https://github.com/Simarglok/arcanum-steamwoven/issues/1635) draws the flight); a PC victim's
+  armed critical-miss fate (0x4F5270) is not applied. The host lists the shooter candidates around the triggerer
+  (`AreaTrapShooters.Candidates`: the objects of types wall, portal, scenery and trap in the isometric window of the game
+  view, each with its use script and counters, the square query's order); without a triggerer it lists none.
+- **Spell**: 30000, and any damage or shot with a top byte, starts the spell at the victim
   with no parent and no source (TT16); its BEGIN comes as an event of the host's pass. An
   unknown spell number casts nothing.
 
@@ -122,6 +131,15 @@ outcome, amount, damage step, hit points taken, shooter and spell run. The float
 `mes\trap.mes` 1 over the triggerer (`TrapEffectRules.FiredLine`) and the eye candy lines of
 the run are the host's. The effects add no session state of their own: the life, object and
 spell run owners record them.
+
+### The AI host and the shooter object (ARC-TECHNOLOGY-1619)
+
+The attack event (0x4A9650, ledger [VB2-2 gap d](../research/ledger/npc-ai.md#partial-rows-by-risk-ai-slice-2-arc-res-1104)) of an object that is no critter reaches `AreaAiHost` through the cast host's
+`AiNotice` hook (`AreaAiHost.SpellAttacked`). The host describes such an object to the hostility rules through `AreaAiScene.ObjectFacts` (the viewer fills it from the shown map's cast
+map: type, tile and object flags; the busted state, 0x43F630, is not read), so `Find` answers an object of kind `Object` or `Wall`, its tile answers `Tile` and `Distance`, and the focus is
+valid as the original's validity test 0x4AB990 keeps it (a wall or a busted one is not, a destroyed, off, not drawn or invulnerable one is gone). An NPC victim of such an attacker
+is asked into COMBAT_FOCUS on it through the setter with no alert sound and the event returns (`AreaAiHost.AttackEvent`, plan `VictimFightsObject`); a victim of any other kind does
+nothing more. What the NPC then does with an object as its focus (the original's attack goal on a non-critter) is not built in the host: it keeps the focus and its pass finds no attack ([#1636](https://github.com/Simarglok/arcanum-steamwoven/issues/1636)).
 
 ## Viewer (ARC-WORLD-110)
 
@@ -148,7 +166,7 @@ is `AreaUseScriptHost.EntityId`, as for the object damage domain.
   before its step start (0x42E9B0).
 - **Step.** Each step the PC starts onto a tile meets the first trap object there
   (`TriggerTrap(Step, …)`, 0x4305D0, TT9): the PC's spell flag 0x2 or 0x4 steps over it, a
-  known trap fires too; a trap spotted or fired ends the walk on that tile. The original
+  known trap fires too; a trap spotted or fired ends the walk on that tile, and since ARC-WORLD-1582 so does any trap object on it the mover does not step over (`AreaTraps.StepEndsWalk`, TT17: an ordinary script, a 30002 shot or a refused meeting end it too). The original
   meets it on the arrival; the viewer meets it when the step starts, as it runs tile scripts,
   so an advance that spans several steps (a very slow frame) may carry the PC past the tile
   before the route stops. A trap object with an ordinary trap script is not met on a step
@@ -180,8 +198,8 @@ is `AreaUseScriptHost.EntityId`, as for the object damage domain.
 - **Effects.** A fired native run goes to `SessionSpellCaster.ApplyTrapEffect` with the cast
   map's id of the trapped object and the hero as the triggerer. Without a cast host no trap
   is met at all (a use goes on as before and the dispatcher stops at a native trap script; a
-  step meets nothing), so no trap is consumed without its effect. A 30002 trap is not met
-  either until its shot is applied (the use is then refused as before). The floating line, the eye candy and the
+  step meets nothing), so no trap is consumed without its effect. A 30002 trap is met when the host lists
+  its shooters (`AreaTrapEffects.ListsShooters`, ARC-TECHNOLOGY-1619: the viewer does, `AreaTrapShooters`); a host that does not leaves it unmet (the use is then refused as before). The floating line, the eye candy and the
   damage effect are not shown; the status line names the outcome and the
   `mes\trap.mes` line number.
 
@@ -200,12 +218,22 @@ or a companion that arrives on a tile with a trap object sets it off with itself
   its trap being unknown to it again, rolls again at its next meeting.
 - **Steps of the AI host.** The walk node asks `IAiGoalWorld.StepMeetsTrap` right after it began the step (`AreaAiHost.TrapMetOn`); a trap spotted or set off makes the goal's path index its length, so the walk ends on
   that tile and the goal above plans again from there (TT17). It covers the NPCs the host walks and the companions it holds. The meeting is taken at the step's start, only for a step that really began, not at its arrival (the viewer's difference for the hero's
-  step too, above): an NPC already stands on the trap's tile, a companion the host holds walks there over the next frames. The original also ends the walk on a trap object that is no trap or whose shot is not built (TT17); Steamwoven ends it on a spotted or fired trap only. A relocation (a far NPC placed on its standpoint, a route's relocation, a knockback slide) is no step and meets no trap.
-- **Companions on their own follow walk.** The viewer reports the tiles the companions' drive stepped onto (the ones the AI host does not hold) to `AreaAiHost.TrapMetOn`; the follow walk is not cut short (its goal
-  plans a route again from where the companion stands), and a trap that spots the companion marks it.
+  step too, above): an NPC already stands on the trap's tile, a companion the host holds walks there over the next frames. Since ARC-WORLD-1582 the walk also ends on a trap object that is no trap or whose shot is not built, as the original's (TT17; `AreaAiHost.TrapMetOn` asks `AreaTraps.StepEndsWalk`, a walker with the step-over flags 0x2 or 0x4 is spared). A relocation (a far NPC placed on its standpoint, a route's relocation, a knockback slide) is no step and meets no trap.
+- **Companions on their own follow walk.** The viewer reports the tiles the companions' drive stepped onto (the ones the AI host does not hold) to `AreaAiHost.TrapMetOn`; since ARC-WORLD-1582 a walk that ends on the tile (TT17) is cut short: `AreaCompanionGroup.EndWalkOnTrap` stops the
+  companion's goal through `CompanionFollower.EndWalkOnTrap` (a started step still ends at its cell centre, an ordered goal ends, the stop is not remembered as unreachable and the next update goes on approaching from where the
+  companion stands, as after a stop before a critter), and a trap that spots the companion marks it. The drive of one frame is complete before the viewer reports its steps, so a frame whose advance spans two steps (a very slow frame) may carry
+  the companion past the tile before its goal stops, as for the hero.
 - **Doors.** The opener goals' use step (`AreaDoorHost.UseDoor`, 0x428A10, TT18) asks `AreaDoorHost.OpenerTrap` for an NPC or a companion opener (`AreaAiHost.TrapMetByUse`); a trap that stops the use (spotted, a
-  native run that answers skip default, or a refused meeting) ends the opener's run and the door stays shut. The hero's own door use does not meet a door's trap yet (its use node only charges the action points).
+  native run that answers skip default, or a refused meeting) ends the opener's run and the door stays shut. The hero's own door use meets it since ARC-WORLD-1581 ([Hero door use](#hero-door-use-arc-world-1581)).
 - **Viewer.** The meetings the walkers had are logged (`ARC-WORLD-1469 walker-trap`) and shown on the status line with the outcome (`AreaAiHost.TakeTrapMeetings`).
+
+## Hero door use (ARC-WORLD-1581)
+
+The hero is an opener too (ledger TT18, TT7). Its use node of goal 12 (`AreaDoorHost.UseDoor` for the hero, 0x428A10) charges the action points first in the viewer (`HeroUse`, `TerrainViewerAreaPortals.HeroDoorUse`; the decompiled node shows no charge for a door target, the 2 points are the CT3 model) and then, as the original's node runs the door's use
+script through the object entry point with the hero as the triggerer, meets the door's trap: `AreaDoorHost.HeroTrap` (`HeroDoorTrap` in the viewer) is `AreaTraps.Use` on the door's row, the same meeting a trapped container's open has.
+A trap spotted now, a native run that went off (its effect through the cast host, the hero the triggerer) or a refused meeting answers 0: the hero's run ends, the door stays shut and the points stay spent (the viewer charges before it meets the trap).
+An ordinary (non-native) trap script is not run by this node yet, and no trap on the door goes on as before. Viewer line: `ARC-WORLD-1581 hero-door-trap` and the status line.
+The door's other, non-trap use script is not run by either opener's node (no script run on a door use is built; tracked in the Not modelled list below).
 
 ## Disarm (ARC-SKILLS-1156)
 
@@ -220,15 +248,14 @@ The hero's disarm traps press (E6-a second half; ledger [SP3](../research/ledger
 ## Not modelled here
 
 - The follower who disarms instead of the hero (SP3, 0x57A620). An NPC's or a companion's use of a trapped object other than a door its opener goal pushes
-  (the original's use node 0x428A10 meets the trap of any target it runs the use script of, TT18; the hero's own door use, a trapped container's opening by an NPC and the NPCs' other uses are not built),
-  and the walk of a companion on its own follow walk being cut short at the trap (TT17).
+  (the original's use node 0x428A10 meets the trap of any target it runs the use script of, TT18; a trapped container's opening by an NPC and the NPCs' other uses are not built; the hero's own door use meets the trap since ARC-WORLD-1581).
 - The 30002 trap in the viewer (with its shot), an ordinary trap script on a step, and the
   route cost of a known trap (DC8) on the PC's route (the drop map's route has it), the
   attack's trap trigger in the viewer,
   and the drawing of a spotted trap object (the area data resolves no body for a don't-draw
   object yet).
-- The shot of script 30002 (TT15) with its draw and its spell (a found shooter applies
-  nothing yet), and the shooter list's rectangle around the triggerer (TT12); the floating line and the eye candy of a fired run, and the damage effect (TT14),
+- The shot's missile (TT15: the default projectile art flying from the shooter's tile, the strike where it meets the victim, the
+  shot in flight across a save) and the shooter list's exact rectangle around the triggerer (TT12); the floating line and the eye candy of a fired run, and the damage effect (TT14),
   are the host's presentation.
 - Trap devices placed by the player (ARC-TECHNOLOGY-011/012, ledger TP1–TP8) and the
   multiplayer per-player lists.
@@ -248,7 +275,9 @@ The hero's disarm traps press (E6-a second half; ledger [SP3](../research/ledger
   (roll not ready, detect flag, known traps skipped, destroyed trap objects) and the step
   (stepped over, fired and removed, spotted); `AreaContainerLootTests.cs`: a trap met on the
   use keeps the container shut.
-- ARC-WORLD-1469: `AreaTrapsTests` (a free NPC's and a companion's step onto a trap object and use of a trapped one: the triggerer, a known trap, an unknown one with and without a roll or a sheet, the step-over flags, no critter side, who marks it; the AI host's walk ending on the trap's tile and the trap firing once), `AreaDoorHostTests` (the opener's use node asks the trap), `ExecutorRulesTests` (a step onto a trap ends the walk there).
+- ARC-WORLD-1581: `AreaDoorHostTests` (the hero's use node charges, then asks the door's trap; a stopping trap ends the run; a refused charge asks none; an NPC opener does not use the hero's port), `AreaTrapsTests` (a trapped door meets the hero on its use and stays shut).
+- ARC-WORLD-1469: `AreaTrapsTests` (a free NPC's and a companion's step onto a trap object and use of a trapped one: the triggerer, a known trap, an unknown one with and without a roll or a sheet, the step-over flags, no critter side, who marks it; the AI host's walk ending on the trap's tile and the trap firing once; ARC-WORLD-1582: the walk ending on any trap object not stepped over), `CompanionFollowTests` (a walk ended on a trap tile: goal stopped, step finished, approach resumes, ordered goal ended), `AreaDoorHostTests` (the opener's use node asks the trap), `ExecutorRulesTests` (a step onto a trap ends the walk there).
 - `tests/Arcanum.Session.Tests/TrapEffectTests.cs`: victims (square and triggerer), one draw
   per victim, each damage type's slot, the damage source, an object victim, the spell with no
-  caster, a damage's spell, the shot with and without a shooter, and 30007.
+  caster, a damage's spell, the shot with and without a shooter (ARC-TECHNOLOGY-1619: its draws, the spell before the event, the event before the damage, the veto, the lost credit), and 30007.
+- ARC-TECHNOLOGY-1619: `tests/Arcanum.TerrainViewer.Tests/AreaTrapShootersTests.cs` (the candidates), `AreaTrapsTests` (a shot met with a host that lists shooters) and `AreaAiObjectAttackerTests` (the attack event of a shooter object).
