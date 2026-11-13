@@ -78,6 +78,8 @@ public sealed record SessionEventPassResult(GameSessionFailure Failure, GameEven
     public IReadOnlyList<GoalRunEnd> GoalsReconciled { get; init; } = Array.Empty<GoalRunEnd>();
     /// <summary>The AI ticks that came due (ARC-WORLD-084), in firing order.</summary>
     public IReadOnlyList<SessionAiTickFiring> AiTicks { get; init; } = Array.Empty<SessionAiTickFiring>();
+    /// <summary>ARC-MAGIC-1651: the NPC encumbrance timers whose chain ended for want of a level reading or a free schedule (<see cref="SessionNpcEncumbranceEndReason"/>), in firing order; a chain that ends below level 4 is not listed.</summary>
+    public IReadOnlyList<SessionNpcEncumbranceEnd> NpcEncumbranceEnds { get; init; } = Array.Empty<SessionNpcEncumbranceEnd>();
     /// <summary>The restock events that came due (ARC-WORLD-094), in firing order.</summary>
     public IReadOnlyList<SessionRestockFiring> Restocks { get; init; } = Array.Empty<SessionRestockFiring>();
     /// <summary>ARC-WORLD-124: the trap device fuses that came due (kind 28, ledger TP3), in firing order; the cast host runs their spells after the pass.</summary>
