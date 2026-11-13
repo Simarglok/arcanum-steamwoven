@@ -70,6 +70,9 @@ public partial class TerrainViewerApp
             _conversationHost.KillNpc = entity => KillByScript(new Arcanum.Scripting.Scr.ScrObjectRef(CurrentAreaMap, entity));
             // ARC-DEV-193: the reply step's hostile check is asked of the same AI host (alive and kill-on-sight toward the hero).
             _conversationHost.NpcHostile = entity => AreaAiHostNow() is { } hostileAi && hostileAi.HostileToHero(entity);
+            // ARC-SCRIPT-1732: the h: reply's healer menu reads the speaker's facts and starts its service and spells on the shown map's AI host; the spell names are the loaded spell data's.
+            _conversationHost.HealerHost = AreaAiHostNow;
+            _conversationHost.SpellName = spell => { AdoptSpellData(); return Arcanum.World.AreaSpellsPage.SpellName(_spellData?.Data, spell); };
             // ARC-SCRIPT-1165 (E5-c): a dialog script's add blessing and add curse take their effect from the module's tables, as a use script's do.
             _conversationHost.Scripts.BlessingEffects = BlessingEffectOf;
             _conversationHost.Scripts.QueryHost = () => ReferenceEquals(_readyArea?.Snapshot, snapshot) ? UseScriptHost(snapshot) : null;

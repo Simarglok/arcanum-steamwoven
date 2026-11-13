@@ -22,9 +22,9 @@ public sealed partial class DialogConversation
 
     private sealed record TrainerTalk(ReplyPlan Reply, StepPlan? Target, DialogOperationSource Source);
 
-    private enum TrainerChoiceKind { Skill, Pay, PayRumor, Follow, Area, More, PayDirections }
+    private enum TrainerChoiceKind { Skill, Pay, PayRumor, Follow, Area, More, PayDirections, HealMenu, HealService, HealSpell, PayHealService, PayHealSpell }
 
-    private readonly record struct TrainerChoice(TrainerChoiceKind Kind, int Skill = 0, int Price = 0, int Rumor = 0, int Area = 0, int Offset = 0);
+    private readonly record struct TrainerChoice(TrainerChoiceKind Kind, int Skill = 0, int Price = 0, int Rumor = 0, int Area = 0, int Offset = 0, int Spell = 0);
 
     private sealed record TrainerOption(string Text, DialogLineOrigin? Origin, TrainerChoice Choice);
 
@@ -221,9 +221,9 @@ public sealed partial class DialogConversation
             var reply = _talk!.Reply;
             var rumor = reply.Rumor is not null;
             var directions = reply.Directions;
-            var letter = directions is { } d ? (d.Learn ? 'x' : 'd') : rumor ? 'r' : reply.Story ? 'c' : 't';
+            var letter = directions is { } d ? (d.Learn ? 'x' : 'd') : rumor ? 'r' : reply.Story ? 'c' : reply.Healer ? 'h' : 't';
             offers.Add(new DialogOption(index + 1, response, -1, DialogOptionTextKind.Generated, option.Text, new DialogGeneratedMarker(letter),
-                follow ? reply.Transition : directions is not null ? DialogOptionTransition.DirectionsStep : rumor ? DialogOptionTransition.RumorStep : DialogOptionTransition.TrainerStep,
+                follow ? reply.Transition : directions is not null ? DialogOptionTransition.DirectionsStep : rumor ? DialogOptionTransition.RumorStep : reply.Healer ? DialogOptionTransition.HealerStep : DialogOptionTransition.TrainerStep,
                 follow && reply.Target is not null ? new DialogNodeId(reply.Target.Id) : null,
                 follow ? reply.ScriptLine : null,
                 new DialogOptionToken(_identity, Turn, _generation, response), null, option.Origin));
@@ -248,6 +248,17 @@ public sealed partial class DialogConversation
                 return Result();
             case TrainerChoiceKind.PayRumor:
                 PayAndTell(choice);
+                return Result();
+            case TrainerChoiceKind.HealMenu:
+                PresentHealerMenu(choice.Skill);
+                return Result();
+            case TrainerChoiceKind.HealService:
+            case TrainerChoiceKind.HealSpell:
+                PresentHealerChoice(choice);
+                return Result();
+            case TrainerChoiceKind.PayHealService:
+            case TrainerChoiceKind.PayHealSpell:
+                PayAndHeal(choice);
                 return Result();
             case TrainerChoiceKind.Area:
                 PresentArea(choice.Area, choice.Price);

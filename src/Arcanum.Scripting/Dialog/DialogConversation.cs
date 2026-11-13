@@ -226,6 +226,9 @@ public sealed partial class DialogConversation
             case DialogOptionTransition.Story:
                 OpenStory(plan!);
                 return Result();
+            case DialogOptionTransition.Healer:
+                OpenHealer(plan!);
+                return Result();
             case DialogOptionTransition.Directions:
                 OpenDirections(plan!);
                 return Result();
@@ -480,7 +483,7 @@ public sealed partial class DialogConversation
                 text,
                 reply.Marker,
                 reply.Trainer is not null ? DialogOptionTransition.Trainer : reply.Rumor is not null ? DialogOptionTransition.Rumor : reply.Story ? DialogOptionTransition.Story
-                    : reply.Directions is not null ? DialogOptionTransition.Directions : reply.Transition,
+                    : reply.Directions is not null ? DialogOptionTransition.Directions : reply.Healer ? DialogOptionTransition.Healer : reply.Transition,
                 reply.Target is null ? null : new DialogNodeId(reply.Target.Id),
                 reply.ScriptLine,
                 new DialogOptionToken(_identity, Turn, _generation, response),
@@ -1563,6 +1566,7 @@ public sealed partial class DialogConversation
         int[]? trainer = null;
         RumorOffer? rumor = null;
         var story = false;
+        var healer = false;
         DirectionsOffer? directions = null;
         var found = DialogText.Marker(text, out var exact);
         if (found is { Letter: 'd' or 'x' })
@@ -1659,6 +1663,16 @@ public sealed partial class DialogConversation
             text = string.Empty;
             phrase = true;
             story = true;
+        }
+        else if (found is { Letter: 'h' } && exact && HealerAvailable)
+        {
+            // ARC-SCRIPT-1732 (ledger HLR1): the original's healer reply (exactly "h:", 0x416C10): a generated phrase (PC lines 700..799) whose pick runs the reply's action
+            // and then opens the healer menu (state 11, 0x414810 → 0x419830).
+            kind = DialogOptionTextKind.Generated;
+            marker = found;
+            text = string.Empty;
+            phrase = true;
+            healer = true;
         }
         else if (found is { Letter: 'b' or 'h' or 'l' or 'p' } && exact || found is { Letter: 'c' or 'r' or 't' or 'z' })
         {
@@ -1760,7 +1774,7 @@ public sealed partial class DialogConversation
                 block = new DialogOptionBlock(DialogOptionBlockKind.UnsupportedInteraction, transfer.Source);
             }
         }
-        if (block is null && (trainer is not null || rumor is not null || story || directions is not null) && (transfer is not null || action?.Any(OpensWindow) == true))
+        if (block is null && (trainer is not null || rumor is not null || story || healer || directions is not null) && (transfer is not null || action?.Any(OpensWindow) == true))
         {
             // A dialog transfer or a window in the same reply moves the dialog itself: outside this subset, as for b:.
             block = new DialogOptionBlock(DialogOptionBlockKind.UnsupportedInteraction, transfer?.Source ?? action!.First(OpensWindow).Source);
@@ -1828,7 +1842,7 @@ public sealed partial class DialogConversation
         }
         return new ReplyPlan(record, gender.Value, gate.IqValue!.Value, condition, kind, text, marker, transition, target, line, action, block,
             block is null ? insult : null, block is null ? barter : null, block is null ? worldMap : null, phrase, block is null ? trainer : null, block is null ? rumor : null, block is null && story,
-            Directions: block is null ? directions : null, DirectionsFilter: directions);
+            Directions: block is null ? directions : null, DirectionsFilter: directions, Healer: block is null && healer);
     }
 
     private static bool CheckTokens(string text, DialogNodeId node, DialogResponseId? response, out DialogConversationFrontier? frontier, out DialogConversationFailure? failure)
@@ -1989,7 +2003,8 @@ public sealed partial class DialogConversation
         bool Story = false,
         int? QuestReply = null,
         DirectionsOffer? Directions = null,
-        DirectionsOffer? DirectionsFilter = null);
+        DirectionsOffer? DirectionsFilter = null,
+        bool Healer = false);
 
     private sealed record OfferPlan(ReplyPlan Reply, StepPlan? Target);
 }

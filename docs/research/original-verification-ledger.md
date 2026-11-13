@@ -265,6 +265,7 @@ Each section of the ledger lives in the file of its area; this index keeps one l
 | <a id="trainer-reply-arc-script-1150"></a>[Trainer reply (ARC-SCRIPT-1150)](ledger/social.md#trainer-reply-arc-script-1150) | [Reaction, reputation and companions](ledger/social.md) | DTR1–DTR9 |
 | <a id="rumor-reply-arc-script-1304"></a>[Rumor reply (ARC-SCRIPT-1304)](ledger/social.md#rumor-reply-arc-script-1304) | [Reaction, reputation and companions](ledger/social.md) | RMR1–RMR9 |
 | <a id="story-reply-arc-script-1321"></a>[Story reply (ARC-SCRIPT-1321)](ledger/social.md#story-reply-arc-script-1321) | [Reaction, reputation and companions](ledger/social.md) | STY1–STY4 |
+| <a id="healer-reply-arc-script-1732"></a>[Healer reply (ARC-SCRIPT-1732)](ledger/social.md#healer-reply-arc-script-1732) | [Reaction, reputation and companions](ledger/social.md) | HLR1–HLR12 |
 | <a id="insult-line-arc-script-1505"></a>[Insult line (ARC-SCRIPT-1505)](ledger/social.md#insult-line-arc-script-1505) | [Reaction, reputation and companions](ledger/social.md) | INS1–INS4 |
 | <a id="directions-replies-arc-script-1533"></a>[Directions replies (ARC-SCRIPT-1533)](ledger/social.md#directions-replies-arc-script-1533) | [Reaction, reputation and companions](ledger/social.md) | DIR1–DIR9 |
 | <a id="quest-state-reply-arc-script-1532"></a>[Quest-state reply (ARC-SCRIPT-1532)](ledger/social.md#quest-state-reply-arc-script-1532) | [Reaction, reputation and companions](ledger/social.md) | DQR1–DQR5 |

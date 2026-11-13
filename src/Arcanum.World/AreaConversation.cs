@@ -257,6 +257,8 @@ public sealed class AreaConversationHost
         host.SpreadOutStart = SpreadOutStart;
         host.HeroAttackAvailable = HeroAttackAvailable;
         host.NpcHostile = NpcHostile;
+        host.HealerHost = HealerHost;
+        host.SpellName = SpellName;
         host.KillNpc = KillNpc;
         host.WorldMapAvailable = WorldMapAvailable;
         host.SpeakerCell = SpeakerCell;
@@ -650,7 +652,11 @@ public sealed class AreaConversationHost
                 // ARC-SCRIPT-1532: a q: reply picks its record from the module's quest rules table; without the table the reply stays a frontier.
                 QuestReplies: _greetingTexts?.QuestReplies is { } questReplies ? new QuestReplyPort(questReplies) : null,
                 // ARC-SCRIPT-1533: the d: and x: replies read the area names and locations of the module's area table and where the speaker stands.
-                Directions: _greetingTexts?.Areas is { } areaTable ? new AreaDialogDirections(areaTable, speaker, SpeakerCell) : null));
+                Directions: _greetingTexts?.Areas is { } areaTable ? new AreaDialogDirections(areaTable, speaker, SpeakerCell) : null,
+                // ARC-SCRIPT-1732: the h: reply's healer menu reads the speaker's college rank and heal skill from the shown map's AI host and starts the service or the spell there;
+                // without that host, the hero, or the skill and spell texts the reply stays blocked.
+                Healer: _session.QueryHero() is null || _greetingTexts?.Skills is null || HealerHost?.Invoke() is not { } healerAi || healerAi.HealerFacts(AreaConversationState.EntityId(speaker.Row)) is null ? null
+                    : new HealerPort(this, healerAi, AreaConversationState.EntityId(speaker.Row), AreaConversationState.Npc(speaker.Index))));
         return new(AreaConversationStartStatus.Started, conversation, speaker, $"script {dialog.Script} SCR line {dialog.Line} -> DLG node {dialog.Node}", party,
             document, dialog.Script) { Greeting = greeting };
     }
@@ -722,7 +728,34 @@ public sealed class AreaConversationHost
     /// check is not made.</summary>
     public Func<string, bool>? NpcHostile { get; set; }
 
+    /// <summary>ARC-SCRIPT-1732: the shown map's AI host (the viewer's), which answers the healer menu's facts and starts its heal and spells; null or answering null: the <c>h:</c> reply stays blocked.</summary>
+    public Func<AreaAiHost?>? HealerHost { get; set; }
+
+    /// <summary>ARC-SCRIPT-1732: a spell's name as the healer menu shows it (<c>spell.mes</c>; the viewer's spell data), or null for none.</summary>
+    public Func<int, string?>? SpellName { get; set; }
+
     internal IDialogInventoryPort? InventoryPort() => _inventory?.DialogPort(_session, SpeakerEntity);
+
+    // ARC-SCRIPT-1732: the healer seam over the AI host of one talk (read when the talk starts); the host answers for the speaker only.
+    private sealed class HealerPort(AreaConversationHost host, AreaAiHost ai, string entity, DialogParticipantId npc) : IDialogHealerPort
+    {
+        public DialogHealerFacts Facts(DialogHealerQuery query)
+        {
+            if (query.PlayerCharacter != AreaConversationState.PcParticipant || query.Npc != npc) throw new ArgumentException("Not the talk's speaker.", nameof(query));
+            var facts = ai.HealerFacts(entity) ?? throw new InvalidOperationException("The speaker is no NPC of the AI host.");
+            return new(facts.Rank, facts.SkillAllowed, facts.SkillLevel, facts.SkillTraining, facts.LedByPc, facts.NoPcLeader);
+        }
+
+        public string? SkillName(int skill) => host._greetingTexts?.SkillName(skill);
+
+        public string? SpellName(int spell) => host.SpellName?.Invoke(spell);
+
+        public DialogCommandResult Execute(HealerSkillCommand command) =>
+            command.PlayerCharacter == AreaConversationState.PcParticipant && command.Npc == npc && ai.HealerService(entity) ? DialogCommandResult.Applied : DialogCommandResult.Rejected;
+
+        public DialogCommandResult Execute(HealerSpellCommand command) =>
+            command.PlayerCharacter == AreaConversationState.PcParticipant && command.Npc == npc && ai.HealerCast(entity, command.Spell, command.Free) ? DialogCommandResult.Applied : DialogCommandResult.Rejected;
+    }
 
     /// <summary>ARC-TECHNOLOGY-006: the NPC crafter the last SU asked for (its entity), set when the port applied it; the host opens the
     /// schematic window with it after the conversation ended with <see cref="DialogEndKind.SchematicWindow"/>.</summary>
@@ -1260,6 +1293,8 @@ public static class AreaConversationText
             TakeItemCommand take => $"IN item name {take.ItemName} PC -> NPC",
             CounterWriteCommand counter => $"LC {counter.Index} = {counter.Value}",
             KillNpcCommand => "NK NPC killed",
+            HealerSkillCommand heal => $"h: heal skill {heal.Skill} on the PC",
+            HealerSpellCommand cast => $"h: spell {cast.Spell} on the PC{(cast.Free ? " (free)" : string.Empty)}",
             CompanionCommand companion => companion.Action switch { DialogCompanionAction.Wait => "WA NPC waits", DialogCompanionAction.Leave => "LV NPC leaves the party", DialogCompanionAction.SpreadOut => "SO spread out", _ => "SC spread out cleared" },
             MarkAreaCommand area => $"MM area {area.Area} known",
             AlignmentCommand alignment => alignment.Mode == DialogReactionMode.Target ? $"AL set {alignment.Value}" : $"AL adjust {alignment.Value:+0;-0;+0}",

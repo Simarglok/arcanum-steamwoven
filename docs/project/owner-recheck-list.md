@@ -1169,3 +1169,14 @@ The original shows the load screen for every successful load of a save, the save
 | 2 | Open the in-play menu, Load Game and choose a save on the shown map. | The same black screen with the clock, then the window is closed and the game is the saved one. | open |
 | 3 | The same with a save whose file is damaged (copy one and break it). | The screen goes at once, the load window stays with the reason (F8: the running game stays, the message window says the load failed). | open |
 | 4 | Press F8 with no save at all. | No black screen; only the two notes, as before. | open |
+
+## ARC-SCRIPT-1732 — The healer menu behind `h:` (2026-11-13)
+
+Built from the executable's state machine ([ledger HLR1–HLR12](../research/ledger/social.md#healer-reply-arc-script-1732)); the effects start through the AI host, so the look and the timing of the heal and the spells are for you to judge.
+
+| # | Step | Expected (from the original executable and data) | Status |
+| --- | --- | --- | --- |
+| 1 | Talk to a town healer (a priest or physician whose talk has the healing reply) and pick it. | The NPC says its menu line; the options are by the healer's rank: its own treatment (when it carries a healing item), up to two lists of spells and the best spell last, and a way out. Each spell is named with its `spell.mes` name. | open |
+| 2 | Choose a spell, then yes, with enough gold; then again with too little. | The price is the reaction-scaled 100 (about 100 at a neutral reaction); the gold goes to the healer, the spell is cast at you (a heal, a poison cure, and at rank 5 a resurrection); with too little gold the healer says its no-money line and nothing is paid. | open |
+| 3 | Choose the healer's own treatment when your hit points are low. | The price follows its heal skill ((level + 2) × (tier + 1), reaction scaled); the healer walks the skill goal and heals through the usual heal check. | open |
+| 4 | Ask a healer who follows you the same. | No price screen and no payment: the service runs at once. | open |
