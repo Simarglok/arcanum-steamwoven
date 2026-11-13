@@ -103,7 +103,7 @@ public partial class TerrainViewerApp
         var rules = _areaEffectRules;
         var numbers = Enumerable.Range(GameSessionOwner.RaceEffectBase, 11).Append(GameSessionOwner.FemaleEffectNumber);
         try { session.AttachInnateEffects(rules is null ? null : numbers.Select(number => rules(number)).OfType<Arcanum.Data.Characters.EffectRule>().Select(SessionEffectDefinition.FromRule).ToArray()); }
-        catch (ArgumentException) { session.AttachInnateEffects(null); GD.Print("ARC-MAGIC-1509 innate effects refused: no race or gender swap"); }
+        catch (ArgumentException) { session.AttachInnateEffects(null); GD.Print("ARC-MAGIC-1509 innate effects refused: no race or gender swap, and no innate resistance changes for the hero (ARC-MAGIC-1700)"); }
     }
 
     /// <summary>ARC-WORLD-087: posts the message of the hero's latest encumbrance change once the texts are there (one entry for the

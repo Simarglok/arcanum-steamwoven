@@ -102,31 +102,43 @@ public partial class TerrainViewerApp
         GD.Print($"ARC-UI-140 native generated interface PASS textures={checkedCount} factor={panel.Factor} device-scale={InterfaceHd.GeneratedScale}");
     }
 
-    // ARC-UI-148: the open inventory window in the generated interface. Its two frames (the pack 221 and the paper doll 223) draw generated chrome
+    // ARC-UI-148: the open inventory window in the generated interface. Its frames (the pack 221, the paper doll 223 and the lens 233) draw generated chrome
     // painted at the window's own device scale (the frame scale times the canvas transform's, fractional in the inventory), at the Legacy size
     // in layout; a bigger window paints them again at the new scale. The window is open when this runs.
-    private async Task VerifyGeneratedInventoryAsync(Func<int, Task> frames, Func<Vector2I, Task> resize)
+    private Task VerifyGeneratedInventoryAsync(Func<int, Task> frames, Func<Vector2I, Task> resize)
     {
-        static void Require(bool ok, string why)
+        if (!(InterfaceHd.Generated && _inventoryPanel is { ArtMode: true } panel && panel.GridAreaForSelfTest.Look is not null))
+        {
+            GD.Print("ARC-UI-148 generated inventory smoke FAIL the generated interface is on and the inventory shows the original's look");
+            throw new InvalidOperationException("ARC-UI-148 generated inventory smoke: the generated interface is on and the inventory shows the original's look");
+        }
+        return VerifyGeneratedWindowAsync("ARC-UI-148", "inventory", panel.GridAreaForSelfTest,
+            [AreaInventoryArtLayout.PackArt, AreaInventoryArtLayout.DollArt, AreaInventoryHole.InventoryArt], frames, resize,
+            at => CaptureHudAsync(at == "first" ? "inventory-generated" : at == "big" ? "inventory-generated-big" : "inventory-generated-back", frames));
+    }
+
+    // ARC-UI-148 / ARC-UI-1194: an open window's frames in the generated interface. Each art of the window's look (its textures claim the window's own device scale
+    // at every draw) draws generated chrome painted at round(size x paint scale) pixels; a bigger window paints them again at the new scale; then the window goes back.
+    private async Task VerifyGeneratedWindowAsync(string task, string window, AreaInventoryGridArea area, IReadOnlyList<int> arts, Func<int, Task> frames, Func<Vector2I, Task> resize, Func<string, Task> capture)
+    {
+        void Require(bool ok, string why)
         {
             if (ok) return;
-            GD.Print("ARC-UI-148 generated inventory smoke FAIL " + why);
-            throw new InvalidOperationException("ARC-UI-148 generated inventory smoke: " + why);
+            GD.Print($"{task} generated {window} smoke FAIL {why}");
+            throw new InvalidOperationException($"{task} generated {window} smoke: {why}");
         }
-        Require(InterfaceHd.Generated && _inventoryPanel is { ArtMode: true }, "the generated interface is on and the inventory shows the original's look");
-        var area = _inventoryPanel!.GridAreaForSelfTest;
-        Require(area.Look is not null, "the inventory has its look");
-        var textures = new[] { AreaInventoryArtLayout.PackArt, AreaInventoryArtLayout.DollArt }
-            .Select(number => area.Look!.Art.GetValueOrDefault(number) as HdInterfaceTexture ?? throw new InvalidOperationException($"ARC-UI-148 generated inventory smoke: art {number} is no interface texture"))
+        Require(InterfaceHd.Generated && area.Look is not null, "the generated interface is on and the window shows the original's look");
+        var textures = arts
+            .Select(number => area.Look!.Art.GetValueOrDefault(number) as HdInterfaceTexture ?? throw new InvalidOperationException($"{task} generated {window} smoke: art {number} is no interface texture"))
             .ToArray();
-        double Device() => area.FrameScale * area.GetGlobalTransformWithCanvas().Scale.X;
+        double Device() => area.DeviceScale();
         async Task Painted(string at)
         {
             // Each draw asks for the frame at the window's current scale; wait for the worker and the swap (at most ~20 s).
             for (var wait = 0; wait < 1200 && (textures.Any(texture => !texture.IsGenerated || texture.GeneratedPixelSize != Wanted(texture)) || InterfaceHd.GeneratedPending > 0); wait++) await frames(1);
             await frames(2);
-            foreach (var texture in textures)
-                Require(texture.IsGenerated && texture.GeneratedPixelSize == Wanted(texture), $"{at}: a window frame is generated at {Wanted(texture)} (got {texture.GeneratedPixelSize}, device scale {Device():F3})");
+            foreach (var (texture, number) in textures.Zip(arts))
+                Require(texture.IsGenerated && texture.GeneratedPixelSize == Wanted(texture), $"{at}: frame {number} is generated at {Wanted(texture)} (got {texture.GeneratedPixelSize}, device scale {Device():F3})");
         }
         Vector2I Wanted(HdInterfaceTexture texture)
         {
@@ -134,7 +146,7 @@ public partial class TerrainViewerApp
             return new Vector2I(w, h);
         }
         await Painted("at the first size");
-        await CaptureHudAsync("inventory-generated", frames);
+        await capture("first");
         var firstScale = Device();
         var size = DisplayServer.WindowGetSize();
         try
@@ -143,14 +155,15 @@ public partial class TerrainViewerApp
             await resize(bigger);
             await frames(3);
             await Painted("at the bigger size");
-            await CaptureHudAsync("inventory-generated-big", frames);
-            GD.Print($"ARC-UI-148 generated inventory scales {firstScale:F3} -> {Device():F3}");
+            await capture("big");
+            GD.Print($"{task} generated {window} scales {firstScale:F3} -> {Device():F3}");
             Require(Math.Abs(Device() - firstScale) > 0.01 || bigger == size, "the window scale changed with the window");
         }
         finally { await resize(size); }
         await frames(3);
         await Painted("back at the first size");
-        GD.Print($"ARC-UI-148 native generated inventory PASS frames={textures.Length} device-scale={Device():F3}");
+        await capture("back");
+        GD.Print($"{task} native generated {window} PASS frames={textures.Length} device-scale={Device():F3}");
     }
 
     // ARC_AREA_BAR_CAPTURE=PREFIX also saves the whole viewport with the bars as PREFIX-hud-MODE.png (a local, ignored path).

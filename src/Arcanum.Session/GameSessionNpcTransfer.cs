@@ -345,6 +345,7 @@ public sealed partial class GameSessionOwner
             else
             {
                 _inventory.AddToNpc(npc, new SessionMadeItem(item, held.Kind, held.Complexity));
+                StoreInsertPlace(npc, item);
                 // ARC-WORLD-1284 (VPG1): the insert sets NPC flag 0x40 on the receiver; a merge into a held stack (above) returns before the flag.
                 MarkCheckWield(npc);
             }
@@ -541,7 +542,9 @@ public sealed partial class GameSessionOwner
         ThrowIfDisposed();
         if (_revision != revision || _inventory.SeedGeneration != seeds) { refusal = RejectItem(GameSessionFailure.StaleVersion, verdict); return null; }
         if (verdict != SessionInsertVerdict.Accepted) { refusal = RejectItem(GameSessionFailure.InsertRefused, verdict); return null; }
-        return CreateMadeItem(new(entity, kind, holder == SessionHolderKind.Container ? SessionCreatePlace.ContainerList : SessionCreatePlace.NpcList, weight, Holder: npc));
+        var made = CreateMadeItem(new(entity, kind, holder == SessionHolderKind.Container ? SessionCreatePlace.ContainerList : SessionCreatePlace.NpcList, weight, Holder: npc));
+        if (holder != SessionHolderKind.Container) StoreInsertPlace(npc, made.Entity);
+        return made;
     }
 
     // The NPC's first gold pile in its list order: its seed piles still in its list (in every attached seed that lists it), then the

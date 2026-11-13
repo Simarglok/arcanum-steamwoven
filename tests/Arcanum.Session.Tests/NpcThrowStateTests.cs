@@ -197,6 +197,8 @@ public sealed class NpcThrowStateTests
         var events = owner.QueryShotEndItemEvents(shot, tile);
         var end = events.Single();
         Assert.AreEqual((Arcanum.Simulation.Magic.ItemTriggerEvent.ParentAttacksLocation, Thrower, Grenade), (end.Event, end.Parent, end.Item));
+        // ARC-COMBAT-1719: the weapon's scripts at the end: the thrower is the triggerer and the grenade the attachee, with no target (a lob keeps no check, so it is not critical).
+        Assert.AreEqual(new SessionShotEndScripts(Thrower, Grenade, false, true, null), owner.QueryShotEndScripts(shot));
         Assert.AreEqual(new Arcanum.Simulation.Magic.SpellLocation((uint)tile.X, (uint)tile.Y), end.Tile);
 
         var landing = new CellCoord(97, 203);
