@@ -33,7 +33,7 @@ public sealed record SessionNpcWielder(EquipmentWearer Wearer, EquipmentChooser 
 /// </summary>
 public sealed record SessionNpcWield(GameSessionFailure Failure, IReadOnlyList<SessionEquipBestStep> Steps)
 {
-    /// <summary>ARC-MAGIC-1684: the printed lines of the item event scripts the wield ran, in order (the regeneration shows none).</summary>
+    /// <summary>ARC-MAGIC-1684: the printed lines of the item event scripts the wield ran, in order (the viewer posts them for the restock event and a created critter's stocking, ARC-MAGIC-1745).</summary>
     public IReadOnlyList<SessionScriptMessage> Messages { get; init; } = [];
 }
 
