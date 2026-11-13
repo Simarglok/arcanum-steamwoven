@@ -8,15 +8,14 @@ namespace Arcanum.TerrainViewer;
 /// length, a push button of art 293 (idle, down, lit) and its line of <c>sleepUI.mes</c> in the white font art 229. A control of the window art's size placed at
 /// (573, 42) of the original's screen (the bars' whole factor); the pointer over it never reaches the world. A left press goes down (sound 3000) and the
 /// release over the same button presses it (sound 3001, <see cref="RowPressed"/>). PROJECT: a button takes the pointer on its art's rectangle, not its opaque
-/// pixels; the controller's focus row is drawn lit; a line is drawn from its rectangle's top left, wrapped at its width. After a press the project hides the
-/// buttons and their lines and keeps the window art (<see cref="ShowButtons"/>).
+/// pixels; the controller's focus row is drawn lit; a line is drawn from its rectangle's top left, wrapped at its width. A press hides nothing (0x57B710): the buttons stay
+/// and a second press restarts the rest.
 /// </summary>
 public partial class AreaSleepView : Control
 {
     private IReadOnlyDictionary<int, Texture2D[]> _art = new Dictionary<int, Texture2D[]>();
     private AreaArtFontFace? _font;
     private IReadOnlyList<string> _labels = [];
-    private bool _buttonsShown = true;
     private readonly AreaSleepButtons _buttons = new();
 
     /// <summary>A button was pressed (0-based row).</summary>
@@ -26,7 +25,6 @@ public partial class AreaSleepView : Control
 
     /// <summary>The window's art and font read and are set.</summary>
     public bool ArtSet => _font is not null && _art.ContainsKey(AreaSleepLayout.BackgroundArt) && _art.ContainsKey(AreaSleepLayout.ButtonArt);
-    public bool ButtonsShown => _buttonsShown;
     internal int RowCount => _labels.Count;
     internal string LabelForSelfTest(int row) => _labels[row];
     internal Rect2 WindowRectForSelfTest => new(GlobalPosition, Size * Scale);
@@ -93,7 +91,6 @@ public partial class AreaSleepView : Control
     {
         _labels = labels ?? throw new ArgumentNullException(nameof(labels));
         _buttons.Reset();
-        _buttonsShown = true;
         Visible = true;
         Place();
         QueueRedraw();
@@ -103,14 +100,6 @@ public partial class AreaSleepView : Control
     {
         _buttons.Reset();
         Visible = false;
-    }
-
-    /// <summary>Hides the buttons and their lines (the press, project) and lets the pointer go.</summary>
-    public void HideButtons()
-    {
-        _buttonsShown = false;
-        _buttons.Reset();
-        QueueRedraw();
     }
 
     /// <summary>The window at (573, 42) of the original's screen at the bars' whole factor.</summary>
@@ -132,7 +121,7 @@ public partial class AreaSleepView : Control
     /// <summary>The controller's confirm: the focused row (the first when none is) presses as a click on it (sounds 3000 then 3001).</summary>
     public bool Confirm()
     {
-        if (!_buttonsShown || _labels.Count == 0) return false;
+        if (_labels.Count == 0) return false;
         var row = Math.Min(_buttons.Focus ?? 0, _labels.Count - 1);
         foreach (var sound in new[] { AreaGameBarLayout.PressSound, AreaGameBarLayout.ReleaseSound }) Sound(sound);
         RowPressed?.Invoke(row);
@@ -146,7 +135,6 @@ public partial class AreaSleepView : Control
 
     private int? RowAt(Vector2 at)
     {
-        if (!_buttonsShown) return null;
         var (width, height) = ButtonSize();
         return AreaSleepLayout.RowAt(at.X, at.Y, width, height, _labels.Count);
     }
@@ -156,7 +144,6 @@ public partial class AreaSleepView : Control
         if (_font is not { } font) return;
         if (AreaCharacterArtDraw.Art(_art, AreaSleepLayout.BackgroundArt) is { } window)
             DrawTextureRect(window, new Rect2(0, 0, window.GetWidth(), window.GetHeight()), false);
-        if (!_buttonsShown) return;
         var frames = ButtonFrames();
         var width = (int)Size.X;
         for (var row = 0; row < _labels.Count; row++)
