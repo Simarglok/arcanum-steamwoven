@@ -1330,6 +1330,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         if (_session.QueryGoals().RunRunningGoal(npc, GoalType.RunToTile) is not { } running) return false;
         if (!StartGatePasses(new GoalStartRequest(npc, GoalStarters.Run, frame, flags))) { Trace(npc).Perform = "BackOffRun gate refused"; return true; }
         var retarget = _session.RetargetGoal(running.Handle, destination);
+        // The found run is marked running whether or not the destination changed (0x433C80 sets flag 0x40 on it before the same-tile test).
+        if (retarget.Failure == SessionGoalFailure.None) _session.TurnOnRunFlags(running.Handle, GoalRunFlags.Running);
         Trace(npc).Perform = $"BackOffRun retarget {retarget.Outcome?.ToString() ?? retarget.Failure.ToString()}";
         return true;
     }
@@ -2740,7 +2742,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     public CellCoord? AwayTile(string npc, string? target, int range)
     {
         if (Tile(npc) is not { } from || Tile(target ?? Pc) is not { } to) return null;
-        var source = new AreaRouteSource(Steps, _scene.Chart, () => Occupancy(npc, target), _scene.Passages);
+        // The target is no exception: the direct attempt treats it as any other blocker of a line through its cell.
+        var source = new AreaRouteSource(Steps, _scene.Chart, () => Occupancy(npc, null), _scene.Passages);
         return RoutePlanner.AwayTile(source, ToChart(from), ToChart(to), range) is { } tile ? ToWorld(tile) : null;
     }
     public void EndBackOff(string npc) => _session.EndBackOff(_session.Version, npc);

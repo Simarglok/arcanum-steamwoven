@@ -51,7 +51,7 @@ public sealed class AreaAiBackOffTests
     }
 
     [TestMethod]
-    public void A_started_back_off_runs_to_the_away_tile_in_the_same_pass_and_ends_when_the_range_is_reached()
+    public void A_back_off_runs_to_the_away_tile_and_a_second_pass_keeps_the_run()
     {
         using var f = AreaAiHostRebindTests.Open();
         var host = Fighting(f);
