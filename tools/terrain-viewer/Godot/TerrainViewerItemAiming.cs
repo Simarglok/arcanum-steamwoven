@@ -160,6 +160,14 @@ public partial class TerrainViewerApp
             var world = grid.Chart.ToWorld(cell);
             tile = new SpellLocation(checked((uint)world.X), checked((uint)world.Y));
         }
+        return ItemAimPickAt(aim, at, tile);
+    }
+
+    /// <summary>The cursor's pick for an object (and a tile) already found: the screen pick above, or ARC-UI-1736 (FP6) a follower's portrait, which names the
+    /// follower as the object with no tile.</summary>
+    private SpellPick? ItemAimPickAt(ItemAiming aim, string? at, SpellLocation? tile)
+    {
+        if (SpellCasterNow() is not { } caster || _spellCastMap is not { } map) return null;
         if (aim.Spell is { } spell) return caster.PickTarget(SessionSpellCaster.Hero, spell, aim.Mask, at, tile);
         var followers = map.Object(SessionSpellCaster.Hero) is { } self ? map.Party(self).Select(o => o.Id).Where(id => id != SessionSpellCaster.Hero).ToHashSet(StringComparer.Ordinal) : [];
         var mask = aim.Mask;

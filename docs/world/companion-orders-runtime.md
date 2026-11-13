@@ -118,6 +118,33 @@ a dialog started from the portrait describes him afresh (HK25). With the interfa
 (OL34) are not part of it. The "hovered" key of the highlight, the window and the rings is the one under the pointer, else the portrait's follower
 (`HoveredKeyNow`). A follower the shown map's hover index does not list (carried from another map) only runs his script.
 
+## Follower panel and menu in the original's form (ARC-UI-1736)
+
+Ledger [FP1–FP13](../research/ledger/ui-audio.md#follower-panel-and-menu-arc-res-1107) (module 0x56A4A0..0x56B970). `AreaFollowerPortraits` is the original's
+follower module; its Godot-free rules are `AreaFollowerPanelRules` (tools/terrain-viewer/Core).
+
+- **Show/hide and scroll (FP1, FP3, FP5)**: the show/hide button (art 501, 502 while hidden, 67 × 13 at (0, 428)) stands while there is a follower; hiding removes
+  the six frames and the arrows. From seven followers the up arrow (art 506, 507 at offset 0, 33 × 13 at (0, 415)) and the down arrow (508, 509 at count − 6, 34 × 13 at
+  (33, 415)) move the offset by one follower per release, and the six frames show `offset .. offset + 5`; the offset clamps to 0 up to six followers and to count − 6
+  above. A new session (the panel's `ResetPanel`, the module's reset 0x56A880) shows the panel again from the first follower.
+- **FP2 decision**: the shown flag and the offset are session-only. The original writes them into its save (two 32-bit values with no gameplay effect); FR-LIFECYCLE-004
+  keeps saves for game state, so the viewer does not add a schema step for them.
+- **Hidden-interface layout (SZ11)**: the original moves the three buttons to y 587, 574 and 574 while the interface bars are hidden. The viewer has no hidden interface
+  layout for the strip yet, so the buttons stand at the bars-drawn places; this stays open with the hidden-interface layout itself.
+- **Menu (FP7–FP9)**: art 826 at the slot's right edge (x 51, the slot's y), not clamped to the screen, with eight rows (Walk, Attack, Stay Close, Spread Out, Back Off,
+  Wait, Inventory, Character Sheet) at (10, 3 + 18 × row), 118 × 15: white, mid grey when greyed, bright (0, 0xD2, 0xFF) under the pointer. Wait is greyed for a
+  mind-controlled follower (spell flag 0x8000000), Inventory when the can-open test (0x575080, `BarterCycleSpeaker`) fails. With the menu open every release is the menu's:
+  a row runs after the menu closes, any other left or right release closes it, and the portraits, the button and the arrows are not handled.
+- **Rows 6 and 7 (FP11, FP12)**: Inventory opens the follower's barter window in its follower form (the pending open the dialog's `b:` reply uses); Character Sheet
+  opens the NPC sheet (`OpenNpcSheet`, read-only).
+- **Portrait aiming (FP6)**: with the spell cursor open (`FollowerAimSpell`: the cast host's pick with the follower as the object and no tile), the item cursor
+  (`FollowerAimItem`: `ItemAimPickAt`) or the pick pocket cursor (`FollowerAimPickPocket`: `PickPocketOn`), a left release on a portrait aims at that follower, as a press on
+  his body would, and the area test decides; the disarm cursor is cancelled (a follower is no trap). In any other mode the click is the ordinary one (a talk, B33). A visiting
+  follower has no cast id on the shown map and refuses a spell or item target. The lockpick cursor and the follower order's own target mode (walk, attack) leave the click as it
+  was (ignored).
+- **Tests**: `AreaFollowerPanelRulesTests`; the `companion-click` stage's facts (the hide and show buttons, the menu's rows and place, the margin release, the sheet and
+  the barter window, eight synthetic followers scrolled by their arrows). `ARC_AREA_FOLLOWER_PANEL_CAPTURE` saves readbacks of the stage to a caller's ignored path.
+
 ## Tests
 
 - `tests/Arcanum.Simulation.Tests/Party/CompanionOrderRulesTests.cs`: presets with F6 under both settings (D2), the portrait items and

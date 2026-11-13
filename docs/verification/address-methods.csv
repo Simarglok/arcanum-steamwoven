@@ -653,6 +653,8 @@ tools/terrain-viewer/Core/AreaDialogBox.cs,Buttons,pending,
 tools/terrain-viewer/Core/AreaFateWindow.cs,Decide,exempt,reference
 tools/terrain-viewer/Core/AreaFateWindow.cs,Load,exempt,reference
 tools/terrain-viewer/Core/AreaFateWindow.cs,TextAt,exempt,reference
+tools/terrain-viewer/Core/AreaFollowerPanelRules.cs,RowState,exempt,reference
+tools/terrain-viewer/Core/AreaFollowerPanelRules.cs,ToggleShown,exempt,reference
 tools/terrain-viewer/Core/AreaGameBar.cs,Exit,pending,
 tools/terrain-viewer/Core/AreaGameBar.cs,SkillButtonName,pending,
 tools/terrain-viewer/Core/AreaHoverDescriptions.cs,Dispatch,pending,
@@ -727,6 +729,7 @@ tools/terrain-viewer/Godot/AreaCharacterArtDraw.cs,Centred,pending,
 tools/terrain-viewer/Godot/AreaCharacterArtDraw.cs,Character,pending,
 tools/terrain-viewer/Godot/AreaCharacterSheetArtView.cs,HitAt,pending,
 tools/terrain-viewer/Godot/AreaCharacterSheetSpellsView.cs,Greyed,pending,
+tools/terrain-viewer/Godot/AreaFollowerPortraits.cs,ResetPanel,exempt,reference
 tools/terrain-viewer/Godot/AreaLogbookArtView.cs,Turn,pending,
 tools/terrain-viewer/Godot/AreaMessageLogView.cs,ApplyArt,pending,
 tools/terrain-viewer/Godot/AreaSaveListArtView.cs,Render,pending,
@@ -740,6 +743,7 @@ tools/terrain-viewer/Godot/TerrainViewerAreaBarter.cs,BarterArt,pending,
 tools/terrain-viewer/Godot/TerrainViewerAreaBarter.cs,BarterCycle,exempt,reference
 tools/terrain-viewer/Godot/TerrainViewerAreaBarter.cs,BarterCycleSpeaker,exempt,reference
 tools/terrain-viewer/Godot/TerrainViewerAreaBarter.cs,BarterPointerStill,pending,
+tools/terrain-viewer/Godot/TerrainViewerAreaBarter.cs,FollowerMenuFacts,exempt,reference
 tools/terrain-viewer/Godot/TerrainViewerAreaContainerLoot.cs,CloseContainer,pending,
 tools/terrain-viewer/Godot/TerrainViewerAreaEncounters.cs,EncounterSiteNow,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAreaEncounters.cs,HandleEncounterNotices,exempt,host
@@ -761,6 +765,7 @@ tools/terrain-viewer/Godot/TerrainViewerAreaMapTransfer.cs,RunMapEnteredSteps,pe
 tools/terrain-viewer/Godot/TerrainViewerAreaPanelArt.cs,HoverPortrait,pending,
 tools/terrain-viewer/Godot/TerrainViewerAreaPickPocket.cs,ArmPickPocketFromBar,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAreaPickPocket.cs,HeroFaceSkill,pending,
+tools/terrain-viewer/Godot/TerrainViewerAreaPickPocket.cs,PickPocketOn,exempt,reference
 tools/terrain-viewer/Godot/TerrainViewerAreaPortals.cs,HeroDoorScript,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAreaPortals.cs,HeroDoorUse,pending,
 tools/terrain-viewer/Godot/TerrainViewerAreaPortals.cs,OpenerDoorScript,exempt,host
@@ -786,7 +791,11 @@ tools/terrain-viewer/Godot/TerrainViewerBodyMoves.cs,UnmovedArmedBodies,exempt,h
 tools/terrain-viewer/Godot/TerrainViewerBodyStyles.cs,SyncAreaBodyStyles,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerBodyStylesSmoke.cs,RunAreaBodyStylesStageAsync,exempt,reference
 tools/terrain-viewer/Godot/TerrainViewerCombatMode.cs,WorldRightRelease,pending,
+tools/terrain-viewer/Godot/TerrainViewerCompanionOrders.cs,FollowerAimItem,exempt,reference
+tools/terrain-viewer/Godot/TerrainViewerCompanionOrders.cs,FollowerAimPickPocket,exempt,reference
+tools/terrain-viewer/Godot/TerrainViewerCompanionOrders.cs,FollowerAimSpell,exempt,reference
 tools/terrain-viewer/Godot/TerrainViewerCompanionOrders.cs,FollowerPortraitClick,pending,
+tools/terrain-viewer/Godot/TerrainViewerCompanionOrders.cs,OpenFollowerSheet,exempt,reference
 tools/terrain-viewer/Godot/TerrainViewerCompanions.cs,LeaveFollowersCombatMode,pending,
 tools/terrain-viewer/Godot/TerrainViewerCompanions.cs,TransferFacts,pending,
 tools/terrain-viewer/Godot/TerrainViewerConversation.cs,ProcessConversationEnd,pending,
