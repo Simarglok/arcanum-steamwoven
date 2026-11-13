@@ -132,7 +132,10 @@ STAGE_PASS = {
 # ARC-DEV-1556: a stage whose own PASS line is not the whole check: the lines that must also be in the log. `transfer` runs the
 # visitor-fight sub-check after its own PASS line; with a hero (HERO_STAGES) the Crash Site start and the town both print its PASS
 # (a NONE or NO-TARGET line there means the fight did not run), so the stage counts as run only with both.
-STAGE_ALSO_PASS = {"transfer": ("ARC-DEV-065 native-smoke visitor-fight PASS",)}
+# ARC-AI-1695: `transfer` also carries a force-joined NPC without a dialog (its led-carry and led-home lines), and the two stages that move the main map's window
+# (`follower-far`, `teleport-follow`) check it there too (led-far).
+STAGE_ALSO_PASS = {"transfer": ("ARC-DEV-065 native-smoke visitor-fight PASS", "ARC-AI-1695 native-smoke led-carry PASS", "ARC-AI-1695 native-smoke led-home PASS"),
+                   "follower-far": ("ARC-AI-1695 native-smoke led-far PASS",), "teleport-follow": ("ARC-AI-1695 native-smoke led-far PASS",)}
 BATTERY_STAGES = ("map", "resources")
 # The stages a hero must play: without a session hero the viewer skips them (the AI stages silently). The map battery
 # plays the hero's stages too (cast, turn-based, ranged, container, junk ...). `transfer` is one (ARC-DEV-1547): its visitor-fight
