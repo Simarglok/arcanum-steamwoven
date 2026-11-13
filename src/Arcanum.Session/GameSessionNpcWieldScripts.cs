@@ -38,7 +38,7 @@ public sealed partial class GameSessionOwner
     }
 
     /// <summary>
-    /// ARC-MAGIC-1644 (GS1, WE2): the stat <paramref name="stat"/> of an NPC wearer as get stat reads it (0x4B0490), by the original's number: the primary stats (0..7) and the aptitude (16) are the effective values under the
+    /// ARC-MAGIC-1644 (GS1, WE2): the stat <paramref name="stat"/> of an NPC wearer as get stat reads it (the stat getter, ledger GS1), by the original's number: the primary stats (0..7) and the aptitude (16) are the effective values under the
     /// given effect list with the NPC's poison and crippled legs, the level (17) and the alignment (19) the stored values; null for any other stat (GS3) and for stored values or a list the character rules refuse.
     /// </summary>
     private int? NpcScriptStat(NpcWearer npc, int stat, IReadOnlyList<SessionEffect> entries, IReadOnlyDictionary<int, SessionEffectDefinition> definitions)
