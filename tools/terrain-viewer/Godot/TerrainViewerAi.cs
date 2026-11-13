@@ -655,6 +655,13 @@ public partial class TerrainViewerApp
                     SyncAreaInventory();
                     redraw = true;
                     break;
+                case AreaAiNoticeKind.PickUp:
+                    // ARC-AI-1309: an NPC picked up an item (goal 16's end): the ground and the pile lose it, so the objects are drawn again.
+                    _aiNotice = $"{AiName(notice.Npc)} picks up an item";
+                    GD.Print($"ARC-AI-1309 ai-pickup npc={notice.Npc} item={notice.Item}");
+                    SyncAreaInventory();
+                    redraw = true;
+                    break;
                 case AreaAiNoticeKind.Skill:
                     // ARC-WORLD-109: a skill attempt at its action frame; a heal changes a body's life and the healer's item.
                     _aiSkills++;

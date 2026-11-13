@@ -181,7 +181,7 @@ public interface IAreaAiFollowers
 /// cast's play, its release and its goal's end, (ARC-WORLD-105) a missile launched at the play's action frame, (ARC-WORLD-109) a
 /// skill attempt at its action frame, (ARC-WORLD-113) a throw at its action frame, (ARC-WORLD-108) an item use's magic branch and (ARC-DEV-206, GR12)
 /// the cell an NPC the host moved was placed on (<see cref="AreaAiNotice.Cell"/>), for the tile's script.</summary>
-public enum AreaAiNoticeKind { Swing, Hit, Step, Sound, Fidget, Cast, Release, CastEnd, Missile, Skill, Throw, ItemUse, Entered }
+public enum AreaAiNoticeKind { Swing, Hit, Step, Sound, Fidget, Cast, Release, CastEnd, Missile, Skill, Throw, ItemUse, Entered, PickUp }
 
 /// <summary>ARC-WORLD-092: one notice for the viewer (the attack pose, the hit's sounds and status line, the redraw).</summary>
 public sealed record AreaAiNotice(AreaAiNoticeKind Kind, string Npc, string? Target)
@@ -825,6 +825,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     {
         _steps = 0; _ending = null; _steppedThisFrame.Clear(); _lastFrameMs = -1; _frameLengthMs = 16;
         _traces.Clear();
+        _pickupItems.Clear();
         _notices.Clear();
         _roundEvents.Clear();
         _roundSeen = false; _subturnsSeen = -1; _turnSetActor = null; _pendingCost = 0; _pendingAt = -1; HookedSubturn = -1; _fidgetAfterHook = null;
@@ -1240,24 +1241,22 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     }
     /// <summary>
     /// ARC-AI-1139: the pipeline's item search (0x4A8E70, <see cref="AiGroundRules.SearchItems"/>): each look-for bit the NPC holds is cleared just before its search
-    /// (the setters are the ranged attack without ammunition, 0x4ADFF0, and an item drop, 0x461AB0). The host has no ground source yet (<see cref="LooseItems"/>,
-    /// <see cref="JunkPiles"/>), so no search finds an item and no pickup starts: the answer is false and the pass goes on to the danger update, as in the original on a map with nothing
-    /// lying in the NPC's square. NOT READY: the loose items and junk piles of the shown map, and the end of the pickup goal (<see cref="PickUp"/>).
+    /// (the setters are the ranged attack without ammunition, 0x4ADFF0, and an item drop, 0x461AB0). ARC-AI-1309: the ground is the shown map's loose items and junk piles
+    /// (<see cref="LooseItems"/>, <see cref="JunkPiles"/>, <see cref="FirstInPile"/>), the pickup starts goal 15 (<see cref="StartPickup"/>) and its end moves the item into the NPC's list
+    /// (<see cref="PickUp"/>). A pass whose search starts a pickup answers true and skips the danger update; any other answers false.
     /// </summary>
     public bool SearchItems(string npc)
     {
+        using var ground = HoldGround(npc);
         var result = AiGroundRules.SearchItems(this, npc);
         if (result.Cleared != DangerFlags.None) Trace(npc).Item = $"item search {result.Stop} cleared {result.Cleared}";
         return result.Stop == AiItemSearchStop.PickupStarted;
     }
 
-    // IAiItemSearchWorld (ARC-AI-1139): the blinded condition (critter flag 0x80), the interface object test (no window holds an object here) and the ground: no source yet.
+    // IAiItemSearchWorld (ARC-AI-1139): the blinded condition (critter flag 0x80) and the interface object test (no window holds an object here); ARC-AI-1309: the ground, the pickup starter and the
+    // goal's end are in AreaAiHostGround.cs.
     public bool Blinded(string npc) => LifeState(npc)?.Conditions.HasFlag(LifeConditions.Blinded) ?? false;
     public bool InterfaceHoldsObject => false;
-    public IReadOnlyList<AiGroundItem> LooseItems(string npc, AiGroundKind kind, int halfSize) => [];
-    public IReadOnlyList<string> JunkPiles(string npc, int halfSize) => [];
-    public AiGroundItem? FirstInPile(string pile, AiGroundKind kind) => null;
-    public bool StartPickup(string npc, string item) => false;
     public bool Loading => false;
 
     /// <summary>
@@ -1538,7 +1537,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     public CellCoord? Tile(string id)
     {
         if (id == Pc) return _scene.HeroCell();
-        return _npcs.TryGetValue(id, out var npc) ? Movers.CellOf(id, npc.Origin) : CompanionCell(id);
+        // ARC-AI-1309: an item an NPC's pickup goal walks to lies on a cell of the shown map (its own, or its junk pile's).
+        return _npcs.TryGetValue(id, out var npc) ? Movers.CellOf(id, npc.Origin) : CompanionCell(id) ?? PickupCell(id);
     }
 
     /// <summary>ARC-WORLD-1158: where a critter of this host's map lies now (its body's cell for the Decay Dead Bodies event); null for another map or a critter the host does not hold.</summary>
@@ -1612,6 +1612,10 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         switch (request.Kind)
         {
             case AiPathKind.Attack: plan = RoutePlanner.PlanApproach(source, ToChart(from), ToChart(to)); break;
+            case AiPathKind.Near when request.Range <= 0:
+                // ARC-AI-1309: a walk onto the object's own tile (the pickup goal's approach, range 0): the route to the tile itself, where the approach below ends one step short of it (0x4280D0).
+                plan = RoutePlanner.Plan(source, ToChart(from), ToChart(to));
+                break;
             case AiPathKind.Near:
                 plan = RoutePlanner.PlanApproach(source, ToChart(from), ToChart(to));
                 if (plan.Outcome != RouteOutcome.Found) return null;
@@ -2607,7 +2611,6 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         return new(Math.Min(trace.Cost, AttackResolver.MaxMagnitude), trace.Blocker is { } b && b.Key != struck);
     }
 
-    public void PickUp(string id, string item) { }
     /// <summary>ARC-WORLD-108: the NPC that holds the item now (0x4612A0; ARC-DEV-075: of any map the host holds, a visiting companion's holder entry is its home map's), or null (the hero's items are not the AI's).</summary>
     public string? ItemHolder(string item) => _scene.Combat.NpcHolder(_session, item);
 
@@ -2867,7 +2870,6 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     public void Unwield(string npc, string item) => Trace(npc).Throw = $"unwield {item} (kept until the throw)";
     /// <summary>ARC-WORLD-109: the skill animation's art (0x436220's test) is the fixed stand-in's, so every NPC the host walks has it.</summary>
     public bool HasSkillArt(string npc) => Walks(npc);
-    public bool NpcPickupsOn => false;
     public bool BoomerangInFlight(string npc) => false;
     // The starters' interrupt (0x424070 at level 3, GS13): the end nodes of the runs it ended run now, and a refusal (a run whose current goal has priority 4 or 5) refuses the start.
     public bool InterruptLowerAnimations(string id) => InterruptOwner(id, GoalInterruptRules.OrdinaryActions).Succeeded;
