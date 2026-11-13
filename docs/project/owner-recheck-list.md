@@ -609,7 +609,7 @@ build); the first build for this comparison is any build from `main` that contai
 | # | Step | Expected (from the original executable and data) | Status |
 | --- | --- | --- | --- |
 | 1 | Start the game, open Single Player and Options, change a setting, go back; do not press New Game. Watch the machine (Activity Monitor) or the log line `ARC-DEV-387 start map load begins`. | The menu works at once and stays light: no map is loaded behind it, as in the original, which has no map before a choice. The menu has no music in this build (known difference: it plays through the start map's session, a follow-up). | open |
-| 2 | Press Last Save with a save made in a town. | The menu stays and says "loading the save…" and takes no other input; after the load the game is on the town map at the saved place with the saved hero. The start map is not shown at any point. The wait is one map load, not two. | open |
+| 2 | Press Last Save with a save made in a town. | The screen goes black with the clock animation in the top-right corner (two pixels in; no wait note; ARC-UI-1362) and takes no input; after the load the game is on the town map at the saved place with the saved hero. The start map is not shown at any point. The wait is one map load, not two. | open |
 | 3 | The same with Load Game and a row of the list (the window opens at once, before any map). | The same as step 2, for the chosen row. A row of a save on the start map works too. | open |
 | 4 | Press Last Save with no save at all. | The window stays and the menu says there is no save to continue from, with no wait and no map load (the original goes back to the window without a message; the wording is the project's). | open |
 | 5 | Press New Game, then the pre-made browser at once (before the map is ready) and browse; press Start. | The browser works at once. Start says the world is still loading and the game starts by itself when the map is ready (the one visible difference from the original). Escape takes it back. | open |
@@ -622,7 +622,7 @@ Known differences (documented, not bugs):
 - A new game still waits for the start map, which begins to load when the New Game window opens.
 - The main thread is busy while the start map is published, for about a second after the load ends, so the menu may answer late then (O6 of the diagnosis).
 - The menu's music was silent until the start map was loaded; ARC-UI-139 (below) plays it from the start without a scene.
-- While a save's map loads the menu stays on screen with a note; the original shows its own loading screen.
+- A load of a save whose map is the one already shown (F8 on the same map) is one synchronous step, so its load screen is not seen; the original shows it (ARC-UI-1362, issue #1504).
 
 ## ARC-UI-139 — The main menu's music plays without a scene (follow-up of ARC-DEV-387, 2026-11-11)
 
@@ -758,7 +758,7 @@ Choosing a length in the sleep or wait window ends the hero's maintained spells 
 
 Known differences (documented, not bugs):
 
-- The window is the diagnostic panel, not the original's art; the hero's own technology runs and item-trigger runs with no maintenance period stay, as in the original.
+- The hero's own technology runs and item-trigger runs with no maintenance period stay, as in the original.
 
 ## ARC-MAGIC-057 — The hero's spot trap roll (E6-a, spot half, 2026-11-12)
 
@@ -1076,3 +1076,25 @@ design (the chance is 5 per cent of each firing, one firing per 300 to 700 game 
 | 4 | Look at where the creatures stand against the party. | Two rings: one side west of the party's tile or north of it, about six tiles away, in small columns of three. Ours do not turn toward the party (a known gap). | open |
 | 5 | Meet a second group in the same encounter (a table row with two creature kinds). | The first creature of the second kind is missing (the original destroys it, a quirk kept). | open |
 | 6 | Try the same in a town sector and while standing in a named area. | No encounter happens there. | open |
+
+## ARC-UI-1363 — The sleep and wait window in the original's look (2026-11-13)
+
+The window is drawn from the build 0x57B4F0 ([sleep window](../world/sleep-window-runtime.md#the-windows-look-arc-ui-1363-ledger-sz13-swb6-swb7), ledger SZ13, SWB6, SWB7): art 565 at (573, 42), a button of art 293 and a line of `sleepUI.mes` for each length. Compare it in both games, from the key `S` and from the bar's Sleep button (in the wilderness and in a town-map sector with the wait marker).
+
+| # | Step | Expected (from the original executable) | Status |
+| --- | --- | --- | --- |
+| 1 | Press `S` in the wilderness. | The window stands at the right edge of the play view (573, 42) with eight rows: a round button and a line each (one hour ... until healed). | open |
+| 2 | Look at the button frames and the line colour. | Idle, lit under the pointer, down while pressed; the lines are white in the small font. | open |
+| 3 | Do the same in a town-map sector with the wait marker. | Seven rows (the wait lengths, no until healed). | open |
+| 4 | Press a button and watch the window. | The rest runs; the original keeps the buttons visible (ours hide them, issue #1511). | open |
+
+Known differences (documented, not bugs): a button takes the pointer on its art's rectangle, not its opaque pixels; the controller's focus row is lit.
+
+## ARC-UI-1362 — Load screen for a save load and a quick load (2026-11-13)
+
+| # | Step | Expected (from the original executable and data) | Status |
+| --- | --- | --- | --- |
+| 1 | From the main menu press Load Game, choose a save made on another map than the start map. | The screen goes black at once with the clock animation in the top-right corner (two pixels in) and stays so until the game appears on the save's map; the menu shows no wait note. | open |
+| 2 | Press F8 with the newest save on another map than the one shown. | The same black screen with the clock until the saved map is there. | open |
+| 3 | Load a save whose map is missing or broken (rename its map folder in a copy). | The black screen goes and the menu (or the running game) comes back with the reason. | open |
+| 4 | Press F8 with a save on the map already shown. | No load screen is seen: the load of the shown map is one step in this build (issue #1504). | open |

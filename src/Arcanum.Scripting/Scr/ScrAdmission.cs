@@ -400,6 +400,13 @@ public sealed class ScrAdmissionSet
     /// </summary>
     public static ScrAdmissionSet S38 { get; } = new("S38", S37.Conditions, S37.Actions.Append(ScrCatalogue.Action.GetLocation), S37.ValueKinds, S37.FocusKinds, counterIndexWraps: true);
 
+    /// <summary>
+    /// The loop-break set (ARC-SCRIPT-1166, plan slice E5-e, ledger PG15): <see cref="S38"/> plus loop break (20), which ends the run's running loop at once and goes on after the first loop end following the loop for (the same
+    /// search an empty list does); without a running loop it does nothing. It needs no host answer of its own. Of the 22 installed scripts that carry it, 17 are reached by a live run (68 placed sites, 65 on the main map; census ARC-RES-1101). S39 is left to another task. Call script at (55) is not part of the slice:
+    /// it stands on one line no run reaches.
+    /// </summary>
+    public static ScrAdmissionSet S40 { get; } = new("S40", S38.Conditions, S38.Actions.Append(ScrCatalogue.Action.LoopBreak), S38.ValueKinds, S38.FocusKinds, counterIndexWraps: true);
+
     /// <summary>The conditions of <see cref="S37"/> a host answers through <see cref="IScrWorldObjectQueries"/>.</summary>
     public static IReadOnlySet<int> WorldObjectQueryConditions { get; } = new HashSet<int>(WorldObjectConditions);
 
@@ -542,6 +549,9 @@ public static class ScrAdmission
             // A loop end goes on with the next line, or jumps back to the line after the loop for that filled the list: any loop for's.
             ScrCatalogue.Action.LoopEnd => program.Lines.Where(l => IsLoopFor(l.OnTrue) || l.Condition.Type != ScrCatalogue.Condition.True && IsLoopFor(l.OnFalse))
                 .Select(l => l.Number + 1).Prepend(line + 1),
+            // PG15: a loop break goes on with the next line when no loop runs, or after the first loop end following the running loop's loop for: any loop for's.
+            ScrCatalogue.Action.LoopBreak => program.Lines.Where(l => IsLoopFor(l.OnTrue) || l.Condition.Type != ScrCatalogue.Condition.True && IsLoopFor(l.OnFalse))
+                .Select(l => AfterLoopEnd(program, l.Number)).Prepend(line + 1),
             _ => [line + 1],
         };
         return lines.Where(next => next < count);

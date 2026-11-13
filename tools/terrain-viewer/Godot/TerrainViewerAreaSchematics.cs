@@ -13,8 +13,8 @@ namespace Arcanum.TerrainViewer;
 // L (ledger SW1); T again, Escape or a controller cancel closes it. Like the character sheet it is modal (gate closed, clock
 // paused, a walk stopped). It opens only with a hero and not for a dead one. The tab, the discipline and the page are kept per
 // tab across close and open, as the original keeps them (ledger SW4). The data come from the module's own files, loaded once
-// per module in the background. Script action 129 (ledger SW8, TC2 both fixed) opens the same window for the PC once no other
-// window or dialog owns input. ARC-TECHNOLOGY-006: the dialog's `su` (after the talk ended, ledger NC1–NC2) and action 129 for an
+// per module in the background. Script action 129 (ledger SW8, TC2 both fixed) opens the same window for the PC (an open window or dialog is replaced, ARC-UI-1467) once no
+// panel outside the stack owns input. ARC-TECHNOLOGY-006: the dialog's `su` (after the talk ended, ledger NC1–NC2) and action 129 for an
 // NPC with a PC leader open it with the NPC as crafter: its degrees and own list, an empty found tab, the products into its list;
 // each NPC open resets the tab, discipline and page, as the original does (NC5).
 public partial class TerrainViewerApp
@@ -229,8 +229,8 @@ public partial class TerrainViewerApp
 
     /// <summary>
     /// SW8: the start schematic UI requests of the dialog scripts the viewer ran (<see cref="AreaScriptHost.ResolveSchematic"/>), and
-    /// (ARC-TECHNOLOGY-006) a conversation's `su`. The window opens once no dialog, window or palette owns input (a dialog's script
-    /// runs while its dialog is open; `su` ends its dialog first): the PC's own, or an NPC crafter's from its home map's data.
+    /// (ARC-TECHNOLOGY-006) a conversation's `su`. The window opens once no palette or other panel outside the stack owns input
+    /// (an open dialog or window is replaced, ARC-UI-1467 and ARC-UI-1125; `su` ends its dialog first): the PC's own, or an NPC crafter's from its home map's data.
     /// </summary>
     private void TakeScriptSchematics()
     {
@@ -239,8 +239,8 @@ public partial class TerrainViewerApp
         if (_schematicScriptOpen is not { } pending) return;
         if (!ReferenceEquals(pending.Session, _areaSession)) { _schematicScriptOpen = null; return; }
         // ARC-UI-1125: an open window does not hold the request (its opener replaces it; the schematic opener toggles, 0x56D130 closes its own open window);
-        // the panels outside the stack and a dialog still do.
-        if (ProgrammaticOpenBlocked || ConversationOpen) return;
+        // the panels outside the stack still do (ARC-UI-1467: an open dialog does not, the opener pops it).
+        if (ProgrammaticOpenBlocked) return;
         _schematicScriptOpen = null;
         if (SchematicsOpen) { CloseSchematicsByPlayer(); return; }
         OpenSchematics(pending.Crafter, replaceWindows: true);
