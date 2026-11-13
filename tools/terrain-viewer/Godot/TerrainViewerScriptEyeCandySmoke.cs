@@ -1,4 +1,5 @@
 using Arcanum.Data.Magic;
+using Arcanum.Scripting.Scr;
 using Arcanum.Session;
 using Arcanum.Simulation.Magic;
 using Arcanum.Simulation.Movement;
@@ -100,6 +101,15 @@ public partial class TerrainViewerApp
                 for (var i = 0; i < 1200 && (ShownEyeCandyHost?.Shown().Any(o => o.Owner == owner && o.Eye.Entry == entryRef) ?? false); i += 5) await Frames(5);
                 Require(!(ShownEyeCandyHost?.Shown().Any(o => o.Owner == owner && o.Eye.Entry == entryRef) ?? false), "the eye candy ran to its end");
             }
+            // ARC-MAGIC-1830: the queue the session moves hand their scripts' requests to (an NPC's or the hero's rewield, a regeneration's wield) plays through the same pump: a request queued for the hero starts the same entry again.
+            _scriptEyeCandyPlayedForSelfTest.Clear();
+            var queuedFrom = _scriptEyeCandyTaken;
+            QueueScriptEyeCandies([new ScrEyeCandy(number, new ScrObjectRef(CurrentAreaMap, AreaScriptHost.PcCode)), new ScrEyeCandy(number, new ScrObjectRef(CurrentAreaMap, AreaScriptHost.PcCode), ScrEyeCandyKind.StopScript)]);
+            await Frames(1);
+            Require(_scriptEyeCandyTaken == queuedFrom + 1 && _scriptEyeCandyPlayedForSelfTest.All(p => p == (owner, number)), $"the queued request was taken once and the stop request played nothing: taken {_scriptEyeCandyTaken - queuedFrom}, played {string.Join(";", _scriptEyeCandyPlayedForSelfTest)}");
+            // A looping entry may still run from the first request, so only an ended one must have started again.
+            Require(forever || _scriptEyeCandyPlayedForSelfTest.Count == 1, "the queued request started the entry again on the hero");
+            await Shot("queued");
             GD.Print("ARC-SCRIPT-1592 native-smoke script-eye-candy PASS " + System.Text.Json.JsonSerializer.Serialize(new { Map = _readyMapName, Script = VoidExitScript, Number = number, Entry = entryRef, Looping = forever, FirstFrame = first, MovedTo = moved?.Eye.Frame }));
         }
         finally

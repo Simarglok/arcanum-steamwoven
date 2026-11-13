@@ -1470,6 +1470,12 @@ public sealed partial class SessionSpellCasterTraitIndexTests
                 WieldEventScriptTests.C(ScrCatalogue.Action.AddEffect, (WieldEventScriptTests.Triggerer, 0), WieldEventScriptTests.N(Charm), WieldEventScriptTests.N(5)))),
             // ARC-MAGIC-1745: prints a line (entry type 6).
             [714] = WieldEventScriptTests.Program(WieldEventScriptTests.Do(WieldEventScriptTests.C(ScrCatalogue.Action.PrintLine, WieldEventScriptTests.N(1), WieldEventScriptTests.N(6)))),
+            // ARC-MAGIC-1830: plays script eye candy 7 on the triggerer (action 120), then 8 on the item.
+            [715] = WieldEventScriptTests.Program(WieldEventScriptTests.Do(WieldEventScriptTests.C(ScrCatalogue.Action.PlayScriptEyeCandy, WieldEventScriptTests.N(7), (WieldEventScriptTests.Triggerer, 0))),
+                WieldEventScriptTests.Do(WieldEventScriptTests.C(ScrCatalogue.Action.PlayScriptEyeCandy, WieldEventScriptTests.N(8), (WieldEventScriptTests.Attachee, 0)))),
+            // ARC-MAGIC-1830: plays eye candy 7 on the triggerer and then prints a line (a host that cannot read the line for an NPC refuses the run).
+            [716] = WieldEventScriptTests.Program(WieldEventScriptTests.Do(WieldEventScriptTests.C(ScrCatalogue.Action.PlayScriptEyeCandy, WieldEventScriptTests.N(7), (WieldEventScriptTests.Triggerer, 0))),
+                WieldEventScriptTests.Do(WieldEventScriptTests.C(ScrCatalogue.Action.PrintLine, WieldEventScriptTests.N(1), WieldEventScriptTests.N(6)))),
             [713] = WieldEventScriptTests.Program(WieldEventScriptTests.Do(WieldEventScriptTests.C(ScrCatalogue.Action.AddEffect, (WieldEventScriptTests.Attachee, 0), WieldEventScriptTests.N(Charm), WieldEventScriptTests.N(5)))),
         };
         public Dictionary<int, SessionEffectDefinition> Effects { get; } = new() { [Charm] = CharmEffect };
@@ -1555,6 +1561,31 @@ public sealed partial class SessionSpellCasterTraitIndexTests
         Assert.IsNull(refusedCaster.Apply(Run(MagickPlus), 0, At(Rat, SpellTargetObject.Npc)).JumpTo);
         Assert.IsTrue(NotReady(refusedCaster));
         Assert.IsFalse(refusedCaster.Log.Any(e => e.Kind == SpellCastEventKind.ItemScriptLine));
+    }
+
+    // ARC-MAGIC-1830: the eye candy a wield script of an NPC's rewield plays (action 120) reaches the cast log with the request as the script made it, in run and action order after the lines, and none for a rewield that is refused.
+    [TestMethod]
+    public void The_eye_candy_an_npcs_rewield_plays_reaches_the_cast_log_as_the_script_asked()
+    {
+        var (owner, caster, host, _) = Ringed(715, 715);
+        using var o = owner;
+        Assert.AreEqual(SpellComponentOutcome.None, caster.Apply(Run(MagickPlus), 0, At(Rat, SpellTargetObject.Npc)));
+        Assert.IsFalse(NotReady(caster));
+        var map = host.Player()!.Value.Map;
+        // Wield off then wield on, each playing 7 on the NPC and 8 on the ring.
+        var played = caster.Log.Where(e => e.Kind == SpellCastEventKind.ItemScriptEyeCandy).ToArray();
+        Assert.AreEqual(4, played.Length);
+        CollectionAssert.AreEqual(new[] { 7, 8, 7, 8 }, played.Select(e => e.Value).ToArray());
+        CollectionAssert.AreEqual(new[] { new ScrEyeCandy(7, new(map, Rat)), new ScrEyeCandy(8, new(map, "ring")), new ScrEyeCandy(7, new(map, Rat)), new ScrEyeCandy(8, new(map, "ring")) }, played.Select(e => e.EyeCandy!.Value).ToArray());
+        Assert.IsTrue(played.All(e => e.Object == Rat));
+
+        // A rewield the session cannot apply (a host that cannot read the line for an NPC) writes nothing and plays nothing, though the script asked for the eye candy before the line.
+        var (refused, refusedCaster, refusedHost, _) = Ringed(716, 716);
+        using var r = refused;
+        refusedCaster.ItemScripts = () => new HeroLinesHost(refusedHost);
+        Assert.IsNull(refusedCaster.Apply(Run(MagickPlus), 0, At(Rat, SpellTargetObject.Npc)).JumpTo);
+        Assert.IsTrue(NotReady(refusedCaster));
+        Assert.IsFalse(refusedCaster.Log.Any(e => e.Kind == SpellCastEventKind.ItemScriptEyeCandy));
     }
 
     // The same host with the default of a host that reads a hero's lines only.
@@ -1735,6 +1766,21 @@ public sealed partial class SessionSpellCasterTraitIndexTests
         var lines = caster.Log.Where(e => e.Kind == SpellCastEventKind.ItemScriptLine).Skip(before).ToArray();
         Assert.AreEqual(2, lines.Length);
         foreach (var line in lines) Assert.AreEqual(new SpellCastEvent(SpellCastEventKind.ItemScriptLine, line.Run, 6, Hero, 714) { Text = "line" }, line);
+    }
+
+    // ARC-MAGIC-1830: the hero's rewield plays the eye candy of its wield scripts the same way.
+    [TestMethod]
+    public void The_eye_candy_the_heros_rewield_plays_reaches_the_cast_log()
+    {
+        var (owner, caster, host) = WornHero(715, 715);
+        using var o = owner;
+        var before = caster.Log.Count(e => e.Kind == SpellCastEventKind.ItemScriptEyeCandy);
+        Assert.AreEqual(SpellComponentOutcome.None, CastOnHero(caster, HeroPointsPlus));
+        Assert.IsFalse(NotReady(caster));
+        var played = caster.Log.Where(e => e.Kind == SpellCastEventKind.ItemScriptEyeCandy).Skip(before).ToArray();
+        CollectionAssert.AreEqual(new[] { 7, 8, 7, 8 }, played.Select(e => e.Value).ToArray());
+        Assert.IsTrue(played.All(e => e.Object == Hero && e.EyeCandy is { Kind: ScrEyeCandyKind.PlayScript }));
+        Assert.AreEqual(new ScrObjectRef(host.Player()!.Value.Map, Hero), played[0].EyeCandy!.Value.Object);
     }
 
     [TestMethod]
