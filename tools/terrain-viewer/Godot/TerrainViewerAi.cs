@@ -496,7 +496,7 @@ public partial class TerrainViewerApp
     private bool RaiseGoesOn(string target, string? healer)
     {
         if (target == SessionSpellCaster.Hero || _areaSession is not { } owner || _readyArea is not { } area || UseScriptHost(area.Snapshot) is not { } host) return true;
-        var triggerer = healer is null ? null : healer == SessionSpellCaster.Hero ? host.Pc : new Arcanum.Scripting.Scr.ScrObjectRef(CurrentAreaMap, ScriptCodeOfCast(healer));
+        Arcanum.Scripting.Scr.ScrObjectRef? triggerer = healer is null ? null : healer == SessionSpellCaster.Hero ? host.Pc : new Arcanum.Scripting.Scr.ScrObjectRef(CurrentAreaMap, ScriptCodeOfCast(healer));
         var ran = Awarded(host, host.RunRaise(ScriptCodeOfCast(target), triggerer, owner.Rules.Scripts));
         var refused = AreaUseScriptHost.RaiseRefuses(ran);
         if (ran.Run is not null || ran.Detail.StartsWith("nested", StringComparison.Ordinal))
