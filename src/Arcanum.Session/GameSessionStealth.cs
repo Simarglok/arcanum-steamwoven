@@ -92,7 +92,7 @@ public sealed partial class GameSessionOwner
     }
 
     /// <summary>
-    /// ARC-AI-1560 (VBG7, the original's 0x45EDE0 with a follower as the prowler): the prowling margin of a concealed follower over one
+    /// ARC-AI-1560 (VBG7, the original's prowling flag of any critter, a follower as the prowler): the prowling margin of a concealed follower over one
     /// observer in a sight or hearing check, as <see cref="HeroProwlingMargin"/> gives the hero's: 0 while the NPC is not in the session's
     /// concealed set (<see cref="IsConcealed"/>), a refused life record, or invalid input; otherwise <see cref="StealthRules.Margin"/> of
     /// the NPC's own prowling level and training (<see cref="QueryNpcSkills(SessionNpcAdvancement, AdvancementModifiers)"/>: the sheet the session levelled it to, else its map data's),
