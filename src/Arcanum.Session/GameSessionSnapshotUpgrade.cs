@@ -623,6 +623,8 @@ public static partial class GameSessionSnapshotCodec
         {
             AddField(Section(root, "flights"), "$.flights", "trapShots", new JsonArray());
         },
+        // ARC-WORLD-1840 (schema 101): the party section gains the followers of NPC leaders. No older build made an NPC lead anyone (the hero was the one leader), so the list is empty.
+        [100] = root => AddField(Section(root, "party"), "$.party", "npcLed", new JsonArray()),
     };
 
     /// <summary>The schemas with an upgrade step to the next one, ascending: every schema from

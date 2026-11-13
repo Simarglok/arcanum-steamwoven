@@ -67,7 +67,8 @@ public static partial class GameSessionSnapshotCodec
     private static readonly string[] GlobalQuestFields = ["quest", "state"];
     private static readonly string[] RumorFields = ["rumor", "timestampMs"];
     private static readonly string[] ReputationFields = ["reputation", "timestampMs"];
-    private static readonly string[] PartyFields = ["followers", "others"];
+    private static readonly string[] PartyFields = ["followers", "others", "npcLed"];
+    private static readonly string[] NpcLedFields = ["entity", "leader", "forced"];
     private static readonly string[] FollowerFields = ["entity", "forced", "spreadOut", "loyalty", "waitFlag"];
     private static readonly string[] OtherFields = ["entity", "standing", "spreadOut", "jilted", "loyalty", "waitFlag"];
     private static readonly string[] HeroFields = ["prototype", "race", "gender", "stats", "level", "experience", "unspentPoints",
@@ -403,6 +404,17 @@ public static partial class GameSessionSnapshotCodec
                 w.WriteBoolean("jilted", other.Jilted);
                 w.WriteNumber("loyalty", (int)other.Loyalty);
                 w.WriteBoolean("waitFlag", other.WaitFlag);
+                w.WriteEndObject();
+            }
+            w.WriteEndArray();
+            // ARC-WORLD-1840 (schema 101): the followers of NPC leaders, grouped by leader in ordinal order, each leader's array in order.
+            w.WriteStartArray("npcLed");
+            foreach (var led in snapshot.Party.NpcLed)
+            {
+                w.WriteStartObject();
+                w.WriteString("entity", led.Entity);
+                w.WriteString("leader", led.Leader);
+                w.WriteBoolean("forced", led.Forced);
                 w.WriteEndObject();
             }
             w.WriteEndArray();
@@ -1849,7 +1861,18 @@ public static partial class GameSessionSnapshotCodec
                 throw new DecodeException(SnapshotDecodeFailure.OutOfRange, path + ".jilted");
             others[i] = record;
         }
-        return new(followers, others);
+        // ARC-WORLD-1840: the followers of NPC leaders; a follower appears once, and not in the hero's lists (restore checks the order of leaders, the hero and cycles).
+        items = Array(f["npcLed"], p + ".npcLed", GameSessionOwner.MaxNpcFollowers);
+        var npcLed = new SessionNpcFollower[items.Length];
+        for (var i = 0; i < items.Length; i++)
+        {
+            var path = $"{p}.npcLed[{i}]";
+            var item = Fields(items[i], path, NpcLedFields);
+            var entity = Entity(item["entity"], path + ".entity");
+            if (!seen.Add(entity)) throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path + ".entity");
+            npcLed[i] = new(entity, Entity(item["leader"], path + ".leader"), Bool(item["forced"], path + ".forced"));
+        }
+        return new(followers, others, npcLed);
     }
 
     // ARC-WORLD-045: the four loyalty marks as their bit sum.

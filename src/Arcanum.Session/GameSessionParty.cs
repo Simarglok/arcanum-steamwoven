@@ -33,19 +33,29 @@ public readonly record struct SessionCompanion(string Entity, CompanionStanding 
 }
 
 /// <summary>
+/// ARC-WORLD-1840 (#1322): a follower of a leader that is not the hero (the original's leader handle, field 0x119, and the leader's follower array, field 0xF1, which any critter has).
+/// <see cref="Forced"/> is the NPC flag 0x400 (<c>ONF_FORCED_FOLLOWER</c>) the forced join sets. Its record in the hero's party (<see cref="SessionCompanion"/>) stands free: a critter has one leader.
+/// </summary>
+public readonly record struct SessionNpcFollower(string Entity, string Leader, bool Forced);
+
+/// <summary>
 /// Saved party state: the PC's follower array in order, then the other recorded NPCs (waiting, or free with a flag)
-/// in ordinal entity order.
+/// in ordinal entity order, then (ARC-WORLD-1840) the followers of leaders that are not the hero: grouped by leader in ordinal leader order, each leader's array in its order.
 /// </summary>
 public sealed class SessionPartyState
 {
-    internal SessionPartyState(SessionCompanion[] followers, SessionCompanion[] others)
+    internal SessionPartyState(SessionCompanion[] followers, SessionCompanion[] others, SessionNpcFollower[]? npcLed = null)
     {
         Followers = Array.AsReadOnly(followers);
         Others = Array.AsReadOnly(others);
+        NpcLed = Array.AsReadOnly(npcLed ?? []);
     }
 
     public IReadOnlyList<SessionCompanion> Followers { get; }
     public IReadOnlyList<SessionCompanion> Others { get; }
+
+    /// <summary>ARC-WORLD-1840: the followers of NPC leaders (see the class).</summary>
+    public IReadOnlyList<SessionNpcFollower> NpcLed { get; }
 
     /// <summary>Followers that count against the PC's max followers (forced ones do not).</summary>
     public int NonForcedFollowers => Followers.Count(companion => !companion.Forced);
@@ -107,5 +117,28 @@ internal sealed class PartyDomain
     internal SessionPartyState Capture() => new(
         Order.Select(entity => Records[entity]).ToArray(),
         Records.Values.Where(record => record.Standing != CompanionStanding.Following)
-            .OrderBy(record => record.Entity, StringComparer.Ordinal).ToArray());
+            .OrderBy(record => record.Entity, StringComparer.Ordinal).ToArray(),
+        NpcArrays.OrderBy(pair => pair.Key, StringComparer.Ordinal).SelectMany(pair => pair.Value.Select(entity => NpcLed[entity])).ToArray());
+
+    /// <summary>ARC-WORLD-1840: the follower arrays of leaders that are not the hero (leader → followers in join order) and each such follower's record. A leader with no follower has no entry.</summary>
+    internal Dictionary<string, List<string>> NpcArrays { get; } = new(StringComparer.Ordinal);
+    internal Dictionary<string, SessionNpcFollower> NpcLed { get; } = new(StringComparer.Ordinal);
+
+    /// <summary>Appends a follower at the end of its NPC leader's array (the caller has removed any earlier link).</summary>
+    internal void PutNpcLed(SessionNpcFollower record)
+    {
+        if (!NpcArrays.TryGetValue(record.Leader, out var array)) NpcArrays[record.Leader] = array = [];
+        array.Add(record.Entity);
+        NpcLed[record.Entity] = record;
+    }
+
+    /// <summary>Takes a follower out of its NPC leader's array (the original's leave 0x45E040 closes the gap); false when it has no NPC leader.</summary>
+    internal bool RemoveNpcLed(string entity)
+    {
+        if (!NpcLed.Remove(entity, out var record)) return false;
+        var array = NpcArrays[record.Leader];
+        array.Remove(entity);
+        if (array.Count == 0) NpcArrays.Remove(record.Leader);
+        return true;
+    }
 }

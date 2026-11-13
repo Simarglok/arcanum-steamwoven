@@ -1004,7 +1004,8 @@ public sealed partial class GameSessionOwner : IDisposable
 
     /// <summary>
     /// Leave (C6): a follower or waiting NPC becomes free, forced and waiting cleared, spread out kept; jilted when
-    /// <see cref="PartyLeave.Jilt"/>. An unforced leave is <see cref="GameSessionFailure.LeaveRefused"/> under an
+    /// <see cref="PartyLeave.Jilt"/>. ARC-WORLD-1840: a follower of an NPC leader leaves that leader's array (<see cref="ForceJoinLeader"/>; the unforced refusals read
+    /// <see cref="PartyLeave.LeaderCharisma"/> and <see cref="PartyLeave.MindControlled"/>, jilt is not written: the session keeps no jilted mark for an NPC-led follower). An unforced leave is <see cref="GameSessionFailure.LeaveRefused"/> under an
     /// extraordinary-charisma leader or mind control. A free NPC is NoChange (with a wait flag too: no leader to leave, CF3, CF9). A waiting NPC's wait timer is removed (OL25); a follower that carries the flag loses it with the leave.
     /// </summary>
     [OriginalFunction(0x45E040, OriginalFunctionScope.Partial)]
@@ -1016,7 +1017,8 @@ public sealed partial class GameSessionOwner : IDisposable
         if (!SessionValidation.Entity(entity)) return Reject(GameSessionFailure.InvalidCompanion);
         if (!IsCurrent(expected)) return Reject(GameSessionFailure.StaleVersion);
         var current = _party.Get(entity);
-        if (current.Standing == CompanionStanding.Free) return NoChange();
+        // ARC-WORLD-1840: a critter the hero does not lead may follow an NPC; NoChange with no leader at all.
+        if (current.Standing == CompanionStanding.Free) return LeaveNpcLeader(entity, leave);
         // ARC-WORLD-067: with a hero the leader's charisma is the hero's effective charisma.
         if (!leave.Force && !FollowConsentRules.MayLeaveUnforced(HeroPartySide()?.Charisma ?? leave.LeaderCharisma, leave.MindControlled))
             return Reject(GameSessionFailure.LeaveRefused);
@@ -2045,6 +2047,28 @@ public sealed partial class GameSessionOwner : IDisposable
                 (previous is not null && string.CompareOrdinal(previous, record.Entity) >= 0)) return GameSessionFailure.InvalidSnapshot;
             previous = record.Entity;
             party.Put(record, false);
+        }
+        // ARC-WORLD-1840: the followers of NPC leaders, grouped by leader in ordinal order, each once, none the hero's follower or waiting NPC, none the hero, none its own leader, and no cycle of leaders.
+        if (saved.NpcLed.Count > MaxNpcFollowers) return GameSessionFailure.BudgetExceeded;
+        string? leaderBefore = null;
+        foreach (var record in saved.NpcLed)
+        {
+            if (!SessionValidation.Entity(record.Entity) || !SessionValidation.Entity(record.Leader) || record.Entity == SessionEventKinds.PlayerEntity ||
+                record.Leader == SessionEventKinds.PlayerEntity || record.Entity == record.Leader || !record.Forced) return GameSessionFailure.InvalidCompanion;
+            if (party.NpcLed.ContainsKey(record.Entity) || party.Get(record.Entity).Standing != CompanionStanding.Free ||
+                (leaderBefore is not null && string.CompareOrdinal(leaderBefore, record.Leader) > 0)) return GameSessionFailure.InvalidSnapshot;
+            leaderBefore = record.Leader;
+            party.PutNpcLed(record);
+        }
+        foreach (var record in saved.NpcLed)
+        {
+            // Climbing from each follower must leave the NPC-led set within its size, else the leaders close a cycle.
+            var at = record.Leader;
+            for (var step = 0; party.NpcLed.TryGetValue(at, out var up); step++)
+            {
+                if (step > party.NpcLed.Count) return GameSessionFailure.InvalidSnapshot;
+                at = up.Leader;
+            }
         }
         return GameSessionFailure.None;
     }
