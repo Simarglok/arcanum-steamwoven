@@ -552,6 +552,29 @@ public partial class TerrainViewerApp
             : healed.Outcome is { } done && done.Events.HasFlag(LifeEvents.AlreadyDead) ? "nothing healed: dead" : "healed";
     }
 
+    /// <summary>ARC-SCRIPT-1481 (VT1, VT2, VT5): the vitals of an NPC of the shown map (current and maximum hit points and fatigue, the poison level) from the session's life of its combat values; null without them.</summary>
+    private AreaScriptVitals? ScriptVitals(string npc)
+    {
+        if (_areaSession is not { } session || _combatHost?.Build(session, CurrentAreaMap, npc).Combat?.Target is not { } target) return null;
+        return session.QueryLife(target).View is { } life
+            ? new(life.Status.HitPoints, life.Status.MaxHitPoints, life.Status.Fatigue, life.Status.MaxFatigue, life.Record.State.PoisonLevel) : null;
+    }
+
+    /// <summary>ARC-SCRIPT-1481 (VT2, VT3): a script's heal of fatigue (the hero's; an NPC's goes through <see cref="HealFatigueByScript"/>) and of poison of the PC (the scheduler id) or an NPC of the shown map by the session's heal: the fatigue damage and the
+    /// poison level fall by the amounts to 0 at most (the heal applier's poison write, 0x4B5DF4, is the stat setter's, as heal poison's 0x44A77E: the poison timer event follows the level).</summary>
+    private string HealLifeByScript(string victim, int fatigue, int poison)
+    {
+        if (_areaSession is not { } session) return "no session";
+        SessionLifeTarget? target = victim == Arcanum.Simulation.Ai.AiSchedulerRules.Pc ? SessionLifeTarget.Hero
+            : _combatHost?.Build(session, CurrentAreaMap, victim).Combat?.Target;
+        if (target is not { } who) return "no combat values";
+        var healed = session.Heal(session.Version, who, new LifeHeal { Fatigue = fatigue, Poison = poison });
+        GD.Print($"ARC-SCRIPT-1481 script-heal-life victim={victim} fatigue={fatigue} poison={poison} disposition={healed.Disposition} failure={healed.Failure} events={healed.Outcome?.Events}");
+        RefreshAreaStatus();
+        return healed.Disposition == GameSessionDisposition.Rejected ? $"not healed: {healed.Failure}"
+            : healed.Outcome is { } done && done.Events.HasFlag(LifeEvents.AlreadyDead) ? "nothing healed: dead" : "healed";
+    }
+
     /// <summary>ARC-WORLD-102: drops the AI host; one of the current session first ends its runs (<see cref="AreaAiHost.Retire"/>), so a
     /// casting goal's magic run does not outlive it.</summary>
     private void RetireAiHost()

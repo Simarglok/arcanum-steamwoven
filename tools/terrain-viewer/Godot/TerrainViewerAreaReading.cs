@@ -97,13 +97,13 @@ public partial class TerrainViewerApp
     /// user; null when it let the use go on (run default), otherwise why the use stopped. Its effects (flags, story, quests, areas, rumors,
     /// reputations, its own slot) are the session's either way the run ended; a completed quest's award levels the followers.
     /// </summary>
-    private string? ItemUseScript(string item, bool reading = true)
+    private string? ItemUseScript(string item, bool reading = true, string? target = null)
     {
         var not = reading ? "not read" : "not used";
         if (_readyArea?.Snapshot is not { } snapshot || UseScriptHost(snapshot) is not { } host) return $"{not}: its use script needs a game session";
         if (_areaSession!.QueryPcInventory().FirstOrDefault(held => held.Entity == item) is not { Entity: not null } held)
             return $"{not}: its use script runs only for an item taken from a map";
-        var ran = Awarded(host, host.RunItemUse(held.Origin.RuntimeMap, item, _areaSession.Rules.Scripts));
+        var ran = Awarded(host, host.RunItemUse(held.Origin.RuntimeMap, item, _areaSession.Rules.Scripts, target));
         var lines = ran.Lines.Count > 0 ? " — \"" + string.Join(" / ", ran.Lines) + "\"" : "";
         GD.Print($"ARC-SCRIPT-020 item use script outcome={ran.Outcome} run={ran.Run?.Outcome.ToString() ?? "-"} detail={ran.Detail}{lines}");
         if (ran.Outcome is not AreaScriptedUseOutcome.NoTeleport) return $"{not}: its use script was refused (" + ran.Detail + ")";

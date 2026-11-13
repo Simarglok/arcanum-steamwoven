@@ -135,8 +135,9 @@ public sealed class AreaUseScriptsOriginalTests
         foreach (var cell in cells)
         {
             var entered = transfers.Enter(cell).Single();
-            // Their scripts need actions outside the set, so the ARC-WORLD-031 teleport is taken.
-            Assert.AreEqual((AreaScriptedUseOutcome.Refused, AreaUseOutcome.Accepted), (transfers.LastScripted!.Outcome, entered.Outcome), entered.Reason);
+            // Their scripts (2549-2558: script eye candy, then the teleport) needed an action outside the set, so the ARC-WORLD-031 teleport was taken; since ARC-SCRIPT-1481 (set S43: the use host admits
+            // script eye candy, which no host plays) they run to their own teleport.
+            Assert.AreEqual((AreaScriptedUseOutcome.Teleport, AreaUseOutcome.Accepted), (transfers.LastScripted!.Outcome, entered.Outcome), entered.Reason);
             Assert.IsTrue(transfers.Clear()!.SameMap);
         }
     }
@@ -231,15 +232,19 @@ public sealed class AreaUseScriptsOriginalTests
         // Since ARC-SCRIPT-1164 (set S37, the world-object commands: the sector block pair, the generator pair, lock state, open toggle, create item, touch art) 151 more tile scripts run without a teleport and 151 fewer are refused (1,586 and 1,180),
         // and 2 more sector scripts run (19 and 1).
         // Re-measured on 2026-11-13 (ARC-SCRIPT-1294; the numbers had not moved with the later sets): 35 more tile scripts run without a teleport and 35 fewer are refused (1,621 and 1,145), the same with and without the spell stop (130) of set S42.
+        // Since ARC-SCRIPT-1481 (set S43: the use host admits script eye candy, magick tech adjustment, the vitals commands and heal poison) the 68 exit tiles of the void maps (scripts 2549-2558, script eye candy then the teleport)
+        // run to their teleport (136 teleports and 1,077 refused) and the last refused sector script runs (20 without a teleport, none refused).
         var tile = Arcanum.Data.Maps.MapTransitionTrigger.TileEntry; var sector = Arcanum.Data.Maps.MapTransitionTrigger.SectorEntry;
         // Since ARC-SCRIPT-1165 (set S34: the story and time commands) the 62 exit tiles of script 2698 on the Tulla battle interiors run to their teleport too.
         static bool IsTullaExit(string t) => t.StartsWith("tulla interior - battle - ", StringComparison.Ordinal) && t.EndsWith(":2698", StringComparison.Ordinal);
         Assert.AreEqual(62, teleports.Count(IsTullaExit));
-        CollectionAssert.AreEquivalent(Enumerable.Repeat("iron clan hq:2203", 5).Append("void-kerghans castle:3070").ToArray(), teleports.Where(t => !IsTullaExit(t)).ToArray(), string.Join(", ", teleports));
+        // Since ARC-SCRIPT-1481 the exit tiles of the void maps (scripts 2549-2558: script eye candy, then the teleport) run to their teleport too.
+        static bool IsVoidExit(string t) => t.StartsWith("void:25", StringComparison.Ordinal);
+        CollectionAssert.AreEquivalent(Enumerable.Repeat("iron clan hq:2203", 5).Append("void-kerghans castle:3070").ToArray(), teleports.Where(t => !IsTullaExit(t) && !IsVoidExit(t)).ToArray(), string.Join(", ", teleports));
         CollectionAssert.AreEquivalent(new[]
         {
-            ((tile, AreaScriptedUseOutcome.Teleport), 68), ((tile, AreaScriptedUseOutcome.NoTeleport), 1621), ((tile, AreaScriptedUseOutcome.Refused), 1145),
-            ((tile, AreaScriptedUseOutcome.EffectsRejected), 178), ((sector, AreaScriptedUseOutcome.NoTeleport), 19), ((sector, AreaScriptedUseOutcome.Refused), 1),
+            ((tile, AreaScriptedUseOutcome.Teleport), 136), ((tile, AreaScriptedUseOutcome.NoTeleport), 1621), ((tile, AreaScriptedUseOutcome.Refused), 1077),
+            ((tile, AreaScriptedUseOutcome.EffectsRejected), 178), ((sector, AreaScriptedUseOutcome.NoTeleport), 20),
         }, placedOutcomes.Select(p => (p.Key, p.Value)).ToArray(), string.Join(", ", placedOutcomes.Select(p => $"{p.Key}={p.Value}")));
     }
 

@@ -169,6 +169,20 @@ public interface IScrStatQueries
 }
 
 /// <summary>
+/// ARC-SCRIPT-1481 (ledger VT1–VT4): the vitals questions of get hit points (action 107) and get fatigue points (action 108). A host whose admission set holds either action implements this interface; the interpreter asks only for the
+/// object the action names.
+/// </summary>
+public interface IScrVitalQueries
+{
+    /// <summary>The object's current and maximum hit points as the original's pair reads them (0x43D600 and 0x43D5A0: the maximum minus the damage, and the maximum); null when the host cannot answer (the object is not a
+    /// PC or an NPC the host knows); the dispatch then ends with <see cref="ScrStop.NotModelled"/> and applies nothing.</summary>
+    (int Current, int Maximum)? HitPoints(ScrObjectRef obj);
+
+    /// <summary>The object's current and maximum fatigue points (0x45D700 and 0x45D670: the maximum minus the damage, and the maximum); null as <see cref="HitPoints"/>.</summary>
+    (int Current, int Maximum)? FatiguePoints(ScrObjectRef obj);
+}
+
+/// <summary>
 /// ARC-SKILLS-009: the skill question of get skill (action 47, ledger SX1, SX2). A host whose admission set holds the action implements
 /// this interface; the interpreter asks only for skill numbers 0..15 and stores 0 for any other without asking.
 /// </summary>
@@ -388,6 +402,8 @@ public enum ScrObjectStateChange
     DamageUnresistable,
     /// <summary>ARC-DEV-243 (S14g, GT196): heal hit points (75) of one object of its operand by <see cref="ScrObjectStateRequest.Value"/>: a living critter only, no resurrection, no get-up.</summary>
     HealHitPoints,
+    /// <summary>ARC-SCRIPT-1481 (VT3): heal poison (128) of each object of its operand: the poison level becomes the level minus <see cref="ScrObjectStateRequest.Value"/>, floored at 0, through the stat setter (which keeps the poison timer event right).</summary>
+    HealPoison,
     /// <summary>ARC-MAGIC-029 (MT21a, SC5): give spell mastery in college (112) of the first object of its operand: <see cref="ScrObjectStateRequest.Value"/> the college as read (not range-checked in the original). The host
     /// writes it for a PC or an NPC that has no mastered college and at least five ranks of the college (0x4B1CF0, SB7), and does nothing else.</summary>
     GiveSpellMastery,
@@ -874,7 +890,7 @@ public sealed class ScrRunResult
 }
 
 /// <summary>How a dispatch runs: the rule mode's script switches, the admitted set (default <see cref="ScrAdmissionSet.S5"/>,
-/// at most <see cref="ScrAdmissionSet.S42"/>, admitted for the lines reachable from the event's line), the executed-line
+/// at most <see cref="ScrAdmissionSet.S43"/>, admitted for the lines reachable from the event's line), the executed-line
 /// budget and the call depth.</summary>
 public sealed record ScrRunOptions
 {
@@ -895,7 +911,7 @@ public sealed record ScrRunOptions
         ArgumentNullException.ThrowIfNull(Admission);
         if (MaxExecutedLines is <= 0 or > OriginalLineBudget) throw new ArgumentOutOfRangeException(nameof(MaxExecutedLines), "The line budget is 1..1000.");
         if (MaxCallDepth is < 1 or > 64) throw new ArgumentOutOfRangeException(nameof(MaxCallDepth), "The call depth is 1..64.");
-        if (!Admission.IsSubsetOf(ScrAdmissionSet.S42)) throw new ArgumentException("The interpreter runs only the commands of ScrAdmissionSet.S42.", nameof(Admission));
+        if (!Admission.IsSubsetOf(ScrAdmissionSet.S43)) throw new ArgumentException("The interpreter runs only the commands of ScrAdmissionSet.S43.", nameof(Admission));
     }
 
     // A set with a guard condition needs a host that answers it, checked before any event runs.
@@ -912,6 +928,8 @@ public sealed record ScrRunOptions
             throw new ArgumentException("A set with get stat needs a host that implements IScrStatQueries.", nameof(Admission));
         if (host is not IScrItemQueries && (Admission.Conditions.Any(ScrAdmissionSet.ItemQueryConditions.Contains) || Admission.Actions.Contains(ScrCatalogue.Action.MagickTechAdjustment)))
             throw new ArgumentException("A set with the identified or rewielding condition or the magick-tech adjustment needs a host that implements IScrItemQueries.", nameof(Admission));
+        if (host is not IScrVitalQueries && Admission.Actions.Any(ScrAdmissionSet.VitalQueryActions.Contains))
+            throw new ArgumentException("A set with get hit points or get fatigue points needs a host that implements IScrVitalQueries.", nameof(Admission));
         if (host is not IScrWorldQueries && (Admission.Actions.Any(ScrAdmissionSet.WorldQueryActions.Contains) || Admission.FocusKinds.Any(ScrAdmissionSet.WorldQueryFocusKinds.Contains)))
             throw new ArgumentException("A set with random, loop for, distance between, get location, float line or the vicinity focus kinds needs a host that implements IScrWorldQueries.", nameof(Admission));
         if (host is not IScrObjectStateQueries && Admission.Conditions.Any(ScrAdmissionSet.ObjectStateQueryConditions.Contains))
