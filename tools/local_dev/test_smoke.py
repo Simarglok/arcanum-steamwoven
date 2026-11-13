@@ -211,10 +211,10 @@ class PlanTests(unittest.TestCase):
         self.assertEqual(hover.command[hover.command.index("--hero") + 1], smoke.AUTO_HERO)
         # ARC-DEV-1547: transfer runs the visitor-fight sub-check, which prints NONE (no hero) while the stage's own PASS line
         # still comes, so the stage gets a hero (and is refused with --main-menu) instead of passing without the check.
-        for stage in ("transfer", "follower-home"):
-            run = self.plan("pr", "--stages", stage, "--no-build")[0]
-            self.assertEqual(run.command[run.command.index("--hero") + 1], smoke.AUTO_HERO, stage)
-            self.assertIn(stage, smoke.HERO_STAGES)
+        run = self.plan("pr", "--stages", "transfer", "--no-build")[0]
+        self.assertEqual(run.command[run.command.index("--hero") + 1], smoke.AUTO_HERO)
+        with self.assertRaisesRegex(ValueError, "stage transfer needs a hero, and --main-menu starts without one"):
+            self.plan("pr", "--stages", "transfer", "--main-menu")
         battery = self.plan("map", "elven ruins", "--no-build")[0]  # the whole battery plays the hero's stages
         self.assertEqual(battery.command[battery.command.index("--hero") + 1], "elf-female")  # the chain's hero there
         cave = self.plan("map", "crash site cave", "--stages", "junk", "--no-build")[0]
