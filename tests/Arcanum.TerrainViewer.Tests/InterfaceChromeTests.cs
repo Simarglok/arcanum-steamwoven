@@ -1,5 +1,6 @@
 using Arcanum.Data.Hd;
 using Arcanum.TerrainViewer.Core;
+using Arcanum.World;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace Arcanum.TerrainViewer.Tests;
@@ -928,5 +929,273 @@ public sealed class InterfaceChromeTests
         var right = InterfaceChromeRenderer.Render(At(60), 40, 20, Flat(40, 20, (1, 2, 3)), [], 0, 1);
         for (var y = 0; y < 20; y += 3)
         for (var x = 0; x < 40; x += 3) Assert.AreEqual(Pixel(whole, 100, 60 + x, y), Pixel(right, 40, x, y), $"({x}, {y})");
+    }
+
+    // ARC-UI-1199: the schematic window's frames (synthetic stand-ins of the frames' sizes and holes; no game art).
+    private static readonly string[] SchematicTabFiles =
+        ["Anatomical_Tab.ART", "Chemistry_Tab.ART", "Electrical_Tab.ART", "Explosives_Tab.ART", "GunSmithy_Tab.ART", "Mechanical_Tab.ART", "Smithy_Tab.ART", "Theraputics_Tab.ART"];
+
+    // The base: 800 x 400 with the lens's square hole, the record's picture hole and the eight tab slots, all transparent, in a flat opaque frame.
+    private static byte[] SchematicBase(bool holes = true)
+    {
+        var rgba = Flat(800, 400, (90, 60, 30));
+        if (!holes) return rgba;
+        void Clear(int x0, int y0, int w, int h)
+        {
+            for (var y = y0; y < y0 + h; y++)
+            for (var x = x0; x < x0 + w; x++) rgba[(y * 800 + x) * 4 + 3] = 0;
+        }
+        var (lx, ly, lw, lh) = AreaSchematicWindowLayout.RoundView;
+        Clear(lx, ly, lw, lh);
+        Clear(240, 146, 295, 225);
+        for (var d = 0; d < AreaSchematicWindowLayout.Disciplines; d++) { var (x, y) = AreaSchematicWindowLayout.DisciplineTab(d); Clear(x, y, 27, 40); }
+        return rgba;
+    }
+
+    [TestMethod]
+    public void The_schematic_window_frames_have_recipes_laid_out_by_the_window_layout_and_the_pictures_stay_art()
+    {
+        var names = InterfaceChromeRecipes.All.Select(r => r.File).ToArray();
+        CollectionAssert.AllItemsAreUnique(names);
+        CollectionAssert.IsSubsetOf(new[] { "Schematic_Base.ART", "Schm_LArrow.ART", "Schm_RArrow.ART", "bgrn_but.art", "CombineButt.ART", "lns_bart.art" }.Concat(SchematicTabFiles).ToArray(), names);
+        Assert.AreEqual(ChromeKind.Panel, Recipe("Schematic_Base.ART").Kind);
+        Assert.AreEqual(ChromeKind.Button, Recipe("bgrn_but.art").Kind);
+        Assert.AreEqual(ChromeKind.Button, Recipe("CombineButt.ART").Kind);
+        Assert.IsFalse(Recipe("CombineButt.ART").KeepFace, "the assemble button's face is generated; it has no glyph to keep");
+        for (var d = 0; d < SchematicTabFiles.Length; d++)
+        {
+            var recipe = Recipe(SchematicTabFiles[d]);
+            var (x, y) = AreaSchematicWindowLayout.DisciplineTab(d);
+            Assert.AreEqual(ChromeKind.Tab, recipe.Kind);
+            Assert.AreEqual((x, y), (recipe.OriginX, recipe.OriginY), $"{SchematicTabFiles[d]} stands where the layout puts discipline tab {d}");
+            Assert.AreEqual(ChromeMaterial.Paper, recipe.TabPaper);
+        }
+        Assert.AreEqual((AreaSchematicWindowLayout.Previous.X, AreaSchematicWindowLayout.Previous.Y), (Recipe("Schm_LArrow.ART").OriginX, Recipe("Schm_LArrow.ART").OriginY));
+        Assert.AreEqual((AreaSchematicWindowLayout.Next.X, AreaSchematicWindowLayout.Next.Y), (Recipe("Schm_RArrow.ART").OriginX, Recipe("Schm_RArrow.ART").OriginY));
+        // The assemble face (358..360), the found and missing tints (830, 831) and the record's picture are pictures: no recipe.
+        foreach (var file in new[] { "CombineIndicator1.ART", "CombineIndicator2.ART", "CombineIndicator3.ART", "Schem_NO_Item.ART", "Schem_Have_Item.ART" })
+            CollectionAssert.DoesNotContain(names.Select(n => n.ToLowerInvariant()).ToArray(), file.ToLowerInvariant());
+        // Every part of the base lies inside the 800 x 400 window.
+        foreach (var part in Recipe("Schematic_Base.ART").Parts)
+        {
+            var (x, y, w, h) = part switch
+            {
+                ChromePlate p => (p.X, p.Y, p.Width, p.Height), ChromeSunk p => (p.X, p.Y, p.Width, p.Height), ChromeKeep p => (p.X, p.Y, p.Width, p.Height),
+                ChromeRuling p => (p.X, p.Y, p.Width, p.Height), ChromeBare p => (p.X, p.Y, p.Width, p.Height), _ => (0, 0, 0, 0),
+            };
+            Assert.IsTrue(x >= 0 && y >= 0 && x + w <= 800 && y + h <= 400, $"{part}");
+        }
+    }
+
+    [TestMethod]
+    public void The_schematic_frames_paint_in_bounds_deterministically_at_whole_and_fractional_scales()
+    {
+        foreach (var (file, w, h) in new[] { ("Schematic_Base.ART", 800, 400), ("Chemistry_Tab.ART", 27, 40), ("Schm_LArrow.ART", 18, 22), ("Schm_RArrow.ART", 18, 22), ("bgrn_but.art", 37, 36), ("CombineButt.ART", 51, 51) })
+        {
+            var legacy = file == "Schematic_Base.ART" ? SchematicBase() : Flat(w, h, (200, 190, 170));
+            var recipe = Recipe(file);
+            foreach (var scale in new[] { 1.0, 1.345, 2.0 })
+            {
+                var a = InterfaceChromeRenderer.Render(recipe, w, h, legacy, [], 0, scale);
+                var (pw, ph) = InterfaceChromeRenderer.PixelSize(w, h, scale);
+                Assert.AreEqual(pw * ph * 4, a.Length, $"{file} at {scale}");
+                CollectionAssert.AreEqual(a, InterfaceChromeRenderer.Render(recipe, w, h, legacy, [], 0, scale), $"{file} deterministic at {scale}");
+            }
+        }
+    }
+
+    [TestMethod]
+    public void The_schematic_base_leaves_the_lens_and_the_tab_slots_plain_rims_the_records_hole_and_rules_the_page_with_one_unit_lines()
+    {
+        const int Scale = 2;
+        var with = InterfaceChromeRenderer.Render(Recipe("Schematic_Base.ART"), 800, 400, SchematicBase(), [], 0, Scale);
+        var without = InterfaceChromeRenderer.Render(Recipe("Schematic_Base.ART"), 800, 400, SchematicBase(holes: false), [], 0, Scale);
+        // The lens's square and a tab slot are holes with no rim: the wood beside them is the wood of the frame with no hole.
+        var (lx, ly, lw, lh) = AreaSchematicWindowLayout.RoundView;
+        Assert.AreEqual(Pixel(without, 1600, (lx - 2) * Scale, (ly + 40) * Scale), Pixel(with, 1600, (lx - 2) * Scale, (ly + 40) * Scale), "beside the lens's square");
+        Assert.AreEqual(Pixel(without, 1600, (lx + lw + 1) * Scale, (ly + 40) * Scale), Pixel(with, 1600, (lx + lw + 1) * Scale, (ly + 40) * Scale));
+        Assert.AreEqual(0, Pixel(with, 1600, (lx + 40) * Scale, (ly + 40) * Scale).A, "the lens's square stays clear");
+        var (tx, ty) = AreaSchematicWindowLayout.DisciplineTab(3);
+        Assert.AreEqual(Pixel(without, 1600, (tx + 30) * Scale, (ty + 20) * Scale), Pixel(with, 1600, (tx + 30) * Scale, (ty + 20) * Scale), "right of a tab slot");
+        Assert.AreEqual(Pixel(without, 1600, (tx + 10) * Scale, (ty - 2) * Scale), Pixel(with, 1600, (tx + 10) * Scale, (ty - 2) * Scale), "above a tab slot");
+        // The record's picture hole has the brass rim: the pixel just outside its left edge differs from the frame with no hole.
+        Assert.AreNotEqual(Pixel(without, 1600, 239 * Scale + 1, 250 * Scale), Pixel(with, 1600, 239 * Scale + 1, 250 * Scale), "the record's hole has a rim");
+        // The page is ruled: a one-unit vertical line at x 227 (two device pixels here) is more orange (less blue) than the paper on both sides, a horizontal one at y 22 likewise.
+        int Blue(int x, int y) => Pixel(without, 1600, x, y).B;
+        var blueAt = Enumerable.Range(0, Scale).Select(k => Blue(227 * Scale + k, 100 * Scale)).Max();
+        var blueBeside = new[] { Blue(224 * Scale, 100 * Scale), Blue(230 * Scale, 100 * Scale), Blue(233 * Scale, 100 * Scale) }.Min();
+        Assert.IsTrue(blueAt + 20 < blueBeside, $"the line {blueAt} against the paper {blueBeside}");
+        Assert.IsTrue(Blue(300 * Scale, 22 * Scale) + 20 < Blue(300 * Scale, 26 * Scale), "a horizontal line at y 22");
+        Assert.IsTrue(Blue(227 * Scale + Scale, 100 * Scale) > blueAt + 15, "the line is one unit wide: the next unit is paper again");
+        // The paper is a warm cream, not grey.
+        var paper = Pixel(without, 1600, 400 * Scale, 100 * Scale);
+        Assert.IsTrue(paper.R > paper.B + 25 && paper.R > 150, $"{paper}");
+    }
+
+    [TestMethod]
+    public void A_page_button_continues_the_ruled_page_under_it_and_a_tabs_paper_is_the_same_paper()
+    {
+        foreach (var scale in new[] { 1.0, 2.0 })
+        {
+            var (pw, ph) = InterfaceChromeRenderer.PixelSize(800, 400, scale);
+            var page = InterfaceChromeRenderer.Render(Recipe("Schematic_Base.ART"), 800, 400, SchematicBase(holes: false), [], 0, scale);
+            foreach (var (file, at) in new[] { ("Schm_LArrow.ART", AreaSchematicWindowLayout.Previous), ("Schm_RArrow.ART", AreaSchematicWindowLayout.Next) })
+            {
+                var button = InterfaceChromeRenderer.Render(Recipe(file), 18, 22, Flat(18, 22, (120, 110, 90)), [], 0, scale);
+                var (bw, _) = InterfaceChromeRenderer.PixelSize(18, 22, scale);
+                for (var y = 0; y < 22; y += 3)
+                for (var x = 0; x < 18; x += 3)
+                    Assert.AreEqual(Pixel(page, pw, (int)(at.X * scale) + (int)(x * scale), (int)(at.Y * scale) + (int)(y * scale)),
+                        Pixel(button, bw, (int)(x * scale), (int)(y * scale)), $"{file} ({x}, {y}) at {scale} is the page under it");
+            }
+        }
+        // A tab: 27 x 40, a paper bookmark (bright, cut away at the lower right) and a dark glyph on a dark ground; the paper is warm and the glyph darker than the paper.
+        var legacy = Flat(27, 40, (50, 45, 40));
+        for (var y = 0; y < 40; y++)
+        for (var x = 0; x < 27; x++)
+        {
+            if (!(x >= 3 && x <= 23 - Math.Max(0, y - 25) && y < 38)) continue;
+            var i = (y * 27 + x) * 4;
+            (legacy[i], legacy[i + 1], legacy[i + 2]) = (190, 185, 170);
+        }
+        for (var y = 10; y < 18; y++)
+        for (var x = 9; x < 17; x++) { var i = (y * 27 + x) * 4; (legacy[i], legacy[i + 1], legacy[i + 2]) = (70, 50, 30); }
+        foreach (var frame in new[] { 0, 1 })
+        {
+            var tab = InterfaceChromeRenderer.Render(Recipe("Chemistry_Tab.ART"), 27, 40, legacy, [], frame, 3);
+            var paper = Pixel(tab, 81, 20 * 3, 5 * 3);
+            Assert.IsTrue(paper.R > paper.B + 25 && paper.R > 150, $"the paper is warm cream: {paper}");
+            var glyph = Pixel(tab, 81, 13 * 3, 14 * 3);
+            Assert.IsTrue(glyph.R < paper.R * 0.6, $"the glyph {glyph} is darker than the paper {paper}");
+            for (var i = 3; i < tab.Length; i += 4) Assert.AreEqual(255, tab[i]);
+        }
+    }
+
+    [TestMethod]
+    public void The_schematic_buttons_follow_their_silhouette_and_sink_on_the_down_frame()
+    {
+        foreach (var (file, size) in new[] { ("bgrn_but.art", 36), ("CombineButt.ART", 51) })
+        {
+            var legacy = new byte[size * size * 4];
+            for (var y = 0; y < size; y++)
+            for (var x = 0; x < size; x++)
+            {
+                double dx = x + 0.5 - size / 2.0, dy = y + 0.5 - size / 2.0;
+                var inside = dx * dx + dy * dy <= (size / 2.0) * (size / 2.0);
+                var i = (y * size + x) * 4;
+                (legacy[i], legacy[i + 1], legacy[i + 2], legacy[i + 3]) = inside ? ((byte)40, (byte)40, (byte)20, (byte)255) : ((byte)0, (byte)0, (byte)0, (byte)0);
+            }
+            var idle = InterfaceChromeRenderer.Render(Recipe(file), size, size, legacy, [], 0, 2);
+            var down = InterfaceChromeRenderer.Render(Recipe(file), size, size, legacy, [], 1, 2);
+            Assert.AreEqual(0, Pixel(idle, size * 2, 0, 0).A, $"{file}: the corner stays transparent");
+            Assert.IsTrue(Pixel(idle, size * 2, size, size).A == 255, $"{file}: the middle is opaque");
+            CollectionAssert.AreNotEqual(idle, down, $"{file}: the down frame is drawn differently");
+        }
+    }
+
+    // ARC-UI-1819: the common dialog box (822 `DialogueBox`, 325 x 136) and its round buttons (823 `Lil_Accept`, 824 `Lil_Cancel`, 28 x 29, three frames); synthetic stand-ins, no game art.
+    private const int DialogButtonWidth = 28, DialogButtonHeight = 29;
+
+    // A round 28 x 29 button of a dark face with a coloured mark (a green block for the check, a red one for the cross) in the middle.
+    private static byte[] DialogButton((byte R, byte G, byte B) mark)
+    {
+        var rgba = new byte[DialogButtonWidth * DialogButtonHeight * 4];
+        for (var y = 0; y < DialogButtonHeight; y++)
+        for (var x = 0; x < DialogButtonWidth; x++)
+        {
+            double dx = x + 0.5 - DialogButtonWidth / 2.0, dy = y + 0.5 - DialogButtonHeight / 2.0;
+            var inside = dx * dx + dy * dy <= 13.5 * 13.5;
+            var marked = x >= 9 && x < 19 && y >= 11 && y < 18;
+            var i = (y * DialogButtonWidth + x) * 4;
+            (rgba[i], rgba[i + 1], rgba[i + 2], rgba[i + 3]) = !inside ? ((byte)0, (byte)0, (byte)0, (byte)0) : marked ? (mark.R, mark.G, mark.B, (byte)255) : ((byte)40, (byte)44, (byte)24, (byte)255);
+        }
+        return rgba;
+    }
+
+    [TestMethod]
+    public void The_dialog_box_and_its_two_buttons_have_recipes_and_the_font_has_none()
+    {
+        Assert.AreEqual(ChromeKind.Panel, Recipe("DialogueBox.ART").Kind);
+        Assert.AreEqual(ChromeMaterial.Slate, Recipe("DialogueBox.ART").Base);
+        foreach (var file in new[] { "Lil_Accept.ART", "Lil_Cancel.ART" })
+        {
+            Assert.AreEqual(ChromeKind.Button, Recipe(file).Kind, file);
+            Assert.IsFalse(Recipe(file).KeepFace, $"{file}: the face is generated, only the mark is kept");
+        }
+        // The names resolve through the HD key as the viewer asks for them; the text font (229) is a picture and has no recipe.
+        Assert.IsNotNull(InterfaceChromeRecipes.For(HdInterfaceKey.Query(HdInterfaceKey.Identity("DIALOGUEBOX.ART", new byte[] { 1 }), 0, 1, 1, new byte[4])));
+        Assert.IsNull(InterfaceChromeRecipes.For(HdInterfaceKey.Query(HdInterfaceKey.Identity("Flare12Font.ART", new byte[] { 1 }), 0, 1, 1, new byte[4])));
+    }
+
+    [TestMethod]
+    public void Every_part_of_the_dialog_recipe_lies_inside_its_frame_holds_the_text_and_covers_no_button()
+    {
+        var parts = Recipe("DialogueBox.ART").Parts;
+        Assert.IsFalse(parts.Any(part => part is ChromeKeep), "the box keeps no picture, so none can cut into a generated plate");
+        var pit = parts.OfType<ChromeSunk>().Single();
+        Assert.IsTrue(pit.X >= 0 && pit.Y >= 0 && pit.X + pit.Width <= AreaDialogBoxLayout.Width && pit.Y + pit.Height <= AreaDialogBoxLayout.Height, "the pit lies inside 325 x 136");
+        var (tx, ty, tw, th) = AreaDialogBoxLayout.Text;
+        // The pit's one-unit rim and one-unit ink line lie outside the text, which is drawn over the black.
+        Assert.IsTrue(tx >= pit.X + 2 && ty >= pit.Y + 2 && tx + tw <= pit.X + pit.Width - 2 && ty + th <= pit.Y + pit.Height - 2, "the pit holds the text's rectangle");
+        foreach (var kind in new[] { AreaDialogBoxKind.Accept, AreaDialogBoxKind.Cancel, AreaDialogBoxKind.YesNo })
+        foreach (var (_, _, x, y) in AreaDialogBoxLayout.Buttons(kind))
+        {
+            Assert.IsTrue(x >= 0 && y >= 0 && x + DialogButtonWidth <= AreaDialogBoxLayout.Width && y + DialogButtonHeight <= AreaDialogBoxLayout.Height, $"a button at ({x}, {y}) lies inside the box");
+            Assert.IsFalse(x < pit.X + pit.Width && pit.X < x + DialogButtonWidth && y < pit.Y + pit.Height && pit.Y < y + DialogButtonHeight, $"the button at ({x}, {y}) stays off the text pit");
+        }
+    }
+
+    [TestMethod]
+    public void The_dialog_box_paints_in_bounds_deterministically_opaque_with_a_black_text_pit_at_whole_and_fractional_scales()
+    {
+        var recipe = Recipe("DialogueBox.ART");
+        var legacy = Flat(AreaDialogBoxLayout.Width, AreaDialogBoxLayout.Height, (60, 60, 64));
+        foreach (var scale in new[] { 1.0, 1.25, 1.5, 2.0, 2.4 })
+        {
+            var a = InterfaceChromeRenderer.Render(recipe, AreaDialogBoxLayout.Width, AreaDialogBoxLayout.Height, legacy, [], 0, scale);
+            var (pw, ph) = InterfaceChromeRenderer.PixelSize(AreaDialogBoxLayout.Width, AreaDialogBoxLayout.Height, scale);
+            Assert.AreEqual(pw * ph * 4, a.Length, $"at {scale}");
+            CollectionAssert.AreEqual(a, InterfaceChromeRenderer.Render(recipe, AreaDialogBoxLayout.Width, AreaDialogBoxLayout.Height, legacy, [], 0, scale), $"deterministic at {scale}");
+            for (var i = 3; i < a.Length; i += 4) Assert.AreEqual(255, a[i], $"the box is opaque at {scale}");
+            var (tx, ty, tw, th) = AreaDialogBoxLayout.Text;
+            foreach (var (x, y) in new[] { (tx, ty), (tx + tw - 1, ty), (tx, ty + th - 1), (tx + tw - 1, ty + th - 1), (tx + tw / 2, ty + th / 2) })
+            {
+                var pixel = Pixel(a, pw, (int)(x * scale), (int)(y * scale));
+                Assert.IsTrue(pixel.R < 12 && pixel.G < 12 && pixel.B < 14, $"the text pit is black at ({x}, {y}) at {scale}");
+            }
+            // The stone around the pit is the generated slate (not black, not the pit), with a rim on the box's edge.
+            var stone = Pixel(a, pw, (int)(160 * scale), (int)(110 * scale));
+            Assert.IsTrue(stone.R > 15 && stone.R < 120, $"the slate at {scale}");
+            // The rim on the box's edge and the pit's own line are brass (red well above blue) within a few device pixels of the edges.
+            bool BrassWithin(int y0) => Enumerable.Range(y0, (int)Math.Ceiling(3 * scale) + 1).Any(y => Pixel(a, pw, (int)(160 * scale), y) is var q && q.R > q.B + 60);
+            Assert.IsTrue(BrassWithin(0), $"the box's top rim is brass at {scale}");
+            Assert.IsTrue(BrassWithin((int)(6 * scale) - 1), $"the pit's line is brass at {scale}");
+        }
+    }
+
+    [TestMethod]
+    public void The_dialog_buttons_follow_their_round_silhouette_keep_their_mark_and_sink_on_the_down_frame()
+    {
+        foreach (var (file, mark) in new[] { ("Lil_Accept.ART", ((byte)30, (byte)170, (byte)30)), ("Lil_Cancel.ART", ((byte)170, (byte)30, (byte)30)) })
+        {
+            var legacy = DialogButton(mark);
+            foreach (var scale in new[] { 1.0, 1.5, 2.0 })
+            {
+                var frames = Enumerable.Range(0, 3).Select(f => InterfaceChromeRenderer.Render(Recipe(file), DialogButtonWidth, DialogButtonHeight, legacy, [], f, scale)).ToArray();
+                var (pw, ph) = InterfaceChromeRenderer.PixelSize(DialogButtonWidth, DialogButtonHeight, scale);
+                foreach (var frame in frames)
+                {
+                    Assert.AreEqual(pw * ph * 4, frame.Length, $"{file} at {scale}");
+                    Assert.AreEqual(0, Pixel(frame, pw, 0, 0).A, $"{file}: the corner stays outside the round silhouette at {scale}");
+                    var middle = Pixel(frame, pw, pw / 2, (int)(14.5 * scale));
+                    Assert.AreEqual(255, middle.A, $"{file}: the middle is opaque at {scale}");
+                    // The mark keeps its own colour (a green check stays green, a red cross red) on every frame.
+                    Assert.IsTrue(mark.Item2 > mark.Item1 ? middle.G > middle.R + 60 : middle.R > middle.G + 60, $"{file}: the mark keeps its colour at {scale}");
+                }
+                CollectionAssert.AreNotEqual(frames[0], frames[1], $"{file}: the down frame is drawn differently at {scale}");
+                CollectionAssert.AreNotEqual(frames[0], frames[2], $"{file}: the lit frame is drawn differently at {scale}");
+                CollectionAssert.AreEqual(frames[1], InterfaceChromeRenderer.Render(Recipe(file), DialogButtonWidth, DialogButtonHeight, legacy, [], 1, scale), $"{file}: deterministic at {scale}");
+            }
+        }
     }
 }

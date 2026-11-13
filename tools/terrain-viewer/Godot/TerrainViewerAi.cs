@@ -171,6 +171,8 @@ public partial class TerrainViewerApp
             ClosedPortalsOf = step => _areaPortals is { } portals && _areaSession is { } shown ? [.. portals.CrossedClosed(shown, step).Select(p => p.Entity)] : [],
             SectorsTouched = area.Snapshot.Window is not null ? RequestSectorChart : null,
             HeroCell = () => _worldActor.Session is AreaGridSession hero ? World(hero.Chart.ToWorld(hero.State.CommittedCell)) : null,
+            // ARC-SCRIPT-1773 (CS5): obj can see obj with the hero as the observer reads the hero's drawn facing (the octant of the object rotation, as the knockback host reads it).
+            HeroRotation = () => _worldActor.Session is AreaGridSession ? _worldActor.State.Facing : null,
             Companions = () => _areaCompanions is { } group
                 ? group.Companions.Select(c => (c.Entity, c.Key, World(chart.ToWorld(c.Grid.State.CommittedCell)))).ToArray() : [],
             // ARC-AI-1515 (0x4A9650): the follow check of a companion the hero hit reads the conversation state's PC side, as its loyalty step does.
@@ -327,7 +329,8 @@ public partial class TerrainViewerApp
         if ((map.TryGetRow(npc, out var held) ? held : CreatedCrittersRow(npc)) is not { } row) return true;
         var scrPoint = point == AiScriptPoint.Heartbeat ? Arcanum.Scripting.Scr.ScrPoint.Heartbeat : Arcanum.Scripting.Scr.ScrPoint.FirstHeartbeat;
         if (host.Slot(new(CurrentAreaMap, npc), scrPoint) is not { Script: > 0 }) return true;
-        var ran = host.RunHeartbeat(row, scrPoint, session.Rules.Scripts);
+        // ARC-SCRIPT-1815: a heartbeat's float lines, awards and created items are taken at once as for any other run (the heartbeat set admits float line since this task; unread they would pile up in the host until the next click).
+        var ran = Awarded(host, host.RunHeartbeat(row, scrPoint, session.Rules.Scripts));
         if (ran.Outcome != AreaScriptedUseOutcome.NoTeleport)
         {
             if (_heartbeatRefusalsLogged.Add($"{npc}|{scrPoint}|{ran.Outcome}|{ran.Run?.Script}"))
@@ -489,6 +492,21 @@ public partial class TerrainViewerApp
         if (ran.Run is not null || ran.Detail.StartsWith("nested", StringComparison.Ordinal))
             GD.Print($"ARC-DEV-254 taking-damage victim={victim} attacker={attacker ?? "-"} outcome={ran.Outcome} run={ran.Run?.Outcome} stop={ran.Run?.Stop} vetoed={vetoed} detail={ran.Detail}");
         return !vetoed;
+    }
+
+    /// <summary>
+    /// ARC-MAGIC-1167 (MA-10, ledger RZ1–RZ3): the dead target's raise script (point 0x12) asked by a Heal with the raise bit: true when the raise goes on (no script, a script that ran default, or one the viewer cannot apply), false when
+    /// the script skipped the default and refuses it. The healer is the triggerer. The PC has no script here (no attachment data), so a raise of the hero always goes on.
+    /// </summary>
+    private bool RaiseGoesOn(string target, string? healer)
+    {
+        if (target == SessionSpellCaster.Hero || _areaSession is not { } owner || _readyArea is not { } area || UseScriptHost(area.Snapshot) is not { } host) return true;
+        Arcanum.Scripting.Scr.ScrObjectRef? triggerer = healer is null ? null : healer == SessionSpellCaster.Hero ? host.Pc : new Arcanum.Scripting.Scr.ScrObjectRef(CurrentAreaMap, ScriptCodeOfCast(healer));
+        var ran = Awarded(host, host.RunRaise(ScriptCodeOfCast(target), triggerer, owner.Rules.Scripts));
+        var refused = AreaUseScriptHost.RaiseRefuses(ran);
+        if (ran.Run is not null || ran.Detail.StartsWith("nested", StringComparison.Ordinal))
+            GD.Print($"ARC-MAGIC-1167 raise-script target={target} healer={healer ?? "-"} outcome={ran.Outcome} run={ran.Run?.Outcome} stop={ran.Run?.Stop} refused={refused} detail={ran.Detail}");
+        return !refused;
     }
 
     /// <summary>ARC-SCRIPT-1483: the combat-point scripts of a hero's hit on <paramref name="victim"/>, the hit event the session raised before its damage step.</summary>
@@ -832,6 +850,8 @@ public partial class TerrainViewerApp
                     RewieldedNpcs(host).Add(notice.Npc);
                     // ARC-MAGIC-1684: a line a moved item's wield or insert script printed goes to the message window.
                     PostNpcPickupLines(notice);
+                    // ARC-MAGIC-1830: and the eye candy they made.
+                    QueueScriptEyeCandies(notice.EyeCandies);
                     redraw = true;
                     break;
                 case AreaAiNoticeKind.Skill:

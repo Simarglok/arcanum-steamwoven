@@ -46,6 +46,10 @@ internal sealed class ScrInterpreter
         public readonly HashSet<(ScrObjectRef Object, int Stat)> AdjustedStats = new();
         // ARC-SCRIPT-1163 (NS1): the objects the dispatch's critter disbands let go, which its later following tests read (the original removes the leader at once).
         public readonly HashSet<ScrObjectRef> Disbanded = new();
+        // ARC-SCRIPT-1772 (CQ4, CQ5): the objects the dispatch's toggle invulnerability left flipped (odd count), which its later invulnerable tests read; the objects whose faction a set faction wrote, which a later get faction cannot read (the host applies after the run), so it
+        // ends the dispatch as not modelled; and the name numbers its renames wrote, which a later is-named test of the same object reads (the original writes the field at once). A rename the host cannot apply refuses the whole run, so the read is only ever of an NPC.
+        public readonly HashSet<ScrObjectRef> InvulnerabilityToggled = new(), FactionSet = new();
+        public readonly Dictionary<ScrObjectRef, int> Names = new();
         // ARC-SCRIPT-1164 (E5-b): the sector and generator toggles of the dispatch, which its later conditions and toggles read back (the original writes the tables at once), the open states its open toggles left, and the requests themselves.
         public readonly Dictionary<(int X, int Y), bool> SectorBlocked = new();
         public readonly Dictionary<int, bool> GeneratorBlocked = new();
@@ -59,6 +63,8 @@ internal sealed class ScrInterpreter
         public readonly List<ScrAmmoUse> AmmoUses = new();
         // ARC-SCRIPT-1241: the fade actions (103), in action order.
         public readonly List<ScrFade> Fades = new();
+        // ARC-RENDER-1171: the queue slide and end game requests (131, 132), in action order.
+        public readonly List<ScrSlideRequest> Slides = new();
         // ARC-SCRIPT-042: the slots call-ex runs changed, in order, and the latest of each, which a later call-ex run of the same slot reads.
         public readonly List<ScrWriteback> SlotWrites = new();
         public readonly Dictionary<(ScrObjectRef, int), ScrSlot> Slots = new();
@@ -205,7 +211,8 @@ internal sealed class ScrInterpreter
             _shared.TownMaps.Count == 0 ? null : Array.AsReadOnly(_shared.TownMaps.ToArray()),
             _shared.AmmoUses.Count == 0 ? null : Array.AsReadOnly(_shared.AmmoUses.ToArray()),
             _shared.Fades.Count == 0 ? null : Array.AsReadOnly(_shared.Fades.ToArray()),
-            _shared.WorldChanges.Count == 0 ? null : Array.AsReadOnly(_shared.WorldChanges.ToArray()));
+            _shared.WorldChanges.Count == 0 ? null : Array.AsReadOnly(_shared.WorldChanges.ToArray()),
+            _shared.Slides.Count == 0 ? null : Array.AsReadOnly(_shared.Slides.ToArray()));
     }
 
     private bool Condition(ScrClause c, int line) => c.Type switch
@@ -219,6 +226,8 @@ internal sealed class ScrInterpreter
         ScrCatalogue.Condition.Jilted => _host.IsJilted(Object(c, 0, line)),
         // SG1: the guard conditions, one object each; the quest state's second value is its third operand.
         ScrCatalogue.Condition.PcQuestState => ScrGuards.Holds(c.Type, Object(c, 0, line), Get(c, 1), Get(c, 2), Queries),
+        // ARC-SCRIPT-1772 (CQ5): an object the run renamed answers its new name number (the guard's mind-control test stays the host's).
+        ScrCatalogue.Condition.IsNamed when _shared.Names.Count > 0 && Object(c, 0, line) is var named && _shared.Names.TryGetValue(named, out var renamed) => !Queries.IsMindControlled(named) && renamed == Get(c, 1),
         ScrCatalogue.Condition.HasItemNamed or ScrCatalogue.Condition.IsNamed or ScrCatalogue.Condition.IsWieldingItem or ScrCatalogue.Condition.HasReputation
             => ScrGuards.Holds(c.Type, Object(c, 0, line), Get(c, 1), 0, Queries),
         // CP9 (0x4451B0 case 0x25): the objects of the operand that are NPCs with the animal critter flag; the list rule of the other object tests.
@@ -233,7 +242,7 @@ internal sealed class ScrInterpreter
         ScrCatalogue.Condition.IsInvisible => ListHolds(c, obj => CritterStates.IsInvisible(obj) ?? throw new MissingObjectStop(line)),
         ScrCatalogue.Condition.IsSurrendered => ListHolds(c, obj => CritterStates.IsSurrendered(obj) ?? throw new MissingObjectStop(line)),
         ScrCatalogue.Condition.IsInDialog => ListHolds(c, obj => CritterStates.IsInDialog(obj) ?? throw new MissingObjectStop(line)),
-        ScrCatalogue.Condition.IsInvulnerable => ListHolds(c, obj => CritterStates.IsInvulnerable(obj) ?? throw new MissingObjectStop(line)),
+        ScrCatalogue.Condition.IsInvulnerable => ListHolds(c, obj => _shared.InvulnerabilityToggled.Contains(obj) != (CritterStates.IsInvulnerable(obj) ?? throw new MissingObjectStop(line))),
         ScrCatalogue.Condition.IsUndead => ListHolds(c, obj => CritterStates.IsUndead(obj) ?? throw new MissingObjectStop(line)),
         ScrCatalogue.Condition.IsProwling => ListHolds(c, obj => CritterStates.IsProwling(obj) ?? throw new MissingObjectStop(line)),
         // CS12–CS14 (ARC-SCRIPT-1771; 0x4451B0 cases 11, 19 and 34): bad associates and monster of type follow the list rule (the type is read once for the whole list; the original reads the list first, 0x44B4E0, then the value, 0x44BA70, which differs only if reading the value could stop the run); within range takes the first object of operand 0 and three values, and is true when the tile distance
@@ -428,6 +437,14 @@ internal sealed class ScrInterpreter
                 _shared.Fades.Add(new(Get(a, 0), Get(a, 1), Get(a, 2), Get(a, 3)));
                 return (Step.Next, 0);
             }
+            case ScrCatalogue.Action.QueueSlide:
+                // SS3 (case 0x83, 0x460B80 → 0x569AA0): the operand's value is the slide number the show's queue takes; the host keeps the 100-slide bound.
+                _shared.Slides.Add(new(ScrSlideKind.Queue, Get(a, 0)));
+                return (Step.Next, 0);
+            case ScrCatalogue.Action.EndGame:
+                // SS4 (case 0x84, 0x460530 → 0x57CDE0): the end of the game is asked for and the run goes on (the interface acts 50 ms later); the multiplayer packet that follows in a network game is not modelled.
+                _shared.Slides.Add(new(ScrSlideKind.EndGame, 0));
+                return (Step.Next, 0);
             case ScrCatalogue.Action.UnfogTownMap:
             {
                 // UF1 (ARC-DEV-205): operand 0 is the town map; the original reveals every cell of it (0x4BEAB0 → 0x4BED30) and does nothing for
@@ -639,7 +656,42 @@ internal sealed class ScrInterpreter
             {
                 // HW4: the first object of operand 0 and the faction; an absent object changes nothing (0x45D0C0 returns at a null handle).
                 var faction = Get(a, 1);
-                if (OptionalObject(a, 0) is { } obj) _shared.ObjectStates.Add(new(ScrObjectStateChange.SetFaction, obj, faction));
+                if (OptionalObject(a, 0) is { } obj) { _shared.ObjectStates.Add(new(ScrObjectStateChange.SetFaction, obj, faction)); _shared.FactionSet.Add(obj); }
+                return (Step.Next, 0);
+            }
+            case ScrCatalogue.Action.GetSocialClass:
+            case ScrCatalogue.Action.GetOrigin:
+            case ScrCatalogue.Action.GetFaction:
+            {
+                // CQ1–CQ3 (0x447220 cases 0x26, 0x27, 0x59): the first object of operand 0 (0x44B960) and the store of operand 1; the NPC's field through the getter (0x45D010 social class, 0x45D290 origin, 0x45D080 faction), 0 for any other object type. An absent object
+                // stops the run (the project rule of the single-object reads); a host that cannot answer ends the whole dispatch with nothing applied. A faction the run's own set faction wrote is not read back (the host applies after the run).
+                var obj = Object(a, 0, line);
+                if (a.Type == ScrCatalogue.Action.GetFaction && _shared.FactionSet.Contains(obj)) throw new CallRefusedStop(null, _number, ScrStop.NotModelled);
+                var value = (a.Type switch
+                {
+                    ScrCatalogue.Action.GetSocialClass => CritterFields.SocialClassOf(obj),
+                    ScrCatalogue.Action.GetOrigin => CritterFields.OriginOf(obj),
+                    _ => CritterFields.FactionOf(obj),
+                }) ?? throw new CallRefusedStop(null, _number, ScrStop.NotModelled);
+                Set(a, 1, value, line);
+                return (Step.Next, 0);
+            }
+            case ScrCatalogue.Action.ToggleInvulnerability:
+            {
+                // CQ4 (case 0x39): each object of operand 0 in list order (0x44B4E0); the flag 0x400000 is flipped at once in the original, so a later invulnerable test of the run reads the flipped state through the parity set. An empty list does nothing.
+                foreach (var obj in Objects(a, 0))
+                {
+                    _shared.ObjectStates.Add(new(ScrObjectStateChange.ToggleInvulnerability, obj));
+                    if (!_shared.InvulnerabilityToggled.Remove(obj)) _shared.InvulnerabilityToggled.Add(obj);
+                }
+                return (Step.Next, 0);
+            }
+            case ScrCatalogue.Action.Rename:
+            {
+                // CQ5 (case 0x5C): the first object of operand 0 and the number of operand 1, written to the object's name field (0x4EFDD0 with field 0x16) with no type test. An absent object changes nothing (a project choice, as for set faction: the original writes
+                // through a null handle).
+                var name = Get(a, 1);
+                if (OptionalObject(a, 0) is { } obj) { _shared.ObjectStates.Add(new(ScrObjectStateChange.Rename, obj, name)); _shared.Names[obj] = name; }
                 return (Step.Next, 0);
             }
             case ScrCatalogue.Action.Destroy:
@@ -1386,6 +1438,9 @@ internal sealed class ScrInterpreter
 
     private IScrCritterStateQueries CritterStates => _host as IScrCritterStateQueries
         ?? throw new InvalidOperationException("SCR_CRITTER_STATE_QUERIES_REQUIRED: the admission set holds a critter-state condition and the host cannot answer it.");
+
+    private IScrCritterFieldQueries CritterFields => _host as IScrCritterFieldQueries
+        ?? throw new InvalidOperationException("SCR_CRITTER_FIELD_QUERIES_REQUIRED: the admission set holds a critter getter (social class, origin, faction) and the host cannot answer it.");
 
     private IScrCritterQueries Critters => _host as IScrCritterQueries
         ?? throw new InvalidOperationException("SCR_CRITTER_QUERIES_REQUIRED: the admission set holds the animal condition and the host cannot answer it.");

@@ -27,8 +27,8 @@ public sealed partial class AreaAiHost
         // tier are the NPC's own in that skill (0 for a number outside the 16 skills, as the getters 0x4C5EB0 and 0x4C65E0 answer).
         var skill = Enum.IsDefined((Skill)skillNumber) && skillNumber >= 0 ? NpcSkill(npc, (Skill)skillNumber) : null;
         var allowed = skillNumber != AiPassChoice.HealSkill || HealingItem(npc) is { } item && HealSkillAccepts(npc, item, Pc);
-        var leader = Leader(npc);
-        return new(CollegeLevel(npc, HealerCollege), allowed, skill?.Level ?? 0, (int?)skill?.Training ?? 0, leader == Pc, leader is null);
+        // 0x45DE00 for the free services, 0x45DDA0 for "no player character leads it at all" (ARC-WORLD-1840: a follower of an NPC has a leader but may have no PC at the top).
+        return new(CollegeLevel(npc, HealerCollege), allowed, skill?.Level ?? 0, (int?)skill?.Training ?? 0, Leader(npc) == Pc, PcLeader(npc) is null);
     }
 
     /// <summary>

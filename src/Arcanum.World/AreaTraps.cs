@@ -1,4 +1,5 @@
 using Arcanum.Data.Area;
+using Arcanum.Scripting.Scr;
 using Arcanum.Session;
 using Arcanum.Simulation.Movement;
 using Arcanum.Simulation.Traps;
@@ -71,6 +72,9 @@ public sealed record AreaTrapMeeting(AreaObjectRecord Row, SessionTrapCause Caus
         return what;
     }
 }
+
+/// <summary>ARC-COMBAT-1777: the inputs of the best-follower chooser's score of a disarm (see <see cref="AreaTraps.DisarmScoreInputs"/>).</summary>
+public sealed record AreaDisarmScoreInputs(SessionTrapped Trapped, SessionTrapBaseline Baseline, int Difficulty, int Light);
 
 /// <summary>
 /// ARC-SKILLS-1156: one disarm traps press of the hero on a trapped object (<see cref="AreaTraps.Disarm"/>): the object's row, the session's roll
@@ -349,6 +353,46 @@ public sealed class AreaTraps
         AreaScriptedUse? script = null;
         if (roll.Disarm is { Outcome: TrapDisarm.Sprung, Run: null })
             script = _host.RunTrapScript(row, _host.Pc, _session.Rules.Scripts);
+        return new(row, roll, effect, device) { Script = script };
+    }
+
+    /// <summary>ARC-COMBAT-1777: what the best-follower chooser scores a disarm of <paramref name="row"/> by (<see cref="GameSessionOwner.QueryDisarmScore"/>): the trapped object, its baseline, the trap object's difficulty and the light at it. Null for a row the hero's disarm would not take (no known trap, a shot without a shooter list, no cast host).</summary>
+    public AreaDisarmScoreInputs? DisarmScoreInputs(AreaObjectRecord row)
+    {
+        ArgumentNullException.ThrowIfNull(row);
+        if (_effects() is not { } effects || !KnownTrap(row) || _host.TrapBaseline(row) is not { } baseline) return null;
+        if (IsShot(_session.QueryTrap(AreaUseScriptHost.Trapped(row), baseline), baseline) && !effects.ListsShooters) return null;
+        return new(AreaUseScriptHost.Trapped(row), baseline, TrapDifficulty(row), LightAt(row));
+    }
+
+    /// <summary>ARC-COMBAT-1777: whether a follower's disarm can take effect on this map (a sprung native trap's effect is applied with the follower as the triggerer, <see cref="AreaTrapEffects.ApplyByCritter"/>).</summary>
+    public bool NpcDisarmReady => _effects() is { ApplyByCritter: not null };
+
+    /// <summary>
+    /// ARC-COMBAT-1777 (ledger SP3, TT5, OH4): the disarm traps press of the hero handed to the follower <paramref name="user"/> by the best-follower chooser (0x57A620 → 0x4C9050): the session's <see cref="GameSessionOwner.RollNpcDisarmTrap"/> with the trap
+    /// object's difficulty and the light at the row (the follower's own level, no local-PC term, no fate; the PC's press paid its action points, so the roll charges none); a sprung native trap's effect with the follower as the triggerer, an ordinary trap script run with
+    /// it as the triggerer. Null for a row that carries no trap the player knows, without a cast host or a follower disarm that cannot take effect (<see cref="NpcDisarmReady"/>). NOT READY: an expert's critical success makes the device in the follower's pack in the
+    /// original (TT5); the session has no item creation for an NPC, so it is made in the hero's pack (<paramref name="insert"/>: the hero's insert check).
+    /// </summary>
+    public AreaTrapDisarm? DisarmByNpc(AreaObjectRecord row, SessionNpcSkillUser user, SessionInsertCheck insert)
+    {
+        ArgumentNullException.ThrowIfNull(row);
+        ArgumentNullException.ThrowIfNull(user);
+        ArgumentNullException.ThrowIfNull(insert);
+        if (_effects() is not { ApplyByCritter: { } by } effects || !KnownTrap(row) || _host.TrapBaseline(row) is not { } baseline) return null;
+        var state = _session.QueryTrap(AreaUseScriptHost.Trapped(row), baseline);
+        if (IsShot(state, baseline) && !effects.ListsShooters) return null;
+        var follower = user.Loaded.Entity;
+        var roll = _session.RollNpcDisarmTrap(_session.Version, user, AreaUseScriptHost.Trapped(row), baseline, TrapDifficulty(row), LightAt(row));
+        SessionTrapEffectResult? effect = null;
+        if (roll.Disarm is { Outcome: TrapDisarm.Sprung, Run: { Effect: not NativeTrapEffect.None } run } sprung)
+            effect = by(follower, row, run, baseline.Counters, sprung.State.ObjectFlags);
+        InventoryMutationResult? device = null;
+        if (roll.Disarm is { Outcome: TrapDisarm.RemovedWithDevice, DevicePrototype: > 0 and var prototype })
+            device = _host.GiveHeroPrototypeItem(prototype, insert);
+        AreaScriptedUse? script = null;
+        if (roll.Disarm is { Outcome: TrapDisarm.Sprung, Run: null })
+            script = _host.RunTrapScript(row, new ScrObjectRef(row.Key.RuntimeMap, follower), _session.Rules.Scripts);
         return new(row, roll, effect, device) { Script = script };
     }
 

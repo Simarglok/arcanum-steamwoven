@@ -269,7 +269,7 @@ public sealed class AreaInventoryHost
     }
 
     /// <summary>
-    /// ARC-DEV-227 (the dialog's PA condition, ledger PN2): an NPC's stored name number (object field 22) and whether its own spell flags carry the mind-controlled bit (field 20, bit 27), read from
+    /// ARC-DEV-227 (the dialog's PA condition, ledger PN2): an NPC's name number (object field 22, a script's rename over the map data's) and whether its own spell flags carry the mind-controlled bit (field 20, bit 27), read from
     /// the record the resolver finds by identity (a travelling companion's home map is read on demand, as <see cref="AreaCombat.Record"/> does); null when no record is found. The flags are the
     /// stored ones: a mind control cast in play is not modelled.
     /// </summary>
@@ -279,7 +279,7 @@ public sealed class AreaInventoryHost
         ArgumentNullException.ThrowIfNull(entity);
         var record = _resolver.Resolve(entity).Record;
         if (record is null && EntityHomes.RecordedHomeOf(session, entity) is { } home) record = _resolver.Resolve(entity, home).Record;
-        return record is null ? null : (AreaUseScriptHost.NameOf(record.Row), AreaUseScriptHost.IsMindControlled(record.Row));
+        return record is null ? null : (AreaUseScriptHost.NameOf(session, record.Row), AreaUseScriptHost.IsMindControlled(record.Row));
     }
 
     /// <summary>ARC-DEV-087 (MIG6e): attaches the seed of the map that lists <paramref name="entity"/> when the resolver read it on demand and the
@@ -385,7 +385,7 @@ public sealed class AreaInventoryHost
         foreach (var map in _maps.Values)
             if (map.Substitute(npc) is { } substitute && map.TryGetRow(npc, out var row) && row.WorldX is { } x && row.WorldY is { } y
                 && x is >= int.MinValue and <= int.MaxValue && y is >= int.MinValue and <= int.MaxValue
-                && !session.QueryCompanion(npc).LedByPc
+                && session.QueryLeader(npc) is null
                 && Arcanum.Simulation.Ai.AiExecutorRules.Distance(new((int)x, (int)y), substitute.Cell) <= AreaBarterMerchant.SubstituteRange)
                 return substitute.Entity;
         return null;

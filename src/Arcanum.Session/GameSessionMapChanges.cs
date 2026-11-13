@@ -32,12 +32,12 @@ internal static class ObjectStateVocabulary
 
     /// <summary>The fields of a mobile object: off and destroyed flags, an NPC's cell, away map, stored home cell and faction, the follow mark, a dropped
     /// item's cell, the damage and the condition, a container's or door's lock fields, a trap's state and (MIG7c) the place a walking resident was
-    /// left on (<see cref="SessionNpcPlacement.Property"/>) and (MIG11 S5) an NPC's teleport map (<see cref="SessionTeleportMap.Property"/>) and (ARC-DEV-351) the mark a change of place to another map leaves on a carried object (<see cref="SessionTeleportedMark.Property"/>) and (ARC-SCRIPT-1163) an NPC's day and night standpoints (<see cref="SessionNpcStandpoint"/>) and (ARC-AI-1314) an NPC's waypoint index and standpoint latch (<see cref="SessionNpcRouteState"/>) and (ARC-WORLD-1525) the bed an NPC lies in (<see cref="SessionNpcBed"/>) and (ARC-MAGIC-1295) the base stats and resistances a spell wrote into an NPC (<see cref="SessionCritterIndexedWrites"/>, the <c>npc.stat.N</c> and <c>npc.resist.N</c> families, tested by <c>Owns</c> and not listed here).</summary>
+    /// left on (<see cref="SessionNpcPlacement.Property"/>) and (MIG11 S5) an NPC's teleport map (<see cref="SessionTeleportMap.Property"/>) and (ARC-DEV-351) the mark a change of place to another map leaves on a carried object (<see cref="SessionTeleportedMark.Property"/>) and (ARC-SCRIPT-1163) an NPC's day and night standpoints (<see cref="SessionNpcStandpoint"/>) and (ARC-AI-1314) an NPC's waypoint index and standpoint latch (<see cref="SessionNpcRouteState"/>) and (ARC-WORLD-1525) the bed an NPC lies in (<see cref="SessionNpcBed"/>) and (ARC-SCRIPT-1772) an NPC's renamed name number (<see cref="SessionNpcName"/>) and (ARC-MAGIC-1295) the base stats and resistances a spell wrote into an NPC (<see cref="SessionCritterIndexedWrites"/>, the <c>npc.stat.N</c> and <c>npc.resist.N</c> families, tested by <c>Owns</c> and not listed here).</summary>
     internal static readonly IReadOnlySet<string> Properties = new HashSet<string>(StringComparer.Ordinal)
     {
         "obj.off", "obj.destroyed", "npc.cell", "npc.map", "npc.home", "npc.faction", "follow.pc", "item.dropped",
         "object.damage", "object.condition", "lock.flags", "lock.frame", "lock.kind", "trap.state", SessionNpcPlacement.Property, SessionTeleportMap.Property, SessionNpcOrigin.Property,
-        SessionTeleportedMark.Property, SessionNpcStandpoint.DayProperty, SessionNpcStandpoint.NightProperty, SessionObjectArt.Property, SessionItemMove.Property, SessionTeleportTile.Property, SessionNpcRouteState.IndexProperty, SessionNpcRouteState.LatchProperty, SessionNpcBed.Property,
+        SessionTeleportedMark.Property, SessionNpcStandpoint.DayProperty, SessionNpcStandpoint.NightProperty, SessionObjectArt.Property, SessionItemMove.Property, SessionTeleportTile.Property, SessionNpcRouteState.IndexProperty, SessionNpcRouteState.LatchProperty, SessionNpcBed.Property, SessionNpcName.Property,
     };
 
     /// <summary>The fields of a static object (MIG7b): the off and destroyed flags, the damage and the condition, a door's or container's lock
@@ -51,7 +51,9 @@ internal static class ObjectStateVocabulary
     internal static bool Mobile(MapChangeKey key) => key.Scope == MapChangeScope.Entity && Mobile(key.Entity, key.Property);
 
     internal static bool Mobile(string? entity, string property) =>
-        entity is not null && entity.StartsWith(EntityPrefix, StringComparison.Ordinal) && (Properties.Contains(property) || Attachment(property) || SessionCritterIndexedWrites.Owns(property));
+        entity is not null && (entity.StartsWith(EntityPrefix, StringComparison.Ordinal) && (Properties.Contains(property) || Attachment(property) || SessionCritterIndexedWrites.Owns(property))
+            // ARC-SCRIPT-1826 (ledger AN18): a made or script-created item (made:n) is a mobile object too: its art id a script wrote follows it from holder to holder and from map to map. Only this field is kept for it.
+            || property == SessionObjectArt.Property && SessionMadeItem.Number(entity) is not null);
 
     /// <summary>Whether the key is a field of a static object (one record per map, entity and property).</summary>
     internal static bool Static(MapChangeKey key) => key.Scope == MapChangeScope.Entity && Static(key.Entity, key.Property);

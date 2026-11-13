@@ -112,6 +112,9 @@ public sealed class AreaHeartbeatSceneryLoopTests
             var ran = host.RunHeartbeat(npc, ScrPoint.Heartbeat, session.Rules.Scripts);
             Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, ran.Outcome, ran.Detail);
             Assert.IsTrue(host.GlobalFlag(LoopFlag), "the loop body ran for the near scenery");
+            // The loop's stop eye candy (124) is asked once, for the near scenery only: not for the gone or the far one, nor for the NPC.
+            CollectionAssert.AreEqual(new[] { (2, ScrEyeCandyKind.StopScript, AreaUseScriptHost.EntityId(near)) }, ran.Run!.Effects.EyeCandies.Select(e => (e.Number, e.Kind, e.Object.Code)).ToArray());
+            Assert.AreEqual(0, host.TakeEyeCandies().Count, "a stop is no play request (#1828 holds the stop itself)");
         });
         WithContent(content =>
         {
@@ -150,7 +153,7 @@ public sealed class AreaHeartbeatSceneryLoopTests
             var host = Host(session, content, _ => false, npc);
             Assert.AreEqual(ScrRefusalCode.ActionNotAdmitted, ScrAdmission.Admit(host.Script(ReactionScript).Program!, AreaUseScriptHost.HeartbeatAdmission).Refusal!.Code);
             var ran = host.RunHeartbeat(npc, ScrPoint.Heartbeat, session.Rules.Scripts);
-            Assert.AreNotEqual(AreaScriptedUseOutcome.NoTeleport, ran.Outcome);
+            Assert.AreEqual(AreaScriptedUseOutcome.Refused, ran.Outcome, ran.Detail);
         });
     }
 }

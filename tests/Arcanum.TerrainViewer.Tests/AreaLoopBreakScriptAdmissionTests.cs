@@ -17,7 +17,7 @@ public sealed class AreaLoopBreakScriptAdmissionTests
         {
             Assert.IsTrue(set.Actions.Contains(ScrCatalogue.Action.LoopBreak), set.Id);
             Assert.IsTrue(set.Actions.Contains(ScrCatalogue.Action.LoopFor) && set.Actions.Contains(ScrCatalogue.Action.LoopEnd), set.Id);
-            Assert.IsTrue(set.IsSubsetOfBesidesStores(ScrAdmissionSet.S55), set.Id);
+            Assert.IsTrue(set.IsSubsetOfBesidesStores(ScrAdmissionSet.S58), set.Id);
         }
         // The dialog host runs no loops: its sets stay without the break.
         foreach (var set in new[] { AreaScriptHost.Admission, AreaScriptHost.SkillAdmission, AreaScriptHost.TalkAdmission, AreaScriptHost.SkillTalkAdmission })
@@ -48,7 +48,6 @@ public sealed class AreaLoopBreakScriptAdmissionTests
         Console.WriteLine($"installed scripts with a loop break {withBreak}; admitted whole: " + string.Join(", ", counts.Select(c => $"{c.Key} {c.Value}")));
         Assert.AreEqual(0, counts["S38"], "S38 refuses every one of them by construction");
         // 22 installed scripts carry a loop break; S40 admits 12 whole (the rest hold a command of another slice), the use set none (its scripts hold other refused commands), the placed and dying sets 7 each and the heartbeat set 1.
-        // ARC-SCRIPT-1815: the heartbeat set gained the scenery and object-variable focus kinds, assign object and float line (heartbeats 7, from 4; the dying set admits 16 of the shared sets today).
-        Assert.AreEqual((22, 12, 0, 7, 7, 16), (withBreak, counts["S40"], counts["use"], counts["placed"], counts["heartbeat"], counts["dying"]));
+        Assert.AreEqual((22, 12, 0, 8, 5, 18), (withBreak, counts["S40"], counts["use"], counts["placed"], counts["heartbeat"], counts["dying"]));
     }
 }

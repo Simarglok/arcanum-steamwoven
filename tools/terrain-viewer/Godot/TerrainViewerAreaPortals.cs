@@ -154,6 +154,8 @@ public partial class TerrainViewerApp
             return true;
         }
         // ARC-DEV-185 (MIG13 S12e): armed lockpicks on a door or window are the skill goal 33 with skill 14: the hero walks within range 1 (goal 8), turns, and the pick is made at the frame's next safe point (goal 67).
+        // ARC-COMBAT-1777 (0x571CB0 → 0x4C9050): the better follower picks instead of the hero unless the option is off or Ctrl is held.
+        if (HandOverLockpick(portal.Entity, pick, PortalName(portal))) return true;
         var lock_ = HeroRequests.Apply(new LockpickRequest(portal.Entity, pick));
         _portalNotice = lock_.Outcome == HeroRequestOutcome.Done ? $"{PortalName(portal)}: picking the lock" : $"{PortalName(portal)}: the pick was refused";
         _lockpickTrying = lock_.Outcome == HeroRequestOutcome.Done;
@@ -185,19 +187,30 @@ public partial class TerrainViewerApp
             NoteTrapMeeting(met);
             if (met.Cancels) return true;
         }
-        return UseScriptHost(area.Snapshot) is { } host && DoorUseScriptStops(area, row, host.Pc);
+        return UseScriptHost(area.Snapshot) is { } host && DoorUseScriptStops(area, row, host.Pc, hero: true);
     }
 
     /// <summary>ARC-WORLD-1668 (TT18): the door's use script (point 1) through the object entry point (<see cref="AreaUseScriptHost.RunUseScript"/>: the opener as the triggerer and the extra object; the trap meeting was asked before), its effects applied as a
-    /// use's are (awards, floats, creations, the printed lines to the message window); a teleport from a door's script is refused (the run is then not applied and the use goes on). True when the answer is "skip default" (<see cref="AreaUseScriptHost.UseStops"/>).</summary>
-    private bool DoorUseScriptStops(AreaLoadResult area, AreaObjectRecord row, Arcanum.Scripting.Scr.ScrObjectRef opener)
+    /// use's are (awards, floats, creations, the printed lines to the message window). ARC-WORLD-1805 (TT20): the hero's run takes a teleport of the hero (the installed doors that teleport do so unconditionally and answer "run default"): the script only records the request
+    /// (0x447220 case 0x2C → 0x4D3380), so the transfer is queued here and the door opens as the answer says; it is applied at the frame's next safe point. An NPC's or a companion's teleport is not modelled (the run is then not applied and the use goes on), and so is a
+    /// conversation a door's script asks for (no installed door or window use script starts one, census of ARC-WORLD-1805). True when the answer is "skip default" (<see cref="AreaUseScriptHost.UseStops"/>).</summary>
+    private bool DoorUseScriptStops(AreaLoadResult area, AreaObjectRecord row, Arcanum.Scripting.Scr.ScrObjectRef opener, bool hero = false)
     {
         if (_areaSession is not { } session || UseScriptHost(area.Snapshot) is not { } host) return false;
-        var ran = Awarded(host, host.RunUseScript(AreaUseScriptHost.EntityId(row), opener, opener, session.Rules.Scripts));
+        var transfers = hero ? _mapTransfers : null;
+        var ran = Awarded(host, host.RunUseScript(AreaUseScriptHost.EntityId(row), opener, opener, session.Rules.Scripts, transfers is null ? null : teleport => transfers.DoorTeleportRefusal(row, teleport)));
         if (ran.Run is null && ran.Outcome == AreaScriptedUseOutcome.NoTeleport) return false;
         var stops = AreaUseScriptHost.UseStops(ran);
         GD.Print($"ARC-WORLD-1668 door-use-script entity={AreaUseScriptHost.EntityId(row)} opener={opener.Code} outcome={ran.Outcome} run={ran.Run?.Outcome.ToString() ?? "-"} stops={stops} detail={ran.Detail}");
         foreach (var entry in ScriptLineEntries(ran.Printed)) PostMessage(entry, "door script line");
+        if (transfers is not null && ran.Outcome == AreaScriptedUseOutcome.TeleportRefused)
+        { _areaUseStatus = $"door script teleport refused: {ran.Detail}"; RefreshAreaStatus(); }
+        if (transfers is not null && ran.Outcome == AreaScriptedUseOutcome.Teleport && ran.Teleport is { } asked)
+        {
+            var queued = transfers.QueueDoorTeleport(row, ran.Run!.Script ?? 0, asked);
+            GD.Print($"ARC-WORLD-1805 door-teleport entity={AreaUseScriptHost.EntityId(row)} outcome={queued.Outcome} to={queued.Site?.DestinationCatalogue} arrival={queued.Site?.Arrival} reason={queued.Reason}");
+            if (queued.Outcome == AreaUseOutcome.Accepted) { _areaUseStatus = $"door script teleport queued to ({queued.Site!.Arrival.X},{queued.Site.Arrival.Y})"; RefreshAreaStatus(); }
+        }
         return stops;
     }
 

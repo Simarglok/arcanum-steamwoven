@@ -100,7 +100,7 @@ The world the run rules ask (MT9a–MT12), for the hero and the map's NPCs:
   component area's test and the re-aim) and the fate "spell at maximum" (MT10).
 - **Components.** Damage and Heal (MT12) are applied to the session's life:
   - an NPC through its life target, the hero as the hero;
-  - the raise script is allowed (no SCR yet).
+  - the raise script (point 0x12, ARC-MAGIC-1167) runs through the SCR dispatcher before the life step, for a dead target and a heal with the raise bit; a skip-default answer refuses the raise (the viewer's `RaiseScript` port, no host: allowed).
 
   - ObjFlag (ARC-DEV-302, MT13's hold part, [below](#hold-flags-arc-dev-302)) writes the three hold flags on a critter (the hero or an
     NPC): entangled and stoned among the spell flags, paralysed among the critter flags; and (ARC-DEV-304,
@@ -524,7 +524,7 @@ While the interface bars show, the skill pane (`K` or the Skills button) is the 
    shows only while it holds the message window: the pointer above the strip gives the window to the log, a move back over the strip
    gives it back (ML8); the toggle stays down meanwhile.
 6. **Not built.** The follower who acts instead of the hero for
-   pick pocket or disarm traps (0x57A620, E8-e5); no walk to the target before the skill runs (the original's press builds the invocation at once).
+   pick pocket (it does not in the original: only the lockpick use and Disarm Traps hand over, OH4; Disarm Traps is built by ARC-COMBAT-1777); no walk to the target before the skill runs (the original's press builds the invocation at once).
 7. **Smoke.** Inside the hotkey-bar smoke (cast stage): `K` shows the pane in the strip (Skills down, Spells up) with its background and the
    four buttons' arts; entering each button names it; a click on each plays 3000 and 3001, becomes the latest recent action and runs the
    button's press (prowling toggles concealment, pick pocket and disarm traps arm their cursor or say why not, repair opens the inventory);
@@ -776,7 +776,7 @@ Slice E1-e of the [missing-systems plan](../project/missing-systems-plan.md#e1-s
 - **The run and the creature.** The death of the summoned creature tells the runs it is gone (0x459740); the first loop (SUM21) ends the run whose summoned list holds it, and the END_CALLBACK Destroy takes the
   corpse away. A destroyed critter that is a follower leaves the party. A Dispel on the creature is MA-3's (it destroys a summoned critter).
 - **An NPC summoner (ARC-MAGIC-1169, E1-f, ledger SUM23).** The AI chooses and casts a summon spell as any spell ([AI host casting](ai-host.md#casting-arc-world-102)), so an NPC is a legal parent of the pipeline above. The created row takes the summoner's alignment (stat 19) and, for an NPC summoner, its faction (field 292: the faction a script set, else the row's; `AreaCreatedCritters.SummonOf`), read when the world first reads the row; a PC summoner leaves the prototype's faction. The summoned and the summoner are faction-same (0x45D110) when the summoner has a faction.
-- **Not built.** The concealed start of SUM19, `Clear_Faction:` and `Palette:`, the marking of the summoned's carried items ([#1834](https://github.com/Simarglok/arcanum-steamwoven/issues/1834)), the forced join of an NPC summoner's summon as its follower (the session has the hero as its one leader, [#1833](https://github.com/Simarglok/arcanum-steamwoven/issues/1833)), the NPC summoner's alignment from its effects (the row's base stat is read), the familiar's own flags and its hiding with the party on the world map.
+- **Not built.** The concealed start of SUM19, `Clear_Faction:` and `Palette:`, the marking of the summoned's carried items ([#1834](https://github.com/Simarglok/arcanum-steamwoven/issues/1834)), the NPC summoner's alignment from its effects (the row's base stat is read), the familiar's own flags and its hiding with the party on the world map.
 
 ## AIRedirect (ARC-MAGIC-1169)
 
@@ -867,7 +867,7 @@ tests `SessionSpellCasterSocialTests`. The five flags the ObjFlag component of M
 | Flag (field) | Set | Clear |
 | --- | --- | --- |
 | Charmed (spell flags 0x800000) | NPC: an animal makes **peace** with the caster (`ISpellSocialHost.Peace`), any other NPC gets **+30** toward the hero when the caster is the hero (`ChangeReaction`); then the flag. Then the NPC flag KOS_OVERRIDE (0x800) is written into the session's [NPC flag layer](#npc-flag-layer-and-the-kill-on-sight-override-arc-magic-1142) and stays after the clear, as in the original. | NPC: **−30** toward the hero when the caster is the hero, then the flag off. Any other object: the plain write. |
-| Mind controlled (spell flags 0x8000000) | No caster: the plain write. A caster and **no NPC** (the hero): **nothing is written** (`SocialIgnored`). An NPC: **−50** toward the hero (hero caster, target not summoned) **before** the flag, the flag, a **forced join** of the NPC under the caster (`ForceJoinParty`; the hero is the party's one leader, any other caster logs `SocialNotModelled`), then **no-flee** for good (`SetNoFlee`). | NPC: the flag off, then a **forced leave** (`LeaveParty` with `Force`); the reaction is not given back and no-flee stays. |
+| Mind controlled (spell flags 0x8000000) | No caster: the plain write. A caster and **no NPC** (the hero): **nothing is written** (`SocialIgnored`). An NPC: **−50** toward the hero (hero caster, target not summoned) **before** the flag, the flag, a **forced join** of the NPC under the caster, whoever it is (`ForceJoinLeader`, ARC-MAGIC-1841: an NPC summoner's summon follows it, a hero's companion an NPC dominates leaves the hero for it; the parent need not be a critter, as 0x45DE90 does not test the leader's type. Steamwoven refuses a join that would make the target its own leader or close a cycle of leaders (the original's chain query 0x45DDA0 would never end on one): `SocialRefused`, the flag and no-flee still written, the target keeps its leader), then **no-flee** for good (`SetNoFlee`). | NPC: the flag off, then a **forced leave** (`LeaveParty` with `Force`) of whichever leader it has: a dominated companion is left with no leader, not back with the hero; the reaction is not given back and no-flee stays. |
 | Fleeing (critter flags 0x10) | NPC: **flee** from the caster (`ISpellSocialHost.Flee`, the danger setter's FLEE); the flag is **never written** (the setter's state is the session's danger record). The hero: nothing. | NPC: **stop fleeing** (in FLEE only: the setter NONE, then the NPC's flee goals ended). The hero: nothing. |
 | Blinded (critter flags 0x80) | The life state's **blinded condition** is set (`GameSessionOwner.SetBlinded`: what the combat resolver, the skill checks and the AI gate's recovery roll read); the hero and an NPC. | The condition is cleared. |
 | Undead (critter flags 0x4) | The object flag 0x20000000 (a side effect), then the critter flag. | Both taken back. |

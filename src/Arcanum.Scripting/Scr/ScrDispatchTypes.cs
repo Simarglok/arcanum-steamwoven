@@ -29,7 +29,7 @@ public enum ScrSource { Object, Tile, Sector }
 /// <summary>The attachment points (0..35) the dispatcher treats by name.</summary>
 public static class ScrPoint
 {
-    public const int Examine = 0, Destroy = 2, Use = 1, Dialog = 9, FirstHeartbeat = 10, Dying = 12, EnterCombat = 13, ExitCombat = 14, Heartbeat = 19, TakingDamage = 23, LeaderSleeping = 29, Bust = 30, DialogOverride = 31, Count = 36,
+    public const int Examine = 0, Destroy = 2, Use = 1, Dialog = 9, FirstHeartbeat = 10, Dying = 12, EnterCombat = 13, ExitCombat = 14, Raise = 18, Heartbeat = 19, TakingDamage = 23, LeaderSleeping = 29, Bust = 30, DialogOverride = 31, Count = 36,
         // ARC-MAGIC-042 (TI4): the weapon's hit (7) and miss (8) points, run for a thrown item's strike or landing.
         Hit = 7, Miss = 8,
         // ARC-SCRIPT-1483: the attacker's critter-hits point (26) and the weapon's critical-hit point (34), run from the hit step with the hit point (7).
@@ -271,6 +271,22 @@ public interface IScrCritterStateQueries
 
     /// <summary>Obj is monster of type (c19, ARC-SCRIPT-1771, case 19, ledger CS13): the art id stored in object field 0x18 is a monster art (type 0xC, the top four bits) whose monster number (bits 23..27, 0x503F20) equals the number; false for any other art; null for an object the host does not know or whose art field it cannot read.</summary>
     bool? IsMonsterOfType(ScrObjectRef obj, int type);
+}
+
+/// <summary>
+/// ARC-SCRIPT-1772 (ledger CQ1–CQ3): the getters of <see cref="ScrAdmissionSet.CritterFieldActions"/>. The original answers each from the object's own field when the object is an NPC (type 0x10) and 0 for every other object type (0x45D010 social class field 0x128,
+/// 0x45D290 origin field 0x123, 0x45D080 faction field 0x124). A host whose admission set holds one of them implements this interface. An answer is null when the host does not know the object (the dispatch ends not modelled, nothing applied).
+/// </summary>
+public interface IScrCritterFieldQueries
+{
+    /// <summary>Get social class (38): the NPC's social class (field 0x128), 0 for any other object type.</summary>
+    int? SocialClassOf(ScrObjectRef obj);
+
+    /// <summary>Get origin (39): the NPC's origin (field 0x123) as it is now (a dialog action's set origin over the map data's), 0 for any other object type.</summary>
+    int? OriginOf(ScrObjectRef obj);
+
+    /// <summary>Get faction (89): the NPC's faction (field 0x124) as it is now (a script's set faction over the map data's), 0 for any other object type.</summary>
+    int? FactionOf(ScrObjectRef obj);
 }
 
 /// <summary>
@@ -531,6 +547,10 @@ public enum ScrObjectStateChange
     DestroyItemNamed,
     /// <summary>ARC-SCRIPT-1164 (E5-b, ledger WO8): toggle item inventory display (127) of <see cref="ScrObjectStateRequest.Object"/> (the first object of operand 0, an item of type 5..14): bit 0x10 of its item flags (field 0x57) is flipped.</summary>
     ToggleItemInventoryDisplay,
+    /// <summary>ARC-SCRIPT-1772 (ledger CQ4, exe 0x447220 case 0x39): toggle invulnerability (57) of each object of its operand in list order: object flag 0x400000 (field 0x13) is set when clear and cleared when set, by the plain flag write (0x4EFF50, 0x4EFEE0 over 0x43D0E0, 0x43D280).</summary>
+    ToggleInvulnerability,
+    /// <summary>ARC-SCRIPT-1772 (ledger CQ5, case 0x5C): rename (92) of <see cref="ScrObjectStateRequest.Object"/>, the first object of operand 0: its name number (field 0x16, the class the name conditions compare, not display text) becomes <see cref="ScrObjectStateRequest.Value"/> as read, with no type test.</summary>
+    Rename,
 }
 
 /// <summary>ARC-SCRIPT-1164 (E5-b): which game state a <see cref="ScrWorldRequest"/> changes.</summary>
@@ -786,6 +806,19 @@ public readonly record struct ScrAmmoUse(ScrObjectRef Holder, int Count, int Amm
 /// </summary>
 public readonly record struct ScrFade(int Seconds, int Sound, int Movie, int Flag);
 
+/// <summary>ARC-RENDER-1171: what a slide script asks of the slide show (ledger SS3, SS4).</summary>
+public enum ScrSlideKind
+{
+    /// <summary>Queue slide (131, 0x447220 case 0x83 → 0x460B80 → 0x569AA0): the slide number joins the show's queue (up to 100; the rest are dropped).</summary>
+    Queue,
+    /// <summary>End game and play slides (132, 0x447220 case 0x84 → 0x460530 → 0x57CDE0): the end of the game is asked for; the interface shows the end-game slides 50 ms later and resets the game.</summary>
+    EndGame,
+}
+
+/// <summary>ARC-RENDER-1171 (script actions 131 and 132, ledger SS3, SS4): a queued slide (<see cref="Slide"/> is its number as the operand read) or the end-game request
+/// (<see cref="Slide"/> is 0, never read). Requests come in action order.</summary>
+public readonly record struct ScrSlideRequest(ScrSlideKind Kind, int Slide);
+
 /// <summary>The final value of a global flag the run changed.</summary>
 public readonly record struct ScrFlagWrite(int Index, bool Value);
 
@@ -864,8 +897,9 @@ public sealed class ScrEffects
         IReadOnlyList<ScrEffectRequest>? effectChanges = null, IReadOnlyList<ScrEyeCandy>? eyeCandies = null, IReadOnlyList<ScrWriteback>? slotWrites = null,
         IReadOnlyList<ScrCreateRequest>? creations = null, IReadOnlyList<ScrObjectStateRequest>? objectStates = null, IReadOnlyList<ScrFloatLine>? floats = null,
         ScrStoreWrites? stores = null, IReadOnlyList<int>? townMaps = null, IReadOnlyList<ScrAmmoUse>? ammoUses = null, IReadOnlyList<ScrFade>? fades = null,
-        IReadOnlyList<ScrWorldRequest>? worldChanges = null)
+        IReadOnlyList<ScrWorldRequest>? worldChanges = null, IReadOnlyList<ScrSlideRequest>? slides = null)
     {
+        Slides = slides ?? Array.Empty<ScrSlideRequest>();
         WorldChanges = worldChanges ?? Array.Empty<ScrWorldRequest>();
         Fades = fades ?? Array.Empty<ScrFade>();
         AmmoUses = ammoUses ?? Array.Empty<ScrAmmoUse>();
@@ -948,11 +982,13 @@ public sealed class ScrEffects
     public IReadOnlyList<ScrFade> Fades { get; }
     /// <summary>ARC-SCRIPT-1164: the sector blocked and monster generator toggles (106, 110), in action order, each with the state it ends in (ledger WO5, WO9).</summary>
     public IReadOnlyList<ScrWorldRequest> WorldChanges { get; }
+    /// <summary>ARC-RENDER-1171: the queue slide (131) and end game (132) requests, in action order (ledger SS3, SS4).</summary>
+    public IReadOnlyList<ScrSlideRequest> Slides { get; }
     public bool IsEmpty => Writeback is null && DestroyTrapObject is null && GlobalFlags.Count == 0 && StoryState is null && Dialog is null && Calls.Count == 0
         && Lines.Count == 0 && Sounds.Count == 0 && Teleports.Count == 0 && Schemes.Count == 0 && Schematics.Count == 0 && Readings.Count == 0 && SkillUses.Count == 0 && States.Count == 0
         && EffectChanges.Count == 0 && EyeCandies.Count == 0 && SlotWrites.Count == 0 && Creations.Count == 0 && ObjectStates.Count == 0
         && Floats.Count == 0 && GlobalVariables.Count == 0 && PcVariables.Count == 0 && PcFlags.Count == 0
-        && TownMaps.Count == 0 && AmmoUses.Count == 0 && Fades.Count == 0 && WorldChanges.Count == 0;
+        && TownMaps.Count == 0 && AmmoUses.Count == 0 && Fades.Count == 0 && WorldChanges.Count == 0 && Slides.Count == 0;
 }
 
 /// <summary>One executed line: the condition, whether it held, the action of the branch taken and where the run went
@@ -979,7 +1015,7 @@ public sealed class ScrRunResult
 }
 
 /// <summary>How a dispatch runs: the rule mode's script switches, the admitted set (default <see cref="ScrAdmissionSet.S5"/>,
-/// at most <see cref="ScrAdmissionSet.S55"/>, admitted for the lines reachable from the event's line), the executed-line
+/// at most <see cref="ScrAdmissionSet.S58"/>, admitted for the lines reachable from the event's line), the executed-line
 /// budget and the call depth.</summary>
 public sealed record ScrRunOptions
 {
@@ -1000,7 +1036,7 @@ public sealed record ScrRunOptions
         ArgumentNullException.ThrowIfNull(Admission);
         if (MaxExecutedLines is <= 0 or > OriginalLineBudget) throw new ArgumentOutOfRangeException(nameof(MaxExecutedLines), "The line budget is 1..1000.");
         if (MaxCallDepth is < 1 or > 64) throw new ArgumentOutOfRangeException(nameof(MaxCallDepth), "The call depth is 1..64.");
-        if (!Admission.IsSubsetOf(ScrAdmissionSet.S55)) throw new ArgumentException("The interpreter runs only the commands of ScrAdmissionSet.S55.", nameof(Admission));
+        if (!Admission.IsSubsetOf(ScrAdmissionSet.S58)) throw new ArgumentException("The interpreter runs only the commands of ScrAdmissionSet.S58.", nameof(Admission));
     }
 
     // A set with a guard condition needs a host that answers it, checked before any event runs.
@@ -1021,6 +1057,8 @@ public sealed record ScrRunOptions
             throw new ArgumentException("A set with the animal condition needs a host that implements IScrCritterQueries.", nameof(Admission));
         if (host is not IScrCritterStateQueries && Admission.Conditions.Any(c => ScrAdmissionSet.CritterStateConditions.Contains(c) || ScrAdmissionSet.CritterTailQueryConditions.Contains(c)))
             throw new ArgumentException("A set with a critter-state condition (or bad associates, monster of type) needs a host that implements IScrCritterStateQueries.", nameof(Admission));
+        if (host is not IScrCritterFieldQueries && Admission.Actions.Any(ScrAdmissionSet.CritterFieldActions.Contains))
+            throw new ArgumentException("A set with a critter getter (social class, origin, faction) needs a host that implements IScrCritterFieldQueries.", nameof(Admission));
         if (host is not IScrStatAdjustQueries && Admission.Actions.Contains(ScrCatalogue.Action.AdjustStat))
             throw new ArgumentException("A set with adjust stat needs a host that implements IScrStatAdjustQueries.", nameof(Admission));
         if (host is not IScrMagickTechQueries && Admission.Actions.Contains(ScrCatalogue.Action.GetMagickTechAdjustment))

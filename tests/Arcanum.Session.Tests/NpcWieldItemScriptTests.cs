@@ -19,7 +19,7 @@ namespace Arcanum.Session.Tests;
 public sealed class NpcWieldItemScriptTests
 {
     private const string Guard = "oid:guard";
-    internal const int Charm = 50, Genius = 51, AddCharm = 720, RemoveCharm = 721, AddGenius = 722, Broken = 723, Mark = 724, Say = 725;
+    internal const int Charm = 50, Genius = 51, AddCharm = 720, RemoveCharm = 721, AddGenius = 722, Broken = 723, Mark = 724, Say = 725, Play = 726;
 
     // The charm only touches the charisma (nothing the best-items choice reads); the genius raises the intelligence from 19 to the extraordinary 20.
     private static readonly SessionEffectDefinition CharmEffect = new(Charm, [new(EffectAttributeKind.Stat, 7, EffectChangeOperator.Add, 1)]);
@@ -39,6 +39,8 @@ public sealed class NpcWieldItemScriptTests
             [RemoveCharm] = Program(Do(C(ScrCatalogue.Action.RemoveEffect, (Triggerer, 0), N(Charm)))),
             [AddGenius] = Program(Do(C(ScrCatalogue.Action.AddEffect, (Triggerer, 0), N(Genius), N(5)))),
             [Say] = Program(Do(C(ScrCatalogue.Action.PrintLine, N(1), N(6)))),
+            // ARC-MAGIC-1830: plays script eye candy 7 on the wearer.
+            [Play] = Program(Do(C(ScrCatalogue.Action.PlayScriptEyeCandy, N(7), (Triggerer, 0)))),
             // Keeps a count in the item's own slot (a run's change the session applies on any entity).
             [Mark] = Program(Do(C(ScrCatalogue.Action.Assign, (Counter, 0), N(7)))),
             // Adds an effect to the item instead of the wearer: not an effect the session can apply.
@@ -275,6 +277,20 @@ public sealed class NpcWieldItemScriptTests
         var result = owner.RewieldNpc(owner.Version, Guard, allSlots: true, world);
         CollectionAssert.AreEqual(new[] { (EquipmentSlot.Boots, "boots") }, Worn(owner));
         Assert.AreEqual(("helm", GameSessionFailure.ItemScriptUnsupported), (result.Steps.First().Unsupported, result.Steps.First().Failure));
+    }
+
+    // ARC-MAGIC-1830: the eye candy a moved item's script plays comes back with the result of the AI gate's re-wield (the regeneration's wield reads the same plan).
+    [TestMethod]
+    public void TheEyeCandyAScriptPlaysComesBackWithTheResult()
+    {
+        using var owner = Open(("helm", 3800, 0));
+        var world = new World();
+        world.Wearable("helm", 3800, ArmorCoverage.Helmet, 5, SessionScriptPoint.WieldOn);
+        world.Scripts.Slots[("helm", SessionScriptPoint.WieldOn)] = Play;
+        var result = owner.RewieldNpc(owner.Version, Guard, allSlots: true, world);
+        Assert.AreEqual(GameSessionDisposition.Changed, result.Disposition);
+        var candy = result.EyeCandies.Single();
+        Assert.AreEqual((7, ScrEyeCandyKind.PlayScript, Guard), (candy.Number, candy.Kind, candy.Object.Code));
     }
 
     [TestMethod]

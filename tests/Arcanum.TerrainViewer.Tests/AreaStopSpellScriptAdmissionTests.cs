@@ -16,7 +16,7 @@ public sealed class AreaStopSpellScriptAdmissionTests
         foreach (var set in new[] { AreaUseScriptHost.PlacedAdmission, AreaUseScriptHost.HeartbeatAdmission, AreaUseScriptHost.DyingAdmission })
         {
             Assert.IsTrue(set.Actions.Contains(ScrCatalogue.Action.StopSpellOnObject), set.Id);
-            Assert.IsTrue(set.IsSubsetOfBesidesStores(ScrAdmissionSet.S55), set.Id);
+            Assert.IsTrue(set.IsSubsetOfBesidesStores(ScrAdmissionSet.S58), set.Id);
         }
         // The use click's set holds the cast actions no more than this one, and the dialog host has no spell run to stop.
         Assert.IsFalse(AreaUseScriptHost.Admission.Actions.Contains(ScrCatalogue.Action.StopSpellOnObject));
@@ -47,9 +47,8 @@ public sealed class AreaStopSpellScriptAdmissionTests
         }
         Console.WriteLine($"installed scripts with a spell stop {string.Join(",", carriers)}; admitted whole: " + string.Join(", ", counts.Select(c => $"{c.Key} {c.Value}")));
         Assert.AreEqual(0, counts["S40"], "S40 refuses every one of them by construction");
-        // Four installed scripts carry the action (1054, 2789, 2792, 3022; the census reaches one of them by a live run); S42 admits 3 whole (the fourth holds a command of another slice), the placed set 1 and the dying set 1 (2 since ARC-SCRIPT-1481 widened the shared set), the heartbeat set none and the use set none.
+        // Four installed scripts carry the action (1054, 2789, 2792, 3022; the census reaches one of them by a live run); S42 admits 3 whole (the fourth holds a command of another slice), the placed set 2 and the dying set 4 (the shared sets widened in ARC-SCRIPT-1481 and again in S53 to S56), the heartbeat set none and the use set none.
         CollectionAssert.AreEqual(new[] { 1054, 2789, 2792, 3022 }, carriers);
-        // ARC-SCRIPT-1815: the heartbeat set gained the scenery and object-variable focus kinds, assign object and float line (the heartbeat set admits all three that S42 does; the placed and dying counts are those of the shared sets today).
-        Assert.AreEqual((0, 3, 0, 2, 3, 4), (counts["S40"], counts["S42"], counts["use"], counts["placed"], counts["heartbeat"], counts["dying"]));
+        Assert.AreEqual((0, 3, 0, 2, 0, 4), (counts["S40"], counts["S42"], counts["use"], counts["placed"], counts["heartbeat"], counts["dying"]));
     }
 }

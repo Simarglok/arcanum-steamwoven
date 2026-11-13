@@ -17,7 +17,7 @@ public sealed class AreaScriptAttackAdmissionTests
             AreaScriptHost.TalkAdmission, AreaScriptHost.SkillTalkAdmission })
         {
             Assert.IsTrue(set.Actions.Contains(ScrCatalogue.Action.Attack), set.Id);
-            Assert.IsTrue(set.IsSubsetOfBesidesStores(ScrAdmissionSet.S55), set.Id);
+            Assert.IsTrue(set.IsSubsetOfBesidesStores(ScrAdmissionSet.S58), set.Id);
         }
         // A talk with no use host of its map has no AI path to raise the event through: the plain dialog sets do not hold it.
         foreach (var set in new[] { AreaScriptHost.Admission, AreaScriptHost.SkillAdmission })
@@ -46,9 +46,9 @@ public sealed class AreaScriptAttackAdmissionTests
             foreach (var (name, set) in sets) if (ScrAdmission.Admit(program, set).IsAdmitted) counts[name]++;
         }
         Console.WriteLine($"installed scripts with an attack {carriers.Count}; admitted whole: " + string.Join(", ", counts.Select(c => $"{c.Key} {c.Value}")));
-        // 79 installed scripts carry the action (111 clauses, the census of ScrAttackActionCensusRealDataTests); its sets admit whole: S33 31 (the thrown item's 29017 among them), the use click 2, tile and sector scripts 34, heartbeats 10,
-        // dying scripts 47 (the union of the placed and heartbeat sets), the talk sets 10 (the others hold a command of another slice).
-        // ARC-SCRIPT-1815: the heartbeat set gained the scenery and object-variable focus kinds, assign object and float line (heartbeats 31, from 10; the placed and dying counts are those of the shared sets today, 37 and 53).
-        Assert.AreEqual((79, 31, 2, 37, 31, 53, 10, 10), (carriers.Count, counts["S33"], counts["use"], counts["placed"], counts["heartbeat"], counts["dying"], counts["talk"], counts["skill talk"]));
+        // 79 installed scripts carry the action (111 clauses, the census of ScrAttackActionCensusRealDataTests); its sets admit whole: S33 31 (the thrown item's 29017 among them), the use click 2, tile and sector scripts 38, heartbeats 11 (ARC-SCRIPT-1772: the critter getters, toggle invulnerability and rename moved placed 37 to 38, heartbeat 10 to 11 and dying 53 to 55),
+        // dying scripts 55 (the union of the placed and heartbeat sets), the talk sets 11 (the others hold a command of another slice; ARC-SCRIPT-1168: the cast actions moved the talk sets from 10 to 11, the placed and dying counts
+        // had moved with the sets of ARC-SCRIPT-1733 and later).
+        Assert.AreEqual((79, 31, 2, 38, 11, 55, 11, 11), (carriers.Count, counts["S33"], counts["use"], counts["placed"], counts["heartbeat"], counts["dying"], counts["talk"], counts["skill talk"]));
     }
 }

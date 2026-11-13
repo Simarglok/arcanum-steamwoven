@@ -16,7 +16,7 @@ namespace Arcanum.World;
 /// point of the map's speakers is modelled; everything the viewer does not model answers "no" (no generator, no trap,
 /// alive and free, not jilted).
 /// </summary>
-public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueries, IScrWorldQueries, IScrObjectStateQueries, IScrAreaQueries, IScrStoreQueries, IScrReactionQueries, IScrSpellQueries, IScrStoryQueries, IScrItemQueries, IScrVitalQueries, IScrCritterQueries, IScrCritterStateQueries
+public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueries, IScrWorldQueries, IScrObjectStateQueries, IScrAreaQueries, IScrStoreQueries, IScrReactionQueries, IScrSpellQueries, IScrStoryQueries, IScrItemQueries, IScrVitalQueries, IScrCritterQueries, IScrCritterStateQueries, IScrCritterFieldQueries
 {
     /// <summary>The PC as the scripts see it; the viewer has one.</summary>
     public const string PcCode = SessionEventKinds.PlayerEntity;
@@ -33,14 +33,15 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
     /// gates (E6) for its callee, assign object could change the dialog's NPC, which the conversation host takes from the click,
     /// and get object type needs object queries this host does not answer. Plus the quest, area, rumor and reputation actions of
     /// <see cref="ScrAdmissionSet.S13"/> (ARC-SCRIPT-019). ARC-SCRIPT-1241: plus fade (103) of <see cref="ScrAdmissionSet.S35"/>, which jumps the game clock and hands its movie to the viewer
-    /// (<see cref="TakeFades"/>; Kerghan's dialog script 1105 plays movies 2, 3 and 6).
+    /// (<see cref="TakeFades"/>; Kerghan's dialog script 1105 plays movies 2, 3 and 6). ARC-RENDER-1171: plus end game and play slides (132), which asks the viewer for the end-game
+    /// slide show (<see cref="TakeEndGame"/>; script 1105 ends the game after its movies).
     /// </summary>
     public static ScrAdmissionSet Admission { get; } = new("S3-area-sound-calls-scheme-schematic-reading-story", ScrAdmissionSet.S3.Conditions.Concat(ScrAdmissionSet.StoryConditions),
         ScrAdmissionSet.S3.Actions
             .Concat([ScrCatalogue.Action.SetPcQuestState, ScrCatalogue.Action.MarkMapLocation, ScrCatalogue.Action.SetRumor,
                 ScrCatalogue.Action.AddReputation, ScrCatalogue.Action.RemoveReputation, ScrCatalogue.Action.PlaySound, ScrCatalogue.Action.PlaySoundOn, ScrCatalogue.Action.PlaySoundScheme,
                 ScrCatalogue.Action.CallScriptIn, ScrCatalogue.Action.RemoveScriptCall, ScrCatalogue.Action.SetAutoLevelScheme,
-                ScrCatalogue.Action.StartSchematicUi, ScrCatalogue.Action.ShowBook, ScrCatalogue.Action.ShowPicture, ScrCatalogue.Action.ShowPlaque, .. ScrAdmissionSet.StoryActions, ScrCatalogue.Action.Fade]),
+                ScrCatalogue.Action.StartSchematicUi, ScrCatalogue.Action.ShowBook, ScrCatalogue.Action.ShowPicture, ScrCatalogue.Action.ShowPlaque, .. ScrAdmissionSet.StoryActions, ScrCatalogue.Action.Fade, ScrCatalogue.Action.EndGame]),
         ScrAdmissionSet.S3.ValueKinds.Concat(ScrAdmissionSet.StoreValueKinds), ScrAdmissionSet.S3.FocusKinds);
 
     /// <summary>ARC-SKILLS-009: <see cref="Admission"/> plus get skill (47) of <see cref="ScrAdmissionSet.S11"/>, the set a run uses while
@@ -57,7 +58,8 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
     /// (29) of <see cref="ScrAdmissionSet.S23"/>. ARC-MAGIC-030 (MT21b): plus the spell conditions body spell (14), influenced by spell (35), knows spell (48) and mastered spell college (49)
     /// and give spell mastery in college (112) of <see cref="ScrAdmissionSet.S31"/>, which the use host answers and this host writes. ARC-SCRIPT-1563 (GT194–GT196): plus damage (60), apply unresistable damage (138) and heal hit points (75) of
     /// <see cref="ScrAdmissionSet.S30"/>, which <see cref="Apply"/> hands to the use host's session path (a talk's poison script 1059, a deferred call's poison chain). ARC-SCRIPT-1620 (TI6): plus attack (36) of <see cref="ScrAdmissionSet.S33"/>, which <see cref="Apply"/> hands to the use host's AI path (the PC or an NPC of the shown map as the attacker).
-    /// ARC-SCRIPT-1733 (CS1–CS12): plus obj is animal (37), obj is in combat (31) and the nine critter-state conditions of <see cref="ScrAdmissionSet.CritterStateConditions"/>, which the use host answers. ARC-SCRIPT-1771 (CS12–CS14): plus the three of <see cref="ScrAdmissionSet.CritterTailConditions"/>.
+    /// ARC-SCRIPT-1733 (CS1–CS12): plus obj is animal (37), obj is in combat (31) and the nine critter-state conditions of <see cref="ScrAdmissionSet.CritterStateConditions"/>, which the use host answers. ARC-SCRIPT-1771 (CS12–CS14): plus the three of <see cref="ScrAdmissionSet.CritterTailConditions"/>; ARC-SCRIPT-1772: plus the critter getters (38, 39, 89) of <see cref="ScrAdmissionSet.CritterFieldActions"/> (the writes, toggle invulnerability and rename, stay out of the talk set: this host applies no object state besides its own).
+    /// ARC-SCRIPT-1168: plus the six cast actions (48, 61, 118, 121, 122, 136) of <see cref="ScrAdmissionSet.S29"/>, which <see cref="Apply"/> hands to the use host's cast path (the PC or an NPC of the shown map as caster or target).
     /// </summary>
     public static ScrAdmissionSet TalkAdmission { get; } = WithQueries("S3-area-talk-queries", Admission);
 
@@ -67,8 +69,10 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
     private static ScrAdmissionSet WithQueries(string id, ScrAdmissionSet set) => new(id,
         set.Conditions.Concat(ScrAdmissionSet.ObjectQueryConditions).Concat(ScrAdmissionSet.ObjectStateQueryConditions).Concat(ScrAdmissionSet.SpellQueryConditions)
             .Concat(ScrAdmissionSet.CritterQueryConditions).Concat(ScrAdmissionSet.CritterStateConditions).Concat(ScrAdmissionSet.CritterTailConditions),
-        set.Actions.Concat([ScrCatalogue.Action.Random, ScrCatalogue.Action.FloatLine, ScrCatalogue.Action.GetArea, ScrCatalogue.Action.GetReaction, ScrCatalogue.Action.GiveSpellMastery,
-            ScrCatalogue.Action.Damage, ScrCatalogue.Action.DamageUnresistable, ScrCatalogue.Action.HealHitPoints, ScrCatalogue.Action.Attack]), set.ValueKinds, set.FocusKinds);
+        set.Actions.Concat(ScrAdmissionSet.CritterFieldActions).Concat([ScrCatalogue.Action.Random, ScrCatalogue.Action.FloatLine, ScrCatalogue.Action.GetArea, ScrCatalogue.Action.GetReaction, ScrCatalogue.Action.GiveSpellMastery,
+            ScrCatalogue.Action.Damage, ScrCatalogue.Action.DamageUnresistable, ScrCatalogue.Action.HealHitPoints, ScrCatalogue.Action.Attack,
+            ScrCatalogue.Action.CastSpell, ScrCatalogue.Action.CastSpellOn, ScrCatalogue.Action.CastFreeSpell, ScrCatalogue.Action.CastUnresistableSpellBy, ScrCatalogue.Action.CastFreeUnresistableSpell,
+            ScrCatalogue.Action.CastUnresistableSpellOn]), set.ValueKinds, set.FocusKinds);
 
     /// <summary>The set a run of this host uses: <see cref="SkillAdmission"/> with a session hero, else <see cref="Admission"/>; ARC-SCRIPT-050:
     /// with the query commands of <see cref="TalkAdmission"/> while <see cref="QueryHost"/> gives a use host of this host's map.</summary>
@@ -171,6 +175,10 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
     public bool? IsInvulnerable(ScrObjectRef obj) => Answering.IsInvulnerable(obj);
     public bool? IsUndead(ScrObjectRef obj) => Answering.IsUndead(obj);
     public bool? IsProwling(ScrObjectRef obj) => Answering.IsProwling(obj);
+    // ARC-SCRIPT-1772: the critter getters are the shown map's use host's answers too.
+    public int? SocialClassOf(ScrObjectRef obj) => Answering.SocialClassOf(obj);
+    public int? OriginOf(ScrObjectRef obj) => Answering.OriginOf(obj);
+    public int? FactionOf(ScrObjectRef obj) => Answering.FactionOf(obj);
     // ARC-SCRIPT-1771: bad associates (CS12) and monster of type (CS13) are the shown map's use host's answers too; obj is within range (CS14) reads only the object's location (IScrWorldQueries).
     public bool? HasBadAssociates(ScrObjectRef obj) => Answering.HasBadAssociates(obj);
     public bool? IsMonsterOfType(ScrObjectRef obj, int type) => Answering.IsMonsterOfType(obj, type);
@@ -197,6 +205,7 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
         _eyeCandies.Clear();
         return eyeCandies;
     }
+    private bool _endGame;
 
     /// <summary>ARC-DEV-324: queues a line for the viewer to float over <paramref name="speaker"/> as a script's float line does (the generic greeting, which is a
     /// floating line and no window).</summary>
@@ -245,6 +254,14 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
         var fades = _fades.ToArray();
         _fades.Clear();
         return fades;
+    }
+
+    /// <summary>ARC-RENDER-1171 (SS4): whether a run applied since the last call asked for the end of the game (132); the viewer starts the end-game show once the movies of the same run have played.</summary>
+    public bool TakeEndGame()
+    {
+        var asked = _endGame;
+        _endGame = false;
+        return asked;
     }
 
     /// <summary>ARC-SCRIPT-040: the speaker the scripts name, or null for the PC and anything else (the viewer knows where it
@@ -418,6 +435,8 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
         foreach (var request in effects.ObjectStates)
             if (request.Change is ScrObjectStateChange.Damage or ScrObjectStateChange.DamageUnresistable && Queries is not { CanApplyScriptDamage: true }
                 || request.Change == ScrObjectStateChange.HealHitPoints && Queries is not { CanApplyScriptHeal: true }
+                // ARC-SCRIPT-1168: a script's cast goes through the use host's AI path (the dialog set holds the six cast actions only while it answers); a world without the AI host refuses the run whole.
+                || request.Change == ScrObjectStateChange.CastSpell && Queries is not { CanApplyScriptCast: true }
                 // ARC-SCRIPT-1620 (TI6): a script's attack goes through the use host's AI path too; an attacker it cannot apply (an object, VB2-2 gap d) refuses the run whole.
                 || request.Change == ScrObjectStateChange.Attack && (Queries is not { CanApplyScriptAttack: true } || Queries.AttackRefusal(request) is not null)) return false;
         // ARC-SCRIPT-050 (FL2, FL4): each float line's text, read before anything applies. A DLG that is missing or unreadable floats nothing,
@@ -492,6 +511,7 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
             if (request.Change is ScrObjectStateChange.Damage or ScrObjectStateChange.DamageUnresistable) { damageHost!.ApplyScriptDamage(request); LastDamage = damageHost.LastDamage; continue; }
             if (request.Change == ScrObjectStateChange.HealHitPoints) { damageHost!.ApplyScriptHeal(request); LastHeal = damageHost.LastHeal; continue; }
             if (request.Change == ScrObjectStateChange.Attack) { damageHost!.ApplyScriptAttack(request); LastAttack = damageHost.LastAttack; continue; }
+            if (request.Change == ScrObjectStateChange.CastSpell) { damageHost!.ApplyScriptCast(request); LastCast = damageHost.LastCast; continue; }
             if (request.Change != ScrObjectStateChange.GiveSpellMastery) continue;
             if (request.Object == Pc) { if (!AreaScriptSpells.GiveMastery(_session, null, request.Value)) return false; }
             else if (request.Object.Map == _map.RuntimeMap && _npcAdvancement?.Invoke(request.Object.Code) is { } npc && !AreaScriptSpells.GiveMastery(_session, npc, request.Value)) return false;
@@ -508,6 +528,8 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
         var fadesApplied = AreaScriptFades.Apply(_session, effects, asked);
         foreach (var fade in asked)   // the fades before a refused jump keep their movie or sound, as their clock jumps stay
             if (fade.Movie != 0) _fades.Add(fade); else _sounds.Add(new(ScrSoundKind.Effect, fade.Sound));
+        // The original runs action 132 inline, before anything later in the run refuses; a refused clock jump does not take the request back.
+        if (effects.Slides.Any(request => request.Kind == ScrSlideKind.EndGame)) _endGame = true;
         if (!fadesApplied) return false;
         if (effects.Writeback is not { } writeback) return true;
         if (writeback.Source != ScrSource.Object || writeback.Point != ScrPoint.Dialog || writeback.Attachee is not { } attachee
@@ -536,6 +558,9 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
 
     /// <summary>ARC-SCRIPT-1620: what the AI host answered to the last script attack a run of this host applied (the stop of the event's plan; test and smoke seam; null before any).</summary>
     public string? LastAttack { get; private set; }
+
+    /// <summary>ARC-SCRIPT-1168: what the AI host answered to the last script cast a talk run applied (smoke and test seam; null before any).</summary>
+    public string? LastCast { get; private set; }
 
     /// <summary>ARC-SCRIPT-016: whether a refused scheme change stops the later steps of <see cref="Apply"/>: the session could not
     /// take it (the record budget, the revision, a stale version); a number outside 0..199 or a missing hero does not.</summary>

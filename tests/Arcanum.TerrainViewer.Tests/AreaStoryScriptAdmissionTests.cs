@@ -19,7 +19,7 @@ public sealed class AreaStoryScriptAdmissionTests
         {
             foreach (var condition in ScrAdmissionSet.StoryConditions) Assert.IsTrue(set.Conditions.Contains(condition), $"{set.Id}: condition {condition}");
             foreach (var action in ScrAdmissionSet.StoryActions) Assert.IsTrue(set.Actions.Contains(action), $"{set.Id}: action {action}");
-            Assert.IsTrue(set.IsSubsetOfBesidesStores(ScrAdmissionSet.S55), set.Id); // ARC-SCRIPT-1241: S35 is S34 plus the fade, which the use and dialog sets hold; ARC-SCRIPT-1163: S36 adds the NPC state actions the use and heartbeat sets hold
+            Assert.IsTrue(set.IsSubsetOfBesidesStores(ScrAdmissionSet.S58), set.Id); // ARC-SCRIPT-1241: S35 is S34 plus the fade, which the use and dialog sets hold; ARC-SCRIPT-1163: S36 adds the NPC state actions the use and heartbeat sets hold
         }
     }
 
@@ -53,7 +53,8 @@ public sealed class AreaStoryScriptAdmissionTests
         // ARC-SCRIPT-1164 (set S37, the world-object commands): the use set admits 24, placed 37, heartbeat 26 and dying 52 (one more each); the talk set stays at 26.
         // ARC-SCRIPT-1279 (the four item commands got a host): the use set admits 33, placed 47 and dying 62 (9, 10 and 10 more); the heartbeat set stays at 26 and the talk set at 26.
         // ARC-SCRIPT-1481 (the shared use set also holds the vitals commands, heal fatigue, magick-tech adjustment, script eye candy and the self-destroy): the dying set admits 63 (one more); the others stay.
-        // ARC-SCRIPT-1815: the heartbeat set gained the scenery and object-variable focus kinds, assign object and float line (heartbeats 41, from 29; the placed and dying counts are those of the shared sets today, 53 and 73, and the talk set 30).
-        Assert.AreEqual((96, 52, 33, 53, 41, 73, 30), (withStory, counts["S34"], counts["use"], counts["placed"], counts["heartbeat"], counts["dying"], counts["talk"]));
+        // ARC-SCRIPT-1168 (the talk sets hold the six cast actions): the talk set admits one more, 31 (30 before). The placed, heartbeat and dying counts had moved with later slices (the critter-state conditions of
+        // ARC-SCRIPT-1733, 1771 and others: 52, 29 and 72, the talk set 30) without this assertion following; it is brought to the measured counts here.
+        Assert.AreEqual((96, 52, 33, 53, 29, 73, 31), (withStory, counts["S34"], counts["use"], counts["placed"], counts["heartbeat"], counts["dying"], counts["talk"]));
     }
 }
