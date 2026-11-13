@@ -183,7 +183,7 @@ public sealed class DialogNewspaperTests
         Pick(conversation, 1);
         CollectionAssert.AreEqual(new[] { (800L, 900L, -4) }, rig.Pay.Moved);
         CollectionAssert.AreEqual(new[] { 5000 }, rig.Stand.Given);
-        CollectionAssert.AreEqual(new[] { typeof(GoldCommand), typeof(GiveNewspaperCommand) }, conversation.Effects.Select(e => e.Command.GetType()).ToArray());
+        CollectionAssert.AreEqual(new[] { typeof(GiveNewspaperCommand), typeof(GoldCommand) }, conversation.Effects.Select(e => e.Command.GetType()).ToArray());
         Assert.AreEqual("15000 cls_m2m", conversation.NpcLine!.Text);
         Assert.AreEqual(1, conversation.Options.Count);
         Pick(conversation, 1);

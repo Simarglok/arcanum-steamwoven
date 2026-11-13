@@ -160,10 +160,11 @@ public sealed partial class DialogConversation
             Stop(new DialogConversationFrontier(DialogFrontierKind.EffectLimit, CurrentNode), null);
             return;
         }
-        var pay = new GoldCommand(_request.Participants.PlayerCharacter, _request.Participants.Npc, -choice.Price);
-        if (!RunTalkCommand(pay, () => _ports.Gold!.Execute(pay), talk.Source)) return;
+        // The paper is made before the gold is taken, so a host that cannot make it (or write its issue) costs the PC nothing; the order is not visible in the original's screens.
         var give = new GiveNewspaperCommand(_request.Participants.Npc, _request.Participants.PlayerCharacter, choice.Issue);
         if (!RunTalkCommand(give, () => _ports.NewspaperStand!.Execute(give), talk.Source)) return;
+        var pay = new GoldCommand(_request.Participants.PlayerCharacter, _request.Participants.Npc, -choice.Price);
+        if (!RunTalkCommand(pay, () => _ports.Gold!.Execute(pay), talk.Source)) return;
         if (!NpcTalkLine(NewspaperGivenGroup, null, out var line) || !PcTalkLine(1000, 0, classLine: true, out var answer)) return;
         Present(line, [answer with { Choice = new TrainerChoice(TrainerChoiceKind.Follow) }]);
     }

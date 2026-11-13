@@ -5,7 +5,7 @@ namespace Arcanum.Session;
 /// <summary>
 /// ARC-DEV-230 (schema 74, the <c>newspaper</c> section; ledger NQ1–NQ5): the newspaper issue queue of the original, a table of 25 words (0x6876D0) and its count (0x6876CC) that the
 /// game writes into its save (0x4BF100) and reads back (0x4BF0C0). A new game sets the first four words to −1, the fifth (the head, the issue shown now) to 5000 and the count to 5
-/// (0x4BF080); the rest is zero. The dialog action <c>np</c> and the script action 85 queue issues behind the head (0x4BF140). ARC-UI-1739 (ledger NQ4, NQ10): the daily newspaper event
+/// (0x4BF080); the rest is zero. The dialog action <c>np</c> queues issues behind the head (0x4BF140; the script action 85 is not built yet). ARC-UI-1739 (ledger NQ4, NP7): the daily newspaper event
 /// (0x4BF270, <see cref="SessionEventKinds.Newspaper"/>) removes the head (0x4BF2C0), so the words before the head hold the heads that went (a head below 5000 moves to word 3) and the words from the
 /// count on may hold what the table shifted over: a saved table has any words, only its length and its count are checked. An issue number is a message number of the newspaper file (the printed
 /// issue's start line and the headline the NPCs and script 86 say).
@@ -123,7 +123,7 @@ public sealed partial class GameSessionOwner
 
     private SessionNewspaperState CaptureNewspaper() => _newspaper;
 
-    // The shape the codec cannot know beyond its own ranges: nothing (a pop leaves any words behind, ledger NQ10).
+    // The shape the codec cannot know beyond its own ranges: nothing (a pop leaves any words behind, ledger NP7).
     private static GameSessionFailure ImportNewspaper(SessionNewspaperState saved) =>
         saved.IsValid ? GameSessionFailure.None : GameSessionFailure.InvalidSnapshot;
 }
