@@ -18,8 +18,9 @@ namespace Arcanum.World;
 /// <param name="CoreSectors">The sectors (world cell &gt;&gt; 6) a window holds as core; null for a whole map.</param>
 /// <param name="LedEntities">ARC-AI-1646: the NPCs without a dialog the read was asked to build a body for because the hero leads them (a Dominate Will target); null or empty
 /// for a read made for the speakers only.</param>
+/// <param name="SpeakerEntities">ARC-AI-1646: the dialog NPCs of the map the read looked at (with or without follow facts); a body for one of them is not asked again as a led NPC's. Null when not known.</param>
 public sealed record AreaHomeRead(int Map, AreaInventoryMap Rows, IReadOnlyList<AreaCompanionTemplate> Templates,
-    IReadOnlyDictionary<AreaFrameKey, DecodedAreaFrame> Frames, IReadOnlySet<(long X, long Y)>? CoreSectors, IReadOnlySet<string>? LedEntities = null)
+    IReadOnlyDictionary<AreaFrameKey, DecodedAreaFrame> Frames, IReadOnlySet<(long X, long Y)>? CoreSectors, IReadOnlySet<string>? LedEntities = null, IReadOnlySet<string>? SpeakerEntities = null)
 {
     private static readonly IReadOnlySet<string> NoEntities = new HashSet<string>(StringComparer.Ordinal);
 
@@ -49,8 +50,11 @@ public sealed record AreaHomeRead(int Map, AreaInventoryMap Rows, IReadOnlyList<
         var frames = new Dictionary<AreaFrameKey, DecodedAreaFrame>();
         foreach (var key in templates.SelectMany(t => t.Commands).Select(c => c.Frame).Distinct())
             if (shown.TryGetValue(key, out var frame)) frames[key] = frame;
-        return new(snapshot.RuntimeMap, rows, templates, frames, snapshot.Window is null ? null : CoreOf(snapshot));
+        return new(snapshot.RuntimeMap, rows, templates, frames, snapshot.Window is null ? null : CoreOf(snapshot), null, SpeakersOf(snapshot));
     }
+
+    internal static IReadOnlySet<string> SpeakersOf(AreaSnapshot snapshot) =>
+        AreaConversationHost.FindSpeakers(snapshot).Select(s => AreaConversationState.EntityId(s.Row)).ToHashSet(StringComparer.Ordinal);
 
     internal static IReadOnlySet<(long X, long Y)> CoreOf(AreaSnapshot snapshot) =>
         snapshot.Sectors.Where(s => s.Scope == AreaScope.Core && s.Present).Select(s => (s.Coordinate.X, s.Coordinate.Y)).ToHashSet();
@@ -93,6 +97,17 @@ public sealed class AreaHomeDirectory(IAreaHomeSource? source, int maxReads = Ar
 
     /// <summary>The reads held now, most recently used last.</summary>
     public IReadOnlyList<AreaHomeRead> Reads => _reads.OrderBy(entry => entry.Used).Select(entry => entry.Read).ToArray();
+
+    // ARC-AI-1646: the NPCs the hero leads that the viewer expects to ask a body for (one read then serves all of them).
+    private readonly HashSet<string> _led = new(StringComparer.Ordinal);
+
+    /// <summary>ARC-AI-1646: names the NPCs the party holds that the viewer will ask <see cref="Body"/> for, so a map read for one of them builds the bodies of all
+    /// of them at once (an NPC of another map is ignored by the read).</summary>
+    public void Lead(IEnumerable<string> entities)
+    {
+        ArgumentNullException.ThrowIfNull(entities);
+        foreach (var entity in entities) _led.Add(entity);
+    }
 
     /// <summary>Keeps a read the viewer made itself (the map it has just loaded), replacing a held read of the same map and window.</summary>
     public void Remember(AreaHomeRead read)
@@ -166,14 +181,16 @@ public sealed class AreaHomeDirectory(IAreaHomeSource? source, int maxReads = Ar
             return (template, read.FramesOf(template), string.Empty);
         }
         // A map not held is read once with this entity asked for (ARC-AI-1646: an NPC the hero leads has its body built from the same read).
-        var load = Held(home, near) is { } held ? new AreaHomeLoad(held, string.Empty) : Fetch(home, near, new HashSet<string>(StringComparer.Ordinal) { entity }, token);
+        var load = Held(home, near) is { } held ? new AreaHomeLoad(held, string.Empty) : Fetch(home, near, new HashSet<string>(_led, StringComparer.Ordinal) { entity }, token);
         if (load.Read is not { } found) return (null, new Dictionary<AreaFrameKey, DecodedAreaFrame>(), load.Detail);
         if (found.Template(entity) is { } body) return (body, found.FramesOf(body), string.Empty);
         // ARC-AI-1646: a read made for the map's speakers (or before the NPC joined the hero) lists no body for an NPC without a dialog that the hero leads now: read the
         // map again with this NPC's body built too (once: the read then records the NPC), so a Dominate Will target has its body on any map and outside the shown window.
-        if (!found.Led.Contains(entity) && source is not null)
+        // A dialog NPC the read looked at is not one of these (its body is its own).
+        if (!found.Led.Contains(entity) && found.SpeakerEntities?.Contains(entity) != true && source is not null)
         {
             var led = new HashSet<string>(found.Led, StringComparer.Ordinal) { entity };
+            led.UnionWith(_led);
             var again = Fetch(home, near, led, token);
             if (again.Read is not { } rebuilt) return (null, new Dictionary<AreaFrameKey, DecodedAreaFrame>(), again.Detail);
             if (rebuilt.Template(entity) is { } ledBody) return (ledBody, rebuilt.FramesOf(ledBody), string.Empty);
@@ -248,21 +265,32 @@ public sealed class AreaMapHomes(TerrainViewerArguments launch, Func<AreaSpeaker
             var chart = AreaMapLoadOperation.Chart(snapshot);
             var scene = AreaScenePlan.Create(snapshot, chart);
             var speakers = AreaConversationHost.FindSpeakers(snapshot);
+            var speaking = AreaHomeRead.SpeakersOf(snapshot);
             var templates = AreaCompanionTemplate.From(speakers, scene, snapshot.Visuals, chart, new(snapshot.RuntimeMap), facts);
-            // ARC-AI-1646: the bodies of the NPCs without a dialog that the hero leads (a speaker keeps its own body): only those rows are built.
+            token.ThrowIfCancellationRequested();
+            var ledNote = string.Empty;
+            // ARC-AI-1646: the bodies of the NPCs without a dialog that the hero leads (a speaker keeps its own body): only those rows are built, and a body or frame that
+            // does not read costs those bodies only, never the speakers'.
             if (led.Count > 0)
             {
-                var speaking = speakers.Select(s => AreaConversationState.EntityId(s.Row)).ToHashSet(StringComparer.Ordinal);
                 var wanted = led.Where(e => !speaking.Contains(e)).ToHashSet(StringComparer.Ordinal);
-                templates = [.. templates, .. AreaCompanionTemplate.ForLedMapNpcs(snapshot.Objects, snapshot.Visuals, wanted, scene, chart, new(snapshot.RuntimeMap), facts)];
+                try
+                {
+                    IReadOnlyList<AreaCompanionTemplate> all = [.. templates, .. AreaCompanionTemplate.ForLedMapNpcs(snapshot.Objects, snapshot.Visuals, wanted, scene, chart, new(snapshot.RuntimeMap), facts)];
+                    var allFrames = AreaLoadOperation.CopyFramesOf(owner, snapshot, all.SelectMany(t => t.Commands).Select(c => c.Frame).Distinct().ToArray(), token);
+                    return new(new(snapshot.RuntimeMap, rows, all, allFrames, core, led, speaking), build.Detail);
+                }
+                catch (Exception error) when (error is InvalidOperationException or AreaException or IOException or InvalidDataException or UnauthorizedAccessException)
+                {
+                    ledNote = $"; no led bodies: {error.GetType().Name} {error.Message}";
+                }
             }
-            token.ThrowIfCancellationRequested();
             var frames = AreaLoadOperation.CopyFramesOf(owner, snapshot, templates.SelectMany(t => t.Commands).Select(c => c.Frame).Distinct().ToArray(), token);
-            return new(new(snapshot.RuntimeMap, rows, templates, frames, core, led.Count > 0 ? led : null), build.Detail);
+            return new(new(snapshot.RuntimeMap, rows, templates, frames, core, led.Count > 0 ? led : null, speaking), build.Detail + ledNote);
         }
         catch (Exception error) when (error is InvalidOperationException or AreaException or IOException or InvalidDataException or UnauthorizedAccessException)
         {
-            return new(new(snapshot.RuntimeMap, rows, [], new Dictionary<AreaFrameKey, DecodedAreaFrame>(), core, led.Count > 0 ? led : null),
+            return new(new(snapshot.RuntimeMap, rows, [], new Dictionary<AreaFrameKey, DecodedAreaFrame>(), core, led.Count > 0 ? led : null, null),
                 $"{build.Detail}; no bodies: {error.GetType().Name} {error.Message}");
         }
     }

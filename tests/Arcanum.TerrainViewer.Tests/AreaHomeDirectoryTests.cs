@@ -108,6 +108,34 @@ public sealed class AreaHomeDirectoryTests
     }
 
     [TestMethod]
+    public void A_dialog_npc_the_held_read_looked_at_is_not_read_again_as_a_led_one()
+    {
+        var template = AreaVisitorTalkTests.Template();
+        var source = new LedBodySource(template);
+        var homes = new AreaHomeDirectory(source);
+        var speaker = template.Entity;
+        homes.Remember(Read(1) with { SpeakerEntities = new HashSet<string> { speaker } });
+        var found = homes.Body(speaker, 1, null);
+        Assert.IsNull(found.Template);
+        StringAssert.Contains(found.Detail, "lists no body");
+        Assert.AreEqual(0, source.Asked.Count, "a speaker the read examined has no led body to look for");
+    }
+
+    [TestMethod]
+    public void The_npcs_the_party_holds_are_asked_for_in_one_read()
+    {
+        var template = AreaVisitorTalkTests.Template();
+        var source = new LedBodySource(template);
+        var homes = new AreaHomeDirectory(source);
+        homes.Lead(["other-led-npc", template.Entity]);
+        homes.Remember(Read(1));
+        Assert.AreSame(template, homes.Body(template.Entity, 1, null).Template);
+        Assert.IsNull(homes.Body("other-led-npc", 1, null).Template);
+        Assert.AreEqual(1, source.Asked.Count, "one read for both led NPCs");
+        Assert.AreEqual(string.Join(",", new[] { "other-led-npc", template.Entity }.Order(StringComparer.Ordinal)), source.Asked[0].Led);
+    }
+
+    [TestMethod]
     public void A_remembered_map_answers_without_a_read()
     {
         var template = AreaVisitorTalkTests.Template();

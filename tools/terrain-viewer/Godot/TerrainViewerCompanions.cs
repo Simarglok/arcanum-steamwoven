@@ -137,6 +137,8 @@ public partial class TerrainViewerApp
         var visitors = AreaVisitors.Here(session, new(CurrentAreaMap), [.. _ownCompanionTemplates, .. led],
             world => grid.Chart.Contains(grid.Chart.ToChart(new(world.X, world.Y))));
         var bodies = new List<AreaCompanionTemplate>(); var unread = new List<string>();
+        // ARC-AI-1646: one home read builds the bodies of every NPC the party holds that no dialog template covers.
+        _homes?.Lead(visitors.Select(v => v.Entity));
         // ARC-MAGIC-050: a created critter has no home map to read (its body is its own, below).
         foreach (var visitor in visitors.Where(v => SessionCreatedObject.KindOf(v.Entity) != SessionCreatedKind.Critter))
         {
