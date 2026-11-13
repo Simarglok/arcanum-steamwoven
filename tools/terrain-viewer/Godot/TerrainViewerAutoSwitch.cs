@@ -26,14 +26,14 @@ public partial class TerrainViewerApp
     }
 
     /// <summary>
-    /// ARC-COMBAT-1738 (OH3 case a, 0x4B3170 → 0x4B83E0): the hero's attack the ammunition check refused (<see cref="AttackRefusal.OutOfAmmunition"/>, the test 0x4B65D0 answers
+    /// ARC-COMBAT-1738 (OH3 case a, the attack dispatcher's no-ammunition branch): the hero's attack the ammunition check refused (<see cref="AttackRefusal.OutOfAmmunition"/>, the ammunition test answers
     /// 0) wields the best weapon for the struck object when the setting is on. Returns the entity wielded, or null.
     /// </summary>
     private string? HeroOutOfAmmunition(AttackRefusal? refusal, AreaObjectRecord struck, bool magneticInversion) =>
         _gameSettings.AutoSwitchWeapons && refusal == AttackRefusal.OutOfAmmunition ? HeroWieldBest("no-ammunition", struck, magneticInversion) : null;
 
     /// <summary>
-    /// ARC-COMBAT-1738 (OH3 case c, the damage step 0x4B4390, messages 0x13, 0x16 and 0x17): an attack that struck the hero (an NPC's hit, an arrow, a throw) and took its
+    /// ARC-COMBAT-1738 (OH3 case c, the damage step's item-loss branches, messages 19, 22 and 23): an attack that struck the hero (an NPC's hit, an arrow, a throw) and took its
     /// wielded weapon (the "drop weapon" critical, the "destroy weapon" and "explode weapon" criticals, the "damage weapon" critical that broke it) wields the best weapon
     /// the hero still holds, with the attacker as the hint for the choice. Returns the entity wielded, or null.
     /// </summary>
