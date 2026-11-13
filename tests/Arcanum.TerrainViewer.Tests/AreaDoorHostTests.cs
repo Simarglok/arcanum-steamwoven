@@ -61,15 +61,15 @@ public sealed class AreaDoorHostTests
         using var f = Open();
         var asked = new List<(string Opener, string Door)>();
         var stops = false;
-        f.Host.OpenerTrap = (opener, portal) => { asked.Add((opener, portal.Entity)); return stops; };
+        f.Host.OpenerScript = (opener, portal) => { asked.Add((opener, portal.Entity)); return stops; };
         Assert.IsTrue(f.Host.UseDoor("oid:thug", DoorA), "no trap stops the use");
         stops = true;
         Assert.IsFalse(f.Host.UseDoor("oid:thug", DoorA), "the trap stops it: the opener's run ends");
         CollectionAssert.AreEqual(new[] { ("oid:thug", DoorA), ("oid:thug", DoorA) }, asked);
         Assert.IsTrue(f.Host.UseDoor("oid:thug", "oid:not-a-door"), "a door of another window is not this host's");
-        f.Host.OpenerTrap = null;
+        f.Host.OpenerScript = null;
         Assert.IsTrue(f.Host.UseDoor("oid:thug", DoorA), "no trap host: the use goes on as before");
-        Assert.AreEqual(2, asked.Count, "the hero's use is its own port, not the opener trap");
+        Assert.AreEqual(2, asked.Count, "the hero's use is its own port, not the opener script");
         Assert.IsTrue(f.Host.UseDoor(AreaHeroRunsHost.Hero, DoorA));
         Assert.AreEqual(2, asked.Count);
     }
@@ -83,7 +83,7 @@ public sealed class AreaDoorHostTests
         var charged = true;
         var stops = false;
         f.Host.HeroUse = portal => { log.Add("charge " + portal.Entity); return charged; };
-        f.Host.HeroTrap = portal => { log.Add("trap " + portal.Entity); return stops; };
+        f.Host.HeroScript = portal => { log.Add("trap " + portal.Entity); return stops; };
         Assert.IsTrue(f.Host.UseDoor(AreaHeroRunsHost.Hero, DoorA), "no trap stops the use");
         stops = true;
         Assert.IsFalse(f.Host.UseDoor(AreaHeroRunsHost.Hero, DoorA), "the trap stops it: the hero's run ends");
@@ -91,11 +91,11 @@ public sealed class AreaDoorHostTests
         Assert.IsFalse(f.Host.UseDoor(AreaHeroRunsHost.Hero, DoorA), "a refused charge ends the run before any trap");
         CollectionAssert.AreEqual(new[] { "charge " + DoorA, "trap " + DoorA, "charge " + DoorA, "trap " + DoorA, "charge " + DoorA }, log);
         Assert.IsTrue(f.Host.UseDoor(AreaHeroRunsHost.Hero, "oid:not-a-door"), "a door of another window is not this host's");
-        f.Host.HeroUse = null; f.Host.HeroTrap = null;
+        f.Host.HeroUse = null; f.Host.HeroScript = null;
         Assert.IsTrue(f.Host.UseDoor(AreaHeroRunsHost.Hero, DoorA), "no hero ports: the use goes on as before");
         var asked = new List<string>();
-        f.Host.OpenerTrap = (opener, _) => { asked.Add(opener); return false; };
-        f.Host.HeroTrap = _ => true;
+        f.Host.OpenerScript = (opener, _) => { asked.Add(opener); return false; };
+        f.Host.HeroScript = _ => true;
         Assert.IsTrue(f.Host.UseDoor("oid:thug", DoorA), "an NPC opener does not meet the hero's port");
         CollectionAssert.AreEqual(new[] { "oid:thug" }, asked);
     }

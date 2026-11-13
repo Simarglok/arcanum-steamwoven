@@ -1268,6 +1268,17 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         finally { _clicked = previous; }
     }
 
+    /// <summary>
+    /// ARC-WORLD-1668 (ledger TT18, 0x428A10 → 0x441980 point 1): whether the use script a door's use node ran (<see cref="RunUseScript"/>, the opener as the triggerer and the extra object) stops the use: the dispatcher's answer 0, "skip default",
+    /// which includes a script that runs past its last line. A run that was not applied (refused by the admission, effects the viewer cannot apply, an unreadable or changed file, a requested teleport) and an object with no use script stop nothing:
+    /// the use goes on, as the original's node returns 1 for them (no attachment: 0x441980 answers 1).
+    /// </summary>
+    public static bool UseStops(AreaScriptedUse ran)
+    {
+        ArgumentNullException.ThrowIfNull(ran);
+        return ran.Outcome is AreaScriptedUseOutcome.NoTeleport && ran.Run is { } run && run.Outcome == ScrOutcome.SkipDefault;
+    }
+
     /// <summary>ARC-DEV-326: whether an examine run (<see cref="RunExamine"/>) leaves the object without a description: the dispatcher's
     /// "skip default" (return 0 of 0x441980, 0x57CD9B), which includes a script that runs past its last line. A run that was not applied
     /// (refused by the admission, effects the viewer cannot apply, an unreadable or changed file, a requested teleport) or an object with no
