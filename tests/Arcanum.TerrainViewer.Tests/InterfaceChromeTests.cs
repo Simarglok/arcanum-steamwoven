@@ -1166,6 +1166,10 @@ public sealed class InterfaceChromeTests
             // The stone around the pit is the generated slate (not black, not the pit), with a rim on the box's edge.
             var stone = Pixel(a, pw, (int)(160 * scale), (int)(110 * scale));
             Assert.IsTrue(stone.R > 15 && stone.R < 120, $"the slate at {scale}");
+            // The rim on the box's edge and the pit's own line are brass (red well above blue) within a few device pixels of the edges.
+            bool BrassWithin(int y0) => Enumerable.Range(y0, (int)Math.Ceiling(3 * scale) + 1).Any(y => Pixel(a, pw, (int)(160 * scale), y) is var q && q.R > q.B + 60);
+            Assert.IsTrue(BrassWithin(0), $"the box's top rim is brass at {scale}");
+            Assert.IsTrue(BrassWithin((int)(6 * scale) - 1), $"the pit's line is brass at {scale}");
         }
     }
 

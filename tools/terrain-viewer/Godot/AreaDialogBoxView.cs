@@ -88,7 +88,7 @@ public partial class AreaDialogBoxView : Control
 
     public override void _Process(double delta)
     {
-        if (Visible && Math.Abs(DeviceScale() - _drawnScale) >= 0.0005f) QueueRedraw();
+        if (IsVisibleInTree() && Math.Abs(DeviceScale() - _drawnScale) >= 0.0005f) QueueRedraw();
     }
 
     /// <summary>ARC-UI-1819: the textures of the box (the background 822, then the frames of the buttons it shows) with their art numbers, for the native smoke.</summary>
