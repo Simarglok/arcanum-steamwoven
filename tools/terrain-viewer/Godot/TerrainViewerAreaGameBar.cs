@@ -99,6 +99,8 @@ public partial class TerrainViewerApp
         }
         _gameBarPanel.Visible = true;
         _gameBarPanel.SetClock(_gameClock.Face);
+        // ARC-UI-1365 (GB13): the experience strip follows the hero's progress toward the next level (null without a hero or experience data).
+        _gameBarPanel.SetExperience(_areaSession?.QueryHeroExperience()?.Progress);
         _hud?.SetTopInset(AreaGameBarPanel.TopInset);
         SyncHotkeyBar();
         SyncMaintainBar();
