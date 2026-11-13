@@ -52,6 +52,7 @@ public sealed class AreaStoryScriptAdmissionTests
         // 23 (use), 35 (placed), 24 (heartbeat), 47 (dying) and 26 (talk); ARC-SCRIPT-1163 (S36: the use and heartbeat sets also hold the NPC state actions) moves placed to 36, heartbeat to 25 and dying to 51.
         // ARC-SCRIPT-1164 (set S37, the world-object commands): the use set admits 24, placed 37, heartbeat 26 and dying 52 (one more each); the talk set stays at 26.
         // ARC-SCRIPT-1279 (the four item commands got a host): the use set admits 33, placed 47 and dying 62 (9, 10 and 10 more); the heartbeat set stays at 26 and the talk set at 26.
-        Assert.AreEqual((96, 52, 33, 47, 26, 62, 26), (withStory, counts["S34"], counts["use"], counts["placed"], counts["heartbeat"], counts["dying"], counts["talk"]));
+        // ARC-SCRIPT-1481 (the shared use set also holds the vitals commands, heal fatigue, magick-tech adjustment, script eye candy and the self-destroy): the dying set admits 63 (one more); the others stay.
+        Assert.AreEqual((96, 52, 33, 47, 26, 63, 26), (withStory, counts["S34"], counts["use"], counts["placed"], counts["heartbeat"], counts["dying"], counts["talk"]));
     }
 }
