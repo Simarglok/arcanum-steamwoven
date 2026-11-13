@@ -568,8 +568,11 @@ public interface IDialogDirectionsPort
     DialogBearing? Bearing(DialogParticipantId npc, int area);
 }
 
-/// <summary>Which NPC heals which PC (ARC-SCRIPT-1732).</summary>
-public readonly record struct DialogHealerQuery(DialogParticipantId Npc, DialogParticipantId PlayerCharacter);
+/// <summary>
+/// Which NPC serves which PC (ARC-SCRIPT-1732). <paramref name="Skill"/> is the skill whose test and price the facts answer (ARC-SCRIPT-1798: the <c>u:N</c> reply names it; the healer menu asks for the heal
+/// skill 10, the default).
+/// </summary>
+public readonly record struct DialogHealerQuery(DialogParticipantId Npc, DialogParticipantId PlayerCharacter, int Skill = 10);
 
 /// <summary>
 /// What the <c>h:</c> healer menu reads of the NPC (ARC-SCRIPT-1732, ledger HLR2–HLR6): <paramref name="Rank"/> is its rank in the healing college 12 (0x4B1AB0, 0..5: how
@@ -577,6 +580,7 @@ public readonly record struct DialogHealerQuery(DialogParticipantId Npc, DialogP
 /// healing item and may use the skill on the PC); <paramref name="SkillLevel"/> and <paramref name="SkillTraining"/> its heal skill's effective level and training tier
 /// (0x4C5EB0, 0x4C60C0: the price is (level + 2) × (tier + 1)); <paramref name="LedByPc"/> that its own leader is the PC (0x45DE00: the services are free);
 /// <paramref name="NoPcLeader"/> that no leader chain ends in a PC (0x45DDA0 is 0; the host answers it from the direct leader, as only the PC leads here: the NPC's own cast is free and the skill's flags carry 0x2000).
+/// <paramref name="SkillAllowed"/>, <paramref name="SkillLevel"/> and <paramref name="SkillTraining"/> are those of the skill the query names (ARC-SCRIPT-1798: <c>u:N</c>; 0x4AE570 passes every skill but 10, 12 and 14).
 /// </summary>
 public sealed record DialogHealerFacts(int Rank, bool SkillAllowed, int SkillLevel, int SkillTraining, bool LedByPc, bool NoPcLeader);
 
