@@ -71,7 +71,7 @@ public sealed partial class SessionSpellCasterTraitIndexTests
     }
 
     [TestMethod]
-    public void A_heros_innate_normal_resistance_reaches_its_life_facts_the_poison_tick_meets_and_a_swap_trial_reads_the_new_race_s()
+    public void A_heros_innate_normal_resistance_reaches_its_life_facts_the_poison_tick_meets_and_leaves_with_its_entry()
     {
         // Poison level 600 hurts 3; normal resistance 50 takes 1 of it (the integer share of 3).
         using var human = ResistSession();
