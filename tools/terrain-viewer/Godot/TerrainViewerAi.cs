@@ -112,6 +112,7 @@ public partial class TerrainViewerApp
         host.ProjectileEnds = ProjectileRunEnded;
         host.KnockbackEnds = KnockbackRunEnded;
         host.HeroEnds = HeroRunEnded;
+        host.FollowerSpeaks = SayFollowerLine;
         session.KillNotice = request => { if (request.Map == mapNumber) host.NoticeKill(request.Victim, request.Killer); };
         // ARC-DEV-104 (MIG9 S4): a whole map opens its residency and sector cache once per map open; the arrival pre-cache folds the 3 × 3
         // sectors around the hero, whose NPCs get their first tick there. The delayed ticks below go only to NPCs without one.
@@ -201,6 +202,8 @@ public partial class TerrainViewerApp
             ObjectTarget = row => _areaSession is { } objectOwner && !IsAreaCompanion(row.Key) ? ObjectTargets()?.Target(objectOwner, row.Key, AreaTrapped) : null,
             LaunchShotAtObject = AiLaunchShotAtObject,
             ObjectStruck = NpcObjectHit,
+            // ARC-TECHNOLOGY-1619 (VB2-2 gap d): a trap's shooter object (an object that is no critter) as the attack event reads it.
+            ObjectFacts = AiObjectFacts,
             // ARC-DEV-261 (GT198): the victims' taking-damage scripts (point 0x17) of the NPCs' attacks, throws and knockback bumps.
             TakingDamage = TakingDamageGoesOn,
             // ARC-SCRIPT-1483: the combat-point scripts (hit, critter hits, critical hit) of the NPCs' hits.
@@ -266,6 +269,19 @@ public partial class TerrainViewerApp
     private readonly HashSet<string> _heartbeatRefusalsLogged = new(StringComparer.Ordinal);
     // ARC-WORLD-114: the NPCs a heartbeat script killed or switched off (the pre-made smoke counts them).
     private int _heartbeatKills, _heartbeatOffs;
+
+    /// <summary>
+    /// ARC-TECHNOLOGY-1619 (VB2-2 gap d): the facts of an object that is no critter (a trap's shooter: a wall, a portal, a scenery or a trap object) as the AI host's attack event and target validity read them, from the shown map's cast map: its type, tile and
+    /// object flags. The busted state (0x43F630) is not read yet, so a broken shooter still holds an NPC's focus. Null for the hero, a critter, an item or an id the cast map does not know.
+    /// </summary>
+    private AreaAiObjectFacts? AiObjectFacts(string id) =>
+        _spellCastMap?.Object(id) is { IsCritter: false, IsItem: false } found
+            ? new AreaAiObjectFacts(found.Type, new CellCoord(checked((int)found.Location.X), checked((int)found.Location.Y)))
+            {
+                Destroyed = (found.ObjectFlags & Arcanum.Simulation.Magic.SpellTargetObject.Destroyed) != 0, Off = (found.ObjectFlags & Arcanum.Simulation.Magic.SpellTargetObject.Off) != 0,
+                DontDraw = (found.ObjectFlags & Arcanum.Simulation.Magic.SpellTargetObject.DontDraw) != 0, Invulnerable = (found.ObjectFlags & Arcanum.Simulation.Magic.SpellTargetObject.Invulnerable) != 0,
+            }
+            : null;
 
     /// <summary>ARC-WORLD-114: an NPC's first-heartbeat or heartbeat script through the shown map's use-script host, whose toggle state and
     /// kill reach the session; true lets the tick go on. A run that is refused or not applied goes on as without a script.</summary>
@@ -397,7 +413,7 @@ public partial class TerrainViewerApp
     /// <summary>
     /// ARC-DEV-245 (MIG13 S14i, GT195): what a script's damage does to a critter beyond its hit points: fire damage above 0 after resistance (<see cref="AttackDamage.DamagesArmor"/>) wears the torso armour by 10 (the session's armour wear
     /// with the critter's worn items; an NPC's broken item is no longer worn), and a follower of the PC that falls from 20 % or more to below it floats its near-death line toward its leader (<see cref="FollowerRules.NearDeathOfHit"/>:
-    /// lines 5500–5599, shown as the log and the answer's text like the other loyalty lines, none is spoken yet). The text says what happened ("" for nothing).
+    /// lines 5500–5599, floated over the follower through the AI host's follower speech, ARC-AI-1527; the answer's text names the range as well). The text says what happened ("" for nothing).
     /// </summary>
     private string ScriptDamageAftermath(GameSessionOwner session, string id, SessionScriptHit hit)
     {
@@ -415,16 +431,10 @@ public partial class TerrainViewerApp
                 if (step?.Item is { } done) text += done.Break is Arcanum.Simulation.Items.ItemBreakStep.Broken or Arcanum.Simulation.Items.ItemBreakStep.Deleted ? ", the armour breaks" : ", the armour wears";
             }
         }
-        if (!hero && hit.Outcome is { } outcome && session.QueryCompanion(id).LedByPc
-            && _combatHost?.Build(session, CurrentAreaMap, id).Combat is { } combat && session.QueryLife(combat.Target).View is { } view)
+        if (!hero && FollowerHurt(id, hit.Outcome) is { } comment)
         {
-            var after = view.Status.HitPoints;
-            var near = FollowerRules.NearDeathOfHit(id, true, after + outcome.HitPointDamage, after, view.Status.MaxHitPoints, outcome.Events.HasFlag(LifeEvents.Died));
-            if (near is { } comment)
-            {
-                GD.Print($"ARC-DEV-245 script-near-death follower={comment.Speaker} lines={comment.Lines.First}-{comment.Lines.Last}");
-                text += $", near-death lines {comment.Lines.First}-{comment.Lines.Last}";
-            }
+            GD.Print($"ARC-DEV-245 script-near-death follower={comment.Speaker} lines={comment.Lines.First}-{comment.Lines.Last}");
+            text += $", near-death lines {comment.Lines.First}-{comment.Lines.Last}";
         }
         return text;
     }
@@ -518,6 +528,8 @@ public partial class TerrainViewerApp
         session.DyingScript = DyingGoesOn;
         // ARC-COMBAT-1141 (GT210): the script kill and the poison tick ask the NPC's taking-damage script too (no attacker); a victim that is not on the shown map has none here.
         session.TakingDamageScript = request => request.Map != CurrentAreaMap || TakingDamageGoesOn(request.Victim, request.Attacker);
+        // ARC-AI-1530: the danger setter's enter-combat and exit-combat scripts (slots 13 and 14) of an NPC of the shown map.
+        session.DangerHookScript = RunDangerHook;
         // ARC-WORLD-1301 (VPG6): a container with flag 0x200 that breaks before it was opened generates its goods through the same restock host as the loot window's first open (not ready until the barter data has loaded: it then spills the stored items).
         session.GenerateOnceWorld = () => AreaEvents;
     }
@@ -537,6 +549,22 @@ public partial class TerrainViewerApp
         if (ran.Run is not null)
             GD.Print($"ARC-DEV-312 dying victim={request.Victim} killer={request.Killer ?? "-"} outcome={ran.Outcome} run={ran.Run.Outcome} stop={ran.Run.Stop} stops-death={stops} detail={ran.Detail}");
         return !stops;
+    }
+
+    /// <summary>
+    /// ARC-AI-1530 (ledger VB2-6): the enter-combat (13) or exit-combat (14) script of an NPC of the shown map the danger setter just moved into or out of FIGHT, through the shown map's use-script host
+    /// (<see cref="AreaUseScriptHost.RunDangerPoint"/>) with the setter's target as the triggerer (none for an exit with no target); the setter ignores the answer, so a run that is refused or not applied is said and nothing else follows.
+    /// </summary>
+    private void RunDangerHook(SessionDangerHook hook)
+    {
+        if (_areaSession is not { } owner || hook.Attachee == Arcanum.Simulation.Ai.AiSchedulerRules.Pc || _readyArea is not { } area || UseScriptHost(area.Snapshot) is not { } host
+            || owner.QueryActor().Map.RuntimeMap != CurrentAreaMap) return;
+        var point = hook.Point == Arcanum.Simulation.Ai.DangerScriptPoint.EnterCombat ? Arcanum.Scripting.Scr.ScrPoint.EnterCombat : Arcanum.Scripting.Scr.ScrPoint.ExitCombat;
+        Arcanum.Scripting.Scr.ScrObjectRef? triggerer = hook.Triggerer is not { } target ? null
+            : target.IsHero ? host.Pc : new(CurrentAreaMap, target.Entity!);
+        var ran = Awarded(host, host.RunDangerPoint(point, hook.Attachee, triggerer, owner.Rules.Scripts));
+        if (ran.Run is not null)
+            GD.Print($"ARC-AI-1530 danger-hook npc={hook.Attachee} point={point} target={(hook.Triggerer is { } who ? (who.IsHero ? "pc" : who.Entity) : "-")} outcome={ran.Outcome} run={ran.Run.Outcome} stop={ran.Run.Stop} detail={ran.Detail}");
     }
 
     /// <summary>ARC-DEV-243 (S14g, GT196): a script's heal of hit points (75) of the PC or an NPC of the shown map by the session's heal (no resurrection: a dead critter does nothing); an amount of 0 or less does nothing.</summary>
@@ -829,6 +857,8 @@ public partial class TerrainViewerApp
         _aiNotice = $"{AiName(notice.Npc)} attacks {(hero ? "the hero" : AiName(notice.Target!))}: "
             + AreaCombatHost.Describe(result, life?.Status.HitPoints, life?.Status.MaxHitPoints);
         FloatCritterAttack(result, notice.Npc, hero ? HeroFloater : notice.Target!);
+        // ARC-AI-1527 (0x4AEAB0): a follower of the PC an NPC's hit brought below a fifth of its hit points says its near-death line.
+        FollowerAttackComments(result, notice.Npc, hero ? HeroFloater : notice.Target!);
         GD.Print($"ARC-WORLD-092 ai-hit npc={notice.Npc} target={notice.Target} disposition={result.Disposition} failure={result.Failure}"
             + $" outcome={result.Resolution?.Outcome} recipient={result.Recipient} damage={result.Life?.HitPointDamage} events={result.Life?.Events}"
             + $" hp={life?.Status.HitPoints}/{life?.Status.MaxHitPoints} step={result.StepFailure}");

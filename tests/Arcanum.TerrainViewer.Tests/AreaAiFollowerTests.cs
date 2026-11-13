@@ -43,12 +43,12 @@ public sealed class AreaAiFollowerTests
 
     // A human NPC (type 16, no monster flags unless given) with every primary stat 20, level 1, 20 hit points, at the world cell; heal 5
     // points when it heals.
-    private static AreaObjectRecord Npc(int index, CellCoord cell, int heal = 0, uint critterFlags = 0) => new(Key(index), 0, 16, 28359, "p", "p", "r", "s", AreaScope.Core, null, cell.X, cell.Y,
+    private static AreaObjectRecord Npc(int index, CellCoord cell, int heal = 0, uint critterFlags = 0, int alignment = 0) => new(Key(index), 0, 16, 28359, "p", "p", "r", "s", AreaScope.Core, null, cell.X, cell.Y,
         Arcanum.Data.Area.AreaDisposition.BodyEligibleConditionally, [],
         [
             Field(0, 0x60000000), Field(18, 0), Field(19, 0), Field(21, 1), Field(22, 2), Field(25, 0), Field(26, 20), Field(27, 0), Field(28, 0), Field(29, 4),
             Array(30), Empty(31),
-            Field(36, critterFlags), Field(37, 0), Array(38, 20, 20, 20, 20, 20, 20, 20, 20, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 20, 1, 0),
+            Field(36, critterFlags), Field(37, 0), Array(38, 20, 20, 20, 20, 20, 20, 20, 20, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, alignment, 0, 0, 0, 0, 0, 20, 1, 0),
             Array(39, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, heal, 0), Array(40), Array(41), Field(42, 10), Field(43, 0), Field(44, 0), Field(45, 0), Empty(46), Empty(47),
             Field(57, 0), Field(63, 0), Field(69, 0), Field(71, 0), Field(74, 10), Field(75, 10), Field(81, 0), Field(82, 0), Field(84, 0), Field(85, 0), Field(89, 0),
             Array(92),
@@ -115,7 +115,7 @@ public sealed class AreaAiFollowerTests
 
     private static Scene Open(bool companionWaits = false, bool followers = true, CellCoord? companionAt = null, CellCoord? corner = null,
         CellCoord? companionHome = null, bool healer = false, uint enemyFlags = 0, bool free = false, bool visitor = false, bool onDemand = false, bool homeless = false, string? dialogPartner = null, Action<string>? dialogEnded = null, Func<string, int?>? alertedSound = null,
-        PartyConsentFacts? joinFacts = null, Func<string, PartyConsentFacts?>? followFacts = null, AiParameterTable? table = null)
+        PartyConsentFacts? joinFacts = null, Func<string, PartyConsentFacts?>? followFacts = null, AiParameterTable? table = null, CellCoord? enemyAt = null, bool enemyLed = false, int companionAlignment = 0)
     {
         var identity = new GlobalFlagIdentity(new WorldId(Guid.NewGuid()), new ModuleId(Guid.NewGuid()));
         var hero = new SessionHeroDefinition(16089, CharacterRace.Human, CharacterGender.Male, [8, 8, 8, 8, 8, 8, 8, 8, 0, 0], 1, 5, 0, null, null, 0, []);
@@ -123,11 +123,12 @@ public sealed class AreaAiFollowerTests
             new(new(1), HeroCell, NeighborDirection.XPlus), Hero: hero));
         var session = created.Owner ?? throw new AssertFailedException($"session {created.Failure}");
         var start = companionAt ?? CompanionCell;
+        var enemy = enemyAt ?? EnemyCell;
         // A healer companion holds a healing item (2) and has heal 5 points.
         // ARC-DEV-075: a visitor is a companion of another home map (2): it has no holder or row on this map, its record is its home map's,
         // given to the resolver (visitor) or read from a source on demand with the session naming the home (onDemand).
-        var rows = healer ? new[] { Npc(0, EnemyCell, critterFlags: enemyFlags), Npc(1, start, 5), Item(2) }
-            : visitor ? new[] { Npc(0, EnemyCell, critterFlags: enemyFlags) } : new[] { Npc(0, EnemyCell, critterFlags: enemyFlags), Npc(1, start) };
+        var rows = healer ? new[] { Npc(0, enemy, critterFlags: enemyFlags), Npc(1, start, 5, alignment: companionAlignment), Item(2) }
+            : visitor ? new[] { Npc(0, enemy, critterFlags: enemyFlags) } : new[] { Npc(0, enemy, critterFlags: enemyFlags), Npc(1, start, alignment: companionAlignment) };
         SessionSeedHolder[] holders = visitor ? [new(Entity(0), SessionHolderKind.Npc, false, false, [], [])]
             : [new(Entity(0), SessionHolderKind.Npc, false, false, [], []), new(Entity(1), SessionHolderKind.Npc, false, false, [], healer ? [Entity(2)] : [])];
         var map = new AreaInventoryMap(1,
@@ -142,6 +143,8 @@ public sealed class AreaAiFollowerTests
             Assert.AreEqual(GameSessionDisposition.Changed, session.SetMapChange(session.Version, new(2), AreaCompanionPlacement.MapKey(Entity(1)), 1).Disposition);
         // ARC-AI-1515: a follower that joined by the check (not forced) can be refused by a later follow check; a forced one is accepted at once.
         Assert.AreEqual(GameSessionDisposition.Changed, (joinFacts is null ? session.ForceJoinParty(session.Version, Entity(1)) : session.JoinParty(session.Version, Entity(1), joinFacts, force: false)).Disposition);
+        // ARC-AI-1531: the party took a map NPC of the host (a mind-controlled one) without the viewer's companion group: it is led, yet not in the follower source.
+        if (enemyLed) Assert.AreEqual(GameSessionDisposition.Changed, session.ForceJoinParty(session.Version, Entity(0)).Disposition);
         if (companionWaits) Assert.AreEqual(GameSessionDisposition.Changed, session.WaitParty(session.Version, Entity(1)).Disposition);
         // ARC-WORLD-119: a companion released before the host is built.
         if (free) Assert.AreEqual(GameSessionDisposition.Changed, session.LeaveParty(session.Version, Entity(1), new PartyLeave(Force: true)).Disposition);
@@ -164,10 +167,10 @@ public sealed class AreaAiFollowerTests
             CardinalTraversalApplicability.Applicable, CardinalTraversalDisposition.Blocked, "TEST")];
         var steps = new AreaStepSnapshot(new(AreaStepInputKind.Structural, "arc-data-019-whole-map-original-rules-v1", [], "d"), 1, [(0, 0)], terrain,
             objects, new Dictionary<AreaStepCell, AreaStepWallEdge[]>());
-        var walks = new Walks(new(Entity(1), Npc(1, start, healer ? 5 : 0), start));
+        var walks = new Walks(new(Entity(1), Npc(1, start, healer ? 5 : 0, alignment: companionAlignment), start));
         var scene = new AreaAiScene
         {
-            RuntimeMap = 1, Chart = new AreaChart(0, 0, new(0, 0), "TEST"), Steps = steps, Npcs = [new(Entity(0), Npc(0, EnemyCell, critterFlags: enemyFlags), EnemyCell)], Combat = combat,
+            RuntimeMap = 1, Chart = new AreaChart(0, 0, new(0, 0), "TEST"), Steps = steps, Npcs = [new(Entity(0), Npc(0, enemy, critterFlags: enemyFlags), enemy)], Combat = combat,
             HeroCell = () => HeroCell,
             Companions = () => [(Entity(1), Key(1), walks.Cells[Entity(1)])],
             Followers = followers ? walks : null,
@@ -299,6 +302,26 @@ public sealed class AreaAiFollowerTests
         Assert.AreEqual(0, waiting.Walks.Jumps);
         var free = Open(companionAt: new(60, 20), free: true);
         Assert.IsFalse(free.Host.CatchUp(free.Companion).HasPcLeader);
+    }
+
+    // ARC-AI-1531 (VBG18, 0x4AD4D0): a led NPC the follower source does not hold cannot reach the catch-up. The AI host counts it as gone (AiLifeTarget: an NPC the hero leads that the
+    // source lacks is the companions', not the host's own), so the tick finds it dead and never asks the catch-up; and it has no tile of the host's (the scene leaves a led NPC out of its rows),
+    // so its distance is -1. Here the host was built with the NPC before the party took it (the joined-since case, the only way a led NPC sits in the host's rows).
+    [TestMethod]
+    public void A_led_npc_the_follower_source_does_not_hold_is_gone_to_the_tick_so_the_catch_up_is_never_reached()
+    {
+        var far = Open(enemyAt: new(60, 20), enemyLed: true);
+        Assert.IsTrue(far.Host.CatchUp(far.Enemy).HasPcLeader, "the session says the party leads it");
+        Assert.IsFalse(far.Walks.Npcs.Any(n => n.Entity == far.Enemy), "the follower source does not hold it");
+        Assert.IsNull(far.Host.AiLifeTarget(far.Enemy), "the host counts it as gone");
+        var tick = Fire(far, far.Enemy);
+        Assert.AreEqual(AiTickSteps.None, tick.Steps, "no animations interrupted, no catch-up");
+        Assert.AreEqual(0, far.Walks.Jumps);
+        Assert.AreEqual(new CellCoord(60, 20), far.Host.Tile(far.Enemy), "it stays where it stood");
+        Assert.AreEqual(0, far.Host.DrainNotices().Count(n => n.Kind == AreaAiNoticeKind.Entered));
+        // A free NPC of the host far away has no PC leader: no catch-up either.
+        var free = Open(enemyAt: new(60, 20));
+        Assert.IsFalse(Fire(free, free.Enemy).Steps.HasFlag(AiTickSteps.CaughtUp));
     }
 
     // ARC-DEV-105 (MIG9 S5, RL16, RL17): a map with a sector cache starts a heartbeat chain only in a loaded sector; a map without one keeps
@@ -1184,5 +1207,72 @@ public sealed class AreaAiFollowerTests
         Assert.IsNotNull(before);
         Assert.IsTrue(host.SpellPeace(enemy, Pc), host.TraceOf(enemy)?.Setter);
         Assert.AreEqual(before!.Handle, host.RunOf(companion)?.Handle, "the follower's run does not aim at the NPC: left");
+    }
+
+    // ARC-AI-1527 (FR-DIALOG-003, VB4-1..VB4-5): the followers' comment lines. The host chooses the comment and names the speaker and the message range; the viewer reads the line text and floats it.
+    private static TauntFacts HitFacts(bool critical = true) => new()
+    {
+        TauntsOn = true, AttackerIsPc = true, Struck = true, StruckInPcParty = false, Hit = true, Critical = critical, StruckIsAimed = true,
+    };
+
+    [TestMethod]
+    public void The_attack_end_asks_the_taunt_and_a_following_companion_says_the_critical_hit_comment_in_about_half_the_cases()
+    {
+        var (_, host, _, _, companion) = Open();
+        var said = new List<(string Speaker, LoyaltyLines Lines)>();
+        host.FollowerSpeaks = (speaker, lines) => said.Add((speaker, lines));
+        for (var i = 0; i < 200; i++) host.AttackEnded(HitFacts());
+        Assert.IsTrue(said.Count is > 40 and < 160, $"random(1, 2) lets about half of the 200 hits comment ({said.Count})");
+        Assert.IsTrue(said.All(line => line.Speaker == companion && line.Lines == new LoyaltyLines(2400, 2499)), "the only follower speaks the critical hit range 2400-2499");
+        said.Clear();
+        for (var i = 0; i < 200; i++) host.AttackEnded(HitFacts() with { TauntsOn = false });
+        for (var i = 0; i < 200; i++) host.AttackEnded(HitFacts(critical: false));
+        for (var i = 0; i < 200; i++) host.AttackEnded(HitFacts() with { StruckInPcParty = true });
+        for (var i = 0; i < 200; i++) host.AttackEnded(HitFacts() with { Hit = false });
+        for (var i = 0; i < 200; i++) host.AttackEnded(HitFacts() with { StruckIsAimed = false });
+        Assert.AreEqual(0, said.Count, "the option off, a plain hit, a struck party member, a miss and a stray hit (no record flag 0x8) say nothing");
+    }
+
+    [TestMethod]
+    public void The_stray_taunt_kind_speaks_its_own_range_and_a_waiting_companion_is_no_taunter()
+    {
+        var (_, host, _, _, _) = Open();
+        var said = new List<LoyaltyLines>();
+        host.FollowerSpeaks = (_, lines) => said.Add(lines);
+        for (var i = 0; i < 200; i++) host.AttackEnded(HitFacts() with { StruckIsAimed = false, StrayFlag = true });
+        Assert.IsTrue(said.Count > 0 && said.All(lines => lines == new LoyaltyLines(2500, 2599)), "kind 1: a hit on another object under record flag 0x8");
+        var (_, waiting, _, _, _) = Open(companionWaits: true);
+        var none = 0;
+        waiting.FollowerSpeaks = (_, _) => none++;
+        for (var i = 0; i < 200; i++) waiting.AttackEnded(HitFacts());
+        Assert.AreEqual(0, none, "a waiting companion is not in the hero's follower array");
+    }
+
+    [TestMethod]
+    public void A_hit_that_takes_a_follower_from_a_fifth_of_its_hit_points_or_more_to_below_makes_it_say_the_near_death_line()
+    {
+        var (_, host, _, enemy, companion) = Open();
+        var said = new List<(string Speaker, LoyaltyLines Lines)>();
+        host.FollowerSpeaks = (speaker, lines) => said.Add((speaker, lines));
+        Assert.AreEqual(new FollowerComment(companion, new LoyaltyLines(5500, 5599)), host.Hurt(companion, 10, 3, 20, died: false), "50 % to 15 %");
+        CollectionAssert.AreEqual(new[] { (companion, new LoyaltyLines(5500, 5599)) }, said);
+        Assert.IsNull(host.Hurt(companion, 20, 10, 20, died: false), "still above a fifth");
+        Assert.IsNull(host.Hurt(companion, 3, 2, 20, died: false), "already below it");
+        Assert.IsNull(host.Hurt(companion, 10, 0, 20, died: true), "a killed follower floats nothing (FO16)");
+        Assert.IsNull(host.Hurt(enemy, 10, 3, 20, died: false), "an NPC without a PC leader");
+        Assert.IsNull(host.Hurt(Pc, 10, 3, 20, died: false), "the hero has no leader");
+        Assert.AreEqual(1, said.Count);
+    }
+
+    [TestMethod]
+    public void The_complaint_of_a_follower_whose_leader_attacks_a_creature_it_cannot_stand_says_the_upset_line_of_its_reason()
+    {
+        // The follower is good (alignment above 0) and the victim's alignment is at least parameter 12 (0 here): the reason GOOD, lines 4900-4999.
+        var (_, host, _, enemy, companion) = Open(companionAlignment: 5);
+        var said = new List<(string Speaker, LoyaltyLines Lines)>();
+        host.FollowerSpeaks = (speaker, lines) => said.Add((speaker, lines));
+        host.HeroAttacked(enemy);
+        CollectionAssert.AreEqual(new[] { (companion, new LoyaltyLines(4900, 4999)) }, said, $"{host.TraceOf(companion)?.Event}");
+        StringAssert.Contains(host.TraceOf(companion)!.Event, "Complain Good");
     }
 }

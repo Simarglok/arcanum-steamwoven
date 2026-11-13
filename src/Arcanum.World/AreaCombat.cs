@@ -491,6 +491,9 @@ public sealed class AreaCombatHost : IAreaEventObjects
     public CombatFields? Fields(string entity) =>
         Record(entity) is { } found && RowFields(found.Map, entity, out var fields) && fields is not null ? Written(null, entity).Apply(fields) : null;
 
+    /// <summary>ARC-MAGIC-1568: the NPC's stored base stats, the entries a spell wrote laid over them (<see cref="Fields(string)"/>).</summary>
+    public IReadOnlyList<int>? StoredStats(string entity) => Fields(entity ?? throw new ArgumentNullException(nameof(entity)))?.Critter?.BaseStats;
+
     // ARC-MAGIC-1475: the entries a spell wrote into the NPC, from the given session or else the host's (none without one).
     private SessionCritterIndexedWrites Written(GameSessionOwner? session, string entity) =>
         (session ?? _session?.Invoke())?.QueryCritterIndexedWrites(entity) ?? SessionCritterIndexedWrites.None;

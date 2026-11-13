@@ -713,6 +713,7 @@ class QueueRunTests(unittest.TestCase):
         self.processes: list[subprocess.Popen] = []
 
     def tearDown(self) -> None:
+        (self.root / "release").write_text("go")  # a held run of a failed test ends at once
         for process in self.processes:
             if process.poll() is None:
                 process.kill()
@@ -725,6 +726,21 @@ class QueueRunTests(unittest.TestCase):
         code = (f"import time; open({str(self.log)!r}, 'a').write('start {name} %f\\n' % time.time()); time.sleep({seconds}); "
                 f"open({str(self.log)!r}, 'a').write('end {name} %f\\n' % time.time())")
         return self.wrapper(kind, name, [sys.executable, "-c", code], timeout=timeout, estimate=estimate, cwd=cwd)
+
+    def held(self, kind: str, name: str, *, cwd: Path | None = None) -> subprocess.Popen:
+        """A run that holds its place until `release()`, so a test's overlap and order do not depend on how fast the
+        machine starts the next wrapper (a loaded Mac took seconds, which broke fixed run lengths)."""
+        code = (f"import os, time; open({str(self.log)!r}, 'a').write('start {name} %f\\n' % time.time()); "
+                f"deadline = time.time() + 90\n"
+                f"while not os.path.exists({str(self.root / 'release')!r}) and time.time() < deadline: time.sleep(0.05)\n"
+                f"open({str(self.log)!r}, 'a').write('end {name} %f\\n' % time.time())")
+        return self.wrapper(kind, name, [sys.executable, "-c", code], cwd=cwd)
+
+    def release(self) -> None:
+        (self.root / "release").write_text("go")
+
+    def started(self, *names: str) -> None:
+        self.until(lambda: self.log.exists() and all(f"start {name} " in self.log.read_text() for name in names), 60.0)
 
     def live(self) -> list[dict]:
         with run_queue._QueueLock():
@@ -822,13 +838,16 @@ class QueueRunTests(unittest.TestCase):
         self.assertLess(found["end d"], found["end w"])
 
     def test_a_third_dotnet_run_waits_for_a_free_dotnet_place(self) -> None:
-        self.queued("dotnet", "a", 1.2)
-        self.until(lambda: self.log.exists())
-        self.queued("dotnet", "b", 1.2)
+        self.held("dotnet", "a")
+        self.held("dotnet", "b")
+        self.started("a", "b")  # two places: a and b overlap, held until released
         self.queued("dotnet", "c", 0.2)
+        time.sleep(1.0)
+        self.assertNotIn("start c ", self.log.read_text())  # both places are taken
+        self.release()
         self.finish()
         found = self.events()
-        self.assertLess(found["start b"], found["end a"])  # two places: a and b overlap
+        self.assertLess(found["start b"], found["end a"])
         self.assertGreaterEqual(found["start c"], min(found["end a"], found["end b"]))
 
     def test_an_export_runs_quiet_after_running_dotnet_and_before_newer_dotnet(self) -> None:
@@ -862,16 +881,17 @@ class QueueRunTests(unittest.TestCase):
         self.assertEqual(run_queue.tickets(), [])
 
     def test_a_stopped_waiter_leaves_the_queue(self) -> None:
-        self.queued("window", "a", 1.5)
-        self.until(lambda: self.log.exists())
+        self.held("window", "a")
+        self.started("a")
         waiter = self.queued("window", "gone", 0.1)
         self.queued("window", "b", 0.1)
         waiter.send_signal(signal.SIGTERM)
-        self.assertEqual(waiter.wait(10), 128 + signal.SIGTERM)
-        self.finish()
+        self.assertEqual(waiter.wait(30), 128 + signal.SIGTERM)
+        self.release()
+        self.finish()  # b would wait for ever behind a ticket the stopped waiter left
         found = self.events()
         self.assertNotIn("start gone", found)
-        self.assertLess(found["start b"] - found["end a"], 2.5)
+        self.assertGreaterEqual(found["start b"], found["end a"])
 
     def test_the_lockf_rule_and_the_queue_exclude_each_other(self) -> None:
         legacy = os.environ["ARCANUM_QUEUE_LEGACY_LOCK"]
