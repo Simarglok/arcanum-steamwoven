@@ -73,7 +73,7 @@ public sealed class AreaMapTransfers
                 _cells.TryAdd(new(site.Location.X, site.Location.Y), site);
                 continue;
             }
-            if (site.Trigger != MapTransitionTrigger.Use || site.Object is not { } owner) continue;
+            if (site.Trigger != MapTransitionTrigger.Use || site.Object is not { } owner || owner.Type == PortalObjectType) continue;
             var row = owner.Sector is { } sector ? statics.GetValueOrDefault((sector.Id, owner.Index)) : mobiles.GetValueOrDefault(owner.OwnIdSha256);
             // The owner's own id digest must agree (sector objects with a null id share one digest, so the sector and ordinal decide).
             if (row is null || row.Key.ObjectIdSha256 != owner.OwnIdSha256 || row.WorldX is null || row.WorldY is null) { Unmatched++; continue; }
@@ -85,7 +85,7 @@ public sealed class AreaMapTransfers
         foreach (var site in transitions.Sites.Where(s => !s.Unconditional && s.Trigger == MapTransitionTrigger.Use && (s.Guards & ~ScriptDecides) == 0)
             .OrderBy(s => s.Chain.Count).ThenBy(s => s.Line))
         {
-            if (site.Object is not { } owner) continue;
+            if (site.Object is not { } owner || owner.Type == PortalObjectType) continue;
             var row = owner.Sector is { } sector ? statics.GetValueOrDefault((sector.Id, owner.Index)) : mobiles.GetValueOrDefault(owner.OwnIdSha256);
             if (row is null || row.Key.ObjectIdSha256 != owner.OwnIdSha256 || row.WorldX is null || row.WorldY is null || _uses.ContainsKey(row.Key)) continue;
             _scripted.TryAdd(row.Key, (site, row));
@@ -117,6 +117,37 @@ public sealed class AreaMapTransfers
     {
         ArgumentException.ThrowIfNullOrEmpty(entity);
         return CritterTileRunner is { } runner && _tiles.TryGetValue(cell, out var placed) ? runner(placed, new ScrObjectRef(homeMap ?? Map.RuntimeMap, entity)) : null;
+    }
+
+    /// <summary>The object type of a door or window (field 0x14F = 1, <see cref="MapTransitionObject.Type"/>).</summary>
+    public const int PortalObjectType = 1;
+
+    /// <summary>
+    /// ARC-WORLD-1805 (ledger TT18, TT20): a door or window is no use trigger of this class. The original's use of one is the use node of goal 12 (0x428A10: the action points, the access test, then the door's own use script, whose
+    /// teleport is only a request the script records, 0x447220 case 0x2C → 0x4D3380, so the door goes on as its script's answer says), which the viewer's door host runs; the door's script asks for its transfer through
+    /// <see cref="QueueDoorTeleport"/>. Before this a click on one of the four installed doors whose use script teleports the hero took the transfer at once, with no action points, lock test or opening.
+    /// </summary>
+    public AreaMapUseResult QueueDoorTeleport(AreaObjectRecord door, int script, ScrTeleport teleport)
+    {
+        ArgumentNullException.ThrowIfNull(door); ArgumentNullException.ThrowIfNull(teleport);
+        LastScripted = null;
+        var site = DoorSite(door, script);
+        // TR4: a request while the hero's change of place is pending is refused (the script's other effects stay).
+        if (Pending is not null) return new(AreaUseOutcome.TransitionPending, Teleported(site, teleport), 0, "TRANSITION_PENDING");
+        return Queue(Teleported(site, teleport), door.Key, 0, teleport.Fade);
+    }
+
+    /// <summary>Why the teleport a door's use script asked for cannot be queued (<see cref="Refusal"/> of its resolved site), or null; a pending transfer drops it instead (<see cref="QueueDoorTeleport"/>), so it is no refusal.</summary>
+    public string? DoorTeleportRefusal(AreaObjectRecord door, ScrTeleport teleport)
+    {
+        ArgumentNullException.ThrowIfNull(door); ArgumentNullException.ThrowIfNull(teleport);
+        return Pending is not null ? null : Refusal(Teleported(DoorSite(door, 0), teleport));
+    }
+
+    private MapTransitionSite DoorSite(AreaObjectRecord door, int script)
+    {
+        var here = new WorldLocation(door.WorldX ?? 0, door.WorldY ?? 0);
+        return new(MapTransitionTrigger.Use, here, null, script, [script], 0, false, false, Map.Snapshot.CatalogueMap, Map.RuntimeMap, here, MapTransitionGuard.None);
     }
 
     /// <summary>ARC-SCRIPT-046: the script of a tile, or null.</summary>
