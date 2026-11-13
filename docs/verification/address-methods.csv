@@ -612,6 +612,7 @@ src/Arcanum.World/AreaRestock.cs,Vicinity,pending,
 src/Arcanum.World/AreaRestock.cs,Wielder,pending,
 src/Arcanum.World/AreaScenePlan.cs,BodyRanks,pending,
 src/Arcanum.World/AreaSceneryHost.cs,AddCreated,pending,
+src/Arcanum.World/AreaSceneryHost.cs,Reframe,exempt,host
 src/Arcanum.World/AreaSceneryHost.cs,Restart,pending,
 src/Arcanum.World/AreaSceneryHost.cs,TakeSoundBegins,exempt,host
 src/Arcanum.World/AreaScriptHost.cs,ReactionOf,pending,
@@ -918,6 +919,7 @@ tools/terrain-viewer/Godot/TerrainViewerSkillBar.cs,SkillBarReleased,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerSoundCallers.cs,NoteGaitFrame,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerSoundCallers.cs,PlayDroppedItemSound,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerSoundCallers.cs,PlayNpcAttackBark,exempt,host
+tools/terrain-viewer/Godot/TerrainViewerSoundCallers.cs,StopKilledSceneryVoices,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerSoundCallers.cs,StopSceneryVoices,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerSpellBar.cs,SpellBarEntered,pending,
 tools/terrain-viewer/Godot/TerrainViewerSpellCast.cs,ActivateItemSlot,pending,
