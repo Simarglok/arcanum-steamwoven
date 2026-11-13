@@ -999,15 +999,18 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         if (plan.ReactsToAttack) React(victim, attacker);
     }
 
+    // ARC-AI-1585 (0x413DF0): the accidental-attack line range, messages 0x8FC..0x95F.
+    private static readonly LoyaltyLines AccidentalAttackLines = new(2300, 2399);
+
     /// <summary>
     /// ARC-AI-1515 (attack event 0x4A9650, the follower branch of a PC attacker, VBG4): the hero hit its direct follower. A deliberate hit changes the
     /// reaction by AI parameter 9 (<see cref="GameSessionOwner.ReactToPcHit"/>, ARC-WORLD-021's profile: added in the Original setting, taken in Steamwoven; an accidental one
     /// changes nothing); then the follow check runs with the follower limit ignored (<see cref="GameSessionOwner.CheckFollowerAfterHit"/>, 0x4AD950): a refusal makes the
-    /// follower leave and sets NPC flag 0x20 (JILTED) and the refusal line range of its reason is named (NOT READY: no line text is loaded, so none is floated; the range is traced,
-    /// as the loyalty step's), and a follower that stays (the check passed, or the leave was refused) says the accidental-attack line (lines 2300-2399) one time in three
-    /// (0x413DF0; likewise only named) when it is active (0x4AD800 is not read yet: the active test 0x45D790 stands for it). The leave is seen by
+    /// follower leave and sets NPC flag 0x20 (JILTED) and it says the refusal line of its reason (ARC-AI-1585: through <see cref="FollowerSpeaks"/>; the range is also traced), and a follower that stays (the check passed, or the leave was refused) says the accidental-attack line (lines 2300-2399) one time in three
+    /// (0x413DF0, through <see cref="FollowerSpeaks"/>) when it is active (0x4AD800 is not read yet: the active test 0x45D790 stands for it). The leave is seen by
     /// <see cref="ObserveLeaves"/> at the next look. Without the check's facts (the scene gives none) only the reaction changes.
     /// </summary>
+    [OriginalFunction(0x413DF0, OriginalFunctionScope.Partial)]
     private void HitFollower(string victim, bool deliberate)
     {
         var changed = false;
@@ -1024,7 +1027,12 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         var result = _session.CheckFollowerAfterHit(_session.Version, victim, consent);
         string outcome;
         if (result.Left && result.RefusalLines is { } lines)
-            outcome = $"left jilted, {(Active(victim) ? $"refusal lines {lines.First}-{lines.Last}" : "inactive: no refusal line")} ({result.Consent})";
+        {
+            var speaks = Active(victim);
+            outcome = $"left jilted, {(speaks ? $"refusal lines {lines.First}-{lines.Last}" : "inactive: no refusal line")} ({result.Consent})";
+            // ARC-AI-1585 (0x413A90): the refusal line of the reason is said (the viewer's line pick: its own draw of 0x413DF0's family, 0x418780).
+            if (speaks) Speak(victim, lines);
+        }
         else if (result.Disposition == GameSessionDisposition.Rejected) outcome = $"check refused ({result.Failure})";
         else
         {
@@ -1033,6 +1041,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
             var speaks = rolled && Active(victim);
             outcome = $"stays ({(result.Consent is { } reason ? reason.ToString() : "no check")}{(result.LeaveRefused ? ", leave refused" : "")})"
                 + (speaks ? ", accidental-attack lines 2300-2399" : "");
+            // ARC-AI-1585 (0x413DF0): the accidental-attack line, a random one of the lines 2300-2399.
+            if (speaks) Speak(victim, AccidentalAttackLines);
         }
         Trace(victim).FollowerHit = $"{(deliberate ? "deliberate" : "accidental")} reaction-changed={changed} follow check: {outcome}";
         ObserveLeaves();

@@ -434,7 +434,6 @@ src/Arcanum.World/AreaAiHost.cs,HealSkillUsable,pending,
 src/Arcanum.World/AreaAiHost.cs,HealingItem,pending,
 src/Arcanum.World/AreaAiHost.cs,HeroAttacked,pending,
 src/Arcanum.World/AreaAiHost.cs,HitEffect,pending,
-src/Arcanum.World/AreaAiHost.cs,HitFollower,exempt,host
 src/Arcanum.World/AreaAiHost.cs,HitReached,pending,
 src/Arcanum.World/AreaAiHost.cs,HostileToHero,pending,
 src/Arcanum.World/AreaAiHost.cs,Hurt,exempt,host
