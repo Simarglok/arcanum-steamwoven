@@ -27,7 +27,7 @@ public partial class TerrainViewerApp
         }
         async Task Settle()
         {
-            for (var i = 0; i < 3; i++) { await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame); SyncAreaInventory(); }
+            for (var i = 0; i < 3; i++) { ScanSceneryArtNow(); await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame); SyncAreaInventory(); }
         }
         await Settle();
         var runtimeMap = area.Snapshot.RuntimeMap;
@@ -75,15 +75,18 @@ public partial class TerrainViewerApp
         }
         try
         {
-            Require(!_groundBodies.ContainsKey(key), "the scenery is drawn from its T0 body before the change");
+            Require(!_sceneryArt.ContainsKey(entity), "the scenery is drawn from its map data before the change");
             Require(session.QueryObjectArt(map, entity) is null, "no art field before the change");
             if (capturing && art.Load(unchecked((uint)baseline)).Frame is { } oldFrame) SaveFrame("before", oldFrame.Frame);
             var set = session.SetObjectArt(session.Version, map, entity, next, unchecked((uint)baseline));
             Require(set.Disposition == GameSessionDisposition.Changed, $"the session keeps the art: {set.Disposition} {set.Failure}");
             Require(session.QueryObjectArt(map, entity) == next && session.QueryObjectArts(map).Any(pair => pair.Entity == entity && pair.Art == next), "the session answers the new art id");
             await Settle();
-            var found = _groundBodies.TryGetValue(key, out var drawn);
-            Require(found && drawn!.Frame == newFrame.Key && drawn.Frame != t0.Frame, "the view draws the new art where the T0 body stood");
+            // ARC-RENDER-1781: the new art's frame the loop shows now (frame 0 when the art has one frame), among the scenery bodies.
+            var found = _sceneryBodies.TryGetValue(key, out var drawn);
+            var haveArt = _sceneryArt.TryGetValue(entity, out var shownArt);
+            Require(found && haveArt && shownArt!.Frames.Any(f => AreaFrameKey.From(f) == drawn!.Frame) && drawn!.Frame != t0.Frame, "the view draws the new art where the T0 body stood");
+            var newFrames = shownArt!.Frames;
             Require(drawn!.MapX == t0.MapX && drawn.MapY == t0.MapY, "at the object's cell");
             Require(HoverIndex() is { } index && index.Contains(key), "the hover index still holds the object");
             SaveFrame("after", newFrame.Frame);
@@ -93,8 +96,9 @@ public partial class TerrainViewerApp
             // The id the map data gives returns the object to its T0 body.
             Require(session.SetObjectArt(session.Version, map, entity, unchecked((uint)baseline), unchecked((uint)baseline)).Disposition == GameSessionDisposition.Changed, "the data's id clears the field");
             await Settle();
-            Require(!_groundBodies.ContainsKey(key) && session.QueryObjectArt(map, entity) is null, "the T0 body is drawn again");
-            GD.Print("ARC-SCRIPT-1735 native-smoke object-art PASS " + System.Text.Json.JsonSerializer.Serialize(new { Map = runtimeMap, Sceneries = sceneries.Length, From = $"0x{baseline:X8}", To = $"0x{next:X8}" }));
+            Require(!_sceneryArt.ContainsKey(entity) && session.QueryObjectArt(map, entity) is null && (!_sceneryBodies.TryGetValue(key, out var back) || newFrames.All(f => AreaFrameKey.From(f) != back.Frame)), "the object has its own art again");
+            var loopReport = await ObserveSceneryArtLoopAsync(session, map, art);
+            GD.Print("ARC-SCRIPT-1735 native-smoke object-art PASS " + System.Text.Json.JsonSerializer.Serialize(new { Map = runtimeMap, Sceneries = sceneries.Length, From = $"0x{baseline:X8}", To = $"0x{next:X8}", Loop = loopReport }));
         }
         finally
         {

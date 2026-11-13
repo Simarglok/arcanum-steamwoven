@@ -67,11 +67,12 @@ public sealed class SceneryLoop
     private readonly IReadOnlyList<(int Dx, int Dy)> _deltas;
 
     /// <param name="deltas">Each frame's delta, in frame order; their count is the ART's frame count.</param>
-    public SceneryLoop(long x, long y, IReadOnlyList<(int Dx, int Dy)> deltas, int frame, long pauseMs)
+    /// <param name="offsetX">ARC-RENDER-1781: the object offset the loop starts from (a loop that took over after an art change keeps the offset the object has, AS6).</param>
+    public SceneryLoop(long x, long y, IReadOnlyList<(int Dx, int Dy)> deltas, int frame, long pauseMs, int offsetX = 0, int offsetY = 0)
     {
         ArgumentNullException.ThrowIfNull(deltas);
         if (deltas.Count < 2 || frame < 0 || frame >= deltas.Count || pauseMs <= 0) throw new ArgumentOutOfRangeException(nameof(deltas));
-        X = x; Y = y; _deltas = deltas; Frame = frame; PauseMs = pauseMs;
+        X = x; Y = y; _deltas = deltas; Frame = frame; PauseMs = pauseMs; OffsetX = offsetX; OffsetY = offsetY;
     }
 
     public long X { get; }

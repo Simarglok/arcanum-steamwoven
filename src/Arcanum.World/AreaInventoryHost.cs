@@ -387,7 +387,7 @@ public sealed class AreaInventoryHost
         foreach (var map in _maps.Values)
             if (map.Substitute(npc) is { } substitute && map.TryGetRow(npc, out var row) && row.WorldX is { } x && row.WorldY is { } y
                 && x is >= int.MinValue and <= int.MaxValue && y is >= int.MinValue and <= int.MaxValue
-                && !session.QueryCompanion(npc).LedByPc
+                && session.QueryLeader(npc) is null
                 && Arcanum.Simulation.Ai.AiExecutorRules.Distance(new((int)x, (int)y), substitute.Cell) <= AreaBarterMerchant.SubstituteRange)
                 return substitute.Entity;
         return null;

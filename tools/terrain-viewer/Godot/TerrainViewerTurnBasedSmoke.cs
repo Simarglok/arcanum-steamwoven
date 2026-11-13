@@ -48,7 +48,7 @@ public partial class TerrainViewerApp
 
         var simulatedFocus = _worldFocusSimulationForSelfTest; var focused = _worldFocused; var testTime = _worldTestTime;
         var numLock = _numLockRun; var option = _alwaysRunOption; var setting = _turnBasedSetting; var concealed = HeroConcealed;
-        var hudForSelfTest = _combatHudForSelfTest;
+        var hudForSelfTest = _combatHudForSelfTest; var hudBarsForSelfTest = _gameBarForSelfTest;
         _worldFocusSimulationForSelfTest = true;
         // ARC-DEV-133: the search places the hero, and the safety gate opens only under focus. The smoke owns the focus from here on, as every
         // smoke does before its first placement, not the window's own, which a run behind another window does not have.
@@ -178,6 +178,8 @@ public partial class TerrainViewerApp
             Require(_turnBasedSetting && session.QueryCombatRound() is null, "Space turned the setting on without a round: " + _turnBasedNotice);
             // ARC-UI-1114: the combat HUD (action-point lamps, turn-order list) is drawn while a round runs; this stage reads it.
             _combatHudForSelfTest = true;
+            // ARC-UI-1888: ARC_AREA_HUD_BARS=1 draws the interface bars of the game's art (the lamp panel then draws the game's own art over them; the readbacks make the graphics composite).
+            if (System.Environment.GetEnvironmentVariable("ARC_AREA_HUD_BARS") == "1") _gameBarForSelfTest = true;
             // ARC_AREA_HUD_CAPTURE=<ignored path prefix> saves readbacks of the HUD for the graphics composite (never committed).
             var hudCapture = System.Environment.GetEnvironmentVariable("ARC_AREA_HUD_CAPTURE");
             async Task HudShot(string name)
@@ -239,6 +241,45 @@ public partial class TerrainViewerApp
             var panelRect = _combatHud.PlacementForSelfTest.Panel;
             Require(new Rect2(Vector2.Zero, GetViewport().GetVisibleRect().Size).Encloses(panelRect) && _combatHud.LampRectForSelfTest(0).Size.X > 0, $"ARC-UI-1114: the lamp panel is inside the window: {panelRect}");
             await HudShot("hero-preview");
+            // ARC-UI-1888: the original's art panel (synthetic art here: an automated run does not read the game's): the panel, the lamps as the arts of their shares at the
+            // table's places (a lit lamp only), the end-turn button, all in one scale; the plain controls hide.
+            Texture2D Block(int width, int height, Color colour) { var image = Image.CreateEmpty(width, height, false, Image.Format.Rgba8); image.Fill(colour); return ImageTexture.CreateFromImage(image); }
+            var realArt = AreaCombatLampLayout.ArtNumbers.All(number => _gameBarPanel?.ArtFrame(number) is not null);
+            // ARC_AREA_HUD_ART=plain draws the plain controls (the "before" frame of the graphics composite) and checks none of the art panel.
+            var plain = System.Environment.GetEnvironmentVariable("ARC_AREA_HUD_ART") == "plain";
+            if (plain) _combatHudArtForSelfTest = _ => null;
+            else if (!realArt) _combatHudArtForSelfTest = number => number switch
+            {
+                AreaCombatLampLayout.PanelArt => [Block(AreaCombatLampLayout.PanelWidth, AreaCombatLampLayout.PanelHeight, new Color(.2f, .2f, .22f))],
+                AreaCombatLampLayout.EndTurnArt => [.. Enumerable.Range(0, 3).Select(i => Block(AreaCombatLampLayout.EndTurnWidth, AreaCombatLampLayout.EndTurnHeight, new Color(.1f * (i + 1), .5f, .2f)))],
+                _ => [Block(AreaCombatLampLayout.LampWidth, AreaCombatLampLayout.LampHeight, Colors.White)],
+            };
+            _combatHudStamp = null; RefreshCombatHud();
+            GD.Print($"ARC-UI-1888 lamp panel art {(plain ? "plain controls" : realArt ? "from the game" : "synthetic")}");
+            if (plain) { Require(!_combatHud.ArtShownForSelfTest && !_combatHud.EndTurnShownForSelfTest, "ARC-UI-1888: no art, no art panel"); await HudShot("hero-preview-plain"); }
+            else {
+            Require(_combatHud.ArtShownForSelfTest && _combatHud.EndTurnShownForSelfTest, "ARC-UI-1888: the art panel is drawn");
+            var factor = _combatHud.PanelArtRectForSelfTest.Size.X / AreaCombatLampLayout.PanelWidth;
+            var origin = _combatHud.PanelArtRectForSelfTest.Position;
+            Require(factor >= 1 && Mathf.IsEqualApprox(_combatHud.PanelArtRectForSelfTest.Size.Y, AreaCombatLampLayout.PanelHeight * factor), $"ARC-UI-1888: the panel keeps the original's proportion: {_combatHud.PanelArtRectForSelfTest}");
+            var shareArt = _combatHud.LampsForSelfTest!.Select(l => AreaCombatLampLayout.LampArt(l) ?? -1).ToArray();
+            for (var i = 0; i < ActionPointRules.LampCount; i++)
+            {
+                Require(_combatHud.LampArtNumberForSelfTest(i) == shareArt[i], $"ARC-UI-1888: lamp {i} draws art {shareArt[i]}, drew {_combatHud.LampArtNumberForSelfTest(i)}");
+                if (shareArt[i] < 0) continue;
+                var rect = _combatHud.LampArtRectForSelfTest(i);
+                Require(rect.Position.IsEqualApprox(origin + new Vector2(AreaCombatLampLayout.LampX[i], AreaCombatLampLayout.LampY) * factor)
+                    && rect.Size.IsEqualApprox(new Vector2(AreaCombatLampLayout.LampWidth, AreaCombatLampLayout.LampHeight) * factor), $"ARC-UI-1888: lamp {i} at the table's place: {rect}");
+            }
+            var button = _combatHud.EndTurnRectForSelfTest;
+            Require(button.Position.IsEqualApprox(origin + new Vector2(AreaCombatLampLayout.EndTurnX, AreaCombatLampLayout.EndTurnY) * factor)
+                && button.Size.IsEqualApprox(new Vector2(AreaCombatLampLayout.EndTurnWidth, AreaCombatLampLayout.EndTurnHeight) * factor) && _combatHud.EndTurnFrameForSelfTest == 0, $"ARC-UI-1888: the end-turn button at its place: {button}");
+            await HudShot("hero-preview-art");
+            // ARC-UI-1888: with ARC_AREA_WINDOW_ART=legacy|hd (and ARC_HD_PACK for hd) the five arts are checked in that interface mode (none generated; the generated mode is #1821's).
+            if (realArt && WindowArtSmokeRequested && System.Environment.GetEnvironmentVariable("ARC_AREA_WINDOW_ART") != "generated")
+                await WindowArtSmokeAsync("combat-lamps", () => AreaCombatLampLayout.ArtNumbers.Select(number => _gameBarPanel!.ArtFrame(number)).OfType<HdInterfaceTexture>().ToArray(),
+                    AreaCombatLampLayout.ArtNumbers, () => _gameBarPanel!.Factor, () => _combatHud.ArtShownForSelfTest);
+            }
             HoverReleaseForSelfTest(); // the pointer leaves: the pending cost stays (an action that runs no check leaves it, CH4)
             Require(_apPending == TurnBasedRules.WalkStepCost, $"ARC-UI-1114: the pending cost stays after the pointer leaves: {_apPending}");
             // The "before" frame: the same scene without the HUD, as it was drawn before this change.
@@ -260,10 +301,10 @@ public partial class TerrainViewerApp
                 && afterStep.Count(l => l == ActionPointLamp.Cost) == Math.Min(2, ActionPointRules.LampCount - leftLamps),
                 $"ARC-UI-1114: the lamps after the step: pending {_apPending}, " + string.Join(",", afterStep));
 
-            // E ends the subturn; round 2 one game second later, the grant again.
-            Tap(Key.E);
+            // The end-turn button of the art panel (CT5) ends the subturn as E does, round 2 one game second later, the grant again (E itself is the AI smoke's).
+            if (plain) Tap(Key.E); else Require(EndTurnClickForSelfTest(), "ARC-UI-1888: the end-turn button is drawn");
             FramesUntil(HeroTurn, 20);
-            Require(Round().Turn == 2 && HeroTurn() && Round().ActionPoints == grant, $"E passed the turn: round {Round().Turn}, AP {Round().ActionPoints}");
+            Require(Round().Turn == 2 && HeroTurn() && Round().ActionPoints == grant, $"the end-turn button passed the turn: round {Round().Turn}, AP {Round().ActionPoints}");
             Require(session.QueryClockSnapshot().GameTimestampMs == clock + TurnBasedRules.RoundGameTimeMs, "one game second per round");
             // CH4: a subturn start runs the check with cost 0, so the new subturn shows all its points and no cost.
             var fresh = HudLamps();
@@ -344,7 +385,7 @@ public partial class TerrainViewerApp
         {
             if (session.QueryCombatRound() is not null) session.EndCombatRound(session.Version);
             _turnBasedSetting = setting;
-            _combatHudForSelfTest = hudForSelfTest; RefreshCombatHud();
+            _combatHudForSelfTest = hudForSelfTest; _combatHudArtForSelfTest = null; _gameBarForSelfTest = hudBarsForSelfTest; RefreshCombatHud();
             if (HeroConcealed != concealed) session.ToggleHeroConcealment(session.Version);
             if (HeroInCombatMode) session.SetCombatMode(session.Version, SessionCombatant.Hero, false, SessionCombatModeContext.RealTime);
             CancelAreaAttack(null);
