@@ -489,7 +489,7 @@ offset still applied. Without the port, or when its facts are unknown, the text 
 roll, a port exception or an undecodable phrase fails the conversation (`InvalidQueryResult`, `QueryException`, `InvalidText`). The
 phrase changes only the text: the transitions and blocks above stay. The `t:` phrase (PC lines 500..599) is built (ARC-SCRIPT-1150); its argument is
 stored after the phrase, not appended to it (ledger DTR1). The `r:` phrase (the PC's class line 2000) is built too (ARC-SCRIPT-1304, ledger RMR1). The `d:` (PC lines 1300..1399) and `x:` (1400..1499) phrases are built (ARC-SCRIPT-1533, ledger DIR1). Not built: the phrases of the prefix markers `u` (skills 10 and 14) and `z`
-([#1798](https://github.com/Simarglok/arcanum-steamwoven/issues/1798), after the healer menu) and the healer menu behind `h:` (ARC-SCRIPT-044).
+([#1798](https://github.com/Simarglok/arcanum-steamwoven/issues/1798), after the healer menu).
 
 ## Skill service reply `u:` (ARC-SCRIPT-1534)
 
@@ -500,7 +500,7 @@ C library's atoi) is a skill the NPC would use on the PC. The original asks the 
   (3 files) are dead data in both rule settings, and the repair is reached through the `ri` action ([item services](../world/item-service-runtime.md)). The reply is planned as a left-out reply (`DialogConversation.IsRepairServiceReply`, tests `DialogServiceReplyTests`).
 - In the original a `u:` text whose atoi is 0 and any number other than 10, 12 and 14 pass the test and are offered (PC line 900..999, state 0xE); they stay a frontier here.
 - **Not built:** `u:10` (heal), `u:14` (pick locks), any other number and `z:` (a spell sold for gold) stay a frontier, as before (`u`) or an offered blocked reply (`z`). They share the skill-service and spell-sale machinery of the healer menu
-  (`h:`, [#1732](https://github.com/Simarglok/arcanum-steamwoven/issues/1732)); no installed reply uses them. Follow-up: [#1798](https://github.com/Simarglok/arcanum-steamwoven/issues/1798), blocked by #1732.
+  (the healer menu `h:`, built by [#1732](https://github.com/Simarglok/arcanum-steamwoven/issues/1732)); no installed reply uses them. Follow-up: [#1798](https://github.com/Simarglok/arcanum-steamwoven/issues/1798).
 
 ## Trainer reply (ARC-SCRIPT-1150)
 
