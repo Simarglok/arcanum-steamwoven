@@ -227,6 +227,37 @@ public sealed class SavedFlightStateTests
         Assert.AreEqual(owner.QueryShotEndItemEvents(shot, tile).Single().Event, restored.QueryShotEndItemEvents(shot, tile).Single().Event, "it still goes off where it ends");
     }
 
+    // ARC-COMBAT-1717: an NPC's thrown weapon in flight is in both NPC stores (the item to land, the check to strike with); a save keeps the pair (a throw and an arrow of one shot).
+    [TestMethod]
+    public void An_npc_thrown_weapon_in_flight_is_saved_as_a_throw_and_an_arrow_and_strikes_and_lands_after_the_load()
+    {
+        SessionNpcThrowResult? thrown = null;
+        GameSessionOwner? found = null;
+        for (ulong seed = 1; seed <= 300 && found is null; seed++)
+        {
+            var candidate = NpcThrowStateTests.Owner(seed);
+            thrown = candidate.ThrowByNpc(candidate.Version, NpcThrowStateTests.AtHero() with { Flight = true });
+            if (thrown.Attack?.Resolution?.Outcome is AttackOutcome.Hit or AttackOutcome.CriticalHit) found = candidate; else candidate.Dispose();
+        }
+        using var owner = found ?? throw new AssertFailedException("no seed gave a hit");
+        var shot = thrown!.Shots.Single();
+        Fly(owner, shot, AiSchedulerRules.Pc, NpcThrowStateTests.Thrower, critter: false, thrower: NpcThrowStateTests.Thrower);
+        var capture = owner.Capture();
+        Assert.AreEqual((1, 1, 0), (capture.Flights.NpcThrows.Count, capture.Flights.NpcArrows.Count, capture.Flights.HeroShots.Count), "the shot is saved as a throw and an arrow");
+        using var restored = Restore(Decode(GameSessionSnapshotCodec.Encode(capture)));
+        Assert.AreEqual(GameSessionFailure.None, restored.AttachMapInventory(Exterior, NpcThrowStateTests.Seed()).Failure);
+        Assert.AreEqual(owner.QueryThrownShot(shot), restored.QueryThrownShot(shot));
+        Assert.AreEqual(owner.QueryNpcShot(shot), restored.QueryNpcShot(shot), "the restored shot carries the decided hit");
+        Assert.AreEqual(1, restored.QueryShotsInFlight().Count);
+        Assert.IsTrue(restored.QueryItemInFlight(NpcThrowStateTests.Dagger), "the dagger stays hidden while the restored flight goes on");
+        var strike = owner.LandNpcShot(owner.Version, shot, new(NpcThrowStateTests.Combat()) { AttackerWorn = new Dictionary<Arcanum.Simulation.Equipment.EquipmentSlot, SessionWearItem>(), Distance = 1 });
+        var again = restored.LandNpcShot(restored.Version, shot, new(NpcThrowStateTests.Combat()) { AttackerWorn = new Dictionary<Arcanum.Simulation.Equipment.EquipmentSlot, SessionWearItem>(), Distance = 1 });
+        Assert.AreEqual((GameSessionFailure.None, GameSessionFailure.None), (strike.Failure, again.Failure));
+        Assert.AreEqual(strike.Life!.HitPointDamage, again.Life!.HitPointDamage, "the strike lands the same hit after the load");
+        Assert.AreEqual(GameSessionDisposition.Changed, restored.LandThrownItem(restored.Version, shot, NpcThrowStateTests.HeroCell).Disposition);
+        Assert.AreEqual(0, restored.QueryShotsInFlight().Count);
+    }
+
     [TestMethod]
     public void A_restore_refuses_a_launch_of_another_kind_than_its_shot()
     {

@@ -760,7 +760,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
 
     // The points whose slot a run writes back as map changes (SlotProperty). ARC-DEV-312: the dying point's slot is kept under scr12.* (no save schema step: the keys are strings).
     private static bool KeptAsMapChanges(int point) => point is ScrPoint.Examine or ScrPoint.Use or ScrPoint.Dialog or CatchingThiefPoint or ScrPoint.FirstHeartbeat or ScrPoint.Heartbeat or ScrPoint.TakingDamage or ScrPoint.LeaderSleeping or ScrPoint.Bust or ScrPoint.Dying
-        or ScrPoint.EnterCombat or ScrPoint.ExitCombat or ScrPoint.Hit or ScrPoint.CritterHits or ScrPoint.CriticalHit;
+        or ScrPoint.EnterCombat or ScrPoint.ExitCombat or ScrPoint.Hit or ScrPoint.CritterHits or ScrPoint.CriticalHit or ScrPoint.Miss or ScrPoint.CriticalMiss;
 
     // The trap's view of the use slot: the loaded one under the session's script and counters; null without a use slot or for a stored
     // script number outside the catalogue's range (it names no script the content holds).
@@ -1119,11 +1119,13 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     /// script (26) of the attacker with the victim as the triggerer and no extra object. The attachee is a row of the shown map (an NPC, or an item an NPC holds or lies there) or, for a carried item, a row the item host reads by identity
     /// (<see cref="OtherMapRow"/>, as <see cref="RunItemUse"/> does); an object with no slot at the point has no script (<see cref="AreaScriptedUseOutcome.NoTeleport"/> with no run). Under <see cref="CombatPointAdmission"/>; the slot is kept as map
     /// changes. A teleport and a conversation are not modelled from a hit and leave the run unapplied; no answer cancels the hit.
+    /// ARC-COMBAT-1719 (0x4B2870, ledger PF9, PS5): the same call serves the two ends of a projectile's flight, where the original runs the weapon's hit script (7, and 34 for a critical weapon) at the destination of a shot with no target
+    /// and its miss script (8, and 35) at the range end, with the shooter as the triggerer and the shot's target (none for a scattered throw) as the extra object.
     /// </summary>
     public AreaScriptedUse RunCombatPoint(int point, ScrObjectRef attachee, ScrObjectRef? triggerer, ScrObjectRef? extra, ScrRuleProfile rules)
     {
         ArgumentNullException.ThrowIfNull(rules);
-        if (point is not (ScrPoint.Hit or ScrPoint.CritterHits or ScrPoint.CriticalHit)) throw new ArgumentOutOfRangeException(nameof(point), "Not a combat point.");
+        if (point is not (ScrPoint.Hit or ScrPoint.CritterHits or ScrPoint.CriticalHit or ScrPoint.Miss or ScrPoint.CriticalMiss)) throw new ArgumentOutOfRangeException(nameof(point), "Not a combat point.");
         var previousItem = _itemUse;
         // An item the host was not given a map of is read by identity, as an item's use is; every other object is a row of a loaded map.
         _itemUse = attachee;

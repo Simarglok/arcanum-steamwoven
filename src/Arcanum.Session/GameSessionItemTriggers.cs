@@ -128,6 +128,24 @@ public sealed partial class GameSessionOwner
     }
 
     /// <summary>
+    /// ARC-COMBAT-1719 (0x4B2870, ledger PF9, PS5; the same shot as <see cref="QueryShotEndItemEvents"/>): the facts of the weapon's scripts at the end of <paramref name="shot"/>'s flight, asked while the shot is still in flight:
+    /// the shooter, the projectile's parent item, whether the shot was critical, whether the item was thrown and the shot's target. Null for a shot not in flight, one that struck already (its strike ran the scripts; the landing the
+    /// session splits off is the same end), or one with no parent item (the original runs no script then). The host runs the hit point (7, and 34 for a critical weapon) at a destination end and the miss point (8, and 35) at a range end.
+    /// </summary>
+    public SessionShotEndScripts? QueryShotEndScripts(SessionShot shot)
+    {
+        ThrowIfDisposed();
+        if (_npcShots.TryGetValue(shot, out var npc)) return new(npc.Thrower, npc.Thrown.Item, false, true, null);
+        if (_npcArrows.TryGetValue(shot, out var arrow))
+            return arrow.WeaponItem is { } bow
+                ? new(arrow.Shooter, bow, arrow.Check.Outcome is AttackOutcome.CriticalHit or AttackOutcome.CriticalMiss, false,
+                    arrow.Target == HeroArrowTarget ? SessionEventKinds.PlayerEntity : arrow.Target)
+                : null;
+        if (!_shots.TryGetValue(shot, out var pending) || pending.Struck || pending.WeaponItem is not { } item) return null;
+        return new(SessionEventKinds.PlayerEntity, item, pending.Check.Outcome is AttackOutcome.CriticalHit or AttackOutcome.CriticalMiss, pending.Thrown is not null, pending.Entity);
+    }
+
+    /// <summary>
     /// ARC-MAGIC-024: the item event of <paramref name="target"/>'s dying animation's end (0x42FF40, IC5,
     /// <see cref="ItemSpellTriggerRules.DyingEnd"/>): its dying with no other object when it is dead, else none (also for a target
     /// the session cannot resolve). The host calls it when the animation ends (not for a goal with flag 0x200) and fires the event
