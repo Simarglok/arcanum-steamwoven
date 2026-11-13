@@ -28,10 +28,12 @@ public sealed class ActorDiagnosticProfile
     private ActorDiagnosticProfile(ActorDiagnosticProfileId id, ActorDiagnosticClock clock,
         ActorDiagnosticResource idle, ActorDiagnosticResource walk, ActorDiagnosticResource? run, ActorDiagnosticResource? vault,
         ActorDiagnosticResource? attack, int coverage, long? rgbaBytes, ActorDiagnosticResource? fallDown = null, ActorDiagnosticResource? getUp = null,
-        ActorDiagnosticResource? lowAttack = null, ActorDiagnosticResource? @throw = null, ActorDiagnosticResource? stunned = null)
+        ActorDiagnosticResource? lowAttack = null, ActorDiagnosticResource? @throw = null, ActorDiagnosticResource? stunned = null,
+        ActorDiagnosticResource? decapitation = null, ActorDiagnosticResource? blownOutChunk = null, ActorDiagnosticResource? severedLeg = null)
     {
         Id = id; Clock = clock; Idle = idle; Walk = walk; Run = run; Vault = vault; Attack = attack; FallDown = fallDown; GetUp = getUp;
         LowAttack = lowAttack; Throw = @throw; Stunned = stunned;
+        Decapitation = decapitation; BlownOutChunk = blownOutChunk; SeveredLeg = severedLeg;
         DistinctKeys = coverage; OriginalRgbaBytes = rgbaBytes;
         var actions = new List<ActorDiagnosticAction> { ActorDiagnosticAction.Idle, ActorDiagnosticAction.Walk };
         if (run is not null) actions.Add(ActorDiagnosticAction.Run);
@@ -43,6 +45,9 @@ public sealed class ActorDiagnosticProfile
             if (lowAttack is not null) actions.Add(ActorDiagnosticAction.LowAttack);
             if (@throw is not null) actions.Add(ActorDiagnosticAction.Throw);
             if (stunned is not null) actions.Add(ActorDiagnosticAction.Stunned);
+            if (decapitation is not null) actions.Add(ActorDiagnosticAction.Decapitation);
+            if (blownOutChunk is not null) actions.Add(ActorDiagnosticAction.BlownOutChunk);
+            if (severedLeg is not null) actions.Add(ActorDiagnosticAction.SeveredLeg);
         }
         Actions = actions.AsReadOnly();
     }
@@ -64,6 +69,8 @@ public sealed class ActorDiagnosticProfile
     public const uint HumanLowAttackSelector = 0x20000541, HumanThrowSelector = 0x20000380;
     /// <summary>ARC-COMBAT-1741: the fixed human's selector of the stunned ART (animation 23, weapon 1: N1 forces the unarmed letter and no shield); only a hero body reads it.</summary>
     public const uint HumanStunnedSelector = 0x200005C1;
+    /// <summary>ARC-COMBAT-1793: the fixed human's selectors of the bloody dying ARTs (animations 17 decapitation, 18 blown-out chunk, 19 severed leg, weapon part 0 like the fall); only a hero body reads them.</summary>
+    public const uint HumanDecapitationSelector = 0x20000440, HumanBlownOutChunkSelector = 0x20000480, HumanSeveredLegSelector = 0x200004C0;
     /// <summary>The fixed human's selector of an action (a hero body's selectors are its body bits over these).</summary>
     public static uint HumanSelector(ActorDiagnosticAction action) => action switch
     {
@@ -72,6 +79,9 @@ public sealed class ActorDiagnosticProfile
         ActorDiagnosticAction.LowAttack => HumanLowAttackSelector,
         ActorDiagnosticAction.Throw => HumanThrowSelector,
         ActorDiagnosticAction.Stunned => HumanStunnedSelector,
+        ActorDiagnosticAction.Decapitation => HumanDecapitationSelector,
+        ActorDiagnosticAction.BlownOutChunk => HumanBlownOutChunkSelector,
+        ActorDiagnosticAction.SeveredLeg => HumanSeveredLegSelector,
         _ => HumanFixedArea.Resource(action).Selector,
     };
     public static ActorDiagnosticProfile HumanFixed { get; } = new(ActorDiagnosticProfileId.HumanFixed, ActorDiagnosticClock.ArtMetadata,
@@ -88,9 +98,11 @@ public sealed class ActorDiagnosticProfile
     /// low attack and throw ARTs when they read (each null otherwise).</remarks>
     internal static ActorDiagnosticProfile ForHeroBody(ActorDiagnosticResource idle, ActorDiagnosticResource walk, ActorDiagnosticResource run,
         ActorDiagnosticResource vault, ActorDiagnosticResource attack, int keys, ActorDiagnosticResource? fallDown = null, ActorDiagnosticResource? getUp = null,
-        ActorDiagnosticResource? lowAttack = null, ActorDiagnosticResource? @throw = null, ActorDiagnosticResource? stunned = null) =>
+        ActorDiagnosticResource? lowAttack = null, ActorDiagnosticResource? @throw = null, ActorDiagnosticResource? stunned = null,
+        ActorDiagnosticResource? decapitation = null, ActorDiagnosticResource? blownOutChunk = null, ActorDiagnosticResource? severedLeg = null) =>
         new(ActorDiagnosticProfileId.HeroBody, ActorDiagnosticClock.ArtMetadata, idle, walk, run, vault, attack, keys, null,
-            fallDown is not null && getUp is not null ? fallDown : null, fallDown is not null && getUp is not null ? getUp : null, lowAttack, @throw, stunned);
+            fallDown is not null && getUp is not null ? fallDown : null, fallDown is not null && getUp is not null ? getUp : null, lowAttack, @throw, stunned,
+            decapitation, blownOutChunk, severedLeg);
     public static ActorDiagnosticProfile MonsterRegression { get; } = new(ActorDiagnosticProfileId.MonsterRegression, ActorDiagnosticClock.LegacyOverride,
         new(ActorDiagnosticAction.Idle, 0xc9001810, 4753, 1, 8, 15, 8, 6),
         new(ActorDiagnosticAction.Walk, 0xc9001850, 4754, 1, 8, 8, 15, 10), null, null, null, 184, null);
@@ -117,6 +129,19 @@ public sealed class ActorDiagnosticProfile
     public ActorDiagnosticResource? Throw { get; }
     /// <summary>ARC-COMBAT-1741: the stunned ART (animation 23) a hero body plays while its stun goal (57) runs, or null (missing, or left out over the key cap: the stun then ends at once, as an NPC's does without it).</summary>
     public ActorDiagnosticResource? Stunned { get; }
+    /// <summary>ARC-COMBAT-1793: the bloody dying ARTs (animations 17, 18, 19) a hero body plays when the killing blow names one, or null each (missing, or left out over the key cap: the hero then falls plain, animation 7).</summary>
+    public ActorDiagnosticResource? Decapitation { get; }
+    public ActorDiagnosticResource? BlownOutChunk { get; }
+    public ActorDiagnosticResource? SeveredLeg { get; }
+
+    /// <summary>ARC-COMBAT-1793: the action and ART a hero body shows for the dying animation the dying goal (31) names (7, 17, 18 or 19): the bloody one when this body loaded it, else the plain fall (null when the body has no fall either).</summary>
+    public (ActorDiagnosticAction Action, ActorDiagnosticResource Resource)? DyingArt(int animation) => animation switch
+    {
+        17 when Decapitation is { } art => (ActorDiagnosticAction.Decapitation, art),
+        18 when BlownOutChunk is { } art => (ActorDiagnosticAction.BlownOutChunk, art),
+        19 when SeveredLeg is { } art => (ActorDiagnosticAction.SeveredLeg, art),
+        _ => FallDown is { } fall ? (ActorDiagnosticAction.FallDown, fall) : null,
+    };
     /// <summary>The actions this profile decodes, in load order.</summary>
     public IReadOnlyList<ActorDiagnosticAction> Actions { get; }
     public int DistinctKeys { get; }
@@ -142,6 +167,9 @@ public sealed class ActorDiagnosticProfile
         ActorDiagnosticAction.LowAttack => LowAttack ?? throw MetadataFailure(),
         ActorDiagnosticAction.Throw => Throw ?? throw MetadataFailure(),
         ActorDiagnosticAction.Stunned => Stunned ?? throw MetadataFailure(),
+        ActorDiagnosticAction.Decapitation => Decapitation ?? throw MetadataFailure(),
+        ActorDiagnosticAction.BlownOutChunk => BlownOutChunk ?? throw MetadataFailure(),
+        ActorDiagnosticAction.SeveredLeg => SeveredLeg ?? throw MetadataFailure(),
         _ => throw MetadataFailure()
     };
     public ActorDiagnosticAction ActionFor(uint selector) => selector == Idle.Selector ? ActorDiagnosticAction.Idle
@@ -152,7 +180,10 @@ public sealed class ActorDiagnosticProfile
         : GetUp is not null && selector == GetUp.Selector ? ActorDiagnosticAction.GetUp
         : LowAttack is not null && selector == LowAttack.Selector ? ActorDiagnosticAction.LowAttack
         : Throw is not null && selector == Throw.Selector ? ActorDiagnosticAction.Throw
-        : Stunned is not null && selector == Stunned.Selector ? ActorDiagnosticAction.Stunned : throw MetadataFailure();
+        : Stunned is not null && selector == Stunned.Selector ? ActorDiagnosticAction.Stunned
+        : Decapitation is not null && selector == Decapitation.Selector ? ActorDiagnosticAction.Decapitation
+        : BlownOutChunk is not null && selector == BlownOutChunk.Selector ? ActorDiagnosticAction.BlownOutChunk
+        : SeveredLeg is not null && selector == SeveredLeg.Selector ? ActorDiagnosticAction.SeveredLeg : throw MetadataFailure();
 
     public ActorDiagnosticFacing Facing(ActorDiagnosticAction action, int projectOctant)
     {

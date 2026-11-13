@@ -15,6 +15,12 @@ public sealed partial class SessionSpellCaster
     public Func<string, string?, bool>? TakingDamage { get; set; }
 
     /// <summary>
+    /// ARC-MAGIC-1167 (MA-10, ledger RZ1–RZ3): the host's raise script (attachment point 0x12) of a dead target, asked by a Heal component with the raise bit (<see cref="LifeHeal.Resurrect"/>) before the life step: the target and the heal's parent
+    /// (the healer, null: none) in, whether the raise goes on out (false: the script skipped the default, which refuses the raise). Null: no host, the raise goes on.
+    /// </summary>
+    public Func<string, string?, bool>? RaiseScript { get; set; }
+
+    /// <summary>
     /// ARC-DEV-243 (MIG13 S14g, GT194–GT195): a script's damage (60) or apply unresistable damage (138) to <paramref name="victim"/>: the shared damage apply (0x4B4390) with a fresh context (no attacker) holding
     /// <paramref name="amount"/> in the damage type <paramref name="type"/> (0 normal, 1 poison, 2 electrical, 3 fire, 4 fatigue). The damage step runs as for any damage: resistance (skipped for the unresistable damage, the only
     /// difference of 138), invulnerability and the walls; no armour step, no difficulty scaling (that is for a PC attacker) and no critical effect, so no stun or knock-down (a knock-down comes only from fatigue damage through the
