@@ -132,6 +132,9 @@ public sealed class AreaHeartbeatScriptTests
             // ARC-DEV-244: 800 has the player cast spell 9 (48) at its attachee.
             Write("scr/00800pccast.scr", Program(Do(new(ScrCatalogue.Action.CastSpell, (Player, 0), N(9), (Attachee, -1))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
             Write("scr/00797caston.scr", Program(Do(new(ScrCatalogue.Action.CastUnresistableSpellOn, N(8), (Player, 0))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
+            // ARC-SCRIPT-1294 (RM6): 807 stops spell 11 on its attachee; 808 stops spell 12 on the player.
+            Write("scr/00807stopspell.scr", Program(Do(new(ScrCatalogue.Action.StopSpellOnObject, N(11), (Attachee, -1))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
+            Write("scr/00808stoppc.scr", Program(Do(new(ScrCatalogue.Action.StopSpellOnObject, N(12), (Player, 0))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
             // ARC-SCRIPT-1360: 806 has the shape of 2787, the heartbeat of the NPC in the first building: PC quest 1158 unknown: run the default; else switch the attachee on (toggle state) and remove the script.
             Write("scr/00806quest.scr", Program(
                 If(new(ScrCatalogue.Condition.PcQuestState, (Player, 0), N(1158), N(0)), new(ScrCatalogue.Action.Goto, N(3)), new(ScrCatalogue.Action.DoNothing)),
@@ -473,6 +476,36 @@ public sealed class AreaHeartbeatScriptTests
             Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, pcHost.RunHeartbeat(byPc, ScrPoint.Heartbeat, session.Rules.Scripts).Outcome);
             CollectionAssert.AreEqual(new[] { ((string?)Arcanum.Simulation.Ai.AiSchedulerRules.Pc, AreaUseScriptHost.EntityId(byPc), 9, false, false) }, asked);
             Assert.AreEqual(AreaScriptedUseOutcome.EffectsRejected, Host(session, content, null, by).RunHeartbeat(by, ScrPoint.Heartbeat, session.Rules.Scripts).Outcome, "no AI host: left unapplied");
+        });
+    }
+
+    [TestMethod]
+    public void A_heartbeat_s_stop_spell_goes_to_the_viewer_with_the_object_and_the_spell_and_the_run_goes_on()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var asked = new List<(string Object, int Spell)>();
+            var npc = Row(1, 16, 807);
+            var byPc = Row(2, 16, 808);
+            AreaScriptWorld World() => new(() => null, _ => false, _ => null, () => null, ScriptStopSpell: (obj, spell) => { asked.Add((obj, spell)); return "stopped"; });
+            Assert.IsTrue(AreaUseScriptHost.HeartbeatAdmission.Actions.Contains(ScrCatalogue.Action.StopSpellOnObject) && AreaUseScriptHost.PlacedAdmission.Actions.Contains(ScrCatalogue.Action.StopSpellOnObject));
+            Assert.IsTrue(AreaUseScriptHost.DyingAdmission.Actions.Contains(ScrCatalogue.Action.StopSpellOnObject));
+            var host = new AreaUseScriptHost(session, 1, [npc, byPc], [], content, World());
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, host.RunHeartbeat(npc, ScrPoint.Heartbeat, session.Rules.Scripts).Outcome);
+            CollectionAssert.AreEqual(new[] { (AreaUseScriptHost.EntityId(npc), 11) }, asked);
+            Assert.AreEqual("stopped", host.LastStopSpell);
+            // The PC goes by the scheduler id of the PC.
+            asked.Clear();
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, host.RunHeartbeat(byPc, ScrPoint.Heartbeat, session.Rules.Scripts).Outcome);
+            CollectionAssert.AreEqual(new[] { (Arcanum.Simulation.Ai.AiSchedulerRules.Pc, 12) }, asked);
+            Assert.AreEqual(AreaScriptedUseOutcome.EffectsRejected, Host(session, content, null, npc).RunHeartbeat(npc, ScrPoint.Heartbeat, session.Rules.Scripts).Outcome, "no viewer answer: left unapplied");
+            // An object of another map than the shown one is left alone (the cast host holds the shown map's runs), and the run is still applied.
+            asked.Clear();
+            var elsewhere = new AreaUseScriptHost(session, 2, [npc], [], content, World());
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, elsewhere.RunHeartbeat(npc, ScrPoint.Heartbeat, session.Rules.Scripts).Outcome);
+            Assert.AreEqual(0, asked.Count);
+            Assert.IsNull(elsewhere.LastStopSpell);
         });
     }
 
