@@ -618,6 +618,34 @@ public sealed class AreaCompanionTests
         Assert.AreEqual(1, AreaCompanionGroup.Create([template], f.Steps, AreaChart.Exterior, session, home, SimulationTime.At(0)).Companions.Count);
     }
 
+    // ARC-AI-1622: the original's follower array holds any critter, so an NPC without a dialog that the hero leads (a Dominate Will target) is a companion of the shown map: its body template
+    // is built from its map row with script 0 (as a created critter's), only for the entities asked for, and the group follows it like any other.
+    [TestMethod]
+    public void A_led_map_npc_without_a_dialog_gets_a_body_template_of_its_map_row_and_follows_in_the_group()
+    {
+        var f = Load();
+        var plan = AreaScenePlan.Create(f.Area);
+        var row = f.Speaker.Row with { Type = 16, Scope = AreaScope.Core };
+        var entity = AreaConversationState.EntityId(row);
+        var facts = new Func<AreaSpeaker, AreaCompanionFacts?>(_ => AreaCompanionRoster.Virgil with { ScriptId = 0 });
+        var templates = AreaCompanionTemplate.ForLedMapNpcs([row], f.Area.Visuals, new HashSet<string> { entity }, plan, AreaChart.Exterior, new(1), facts);
+        var template = templates.Single();
+        Assert.AreEqual(entity, template.Entity);
+        Assert.AreEqual(0, template.Speaker.ScriptId, "no dialog script");
+        Assert.AreEqual(AreaCompanionTemplate.LedMapNpcIndexBase, template.Speaker.Index, "its index is the base plus its position among the objects");
+        Assert.IsFalse(template.Created, "it keeps its home map (its away change and stored cell) as a map NPC does");
+        Assert.AreEqual((new CellCoord(5, 1), new SessionMapId(1)), (template.HomeOrigin, template.Home));
+        Assert.IsTrue(template.Commands.Count > 0 && template.Commands.All(c => c.Identity == row.Key));
+        Assert.AreEqual(0, AreaCompanionTemplate.ForLedMapNpcs([row], f.Area.Visuals, new HashSet<string>(), plan, AreaChart.Exterior, new(1), facts).Count, "an NPC nobody leads is not built");
+        Assert.AreEqual(0, AreaCompanionTemplate.ForLedMapNpcs([row with { Type = 14 }], f.Area.Visuals, new HashSet<string> { entity }, plan, AreaChart.Exterior, new(1), facts).Count, "only an NPC row");
+        Assert.AreEqual(0, AreaCompanionTemplate.ForLedMapNpcs([row], f.Area.Visuals, new HashSet<string> { entity }, plan, AreaChart.Exterior, new(1), _ => null).Count, "no follow facts, no template");
+        using var session = ConversationSessionFixture.Create();
+        Assert.AreEqual(GameSessionDisposition.Changed, session.ForceJoinParty(session.Version, entity).Disposition, "Dominate Will's force join");
+        var group = AreaCompanionGroup.Create(templates, f.Steps, AreaChart.Exterior, session, new(1), SimulationTime.At(0));
+        Assert.AreEqual(1, group.Companions.Count, "the led NPC is a companion of the group");
+        Assert.AreEqual(CompanionStanding.Following, group.Companions[0].Standing);
+    }
+
     [TestMethod]
     public void A_created_critters_template_moves_whole_with_the_pc_and_writes_no_away_map()
     {

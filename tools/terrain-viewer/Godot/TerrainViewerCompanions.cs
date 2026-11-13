@@ -130,7 +130,9 @@ public partial class TerrainViewerApp
     private void RefreshVisitorBodies(GameSessionOwner session, AreaGridSession grid)
     {
         _visitorFrames.Clear(); _unreadVisitors = [];
-        var visitors = AreaVisitors.Here(session, new(CurrentAreaMap), _ownCompanionTemplates,
+        // ARC-AI-1622: the shown map's own NPCs without a dialog that the hero leads (a Dominate Will target) are companions with a body of the shown scene.
+        var led = LedMapNpcTemplates(session);
+        var visitors = AreaVisitors.Here(session, new(CurrentAreaMap), [.. _ownCompanionTemplates, .. led],
             world => grid.Chart.Contains(grid.Chart.ToChart(new(world.X, world.Y))));
         var bodies = new List<AreaCompanionTemplate>(); var unread = new List<string>();
         // ARC-MAGIC-050: a created critter has no home map to read (its body is its own, below).
@@ -151,6 +153,7 @@ public partial class TerrainViewerApp
         // ARC-MAGIC-050: the created critters in the party stand here with a body of their own (they have no home map).
         var created = CreatedCompanionTemplates(session, grid);
         foreach (var (template, frames) in created) { bodies.Add(template); _visitorFrames[template.Entity] = frames; }
+        bodies.AddRange(led);
         IReadOnlyList<AreaCompanionTemplate> next = [.. _ownCompanionTemplates, .. bodies];
         if (next.SequenceEqual(_companionTemplates, ReferenceEqualityComparer.Instance)) return;
         _companionTemplates = next; _hoverIndex = null; _hoverIndexArea = null;
@@ -220,7 +223,7 @@ public partial class TerrainViewerApp
     /// <summary>One frame after the PC's advance to <paramref name="frontier"/>: every following companion drives to it.</summary>
     private void DriveAreaCompanions(IGridSession session, SimulationTime frontier)
     {
-        if (_areaSession is { } created) SyncCreatedCompanions(created);
+        if (_areaSession is { } created) { SyncCreatedCompanions(created); SyncLedMapNpcCompanions(created); }
         if (_areaCompanions is not { } group || _areaSession is not { } owner || session is not AreaGridSession pc) return;
         // ARC-COMBAT-020: in a turn-based round a companion moves only on its own subturn, by its AI (ARC-WORLD-115: the steps the AI
         // host gives the companion it holds); the others stand.
