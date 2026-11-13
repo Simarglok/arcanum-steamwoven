@@ -813,6 +813,19 @@ heartbeat set (`AreaUseScriptHost.HeartbeatAdmission`, and the dying set built o
 ARC-DEV-231) through the AI host's goal start, so it is admitted whole. Tests: `ScrHeartbeatWorldTests` (the action and the set), `AreaHeartbeatScriptTests` (a 1717-shaped script over the host and, with `DAT_ROOT`, the installed agent).
 Not built: the use, tile, sector and talk sets (tile script 2080 also uses 95).
 
+## Vitals commands and the food use script (ARC-SCRIPT-1481, set S41)
+
+`ScrAdmissionSet.S41` is S38 plus get hit points (107), get fatigue points (108) and heal poison (128). The two reads store an object's current points into number operand 1 and its maximum into operand 2 through `IScrVitalQueries` (an object the host cannot
+answer ends the dispatch as not modelled with nothing applied; an absent object stops the run; a literal in either store is refused); heal poison asks the host once per object of its operand (`ScrObjectStateChange.HealPoison`, the amount in `Value`). The interpreter
+runs at most S41. Ledger [VT1–VT8](../research/ledger/scripts.md#vitals-commands-and-the-food-use-script-arc-script-1481).
+
+The area use host (`AreaUseScriptHost.Admission`, with the placed and dying sets built on it) holds the three commands and heal hit points (75), heal fatigue (76), the magick-tech adjustment (91), play script eye candy (120) and destroy (68), so the food use script
+30282 is admitted whole. The host answers the PC from the session's life and an NPC of the shown map from `AreaScriptWorld.Vitals`; get stat 24 reads the same poison level (0 to 1000). Heal poison and the hero's heal fatigue go through `AreaScriptWorld.ScriptHealLife`
+(the viewer's `HealLifeByScript`: the session's heal with the fatigue and poison amounts); a negative heal poison amount leaves the run unapplied. Destroy of the **item in use** (`RunItemUse`) takes the food out of the hero's list through the session's used-item
+destruction; destroy of any other non-NPC object stays refused. `RunItemUse(…, targetIsPc: true)` makes the PC the extra object (the use's target, ledger IU2); the viewer passes it for the inventory use. Tests: `ScrVitalTests` (the interpreter and the sets),
+`AreaVitalScriptTests` (the host over a session, an NPC's vitals, the self-destroying item and, with `DAT_ROOT`, the installed 30282 admitted and a whole hero leaving the potion alone). Under S41 the census (`--script-refusal-census --set S41`) admits 1,575 attached scripts
+on 6,856 placed sites (S38: 1,558 on 6,113). Not built: an NPC that eats, script eye candy.
+
 ## Checks
 
 - `tests/Arcanum.Scripting.Tests/Scr/ScrDispatcherTests.cs`: every step of the

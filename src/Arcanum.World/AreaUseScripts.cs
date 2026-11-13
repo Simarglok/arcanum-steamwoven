@@ -35,6 +35,7 @@ namespace Arcanum.World;
 /// refused as before. <see cref="CreatedRow"/> answers a created critter's base record by its entity (the run's NPC rows are the shown map's and the loaded maps'; a critter created at run time has none of them).
 /// ARC-DEV-386 (E1-c4): <see cref="CritterMade"/> is told the entity of each critter the run created, right after it exists, so the host generates its inventory (the original's create finish runs the restock body 0x463C60, OM16, RK14);
 /// without it a created critter's list stays empty. ARC-SCRIPT-1163 (E5-a, NS2): <see cref="ScriptReaction"/> changes an NPC of the shown map's reaction toward the PC (set reaction 30 when its flag is true, adjust reaction 31) in the AI host and answers what happened;
+/// ARC-SCRIPT-1481 (VT1–VT3): <see cref="Vitals"/> answers an NPC's vitals (the hero's are the session's) for get hit points, get fatigue points and get stat 24, and <see cref="ScriptHealLife"/> (victim, fatigue amount, poison amount) takes fatigue damage and poison level off the hero or an NPC of the shown map through the session's life step; without it a run with a hero's heal fatigue or a heal poison is left unapplied.
 /// without it a run with a reaction action is left unapplied. ARC-SCRIPT-1164 (E5-b, WO3, WO4): <see cref="Openable"/> answers a portal's or container's lock identity, T0 baseline and ART facts on the shown map
 /// (<see cref="AreaScriptOpenable"/>; null for an object that is neither or not shown), for set lock state (53), toggle open or closed (88) and obj is open (36); without it those runs are left unapplied and the condition stops the run.
 /// </summary>
@@ -45,7 +46,12 @@ public sealed record AreaScriptWorld(Func<CellCoord?> PcCell, Func<AreaObjectRec
     Func<ScrObjectRef, int, bool>? HealFatigue = null, Func<string, int, string>? ScriptAnimate = null, Func<string, string, string>? ScriptSteal = null, Func<string, string>? ScriptProne = null,
     Func<string?, string, int, bool, bool, string>? ScriptCast = null, Func<string, int, int, bool, string>? ScriptDamage = null, Func<string, int, string>? ScriptHeal = null,
     Func<string, bool>? ScriptDamageAsk = null, Func<int, bool>? Critter = null, Func<string, AreaObjectRecord?>? CreatedRow = null,
-    Action<string>? CritterMade = null, Func<string, int, bool, string>? ScriptReaction = null, Func<ScrObjectRef, AreaScriptOpenable?>? Openable = null);
+    Action<string>? CritterMade = null, Func<string, int, bool, string>? ScriptReaction = null, Func<ScrObjectRef, AreaScriptOpenable?>? Openable = null,
+    Func<string, AreaScriptVitals?>? Vitals = null, Func<string, int, int, string>? ScriptHealLife = null);
+
+/// <summary>ARC-SCRIPT-1481 (VT1–VT3): the vitals of an NPC of the shown map for get hit points (107), get fatigue points (108) and get stat of the poison level (24): the current and maximum hit points and fatigue and the poison level,
+/// as the session's life status gives them (<see cref="AreaScriptWorld.Vitals"/>).</summary>
+public readonly record struct AreaScriptVitals(int HitPoints, int MaxHitPoints, int Fatigue, int MaxFatigue, int Poison);
 
 /// <summary>ARC-SCRIPT-1164 (WO3, WO4): what a script's lock and open actions need of a portal or container of the shown map: the session's lock identity and T0 baseline (<see cref="GameSessionOwner.QueryOpenable"/>) and, for a portal, its ART
 /// (<see cref="PortalArt"/>, the frames a toggle steps through, ledger LK10); for a container the ART's frame count (it opens to frame 1 when it has a second frame).</summary>
@@ -117,7 +123,7 @@ public readonly record struct AreaPrintedLine(int Type, string Text);
 /// The PC's reputations are the session's (ARC-WORLD-044); no other object has one. Everything else the viewer does not model
 /// answers "no", as for the dialog and item hosts.
 /// </summary>
-public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrObjectQueries, IScrWorldQueries, IScrObjectStateQueries, IScrAreaQueries, IScrStoreQueries, IScrStatQueries, IScrSpellQueries, IScrStoryQueries
+public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrObjectQueries, IScrWorldQueries, IScrObjectStateQueries, IScrAreaQueries, IScrStoreQueries, IScrStatQueries, IScrSpellQueries, IScrStoryQueries, IScrVitalQueries, IScrItemQueries
 {
     /// <summary>Map-change keys of an object's use slot.</summary>
     public const string LocalFlagsProperty = "use.lf", CountersProperty = "use.counters", ScriptProperty = "use.script";
@@ -173,10 +179,15 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
                 ScrCatalogue.Action.SetPcQuestState, ScrCatalogue.Action.MarkMapLocation, ScrCatalogue.Action.SetRumor,
                 ScrCatalogue.Action.AddReputation, ScrCatalogue.Action.RemoveReputation,
                 ScrCatalogue.Action.Random, ScrCatalogue.Action.LoopFor, ScrCatalogue.Action.LoopEnd, ScrCatalogue.Action.CreateObject, ScrCatalogue.Action.GetStat,
-                ScrCatalogue.Action.UnfogTownMap, ScrCatalogue.Action.GiveSpellMastery, .. ScrAdmissionSet.StoryActions, ScrCatalogue.Action.Fade, .. ScrAdmissionSet.NpcStateHostActions, .. ScrAdmissionSet.WorldObjectHostActions]),
+                ScrCatalogue.Action.UnfogTownMap, ScrCatalogue.Action.GiveSpellMastery, .. ItemUseVitalActions, .. ScrAdmissionSet.StoryActions, ScrCatalogue.Action.Fade, .. ScrAdmissionSet.NpcStateHostActions, .. ScrAdmissionSet.WorldObjectHostActions]),
         ScrAdmissionSet.S4.ValueKinds.Concat(ScrAdmissionSet.StoreValueKinds),
         ScrAdmissionSet.S4.FocusKinds.Concat([ScrFocusKind.LocalObject, ScrFocusKind.CurrentLoopedObject, ScrFocusKind.EverySceneryInVicinity]),
         counterIndexWraps: true);
+
+    /// <summary>ARC-SCRIPT-1481 (VT1–VT6): what the food use script 30282 needs besides the use set's own: get hit points (107), get fatigue points (108), heal poison (128), heal hit points (75), heal fatigue (76), the magick-tech adjustment (91; the item's power
+    /// ratio, <see cref="PowerRatio"/>), play script eye candy (120; the use host shows none) and destroy (68; of the item being used only, <see cref="ObjectStateRefusal"/>).</summary>
+    private static int[] ItemUseVitalActions => [ScrCatalogue.Action.GetHitPoints, ScrCatalogue.Action.GetFatiguePoints, ScrCatalogue.Action.HealPoison, ScrCatalogue.Action.HealHitPoints,
+        ScrCatalogue.Action.HealFatigue, ScrCatalogue.Action.MagickTechAdjustment, ScrCatalogue.Action.PlayScriptEyeCandy, ScrCatalogue.Action.Destroy];
 
     /// <summary>ARC-DEV-243 (S14g): damage (60), apply unresistable damage (138) and heal hit points (75), which the placed and heartbeat sets admit.</summary>
     private static readonly int[] DamageActions = [ScrCatalogue.Action.Damage, ScrCatalogue.Action.DamageUnresistable, ScrCatalogue.Action.HealHitPoints];
@@ -414,7 +425,44 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     /// <summary>ARC-DEV-157 (GS1, GS3): the PC's stat by the original's number from the session hero (<see cref="GameSessionOwner.QueryHeroScriptStat"/>);
     /// null (the dispatch ends as not modelled) for an NPC or any other object, whose stats this host does not read, and for a stat the session does
     /// not hold.</summary>
-    public int? EffectiveStat(ScrObjectRef obj, int stat) => IsPc(obj) ? _session.QueryHeroScriptStat(stat) : null;
+    public int? EffectiveStat(ScrObjectRef obj, int stat) =>
+        stat == PoisonStat ? Vitals(obj)?.Poison is { } poison ? Math.Clamp(poison, 0, Arcanum.Simulation.Combat.LifeLimits.MaxPoisonLevel) : null
+        : IsPc(obj) ? _session.QueryHeroScriptStat(stat) : null;
+
+    /// <summary>ARC-SCRIPT-1481 (VT5): the stat number of the poison level (24). The getter (0x4B0490) adds the object's effects to the base level and clamps to 0..1000 (the range tables 0x5B5194 and 0x5B5204); no installed effect changes it (ledger PZ6).</summary>
+    public const int PoisonStat = 24;
+
+    // ARC-SCRIPT-1481: the vitals of the PC (the session's life) or of an NPC of the shown map (the world's answer); null for any other object.
+    private AreaScriptVitals? Vitals(ScrObjectRef obj)
+    {
+        if (IsPc(obj)) return _session.QueryHeroLife() is { } life ? new(life.Status.HitPoints, life.Status.MaxHitPoints, life.Status.Fatigue, life.Status.MaxFatigue, life.Record.State.PoisonLevel) : null;
+        return obj.Map == _shownMap && Row(obj) is { Type: NpcType } ? _world?.Vitals?.Invoke(obj.Code) : null;
+    }
+
+    /// <summary>ARC-SCRIPT-1481 (VT1): get hit points, the current and the maximum of the PC or of an NPC of the shown map; null for another object (not modelled).</summary>
+    public (int Current, int Maximum)? HitPoints(ScrObjectRef obj) => Vitals(obj) is { } v ? (v.HitPoints, v.MaxHitPoints) : null;
+
+    /// <summary>ARC-SCRIPT-1481 (VT2): get fatigue points, as <see cref="HitPoints"/>.</summary>
+    public (int Current, int Maximum)? FatiguePoints(ScrObjectRef obj) => Vitals(obj) is { } v ? (v.Fatigue, v.MaxFatigue) : null;
+
+    /// <summary>ARC-SCRIPT-1481 (VT4, ledger WE2, EQ9): the item's power ratio for the PC that uses it, <see cref="Arcanum.Simulation.Equipment.EquipmentRules.EffectivePowerRatio"/> of its complexity and the PC's aptitude (stat 16, clamped to the
+    /// aptitude range); null for any other owner (not modelled) or an item the host does not know.</summary>
+    public int? PowerRatio(ScrObjectRef item, ScrObjectRef owner)
+    {
+        if (!IsPc(owner) || ComplexityOf(item) is not { } complexity || _session.QueryHeroScriptStat(Arcanum.Session.GameSessionOwner.ScriptStatAptitude) is not { } aptitude) return null;
+        var limits = Arcanum.Simulation.Equipment.EquipmentLimits.MaxMagnitude;
+        if (complexity < -limits || complexity > limits) return null;
+        return Arcanum.Simulation.Equipment.EquipmentRules.EffectivePowerRatio(complexity, Math.Clamp(aptitude, Arcanum.Simulation.Equipment.EquipmentLimits.MinAptitude, Arcanum.Simulation.Equipment.EquipmentLimits.MaxAptitude));
+    }
+
+    // The magick-tech complexity of an item the host has a row for (the item in use is a row of its origin map); null for an item without one (a made or kit item: not modelled).
+    private int? ComplexityOf(ScrObjectRef item) => Row(item) is { } row && Arcanum.Data.Combat.CombatFieldReader.Read(row).Fields?.Item is { } fields ? fields.MagickTechComplexity : null;
+
+    /// <summary>The identified test is not answered by the use host (its set holds no condition that asks it).</summary>
+    public bool? IsIdentified(ScrObjectRef obj) => null;
+
+    /// <summary>The use host runs no rewield.</summary>
+    public bool ItemsBeingRewielded() => false;
 
     /// <summary>ARC-DEV-157 (GS2): the PC's dumb background (55, 74, 75); false for any other object.</summary>
     public bool IsDumbByBackground(ScrObjectRef obj) => IsPc(obj) && _session.QueryHeroDumbBackground();
@@ -1099,9 +1147,10 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     /// ARC-SCRIPT-020: an item's use script (point 1, item use 0x462CC0; ledger IU rows) with the PC as the user and no target, before
     /// the use goes on: the run's outcome decides (run default lets the use go on, skip default stops it). The item is a row of a
     /// loaded map's inventory (<see cref="AreaInventoryMap"/>), named by its origin map and entity; its use slot is kept as map
-    /// changes there. A teleport is not modelled from an item's use and leaves the run unapplied.
+    /// changes there. A teleport is not modelled from an item's use and leaves the run unapplied. ARC-SCRIPT-1481 (IU2): with <paramref name="targetIsPc"/> the PC is the use's target too (the extra object: a right click and the use icon with Shift
+    /// target the hero, the food use script 30282 heals its extra object).
     /// </summary>
-    public AreaScriptedUse RunItemUse(int originMap, string entity, ScrRuleProfile rules)
+    public AreaScriptedUse RunItemUse(int originMap, string entity, ScrRuleProfile rules, bool targetIsPc = false)
     {
         ArgumentNullException.ThrowIfNull(entity); ArgumentNullException.ThrowIfNull(rules);
         if (_content is null) return new(AreaScriptedUseOutcome.ContentUnavailable, null, [], null, "no script content");
@@ -1111,7 +1160,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         try
         {
             if (Row(item) is null) return new(AreaScriptedUseOutcome.Refused, null, [], null, "the item is not a row of a loaded map");
-            var run = ScrDispatcher.RunObject(new(ScrPoint.Use, item, Pc, null), this, new() { Rules = rules, Admission = Admission });
+            var run = ScrDispatcher.RunObject(new(ScrPoint.Use, item, Pc, targetIsPc ? Pc : null), this, new() { Rules = rules, Admission = Admission });
             return Finish(run, _ => "a teleport from an item's use is not modelled", writeback => WriteObjectSlot(writeback, item));
         }
         finally { _itemUse = null; }
@@ -1321,6 +1370,13 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
             if (request.Change == ScrObjectStateChange.Kill) { if (!_world!.Kill!(request.Object)) return false; continue; }
             if (request.Change == ScrObjectStateChange.Destroy)
             {
+                // ARC-SCRIPT-1481 (VT6): the item being used goes out of the PC's list (0x43CCA0 through the session's used-item destruction).
+                if (_itemUse is { } used && used.Equals(request.Object))
+                {
+                    if (_session.IsItemDestroyed(used.Code)) continue;
+                    if (_session.DestroyUsedItem(_session.Version, used.Code).Disposition == GameSessionDisposition.Rejected) return false;
+                    continue;
+                }
                 // TD2: an NPC already destroyed is left as it is.
                 if (AlreadyDestroyed(request.Object)) continue;
                 var destroyed = _session.ApplyChanges(_session.Version, null,
@@ -1389,7 +1445,16 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
             if (request.Change == ScrObjectStateChange.HealFatigue)
             {
                 // GT162: a negative amount raises the damage in the original (not modelled); the session's refusal does not stop the run (GT154).
-                if (request.Value > 0 && ShownNpc(request.Object)) _world!.HealFatigue!(request.Object, request.Value);
+                // ARC-SCRIPT-1481: the PC's fatigue damage falls through the session's life step too (VT2).
+                if (request.Value > 0 && IsPc(request.Object)) LastHealLife = _world!.ScriptHealLife!(Arcanum.Simulation.Ai.AiSchedulerRules.Pc, request.Value, 0);
+                else if (request.Value > 0 && ShownNpc(request.Object)) _world!.HealFatigue!(request.Object, request.Value);
+                continue;
+            }
+            if (request.Change == ScrObjectStateChange.HealPoison)
+            {
+                // VT3: the PC or an NPC of the shown map; the level falls by the amount to 0 at most through the session's life step (the stat setter's timer event, ledger PZ1, PZ3).
+                if (request.Value > 0 && (IsPc(request.Object) || ShownNpc(request.Object) && !AlreadyDestroyed(request.Object)))
+                    LastHealLife = _world!.ScriptHealLife!(IsPc(request.Object) ? Arcanum.Simulation.Ai.AiSchedulerRules.Pc : request.Object.Code, 0, request.Value);
                 continue;
             }
             if (request.Change is ScrObjectStateChange.WalkTo or ScrObjectStateChange.RunTo)
@@ -1557,6 +1622,9 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     /// <summary>ARC-DEV-241: what the AI host answered to the last script cast a run applied (smoke and test seam; null before any).</summary>
     public string? LastCast { get; private set; }
 
+    /// <summary>ARC-SCRIPT-1481: what the life step answered to the last heal of fatigue (the PC's) or poison a run applied (test and smoke seam; null before any).</summary>
+    public string? LastHealLife { get; private set; }
+
     /// <summary>ARC-DEV-236: what the AI host answered to the last become prone a run applied (smoke and test seam; null before any).</summary>
     public string? LastProne { get; private set; }
 
@@ -1631,6 +1699,8 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
             }
             if (request.Change == ScrObjectStateChange.Destroy)
             {
+                // ARC-SCRIPT-1481 (VT6): the item whose use script runs destroys itself (the food use script 30282 ends by it): the PC's food or scroll leaves its list through the session.
+                if (_itemUse is { } used && used.Equals(request.Object)) continue;
                 if (request.Object.Map != _shownMap || IsPc(request.Object) || Row(request.Object) is not { Type: NpcType } npc)
                     return $"destroy of {request.Object.Code} is not modelled (only an NPC of the shown map)";
                 // TD2: one destroyed in its map data, or by an earlier run, is left as it is.
@@ -1682,7 +1752,14 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
             }
             if (request.Change == ScrObjectStateChange.HealFatigue)
             {
-                if (_world?.HealFatigue is null) return "heal fatigue needs the session's life step";
+                if (IsPc(request.Object) ? _world?.ScriptHealLife is null : _world?.HealFatigue is null) return "heal fatigue needs the session's life step";
+                continue;
+            }
+            if (request.Change == ScrObjectStateChange.HealPoison)
+            {
+                // VT3: a negative amount raises the level in the original (the level minus the amount); that is not modelled.
+                if (_world?.ScriptHealLife is null) return "heal poison needs the session's life step";
+                if (request.Value < 0) return "heal poison of a negative amount raises the poison level, which is not modelled";
                 continue;
             }
             if (request.Change is ScrObjectStateChange.WalkTo or ScrObjectStateChange.RunTo)

@@ -6,7 +6,7 @@ namespace Arcanum.Scripting.Scr;
 /// One run of an admitted program (ARC-RES-042 E7–E11): fresh local variables, the attachment's local flags and
 /// counters in a private copy, a line loop with the original's budget, and every global change kept in an overlay that
 /// the run itself reads back and the result hands to the caller. It supports exactly the commands of
-/// <see cref="ScrAdmissionSet.S38"/>.
+/// <see cref="ScrAdmissionSet.S41"/>.
 /// </summary>
 internal sealed class ScrInterpreter
 {
@@ -553,6 +553,25 @@ internal sealed class ScrInterpreter
                 var at = World.Location(Object(a, 0, line)) ?? throw new MissingObjectStop(line);
                 Set(a, 1, unchecked((int)at.X), line);
                 Set(a, 2, unchecked((int)at.Y), line);
+                return (Step.Next, 0);
+            }
+            case ScrCatalogue.Action.GetHitPoints:
+            case ScrCatalogue.Action.GetFatiguePoints:
+            {
+                // VT1, VT2 (0x447220 cases 107 and 108): the first object of operand 0 (0x44B960, no null test), its current points (the maximum minus the damage: 0x43D600, 0x45D700) into operand 1 and its maximum
+                // (0x43D5A0, 0x45D670) into operand 2, each by the value store (0x44BB50). An absent object stops the run (the original reads a null handle's fields); a host that cannot answer (an object that is no
+                // PC or NPC it knows) ends the whole dispatch with nothing applied, so the caller reports it as not ready.
+                var who = Object(a, 0, line);
+                var points = (a.Type == ScrCatalogue.Action.GetHitPoints ? Vitals.HitPoints(who) : Vitals.FatiguePoints(who)) ?? throw new CallRefusedStop(null, _number, ScrStop.NotModelled);
+                Set(a, 1, points.Current, line);
+                Set(a, 2, points.Maximum, line);
+                return (Step.Next, 0);
+            }
+            case ScrCatalogue.Action.HealPoison:
+            {
+                // VT3 (case 128, 0x44A766 to 0x44A7B6): every object of operand 0 in list order and the amount of operand 1; the run goes on. The level change itself is the host's (ObjectStates).
+                var amount = Get(a, 1);
+                foreach (var obj in Objects(a, 0)) _shared.ObjectStates.Add(new(ScrObjectStateChange.HealPoison, obj, amount));
                 return (Step.Next, 0);
             }
             case ScrCatalogue.Action.SetFaction:
@@ -1282,6 +1301,9 @@ internal sealed class ScrInterpreter
 
     private IScrStatQueries Stats => _host as IScrStatQueries
         ?? throw new InvalidOperationException("SCR_STAT_QUERIES_REQUIRED: the admission set holds get stat and the host cannot answer it.");
+
+    private IScrVitalQueries Vitals => _host as IScrVitalQueries
+        ?? throw new InvalidOperationException("SCR_VITAL_QUERIES_REQUIRED: the admission set holds get hit points or get fatigue points and the host cannot answer it.");
 
     private IScrItemQueries Items => _host as IScrItemQueries
         ?? throw new InvalidOperationException("SCR_ITEM_QUERIES_REQUIRED: the admission set holds an item question the host cannot answer.");

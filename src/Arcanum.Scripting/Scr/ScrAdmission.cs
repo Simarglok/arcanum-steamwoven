@@ -400,6 +400,16 @@ public sealed class ScrAdmissionSet
     /// </summary>
     public static ScrAdmissionSet S38 { get; } = new("S38", S37.Conditions, S37.Actions.Append(ScrCatalogue.Action.GetLocation), S37.ValueKinds, S37.FocusKinds, counterIndexWraps: true);
 
+    /// <summary>
+    /// The vitals set (ARC-SCRIPT-1481, ledger VT1–VT4): <see cref="S38"/> plus get hit points (107) and get fatigue points (108), which store an object's current and maximum points into their number operands 1 and 2 through
+    /// <see cref="IScrVitalQueries"/>, and heal poison (128), which lowers the poison level of every object of its operand (the food use script 30282 reads and heals the eater's vitals and poison).
+    /// </summary>
+    public static ScrAdmissionSet S41 { get; } = new("S41", S38.Conditions, S38.Actions.Concat([ScrCatalogue.Action.GetHitPoints, ScrCatalogue.Action.GetFatiguePoints, ScrCatalogue.Action.HealPoison]),
+        S38.ValueKinds, S38.FocusKinds, counterIndexWraps: true);
+
+    /// <summary>The actions of <see cref="S41"/> a host answers through <see cref="IScrVitalQueries"/>.</summary>
+    public static IReadOnlySet<int> VitalQueryActions { get; } = new HashSet<int> { ScrCatalogue.Action.GetHitPoints, ScrCatalogue.Action.GetFatiguePoints };
+
     /// <summary>The conditions of <see cref="S37"/> a host answers through <see cref="IScrWorldObjectQueries"/>.</summary>
     public static IReadOnlySet<int> WorldObjectQueryConditions { get; } = new HashSet<int>(WorldObjectConditions);
 
@@ -620,6 +630,8 @@ public static class ScrAdmission
             if (!condition && type == ScrCatalogue.Action.DistanceBetween && slot == 2 && (ScrValueKind)kind == ScrValueKind.Number) return Refuse(ScrRefusalCode.WriteToNumber);
             // Get location stores into its number operands 1 and 2 (ARC-SCRIPT-1359, GL1).
             if (!condition && type == ScrCatalogue.Action.GetLocation && slot is 1 or 2 && (ScrValueKind)kind == ScrValueKind.Number) return Refuse(ScrRefusalCode.WriteToNumber);
+            // Get hit points and get fatigue points store into their number operands 1 and 2 (ARC-SCRIPT-1481, VT1, VT2).
+            if (!condition && type is ScrCatalogue.Action.GetHitPoints or ScrCatalogue.Action.GetFatiguePoints && slot is 1 or 2 && (ScrValueKind)kind == ScrValueKind.Number) return Refuse(ScrRefusalCode.WriteToNumber);
             // Get area stores into its number operand 1 (ARC-SCRIPT-050, GA1).
             if (!condition && type == ScrCatalogue.Action.GetArea && slot == 1 && (ScrValueKind)kind == ScrValueKind.Number) return Refuse(ScrRefusalCode.WriteToNumber);
             // Slot 0 of these types is itself an index, a store or a jump target.

@@ -1076,3 +1076,15 @@ design (the chance is 5 per cent of each firing, one firing per 300 to 700 game 
 | 4 | Look at where the creatures stand against the party. | Two rings: one side west of the party's tile or north of it, about six tiles away, in small columns of three. Ours do not turn toward the party (a known gap). | open |
 | 5 | Meet a second group in the same encounter (a table row with two creature kinds). | The first creature of the second kind is missing (the original destroys it, a quirk kept). | open |
 | 6 | Try the same in a town sector and while standing in a named area. | No encounter happens there. | open |
+
+## ARC-SCRIPT-1481 — food that heals and cures poison (2026-11-13)
+
+The food use script 30282 (the generic magic potion on 729 food items, most of them in the main map's chests and on its NPCs) runs when the hero eats the item ([VT1–VT8](../research/ledger/scripts.md#vitals-commands-and-the-food-use-script-arc-script-1481)). Use a food item that holds a potion in the hero's own inventory window (right click).
+
+| # | Step | Expected (from the original executable and data) | Status |
+| --- | --- | --- | --- |
+| 1 | Hurt the hero (a fight or a trap), then take a food item that the original calls a healing potion from a chest or an NPC and right-click it in the inventory. | The item is eaten (it leaves the list), hit points (or fatigue, or poison, by the potion) rise by the potion's amount scaled by the hero's magick or tech aptitude, and the use costs 4 action points in a round. | open |
+| 2 | Do the same with a hero at full health (and no poison). | Nothing happens and the potion stays: the script skips the default before it destroys the item. | open |
+| 3 | Poison the hero (a poison trap or a spider bite) and eat a cure-poison potion. | The poison level falls by the potion's amount (to 0 at least) and the poison damage ticks stop when it reaches 0. | open |
+| 4 | Eat a magick potion with a technological hero (a dwarf with a high tech aptitude). | The item is gone and nothing heals (the potion fizzles with its own effect), as the original's script does. | open |
+

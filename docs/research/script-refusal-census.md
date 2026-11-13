@@ -479,3 +479,10 @@ dependency on each other and on the census; all four can start.
   type-blocked sites by the 16 non-type-only scripts' sites (script 1990 is one).
 - **Quests are partial.** Only literal quest numbers count; a quest the script computes is missing.
   Quest and map names are not published beyond the map folder names.
+
+## After the vitals commands (ARC-SCRIPT-1481, 2026-11-13)
+
+The probe takes `--set S38` and `--set S41` besides S30 to S33. Under S38 (the widest set before ARC-SCRIPT-1481) 1,558 attached scripts on 6,113 placed sites are admitted whole and script 30282 is refused for `get_hit_points`, `get_fatigue_points` and
+`heal_poison`; under **S41** (S38 plus those three commands) 1,575 scripts on 6,856 sites are admitted (+17 scripts, +743 sites; 30282 is 729 of them) and 30282 is no longer in the refused lists. The numbers above stay those of S33; a host's own set is
+not counted here (the use set holds the three commands since this task, [ledger VT7](ledger/scripts.md#vitals-commands-and-the-food-use-script-arc-script-1481)).
+
