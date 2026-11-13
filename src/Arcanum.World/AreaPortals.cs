@@ -154,7 +154,14 @@ public sealed class AreaPortals
         ISessionCombatWorld? world = null)
     {
         ArgumentNullException.ThrowIfNull(session); ArgumentNullException.ThrowIfNull(portal);
-        return session.PickLock(session.Version, new(Openable(portal), portal.Baseline, portal.LockDifficulty, light), lockpick, world);
+        return session.PickLock(session.Version, PickTarget(portal, light), lockpick, world);
+    }
+
+    /// <summary>ARC-COMBAT-1776: the session's pick-locks target of the portal at the light <paramref name="light"/> (the hero's <see cref="Pick"/> and an NPC's <see cref="GameSessionOwner.PickLockByNpc"/> read the same).</summary>
+    public SessionPickLockTarget PickTarget(AreaPortal portal, int light = SessionPickLockTarget.FullLight)
+    {
+        ArgumentNullException.ThrowIfNull(portal);
+        return new(Openable(portal), portal.Baseline, portal.LockDifficulty, light);
     }
 
     /// <summary>

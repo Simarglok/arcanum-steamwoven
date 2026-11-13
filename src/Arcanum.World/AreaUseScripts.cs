@@ -44,7 +44,7 @@ namespace Arcanum.World;
 /// ARC-SCRIPT-1735 (E5-a tail, ledger NS5, NS9): <see cref="ArtExists"/> says whether an art id names an ART file of the module's content (the original's test 0x502220 before a change art number, action 59, writes the new art id); without it a run with a change art number is left unapplied.
 /// ARC-SCRIPT-1562 (WE2, CP7, CP8): <see cref="Aptitude"/> answers an NPC of the shown map's effective magick-tech aptitude (the hero's is the session's) for the magick-tech adjustments (91, 80) of a combat-point script; without it those runs stop at an NPC.
 /// ARC-SCRIPT-1733 (CS5, CS6): <see cref="CanSee"/> and <see cref="CanHear"/> (observer, target; the PC as the scheduler's id) answer the sight (0x4AF260) and hearing (0x4AF470, normal loudness) checks of an NPC through the AI host, null for an observer or target it
-/// holds no facts of; without them obj can see obj and obj can hear obj stop the run.
+/// holds no facts of (the PC included since ARC-SCRIPT-1773); without them obj can see obj and obj can hear obj stop the run.
 /// </summary>
 public sealed record AreaScriptWorld(Func<CellCoord?> PcCell, Func<AreaObjectRecord, bool> Gone, Func<int, AreaPrototypeItem?> Item, Func<IDropMap?> DropMap,
     Func<ScrObjectRef, bool>? Kill = null, Func<ScrObjectRef, bool>? CanKill = null, Func<ScrObjectRef, CellCoord?>? CritterCell = null,
@@ -571,27 +571,29 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     }
 
     /// <summary>
-    /// ARC-SCRIPT-1733 (CS4, case 26 → 0x4C1110, 0x460460): an NPC is in dialog while its conversation slot (entry 0 of the reaction-PC array, field 0x129) holds the PC: the session's reaction record. Every other object type goes to a callback of the dialog layer (0x567400 reading the
-    /// dialog slot of the PC, whichever object is asked) which the viewer's conversation host does not give this host: the answer is null and the run stops as not modelled (issue #1773 for the PC branch).
+    /// ARC-SCRIPT-1733 / ARC-SCRIPT-1773 (CS4, case 26 → 0x4C1110, 0x460460): an NPC is in dialog while its conversation slot (entry 0 of the reaction-PC array, field 0x129) holds the PC: the session's reaction record. Every other object type, and the PC, goes to the dialog layer's callback
+    /// (0x460460 → 0x567400 → 0x567420: in single player always the dialog slot 0 of the PC, whichever object was named), which returns the slot's word +0x1850: 1 from the dialog start (0x567460, after the NPC's conversation slot opened) until its close (0x5678D0,
+    /// 0x567A20), else 0. The session's conversation slots tell the same span (<see cref="GameSessionOwner.QueryDialogOpen"/>: the conversation host opens an NPC's slot at the start and closes it at every exit), so a scenery or item answers as the PC does. Null for an object this host
+    /// has no row for.
     /// </summary>
     public bool? IsInDialog(ScrObjectRef obj)
     {
-        if (IsPc(obj)) return null;
+        if (IsPc(obj)) return _session.QueryDialogOpen();
         if (Row(obj) is not { } row) return null;
-        return row.Type == NpcType ? _session.QueryReactionRecord(obj.Code) is { InConversation: true } : null;
+        return row.Type == NpcType ? _session.QueryReactionRecord(obj.Code) is { InConversation: true } : _session.QueryDialogOpen();
     }
 
-    /// <summary>ARC-SCRIPT-1733 (CS5): sight (0x4AF260) of an NPC of the shown map toward an NPC of it or the PC, through the AI host (<see cref="AreaScriptWorld.CanSee"/>); null for any other pair.</summary>
+    /// <summary>ARC-SCRIPT-1733 / ARC-SCRIPT-1773 (CS5): sight (0x4AF260) of an NPC of the shown map or the PC toward an NPC of it or the PC, through the AI host (<see cref="AreaScriptWorld.CanSee"/>); null for any other pair.</summary>
     public bool? CanSee(ScrObjectRef observer, ScrObjectRef target) => Perceives(observer, target, _world?.CanSee);
 
-    /// <summary>ARC-SCRIPT-1733 (CS6): hearing (0x4AF470 at the normal loudness 1) of an NPC of the shown map toward an NPC of it or the PC, through the AI host (<see cref="AreaScriptWorld.CanHear"/>); null for any other pair.</summary>
+    /// <summary>ARC-SCRIPT-1733 / ARC-SCRIPT-1773 (CS6): hearing (0x4AF470 at the normal loudness 1) of an NPC of the shown map or the PC toward an NPC of it or the PC, through the AI host (<see cref="AreaScriptWorld.CanHear"/>); null for any other pair.</summary>
     public bool? CanHear(ScrObjectRef listener, ScrObjectRef source) => Perceives(listener, source, _world?.CanHear);
 
     private bool? Perceives(ScrObjectRef from, ScrObjectRef to, Func<string, string, bool?>? check)
     {
-        if (check is null || IsPc(from) || from.Map != _shownMap || Row(from) is not { Type: NpcType }) return null;
+        if (check is null || (!IsPc(from) && (from.Map != _shownMap || Row(from) is not { Type: NpcType }))) return null;
         if (!IsPc(to) && (to.Map != _shownMap || Row(to) is not { Type: NpcType })) return null;
-        return check(from.Code, IsPc(to) ? Arcanum.Simulation.Ai.AiSchedulerRules.Pc : to.Code);
+        return check(IsPc(from) ? Arcanum.Simulation.Ai.AiSchedulerRules.Pc : from.Code, IsPc(to) ? Arcanum.Simulation.Ai.AiSchedulerRules.Pc : to.Code);
     }
 
     /// <summary>ARC-SCRIPT-1733 (CS7, case 30): object flag 0x400000 (field 0x13) of any object: the PC's and an NPC's as the session has them (the stored flags under the written ones), another row's as stored; null for an object this host has no row for.</summary>

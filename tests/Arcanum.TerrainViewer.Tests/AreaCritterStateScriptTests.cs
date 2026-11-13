@@ -146,23 +146,28 @@ public sealed class AreaCritterStateScriptTests
     }
 
     [TestMethod]
-    public void Obj_is_in_dialog_reads_the_conversation_slot_of_an_NPC_and_stops_for_any_other_object()
+    public void Obj_is_in_dialog_reads_the_conversation_slot_of_an_NPC_and_the_PC_s_dialog_slot_for_every_other_object()
     {
         using var session = ConversationSessionFixture.CreateWithHero(1);
         var npc = Npc(1);
+        var other = Npc(3);
         var scenery = Plain(2, ScenerySlotType);
-        var host = Host(session, null, npc, scenery);
+        var host = Host(session, null, npc, other, scenery);
         var entity = AreaUseScriptHost.EntityId(npc);
         var facts = new ReactionNpcFacts(50, CharacterRace.Human, false, false);
         Assert.IsFalse(host.IsInDialog(Ref(npc))!.Value);
+        Assert.IsFalse(host.IsInDialog(host.Pc)!.Value, "no dialog is open: the dialog slot word +0x1850 is 0");
+        Assert.IsFalse(host.IsInDialog(Ref(scenery))!.Value);
         Assert.AreEqual(GameSessionDisposition.Changed, session.BeginReactionConversation(session.Version, entity, facts).Disposition);
         Assert.IsTrue(host.IsInDialog(Ref(npc)));
+        Assert.IsTrue(host.IsInDialog(host.Pc), "the PC is in the dialog its NPC's conversation slot tells (0x567400 reads the PC's dialog slot)");
+        Assert.IsTrue(host.IsInDialog(Ref(scenery)), "every other object type asks the same callback, whichever object it names");
+        Assert.IsFalse(host.IsInDialog(Ref(other))!.Value, "an NPC reads its own conversation slot, not the PC's: another NPC is not in the dialog");
         Assert.AreEqual(GameSessionDisposition.Changed, session.EndReactionConversation(session.Version, entity, facts).Disposition);
         Assert.IsFalse(host.IsInDialog(Ref(npc))!.Value, "the talk ended");
-        // Any other object type goes to the dialog layer's callback (0x567400 over the PC's dialog slot), which this host does not hold.
-        Assert.IsNull(host.IsInDialog(host.Pc));
-        Assert.IsNull(host.IsInDialog(Ref(scenery)));
-        Assert.IsNull(host.IsInDialog(new(1, "oid:nobody")));
+        Assert.IsFalse(host.IsInDialog(host.Pc)!.Value);
+        Assert.IsFalse(host.IsInDialog(Ref(scenery))!.Value);
+        Assert.IsNull(host.IsInDialog(new(1, "oid:nobody")), "an object the host has no row for is not known");
     }
 
     [TestMethod]
@@ -197,19 +202,23 @@ public sealed class AreaCritterStateScriptTests
         Assert.IsFalse(host.CanSee(Ref(thief), Ref(guard))!.Value);
         Assert.IsTrue(host.CanHear(Ref(guard), host.Pc), "the PC target goes by the scheduler's id");
         Assert.IsFalse(host.CanHear(Ref(guard), Ref(thief))!.Value);
+        // ARC-SCRIPT-1773: the hero as the observer goes through the world by the scheduler's id as well.
+        Assert.IsTrue(host.CanSee(host.Pc, Ref(guard)) is false, "the hero's check is the world's (this one answers true only for the guard as the observer)");
+        Assert.IsTrue(host.CanHear(host.Pc, Ref(guard)) is false);
         CollectionAssert.AreEqual(new[]
         {
             ("see", AreaUseScriptHost.EntityId(guard), AreaUseScriptHost.EntityId(thief)), ("see", AreaUseScriptHost.EntityId(thief), AreaUseScriptHost.EntityId(guard)),
             ("hear", AreaUseScriptHost.EntityId(guard), "pc"), ("hear", AreaUseScriptHost.EntityId(guard), AreaUseScriptHost.EntityId(thief)),
+            ("see", "pc", AreaUseScriptHost.EntityId(guard)), ("hear", "pc", AreaUseScriptHost.EntityId(guard)),
         }, asked);
-        // The hero as the observer (its facing is not tracked), a row that is no NPC, an object of another map or none, and a host without the world's check: not modelled.
-        Assert.IsNull(host.CanSee(host.Pc, Ref(guard)));
+        Assert.IsNull(host.CanSee(host.Pc, new(1, "oid:nobody")));
+        // A row that is no NPC, an object of another map or none, and a host without the world's check: not modelled.
         Assert.IsNull(host.CanSee(Ref(item), Ref(guard)));
         Assert.IsNull(host.CanSee(Ref(guard), Ref(item)));
         Assert.IsNull(host.CanSee(new(2, AreaUseScriptHost.EntityId(guard)), Ref(thief)));
         Assert.IsNull(host.CanHear(Ref(guard), new(1, "oid:nobody")));
         Assert.IsNull(Host(session, null, guard, thief).CanSee(Ref(guard), Ref(thief)));
-        Assert.AreEqual(4, asked.Count, "a refused pair asks nothing");
+        Assert.AreEqual(6, asked.Count, "a refused pair asks nothing");
     }
 
     private static byte[] Program(params ((int Type, (byte Kind, int Value)[] Operands) Condition, (int Type, (byte Kind, int Value)[] Operands) OnTrue, (int Type, (byte Kind, int Value)[] Operands) OnFalse)[] lines)
