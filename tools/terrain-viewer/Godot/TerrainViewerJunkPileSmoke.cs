@@ -36,14 +36,14 @@ public partial class TerrainViewerApp
         if (candidate is null) { GD.Print($"ARC-WORLD-063 native-smoke junk-pile NONE map={_readyMapName} (no container with two items)"); return Task.CompletedTask; }
         var spilled = inventory.Holders.Single(h => h.Entity == candidate.Entity).Items.Select(item => item.Entity).ToArray();
         var attacks = 0;
-        var (lastHitPoints, stalled) = (session.QueryObject(candidate.Object!).HitPoints, 0);
+        var (lastHitPoints, stalled) = (session.QueryObject(candidate.Object!).HitPoints, -1); // -1: the first pass sees no attack yet
         var damagedWithoutAttack = false;
         for (; attacks < 400 && session.QueryObject(candidate.Object!).Condition == SessionObjectCondition.Whole; attacks++)
         {
             // ARC-BUG-1536: the stage tests the spill, not the hero's damage. A hero an earlier stage of the map chain left without its weapon
             // (a critical smoke destroys it) takes a container down to its damage threshold and no further: 20 attacks in a row without a
             // hit point lost, and the container takes its remaining hit points as damage that is no attack (ARC-DEV-255), which breaks
-            // and spills it the same way.
+            // and spills it the same way. Any hero whose hits stay under the threshold takes this path, so the PASS line says ViaDamage.
             var hitPoints = session.QueryObject(candidate.Object!).HitPoints;
             stalled = hitPoints < lastHitPoints ? 0 : stalled + 1;
             lastHitPoints = hitPoints;
@@ -99,7 +99,7 @@ public partial class TerrainViewerApp
         Require(dissolved != _groundBodies.ContainsKey(key), "the pile's body follows the pile");
         GD.Print("ARC-WORLD-063 native-smoke junk-pile PASS " + System.Text.Json.JsonSerializer.Serialize(new
         {
-            Map = _readyMapName, Container = candidate.Entity, Attacks = attacks, Spilled = spilled.Length, NoDecay = kept.Count, Piled = pile.Items.Count, Loose = loose.Length,
+            Map = _readyMapName, Container = candidate.Entity, Attacks = attacks, ViaDamage = damagedWithoutAttack, Spilled = spilled.Length, NoDecay = kept.Count, Piled = pile.Items.Count, Loose = loose.Length,
             Art = $"0x{_junkPileArt:X8}", Taken = first, Left = left, Dissolved = dissolved,
             Parity = "NOT_VERIFIED (rules read in the original executable; no original-runtime run)",
         }));
