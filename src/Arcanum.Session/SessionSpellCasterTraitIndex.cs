@@ -30,7 +30,7 @@ namespace Arcanum.Session;
 /// ARC-MAGIC-1628: a record follower's gender is the stored field and the innate effect as for any NPC (the sheet holds none), its race the sheet's (not ready when the new race's ranges leave the sheet invalid); the hero's poison is its life state's level,
 /// its magick and tech points are stored when no worn item has a wield script (<see cref="GameSessionOwner.HeroRewieldReady"/>), and its experience runs the level recalculation (0x4A69C0) after the store, queueing the award for the host as an
 /// award does (<see cref="TakeExperienceAwards"/>); the level has no case and is stored alone. ARC-MAGIC-1658: the hero's resistance (its stored array, schema 99), stat 25 (its stored age) and gender and race (the innate effects swapped, the character owner built again, <see cref="GameSessionOwner.WriteHeroInnate"/>) run; not ready for the hero:
-/// an age the session has not read (a save upgraded from schema 98 or before: the load path reads no prototype), a race of 11 (effect 75 exists but the character rules have no race 11) and a swap the session refuses (<see cref="GameSessionOwner.HeroInnateReady"/>). ARC-MAGIC-1700: the innate effects' resistance changes are read from the attached rules (<c>HeroEffectResistances</c>); the innate list's display order (race first) differs from the original's append order.</item>
+/// an age the session has not read (a save upgraded from schema 98 or before whose load found no prototype age: the viewer's load stores it, ARC-MAGIC-1724), a race of 11 (effect 75 exists but the character rules have no race 11) and a swap the session refuses (<see cref="GameSessionOwner.HeroInnateReady"/>). ARC-MAGIC-1700: the innate effects' resistance changes are read from the attached rules (<c>HeroEffectResistances</c>); the innate list's display order (race first) differs from the original's append order.</item>
 /// </list>
 /// </summary>
 public sealed partial class SessionSpellCaster
@@ -181,7 +181,7 @@ public sealed partial class SessionSpellCaster
     /// (0x45F820); alignment arms the followers' re-check (OL17). A derived stat (8 to 16) is read and not written. ARC-MAGIC-1628: poison is the life state's level (<see cref="PoisonStat"/>); magick and tech points run the rewield
     /// 0x465530 (<see cref="GameSessionOwner.HeroRewieldReady"/>); experience is stored and then recalculated (0x4A69C0, <see cref="GameSessionOwner.WriteHeroExperienceStat"/>) and its award waits in <see cref="TakeExperienceAwards"/> for the
     /// host's level-up messages and followers' step, as an award's does; the level has no case in the setter and is stored alone. ARC-MAGIC-1658: a resistance (the hero's stored array, saved since schema 99), stat 25 (its stored age) and gender and race (the removal, store and add of the innate effects: the character owner is built again) run too.
-    /// <b>Not ready</b>: a worn wield script for the points, experience without the experience table, an age the session has not read (a save of schema 98 or before), a race of 11, and an innate swap the session refuses (<see cref="GameSessionOwner.HeroInnateReady"/>).
+    /// <b>Not ready</b>: a worn wield script for the points, experience without the experience table, an age the session has not read (a save of schema 98 or before the load could not fill, ARC-MAGIC-1724), a race of 11, and an innate swap the session refuses (<see cref="GameSessionOwner.HeroInnateReady"/>).
     /// </remarks>
     private SpellComponentOutcome? TraitIndexHero(SpellRun run, TraitIndexData data)
     {
@@ -225,7 +225,7 @@ public sealed partial class SessionSpellCaster
         return Report(run, Hero, data, _owner.WriteHeroStat(_owner.Version, data.Index, next));
     }
 
-    // ARC-MAGIC-1658: the hero's stat 25 (stored age), 26 (gender) and 27 (race). Not ready: an age the session has not read (a save of an older schema), a race of 11 (the table's last, a race the character rules do not have) and what
+    // ARC-MAGIC-1658: the hero's stat 25 (stored age), 26 (gender) and 27 (race). Not ready: an age the session has not read (an older save the load could not fill), a race of 11 (the table's last, a race the character rules do not have) and what
     // the hero's innate swap refuses (GameSessionOwner.HeroInnateReady: no rule attached for the effect to add, a stat the new race's ranges do not admit, a durable effect with the number of the new innate one).
     private SpellComponentOutcome? TraitIndexHeroInnate(SpellRun run, TraitIndexData data, SessionHeroState hero)
     {
