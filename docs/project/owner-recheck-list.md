@@ -1202,6 +1202,33 @@ start a game and press `C`. Compare with **HD** and **Legacy**.
 | 4 | Resize the window and open the sheet again. | The frames are sharp at the new size, no seam between the window and the pages. | open |
 | 5 | Open an NPC's sheet in a dialog (reply `c-e`). | The same look, with no + or − buttons. | open |
 
+## ARC-UI-1197 — Generated interface: the world map and the town map (S6, 2026-11-13)
+
+The rules are in [viewer slice S6](../rendering/hd-interface-density.md#viewer-slice-s6-arc-ui-1197). Set the HD interface line on the launcher screen to **Generated (experimental)**,
+start a game and press `W` (the town map opens in the Crash Site; on the open ground the world map). Compare with **HD** and **Legacy**.
+
+| # | Step | Expected | Status |
+| --- | --- | --- | --- |
+| 1 | Press `W` in a 1280 × 800 window. | The window's wood, the brass rim around the map view, the readout boxes, the compass rose, the route sketch and the Travel button's ring sit where they did in HD; the map picture is as before. | open |
+| 2 | Press `Z` or the Zoom and Whole-map buttons to change the view. | The frame does not change; the buttons (still art) answer to hover and press. | open |
+| 3 | Move the pointer over the map. | The two readout boxes show their numbers in the same places. | open |
+| 4 | Resize the window (or go full screen) and open the map again. | The frame is sharp at the new size, no seam between the wood and the kept pictures. | open |
+
+Known differences (documented, not bugs):
+
+- The buttons, the lens cover and the bottom cover are still art ([issue #1810](https://github.com/Simarglok/arcanum-steamwoven/issues/1810)); the zoom and whole-map buttons get a brass frame from the holes of the frame.
+- The compass, the route sketch and the Travel ring are the original's pictures; their small patches of old wood differ a little from the generated wood.
+
+## ARC-COMBAT-1738 — Auto Switch Weapons option and its re-wield cases (2026-11-13)
+
+The rules are in the [ledger OH3](../research/ledger/ui-audio.md#hidden-options-arc-res-1107) and [equipment runtime](../world/equipment-runtime.md). Start a game with a hero who carries two weapons.
+
+| # | Step | Expected | Status |
+| --- | --- | --- | --- |
+| 1 | Open Options (main menu and in play), Game page. | Auto Switch Weapons is the fifth line, after Auto Attack, Off at the first start. | open |
+| 2 | Turn Auto Switch Weapons On, wield a bow with no arrows (or a gun with no bullets) and attack. | The attack does not shoot, and the hero wields the best other weapon at once; with the option Off nothing changes. | open |
+| 3 | With it On, let an enemy with a critical hit (drop weapon or destroy weapon) strike the hero. | The hero's lost weapon is replaced by the best weapon left; with the option Off the hand stays empty. | open |
+
 ## ARC-SCRIPT-1732 — The healer menu behind `h:` (2026-11-13)
 
 Built from the executable's state machine ([ledger HLR1–HLR12](../research/ledger/social.md#healer-reply-arc-script-1732)); the effects start through the AI host, so the look and the timing of the heal and the spells are for you to judge.
