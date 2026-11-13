@@ -1,6 +1,7 @@
 using Arcanum.Data;
 using Arcanum.Data.Area;
 using Arcanum.Data.Audio;
+using Arcanum.Data.Messages;
 using Arcanum.Data.Scripts;
 using Arcanum.Scripting.Dialog;
 using Arcanum.Scripting.GlobalFlags;
@@ -617,6 +618,8 @@ public sealed class AreaConversationHost
                 _session.QueryHero() is null ? null : new SessionDialogPursePort(_session, AreaConversationState.PcParticipant),
                 // ARC-SCRIPT-1358: an l: reply asks for the world map once the talk ended; the viewer says whether it has one (map mode) and opens it.
                 WorldMapAvailable?.Invoke() == true ? new WorldMapPort(this) : null,
+                // ARC-SCRIPT-1532: a q: reply picks its record from the module's quest rules table; without the table the reply stays a frontier.
+                QuestReplies: _greetingTexts?.QuestReplies is { } questReplies ? new QuestReplyPort(questReplies) : null,
                 // ARC-SCRIPT-1533: the d: and x: replies read the area names and locations of the module's area table and where the speaker stands.
                 Directions: _greetingTexts?.Areas is { } areaTable ? new AreaDialogDirections(areaTable, speaker, SpeakerCell) : null));
         return new(AreaConversationStartStatus.Started, conversation, speaker, $"script {dialog.Script} SCR line {dialog.Line} -> DLG node {dialog.Node}", party,
@@ -805,6 +808,12 @@ public sealed class AreaConversationHost
     }
 
     // l: (ledger VA5): the original's dialog state 6 opens the world map for the local PC only (0x567E30 tests the handle against the local PC, 0x40D9F0).
+    /// <summary>ARC-SCRIPT-1532: the module's <c>rules\gamequest.mes</c> numbers for the <c>q:</c> reply.</summary>
+    private sealed class QuestReplyPort(QuestReplyTable table) : IDialogQuestReplyPort
+    {
+        public int? Field(int quest, int index) => table.Field(quest, index);
+    }
+
     private sealed class WorldMapPort(AreaConversationHost host) : IDialogWorldMapPort
     {
         public DialogCommandResult Execute(OpenWorldMapCommand command)

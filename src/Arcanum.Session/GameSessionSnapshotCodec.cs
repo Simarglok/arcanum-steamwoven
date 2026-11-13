@@ -44,7 +44,7 @@ public static partial class GameSessionSnapshotCodec
     /// it at the policy maxima with the longest keys, and saving it is then a typed <c>TooLarge</c>.</summary>
     public const int MaxEncodedCharacters = 96 * 1024 * 1024;
 
-    private static readonly string[] RootFields = ["format", "schemaVersion", "world", "module", "revision", "clock", "flags", "actor", "maps", "story", "party", "hero", "inventory", "objects", "equipment", "durability", "schematics", "effects", "experience", "advancement", "random", "life", "reactions", "combat", "combatMode", "concealment", "danger", "sound", "events", "hotkeys", "scripts", "residency", "goals", "spells", "newspaper", "generators", "flights", "encounters", "lighting"];
+    private static readonly string[] RootFields = ["format", "schemaVersion", "world", "module", "revision", "clock", "flags", "actor", "maps", "story", "party", "hero", "inventory", "objects", "equipment", "durability", "schematics", "effects", "experience", "advancement", "random", "life", "reactions", "combat", "combatMode", "concealment", "danger", "sound", "events", "hotkeys", "scripts", "residency", "goals", "spells", "newspaper", "generators", "flights", "encounters", "barLights", "lighting"];
     private static readonly string[] ClockFields = ["schemaVersion", "policyId", "sourceRevision", "sourceDataSha256",
         "startupResourceSha256", "startYear", "startHour", "timestampMs", "paused", "pauseReason", "revision", "realMs", "animationMs"];
     private static readonly string[] FlagsFields = ["revision", "entries"];
@@ -52,6 +52,8 @@ public static partial class GameSessionSnapshotCodec
     private static readonly string[] ActorFields = ["map", "x", "y", "facing"];
     private static readonly string[] MapFields = ["map", "changes"];
     private static readonly string[] LightingFields = ["schemeId", "hour"];
+    // ARC-UI-1542 (schema 98): the lit state of the top strip's buttons: one flag per light slot and the Map button's face.
+    private static readonly string[] BarLightsFields = ["lit", "mapMode"];
     private static readonly string[] SectorChangeFields = ["scope", "sector", "property", "value"];
     private static readonly string[] EntityChangeFields = ["scope", "entity", "property", "value"];
     private static readonly string[] StoryFields = ["quests", "globalQuests", "rumors", "quelledRumors", "knownAreas", "lastArea", "reputations", "storyState",
@@ -1055,6 +1057,17 @@ public static partial class GameSessionSnapshotCodec
             WriteFlights(w, snapshot.Flights);
             WriteEncounters(w, snapshot.Encounters);
 
+            if (snapshot.BarLights is { } barLights)
+            {
+                w.WriteStartObject("barLights");
+                w.WriteStartArray("lit");
+                for (var slot = 0; slot < 5; slot++) w.WriteBooleanValue((barLights.LitMask >> slot & 1) != 0);
+                w.WriteEndArray();
+                w.WriteNumber("mapMode", barLights.MapMode);
+                w.WriteEndObject();
+            }
+            else w.WriteNull("barLights");
+
             if (snapshot.Lighting is { } lighting)
             {
                 w.WriteStartObject("lighting");
@@ -1262,7 +1275,7 @@ public static partial class GameSessionSnapshotCodec
         return new(GameSessionSnapshot.CurrentSchemaVersion, identity, revision,
             Clock(f["clock"]), Flags(f["flags"]), Actor(f["actor"]), Maps(f["maps"]), Story(f["story"]), Party(f["party"]),
             Hero(f["hero"]), Inventory(f["inventory"]), Equipment(f["equipment"]), Durability(f["durability"]), Schematics(f["schematics"]), Effects(f["effects"]), Experience(f["experience"]), Advancement(f["advancement"]), Random(f["random"]), Life(f["life"]), Reactions(f["reactions"]), Combat(f["combat"]), CombatMode(f["combatMode"]), Concealment(f["concealment"]), Danger(f["danger"]), Events(f["events"]), Lighting(f["lighting"]), Sound(f["sound"]),
-            Hotkeys(f["hotkeys"]), Objects(f["objects"]), Scripts(f["scripts"], f["hero"]), Residency(f["residency"]), Goals(f["goals"]), Spells(f["spells"]), Newspaper(f["newspaper"]), Flights(f["flights"]), Generators(f["generators"]), Encounters(f["encounters"]));
+            Hotkeys(f["hotkeys"]), Objects(f["objects"]), Scripts(f["scripts"], f["hero"]), Residency(f["residency"]), Goals(f["goals"]), Spells(f["spells"]), Newspaper(f["newspaper"]), Flights(f["flights"]), Generators(f["generators"]), Encounters(f["encounters"]), BarLights(f["barLights"]));
     }
 
     // Shapes and ordinal order; the values' ranges and the budget are Restore's.
@@ -1502,6 +1515,20 @@ public static partial class GameSessionSnapshotCodec
         if (element.ValueKind == JsonValueKind.Null) return null;
         var f = Fields(element, p, LightingFields);
         return new(Int(f["schemeId"], p + ".schemeId", 1, int.MaxValue), Int(f["hour"], p + ".hour", 0, 23));
+    }
+
+    // Shapes and ranges: five flags and a face of 2 or 3, or null for a save whose host never lit a button.
+    private static SessionBarLightsState? BarLights(JsonElement element)
+    {
+        const string p = "$.barLights";
+        if (element.ValueKind == JsonValueKind.Null) return null;
+        var f = Fields(element, p, BarLightsFields);
+        var rows = Array(f["lit"], p + ".lit", 5);
+        if (rows.Length != 5) throw new DecodeException(SnapshotDecodeFailure.OutOfRange, p + ".lit");
+        var mask = 0;
+        for (var slot = 0; slot < 5; slot++)
+            if (Bool(rows[slot], $"{p}.lit[{slot}]")) mask |= 1 << slot;
+        return new(mask, Int(f["mapMode"], p + ".mapMode", 2, 3));
     }
 
     private static SessionClockState Clock(JsonElement element)

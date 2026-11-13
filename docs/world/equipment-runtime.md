@@ -258,6 +258,12 @@ Plan slice S8 of the [dispatcher research](../research/scr-event-dispatcher.md#1
   changed of the move's items (the event's own writeback and its call-ex runs'), which the session keeps
   (`QueryItemScriptSlots`) and every later item run reads instead of the host's slot. Eye candy and sounds stay in the runs
   (`EquipmentMutationResult.Scripts`) for the host to show and play.
+- **Poisoning items (ARC-SCRIPT-1482).** The installed wield-on poisoning items (callers 30088, 30103, 30115, 30147, 30165, 30197)
+  run inside this set: they add effects and only *schedule* their poison script with call script in (54), which the move puts in the
+  session's event queue. The damage is the deferred call's: `AreaScriptHost.CallAdmissionFor` holds the magick-tech adjustment
+  (`GameSessionOwner.QueryWornPowerRatio`, a worn item's ratio) and the eye candy, and its damage (60, 138) and heal hit points (75)
+  of the hero come from the talk set while the shown map's use host answers: they go through the use host's session path, no
+  attacker (ARC-SCRIPT-1563, ledger [PZ11](../research/ledger/combat.md#poison-sources-arc-res-1329)). The item-event set itself has no damage action and needs none.
 - **Item questions.** The identified test is the host's (`ISessionItemScriptHost.IsIdentified`); the power ratio of the
   magick-tech adjustment is the session's, for an item of the move and the hero (its effective magick/tech aptitude under the effect
   changes of the move's earlier runs) or another item of the move (not a critter: 100); items are never being rewielded (no rewield

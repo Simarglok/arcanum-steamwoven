@@ -407,15 +407,15 @@ public sealed partial class DialogConversation
     {
         var offers = new List<DialogOption>();
         var plans = new Dictionary<int, OfferPlan>();
-        // The cap of five counts the replies whose conditions hold (0x414F50); a directions reply the PC has nothing to ask for is left out afterwards (0x414E60).
+        // The source takes the first five eligible records (0x414F50) before the reply builder (0x416C10) drops one, so a dropped q: reply still counts.
         var eligible = 0;
-        foreach (var reply in step.Replies)
+        foreach (var planned in step.Replies)
         {
             if (eligible == MaxEligible)
             {
                 break;
             }
-            var open = IsEligible(reply);
+            var open = IsEligible(planned);
             if (open is null)
             {
                 return;
@@ -425,7 +425,20 @@ public sealed partial class DialogConversation
                 continue;
             }
             eligible++;
-            // A reply the PC has nothing to ask for is left out whatever its action holds (0x416C10 returns before the states are built).
+            var reply = planned;
+            if (planned.QuestReply is not null)
+            {
+                if (!ResolveQuestReply(planned, step, out var resolved))
+                {
+                    return;
+                }
+                if (resolved is null)
+                {
+                    continue;
+                }
+                reply = resolved;
+            }
+            // A directions reply the PC has nothing to ask for is left out whatever its action holds (0x416C10 returns before the states are built).
             if (reply.DirectionsFilter is { } directions)
             {
                 var hidden = DirectionsHidden(directions);
@@ -1512,20 +1525,23 @@ public sealed partial class DialogConversation
     }
 
     /// <summary>Plans one Player record. Condition grammar failures propagate to the step; action failures block only this reply.</summary>
-    private ReplyPlan? PlanReply(DlgRecord record, DialogNodeId node, out DialogConversationFrontier? frontier, out DialogConversationFailure? failure)
+    private ReplyPlan? PlanReply(DlgRecord record, DialogNodeId node, out DialogConversationFrontier? frontier, out DialogConversationFailure? failure,
+        DlgRecord? gates = null, bool nestedQuest = false)
     {
         frontier = null;
         failure = null;
+        // ARC-SCRIPT-1532: a q: reply's chosen record gives the text, response and action; the gates (gender, IQ, condition) stay the q: record's (0x416C10 only recurses for the record).
+        var gate = gates ?? record;
         var response = new DialogResponseId(record.Id);
-        var gender = ParseGender(record);
+        var gender = ParseGender(gate);
         if (gender is null)
         {
             failure = new DialogConversationFailure(DialogConversationFailureKind.InvalidOperation, node,
-                new DialogOperationSource(new DialogNodeId(record.Id), record.SerializedIndex, DlgFieldKind.AlternateText,
-                    record.AlternateText.PayloadOffset, 0, record.AlternateText.Length, 0), response);
+                new DialogOperationSource(new DialogNodeId(gate.Id), gate.SerializedIndex, DlgFieldKind.AlternateText,
+                    gate.AlternateText.PayloadOffset, 0, gate.AlternateText.Length, 0), response);
             return null;
         }
-        var condition = ParseField(record, record.Condition, ConversationField.PlayerCondition);
+        var condition = ParseField(gate, gate.Condition, ConversationField.PlayerCondition);
         if (MissingCapability(condition) is { } missing)
         {
             frontier = new DialogConversationFrontier(DialogFrontierKind.CapabilityUnavailable, node, missing, response);
@@ -1554,6 +1570,12 @@ public sealed partial class DialogConversation
             // ARC-SCRIPT-1533: the directions replies (0x416C10): with the directions port, the known-area port and the lines the reply is built; its visibility (an area the PC does
             // not know) is read when the offers are built. Without them it stays a static frontier, as the other replies whose visibility depends on state this runtime cannot read.
             directions = ToDirections(found is { Letter: 'x' }, ParseDirectionsReply(text));
+        }
+        if (found is { Letter: 'q' } && !nestedQuest && QuestReplyAvailable && ParseQuestReply(text) is { } questReply)
+        {
+            // ARC-SCRIPT-1532 (ledger DQR1): the reply is chosen when the offers are built (BuildOffers → ResolveQuestReply): the record it shows depends on the PC's quest state.
+            return new ReplyPlan(record, gender.Value, record.IqValue!.Value, condition, DialogOptionTextKind.Record, string.Empty, null, DialogOptionTransition.Exit, null, null, null, null,
+                null, QuestReply: questReply);
         }
         if (found is { Letter: 'q' or 'u' } || found is { Letter: 'd' or 'x' } && directions is null)
         {
@@ -1804,9 +1826,9 @@ public sealed partial class DialogConversation
                 line = null;
             }
         }
-        return new ReplyPlan(record, gender.Value, record.IqValue!.Value, condition, kind, text, marker, transition, target, line, action, block,
+        return new ReplyPlan(record, gender.Value, gate.IqValue!.Value, condition, kind, text, marker, transition, target, line, action, block,
             block is null ? insult : null, block is null ? barter : null, block is null ? worldMap : null, phrase, block is null ? trainer : null, block is null ? rumor : null, block is null && story,
-            block is null ? directions : null, directions);
+            Directions: block is null ? directions : null, DirectionsFilter: directions);
     }
 
     private static bool CheckTokens(string text, DialogNodeId node, DialogResponseId? response, out DialogConversationFrontier? frontier, out DialogConversationFailure? failure)
@@ -1965,6 +1987,7 @@ public sealed partial class DialogConversation
         int[]? Trainer = null,
         RumorOffer? Rumor = null,
         bool Story = false,
+        int? QuestReply = null,
         DirectionsOffer? Directions = null,
         DirectionsOffer? DirectionsFilter = null);
 

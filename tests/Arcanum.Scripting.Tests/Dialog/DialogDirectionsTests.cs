@@ -297,11 +297,12 @@ public sealed class DialogDirectionsTests
         Assert.AreEqual(DialogOptionTextKind.Fallback, new Rig(known: [1]).Start(Reply("d:$0,1", action: "FL 20")).Options.Single().TextKind,
             "the exe leaves a reply out whatever its action holds");
         var tight = new Rig();
-        var limited = tight.Start(Reply("x:$0,1"), options: new DialogConversationOptions { MaxEffects = 0 });
+        // The reply's own action takes the one effect of the budget, so the marking of the way does not fit.
+        var limited = tight.Start(Reply("x:$0,1", action: "MM 9"), options: new DialogConversationOptions { MaxEffects = 1 });
         Pick(limited, 1);
         Assert.AreEqual(DialogConversationSelectStatus.AtFrontier, limited.Select(limited.Options[0].Token).Status);
         Assert.AreEqual(DialogFrontierKind.EffectLimit, limited.Frontier!.Kind);
-        Assert.AreEqual(0, tight.World.Commands.Count);
+        CollectionAssert.AreEqual(new[] { "MM:9" }, tight.World.Commands.ToArray());
     }
 
     [TestMethod]

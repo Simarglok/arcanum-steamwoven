@@ -836,7 +836,8 @@ public sealed class AreaAiFollowerTests
     [TestMethod]
     public void The_follower_branch_interrupts_a_leftover_run_at_level_3_by_the_tables_rule()
     {
-        var (session, host, _, _, companion) = Open();
+        // ARC-AI-1523: the leader is far (past 4 tiles), so the follow starter takes its start path, which is the one that interrupts.
+        var (session, host, _, _, companion) = Open(companionAt: new(60, 20));
         Assert.AreEqual(DangerState.None, session.QueryDanger(companion).State);
         var attempt = Leftover(host, companion, GoalType.AttemptSpell);
         host.Perform(companion);
@@ -853,6 +854,33 @@ public sealed class AreaAiFollowerTests
         Assert.IsFalse(Alive(host, walk), "a walk is ended at level 3");
         Assert.IsNull(host.RunOf(companion));
         Assert.IsFalse(host.Holds(companion), "and its own walk follows the hero again");
+    }
+
+    /// <summary>
+    /// ARC-AI-1523 (VBG12, 0x4346A0): the follow starter interrupts only on its start path; with the leader near (4 tiles, 7 spread out) or a follow run kept it ends nothing, so a companion's
+    /// please-move (68) goes on instead of being ended by the follower branch (the far case, where the starter starts, is the level-3 test above).
+    /// </summary>
+    [TestMethod]
+    public void A_follow_that_keeps_the_run_or_finds_the_leader_near_does_not_interrupt_a_please_move()
+    {
+        var (session, host, _, _, companion) = Open();
+        Assert.AreEqual(DangerState.None, session.QueryDanger(companion).State);
+        var move = Leftover(host, companion, GoalType.PleaseMove);
+        host.Perform(companion);
+        StringAssert.Contains(host.TraceOf(companion)!.Perform, "Follow by its own walk");
+        Assert.IsTrue(Alive(host, move), "the leader is near: the follow starter ends nothing, the please-move goes on");
+        Assert.IsTrue(host.Holds(companion), "so the host still holds the walk until the move is done");
+    }
+
+    [TestMethod]
+    public void A_follow_that_finds_an_equal_run_queued_does_not_interrupt_the_companions_run()
+    {
+        // The leader is far; a follow run of the companion stands (the starter's duplicate test, AlreadyQueued): the starter keeps it and ends nothing.
+        var (_, host, _, _, companion) = Open(companionAt: new(60, 20));
+        var follow = Leftover(host, companion, GoalType.Follow);
+        host.Perform(companion);
+        StringAssert.Contains(host.TraceOf(companion)!.Perform, "Follow by its own walk");
+        Assert.IsTrue(Alive(host, follow), "an equal follow run is kept, no interrupt");
     }
 
     [TestMethod]
@@ -1009,5 +1037,61 @@ public sealed class AreaAiFollowerTests
         Assert.IsFalse(scene.Session.QueryCompanion(scene.Companion).Jilted);
         Assert.IsNull(scene.Host.TraceOf(scene.Companion)?.FollowerHit);
         Assert.IsNotNull(scene.Host.TraceOf(scene.Companion)?.Event, "the hit reached the host's attack event");
+    }
+
+    // ARC-AI-1517 (0x4A9650 → 0x45EE30, VBG6): the attack event unconceals the victim's PC group whoever attacks.
+    [TestMethod]
+    public void An_npcs_hit_on_the_sneaking_hero_ends_the_heros_and_its_followers_concealment()
+    {
+        var scene = Open();
+        Assert.AreEqual(GameSessionDisposition.Changed, scene.Session.ToggleHeroConcealment(scene.Session.Version).Disposition);
+        Assert.IsTrue(scene.Session.IsConcealed(SessionCombatant.Hero) && scene.Session.IsConcealed(SessionCombatant.Critter(scene.Companion)));
+        scene.Host.SpellAttacked(scene.Enemy, Pc);
+        Assert.IsFalse(scene.Session.IsConcealed(SessionCombatant.Hero), "the hero stops prowling");
+        Assert.IsFalse(scene.Session.IsConcealed(SessionCombatant.Critter(scene.Companion)), "and so does its follower");
+        Assert.AreEqual(0, scene.Session.QueryConcealment().Npcs.Count);
+    }
+
+    [TestMethod]
+    public void An_npcs_hit_on_a_sneaking_follower_ends_the_whole_groups_concealment()
+    {
+        var scene = Open();
+        scene.Session.ToggleHeroConcealment(scene.Session.Version);
+        scene.Host.SpellAttacked(scene.Enemy, scene.Companion);
+        Assert.IsFalse(scene.Session.IsConcealed(SessionCombatant.Hero), "the victim's PC leader stops prowling");
+        Assert.IsFalse(scene.Session.IsConcealed(SessionCombatant.Critter(scene.Companion)));
+    }
+
+    [TestMethod]
+    public void The_script_attack_action_ends_the_concealment_too_in_one_revision()
+    {
+        var scene = Open();
+        scene.Session.ToggleHeroConcealment(scene.Session.Version);
+        var revision = scene.Session.Version.Revision;
+        scene.Host.ScriptAttack(scene.Enemy, Pc);
+        Assert.IsFalse(scene.Session.IsConcealed(SessionCombatant.Hero));
+        Assert.IsFalse(scene.Session.IsConcealed(SessionCombatant.Critter(scene.Companion)));
+        Assert.AreEqual(revision + 1, scene.Session.Version.Revision, "the concealment ended in one revision of its own (a PC victim writes nothing else)");
+    }
+
+    [TestMethod]
+    public void A_hit_on_a_hero_that_is_not_sneaking_leaves_the_concealment_state_empty()
+    {
+        var scene = Open();
+        scene.Host.SpellAttacked(scene.Enemy, Pc);
+        Assert.AreEqual((false, 0), (scene.Session.QueryConcealment().Hero, scene.Session.QueryConcealment().Npcs.Count));
+    }
+
+    // ARC-AI-1516 (EX14, 0x4A9650 step 12): the hero's stray missile on a non-follower NPC is an accidental event: its reaction toward the hero drops by 10 in place of the deliberate hit's lowering
+    // to AI parameter 10, and the event is not the follower branch (the free former follower stands for the NPC no one leads).
+    [TestMethod]
+    public void The_heros_stray_missile_on_an_npc_that_follows_nobody_lowers_its_reaction_by_ten()
+    {
+        var scene = Open(free: true, followFacts: entity => Consent(0), table: Parameter9(5));
+        Assert.IsNull(scene.Session.QueryReactionRecord(scene.Companion)?.Remembered, "nothing remembered yet");
+        scene.Host.HeroStrayAttacked(scene.Companion);
+        Assert.AreEqual("None", scene.Host.TraceOf(scene.Companion)?.Event, "the event ran to the reaction step");
+        Assert.AreEqual(-10, scene.Session.QueryReactionRecord(scene.Companion)?.Remembered, "the accidental hit costs 10");
+        Assert.IsNull(scene.Host.TraceOf(scene.Companion)?.FollowerHit, "no follower branch");
     }
 }

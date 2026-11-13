@@ -105,7 +105,7 @@ port, then reads the effective reaction; at most 20 (`InsultEndsAtOrBelow`) the 
 continuation (the NPC's last words are its race line 1000 with the greeting port, [below](#insult-line-arc-script-1505)), above 20 its transition follows (0x4191E0). Without a world port, or
 with an action ending in `JO`/`UW`/`FL`/`ET` (the original then skips the insult, read for FL), it is offered blocked. `b h l p` (exact) and
 `c z` (prefix) are offered blocked as
-`UnsupportedInteraction`, and so is a prefix `t` without the [trainer ports](#trainer-reply-arc-script-1150) and a prefix `r` without the [rumor ports](#rumor-reply-arc-script-1304); with them `t:` is the trainer reply and `r:` the rumor reply; `d:` and `x:` are the [directions replies](#directions-reply-arc-script-1533) with their ports and otherwise, like `q u`
+`UnsupportedInteraction`, and so is a prefix `t` without the [trainer ports](#trainer-reply-arc-script-1150) and a prefix `r` without the [rumor ports](#rumor-reply-arc-script-1304); with them `t:` is the trainer reply and `r:` the rumor reply; `q` with the [quest ports](#quest-state-reply-arc-script-1532) is the quest-state reply; `d:` and `x:` are the [directions replies](#directions-reply-arc-script-1533) with their ports and otherwise, like `u` and `q` without its ports
 (state-dependent visibility), make the step a frontier. NPC `g:` (prefix) is the original's greeting when the conversation has a greeting port (ARC-WORLD-058,
 [dialog greeting](dialog-greeting.md)), else a frontier; an exact `i:` is the [insulted line](#insult-line-arc-script-1505) with the greeting port, else a frontier; `m:`/`r:` (prefix) are frontiers ([#1535](https://github.com/Simarglok/arcanum-steamwoven/issues/1535)). Other text is literal.
 
@@ -599,6 +599,21 @@ name, a bearing outside the eight directions fail the talk (`InvalidQueryResult`
 loaded with the greeting texts) and measures from the speaker's location (a following companion's live cell, else its T0 cell: another NPC the AI host has moved is measured from where the map data puts it, a limit of the talk range too, [#1601](https://github.com/Simarglok/arcanum-steamwoven/issues/1601)) with `LineOfFireRules.Rotation` and `WorldTravelGeometry.Distance`.
 Tests: `DialogDirectionsTests` (synthetic), `AreaDialogDirectionsTests` (the host's seam) and the opt-in `DialogDirectionsRealDataTests` (`DAT_ROOT`: the two installed `d:` replies are admitted and run
 to their way; no installed `x:`).
+
+## Quest-state reply (ARC-SCRIPT-1532)
+
+With the quest port (`IDialogQuestPort`, the PC's quest state), the world port (the NPC's reaction) and the quest rules port (`DialogConversationPorts.QuestReplies`,
+`IDialogQuestReplyPort`: the module's `rules\gamequest.mes` numbers, read by `QuestReplyTable`), a Player reply whose text is `q:` (either case) and a quest number 1000..1999
+is the original's **quest-state reply** ([ledger DQR1–DQR5](../research/ledger/social.md#quest-state-reply-arc-script-1532)). The reply is planned with its own gates only (gender,
+IQ, condition); which record it shows depends on the PC's state, so it is chosen when the offers are built (`ResolveQuestReply`, 0x4C4C00): the PC's quest state 0..6, then the
+PC's Intelligence (below 5 reads table field 16 + state, the reaction is not asked), else the reaction (below 20 reads field 9 + state, else field 2 + state). A chosen -1 drops
+the reply, which still counted as one of the five eligible places; any other number is a Player record of the same dialog, planned as the reply (its text, response value and
+action; its own gates are not tested; a chosen `q:` record is chosen through in turn, at most 8 deep) and offered under the `q:` record's response id. A chosen record that is missing,
+is no Player record or loops, a table without that field, and a chosen record that cannot be planned leave the option blocked (`TargetInvalid` or `UnsupportedInteraction`).
+Without any of the three ports, or for a number outside 1000..1999, the reply stays the frontier of `d`, `u` and `x` (`UnsupportedGeneratedText`). The AREA host passes the
+table when `rules\gamequest.mes` loads from the module (`AreaGreetingTexts.QuestReplies`). Tests: `DialogQuestReplyTests` (synthetic) and the opt-in
+`DialogQuestReplyRealDataTests` (`DAT_ROOT`: the 5 installed `q:` replies in 1 file are offered or dropped for every quest state and each of the three groups; a state-5 or
+state-6 choice that names a record the file lacks is blocked; a picked reply runs on without failure).
 
 ## Insult line (ARC-SCRIPT-1505)
 
