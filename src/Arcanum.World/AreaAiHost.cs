@@ -1738,7 +1738,13 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     public CellCoord? BodyCell(SessionMapId map, string entity) => map.RuntimeMap == _scene.RuntimeMap && entity != Pc ? Tile(entity) : null;
 
     /// <summary>ARC-AI-1636 (0x4294F0: the target's object flags 0x1 destroyed and 0x2 off): a map row the session removed, or an object that is no critter (<see cref="AreaAiScene.ObjectFacts"/>) destroyed or switched off.</summary>
-    public bool Gone(string id) => id != Pc && (Key(id) is { } key && _scene.Removed?.Invoke().Contains(key) == true || _scene.ObjectFacts?.Invoke(id) is { } facts && (facts.Destroyed || facts.Off));
+    public bool Gone(string id)
+    {
+        if (id == Pc) return false;
+        // A map row or companion the host runs is told by its key; only an id that is none of those (and no created critter) can be an object of the scene, which the cast map answers at some cost.
+        if (Key(id) is { } key) return _scene.Removed?.Invoke().Contains(key) == true;
+        return !id.StartsWith(SessionCreatedObject.CritterPrefix, StringComparison.Ordinal) && _scene.ObjectFacts?.Invoke(id) is { } facts && (facts.Destroyed || facts.Off);
+    }
 
     /// <summary>ARC-AI-1636 (0x429450 and 0x4294F0 test the target's death only for a type 15 or 16): an object that is no critter is never dead; an id the host knows nothing of counts as dead, as before.</summary>
     public bool DeadCritter(string id) => Status(id) is { } status ? status.IsDead : _scene.ObjectFacts?.Invoke(id) is null;
@@ -2279,12 +2285,12 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     /// art is decided here and its arrow flies (<see cref="AreaAiScene.LaunchShot"/>); its damage is <see cref="LandShot"/>'s, at the strike.</summary>
     public void Hit(string id, string target)
     {
-        // ARC-AI-1636: the focus is an object that is no critter (a door, container, scenery or trap): the attack is the session's object attack.
-        if (target != Pc && _scene.ObjectFacts?.Invoke(target) is not null) { HitObjectFocus(id, target); return; }
         var aimed = target;
         // ARC-COMBAT-1140 (RA4, RH5): a door, container, scenery, trap or wall that stops the line of fire takes the shot in place of the target.
         if (HitBlockingObject(id, target)) return;
         target = LineOfFireStruck(id, target);
+        // ARC-AI-1636: the focus is an object that is no critter (a door, container, scenery or trap) and nothing stops the line to it: the attack is the session's object attack.
+        if (target == aimed && target != Pc && _scene.ObjectFacts?.Invoke(target) is not null) { HitObjectFocus(id, target); return; }
         if (NpcAttackOf(id, target, flight: _scene.LaunchShot is not null) is not { } attack) return;
         var result = _session.AttackByNpc(_session.Version, attack);
         Trace(id).Hit = $"{result.Disposition} {result.Failure} {result.Resolution?.Outcome} {result.Life?.HitPointDamage}" + (target == aimed ? "" : $" (the line of fire struck {target} instead of {aimed})");

@@ -4,6 +4,7 @@ using Arcanum.Simulation.Ai;
 using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Goals;
 using Arcanum.Simulation.Movement;
+using Arcanum.TerrainViewer.Core;
 using Arcanum.World;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
@@ -26,6 +27,16 @@ public sealed class AreaAiObjectFocusFightTests
 
     private static AreaObjectAttackTarget SceneryTarget(AreaObjectRecord row, int points = 6) => new(Shooter, row, DamageableObjectKind.Scenery,
         new SessionObjectTarget(new SessionMapId(1), Shooter, new SessionObjectBaseline { Kind = DamageableObjectKind.Scenery, Points = points, Material = ObjectMaterial.Cloth, Cell = ShooterCell }), null, null, null);
+
+    // A line-of-fire map with one object on one tile.
+    private sealed class Line(AreaObjectRecord? blocker, CellCoord at) : ILineOfFireMap<AreaObjectRecord>
+    {
+        private static readonly (int X, int Y)[] Offsets = [(-1, -1), (-1, 0), (-1, 1), (0, 1), (1, 1), (1, 0), (1, -1), (0, -1)];
+        public bool Contains(CellCoord tile) => tile.X >= 0 && tile.Y >= 0 && tile.X < 64 && tile.Y < 64;
+        public CellCoord? Step(CellCoord from, int rotation) => new CellCoord(from.X + Offsets[rotation].X, from.Y + Offsets[rotation].Y) is var next && Contains(next) ? next : null;
+        public IEnumerable<LineOfFirePiece<AreaObjectRecord>> Edge(CellCoord tile, int edge) => [];
+        public IEnumerable<LineOfFireObject<AreaObjectRecord>> Objects(CellCoord tile) => blocker is not null && tile == at ? [new(blocker, false, 0)] : [];
+    }
 
     private sealed class World
     {
@@ -115,6 +126,38 @@ public sealed class AreaAiObjectFocusFightTests
 
         Assert.IsTrue(world.Struck.Count > 0, "it reached the object and struck it: " + host.TraceOf(f.B)?.Step + " / " + host.TraceOf(f.B)?.Hit);
         Assert.IsTrue(AiExecutorRules.Distance(host.Tile(f.B)!.Value, ShooterCell) <= 1, "from a tile next to it, at " + host.Tile(f.B));
+    }
+
+    [TestMethod]
+    public void A_ranged_attack_on_the_object_focus_strikes_an_object_that_stops_the_line_instead()
+    {
+        // The line from the NPC (54, 14) to the shooter object (61, 14) is stopped by a chest on the next tile (55, 14), within the NPC's reach: as for a critter target (RA4) the chest takes the attack, the focus none.
+        var chestCell = new CellCoord(55, 14);
+        var chest = new AreaObjectRecord(new(new string('a', 64), 1, AreaSourceKind.Mobile, 1, 6, 600L, new string('g', 64), 100), 0, 2, 9998, "p", "p", "r", "s", AreaScope.Core, null,
+            chestCell.X, chestCell.Y, Arcanum.Data.Area.AreaDisposition.BodyEligibleConditionally, [], [], true, true, true);
+        var chestTarget = new AreaObjectAttackTarget("sector:1:6", chest, DamageableObjectKind.Container,
+            new SessionObjectTarget(new SessionMapId(1), "sector:1:6", new SessionObjectBaseline
+            {
+                Kind = DamageableObjectKind.Container, Points = 40, Material = ObjectMaterial.Cloth, Cell = chestCell,
+                Openable = new SessionOpenableBaseline(Arcanum.Simulation.Locks.OpenableKind.Container, 0, 0, 0),
+            }), null, null, null);
+        var f = AreaAiHostRebindTests.Open();
+        using var _ = f;
+        var focusTarget = SceneryTarget(ShooterRow());
+        var struck = new List<AreaObjectAttackTarget?>();
+        var scene = f.Scene(0, AreaAiHostRebindTests.Sector(0, 0), [new(f.A, f.RowA, new(2, 2)), new(f.B, f.RowB, Distant)])
+            with
+            {
+                ObjectFacts = id => id == Shooter ? new AreaAiObjectFacts(3, ShooterCell) : null, ObjectAttackTarget = id => id == Shooter ? focusTarget : null,
+                LineOfFire = () => new Line(chest, chestCell), ObjectTarget = row => row.Key == chest.Key ? chestTarget : null, ObjectStruck = (_, _, target, _) => struck.Add(target),
+            };
+        var host = f.Build(scene);
+
+        for (var attempt = 0; attempt < 5 && struck.Count == 0; attempt++) host.Hit(f.B, Shooter);
+
+        Assert.AreEqual(1, struck.Count, host.TraceOf(f.B)?.Hit);
+        Assert.AreEqual("sector:1:6", struck[0]!.Entity, "the chest took the attack: " + host.TraceOf(f.B)?.Hit);
+        Assert.AreEqual(0, f.Session.QueryObject(focusTarget.Object!).Damage, "the focus was not struck through it");
     }
 
     [TestMethod]
