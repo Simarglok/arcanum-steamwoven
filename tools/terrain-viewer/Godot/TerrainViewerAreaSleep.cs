@@ -158,7 +158,7 @@ public partial class TerrainViewerApp
         var rest = new AreaRestRun(opening.Wait);
         var labels = Enumerable.Range(0, AreaRestRules.ButtonCount(opening.Wait)).Select(i => texts.Label(i, opening.Wait)).ToArray();
         _rest = rest; _restSession = session; _restLog.Clear(); _restPresses = 0; _restBed = bed;
-        if (!OpenWindowMode(InterfaceMode.Sleep, () => _sleepPanel!.Open(labels, opening.Wait), () => _sleepPanel!.CloseView()))
+        if (!OpenWindowMode(InterfaceMode.Sleep, () => _sleepPanel!.Open(labels, opening.Wait), CloseSleepByStack))
         {
             // A refused mode change takes the hero out of the bed again (SWB6).
             if (bed is { } seated) _bedOccupancy.Unseat(seated, AreaScriptHost.PcCode);
@@ -274,7 +274,27 @@ public partial class TerrainViewerApp
     private void EndSleep()
     {
         if (!SleepOpen && _rest is null) return;
-        _rest?.Clear(); _restPresses = 0;
+        // The stack's leave step (<see cref="CloseSleepByStack"/>) hides the window and stops the rest; a leave that did not run still stops it here.
+        if (SleepOpen) CloseWindowMode(InterfaceMode.Sleep);
+        StopRest();
+        QuarantineWorld(); RefreshReadyStatus();
+    }
+
+    /// <summary>
+    /// Issue #1548 (SWB11, SWB12): the leave step of the sleep mode on the interface stack. Whoever leaves the mode (EndSleep, or any other pop of it) hides the window and stops the
+    /// rest: a rest must never keep stepping with no window.
+    /// </summary>
+    private void CloseSleepByStack()
+    {
+        _sleepPanel!.CloseView();
+        StopRest();
+    }
+
+    /// <summary>The rest's end, once: the pending step is removed, the hero leaves his bed, the screen fades in and the hourly light applies. A no-op when no rest is under way.</summary>
+    private void StopRest()
+    {
+        if (_rest is null) return;
+        _rest.Clear(); _restPresses = 0;
         // The close takes the hero out of his bed (SWB12, SWB16).
         if (_restBed is { } bed) { _bedOccupancy.Unseat(bed, AreaScriptHost.PcCode); _restBed = null; }
         if (_restDark)
@@ -284,9 +304,7 @@ public partial class TerrainViewerApp
             if (_areaAmbient is not null) { PushAreaAmbient(); BindAreaAmbientPalette(); }
         }
         GD.Print("ARC-WORLD-1160 sleep closed");
-        if (SleepOpen) CloseWindowMode(InterfaceMode.Sleep);
         _rest = null; _restSession = null;
-        QuarantineWorld(); RefreshReadyStatus();
     }
 
     /// <summary>Per frame: a replaced session or a session that cannot show it closes the window; the cover is cleared at once with it (a load closes the window and its events).</summary>

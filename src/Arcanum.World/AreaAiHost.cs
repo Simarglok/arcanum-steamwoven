@@ -2416,22 +2416,25 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     }
 
     /// <summary>
-    /// ARC-MAGIC-035: stop fleeing (0x4AF170): an NPC in FLEE goes to NONE through the setter, then every run of the NPC whose bottom or top goal is flee (25) is ended at level 6 whatever its state was
-    /// (the helper 0x44E4D0; an eye candy or a burning run is left). False: the NPC is not run here or the session refused.
+    /// ARC-MAGIC-035: stop fleeing (0x4AF170): an NPC in FLEE goes to NONE through the setter, then every run of the NPC whose bottom or top goal is flee (25) is ended at level 6
+    /// (the helper 0x44E4D0; an eye candy or a burning run is left). Both steps are the FLEE state's only (<see cref="MoraleRules.StopFleeing"/>, issue #1595): an NPC in another state keeps its flee runs.
+    /// False: the NPC is not run here or the session refused.
     /// </summary>
     public bool SpellStopFleeing(string npc)
     {
         if (npc == Pc || !TryNpc(npc, out _)) return false;
+        // The state is read before the setter: 0x4AF170 does everything inside its FLEE branch.
+        var stop = MoraleRules.StopFleeing(new HostilityCritter { Id = npc, Kind = HostilityKind.Npc }, _session.QueryDanger(npc).State);
         var result = _session.StopFleeing(_session.Version, npc, SetterFacts(npc));
         // The flee goals end whatever the setter did (0x4AF170 calls 0x44E4D0 after it), so a refused setter does not keep them: only the runs whose bottom or top goal is 25 end, at level 6.
-        InterruptRunsWhere(npc, GoalInterruptRules.MaxLevel, r => r.Bottom.Goal == GoalType.Flee || r.Frames[^1].Goal == GoalType.Flee);
+        if (stop.InterruptsFleeGoals) InterruptFleeRuns(npc);
         return result.Failure == GameSessionFailure.None;
     }
 
     /// <summary>
     /// ARC-AI-1134 (ledger DY3, DY7): the kill notification (0x4AA1B0) of an NPC whose death the session processed (<see cref="GameSessionOwner.KillNotice"/>, after the combat focus := killer):
     /// <see cref="MoraleRules.KillNotification"/> over this host's world (the victim stops fleeing; for a PC killer, the live NPCs of the victim's faction in the 7 × 7 square centred on the killer whose combat focus is the killer start backing off) applied in one
-    /// revision, then every run of the victim whose bottom or top goal is flee ends at level 6 (the stop-fleeing helper's interrupt, as <see cref="SpellStopFleeing"/>). False: the victim is not run here, or the world
+    /// revision, then, when the victim was in FLEE, every run of the victim whose bottom or top goal is flee ends at level 6 (the stop-fleeing helper's interrupt, as <see cref="SpellStopFleeing"/>). False: the victim is not run here, or the world
     /// no longer knows it, or the session refused the plan.
     /// </summary>
     public bool NoticeKill(string victim, string? killer)
@@ -2444,7 +2447,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         {
             Victim = SessionCombatant.Critter(victim), Plan = plan, VictimFacts = SetterFacts(victim),
         });
-        InterruptRunsWhere(victim, GoalInterruptRules.MaxLevel, r => r.Bottom.Goal == GoalType.Flee || r.Frames[^1].Goal == GoalType.Flee);
+        // Only a victim that was in FLEE loses its flee runs (the plan read the state before the session applied it).
+        if (plan.VictimStopsFleeing.InterruptsFleeGoals) InterruptFleeRuns(victim);
         return result.Failure == GameSessionFailure.None;
     }
 

@@ -227,6 +227,7 @@ public sealed partial class SessionSpellCaster
         public IReadOnlyList<SpellTargetObject> ObjectsInSquare(SpellLocation centre, int radius, int typeMask) => Over(map.ObjectsInSquare(centre, radius, typeMask));
         public IReadOnlyList<SpellTargetObject> ObjectsAt(SpellLocation tile, int typeMask) => Over(map.ObjectsAt(tile, typeMask));
         public bool TileBlocked(SpellLocation tile) => map.TileBlocked(tile);
+        public string CastIdOfScriptEntity(string entity) => map.CastIdOfScriptEntity(entity);
         public bool PathExists(SpellTargetObject source, SpellLocation tile) => map.PathExists(source, tile);
         public int SectorKind(SpellLocation location) => map.SectorKind(location);
         public int Direction(SpellLocation from, SpellLocation to) => map.Direction(from, to);

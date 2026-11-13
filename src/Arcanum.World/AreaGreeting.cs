@@ -117,7 +117,8 @@ public sealed class AreaGreeting : IDialogGreetingPort
     public DialogGreetingFacts? Facts(DialogReactionQuery query)
     {
         var entity = AreaConversationState.EntityId(_speaker.Row);
-        return FactsFor(CombatFieldReader.Read(_speaker.Row).Fields, _pc, _state.Reaction(_speaker.Index), _state.MetBefore(_speaker.Index),
+        // ARC-MAGIC-1551: the base stats a TraitIdx spell wrote into the NPC (gender, intelligence, race) lie over its stored ones.
+        return FactsFor(AreaWrittenCritterFields.Read(_session, _speaker.Row), _pc, _state.Reaction(_speaker.Index), _state.MetBefore(_speaker.Index),
             _session.QueryLifeRecord(entity)?.DeathTimeMs is not null) is { } facts ? facts with { NpcLedByPc = _state.Follows(_speaker.Index) } : null;
     }
 

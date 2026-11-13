@@ -139,8 +139,9 @@ public static class MoraleRules
 
     /// <summary>
     /// Stop fleeing (0x4AF170) for <paramref name="critter"/> in <paramref name="state"/>: an NPC in FLEE asks the setter for NONE
-    /// with no target (a surrendered NPC stays surrendered), and every flee goal of an NPC is interrupted whatever its state; any
-    /// other object is left alone. Callers: the fear effect's end, the kill notification (on the victim), set no-flee and the
+    /// with no target and then has every flee goal interrupted; the listing tests the state first (CMP 0x10 at 0x4AF189, JNZ to the
+    /// epilogue), so an NPC in any other state (a surrendered one stays surrendered) keeps its flee goals, and any other object is
+    /// left alone (issue #1595). Callers: the fear effect's end, the kill notification (on the victim), set no-flee and the
     /// resurrection.
     /// </summary>
     [OriginalFunction(0x4AF170, OriginalFunctionScope.Partial)]
@@ -149,7 +150,8 @@ public static class MoraleRules
         ArgumentNullException.ThrowIfNull(critter);
         if (!Enum.IsDefined(state)) throw new ArgumentOutOfRangeException(nameof(state));
         var npc = critter.Kind == HostilityKind.Npc;
-        return new(npc && state == DangerState.Flee, npc);
+        var fleeing = npc && state == DangerState.Flee;
+        return new(fleeing, fleeing);
     }
 
     // ---- back off ----
