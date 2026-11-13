@@ -254,22 +254,73 @@ public sealed class SessionSpellCasterTraitIndexTests
         Assert.AreEqual(version, owner.Version);
     }
 
-    [TestMethod]
-    public void The_stats_whose_setter_does_more_than_store_are_not_ready_with_the_reason_in_the_ledger()
+    // ARC-MAGIC-1508 (ledger RM3b, setter case 0x18 → 0x4B0EE0, 0x4B1350): stat 24 is the NPC's poison level, the life state's in the session.
+    private static (GameSessionOwner Owner, SessionSpellCaster Caster) PoisonSession(int stored, int constitution, int number, int value, CombatFields? fields = null)
     {
-        // Poison (the poison timer and the life state) is read and not written (magick and tech points run the rewield, ARC-MAGIC-1507, below; gender and race the innate effect swap, ARC-MAGIC-1509, below).
-        foreach (var index in new[] { 24 })
-        {
-            var (owner, _) = Session();
-            using var _o = owner;
-            var number = 400 + index;
-            var records = new Dictionary<int, SessionSpellRecord>(Records) { [number] = Spell(number, StatField, index, 1) };
-            var tried = new SessionSpellCaster(owner, n => records.GetValueOrDefault(n), new Map(owner, RatFields()), new Events());
-            var version = owner.Version;
-            Assert.IsNull(tried.Apply(Run(number), 0, At(Rat, SpellTargetObject.Npc)).JumpTo, $"stat {index}");
-            Assert.AreEqual(version, owner.Version, $"stat {index}");
-            Assert.IsTrue(NotReady(tried), $"stat {index}");
-        }
+        var owner = CreateWith(HalfElf());
+        var rat = fields ?? AttackStateTests.Npc(AttackStateTests.Stats(constitution: constitution, poison: stored), resistances: [0, 0, 0, 0, 0]);
+        var records = new Dictionary<int, SessionSpellRecord>(Records) { [number] = Spell(number, StatField, 24, value) };
+        return (owner, new SessionSpellCaster(owner, n => records.GetValueOrDefault(n), new Map(owner, rat), new Events()));
+    }
+
+    private static int Poison(GameSessionOwner owner, SessionSpellCaster caster) => owner.QueryLife(caster.LifeTarget(Rat)!).View!.Record.State.PoisonLevel;
+
+    [TestMethod]
+    public void Poison_adds_to_the_loaded_level_in_the_life_state_and_sets_the_poison_timers()
+    {
+        var (owner, caster) = PoisonSession(stored: 40, constitution: 3, number: 450, value: 60);
+        using var _ = owner;
+        Assert.AreEqual(40, Poison(owner, caster), "the map data's entry is the level the NPC loads with");
+        Assert.AreEqual(SpellComponentOutcome.None, caster.Apply(Run(450), 0, At(Rat, SpellTargetObject.Npc)));
+        Assert.AreEqual(100, Poison(owner, caster));
+        Assert.IsTrue(owner.QueryLife(caster.LifeTarget(Rat)!).View!.Recorded, "the NPC got a life record");
+        Assert.IsTrue(owner.QueryCritterIndexedWrites(Rat).IsEmpty, "no stored entry is written: the life state is the level");
+        CollectionAssert.AreEqual(new[] { new SpellCastEvent(SpellCastEventKind.TraitIndexWritten, 1, StatField, Rat, 24) }, caster.Log.ToArray());
+        CollectionAssert.AreEquivalent(new[] { SessionEventKinds.NpcPoisonDamage, SessionEventKinds.NpcPoisonRecovery }, owner.QueryEvents().Select(e => e.Kind).ToArray(), "a positive level schedules the damage and recovery ticks (0x4B1350)");
+        caster.Apply(Run(450), 0, At(Rat, SpellTargetObject.Npc));
+        Assert.AreEqual(160, Poison(owner, caster), "the second write reads the level the first left");
+        Assert.AreEqual(2, owner.QueryEvents().Count, "one pending timer per kind");
+        Assert.IsFalse(NotReady(caster));
+    }
+
+    [TestMethod]
+    public void Poison_is_clamped_to_0_and_1000_and_a_cure_stops_at_zero_without_timers()
+    {
+        var (owner, caster) = PoisonSession(stored: 900, constitution: 3, number: 451, value: 500);
+        using var _ = owner;
+        caster.Apply(Run(451), 0, At(Rat, SpellTargetObject.Npc));
+        Assert.AreEqual(1000, Poison(owner, caster));
+        var (cured, curer) = PoisonSession(stored: 30, constitution: 3, number: 452, value: -500);
+        using var _c = cured;
+        curer.Apply(Run(452), 0, At(Rat, SpellTargetObject.Npc));
+        Assert.AreEqual(0, Poison(cured, curer));
+        Assert.AreEqual(0, cured.QueryEvents().Count, "a level of 0 schedules nothing");
+        var (wrapped, wrapper) = PoisonSession(stored: 10, constitution: 3, number: 453, value: int.MaxValue);
+        using var _w = wrapped;
+        wrapper.Apply(Run(453), 0, At(Rat, SpellTargetObject.Npc));
+        Assert.AreEqual(0, Poison(wrapped, wrapper), "the 32-bit sum 10 + 2147483647 wraps negative and clamps to 0");
+    }
+
+    [TestMethod]
+    public void An_effective_constitution_of_twenty_or_more_makes_the_poison_level_zero()
+    {
+        var (owner, caster) = PoisonSession(stored: 0, constitution: 20, number: 454, value: 300);
+        using var _ = owner;
+        Assert.AreEqual(SpellComponentOutcome.None, caster.Apply(Run(454), 0, At(Rat, SpellTargetObject.Npc)));
+        Assert.AreEqual(0, Poison(owner, caster), "0x4B0EE0: the setter stores 0");
+        Assert.AreEqual(0, owner.QueryEvents().Count);
+        Assert.IsFalse(NotReady(caster));
+    }
+
+    [TestMethod]
+    public void The_poison_level_is_saved_with_the_life_state_and_restored()
+    {
+        var (owner, caster) = PoisonSession(stored: 0, constitution: 3, number: 455, value: 250);
+        using var _ = owner;
+        caster.Apply(Run(455), 0, At(Rat, SpellTargetObject.Npc));
+        using var restored = Restore(Decode(GameSessionSnapshotCodec.Encode(owner.Capture())));
+        Assert.AreEqual(250, restored.QueryLife(caster.LifeTarget(Rat)!).View!.Record.State.PoisonLevel);
+        Assert.AreEqual(2, restored.QueryEvents().Count);
     }
 
     // ARC-MAGIC-1509 (ledger RM3b; exe read 0x4B0980 cases 2 and 3 with the table 0x4B0E74, 0x4EA2E0, 0x4B0FD0): gender and race remove the first innate entry of their cause before the store and add the new innate effect after it.
