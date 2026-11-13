@@ -77,9 +77,10 @@ public enum ChromeKind
 /// and its <paramref name="HoverFrame"/> lit (the bar's arts: idle 0, down 1, hover 2).</summary>
 /// <remarks>ARC-UI-1196: <paramref name="Holes"/> says what the holes of the Legacy frame get; <paramref name="OriginX"/> and <paramref name="OriginY"/> are where the art's corner lies in the
 /// window's larger picture (the logbook's book), in Legacy pixels: the materials are sampled at that offset, so a tab or a page button painted on its own continues the page or the
-/// stack it lies on without a seam.</remarks>
+/// stack it lies on without a seam. ARC-UI-1784: <paramref name="KeepFace"/> (a button only) keeps the art's whole picture inside the generated rim (a ball whose colour tells the college
+/// apart), where a plain button keeps only the glyph on a generated brass face.</remarks>
 public sealed record ChromeRecipe(string File, ChromeKind Kind, ChromeMaterial Base, ChromeSides Rim, IReadOnlyList<ChromePart> Parts, int DownFrame = 1, int HoverFrame = 2,
-    ChromeHoles Holes = ChromeHoles.Brass, int OriginX = 0, int OriginY = 0)
+    ChromeHoles Holes = ChromeHoles.Brass, int OriginX = 0, int OriginY = 0, bool KeepFace = false)
 {
     public string NameSha256 { get; } = HdInterfaceKey.NameSha256(File);
 }
@@ -88,6 +89,14 @@ public sealed record ChromeRecipe(string File, ChromeKind Kind, ChromeMaterial B
 /// pixels of each frame (layout facts of the original windows, as in the ledgers); everything drawn is ours.</summary>
 public static class InterfaceChromeRecipes
 {
+    /// <summary>ARC-UI-1784: the file names of the sixteen college tab arts of the sheet's spells page (<c>interface.mes</c> numbers 11, 44, 38, 92, 50, 86, 56, 98, 62, 68, 74, 104, 110, 80, 116, 122,
+    /// the order of <see cref="AreaCharacterSheetSpellsLayout.CollegeArt"/>).</summary>
+    public static readonly IReadOnlyList<string> CollegeTabFiles =
+    [
+        "s_conveyance.art", "s_divination.art", "s_air.art", "s_earth.art", "s_fire.art", "s_water.art", "s_forc.art", "s_mental.art",
+        "s_meta.art", "s_morph.art", "s_nature.art", "s_evilnecro.art", "s_goodnecro.art", "s_phantasm.art", "s_summoning.art", "s_temporal.art",
+    ];
+
     /// <summary>ARC-UI-1196: the logbook's frames (the layout of <see cref="AreaLogbookArtLayout"/>; coordinates in Legacy pixels of each art, the book's own for the book).
     /// The side panel is plain wood (its square hole is the live view of the lens, whose ring the lens art 198 draws). The book is the table, a cover, the stacks of pages and the
     /// two pages with the fold between them; the page art 261 is the cover's cloth frame, its hole shows the pages. A tab is its ground, a paper tab and the glyph; a page button is the page
@@ -205,7 +214,9 @@ public static class InterfaceChromeRecipes
             "char_Common_Skills.art", "char_Tech_Skills.art", "char_Spells_Skills.art", "char_Schem_Skills.ART",
             "Combat_But.ART", "Thieving_But.ART", "Social_But.ART", "Technological_But.ART",
             "Anatomical_But.ART", "Chemistry_But.ART", "Electrical_But.ART", "Explosives_But.ART", "GunSmithy_But.ART", "Mechanical_But.ART", "Smithy_But.ART", "Therapeutics_But.ART"];
-        return [top, bottom, inventory, doll, loot, barter, follower, lootDoll, .. lenses, .. SheetPanels(), .. MapPanels(), .. LogbookRecipes(), .. buttons.Select(file => new ChromeRecipe(file, ChromeKind.Button, ChromeMaterial.Face, ChromeSides.None, []))];
+        return [top, bottom, inventory, doll, loot, barter, follower, lootDoll, .. lenses, .. SheetPanels(), .. MapPanels(), .. LogbookRecipes(), .. buttons.Select(file => new ChromeRecipe(file, ChromeKind.Button, ChromeMaterial.Face, ChromeSides.None, [])),
+            // ARC-UI-1784: the spells page's sixteen college tabs (24 x 24 balls, three frames): a generated rim around the ball's own picture.
+            .. CollegeTabFiles.Select(file => new ChromeRecipe(file, ChromeKind.Button, ChromeMaterial.Face, ChromeSides.None, [], KeepFace: true))];
     }
 
     // ARC-UI-1197: the world map and town map window (138 `mapmain`, 800 x 400, wood). The map view's hole gets the brass rim every hole gets; the two readout boxes (680, 157 and
@@ -268,6 +279,13 @@ public static class InterfaceChromeRecipes
             new ChromeRecipe("Skills_Window.ART", ChromeKind.Panel, ChromeMaterial.Slate, ChromeSides.All, skills),
             new ChromeRecipe("Disciplines_Window.ART", ChromeKind.Panel, ChromeMaterial.Slate, ChromeSides.All, disciplines),
             new ChromeRecipe("char_spells.art", ChromeKind.Panel, ChromeMaterial.Slate, ChromeSides.All, spells),
+            // ARC-UI-1784: the schemes page (567, the auto-level tab): a sunk plaque for the scheme's name with a rivet at each end, the list's pit and the scroll bar's track
+            // (the bar's arrows and thumb are their own arts, drawn over the track).
+            new ChromeRecipe("Scheme_Rot.ART", ChromeKind.Panel, ChromeMaterial.Slate, ChromeSides.All,
+            [
+                new ChromeSunk(4, 13, 227, 33, ChromeMaterial.Pit), new ChromeRivet(13.5, 29.5, 3.5), new ChromeRivet(221.5, 29.5, 3.5),
+                new ChromeSunk(12, 57, 194, 258, ChromeMaterial.Pit), new ChromeSunk(206, 57, 20, 258, ChromeMaterial.Pit),
+            ]),
         ];
     }
 }
@@ -371,7 +389,7 @@ public static class InterfaceChromeRenderer
         if (frameIndex < 0) throw new ArgumentOutOfRangeException(nameof(frameIndex));
 
         var canvas = new Canvas(width, height, legacy.ToArray(), picture.IsEmpty ? null : picture.ToArray(), scale) { OriginX = recipe.OriginX, OriginY = recipe.OriginY };
-        if (recipe.Kind == ChromeKind.Button) PaintButton(canvas, frameIndex == recipe.DownFrame, frameIndex == recipe.HoverFrame && recipe.HoverFrame != recipe.DownFrame);
+        if (recipe.Kind == ChromeKind.Button) PaintButton(canvas, frameIndex == recipe.DownFrame, frameIndex == recipe.HoverFrame && recipe.HoverFrame != recipe.DownFrame, recipe.KeepFace);
         else if (recipe.Kind == ChromeKind.Tab) PaintTab(canvas, recipe);
         else PaintPanel(canvas, recipe);
 
@@ -948,7 +966,7 @@ public static class InterfaceChromeRenderer
         }
     }
 
-    private static void PaintButton(Canvas c, bool down, bool hover)
+    private static void PaintButton(Canvas c, bool down, bool hover, bool keepFace = false)
     {
         // The silhouette's box and kind (round when its fill is a circle's share of the box).
         int x0 = int.MaxValue, y0 = int.MaxValue, x1 = -1, y1 = -1, count = 0;
@@ -987,7 +1005,7 @@ public static class InterfaceChromeRenderer
             // Hover lifts the face and the rim toward light brass (the original's hover frame is the lit one).
             if (hover) { face = Rgb.Lerp(face, BrassLight, 0.3f); rim = Rgb.Lerp(rim, White, 0.2f); }
             Rgb colour = inset < c.S ? Ink : inset < 3 * c.S ? rim : inset < 3.6f * c.S ? Ink : face;
-            if (inset >= 3.6f * c.S && glyph[Math.Min(c.Cell(y), c.LegacyH - 1) * c.LegacyW + Math.Min(c.Cell(x), c.LegacyW - 1)]) colour = c.PictureAt(x, y);
+            if (inset >= 3.6f * c.S && (keepFace || glyph[Math.Min(c.Cell(y), c.LegacyH - 1) * c.LegacyW + Math.Min(c.Cell(x), c.LegacyW - 1)])) colour = c.PictureAt(x, y);
             c.Color[i] = colour;
         }
     }
