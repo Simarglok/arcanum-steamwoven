@@ -435,9 +435,9 @@ public sealed partial class SessionSpellCasterTraitIndexTests
     }
 
     // ARC-MAGIC-1631 (ledger RM3b): the setter stores race 11 (clamp maximum 11) and adds effect 75, but every race-keyed table of the original has eleven rows, so an NPC of race 11 would read past them
-    // (the reaction table 0x5B684C: row 11 is text and pointers): the component stays not ready and the store that only reaches 11 by an addend leaves the race, its effect and the version as they were.
+    // (the reaction table 0x5B684C: row 11 is text and pointers): the component stays not ready and the store that only reaches 11 by an addend leaves the race, its effect and the version as they were (the host cannot attach a rule for effect 75, so the guard and the missing rule refuse alike).
     [TestMethod]
-    public void An_orc_pushed_to_the_races_eleventh_slot_by_one_is_not_ready_and_keeps_its_race_and_race_effect()
+    public void An_orc_pushed_by_one_to_race_11_is_not_ready_and_keeps_its_race_and_race_effect()
     {
         var (owner, caster, target) = Innate(race: 10);
         using var _o = owner;
