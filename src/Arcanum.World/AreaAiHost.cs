@@ -3712,11 +3712,11 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     /// is the hero (its facing is not tracked here, <see cref="SeeToward"/>) or that is not an NPC of this host, and for a target it holds no facts of: the script stops as not modelled.
     /// </summary>
     public bool? ScriptCanSee(string observer, string target) =>
-        observer == Pc || Find(observer) is null || Find(target) is null ? null : See(observer, target).Excess == 0;
+        observer == Pc || Find(observer) is null || Find(target) is null || _scene.LineOfFire?.Invoke() is null ? null : See(observer, target).Excess == 0;
 
     /// <summary>ARC-SCRIPT-1733 (CS6, case 29 → 0x4AF470 with loudness 1): the hearing check of an NPC toward an NPC or the hero at the normal loudness; null as <see cref="ScriptCanSee"/>.</summary>
     public bool? ScriptCanHear(string listener, string source) =>
-        listener == Pc || Find(listener) is null || Find(source) is null ? null : Hear(listener, source, Loudness.Normal).Excess == 0;
+        listener == Pc || Find(listener) is null || Find(source) is null || _scene.LineOfFire?.Invoke() is null ? null : Hear(listener, source, Loudness.Normal).Excess == 0;
 
     private AwarenessResult SeeFacing(string observer, string target, NeighborDirection? facing)
     {

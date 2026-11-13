@@ -527,7 +527,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     /// <remarks>Exe read 2026-11-13: action 137 at 0x447220 case 0x89, base stat 0x4B0740, stat setter 0x4B0980 with the range tables 0x5B5194 and 0x5B5204.</remarks>
     public bool CanAdjustStat(ScrObjectRef obj, int stat) => stat == AreaScriptStory.AlignmentStat && IsPc(obj) && _session.QueryHero() is not null;
 
-    private const uint UndeadCritterFlag = 0x4, InvulnerableObjectFlag = 0x400000, InvisibleSpellFlag = 0x1;
+    private const uint ProwlingCritterFlag = 0x1, UndeadCritterFlag = 0x4, InvulnerableObjectFlag = 0x400000, InvisibleSpellFlag = 0x1;
 
     /// <summary>ARC-SCRIPT-1733 (CS1, exe read 2026-11-13: condition 10 at 0x4451B0, 0x4C0C40): met before, of an NPC toward the PC: the same object twice is true; a second object that is not the PC or a first that is not an NPC is false; else whether the NPC's reaction memory holds the PC
     /// in a remembered slot (<see cref="SessionReaction.MetBefore"/>), which the conversation slot is not, so it is false during the first talk. Null for an NPC this host has no row for.</summary>
@@ -552,7 +552,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
 
     /// <summary>
     /// ARC-SCRIPT-1733 (CS4, case 26 → 0x4C1110, 0x460460): an NPC is in dialog while its conversation slot (entry 0 of the reaction-PC array, field 0x129) holds the PC: the session's reaction record. Every other object type goes to a callback of the dialog layer (0x567400 reading the
-    /// dialog slot of the PC, whichever object is asked) which the viewer's conversation host does not give this host: the answer is null and the run stops as not modelled (issue for the PC branch).
+    /// dialog slot of the PC, whichever object is asked) which the viewer's conversation host does not give this host: the answer is null and the run stops as not modelled (issue #1773 for the PC branch).
     /// </summary>
     public bool? IsInDialog(ScrObjectRef obj)
     {
@@ -586,13 +586,12 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     /// <summary>ARC-SCRIPT-1733 (CS8, case 38): an NPC with the undead critter flag (0xDA bit 0x4); false for the PC and any other object type.</summary>
     public bool? IsUndead(ScrObjectRef obj) => NpcCritterBit(obj, UndeadCritterFlag);
 
-    /// <summary>ARC-SCRIPT-1733 (CS9, case 51 → 0x45EDE0): the prowling bit (0xDA bit 0x1) of a PC or an NPC, which the session keeps as concealment of the hero and of its followers (<see cref="GameSessionOwner.IsConcealed"/>); another NPC reads as not prowling (the AI host's
-    /// stealth model reads no other); false for any other object type.</summary>
+    /// <summary>ARC-SCRIPT-1733 (CS9, case 51 → 0x45EDE0): the prowling bit (0xDA bit 0x1) of a PC or an NPC, which the session keeps as concealment of the hero and of its followers (<see cref="GameSessionOwner.IsConcealed"/>); an NPC also reads prowling when its stored critter flags hold the bit; false for any other object type.</summary>
     public bool? IsProwling(ScrObjectRef obj)
     {
         if (IsPc(obj)) return _session.QueryHero() is not null && _session.IsConcealed(SessionCombatant.Hero);
         if (Row(obj) is not { } row) return null;
-        return row.Type == NpcType && _session.IsConcealed(SessionCombatant.Critter(obj.Code));
+        return row.Type == NpcType && (_session.IsConcealed(SessionCombatant.Critter(obj.Code)) || NpcCritterBit(obj, ProwlingCritterFlag) == true);
     }
 
     // ARC-SCRIPT-1562: what a critter-or-not object gives a magick-tech adjustment: Critter false for a row of the shown map that is neither the PC nor an NPC (no aptitude is read), else the aptitude (the PC's of the session, an NPC's of the world; null when not known).

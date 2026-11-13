@@ -245,7 +245,7 @@ public interface IScrCritterStateQueries
     /// <summary>Obj has surrendered (c25, case 25 → 0x4AF210 → 0x4AAB00): an NPC whose danger state reads surrender (not fleeing, critter flag 0x4000); false for any other object type.</summary>
     bool? IsSurrendered(ScrObjectRef obj);
 
-    /// <summary>Obj is in dialog (c26, case 26 → 0x4C1110): an NPC with a conversation partner (the reaction-PC array's entry 0, field 0x129); the PC's own answer (a registered callback, 0x567400 reading the dialog slot) is not modelled and answers null; false for any other object type.</summary>
+    /// <summary>Obj is in dialog (c26, case 26 → 0x4C1110): an NPC with a conversation partner (the reaction-PC array's entry 0, field 0x129); every other object type goes to a registered callback (0x567400 reading the PC's dialog slot) which is not modelled and answers null.</summary>
     bool? IsInDialog(ScrObjectRef obj);
 
     /// <summary>Obj can see obj (c28, case 28 → 0x4AF260): the sight check of the observer toward the target, true when it needs nothing more (excess 0); null for an observer that is not an NPC this host holds sight facts of.</summary>

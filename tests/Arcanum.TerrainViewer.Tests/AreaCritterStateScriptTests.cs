@@ -113,7 +113,9 @@ public sealed class AreaCritterStateScriptTests
         using var session = ConversationSessionFixture.CreateWithHero(1);
         var stranger = Npc(1);
         var scenery = Plain(2, ScenerySlotType);
-        var host = Host(session, null, stranger, scenery);
+        var prowler = Npc(3, critterFlags: 0x1);
+        var host = Host(session, null, stranger, scenery, prowler);
+        Assert.IsTrue(host.IsProwling(Ref(prowler)), "an NPC whose stored critter flags hold the prowling bit (0x45EDE0 reads 0xDA bit 1 of any NPC)");
         Assert.IsFalse(host.IsProwling(host.Pc)!.Value);
         Assert.AreEqual(GameSessionDisposition.Changed, session.ToggleHeroConcealment(session.Version).Disposition);
         Assert.IsTrue(host.IsProwling(host.Pc));
