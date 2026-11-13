@@ -36,13 +36,16 @@ public sealed class AreaItemServiceTests
         });
 
     // kit:1 is a plain sword (worth 100, identified), kit:2 a magickal axe (worth 400, complexity 30, not identified); the hero has 1000 gold.
-    private static GameSessionOwner Session()
+    private static GameSessionOwner Session(RuleMode rules = RuleMode.Steamwoven)
     {
         var hero = new SessionHeroDefinition(16089, CharacterRace.HalfElf, CharacterGender.Male, [8, 8, 8, 8, 8, 8, 8, 8, 0, 0], 1, 5, 0,
             null, null, 1000, [new SessionHeroKitItem(new(SessionItemType.Weapon, KitSword, 4100, 34100)), new SessionHeroKitItem(new(SessionItemType.Weapon, KitAxe, 4200, 34200))]);
         var load = new AreaHeroLoad(AreaHeroStatus.Ready, AreaStartingHero.Find("half-elf-male")!, hero, 2352, 0, null, "synthetic");
-        var session = AreaTransitionCoordinator.CreateSession(ConversationSessionFixture.Clock, Guid.NewGuid(), Guid.NewGuid(),
-            AreaGridSession.Cell(AreaGridSession.Spawn), 1, load).Owner!;
+        var cell = AreaGridSession.Cell(AreaGridSession.Spawn);
+        var flags = AreaStartingHero.NewGameFlags(new(new(Guid.NewGuid()), new(Guid.NewGuid())), new(Guid.NewGuid()), load.Flag);
+        var session = GameSessionOwner.Create(new(ConversationSessionFixture.Clock, flags,
+            new(new(1), new(checked((int)cell.X), checked((int)cell.Y)), Arcanum.Simulation.Movement.NeighborDirection.XPlus), Hero: load.Definition,
+            Experience: load.Experience, AutoLevel: load.AutoLevel) { Rules = rules }).Owner!;
         var seed = new SessionMapInventorySeed(
             [new("merchant", SessionHolderKind.Npc, false, false, [], ["coins"])],
             [new("coins", new(new(SessionItemType.Gold, AreaBarterData.GoldPrototype, 4300, 34300), 10, 0, 0, 100, []), null)]);
@@ -122,6 +125,22 @@ public sealed class AreaItemServiceTests
     }
 
     [TestMethod]
+    public void A_refused_item_after_a_quoted_one_keeps_the_stale_price_in_the_original_setting()
+    {
+        // Ledger IS5: after quoting A (100) and refusing B, the next event on B finds the kept price 100 and pays it for nothing.
+        using var session = Session(RuleMode.Original);
+        Assert.IsTrue(session.Rules.Items.ServiceKeepsStalePrice);
+        var service = Service(session, ItemServiceKind.Identify);
+        service.Click("kit:2");
+        var refusedQuote = service.Click("kit:1");
+        Assert.AreEqual((AreaItemServiceAction.Selected, ItemServiceStatus.AlreadyIdentified), (refusedQuote.Action, refusedQuote.Quote!.Value.Status));
+        Assert.AreEqual(100, service.View().KeptPrice, "the refusal leaves the price of the first item");
+        var confirm = service.Click("kit:1");
+        Assert.AreEqual((AreaItemServiceAction.Done, 100, 900), (confirm.Action, confirm.Paid, session.QueryGold()), confirm.Text);
+        Assert.IsFalse(session.QueryItemIdentified("kit:2"), "the item that was quoted is not the one served");
+    }
+
+    [TestMethod]
     public void Repair_quotes_by_damage_and_the_repairers_forced_run_restores_and_is_paid()
     {
         using var session = Session();
@@ -146,6 +165,25 @@ public sealed class AreaItemServiceTests
         Assert.IsTrue(done.Condition!.Value.Damage < 20, "the run restored hit points");
         Assert.AreEqual(done.Condition, session.QueryItemCondition("kit:1", Stock()));
         Assert.AreEqual(draws + 2, session.QueryRandom().Draws, "the skill run always takes its two draws");
+    }
+
+    [TestMethod]
+    public void The_forced_run_restores_at_least_one_point_and_takes_the_trainings_share_of_the_adjustment()
+    {
+        // Ledger RP2/DU8: the forced run's amount is the maximum x effectiveness / 100, at least 1; hp_adj falls by the training's share (none 10, expert 1).
+        foreach (var (training, percent) in new[] { (SkillTraining.None, 10), (SkillTraining.Expert, 1) })
+        {
+            using var session = Session();
+            Damage(session, "kit:1", 20);
+            var before = session.QueryItemCondition("kit:1", Stock())!.Value;
+            var service = Service(session, ItemServiceKind.Repair, points: 0, training: training);
+            service.Click("kit:1");
+            var done = service.Click("kit:1");
+            Assert.AreEqual(AreaItemServiceAction.Done, done.Action, done.Text);
+            var after = done.Condition!.Value;
+            Assert.IsTrue(before.Damage - after.Damage >= 1, $"{training}: at least one point is restored");
+            Assert.AreEqual(before.Adjustment - (int)((long)before.MaximumHitPoints * percent / 100), after.Adjustment, $"{training}: the share of the adjustment");
+        }
     }
 
     [TestMethod]

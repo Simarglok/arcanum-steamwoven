@@ -183,7 +183,7 @@ public partial class TerrainViewerApp
             case AreaBarButton.FatePoints:
                 // ARC-UI-1112: the button and the key F call one function (0x56FBF0); only the dialog's modal hook and the panels outside the stack keep the press from acting.
                 if (!FateActive) _gameBarNotice = "fate points: not available here";
-                else if (!FateOpen && (WorldModal || ConversationOpen || BarterOpen || ReadingOpen || WorldMapOpen)) _gameBarNotice = "fate points: ignored while another window owns input";
+                else if (!FateOpen && (WorldModal || ConversationOpen || BarterOpen || ItemServiceOpen || ReadingOpen || WorldMapOpen)) _gameBarNotice = "fate points: ignored while another window owns input";
                 else ToggleFate("button");
                 break;
             case AreaBarButton.Clock: ClockButton(); break;

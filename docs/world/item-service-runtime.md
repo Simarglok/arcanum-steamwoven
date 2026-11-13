@@ -23,7 +23,7 @@ line); the original look (the inventory window's grid, wear slots and the NPC's 
 1. The reply's action ends the talk (`DialogEndKind.ItemIdentifyWindow` or `ItemRepairWindow`); the host names the window and the speaker once; the talk does not resume.
 2. The viewer opens the window when nothing else owns input and the barter data is loaded (the gold pile kind and the item prototypes are the barter's data). A hero that is not alive
    refuses it; the window closes with a replaced session, a dead hero or a map change.
-3. **First click on an item** selects it and quotes it: identify costs 100 (an identified item is refused: "already identified"); repair costs `trunc(P / 2) × damage / maximum`,
+3. **First click on an item** selects it and quotes it (the original quotes the item under the pointer and pays when its handler sees the same item again; which pointer event that is was not settled, ledger IS3, so the two clicks are a viewer substitute for the missing hover): identify costs 100 (an identified item is refused: "already identified"); repair costs `trunc(P / 2) × damage / maximum`,
    at least 2, where P is the hero's sale price of the item to the NPC with the sale check off (the NPC's multiplier, the hero's haggle, the damage scaling of TC7), a broken item only
    from a master of Repair, an undamaged item "nothing to repair".
 4. **Click on the selected item again** quotes it again and pays: a hero with fewer coins than the kept price gets the "no money" line; else identify marks the item identified, repair
@@ -31,7 +31,7 @@ line); the original look (the inventory window's grid, wear slots and the NPC's 
 
 ## Rule settings
 
-- **Stale price (IS5).** The original keeps the last quoted price across a refused quote: after quoting A, selecting a refused B and clicking B again the hero pays A's price for nothing.
+- **Stale price (IS5).** The original keeps the last quoted price across a refused quote: after quoting A, quoting a refused B and the next event on B the hero pays A's price for nothing.
   The Original setting keeps that (`ItemRuleProfile.ServiceKeepsStalePrice`); Steamwoven clears the price at a refused quote (owner rule 2026-10-28 for gameplay slips).
 - **Repair price (TC7).** The existing switch `RepairQuoteCountsDamageTwice` decides the damage scaling of the quote.
 

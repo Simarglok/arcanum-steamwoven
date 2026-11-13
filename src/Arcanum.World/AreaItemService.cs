@@ -9,7 +9,7 @@ namespace Arcanum.World;
 /// <summary>One line of an item service window: the hero's item, its text, and the quote the window would make for it now.</summary>
 public sealed record AreaItemServiceLine(string Entity, string Text, ItemServiceQuote Quote);
 
-/// <summary>What one click on an item did (ledger IS4): it selected the item and quoted it, or (the item already selected) confirmed it.</summary>
+/// <summary>What one click on an item did (ledger IS3): it selected the item and quoted it, or (the item already selected) confirmed it.</summary>
 public enum AreaItemServiceAction
 {
     /// <summary>A different item than the selected one: it is selected and quoted (the quote may be a refusal).</summary>
@@ -20,7 +20,7 @@ public enum AreaItemServiceAction
     NoMoney,
     /// <summary>The service ran and was paid.</summary>
     Done,
-    /// <summary>The service ran but the payment was refused (full records), or the service itself was refused (a stale view).</summary>
+    /// <summary>The service ran but the payment was refused (full records), or the service itself was refused (the session's own refusal).</summary>
     Failed,
     /// <summary>Nothing happened (not one of the hero's items, or no skills of the NPC for a repair).</summary>
     None,
@@ -37,7 +37,7 @@ public sealed record AreaItemServiceView(ItemServiceKind Kind, string Npc, int H
 /// <summary>
 /// ARC-UI-1731 (contract docs/world/item-service-runtime.md, ledger IS1–IS6): the model of the item identify window (the inventory window in
 /// mode 5, opened by the dialog action <c>ii</c>) and the item repair window (mode 6, <c>ri</c>): the hero's items over the session, the
-/// original's two-click flow (0x573850: the first click selects the item and quotes it, the next click on the same item pays and does it),
+/// original's quote-then-pay rule (0x573850; the viewer's list stands in for the hover with a first click that quotes and a next click on the same item that pays, ledger IS3),
 /// the identify price 100 (0x5786C0) and the repair quote of the NPC repairer (0x578760, <see cref="ItemDurabilityRules.RepairQuote"/>), the
 /// forced repair run of the NPC (0x4C8E60, <see cref="GameSessionOwner.RepairForService"/>) and the payment to the NPC
 /// (<see cref="GameSessionOwner.GiveGoldToNpc"/>). The price the window keeps between clicks follows <see cref="ItemRuleProfile.ServiceKeepsStalePrice"/>.

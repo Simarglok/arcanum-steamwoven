@@ -134,7 +134,7 @@ public static class TradeRules
     /// ARC-UI-1731: the price of one unit that the PC would get for selling it with the sale check switched off (the unchecked flag of the
     /// price function, as the repair quote calls it), before the damage scaling: the worth W, from a merchant multiplier m above 100
     /// <c>W × (100 + trunc(3 × (100 − m) / 8)) / 100</c>, then <c>× (trunc(H / 2) + 50) / 100</c> with the PC's haggle effectiveness H. The
-    /// caller scales it by the item's damage (<see cref="ItemDurabilityRules.RepairQuote"/>). Coins are 0.
+    /// caller scales it by the item's damage (<see cref="ItemDurabilityRules.RepairQuote"/>). Coins give 0 here (the original returns the pile's count, which no repair quote reaches: an undamaged pile quotes "nothing to repair").
     /// </summary>
     /// <remarks>Executable: the unchecked branch of 0x461F80 (registered as <see cref="Price"/>), called by the repair quote 0x578760.</remarks>
     public static int UncheckedSalePrice(TradeItem item, TradeParties parties)
