@@ -622,7 +622,7 @@ Known differences (documented, not bugs):
 - A new game still waits for the start map, which begins to load when the New Game window opens.
 - The main thread is busy while the start map is published, for about a second after the load ends, so the menu may answer late then (O6 of the diagnosis).
 - The menu's music was silent until the start map was loaded; ARC-UI-139 (below) plays it from the start without a scene.
-- A load of a save whose map is the one already shown (F8 on the same map) is one synchronous step, so its load screen is not seen; the original shows it (ARC-UI-1362, issue #1504).
+- A load of a save whose map is the one already shown (F8 on the same map) shows the load screen for a frame or two only, as the load itself is short; ARC-UI-1504 recheck below.
 
 ## ARC-UI-139 — The main menu's music plays without a scene (follow-up of ARC-DEV-387, 2026-11-11)
 
@@ -1097,4 +1097,15 @@ Known differences (documented, not bugs): a button takes the pointer on its art'
 | 1 | From the main menu press Load Game, choose a save made on another map than the start map. | The screen goes black at once with the clock animation in the top-right corner (two pixels in) and stays so until the game appears on the save's map; the menu shows no wait note. | open |
 | 2 | Press F8 with the newest save on another map than the one shown. | The same black screen with the clock until the saved map is there. | open |
 | 3 | Load a save whose map is missing or broken (rename its map folder in a copy). | The black screen goes and the menu (or the running game) comes back with the reason. | open |
-| 4 | Press F8 with a save on the map already shown. | No load screen is seen: the load of the shown map is one step in this build (issue #1504). | open |
+| 4 | Press F8 with a save on the map already shown. | Superseded by ARC-UI-1504 below: the screen shows for a moment. | open |
+
+## ARC-UI-1504 — Load screen for a load of the map already shown (2026-11-13)
+
+The original shows the load screen for every successful load of a save, the saved map being the one already open too; the viewer's load of the shown map is one step, so it now raises the screen first and runs the load a frame or two later (F8, the load window of the in-play menu, Last Save).
+
+| # | Step | Expected (from the original executable and data) | Status |
+| --- | --- | --- | --- |
+| 1 | In play press F8 with the newest save on the map already shown. | The screen goes black with the clock in the top-right corner for a moment (a frame or two, longer on a big map), then the game shows the saved state. The keys do nothing meanwhile. | open |
+| 2 | Open the in-play menu, Load Game and choose a save on the shown map. | The same black screen with the clock, then the window is closed and the game is the saved one. | open |
+| 3 | The same with a save whose file is damaged (copy one and break it). | The screen goes at once, the load window stays with the reason (F8: the running game stays, the message window says the load failed). | open |
+| 4 | Press F8 with no save at all. | No black screen; only the two notes, as before. | open |
