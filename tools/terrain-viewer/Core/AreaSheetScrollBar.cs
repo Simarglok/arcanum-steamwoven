@@ -5,7 +5,7 @@ public readonly record struct AreaScrollArrows(int TopWidth, int TopHeight, int 
 
 /// <summary>
 /// ARC-UI-1742: the original's vertical scroll bar widget (created by 0x5804E0 from a descriptor, geometry 0x581550..0x581660, events 0x580B10, thumb
-/// drawn by 0x5807F0; ledger ALP10..ALP16), Godot-free. The bar is <see cref="Width"/> × <see cref="Height"/> at (<see cref="X"/>, <see cref="Y"/>) in its
+/// drawn by 0x5807F0; ledger ALP10..ALP15), Godot-free. The bar is <see cref="Width"/> × <see cref="Height"/> at (<see cref="X"/>, <see cref="Y"/>) in its
 /// window: the up arrow (art 317) at its top, the down arrow (art 318) at its bottom, the thumb between them. One step is <see cref="Unit"/>
 /// pixels of thumb travel and the thumb is as long as one step (at least 12 pixels), so it shrinks as the range grows. The window's own art draws
 /// the track. A press on the thumb drags it, a press above or below it moves the value by a page, an arrow by a step, the wheel inside the wheel

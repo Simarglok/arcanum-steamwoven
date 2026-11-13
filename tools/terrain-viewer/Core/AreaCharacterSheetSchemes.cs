@@ -4,7 +4,7 @@ namespace Arcanum.TerrainViewer.Core;
 
 /// <summary>
 /// ARC-UI-1742: the original look of the character sheet's auto-level scheme page (window 0x64CA60, art 567, created by 0x55D060, drawn by 0x55D210,
-/// buttons by 0x55DF90, scroll bar by 0x55EFF0; ledger ALP1..ALP16), read from the retail 1.0.7.4 executable. The window is 235 × 325 at the main window's
+/// buttons by 0x55DF90, scroll bar by 0x55EFF0; ledger ALP1..ALP15), read from the retail 1.0.7.4 executable. The window is 235 × 325 at the main window's
 /// (503, 63); every coordinate here is <b>panel-relative</b> (the exe's tables hold screen coordinates, the drawer 0x55B880 subtracts the window's origin,
 /// (503, 104)). The page is the shown critter's scheme name centred near the top in Flare12 blue, and the list of scheme names below it: fifteen rows of
 /// 160 × 16 from (23, 66), each name in Flare12 white (blue under the pointer), scrolled by the bar at (209, 60), 17 × 255 (<see cref="AreaSheetScrollBar"/>).

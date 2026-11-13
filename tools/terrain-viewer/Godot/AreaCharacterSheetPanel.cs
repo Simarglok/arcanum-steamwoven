@@ -351,7 +351,7 @@ public partial class AreaCharacterSheetPanel : CanvasLayer
         if (schemes) _artView.Schemes.SetArt(art, fonts);
         _pagesReady = pages;
         _spellsReady = pages && spells;
-        _schemesReady = pages && schemes && !_creation;
+        _schemesReady = pages && schemes && !_creation && texts.HasSchemeNames;
         // The diagnostic pages stay in the host for a game folder whose pages art does not read.
         if (_pages.GetParent() != _host) { _pages.Reparent(_host!); _pages.SetTabHidden(0, true); _pages.CurrentTab = 1; _pages.TabsVisible = false; _pages.CustomMinimumSize = new(300, 0); }
         ApplyTab(_artView.Tab);

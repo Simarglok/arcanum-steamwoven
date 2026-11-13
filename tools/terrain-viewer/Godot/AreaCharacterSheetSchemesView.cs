@@ -5,7 +5,7 @@ using Godot;
 namespace Arcanum.TerrainViewer;
 
 /// <summary>
-/// ARC-UI-1742: the auto-level scheme page of the character sheet in the original's look (<see cref="AreaCharacterSheetSchemesLayout"/>, ledger ALP1..ALP16):
+/// ARC-UI-1742: the auto-level scheme page of the character sheet in the original's look (<see cref="AreaCharacterSheetSchemesLayout"/>, ledger ALP1..ALP15):
 /// a control of 235 × 325 at the sheet's (503, 63), drawn in the page's own coordinates. Art 567, the critter's scheme name centred near the top in
 /// Flare12 blue, fifteen rows of scheme names in Flare12 white (blue under the pointer) and the scroll bar at the right: the up and down arrows (art
 /// 317, 318) and the thumb (arts 238, 787, 240, stretched to the bar's width). A row released over itself writes that scheme into the critter; the NPC

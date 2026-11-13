@@ -7,7 +7,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace Arcanum.TerrainViewer.Tests;
 
-/// <summary>ARC-UI-1742 scheme page of the character sheet (ledger ALP1..ALP16): the layout tables, the list the name files give, the hero's choice, on
+/// <summary>ARC-UI-1742 scheme page of the character sheet (ledger ALP1..ALP15): the layout tables, the list the name files give, the hero's choice, on
 /// invented tables (no original data).</summary>
 [TestClass]
 public sealed class AreaCharacterSheetSchemesTests

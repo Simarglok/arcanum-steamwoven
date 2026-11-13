@@ -657,6 +657,7 @@ tools/terrain-viewer/Core/AreaBarterArt.cs,Release,pending,
 tools/terrain-viewer/Core/AreaBarterArt.cs,RightRelease,pending,
 tools/terrain-viewer/Core/AreaBarterArt.cs,Step,exempt,reference
 tools/terrain-viewer/Core/AreaCharacterSheetArt.cs,RegionAt,pending,
+tools/terrain-viewer/Core/AreaCharacterSheetSchemes.cs,Row,exempt,reference
 tools/terrain-viewer/Core/AreaCharacterSheetSpells.cs,HitAt,pending,
 tools/terrain-viewer/Core/AreaCursor.cs,Art,pending,
 tools/terrain-viewer/Core/AreaDialogBox.cs,Buttons,pending,
@@ -726,6 +727,12 @@ tools/terrain-viewer/Core/AreaSaveListArt.cs,RowAt,pending,
 tools/terrain-viewer/Core/AreaSaveListArt.cs,ScrollTop,pending,
 tools/terrain-viewer/Core/AreaSaveListArt.cs,Unread,pending,
 tools/terrain-viewer/Core/AreaSaveListArt.cs,Wrapped,pending,
+tools/terrain-viewer/Core/AreaSheetScrollBar.cs,Drag,exempt,reference
+tools/terrain-viewer/Core/AreaSheetScrollBar.cs,DrawnThumbTop,exempt,reference
+tools/terrain-viewer/Core/AreaSheetScrollBar.cs,PartAt,exempt,reference
+tools/terrain-viewer/Core/AreaSheetScrollBar.cs,PressArrow,exempt,reference
+tools/terrain-viewer/Core/AreaSheetScrollBar.cs,PressTrack,exempt,reference
+tools/terrain-viewer/Core/AreaSheetScrollBar.cs,public,exempt,reference
 tools/terrain-viewer/Core/AreaTextFonts.cs,Centred,pending,
 tools/terrain-viewer/Core/AreaTextFonts.cs,Place,pending,
 tools/terrain-viewer/Core/AreaTownMapArt.cs,ToLocation,pending,
@@ -738,6 +745,7 @@ tools/terrain-viewer/Core/HeroAttackArt.cs,Clip,pending,
 tools/terrain-viewer/Godot/AreaCharacterArtDraw.cs,Centred,pending,
 tools/terrain-viewer/Godot/AreaCharacterArtDraw.cs,Character,pending,
 tools/terrain-viewer/Godot/AreaCharacterSheetArtView.cs,HitAt,pending,
+tools/terrain-viewer/Godot/AreaCharacterSheetSchemesView.cs,ArrowFrame,exempt,reference
 tools/terrain-viewer/Godot/AreaCharacterSheetSpellsView.cs,Greyed,pending,
 tools/terrain-viewer/Godot/AreaFollowerPortraits.cs,ResetPanel,exempt,reference
 tools/terrain-viewer/Godot/AreaLogbookArtView.cs,Turn,pending,

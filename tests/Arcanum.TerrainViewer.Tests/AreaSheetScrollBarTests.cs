@@ -3,7 +3,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace Arcanum.TerrainViewer.Tests;
 
-/// <summary>ARC-UI-1742: the original's scroll bar widget (0x5804E0, 0x581550..0x581660, 0x580B10, 0x5807F0; ledger ALP10..ALP16) on the schemes page's
+/// <summary>ARC-UI-1742: the original's scroll bar widget (0x5804E0, 0x581550..0x581660, 0x580B10, 0x5807F0; ledger ALP10..ALP15) on the schemes page's
 /// descriptor: a bar at (209, 60), 17 × 255, value 0..44 by 1, arrows 11 × 15 and 11 × 14, page 5, wheel 3.</summary>
 [TestClass]
 public sealed class AreaSheetScrollBarTests
