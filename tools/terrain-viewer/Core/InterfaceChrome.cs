@@ -176,6 +176,17 @@ public static class InterfaceChromeRecipes
         yield return new ChromeRecipe("Schm_RArrow.ART", ChromeKind.Panel, ChromeMaterial.Paper, ChromeSides.None, [PageRuling(nx, ny, 18, 22), new ChromeGlyph(0, 0, 18, 22)], Holes: ChromeHoles.None, OriginX: nx, OriginY: ny);
     }
 
+    // ARC-UI-1819: the common dialog box (822 `DialogueBox`, 325 x 136, opaque stone) and its two round buttons (823 `Lil_Accept`, 824 `Lil_Cancel`, 28 x 29, three frames: idle, down, lit). The box is a
+    // `Slate` panel with a rim on all sides, like the sheet's pages: a sunk black pit for the text (the original's brass line with curled corners round its black field, measured at 12..312 across and
+    // 6..82 down; the curls are not drawn, as in S5) holds the white art-font lines, which are drawn text. The buttons are the generic button recipe (generated brass face and rim following the round
+    // silhouette, sunk on the down frame, lit on the lit frame) with the glyph kept: the green check and the red cross are the state of the answer, so they stay pictures.
+    private static IEnumerable<ChromeRecipe> DialogRecipes()
+    {
+        yield return new ChromeRecipe("DialogueBox.ART", ChromeKind.Panel, ChromeMaterial.Slate, ChromeSides.All, [new ChromeSunk(12, 6, 301, 77, ChromeMaterial.Pit)]);
+        foreach (var file in new[] { "Lil_Accept.ART", "Lil_Cancel.ART" })
+            yield return new ChromeRecipe(file, ChromeKind.Button, ChromeMaterial.Face, ChromeSides.None, []);
+    }
+
     public static IReadOnlyList<ChromeRecipe> All { get; } = Build();
 
     private static readonly Dictionary<string, ChromeRecipe> ByName = All.ToDictionary(recipe => recipe.NameSha256, StringComparer.Ordinal);
@@ -267,7 +278,7 @@ public static class InterfaceChromeRecipes
             "Anatomical_But.ART", "Chemistry_But.ART", "Electrical_But.ART", "Explosives_But.ART", "GunSmithy_But.ART", "Mechanical_But.ART", "Smithy_But.ART", "Therapeutics_But.ART",
             // ARC-UI-1199: the schematic window's two list buttons (art 6) and its assemble button (357).
             "bgrn_but.art", "CombineButt.ART"];
-        return [top, bottom, inventory, doll, loot, barter, follower, lootDoll, .. lenses, .. SheetPanels(), .. MapPanels(), .. LogbookRecipes(), .. SchematicRecipes(), .. buttons.Select(file => new ChromeRecipe(file, ChromeKind.Button, ChromeMaterial.Face, ChromeSides.None, [])),
+        return [top, bottom, inventory, doll, loot, barter, follower, lootDoll, .. lenses, .. SheetPanels(), .. MapPanels(), .. LogbookRecipes(), .. SchematicRecipes(), .. DialogRecipes(), .. buttons.Select(file => new ChromeRecipe(file, ChromeKind.Button, ChromeMaterial.Face, ChromeSides.None, [])),
             // ARC-UI-1784: the spells page's sixteen college tabs (24 x 24 balls, three frames): a generated rim around the ball's own picture.
             .. CollegeTabFiles.Select(file => new ChromeRecipe(file, ChromeKind.Button, ChromeMaterial.Face, ChromeSides.None, [], KeepFace: true))];
     }

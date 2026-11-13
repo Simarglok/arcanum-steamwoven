@@ -1297,3 +1297,20 @@ Known differences (documented, not bugs):
 - The page is plainer than the original's (soft clouds and a plain ruling in place of its stains, ragged edges and the printed connecting lines between the record and the two component boxes, which are not drawn).
 - The tabs and arrows follow the Legacy outlines and marks; the assemble face (the two lamps), the found and missing tints and the record's picture stay pictures.
 - The ring of the round view (art 231) is the barter window's recipe and sits on a patch of wood whose grain differs a little from the window's.
+
+## ARC-UI-1819 — Generated interface: the common dialog box (S10, 2026-11-14)
+
+The rules are in [viewer slice S10](../rendering/hd-interface-density.md#viewer-slice-s10-arc-ui-1819). Set the HD interface line on the launcher screen to **Generated (experimental)**,
+start a game, press Esc and choose Quit (the quit question). Compare with **HD** and **Legacy**.
+
+| # | Step | Expected | Status |
+| --- | --- | --- | --- |
+| 1 | Press Esc, then Quit, in a 1280 × 800 window. | The box is a dark stone plate with a thin brass rim and a black text field; the question's white text sits where it did; the green check and the red cross are in round brass buttons at the same places. | open |
+| 2 | Move over the two buttons and hold each down. | The button under the pointer is lit, the held one sinks; the answer is taken on the release, as before. | open |
+| 3 | Resize the window (or go full screen) while the question is open. | The box is sharp at the new size, with no seam between the plate and the buttons. | open |
+| 4 | Die in the game (Steamwoven rules) and look at the load question over the death slide. | The same box and buttons. | open |
+
+Known differences (documented, not bugs):
+
+- The curled brass corners of the original's text field are not drawn; the stone is plainer than the original's.
+- The quit question of the main menu screen is the same box, so it is generated too while the main menu's own art is the HD or Legacy one.

@@ -44,7 +44,60 @@ public partial class AreaDialogBoxView : Control
         AreaArtTextDraw.Prepare(this);
     }
 
-    public void SetArt(AreaDialogBoxArt art) => _art = art ?? throw new ArgumentNullException(nameof(art));
+    public override void _ExitTree() => Release();
+
+    public void SetArt(AreaDialogBoxArt art)
+    {
+        ArgumentNullException.ThrowIfNull(art);
+        // ARC-UI-1819: the textures of an art this view no longer shows are let go.
+        Release();
+        _art = art;
+    }
+
+    // ARC-UI-1819: the generated interface paints the box and its buttons at the window's own device scale (the control's scale times the canvas transform's and the viewport's stretch, the
+    // bars' own rule). The view claims the art's textures at its draw (the box on screen claims them: the death panel and the menu share one art) and watches them, so a frame a worker swaps in
+    // redraws the box; a change of the window's scale moves no pixel by itself (the canvas item is only stretched), so the box also draws again then.
+    private readonly HashSet<HdInterfaceTexture> _watched = [];
+    private Action? _onTextureChanged;
+    private Func<float>? _deviceScale;
+    private float _drawnScale;
+
+    internal float DeviceScale() =>
+        GodotObject.IsInstanceValid(this) && IsInsideTree() ? GetGlobalTransformWithCanvas().Scale.X * GetViewport().GetStretchTransform().Scale.X : 1f;
+
+    private void Release()
+    {
+        if (_onTextureChanged is { } handler) foreach (var texture in _watched) texture.Changed -= handler;
+        _watched.Clear();
+    }
+
+    private IEnumerable<Texture2D> Textures() => _art is { } art ? art.Buttons.Values.SelectMany(frames => frames).Prepend(art.Background) : [];
+
+    private void ClaimScale()
+    {
+        _deviceScale ??= DeviceScale;
+        _onTextureChanged ??= () => { if (GodotObject.IsInstanceValid(this)) QueueRedraw(); };
+        foreach (var texture in Textures())
+        {
+            if (texture is not HdInterfaceTexture hd) continue;
+            hd.ScaleSource = _deviceScale;
+            if (_watched.Add(hd)) hd.Changed += _onTextureChanged;
+        }
+        _drawnScale = DeviceScale();
+    }
+
+    public override void _Process(double delta)
+    {
+        if (Visible && Math.Abs(DeviceScale() - _drawnScale) >= 0.0005f) QueueRedraw();
+    }
+
+    /// <summary>ARC-UI-1819: the textures of the box (the background 822, then the frames of the buttons it shows) with their art numbers, for the native smoke.</summary>
+    internal IReadOnlyList<(int Art, HdInterfaceTexture Texture)> TexturesForSelfTest() => _art is not { } art ? [] :
+    [
+        .. new[] { (AreaDialogBoxLayout.BackgroundArt, art.Background) }.Concat(_buttons.Select(button => button.Art).Distinct()
+            .SelectMany(number => art.Buttons[number].Select(frame => (number, frame)))).Where(pair => pair.Item2 is HdInterfaceTexture)
+            .Select(pair => (pair.Item1, (HdInterfaceTexture)pair.Item2)),
+    ];
 
     /// <summary>Shows the box with <paramref name="text"/> (a line feed starts a new line) at its window point of the screen.</summary>
     public void Show(string text, AreaDialogBoxKind kind, (int X, int Y) point)
@@ -86,6 +139,7 @@ public partial class AreaDialogBoxView : Control
     public override void _Draw()
     {
         if (_art is not { } art) return;
+        ClaimScale();
         DrawTextureRect(art.Background, new Rect2(0, 0, AreaDialogBoxLayout.Width, AreaDialogBoxLayout.Height), false);
         var (x, y, _, _) = AreaDialogBoxLayout.Text;
         for (var line = 0; line < _lines.Count; line++)
