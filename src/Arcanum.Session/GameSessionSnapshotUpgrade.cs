@@ -618,6 +618,11 @@ public static partial class GameSessionSnapshotCodec
                 hero.Add("age", null);
             }
         },
+        // ARC-TECHNOLOGY-1635 (schema 100): the flights section gains the native traps' shots in flight. No older build flew a trap's shot (it struck at once), so the list is empty.
+        [99] = root =>
+        {
+            AddField(Section(root, "flights"), "$.flights", "trapShots", new JsonArray());
+        },
     };
 
     /// <summary>The schemas with an upgrade step to the next one, ascending: every schema from

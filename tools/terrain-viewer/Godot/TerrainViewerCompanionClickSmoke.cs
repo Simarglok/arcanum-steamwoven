@@ -1,3 +1,5 @@
+using Arcanum.Simulation.Combat;
+using Arcanum.Simulation.Magic;
 using Arcanum.Session;
 using Arcanum.Simulation.Movement;
 using Arcanum.Simulation.Party;
@@ -48,6 +50,16 @@ public partial class TerrainViewerApp
             var companion = _areaCompanions!.Companions.Single(c => c.Entity == follower);
             var portraits = _followerPortraits!;
 
+            // ARC_AREA_FOLLOWER_PANEL_CAPTURE saves in-app readbacks of the panel (the menu open, the scrolled strip) to the caller's ignored path (never committed).
+            var capture = System.Environment.GetEnvironmentVariable("ARC_AREA_FOLLOWER_PANEL_CAPTURE");
+            async Task Capture(string name)
+            {
+                if (string.IsNullOrWhiteSpace(capture)) return;
+                await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+                using var image = GetViewport().GetTexture().GetImage();
+                Require(image.SavePng($"{capture}-{name}.png") == Error.Ok, "capture saved");
+            }
             var facts = new List<string>();
             var failures = new List<string>();
             void Fact(string name, bool original, string seen)
@@ -155,14 +167,125 @@ public partial class TerrainViewerApp
             await ClickPortraitAsync(MouseButton.Right);
             await ReleaseAtAsync(portraits.MenuItemCentreForSelfTest(FollowerMenuItem.Wait), MouseButton.Right);
             Fact("a right click on a menu item closes the menu", !portraits.MenuShown, portraits.MenuShown ? "menu" : "closed");
+            // ARC-UI-1736 (FP9): a left release over the menu's own margins (no row) closes it and is consumed.
             await ClickPortraitAsync(MouseButton.Right);
-            await ReleaseAtAsync(portraits.MenuItemCentreForSelfTest(FollowerMenuItem.Inventory), MouseButton.Left);
-            Fact("a left click on an unmodelled menu item closes the menu", !portraits.MenuShown, portraits.MenuShown ? "menu" : "closed");
+            var marginAt = portraits.MenuForSelfTest is { } shownMenu ? shownMenu.Rect.Position + new Vector2(2, shownMenu.Rect.Size.Y - 2) : (Vector2?)null;
+            await ReleaseAtAsync(marginAt, MouseButton.Left);
+            Fact("a left release over the menu's margin closes the menu", !portraits.MenuShown, portraits.MenuShown ? "menu" : "closed");
             portraits.CloseMenu();
 
             // 7. ARC-UI-1281 (HK26): the pointer entering his portrait runs his examine and describes him; leaving clears; no menu and no dialog.
             foreach (var (name, original, seen) in await ObservePortraitHoverAsync(follower)) Fact(name, original, seen);
             portraits.CloseMenu();
+
+            // 8. ARC-UI-1736 (FP5): the show/hide button hides his frame and shows it again; the GUI takes both presses (no world click, no talk).
+            portraits.CloseMenu();
+            Fact("one follower: the hide button and no arrows", portraits.PanelForSelfTest is { Shown: true, Count: 1, ToggleArt: 501, UpArt: null, DownArt: null },
+                portraits.PanelForSelfTest.ToString());
+            await ReleaseAtAsync(portraits.ButtonCentreForSelfTest("toggle"), MouseButton.Left);
+            Fact("the hide button removes his frame and shows art 502", portraits.PanelForSelfTest is { Shown: false, ToggleArt: 502 } && !portraits.EntitiesForSelfTest.Contains(follower),
+                portraits.PanelForSelfTest.ToString());
+            Fact("... and starts no talk", !ConversationOpen, ConversationOpen ? "talk" : "none");
+            if (ConversationOpen) CloseConversation();
+            await ReleaseAtAsync(portraits.ButtonCentreForSelfTest("toggle"), MouseButton.Left);
+            Fact("the show button brings his frame back with art 501", portraits.PanelForSelfTest is { Shown: true, ToggleArt: 501 } && portraits.EntitiesForSelfTest.Contains(follower),
+                portraits.PanelForSelfTest.ToString());
+
+            // 9. ARC-UI-1736 (FP7, FP8): the menu stands at the frame's right edge and top with the original's eight rows 18 pixels apart; Wait is normal for a follower in his mind.
+            await ClickPortraitAsync(MouseButton.Right);
+            {
+                var factor = portraits.ScaleForSelfTest;
+                var frameTop = portraits.PortraitCentreForSelfTest(follower)!.Value.Y - AreaFollowerFrameLayout.Height * factor / 2;
+                var open = portraits.MenuForSelfTest;
+                Fact("the menu has eight rows at his frame's top", open is { Rows: 8 } && Math.Abs(open.Value.Rect.Position.Y - frameTop) < 2, open?.ToString() ?? "none");
+                var walk = portraits.MenuItemCentreForSelfTest(FollowerMenuItem.Walk); var sheet = portraits.MenuItemCentreForSelfTest(FollowerMenuItem.CharacterSheet);
+                Fact("the rows stand 18 pixels apart", walk is not null && sheet is not null && Math.Abs(sheet.Value.Y - walk.Value.Y - 18 * 7 * factor) < 2
+                    && portraits.MenuRowSizeForSelfTest(FollowerMenuItem.Walk) == new Vector2(118, 15), $"{walk} {sheet} at factor {factor}, row {portraits.MenuRowSizeForSelfTest(FollowerMenuItem.Walk)}");
+                await Capture("menu");
+                Fact("Wait and Character Sheet are normal rows", portraits.MenuRowStateForSelfTest(FollowerMenuItem.Wait) == FollowerMenuRowState.Normal
+                    && portraits.MenuRowStateForSelfTest(FollowerMenuItem.CharacterSheet) == FollowerMenuRowState.Normal, "row states");
+            }
+            var inventoryState = portraits.MenuRowStateForSelfTest(FollowerMenuItem.Inventory);
+            // 10. ARC-UI-1736 (FP12): Character Sheet opens his NPC sheet over him (read-only, no plus and minus buttons).
+            await ReleaseAtAsync(portraits.MenuItemCentreForSelfTest(FollowerMenuItem.CharacterSheet), MouseButton.Left);
+            for (var frame = 0; frame < 40 && !(SheetOpen && _sheetNpc is not null); frame++) AreaSmokeFrame();
+            Fact("the Character Sheet row opens his NPC sheet", !portraits.MenuShown && SheetOpen && _sheetNpc is not null, SheetOpen ? "sheet" : $"none ({_sheetNpcStatus})");
+            if (SheetOpen) CloseWindowMode(InterfaceMode.Character);
+            AreaSmokeFrame();
+            // 11. ARC-UI-1736 (FP11): Inventory opens the follower's barter window (no prices) when the can-open test passes (the row is greyed and does nothing otherwise).
+            await ClickPortraitAsync(MouseButton.Right);
+            await ReleaseAtAsync(portraits.MenuItemCentreForSelfTest(FollowerMenuItem.Inventory), MouseButton.Left);
+            if (inventoryState == FollowerMenuRowState.Normal)
+            {
+                for (var frame = 0; frame < 600 && !BarterOpen; frame++) AreaSmokeFrame();
+                Fact("the Inventory row opens his barter window as a follower", BarterOpen && _barter is { Merchant.Follower: true } && _barter.Merchant.Entity == follower,
+                    BarterOpen ? "barter" : $"none ({_barterStatus})");
+                if (BarterOpen) EndBarter();
+            }
+            else Fact("the Inventory row is greyed and the click only closes the menu", !portraits.MenuShown && !BarterOpen, "greyed");
+            for (var frame = 0; frame < 5; frame++) AreaSmokeFrame();
+
+            // 12a. ARC-UI-1736 (FP6): with a spell cursor open (a spell of the data the pick accepts for him), a left release on his portrait takes him as the target and casts at him
+            // (no talk), exactly as a click on his body would. A portrait click is the ordinary click otherwise (step 3).
+            for (var frame = 0; frame < 600 && SpellRecordsNow() is null; frame++) AreaSmokeFrame();
+            {
+                int? chosen = null; uint chosenMask = 0;
+                if (SpellRecordsNow() is { } spells && SpellCasterNow() is { } aimCaster && FollowerObjectId(follower) is { } followerId)
+                {
+                    for (var spell = 0; spell < spells.Length && chosen is null; spell++)
+                    {
+                        var record = spells[spell];
+                        var begin = record.Areas.Length > 0 ? record.Areas[0].Targets : 0;
+                        if (!record.Data.Enabled || record.Resist.Aggressive || SpellUiRules.TargetsInventory(begin)) continue;
+                        var activation = SpellUiRules.Activate(true, true, begin, false, false, false, session.QueryActionPointCheck(SessionCombatant.Hero, TurnBasedRules.CastSpellCost));
+                        if (activation.Kind == SpellActivationKind.Target && aimCaster.PickTarget(SessionSpellCaster.Hero, spell, activation.Mask, followerId, null).Test.Passes) { chosen = spell; chosenMask = (uint)activation.Mask; }
+                    }
+                }
+                if (chosen is not { } aimed) Fact("a spell cursor takes his portrait as the target", true, "skipped (no spell data or no spell the pick accepts for him)");
+                else
+                {
+                    portraits.CloseMenu();
+                    ActivateSpell(aimed);
+                    Require(_spellTargeting is not null, $"spell {aimed} opened its cursor: {_spellNotice}");
+                    var casts = _spellCasts;
+                    await ClickPortraitAsync(MouseButton.Left);
+                    for (var frame = 0; frame < 20; frame++) AreaSmokeTalkFrame();
+                    Fact("a spell cursor takes his portrait as the target and casts", _spellCasts == casts + 1 && !ConversationOpen,
+                        $"spell {aimed} mask 0x{chosenMask:X} casts {casts}->{_spellCasts} cursor {(_spellTargeting is null ? "closed" : "open")} {_spellNotice}");
+                    if (ConversationOpen) CloseConversation();
+                    CancelSpellCast("the smoke ended");
+                    Settle();
+                }
+            }
+
+            // 12. ARC-UI-1736 (FP3, FP5): eight followers scroll by their arrows, six frames from the offset, and clamp at both ends (a panel of its own with synthetic followers).
+            {
+                var strip = new AreaFollowerPortraits();
+                portraits.Visible = false;
+                AddChild(strip);
+                try
+                {
+                    strip.Bind(InterfaceTextures(_portraitContent?.Art ?? new Dictionary<int, AreaInterfaceArtLoad>()));
+                    strip.Show(Enumerable.Range(0, 8).Select(i => ($"smoke:{i}", $"F{i}", (AreaLife?)new AreaLife(100 - 9 * i, 100, 15 + 6 * i, 60, 0), (Texture2D?)null)).ToArray());
+                    await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                    string Frames() => string.Join(",", strip.EntitiesForSelfTest.Select(e => e[^1]));
+                    Fact("eight followers: arrows, six frames from 0", strip.PanelForSelfTest is { Shown: true, Offset: 0, Count: 8, ToggleArt: 501, UpArt: 507, DownArt: 508 } && Frames() == "0,1,2,3,4,5", $"{strip.PanelForSelfTest} {Frames()}");
+                    await Capture("strip-top");
+                    await ReleaseAtAsync(strip.ButtonCentreForSelfTest("down"), MouseButton.Left);
+                    await Capture("strip-scrolled");
+                    Fact("down scrolls by one follower", strip.PanelForSelfTest is { Offset: 1, UpArt: 506, DownArt: 508 } && Frames() == "1,2,3,4,5,6", $"{strip.PanelForSelfTest} {Frames()}");
+                    await ReleaseAtAsync(strip.ButtonCentreForSelfTest("down"), MouseButton.Left);
+                    await ReleaseAtAsync(strip.ButtonCentreForSelfTest("down"), MouseButton.Left);
+                    Fact("down clamps at count - 6 and shows its end art", strip.PanelForSelfTest is { Offset: 2, DownArt: 509 } && Frames() == "2,3,4,5,6,7", $"{strip.PanelForSelfTest} {Frames()}");
+                    await ReleaseAtAsync(strip.ButtonCentreForSelfTest("up"), MouseButton.Left);
+                    Fact("up scrolls back", strip.PanelForSelfTest is { Offset: 1 } && Frames() == "1,2,3,4,5,6", $"{strip.PanelForSelfTest} {Frames()}");
+                    await ReleaseAtAsync(strip.ButtonCentreForSelfTest("toggle"), MouseButton.Left);
+                    Fact("hidden: no frames and no arrows", strip.PanelForSelfTest is { Shown: false, ToggleArt: 502, UpArt: null, DownArt: null } && Frames() == "", $"{strip.PanelForSelfTest} {Frames()}");
+                    await ReleaseAtAsync(strip.ButtonCentreForSelfTest("toggle"), MouseButton.Left);
+                    Fact("shown again keeps the offset", strip.PanelForSelfTest is { Shown: true, Offset: 1 } && Frames() == "1,2,3,4,5,6", $"{strip.PanelForSelfTest} {Frames()}");
+                }
+                finally { strip.QueueFree(); portraits.Visible = true; }
+            }
 
             var summary = string.Join("; ", facts);
             GD.Print("ARC-DEV-263 companion-click " + summary);
