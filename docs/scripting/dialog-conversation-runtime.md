@@ -434,7 +434,7 @@ With the optional `IDialogWindowPort` (`DialogConversationPorts.Windows`) a Play
   `DialogEndKind.NpcSheetWindow`, `ItemIdentifyWindow` or `ItemRepairWindow` (reply transitions `NpcSheet`, `ItemIdentify`, `ItemRepair`). A number after the code is read and ignored. They are Player reply actions
   only (no NPC line, no condition). A dialog transfer (JO, UW, FL, ET) or an insult in the same reply is offered blocked (`UnsupportedInteraction`).
 - **Port.** `Execute(OpenWindowCommand)`: Applied means the host opens the window once the talk ended; Rejected fails the conversation; a thrown exception is indeterminate.
-- **Viewer.** The AREA host passes a window port that offers only the NPC sheet (ARC-UI-088: the talk ends and the speaker's character sheet opens read-only, ledger CHW24); the `ii` and `ri` windows are not built, so those two replies are offered blocked.
+- **Viewer.** The AREA host passes a window port that offers all three windows: the NPC sheet (ARC-UI-088: the talk ends and the speaker's character sheet opens read-only, ledger CHW24) and, since ARC-UI-1731, the item identify and repair windows (the host names the window and the speaker with `TakeItemServiceRequest`; the last window action of a reply decides, an earlier one is dropped; [item service runtime](../world/item-service-runtime.md)).
 - **Installed data.** The c-e action appears in 47 Player reply fields, `II` in 26 and `RI` in 61 (132 fields); all parse with every port.
 
 ## Newspaper and origin actions (ARC-DEV-230)

@@ -454,6 +454,9 @@ public partial class TerrainViewerApp
         // ARC-UI-088: c-e ended the talk; the NPC's character sheet opens and the talk does not resume (WN2).
         if (conversation?.End is { Kind: DialogEndKind.NpcSheetWindow } && talkHost?.TakeNpcSheetSpeaker() is { } sheetSpeaker && _areaSession is not null)
             QueueDialogNpcSheet(talkHost, sheetSpeaker);
+        // ARC-UI-1731: ii or ri ended the talk; the item identify or repair window opens and the talk does not resume (WN1, WN2).
+        if (conversation?.End is { Kind: DialogEndKind.ItemIdentifyWindow or DialogEndKind.ItemRepairWindow } && talkHost?.TakeItemServiceRequest() is { } serviceRequest && _areaSession is not null)
+            QueueDialogItemService(talkHost, serviceRequest);
         if (resume && scripted && conversation?.End is { Kind: DialogEndKind.ReturnToScript })
             _conversationNotice = "the script that started this conversation does not continue here (not modelled)";
         else if (resume && conversation?.End is { Kind: DialogEndKind.ReturnToScript, ScriptLine: { } line } && speaker is not null && talkHost is not null)
