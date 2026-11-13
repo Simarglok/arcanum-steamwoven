@@ -69,6 +69,32 @@ public sealed class CritterStateGoalsTests
     }
 
     [TestMethod]
+    public void WithTheViolenceFilterOnEveryKillDiesInTheFallDownWhateverItStoredAndTheGoalWalksThatAnimation()
+    {
+        // ARC-UI-1737 (OH2, 0x42BC10): the art node reads the setting when it runs; the goal then steps the fall-down's frames, not the kill's.
+        var world = Arena();
+        world.ViolenceFilter = true;
+        world.Clips[7] = new(3, 10);
+        world.Clips[18] = new(5, 10);
+        var steps = ExecutorRulesTests.Drive(Run(AiExecutorRules.DyingFrame(18)), world, Steamwoven);
+        Assert.AreEqual(DyingAnimationRules.EndMs(3, 100), Time(steps));
+        Assert.AreEqual(AiRunEnd.EndStep, steps[^1].End);
+        CollectionAssert.AreEqual(new[] { (7, 0), (7, 1), (7, 2) }, world.Writes, "the stored animation 18 is never shown");
+        Assert.AreEqual((7, 2), world.Arts[Npc]);
+        Assert.AreEqual(1, world.Finished);
+    }
+
+    [TestMethod]
+    public void WithTheFilterOffTheKillsAnimationStaysAsItWas()
+    {
+        var world = Arena();
+        world.Clips[17] = new(2, 10);
+        var steps = ExecutorRulesTests.Drive(Run(AiExecutorRules.DyingFrame(17)), world, Steamwoven);
+        CollectionAssert.AreEqual(new[] { (17, 0), (17, 1) }, world.Writes, "filter off: nothing changes");
+        Assert.AreEqual(AiRunEnd.EndStep, steps[^1].End);
+    }
+
+    [TestMethod]
     public void DyingWithAnUnreadableHeaderStoresTheHundredMillisecondDelayAndEndsOnItsFirstFrame()
     {
         var world = Arena();
