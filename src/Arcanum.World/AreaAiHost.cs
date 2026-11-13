@@ -265,7 +265,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     // Object flags: destroyed, off, don't draw, invisible, invulnerable; critter flags; spell flags; NPC flags (HostilityCritter's bits).
     private const uint DontDraw = 0x100, ObjectInvisible = 0x200, Invulnerable = 0x400000, OffObject = 0x2;
     private const uint Undead = 0x4, Animal = 0x8, SleepingFlag = 0x1000, NoFleeFlag = 0x8000000, NonLethal = 0x10000000, AnimalEnshrouded = 0x40000000;
-    private const uint NighInvulnerable2 = 0x200, AutoAnimates2 = 0x2;
+    private const uint NighInvulnerable2 = 0x200, AutoAnimates2 = 0x2, DarkSight2 = 0x800;
     private const uint InvisibleSpell = 0x1, DetectsInvisibleSpell = 0x200, StonedSpell = 0x10000, EntangledSpell = 0x1000000, MindControlledSpell = 0x8000000, EnshroudedSpell = 0x20000000;
     private const uint WaitingHereNpc = 0x8, KillOnSightNpc = 0x100, KosOverrideNpc = 0x800, GeneratorNpc = 0x80000, AloofNpc = 0x20000;
     // ARC-WORLD-102: critter flag MECHANICAL and NPC flag CAST_HIGHEST (field 0x118, read in 0x4AE720).
@@ -1274,6 +1274,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         var plan = HostilityRules.DangerUpdate(this, npc, _session.AiRolls, _session.Rules.Combat);
         Trace(npc).Danger = $"{plan.Path} {plan.Request?.ToString() ?? "-"} {plan.Target ?? "-"}";
         if (plan.Path == DangerUpdatePath.Flee) { _session.RunFleeSpellStep(_session.Version, npc, () => false); return; }
+        // ARC-AI-1518 (0x4AB460's end, ST5): a scan that found no target but perceived a concealed PC turns the scanner to face it; a step in progress goes on.
+        if (plan.Scan is { Target: null, TurnToward: { } toward } && TryNpc(npc, out var scanner) && Tile(toward) is { } facing) FaceNpc(scanner, facing, keepStep: true);
         if (plan.Unlocks) _session.UnlockDangerTarget(_session.Version, npc);
         // ARC-AI-1317 (VAG6): the pick's purge of the saved enemy list (the original runs it inside the pick, before the setter).
         if (plan.PurgesEnemies) _session.PurgeDangerEnemies(_session.Version, npc, enemy => Exists(Id(enemy)));
@@ -3104,6 +3106,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         if (id == Pc)
         {
             if (_session.QueryHeroLife() is not { } hero) return null;
+            var concealed = _session.IsConcealed(SessionCombatant.Hero);
             return new HostilityCritter
             {
                 Id = Pc, Kind = HostilityKind.Pc, Dead = hero.Status.IsDead, Unconscious = hero.Status.IsUnconscious,
@@ -3114,6 +3117,9 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
                 // ARC-DEV-358: the spell flags the hero's spells wrote (Invisibility, Sense Hidden, Sanctuary).
                 InvisibleSpell = (SpellFlagsOf(Pc, 0) & InvisibleSpell) != 0, DetectsInvisible = (SpellFlagsOf(Pc, 0) & DetectsInvisibleSpell) != 0,
                 Enshrouded = (SpellFlagsOf(Pc, 0) & EnshroudedSpell) != 0,
+                // ARC-AI-1518 (critter flag 0x1, 0x45EDE0; prowling trained to master): the scan hears a concealed hero at the silent level,
+                // remembers it, and refuses a master prowler it cannot see.
+                Concealed = concealed, MasterProwler = concealed && _session.QueryHeroSkills()?[Skill.Prowling].Training >= SkillTraining.Master,
             };
         }
         if (!_npcs.ContainsKey(id) && CompanionCell(id) is null) return null;
@@ -3268,8 +3274,36 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
             Rotation = GridActorMath.Octant(facing ?? Movers.FacingOf(observer, NeighborDirection.XPlus)),
             Stunned = facts?.Stunned ?? false, Sleeping = facts?.Asleep ?? false, Unconscious = facts?.Unconscious ?? false,
             TargetInvisible = Find(target) is { } seen && (seen.ObjectInvisible || seen.InvisibleSpell), DetectsInvisible = facts?.DetectsInvisible ?? false,
+            ProwlingMargin = ProwlingMargin(observer, target, at, there, facts, map, true),
         };
         return AwarenessRules.See(sight, at, 0, 0, there, map, _session.Rules.Combat);
+    }
+
+    /// <summary>
+    /// ARC-AI-1518 (ledger AW4, AW5): the margin 0..100 by which a concealed hero lowers the observer's
+    /// Perception in one sight or hearing check, from the session's stealth facts (<see cref="GameSessionOwner.HeroProwlingMargin"/>) and
+    /// the observer's own: its conditions, dark sight, the light at the hero, and for sight the line from the observer to the hero (a
+    /// blocker hides the prowler, else the line's cover). 0 for any other target, or a hero that is not concealed. A concealed follower
+    /// is not handled here (it has no margin yet).
+    /// </summary>
+    private int ProwlingMargin(string observer, string target, CellCoord at, CellCoord there, HostilityCritter? facts, ILineOfFireMap<AreaObjectRecord> map, bool seeing)
+    {
+        if (target != Pc || observer == Pc || !_session.IsConcealed(SessionCombatant.Hero)) return 0;
+        var perception = Math.Clamp(facts?.Perception ?? 0, 0, AwarenessRules.MaxPerception);
+        var trace = seeing ? LineOfFireRules.Trace(at, 0, 0, there, map, _session.Rules.Combat) : null;
+        var state = LifeState(observer);
+        var conditions = (facts is { Stunned: true } && Paralysed(observer) ? SkillTargetConditions.Paralyzed : 0)
+            | (facts?.Unconscious == true ? SkillTargetConditions.Unconscious : 0)
+            | (state?.Conditions.HasFlag(LifeConditions.Stunned) == true ? SkillTargetConditions.Stunned : 0)
+            | (facts?.Asleep == true ? SkillTargetConditions.Sleeping : 0);
+        var observerFacts = new SkillDifficultyFacts
+        {
+            TargetConditions = conditions,
+            Light = Math.Clamp(CellLight(there), 0, AttackRules.MaxLightLevel),
+            ObserverDarkSight = ((Fields(observer)?.Critter?.Flags2 ?? 0) & DarkSight2) != 0,
+        };
+        if (trace is not null) observerFacts = AwarenessRules.WithProwlerLine(observerFacts, trace);
+        return _session.HeroProwlingMargin(perception, observerFacts, seeing).Margin;
     }
 
     public AwarenessResult Hear(string observer, string target, Loudness loudness)
@@ -3280,6 +3314,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         {
             Perception = Math.Clamp(facts?.Perception ?? 0, 0, AwarenessRules.MaxPerception),
             Stunned = facts?.Stunned ?? false, Sleeping = facts?.Asleep ?? false, Unconscious = facts?.Unconscious ?? false,
+            ProwlingMargin = ProwlingMargin(observer, target, at, there, facts, map, false),
         };
         return AwarenessRules.Hear(hearing, at, 0, 0, there, loudness, new SoundMap(map), _session.Rules.Combat);
     }

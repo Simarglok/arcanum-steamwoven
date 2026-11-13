@@ -23,7 +23,7 @@ Snapshot schema 35. Requirements: [FR-AI-002](../requirements/story-social-ai.md
 | Join, leave (ST2) | A new or unwaited follower takes the hero's state; one that leaves (dismissed, by wait expiry or by loyalty) loses it. | `JoinParty`, `ForceJoinParty`, `UnwaitParty`, `LeaveParty` |
 | End (ST4) | A dialog's start ends the hero's and that NPC's; an attack on the hero or on an NPC the hero leads (following or waiting) ends the hero's and the follower list's, even when it misses; a waiting victim's stays, and so does an attacker outside the victim's party (the hero attacking its own follower is in it and loses its own). Nothing else ends it (not a map change or a load). | `BeginReactionConversation`, `AttackCritter` |
 | Gait (ST3) | Below expert the stealth walk and no run; an expert the ordinary walk and no run; a master runs while it has fatigue. | `StealthRules.Gait` |
-| Margin (AW4, ST5) | Per observer at each check: `clamp(E − D, 0, 100)` of the shared check's prowling effectiveness (opposed by the observer's perception) and difficulty (sight or hearing); the observer's perception falls by `P × M / 100`. 0 while the hero is not concealed. | `HeroProwlingMargin`, `StealthRules.Margin`, `PerceptionAfterMargin` |
+| Margin (AW4, ST5) | Per observer at each check: `clamp(E − D, 0, 100)` of the shared check's prowling effectiveness (opposed by the observer's perception) and difficulty (sight or hearing); the observer's perception falls by `P × M / 100`. 0 while the hero is not concealed. | `HeroProwlingMargin`, `StealthRules.Margin`, `PerceptionAfterMargin`; the AI host asks it for each sight and hearing check of a hero ([AI awareness](ai-awareness.md), ARC-AI-1518); the session adds the hero's carried light and worn armour's silent-move adjustments |
 
 ## Snapshot schema 35
 
@@ -41,8 +41,8 @@ stand and walk are). Followers keep their ordinary follow gait in the viewer: th
 
 ## Boundaries (NOT READY)
 
-- The observers: no NPC sees or hears in the session yet (the awareness functions of slice I2 take the margin as an input; the target scan and witnesses of slice I4 and later will call `HeroProwlingMargin`); the examine lines (ST6), the
-  AI's target rules (ST5) and script condition 51 are its.
+- The observers: the AI host's sight and hearing checks ask `HeroProwlingMargin` for a concealed hero (ARC-AI-1518, so the target scan, witnesses and the unseen master prowler rule see it); a concealed follower has no margin yet (issue #1560); the examine lines (ST6)
+  and script condition 51 are not wired.
 - Not modelled: the crouch art and its missing-art refusal (ST1), the hotkey's refusal of a stunned or paralysed PC (ST1, one reader only), the followers' stealth gait in the viewer, summoned NPCs created concealed (ST2), the right-click and goal
   54 ends (ST4), NPC attacks on the hero (no NPC attack path yet), the 2 action points per step in a turn-based round and the light
   avoidance of the path search (ST3), the shadow (ST6), the multiplayer records.
