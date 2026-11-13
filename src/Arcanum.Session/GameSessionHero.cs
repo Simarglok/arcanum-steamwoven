@@ -15,6 +15,10 @@ public static class SessionHeroLimits
     public const int MinLevel = 0, MaxLevel = 51;
     public const int MinExperience = 0, MaxExperience = ExperienceRules.MaxExperience;
     public const int MinAlignment = -1000, MaxAlignment = 1000;
+    /// <summary>ARC-MAGIC-1658: the entries of the stored resistance array (normal, fire, electrical, poison, magic).</summary>
+    public const int ResistanceCount = 5;
+    /// <summary>The stored resistances of a hero that has none written.</summary>
+    public static readonly ImmutableArray<int> NoResistances = [0, 0, 0, 0, 0];
     public const int MinUnspentPoints = 0, MaxUnspentPoints = 56;
     /// <summary>ARC-WORLD-069: background ids (<c>rules\backgrnd.mes</c> blocks; 0 none). The installed file has fewer than 100.</summary>
     public const int MinBackground = 0, MaxBackground = 999;
@@ -75,6 +79,8 @@ public sealed record SessionHeroDefinition(int Prototype, CharacterRace Race, Ch
     /// pre-made prototype's name, empty for none (a new character's comes from its window's Accept, NW6). A name the session refuses
     /// (<see cref="SessionHeroLimits.ValidPlayerName"/>) refuses the hero.</summary>
     public IReadOnlyList<byte> PlayerName { get; init; } = [];
+    /// <summary>ARC-MAGIC-1658: the PC's stored age (base stat 25, ledger CS5): a pre-made prototype's; null for none read. A negative one is refused.</summary>
+    public int? Age { get; init; }
 }
 
 /// <summary>
@@ -88,8 +94,10 @@ public sealed class SessionHeroState
     internal SessionHeroState(int prototype, CharacterRace race, CharacterGender gender, int[] stats, int level, int unspentPoints,
         int alignment, StatEffectDefinition? raceEffect, StatEffectDefinition? genderEffect, int experience = 0,
         SessionHeroAdvancement? advancement = null, ImmutableArray<SessionInnateSkillChange> innateSkills = default, FateState fate = default,
-        int background = 0, int backgroundDescription = 0, ImmutableArray<byte> playerName = default, int portrait = 0)
+        int background = 0, int backgroundDescription = 0, ImmutableArray<byte> playerName = default, int portrait = 0,
+        ImmutableArray<int> resistances = default, int? age = null)
     {
+        Resistances = resistances.IsDefault ? SessionHeroLimits.NoResistances : resistances; Age = age;
         Background = background; BackgroundDescription = backgroundDescription;
         PlayerName = playerName.IsDefault ? [] : playerName; Portrait = portrait;
         Prototype = prototype; Race = race; Gender = gender; Stats = Array.AsReadOnly(stats); Level = level;
@@ -127,30 +135,48 @@ public sealed class SessionHeroState
     public ImmutableArray<byte> PlayerName { get; }
     /// <summary>ARC-UI-033: the PC's portrait id (the original's field 0xE7, ledger PO9); 0 for none.</summary>
     public int Portrait { get; }
+    /// <summary>ARC-MAGIC-1658: the PC's stored resistance array (the original's field 31, <c>obj_f_resistance_idx</c>): normal, fire, electrical, poison, magic, the base the worn armour and the effects are laid over.
+    /// Zero for a new hero (a PC prototype stores none) and written by the TraitIdx component alone, unclamped as the indexed write 0x407340 stores it. Always <see cref="SessionHeroLimits.ResistanceCount"/> entries.</summary>
+    public ImmutableArray<int> Resistances { get; }
+    /// <summary>ARC-MAGIC-1658: the PC's stored age (base stat 25, which only the character window shows): a pre-made hero's from its prototype; null for a hero whose age the session has not read (a save of schema 98 or before: the
+    /// TraitIdx component adds to a stored value, so it is not ready for it).</summary>
+    public int? Age { get; }
 
     /// <summary>The same hero with a new level, experience and unspent points (an experience award).</summary>
     internal SessionHeroState WithExperience(int level, int experience, int unspentPoints) =>
-        new(Prototype, Race, Gender, [.. Stats], level, unspentPoints, Alignment, RaceEffect, GenderEffect, experience, Advancement, InnateSkills, Fate, Background, BackgroundDescription, PlayerName, Portrait);
+        new(Prototype, Race, Gender, [.. Stats], level, unspentPoints, Alignment, RaceEffect, GenderEffect, experience, Advancement, InnateSkills, Fate, Background, BackgroundDescription, PlayerName, Portrait, Resistances, Age);
 
     /// <summary>The same hero with new stored stats, level, experience, unspent points and advancement (a scheme's purchases).</summary>
     internal SessionHeroState With(int[] stats, int level, int experience, int unspentPoints, SessionHeroAdvancement advancement) =>
-        new(Prototype, Race, Gender, stats, level, unspentPoints, Alignment, RaceEffect, GenderEffect, experience, advancement, InnateSkills, Fate, Background, BackgroundDescription, PlayerName, Portrait);
+        new(Prototype, Race, Gender, stats, level, unspentPoints, Alignment, RaceEffect, GenderEffect, experience, advancement, InnateSkills, Fate, Background, BackgroundDescription, PlayerName, Portrait, Resistances, Age);
 
     /// <summary>The same hero with a new stored alignment (ARC-WORLD-067).</summary>
     internal SessionHeroState WithAlignment(int alignment) =>
-        new(Prototype, Race, Gender, [.. Stats], Level, UnspentPoints, alignment, RaceEffect, GenderEffect, Experience, Advancement, InnateSkills, Fate, Background, BackgroundDescription, PlayerName, Portrait);
+        new(Prototype, Race, Gender, [.. Stats], Level, UnspentPoints, alignment, RaceEffect, GenderEffect, Experience, Advancement, InnateSkills, Fate, Background, BackgroundDescription, PlayerName, Portrait, Resistances, Age);
 
     /// <summary>The same hero with new fate points and armed fates (ARC-WORLD-054).</summary>
     internal SessionHeroState WithFate(FateState fate) =>
-        new(Prototype, Race, Gender, [.. Stats], Level, UnspentPoints, Alignment, RaceEffect, GenderEffect, Experience, Advancement, InnateSkills, fate, Background, BackgroundDescription, PlayerName, Portrait);
+        new(Prototype, Race, Gender, [.. Stats], Level, UnspentPoints, Alignment, RaceEffect, GenderEffect, Experience, Advancement, InnateSkills, fate, Background, BackgroundDescription, PlayerName, Portrait, Resistances, Age);
 
     /// <summary>The same hero with a new background and description number (ARC-WORLD-097).</summary>
     internal SessionHeroState WithBackground(int background, int description) =>
-        new(Prototype, Race, Gender, [.. Stats], Level, UnspentPoints, Alignment, RaceEffect, GenderEffect, Experience, Advancement, InnateSkills, Fate, background, description, PlayerName, Portrait);
+        new(Prototype, Race, Gender, [.. Stats], Level, UnspentPoints, Alignment, RaceEffect, GenderEffect, Experience, Advancement, InnateSkills, Fate, background, description, PlayerName, Portrait, Resistances, Age);
+
+    /// <summary>The same hero with a new stored resistance array (ARC-MAGIC-1658).</summary>
+    internal SessionHeroState WithResistances(ImmutableArray<int> resistances) =>
+        new(Prototype, Race, Gender, [.. Stats], Level, UnspentPoints, Alignment, RaceEffect, GenderEffect, Experience, Advancement, InnateSkills, Fate, Background, BackgroundDescription, PlayerName, Portrait, resistances, Age);
+
+    /// <summary>The same hero with a new stored age (ARC-MAGIC-1658).</summary>
+    internal SessionHeroState WithAge(int age) =>
+        new(Prototype, Race, Gender, [.. Stats], Level, UnspentPoints, Alignment, RaceEffect, GenderEffect, Experience, Advancement, InnateSkills, Fate, Background, BackgroundDescription, PlayerName, Portrait, Resistances, age);
+
+    /// <summary>The same hero with another race, gender, their innate stat effects and their innate skill changes (ARC-MAGIC-1658: the race and gender cases of the stat setter).</summary>
+    internal SessionHeroState WithInnate(CharacterRace race, CharacterGender gender, StatEffectDefinition? raceEffect, StatEffectDefinition? genderEffect, ImmutableArray<SessionInnateSkillChange> innateSkills) =>
+        new(Prototype, race, gender, [.. Stats], Level, UnspentPoints, Alignment, raceEffect, genderEffect, Experience, Advancement, innateSkills, Fate, Background, BackgroundDescription, PlayerName, Portrait, Resistances, Age);
 
     /// <summary>The same hero with a new player name (ARC-UI-033).</summary>
     internal SessionHeroState WithPlayerName(ImmutableArray<byte> name) =>
-        new(Prototype, Race, Gender, [.. Stats], Level, UnspentPoints, Alignment, RaceEffect, GenderEffect, Experience, Advancement, InnateSkills, Fate, Background, BackgroundDescription, name, Portrait);
+        new(Prototype, Race, Gender, [.. Stats], Level, UnspentPoints, Alignment, RaceEffect, GenderEffect, Experience, Advancement, InnateSkills, Fate, Background, BackgroundDescription, name, Portrait, Resistances, Age);
 }
 
 /// <summary>The hero domain of one owner: its saved fields and the character owner built from them.</summary>
@@ -168,7 +194,7 @@ internal sealed class HeroDomain
 
     /// <summary>Replaced by <see cref="Apply"/> (an experience award, ARC-WORLD-030, or a scheme's purchases, ARC-WORLD-036).</summary>
     internal SessionHeroState State { get; private set; }
-    internal CharacterStatsOwner Stats { get; }
+    internal CharacterStatsOwner Stats { get; private set; }
 
     /// <summary>ARC-DEV-266 (MIG8 leftover, SA14): the PC's flag elements and variables, fields 272 and 273 of the PC object, kept on the hero
     /// that owns them (a session without a hero has none) and saved with it (the <c>hero</c> section's <c>scripts</c>, schema 79). Sparse: a
@@ -186,6 +212,18 @@ internal sealed class HeroDomain
                 throw new InvalidOperationException("Hero stat refused after admission.");
         State = next;
     }
+
+    /// <summary>ARC-MAGIC-1658: takes a new state whose race, gender or innate effects changed together with the character owner built from it (<see cref="BuildFrom"/>); the caller re-applies the durable effects to the owner.</summary>
+    internal void Replace(HeroDomain next)
+    {
+        State = next.State;
+        Stats = next.Stats;
+    }
+
+    /// <summary>The hero built from a state's own fields (null as <see cref="Build"/> is).</summary>
+    internal static HeroDomain? BuildFrom(SessionHeroState state) =>
+        Build(state.Prototype, state.Race, state.Gender, state.Stats, state.Level, state.UnspentPoints, state.Alignment, state.RaceEffect, state.GenderEffect, state.Experience,
+            state.Advancement, state.InnateSkills, state.Fate, state.Background, state.BackgroundDescription, state.PlayerName, state.Portrait, state.Resistances, state.Age);
 
     internal static string KitEntity(int index) => KitPrefix + (index + 1).ToString(System.Globalization.CultureInfo.InvariantCulture);
 
@@ -205,8 +243,9 @@ internal sealed class HeroDomain
     internal static HeroDomain? Build(int prototype, CharacterRace race, CharacterGender gender, IReadOnlyList<int>? stats,
         int level, int unspentPoints, int alignment, StatEffectDefinition? raceEffect, StatEffectDefinition? genderEffect, int experience,
         SessionHeroAdvancement? advancement, IReadOnlyList<SessionInnateSkillChange>? innateSkills, FateState fate = default, int background = 0,
-        int backgroundDescription = 0, IReadOnlyList<byte>? playerName = null, int portrait = 0)
+        int backgroundDescription = 0, IReadOnlyList<byte>? playerName = null, int portrait = 0, ImmutableArray<int> resistances = default, int? age = null)
     {
+        if (!resistances.IsDefault && resistances.Length != SessionHeroLimits.ResistanceCount || age < 0) return null;
         if (background is < SessionHeroLimits.MinBackground or > SessionHeroLimits.MaxBackground) return null;
         if (portrait < 0 || !SessionHeroLimits.ValidPlayerName(playerName ?? [])) return null;
         advancement ??= SessionHeroAdvancement.None;
@@ -234,7 +273,7 @@ internal sealed class HeroDomain
         if (created.Owner is not { } owner) return null;
         for (var index = 0; index < values.Length; index++)
             if (owner.SetBase(SessionHeroLimits.StoredStats[index], values[index]).Disposition == CharacterStatsDisposition.Rejected) return null;
-        return new(new(prototype, race, gender, values, level, unspentPoints, alignment, raceEffect, genderEffect, experience, advancement, skills, fate, background, backgroundDescription, [.. playerName ?? []], portrait), owner);
+        return new(new(prototype, race, gender, values, level, unspentPoints, alignment, raceEffect, genderEffect, experience, advancement, skills, fate, background, backgroundDescription, [.. playerName ?? []], portrait, resistances, age), owner);
     }
 
     /// <summary>The DLG reply-eligibility facts of this hero (see <see cref="GameSessionOwner.QueryHeroDialogFacts"/>).</summary>

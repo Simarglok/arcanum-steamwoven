@@ -650,6 +650,8 @@ public static class AreaStartingHero
             // ARC-UI-069: the prototype's player name (field 0x10E, MW21), the name the browser shows and the save info keeps; one the
             // session would refuse (longer than its bound, never installed) starts empty rather than refusing the hero.
             PlayerName = SessionHeroLimits.ValidPlayerName(hero.PlayerName) ? hero.PlayerName : [],
+            // ARC-MAGIC-1658: the prototype's age (stat 25), which the TraitIdx component adds to; a negative one (never installed) is not kept.
+            Age = hero.Age >= 0 ? hero.Age : null,
         };
     }
 

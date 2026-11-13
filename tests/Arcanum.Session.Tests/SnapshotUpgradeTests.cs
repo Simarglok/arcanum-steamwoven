@@ -9,7 +9,8 @@ namespace Arcanum.Session.Tests;
 [TestClass]
 public sealed class SnapshotUpgradeTests
 {
-    private const string Current = "\"schemaVersion\":98,\"world\"";
+    private const string Current = "\"schemaVersion\":99,\"world\"";
+    private const string Current98 = "\"schemaVersion\":98,\"world\"";
     private const string Current97 = "\"schemaVersion\":97,\"world\"";
     private const string Current96 = "\"schemaVersion\":96,\"world\"";
     private const string Current95 = "\"schemaVersion\":95,\"world\"";
@@ -279,9 +280,19 @@ public sealed class SnapshotUpgradeTests
     // ARC-UI-1542: the schema 97 text of a schema 98 one with no lit state recorded: the text loses the null bar lights section. A text with a recorded state has no older literal: no build before saved one.
     internal static string Schema97(string text)
     {
-        StringAssert.Contains(text, Current);
+        text = Schema98(text);
+        StringAssert.Contains(text, Current98);
         Assert.AreEqual(1, text.Split(NoBarLights).Length - 1, "the bar lights section is a session's with none recorded");
-        return text.Replace(NoBarLights, "").Replace(Current, Current97);
+        return text.Replace(NoBarLights, "").Replace(Current98, Current97);
+    }
+
+    // ARC-MAGIC-1658: the schema 98 text of a schema 99 one whose hero (if any) has no resistance written and no age read: the hero section loses its two closing keys. A text with a written resistance or a read age has no older literal:
+    // no build before kept either.
+    internal static string Schema98(string text)
+    {
+        StringAssert.Contains(text, Current);
+        Assert.IsTrue(text.Contains("\"hero\":null") || text.Split(NoHeroStoredKeys).Length == 2, "the hero holds none written");
+        return text.Replace(NoHeroStoredKeys, "").Replace(Current, Current98);
     }
 
     internal static string Schema95(string text)
@@ -703,6 +714,6 @@ public sealed class SnapshotUpgradeTests
         Fails(With("\"format\":\"arcanum-steamwoven-session\"", "\"format\":\"other-save\""), SnapshotDecodeFailure.WrongFormat, "$.format");
         // Schemas older than the oldest readable one, and newer ones, stay refused.
         Fails(GoldenJson.Replace(Current, "\"schemaVersion\":55,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
-        Fails(GoldenJson.Replace(Current, "\"schemaVersion\":99,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
+        Fails(GoldenJson.Replace(Current, "\"schemaVersion\":100,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
     }
 }

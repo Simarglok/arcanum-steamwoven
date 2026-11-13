@@ -386,7 +386,7 @@ public sealed class EquipmentStateTests
         Fails("\"coverage\":\"Ring\",\"sizes\":0,\"maleOnly\":false,\"femaleOnly\":false,\"ac\":2", "\"coverage\":\"Ring\",\"sizes\":0,\"maleOnly\":false,\"femaleOnly\":false,\"ac\":1001",
             SnapshotDecodeFailure.OutOfRange, "$.equipment[1].item.armor.ac");
         Fails("\"light\":0", "\"light\":16", SnapshotDecodeFailure.OutOfRange, "$.equipment[0].item.light");
-        Fails("\"resistances\":[0,0,0,0,0]", "\"resistances\":[0,0,0,0]", SnapshotDecodeFailure.OutOfRange, "$.equipment[0].item.armor.resistances");
+        Fails("\"resistances\":[0,0,0,0,0],\"magicResistances\"", "\"resistances\":[0,0,0,0],\"magicResistances\"", SnapshotDecodeFailure.OutOfRange, "$.equipment[0].item.armor.resistances");
         Fails("\"hp\":0", "\"hp\":-1", SnapshotDecodeFailure.OutOfRange, "$.equipment[0].item.hp");
     }
 
