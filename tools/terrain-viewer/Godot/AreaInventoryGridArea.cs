@@ -28,9 +28,13 @@ public partial class AreaInventoryGridArea : Control
     private float _scale = 1;
     private Func<float>? _deviceScale;
     private Vector2 _pointer;
+    // ARC-UI-1740: an item is held over the bet box now, and what the gate said as it entered (art 344 passes, 346 refuses).
+    private bool _overGamble, _gambleGate;
     public event Action<AreaInventoryDrop>? DropRequested;
     /// <summary>ARC-UI-025: a right release with nothing held on an item of the doll or the grid (ARC-UI-032: the release, IW5).</summary>
     public event Action<AreaInventoryHeld>? UseRequested;
+    /// <summary>ARC-UI-1740 (BW3): an item held over the barter window's bet box entered it; the host runs the bet gate (0x579840) and answers with <see cref="SetGambleGate"/>.</summary>
+    public event Action<AreaInventoryHeld>? GambleEntered;
     /// <summary>ARC-MAGIC-1128: while <see cref="TargetPicking"/>, a left press on an item names it as the target (the item under the pointer, 0x575FA0 in mode 1, ledger IW44); nothing is lifted.</summary>
     public event Action<AreaInventoryHeld>? ItemPicked;
     /// <summary>ARC-MAGIC-1128: a right release while <see cref="TargetPicking"/> cancels the cursor (the spell cursor's own cancel, SU9).</summary>
@@ -239,6 +243,7 @@ public partial class AreaInventoryGridArea : Control
         if (@event is InputEventMouseMotion motion)
         {
             _pointer = motion.Position; _movedAt = Time.GetTicksMsec(); _stillReported = false;
+            TrackGamble();
             if (Held is not null) QueueRedraw();
             return;
         }
@@ -453,12 +458,34 @@ public partial class AreaInventoryGridArea : Control
         }
         if (Held is not { } held) return;
         Held = null;
+        _overGamble = false;
         var drop = BarterLook ? AreaBarterArtLayout.Release(held, BarterHit(frame)) : LootLook ? AreaLootArtLayout.Release(held, LootHit(frame), Mode)
             : AreaInventoryDrag.Release(held, AreaInventoryDrag.HitTest(frame.X, frame.Y));
         QueueRedraw();
         // The app re-renders the window, which may put an occupant on the cursor: after this input event returns.
         Callable.From(() => DropRequested?.Invoke(drop)).CallDeferred();
     }
+
+    /// <summary>
+    /// ARC-UI-1740 (BW3, 0x573E67..0x573F1C): the pointer moved with an item held: entering the bet box asks the host's gate once (<see cref="GambleEntered"/>), which
+    /// sets the art 344 or 346 through <see cref="SetGambleGate"/>; moving out sets the resting art 345 again.
+    /// </summary>
+    private void TrackGamble() => TrackGambleAt(_pointer / _scale);
+
+    internal void TrackGambleAt(Vector2 frame)
+    {
+        var over = BarterLook && Held is not null && BarterHit(frame).Gamble;
+        if (over == _overGamble) return;
+        _overGamble = over;
+        if (over) { _gambleGate = false; GambleEntered?.Invoke(Held!); }
+        QueueRedraw();
+    }
+
+    /// <summary>ARC-UI-1740: the host's answer to <see cref="GambleEntered"/>: the gate passed (art 344) or refused the item (art 346).</summary>
+    internal void SetGambleGate(bool passes) { _gambleGate = passes; QueueRedraw(); }
+
+    /// <summary>ARC-UI-1740: the bet box's art number now (for the self-test): 345 at rest, 344 or 346 with an item held over it.</summary>
+    internal int GambleArtNow => AreaBarterArtLayout.GambleBoxArt(_overGamble && Held is not null, _gambleGate);
 
     /// <summary>ARC-DEV-306: the screen point of a frame point (for the native smoke, which pushes real pointer events).</summary>
     internal Vector2 ScreenPointForSelfTest(Vector2 frame) => GetGlobalTransformWithCanvas() * (frame * _scale);
@@ -705,7 +732,7 @@ public partial class AreaInventoryGridArea : Control
             var (x, y) = AreaInventoryArtLayout.Box(icon);
             Art(barter is not null ? AreaBarterArtLayout.BoxArt(icon, Held, over == icon) : AreaLootArtLayout.BoxArt(icon, Held, over == icon), x, y);
         }
-        if (barter is not null) Art(AreaBarterArtLayout.GambleArt, AreaBarterArtLayout.GambleBox.X, AreaBarterArtLayout.GambleBox.Y);
+        if (barter is not null) Art(GambleArtNow, AreaBarterArtLayout.GambleBox.X, AreaBarterArtLayout.GambleBox.Y);
         foreach (var item in view.Grid)
         {
             if (item.Entity == Held?.Entity) continue;

@@ -44,7 +44,7 @@ public static partial class GameSessionSnapshotCodec
     /// it at the policy maxima with the longest keys, and saving it is then a typed <c>TooLarge</c>.</summary>
     public const int MaxEncodedCharacters = 96 * 1024 * 1024;
 
-    private static readonly string[] RootFields = ["format", "schemaVersion", "world", "module", "revision", "clock", "flags", "actor", "maps", "story", "party", "hero", "inventory", "objects", "equipment", "durability", "schematics", "effects", "experience", "advancement", "random", "life", "reactions", "combat", "combatMode", "concealment", "danger", "sound", "events", "hotkeys", "scripts", "residency", "goals", "spells", "newspaper", "generators", "flights", "encounters", "barLights", "lighting"];
+    private static readonly string[] RootFields = ["format", "schemaVersion", "world", "module", "revision", "clock", "flags", "actor", "maps", "story", "party", "hero", "inventory", "objects", "equipment", "durability", "schematics", "effects", "experience", "advancement", "random", "life", "reactions", "combat", "combatMode", "concealment", "danger", "sound", "events", "hotkeys", "scripts", "residency", "goals", "spells", "newspaper", "generators", "flights", "encounters", "barLights", "gamblingRoll", "lighting"];
     private static readonly string[] ClockFields = ["schemaVersion", "policyId", "sourceRevision", "sourceDataSha256",
         "startupResourceSha256", "startYear", "startHour", "timestampMs", "paused", "pauseReason", "revision", "realMs", "animationMs"];
     private static readonly string[] FlagsFields = ["revision", "entries"];
@@ -1072,6 +1072,10 @@ public static partial class GameSessionSnapshotCodec
             }
             else w.WriteNull("barLights");
 
+            // ARC-UI-1740 (schema 101): the skill module's pre-thrown gambling roll, or null before the first one.
+            if (snapshot.GamblingRoll is { } gamblingRoll) w.WriteNumber("gamblingRoll", gamblingRoll);
+            else w.WriteNull("gamblingRoll");
+
             if (snapshot.Lighting is { } lighting)
             {
                 w.WriteStartObject("lighting");
@@ -1279,7 +1283,7 @@ public static partial class GameSessionSnapshotCodec
         return new(GameSessionSnapshot.CurrentSchemaVersion, identity, revision,
             Clock(f["clock"]), Flags(f["flags"]), Actor(f["actor"]), Maps(f["maps"]), Story(f["story"]), Party(f["party"]),
             Hero(f["hero"]), Inventory(f["inventory"]), Equipment(f["equipment"]), Durability(f["durability"]), Schematics(f["schematics"]), Effects(f["effects"]), Experience(f["experience"]), Advancement(f["advancement"]), Random(f["random"]), Life(f["life"]), Reactions(f["reactions"]), Combat(f["combat"]), CombatMode(f["combatMode"]), Concealment(f["concealment"]), Danger(f["danger"]), Events(f["events"]), Lighting(f["lighting"]), Sound(f["sound"]),
-            Hotkeys(f["hotkeys"]), Objects(f["objects"]), Scripts(f["scripts"], f["hero"]), Residency(f["residency"]), Goals(f["goals"]), Spells(f["spells"]), Newspaper(f["newspaper"]), Flights(f["flights"]), Generators(f["generators"]), Encounters(f["encounters"]), BarLights(f["barLights"]));
+            Hotkeys(f["hotkeys"]), Objects(f["objects"]), Scripts(f["scripts"], f["hero"]), Residency(f["residency"]), Goals(f["goals"]), Spells(f["spells"]), Newspaper(f["newspaper"]), Flights(f["flights"]), Generators(f["generators"]), Encounters(f["encounters"]), BarLights(f["barLights"]), GamblingRoll(f["gamblingRoll"]));
     }
 
     // Shapes and ordinal order; the values' ranges and the budget are Restore's.
@@ -1534,6 +1538,10 @@ public static partial class GameSessionSnapshotCodec
             if (Bool(rows[slot], $"{p}.lit[{slot}]")) mask |= 1 << slot;
         return new(mask, Int(f["mapMode"], p + ".mapMode", 2, 3));
     }
+
+    // Shape and range: 1..100, or null for a save of a session that threw no roll yet.
+    private static int? GamblingRoll(JsonElement element) =>
+        element.ValueKind == JsonValueKind.Null ? null : Int(element, "$.gamblingRoll", 1, 100);
 
     private static SessionClockState Clock(JsonElement element)
     {

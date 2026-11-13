@@ -34,6 +34,8 @@ public partial class AreaBarterPanel : CanvasLayer
     public event Action<string>? BuyRequested;
     /// <summary>ARC-UI-064: an item held in the original look was released (a buy, a sale, or put back).</summary>
     public event Action<AreaInventoryDrop>? DropRequested;
+    /// <summary>ARC-UI-1740: an item held over the bet box entered it (the host runs the bet gate and answers with <see cref="SetGambleGate"/>).</summary>
+    public event Action<AreaInventoryHeld>? GambleEntered;
     /// <summary>ARC-UI-064: the pointer rested on another item of the original look (its entity) or on none (null).</summary>
     public event Action<string?>? PointerStill;
     /// <summary>ARC-DEV-339 (B54): the arrange button (art 340, IW30) of the original look was pressed and released.</summary>
@@ -121,6 +123,7 @@ public partial class AreaBarterPanel : CanvasLayer
         _area = new AreaInventoryGridArea { Name = "BarterFrame", Visible = false };
         _area.DropRequested += drop => DropRequested?.Invoke(drop);
         _area.PointerStill += item => PointerStill?.Invoke(item);
+        _area.GambleEntered += held => GambleEntered?.Invoke(held);
         _area.ArrangeRequested += () => ArrangeRequested?.Invoke();
         _area.SoundRequested += id => SoundRequested?.Invoke(id);
         _area.CycleRequested += direction => CycleRequested?.Invoke(direction);
@@ -197,6 +200,9 @@ public partial class AreaBarterPanel : CanvasLayer
         _lookToggle.Text = art ? "Diagnostic view" : "Original look";
         _panel.AddThemeStyleboxOverride("panel", art ? _originalStyle : _diagnosticStyle);
     }
+
+    /// <summary>ARC-UI-1740: the bet gate's answer for the item held over the bet box: the box shows its "on" art (passes) or "refused" art.</summary>
+    public void SetGambleGate(bool passes) => _area.SetGambleGate(passes);
 
     /// <summary>ARC-UI-064: puts <paramref name="quote"/> on the original look's quote line (and the diagnostic message) without rebuilding
     /// the window.</summary>
