@@ -143,10 +143,10 @@ public partial class TerrainViewerApp
                 && place.X + place.Width / 2 == AreaMenuArtLayout.OptionsButtonX && place.Width > 0 && place.Height == 33).All(ok => ok),
                 "the page labels stand centred at (130, 221 + 40 i): " + string.Join(" ", places));
             Require(art.HoveredForSelfTest == -1, "no page label is lit while the focus is on the first control: " + art.HoveredForSelfTest);
-            Require(Controls().SequenceEqual(["Difficulty: Moderate", "Violence Filter: Off", "Default Combat Mode: Real Time", "Auto Attack: On", "Auto Switch Weapons: Off", "Always Run: Off", "Rules: Steamwoven"]), "Game page: " + string.Join("|", Controls()));
-            // ARC-UI-061: the shown controls take the first slots: four in the first column, the fifth at the second's top (as drawn).
+            Require(Controls().SequenceEqual(["Difficulty: Moderate", "Violence Filter: Off", "Default Combat Mode: Real Time", "Auto Attack: On", "Auto Switch Weapons: Off", "Always Run: Off", "Follower Skills: On", "Rules: Steamwoven"]), "Game page: " + string.Join("|", Controls()));
+            // ARC-UI-061: the shown controls take the first slots: four in the first column, the fifth to the eighth in the second (as drawn).
             await Frames(1);
-            Require(art.ControlPlacesForSelfTest.SequenceEqual(Enumerable.Range(0, 7).Select(AreaMenuArtLayout.OptionsSlot)),
+            Require(art.ControlPlacesForSelfTest.SequenceEqual(Enumerable.Range(0, 8).Select(AreaMenuArtLayout.OptionsSlot)),
                 "the Game page's controls stand in their art at the first slots: " + string.Join(" ", art.ControlPlacesForSelfTest));
             if (System.Environment.GetEnvironmentVariable("ARC_AREA_OPTIONS_CAPTURE") is { Length: > 0 } gameCapture)
             {
@@ -155,8 +155,14 @@ public partial class TerrainViewerApp
                 Require(image.SavePng(path) == Error.Ok, "the Game page's capture saved to " + path);
             }
             // ARC-UI-014: Original chosen in the main menu is the rule mode the new game begins in.
+            panel.ChangeForSelfTest(7, 1);
+            Require(_ruleMode == RuleMode.Original && Controls()[7] == "Rules: Original", "Original chosen before the game");
+            // ARC-COMBAT-1777 (OH4): Follower Skills is the Game page's seventh line, on until written; it changes at once and is saved in the settings file.
+            Require(_gameSettings.FollowerSkills && Controls()[6] == "Follower Skills: On", "follower skills starts on: " + Controls()[6]);
+            panel.ChangeForSelfTest(6, -1);
+            Require(!_gameSettings.FollowerSkills && Controls()[6] == "Follower Skills: Off" && _gameSettingsStore is { Persistent: true } && !_gameSettingsStore.Load().FollowerSkills, "the Follower Skills line turned the setting off and saved it: " + Controls()[6]);
             panel.ChangeForSelfTest(6, 1);
-            Require(_ruleMode == RuleMode.Original && Controls()[6] == "Rules: Original", "Original chosen before the game");
+            Require(_gameSettings.FollowerSkills && Controls()[6] == "Follower Skills: On" && _gameSettingsStore?.Load().FollowerSkills == true, "and on again: " + Controls()[6]);
             // ARC-UI-1737 (OH2): the Violence Filter is the Game page's second line; it is saved in the smoke's own settings file at once.
             panel.ChangeForSelfTest(1, 1);
             Require(_gameSettings.ViolenceFilter && Controls()[1] == "Violence Filter: On" && _gameSettingsStore is { Persistent: true } && _gameSettingsStore.Load().ViolenceFilter,
@@ -334,8 +340,8 @@ public partial class TerrainViewerApp
             Require(_turnBasedSetting && Controls()[2] == "Default Combat Mode: Turn Based", "the hero's turn-based switch took it: " + _mainMenu!.Notice + " " + _turnBasedNotice);
             panel.ChangeForSelfTest(2, 1);
             Require(!_turnBasedSetting && Controls()[2] == "Default Combat Mode: Real Time", "back to real time");
-            panel.ChangeForSelfTest(6, -1);
-            Require(_areaSession!.Rules.Mode == RuleMode.Steamwoven && Controls()[6] == "Rules: Steamwoven", "Steamwoven again in play");
+            panel.ChangeForSelfTest(7, -1);
+            Require(_areaSession!.Rules.Mode == RuleMode.Steamwoven && Controls()[7] == "Rules: Steamwoven", "Steamwoven again in play");
             Key(Godot.Key.O);
             Require(!MainMenuOpen && _mainMenu is null, "the O key closed the menu from play");
             await Frames(3);

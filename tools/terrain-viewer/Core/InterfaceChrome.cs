@@ -1,4 +1,5 @@
 using Arcanum.Data.Hd;
+using Arcanum.Presentation.Hud;
 using Arcanum.World;
 
 namespace Arcanum.TerrainViewer.Core;
@@ -134,6 +135,34 @@ public static class InterfaceChromeRecipes
             OriginX: AreaLogbookArtLayout.PreviousCorner.X - AreaLogbookArtLayout.BookCorner.X, OriginY: AreaLogbookArtLayout.PreviousCorner.Y - AreaLogbookArtLayout.BookCorner.Y);
         yield return new ChromeRecipe("pageturn_r.art", ChromeKind.Panel, ChromeMaterial.Parchment, ChromeSides.None, [new ChromeGlyph(0, 0, 18, 22)], Holes: ChromeHoles.None,
             OriginX: AreaLogbookArtLayout.NextCorner.X - AreaLogbookArtLayout.BookCorner.X, OriginY: AreaLogbookArtLayout.NextCorner.Y - AreaLogbookArtLayout.BookCorner.Y);
+    }
+
+    /// <summary>ARC-UI-1200: the frames of the message window and its two other panes and of the Fate and Sleep windows (Legacy pixels of each art; the layouts are those of
+    /// <see cref="AreaMessageLayout"/>, <c>SpellPaneRules</c>, <c>SkillPaneRules</c>, <see cref="AreaFateLayout"/> and <see cref="AreaSleepLayout"/>). All of them are <see cref="ChromeMaterial.Slate"/> with a
+    /// rim on every side, like the character sheet's pages: the bottom strip's mode panes (<c>DialogueWindow</c> 354, the message text area; <c>spell_ro</c> 8; <c>Skill_Rot</c> 274; 410 × 107 at (196, 492))
+    /// are a sunk text plate (with a rivet at each end where the original has a brass plaque, the spell and skill panes'), the spell pane's five wells and the skill pane's four are sunk pits under the icon
+    /// buttons, and the spell pane's sixteen domes under the college buttons stay pictures (a college the hero has no rank in shows its dome). The Fate (<c>Fate_Base</c> 292) and Sleep (<c>Sleep_Base</c> 565)
+    /// windows have a sunk bar behind every second row of their lines and buttons; the twelve button holes of the Fate window stay holes (the buttons are drawn over them). The push button
+    /// <c>FateBut</c> 293 of both windows is the generic button.</summary>
+    private static IEnumerable<ChromeRecipe> PaneRecipes()
+    {
+        yield return new ChromeRecipe("DialogueWindow.ART", ChromeKind.Panel, ChromeMaterial.Slate, ChromeSides.All, [new ChromeSunk(8, 6, 394, 95, ChromeMaterial.Pit)], Holes: ChromeHoles.None);
+        List<ChromePart> spell = [];
+        for (var college = 0; college < SpellPaneRules.Colleges; college++) spell.Add(new ChromeKeep(SpellPaneRules.CollegeButtonX[college] - SpellPaneRules.BackgroundX + 1, SpellPaneRules.CollegeButtonY - SpellPaneRules.BackgroundY + 1, 23, 23, true)); // a dome lies one pixel in from its 24 x 24 button's corner
+        foreach (var x in SpellPaneRules.SpellButtonX) spell.Add(new ChromeSunk(x - SpellPaneRules.BackgroundX - 2, SpellPaneRules.SpellButtonY - SpellPaneRules.BackgroundY - 2, 36, 36, ChromeMaterial.Pit)); // a 32 x 32 icon button in a 36 x 36 well
+        spell.AddRange([new ChromeSunk(10, 80, 391, 22, ChromeMaterial.Pit), new ChromeRivet(6.5, 91, 2.5), new ChromeRivet(404.5, 91, 2.5)]);
+        yield return new ChromeRecipe("spell_ro.art", ChromeKind.Panel, ChromeMaterial.Slate, ChromeSides.All, spell, Holes: ChromeHoles.None);
+        List<ChromePart> skill = [];
+        foreach (var x in SkillPaneRules.ButtonX) skill.Add(new ChromeSunk(x - SkillPaneRules.BackgroundX - 6, SkillPaneRules.ButtonY - SkillPaneRules.BackgroundY - 6, 43, 44, ChromeMaterial.Pit)); // a 32 x 32 button in a 43 x 44 well
+        skill.AddRange([new ChromeSunk(10, 73, 391, 22, ChromeMaterial.Pit), new ChromeRivet(6.5, 84, 2.5), new ChromeRivet(404.5, 84, 2.5)]);
+        yield return new ChromeRecipe("Skill_Rot.ART", ChromeKind.Panel, ChromeMaterial.Slate, ChromeSides.All, skill, Holes: ChromeHoles.None);
+        List<ChromePart> fate = [];
+        for (var bar = 0; bar < 6; bar++) fate.Add(new ChromeSunk(6, 19 + 36 * bar, 238, 18, ChromeMaterial.Pit));
+        yield return new ChromeRecipe("Fate_Base.ART", ChromeKind.Panel, ChromeMaterial.Slate, ChromeSides.All, fate, Holes: ChromeHoles.None);
+        List<ChromePart> sleep = [];
+        for (var bar = 0; bar < 4; bar++) sleep.Add(new ChromeSunk(6, 19 + 36 * bar, 216, 18, ChromeMaterial.Pit));
+        yield return new ChromeRecipe("Sleep_Base.ART", ChromeKind.Panel, ChromeMaterial.Slate, ChromeSides.All, sleep, Holes: ChromeHoles.None);
+        yield return new ChromeRecipe("FateBut.ART", ChromeKind.Button, ChromeMaterial.Face, ChromeSides.None, []);
     }
 
     // ARC-UI-1199: the schematic window's frames (Legacy pixels of each art; the layout of AreaSchematicWindowLayout). The base (365, 800 x 400) is wood with a blueprint page (a ruled sheet of paper
@@ -278,7 +307,7 @@ public static class InterfaceChromeRecipes
             "Anatomical_But.ART", "Chemistry_But.ART", "Electrical_But.ART", "Explosives_But.ART", "GunSmithy_But.ART", "Mechanical_But.ART", "Smithy_But.ART", "Therapeutics_But.ART",
             // ARC-UI-1199: the schematic window's two list buttons (art 6) and its assemble button (357).
             "bgrn_but.art", "CombineButt.ART"];
-        return [top, bottom, inventory, doll, loot, barter, follower, lootDoll, .. lenses, .. SheetPanels(), .. MapPanels(), .. LogbookRecipes(), .. SchematicRecipes(), .. DialogRecipes(), .. buttons.Select(file => new ChromeRecipe(file, ChromeKind.Button, ChromeMaterial.Face, ChromeSides.None, [])),
+        return [top, bottom, inventory, doll, loot, barter, follower, lootDoll, .. lenses, .. SheetPanels(), .. MapPanels(), .. LogbookRecipes(), .. PaneRecipes(), .. SchematicRecipes(), .. DialogRecipes(), .. buttons.Select(file => new ChromeRecipe(file, ChromeKind.Button, ChromeMaterial.Face, ChromeSides.None, [])),
             // ARC-UI-1784: the spells page's sixteen college tabs (24 x 24 balls, three frames): a generated rim around the ball's own picture.
             .. CollegeTabFiles.Select(file => new ChromeRecipe(file, ChromeKind.Button, ChromeMaterial.Face, ChromeSides.None, [], KeepFace: true))];
     }

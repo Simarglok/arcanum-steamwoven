@@ -325,6 +325,19 @@ public static class SkillCheckRules
     }
 
     /// <summary>
+    /// ARC-COMBAT-1777 (0x4C9050, ledger PL5, OH4): the best-follower chooser's score of one candidate for a request: its effectiveness minus the difficulty (0x4C8430) of the same request
+    /// with the candidate as the source, nothing more (no roll, no counted-twice modifier, which only the run adds). A difficulty of <see cref="Impossible"/> makes a very low score, as in the source.
+    /// </summary>
+    [OriginalFunction(0x4C9050, OriginalFunctionScope.Partial)]
+    public static int Score(SkillCheckRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        var effectiveness = Effectiveness(request.Skill, request.Level, request.Effectiveness);
+        var difficulty = Difficulty(request.Skill, request.Training, effectiveness, request.Difficulty);
+        return (int)Math.Clamp((long)effectiveness - difficulty.Total, int.MinValue, int.MaxValue);
+    }
+
+    /// <summary>
     /// Runs one check (the generic part of the source's run): effectiveness, difficulty (with the modifier counted again under
     /// <paramref name="modifierCountedTwice"/>, the original's A2), the check roll (gambling uses its stored roll and keeps the
     /// fresh one for the next check), success

@@ -52,7 +52,7 @@ in a turn-based round (ARC-COMBAT-020) it passes the round's world, so the pick 
 
 ## An NPC as the user (ARC-COMBAT-1776)
 
-Follower Skills slice 1 (the chooser and the options row are slice 2): `PickLockByNpc(version, user, target, lockpick?)` in
+Follower Skills slice 1 (the chooser and the options row are slice 2, ARC-COMBAT-1777, below): `PickLockByNpc(version, user, target, lockpick?)` in
 [`GameSessionFollowerSkills.cs`](../../src/Arcanum.Session/GameSessionFollowerSkills.cs) is the same check, outcome, lock write, Lock event and
 generator draws as `PickLock` (they share `PickLockStep`), for an NPC that is the user (`SessionNpcSkillUser`: its life target, its map data's
 advancement sheet and its effects' modifiers, as the NPC heal's and pick pocket's). It differs as the original does (SC12, SC14, PL4, PL5):
@@ -81,7 +81,8 @@ Armed lockpicks (the item cursor of the lockpicks, interface mode 16) on a conta
 
 - **Witnesses** (PL6): the session reports whether the original calls them; nobody acts on it (no NPC sight, hearing, reaction or
   attack is wired to it, the AI hostility slice does not exist yet).
-- **Not modelled:** the best-follower substitution and its line (PL5, slice 2 of Follower Skills, #1738), the witnesses and the floating
+- **Best follower (ARC-COMBAT-1777, PL5):** `QueryPickLockScore(user, target, lockpick?)` is a user's score for the pick (`SkillCheckRules.Score`, the same lock and lockpick terms as `PickLockStep`, `WithLockFacts`; the hero's with its local-PC term); the viewer's lockpick press hands the pick to the follower with the strictly best score (the hero first, ties keep the earlier) as its own skill goal with its own lockpicks if it has any, and the hand-over line floats over it ([viewer](../rendering/terrain-viewer.md#follower-skills-arc-combat-1777)).
+- **Not modelled:** the witnesses and the floating
   text of an NPC's pick, the multiplayer packets, keys (the session holds none, ARC-WORLD-050). The NPC's pick itself is built since
   ARC-COMBAT-1776 ([above](#an-npc-as-the-user-arc-combat-1776)); the timed pick-lock goal's animation loops are the AI host's (ARC-AI-1524).
 

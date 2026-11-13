@@ -54,35 +54,22 @@ public partial class AreaDialogBoxView : Control
         _art = art;
     }
 
-    // ARC-UI-1819: the generated interface paints the box and its buttons at the window's own device scale (the control's scale times the canvas transform's and the viewport's stretch, the
-    // bars' own rule). The view claims the art's textures at its draw (the box on screen claims them: the death panel and the menu share one art) and watches them, so a frame a worker swaps in
-    // redraws the box; a change of the window's scale moves no pixel by itself (the canvas item is only stretched), so the box also draws again then.
-    private readonly HashSet<HdInterfaceTexture> _watched = [];
-    private Action? _onTextureChanged;
-    private Func<float>? _deviceScale;
+    // ARC-UI-1819: the generated interface paints the box and its buttons at the window's own device scale (the shared AreaDeviceScale claim). The box on screen claims the art's textures at
+    // its draw (the death panel and the menu share one art) and a frame a worker swaps in redraws it; a change of the window's scale moves no pixel by itself (the canvas item is only
+    // stretched), so the box also draws again then.
+    private AreaDeviceScale? _claim;
+    private AreaDeviceScale Claim => _claim ??= new(this);
     private float _drawnScale;
 
-    internal float DeviceScale() =>
-        GodotObject.IsInstanceValid(this) && IsInsideTree() ? GetGlobalTransformWithCanvas().Scale.X * GetViewport().GetStretchTransform().Scale.X : 1f;
+    internal float DeviceScale() => Claim.Current();
 
-    private void Release()
-    {
-        if (_onTextureChanged is { } handler) foreach (var texture in _watched) texture.Changed -= handler;
-        _watched.Clear();
-    }
+    private void Release() => _claim?.Release();
 
     private IEnumerable<Texture2D> Textures() => _art is { } art ? art.Buttons.Values.SelectMany(frames => frames).Prepend(art.Background) : [];
 
     private void ClaimScale()
     {
-        _deviceScale ??= DeviceScale;
-        _onTextureChanged ??= () => { if (GodotObject.IsInstanceValid(this)) QueueRedraw(); };
-        foreach (var texture in Textures())
-        {
-            if (texture is not HdInterfaceTexture hd) continue;
-            hd.ScaleSource = _deviceScale;
-            if (_watched.Add(hd)) hd.Changed += _onTextureChanged;
-        }
+        Claim.Claim(Textures());
         _drawnScale = DeviceScale();
     }
 
