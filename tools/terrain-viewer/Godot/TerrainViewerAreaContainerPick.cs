@@ -53,6 +53,16 @@ public partial class TerrainViewerApp
         RefreshAreaStatus();
     }
 
+    /// <summary>ARC-COMBAT-1776 (0x42A4E0): the lock an NPC's pick-locks goal names (the goal's target string: a door or window's entity, or a container's "inv:" string) as the session picks it, at the light of its cell; null for a target that is none or gone.</summary>
+    private SessionPickLockTarget? AiPickLockTarget(string target)
+    {
+        if (_areaSession is not { } session) return null;
+        if (_areaDoors?.PortalOf(target) is { } door && _areaPortals is { } portals) return portals.PickTarget(door, AreaCellLightLevel(door.Cell.X, door.Cell.Y));
+        if (ContainerOfSkillTarget(target) is not { } container || _inventoryHost?.Map(CurrentAreaMap) is not { } map) return null;
+        var (x, y) = LiveWorldCell(container.Row);
+        return AreaContainerLoot.PickTarget(session, map, container.Entity, AreaCellLightLevel(checked((int)x), checked((int)y)));
+    }
+
     /// <summary>The last container pick's session answer, for the smoke.</summary>
     private SessionPickLockResult? _lastContainerPick;
     internal SessionPickLockResult? LastContainerPickForSelfTest => _lastContainerPick;
