@@ -776,6 +776,14 @@ on each later step, so `./arcanum run` keeps the command's output out of it by d
 Tests: `python3 -B -m unittest tools.local_dev.test_run_log` (error lines, summary, kept logs, quiet and `--verbose`
 wrapper runs).
 
+## All launcher tests in one command (ARC-DEV-1565)
+
+`python3 -B -m unittest discover -s tools/local_dev -t . -p 'test_*.py'` from the repository root runs every
+`tools/local_dev` test in one process (about 3 minutes on a quiet Mac; the whole tree is not part of the root checks, run it when a
+launcher change touches several modules). `-t .` names the modules `tools.local_dev.test_*`, which the modules'
+imports need; the per-module commands above stay the quick way to run one. The stopped-waiter and third-dotnet-place tests of `test_run_queue` hold their runs until released instead of
+timing them, so a loaded Mac cannot fail them.
+
 ## Root solution synthetic checks
 
 ARC-WORLD-001 uses the terrain endpoint with
