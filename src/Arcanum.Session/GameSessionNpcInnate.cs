@@ -40,11 +40,11 @@ public sealed partial class GameSessionOwner
     /// <summary>The attached rule of innate effect <paramref name="number"/>, or null.</summary>
     internal SessionEffectDefinition? InnateRule(int number) => _innateEffects.GetValueOrDefault(number);
 
-    /// <summary>The removal that opens the race or gender case of the setter (0x4EA2E0): the first entry of the race or gender cause leaves the NPC's list; NoChange when it holds none.</summary>
+    /// <summary>The removal that opens the race or gender case of the setter (the effect removal by cause): the first entry of the race or gender cause leaves the NPC's list; NoChange when it holds none.</summary>
     internal SessionEffectResult RemoveNpcInnate(SessionLifeTarget target, bool gender) =>
         RemoveNpcEffectsCausedBy(Version, target, gender ? EffectCause.Gender : EffectCause.Race);
 
-    /// <summary>The add that closes it (0x4E9F70): the innate effect <paramref name="rule"/> with the race or gender cause.</summary>
+    /// <summary>The add that closes it (the effect add): the innate effect <paramref name="rule"/> with the race or gender cause.</summary>
     internal SessionEffectResult AddNpcInnate(SessionLifeTarget target, SessionEffectDefinition rule, bool gender) =>
         AddNpcEffect(Version, target, rule, gender ? EffectCause.Gender : EffectCause.Race);
 }

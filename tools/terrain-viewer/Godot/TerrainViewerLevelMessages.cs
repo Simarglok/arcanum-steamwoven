@@ -97,7 +97,7 @@ public partial class TerrainViewerApp
         GD.Print($"ARC-WORLD-087 effect 158 {(rule is null ? "missing" : "attached")}");
     }
 
-    /// <summary>ARC-MAGIC-1509: gives the session the rules of the innate effects (race 64 to 74, the woman's 330) from the hero's effect tables, which an NPC's race or gender change by a spell adds (0x4B0980 cases 2 and 3); the session does not save them.</summary>
+    /// <summary>ARC-MAGIC-1509: gives the session the rules of the innate effects (race 64 to 74, the woman's 330) from the hero's effect tables, which an NPC's race or gender change by a spell adds (the base stat setter's gender and race cases); the session does not save them.</summary>
     private void AttachAreaInnateEffects(GameSessionOwner session)
     {
         var rules = _areaEffectRules;
