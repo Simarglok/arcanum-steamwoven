@@ -592,6 +592,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         _steppedThisFrame.Clear();
         _nowMs = Math.Max(_nowMs, nowMs);
         ClaimSessionEnds();
+        DrainFleeInterrupts();
         Movers.Settle(_nowMs);
         ObserveLeaves();
         ObserveRound();
@@ -2289,9 +2290,45 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         };
     }
 
+    /// <summary>
+    /// ARC-AI-1513 (ledger VB2-7): set no-flee (0x4AF1D0) as the move-away goal's nodes ask it: the session first stops the fleeing (FLEE to NONE through the setter) and sets NO_FLEE in one revision; an NPC that was
+    /// in FLEE has its flee runs ended (the interrupt of 0x4AF170, which the original runs in the FLEE state only). Not run for the hero or an NPC the session does not know.
+    /// </summary>
     public void SetNoFlee(string id)
     {
-        if (id != Pc) _session.SetNoFlee(_session.Version, id);
+        if (id == Pc) return;
+        var fleeing = _session.QueryDanger(id).State == DangerState.Flee;
+        var result = _session.SetNoFlee(_session.Version, id, SetterFacts(id));
+        if (fleeing && result.Failure == GameSessionFailure.None) InterruptFleeRuns(id);
+    }
+
+    /// <summary>ARC-AI-1513: the flee-goal interrupt of stop fleeing (0x44E4D0, goal 25) for the start of mind control, which has set no-flee through the session: every run of the NPC whose bottom or top goal is flee ends. False: the NPC is not run here.</summary>
+    public bool SpellEndFleeGoals(string npc)
+    {
+        if (npc == Pc || !TryNpc(npc, out _)) return false;
+        InterruptFleeRuns(npc);
+        return true;
+    }
+
+    // The flee runs end at level 6. While the spell system holds the table (the start of mind control runs inside a spell run) the session refuses the interrupt: the NPC waits and its runs end when the table frees,
+    // at the next step of this host (DrainFleeInterrupts).
+    private readonly HashSet<string> _fleeInterruptsPending = [];
+
+    private void InterruptFleeRuns(string npc)
+    {
+        _fleeInterruptsPending.Remove(npc);
+        foreach (var run in RunsOf(npc).Where(r => !AiExecutorRules.IsOverlayRunGoal(r.Bottom.Goal) && (r.Bottom.Goal == GoalType.Flee || r.Frames[^1].Goal == GoalType.Flee)).ToArray())
+        {
+            var change = _session.InterruptGoal(run.Handle, GoalInterruptRules.MaxLevel);
+            if (change.Failure == SessionGoalFailure.PassInProgress) _fleeInterruptsPending.Add(npc);
+            else EndNodes(change.Steps);
+        }
+    }
+
+    private void DrainFleeInterrupts()
+    {
+        if (_fleeInterruptsPending.Count == 0) return;
+        foreach (var npc in _fleeInterruptsPending.ToArray()) InterruptFleeRuns(npc);
     }
 
     // ARC-MAGIC-035: the interrupt of the helpers 0x44E050 and 0x44E4D0 ends only the runs that test true, not every run of the NPC (an eye candy or a burning run beside it is left): each at the level, with its end nodes.
@@ -3439,7 +3476,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
             ProwlingMargin = facts is { Asleep: false, Unconscious: false } && !stunned && !blinded && AwarenessRules.Faces(at, GridActorMath.Octant(facing ?? Movers.FacingOf(observer, NeighborDirection.XPlus)), there)
                 ? ProwlingMargin(observer, target, at, there, facts, map, true) : 0,
         };
-        return AwarenessRules.See(sight, at, 0, 0, there, map, _session.Rules.Combat);
+        var (offsetX, offsetY) = ObserverOffset(observer);
+        return AwarenessRules.See(sight, at, offsetX, offsetY, there, map, _session.Rules.Combat);
     }
 
     /// <summary>
@@ -3453,7 +3491,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     {
         if (target != Pc || observer == Pc || !_session.IsConcealed(SessionCombatant.Hero)) return 0;
         var perception = Math.Clamp(facts?.Perception ?? 0, 0, AwarenessRules.MaxPerception);
-        var trace = seeing ? LineOfFireRules.Trace(at, 0, 0, there, map, _session.Rules.Combat) : null;
+        var (offsetX, offsetY) = ObserverOffset(observer);
+        var trace = seeing ? LineOfFireRules.Trace(at, offsetX, offsetY, there, map, _session.Rules.Combat) : null;
         var state = LifeState(observer);
         var conditions = (facts is { Stunned: true } && Paralysed(observer) ? SkillTargetConditions.Paralyzed : 0)
             | (facts?.Unconscious == true ? SkillTargetConditions.Unconscious : 0)
@@ -3469,6 +3508,24 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         return _session.HeroProwlingMargin(perception, observerFacts, seeing).Margin;
     }
 
+    private const int OffsetXSlot = 2, OffsetYSlot = 3;
+
+    /// <summary>
+    /// ARC-AI-1520 (ledger AW18, VBG9): the observer's pixel offset (object fields 3 and 4) that the original adds to the start of the sight line
+    /// and the sound line (ledger RA7, VB3-16, VB3-18): the offset of its map data plus, for an NPC the host walked, the screen shift its
+    /// step has left (the pose's shift less the projection of its cell from the T0 cell, <see cref="AreaCritterLights.Stand"/>). The hero and an
+    /// NPC this host does not walk stand at their cell centre (0, 0): the hero's step offset and a follower's are not tracked here.
+    /// </summary>
+    private (int X, int Y) ObserverOffset(string observer)
+    {
+        if (!_npcs.TryGetValue(observer, out var npc)) return (0, 0);
+        int Base(int slot) => npc.Row.EffectiveFields.FirstOrDefault(f => f.Slot == slot && f.Presence == AreaPresence.Value)?.Number is { } n && n is >= int.MinValue and <= int.MaxValue ? (int)n : 0;
+        var (offsetX, offsetY) = (Base(OffsetXSlot), Base(OffsetYSlot));
+        if (Movers.PoseOf(observer, _nowMs) is not { } pose) return (offsetX, offsetY);
+        var stood = AreaCritterLights.Stand(npc.Origin.X, npc.Origin.Y, offsetX, offsetY, pose);
+        return (stood.OffsetX, stood.OffsetY);
+    }
+
     public AwarenessResult Hear(string observer, string target, Loudness loudness)
     {
         if (Tile(observer) is not { } at || Tile(target) is not { } there || _scene.LineOfFire?.Invoke() is not { } map) return new(AwarenessRules.NotPerceived, AwarenessReason.State);
@@ -3481,7 +3538,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
             Stunned = stunned, Sleeping = facts?.Asleep ?? false, Unconscious = facts?.Unconscious ?? false,
             ProwlingMargin = facts is { Unconscious: false } && !stunned ? ProwlingMargin(observer, target, at, there, facts, map, false) : 0,
         };
-        return AwarenessRules.Hear(hearing, at, 0, 0, there, loudness, new SoundMap(map), _session.Rules.Combat);
+        var (offsetX, offsetY) = ObserverOffset(observer);
+        return AwarenessRules.Hear(hearing, at, offsetX, offsetY, there, loudness, new SoundMap(map), _session.Rules.Combat);
     }
 
     public HostilityDanger Danger(string npc)

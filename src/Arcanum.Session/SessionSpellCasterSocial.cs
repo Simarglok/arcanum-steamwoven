@@ -1,3 +1,4 @@
+using Arcanum.Simulation.Ai;
 using Arcanum.Simulation.Magic;
 
 namespace Arcanum.Session;
@@ -20,6 +21,9 @@ public interface ISpellSocialHost
 
     /// <summary>Stop fleeing (0x4AF170): an NPC in FLEE goes to NONE, then every flee goal (25) of it is ended whatever its state was.</summary>
     bool StopFleeing(string npc);
+
+    /// <summary>ARC-AI-1513: the flee-goal interrupt that stop fleeing (0x4AF170) runs for an NPC in FLEE, which set no-flee (0x4AF1D0, the start of mind control) runs first: every flee goal (25) of the NPC is ended. The session has written the state and the bit; no answer is needed (an NPC this host does not run has no goals here).</summary>
+    void EndFleeGoals(string npc) { }
 }
 
 /// <summary>
@@ -143,7 +147,13 @@ public sealed partial class SessionSpellCaster
                 else SocialLine(run, SocialRefused, id, SocialJoin);
             }
             else SocialLine(run, SocialNotModelled, id, 1);
-            if (_owner.SetNoFlee(_owner.Version, id).Disposition != GameSessionDisposition.Rejected) SocialLine(run, SocialNoFlee, id);
+            // No-flee first stops fleeing (ARC-AI-1513): an NPC in FLEE goes to NONE in the same revision and the host ends its flee goals.
+            var fleeing = _owner.QueryDanger(id).State == DangerState.Flee;
+            if (_owner.SetNoFlee(_owner.Version, id).Disposition != GameSessionDisposition.Rejected)
+            {
+                SocialLine(run, SocialNoFlee, id);
+                if (fleeing) Social?.EndFleeGoals(id);
+            }
             else SocialLine(run, SocialRefused, id, SocialNoFlee);
             return true;
         }
