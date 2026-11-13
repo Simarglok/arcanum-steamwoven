@@ -1,3 +1,5 @@
+using Arcanum.Scripting.Scr;
+
 namespace Arcanum.Session;
 
 /// <summary>
@@ -299,7 +301,7 @@ public sealed partial class GameSessionOwner
         // ARC-MAGIC-1743 (IE3, IE4, IE6): the item event scripts of the move, from the worn record's points (a kit or made item too) and the origin seed row's. The removal runs wield off (25, only a worn
         // item) and remove item (28) with the hero as the triggerer, the insertion insert item (21) with the recipient as the triggerer; without a script host an item with any of them is refused.
         var wornPoints = _equipment.SlotOf(item) is { } wornIn ? _equipment.Worn[wornIn].ScriptPoints : [];
-        SessionSeedItem? listed = held.Origin is { } originMap && _inventory.Seeds.TryGetValue(originMap, out var originSeed) && originSeed.Items.TryGetValue(item, out var seedRow) ? seedRow : null;
+        SessionSeedItem? listed = held.Origin is { } originMap && _inventory.Seeds.TryGetValue(originMap, out var originSeed) && originSeed.Items.TryGetValue(item, out var givenRow) ? givenRow : null;
         bool Has(int point) => wornPoints.Contains(point) || listed?.Facts.HasScript(point) == true;
         var (wieldOff, removeOwn, insertOwn) = (worn && Has(SessionScriptPoint.WieldOff), Has(SessionScriptPoint.RemoveItem), Has(SessionScriptPoint.InsertItem));
         if (scripts is null && (wornPoints.Count > 0 || wieldOff || removeOwn || insertOwn)) return RejectItem(GameSessionFailure.ItemScriptUnsupported);
