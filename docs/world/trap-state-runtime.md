@@ -166,7 +166,7 @@ is `AreaUseScriptHost.EntityId`, as for the object damage domain.
   before its step start (0x42E9B0).
 - **Step.** Each step the PC starts onto a tile meets the first trap object there
   (`TriggerTrap(Step, …)`, 0x4305D0, TT9): the PC's spell flag 0x2 or 0x4 steps over it, a
-  known trap fires too; a trap spotted or fired ends the walk on that tile. The original
+  known trap fires too; a trap spotted or fired ends the walk on that tile, and since ARC-WORLD-1582 so does any trap object on it the mover does not step over (`AreaTraps.StepEndsWalk`, TT17: an ordinary script, a 30002 shot or a refused meeting end it too). The original
   meets it on the arrival; the viewer meets it when the step starts, as it runs tile scripts,
   so an advance that spans several steps (a very slow frame) may carry the PC past the tile
   before the route stops. A trap object with an ordinary trap script is not met on a step
@@ -218,9 +218,11 @@ or a companion that arrives on a tile with a trap object sets it off with itself
   its trap being unknown to it again, rolls again at its next meeting.
 - **Steps of the AI host.** The walk node asks `IAiGoalWorld.StepMeetsTrap` right after it began the step (`AreaAiHost.TrapMetOn`); a trap spotted or set off makes the goal's path index its length, so the walk ends on
   that tile and the goal above plans again from there (TT17). It covers the NPCs the host walks and the companions it holds. The meeting is taken at the step's start, only for a step that really began, not at its arrival (the viewer's difference for the hero's
-  step too, above): an NPC already stands on the trap's tile, a companion the host holds walks there over the next frames. The original also ends the walk on a trap object that is no trap or whose shot is not built (TT17); Steamwoven ends it on a spotted or fired trap only. A relocation (a far NPC placed on its standpoint, a route's relocation, a knockback slide) is no step and meets no trap.
-- **Companions on their own follow walk.** The viewer reports the tiles the companions' drive stepped onto (the ones the AI host does not hold) to `AreaAiHost.TrapMetOn`; the follow walk is not cut short (its goal
-  plans a route again from where the companion stands), and a trap that spots the companion marks it.
+  step too, above): an NPC already stands on the trap's tile, a companion the host holds walks there over the next frames. Since ARC-WORLD-1582 the walk also ends on a trap object that is no trap or whose shot is not built, as the original's (TT17; `AreaAiHost.TrapMetOn` asks `AreaTraps.StepEndsWalk`, a walker with the step-over flags 0x2 or 0x4 is spared). A relocation (a far NPC placed on its standpoint, a route's relocation, a knockback slide) is no step and meets no trap.
+- **Companions on their own follow walk.** The viewer reports the tiles the companions' drive stepped onto (the ones the AI host does not hold) to `AreaAiHost.TrapMetOn`; since ARC-WORLD-1582 a walk that ends on the tile (TT17) is cut short: `AreaCompanionGroup.EndWalkOnTrap` stops the
+  companion's goal through `CompanionFollower.EndWalkOnTrap` (a started step still ends at its cell centre, an ordered goal ends, the stop is not remembered as unreachable and the next update goes on approaching from where the
+  companion stands, as after a stop before a critter), and a trap that spots the companion marks it. The drive of one frame is complete before the viewer reports its steps, so a frame whose advance spans two steps (a very slow frame) may carry
+  the companion past the tile before its goal stops, as for the hero.
 - **Doors.** The opener goals' use step (`AreaDoorHost.UseDoor`, 0x428A10, TT18) asks `AreaDoorHost.OpenerTrap` for an NPC or a companion opener (`AreaAiHost.TrapMetByUse`); a trap that stops the use (spotted, a
   native run that answers skip default, or a refused meeting) ends the opener's run and the door stays shut. The hero's own door use meets it since ARC-WORLD-1581 ([Hero door use](#hero-door-use-arc-world-1581)).
 - **Viewer.** The meetings the walkers had are logged (`ARC-WORLD-1469 walker-trap`) and shown on the status line with the outcome (`AreaAiHost.TakeTrapMeetings`).
@@ -246,8 +248,7 @@ The hero's disarm traps press (E6-a second half; ledger [SP3](../research/ledger
 ## Not modelled here
 
 - The follower who disarms instead of the hero (SP3, 0x57A620). An NPC's or a companion's use of a trapped object other than a door its opener goal pushes
-  (the original's use node 0x428A10 meets the trap of any target it runs the use script of, TT18; a trapped container's opening by an NPC and the NPCs' other uses are not built; the hero's own door use meets the trap since ARC-WORLD-1581),
-  and the walk of a companion on its own follow walk being cut short at the trap (TT17).
+  (the original's use node 0x428A10 meets the trap of any target it runs the use script of, TT18; a trapped container's opening by an NPC and the NPCs' other uses are not built; the hero's own door use meets the trap since ARC-WORLD-1581).
 - The 30002 trap in the viewer (with its shot), an ordinary trap script on a step, and the
   route cost of a known trap (DC8) on the PC's route (the drop map's route has it), the
   attack's trap trigger in the viewer,
@@ -275,7 +276,7 @@ The hero's disarm traps press (E6-a second half; ledger [SP3](../research/ledger
   (stepped over, fired and removed, spotted); `AreaContainerLootTests.cs`: a trap met on the
   use keeps the container shut.
 - ARC-WORLD-1581: `AreaDoorHostTests` (the hero's use node charges, then asks the door's trap; a stopping trap ends the run; a refused charge asks none; an NPC opener does not use the hero's port), `AreaTrapsTests` (a trapped door meets the hero on its use and stays shut).
-- ARC-WORLD-1469: `AreaTrapsTests` (a free NPC's and a companion's step onto a trap object and use of a trapped one: the triggerer, a known trap, an unknown one with and without a roll or a sheet, the step-over flags, no critter side, who marks it; the AI host's walk ending on the trap's tile and the trap firing once), `AreaDoorHostTests` (the opener's use node asks the trap), `ExecutorRulesTests` (a step onto a trap ends the walk there).
+- ARC-WORLD-1469: `AreaTrapsTests` (a free NPC's and a companion's step onto a trap object and use of a trapped one: the triggerer, a known trap, an unknown one with and without a roll or a sheet, the step-over flags, no critter side, who marks it; the AI host's walk ending on the trap's tile and the trap firing once; ARC-WORLD-1582: the walk ending on any trap object not stepped over), `CompanionFollowTests` (a walk ended on a trap tile: goal stopped, step finished, approach resumes, ordered goal ended), `AreaDoorHostTests` (the opener's use node asks the trap), `ExecutorRulesTests` (a step onto a trap ends the walk there).
 - `tests/Arcanum.Session.Tests/TrapEffectTests.cs`: victims (square and triggerer), one draw
   per victim, each damage type's slot, the damage source, an object victim, the spell with no
   caster, a damage's spell, the shot with and without a shooter (ARC-TECHNOLOGY-1619: its draws, the spell before the event, the event before the damage, the veto, the lost credit), and 30007.

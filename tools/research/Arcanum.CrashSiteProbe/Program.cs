@@ -56,6 +56,8 @@ internal static partial class Program
             if (args.SequenceEqual(["--data-census-self-test"])) { DataCensusSelfTest(); return 0; }
             if (args.FirstOrDefault() == "--light-census") return ProbeLightCensus(args[1..]);
             if (args.SequenceEqual(["--light-census-self-test"])) { LightCensusSelfTest(); return 0; }
+            if (args.FirstOrDefault() == "--generator-census") return ProbeGeneratorCensus(args[1..]);
+            if (args.SequenceEqual(["--generator-census-self-test"])) { GeneratorCensusSelfTest(); return 0; }
             if (args.FirstOrDefault() == "--ai-redirect-census") return ProbeAiRedirectCensus(args[1..]);
             if (args.SequenceEqual(["--ai-redirect-census-self-test"])) { AiRedirectCensusSelfTest(); return 0; }
             if (args.FirstOrDefault() == "--combat-census") return ProbeCombatCensus(args[1..]);
@@ -879,6 +881,8 @@ internal static partial class Program
         public IReadOnlyDictionary<int, int> NumericFields { get; init; } = new Dictionary<int, int>();
         public IReadOnlyList<ArraySpan> Arrays { get; init; } = [];
         public IReadOnlyList<int> OverlayOverrides { get; init; } = [];
+        /// <summary>ARC-WORLD-1526: every field slot the instance overrides (its valid mask's set bits).</summary>
+        public IReadOnlyList<int> OverrideSlots { get; init; } = [];
     }
     private sealed record ArraySpan(int Field, int Start, int End, int Size, int Count, int WordStart, int Words);
     private sealed record PrototypeInfo(ObjectId Id, int Type, int CurrentAid, uint Flags)
@@ -1244,7 +1248,7 @@ internal static partial class Program
                     catch (InvalidDataException error) { throw new InvalidDataException($"field={field} offset={cursor.Offset} {error.Message}"); }
                 }
             }
-            return new InstanceInfo(-1, prototype, type, currentAid, location, offsetX, offsetY, flags) { OwnId = ownId, NumericFields = numeric, Arrays = arrays, ScriptsOverridden = set[31], OverlayOverrides = Array.AsReadOnly(Enumerable.Range(15, 3).Where(i => set[i]).ToArray()) };
+            return new InstanceInfo(-1, prototype, type, currentAid, location, offsetX, offsetY, flags) { OwnId = ownId, NumericFields = numeric, Arrays = arrays, ScriptsOverridden = set[31], OverrideSlots = Enumerable.Range(0, set.Length).Where(i => set[i]).ToArray(), OverlayOverrides = Array.AsReadOnly(Enumerable.Range(15, 3).Where(i => set[i]).ToArray()) };
         }
 
         private static bool[] ReadMasks(ref Cursor cursor, int type, bool prototype, out int popcount)

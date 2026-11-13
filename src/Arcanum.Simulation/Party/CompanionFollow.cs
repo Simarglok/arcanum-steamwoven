@@ -61,6 +61,8 @@ public sealed class CompanionFollower
     public const string NotFollowingReason = "FOLLOW_NOT_FOLLOWING";
     /// <summary>The route's stop before a segment's last step onto a living critter (<see cref="RouteFollower"/>, ledger LR5).</summary>
     public const string SegmentEndCritterReason = "ROUTE_SEGMENT_END_CRITTER";
+    /// <summary>ARC-WORLD-1582 (ledger TT17): the stop of a walk that ended on a trap object's tile (<see cref="EndWalkOnTrap"/>).</summary>
+    public const string TrapEndedReason = "ROUTE_ENDED_BY_TRAP";
     private static readonly NeighborDirection[] Directions = Enum.GetValues<NeighborDirection>();
     private readonly IRouteStepSource _source;
     private (CellCoord Follower, CellCoord Leader)? _unreachable;
@@ -126,7 +128,8 @@ public sealed class CompanionFollower
         var resume = false;
         if (!_stopSeen && Route.Status == RouteFollowStatus.Stopped && settled)
         {
-            if (Route.StopReason != SegmentEndCritterReason) _unreachable = (cell, Route.Target ?? leader);
+            // A walk ended on a trap's tile is not unreachable either: the follow goal plans again from where the follower stands (TT17).
+            if (Route.StopReason is not (SegmentEndCritterReason or TrapEndedReason)) _unreachable = (cell, Route.Target ?? leader);
             else resume = Route.Range > 0;
             _stopSeen = true;
         }
@@ -184,6 +187,20 @@ public sealed class CompanionFollower
         if (!at.IsValid) throw new ArgumentException("FOLLOW_TIME_INVALID", nameof(at));
         Route.Stop(at, "FOLLOW_JUMPED");
         _unreachable = null; _stopSeen = true; _ordered = false;
+    }
+
+    /// <summary>
+    /// ARC-WORLD-1582 (ledger TT17): the step function ended the walk on a trap object's tile (path index := length, flag 0x8): a running goal stops, a
+    /// started step still ends at its cell centre, and the next update goes on approaching from where the follower stands (as after a stop before a critter, an
+    /// approach's parent plans again); an ordered goal ends. False when no goal was running.
+    /// </summary>
+    public bool EndWalkOnTrap(SimulationTime at)
+    {
+        if (!at.IsValid) throw new ArgumentException("FOLLOW_TIME_INVALID", nameof(at));
+        if (Route.Status != RouteFollowStatus.Following) return false;
+        Route.Stop(at, TrapEndedReason);
+        _stopSeen = false;
+        return true;
     }
 
     private CompanionFollowUpdate Jump(SimulationTime observedAt, CellCoord leader)
