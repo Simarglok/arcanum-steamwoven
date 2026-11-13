@@ -423,7 +423,6 @@ src/Arcanum.World/AreaAiHost.cs,Active,pending,
 src/Arcanum.World/AreaAiHost.cs,AnimationPriority,pending,
 src/Arcanum.World/AreaAiHost.cs,ApplyStop,pending,
 src/Arcanum.World/AreaAiHost.cs,AttackEnded,exempt,host
-src/Arcanum.World/AreaAiHost.cs,AttemptPickLocks,pending,
 src/Arcanum.World/AreaAiHost.cs,BeginAttack,pending,
 src/Arcanum.World/AreaAiHost.cs,BlastRadius,pending,
 src/Arcanum.World/AreaAiHost.cs,CanHealAndFight,pending,
