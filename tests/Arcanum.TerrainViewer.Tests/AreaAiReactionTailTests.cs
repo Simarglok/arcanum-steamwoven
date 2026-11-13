@@ -62,7 +62,7 @@ public sealed class AreaAiReactionTailTests
 
         host.SpellAttacked(f.A, f.B);
 
-        Assert.AreNotEqual(AttackReactionStep.FleeGoal.ToString(), host.TraceOf(f.B)?.Reaction?.Split(' ')[0], host.TraceOf(f.B)?.Reaction);
+        Assert.AreEqual(AttackReactionStep.Weigh.ToString(), host.TraceOf(f.B)?.Reaction?.Split(' ')[0], "it surrendered to the attacker: weigh: " + host.TraceOf(f.B)?.Reaction);
         Assert.IsFalse(Flees(host, f.B), "the reaction weighed (the setter's): no flee run from the reaction");
     }
 
@@ -103,7 +103,7 @@ public sealed class AreaAiReactionTailTests
     }
 
     [TestMethod]
-    public void A_dead_victim_does_not_enter_the_round()
+    public void A_dead_victim_ends_the_attack_event_before_the_reaction_and_does_not_enter_the_round()
     {
         var (f, host) = Open();
         using var _ = f;
@@ -113,6 +113,8 @@ public sealed class AreaAiReactionTailTests
 
         host.SpellAttacked(f.A, f.B);
 
-        CollectionAssert.DoesNotContain(f.Session.QueryCombatRound()!.Participants.ToList(), SessionCombatant.Critter(f.B), "0x4AA620 returns at a dead object before the round entry");
+        // The attack event stops at a dead victim before the reaction is reached; the reaction's own dead step (0x4AA620 returns first) is pinned in HostilityRulesTests.
+        Assert.IsNull(host.TraceOf(f.B)?.Reaction, "no reaction ran for a dead victim");
+        CollectionAssert.DoesNotContain(f.Session.QueryCombatRound()!.Participants.ToList(), SessionCombatant.Critter(f.B));
     }
 }
