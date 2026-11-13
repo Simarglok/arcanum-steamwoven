@@ -758,7 +758,7 @@ Choosing a length in the sleep or wait window ends the hero's maintained spells 
 
 Known differences (documented, not bugs):
 
-- The window is the diagnostic panel, not the original's art; the hero's own technology runs and item-trigger runs with no maintenance period stay, as in the original.
+- The hero's own technology runs and item-trigger runs with no maintenance period stay, as in the original.
 
 ## ARC-MAGIC-057 — The hero's spot trap roll (E6-a, spot half, 2026-11-12)
 
@@ -1076,3 +1076,16 @@ design (the chance is 5 per cent of each firing, one firing per 300 to 700 game 
 | 4 | Look at where the creatures stand against the party. | Two rings: one side west of the party's tile or north of it, about six tiles away, in small columns of three. Ours do not turn toward the party (a known gap). | open |
 | 5 | Meet a second group in the same encounter (a table row with two creature kinds). | The first creature of the second kind is missing (the original destroys it, a quirk kept). | open |
 | 6 | Try the same in a town sector and while standing in a named area. | No encounter happens there. | open |
+
+## ARC-UI-1363 — The sleep and wait window in the original's look (2026-11-13)
+
+The window is drawn from the build 0x57B4F0 ([sleep window](../world/sleep-window-runtime.md#the-windows-look-arc-ui-1363-ledger-sz13-swb6-swb7), ledger SZ13, SWB6, SWB7): art 565 at (573, 42), a button of art 293 and a line of `sleepUI.mes` for each length. Compare it in both games, from the key `S` and from the bar's Sleep button (in the wilderness and in a town-map sector with the wait marker).
+
+| # | Step | Expected (from the original executable) | Status |
+| --- | --- | --- | --- |
+| 1 | Press `S` in the wilderness. | The window stands at the right edge of the play view (573, 42) with eight rows: a round button and a line each (one hour ... until healed). | open |
+| 2 | Look at the button frames and the line colour. | Idle, lit under the pointer, down while pressed; the lines are white in the small font. | open |
+| 3 | Do the same in a town-map sector with the wait marker. | Seven rows (the wait lengths, no until healed). | open |
+| 4 | Press a button and watch the window. | The rest runs; the original keeps the buttons visible (ours hide them, issue #1511). | open |
+
+Known differences (documented, not bugs): a button takes the pointer on its art's rectangle, not its opaque pixels; the controller's focus row is lit.
