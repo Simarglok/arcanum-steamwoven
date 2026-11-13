@@ -1,3 +1,4 @@
+using Arcanum.Data.Area;
 using Arcanum.Session;
 using Arcanum.Simulation.Movement;
 using Arcanum.TerrainViewer.Core;
@@ -21,11 +22,15 @@ public partial class TerrainViewerApp
     /// them) and that <paramref name="pick"/> names, the way a script's toggle state does: the session's object-flag change over the data's. Such an NPC is gone (not drawn, not walking) until then,
     /// so a stage that needs one standing in the window has to switch it on. Returns how many it switched.
     /// </summary>
-    private static int SwitchOnStoredOffNpcs(GameSessionOwner session, AreaAiHost host, Func<string, bool> pick)
+    private int SwitchOnStoredOffNpcs(GameSessionOwner session, AreaAiHost host, Func<string, bool> pick)
     {
+        // Only the NPCs whose map data has the off bit: the ones a script's toggle state flips this way (a destroyed or script-switched-off NPC stays gone).
+        var stored = _readyArea!.Snapshot.Objects.Where(r => r.Type == 16 && r.EffectiveFields.FirstOrDefault(f => f.Slot == 18) is { Presence: AreaPresence.Value, Number: { } flags } && (flags & 0x2) != 0)
+            .Select(AreaUseScriptHost.EntityId).ToHashSet();
         var switched = 0;
-        foreach (var npc in host.Scene.Npcs.Where(n => host.Gone(n.Entity) && pick(n.Entity)).Select(n => n.Entity).ToArray())
-            if (session.WriteObjectFlag(session.Version, npc, SessionObjectFlagField.Object, 0x2, false, dataHas: true).Disposition != GameSessionDisposition.Rejected) switched++;
+        foreach (var npc in host.Scene.Npcs.Where(n => stored.Contains(n.Entity) && host.Gone(n.Entity) && pick(n.Entity)).Select(n => n.Entity).ToArray())
+            if (session.WriteObjectFlag(session.Version, npc, SessionObjectFlagField.Object, 0x2, false, dataHas: true).Disposition == GameSessionDisposition.Changed)
+            { switched++; GD.Print($"ARC-BUG-1503 switched on {npc}"); }
         return switched;
     }
 
