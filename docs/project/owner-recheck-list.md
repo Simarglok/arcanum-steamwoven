@@ -622,7 +622,7 @@ Known differences (documented, not bugs):
 - A new game still waits for the start map, which begins to load when the New Game window opens.
 - The main thread is busy while the start map is published, for about a second after the load ends, so the menu may answer late then (O6 of the diagnosis).
 - The menu's music was silent until the start map was loaded; ARC-UI-139 (below) plays it from the start without a scene.
-- A load of a save whose map is the one already shown (F8 on the same map) is one synchronous step, so its load screen is not seen; the original shows it (ARC-UI-1362, issue #1504).
+- A load of a save whose map is the one already shown (F8 on the same map) shows the load screen for a frame or two only, as the load itself is short; ARC-UI-1504 recheck below.
 
 ## ARC-UI-139 — The main menu's music plays without a scene (follow-up of ARC-DEV-387, 2026-11-11)
 
@@ -1098,3 +1098,47 @@ Known differences (documented, not bugs): a button takes the pointer on its art'
 | 2 | Press F8 with the newest save on another map than the one shown. | The same black screen with the clock until the saved map is there. | open |
 | 3 | Load a save whose map is missing or broken (rename its map folder in a copy). | The black screen goes and the menu (or the running game) comes back with the reason. | open |
 | 4 | Press F8 with a save on the map already shown. | No load screen is seen: the load of the shown map is one step in this build (issue #1504). | open |
+
+## ARC-UI-1365 — The experience progress strip under the hot-key bar (PR #1555, 2026-11-13)
+
+The strip is drawn as the draw 0x556C20 does ([experience strip](../rendering/terrain-viewer.md#experience-strip-arc-ui-1365), ledger GB13, GB14). Known and already documented: the viewer redraws the strip at
+once when experience changes; the original repaints it at its bar refresh events (and at once only while the character sheet is open).
+
+| # | Step | Expected (from the original executable and data) | Status |
+| --- | --- | --- | --- |
+| 1 | Start a new hero, look at the bottom bar under the ten hot-key slots. | No red segments at the start of a level. | open |
+| 2 | Gain about half of the experience a level needs (kill or quest), open and close the character sheet. | Red segments fill from the left, about five of ten at half; a thin bar under them grows by the rest. | open |
+| 3 | Gain experience until just below the next level, then reach it. | The strip is nearly full, then shows the new level's progress (almost empty) after the level-up message. | open |
+
+## ARC-UI-1364 — top strip buttons lit by game events and the Map button's face (2026-11-13)
+
+The rules are in [bar buttons lit by game events](../rendering/terrain-viewer.md#bar-buttons-lit-by-game-events-arc-ui-1364) (ledger GB15–GB17). Compare them in both games with the interface bars on.
+
+| # | Step | Expected (from the original executable and data) | Status |
+| --- | --- | --- | --- |
+| 1 | Gain a level (kill something, or finish a quest) with the character sheet closed. | The level-up sound and message appear and the Character button turns red (the lit art). | open |
+| 2 | Open the character sheet (the button or `C`). | The Character button goes back to its normal look. | open |
+| 3 | Gain a level while the sheet is open, then close it. | The button stays normal. | open |
+| 4 | Take or drop an object on the ground, or have one given to you, with the inventory closed. | The Inventory button lights; opening the inventory puts it out. | open |
+| 5 | Accept or complete a quest, add or lose a blessing or a curse, or gain a reputation, with the logbook closed. | The Logbook button lights; opening the logbook puts it out. | open |
+| 6 | Learn a new world-map area (a dialog or script that reveals one) while standing in the wilderness. | The Map button (the blue globe in the wilderness) lights until the world map is opened. | open |
+| 7 | Walk from the wilderness into a town with a town map, and out again. | In the town the Map button shows its town art; in the wilderness the blue globe. The map opens on the town map in the town. | open |
+| 8 | Save with a button lit and load the save. | The original restores the lit button; ours starts with all buttons normal (a known difference, see below). | open |
+
+Known differences (documented, not bugs):
+
+- The lit state is not in our save (issue [#1542](https://github.com/Simarglok/arcanum-steamwoven/issues/1542)).
+- The original blocks no map entry by the button's art: going to the world map is not tied to the blue globe being shown (ledger GB17), so nothing is blocked here either.
+
+| 4 | Press F8 with a save on the map already shown. | Superseded by ARC-UI-1504 below: the screen shows for a moment. | open |
+
+## ARC-UI-1504 — Load screen for a load of the map already shown (2026-11-13)
+
+The original shows the load screen for every successful load of a save, the saved map being the one already open too; the viewer's load of the shown map is one step, so it now raises the screen first and runs the load a frame or two later (F8, the load window of the in-play menu, Last Save).
+
+| # | Step | Expected (from the original executable and data) | Status |
+| --- | --- | --- | --- |
+| 1 | In play press F8 with the newest save on the map already shown. | The screen goes black with the clock in the top-right corner for a moment (a frame or two, longer on a big map), then the game shows the saved state. The keys do nothing meanwhile. | open |
+| 2 | Open the in-play menu, Load Game and choose a save on the shown map. | The same black screen with the clock, then the window is closed and the game is the saved one. | open |
+| 3 | The same with a save whose file is damaged (copy one and break it). | The screen goes at once, the load window stays with the reason (F8: the running game stays, the message window says the load failed). | open |
+| 4 | Press F8 with no save at all. | No black screen; only the two notes, as before. | open |

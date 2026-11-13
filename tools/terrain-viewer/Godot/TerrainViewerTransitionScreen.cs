@@ -35,7 +35,7 @@ public partial class TerrainViewerApp
     /// them, and carries out the hero change that waited for the black screen.</summary>
     private void TickTransitionScreen(double milliseconds)
     {
-        if (!_transitionScreen.Covering && _fadingChange is null && _transitionPanel is null) return;
+        if (!_transitionScreen.Covering && _fadingChange is null && _transitionPanel is null && _pendingLoad is null) return;
         // A frame that took long (a map published on the main thread) does not eat a fade: one step is at most a quarter of a second.
         _transitionScreen.Advance(Math.Min(milliseconds, 250));
         // The change that waited is the session's and the actor's of the request: a load, a reset or a death that replaced them drops it.
@@ -51,6 +51,8 @@ public partial class TerrainViewerApp
             WorldObservation(() => change());
         }
         DrawTransitionScreen();
+        // ARC-UI-1504: a load that waited for its screen runs once the screen was drawn.
+        TickPendingLoad();
     }
 
     private void DrawTransitionScreen()

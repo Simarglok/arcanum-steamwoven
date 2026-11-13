@@ -258,7 +258,9 @@ The session's plan carries each presentation step; the viewer's hosts answer the
   save (Last Save, a row of the load window) before any map stands, until the save is in (the menu's wait note is gone), and for a quick load
   (F8) or a load from the in-play menu that opens another map, until that map is there. A load that does not take (the save's map cannot be
   found or does not load, a refusal after the map loaded) clears the screen and gives the menu or the running game back with the reason. A load of
-  the map already shown is one synchronous step of the viewer (no background load, so no frame is drawn while it runs): its screen cannot be
-  seen. Known difference, [issue #1504](https://github.com/Simarglok/arcanum-steamwoven/issues/1504).
+  the map already shown (ARC-UI-1504) is one synchronous step of the viewer, so the screen is raised first and the load runs on a later frame,
+  after the screen was drawn at least once (the player's loads only: F8, the load window, Last Save; the smokes, the death reload and a menu
+  flow that already shows the screen load at once); it goes with the load, or at once when the load is refused, and while it stands the keys and
+  the menu take no input. No clock frame turns during the load itself, as the step is short (the map's own load time decides the rest).
 - **Not here.** The new game's own fade-out and its two movies (flag 0x45, AreaNewGameStart), the homecoming of a former follower (flag 0, no
   presentation), and the 3 × 3 pre-cache.

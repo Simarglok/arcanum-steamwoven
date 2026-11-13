@@ -17,8 +17,8 @@ public partial class TerrainViewerApp
     // attacks ran; each hit runs through the session, and an object the hit destroyed or switched off is no longer drawn. NONE on a
     // map without such an object. ARC-COMBAT-014: only an object the player's click can pick is a candidate (a click-through scenery,
     // OF_CLICK_THROUGH, is never picked, as in the original, and a roof-covered body is not drawn); a candidate with no cell within the
-    // hero's reach to stand on, with no start the route planner connects to the cell the attack walks to, or with no point under the
-    // pointer is skipped for the next, up to eight; NONE with the reasons when all are skipped.
+    // hero's reach to stand on, with no start the route planner connects to the cell the attack walks to (ARC-BUG-1536: and from which the
+    // swing has a clear shot), or with no point under the pointer is skipped for the next, up to eight; NONE with the reasons when all are skipped.
     private async Task RunAreaObjectAttackSmokeAsync()
     {
         if (_areaSession is not { } session || session.QueryHero() is null || ObjectTargets() is not { } targets || _readyArea is not { } area
@@ -66,7 +66,7 @@ public partial class TerrainViewerApp
                 catch (InvalidOperationException) { skipped.Add($"{candidate.Target.Entity}:no standable cell within reach"); continue; }
                 // A start a few cells away from which the attack's approach finds a route (ARC-WORLD-073: the original's approach, one
                 // step short of the object; a start across a fence or wall from the object would leave the walk without a route).
-                CellCoord? start = null;
+                CellCoord? start = null; var noShot = false;
                 foreach (var (dx, dy) in new[] { (3, 0), (-3, 0), (0, 3), (0, -3), (2, 0), (-2, 0), (0, 2), (0, -2), (1, 0), (-1, 0), (0, 1), (0, -1) })
                 {
                     var near = new CellCoord(cell.X + dx, cell.Y + dy);
@@ -79,9 +79,17 @@ public partial class TerrainViewerApp
                     var routes = new AreaRouteSource(live.Snapshot, live.Chart, live.Occupancy, () => live.Portals?.Invoke());
                     if (approach != standable && Arcanum.Simulation.Navigation.RoutePlanner.Plan(routes, standable, approach).Outcome
                         != Arcanum.Simulation.Navigation.RouteOutcome.Found) continue;
+                    // ARC-BUG-1536: the walk ends at the approach cell and the swing needs a clear shot from there (a wall on the target's own
+                    // tile blocks the line from a diagonal, the original's rule): a start whose approach has none is no start. A ranged
+                    // weapon's walk stops at the first cell with a clear shot, so its approach cell is not tested.
+                    if (session.QueryHeroAttack() is { } heroAttack && !RangedPath(heroAttack))
+                    {
+                        var world = live.Chart.ToWorld(approach);
+                        if (!InAttackReach(candidate.Target.Row, new(checked((int)world.X), checked((int)world.Y)), heroAttack)) { noShot = true; continue; }
+                    }
                     start = standable; break;
                 }
-                if (start is null) { skipped.Add($"{candidate.Target.Entity}:no start with a route to it"); continue; }
+                if (start is null) { skipped.Add($"{candidate.Target.Entity}:{(noShot ? "no clear shot from the approach cell" : "no start with a route to it")}"); continue; }
                 if (!HeroInCombatMode) ToggleCombatMode();
                 Require(HeroInCombatMode, "the hero is in combat mode");
                 _camera!.ResetWorld(WorldAnchor, WorldViewport, 1);
