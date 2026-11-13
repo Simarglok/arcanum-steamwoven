@@ -50,13 +50,15 @@ public sealed partial class GameSessionOwner
         _encumbranceEffect ?? (NpcEffectRules?.Invoke(CarryRules.EffectNumber) is { Number: CarryRules.EffectNumber } rule && EffectDomain.IsValid(rule) ? rule : null);
 
     /// <summary>
-    /// The encumbrance recalculation of an NPC for the level it reaches (<paramref name="level"/>): every entry of effect 158 leaves its list (whatever added it) and the effect with the item cause is added
-    /// <see cref="CarryRules.EffectEntries"/> times (one a level, eight at the heaviest). Two revisions when both the removal and the add change the list. Not the NPC's encumbrance fatigue timer (a level of 4 or
-    /// more) nor the animation speed: the caller refuses a level with a timer.
+    /// The encumbrance recalculation of an NPC for the level it reaches (<paramref name="level"/>) on <paramref name="map"/>: every entry of effect 158 leaves its list (whatever added it) and the effect with the item cause is added
+    /// <see cref="CarryRules.EffectEntries"/> times (one a level, eight at the heaviest); a level with a drain interval (4 and above) schedules the NPC's encumbrance fatigue timer unless one is pending
+    /// (<see cref="ScheduleNpcEncumbranceDrain"/>, the caller asked <see cref="CanScheduleNpcEncumbrance"/> first). Two revisions when both the removal and the add change the list. Not the animation speed.
     /// </summary>
     /// <remarks>The recalculation 0x45F820 with the removal 0x4EA200, the add 0x4E9F70, the timer 0x45E820 (mode 1) and the animation speed 0x436FA0.</remarks>
-    internal SessionEffectResult RecalculateNpcEncumbrance(SessionLifeTarget target, SessionEffectDefinition rule, int level)
+    internal SessionEffectResult RecalculateNpcEncumbrance(SessionLifeTarget target, SessionMapId map, SessionEffectDefinition rule, int level)
     {
+        // The timer comes whether or not the list's own change is refused, as in the original, whose list add cannot fail.
+        if (CarryRules.DrainIntervalMs(level) is { } delay) ScheduleNpcEncumbranceDrain(target, map, delay);
         var removed = RemoveAllNpcEffects(Version, target, CarryRules.EffectNumber);
         if (removed.Disposition == GameSessionDisposition.Rejected) return removed;
         var entries = CarryRules.EffectEntries(level);

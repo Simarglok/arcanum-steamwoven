@@ -16,4 +16,6 @@ public interface IAreaEventObjects
     SessionCritterCombat? Critter(string entity) => null;
     /// <summary>ARC-MAGIC-1561: the items the NPC wears now on a map (not broken, not destroyed), or null when the host cannot say (<see cref="AreaCombatHost.Worn(GameSessionOwner, int, string)"/>).</summary>
     IReadOnlyList<AreaNpcWornItem>? Worn(GameSessionOwner session, int runtimeMap, string entity) => null;
+    /// <summary>ARC-MAGIC-1568: the NPC's stored base stats (the 28 entries) with the entries a spell wrote laid over them, or null: the strength an NPC's encumbrance timer reads when it fires.</summary>
+    IReadOnlyList<int>? StoredStats(string entity) => null;
 }

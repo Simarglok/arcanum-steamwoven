@@ -18,7 +18,7 @@ namespace Arcanum.World;
 /// diagnostic NPC facts, and the hero's or the diagnostic PC's facts); without a conversation host it has none. ARC-WORLD-096: a
 /// restock event runs through the viewer's restock host (<see cref="AreaRestockHost"/>); without one it waits a minute.
 /// </summary>
-public sealed class AreaEventWorld : ISessionScriptWorld, ISessionPartyEventWorld, ISessionLootWindowWorld, ISessionAiWorld, ISessionRestockWorld, ISessionBodyWorld, ISessionEncounterWorld
+public sealed class AreaEventWorld : ISessionScriptWorld, ISessionPartyEventWorld, ISessionLootWindowWorld, ISessionAiWorld, ISessionRestockWorld, ISessionBodyWorld, ISessionEncounterWorld, ISessionNpcStatsWorld
 {
     private readonly Func<IAreaEventObjects?> _combat;
     private readonly Func<AreaConversationHost?> _talk;
@@ -95,6 +95,9 @@ public sealed class AreaEventWorld : ISessionScriptWorld, ISessionPartyEventWorl
         // ARC-DEV-076 (MIG3): by identity, wherever the object stands: a follower the session moved answers as on its home map.
         return _combat()?.Facts(entity);
     }
+
+    /// <summary>ARC-MAGIC-1568: the NPC's stored base stats by identity, from the shown map's combat host (null without one).</summary>
+    public IReadOnlyList<int>? StoredStats(SessionMapId map, string entity) => _combat()?.StoredStats(entity);
 
     public bool ObjectExists(SessionMapId map, string entity) =>
         entity == SessionEventKinds.PlayerEntity || _combat()?.HasObject(entity) == true;
