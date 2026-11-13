@@ -61,6 +61,8 @@ public partial class TerrainViewerApp
             _conversationHost.HeroAttackAvailable = () => AreaAiHostNow() is not null;
             // ARC-SCRIPT-1358: an l: reply ends the talk and opens the world map; only in map mode, where the bar's Map button has one.
             _conversationHost.WorldMapAvailable = () => WorldMapActive;
+            // ARC-SCRIPT-1533: a d: or x: reply measures from where the speaker stands now (a companion's live cell, else its T0 cell).
+            _conversationHost.SpeakerCell = speaker => SpeakerCell?.Invoke(speaker) ?? (speaker.WorldX, speaker.WorldY);
             _conversationHost.HeroAttack = entity => AreaAiHostNow() is { } ai && ai.OrderAttack(new Arcanum.Session.CompanionOrderAttack(Arcanum.Session.SessionCombatant.Hero, Arcanum.Session.SessionCombatant.Critter(entity), Arcanum.Simulation.Ai.Loudness.Normal, Arcanum.Simulation.Ai.AttackEventFlags.None));
             // ARC-SCRIPT-1135: an so action that newly sets the spread-out flag starts goal 69 on the shown map's AI host (CF4).
             _conversationHost.SpreadOutStart = entity => AreaAiHostNow() is { } spreadAi && spreadAi.StartSpreadOut(entity);

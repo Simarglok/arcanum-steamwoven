@@ -258,6 +258,7 @@ public sealed class AreaConversationHost
         host.NpcHostile = NpcHostile;
         host.KillNpc = KillNpc;
         host.WorldMapAvailable = WorldMapAvailable;
+        host.SpeakerCell = SpeakerCell;
         return host;
     }
 
@@ -618,7 +619,9 @@ public sealed class AreaConversationHost
                 // ARC-SCRIPT-1358: an l: reply asks for the world map once the talk ended; the viewer says whether it has one (map mode) and opens it.
                 WorldMapAvailable?.Invoke() == true ? new WorldMapPort(this) : null,
                 // ARC-SCRIPT-1532: a q: reply picks its record from the module's quest rules table; without the table the reply stays a frontier.
-                _greetingTexts?.QuestReplies is { } questReplies ? new QuestReplyPort(questReplies) : null));
+                QuestReplies: _greetingTexts?.QuestReplies is { } questReplies ? new QuestReplyPort(questReplies) : null,
+                // ARC-SCRIPT-1533: the d: and x: replies read the area names and locations of the module's area table and where the speaker stands.
+                Directions: _greetingTexts?.Areas is { } areaTable ? new AreaDialogDirections(areaTable, speaker, SpeakerCell) : null));
         return new(AreaConversationStartStatus.Started, conversation, speaker, $"script {dialog.Script} SCR line {dialog.Line} -> DLG node {dialog.Node}", party,
             document, dialog.Script) { Greeting = greeting };
     }
@@ -784,6 +787,9 @@ public sealed class AreaConversationHost
             return attack(entity) ? DialogCommandResult.Applied : DialogCommandResult.Rejected;
         }
     }
+
+    /// <summary>ARC-SCRIPT-1533: where a speaker stands now (a following companion's live cell), read when a <c>d:</c> or <c>x:</c> reply tells the way; null: its T0 cell.</summary>
+    public Func<AreaSpeaker, (long X, long Y)>? SpeakerCell { get; set; }
 
     /// <summary>ARC-SCRIPT-1358: whether the viewer can open the world map after a talk (map mode); read when a talk starts. Null or false: an <c>l:</c>
     /// reply stays blocked as an unsupported interaction.</summary>

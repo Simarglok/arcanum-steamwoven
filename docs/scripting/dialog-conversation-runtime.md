@@ -105,8 +105,8 @@ port, then reads the effective reaction; at most 20 (`InsultEndsAtOrBelow`) the 
 continuation (the NPC's last words are its race line 1000 with the greeting port, [below](#insult-line-arc-script-1505)), above 20 its transition follows (0x4191E0). Without a world port, or
 with an action ending in `JO`/`UW`/`FL`/`ET` (the original then skips the insult, read for FL), it is offered blocked. `b h l p` (exact) and
 `c z` (prefix) are offered blocked as
-`UnsupportedInteraction`, and so is a prefix `t` without the [trainer ports](#trainer-reply-arc-script-1150) and a prefix `r` without the [rumor ports](#rumor-reply-arc-script-1304); with them `t:` is the trainer reply and `r:` the rumor reply; `q` with the [quest ports](#quest-state-reply-arc-script-1532) is the quest-state reply; `d u x` (and `q` without them) have state-dependent visibility and make the step a
-frontier. NPC `g:` (prefix) is the original's greeting when the conversation has a greeting port (ARC-WORLD-058,
+`UnsupportedInteraction`, and so is a prefix `t` without the [trainer ports](#trainer-reply-arc-script-1150) and a prefix `r` without the [rumor ports](#rumor-reply-arc-script-1304); with them `t:` is the trainer reply and `r:` the rumor reply; `q` with the [quest ports](#quest-state-reply-arc-script-1532) is the quest-state reply; `d:` and `x:` are the [directions replies](#directions-reply-arc-script-1533) with their ports and otherwise, like `u` and `q` without its ports
+(state-dependent visibility), make the step a frontier. NPC `g:` (prefix) is the original's greeting when the conversation has a greeting port (ARC-WORLD-058,
 [dialog greeting](dialog-greeting.md)), else a frontier; an exact `i:` is the [insulted line](#insult-line-arc-script-1505) with the greeting port, else a frontier; `m:`/`r:` (prefix) are frontiers ([#1535](https://github.com/Simarglok/arcanum-steamwoven/issues/1535)). Other text is literal.
 
 ## conversation-grammar-v1
@@ -488,8 +488,8 @@ a dumb PC (its intelligence as the reply gates read it at most 4, the original's
 offset still applied. Without the port, or when its facts are unknown, the text stays empty and the reply works as before; a refused
 roll, a port exception or an undecodable phrase fails the conversation (`InvalidQueryResult`, `QueryException`, `InvalidText`). The
 phrase changes only the text: the transitions and blocks above stay. The `t:` phrase (PC lines 500..599) is built (ARC-SCRIPT-1150); its argument is
-stored after the phrase, not appended to it (ledger DTR1). The `r:` phrase (the PC's class line 2000) is built too (ARC-SCRIPT-1304, ledger RMR1). Not built: the phrases of the prefix markers (`c d q u x z`;
-`d x` keep the reply's text after a phrase, `c` reads one line; issues [#1532](https://github.com/Simarglok/arcanum-steamwoven/issues/1532), [#1533](https://github.com/Simarglok/arcanum-steamwoven/issues/1533), [#1534](https://github.com/Simarglok/arcanum-steamwoven/issues/1534)) and the healer menu behind `h:` (ARC-SCRIPT-044).
+stored after the phrase, not appended to it (ledger DTR1). The `r:` phrase (the PC's class line 2000) is built too (ARC-SCRIPT-1304, ledger RMR1). The `d:` (PC lines 1300..1399) and `x:` (1400..1499) phrases are built (ARC-SCRIPT-1533, ledger DIR1). Not built: the phrases of the prefix markers (`c q u z`;
+`c` reads one line; issues [#1532](https://github.com/Simarglok/arcanum-steamwoven/issues/1532), [#1534](https://github.com/Simarglok/arcanum-steamwoven/issues/1534)) and the healer menu behind `h:` (ARC-SCRIPT-044).
 
 ## Trainer reply (ARC-SCRIPT-1150)
 
@@ -577,6 +577,28 @@ Picking it runs the reply's action (the hostile check too), then, in the screen 
 Receipts: the action's effects are recorded as for any reply; the story talk writes nothing. A rebuild keeps the screen and a stale token is `NotOffered`, as for the other
 talks. Tests: `DialogStoryLineTests` (synthetic) and the opt-in `DialogStoryLineRealDataTests` (`DAT_ROOT`: all 212 installed `c:` replies in 41 files are admitted; an
 installed story talk tells an installed line).
+
+## Directions reply (ARC-SCRIPT-1533)
+
+With the optional `IDialogDirectionsPort` (`DialogConversationPorts.Directions`: the area names and the bearing from the NPC to an area) and the known-area (`Areas`) and greeting ports, a
+Player reply whose text starts with `d:` or `x:` (either case; `d:$price,areas`) is the original's **directions reply** ([ledger DIR1–DIR9](../research/ledger/social.md#directions-replies-arc-script-1533)).
+A reply with a price also needs the `World`, `Gold` and purse ports (the price on the reaction scale, the payment), `x:` the `World` port (the area marking); without them, or with an area outside
+1..4095, no `$` or no comma after it, it stays a frontier (`UnsupportedGeneratedText`) as before. It is offered as `Generated` (marker `d` or `x`, PC lines 1300..1399 or 1400..1499, the arguments
+not shown) with the transition `Directions`, **unless the PC knows every area of its list** (`IDialogAreaPort`), when it is left out; a left-out reply still takes a slot of the five. A dialog
+transfer or window action in the same reply keeps it blocked (`UnsupportedInteraction`), and a blocked reply is left out the same way. Picking it runs the reply's action, then the talk, in the screens of the [trainer's talk](#trainer-reply-arc-script-1150)
+(`TrainerTalk`; the options are `DirectionsStep`, the reply's own response is followed on leaving):
+
+| Screen | NPC line | Options |
+| --- | --- | --- |
+| Page (0x419E70) | NPC line 100..199 (`x:` 500..599, 0x418780) | up to four areas still unknown to the PC, each named by the area table; then the more option (PC line 600..699, the next page) while areas remain, else the way out (PC line 800..899, the reply's response) |
+| Price (0x41A0F0, 0x41A230 → 0x418A40) | class line 1000 with the price on the reaction scale | yes (PC 1..99) pays, no (PC 100..199) leaves; no screen for a price below 1, and a follower of the PC (`NpcLedByPc`) is never charged |
+| Way (0x41A150, 0x41A290) | `d:`: line 200 / 300 / 400 by the distance (under 2 / under 100 / more units of 3168 tiles) + 10 per direction (0x4B8D50, 0x4B96F0); `x:`: 600 (under 2) or 700 + 10 per direction, the units printed into the line from 2 on | the PC's class line 1000 only; `x:` then marks the area known (`MarkAreaCommand`, as `MM`), **`d:` does not** (ledger DIR5, DIR6) |
+
+The way is built before the payment, so a failed line never follows a spent price; the effect budget covers the payment and the marking together. A refused or throwing port, an area the port cannot
+name, a bearing outside the eight directions fail the talk (`InvalidQueryResult`, `QueryException`). The viewer's host (`AreaDialogDirections`) names the areas from `mes\gamearea.mes` (`WorldAreaTable`,
+loaded with the greeting texts) and measures from the speaker's location (a following companion's live cell, else its T0 cell: another NPC the AI host has moved is measured from where the map data puts it, a limit of the talk range too, [#1601](https://github.com/Simarglok/arcanum-steamwoven/issues/1601)) with `LineOfFireRules.Rotation` and `WorldTravelGeometry.Distance`.
+Tests: `DialogDirectionsTests` (synthetic), `AreaDialogDirectionsTests` (the host's seam) and the opt-in `DialogDirectionsRealDataTests` (`DAT_ROOT`: the two installed `d:` replies are admitted and run
+to their way; no installed `x:`).
 
 ## Quest-state reply (ARC-SCRIPT-1532)
 
@@ -725,6 +747,8 @@ DAT_ROOT=<installation> "$DOTNET" test tests/Arcanum.Scripting.Tests/Arcanum.Scr
 "$DOTNET" test tests/Arcanum.TerrainViewer.Tests/Arcanum.TerrainViewer.Tests.csproj --no-build --filter "FullyQualifiedName~AreaCombatConversation"
 "$DOTNET" test tests/Arcanum.Scripting.Tests/Arcanum.Scripting.Tests.csproj --no-build --filter "FullyQualifiedName~DialogHostileTests"   # ARC-DEV-193
 "$DOTNET" test tests/Arcanum.Scripting.Tests/Arcanum.Scripting.Tests.csproj --no-build --filter "FullyQualifiedName~DialogInsultLine"   # ARC-SCRIPT-1505
+"$DOTNET" test tests/Arcanum.Scripting.Tests/Arcanum.Scripting.Tests.csproj --no-build --filter "FullyQualifiedName~DialogDirections"   # ARC-SCRIPT-1533
+"$DOTNET" test tests/Arcanum.TerrainViewer.Tests/Arcanum.TerrainViewer.Tests.csproj --no-build --filter "FullyQualifiedName~AreaDialogDirections"
 "$DOTNET" test tests/Arcanum.TerrainViewer.Tests/Arcanum.TerrainViewer.Tests.csproj --no-build --filter "FullyQualifiedName~AreaHostileConversation|FullyQualifiedName~hostile_check"
 "$DOTNET" test tests/Arcanum.Scripting.Tests/Arcanum.Scripting.Tests.csproj --no-build --filter "FullyQualifiedName~DialogItemHoldTests"   # ARC-DEV-194
 "$DOTNET" test tests/Arcanum.Session.Tests/Arcanum.Session.Tests.csproj --no-build --filter "FullyQualifiedName~DialogItemHoldPort"
