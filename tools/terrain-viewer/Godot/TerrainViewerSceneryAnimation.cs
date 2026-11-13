@@ -10,7 +10,7 @@ namespace Arcanum.TerrainViewer;
 // ARC-DEV-142 (MIG13 S9a, docs/architecture/goal-table.md §3.5): the loop is the scenery's own goal run (goal 1, or 77 for a burning scenery, the S9 read GT75-GT78) that the frame step hands to the scenery host
 // through the router, on the animation clock (so the loops stop with the Esc pause); this file binds the host to the shown map and redraws a scenery whose frame the host moved.
 // ARC-DEV-144 (S9c): goal 77 burns the critters on the scenery's tile (TerrainViewerFire.cs).
-// ARC-RENDER-1126: the begin node's looping sound (TerrainViewerSoundCallers.cs). Not ready: the ambient sound of a one-frame ART and of a created scenery, restarting a loop when an object's ART or OFF flag changes at runtime (AreaSceneryHost.Restart is the rule; no site calls it) and the items on a burning tile (busted scenery keeps its ground body,
+// ARC-RENDER-1126: the begin node's looping sound (TerrainViewerSoundCallers.cs). ARC-RENDER-1781: an object's ART changed at run time reframes its loop (TerrainViewerSceneryArt.cs). Not ready: the ambient sound of a one-frame ART and of a created scenery, restarting a loop when an object's OFF flag changes at runtime (AreaSceneryHost.Restart is the rule; no site calls it) and the items on a burning tile (busted scenery keeps its ground body,
 // unanimated). A table-exhaustion sweep ends the loops for good, as in the original (GT98).
 public partial class TerrainViewerApp
 {
@@ -42,6 +42,8 @@ public partial class TerrainViewerApp
             _sceneryStamp = area.Plan;
             _sceneryAnimation = AreaSceneryAnimation.Create(area.Plan, area.Snapshot.Objects);
             _sceneryHost = new(session, _sceneryAnimation, HeroWorldCell, FireBurnerFor(session));
+            // ARC-RENDER-1781: the sceneries with a changed art get their loops before the loops start (the original starts a loop with the art the object has).
+            SyncSceneryArt(_sceneryHost, newHost: true);
             var started = _sceneryHost.Start();
             // A restamp drops the old map's bodies from the canvas too, even when no loop has stepped yet.
             if (_sceneryBodies.Count > 0) { _sceneryBodies = []; _canvas?.SetAreaMovingBodies(AreaMovingCommands()); }
@@ -49,6 +51,8 @@ public partial class TerrainViewerApp
                 + $"frames={_sceneryAnimation.Loops.Sum(l => l.Frames.Count)} burning={_sceneryAnimation.Loops.Count(l => l.Burning)} runs={started} refused={_sceneryHost.Refused}");
             changed = true;
         }
+        // ARC-RENDER-1781: a scenery whose art field came, changed or went at run time gets the loop of its art (AN10).
+        changed |= SyncSceneryArt(_sceneryHost, newHost: false);
         // A start that found the table held by a pass is tried again (the loops already running stay).
         if (_sceneryHost.StartPending) _sceneryHost.Start();
         // ARC-DEV-352: the created sceneries (a wall of fire's pieces) get or lose their loops.
@@ -72,11 +76,15 @@ public partial class TerrainViewerApp
         var bodies = new Dictionary<AreaObjectKey, AreaDrawCommand>();
         foreach (var loop in animation.Loops)
         {
+            if (_sceneryArt.ContainsKey(loop.Entity)) continue;
             if (!overlay.Bodies.TryGetValue(loop.Key, out var command) || !overlay.Visuals.TryGetValue(command.Visual, out var body)) continue;
             if (loop.Visual.Key == body.Key && loop.Loop.OffsetX == 0 && loop.Loop.OffsetY == 0) continue;
             bodies[loop.Key] = AreaScenePlan.SceneryFrame(command, loop.Row, body, loop.Visual,
                 loop.Loop.OffsetX, loop.Loop.OffsetY);
         }
+        // ARC-RENDER-1781: a scenery with a changed art, on its loop's frame of that art or on frame 0 (a busted one's ground body wins in the draw order).
+        foreach (var (entity, art) in _sceneryArt)
+            if (SceneryArtCommand(entity, art, _sceneryHost, overlay.Bodies, overlay.Visuals) is { } drawn) bodies[art.Row.Key] = drawn;
         AddOccupiedBeds(bodies, overlay.Bodies, overlay.Visuals);
         _bedRevisionDrawn = _bedOccupancy.Revision;
         if (bodies.Count == 0 && _sceneryBodies.Count == 0) return;

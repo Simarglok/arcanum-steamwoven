@@ -228,6 +228,110 @@ public sealed class AreaSceneryAnimationTests
         Assert.AreEqual(GoalType.AnimateLoopFireDamage, f.Host.GoalOf(f.Loop.Entity), "the goal follows the object's present flag 0x10");
     }
 
+    // ARC-RENDER-1781 (AN6, AN10-AN13): the frames a changed art has (their deltas and the frame count are what the loop reads).
+    private static IReadOnlyList<AreaVisualRecord> NewArt(AreaObjectRecord row, int frames, (int X, int Y) delta = default)
+    {
+        var body = Visual(row, 24, 30, 12, 28) with { ArtOffsetX = 0, ArtOffsetY = 0, FrameCount = frames };
+        return Enumerable.Range(0, frames).Select(i => body with { Frame = i, RawArt = body.RawArt | ((uint)i << 14), ArtOffsetX = i == 0 ? 0 : delta.X, ArtOffsetY = i == 0 ? 0 : delta.Y }).ToArray();
+    }
+
+    [TestMethod]
+    public void A_still_scenery_that_takes_an_art_of_several_frames_gets_the_loop_of_that_art()
+    {
+        var (plan, row) = Scenery(frames: 1, fps: 8);
+        using var f = new Fixture(plan, row);
+        Assert.AreEqual(0, f.Animation.Loops.Count, "a one-frame art starts no loop");
+        Assert.AreEqual(SceneryRestart.Start, f.Host.Reframe(row, NewArt(row, 4), framesPerSecond: 8));
+        var loop = f.Animation.Loops.Single();
+        Assert.AreEqual(4, loop.Frames.Count);
+        Assert.AreEqual(125, loop.Loop.PauseMs, "a run started now reads the new art's rate");
+        Assert.AreEqual(GoalType.AnimateLoop, f.Host.GoalOf(loop.Entity));
+        Assert.AreEqual((0, 0, 0), f.Host.Pose(loop.Entity), "the action set frame 0");
+        f.Run(1000);
+        Assert.IsTrue(loop.Loop.Steps is >= 7 and <= 8, $"one frame per 125 ms: {loop.Loop.Steps}");
+        Assert.AreEqual(loop.Loop.Steps % 4, loop.Loop.Frame, "it wraps over the new art's four frames");
+        Assert.AreEqual((loop.Loop.Frame, 0, 0), f.Host.Pose(loop.Entity));
+        Assert.AreEqual(0, f.Host.Start(), "the start leaves a scenery that has its run");
+    }
+
+    [TestMethod]
+    public void A_running_loop_follows_the_new_art_with_its_run_and_the_delay_it_began_with()
+    {
+        var (plan, row) = Scenery(frames: 2, fps: 8);
+        using var f = new Fixture(plan, row);
+        f.Host.Start();
+        f.Run(500);
+        var handle = f.Session.QueryGoals().MainRunOf(f.Loop.Entity)!.Handle;
+        Assert.AreEqual(SceneryRestart.Start, f.Host.Reframe(row, NewArt(row, 5), framesPerSecond: 20));
+        var loop = f.Animation.Loops.Single();
+        Assert.AreEqual(5, loop.Frames.Count);
+        Assert.AreEqual(0, loop.Loop.Frame, "the frame is 0 after the change");
+        Assert.AreEqual(125, loop.Loop.PauseMs, "the begin node stored the old art's delay; the starter does not run again while the run exists (AS2)");
+        Assert.AreEqual(handle, f.Session.QueryGoals().MainRunOf(loop.Entity)!.Handle, "the same run");
+        f.Run(1000);
+        Assert.AreEqual(loop.Loop.Steps % 5, loop.Loop.Frame, "the next frame wraps at the new art's frame count (0x502C40)");
+        Assert.IsTrue(loop.Loop.Frame != 0 || loop.Loop.Steps % 5 == 0);
+        Assert.AreEqual(1, f.Session.QueryGoals().InUseCount);
+    }
+
+    [TestMethod]
+    public void An_art_of_one_frame_kills_the_loop_and_leaves_the_object_where_the_loop_moved_it()
+    {
+        var (plan, row) = Scenery(frames: 3, fps: 10, delta: (2, -1));
+        using var f = new Fixture(plan, row);
+        f.Host.Start();
+        f.Run(130);
+        var entity = f.Loop.Entity;
+        var moved = f.Host.Pose(entity)!.Value;
+        Assert.AreEqual((1, 2, -1), moved);
+        Assert.AreEqual(SceneryRestart.Kill, f.Host.Reframe(row, NewArt(row, 1), framesPerSecond: 8));
+        Assert.AreEqual(0, f.Animation.Loops.Count, "the old art's loop stops");
+        Assert.AreEqual(0, f.Host.Running);
+        Assert.AreEqual(0, f.Session.QueryGoals().InUseCount);
+        Assert.AreEqual((0, 2, -1), f.Host.Pose(entity), "frame 0 of the one-frame art, the object offset kept (field 3 and 4 of the object)");
+        f.Run(500);
+        Assert.AreEqual((0, 2, -1), f.Host.Pose(entity), "still");
+        // A later art of several frames starts from that offset.
+        Assert.AreEqual(SceneryRestart.Start, f.Host.Reframe(row, NewArt(row, 3, (1, 1)), framesPerSecond: 10));
+        Assert.AreEqual((2, -1), (f.Animation.Loops.Single().Loop.OffsetX, f.Animation.Loops.Single().Loop.OffsetY));
+        Assert.AreEqual(100, f.Animation.Loops.Single().Loop.PauseMs);
+    }
+
+    [TestMethod]
+    public void The_art_writers_restart_rule_decides_flags_not_the_art()
+    {
+        var (plan, row) = Scenery(frames: 4, fps: 8, sceneryFlags: SceneryAnimationRules.NoAutoAnimate);
+        using var f = new Fixture(plan, row);
+        Assert.AreEqual(SceneryRestart.Kill, f.Host.Reframe(row, NewArt(row, 4), 8), "scenery flag 0x1: no auto-animation");
+        Assert.AreEqual(0, f.Animation.Loops.Count);
+        Assert.AreEqual(0, f.Host.Running);
+        var (plan2, row2) = Scenery(frames: 4, fps: 8);
+        using var g = new Fixture(plan2, row2);
+        g.Host.Start();
+        var destroyed = Body(0, flags: 0x2);
+        Assert.AreEqual(SceneryRestart.Skip, g.Host.Reframe(destroyed, NewArt(destroyed, 1), 8), "an object that is off is left as it is");
+        Assert.AreEqual(1, g.Animation.Loops.Count);
+        Assert.AreEqual(SceneryRestart.Skip, g.Host.Reframe(row2, [], 8), "no frames: nothing to follow");
+    }
+
+    [TestMethod]
+    public void A_stoned_scenery_gets_no_new_loop_and_a_killed_loop_is_reported_for_its_voice()
+    {
+        var (plan, row) = Scenery(frames: 1, fps: 8);
+        using var f = new Fixture(plan, row);
+        var stoned = Body(0, scenery: 0) with { EffectiveFields = [.. row.EffectiveFields, Field(19, SceneryAnimationRules.Stoned)] };
+        Assert.AreEqual(SceneryRestart.Start, f.Host.Reframe(stoned, NewArt(stoned, 4), 8));
+        Assert.AreEqual(0, f.Animation.Loops.Count, "the begin node refuses a stoned object (AS3)");
+        Assert.AreEqual(0, f.Host.Running);
+        var (plan2, row2) = Scenery(frames: 4, fps: 8);
+        using var g = new Fixture(plan2, row2);
+        g.Host.Start();
+        Assert.AreEqual(0, g.Host.TakeKilledByArt().Count);
+        g.Host.Reframe(row2, NewArt(row2, 1), 8);
+        CollectionAssert.AreEqual(new[] { AreaUseScriptHost.EntityId(row2) }, g.Host.TakeKilledByArt().ToArray());
+        Assert.AreEqual(0, g.Host.TakeKilledByArt().Count, "taken once");
+    }
+
     [TestMethod]
     public void The_begin_node_of_each_loop_is_reported_once_for_its_looping_sound()
     {
