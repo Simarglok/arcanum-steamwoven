@@ -257,6 +257,8 @@ public sealed class AreaConversationHost
         host.SpreadOutStart = SpreadOutStart;
         host.HeroAttackAvailable = HeroAttackAvailable;
         host.NpcHostile = NpcHostile;
+        host.HealerHost = HealerHost;
+        host.SpellName = SpellName;
         host.KillNpc = KillNpc;
         host.GiveHeroItem = GiveHeroItem;
         host.WorldMapAvailable = WorldMapAvailable;
@@ -652,6 +654,11 @@ public sealed class AreaConversationHost
                 QuestReplies: _greetingTexts?.QuestReplies is { } questReplies ? new QuestReplyPort(questReplies) : null,
                 // ARC-SCRIPT-1533: the d: and x: replies read the area names and locations of the module's area table and where the speaker stands.
                 Directions: _greetingTexts?.Areas is { } areaTable ? new AreaDialogDirections(areaTable, speaker, SpeakerCell) : null,
+                // ARC-SCRIPT-1732: the h: reply's healer menu reads the speaker's college rank and heal skill from the shown map's AI host and starts the service or the spell there;
+                // without that host, the hero, or the skill and spell texts the reply stays blocked.
+                Healer: _session.QueryHero() is null || _greetingTexts?.Skills is null || HealerHost?.Invoke() is not { } healerAi || healerAi.HealerFacts(AreaConversationState.EntityId(speaker.Row)) is null ? null
+                    : new HealerPort(this, healerAi, AreaConversationState.EntityId(speaker.Row), AreaConversationState.Npc(speaker.Index)),
+
                 // ARC-UI-1739: the p: reply reads the session's issue queue and the newspaper file's headlines, and gives the printed issue through the viewer's item maker.
                 NewspaperStand: _greetingTexts?.Written is { } written && GiveHeroItem is not null && _session.QueryHero() is not null ? new NewspaperStandPort(this, written) : null));
         return new(AreaConversationStartStatus.Started, conversation, speaker, $"script {dialog.Script} SCR line {dialog.Line} -> DLG node {dialog.Node}", party,
@@ -725,7 +732,34 @@ public sealed class AreaConversationHost
     /// check is not made.</summary>
     public Func<string, bool>? NpcHostile { get; set; }
 
+    /// <summary>ARC-SCRIPT-1732: the shown map's AI host (the viewer's), which answers the healer menu's facts and starts its heal and spells; null or answering null: the <c>h:</c> reply stays blocked.</summary>
+    public Func<AreaAiHost?>? HealerHost { get; set; }
+
+    /// <summary>ARC-SCRIPT-1732: a spell's name as the healer menu shows it (<c>spell.mes</c>; the viewer's spell data), or null for none.</summary>
+    public Func<int, string?>? SpellName { get; set; }
+
     internal IDialogInventoryPort? InventoryPort() => _inventory?.DialogPort(_session, SpeakerEntity);
+
+    // ARC-SCRIPT-1732: the healer seam over the AI host of one talk (read when the talk starts); the host answers for the speaker only.
+    private sealed class HealerPort(AreaConversationHost host, AreaAiHost ai, string entity, DialogParticipantId npc) : IDialogHealerPort
+    {
+        public DialogHealerFacts Facts(DialogHealerQuery query)
+        {
+            if (query.PlayerCharacter != AreaConversationState.PcParticipant || query.Npc != npc) throw new ArgumentException("Not the talk's speaker.", nameof(query));
+            var facts = ai.HealerFacts(entity) ?? throw new InvalidOperationException("The speaker is no NPC of the AI host.");
+            return new(facts.Rank, facts.SkillAllowed, facts.SkillLevel, facts.SkillTraining, facts.LedByPc, facts.NoPcLeader);
+        }
+
+        public string? SkillName(int skill) => host._greetingTexts?.SkillName(skill);
+
+        public string? SpellName(int spell) => host.SpellName?.Invoke(spell);
+
+        public DialogCommandResult Execute(HealerSkillCommand command) =>
+            command.PlayerCharacter == AreaConversationState.PcParticipant && command.Npc == npc && ai.HealerService(entity) ? DialogCommandResult.Applied : DialogCommandResult.Rejected;
+
+        public DialogCommandResult Execute(HealerSpellCommand command) =>
+            command.PlayerCharacter == AreaConversationState.PcParticipant && command.Npc == npc && ai.HealerCast(entity, command.Spell, command.Free) ? DialogCommandResult.Applied : DialogCommandResult.Rejected;
+    }
 
     /// <summary>ARC-TECHNOLOGY-006: the NPC crafter the last SU asked for (its entity), set when the port applied it; the host opens the
     /// schematic window with it after the conversation ended with <see cref="DialogEndKind.SchematicWindow"/>.</summary>
@@ -923,16 +957,31 @@ public sealed class AreaConversationHost
         return speaker;
     }
 
-    // c-e (ledger WN1, WN2): the sheet of the dialog's NPC opens for the local PC (mode 2); only the NPC sheet is a window the viewer builds.
+    /// <summary>ARC-UI-1731: the item service the last <c>ii</c> or <c>ri</c> reply asked for (the window kind, the speaker's entity and speaker index), set
+    /// when the port applied it; the host opens the identify or repair window with it after the conversation ended with
+    /// <see cref="DialogEndKind.ItemIdentifyWindow"/> or <see cref="DialogEndKind.ItemRepairWindow"/>.</summary>
+    public (DialogWindowKind Window, string Entity, int Speaker)? ItemServiceRequest { get; private set; }
+
+    /// <summary>Takes the item service the last <c>ii</c> or <c>ri</c> reply asked for, once.</summary>
+    public (DialogWindowKind Window, string Entity, int Speaker)? TakeItemServiceRequest()
+    {
+        var request = ItemServiceRequest;
+        ItemServiceRequest = null;
+        return request;
+    }
+
+    // c-e, ii, ri (ledger WN1, WN2, IS1): the sheet of the dialog's NPC opens for the local PC (mode 2), or the item identify (mode 5) or item repair (mode 6) window.
     private sealed class WindowPort(AreaConversationHost host) : IDialogWindowPort
     {
-        public bool Offers(DialogWindowKind kind) => kind == DialogWindowKind.NpcSheet;
+        public bool Offers(DialogWindowKind kind) => kind is DialogWindowKind.NpcSheet or DialogWindowKind.ItemIdentify or DialogWindowKind.ItemRepair;
 
         public DialogCommandResult Execute(OpenWindowCommand command)
         {
-            if (command.Window != DialogWindowKind.NpcSheet || command.PlayerCharacter != AreaConversationState.PcParticipant
-                || host.SpeakerEntity(command.Npc) is not { } entity) return DialogCommandResult.Rejected;
-            host.NpcSheetSpeaker = (entity, (int)(command.Npc.Value - 1000));
+            if (command.PlayerCharacter != AreaConversationState.PcParticipant || host.SpeakerEntity(command.Npc) is not { } entity) return DialogCommandResult.Rejected;
+            var speaker = (int)(command.Npc.Value - 1000);
+            // The last window action of a reply decides the window (WN1), so a window an earlier action of the same reply asked for is dropped.
+            if (command.Window == DialogWindowKind.NpcSheet) { host.NpcSheetSpeaker = (entity, speaker); host.ItemServiceRequest = null; }
+            else { host.ItemServiceRequest = (command.Window, entity, speaker); host.NpcSheetSpeaker = null; }
             return DialogCommandResult.Applied;
         }
     }
@@ -1295,6 +1344,8 @@ public static class AreaConversationText
             CounterWriteCommand counter => $"LC {counter.Index} = {counter.Value}",
             KillNpcCommand => "NK NPC killed",
             GiveNewspaperCommand give => $"p: newspaper issue {give.Issue} given",
+            HealerSkillCommand heal => $"h: heal skill {heal.Skill} on the PC",
+            HealerSpellCommand cast => $"h: spell {cast.Spell} on the PC{(cast.Free ? " (free)" : string.Empty)}",
             CompanionCommand companion => companion.Action switch { DialogCompanionAction.Wait => "WA NPC waits", DialogCompanionAction.Leave => "LV NPC leaves the party", DialogCompanionAction.SpreadOut => "SO spread out", _ => "SC spread out cleared" },
             MarkAreaCommand area => $"MM area {area.Area} known",
             AlignmentCommand alignment => alignment.Mode == DialogReactionMode.Target ? $"AL set {alignment.Value}" : $"AL adjust {alignment.Value:+0;-0;+0}",

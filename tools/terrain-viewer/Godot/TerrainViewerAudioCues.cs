@@ -232,7 +232,7 @@ public partial class TerrainViewerApp
         }
         // ARC-RENDER-042: a death of an NPC lying in its fall (knocked out before the killing blow) plays no dying animation (0x45D730), so no bark either.
         if (result.Life?.Events.HasFlag(Arcanum.Simulation.Combat.LifeEvents.Died) == true && result.Recipient != Arcanum.Simulation.Combat.DamageRecipient.Attacker && !LyingInFall(targetEntity))
-            PlayDyingBark(targetEntity, targetRow, AreaFallenPoses.Animation(result.Life.Death), _areaSession?.QueryLifeRecord(targetEntity)?.DeathTimeMs);
+            PlayDyingBark(targetEntity, targetRow, DeathAnimationOf(result.Life.Death), _areaSession?.QueryLifeRecord(targetEntity)?.DeathTimeMs);
     }
 
     // The deaths whose bark played (by death time), so the attack's own call and the dying animation's start (any killer) play it once.

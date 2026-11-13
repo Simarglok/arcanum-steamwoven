@@ -231,6 +231,40 @@ public interface IScrCritterQueries
 }
 
 /// <summary>
+/// ARC-SCRIPT-1733 (ledger CS1–CS12): the critter-state and social conditions of <see cref="ScrAdmissionSet.CritterStateConditions"/>, which the original answers from the object's own fields (0x406CA0 over the field numbers named below) or from the
+/// reaction, danger, sight and hearing records. A host whose admission set holds one of them implements this interface. Each answer is null when the host does not know the object (the run stops, not modelled); an absent object never asks.
+/// </summary>
+public interface IScrCritterStateQueries
+{
+    /// <summary>Obj met PC before (c10, 0x4451B0 case 10 → 0x4C0C40): true for the same object twice; false unless the second object is a PC and the first an NPC; else whether the PC is in the NPC's remembered reaction slots (1..9), so false during the first conversation (the conversation slot 0 is not one).</summary>
+    bool? MetPcBefore(ScrObjectRef npc, ScrObjectRef pc);
+
+    /// <summary>Obj is invisible (c15, case 15): bit 0x1 of the spell flags (field 0x14) of any object.</summary>
+    bool? IsInvisible(ScrObjectRef obj);
+
+    /// <summary>Obj has surrendered (c25, case 25 → 0x4AF210 → 0x4AAB00): an NPC whose danger state reads surrender (not fleeing, critter flag 0x4000); false for any other object type.</summary>
+    bool? IsSurrendered(ScrObjectRef obj);
+
+    /// <summary>Obj is in dialog (c26, case 26 → 0x4C1110): an NPC with a conversation partner (the reaction-PC array's entry 0, field 0x129); every other object type goes to a registered callback (0x567400 reading the PC's dialog slot) which is not modelled and answers null.</summary>
+    bool? IsInDialog(ScrObjectRef obj);
+
+    /// <summary>Obj can see obj (c28, case 28 → 0x4AF260): the sight check of the observer toward the target, true when it needs nothing more (excess 0); null for an observer that is not an NPC this host holds sight facts of.</summary>
+    bool? CanSee(ScrObjectRef observer, ScrObjectRef target);
+
+    /// <summary>Obj can hear obj (c29, case 29 → 0x4AF470 with loudness 1, normal): the hearing check of the listener toward the source; null for a listener that is not an NPC this host holds hearing facts of.</summary>
+    bool? CanHear(ScrObjectRef listener, ScrObjectRef source);
+
+    /// <summary>Obj is invulnerable (c30, case 30): object flag 0x400000 (field 0x13) of any object, the flags as the session has them.</summary>
+    bool? IsInvulnerable(ScrObjectRef obj);
+
+    /// <summary>Obj is undead (c38, case 38): an NPC whose critter flags (0xDA) hold the undead bit 0x4; false for the PC and any other object type (the original tests the object type 0x10 first).</summary>
+    bool? IsUndead(ScrObjectRef obj);
+
+    /// <summary>Prowling (c51, case 51 → 0x45EDE0): a PC or NPC whose critter flags hold the prowling bit 0x1 (the session's concealment of the hero and of a follower); false for any other object type.</summary>
+    bool? IsProwling(ScrObjectRef obj);
+}
+
+/// <summary>
 /// ARC-SCRIPT-1661 (ledger CP12): the question of adjust stat (action 137, 0x447220 case 0x89), which the alignment weapon script 30252 runs at the wielder. A host whose admission set holds action 137 implements this interface.
 /// </summary>
 public interface IScrStatAdjustQueries
@@ -936,7 +970,7 @@ public sealed class ScrRunResult
 }
 
 /// <summary>How a dispatch runs: the rule mode's script switches, the admitted set (default <see cref="ScrAdmissionSet.S5"/>,
-/// at most <see cref="ScrAdmissionSet.S53"/>, admitted for the lines reachable from the event's line), the executed-line
+/// at most <see cref="ScrAdmissionSet.S54"/>, admitted for the lines reachable from the event's line), the executed-line
 /// budget and the call depth.</summary>
 public sealed record ScrRunOptions
 {
@@ -957,7 +991,7 @@ public sealed record ScrRunOptions
         ArgumentNullException.ThrowIfNull(Admission);
         if (MaxExecutedLines is <= 0 or > OriginalLineBudget) throw new ArgumentOutOfRangeException(nameof(MaxExecutedLines), "The line budget is 1..1000.");
         if (MaxCallDepth is < 1 or > 64) throw new ArgumentOutOfRangeException(nameof(MaxCallDepth), "The call depth is 1..64.");
-        if (!Admission.IsSubsetOf(ScrAdmissionSet.S53)) throw new ArgumentException("The interpreter runs only the commands of ScrAdmissionSet.S53.", nameof(Admission));
+        if (!Admission.IsSubsetOf(ScrAdmissionSet.S54)) throw new ArgumentException("The interpreter runs only the commands of ScrAdmissionSet.S54.", nameof(Admission));
     }
 
     // A set with a guard condition needs a host that answers it, checked before any event runs.
@@ -976,6 +1010,8 @@ public sealed record ScrRunOptions
             throw new ArgumentException("A set with the identified or rewielding condition or the magick-tech adjustment needs a host that implements IScrItemQueries.", nameof(Admission));
         if (host is not IScrCritterQueries && Admission.Conditions.Any(ScrAdmissionSet.CritterQueryConditions.Contains))
             throw new ArgumentException("A set with the animal condition needs a host that implements IScrCritterQueries.", nameof(Admission));
+        if (host is not IScrCritterStateQueries && Admission.Conditions.Any(ScrAdmissionSet.CritterStateConditions.Contains))
+            throw new ArgumentException("A set with a critter-state condition needs a host that implements IScrCritterStateQueries.", nameof(Admission));
         if (host is not IScrStatAdjustQueries && Admission.Actions.Contains(ScrCatalogue.Action.AdjustStat))
             throw new ArgumentException("A set with adjust stat needs a host that implements IScrStatAdjustQueries.", nameof(Admission));
         if (host is not IScrMagickTechQueries && Admission.Actions.Contains(ScrCatalogue.Action.GetMagickTechAdjustment))

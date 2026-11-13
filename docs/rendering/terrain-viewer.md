@@ -2308,7 +2308,7 @@ project's, except as below.
   arrows 667 and 668 at (+6, +21) and (+180, +21), a slider's bar 623 `SkilGauge` at (+47, +24) as wide as value × 120 / top, a
   list's value centred in red `Flare12Font` at (+47, +30). An arrow is a push button: the pointer over it shows its lit frame, a
   press its down frame with sound 3000, the release over it plays 3001 and changes the value. PROJECT: the shown controls take the
-  page's first slots in order (the Rules line the Game page's fifth, at (531, 122), then the evidence log's two lines (ARC-GPAD-1376), with it the eight slots of the page; the Controls line (ARC-GPAD-1463) is the Game page's eighth and last; ARC-GPAD-1374's Prompt style line is the Video page's third, after the floats; ARC-UI-146 removed the HD graphics, HD interface and HD pack lines that stood after Rules, they are the [launcher screen](#launcher-screen-arc-ui-014)'s); the control with the keyboard or controller
+  page's first slots in order (the Violence Filter (ARC-UI-1737) is the Game page's second line and the Rules line its sixth; ARC-UI-1737 moved the Controls line (ARC-GPAD-1463), ARC-GPAD-1374's Prompt style line and the evidence log's two lines (ARC-GPAD-1376) to the Video page, which holds Brightness, Floats, Float Speed, Combat Taunts, Controls, Prompt style, Evidence Log and Test Task, the eight slots of a page, so the Game page keeps its two free slots for Auto Switch Weapons and Follower Skills; ARC-UI-146 removed the HD graphics, HD interface and HD pack lines that stood after Rules, they are the [launcher screen](#launcher-screen-arc-ui-014)'s); the control with the keyboard or controller
   focus has its label lit in the page buttons' hover red; a text is one line. The line at the top names the hidden controls and the
   notice. Without the game's art (the synthetic self-tests) the whole window is the project's panel.
 
@@ -2316,13 +2316,13 @@ project's, except as below.
   letters G, V, S, D); the window opens at the Game page each time. The letters act as in the other menu windows, in both
   rule modes; the original's options window ignores them (an original bug: its hotkey path runs such buttons only in
   the in-play windows, OP7), which the owner chose to fix everywhere without a switch (2026-10-28). The Video page (ARC-UI-021) shows Floats and
-  Float Speed, the [floating text](#floating-text-arc-ui-021)'s level and speed, and Combat Taunts (ARC-AI-1527, default on, the settings file's `combat taunts` line: the followers' comment lines); its Brightness and Text Duration are hidden with their reasons (no gamma control, no text bubbles).
+  Float Speed, the [floating text](#floating-text-arc-ui-021)'s level and speed, and Combat Taunts (ARC-AI-1527, default on, the settings file's `combat taunts` line: the followers' comment lines); ARC-UI-1737 adds Brightness first (0–9, default 0, the `brightness` line; the final colour multiply 1.0 + 0.1 × the value over the whole picture, interface and fades included, drawn by `AreaBrightnessLayer` and hidden at 0 so the picture is today's byte for byte; ledger OH1) and the Game page's Violence Filter (off/on, default off, the `violence filter` line; ledger OH2: no pool of blood, a dying critter falls down plainly, the hit's blood effect index is the clean one); Text Duration is hidden with its reason (no text bubbles).
 - **Controls.** Each control shows its `options_ui.mes` label (message 100 + 100 × page + slot) and its value: a
   list's text from its value file (`OptionsDifficulty.mes`, `OptionsCombatMode.mes`, `OptionsOffOn.mes`), a slider as
-  `N/10`. Game: Difficulty (Easy, Moderate, Hard), Default Combat Mode (Real Time, Turn Based), Auto Attack, Always
-  Run and the project's Rules line (ARC-UI-014, below). Video: Floats (Never, Minimal, Verbose) and Float Speed (0–10). Sound: Effects, Voice and Music (0–10). The arrows (or Left and Right on the focused control, which Up and Down or
+  `N/10`. Game: Difficulty (Easy, Moderate, Hard), Violence Filter, Default Combat Mode (Real Time, Turn Based), Auto Attack, Always
+  Run and the project's Rules line (ARC-UI-014, below). Video: Brightness (0–9), Floats (Never, Minimal, Verbose) and Float Speed (0–10). Sound: Effects, Voice and Music (0–10). The arrows (or Left and Right on the focused control, which Up and Down or
   a click on an arrow choose, or a controller's confirm) change the value at once, as the original's setters run on each step: a list wraps around at either end, a
-  slider stops there. Hidden with their reasons: Module (one module), Violence Filter, Auto Switch Weapons (its setting is the settings file's `auto switch` line since ARC-COMBAT-1720; no free slot on the Game page, issue 1729), Follower
+  slider stops there. Hidden with their reasons: Module (one module), Auto Switch Weapons (its setting is the settings file's `auto switch` line since ARC-COMBAT-1720; the Game page now has the free slots, ARC-UI-1737, the row is issue 1729), Follower
   Skills, and the third combat mode Fast Turn Based (the list cycles Real Time and Turn Based).
 - **What each setting does.** Difficulty is the session's difficulty (its skill and experience readers, ARC-WORLD-030;
   a new game or a load takes the setting). Default Combat Mode is the turn-based setting Space also toggles: with a
@@ -2359,10 +2359,10 @@ Done back to the main menu, a new game as the first hero beginning under the Ori
 step reaching the session, the default combat mode going through the hero's turn-based switch and back, Rules back to
 Steamwoven on the session, the O key closing the menu; ARC-UI-059: the art read, the page labels at their places, none lit
 while a control has the focus, the pointer lighting Sound and a click on it showing the Sound page; `ARC_AREA_OPTIONS_CAPTURE=PATH`
-saves the Game page's picture to an ignored path; ARC-UI-061: the controls at the first slots on the Game and Sound pages, the
+saves the Video page's picture to an ignored path (the Game page's next to it with `-game`); ARC-UI-061: the controls at the first slots on the Game and Sound pages, the
 pointer lighting Music's left arrow, a press showing it down with 3000 and the release over it playing 3001 and lowering the music, a release away from it changing nothing;
-the capture also saves the Sound page next to it with `-sound` before the extension). Not done: Brightness, Text Duration,
-Module, Violence Filter, Auto Switch Weapons, Follower Skills and Fast Turn Based (no function yet).
+the capture also saves the Sound page next to it with `-sound` before the extension). ARC-UI-1737: the Violence Filter line is saved at once, and the Brightness pixel check reads the same frame at 0, 5 and 9 and requires every steady sample to equal the original's ramp (`BrightnessRules.Apply`) and the frame at 0 again to be the first one; the `critter-fall` stage checks no pool and the fall-down with `ARC_CRITTER_FALL_FILTER=1` (and `ARC_CRITTER_FALL_BRIGHTNESS=N`, `ARC_CRITTER_FALL_CAPTURE=PATH` for the capture series). Not done: Text Duration,
+Module, Auto Switch Weapons, Follower Skills and Fast Turn Based (no function yet).
 
 ### New-character window (ARC-UI-030)
 
@@ -3010,6 +3010,17 @@ inventory source of its own whose set the project admits and combat values is sc
 best items through the production event world, and the session's list shows the slots its record names (SKIP on a map without such an
 NPC; [NPC best items](../world/barter-runtime.md#npc-best-items-after-a-regeneration-arc-world-103)).
 
+
+### Item identify and repair windows (ARC-UI-1731)
+
+A dialog reply `ii` or `ri` ends the talk (the original's interface-mode change, ledger WN1, WN2) and the viewer opens the **item identify window** (the interface mode `InventoryKind5`) or the
+**item repair window** (`InventoryKind6`) over the area session once nothing else owns input and the barter data is loaded
+([contract](../world/item-service-runtime.md), ledger IS1–IS7). The window is a PROJECT diagnostic list (`AreaItemServicePanel`: the hero's items, one button each with its quote, the hero's
+gold, the NPC's name and the last message); the first click on an item selects and quotes it, the next click on the same item pays and does the service through the model
+(`AreaItemService`, [`TerrainViewerAreaItemService.cs`](../../tools/terrain-viewer/Godot/TerrainViewerAreaItemService.cs)). Like the barter window it is modal (gate closed, clock paused, a walk stopped),
+is the inventory family at Escape (the limited in-play menu opens and closes it), and closes with a replaced session, a dead hero or a map change; the NPC is held as the talk partner while it is open. The viewer's
+self-test stage `AreaItemService` covers both windows over a synthetic hero and merchant (identify, two clicks, Escape, repair, a replaced session); `ARC_UI_ITEM_SERVICE_CAPTURE` (a folder) saves a PNG
+of each step for a graphics comparison. The original look is [#1765](https://github.com/Simarglok/arcanum-steamwoven/issues/1765).
 ### Reading window (ARC-UI-049)
 
 The inventory window shows a `Read:` button for each written item the hero holds; the session decides the use

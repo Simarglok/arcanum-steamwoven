@@ -161,7 +161,7 @@ public sealed class ScrSpellConditionTests
         var mastery = Program(Do(C(ScrCatalogue.Action.GiveSpellMastery, (Triggerer, 0), N(1))));
         Assert.IsTrue(ScrAdmission.Admit(mastery, ScrAdmissionSet.S31).IsAdmitted);
         Assert.AreEqual(ScrRefusalCode.ActionNotAdmitted, ScrAdmission.Admit(mastery, ScrAdmissionSet.S30).Refusal!.Code);
-        Assert.IsTrue(ScrAdmissionSet.S30.IsSubsetOf(ScrAdmissionSet.S31) && Set.IsSubsetOf(ScrAdmissionSet.S53), "the spell queries of S31 and the spell-state conditions of S53 are what a spell-query host answers");
+        Assert.IsTrue(ScrAdmissionSet.S30.IsSubsetOf(ScrAdmissionSet.S31) && Set.IsSubsetOf(ScrAdmissionSet.S54), "the spell queries of S31 and the spell-state conditions of S54 are what a spell-query host answers");
         // A plain host cannot run a set that holds the conditions.
         var plain = new FakeHost();
         plain.Attach(Npc, ScrPoint.Heartbeat, Script, Test(ScrCatalogue.Condition.KnowsSpell, Attachee, N(1)));

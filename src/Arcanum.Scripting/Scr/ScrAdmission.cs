@@ -434,13 +434,26 @@ public sealed class ScrAdmissionSet
     public static ScrAdmissionSet S52 { get; } = new("S52", S51.Conditions.Append(ScrCatalogue.Condition.IsInCombat), S51.Actions.Append(ScrCatalogue.Action.AdjustStat),
         S51.ValueKinds, S51.FocusKinds, counterIndexWraps: true);
 
+    /// <summary>The critter-state conditions the set <see cref="S53"/> adds to <see cref="S52"/> (ARC-SCRIPT-1733, ledger CS1–CS12), which a host answers through <see cref="IScrCritterStateQueries"/>: obj met PC before (10), obj is invisible (15), obj has surrendered (25), obj is in dialog (26), obj can see obj (28), obj can hear obj (29), obj is invulnerable (30), obj is undead (38) and prowling (51).</summary>
+    public static IReadOnlyList<int> CritterStateConditions { get; } =
+    [
+        ScrCatalogue.Condition.MetPcBefore, ScrCatalogue.Condition.IsInvisible, ScrCatalogue.Condition.IsSurrendered, ScrCatalogue.Condition.IsInDialog, ScrCatalogue.Condition.CanSeeObject, ScrCatalogue.Condition.CanHearObject,
+        ScrCatalogue.Condition.IsInvulnerable, ScrCatalogue.Condition.IsUndead, ScrCatalogue.Condition.IsProwling,
+    ];
+
     /// <summary>
-    /// The spell-state set (ARC-SCRIPT-1734, ledger SC7, WE7, WE8): <see cref="S52"/> plus the conditions obj is polymorphed (12, bit 0x20000), obj is shrunk (13, 0x80000) and obj has mirror image (16, 0x40000) of the object's spell flags
+    /// The critter-state set (ARC-SCRIPT-1733, ledger CS1–CS12; the script census group CRQ, ARC-RES-1101): <see cref="S52"/> plus the nine critter-state and social conditions of <see cref="CritterStateConditions"/>, each a read of a field or a call the session and the AI host already hold
+    /// (exe 0x4451B0 cases 10, 15, 25, 26, 28, 29, 30, 38 and 51). Obj is animal (37) and obj is in combat (31) were in the combat-point sets only; this set gives them to every host that answers them.
+    /// </summary>
+    public static ScrAdmissionSet S53 { get; } = new("S53", S52.Conditions.Concat(CritterStateConditions), S52.Actions, S52.ValueKinds, S52.FocusKinds, counterIndexWraps: true);
+
+    /// <summary>
+    /// The spell-state set (ARC-SCRIPT-1734, ledger SC7, WE7, WE8): <see cref="S53"/> plus the conditions obj is polymorphed (12, bit 0x20000), obj is shrunk (13, 0x80000) and obj has mirror image (16, 0x40000) of the object's spell flags
     /// (<see cref="IScrSpellQueries"/>, as condition 14 reads its body bits), and the eye candy actions play spell eye candy (104, 0x456E60) and stop script eye candy (124, 0x44C800), which hand their number and object to the host as
     /// <see cref="ScrEyeCandy"/> requests (presentation only).
     /// </summary>
-    public static ScrAdmissionSet S53 { get; } = new("S53", S52.Conditions.Concat([ScrCatalogue.Condition.IsPolymorphed, ScrCatalogue.Condition.IsShrunk, ScrCatalogue.Condition.HasMirrorImage]),
-        S52.Actions.Concat([ScrCatalogue.Action.PlaySpellEyeCandy, ScrCatalogue.Action.StopScriptEyeCandy]), S52.ValueKinds, S52.FocusKinds, counterIndexWraps: true);
+    public static ScrAdmissionSet S54 { get; } = new("S54", S53.Conditions.Concat([ScrCatalogue.Condition.IsPolymorphed, ScrCatalogue.Condition.IsShrunk, ScrCatalogue.Condition.HasMirrorImage]),
+        S53.Actions.Concat([ScrCatalogue.Action.PlaySpellEyeCandy, ScrCatalogue.Action.StopScriptEyeCandy]), S53.ValueKinds, S53.FocusKinds, counterIndexWraps: true);
 
     /// <summary>The conditions of <see cref="S51"/> and <see cref="S52"/> a host answers through <see cref="IScrCritterQueries"/>.</summary>
     public static IReadOnlySet<int> CritterQueryConditions { get; } = new HashSet<int> { ScrCatalogue.Condition.IsAnimal, ScrCatalogue.Condition.IsInCombat };

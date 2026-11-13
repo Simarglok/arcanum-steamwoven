@@ -434,7 +434,7 @@ With the optional `IDialogWindowPort` (`DialogConversationPorts.Windows`) a Play
   `DialogEndKind.NpcSheetWindow`, `ItemIdentifyWindow` or `ItemRepairWindow` (reply transitions `NpcSheet`, `ItemIdentify`, `ItemRepair`). A number after the code is read and ignored. They are Player reply actions
   only (no NPC line, no condition). A dialog transfer (JO, UW, FL, ET) or an insult in the same reply is offered blocked (`UnsupportedInteraction`).
 - **Port.** `Execute(OpenWindowCommand)`: Applied means the host opens the window once the talk ended; Rejected fails the conversation; a thrown exception is indeterminate.
-- **Viewer.** The AREA host passes a window port that offers only the NPC sheet (ARC-UI-088: the talk ends and the speaker's character sheet opens read-only, ledger CHW24); the `ii` and `ri` windows are not built, so those two replies are offered blocked.
+- **Viewer.** The AREA host passes a window port that offers all three windows: the NPC sheet (ARC-UI-088: the talk ends and the speaker's character sheet opens read-only, ledger CHW24) and, since ARC-UI-1731, the item identify and repair windows (the host names the window and the speaker with `TakeItemServiceRequest`; the last window action of a reply decides, an earlier one is dropped; [item service runtime](../world/item-service-runtime.md)).
 - **Installed data.** The c-e action appears in 47 Player reply fields, `II` in 26 and `RI` in 61 (132 fields); all parse with every port.
 
 ## Newspaper and origin actions (ARC-DEV-230)
@@ -577,6 +577,31 @@ Picking it runs the reply's action (the hostile check too), then, in the screen 
 Receipts: the action's effects are recorded as for any reply; the story talk writes nothing. A rebuild keeps the screen and a stale token is `NotOffered`, as for the other
 talks. Tests: `DialogStoryLineTests` (synthetic) and the opt-in `DialogStoryLineRealDataTests` (`DAT_ROOT`: all 212 installed `c:` replies in 41 files are admitted; an
 installed story talk tells an installed line).
+
+## Healer reply (ARC-SCRIPT-1732)
+
+With the healer port (`DialogConversationPorts.Healer`, `IDialogHealerPort`) and the greeting, world, gold and purse (or trainer) ports, a Player reply whose whole text is `h:` (either
+case) is the original's **healer reply** ([ledger HLR1–HLR12](../research/ledger/social.md#healer-reply-arc-script-1732)). It is offered as `Generated` (marker `h`) with the transition
+`DialogOptionTransition.Healer`; its phrase is the PC line 700..799 of the generated phrases (ARC-SCRIPT-043). A reply with a dialog transfer or window action in the same reply, or without
+one of the ports, stays blocked (`UnsupportedInteraction`) as before (none of the installed 52 has an action). The reply's own response is followed when the player leaves the talk
+(the way out), as for the [trainer's talk](#trainer-reply-arc-script-1150), whose screens the talk reuses.
+
+Picking it runs the reply's action (the hostile check too), then:
+
+| Step | What happens |
+| --- | --- |
+| Menu (0x419830) | the NPC's class line 14000; the host's facts (`DialogHealerFacts`: the NPC's rank in college 12, whether its skill service is allowed, its heal skill's level and tier, its leaders) set the options in the original's order: the skill service (PC line 900..999 with the skill's name), a first submenu (rank above 0), a second (rank above 1), the spell 64 (rank exactly 5), the way out (PC line 800..899); a throwing port is `QueryException`, a rank outside 0..5 `InvalidQueryResult` |
+| Submenus | the same NPC line; the first holds the spells 60 (rank above 0) and 62 (rank above 2), the second the spell 61 (rank above 1), each the PC line 1000..1099 with the spell's name; both end with the way out |
+| Offer | an NPC whose own leader is the PC serves at once and free; any other quotes (level + 2) × (tier + 1) for the skill or 100 for a spell on the reaction scale (`ReactionPrice`, the NPC class line 1000 with the price) and asks yes (PC line 1..99) or no (100..199, the way out) |
+| Payment | the PC's own gold must cover the price (else the notice 2000); the effect budget is checked before it; the gold goes to the NPC through the gold port, then the effect runs |
+| Effect | `HealerSkillCommand` (the heal skill 10, flag `NoPcLeader`, which the AREA host does not yet pass to the skill starter) or `HealerSpellCommand` (the spell, `Free` when no PC leads the NPC) through the healer port, recorded as an effect; `Rejected` fails the conversation (`CommandRejected`); then the NPC's line 15000 and the PC's class line 1000 as the only way on, which follows the reply's own transition |
+
+The AREA host passes the port when the viewer gives it the shown map's AI host (`AreaConversationHost.HealerHost`) and the speaker is an NPC that host runs, the module's skill texts have loaded
+and the session has a hero; the spell names come from the viewer's loaded spell data (`SpellName`). The port (`AreaConversationHost.HealerPort`) reads the facts from `AreaAiHost.HealerFacts`
+(the NPC's college rank from the host's spell facts, the heal tool and test the AI heal already uses, its heal skill's level and tier, its leaders) and starts the effects through
+`AreaAiHost.HealerService` (the skill starter's goal 33 on the hero) and `AreaAiHost.HealerCast` (the script cast entry with the NPC as the caster). Tests: `DialogHealerTests` (synthetic),
+`AreaAiSkillTests` and `AreaHealerConversationTests` (the host side) and the opt-in `DialogHealerRealDataTests` (`DAT_ROOT`: the census of the 52 installed `h:` replies in 15 files, the lines the talk
+reads and an installed healer's talk to the spell).
 
 ## Directions reply (ARC-SCRIPT-1533)
 

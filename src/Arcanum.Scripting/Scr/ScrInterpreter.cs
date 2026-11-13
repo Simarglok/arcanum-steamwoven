@@ -225,6 +225,17 @@ internal sealed class ScrInterpreter
         ScrCatalogue.Condition.IsAnimal => ListHolds(c, obj => Critters.IsAnimal(obj) ?? throw new MissingObjectStop(line)),
         // CP11 (0x4451B0 case 0x1f): the objects of operand 0 that are a PC or an NPC with the combat-mode bit (0x4B3D50); the same list rule.
         ScrCatalogue.Condition.IsInCombat => ListHolds(c, obj => Critters.IsInCombat(obj) ?? throw new MissingObjectStop(line)),
+        // CS1–CS9 (ARC-SCRIPT-1733; 0x4451B0 cases 10, 15, 25, 26, 28, 29, 30, 38, 51): the single-object field and record reads follow the list rule of the other object tests; met before, can see and can hear take the first object of each of two operands
+        // (0x44B960) and stop the run when either is absent, as the other two-object conditions here do.
+        ScrCatalogue.Condition.MetPcBefore => CritterStates.MetPcBefore(Object(c, 0, line), Object(c, 1, line)) ?? throw new MissingObjectStop(line),
+        ScrCatalogue.Condition.CanSeeObject => CritterStates.CanSee(Object(c, 0, line), Object(c, 1, line)) ?? throw new MissingObjectStop(line),
+        ScrCatalogue.Condition.CanHearObject => CritterStates.CanHear(Object(c, 0, line), Object(c, 1, line)) ?? throw new MissingObjectStop(line),
+        ScrCatalogue.Condition.IsInvisible => ListHolds(c, obj => CritterStates.IsInvisible(obj) ?? throw new MissingObjectStop(line)),
+        ScrCatalogue.Condition.IsSurrendered => ListHolds(c, obj => CritterStates.IsSurrendered(obj) ?? throw new MissingObjectStop(line)),
+        ScrCatalogue.Condition.IsInDialog => ListHolds(c, obj => CritterStates.IsInDialog(obj) ?? throw new MissingObjectStop(line)),
+        ScrCatalogue.Condition.IsInvulnerable => ListHolds(c, obj => CritterStates.IsInvulnerable(obj) ?? throw new MissingObjectStop(line)),
+        ScrCatalogue.Condition.IsUndead => ListHolds(c, obj => CritterStates.IsUndead(obj) ?? throw new MissingObjectStop(line)),
+        ScrCatalogue.Condition.IsProwling => ListHolds(c, obj => CritterStates.IsProwling(obj) ?? throw new MissingObjectStop(line)),
         // WE5: the identified count over the operand's objects; none identified is false and, for one object, all is true. An absent
         // object names none, so the condition fails (the set's focus kinds name at most one object).
         ScrCatalogue.Condition.Identified => Objects(c, 0).Count(obj => Items.IsIdentified(obj) ?? throw new MissingObjectStop(line)) > 0,
@@ -1367,6 +1378,9 @@ internal sealed class ScrInterpreter
 
     private IScrVitalQueries Vitals => _host as IScrVitalQueries
         ?? throw new InvalidOperationException("SCR_VITAL_QUERIES_REQUIRED: the admission set holds get hit points or get fatigue points and the host cannot answer it.");
+
+    private IScrCritterStateQueries CritterStates => _host as IScrCritterStateQueries
+        ?? throw new InvalidOperationException("SCR_CRITTER_STATE_QUERIES_REQUIRED: the admission set holds a critter-state condition and the host cannot answer it.");
 
     private IScrCritterQueries Critters => _host as IScrCritterQueries
         ?? throw new InvalidOperationException("SCR_CRITTER_QUERIES_REQUIRED: the admission set holds the animal condition and the host cannot answer it.");

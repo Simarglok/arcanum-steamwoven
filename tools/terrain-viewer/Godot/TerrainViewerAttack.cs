@@ -900,7 +900,7 @@ public partial class TerrainViewerApp
         LevelAreaFollowers(result.HitAward);
         LevelAreaFollowers(result.KillAward);
         if (result.Recipient == DamageRecipient.Target && result.Life is { } dealt && dealt.Events.HasFlag(LifeEvents.Died))
-            _deathAnimations[(CurrentAreaMap, struck.Entity)] = AreaFallenPoses.Animation(dealt.Death);
+            _deathAnimations[(CurrentAreaMap, struck.Entity)] = DeathAnimationOf(dealt.Death);
         SyncAreaCombatBodies();
         SyncAreaInventory();
         RefreshAreaStatus();
@@ -976,6 +976,9 @@ public partial class TerrainViewerApp
 
     /// <summary>ARC-RENDER-039: the animation the attack's target is drawn in when the session knocked it out (the fall, 7) or killed
     /// it (its dying animation); null for a standing NPC or an object (its placed art's).</summary>
+    /// <summary>ARC-UI-1737 (OH2): the dying animation a kill keeps: the fall-down for every death with the violence filter on (<see cref="DyingAnimationRules.Chosen"/>), else the kill's own.</summary>
+    private int DeathAnimationOf(DeathAnimation death) => DyingAnimationRules.Chosen(AreaFallenPoses.Animation(death), _gameSettings.ViolenceFilter);
+
     private int? LyingAnimation(AttackGoal goal)
     {
         if (goal.Combat is null || _areaSession?.QueryLife(goal.Combat.Target).View is not { } life) return null;

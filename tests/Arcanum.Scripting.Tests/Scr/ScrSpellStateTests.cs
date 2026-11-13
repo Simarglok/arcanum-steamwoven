@@ -7,7 +7,7 @@ namespace Arcanum.Scripting.Tests.Scr;
 
 /// <summary>
 /// ARC-SCRIPT-1734 (ledger SC7, WE7, WE8): obj is polymorphed (12, 0x20000), obj is shrunk (13, 0x80000) and obj has mirror image (16, 0x40000), each one bit of the object's spell flags (0x4451B0 cases 0xC, 0xD, 0x10) over the list rule of the other
-/// object conditions, and the eye candy actions play spell eye candy (104, 0x456E60) and stop script eye candy (124, 0x44C800), which the set S53 holds. Programs, objects and numbers are invented.
+/// object conditions, and the eye candy actions play spell eye candy (104, 0x456E60) and stop script eye candy (124, 0x44C800), which the set S54 holds. Programs, objects and numbers are invented.
 /// </summary>
 [TestClass]
 public sealed class ScrSpellStateTests
@@ -120,21 +120,21 @@ public sealed class ScrSpellStateTests
     }
 
     [TestMethod]
-    public void S53_adds_the_three_conditions_and_the_two_actions_over_S52()
+    public void S54_adds_the_three_conditions_and_the_two_actions_over_S53()
     {
         foreach (var condition in new[] { ScrCatalogue.Condition.IsPolymorphed, ScrCatalogue.Condition.IsShrunk, ScrCatalogue.Condition.HasMirrorImage })
         {
             var program = Test(condition, Attachee);
-            Assert.IsTrue(ScrAdmission.Admit(program, ScrAdmissionSet.S53).IsAdmitted, $"condition {condition}");
-            Assert.AreEqual(ScrRefusalCode.ConditionNotAdmitted, ScrAdmission.Admit(program, ScrAdmissionSet.S52).Refusal!.Code);
+            Assert.IsTrue(ScrAdmission.Admit(program, ScrAdmissionSet.S54).IsAdmitted, $"condition {condition}");
+            Assert.AreEqual(ScrRefusalCode.ConditionNotAdmitted, ScrAdmission.Admit(program, ScrAdmissionSet.S53).Refusal!.Code);
         }
         foreach (var action in new[] { ScrCatalogue.Action.PlaySpellEyeCandy, ScrCatalogue.Action.StopScriptEyeCandy })
         {
             var program = Program(Do(C(action, N(1), (Triggerer, 0))));
-            Assert.IsTrue(ScrAdmission.Admit(program, ScrAdmissionSet.S53).IsAdmitted, $"action {action}");
-            Assert.AreEqual(ScrRefusalCode.ActionNotAdmitted, ScrAdmission.Admit(program, ScrAdmissionSet.S52).Refusal!.Code);
+            Assert.IsTrue(ScrAdmission.Admit(program, ScrAdmissionSet.S54).IsAdmitted, $"action {action}");
+            Assert.AreEqual(ScrRefusalCode.ActionNotAdmitted, ScrAdmission.Admit(program, ScrAdmissionSet.S53).Refusal!.Code);
         }
-        Assert.IsTrue(ScrAdmissionSet.S52.IsSubsetOf(ScrAdmissionSet.S53));
+        Assert.IsTrue(ScrAdmissionSet.S53.IsSubsetOf(ScrAdmissionSet.S54));
         var plain = new FakeHost();
         plain.Attach(Npc, ScrPoint.Heartbeat, Script, Test(ScrCatalogue.Condition.IsShrunk, Attachee));
         var refused = Assert.Throws<ArgumentException>(() => ScrDispatcher.RunObject(new(ScrPoint.Heartbeat, Npc, Pc, null), plain, Options));

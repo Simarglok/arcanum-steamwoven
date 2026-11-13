@@ -33,6 +33,7 @@ public partial class TerrainViewerApp
     internal bool WindowPanelsMatchStack =>
         (_conversationPanel?.IsOpen ?? false) == WindowOpen(InterfaceMode.Dialog)
         && (_barterPanel?.IsOpen ?? false) == WindowOpen(InterfaceMode.Barter)
+        && (_servicePanel?.IsOpen ?? false) == ItemServiceOpen
         && (_worldMapPanel?.IsOpen ?? false) == WindowOpen(InterfaceMode.WorldMap)
         && (_logbookPanel?.IsOpen ?? false) == WindowOpen(InterfaceMode.Logbook)
         && (_inventoryPanel?.IsOpen ?? false) == InventoryOpen
