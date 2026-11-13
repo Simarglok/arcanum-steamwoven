@@ -488,8 +488,19 @@ a dumb PC (its intelligence as the reply gates read it at most 4, the original's
 offset still applied. Without the port, or when its facts are unknown, the text stays empty and the reply works as before; a refused
 roll, a port exception or an undecodable phrase fails the conversation (`InvalidQueryResult`, `QueryException`, `InvalidText`). The
 phrase changes only the text: the transitions and blocks above stay. The `t:` phrase (PC lines 500..599) is built (ARC-SCRIPT-1150); its argument is
-stored after the phrase, not appended to it (ledger DTR1). The `r:` phrase (the PC's class line 2000) is built too (ARC-SCRIPT-1304, ledger RMR1). The `d:` (PC lines 1300..1399) and `x:` (1400..1499) phrases are built (ARC-SCRIPT-1533, ledger DIR1). Not built: the phrases of the prefix markers (`u z`;
-issue [#1534](https://github.com/Simarglok/arcanum-steamwoven/issues/1534)) and the healer menu behind `h:` (ARC-SCRIPT-044).
+stored after the phrase, not appended to it (ledger DTR1). The `r:` phrase (the PC's class line 2000) is built too (ARC-SCRIPT-1304, ledger RMR1). The `d:` (PC lines 1300..1399) and `x:` (1400..1499) phrases are built (ARC-SCRIPT-1533, ledger DIR1). Not built: the phrases of the prefix markers `u` (skills 10 and 14) and `z`
+([#1798](https://github.com/Simarglok/arcanum-steamwoven/issues/1798), after the healer menu).
+
+## Skill service reply `u:` (ARC-SCRIPT-1534)
+
+A Player reply whose text starts with `u:` (either case) is the original's **skill service reply** (0x416C10; [ledger DSV1–DSV3](../research/ledger/social.md#skill-service-reply-u-arc-script-1534)): the number after the marker (read like the
+C library's atoi) is a skill the NPC would use on the PC. The original asks the skill test 0x4AE570 whether the NPC can, and leaves the reply out when it cannot (the five-reply count still includes it, as for a directions reply with nothing to ask for).
+
+- **Skill 12 (repair) is built as the original behaves: never offered.** The test wants the target to be an item, and the dialog hands it the PC (a critter), so the reply never shows, whatever the NPC and the data: the 8 installed `u: 12` replies
+  (3 files) are dead data in both rule settings, and the repair is reached through the `ri` action ([item services](../world/item-service-runtime.md)). The reply is planned as a left-out reply (`DialogConversation.IsRepairServiceReply`, tests `DialogServiceReplyTests`).
+- In the original a `u:` text whose atoi is 0 and any number other than 10, 12 and 14 pass the test and are offered (PC line 900..999, state 0xE); they stay a frontier here.
+- **Not built:** `u:10` (heal), `u:14` (pick locks), any other number and `z:` (a spell sold for gold) stay a frontier, as before (`u`) or an offered blocked reply (`z`). They share the skill-service and spell-sale machinery of the healer menu
+  (the healer menu `h:`, built by [#1732](https://github.com/Simarglok/arcanum-steamwoven/issues/1732)); no installed reply uses them. Follow-up: [#1798](https://github.com/Simarglok/arcanum-steamwoven/issues/1798).
 
 ## Trainer reply (ARC-SCRIPT-1150)
 
