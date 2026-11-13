@@ -970,7 +970,7 @@ companion, a shopkeeper and a guard in any town where a quest script touches the
 
 Known differences (documented, not bugs):
 
-- Change art number (a door, scenery or creature changing its picture from a script) is not built: scripts that use it are still refused, so those quest steps do nothing in Steamwoven.
+- Change art number (ARC-SCRIPT-1735) changes the picture of a **scenery** from a script (kept in the save, drawn in the viewer); a door, container, trap, item or unique NPC target is not built: a script run that reaches one is refused, so that step does nothing in Steamwoven. A critter (the hero, an NPC of a critter or monster body) is never changed (the original builds the art id 0 for them and writes it only if a file of that id exists; not read, F0).
 - A script in a dialog (a talk) that uses one of these actions is still refused; only use, tile, sector, heartbeat and dying scripts run them.
 - A reaction or standpoint change acts for NPCs of the map on screen only.
 
@@ -1201,6 +1201,17 @@ start a game and press `C`. Compare with **HD** and **Legacy**.
 | 3 | Press + and − on a stat and on a skill with points to spend. | The buttons show their hover and down looks; the numbers change as before. | open |
 | 4 | Resize the window and open the sheet again. | The frames are sharp at the new size, no seam between the window and the pages. | open |
 | 5 | Open an NPC's sheet in a dialog (reply `c-e`). | The same look, with no + or − buttons. | open |
+
+## ARC-UI-1784 — Generated interface: the schemes page and the college tabs (S5b, 2026-11-13)
+
+The rules are in [viewer slice S5b](../rendering/hd-interface-density.md#viewer-slice-s5b-arc-ui-1784). Set the HD interface line to **Generated (experimental)**, start a game and press `C`. Compare with **HD** and **Legacy**.
+
+| # | Step | Expected | Status |
+| --- | --- | --- | --- |
+| 1 | Open the spells tab. | The sixteen college balls keep their colours and glyphs inside a brass ring drawn by code; hover and the pressed look change the ring and the ball as before. | open |
+| 2 | Open the schemes tab (the fourth, the one with the scroll icon). | The page is dark stone like the other pages: the scheme's name in a sunk plaque with a rivet at each end, the list's pit and the scroll bar's track; the names, the bar's arrows and thumb are where they were. | open |
+| 3 | Resize the window and look at both pages again. | The frames are sharp at the new size. | open |
+| 4 | Look at the spell icons next to the generated pits. | Judge whether they need a generated frame (they are pictures in S5b). | open |
 
 ## ARC-UI-1197 — Generated interface: the world map and the town map (S6, 2026-11-13)
 

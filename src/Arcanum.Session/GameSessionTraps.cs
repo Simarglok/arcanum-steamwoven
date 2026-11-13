@@ -334,7 +334,7 @@ public sealed partial class GameSessionOwner
     /// carrier), the skill's own case (<see cref="TrapRules.DisarmCase"/>: the master's second roll) and the disarm (<see cref="DisarmTrap"/>:
     /// success removes the trap, an expert's critical success yields the device prototype the caller creates in the hero's pack, a critical failure
     /// sets it off). The rolls, the PC's fate point and the disarm are one revision (the charge has its own). A trap that is gone, or that the hero does
-    /// not know, is NoChange with nothing charged or rolled (TT5: no trap there to disarm). NOT READY: the follower who acts instead (SP3). Refused:
+    /// not know, is NoChange with nothing charged or rolled (TT5: no trap there to disarm). The follower who acts instead (SP3) goes through <see cref="RollNpcDisarmTrap"/>. Refused:
     /// no hero or a dead one (<see cref="GameSessionFailure.SkillsUnavailable"/>), an invalid object, difficulty or light
     /// (<see cref="GameSessionFailure.InvalidTrap"/>), the version, the generator or the revision exhausted, a budget the removal cannot take.
     /// </summary>
@@ -363,7 +363,14 @@ public sealed partial class GameSessionOwner
             // The charge moved the version; the press goes on from there.
             expected = Version;
         }
-        var request = HeroSkillRequest(Skill.DisarmTraps, null);
+        return DisarmStep(expected, trapped, baseline, HeroSkillRequest(Skill.DisarmTraps, null), trapDifficulty, light, TrapObserver.Player, charge);
+    }
+
+    // The check, the skill's own case and the disarm of an attempt on the request of its user (the hero's, or a follower's: no fate and no local-PC term in its
+    // request, its own observer rules for the known trap); the rolls, the fate point and the disarm are one revision.
+    private SessionDisarmRoll DisarmStep(GameSessionVersion expected, SessionTrapped trapped, SessionTrapBaseline baseline, SkillCheckRequest request, int trapDifficulty,
+        int light, TrapObserver disarmer, SessionCombatResult? charge)
+    {
         request = request with
         {
             Difficulty = request.Difficulty with
@@ -383,15 +390,15 @@ public sealed partial class GameSessionOwner
                 () => { second = true; return rolls.D100(SkillCheckRoll.Check); });
         }
         catch (SkillRolls.ExhaustedException) { return RejectDisarm(GameSessionFailure.RandomExhausted) with { Charge = charge }; }
-        var (savedRandom, savedState) = (_random, _hero.State);
+        var (savedRandom, savedState) = (_random, _hero?.State);
         _random = rolls.Trial;
-        if (check.Fated && FateRules.Of(SkillCheckRules.Fate(Skill.DisarmTraps)) is { } fate) _hero.Apply(_hero.State.WithFate(FateRules.Use(_hero.State.Fate, fate).After));
-        var disarm = DisarmTrap(expected, trapped, baseline, TrapObserver.Player, success, critical, (int)request.Training);
+        if (check.Fated && FateRules.Of(SkillCheckRules.Fate(Skill.DisarmTraps)) is { } fate) _hero!.Apply(_hero.State.WithFate(FateRules.Use(_hero.State.Fate, fate).After));
+        var disarm = DisarmTrap(expected, trapped, baseline, disarmer, success, critical, (int)request.Training);
         if (disarm.Mutation.Disposition == GameSessionDisposition.Rejected)
         {
             // The removal could not be written: the rolls and the fate point go back, nothing happened.
             _random = savedRandom;
-            _hero.Apply(savedState);
+            if (savedState is { } state) _hero!.Apply(state);
             return RejectDisarm(disarm.Mutation.Failure) with { Charge = charge };
         }
         // A failed disarm writes nothing, but the rolls were drawn: the attempt is one revision.

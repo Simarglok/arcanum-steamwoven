@@ -136,9 +136,12 @@ public partial class TerrainViewerApp
                 .Select(bed => (bed.Key, new CellCoord(checked((int)bed.Row.WorldX!.Value), checked((int)bed.Row.WorldY!.Value))))];
 
     // ARC-AI-1655: the lines an NPC's pickup made the item's scripts print, as the message window posts any script's printed line.
-    private void PostNpcPickupLines(AreaAiNotice notice)
+    private void PostNpcPickupLines(AreaAiNotice notice) => PostScriptLines(notice.Messages);
+
+    // ARC-AI-1655, ARC-MAGIC-1745: printed lines of item scripts an NPC's move ran (pickup, wield, rewield, regeneration's best-items wield), posted as any script's printed line.
+    private void PostScriptLines(IEnumerable<SessionScriptMessage> lines)
     {
-        foreach (var entry in AreaScriptMessages.Entries(notice.Messages.Select(message => new AreaPrintedLine(message.Kind, message.Text)))) PostMessage(entry, "script line");
+        foreach (var entry in AreaScriptMessages.Entries(lines.Select(message => new AreaPrintedLine(message.Kind, message.Text)))) PostMessage(entry, "script line");
     }
 
     /// <summary>The scene the shown window gives the AI host: its chart and evidence, the rows its map data holds (the companions and the NPCs the party leads
@@ -168,6 +171,8 @@ public partial class TerrainViewerApp
             ClosedPortalsOf = step => _areaPortals is { } portals && _areaSession is { } shown ? [.. portals.CrossedClosed(shown, step).Select(p => p.Entity)] : [],
             SectorsTouched = area.Snapshot.Window is not null ? RequestSectorChart : null,
             HeroCell = () => _worldActor.Session is AreaGridSession hero ? World(hero.Chart.ToWorld(hero.State.CommittedCell)) : null,
+            // ARC-SCRIPT-1773 (CS5): obj can see obj with the hero as the observer reads the hero's drawn facing (the octant of the object rotation, as the knockback host reads it).
+            HeroRotation = () => _worldActor.Session is AreaGridSession ? _worldActor.State.Facing : null,
             Companions = () => _areaCompanions is { } group
                 ? group.Companions.Select(c => (c.Entity, c.Key, World(chart.ToWorld(c.Grid.State.CommittedCell)))).ToArray() : [],
             // ARC-AI-1515 (0x4A9650): the follow check of a companion the hero hit reads the conversation state's PC side, as its loyalty step does.
@@ -211,6 +216,8 @@ public partial class TerrainViewerApp
             ObjectStruck = NpcObjectHit,
             // ARC-TECHNOLOGY-1619 (VB2-2 gap d): a trap's shooter object (an object that is no critter) as the attack event reads it.
             ObjectFacts = AiObjectFacts,
+            // ARC-COMBAT-1776 (0x42A4E0): the door, window or container a pick-locks goal's target string names, as the session picks it, at the light of its cell.
+            PickLockTarget = AiPickLockTarget,
             // ARC-AI-1636: an NPC's attack on the object it holds as its focus is the session's object attack on the map row the cast id names.
             ObjectAttackTarget = id => _areaSession is { } objectOwner && _spellCastMap?.Row(id) is { } objectRow && !IsAreaCompanion(objectRow.Key) ? ObjectTargets()?.Target(objectOwner, objectRow.Key, AreaTrapped) : null,
             // ARC-DEV-261 (GT198): the victims' taking-damage scripts (point 0x17) of the NPCs' attacks, throws and knockback bumps.
@@ -837,6 +844,12 @@ public partial class TerrainViewerApp
                     GD.Print($"ARC-WORLD-109 ai-skill npc={notice.Npc} skill={notice.Skill} target={notice.Target} disposition={notice.Heal?.Disposition.ToString() ?? "none"}"
                         + $" failure={notice.Heal?.Failure} success={notice.Heal?.Check?.Success} hp={notice.Heal?.Heal?.HitPoints} uses={notice.Heal?.UsesLeft}");
                     if (notice.Heal is { Disposition: GameSessionDisposition.Changed }) AiSpellTook();
+                    // ARC-COMBAT-1776: an NPC's pick of a lock (the session's answer); witnesses and the hand-over line are not built.
+                    if (notice.PickLock is { } pick)
+                    {
+                        _aiNotice = $"{AiName(notice.Npc)} picks a lock: {(pick.Disposition == GameSessionDisposition.Rejected ? $"refused ({pick.Failure})" : pick.Outcome!.Value.Result.ToString())}";
+                        GD.Print($"ARC-COMBAT-1776 ai-pick-lock npc={notice.Npc} target={notice.Target} disposition={pick.Disposition} failure={pick.Failure} success={pick.Check?.Success} result={pick.Outcome?.Result} locked={pick.State?.Locked}");
+                    }
                     break;
                 case AreaAiNoticeKind.Throw:
                     AiThrow(notice);

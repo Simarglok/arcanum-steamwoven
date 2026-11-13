@@ -106,6 +106,33 @@ public sealed class AreaCreatedCrittersTests
         Assert.AreEqual(CreatedRowFailure.PrototypeMissing, plain.Refused[copy.Entity]);
     }
 
+    // ARC-MAGIC-1169 (E1-f, SUM5): a critter an NPC summoned takes that NPC's faction (field 292) and alignment (stat 19) from its row; a hero summoner gives its alignment and no faction; no known row gives nothing.
+    [TestMethod]
+    public void A_summoned_critter_takes_an_npc_summoners_faction_and_alignment_and_a_critter_no_spell_made_takes_nothing()
+    {
+        using var f = AreaAiHostRebindTests.Open();
+        AreaFieldValue Own(int slot, long number) => new(slot, AreaPresence.Value, AreaValueOrigin.Instance, number, [], null);
+        var summoner = f.RowA with { EffectiveFields = [.. f.RowA.EffectiveFields.Where(field => field.Slot != 81), Own(81, 31)] };
+        var asked = new List<(string, int)>();
+        Func<string, int, AreaObjectRecord?> template = (entity, map) => { asked.Add((entity, map)); return entity == f.A ? summoner : null; };
+        var expectedAlignment = Arcanum.Data.Combat.CombatFieldReader.Read(summoner).Fields!.Critter!.BaseStats[CreatedObjectRows.AlignmentStat];
+
+        var npcMade = f.Session.CreateSummonedCritter(f.Session.Version, Prototype, new(Map), Spot, f.A, null).Object!;
+        Assert.AreEqual(new CreatedCritterSummon(expectedAlignment, 31), AreaCreatedCritters.SummonOf(f.Session, template, npcMade));
+        CollectionAssert.AreEqual(new[] { (f.A, Map) }, asked, "the summoner's row is asked of the shown map");
+
+        var unknownMade = f.Session.CreateSummonedCritter(f.Session.Version, Prototype, new(Map), new(Spot.X + 1, Spot.Y), "oid:nobody", null).Object!;
+        Assert.AreEqual(new CreatedCritterSummon(null), AreaCreatedCritters.SummonOf(f.Session, template, unknownMade), "a summoner whose row is not known: the experience is cleared, nothing is copied");
+        Assert.AreEqual(new CreatedCritterSummon(null), AreaCreatedCritters.SummonOf(f.Session, null, npcMade), "no row lookup: nothing copied");
+
+        var heroMade = f.Session.CreateSummonedCritter(f.Session.Version, Prototype, new(Map), new(Spot.X + 2, Spot.Y), SessionSpellCaster.Hero, null).Object!;
+        var fromHero = AreaCreatedCritters.SummonOf(f.Session, template, heroMade)!;
+        Assert.AreEqual((f.Session.QueryHero()?.Alignment, (int?)null), (fromHero.Alignment, fromHero.Faction), "a PC summoner leaves the prototype's faction");
+
+        var plain = Make(f, new(Spot.X + 3, Spot.Y));
+        Assert.IsNull(AreaCreatedCritters.SummonOf(f.Session, template, plain), "a critter no spell made (not summoned) copies nothing");
+    }
+
     [TestMethod]
     public void The_ai_host_runs_a_created_critter_keeps_it_through_a_window_move_and_drops_it_when_destroyed()
     {

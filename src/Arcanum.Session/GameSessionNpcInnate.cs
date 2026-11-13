@@ -1,3 +1,4 @@
+using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Character;
 
 namespace Arcanum.Session;
@@ -20,7 +21,7 @@ public sealed partial class GameSessionOwner
     /// <summary>
     /// ARC-MAGIC-1509: attaches the rules of the innate effects (<see cref="RaceEffectBase"/> + a race 0..10, and <see cref="FemaleEffectNumber"/>) the host reads from <c>rules\effect.mes</c> and the effect tables. Not state:
     /// never saved, attached again after a restore; null (or a call with an empty set) detaches them. A rule of another number or one the effect list does not admit throws <see cref="ArgumentException"/>
-    /// and attaches nothing.
+    /// and attaches nothing; so does a rule set whose special changes, laid under the hero's durable entries, pass the bounds of the maxima and the reaction lists (ARC-MAGIC-1723).
     /// </summary>
     public void AttachInnateEffects(IEnumerable<SessionEffectDefinition>? definitions)
     {
@@ -30,6 +31,13 @@ public sealed partial class GameSessionOwner
         {
             if (definition is null || !IsInnateNumber(definition.Number) || !EffectDomain.IsValid(definition)) throw new ArgumentException("Not an admitted rule of an innate effect.", nameof(definitions));
             accepted[definition.Number] = definition;
+        }
+        // ARC-MAGIC-1723: the hero's maxima and reaction lists now read the attached rules, so rules the durable entries would carry past the bounds (or that make the life facts invalid) are refused like an invalid rule.
+        if (_hero is { } hero)
+        {
+            var rules = EffectDomain.Innate(hero.State).Select(entry => accepted.GetValueOrDefault(entry.Number)).OfType<SessionEffectDefinition>().ToArray();
+            var facts = LifeDomain.HeroFacts(hero.Stats, hero.State, _life.Hero!.Value.State, 0, _effects.Maximum(EffectSpecial.MaxHitPoints, rules), _effects.Maximum(EffectSpecial.MaxFatigue, rules));
+            if (!EffectDomain.Bounded(_effects.Entries, _effects.Definitions, innate: rules) || !LifeRules.IsValid(facts)) throw new ArgumentException("The rules carry the hero's effects past their bounds.", nameof(definitions));
         }
         _innateEffects.Clear();
         foreach (var pair in accepted) _innateEffects[pair.Key] = pair.Value;

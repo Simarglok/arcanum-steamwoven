@@ -1088,12 +1088,12 @@ public sealed partial class SessionSpellCasterTraitIndexTests
     }
 
     // ARC-MAGIC-1628: the setter's experience case (0x12) runs the recalculation 0x4A69C0 after the store; the level has no case and is stored alone.
-    private const int ExperienceLevelTwo = 651, PoisonPlus = 652, HeroPointsPlus = 653, HeroPointsMinus = 654;
+    private const int ExperienceLevelTwo = 651, PoisonPlus = 652, HeroPointsPlus = 653, HeroPointsMinus = 654, HeroTechPlus = 655;
 
     private static Dictionary<int, SessionSpellRecord> HeroRecords() => new(Records)
     {
         [650] = Spell(650, StatField, 18, 100), [ExperienceLevelTwo] = Spell(ExperienceLevelTwo, StatField, 18, 1500), [PoisonPlus] = Spell(PoisonPlus, StatField, 24, 60),
-        [HeroPointsPlus] = Spell(HeroPointsPlus, StatField, 22, 7), [HeroPointsMinus] = Spell(HeroPointsMinus, StatField, 23, -3),
+        [HeroPointsPlus] = Spell(HeroPointsPlus, StatField, 22, 7), [HeroPointsMinus] = Spell(HeroPointsMinus, StatField, 23, -3), [HeroTechPlus] = Spell(HeroTechPlus, StatField, 23, 20),
     };
 
     [TestMethod]
@@ -1468,6 +1468,8 @@ public sealed partial class SessionSpellCasterTraitIndexTests
             // Adds a charm only while the items are being rewielded; the other program targets the item (not the wearer).
             [Gate] = WieldEventScriptTests.Program(WieldEventScriptTests.If(WieldEventScriptTests.C(ScrCatalogue.Condition.ItemsBeingRewielded),
                 WieldEventScriptTests.C(ScrCatalogue.Action.AddEffect, (WieldEventScriptTests.Triggerer, 0), WieldEventScriptTests.N(Charm), WieldEventScriptTests.N(5)))),
+            // ARC-MAGIC-1745: prints a line (entry type 6).
+            [714] = WieldEventScriptTests.Program(WieldEventScriptTests.Do(WieldEventScriptTests.C(ScrCatalogue.Action.PrintLine, WieldEventScriptTests.N(1), WieldEventScriptTests.N(6)))),
             [713] = WieldEventScriptTests.Program(WieldEventScriptTests.Do(WieldEventScriptTests.C(ScrCatalogue.Action.AddEffect, (WieldEventScriptTests.Attachee, 0), WieldEventScriptTests.N(Charm), WieldEventScriptTests.N(5)))),
         };
         public Dictionary<int, SessionEffectDefinition> Effects { get; } = new() { [Charm] = CharmEffect };
@@ -1485,6 +1487,7 @@ public sealed partial class SessionSpellCasterTraitIndexTests
         public bool IsJilted(ScrObjectRef critter) => false;
         public bool IsPc(ScrObjectRef critter) => critter.Code == SessionEventKinds.PlayerEntity;
         public SessionPrintedLine PrintedLine(int script, int line) => new(SessionPrintedLineStatus.Shown, "line", "test");
+        public SessionPrintedLine PrintedLineForNpc(int script, int line) => new(SessionPrintedLineStatus.Shown, "npc line", "test");
         public SessionEffectDefinition? EffectDefinition(int number) => Effects.TryGetValue(number, out var rule) ? rule : null;
     }
 
@@ -1530,6 +1533,47 @@ public sealed partial class SessionSpellCasterTraitIndexTests
         Assert.AreEqual((uint)second, owner.QueryItemScriptSlots().Single().Counters);
         Assert.IsTrue(owner.QueryNpcEffects(target)!.Entries.All(e => e.Cause == EffectCause.Item));
         Assert.IsFalse(caster.Log.Any(e => e.Kind == SpellCastEventKind.ComponentNotReady));
+    }
+
+    // ARC-MAGIC-1745: a line a wield script of an NPC's rewield prints is read for the NPC as triggerer and reaches the cast log for the message window, after the write and in print order; a rewield that is refused logs none.
+    [TestMethod]
+    public void A_line_an_npcs_rewield_prints_reaches_the_cast_log_read_for_the_npc()
+    {
+        var (owner, caster, _, _) = Ringed(714, 714);
+        using var o = owner;
+        Assert.AreEqual(SpellComponentOutcome.None, caster.Apply(Run(MagickPlus), 0, At(Rat, SpellTargetObject.Npc)));
+        Assert.IsFalse(NotReady(caster));
+        // Wield off then wield on: two lines, each with the entry type of the print action and the script.
+        var lines = caster.Log.Where(e => e.Kind == SpellCastEventKind.ItemScriptLine).ToArray();
+        Assert.AreEqual(2, lines.Length);
+        foreach (var line in lines) Assert.AreEqual(new SpellCastEvent(SpellCastEventKind.ItemScriptLine, line.Run, 6, Rat, 714) { Text = "npc line" }, line);
+
+        // A host that cannot read a line for an NPC triggerer makes the rewield not ready: nothing written, no line.
+        var (refused, refusedCaster, host, _) = Ringed(714, 714);
+        using var r = refused;
+        refusedCaster.ItemScripts = () => new HeroLinesHost(host);
+        Assert.IsNull(refusedCaster.Apply(Run(MagickPlus), 0, At(Rat, SpellTargetObject.Npc)).JumpTo);
+        Assert.IsTrue(NotReady(refusedCaster));
+        Assert.IsFalse(refusedCaster.Log.Any(e => e.Kind == SpellCastEventKind.ItemScriptLine));
+    }
+
+    // The same host with the default of a host that reads a hero's lines only.
+    private sealed class HeroLinesHost(NpcScriptHost inner) : ISessionItemScriptHost
+    {
+        public ScrSlot? Slot(ScrObjectRef attachee, int point) => inner.Slot(attachee, point);
+        public ScrScriptLookup Script(int number) => inner.Script(number);
+        public bool GlobalFlag(int index) => inner.GlobalFlag(index);
+        public int StoryState() => inner.StoryState();
+        public bool IsMonsterGenerator(ScrObjectRef attachee) => false;
+        public ScrDialogState DialogState(ScrObjectRef attachee) => ScrDialogState.Normal;
+        public ScrTrapCheck CheckTrapBeforeUse(ScrObjectRef triggerer, ScrObjectRef attachee) => ScrTrapCheck.NoTrap;
+        public bool IsTrapObject(ScrObjectRef attachee) => false;
+        public ScrObjectRef? Player() => inner.Player();
+        public ScrObjectRef? Leader(ScrObjectRef critter) => null;
+        public bool IsJilted(ScrObjectRef critter) => false;
+        public bool IsPc(ScrObjectRef critter) => inner.IsPc(critter);
+        public SessionPrintedLine PrintedLine(int script, int line) => new(SessionPrintedLineStatus.Shown, "line", "test");
+        public SessionEffectDefinition? EffectDefinition(int number) => inner.EffectDefinition(number);
     }
 
     [TestMethod]
@@ -1593,5 +1637,115 @@ public sealed partial class SessionSpellCasterTraitIndexTests
         Assert.AreEqual(version, other.Version);
         Assert.AreEqual(0, Charms(other, otherTarget));
         Assert.IsTrue(other.QueryCritterIndexedWrites(Rat).IsEmpty);
+    }
+
+    // ARC-MAGIC-1744 (ledger RM3c, IE7): the hero's rewield after a store of magick or tech points runs its worn items' wield scripts as an NPC's does: wield off (25) then wield on (24), the hero as the triggerer, the condition
+    // "items are being rewielded" true, the reads over the new points. Spells 653 (magick +7) and 654 (tech -3) are the hero's point spells.
+    private static (GameSessionOwner Owner, SessionSpellCaster Caster, NpcScriptHost Host) WornHero(int on = NpcWieldOn, int off = NpcWieldOff, bool equip = true)
+    {
+        var (owner, caster) = HeroSession(SkilledHero([8, 10, 8, 8, 8, 8, 8, 8, 5, 2]), records: HeroRecords());
+        var host = new NpcScriptHost();
+        host.Slots[("kit:1", SessionScriptPoint.WieldOn)] = on;
+        host.Slots[("kit:1", SessionScriptPoint.WieldOff)] = off;
+        caster.ItemScripts = () => host;
+        if (equip)
+            Accepts(owner.Equip(owner.Version, "kit:1", EquipmentSlot.Weapon, EquipmentStateTests.Wearable(1, EquipmentStateTests.Blade with { MagickTechComplexity = 40 }, [SessionScriptPoint.WieldOn, SessionScriptPoint.WieldOff]),
+                EquipmentStateTests.Drawn, _ => SessionInsertVerdict.Accepted, host));
+        return (owner, caster, host);
+    }
+
+    private static int HeroCharms(GameSessionOwner owner) => owner.QueryHeroEffects()!.Effects.Count(e => e.Number == Charm && e.Cause == EffectCause.Item);
+
+    // The charms the scaled wield-on script adds: ten times the item's power ratio under the hero's aptitude as the stat getter reads it now.
+    private static int HeroExpectedCharms(GameSessionOwner owner) =>
+        (EquipmentRules.EffectivePowerRatio(40, Math.Clamp(owner.QueryHeroScriptStat(GameSessionOwner.ScriptStatAptitude)!.Value, EquipmentLimits.MinAptitude, EquipmentLimits.MaxAptitude)) * 10 + 50) / 100;
+
+    [TestMethod]
+    public void A_heros_rewield_runs_wield_off_then_wield_on_of_its_worn_items_over_the_new_points()
+    {
+        var (owner, caster, _) = WornHero();
+        using var o = owner;
+        var equipped = HeroCharms(owner);
+        Assert.IsTrue(equipped > 0, "the equip itself ran wield on over the old points");
+        Assert.AreEqual(equipped, HeroExpectedCharms(owner));
+        Assert.IsFalse(owner.HeroRewieldReady());
+        Assert.AreEqual(SpellComponentOutcome.None, CastOnHero(caster, HeroPointsPlus));
+        Assert.IsFalse(NotReady(caster));
+        Assert.AreEqual(12, owner.QueryHeroStoredStat(22));
+        var first = HeroExpectedCharms(owner);
+        Assert.AreNotEqual(equipped, first, "the magick points moved the aptitude the runs read");
+        Assert.AreEqual(first, HeroCharms(owner), "wield off took the old charms, wield on added the count of the new aptitude");
+        Assert.AreEqual((uint)first, owner.QueryItemScriptSlots().Single(slot => slot.Point == SessionScriptPoint.WieldOn).Counters);
+        Assert.IsTrue(owner.QueryHeroEffects()!.Effects.All(e => e.Cause == EffectCause.Item));
+
+        CastOnHero(caster, HeroTechPlus);
+        Assert.AreEqual(22, owner.QueryHeroStoredStat(23));
+        Assert.AreEqual(HeroExpectedCharms(owner), HeroCharms(owner));
+        Assert.AreNotEqual(first, HeroCharms(owner), "the tech points moved it again");
+        Assert.IsFalse(caster.Log.Any(e => e.Kind == SpellCastEventKind.ComponentNotReady));
+    }
+
+    [TestMethod]
+    public void The_condition_items_are_being_rewielded_is_true_in_the_heros_rewield()
+    {
+        // The gate adds one charm only while rewielding: the equip adds none, the rewield one.
+        var (owner, caster, _) = WornHero(Gate, 0);
+        using var o = owner;
+        Assert.AreEqual(0, HeroCharms(owner));
+        CastOnHero(caster, HeroPointsPlus);
+        Assert.AreEqual(1, HeroCharms(owner));
+        Assert.IsFalse(NotReady(caster));
+    }
+
+    [TestMethod]
+    public void A_hero_rewield_the_session_cannot_apply_writes_nothing()
+    {
+        // No rule of the effect the script adds: the run is refused, the stat is not written.
+        var (owner, caster, host) = WornHero(Gate, 0);
+        using var primary = owner;
+        host.Effects.Clear();
+        var version = owner.Version;
+        Assert.IsNull(CastOnHero(caster, HeroPointsPlus).JumpTo);
+        Assert.IsTrue(NotReady(caster));
+        Assert.AreEqual(version, owner.Version);
+        Assert.AreEqual(5, owner.QueryHeroStoredStat(22));
+        Assert.AreEqual(0, HeroCharms(owner));
+
+        // Without a host (or a host that answers none) the scripted item leaves the points not ready.
+        var (bare, bareCaster, _) = WornHero(Gate, 0);
+        using var _b = bare;
+        bareCaster.ItemScripts = () => null;
+        var bareVersion = bare.Version;
+        Assert.IsNull(CastOnHero(bareCaster, HeroPointsPlus).JumpTo);
+        Assert.IsTrue(NotReady(bareCaster));
+        Assert.AreEqual(bareVersion, bare.Version);
+        Assert.AreEqual(5, bare.QueryHeroStoredStat(22));
+    }
+
+    // ARC-MAGIC-1744 with ARC-MAGIC-1745: a line a wield script of the hero's rewield prints is read for the hero (the default reading) and reaches the cast log for the message window, after the write and in print order.
+    [TestMethod]
+    public void A_line_the_heros_rewield_prints_reaches_the_cast_log_read_for_the_hero()
+    {
+        var (owner, caster, _) = WornHero(714, 714);
+        using var o = owner;
+        var before = caster.Log.Count(e => e.Kind == SpellCastEventKind.ItemScriptLine);
+        Assert.AreEqual(SpellComponentOutcome.None, CastOnHero(caster, HeroPointsPlus));
+        Assert.IsFalse(NotReady(caster));
+        // Wield off then wield on: two lines, each with the entry type of the print action and the script.
+        var lines = caster.Log.Where(e => e.Kind == SpellCastEventKind.ItemScriptLine).Skip(before).ToArray();
+        Assert.AreEqual(2, lines.Length);
+        foreach (var line in lines) Assert.AreEqual(new SpellCastEvent(SpellCastEventKind.ItemScriptLine, line.Run, 6, Hero, 714) { Text = "line" }, line);
+    }
+
+    [TestMethod]
+    public void A_hero_without_a_worn_wield_script_stores_its_points_and_runs_nothing_even_through_a_host()
+    {
+        var (owner, caster, _) = WornHero(equip: false);
+        using var o = owner;
+        Assert.IsTrue(owner.HeroRewieldReady());
+        Assert.AreEqual(SpellComponentOutcome.None, CastOnHero(caster, HeroPointsPlus));
+        Assert.AreEqual(12, owner.QueryHeroStoredStat(22));
+        Assert.AreEqual(0, HeroCharms(owner));
+        Assert.IsFalse(NotReady(caster));
     }
 }
