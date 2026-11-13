@@ -735,11 +735,13 @@ public partial class TerrainViewerApp
         {
             _mainMenuStatus = "Escape ignored: a load is in progress"; RefreshAreaStatus(); return true;
         }
-        var limited = AnotherHasTheTurn || ConversationOpen || WorldMapOpen || BarterOpen;
+        var limited = AnotherHasTheTurn || ConversationOpen || WorldMapOpen || BarterOpen || ItemServiceOpen;
         // 0x573440 (the menu's start, 0x541180): the inventory window closes, with any overlay over it; barter (the inventory family) too.
         // Target modes over the base and the other windows stay as they are, and Continue returns to them (0x5412D0).
         if (InventoryOpen) EndInventory();
         if (BarterOpen) CloseBarterByPlayer();
+        // ARC-UI-1731: the item identify and repair windows are the inventory window in its modes 5 and 6 (the same family).
+        if (ItemServiceOpen) EndItemService();
         GD.Print($"ARC-DEV-111 Escape opens the in-play menu kind={(limited ? 3 : 2)} (stack {StackText()})");
         OpenMainMenu(MainMenuTexts(_arguments ?? _launchArguments!), limited ? AreaMenuWindow.InPlayLimited : AreaMenuWindow.InPlay);
         return true;
