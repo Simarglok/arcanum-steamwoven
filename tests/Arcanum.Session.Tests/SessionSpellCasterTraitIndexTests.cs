@@ -20,7 +20,7 @@ namespace Arcanum.Session.Tests;
 // ARC-MAGIC-1295 (ledger RM3; exe read 0x452D80, 0x4B0740, 0x4B0980, 0x4B0FC0, 0x4B0FD0, 0x407340, 0x4072D0): the TraitIdx component adds its value to an NPC's stored base stat or resistance through the cast host.
 // Records, ids and numbers are invented; the NPC is an oid: entity whose stored values the host map gives.
 [TestClass]
-public sealed class SessionSpellCasterTraitIndexTests
+public sealed partial class SessionSpellCasterTraitIndexTests
 {
     private const string Hero = SessionSpellCaster.Hero, Rat = "oid:rat", Box = "oid:box";
     private static readonly SpellLocation HeroTile = new(5, 5), FarTile = new(8, 5);
@@ -249,7 +249,7 @@ public sealed class SessionSpellCasterTraitIndexTests
         using var _ = owner;
         var version = owner.Version;
         // The hero (the character owner's stats), an index and a field the host has no state for, strength of an NPC the map's seed does not list (its carried weight is unknown), and a PC that is not the hero.
-        Assert.IsNull(caster.Apply(Run(FirePlus), 0, At(Hero, SpellTargetObject.Pc)).JumpTo);
+        Assert.IsNull(caster.Apply(Run(BadField), 0, At(Hero, SpellTargetObject.Pc)).JumpTo);
         Assert.IsNull(caster.Apply(Run(BadIndex), 0, At(Rat, SpellTargetObject.Npc)).JumpTo);
         Assert.IsNull(caster.Apply(Run(BadField), 0, At(Rat, SpellTargetObject.Npc)).JumpTo);
         Assert.IsNull(caster.Apply(Run(StrengthPlus), 0, At(Rat, SpellTargetObject.Npc)).JumpTo);
@@ -1236,27 +1236,14 @@ public sealed class SessionSpellCasterTraitIndexTests
     }
 
     [TestMethod]
-    public void What_the_heros_state_does_not_hold_is_not_ready_and_a_derived_stat_is_read_not_written()
+    public void A_derived_stat_is_read_not_written_for_the_hero_and_an_index_outside_the_array_is_not_ready()
     {
-        // Stat 25, gender, race and a resistance (the hero stores none): a saved field is needed.
-        foreach (var index in new[] { 25, 26, 27 })
-        {
-            var number = 600 + index;
-            var records = new Dictionary<int, SessionSpellRecord>(Records) { [number] = Spell(number, StatField, index, 1) };
-            var (owner, caster) = HeroSession(SkilledHero(), records: records);
-            using var _ = owner;
-            var version = owner.Version;
-            Assert.IsNull(CastOnHero(caster, number).JumpTo, $"stat {index}");
-            Assert.AreEqual(version, owner.Version, $"stat {index}");
-            Assert.IsTrue(NotReady(caster), $"stat {index}");
-        }
         var (hero, cast) = HeroSession(SkilledHero());
         using var _h = hero;
         var before = hero.Version;
         Assert.AreEqual(SpellComponentOutcome.None, CastOnHero(cast, DerivedPlus), "stats 8 to 16 are read, not written");
         Assert.AreEqual(before, hero.Version);
         Assert.AreEqual(0, cast.Log.Count);
-        Assert.IsNull(CastOnHero(cast, FirePlus).JumpTo);
         Assert.IsNull(CastOnHero(cast, BadIndex).JumpTo);
     }
 

@@ -100,7 +100,7 @@ public sealed class ScriptStoreStateTests
         var text = GameSessionSnapshotCodec.Encode(owner.Capture());
         StringAssert.Contains(text, ",\"scripts\":{\"globalVariables\":[[2,40],[1999,-7]]}");
         // ARC-DEV-266 (schema 79): fields 272 and 273 of the PC are saved on the hero's record, the last field of its section.
-        StringAssert.Contains(text, ",\"portrait\":0,\"scripts\":{\"flags\":[[0,-2147483648],[1,2]],\"variables\":[[300,9]]}},");
+        StringAssert.Contains(text, ",\"portrait\":0,\"scripts\":{\"flags\":[[0,-2147483648],[1,2]],\"variables\":[[300,9]]}" + NoHeroStoredKeys + "},");
         var restored = Restore(Decode(text));
         using var _ = restored;
         Assert.AreEqual(text, GameSessionSnapshotCodec.Encode(restored.Capture()));
@@ -129,7 +129,7 @@ public sealed class ScriptStoreStateTests
         var global = GameSessionSnapshotCodec.Encode(Create().Capture()).Replace(NoScripts, ",\"scripts\":{\"globalVariables\":[[1,5]]}");
         using var kept = Restore(Decode(global));
         Assert.AreEqual(5, kept.QueryGlobalVariable(1));
-        StringAssert.Contains(text, ",\"scripts\":{\"flags\":[],\"variables\":[[1,5]]}}");
+        StringAssert.Contains(text, ",\"scripts\":{\"flags\":[],\"variables\":[[1,5]]}" + NoHeroStoredKeys + "}");
     }
 
     [TestMethod]
@@ -169,7 +169,7 @@ public sealed class ScriptStoreStateTests
         var text = GameSessionSnapshotCodec.Encode(owner.Capture());
         void Fails(string scripts, SnapshotDecodeFailure failure, string path)
         {
-            var result = GameSessionSnapshotCodec.TryDecode(text.Replace(NoHeroScripts + "}", ",\"scripts\":" + scripts + "}"));
+            var result = GameSessionSnapshotCodec.TryDecode(text.Replace(NoHeroScripts + NoHeroStoredKeys + "}", ",\"scripts\":" + scripts + NoHeroStoredKeys + "}"));
             Assert.AreEqual((failure, path), (result.Failure, result.Path));
         }
         Fails("{\"flags\":[[2048,1]],\"variables\":[]}", SnapshotDecodeFailure.OutOfRange, "$.hero.scripts.flags[0][0]");
@@ -179,7 +179,7 @@ public sealed class ScriptStoreStateTests
         Fails("{\"flags\":[]}", SnapshotDecodeFailure.MissingField, "$.hero.scripts.variables");
         Fails("{\"flags\":[],\"variables\":[],\"globalVariables\":[]}", SnapshotDecodeFailure.UnknownField, "$.hero.scripts.globalVariables");
         Fails("[]", SnapshotDecodeFailure.WrongType, "$.hero.scripts");
-        var missing = GameSessionSnapshotCodec.TryDecode(text.Replace(NoHeroScripts + "}", "}"));
+        var missing = GameSessionSnapshotCodec.TryDecode(text.Replace(NoHeroScripts + NoHeroStoredKeys + "}", NoHeroStoredKeys + "}"));
         Assert.AreEqual((SnapshotDecodeFailure.MissingField, "$.hero.scripts"), (missing.Failure, missing.Path));
     }
 
