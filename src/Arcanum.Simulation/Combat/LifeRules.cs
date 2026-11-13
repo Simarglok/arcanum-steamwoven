@@ -289,8 +289,8 @@ public static class LifeRules
     }
 
     /// <summary>
-    /// ARC-MAGIC-1508 (the stat setter 0x4B0980 for stat 24, ledger RM3b): the poison level is written as <paramref name="level"/>: clamped to 0..1000 (the range tables), then 0 for a critter whose effective
-    /// constitution is 20 or more (0x4B0EE0 called with constitution), as every poison write does (<see cref="Damage"/> too). Nothing else changes: no damage step, so no death check (the original's setter
+    /// ARC-MAGIC-1508 (the stat setter's poison case, ledger RM3b): the poison level is written as <paramref name="level"/>: clamped to 0..1000 (the range tables), then 0 for a critter whose effective
+    /// constitution is 20 or more (the setter's constitution test, RM3b), as every poison write does (<see cref="Damage"/> too). Nothing else changes: no damage step, so no death check (the original's setter
     /// kills nobody; the next poison tick or hit does) and no event but the timers the session sets for a positive level.
     /// </summary>
     public static LifeOutcome SetPoison(LifeState state, LifeFacts facts, long level)

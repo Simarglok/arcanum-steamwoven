@@ -124,10 +124,10 @@ public sealed partial class SessionSpellCaster
         !listed.Items.Any(item => item.Facts.Worn && (item.Facts.HasScript(SessionScriptPoint.WieldOn) || item.Facts.HasScript(SessionScriptPoint.WieldOff)));
 
     /// <summary>
-    /// ARC-MAGIC-1508 (ledger RM3b, the setter's poison case): stat 24 is the poison level, which the original stores in the stat array and the session keeps in the NPC's life state (the map data's entry is only what it loads
-    /// with: <c>LifeState.PoisonLevel</c> of the loaded state, then the life record wins). The executor's current value (0x4B0740, the raw entry) is therefore the life state's level; the sum wraps in 32 bits, is clamped to 0..1000,
-    /// becomes 0 for an effective constitution of 20 or more (0x4B0EE0), and is written through <see cref="GameSessionOwner.SetPoisonLevel"/>, which sets the poison timers of a positive level (0x4B1350) and gives the NPC a life
-    /// record. The interface callback 0x460240 is not the session's. Not ready when the life state cannot be read.
+    /// ARC-MAGIC-1508 (ledger RM3b, the setter's poison case; the addresses are in RM3b): stat 24 is the poison level, which the original stores in the stat array and the session keeps in the NPC's life state (the map data's entry is only what it loads
+    /// with: <c>LifeState.PoisonLevel</c> of the loaded state, then the life record wins). The executor's current value (the raw entry) is therefore the life state's level; the sum wraps in 32 bits, is clamped to 0..1000,
+    /// becomes 0 for an effective constitution of 20 or more (the setter's constitution test), and is written through <see cref="GameSessionOwner.SetPoisonLevel"/>, which sets the poison timers of a positive level and gives the NPC a life
+    /// record. The interface callback is not the session's. Not ready when the life state cannot be read.
     /// </summary>
     private SpellComponentOutcome? PoisonStat(SpellRun run, string entity, TraitIndexData data, SessionLifeTarget life)
     {

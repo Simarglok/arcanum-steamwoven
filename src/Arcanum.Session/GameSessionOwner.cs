@@ -1445,11 +1445,10 @@ public sealed partial class GameSessionOwner : IDisposable
     }
 
     /// <summary>
-    /// ARC-MAGIC-1508 (the stat setter 0x4B0980 for stat 24, ledger RM3b): the poison level of the target is <paramref name="level"/> (<see cref="LifeRules.SetPoison"/>: clamped to 0..1000, 0 for an effective
+    /// ARC-MAGIC-1508 (the stat setter's poison case, ledger RM3b): the poison level of the target is <paramref name="level"/> (<see cref="LifeRules.SetPoison"/>: clamped to 0..1000, 0 for an effective
     /// constitution of 20 or more). The poison level is the stored stat 24 of the original, and the session keeps it in the life state alone (the stored array's entry is only what the map data loads the NPC with): this
-    /// write is the setter. A level that becomes positive sets the poison damage and recovery timers as every life write does (0x4B1350; the session sets them on a change, see the event queue document).
+    /// write is the setter. A level that becomes positive sets the poison damage and recovery timers as every life write does (the original's poison event schedule; the session sets them on a change, see the event queue document).
     /// </summary>
-    [OriginalFunction(0x4B0980, OriginalFunctionScope.Partial)]
     public SessionLifeResult SetPoisonLevel(GameSessionVersion expected, SessionLifeTarget target, long level)
     {
         ThrowIfDisposed();
