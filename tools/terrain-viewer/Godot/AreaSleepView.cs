@@ -17,6 +17,9 @@ public partial class AreaSleepView : Control
     private AreaArtFontFace? _font;
     private IReadOnlyList<string> _labels = [];
     private readonly AreaSleepButtons _buttons = new();
+    // ARC-UI-1200: the generated interface paints the window's frames and buttons at the window's own device scale (claimed at every draw).
+    private AreaDeviceScale? _claim;
+    private AreaDeviceScale Claim => _claim ??= new(this);
 
     /// <summary>A button was pressed (0-based row).</summary>
     public event Action<int>? RowPressed;
@@ -35,6 +38,10 @@ public partial class AreaSleepView : Control
         return GetGlobalTransform() * new Vector2(x + width / 2f, y + height / 2f);
     }
     internal int FrameForSelfTest(int row) => AreaGameBarLayout.Frame(_buttons.Look(row), ButtonFrames());
+    /// <summary>ARC-UI-1200: the window's device scale (what its generated frames are painted at) and its textures by art number, every frame (the native smoke).</summary>
+    internal float DeviceScale() => Claim.Current();
+    internal IReadOnlyList<(int Art, HdInterfaceTexture Texture)> TexturesForSelfTest(IEnumerable<int> arts) =>
+        [.. arts.Where(_art.ContainsKey).SelectMany(number => _art[number].OfType<HdInterfaceTexture>().Select(texture => (number, texture)))];
     internal AreaSleepButtons Buttons => _buttons;
     /// <summary>The interface sounds the buttons asked for, newest last (self-test and smoke).</summary>
     internal List<int> SoundsForSelfTest { get; } = [];
@@ -73,6 +80,7 @@ public partial class AreaSleepView : Control
 
     public void SetArt(IReadOnlyDictionary<int, Texture2D[]> art, AreaArtFontFace font)
     {
+        Claim.Release();
         _art = art ?? throw new ArgumentNullException(nameof(art));
         _font = font ?? throw new ArgumentNullException(nameof(font));
         if (_art.TryGetValue(AreaSleepLayout.BackgroundArt, out var window) && window.Length > 0) Size = new Vector2(window[0].GetWidth(), window[0].GetHeight());
@@ -82,6 +90,7 @@ public partial class AreaSleepView : Control
     /// <summary>Forgets the art (the module changed); the host sets it again when the new one has read.</summary>
     public void ClearArt()
     {
+        Claim.Release();
         _art = new Dictionary<int, Texture2D[]>(); _font = null;
         QueueRedraw();
     }
@@ -142,6 +151,7 @@ public partial class AreaSleepView : Control
     public override void _Draw()
     {
         if (_font is not { } font) return;
+        Claim.Claim(_art, AreaSleepLayout.BackgroundArt, AreaSleepLayout.ButtonArt);
         if (AreaCharacterArtDraw.Art(_art, AreaSleepLayout.BackgroundArt) is { } window)
             DrawTextureRect(window, new Rect2(0, 0, window.GetWidth(), window.GetHeight()), false);
         var frames = ButtonFrames();
@@ -154,6 +164,8 @@ public partial class AreaSleepView : Control
             AreaCharacterArtDraw.Lines(this, AreaSleepLayout.TextField(row, width), _labels[row], font, AreaSleepLayout.TextColour);
         }
     }
+
+    public override void _ExitTree() => _claim?.Release();
 
     public override void _Notification(int what)
     {

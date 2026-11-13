@@ -174,4 +174,18 @@ public sealed class AreaScriptEyeCandyTests
         Assert.IsNull(EyeCandyEntryRef.Make(EyeCandyList.Script, EyeCandyEntryRef.MaxIndex + 1));
         Assert.IsFalse(Enum.IsDefined(EyeCandyEntryRef.ListOf(0x06000005)), "a value outside the lists is not read as the spell list");
     }
+
+    // ARC-MAGIC-1830: the requests the session hands over for an NPC's rewield or wield scripts are turned into plays in order, and only a play of the script list is one (play spell names the spell list, stop script takes an entry off).
+    [TestMethod]
+    public void Only_the_script_list_plays_of_a_hosts_requests_are_played_in_order()
+    {
+        var map = 1;
+        var npc = new ScrObjectRef(map, "oid:npc");
+        var plays = AreaScriptEyeCandy.Of(
+        [
+            new ScrEyeCandy(7, npc), new ScrEyeCandy(23, npc, ScrEyeCandyKind.PlaySpell), new ScrEyeCandy(9, new(map, "ring")), new ScrEyeCandy(30, npc, ScrEyeCandyKind.StopScript),
+        ]).ToArray();
+        CollectionAssert.AreEqual(new[] { new AreaScriptEyeCandy(npc, 7), new AreaScriptEyeCandy(new(map, "ring"), 9) }, plays);
+        Assert.AreEqual(0, AreaScriptEyeCandy.Of(Array.Empty<ScrEyeCandy>()).Count());
+    }
 }
