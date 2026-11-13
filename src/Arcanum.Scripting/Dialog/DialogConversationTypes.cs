@@ -58,6 +58,7 @@ public sealed record DialogConversationRequest(
 /// <paramref name="Purse"/> (ARC-SCRIPT-1304) reads the PC's own gold for a paid <c>r:</c> rumor, where <paramref name="Trainer"/> is not given (it answers the same read).
 /// The <c>r:</c> reply needs the <paramref name="Rumors"/> and <paramref name="Greeting"/> ports (the rumor state, the lines, texts and the draw); a paid one also the
 /// <paramref name="World"/>, <paramref name="Gold"/> and purse (the price on the reaction scale, the payment); without any of them the reply stays blocked.
+/// <paramref name="QuestReplies"/> (ARC-SCRIPT-1532) admits the <c>q:</c> quest-state reply together with the <paramref name="Quests"/> and <paramref name="World"/> ports (the PC's quest state and the NPC's reaction); without any of them the reply stays a frontier.
 /// </summary>
 public sealed record DialogConversationPorts(
     IDialogStateQueryPort LocalFlags,
@@ -96,7 +97,8 @@ public sealed record DialogConversationPorts(
     IDialogOriginPort? Origins = null,
     IDialogTrainerPort? Trainer = null,
     IDialogPcGoldPort? Purse = null,
-    IDialogWorldMapPort? WorldMap = null);
+    IDialogWorldMapPort? WorldMap = null,
+    IDialogQuestReplyPort? QuestReplies = null);
 
 public enum DialogReactionMode
 {
@@ -206,6 +208,17 @@ public readonly record struct DialogQuestQuery(DialogParticipantId PlayerCharact
 public interface IDialogQuestPort
 {
     int State(DialogQuestQuery query);
+}
+
+/// <summary>
+/// The quest rules table of the <c>q:</c> reply (ARC-SCRIPT-1532, ledger DQR1; <c>rules\gamequest.mes</c>, filled by 0x4C4860 and read by the chooser 0x4C4C00): field <paramref name="index"/> (0..22) of the
+/// quest's entry (the quest is 1000..1999), or null when the module holds no such number. A <c>q:N</c> reply is offered with the text, response and action of the DLG record the table names for the PC's quest
+/// state (<see cref="IDialogQuestPort"/>), the NPC's reaction toward the PC and the PC's Intelligence: field 2 + state normally, 9 + state when the reaction is below 20, 16 + state when the Intelligence is
+/// below 5 (that first). A thrown exception fails the conversation. The reply needs this port, the quest port and the world port (the reaction); without any of them it stays a frontier.
+/// </summary>
+public interface IDialogQuestReplyPort
+{
+    int? Field(int quest, int index);
 }
 
 /// <summary>One question of the PC stat conditions (ARC-DEV-192): the PC's stat by the original's number (5 perception, 7 charisma, 16 magick-technology aptitude, 17 level, 19 alignment).</summary>

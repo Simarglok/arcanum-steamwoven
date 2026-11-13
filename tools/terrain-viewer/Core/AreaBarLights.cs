@@ -12,7 +12,7 @@ public enum AreaLightSlot { Character = 0, Logbook = 1, TownMap = 2, WorldMap = 
 /// open (its own test: the character sheet 0x55A220, the logbook 0x53F0D0, the world map 0x560F90 for both map slots, the inventory
 /// 0x5735F0); with a zero flag it stores the idle art back, whatever is open. Each store redraws the button, and the map slots draw only
 /// while the map mode names them (0x556B90). The map callback (0x556B70) stores the mode and redraws it. All five words and the mode are
-/// part of the original's save (0x54A1A0); this build keeps them for the session only.
+/// part of the original's save (0x54A1A0); ARC-UI-1542: this build saves them in the session snapshot (<see cref="LitMask"/>, <see cref="Restore"/>).
 /// </summary>
 public sealed class AreaBarLights
 {
@@ -28,6 +28,30 @@ public sealed class AreaBarLights
 
     /// <summary>The Map button's face: <see cref="AreaLightSlot.TownMap"/> (193, the start) or <see cref="AreaLightSlot.WorldMap"/> (194).</summary>
     public AreaLightSlot MapMode { get; private set; } = AreaLightSlot.TownMap;
+
+    /// <summary>The lit slots as bits (bit n for the slot number n, 0..31), for the save (ARC-UI-1542).</summary>
+    public int LitMask
+    {
+        get
+        {
+            var mask = 0;
+            for (var slot = 0; slot < _lit.Length; slot++)
+                if (_lit[slot]) mask |= 1 << slot;
+            return mask;
+        }
+    }
+
+    /// <summary>A load's state (ARC-UI-1542, the original's interface load): the five slots and the map face as saved. Nothing is checked against an open window (the
+    /// original's load stores the words and redraws all five buttons). True when the stored state changed.</summary>
+    public bool Restore(int litMask, AreaLightSlot mapMode)
+    {
+        if (litMask is < 0 or > 31) throw new ArgumentOutOfRangeException(nameof(litMask));
+        if (mapMode is not (AreaLightSlot.TownMap or AreaLightSlot.WorldMap)) throw new ArgumentOutOfRangeException(nameof(mapMode));
+        var changed = MapMode != mapMode || LitMask != litMask;
+        for (var slot = 0; slot < _lit.Length; slot++) _lit[slot] = (litMask >> slot & 1) != 0;
+        MapMode = mapMode;
+        return changed;
+    }
 
     /// <summary>Whether the slot holds its lit art.</summary>
     public bool IsLit(AreaLightSlot slot) => _lit[Index(slot)];

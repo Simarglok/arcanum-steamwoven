@@ -1149,11 +1149,10 @@ The rules are in [bar buttons lit by game events](../rendering/terrain-viewer.md
 | 5 | Accept or complete a quest, add or lose a blessing or a curse, or gain a reputation, with the logbook closed. | The Logbook button lights; opening the logbook puts it out. | open |
 | 6 | Learn a new world-map area (a dialog or script that reveals one) while standing in the wilderness. | The Map button (the blue globe in the wilderness) lights until the world map is opened. | open |
 | 7 | Walk from the wilderness into a town with a town map, and out again. | In the town the Map button shows its town art; in the wilderness the blue globe. The map opens on the town map in the town. | open |
-| 8 | Save with a button lit and load the save. | The original restores the lit button; ours starts with all buttons normal (a known difference, see below). | open |
+| 8 | Save with a button lit and load the save. | The lit button is lit again after the load, as in the original (ARC-UI-1542, schema 98); a save from an older build loads with all buttons normal. | open |
 
 Known differences (documented, not bugs):
 
-- The lit state is not in our save (issue [#1542](https://github.com/Simarglok/arcanum-steamwoven/issues/1542)).
 - The original blocks no map entry by the button's art: going to the world map is not tied to the blue globe being shown (ledger GB17), so nothing is blocked here either.
 
 | 4 | Press F8 with a save on the map already shown. | Superseded by ARC-UI-1504 below: the screen shows for a moment. | open |
