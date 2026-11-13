@@ -77,10 +77,10 @@ public sealed class AreaItemService
     /// <summary>
     /// One click on an item (ledger IS3). A click on another item than the selected one selects it and quotes it
     /// (<see cref="ItemServiceRules.KeptPrice"/> keeps the price). A click on the selected item quotes it again and, when the kept price is above 0,
-    /// pays for the service: a price above the hero's gold is the "no money" line (0x413910); else the service runs on the item (identify
+    /// pays for the service: a price above the hero's gold is the "no money" line; else the service runs on the item (identify
     /// marks it, repair is the NPC's forced run) and the hero pays the price to the NPC. The kept price is then cleared whatever happened.
     /// </summary>
-    /// <remarks>Executable: the click handler of the inventory window 0x573850 in its modes 5 and 6 (registered as <c>AreaInventoryDrag.Release</c> for the own window).</remarks>
+    /// <remarks>Executable: the handler of the inventory window 0x573850 in its modes 5 and 6 (registered as <c>AreaInventoryDrag.Release</c> for the own window); the "no money" line is the class line generator 0x413910.</remarks>
     public AreaItemServiceStep Click(string entity)
     {
         var line = _barter.View().Hero.FirstOrDefault(item => item.Entity == entity);
