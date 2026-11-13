@@ -211,9 +211,9 @@ public sealed class AreaUseScriptsOriginalTests
         // ARC_TILE_CENSUS, when set, names a file the first stops of the refused tile scripts are written to (reason, count, one sample script; no game data).
         if (Environment.GetEnvironmentVariable("ARC_TILE_CENSUS") is { Length: > 0 } reasonFile)
             File.WriteAllLines(reasonFile, tileReasons.OrderByDescending(p => p.Value).Select(p => $"{p.Value}\t{p.Key}\t{tileSamples[p.Key]}"));
-        // 21 guarded use sites on 6 maps: 10 run and their guards hold the teleport back (one more since ARC-SCRIPT-1165 admitted the story and time commands); 11 need conditions or actions
+        // 21 guarded use sites on 6 maps: 11 run and their guards hold the teleport back (one more since ARC-SCRIPT-1165 admitted the story and time commands, one more since ARC-SCRIPT-1772 admitted the critter getters, toggle invulnerability and rename); 10 need conditions or actions
         // outside the set (immediate calls, loops, other conditions) and are refused.
-        CollectionAssert.AreEquivalent(new[] { (AreaScriptedUseOutcome.NoTeleport, 10), (AreaScriptedUseOutcome.Refused, 11) },
+        CollectionAssert.AreEquivalent(new[] { (AreaScriptedUseOutcome.NoTeleport, 11), (AreaScriptedUseOutcome.Refused, 10) },
             outcomes.Select(p => (p.Key, p.Value)).ToArray(), string.Join(", ", outcomes.Select(p => $"{p.Key}={p.Value}")));
         // 3,012 tile and 20 sector scripts on the 79 maps map mode opens (the start map holds 2,439 tile scripts): since
         // ARC-SCRIPT-018 (call script, assign object, get object type) 644 tile scripts run, since ARC-SCRIPT-019 (story state and
