@@ -93,12 +93,14 @@ public sealed class AreaTalkQueryTests
                 Do(new(ScrCatalogue.Action.ReturnSkipDefault))));
             Write("dlg/00794attack.dlg", Encoding.Latin1.GetBytes("{1}{Hello.}{}{}{}{}{}\n"));
             // 795 (ARC-SCRIPT-1168): sets global flag 100, casts spell 12 on the PC with the attachee as the caster (action 48 shape), casts spell 13 on the attachee with the PC as the caster freely (118), then spell 14 on the PC with
-            // no caster (61), skip default; a talk that has the NPC cast on the player like a paid service.
+            // no caster (61), spell 15 on the PC by the attachee free and unresistable (122), spell 16 on the attachee with no caster unresistably (136), skip default; a talk that has the NPC cast on the player like a paid service.
             Write("scr/00795cast.scr", Program(
                 Do(new(ScrCatalogue.Action.SetGlobalFlag, N(AreaFlag))),
                 Do(new(ScrCatalogue.Action.CastSpell, (Attachee, -1), N(12), (Triggerer, -1))),
                 Do(new(ScrCatalogue.Action.CastFreeSpell, (Triggerer, -1), N(13), (Attachee, -1))),
                 Do(new(ScrCatalogue.Action.CastSpellOn, N(14), (Triggerer, -1))),
+                Do(new(ScrCatalogue.Action.CastFreeUnresistableSpell, (Attachee, -1), N(15), (Triggerer, -1))),
+                Do(new(ScrCatalogue.Action.CastUnresistableSpellOn, N(16), (Attachee, -1))),
                 Do(new(ScrCatalogue.Action.ReturnSkipDefault))));
             Write("dlg/00795cast.dlg", Encoding.Latin1.GetBytes("{1}{Hello.}{}{}{}{}{}\n"));
             // 791: sets global flag 100, then floats line 2 of 790's DLG shape (an action field the viewer does not run).
@@ -329,14 +331,15 @@ public sealed class AreaTalkQueryTests
             using var talk = Create(content, 795, (7, false), cast: (caster, target, spell, free, unresistable) => { calls.Add((caster, target, spell, free, unresistable)); return $"cast {spell}"; });
             var run = talk.Run();
             Assert.AreEqual(ScrOutcome.SkipDefault, run.Outcome, run.Refusal?.ToString());
-            Assert.AreEqual(3, run.Effects.ObjectStates.Count(r => r.Change == ScrObjectStateChange.CastSpell));
+            Assert.AreEqual(5, run.Effects.ObjectStates.Count(r => r.Change == ScrObjectStateChange.CastSpell));
             Assert.IsTrue(talk.Host.Apply(run.Effects));
             Assert.IsTrue(talk.Flag, "the run's flag applies with the casts");
             var npc = talk.Host.Object(talk.Speaker).Code;
-            // In action order: the NPC casts spell 12 on the PC; the PC casts spell 13 freely on the NPC; spell 14 reaches the PC with no caster (the first and the last carry no flags).
-            CollectionAssert.AreEqual(new (string?, string, int, bool, bool)[] { (npc, AiSchedulerRules.Pc, 12, false, false), (AiSchedulerRules.Pc, npc, 13, true, false), (null, AiSchedulerRules.Pc, 14, false, false) }, calls);
-            Assert.AreEqual("cast 14", talk.Host.LastCast);
-            Assert.AreEqual("cast 14", talk.Host.QueryHost!()!.LastCast);
+            // In action order: the NPC casts spell 12 on the PC; the PC casts spell 13 freely on the NPC; spell 14 reaches the PC with no caster (then 15 free and unresistable by the NPC, 16 unresistable with no caster).
+            CollectionAssert.AreEqual(new (string?, string, int, bool, bool)[] { (npc, AiSchedulerRules.Pc, 12, false, false), (AiSchedulerRules.Pc, npc, 13, true, false), (null, AiSchedulerRules.Pc, 14, false, false),
+                (npc, AiSchedulerRules.Pc, 15, true, true), (null, npc, 16, false, true) }, calls);
+            Assert.AreEqual("cast 16", talk.Host.LastCast);
+            Assert.AreEqual("cast 16", talk.Host.QueryHost!()!.LastCast);
         });
     }
 
