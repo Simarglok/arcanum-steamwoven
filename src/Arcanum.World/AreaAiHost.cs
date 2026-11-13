@@ -2597,7 +2597,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
 
     /// <summary>
     /// An action animation's start (0x42BD40, 0x42CB10, 0x42D300): the skill animation (12) of goals 34 and 86 to its action frame and
-    /// rest; goal 67's pick-locks loops, as many as the pick-locks starter (0x436220, AG12) counts from the art's frames (frames ÷
+    /// rest; goal 67's pick-locks loops, as many as the pick-locks starter (0x436220, AG12) counts from the art's frame rate (rate × 10 ÷
     /// max(frames − 2, 1) + 1, halved when the NPC's pick-locks training is apprentice or more), the attempt after the last;
     /// ARC-WORLD-113: goal 37's throw animation (14) to its action frame, the throw, and rest. The art is the fixed stand-in's (NPC ART
     /// is not read yet), played at its raw rate. An object flag 0x10000 or a stunned or paralysed critter cannot start.
@@ -2612,7 +2612,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         var frameMs = 1000.0 / art.RawFramesPerSecond;
         if (animation == AiActionAnimation.PickLocks)
         {
-            var loops = art.Frames / Math.Max(art.Frames - 2, 1) + 1;
+            var loops = art.RawFramesPerSecond * 10 / Math.Max(art.Frames - 2, 1) + 1;
             if (NpcSkill(id, Skill.PickLocks)?.Training is { } training && training >= SkillTraining.Apprentice) loops /= 2;
             return new(AiActionStart.Started, (int)Math.Max(1, Math.Round(loops * art.Frames * frameMs)), 0);
         }
