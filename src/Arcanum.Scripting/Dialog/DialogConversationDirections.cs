@@ -30,8 +30,8 @@ public sealed partial class DialogConversation
 
     /// <summary>
     /// The arguments of a <c>d:</c> or <c>x:</c> reply (ledger DIR1): the price is the number after the first <c>$</c> (read like <c>atoi</c>), the listed areas the list after
-    /// the first comma at or after it (what the pick reads, 0x419E70), the visible ones the list after the first comma of the whole text (what the offer
-    /// reads, 0x416C10; the same list for the installed replies). The reply is outside the subset without a <c>$</c> or a comma after it (the original then reads address 1)
+    /// the first comma at or after it (what the pick reads), the visible ones the list after the first comma of the whole text (what the offer
+    /// reads; the same list for the installed replies, ledger DIR7). The reply is outside the subset without a <c>$</c> or a comma after it (the original then reads address 1)
     /// and when an area is outside the session's 1..4095 (the original reads its known-area table with no range test).
     /// </summary>
     internal static (int Price, int[] Visible, int[] Listed)? ParseDirectionsReply(string text)

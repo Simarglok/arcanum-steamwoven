@@ -181,7 +181,7 @@ public sealed partial class DialogConversation
     private void PresentQuote(int skill) => PresentPriceScreen(TrainerBasePrice, price => new TrainerChoice(TrainerChoiceKind.Pay, skill, price));
 
     /// <summary>
-    /// The price screen (ledger DTR5, RMR5, DIR4; 0x418A40): the base price on the reaction scale in the NPC's class line 1000, and the yes and no replies; <paramref name="yes"/> makes
+    /// The price screen (ledger DTR5, RMR5, DIR4): the base price on the reaction scale in the NPC's class line 1000, and the yes and no replies; <paramref name="yes"/> makes
     /// the choice of the yes reply from the shown price, the no reply leaves by the reply's response.
     /// </summary>
     private void PresentPriceScreen(int basePrice, Func<int, TrainerChoice> yes)

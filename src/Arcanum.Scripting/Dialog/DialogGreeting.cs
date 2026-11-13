@@ -400,7 +400,7 @@ internal static class DialogGreeting
     }
 
     /// <summary>
-    /// ARC-SCRIPT-1533 (ledger DIR2, DIR5): a plain NPC line of the range <paramref name="first"/>..<paramref name="last"/> (0x418780: the directions lists' 100..199 and 500..599, the
+    /// ARC-SCRIPT-1533 (ledger DIR2, DIR5): a plain NPC line of the range <paramref name="first"/>..<paramref name="last"/> (the plain generator, <see cref="NpcLine"/>: the directions lists' 100..199 and 500..599, the
     /// direction lines 200..479 and 600..790), the NPC's own override record 11999 + <paramref name="first"/> / 100 first, else a pick of the NPC file by the two genders.
     /// </summary>
     public static GreetingOutcome NpcRange(int first, int last, DialogGreetingFacts facts, DialogGreetingSources sources, IDialogGreetingPort port,
