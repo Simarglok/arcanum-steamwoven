@@ -15,6 +15,8 @@ public sealed class AreaObjectArtTests
         (AreaMappingRole.ItemGround, 3) => "bad/name.art",
         (AreaMappingRole.ItemInventory, 1043) => "plate_inv.art",
         (AreaMappingRole.ItemInventory, 2304) => "helm_inv.art",
+        (AreaMappingRole.ItemPaper, 3000) => "gold_paper.art",
+        (AreaMappingRole.ItemPaper, 1002) => "arrow_paper.art",
         _ => null,
     };
 
@@ -58,5 +60,19 @@ public sealed class AreaObjectArtTests
         Assert.AreEqual(AreaObjectArtStatus.OtherClass, AreaObjectArt.ResolveItemInventory(0x40000000u, Name).Status);
         Assert.AreEqual(AreaObjectArtStatus.UnnamedNumber, AreaObjectArt.ResolveItemInventory(0x60000000u | (1u << 12) | (9u << 17), Name).Status);
         Assert.AreEqual(AreaObjectArtStatus.Unsupported, AreaObjectArt.Resolve(aid, Name).Status, "the area owner keeps refusing inventory art");
+    }
+
+    [TestMethod]
+    public void ItemPaperArtNamesItsFileInThePaperTable()
+    {
+        // ARC-UI-1884 (0x4EC290): place bits 12..13 = 2; gold is number 0 of type 3: 0 + 20 × (0 + 50 × 3) = 3000, ammunition type 2: 2 + 20 × 50 = 1002.
+        var gold = AreaObjectArt.ResolveItemPaper(0x60002003u, Name);
+        Assert.AreEqual(new AreaObjectArtPath("art/item/gold_paper.art", 0x60002003u, 0, 0, 0, 0), gold.Path);
+        Assert.AreEqual("art/item/arrow_paper.art", AreaObjectArt.ResolveItemPaper(0x60002001u | (2u << 17), Name).Path!.Path);
+        Assert.AreEqual("art/item/item_paper.mes", AreaObjectArt.MappingPath(AreaMappingRole.ItemPaper));
+        Assert.AreEqual(AreaObjectArtStatus.Unsupported, AreaObjectArt.ResolveItemPaper(0x60001003u, Name).Status, "an inventory art id");
+        Assert.AreEqual(AreaObjectArtStatus.Unsupported, AreaObjectArt.ResolveItemInventory(0x60002003u, Name).Status, "the inventory resolver keeps leaving the paper place out");
+        Assert.AreEqual(AreaObjectArtStatus.OtherClass, AreaObjectArt.ResolveItemPaper(0x40002003u, Name).Status);
+        Assert.AreEqual(AreaObjectArtStatus.UnnamedNumber, AreaObjectArt.ResolveItemPaper(0x60002003u | (9u << 17), Name).Status);
     }
 }

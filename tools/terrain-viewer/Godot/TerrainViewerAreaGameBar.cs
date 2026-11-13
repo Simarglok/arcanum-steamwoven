@@ -59,6 +59,7 @@ public partial class TerrainViewerApp
             HideHotkeyBar();
             HideSpellBar();
             HideSkillBar();
+            HideQuantityPane();
             return;
         }
         if (_gameBarPanel is null)
@@ -108,6 +109,7 @@ public partial class TerrainViewerApp
         SyncMaintainBar();
         SyncSpellBar();
         SyncSkillBar();
+        SyncQuantityPane();
     }
 
     private static int ClockArtWidth(AreaGameBarContent content, int art, int fallback) =>
