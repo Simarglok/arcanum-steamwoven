@@ -205,6 +205,7 @@ src/Arcanum.Session/GameSessionSpellRuns.cs,SpendItemCharge,pending,
 src/Arcanum.Session/GameSessionSpellRuns.cs,StartSpellRun,pending,
 src/Arcanum.Session/GameSessionSpellRuns.cs,StopMaintainedSpell,pending,
 src/Arcanum.Session/GameSessionSpellRuns.cs,TellCritterRunEnds,pending,
+src/Arcanum.Session/GameSessionStealth.cs,EndConcealmentForAttackEvent,exempt,host
 src/Arcanum.Session/GameSessionTeleportMap.cs,SetTeleportMap,exempt,reference
 src/Arcanum.Session/GameSessionTownMaps.cs,IsTownMapCellRevealed,pending,
 src/Arcanum.Session/GameSessionTraitArt.cs,WriteTraitArt,pending,

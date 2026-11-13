@@ -123,6 +123,26 @@ public sealed partial class GameSessionOwner
         return changed;
     }
 
+    /// <summary>
+    /// ARC-AI-1517 (attack event 0x4A9650 → 0x45EE30, VBG6): the attack event's concealment step for any attacker. When the victim is the
+    /// hero or an NPC the hero leads, the hero and the followers in its follower list stop prowling (<see cref="EndConcealmentForAttackOn"/>);
+    /// a victim the hero does not lead is no group of the session's. One revision of its own; no change (nothing concealed, or not the
+    /// hero's group) is <see cref="GameSessionDisposition.NoChange"/>. The host calls it for the plan's
+    /// <see cref="Arcanum.Simulation.Ai.AttackEventPlan.LosesConcealment"/>, which is set only while the group's head is concealed.
+    /// </summary>
+    public GameSessionMutationResult EndConcealmentForAttackEvent(GameSessionVersion expected, SessionCombatant victim)
+    {
+        ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(victim);
+        if (!IsCurrent(expected)) return Reject(GameSessionFailure.StaleVersion);
+        var concealed = _combat.HeroConcealed || _party.Order.Any(_combat.Concealed.Contains);
+        if (!concealed) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, Version);
+        if (_revision == long.MaxValue) return Reject(GameSessionFailure.RevisionExhausted);
+        if (!EndConcealmentForAttackOn(victim)) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, Version);
+        Revise();
+        return new(GameSessionDisposition.Changed, GameSessionFailure.None, Version);
+    }
+
     private SessionConcealmentState CaptureConcealment() =>
         new(_hero is not null && _combat.HeroConcealed, _combat.Concealed.ToArray());
 
