@@ -245,6 +245,7 @@ Each section of the ledger lives in the file of its area; this index keeps one l
 | <a id="trap-state-arc-world-076"></a>[Trap state (ARC-WORLD-076)](ledger/technology.md#trap-state-arc-world-076) | [Technology](ledger/technology.md) | TT1–TT10 |
 | <a id="generators-encounter-creatures-and-body-decay-arc-res-1103"></a>[Generators, encounter creatures and body decay (ARC-RES-1103)](ledger/npc-ai.md#generators-encounter-creatures-and-body-decay-arc-res-1103) | [NPC AI](ledger/npc-ai.md) | PO1–PO12 |
 | <a id="partial-rows-by-risk-ai-slice-1-arc-res-1104"></a>[Partial rows by risk, AI slice 1 (ARC-RES-1104)](ledger/npc-ai.md#partial-rows-by-risk-ai-slice-1-arc-res-1104) | [NPC AI](ledger/npc-ai.md) | VA1–VA21, VAG1–VAG6 |
+| <a id="partial-rows-by-risk-ai-slice-2-arc-res-1104"></a>[Partial rows by risk, AI slice 2 (ARC-RES-1104)](ledger/npc-ai.md#partial-rows-by-risk-ai-slice-2-arc-res-1104) | [NPC AI](ledger/npc-ai.md) | VB1-1–VB4-20, VBG1–VBG18 |
 | <a id="spot-trap-roll-arc-magic-057"></a>[Spot trap roll (ARC-MAGIC-057)](ledger/technology.md#spot-trap-roll-arc-magic-057) | [Technology](ledger/technology.md) | SP1–SP3 |
 | <a id="trap-effects-arc-world-107"></a>[Trap effects (ARC-WORLD-107)](ledger/technology.md#trap-effects-arc-world-107) | [Technology](ledger/technology.md) | TT11–TT16 |
 | <a id="technology-item-scripts-and-generic-item-flags-arc-res-112"></a>[Technology item scripts and generic item flags (ARC-RES-112)](ledger/technology.md#technology-item-scripts-and-generic-item-flags-arc-res-112) | [Technology](ledger/technology.md) | TI1–TI10 |
