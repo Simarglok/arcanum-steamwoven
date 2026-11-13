@@ -308,8 +308,42 @@ public partial class TerrainViewerApp
             var heroPush = RunAreaHeroKnockbackSmoke(session, () => TickAreaClock(hostMs += 50));
             // ARC-MAGIC-1230: so is an item lying on the ground (Unseen Force, UO5).
             var itemPush = RunAreaItemKnockbackSmoke(session, () => TickAreaClock(hostMs += 50));
+            // ARC-AI-1512 (VBG1): a back-off moves the NPC. It still fights the hero and BACKING_OFF is set (what a won 1 in 20 roll of combat perform does; the stage does not wait for the roll): the same
+            // pass runs it to the away tile, the run walks it on the animation clock and it ends farther from the hero; with no line clear the bit is cleared and no run starts ("no-line").
+            var backOff = "skipped";
+            if (host.Tile(entity) is { } near && session.QueryDanger(entity).State == DangerState.CombatFocus && session.QueryLife(target.Build.Combat!.Target).View is { Status.IsActive: true })
+            {
+                var heroCell = new CellCoord(checked((int)hero.X), checked((int)hero.Y));
+                var closeBy = AiExecutorRules.Distance(near, heroCell);
+                static long Apart(CellCoord a, CellCoord b) => (long)(a.X - b.X) * (a.X - b.X) + (long)(a.Y - b.Y) * (a.Y - b.Y);
+                var begun = session.StartBackOff(session.Version, entity);
+                Require(begun.Disposition == GameSessionDisposition.Changed, "BACKING_OFF was set: " + begun.Failure);
+                host.Perform(entity);
+                if (host.RunOf(entity) is not { } run)
+                {
+                    Require((session.QueryDanger(entity).Flags & DangerFlags.BackingOff) == 0, "with no run the back-off ended: " + host.TraceOf(entity)?.Perform);
+                    backOff = "no-line";
+                }
+                else
+                {
+                    Require(run.Bottom.Goal == GoalType.RunToTile && run.Bottom.Tile is { } awayTile && Apart(awayTile, heroCell) > Apart(near, heroCell),
+                        $"the back-off pass started a run to a tile farther from the hero: {run.Bottom.Goal} {run.Bottom.Tile}; " + host.TraceOf(entity)?.Perform);
+                    var ran = 0;
+                    for (var f = 0; f < 600 && host.RunOf(entity)?.Bottom.Goal == GoalType.RunToTile; f++)
+                    {
+                        ran++;
+                        _areaSmokeTime++;
+                        TickAreaClock(hostMs += 50);
+                        WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .05, true, SimulationTime.At(_areaSmokeTime, 20));
+                    }
+                    // The line away runs in one of eight directions, so the tile distance (the larger axis) can stay while the NPC goes round the hero: the squared straight distance is what must grow.
+                    var apart = host.Tile(entity) is { } now ? Apart(now, heroCell) : Apart(near, heroCell);
+                    Require(apart > Apart(near, heroCell), $"the NPC backed away from the hero: squared distance {Apart(near, heroCell)} -> {apart} (from {near}, to {run.Bottom.Tile}, now {host.Tile(entity)}, hero {heroCell}, {ran} frames, run {host.RunOf(entity)?.Bottom.Goal}, flags {session.QueryDanger(entity).Flags}, perform {host.TraceOf(entity)?.Perform}, step {host.TraceOf(entity)?.Step})");
+                    backOff = $"{closeBy}->{AiExecutorRules.Distance(host.Tile(entity) ?? near, heroCell)} (squared {Apart(near, heroCell)}->{apart})";
+                }
+            }
             GD.Print("ARC-WORLD-092 native-smoke ai PASS " + System.Text.Json.JsonSerializer.Serialize(new {
-                map.RuntimeMap, Knockback = knockback, HeroPush = heroPush, ItemPush = itemPush, Target = target.Row.PrototypeNumber, MaxHitPoints = LifeRules.MaxHitPoints(target.Build.Combat!.Facts, 0),
+                map.RuntimeMap, BackOff = backOff, Knockback = knockback, HeroPush = heroPush, ItemPush = itemPush, Target = target.Row.PrototypeNumber, MaxHitPoints = LifeRules.MaxHitPoints(target.Build.Combat!.Facts, 0),
                 Frames = frames, Steps = host.Movers.Of(entity) is not null, StepFrames = stepFrames.Count, Hit = trace!.Hit,
                 AttackFrames = _npcAttackFrames.Count - attackFrames, ArmedStands = _npcArmedStandDraws - armedStands, Shown = $"{shown.Weapon}/{shown.Shield}", StruckBack = struckBack, Fidgets = _aiFidgets - fidgets, Skills = _aiSkills - skills,
                 HeroDamage = session.QueryHeroLife()!.Record.State.HitPointDamage - heroLife,
