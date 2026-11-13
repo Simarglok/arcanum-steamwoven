@@ -1094,4 +1094,41 @@ public sealed class AreaAiFollowerTests
         Assert.AreEqual(-10, scene.Session.QueryReactionRecord(scene.Companion)?.Remembered, "the accidental hit costs 10");
         Assert.IsNull(scene.Host.TraceOf(scene.Companion)?.FollowerHit, "no follower branch");
     }
+
+    // ARC-AI-1522 (ledger VB2-3, 0x4AA300 → 0x44E050 and 0x44E0E0): the spell's peace ends the NPC's attack run at the head's party and each follower's attack run at the NPC.
+    [TestMethod]
+    public void Peace_with_a_follower_ends_the_npcs_attack_run_at_the_hero_its_head()
+    {
+        var (_, host, _, enemy, companion) = Open();
+        host.PerformAttack(enemy, Pc);
+        host.PerformAttack(companion, enemy);
+        Assert.AreEqual((GoalType.Attack, Pc), (host.RunOf(enemy)?.Bottom.Goal, host.RunOf(enemy)?.Bottom.Target), "the enemy attacks the hero");
+        Assert.IsTrue(host.SpellPeace(enemy, companion), host.TraceOf(enemy)?.Setter);
+        Assert.IsNull(host.RunOf(enemy), "the head of the companion is the hero: the attack at the hero ends");
+        Assert.IsNull(host.RunOf(companion), "the follower's attack at the NPC ends too");
+    }
+
+    [TestMethod]
+    public void Peace_with_the_hero_ends_the_enemys_attack_at_a_follower_and_the_followers_attack_at_it()
+    {
+        var (_, host, _, enemy, companion) = Open();
+        host.PerformAttack(enemy, companion);
+        host.PerformAttack(companion, enemy);
+        Assert.IsNotNull(host.RunOf(enemy));
+        Assert.IsNotNull(host.RunOf(companion));
+        Assert.IsTrue(host.SpellPeace(enemy, Pc), host.TraceOf(enemy)?.Setter);
+        Assert.IsNull(host.RunOf(enemy), "the enemy's attack at a member of the hero's party ends");
+        Assert.IsNull(host.RunOf(companion), "the follower's attack at the charmed NPC ends");
+    }
+
+    [TestMethod]
+    public void Peace_leaves_a_followers_attack_at_another_target()
+    {
+        var (_, host, _, enemy, companion) = Open();
+        host.PerformAttack(companion, Pc);
+        var before = host.RunOf(companion);
+        Assert.IsNotNull(before);
+        Assert.IsTrue(host.SpellPeace(enemy, Pc), host.TraceOf(enemy)?.Setter);
+        Assert.AreEqual(before!.Handle, host.RunOf(companion)?.Handle, "the follower's run does not aim at the NPC: left");
+    }
 }
