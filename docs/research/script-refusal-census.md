@@ -80,7 +80,7 @@ beyond S33 is not counted.
 ```sh
 "$DOTNET" run --project tools/research/Arcanum.CrashSiteProbe --no-build -- --script-refusal-census-self-test
 "$DOTNET" run --project tools/research/Arcanum.CrashSiteProbe --no-build -- --script-refusal-census \
-  --game-root "$GAME" [--set S30|S31|S32|S33|S38|S43|S52|S53|S54] > "$PRIVATE/refusal-census.json"
+  --game-root "$GAME" [--set S30|S31|S32|S33|S38|S43|S52|S53|S54|S56] > "$PRIVATE/refusal-census.json"
 ```
 
 The run takes about five seconds and is deterministic: two runs on the owner's installation
@@ -511,3 +511,10 @@ candy 104 and stop script eye candy 124, [ledger SC18–SC20, WE11–WE13](ledge
 on 121 sites on 9 maps blocked under S54 (43 roots on 91 sites on 7 maps freed by it alone), is empty under S55: get magictech adjustment (80) was admitted already by the combat-point set (ARC-SCRIPT-1562, set S51; the S33 baseline of the first census could not know it) and stop spell (130) by ARC-SCRIPT-1294.
 What the hosts admit, from the opt-in real-data check (`AreaScriptSpellTests`): 60 installed scripts use one of the five commands; the use set admits 21 of them whole, the placed set 28, the dying set 30, the combat-point set 28, the heartbeat set 1 and the talk set none (the others stop at commands of other groups).
 The 21 main-map heartbeats that stop a script eye candy (attachment point 19) are refused by the heartbeat set for other commands (assign object, get reaction, float line, play script eye candy), a slice of its own. The trigger census (`ScriptTriggerCensusTests`) is unchanged at the dialog point (124 of 180) and the heartbeat point (96 of 141), and the use point admits 2,445 of 2,467 rows. No host plays an eye candy request yet (#1592).
+
+## After the critter getters and writes (ARC-SCRIPT-1772, 2026-11-13)
+
+The probe takes `--set S56` too: **S56** is S55 plus get social class (38), get origin (39), get faction (89), toggle invulnerability (57) and rename (92) (ledger [CQ1–CQ8](ledger/scripts.md#critter-state-and-social-conditions-arc-script-1733-group-crq-of-the-script-census)). Under **S55** 1,712 attached
+scripts on 7,268 placed sites are admitted whole and 43 roots (251 sites) are refused for a type; under **S56** 1,720 scripts on 7,341 sites are admitted (+8 scripts, +73 sites) and 35 roots (178 sites) are refused for a type. The CRQ group, 8 roots on 73 sites on 2 maps under S55 (each root freed by it alone),
+is empty: the heartbeat point 19 loses 13 blocked sites (76 to 63), the dialog point 9 none (the dialog-talk set holds only the getters, and its blocking types are others). The issue's estimate (about +9 roots on 80 sites) was close; the difference is that the census counts what the set admits whole, and the
+installed scripts that use these five actions are 8 roots on 73 sites. What the host does with the two writes is limited to the hero and NPCs (ledger CQ8); the use, placed, heartbeat, dying and combat-point sets hold all five actions, the dialog-talk set the getters.

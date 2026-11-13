@@ -471,7 +471,12 @@ public partial class TerrainViewerApp
         if (last.Restocks.Any(r => r.Regenerations.Count > 0)) SyncAreaInventory();
         // ARC-MAGIC-1745: the lines the item scripts of an NPC's best-items wield printed at the end of its regeneration go to the message window.
         foreach (var restock in last.Restocks)
-            foreach (var regeneration in restock.Regenerations) PostScriptLines(regeneration.Wield?.Messages ?? []);
+            foreach (var regeneration in restock.Regenerations)
+            {
+                PostScriptLines(regeneration.Wield?.Messages ?? []);
+                // ARC-MAGIC-1830: and the eye candy those scripts made.
+                QueueScriptEyeCandies(regeneration.Wield?.EyeCandies ?? []);
+            }
         var refused = (_areaEventWorld?.CallRefusals ?? 0) > _loggedCallRefusals;
         _loggedCallRefusals = _areaEventWorld?.CallRefusals ?? 0;
         GD.Print($"ARC-WORLD-039 events steps={last.Steps} passes={last.Passes} fired={last.Fired} dropped={last.Dropped} calls={last.ScriptCallsRun}/{last.ScriptCalls}"

@@ -110,6 +110,8 @@ public partial class TerrainViewerApp
                 $"refused={done?.Refused ?? 0} skipped={done?.Skipped ?? 0} wield-steps={done?.Wield?.Steps.Count ?? 0}");
             // ARC-MAGIC-1745: the lines the item scripts of the created critter's best-items wield printed.
             PostScriptLines(done?.Wield?.Messages ?? []);
+            // ARC-MAGIC-1830: and the eye candy those scripts made.
+            QueueScriptEyeCandies(done?.Wield?.EyeCandies ?? []);
         }
     }
 
