@@ -113,10 +113,15 @@ public partial class TerrainViewerApp
             Require(_mapHandoff is null && ReferenceEquals(_areaSession, session), "the far area loaded with the session carried");
             Require(session.QueryActor().Map.RuntimeMap == data.StartRuntime, "the hero is on the main map");
             var there = await FollowerNearHeroAsync(entity, "after the window moved");
+            // ARC-AI-1695: the NPC without a dialog that the follow smoke force-joined with it (its map row now lies outside the shown window of the main map) is carried the same way: its body is read from the main map's data.
+            var ledThere = _smokeLedNpc is { } ledEntity ? await FollowerNearHeroAsync(ledEntity, "after the window moved (the NPC without a dialog)", place: false) : null;
+            // The runner requires this line from both window-moving stages (STAGE_ALSO_PASS): without it the NPC without a dialog was not covered there.
+            if (ledThere is null) GD.Print("ARC-AI-1695 native-smoke led-far NONE (the follow smoke joined no NPC without a dialog)");
+            else GD.Print("ARC-AI-1695 native-smoke led-far PASS " + System.Text.Json.JsonSerializer.Serialize(new { Stage = tag, Entity = _smokeLedNpc, AfterMove = ledThere }));
             if (viaSpell)
             {
                 // The companion was carried by the landing: led by the hero, in the shown map's group, within the follow distance, drawn (FollowerNearHeroAsync).
-                GD.Print("ARC-MAGIC-1147 native-smoke teleport-follow PASS " + System.Text.Json.JsonSerializer.Serialize(new { From = fromMap, Target = target, Entity = entity, AfterMove = there }));
+                GD.Print("ARC-MAGIC-1147 native-smoke teleport-follow PASS " + System.Text.Json.JsonSerializer.Serialize(new { From = fromMap, Target = target, Entity = entity, AfterMove = there, LedAfterMove = ledThere }));
             }
             else
             {
@@ -133,7 +138,8 @@ public partial class TerrainViewerApp
                 Require(_mapHandoff is null && !ReferenceEquals(running, _areaSession) && _areaSession is not null, "the load published a new session: " + _quickSaveStatus);
                 Require(((AreaGridSession)_worldActor.Session!).State.CommittedCell == savedCell && _areaSession!.QueryActor().Map.RuntimeMap == data.StartRuntime, "the hero stands on the saved cell");
                 var back = await FollowerNearHeroAsync(entity, "after the quick load");
-                GD.Print("ARC-DEV-170 native-smoke follower-far PASS " + System.Text.Json.JsonSerializer.Serialize(new { From = fromMap, Target = target, Entity = entity, AfterMove = there, AfterLoad = back }));
+                var ledBack = _smokeLedNpc is { } ledSaved ? await FollowerNearHeroAsync(ledSaved, "after the quick load (the NPC without a dialog)", place: false) : null;
+                GD.Print("ARC-DEV-170 native-smoke follower-far PASS " + System.Text.Json.JsonSerializer.Serialize(new { From = fromMap, Target = target, Entity = entity, AfterMove = there, AfterLoad = back, LedAfterMove = ledThere, LedAfterLoad = ledBack }));
             }
         }
         finally
@@ -145,13 +151,13 @@ public partial class TerrainViewerApp
         }
 
         // The companion is led by the hero, bound to the shown map, drawn and within the follow distance after ten seconds of frames (a hundred frames of a tenth of a second).
-        async Task<object> FollowerNearHeroAsync(string who, string when)
+        async Task<object> FollowerNearHeroAsync(string who, string when, bool place = true)
         {
             Require(_areaSession!.QueryCompanion(who).LedByPc, $"the companion is in the party {when}");
             Require(_areaCompanions?.Companions.Any(c => c.Entity == who) == true, $"the shown map's group holds the companion before any placement {when}: {_areaCompanions?.Status()}");
             // The new grid starts its clock at 0: the hero is placed on its own cell again (the smoke clock restarts) before the frames.
             var grid = (AreaGridSession)_worldActor.Session!;
-            AreaSmokePlace(new AreaMapRuntime(_readyArea!.Snapshot, grid.Snapshot, grid.Chart), grid.State.CommittedCell);
+            if (place) AreaSmokePlace(new AreaMapRuntime(_readyArea!.Snapshot, grid.Snapshot, grid.Chart), grid.State.CommittedCell);
             var frames = 0;
             for (; frames < 100 || (_areaCompanions?.Companions.SingleOrDefault(c => c.Entity == who) is not { } c0 || FollowDistanceRules.Distance(c0.Grid.State.CommittedCell, ((AreaGridSession)_worldActor.Session!).State.CommittedCell) > FollowDistanceRules.Range) && frames < 600; frames++) AreaSmokeFrame();
             _camera!.ResetWorld(WorldAnchor, WorldViewport, _worldPreferredZoom);
