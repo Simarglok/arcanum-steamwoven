@@ -26,7 +26,7 @@ public static class AreaSleepLayout
 
     public static (int X, int Y) ButtonAt(int row) => row >= 0 ? (ButtonX, ButtonTop + RowStep * row) : throw new ArgumentOutOfRangeException(nameof(row));
 
-    /// <summary>The top left of a row's line; its rectangle is <paramref name="windowWidth"/> − 36 wide and 18 high (0x57B4F0).</summary>
+    /// <summary>The top left of a row's line; its rectangle is <paramref name="windowWidth"/> − 36 wide and 18 high (the window build, see the class).</summary>
     public static (int X, int Y, int Width, int Height) TextField(int row, int windowWidth) =>
         row >= 0 ? (TextX, TextTop + RowStep * row, Math.Max(0, windowWidth - TextX), TextHeight) : throw new ArgumentOutOfRangeException(nameof(row));
 
