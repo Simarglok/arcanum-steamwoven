@@ -19,7 +19,7 @@ public interface ISpellSocialHost
     /// <summary>Flee (0x4AF130): the danger setter asked for FLEE from <paramref name="from"/> (the fear spell's caster).</summary>
     bool Flee(string npc, string from);
 
-    /// <summary>Stop fleeing (0x4AF170): an NPC in FLEE goes to NONE, then every flee goal (25) of it is ended whatever its state was.</summary>
+    /// <summary>Stop fleeing (0x4AF170): an NPC in FLEE goes to NONE, then its flee goals (25) are ended; an NPC in any other state is left alone.</summary>
     bool StopFleeing(string npc);
 
     /// <summary>ARC-AI-1513: the flee-goal interrupt that stop fleeing (0x4AF170) runs for an NPC in FLEE, which set no-flee (0x4AF1D0, the start of mind control) runs first: every flee goal (25) of the NPC is ended. The session has written the state and the bit; no answer is needed (an NPC this host does not run has no goals here).</summary>
