@@ -102,6 +102,7 @@ src/Arcanum.Session/GameSessionHeroThrow.cs,SplitAmmoRefusal,pending,
 src/Arcanum.Session/GameSessionHeroThrow.cs,ThrowHeroItem,pending,
 src/Arcanum.Session/GameSessionHolderGrid.cs,ArrangeHolderGrid,exempt,host
 src/Arcanum.Session/GameSessionHolderGrid.cs,QueryHolderRoom,exempt,host
+src/Arcanum.Session/GameSessionHolderGrid.cs,StoreInsertPlace,exempt,host
 src/Arcanum.Session/GameSessionHostility.cs,ApplyAttackEvent,pending,
 src/Arcanum.Session/GameSessionHotkeys.cs,QueryHotkeySameKind,pending,
 src/Arcanum.Session/GameSessionHotkeys.cs,RecordHotkeyAction,pending,
@@ -116,6 +117,7 @@ src/Arcanum.Session/GameSessionItemTriggers.cs,FireItemEvents,pending,
 src/Arcanum.Session/GameSessionItemTriggers.cs,QueryAttackStartItemEvents,pending,
 src/Arcanum.Session/GameSessionItemTriggers.cs,QueryDyingEndItemEvents,pending,
 src/Arcanum.Session/GameSessionItemTriggers.cs,QueryShotEndItemEvents,pending,
+src/Arcanum.Session/GameSessionItemTriggers.cs,QueryShotEndScripts,exempt,reference
 src/Arcanum.Session/GameSessionItemViewer.cs,QueryItemViewer,pending,
 src/Arcanum.Session/GameSessionJunkPiles.cs,CloseJunkPile,pending,
 src/Arcanum.Session/GameSessionJunkPiles.cs,CloseMapJunkPile,pending,
@@ -422,11 +424,13 @@ src/Arcanum.World/AreaAiHost.cs,CanHealAndFight,pending,
 src/Arcanum.World/AreaAiHost.cs,Cast,pending,
 src/Arcanum.World/AreaAiHost.cs,CastActionFrame,pending,
 src/Arcanum.World/AreaAiHost.cs,CatchUp,pending,
+src/Arcanum.World/AreaAiHost.cs,DeadCritter,exempt,reference
 src/Arcanum.World/AreaAiHost.cs,DyingRunning,pending,
 src/Arcanum.World/AreaAiHost.cs,EndCast,pending,
 src/Arcanum.World/AreaAiHost.cs,FaceCast,pending,
 src/Arcanum.World/AreaAiHost.cs,FactionSame,pending,
 src/Arcanum.World/AreaAiHost.cs,FirstStepClear,pending,
+src/Arcanum.World/AreaAiHost.cs,Gone,exempt,reference
 src/Arcanum.World/AreaAiHost.cs,Grenade,pending,
 src/Arcanum.World/AreaAiHost.cs,HasSkillArt,pending,
 src/Arcanum.World/AreaAiHost.cs,HasThrowingPoints,pending,
@@ -436,6 +440,7 @@ src/Arcanum.World/AreaAiHost.cs,HealSkillUsable,pending,
 src/Arcanum.World/AreaAiHost.cs,HealingItem,pending,
 src/Arcanum.World/AreaAiHost.cs,HeroAttacked,pending,
 src/Arcanum.World/AreaAiHost.cs,HitEffect,pending,
+src/Arcanum.World/AreaAiHost.cs,HitObjectFocus,exempt,reference
 src/Arcanum.World/AreaAiHost.cs,HitReached,pending,
 src/Arcanum.World/AreaAiHost.cs,HostileToHero,pending,
 src/Arcanum.World/AreaAiHost.cs,Hurt,exempt,host
@@ -845,6 +850,7 @@ tools/terrain-viewer/Godot/TerrainViewerProjectiles.cs,EndProjectile,pending,
 tools/terrain-viewer/Godot/TerrainViewerProjectiles.cs,FireShotEnd,pending,
 tools/terrain-viewer/Godot/TerrainViewerProjectiles.cs,LaunchProjectile,pending,
 tools/terrain-viewer/Godot/TerrainViewerProjectiles.cs,ProjectileGoalEnded,pending,
+tools/terrain-viewer/Godot/TerrainViewerProjectiles.cs,RunShotEndScripts,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerProjectiles.cs,Strike,pending,
 tools/terrain-viewer/Godot/TerrainViewerProjectiles.cs,TurnBack,pending,
 tools/terrain-viewer/Godot/TerrainViewerSceneryAnimation.cs,AddOccupiedBeds,exempt,host
