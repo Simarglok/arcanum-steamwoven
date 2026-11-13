@@ -502,4 +502,5 @@ The probe takes `--set S54` too: **S54** is S53 plus obj has bad associates (11)
 sites are admitted whole and 101 roots (368 sites) are refused for a type; under **S54** 1,669 scripts on 7,177 sites are admitted (+8 scripts, +8 sites: the seven roots of obj is within range, each freed by it alone, and the one root of obj is monster of type) and 93 roots (360 sites) are refused for a type.
 The CRQ group is down from 38 roots on 133 sites (6 maps) under S53 to 8 roots on 73 sites on 2 maps under S54: obj has bad associates (22 roots) frees almost none by itself, as every root that holds it is also blocked by a polymorph or shrink condition of E4-g (12 and 13); what stays in the group are the
 getters get origin (39), get faction (89) and get social class (38) and the actions toggle invulnerability (57) and rename (92).
+The opt-in trigger census (`ScriptTriggerCensusTests`) on the owner's installation: the heartbeat point 19 admits 97 of 141 rows (96 before), every other point as before (the dialog point 9 124 of 180).
 
