@@ -823,7 +823,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
 
     // The points whose slot a run writes back as map changes (SlotProperty). ARC-DEV-312: the dying point's slot is kept under scr12.* (no save schema step: the keys are strings).
     private static bool KeptAsMapChanges(int point) => point is ScrPoint.Examine or ScrPoint.Use or ScrPoint.Dialog or CatchingThiefPoint or ScrPoint.FirstHeartbeat or ScrPoint.Heartbeat or ScrPoint.TakingDamage or ScrPoint.LeaderSleeping or ScrPoint.Bust or ScrPoint.Dying
-        or ScrPoint.EnterCombat or ScrPoint.ExitCombat or ScrPoint.Hit or ScrPoint.CritterHits or ScrPoint.CriticalHit or ScrPoint.Miss or ScrPoint.CriticalMiss;
+        or ScrPoint.EnterCombat or ScrPoint.ExitCombat or ScrPoint.Raise or ScrPoint.Hit or ScrPoint.CritterHits or ScrPoint.CriticalHit or ScrPoint.Miss or ScrPoint.CriticalMiss;
 
     // The trap's view of the use slot: the loaded one under the session's script and counters; null without a use slot or for a stored
     // script number outside the catalogue's range (it names no script the content holds).
@@ -1288,6 +1288,41 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         }
         finally { _dangerRunDepth--; _clicked = previous; }
     }
+
+    /// <summary>
+    /// ARC-MAGIC-1167 (magic audit MA-10, exe read 2026-11-13, ledger RZ1-RZ3): the raise script (attachment point 18, 0x12) of <paramref name="target"/>, a creature of the shown map that a heal with the raise bit is about to bring back:
+    /// the heal applier (0x4B58C0, the call at 0x4B5A46) runs it through the script dispatcher (0x441980) after it has computed the refusal by the creature's flags and before it tests that refusal, so it runs whether the flags refuse or not. The healer
+    /// (<paramref name="healer"/>, the heal record's parent; null for a heal with none) is the triggerer, the target the attachee, line 0, under <see cref="DyingAdmission"/> (the set of the other NPC point scripts); its slot is kept as map
+    /// changes (<see cref="SlotProperty"/>). The record's source (a critter parent's wielded weapon, 0x4B23B0) is the extra object in the original; it is none here (the spell host knows no weapon identity, and MG36 passes the caster no weapon). The caller reads <see cref="RaiseRefuses"/>.
+    /// A target that is not a row of the shown map, or has no script at the point, runs nothing (the raise goes on). The original has no guard; a script whose effects raise the same creature again reaches this call nested, so the depth is bounded
+    /// (<see cref="MaxDangerRunDepth"/>) and a deeper call runs nothing.
+    /// </summary>
+    public AreaScriptedUse RunRaise(string target, ScrObjectRef? healer, ScrRuleProfile rules)
+    {
+        ArgumentNullException.ThrowIfNull(target); ArgumentNullException.ThrowIfNull(rules);
+        var attachee = new ScrObjectRef(_shownMap, target);
+        if (Row(attachee) is not { } row || Slot(attachee, ScrPoint.Raise) is not { Script: > 0 }) return new(AreaScriptedUseOutcome.NoTeleport, null, [], null, "no script at the point");
+        if (_content is null) return new(AreaScriptedUseOutcome.ContentUnavailable, null, [], null, "no script content");
+        if (_raiseRunDepth >= MaxDangerRunDepth) return new(AreaScriptedUseOutcome.Refused, null, [], null, $"nested raise scripts: the depth bound {MaxDangerRunDepth} is reached");
+        var previous = _clicked;
+        _clicked = (target, row);
+        _raiseRunDepth++;
+        try
+        {
+            var run = ScrDispatcher.RunObject(new(ScrPoint.Raise, attachee, healer, null), this, new() { Rules = rules, Admission = DyingAdmission });
+            return Finish(run, _ => "a teleport from a raise script is not modelled", writeback => WriteObjectSlot(writeback, attachee));
+        }
+        finally { _raiseRunDepth--; _clicked = previous; }
+    }
+
+    private int _raiseRunDepth;
+
+    /// <summary>
+    /// ARC-MAGIC-1167 (RZ2): whether a raise run (<see cref="RunRaise"/>) refuses the raise: the dispatcher's "skip default" (return 0 of 0x441980, which the applier tests as <c>result == 0</c>, 0x4B5A4E), as for the taking-damage script
+    /// (<see cref="TakingDamageVetoes"/>): a script number whose file the content lacks, a trap script and a script that runs past its last line skip the default too. A run that was not applied (refused by the admission, effects the viewer
+    /// cannot apply, a teleport) refuses nothing: the raise goes on.
+    /// </summary>
+    public static bool RaiseRefuses(AreaScriptedUse ran) => TakingDamageVetoes(ran);
 
     /// <summary>ARC-AI-1634: how deep danger scripts may nest (the dispatcher's own call bound, <see cref="ScrRunOptions.MaxCallDepth"/>'s default).</summary>
     public const int MaxDangerRunDepth = 16;
