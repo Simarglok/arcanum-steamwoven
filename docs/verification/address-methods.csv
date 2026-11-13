@@ -117,6 +117,7 @@ src/Arcanum.Session/GameSessionItemTriggers.cs,FireItemEvents,pending,
 src/Arcanum.Session/GameSessionItemTriggers.cs,QueryAttackStartItemEvents,pending,
 src/Arcanum.Session/GameSessionItemTriggers.cs,QueryDyingEndItemEvents,pending,
 src/Arcanum.Session/GameSessionItemTriggers.cs,QueryShotEndItemEvents,pending,
+src/Arcanum.Session/GameSessionItemTriggers.cs,QueryShotEndScripts,exempt,reference
 src/Arcanum.Session/GameSessionItemViewer.cs,QueryItemViewer,pending,
 src/Arcanum.Session/GameSessionJunkPiles.cs,CloseJunkPile,pending,
 src/Arcanum.Session/GameSessionJunkPiles.cs,CloseMapJunkPile,pending,
@@ -840,6 +841,7 @@ tools/terrain-viewer/Godot/TerrainViewerProjectiles.cs,EndProjectile,pending,
 tools/terrain-viewer/Godot/TerrainViewerProjectiles.cs,FireShotEnd,pending,
 tools/terrain-viewer/Godot/TerrainViewerProjectiles.cs,LaunchProjectile,pending,
 tools/terrain-viewer/Godot/TerrainViewerProjectiles.cs,ProjectileGoalEnded,pending,
+tools/terrain-viewer/Godot/TerrainViewerProjectiles.cs,RunShotEndScripts,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerProjectiles.cs,Strike,pending,
 tools/terrain-viewer/Godot/TerrainViewerProjectiles.cs,TurnBack,pending,
 tools/terrain-viewer/Godot/TerrainViewerSceneryAnimation.cs,AddOccupiedBeds,exempt,host
