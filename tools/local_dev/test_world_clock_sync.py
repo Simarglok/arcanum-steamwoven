@@ -40,8 +40,9 @@ class WorldClockSyncTests(unittest.TestCase):
 
     def test_the_world_time_reads_the_host_only_in_the_clock_source(self):
         # TerrainViewerWorld.cs: the clock source (WorldTime's fallback, the AI host's own clock until S5) and the restore of a smoke's
-        # time; TerrainViewerPacing.cs: frame pacing, a presentation matter.
-        allowed = {"TerrainViewerWorld.cs", "TerrainViewerPacing.cs"}
+        # time; TerrainViewerPacing.cs: frame pacing, a presentation matter; TerrainViewerPressTrace.cs (ARC-INPUT-1400): the real-time stamp
+        # of a logged mouse press, a diagnostic line that decides no rule.
+        allowed = {"TerrainViewerWorld.cs", "TerrainViewerPacing.cs", "TerrainViewerPressTrace.cs"}
         found = {p.name for p in GODOT.glob("*.cs") if any(re.search(r"\bTime\.GetTicksUsec\b", line) for _, line in code_lines(p))}
         self.assertEqual(set(), found - allowed, "the microsecond host clock is the world clock's fallback only")
 
