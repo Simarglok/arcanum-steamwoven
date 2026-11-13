@@ -90,9 +90,11 @@ public partial class TerrainViewerApp
                 Require(_canvas.AreaChunkResidentCount <= AreaChunkTextureCache.MaxChunks && _canvas.AreaChunkResidentBytes <= AreaChunkTextureCache.MaxBytes, "CHUNK_BUDGET");
                 Require(chunked ? _canvas.AreaTerrainChunked : _canvas.AreaChunkResidentCount == 0, "TERRAIN_MODE");
             }
-            // Every command counts once: drawn in some view (a moved or changed body is drawn as a copy of its plan command, whose own T0 command is then
-            // not drawn and not hidden, so the copy stands for it) or hidden (no longer in the world) at some view without ever being drawn.
-            var unaccounted = _readyArea!.Plan.Commands.Count - (seen.Count + hiddenAtAView.Count(command => !seen.Contains(command)));
+            // Every plan command is accounted for: drawn in some view, hidden (no longer in the world) at some view, or (a moved or changed body is drawn as a
+            // copy of its plan command, whose own T0 command is then not drawn and not hidden) stood for by a drawn copy under the same identity.
+            var seenKeys = seen.Where(command => command.Identity is not null).Select(command => command.Identity!.Value).ToHashSet();
+            var unaccounted = _readyArea!.Plan.Commands.Count(command => !seen.Contains(command) && !hiddenAtAView.Contains(command)
+                && !(command.Identity is { } key && seenKeys.Contains(key)));
             return (steps, seen.Count, unaccounted, maxVisible, maxLive, maxBytes, maxChunks, maxChunkBytes);
         }
         var chunkCreated = _canvas!.AreaChunkCreatedCount; var chunkDisposed = _canvas.AreaChunkDisposedCount;
@@ -216,12 +218,11 @@ public partial class TerrainViewerApp
         // the bound and the bound per generation, which the pair alone showed, now passes.
         // ARC-BUG-1501: the post-GC heap of a large map also alternates by about 16 MB between reloads with nothing retained (town sector 1409,1314:
         // 485, 503, 488, 503, 503, 483 MB after the first six reloads, baseline 393 MB), so a single repeated reload can land on the high side.
-        // A retention every replaced generation adds grows the heap at every reload, so up to two more reloads are made and the least growth
-        // of them is bound (the first one under the limit ends it).
+        // A retention every replaced generation adds grows the heap at every reload, so up to two more reloads are made and the mean growth per
+        // reload since the first one is bound (a pair of reloads averages the alternation out; the first one under the limit ends it).
         long? repeated = null;
         if (growth >= limit)
         {
-            var previous = after.Managed;
             for (var attempt = 1; attempt <= 2 && (repeated is null || repeated >= limit); attempt++)
             {
                 var published = CaptureAreaResourceBaseline();
@@ -230,9 +231,8 @@ public partial class TerrainViewerApp
                 await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
                 await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
                 var againSamples = await ManagedSamples();
-                var again = againSamples.Min() - previous; previous = againSamples.Min();
-                repeated = repeated is null ? again : Math.Min(repeated.Value, again);
-                GD.Print($"ARC-RENDER-007 resources reload again {attempt} generation={_generation} managed={againSamples.Min()} samples={string.Join(',', againSamples)} growth={growth}/{again} limit={limit}");
+                repeated = (againSamples.Min() - after.Managed) / attempt;
+                GD.Print($"ARC-RENDER-007 resources reload again {attempt} generation={_generation} managed={againSamples.Min()} samples={string.Join(',', againSamples)} growth={growth} perReload={repeated} limit={limit}");
                 Require(!published.Result.IsAlive && !published.Frames.IsAlive, "RETIRED_GENERATION_ALIVE");
             }
         }

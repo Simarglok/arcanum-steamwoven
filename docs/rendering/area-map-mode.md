@@ -162,11 +162,11 @@ the stage, none in the viewer. The coverage count (`swept + hidden == commands`)
 learns its hidden set from the session's per-frame sync, which also hides the objects stored or switched off (ARC-WORLD-1436) and the destroyed ones; the
 stage's own first frame changed it (4 data-off NPCs on `elven ruins`). A stage run alone had no frame yet, and in the chain a later change of the set
 also shifted the count by one to three commands (a changed body drawn as a copy stands for its plan command). The sweep now reads the hidden commands at every
-view of the sweep itself (a command hidden at some view and never drawn is accounted for), and `taken` is read again after the sweeps for the report. On the
+view of the sweep itself (a command hidden at some view and never drawn, or stood for by a drawn copy under its identity, is accounted for), and `taken` is read again after the sweeps for the report. On the
 town sector (`Arcanum1-024-fixed --sector 1409,1314`, about 393 MB live heap, a 15.7 MB bound) the heap then showed the next check: the first reload
 adds 92 MB once (content the earlier stages had not made) and the following reloads alternate by about 16 MB without a trend (485, 503, 488, 503, 503,
 483 MB; the launch queue's run logs on the owner's Mac), so one repeated reload landed above the bound. A real retention grows the heap at every reload,
-so up to two repeated reloads are made, each must publish and collect its predecessor, and the smallest growth of them is bound. The cause of the
+so up to two repeated reloads are made, each must publish and collect its predecessor, and the mean growth per reload since the first one is bound (the pair averages the alternation out; the first one under the bound ends it). The cause of the
 alternating 16 MB is not established.
 
 ## Body blends and wading (ARC-RENDER-018)
