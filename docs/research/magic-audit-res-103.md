@@ -17,7 +17,7 @@ Requirements (reference only): [FR-MAGIC-006](../requirements/combat-magic-tech.
   Summon of scenery is built (E1-a ARC-DEV-347, E1-b ARC-DEV-352) and created critters exist (E1-c, ARC-DEV-359, -370, -371); **Summon of critters is built (E1-e, ARC-MAGIC-053; not built: `Clear_Faction:`, `Palette:`, the concealed start SUM19); an NPC summoner's faction and alignment and the AIRedirect component are built (E1-f, ARC-MAGIC-1169).**
 - **Done slices:** MA-0 the spell census (ARC-DEV-356), MA-R the executable reads (ARC-DEV-357, ledger XR1-XR15), MA-1, MA-2, MA-3 Dispel (ARC-MAGIC-034, -039), MA-4 social and AI flags (ARC-MAGIC-035), MA-5 Movement (ARC-MAGIC-036, -038), MA-6 locks and holds (ARC-MAGIC-037),
   MA-7 Identify (ARC-MAGIC-032), MA-8 Trait and the body spells (ARC-MAGIC-040, -046, -047, -052), MA-9 Tempus Fugit (ARC-MAGIC-056). The control components that belong to the technology records and items (NoOp, Terminate, branches, Use, nested Cast) are ARC-MAGIC-044, -048 and -049.
-- **Open:** E6 trap spotting (spell 8), MA-10 the raise script hook (58, 64), the hero and companion push of Unseen Force (2), and the windows of Identify (E8) ([slices](#slices), [open spells](#open-spells)).
+- **Open:** E6 trap spotting (spell 8), the hero and companion push of Unseen Force (2), and the windows of Identify (E8) ([slices](#slices), [open spells](#open-spells)).
 - **Only seven spells are named by a smoke stage** (51, 56 and, by its data filter, 55; since ARC-DEV-1148 30, 46, 76 and 77 by the stage `spell-effects`); the others are covered by unit tests of their components and by the census. "Runs" is a code-path claim, not parity (parity stays with the [ledger](original-verification-ledger.md)).
 - **Decisions for the owner** were six; the owner decided all of them on 2026-11-11 (D1 a, D2 a, D3 b, D4 a, D5 a, D6 c) ([decisions](#decisions-for-the-owner)).
 
@@ -35,7 +35,7 @@ Everything before the components works for any caster and map (ledger [invocatio
 [cost](ledger/magic.md#spell-cost-and-payment-arc-magic-003), [resistance](ledger/magic.md#spell-resistance-arc-magic-005)): the checks, the cost and payment, the targets of each action, the save, the anti-magic shell and reflection, the run table with BEGIN, MAINTAIN, END
 and the callbacks, the maintain bar, saved runs of the active map, the endings by death, knock-out and the AI gate, the spell pane and hotkeys, the casting goal with its missile and eye candy, the AI's choice from its ten lists. 53 of the 80 spells are maintained and two are timed.
 
-Components still not ready for the colleges: **Destroy** for critters and containers (E4-c); **AGoal** knockback pushes NPCs, not the hero or companions; **Heal**'s raise script (point 0x12) runs no SCR (MA-10);
+Components still not ready for the colleges: **Destroy** for critters and containers (E4-c); **AGoal** knockback pushes NPCs, not the hero or companions.
 effect 157 (spot-trap skill, spell 8) is inert because skills are not modelled by the durable effects; the flags' readers: the combat and life rules do not read a written undead bit, the viewer does not draw translucent, shrunk or hidden critters, the NPC flag KOS_OVERRIDE of Charm (35, 50) is not kept.
 
 ## Open spells
@@ -51,7 +51,7 @@ Every other college spell has a code path for every component of its record (the
 | 35, 50 Charm, Charm Beast | Built in ARC-MAGIC-1142: the session's NPC flag layer keeps the flag; the attack event clears it | - |
 | 47 Shrink, 34 Disintegrate, 69 Invisibility, 63 Sanctuary | The flags are written; the viewer's draw of shrunk, hidden, translucent critters is not built | render |
 | 48 Flesh to Stone | Stone render side effect; the stone-to-flesh pair on a portal holding the stoned spell flag | - |
-| 58 Create Undead, 64 Resurrect | The raise script hook; the combat and life rules read the data's undead bit, not the written one | MA-10 |
+| 58 Create Undead, 64 Resurrect | The raise script hook is built (ARC-MAGIC-1167, MA-10); the combat and life rules read the data's undead bit, not the written one | MA-10 |
 | 65 Illuminate | The original lights the scene: a live object light on the target while the spell runs ([IW1–IW6](ledger/spell-runs.md#small-executable-reads-illuminate-unseen-force-on-objects-disarm-arc-res-1109)); built by ARC-MAGIC-1229 (the overlay host keeps the live light while the run is shown, the viewer draws it and the darkness sampler reads it; the glow after a load is built by ARC-MAGIC-1280 (the overlay runs are saved); not built: the object's own offsets) | lighting lane (done) |
 | 76, 77 Congeal Time, Hasten | Speed reaches the turn-based action points and the real-time attack pause, not walking (the original does not either, XR); stage `spell-effects` (ARC-DEV-1148) casts both: BEGIN adds the effect and moves the speed (77 up, 76 down); found there: the END of 76 left its effect on the NPC (its END area names the run's object list, which no host kept); fixed by ARC-MAGIC-1234 (the run stores the list its BEGIN gather builds, ledger TA17) and the stage now expects the removal | [#1234](https://github.com/Simarglok/arcanum-steamwoven/issues/1234) |
 | 79 Tempus Fugit | Built (MA-9, ARC-MAGIC-056): +10 speed to its holders and -10 to every other critter while any critter holds it (the original: while the player holds it, XR6); the follower join and leave flag writes of XR7 are built (ARC-MAGIC-1190) | - |
@@ -71,6 +71,8 @@ Order: E1-e before E1-f (one writer in the Summon and AI files); E6, MA-9 and MA
 | **MA-9** Tempus Fugit | Implement what MA-R read (XR6); the XR14 (a) fix decided by the owner ([Decisions](#decisions-for-the-owner)) | 79 | S-M | MA-R, MA-1 (done) | done: ARC-MAGIC-056, session and stat files | FR-MAGIC-007 |
 | **MA-10** Raise script hook | The resurrect script (point 0x12) through the SCR dispatcher | edge of 58, 64 | S | the SCR dispatcher (E5) | scripts | FR-MAGIC-007 |
 | **E1-f** AI summoning and AI parity (**summon half built, ARC-MAGIC-1169**: an NPC summoner's faction and alignment, the AIRedirect component; the `ai-cast` pass over the 80 is [#1835](https://github.com/Simarglok/arcanum-steamwoven/issues/1835)) | The AI's summon list and one pass of `ai-cast` over every AI priority of the 80 (an NPC casting a spell must act like the hero's cast) | 60 spells carry an AI priority | M | E1-e | AI host | FR-AI-002 |
+
+MA-10 is done (ARC-MAGIC-1167): the raise script runs through the dispatcher before the life step ([ledger RZ1–RZ3](ledger/spell-runs.md)); the refusal feedback (message 605, resisted effect) is built too (ARC-MAGIC-1838, [RZ3](ledger/spell-runs.md)).
 
 ### By college
 

@@ -40,8 +40,9 @@ public sealed record HeroBodyLoad(HeroBody Body, ActorDiagnosticProfile Profile,
 /// <see cref="TerrainViewerException"/>; nothing is retained on failure.</summary>
 public static class HeroBodyArt
 {
-    /// <summary>Upper bounds of one body: distinct frames and their RGBA bytes (the human uses 195 and 1,705,144).</summary>
-    public const int MaxKeys = 512;
+    /// <summary>Upper bounds of one body: distinct frames and their RGBA bytes (the five base actions of the human use 195 and 1,705,144; the whole installed body about 665 keys and 6 MB).</summary>
+    // ARC-COMBAT-1793: raised from 512 (the installed bodies need 665: 195 for the five, 150 fall and get-up, 90 low attack and throw, 40 stunned, 190 for the three bloody dying ARTs).
+    public const int MaxKeys = 768;
     public const long MaxRgbaBytes = 16L * 1024 * 1024;
 
     public static HeroBodyLoad Load(DatArchive resource, HeroBody body, CancellationToken token = default)
@@ -64,7 +65,11 @@ public static class HeroBodyArt
                 .Append((ActorDiagnosticAction.LowAttack, ActorDiagnosticProfile.HumanLowAttackSelector, true))
                 .Append((ActorDiagnosticAction.Throw, ActorDiagnosticProfile.HumanThrowSelector, true))
                 // ARC-COMBAT-1741: the stunned ART (animation 23, unarmed, no shield), optional.
-                .Append((ActorDiagnosticAction.Stunned, ActorDiagnosticProfile.HumanStunnedSelector, true));
+                .Append((ActorDiagnosticAction.Stunned, ActorDiagnosticProfile.HumanStunnedSelector, true))
+                // ARC-COMBAT-1793: the bloody dying ARTs (17 decapitation, 18 blown-out chunk, 19 severed leg; weapon part cleared like the fall), each optional.
+                .Append((ActorDiagnosticAction.Decapitation, ActorDiagnosticProfile.HumanDecapitationSelector, true))
+                .Append((ActorDiagnosticAction.BlownOutChunk, ActorDiagnosticProfile.HumanBlownOutChunkSelector, true))
+                .Append((ActorDiagnosticAction.SeveredLeg, ActorDiagnosticProfile.HumanSeveredLegSelector, true));
             foreach (var (action, humanSelector, optional) in wanted)
             {
                 token.ThrowIfCancellationRequested();
@@ -130,9 +135,12 @@ public static class HeroBodyArt
             return extra.Resource;
         }
         var low = Extra(ActorDiagnosticAction.LowAttack); var thrown = Extra(ActorDiagnosticAction.Throw); var stunned = Extra(ActorDiagnosticAction.Stunned);
+        // ARC-COMBAT-1793: the bloody dying ARTs are variants of the fall, so a body without the fall (nothing is drawn falling) does not take them.
+        var decapitation = falls ? Extra(ActorDiagnosticAction.Decapitation) : null; var blownOut = falls ? Extra(ActorDiagnosticAction.BlownOutChunk) : null;
+        var severed = falls ? Extra(ActorDiagnosticAction.SeveredLeg) : null;
         var profile = ActorDiagnosticProfile.ForHeroBody(read[ActorDiagnosticAction.Idle].Resource, read[ActorDiagnosticAction.Walk].Resource,
             read[ActorDiagnosticAction.Run].Resource, read[ActorDiagnosticAction.Vault].Resource, read[ActorDiagnosticAction.Attack].Resource, keys,
-            falls ? read[ActorDiagnosticAction.FallDown].Resource : null, falls ? read[ActorDiagnosticAction.GetUp].Resource : null, low, thrown, stunned);
+            falls ? read[ActorDiagnosticAction.FallDown].Resource : null, falls ? read[ActorDiagnosticAction.GetUp].Resource : null, low, thrown, stunned, decapitation, blownOut, severed);
         var frames = new List<ActorDiagnosticFrame>(keys);
         var textures = new Dictionary<ActorDiagnosticTextureKey, DecodedActorTexture>(keys);
         long rgbaBytes = 0;

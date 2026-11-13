@@ -126,6 +126,10 @@ public sealed class HeroBodyArtTests
         Assert.AreEqual("art/critter/HMM/HMMUWXAh.art", shielded.ArtPath(shielded.Selector(ActorDiagnosticProfile.HumanFallDownSelector)));
         // ARC-COMBAT-1741 (N1): the stunned animation 23 names the unarmed weapon letter and no shield whatever the body wields.
         Assert.AreEqual("art/critter/HMM/HMMUWXBx.art", shielded.ArtPath(shielded.Selector(ActorDiagnosticProfile.HumanStunnedSelector)));
+        // ARC-COMBAT-1793: the bloody dying animations 17, 18, 19 are in 6..19, so they clear the weapon and shield like the fall (letters r, s, t).
+        Assert.AreEqual("art/critter/HMM/HMMUWXAr.art", shielded.ArtPath(shielded.Selector(ActorDiagnosticProfile.HumanDecapitationSelector)));
+        Assert.AreEqual("art/critter/HMM/HMMUWXAs.art", shielded.ArtPath(shielded.Selector(ActorDiagnosticProfile.HumanBlownOutChunkSelector)));
+        Assert.AreEqual("art/critter/HMM/HMMUWXAt.art", shielded.ArtPath(shielded.Selector(ActorDiagnosticProfile.HumanSeveredLegSelector)));
         // Animations outside 6..19 (stealth walk 3 here) keep both (MA2).
         Assert.AreEqual("art/critter/HMM/HMMUWSCd.art", shielded.ArtPath(shielded.Selector(0x200000C0u)));
         Assert.AreEqual(shielded.BodyBits, shielded.Selector(human.Idle.Selector) & 0x0FF00030u);
@@ -378,7 +382,10 @@ public sealed class HeroBodyArtTests
             // action frame 5, and 11 frames at 12 fps, action frame 4; 435 keys a body).
             Assert.IsNotNull(load.Profile.LowAttack, body.Label); Assert.IsNotNull(load.Profile.Throw, body.Label);
             var attackKeys = 5 * (load.Profile.LowAttack.FramesPerGroup + load.Profile.Throw.FramesPerGroup);
-            Assert.AreEqual((195 + downKeys + attackKeys, 195 + downKeys + attackKeys), (load.Profile.DistinctKeys, load.Textures.Count), body.Label);
+            // ARC-COMBAT-1741 and ARC-COMBAT-1793: the stunned ART (23) and the three bloody dying ARTs (17, 18, 19) come on top, five used groups of each, where the key cap allows.
+            var extraKeys = 5 * new[] { load.Profile.Stunned, load.Profile.Decapitation, load.Profile.BlownOutChunk, load.Profile.SeveredLeg }.Sum(art => art?.FramesPerGroup ?? 0);
+            Assert.IsNotNull(load.Profile.Decapitation, body.Label); Assert.IsNotNull(load.Profile.BlownOutChunk, body.Label); Assert.IsNotNull(load.Profile.SeveredLeg, body.Label);
+            Assert.AreEqual((195 + downKeys + attackKeys + extraKeys, 195 + downKeys + attackKeys + extraKeys), (load.Profile.DistinctKeys, load.Textures.Count), body.Label);
             CollectionAssert.AreEqual(new[] { 1, 10, 10, 9, 9 }, load.Profile.Actions.Take(5).Select(a => load.Profile.Resource(a).FramesPerGroup).ToArray(), body.Label);
             // HB3: the installed strides (axis dx, dy, diagonal) of walk and run.
             var (walk, run) = body.Label switch

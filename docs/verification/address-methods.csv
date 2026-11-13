@@ -135,6 +135,7 @@ src/Arcanum.Session/GameSessionJunkPiles.cs,CloseMapJunkPile,pending,
 src/Arcanum.Session/GameSessionJunkPiles.cs,DissolveJunkPile,pending,
 src/Arcanum.Session/GameSessionKillLog.cs,RecordHeroInjuries,pending,
 src/Arcanum.Session/GameSessionKillLog.cs,RecordKillLog,pending,
+src/Arcanum.Session/GameSessionLeaders.cs,ForceJoinLeader,exempt,reference
 src/Arcanum.Session/GameSessionLocks.cs,WriteOpenableFlag,pending,
 src/Arcanum.Session/GameSessionLoyalty.cs,CheckFollowerAfterHit,exempt,host
 src/Arcanum.Session/GameSessionMissiles.cs,CreateMissile,pending,
@@ -471,6 +472,7 @@ src/Arcanum.World/AreaAiHost.cs,InterruptForHold,pending,
 src/Arcanum.World/AreaAiHost.cs,ItemHolder,pending,
 src/Arcanum.World/AreaAiHost.cs,Jump,pending,
 src/Arcanum.World/AreaAiHost.cs,LaunchCast,pending,
+src/Arcanum.World/AreaAiHost.cs,Leader,exempt,host
 src/Arcanum.World/AreaAiHost.cs,LineOfFire,pending,
 src/Arcanum.World/AreaAiHost.cs,LineOfFireBlocker,pending,
 src/Arcanum.World/AreaAiHost.cs,LineOfFireStruck,pending,
@@ -480,6 +482,7 @@ src/Arcanum.World/AreaAiHost.cs,NeedsAmmunition,exempt,host
 src/Arcanum.World/AreaAiHost.cs,NoticeKill,exempt,host
 src/Arcanum.World/AreaAiHost.cs,ObserveLeaves,pending,
 src/Arcanum.World/AreaAiHost.cs,ObserveRound,pending,
+src/Arcanum.World/AreaAiHost.cs,PcLeader,exempt,host
 src/Arcanum.World/AreaAiHost.cs,Perform,pending,
 src/Arcanum.World/AreaAiHost.cs,PerformAttack,pending,
 src/Arcanum.World/AreaAiHost.cs,PerformSkill,pending,
@@ -597,6 +600,7 @@ src/Arcanum.World/AreaLootArt.cs,Arrange,pending,
 src/Arcanum.World/AreaLootArt.cs,HolderImage,pending,
 src/Arcanum.World/AreaLootArt.cs,Release,pending,
 src/Arcanum.World/AreaLootArt.cs,RightRelease,pending,
+src/Arcanum.World/AreaMapTransfers.cs,QueueDoorTeleport,exempt,reference
 src/Arcanum.World/AreaNewCharacter.cs,BeginName,pending,
 src/Arcanum.World/AreaNewCharacter.cs,WieldStart,pending,
 src/Arcanum.World/AreaNpcSheet.cs,Mark,pending,
@@ -641,6 +645,7 @@ src/Arcanum.World/AreaUseScripts.cs,CanHear,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,CanSee,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,DyingStops,pending,
 src/Arcanum.World/AreaUseScripts.cs,ExamineSkips,pending,
+src/Arcanum.World/AreaUseScripts.cs,FactionOf,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,HasBadAssociates,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,IsAnimal,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,IsInDialog,exempt,host
@@ -650,6 +655,8 @@ src/Arcanum.World/AreaUseScripts.cs,IsSurrendered,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,IsTrap,pending,
 src/Arcanum.World/AreaUseScripts.cs,MagickCancelPercent,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,MetPcBefore,exempt,host
+src/Arcanum.World/AreaUseScripts.cs,OriginOf,exempt,host
+src/Arcanum.World/AreaUseScripts.cs,RaiseRefuses,exempt,reference
 src/Arcanum.World/AreaUseScripts.cs,RunBed,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,RunBust,pending,
 src/Arcanum.World/AreaUseScripts.cs,RunCombatPoint,exempt,host
@@ -658,9 +665,11 @@ src/Arcanum.World/AreaUseScripts.cs,RunDying,pending,
 src/Arcanum.World/AreaUseScripts.cs,RunExamine,pending,
 src/Arcanum.World/AreaUseScripts.cs,RunHeartbeat,pending,
 src/Arcanum.World/AreaUseScripts.cs,RunItemUse,pending,
+src/Arcanum.World/AreaUseScripts.cs,RunRaise,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,RunTakingDamage,pending,
 src/Arcanum.World/AreaUseScripts.cs,RunTrapScript,pending,
 src/Arcanum.World/AreaUseScripts.cs,RunUseScript,pending,
+src/Arcanum.World/AreaUseScripts.cs,SocialClassOf,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,TakingDamageVetoes,pending,
 src/Arcanum.World/AreaUseScripts.cs,UseStops,exempt,host
 src/Arcanum.World/AreaWorldMap.cs,Passes,exempt,host
@@ -816,6 +825,7 @@ tools/terrain-viewer/Godot/TerrainViewerAreaPanelArt.cs,HoverPortrait,pending,
 tools/terrain-viewer/Godot/TerrainViewerAreaPickPocket.cs,ArmPickPocketFromBar,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAreaPickPocket.cs,HeroFaceSkill,pending,
 tools/terrain-viewer/Godot/TerrainViewerAreaPickPocket.cs,PickPocketOn,exempt,reference
+tools/terrain-viewer/Godot/TerrainViewerAreaPortals.cs,DoorUseScriptStops,exempt,reference
 tools/terrain-viewer/Godot/TerrainViewerAreaPortals.cs,HeroDoorScript,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAreaPortals.cs,HeroDoorUse,pending,
 tools/terrain-viewer/Godot/TerrainViewerAreaPortals.cs,OpenerDoorScript,exempt,host

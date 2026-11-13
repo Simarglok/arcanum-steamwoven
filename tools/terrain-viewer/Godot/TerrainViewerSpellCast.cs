@@ -139,6 +139,8 @@ public partial class TerrainViewerApp
         _spellCaster.CastCombat = castCombat;
         // ARC-DEV-254: a script's damage asks the victim's taking-damage script (point 0x17) first.
         _spellCaster.TakingDamage = TakingDamageGoesOn;
+        // ARC-MAGIC-1167 (MA-10): a Heal with the raise bit asks a dead target's raise script (point 0x12) first.
+        _spellCaster.RaiseScript = RaiseGoesOn;
         // ARC-AI-1680: a spell's, trap's or burn's damage step asks a follower's near-death line (0x4AEAB0) as it lands, as the damage step 0x4B4390 does.
         _spellCaster.DamageStepApplied = AskNearDeathOfCastStep;
         // ARC-MAGIC-048 (E4-c): the Use component has its target run its own use script (the target is the triggerer too).
@@ -987,6 +989,8 @@ public partial class TerrainViewerApp
             TakeIdentifyEvent(entry);
             // ARC-MAGIC-1745: a line a wield script of an NPC's rewield printed (the TraitIdx magick and tech points) goes to the message window as any script's printed line.
             if (entry is { Kind: SpellCastEventKind.ItemScriptLine, Text: { } text }) PostScriptLines([new(entry.Detail, 0, entry.Value, text)]);
+            // ARC-MAGIC-1830: an eye candy request of the same scripts plays on the object it names, as any script's.
+            if (entry is { Kind: SpellCastEventKind.ItemScriptEyeCandy, EyeCandy: { } candy }) QueueScriptEyeCandies([candy]);
             if (AreaSpellCasting.Line(entry, texts, SpellObjectName) is { } line) lines.Add(line);
         }
         // ARC-MAGIC-045: a run wrote or took off an object flag (invisible, translucent, shrunk, don't-draw): the bodies are styled again without waiting for the next selection.
