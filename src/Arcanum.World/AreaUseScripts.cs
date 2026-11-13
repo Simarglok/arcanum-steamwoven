@@ -1769,26 +1769,33 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     public bool CanApplyScriptAttack => _world?.ScriptAttack is not null;
 
     /// <summary>
-    /// ARC-SCRIPT-1620 (TI6, VB2-2 gap d): why one attack (36) request of a run cannot be applied here, null when it can. The attacker (<see cref="ScrObjectStateRequest.Other"/>) must be the PC or an NPC of the shown map: the AI host's event
-    /// describes the PC and its NPCs only, and an object attacker (a trap, scenery) makes an NPC victim fight the object (the setter 0x4AABE0, COMBAT_FOCUS), which waits for the trap shot (#1619); an attacker of no loaded row or another map is not modelled either.
+    /// ARC-SCRIPT-1620 (TI6, VB2-2 gap d), ARC-SCRIPT-1679: why one attack (36) request of a run cannot be applied here, null when it can. The attacker (<see cref="ScrObjectStateRequest.Other"/>) is an object the AI host holds: the PC; an NPC standing on
+    /// the shown map, a carried follower named by its home map included (the original keeps one object wherever it stands, FM1, so it is told apart by <see cref="AreaScriptWorld.CritterCell"/> and not by the map of its record); or an object of the shown map
+    /// that is no critter and no item (a wall, portal, container, scenery or trap object: 0x447D2F gives 0x4A9650 no type test of either side, and an NPC victim of such an attacker is asked into COMBAT_FOCUS on it, 0x4AABE0, through the AI host's object facts,
+    /// #1619; a victim of another kind does nothing more). Not modelled: an item as the attacker (the AI host describes no item), an object of no loaded row, and an object of another map that no companion stands for.
     /// </summary>
     public string? AttackRefusal(ScrObjectStateRequest request)
     {
         if (request.Other is not { } attacker) return "attack has no attacker";
-        if (IsPc(attacker) || ShownNpc(attacker)) return null;
-        var what = attacker.Map != _shownMap ? "an object of another map" : Row(attacker) is null ? "an object of no loaded row" : "a non-critter object";
-        return $"attack by {attacker.Code} is not modelled ({what} as the attacker; only the PC or an NPC of the shown map, an object attacker waits for #1619)";
+        if (IsPc(attacker) || StandsHere(attacker)) return null;
+        if (attacker.Map == _shownMap && Row(attacker) is { } row && row.Type is not (Arcanum.Simulation.Magic.SpellObjectFacts.PcType or Arcanum.Simulation.Magic.SpellObjectFacts.NpcType)
+            && !(row.Type is >= Arcanum.Simulation.Magic.SpellObjectFacts.FirstItemType and <= Arcanum.Simulation.Magic.SpellObjectFacts.LastItemType)) return null;
+        var what = attacker.Map != _shownMap ? "an object of another map that no companion stands for" : Row(attacker) is null ? "an object of no loaded row" : Row(attacker)!.Type == NpcType ? "an NPC that stands elsewhere" : "an item";
+        return $"attack by {attacker.Code} is not modelled ({what} as the attacker; only the PC, an NPC standing on the shown map or an object of it that is no item)";
     }
 
     /// <summary>
-    /// One attack (36) request of a run, applied (<see cref="AttackRefusal"/> said it can be): the attack event (0x4A9650, flags 2, loudness 1) of the attacker on the victim in the AI host. A victim that is neither the PC nor an NPC of the shown map is left as it is
-    /// (the host holds no such object: the event's early exit); the answer is the stop of the event's plan. Shared by the dialog host (<see cref="AreaScriptHost.Apply"/>).
+    /// One attack (36) request of a run, applied (<see cref="AttackRefusal"/> said it can be): the attack event (0x4A9650, flags 2, loudness 1) of the attacker on the victim in the AI host. A victim that is neither the PC nor an NPC standing here (a carried
+    /// follower counts by identity, <see cref="StandsHere"/>) is left as it is (the host holds no such object: the event's early exit); the answer is the stop of the event's plan. Shared by the dialog host (<see cref="AreaScriptHost.Apply"/>).
     /// </summary>
     public void ApplyScriptAttack(ScrObjectStateRequest request)
     {
         LastAttack = null;
-        if (request.Other is { } attacker && (IsPc(request.Object) || ShownNpc(request.Object))) LastAttack = _world!.ScriptAttack!(attacker.Code, request.Object.Code);
+        if (request.Other is { } attacker && (IsPc(request.Object) || StandsHere(request.Object))) LastAttack = _world!.ScriptAttack!(attacker.Code, request.Object.Code);
     }
+
+    // ARC-SCRIPT-1679 (FM1): an NPC standing on the shown map, told by identity: a row of the shown map, or the row of a carried follower named by its home map whose live cell the viewer gives here (the tile script's test of the same).
+    private bool StandsHere(ScrObjectRef obj) => ShownNpc(obj) || obj.Map != _shownMap && !IsPc(obj) && Row(obj) is { Type: NpcType } && _world?.CritterCell?.Invoke(obj) is not null;
 
     /// <summary>ARC-SCRIPT-1563: whether the world gives the script damage (<see cref="ApplyScriptDamage"/>) this host applies; the dialog host asks before it applies anything, so a run it cannot finish is refused whole.</summary>
     public bool CanApplyScriptDamage => _world?.ScriptDamage is not null;
@@ -1916,8 +1923,8 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
                 if (_world?.ScriptHeal is null) return "heal hit points needs the viewer's session";
                 continue;
             }
-            // ARC-SCRIPT-1620 (TI6, VB2-2 gap d): the attacker (the first object of operand 1) is the PC or an NPC of the shown map, the critters the AI host holds; any other object (a trap, scenery, an item, another map's critter) as the attacker would
-            // make an NPC victim fight an object (0x4AABE0), which waits for the trap shot (#1619). The victim needs no test: the event's own early exits leave an object the host does not hold as it is.
+            // ARC-SCRIPT-1620 (TI6, VB2-2 gap d), ARC-SCRIPT-1679: the attacker (the first object of operand 1) is the PC, an NPC standing here (a carried follower by identity) or an object of the shown map that is no item (the AI host's object facts, #1619);
+            // an item or an object it does not hold is refused whole. The victim needs no test: the event's own early exits leave an object the host does not hold as it is.
             if (request.Change == ScrObjectStateChange.Attack)
             {
                 if (_world?.ScriptAttack is null) return "attack needs the AI host";
