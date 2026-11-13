@@ -1295,6 +1295,20 @@ public sealed class AreaAiFollowerTests
         Assert.IsNull(host.RunOf(companion), "the follower's attack at the NPC ends too");
     }
 
+    // ARC-MAGIC-1169 (E1-f, ledger AR1-AR4, 0x451700 → 0x4A9560 → 0x4A94C0): the AI redirect turns the NPCs of the target's vicinity on it: the attack event with the target as attacker, then focus and who-hit-me-last := the target.
+    [TestMethod]
+    public void The_spells_ai_redirect_turns_the_npcs_near_its_target_on_it_and_honours_the_critter_flag()
+    {
+        var (session, host, _, enemy, companion) = Open(enemyFlags: 0x8);
+        var target = SessionCombatant.Critter(companion);
+        Assert.IsNull(session.QueryDanger(enemy).Focus);
+        Assert.AreEqual(0, host.SpellRedirect(companion, 0x10, -1), "no candidate holds the critter flag asked for: none redirected");
+        Assert.IsNull(session.QueryDanger(enemy).Focus);
+        Assert.AreEqual(1, host.SpellRedirect(companion, 0x8, -1), "the animal enemy is redirected (the hero is no NPC, the target is skipped)");
+        Assert.AreEqual((target, target), (session.QueryDanger(enemy).Focus, session.QueryDanger(enemy).HitBy), host.TraceOf(enemy)?.Setter);
+        Assert.IsNull(host.SpellRedirect("oid:nobody", 0, -1), "a target this host does not know");
+    }
+
     [TestMethod]
     public void Peace_with_the_hero_ends_the_enemys_attack_at_a_follower_and_the_followers_attack_at_it()
     {

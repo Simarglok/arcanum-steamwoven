@@ -194,6 +194,7 @@ public partial class TerrainViewerApp
             Require(schemePage.Scheme == startScheme && schemePage.Entries.Count > AreaSchemesPage.Rows && schemes.BarForSelfTest is { Maximum: > 0 } bar && bar.Value == 0
                 && schemePage.Entries.Zip(schemePage.Entries.Skip(1)).All(pair => pair.First.Number < pair.Second.Number), "the hero's scheme, an ordered list longer than the rows, a bar at its top");
             await Capture("-schemes");
+            await WindowArt("schemes", AreaCharacterSheetArtLayout.SchemesPageArtNumbers);
             var (rx, ry, _, _) = AreaCharacterSheetSchemesLayout.Row(2);
             GetViewport().PushInput(new InputEventMouseMotion { Position = schemes.PointForSelfTest(rx + 5, ry + 5), GlobalPosition = schemes.PointForSelfTest(rx + 5, ry + 5) });
             await Frame();

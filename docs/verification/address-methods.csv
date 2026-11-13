@@ -39,6 +39,9 @@ src/Arcanum.Scripting/Dialog/DialogConversation.cs,SchematicsCommand,pending,
 src/Arcanum.Scripting/Dialog/DialogConversation.cs,Store,pending,
 src/Arcanum.Scripting/Dialog/DialogConversationHealer.cs,FormatName,exempt,reference
 src/Arcanum.Scripting/Dialog/DialogConversationNewspaper.cs,PunctuatedHeadline,exempt,host
+src/Arcanum.Scripting/Dialog/DialogConversationServiceReply.cs,OpenService,exempt,host
+src/Arcanum.Scripting/Dialog/DialogConversationServiceReply.cs,ServiceOffered,exempt,host
+src/Arcanum.Scripting/Dialog/DialogConversationServiceReply.cs,ServiceText,exempt,host
 src/Arcanum.Scripting/Dialog/DialogGreeting.cs,Comment,exempt,host
 src/Arcanum.Scripting/Dialog/DialogGreeting.cs,MissingLine,pending,
 src/Arcanum.Scripting/Dialog/DialogGreeting.cs,ParseSlots,pending,
@@ -259,6 +262,7 @@ src/Arcanum.Session/SessionSpellCasterItems.cs,WithdrawItemSpells,pending,
 src/Arcanum.Session/SessionSpellCasterScript.cs,CastByScript,pending,
 src/Arcanum.Session/SessionSpellCasterScriptDamage.cs,ApplyScriptDamage,pending,
 src/Arcanum.Session/SessionSpellCasterSocial.cs,EndFleeGoals,exempt,host
+src/Arcanum.Session/SessionSpellCasterSocial.cs,Redirect,exempt,host
 src/Arcanum.Session/SessionSpellCasterSummon.cs,DestroyCreated,pending,
 src/Arcanum.Session/SessionSpellCasterTeleport.cs,PayTeleportCost,pending,
 src/Arcanum.Session/SessionSpellCasterTeleport.cs,TeleportAllowedFor,pending,
@@ -519,6 +523,8 @@ src/Arcanum.World/AreaAiHostGround.cs,LooseItems,exempt,host
 src/Arcanum.World/AreaAiHostGround.cs,StartPickup,exempt,host
 src/Arcanum.World/AreaAiHostHealer.cs,HealerCast,exempt,host
 src/Arcanum.World/AreaAiHostHealer.cs,HealerService,exempt,host
+src/Arcanum.World/AreaAiHostRedirect.cs,SpellRedirect,exempt,host
+src/Arcanum.World/AreaAiHostRedirect.cs,Vicinity,exempt,host
 src/Arcanum.World/AreaAiHostRoutes.cs,RelocateAlongPath,pending,
 src/Arcanum.World/AreaAiHostRoutes.cs,RelocateToRandomTile,pending,
 src/Arcanum.World/AreaAiHostRoutes.cs,ScriptProne,pending,
