@@ -70,7 +70,7 @@ public static class InterfaceChromeRecipes
     public static readonly IReadOnlyList<string> CollegeTabFiles =
     [
         "s_conveyance.art", "s_divination.art", "s_air.art", "s_earth.art", "s_fire.art", "s_water.art", "s_forc.art", "s_mental.art",
-        "s_meta.art", "s_morph.art", "s_nature.art", "s_phantasm.art", "s_goodnecro.art", "s_evilnecro.art", "s_summoning.art", "s_temporal.art",
+        "s_meta.art", "s_morph.art", "s_nature.art", "s_evilnecro.art", "s_goodnecro.art", "s_phantasm.art", "s_summoning.art", "s_temporal.art",
     ];
 
     public static IReadOnlyList<ChromeRecipe> All { get; } = Build();

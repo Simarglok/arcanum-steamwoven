@@ -686,6 +686,9 @@ public sealed class InterfaceChromeTests
                 if (p.A > 0) Assert.IsFalse(p.R > 180 && p.G < 60, $"no Legacy red outline at {scale}, x {x}");
             }
         }
+        // KeepFace is what keeps the ball: the same input through a plain button recipe gets the brass face (the glyph test keeps nothing of a plain disc).
+        var plain = new ChromeRecipe("plain.art", ChromeKind.Button, ChromeMaterial.Face, ChromeSides.None, []);
+        CollectionAssert.AreNotEqual(InterfaceChromeRenderer.Render(recipe, size, size, legacy, [], 0, 2), InterfaceChromeRenderer.Render(plain, size, size, legacy, [], 0, 2));
         // Idle, hover and down differ (the ring is lit differently per frame).
         var frames = Enumerable.Range(0, 3).Select(f => InterfaceChromeRenderer.Render(recipe, size, size, legacy, [], f, 2)).ToArray();
         CollectionAssert.AreNotEqual(frames[0], frames[1]);
