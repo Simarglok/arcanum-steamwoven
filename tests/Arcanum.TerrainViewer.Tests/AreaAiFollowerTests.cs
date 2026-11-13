@@ -1010,4 +1010,16 @@ public sealed class AreaAiFollowerTests
         Assert.IsNull(scene.Host.TraceOf(scene.Companion)?.FollowerHit);
         Assert.IsNotNull(scene.Host.TraceOf(scene.Companion)?.Event, "the hit reached the host's attack event");
     }
+    // ARC-AI-1516 (EX14, 0x4A9650 step 12): the hero's stray missile on a non-follower NPC is an accidental event: its reaction toward the hero drops by 10 in place of the deliberate hit's lowering
+    // to AI parameter 10, and the event is not the follower branch (the free former follower stands for the NPC no one leads).
+    [TestMethod]
+    public void The_heros_stray_missile_on_an_npc_that_follows_nobody_lowers_its_reaction_by_ten()
+    {
+        var scene = Open(free: true, followFacts: entity => Consent(0), table: Parameter9(5));
+        Assert.IsNull(scene.Session.QueryReactionRecord(scene.Companion)?.Remembered, "nothing remembered yet");
+        scene.Host.HeroStrayAttacked(scene.Companion);
+        Assert.AreEqual("None", scene.Host.TraceOf(scene.Companion)?.Event, "the event ran to the reaction step");
+        Assert.AreEqual(-10, scene.Session.QueryReactionRecord(scene.Companion)?.Remembered, "the accidental hit costs 10");
+        Assert.IsNull(scene.Host.TraceOf(scene.Companion)?.FollowerHit, "no follower branch");
+    }
 }
