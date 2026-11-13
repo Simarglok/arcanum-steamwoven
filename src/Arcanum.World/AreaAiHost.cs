@@ -1085,6 +1085,20 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     }
 
     /// <summary>
+    /// ARC-AI-1685: a follower that stayed through the loyalty step with a leader-check warning (<see cref="LoyaltyStepResult.Warning"/>: too good 5200-5299, too evil 5300-5399, low
+    /// reaction 5400-5499) says the warning line when it is active and a line callback exists, through <see cref="FollowerSpeaks"/>. Returns the line range asked, or null when the step gave no
+    /// warning, the follower is not active or nobody listens. The can-speak test with flag 1 (its head and the viewer's float) is the speaker's, as for <see cref="SayLoyaltyLeave"/>.
+    /// </summary>
+    /// <remarks>The warning branch of 0x4AC380 (its registry row names the step rule): the active test 0x45D790, then 0x414290.</remarks>
+    public LoyaltyLines? SayLoyaltyWarning(string follower, LoyaltyStepResult step)
+    {
+        ArgumentNullException.ThrowIfNull(follower);
+        if (step.WarningLines is not { } lines || FollowerSpeaks is null || !Active(follower)) return null;
+        Speak(follower, lines);
+        return lines;
+    }
+
+    /// <summary>
     /// ARC-AI-1527 (0x4B6B90 → 0x4AE9E0, the end of one attack): the combat taunt of the PC's followers. <see cref="FollowerRules.TauntKindOf"/> asks the kind of the attack's facts; then
     /// <see cref="FollowerRules.Taunt"/> draws (half the time none) one of the PC's following followers, in the party's order (a follower this host does not resolve is a null entry, FO17), which says its line
     /// through <see cref="FollowerSpeaks"/>. Returns the comment chosen, or null. The facts' setting is the "combat taunts" option; the attacker is the hero.
