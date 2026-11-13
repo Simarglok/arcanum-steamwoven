@@ -160,9 +160,11 @@ internal sealed class EffectDomain
     /// ARC-MAGIC-027 (MA-2): the resistance changes of the entries (the five resistances in the source's order, list order within each), for the effective resistance function
     /// (<see cref="CombatantRules.Resistances(DamageResistances, Arcanum.Simulation.Equipment.EquipmentResistances, int, bool, EffectResistances)"/>). A number without a rule has no changes.
     /// </summary>
-    internal static EffectResistances Resistances(IEnumerable<SessionEffect> entries, IReadOnlyDictionary<int, SessionEffectDefinition> definitions)
+    internal static EffectResistances Resistances(IEnumerable<SessionEffect> entries, IReadOnlyDictionary<int, SessionEffectDefinition> definitions,
+        IEnumerable<SessionEffectDefinition>? innate = null)
     {
-        var changes = entries.SelectMany(entry => definitions.TryGetValue(entry.Number, out var rule) ? rule.Changes : [])
+        // ARC-MAGIC-1700: the hero's innate entries stand first in its list, so their changes come first within each resistance (the rules are the host's, <see cref="GameSessionOwner.AttachInnateEffects"/>).
+        var changes = (innate ?? []).SelectMany(rule => rule.Changes).Concat(entries.SelectMany(entry => definitions.TryGetValue(entry.Number, out var rule) ? rule.Changes : []))
             .Where(c => c.Kind == EffectAttributeKind.Resistance).ToArray();
         if (changes.Length == 0) return EffectResistances.None;
         IReadOnlyList<EffectModifier> Of(int attribute) =>
@@ -649,7 +651,7 @@ public sealed partial class GameSessionOwner
     private LifeFacts? TrialFacts(HeroDomain trial, IReadOnlyList<SessionEffect> entries, IReadOnlyDictionary<int, SessionEffectDefinition> definitions,
         LifeState state)
     {
-        var facts = LifeDomain.HeroFacts(trial.Stats, trial.State, state, HeroNormalResistance(entries, definitions),
+        var facts = LifeDomain.HeroFacts(trial.Stats, trial.State, state, HeroNormalResistance(entries, definitions, trial.State),
             EffectDomain.Modifiers(entries, definitions, EffectSpecial.MaxHitPoints), EffectDomain.Modifiers(entries, definitions, EffectSpecial.MaxFatigue));
         return LifeRules.IsValid(facts) ? facts : null;
     }
