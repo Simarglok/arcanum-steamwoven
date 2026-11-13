@@ -966,6 +966,32 @@ public sealed class AreaAiFollowerTests
     }
 
     [TestMethod]
+    public void Stop_fleeing_ends_the_flee_goals_only_of_an_npc_that_was_in_flee()
+    {
+        // Issue #1595 (ledger VA14, MR12; 0x4AF170): the listing tests the state first (CMP 0x10 at 0x4AF189, JNZ to the epilogue), so the setter's NONE and the flee-goal interrupt are the FLEE state's only.
+        // The fear effect's end (SpellStopFleeing) and the kill notification (NoticeKill) are the callers.
+        foreach (var kill in new[] { false, true })
+        {
+            bool Stop(Scene scene) => kill ? scene.Host.NoticeKill(scene.Enemy, null) : scene.Host.SpellStopFleeing(scene.Enemy);
+            var fleeing = Open();
+            Assert.IsTrue(fleeing.Host.SpellFlee(fleeing.Enemy, Pc), "the enemy flees from the hero");
+            var flee = Leftover(fleeing.Host, fleeing.Enemy, GoalType.Flee);
+            Assert.IsTrue(Stop(fleeing));
+            Assert.AreEqual(DangerState.None, fleeing.Session.QueryDanger(fleeing.Enemy).State, $"in FLEE the setter is asked for none (kill {kill})");
+            Assert.IsFalse(Alive(fleeing.Host, flee), $"an NPC in FLEE loses its flee goal (kill {kill})");
+
+            var other = Open();
+            var before = other.Session.QueryDanger(other.Enemy).State;
+            Assert.AreNotEqual(DangerState.Flee, before);
+            var leftover = Leftover(other.Host, other.Enemy, GoalType.Flee);
+            Assert.IsTrue(Stop(other));
+            Assert.AreEqual(before, other.Session.QueryDanger(other.Enemy).State, $"the state is unchanged (kill {kill})");
+            Assert.IsTrue(Alive(other.Host, leftover), $"an NPC in another state keeps its flee goal (kill {kill})");
+        }
+        Assert.IsFalse(Open().Host.SpellStopFleeing(Pc), "the hero is no NPC");
+    }
+
+    [TestMethod]
     public void The_reactions_setter_asks_for_no_alerted_sound_so_the_attack_goal_carries_none()
     {
         // ARC-RENDER-1126 (0x4A92D0, 0x4AABE0, 0x4296D0): only the danger update's setter call asks for the alerted sound (its pass record's bark slot, the host's UpdateDanger);
