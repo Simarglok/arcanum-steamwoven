@@ -48,6 +48,7 @@ public sealed class AreaScriptAttackAdmissionTests
         Console.WriteLine($"installed scripts with an attack {carriers.Count}; admitted whole: " + string.Join(", ", counts.Select(c => $"{c.Key} {c.Value}")));
         // 79 installed scripts carry the action (111 clauses, the census of ScrAttackActionCensusRealDataTests); its sets admit whole: S33 31 (the thrown item's 29017 among them), the use click 2, tile and sector scripts 34, heartbeats 10,
         // dying scripts 47 (the union of the placed and heartbeat sets), the talk sets 10 (the others hold a command of another slice).
-        Assert.AreEqual((79, 31, 2, 34, 10, 47, 10, 10), (carriers.Count, counts["S33"], counts["use"], counts["placed"], counts["heartbeat"], counts["dying"], counts["talk"], counts["skill talk"]));
+        // ARC-SCRIPT-1815: the heartbeat set gained the scenery and object-variable focus kinds, assign object and float line (heartbeats 31, from 10; the placed and dying counts are those of the shared sets today, 37 and 53).
+        Assert.AreEqual((79, 31, 2, 37, 31, 53, 10, 10), (carriers.Count, counts["S33"], counts["use"], counts["placed"], counts["heartbeat"], counts["dying"], counts["talk"], counts["skill talk"]));
     }
 }

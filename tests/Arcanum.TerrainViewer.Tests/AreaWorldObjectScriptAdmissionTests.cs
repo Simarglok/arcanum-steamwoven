@@ -37,6 +37,7 @@ public sealed class AreaWorldObjectScriptAdmissionTests
         Assert.IsTrue(withCommand >= counts["S37"]);
         // Ledger WO13, WO18: 117 installed scripts use one of the 13 commands; S37 admits 84 whole, and the hosts' sets 39 (use), 69 (tile and sector), 35 (heartbeat) and 77 (dying) since ARC-SCRIPT-1279 gave the four item commands
         // (transfer item, set written start, destroy item named, toggle item inventory display) a host (ARC-SCRIPT-1164 had left them out: 25, 43, 30, 48); the rest hold a command of another planned slice.
-        Assert.AreEqual((117, 84, 39, 69, 35, 77), (withCommand, counts["S37"], counts["use"], counts["placed"], counts["heartbeat"], counts["dying"]));
+        // ARC-SCRIPT-1815: the heartbeat set gained the scenery and object-variable focus kinds, assign object and float line (heartbeats 45, from 35; the use, placed and dying counts are those of the shared sets today, 40, 72 and 83).
+        Assert.AreEqual((117, 84, 40, 72, 45, 83), (withCommand, counts["S37"], counts["use"], counts["placed"], counts["heartbeat"], counts["dying"]));
     }
 }
