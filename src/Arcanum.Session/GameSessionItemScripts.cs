@@ -312,7 +312,7 @@ public sealed partial class GameSessionOwner
             return GameSessionFailure.None;
         }
 
-        // ARC-MAGIC-1644: one effect action on the NPC wearer, checked as its list admits it (0x4E9F70, 0x4EA100: no innate entry, the item cause, the number in use with the same rule, the capacity); the life rules'
+        // ARC-MAGIC-1644: one effect action on the NPC wearer, checked as its list admits it (0x4E9F70, 0x4EA100: the item cause, the number in use with the same rule, the capacity; the NPC's list has no innate guard); the life rules'
         // checks (the maxima, the budgets) are the commit's dry run (<see cref="Prepare"/>).
         private GameSessionFailure PlanNpc(ScrEffectRequest change)
         {

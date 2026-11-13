@@ -1529,4 +1529,26 @@ public sealed class SessionSpellCasterTraitIndexTests
         Assert.IsTrue(NotReady(bareCaster));
         Assert.IsTrue(bare.QueryCritterIndexedWrites(Rat).IsEmpty);
     }
+    [TestMethod]
+    public void An_npc_rewield_walks_the_slots_in_order_and_a_later_refusal_leaves_everything_unapplied()
+    {
+        // A helmet (slot 1000) whose wield on adds a charm while rewielding, then the ring (slot 1003): the helmet's effect lands before the ring's run reads the list.
+        var helm = new SessionSeedItem("helm", Facts(SessionItemType.Armor, 3800, 1000, 0, null, SessionScriptPoint.WieldOn), null);
+        var (owner, caster, host, target) = Ringed(NpcWieldOn, NpcWieldOff, helm);
+        using var o = owner;
+        host.Slots[("helm", SessionScriptPoint.WieldOn)] = Gate;
+        Assert.AreEqual(SpellComponentOutcome.None, caster.Apply(Run(MagickPlus), 0, At(Rat, SpellTargetObject.Npc)));
+        var expected = 1 + ExpectedCharms(RatFields().Critter!.BaseStats[22] + 7, RatFields().Critter!.BaseStats[23]);
+        Assert.AreEqual(expected, Charms(owner, target), "both items' runs applied together");
+
+        // The ring's script (a later slot) is refused: the helmet's earlier run is not applied either, and the stat is not written.
+        var (other, otherCaster, otherHost, otherTarget) = Ringed(713, 0, new SessionSeedItem("helm", Facts(SessionItemType.Armor, 3800, 1000, 0, null, SessionScriptPoint.WieldOn), null));
+        using var p = other;
+        otherHost.Slots[("helm", SessionScriptPoint.WieldOn)] = Gate;
+        var version = other.Version;
+        Assert.IsNull(otherCaster.Apply(Run(MagickPlus), 0, At(Rat, SpellTargetObject.Npc)).JumpTo);
+        Assert.AreEqual(version, other.Version);
+        Assert.AreEqual(0, Charms(other, otherTarget));
+        Assert.IsTrue(other.QueryCritterIndexedWrites(Rat).IsEmpty);
+    }
 }
