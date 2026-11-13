@@ -113,6 +113,8 @@ public static class AwarenessRules
     public const int MinPerceptionDistance = 1, MaxPerceptionDistance = 10;
     /// <summary>The largest effective Perception the checks accept (a stat is far below it; it keeps the arithmetic in range).</summary>
     public const int MaxPerception = 1000;
+    /// <summary>The Perception from which a critter sees the invisible (0x4B0EE0, ARC-AI-1519).</summary>
+    public const int ExtraordinaryPerceptionMin = 20;
     /// <summary>What hearing takes off Perception before the distance (AW1).</summary>
     public const int HearingPerceptionOffset = 4;
     /// <summary>A sound line's step costs (0x43FE00 with flag 0x20, AW6): a wall on the crossed edge, a closed unbroken door or

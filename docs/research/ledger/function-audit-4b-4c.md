@@ -521,7 +521,7 @@ Registered rows are not repeated. `Size` is in bytes (the census), `B` the basis
 | 0x4C4800 | 48 | R | implemented per documents, no address in code | quest state save (original-persistence) |
 | 0x4C4830 | 48 | R | implemented per documents, no address in code | quest state load (original-persistence) |
 | 0x4C4860 | 928 | S | implemented per documents, no address in code | quest list load from the message file (the data reader) |
-| 0x4C4C00 | 176 | S | not yet read (F0 row) | quest state helper for reactions (176 bytes); not yet read as a whole |
+| 0x4C4C00 | 176 | S | read, ARC-SCRIPT-1532 | quest reply chooser: the PC's quest state, Intelligence below 5, reaction below 20, picks a table field ([DQR2](social.md#quest-state-reply-arc-script-1532)) |
 | 0x4C4E60 | 528 | S | implemented, unmarked | quest state change with experience (ReactionRules mention, the quest rules) |
 | 0x4C5070 | 304 | S | not yet read (F0 row) | quest logbook helper (304 bytes); not yet read as a whole |
 | 0x4C51A0 | 32 | R | implemented, unmarked | quest state by index (DialogConversationGrammar) |
