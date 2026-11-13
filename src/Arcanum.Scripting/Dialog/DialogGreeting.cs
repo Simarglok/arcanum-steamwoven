@@ -267,6 +267,13 @@ internal static class DialogGreeting
         OverrideLine(context, overrideLine ?? 11999 + first / 100)
         ?? Pick(context, GeneratedDialogFiles.NpcLineFile(GeneratedLineGroup.Npc, context.Facts.NpcMale, context.Facts.PcMale, false), first, last);
 
+    /// <summary>
+    /// ARC-AI-1527: the NPC line of a follower's comment (the taunt 0x413F50, the upset line 0x414370 and the near-death line 0x414490 all end in 0x418780 over their own range): the
+    /// plain NPC line <paramref name="first"/>..<paramref name="last"/> as the speaker says it to the PC, by the speaker's and the PC's genders, the speaker's own override line first.
+    /// </summary>
+    internal static GreetingOutcome Comment(DialogGreetingFacts facts, DialogGreetingSources sources, IDialogGreetingPort port, DialogSpeakerNames names, DialogTextEncoding encoding,
+        int maxTextBytes, int first, int last) => NpcLine(new Context(facts, sources, port, names, encoding, maxTextBytes), first, last);
+
     /// <summary>The override line (0x418870): the NPC's override dialog's record of that number, its male-PC text or else its
     /// alternate text, copied raw (no name substitution); null without the dialog or the record.</summary>
     [OriginalFunction(0x418870, OriginalFunctionScope.Partial)]
