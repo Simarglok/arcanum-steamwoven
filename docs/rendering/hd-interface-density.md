@@ -408,7 +408,7 @@ those of the player's `interface.mes` (the viewer's window ledgers carry them; e
 | ARC-UI-149 (issue #1194, ARC-UI-1194, [S4](#viewer-slice-s4-arc-ui-1194)) | loot, barter, steal | 234 loot, 235 barter and 825 follower barter, 349 loot doll, the three lenses 231–233; 337 barter doll and 341 doll cover are not built; the gamble boxes stay art | the same frame family as 148 with their own boxes |
 | ARC-UI-150 (issue #1195, ARC-UI-1195, [S5](#viewer-slice-s5-arc-ui-1195)) | character sheet | 22 main, 29 skills, 30 disciplines, 31 spells, tabs 34–36 and 568, the + and − buttons (23/24, 624/625, 647/648; 257/258 are `SP_Minus`/`SP_Plus`, which the sheet does not draw), the group and discipline buttons 302–313 | stat labels baked in the art stay pictures (kept rectangles); the schemes page 567 and the college tabs are not generated |
 | ARC-UI-151 | logbook | 263, 264 side, 260 book, 259, 261, 262 pages, the tabs | a parchment page material |
-| ARC-UI-152 | world and town map | 138 main, 140, 199 side pieces, 219, 220 town map frames | the map picture itself stays art |
+| ARC-UI-152 (issue #1197, ARC-UI-1197, [S6](#viewer-slice-s6-arc-ui-1197)) | world and town map | 138 main (the one frame the two windows draw); 140 and 199 (`wp_main`, `WP_Cover`, 130 × 152) and 219 and 220 (`Tmp_Day`, `Tmp_Nght`, two 501 × 365 landscape pictures) are drawn by no window of the viewer, so they are not built (issue #1811) | the map picture itself stays art; the buttons 811–813, the compass button 139, the lens 198 and the cover 217 are issue #1810 |
 | ARC-UI-153 | schematic window | 365 base and its buttons and tabs | |
 | ARC-UI-154 | message and dialogue frames, Fate, Sleep | 354, 7, 8, 128, 200, 274, 288, 290, 291 (410 × 107 rows), 292, 298, 218 | |
 | ARC-UI-155 | reading windows and the remaining small panels | 477, 487, 489, 491, 500 backgrounds, 494 side bar, and what is left | |
@@ -504,6 +504,33 @@ ones (D9); only the drawing changes. The frames are the player's `interface.mes`
   sheet stands at the whole factor 1 here (the bars are hidden in the smoke) and 2 in a 1600 × 1200 window, where the frames paint again. The composite (Legacy, HD pack, Generated for the three pages) is in the
   task thread, not in git. Seen there: the generated wood and slate are plainer than the painted ones, the stat boxes are rectangles with rivets where the original has brass ovals, and the kept label
   rectangles show a slightly different grain from the generated wood around them.
+
+## Viewer slice S6 (ARC-UI-1197)
+
+S6 draws the frame of the world map and town map window (planned as ARC-UI-152, issue #1197) in the generated interface at the window's own device scale ([S3](#viewer-slice-s3-arc-ui-148)).
+Positions, sizes, alpha tests and hit areas are the Legacy ones (D9); only the drawing changes. The frame is the player's `interface.mes` art 138, read from the installed game for this slice;
+the recipe holds only rectangles and colours of our own. The world map and the town map are one window (`AreaWorldMapArtView`) that draws the one frame behind the 501 × 365 view, so one recipe covers both.
+
+- **Frame.** `mapmain.art` (138, 800 × 400, wood): the map view's hole gets the brass rim every hole gets; the two readout boxes (680, 157 and 680, 189, 94 × 22) are sunk black pits the window writes its
+  numbers in; the portrait's square hole is a round view (`ChromeRoundView`, centre 69.5, 68.5, radius 44.5), so the square gets no rim, and the ring around it is kept as a round picture, since the lens art 198
+  that is drawn over the hole carries the same ring in its corners and the two must meet. Kept pictures: the compass rose (the star, the four medallions and the four needles, each as small as it can be so
+  that little old wood comes with them), the route sketch (a kept rectangle inside a sunk plate, which hides the old wood's different grain), the Travel button's brass ring and the brass pill under the view's
+  bottom edge (the cover 217 and the compass button 139 are drawn on it). The holes of the zoom and whole-map buttons are covered by those buttons, which stay art.
+- **Not built.** The buttons Zoom 811, Whole map 812, Travel 813 and the compass button 139, the lens art 198 (shared with the character sheet and the logbook) and the bottom cover 217 stay art (issue
+  #1810). The plan listed 140 and 199 (`wp_main`, `WP_Cover`, 130 × 152) and 219 and 220 (`Tmp_Day`, `Tmp_Nght`, two 501 × 365 landscape pictures); no window of the viewer draws any of them and the exe's
+  world map window code names no art number, so they have no recipe (issue #1811 asks the exe). The map tiles, the continent picture and the town tiles stay pictures.
+- **Scale.** `AreaWorldMapArtView` claims every texture's scale source of its look at its draw (the window's own device scale: the frame scale times the canvas and viewport stretch; the window stands at the
+  largest whole factor of the free area, 1 in a 1280 × 800 window and 2 in 1920 × 1080) and redraws, with its canvases, when a texture it claimed swaps in a painted frame or the device scale changes. The textures of
+  a look it no longer shows are let go.
+- **Checks.** `InterfaceChromeTests` (the recipe exists and the unused arts have none, every part lies inside the frame and no kept picture cuts into a generated plate, the frame paints in bounds and
+  deterministically at whole and fractional scales, the map view's hole stays clear, the round portrait has no square rim). The native smoke has the opt-in `ARC_AREA_WINDOW_ART=legacy|hd|generated` part (with
+  `ARC_HD_PACK`, `ARC_AREA_WINDOW_CAPTURE=PREFIX`) in the `worldmap` stage, once for the town map window (`townmap`, a PC in a town-map sector) and once for the world map window (`worldmap`): in `generated`
+  it checks that the frame draws generated chrome at `round(size × paint scale)` pixels, resizes the window to 1920 × 1080 (the factor 1, then 2), checks again and goes back. The check asks each texture for its
+  generated frame (which starts the paint), so it proves that the frame paints at the scale, not that a draw used it; the view redraws itself when its device scale changes.
+- **Local observation** (owner's Mac, 1280 × 800 window): the `worldmap` stage passes in the Generated, HD and Legacy runs for both windows (one frame each); the window stands at the whole factor 1
+  here and 2 in the 1920 × 1080 window, where the frame paints again. The composite (Legacy, HD pack art, Generated, for the world map and the town map) is in the task thread, not in git. Seen there: the
+  generated wood is plainer than the painted one; the kept compass, sketch and ring show the old wood's grain a little (the sketch sits in a sunk plate on purpose); the zoom and whole-map buttons, still art,
+  get a brass frame from the frame's holes around their lamp and picture.
 
 ## Synthetic comparison
 

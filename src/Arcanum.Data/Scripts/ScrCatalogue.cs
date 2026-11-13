@@ -92,7 +92,8 @@ public static class ScrCatalogue
             HasBodySpell = 14, IsPolymorphed = 12, IsShrunk = 13, HasMirrorImage = 16, InfluencedBySpell = 35, KnowsSpell = 48, MasteredSpellCollege = 49,
             Daytime = 1, GlobalQuestState = 7, HasBlessing = 8, HasCurse = 9, RumorKnown = 40, RumorQuelled = 41,
             ObjIsOpen = 36, SectorIsBlocked = 45, MonsterGenDisabled = 46,
-            MetPcBefore = 10, IsInvisible = 15, IsSurrendered = 25, IsInDialog = 26, CanSeeObject = 28, CanHearObject = 29, IsInvulnerable = 30, IsUndead = 38, IsProwling = 51;
+            MetPcBefore = 10, IsInvisible = 15, IsSurrendered = 25, IsInDialog = 26, CanSeeObject = 28, CanHearObject = 29, IsInvulnerable = 30, IsUndead = 38, IsProwling = 51,
+            BadAssociates = 11, MonsterOfType = 19, WithinRange = 34;
     }
 
     /// <summary>Action types the project reads by name.</summary>
