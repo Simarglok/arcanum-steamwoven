@@ -1297,3 +1297,21 @@ Known differences (documented, not bugs):
 - The page is plainer than the original's (soft clouds and a plain ruling in place of its stains, ragged edges and the printed connecting lines between the record and the two component boxes, which are not drawn).
 - The tabs and arrows follow the Legacy outlines and marks; the assemble face (the two lamps), the found and missing tints and the record's picture stay pictures.
 - The ring of the round view (art 231) is the barter window's recipe and sits on a patch of wood whose grain differs a little from the window's.
+
+## ARC-UI-1200 — Generated interface: message window, spell and skill panes, Fate and Sleep (S9, 2026-11-14)
+
+The rules are in [viewer slice S9](../rendering/hd-interface-density.md#viewer-slice-s9-arc-ui-1200). Set the HD interface line on the launcher screen to **Generated (experimental)**, start a game and compare with **HD** and **Legacy**.
+
+| # | Step | Expected | Status |
+| --- | --- | --- | --- |
+| 1 | Look at the message window at the bottom strip; pick something up or wait for a message. | The window is a dark slate frame with a black text area; the entries, icon and scrolling are as before. | open |
+| 2 | Press `M` (spells) with a hero who knows spells, then `K` (skills). | Both panes are slate with five (spells) or four (skills) dark wells under the icon buttons and a dark name plate with a rivet at each end; the sixteen college domes show for colleges you have no rank in; the names appear in the plate when you point at a button. | open |
+| 3 | Press `F` (Fate) and toggle a few buttons. | The window is slate with a dark bar behind every second line; the toggle buttons are generated brass buttons with the green lamp, sunk when on; the lines and sounds are as before. | open |
+| 4 | Open the sleep window (`S`, or the sleep button) and point at its buttons. | Four dark bars behind the odd lines; the buttons are lit under the pointer; the lines read as before. | open |
+| 5 | Make the window bigger and smaller while the Fate or Sleep window is open. | The window redraws at the new size (the previous picture stays until it is ready). | open |
+
+Known differences (documented, not bugs):
+
+- The slate is plainer than the original's marbled iron and the wells and bars are black where the original's are barely darker than their surroundings.
+- The common dialog box (the exit question, the load question after death) stays in the HD or Legacy look: issue #1819.
+- The first rows of the spell pane's top edge are transparent in the Legacy frame, so the rim does not run along them.
