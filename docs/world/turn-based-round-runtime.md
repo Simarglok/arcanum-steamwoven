@@ -64,7 +64,7 @@ that moves the revision makes the round call `StaleVersion` with no effect.
 | `ConsumeActionPoints(expected, combatant, cost, world)` | The charge above. `Free` (NoChange) without a round or outside the combatant's subturn. An overexertion takes the hero's fatigue damage through the life domain in the same revision, with its recovery timer; if it knocks the hero out its subturn ends at once. |
 | `EndCombatTurn(expected, combatant, world)` | Action points 0 and the next subturn (the source's end of a critter's turn). |
 | `CompleteCombatActions(expected, world)` | The animations-complete check and its 2 ms turn event as one step: the stalled-actor check, a forced spend, the next subturn. |
-| `AddCombatant(expected, combatant)` | An NPC joins the round (the AI's insert): appended, re-ordered, whose subturn it is unchanged. |
+| `AddCombatant(expected, combatant)` | An NPC joins the round (the AI's insert 0x4B7E00): appended, re-ordered, whose subturn it is unchanged. The area AI host calls it for every NPC that is not dead after the reaction to an attack (ARC-AI-1521). |
 | `QueryActionPointCheck(combatant, cost)` / `QueryCombatActionGate(combatant, cost, facts)` | The preview and the goal-start gate. |
 
 Every mutation takes the expected version, decides the whole step on a copy (reading the host's answers once per NPC and
