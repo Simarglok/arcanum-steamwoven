@@ -201,6 +201,8 @@ public partial class TerrainViewerApp
             ObjectTarget = row => _areaSession is { } objectOwner && !IsAreaCompanion(row.Key) ? ObjectTargets()?.Target(objectOwner, row.Key, AreaTrapped) : null,
             LaunchShotAtObject = AiLaunchShotAtObject,
             ObjectStruck = NpcObjectHit,
+            // ARC-TECHNOLOGY-1619 (VB2-2 gap d): a trap's shooter object (an object that is no critter) as the attack event reads it.
+            ObjectFacts = AiObjectFacts,
             // ARC-DEV-261 (GT198): the victims' taking-damage scripts (point 0x17) of the NPCs' attacks, throws and knockback bumps.
             TakingDamage = TakingDamageGoesOn,
             // ARC-SCRIPT-1483: the combat-point scripts (hit, critter hits, critical hit) of the NPCs' hits.
@@ -264,6 +266,19 @@ public partial class TerrainViewerApp
     private readonly HashSet<string> _heartbeatRefusalsLogged = new(StringComparer.Ordinal);
     // ARC-WORLD-114: the NPCs a heartbeat script killed or switched off (the pre-made smoke counts them).
     private int _heartbeatKills, _heartbeatOffs;
+
+    /// <summary>
+    /// ARC-TECHNOLOGY-1619 (VB2-2 gap d): the facts of an object that is no critter (a trap's shooter: a wall, a portal, a scenery or a trap object) as the AI host's attack event and target validity read them, from the shown map's cast map: its type, tile and
+    /// object flags. The busted state (0x43F630) is not read yet, so a broken shooter still holds an NPC's focus. Null for the hero, a critter, an item or an id the cast map does not know.
+    /// </summary>
+    private AreaAiObjectFacts? AiObjectFacts(string id) =>
+        _spellCastMap?.Object(id) is { IsCritter: false, IsItem: false } found
+            ? new AreaAiObjectFacts(found.Type, new CellCoord(checked((int)found.Location.X), checked((int)found.Location.Y)))
+            {
+                Destroyed = (found.ObjectFlags & Arcanum.Simulation.Magic.SpellTargetObject.Destroyed) != 0, Off = (found.ObjectFlags & Arcanum.Simulation.Magic.SpellTargetObject.Off) != 0,
+                DontDraw = (found.ObjectFlags & Arcanum.Simulation.Magic.SpellTargetObject.DontDraw) != 0, Invulnerable = (found.ObjectFlags & Arcanum.Simulation.Magic.SpellTargetObject.Invulnerable) != 0,
+            }
+            : null;
 
     /// <summary>ARC-WORLD-114: an NPC's first-heartbeat or heartbeat script through the shown map's use-script host, whose toggle state and
     /// kill reach the session; true lets the tick go on. A run that is refused or not applied goes on as without a script.</summary>
