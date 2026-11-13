@@ -114,10 +114,10 @@ public partial class TerrainViewerApp
             Require(_gameSettingsStore is { Persistent: true } && _gameSettingsStore.Load() is { Pad: Arcanum.Input.PadScheme.Direct, Touch: Arcanum.Input.TouchScheme.Off },
                 "the Controls line is saved in the settings file");
             Key(Godot.Key.V, 'v');
-            Require(_mainMenu!.Page == AreaOptionsPage.Video && Controls().Length == 3 && Controls()[2] == "Prompt style: Auto", "the Video page holds the floats and the prompt style: " + string.Join("|", Controls()));
-            panel.ChangeForSelfTest(2, 1); panel.ChangeForSelfTest(2, 1);
-            Require(Controls()[2] == "Prompt style: PlayStation" && _gameSettings.Prompts == Arcanum.Input.PromptStyle.PlayStation
-                && _gameSettingsStore?.Load().Prompts == Arcanum.Input.PromptStyle.PlayStation, "the prompt style changed and is saved: " + Controls()[2]);
+            Require(_mainMenu!.Page == AreaOptionsPage.Video && Controls().Length == 4 && Controls()[2] == "Combat Taunts: On" && Controls()[3] == "Prompt style: Auto", "the Video page holds the floats, the taunts and the prompt style: " + string.Join("|", Controls()));
+            panel.ChangeForSelfTest(3, 1); panel.ChangeForSelfTest(3, 1);
+            Require(Controls()[3] == "Prompt style: PlayStation" && _gameSettings.Prompts == Arcanum.Input.PromptStyle.PlayStation
+                && _gameSettingsStore?.Load().Prompts == Arcanum.Input.PromptStyle.PlayStation, "the prompt style changed and is saved: " + Controls()[3]);
             Require(PromptStripForSelfTest.Length == 0 && MainMenuOpen && _mainMenu!.Window == AreaMenuWindow.Options, "the mouse shows no strip and no window was reset");
             // A pad in hand (device 7, a DualSense: never device 0): after the hysteresis the strip names it with its family, over the open window.
             var clock = 1000.0;
@@ -137,8 +137,8 @@ public partial class TerrainViewerApp
             clock += .3; await Frames(2);
             Require(PromptStripForSelfTest.Length == 0, "a key takes the strip away: " + PromptStripForSelfTest);
             _controllerClockForSelfTest = null; _padIdentityForSelfTest = null;
-            panel.ChangeForSelfTest(2, 1); panel.ChangeForSelfTest(2, 1); panel.ChangeForSelfTest(2, 1);
-            Require(_gameSettings.Prompts == Arcanum.Input.PromptStyle.Auto, "the prompt style wrapped back to Auto: " + Controls()[2]);
+            panel.ChangeForSelfTest(3, 1); panel.ChangeForSelfTest(3, 1); panel.ChangeForSelfTest(3, 1);
+            Require(_gameSettings.Prompts == Arcanum.Input.PromptStyle.Auto, "the prompt style wrapped back to Auto: " + Controls()[3]);
             Key(Godot.Key.G, 'g');
             Require(_mainMenu!.Page == AreaOptionsPage.Game, "back on the Game page");
             panel.ChangeForSelfTest(7, 1); panel.ChangeForSelfTest(7, 1);

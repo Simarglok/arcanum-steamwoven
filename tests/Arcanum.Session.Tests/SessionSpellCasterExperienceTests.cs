@@ -213,4 +213,48 @@ public sealed class SessionSpellCasterExperienceTests
         Assert.IsTrue(caster.ApplyScriptDamage(Rat, 2, 0, unresistable: true).Applied);
         Assert.IsTrue(caster.TakeDamageSteps().Single().FromScript, "a script's step");
     }
+
+    [TestMethod]
+    public void The_damage_step_callback_runs_as_each_step_lands_and_sees_the_state_after_that_step_only()
+    {
+        // ARC-AI-1680 (0x4B4390 asks the near-death line 0x4AEAB0 inside the step): two steps in one frame, the callback of the first sees the critter after the first and before the second, so a speaker's can-speak gate is read then, not when the host drains the steps.
+        var record = Bolt(3);
+        var (owner, caster) = Session(record);
+        using var _ = owner;
+        var seen = new List<(int Before, int After, int NowHitPoints)>();
+        caster.DamageStepApplied = step =>
+        {
+            var now = owner.QueryLife(caster.LifeTarget(Rat)!).View!.Status;
+            seen.Add((step.Life.Before.HitPointDamage, step.Life.After.HitPointDamage, now.MaxHitPoints - now.HitPoints));
+        };
+        var burn = Arcanum.Simulation.Combat.FireDamageRules.Damage(false, false);
+        Assert.IsTrue(caster.ApplyBurn(Rat, burn).Applied);
+        Assert.AreEqual(1, seen.Count, "asked as the first step lands, before the next one");
+        Assert.AreEqual(seen[0].After, seen[0].NowHitPoints, "the first callback reads the state after the first step");
+        Assert.IsTrue(caster.ApplyBurn(Rat, burn).Applied);
+        Assert.AreEqual(2, seen.Count);
+        Assert.AreEqual(seen[1].After, seen[1].NowHitPoints, "the second callback reads the state after the second step");
+        Assert.IsTrue(seen[0].After < seen[1].After, "the second step took more");
+        Assert.AreEqual(2, caster.TakeDamageSteps().Count, "the steps stay queued for the floaters");
+        caster.TakeDamageSteps();
+        // A script's step calls it too (the host skips its own near-death ask for a FromScript step).
+        Assert.IsTrue(caster.ApplyScriptDamage(Rat, 2, 0, unresistable: true).Applied);
+        Assert.AreEqual(3, seen.Count);
+    }
+
+    [TestMethod]
+    public void The_damage_step_callback_runs_before_the_steps_experience_award()
+    {
+        // ARC-AI-1680: in the original's damage function the near-death ask (0x4B4390 calls 0x4AEAB0) comes before the experience and the AI pass, so a spell's callback sees the hero's experience as it was before the step's pool share.
+        var record = Bolt(3);
+        var (owner, caster) = Session(record);
+        using var _ = owner;
+        var before = HeroExperience(owner);
+        var atCallback = new List<int>();
+        caster.DamageStepApplied = _ => atCallback.Add(HeroExperience(owner));
+        CastAtRat(owner, caster, record);
+        Assert.AreEqual(1, atCallback.Count);
+        Assert.AreEqual(before, atCallback[0], "the callback ran before the experience was written");
+        Assert.IsTrue(HeroExperience(owner) > before, "the step's pool share was paid after it");
+    }
 }
