@@ -64,7 +64,7 @@ public partial class TerrainViewerApp
             {
                 // In the legacy and HD runs no frame of the window is generated chrome.
                 var drawn = textures();
-                if (drawn.Count != arts.Count || drawn.Any(texture => texture.IsGenerated))
+                if (drawn.Count == 0 || drawn.Count != arts.Count || drawn.Any(texture => texture.IsGenerated))
                 {
                     GD.Print($"ARC-UI-1194 window art smoke FAIL {window}: the {mode} frames are not generated ({drawn.Count} of {arts.Count} read)");
                     throw new InvalidOperationException("ARC-UI-1194 window art smoke: a " + mode + " frame is generated");

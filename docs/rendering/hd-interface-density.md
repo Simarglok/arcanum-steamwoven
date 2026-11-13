@@ -482,7 +482,7 @@ S4 draws the loot, barter and steal windows (planned as ARC-UI-149, issue #1194)
 S5 draws the character sheet in the generated interface at the sheet's own device scale ([S3](#viewer-slice-s3-arc-ui-148)). Positions, sizes, alpha tests and hit areas are the Legacy
 ones (D9); only the drawing changes. The frames are the player's `interface.mes` arts, read from the installed game for this slice; the recipes hold only rectangles and colours of our own.
 
-- **Window.** `char_maint.art` (22, 800 × 400, wood): sunk pits for the name box, the info box (its divider line kept), the page area, the schemes tab's square and the ten stat boxes (a sunk
+- **Window.** `char_maint.art` (22, 800 × 400, wood): sunk pits for the name box, the info box (its divider line kept), the page area, the schemes tab's square and the eight stat boxes (a sunk
   box with a rivet at each end, in place of the original's brass ovals; the curled corners of the name and info boxes are not drawn, as in S3). Kept pictures: the stat labels (ST, CN, ..)
   baked into the art, the close ring (the portrait's cover), the alignment gauge, the health and fatigue discs, the three lamp sockets and the experience ruler.
 - **Pages.** `Skills_Window.ART` (29), `Disciplines_Window.ART` (30) and `char_spells.art` (31, 235 × 325) are a new `ChromeMaterial.Slate` (darker than the iron of the bars; the original's stone is
@@ -498,7 +498,8 @@ ones (D9); only the drawing changes. The frames are the player's `interface.mes`
 - **Checks.** `InterfaceChromeTests` (the recipes exist, every part lies inside its frame and no kept picture cuts into a generated box, the frames paint in bounds and deterministically at whole and
   fractional scales, slate is darker than iron, every button recipe keeps its silhouette on each frame). The native smoke has the opt-in `ARC_AREA_WINDOW_ART=legacy|hd|generated` part (with `ARC_HD_PACK`,
   `ARC_AREA_WINDOW_CAPTURE=PREFIX`) in the sheet smoke of the map stage: for the skills, technology and spells pages it checks that every frame of the window and the page draws generated chrome at
-  `round(size × paint scale)` pixels, resizes the window to 1920 × 1080, checks again and goes back.
+  `round(size × paint scale)` pixels, resizes the window to 1600 × 1200 (the bars are hidden in the smoke, so the sheet stands at the screen's whole factor: 1, then 2), checks again and goes back. The check asks
+  each texture for its generated frame (which starts the paint), so it proves that the frames paint at the scale, not that a draw used them; the view redraws itself when its device scale changes.
 - **Local observation** (owner's Mac, 1280 × 800 window): the map stage's sheet smoke passes in the Generated, HD and Legacy runs for the skills, technology and spells pages (40, 52 and 28 frames); the
   sheet stands at the whole factor 1 here (the bars are hidden in the smoke) and 2 in a 1600 × 1200 window, where the frames paint again. The composite (Legacy, HD pack, Generated for the three pages) is in the
   task thread, not in git. Seen there: the generated wood and slate are plainer than the painted ones, the stat boxes are rectangles with rivets where the original has brass ovals, and the kept label

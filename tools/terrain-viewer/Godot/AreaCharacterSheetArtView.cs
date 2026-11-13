@@ -94,6 +94,8 @@ public partial class AreaCharacterSheetArtView : Control
     /// <param name="alignmentHot">The hot point of each frame of art 254.</param>
     public void SetArt(IReadOnlyDictionary<int, Texture2D[]> art, AreaCharacterSheetFonts fonts, AreaCharacterSheetTexts texts, (int X, int Y)[] alignmentHot)
     {
+        // ARC-UI-1195: the textures of a look this view no longer shows are let go.
+        if (_onTextureChanged is { } handler) { foreach (var texture in _watched) texture.Changed -= handler; _watched.Clear(); }
         _art = art ?? throw new ArgumentNullException(nameof(art));
         _fonts = fonts ?? throw new ArgumentNullException(nameof(fonts));
         _texts = texts ?? throw new ArgumentNullException(nameof(texts));
@@ -137,12 +139,25 @@ public partial class AreaCharacterSheetArtView : Control
             Scale = new Vector2(factor, factor);
             Position = new Vector2(AreaGameBarPanel.ScreenLeft(screen, factor),
                 MathF.Round((screen.Y - AreaPremadeBrowserArtLayout.ScreenHeight * factor) / 2) + AreaShopArtLayout.Window.Y * factor);
+            RedrawOnScaleChange();
             return;
         }
         var (scale, position) = AreaGameBarPanel.FittedWindow(GetViewportRect().Size, AreaCharacterSheetArtLayout.Width, AreaCharacterSheetArtLayout.Height,
             InterfaceHd.Enabled && InterfaceHd.Pack is not null);
         Scale = new Vector2(scale, scale);
         Position = position;
+        RedrawOnScaleChange();
+    }
+
+    // ARC-UI-1195: a change of the window's scale moves no pixel by itself (the canvas item is only stretched), so the frames are drawn again at the new device scale.
+    private float _drawnScale;
+
+    private void RedrawOnScaleChange()
+    {
+        var device = DeviceScale();
+        if (Math.Abs(device - _drawnScale) < 0.0005f) return;
+        _drawnScale = device;
+        QueueRedraw(); Pages.QueueRedraw(); Spells.QueueRedraw();
     }
 
     private Texture2D? Art(int number, int frame = 0) => AreaCharacterArtDraw.Art(_art, number, frame);
