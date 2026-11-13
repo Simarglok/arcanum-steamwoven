@@ -488,19 +488,22 @@ a dumb PC (its intelligence as the reply gates read it at most 4, the original's
 offset still applied. Without the port, or when its facts are unknown, the text stays empty and the reply works as before; a refused
 roll, a port exception or an undecodable phrase fails the conversation (`InvalidQueryResult`, `QueryException`, `InvalidText`). The
 phrase changes only the text: the transitions and blocks above stay. The `t:` phrase (PC lines 500..599) is built (ARC-SCRIPT-1150); its argument is
-stored after the phrase, not appended to it (ledger DTR1). The `r:` phrase (the PC's class line 2000) is built too (ARC-SCRIPT-1304, ledger RMR1). The `d:` (PC lines 1300..1399) and `x:` (1400..1499) phrases are built (ARC-SCRIPT-1533, ledger DIR1). Not built: the phrases of the prefix markers `u` (skills 10 and 14) and `z`
-([#1798](https://github.com/Simarglok/arcanum-steamwoven/issues/1798), after the healer menu).
+stored after the phrase, not appended to it (ledger DTR1). The `r:` phrase (the PC's class line 2000) is built too (ARC-SCRIPT-1304, ledger RMR1). The `d:` (PC lines 1300..1399) and `x:` (1400..1499) phrases are built (ARC-SCRIPT-1533, ledger DIR1). The `u:N` (PC lines 900..999 with the skill's name) and `z:N` (1000..1099 with the spell's name) phrases are built (ARC-SCRIPT-1798, ledger DSV1, DSV3).
 
 ## Skill service reply `u:` (ARC-SCRIPT-1534)
 
 A Player reply whose text starts with `u:` (either case) is the original's **skill service reply** (0x416C10; [ledger DSV1–DSV3](../research/ledger/social.md#skill-service-reply-u-arc-script-1534)): the number after the marker (read like the
 C library's atoi) is a skill the NPC would use on the PC. The original asks the skill test 0x4AE570 whether the NPC can, and leaves the reply out when it cannot (the five-reply count still includes it, as for a directions reply with nothing to ask for).
 
-- **Skill 12 (repair) is built as the original behaves: never offered.** The test wants the target to be an item, and the dialog hands it the PC (a critter), so the reply never shows, whatever the NPC and the data: the 8 installed `u: 12` replies
-  (3 files) are dead data in both rule settings, and the repair is reached through the `ri` action ([item services](../world/item-service-runtime.md)). The reply is planned as a left-out reply (`DialogConversation.IsRepairServiceReply`, tests `DialogServiceReplyTests`).
-- In the original a `u:` text whose atoi is 0 and any number other than 10, 12 and 14 pass the test and are offered (PC line 900..999, state 0xE); they stay a frontier here.
-- **Not built:** `u:10` (heal), `u:14` (pick locks), any other number and `z:` (a spell sold for gold) stay a frontier, as before (`u`) or an offered blocked reply (`z`). They share the skill-service and spell-sale machinery of the healer menu
-  (the healer menu `h:`, built by [#1732](https://github.com/Simarglok/arcanum-steamwoven/issues/1732)); no installed reply uses them. Follow-up: [#1798](https://github.com/Simarglok/arcanum-steamwoven/issues/1798).
+- **Skills 12 (repair) and 14 (pick locks) are built as the original behaves: never offered.** Their cases of the test want the target to be an item (12) or a portal or container (14), and the dialog hands it the PC (a critter), so the reply
+  never shows, whatever the NPC and the data: the 8 installed `u: 12` replies (3 files) are dead data in both rule settings, and the repair is reached through the `ri` action ([item services](../world/item-service-runtime.md)). Such a reply is planned
+  as a left-out reply (`DialogConversation.IsUnreachableServiceReply`, tests `DialogServiceReplyTests`, `DialogServiceOfferTests`).
+- **Skill 10 (heal) is offered when the NPC may heal the PC** (the host's `DialogHealerFacts.SkillAllowed` for skill 10: a healing item in the NPC's pack and a healer that is neither undead nor mechanical); **any other number passes the test** and is offered (a text whose atoi is 0 is skill 0).
+  The option text is the PC line 900..999 with the skill's name (empty for a number without one). Both need the healer menu's ports (`Healer`, `Greeting`, `World`, `Gold` and `Purse` or `Trainer`); without them the reply stays a frontier, as before.
+- **The pick** runs the reply's action, then offers the skill as the healer menu's option does (ledger HLR7, HLR9, HLR10; states 0xE then 0x10): a follower of the PC (its leader is the PC) is served at once and free, anyone else is quoted `(level + 2) × (tier + 1)` of the NPC's *named* skill on the reaction scale, paid
+  and then served by the NPC's skill goal 33 on the PC (tool: the healing item for skill 10, none for other skills, 0x4C91F0). The host starts the goal for any of the 16 skills; the attempt goal of a skill other than heal and pick pocket is not built in the AI host (`AttemptSkill`: nothing happens and the goal ends), so a
+  `u:N` other than 10 and 5 (pick pocket: the NPC tries to steal the PC's gold) pays and does nothing yet (no installed reply has one). A number outside the 16 skills starts nothing.
+- **`z:N` (a spell sold for gold)** has no filter: the option text is the PC line 1000..1099 with the spell's name, the pick sells spell N for 100 on the reaction scale (free for a follower), and the NPC casts it on the PC (ledger HLR8, HLR11, DSV3). No installed reply uses it. Without the healer menu's ports it stays an offered blocked reply.
 
 ## Trainer reply (ARC-SCRIPT-1150)
 

@@ -45,7 +45,7 @@ from line 0, static.
 | Point | Name | Call sites (0x441980 callers) | Steamwoven host | Rows (scripts) | Admitted |
 | ---: | --- | --- | --- | ---: | ---: |
 | 0 | examine | 0x57CD93 | the description step of the world hover, hotkey bar and inventory pointer (`AreaUseScriptHost.RunExamine`, ARC-DEV-326); barter and dialog windows not | 54 (31) | under the use set |
-| 1 | use | 0x428C21, 0x428CAB, 0x430CE3, 0x452EEB, 0x462E0C, 0x4BC9A7, 0x572477, 0x5724E5, 0x57A558, 0x57B31F | use click, item use (`AreaUseScriptHost.Admission`) | 2467 (245) | 2221 |
+| 1 | use | 0x428C21, 0x428CAB, 0x430CE3, 0x452EEB, 0x462E0C, 0x4BC9A7, 0x572477, 0x5724E5, 0x57A558, 0x57B31F | use click, item use (`AreaUseScriptHost.Admission`) | 2467 (245) | 2445 (ARC-SCRIPT-1734: a run of the opt-in trigger census with `ARC_SCRIPT_TRIGGER_CENSUS`, not pinned by a test; 2221 was the figure of the audit, ARC-SCRIPT-047, and the point was not recounted since) |
 | 2 | destroy | 0x43CD0E | **none** | 26 (7) | — |
 | 3 | unlock | 0x4AEBC5, 0x4AEDC4 | **none** | 0 | — |
 | 4 | get | 0x4618F2 | hero's item moves (`SessionItemScripts`) | 0 | — |
@@ -63,7 +63,7 @@ from line 0, static.
 | 16 | end combat | 0x4A8688, 0x4B7681 | **none** | 0 | — |
 | 17 | buy object | 0x4621D7, 0x578446 | **none** | 0 | — |
 | 18 | resurrect | 0x4B5A46 | **none** | 8 (8) | — |
-| 19 | heartbeat | 0x4AD2E1, 0x4B704A | AI tick, shown map (`HeartbeatAdmission`) | 141 (84) | 96 (was 32; ARC-SCRIPT-1733: 95 before) |
+| 19 | heartbeat | 0x4AD2E1, 0x4B704A | AI tick, shown map (`HeartbeatAdmission`) | 141 (84) | 97 (was 32; ARC-SCRIPT-1733: 95 before; ARC-SCRIPT-1771: 96 before) |
 | 20 | leader killing | 0x45DB95 | **none** | 0 | — |
 | 21 | insert item | 0x4648C2, 0x465977, 0x46687A, 0x46697F | hero's item moves | 28 (12) | 3 |
 | 22 | will KOS | 0x4AE179 | **none** | 60 (7) | — |

@@ -149,6 +149,26 @@ public sealed class AreaAiSkillTests
         Assert.IsNotNull(heal.Check, "the heal check ran on the hero");
     }
 
+    // ARC-SCRIPT-1798 (ledger DSV2, DSV5): the u:N reply's facts and service for the skill the reply names.
+    [TestMethod]
+    public void The_service_facts_and_starter_take_the_skill_the_reply_names()
+    {
+        var (_, host, npc, _) = Open(hero: true);
+        var undead = Open(critterFlags: 0x4).Host.HealerFacts(npc, AiPassChoice.HealSkill)!.Value;
+        Assert.IsFalse(undead.SkillAllowed, "skill 10 keeps the heal test");
+        var other = Open(critterFlags: 0x4).Host.HealerFacts(npc, 3)!.Value;
+        Assert.IsTrue(other.SkillAllowed, "any other skill passes 0x4AE570");
+        Assert.IsNull(host.HealerFacts(Entity(9), 3));
+        var outside = host.HealerFacts(npc, 99)!.Value;
+        Assert.AreEqual((0, 0, true), (outside.SkillLevel, outside.SkillTraining, outside.SkillAllowed), "a number outside the 16 skills has no level or tier");
+
+        Assert.IsTrue(host.HealerService(npc, 99), "a number the starter cannot name starts nothing and still answers");
+        Assert.IsNull(host.RunOf(npc));
+        Assert.IsTrue(host.HealerService(npc, 3));
+        var goal = host.RunOf(npc)?.Bottom ?? throw new AssertFailedException($"no run: {host.TraceOf(npc)?.Perform}");
+        Assert.AreEqual((GoalType.UseSkill, AiSchedulerRules.Pc, 3, (string?)null), (goal.Goal, goal.Target, goal.Skill, goal.Item), "goal 33 with the named skill and no tool (0x4C91F0 answers none)");
+    }
+
     // Hurts the NPC to half its hit points (below the heal skill's 90 %, above the 30 % care line).
     private static int Hurt(GameSessionOwner session, AreaAiHost host, string npc)
     {

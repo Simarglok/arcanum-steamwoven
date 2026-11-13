@@ -15,6 +15,9 @@ public sealed record AreaSpellDataLoad(AreaSpellDataStatus Status, SpellData? Da
 {
     public SpellEyeCandyTable? EyeCandy { get; init; }
     public string? EyeCandyDetail { get; init; }
+    /// <summary>ARC-SCRIPT-1592: the script eye-candy list (<c>rules\ScriptEyeCandy.mes</c>, the script module's init 0x4446E0), the table the script action 120 plays from; null when it does not read (the action then plays nothing, <see cref="ScriptEyeCandyDetail"/>).</summary>
+    public SpellEyeCandyTable? ScriptEyeCandy { get; init; }
+    public string? ScriptEyeCandyDetail { get; init; }
 }
 
 /// <summary>How a rank of the shown college looks: known (full colour), the next to learn, or above it (greyed).</summary>
@@ -85,10 +88,14 @@ public static class AreaSpellsPage
         if (loaded.Status != SpellDataStatus.Read) return new(AreaSpellDataStatus.DataFailed, null, $"{loaded.Status} {loaded.Refusal}");
         // ARC-MAGIC-017: rules\SpellEyeCandy.mes, read by the same init (0x44F07C).
         var eyeCandy = SpellEyeCandyTable.Open(stack);
+        // ARC-SCRIPT-1592: and rules\ScriptEyeCandy.mes, the list of the script action 120 (the same module reads it).
+        var scriptEyeCandy = SpellEyeCandyTable.OpenScript(stack);
         return new(AreaSpellDataStatus.Ready, loaded.Data, "spell data loaded")
         {
             EyeCandy = eyeCandy.Table,
             EyeCandyDetail = eyeCandy.Table is { } table ? $"eye candy {table.Entries.Count} entries" : $"eye candy {eyeCandy.Status} {eyeCandy.Refusal}",
+            ScriptEyeCandy = scriptEyeCandy.Table,
+            ScriptEyeCandyDetail = scriptEyeCandy.Table is { } script ? $"script eye candy {script.Entries.Count} entries" : $"script eye candy {scriptEyeCandy.Status} {scriptEyeCandy.Refusal}",
         };
     }
 
