@@ -457,14 +457,17 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     public (int Current, int Maximum)? FatiguePoints(ScrObjectRef obj) => Vitals(obj) is { } v ? (v.Fatigue, v.MaxFatigue) : null;
 
     /// <summary>ARC-SCRIPT-1481 (VT4, ledger WE2, EQ9): the item's power ratio for the PC or NPC that holds it, <see cref="Arcanum.Simulation.Equipment.EquipmentRules.EffectivePowerRatio"/> of its complexity and the owner's aptitude (stat 16, clamped to the
-    /// aptitude range); null for any other owner (not modelled) or an item the host does not know. ARC-SCRIPT-1562: a hero's worn item is read as the session has it (<see cref="GameSessionOwner.QueryWornPowerRatio"/>, the helper of the deferred item calls; a made item has no row), the
+    /// aptitude range); 100 for an owner the host holds a row for that is neither (ARC-SCRIPT-1662); null for an owner it has no row for, an NPC whose aptitude is not known, or an item the host does not know. ARC-SCRIPT-1562: a hero's worn item is read as the session has it (<see cref="GameSessionOwner.QueryWornPowerRatio"/>, the helper of the deferred item calls; a made item has no row), the
     /// rest of the items by their row; an NPC of the shown map has its aptitude from the world (<see cref="AreaScriptWorld.Aptitude"/>).</summary>
     public int? PowerRatio(ScrObjectRef item, ScrObjectRef owner)
     {
         if (IsPc(owner) && _session.QueryWornPowerRatio(item.Code) is { } worn) return worn;
-        if (ComplexityOf(item) is not { } complexity || CritterAptitude(owner) is not { Critter: true, Aptitude: { } aptitude }) return null;
+        if (ComplexityOf(item) is not { } complexity || CritterAptitude(owner) is not { } holder) return null;
+        // ARC-SCRIPT-1662 (WE2, CP8; exe 0x4614A0, 0x461540): an owner that is neither the PC nor an NPC (a container, scenery, an item) has its complexity as the item's power, so the ratio is 100 whatever the complexity (0 reads 100 as well).
         var limits = Arcanum.Simulation.Equipment.EquipmentLimits.MaxMagnitude;
         if (complexity < -limits || complexity > limits) return null;
+        if (!holder.Critter) return 100;
+        if (holder.Aptitude is not { } aptitude) return null;
         return Arcanum.Simulation.Equipment.EquipmentRules.EffectivePowerRatio(complexity, Math.Clamp(aptitude, Arcanum.Simulation.Equipment.EquipmentLimits.MinAptitude, Arcanum.Simulation.Equipment.EquipmentLimits.MaxAptitude));
     }
 

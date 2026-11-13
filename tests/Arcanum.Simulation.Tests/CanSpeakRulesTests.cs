@@ -36,4 +36,21 @@ public sealed class CanSpeakRulesTests
         Assert.AreEqual(CanSpeakRules.Unable, CanSpeakRules.Head(new(Spell58: true, Dead: true, SpokenWithDead: true)), "spell 58 refuses even a spoken-with corpse");
         Assert.AreEqual(CanSpeakRules.Unable, CanSpeakRules.Head(new(Stoned: true, Dead: true, SpokenWithDead: true)));
     }
+
+    // ARC-AI-1677 (0x4AD800 read in the export): the tail with the fifth argument 0 and 1.
+    [TestMethod]
+    public void The_tail_with_flag_zero_asks_the_combat_focus_then_the_goal_interrupt_then_the_partner()
+    {
+        Assert.AreEqual(CanSpeakRules.Free, CanSpeakRules.Tail(new(), skipsActivityTests: false));
+        Assert.AreEqual(CanSpeakRules.Fighting, CanSpeakRules.Tail(new(InCombatFocusOrFlee: true, GoalRefusesInterrupt: true, OtherPartner: true), skipsActivityTests: false));
+        Assert.AreEqual(CanSpeakRules.Busy, CanSpeakRules.Tail(new(GoalRefusesInterrupt: true, OtherPartner: true), skipsActivityTests: false));
+        Assert.AreEqual(CanSpeakRules.OtherConversation, CanSpeakRules.Tail(new(OtherPartner: true), skipsActivityTests: false));
+    }
+
+    [TestMethod]
+    public void The_tail_with_flag_one_asks_only_the_partner()
+    {
+        Assert.AreEqual(CanSpeakRules.Free, CanSpeakRules.Tail(new(InCombatFocusOrFlee: true, GoalRefusesInterrupt: true), skipsActivityTests: true), "a fighting follower may still say its line");
+        Assert.AreEqual(CanSpeakRules.OtherConversation, CanSpeakRules.Tail(new(InCombatFocusOrFlee: true, OtherPartner: true), skipsActivityTests: true));
+    }
 }

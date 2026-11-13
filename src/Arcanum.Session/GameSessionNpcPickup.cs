@@ -23,7 +23,7 @@ public sealed partial class GameSessionOwner
     /// does not have, <see cref="GameSessionFailure.ItemNotAvailable"/> for an item that is not in its list or a pile that is gone); the item then leaves that list like a loose seed item leaves the ground. A junk pile the item
     /// leaves, the session's or the map's, is checked as the removal does (0x467860 at 0x467C26, JP5): left with one item or none it dissolves at once (the last item is dropped again with a new decay event); the host has
     /// tested that no container's loot window is open (the goal's end 0x42AA70 reads the switch), so the check is never held back here. A pile of the map's data goes as a map change, which takes a revision of its own.
-    /// NOT READY: the get and insert-item scripts of the item (#1655), the room test of the NPC's grid (#1654) and the item sound of a local picker.
+    /// The room test of the NPC's grid is the host's verdict (ARC-AI-1654, <see cref="QueryHolderRoom"/>). NOT READY: the get and insert-item scripts of the item (#1655) and the item sound of a local picker.
     /// </summary>
     public InventoryMutationResult PickUpItemByNpc(GameSessionVersion expected, string npc, string item, SessionInsertCheck insertCheck, SessionObjectTarget? mapPile = null)
     {

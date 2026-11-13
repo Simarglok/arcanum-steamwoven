@@ -34,9 +34,18 @@ public sealed partial class SessionSpellCaster
         return taken;
     }
 
+    // ARC-AI-1680 (0x4B4390 calls 0x4AEAB0 after the hit points are written and before the AI pass 0x4B52FC):
+    /// <summary>
+    /// The host's callback for a damage step at the moment it lands, inside the cast host's damage apply right after the step's life outcome is written and before the next step, the AI pass or the experience. The session's state is then the state after this step
+    /// and none after a later one, so a speaker's can-speak gate reads it as the original does (the follower's near-death line is asked in the damage step). The steps stay queued for <see cref="TakeDamageSteps"/> (the floaters are the drain's). Null: no callback.
+    /// </summary>
+    public Action<SessionSpellDamageStep>? DamageStepApplied { get; set; }
+
     private void QueueDamageStep(string victim, AttackDamage damage, LifeOutcome life, string? attacker, IReadOnlyList<SessionCriticalStep>? criticals = null, bool fromScript = false)
     {
         if (_damageSteps.Count >= MaxPendingEntries) _damageSteps.RemoveAt(0);
-        _damageSteps.Add(new(victim, damage, life, attacker) { Criticals = criticals ?? [], FromScript = fromScript });
+        var step = new SessionSpellDamageStep(victim, damage, life, attacker) { Criticals = criticals ?? [], FromScript = fromScript };
+        _damageSteps.Add(step);
+        DamageStepApplied?.Invoke(step);
     }
 }

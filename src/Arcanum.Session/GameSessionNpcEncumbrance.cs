@@ -15,6 +15,22 @@ public interface ISessionNpcStatsWorld : ISessionEventWorld
     IReadOnlyList<int>? StoredStats(SessionMapId map, string entity);
 }
 
+/// <summary>ARC-MAGIC-1651: why an NPC's encumbrance timer chain ended although the original would have gone on (it reads the level from the live object): the session could not read the NPC's level, or could not schedule the next timer.</summary>
+public enum SessionNpcEncumbranceEndReason
+{
+    /// <summary>The pass world is no <see cref="ISessionNpcStatsWorld"/> (it cannot give the stored stats).</summary>
+    NoStatsWorld,
+    /// <summary>The world gave no stored stats, or not the 28 entries: the NPC has no combat row there.</summary>
+    NoStoredStats,
+    /// <summary>The level is unreadable: the map's seed does not list the NPC as a holder, or its list or stats do not fit the rules (<see cref="GameSessionOwner.QueryNpcCarry"/>).</summary>
+    LevelUnreadable,
+    /// <summary>The level has a drain interval but the next timer could not be scheduled (queue full, life record budget, timers on another map).</summary>
+    NotScheduled,
+}
+
+/// <summary>ARC-MAGIC-1651: an NPC's encumbrance timer fired and its chain ended for a <see cref="Reason"/> (a chain that ends because the level fell below 4 is the rule and is not reported).</summary>
+public sealed record SessionNpcEncumbranceEnd(GameEvent Event, SessionMapId Map, string Entity, SessionNpcEncumbranceEndReason Reason);
+
 /// <summary>
 /// ARC-MAGIC-1568 (the NPC's form of the encumbrance fatigue timer; ledger WE8): the recalculation 0x45F820 schedules the fatigue event 0x45E820 in mode 1 for any critter whose new level has a drain interval, the hero or an NPC;
 /// the match 0x45E8D0 compares the mode and the object, so one such event is pending for an NPC and a second schedule adds nothing. The session keeps the NPC's event as its own kind
@@ -58,7 +74,7 @@ public sealed partial class GameSessionOwner
     /// The NPC's encumbrance fatigue timer (mode 1 of the fatigue timer, ledger WE8): nothing for an NPC the host no longer reports, one without a life record or a dead one; otherwise its steps are
     /// <c>max(1, elapsed s / 80)</c> since it was scheduled and <see cref="CarryRules.Drain"/> of the NPC's current fatigue is added to its fatigue damage (nothing below 5 fatigue, never below 4), as the hero's does. It does not
     /// check the level first; afterwards it is scheduled again with the drain interval of the level then (none below level 4). The level is the one <see cref="QueryNpcCarry"/> reads from the NPC's list in the map's seed and
-    /// the stored stats the pass world gives (<see cref="ISessionNpcStatsWorld"/>); a world that cannot give them, or an NPC the seed does not list, schedules no next one.
+    /// the stored stats the pass world gives (<see cref="ISessionNpcStatsWorld"/>); a world that cannot give them, or an NPC the seed does not list, schedules no next one and the pass reports the end (<see cref="SessionEventPassResult.NpcEncumbranceEnds"/>).
     /// </summary>
     /// <remarks>The fatigue timer 0x45E610, mode 1.</remarks>
     internal GameEventHandlerOutcome FireNpcEncumbranceDrain(GameEventFiring firing)
@@ -79,11 +95,24 @@ public sealed partial class GameSessionOwner
                 state with { FatigueDamage = (int)Math.Min((long)state.FatigueDamage + drain, LifeLimits.MaxDamage) }, LifeEvents.None, 0, DeathAnimation.None), eventMap: at.Map);
             _passFirings?.Add(new(firing.Event, result));
         }
-        // The level now: the NPC's list in the seed against the carry weight its stored strength gives.
-        if (PassWorldAs<ISessionNpcStatsWorld>()?.StoredStats(map, at.Code) is { Count: SessionCritterIndexedWrites.StatCount } stats &&
-            QueryNpcCarry(map, target, stats, stats[0]) is { } carry &&
-            CarryRules.DrainIntervalMs(carry.Level) is { } delay)
-            ScheduleNpcEncumbranceDrain(target, map, delay);
+        // The level now: the NPC's list in the seed against the carry weight its stored strength gives. A chain that ends for want of that reading is reported (ARC-MAGIC-1651), one that ends below level 4 is the rule.
+        var reason = SessionNpcEncumbranceEndReason.NoStatsWorld;
+        if (PassWorldAs<ISessionNpcStatsWorld>() is { } statsWorld)
+        {
+            reason = SessionNpcEncumbranceEndReason.NoStoredStats;
+            if (statsWorld.StoredStats(map, at.Code) is { Count: SessionCritterIndexedWrites.StatCount } stats)
+            {
+                reason = SessionNpcEncumbranceEndReason.LevelUnreadable;
+                if (QueryNpcCarry(map, target, stats, stats[0]) is { } carry)
+                {
+                    if (CarryRules.DrainIntervalMs(carry.Level) is not { } delay) return GameEventHandlerOutcome.Completed;
+                    ScheduleNpcEncumbranceDrain(target, map, delay);
+                    if (IsPending(SessionEventKinds.NpcEncumbrance, at.Code)) return GameEventHandlerOutcome.Completed;
+                    reason = SessionNpcEncumbranceEndReason.NotScheduled;
+                }
+            }
+        }
+        _passNpcEncumbranceEnds?.Add(new(firing.Event, map, at.Code, reason));
         return GameEventHandlerOutcome.Completed;
     }
 }

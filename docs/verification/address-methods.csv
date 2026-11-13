@@ -101,6 +101,7 @@ src/Arcanum.Session/GameSessionHeroThrow.cs,SplitAmmoForThrow,pending,
 src/Arcanum.Session/GameSessionHeroThrow.cs,SplitAmmoRefusal,pending,
 src/Arcanum.Session/GameSessionHeroThrow.cs,ThrowHeroItem,pending,
 src/Arcanum.Session/GameSessionHolderGrid.cs,ArrangeHolderGrid,exempt,host
+src/Arcanum.Session/GameSessionHolderGrid.cs,QueryHolderRoom,exempt,host
 src/Arcanum.Session/GameSessionHostility.cs,ApplyAttackEvent,pending,
 src/Arcanum.Session/GameSessionHotkeys.cs,QueryHotkeySameKind,pending,
 src/Arcanum.Session/GameSessionHotkeys.cs,RecordHotkeyAction,pending,
@@ -364,6 +365,7 @@ src/Arcanum.Simulation/Items/CarryRules.cs,Fits,pending,
 src/Arcanum.Simulation/Items/CarryRules.cs,HolderMagicWeight,pending,
 src/Arcanum.Simulation/Items/DropPlacementRules.cs,PlaceCreated,pending,
 src/Arcanum.Simulation/Items/DropPlacementRules.cs,PlaceOnce,pending,
+src/Arcanum.Simulation/Items/JunkPileRules.cs,HolderFreeSlot,exempt,host
 src/Arcanum.Simulation/Items/RestockRules.cs,GenerateOnce,pending,
 src/Arcanum.Simulation/Items/RestockRules.cs,GeneratedOnceSeed,pending,
 src/Arcanum.Simulation/Locks/LockRules.cs,WriteBit,pending,
