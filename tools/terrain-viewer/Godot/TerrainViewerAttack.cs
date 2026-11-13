@@ -837,8 +837,8 @@ public partial class TerrainViewerApp
             // A critical miss turned on the hero at the shot; anything else waits for the strike.
             if (result.Life is null) { _lastCritterAttackForSelfTest = result; SyncAreaInventory(); RefreshAreaStatus(); return; }
         }
-        // ARC-AI-1639: the attack's end calls the taunt (0x4B6B90) unless it fired an ammunition shot (record bit 0x200 with a weapon ammunition type; a throwing weapon has none).
-        FinishCritterHit(struck, result, selfHitReachesTaunt: result.Shot is not { } fired || owner.QueryThrownShot(fired) is not null);
+        // ARC-AI-1639: the attack's end calls the taunt (0x4B6B90) only for an attack without a flight: a shot or a throw has record bit 0x200 and 0x4B3170 skips the call (a default-throw weapon has weapon type 3).
+        FinishCritterHit(struck, result, selfHitReachesTaunt: result.Shot is null);
     }
 
     /// <summary>ARC-COMBAT-005: the hero's attack on <paramref name="struck"/> as the session sees it now (its worn items, cell and the
@@ -871,7 +871,7 @@ public partial class TerrainViewerApp
 
     /// <summary>What follows an attack on an NPC (at once, or when a projectile struck it): the sounds, the status line, a stun's
     /// end, the followers' levels, the death pose and the drawn bodies and inventory.</summary>
-    private void FinishCritterHit(AttackGoal struck, SessionAttackResult result, bool aimed = true, bool selfHitReachesTaunt = true)
+    private void FinishCritterHit(AttackGoal struck, SessionAttackResult result, bool aimed = true, bool selfHitReachesTaunt = false)
     {
         var owner = _areaSession!;
         _lastCritterAttackForSelfTest = result;

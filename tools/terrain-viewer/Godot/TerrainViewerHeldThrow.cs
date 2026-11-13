@@ -423,7 +423,7 @@ public partial class TerrainViewerApp
                 sizeArc: facts.Kind.Type != SessionItemType.Weapon);
         SetHeldThrowNotice($"{held.Name} thrown at {tile.X},{tile.Y}" + (aimed is null ? "" : hit ? $": it will hit {aimed.Entity}" : ": it missed"));
         // A critical miss turned on the hero at once (its result is the attack's); a strike waits for the flight.
-        if (aimed is not null && result.Attack is { } attack && (result.Shots.Count == 0 || attack.Life is not null)) FinishCritterHit(aimed, attack, selfHitReachesTaunt: false); // ARC-AI-1639: a held throw (item type 3) skips the attack end's taunt call
+        if (aimed is not null && result.Attack is { } attack && (result.Shots.Count == 0 || attack.Life is not null)) FinishCritterHit(aimed, attack, selfHitReachesTaunt: false); // ARC-AI-1639: a held throw has weapon type 3 (0x465D80), which skips the attack end's taunt call
         SyncAreaInventory(); RefreshAreaStatus();
         return result;
     }

@@ -71,9 +71,9 @@ public partial class TerrainViewerApp
     /// <summary>
     /// ARC-AI-1527: the followers' comments on one resolved attack on a critter: the near-death line of whoever took the damage (the attack damage path of 0x4B4390) and, for the hero's own hit, the combat taunt of the end of the attack
     /// (0x4B6B90). <paramref name="aimed"/> is whether the struck critter is the one the attack was aimed at; the stray taunt kind needs attack-record flag 0x8, which only the critical-miss self-hit writes (ARC-AI-1639), and
-    /// <paramref name="selfHitReachesTaunt"/> is whether the attack's end calls the taunt at all (not for an ammunition shot or a held throw).
+    /// <paramref name="selfHitReachesTaunt"/> is whether the attack's end calls the taunt at all (only for an attack without a flight).
     /// </summary>
-    private void FollowerAttackComments(SessionAttackResult result, string attacker, string target, bool aimed = true, bool selfHitReachesTaunt = true)
+    private void FollowerAttackComments(SessionAttackResult result, string attacker, string target, bool aimed = true, bool selfHitReachesTaunt = false)
     {
         if (result.Disposition == GameSessionDisposition.Rejected || result.Resolution?.Refusal != AttackRefusal.None) return;
         var damaged = result.Recipient == DamageRecipient.Attacker ? attacker : target;

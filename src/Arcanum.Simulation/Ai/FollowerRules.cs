@@ -118,8 +118,8 @@ public static class FollowerRules
     /// ARC-AI-1639 (VB4-5): the taunt facts of one attack of the hero on a critter that <paramref name="outcome"/> resolved. The only writer of attack-record flag 0x8 is the critical-miss turn (0x4B6410, called from 0x4B3170 when
     /// the record carries the critical bit without the hit bit): it makes the attacker the struck object, sets the hit bit and 0x8 and leaves the aimed object as it was. Such a self-hit is therefore a hit on an object other than the
     /// aimed one under flag 0x8, and, as the PC-leader test (0x45DDA0) answers 0 for a PC, a struck object outside the party: kind 1 (a stray hit). A projectile strike never carries it (its record names the struck object as the
-    /// aimed one, or has no 0x8). <paramref name="selfHitReachesTaunt"/> is whether the attack's end calls 0x4B6B90 at all: a melee or ammunition-free attack does, an ammunition shot (record bit 0x200 with a weapon ammunition type)
-    /// and a held throw (item type 3) do not (the skipped call at 0x4B3170's start).
+    /// aimed one, or has no 0x8). <paramref name="selfHitReachesTaunt"/> is whether the attack's end calls 0x4B6B90 at all: a melee attack does; with the ranged record bit 0x200 (a shot or a throw, bit 0x200 is always set for attack type 3) it does not, whether the attack type
+    /// is 3 (a non-weapon item or a default-throw weapon, 0x465D80) or the weapon has an ammunition type (the skipped call at 0x4B3170's start).
     /// </summary>
     public static TauntFacts HeroAttackTauntFacts(bool tauntsOn, AttackOutcome? outcome, bool struckInPcParty, bool aimed, bool selfHitReachesTaunt)
     {
