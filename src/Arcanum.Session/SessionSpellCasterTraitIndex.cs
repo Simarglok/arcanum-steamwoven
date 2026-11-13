@@ -30,7 +30,7 @@ namespace Arcanum.Session;
 /// ARC-MAGIC-1628: a record follower's gender is the stored field and the innate effect as for any NPC (the sheet holds none), its race the sheet's (not ready when the new race's ranges leave the sheet invalid); the hero's poison is its life state's level,
 /// its magick and tech points are stored when no worn item has a wield script (<see cref="GameSessionOwner.HeroRewieldReady"/>), and its experience runs the level recalculation (0x4A69C0) after the store, queueing the award for the host as an
 /// award does (<see cref="TakeExperienceAwards"/>); the level has no case and is stored alone. ARC-MAGIC-1658: the hero's resistance (its stored array, schema 99), stat 25 (its stored age) and gender and race (the innate effects swapped, the character owner built again, <see cref="GameSessionOwner.WriteHeroInnate"/>) run; not ready for the hero:
-/// an age the session has not read (a save of schema 98 or before), a race of 11 and a swap the session refuses (<see cref="GameSessionOwner.HeroInnateReady"/>).</item>
+/// an age the session has not read (a save upgraded from schema 98 or before: the load path reads no prototype), a race of 11 (effect 75 exists but the character rules have no race 11) and a swap the session refuses (<see cref="GameSessionOwner.HeroInnateReady"/>). ARC-MAGIC-1700: the innate effects' resistance changes are read from the attached rules (<c>HeroEffectResistances</c>); the innate list's display order (race first) differs from the original's append order.</item>
 /// </list>
 /// </summary>
 public sealed partial class SessionSpellCaster
