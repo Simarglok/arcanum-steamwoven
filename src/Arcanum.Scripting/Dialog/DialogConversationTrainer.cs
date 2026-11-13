@@ -15,7 +15,7 @@ public sealed partial class DialogConversation
     private const int TrainerTier = 1, TrainerBasePrice = 100, MaxTrainerSkill = 15;
 
     // The NPC line groups of the talk (0x418CA0: 3000, 0x418A40: 1000, 0x418C40: 2000, 4000, 5000, 0x418F30: 6000) and the PC answers.
-    private const int MenuGroup = 3000, QuoteGroup = 1000, NoGoldGroup = 2000, TrainedGroup = 4000, RefusedGroup = 5000, DoneGroup = 6000;
+    private const int MenuGroup = 3000, QuoteGroup = 1000, InsultGroup = 1000, NoGoldGroup = 2000, TrainedGroup = 4000, RefusedGroup = 5000, DoneGroup = 6000;
 
     private sealed record TrainerTalk(ReplyPlan Reply, StepPlan? Target, DialogOperationSource Source);
 
