@@ -120,6 +120,10 @@ while an NPC leads it.
   answers the session's leader in every script host: the PC, or an NPC leader named on the critter's map. A join refused as a cycle
   leaves the run going on. A free Create Undead whose caster is a looped NPC (the dying scripts 30118 and 30127) reaches the cast host
   with that caster, whose join makes the risen critter its follower (ARC-MAGIC-1841).
+  Condition 11 (bad associates, 0x45F460) walks the NPC leader's follower array as it walks the hero's party; the schematic
+  window of a talk takes the first PC up the speaker's chain (0x45DDA0) as its viewer, so an NPC led by an NPC alone opens none.
+  A script destroy (68) of an NPC that leads or follows an NPC is refused whole: it writes a map change only and never reaches the
+  session's unlink.
 
 **NOT READY:** a waiting standing under an NPC leader (the original's wait 0x4AA7A0 keeps any leader; here the wait of an NPC-led
 follower sets the flag as for a leaderless NPC and the leave clears it); the catch-up of an NPC of the map whose chain reaches the hero

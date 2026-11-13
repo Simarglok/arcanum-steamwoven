@@ -154,6 +154,8 @@ public sealed class AreaHeartbeatScriptTests
                 If(new(ScrCatalogue.Condition.FollowingPc, (Attachee, -1), (Looped, 0)), new(ScrCatalogue.Action.CastFreeSpell, (Looped, 0), N(58), (Attachee, -1)), new(ScrCatalogue.Action.DoNothing)),
                 Do(new(ScrCatalogue.Action.LoopEnd)),
                 Do(new(ScrCatalogue.Action.ReturnRunDefault))));
+            // 815 destroys its attachee (a dying script's destroy, 68).
+            Write("scr/00815destroy.scr", Program(Do(new(ScrCatalogue.Action.Destroy, (Attachee, -1))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
             Write("scr/00813followpc.scr", Program(Do(new(ScrCatalogue.Action.MakeFollow, (Attachee, -1), (Player, 0))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
             Write("scr/00808stoppc.scr", Program(Do(new(ScrCatalogue.Action.StopSpellOnObject, N(12), (Player, 0))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
             // ARC-SCRIPT-1360: 806 has the shape of 2787, the heartbeat of the NPC in the first building: PC quest 1158 unknown: run the default; else switch the attachee on (toggle state) and remove the script.
@@ -603,8 +605,8 @@ public sealed class AreaHeartbeatScriptTests
             var second = Row(3, 16, 0);
             var host = HostAt(session, content, null, new CellCoord(12, 20), follower, first, second);
             var run = host.RunHeartbeat(follower, ScrPoint.Heartbeat, session.Rules.Scripts);
-            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, run.Outcome, run.Detail);
-            Assert.AreEqual(ScrOutcome.RunDefault, run.Run!.Outcome, "the self-join refusal does not stop the run");
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, run.Outcome, run.Detail + ": the self-join refusal does not stop the applied run");
+            Assert.AreEqual(ScrOutcome.RunDefault, run.Run!.Outcome);
             Assert.AreEqual(Entity(3), session.QueryLeader(Entity(1)));
             CollectionAssert.AreEqual(new[] { Entity(1) }, session.QueryFollowers(Entity(3)).ToArray());
             Assert.AreEqual(0, session.QueryFollowers(Entity(2)).Count, "left with the second join");
@@ -643,6 +645,27 @@ public sealed class AreaHeartbeatScriptTests
             var run = host.RunDying(Entity(1), null, session.Rules.Scripts);
             Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, run.Outcome, run.Detail);
             CollectionAssert.AreEqual(new[] { ((string?)Entity(2), Entity(1), 58, true, false) }, asked);
+        });
+    }
+
+    [TestMethod]
+    public void A_script_destroy_of_an_npc_that_leads_or_follows_an_npc_is_refused_whole()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            // ARC-SCRIPT-1842: the destroy writes a map change only and never reaches the session's unlink (0x45E180), so a linked NPC is left as it is.
+            Assert.AreEqual(GameSessionDisposition.Changed, session.ForceJoinLeader(session.Version, Entity(2), Entity(1)).Disposition);
+            var host = new AreaUseScriptHost(session, 1, [Row(1, 16, 815, point: ScrPoint.Dying), Row(2, 16, 815, point: ScrPoint.Dying), Row(3, 16, 815, point: ScrPoint.Dying)], [], content,
+                new AreaScriptWorld(() => null, _ => false, _ => null, () => null));
+            foreach (var linked in new[] { 1, 2 })
+            {
+                var run = host.RunDying(Entity(linked), null, session.Rules.Scripts);
+                Assert.AreEqual(AreaScriptedUseOutcome.EffectsRejected, run.Outcome, linked.ToString());
+                StringAssert.Contains(run.Detail, "leads or follows an NPC");
+            }
+            var free = host.RunDying(Entity(3), null, session.Rules.Scripts);
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, free.Outcome, free.Detail);
         });
     }
 

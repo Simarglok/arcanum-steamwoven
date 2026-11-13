@@ -137,13 +137,24 @@ public sealed class AreaThrownItemScriptsTests
     {
         WithRig(LedPetScript, (session, rig) =>
         {
-            // ARC-SCRIPT-1842 (#1322): the original's join (0x45DE90) takes any leader; the session holds the NPC leader beside the hero's party.
+            // ARC-SCRIPT-1842 (#1322): the original's join (0x45DE90) takes any leader; the session holds the NPC leader beside the hero's party. The leader is a critter the world names near the landing tile.
+            rig.Near = ["npc.9"];
             var ran = rig.Run(ScrPoint.Hit, "npc.9");
             Assert.AreEqual(AreaThrownItemOutcome.Applied, ran.Outcome, ran.Detail);
             Assert.IsTrue(ran.Followed);
             Assert.AreEqual("npc.9", session.QueryLeader("oid:critter:1"));
             CollectionAssert.AreEqual(new[] { "oid:critter:1" }, session.QueryFollowers("npc.9").ToArray());
             Assert.IsFalse(session.QueryCompanion("oid:critter:1").LedByPc);
+            return 0;
+        });
+        // A target the world does not name as a critter near the tile (an object that is no critter) is refused whole: nothing is made.
+        WithRig(LedPetScript, (session, rig) =>
+        {
+            var ran = rig.Run(ScrPoint.Hit, "obj.7");
+            Assert.AreEqual(AreaThrownItemOutcome.Refused, ran.Outcome);
+            StringAssert.Contains(ran.Detail, "a critter near the landing tile");
+            Assert.AreEqual(0, rig.Made.Count);
+            Assert.AreEqual(1, session.QueryPlacedItems().Count, "the item still lies there");
             return 0;
         });
         // With no target the follow names no leader: nothing joins, the transform stays.

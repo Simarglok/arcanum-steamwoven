@@ -399,6 +399,10 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
     public ScrObjectRef? Leader(ScrObjectRef critter) => Speaker(critter) is not { } speaker ? null : _state.Follows(speaker.Index) ? Pc
         : _session.QueryLeader(critter.Code) is { } leader && leader != PcCode ? new ScrObjectRef(critter.Map, leader) : null;
     public bool IsJilted(ScrObjectRef critter) => false;
+
+    // ARC-SCRIPT-1842: the first PC up a speaker's chain of leaders (0x45DDA0), which the schematic window takes as its viewer: the PC for a follower of the hero or of its companion, null for an NPC led by an NPC alone.
+    private ScrObjectRef? PcLeader(ScrObjectRef critter) => Speaker(critter) is not { } speaker ? null
+        : _state.Follows(speaker.Index) || _session.QueryPcLeader(critter.Code) is not null ? Pc : null;
     public bool IsPc(ScrObjectRef critter) => critter == Pc;
 
     /// <summary>ARC-SCRIPT-1165 (E5-c): the effect rule of a blessing or curse number, which a dialog script's add blessing (25) or add curse (27) needs; see <see cref="AreaUseScriptHost.BlessingEffects"/>.</summary>
@@ -521,7 +525,7 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
         // ARC-TECHNOLOGY-005 (SW8, TC2 both fixed): each start schematic UI request in action order, resolved now (the PC, or an NPC
         // and its PC leader); it changes no session state, so it neither stops nor is stopped by a later step.
         foreach (var request in effects.Schematics)
-            if (ResolveSchematic(request.Object, IsPc(request.Object), Leader(request.Object)) is { } open) _schematics.Add(open);
+            if (ResolveSchematic(request.Object, IsPc(request.Object), PcLeader(request.Object)) is { } open) _schematics.Add(open);
         // ARC-UI-049: a reading action shows its document to the PC only (0x4EE290); it changes no session state either.
         foreach (var request in effects.Readings)
             if (IsPc(request.Viewer)) _readings.Add(request);
