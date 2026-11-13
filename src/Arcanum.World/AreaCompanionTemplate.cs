@@ -41,6 +41,33 @@ public sealed record AreaCompanionTemplate(AreaSpeaker Speaker, AreaCompanionFac
             new ReadOnlyDictionary<AreaVisualKey, AreaVisualRecord>(new Dictionary<AreaVisualKey, AreaVisualRecord> { [visual.Key] = visual }), true);
     }
 
+    /// <summary>The first <see cref="AreaSpeaker.Index"/> of a led map NPC's speaker (<see cref="ForLedMapNpcs"/>): the index is this base plus the row's position among the map's
+    /// objects, so it is stable across rebuilds and clear of a created critter's (<see cref="CreatedIndexBase"/>) and of a map's own dialog NPCs.</summary>
+    public const int LedMapNpcIndexBase = 2_000_000;
+
+    /// <summary>
+    /// ARC-AI-1622: the body templates of the map's NPC rows that have no dialog script and that the hero leads now (a Dominate Will target, a script's join): the
+    /// original's follower array holds any critter, so such an NPC follows, fights and catches up through the same companion group as a dialog NPC (its speaker
+    /// has script 0, as a created critter's). Only the rows whose entity is in <paramref name="entities"/> are built, so the scan costs nothing for the NPCs
+    /// nobody leads; a row the plan does not draw, or whose follow facts do not read, gets no template (<see cref="From"/>).
+    /// </summary>
+    public static IReadOnlyList<AreaCompanionTemplate> ForLedMapNpcs(IEnumerable<AreaObjectRecord> objects, IEnumerable<AreaVisualRecord> visuals, IReadOnlySet<string> entities,
+        AreaScenePlan plan, AreaChart chart, SessionMapId home, Func<AreaSpeaker, AreaCompanionFacts?> facts)
+    {
+        ArgumentNullException.ThrowIfNull(objects); ArgumentNullException.ThrowIfNull(visuals); ArgumentNullException.ThrowIfNull(entities); ArgumentNullException.ThrowIfNull(plan);
+        ArgumentNullException.ThrowIfNull(chart); ArgumentNullException.ThrowIfNull(facts);
+        if (entities.Count == 0) return [];
+        var speakers = new List<AreaSpeaker>();
+        var position = 0;
+        foreach (var row in objects)
+        {
+            var index = position++;
+            if (row.Type != 16 || row.Scope != AreaScope.Core || row.WorldX is not { } x || row.WorldY is not { } y || !entities.Contains(AreaConversationState.EntityId(row))) continue;
+            speakers.Add(new AreaSpeaker(LedMapNpcIndexBase + index, row, 0, x, y));
+        }
+        return From(speakers, plan, visuals, chart, home, facts);
+    }
+
     public string Entity => AreaConversationState.EntityId(Speaker.Row);
     public AreaObjectKey Key => Speaker.Row.Key;
 
