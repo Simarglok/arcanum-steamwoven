@@ -288,6 +288,17 @@ public static class LifeRules
         return Damage(state, facts, new LifeDamage { HitPoints = damage }, NoRolls.Instance);
     }
 
+    /// <summary>
+    /// ARC-MAGIC-1508 (the stat setter 0x4B0980 for stat 24, ledger RM3b): the poison level is written as <paramref name="level"/>: clamped to 0..1000 (the range tables), then 0 for a critter whose effective
+    /// constitution is 20 or more (0x4B0EE0 called with constitution), as every poison write does (<see cref="Damage"/> too). Nothing else changes: no damage step, so no death check (the original's setter
+    /// kills nobody; the next poison tick or hit does) and no event but the timers the session sets for a positive level.
+    /// </summary>
+    public static LifeOutcome SetPoison(LifeState state, LifeFacts facts, long level)
+    {
+        Check(state, facts);
+        return new(state, state with { PoisonLevel = PoisonLevel(level, facts) }, LifeEvents.None, 0, DeathAnimation.None);
+    }
+
     /// <summary>The 120-second poison recovery tick: the poison level loses the PoisonRecovery stat (never below 0); dead or not.</summary>
     public static LifeOutcome PoisonRecoveryTick(LifeState state, LifeFacts facts)
     {
