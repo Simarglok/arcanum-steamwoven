@@ -36,6 +36,11 @@ public partial class TerrainViewerApp
     private Func<AreaSlidePair, bool>? _deathVoiceForSelfTest;
     private Func<bool>? _deathVoicePlayingForSelfTest;
     private AreaSlideTable? _deathSlidesForSelfTest;
+    // ARC-RENDER-1171: the script content the slide scripts (997–999) are read from, borrowed from the module's content stack, once a module; a check's synthetic queue stands in for it.
+    private (string Module, Arcanum.Data.Content.ContentStack Stack, Arcanum.Data.Scripts.ScriptContent Content)? _slideScripts;
+    private Func<AreaSlideKind, IReadOnlyList<int>>? _slideQueueForSelfTest;
+    // ARC-RENDER-1171: a script asked for the end of the game; it starts once nothing else covers the game.
+    private bool _endGameAsked;
     private string? _heroDeathStatus;
     private AreaDialogBoxContent? _dialogBoxContent;
     private AreaDialogBoxArt? _dialogBoxArt;
@@ -72,6 +77,55 @@ public partial class TerrainViewerApp
                 + $" shown={_heroDeath.Shown}{(_heroDeath.ResetRefusal is { } why ? " refused=" + why : "")}");
         }
         if (!_heroDeath.Covering && _heroDeathPanel is { IsOpen: true } panel) panel.Close();
+        // ARC-RENDER-1171: the credits end over the menu they were opened from: its song, which the show stopped, starts again.
+        if (before != AreaDeathStage.Watching && _heroDeath.Stage == AreaDeathStage.Watching && _heroDeath.Kind == AreaSlideKind.Credits && _mainMenu is { Root: AreaMenuWindow.Main }) StartMenuMusic();
+    }
+
+    /// <summary>ARC-RENDER-1171 (0x544640): the main menu's Credits button: the screen fades to black over the menu and the slides of script 999 show; the menu is there again after
+    /// them. False, with the reason, when it did not start.</summary>
+    private bool StartCredits(out string refusal)
+    {
+        refusal = "";
+        if (CreditsRefusal() is { } why) { refusal = why; return false; }
+        _heroDeathHost ??= new(this);
+        // The original stops the music before the slides (PD6); the menu's own song is the viewer's (ARC-UI-139) and starts again when the credits end.
+        StopMenuMusic();
+        if (_heroDeath.StartCredits(_heroDeathHost))
+        {
+            GD.Print($"ARC-RENDER-1171 credits start queue={string.Join(",", _heroDeath.Queue)}");
+            _heroDeathStatus = _heroDeath.Stage.ToString();
+            return true;
+        }
+        StartMenuMusic();
+        refusal = "another slide show is under way";
+        return false;
+    }
+
+    /// <summary>ARC-RENDER-1171: why the credits cannot show (null: they can): no slide table of the shown game, or a show under way.</summary>
+    private string? CreditsRefusal()
+    {
+        if (_heroDeath.Stage != AreaDeathStage.Watching) return "another slide show is under way";
+        var table = DeathSlides();
+        return table.Loaded ? null : AreaMainMenu.NoCredits + ": " + table.Detail;
+    }
+
+    /// <summary>The script content of the shown module for the slide scripts (null without a game folder or a content stack).</summary>
+    private Arcanum.Data.Scripts.ScriptContent? SlideScriptContent()
+    {
+        if (_arguments?.ModulePath is not { } module || SelfTestBootstrap) return null;
+        if (AreaSoundCatalog() is null || _soundContent?.Stack is not { } stack) return null;
+        if (_slideScripts is { } cached && cached.Module == module && ReferenceEquals(cached.Stack, stack)) return cached.Content;
+        var content = Arcanum.Data.Scripts.ScriptContent.Over(stack);
+        _slideScripts = (module, stack, content);
+        return content;
+    }
+
+    /// <summary>ARC-RENDER-1171 (SS5, 0x57CDE0): a script's end game and play slides: the end-game show comes 50 ms later. False when a show is under way already.</summary>
+    internal bool RequestEndGame()
+    {
+        if (!_heroDeath.RequestEndGame()) return false;
+        GD.Print("ARC-RENDER-1171 end game requested");
+        return true;
     }
 
     /// <summary>Any input while the death screen covers the game; true when it took it (it takes all).</summary>
@@ -227,6 +281,13 @@ public partial class TerrainViewerApp
         public bool HeroDying => app.ShownHeroRunsHost?.DownRun is { Bottom.Goal: Arcanum.Simulation.Goals.GoalType.Dying };
         public bool MenuOpen => app.MainMenuOpen || app.SaveListOpen || app._mainMenu is not null;
         public AreaSlideTable Slides => app.DeathSlides();
+        public IReadOnlyList<int> SlideQueue(AreaSlideKind kind)
+        {
+            if (app._slideQueueForSelfTest is { } synthetic) return synthetic(kind);
+            var result = AreaSlideScripts.Run(kind, app.SlideScriptContent(), app._areaSession);
+            GD.Print($"ARC-RENDER-1171 slide script {kind}: {result.Detail} queued={string.Join(",", result.Slides)}");
+            return result.Slides;
+        }
         public bool VoicePlaying => app._deathVoicePlayingForSelfTest is { } synthetic ? synthetic()
             : app._deathVoice is { } voice && app._audio?.IsPlaying(voice) == true;
 

@@ -115,6 +115,8 @@ public interface IAreaDeathHost
     /// <summary>A main-menu window (the in-play menu, its save and load windows, the options) is open (PD3).</summary>
     bool MenuOpen { get; }
     AreaSlideTable Slides { get; }
+    /// <summary>ARC-RENDER-1171 (SS1, SS2): the slides the show type's script queues (997, 998 or 999; <see cref="AreaSlideScripts.Run"/>), in order; empty when it queued none or cannot run.</summary>
+    IReadOnlyList<int> SlideQueue(AreaSlideKind kind) => [];
     /// <summary>Closes the windows open over play before the slides (the original closes its inventory window, PD3).</summary>
     void CloseWindows();
     /// <summary>Closes the open main-menu windows (PD3).</summary>
@@ -157,8 +159,8 @@ public interface IAreaDeathHost
 /// part, FR-CHAR-026). The original starts a 5 s real-time event when the PC's dying animation ends; Steamwoven starts it when
 /// the session's hero becomes dead, as the viewer plays no dying animation for the hero. When it fires and the hero is still
 /// dead, the windows over play close; an open main-menu window closes and the event comes again 0.3 s later. Then the screen
-/// fades to black (2 s) and the death slides show: the slides a script queued (none here: the installed data has no death
-/// slide script, and Steamwoven runs none), else the default slide 0 when <c>rules\slide.mes</c> was read. Each slide fades in
+/// fades to black (2 s) and the death slides show: the slides script 998 queued (ARC-RENDER-1171: slide 2 when global flag 2632 is set, else slide 0; PD4 once read that the installed data has no such script, which was wrong: the
+/// module archive holds it), else the default slide 0 when <c>rules\slide.mes</c> was read. Each slide fades in
 /// (2 s), its voice plays, and it ends when the voice ends (at once without one), on a key's or a mouse button's release; Escape
 /// also ends the show. Input during a fade does nothing. The original's fades are meant to last 2 s but its gamma fade waits
 /// 2.0 / 48 truncated to 0 ms per step, so they flash by (a technical bug, PD9); Steamwoven fades over 2 s in both rule modes. After its fade out (2 s) the next slide comes; a slide whose message or picture
@@ -172,10 +174,16 @@ public interface IAreaDeathHost
 /// there; a refused load, or one that brought no living hero, keeps the box with the reason; No ends the slide as the original
 /// does (it fades out) and resets. Without a save of this hero the original's show and reset follow. Caller-serialized; the host
 /// ticks it every frame.
+/// ARC-RENDER-1171 (FR-MEDIA-002; ledger SS1–SS6): the same show loop serves the other two slide show types of the original (0x569600): the end of the
+/// game (<see cref="RequestEndGame"/>: the script action 132 asks for it, the event comes 50 ms later, script 997 queues the slides, no default slide, no box,
+/// then the same reset and menu as the death's) and the credits (<see cref="StartCredits"/>: the main menu's Credits button, script 999 queues the slides, the
+/// screen fades in again over the menu and nothing resets). <see cref="Kind"/> says which one runs.
 /// </summary>
 public sealed class AreaHeroDeath
 {
     public const int DeathDelay = 5000;
+    /// <summary>ARC-RENDER-1171 (SS5): the end-game event comes 50 ms after the script action asks for it (0x57CDE0), on the real-time clock like the death's.</summary>
+    public const int EndGameDelay = 50;
     public const int MenuRetryDelay = 300;
     public const int FadeTime = 2000;
     public const int DefaultSlide = 0;
@@ -200,6 +208,8 @@ public sealed class AreaHeroDeath
     private bool _asked;
 
     public AreaDeathStage Stage { get; private set; }
+    /// <summary>ARC-RENDER-1171: the show type that runs or waits (<see cref="AreaSlideKind.Death"/> while nothing does).</summary>
+    public AreaSlideKind Kind { get; private set; } = AreaSlideKind.Death;
     /// <summary>The time left in a waiting or fading stage (ms).</summary>
     public double Remaining { get; private set; }
     public IReadOnlyList<int> Queue => _queue;
@@ -242,7 +252,7 @@ public sealed class AreaHeroDeath
                 var dead = host.HeroDead;
                 // ARC-COMBAT-1741: a death starts counting when its dying animation has played (the goal's last node asks for the event, PD1); while it plays the death is not yet seen.
                 if (dead && !_wasDead && host.HeroDying) return;
-                if (dead && !_wasDead) { Stage = AreaDeathStage.Waiting; Remaining = DeathDelay; }
+                if (dead && !_wasDead) { Kind = AreaSlideKind.Death; Stage = AreaDeathStage.Waiting; Remaining = DeathDelay; }
                 _wasDead = dead;
                 return;
             case AreaDeathStage.Waiting:
@@ -350,15 +360,44 @@ public sealed class AreaHeroDeath
         Stage = AreaDeathStage.MenuFadeIn; Remaining = FadeTime;
     }
 
+    /// <summary>ARC-RENDER-1171 (SS5): the script action end game and play slides (132) asks for the end of the game: the interface event comes
+    /// <see cref="EndGameDelay"/> ms later and the end-game slides show. True when it was taken; a death or an end game already under way takes none (the original's second
+    /// event would find the first one's reset done; a show cannot be asked twice at once).</summary>
+    public bool RequestEndGame()
+    {
+        if (Stage != AreaDeathStage.Watching) return false;
+        Kind = AreaSlideKind.EndGame; Stage = AreaDeathStage.Waiting; Remaining = EndGameDelay;
+        return true;
+    }
+
+    /// <summary>ARC-RENDER-1171 (SS6, 0x544640): the main menu's Credits button. The screen fades to black, script 999 queues the slides and they show; then the
+    /// screen fades in again over the menu (the original's 0x569A60) and nothing resets. True when it began; a show under way refuses it.</summary>
+    public bool StartCredits(IAreaDeathHost host)
+    {
+        ArgumentNullException.ThrowIfNull(host);
+        if (Stage != AreaDeathStage.Watching) return false;
+        Kind = AreaSlideKind.Credits;
+        BeginShow(host);
+        return true;
+    }
+
     private void Fire(IAreaDeathHost host)
     {
-        // The event checks the hero again: one brought back to life meanwhile is not dead (PD3).
-        if (!host.HeroDead) { Stage = AreaDeathStage.Watching; _wasDead = false; return; }
+        // The event checks the hero again: one brought back to life meanwhile is not dead (PD3). The end-game event does not (0x57D410 case 11).
+        if (Kind == AreaSlideKind.Death && !host.HeroDead) { Stage = AreaDeathStage.Watching; _wasDead = false; return; }
         host.CloseWindows();
         if (host.MenuOpen) { host.CloseMenu(); Remaining = MenuRetryDelay; return; }
+        BeginShow(host);
+    }
+
+    /// <summary>The show's start (0x569600): the queue is cleared and the type's script queues the slides; a death alone gets the default slide 0 when none
+    /// was queued and the slide table was read (PD4); the screen fades to black (PD6).</summary>
+    private void BeginShow(IAreaDeathHost host)
+    {
         _queue.Clear(); Index = -1; Shown = 0; _stopShow = false; _slide = null; ResetRefusal = null; ResetAbandoned = false; _resetElapsed = 0;
         _save = null; _asked = false; LoadRefusal = null; Loaded = false; LoadAbandoned = false;
-        if (host.Slides.Loaded) _queue.Add(DefaultSlide);
+        _queue.AddRange(host.SlideQueue(Kind).Take(AreaSlideScripts.MaxQueued));
+        if (Kind == AreaSlideKind.Death && _queue.Count == 0 && host.Slides.Loaded) _queue.Add(DefaultSlide);
         host.Fade(true, FadeTime);
         Stage = AreaDeathStage.FadeOut; Remaining = FadeTime;
     }
@@ -398,6 +437,13 @@ public sealed class AreaHeroDeath
     /// over a slide, the box asks first (ARC-UI-028).</summary>
     private void EndOfShow(IAreaDeathHost host)
     {
+        // The credits end by fading in over the menu they were opened from (0x569A60, show type 2): nothing resets.
+        if (Kind == AreaSlideKind.Credits)
+        {
+            host.Fade(false, FadeTime);
+            Stage = AreaDeathStage.MenuFadeIn; Remaining = FadeTime;
+            return;
+        }
         if (!_asked && Offer(host)) return;
         BeginReset(host);
     }
@@ -406,7 +452,7 @@ public sealed class AreaHeroDeath
     /// when there is one; true when it asks.</summary>
     private bool Offer(IAreaDeathHost host)
     {
-        if (_asked || host.Rules.DeathResetsToMainMenu || host.HeroSave is not { } save) return false;
+        if (_asked || Kind != AreaSlideKind.Death || host.Rules.DeathResetsToMainMenu || host.HeroSave is not { } save) return false;
         _save = save; _asked = true;
         Stage = AreaDeathStage.Asking; Remaining = 0;
         host.Ask(save, null);

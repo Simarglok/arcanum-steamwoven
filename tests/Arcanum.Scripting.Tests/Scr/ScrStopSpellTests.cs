@@ -60,15 +60,15 @@ public sealed class ScrStopSpellTests
     }
 
     [TestMethod]
-    public void The_interpreter_runs_S53_and_nothing_above_it()
+    public void The_interpreter_runs_S58_and_nothing_above_it()
     {
-        Assert.IsNotNull(new ScrRunOptions { Admission = ScrAdmissionSet.S53 });
-        // A set with no guard condition (the host check does not fire) plus an action that no set holds: refused as above S53, by name.
+        Assert.IsNotNull(new ScrRunOptions { Admission = ScrAdmissionSet.S58 });
+        // A set with no guard condition (the host check does not fire) plus an action that no set holds: refused as above S58, by name.
         var above = new ScrAdmissionSet("above", ScrAdmissionSet.S2.Conditions, ScrAdmissionSet.S2.Actions.Append(UnsupportedAction), ScrAdmissionSet.S2.ValueKinds, ScrAdmissionSet.S3.FocusKinds);
         var program = Program(Do(C(ScrCatalogue.Action.ReturnSkipDefault)));
         var host = new FakeHost();
         host.Scripts[TileScript] = ScrScriptLookup.Of(program);
         var thrown = Assert.ThrowsExactly<ArgumentException>(() => ScrDispatcher.RunTile(new(new ScrSlot(TileScript, 0, 0), Npc), host, new() { Admission = above }));
-        StringAssert.Contains(thrown.Message, "S53");
+        StringAssert.Contains(thrown.Message, "S58");
     }
 }

@@ -2301,6 +2301,19 @@ on it loads the save, which fades in with its hero alive; the loaded hero killed
 Escape ending the show, the start map loaded again with a fresh session and the main menu reopened, without the box). `ARC_AREA_DEATH_CAPTURE=PATH.png` saves the shown
 slide with the box (original art: never into git). Not done: script-queued slides, the end-game and credits slides, the hero's bloody dying animations (17–19 by the killing blow). Since ARC-COMBAT-1741 the dying goal (31) lasts while the hero's fall plays and the death's 5 s count from its end (`IAreaDeathHost.HeroDying`).
 
+
+### Slide shows: end game and credits (ARC-RENDER-1171)
+
+The death's show loop (`AreaHeroDeath`, which keeps its name) serves the other two slide show types of the original too ([ledger SS1–SS6](../research/ledger/ui-audio.md#slide-shows-end-game-credits-and-the-queue-arc-render-1171)).
+`AreaSlideScripts.Run` runs the show type's script (997 end game, 998 death, 999 credits) with `ScrAdmissionSet.SlideScripts`, the hero as the player and the session's flags and quest log; its queue slide
+actions (131) give the slide numbers (up to 100), which the table `rules\slide.mes` turns into a picture and a voice as for the death. A death with nothing queued still shows slide 0 (PD4).
+
+- **Credits:** the main menu's Credits button (shown when the game's slide table was read, else hidden with the reason) fades the screen to black over the menu, shows the slides of script 999 (45 to 55 in the
+  installed game) and fades back in over the menu, whose own song stops for the show and plays again after it. A key or a mouse button's release ends a slide, Escape the show.
+- **End game:** the script action end game and play slides (132; Kerghan's dialog script 1105 and the movie scripts 2862, 2863 and 3061 run it) asks the viewer, which waits for the movies of the same run and any other
+  show, then starts the show 50 ms later (a main-menu window open closes and retries 300 ms later): script 997 and the ending scripts it calls queue the slides by flags and quest states; no default slide; then the
+  game resets to the main menu as after a death (no load box).
+
 ### Options window (ARC-UI-013)
 
 The original's options window (its window 6, [ledger OP1–OP8](../research/ledger/ui-audio.md#options-window-arc-ui-013))

@@ -773,6 +773,19 @@ public readonly record struct ScrAmmoUse(ScrObjectRef Holder, int Count, int Amm
 /// </summary>
 public readonly record struct ScrFade(int Seconds, int Sound, int Movie, int Flag);
 
+/// <summary>ARC-RENDER-1171: what a slide script asks of the slide show (ledger SS3, SS4).</summary>
+public enum ScrSlideKind
+{
+    /// <summary>Queue slide (131, 0x447220 case 0x83 → 0x460B80 → 0x569AA0): the slide number joins the show's queue (up to 100; the rest are dropped).</summary>
+    Queue,
+    /// <summary>End game and play slides (132, 0x447220 case 0x84 → 0x460530 → 0x57CDE0): the end of the game is asked for; the interface shows the end-game slides 50 ms later and resets the game.</summary>
+    EndGame,
+}
+
+/// <summary>ARC-RENDER-1171 (script actions 131 and 132, ledger SS3, SS4): a queued slide (<see cref="Slide"/> is its number as the operand read) or the end-game request
+/// (<see cref="Slide"/> is 0, never read). Requests come in action order.</summary>
+public readonly record struct ScrSlideRequest(ScrSlideKind Kind, int Slide);
+
 /// <summary>The final value of a global flag the run changed.</summary>
 public readonly record struct ScrFlagWrite(int Index, bool Value);
 
@@ -851,8 +864,9 @@ public sealed class ScrEffects
         IReadOnlyList<ScrEffectRequest>? effectChanges = null, IReadOnlyList<ScrEyeCandy>? eyeCandies = null, IReadOnlyList<ScrWriteback>? slotWrites = null,
         IReadOnlyList<ScrCreateRequest>? creations = null, IReadOnlyList<ScrObjectStateRequest>? objectStates = null, IReadOnlyList<ScrFloatLine>? floats = null,
         ScrStoreWrites? stores = null, IReadOnlyList<int>? townMaps = null, IReadOnlyList<ScrAmmoUse>? ammoUses = null, IReadOnlyList<ScrFade>? fades = null,
-        IReadOnlyList<ScrWorldRequest>? worldChanges = null)
+        IReadOnlyList<ScrWorldRequest>? worldChanges = null, IReadOnlyList<ScrSlideRequest>? slides = null)
     {
+        Slides = slides ?? Array.Empty<ScrSlideRequest>();
         WorldChanges = worldChanges ?? Array.Empty<ScrWorldRequest>();
         Fades = fades ?? Array.Empty<ScrFade>();
         AmmoUses = ammoUses ?? Array.Empty<ScrAmmoUse>();
@@ -935,11 +949,13 @@ public sealed class ScrEffects
     public IReadOnlyList<ScrFade> Fades { get; }
     /// <summary>ARC-SCRIPT-1164: the sector blocked and monster generator toggles (106, 110), in action order, each with the state it ends in (ledger WO5, WO9).</summary>
     public IReadOnlyList<ScrWorldRequest> WorldChanges { get; }
+    /// <summary>ARC-RENDER-1171: the queue slide (131) and end game (132) requests, in action order (ledger SS3, SS4).</summary>
+    public IReadOnlyList<ScrSlideRequest> Slides { get; }
     public bool IsEmpty => Writeback is null && DestroyTrapObject is null && GlobalFlags.Count == 0 && StoryState is null && Dialog is null && Calls.Count == 0
         && Lines.Count == 0 && Sounds.Count == 0 && Teleports.Count == 0 && Schemes.Count == 0 && Schematics.Count == 0 && Readings.Count == 0 && SkillUses.Count == 0 && States.Count == 0
         && EffectChanges.Count == 0 && EyeCandies.Count == 0 && SlotWrites.Count == 0 && Creations.Count == 0 && ObjectStates.Count == 0
         && Floats.Count == 0 && GlobalVariables.Count == 0 && PcVariables.Count == 0 && PcFlags.Count == 0
-        && TownMaps.Count == 0 && AmmoUses.Count == 0 && Fades.Count == 0 && WorldChanges.Count == 0;
+        && TownMaps.Count == 0 && AmmoUses.Count == 0 && Fades.Count == 0 && WorldChanges.Count == 0 && Slides.Count == 0;
 }
 
 /// <summary>One executed line: the condition, whether it held, the action of the branch taken and where the run went
@@ -966,7 +982,7 @@ public sealed class ScrRunResult
 }
 
 /// <summary>How a dispatch runs: the rule mode's script switches, the admitted set (default <see cref="ScrAdmissionSet.S5"/>,
-/// at most <see cref="ScrAdmissionSet.S53"/>, admitted for the lines reachable from the event's line), the executed-line
+/// at most <see cref="ScrAdmissionSet.S58"/>, admitted for the lines reachable from the event's line), the executed-line
 /// budget and the call depth.</summary>
 public sealed record ScrRunOptions
 {
@@ -987,7 +1003,7 @@ public sealed record ScrRunOptions
         ArgumentNullException.ThrowIfNull(Admission);
         if (MaxExecutedLines is <= 0 or > OriginalLineBudget) throw new ArgumentOutOfRangeException(nameof(MaxExecutedLines), "The line budget is 1..1000.");
         if (MaxCallDepth is < 1 or > 64) throw new ArgumentOutOfRangeException(nameof(MaxCallDepth), "The call depth is 1..64.");
-        if (!Admission.IsSubsetOf(ScrAdmissionSet.S53)) throw new ArgumentException("The interpreter runs only the commands of ScrAdmissionSet.S53.", nameof(Admission));
+        if (!Admission.IsSubsetOf(ScrAdmissionSet.S58)) throw new ArgumentException("The interpreter runs only the commands of ScrAdmissionSet.S58.", nameof(Admission));
     }
 
     // A set with a guard condition needs a host that answers it, checked before any event runs.

@@ -253,11 +253,53 @@ public partial class TerrainViewerApp
             Require(DieToTheReset(game) == AreaDeathStage.MenuFadeIn && _sceneLoadsForSelfTest == loads + 5 && MainMenuOpen && !_heroDeathPanel.Asking,
                 "another hero's save is not offered: " + _heroDeath.Stage);
             TickHeroDeath(AreaHeroDeath.FadeTime);
+
+            // ARC-RENDER-1171: the reopened main menu's Credits button shows script 999's slides over the menu (a synthetic queue and table), then the screen fades back in
+            // over the menu, which is still there: nothing resets and no box asks. Escape ends the whole show.
+            Require(MainMenuOpen && _mainMenu is { Window: AreaMenuWindow.Main }, "the main menu is open for the credits");
+            _slideQueueForSelfTest = kind => kind == AreaSlideKind.Credits ? [45, 46] : [];
+            _deathSlidesForSelfTest = AreaSlideTable.From(id => id is 45 or 46 ? $"c{id}.bmp C{id}.mp3" : null, "synthetic credits");
+            _deathPictureForSelfTest = slide => Image.CreateEmpty(800, 600, false, Image.Format.Rgb8);
+            _deathVoiceForSelfTest = slide => { voices++; voicePlaying = true; return true; };
+            _mainMenu!.CreditsRefusal = CreditsRefusal();
+            Require(_mainMenu.CreditsRefusal is null, "the Credits button is shown once the slide table reads: " + _mainMenu.CreditsRefusal);
+            var creditsIndex = _mainMenu.Shown.ToList().FindIndex(button => button.Role == AreaMenuRole.Credits);
+            Require(creditsIndex >= 0, "the main window lists Credits");
+            var creditLoads = _sceneLoadsForSelfTest;
+            MainMenuCommand(() => _mainMenu!.Activate(creditsIndex));
+            Require(_heroDeath.Stage == AreaDeathStage.FadeOut && _heroDeath.Kind == AreaSlideKind.Credits && HeroDeathCovering && _heroDeathPanel!.IsOpen
+                && _heroDeath.Queue.SequenceEqual([45, 46]), $"Credits begins the show: {_heroDeath.Stage} queue {string.Join(",", _heroDeath.Queue)}");
+            TickHeroDeath(AreaHeroDeath.FadeTime); TickHeroDeath(AreaHeroDeath.FadeTime);
+            Require(_heroDeath.Stage == AreaDeathStage.Slide && _heroDeath.Slide?.Id == 45, "the first credits slide shows: " + _heroDeath.Stage);
+            Key(Godot.Key.Space);
+            Require(_heroDeath.Stage == AreaDeathStage.SlideOut, "a key ends the slide");
+            TickHeroDeath(AreaHeroDeath.FadeTime); TickHeroDeath(AreaHeroDeath.FadeTime);
+            Require(_heroDeath.Stage == AreaDeathStage.Slide && _heroDeath.Slide?.Id == 46, "the second slide shows");
+            Key(Godot.Key.Escape);
+            TickHeroDeath(AreaHeroDeath.FadeTime);
+            Require(_heroDeath.Stage == AreaDeathStage.MenuFadeIn && MainMenuOpen && _sceneLoadsForSelfTest == creditLoads && !_heroDeathPanel.Asking,
+                "Escape ends the credits, which fade back in over the menu without a reset: " + _heroDeath.Stage);
+            TickHeroDeath(AreaHeroDeath.FadeTime);
+            Require(_heroDeath.Stage == AreaDeathStage.Watching && !HeroDeathCovering && MainMenuOpen, "the menu is there again after the credits");
+
+            // An end game asked for by a script waits for nothing here: 50 ms later the show runs its queue and resets to the menu.
+            _slideQueueForSelfTest = kind => kind == AreaSlideKind.EndGame ? [45] : [];
+            Require(RequestEndGame() && _heroDeath.Stage == AreaDeathStage.Waiting && _heroDeath.Kind == AreaSlideKind.EndGame, "the end game is asked for");
+            TickHeroDeath(AreaHeroDeath.EndGameDelay);
+            Require(_heroDeath.Stage == AreaDeathStage.Waiting && _heroDeath.Remaining == AreaHeroDeath.MenuRetryDelay, "the open menu closes and the event comes again: " + _heroDeath.Stage);
+            TickHeroDeath(AreaHeroDeath.MenuRetryDelay);
+            Require(_heroDeath.Stage == AreaDeathStage.FadeOut && _heroDeath.Queue.SequenceEqual([45]), "the end game fades out with its slide");
+            TickHeroDeath(AreaHeroDeath.FadeTime); TickHeroDeath(AreaHeroDeath.FadeTime);
+            Key(Godot.Key.Space); voicePlaying = false;
+            TickHeroDeath(AreaHeroDeath.FadeTime);
+            Require(_heroDeath.Stage == AreaDeathStage.MenuFadeIn && _sceneLoadsForSelfTest == creditLoads + 1 && MainMenuOpen, "the end game reset to the main menu: " + _heroDeath.Stage);
+            TickHeroDeath(AreaHeroDeath.FadeTime);
             return "a death waits 5 s, closes the in-play menu and comes 0.3 s later, fades to black owning the input, shows the slide "
                 + "(picture, voice) until a key, resets to the reopened main menu fading in; a hero alive again is not reset; a voice's end ends the slide; "
                 + "an unpublished start scene clears the screen; Steamwoven with a save of this hero asks over the slide: Y loads it while the slide "
                 + "fades out and it fades in, a corrupt save keeps the box, Escape, the No button and N fade the slide out and reset; Original resets "
-                + "without asking; another hero's save is not offered";
+                + "without asking; another hero's save is not offered; the main menu's Credits shows script 999's slides over the menu (a key ends a slide, Escape the show) and "
+                + "fades back in without a reset; an end game asked for by a script shows its slides and resets to the menu";
         }
         finally
         {
@@ -265,7 +307,7 @@ public partial class TerrainViewerApp
             if (_mainMenu is not null) EndMainMenu("self-test end");
             StopHeroDeath();
             _heroDeathForSelfTest = false; _deathSlidesForSelfTest = null; _deathPictureForSelfTest = null; _deathVoiceForSelfTest = null;
-            _deathVoicePlayingForSelfTest = null;
+            _deathVoicePlayingForSelfTest = null; _slideQueueForSelfTest = null;
             _saveLibraryForSelfTest = null; _quickKeys.Reset(); _heroLoaderForSelfTest = null; _mainMenuExitForSelfTest = null;
             _sceneLoadForSelfTest = null; _launchArguments = null; _sceneFlow = null;
             _worldFocusSimulationForSelfTest = simulatedFocus;

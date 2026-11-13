@@ -59,6 +59,8 @@ internal sealed class ScrInterpreter
         public readonly List<ScrAmmoUse> AmmoUses = new();
         // ARC-SCRIPT-1241: the fade actions (103), in action order.
         public readonly List<ScrFade> Fades = new();
+        // ARC-RENDER-1171: the queue slide and end game requests (131, 132), in action order.
+        public readonly List<ScrSlideRequest> Slides = new();
         // ARC-SCRIPT-042: the slots call-ex runs changed, in order, and the latest of each, which a later call-ex run of the same slot reads.
         public readonly List<ScrWriteback> SlotWrites = new();
         public readonly Dictionary<(ScrObjectRef, int), ScrSlot> Slots = new();
@@ -205,7 +207,8 @@ internal sealed class ScrInterpreter
             _shared.TownMaps.Count == 0 ? null : Array.AsReadOnly(_shared.TownMaps.ToArray()),
             _shared.AmmoUses.Count == 0 ? null : Array.AsReadOnly(_shared.AmmoUses.ToArray()),
             _shared.Fades.Count == 0 ? null : Array.AsReadOnly(_shared.Fades.ToArray()),
-            _shared.WorldChanges.Count == 0 ? null : Array.AsReadOnly(_shared.WorldChanges.ToArray()));
+            _shared.WorldChanges.Count == 0 ? null : Array.AsReadOnly(_shared.WorldChanges.ToArray()),
+            _shared.Slides.Count == 0 ? null : Array.AsReadOnly(_shared.Slides.ToArray()));
     }
 
     private bool Condition(ScrClause c, int line) => c.Type switch
@@ -419,6 +422,14 @@ internal sealed class ScrInterpreter
                 _shared.Fades.Add(new(Get(a, 0), Get(a, 1), Get(a, 2), Get(a, 3)));
                 return (Step.Next, 0);
             }
+            case ScrCatalogue.Action.QueueSlide:
+                // SS3 (case 0x83, 0x460B80 → 0x569AA0): the operand's value is the slide number the show's queue takes; the host keeps the 100-slide bound.
+                _shared.Slides.Add(new(ScrSlideKind.Queue, Get(a, 0)));
+                return (Step.Next, 0);
+            case ScrCatalogue.Action.EndGame:
+                // SS4 (case 0x84, 0x460530 → 0x57CDE0): the end of the game is asked for and the run goes on (the interface acts 50 ms later); the multiplayer packet that follows in a network game is not modelled.
+                _shared.Slides.Add(new(ScrSlideKind.EndGame, 0));
+                return (Step.Next, 0);
             case ScrCatalogue.Action.UnfogTownMap:
             {
                 // UF1 (ARC-DEV-205): operand 0 is the town map; the original reveals every cell of it (0x4BEAB0 → 0x4BED30) and does nothing for
