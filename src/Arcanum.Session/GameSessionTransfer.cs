@@ -112,7 +112,8 @@ public sealed partial class GameSessionOwner
     {
         foreach (var (entity, delay, charisma) in plan.Waits)
         {
-            _party.Put(_party.Get(entity) with { Standing = CompanionStanding.Waiting, Forced = false }, false);
+            // A waiting standing is the WAIT bit itself, so a follower that carried the flag (ARC-SCRIPT-1136) has no separate flag after.
+            _party.Put(_party.Get(entity) with { Standing = CompanionStanding.Waiting, Forced = false, WaitFlag = false }, false);
             ClearTempusFugitOnLeave(entity);
             if (delay is { } wait) ScheduleWaitTimer(entity, wait, charisma);
         }

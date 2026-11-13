@@ -470,8 +470,8 @@ public sealed class CompanionLoyaltyStateTests
         Assert.AreEqual(GameSessionDisposition.Changed, owner.ForceJoinParty(owner.Version, "oid:a").Disposition);
         Assert.AreEqual(GameSessionDisposition.Changed, owner.RecordPcAlignmentChange(owner.Version, 0, -10).Disposition);
         var text = GameSessionSnapshotCodec.Encode(owner.Capture());
-        StringAssert.Contains(text, "{\"entity\":\"oid:a\",\"forced\":true,\"spreadOut\":false,\"loyalty\":9}");
-        StringAssert.Contains(text, "{\"entity\":\"oid:sogg\",\"standing\":\"Waiting\",\"spreadOut\":false,\"jilted\":false,\"loyalty\":3}");
+        StringAssert.Contains(text, "{\"entity\":\"oid:a\",\"forced\":true,\"spreadOut\":false,\"loyalty\":9,\"waitFlag\":false}");
+        StringAssert.Contains(text, "{\"entity\":\"oid:sogg\",\"standing\":\"Waiting\",\"spreadOut\":false,\"jilted\":false,\"loyalty\":3,\"waitFlag\":false}");
         StringAssert.Contains(text, "\"kind\":\"party.wait\"");
         Assert.AreEqual(GameSessionSnapshot.CurrentSchemaVersion, owner.Capture().SchemaVersion);
         using var restored = Restore(Decode(text));
@@ -488,15 +488,15 @@ public sealed class CompanionLoyaltyStateTests
         using var owner = Create();
         Assert.AreEqual(GameSessionDisposition.Changed, owner.ForceJoinParty(owner.Version, Npc).Disposition);
         var text = GameSessionSnapshotCodec.Encode(owner.Capture());
-        const string Marks = "\"loyalty\":0}";
+        const string Marks = "\"loyalty\":0,\"waitFlag\":false}";
         Assert.AreEqual(1, text.Split(Marks).Length - 1);
-        foreach (var bad in new[] { "\"loyalty\":16}", "\"loyalty\":-1}", "\"loyalty\":true}" })
+        foreach (var bad in new[] { "\"loyalty\":16,\"waitFlag\":false}", "\"loyalty\":-1,\"waitFlag\":false}", "\"loyalty\":true,\"waitFlag\":false}" })
         {
             var result = GameSessionSnapshotCodec.TryDecode(text.Replace(Marks, bad));
             Assert.AreNotEqual(SnapshotDecodeFailure.None, result.Failure, bad);
             Assert.AreEqual("$.party.followers[0].loyalty", result.Path, bad);
         }
-        Assert.AreEqual(SnapshotDecodeFailure.MissingField, GameSessionSnapshotCodec.TryDecode(text.Replace(",\"loyalty\":0", "")).Failure);
+        Assert.AreEqual(SnapshotDecodeFailure.MissingField, GameSessionSnapshotCodec.TryDecode(text.Replace(",\"loyalty\":0,\"waitFlag\":false", "")).Failure);
         Assert.AreNotEqual(SnapshotDecodeFailure.None, GameSessionSnapshotCodec.TryDecode(text.Replace($"\"schemaVersion\":{GameSessionSnapshot.CurrentSchemaVersion}", "\"schemaVersion\":26")).Failure);
 
         // A free record with only marks is a state the transitions produce (OL22); undefined marks are not.

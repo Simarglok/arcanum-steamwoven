@@ -66,8 +66,8 @@ public static partial class GameSessionSnapshotCodec
     private static readonly string[] RumorFields = ["rumor", "timestampMs"];
     private static readonly string[] ReputationFields = ["reputation", "timestampMs"];
     private static readonly string[] PartyFields = ["followers", "others"];
-    private static readonly string[] FollowerFields = ["entity", "forced", "spreadOut", "loyalty"];
-    private static readonly string[] OtherFields = ["entity", "standing", "spreadOut", "jilted", "loyalty"];
+    private static readonly string[] FollowerFields = ["entity", "forced", "spreadOut", "loyalty", "waitFlag"];
+    private static readonly string[] OtherFields = ["entity", "standing", "spreadOut", "jilted", "loyalty", "waitFlag"];
     private static readonly string[] HeroFields = ["prototype", "race", "gender", "stats", "level", "experience", "unspentPoints",
         "alignment", "advancement", "raceEffect", "genderEffect", "innateSkills", "fatePoints", "armedFates", "background", "backgroundDescription", "playerName", "portrait", "scripts"];
     private static readonly string[] EffectFields = ["effect", "modifiers"];
@@ -387,6 +387,7 @@ public static partial class GameSessionSnapshotCodec
                 w.WriteBoolean("forced", follower.Forced);
                 w.WriteBoolean("spreadOut", follower.SpreadOut);
                 w.WriteNumber("loyalty", (int)follower.Loyalty);
+                w.WriteBoolean("waitFlag", follower.WaitFlag);
                 w.WriteEndObject();
             }
             w.WriteEndArray();
@@ -399,6 +400,7 @@ public static partial class GameSessionSnapshotCodec
                 w.WriteBoolean("spreadOut", other.SpreadOut);
                 w.WriteBoolean("jilted", other.Jilted);
                 w.WriteNumber("loyalty", (int)other.Loyalty);
+                w.WriteBoolean("waitFlag", other.WaitFlag);
                 w.WriteEndObject();
             }
             w.WriteEndArray();
@@ -1788,7 +1790,7 @@ public static partial class GameSessionSnapshotCodec
             // The array order is meaningful, so it is kept; an entity may appear once in the whole party.
             if (!seen.Add(entity)) throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path + ".entity");
             followers[i] = new(entity, CompanionStanding.Following, Bool(item["forced"], path + ".forced"),
-                Bool(item["spreadOut"], path + ".spreadOut"), false, Loyalty(item["loyalty"], path + ".loyalty"));
+                Bool(item["spreadOut"], path + ".spreadOut"), false, Loyalty(item["loyalty"], path + ".loyalty"), Bool(item["waitFlag"], path + ".waitFlag"));
         }
         items = Array(f["others"], p + ".others", GameSessionLimits.PolicyMaxCompanions);
         if (followers.Length + items.Length > GameSessionLimits.PolicyMaxCompanions)
@@ -1808,8 +1810,9 @@ public static partial class GameSessionSnapshotCodec
                 _ => throw new DecodeException(SnapshotDecodeFailure.OutOfRange, path + ".standing"),
             };
             var record = new SessionCompanion(entity, standing, false, Bool(item["spreadOut"], path + ".spreadOut"),
-                Bool(item["jilted"], path + ".jilted"), Loyalty(item["loyalty"], path + ".loyalty"));
-            // Jilted only while free, and a free NPC without a flag is not listed.
+                Bool(item["jilted"], path + ".jilted"), Loyalty(item["loyalty"], path + ".loyalty"), Bool(item["waitFlag"], path + ".waitFlag"));
+            // Jilted only while free, the wait flag never with a waiting standing (that is the bit itself), and a free NPC without a flag is not listed.
+            if (standing == CompanionStanding.Waiting && record.WaitFlag) throw new DecodeException(SnapshotDecodeFailure.OutOfRange, path + ".waitFlag");
             if ((standing == CompanionStanding.Waiting && record.Jilted) || record.IsBaseline)
                 throw new DecodeException(SnapshotDecodeFailure.OutOfRange, path + ".jilted");
             others[i] = record;

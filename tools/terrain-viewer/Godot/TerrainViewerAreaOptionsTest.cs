@@ -81,7 +81,7 @@ public partial class TerrainViewerApp
                 "Options opened the options window at the Game page: " + _mainMenuPanel?.HeaderForSelfTest);
             var panel = _mainMenuPanel!;
             Require(panel.ButtonsForSelfTest.SequenceEqual(["Game  (G)", "Video  (V)", "Sound  (S)", "Done  (D)"]), "page buttons: " + string.Join("|", panel.ButtonsForSelfTest));
-            Require(Controls().SequenceEqual(["Difficulty: Moderate", "Default Combat Mode: Real Time", "Auto Attack: On", "Always Run: Off", "Rules: Steamwoven", "Evidence Log: Off", "Test Task: None"]),
+            Require(Controls().SequenceEqual(["Difficulty: Moderate", "Default Combat Mode: Real Time", "Auto Attack: On", "Always Run: Off", "Rules: Steamwoven", "Evidence Log: Off", "Test Task: None", "Controls: Original"]),
                 "Game page: " + string.Join("|", Controls()));
             Require(!panel.NoteForSelfTest.Contains("Video: ", StringComparison.Ordinal) && panel.NoteForSelfTest.Contains("Violence Filter: ", StringComparison.Ordinal),
                 "hidden controls are named: " + panel.NoteForSelfTest);
@@ -105,42 +105,46 @@ public partial class TerrainViewerApp
             Require(_ruleMode == RuleMode.Steamwoven && _areaSession!.Rules.Mode == RuleMode.Steamwoven && Controls()[4] == "Rules: Steamwoven", "the list wrapped to Steamwoven");
 
             // ARC-UI-146: the HD lines (HD graphics, HD interface, HD pack) are no longer in this window: the Game page ends with Rules and the evidence log's two lines (ARC-GPAD-1376).
-            Require(Controls().Length == 7 && !Controls().Any(line => line.StartsWith("HD ", StringComparison.Ordinal)), "no HD line: " + string.Join("|", Controls()));
+            Require(Controls().Length == 8 && !Controls().Any(line => line.StartsWith("HD ", StringComparison.Ordinal)), "no HD line: " + string.Join("|", Controls()));
 
             // ARC-UI-021: the Video page's floating text level and speed apply at once.
             Letter('v');
-            Require(_mainMenu!.Page == AreaOptionsPage.Video && Controls().SequenceEqual(["Floats: Minimal", "Float Speed: 2/10", "Pad scheme: Off", "Touch: Off", "Prompt style: Auto"]), "Video page: " + string.Join("|", Controls()));
+            Require(_mainMenu!.Page == AreaOptionsPage.Video && Controls().SequenceEqual(["Floats: Minimal", "Float Speed: 2/10", "Prompt style: Auto"]), "Video page: " + string.Join("|", Controls()));
             Require(panel.NoteForSelfTest.Contains("Text Duration: ", StringComparison.Ordinal), "its hidden controls are named: " + panel.NoteForSelfTest);
             panel.ChangeForSelfTest(0, 1);
             panel.ChangeForSelfTest(1, -1);
             Require(_gameSettings.Floats == 2 && _gameSettings.FloatSpeed == 1 && Controls()[0] == "Floats: Verbose" && Controls()[1] == "Float Speed: 1/10",
                 "floats verbose, speed 1: " + string.Join("|", Controls()));
 
-            // ARC-GPAD-1374: the three controller scheme lines (the Video page's, the Game page being full) switch at run time with no restart and no window is closed; the strip follows the device.
+            // ARC-GPAD-1374, ARC-GPAD-1463: the Controls line (the Game page's) and the Prompt style line (the Video page's) switch at run time with no restart
+            // and no window is closed; the strip follows the device in hand.
             Require(Controllers is { Device: ActiveDevice.KeyboardMouse } && PromptStripForSelfTest.Length == 0, "the mouse and keyboard show no prompt line");
             void Hand(InputEvent input) { ObserveControllerInput(input); clock += .3; SyncControllerPrompts(); }
             Hand(new InputEventJoypadButton { Device = 7, ButtonIndex = JoyButton.A, Pressed = true });
             Require(Controllers.Device == ActiveDevice.Pad && Controllers.PadDeviceId == 7 && Controllers.Family == GlyphFamily.PlayStation
-                && PromptStripForSelfTest.StartsWith("PlayStation pad", StringComparison.Ordinal) && PromptStripForSelfTest.Contains("pad scheme Off", StringComparison.Ordinal),
+                && PromptStripForSelfTest.StartsWith("PlayStation pad", StringComparison.Ordinal) && PromptStripForSelfTest.Contains("original controls", StringComparison.Ordinal),
                 "pad 7 is in hand, PlayStation glyphs: " + PromptStripForSelfTest);
             Require(MainMenuOpen && _mainMenu!.Window == AreaMenuWindow.Options, "a change of device resets no window");
             panel.ChangeForSelfTest(2, 1);
-            Require(_gameSettings.Pad == PadScheme.Direct && Controls()[2] == "Pad scheme: A Direct" && Controllers.Settings.Pad == PadScheme.Direct, "Pad scheme: A Direct at once: " + Controls()[2]);
+            Require(_gameSettings.Prompts == PromptStyle.Xbox && Controls()[2] == "Prompt style: Xbox" && Controllers.Family == GlyphFamily.Xbox, "the override wins: " + Controls()[2]);
+            panel.ChangeForSelfTest(2, -1); panel.ChangeForSelfTest(2, -1);
+            Require(_gameSettings.Prompts == PromptStyle.SteamDeck && Controls()[2] == "Prompt style: Steam Deck", "a list wraps back to its last value");
+            panel.ChangeForSelfTest(2, 1);
+            Require(_gameSettings.Prompts == PromptStyle.Auto && Controllers.Family == GlyphFamily.PlayStation, "Auto follows the pad again");
+            Letter('g');
+            Require(_mainMenu!.Page == AreaOptionsPage.Game && Controls()[7] == "Controls: Original", "the Game page ends with Controls: " + string.Join("|", Controls()));
+            panel.ChangeForSelfTest(7, 1);
+            Require(_gameSettings.Pad == PadScheme.Direct && _gameSettings.Touch == TouchScheme.Off && Controls()[7] == "Controls: A Direct" && Controllers.Settings.Pad == PadScheme.Direct,
+                "Controls: A Direct at once: " + Controls()[7]);
             clock += .3; SyncControllerPrompts();
             Require(PromptStripForSelfTest == "PlayStation pad - A Direct", "the strip follows the switch: " + PromptStripForSelfTest);
-            panel.ChangeForSelfTest(2, 1);
-            Require(_gameSettings.Pad == PadScheme.Pointer && Controls()[2] == "Pad scheme: B Pointer", "B Pointer");
-            panel.ChangeForSelfTest(4, 1);
-            Require(_gameSettings.Prompts == PromptStyle.Xbox && Controls()[4] == "Prompt style: Xbox" && Controllers.Family == GlyphFamily.Xbox, "the override wins: " + Controls()[4]);
-            panel.ChangeForSelfTest(4, -1); panel.ChangeForSelfTest(4, -1);
-            Require(_gameSettings.Prompts == PromptStyle.SteamDeck && Controls()[4] == "Prompt style: Steam Deck", "a list wraps back to its last value");
-            panel.ChangeForSelfTest(4, 1);
-            Require(_gameSettings.Prompts == PromptStyle.Auto && Controllers.Family == GlyphFamily.PlayStation, "Auto follows the pad again");
+            panel.ChangeForSelfTest(7, 1);
+            Require(_gameSettings.Pad == PadScheme.Pointer && Controls()[7] == "Controls: B Pointer", "B Pointer");
             Hand(new InputEventScreenTouch { Index = 0, Position = new(100, 100), Pressed = true });
-            Require(Controllers.Device == ActiveDevice.Touch && PromptStripForSelfTest.StartsWith("Touch", StringComparison.Ordinal) && PromptStripForSelfTest.Contains("touch scheme Off", StringComparison.Ordinal),
+            Require(Controllers.Device == ActiveDevice.Touch && PromptStripForSelfTest.StartsWith("Touch", StringComparison.Ordinal) && PromptStripForSelfTest.Contains("original controls", StringComparison.Ordinal),
                 "a touch is in hand: " + PromptStripForSelfTest);
-            panel.ChangeForSelfTest(3, 1);
-            Require(_gameSettings.Touch == TouchScheme.TouchPad && Controls()[3] == "Touch: C Touch+pad", "Touch: C Touch+pad");
+            panel.ChangeForSelfTest(7, 1);
+            Require(_gameSettings.Touch == TouchScheme.TouchPad && _gameSettings.Pad == PadScheme.Off && Controls()[7] == "Controls: C Touch+pad", "Controls: C Touch+pad (no pad scheme beside it)");
             clock += .3; SyncControllerPrompts();
             Require(PromptStripForSelfTest == "Touch - C Touch+pad", "touch line: " + PromptStripForSelfTest);
             foreach (var shown in new[] { "mouse", "keyboard", "click", "Esc" })
@@ -149,8 +153,8 @@ public partial class TerrainViewerApp
             clock += 1; Hand(new InputEventKey { Keycode = Key.A, PhysicalKeycode = Key.A, Pressed = true });
             Require(Controllers.Device == ActiveDevice.KeyboardMouse && PromptStripForSelfTest.Length == 0, "the mouse takes the strip away: " + PromptStripForSelfTest);
             Require(MainMenuOpen && _mainMenu!.Window == AreaMenuWindow.Options, "the window stayed open through every device change");
-            panel.ChangeForSelfTest(2, 1); panel.ChangeForSelfTest(3, 1);
-            Require(_gameSettings.Pad == PadScheme.Off && _gameSettings.Touch == TouchScheme.Off && Controls()[2] == "Pad scheme: Off" && Controls()[3] == "Touch: Off", "lists wrap back to Off");
+            panel.ChangeForSelfTest(7, 1);
+            Require(_gameSettings.Pad == PadScheme.Off && _gameSettings.Touch == TouchScheme.Off && Controls()[7] == "Controls: Original", "the list wraps back to Original");
 
             // The Sound page: a volume moves its channel; a slider stops at its end.
             Letter('s');

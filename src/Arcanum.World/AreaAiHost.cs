@@ -69,6 +69,9 @@ public sealed record AreaAiScene
     public Func<IReadOnlyList<(string Entity, AreaObjectKey Key, CellCoord Cell)>>? Companions { get; init; }
     /// <summary>The T0 records the session destroyed or switched off.</summary>
     public Func<IReadOnlySet<AreaObjectKey>>? Removed { get; init; }
+    /// <summary>ARC-WORLD-1436: the NPCs the map data stores off that the session switched on, with the world cell of their map data (<see cref="AreaObjectTargets.SwitchedOn"/>): the T0
+    /// evidence lists no blocker for them, so the planners hold their cells while the host has not walked them off (a companion, which the host does not run, is not held).</summary>
+    public Func<IReadOnlyList<(AreaObjectKey Key, string Entity, CellCoord World)>>? SwitchedOn { get; init; }
     /// <summary>The shown map's line of fire now (walls, doors, objects, the companions on their cells), or null.</summary>
     public Func<ILineOfFireMap<AreaObjectRecord>?>? LineOfFire { get; init; }
     /// <summary>The shown map as the drop's placement reads it, or null.</summary>
@@ -2785,7 +2788,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     [OriginalFunction(0x45DE00, OriginalFunctionScope.Partial)]
     [OriginalFunction(0x45DDA0, OriginalFunctionScope.Partial)]
     public string? Leader(string npc) => npc != Pc && _session.QueryCompanion(npc).LedByPc ? Pc : null;
-    public bool Waiting(string npc) => _session.QueryCompanion(npc).Standing == CompanionStanding.Waiting;
+    public bool Waiting(string npc) => _session.QueryCompanion(npc).WaitBit;
     public void LoyaltyCheck(string npc) { }
     /// <summary>ARC-DEV-170 (B06): the routine of a leaderless NPC (the non-combat perform's branch, 0x4AC583): the unforced waypoint step, the unforced standpoint step when it answered 0
     /// (WS11), each starting the walk goal to the waypoint or the standpoint. Left out (NOT READY): the fidget start (0x435CE0), the step apart (0x4364D0) after both answered 0 and the
@@ -3433,7 +3436,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     {
         if (mover != Pc && Tile(Pc) == cell && !(Status(Pc)?.IsDead ?? true)) return true;
         foreach (var npc in _scene.Npcs)
-            if (npc.Entity != mover && Tile(npc.Entity) == cell && !(Status(npc.Entity)?.IsDead ?? true)) return true;
+            if (npc.Entity != mover && Tile(npc.Entity) == cell && !Gone(npc.Entity) && !(Status(npc.Entity)?.IsDead ?? true)) return true;
         return _scene.Companions?.Invoke().Any(c => c.Cell == cell && c.Entity != mover) == true;
     }
 
@@ -3452,6 +3455,9 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
             if (entity != mover && entity != target) held.Add(ToChart(cell));
         }
         if (target is not null && Key(target) is { } targetKey) moved.Add(targetKey);
+        // ARC-WORLD-1436: an NPC switched on from the map data's off flag stands where the data has it and holds that cell (the T0 evidence lists none for it).
+        foreach (var (_, entity, world) in _scene.SwitchedOn?.Invoke() ?? [])
+            if (entity != mover && entity != target && _npcs.ContainsKey(entity) && !Movers.IsMoved(entity) && !Gone(entity)) held.Add(ToChart(world));
         var occupancy = new AreaOccupancy(moved, held);
         return _scene.Removed?.Invoke() is { Count: > 0 } removed ? occupancy.WithRemoved(removed) : occupancy;
     }

@@ -65,6 +65,7 @@ src/Arcanum.Session/GameSessionCheckWield.cs,MarkCheckWield,exempt,reference
 src/Arcanum.Session/GameSessionCheckWield.cs,NpcHolderOfItem,exempt,reference
 src/Arcanum.Session/GameSessionCombatMode.cs,QueryCanExitCombatMode,pending,
 src/Arcanum.Session/GameSessionCreatedObjects.cs,CreateCritterNear,pending,
+src/Arcanum.Session/GameSessionCritterIndexedWrites.cs,QueryNpcEffectiveStat,exempt,reference
 src/Arcanum.Session/GameSessionDanger.cs,AddDangerEnemy,pending,
 src/Arcanum.Session/GameSessionDanger.cs,PurgeDangerEnemies,exempt,host
 src/Arcanum.Session/GameSessionEncumbrance.cs,FireEncumbranceDrain,pending,

@@ -104,14 +104,11 @@ public partial class TerrainViewerApp
             // ARC-GPAD-1376: the controller test's evidence log and its task marker; this run only, never saved.
             case AreaOption.EvidenceLog: refused = value is 0 or 1 ? SetEvidenceLog(value == 1) : "out of range"; break;
             case AreaOption.TestTask: refused = SetEvidenceTask(value); break;
-            // ARC-GPAD-1374: the controller scheme lines, switched at run time with no restart and saved at once; the original mouse and keyboard stay live.
-            case AreaOption.PadScheme:
-                if (!Enum.IsDefined((Arcanum.Input.PadScheme)value)) { refused = "no such pad scheme"; break; }
-                SaveGameSettings(_gameSettings with { Pad = (Arcanum.Input.PadScheme)value });
-                break;
-            case AreaOption.TouchScheme:
-                if (!Enum.IsDefined((Arcanum.Input.TouchScheme)value)) { refused = "no such touch scheme"; break; }
-                SaveGameSettings(_gameSettings with { Touch = (Arcanum.Input.TouchScheme)value });
+            // ARC-GPAD-1374, ARC-GPAD-1463: the Controls line (the original or scheme A, B or C) and the prompt style, switched at run time with no restart and saved at once; the original mouse and keyboard stay live.
+            case AreaOption.ControlScheme:
+                if (!Enum.IsDefined((Arcanum.Input.ControlChoice)value)) { refused = "no such control scheme"; break; }
+                var chosen = _gameSettings.Controls.WithChoice((Arcanum.Input.ControlChoice)value);
+                SaveGameSettings(_gameSettings with { Pad = chosen.Pad, Touch = chosen.Touch });
                 break;
             case AreaOption.PromptStyle:
                 if (!Enum.IsDefined((Arcanum.Input.PromptStyle)value)) { refused = "no such prompt style"; break; }

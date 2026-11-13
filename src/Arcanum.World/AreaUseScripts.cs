@@ -133,7 +133,9 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     /// <summary>ARC-SCRIPT-052: the map-change key of an NPC a script's destroy (68) took out of the world (value 1). The original sets object
     /// flag 0x1 (TD2); a destroyed NPC is neither drawn nor in the object lists, and the view no longer reaches it (<see cref="Destroyed"/>).</summary>
     public const string DestroyedProperty = GameSessionOwner.ObjectDestroyedProperty;
-    private const int NpcType = 16, DestroyedObjectFlag = 0x1, OffObjectFlag = 0x2, FirstItemType = 5, LastItemType = 14, WrittenItemType = 13;
+    /// <summary>The object flag "off" (0x2) of the original.</summary>
+    public const int OffObjectFlagBit = 0x2;
+    private const int NpcType = 16, DestroyedObjectFlag = 0x1, OffObjectFlag = OffObjectFlagBit, FirstItemType = 5, LastItemType = 14, WrittenItemType = 13;
     private const string ScriptPart = "script", LocalFlagsPart = "lf", CountersPart = "counters";
 
     /// <summary>The map-change property of a slot's part at a point the host writes back: <c>use.*</c> for the use point,
@@ -436,14 +438,14 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         return Row(obj) is { Type: NpcType } ? _session.QueryNpcDead(obj.Code) : null;
     }
 
-    /// <summary>ARC-SCRIPT-049 (HW2): the "off" object flag of the row's map data, or for an NPC of the shown map a script's toggle state
-    /// (<see cref="OffProperty"/>); the PC is never off; null for an object of no loaded row.</summary>
+    /// <summary>ARC-SCRIPT-049 (HW2): the "off" object flag of the row's map data, or for an NPC (of the shown map or a carried follower's home map, ARC-WORLD-1436) what <see cref="NpcOff"/> says:
+    /// the session's object-flag change over the data's and a script's toggle state (<see cref="OffProperty"/>); the PC is never off; null for an object of no loaded row.</summary>
     public bool? IsSwitchedOff(ScrObjectRef obj)
     {
         if (IsPc(obj)) return false;
         if (Row(obj) is not { } row) return null;
         var data = Number(row, ObjectFlagsSlot) ?? 0;
-        return row.Type == NpcType && obj.Map == _shownMap ? NpcOff(_session, obj.Map, obj.Code, data) : (data & OffObjectFlag) != 0;
+        return row.Type == NpcType ? NpcOff(_session, obj.Map, obj.Code, data) : (data & OffObjectFlag) != 0;
     }
 
     // ARC-MAGIC-030 (MT21b, SC1): the object's spell flags (field 20) as the original's field getter reads them for any object type: a row's effective value, and for a

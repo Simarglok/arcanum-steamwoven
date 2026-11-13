@@ -252,7 +252,7 @@ public sealed partial class GameSessionOwner
         {
             var facts = host.CatchUp(npc);
             return owner._party.Records.TryGetValue(npc, out var companion)
-                ? facts with { Waiting = facts.Waiting || companion.Standing == CompanionStanding.Waiting }
+                ? facts with { Waiting = facts.Waiting || companion.WaitBit }
                 : facts;
         }
 

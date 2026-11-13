@@ -6,8 +6,8 @@ namespace Arcanum.Session;
 /// Dialog companion seam over a <see cref="GameSessionOwner"/> (ARC-DEV-195, ledger CF1–CF7): the <c>FO</c> and <c>WT</c> conditions read the NPC's party record (<c>LedByPc</c>, <c>Jilted</c>), and
 /// the <c>WA</c>, <c>LV</c>, <c>SO</c> and <c>SC</c> actions run the session's wait (<see cref="GameSessionOwner.WaitParty"/> with the host's wait timer facts), forced leave
 /// (<see cref="GameSessionOwner.LeaveParty"/> with <c>Force</c>, the source's flag 1) and spread-out flag (<see cref="GameSessionOwner.SetSpreadOut"/>). Waiting while already waiting, leaving
-/// while not in the party and a flag already in the asked state change nothing and are Applied, as in the source. Waiting while not in the party is Rejected: the original sets the
-/// wait flag on an NPC with no leader, a state the session cannot hold. Every other refusal of the session (a version change, a full budget, no room for the wait timer) is Rejected and fails the conversation.
+/// while not in the party and a flag already in the asked state change nothing and are Applied, as in the source. Waiting while not in the party (ARC-SCRIPT-1136, CF8) sets the wait flag on the free NPC, as the original does with no leader
+/// (<see cref="SessionCompanion.WaitFlag"/>; the wait timer is the one of its wait index, and does nothing when it runs out). Every other refusal of the session (a version change, a full budget, no room for the wait timer) is Rejected and fails the conversation.
 /// ARC-SCRIPT-1135 (CF4): an <c>SO</c> that newly sets the flag then starts the spread-out goal (69) through <paramref name="spreadOutStarted"/>, the starter 0x436960 the original calls right after
 /// the bit (the host's AI table; without it nothing starts, as before); a flag already set starts nothing, and the starter's answer is never seen by the action.
 /// A participant the host cannot map or a PC other than <paramref name="playerCharacter"/> throws on a query and is Rejected for an action. The session is read at each call; the port must be

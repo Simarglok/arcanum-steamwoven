@@ -468,10 +468,11 @@ public sealed class AreaCompanionGroup
             var held = HeldByAi?.Invoke(companion.Entity) == true;
             if (heldOnly && !held) continue;
             var update = held ? new CompanionFollowUpdate(companion.AiRunning ? FollowAction.Run : FollowAction.Walk, null)
-                : companion.Follow.Update(grid.State, pc.CommittedCell, record.SpreadOut, record.Standing == CompanionStanding.Following, frontier);
+                : companion.Follow.Update(grid.State, pc.CommittedCell, record.SpreadOut, record.Standing == CompanionStanding.Following && !record.WaitFlag, frontier);
             companion.LastUpdate = update;
             // ARC-WORLD-045: an approach starts the follow goal, which then lives until something interrupts it.
-            if (record.Standing != CompanionStanding.Following || held) companion.FollowGoal = false;
+            // ARC-SCRIPT-1136 (CF9): a follower that carries the wait bit is waiting for the AI (the non-combat perform returns "waiting"), so it follows nobody.
+            if (record.Standing != CompanionStanding.Following || record.WaitFlag || held) companion.FollowGoal = false;
             else if (update.Action is FollowAction.Walk or FollowAction.Run or FollowAction.Jump) companion.FollowGoal = true;
             if (update.JumpTo is { } jump)
             {

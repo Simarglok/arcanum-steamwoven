@@ -78,10 +78,10 @@ public partial class TerrainViewerApp
                 && place.X + place.Width / 2 == AreaMenuArtLayout.OptionsButtonX && place.Width > 0 && place.Height == 33).All(ok => ok),
                 "the page labels stand centred at (130, 221 + 40 i): " + string.Join(" ", places));
             Require(art.HoveredForSelfTest == -1, "no page label is lit while the focus is on the first control: " + art.HoveredForSelfTest);
-            Require(Controls().SequenceEqual(["Difficulty: Moderate", "Default Combat Mode: Real Time", "Auto Attack: On", "Always Run: Off", "Rules: Steamwoven", "Evidence Log: Off", "Test Task: None"]), "Game page: " + string.Join("|", Controls()));
+            Require(Controls().SequenceEqual(["Difficulty: Moderate", "Default Combat Mode: Real Time", "Auto Attack: On", "Always Run: Off", "Rules: Steamwoven", "Evidence Log: Off", "Test Task: None", "Controls: Original"]), "Game page: " + string.Join("|", Controls()));
             // ARC-UI-061: the shown controls take the first slots: four in the first column, the fifth at the second's top (as drawn).
             await Frames(1);
-            Require(art.ControlPlacesForSelfTest.SequenceEqual(Enumerable.Range(0, 7).Select(AreaMenuArtLayout.OptionsSlot)),
+            Require(art.ControlPlacesForSelfTest.SequenceEqual(Enumerable.Range(0, 8).Select(AreaMenuArtLayout.OptionsSlot)),
                 "the Game page's controls stand in their art at the first slots: " + string.Join(" ", art.ControlPlacesForSelfTest));
             // ARC-UI-014: Original chosen in the main menu is the rule mode the new game begins in.
             panel.ChangeForSelfTest(4, 1);
@@ -105,16 +105,19 @@ public partial class TerrainViewerApp
                 && evidenceEvents.Select(e => e!.Value.Kind).SequenceEqual([EvidenceKind.SessionStart, EvidenceKind.TaskStart, EvidenceKind.Command, EvidenceKind.TaskEnd, EvidenceKind.SessionEnd])
                 && evidenceEvents[2]!.Value is { Command: EvidenceCommand.Examine, Outcome: EvidenceOutcome.WrongTarget, Task: 1, Scheme: EvidenceScheme.Original },
                 "the file holds the session's closed lines: " + string.Join(" | ", evidenceLines));
-            // ARC-GPAD-1374: the three controller scheme lines are the Video page's (the Game page's eight slots are full); the Game page comes back after.
+            // ARC-GPAD-1463: the Controls line (the Game page's eighth) changes at run time, no restart, and is saved at once in the smoke's own settings
+            // file; ARC-GPAD-1374: the prompt style is the Video page's. The strip shows nothing while the mouse is in hand and names the pad when one is used.
+            Require(Controls()[7] == "Controls: Original", "the Game page ends with the Controls line: " + string.Join("|", Controls()));
+            panel.ChangeForSelfTest(7, 1);
+            Require(Controls()[7] == "Controls: A Direct" && _gameSettings is { Pad: Arcanum.Input.PadScheme.Direct, Touch: Arcanum.Input.TouchScheme.Off },
+                "the Controls line changed at once: " + Controls()[7]);
+            Require(_gameSettingsStore is { Persistent: true } && _gameSettingsStore.Load() is { Pad: Arcanum.Input.PadScheme.Direct, Touch: Arcanum.Input.TouchScheme.Off },
+                "the Controls line is saved in the settings file");
             Key(Godot.Key.V, 'v');
-            Require(_mainMenu!.Page == AreaOptionsPage.Video && Controls().Length == 5, "the Video page holds the floats and the three scheme lines: " + string.Join("|", Controls()));
-            // The controller scheme lines change at run time, no restart, and are saved at once in the smoke's own settings file; the
-            // prompt strip shows nothing while the mouse is the device in hand and names the pad when one is used.
-            panel.ChangeForSelfTest(2, 1); panel.ChangeForSelfTest(3, 1); panel.ChangeForSelfTest(4, 1); panel.ChangeForSelfTest(4, 1);
-            Require(Controls().Skip(2).SequenceEqual(["Pad scheme: A Direct", "Touch: C Touch+pad", "Prompt style: PlayStation"]) && _gameSettings is { Pad: Arcanum.Input.PadScheme.Direct, Touch: Arcanum.Input.TouchScheme.TouchPad, Prompts: Arcanum.Input.PromptStyle.PlayStation },
-                "the scheme lines changed at once: " + string.Join("|", Controls().Skip(2)));
-            Require(_gameSettingsStore is { Persistent: true } && _gameSettingsStore.Load() is { Pad: Arcanum.Input.PadScheme.Direct, Touch: Arcanum.Input.TouchScheme.TouchPad, Prompts: Arcanum.Input.PromptStyle.PlayStation },
-                "the scheme lines are saved in the settings file");
+            Require(_mainMenu!.Page == AreaOptionsPage.Video && Controls().Length == 3 && Controls()[2] == "Prompt style: Auto", "the Video page holds the floats and the prompt style: " + string.Join("|", Controls()));
+            panel.ChangeForSelfTest(2, 1); panel.ChangeForSelfTest(2, 1);
+            Require(Controls()[2] == "Prompt style: PlayStation" && _gameSettings.Prompts == Arcanum.Input.PromptStyle.PlayStation
+                && _gameSettingsStore?.Load().Prompts == Arcanum.Input.PromptStyle.PlayStation, "the prompt style changed and is saved: " + Controls()[2]);
             Require(PromptStripForSelfTest.Length == 0 && MainMenuOpen && _mainMenu!.Window == AreaMenuWindow.Options, "the mouse shows no strip and no window was reset");
             // A pad in hand (device 7, a DualSense: never device 0): after the hysteresis the strip names it with its family, over the open window.
             var clock = 1000.0;
@@ -134,12 +137,14 @@ public partial class TerrainViewerApp
             clock += .3; await Frames(2);
             Require(PromptStripForSelfTest.Length == 0, "a key takes the strip away: " + PromptStripForSelfTest);
             _controllerClockForSelfTest = null; _padIdentityForSelfTest = null;
-            panel.ChangeForSelfTest(2, 1); panel.ChangeForSelfTest(3, 1); panel.ChangeForSelfTest(4, 1);
-            Require(_gameSettings is { Pad: Arcanum.Input.PadScheme.Pointer, Touch: Arcanum.Input.TouchScheme.Off, Prompts: Arcanum.Input.PromptStyle.Nintendo }, "the lines wrap or move on: " + string.Join("|", Controls().Skip(2)));
-            panel.ChangeForSelfTest(2, 1); panel.ChangeForSelfTest(4, 1); panel.ChangeForSelfTest(4, 1);
-            Require(_gameSettings is { Pad: Arcanum.Input.PadScheme.Off, Prompts: Arcanum.Input.PromptStyle.Auto }, "back to Off and Auto: " + string.Join("|", Controls().Skip(2)));
+            panel.ChangeForSelfTest(2, 1); panel.ChangeForSelfTest(2, 1); panel.ChangeForSelfTest(2, 1);
+            Require(_gameSettings.Prompts == Arcanum.Input.PromptStyle.Auto, "the prompt style wrapped back to Auto: " + Controls()[2]);
             Key(Godot.Key.G, 'g');
             Require(_mainMenu!.Page == AreaOptionsPage.Game, "back on the Game page");
+            panel.ChangeForSelfTest(7, 1); panel.ChangeForSelfTest(7, 1);
+            Require(_gameSettings is { Pad: Arcanum.Input.PadScheme.Off, Touch: Arcanum.Input.TouchScheme.TouchPad } && Controls()[7] == "Controls: C Touch+pad", "C Touch+pad: " + Controls()[7]);
+            panel.ChangeForSelfTest(7, 1);
+            Require(_gameSettings is { Pad: Arcanum.Input.PadScheme.Off, Touch: Arcanum.Input.TouchScheme.Off } && Controls()[7] == "Controls: Original", "back to Original: " + Controls()[7]);
             // ARC-DEV-350: the HD pack problem box: the reason on screen, Continue closes it, Close game quits (the smoke takes the quit over).
             var quits = 0;
             _hdPackProblemQuitForSelfTest = () => quits++;
