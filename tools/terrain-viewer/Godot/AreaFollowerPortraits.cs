@@ -183,10 +183,30 @@ public partial class AreaFollowerPortraits : CanvasLayer
 
     private void Resized() { CloseMenu(); Place(); EdgeChanged?.Invoke(); }
 
+    /// <summary>ARC-UI-1817: device pixels per Legacy pixel of this panel and its menu (what the generated frames are painted at): the scale of the panel's root, the canvas transform's
+    /// and the viewport's stretch.</summary>
+    internal float DeviceScale() =>
+        _root is not null && GodotObject.IsInstanceValid(_root) && _root.IsInsideTree() ? _root.GetGlobalTransformWithCanvas().Scale.X * GetViewport().GetStretchTransform().Scale.X : _root?.Scale.X ?? 1;
+
+    /// <summary>ARC-UI-1817: the interface texture of an art number the panel was bound with (null without it), for the native smoke.</summary>
+    internal HdInterfaceTexture? TextureForSelfTest(int art) => _art.GetValueOrDefault(art) as HdInterfaceTexture;
+
+    // The frames are painted again when the device scale changes (the textures ask for it at every draw, but a parent's scale change draws nothing by itself).
+    private float _drawnScale;
+
+    private void RedrawTextures()
+    {
+        _drawnScale = DeviceScale();
+        foreach (var root in new Control?[] { _root, _menu })
+            if (root is not null) foreach (var node in root.FindChildren("*", "TextureRect", true, false)) (node as CanvasItem)?.QueueRedraw();
+    }
+
     /// <summary>Gives the frames their interface art (frame 0 of 503, 504, 505 and 616 by number, and the panel's); missing numbers draw the fallback.</summary>
     public void Bind(IReadOnlyDictionary<int, Texture2D> art)
     {
         _art = art ?? throw new ArgumentNullException(nameof(art));
+        // ARC-UI-1817: the generated interface paints the panel's frames at the panel's own device scale.
+        foreach (var texture in art.Values.OfType<HdInterfaceTexture>()) texture.ScaleSource = DeviceScale;
         // No list matches it: the next Show rebuilds the frames with the new art, an empty list included.
         _signature = "\0";
     }
@@ -428,5 +448,6 @@ public partial class AreaFollowerPortraits : CanvasLayer
         if (_menu is null) return;
         _menu.Scale = _root.Scale;
         _menu.Position = _root.Position + _menuOrigin * _root.Scale.X;
+        if (IsInsideTree() && MathF.Abs(DeviceScale() - _drawnScale) > 0.001f) RedrawTextures();
     }
 }
