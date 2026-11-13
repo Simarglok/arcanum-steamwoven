@@ -57,7 +57,7 @@ internal static class CharacterStatRules
     /// <summary>
     /// ARC-MAGIC-1476: the range the stat setter (0x4B0980) clamps a stored stat to, by the <b>source's</b> stat index (0..27, <c>obj_f_critter_stat_base_idx</c>; not <see cref="CharacterStat"/>, whose order differs): the
     /// minimum table at 0x5B5194 (0x4B0FC0) and the maximum table at 0x5B5204 with the race's raised maxima (0x4B0FD0; the registry marks them on <see cref="Range(CharacterRace, CharacterStat)"/>). The primary stats 0..7 are <see cref="Range(CharacterRace, CharacterStat)"/>; 17 level 0 to 51,
-    /// 18 experience 0 to 2,000,000,000, 19 alignment -1000 to 1000, 20 fate points 0 to 100, 21 unspent points 0 to 56, 22 and 23 magick and tech points 0 to 210, 24 poison 0 to 1000, 25 0 to 1000, 26 gender 0 to 1,
+    /// 18 experience 0 to 2,000,000,000, 19 alignment -1000 to 1000, 20 fate points 0 to 100, 21 unspent points 0 to 56, 22 and 23 magick and tech points 0 to 210, 24 poison 0 to 1000, 25 20 to 1000, 26 gender 0 to 1,
     /// 27 race 0 to 11. Null for 8 to 16 (derived, the setter never writes them) and an index outside 0..27.
     /// </summary>
     public static StatRange? StoredRange(CharacterRace race, int index) => index switch
@@ -69,7 +69,8 @@ internal static class CharacterStatRules
         20 => new(0, 100),
         21 => new(0, 56),
         22 or 23 => new(0, 210),
-        24 or 25 => new(0, 1000),
+        24 => new(0, 1000),
+        25 => new(20, 1000),
         26 => new(0, 1),
         27 => new(0, 11),
         _ => null,

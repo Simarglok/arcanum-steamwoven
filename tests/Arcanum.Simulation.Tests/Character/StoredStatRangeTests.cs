@@ -27,7 +27,7 @@ public sealed class StoredStatRangeTests
         Assert.AreEqual(new StatRange(0, 210), CharacterStatRules.StoredRange(CharacterRace.Human, 22), "magick points");
         Assert.AreEqual(new StatRange(0, 210), CharacterStatRules.StoredRange(CharacterRace.Human, 23), "tech points");
         Assert.AreEqual(new StatRange(0, 1000), CharacterStatRules.StoredRange(CharacterRace.Human, 24), "poison");
-        Assert.AreEqual(new StatRange(0, 1000), CharacterStatRules.StoredRange(CharacterRace.Human, 25));
+        Assert.AreEqual(new StatRange(20, 1000), CharacterStatRules.StoredRange(CharacterRace.Human, 25), "stat 25: the only minimum above 1 besides the derived ones");
         Assert.AreEqual(new StatRange(0, 1), CharacterStatRules.StoredRange(CharacterRace.Human, 26), "gender");
         Assert.AreEqual(new StatRange(0, 11), CharacterStatRules.StoredRange(CharacterRace.Human, 27), "race");
     }

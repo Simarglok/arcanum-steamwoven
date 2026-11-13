@@ -85,6 +85,7 @@ public sealed class SessionSpellCasterTraitIndexTests
     private static SessionSpellRecord FatePlusMany => Spell(240, StatField, 20, 200);
     private static SessionSpellRecord UnspentMinusMany => Spell(241, StatField, 21, -10);
     private static SessionSpellRecord Stat25PlusMany => Spell(242, StatField, 25, 2000);
+    private static SessionSpellRecord Stat25MinusMany => Spell(243, StatField, 25, -3000);
 
     private static readonly Dictionary<int, SessionSpellRecord> Records = new[]
     {
@@ -92,7 +93,7 @@ public sealed class SessionSpellCasterTraitIndexTests
         Spell(DexMinusOne, StatField, 1, -1), Spell(DexMinusTwo, StatField, 1, -2), Spell(DexMinusMany, StatField, 1, -20), Spell(DexPlusFive, StatField, 1, 5),
         Spell(IntPlus, StatField, 4, 1), Spell(DerivedPlus, StatField, 9, 3), Spell(CharismaPlus, StatField, 7, 1),
         Spell(BadIndex, StatField, 28, 1), Spell(BadField, 99, 0, 1), Spell(StrengthPlus, StatField, 0, 1), Spell(LevelPlus, StatField, 17, 1),
-        IntMinusOne, IntMinusTwo, IntMinusMany, WillMinusOne, WillMinusTwo, LevelMinusMany, LevelPlusMany, ExperiencePlusMany, AlignmentPlusMany, AlignmentMinusMany, FatePlusMany, UnspentMinusMany, Stat25PlusMany,
+        IntMinusOne, IntMinusTwo, IntMinusMany, Stat25MinusMany, WillMinusOne, WillMinusTwo, LevelMinusMany, LevelPlusMany, ExperiencePlusMany, AlignmentPlusMany, AlignmentMinusMany, FatePlusMany, UnspentMinusMany, Stat25PlusMany,
     }.ToDictionary(r => r.Data.Number);
 
     private static (GameSessionOwner Owner, SessionSpellCaster Caster) Session(CombatFields? fields = null)
@@ -288,6 +289,8 @@ public sealed class SessionSpellCasterTraitIndexTests
         Assert.AreEqual(0, owner.QueryCritterIndexedWrites(Rat).Stats[21]);
         caster.Apply(Run(Stat25PlusMany.Data.Number), 0, At(Rat, SpellTargetObject.Npc));
         Assert.AreEqual(1000, owner.QueryCritterIndexedWrites(Rat).Stats[25]);
+        caster.Apply(Run(Stat25MinusMany.Data.Number), 0, At(Rat, SpellTargetObject.Npc));
+        Assert.AreEqual(20, owner.QueryCritterIndexedWrites(Rat).Stats[25], "the minimum of stat 25 is 20, not 0");
         Assert.IsFalse(NotReady(caster));
         Assert.IsFalse(caster.Log.Any(e => e.Kind == SpellCastEventKind.TraitIndexRefused));
     }
