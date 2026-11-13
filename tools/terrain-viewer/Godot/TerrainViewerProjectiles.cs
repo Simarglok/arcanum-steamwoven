@@ -559,7 +559,7 @@ public partial class TerrainViewerApp
         if (result.Life is { } self)
         {
             _attackNotice = $"{AiName(shooter)}'s shot misfired: it takes {self.HitPointDamage} damage";
-            if (self.Events.HasFlag(LifeEvents.Died)) _deathAnimations[(CurrentAreaMap, shooter)] = AreaFallenPoses.Animation(self.Death);
+            if (self.Events.HasFlag(LifeEvents.Died)) _deathAnimations[(CurrentAreaMap, shooter)] = DeathAnimationOf(self.Death);
             SyncAreaCombatBodies();
             SyncAreaInventory();
         }

@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using Arcanum.Input;
 using Arcanum.Presentation.Audio;
+using Arcanum.Presentation.Display;
 using Arcanum.Presentation.Hud;
 using Arcanum.Session.Launcher;
 using Arcanum.Session.Settings;
@@ -13,7 +14,7 @@ namespace Arcanum.TerrainViewer.Core;
 /// <summary>
 /// ARC-UI-1130: the viewer's player settings as lines of the one settings file (<c>arcanum.cfg</c>, <see cref="ArcanumConfig"/>), Godot-free.
 /// The settings the original registers keep the original's names and value shape (OP5, <see cref="AreaOptionTable"/>): <c>difficulty</c> 0–2,
-/// <c>turn-based</c> and <c>auto attack</c> and <c>always run</c> 0 or 1, <c>text floaters</c> 0–2, <c>float speed</c> 0–10 and the three
+/// <c>turn-based</c> and <c>auto attack</c> and <c>always run</c> and <c>violence filter</c> (ARC-UI-1737) 0 or 1, <c>brightness</c> 0–9 (ARC-UI-1737), <c>text floaters</c> 0–2, <c>float speed</c> 0–10 and the three
 /// volumes <c>effects volume</c>, <c>voice volume</c> and <c>music volume</c> 0–10. The project's own settings have project names:
 /// <c>pad scheme</c> (<c>off</c>, <c>direct</c>, <c>pointer</c>), <c>touch scheme</c> (<c>off</c>, <c>touchpad</c>) and <c>prompt style</c> (<c>auto</c>, <c>xbox</c>,
 /// <c>playstation</c>, <c>nintendo</c>, <c>steamdeck</c>; ARC-GPAD-1374, the controller scheme choice of <see cref="ControlSchemeSettings"/>),
@@ -31,6 +32,8 @@ public static class ViewerSettingsConfig
     public const string TextFloaters = "text floaters";
     public const string FloatSpeed = "float speed";
     public const string CombatTaunts = "combat taunts";
+    public const string ViolenceFilter = "violence filter";
+    public const string Brightness = "brightness";
     public const string EffectsVolume = "effects volume";
     public const string VoiceVolume = "voice volume";
     public const string MusicVolume = "music volume";
@@ -43,7 +46,7 @@ public static class ViewerSettingsConfig
     public const string TouchSchemeLine = "touch scheme";
     public const string PromptStyleLine = "prompt style";
 
-    private static readonly string[] GameLines = [Difficulty, TurnBased, AutoAttack, TextFloaters, FloatSpeed, CombatTaunts, HdInterface, GeneratedInterface, HdPack, HdPackPath, PadSchemeLine, TouchSchemeLine, PromptStyleLine];
+    private static readonly string[] GameLines = [Difficulty, TurnBased, AutoAttack, TextFloaters, FloatSpeed, CombatTaunts, ViolenceFilter, Brightness, HdInterface, GeneratedInterface, HdPack, HdPackPath, PadSchemeLine, TouchSchemeLine, PromptStyleLine];
     private static readonly string[] AudioLines = [EffectsVolume, VoiceVolume, MusicVolume];
 
     private static int? Int(ArcanumConfigRead read, string name, int minimum, int maximum)
@@ -85,6 +88,8 @@ public static class ViewerSettingsConfig
             Floats = Int(read, TextFloaters, 0, FloaterRules.MaxLevel) ?? defaults.Floats,
             FloatSpeed = Int(read, FloatSpeed, 0, FloaterRules.MaxSpeed) ?? defaults.FloatSpeed,
             CombatTaunts = Flag(read, CombatTaunts) ?? defaults.CombatTaunts,
+            ViolenceFilter = Flag(read, ViolenceFilter) ?? defaults.ViolenceFilter,
+            Brightness = Int(read, Brightness, 0, BrightnessRules.Max) ?? defaults.Brightness,
             HdInterface = hdInterface,
             // The generated interface draws through the HD interface, so it is on only with it (the options line writes both).
             GeneratedInterface = (Flag(read, GeneratedInterface) ?? false) && hdInterface,
@@ -106,6 +111,7 @@ public static class ViewerSettingsConfig
         [
             new(Difficulty, Number(settings.Difficulty)), new(TurnBased, Flag(settings.TurnBased)), new(AutoAttack, Flag(settings.AutoAttack)),
             new(TextFloaters, Number(settings.Floats)), new(FloatSpeed, Number(settings.FloatSpeed)), new(CombatTaunts, Flag(settings.CombatTaunts)),
+            new(ViolenceFilter, Flag(settings.ViolenceFilter)), new(Brightness, Number(settings.Brightness)),
             new(HdInterface, Flag(settings.HdInterface)), new(GeneratedInterface, Flag(settings.GeneratedInterface && settings.HdInterface)),
             new(HdPack, HdPackSourceResolver.ModeName(settings.HdPackSource)), new(HdPackPath, path),
             new(PadSchemeLine, Choice(settings.Controls.Pad)), new(TouchSchemeLine, Choice(settings.Controls.Touch)), new(PromptStyleLine, Choice(settings.Controls.Prompts)),

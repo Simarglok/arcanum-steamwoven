@@ -18,6 +18,18 @@ public static class DyingAnimationRules
     public const int UnreadArtDelayMs = 100;
 
     /// <summary>
+    /// ARC-UI-1737 (ledger OH2): the dying animation the art node (0x42BC10) sets: the one the kill stored, or with the "violence filter" setting
+    /// on (a plain read of the global 0x5DE6A4) the fall-down 7 whatever the kill stored. The filter-off repair to animation 18 when the art of
+    /// the stored one is missing is not here (the caller's art step); with the filter on there is no repair at all: a missing art 7 leaves the art
+    /// as it is and the goal goes on to its pool node (<see cref="FilterRefusesMissingArt"/>).
+    /// </summary>
+    [OriginalFunction(0x42BC10, OriginalFunctionScope.Partial)]
+    public static int Chosen(int stored, bool violenceFilter) => violenceFilter ? FallDown : stored;
+
+    /// <summary>With the filter on a missing art for the fall-down is not repaired (the art node logs an assertion and answers 0): the art stays and the dying goal goes to its pool node.</summary>
+    public static bool FilterRefusesMissingArt(bool violenceFilter, bool artExists) => violenceFilter && !artExists;
+
+    /// <summary>
     /// The dying goal's third node (0x426F10 → 0x45D730): a PC or NPC that is neither destroyed nor off and whose art shows the fall-down
     /// animation (7, at any frame: a critter knocked out or knocked down) skips the dying animation; the goal goes to its pool node at
     /// once and the critter keeps its fall. Not modelled here: the object flags and type tests (the caller's critter).
