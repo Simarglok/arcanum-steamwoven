@@ -89,12 +89,21 @@ public partial class TerrainViewerApp
                 using var shot = GetViewport().GetTexture().GetImage();
                 if (shot.SavePng(capture.Replace(".png", suffix + ".png")) != Error.Ok) throw new InvalidOperationException("ARC-UI-075 sheet art smoke: capture failed");
             }
+            // ARC-UI-1195: with ARC_AREA_WINDOW_ART the sheet's window and the page on show (their frames and buttons) are checked in the generated interface and captured.
+            async Task WindowArt(string page, IEnumerable<int> numbers)
+            {
+                if (!WindowArtSmokeRequested) return;
+                var found = art.TexturesForSelfTest(AreaCharacterSheetArtLayout.WindowArtNumbers.Concat(numbers));
+                await WindowArtSmokeAsync("sheet-" + page, () => found.Select(pair => pair.Texture).ToArray(), found.Select(pair => pair.Art).ToArray(), art.DeviceScale, () => art.ArtSet,
+                    new Vector2I(1600, 1200)); // the bars are hidden here, so the sheet stands at the whole factor of the screen: 2 from 1600 x 1200 (1 at 1280 x 800 and 1920 x 1080)
+            }
             var pages = art.Pages;
             Require(_sheetPanel.PagesReadyForSelfTest && pages.Visible && pages.ShownForSelfTest == AreaSheetTab.Skills, "the pages' art read and the sheet opens on the skills page");
             var entries = new List<AreaMessageEntry?>();
             void Heard(AreaMessageEntry? entry) => entries.Add(entry);
             _sheetPanel.HoverEntryRequested += Heard;
             await Capture("-skills");
+            await WindowArt("skills", AreaCharacterSheetArtLayout.SkillsPageArtNumbers);
             var (gx, gy) = AreaCharacterSheetPagesLayout.GroupTab(3);
             await Click(pages.PointForSelfTest(gx + 5, gy + 5));
             Require(pages.Group == 3, "the technological group tab");
@@ -122,6 +131,7 @@ public partial class TerrainViewerApp
             await Frame();
             Require(entries.Any(entry => entry is { Title.Length: > 0 }), "the pointer over the header writes its text");
             await Capture("-tech");
+            await WindowArt("tech", AreaCharacterSheetArtLayout.TechPageArtNumbers);
             var degree = session.QueryHeroTechnology()!.Value[2].Degree;
             var (tx2, ty2) = AreaCharacterSheetPagesLayout.DegreeSlot(degree);
             if (unspent == 0 && degree < AreaCharacterSheetPagesLayout.Degrees)
@@ -141,6 +151,7 @@ public partial class TerrainViewerApp
             Require(spells.Visible && spells.ViewForSelfTest is not null, "the spells page shows");
             var startCollege = spells.ViewForSelfTest!.College;
             await Capture("-spells");
+            await WindowArt("spells", AreaCharacterSheetArtLayout.SpellsPageArtNumbers);
             _sheetPanel.HoverEntryRequested += Heard;
             entries.Clear();
             var (cx, cy) = AreaCharacterSheetSpellsLayout.CollegeTab(9);

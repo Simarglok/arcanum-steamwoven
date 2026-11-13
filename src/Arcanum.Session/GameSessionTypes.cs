@@ -676,8 +676,9 @@ public sealed class GameSessionSnapshot
     /// Schema 97 adds the encounters section: the use counts of the world-map random encounter rows (<see cref="SessionEncounterState"/>, ARC-WORLD-1159).
     /// Schema 98 adds the lit state of the top strip's buttons and the Map button's face (<see cref="BarLights"/>, ARC-UI-1542).
     /// Schema 99 adds the hero's stored resistance array and stored age (<see cref="SessionHeroState.Resistances"/>, <see cref="SessionHeroState.Age"/>, ARC-MAGIC-1658).
-    /// Schemas 1..55 are refused, not migrated; schemas 56 to 98 are upgraded on decode (ARC-UI-037).</summary>
-    public const int CurrentSchemaVersion = 99;
+    /// Schema 100 adds the native traps' shots in flight to the flights section (<see cref="SessionFlightState.TrapShots"/>, ARC-TECHNOLOGY-1635).
+    /// Schemas 1..55 are refused, not migrated; schemas 56 to 99 are upgraded on decode (ARC-UI-037).</summary>
+    public const int CurrentSchemaVersion = 100;
 
     internal GameSessionSnapshot(int schemaVersion, GlobalFlagIdentity identity, long revision,
         SessionClockState clock, SessionFlagState flags, ActorPlacement actor, SessionMapState[] maps, SessionStoryState story,

@@ -96,7 +96,11 @@ public sealed class ThrowStateTests
         var shot = ThrowUntil(owner, rat, hit: true);
         var tile = new CellCoord(Start.Cell.X + 3, Start.Cell.Y);
         Assert.AreEqual("kit:1", owner.QueryShotEndItemEvents(shot.Shot!.Value, tile).Single().Item);
+        // ARC-COMBAT-1719: the thrown item's end scripts name the hero, the item and the target; the hero's thrown item's hit and miss are the thrown-item host's (Thrown).
+        var ends = owner.QueryShotEndScripts(shot.Shot.Value)!.Value;
+        Assert.AreEqual((SessionEventKinds.PlayerEntity, "kit:1", true), (ends.Attacker, ends.Weapon, ends.Thrown));
         Assert.AreEqual(GameSessionFailure.None, owner.LandShot(owner.Version, shot.Shot.Value, new(rat)).Failure);
+        Assert.IsNull(owner.QueryShotEndScripts(shot.Shot.Value), "struck: the strike ran the scripts, the landing the session splits off runs none");
         Assert.AreEqual(0, owner.QueryShotEndItemEvents(shot.Shot.Value, tile).Count, "struck: the landing the session splits off fires nothing more");
         Assert.AreEqual(GameSessionDisposition.Changed, owner.LandThrownItem(owner.Version, shot.Shot.Value, tile).Disposition);
     }
@@ -282,6 +286,8 @@ public sealed class ThrowStateTests
         var events = owner.QueryShotEndItemEvents(miss.Shot!.Value, scattered);
         Assert.AreEqual(1, events.Count, "the miss's end fires the item's location event");
         Assert.AreEqual(("kit:1", SessionEventKinds.PlayerEntity), (events[0].Item, events[0].Parent));
+        var missEnds = owner.QueryShotEndScripts(miss.Shot.Value)!.Value;
+        Assert.AreEqual((SessionEventKinds.PlayerEntity, "kit:1", true, null), (missEnds.Attacker, missEnds.Weapon, missEnds.Thrown, missEnds.Target), "a scattered throw has no target");
         Assert.AreEqual(GameSessionDisposition.Changed, owner.LandThrownItem(owner.Version, miss.Shot.Value, scattered).Disposition);
         Assert.AreEqual(0, owner.QueryShotEndItemEvents(miss.Shot.Value, scattered).Count, "landed: the shot is gone");
     }

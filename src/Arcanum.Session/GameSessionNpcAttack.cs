@@ -62,6 +62,11 @@ public sealed record SessionNpcThrow(SessionCritterCombat Thrower, string Item, 
     public Action<SessionHitScriptEvent>? HitScripts { get; init; }
     /// <summary>ARC-MAGIC-1188: as <see cref="SessionNpcAttack.ItemTriggers"/>, for the attack on the struck critter (the thrown item is the event's weapon; the thrower's worn items exclude it).</summary>
     public ISessionItemTriggers? ItemTriggers { get; init; }
+    /// <summary>ARC-COMBAT-1717 (PF1, PF6, PF7, PF10; 0x4B3C00 → 0x4B3170): the host can fly the thrown weapon. The throw is then decided now (the check and a miss's scatter, rolled as ever) and the weapon leaves
+    /// the NPC to lie hidden on its cell while its projectile flies to the struck critter (a hit) or to the scatter tile (a miss); the hit's damage waits for the strike
+    /// (<see cref="GameSessionOwner.LandNpcShot"/>) and the item lands where the flight ends (<see cref="GameSessionOwner.LandThrownItem"/>). A throw at a location with no struck critter flies unchecked
+    /// as a generic item does. Without it the throw lands at once, as before.</summary>
+    public bool Flight { get; init; }
 }
 
 /// <summary>ARC-WORLD-113: what <see cref="GameSessionOwner.ThrowByNpc"/> did: the attack on the struck critter (null without one or
@@ -72,13 +77,17 @@ public sealed record SessionNpcThrowResult(GameSessionDisposition Disposition, G
     /// <summary>ARC-DEV-258 (MIG13 S14n): the shot of a generic item (a grenade) the NPC threw: it flies to <see cref="Destination"/> as a projectile the host
     /// launches and lands (<see cref="GameSessionOwner.LandThrownItem"/>); empty for a thrown weapon, which lands at once.</summary>
     public IReadOnlyList<SessionShot> Shots { get; init; } = [];
-    /// <summary>ARC-DEV-258: the tile a thrown generic item flies to (the throw goal's location); null when it did not fly.</summary>
+    /// <summary>ARC-DEV-258: the tile a thrown item flies to: the throw goal's location for a generic item or an unstruck weapon; ARC-COMBAT-1717: for a weapon thrown at a critter the struck critter's cell (a hit) or the scatter tile (a miss, a flight
+    /// without a target); null when it did not fly.</summary>
     public CellCoord? Destination { get; init; }
 }
 
 /// <summary>ARC-DEV-282: an NPC's arrow in flight (<see cref="GameSessionOwner.QueryNpcShot"/>): its shooter's entity, whether the check decided at the shot was a hit, and the weapon's range.</summary>
 public readonly record struct SessionNpcShotFacts(string Shooter, bool Hit, int Range, string Target)
 {
+    /// <summary>ARC-COMBAT-1717: the projectile art of the weapon an NPC threw (its missile art field, a scenery art faced in the flight's direction), as the shot carried it; null for an arrow and for a weapon without one (the viewer flies the item's own art).</summary>
+    public uint? ThrownArt { get; init; }
+
     /// <summary>The <see cref="Target"/> of a shot aimed at the hero.</summary>
     public const string HeroTarget = "\0hero";
 }
@@ -99,8 +108,9 @@ public sealed partial class GameSessionOwner
     /// item leaves the NPC (worn no more) and lies on the landing cell in a revision of its own before the damage, moved there without
     /// the drop's placement, so it joins no junk pile and gets no decay (TW6, ID9); the damage, experience, critical and wear steps
     /// follow with the thrower's hand empty (its critical miss finds no weapon). Without a struck critter nothing is rolled and the item
-    /// lands on the location. ARC-DEV-258: a generic item the NPC holds (a grenade) is not thrown here but flies (<see cref="ThrowNpcGeneric"/>). NOT READY: the thrown
-    /// weapon's projectile flight (it lands at once, no stray strike on the tiles a miss passes, PF6, and no item event at its end, PF10), a non-critter
+    /// lands on the location. ARC-DEV-258: a generic item the NPC holds (a grenade) is not thrown here but flies (<see cref="ThrowNpcGeneric"/>). ARC-COMBAT-1717 (<see cref="SessionNpcThrow.Flight"/>): the thrown weapon flies
+    /// too, decided now and struck later (the strike is <see cref="LandNpcShot"/>'s, a miss's stray strikes PF6, PF7 forced hits, the landing <see cref="LandThrownItem"/>, the item event at its end PF10); the result then names the shot
+    /// (<see cref="SessionNpcThrowResult.Shots"/>) and its destination, with no landing and no damage yet. NOT READY: a non-critter
     /// blocker (the host names none), a thrown item other than the weapon the NPC wields and a generic item (a food, an ammunition, a key) or an item
     /// the session added to the NPC (no seed holds it), the throw and remove-item
     /// scripts (an item with any script point is refused) and the unwear of its item spells. Refused before any roll: no hero
@@ -150,6 +160,8 @@ public sealed partial class GameSessionOwner
             if (!status.IsActive) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, null, null, Version);
             if (!IsCurrent(expected)) return Refused(GameSessionFailure.StaleVersion);
             if (_revision == long.MaxValue) return Refused(GameSessionFailure.RevisionExhausted);
+            // ARC-COMBAT-1717: the weapon thrown at a location flies unchecked to it, as a generic item does.
+            if (request.Flight && ShotsInFlight <= MaxShotsInFlight - 1) return ThrowNpcGeneric(expected, request);
             var failure = LandNpcItem(request.Item, request.Target);
             return failure == GameSessionFailure.None ? new(GameSessionDisposition.Changed, GameSessionFailure.None, null, request.Target, Version)
                 : Refused(failure);
@@ -166,10 +178,16 @@ public sealed partial class GameSessionOwner
             TakingDamage = request.TakingDamage,
             HitScripts = request.HitScripts,
             ItemTriggers = request.ItemTriggers,
+            Flight = request.Flight,
         };
         var result = NpcAttack(expected, attack,
             new NpcThrowing(request.Item, request.Weight, request.Target, request.ThrowerCell, request.StruckCell.Value, request.LineOfFire), out var landed, null);
-        return new(result.Disposition, result.Failure, result.Disposition == GameSessionDisposition.Rejected ? null : result, landed, Version);
+        // ARC-COMBAT-1717: a weapon that flies goes to the struck critter's cell (a hit) or the scatter tile (a miss).
+        return new(result.Disposition, result.Failure, result.Disposition == GameSessionDisposition.Rejected ? null : result, landed, Version)
+        {
+            Shots = result.Shots,
+            Destination = result.Shots.Count > 0 ? result.Scatter ?? request.StruckCell : null,
+        };
     }
 
     /// <summary>
@@ -247,7 +265,11 @@ public sealed partial class GameSessionOwner
     public SessionAttackResult LandNpcShot(GameSessionVersion expected, SessionShot shot, SessionNpcAttack attack) => NpcAttack(expected, attack, null, out _, shot);
 
     /// <summary>ARC-DEV-282: an NPC's arrow or bullet in flight: the shooter, the attack values and the check decided at the shot, whether it hit, and its target (an NPC's entity; a marker for the hero).</summary>
-    private sealed record NpcArrow(string Shooter, SessionNpcAttackValues Values, AttackResolution Check, bool Hit, string Target, string? WeaponItem = null);
+    private sealed record NpcArrow(string Shooter, SessionNpcAttackValues Values, AttackResolution Check, bool Hit, string Target, string? WeaponItem = null)
+    {
+        /// <summary>ARC-COMBAT-1717: the thrown weapon's projectile art (not saved: the saved flight carries the art the projectile flies with).</summary>
+        public uint? ThrownArt { get; init; }
+    }
 
     private readonly Dictionary<SessionShot, NpcArrow> _npcArrows = [];
 
@@ -255,7 +277,7 @@ public sealed partial class GameSessionOwner
     public SessionNpcShotFacts? QueryNpcShot(SessionShot shot)
     {
         ThrowIfDisposed();
-        return _npcArrows.TryGetValue(shot, out var arrow) ? new(arrow.Shooter, arrow.Hit, arrow.Values.Weapon.Range, arrow.Target) : null;
+        return _npcArrows.TryGetValue(shot, out var arrow) ? new(arrow.Shooter, arrow.Hit, arrow.Values.Weapon.Range, arrow.Target) { ThrownArt = arrow.ThrownArt } : null;
     }
 
     private const string HeroArrowTarget = SessionNpcShotFacts.HeroTarget;
@@ -335,6 +357,9 @@ public sealed partial class GameSessionOwner
         var projectiles = flies ? ProjectileRules.Projectiles(values.Skill, values.Training) : 0;
         // A full shot budget (the hero's, the NPCs' thrown items and arrows share it) lands the attack at once, as ARC-DEV-273's.
         if (flies && ShotsInFlight > MaxShotsInFlight - projectiles) { flies = false; projectiles = 0; }
+        // ARC-COMBAT-1717 (PF1, 0x4B3C00 → 0x4B3170): a thrown weapon on a host that can fly it is one projectile whose hit waits for the strike; a full shot budget lands the throw at once as before.
+        var throwFlies = arrow is null && throwing is not null && attack.Flight && ShotsInFlight <= MaxShotsInFlight - 1;
+        if (throwFlies) { flies = true; projectiles = 1; }
         // ARC-DEV-283 (RA3, AM4, 0x4B65D0): a shot of an NPC led by a PC (a companion) spends its weapon's ammunition from the NPC's own stack, right after the location roll and before every
         // other roll, all or nothing; too few units refuse the attack (the resolver's out-of-ammunition refusal). An NPC with no PC leader spends nothing. Spent at the shot, not at the strike.
         var ammunition = arrow is null && throwing is null && weapon.Kind == WeaponKind.Weapon && weapon.AmmoType is { } ammoType && weapon.AmmoConsumption > 0 && LedByPc(attacker.Entity!)
@@ -391,22 +416,36 @@ public sealed partial class GameSessionOwner
         var spentNow = spentAmmo is { Disposition: GameSessionDisposition.Changed };
         // A shot that flies is in flight from now on, hit or miss, after its ammunition went (the hero's order); a rejected spend leaves none.
         IReadOnlyList<SessionShot> flying = [];
+        CellCoord? scatter = null;
+        if (throwFlies && resolution.Refusal == AttackRefusal.None)
+        {
+            // ARC-COMBAT-1717 (0x4B3C00: 0x4415C0, no decay): the thrown weapon leaves the NPC's hand and lies hidden on its cell while it flies; a miss's scatter tile is the flight's destination.
+            scatter = scatterRotation is { } rotation ? ScatterThrow(throwing!.Target, values.SkillLevel, rotation, attack.DropMap, throwing.From) : null;
+            var leaving = LandNpcItem(throwing!.Item, throwing.From);
+            if (leaving != GameSessionFailure.None) return new(GameSessionDisposition.Changed, GameSessionFailure.None, resolution, null, null, null, null, leaving, Version);
+            attackerSide = attackerSide with { Worn = attack.AttackerWorn?.Where(pair => pair.Key != EquipmentSlot.Weapon).ToDictionary(pair => pair.Key, pair => pair.Value) };
+        }
         if (flies && resolution.Refusal == AttackRefusal.None)
         {
             var carried = new NpcArrow(attacker.Entity!, values with { Weapon = weapon }, resolution,
-                resolution.Outcome is AttackOutcome.Hit or AttackOutcome.CriticalHit, targetKey, attack.AttackerWorn?.GetValueOrDefault(EquipmentSlot.Weapon)?.Entity);
+                resolution.Outcome is AttackOutcome.Hit or AttackOutcome.CriticalHit, targetKey,
+                throwFlies ? throwing!.Item : attack.AttackerWorn?.GetValueOrDefault(EquipmentSlot.Weapon)?.Entity)
+            {
+                ThrownArt = throwFlies ? attack.AttackerWorn?.GetValueOrDefault(EquipmentSlot.Weapon)?.MissileArt : null,
+            };
             var shots = new SessionShot[projectiles];
             for (var i = 0; i < projectiles; i++)
             {
                 shots[i] = new SessionShot(++_nextShot);
                 _npcArrows.Add(shots[i], carried);
+                if (throwFlies) _npcShots[shots[i]] = new NpcShot(attacker.Entity!, new SessionThrownShot(throwing!.Item, values.Weapon.Range));
             }
             flying = shots;
         }
         // ARC-WORLD-113: the thrown item leaves the NPC's hand and lands at once: on the struck critter's cell for a hit, else on its
         // scattered tile; the thrower's later steps find its hand empty.
         var thrown = throwing is not null && resolution.Refusal == AttackRefusal.None;
-        if (thrown)
+        if (thrown && !throwFlies)
         {
             landed = scatterRotation is { } rotation
                 ? ScatterThrow(throwing!.Target, values.SkillLevel, rotation, attack.DropMap, throwing.From) : throwing!.Struck;
@@ -420,22 +459,22 @@ public sealed partial class GameSessionOwner
         }
         // ARC-SCRIPT-1483 (CP1–CP3): the hit's combat-point scripts run before the damage step; a shot that flies asks at its strike.
         if (resolution.Refusal == AttackRefusal.None && !flies && (resolution.Outcome is AttackOutcome.Hit or AttackOutcome.CriticalHit))
-            attack.HitScripts?.Invoke(new(arrow?.WeaponItem ?? throwing?.Item ?? attack.AttackerWorn?.GetValueOrDefault(EquipmentSlot.Weapon)?.Entity, resolution.Outcome == AttackOutcome.CriticalHit, arrow is not null || throwing is not null, throwing is not null));
+            attack.HitScripts?.Invoke(new(arrow?.WeaponItem ?? throwing?.Item ?? attack.AttackerWorn?.GetValueOrDefault(EquipmentSlot.Weapon)?.Entity, resolution.Outcome == AttackOutcome.CriticalHit, arrow is not null || throwing is not null, throwing is not null || strike is { } landing && _npcShots.ContainsKey(landing)));
         // ARC-DEV-261 (GT198): a prevented damage asks the victim's script too (it comes before the invulnerable gate); its answer cannot change the outcome.
         if (resolution.Refusal == AttackRefusal.None && resolution.Damage is { Prevented: not DamagePrevention.None } blocked) attack.TakingDamage?.Invoke(blocked.Recipient);
         if (resolution.Refusal != AttackRefusal.None || LifeDamage.FromAttack(resolution) is not { } damage)
             return new(resolution.Fate != FateUse.None || thrown || spentNow ? GameSessionDisposition.Changed : GameSessionDisposition.NoChange, GameSessionFailure.None,
-                resolution, null, null, null, null, GameSessionFailure.None, Version) { Shots = flying, Ammunition = spentAmmo };
+                resolution, null, null, null, null, GameSessionFailure.None, Version) { Shots = flying, Ammunition = spentAmmo, Scatter = scatter };
 
         var recipient = resolution.Damage!.Recipient;
         var struck = recipient == DamageRecipient.Target ? target : attacker;
         // ARC-DEV-261 (GT198–GT199): the victim's taking-damage script comes first in the damage apply; a veto ends the whole step.
         if (attack.TakingDamage is { } asks && !asks(recipient))
-            return new(resolution.Fate != FateUse.None || thrown || spentNow ? GameSessionDisposition.Changed : GameSessionDisposition.NoChange, GameSessionFailure.None, resolution, recipient, null, null, null, GameSessionFailure.None, Version) { Vetoed = true, Shots = flying, Ammunition = spentAmmo };
+            return new(resolution.Fate != FateUse.None || thrown || spentNow ? GameSessionDisposition.Changed : GameSessionDisposition.NoChange, GameSessionFailure.None, resolution, recipient, null, null, null, GameSessionFailure.None, Version) { Vetoed = true, Shots = flying, Ammunition = spentAmmo, Scatter = scatter };
         // ARC-DEV-312: the attacker is the killer of a target it kills (a critical self-hit has none).
         var applied = ApplyDamage(Version, recipient == DamageRecipient.Target ? targetLife : attacker.Target, damage, killer: recipient == DamageRecipient.Target ? attacker.Entity : null);
         if (applied.Disposition == GameSessionDisposition.Rejected)
-            return new(GameSessionDisposition.Changed, GameSessionFailure.None, resolution, recipient, null, null, null, applied.Failure, Version);
+            return new(GameSessionDisposition.Changed, GameSessionFailure.None, resolution, recipient, null, null, null, applied.Failure, Version) { Shots = flying, Ammunition = spentAmmo, Scatter = scatter };
         var outcome = applied.Outcome!;
         SessionExperienceAward? killAward = null;
         var stepFailure = GameSessionFailure.None;
@@ -492,6 +531,7 @@ public sealed partial class GameSessionOwner
             Criticals = criticals,
             Ammunition = spentAmmo,
             Shots = flying,
+            Scatter = scatter,
             ItemSpells = itemSpells,
         };
     }

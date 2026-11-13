@@ -44,6 +44,21 @@ public static class AreaCharacterSheetArtLayout
     public static IReadOnlyList<int> ArtNumbers { get; } =
         [BackgroundArt, MinusArt, PlusArt, SkillsTabArt, TechTabArt, SpellsTabArt, AlignmentArt, AptitudeArt, LabelFontArt, FlareFontArt, CloisterFontArt];
 
+    /// <summary>ARC-UI-1195: the arts the generated interface draws for the window itself (the background, the + and − buttons, the four tabs) and for each page
+    /// (the page's background and its buttons); the native smoke checks that every frame of them draws generated chrome.</summary>
+    public static IReadOnlyList<int> WindowArtNumbers { get; } = [BackgroundArt, MinusArt, PlusArt, SkillsTabArt, TechTabArt, SpellsTabArt, SchemesTabArt];
+
+    public static IReadOnlyList<int> SkillsPageArtNumbers { get; } =
+        [AreaCharacterSheetPagesLayout.SkillsBackgroundArt, .. Enumerable.Range(AreaCharacterSheetPagesLayout.GroupTabArtBase, AreaCharacterSheetPagesLayout.Groups),
+            AreaCharacterSheetPagesLayout.SkillPlusArt, AreaCharacterSheetPagesLayout.SkillMinusArt];
+
+    public static IReadOnlyList<int> TechPageArtNumbers { get; } =
+        [AreaCharacterSheetPagesLayout.TechBackgroundArt, .. Enumerable.Range(AreaCharacterSheetPagesLayout.DisciplineArtBase, AreaCharacterSheetPagesLayout.Disciplines),
+            AreaCharacterSheetPagesLayout.TechPlusArt, AreaCharacterSheetPagesLayout.TechMinusArt];
+
+    public static IReadOnlyList<int> SpellsPageArtNumbers { get; } =
+        [AreaCharacterSheetSpellsLayout.BackgroundArt, AreaCharacterSheetSpellsLayout.PlusArt, AreaCharacterSheetSpellsLayout.MinusArt];
+
     public static IReadOnlyList<int> AllArtNumbers { get; } =
         [.. ArtNumbers.Concat([SchemesTabArt]).Concat(AreaCharacterSheetPagesLayout.ArtNumbers).Concat(AreaCharacterSheetSpellsLayout.ArtNumbers).Distinct()];
 

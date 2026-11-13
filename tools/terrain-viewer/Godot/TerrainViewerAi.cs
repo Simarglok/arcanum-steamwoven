@@ -210,6 +210,8 @@ public partial class TerrainViewerApp
             ObjectStruck = NpcObjectHit,
             // ARC-TECHNOLOGY-1619 (VB2-2 gap d): a trap's shooter object (an object that is no critter) as the attack event reads it.
             ObjectFacts = AiObjectFacts,
+            // ARC-AI-1636: an NPC's attack on the object it holds as its focus is the session's object attack on the map row the cast id names.
+            ObjectAttackTarget = id => _areaSession is { } objectOwner && _spellCastMap?.Row(id) is { } objectRow && !IsAreaCompanion(objectRow.Key) ? ObjectTargets()?.Target(objectOwner, objectRow.Key, AreaTrapped) : null,
             // ARC-DEV-261 (GT198): the victims' taking-damage scripts (point 0x17) of the NPCs' attacks, throws and knockback bumps.
             TakingDamage = TakingDamageGoesOn,
             // ARC-SCRIPT-1483: the combat-point scripts (hit, critter hits, critical hit) of the NPCs' hits.
@@ -240,7 +242,7 @@ public partial class TerrainViewerApp
     private string? ConversationPartnerEntity()
     {
         if (ConversationOpen && _conversationSpeaker is { } speaker) return AreaConversationState.EntityId(speaker.Row);
-        return BarterOpen && _barter is { } barter ? barter.Merchant.Entity : null;
+        return BarterOpen && _barter is { } barter ? barter.Merchant.Entity : ItemServiceOpen && _itemService is { } service ? service.Merchant.Entity : null;
     }
 
     /// <summary>ARC-WORLD-115: the companions of the shown map the AI host runs (ARC-WORLD-119: every one standing here, following,
@@ -279,8 +281,8 @@ public partial class TerrainViewerApp
     private int _heartbeatKills, _heartbeatOffs;
 
     /// <summary>
-    /// ARC-TECHNOLOGY-1619 (VB2-2 gap d): the facts of an object that is no critter (a trap's shooter: a wall, a portal, a scenery or a trap object) as the AI host's attack event and target validity read them, from the shown map's cast map: its type, tile and
-    /// object flags. The busted state (0x43F630) is not read yet, so a broken shooter still holds an NPC's focus. Null for the hero, a critter, an item or an id the cast map does not know.
+    /// ARC-TECHNOLOGY-1619 (VB2-2 gap d): the facts of an object that is no critter (a trap's shooter: a wall, a portal, a scenery or a trap object) as the AI host's attack event and target validity read them, from the shown map's cast map
+    /// object flags; ARC-AI-1636: with the busted state (0x43F630, <see cref="AreaObjectTargets.IsBusted"/>), so an NPC drops a focus the object's break has made invalid. Null for the hero, a critter, an item or an id the cast map does not know.
     /// </summary>
     private AreaAiObjectFacts? AiObjectFacts(string id) =>
         _spellCastMap?.Object(id) is { IsCritter: false, IsItem: false } found
@@ -288,8 +290,26 @@ public partial class TerrainViewerApp
             {
                 Destroyed = (found.ObjectFlags & Arcanum.Simulation.Magic.SpellTargetObject.Destroyed) != 0, Off = (found.ObjectFlags & Arcanum.Simulation.Magic.SpellTargetObject.Off) != 0,
                 DontDraw = (found.ObjectFlags & Arcanum.Simulation.Magic.SpellTargetObject.DontDraw) != 0, Invulnerable = (found.ObjectFlags & Arcanum.Simulation.Magic.SpellTargetObject.Invulnerable) != 0,
+                Busted = AiObjectBusted(id),
             }
             : null;
+
+    // ARC-AI-1636: the busted answers of one session revision and one map's targets (a fight asks the same object every pass); a revision or another map's targets start a new set.
+    private readonly Dictionary<string, bool> _aiBusted = new(StringComparer.Ordinal);
+    private GameSessionVersion _aiBustedVersion;
+    private AreaObjectTargets? _aiBustedTargets;
+
+    private bool AiObjectBusted(string id)
+    {
+        if (_areaSession is not { } session || _spellCastMap?.Row(id) is not { } row || ObjectTargets() is not { } targets) return false;
+        if (_aiBustedVersion != session.Version || !ReferenceEquals(_aiBustedTargets, targets))
+        {
+            _aiBusted.Clear();
+            (_aiBustedVersion, _aiBustedTargets) = (session.Version, targets);
+        }
+        if (_aiBusted.TryGetValue(id, out var known)) return known;
+        return _aiBusted[id] = targets.IsBusted(session, row.Key, AreaTrapped);
+    }
 
     /// <summary>ARC-WORLD-114: an NPC's first-heartbeat or heartbeat script through the shown map's use-script host, whose toggle state and
     /// kill reach the session; true lets the tick go on. A run that is refused or not applied goes on as without a script.</summary>
@@ -654,6 +674,24 @@ public partial class TerrainViewerApp
         if (_sectorChart is { } chart && _sectorChartKey == (_areaSession, CurrentAreaMap) && _areaSession?.QuerySectors(new SessionMapId(CurrentAreaMap)) is { } state) chart.Request(state.Slots);
     }
 
+    // ARC-DEV-1692: what the chart over the loaded sectors holds now, for a smoke's line (idle, evidence present, sectors held, sectors the session's cache holds loaded).
+    private string SectorChartState() => _sectorChart is not { } chart ? "none"
+        : $"idle={chart.Idle} steps={(chart.Steps is null ? "none" : "held")} held={chart.Sectors.Count} cache={(_areaSession?.QuerySectors(new SessionMapId(CurrentAreaMap))?.Slots is { IsDefault: false } slots ? slots.Length.ToString() : "-")}";
+
+    // ARC-DEV-1692: a smoke's frames run in microseconds of wall time, while the chart reads the sectors the cache loaded on a background task (seconds for a sector outside the window), so a
+    // stage that expects the host to plan a route into such a sector must let the read finish first or its outcome depends on the machine's load. False: the read did not finish in the time.
+    private bool SettleSectorChartForSmoke(int timeoutMs = 60_000)
+    {
+        if (_sectorChart is not { } chart) return true;
+        var until = Time.GetTicksMsec() + (ulong)timeoutMs;
+        while (!chart.Idle)
+        {
+            if (Time.GetTicksMsec() > until) return false;
+            System.Threading.Thread.Sleep(1);
+        }
+        return true;
+    }
+
     private void DropSectorChart() { _sectorChart?.Dispose(); _sectorChart = null; _sectorChartKey = null; }
 
     // ARC-DEV-104 (MIG9 S4, RL11): each frame the hero's view square touches its sectors in the session's cache (an age bump, or a load and a
@@ -905,13 +943,14 @@ public partial class TerrainViewerApp
     {
         var thrown = notice.Throw!;
         GD.Print($"ARC-WORLD-113 ai-throw npc={notice.Npc} item={notice.Item} struck={notice.Target ?? "none"} disposition={thrown.Disposition}"
-            + $" failure={thrown.Failure} outcome={thrown.Attack?.Resolution?.Outcome} landed={(thrown.Landed is { } at ? $"{at.X},{at.Y}" : "none")}");
+            + $" failure={thrown.Failure} outcome={thrown.Attack?.Resolution?.Outcome} landed={(thrown.Landed is { } at ? $"{at.X},{at.Y}" : "none")}"
+            + (thrown.Shots.Count > 0 ? $" flies-to={(thrown.Destination is { } to ? $"{to.X},{to.Y}" : "none")}" : ""));
         if (notice.Target is not null && notice.Result is not null)
         {
             AiHit(notice);
             return;
         }
-        _aiNotice = $"{AiName(notice.Npc)} throws: {(thrown.Landed is null ? $"refused ({thrown.Failure})" : "it lands")}";
+        _aiNotice = $"{AiName(notice.Npc)} throws: {(thrown.Shots.Count > 0 ? "it flies" : thrown.Landed is null ? $"refused ({thrown.Failure})" : "it lands")}";
         SyncAreaCombatBodies();
         SyncAreaInventory();
         RefreshAreaStatus();

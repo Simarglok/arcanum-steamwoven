@@ -104,11 +104,14 @@ public partial class TerrainViewerApp
     }
 
     /// <summary>The armed press: an NPC of the map's seed starts at once, at any distance (the walk is each attempt's); anything else cancels the skill.</summary>
-    private void PickPocketPress(Vector2 screen)
+    private void PickPocketPress(Vector2 screen) => PickPocketOn(AreaObjectAtScreen(screen));
+
+    /// <summary>The armed press on an object found: the screen's pick above, or ARC-UI-1736 (FP6) a follower's portrait (the skill target mode's valid-target test and handler 0x57A1F0).</summary>
+    private void PickPocketOn(AreaObjectKey? found)
     {
         // The press leaves the skill's target mode (SA51: pick pocket leaves it and opens the steal window).
         if (PickPocketArmed) CloseTargetMode(InterfaceMode.SkillTarget);
-        if (InventoryOpen || ActorCell() is null || AreaObjectAtScreen(screen) is not { } key || _inventoryHost?.Map(CurrentAreaMap) is not { } map
+        if (InventoryOpen || ActorCell() is null || found is not { } key || _inventoryHost?.Map(CurrentAreaMap) is not { } map
             || !map.TryGetEntity(key, out var npc) || !map.Seed.Holders.Any(h => h.Entity == npc && h.Kind == SessionHolderKind.Npc))
         {
             _inventoryStatus = "pick pocket cancelled: not an NPC"; RefreshAreaStatus(); return;

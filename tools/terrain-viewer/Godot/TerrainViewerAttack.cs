@@ -276,6 +276,8 @@ public partial class TerrainViewerApp
     private void FinishObjectHit(AttackGoal? goal, AreaObjectAttackTarget target, SessionObjectAttackResult result, bool ranged = false, bool byHero = true, string? attacker = null)
     {
         var owner = _areaSession!;
+        // ARC-COMBAT-1720: a weapon the wear broke is replaced at once (0x4B5580 → 0x4B83E0); an object has no magnetic inversion.
+        if (byHero) HeroWeaponWornOut(result.Wear, target.Row, false);
         // A blocker the line of fire struck instead (ARC-COMBAT-012) does not end the goal on the clicked target when it breaks.
         if (goal is not null && target.Row.Key == goal.Row.Key)
             goal.Broke = result.Object?.Broken == true || result.Item?.Break is Arcanum.Simulation.Items.ItemBreakStep.Broken or Arcanum.Simulation.Items.ItemBreakStep.Deleted;
@@ -877,6 +879,8 @@ public partial class TerrainViewerApp
     {
         var owner = _areaSession!;
         _lastCritterAttackForSelfTest = result;
+        // ARC-COMBAT-1720: a weapon the wear broke is replaced at once (0x4B5580 → 0x4B83E0), before anything else reads the hero's equipment.
+        HeroWeaponWornOut(result.Wear, struck.Row, struck.Combat?.MagneticInversion == true);
         // ARC-DEV-292: a hit or a miss that ran the attack event gives the NPC victim its immediate AI pass (0x4B52FC, the miss paths 0x4B30F5 and 0x4B3948): after the attack event (the victim has its focus), before the sounds and bookkeeping.
         // ARC-DEV-303 (RS10): the hit effect (0x4B6930 → 0x459A30): a hit that reached an entangled NPC asks its save again, before its pass.
         if (AreaAiHost.HitReached(result)) _spellCaster?.CritterHit(struck.Entity);
