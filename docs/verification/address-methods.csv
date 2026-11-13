@@ -259,6 +259,7 @@ src/Arcanum.Session/SessionSpellCasterTrapDevices.cs,CastAtTileWithoutCaster,pen
 src/Arcanum.Session/SessionSpellCasterTrapDevices.cs,UseScriptTrapDevice,pending,
 src/Arcanum.Session/SessionSpellCasterTrapDevices.cs,UseTrapDevice,pending,
 src/Arcanum.Session/SessionSpellCasterTraps.cs,ApplyTrapEffect,pending,
+src/Arcanum.Session/SessionSpellCasterTraps.cs,StrikeTrapShot,exempt,host
 src/Arcanum.Session/SessionSpellCasterTraps.cs,TrapShot,exempt,host
 src/Arcanum.Simulation/Ai/AwarenessRules.cs,SoundStepCost,pending,
 src/Arcanum.Simulation/Ai/AwarenessRules.cs,WithProwlerLine,pending,

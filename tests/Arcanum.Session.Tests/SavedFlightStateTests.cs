@@ -17,7 +17,7 @@ public sealed class SavedFlightStateTests
     private static readonly CellCoord From = new(100, 200), To = new(103, 200);
 
     // A projectile carrying the shot, its flight written as the host writes it, and its run (goal 36) on the table.
-    private static string Fly(GameSessionOwner owner, SessionShot shot, string? target, string? shooter = null, bool critter = true, string? thrower = null)
+    internal static string Fly(GameSessionOwner owner, SessionShot shot, string? target, string? shooter = null, bool critter = true, string? thrower = null)
     {
         var id = owner.CreateProjectile(From)!;
         var line = ProjectileRules.Launch(From, To)!;

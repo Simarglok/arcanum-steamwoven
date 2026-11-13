@@ -117,9 +117,14 @@ or the triggerer alone for radius 0, none without a triggerer):
   then the victim's taking-damage script is asked with the shooter as the attacker, the damage step takes the amount in the
   normal slot and the hit effect of a PC or NPC victim runs. The victim's result carries the damage step's own outcome and
   the shooter. The player credit of a PC-placed trap is lost in a shot (the result's `Killer` is null: the strike's context
-  names the shooter as the damage source, TT15). The strike also calls the shooter's critter-hits script point (0x4B2F60, not run) and the sound cue draws one random (0x4F0BF0, not drawn: the project draws no sound cues). The hit effect (0x4B6930) runs whatever the damage step did, a veto and an invulnerable target included. PROJECT: the missile is not drawn or flown, so a victim that would leave its
-  line, a kill before the strike and a save during the flight are not modelled ([#1635](https://github.com/Simarglok/arcanum-steamwoven/issues/1635) draws the flight); a PC victim's
-  armed critical-miss fate (0x4F5270) is not applied. The host lists the shooter candidates around the triggerer
+  names the shooter as the damage source, TT15). The strike also calls the shooter's critter-hits script point (0x4B2F60, not run) and the sound cue draws one random (0x4F0BF0, not drawn: the project draws no sound cues). The hit effect (0x4B6930) runs whatever the damage step did, a veto and an invulnerable target included.
+  ARC-TECHNOLOGY-1635 (the missile): the strike does not follow the dispatcher when the host flies the missile (`SessionSpellCaster.LaunchTrapShot`, set by the viewer): after the spell the session makes a shot of its own
+  (`GameSessionOwner.BeginTrapShot`: shooter object, victim, amount; a full budget of 16 shots in flight strikes at once) and the host launches one projectile of the default art (scenery art 0, faced along its line, drawn)
+  from the shooter object's tile to the victim's location. Where the missile meets the victim on the line (`SessionSpellCaster.StrikeTrapShot`) the event and the damage described above run; a victim that left the line is
+  not struck: the missile flies on past its destination (as a miss), strikes another living critter by the shared stray rule (the same strike with the shooter as attacker) or ends at its range of 20 tiles with nothing struck.
+  The session's shot is saved with the missile (`flights.trapShots`, schema 100: shooter, victim, amount) and strikes after a load. The hero victim's armed critical-miss fate (0x4F5270 kind 3, ledger TT15) makes the hit a
+  miss that pops on the shooter's own tile (`SessionTrapHit.Missed`: the fate is used up, a third d100 of the critical-miss procedure is drawn, no event, no damage; the spell is cast all the same). Not built: a missile that
+  meets an object other than a critter on its free flight strikes none ([#1760](https://github.com/Simarglok/arcanum-steamwoven/issues/1760)). Without a host that flies (no launch hook, or a launch the host refuses) the strike follows the dispatcher at once, as it did. The smoke stage `ranged` has a trap-shot leg on the real map: a scenery, portal or trap object 3..8 cells from the hero shoots through the cast host; the missile is drawn and strikes the hero for exactly the drawn amount, a hero moved off the line is not struck, and a shot saved in flight with F7 strikes after F8 as the live one did. The host lists the shooter candidates around the triggerer
   (`AreaTrapShooters.Candidates`: the objects of types wall, portal, scenery and trap in the isometric window of the game
   view, each with its use script and counters, the square query's order); without a triggerer it lists none.
 - **Spell**: 30000, and any damage or shot with a top byte, starts the spell at the victim
@@ -258,8 +263,7 @@ The hero's disarm traps press (E6-a second half; ledger [SP3](../research/ledger
   attack's trap trigger in the viewer,
   and the drawing of a spotted trap object (the area data resolves no body for a don't-draw
   object yet).
-- The shot's missile (TT15: the default projectile art flying from the shooter's tile, the strike where it meets the victim, the
-  shot in flight across a save) and the shooter list's exact rectangle around the triggerer (TT12); the floating line and the eye candy of a fired run, and the damage effect (TT14),
+- The shooter list's exact rectangle around the triggerer (TT12); the floating line and the eye candy of a fired run, and the damage effect (TT14),
   are the host's presentation.
 - Trap devices placed by the player (ARC-TECHNOLOGY-011/012, ledger TP1–TP8) and the
   multiplayer per-player lists.
