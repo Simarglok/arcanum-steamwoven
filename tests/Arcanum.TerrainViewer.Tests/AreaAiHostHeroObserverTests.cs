@@ -81,6 +81,31 @@ public sealed class AreaAiHostHeroObserverTests
     }
 
     [TestMethod]
+    public void A_hero_blinded_by_the_critter_flag_does_not_see_either_and_the_pick_pocket_start_reads_the_same_check()
+    {
+        var (f, host) = Setup(() => TowardNpc);
+        using var _ = f;
+        Assert.IsTrue(host.SeeToward(Pc, f.A).Perceived, "the pick-pocket start turns the hero toward the target");
+        Write(f, Pc, SessionObjectFlagField.Critter, 0x80);
+        Assert.IsFalse(host.ScriptCanSee(Pc, f.A), "critter flag 0x80 is in the sight refusal mask 0x10A0");
+        Assert.IsFalse(host.SeeToward(Pc, f.A).Perceived, "a blinded hero no longer opens a pick-pocket (the same check)");
+        Assert.IsTrue(host.ScriptCanHear(Pc, f.A));
+    }
+
+    [TestMethod]
+    public void A_dead_hero_neither_sees_nor_hears()
+    {
+        var (f, host) = Setup(() => TowardNpc);
+        using var _ = f;
+        Assert.IsTrue(host.ScriptCanSee(Pc, f.A));
+        var life = f.Session.QueryHeroLife()!;
+        f.Session.ApplyDamage(f.Session.Version, SessionLifeTarget.Hero, new LifeDamage { HitPoints = life.Status.MaxHitPoints + 100 }, new SessionDamageParties(null, null));
+        Assert.IsTrue(f.Session.QueryHeroLife()!.Status.IsDead);
+        Assert.IsFalse(host.ScriptCanSee(Pc, f.A), "0x4AF260 starts with the unconscious-or-dead test of the observer (0x45D800)");
+        Assert.IsFalse(host.ScriptCanHear(Pc, f.A));
+    }
+
+    [TestMethod]
     public void A_blinded_hero_does_not_see_but_hears()
     {
         var (f, host) = Setup(() => TowardNpc);

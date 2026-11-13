@@ -320,7 +320,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     // at their raw rate: NPC ART is not read yet.
     private static readonly (int Frames, int ActionFrame, int RawFramesPerSecond) FixedSkillArt = FixedAttackArt;
     // ARC-WORLD-109: object flag 0x10000 and critter flags stunned and paralysed refuse an action's turn and start (0x42C0F0, 0x42CB10).
-    private const uint ActionRefusedObject = 0x10000, StunnedCritter = 0x20, ParalysedCritter = 0x40, ProwlingCritter = 0x1;
+    private const uint ActionRefusedObject = 0x10000, StunnedCritter = 0x20, ParalysedCritter = 0x40, BlindedCritter = 0x80, ProwlingCritter = 0x1;
     // ARC-DEV-135 (MIG13 S5): the levels of the host's own interrupts (GS20): the AI tick's far path, the follower catch-up and the waypoint and standpoint moves interrupt at 4
     // (TL42), a follower's removal from the party at 5 (0x45E040).
     private const int FarPathLevel = 4, LeaveLevel = 5;
@@ -3763,12 +3763,15 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         : observer == Pc && _scene.HeroRotation?.Invoke() is { } hero ? hero & 7
         : GridActorMath.Octant(Movers.FacingOf(observer, NeighborDirection.XPlus));
 
+    // ARC-SCRIPT-1773 (AW2, 0x45D800): the observer refused for being down: unconscious, and the dead hero (0x4AF260 starts with that test; the hero's dead state is a fact the rules have no field for).
+    private static bool Down(string observer, HostilityCritter? facts) => facts?.Unconscious == true || (observer == Pc && facts?.Dead == true);
+
     private AwarenessResult SeeFacing(string observer, string target, NeighborDirection? facing)
     {
         if (Tile(observer) is not { } at || Tile(target) is not { } there || _scene.LineOfFire?.Invoke() is not { } map) return new(AwarenessRules.NotPerceived, AwarenessReason.State);
         var facts = Find(observer);
         var stunned = Stunned(observer);
-        var blinded = observer == Pc ? HeroLifeState()?.Conditions.HasFlag(LifeConditions.Blinded) ?? false : Blinded(observer);
+        var blinded = observer == Pc ? (HeroLifeState()?.Conditions.HasFlag(LifeConditions.Blinded) ?? false) || (_session.QueryObjectFlags(Pc).Critter(0) & unchecked((int)BlindedCritter)) != 0 : Blinded(observer);
         var rotation = ObserverRotation(observer, facing);
         var sleeping = observer == Pc ? (_session.QueryObjectFlags(Pc).Critter(0) & unchecked((int)SleepingFlag)) != 0 : facts?.Asleep ?? false;
         var sight = new SightFacts
@@ -3776,11 +3779,11 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
             Perception = Math.Clamp(facts?.Perception ?? 0, 0, AwarenessRules.MaxPerception),
             Rotation = rotation,
             // ARC-AI-1519 (VBG8): the refusal flags 0x10A0 are stunned 0x20, blinded 0x80 and sleeping 0x1000, not paralysis 0x40; Perception 20 or more (0x4B0EE0) sees the invisible.
-            Stunned = stunned, Blinded = blinded, Sleeping = sleeping, Unconscious = facts?.Unconscious ?? false,
+            Stunned = stunned, Blinded = blinded, Sleeping = sleeping, Unconscious = Down(observer, facts),
             ExtraordinaryPerception = (facts?.Perception ?? 0) >= AwarenessRules.ExtraordinaryPerceptionMin,
             TargetInvisible = Find(target) is { } seen && (seen.ObjectInvisible || seen.InvisibleSpell), DetectsInvisible = facts?.DetectsInvisible ?? false,
             // The margin is read only where the sight check gets as far as Perception (not for a stunned, blinded, sleeping or unconscious observer, nor one facing away).
-            ProwlingMargin = facts is { Unconscious: false } && !sleeping && !stunned && !blinded && AwarenessRules.Faces(at, rotation, there)
+            ProwlingMargin = !Down(observer, facts) && !sleeping && !stunned && !blinded && AwarenessRules.Faces(at, rotation, there)
                 ? ProwlingMargin(observer, target, at, there, facts, map, true) : 0,
         };
         var (offsetX, offsetY) = ObserverOffset(observer);
@@ -3854,8 +3857,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         {
             Perception = Math.Clamp(facts?.Perception ?? 0, 0, AwarenessRules.MaxPerception),
             // ARC-AI-1519 (VBG8): hearing refuses critter flag 0x20 only; a paralysed observer still hears.
-            Stunned = stunned, Sleeping = sleeping, Unconscious = facts?.Unconscious ?? false,
-            ProwlingMargin = facts is { Unconscious: false } && !stunned ? ProwlingMargin(observer, target, at, there, facts, map, false) : 0,
+            Stunned = stunned, Sleeping = sleeping, Unconscious = Down(observer, facts),
+            ProwlingMargin = facts is { Unconscious: false } && !Down(observer, facts) && !stunned ? ProwlingMargin(observer, target, at, there, facts, map, false) : 0,
         };
         var (offsetX, offsetY) = ObserverOffset(observer);
         return AwarenessRules.Hear(hearing, at, offsetX, offsetY, there, loudness, new SoundMap(map), _session.Rules.Combat);
