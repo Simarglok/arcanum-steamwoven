@@ -3,27 +3,38 @@ using Godot;
 namespace Arcanum.TerrainViewer;
 
 /// <summary>
-/// ARC-WORLD-1160 diagnostic sleep and wait window (mode 6, <see cref="Arcanum.World.AreaRestRules"/>): one button for each length of the rest (eight, seven in the wait window) with the
-/// labels of the game's <c>sleepUI.mes</c> (the project's English text when it does not read), and the screen fade the rest starts (a black cover under the windows and the bars). A plain
-/// layout instead of the original's window art (interface arts 0x235 and 0x23D, not drawn here) and fonts; the window takes no keys of its own (S, a window key or Escape come through the
-/// game's global keys). A press hides the buttons (0x57B710) and the window stays until the rest ends.
+/// The sleep and wait window (mode 6, <see cref="Arcanum.World.AreaRestRules"/>): one button for each length of the rest (eight, seven in the wait window) with the
+/// labels of the game's <c>sleepUI.mes</c> (the project's English text when it does not read), and the screen fade the rest starts (a black cover under the windows and the bars). ARC-UI-1363: the window is
+/// drawn in the original's look (<see cref="AreaSleepView"/>: art 565 at (573, 42), buttons of art 293, font art 229) once its art has read; until then (and in the self-test, which has no game folder)
+/// a plain project panel stands in with the same buttons. The window takes no keys of its own (S, a window key or Escape come through the game's global keys). A press hides the buttons (project:
+/// the original's handler, 0x57B710, hides none) and the window stays until the rest ends.
 /// </summary>
 public partial class AreaSleepPanel : CanvasLayer
 {
     private CanvasLayer _fadeLayer = null!;
     private ColorRect _fade = null!;
     private PanelContainer _panel = null!;
-    private Label _title = null!, _note = null!;
+    private Label _title = null!;
     private VBoxContainer _buttons = null!;
     private readonly List<Button> _buttonList = [];
+    private AreaSleepView _view = null!;
+    private IReadOnlyList<string> _labels = [];
+    private bool _buttonsShown;
 
     /// <summary>A button was pressed (0-based).</summary>
     public event Action<int>? ButtonPressed;
+    /// <summary>An interface sound of the original-look buttons (3000 press, 3001 release).</summary>
+    public event Action<int>? SoundRequested;
     public bool IsOpen => Visible;
     /// <summary>True while the buttons are shown (before the first press).</summary>
-    public bool ButtonsShown => _buttons.Visible;
-    internal int ButtonCountForSelfTest => _buttonList.Count;
-    internal string ButtonTextForSelfTest(int button) => _buttonList[button].Text;
+    public bool ButtonsShown => _buttonsShown;
+    /// <summary>The original's art and font are set (the window is drawn in the original's look when it opens).</summary>
+    public bool ArtSet => _view.ArtSet;
+    /// <summary>The open window is drawn in the original's look (art 565), not as the plain stand-in panel.</summary>
+    public bool OriginalLook => IsOpen && _view.Visible;
+    internal AreaSleepView ViewForSelfTest => _view;
+    internal int ButtonCountForSelfTest => _labels.Count;
+    internal string ButtonTextForSelfTest(int button) => _labels[button];
     internal double FadeForSelfTest => _fade.Color.A;
 
     public override void _Ready()
@@ -45,12 +56,11 @@ public partial class AreaSleepPanel : CanvasLayer
         var contents = new VBoxContainer(); _panel.AddChild(contents);
         _title = new Label { Modulate = new Color(.15f, .1f, .05f), HorizontalAlignment = HorizontalAlignment.Center };
         _buttons = new VBoxContainer();
-        _note = new Label
-        {
-            Modulate = new Color(.3f, .3f, .3f), AutowrapMode = TextServer.AutowrapMode.WordSmart,
-            Text = "PROJECT diagnostic window: the original's window art and fonts are not drawn; S, a window key or Escape leave through the game's keys",
-        };
-        foreach (var control in new Control[] { _title, _buttons, _note }) contents.AddChild(control);
+        foreach (var control in new Control[] { _title, _buttons }) contents.AddChild(control);
+        _view = new AreaSleepView();
+        AddChild(_view);
+        _view.RowPressed += row => ButtonPressed?.Invoke(row);
+        _view.SoundRequested += sound => SoundRequested?.Invoke(sound);
         GetViewport().SizeChanged += ResizePanel;
         ResizePanel(); Hide();
         _fadeLayer.Visible = false;
@@ -61,6 +71,16 @@ public partial class AreaSleepPanel : CanvasLayer
     {
         foreach (var button in _buttonList) button.QueueFree();
         _buttonList.Clear();
+        _labels = labels;
+        _buttonsShown = true;
+        Show(); _fadeLayer.Visible = _fade.Color.A > 0;
+        if (_view.ArtSet)
+        {
+            _panel.Visible = false;
+            _view.Open(labels);
+            return;
+        }
+        _view.CloseView();
         for (var i = 0; i < labels.Count; i++)
         {
             var index = i;
@@ -70,16 +90,31 @@ public partial class AreaSleepPanel : CanvasLayer
         }
         _title.Text = wait ? "Wait" : "Rest";
         _buttons.Visible = true;
-        Show(); _fadeLayer.Visible = _fade.Color.A > 0;
+        _panel.Visible = true;
         if (_buttonList.Count > 0) _buttonList[0].GrabFocus();
         CallDeferred(nameof(Fit));
     }
 
-    /// <summary>The window closes (the fade goes with it: the viewer fades the screen back in on its own cover until it is clear).</summary>
-    public void CloseView() { Hide(); GetViewport().GuiReleaseFocus(); }
+    /// <summary>Sets the original's art and font (the viewer has read them); the next opening is drawn in the original's look.</summary>
+    public void SetArt(IReadOnlyDictionary<int, Texture2D[]> art, AreaArtFontFace font) => _view.SetArt(art, font);
 
-    /// <summary>A press hides the buttons (SWB8).</summary>
-    public void HideButtons() { _buttons.Visible = false; GetViewport().GuiReleaseFocus(); CallDeferred(nameof(Fit)); }
+    /// <summary>Forgets the original's art (the module changed).</summary>
+    public void ClearArt() { _view.CloseView(); _view.ClearArt(); }
+
+    /// <summary>The original-look window follows the viewport (its place and factor); the plain panel does it itself.</summary>
+    public void PlaceView() { if (_view.Visible) _view.Place(); }
+
+    /// <summary>The window closes (the fade goes with it: the viewer fades the screen back in on its own cover until it is clear).</summary>
+    public void CloseView() { Hide(); _view.CloseView(); GetViewport().GuiReleaseFocus(); }
+
+    /// <summary>A press hides the buttons (project, SWB8).</summary>
+    public void HideButtons()
+    {
+        _buttonsShown = false;
+        _buttons.Visible = false;
+        _view.HideButtons();
+        GetViewport().GuiReleaseFocus(); CallDeferred(nameof(Fit));
+    }
 
     private void Fit() => _panel.Size = new Vector2(_panel.CustomMinimumSize.X, 0);
 
@@ -93,12 +128,18 @@ public partial class AreaSleepPanel : CanvasLayer
     /// <summary>Controller confirm: the focused button.</summary>
     public void Confirm()
     {
+        if (_view.Visible) { _view.Confirm(); return; }
         foreach (var button in _buttonList)
             if (button.HasFocus() && _buttons.Visible) { button.EmitSignal(BaseButton.SignalName.Pressed); return; }
     }
 
     public void Navigate(int direction)
     {
+        if (_view.Visible)
+        {
+            if (_buttonsShown && _labels.Count > 0) _view.Focus = Math.Clamp(_view.Focus is { } at ? at + direction : 0, 0, _labels.Count - 1);
+            return;
+        }
         if (!_buttons.Visible || _buttonList.Count == 0) return;
         var focus = _buttonList.FindIndex(b => b.HasFocus());
         _buttonList[Math.Clamp(focus < 0 ? 0 : focus + direction, 0, _buttonList.Count - 1)].GrabFocus();
