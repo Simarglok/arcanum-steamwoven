@@ -1087,6 +1087,51 @@ public sealed class AreaAiFollowerTests
         Assert.IsTrue(spoke is > 5 and < 40, $"one time in three of 60 hits: {spoke}");
     }
 
+    // ARC-AI-1585 (AC2): the accidental follower path (an arrow or a spell stray the hero let fly: FollowerAccidental) changes no reaction but still runs the follow check.
+    [TestMethod]
+    public void A_stray_hit_on_a_follower_changes_no_reaction_and_the_follower_that_passes_the_check_stays()
+    {
+        var scene = OpenFollowerHit(reaction: 100);
+        scene.Host.HeroStrayAttacked(scene.Companion);
+        AssertLeft(scene, left: false);
+        var trace = scene.Host.TraceOf(scene.Companion)!.FollowerHit!;
+        StringAssert.StartsWith(trace, "accidental reaction-changed=False");
+        StringAssert.Contains(trace, "stays (Accepted)");
+        Assert.IsNull(scene.Session.QueryReactionRecord(scene.Companion)?.Remembered, "no parameter 9 was added or taken");
+    }
+
+    [TestMethod]
+    public void A_stray_hit_on_a_follower_that_refuses_to_follow_still_makes_it_leave_jilted()
+    {
+        var scene = OpenFollowerHit(reaction: 40);
+        scene.Host.HeroStrayAttacked(scene.Companion);
+        AssertLeft(scene, left: true);
+        var trace = scene.Host.TraceOf(scene.Companion)!.FollowerHit!;
+        StringAssert.StartsWith(trace, "accidental reaction-changed=False");
+        StringAssert.Contains(trace, "left jilted, refusal lines 1800-1899 (Dislike)");
+    }
+
+    // ARC-AI-1585 (AC2): in Steamwoven a deliberate hit takes parameter 9 off the follower's reaction (the original adds it): the check reads the lowered reaction, so a follower
+    // that stood above its dislike limit leaves after enough hits. The facts here read the session's remembered reaction (baseline 0, the limit −12, parameter 9 of 5).
+    [TestMethod]
+    public void The_parameter_9_loss_of_a_deliberate_hit_drives_a_follower_below_its_dislike_limit_and_it_leaves()
+    {
+        var thresholds = new FollowThresholds(DislikeReaction: -12, MaxAlignmentAbove: 100, MaxAlignmentBelow: 100, LevelGate: 10);
+        Scene? opened = null;
+        var scene = Open(joinFacts: Consent(100),
+            followFacts: entity => new PartyConsentFacts(false, PersuasionTraining.None, 8, 0, 1, null, opened!.Session.QueryReactionRecord(entity)?.Remembered ?? 0, thresholds, 0, 1, 2),
+            table: Parameter9(5));
+        opened = scene;
+        scene.Host.HeroAttacked(scene.Companion);
+        AssertLeft(scene, left: false);
+        Assert.AreEqual(-5, scene.Session.QueryReactionRecord(scene.Companion)?.Remembered, "5 off the baseline");
+        scene.Host.HeroAttacked(scene.Companion);
+        AssertLeft(scene, left: false);
+        scene.Host.HeroAttacked(scene.Companion);
+        AssertLeft(scene, left: true);
+        StringAssert.Contains(scene.Host.TraceOf(scene.Companion)!.FollowerHit!, "refusal lines 1800-1899 (Dislike)");
+    }
+
     [TestMethod]
     public void A_forced_follower_is_accepted_by_the_check_whatever_its_reaction()
     {
