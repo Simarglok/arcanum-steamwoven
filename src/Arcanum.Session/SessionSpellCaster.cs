@@ -1308,7 +1308,25 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
         _itemEvents.AddRange(healed.ItemEvents);
         if (healed.Disposition == GameSessionDisposition.Changed)
             _log.Add(new(SpellCastEventKind.Healed, run.Id, (_owner.QueryLife(who).View?.Status.HitPoints ?? 0) - before, target.Id));
+        // The scar removal that comes first in the applier can change the state of a refused raise (disposition Changed): the feedback follows the refusal either way.
+        if (healed.Outcome is { } outcome && outcome.Events.HasFlag(LifeEvents.ResurrectionRefused)) RaiseRefusedFeedback(run, target.Id);
     }
+
+    /// <summary>
+    /// ARC-MAGIC-1838 (RZ3): the refusal feedback (0x45A540, called by the heal applier 0x4B58C0 right after its refusal test, whoever healed): message 0x25D for the player, then the resisted effect (number 0x283) on the target.
+    /// </summary>
+    [OriginalFunction(0x45A540, OriginalFunctionScope.Full)]
+    private void RaiseRefusedFeedback(SpellRun run, string target)
+    {
+        _log.Add(new(SpellCastEventKind.Message, run.Id, RaiseRefusedMessage));
+        _log.Add(new(SpellCastEventKind.EyeCandyAdded, -1, RaiseRefusedEyeCandyEntry, target, 0));
+    }
+
+    /// <summary>ARC-MAGIC-1838 (RZ3): spell.mes shown to the player when a raise is refused (0x45A540 asks message 0x25D).</summary>
+    public const int RaiseRefusedMessage = 605;
+
+    /// <summary>ARC-MAGIC-1838 (RZ3): the eye candy table entry the refusal plays on the target (0x45A540 plays number 0x283 = 643, which 0x456E60 turns into entry 643 % 10 + 643 / 10 · 6 = 387, no run).</summary>
+    public const int RaiseRefusedEyeCandyEntry = 387;
 
     // ---- helpers ----
 
