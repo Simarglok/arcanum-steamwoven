@@ -45,14 +45,14 @@ public sealed class AreaAiShotTests
         ], true, true, true);
 
     // A human NPC (type 16, no monster flags) with every primary stat 20, level 1, throwing 5 points, 20 hit points, at world cell (10, 20).
-    private static AreaObjectRecord Npc(int index, CellCoord? at = null) => new(Key(index), 0, 16, 28359, "p", "p", "r", "s", AreaScope.Core, null, (at ?? NpcCell).X, (at ?? NpcCell).Y,
+    private static AreaObjectRecord Npc(int index, CellCoord? at = null, long faction = 0) => new(Key(index), 0, 16, 28359, "p", "p", "r", "s", AreaScope.Core, null, (at ?? NpcCell).X, (at ?? NpcCell).Y,
         Arcanum.Data.Area.AreaDisposition.BodyEligibleConditionally, [],
         [
             Field(0, 0x60000000), Field(18, 0), Field(19, 0), Field(21, 1), Field(22, 2), Field(25, 0), Field(26, 20), Field(27, 0), Field(28, 0), Field(29, 4),
             Array(30), Empty(31),
             Field(36, 0), Field(37, 0), Array(38, 20, 20, 20, 20, 20, 20, 20, 20, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 20, 1, 0),
             Array(39, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8), Array(40), Array(41), Field(42, 10), Field(43, 0), Field(44, 0), Field(45, 0), Empty(46), Empty(47),
-            Field(57, 0), Field(63, 0), Field(69, 0), Field(71, 0), Field(74, 10), Field(75, 10), Field(81, 0), Field(82, 0), Field(84, 0), Field(85, 0), Field(89, 0),
+            Field(57, 0), Field(63, 0), Field(69, 0), Field(71, 0), Field(74, 10), Field(75, 10), Field(81, faction), Field(82, 0), Field(84, 0), Field(85, 0), Field(89, 0),
             Array(92),
         ], true, true, true);
 
@@ -92,7 +92,7 @@ public sealed class AreaAiShotTests
     private static Scene Open(Func<string, string, SessionShot, CellCoord, CellCoord, bool>? launch, bool bystander = false, AreaObjectRecord? blockerRow = null,
         Func<AreaObjectRecord, AreaObjectAttackTarget?>? objectTarget = null, Func<string, AreaObjectRecord, SessionShot, CellCoord, CellCoord, bool>? launchAtObject = null,
         Action<string, AreaObjectRecord, AreaObjectAttackTarget?, SessionObjectAttackResult>? struck = null,
-        IReadOnlyList<(AreaObjectRecord Row, SessionSeedItem Seed)>? ground = null, string? junkPiles = null, long bowUseArt = 0x60000000)
+        IReadOnlyList<(AreaObjectRecord Row, SessionSeedItem Seed)>? ground = null, string? junkPiles = null, long bowUseArt = 0x60000000, long faction = 0, bool bystanderOnLine = true)
     {
         var identity = new GlobalFlagIdentity(new WorldId(Guid.NewGuid()), new ModuleId(Guid.NewGuid()));
         var hero = new SessionHeroDefinition(16089, CharacterRace.Human, CharacterGender.Male, [8, 8, 8, 8, 8, 8, 8, 8, 0, 0], 1, 5, 0, null, null, 0, []);
@@ -106,7 +106,7 @@ public sealed class AreaAiShotTests
             session.Dispose();
             session = GameSessionOwner.Restore(snapshot, new(snapshot.Identity, snapshot.Clock.Profile, new OwnerEpoch(Guid.NewGuid()))).Owner!;
         }
-        var rows = (bystander ? new[] { Npc(0), Item(1, useArt: bowUseArt), Npc(3, BystanderCell) } : new[] { Npc(0), Item(1, useArt: bowUseArt) }).Concat(ground?.Select(g => g.Row) ?? []).ToArray();
+        var rows = (bystander ? new[] { Npc(0, null, faction), Item(1, useArt: bowUseArt), Npc(3, BystanderCell, faction) } : new[] { Npc(0), Item(1, useArt: bowUseArt) }).Concat(ground?.Select(g => g.Row) ?? []).ToArray();
         var map = new AreaInventoryMap(1,
             new(bystander ? [new(Entity(0), SessionHolderKind.Npc, false, false, [], [Entity(1)]), new(Entity(3), SessionHolderKind.Npc, false, false, [], [])] : [new(Entity(0), SessionHolderKind.Npc, false, false, [], [Entity(1)])],
                 [new SessionSeedItem(Entity(1), new(BowKind, 15, 0, 1004, null, []), null), .. ground?.Select(g => g.Seed) ?? []]),
@@ -121,9 +121,9 @@ public sealed class AreaAiShotTests
             new Dictionary<AreaStepCell, AreaStepObjectEvaluation[]>(), new Dictionary<AreaStepCell, AreaStepWallEdge[]>());
         var scene = new AreaAiScene
         {
-            RuntimeMap = 1, Chart = new AreaChart(0, 0, new(0, 0), "TEST") { MinimumCell = -64, MaximumCell = 127 }, Steps = steps, Npcs = bystander ? [new(Entity(0), Npc(0), NpcCell), new(Entity(3), Npc(3, BystanderCell), BystanderCell)] : [new(Entity(0), Npc(0), NpcCell)], Combat = combat,
+            RuntimeMap = 1, Chart = new AreaChart(0, 0, new(0, 0), "TEST") { MinimumCell = -64, MaximumCell = 127 }, Steps = steps, Npcs = bystander ? [new(Entity(0), Npc(0, null, faction), NpcCell), new(Entity(3), Npc(3, BystanderCell, faction), BystanderCell)] : [new(Entity(0), Npc(0), NpcCell)], Combat = combat,
             HeroCell = () => HeroCell, LaunchShot = launch,
-            LineOfFire = blockerRow is not null ? () => new Line(blockerRow) : bystander ? () => new Line(Npc(3, BystanderCell)) : null,
+            LineOfFire = blockerRow is not null ? () => new Line(blockerRow) : bystander && bystanderOnLine ? () => new Line(Npc(3, BystanderCell)) : null,
             ObjectTarget = objectTarget, LaunchShotAtObject = launchAtObject, ObjectStruck = struck,
         };
         // ARC-AI-1139: the restock host answers the NPC wield the AI gate's re-wield asks for (no barter data: the map's own rows are the items).
@@ -230,6 +230,52 @@ public sealed class AreaAiShotTests
         Assert.IsTrue(launched.Count > 0, host.TraceOf(npc)?.Hit);
         Assert.AreEqual((npc, Entity(3), NpcCell, BystanderCell), (launched[0].Shooter, launched[0].Target, launched[0].From, launched[0].To),
             "the arrow is shot at the critter that stops the line, not at the hero: " + host.TraceOf(npc)?.Hit);
+    }
+
+    // ARC-AI-1516 (EX14, VBG5, 0x4B2870/0x4B2690 → 0x4A9650): a missile that meets an object other than its aimed target raises the attack event with the accidental bit: a same-faction
+    // bystander struck by a stray arrow records no who-hit-me-last (the shielded case); one of another faction does (the accidental bit only shields one faction).
+    private static AreaAiNotice? ShootAtHeroAndStrike(AreaAiHost host, GameSessionOwner session, string npc, string struck, List<SessionShot> launched)
+    {
+        for (var attempt = 0; attempt < 80 && launched.Count == 0; attempt++) host.Hit(npc, AiSchedulerRules.Pc);
+        Assert.AreEqual(1, launched.Count, host.TraceOf(npc)?.Hit);
+        host.DrainNotices();
+        Assert.IsNull(session.QueryDanger(struck).HitBy, "no event yet");
+        var landed = host.LandShot(npc, launched[0], struck);
+        Assert.IsNotNull(landed, host.TraceOf(npc)?.Hit);
+        return host.DrainNotices().FirstOrDefault(n => n.Kind == AreaAiNoticeKind.Hit);
+    }
+
+    [TestMethod]
+    public void A_stray_arrow_on_an_ally_records_nobody_who_hit_it()
+    {
+        var launched = new List<SessionShot>();
+        var (session, host, npc, _) = Open((_, _, shot, _, _) => { launched.Add(shot); return true; }, bystander: true, faction: 5, bystanderOnLine: false);
+        Assert.IsTrue(host.FactionSame(npc, Entity(3)));
+        ShootAtHeroAndStrike(host, session, npc, Entity(3), launched);
+        Assert.IsNull(session.QueryDanger(Entity(3)).HitBy, "the accidental event between one faction writes no who-hit-me-last: " + host.TraceOf(Entity(3))?.Event);
+    }
+
+    [TestMethod]
+    public void A_stray_arrow_on_a_stranger_still_records_the_shooter()
+    {
+        var launched = new List<SessionShot>();
+        var (session, host, npc, _) = Open((_, _, shot, _, _) => { launched.Add(shot); return true; }, bystander: true, faction: 0, bystanderOnLine: false);
+        Assert.IsFalse(host.FactionSame(npc, Entity(3)));
+        ShootAtHeroAndStrike(host, session, npc, Entity(3), launched);
+        Assert.AreEqual(npc, session.QueryDanger(Entity(3)).HitBy?.Entity, "another faction: the event writes the shooter");
+    }
+
+    [TestMethod]
+    public void The_aimed_target_of_a_shot_at_an_ally_is_a_deliberate_event_still()
+    {
+        var launched = new List<SessionShot>();
+        var (session, host, npc, _) = Open((_, _, shot, _, _) => { launched.Add(shot); return true; }, bystander: true, faction: 5);
+        for (var attempt = 0; attempt < 80 && launched.Count == 0; attempt++) host.Hit(npc, AiSchedulerRules.Pc);
+        Assert.AreEqual(1, launched.Count, host.TraceOf(npc)?.Hit);
+        Assert.AreEqual(npc, session.QueryDanger(Entity(3)).HitBy?.Entity, "the line's blocker is the shot's target: its event is raised at the shot, deliberate (EX15)");
+        host.DrainNotices();
+        host.LandShot(npc, launched[0], Entity(3));
+        Assert.AreEqual(npc, session.QueryDanger(Entity(3)).HitBy?.Entity, "the strike of the aimed target raises no second, accidental event");
     }
 
     // ARC-COMBAT-1140 (RA4, RH5): a container that stops the line of fire takes the NPC's shot in place of the hero: the shot is decided a hit on it without a skill roll, the viewer is asked to fly it at the blocker,

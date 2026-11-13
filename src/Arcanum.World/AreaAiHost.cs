@@ -703,6 +703,12 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     public void HeroAttacked(string victim) => AttackEvent(Pc, victim);
 
     /// <summary>
+    /// ARC-AI-1516 (EX14, VBG5): the attack event of the hero's missile that met <paramref name="victim"/> on its way, not the aimed target: the accidental
+    /// bit is set (no noise; no who-hit-me-last write and no reaction to the attack between one faction; -10 in place of the lowered reaction toward the hero).
+    /// </summary>
+    public void HeroStrayAttacked(string victim) => AttackEvent(Pc, victim, AttackEventFlags.Accidental);
+
+    /// <summary>
     /// ARC-DEV-281 (B08, TA16): the AI notice of an aggressive spell (0x453EE0, 0x453F20): the attack event (0x4A9650, loudness 1, no
     /// flags) of <paramref name="attacker"/> (the hero as <c>pc</c>, an NPC by its entity) on <paramref name="victim"/>, whatever the
     /// distance between them (the chain tests none for the victim's own reaction; read in the executable on 2026-11-08). A caster or a
@@ -960,8 +966,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         if (plan.Stop != AttackEventStop.None) return;
         _session.ApplyAttackEvent(_session.Version, new SessionAttackEventRequest { Attacker = Combatant(attacker)!, Victim = victim, Plan = plan });
         if (plan.TurnsVictim && Tile(attacker) is { } there && TryNpc(victim, out var npc)) FaceNpc(npc, there, keepStep: true);
-        if (plan.Reaction == AttackReactionChange.Deliberate && attacker == Pc && ReactionFacts(victim) is { } facts && Row(victim) is { } row)
-            _session.ReactToPcHit(_session.Version, victim, facts.Npc, facts.Pc, new(row.FollowerHitReaction, row.HostileReaction), deliberate: true);
+        if (plan.Reaction is AttackReactionChange.Deliberate or AttackReactionChange.Accidental && attacker == Pc && ReactionFacts(victim) is { } facts && Row(victim) is { } row)
+            _session.ReactToPcHit(_session.Version, victim, facts.Npc, facts.Pc, new(row.FollowerHitReaction, row.HostileReaction), deliberate: plan.Reaction == AttackReactionChange.Deliberate);
         if (plan.Reaction is AttackReactionChange.FollowerDeliberate or AttackReactionChange.FollowerAccidental && attacker == Pc)
             HitFollower(victim, plan.Reaction == AttackReactionChange.FollowerDeliberate);
         if (plan.ReactsToAttack) React(victim, attacker);
@@ -2160,7 +2166,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         _notices.Add(new(AreaAiNoticeKind.Hit, shooter, struck) { Result = result });
         if (result.Resolution?.Refusal == AttackRefusal.None)
         {
-            if (struck != aimed) AttackEvent(shooter, struck);
+            // ARC-AI-1516 (EX14, VBG5): a missile that met an object other than its target raises the event with the accidental bit.
+            if (struck != aimed) AttackEvent(shooter, struck, AttackEventFlags.Accidental);
             // ARC-DEV-292: the strike is the damage step (or the miss path) of the shot: the struck NPC's immediate pass, after its attack event.
             HitEffect(struck, result);
             if (VictimReached(result)) Struck(struck);
