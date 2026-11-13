@@ -637,6 +637,7 @@ src/Arcanum.World/AreaUseScripts.cs,CanHear,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,CanSee,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,DyingStops,pending,
 src/Arcanum.World/AreaUseScripts.cs,ExamineSkips,pending,
+src/Arcanum.World/AreaUseScripts.cs,FactionOf,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,HasBadAssociates,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,IsAnimal,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,IsInDialog,exempt,host
@@ -646,6 +647,7 @@ src/Arcanum.World/AreaUseScripts.cs,IsSurrendered,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,IsTrap,pending,
 src/Arcanum.World/AreaUseScripts.cs,MagickCancelPercent,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,MetPcBefore,exempt,host
+src/Arcanum.World/AreaUseScripts.cs,OriginOf,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,RaiseRefuses,exempt,reference
 src/Arcanum.World/AreaUseScripts.cs,RunBed,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,RunBust,pending,
@@ -659,6 +661,7 @@ src/Arcanum.World/AreaUseScripts.cs,RunRaise,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,RunTakingDamage,pending,
 src/Arcanum.World/AreaUseScripts.cs,RunTrapScript,pending,
 src/Arcanum.World/AreaUseScripts.cs,RunUseScript,pending,
+src/Arcanum.World/AreaUseScripts.cs,SocialClassOf,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,TakingDamageVetoes,pending,
 src/Arcanum.World/AreaUseScripts.cs,UseStops,exempt,host
 src/Arcanum.World/AreaWorldMap.cs,Passes,exempt,host
