@@ -94,6 +94,9 @@ public partial class TerrainViewerApp
             AreaKnockdownStage.GettingUp when getUp is not null => (ActorDiagnosticAction.GetUp, _heroKnockdownOctant, _heroKnockdown.Frame),
             _ => null,
         };
+        // ARC-COMBAT-1741: the hero's stun run writes the stunned art (animation 23) frame by frame; a hero standing in it is drawn in that pose, facing where it stood.
+        if (pose is null && profile.Stunned is not null && _aiHost?.ArtOf(Arcanum.Simulation.Ai.AiSchedulerRules.Pc) is { Animation: AreaFallenPoses.Stunned } stunnedArt && settled)
+            pose = (ActorDiagnosticAction.Stunned, _worldActor.State.Facing, Math.Clamp(stunnedArt.Frame, 0, profile.Stunned.FramesPerGroup - 1));
         if (_worldActor.DownPose == pose) return;
         _worldActor.DownPose = pose;
         PublishWorldSelection();

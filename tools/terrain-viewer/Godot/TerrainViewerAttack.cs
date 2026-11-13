@@ -278,6 +278,8 @@ public partial class TerrainViewerApp
         var owner = _areaSession!;
         // ARC-COMBAT-1720: a weapon the wear broke is replaced at once (0x4B5580 → 0x4B83E0); an object has no magnetic inversion.
         if (byHero) HeroWeaponWornOut(result.Wear, target.Row, false);
+        // ARC-COMBAT-1738 (0x4B3170 → 0x4B83E0): the ammunition check refused the attack, so the best weapon for the target is wielded.
+        if (byHero) HeroOutOfAmmunition(result.Resolution?.Refusal, target.Row, false);
         // A blocker the line of fire struck instead (ARC-COMBAT-012) does not end the goal on the clicked target when it breaks.
         if (goal is not null && target.Row.Key == goal.Row.Key)
             goal.Broke = result.Object?.Broken == true || result.Item?.Break is Arcanum.Simulation.Items.ItemBreakStep.Broken or Arcanum.Simulation.Items.ItemBreakStep.Deleted;
@@ -366,15 +368,17 @@ public partial class TerrainViewerApp
     {
         if (_areaSession is not { } owner) return;
         var cleared = owner.ClearStun(owner.Version, SessionLifeTarget.Hero);
+        // ARC-COMBAT-1741: the hero shows its standing art again (the stun nodes wrote the stunned art).
+        _aiHost?.ClearHeroArt();
         if (cleared.Disposition == GameSessionDisposition.Changed) GD.Print("ARC-DEV-187 hero stun ended by its goal");
     }
 
-    // ARC-COMBAT-009: the original keeps a critter stunned while its stun animation (goal 57) runs; the viewer plays none, so it ends
-    // the stun at once, as the session's contract has it for an animation that could not start (the duration is NOT READY).
+    // ARC-COMBAT-009: the original keeps a critter stunned while its stun animation (goal 57) runs. ARC-COMBAT-1741: the viewer plays it where the body's art has it; this fallback ends the stun at once
+    // for a stun with no run (no AI host or hero host, or the start refused), as the session's contract has it for an animation that could not start.
     private static void EndStun(GameSessionOwner owner, SessionLifeTarget target, string who)
     {
         var cleared = owner.ClearStun(owner.Version, target);
-        GD.Print($"ARC-COMBAT-009 stun-ended who={who} disposition={cleared.Disposition} (no stun animation in the viewer)");
+        GD.Print($"ARC-COMBAT-009 stun-ended who={who} disposition={cleared.Disposition} (no stun run to play the animation)");
     }
 
     /// <summary>
@@ -791,6 +795,9 @@ public partial class TerrainViewerApp
             });
             goal.Attacks++;
             goal.Stop = result.Disposition == GameSessionDisposition.Rejected || result.Resolution?.Refusal is { } refusal && refusal != AttackRefusal.None;
+            // ARC-COMBAT-1738: a wall takes the same re-wields (a worn-out weapon, no ammunition) as any struck object.
+            HeroWeaponWornOut(result.Wear, blocker, false);
+            HeroOutOfAmmunition(result.Resolution?.Refusal, blocker, false);
             if (result.Shot is { } shot)
             {
                 foreach (var projectile in result.Shots) LaunchProjectile(goal, projectile, flight!.Value, result.Resolution!, blocker, null, null, null);
@@ -879,6 +886,8 @@ public partial class TerrainViewerApp
         _lastCritterAttackForSelfTest = result;
         // ARC-COMBAT-1720: a weapon the wear broke is replaced at once (0x4B5580 → 0x4B83E0), before anything else reads the hero's equipment.
         HeroWeaponWornOut(result.Wear, struck.Row, struck.Combat?.MagneticInversion == true);
+        // ARC-COMBAT-1738 (0x4B3170 → 0x4B83E0): no ammunition for the attack, so the best weapon for the target is wielded.
+        HeroOutOfAmmunition(result.Resolution?.Refusal, struck.Row, struck.Combat?.MagneticInversion == true);
         // ARC-DEV-292: a hit or a miss that ran the attack event gives the NPC victim its immediate AI pass (0x4B52FC, the miss paths 0x4B30F5 and 0x4B3948): after the attack event (the victim has its focus), before the sounds and bookkeeping.
         // ARC-DEV-303 (RS10): the hit effect (0x4B6930 → 0x459A30): a hit that reached an entangled NPC asks its save again, before its pass.
         if (AreaAiHost.HitReached(result)) _spellCaster?.CritterHit(struck.Entity);
@@ -1083,7 +1092,7 @@ public partial class TerrainViewerApp
                 : life.Status.IsUnconscious ? AreaFallenPoses.FallDown : null;
             // ARC-DEV-137 (MIG13 S6): what the critter-state goals show wins: the knock-down's fall (also of a conscious NPC), the get-up, the dying animation the kill chose.
             var art = AiArtOf(map.RuntimeMap, holder.Entity);
-            if (art is { Animation: AreaFallenPoses.FallDown or AreaFallenPoses.GetUp or >= AreaFallenPoses.Decapitation and <= AreaFallenPoses.SeveredLeg } shown) animation = shown.Animation;
+            if (art is { Animation: AreaFallenPoses.FallDown or AreaFallenPoses.GetUp or AreaFallenPoses.Stunned or >= AreaFallenPoses.Decapitation and <= AreaFallenPoses.SeveredLeg } shown) animation = shown.Animation;
             var row = map.Row(holder.Entity);
             if (animation is not { } anim || NpcT0Body(row.Key) is not { } command || !TryBodyVisual(command.Visual, out var visual)) continue;
             if (!_fallenPoses.TryGetValue((map.RuntimeMap, holder.Entity, anim), out var load))
@@ -1121,11 +1130,14 @@ public partial class TerrainViewerApp
         return null;
     }
 
-    /// <summary>ARC-DEV-137: the ART clip of an NPC's fall, get-up or dying animation (frames and rate) for the critter-state goals' timing; null for any other animation (the stun's 23 is not
-    /// read yet) or when the pose does not read.</summary>
+    /// <summary>ARC-DEV-137: the ART clip of an NPC's fall, get-up or dying animation (frames and rate) for the critter-state goals' timing; null for any other animation (the stun's 23 is read
+    /// since ARC-COMBAT-1741) or when the pose does not read.</summary>
     private Arcanum.Simulation.Ai.AiAnimationClip? NpcAnimationClip(string entity, int animation)
     {
-        if (animation is not (AreaFallenPoses.FallDown or AreaFallenPoses.GetUp or (>= AreaFallenPoses.Decapitation and <= AreaFallenPoses.SeveredLeg))) return null;
+        // ARC-COMBAT-1741: the hero's stunned ART is the clip the stun nodes read for the hero (the body's own; no ART, no clip: the stun ends at once).
+        if (entity == Arcanum.Simulation.Ai.AiSchedulerRules.Pc)
+            return animation == AreaFallenPoses.Stunned && _worldActor.Profile.Stunned is { } stunned ? new(stunned.FramesPerGroup, stunned.RawFramesPerSecond) : null;
+        if (animation is not (AreaFallenPoses.FallDown or AreaFallenPoses.GetUp or AreaFallenPoses.Stunned or (>= AreaFallenPoses.Decapitation and <= AreaFallenPoses.SeveredLeg))) return null;
         if (_readyArea is not { } area || NpcRowOf(area, entity) is not { } found || NpcT0Body(found.Row.Key) is not { } command || !TryBodyVisual(command.Visual, out var visual)) return null;
         var key = (found.Map.RuntimeMap, entity, animation);
         if (!_fallenPoses.TryGetValue(key, out var load))

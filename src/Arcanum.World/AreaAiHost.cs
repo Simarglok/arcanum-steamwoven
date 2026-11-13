@@ -221,7 +221,7 @@ public sealed record AreaAiNotice(AreaAiNoticeKind Kind, string Npc, string? Tar
 {
     /// <summary>ARC-DEV-206 (GR12, <see cref="AreaAiNoticeKind.Entered"/>): the world cell the NPC was placed on.</summary>
     public CellCoord? Cell { get; init; }
-    /// <summary>ARC-AI-1655 (<see cref="AreaAiNoticeKind.PickUp"/>, <see cref="AreaAiNoticeKind.PickUpDeclined"/>): the lines the item's get or insert-item script printed, for the message window.</summary>
+    /// <summary>ARC-AI-1655 (<see cref="AreaAiNoticeKind.PickUp"/>, <see cref="AreaAiNoticeKind.PickUpDeclined"/>; ARC-MAGIC-1684, <see cref="AreaAiNoticeKind.Rewield"/>): the lines the item's get or insert-item script (or the scripts of the items a re-wield moved) printed, for the message window.</summary>
     public IReadOnlyList<SessionScriptMessage> Messages { get; init; } = [];
     public SessionAttackResult? Result { get; init; }
     public int Sound { get; init; }
@@ -1398,7 +1398,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         var result = _session.RewieldNpc(_session.Version, npc, allSlots, _events as ISessionRestockWorld);
         Trace(npc).Item = $"rewield {(allSlots ? "all" : "weapon")} {result.Disposition} {result.Failure} " + string.Join(", ", result.Steps.Select(step => $"{step.Slot} off={step.TakenOff ?? "-"} on={step.Wielded ?? "-"}"));
         // ARC-RENDER-1485: a changed worn item changes the weapon part and shield bit the NPC's body shows (0x465020, ShownWeapon); the viewer draws its body again.
-        if (result.Disposition == GameSessionDisposition.Changed) _notices.Add(new(AreaAiNoticeKind.Rewield, npc, null));
+        // ARC-MAGIC-1684: the lines the moved items' scripts printed go to the message window with the notice.
+        if (result.Disposition == GameSessionDisposition.Changed || result.Messages.Count > 0) _notices.Add(new(AreaAiNoticeKind.Rewield, npc, null) { Messages = result.Messages });
     }
     // ARC-DEV-301: the gate's demaintain (0x4A8570 step 15 → 0x457450) ends the NPC's maintained spell runs through the cast host.
     public void EndMaintainedSpells(string npc) => _scene.Spells?.Invoke()?.EndMaintainedSpells(npc);
@@ -2153,6 +2154,26 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     public bool ViolenceFilter { get; set; }
 
     public AiAnimationClip? Clip(string id, int animation) => _scene.AnimationClip?.Invoke(id, animation);
+
+    /// <summary>
+    /// ARC-COMBAT-1741: the hero's stun run (goal 57, started by the session's life step) stepped by the NPC's stun nodes over this host's ports (the art writes, the clip of the hero's stunned ART, the round test), so the stun
+    /// lasts its frames and plays out the countdown as an NPC's does (GT26, GT27). The hero host owns the run's end hooks; nothing here frees it. No readable stun ART (the clip provider answers none) ends it at its first step.
+    /// </summary>
+    public SessionGoalStepAnswer StepHeroStun(GoalRun run)
+    {
+        ArgumentNullException.ThrowIfNull(run);
+        var step = AiExecutorRules.Step(run, this, _session.AiRolls, _session.Rules.Combat);
+        _steps++;
+        if (!step.Ended && step.Run is { } next) return SessionGoalStepAnswer.After(Math.Max(step.DelayMs, 1), next);
+        ClearHeroArt();
+        return SessionGoalStepAnswer.End;
+    }
+
+    /// <summary>ARC-COMBAT-1741: the hero shows its standing art again (its stun ended or was cut short).</summary>
+    public void ClearHeroArt()
+    {
+        if (_arts.Remove(Pc)) ArtRevision++;
+    }
 
     // An NPC with no art written lies in its fall when it is unconscious or dead (a body first seen), except a dead one whose dying goal is on the table: it was killed standing and the goal sets the art.
     public int ShownAnimation(string id) => SyncedArt(id) is { } art ? art.Animation

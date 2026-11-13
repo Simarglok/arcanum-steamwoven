@@ -170,10 +170,13 @@ public partial class TerrainViewerApp
             }
             Require(second is not null || tried == 0, $"an approach ran from one of {tried} far cells");
             var flights = session.QueryHeroAttack() is { Skill: CombatSkill.Bow } ? await Projectiles() : "NONE (a critical miss took the bow)";
+            // ARC-DEV-1803: the trap leg's shooting cells are traced on the lines of the session this leg started with (their closures read it),
+            // so they are read out here, before the saved-flight load disposes that session.
+            var trapCells = session.QueryHeroAttack() is { Skill: CombatSkill.Bow } ? Shootings(pick.Target, 3, 6).Take(40).ToArray() : [];
             // ARC-DEV-288: while the lent bow is still wielded; the load replaces the session, so the sub-steps after it run on the loaded one (it holds the lent bow too).
             var savedFlight = session.QueryHeroAttack() is { Skill: CombatSkill.Bow } ? await SavedFlight() : "NONE (a critical miss took the bow)";
             // ARC-TECHNOLOGY-1635: a trap's shot of the default projectile art (the lent bow's), on the session the saved-flight leg left.
-            var trapShots = session.QueryHeroAttack() is { Skill: CombatSkill.Bow } ? await TrapShotSmokeLegAsync(map, pick.Hero, Shootings(pick.Target, 3, 6).Take(40).ToArray()) : "NONE (a critical miss took the bow)";
+            var trapShots = session.QueryHeroAttack() is { Skill: CombatSkill.Bow } ? await TrapShotSmokeLegAsync(map, pick.Hero, trapCells) : "NONE (a critical miss took the bow)";
             session = _areaSession!;
             var pairs = session.QueryHeroAttack() is { Skill: CombatSkill.Bow } ? await ExpertShots() : "NONE (a critical miss took the bow)";
             var throws = session.QueryHeroAttack() is { Skill: CombatSkill.Bow } ? await Throws() : "NONE (a critical miss took the bow)";

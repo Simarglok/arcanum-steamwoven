@@ -42,7 +42,7 @@ public partial class TerrainViewerApp
     /// <summary>The values the options window shows: the host's settings as they are now.</summary>
     private AreaGameOptions CurrentGameOptions() => new(_gameSettings.Difficulty, _turnBasedSetting ? 1 : 0, _gameSettings.AutoAttack, _alwaysRunOption,
         _audioVolumes.Effects, _audioVolumes.Voice, _audioVolumes.Music, _ruleMode, _gameSettings.Floats, _gameSettings.FloatSpeed,
-        EvidenceRecording, EvidenceRecording ? _evidenceTask : 0, _gameSettings.Controls, _gameSettings.CombatTaunts, _gameSettings.ViolenceFilter, _gameSettings.Brightness);
+        EvidenceRecording, EvidenceRecording ? _evidenceTask : 0, _gameSettings.Controls, _gameSettings.CombatTaunts, _gameSettings.ViolenceFilter, _gameSettings.Brightness, _gameSettings.AutoSwitchWeapons);
 
     private AreaBrightnessLayer? _brightnessLayer;
 
@@ -114,6 +114,11 @@ public partial class TerrainViewerApp
             case AreaOption.Brightness:
                 if (value < 0 || value > BrightnessRules.Max) { refused = "out of range"; break; }
                 SaveGameSettings(_gameSettings with { Brightness = value });
+                break;
+            // ARC-COMBAT-1738: the auto switch setting (OH3): the hero's attack and a strike read the saved setting when its weapon is lost.
+            case AreaOption.AutoSwitchWeapons:
+                if (value is not (0 or 1)) { refused = "out of range"; break; }
+                SaveGameSettings(_gameSettings with { AutoSwitchWeapons = value == 1 });
                 break;
             case AreaOption.AlwaysRun: SetAlwaysRun(value == 1); break;
             case AreaOption.Effects: PaletteVolumeChanged(AudioChannel.Effects, value); break;
