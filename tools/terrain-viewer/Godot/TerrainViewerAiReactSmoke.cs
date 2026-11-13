@@ -15,7 +15,7 @@ namespace Arcanum.TerrainViewer;
 public partial class TerrainViewerApp
 {
     // ARC-AI-1514 adds a check: a calm bystander the witness rule (0x4A9F10) sends fleeing from the hero at the hit must reach the setter with FLEE. ARC-DEV-1577: the bystanders are every NPC of the map the host runs (animals and humans),
-    // and the victim is the animal with the most bystanders the witness rule does not make protectors (a human, an animal of another faction) within the noise radius, so the flight shows on a map that has one; the stage prints NONE when the map has none.
+    // and the victim is the animal with the most bystanders the witness rule does not make protectors (a human) within the noise radius, so the flight shows on a map that has one; the stage prints NONE when the map has none.
     // ARC-DEV-264 (B08, smoke plan SM06) native observation (stage "ai-react", only when named, map mode with --hero, AI on, the Crash Site): the hero casts an aggressive single-target damage spell at a calm animal from
     // the longest distance the screen and the spell's Range allow. The pass rule is the executable's (read on 2026-11-08, docs/research/npc-ai-hostility.md section 7.7): the aggressive spell's notice (0x453EE0) runs the attack event
     // on the target before the damage, with no test of the distance, so the animal takes COMBAT_FOCUS on the hero at the hit; it then acts at once (the damage step's AI pass, 0x4B52FC) or at its next tick, at most 5 s of game
@@ -53,7 +53,7 @@ public partial class TerrainViewerApp
             .Where(c => c.Build.Combat is { Monstrous: true } && commands.ContainsKey(c.Row.Key) && c.Row.Scope == AreaScope.Core && c.Row.WorldX is not null && c.Row.WorldY is not null)
             .ToArray();
         // ARC-DEV-1577: the bystanders the hit's noise can reach (every NPC of the map but the victim) are ranked per victim by the data: the NPCs that are not animals of the victim's kind come first
-        // (a human or an animal of another faction does not protect the victim, so the witness rule may send it fleeing; the rule itself decides at the hit).
+        // (a human does not protect an animal victim, so the witness rule may send it fleeing unless it is a guard or in danger; the rule itself decides at the hit).
         var noiseHalf = AwarenessRules.NoiseRadius(Loudness.Normal);
         var bystanders = session.QueryMapInventory(new(map.RuntimeMap))!.Holders
             .Where(h => h.Kind == SessionHolderKind.Npc && !h.Dead)
@@ -174,6 +174,8 @@ public partial class TerrainViewerApp
             // ARC-DEV-292: the damage step's own AI pass (0x4B52FC) ran at the hit, before any tick: the trace holds it, and the pass is the one that started the animal's run when its gate let it.
             var struckPass = host!.TraceOf(entity)?.Struck; var runAtHit = host.RunOf(entity)?.Top.Goal;
             // Then, up to ten seconds of game time (the next tick is at most five seconds away, ten after a fold's wake-up): the animal leaves its place toward the hero or attacks.
+            // The bystanders' setter calls at the notice, kept now: a later call of the setter on one of them (the reaction loop below runs ten seconds) would overwrite the trace.
+            var noticeSetters = fleeing.Keys.ToDictionary(k => k, k => host.TraceOf(k)?.Setter, StringComparer.Ordinal);
             var gameStart = session.QueryClockSnapshot().GameTimestampMs;
             long Elapsed() => session.QueryClockSnapshot().GameTimestampMs - gameStart;
             var reacted = false; long reactedAfterMs = -1; var swung = false;
@@ -188,9 +190,9 @@ public partial class TerrainViewerApp
             // The bystanders the rule named just before the hit asked the setter for FLEE from the hero at the notice (the setter's own rules then decide; its call is what the trace holds).
             if (fleeing.Count == 0)
             { GD.Print($"ARC-DEV-264 native-smoke ai-react NONE map={map.RuntimeMap} (no NPC the witness rule sends fleeing from the hero stood within {noiseRadius} tiles of the hit: every bystander protects the victim, is a guard or is already in danger)"); return; }
-            var witnessFlights = fleeing.Where(w => host.TraceOf(w.Key)?.Setter is { } now && now != w.Value && now.StartsWith($"{DangerState.Flee} {AiSchedulerRules.Pc} ", StringComparison.Ordinal)).Select(w => w.Key).ToArray();
+            var witnessFlights = fleeing.Where(w => noticeSetters[w.Key] is { } now && now != w.Value && now.StartsWith($"{DangerState.Flee} {AiSchedulerRules.Pc} ", StringComparison.Ordinal)).Select(w => w.Key).ToArray();
             string Name(string id) => $"{id[^6..]}{(bystanders.First(b => b.Entity == id).Monstrous ? "(animal)" : "(human)")}";
-            Require(witnessFlights.Length == fleeing.Count, $"the witness rule sent {fleeing.Count} bystander(s) fleeing from the hero but only {witnessFlights.Length} reached the setter with FLEE: {string.Join(",", fleeing.Keys.Select(w => Name(w) + "=" + host.TraceOf(w)?.Setter))}");
+            Require(witnessFlights.Length == fleeing.Count, $"the witness rule sent {fleeing.Count} bystander(s) fleeing from the hero but only {witnessFlights.Length} reached the setter with FLEE: {string.Join(",", fleeing.Keys.Select(w => Name(w) + "=" + noticeSetters[w]))}");
             GD.Print($"ARC-AI-1514 ai-react witnesses: {fleeing.Count} bystander(s) in the witness rule's flight, {witnessFlights.Length} asked the setter for FLEE from the hero: {string.Join(",", witnessFlights.Select(Name))}");
             GD.Print($"ARC-DEV-264 ai-react spell={spell.Data.Number} range={spellRange} distance={castDistance} (asked {distance}) hitFrame={hitFrame} danger={danger.State}/{danger.Focus}"
                 + $" struck={struckPass} runAtHit={runAtHit} event={host!.TraceOf(entity)?.Event} reaction={host.TraceOf(entity)?.Reaction} tile {atHit.X},{atHit.Y}->{after.X},{after.Y} hero {heroCell.X},{heroCell.Y} reacted={reacted} afterMs={reactedAfterMs}");
