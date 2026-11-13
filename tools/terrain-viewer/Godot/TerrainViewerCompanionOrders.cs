@@ -127,7 +127,9 @@ public partial class TerrainViewerApp
         _portraitLifeRetry = null;
         if (_areaSession is not { } session || _areaCompanions is not { } group || _conversationHost is not { PartyWired: true } || WorldModal)
         {
-            _followerPortraits?.Show([]);
+            // A modal window only covers the strip (ARC-UI-1736: the scroll offset stays); no session, group or party shows none.
+            if (WorldModal && _areaSession is not null && _areaCompanions is not null && _conversationHost is { PartyWired: true }) _followerPortraits?.Suspend();
+            else _followerPortraits?.Show([]);
             _followerPortraits?.CloseMenu();
             if (TargetsDroppedByModal) { CancelPendingOrder("a window opened"); _orderKeyArmed = null; }
             return;

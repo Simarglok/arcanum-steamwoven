@@ -82,6 +82,7 @@ public partial class AreaFollowerPortraits : CanvasLayer
     private Button? _toggle, _up, _down;
     private TextureRect? _toggleArt, _upArt, _downArt;
     private Vector2 _menuOrigin;
+    private int _menuSlot;
     /// <summary>The width of a frame's bars, in the original's pixels (the bar art's).</summary>
     public const int BarWidth = AreaFollowerFrameLayout.BarWidth;
     private static readonly Color Back = new(14 / 255f, 16 / 255f, 22 / 255f, .85f);
@@ -190,6 +191,16 @@ public partial class AreaFollowerPortraits : CanvasLayer
         _signature = "\0";
     }
 
+    /// <summary>A modal window covers the panel: the frames and buttons go away and the menu closes, but the shown flag and the scroll offset are kept for when the window closes
+    /// (the next <see cref="Show"/> brings the strip back as it was).</summary>
+    public void Suspend()
+    {
+        CloseMenu();
+        if (_hovered is not null) { _hovered = null; PortraitHoverLeft?.Invoke(); }
+        Visible = false;
+        EdgeChanged?.Invoke();
+    }
+
     /// <summary>ARC-UI-1736 (FP1, the module's reset 0x56A880): the panel is shown again and the scroll offset is 0 (a new game or a load).</summary>
     public void ResetPanel()
     {
@@ -215,13 +226,14 @@ public partial class AreaFollowerPortraits : CanvasLayer
             _entries.Clear();
             _toggle = _up = _down = null; _toggleArt = _upArt = _downArt = null;
             EntitiesForSelfTest = shown.Select(f => f.Entity).ToArray();
-            if (_menuEntity is { } open && !EntitiesForSelfTest.Contains(open)) CloseMenu();
             for (var slot = 0; slot < shown.Length; slot++) BuildFrame(slot, shown[slot]);
+            // The menu stands at its follower's slot: a rebuild that moved or removed him closes it.
+            if (_menuEntity is { } open && (!_entries.TryGetValue(open, out var kept) || kept.Slot != _menuSlot)) CloseMenu();
             BuildChrome();
-            Visible = _followers.Count > 0;
             Place();
             EdgeChanged?.Invoke();
         }
+        Visible = _followers.Count > 0;
         foreach (var (entity, _, life, _) in shown)
         {
             var entry = _entries[entity];
@@ -384,6 +396,7 @@ public partial class AreaFollowerPortraits : CanvasLayer
         }
         var (originX, originY) = AreaFollowerPanelRules.MenuOrigin(entry.Slot);
         _menuOrigin = new Vector2(originX, originY);
+        _menuSlot = entry.Slot;
         PlaceMenu();
         _menu.Show();
     }
