@@ -14,4 +14,6 @@ public interface IAreaEventObjects
     bool HasObject(string entity);
     /// <summary>ARC-WORLD-103: the NPC's combat values from its stored fields (its wearer and best-items chooser), or null.</summary>
     SessionCritterCombat? Critter(string entity) => null;
+    /// <summary>ARC-MAGIC-1568: the NPC's stored base stats (the 28 entries) with the entries a spell wrote laid over them, or null: the strength an NPC's encumbrance timer reads when it fires.</summary>
+    IReadOnlyList<int>? StoredStats(string entity) => null;
 }
