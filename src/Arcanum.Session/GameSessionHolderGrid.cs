@@ -70,4 +70,28 @@ public sealed partial class GameSessionOwner
         Revise();
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, false, moved, Version);
     }
+
+    /// <summary>
+    /// ARC-AI-1654 (the room test of the insert check 0x466510, its answer code 2): whether the holder's grid has a place for <paramref name="item"/>, an NPC's or a container's, as the list its inventory
+    /// window shows (<see cref="QueryHolderItems"/>) lies now. An ammunition item whose prototype another item of an NPC's list shares needs no place (the stack field 0x462410 and the same-prototype
+    /// finder 0x462930 join it to that stack: AM1); every other item needs a free rectangle of its size (<see cref="QueryItemCells"/>: 10 columns by 12 rows for an NPC, 96 for a container)
+    /// at the first free place of the grid the list's items fill (<see cref="InventoryGridRules.HolderFreeSlot"/>: each item marks its rectangle from its location, seed data or the slot
+    /// an arrangement gave it, <see cref="ArrangeHolderGrid"/>; the worn and quick-slot items take no cell; an item with no place, a made, given or picked-up one, takes the first free one
+    /// in list order). A holder no attached seed lists has an empty grid (a junk pile the session made is none: it is not covered). The item's own entry in the list, when it is already there, is left out. PROJECT: gold and keys are not admitted by the lists
+    /// (a key going onto a key ring needs no place, KY3); the item's size is the session's (art first, else the seed row's, else 1 × 1).
+    /// </summary>
+    public bool QueryHolderRoom(string holder, SessionInventoryItem item)
+    {
+        ThrowIfDisposed();
+        if (!SessionValidation.Entity(holder)) throw new ArgumentException("Invalid entity id.", nameof(holder));
+        ArgumentNullException.ThrowIfNull(item);
+        var kind = item.Facts.Kind;
+        var container = _inventory.Seeds.Values.Any(seed => seed.Holders.TryGetValue(holder, out var row) && row.Kind == SessionHolderKind.Container);
+        // 0x462930 finds another item of the list with the item's prototype (never the item itself).
+        if (kind.Type == SessionItemType.Ammo && (container ? ContainerStacks(holder) : NpcStacks(holder)).Any(pair => pair.Prototype == kind.Prototype && pair.Stack.Entity != item.Entity)) return true;
+        var list = (QueryHolderItems(holder) ?? []).Where(listed => listed.Entity != item.Entity)
+            .Select(listed => { var (listedWidth, listedHeight) = GridSize(listed.Entity); return new InventoryGridRules.HolderListItem(listed.Facts.InventoryLocation, listedWidth, listedHeight); }).ToArray();
+        var (width, height) = GridSize(item.Entity);
+        return InventoryGridRules.HolderFreeSlot(list, container ? InventoryGridRules.ContainerRows : InventoryGridRules.CritterRows, width, height) >= 0;
+    }
 }
