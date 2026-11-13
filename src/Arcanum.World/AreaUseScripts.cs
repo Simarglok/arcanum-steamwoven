@@ -1877,6 +1877,8 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     {
         // NS5: the PC's art is a critter class, whose number setter answers the id 0 (no ART file of this project's reading): nothing changes.
         if (IsPc(obj)) return default;
+        // 0x43EB30: an object destroyed (object flag 0x1, or by a script) is left as it is, whatever its type.
+        if (AlreadyDestroyed(obj)) return default;
         if (Row(obj) is not { } row) return new($"change art number of {obj.Code} is not modelled (no loaded row)", null, 0);
         if (Number(row, ArtSlot) is not { } stored) return new($"change art number of {obj.Code} is not modelled (the row names no art)", null, 0);
         var baseline = unchecked((uint)stored);
@@ -1887,8 +1889,6 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         var current = _session.QueryObjectArt(new SessionMapId(obj.Map), obj.Code) ?? baseline;
         if (ObjectArtNumber.Class(current) != 4)
             return new($"change art number of {obj.Code} is not modelled (art class {ObjectArtNumber.Class(current)})", null, baseline);
-        // 0x43EB30: an object destroyed (object flag 0x1) is left as it is.
-        if (AlreadyDestroyed(obj)) return new(null, null, baseline);
         var next = ObjectArtNumber.Changed(current, number, out _);
         if (_world?.ArtExists is not { } exists) return new($"change art number of {obj.Code} needs the module's art index", null, baseline);
         // 0x502220: the new id is written only when its ART file exists.

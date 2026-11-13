@@ -90,6 +90,8 @@ public sealed class AreaNpcStateScriptTests
             Write("scr/00824dialog.scr", Program(Do(new(ScrCatalogue.Action.ChangeScript, (Attachee, -1), N(ScrPoint.Dialog), N(1200))), Do(Run)));
             Write("scr/00826lowmap.scr", Program(Do(new(ScrCatalogue.Action.SetDayStandpointEx, (Attachee, -1), N(10), N(20), N(0))), Do(Run)));
             Write("scr/00825art.scr", Program(Do(new(ScrCatalogue.Action.ChangeArtNumber, (Attachee, -1), N(4))), Do(Run)));
+            Write("scr/00828standart.scr", Program(Do(new(ScrCatalogue.Action.SetDayStandpoint, (Attachee, -1), N(480), N(521))),
+                Do(new(ScrCatalogue.Action.ChangeArtNumber, (Attachee, -1), N(4))), Do(Run)));
             Write("scr/00827art9.scr", Program(Do(new(ScrCatalogue.Action.ChangeArtNumber, (Attachee, -1), N(9))), Do(Run)));
             using var content = ScriptContent.Open(ContentMountPlan.Discover(root.FullName, "Syn").Plan!).Content!;
             test(content);
@@ -244,6 +246,9 @@ public sealed class AreaNpcStateScriptTests
             var destroyed = Scenery(2, 825, SceneryArt(9), flags: 1);
             Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, Host(session, content, any, destroyed).Run(destroyed, session.Rules.Scripts).Outcome);
             Assert.IsNull(session.QueryObjectArt(map, AreaUseScriptHost.EntityId(destroyed)));
+            // A destroyed container (not drawable with another art) is left alone, not refused: the destroyed test comes before the type test.
+            var destroyedContainer = Scenery(8, 825, (7u << 28) | (5u << 19), flags: 1, type: 2);
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, Host(session, content, any, destroyedContainer).Run(destroyedContainer, session.Rules.Scripts).Outcome);
             // A critter class (the NPC's body art is class 2) answers the id 0 in the number setter: nothing changes; a unique NPC's art (class 13) and a container are not drawn with another art: the run is refused before anything applies.
             var critter = Scenery(3, 825, (2u << 28) | 5u, type: 16);
             Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, Host(session, content, any, critter).Run(critter, session.Rules.Scripts).Outcome);
@@ -252,6 +257,13 @@ public sealed class AreaNpcStateScriptTests
             Assert.AreEqual(AreaScriptedUseOutcome.EffectsRejected, Host(session, content, any, unique).Run(unique, session.Rules.Scripts).Outcome);
             var container = Scenery(5, 825, (7u << 28) | (5u << 19), type: 2);
             Assert.AreEqual(AreaScriptedUseOutcome.EffectsRejected, Host(session, content, any, container).Run(container, session.Rules.Scripts).Outcome);
+            // A refused change art number leaves the run's other effects unapplied too: the same script (a day standpoint, then the art change) writes the standpoint for a critter art (no change) and not for a unique NPC's art (refused).
+            var okNpc = Scenery(6, 828, (2u << 28) | 5u, type: 16);
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, Host(session, content, any, okNpc).Run(okNpc, session.Rules.Scripts).Outcome);
+            Assert.AreEqual(new AreaRouteLocation(480, 521), AreaUseScriptHost.Standpoint(session, 1, AreaUseScriptHost.EntityId(okNpc), day: true), "the control: the standpoint is written when the art change is a no-op");
+            var refusedNpc = Scenery(7, 828, (13u << 28) | (5u << 20), type: 16);
+            Assert.AreEqual(AreaScriptedUseOutcome.EffectsRejected, Host(session, content, any, refusedNpc).Run(refusedNpc, session.Rules.Scripts).Outcome);
+            Assert.IsNull(AreaUseScriptHost.Standpoint(session, 1, AreaUseScriptHost.EntityId(refusedNpc), day: true), "nothing applied before the refused art change");
         });
     }
 }
