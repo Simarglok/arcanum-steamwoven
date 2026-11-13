@@ -191,7 +191,7 @@ public sealed partial class GameSessionOwner
         }
 
         /// <summary>ARC-AI-1655, ARC-MAGIC-1684: the runs' triggerer is an NPC (its ground pickup, its best-items wield): a printed line is read for an NPC triggerer (<see cref="ISessionItemScriptHost.PrintedLineForNpc"/>). Every other move keeps the hero's reading, whatever its triggerer.</summary>
-        internal bool NpcTriggerer { get; init; }
+        internal bool NpcTriggerer { get; set; }
 
         /// <summary>ARC-MAGIC-1644 (IE7, WE6): the runs are the rewield's: the condition "items are being rewielded" answers true (0x5E87E8).</summary>
         internal bool Rewielding { get; init; }

@@ -407,8 +407,8 @@ those of the player's `interface.mes` (the viewer's window ledgers carry them; e
 | ARC-UI-148 | foundation and inventory | 221 pack, 223 paper doll | a window's own fractional scale, grid rule, grid lines; the drop, use and gamble boxes (224, 225, 342–348) are oval buttons with a coloured allowed or refused corner, kept as art |
 | ARC-UI-149 (issue #1194, ARC-UI-1194, [S4](#viewer-slice-s4-arc-ui-1194)) | loot, barter, steal | 234 loot, 235 barter and 825 follower barter, 349 loot doll, the three lenses 231–233; 337 barter doll and 341 doll cover are not built; the gamble boxes stay art | the same frame family as 148 with their own boxes |
 | ARC-UI-150 (issue #1195, ARC-UI-1195, [S5](#viewer-slice-s5-arc-ui-1195)) | character sheet | 22 main, 29 skills, 30 disciplines, 31 spells, tabs 34–36 and 568, the + and − buttons (23/24, 624/625, 647/648; 257/258 are `SP_Minus`/`SP_Plus`, which the sheet does not draw), the group and discipline buttons 302–313 | stat labels baked in the art stay pictures (kept rectangles); the schemes page 567 and the college tabs are not generated |
-| ARC-UI-151 | logbook | 263, 264 side, 260 book, 259, 261, 262 pages, the tabs | a parchment page material |
-| ARC-UI-152 | world and town map | 138 main, 140, 199 side pieces, 219, 220 town map frames | the map picture itself stays art |
+| ARC-UI-151 (issue #1196, ARC-UI-1196, [S7](#viewer-slice-s7-arc-ui-1196)) | logbook | 264 side, 260 book, 261 page art, the seven tabs 265–271, the page buttons 272 and 273; 263, 259 and 262 are not drawn by the logbook | a parchment page material; the lens 198 is shared and stays art |
+| ARC-UI-152 (issue #1197, ARC-UI-1197, [S6](#viewer-slice-s6-arc-ui-1197)) | world and town map | 138 main (the one frame the two windows draw); 140 and 199 (`wp_main`, `WP_Cover`, 130 × 152) and 219 and 220 (`Tmp_Day`, `Tmp_Nght`, two 501 × 365 landscape pictures) are drawn by no window of the viewer, so they are not built (issue #1811) | the map picture itself stays art; the buttons 811–813, the compass button 139, the lens 198 and the cover 217 are issue #1810 |
 | ARC-UI-153 | schematic window | 365 base and its buttons and tabs | |
 | ARC-UI-154 | message and dialogue frames, Fate, Sleep | 354, 7, 8, 128, 200, 274, 288, 290, 291 (410 × 107 rows), 292, 298, 218 | |
 | ARC-UI-155 | reading windows and the remaining small panels | 477, 487, 489, 491, 500 backgrounds, 494 side bar, and what is left | |
@@ -504,6 +504,65 @@ ones (D9); only the drawing changes. The frames are the player's `interface.mes`
   sheet stands at the whole factor 1 here (the bars are hidden in the smoke) and 2 in a 1600 × 1200 window, where the frames paint again. The composite (Legacy, HD pack, Generated for the three pages) is in the
   task thread, not in git. Seen there: the generated wood and slate are plainer than the painted ones, the stat boxes are rectangles with rivets where the original has brass ovals, and the kept label
   rectangles show a slightly different grain from the generated wood around them.
+
+## Viewer slice S6 (ARC-UI-1197)
+
+S6 draws the frame of the world map and town map window (planned as ARC-UI-152, issue #1197) in the generated interface at the window's own device scale ([S3](#viewer-slice-s3-arc-ui-148)).
+Positions, sizes, alpha tests and hit areas are the Legacy ones (D9); only the drawing changes. The frame is the player's `interface.mes` art 138, read from the installed game for this slice;
+the recipe holds only rectangles and colours of our own. The world map and the town map are one window (`AreaWorldMapArtView`) that draws the one frame behind the 501 × 365 view, so one recipe covers both.
+
+- **Frame.** `mapmain.art` (138, 800 × 400, wood): the map view's hole gets the brass rim every hole gets; the two readout boxes (680, 157 and 680, 189, 94 × 22) are sunk black pits the window writes its
+  numbers in; the portrait's square hole is a round view (`ChromeRoundView`, centre 69.5, 68.5, radius 44.5), so the square gets no rim, and the ring around it is kept as a round picture, since the lens art 198
+  that is drawn over the hole carries the same ring in its corners and the two must meet. Kept pictures: the compass rose (the star, the four medallions and the four needles, each as small as it can be so
+  that little old wood comes with them), the route sketch (a kept rectangle inside a sunk plate, which hides the old wood's different grain), the Travel button's brass ring and the brass pill under the view's
+  bottom edge (the cover 217 and the compass button 139 are drawn on it). The holes of the zoom and whole-map buttons are covered by those buttons, which stay art.
+- **Not built.** The buttons Zoom 811, Whole map 812, Travel 813 and the compass button 139, the lens art 198 (shared with the character sheet and the logbook) and the bottom cover 217 stay art (issue
+  #1810). The plan listed 140 and 199 (`wp_main`, `WP_Cover`, 130 × 152) and 219 and 220 (`Tmp_Day`, `Tmp_Nght`, two 501 × 365 landscape pictures); no window of the viewer draws any of them and the exe's
+  world map window code names no art number, so they have no recipe (issue #1811 asks the exe). The map tiles, the continent picture and the town tiles stay pictures.
+- **Scale.** `AreaWorldMapArtView` claims every texture's scale source of its look at its draw (the window's own device scale: the frame scale times the canvas and viewport stretch; the window stands at the
+  largest whole factor of the free area, 1 in a 1280 × 800 window and 2 in 1920 × 1080) and redraws, with its canvases, when a texture it claimed swaps in a painted frame or the device scale changes. The textures of
+  a look it no longer shows are let go.
+- **Checks.** `InterfaceChromeTests` (the recipe exists and the unused arts have none, every part lies inside the frame and no kept picture cuts into a generated plate, the frame paints in bounds and
+  deterministically at whole and fractional scales, the map view's hole stays clear, the round portrait has no square rim). The native smoke has the opt-in `ARC_AREA_WINDOW_ART=legacy|hd|generated` part (with
+  `ARC_HD_PACK`, `ARC_AREA_WINDOW_CAPTURE=PREFIX`) in the `worldmap` stage, once for the town map window (`townmap`, a PC in a town-map sector) and once for the world map window (`worldmap`): in `generated`
+  it checks that the frame draws generated chrome at `round(size × paint scale)` pixels, resizes the window to 1920 × 1080 (the factor 1, then 2), checks again and goes back. The check asks each texture for its
+  generated frame (which starts the paint), so it proves that the frame paints at the scale, not that a draw used it; the view redraws itself when its device scale changes.
+- **Local observation** (owner's Mac, 1280 × 800 window): the `worldmap` stage passes in the Generated, HD and Legacy runs for both windows (one frame each); the window stands at the whole factor 1
+  here and 2 in the 1920 × 1080 window, where the frame paints again. The composite (Legacy, HD pack art, Generated, for the world map and the town map) is in the task thread, not in git. Seen there: the
+  generated wood is plainer than the painted one; the kept compass, sketch and ring show the old wood's grain a little (the sketch sits in a sunk plate on purpose); the zoom and whole-map buttons, still art,
+  get a brass frame from the frame's holes around their lamp and picture.
+
+## Viewer slice S7 (ARC-UI-1196)
+
+S7 draws the logbook in the generated interface (planned as ARC-UI-151, issue #1196), at the window's own device scale. Positions, sizes, alpha tests and hit areas are the Legacy ones
+(D9); only the drawing changes. The arts are the ones the logbook draws (ledger LB14: 264 `LogBooks_Side`, 260 `Book_Main`, 261 `Book_Quests`, tabs 265–271 `Tab_Note`, `Tab_Quest`,
+`Tab_Rep`, `Tab_BlessCurse`, `Tab_EgoInjure`, `Tab_BackGrnd`, `Tab_Keys`, page buttons 272 and 273 `PageTurn_L` and `PageTurn_R`); art 263 (the pack's `Book_Side`) and the page arts 259 and 262 are not called
+by the logbook, so they have no recipe.
+
+- **Frames.** `logbooks_side.art` is plain wood (its square hole is the live view of the lens: no rim, `ChromeHoles.None`). `book_main.art` (635 × 400, opaque) is the table's wood, the cover
+  (cloth, 7, 23, 561 × 355), the two stacks of page edges, the two pages (parchment, 44–286 and 286–530 in the book's pixels) and two small iron clasps at the spine. `book_quests.art` (561 × 355, the cover's frame of 12 to 14
+  pixels with the pages' hole at (14, 12, 537 × 331)) is cloth with a cloth edge along the hole (`ChromeHoles.Cloth`: a darker and a lighter line of the cloth itself, no brass), so the pages of `Book_Main` show through it.
+  A tab (`ChromeKind.Tab`) is the stack's edge and the cover's shadow as its ground and the paper bookmark of its own Legacy frame: the paper is read from the frame (a pixel nearly as bright as the frame's brightest tenth;
+  a row's paper runs from the left edge, the tenth percentile of the rows' first runs of three bright pixels, to its last bright pixel, so a glyph's dark pixels are inside), painted parchment with a dark edge on its lower
+  right, a light one on its upper left and a soft shadow beside it; every tab art has its own outline and the pressed frame another, which the frame itself gives. A page button is the page under it and the Legacy arrow (no hole rim; the down and hover frames differ only by the Legacy arrow's own marks).
+- **New parts.** Materials `Cloth` (a diagonal two-way weave), `Parchment` (cream with soft mottling, sinking toward the fold at the book's x 286 with a dark line on the fold itself) and `PageEdge` (stripes that run the page's
+  height); `ChromePlate.Bevel` false (a page or a stack meets its neighbour with no edge); `ChromeGlyph` (the marks of a picture on the ground under it: in the rectangle, a Legacy pixel that departs from the rectangle's median
+  colour by more than a tenth multiplies the difference onto the generated colour, a lighter one lifts it by at most 12 %, so the marks keep their shape and anti-aliasing and the Legacy ground's grain does not carry over);
+  `ChromeRecipe.Holes` and `OriginX` / `OriginY` (the art's corner in the window's larger picture: materials are sampled at that offset, so a tab or a page button painted as its own art continues the page or the stack under
+  it without a seam; the origins come from `AreaLogbookArtLayout`).
+- **Device scale.** `AreaLogbookArtView` claims the window's own device scale for its textures (the control's scale times the canvas transform's and the viewport's stretch; the bars' whole factor at the window's size) and redraws
+  when a worker's finished frame replaces the one it drew, as the inventory area does ([S4](#viewer-slice-s4-arc-ui-1194)).
+- **Not generated.** The lens art 198 (`PCWinCvr`, the ring over the live view) is shared with the character sheet and the world map and has no recipe here; in the generated interface it stays the pack's frame (or Legacy). The
+  curly details of the original's cover, the clasp's real shape and the page grain are not drawn. A previous-page or next-page button is drawn only when there is such a page (the first spread has no previous one), so the
+  native smoke covers the seven tabs and the three frames; the renderer's own tests cover the buttons, and they were not looked at in a native run (owner recheck step 3).
+- **Checks.** `InterfaceChromeTests` (the recipes and their origins from the layout; in-bounds, deterministic and opaque paint at whole and fractional scales; the side's hole stays plain and the cover's hole has a cloth edge;
+  the parchment sinks toward the fold and a page button matches the page under it; a glyph multiplies its marks and leaves the grain; a tab reads its paper, edge, shadow and glyph; materials join at an origin). The native smoke:
+  the loot-room stage with `ARC_AREA_WINDOW_ART=legacy|hd|generated` (with `ARC_HD_PACK` for the last two) also opens the logbook after the inventory part (the opt-in bar smoke does not reach it: issue #1759). In `generated` it
+  checks the side, the book, the page art and the seven tabs (the shown tab's pressed frame, the others' idle one) are generated chrome at `round(size × paint scale)` pixels of the window's own device scale, resizes the window to 1600 × 1200
+  (the bars' whole factor, and the logbook's, steps to 2 from 1200 high), checks again and goes back; in `hd` and `legacy` none is generated. `ARC_AREA_WINDOW_CAPTURE=PREFIX` saves the viewport as `PREFIX-logbook-MODE[-big|-back].png` (local, not in git).
+- **Local observation** (owner's Mac, 1280 × 800 window): the loot-room stage passes in the generated, HD and Legacy runs; the device scale is 1 and 2 in the 1600 × 1200 window. The composite (before = the HD pack art that the Generated mode drew until now, after,
+  Legacy, and after at scale 2) is in the task thread, not in git. Seen there: the generated pages are plainer than the original's, with soft clouds in place of its grain; the cover is a flat maroon weave; the page edges are
+  light and regular stripes where the original's are a dark speckle; the tabs follow the original's outlines and glyphs closely.
 
 ## Synthetic comparison
 

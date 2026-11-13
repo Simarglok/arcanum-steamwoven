@@ -76,10 +76,34 @@ public partial class AreaLogbookArtView : Control
     {
         _art = art ?? throw new ArgumentNullException(nameof(art));
         _fonts = fonts ?? throw new ArgumentNullException(nameof(fonts));
+        Unwatch();
+        // ARC-UI-1196: the generated interface paints the window's frames at this window's own device scale (the control's scale, the canvas transform's and the viewport's
+        // stretch: the bars' whole factor times the stretch), and the view redraws when a worker's finished frame replaces the one it drew (it draws the textures in its own _Draw).
+        _onTextureChanged ??= () => { if (GodotObject.IsInstanceValid(this)) QueueRedraw(); };
+        foreach (var texture in art.Values.SelectMany(frames => frames))
+        {
+            if (texture is not HdInterfaceTexture hd) continue;
+            hd.ScaleSource = DeviceScale;
+            if (_watched.Add(hd)) hd.Changed += _onTextureChanged;
+        }
+    }
+
+    // ARC-UI-1196: the frames this view drew with its own device scale.
+    private readonly HashSet<HdInterfaceTexture> _watched = [];
+    private Action? _onTextureChanged;
+
+    /// <summary>ARC-UI-1196: device pixels per Legacy pixel of this window (what the generated frames are painted at).</summary>
+    internal float DeviceScale() =>
+        GodotObject.IsInstanceValid(this) && IsInsideTree() ? GetGlobalTransformWithCanvas().Scale.X * GetViewport().GetStretchTransform().Scale.X : Scale.X;
+
+    private void Unwatch()
+    {
+        if (_onTextureChanged is { } handler) foreach (var texture in _watched) texture.Changed -= handler;
+        _watched.Clear();
     }
 
     /// <summary>Takes the art back (the module changed to one whose art did not read): the panel then shows its list.</summary>
-    public void ClearArt() { _art = new Dictionary<int, Texture2D[]>(); _fonts = null; ResetPage(); CloseView(); }
+    public void ClearArt() { Unwatch(); _art = new Dictionary<int, Texture2D[]>(); _fonts = null; ResetPage(); CloseView(); }
 
     /// <summary>Shows <paramref name="view"/>. A tab other than the one shown starts at the first spread (the tab switch resets the page,
     /// LB3); the same tab rebuilt keeps its spread as far as the list still reaches it.</summary>

@@ -1202,6 +1202,23 @@ start a game and press `C`. Compare with **HD** and **Legacy**.
 | 4 | Resize the window and open the sheet again. | The frames are sharp at the new size, no seam between the window and the pages. | open |
 | 5 | Open an NPC's sheet in a dialog (reply `c-e`). | The same look, with no + or − buttons. | open |
 
+## ARC-UI-1197 — Generated interface: the world map and the town map (S6, 2026-11-13)
+
+The rules are in [viewer slice S6](../rendering/hd-interface-density.md#viewer-slice-s6-arc-ui-1197). Set the HD interface line on the launcher screen to **Generated (experimental)**,
+start a game and press `W` (the town map opens in the Crash Site; on the open ground the world map). Compare with **HD** and **Legacy**.
+
+| # | Step | Expected | Status |
+| --- | --- | --- | --- |
+| 1 | Press `W` in a 1280 × 800 window. | The window's wood, the brass rim around the map view, the readout boxes, the compass rose, the route sketch and the Travel button's ring sit where they did in HD; the map picture is as before. | open |
+| 2 | Press `Z` or the Zoom and Whole-map buttons to change the view. | The frame does not change; the buttons (still art) answer to hover and press. | open |
+| 3 | Move the pointer over the map. | The two readout boxes show their numbers in the same places. | open |
+| 4 | Resize the window (or go full screen) and open the map again. | The frame is sharp at the new size, no seam between the wood and the kept pictures. | open |
+
+Known differences (documented, not bugs):
+
+- The buttons, the lens cover and the bottom cover are still art ([issue #1810](https://github.com/Simarglok/arcanum-steamwoven/issues/1810)); the zoom and whole-map buttons get a brass frame from the holes of the frame.
+- The compass, the route sketch and the Travel ring are the original's pictures; their small patches of old wood differ a little from the generated wood.
+
 ## ARC-COMBAT-1738 — Auto Switch Weapons option and its re-wield cases (2026-11-13)
 
 The rules are in the [ledger OH3](../research/ledger/ui-audio.md#hidden-options-arc-res-1107) and [equipment runtime](../world/equipment-runtime.md). Start a game with a hero who carries two weapons.
@@ -1222,3 +1239,20 @@ Built from the executable's state machine ([ledger HLR1–HLR12](../research/led
 | 2 | Choose a spell, then yes, with enough gold; then again with too little. | The price is the reaction-scaled 100 (about 100 at a neutral reaction); the gold goes to the healer, the spell is cast at you (a heal, a poison cure, and at rank 5 a resurrection); with too little gold the healer says its no-money line and nothing is paid. | open |
 | 3 | Choose the healer's own treatment when your hit points are low. | The price follows its heal skill ((level + 2) × (tier + 1), reaction scaled); the healer walks the skill goal and heals through the usual heal check. | open |
 | 4 | Ask a healer who follows you the same. | No price screen and no payment: the service runs at once. | open |
+
+## ARC-UI-1196 — Generated interface: the logbook (S7, 2026-11-13)
+
+The rules are in [viewer slice S7](../rendering/hd-interface-density.md#viewer-slice-s7-arc-ui-1196). Set the HD interface line on the launcher screen to **Generated (experimental)**,
+start a game and open the logbook (L). Compare with **HD** and **Legacy**.
+
+| # | Step | Expected | Status |
+| --- | --- | --- | --- |
+| 1 | Open the logbook in a 1280 × 800 window. | The side panel is wood with the round view of the hero, the book is a maroon cover with two pages sinking toward the fold and stacks of page edges at both sides; the titles and page numbers sit where they did. | open |
+| 2 | Click each of the seven tabs, move over them. | The paper bookmarks (their own outlines and glyphs) follow the Legacy ones; the shown tab is the pressed one; hints and the page sound are as before. | open |
+| 3 | Fill a tab so it has several spreads (the rumors with many entries) and turn the pages with the two arrows. | The arrows are drawn on the page under them (no box of another colour); a turn plays the page sound; the arrow hides on the first and last spread. | open |
+| 4 | Make the window bigger and smaller while the logbook is open. | The book redraws at the new size (the previous picture stays until it is ready); the lines of the page edges stay one unit wide. | open |
+
+Known differences (documented, not bugs):
+
+- The pages are plainer than the original's (soft clouds, no grain), the cover is a flat weave and the page edges are light regular stripes where the original's are a dark speckle.
+- The ring of the round view (art 198) is the HD pack's (or Legacy) frame: it is shared with the character sheet and the world map.
