@@ -53,6 +53,9 @@ public sealed record AreaAiScene
     /// <summary>ARC-DEV-137 (MIG13 S6): the ART of an NPC's animation (frames and rate) for the critter-state goals' timing; null (the provider, or its answer) when the header does not read or
     /// the viewer cannot read that animation (the stun's 23 is not read yet: the stun then ends at once, GT26).</summary>
     public Func<string, int, AiAnimationClip?>? AnimationClip { get; init; }
+    /// <summary>ARC-AI-1486 (the item system's pickup switch 0x5E8800, lowered by 0x468190 when an inventory window opens in loot or See Contents mode on a container, 0x5727B0; raised by 0x468180 at its close,
+    /// 0x573440): whether such a window is open now (a container of the map or a junk pile). While it is, no NPC starts a pickup (<see cref="AreaAiHost.NpcPickupsOn"/>); null: no window is ever open.</summary>
+    public Func<bool>? LootWindowOpen { get; init; }
     /// <summary>ARC-AI-1313 (0x4D9240 at the dark wander's node 0x425D60): the light level 0..255 at a world cell, as the viewer's lighting answers it for a light-aware check; null: full light everywhere, so the dark wander accepts every tile.</summary>
     public Func<CellCoord, int>? CellLight { get; init; }
     /// <summary>ARC-WORLD-1162 (SWB17–SWB21): the beds of the shown map and who lies in them, shared with the hero's rest; null: the map has none, so an NPC at its standpoint finds no bed.</summary>
@@ -3418,6 +3421,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         var state = LifeState(id) ?? build.Loaded;
         var danger = _session.QueryDanger(id);
         var leader = Leader(id);
+        var npcConcealed = _session.IsConcealed(SessionCombatant.Critter(id));
         return new HostilityCritter
         {
             Id = id, Kind = HostilityKind.Npc,
@@ -3438,6 +3442,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
             Perception = build.EffectiveStat(CharacterStat.Perception, state), Intelligence = build.EffectiveStat(CharacterStat.Intelligence, state),
             Level = build.Level, Alignment = critter.BaseStats.Count > AreaCompanionData.AlignmentStat ? critter.BaseStats[AreaCompanionData.AlignmentStat] : 0,
             HealthPercent = status is null ? 0 : Percent(status), Leader = leader, PcLeader = leader,
+            // ARC-AI-1560 (critter flag 0x1, 0x45EDE0, for any critter): a follower the hero's sneak hides is heard at the silent level and refused unseen when it prowls as a master.
+            Concealed = npcConcealed, MasterProwler = npcConcealed && NpcSkill(id, Skill.Prowling)?.Training >= SkillTraining.Master,
         };
     }
 
@@ -3580,12 +3586,23 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     /// ARC-AI-1518 (ledger AW4, AW5): the margin 0..100 by which a concealed hero lowers the observer's
     /// Perception in one sight or hearing check, from the session's stealth facts (<see cref="GameSessionOwner.HeroProwlingMargin"/>) and
     /// the observer's own: its conditions, dark sight, the light at the hero, and for sight the line from the observer to the hero (a
-    /// blocker hides the prowler, else the line's cover). 0 for any other target, or a hero that is not concealed. A concealed follower
-    /// is not handled here (it has no margin yet).
+    /// blocker hides the prowler, else the line's cover). ARC-AI-1560: the same for a concealed follower as the target, from its own
+    /// prowling level and training, light and worn armour (<see cref="GameSessionOwner.NpcProwlingMargin"/>); a follower with no sheet or
+    /// build here gives 0. 0 for a target that is not concealed.
     /// </summary>
     private int ProwlingMargin(string observer, string target, CellCoord at, CellCoord there, HostilityCritter? facts, ILineOfFireMap<AreaObjectRecord> map, bool seeing)
     {
-        if (target != Pc || observer == Pc || !_session.IsConcealed(SessionCombatant.Hero)) return 0;
+        if (observer == Pc || observer == target) return 0;
+        SessionNpcProwler? prowler = null;
+        if (target == Pc)
+        {
+            if (!_session.IsConcealed(SessionCombatant.Hero)) return 0;
+        }
+        else
+        {
+            if (!_session.IsConcealed(SessionCombatant.Critter(target)) || Build(target) is not { } build || _scene.NpcSheet?.Invoke(target) is not { } sheet) return 0;
+            prowler = new(build, sheet.Loaded, sheet.Modifiers);
+        }
         var perception = Math.Clamp(facts?.Perception ?? 0, 0, AwarenessRules.MaxPerception);
         var (offsetX, offsetY) = ObserverOffset(observer);
         var trace = seeing ? LineOfFireRules.Trace(at, offsetX, offsetY, there, map, _session.Rules.Combat) : null;
@@ -3601,7 +3618,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
             ObserverDarkSight = ((Fields(observer)?.Critter?.Flags2 ?? 0) & DarkSight2) != 0,
         };
         if (trace is not null) observerFacts = AwarenessRules.WithProwlerLine(observerFacts, trace);
-        return _session.HeroProwlingMargin(perception, observerFacts, seeing).Margin;
+        return (prowler is null ? _session.HeroProwlingMargin(perception, observerFacts, seeing) : _session.NpcProwlingMargin(prowler, perception, observerFacts, seeing)).Margin;
     }
 
     private const int OffsetXSlot = 2, OffsetYSlot = 3;
