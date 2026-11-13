@@ -568,6 +568,7 @@ src/Arcanum.World/AreaRestock.cs,GeneratedOnceFacts,pending,
 src/Arcanum.World/AreaRestock.cs,GeneratesAtCreation,pending,
 src/Arcanum.World/AreaRestock.cs,Item,pending,
 src/Arcanum.World/AreaRestock.cs,Merchant,pending,
+src/Arcanum.World/AreaRestock.cs,NpcLight,exempt,host
 src/Arcanum.World/AreaRestock.cs,Schedule,pending,
 src/Arcanum.World/AreaRestock.cs,Set,pending,
 src/Arcanum.World/AreaRestock.cs,Vicinity,pending,
