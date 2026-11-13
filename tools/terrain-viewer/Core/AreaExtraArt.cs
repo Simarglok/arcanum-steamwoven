@@ -68,6 +68,17 @@ public sealed class AreaExtraArt : IDisposable
         return load;
     }
 
+    /// <summary>
+    /// ARC-SCRIPT-1735 (ledger NS5, the original's ART file test): whether the art id names an ART file of the content stack: the id resolves to a path (a scenery, container, item or eye-candy class with a numbered entry) and a file of that path is found.
+    /// The file is not read; an id of another class (tile, wall, critter, monster, portal) names none in this project's reading.
+    /// </summary>
+    public bool Exists(uint aid)
+    {
+        if (_loads.TryGetValue(aid, out var known)) return known.Status is AreaExtraArtStatus.Ready or AreaExtraArtStatus.Unreadable or AreaExtraArtStatus.LimitExceeded;
+        var resolved = AreaObjectArt.Resolve(aid, (role, key) => Table(role) is { } table && table.TryGetValue(key, out var name) ? name : null);
+        return resolved.Path is { } selection && _stack.Resolve(selection.Path).Winner is not null;
+    }
+
     private AreaExtraArtLoad Read(uint aid)
     {
         var resolved = AreaObjectArt.Resolve(aid, (role, key) => Table(role) is { } table && table.TryGetValue(key, out var name) ? name : null);

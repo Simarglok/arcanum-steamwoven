@@ -65,11 +65,11 @@ internal sealed class ReactionDomain
 
     /// <summary>The hero's side of a reaction (see <see cref="GameSessionOwner.QueryHeroReactionFacts"/>); the reaction, good and
     /// bad reaction effects are the hero's durable effects' (ARC-WORLD-029).</summary>
-    internal static ReactionPcFacts HeroFacts(HeroDomain hero, EffectDomain effects)
+    internal static ReactionPcFacts HeroFacts(HeroDomain hero, EffectDomain effects, IEnumerable<SessionEffectDefinition>? innate = null)
     {
         var stats = hero.Stats.Query(new(0)).Snapshot!;
-        return new(hero.State.Race, stats.GetEffective(CharacterStat.ReactionModifier), 0, effects.Special(EffectSpecial.Reaction),
-            effects.Special(EffectSpecial.GoodReaction), effects.Special(EffectSpecial.BadReaction),
+        return new(hero.State.Race, stats.GetEffective(CharacterStat.ReactionModifier), 0, effects.Special(EffectSpecial.Reaction, innate),
+            effects.Special(EffectSpecial.GoodReaction, innate), effects.Special(EffectSpecial.BadReaction, innate),
             stats.GetEffective(CharacterStat.Charisma) >= CharacterStatRules.ExtraordinaryThreshold);
     }
 }
@@ -90,6 +90,16 @@ public sealed partial class GameSessionOwner
         ThrowIfDisposed();
         if (!SessionValidation.Entity(entity)) throw new ArgumentException("Invalid entity id.", nameof(entity));
         return _reactions.Records.TryGetValue(entity, out var record) ? record : null;
+    }
+
+    /// <summary>
+    /// ARC-SCRIPT-1773 (ledger CS4, the dialog layer's slot word of the PC): whether the PC is in a dialog now. The original keeps one dialog slot for the PC (single player), set at the dialog start and cleared at its close; the
+    /// span is the one in which an NPC's conversation slot is open (<see cref="SessionReaction.InConversation"/>: the start opens it, every exit closes it), so a slot open on any NPC tells it.
+    /// </summary>
+    public bool QueryDialogOpen()
+    {
+        ThrowIfDisposed();
+        return _reactions.Records.Values.Any(record => record.InConversation);
     }
 
     /// <summary>Detached copy of the reaction domain.</summary>

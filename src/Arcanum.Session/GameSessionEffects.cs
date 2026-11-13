@@ -145,14 +145,16 @@ internal sealed class EffectDomain
         new([.. Entries], [.. Definitions.OrderBy(pair => pair.Key).Select(pair => pair.Value)], [.. Blessings], [.. Curses],
             [.. Critters.Select(pair => new SessionCritterEffectRecord(pair.Key, [.. pair.Value.Entries], [.. pair.Value.Definitions.OrderBy(d => d.Key).Select(d => d.Value)]))]);
 
-    internal ImmutableArray<EffectModifier> Maximum(EffectSpecial special) => Modifiers(Entries, Definitions, special);
+    internal ImmutableArray<EffectModifier> Maximum(EffectSpecial special, IEnumerable<SessionEffectDefinition>? innate = null) => Modifiers(Entries, Definitions, special, innate);
 
-    internal IReadOnlyList<ReactionModifier> Special(EffectSpecial special) =>
-        Array.AsReadOnly(Modifiers(Entries, Definitions, special).Select(m => new ReactionModifier(m.Operator, m.Value)).ToArray());
+    internal IReadOnlyList<ReactionModifier> Special(EffectSpecial special, IEnumerable<SessionEffectDefinition>? innate = null) =>
+        Array.AsReadOnly(Modifiers(Entries, Definitions, special, innate).Select(m => new ReactionModifier(m.Operator, m.Value)).ToArray());
 
+    /// <summary>The changes of one special value over the entries in list order; for the hero <paramref name="innate"/> are the rules of its innate entries, which stand first in its list.</summary>
+    /// <remarks>ARC-MAGIC-1723: the original's special getters (0x4EAA20, 0x4EAA50, 0x4EAA80, 0x4EAAB0, 0x4EABC0) read the whole list: only the stat getter has an "ignore innate" form.</remarks>
     internal static ImmutableArray<EffectModifier> Modifiers(IEnumerable<SessionEffect> entries,
-        IReadOnlyDictionary<int, SessionEffectDefinition> definitions, EffectSpecial special) =>
-        [.. entries.SelectMany(entry => definitions[entry.Number].Changes)
+        IReadOnlyDictionary<int, SessionEffectDefinition> definitions, EffectSpecial special, IEnumerable<SessionEffectDefinition>? innate = null) =>
+        [.. (innate ?? []).SelectMany(rule => rule.Changes).Concat(entries.SelectMany(entry => definitions[entry.Number].Changes))
             .Where(c => c.Kind == EffectAttributeKind.Special && c.Attribute == (int)special)
             .Select(c => new EffectModifier(Operator(c.Operator), c.Value))];
 
@@ -178,13 +180,14 @@ internal sealed class EffectDomain
     /// pinned death damage in either direction even when the bounds that hold them and the changes that pull the other way
     /// are removed (a hero's maximum before effects is between 0 and <see cref="HeroMaximumCeiling"/>).
     /// </summary>
-    internal static bool Bounded(IReadOnlyList<SessionEffect> entries, IReadOnlyDictionary<int, SessionEffectDefinition> definitions, long ceiling = HeroMaximumCeiling)
+    internal static bool Bounded(IReadOnlyList<SessionEffect> entries, IReadOnlyDictionary<int, SessionEffectDefinition> definitions, long ceiling = HeroMaximumCeiling,
+        IEnumerable<SessionEffectDefinition>? innate = null)
     {
         foreach (var special in new[] { EffectSpecial.Reaction, EffectSpecial.GoodReaction, EffectSpecial.BadReaction })
-            if (Modifiers(entries, definitions, special).Length > ReactionLimits.MaxModifiers) return false;
+            if (Modifiers(entries, definitions, special, innate).Length > ReactionLimits.MaxModifiers) return false;
         foreach (var special in new[] { EffectSpecial.MaxHitPoints, EffectSpecial.MaxFatigue })
         {
-            var modifiers = Modifiers(entries, definitions, special);
+            var modifiers = Modifiers(entries, definitions, special, innate);
             long Sum(StatModifierOperator op, bool positive) =>
                 modifiers.Where(m => m.Operator == op && m.Value > 0 == positive).Sum(m => (long)m.Value);
             var highest = ceiling * (100 + Sum(StatModifierOperator.Percent, true)) / 100 + Sum(StatModifierOperator.Add, true);
@@ -279,6 +282,9 @@ internal sealed class EffectDomain
     internal static bool OwnCause(EffectCause cause) =>
         Enum.IsDefined(cause) && cause is not (EffectCause.Race or EffectCause.Gender or EffectCause.Injury);
 }
+
+/// <summary>ARC-MAGIC-1658, ARC-MAGIC-1723: a hero state a trial passes through before its steps and the rules of the innate entries the hero holds at that state (the removal stage lacks the removed cause's).</summary>
+internal readonly record struct HeroStage(SessionHeroState State, ImmutableArray<SessionEffectDefinition> Innate);
 
 /// <summary>One step of an effect change: append an entry, or remove the entry at an index of the durable list.</summary>
 internal readonly record struct EffectStep(SessionEffect? Add, int RemoveAt);
@@ -459,7 +465,7 @@ public sealed partial class GameSessionOwner
         if (!IsCurrent(expected)) return RejectEffect(GameSessionFailure.StaleVersion);
         if (count > SessionEffectLimits.MaxHeroEffects - _effects.Entries.Count) return RejectEffect(GameSessionFailure.EffectCapacityExceeded);
         var definitions = new Dictionary<int, SessionEffectDefinition>(_effects.Definitions) { [definition.Number] = definition };
-        if (!EffectDomain.Bounded([.. _effects.Entries, .. Enumerable.Repeat(new SessionEffect(definition.Number, cause), count)], definitions))
+        if (!EffectDomain.Bounded([.. _effects.Entries, .. Enumerable.Repeat(new SessionEffect(definition.Number, cause), count)], definitions, innate: HeroInnateRules()))
             return RejectEffect(GameSessionFailure.InvalidEffect);
         var steps = Enumerable.Repeat(new EffectStep(new SessionEffect(definition.Number, cause), -1), count).ToArray();
         return Commit(steps, definition, durationMs is { } d ? (definition.Number, count, d) : null, null, apply);
@@ -537,7 +543,7 @@ public sealed partial class GameSessionOwner
 
     // ARC-MAGIC-1658: stages are hero states the trial passes through before the steps (the removal and the add of the race and gender setters, each moving the damage as an effect's does): the character owner is built again from each
     // with the durable entries applied to it again. A state the character rules refuse, or an entry its owner refuses, is InvalidHero or InvalidEffect.
-    private GameSessionFailure PrepareEffects(EffectStep[] steps, Dictionary<int, SessionEffectDefinition> definitions, int extraEvents, IReadOnlyList<SessionHeroState> stages, out PreparedEffects? prepared)
+    private GameSessionFailure PrepareEffects(EffectStep[] steps, Dictionary<int, SessionEffectDefinition> definitions, int extraEvents, IReadOnlyList<HeroStage> stages, out PreparedEffects? prepared)
     {
         prepared = null;
         // The staged owner and the steps would both be applied to it again by ApplyEffects: the stages stand alone.
@@ -548,16 +554,18 @@ public sealed partial class GameSessionOwner
         foreach (var entry in entries) ids.Add(ApplyStats(trial.Stats, entry, definitions));
         var before = _life.Hero!.Value;
         var state = before.State;
-        var facts = TrialFacts(trial, entries, definitions, state);
+        var innate = HeroInnateRules();
+        var facts = TrialFacts(trial, entries, definitions, state, innate);
         if (facts is null) return GameSessionFailure.InvalidEffect;
         foreach (var stage in stages)
         {
-            if (HeroDomain.BuildFrom(stage) is not { } staged) return GameSessionFailure.InvalidHero;
+            if (HeroDomain.BuildFrom(stage.State) is not { } staged) return GameSessionFailure.InvalidHero;
+            innate = stage.Innate;
             trial = staged;
             ids = [];
             try { foreach (var entry in entries) ids.Add(ApplyStats(trial.Stats, entry, definitions)); }
             catch (InvalidOperationException) { return GameSessionFailure.InvalidEffect; }
-            var after = TrialFacts(trial, entries, definitions, state);
+            var after = TrialFacts(trial, entries, definitions, state, innate);
             if (after is null) return GameSessionFailure.InvalidEffect;
             state = state with
             {
@@ -580,7 +588,7 @@ public sealed partial class GameSessionOwner
                     throw new InvalidOperationException("Trial effect removal failed.");
                 ids.RemoveAt(step.RemoveAt);
             }
-            var next = TrialFacts(trial, entries, definitions, state);
+            var next = TrialFacts(trial, entries, definitions, state, innate);
             if (next is null) return GameSessionFailure.InvalidEffect;
             state = state with
             {
@@ -638,21 +646,21 @@ public sealed partial class GameSessionOwner
                 throw new InvalidOperationException("Timer scheduling failed after admission.");
     }
 
-    // A character owner built from the hero's saved fields, for trials.
-    private HeroDomain TrialHero()
+    // A character owner built from the hero's saved fields, for trials. ARC-MAGIC-1744: with stats the stored array of the hero state is replaced by them (the rewield's reads, which come after the store).
+    private HeroDomain TrialHero(IReadOnlyList<int>? stats = null)
     {
         var hero = _hero!;
-        return HeroDomain.Build(hero.State.Prototype, hero.State.Race, hero.State.Gender, hero.State.Stats, hero.State.Level,
+        return HeroDomain.Build(hero.State.Prototype, hero.State.Race, hero.State.Gender, stats ?? hero.State.Stats, hero.State.Level,
             hero.State.UnspentPoints, hero.State.Alignment, hero.State.RaceEffect, hero.State.GenderEffect, hero.State.Experience,
             hero.State.Advancement, hero.State.InnateSkills)!;
     }
 
     // The hero's life facts under a trial list, or null when the life rules refuse the maxima it gives.
     private LifeFacts? TrialFacts(HeroDomain trial, IReadOnlyList<SessionEffect> entries, IReadOnlyDictionary<int, SessionEffectDefinition> definitions,
-        LifeState state)
+        LifeState state, ImmutableArray<SessionEffectDefinition> innate)
     {
-        var facts = LifeDomain.HeroFacts(trial.Stats, trial.State, state, HeroNormalResistance(entries, definitions, trial.State),
-            EffectDomain.Modifiers(entries, definitions, EffectSpecial.MaxHitPoints), EffectDomain.Modifiers(entries, definitions, EffectSpecial.MaxFatigue));
+        var facts = LifeDomain.HeroFacts(trial.Stats, trial.State, state, HeroNormalResistance(entries, definitions, innate),
+            EffectDomain.Modifiers(entries, definitions, EffectSpecial.MaxHitPoints, innate), EffectDomain.Modifiers(entries, definitions, EffectSpecial.MaxFatigue, innate));
         return LifeRules.IsValid(facts) ? facts : null;
     }
 
@@ -666,7 +674,7 @@ public sealed partial class GameSessionOwner
 
     /// <summary>The hero's life facts at a state, with its worn armour and durable effects.</summary>
     private LifeFacts HeroLifeFacts(LifeState state) => WithWrittenHolds(SessionEventKinds.PlayerEntity, LifeDomain.HeroFacts(_hero!.Stats, _hero.State, state, HeroNormalResistance(),
-        _effects.Maximum(EffectSpecial.MaxHitPoints), _effects.Maximum(EffectSpecial.MaxFatigue)));
+        _effects.Maximum(EffectSpecial.MaxHitPoints, HeroInnateRules()), _effects.Maximum(EffectSpecial.MaxFatigue, HeroInnateRules())));
 
     private SessionEffectResult RejectEffect(GameSessionFailure failure) =>
         new(GameSessionDisposition.Rejected, failure, 0, null, null, new(_identity, _revision));
