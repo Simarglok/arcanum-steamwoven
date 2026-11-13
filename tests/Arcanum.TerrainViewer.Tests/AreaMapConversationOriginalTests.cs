@@ -124,8 +124,10 @@ public sealed class AreaMapConversationOriginalTests
         // 44 more talks start and 13 more end in their script (57 fewer entries refused; obj is dead of ARC-SCRIPT-049 included); 12 of them
         // float a line, and none reaches a floated line with an action field. The counts move only when the talk set or the dialog runtime grows
         // (ARC-SCRIPT-1165: one entry more is admitted and falls to the generic greeting).
-        Assert.AreEqual("EntryNotAdmitted=73, GenericGreeting=1, ScriptEnded=14, Started=94", string.Join(", ", statuses.Select(s => $"{s.Key}={s.Value}")));
+        // Since the later condition and action sets (S53 to S56, measured on 2026-11-14 at 5c02daa9e) 8 more entries are admitted: Started 99, ScriptEnded 16, one ends in effects the host rejects (script 1092, see the check below) and the generic greeting stays 1.
+        Assert.AreEqual("EntryNotAdmitted=65, GenericGreeting=1, ScriptEffectsRejected=1, ScriptEnded=16, Started=99", string.Join(", ", statuses.Select(s => $"{s.Key}={s.Value}")));
         Assert.AreEqual(13, floated.Count); // one more since ARC-SCRIPT-1165: the entry now admitted floats a line
-        Assert.IsFalse(stops.Keys.Any(k => k.StartsWith("effects ", StringComparison.Ordinal)), string.Join("; ", stops.Keys));
+        // The one run whose effects the session refuses is script 1092 (caladon-panarrii temple): it asks the NPC to attack, which only a world with the AI host can apply (ARC-SCRIPT-1620, TI6), and this test world has none.
+        CollectionAssert.AreEqual(new[] { "effects 1092" }, stops.Keys.Where(k => k.StartsWith("effects ", StringComparison.Ordinal)).ToArray(), string.Join("; ", stops.Keys));
     }
 }

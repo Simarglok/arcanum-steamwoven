@@ -47,7 +47,7 @@ public sealed class AreaLoopBreakScriptAdmissionTests
         }
         Console.WriteLine($"installed scripts with a loop break {withBreak}; admitted whole: " + string.Join(", ", counts.Select(c => $"{c.Key} {c.Value}")));
         Assert.AreEqual(0, counts["S38"], "S38 refuses every one of them by construction");
-        // 22 installed scripts carry a loop break; S40 admits 12 whole (the rest hold a command of another slice), the use set none (its scripts hold other refused commands), the placed and dying sets 7 each and the heartbeat set 1.
-        Assert.AreEqual((22, 12, 0, 7, 1, 7), (withBreak, counts["S40"], counts["use"], counts["placed"], counts["heartbeat"], counts["dying"]));
+        // 22 installed scripts carry a loop break; S40 admits 12 whole (the rest hold a command of another slice), the use set none (its scripts hold other refused commands), the placed set 7, the heartbeat set 4 and the dying set 16 (3 and 9 more than the first count: the later condition and action sets S53 to S56, the critter-state, spell-state and critter-getter slices, widened the heartbeat and dying sets; the use, placed and S40 counts did not move).
+        Assert.AreEqual((22, 12, 0, 7, 4, 16), (withBreak, counts["S40"], counts["use"], counts["placed"], counts["heartbeat"], counts["dying"]));
     }
 }
