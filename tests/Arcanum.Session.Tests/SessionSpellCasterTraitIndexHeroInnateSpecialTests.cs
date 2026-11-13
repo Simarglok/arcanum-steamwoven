@@ -115,4 +115,19 @@ public sealed partial class SessionSpellCasterTraitIndexTests
         Assert.AreEqual(version, full.Version, "nothing is written for a refusal");
         Assert.AreEqual(0, full.QueryHeroStoredRace());
     }
+
+    [TestMethod]
+    public void Rules_the_heros_durable_entries_would_carry_past_the_bounds_are_refused_at_attach_and_nothing_is_attached()
+    {
+        var heavy = new SessionEffectDefinition(64, [.. Enumerable.Repeat(new EffectChange(EffectAttributeKind.Special, 0, EffectChangeOperator.Add, 1000), 7)]);
+        SessionEffectDefinition Durable(int number) => new(number, [new(EffectAttributeKind.Special, 0, EffectChangeOperator.Add, 1000)]);
+        using var owner = SpecialSession();
+        var added = 0;
+        while (added < 60 && owner.AddHeroEffect(owner.Version, Durable(400 - added - 1), EffectCause.Spell).Disposition == GameSessionDisposition.Changed) added++;
+        // The human hero's own entry is effect 64: its rule carries +7000 on top of the full durable list.
+        Assert.ThrowsExactly<ArgumentException>(() => owner.AttachInnateEffects([heavy]));
+        Assert.AreEqual(0, owner.QueryHeroReactionFacts()!.ReactionEffects.Count);
+        // The rules attached before stay: a half-orc swap still reads the old set (its entry 70 is there).
+        Assert.IsTrue(owner.HeroInnateReady(false, 6));
+    }
 }
