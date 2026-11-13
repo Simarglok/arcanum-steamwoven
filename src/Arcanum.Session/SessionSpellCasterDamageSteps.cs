@@ -13,6 +13,10 @@ public sealed record SessionSpellDamageStep(string Victim, AttackDamage Damage, 
     /// <summary>ARC-MAGIC-1232 (DW2): the weapon block's drop of this step (a Damage component with the weapon-drop flag, Disarm): one <see cref="SessionCriticalStepKind.DropWeapon"/> step, none for a step without the flag. The host that draws
     /// the floaters reads message 19 from it as for an attack's critical drop.</summary>
     public IReadOnlyList<SessionCriticalStep> Criticals { get; init; } = [];
+
+    /// <summary>ARC-AI-1638: true for the step of a script's damage (<c>SessionSpellCaster.ScriptDamage</c>): the script answer already asks the follower's near-death line (<c>ScriptDamageAftermath</c>, ARC-DEV-245), so the host that drains
+    /// the steps must not ask it a second time. False for a spell's, a burn's and a trap's step.</summary>
+    public bool FromScript { get; init; }
 }
 
 public sealed partial class SessionSpellCaster
@@ -30,9 +34,9 @@ public sealed partial class SessionSpellCaster
         return taken;
     }
 
-    private void QueueDamageStep(string victim, AttackDamage damage, LifeOutcome life, string? attacker, IReadOnlyList<SessionCriticalStep>? criticals = null)
+    private void QueueDamageStep(string victim, AttackDamage damage, LifeOutcome life, string? attacker, IReadOnlyList<SessionCriticalStep>? criticals = null, bool fromScript = false)
     {
         if (_damageSteps.Count >= MaxPendingEntries) _damageSteps.RemoveAt(0);
-        _damageSteps.Add(new(victim, damage, life, attacker) { Criticals = criticals ?? [] });
+        _damageSteps.Add(new(victim, damage, life, attacker) { Criticals = criticals ?? [], FromScript = fromScript });
     }
 }

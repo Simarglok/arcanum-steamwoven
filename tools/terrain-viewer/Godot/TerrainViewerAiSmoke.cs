@@ -1118,6 +1118,25 @@ public partial class TerrainViewerApp
             else GD.Print("ARC-AI-1527 native-smoke ai-follower-lines text PASS");
             GD.Print($"ARC-AI-1527 native-smoke ai-follower-lines PASS said={_followerLinesSaid - linesBefore}");
 
+            // ARC-AI-1638: a real burn step (the cast host's damage step, drained by TickCasterDamage) that takes the follower from a fifth of its hit points or more to below it floats the near-death line once.
+            if (SpellCasterNow() is { } burner && _combatHost.Build(session, map.RuntimeMap, follower).Combat?.Target is { } burnTarget && session.QueryLife(burnTarget).View is { } burnView)
+            {
+                burner.TakeDamageSteps();
+                var stepLinesBefore = _followerLinesSaid;
+                var burnLeft = burnView.Status.MaxHitPoints / 10;
+                for (var burns = 0; burns < 12 && session.QueryLife(burnTarget).View is { } cur && cur.Status.HitPoints * 5 >= cur.Status.MaxHitPoints && !cur.Status.IsDead; burns++)
+                {
+                    burner.ApplyBurn(follower, DamageByType.Zero.With(DamageType.Fire, Math.Max(1, cur.Status.HitPoints - burnLeft)));
+                    TickCasterDamage();
+                }
+                var burnt = session.QueryLife(burnTarget).View!.Status;
+                Require(!burnt.IsDead && burnt.HitPoints * 5 < burnt.MaxHitPoints, $"the burn steps took the follower below a fifth: {burnt.HitPoints}/{burnt.MaxHitPoints}");
+                if (textsReady && _followerLinesSaid != stepLinesBefore + 1) throw new InvalidOperationException($"the burn step floated the near-death line once: said {_followerLinesSaid - stepLinesBefore}");
+                GD.Print($"ARC-AI-1638 native-smoke ai-follower-burn-near-death PASS said={_followerLinesSaid - stepLinesBefore} hp={burnt.HitPoints}/{burnt.MaxHitPoints}");
+                session.Heal(session.Version, burnTarget, new LifeHeal { Full = true });
+            }
+            else GD.Print("ARC-AI-1638 native-smoke ai-follower-burn-near-death SKIP no cast host");
+
             // ARC-WORLD-119: the curse through the AI host (the viewer reads no typed order text, so the smoke sends it): the follower
             // leaves (its run ends, FO20), the hero's attack event on it runs in full and asks its reaction, then its pass runs; the
             // host is kept and runs it on as a free NPC.
