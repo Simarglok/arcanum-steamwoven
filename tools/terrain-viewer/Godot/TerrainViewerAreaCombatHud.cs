@@ -12,7 +12,8 @@ namespace Arcanum.TerrainViewer;
 // list. The lamps show the hero's points left after the previewed action, the action's cost and the part the points do not cover; the
 // pending cost is the last action-point check's (the hover preview of 0x557370 and the hero's own charges set it; a charge does not
 // clear it, CH4). On another participant's subturn three lights run along the lamps. The list of the round's participants is a Steamwoven
-// addition, hidden in the Original rule mode. Plain Godot controls; shown only while a round runs.
+// addition, hidden in the Original rule mode. Shown only while a round runs. ARC-UI-1888: the lamp panel is the original's art (panel 294, lamps
+// 295, 296 and 315, end-turn button 297, CH1, CH2, CT5) when the bars' art read; the turn-order list stays a plain control (no original art).
 public partial class TerrainViewerApp
 {
     private AreaCombatHud? _combatHud;
@@ -21,12 +22,14 @@ public partial class TerrainViewerApp
     private WeakReference<GameSessionOwner>? _apPendingSession;
     // The subturns the session had started when the pending cost was last kept: a subturn start runs the check with cost 0 (CH4, 0x4B75D0).
     private long _apSeenSubturns = -1;
-    private (GameSessionOwner? Session, int Turn, int Current, int Points, int Participants, int Pending, int Cue, bool Shown, bool InBars, string? List)? _combatHudStamp;
+    private (GameSessionOwner? Session, int Turn, int Current, int Points, int Participants, int Pending, int Cue, bool Shown, bool InBars, string? List, Texture2D? Art, bool ButtonActive)? _combatHudStamp;
     // The running lights' clock: it advances only while another participant acts and starts at 0 with the round (CH5).
     private long _cueMs;
     private ulong _cueTick;
     // Automated runs draw the HUD only when their smoke asks (or the interface bars are drawn), as the gauges (ARC-UI-020).
     private bool _combatHudForSelfTest;
+    // ARC-UI-1888: synthetic art for the smoke (an interface art number to its frames), in place of the bars' art that an automated run does not read.
+    private Func<int, Texture2D[]?>? _combatHudArtForSelfTest;
 
     /// <summary>A subturn start clears the pending cost (the original's subturn start runs the action-point check with 0, CH4); called before any
     /// read or write of the pending cost of <paramref name="round"/>.</summary>
@@ -69,14 +72,42 @@ public partial class TerrainViewerApp
             hidden = window.Hidden;
         }
         var listKey = rows is null ? null : string.Join("\n", rows.Select(r => (r.Item2 ? ">" : " ") + r.Item1)) + "\n+" + hidden;
-        var stamp = (session, round?.Turn ?? 0, round?.Current ?? 0, round?.ActionPoints ?? 0, round?.Participants.Count ?? 0, _apPending, cue, shown, inBars, listKey);
+        Func<int, Texture2D[]?> artOf = _combatHudArtForSelfTest ?? (number => _gameBarPanel?.ArtFrames(number));
+        var art = AreaCombatLampLayout.ArtNumbers.All(number => artOf(number) is { Length: > 0 }) ? artOf(AreaCombatLampLayout.PanelArt)![0] : null;
+        // A window over the world owns the pointer: the end-turn button (above every window's layer) takes none then (the release is refused anyway, CT5).
+        var buttonActive = !WorldModal;
+        _combatHud?.SetEndTurnActive(buttonActive);
+        var stamp = (session, round?.Turn ?? 0, round?.Current ?? 0, round?.ActionPoints ?? 0, round?.Participants.Count ?? 0, _apPending, cue, shown, inBars, listKey, art, buttonActive);
         if (_combatHudStamp == stamp) return;
         _combatHudStamp = stamp;
         if (!shown) { _combatHud?.Show(null, null); return; }
-        if (_combatHud is null) { _combatHud = new AreaCombatHud(); AddChild(_combatHud); }
+        if (_combatHud is null)
+        {
+            _combatHud = new AreaCombatHud();
+            AddChild(_combatHud);
+            _combatHud.EndTurnPressed += () => PlayBarSound(AreaGameBarLayout.PressSound, "end turn");
+            _combatHud.EndTurnReleased += over => { if (!over) return; PlayBarSound(AreaGameBarLayout.ReleaseSound, "end turn"); EndTurnFromButton(); };
+        }
+        _combatHud.SetArt(_combatHudArtForSelfTest ?? (number => _gameBarPanel?.ArtFrames(number)));
         // CH4: the hero's subturn shows its points (A) against the pending cost (P); another participant's shows the running lights.
         var lamps = heroTurn ? ActionPointRules.Lamps(round!.ActionPoints, _apPending) : ActionPointRules.CueLampStates(cue);
         _combatHud.Show(new AreaCombatHudView(lamps, heroTurn, round!.Turn, rows, hidden), inBars ? _gameBarPanel : null);
+    }
+
+    /// <summary>The end-turn button's release (ARC-UI-1888, CT5): the same end of the hero's subturn as E, which a window over the world refuses.</summary>
+    private void EndTurnFromButton()
+    {
+        if (!CombatModeActive || WorldModal) { _turnBasedNotice = "end turn ignored: a window or dialog owns input"; RefreshAreaStatus(); return; }
+        EndHeroSubturn();
+    }
+
+    /// <summary>Presses and releases the end-turn button as the pointer would (the smoke); false when the button is not drawn.</summary>
+    internal bool EndTurnClickForSelfTest()
+    {
+        if (_combatHud is not { EndTurnShownForSelfTest: true } hud) return false;
+        var at = hud.EndTurnRectForSelfTest.GetCenter();
+        hud.EndTurnClickForSelfTest(at);
+        return true;
     }
 
     /// <summary>The round list's name of a participant: the hero, an NPC as the hover names it (its description), else its map number.</summary>

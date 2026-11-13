@@ -60,7 +60,6 @@ public sealed record AreaOptionControl(AreaOption Option, AreaOptionsPage Page, 
 public static class AreaOptionTable
 {
     public const string NoModules = "one module is offered; choosing a module is not built";
-    public const string NoFollowerSkills = "followers do not use skills on their own yet";
     public const string NoTextDuration = "text bubbles are not built";
     public const string NoFastTurnBased = "Fast Turn Based is not built";
     public const string NoVideoPage = "text bubbles are not built";
@@ -89,7 +88,7 @@ public static class AreaOptionTable
         new(AreaOption.AutoAttack, AreaOptionsPage.Game, 4, AreaOptionKind.List, 1, 1, OffOn, "auto attack", 1, null),
         new(AreaOption.AutoSwitchWeapons, AreaOptionsPage.Game, 5, AreaOptionKind.List, 1, 1, OffOn, "auto switch", 0, null),
         new(AreaOption.AlwaysRun, AreaOptionsPage.Game, 6, AreaOptionKind.List, 1, 1, OffOn, "always run", 0, null),
-        new(AreaOption.FollowerSkills, AreaOptionsPage.Game, 7, AreaOptionKind.List, 1, 1, OffOn, "follower skills", 1, NoFollowerSkills),
+        new(AreaOption.FollowerSkills, AreaOptionsPage.Game, 7, AreaOptionKind.List, 1, 1, OffOn, "follower skills", 1, null),
         new(AreaOption.Brightness, AreaOptionsPage.Video, 0, AreaOptionKind.Slider, 9, 9, null, "brightness", 0, null),
         new(AreaOption.TextDuration, AreaOptionsPage.Video, 1, AreaOptionKind.Slider, 10, 10, null, "text duration", 6, NoTextDuration),
         // ARC-UI-021: the floating text (CH10).
@@ -129,7 +128,7 @@ public static class AreaOptionTable
 /// the floating text's level and speed (ARC-UI-021).</summary>
 public sealed record AreaGameOptions(int Difficulty, int CombatMode, bool AutoAttack, bool AlwaysRun, int Effects, int Voice, int Music,
     RuleMode Rules = RuleMode.Steamwoven, int Floats = FloaterRules.DefaultLevel, int FloatSpeed = FloaterRules.DefaultSpeed, bool EvidenceLog = false, int TestTask = 0,
-    ControlSchemeSettings? Controls = null, bool CombatTaunts = true, bool ViolenceFilter = false, int Brightness = 0, bool AutoSwitchWeapons = false)
+    ControlSchemeSettings? Controls = null, bool CombatTaunts = true, bool ViolenceFilter = false, int Brightness = 0, bool AutoSwitchWeapons = false, bool FollowerSkills = true)
 {
     /// <summary>ARC-GPAD-1374: the controller scheme choice the three lines show (the defaults when the host passes none).</summary>
     public ControlSchemeSettings Schemes => Controls ?? ControlSchemeSettings.Default;
@@ -155,6 +154,7 @@ public sealed record AreaGameOptions(int Difficulty, int CombatMode, bool AutoAt
         AreaOption.ViolenceFilter => ViolenceFilter ? 1 : 0,
         AreaOption.Brightness => Brightness,
         AreaOption.AutoSwitchWeapons => AutoSwitchWeapons ? 1 : 0,
+        AreaOption.FollowerSkills => FollowerSkills ? 1 : 0,
         _ => null,
     };
 }
@@ -228,6 +228,9 @@ public sealed record AreaGameSettings
     }
     /// <summary>ARC-COMBAT-1720: the "auto switch" setting (OH3, getter 0x4B8330; the original never registers it, so it reads 0 until written: default off): the hero's weapon wearing out wields the best remaining weapon for the target (0x4B83E0). The settings file's <c>auto switch</c> line; ARC-COMBAT-1738 shows its options row (Game page, the original's sixth slot).</summary>
     public bool AutoSwitchWeapons { get; init; }
+
+    /// <summary>ARC-COMBAT-1777: the "follower skills" setting (OH4, getter 0x4C8FA0, the skill module's init registers 1: default on): the PC's lockpick item use and the skill bar's Disarm Traps let the follower with the best effectiveness minus difficulty act instead (the chooser 0x4C9050). The settings file's <c>follower skills</c> line; the options row is the Game page's seventh slot.</summary>
+    public bool FollowerSkills { get; init; } = Arcanum.Simulation.Skills.FollowerSkillRules.DefaultOn;
 
     /// <summary>The "float speed" (a step of speed + 1 px).</summary>
     public int FloatSpeed

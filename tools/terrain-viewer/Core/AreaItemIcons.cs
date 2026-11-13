@@ -44,8 +44,8 @@ public sealed class AreaItemIcons : IDisposable
     private readonly Dictionary<int, CombatFields?> _prototypeFields = [];
     private readonly Dictionary<int, int?> _unknownDescriptions = [];
     private readonly Dictionary<uint, (AreaInterfaceFrame? Frame, string Detail)> _arts = [];
-    private IReadOnlyDictionary<int, string>? _table;
-    private bool _tableRead, _disposed;
+    private readonly Dictionary<AreaMappingRole, IReadOnlyDictionary<int, string>?> _tables = [];
+    private bool _disposed;
     private long _rgbaBytes;
 
     /// <param name="stack">The game's content stack; this object owns it and disposes it.</param>
@@ -90,6 +90,14 @@ public sealed class AreaItemIcons : IDisposable
         ObjectDisposedException.ThrowIf(_disposed, this);
         if ((rowFields ?? Prototype(kind.Prototype)) is not { Item: { } item }) return (null, $"prototype {kind.Prototype}: no item fields");
         return InventoryArt(item.InventoryArt);
+    }
+
+    /// <summary>ARC-UI-1884: the frame of an item art id of place 2 (<c>item_paper.mes</c>, <see cref="AreaObjectArt.ResolveItemPaper"/>), as the quantity pane's
+    /// kind icon is drawn; null with the reason when the table, the name or the art does not read.</summary>
+    public (AreaInterfaceFrame? Frame, string Detail) PaperFrame(uint aid)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        return InventoryArt(aid);
     }
 
     /// <summary>ARC-UI-035: an item as the item window names it (0x554F10's first part, HK22): its type icon (0x554C20, always the type
@@ -261,7 +269,8 @@ public sealed class AreaItemIcons : IDisposable
 
     private (AreaInterfaceFrame? Frame, string Detail) Read(uint aid)
     {
-        var resolved = AreaObjectArt.ResolveItemInventory(aid, (role, key) => Table() is { } table && table.TryGetValue(key, out var name) ? name : null);
+        Func<AreaMappingRole, int, string?> names = (role, key) => Table(role) is { } table && table.TryGetValue(key, out var name) ? name : null;
+        var resolved = ((aid >> 12) & 3) == 2 ? AreaObjectArt.ResolveItemPaper(aid, names) : AreaObjectArt.ResolveItemInventory(aid, names);
         if (resolved.Path is not { } selection) return (null, $"inventory art {resolved.Status} {resolved.Detail}");
         if (_stack.Resolve(selection.Path).Winner is not { } winner) return (null, $"{selection.Path} missing");
         if (winner.Length > _limits.MaxFileBytes) return (null, $"{selection.Path} {winner.Length} bytes");
@@ -280,13 +289,13 @@ public sealed class AreaItemIcons : IDisposable
         }
     }
 
-    private IReadOnlyDictionary<int, string>? Table()
+    private IReadOnlyDictionary<int, string>? Table(AreaMappingRole role)
     {
-        if (_tableRead) return _table;
-        _tableRead = true;
-        var found = _stack.Resolve(AreaObjectArt.MappingPath(AreaMappingRole.ItemInventory));
-        _table = found.Winner is { } winner && _stack.Read(winner) is { Status: ContentReadStatus.Read, Bytes: { } bytes } ? AreaObjectArt.ReadNameTable(bytes) : null;
-        return _table;
+        if (_tables.TryGetValue(role, out var known)) return known;
+        var found = _stack.Resolve(AreaObjectArt.MappingPath(role));
+        var table = found.Winner is { } winner && _stack.Read(winner) is { Status: ContentReadStatus.Read, Bytes: { } bytes } ? AreaObjectArt.ReadNameTable(bytes) : null;
+        _tables[role] = table;
+        return table;
     }
 
     public void Dispose()

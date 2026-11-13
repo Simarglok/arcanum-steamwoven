@@ -21,6 +21,8 @@ public partial class TerrainViewerApp
     {
         if (ActorCell() is null || InventoryTargetAt(screen) is not { Kind: AreaInventoryTargetKind.Container } target) return false;
         CancelTalkApproach("a use click replaced it"); CancelInventoryApproach("a use click replaced it"); CancelAreaUseApproach("a use click replaced it");
+        // ARC-COMBAT-1777 (0x571CB0 → 0x4C9050): the better follower picks instead of the hero unless the option is off or Ctrl is held.
+        if (HandOverLockpick(InventoryTargetOf(target.Row.Key), pick, "container")) return true;
         var started = HeroRequests.Apply(new LockpickRequest(InventoryTargetOf(target.Row.Key), pick));
         _lockpickTrying = started.Outcome == HeroRequestOutcome.Done;
         _portalNotice = _lockpickTrying ? "container: picking the lock" : "container: the pick was refused";

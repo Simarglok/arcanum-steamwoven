@@ -226,6 +226,8 @@ public sealed partial class GameSessionOwner
         internal GameSessionFailure Failure { get; private set; }
         internal IReadOnlyList<SessionItemScriptRun> Runs => _runs.AsReadOnly();
         internal IReadOnlyList<SessionScriptMessage> Messages => _messages.AsReadOnly();
+        /// <summary>ARC-MAGIC-1830: the eye candy requests (<see cref="ScrEffects.EyeCandies"/>) of the runs so far, in run and action order, for the host to show as it shows the lines (<see cref="Messages"/>) once the runs are applied; a run the session refused has none.</summary>
+        internal IReadOnlyList<ScrEyeCandy> EyeCandies => _runs.Where(run => run.Run.Outcome != ScrOutcome.Refused).SelectMany(run => run.Run.Effects.EyeCandies).ToArray();
         /// <summary>Whether committing changes the session: a flag write, a script store cell that differs from the session's (ARC-DEV-152),
         /// a slot or an effect change, a deferred call to schedule or one to remove that is pending (ARC-MAGIC-041).</summary>
         internal bool Changes => _writes.Count > 0 || _slots.Count > 0 || _steps.Count > 0 || _npcOps.Count > 0 || _owner.ScriptCallsChange(_calls) || _reads.StoreChanges;

@@ -35,6 +35,9 @@ public enum AreaMenuCommandKind
     /// <summary>ARC-RENDER-1170: play the intro movies (the original's View Intro, 0x5445F0: movies 1 and 7); the host hides the menu while they play
     /// and shows it again after (<see cref="AreaMainMenu.IntroRefusal"/> is null only when it can).</summary>
     ViewIntro,
+    /// <summary>ARC-RENDER-1171: show the credits (the original's Credits button, 0x544640: slide show type 2, script 999); the host shows the slides over the menu and the menu is there again after
+    /// them (<see cref="AreaMainMenu.CreditsRefusal"/> is null only when it can).</summary>
+    Credits,
     /// <summary>ARC-UI-013: set <see cref="AreaMenuCommand.Option"/> to <see cref="AreaMenuCommand.Value"/> (the original's setter runs at
     /// once, OP3); the host applies it and gives the window the values it then has (<see cref="AreaMainMenu.SetOptions"/>).</summary>
     ChangeOption,
@@ -75,7 +78,7 @@ public readonly record struct AreaMenuCommand(AreaMenuCommandKind Kind, int Hero
 public sealed class AreaMainMenu
 {
     public const string NoNetworkPlay = "network play is not built";
-    public const string NoCredits = "the credits screen is not built (FR-MEDIA-002)";
+    public const string NoCredits = "the credits need the game's slide table and pictures (FR-MEDIA-002)";
     public const string NoIntro = "movies do not play (FR-MEDIA-001): no decoder or movie table";
     /// <summary>ARC-UI-038: the opening shop's note while its merchant's barter is not open yet (the shop map loads behind the menu).</summary>
     public const string ShopLoading = "the shop map's merchant is loading; Accept starts the game with the kit";
@@ -113,6 +116,10 @@ public sealed class AreaMainMenu
     /// <summary>ARC-RENDER-1170: why the intro cannot play (null: View Intro is shown and plays movies 1 and 7). The host sets it from what it
     /// found (the decoder program and the installed movie table); the default is the "no decoder" reason, so a menu without a host hides the button.</summary>
     public string? IntroRefusal { get; set; } = NoIntro;
+
+    /// <summary>ARC-RENDER-1171: why the credits cannot show (null: Credits is shown and plays the slides of script 999). The host sets it from what it found (the game's slide table);
+    /// the default is the "no slides" reason, so a menu without a host hides the button.</summary>
+    public string? CreditsRefusal { get; set; } = NoCredits;
     public AreaMenuWindow Root { get; }
     public bool Reopened { get; }
     /// <summary>True while the quit box asks (message 5100); only its answer, Escape and its letters act.</summary>
@@ -131,7 +138,7 @@ public sealed class AreaMainMenu
         AreaMenuWindow.Main =>
         [
             new(10, AreaMenuRole.Open, AreaMenuWindow.SinglePlayer), new(11, AreaMenuRole.Unavailable, Unavailable: NoNetworkPlay),
-            new(12, AreaMenuRole.Open, AreaMenuWindow.Options), new(13, AreaMenuRole.Unavailable, Unavailable: NoCredits), new(14, AreaMenuRole.Exit),
+            new(12, AreaMenuRole.Open, AreaMenuWindow.Options), CreditsRefusal is null ? new(13, AreaMenuRole.Credits) : new(13, AreaMenuRole.Unavailable, Unavailable: CreditsRefusal), new(14, AreaMenuRole.Exit),
         ],
         AreaMenuWindow.SinglePlayer =>
         [
@@ -228,6 +235,7 @@ public sealed class AreaMainMenu
             case AreaMenuRole.LoadGame: return new(AreaMenuCommandKind.LoadGame);
             case AreaMenuRole.LastSave: return new(AreaMenuCommandKind.LastSave);
             case AreaMenuRole.ViewIntro: return new(AreaMenuCommandKind.ViewIntro);
+            case AreaMenuRole.Credits: return new(AreaMenuCommandKind.Credits);
             case AreaMenuRole.Exit: return new(AreaMenuCommandKind.Exit);
             default: return AreaMenuCommand.Nothing;
         }

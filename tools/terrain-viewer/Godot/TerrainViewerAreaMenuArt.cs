@@ -102,7 +102,7 @@ public partial class TerrainViewerApp
         require(panel.ArtMode && _menuArtContent is { ArtReady: true }, "the main window shows the game's menu art: " + _menuArtContent?.Detail);
         var labels = art.LabelsForSelfTest;
         var places = art.ButtonsForSelfTest;
-        require(labels.SequenceEqual(_mainMenu!.Shown.Select(button => _mainMenu.Texts.Text(button.Message))) && places.Count == 3
+        require(labels.SequenceEqual(_mainMenu!.Shown.Select(button => _mainMenu.Texts.Text(button.Message))) && places.Count == _mainMenu.Shown.Count
             && places.Select((place, slot) => place.Y == AreaMenuArtLayout.FirstButtonY + AreaMenuArtLayout.ButtonStep * slot
                 && place.X + place.Width / 2 == AreaMenuArtLayout.ButtonX && place.Width > 0 && place.Height == 33).All(ok => ok),
             "the labels stand centred at (410, 143 + 50 i): " + string.Join(" ", places));
@@ -112,6 +112,16 @@ public partial class TerrainViewerApp
         {
             using var image = GetViewport().GetTexture().GetImage();
             require(image.SavePng(capture) == Error.Ok, "the capture saved to " + capture);
+            // ARC-RENDER-1171 (graphics report): the same window as before the Credits button was built (hidden with its reason), saved beside it as NAME-before.png.
+            var shownRefusal = _mainMenu.CreditsRefusal;
+            _mainMenu.CreditsRefusal = AreaMainMenu.NoCredits;
+            RenderMainMenu();
+            await Frames(2);
+            using var before = GetViewport().GetTexture().GetImage();
+            require(before.SavePng(System.IO.Path.ChangeExtension(capture, null) + "-before.png") == Error.Ok, "the before capture saved");
+            _mainMenu.CreditsRefusal = shownRefusal;
+            RenderMainMenu();
+            await Frames(2);
         }
         var single = panel.ButtonCentreForSelfTest(0) ?? throw new InvalidOperationException("ARC-UI-058 menu art smoke: no label");
         // The focused first label is lit at the opening; the pointer off every label darkens it, over Single Player lights it again.

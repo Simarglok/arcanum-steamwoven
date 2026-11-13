@@ -41,6 +41,8 @@ public sealed record AreaInventoryLine(string Entity, string Text)
     /// many, ledger QW1); null for any other item.</summary>
     public SessionItemKind? StackKind { get; init; }
     public int Units { get; init; }
+    /// <summary>ARC-UI-1884: an ammunition stack's type (0..3 arrows, bullets, charges, fuel), which the quantity pane's icon follows; null for gold and every other item.</summary>
+    public int? StackAmmoType { get; init; }
 }
 
 /// <summary>ARC-UI-019: one item of the hero's grid as the window draws it: its entity, slot (row × 10 + column), size in cells and name.</summary>
@@ -385,7 +387,7 @@ public sealed class AreaInventoryHost
         foreach (var map in _maps.Values)
             if (map.Substitute(npc) is { } substitute && map.TryGetRow(npc, out var row) && row.WorldX is { } x && row.WorldY is { } y
                 && x is >= int.MinValue and <= int.MaxValue && y is >= int.MinValue and <= int.MaxValue
-                && !session.QueryCompanion(npc).LedByPc
+                && session.QueryLeader(npc) is null
                 && Arcanum.Simulation.Ai.AiExecutorRules.Distance(new((int)x, (int)y), substitute.Cell) <= AreaBarterMerchant.SubstituteRange)
                 return substitute.Entity;
         return null;
@@ -480,7 +482,7 @@ public sealed class AreaInventoryHost
             // ARC-DEV-305 (B36): a made item's facts come from its prototype, so its line offers the same actions as a taken item's.
             { Healing = HealingItem(session, item.Entity, kitHealing) is not null, Lockpick = Lockpick(session, item.Entity, kitLockpicks) is not null, Written = item.Kind.Type == SessionItemType.Written,
               Repairable = Repairable(session, item.Entity, kitDurability), WearSlots = Slots(item.Entity), Usable = Usable(item.Entity) }))
-            .Select(line => session.QueryAmmo(line.Entity) is { } stack ? line with { StackKind = HeldKind(line.Entity), Units = stack.Units } : line)
+            .Select(line => session.QueryAmmo(line.Entity) is { } stack ? line with { StackKind = HeldKind(line.Entity), Units = stack.Units, StackAmmoType = stack.AmmoType } : line)
             .ToArray();
         SessionItemKind? HeldKind(string entity) => session.QueryHeroKit().Select(item => (item.Entity, item.Kind)).Concat(session.QueryPcInventory().Select(item => (item.Entity, item.Kind)))
             .Concat(session.QueryMadeItems().Select(item => (item.Entity, item.Kind))).Where(pair => pair.Entity == entity).Select(pair => (SessionItemKind?)pair.Kind).FirstOrDefault();
@@ -512,7 +514,7 @@ public sealed class AreaInventoryHost
         var loot = list.Select(item => new AreaInventoryLine(item.Entity, (Rowless(item.Entity) is { } label
                 ? Line(KindName(item.Facts.Kind, catalog) + label, item.Facts.Kind.Type, null) : Line(Name(item.Entity, catalog), item.Facts.Kind.Type, item.Facts.Weight))
             + (Stack(item.Facts) ? $" ×{item.Facts.Quantity}" : string.Empty) + (pile is null && item.Facts.Worn ? " (worn)" : string.Empty))
-            { StackKind = Stack(item.Facts) ? item.Facts.Kind : null, Units = Stack(item.Facts) ? item.Facts.Quantity ?? 0 : 0 }).ToArray();
+            { StackKind = Stack(item.Facts) ? item.Facts.Kind : null, Units = Stack(item.Facts) ? item.Facts.Quantity ?? 0 : 0, StackAmmoType = Stack(item.Facts) ? item.Facts.AmmoType : null }).ToArray();
         // ARC-UI-052: the loot window's grid shows the holder's items at their locations, its worn ones left out (0x577C6C).
         // A junk pile's item lies in the slot the session gave it in the pile (its facts keep the location it was dropped from). ARC-UI-055:
         // another item takes its size from the session (its inventory art's cells, 0x461780), drawn at most a container grid's size.
