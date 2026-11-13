@@ -243,6 +243,8 @@ internal static partial class Program
                 all_attachment_kinds_including_prototype_and_aggregate = walk.Hits.Where(h => set.Contains(h.Script)).GroupBy(h => h.Kind).OrderBy(g => g.Key, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.Count()),
                 by_kind = rows.GroupBy(h => h.Kind).OrderBy(g => g.Key, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.Count()),
                 by_point = rows.Where(h => h.Sap >= 0).GroupBy(h => h.Sap).OrderBy(g => g.Key).ToDictionary(g => g.Key.ToString(System.Globalization.CultureInfo.InvariantCulture), g => g.Count()),
+                // ARC-SCRIPT-1483: the script numbers placed at each attachment point (numbers only), to name the combat-point and dialog-point sites.
+                scripts_by_point = rows.Where(h => h.Sap >= 0).GroupBy(h => h.Sap).OrderBy(g => g.Key).ToDictionary(g => g.Key.ToString(System.Globalization.CultureInfo.InvariantCulture), g => g.Select(h => h.Script).Distinct().Order().ToArray()),
                 top_maps = rows.Where(h => h.Map.Length > 0).GroupBy(h => h.Map).OrderByDescending(g => g.Count()).ThenBy(g => g.Key, StringComparer.Ordinal).Take(6)
                     .Select(g => new { map = g.Key, sites = g.Count() }).ToArray(),
                 numbers = set.Order().Take(40).ToArray(),

@@ -614,7 +614,8 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     }
 
     // The points whose slot a run writes back as map changes (SlotProperty). ARC-DEV-312: the dying point's slot is kept under scr12.* (no save schema step: the keys are strings).
-    private static bool KeptAsMapChanges(int point) => point is ScrPoint.Examine or ScrPoint.Use or ScrPoint.Dialog or CatchingThiefPoint or ScrPoint.FirstHeartbeat or ScrPoint.Heartbeat or ScrPoint.TakingDamage or ScrPoint.LeaderSleeping or ScrPoint.Bust or ScrPoint.Dying;
+    private static bool KeptAsMapChanges(int point) => point is ScrPoint.Examine or ScrPoint.Use or ScrPoint.Dialog or CatchingThiefPoint or ScrPoint.FirstHeartbeat or ScrPoint.Heartbeat or ScrPoint.TakingDamage or ScrPoint.LeaderSleeping or ScrPoint.Bust or ScrPoint.Dying
+        or ScrPoint.Hit or ScrPoint.CritterHits or ScrPoint.CriticalHit;
 
     // The trap's view of the use slot: the loaded one under the session's script and counters; null without a use slot or for a stored
     // script number outside the catalogue's range (it names no script the content holds).
@@ -956,6 +957,43 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
             return Finish(run, _ => "a teleport from a taking-damage script is not modelled", writeback => WriteObjectSlot(writeback, attachee));
         }
         finally { _inTakingDamage = false; _clicked = previous; }
+    }
+
+    /// <summary>
+    /// ARC-SCRIPT-1483 (script trigger audit slice 5, ledger CP1–CP5): the set a combat-point script (hit 7, critter hits 26, critical hit 34) runs under: the placed set (<see cref="PlacedAdmission"/>), whose damage and cast actions deal the
+    /// installed poison weapons' damage and the college poison spell. A script outside it is refused and the hit goes on as without one.
+    /// </summary>
+    public static ScrAdmissionSet CombatPointAdmission => PlacedAdmission;
+
+    /// <summary>
+    /// ARC-SCRIPT-1483 (exe read 2026-11-13, ledger CP1–CP5): the combat-point script <paramref name="point"/> of <paramref name="attachee"/>, which the original's hit step runs once the hit is decided and before the damage step (0x4B3770 for a swing or an
+    /// arrow's strike: the calls at 0x4B37A3, 0x4B37CD and 0x4B37FC; 0x4B2F60 for a projectile's strike: 0x4B2F90, 0x4B2FD4, 0x4B3003; both through 0x441980, whose answer these call sites ignore). The three points: the hit script (7) of the attack
+    /// context's weapon (the weapon item, nothing for bare hands) with the attacker as the triggerer and the victim as the extra object; the critical-hit script (34) of the same weapon, for a critical hit, with the same objects; and the critter-hits
+    /// script (26) of the attacker with the victim as the triggerer and no extra object. The attachee is a row of the shown map (an NPC, or an item an NPC holds or lies there) or, for a carried item, a row the item host reads by identity
+    /// (<see cref="OtherMapRow"/>, as <see cref="RunItemUse"/> does); an object with no slot at the point has no script (<see cref="AreaScriptedUseOutcome.NoTeleport"/> with no run). Under <see cref="CombatPointAdmission"/>; the slot is kept as map
+    /// changes. A teleport and a conversation are not modelled from a hit and leave the run unapplied; no answer cancels the hit.
+    /// </summary>
+    public AreaScriptedUse RunCombatPoint(int point, ScrObjectRef attachee, ScrObjectRef? triggerer, ScrObjectRef? extra, ScrRuleProfile rules)
+    {
+        ArgumentNullException.ThrowIfNull(rules);
+        if (point is not (ScrPoint.Hit or ScrPoint.CritterHits or ScrPoint.CriticalHit)) throw new ArgumentOutOfRangeException(nameof(point), "Not a combat point.");
+        var previousItem = _itemUse;
+        // An item the host was not given a map of is read by identity, as an item's use is; every other object is a row of a loaded map.
+        _itemUse = attachee;
+        try
+        {
+            if (Row(attachee) is not { } row || Slot(attachee, point) is not { Script: > 0 }) return new(AreaScriptedUseOutcome.NoTeleport, null, [], null, "no script at the point");
+            if (_content is null) return new(AreaScriptedUseOutcome.ContentUnavailable, null, [], null, "no script content");
+            var previous = _clicked;
+            _clicked = (attachee.Code, row);
+            try
+            {
+                var run = ScrDispatcher.RunObject(new(point, attachee, triggerer, extra), this, new() { Rules = rules, Admission = CombatPointAdmission });
+                return Finish(run, _ => "a teleport from a combat-point script is not modelled", writeback => WriteObjectSlot(writeback, attachee));
+            }
+            finally { _clicked = previous; }
+        }
+        finally { _itemUse = previousItem; }
     }
 
     /// <summary>
@@ -1400,18 +1438,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
                 if (ShownNpc(request.Object)) LastAnimation = _world!.ScriptAnimate!(request.Object.Code, request.Value);
                 continue;
             }
-            if (request.Change is ScrObjectStateChange.Damage or ScrObjectStateChange.DamageUnresistable)
-            {
-                // GT194: an NPC of the shown map, the PC, or (ARC-DEV-255, GT195) a door, window, container, scenery or trap of the shown map; any other object is left as it is, and a destroyed
-                // object takes none (object flags 0x400001, GT195).
-                LastDamage = null;
-                if (IsPc(request.Object) || (ShownNpc(request.Object) || ShownDamageable(request.Object)) && !AlreadyDestroyed(request.Object))
-                    LastDamage = _world!.ScriptDamage!(IsPc(request.Object) ? Arcanum.Simulation.Ai.AiSchedulerRules.Pc : request.Object.Code, request.Value, request.Value2,
-                        request.Change == ScrObjectStateChange.DamageUnresistable);
-                // ARC-DEV-261 (GT198): the taking-damage script comes before the destroyed gate, so a destroyed object is asked all the same (its answer cannot change the outcome: it takes none).
-                else if (ShownNpc(request.Object) || ShownDamageable(request.Object)) _world!.ScriptDamageAsk?.Invoke(request.Object.Code);
-                continue;
-            }
+            if (request.Change is ScrObjectStateChange.Damage or ScrObjectStateChange.DamageUnresistable) { ApplyScriptDamage(request); continue; }
             if (request.Change == ScrObjectStateChange.GiveSpellMastery)
             {
                 // SC5: the PC, or an NPC of the shown map (ObjectStateRefusal checked its sheet); any other object does nothing in the original. The spell-book rule decides, the run goes on.
@@ -1419,14 +1446,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
                     : ShownNpc(request.Object) && AdvancementOf(request.Object) is { } npc && !AreaScriptSpells.GiveMastery(_session, npc, request.Value)) return false;
                 continue;
             }
-            if (request.Change == ScrObjectStateChange.HealHitPoints)
-            {
-                // GT196: a living PC or NPC of the shown map; any other object does nothing in the original.
-                LastHeal = null;
-                if (IsPc(request.Object) || ShownNpc(request.Object) && !AlreadyDestroyed(request.Object))
-                    LastHeal = _world!.ScriptHeal!(IsPc(request.Object) ? Arcanum.Simulation.Ai.AiSchedulerRules.Pc : request.Object.Code, request.Value);
-                continue;
-            }
+            if (request.Change == ScrObjectStateChange.HealHitPoints) { ApplyScriptHeal(request); continue; }
             if (request.Change == ScrObjectStateChange.CastSpell)
             {
                 // GT183/GT184: the target an NPC of the shown map or the PC; the caster an NPC of the shown map, the PC (ARC-DEV-244: the hero's casting goal) or none (a missing caster handle, 61 and 136). Another map's
@@ -1652,6 +1672,34 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
 
     /// <summary>ARC-SCRIPT-1163 (NS2): what the AI host answered for the last reaction change a run applied (null: none yet).</summary>
     public string? LastReaction { get; private set; }
+
+    /// <summary>ARC-SCRIPT-1563: whether the world gives the script damage (<see cref="ApplyScriptDamage"/>) this host applies; the dialog host asks before it applies anything, so a run it cannot finish is refused whole.</summary>
+    public bool CanApplyScriptDamage => _world?.ScriptDamage is not null;
+
+    /// <summary>ARC-SCRIPT-1563: whether the world gives the script heal (<see cref="ApplyScriptHeal"/>) this host applies.</summary>
+    public bool CanApplyScriptHeal => _world?.ScriptHeal is not null;
+
+    /// <summary>
+    /// One damage (60) or apply unresistable damage (138) request of a run, applied (ARC-SCRIPT-1563: shared by the dialog host, <see cref="AreaScriptHost.Apply"/>). GT194: an NPC of the shown map, the PC, or (ARC-DEV-255, GT195) a door, window, container, scenery or trap
+    /// of the shown map; any other object is left as it is, and a destroyed object takes none (object flags 0x400001, GT195). The victim's taking-damage script is asked (GT198) through the world's damage; a destroyed object is asked all the same.
+    /// </summary>
+    public void ApplyScriptDamage(ScrObjectStateRequest request)
+    {
+        LastDamage = null;
+        if (IsPc(request.Object) || (ShownNpc(request.Object) || ShownDamageable(request.Object)) && !AlreadyDestroyed(request.Object))
+            LastDamage = _world!.ScriptDamage!(IsPc(request.Object) ? Arcanum.Simulation.Ai.AiSchedulerRules.Pc : request.Object.Code, request.Value, request.Value2,
+                request.Change == ScrObjectStateChange.DamageUnresistable);
+        // ARC-DEV-261 (GT198): the taking-damage script comes before the destroyed gate, so a destroyed object is asked all the same (its answer cannot change the outcome: it takes none).
+        else if (ShownNpc(request.Object) || ShownDamageable(request.Object)) _world!.ScriptDamageAsk?.Invoke(request.Object.Code);
+    }
+
+    /// <summary>One heal hit points (75) request of a run, applied (GT196: a living PC or NPC of the shown map; any other object does nothing in the original). ARC-SCRIPT-1563: shared by the dialog host.</summary>
+    public void ApplyScriptHeal(ScrObjectStateRequest request)
+    {
+        LastHeal = null;
+        if (IsPc(request.Object) || ShownNpc(request.Object) && !AlreadyDestroyed(request.Object))
+            LastHeal = _world!.ScriptHeal!(IsPc(request.Object) ? Arcanum.Simulation.Ai.AiSchedulerRules.Pc : request.Object.Code, request.Value);
+    }
 
     // ARC-DEV-233: an NPC of the shown map, the only target the goal-starting actions (62, 69, 74, 76) are applied to; the PC, another map's object and a non-NPC are left as they are.
     private bool ShownNpc(ScrObjectRef obj) => obj.Map == _shownMap && !IsPc(obj) && Row(obj) is { Type: NpcType };

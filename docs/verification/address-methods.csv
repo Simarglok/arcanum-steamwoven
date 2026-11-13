@@ -121,6 +121,7 @@ src/Arcanum.Session/GameSessionJunkPiles.cs,DissolveJunkPile,pending,
 src/Arcanum.Session/GameSessionKillLog.cs,RecordHeroInjuries,pending,
 src/Arcanum.Session/GameSessionKillLog.cs,RecordKillLog,pending,
 src/Arcanum.Session/GameSessionLocks.cs,WriteOpenableFlag,pending,
+src/Arcanum.Session/GameSessionLoyalty.cs,CheckFollowerAfterHit,exempt,host
 src/Arcanum.Session/GameSessionMissiles.cs,CreateMissile,pending,
 src/Arcanum.Session/GameSessionMissiles.cs,MoveMissile,pending,
 src/Arcanum.Session/GameSessionMorale.cs,ApplyKillNotification,pending,
@@ -427,6 +428,7 @@ src/Arcanum.World/AreaAiHost.cs,HealSkillUsable,pending,
 src/Arcanum.World/AreaAiHost.cs,HealingItem,pending,
 src/Arcanum.World/AreaAiHost.cs,HeroAttacked,pending,
 src/Arcanum.World/AreaAiHost.cs,HitEffect,pending,
+src/Arcanum.World/AreaAiHost.cs,HitFollower,exempt,host
 src/Arcanum.World/AreaAiHost.cs,HitReached,pending,
 src/Arcanum.World/AreaAiHost.cs,HostileToHero,pending,
 src/Arcanum.World/AreaAiHost.cs,IdleRestart,pending,
@@ -585,6 +587,7 @@ src/Arcanum.World/AreaUseScripts.cs,ExamineSkips,pending,
 src/Arcanum.World/AreaUseScripts.cs,IsTrap,pending,
 src/Arcanum.World/AreaUseScripts.cs,RunBed,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,RunBust,pending,
+src/Arcanum.World/AreaUseScripts.cs,RunCombatPoint,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,RunDying,pending,
 src/Arcanum.World/AreaUseScripts.cs,RunExamine,pending,
 src/Arcanum.World/AreaUseScripts.cs,RunHeartbeat,pending,
@@ -701,6 +704,7 @@ tools/terrain-viewer/Godot/AreaSaveListArtView.cs,Render,pending,
 tools/terrain-viewer/Godot/AreaSchematicsPanel.cs,UpdateRoundView,pending,
 tools/terrain-viewer/Godot/AreaWorldMapArtView.cs,AcceptNoteEdit,pending,
 tools/terrain-viewer/Godot/TerrainCanvasArea.cs,AreaBodyRect,pending,
+tools/terrain-viewer/Godot/TerrainViewerAi.cs,RunHitScripts,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAi.cs,UseScriptOfCast,pending,
 tools/terrain-viewer/Godot/TerrainViewerAreaBarter.cs,BarterArt,pending,
 tools/terrain-viewer/Godot/TerrainViewerAreaBarter.cs,BarterCycle,exempt,reference
@@ -747,6 +751,7 @@ tools/terrain-viewer/Godot/TerrainViewerAttack.cs,TraceLineOfFire,pending,
 tools/terrain-viewer/Godot/TerrainViewerAudioCues.cs,PlayDyingBark,pending,
 tools/terrain-viewer/Godot/TerrainViewerBloodPools.cs,LeaveBloodPoolsForNewDeaths,pending,
 tools/terrain-viewer/Godot/TerrainViewerBodyMoves.cs,ArmedWalk,exempt,host
+tools/terrain-viewer/Godot/TerrainViewerBodyMoves.cs,UnmovedArmedBodies,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerBodyStyles.cs,SyncAreaBodyStyles,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerBodyStylesSmoke.cs,RunAreaBodyStylesStageAsync,exempt,reference
 tools/terrain-viewer/Godot/TerrainViewerCombatMode.cs,WorldRightRelease,pending,
@@ -854,3 +859,4 @@ tools/terrain-viewer/Godot/TerrainViewerTrapDevices.cs,PlaceScriptTrapUse,pendin
 tools/terrain-viewer/Godot/TerrainViewerTrapDevices.cs,PlaceTrapDeviceUse,pending,
 tools/terrain-viewer/Godot/TerrainViewerTraps.cs,HeroStepGate,pending,
 tools/terrain-viewer/Godot/TerrainViewerTurnBased.cs,ProcessTurnBasedRound,pending,
+tools/terrain-viewer/Godot/TerrainViewerWeaponArtSmoke.cs,RunAreaWeaponArtStageAsync,exempt,reference

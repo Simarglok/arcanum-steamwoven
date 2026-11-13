@@ -623,6 +623,8 @@ public sealed record SessionAttack(SessionCritterCombat Target)
     /// <summary>ARC-DEV-261 (GT198–GT199): the host's taking-damage script (attachment point 0x17) of whoever takes the damage, asked by the damage apply (0x4B4390) right before it, after the attack is resolved: the recipient in, whether the damage goes on out
     /// (false: the script skipped the default, which cancels the whole damage step, <see cref="SessionAttackResult.Vetoed"/>). Null: the damage goes on. The hero has no script data here, so a host answers true for it.</summary>
     public Func<DamageRecipient, bool>? TakingDamage { get; init; }
+    /// <summary>ARC-SCRIPT-1483 (CP1–CP3): the host's combat-point scripts (hit 7, critter hits 26, critical hit 34) of a resolved hit, asked before the damage steps (0x4B3770); a shot that flies asks at its landing, not at the shot. Null: none run.</summary>
+    public Action<SessionHitScriptEvent>? HitScripts { get; init; }
 }
 
 /// <summary>
@@ -930,6 +932,9 @@ public sealed partial class GameSessionOwner
             ? Launch(new PendingShot(ShotFacts.Of(hero), resolution, resolution.Outcome is AttackOutcome.Hit or AttackOutcome.CriticalHit, scatter is null ? target.Entity : null, null)
                 { Thrown = throwing ? new SessionThrownShot(thrown!, hero.Weapon.Range) : null, Boomerang = Boomerang(hero, thrown), WeaponItem = throwing ? thrown : WieldedEntity() },
                 ShotProjectiles(hero)) : [];
+        // ARC-SCRIPT-1483 (CP1–CP3): the hit's combat-point scripts run before the damage step (0x4B3770), at the landing for a shot that flew.
+        if (resolution.Refusal == AttackRefusal.None && (resolution.Outcome is AttackOutcome.Hit or AttackOutcome.CriticalHit) && !(pending is null && attack.Flight))
+            attack.HitScripts?.Invoke(new(pending is null ? WieldedEntity() : pending.WeaponItem, resolution.Outcome == AttackOutcome.CriticalHit, pending is not null, pending?.Thrown is not null));
         // ARC-DEV-261 (GT198): the victim's script comes before the invulnerable gate, so a prevented damage asks it too; its answer cannot change the outcome.
         if (resolution.Refusal == AttackRefusal.None && resolution.Damage is { Prevented: not DamagePrevention.None } blocked) attack.TakingDamage?.Invoke(blocked.Recipient);
         if (resolution.Refusal != AttackRefusal.None || LifeDamage.FromAttack(resolution) is not { } damage)

@@ -222,6 +222,7 @@ public static class SessionEquipmentFacts
             MaleOnly = flags.HasFlag(Arcanum.Data.Combat.CombatArmorFlags.MaleOnly),
             FemaleOnly = flags.HasFlag(Arcanum.Data.Combat.CombatArmorFlags.FemaleOnly),
             AcAdjustment = a.ArmorClassAdjustment, MagicAcAdjustment = a.MagicArmorClassAdjustment,
+            SilentMoveAdjustment = a.SilentMoveAdjustment, MagicSilentMoveAdjustment = a.MagicSilentMoveAdjustment,
             Resistances = Of(a.ResistanceAdjustment), MagicResistances = Of(a.MagicResistanceAdjustment),
             UnarmedBonusDamage = a.UnarmedBonusDamage,
         };
