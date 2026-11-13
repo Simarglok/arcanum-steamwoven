@@ -194,7 +194,12 @@ below 4 fatigue; nothing for a dead NPC, or one the pass world does not report),
 again with the interval of the level then: the level is read from the NPC's list in the map's seed against the carry weight of its
 stored strength (`ISessionNpcStatsWorld.StoredStats`, the viewer's combat host with the written entries laid over). A pass world that
 cannot give the stats (or an NPC the seed does not list) schedules no next one: the timer ends after one drain, the difference from the
-original (the hero's level is the session's own). The NPC's timers live on one map as the others do (the strength write is not ready while another of its timers lies on another map), and `MaxPending` holds a
+original (the hero's level is the session's own). ARC-MAGIC-1651: such an end is reported, not silent: `SessionEventPassResult.NpcEncumbranceEnds`
+lists it with its reason (`SessionNpcEncumbranceEndReason`: the pass world gives no stats, the world has no combat row for the NPC, the level is unreadable
+because the seed does not list the NPC or its list or stats do not fit, or the next timer could not be scheduled); a chain that ends because the level fell
+below 4 is the rule and is not listed. The viewer's side is tested: the combat host's `StoredStats` (the written entries over the row), `AreaEventWorld.StoredStats`
+(forwarded from the shown map's combat host by identity; the map argument is not used, as `CritterFacts`' is not, while events fire on the shown map) and a created
+critter (answered like a map NPC once the resolver knows its row). The NPC's timers live on one map as the others do (the strength write is not ready while another of its timers lies on another map), and `MaxPending` holds a
 fifth timer for each life record. A restore refuses one without a life record of its NPC, set after the saved clock, whose deadline is
 not its time plus one of the three intervals, or with another map than the NPC's other timers.
 
