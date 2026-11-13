@@ -175,9 +175,43 @@ public partial class AreaCharacterSheetArtView : Control
         return null;
     }
 
+    // ARC-UI-1195: the generated interface paints the sheet's frames at the window's own device scale (the frame scale times the canvas transform's and the viewport's
+    // stretch, the bars' own rule). The sheet's textures are shared (the in-game sheet, the NPC sheet, the creation editor), so the view on screen claims them at its draw.
+    // The pages (the children) draw the same textures at the same scale; a texture swapped in by a worker redraws all three, since each draws in its own _Draw.
+    private readonly HashSet<HdInterfaceTexture> _watched = [];
+    private Action? _onTextureChanged;
+    private Func<float>? _deviceScale;
+
+    internal float DeviceScale() =>
+        GodotObject.IsInstanceValid(this) && IsInsideTree() ? GetGlobalTransformWithCanvas().Scale.X * GetViewport().GetStretchTransform().Scale.X : 1f;
+
+    private void ClaimScale()
+    {
+        _deviceScale ??= DeviceScale;
+        _onTextureChanged ??= () => { if (GodotObject.IsInstanceValid(this)) { QueueRedraw(); Pages.QueueRedraw(); Spells.QueueRedraw(); } };
+        foreach (var frames in _art.Values)
+            foreach (var texture in frames)
+            {
+                if (texture is not HdInterfaceTexture hd) continue;
+                hd.ScaleSource = _deviceScale;
+                if (_watched.Add(hd)) hd.Changed += _onTextureChanged;
+            }
+    }
+
+    public override void _ExitTree()
+    {
+        if (_onTextureChanged is { } handler) foreach (var texture in _watched) texture.Changed -= handler;
+        _watched.Clear();
+    }
+
+    /// <summary>ARC-UI-1195: the textures of the given art numbers that the sheet holds, every frame, with the art number of each (the native smoke).</summary>
+    internal IReadOnlyList<(int Art, HdInterfaceTexture Texture)> TexturesForSelfTest(IEnumerable<int> arts) =>
+        [.. arts.Where(_art.ContainsKey).SelectMany(number => _art[number].OfType<HdInterfaceTexture>().Select(texture => (number, texture)))];
+
     public override void _Draw()
     {
         if (_fonts is not { } fonts || _view is not { } view) return;
+        ClaimScale();
         if (Art(AreaCharacterSheetArtLayout.BackgroundArt) is { } window) DrawTextureRect(window, new Rect2(0, 0, window.GetWidth(), window.GetHeight()), false);
         // The portrait in its slot (141, 21), at its own size (0x4CE470).
         if (_portrait is not null) DrawTextureRect(_portrait, new Rect2(141, 21, _portrait.GetWidth(), _portrait.GetHeight()), false);

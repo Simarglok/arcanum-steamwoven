@@ -1188,3 +1188,16 @@ Known differences (documented, not bugs):
 - The curved flourishes at the corners of the original's boxes are not drawn; the ring around the round view is three units wide, narrower than the original's.
 - The follower's plates keep a little of the old wood at their inner ends; the barter doll and the doll cover are not built yet.
 
+
+## ARC-UI-1195 — Generated interface: the character sheet (S5, 2026-11-13)
+
+The rules are in [viewer slice S5](../rendering/hd-interface-density.md#viewer-slice-s5-arc-ui-1195). Set the HD interface line on the launcher screen to **Generated (experimental)**,
+start a game and press `C`. Compare with **HD** and **Legacy**.
+
+| # | Step | Expected | Status |
+| --- | --- | --- | --- |
+| 1 | Press `C` in a 1280 × 800 window. | The window's boxes (name, info, stats with their rivets, the page area) are drawn by code in the same places as in HD; the stat numbers, the portrait, the gauge and the experience ruler sit where they did. | open |
+| 2 | Click the three tabs (skills, technology, spells). | Each page is dark stone drawn by code; the group buttons, the discipline buttons, the college sockets and the + and − buttons are in place and answer to hover and press. | open |
+| 3 | Press + and − on a stat and on a skill with points to spend. | The buttons show their hover and down looks; the numbers change as before. | open |
+| 4 | Resize the window and open the sheet again. | The frames are sharp at the new size, no seam between the window and the pages. | open |
+| 5 | Open an NPC's sheet in a dialog (reply `c-e`). | The same look, with no + or − buttons. | open |
