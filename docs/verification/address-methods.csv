@@ -586,7 +586,9 @@ src/Arcanum.World/AreaTraps.cs,Use,pending,
 src/Arcanum.World/AreaTraps.cs,UseNpc,exempt,host
 src/Arcanum.World/AreaTraps.cs,WalkCheck,pending,
 src/Arcanum.World/AreaTraps.cs,WalkCheckNpc,exempt,host
+src/Arcanum.World/AreaUseScripts.cs,ApplyScriptAttack,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,AreaOf,pending,
+src/Arcanum.World/AreaUseScripts.cs,AttackRefusal,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,DyingStops,pending,
 src/Arcanum.World/AreaUseScripts.cs,ExamineSkips,pending,
 src/Arcanum.World/AreaUseScripts.cs,IsTrap,pending,
