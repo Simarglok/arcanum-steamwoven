@@ -796,12 +796,13 @@ It is fixed in both rule modes: the frame that stood still was a technical bug o
   ends the runs of the old loops and restarts the new plan's at their T0 frames.
 - **Census.** 1,063 animated scenery on 60 of the 80 interiors, 10 to 30 frames at 8 to 15 frames per second; the Crash
   Site window holds 4 of them (76 more frames). Void needs 4,678 frame requests (116 more), within the repository's 16,384.
-- **Not modelled.** The loop's ambient sound, restarting a loop when a scenery's ART or off flag
-  changes at runtime (`AreaSceneryHost.Restart` is the rule of 0x43F710, GT78; the viewer changes neither, so no site calls it), the HD pack's frames (an HD pack draws the frames it holds). A table-exhaustion sweep (216 slots, every run at level 3) ends the loops for good, as in the original: they start again only when the window is shown again (GT98).
+- **A changed art (ARC-RENDER-1781).** A scenery whose art id a script's change art number wrote (the session's `obj.art` field) animates over the new art's frames, not frozen on frame 0: the original's step reads the object's current art every time (frame count from the header, [ledger AAR1–AAR6](../research/ledger/world.md#an-animated-scenery-whose-art-changed-arc-render-1781)). The viewer loads each frame of the new art and `AreaSceneryHost.Reframe` replaces the object's loop (frame 0; a running loop keeps its run and its stored delay, a scenery with no run gets one at the new art's rate) or kills it (an art of one frame, scenery flag 0x1; the object keeps the offset the old loop gave it). The id of the map data returns the object's own frames.
+- **Not modelled.** The loop's ambient sound, restarting a loop when a scenery's off flag
+  changes at runtime (`AreaSceneryHost.Restart` is the rule of 0x43F710, GT78; the viewer changes none, so no site calls it), the HD pack's frames (an HD pack draws the frames it holds). A table-exhaustion sweep (216 slots, every run at level 3) ends the loops for good, as in the original: they start again only when the window is shown again (GT98).
 
 Native smoke (`ARC-RENDER-035 native-smoke scenery animation PASS`, after the light animation stage): the stage takes the shown map's loops with their runs, takes the animated scenery nearest the PC within 30 tiles that the canvas draws (of the four nearest) and ticks the frame clock (50 ms host stamps) until its run has stepped four more times; after each
 step the canvas must draw one of that scenery's frames, three distinct frames in all. It prints `SKIP` on a map without
-animated scenery drawn near the PC.
+animated scenery drawn near the PC. The loop part of the `object-art` stage (ARC-RENDER-1781, `ARC-RENDER-1781 scenery-art-loop` line) gives a still scenery near the hero the art of an animated one (three distinct frames of the new art are drawn from the scenery bodies and its run is on the table), gives the animated one a one-frame art (its run and loop are gone and its body stays still) and returns both by the data's id; `NONE` on a map without an animated scenery of three frames.
 
 ## The main world map (ARC-RENDER-024)
 

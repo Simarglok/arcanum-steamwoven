@@ -970,7 +970,7 @@ companion, a shopkeeper and a guard in any town where a quest script touches the
 
 Known differences (documented, not bugs):
 
-- Change art number (ARC-SCRIPT-1735) changes the picture of a **scenery** from a script (kept in the save, drawn in the viewer) and, since ARC-SCRIPT-1779, the **ground and flight art of an item** (the item as an object on the ground; its inventory art and paper doll stay, as in the original, ledger AN11); since ARC-SCRIPT-1778 also a **door or window** and a **container** (it ends closed with its lock as it was); a trap, unique NPC or made or script-created item target is not built: a script run that reaches one is refused, so that step does nothing in Steamwoven. A critter (the hero, an NPC of a critter or monster body) is never changed (the original builds the art id 0 for them and writes it only if a file of that id exists; not read, F0).
+- Change art number (ARC-SCRIPT-1735) changes the picture of a **scenery** from a script (kept in the save, drawn in the viewer; a new scenery art of several frames animates since ARC-RENDER-1781, one of a single frame stops the old loop) and, since ARC-SCRIPT-1779, the **ground and flight art of an item** (the item as an object on the ground; its inventory art and paper doll stay, as in the original, ledger AN11); since ARC-SCRIPT-1778 a **door or window** and a **container** take it too (it ends closed with its lock as it was); a trap, unique NPC or hero starting-kit item target is not built: a script run that reaches one is refused, so that step does nothing in Steamwoven (a made or script-created item and an item carried from another map take it since ARC-SCRIPT-1826, ledger AD1). A critter (the hero, an NPC of a critter or monster body) is never changed (the original builds the art id 0 for them and writes it only if a file of that id exists; not read, F0).
 - A script in a dialog (a talk) that uses one of these actions is still refused; only use, tile, sector, heartbeat and dying scripts run them.
 - A reaction or standpoint change acts for NPCs of the map on screen only.
 
@@ -1313,5 +1313,22 @@ The rules are in [viewer slice S9](../rendering/hd-interface-density.md#viewer-s
 Known differences (documented, not bugs):
 
 - The slate is plainer than the original's marbled iron and the wells and bars are black where the original's are barely darker than their surroundings.
-- The common dialog box (the exit question, the load question after death) stays in the HD or Legacy look: issue #1819.
+- The common dialog box (the exit question, the load question after death) is [S10](../rendering/hd-interface-density.md#viewer-slice-s10-arc-ui-1819).
 - The first rows of the spell pane's top edge are transparent in the Legacy frame, so the rim does not run along them.
+
+## ARC-UI-1819 — Generated interface: the common dialog box (S10, 2026-11-14)
+
+The rules are in [viewer slice S10](../rendering/hd-interface-density.md#viewer-slice-s10-arc-ui-1819). Set the HD interface line on the launcher screen to **Generated (experimental)**,
+start a game, press Esc and choose Quit (the quit question). Compare with **HD** and **Legacy**.
+
+| # | Step | Expected | Status |
+| --- | --- | --- | --- |
+| 1 | Press Esc, then Quit, in a 1280 × 800 window. | The box is a dark stone plate with a thin brass rim and a black text field; the question's white text sits where it did; the green check and the red cross are in round brass buttons at the same places. | open |
+| 2 | Move over the two buttons and hold each down. | The button under the pointer is lit, the held one sinks; the answer is taken on the release, as before. | open |
+| 3 | Resize the window (or go full screen) while the question is open. | The box is sharp at the new size, with no seam between the plate and the buttons. | open |
+| 4 | Die in the game (Steamwoven rules) and look at the load question over the death slide. | The same box and buttons. | open |
+
+Known differences (documented, not bugs):
+
+- The curled brass corners of the original's text field are not drawn; the stone is plainer than the original's.
+- The quit question of the main menu screen is the same box, so it is generated too while the main menu's own art is the HD or Legacy one.

@@ -128,16 +128,8 @@ public partial class TerrainViewerApp
         var placedItems = session.QueryPlacedItems().ToDictionary(p => p.Entity, StringComparer.Ordinal);
         AreaExtraFrame? Frame(uint aid, string what) => ExtraArtFrame(aid, what);
         lap?.Step("busted");
-        // ARC-SCRIPT-1735 (ledger NS5): a scenery whose art id a script's change art number wrote is drawn from the new art where its T0 body stood (the destroyed ART of a busted one below wins).
-        if (ObjectTargets() is { } artTargets)
-            foreach (var (entity, aid) in session.QueryObjectArts(new SessionMapId(area.Snapshot.RuntimeMap)))
-            {
-                if (artTargets.KeyOfEntity(entity) is not { } key || !overlay.Bodies.TryGetValue(key, out var command) || !overlay.Visuals.TryGetValue(command.Visual, out var visual)
-                    || area.Snapshot.Objects.FirstOrDefault(row => row.Key == key) is not { Type: SceneryType } row || aid == visual.RawArt) continue;
-                if (Frame(aid, "object-art") is not { } frame) continue;
-                bodies[key] = AreaScenePlan.Repose(command, row, visual, frame.Key, frame.Frame.Width, frame.Frame.Height, frame.Visual.HotX, frame.Visual.HotY);
-            }
-        // ARC-SCRIPT-1778 (ledger AN18, LW2, LK13): a container off its T0 art or frame is drawn from its current art and frame (the open lid, a script's new art).
+        // ARC-RENDER-1781: a scenery whose art id a script's change art number wrote is drawn with the scenery bodies (TerrainViewerSceneryArt.cs: its loop's frame of the new art, frame 0 when it is still); the destroyed ART of a busted one below wins.
+        // ARC-SCRIPT-1778 (ledger AD1, LW2, LK13): a container off its T0 art or frame is drawn from its current art and frame (the open lid, a script's new art).
         foreach (var (containerKey, containerBody) in ContainerArtBodies(area, session, overlay.Bodies, overlay.Visuals, Frame)) bodies[containerKey] = containerBody;
         // A busted scenery or trap: its destroyed ART where its T0 body stood.
         if (ObjectTargets() is { } targets)

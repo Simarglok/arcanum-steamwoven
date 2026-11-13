@@ -211,7 +211,7 @@ public sealed class AreaScenePlan
     }
 
     /// <summary>
-    /// ARC-SCRIPT-1778 (ledger AN18): <paramref name="command"/> (the T0 body of the portal <paramref name="body"/>, drawn from <paramref name="visual"/>) with a frame of another door or window ART a script's change art
+    /// ARC-SCRIPT-1778 (ledger AD1): <paramref name="command"/> (the T0 body of the portal <paramref name="body"/>, drawn from <paramref name="visual"/>) with a frame of another door or window ART a script's change art
     /// number gave it, <paramref name="frame"/> (an extra-art frame, which belongs to no object): placed from the frame's size and drawn hotspot about the anchor the T0 body was placed from, as <see cref="PortalFrame"/> does.
     /// </summary>
     public static AreaDrawCommand PortalArtFrame(AreaDrawCommand command, AreaObjectRecord body, AreaVisualRecord visual, AreaVisualRecord frame)
@@ -264,7 +264,7 @@ public sealed class AreaScenePlan
     /// the new frame's size and hotspot by the rule <see cref="Create"/> places a body with (scale and shrink of the object).
     /// </summary>
     public static AreaDrawCommand Repose(AreaDrawCommand command, AreaObjectRecord body, AreaVisualRecord visual, AreaFrameKey frame,
-        int width, int height, int hotX, int hotY)
+        int width, int height, int hotX, int hotY, int offsetX = 0, int offsetY = 0)
     {
         ArgumentNullException.ThrowIfNull(command); ArgumentNullException.ThrowIfNull(body); ArgumentNullException.ThrowIfNull(visual);
         ArgumentNullException.ThrowIfNull(frame);
@@ -277,8 +277,9 @@ public sealed class AreaScenePlan
         var anchorY = checked(command.Destination.Y + visual.HotY * state.Scale / 100 / (state.Shrunk ? 2 : 1));
         var w = Scaled(width); var h = Scaled(height);
         if (w <= 0 || h <= 0) throw new InvalidOperationException("AREA_BODY_SCALE");
-        var destination = new TerrainRect(checked(anchorX - hotX * state.Scale / 100 / (state.Shrunk ? 2 : 1)),
-            checked(anchorY - hotY * state.Scale / 100 / (state.Shrunk ? 2 : 1)), w, h);
+        // ARC-RENDER-1781: <paramref name="offsetX"/> and <paramref name="offsetY"/> are the object offset a scenery's loop frame deltas moved it by (AS6).
+        var destination = new TerrainRect(checked(anchorX - hotX * state.Scale / 100 / (state.Shrunk ? 2 : 1) + offsetX),
+            checked(anchorY - hotY * state.Scale / 100 / (state.Shrunk ? 2 : 1) + offsetY), w, h);
         return command with
         {
             Frame = frame, Source = new(0, 0, width, height), Destination = destination,
