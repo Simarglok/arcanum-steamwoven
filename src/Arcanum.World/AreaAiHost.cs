@@ -1100,6 +1100,9 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
             {
                 case WitnessResponse.ReactToAttacker: React(witness, attacker); break;
                 case WitnessResponse.ReactToVictim: React(witness, victim); break;
+                // ARC-AI-1514 (0x4A9F10, VBG3): a neutral bystander that perceives the victim asks the setter for FLEE from the attacker
+                // (the setter applies its own rules: no-flee, leader charisma, the NPC-fighting switch); a refusal leaves it as it was.
+                case WitnessResponse.FleeFromAttacker: SetDanger(witness, DangerState.Flee, attacker); break;
             }
         }
     }
