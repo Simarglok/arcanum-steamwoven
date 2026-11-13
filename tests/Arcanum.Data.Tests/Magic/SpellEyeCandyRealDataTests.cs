@@ -50,4 +50,20 @@ public sealed class SpellEyeCandyRealDataTests
         Assert.IsTrue(missiles.All(m => EyeCandyArt.IsEyeCandy(m.Entry.Art!.Value) && EyeCandyArt.Rotation(m.Entry.Art.Value) == 0
             && EyeCandyArt.Number(m.Entry.Art.Value) + 3 < 0x200), "eye-candy arts whose four faced numbers fit");
     }
+
+    [TestMethod, TestCategory("RealData")]
+    public void The_installed_script_eye_candy_list_reads_and_has_entries_the_scripts_name()
+    {
+        // ARC-SCRIPT-1592: rules\ScriptEyeCandy.mes (0x5E2FB0) is read like the spell list; counts only, no game text.
+        var root = Environment.GetEnvironmentVariable("DAT_ROOT");
+        if (string.IsNullOrWhiteSpace(root)) Assert.Inconclusive("DAT_ROOT is required for the opt-in eye-candy check; this is not a synthetic pass.");
+        using var stack = ContentStack.Open(ContentMountPlan.Discover(root).Plan!).Stack!;
+        var read = SpellEyeCandyTable.OpenScript(stack);
+        Assert.AreEqual(SpellDataStatus.Read, read.Status, $"{read.Refusal}");
+        var entries = read.Table!.Entries;
+        Console.WriteLine($"script eye candy entries={entries.Count} withArt={entries.Count(e => e.Art is not null)} animating={entries.Count(e => e.Art is not null && (e.Flags & SpellEyeCandyFlags.Animates) != 0)} "
+            + $"forever={entries.Count(e => (e.Flags & SpellEyeCandyFlags.Forever) != 0)} lit={entries.Count(e => e.Light is not null)} sounds={entries.Count(e => e.Sound >= 0)}");
+        Assert.AreEqual((75, 75, 75, 33, 13, 22), (entries.Count, entries.Count(e => e.Art is not null), entries.Count(e => e.Art is not null && (e.Flags & SpellEyeCandyFlags.Animates) != 0),
+            entries.Count(e => (e.Flags & SpellEyeCandyFlags.Forever) != 0), entries.Count(e => e.Light is not null), entries.Count(e => e.Sound >= 0)));
+    }
 }
