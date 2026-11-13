@@ -195,10 +195,10 @@ public sealed class WrittenTexts
     public const int DefaultIssueBase = 5000, DefaultIssueStep = 10;
 
     /// <summary>
-    /// The headline of newspaper issue <paramref name="number"/> as the interface's message hook gives it (0x56CCA0, ARC-UI-1739, ledger NQ9): message <paramref name="number"/> of the newspaper file with the markup
+    /// The headline of newspaper issue <paramref name="number"/> as the interface's message hook gives it (0x56CCA0, ARC-UI-1739, ledger NP2): message <paramref name="number"/> of the newspaper file with the markup
     /// of the written texts taken off (0x56C9F0, under <paramref name="rules"/> as in <see cref="Read"/>) and every line feed made a space. An issue with no message, or no newspaper file, gives an empty text (the hook clears its buffer first).
     /// </summary>
-    [OriginalFunction(0x56CCA0, OriginalFunctionScope.Full)]
+    [OriginalFunction(0x56CCA0, OriginalFunctionScope.Partial)]
     public string Headline(int number, WrittenRuleProfile? rules = null)
     {
         if (File(WrittenSubtype.Newspaper)?.Find(number) is not { } message) return string.Empty;

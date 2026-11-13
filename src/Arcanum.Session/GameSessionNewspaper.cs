@@ -50,6 +50,7 @@ public sealed record SessionNewspaperState
     /// The table after the daily pop (0x4BF2C0, ledger NQ4) without a default issue: a head below 5000 is removed by moving every word down one place from word 0, any other head by moving the words from the head down; the count falls by one.
     /// <see cref="NeedsDefault"/> then says whether the count fell under the head's place, and the caller gives the default issue (<see cref="WithDefault"/>).
     /// </summary>
+    [OriginalFunction(0x4BF2C0, OriginalFunctionScope.Partial)]
     public SessionNewspaperState Popped()
     {
         var entries = Entries.ToArray();

@@ -104,7 +104,7 @@ public sealed class WrittenTextsTests
         Assert.AreEqual(WrittenTexts.MaxFillerCount, Texts().NewspaperFiller(1300, WrittenTexts.MaxFillerCount).Count, "the fill wraps");
     }
 
-    // ARC-UI-1739, ledger NQ9: the interface's message hook (0x56CCA0) and the default issue's probe loop (0x4BF330).
+    // ARC-UI-1739, ledger NP2: the interface's message hook (0x56CCA0) and the default issue's probe loop (0x4BF330).
     [TestMethod]
     public void A_headline_is_the_issue_message_without_its_markup_and_with_line_feeds_made_spaces()
     {

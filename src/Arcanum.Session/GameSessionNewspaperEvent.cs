@@ -43,9 +43,7 @@ public sealed partial class GameSessionOwner
     /// when none is left behind it (5000 + 10 × a number drawn from 0 to <see cref="WrittenTexts.DefaultIssueChoices"/>; equal bounds draw nothing), and the event sets itself up again a day on. A session whose generator is exhausted keeps the queue as it is.
     /// The re-armed event and the new queue are one revision.
     /// </summary>
-    [OriginalFunction(0x4BF270, OriginalFunctionScope.Full)]
-    [OriginalFunction(0x4BF2C0, OriginalFunctionScope.Full)]
-    [OriginalFunction(0x4BF330, OriginalFunctionScope.Full)]
+    [OriginalFunction(0x4BF270, OriginalFunctionScope.Partial)]
     internal GameEventHandlerOutcome FireNewspaper(GameEventFiring firing)
     {
         ScheduleNewspaper(firing.NowMs, SessionEventKinds.NewspaperDayMs);
