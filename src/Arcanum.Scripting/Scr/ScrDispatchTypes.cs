@@ -220,6 +220,24 @@ public interface IScrCritterQueries
 {
     /// <summary>Whether the object is an NPC whose critter flags (0xDA) hold the animal bit 0x8 as the session has them; false for any other object (the original tests the object type 0x10 first); null when the host does not know the object (the run stops).</summary>
     bool? IsAnimal(ScrObjectRef obj);
+
+    /// <summary>
+    /// ARC-SCRIPT-1661 (CP11, exe read 2026-11-13: condition 31 at 0x4451B0 case 0x1f, 0x4B3D50): whether the object is a PC or an NPC whose critter flags (0xDA) hold the combat-mode bit 0x40000 as the session has it; false for any other object type; null when the host does not
+    /// know the object (the run stops). A surrendered NPC keeps the bit, so it still answers true (CL4).
+    /// </summary>
+    bool? IsInCombat(ScrObjectRef obj);
+}
+
+/// <summary>
+/// ARC-SCRIPT-1661 (ledger CP12): the question of adjust stat (action 137, 0x447220 case 0x89), which the alignment weapon script 30252 runs at the wielder. A host whose admission set holds action 137 implements this interface.
+/// </summary>
+public interface IScrStatAdjustQueries
+{
+    /// <summary>
+    /// Whether the host applies an adjustment of base stat <paramref name="stat"/> of <paramref name="obj"/> (the original writes <c>base + value</c> through the stat setter 0x4B0980 for any PC or NPC and stat 0..27; this host's session holds the hero's alignment (stat 19) only). False ends the dispatch with
+    /// <see cref="ScrStop.NotModelled"/> and applies nothing; an absent object never asks.
+    /// </summary>
+    bool CanAdjustStat(ScrObjectRef obj, int stat);
 }
 
 /// <summary>
@@ -762,6 +780,8 @@ public enum ScrStateKind
     QuestExperience,
     /// <summary>Grant one fate point (117): the first object of operand 0, a PC only (0x44A2B3).</summary>
     FatePoint,
+    /// <summary>Adjust stat (137, 0x447220 case 0x89): <see cref="ScrStateRequest.Number"/> the stat, <see cref="ScrStateRequest.Value"/> the number added to the object's base stat (0x4B0740) and written through the stat setter (0x4B0980, which clamps to the stat's range).</summary>
+    AdjustStat,
     /// <summary>Set PC quest unbotched (119): <see cref="ScrStateRequest.Number"/> the quest, one request per object of operand 0 in list order (0x4C5070).</summary>
     QuestUnbotched,
     /// <summary>Add blessing (25): <see cref="ScrStateRequest.Number"/> the blessing, one request per object of operand 1 in list order (0x4C42F0).</summary>
@@ -910,7 +930,7 @@ public sealed class ScrRunResult
 }
 
 /// <summary>How a dispatch runs: the rule mode's script switches, the admitted set (default <see cref="ScrAdmissionSet.S5"/>,
-/// at most <see cref="ScrAdmissionSet.S51"/>, admitted for the lines reachable from the event's line), the executed-line
+/// at most <see cref="ScrAdmissionSet.S52"/>, admitted for the lines reachable from the event's line), the executed-line
 /// budget and the call depth.</summary>
 public sealed record ScrRunOptions
 {
@@ -931,7 +951,7 @@ public sealed record ScrRunOptions
         ArgumentNullException.ThrowIfNull(Admission);
         if (MaxExecutedLines is <= 0 or > OriginalLineBudget) throw new ArgumentOutOfRangeException(nameof(MaxExecutedLines), "The line budget is 1..1000.");
         if (MaxCallDepth is < 1 or > 64) throw new ArgumentOutOfRangeException(nameof(MaxCallDepth), "The call depth is 1..64.");
-        if (!Admission.IsSubsetOf(ScrAdmissionSet.S51)) throw new ArgumentException("The interpreter runs only the commands of ScrAdmissionSet.S51.", nameof(Admission));
+        if (!Admission.IsSubsetOf(ScrAdmissionSet.S52)) throw new ArgumentException("The interpreter runs only the commands of ScrAdmissionSet.S52.", nameof(Admission));
     }
 
     // A set with a guard condition needs a host that answers it, checked before any event runs.
@@ -950,6 +970,8 @@ public sealed record ScrRunOptions
             throw new ArgumentException("A set with the identified or rewielding condition or the magick-tech adjustment needs a host that implements IScrItemQueries.", nameof(Admission));
         if (host is not IScrCritterQueries && Admission.Conditions.Any(ScrAdmissionSet.CritterQueryConditions.Contains))
             throw new ArgumentException("A set with the animal condition needs a host that implements IScrCritterQueries.", nameof(Admission));
+        if (host is not IScrStatAdjustQueries && Admission.Actions.Contains(ScrCatalogue.Action.AdjustStat))
+            throw new ArgumentException("A set with adjust stat needs a host that implements IScrStatAdjustQueries.", nameof(Admission));
         if (host is not IScrMagickTechQueries && Admission.Actions.Contains(ScrCatalogue.Action.GetMagickTechAdjustment))
             throw new ArgumentException("A set with get magick-tech adjustment needs a host that implements IScrMagickTechQueries.", nameof(Admission));
         if (host is not IScrVitalQueries && Admission.Actions.Any(ScrAdmissionSet.VitalQueryActions.Contains))

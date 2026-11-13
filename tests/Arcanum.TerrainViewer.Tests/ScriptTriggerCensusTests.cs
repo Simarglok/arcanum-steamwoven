@@ -110,8 +110,8 @@ public sealed class ScriptTriggerCensusTests
         // ARC-SCRIPT-050: the talk set admits 115 of the 180 dialog rows (52 before float line, get area, random, the guard conditions and obj is dead).
         Assert.AreEqual(180, rows[ScrPoint.Dialog]);
         Assert.IsTrue(admitted[ScrPoint.Dialog] >= 115, admitted[ScrPoint.Dialog].ToString());
-        // ARC-SCRIPT-1562: the combat-point set admits 24 of the 26 hit rows (2 before: the rest stopped at 91, 80 and condition 37), all 18 critter-hits rows and 3 of the 4 critical-hit rows (the others stop at obj is in combat, 31, and adjust stat, 137).
-        Assert.IsTrue(admitted[ScrPoint.Hit] >= 24 && admitted[ScrPoint.CritterHits] == 18 && admitted[ScrPoint.CriticalHit] >= 3, $"{admitted[ScrPoint.Hit]}, {admitted[ScrPoint.CritterHits]}, {admitted[ScrPoint.CriticalHit]}");
+        // ARC-SCRIPT-1562: the combat-point set admitted 24 of the 26 hit rows (2 before: the rest stopped at 91, 80 and condition 37), all 18 critter-hits rows and 3 of the 4 critical-hit rows. ARC-SCRIPT-1661: with obj is in combat (31) and adjust stat (137) it admits all 26, 18 and 4.
+        Assert.IsTrue(admitted[ScrPoint.Hit] >= 26 && admitted[ScrPoint.CritterHits] == 18 && admitted[ScrPoint.CriticalHit] >= 4, $"{admitted[ScrPoint.Hit]}, {admitted[ScrPoint.CritterHits]}, {admitted[ScrPoint.CriticalHit]}");
     }
 
     /// <summary>
@@ -138,6 +138,9 @@ public sealed class ScriptTriggerCensusTests
         // ARC-SCRIPT-1562: the poison weapons' hit (30032, 30076) and critical-hit (30199) scripts run since the combat-point set holds the magick-tech adjustments (91, 80) and play script eye candy (120); the hunting weapon 28007 and the NPC script 2188 need obj is animal (37).
         foreach (var (point, number) in new[] { (ScrPoint.Hit, 30032), (ScrPoint.Hit, 30076), (ScrPoint.CriticalHit, 30199), (ScrPoint.Hit, 28007) })
             Assert.IsTrue(Read(point, number, AreaUseScriptHost.CombatPointAdmission).IsAdmitted, $"{number}, the installed combat-point script, runs");
+        // ARC-SCRIPT-1661: the area weapons 30064 and 30074 (obj is in combat, 31) and the alignment weapon 30252 (adjust stat, 137) run too; the hit and critical-hit scripts the poison census counts are all admitted.
+        foreach (var number in new[] { 30064, 30074, 30252 })
+            Assert.IsTrue(Read(ScrPoint.Hit, number, AreaUseScriptHost.CombatPointAdmission).IsAdmitted, $"{number}, the installed combat-point script, runs");
         // ARC-SCRIPT-1563: the dialog host applies a talk's damage, so the talk set admits 1059 whole (the plain dialog set, without the shown map's use host, still refuses it).
         Assert.IsTrue(Read(ScrPoint.Dialog, 1059, AreaScriptHost.SkillTalkAdmission).IsAdmitted, "1059, the dialog-point poison script, runs");
         Assert.IsFalse(Read(ScrPoint.Dialog, 1059, AreaScriptHost.Admission).IsAdmitted, "without the use host's queries the plain set refuses 1059");

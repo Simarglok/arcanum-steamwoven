@@ -17,6 +17,9 @@ namespace Arcanum.World;
 /// </summary>
 public static class AreaScriptStory
 {
+    /// <summary>ARC-SCRIPT-1661: the stat number of the alignment (19), the one stat an adjust stat changes here.</summary>
+    public const int AlignmentStat = 19;
+
     /// <summary>Whether every add blessing or add curse request that would change the hero has its effect rule, asked before anything of the run applies, so a missing rule refuses the run whole and not partway (a held number needs no rule, BC4).</summary>
     public static bool BlessingRulesResolve(GameSessionOwner session, ScrEffects effects, Func<ScrObjectRef, bool> isPc, Func<SessionBlessingKind, int, SessionEffectDefinition?>? blessingEffect)
     {
@@ -57,6 +60,14 @@ public static class AreaScriptStory
                 {
                     var result = session.GrantHeroFatePoint(session.Version);
                     if (result.Disposition == GameSessionDisposition.Rejected && result.Failure != GameSessionFailure.FateUnavailable) return false;
+                    continue;
+                }
+                case ScrStateKind.AdjustStat:
+                {
+                    // ARC-SCRIPT-1661 (CP12, 0x447220 case 0x89 → 0x4B0980): the hero's base alignment plus the number, clamped to the stat's −1000..1000 and the followers armed as every alignment change arms them (OL17). The host asked before the run
+                    // (IScrStatAdjustQueries) and admits no other stat; a session without a hero refuses.
+                    if (request.Number != AlignmentStat || session.QueryHeroStoredStat(AlignmentStat) is not { } stored) return false;
+                    if (session.ChangeHeroAlignment(session.Version, (long)stored + request.Value).Disposition == GameSessionDisposition.Rejected) return false;
                     continue;
                 }
                 case ScrStateKind.AddBlessing or ScrStateKind.AddCurse or ScrStateKind.RemoveBlessing or ScrStateKind.RemoveCurse:

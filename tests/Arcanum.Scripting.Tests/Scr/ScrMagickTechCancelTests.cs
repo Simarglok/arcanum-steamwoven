@@ -17,6 +17,7 @@ public sealed class ScrMagickTechCancelTests
     {
         public Dictionary<ScrObjectRef, bool> Animals { get; } = new();
         public bool? IsAnimal(ScrObjectRef obj) => Animals.TryGetValue(obj, out var animal) ? animal : null;
+        public bool? IsInCombat(ScrObjectRef obj) => null;
         public Dictionary<(ScrObjectRef, ScrObjectRef, ScrObjectRef), int> Chances { get; } = new();
         public List<(ScrObjectRef Item, ScrObjectRef Attacker, ScrObjectRef Target)> Asked { get; } = [];
         public ScrSlot? Slot(ScrObjectRef attachee, int point) => inner.Slot(attachee, point);

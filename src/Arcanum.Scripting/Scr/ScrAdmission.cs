@@ -427,8 +427,15 @@ public sealed class ScrAdmissionSet
     public static ScrAdmissionSet S51 { get; } = new("S51", S43.Conditions.Append(ScrCatalogue.Condition.IsAnimal), S43.Actions.Concat([ScrCatalogue.Action.GetMagickTechAdjustment, ScrCatalogue.Action.MagickTechAdjustment, ScrCatalogue.Action.PlayScriptEyeCandy]),
         S43.ValueKinds, S43.FocusKinds, counterIndexWraps: true);
 
-    /// <summary>The conditions of <see cref="S51"/> a host answers through <see cref="IScrCritterQueries"/>.</summary>
-    public static IReadOnlySet<int> CritterQueryConditions { get; } = new HashSet<int> { ScrCatalogue.Condition.IsAnimal };
+    /// <summary>
+    /// The combat-point tail set (ARC-SCRIPT-1661, ledger CP11–CP12): <see cref="S51"/> plus the condition obj is in combat (31, 0x4451B0 case 0x1f: the critter's combat-mode bit, <see cref="IScrCritterQueries"/>) and adjust stat (137, 0x447220 case 0x89: the base stat plus a
+    /// number through the stat setter 0x4B0980, <see cref="IScrStatAdjustQueries"/>): the commands the area weapon scripts 30064 and 30074 (a spell on every critter around the wielder that is in combat) and the alignment weapon 30252 (the wielder's alignment falls by 200) still stopped at.
+    /// </summary>
+    public static ScrAdmissionSet S52 { get; } = new("S52", S51.Conditions.Append(ScrCatalogue.Condition.IsInCombat), S51.Actions.Append(ScrCatalogue.Action.AdjustStat),
+        S51.ValueKinds, S51.FocusKinds, counterIndexWraps: true);
+
+    /// <summary>The conditions of <see cref="S51"/> and <see cref="S52"/> a host answers through <see cref="IScrCritterQueries"/>.</summary>
+    public static IReadOnlySet<int> CritterQueryConditions { get; } = new HashSet<int> { ScrCatalogue.Condition.IsAnimal, ScrCatalogue.Condition.IsInCombat };
 
     /// <summary>The actions of <see cref="S43"/> a host answers through <see cref="IScrVitalQueries"/>.</summary>
     public static IReadOnlySet<int> VitalQueryActions { get; } = new HashSet<int> { ScrCatalogue.Action.GetHitPoints, ScrCatalogue.Action.GetFatiguePoints };
