@@ -23,7 +23,9 @@ namespace Arcanum.Session;
 /// <see cref="GameSessionOwner.QueryNpcCarry"/>) and, when the level changed, runs the recalculation 0x45F820 after it (<see cref="GameSessionOwner.RecalculateNpcEncumbrance"/>: every entry of effect 158 leaves the NPC's list, then one
 /// entry a level is added with the item cause, eight at the heaviest). Ready for an NPC the map's inventory seed lists; not ready when the NPC is no holder of it, when effect 158 has no rule to add, and when the new level has the
 /// fatigue timer (level 4 and above: 0x45E820 mode 1 is kept for the hero alone) or the old and new level are not both readable; nothing is written then. The level message is the local PC's and the animation speed
-/// (0x436FA0) the host's. <b>Not ready</b> (issues name them): poison (the poison timer 0x4B1350, the life state), gender and race (the innate effect removal 0x4EA2E0 and add), an NPC whose stats the follower's advancement record
+/// (0x436FA0) the host's. <b>Poison</b> (stat 24, ARC-MAGIC-1508) is the life state's level (<see cref="PoisonStat"/>). <b>Gender and race</b> (ARC-MAGIC-1509, cases 2 and 3 of the setter) remove the first entry of the gender (9) or race (0) cause from the NPC's effect list before the store (0x4EA2E0) and add the innate effect after it
+/// (0x4E9F70: race 0x40 + race with the race cause, gender 0 effect 0x14A with the gender cause), from the rules the host attached (<see cref="GameSessionOwner.AttachInnateEffects"/>; without the rule of the effect to add nothing is written);
+/// the race a store reaches (11, the table's last, a race the character rules do not have) is not ready. <b>Not ready</b> (issues name them): an NPC whose stats the follower's advancement record
 /// holds, and a hero target (the hero's stats are the character owner's).</item>
 /// </list>
 /// </summary>
@@ -33,7 +35,7 @@ public sealed partial class SessionSpellCaster
     public const int StatIndexField = 220, ResistanceIndexField = 31;
 
     // The stats the host runs as the setter does for an NPC: the primary stats (strength with its encumbrance recalculation, see below; the guards for intelligence and willpower included) and the stats the setter stores after the clamp alone (the others are not ready, see above).
-    private static bool ReadyStat(int index) => index is 0 or 1 or 2 or 3 or 4 or 5 or 6 or 7 or 17 or 18 or 19 or 20 or 21 or 22 or 23 or 25;
+    private static bool ReadyStat(int index) => index is 0 or 1 or 2 or 3 or 4 or 5 or 6 or 7 or 17 or 18 or 19 or 20 or 21 or 22 or 23 or 24 or 25 or 26 or 27;
 
     // The reasons of a refused lowering (the event's value).
     private const int RefusedBySkill = 0, RefusedBySpell = 1, RefusedByDegree = 2;
@@ -56,6 +58,8 @@ public sealed partial class SessionSpellCaster
         // The setter returns the derived stats (8 to 16) unwritten.
         if (data.Index is >= 8 and <= 16) return SpellComponentOutcome.None;
         if (!ReadyStat(data.Index) || _owner.QueryNpcAdvancement(obj.Id) is not null) return null;
+        // ARC-MAGIC-1508: poison is the life state's (the setter's case 0x18: the constitution test 0x4B0EE0, the timer 0x4B1350), not a stored entry.
+        if (data.Index == 24) return PoisonStat(run, obj.Id, data, critter.Combat.Target);
         // Magick and tech points run the rewield (0x465530) after the store: with a worn item that carries a wield script the session cannot run it for an NPC, so nothing is written.
         if (data.Index is 22 or 23 && !RewieldReady(obj.Id, map)) return null;
         if (stats[27] is < 0 or > 10) return null;
@@ -104,8 +108,29 @@ public sealed partial class SessionSpellCaster
                 (encumbrance, level) = (rule, after.Level);
             }
         }
+        // ARC-MAGIC-1509 (cases 2 and 3 of the setter, 0x4B0E74): gender and race remove the first innate entry of their cause before the store (0x4EA2E0) and add the new innate effect after it (0x4E9F70: race
+        // 0x40 + race with the race cause; gender 0 effect 0x14A with the gender cause, gender 1 adds nothing). The rule of the effect to add is the host's: without it, nothing is written. A race beyond the character
+        // rules' ten (11, the table's last) is not ready: the consumers of an NPC's stored fields read none for it.
+        SessionEffectDefinition? innate = null;
+        var swaps = data.Index is 26 or 27;
+        if (swaps)
+        {
+            if (data.Index == 27 && next > (int)CharacterRace.Orc) return null;
+            if (data.Index == 27 || next == 0)
+            {
+                innate = _owner.InnateRule(data.Index == 27 ? GameSessionOwner.RaceEffectBase + next : GameSessionOwner.FemaleEffectNumber);
+                if (innate is null) return null;
+            }
+            if (_owner.RemoveNpcInnate(critter.Combat.Target, data.Index == 26) is { Disposition: GameSessionDisposition.Rejected } removal)
+            {
+                _log.Add(new(SpellCastEventKind.TraitIndexNotSaved, run.Id, (int)removal.Failure, obj.Id));
+                return SpellComponentOutcome.None;
+            }
+        }
         var written = _owner.WriteCritterStat(_owner.Version, map, obj.Id, data.Index, next);
         var outcome = Report(run, obj.Id, data, written);
+        if (innate is not null && written.Disposition != GameSessionDisposition.Rejected && _owner.AddNpcInnate(critter.Combat.Target, innate, data.Index == 26) is { Disposition: GameSessionDisposition.Rejected } added)
+            _log.Add(new(SpellCastEventKind.TraitIndexNotSaved, run.Id, (int)added.Failure, obj.Id));
         if (encumbrance is not null && written.Disposition != GameSessionDisposition.Rejected && _owner.RecalculateNpcEncumbrance(critter.Combat.Target, encumbrance, level) is { Disposition: GameSessionDisposition.Rejected } failed)
             _log.Add(new(SpellCastEventKind.TraitIndexNotSaved, run.Id, (int)failed.Failure, obj.Id));
         return outcome;
@@ -121,9 +146,24 @@ public sealed partial class SessionSpellCaster
         _owner.QueryMapInventory(map)?.Holders.FirstOrDefault(holder => holder.Entity == npc && holder.Kind == SessionHolderKind.Npc) is { } listed &&
         !listed.Items.Any(item => item.Facts.Worn && (item.Facts.HasScript(SessionScriptPoint.WieldOn) || item.Facts.HasScript(SessionScriptPoint.WieldOff)));
 
-    private SpellComponentOutcome Report(SpellRun run, string entity, TraitIndexData data, GameSessionMutationResult written)
+    /// <summary>
+    /// ARC-MAGIC-1508 (ledger RM3b, the setter's poison case; the addresses are in RM3b): stat 24 is the poison level, which the original stores in the stat array and the session keeps in the NPC's life state (the map data's entry is only what it loads
+    /// with: <c>LifeState.PoisonLevel</c> of the loaded state, then the life record wins). The executor's current value (the raw entry) is therefore the life state's level; the sum wraps in 32 bits, is clamped to 0..1000,
+    /// becomes 0 for an effective constitution of 20 or more (the setter's constitution test), and is written through <see cref="GameSessionOwner.SetPoisonLevel"/>, which sets the poison timers of a positive level and gives the NPC a life
+    /// record. The interface callback is not the session's. Not ready when the life state cannot be read.
+    /// </summary>
+    private SpellComponentOutcome? PoisonStat(SpellRun run, string entity, TraitIndexData data, SessionLifeTarget life)
     {
-        _log.Add(written.Disposition == GameSessionDisposition.Rejected ? new(SpellCastEventKind.TraitIndexNotSaved, run.Id, (int)written.Failure, entity)
+        if (_owner.QueryLife(life).View is not { } view) return null;
+        var written = _owner.SetPoisonLevel(_owner.Version, life, unchecked(view.Record.State.PoisonLevel + data.Value));
+        return Report(run, entity, data, written.Disposition, written.Failure);
+    }
+
+    private SpellComponentOutcome Report(SpellRun run, string entity, TraitIndexData data, GameSessionMutationResult written) => Report(run, entity, data, written.Disposition, written.Failure);
+
+    private SpellComponentOutcome Report(SpellRun run, string entity, TraitIndexData data, GameSessionDisposition disposition, GameSessionFailure failure)
+    {
+        _log.Add(disposition == GameSessionDisposition.Rejected ? new(SpellCastEventKind.TraitIndexNotSaved, run.Id, (int)failure, entity)
             : new(SpellCastEventKind.TraitIndexWritten, run.Id, data.Field, entity, data.Index));
         return SpellComponentOutcome.None;
     }
