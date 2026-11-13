@@ -26,7 +26,7 @@ public static class MoraleRules
     /// either side, 90°, 135° and last straight toward the target. Each is a straight line of <c>range − distance</c> tiles that
     /// stops at a blocking tile, a blocked traversal or a spotted trap (path flag 0x800, at most 100 steps; fire is not checked).
     /// </summary>
-    public static IReadOnlyList<int> AwayOffsets { get; } = Array.AsReadOnly(new[] { 4, 5, 3, 6, 2, 7, 1, 0 });
+    public static IReadOnlyList<int> AwayOffsets => Navigation.OriginalPathRequest.AwayOffsets;
 
     // ---- the flee question ----
 

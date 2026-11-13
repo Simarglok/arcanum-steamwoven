@@ -180,7 +180,7 @@ public static partial class AiExecutorRules
     /// the NPC's turn; BACKING_OFF → the back-off run; a cast → the magic domain's cast and its casting goal (<see cref="StartCast"/>),
     /// an item → the item-use starter (<see cref="StartUseItem"/>), a skill → the skill starter (<see cref="StartUseSkill"/>), each with
     /// the choice's target (the pass record's, which the chooser wrote; <paramref name="target"/> when the choice has none); otherwise by the danger state: NONE → non-combat perform (0x4AC380), COMBAT_FOCUS → combat perform (0x4AC6E0:
-    /// back-off start, else the grenade step and its throw, else the attack starter), FLEE → perform fleeing and the flee goal,
+    /// back-off start and the back-off in the same pass, else the grenade step and its throw, else the attack starter), FLEE → perform fleeing and the flee goal,
     /// SURRENDER → perform surrender.
     /// </summary>
     [OriginalFunction(0x4AC180, OriginalFunctionScope.Partial)]
@@ -208,7 +208,8 @@ public static partial class AiExecutorRules
                 world.LoyaltyCheck(npc);
                 return follow with { Kind = AiPerformKind.Follow };
             case DangerState.CombatFocus:
-                if (world.StartBackOff(npc, target)) return new(AiPerformKind.BackOffStart, current);
+                // The back-off starts and runs in the same perform (0x4AC6E0 calls 0x4AC7B0 at once): the pass is the back-off's, with no grenade and no attack.
+                if (world.StartBackOff(npc, target)) return BackOff(world, npc, target, current);
                 // The grenade step (0x4AC910) answers "thrown" once it called the throw starter, whatever the starter did.
                 if (target is not null && world.Grenade(npc, target) is { Throws: true, Grenade: { } grenade })
                     return StartThrow(world, npc, grenade, world.Tile(target), current) with { Kind = AiPerformKind.Grenade };

@@ -390,6 +390,7 @@ src/Arcanum.Simulation/Magic/SpellUiRules.cs,TargetsInventory,pending,
 src/Arcanum.Simulation/Navigation/OriginalPathRequest.cs,Neighbor,pending,
 src/Arcanum.Simulation/Navigation/OriginalPathRequest.cs,Rotation,pending,
 src/Arcanum.Simulation/Navigation/RouteFollower.cs,PlanWalk,pending,
+src/Arcanum.Simulation/Navigation/RoutePlanner.cs,AwayTile,exempt,host
 src/Arcanum.Simulation/Navigation/RoutePlanner.cs,Toward,pending,
 src/Arcanum.Simulation/Navigation/RouteTypes.cs,StepEntersCritter,pending,
 src/Arcanum.Simulation/Party/CompanionFollow.cs,Interrupt,pending,

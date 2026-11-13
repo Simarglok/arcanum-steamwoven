@@ -488,7 +488,7 @@ public enum AiPerformKind
 {
     /// <summary>In a round, another critter's subturn: nothing.</summary>
     NotActor,
-    /// <summary>BACKING_OFF: the run to the back-off's tile started.</summary>
+    /// <summary>BACKING_OFF (also the pass in which combat perform started it): the run to the back-off's tile.</summary>
     BackOffRun,
     /// <summary>BACKING_OFF: reached, or no "away" path (MR15): the bit was cleared.</summary>
     BackOffEnded,
@@ -508,8 +508,6 @@ public enum AiPerformKind
     Routine,
     /// <summary>Danger state NONE, a waiting follower: only the combat-mode exit.</summary>
     Waiting,
-    /// <summary>COMBAT_FOCUS: a back-off started (BACKING_OFF set; the run follows on the next pass).</summary>
-    BackOffStart,
     /// <summary>COMBAT_FOCUS: the grenade step chose a throw (<see cref="AiGroundRules.Grenade"/>); the throw starter ran with the
     /// grenade at the target's tile, and perform goes no further whether it started or not.</summary>
     Grenade,
@@ -591,7 +589,8 @@ public interface IAiPerformWorld : IAiGoalWorld
     DangerFlags DangerBits(string npc);
     /// <summary>The back-off's step (<see cref="MoraleRules.BackOff"/>).</summary>
     BackOffRun BackOff(string npc, string? target);
-    /// <summary>The "away" path's end tile at <paramref name="range"/> (0x41F3C0 along <see cref="MoraleRules.AwayOffsets"/>),
+    /// <summary>The "away" path's end tile (0x41F3C0 with flag 0x800, 0x41F6C0) at the back-off's <paramref name="range"/> from the
+    /// target (the host takes the distance itself and goes <c>range − distance</c> tiles out along <see cref="MoraleRules.AwayOffsets"/>),
     /// or null when no straight line is clear.</summary>
     CellCoord? AwayTile(string npc, string? target, int range);
     /// <summary>Clears BACKING_OFF (the session's <c>EndBackOff</c>).</summary>

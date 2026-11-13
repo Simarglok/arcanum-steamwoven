@@ -1402,7 +1402,22 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
             if (current is not null && result.Refusal is not (AiStartRefusal.LeaderNear or AiStartRefusal.AlreadyQueued)) InterruptRuns(npc, GoalInterruptRules.OrdinaryActions);
             return;
         }
+        // ARC-AI-1512: the back-off's run starter (0x433C80) changes the destination of a run to a tile the NPC already has instead of starting another one.
+        if (result is { Kind: AiPerformKind.BackOffRun, Run.Bottom.Tile: { } away } && RetargetRunToTile(npc, result.Run.Bottom, result.Run.Flags, away)) return;
         Started(npc, current, result);
+    }
+
+    // 0x433C80 on an object whose first run already walks or runs to a tile (0x44E830 with goal 4 and its aliases): the movement gate, then the same destination is kept and a new one
+    // overwrites the run's destination in place (GS14). False: no such run, the caller starts one.
+    private bool RetargetRunToTile(string npc, GoalFrame frame, GoalRunFlags flags, CellCoord destination)
+    {
+        if (_session.QueryGoals().RunRunningGoal(npc, GoalType.RunToTile) is not { } running) return false;
+        if (!StartGatePasses(new GoalStartRequest(npc, GoalStarters.Run, frame, flags))) { Trace(npc).Perform = "BackOffRun gate refused"; return true; }
+        var retarget = _session.RetargetGoal(running.Handle, destination);
+        // The found run is marked running whether or not the destination changed (0x433C80 sets flag 0x40 on it before the same-tile test).
+        if (retarget.Failure == SessionGoalFailure.None) _session.TurnOnRunFlags(running.Handle, GoalRunFlags.Running);
+        Trace(npc).Perform = $"BackOffRun retarget {retarget.Outcome?.ToString() ?? retarget.Failure.ToString()}";
+        return true;
     }
 
     /// <summary>
@@ -2914,8 +2929,15 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         if (set != DangerFlags.None) _session.SetAiSupportBits(_session.Version, npc, set);
     }
     public BackOffRun BackOff(string npc, string? target) => MoraleRules.BackOff(this, npc, target ?? Pc, DangerBits(npc));
-    // The back-off's away path (0x41F3C0 along the offsets) is not walked yet: no tile, so the back-off ends.
-    public CellCoord? AwayTile(string npc, string? target, int range) => null;
+    // ARC-AI-1512 (VBG1): the back-off's "away" path (0x41F3C0 with flag 0x800, 0x41F6C0): the first of the eight lines from the side opposite the target, range - distance
+    // tiles out, that the direct attempt completes over the NPC's own step evidence (critters block it as in the NPC's other paths, no gate, no search); none when no line is clear.
+    public CellCoord? AwayTile(string npc, string? target, int range)
+    {
+        if (Tile(npc) is not { } from || Tile(target ?? Pc) is not { } to) return null;
+        // The target is no exception: the direct attempt treats it as any other blocker of a line through its cell.
+        var source = new AreaRouteSource(Steps, _scene.Chart, () => Occupancy(npc, null), _scene.Passages);
+        return RoutePlanner.AwayTile(source, ToChart(from), ToChart(to), range) is { } tile ? ToWorld(tile) : null;
+    }
     public void EndBackOff(string npc) => _session.EndBackOff(_session.Version, npc);
     // ARC-DEV-241: set by ScriptCast around its one Cast call so the cast uses the script entry point (free and unresistable flags).
     private (bool Free, bool Unresistable)? _scriptCast;
