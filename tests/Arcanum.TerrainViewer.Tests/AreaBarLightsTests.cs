@@ -76,4 +76,31 @@ public sealed class AreaBarLightsTests
         Assert.AreEqual(AreaLightSlot.TownMap, bar.Lights.MapMode);
         Assert.IsFalse(bar.Lights.Reset(), "nothing left to reset");
     }
+
+    [TestMethod]
+    public void The_lit_slots_are_a_mask_and_a_restore_sets_the_state_of_a_save_whatever_is_open()
+    {
+        var lights = new AreaBarLights();
+        Assert.AreEqual(0, lights.LitMask);
+        lights.Light(AreaLightSlot.Logbook, true, false);
+        lights.Light(AreaLightSlot.Inventory, true, false);
+        Assert.AreEqual(0b10010, lights.LitMask, "bit n is the slot n");
+        var saved = new AreaBarLights();
+        Assert.IsTrue(saved.Restore(lights.LitMask, AreaLightSlot.WorldMap));
+        Assert.IsTrue(saved.IsLit(AreaLightSlot.Logbook) && saved.IsLit(AreaLightSlot.Inventory) && !saved.IsLit(AreaLightSlot.Character));
+        Assert.AreEqual(AreaLightSlot.WorldMap, saved.MapMode);
+        Assert.AreEqual(560, saved.ArtOf(AreaBarButton.Logbook));
+        Assert.AreEqual(194, saved.ArtOf(AreaBarButton.Map), "the world map slot is not lit: its idle art");
+        Assert.IsFalse(saved.Restore(lights.LitMask, AreaLightSlot.WorldMap), "the same state is no change");
+        Assert.IsTrue(saved.Restore(0, AreaLightSlot.TownMap));
+        Assert.AreEqual(0, saved.LitMask);
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => saved.Restore(32, AreaLightSlot.TownMap));
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => saved.Restore(-1, AreaLightSlot.TownMap));
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => saved.Restore(0, AreaLightSlot.Inventory));
+        // Both map slots may hold a lit art in a save; only the one the mode names is drawn.
+        saved.Restore(0b01100, AreaLightSlot.WorldMap);
+        Assert.AreEqual(195, saved.ArtOf(AreaBarButton.Map));
+        saved.Restore(0b01100, AreaLightSlot.TownMap);
+        Assert.AreEqual(558, saved.ArtOf(AreaBarButton.Map));
+    }
 }

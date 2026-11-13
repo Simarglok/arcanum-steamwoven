@@ -31,7 +31,7 @@ public sealed class SavedFlightStateTests
         return id;
     }
 
-    private static readonly Regex FlightsSection = new(",\"flights\":\\{.*\\}(?=,\"lighting\")");
+    private static readonly Regex FlightsSection = new(",\"flights\":\\{.*\\}(?=,\"barLights\")");
 
     private static string Flights(string text) => FlightsSection.Match(text) is { Success: true } match ? match.Value : throw new AssertFailedException("no flights section");
 

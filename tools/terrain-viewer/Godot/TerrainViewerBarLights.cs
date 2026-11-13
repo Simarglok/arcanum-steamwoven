@@ -16,13 +16,18 @@ namespace Arcanum.TerrainViewer;
 //              the hero's sector: no town map (0x4BE380 answers 0) shows the world map art 194, a town map the town art 193 (0x564F60).
 // A light is not stored while the slot's own window is open. The window-open puts it out all the time here (the original does it once when
 // the window opens: the same final state, as the light is refused while the window stays open). The original keeps the state in its save
-// (0x54A1A0); this build resets it with a new session (issue "lit state in the save").
+// (0x54A1A0, restored by 0x54A220); ARC-UI-1542: the session snapshot holds it (SessionBarLightsState, recorded here at each change, read back when a
+// loaded session first shows), a new game starts idle.
 public partial class TerrainViewerApp
 {
     private GameSessionOwner? _barLightsSession;
     private long _barLightsRevision = -1;
     private SessionInterfaceStamp? _barLightsStamp;
     private int _barLightsLit;
+    // ARC-UI-1542: the sector's last seen town-map answer (null before the first look of a session), and whether the lights came from a save: a restored
+    // face holds until the answer changes, as the original's stored map mode does until the next map callback (0x556B70).
+    private bool? _barLightsTownMap;
+    private bool _barLightsRestored;
 
     /// <summary>The lights lit since the app started (for the logs and the smoke).</summary>
     internal int BarLightsLitForSelfTest => _barLightsLit;
@@ -46,10 +51,19 @@ public partial class TerrainViewerApp
         return true;
     }
 
+    /// <summary>ARC-UI-1542: hands the lit state to the session so a save holds it (a session records the same state as no change).</summary>
+    private void RecordBarLights(GameSessionOwner session)
+    {
+        var lights = _gameBar.Lights;
+        session.RecordBarLights(new(lights.LitMask, (int)lights.MapMode));
+    }
+
     /// <summary>A level-up of the hero lights the Character button unless the sheet is open (GB16).</summary>
     private void LightCharacterForLevelUp()
     {
-        if (TryLight(AreaLightSlot.Character)) _gameBarPanel?.Render();
+        if (!TryLight(AreaLightSlot.Character)) return;
+        if (_areaSession is { } session) RecordBarLights(session);
+        _gameBarPanel?.Render();
     }
 
     /// <summary>Per frame, before the bars show or hide: follows the session's events with the lights (the stamps' differences), puts out the
@@ -63,8 +77,12 @@ public partial class TerrainViewerApp
         if (!ReferenceEquals(session, _barLightsSession))
         {
             // A new session (a new game, a load): the first stamps are the baseline, nothing lights for what the session already holds.
-            _barLightsSession = session; _barLightsStamp = null; _barLightsRevision = -1;
+            _barLightsSession = session; _barLightsStamp = null; _barLightsRevision = -1; _barLightsTownMap = null;
             changed |= _gameBar.Lights.Reset();
+            // ARC-UI-1542: a loaded session carries the saved lights (0x54A220 restores them and redraws the five buttons); a new game or an older save starts idle.
+            var saved = session.QueryBarLights();
+            _barLightsRestored = saved is not null;
+            if (saved is { } lights) changed |= _gameBar.Lights.Restore(lights.LitMask, (AreaLightSlot)lights.MapMode);
         }
         var revision = session.Version.Revision;
         if (revision != _barLightsRevision)
@@ -85,7 +103,18 @@ public partial class TerrainViewerApp
         foreach (var slot in new[] { AreaLightSlot.Character, AreaLightSlot.Logbook, AreaLightSlot.Inventory, AreaLightSlot.WorldMap })
             if (BarLightWindowOpen(slot)) changed |= _gameBar.Lights.Light(slot, false, true);
         if (_readyMode == TerrainViewerMode.Area && _readyArea is not null && _worldActor.Session is AreaGridSession)
-            changed |= _gameBar.Lights.SetMapMode(PcTownMapNumber() > 0 ? AreaLightSlot.TownMap : AreaLightSlot.WorldMap);
+        {
+            // The face follows the hero's sector. After a load the first answer is only the baseline: the saved face holds until the answer changes.
+            var townMap = PcTownMapNumber() > 0;
+            if (_barLightsTownMap is null && _barLightsRestored) _barLightsTownMap = townMap;
+            else if (_barLightsTownMap != townMap)
+            {
+                _barLightsTownMap = townMap;
+                changed |= _gameBar.Lights.SetMapMode(townMap ? AreaLightSlot.TownMap : AreaLightSlot.WorldMap);
+            }
+        }
+        // Recorded whether or not a light changed now: a level-up that lit the Character button while no session was set (a map transfer) is still to be handed over, and the same state is no change.
+        RecordBarLights(session);
         if (changed) _gameBarPanel?.Render();
     }
 }
