@@ -10,6 +10,7 @@ namespace Arcanum.Session.Tests;
 public sealed class SnapshotUpgradeTests
 {
     private const string Current = "\"schemaVersion\":97,\"world\"";
+    private const string Current96 = "\"schemaVersion\":96,\"world\"";
     private const string Current95 = "\"schemaVersion\":95,\"world\"";
     private const string Current94 = "\"schemaVersion\":94,\"world\"";
     private const string Current93 = "\"schemaVersion\":93,\"world\"";
