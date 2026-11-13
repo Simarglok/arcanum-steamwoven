@@ -186,8 +186,8 @@ public sealed partial class SessionSpellCaster
     /// <summary>
     /// ARC-MAGIC-1507 (ledger RM3b): the rewield 0x465530 the setter runs after storing magick points (22) or tech points (23) walks the wear slots 1000 to 1008; for each worn item it recalculates the wearer's light (0x467E80)
     /// and runs the item's script points 25 (wield off) and 24 (wield on) with the wearer as the initiator. Ready when the session knows the NPC's list (the holder of its map's inventory view, a dressed NPC's wear record laid
-    /// over the map data) and no worn item has script point 24 or 25: the runs then do nothing (a script run of a point with no script returns at once), and the light stays as saved, as it does after the session dresses an NPC (exact for an NPC wearing no light item; with a light item the original's size follows the item's power against the holder's derived stat 16, #1561)
-    /// (the carried light is not recalculated for an NPC yet, <c>docs/rendering/area-lighting.md</c>). With a worn wield script, or an NPC the session does not list, it is not ready.
+    /// over the map data) and no worn item has script point 24 or 25: the runs then do nothing (a script run of a point with no script returns at once), and the light is not written here: the host derives the recalculated carried light from the worn items and the NPC's aptitude for an NPC the session wrote magick or tech points of (ARC-MAGIC-1561, <c>AreaRestockHost.NpcLight</c>, ledger RM3d;
+    /// exact for an NPC wearing no light item, which 0x467E80 leaves alone). With a worn wield script (run for the hero alone, #1644), or an NPC the session does not list, it is not ready.
     /// </summary>
     private bool RewieldReady(string npc, SessionMapId map) =>
         _owner.QueryMapInventory(map)?.Holders.FirstOrDefault(holder => holder.Entity == npc && holder.Kind == SessionHolderKind.Npc) is { } listed &&
