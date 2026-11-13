@@ -190,8 +190,8 @@ public sealed partial class GameSessionOwner
             _reads = new(owner, host, this);
         }
 
-        /// <summary>ARC-AI-1655: the runs are an NPC's ground pickup, whose triggerer is the NPC: a printed line is read for an NPC triggerer (<see cref="ISessionItemScriptHost.PrintedLineForNpc"/>). Every other move keeps the hero's reading, whatever its triggerer.</summary>
-        internal bool NpcPickup { get; init; }
+        /// <summary>ARC-AI-1655, ARC-MAGIC-1684: the runs' triggerer is an NPC (its ground pickup, its best-items wield): a printed line is read for an NPC triggerer (<see cref="ISessionItemScriptHost.PrintedLineForNpc"/>). Every other move keeps the hero's reading, whatever its triggerer.</summary>
+        internal bool NpcTriggerer { get; init; }
 
         /// <summary>ARC-MAGIC-1644 (IE7, WE6): the runs are the rewield's: the condition "items are being rewielded" answers true (0x5E87E8).</summary>
         internal bool Rewielding { get; init; }
@@ -205,6 +205,23 @@ public sealed partial class GameSessionOwner
 
         /// <summary>The wearer's entity: the hero's, or the NPC's.</summary>
         private string Wearer => _npc?.Entity ?? SessionEventKinds.PlayerEntity;
+
+        /// <summary>ARC-MAGIC-1684: an effect the runs added to or removed from an NPC wearer's list changes a basic or tech skill, which the best-items choice reads (the weapon skill levels) and the session does not model.</summary>
+        internal bool NpcSkillEffects { get; private set; }
+
+        private static bool TouchesSkills(SessionEffectDefinition definition) => definition.Changes.Any(c => c.Kind is Arcanum.Data.Characters.EffectAttributeKind.BasicSkill or Arcanum.Data.Characters.EffectAttributeKind.TechSkill);
+
+        /// <summary>ARC-MAGIC-1684: the number of actions the runs so far have made on an NPC wearer's effect list (0 for the hero).</summary>
+        internal int NpcEffectChanges => _npcOps.Count;
+
+        /// <summary>
+        /// ARC-MAGIC-1684: what the best-items choice reads of an NPC wearer (<see cref="EquipmentChooser"/>: its damage bonus, aptitude and extraordinary intelligence) under the effect list the runs so far left, as the character
+        /// rules derive them from the NPC's stored stats; null for the hero as wearer and for stored values or a list the rules refuse.
+        /// </summary>
+        internal (int DamageBonus, int Aptitude, bool ExtraordinaryIntelligence)? ChooserReads() =>
+            _npc is { } npc && _owner.NpcScriptSnapshot(npc, _entries, _definitions) is { } snapshot
+                ? (snapshot.GetEffective(CharacterStat.DamageBonus), snapshot.GetEffective(CharacterStat.MagickTechAptitude), snapshot.GetEffective(CharacterStat.Intelligence) >= CharacterStatRules.ExtraordinaryThreshold)
+                : null;
 
         internal GameSessionFailure Failure { get; private set; }
         internal IReadOnlyList<SessionItemScriptRun> Runs => _runs.AsReadOnly();
@@ -222,7 +239,7 @@ public sealed partial class GameSessionOwner
                 extra is null ? null : new ScrObjectRef(_map, extra)), _reads, new() { Rules = _owner._rules.Scripts, Admission = SessionItemScripts.Admission });
             _owner.ThrowIfDisposed();
             _runs.Add(new(point, attachee, run));
-            Failure = _reads.UnknownFlag || _reads.UnknownObject ? GameSessionFailure.ItemScriptUnsupported : _owner.ItemScriptEffects(run, _host, _messages, NpcPickup);
+            Failure = _reads.UnknownFlag || _reads.UnknownObject ? GameSessionFailure.ItemScriptUnsupported : _owner.ItemScriptEffects(run, _host, _messages, NpcTriggerer);
             if (Failure == GameSessionFailure.None) Failure = Accept(run);
             return run;
         }
@@ -328,6 +345,7 @@ public sealed partial class GameSessionOwner
             {
                 var index = _entries.FindIndex(entry => entry.Number == number);
                 if (index < 0) return GameSessionFailure.None;
+                if (_definitions.TryGetValue(number, out var leaving)) NpcSkillEffects |= TouchesSkills(leaving);
                 _entries.RemoveAt(index);
                 _npcOps.Add(new(null, default, 0, number, 1, null));
                 return GameSessionFailure.None;
@@ -340,6 +358,7 @@ public sealed partial class GameSessionOwner
             if (_definitions.TryGetValue(number, out var known) && !known.Changes.IsEmpty && !known.SameAs(definition)) return GameSessionFailure.EffectMismatch;
             if (_entries.Count >= SessionNpcEffectLimits.MaxEntries) return GameSessionFailure.EffectCapacityExceeded;
             _definitions[number] = definition;
+            NpcSkillEffects |= TouchesSkills(definition);
             _entries.Add(new SessionEffect(number, cause));
             _npcOps.Add(new(definition, cause, 1, null, 0, null));
             return GameSessionFailure.None;
