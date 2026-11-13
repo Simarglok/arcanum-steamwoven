@@ -44,7 +44,7 @@ public interface ISpellSocialHost
 /// Any other object: the plain write.</item>
 /// <item><b>Mind controlled</b>, set: without a caster the plain write; with one, **nothing at all** for an object that is no NPC (the flag is not written, SO3); for an NPC the reaction <c>−50</c> toward the hero when the
 /// caster is the hero and the NPC does not hold the summoned spell flag (0x4000), then the flag, then the NPC joins the caster as a forced follower (0x45DE90), then no-flee for good (0x4AF1D0). Clear, on an NPC: the flag, then a forced
-/// leave (0x45DFC0); the reaction is not given back. ARC-MAGIC-1841: the caster is any critter (<see cref="GameSessionOwner.ForceJoinLeader"/>): an NPC's summon follows it, and a companion an NPC dominates
+/// leave (0x45DFC0); the reaction is not given back. ARC-MAGIC-1841: the caster is any object the run names as its parent (<see cref="GameSessionOwner.ForceJoinLeader"/>; 0x45DE90 does not test the leader's type): an NPC's summon follows it, and a companion an NPC dominates
 /// leaves the hero for it.</item>
 /// <item><b>Fleeing</b>, on an NPC: the flee function (0x4AF130); off: the stop-fleeing function (0x4AF170); **neither writes the critter flag in the original's closing write** (the setter keeps the state; the session's danger
 /// record is that state), and on the hero nothing happens.</item>

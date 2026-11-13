@@ -231,15 +231,38 @@ public sealed class SessionSpellCasterSocialTests
     public void A_hero_companion_dominated_by_an_npc_leaves_the_hero_for_it_and_the_end_leaves_it_with_no_leader()
     {
         var record = Flag(SessionSpellCaster.SpellFlagsField, MindControlled);
-        var (owner, caster, _) = Session(record);
+        var (owner, caster, host) = Session(record);
         using var __ = owner;
         Assert.AreEqual(GameSessionDisposition.Changed, owner.ForceJoinParty(owner.Version, Target).Disposition);
         var run = Cast(owner, caster, record, from: Mage);
         Assert.AreEqual(Mage, owner.QueryLeader(Target), Trail(caster));
+        Assert.AreEqual(0, host.Calls.Count, "no reaction toward the hero");
+        Assert.IsTrue(Social_(caster).Any(e => e.Value == SessionSpellCaster.SocialJoin), Trail(caster));
         Assert.AreEqual(0, owner.QueryParty().Followers.Count, "the join first left the hero (0x45DE90 → 0x45DFC0)");
         EndComponent(owner, caster, run);
         Assert.IsNull(owner.QueryLeader(Target), "the forced leave at the end leaves it with no leader, not back with the hero");
         Assert.AreEqual(CompanionStanding.Free, owner.QueryCompanion(Target).Standing);
+    }
+
+    [TestMethod]
+    public void The_hero_dominating_a_follower_of_an_npc_takes_it_from_the_npc_and_a_cycle_of_leaders_is_refused()
+    {
+        var record = Flag(SessionSpellCaster.SpellFlagsField, MindControlled);
+        var (owner, caster, _) = Session(record);
+        using var __ = owner;
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.ForceJoinLeader(owner.Version, Target, Mage).Disposition);
+        var run = Cast(owner, caster, record);
+        Assert.AreEqual(Hero, owner.QueryLeader(Target), Trail(caster));
+        Assert.AreEqual(0, owner.QueryFollowers(Mage).Count, "the join first left the mage");
+        EndComponent(owner, caster, run);
+        Assert.IsNull(owner.QueryLeader(Target));
+        // The mage follows the target; the mage dominating the target would close a cycle: refused (a Steamwoven choice: the original's chain query would never end), the leaders unchanged.
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.ForceJoinLeader(owner.Version, Mage, Target).Disposition);
+        var cycle = Cast(owner, caster, record, from: Mage);
+        Assert.IsNull(owner.QueryLeader(Target));
+        Assert.AreEqual(Target, owner.QueryLeader(Mage));
+        Assert.IsTrue(Social_(caster).Contains(new(SpellCastEventKind.SocialEffect, cycle, SessionSpellCaster.SocialRefused, Target, SessionSpellCaster.SocialJoin)), Trail(caster));
+        Assert.AreEqual(MindControlled, owner.QueryObjectFlags(Target).SpellSet & MindControlled, "the flag is still written");
     }
 
     [TestMethod]
