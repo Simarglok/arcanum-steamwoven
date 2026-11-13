@@ -52,6 +52,9 @@ public sealed record AreaAiScene
     /// <summary>ARC-DEV-137 (MIG13 S6): the ART of an NPC's animation (frames and rate) for the critter-state goals' timing; null (the provider, or its answer) when the header does not read or
     /// the viewer cannot read that animation (the stun's 23 is not read yet: the stun then ends at once, GT26).</summary>
     public Func<string, int, AiAnimationClip?>? AnimationClip { get; init; }
+    /// <summary>ARC-AI-1486 (the item system's pickup switch 0x5E8800, lowered by 0x468190 when an inventory window opens in loot or See Contents mode on a container, 0x5727B0; raised by 0x468180 at its close,
+    /// 0x573440): whether such a window is open now (a container of the map or a junk pile). While it is, no NPC starts a pickup (<see cref="AreaAiHost.NpcPickupsOn"/>); null: no window is ever open.</summary>
+    public Func<bool>? LootWindowOpen { get; init; }
     /// <summary>ARC-AI-1313 (0x4D9240 at the dark wander's node 0x425D60): the light level 0..255 at a world cell, as the viewer's lighting answers it for a light-aware check; null: full light everywhere, so the dark wander accepts every tile.</summary>
     public Func<CellCoord, int>? CellLight { get; init; }
     /// <summary>ARC-WORLD-1162 (SWB17–SWB21): the beds of the shown map and who lies in them, shared with the hero's rest; null: the map has none, so an NPC at its standpoint finds no bed.</summary>

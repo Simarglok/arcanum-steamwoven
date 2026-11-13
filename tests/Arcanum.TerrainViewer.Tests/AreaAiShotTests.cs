@@ -92,7 +92,8 @@ public sealed class AreaAiShotTests
     private static Scene Open(Func<string, string, SessionShot, CellCoord, CellCoord, bool>? launch, bool bystander = false, AreaObjectRecord? blockerRow = null,
         Func<AreaObjectRecord, AreaObjectAttackTarget?>? objectTarget = null, Func<string, AreaObjectRecord, SessionShot, CellCoord, CellCoord, bool>? launchAtObject = null,
         Action<string, AreaObjectRecord, AreaObjectAttackTarget?, SessionObjectAttackResult>? struck = null,
-        IReadOnlyList<(AreaObjectRecord Row, SessionSeedItem Seed)>? ground = null, string? junkPiles = null, long bowUseArt = 0x60000000, long faction = 0, bool bystanderOnLine = true)
+        IReadOnlyList<(AreaObjectRecord Row, SessionSeedItem Seed)>? ground = null, string? junkPiles = null, long bowUseArt = 0x60000000, long faction = 0, bool bystanderOnLine = true,
+        bool npcHome2 = false, int bowWeight = 15, Func<bool>? lootWindowOpen = null, (int Index, CellCoord At, IReadOnlyList<(AreaObjectRecord Row, SessionSeedItem Seed)> Items)? mapPile = null)
     {
         var identity = new GlobalFlagIdentity(new WorldId(Guid.NewGuid()), new ModuleId(Guid.NewGuid()));
         var hero = new SessionHeroDefinition(16089, CharacterRace.Human, CharacterGender.Male, [8, 8, 8, 8, 8, 8, 8, 8, 0, 0], 1, 5, 0, null, null, 0, []);
@@ -106,12 +107,19 @@ public sealed class AreaAiShotTests
             session.Dispose();
             session = GameSessionOwner.Restore(snapshot, new(snapshot.Identity, snapshot.Clock.Profile, new OwnerEpoch(Guid.NewGuid()))).Owner!;
         }
-        var rows = (bystander ? new[] { Npc(0, null, faction), Item(1, useArt: bowUseArt), Npc(3, BystanderCell, faction) } : new[] { Npc(0), Item(1, useArt: bowUseArt) }).Concat(ground?.Select(g => g.Row) ?? []).ToArray();
+        var rows = (bystander ? new[] { Npc(0, null, faction), Item(1, useArt: bowUseArt), Npc(3, BystanderCell, faction) } : new[] { Npc(0), Item(1, useArt: bowUseArt) }).Concat(ground?.Select(g => g.Row) ?? [])
+            .Concat(mapPile is { } piled ? [PileRow(piled.Index, piled.At), .. piled.Items.Select(i => i.Row)] : []).ToArray();
+        // ARC-AI-1486: npcHome2 lists the NPC and its bow on map 2's seed only, as a companion carried from another map is (its home map's seed; the shown map's view does not list it).
+        var npcHolder = new SessionSeedHolder(Entity(0), SessionHolderKind.Npc, false, false, [], [Entity(1)]);
+        var bow = new SessionSeedItem(Entity(1), new(BowKind, bowWeight, 0, 1004, null, []), null);
+        SessionSeedHolder[] shownHolders = npcHome2 ? [] : bystander ? [npcHolder, new(Entity(3), SessionHolderKind.Npc, false, false, [], [])] : [npcHolder];
+        // ARC-AI-1486: a junk pile of the map's data: a container row of prototype 3043 whose seed holder lists the items.
+        if (mapPile is { } pileSeed) shownHolders = [.. shownHolders, new(Entity(pileSeed.Index), SessionHolderKind.Container, false, false, [], [.. pileSeed.Items.Select(i => i.Seed.Entity)])];
         var map = new AreaInventoryMap(1,
-            new(bystander ? [new(Entity(0), SessionHolderKind.Npc, false, false, [], [Entity(1)]), new(Entity(3), SessionHolderKind.Npc, false, false, [], [])] : [new(Entity(0), SessionHolderKind.Npc, false, false, [], [Entity(1)])],
-                [new SessionSeedItem(Entity(1), new(BowKind, 15, 0, 1004, null, []), null), .. ground?.Select(g => g.Seed) ?? []]),
-            rows.ToDictionary(row => Entity(row.Key.SourceIndex)));
-        var inventory = new AreaInventoryHost([map]);
+            new(shownHolders, [.. npcHome2 ? [] : new[] { bow }, .. ground?.Select(g => g.Seed) ?? [], .. mapPile?.Items.Select(i => i.Seed) ?? []]),
+            rows.Where(row => !npcHome2 || row.Key.SourceIndex > 1).ToDictionary(row => Entity(row.Key.SourceIndex)));
+        var home2 = new AreaInventoryMap(2, new([npcHolder], [bow]), rows.Where(row => row.Key.SourceIndex <= 1).ToDictionary(row => Entity(row.Key.SourceIndex)));
+        var inventory = new AreaInventoryHost(npcHome2 ? [map, home2] : [map]);
         Assert.AreEqual(GameSessionFailure.None, inventory.Attach(session));
         var combat = new AreaCombatHost(inventory, session: () => session);
         var terrain = new Dictionary<AreaStepCell, AreaStepTerrainEvidence>();
@@ -124,7 +132,7 @@ public sealed class AreaAiShotTests
             RuntimeMap = 1, Chart = new AreaChart(0, 0, new(0, 0), "TEST") { MinimumCell = -64, MaximumCell = 127 }, Steps = steps, Npcs = bystander ? [new(Entity(0), Npc(0, null, faction), NpcCell), new(Entity(3), Npc(3, BystanderCell, faction), BystanderCell)] : [new(Entity(0), Npc(0), NpcCell)], Combat = combat,
             HeroCell = () => HeroCell, LaunchShot = launch,
             LineOfFire = blockerRow is not null ? () => new Line(blockerRow) : bystander && bystanderOnLine ? () => new Line(Npc(3, BystanderCell)) : null,
-            ObjectTarget = objectTarget, LaunchShotAtObject = launchAtObject, ObjectStruck = struck,
+            ObjectTarget = objectTarget, LaunchShotAtObject = launchAtObject, ObjectStruck = struck, LootWindowOpen = lootWindowOpen,
         };
         // ARC-AI-1139: the restock host answers the NPC wield the AI gate's re-wield asks for (no barter data: the map's own rows are the items).
         var restock = new AreaRestockHost(session, inventory, null, new NoScreen());
@@ -410,6 +418,17 @@ public sealed class AreaAiShotTests
         return (Item(index, 0, flags, weight, worth, -1), new SessionSeedItem(Entity(index), new(BowKind with { Type = type, Prototype = BowPrototype + index }, weight, 0, -1, type == SessionItemType.Ammo ? 5 : null, []) { AmmoType = type == SessionItemType.Ammo ? 0 : null }, at));
     }
 
+    // ARC-AI-1486: a junk pile of the map's data (a container row of prototype 3043, as the Crash Site cave's) and the item it holds (a bow-shaped weapon with no cell of its own).
+    private static AreaObjectRecord PileRow(int index, CellCoord at) => new(Key(index), 0, 2, SessionObjectFacts.JunkPilePrototypeFile, "p", "p", "r", "s", AreaScope.Core, null, at.X, at.Y,
+        Arcanum.Data.Area.AreaDisposition.BodyEligibleConditionally, [],
+        [
+            Field(0, 0x20000000), Field(18, 0), Field(19, 0), Field(21, 1), Field(22, 2), Field(25, 0), Field(26, 10), Field(27, 0), Field(28, 0), Field(29, 2),
+            Array(30), Empty(31), Field(36, 0), Field(38, 0),
+        ], true, true, true);
+
+    private static (AreaObjectRecord Row, SessionSeedItem Seed) PileItem(int index, uint flags = 0) =>
+        (Item(index, 0, flags, 3, 1, -1), new SessionSeedItem(Entity(index), new(BowKind with { Prototype = BowPrototype + index }, 3, 0, -1, null, []), null));
+
     private static readonly DangerFlags Looking = DangerFlags.LookForAmmo | DangerFlags.LookForWeapon | DangerFlags.LookForArmor;
 
     [TestMethod]
@@ -433,6 +452,88 @@ public sealed class AreaAiShotTests
     {
         var (_, host, npc, _) = Open(null, ground: [Loose(2, new(11, 20), weight: 100000)]);
         Assert.IsTrue(host.LooseItems(npc, AiGroundKind.Weapon, 10).Single().CannotTake);
+    }
+
+    // ARC-AI-1486: a companion carried from another map lists on its home map's seed, which the shown map's view does not show; its carried weight still counts (0x466510 totals the holder's own list).
+    [TestMethod]
+    public void The_weight_of_a_listed_npc_counts_when_its_list_is_on_another_maps_seed()
+    {
+        var (_, shown, shownNpc, _) = Open(null, ground: [Loose(2, new(11, 20), weight: 1)], bowWeight: 100000);
+        Assert.IsTrue(shown.LooseItems(shownNpc, AiGroundKind.Weapon, 10).Single().CannotTake, "control: the shown map's own NPC, overloaded by its bow");
+        var (_, carried, carriedNpc, _) = Open(null, ground: [Loose(2, new(11, 20), weight: 1)], bowWeight: 100000, npcHome2: true);
+        Assert.IsTrue(carried.LooseItems(carriedNpc, AiGroundKind.Weapon, 10).Single().CannotTake, "its list is on map 2's seed");
+        var (_, light, lightNpc, _) = Open(null, ground: [Loose(2, new(11, 20), weight: 1)], npcHome2: true);
+        Assert.IsFalse(light.LooseItems(lightNpc, AiGroundKind.Weapon, 10).Single().CannotTake, "a light list leaves room for it");
+    }
+
+    // ARC-AI-1486 (0x5E8800 lowered by an open loot window on a container, 0x5727B0 → 0x468190): no NPC starts a pickup while it is open, and one starts again once it closes.
+    [TestMethod]
+    public void No_npc_starts_a_pickup_while_a_loot_window_is_open_on_a_container()
+    {
+        var open = true;
+        var (session, host, npc, _) = Open(null, ground: [Loose(2, new(13, 20))], lootWindowOpen: () => open);
+        Assert.IsFalse(host.NpcPickupsOn);
+        Assert.IsFalse(host.StartPickup(npc, Entity(2)), "the starter reads the switch");
+        Assert.IsNull(host.RunOf(npc));
+        open = false;
+        Assert.IsTrue(host.NpcPickupsOn);
+        Assert.IsTrue(host.StartPickup(npc, Entity(2)));
+        Assert.AreEqual(Arcanum.Simulation.Goals.GoalType.PickupItem, host.RunOf(npc)!.Bottom.Goal);
+    }
+
+    // ARC-AI-1486: the map's own junk piles (containers of prototype 3043 named 3023) are searched as the session's are; the item leaves its container and the emptied pile dissolves at once (JP5).
+    [TestMethod]
+    public void The_search_reads_a_junk_pile_of_the_maps_data_and_the_pickup_dissolves_the_pile_it_leaves_with_one_item()
+    {
+        var (session, host, npc, _) = Open(null, mapPile: (9, new(12, 22), [PileItem(10, flags: 0x80000), PileItem(11), PileItem(12)]));
+        CollectionAssert.AreEqual(new[] { Entity(9) }, host.JunkPiles(npc, 10).ToArray());
+        Assert.AreEqual(0, host.JunkPiles(npc, 1).Count, "a square of half-size 1 does not reach it");
+        Assert.IsTrue(host.FirstInPile(Entity(9), AiGroundKind.Weapon) is { NoNpcPickup: true } first && first.Id == Entity(10), "the first weapon of the container's list");
+        Assert.IsNull(host.FirstInPile(Entity(9), AiGroundKind.Armor));
+        Assert.IsNull(host.FirstInPile(Entity(1), AiGroundKind.Weapon), "an item row is no pile");
+        Assert.AreEqual(GameSessionDisposition.Changed, session.SetAiSupportBits(session.Version, npc, DangerFlags.LookForWeapon).Disposition);
+        // The first item of the pile is NO_NPC_PICKUP: the search passes the pile over (SP21), no pickup starts.
+        Assert.IsFalse(host.SearchItems(npc));
+        Assert.IsNull(host.RunOf(npc));
+    }
+
+    [TestMethod]
+    public void An_npc_takes_the_first_item_of_a_junk_pile_of_the_maps_data_and_a_pile_left_with_one_item_drops_it()
+    {
+        var (session, host, npc, _) = Open(null, mapPile: (9, new(12, 22), [PileItem(10), PileItem(11)]));
+        Assert.AreEqual(GameSessionDisposition.Changed, session.SetAiSupportBits(session.Version, npc, DangerFlags.LookForWeapon).Disposition);
+        Assert.IsTrue(host.SearchItems(npc), host.TraceOf(npc)?.Item);
+        Assert.AreEqual((Arcanum.Simulation.Goals.GoalType.PickupItem, Entity(10)), (host.RunOf(npc)!.Bottom.Goal, host.RunOf(npc)!.Bottom.Item));
+        var notices = Run(host, npc);
+        Assert.IsNull(host.RunOf(npc), host.TraceOf(npc)?.Item);
+        Assert.IsTrue(session.QueryHolderItems(npc)!.Any(item => item.Entity == Entity(10)), $"{host.TraceOf(npc)?.Item} {host.TraceOf(npc)?.Perform}");
+        Assert.AreEqual(Entity(10), notices.Single(n => n.Kind == AreaAiNoticeKind.PickUp).Item);
+        Assert.AreEqual(SessionObjectCondition.Destroyed, session.QueryObjectCondition(new(1), Entity(9), DamageableObjectKind.Container), "the removal checks the container: one item left, it goes");
+        Assert.AreEqual((Entity(11), new CellCoord(12, 22)), session.QueryMapInventory(new SessionMapId(1))!.Ground.Select(g => (g.Item.Entity, g.Cell)).Single());
+        Assert.AreEqual(0, host.JunkPiles(npc, 10).Count, "the pile is gone");
+    }
+
+    [TestMethod]
+    public void An_open_container_window_stops_the_pile_pickup_and_fails_one_already_under_way_before_anything_moves()
+    {
+        var open = false;
+        var (session, host, npc, _) = Open(null, mapPile: (9, new(12, 22), [PileItem(10)]), lootWindowOpen: () => open);
+        Assert.AreEqual(GameSessionDisposition.Changed, session.SetAiSupportBits(session.Version, npc, DangerFlags.LookForWeapon).Disposition);
+        open = true;
+        Assert.IsFalse(host.SearchItems(npc), "the switch is lowered: the starter refuses");
+        Assert.IsNull(host.RunOf(npc));
+        open = false;
+        Assert.AreEqual(GameSessionDisposition.Changed, session.SetAiSupportBits(session.Version, npc, DangerFlags.LookForWeapon).Disposition);
+        Assert.IsTrue(host.SearchItems(npc));
+        open = true;
+        var notices = Run(host, npc);
+        Assert.IsFalse(session.QueryHolderItems(npc)!.Any(item => item.Entity == Entity(10)), "the goal's end reads the switch (0x42AA70): the item stays in its pile");
+        Assert.AreEqual(0, notices.Count(n => n.Kind == AreaAiNoticeKind.PickUp));
+        Assert.AreEqual(SessionObjectCondition.Whole, session.QueryObjectCondition(new(1), Entity(9), DamageableObjectKind.Container));
+        Assert.AreEqual(Entity(10), session.QueryHolderItems(Entity(9))!.Single().Entity);
+        open = false;
+        Assert.AreEqual(GameSessionDisposition.Changed, session.SetAiSupportBits(session.Version, npc, DangerFlags.LookForWeapon).Disposition);
+        Assert.IsTrue(host.SearchItems(npc), "once the window closes the search starts it again");
     }
 
     [TestMethod]
