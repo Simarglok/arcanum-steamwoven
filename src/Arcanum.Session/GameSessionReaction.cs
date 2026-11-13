@@ -92,6 +92,16 @@ public sealed partial class GameSessionOwner
         return _reactions.Records.TryGetValue(entity, out var record) ? record : null;
     }
 
+    /// <summary>
+    /// ARC-SCRIPT-1773 (ledger CS4, the dialog layer's slot word of the PC): whether the PC is in a dialog now. The original keeps one dialog slot for the PC (single player), set at the dialog start and cleared at its close; the
+    /// span is the one in which an NPC's conversation slot is open (<see cref="SessionReaction.InConversation"/>: the start opens it, every exit closes it), so a slot open on any NPC tells it.
+    /// </summary>
+    public bool QueryDialogOpen()
+    {
+        ThrowIfDisposed();
+        return _reactions.Records.Values.Any(record => record.InConversation);
+    }
+
     /// <summary>Detached copy of the reaction domain.</summary>
     public SessionReactionState QueryReactions() { ThrowIfDisposed(); return _reactions.Capture(); }
 
