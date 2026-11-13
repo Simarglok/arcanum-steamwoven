@@ -620,6 +620,16 @@ public sealed class ExecutorRulesTests
     }
 
     [TestMethod]
+    public void AStartedBackOffWithNoAwayLineEndsInTheSamePassAndAttacksNothing()
+    {
+        var world = Arena(1);
+        world.BackOffStart = true;
+        var perform = AiExecutorRules.Perform(world, Npc, Foe, null, null, null);
+        Assert.AreEqual((AiPerformKind.BackOffEnded, false), (perform.Kind, perform.Started));
+        CollectionAssert.AreEqual(new[] { "back-off start?", "end back-off" }, world.Calls, "no path clears BACKING_OFF; the grenade step and the attack are not reached");
+    }
+
+    [TestMethod]
     public void AFollowerWalksWithinFourAndRunsBeyond()
     {
         foreach (var (distance, reason, running) in new[] { (4, AiExecutorReason.FollowWalk, false), (9, AiExecutorReason.FollowRun, true) })
@@ -688,7 +698,11 @@ public sealed class ExecutorRulesTests
     {
         var world = Arena(1);
         world.BackOffStart = true;
-        Assert.AreEqual(AiPerformKind.BackOffStart, AiExecutorRules.Perform(world, Npc, Foe, null, null, null).Kind);
+        world.Away = new(5, 10);
+        var started = AiExecutorRules.Perform(world, Npc, Foe, null, null, null);
+        Assert.AreEqual((AiPerformKind.BackOffRun, GoalType.RunToTile, new CellCoord(5, 10), true), (started.Kind, started.Run!.Bottom.Goal, started.Run.Bottom.Tile, started.Started),
+            "the back-off starts and runs in the same perform");
+        CollectionAssert.AreEqual(new[] { "back-off start?" }, world.Calls, "no grenade step and no attack after it");
         world = Arena(1);
         world.Grenades = true;
         var grenade = AiExecutorRules.Perform(world, Npc, Foe, null, null, null);

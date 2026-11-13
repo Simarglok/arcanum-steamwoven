@@ -73,6 +73,37 @@ public static class OriginalPathRequest
         return new(Math.Min(search.Length, ResultCap), partial, rotations, search.Length, search.End, search.WindowEdge, search.Expansions);
     }
 
+    /// <summary>The order the "away" path tries the eight directions in, as rotation offsets from the rotation toward the target (0x41F6C0:
+    /// straight away, 45 degrees either side, 90, 135, last straight toward it).</summary>
+    public static IReadOnlyList<int> AwayOffsets { get; } = Array.AsReadOnly(new[] { 4, 5, 3, 6, 2, 7, 1, 0 });
+
+    /// <summary>
+    /// The "away" path of the request with flag 0x800 (0x41F6C0, ARC-AI-1512; the back-off 0x4AC7B0 asks it): when the tile distance
+    /// <c>d</c> from <paramref name="from"/> to <paramref name="target"/> is below <paramref name="range"/> (<c>r</c>), each of the eight
+    /// directions of <see cref="AwayOffsets"/> from the rotation toward the target gives a destination <c>r − d</c> tiles out
+    /// (0x4B90D0, a step off the map stops it), and the direct attempt (0x41F840) is asked over it, no gate and no search; the first line
+    /// the attempt completes gives the answer. With no clear line the original keeps the direction with the most completed steps and
+    /// asks the same attempt over it again, which fails again (ledger MR15), so the answer is none. <paramref name="range"/> not above the
+    /// distance gives none.
+    /// </summary>
+    [OriginalFunction(0x41F6C0, OriginalFunctionScope.Partial)]
+    public static CellCoord? Away(IOriginalPathMap map, CellCoord from, CellCoord target, int range)
+    {
+        ArgumentNullException.ThrowIfNull(map);
+        var distance = Math.Max(Math.Abs((long)target.X - from.X), Math.Abs((long)target.Y - from.Y));
+        if (range <= distance || distance > int.MaxValue - 1) return null;
+        var toward = Rotation(from, target);
+        // A line longer than the direct attempt's limit fails whole; walking one tile past it settles that, the same end as walking all of it.
+        var tiles = (int)Math.Min(range - distance, DirectLimit + 1);
+        var rotations = new int[BufferRotations];
+        foreach (var offset in AwayOffsets)
+        {
+            var end = Combat.ThrowRules.Scatter(from, (offset + toward) & 7, tiles, map.Step);
+            if (Direct(map, from, end, rotations, false, out _) > 0) return end;
+        }
+        return null;
+    }
+
     // 0x41F840: toward the target one rotation at a time, each step tested; a failure keeps the completed steps.
     [OriginalFunction(0x41F840, OriginalFunctionScope.Partial)]
     private static int Direct(IOriginalPathMap map, CellCoord from, CellCoord to, int[] rotations, bool intoGoal, out int partial)

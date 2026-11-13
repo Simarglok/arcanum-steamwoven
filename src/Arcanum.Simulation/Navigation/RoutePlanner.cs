@@ -109,6 +109,18 @@ public static class RoutePlanner
         return new(from, target, RouteOutcome.Found, RouteMethod.StraightRetry, "ROUTE_STRAIGHT_RETRY", steps.ToArray(), limits.SegmentSteps, 0, 0, 0, 0, 0);
     }
 
+    /// <summary>
+    /// The back-off's "away" destination (ARC-AI-1512, 0x41F6C0 behind the request flag 0x800 of 0x4AC7B0): <see cref="OriginalPathRequest.Away"/>
+    /// over the caller's step evidence, in the caller's cells; none when <paramref name="from"/> lies outside the area or no line is clear.
+    /// </summary>
+    public static CellCoord? AwayTile(IRouteStepSource source, CellCoord from, CellCoord target, int range)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        if (!source.Contains(from)) return null;
+        try { return OriginalPathRequest.Away(new SourceMap(source, target), from, target, range); }
+        catch (OverflowException) { return null; }
+    }
+
     /// <summary>The straight-line rule (0x4B8D50): diagonal unless the minor remaining delta is under half the major one.</summary>
     public static NeighborDirection Toward(CellCoord from, CellCoord target)
     {
