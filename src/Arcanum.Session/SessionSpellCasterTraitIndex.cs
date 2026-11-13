@@ -26,8 +26,10 @@ namespace Arcanum.Session;
 /// (0x436FA0) the host's. <b>Poison</b> (stat 24, ARC-MAGIC-1508) is the life state's level (<see cref="PoisonStat"/>). <b>Gender and race</b> (ARC-MAGIC-1509, cases 2 and 3 of the setter) remove the first entry of the gender (9) or race (0) cause from the NPC's effect list before the store (0x4EA2E0) and add the innate effect after it
 /// (0x4E9F70: race 0x40 + race with the race cause, gender 0 effect 0x14A with the gender cause), from the rules the host attached (<see cref="GameSessionOwner.AttachInnateEffects"/>; without the rule of the effect to add nothing is written);
 /// the race a store reaches (11, the table's last, a race the character rules do not have) is not ready.
-/// ARC-MAGIC-1510: an NPC whose stats the follower's advancement record holds reads and writes its sheet (<see cref="GameSessionOwner.WriteNpcAdvancementStat"/>; its gender and race, which the sheet's race also holds, are not ready), and the hero is written in its state
-/// (<c>TraitIndexHero</c>; the hero's resistance, magick and tech points, stat 25, poison, gender, race and a level-up stay not ready, #1628).</item>
+/// ARC-MAGIC-1510: an NPC whose stats the follower's advancement record holds reads and writes its sheet (<see cref="GameSessionOwner.WriteNpcAdvancementStat"/>), and the hero is written in its state (<c>TraitIndexHero</c>).
+/// ARC-MAGIC-1628: a record follower's gender is the stored field and the innate effect as for any NPC (the sheet holds none), its race the sheet's (not ready when the new race's ranges leave the sheet invalid); the hero's poison is its life state's level,
+/// its magick and tech points are stored when no worn item has a wield script (<see cref="GameSessionOwner.HeroRewieldReady"/>), and its experience runs the level recalculation (0x4A69C0) after the store, queueing the award for the host as an
+/// award does (<see cref="TakeExperienceAwards"/>); the level has no case and is stored alone. Not ready for the hero: a resistance and stat 25 (it stores none), gender and race.</item>
 /// </list>
 /// </summary>
 public sealed partial class SessionSpellCaster
@@ -64,7 +66,6 @@ public sealed partial class SessionSpellCaster
         if (data.Index == 24) return PoisonStat(run, obj.Id, data, critter.Combat.Target);
         // ARC-MAGIC-1510: a follower with an advancement record holds its primary stats, level, unspent points and magick and tech points in the record's sheet, which then gives the current value and the guards' skills and degrees, and takes the write. Its gender and race are the sheet's race too: not ready.
         var advanced = _owner.QueryNpcAdvancement(obj.Id);
-        if (advanced is not null && data.Index is 26 or 27) return null;
         var recorded = advanced is not null && GameSessionOwner.SheetHoldsStat(data.Index) ? advanced.Sheet : null;
         if (recorded is not null) stats = SheetOver(stats, recorded);
         // Magick and tech points run the rewield (0x465530) after the store: with a worn item that carries a wield script the session cannot run it for an NPC, so nothing is written.
@@ -110,6 +111,8 @@ public sealed partial class SessionSpellCaster
         if (swaps)
         {
             if (data.Index == 27 && next > (int)CharacterRace.Orc) return null;
+            // ARC-MAGIC-1628: a record follower's race is its sheet's; a sheet whose primary stats do not fit the new race's ranges is not valid (the write would be refused after the old effect had left): not ready.
+            if (data.Index == 27 && recorded is not null && !AutoLevelRules.IsValid(recorded with { Race = (CharacterRace)next })) return null;
             if (data.Index == 27 || next == 0)
             {
                 innate = _owner.InnateRule(data.Index == 27 ? GameSessionOwner.RaceEffectBase + next : GameSessionOwner.FemaleEffectNumber);
@@ -134,7 +137,7 @@ public sealed partial class SessionSpellCaster
     private static IReadOnlyList<int> SheetOver(IReadOnlyList<int> stats, AdvancementSheet sheet)
     {
         var values = stats.ToArray();
-        foreach (var index in new[] { 0, 1, 2, 3, 4, 5, 6, 7, 17, 21, 22, 23 }) values[index] = GameSessionOwner.SheetStat(sheet, index)!.Value;
+        foreach (var index in new[] { 0, 1, 2, 3, 4, 5, 6, 7, 17, 21, 22, 23, 27 }) values[index] = GameSessionOwner.SheetStat(sheet, index)!.Value;
         return Array.AsReadOnly(values);
     }
 
@@ -157,18 +160,23 @@ public sealed partial class SessionSpellCaster
 
     /// <summary>The TraitIdx component's write for the hero.</summary>
     /// <remarks>
-    /// ARC-MAGIC-1510 (0x452D80 and the setter 0x4B0980 for the PC): the hero's stored base stats are the hero state's (the character owner's primary stats, level, experience, alignment, fate points, unspent points). The component adds its value
+    /// ARC-MAGIC-1510 (0x452D80 and the setter 0x4B0980 for the PC): the hero's stored base stats are the hero state's (the character owner's primary stats, level, experience, alignment, fate points, unspent points, magick and tech points). The component adds its value
     /// to the stored one, clamps it, asks the same guards for a lowering (with the hero's skills, college ranks and tech degrees), stores it and leaves the callbacks to the interface. Strength moves the encumbrance level as every revision compares it
-    /// (0x45F820); alignment arms the followers' re-check (OL17). A derived stat (8 to 16) is read and not written. <b>Not ready</b>: a resistance (the hero stores none), magick and tech points (the rewield 0x465530 runs the worn items' scripts), stat 25, poison, gender
-    /// and race, and a level or experience that reaches a level (the recalculation 0x4A69C0 runs the experience award's messages, scheme and followers' step), or without the experience table to tell.
+    /// (0x45F820); alignment arms the followers' re-check (OL17). A derived stat (8 to 16) is read and not written. ARC-MAGIC-1628: poison is the life state's level (<see cref="PoisonStat"/>); magick and tech points run the rewield
+    /// 0x465530 (<see cref="GameSessionOwner.HeroRewieldReady"/>); experience is stored and then recalculated (0x4A69C0, <see cref="GameSessionOwner.WriteHeroExperienceStat"/>) and its award waits in <see cref="TakeExperienceAwards"/> for the
+    /// host's level-up messages and followers' step, as an award's does; the level has no case in the setter and is stored alone. <b>Not ready</b>: a resistance and stat 25 (the hero stores none: a saved field is needed), gender and race (the
+    /// race and gender effects of the hero's character owner), a worn wield script for the points, and experience without the experience table.
     /// </remarks>
     private SpellComponentOutcome? TraitIndexHero(SpellRun run, TraitIndexData data)
     {
         if (_owner.QueryHero() is not { } hero || data.Field != StatIndexField || data.Index is < 0 or >= SessionCritterIndexedWrites.StatCount) return null;
         if (data.Index is >= 8 and <= 16) return SpellComponentOutcome.None;
+        // ARC-MAGIC-1628: poison is the life state's level, the hero's as the NPC's (the setter's case 0x18).
+        if (data.Index == 24) return PoisonStat(run, Hero, data, SessionLifeTarget.Hero);
         if (_owner.QueryHeroStoredStat(data.Index) is not { } current || CharacterStatRules.StoredRange(hero.Race, data.Index) is not { } range) return null;
+        // Magick and tech points run the rewield (0x465530) after the store: with a worn item that carries a wield script the session cannot run it, so nothing is written.
+        if (data.Index is 22 or 23 && !_owner.HeroRewieldReady()) return null;
         var next = Math.Clamp(unchecked(current + data.Value), range.Minimum, range.Maximum);
-        if (data.Index is 17 or 18 && _owner.HeroLevelUpPending(data.Index == 17 ? next : hero.Level, data.Index == 18 ? next : hero.Experience) is not false) return null;
         if (next < current && data.Index <= 7)
         {
             var stat = (CharacterStat)data.Index;
@@ -179,6 +187,18 @@ public sealed partial class SessionSpellCaster
                 _log.Add(new(SpellCastEventKind.TraitIndexRefused, run.Id, refused, Hero, data.Index));
                 return SpellComponentOutcome.None;
             }
+        }
+        // ARC-MAGIC-1628: experience runs the level recalculation after its store (0x4A69C0); the level itself has no case in the setter and is stored alone. Without the experience table the recalculation cannot run.
+        if (data.Index == 18)
+        {
+            if (_owner.Experience is null) return null;
+            var written = _owner.WriteHeroExperienceStat(_owner.Version, next);
+            if (written.Award is { } award)
+            {
+                if (_awards.Count >= MaxPendingEntries) _awards.RemoveAt(0);
+                _awards.Add(award);
+            }
+            return Report(run, Hero, data, written.Result);
         }
         return Report(run, Hero, data, _owner.WriteHeroStat(_owner.Version, data.Index, next));
     }
