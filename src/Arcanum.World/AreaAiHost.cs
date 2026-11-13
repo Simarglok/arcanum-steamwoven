@@ -67,6 +67,9 @@ public sealed record AreaAiScene
     /// <summary>The companions standing here: their session entity, the T0 record they were made from (a visitor's is a row of its home map) and
     /// the world cells they hold now (their live overlay). ARC-DEV-075: the entity is given, never read back from the key on the shown map.</summary>
     public Func<IReadOnlyList<(string Entity, AreaObjectKey Key, CellCoord Cell)>>? Companions { get; init; }
+    /// <summary>ARC-AI-1515: the follow check's facts of a companion the hero hit (<see cref="AreaCompanionLoyalty.Facts"/>: its alignment, level and thresholds against the
+    /// PC side, its effective reaction now); null (or a null answer): the check cannot run and the hit changes the reaction only.</summary>
+    public Func<string, PartyConsentFacts?>? FollowFacts { get; init; }
     /// <summary>The T0 records the session destroyed or switched off.</summary>
     public Func<IReadOnlySet<AreaObjectKey>>? Removed { get; init; }
     /// <summary>ARC-WORLD-1436: the NPCs the map data stores off that the session switched on, with the world cell of their map data (<see cref="AreaObjectTargets.SwitchedOn"/>): the T0
@@ -134,6 +137,8 @@ public sealed record AreaAiScene
     public Action<string, AreaObjectRecord, AreaObjectAttackTarget?, SessionObjectAttackResult>? ObjectStruck { get; init; }
     /// <summary>ARC-DEV-261 (MIG13 S14m, GT198–GT199): a victim's taking-damage script (point 0x17) asked by an NPC's damage: the victim and the damage's attacker (null: none) in, whether the damage goes on out (false: the script skipped the default, which cancels the whole damage step). The hero has no script data and is not asked. Null: the damage goes on.</summary>
     public Func<string, string?, bool>? TakingDamage { get; init; }
+    /// <summary>ARC-SCRIPT-1483 (CP1–CP3): the combat-point scripts (hit 7, critter hits 26, critical hit 34) of an NPC's hit, asked before its damage step: the attacker, the victim (the hero is <c>"pc"</c>) and the session's hit event in. Null: none run.</summary>
+    public Action<string, string, SessionHitScriptEvent>? HitScripts { get; init; }
     /// <summary>ARC-WORLD-115 (NPC AI slice I9, host part): the companions of the shown map the host runs too, and their moves; null:
     /// the companions run no AI (their follow goal moves them). ARC-WORLD-119: the free ones too, as any leaderless NPC.</summary>
     public IAreaAiFollowers? Followers { get; init; }
@@ -957,7 +962,48 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         if (plan.TurnsVictim && Tile(attacker) is { } there && TryNpc(victim, out var npc)) FaceNpc(npc, there, keepStep: true);
         if (plan.Reaction == AttackReactionChange.Deliberate && attacker == Pc && ReactionFacts(victim) is { } facts && Row(victim) is { } row)
             _session.ReactToPcHit(_session.Version, victim, facts.Npc, facts.Pc, new(row.FollowerHitReaction, row.HostileReaction), deliberate: true);
+        if (plan.Reaction is AttackReactionChange.FollowerDeliberate or AttackReactionChange.FollowerAccidental && attacker == Pc)
+            HitFollower(victim, plan.Reaction == AttackReactionChange.FollowerDeliberate);
         if (plan.ReactsToAttack) React(victim, attacker);
+    }
+
+    /// <summary>
+    /// ARC-AI-1515 (attack event 0x4A9650, the follower branch of a PC attacker, VBG4): the hero hit its direct follower. A deliberate hit changes the
+    /// reaction by AI parameter 9 (<see cref="GameSessionOwner.ReactToPcHit"/>, ARC-WORLD-021's profile: added in the Original setting, taken in Steamwoven; an accidental one
+    /// changes nothing); then the follow check runs with the follower limit ignored (<see cref="GameSessionOwner.CheckFollowerAfterHit"/>, 0x4AD950): a refusal makes the
+    /// follower leave and sets NPC flag 0x20 (JILTED) and the refusal line range of its reason is named (NOT READY: no line text is loaded, so none is floated; the range is traced,
+    /// as the loyalty step's), and a follower that stays (the check passed, or the leave was refused) says the accidental-attack line (lines 2300-2399) one time in three
+    /// (0x413DF0; likewise only named) when it is active (0x4AD800 is not read yet: the active test 0x45D790 stands for it). The leave is seen by
+    /// <see cref="ObserveLeaves"/> at the next look. Without the check's facts (the scene gives none) only the reaction changes.
+    /// </summary>
+    private void HitFollower(string victim, bool deliberate)
+    {
+        var changed = false;
+        if (deliberate && ReactionFacts(victim) is { } facts && Row(victim) is { } row)
+        {
+            var hit = _session.ReactToPcHit(_session.Version, victim, facts.Npc, facts.Pc, new(row.FollowerHitReaction, row.HostileReaction), deliberate: true);
+            changed = hit.Adjustment is { Delta: not 0 };
+        }
+        if (_scene.FollowFacts?.Invoke(victim) is not { } consent)
+        {
+            Trace(victim).FollowerHit = $"{(deliberate ? "deliberate" : "accidental")} reaction-changed={changed} follow check: no facts";
+            return;
+        }
+        var result = _session.CheckFollowerAfterHit(_session.Version, victim, consent);
+        string outcome;
+        if (result.Left && result.RefusalLines is { } lines)
+            outcome = $"left jilted, {(Active(victim) ? $"refusal lines {lines.First}-{lines.Last}" : "inactive: no refusal line")} ({result.Consent})";
+        else if (result.Disposition == GameSessionDisposition.Rejected) outcome = $"check refused ({result.Failure})";
+        else
+        {
+            // The original draws on every stay (0x4CEF00) and tests the can-speak only after a hit of 1 (its line pick's own draw is not made: no line text is loaded).
+            var rolled = result.Consent is not null && _session.AiRolls.Roll(AiRollPurpose.FollowerHitLine, 1, 3) == 1;
+            var speaks = rolled && Active(victim);
+            outcome = $"stays ({(result.Consent is { } reason ? reason.ToString() : "no check")}{(result.LeaveRefused ? ", leave refused" : "")})"
+                + (speaks ? ", accidental-attack lines 2300-2399" : "");
+        }
+        Trace(victim).FollowerHit = $"{(deliberate ? "deliberate" : "accidental")} reaction-changed={changed} follow check: {outcome}";
+        ObserveLeaves();
     }
 
     // The attack event's clear of NPC flag 0x800 on the victim (0x406D40 of field 0x118): the session's NPC flag layer takes it off the data's value; a victim without the bit writes nothing.
@@ -1100,6 +1146,9 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
             {
                 case WitnessResponse.ReactToAttacker: React(witness, attacker); break;
                 case WitnessResponse.ReactToVictim: React(witness, victim); break;
+                // ARC-AI-1514 (0x4A9F10, VBG3): a neutral bystander that perceives the victim asks the setter for FLEE from the attacker
+                // (the setter applies its own rules: no-flee, leader charisma, the NPC-fighting switch); a refusal leaves it as it was.
+                case WitnessResponse.FleeFromAttacker: SetDanger(witness, DangerState.Flee, attacker); break;
             }
         }
     }
@@ -1694,12 +1743,68 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     /// </summary>
     public bool TrapSpottedOn(string id, CellCoord next)
     {
-        if (id == Pc || _scene.Traps?.Invoke() is not { } traps || _scene.NpcSheet?.Invoke(id) is not { } sheet || RawBuild(id)?.Target is not { } life) return false;
-        var walk = traps.WalkCheckNpc(new(life, sheet.Loaded, sheet.Modifiers, Leader(id) == Pc), next);
+        if (id == Pc || _scene.Traps?.Invoke() is not { } traps || TrapWalker(id)?.Spot is not { } spot) return false;
+        var walk = traps.WalkCheckNpc(spot, next);
         if (walk.Spotted is null) return false;
         Trace(id).Step = $"spotted a trap on {next.X},{next.Y}: the walk stops";
         return true;
     }
+
+    /// <summary>ARC-WORLD-1469: the NPC or companion as a trap's triggerer: its entity, whether the PC leads it and, with a sheet and a life, its spot roll's inputs. Null for the hero.</summary>
+    private AreaTrapWalker? TrapWalker(string id)
+    {
+        if (id == Pc) return null;
+        var led = Leader(id) == Pc;
+        SessionNpcSpot? spot = _scene.NpcSheet?.Invoke(id) is { } sheet && RawBuild(id)?.Target is { } life ? new(life, sheet.Loaded, sheet.Modifiers, led) : null;
+        return new(id, led, spot);
+    }
+
+    /// <summary>
+    /// ARC-WORLD-1469 (ledger TT9, TT8, 0x4305D0): the walker's step arrives on <paramref name="cell"/> (the step the host began, or a companion's own follow step the viewer reports): the first trap
+    /// object there meets it (<see cref="AreaTraps.StepNpc"/>, the walker as the triggerer: a known trap fires, an unknown one gets its own spot attempt first). True when the trap was spotted or
+    /// went off, which ends the walk on that tile. False for the hero, when the map has no trap host or cast host, and for a tile with no trap object.
+    /// </summary>
+    public bool TrapMetOn(string id, CellCoord cell)
+    {
+        if (TrapWalker(id) is not { } walker || _scene.Traps?.Invoke() is not { } traps || traps.StepNpc(walker, cell) is not { } met) return false;
+        Trace(id).Step = $"met a trap on {cell.X},{cell.Y}: {met.Describe()}";
+        _trapMeetings.Add(new(id, met));
+        return met.EndsWalk;
+    }
+
+    /// <summary>
+    /// ARC-WORLD-1469 (ledger TT7, 0x441980 with point 1): the walker uses a trapped object (a door its opener goal pushes). The meeting of its trap with the walker as the triggerer
+    /// (<see cref="AreaTraps.UseNpc"/>); true when the use stops (the trap was spotted now, a native run went off, or the session refused the meeting), which ends the opener's run.
+    /// </summary>
+    public bool TrapMetByUse(string id, AreaObjectRecord row)
+    {
+        if (TrapWalker(id) is not { } walker || _scene.Traps?.Invoke() is not { } traps || traps.UseNpc(row, walker) is not { } met) return false;
+        Trace(id).Step = $"used a trapped object: {met.Describe()}";
+        _trapMeetings.Add(new(id, met));
+        return met.Cancels;
+    }
+
+    private readonly List<AreaTrapNotice> _trapMeetings = [];
+
+    /// <summary>ARC-WORLD-1469: the trap meetings the walkers had since the last call (the viewer logs them and shows the status line), oldest first; the list is emptied.</summary>
+    public IReadOnlyList<AreaTrapNotice> TakeTrapMeetings()
+    {
+        var taken = _trapMeetings.ToArray();
+        _trapMeetings.Clear();
+        return taken;
+    }
+
+    /// <summary><see cref="IAiGoalWorld.StepMeetsTrap"/>: the step just begun onto <paramref name="next"/> meets its trap object (<see cref="TrapMetOn"/>); nothing when that step did not begin.</summary>
+    public bool StepMeetsTrap(string id, CellCoord next)
+    {
+        // Only a step that really began meets its trap: a companion's walk that refused the step, or a mover the host does not run, stands on no new tile.
+        var began = _startedStep == id;
+        _startedStep = null;
+        return began && TrapMetOn(id, next);
+    }
+
+    // The walker whose step <see cref="BeginStep"/> just began (null: none began).
+    private string? _startedStep;
 
     // ---- ARC-DEV-141 (MIG13 S8c): the pushed NPC's bodies for the knockback host (AreaAiKnockbackBodies) ----
 
@@ -1802,14 +1907,15 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
 
     public int BeginStep(string id, CellCoord next, bool running)
     {
+        _startedStep = null;
         if (!TryNpc(id, out var npc) || Tile(id) is not { } from) return 1;
         if (InRound && RoundActor != id) OffTurnSteps++;
         var gait = running ? MovementGait.Run : MovementGait.Walk;
         var direction = AreaCombatHost.Facing(from, next) ?? NeighborDirection.XPlus;
         var duration = _scene.Timing?.For(gait, direction) ?? DiagnosticGridSession.LiveDuration;
         var ms = (int)Int128.Clamp(duration.Value.Numerator * 1000 / duration.Value.Denominator, 1, 10_000);
-        if (_followers.ContainsKey(id)) { if (!_scene.Followers!.Step(id, next, running)) Trace(id).Step = $"walk refused the step to {next.X},{next.Y}"; }
-        else { Movers.Step(id, npc.Row.Key, npc.Origin, next, _nowMs, ms, running); RecordPlace(id); NoteEntered(id, next); }
+        if (_followers.ContainsKey(id)) { if (_scene.Followers!.Step(id, next, running)) _startedStep = id; else Trace(id).Step = $"walk refused the step to {next.X},{next.Y}"; }
+        else { Movers.Step(id, npc.Row.Key, npc.Origin, next, _nowMs, ms, running); RecordPlace(id); NoteEntered(id, next); _startedStep = id; }
         _notices.Add(new(AreaAiNoticeKind.Step, id, null));
         return ms;
     }
@@ -1972,6 +2078,10 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     private Func<DamageRecipient, bool>? TakingDamageOf(string attacker, string? target) =>
         _scene.TakingDamage is not { } asks ? null : recipient => recipient == DamageRecipient.Target ? target is null || target == Pc || asks(target, attacker) : asks(attacker, attacker);
 
+    // ARC-SCRIPT-1483: the combat-point scripts of an NPC's hit on <paramref name="victim"/> (null: no victim named, none run).
+    private Action<SessionHitScriptEvent>? HitScriptsOf(string attacker, string? victim) =>
+        _scene.HitScripts is not { } run || victim is null ? null : hit => run(attacker, victim, hit);
+
     /// <summary>The hit step: the session's NPC attack (<see cref="GameSessionOwner.AttackByNpc"/>), then the attack event. ARC-DEV-282: a bow or firearms attack whose weapon has a projectile
     /// art is decided here and its arrow flies (<see cref="AreaAiScene.LaunchShot"/>); its damage is <see cref="LandShot"/>'s, at the strike.</summary>
     public void Hit(string id, string target)
@@ -2076,7 +2186,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         var result = _session.AttackObjectByNpc(_session.Version, new SessionNpcObjectAttack(attacker)
         {
             Target = struck, Wall = struck is null, Distance = AiExecutorRules.Distance(from, cell), AttackerWorn = _scene.Combat.WornItems(_session, id), AttackerCell = from, DropMap = _scene.DropMap?.Invoke(),
-            Flight = _scene.LaunchShotAtObject is not null, TakingDamage = TakingDamageOfObject(id, struck),
+            Flight = _scene.LaunchShotAtObject is not null, TakingDamage = TakingDamageOfObject(id, struck), HitScripts = HitScriptsOf(id, struck?.Entity),
         });
         Trace(id).Hit = $"shot on {(struck?.Entity ?? "a wall")} instead of {target}: {result.Disposition} {result.Failure} {result.Resolution?.Outcome} {result.Object?.Damage}";
         NeedsAmmunition(id, result.Resolution);
@@ -2108,7 +2218,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         var result = _session.LandNpcShotOnObject(_session.Version, shot, new SessionNpcObjectAttack(attacker)
         {
             Target = target, Wall = wall, AttackerWorn = _scene.Combat.WornItems(_session, shooter), AttackerCell = Tile(shooter), DropMap = _scene.DropMap?.Invoke(),
-            TakingDamage = TakingDamageOfObject(shooter, target),
+            TakingDamage = TakingDamageOfObject(shooter, target), HitScripts = HitScriptsOf(shooter, target?.Entity),
         });
         _session.EndShot(shot);
         Trace(shooter).Hit = $"shot on {target?.Entity ?? "a wall"} {result.Disposition} {result.Failure} {result.Resolution?.Outcome} {result.Object?.Damage}";
@@ -2131,6 +2241,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
             TargetCell = target == Pc ? null : Tile(target),
             DropMap = _scene.DropMap?.Invoke(),
             TakingDamage = TakingDamageOf(id, target),
+            HitScripts = HitScriptsOf(id, target),
             // ARC-MAGIC-1188: the damage step's item events (the NPC's worn items fire as any attacker's, 0x4B4390) through the cast host's trigger host.
             ItemTriggers = _scene.Spells?.Invoke()?.ItemTriggers,
             // ARC-DEV-273 (RA4): a bow or firearms attack reads the line to the target (a melee one ignores it).
@@ -2556,6 +2667,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
             StruckWorn = struck is not { Who: { } target } ? null : hero ? _scene.HeroWorn?.Invoke() : _scene.Combat.WornItems(_session, target),
             DropMap = _scene.DropMap?.Invoke(),
             TakingDamage = TakingDamageOf(id, struck?.Who),
+            HitScripts = HitScriptsOf(id, struck?.Who),
             ItemTriggers = _scene.Spells?.Invoke()?.ItemTriggers,
         };
         var result = _session.ThrowByNpc(_session.Version, request);
@@ -3504,6 +3616,8 @@ public sealed class AreaAiTrace
     public string? Event { get; set; }
     /// <summary>ARC-DEV-292: its last immediate pass after a hit (<see cref="AreaAiHost.Struck"/>): the session's failure, the gate's stop and whether perform ran; null when none ran.</summary>
     public string? Struck { get; set; }
+    /// <summary>ARC-AI-1515: what the hero's hit on its follower did (the attack event's follower branch): the reaction change and the follow check's outcome with the line range named; null when none.</summary>
+    public string? FollowerHit { get; set; }
     public string? Reaction { get; set; }
     /// <summary>ARC-WORLD-099: the end-combat scripts (point 16) its subturn ends asked.</summary>
     public int EndCombatScripts { get; set; }

@@ -379,6 +379,12 @@ public interface IAiGoalWorld : IItemUseWorld
     /// <summary>Starts the step to <paramref name="next"/> (doors, windows and the gait are the walker's): the game milliseconds it
     /// takes, at least 1. The object stands on <paramref name="next"/> when the next step of the run comes.</summary>
     int BeginStep(string id, CellCoord next, bool running);
+    /// <summary>
+    /// ARC-WORLD-1469 (ledger TT9, 0x4305D0 → 0x441980): the walker's step onto <paramref name="next"/> meets the first trap object there with the walker as the triggerer; true when the trap
+    /// was spotted or went off, which ends the walk on that tile (the path index becomes the path's length, as the original's step function does). Asked right after <see cref="BeginStep"/> for the
+    /// same step; a world answers false when that step did not begin. An NPC stands on the tile at once, a companion the host holds walks there over the next frames. The default meets nothing, as a world with no traps.
+    /// </summary>
+    bool StepMeetsTrap(string id, CellCoord next) => false;
     /// <summary>Gets the object up (goal 63): the game milliseconds it takes.</summary>
     int GetUp(string id);
     /// <summary>Unconceals the object (goal 54): the game milliseconds it takes.</summary>

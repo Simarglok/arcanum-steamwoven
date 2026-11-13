@@ -54,6 +54,26 @@ public sealed class AreaDoorHostTests
 
     private static Fixture Open(int flagsA = 0, int flagsB = 0) => new(flagsA, flagsB);
 
+    // ARC-WORLD-1469 (TT7, 0x428A10): the use node of goal 12 for an NPC or a companion opener meets the door's trap with the opener as the triggerer; a trap that stops the use ends the opener's run.
+    [TestMethod]
+    public void TheUseNodeOfAnNpcOpenerAsksTheDoorsTrapAndATrapThatStopsTheUseEndsTheRun()
+    {
+        using var f = Open();
+        var asked = new List<(string Opener, string Door)>();
+        var stops = false;
+        f.Host.OpenerTrap = (opener, portal) => { asked.Add((opener, portal.Entity)); return stops; };
+        Assert.IsTrue(f.Host.UseDoor("oid:thug", DoorA), "no trap stops the use");
+        stops = true;
+        Assert.IsFalse(f.Host.UseDoor("oid:thug", DoorA), "the trap stops it: the opener's run ends");
+        CollectionAssert.AreEqual(new[] { ("oid:thug", DoorA), ("oid:thug", DoorA) }, asked);
+        Assert.IsTrue(f.Host.UseDoor("oid:thug", "oid:not-a-door"), "a door of another window is not this host's");
+        f.Host.OpenerTrap = null;
+        Assert.IsTrue(f.Host.UseDoor("oid:thug", DoorA), "no trap host: the use goes on as before");
+        Assert.AreEqual(2, asked.Count, "the hero's use is its own port, not the opener trap");
+        Assert.IsTrue(f.Host.UseDoor(AreaHeroRunsHost.Hero, DoorA));
+        Assert.AreEqual(2, asked.Count);
+    }
+
     [TestMethod]
     public void AnOpenedDoorWritesItsFramesOneByOneThenClosesByItselfAfterOneAndAHalfSeconds()
     {
