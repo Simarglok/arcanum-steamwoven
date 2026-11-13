@@ -235,6 +235,7 @@ public sealed class AreaUseScriptsOriginalTests
         // Since ARC-SCRIPT-1481 (set S43: the use host admits script eye candy, magick tech adjustment, the vitals commands and heal poison) the 68 exit tiles of the void maps (scripts 2549-2558, script eye candy then the teleport)
         // run to their teleport (136 teleports and 1,077 refused) and the last refused sector script runs (20 without a teleport, none refused).
         // Since ARC-SCRIPT-1772 (the critter getters, toggle invulnerability and rename of set S56) 44 more tile scripts run without a teleport and 44 fewer are refused (1,665 and 1,033); the teleports, the rejected effects and the sector counts do not move.
+        // Re-measured on 2026-11-14 at f5823e48a (main after ARC-SCRIPT-1772): the later sets S53 to S56 together run 135 more tile scripts than the 1,621 above (1,756 without a teleport, 942 refused); the teleports (136), the rejected effects (178) and the sector counts (20) did not move.
         var tile = Arcanum.Data.Maps.MapTransitionTrigger.TileEntry; var sector = Arcanum.Data.Maps.MapTransitionTrigger.SectorEntry;
         // Since ARC-SCRIPT-1165 (set S34: the story and time commands) the 62 exit tiles of script 2698 on the Tulla battle interiors run to their teleport too.
         static bool IsTullaExit(string t) => t.StartsWith("tulla interior - battle - ", StringComparison.Ordinal) && t.EndsWith(":2698", StringComparison.Ordinal);
@@ -244,7 +245,7 @@ public sealed class AreaUseScriptsOriginalTests
         CollectionAssert.AreEquivalent(Enumerable.Repeat("iron clan hq:2203", 5).Append("void-kerghans castle:3070").ToArray(), teleports.Where(t => !IsTullaExit(t) && !IsVoidExit(t)).ToArray(), string.Join(", ", teleports));
         CollectionAssert.AreEquivalent(new[]
         {
-            ((tile, AreaScriptedUseOutcome.Teleport), 136), ((tile, AreaScriptedUseOutcome.NoTeleport), 1665), ((tile, AreaScriptedUseOutcome.Refused), 1033),
+            ((tile, AreaScriptedUseOutcome.Teleport), 136), ((tile, AreaScriptedUseOutcome.NoTeleport), 1756), ((tile, AreaScriptedUseOutcome.Refused), 942),
             ((tile, AreaScriptedUseOutcome.EffectsRejected), 178), ((sector, AreaScriptedUseOutcome.NoTeleport), 20),
         }, placedOutcomes.Select(p => (p.Key, p.Value)).ToArray(), string.Join(", ", placedOutcomes.Select(p => $"{p.Key}={p.Value}")));
     }
