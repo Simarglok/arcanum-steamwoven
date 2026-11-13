@@ -52,4 +52,22 @@ public sealed class WrittenRealDataTests
         Assert.IsTrue(statuses.All(s => s.Body.Count <= WrittenTexts.MessagesPerDocument), "at most ten messages a document");
         Assert.IsTrue(statuses.Where(s => s.Subtype == WrittenSubtype.Newspaper).All(s => s.Header.Count == 6), "a newspaper's masthead has six entries");
     }
+
+    /// <summary>ARC-UI-1739 (ledger NP2, NP6, NP7): the vendor's newspaper is a written newspaper item that starts at the issue it is given with, the default issue's headlines exist and the first headline reads. Counts and flags only; no game text.</summary>
+    [TestMethod, TestCategory("RealData")]
+    public void The_vendors_newspaper_prototype_and_the_default_issue_headlines_exist()
+    {
+        var root = Environment.GetEnvironmentVariable("DAT_ROOT");
+        if (string.IsNullOrWhiteSpace(root)) Assert.Inconclusive("DAT_ROOT is required for the opt-in newspaper check; this is not a synthetic pass.");
+        using var stack = ContentStack.Open(ContentMountPlan.Discover(root).Plan!).Stack!;
+        var texts = WrittenTexts.Open(stack);
+        var prototypes = ContentPrototypes.Open(stack);
+        const int vendorPrototype = 14064 + 20; // the executable's basic number plus the project's shift
+        var written = CombatFieldReader.ReadPrototype(prototypes.Read, vendorPrototype).Fields?.Written;
+        Assert.IsNotNull(written, "the vendor's newspaper prototype is a written item");
+        Assert.AreEqual((int)WrittenSubtype.Newspaper, written.Subtype);
+        Assert.IsTrue(texts.Headline(5000).Length > 0, "the new game's head issue has a headline");
+        Assert.IsTrue(texts.DefaultIssueChoices() > 0, "the newspaper file offers default issues above 5000");
+        Console.WriteLine($"default issue choices {texts.DefaultIssueChoices()}; vendor prototype start line {written.TextStartLine}");
+    }
 }

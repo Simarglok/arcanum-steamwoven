@@ -128,7 +128,7 @@ public sealed record AreaPortraitContent(IReadOnlyDictionary<int, AreaInterfaceA
         var opened = ContentStack.OpenShared(found.Plan!);
         if (opened.Status != ContentStackStatus.Ready) return Failed(known, wanted, $"not read (content stack {opened.Status})");
         using var stack = opened.Stack!;
-        var art = known?.Art ?? AreaInterfaceArt.Load(stack, AreaFollowerFrameLayout.ArtNumbers);
+        var art = known?.Art ?? AreaInterfaceArt.Load(stack, AreaFollowerFrameLayout.ArtNumbers.Concat(AreaFollowerPanelRules.ArtNumbers));
         PortraitCatalogue? catalogue = known?.Catalogue;
         var catalogueDetail = known is null ? "" : "catalogue kept";
         if (known is null)

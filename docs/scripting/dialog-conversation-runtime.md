@@ -446,7 +446,7 @@ With the optional `IDialogNewspaperPort` (`Newspaper`) and `IDialogOriginPort` (
   the command is `QueueNewspaperCommand(Issue, Front)`. The queue rule is the owner's (session `QueueNewspaper`, 0x4BF140); an issue that is already queued is its no-change outcome, still Applied.
 - **`or`.** The first operand is read as it is (any 32-bit number); a second one is not read, so a number after it is outside the subset. The command is `SetOriginCommand(Npc, PlayerCharacter, Origin)`.
 - **Neither clears the string's result**, so the reply goes on to its target node and the hostile check; a refusing port fails the conversation, a throwing one is indeterminate.
-- **Viewer.** `np` goes to the session's newspaper queue (schema 74, `newspaper` section; nothing shows it yet: the reading window and the daily pop are not built). `or` sets the session object field
+- **Viewer.** `np` goes to the session's newspaper queue (schema 74, `newspaper` section; the daily pop and the vendor's printed issue are [below](#newspaper-vendor-reply-arc-ui-1739)). `or` sets the session object field
   `npc.origin` of the speaker (cleared when it equals the map data's origin), which `AreaConversationHost.Scope` reads next to the faction, and the reputation scope of the talk in progress follows.
 - **Installed data.** `np` appears in 21 fields (17 Player replies, 4 NPC lines), `or` in 4 NPC lines; all parse. No code of the tables is outside the subset any more.
 
@@ -677,6 +677,22 @@ line, no SCR continuation, and the talk does not resume (the original's mode cha
 the step. A rejected command (the AREA port refuses without a living hero) fails the conversation. Outside the subset: a `b:` reply
 whose action holds JO, UW, FL, ET or SU (offered blocked). The AREA viewer's port records the speaker for the
 [barter window](../world/barter-runtime.md).
+
+## Newspaper vendor reply (ARC-UI-1739)
+
+A Player reply with the marker `p:` (exact, as the other generated replies; ledger [NP1–NP8](../research/ledger/scripts.md#newspaper-vendor-and-daily-event-arc-ui-1739)) opens the original's newspaper vendor: after its action the NPC line 4200..4299 and four ways on (buy the shown issue, hear its headline, the back issues, leave) replace the node's NPC line and replies; the PC phrases are 2200..2299, 2000..2099, 2100..2199 and 800..899.
+
+- **Port.** `IDialogNewspaperStandPort` (`DialogPorts.NewspaperStand`, with the greeting texts, the world facts and the gold and purse ports): `Issues()` (the shown issue and the reserved words that are not −1), `Headline(issue)` and `Execute(GiveNewspaperCommand)`. Without the port the marker stays outside the subset.
+- **Headline.** The newspaper file's message with the markup taken off, then a closing full stop (unless it ends in `.`, `?` or `!`) and a space, then the NPC line 4300..4399; yes (PC 1..99) goes to the price, no (100..199) leaves.
+- **Back issues.** One option per reserved word that is not −1, in table order, its headline as the text; none: NPC 4400..4499 and the answer 600..699, else NPC 4500..4599 and the way out 800..899.
+- **Price and payment.** The price screen of the other talks with the base price 2; yes pays (gold to the NPC) and gives the issue, then the NPC class line 15000 and the PC class line 1000.
+- **Viewer.** `AreaConversationHost.NewspaperStandPort` reads the session's queue, the headline through `WrittenTexts.Headline`, and gives a new newspaper (prototype 14064, the executable's basic number; the project's 14084) through the viewer's item maker `GiveHeroItem` (`AreaUseScripts.GiveHeroPrototypeItem` with the inventory's insert check), then writes the issue as the item's written start line (`SetItemWrittenStart`). The player reads it through the reading window's use path ([WR1](../world/reading-window-runtime.md)): right click or use on the item in the pack. A pack with no room leaves the paper on the hero's tile.
+- **Daily event.** Not a dialog matter: see [the event queue](../world/game-event-queue-runtime.md#daily-newspaper-event-arc-ui-1739).
+- **Not built.** The script actions a85 `queue_newspaper` and a86 `float_newspaper_headline`.
+
+```sh
+"$DOTNET" test tests/Arcanum.Scripting.Tests/Arcanum.Scripting.Tests.csproj --no-build --filter "FullyQualifiedName~DialogNewspaperTests"   # ARC-UI-1739
+```
 
 ## Bounds and failure accounting
 

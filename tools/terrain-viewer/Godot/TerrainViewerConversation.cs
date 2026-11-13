@@ -68,6 +68,8 @@ public partial class TerrainViewerApp
             _conversationHost.SpreadOutStart = entity => AreaAiHostNow() is { } spreadAi && spreadAi.StartSpreadOut(entity);
             // ARC-DEV-227: an nk action is a script's kill of the speaker (a death with no killer through the session's life domain) on the shown map.
             _conversationHost.KillNpc = entity => KillByScript(new Arcanum.Scripting.Scr.ScrObjectRef(CurrentAreaMap, entity));
+            // ARC-UI-1739: the newspaper vendor's p: reply gives a new newspaper into the hero's pack through the shown map's use host (the item data of the prototype) and the inventory's insert check.
+            _conversationHost.GiveHeroItem = prototype => ReferenceEquals(_readyArea?.Snapshot, snapshot) && _inventoryHost is { } stock ? UseScriptHost(snapshot)?.GiveHeroPrototypeItem(prototype, stock.InsertCheck) : null;
             // ARC-DEV-193: the reply step's hostile check is asked of the same AI host (alive and kill-on-sight toward the hero).
             _conversationHost.NpcHostile = entity => AreaAiHostNow() is { } hostileAi && hostileAi.HostileToHero(entity);
             // ARC-SCRIPT-1732: the h: reply's healer menu reads the speaker's facts and starts its service and spells on the shown map's AI host; the spell names are the loaded spell data's.

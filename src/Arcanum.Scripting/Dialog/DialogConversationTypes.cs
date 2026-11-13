@@ -105,6 +105,7 @@ public sealed record DialogConversationPorts(
     IDialogWorldMapPort? WorldMap = null,
     IDialogDirectionsPort? Directions = null,
     IDialogQuestReplyPort? QuestReplies = null,
+    IDialogNewspaperStandPort? NewspaperStand = null,
     IDialogHealerPort? Healer = null);
 
 public enum DialogReactionMode
@@ -290,6 +291,27 @@ public sealed record QueueNewspaperCommand(int Issue, bool Front) : DialogComman
 public interface IDialogNewspaperPort
 {
     DialogCommandResult Execute(QueueNewspaperCommand command);
+}
+
+/// <summary>
+/// ARC-UI-1739 (ledger NP1–NP8): the newspaper queue as the vendor's talk reads it: <paramref name="Head"/> is the shown issue (word 4, 0x4BF200), <paramref name="Back"/> the issues behind it in the past, the words 0 to 3 that are not −1 in table order
+/// (0x41A700).
+/// </summary>
+public sealed record DialogNewspaperIssues(int Head, IReadOnlyList<int> Back);
+
+/// <summary>ARC-UI-1739 (ledger NP7): the PC buys newspaper issue <paramref name="Issue"/> and the NPC gives it: a new newspaper item whose written start line is the issue, in the PC's pack (0x41A8C0, 0x4BF210).</summary>
+public sealed record GiveNewspaperCommand(DialogParticipantId Npc, DialogParticipantId PlayerCharacter, int Issue) : DialogCommand;
+
+/// <summary>
+/// Newspaper vendor seam (ARC-UI-1739, ledger NP1–NP8): the reply <c>p:</c> reads the issue queue, the headline of an issue (the interface's message hook 0x56CCA0 over the newspaper file) and gives the printed issue. Without the
+/// port (and the greeting, world, gold and purse ports its price screen needs) the reply stays blocked. <see cref="Issues"/> and <see cref="Headline"/> may throw (a failed read fails the conversation); <see cref="Execute"/> answers Applied
+/// when the item was made (a pack with no room leaves it on the ground, as the original's insert does), Rejected when the owner could not make it.
+/// </summary>
+public interface IDialogNewspaperStandPort
+{
+    DialogNewspaperIssues Issues();
+    string Headline(int issue);
+    DialogCommandResult Execute(GiveNewspaperCommand command);
 }
 
 /// <summary>The <c>or</c> action (ARC-DEV-230, ledger NQ6): the dialog's NPC takes origin <paramref name="Origin"/> (the value as read).</summary>
@@ -786,6 +808,11 @@ public enum DialogOptionTransition
     Directions,
     /// <summary>ARC-SCRIPT-1533: an option of the directions talk (an area, the more option, the price's yes) that stays inside it.</summary>
     DirectionsStep,
+    /// <summary>ARC-UI-1739: a Player <c>p:</c> reply with the newspaper vendor port: the reply's action runs, then the vendor's greeting replaces the NPC line and the replies (state 0x19, ledger NP1); its own transition
+    /// is followed when the player leaves the talk.</summary>
+    Newspaper,
+    /// <summary>ARC-UI-1739: an option of the vendor's talk (the headline, the back issues, an issue, the price's yes) that stays inside it.</summary>
+    NewspaperStep,
     /// <summary>Generated interaction (barter, training, …) this runtime does not perform.</summary>
     Unsupported,
 }
