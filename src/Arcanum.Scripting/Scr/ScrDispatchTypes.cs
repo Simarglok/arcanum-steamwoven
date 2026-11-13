@@ -262,6 +262,15 @@ public interface IScrCritterStateQueries
 
     /// <summary>Prowling (c51, case 51 → 0x45EDE0): a PC or NPC whose critter flags hold the prowling bit 0x1 (the session's concealment of the hero and of a follower); false for any other object type.</summary>
     bool? IsProwling(ScrObjectRef obj);
+
+    /// <summary>
+    /// Obj has bad associates (c11, ARC-SCRIPT-1771, case 11 → 0x45F460, ledger CS12): for a PC the object itself, else its leader (none: false); true when one of the leader's followers is summoned (spell flag 0x4000), has no NPC flag 0x8000 and no animal critter flag
+    /// and has neither object flag 0x102. Null when the host cannot tell for an object it holds or for a follower whose flags it cannot read while no other follower decides it.
+    /// </summary>
+    bool? HasBadAssociates(ScrObjectRef obj);
+
+    /// <summary>Obj is monster of type (c19, ARC-SCRIPT-1771, case 19, ledger CS13): the art id stored in object field 0x18 is a monster art (type 0xC, the top four bits) whose monster number (bits 23..27, 0x503F20) equals the number; false for any other art.</summary>
+    bool? IsMonsterOfType(ScrObjectRef obj, int type);
 }
 
 /// <summary>
@@ -966,7 +975,7 @@ public sealed class ScrRunResult
 }
 
 /// <summary>How a dispatch runs: the rule mode's script switches, the admitted set (default <see cref="ScrAdmissionSet.S5"/>,
-/// at most <see cref="ScrAdmissionSet.S53"/>, admitted for the lines reachable from the event's line), the executed-line
+/// at most <see cref="ScrAdmissionSet.S54"/>, admitted for the lines reachable from the event's line), the executed-line
 /// budget and the call depth.</summary>
 public sealed record ScrRunOptions
 {
@@ -987,7 +996,7 @@ public sealed record ScrRunOptions
         ArgumentNullException.ThrowIfNull(Admission);
         if (MaxExecutedLines is <= 0 or > OriginalLineBudget) throw new ArgumentOutOfRangeException(nameof(MaxExecutedLines), "The line budget is 1..1000.");
         if (MaxCallDepth is < 1 or > 64) throw new ArgumentOutOfRangeException(nameof(MaxCallDepth), "The call depth is 1..64.");
-        if (!Admission.IsSubsetOf(ScrAdmissionSet.S53)) throw new ArgumentException("The interpreter runs only the commands of ScrAdmissionSet.S53.", nameof(Admission));
+        if (!Admission.IsSubsetOf(ScrAdmissionSet.S54)) throw new ArgumentException("The interpreter runs only the commands of ScrAdmissionSet.S54.", nameof(Admission));
     }
 
     // A set with a guard condition needs a host that answers it, checked before any event runs.
@@ -1006,16 +1015,16 @@ public sealed record ScrRunOptions
             throw new ArgumentException("A set with the identified or rewielding condition or the magick-tech adjustment needs a host that implements IScrItemQueries.", nameof(Admission));
         if (host is not IScrCritterQueries && Admission.Conditions.Any(ScrAdmissionSet.CritterQueryConditions.Contains))
             throw new ArgumentException("A set with the animal condition needs a host that implements IScrCritterQueries.", nameof(Admission));
-        if (host is not IScrCritterStateQueries && Admission.Conditions.Any(ScrAdmissionSet.CritterStateConditions.Contains))
-            throw new ArgumentException("A set with a critter-state condition needs a host that implements IScrCritterStateQueries.", nameof(Admission));
+        if (host is not IScrCritterStateQueries && Admission.Conditions.Any(c => ScrAdmissionSet.CritterStateConditions.Contains(c) || ScrAdmissionSet.CritterTailQueryConditions.Contains(c)))
+            throw new ArgumentException("A set with a critter-state condition (or bad associates, monster of type) needs a host that implements IScrCritterStateQueries.", nameof(Admission));
         if (host is not IScrStatAdjustQueries && Admission.Actions.Contains(ScrCatalogue.Action.AdjustStat))
             throw new ArgumentException("A set with adjust stat needs a host that implements IScrStatAdjustQueries.", nameof(Admission));
         if (host is not IScrMagickTechQueries && Admission.Actions.Contains(ScrCatalogue.Action.GetMagickTechAdjustment))
             throw new ArgumentException("A set with get magick-tech adjustment needs a host that implements IScrMagickTechQueries.", nameof(Admission));
         if (host is not IScrVitalQueries && Admission.Actions.Any(ScrAdmissionSet.VitalQueryActions.Contains))
             throw new ArgumentException("A set with get hit points or get fatigue points needs a host that implements IScrVitalQueries.", nameof(Admission));
-        if (host is not IScrWorldQueries && (Admission.Actions.Any(ScrAdmissionSet.WorldQueryActions.Contains) || Admission.FocusKinds.Any(ScrAdmissionSet.WorldQueryFocusKinds.Contains)))
-            throw new ArgumentException("A set with random, loop for, distance between, get location, float line or the vicinity focus kinds needs a host that implements IScrWorldQueries.", nameof(Admission));
+        if (host is not IScrWorldQueries && (Admission.Actions.Any(ScrAdmissionSet.WorldQueryActions.Contains) || Admission.FocusKinds.Any(ScrAdmissionSet.WorldQueryFocusKinds.Contains) || Admission.Conditions.Contains(ScrCatalogue.Condition.WithinRange)))
+            throw new ArgumentException("A set with random, loop for, distance between, get location, float line, obj is within range or the vicinity focus kinds needs a host that implements IScrWorldQueries.", nameof(Admission));
         if (host is not IScrObjectStateQueries && Admission.Conditions.Any(ScrAdmissionSet.ObjectStateQueryConditions.Contains))
             throw new ArgumentException("A set with the dead or switched-off condition needs a host that implements IScrObjectStateQueries.", nameof(Admission));
         if (host is not IScrSpellQueries && Admission.Conditions.Any(ScrAdmissionSet.SpellQueryConditions.Contains))

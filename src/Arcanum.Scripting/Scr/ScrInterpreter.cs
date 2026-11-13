@@ -236,6 +236,11 @@ internal sealed class ScrInterpreter
         ScrCatalogue.Condition.IsInvulnerable => ListHolds(c, obj => CritterStates.IsInvulnerable(obj) ?? throw new MissingObjectStop(line)),
         ScrCatalogue.Condition.IsUndead => ListHolds(c, obj => CritterStates.IsUndead(obj) ?? throw new MissingObjectStop(line)),
         ScrCatalogue.Condition.IsProwling => ListHolds(c, obj => CritterStates.IsProwling(obj) ?? throw new MissingObjectStop(line)),
+        // CS12–CS14 (ARC-SCRIPT-1771; 0x4451B0 cases 11, 19 and 34): bad associates and monster of type follow the list rule (the type is read once, 0x44BA70); within range takes the first object of operand 0 and three values, and is true when the tile distance
+        // of its location and the point (x operand 2, y operand 3) is at most the range of operand 1.
+        ScrCatalogue.Condition.BadAssociates => ListHolds(c, obj => CritterStates.HasBadAssociates(obj) ?? throw new MissingObjectStop(line)),
+        ScrCatalogue.Condition.MonsterOfType => MonsterOfTypeHolds(c, line),
+        ScrCatalogue.Condition.WithinRange => WithinRange(c, line),
         // WE5: the identified count over the operand's objects; none identified is false and, for one object, all is true. An absent
         // object names none, so the condition fails (the set's focus kinds name at most one object).
         ScrCatalogue.Condition.Identified => Objects(c, 0).Count(obj => Items.IsIdentified(obj) ?? throw new MissingObjectStop(line)) > 0,
@@ -1390,6 +1395,24 @@ internal sealed class ScrInterpreter
 
     /// <summary>SC1: the four body-spell bits of the spell flags: body of air 0x4, earth 0x8, fire 0x10, water 0x20.</summary>
     private const int BodySpellFlags = 0x3C;
+
+    private bool MonsterOfTypeHolds(ScrClause c, int line)
+    {
+        var type = Get(c, 1);
+        return ListHolds(c, obj => CritterStates.IsMonsterOfType(obj, type) ?? throw new MissingObjectStop(line));
+    }
+
+    // CS14 (case 34): the first object of operand 0 (0x44B960), then the range, x and y values (0x44BA70); the object's location (0x406DA0, field 2) against the point by the tile distance 0x4B96F0, which takes the absolute difference of each pair of 32-bit
+    // coordinates as unsigned values and keeps the larger. The original builds the point's high word as operand 3 or-ed with the sign of operand 2, so a negative x makes y all ones. The test is distance <= range (signed 64-bit). An absent object, or one without a place, stops the run.
+    private bool WithinRange(ScrClause c, int line)
+    {
+        var who = Object(c, 0, line);
+        var range = Get(c, 1); var x = Get(c, 2); var y = Get(c, 3);
+        var at = World.Location(who) ?? throw new MissingObjectStop(line);
+        var pointX = unchecked((uint)x); var pointY = x < 0 ? uint.MaxValue : unchecked((uint)y);
+        var distance = Math.Max(Math.Abs((long)pointX - unchecked((uint)at.X)), Math.Abs((long)pointY - unchecked((uint)at.Y)));
+        return distance <= range;
+    }
 
     // SC2–SC4: the value of operand 1 is read once before the list is walked (0x44BA70, as the original does), then the host answers per object; a null stops the run.
     private bool SpellHolds(ScrClause c, int line, Func<ScrObjectRef, int, bool?> test)

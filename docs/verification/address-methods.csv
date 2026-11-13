@@ -613,8 +613,10 @@ src/Arcanum.World/AreaUseScripts.cs,CanHear,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,CanSee,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,DyingStops,pending,
 src/Arcanum.World/AreaUseScripts.cs,ExamineSkips,pending,
+src/Arcanum.World/AreaUseScripts.cs,HasBadAssociates,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,IsAnimal,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,IsInDialog,exempt,host
+src/Arcanum.World/AreaUseScripts.cs,IsMonsterOfType,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,IsProwling,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,IsSurrendered,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,IsTrap,pending,
