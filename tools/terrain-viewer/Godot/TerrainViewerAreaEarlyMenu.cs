@@ -209,7 +209,7 @@ public partial class TerrainViewerApp
         _menuAwaitsScene = false; _menuLoadingSave = false;
         if (_mainMenu is null) { ClearTransition(); return; } // ARC-UI-1362: the screen never outlives the menu it began for
         var name = flow.SaveName!;
-        if (QuickKeysActive && LoadGame(SaveLibrary.Slot(name), flow.SavePrefix ?? "Load ", MainMenuTables(), AreaLoadMessageRoute.Result))
+        if (QuickKeysActive && LoadGame(SaveLibrary.Slot(name), flow.SavePrefix ?? "Load ", MainMenuTables(), AreaLoadMessageRoute.Result, supersedePending: false))
         {
             GD.Print($"ARC-DEV-387 save loaded on its own map save={name} (ms since start {Time.GetTicksMsec()})");
             EndMainMenu("save " + name);
