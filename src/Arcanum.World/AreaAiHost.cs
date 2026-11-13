@@ -3439,7 +3439,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
             ProwlingMargin = facts is { Asleep: false, Unconscious: false } && !stunned && !blinded && AwarenessRules.Faces(at, GridActorMath.Octant(facing ?? Movers.FacingOf(observer, NeighborDirection.XPlus)), there)
                 ? ProwlingMargin(observer, target, at, there, facts, map, true) : 0,
         };
-        return AwarenessRules.See(sight, at, 0, 0, there, map, _session.Rules.Combat);
+        var (offsetX, offsetY) = ObserverOffset(observer);
+        return AwarenessRules.See(sight, at, offsetX, offsetY, there, map, _session.Rules.Combat);
     }
 
     /// <summary>
@@ -3453,7 +3454,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     {
         if (target != Pc || observer == Pc || !_session.IsConcealed(SessionCombatant.Hero)) return 0;
         var perception = Math.Clamp(facts?.Perception ?? 0, 0, AwarenessRules.MaxPerception);
-        var trace = seeing ? LineOfFireRules.Trace(at, 0, 0, there, map, _session.Rules.Combat) : null;
+        var (offsetX, offsetY) = ObserverOffset(observer);
+        var trace = seeing ? LineOfFireRules.Trace(at, offsetX, offsetY, there, map, _session.Rules.Combat) : null;
         var state = LifeState(observer);
         var conditions = (facts is { Stunned: true } && Paralysed(observer) ? SkillTargetConditions.Paralyzed : 0)
             | (facts?.Unconscious == true ? SkillTargetConditions.Unconscious : 0)
@@ -3469,6 +3471,24 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         return _session.HeroProwlingMargin(perception, observerFacts, seeing).Margin;
     }
 
+    private const int OffsetXSlot = 2, OffsetYSlot = 3;
+
+    /// <summary>
+    /// ARC-AI-1520 (ledger AW18, VBG9): the observer's pixel offset (object fields 3 and 4) that the original adds to the start of the sight line
+    /// and the sound line (ledger RA7, VB3-16, VB3-18): the offset of its map data plus, for an NPC the host walked, the screen shift its
+    /// step has left (the pose's shift less the projection of its cell from the T0 cell, <see cref="AreaCritterLights.Stand"/>). The hero and an
+    /// NPC this host does not walk stand at their cell centre (0, 0): the hero's step offset and a follower's are not tracked here.
+    /// </summary>
+    private (int X, int Y) ObserverOffset(string observer)
+    {
+        if (!_npcs.TryGetValue(observer, out var npc)) return (0, 0);
+        int Base(int slot) => npc.Row.EffectiveFields.FirstOrDefault(f => f.Slot == slot && f.Presence == AreaPresence.Value)?.Number is { } n && n is >= int.MinValue and <= int.MaxValue ? (int)n : 0;
+        var (offsetX, offsetY) = (Base(OffsetXSlot), Base(OffsetYSlot));
+        if (Movers.PoseOf(observer, _nowMs) is not { } pose) return (offsetX, offsetY);
+        var stood = AreaCritterLights.Stand(npc.Origin.X, npc.Origin.Y, offsetX, offsetY, pose);
+        return (stood.OffsetX, stood.OffsetY);
+    }
+
     public AwarenessResult Hear(string observer, string target, Loudness loudness)
     {
         if (Tile(observer) is not { } at || Tile(target) is not { } there || _scene.LineOfFire?.Invoke() is not { } map) return new(AwarenessRules.NotPerceived, AwarenessReason.State);
@@ -3481,7 +3501,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
             Stunned = stunned, Sleeping = facts?.Asleep ?? false, Unconscious = facts?.Unconscious ?? false,
             ProwlingMargin = facts is { Unconscious: false } && !stunned ? ProwlingMargin(observer, target, at, there, facts, map, false) : 0,
         };
-        return AwarenessRules.Hear(hearing, at, 0, 0, there, loudness, new SoundMap(map), _session.Rules.Combat);
+        var (offsetX, offsetY) = ObserverOffset(observer);
+        return AwarenessRules.Hear(hearing, at, offsetX, offsetY, there, loudness, new SoundMap(map), _session.Rules.Combat);
     }
 
     public HostilityDanger Danger(string npc)

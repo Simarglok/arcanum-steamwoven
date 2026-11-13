@@ -146,15 +146,20 @@ public sealed class AreaAiMovers
     /// pose its body command carries and its carried light (<see cref="AreaCritterLights"/>) is stood by.</summary>
     public IReadOnlyList<AreaCritterPose> Poses(long nowMs) => PosesOf(nowMs).Select(pair => pair.Pose).ToArray();
 
+    /// <summary>ARC-AI-1520: where one mover stands at <paramref name="nowMs"/> (null for an NPC that never moved: it stands at its T0 place).</summary>
+    public AreaCritterPose? PoseOf(string entity, long nowMs) => _movers.TryGetValue(entity, out var mover) ? PoseOf(mover, nowMs) : null;
+
     private IEnumerable<(AreaAiMover Mover, AreaCritterPose Pose)> PosesOf(long nowMs)
     {
-        foreach (var mover in _movers.Values)
-        {
-            var t = mover.Progress(nowMs);
-            var from = mover.From ?? mover.Cell;
-            double du = from.X + (mover.Cell.X - from.X) * t - mover.Origin.X, dv = from.Y + (mover.Cell.Y - from.Y) * t - mover.Origin.Y;
-            int px = (int)Math.Round(40 * (dv - du), MidpointRounding.AwayFromZero), py = (int)Math.Round(20 * (du + dv), MidpointRounding.AwayFromZero);
-            yield return (mover, new AreaCritterPose(mover.Key, mover.Cell.X, mover.Cell.Y, px, py));
-        }
+        foreach (var mover in _movers.Values) yield return (mover, PoseOf(mover, nowMs));
+    }
+
+    private static AreaCritterPose PoseOf(AreaAiMover mover, long nowMs)
+    {
+        var t = mover.Progress(nowMs);
+        var from = mover.From ?? mover.Cell;
+        double du = from.X + (mover.Cell.X - from.X) * t - mover.Origin.X, dv = from.Y + (mover.Cell.Y - from.Y) * t - mover.Origin.Y;
+        int px = (int)Math.Round(40 * (dv - du), MidpointRounding.AwayFromZero), py = (int)Math.Round(20 * (du + dv), MidpointRounding.AwayFromZero);
+        return new AreaCritterPose(mover.Key, mover.Cell.X, mover.Cell.Y, px, py);
     }
 }
