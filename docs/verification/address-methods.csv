@@ -36,6 +36,7 @@ src/Arcanum.Scripting/Dialog/DialogConversation.cs,ReadStore,pending,
 src/Arcanum.Scripting/Dialog/DialogConversation.cs,ReadWorldFact,pending,
 src/Arcanum.Scripting/Dialog/DialogConversation.cs,SchematicsCommand,pending,
 src/Arcanum.Scripting/Dialog/DialogConversation.cs,Store,pending,
+src/Arcanum.Scripting/Dialog/DialogConversationNewspaper.cs,PunctuatedHeadline,exempt,host
 src/Arcanum.Scripting/Dialog/DialogGreeting.cs,Comment,exempt,host
 src/Arcanum.Scripting/Dialog/DialogGreeting.cs,MissingLine,pending,
 src/Arcanum.Scripting/Dialog/DialogGreeting.cs,ParseSlots,pending,
@@ -129,6 +130,8 @@ src/Arcanum.Session/GameSessionLoyalty.cs,CheckFollowerAfterHit,exempt,host
 src/Arcanum.Session/GameSessionMissiles.cs,CreateMissile,pending,
 src/Arcanum.Session/GameSessionMissiles.cs,MoveMissile,pending,
 src/Arcanum.Session/GameSessionMorale.cs,ApplyKillNotification,pending,
+src/Arcanum.Session/GameSessionNewspaper.cs,WithDefault,exempt,reference
+src/Arcanum.Session/GameSessionNewspaperEvent.cs,ArmNewspaper,exempt,reference
 src/Arcanum.Session/GameSessionNpcAssembly.cs,AssembleSchematicForNpc,pending,
 src/Arcanum.Session/GameSessionNpcAssembly.cs,QueryNpcTechnology,pending,
 src/Arcanum.Session/GameSessionNpcAttack.cs,WithNpcEffects,pending,
@@ -261,6 +264,7 @@ src/Arcanum.Session/SessionSpellCasterTrapDevices.cs,CastAtTileWithoutCaster,pen
 src/Arcanum.Session/SessionSpellCasterTrapDevices.cs,UseScriptTrapDevice,pending,
 src/Arcanum.Session/SessionSpellCasterTrapDevices.cs,UseTrapDevice,pending,
 src/Arcanum.Session/SessionSpellCasterTraps.cs,ApplyTrapEffect,pending,
+src/Arcanum.Session/SessionSpellCasterTraps.cs,StrikeTrapShot,exempt,host
 src/Arcanum.Session/SessionSpellCasterTraps.cs,TrapShot,exempt,host
 src/Arcanum.Simulation/Ai/AwarenessRules.cs,SoundStepCost,pending,
 src/Arcanum.Simulation/Ai/AwarenessRules.cs,WithProwlerLine,pending,

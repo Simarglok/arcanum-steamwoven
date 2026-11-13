@@ -76,7 +76,7 @@ internal static class SessionFixtures
     // and recorded lighting (scheme 1 at 15:00), with an empty party and inventory, no hero, no roll from seed 0 and no life record.
     internal const string LightingTail = ",\"lighting\":{\"schemeId\":1,\"hour\":15}}";
     internal const string GoldenJson =
-        "{\"format\":\"arcanum-steamwoven-session\",\"schemaVersion\":99," +
+        "{\"format\":\"arcanum-steamwoven-session\",\"schemaVersion\":100," +
         "\"world\":\"11111111-1111-1111-1111-111111111111\",\"module\":\"22222222-2222-2222-2222-222222222222\",\"revision\":2," +
         "\"clock\":{\"schemaVersion\":1,\"policyId\":\"steamwoven-normalized-clock-v1\"," +
         "\"sourceRevision\":\"9bd80511f8663a41a25a20a701959e394e0065e4ffc68a8dc69fe19c23678d52\"," +
@@ -161,7 +161,9 @@ internal static class SessionFixtures
     internal const string NoEncounters = ",\"encounters\":{\"uses\":[]}";
     internal const string NoFlights80 = ",\"flights\":{\"lastProjectile\":0,\"projectiles\":[],\"nextShot\":0,\"heroShots\":[],\"npcThrows\":[],\"npcArrows\":[]}";
     // ARC-DEV-289 (schema 84): the flights section ends with the missile counter and the missiles in flight.
-    internal const string NoFlights = ",\"flights\":{\"lastProjectile\":0,\"projectiles\":[],\"nextShot\":0,\"heroShots\":[],\"npcThrows\":[],\"npcArrows\":[],\"lastMissile\":0,\"missiles\":[]}";
+    internal const string NoFlights84 = ",\"flights\":{\"lastProjectile\":0,\"projectiles\":[],\"nextShot\":0,\"heroShots\":[],\"npcThrows\":[],\"npcArrows\":[],\"lastMissile\":0,\"missiles\":[]}";
+    // ARC-TECHNOLOGY-1635 (schema 100): the flights section ends with the trap shots in flight (none).
+    internal const string NoFlights = ",\"flights\":{\"lastProjectile\":0,\"projectiles\":[],\"nextShot\":0,\"heroShots\":[],\"npcThrows\":[],\"npcArrows\":[],\"lastMissile\":0,\"missiles\":[],\"trapShots\":[]}";
     internal const string EmptyHotkey = "{\"kind\":0,\"item\":null,\"index\":-1}";
     internal const string NoEvents = ",\"events\":{\"registry\":1,\"nextSequence\":1,\"pending\":[]}";
 
