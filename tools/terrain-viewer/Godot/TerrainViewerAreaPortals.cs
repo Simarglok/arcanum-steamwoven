@@ -201,6 +201,8 @@ public partial class TerrainViewerApp
         var stops = AreaUseScriptHost.UseStops(ran);
         GD.Print($"ARC-WORLD-1668 door-use-script entity={AreaUseScriptHost.EntityId(row)} opener={opener.Code} outcome={ran.Outcome} run={ran.Run?.Outcome.ToString() ?? "-"} stops={stops} detail={ran.Detail}");
         foreach (var entry in ScriptLineEntries(ran.Printed)) PostMessage(entry, "door script line");
+        if (transfers is not null && ran.Outcome == AreaScriptedUseOutcome.TeleportRefused)
+        { _areaUseStatus = $"door script teleport refused: {ran.Detail}"; RefreshAreaStatus(); }
         if (transfers is not null && ran.Outcome == AreaScriptedUseOutcome.Teleport && ran.Teleport is { } asked)
         {
             var queued = transfers.QueueDoorTeleport(row, ran.Run!.Script ?? 0, asked);

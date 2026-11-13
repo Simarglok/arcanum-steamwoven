@@ -205,6 +205,8 @@ public partial class TerrainViewerApp
         // The transfer itself is the transfer stage's: clear it so the stage ends on this map, then let the door close by itself.
         transfers.Clear();
         PortalSmokeUntil(() => portals.Frame(session, door) == 0 && doors.GoalOf(door) is null, 8000 + 12 * door.StepMs);
+        // The lock as the data had it, so a later stage of the run finds the door as before.
+        if (locked) session.SetOpenableLocked(session.Version, portals.Openable(door), door.Baseline, true);
         return report;
     }
 }
