@@ -93,6 +93,18 @@ public sealed class GeneratorItemCopyTests
     }
 
     [TestMethod]
+    public void A_made_item_of_the_generators_list_keeps_its_tracked_weight_on_the_copy()
+    {
+        using var owner = Owner();
+        owner.AttachItemWeights(prototype => prototype == Bread.Prototype ? new SessionItemWeight(7, 2, 1) : null);
+        Assert.AreEqual(GameSessionFailure.None, owner.AddItemToNpc(owner.Version, Generator, Bread, _ => SessionInsertVerdict.Accepted).Failure);
+        var copy = owner.RunGenerator(owner.Version, Run()).Made.Single();
+        var breads = View(owner, copy.Entity).Items.Where(item => item.Facts.Kind == Bread).ToArray();
+        Assert.AreEqual(2, breads.Length, "the seed bread and the made one");
+        Assert.IsTrue(breads.Any(item => owner.QueryItemWeight(item.Entity) == new SessionItemWeight(7, 2, 1)), "the made item's weight facts are kept");
+    }
+
+    [TestMethod]
     public void A_generator_the_session_has_no_seed_for_makes_its_copy_with_no_items()
     {
         using var owner = Owner(attach: false);
