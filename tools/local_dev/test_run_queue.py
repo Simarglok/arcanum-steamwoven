@@ -713,6 +713,7 @@ class QueueRunTests(unittest.TestCase):
         self.processes: list[subprocess.Popen] = []
 
     def tearDown(self) -> None:
+        (self.root / "release").write_text("go")  # a held run of a failed test ends at once
         for process in self.processes:
             if process.poll() is None:
                 process.kill()
