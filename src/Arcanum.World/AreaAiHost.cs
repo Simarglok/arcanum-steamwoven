@@ -1880,15 +1880,19 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
 
     /// <summary>
     /// ARC-WORLD-1469 (ledger TT9, TT8, 0x4305D0): the walker's step arrives on <paramref name="cell"/> (the step the host began, or a companion's own follow step the viewer reports): the first trap
-    /// object there meets it (<see cref="AreaTraps.StepNpc"/>, the walker as the triggerer: a known trap fires, an unknown one gets its own spot attempt first). True when the trap was spotted or
-    /// went off, which ends the walk on that tile. False for the hero, when the map has no trap host or cast host, and for a tile with no trap object.
+    /// object there meets it (<see cref="AreaTraps.StepNpc"/>, the walker as the triggerer: a known trap fires, an unknown one gets its own spot attempt first). True when the walk ends on that
+    /// tile: the trap was spotted or went off, or (ARC-WORLD-1582, TT17) the tile holds any trap object the walker does not step over (<see cref="AreaTraps.StepEndsWalk"/>). False for the hero, when the
+    /// map has no trap host, and for a tile with no trap object.
     /// </summary>
     public bool TrapMetOn(string id, CellCoord cell)
     {
-        if (TrapWalker(id) is not { } walker || _scene.Traps?.Invoke() is not { } traps || traps.StepNpc(walker, cell) is not { } met) return false;
+        if (TrapWalker(id) is not { } walker || _scene.Traps?.Invoke() is not { } traps) return false;
+        // ARC-WORLD-1582 (TT17): the walk ends on any trap object's tile the walker does not step over, also where no meeting was made.
+        var ends = traps.StepEndsWalk(cell, walker);
+        if (traps.StepNpc(walker, cell) is not { } met) return ends;
         Trace(id).Step = $"met a trap on {cell.X},{cell.Y}: {met.Describe()}";
         _trapMeetings.Add(new(id, met));
-        return met.EndsWalk;
+        return met.EndsWalk || ends;
     }
 
     /// <summary>
