@@ -21,9 +21,18 @@ public sealed partial class DialogConversation
     private bool HealerAvailable => _ports.Healer is not null && _ports.Greeting is not null && _ports.World is not null && _ports.Gold is not null
         && (_ports.Purse ?? _ports.Trainer) is not null;
 
+    // ARC-SCRIPT-1798: the u:N and z:N replies need the same ports as the healer menu (the skill service and the spell sale share its screens).
+    private bool ServiceAvailable => HealerAvailable;
+
     /// <summary>The <c>h:</c> reply was picked and its action has run: the healer menu opens (ledger HLR1).</summary>
     private void OpenHealer(OfferPlan plan)
     {
+        if (plan.Reply.Service is not null)
+        {
+            // ARC-SCRIPT-1798: a u:N or z:N reply opens its skill or spell offer directly (state 0xE or 0xF).
+            OpenService(plan);
+            return;
+        }
         var record = plan.Reply.Record;
         var source = new DialogOperationSource(new DialogNodeId(record.Id), record.SerializedIndex, DlgFieldKind.Text, record.Text.PayloadOffset, 0, 2, 0);
         _talk = new TrainerTalk(plan.Reply, plan.Target, source);
@@ -34,7 +43,7 @@ public sealed partial class DialogConversation
     [OriginalFunction(0x419830, OriginalFunctionScope.Partial)]
     private void PresentHealerMenu(int level)
     {
-        if (!ReadHealerFacts(out var facts)) return;
+        if (!ReadHealerFacts(HealingSkill, out var facts)) return;
         if (!NpcTalkLine(HealerMenuGroup, null, out var line)) return;
         var options = new List<TrainerOption>();
         if (level == 0)
@@ -101,12 +110,12 @@ public sealed partial class DialogConversation
         }
     }
 
-    private bool ReadHealerFacts(out DialogHealerFacts facts)
+    private bool ReadHealerFacts(int skill, out DialogHealerFacts facts)
     {
         facts = new DialogHealerFacts(0, false, 0, 0, false, true);
         try
         {
-            facts = _ports.Healer!.Facts(new DialogHealerQuery(_request.Participants.Npc, _request.Participants.PlayerCharacter));
+            facts = _ports.Healer!.Facts(new DialogHealerQuery(_request.Participants.Npc, _request.Participants.PlayerCharacter, skill));
         }
         catch (Exception)
         {
@@ -124,7 +133,7 @@ public sealed partial class DialogConversation
     /// <summary>The skill service or a spell was picked (ledger HLR5, HLR6; states 14 and 15).</summary>
     private void PresentHealerChoice(TrainerChoice choice)
     {
-        if (!ReadHealerFacts(out var facts)) return;
+        if (!ReadHealerFacts(choice.Kind == TrainerChoiceKind.HealService ? choice.Skill : HealingSkill, out var facts)) return;
         if (choice.Kind == TrainerChoiceKind.HealService) OfferHealerService(choice, facts);
         else OfferHealerSpell(choice, facts);
     }

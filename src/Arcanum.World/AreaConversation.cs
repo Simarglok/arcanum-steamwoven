@@ -757,7 +757,7 @@ public sealed class AreaConversationHost
         public DialogHealerFacts Facts(DialogHealerQuery query)
         {
             if (query.PlayerCharacter != AreaConversationState.PcParticipant || query.Npc != npc) throw new ArgumentException("Not the talk's speaker.", nameof(query));
-            var facts = ai.HealerFacts(entity) ?? throw new InvalidOperationException("The speaker is no NPC of the AI host.");
+            var facts = ai.HealerFacts(entity, query.Skill) ?? throw new InvalidOperationException("The speaker is no NPC of the AI host.");
             return new(facts.Rank, facts.SkillAllowed, facts.SkillLevel, facts.SkillTraining, facts.LedByPc, facts.NoPcLeader);
         }
 
@@ -766,7 +766,7 @@ public sealed class AreaConversationHost
         public string? SpellName(int spell) => host.SpellName?.Invoke(spell);
 
         public DialogCommandResult Execute(HealerSkillCommand command) =>
-            command.PlayerCharacter == AreaConversationState.PcParticipant && command.Npc == npc && ai.HealerService(entity) ? DialogCommandResult.Applied : DialogCommandResult.Rejected;
+            command.PlayerCharacter == AreaConversationState.PcParticipant && command.Npc == npc && ai.HealerService(entity, command.Skill) ? DialogCommandResult.Applied : DialogCommandResult.Rejected;
 
         public DialogCommandResult Execute(HealerSpellCommand command) =>
             command.PlayerCharacter == AreaConversationState.PcParticipant && command.Npc == npc && ai.HealerCast(entity, command.Spell, command.Free) ? DialogCommandResult.Applied : DialogCommandResult.Rejected;
