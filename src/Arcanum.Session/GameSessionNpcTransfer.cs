@@ -256,20 +256,24 @@ public sealed partial class GameSessionOwner
     /// past 32 bits (<see cref="GameSessionFailure.BudgetExceeded"/>), the revision, the host's verdict
     /// (<see cref="GameSessionFailure.InsertRefused"/>; a call back into the owner from it is <see cref="GameSessionFailure.StaleVersion"/>).
     /// ARC-WORLD-1283: an item with the no-drop flag (item flag 0x20; the worn record's, the origin seed row's, else its prototype's through <see cref="AttachItemNoDrop"/>) is refused by the original's remove check (0x466DA0) after the transfer script and before the insert check: <see cref="GameSessionFailure.ItemNotDroppable"/> with <see cref="InventoryMutationResult.PcMessage"/> 111, nothing changed. The NPC flag 0x40 (re-wield) is not modelled. One revision.
+    /// ARC-MAGIC-1743 (ledger IE3, IE4, IE6): with <paramref name="scripts"/> a worn item's wield-off (25) and the item's remove-item (28) scripts run with the hero as the triggerer and its insert-item (21) with the NPC as the triggerer
+    /// (<see cref="InventoryMutationResult.Scripts"/>, <see cref="InventoryMutationResult.InsertScript"/>), before the move is applied; a run the session cannot apply refuses the move with nothing changed; without a host an item with
+    /// such a script is refused (<see cref="GameSessionFailure.ItemScriptUnsupported"/>). The NPC's own wield on the receiving side is its re-wield (flag 0x40), not this call.
     /// ARC-WORLD-1284: a moved item that is not merged marks the NPC with its re-wield bit (NPC flag 0x40, <see cref="Arcanum.Simulation.Ai.DangerFlags.CheckWield"/>). One revision.
     /// ARC-MAGIC-022: an item that is the source of a spell run needs <paramref name="triggers"/> (else
     /// <see cref="GameSessionFailure.ItemEffectUnsupported"/>); with one, the removal's spell steps run after the move
     /// (<see cref="ISessionItemTriggers.Remove"/>, <see cref="InventoryMutationResult.ItemSpells"/>).
     /// </summary>
     public InventoryMutationResult GiveItemToNpc(GameSessionVersion expected, string npc, string item, SessionInsertCheck insertCheck,
-        ISessionItemTriggers? triggers = null)
+        ISessionItemTriggers? triggers = null, ISessionItemScriptHost? scripts = null)
     {
-        var result = GiveToNpc(expected, npc, item, insertCheck, triggers);
+        var result = GiveToNpc(expected, npc, item, insertCheck, triggers, scripts);
         if (triggers is null || result.Disposition != GameSessionDisposition.Changed) return result;
         return result with { ItemSpells = [triggers.Remove(item, SessionSpellCaster.Hero)], Version = Version };
     }
 
-    private InventoryMutationResult GiveToNpc(GameSessionVersion expected, string npc, string item, SessionInsertCheck insertCheck, ISessionItemTriggers? triggers)
+    private InventoryMutationResult GiveToNpc(GameSessionVersion expected, string npc, string item, SessionInsertCheck insertCheck, ISessionItemTriggers? triggers,
+        ISessionItemScriptHost? scripts)
     {
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(insertCheck);
@@ -277,14 +281,14 @@ public sealed partial class GameSessionOwner
             return RejectItem(GameSessionFailure.InvalidItem);
         if (!IsCurrent(expected)) return RejectItem(GameSessionFailure.StaleVersion);
         if (!KnownNpc(npc)) return RejectItem(GameSessionFailure.UnknownHolder);
-        return GiveItemTo(npc, SessionHolderKind.Npc, item, insertCheck, identify: false, triggers);
+        return GiveItemTo(npc, SessionHolderKind.Npc, item, insertCheck, identify: false, triggers, scripts);
     }
 
     // The move of GiveItemToNpc after its input, version and holder checks, into an NPC's or (ARC-WORLD-090) a container's list;
     // identify marks the moved item identified in the same revision (a barter window's sale, BT5); without triggers (ARC-MAGIC-022) an
     // item that is the source of a spell run is refused.
     private InventoryMutationResult GiveItemTo(string npc, SessionHolderKind kind, string item, SessionInsertCheck insertCheck, bool identify,
-        ISessionItemTriggers? triggers = null)
+        ISessionItemTriggers? triggers = null, ISessionItemScriptHost? scripts = null)
     {
         if (HeroListed(item) is not { } held) return RejectItem(GameSessionFailure.ItemNotAvailable);
         if (HolderHasScript(npc, kind, SessionScriptPoint.Transfer)) return RejectItem(GameSessionFailure.HolderScriptUnsupported);
@@ -292,16 +296,19 @@ public sealed partial class GameSessionOwner
         // the hero's item (worn or not) with message 111 before any other check, so a barter sale, a plant or a hand-over of such an item changes nothing.
         if (HeroItemNoDrop(item, held.Kind, held.Origin)) return NoDropRefusal();
         var worn = _equipment.SlotOf(item) is not null;
-        // ARC-SCRIPT-042: a worn item with item event scripts (a kit or made item too) would leave without its wield-off and remove-item runs.
-        if (_equipment.SlotOf(item) is { } wornIn && _equipment.Worn[wornIn].ScriptPoints.Count > 0) return RejectItem(GameSessionFailure.ItemScriptUnsupported);
+        // ARC-MAGIC-1743 (IE3, IE4, IE6): the item event scripts of the move, from the worn record's points (a kit or made item too) and the origin seed row's. The removal runs wield off (25, only a worn
+        // item) and remove item (28) with the hero as the triggerer, the insertion insert item (21) with the recipient as the triggerer; without a script host an item with any of them is refused.
+        var wornPoints = _equipment.SlotOf(item) is { } wornIn ? _equipment.Worn[wornIn].ScriptPoints : [];
+        SessionSeedItem? listed = held.Origin is { } originMap && _inventory.Seeds.TryGetValue(originMap, out var originSeed) && originSeed.Items.TryGetValue(item, out var seedRow) ? seedRow : null;
+        bool Has(int point) => wornPoints.Contains(point) || listed?.Facts.HasScript(point) == true;
+        var (wieldOff, removeOwn, insertOwn) = (worn && Has(SessionScriptPoint.WieldOff), Has(SessionScriptPoint.RemoveItem), Has(SessionScriptPoint.InsertItem));
+        if (scripts is null && (wornPoints.Count > 0 || wieldOff || removeOwn || insertOwn)) return RejectItem(GameSessionFailure.ItemScriptUnsupported);
+        // The script host answers for the shown map's rows, so the scripts of an item whose row is another map's seed row are not run: refused, never moved with a script skipped.
+        if (held.Origin is { } rowMap && rowMap != _actor.Map && (wieldOff || removeOwn || insertOwn)) return RejectItem(GameSessionFailure.ItemScriptUnsupported);
         // ARC-MAGIC-022: a worn item with the item spells mark would leave without its unwear (0x4CBFC0).
         if (_equipment.SlotOf(item) is { } markedIn && _equipment.Worn[markedIn].ItemSpells) return RejectItem(GameSessionFailure.ItemEffectUnsupported);
         // ARC-MAGIC-022: the removal ends the item's runs and runs its drop (IU9) only through an item trigger host.
         if (triggers is null && HasItemRuns(item)) return RejectItem(GameSessionFailure.ItemEffectUnsupported);
-        if (held.Origin is { } origin && _inventory.Seeds.TryGetValue(origin, out var seed) && seed.Items.TryGetValue(item, out var listed) &&
-            (listed.Facts.HasScript(SessionScriptPoint.RemoveItem) || listed.Facts.HasScript(SessionScriptPoint.InsertItem) ||
-                worn && listed.Facts.HasScript(SessionScriptPoint.WieldOff)))
-            return RejectItem(GameSessionFailure.ItemScriptUnsupported);
         // ARC-WORLD-083: a made item keeps its complexity in the NPC's list, so taking it back can refuse it (a taken item's seed answers).
         var complexity = held.Origin is { } takenFrom && _inventory.Seeds.TryGetValue(takenFrom, out var takenSeed) && takenSeed.Items.TryGetValue(item, out var seedRow)
             ? seedRow.Facts.Complexity : held.Complexity;
@@ -330,6 +337,22 @@ public sealed partial class GameSessionOwner
         ThrowIfDisposed();
         if (_revision != revision || _inventory.SeedGeneration != seeds) return RejectItem(GameSessionFailure.StaleVersion, verdict);
         if (verdict != SessionInsertVerdict.Accepted) return RejectItem(GameSessionFailure.InsertRefused, verdict);
+        ItemScriptRuns? runs = null;
+        ScrRunResult? insertRun = null;
+        if (scripts is not null && (wieldOff || removeOwn || insertOwn))
+        {
+            // The original moves the item first and then runs these scripts, whose results it ignores (IE3, IE4, IF10); the admitted commands read nothing the move changes, so the runs are made
+            // before the commit and applied with it, or the whole move is refused.
+            var (shown, flagVersion) = (_actor.Map, _flags.Version);
+            runs = new ItemScriptRuns(this, scripts, shown.RuntimeMap, new Dictionary<string, int>(StringComparer.Ordinal) { [item] = complexity });
+            if (wieldOff) runs.Run(SessionScriptPoint.WieldOff, item, SessionEventKinds.PlayerEntity, null);
+            if (runs.Failure == GameSessionFailure.None && removeOwn) runs.Run(SessionScriptPoint.RemoveItem, item, SessionEventKinds.PlayerEntity, null);
+            if (runs.Failure == GameSessionFailure.None && insertOwn) insertRun = runs.Run(SessionScriptPoint.InsertItem, item, npc, null);
+            ThrowIfDisposed();
+            if (_revision != revision || _actor.Map != shown || _flags.Version != flagVersion) return RejectItem(GameSessionFailure.StaleVersion, verdict) with { InsertScript = insertRun, Scripts = runs.Runs };
+            runs.Prepare();
+            if (runs.Failure != GameSessionFailure.None) return RejectItem(runs.Failure, verdict) with { InsertScript = insertRun, Scripts = runs.Runs };
+        }
         if (into is { } target)
         {
             var units = _inventory.Ammo[item].Units;
@@ -352,8 +375,10 @@ public sealed partial class GameSessionOwner
             if (held.Source != SessionPlacedSource.Made) _inventory.Hero.SetGiven(new(item, held.Origin));
             if (identify) _inventory.Identified.Add(item);
         }
+        runs?.Commit();
         Revise();
-        return new(GameSessionDisposition.Changed, GameSessionFailure.None, into?.Entity ?? item, verdict, Version);
+        return new(GameSessionDisposition.Changed, GameSessionFailure.None, into?.Entity ?? item, verdict, Version)
+            { InsertScript = insertRun, Scripts = runs?.Runs ?? [], Messages = runs?.Messages ?? [] };
     }
 
     /// <summary>

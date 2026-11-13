@@ -297,6 +297,35 @@ public sealed class WieldEventScriptTests
         Assert.AreEqual(GameSessionFailure.ItemScriptUnsupported, owner.GiveItemToNpc(owner.Version, "virgil", "kit:3", Accept).Failure);
     }
 
+    // ARC-MAGIC-1743 (IE3, IE4, IE6): a worn scripted ring handed to an NPC runs wield off, remove item and the NPC's insert item before the move applies.
+    [TestMethod]
+    public void Giving_a_worn_scripted_ring_to_an_NPC_runs_the_removal_and_insertion_scripts()
+    {
+        int[] all = [SessionScriptPoint.InsertItem, SessionScriptPoint.WieldOn, SessionScriptPoint.WieldOff, SessionScriptPoint.RemoveItem];
+        var (owner, host) = Owner();
+        using var _ = owner;
+        host.Slots[("kit:3", SessionScriptPoint.RemoveItem)] = Record;
+        host.Slots[("kit:3", SessionScriptPoint.InsertItem)] = Record;
+        var ring = Wearable(3, Ring(1), all);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.Equip(owner.Version, "kit:3", EquipmentSlot.Ring1, ring, Drawn, Accept, host).Disposition);
+        Assert.AreEqual(10, Charms(owner));
+        Assert.AreEqual(GameSessionFailure.None, owner.AttachMapInventory(Exterior, InventoryStateTests.Seed()).Failure);
+
+        // Without a host the item stays refused; a refusing insert check runs nothing.
+        Assert.AreEqual(GameSessionFailure.ItemScriptUnsupported, owner.GiveItemToNpc(owner.Version, "virgil", "kit:3", Accept).Failure);
+        var before = owner.Version;
+        var refused = owner.GiveItemToNpc(owner.Version, "virgil", "kit:3", _ => SessionInsertVerdict.NoRoom, scripts: host);
+        Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.InsertRefused, 0, 10, before), (refused.Disposition, refused.Failure, refused.Scripts.Count, Charms(owner), owner.Version));
+
+        var given = owner.GiveItemToNpc(owner.Version, "virgil", "kit:3", Accept, scripts: host);
+        Assert.AreEqual((GameSessionDisposition.Changed, GameSessionFailure.None), (given.Disposition, given.Failure));
+        CollectionAssert.AreEqual(new[] { (25, "kit:3"), (28, "kit:3"), (21, "kit:3") }, given.Scripts.Select(run => (run.Point, run.Attachee)).ToArray());
+        Assert.IsNotNull(given.InsertScript);
+        Assert.AreEqual(0, Charms(owner), "wield off took the charms away");
+        Assert.AreEqual(0, owner.QueryEquipment().Worn.Count);
+        Assert.IsTrue(owner.QueryMapInventory(Exterior)!.Holders.Single(holder => holder.Entity == "virgil").Items.Any(listed => listed.Entity == "kit:3"));
+    }
+
     [TestMethod]
     public void Equip_best_leaves_a_scripted_worn_item_in_its_slot()
     {
