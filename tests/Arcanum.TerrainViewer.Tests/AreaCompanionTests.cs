@@ -644,6 +644,14 @@ public sealed class AreaCompanionTests
         var group = AreaCompanionGroup.Create(templates, f.Steps, AreaChart.Exterior, session, new(1), SimulationTime.At(0));
         Assert.AreEqual(1, group.Companions.Count, "the led NPC is a companion of the group");
         Assert.AreEqual(CompanionStanding.Following, group.Companions[0].Standing);
+        // Where the AI host last stood the NPC before the hero took it is where the group starts it, not the T0 cell of its row.
+        var walked = new CellCoord(checked((int)f.Speaker.WorldX + 1), checked((int)f.Speaker.WorldY));
+        Assert.AreEqual(GameSessionFailure.None, AreaCompanionPlacement.SeedFromNpcPlace(session, template, new(1)), "no place recorded: nothing to seed");
+        Assert.IsNull(AreaCompanionPlacement.Where(session, template.Home, entity).Placement);
+        Assert.AreEqual(GameSessionDisposition.Changed, session.RecordNpcPlace(session.Version, new(1), entity, walked, NeighborDirection.YPlus).Disposition);
+        Assert.AreEqual(GameSessionFailure.None, AreaCompanionPlacement.SeedFromNpcPlace(session, template, new(1)));
+        Assert.AreEqual((walked, NeighborDirection.YPlus), AreaCompanionPlacement.Where(session, template.Home, entity).Placement!.Value, "the companion's cell is the walked place");
+        Assert.AreEqual(GameSessionFailure.None, AreaCompanionPlacement.SeedFromNpcPlace(session, template, new(2)), "another map: nothing seeded");
     }
 
     [TestMethod]
