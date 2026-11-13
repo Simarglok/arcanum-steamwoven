@@ -943,13 +943,14 @@ public partial class TerrainViewerApp
     {
         var thrown = notice.Throw!;
         GD.Print($"ARC-WORLD-113 ai-throw npc={notice.Npc} item={notice.Item} struck={notice.Target ?? "none"} disposition={thrown.Disposition}"
-            + $" failure={thrown.Failure} outcome={thrown.Attack?.Resolution?.Outcome} landed={(thrown.Landed is { } at ? $"{at.X},{at.Y}" : "none")}");
+            + $" failure={thrown.Failure} outcome={thrown.Attack?.Resolution?.Outcome} landed={(thrown.Landed is { } at ? $"{at.X},{at.Y}" : "none")}"
+            + (thrown.Shots.Count > 0 ? $" flies-to={(thrown.Destination is { } to ? $"{to.X},{to.Y}" : "none")}" : ""));
         if (notice.Target is not null && notice.Result is not null)
         {
             AiHit(notice);
             return;
         }
-        _aiNotice = $"{AiName(notice.Npc)} throws: {(thrown.Landed is null ? $"refused ({thrown.Failure})" : "it lands")}";
+        _aiNotice = $"{AiName(notice.Npc)} throws: {(thrown.Shots.Count > 0 ? "it flies" : thrown.Landed is null ? $"refused ({thrown.Failure})" : "it lands")}";
         SyncAreaCombatBodies();
         SyncAreaInventory();
         RefreshAreaStatus();
