@@ -78,25 +78,36 @@ public partial class TerrainViewerApp
                 && place.X + place.Width / 2 == AreaMenuArtLayout.OptionsButtonX && place.Width > 0 && place.Height == 33).All(ok => ok),
                 "the page labels stand centred at (130, 221 + 40 i): " + string.Join(" ", places));
             Require(art.HoveredForSelfTest == -1, "no page label is lit while the focus is on the first control: " + art.HoveredForSelfTest);
-            Require(Controls().SequenceEqual(["Difficulty: Moderate", "Default Combat Mode: Real Time", "Auto Attack: On", "Always Run: Off", "Rules: Steamwoven", "Evidence Log: Off", "Test Task: None", "Controls: Original"]), "Game page: " + string.Join("|", Controls()));
+            Require(Controls().SequenceEqual(["Difficulty: Moderate", "Default Combat Mode: Real Time", "Auto Attack: On", "Auto Switch Weapons: Off", "Always Run: Off", "Rules: Steamwoven", "Controls: Original"]), "Game page: " + string.Join("|", Controls()));
             // ARC-UI-061: the shown controls take the first slots: four in the first column, the fifth at the second's top (as drawn).
             await Frames(1);
-            Require(art.ControlPlacesForSelfTest.SequenceEqual(Enumerable.Range(0, 8).Select(AreaMenuArtLayout.OptionsSlot)),
+            Require(art.ControlPlacesForSelfTest.SequenceEqual(Enumerable.Range(0, 7).Select(AreaMenuArtLayout.OptionsSlot)),
                 "the Game page's controls stand in their art at the first slots: " + string.Join(" ", art.ControlPlacesForSelfTest));
             // ARC-UI-014: Original chosen in the main menu is the rule mode the new game begins in.
-            panel.ChangeForSelfTest(4, 1);
-            Require(_ruleMode == RuleMode.Original && Controls()[4] == "Rules: Original", "Original chosen before the game");
+            panel.ChangeForSelfTest(5, 1);
+            Require(_ruleMode == RuleMode.Original && Controls()[5] == "Rules: Original", "Original chosen before the game");
+            // ARC-COMBAT-1738 (OH3): Auto Switch Weapons is the Game page's fourth shown line, off until written; it changes at once and is saved in the settings file.
+            Require(!_gameSettings.AutoSwitchWeapons, "auto switch starts off");
+            panel.ChangeForSelfTest(3, 1);
+            Require(_gameSettings.AutoSwitchWeapons && Controls()[3] == "Auto Switch Weapons: On" && _gameSettingsStore is { Persistent: true } && _gameSettingsStore.Load().AutoSwitchWeapons,
+                "the Auto Switch Weapons line turned the setting on and saved it: " + Controls()[3]);
+            panel.ChangeForSelfTest(3, 1);
+            Require(!_gameSettings.AutoSwitchWeapons && Controls()[3] == "Auto Switch Weapons: Off" && _gameSettingsStore?.Load().AutoSwitchWeapons == false, "and off again: " + Controls()[3]);
+            // ARC-COMBAT-1738: the evidence log's two lines are the Video page's last (the Game page needed the room).
+            Key(Godot.Key.V, 'v');
+            Require(_mainMenu!.Page == AreaOptionsPage.Video && Controls().Length == 6 && Controls()[4] == "Evidence Log: Off" && Controls()[5] == "Test Task: None",
+                "the Video page ends with the evidence log and its task marker: " + string.Join("|", Controls()));
             // ARC-GPAD-1376: the evidence log is off at the start, a session writes its closed lines to the device's own folder and ends cleanly.
             Require(!EvidenceRecording && _evidenceTask == 0, "the evidence log starts off");
-            panel.ChangeForSelfTest(6, 1);
-            Require(!EvidenceRecording && Controls()[6] == "Test Task: None", "a task marker with the log off is refused: " + Controls()[6]);
             panel.ChangeForSelfTest(5, 1);
-            Require(EvidenceRecording && Controls()[5] == "Evidence Log: On", "the Evidence Log line turned the log on");
-            panel.ChangeForSelfTest(6, 1);
-            Require(_evidenceTask == 1 && Controls()[6] == "Test Task: Task 1", "the Test Task line started task 1");
+            Require(!EvidenceRecording && Controls()[5] == "Test Task: None", "a task marker with the log off is refused: " + Controls()[5]);
+            panel.ChangeForSelfTest(4, 1);
+            Require(EvidenceRecording && Controls()[4] == "Evidence Log: On", "the Evidence Log line turned the log on");
+            panel.ChangeForSelfTest(5, 1);
+            Require(_evidenceTask == 1 && Controls()[5] == "Test Task: Task 1", "the Test Task line started task 1");
             RecordEvidence(EvidenceCommand.Examine, EvidenceOutcome.WrongTarget);
-            panel.ChangeForSelfTest(5, 1);
-            Require(!EvidenceRecording && _evidenceTask == 0 && Controls()[5] == "Evidence Log: Off", "the line turned it off again");
+            panel.ChangeForSelfTest(4, 1);
+            Require(!EvidenceRecording && _evidenceTask == 0 && Controls()[4] == "Evidence Log: Off", "the line turned it off again");
             var evidenceFiles = System.IO.Directory.GetFiles(System.IO.Path.Combine(ViewerAutomatedStorage.Folder(), "evidence"), "evidence-*.jsonl");
             Require(evidenceFiles.Length == 1, "one evidence file in the isolated folder: " + evidenceFiles.Length);
             var evidenceLines = System.IO.File.ReadAllLines(evidenceFiles[0]);
@@ -105,16 +116,18 @@ public partial class TerrainViewerApp
                 && evidenceEvents.Select(e => e!.Value.Kind).SequenceEqual([EvidenceKind.SessionStart, EvidenceKind.TaskStart, EvidenceKind.Command, EvidenceKind.TaskEnd, EvidenceKind.SessionEnd])
                 && evidenceEvents[2]!.Value is { Command: EvidenceCommand.Examine, Outcome: EvidenceOutcome.WrongTarget, Task: 1, Scheme: EvidenceScheme.Original },
                 "the file holds the session's closed lines: " + string.Join(" | ", evidenceLines));
-            // ARC-GPAD-1463: the Controls line (the Game page's eighth) changes at run time, no restart, and is saved at once in the smoke's own settings
+            Key(Godot.Key.G, 'g');
+            Require(_mainMenu!.Page == AreaOptionsPage.Game, "back on the Game page");
+            // ARC-GPAD-1463: the Controls line (the Game page's seventh) changes at run time, no restart, and is saved at once in the smoke's own settings
             // file; ARC-GPAD-1374: the prompt style is the Video page's. The strip shows nothing while the mouse is in hand and names the pad when one is used.
-            Require(Controls()[7] == "Controls: Original", "the Game page ends with the Controls line: " + string.Join("|", Controls()));
-            panel.ChangeForSelfTest(7, 1);
-            Require(Controls()[7] == "Controls: A Direct" && _gameSettings is { Pad: Arcanum.Input.PadScheme.Direct, Touch: Arcanum.Input.TouchScheme.Off },
-                "the Controls line changed at once: " + Controls()[7]);
+            Require(Controls()[6] == "Controls: Original", "the Game page ends with the Controls line: " + string.Join("|", Controls()));
+            panel.ChangeForSelfTest(6, 1);
+            Require(Controls()[6] == "Controls: A Direct" && _gameSettings is { Pad: Arcanum.Input.PadScheme.Direct, Touch: Arcanum.Input.TouchScheme.Off },
+                "the Controls line changed at once: " + Controls()[6]);
             Require(_gameSettingsStore is { Persistent: true } && _gameSettingsStore.Load() is { Pad: Arcanum.Input.PadScheme.Direct, Touch: Arcanum.Input.TouchScheme.Off },
                 "the Controls line is saved in the settings file");
             Key(Godot.Key.V, 'v');
-            Require(_mainMenu!.Page == AreaOptionsPage.Video && Controls().Length == 4 && Controls()[2] == "Combat Taunts: On" && Controls()[3] == "Prompt style: Auto", "the Video page holds the floats, the taunts and the prompt style: " + string.Join("|", Controls()));
+            Require(_mainMenu!.Page == AreaOptionsPage.Video && Controls().Length == 6 && Controls()[2] == "Combat Taunts: On" && Controls()[3] == "Prompt style: Auto", "the Video page holds the floats, the taunts, the prompt style and the evidence lines: " + string.Join("|", Controls()));
             panel.ChangeForSelfTest(3, 1); panel.ChangeForSelfTest(3, 1);
             Require(Controls()[3] == "Prompt style: PlayStation" && _gameSettings.Prompts == Arcanum.Input.PromptStyle.PlayStation
                 && _gameSettingsStore?.Load().Prompts == Arcanum.Input.PromptStyle.PlayStation, "the prompt style changed and is saved: " + Controls()[3]);
@@ -141,10 +154,10 @@ public partial class TerrainViewerApp
             Require(_gameSettings.Prompts == Arcanum.Input.PromptStyle.Auto, "the prompt style wrapped back to Auto: " + Controls()[3]);
             Key(Godot.Key.G, 'g');
             Require(_mainMenu!.Page == AreaOptionsPage.Game, "back on the Game page");
-            panel.ChangeForSelfTest(7, 1); panel.ChangeForSelfTest(7, 1);
-            Require(_gameSettings is { Pad: Arcanum.Input.PadScheme.Off, Touch: Arcanum.Input.TouchScheme.TouchPad } && Controls()[7] == "Controls: C Touch+pad", "C Touch+pad: " + Controls()[7]);
-            panel.ChangeForSelfTest(7, 1);
-            Require(_gameSettings is { Pad: Arcanum.Input.PadScheme.Off, Touch: Arcanum.Input.TouchScheme.Off } && Controls()[7] == "Controls: Original", "back to Original: " + Controls()[7]);
+            panel.ChangeForSelfTest(6, 1); panel.ChangeForSelfTest(6, 1);
+            Require(_gameSettings is { Pad: Arcanum.Input.PadScheme.Off, Touch: Arcanum.Input.TouchScheme.TouchPad } && Controls()[6] == "Controls: C Touch+pad", "C Touch+pad: " + Controls()[6]);
+            panel.ChangeForSelfTest(6, 1);
+            Require(_gameSettings is { Pad: Arcanum.Input.PadScheme.Off, Touch: Arcanum.Input.TouchScheme.Off } && Controls()[6] == "Controls: Original", "back to Original: " + Controls()[6]);
             // ARC-DEV-350: the HD pack problem box: the reason on screen, Continue closes it, Close game quits (the smoke takes the quit over).
             var quits = 0;
             _hdPackProblemQuitForSelfTest = () => quits++;
@@ -243,8 +256,8 @@ public partial class TerrainViewerApp
             Require(_turnBasedSetting && Controls()[1] == "Default Combat Mode: Turn Based", "the hero's turn-based switch took it: " + _mainMenu!.Notice + " " + _turnBasedNotice);
             panel.ChangeForSelfTest(1, 1);
             Require(!_turnBasedSetting && Controls()[1] == "Default Combat Mode: Real Time", "back to real time");
-            panel.ChangeForSelfTest(4, -1);
-            Require(_areaSession!.Rules.Mode == RuleMode.Steamwoven && Controls()[4] == "Rules: Steamwoven", "Steamwoven again in play");
+            panel.ChangeForSelfTest(5, -1);
+            Require(_areaSession!.Rules.Mode == RuleMode.Steamwoven && Controls()[5] == "Rules: Steamwoven", "Steamwoven again in play");
             Key(Godot.Key.O);
             Require(!MainMenuOpen && _mainMenu is null, "the O key closed the menu from play");
             await Frames(3);

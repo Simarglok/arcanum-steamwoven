@@ -918,6 +918,8 @@ public partial class TerrainViewerApp
         var life = hero ? owner.QueryHeroLife() : _combatHost?.Build(owner, notice.Target!).Combat is { } combat ? owner.QueryLife(combat.Target).View : null;
         _aiNotice = $"{AiName(notice.Npc)} attacks {(hero ? "the hero" : AiName(notice.Target!))}: "
             + AreaCombatHost.Describe(result, life?.Status.HitPoints, life?.Status.MaxHitPoints);
+        // ARC-COMBAT-1738 (0x4B4390 → 0x4B83E0): a hero whose weapon the strike took (dropped, destroyed or broken by a critical) wields the best weapon it still holds, before anything reads its equipment.
+        if (hero) HeroWeaponLostToStrike(result, EntityRow(notice.Npc), false);
         FloatCritterAttack(result, notice.Npc, hero ? HeroFloater : notice.Target!);
         // ARC-AI-1527 (0x4AEAB0): a follower of the PC an NPC's hit brought below a fifth of its hit points says its near-death line.
         FollowerAttackComments(result, notice.Npc, hero ? HeroFloater : notice.Target!);

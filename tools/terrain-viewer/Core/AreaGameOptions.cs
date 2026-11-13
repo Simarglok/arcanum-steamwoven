@@ -60,7 +60,6 @@ public static class AreaOptionTable
 {
     public const string NoModules = "one module is offered; choosing a module is not built";
     public const string NoViolenceFilter = "its effect on blood and death art is not built";
-    public const string NoAutoSwitch = "the Game page has no free slot; the setting is the settings file's auto switch line";
     public const string NoFollowerSkills = "followers do not use skills on their own yet";
     public const string NoBrightness = "the gamma control is not built";
     public const string NoTextDuration = "text bubbles are not built";
@@ -89,7 +88,7 @@ public static class AreaOptionTable
         new(AreaOption.ViolenceFilter, AreaOptionsPage.Game, 2, AreaOptionKind.List, 1, 1, OffOn, "violence filter", 0, NoViolenceFilter),
         new(AreaOption.DefaultCombatMode, AreaOptionsPage.Game, 3, AreaOptionKind.List, 2, 1, CombatModes, "turn-based", 0, null, NoFastTurnBased),
         new(AreaOption.AutoAttack, AreaOptionsPage.Game, 4, AreaOptionKind.List, 1, 1, OffOn, "auto attack", 1, null),
-        new(AreaOption.AutoSwitchWeapons, AreaOptionsPage.Game, 5, AreaOptionKind.List, 1, 1, OffOn, "auto switch", 0, NoAutoSwitch),
+        new(AreaOption.AutoSwitchWeapons, AreaOptionsPage.Game, 5, AreaOptionKind.List, 1, 1, OffOn, "auto switch", 0, null),
         new(AreaOption.AlwaysRun, AreaOptionsPage.Game, 6, AreaOptionKind.List, 1, 1, OffOn, "always run", 0, null),
         new(AreaOption.FollowerSkills, AreaOptionsPage.Game, 7, AreaOptionKind.List, 1, 1, OffOn, "follower skills", 1, NoFollowerSkills),
         new(AreaOption.Brightness, AreaOptionsPage.Video, 0, AreaOptionKind.Slider, 9, 9, null, "brightness", 0, NoBrightness),
@@ -104,9 +103,9 @@ public static class AreaOptionTable
         // ARC-UI-014: the rule mode (owner decision D8: the settings menu may switch it in play), after the original's eight Game slots.
         new(AreaOption.Rules, AreaOptionsPage.Game, 8, AreaOptionKind.List, 1, 1, RuleModes, "rules", (int)RuleMode.Steamwoven, null, Project: true),
         // ARC-GPAD-1376: the opt-in evidence log of the controller test (concept §0.8); off at every start, never saved.
-        new(AreaOption.EvidenceLog, AreaOptionsPage.Game, 9, AreaOptionKind.List, 1, 1, OffOnProject, "evidence log", 0, null, Project: true),
+        new(AreaOption.EvidenceLog, AreaOptionsPage.Video, 6, AreaOptionKind.List, 1, 1, OffOnProject, "evidence log", 0, null, Project: true),
         // The marker of the test script's task (concept §5): the log's task start and end lines, so the summariser can time it.
-        new(AreaOption.TestTask, AreaOptionsPage.Game, 10, AreaOptionKind.List, TestTaskCount, TestTaskCount, TestTasks, "test task", 0, null, Project: true),
+        new(AreaOption.TestTask, AreaOptionsPage.Video, 7, AreaOptionKind.List, TestTaskCount, TestTaskCount, TestTasks, "test task", 0, null, Project: true),
         // ARC-GPAD-1463 (concept docs/input/controller-schemes.md §0.1, owner request 2026-11-12): one Controls line, the original or one of the three
         // experimental schemes, switching at run time and saved with the game settings; it takes the Game page's eighth slot. The original mouse and
         // keyboard are live in every value. ARC-GPAD-1374: the prompt style (the glyph family override) is the Video page's.
@@ -117,8 +116,8 @@ public static class AreaOptionTable
 
     public static AreaOptionControl Of(AreaOption option) => All[(int)option];
 
-    /// <summary>A page's controls in slot order (hidden ones included).</summary>
-    public static IReadOnlyList<AreaOptionControl> Page(AreaOptionsPage page) => All.Where(control => control.Page == page).ToArray();
+    /// <summary>A page's controls in slot order (hidden ones included). ARC-COMBAT-1738: the Game page's project lines Evidence Log and Test Task (developer lines of the controller test) moved to the end of the Video page, making room for Auto Switch Weapons (issue 1729).</summary>
+    public static IReadOnlyList<AreaOptionControl> Page(AreaOptionsPage page) => All.Where(control => control.Page == page).OrderBy(control => control.Slot).ToArray();
 
     /// <summary>A page Steamwoven offers: one with a shown control.</summary>
     public static bool Offered(AreaOptionsPage page) => All.Any(control => control.Page == page && control.Shown);
@@ -129,7 +128,7 @@ public static class AreaOptionTable
 /// the floating text's level and speed (ARC-UI-021).</summary>
 public sealed record AreaGameOptions(int Difficulty, int CombatMode, bool AutoAttack, bool AlwaysRun, int Effects, int Voice, int Music,
     RuleMode Rules = RuleMode.Steamwoven, int Floats = FloaterRules.DefaultLevel, int FloatSpeed = FloaterRules.DefaultSpeed, bool EvidenceLog = false, int TestTask = 0,
-    ControlSchemeSettings? Controls = null, bool CombatTaunts = true)
+    ControlSchemeSettings? Controls = null, bool CombatTaunts = true, bool AutoSwitchWeapons = false)
 {
     /// <summary>ARC-GPAD-1374: the controller scheme choice the three lines show (the defaults when the host passes none).</summary>
     public ControlSchemeSettings Schemes => Controls ?? ControlSchemeSettings.Default;
@@ -152,6 +151,7 @@ public sealed record AreaGameOptions(int Difficulty, int CombatMode, bool AutoAt
         AreaOption.Floats => Floats,
         AreaOption.FloatSpeed => FloatSpeed,
         AreaOption.CombatTaunts => CombatTaunts ? 1 : 0,
+        AreaOption.AutoSwitchWeapons => AutoSwitchWeapons ? 1 : 0,
         _ => null,
     };
 }
@@ -212,7 +212,7 @@ public sealed record AreaGameSettings
     /// <summary>ARC-AI-1527: the "combat taunts" setting (OH5, 0x4B82E0; default on, the original registers 1): at the end of a hit the hero's followers may comment (<see cref="Arcanum.Simulation.Ai.FollowerRules.TauntKindOf"/>).</summary>
     public bool CombatTaunts { get; init; } = true;
 
-    /// <summary>ARC-COMBAT-1720: the "auto switch" setting (OH3, getter 0x4B8330; the original never registers it, so it reads 0 until written: default off): the hero's weapon wearing out wields the best remaining weapon for the target (0x4B83E0). The settings file's <c>auto switch</c> line; the options window shows no row yet (the Game page's eight slots are full, issue 1729).</summary>
+    /// <summary>ARC-COMBAT-1720: the "auto switch" setting (OH3, getter 0x4B8330; the original never registers it, so it reads 0 until written: default off): the hero's weapon wearing out wields the best remaining weapon for the target (0x4B83E0). The settings file's <c>auto switch</c> line; ARC-COMBAT-1738 shows its options row (Game page, the original's sixth slot).</summary>
     public bool AutoSwitchWeapons { get; init; }
 
     /// <summary>The "float speed" (a step of speed + 1 px).</summary>
