@@ -267,6 +267,8 @@ public partial class TerrainViewerApp
         // ARC-DEV-315: an item the session made has no row; it is a copy of its prototype, so its art is the prototype's current art.
         uint? art = map.TryGetRow(thrown.Item, out var itemRow) ? (Number(itemRow, CurrentArtSlot) is { } own ? own : null)
             : AreaMadeItems.Art(owner, thrown.Item, prototype => PrototypeItems()?.Item(prototype)?.Art, thrower);
+        // ARC-SCRIPT-1779: the item's own art is the ground art a script's change art number wrote, if any.
+        art = owner.QueryObjectArt(new SessionMapId(CurrentAreaMap), thrown.Item) ?? art;
         // ARC-COMBAT-1717: a thrown weapon carries the check decided at the throw; the hit's target is the struck critter (the hero, or an NPC of the shown map).
         var decided = owner.QueryNpcShot(shot);
         var weapon = decided is not null;
