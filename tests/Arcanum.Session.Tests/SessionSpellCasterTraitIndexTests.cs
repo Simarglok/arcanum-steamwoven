@@ -448,5 +448,12 @@ public sealed class SessionSpellCasterTraitIndexTests
         Assert.IsNull(tried.Apply(Run(MagickPlus), 0, At(Rat, SpellTargetObject.Npc)).JumpTo, "no inventory view");
         Assert.IsTrue(NotReady(tried));
         Assert.IsTrue(plain.QueryCritterIndexedWrites(Rat).IsEmpty);
+        // A view that lists other holders only.
+        var other = CreateWith(HalfElf());
+        using var _x = other;
+        Assert.AreEqual(GameSessionFailure.None, other.AttachMapInventory(Exterior, new SessionMapInventorySeed([new("oid:other", SessionHolderKind.Npc, false, false, [], [])], [])).Failure);
+        var viewed = new SessionSpellCaster(other, n => records.GetValueOrDefault(n), new Map(other, RatFields()), new Events());
+        Assert.IsNull(viewed.Apply(Run(MagickPlus), 0, At(Rat, SpellTargetObject.Npc)).JumpTo, "a view without the NPC");
+        Assert.IsTrue(other.QueryCritterIndexedWrites(Rat).IsEmpty);
     }
 }
