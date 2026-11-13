@@ -45,6 +45,8 @@ public sealed class ItemInsertScriptRealDataTests
         Assert.AreEqual(ScriptContentStatus.Read, dialog.Status, dialog.Detail);
         var record = dialog.Document!.Records.Single();
         Assert.AreEqual((1, DlgRecordRole.Npc, 0, 0, 0), (record.Id, record.Role, record.Condition.Length, record.Response.Length, record.Action.Length));
+        // ARC-AI-1655: the text and the alternate text agree byte for byte, so the line shows the same whoever triggers the script (an NPC's pickup, whose gender the host does not read).
+        CollectionAssert.AreEqual(record.Text.Bytes.ToArray(), record.AlternateText.Bytes.ToArray());
         foreach (var text in new[] { record.Text, record.AlternateText })
         {
             Assert.AreEqual(75, text.Length);

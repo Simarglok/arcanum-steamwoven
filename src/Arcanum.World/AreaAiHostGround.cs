@@ -170,8 +170,7 @@ public sealed partial class AreaAiHost
 
     /// <summary>
     /// ARC-AI-1309 (goal 16 → 0x42A9B0 → 0x42AA70): the pickup. A target with object flags OFF or DESTROYED (0x13 &amp; 3) is not taken and neither is an item whose holder is no junk pile (an item that lies nowhere: no action point is charged). In a round the actor's 1 action point is spent first (0x4B7CD0: none left ends its subturn and the pickup fails); then the item moves
-    /// into the NPC's list (<see cref="GameSessionOwner.PickUpItemByNpc"/>, the insert check the carry weight of 0x466510) and a <see cref="AreaAiNoticeKind.PickUp"/> notice tells the viewer. The goal's end reads the item switch first (0x4681A0: a loot window open on a container, <see cref="NpcPickupsOn"/>, fails it before any action point), and an item of a standing junk pile of the map's data leaves its container (ARC-AI-1486, <see cref="MapPileOf"/>). NOT READY: the item's get and insert-item
-    /// scripts (an item with one is refused, #1655), the room test of the NPC's grid (#1654), the item sound of a local picker (0x4F0BF0) and the network round's flag.
+    /// into the NPC's list (<see cref="GameSessionOwner.PickUpItemByNpc"/>, the insert check the carry weight of 0x466510) and a <see cref="AreaAiNoticeKind.PickUp"/> notice tells the viewer. The goal's end reads the item switch first (0x4681A0: a loot window open on a container, <see cref="NpcPickupsOn"/>, fails it before any action point), and an item of a standing junk pile of the map's data leaves its container (ARC-AI-1486, <see cref="MapPileOf"/>). ARC-AI-1655: the item's get (before the insert check, skip default leaves the item) and insert-item scripts run with the NPC as the triggerer and their lines go out in the notice. NOT READY: the room test of the NPC's grid (#1654), the item sound of a local picker (0x4F0BF0) and the network round's flag.
     /// </summary>
     [OriginalFunction(0x42AA70, OriginalFunctionScope.Partial)]
     public void PickUp(string id, string item)
@@ -198,9 +197,13 @@ public sealed partial class AreaAiHost
         }
         var view = GroundView();
         // ARC-AI-1486: an item of a junk pile of the map's data leaves its container (the pile is named by its target).
-        var result = _session.PickUpItemByNpc(_session.Version, id, item, moving => NpcInsertVerdict(id, view, moving), MapPileOf(item)?.Target);
-        Trace(id).Item = $"pickup {item} {result.Disposition} {result.Failure}";
-        if (result.Disposition == GameSessionDisposition.Changed || LyingCell(item) is null) _pickupItems.Remove(item);
-        if (result.Disposition == GameSessionDisposition.Changed) _notices.Add(new(AreaAiNoticeKind.PickUp, id, null) { Item = result.Item ?? item });
+        // ARC-AI-1655: the item's get and insert-item scripts run through the shown map's item script host, with the NPC as the triggerer.
+        var result = _session.PickUpItemByNpc(_session.Version, id, item, moving => NpcInsertVerdict(id, view, moving), MapPileOf(item)?.Target, _scene.ItemScripts?.Invoke());
+        Trace(id).Item = $"pickup {item} {result.Disposition} {result.Failure}" + (result.DeclinedBy is { } point ? $" declined by point {point}" : "");
+        // A get script that answered skip default leaves the item where it lies (its flag writes and lines still happen, so the disposition can be Changed).
+        var picked = result.Disposition == GameSessionDisposition.Changed && result.DeclinedBy is null;
+        if (picked || LyingCell(item) is null) _pickupItems.Remove(item);
+        if (picked) _notices.Add(new(AreaAiNoticeKind.PickUp, id, null) { Item = result.Item ?? item, Messages = result.Messages });
+        else if (result.DeclinedBy is not null) _notices.Add(new(AreaAiNoticeKind.PickUpDeclined, id, null) { Item = item, Messages = result.Messages });
     }
 }

@@ -99,10 +99,11 @@ public sealed class AreaItemScriptHostTests
             }
             Write("tig.dat", AreaOwnerFixture.Dat());
             Write("modules/Syn.dat", AreaOwnerFixture.Dat());
-            foreach (var name in new[] { "00500plain", "00501named", "00502silent", "00503acting" }) Write($"scr/{name}.scr", PrintAndSkip());
+            foreach (var name in new[] { "00500plain", "00501named", "00502silent", "00503acting", "00504same" }) Write($"scr/{name}.scr", PrintAndSkip());
             Write("scr/00510tome.scr", TomeScript());
             Write("dlg/00500plain.dlg", Encoding.Latin1.GetBytes("{1}{It hums for @pcname@.}{It hums softly.}{}{}{}{}"));
             Write("dlg/00501named.dlg", Encoding.Latin1.GetBytes("{1}{@npcname@ hums.}{}{}{}{}{}"));
+            Write("dlg/00504same.dlg", Encoding.Latin1.GetBytes("{1}{It hums.}{It hums.}{}{}{}{}"));
             Write("dlg/00503acting.dlg", Encoding.Latin1.GetBytes("{1}{It hums.}{}{}{}{}{gf 5 1}"));
             using var content = ScriptContent.Open(ContentMountPlan.Discover(root.FullName, "Syn").Plan!).Content!;
             return test(content);
@@ -133,6 +134,14 @@ public sealed class AreaItemScriptHostTests
             Assert.AreEqual(SessionPrintedLineStatus.NoDialog, host.PrintedLine(502, 1).Status);
             Assert.AreEqual(SessionPrintedLineStatus.Unsupported, host.PrintedLine(503, 1).Status, "the original would run the action field");
             Assert.AreEqual(SessionPrintedLineStatus.NoDialog, new AreaItemScriptHost(session, [Map()], null).PrintedLine(500, 1).Status);
+
+            // ARC-AI-1655 (IS2): the line of a run an NPC triggers is the text or the alternate text by the NPC's gender, which the host does not read: a line whose two texts agree is shown, one that differs is not.
+            Assert.AreEqual((SessionPrintedLineStatus.Shown, "It hums."), Pair(host.PrintedLineForNpc(504, 1)));
+            Assert.AreEqual(SessionPrintedLineStatus.Unsupported, host.PrintedLineForNpc(500, 1).Status, "text and alternate text differ");
+            Assert.AreEqual(SessionPrintedLineStatus.Unsupported, host.PrintedLineForNpc(501, 1).Status, "@npcname@ is not read");
+            Assert.AreEqual(SessionPrintedLineStatus.NoDialog, host.PrintedLineForNpc(502, 1).Status);
+            Assert.AreEqual(SessionPrintedLineStatus.Unsupported, host.PrintedLineForNpc(503, 1).Status, "the action field");
+            Assert.AreEqual((SessionPrintedLineStatus.Shown, " "), Pair(host.PrintedLineForNpc(504, 7)), "a missing line prints one space");
             return 0;
         });
     }

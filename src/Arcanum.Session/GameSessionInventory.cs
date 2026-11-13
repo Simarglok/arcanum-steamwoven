@@ -401,6 +401,13 @@ public interface ISessionItemScriptHost : IScrHost
 {
     SessionPrintedLine PrintedLine(int script, int line);
 
+    /// <summary>
+    /// ARC-AI-1655 (ledger IS2): the same line for a run whose triggerer is an NPC, not the PC (an NPC's ground pickup runs the item's get and insert-item scripts with the NPC as the triggerer): the original picks the text or the alternate text by
+    /// the triggerer's gender when it is a critter. A host that does not know the NPC's gender answers a line whose two texts agree and is otherwise <see cref="SessionPrintedLineStatus.Unsupported"/> (the session then refuses the pickup); the default
+    /// reads no line.
+    /// </summary>
+    SessionPrintedLine PrintedLineForNpc(int script, int line) => new(SessionPrintedLineStatus.Unsupported, string.Empty, "this host does not read a line for an NPC triggerer");
+
     /// <summary>ARC-SCRIPT-042: the rule of an effect number an add-effect action names (<see cref="SessionEffectDefinition.FromRule"/> of
     /// the module's effect rule), or null when the host has none; the session then refuses the move.</summary>
     SessionEffectDefinition? EffectDefinition(int number) => null;

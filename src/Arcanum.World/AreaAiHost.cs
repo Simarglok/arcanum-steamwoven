@@ -56,6 +56,9 @@ public sealed record AreaAiScene
     /// <summary>ARC-AI-1486 (the item system's pickup switch 0x5E8800, lowered by 0x468190 when an inventory window opens in loot or See Contents mode on a container, 0x5727B0; raised by 0x468180 at its close,
     /// 0x573440): whether such a window is open now (a container of the map or a junk pile). While it is, no NPC starts a pickup (<see cref="AreaAiHost.NpcPickupsOn"/>); null: no window is ever open.</summary>
     public Func<bool>? LootWindowOpen { get; init; }
+    /// <summary>ARC-AI-1655 (0x461810, 0x466640): the shown map's item script host, which runs the get (4) and insert-item (21) scripts of an item an NPC picks up (<see cref="GameSessionOwner.PickUpItemByNpc"/>); null (the provider, or its answer):
+    /// an item with one of those scripts is refused for an NPC.</summary>
+    public Func<ISessionItemScriptHost?>? ItemScripts { get; init; }
     /// <summary>ARC-AI-1313 (0x4D9240 at the dark wander's node 0x425D60): the light level 0..255 at a world cell, as the viewer's lighting answers it for a light-aware check; null: full light everywhere, so the dark wander accepts every tile.</summary>
     public Func<CellCoord, int>? CellLight { get; init; }
     /// <summary>ARC-WORLD-1162 (SWB17–SWB21): the beds of the shown map and who lies in them, shared with the hero's rest; null: the map has none, so an NPC at its standpoint finds no bed.</summary>
@@ -206,13 +209,15 @@ public sealed record AreaAiObjectFacts(int Type, CellCoord Cell)
 /// cast's play, its release and its goal's end, (ARC-WORLD-105) a missile launched at the play's action frame, (ARC-WORLD-109) a
 /// skill attempt at its action frame, (ARC-WORLD-113) a throw at its action frame, (ARC-WORLD-108) an item use's magic branch and (ARC-DEV-206, GR12)
 /// the cell an NPC the host moved was placed on (<see cref="AreaAiNotice.Cell"/>), for the tile's script.</summary>
-public enum AreaAiNoticeKind { Swing, Hit, Step, Sound, Fidget, Cast, Release, CastEnd, Missile, Skill, Throw, ItemUse, Entered, PickUp, Rewield }
+public enum AreaAiNoticeKind { Swing, Hit, Step, Sound, Fidget, Cast, Release, CastEnd, Missile, Skill, Throw, ItemUse, Entered, PickUp, Rewield, PickUpDeclined }
 
 /// <summary>ARC-WORLD-092: one notice for the viewer (the attack pose, the hit's sounds and status line, the redraw).</summary>
 public sealed record AreaAiNotice(AreaAiNoticeKind Kind, string Npc, string? Target)
 {
     /// <summary>ARC-DEV-206 (GR12, <see cref="AreaAiNoticeKind.Entered"/>): the world cell the NPC was placed on.</summary>
     public CellCoord? Cell { get; init; }
+    /// <summary>ARC-AI-1655 (<see cref="AreaAiNoticeKind.PickUp"/>, <see cref="AreaAiNoticeKind.PickUpDeclined"/>): the lines the item's get or insert-item script printed, for the message window.</summary>
+    public IReadOnlyList<SessionScriptMessage> Messages { get; init; } = [];
     public SessionAttackResult? Result { get; init; }
     public int Sound { get; init; }
     public AiAttackSwing Swing { get; init; }
