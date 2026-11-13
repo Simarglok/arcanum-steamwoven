@@ -557,7 +557,8 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     }
 
     // The points whose slot a run writes back as map changes (SlotProperty). ARC-DEV-312: the dying point's slot is kept under scr12.* (no save schema step: the keys are strings).
-    private static bool KeptAsMapChanges(int point) => point is ScrPoint.Examine or ScrPoint.Use or ScrPoint.Dialog or CatchingThiefPoint or ScrPoint.FirstHeartbeat or ScrPoint.Heartbeat or ScrPoint.TakingDamage or ScrPoint.LeaderSleeping or ScrPoint.Bust or ScrPoint.Dying;
+    private static bool KeptAsMapChanges(int point) => point is ScrPoint.Examine or ScrPoint.Use or ScrPoint.Dialog or CatchingThiefPoint or ScrPoint.FirstHeartbeat or ScrPoint.Heartbeat or ScrPoint.TakingDamage or ScrPoint.LeaderSleeping or ScrPoint.Bust or ScrPoint.Dying
+        or ScrPoint.Hit or ScrPoint.CritterHits or ScrPoint.CriticalHit;
 
     // The trap's view of the use slot: the loaded one under the session's script and counters; null without a use slot or for a stored
     // script number outside the catalogue's range (it names no script the content holds).
@@ -899,6 +900,43 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
             return Finish(run, _ => "a teleport from a taking-damage script is not modelled", writeback => WriteObjectSlot(writeback, attachee));
         }
         finally { _inTakingDamage = false; _clicked = previous; }
+    }
+
+    /// <summary>
+    /// ARC-SCRIPT-1483 (script trigger audit slice 5, ledger CP1–CP5): the set a combat-point script (hit 7, critter hits 26, critical hit 34) runs under: the placed set (<see cref="PlacedAdmission"/>), whose damage and cast actions deal the
+    /// installed poison weapons' damage and the college poison spell. A script outside it is refused and the hit goes on as without one.
+    /// </summary>
+    public static ScrAdmissionSet CombatPointAdmission => PlacedAdmission;
+
+    /// <summary>
+    /// ARC-SCRIPT-1483 (exe read 2026-11-13, ledger CP1–CP5): the combat-point script <paramref name="point"/> of <paramref name="attachee"/>, which the original's hit step runs once the hit is decided and before the damage step (0x4B3770 for a swing or an
+    /// arrow's strike: the calls at 0x4B37A3, 0x4B37CD and 0x4B37FC; 0x4B2F60 for a projectile's strike: 0x4B2F90, 0x4B2FD4, 0x4B3003; both through 0x441980, whose answer these call sites ignore). The three points: the hit script (7) of the attack
+    /// context's weapon (the weapon item, nothing for bare hands) with the attacker as the triggerer and the victim as the extra object; the critical-hit script (34) of the same weapon, for a critical hit, with the same objects; and the critter-hits
+    /// script (26) of the attacker with the victim as the triggerer and no extra object. The attachee is a row of the shown map (an NPC, or an item an NPC holds or lies there) or, for a carried item, a row the item host reads by identity
+    /// (<see cref="OtherMapRow"/>, as <see cref="RunItemUse"/> does); an object with no slot at the point has no script (<see cref="AreaScriptedUseOutcome.NoTeleport"/> with no run). Under <see cref="CombatPointAdmission"/>; the slot is kept as map
+    /// changes. A teleport and a conversation are not modelled from a hit and leave the run unapplied; no answer cancels the hit.
+    /// </summary>
+    public AreaScriptedUse RunCombatPoint(int point, ScrObjectRef attachee, ScrObjectRef? triggerer, ScrObjectRef? extra, ScrRuleProfile rules)
+    {
+        ArgumentNullException.ThrowIfNull(rules);
+        if (point is not (ScrPoint.Hit or ScrPoint.CritterHits or ScrPoint.CriticalHit)) throw new ArgumentOutOfRangeException(nameof(point), "Not a combat point.");
+        var previousItem = _itemUse;
+        // An item the host was not given a map of is read by identity, as an item's use is; every other object is a row of a loaded map.
+        _itemUse = attachee;
+        try
+        {
+            if (Row(attachee) is not { } row || Slot(attachee, point) is not { Script: > 0 }) return new(AreaScriptedUseOutcome.NoTeleport, null, [], null, "no script at the point");
+            if (_content is null) return new(AreaScriptedUseOutcome.ContentUnavailable, null, [], null, "no script content");
+            var previous = _clicked;
+            _clicked = (attachee.Code, row);
+            try
+            {
+                var run = ScrDispatcher.RunObject(new(point, attachee, triggerer, extra), this, new() { Rules = rules, Admission = CombatPointAdmission });
+                return Finish(run, _ => "a teleport from a combat-point script is not modelled", writeback => WriteObjectSlot(writeback, attachee));
+            }
+            finally { _clicked = previous; }
+        }
+        finally { _itemUse = previousItem; }
     }
 
     /// <summary>
