@@ -33,7 +33,8 @@ public sealed class AreaCombatHost : IAreaEventObjects
     private readonly RecordResolver _resolver;
     private readonly Func<int, CombatFields?>? _prototypes;
     private readonly Func<GameSessionOwner?>? _session;
-    private readonly Dictionary<(int Map, string Entity), SessionCritterCombatBuild> _builds = [];
+    // ARC-MAGIC-1475: the session-less build over the written entries (SessionCritterIndexedWrites.Signature, empty when none) it was made for.
+    private readonly Dictionary<(int Map, string Entity), (string Written, SessionCritterCombatBuild Build)> _builds = [];
     // ARC-WORLD-106: the NPC's build over the session's worn set it was made for (slot:item:prototype, in slot order), for one session (a
     // loaded save may reuse a made item's number for another item); and the worn sets of one session revision, kept only when every
     // worn item had fields (a prototype may load later without a revision).
@@ -268,7 +269,8 @@ public sealed class AreaCombatHost : IAreaEventObjects
             ? holder : null;
     }
 
-    /// <summary>ARC-WORLD-036: an NPC's stored fields on a map this host covers (a follower's loaded sheet), or null.</summary>
+    /// <summary>ARC-WORLD-036: an NPC's stored fields on a map this host covers (a follower's loaded sheet), or null. ARC-MAGIC-1475: the stored values as its row has
+    /// them, without what a spell wrote (<see cref="Fields(string)"/> lays that over); its callers read no stat or resistance.</summary>
     public CombatFields? Fields(int runtimeMap, string entity) =>
         Held(runtimeMap, out var map) && map.TryGetRow(entity, out var row) ? CombatFieldReader.Read(row).Fields : null;
 
@@ -444,9 +446,14 @@ public sealed class AreaCombatHost : IAreaEventObjects
     public int? HomeMap(string entity) =>
         Record(entity)?.HomeMap;
 
-    /// <summary>ARC-DEV-072: the NPC's stored fields by identity (<see cref="Record"/>), wherever it stands; null without a record.</summary>
+    /// <summary>ARC-DEV-072: the NPC's stored fields by identity (<see cref="Record"/>), wherever it stands; null without a record. ARC-MAGIC-1475: with the base stats
+    /// and resistances a spell wrote into the NPC laid over them (<see cref="SessionCritterIndexedWrites.Apply"/>, when the host has a session).</summary>
     public CombatFields? Fields(string entity) =>
-        Record(entity) is { } found && RowFields(found.Map, entity, out var fields) ? fields : null;
+        Record(entity) is { } found && RowFields(found.Map, entity, out var fields) && fields is not null ? Written(null, entity).Apply(fields) : null;
+
+    // ARC-MAGIC-1475: the entries a spell wrote into the NPC, from the given session or else the host's (none without one).
+    private SessionCritterIndexedWrites Written(GameSessionOwner? session, string entity) =>
+        (session ?? _session?.Invoke())?.QueryCritterIndexedWrites(entity) ?? SessionCritterIndexedWrites.None;
 
     /// <summary>ARC-DEV-072: <see cref="Build(int, string)"/> by identity: the NPC's combat values with its home map's worn items.</summary>
     public SessionCritterCombatBuild Build(string entity) =>
@@ -581,7 +588,7 @@ public sealed class AreaCombatHost : IAreaEventObjects
 
     private SessionCritterCombatBuild Build(GameSessionOwner session, AreaInventoryMap map, string entity)
     {
-        if (!map.TryGetRow(entity, out _) || !Holders(session, map.RuntimeMap).ContainsKey(entity)) return Build(map, entity);
+        if (!map.TryGetRow(entity, out _) || !Holders(session, map.RuntimeMap).ContainsKey(entity)) return Build(map, entity, session);
         if (!RowFields(map, entity, out var fields) || fields is null) return new(SessionCritterCombatFailure.NotAnNpc, null);
         if (Worn(session, map.RuntimeMap, entity) is not { } worn) return new(SessionCritterCombatFailure.InvalidWornItem, null);
         if (!ReferenceEquals(_buildSession, session)) { _wornBuilds.Clear(); _buildSession = session; }
@@ -595,9 +602,11 @@ public sealed class AreaCombatHost : IAreaEventObjects
         return build;
     }
 
-    private SessionCritterCombatBuild Build(AreaInventoryMap map, string entity)
+    private SessionCritterCombatBuild Build(AreaInventoryMap map, string entity, GameSessionOwner? session = null)
     {
-        if (_builds.TryGetValue((map.RuntimeMap, entity), out var cached)) return cached;
+        // ARC-MAGIC-1475: the base stats and resistances a spell wrote into the NPC lie over its stored fields here too (and name the cached build).
+        var written = Written(session, entity);
+        if (_builds.TryGetValue((map.RuntimeMap, entity), out var cached) && cached.Written == written.Signature) return cached.Build;
         SessionCritterCombatBuild build;
         // ARC-DEV-076 (MIG3): an entity that is no holder of the map's seed (an item's row) is no NPC: the identity questions reach any entity.
         if (!RowFields(map, entity, out var fields) || fields is null || map.Seed.Holders.FirstOrDefault(h => h.Entity == entity) is not { } holder)
@@ -607,9 +616,9 @@ public sealed class AreaCombatHost : IAreaEventObjects
             var carried = new List<CombatFields>();
             foreach (var item in holder.Items)
                 if (RowFields(map, item, out var itemFields) && itemFields is not null) carried.Add(itemFields);
-            build = SessionCritterCombat.From(entity, fields, carried);
+            build = SessionCritterCombat.From(entity, written.Apply(fields), carried);
         }
-        _builds[(map.RuntimeMap, entity)] = build;
+        _builds[(map.RuntimeMap, entity)] = (written.Signature, build);
         return build;
     }
 

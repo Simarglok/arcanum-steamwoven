@@ -193,7 +193,9 @@ damage apply (0x4B4390) with no attacker (GT194/GT195, ledger OD3, OD4, OD7–OD
   candidates are only the objects the player's click can pick: a click-through scenery (OF_CLICK_THROUGH) is never picked, as in
   the original, and a roof-covered body is not drawn, so neither can be Alt-clicked. A candidate is skipped for the next (at
   most eight tried, `Skipped` in the PASS line) when it has no cell within the hero's reach to stand on, when no start a few
-  cells away has a planner route to the cell the attack will walk to, or when the pointer finds no point of it; with every
+  cells away has a planner route to the cell the attack will walk to with a clear shot from that cell (ARC-BUG-1536: a wall on the target's own
+  tile blocks the line from a diagonal approach, the original's rule, so a start whose approach cell has none is not used; a ranged
+  weapon's approach cell is not tested, its walk stops at the first clear cell), or when the pointer finds no point of it; with every
   candidate skipped the stage is `NONE` with the reasons. On the main map the earlier stage chose a click-through scenery
   ("target not visible") and then a start with no route to the approach cell. Known limit: the attack walks to the standable
   cell nearest the object and then nearest the actor (`ApproachCell`), which does not ask whether a route leads there (since ARC-WORLD-073 the attack takes the original's approach instead, a cell a route reaches by construction, [click route](click-route-runtime.md#attack-approach-arc-world-073)); the
