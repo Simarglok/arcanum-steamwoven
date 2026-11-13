@@ -412,7 +412,24 @@ public sealed class AreaAiBedTests
         scene.Host.RunStandpoints(scene.Npc);
         Assert.AreEqual("pc", occupancy.Occupant(OtherBedKey), "the hero's bed is not touched");
         Assert.AreEqual(scene.Npc, occupancy.Occupant(BedKey));
+        Assert.AreEqual(BedCodeOfBedKey, scene.Session.QueryNpcBed(scene.Npc), "the fallback seat recorded the bed it took");
         scene.Host.NoticeKill(scene.Npc, null);
         Assert.IsNull(scene.Session.QueryNpcBed(scene.Npc));
+    }
+
+    [TestMethod]
+    public void A_saved_bed_that_stands_on_neither_standpoint_is_not_taken_and_the_nearer_standpoints_bed_is()
+    {
+        var occupancy = new AreaBedOccupancy();
+        var far = new AreaObjectKey(new string('b', 64), 1, AreaSourceKind.Static, 0, 11, 1100L, new string('e', 64), 100);
+        var scene = AreaAiRouteTests.Open(AreaAiRouteTests.Npc(0, [], 0, (DayStand.X, DayStand.Y), (NightStand.X, NightStand.Y)),
+            beds: new AreaAiBeds(occupancy, () => [(BedKey, NightStand), (far, new CellCoord(3, 3))]));
+        WriteSavedSleeper(scene);
+        Assert.AreEqual(GameSessionDisposition.Changed, scene.Session.WriteNpcBed(scene.Session.Version, scene.Npc, new SessionMapId(1), SessionNpcBed.Code(0, 11)).Disposition);
+        JumpToHour(scene, 3);
+        scene.Host.RunStandpoints(scene.Npc);
+        Assert.IsNull(occupancy.Occupant(far), "a stale field does not seat the NPC in a bed away from its standpoints");
+        Assert.AreEqual(scene.Npc, occupancy.Occupant(BedKey));
+        Assert.AreEqual(BedCodeOfBedKey, scene.Session.QueryNpcBed(scene.Npc));
     }
 }

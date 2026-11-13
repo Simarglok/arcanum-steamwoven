@@ -56,6 +56,19 @@ public sealed class NpcBedStateTests
     }
 
     [TestMethod]
+    public void A_code_of_a_far_sector_survives_a_save_and_the_record_moves_with_the_map_it_is_written_on()
+    {
+        using var owner = Create();
+        var far = SessionNpcBed.Code((1290L << 26) | 1452, 3) ?? throw new AssertFailedException("code");
+        Changed(owner.WriteNpcBed(owner.Version, Virgil, Exterior, far), owner, 1);
+        Changed(owner.WriteNpcBed(owner.Version, Virgil, Cave, far - 1), owner, 2);
+        var text = GameSessionSnapshotCodec.Encode(owner.Capture());
+        Assert.AreEqual(1, System.Text.RegularExpressions.Regex.Matches(text, "npc\\.bed").Count, "one record whatever map it names");
+        using var restored = Restore(Decode(text));
+        Assert.AreEqual(far - 1, restored.QueryNpcBed(Virgil));
+    }
+
+    [TestMethod]
     public void A_refused_write_changes_nothing()
     {
         using var owner = Create();

@@ -116,22 +116,32 @@ public sealed partial class AreaAiHost
     }
 
     // A sleeper whose critter flag the session saved (a load) but whose bed holds nobody (the occupancy is not saved): ARC-WORLD-1525 (VBG14) the bed the session saved for it takes it again, the exact bed the original's occupant field names;
-    // a save with no such record (an older one, a bed of the mobile list) or a saved bed that is gone or taken falls back to the bed of its nearer standpoint (a sleeper lay in the bed it stood at; here the place says which).
-    private string? RecoverSeat(string npc, AreaAiBeds beds, AreaNpcRoute route)
+    // a save with no such record (an older one, a bed of the mobile list) or a saved bed that is gone, taken or not at one of the NPC's standpoints falls back to the bed of its nearer standpoint (a sleeper lay in the bed it stood at; here the place says which).
+    private string? RecoverSeat(string npc, AreaAiBeds beds, AreaNpcRoute route) =>
+        RecoverSavedBed(npc, beds, route) ?? RecoverNearestBed(npc, beds, route);
+
+    private bool NeedsSeat(string npc, AreaAiBeds beds) =>
+        beds.Occupancy.BedOf(npc) is null && (_session.QueryObjectFlags(npc).CritterSet & unchecked((int)SleepingFlag)) != 0;
+
+    // The exact bed of the saved field; a bed that stands on neither standpoint (a stale field of an NPC that was moved, say) is not taken.
+    private string? RecoverSavedBed(string npc, AreaAiBeds beds, AreaNpcRoute route)
     {
-        if (beds.Occupancy.BedOf(npc) is not null || (_session.QueryObjectFlags(npc).CritterSet & unchecked((int)SleepingFlag)) == 0) return null;
-        if (_session.QueryNpcBed(npc) is { } saved)
-            foreach (var (key, _) in beds.Placed())
-                if (BedCode(key) == saved)
-                {
-                    if (beds.Occupancy.Occupant(key) is null && beds.Occupancy.Seat(key, npc))
-                    {
-                        // A save of slice 2 kept the sleeping flag only: the don't-draw flag is written again with it.
-                        WriteSleeping(npc, true);
-                        return "seated again in its saved bed";
-                    }
-                    break;
-                }
+        if (!NeedsSeat(npc, beds) || _session.QueryNpcBed(npc) is not { } saved) return null;
+        foreach (var (key, cell) in beds.Placed())
+        {
+            if (BedCode(key) != saved) continue;
+            var atStandpoint = new[] { route.StandpointNight, route.StandpointDay }.Any(stand => cell.X >= 0 && cell.Y >= 0 && (uint)cell.X == stand.X && (uint)cell.Y == stand.Y);
+            if (!atStandpoint || beds.Occupancy.Occupant(key) is not null || !beds.Occupancy.Seat(key, npc)) return null;
+            // A save of slice 2 kept the sleeping flag only: the don't-draw flag is written again with it.
+            WriteSleeping(npc, true);
+            return "seated again in its saved bed";
+        }
+        return null;
+    }
+
+    private string? RecoverNearestBed(string npc, AreaAiBeds beds, AreaNpcRoute route)
+    {
+        if (!NeedsSeat(npc, beds)) return null;
         foreach (var stand in NearestFirst(npc, route))
             if (BedAt(beds, new(stand.X, stand.Y)) is { } bed && beds.Occupancy.Occupant(bed) is null && beds.Occupancy.Seat(bed, npc))
             {
@@ -161,8 +171,11 @@ public sealed partial class AreaAiHost
         _bedsReconciled = true;
         foreach (var npc in _npcs.Keys.ToArray())
             if (beds.Occupancy.BedOf(npc) is { } bed && (!Sleeping(npc) || Gone(npc) || DeadCritter(npc))) Unseat(npc, beds, bed);
+        // The saved beds first, so no sleeper's fallback takes another sleeper's exact bed (ARC-WORLD-1525).
         foreach (var npc in _npcs.Keys.ToArray())
-            if (RouteOf(npc) is { } route) RecoverSeat(npc, beds, route);
+            if (RouteOf(npc) is { } route) RecoverSavedBed(npc, beds, route);
+        foreach (var npc in _npcs.Keys.ToArray())
+            if (RouteOf(npc) is { } route) RecoverNearestBed(npc, beds, route);
     }
 
     // A killed NPC leaves its bed at once (the original's handling of a dead occupant is not read: a project choice, so the bed does not refuse the hero for ever).
