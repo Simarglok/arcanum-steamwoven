@@ -107,7 +107,7 @@ with an action ending in `JO`/`UW`/`FL`/`ET` (the original then skips the insult
 `c z` (prefix) are offered blocked as
 `UnsupportedInteraction`, and so is a prefix `t` without the [trainer ports](#trainer-reply-arc-script-1150) and a prefix `r` without the [rumor ports](#rumor-reply-arc-script-1304); with them `t:` is the trainer reply and `r:` the rumor reply; `q` with the [quest ports](#quest-state-reply-arc-script-1532) is the quest-state reply; `d:` and `x:` are the [directions replies](#directions-reply-arc-script-1533) with their ports and otherwise, like `u` and `q` without its ports
 (state-dependent visibility), make the step a frontier. NPC `g:` (prefix) is the original's greeting when the conversation has a greeting port (ARC-WORLD-058,
-[dialog greeting](dialog-greeting.md)), else a frontier; an exact `i:` is the [insulted line](#insult-line-arc-script-1505) with the greeting port, else a frontier; `m:`/`r:` (prefix) are frontiers ([#1535](https://github.com/Simarglok/arcanum-steamwoven/issues/1535)). Other text is literal.
+[dialog greeting](dialog-greeting.md)), else a frontier; an exact `i:` is the [insulted line](#insult-line-arc-script-1505) with the greeting port, else a frontier; `m:`/`r:` (prefix) are the [NPC price and rumor lines](#npc-price-and-rumor-lines-arc-script-1535) with their ports, else frontiers. Other text is literal.
 
 ## conversation-grammar-v1
 
@@ -488,8 +488,8 @@ a dumb PC (its intelligence as the reply gates read it at most 4, the original's
 offset still applied. Without the port, or when its facts are unknown, the text stays empty and the reply works as before; a refused
 roll, a port exception or an undecodable phrase fails the conversation (`InvalidQueryResult`, `QueryException`, `InvalidText`). The
 phrase changes only the text: the transitions and blocks above stay. The `t:` phrase (PC lines 500..599) is built (ARC-SCRIPT-1150); its argument is
-stored after the phrase, not appended to it (ledger DTR1). The `r:` phrase (the PC's class line 2000) is built too (ARC-SCRIPT-1304, ledger RMR1). The `d:` (PC lines 1300..1399) and `x:` (1400..1499) phrases are built (ARC-SCRIPT-1533, ledger DIR1). Not built: the phrases of the prefix markers (`c q u z`;
-`c` reads one line; issues [#1532](https://github.com/Simarglok/arcanum-steamwoven/issues/1532), [#1534](https://github.com/Simarglok/arcanum-steamwoven/issues/1534)) and the healer menu behind `h:` (ARC-SCRIPT-044).
+stored after the phrase, not appended to it (ledger DTR1). The `r:` phrase (the PC's class line 2000) is built too (ARC-SCRIPT-1304, ledger RMR1). The `d:` (PC lines 1300..1399) and `x:` (1400..1499) phrases are built (ARC-SCRIPT-1533, ledger DIR1). Not built: the phrases of the prefix markers (`u z`;
+issue [#1534](https://github.com/Simarglok/arcanum-steamwoven/issues/1534)) and the healer menu behind `h:` (ARC-SCRIPT-044).
 
 ## Trainer reply (ARC-SCRIPT-1150)
 
@@ -623,9 +623,23 @@ the node's line after the node's action ran, and the node's replies are offered 
 the `Line` roll of the greeting port: the race group 1000 + 50 × (0 when the PC's race is the NPC's, else the PC's race + 1), the dumb file for a dumb NPC, the override record 10999 + 1, names substituted; the race generator, not the class one); and the NPC's last
 words when a Player `i:` reply ends the talk (the reaction at most 20) or when the hostile check turns the NPC on the PC, which replace the NPC's line before the talk ends as
 `Ended(Insulted)` or `Ended(HostileRefusal)` (no replies, no SCR continuation). Without the greeting port a node `i:` stays a frontier (`UnsupportedGeneratedText`) and the last words
-are not changed. An `i:` node that is planned without its replies (the target of a final line, a greeting slot's node) stays a frontier, as the line is picked at the node's entry. The NPC lines `m:` and `r:`
-are not built (no installed node has either, [#1535](https://github.com/Simarglok/arcanum-steamwoven/issues/1535)). The dialog's item hand-over to the PC (`IN -n`) runs the hero's room test and lays a refused item on the hero's tile since
+are not changed. An `i:` node that is planned without its replies (the target of a final line, a greeting slot's node) stays a frontier, as the line is picked at the node's entry. The NPC lines `m:` and `r:` are the
+[next section](#npc-price-and-rumor-lines-arc-script-1535). The dialog's item hand-over to the PC (`IN -n`) runs the hero's room test and lays a refused item on the hero's tile since
 ARC-WORLD-1131, so it is not open any more. Tests: `DialogInsultLineTests` (synthetic) and the opt-in `DialogInsultLineRealDataTests` (`DAT_ROOT`: 15 nodes in 9 files, and no node starts with `m:` or `r:`).
+
+## NPC price and rumor lines (ARC-SCRIPT-1535)
+
+An NPC node whose text starts with `m:` or `r:` (either case, a prefix; no installed node has either, 0 of 709 files, checked by the opt-in `DialogInsultLineRealDataTests`) hands the node to the
+price screen or the rumor draw of the trainer's and rumor talks ([ledger INS3](../research/ledger/social.md#insult-line-arc-script-1505), 0x416840 → 0x418A40, 0x418FC0). The node's action
+runs first; the node's own replies are not built (the original returns 0). `m:$price,node`: the screen of the [trainer's talk](#trainer-reply-arc-script-1150) (the NPC's class line 1000 with
+the price on the reaction scale, a base price of 0 shown as 0 and paying nothing, the PC lines 1..99 and 100..199), whose yes (the `GoldCommand` from the hero's own gold, the notice of line 2000 when it
+does not cover the price) pays and follows the `node` number like a response (a node, 0 ends the talk, a negative number is a script line), and whose no, and the line-2000 notice, follow the node's
+own response field. `r:$price,list`: the [rumor draw](#rumor-reply-arc-script-1304) of the list with the node's own response in the place of a reply's response (the way on after the tale, the
+notice of line 7000 and the no). The numbers are read as the Player replies read theirs (`ParseNpcPriceLine`, `ParseRumorReply`). The line needs the greeting port and the money ports (`World`, `Gold`
+and a purse or the trainer port; `r:` also the rumor port, and the money ports only for a price of at least 1), else the node stays a frontier (`UnsupportedGeneratedText`), as it does with
+arguments outside the subset (no `$` or no comma after it, a negative `m:` price, a rumor outside 1000..2999) and where the node is planned without its replies or nested (a final line's target, a greeting slot). The
+follow nodes are planned one level deep when the node is planned, before its action runs, so a missing or Player-role follow fails the step and a follow that is itself a generated line (`g:`, `m:`, `r:`) is a
+frontier. The effect and turn budgets are checked before the payment. Tests: `DialogNpcTalkTests` (synthetic).
 
 ## Barter reply (ARC-UI-050)
 

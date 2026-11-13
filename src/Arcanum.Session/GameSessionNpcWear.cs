@@ -65,6 +65,7 @@ public sealed partial class GameSessionOwner
         var planned = PlanNpcWield(world, map, seed, npc, Enum.GetValues<EquipmentSlot>());
         if (planned.Failure != GameSessionFailure.None) return new(planned.Failure, []);
         _inventory.NpcWorn[npc] = planned.Record!;
+        foreach (var worn in planned.Record!.Values) _inventory.ForgetSlot(worn);
         return new(GameSessionFailure.None, planned.Steps);
     }
 
@@ -89,6 +90,7 @@ public sealed partial class GameSessionOwner
         // A first record for an NPC the session never dressed counts against the saved budget (a save holds at most MaxNpcWorn, as the restock's wield checks).
         if (!_inventory.NpcWorn.ContainsKey(npc) && _inventory.NpcWorn.Count >= SessionInventoryState.MaxNpcWorn) return RejectBest(GameSessionFailure.BudgetExceeded);
         _inventory.NpcWorn[npc] = planned.Record!;
+        foreach (var worn in planned.Record!.Values) _inventory.ForgetSlot(worn);
         Revise();
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, planned.Steps, Version);
     }

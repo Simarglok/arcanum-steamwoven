@@ -132,7 +132,10 @@ STAGE_PASS = {
 # ARC-DEV-1556: a stage whose own PASS line is not the whole check: the lines that must also be in the log. `transfer` runs the
 # visitor-fight sub-check after its own PASS line; with a hero (HERO_STAGES) the Crash Site start and the town both print its PASS
 # (a NONE or NO-TARGET line there means the fight did not run), so the stage counts as run only with both.
-STAGE_ALSO_PASS = {"transfer": ("ARC-DEV-065 native-smoke visitor-fight PASS",)}
+# ARC-AI-1695: `transfer` also carries a force-joined NPC without a dialog (its led-carry and led-home lines), and the two stages that move the main map's window
+# (`follower-far`, `teleport-follow`) check it there too (led-far).
+STAGE_ALSO_PASS = {"transfer": ("ARC-DEV-065 native-smoke visitor-fight PASS", "ARC-AI-1695 native-smoke led-carry PASS", "ARC-AI-1695 native-smoke led-home PASS"),
+                   "follower-far": ("ARC-AI-1695 native-smoke led-far PASS",), "teleport-follow": ("ARC-AI-1695 native-smoke led-far PASS",)}
 BATTERY_STAGES = ("map", "resources")
 # The stages a hero must play: without a session hero the viewer skips them (the AI stages silently). The map battery
 # plays the hero's stages too (cast, turn-based, ranged, container, junk ...). `transfer` is one (ARC-DEV-1547): its visitor-fight
@@ -244,7 +247,7 @@ STAGE_NEEDS: dict[str, StageNeeds] = {
     "indoor-fade": _needs(**_MAIN_ONLY, sector=TOWN, only_sector=True),
     "critter-fall": _needs(own=True),  # fails in a longer list ("ran over at least two cells"), passes alone
     "save-resume": _needs(), "cast-multi": _needs(map=RUINS, only_map=True), "grenade": _needs(map=CAVE),
-    # ai-react: a bystander the witness rule sends fleeing (a human near the hit, ARC-DEV-1577) exists in the town, not at the Crash Site (the animals protect one another: NONE); elven ruins and the cave: the spell did not land (2026-11-13)
+    # ai-react: a bystander the witness rule sends fleeing (a human near the hit, ARC-DEV-1577) exists in the town, not at the Crash Site (the animals protect one another: NONE); elven ruins and the cave: the spell lands (ARC-DEV-1660: the victim must have a clear line of fire, the cast refuses without one, spell.mes 604) but no calm bystander the rule sends fleeing stands near the hit: NONE (2026-11-13)
     "companion-click": _needs(), "npc-shot": _needs(sector=TOWN), "ai-react": _needs(**_MAIN_ONLY, sector=TOWN, only_sector=True, own=True), "please-move": _needs(),
     "placement-census": _needs(),  # passes after the other AI stages (ARC-DEV-1187: baseline loads at the stage boundaries, a companion is no NPC row)
     "inv-carry": _needs(debug=True, own=True),  # a dead body with an item; NONE at the Crash Site was seen

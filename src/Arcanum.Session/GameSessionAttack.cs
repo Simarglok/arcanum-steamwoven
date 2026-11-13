@@ -707,9 +707,9 @@ public sealed partial class GameSessionOwner
             MagickTechAptitude = aptitude,
             ArmorClass = AttackRules.ArmorClass(0, equipment.ArmorClassAdjustment, snapshot.GetEffective(CharacterStat.AcAdjustment), value => value,
                 _rules.Combat),
-            // ARC-MAGIC-027: the hero's durable effects' resistance changes (the innate entries' are not modelled).
+            // ARC-MAGIC-027: the hero's durable effects' resistance changes, under the innate effects' (ARC-MAGIC-1700).
             Resistances = CombatantRules.Resistances(HeroStoredResistances().Damage, equipment.Resistances, snapshot.GetEffective(CharacterStat.Constitution), false,
-                EffectDomain.Resistances(_effects.Entries, _effects.Definitions)),
+                HeroEffectResistances()),
             Conditions = CombatantRules.Conditions(status, state, facts.Traits, CombatantFlags.None),
             LightEmission = equipment.Light,
             DodgeLevel = skills[Skill.Dodge].Level,
