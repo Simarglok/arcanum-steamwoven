@@ -134,6 +134,8 @@ public partial class TerrainViewerApp
         ProcessPickPocketPending(); ProcessLockpickPending(); ProcessItemUsePending();
         // The attempt may run a caught-thief script that starts a transfer: the busy check again.
         if ((busy = QuickBusyReason()) != QuickBusy.None) { SetQuickStatus(prefix + "save refused: " + Describe(busy)); return null; }
+        // ARC-UI-1542: a light the session's changes of this frame (an input handler, the attempt just made) cause is recorded before the capture, or a load would take the new stamps as its baseline and lose it.
+        SyncBarLights();
         // ARC-DEV-318 (MIG14 S9c): the hero's casting goal and the casts queued beneath it are saved with their runs (the gate ARC-MAGIC-015 set is gone).
         var grid = (AreaGridSession)_worldActor.Session!;
         var cell = grid.Chart.ToWorld(grid.State.CommittedCell);
@@ -404,14 +406,17 @@ public partial class TerrainViewerApp
             // ARC-UI-1542 (ledger GB13): the top strip's lit buttons and the Map button's face are part of the save. A quest accepted lights the Logbook
             // button (the production route: the stamp of the session's logbook), the Map face is turned to the other one, then F7 saves.
             var lightQuest = Enumerable.Range(1000, 40).First(number => _areaSession!.QueryQuest(number) is null);
-            var faceBefore = _gameBar.Lights.MapMode;
+            var faceBefore = _gameBar.Lights.MapMode; var litBefore = _gameBar.Lights.LitMask;
             var savedFace = faceBefore == AreaLightSlot.TownMap ? AreaLightSlot.WorldMap : AreaLightSlot.TownMap;
             _gameBar.Lights.SetMapMode(savedFace);
             var lightSession = _areaSession!; RecordBarLights(lightSession);
             Require(lightSession.SetQuestState(lightSession.Version, lightQuest, SessionQuestState.Accepted).Disposition == GameSessionDisposition.Changed, "a quest was accepted");
             for (var frame = 0; frame < 3; frame++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
-            Require(_gameBar.Lights.IsLit(AreaLightSlot.Logbook) && _gameBar.Lights.MapMode == savedFace, "the quest lit the Logbook button");
-            Require(_areaSession!.QueryBarLights() == new SessionBarLightsState(_gameBar.Lights.LitMask, (int)savedFace), "the session holds the lit state for the save: " + _areaSession.QueryBarLights());
+            // Earlier steps of the smoke may have lit other buttons: the save holds whatever is lit, with the Logbook added.
+            var savedMask = _gameBar.Lights.LitMask;
+            Require(_gameBar.Lights.IsLit(AreaLightSlot.Logbook) && _gameBar.Lights.MapMode == savedFace && savedMask == (litBefore | 1 << (int)AreaLightSlot.Logbook),
+                $"the quest lit the Logbook button: before {litBefore}, now {savedMask}");
+            Require(_areaSession!.QueryBarLights() == new SessionBarLightsState(savedMask, (int)savedFace), "the session holds the lit state for the save: " + _areaSession.QueryBarLights());
             QuickKey(Key.F7);
             var slot = _saveLibraryForSelfTest.AutoSlot;
             Require(slot.Exists && _quickSaveStatus?.StartsWith("F7 quick saved", StringComparison.Ordinal) == true, "F7 saved: " + _quickSaveStatus);
@@ -457,10 +462,10 @@ public partial class TerrainViewerApp
             }
 
             // ARC-UI-1542: the loaded session shows the Logbook button lit again and the saved Map face; the sector's answer holds no sway until it changes.
-            Require(!ReferenceEquals(caveSession, _areaSession) && _areaSession!.QueryBarLights() is { } restoredLights && restoredLights.LitMask == (1 << (int)AreaLightSlot.Logbook) && restoredLights.MapMode == (int)savedFace,
+            Require(!ReferenceEquals(caveSession, _areaSession) && _areaSession!.QueryBarLights() is { } restoredLights && restoredLights.LitMask == savedMask && restoredLights.MapMode == (int)savedFace,
                 "the loaded session holds the saved lights: " + _areaSession.QueryBarLights());
-            Require(_gameBar.Lights.IsLit(AreaLightSlot.Logbook) && _gameBar.Lights.ArtOf(AreaBarButton.Logbook) == 560 && _gameBar.Lights.MapMode == savedFace,
-                $"F8 brought back the lit Logbook button and the Map face {savedFace}: lit {_gameBar.Lights.LitMask}, face {_gameBar.Lights.MapMode}");
+            Require(_gameBar.Lights.LitMask == savedMask && _gameBar.Lights.ArtOf(AreaBarButton.Logbook) == 560 && _gameBar.Lights.MapMode == savedFace,
+                $"F8 brought back the lit buttons {savedMask} (the Logbook among them) and the Map face {savedFace}: lit {_gameBar.Lights.LitMask}, face {_gameBar.Lights.MapMode}");
             _gameBar.Lights.Light(AreaLightSlot.Logbook, false, true); _gameBar.Lights.SetMapMode(faceBefore); RecordBarLights(_areaSession!); _gameBarPanel?.Render();
 
             // A damaged slot: F8 fails, the running session and map stay.

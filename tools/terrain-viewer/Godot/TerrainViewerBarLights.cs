@@ -113,8 +113,8 @@ public partial class TerrainViewerApp
                 changed |= _gameBar.Lights.SetMapMode(townMap ? AreaLightSlot.TownMap : AreaLightSlot.WorldMap);
             }
         }
-        if (!changed) return;
+        // Recorded whether or not a light changed now: a level-up that lit the Character button while no session was set (a map transfer) is still to be handed over, and the same state is no change.
         RecordBarLights(session);
-        _gameBarPanel?.Render();
+        if (changed) _gameBarPanel?.Render();
     }
 }
