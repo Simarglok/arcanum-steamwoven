@@ -259,6 +259,28 @@ public sealed class DialogHealerTests
         Assert.AreEqual(DialogConversationSelectStatus.AtFrontier, limited.Select(limited.Options[0].Token).Status);
         Assert.AreEqual(DialogFrontierKind.EffectLimit, limited.Frontier!.Kind);
         Assert.AreEqual(0, tight.Pay.Moved.Count, "nothing is paid when the payment and the effect do not both fit");
+
+        var exact = new Rig();
+        exact.Healer.Facts = new(0, true, 2, 0, false, true);
+        var fits = exact.Start(HealerReply(), options: new DialogConversationOptions { MaxEffects = 2 });
+        Pick(fits, 1);
+        Pick(fits, 1);
+        Pick(fits, 1);
+        Assert.AreEqual(1, exact.Pay.Moved.Count + exact.Healer.Commands.Count - 1, "two effects fit exactly: the payment and the heal both run");
+        Assert.AreEqual("15000 cls_m2m", fits.NpcLine!.Text);
+    }
+
+    [TestMethod]
+    public void The_effect_does_not_read_the_facts_again_after_the_payment()
+    {
+        var rig = new Rig();
+        rig.Healer.Facts = new(0, true, 2, 0, false, true);
+        var conversation = Open(rig);
+        Pick(conversation, 1);
+        rig.Healer.ThrowOnFacts = true;
+        Pick(conversation, 1);
+        CollectionAssert.AreEqual(new[] { "skill:10:True" }, rig.Healer.Commands, "the no-leader flag was read before the payment");
+        Assert.AreEqual(1, rig.Pay.Moved.Count);
     }
 
     [TestMethod]

@@ -25,7 +25,7 @@ public sealed partial class AreaAiHost
         if (npc == Pc || !_npcs.ContainsKey(npc)) return null;
         var skill = NpcSkill(npc, Skill.Heal);
         var item = HealingItem(npc);
-        var allowed = skill is not null && item is not null && HealSkillAccepts(npc, item, Pc);
+        var allowed = item is not null && HealSkillAccepts(npc, item, Pc);
         var leader = Leader(npc);
         return new(CollegeLevel(npc, HealerCollege), allowed, skill?.Level ?? 0, (int?)skill?.Training ?? 0, leader == Pc, leader is null);
     }

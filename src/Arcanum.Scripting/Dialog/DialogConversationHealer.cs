@@ -133,16 +133,16 @@ public sealed partial class DialogConversation
     [OriginalFunction(0x419B50, OriginalFunctionScope.Partial)]
     private void OfferHealerService(TrainerChoice choice, DialogHealerFacts facts)
     {
-        if (facts.LedByPc) RunHealerEffect(true, choice.Skill, 0);
-        else PresentHealerQuote((facts.SkillLevel + 2) * (facts.SkillTraining + 1), choice);
+        if (facts.LedByPc) RunHealerEffect(true, choice.Skill, 0, facts.NoPcLeader);
+        else PresentHealerQuote((facts.SkillLevel + 2) * (facts.SkillTraining + 1), choice with { NoLeader = facts.NoPcLeader });
     }
 
     // 0x419C30: free for a follower of the PC, else 100 (0x4B1740) on the reaction scale.
     [OriginalFunction(0x419C30, OriginalFunctionScope.Partial)]
     private void OfferHealerSpell(TrainerChoice choice, DialogHealerFacts facts)
     {
-        if (facts.LedByPc) RunHealerEffect(false, 0, choice.Spell);
-        else PresentHealerQuote(HealerSpellBasePrice, choice);
+        if (facts.LedByPc) RunHealerEffect(false, 0, choice.Spell, facts.NoPcLeader);
+        else PresentHealerQuote(HealerSpellBasePrice, choice with { NoLeader = facts.NoPcLeader });
     }
 
     // The price screen (0x418A40): the base price on the reaction scale in the NPC's class line 1000, and the yes and no replies.
@@ -153,7 +153,7 @@ public sealed partial class DialogConversation
         if (!NpcTalkLine(QuoteGroup, price, out var line)) return;
         if (!PcTalkLine(1, 99, classLine: false, out var yes) || !PcTalkLine(100, 199, classLine: false, out var no)) return;
         var service = choice.Kind == TrainerChoiceKind.HealService;
-        var pay = new TrainerChoice(service ? TrainerChoiceKind.PayHealService : TrainerChoiceKind.PayHealSpell, choice.Skill, price, Spell: choice.Spell);
+        var pay = new TrainerChoice(service ? TrainerChoiceKind.PayHealService : TrainerChoiceKind.PayHealSpell, choice.Skill, price, Spell: choice.Spell, NoLeader: choice.NoLeader);
         Present(line, [yes with { Choice = pay }, no with { Choice = new TrainerChoice(TrainerChoiceKind.Follow) }]);
     }
 
@@ -165,42 +165,41 @@ public sealed partial class DialogConversation
     {
         var talk = _talk!;
         if (!EnoughGold(choice.Price)) return;
-        if ((long)_effects.Count + 3 > _options.MaxEffects)
+        if ((long)_effects.Count + 2 > _options.MaxEffects)
         {
             Stop(new DialogConversationFrontier(DialogFrontierKind.EffectLimit, CurrentNode), null);
             return;
         }
         var pay = new GoldCommand(_request.Participants.PlayerCharacter, _request.Participants.Npc, -choice.Price);
         if (!RunTalkCommand(pay, () => _ports.Gold!.Execute(pay), talk.Source)) return;
-        RunHealerEffect(choice.Kind == TrainerChoiceKind.PayHealService, choice.Skill, choice.Spell);
+        RunHealerEffect(choice.Kind == TrainerChoiceKind.PayHealService, choice.Skill, choice.Spell, choice.NoLeader);
     }
 
     /// <summary>The effect, then the NPC's line 15000 and the PC's class line 1000 as the only way on (ledger HLR8, HLR9).</summary>
-    private void RunHealerEffect(bool service, int skill, int spell)
+    private void RunHealerEffect(bool service, int skill, int spell, bool noPcLeader)
     {
-        if (!ReadHealerFacts(out var facts)) return;
         if ((long)_effects.Count + 1 > _options.MaxEffects)
         {
             Stop(new DialogConversationFrontier(DialogFrontierKind.EffectLimit, CurrentNode), null);
             return;
         }
-        if (!(service ? RunHealerSkill(skill, facts) : RunHealerSpell(spell, facts))) return;
+        if (!(service ? RunHealerSkill(skill, noPcLeader) : RunHealerSpell(spell, noPcLeader))) return;
         PresentNotice(HealerDoneGroup, classAnswer: true);
     }
 
     // 0x419CB0: the heal skill used by the NPC on the PC (the skill starter 0x4350F0 with the NPC's tool; flag 0x2000 when no PC leads it).
     [OriginalFunction(0x419CB0, OriginalFunctionScope.Partial)]
-    private bool RunHealerSkill(int skill, DialogHealerFacts facts)
+    private bool RunHealerSkill(int skill, bool noPcLeader)
     {
-        var command = new HealerSkillCommand(_request.Participants.PlayerCharacter, _request.Participants.Npc, skill, facts.NoPcLeader);
+        var command = new HealerSkillCommand(_request.Participants.PlayerCharacter, _request.Participants.Npc, skill, noPcLeader);
         return RunTalkCommand(command, () => _ports.Healer!.Execute(command), _talk!.Source);
     }
 
     // 0x419D50: the spell cast by the NPC at the PC (the invocation 0x455A20, flag 2 when no PC leads the NPC, then 0x455AC0).
     [OriginalFunction(0x419D50, OriginalFunctionScope.Partial)]
-    private bool RunHealerSpell(int spell, DialogHealerFacts facts)
+    private bool RunHealerSpell(int spell, bool noPcLeader)
     {
-        var command = new HealerSpellCommand(_request.Participants.PlayerCharacter, _request.Participants.Npc, spell, facts.NoPcLeader);
+        var command = new HealerSpellCommand(_request.Participants.PlayerCharacter, _request.Participants.Npc, spell, noPcLeader);
         return RunTalkCommand(command, () => _ports.Healer!.Execute(command), _talk!.Source);
     }
 

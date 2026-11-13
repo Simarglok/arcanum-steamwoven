@@ -24,7 +24,7 @@ public sealed partial class DialogConversation
 
     private enum TrainerChoiceKind { Skill, Pay, PayRumor, Follow, Area, More, PayDirections, PayFollow, HealMenu, HealService, HealSpell, PayHealService, PayHealSpell }
 
-    private readonly record struct TrainerChoice(TrainerChoiceKind Kind, int Skill = 0, int Price = 0, int Rumor = 0, int Area = 0, int Offset = 0, int Spell = 0);
+    private readonly record struct TrainerChoice(TrainerChoiceKind Kind, int Skill = 0, int Price = 0, int Rumor = 0, int Area = 0, int Offset = 0, int Spell = 0, bool NoLeader = false);
 
     private sealed record TrainerOption(string Text, DialogLineOrigin? Origin, TrainerChoice Choice);
 
