@@ -48,6 +48,70 @@ public sealed class MapJunkPileStateTests
     private static void Take(GameSessionOwner owner, string holder, string item) =>
         Assert.AreEqual(GameSessionFailure.None, owner.LootItem(owner.Version, holder, item, Accept).Failure, item);
 
+    // ARC-AI-1486: an NPC picks an item out of a junk pile of the map's data (the pickup goal's end 0x42AA70 → 0x4617F0 → 0x461CA0 from a container).
+    private static GameSessionOwner NpcOwner(params string[] items)
+    {
+        var owner = GameSessionOwner.Create(Descriptor() with { Hero = HalfElf() }).Owner!;
+        var seed = Seed(false, items);
+        seed = new([new("npc", SessionHolderKind.Npc, false, false, [], []), .. seed.Holders], seed.Items);
+        Assert.AreEqual(GameSessionFailure.None, owner.AttachMapInventory(Exterior, seed).Failure);
+        return owner;
+    }
+
+    private static string[] NpcList(GameSessionOwner owner) => owner.QueryMapInventory(Exterior)!.Holders.Single(h => h.Entity == "npc").Items.Select(item => item.Entity).ToArray();
+
+    [TestMethod]
+    public void AnItemOfAMapsJunkPileGoesToTheNpcAndAPileOfThreeStaysWithTwo()
+    {
+        using var owner = NpcOwner("cup", "knife", "rope");
+        var revision = owner.Version.Revision;
+        var result = owner.PickUpItemByNpc(owner.Version, "npc", "knife", Accept, Pile());
+        Assert.AreEqual((GameSessionDisposition.Changed, GameSessionFailure.None, "knife"), (result.Disposition, result.Failure, result.Item));
+        Assert.AreEqual(revision + 1, owner.Version.Revision, "one revision");
+        CollectionAssert.AreEqual(new[] { "knife" }, NpcList(owner));
+        CollectionAssert.AreEqual(new[] { "cup", "rope" }, owner.QueryMapInventory(Exterior)!.Holders.Single(h => h.Entity == "pile").Items.Select(item => item.Entity).ToArray());
+        Assert.AreEqual(SessionObjectCondition.Whole, owner.QueryObject(Pile()).Condition, "two items keep it");
+        Assert.AreEqual(GameSessionFailure.ItemNotAvailable, owner.PickUpItemByNpc(owner.Version, "npc", "knife", Accept, Pile()).Failure, "it is gone from the pile");
+    }
+
+    [TestMethod]
+    public void APileOfTwoDissolvesAtTheNpcsPickupAndDropsTheOtherItemOnItsCell()
+    {
+        using var owner = NpcOwner("cup", "knife");
+        var result = owner.PickUpItemByNpc(owner.Version, "npc", "cup", Accept, Pile());
+        Assert.AreEqual(GameSessionDisposition.Changed, result.Disposition, result.Failure.ToString());
+        Assert.AreEqual(SessionObjectCondition.Destroyed, owner.QueryObject(Pile()).Condition, "JP5: the removal checks the container");
+        Assert.AreEqual(("knife", PileCell), owner.QueryMapInventory(Exterior)!.Ground.Select(g => (g.Item.Entity, g.Cell)).Single(g => g.Item1 == "knife"));
+        Assert.IsTrue(owner.QueryItemDecays().Any(decay => decay.Entity == "knife"), "its decay starts over");
+        CollectionAssert.AreEqual(new[] { "cup" }, NpcList(owner));
+    }
+
+    [TestMethod]
+    public void TheLastItemTakenByTheNpcDissolvesTheEmptyMapPileAtOnce()
+    {
+        using var owner = NpcOwner("cup");
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItemByNpc(owner.Version, "npc", "cup", Accept, Pile()).Disposition);
+        Assert.AreEqual(SessionObjectCondition.Destroyed, owner.QueryObject(Pile()).Condition, "no item left: the removal's check destroys the pile");
+        Assert.AreEqual(0, owner.QueryMapInventory(Exterior)!.Ground.Count, "and nothing is dropped");
+    }
+
+    [TestMethod]
+    public void TheNpcsPickupFromAMapPileRefusesWhatIsNotThereAndChangesNothing()
+    {
+        using var owner = NpcOwner("cup", "knife");
+        var before = owner.Version;
+        Assert.AreEqual(GameSessionFailure.ItemNotAvailable, owner.PickUpItemByNpc(owner.Version, "npc", "coin", Accept, Pile()).Failure, "the chest's item is not the pile's");
+        Assert.AreEqual(GameSessionFailure.InvalidObject, owner.PickUpItemByNpc(owner.Version, "npc", "cup", Accept, Pile(junk: false)).Failure, "a chest is no junk pile");
+        Assert.AreEqual(GameSessionFailure.UnknownHolder, owner.PickUpItemByNpc(owner.Version, "npc", "cup", Accept, Pile("no-such")).Failure);
+        Assert.AreEqual(GameSessionFailure.ItemNotAvailable, owner.PickUpItemByNpc(owner.Version, "npc", "cup", Accept).Failure, "without the pile's target the item is no loose one");
+        Assert.AreEqual(GameSessionFailure.InsertRefused, owner.PickUpItemByNpc(owner.Version, "npc", "cup", _ => SessionInsertVerdict.TooHeavy, Pile()).Failure);
+        Assert.AreEqual(before, owner.Version, "no revision moved");
+        Take(owner, "pile", "cup");
+        Assert.AreEqual(GameSessionFailure.ItemNotAvailable, owner.PickUpItemByNpc(owner.Version, "npc", "cup", Accept, Pile()).Failure, "the hero took it");
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.CloseMapJunkPile(owner.Version, Pile()).Disposition);
+        Assert.AreEqual(GameSessionFailure.ItemNotAvailable, owner.PickUpItemByNpc(owner.Version, "npc", "knife", Accept, Pile()).Failure, "the pile has gone");
+    }
+
     [TestMethod]
     public void APileTakenEmptyStaysWhileTheWindowShowsItAndGoesOnClosing()
     {
