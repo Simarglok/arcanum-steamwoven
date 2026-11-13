@@ -6,7 +6,7 @@ using static Arcanum.Scripting.Tests.Scr.ScrTestPrograms;
 namespace Arcanum.Scripting.Tests.Scr;
 
 /// <summary>
-/// ARC-SCRIPT-1772 (ledger CQ1–CQ8): the critter getters get social class (38), get origin (39) and get faction (89), toggle invulnerability (57) and rename (92) of the set S54 (exe 0x447220 cases 0x26, 0x27, 0x59, 0x39 and 0x5C): a getter stores the host's
+/// ARC-SCRIPT-1772 (ledger CQ1–CQ8): the critter getters get social class (38), get origin (39) and get faction (89), toggle invulnerability (57) and rename (92) of the set S56 (exe 0x447220 cases 0x26, 0x27, 0x59, 0x39 and 0x5C): a getter stores the host's
 /// field of the first object into its number operand, the two writes queue object-state requests and a later condition of the same run reads their effect. Programs, objects and answers are invented; the host answers from tables.
 /// </summary>
 [TestClass]
@@ -187,17 +187,17 @@ public sealed class ScrCritterFieldTests
     }
 
     [TestMethod]
-    public void The_commands_need_a_host_that_answers_them_and_S54_adds_exactly_the_five_actions_to_S53()
+    public void The_commands_need_a_host_that_answers_them_and_S56_adds_exactly_the_five_actions_to_S54()
     {
         var plain = new FakeHost();
         plain.Attach(Sword, 7, 700, Program(Do(C(ScrCatalogue.Action.ReturnRunDefault))));
         var getters = new ScrAdmissionSet("getters-only", ScrAdmissionSet.S5.Conditions, ScrAdmissionSet.S5.Actions.Concat(ScrAdmissionSet.CritterFieldActions), ScrAdmissionSet.S5.ValueKinds, ScrAdmissionSet.S5.FocusKinds);
         Assert.ThrowsExactly<ArgumentException>(() => ScrDispatcher.RunObject(new(7, Sword, Pc, Victim), plain, new() { Admission = getters }));
         CollectionAssert.AreEquivalent(new[] { 38, 39, 89 }, ScrAdmissionSet.CritterFieldActions.ToArray());
-        CollectionAssert.AreEquivalent(new[] { 38, 39, 57, 89, 92 }, ScrAdmissionSet.S54.Actions.Except(ScrAdmissionSet.S53.Actions).ToArray());
-        CollectionAssert.AreEquivalent(ScrAdmissionSet.S53.Conditions.ToArray(), ScrAdmissionSet.S54.Conditions.ToArray());
-        Assert.IsTrue(ScrAdmissionSet.S53.IsSubsetOf(ScrAdmissionSet.S54));
-        Assert.IsTrue(ScrAdmissionSet.S54.IsSubsetOf(ScrAdmissionSet.S54));
-        Assert.IsNotNull(new ScrRunOptions { Admission = ScrAdmissionSet.S54 });
+        CollectionAssert.AreEquivalent(new[] { 38, 39, 57, 89, 92 }, ScrAdmissionSet.S56.Actions.Except(ScrAdmissionSet.S54.Actions).ToArray());
+        CollectionAssert.AreEquivalent(ScrAdmissionSet.S54.Conditions.ToArray(), ScrAdmissionSet.S56.Conditions.ToArray());
+        Assert.IsTrue(ScrAdmissionSet.S54.IsSubsetOf(ScrAdmissionSet.S56));
+        Assert.IsTrue(ScrAdmissionSet.S56.IsSubsetOf(ScrAdmissionSet.S56));
+        Assert.IsNotNull(new ScrRunOptions { Admission = ScrAdmissionSet.S56 });
     }
 }

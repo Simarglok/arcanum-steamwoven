@@ -180,10 +180,10 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     /// ARC-SCRIPT-1241: plus fade (103) of <see cref="ScrAdmissionSet.S35"/>, which jumps the game clock and hands its movie to the viewer (<see cref="TakeFades"/>); the use script 2862 of the Vendigroth
     /// underground and the dying scripts 2863 and 3061 of Kerghan carry it, and the placed and dying sets are built on this one.
     /// ARC-SCRIPT-1620 (TI6): plus attack (36, 0x447D2F), which raises the attack event of the first object of operand 1 on each object of operand 0 through the AI host (<see cref="AreaScriptWorld.ScriptAttack"/>); 79 installed scripts use it (111 clauses), and the heartbeat set admits it too.
-    /// ARC-SCRIPT-1772 (CQ1–CQ8): plus the critter getters get social class (38), get origin (39) and get faction (89), toggle invulnerability (57) and rename (92) of <see cref="ScrAdmissionSet.S54"/> (<see cref="CritterFieldWriteActions"/>), which the placed, heartbeat, dying and combat-point sets admit too.
+    /// ARC-SCRIPT-1772 (CQ1–CQ8): plus the critter getters get social class (38), get origin (39) and get faction (89), toggle invulnerability (57) and rename (92) of <see cref="ScrAdmissionSet.S56"/> (<see cref="CritterFieldWriteActions"/>), which the placed, heartbeat, dying and combat-point sets admit too.
     /// </summary>
     public static ScrAdmissionSet Admission { get; } = new("S4-area-use-reading-objects-story-world", ScrAdmissionSet.S4.Conditions.Concat(ScrAdmissionSet.SpellQueryConditions).Concat(ScrAdmissionSet.StoryConditions).Concat(ScrAdmissionSet.WorldObjectConditions)
-            .Concat(ScrAdmissionSet.CritterQueryConditions).Concat(ScrAdmissionSet.CritterStateConditions),
+            .Concat(ScrAdmissionSet.CritterQueryConditions).Concat(ScrAdmissionSet.CritterStateConditions).Concat(ScrAdmissionSet.CritterTailConditions),
         ScrAdmissionSet.S4.Actions.Where(a => a is not ScrCatalogue.Action.Dialog)
             .Concat([ScrCatalogue.Action.ShowBook, ScrCatalogue.Action.ShowPicture, ScrCatalogue.Action.ShowPlaque,
                 ScrCatalogue.Action.CallScript, ScrCatalogue.Action.AssignObject, ScrCatalogue.Action.GetObjectType,
@@ -200,7 +200,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     private static int[] ItemUseVitalActions => [ScrCatalogue.Action.GetHitPoints, ScrCatalogue.Action.GetFatiguePoints, ScrCatalogue.Action.HealPoison, ScrCatalogue.Action.HealHitPoints,
         ScrCatalogue.Action.HealFatigue, ScrCatalogue.Action.MagickTechAdjustment, ScrCatalogue.Action.PlayScriptEyeCandy, ScrCatalogue.Action.Destroy];
 
-    /// <summary>ARC-SCRIPT-1772 (CQ1–CQ5): the critter getters (38, 39, 89; <see cref="ScrAdmissionSet.CritterFieldActions"/>), toggle invulnerability (57) and rename (92) of <see cref="ScrAdmissionSet.S54"/>, which the use set and so the placed, combat-point, dying and
+    /// <summary>ARC-SCRIPT-1772 (CQ1–CQ5): the critter getters (38, 39, 89; <see cref="ScrAdmissionSet.CritterFieldActions"/>), toggle invulnerability (57) and rename (92) of <see cref="ScrAdmissionSet.S56"/>, which the use set and so the placed, combat-point, dying and
     /// heartbeat sets admit: the getters are answered here (<see cref="IScrCritterFieldQueries"/>), the two writes go through the session for the PC and an NPC (<see cref="ObjectStateRefusal"/> refuses the rest).</summary>
     private static int[] CritterFieldWriteActions => [.. ScrAdmissionSet.CritterFieldActions, ScrCatalogue.Action.ToggleInvulnerability, ScrCatalogue.Action.Rename];
 
@@ -247,7 +247,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     /// </summary>
     public static ScrAdmissionSet HeartbeatAdmission { get; } = new("S2-area-heartbeat-state-kill-talk-world",
         ScrAdmissionSet.S2.Conditions.Concat([ScrCatalogue.Condition.FollowingPc, ScrCatalogue.Condition.IsNamed, ScrCatalogue.Condition.IsDead,
-            ScrCatalogue.Condition.IsSwitchedOff, ScrCatalogue.Condition.HasReputation, ScrCatalogue.Condition.PcQuestState, .. ScrAdmissionSet.SpellQueryConditions, .. ScrAdmissionSet.StoryConditions, .. ScrAdmissionSet.WorldObjectConditions, .. ScrAdmissionSet.CritterQueryConditions, .. ScrAdmissionSet.CritterStateConditions]),
+            ScrCatalogue.Condition.IsSwitchedOff, ScrCatalogue.Condition.HasReputation, ScrCatalogue.Condition.PcQuestState, .. ScrAdmissionSet.SpellQueryConditions, .. ScrAdmissionSet.StoryConditions, .. ScrAdmissionSet.WorldObjectConditions, .. ScrAdmissionSet.CritterQueryConditions, .. ScrAdmissionSet.CritterStateConditions, .. ScrAdmissionSet.CritterTailConditions]),
         ScrAdmissionSet.S2.Actions.Concat([ScrCatalogue.Action.ToggleState, ScrCatalogue.Action.Kill, ScrCatalogue.Action.LoopFor, ScrCatalogue.Action.LoopEnd, ScrCatalogue.Action.LoopBreak,
             ScrCatalogue.Action.GetObjectType, ScrCatalogue.Action.CallScriptEx, ScrCatalogue.Action.Dialog, ScrCatalogue.Action.CallScriptIn,
             ScrCatalogue.Action.DistanceBetween, ScrCatalogue.Action.GetLocation, ScrCatalogue.Action.SetFaction, ScrCatalogue.Action.WalkTo, ScrCatalogue.Action.RunTo,
@@ -532,7 +532,11 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     /// <remarks>Exe read 2026-11-13: action 137 at 0x447220 case 0x89, base stat 0x4B0740, stat setter 0x4B0980 with the range tables 0x5B5194 and 0x5B5204.</remarks>
     public bool CanAdjustStat(ScrObjectRef obj, int stat) => stat == AreaScriptStory.AlignmentStat && IsPc(obj) && _session.QueryHero() is not null;
 
-    private const uint ProwlingCritterFlag = 0x1, UndeadCritterFlag = 0x4, InvulnerableObjectFlag = 0x400000, InvisibleSpellFlag = 0x1;
+    private const uint ProwlingCritterFlag = 0x1, UndeadCritterFlag = 0x4, InvulnerableObjectFlag = 0x400000, InvisibleSpellFlag = 0x1,
+        SummonedSpellFlag = 0x4000, NoStrayNpcFlag = 0x8000, AssociateBlockingObjectFlags = 0x102;
+
+    // Object field 0x18 (obj_f_aid, slot 23): the art id the object was built with, which a polymorph does not change (the current art is field 1).
+    private const int BaseArtSlot = 23;
 
     /// <summary>ARC-SCRIPT-1733 (CS1, exe read 2026-11-13: condition 10 at 0x4451B0, 0x4C0C40): met before, of an NPC toward the PC: the same object twice is true; a second object that is not the PC or a first that is not an NPC is false; else whether the NPC's reaction memory holds the PC
     /// in a remembered slot (<see cref="SessionReaction.MetBefore"/>), which the conversation slot is not, so it is false during the first talk. Null for an NPC this host has no row for.</summary>
@@ -614,6 +618,48 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         if (IsPc(obj)) return 0;
         if (Row(obj) is not { } row) return null;
         return row.Type == NpcType ? read(row) : 0;
+    }
+
+    /// <summary>
+    /// ARC-SCRIPT-1771 (CS12, exe read 2026-11-13: condition 11 at 0x4451B0 → 0x45F460): for the PC the PC itself, else the object's leader (the hero for a follower of the hero, the only leader the session holds; none: false). True when one of the leader's followers (the session's party)
+    /// is summoned (spell flag 0x4000), has no NPC flag 0x8000 and no animal critter flag and has neither object flag 0x102; a follower with 0x102 only logs a warning and the walk goes on. A follower this host cannot read (it has no row on the shown map) is unknown and the answer is null unless
+    /// another follower decides it. The followers of a follower (0x441260 recurses) are not held by the session and are not walked.
+    /// </summary>
+    public bool? HasBadAssociates(ScrObjectRef obj)
+    {
+        if (IsPc(obj)) { if (_session.QueryHero() is null) return null; }
+        else
+        {
+            if (Row(obj) is not { } row) return null;
+            if (row.Type != NpcType || Leader(obj) is null) return false;
+        }
+        var unknown = false;
+        foreach (var follower in _session.QueryParty().Followers)
+        {
+            var who = new ScrObjectRef(_shownMap, follower.Entity);
+            if (SpellFlags(who) is not { } spell || Row(who) is not { } followerRow) { unknown = true; continue; }
+            if ((unchecked((uint)spell) & SummonedSpellFlag) == 0) continue;
+            if (Arcanum.Data.Combat.CombatFieldReader.Read(followerRow).Fields?.Npc is not { } npc) { unknown = true; continue; }
+            if ((unchecked((uint)_session.QueryObjectFlags(who.Code).Npc(unchecked((int)npc.Flags))) & NoStrayNpcFlag) != 0) continue;
+            if (NpcCritterBit(who, AnimalCritterFlag) is not { } animal) { unknown = true; continue; }
+            if (animal) continue;
+            var stored = unchecked((int)(Number(followerRow, ObjectFlagsSlot) ?? 0));
+            if ((unchecked((uint)_session.QueryObjectFlags(who.Code).Object(stored)) & AssociateBlockingObjectFlags) == 0) return true;
+        }
+        return unknown ? null : false;
+    }
+
+    /// <summary>
+    /// ARC-SCRIPT-1771 (CS13, exe read 2026-11-13: condition 19 at 0x4451B0, 0x406CA0 field 0x18, 0x502700 = art type = bits 28..31, 0x503F20 = monster number = bits 23..27 of a type 0xC art): whether the base art of the object (its own art field 0x18, which a polymorph does not touch) is a monster art
+    /// of that number. The PC's base art is a human critter art (class 2: its body and gender come from the character's race), so false. Null for an object this host has no row for, and for an NPC whose art field does not read.
+    /// </summary>
+    public bool? IsMonsterOfType(ScrObjectRef obj, int type)
+    {
+        if (IsPc(obj)) return _session.QueryHero() is null ? null : false;
+        if (Row(obj) is not { } row) return null;
+        if (Number(row, BaseArtSlot) is not { } art) return row.Type == NpcType ? null : false;
+        var id = unchecked((uint)art);
+        return id >> 28 == Arcanum.Simulation.Equipment.BodyArmorArtRules.MonsterArt && (int)((id >> 23) & 31) == type;
     }
 
     // ARC-SCRIPT-1562: what a critter-or-not object gives a magick-tech adjustment: Critter false for a row of the shown map that is neither the PC nor an NPC (no aptitude is read), else the aptitude (the PC's of the session, an NPC's of the world; null when not known).

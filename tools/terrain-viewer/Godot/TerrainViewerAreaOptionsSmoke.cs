@@ -143,10 +143,10 @@ public partial class TerrainViewerApp
                 && place.X + place.Width / 2 == AreaMenuArtLayout.OptionsButtonX && place.Width > 0 && place.Height == 33).All(ok => ok),
                 "the page labels stand centred at (130, 221 + 40 i): " + string.Join(" ", places));
             Require(art.HoveredForSelfTest == -1, "no page label is lit while the focus is on the first control: " + art.HoveredForSelfTest);
-            Require(Controls().SequenceEqual(["Difficulty: Moderate", "Violence Filter: Off", "Default Combat Mode: Real Time", "Auto Attack: On", "Always Run: Off", "Rules: Steamwoven"]), "Game page: " + string.Join("|", Controls()));
+            Require(Controls().SequenceEqual(["Difficulty: Moderate", "Violence Filter: Off", "Default Combat Mode: Real Time", "Auto Attack: On", "Auto Switch Weapons: Off", "Always Run: Off", "Rules: Steamwoven"]), "Game page: " + string.Join("|", Controls()));
             // ARC-UI-061: the shown controls take the first slots: four in the first column, the fifth at the second's top (as drawn).
             await Frames(1);
-            Require(art.ControlPlacesForSelfTest.SequenceEqual(Enumerable.Range(0, 6).Select(AreaMenuArtLayout.OptionsSlot)),
+            Require(art.ControlPlacesForSelfTest.SequenceEqual(Enumerable.Range(0, 7).Select(AreaMenuArtLayout.OptionsSlot)),
                 "the Game page's controls stand in their art at the first slots: " + string.Join(" ", art.ControlPlacesForSelfTest));
             if (System.Environment.GetEnvironmentVariable("ARC_AREA_OPTIONS_CAPTURE") is { Length: > 0 } gameCapture)
             {
@@ -155,14 +155,21 @@ public partial class TerrainViewerApp
                 Require(image.SavePng(path) == Error.Ok, "the Game page's capture saved to " + path);
             }
             // ARC-UI-014: Original chosen in the main menu is the rule mode the new game begins in.
-            panel.ChangeForSelfTest(5, 1);
-            Require(_ruleMode == RuleMode.Original && Controls()[5] == "Rules: Original", "Original chosen before the game");
+            panel.ChangeForSelfTest(6, 1);
+            Require(_ruleMode == RuleMode.Original && Controls()[6] == "Rules: Original", "Original chosen before the game");
             // ARC-UI-1737 (OH2): the Violence Filter is the Game page's second line; it is saved in the smoke's own settings file at once.
             panel.ChangeForSelfTest(1, 1);
             Require(_gameSettings.ViolenceFilter && Controls()[1] == "Violence Filter: On" && _gameSettingsStore is { Persistent: true } && _gameSettingsStore.Load().ViolenceFilter,
                 "the violence filter is on and saved: " + Controls()[1]);
             panel.ChangeForSelfTest(1, 1);
             Require(!_gameSettings.ViolenceFilter && !_gameSettingsStore!.Load().ViolenceFilter, "and off again");
+            // ARC-COMBAT-1738 (OH3): Auto Switch Weapons is the Game page's fifth line, off until written; it changes at once and is saved in the settings file.
+            Require(!_gameSettings.AutoSwitchWeapons, "auto switch starts off");
+            panel.ChangeForSelfTest(4, 1);
+            Require(_gameSettings.AutoSwitchWeapons && Controls()[4] == "Auto Switch Weapons: On" && _gameSettingsStore is { Persistent: true } && _gameSettingsStore.Load().AutoSwitchWeapons,
+                "the Auto Switch Weapons line turned the setting on and saved it: " + Controls()[4]);
+            panel.ChangeForSelfTest(4, 1);
+            Require(!_gameSettings.AutoSwitchWeapons && Controls()[4] == "Auto Switch Weapons: Off" && _gameSettingsStore?.Load().AutoSwitchWeapons == false, "and off again: " + Controls()[4]);
             // The evidence log's two lines are the Video page's (ARC-UI-1737).
             Key(Godot.Key.V, 'v');
             Require(_mainMenu!.Page == AreaOptionsPage.Video && Controls()[6] == "Evidence Log: Off" && Controls()[7] == "Test Task: None", "the Video page holds the evidence log's lines: " + string.Join("|", Controls()));
@@ -327,8 +334,8 @@ public partial class TerrainViewerApp
             Require(_turnBasedSetting && Controls()[2] == "Default Combat Mode: Turn Based", "the hero's turn-based switch took it: " + _mainMenu!.Notice + " " + _turnBasedNotice);
             panel.ChangeForSelfTest(2, 1);
             Require(!_turnBasedSetting && Controls()[2] == "Default Combat Mode: Real Time", "back to real time");
-            panel.ChangeForSelfTest(5, -1);
-            Require(_areaSession!.Rules.Mode == RuleMode.Steamwoven && Controls()[5] == "Rules: Steamwoven", "Steamwoven again in play");
+            panel.ChangeForSelfTest(6, -1);
+            Require(_areaSession!.Rules.Mode == RuleMode.Steamwoven && Controls()[6] == "Rules: Steamwoven", "Steamwoven again in play");
             Key(Godot.Key.O);
             Require(!MainMenuOpen && _mainMenu is null, "the O key closed the menu from play");
             await Frames(3);
