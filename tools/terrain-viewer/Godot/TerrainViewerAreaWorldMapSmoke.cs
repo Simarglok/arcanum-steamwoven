@@ -424,9 +424,6 @@ public partial class TerrainViewerApp
         }
     }
 
-    // ARC-UI-084 native observation (stage "worldmap", the PC standing in a sector with a town map): W opens the town map centred on the party pixel;
-    // the scroll clamps at both corners; Home centres; Z cycles the continent view and back; tiles were read as drawn; a whole map and a fogged one
-    // are drawn and the frame holds lit pixels (and, fogged, dark ones). Prints counts only.
     // ARC-UI-1197: with ARC_AREA_WINDOW_ART (the shared opt-in part of the window smokes) the open window's frame (art 138, the one the world map and the town map draw) is checked in
     // the generated interface at the window's own device scale (the whole factor of the free area: 1 in a 1280 x 800 window, 2 in a 1920 x 1080 one), checked again after a resize and
     // captured as PREFIX-worldmap|townmap-MODE[-STAGE].png (ARC_AREA_WINDOW_CAPTURE, local).
@@ -437,6 +434,9 @@ public partial class TerrainViewerApp
         await WindowArtSmokeAsync(window, () => found.Select(pair => pair.Texture).ToArray(), found.Select(pair => pair.Art).ToArray(), view.DeviceScale, () => view.HasLook);
     }
 
+    // ARC-UI-084 native observation (stage "worldmap", the PC standing in a sector with a town map): W opens the town map centred on the party pixel;
+    // the scroll clamps at both corners; Home centres; Z cycles the continent view and back; tiles were read as drawn; a whole map and a fogged one
+    // are drawn and the frame holds lit pixels (and, fogged, dark ones). Prints counts only.
     private async Task RunWorldMapTownSmokeAsync(AreaWorldMapData data)
     {
         static void Require(bool value, string why)

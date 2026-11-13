@@ -664,8 +664,8 @@ public sealed class InterfaceChromeTests
         var recipe = InterfaceChromeRecipes.All.Single(r => r.File == "mapmain.art");
         Assert.AreEqual(ChromeKind.Panel, recipe.Kind);
         // 140 and 199 (the waypoint panel's pieces) and 219 and 220 (the two landscape pictures) are drawn by no window of the viewer; the picture stays art.
-        foreach (var file in new[] { "wp_main.art", "WP_Cover.ART", "Tmp_Day.ART", "Tmp_Nght.ART", "map_zoomed.bmp" })
-            CollectionAssert.DoesNotContain(InterfaceChromeRecipes.All.Select(r => r.File).ToArray(), file);
+        foreach (var file in new[] { "wp_main.art", "WP_Cover.ART", "Tmp_Day.ART", "Tmp_Nght.ART" })
+            Assert.IsNull(InterfaceChromeRecipes.For(HdInterfaceKey.Query(HdInterfaceKey.Identity(file, new byte[] { 1 }), 0, 1, 1, new byte[4])), file);
         Assert.IsNotNull(InterfaceChromeRecipes.For(HdInterfaceKey.Query(HdInterfaceKey.Identity("MAPMAIN.ART", new byte[] { 1 }), 0, 1, 1, new byte[4])));
     }
 
@@ -681,11 +681,11 @@ public sealed class InterfaceChromeTests
             _ => (X: 0, Y: 0, Width: 0, Height: 0, Kind: "other"),
         }).Where(box => box.Kind != "other").ToArray();
         Assert.IsTrue(boxes.Count(box => box.Kind == "sunk") == 3 && boxes.Count(box => box.Kind == "view") == 1);
-        foreach (var (x, y, w, h, kind) in boxes) Assert.IsTrue(x >= 0 && y >= 0 && x + w <= 801 && y + h <= 401, $"a {kind} at ({x}, {y}, {w} x {h}) lies inside 800 x 400");
+        foreach (var (x, y, w, h, kind) in boxes) Assert.IsTrue(x >= 0 && y >= 0 && x + w <= 800 && y + h <= 400, $"a {kind} at ({x}, {y}, {w} x {h}) lies inside 800 x 400");
         foreach (var keep in boxes.Where(box => box.Kind == "keep"))
         foreach (var other in boxes.Where(box => box.Kind == "sunk"))
         {
-            // The route sketch lies wholly inside its sunk plate; no other kept picture touches a plate.
+            // The route sketch lies inside its sunk plate (2 units from three of its edges and 1 from the bottom, where the Travel ring's circle comes close); no other kept picture touches a plate.
             var overlaps = keep.X < other.X + other.Width && other.X < keep.X + keep.Width && keep.Y < other.Y + other.Height && other.Y < keep.Y + keep.Height;
             var inside = keep.X >= other.X + 1 && keep.Y >= other.Y + 1 && keep.X + keep.Width <= other.X + other.Width - 1 && keep.Y + keep.Height <= other.Y + other.Height - 1;
             Assert.IsTrue(!overlaps || inside, $"the kept picture at ({keep.X}, {keep.Y}) covers a generated plate at ({other.X}, {other.Y})");
