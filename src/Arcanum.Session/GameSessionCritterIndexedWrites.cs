@@ -1,6 +1,7 @@
 using System.Collections.Immutable;
 using System.Globalization;
 using Arcanum.Data.Combat;
+using Arcanum.Simulation;
 using Arcanum.Simulation.Character;
 
 namespace Arcanum.Session;
@@ -86,6 +87,7 @@ public sealed partial class GameSessionOwner
     /// <paramref name="map"/>. The same value as the one written is <see cref="GameSessionDisposition.NoChange"/>. Refused as a map change is: a map below 1 (<see cref="GameSessionFailure.InvalidMap"/>), an entity that is not a mobile
     /// object or an index out of range (<see cref="GameSessionFailure.InvalidChangeKey"/>), a stale version, the change budget. The bounds and guards of the setter are the caller's.
     /// </summary>
+    [OriginalFunction(0x4B0980, OriginalFunctionScope.Partial)]
     public GameSessionMutationResult WriteCritterStat(GameSessionVersion expected, SessionMapId map, string entity, int index, int value)
     {
         ThrowIfDisposed();
@@ -95,6 +97,7 @@ public sealed partial class GameSessionOwner
     }
 
     /// <summary>ARC-MAGIC-1295 (the indexed write 0x407340 of the TraitIdx component): resistance <paramref name="index"/> (0..4) of the NPC is <paramref name="value"/> from now on; the refusals of <see cref="WriteCritterStat"/>.</summary>
+    [OriginalFunction(0x407340, OriginalFunctionScope.Partial)]
     public GameSessionMutationResult WriteCritterResistance(GameSessionVersion expected, SessionMapId map, string entity, int index, int value)
     {
         ThrowIfDisposed();
