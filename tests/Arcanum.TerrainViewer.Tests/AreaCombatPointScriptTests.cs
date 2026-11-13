@@ -129,6 +129,7 @@ public sealed class AreaCombatPointScriptTests
             // ARC-SCRIPT-1661: 920 (an area weapon's test of the victim, as 30064's looped critter): sets a global flag when the extra object is in combat; 921 (the alignment weapon 30252's shape): the triggerer's alignment (stat 19) falls by 200.
             Write("scr/00920incombat.scr", Program(If(new(ScrCatalogue.Condition.IsInCombat, (Extra, 0)), new(ScrCatalogue.Action.Assign, (GlobalFlag, CombatSeen), N(1)), new(0)), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
             Write("scr/00921alignment.scr", Program(Do(new(ScrCatalogue.Action.AdjustStat, N(19), (Triggerer, 0), N(-200))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
+            Write("scr/00922twice.scr", Program(Do(new(ScrCatalogue.Action.AdjustStat, N(19), (Triggerer, 0), N(-200))), Do(new(ScrCatalogue.Action.AdjustStat, N(19), (Triggerer, 0), N(50))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
             Write("scr/00918eyecandy.scr", Program(Do(new(ScrCatalogue.Action.PlayScriptEyeCandy, N(30), (Extra, 0))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
             using var content = ScriptContent.Open(ContentMountPlan.Discover(root.FullName, "Syn").Plan!).Content!;
             test(content);
@@ -465,6 +466,34 @@ public sealed class AreaCombatPointScriptTests
                 Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, ran.Outcome, ran.Detail);
                 Assert.AreEqual(after, session.QueryHeroStoredStat(19), $"{before} − 200, the setter clamps at −1000");
             }
+        });
+    }
+
+    [TestMethod]
+    public void Obj_is_in_combat_is_false_for_the_PC_of_a_session_without_a_hero()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var host = Host(session, content, null, Row(1, WeaponType, 920, ScrPoint.Hit));
+            Assert.IsFalse(host.IsInCombat(host.Pc)!.Value);
+        });
+    }
+
+    [TestMethod]
+    public void Adjust_stat_clamps_each_of_two_adjustments_of_one_run_in_order()
+    {
+        // 922: −200 then +50 on the triggerer's alignment: from −900 the first clamps to −1000, the second gives −950 (applying the sum −150 at once would give −1000).
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.CreateWithHero(1);
+            var weapon = Row(1, WeaponType, 922, ScrPoint.Hit, 0);
+            var victim = Row(2, NpcType, 0, ScrPoint.Heartbeat);
+            var host = Host(session, content, null, weapon, victim);
+            Assert.AreEqual(GameSessionDisposition.Changed, session.ChangeHeroAlignment(session.Version, -900).Disposition);
+            var ran = host.RunCombatPoint(ScrPoint.Hit, Ref(weapon), host.Pc, Ref(victim), session.Rules.Scripts);
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, ran.Outcome, ran.Detail);
+            Assert.AreEqual(-950, session.QueryHeroStoredStat(19), "−900 − 200 clamps to −1000, then + 50");
         });
     }
 

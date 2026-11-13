@@ -509,7 +509,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     /// <remarks>Exe read 2026-11-13: condition 31 at 0x4451B0 case 0x1f, the test 0x4B3D50.</remarks>
     public bool? IsInCombat(ScrObjectRef obj)
     {
-        if (IsPc(obj)) return _session.QueryCombatMode(SessionCombatant.Hero);
+        if (IsPc(obj)) return _session.QueryHero() is not null && _session.QueryCombatMode(SessionCombatant.Hero);
         if (Row(obj) is not { } row) return null;
         return row.Type == NpcType && _session.QueryCombatMode(SessionCombatant.Critter(obj.Code));
     }

@@ -51,7 +51,7 @@ public sealed class ScrCombatPointTailTests
     private static ScrRunResult Hit(IScrHost host, ScrAdmissionSet? set = null) => ScrDispatcher.RunObject(new(7, Sword, Pc, Victim), host, new() { Admission = set ?? Set });
 
     [TestMethod]
-    public void Obj_is_in_combat_asks_the_host_of_each_object_and_the_list_rule_is_the_other_conditions()
+    public void Obj_is_in_combat_asks_the_host_of_the_object_the_operand_names()
     {
         // If in combat(extra) set global flag 7.
         var program = Program(L(C(ScrCatalogue.Condition.IsInCombat, (Extra, 0)), C(ScrCatalogue.Action.SetGlobalFlag, N(7)), C(0)), Do(C(ScrCatalogue.Action.ReturnRunDefault)));
@@ -70,7 +70,7 @@ public sealed class ScrCombatPointTailTests
     }
 
     [TestMethod]
-    public void Obj_is_in_combat_is_asked_of_the_looped_object_so_the_area_weapons_skip_the_critters_that_are_not()
+    public void Obj_is_in_combat_is_asked_of_an_object_variable_as_the_area_weapons_ask_it_of_the_looped_object()
     {
         // 30064's shape: loop for each critter around the attachee (kind 8), skip it unless it is in combat (kind 10, the current looped object), and say so by adding to a counter... here by a global flag set per looped object that passed.
         // A FakeHost has no vicinity, so the looped object is named through the one-object list of the extra object by assign object first.
@@ -80,6 +80,17 @@ public sealed class ScrCombatPointTailTests
         host.Combat[Victim] = true;
         var run = ScrDispatcher.RunObject(new(7, Sword, Pc, Victim), host, new() { Admission = new("tail-objects", Set.Conditions, Set.Actions.Append(ScrCatalogue.Action.AssignObject), Set.ValueKinds, Set.FocusKinds.Append(ScrFocusKind.LocalObject)) });
         Assert.AreEqual(8, run.Effects.GlobalFlags.Single().Index);
+    }
+
+    [TestMethod]
+    public void Obj_is_in_combat_reads_the_player_focus_kind_through_the_host()
+    {
+        // The list rule (all, or one for the any kinds) is ListHolds', shared with obj is animal and the dead test, whose tests pin it; FakeHost names no group, so only the one-object kinds are exercised here.
+        var program = Program(L(C(ScrCatalogue.Condition.IsInCombat, (21, 0)), C(ScrCatalogue.Action.SetGlobalFlag, N(7)), C(0)), Do(C(ScrCatalogue.Action.ReturnRunDefault)));
+        var host = With(program);
+        host.Combat[Pc] = true;
+        var set = new ScrAdmissionSet("tail-player", Set.Conditions, Set.Actions, Set.ValueKinds, Set.FocusKinds.Append(ScrFocusKind.Player));
+        Assert.AreEqual(1, Hit(host, set).Effects.GlobalFlags.Count);
     }
 
     [TestMethod]
