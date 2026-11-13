@@ -67,6 +67,9 @@ public sealed record AreaAiScene
     /// <summary>The companions standing here: their session entity, the T0 record they were made from (a visitor's is a row of its home map) and
     /// the world cells they hold now (their live overlay). ARC-DEV-075: the entity is given, never read back from the key on the shown map.</summary>
     public Func<IReadOnlyList<(string Entity, AreaObjectKey Key, CellCoord Cell)>>? Companions { get; init; }
+    /// <summary>ARC-AI-1515: the follow check's facts of a companion the hero hit (<see cref="AreaCompanionLoyalty.Facts"/>: its alignment, level and thresholds against the
+    /// PC side, its effective reaction now); null (or a null answer): the check cannot run and the hit changes the reaction only.</summary>
+    public Func<string, PartyConsentFacts?>? FollowFacts { get; init; }
     /// <summary>The T0 records the session destroyed or switched off.</summary>
     public Func<IReadOnlySet<AreaObjectKey>>? Removed { get; init; }
     /// <summary>ARC-WORLD-1436: the NPCs the map data stores off that the session switched on, with the world cell of their map data (<see cref="AreaObjectTargets.SwitchedOn"/>): the T0
@@ -267,7 +270,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     // Object flags: destroyed, off, don't draw, invisible, invulnerable; critter flags; spell flags; NPC flags (HostilityCritter's bits).
     private const uint DontDraw = 0x100, ObjectInvisible = 0x200, Invulnerable = 0x400000, OffObject = 0x2;
     private const uint Undead = 0x4, Animal = 0x8, SleepingFlag = 0x1000, NoFleeFlag = 0x8000000, NonLethal = 0x10000000, AnimalEnshrouded = 0x40000000;
-    private const uint NighInvulnerable2 = 0x200, AutoAnimates2 = 0x2;
+    private const uint NighInvulnerable2 = 0x200, AutoAnimates2 = 0x2, DarkSight2 = 0x800;
     private const uint InvisibleSpell = 0x1, DetectsInvisibleSpell = 0x200, StonedSpell = 0x10000, EntangledSpell = 0x1000000, MindControlledSpell = 0x8000000, EnshroudedSpell = 0x20000000;
     private const uint WaitingHereNpc = 0x8, KillOnSightNpc = 0x100, KosOverrideNpc = 0x800, GeneratorNpc = 0x80000, AloofNpc = 0x20000;
     // ARC-WORLD-102: critter flag MECHANICAL and NPC flag CAST_HIGHEST (field 0x118, read in 0x4AE720).
@@ -959,7 +962,48 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         if (plan.TurnsVictim && Tile(attacker) is { } there && TryNpc(victim, out var npc)) FaceNpc(npc, there, keepStep: true);
         if (plan.Reaction == AttackReactionChange.Deliberate && attacker == Pc && ReactionFacts(victim) is { } facts && Row(victim) is { } row)
             _session.ReactToPcHit(_session.Version, victim, facts.Npc, facts.Pc, new(row.FollowerHitReaction, row.HostileReaction), deliberate: true);
+        if (plan.Reaction is AttackReactionChange.FollowerDeliberate or AttackReactionChange.FollowerAccidental && attacker == Pc)
+            HitFollower(victim, plan.Reaction == AttackReactionChange.FollowerDeliberate);
         if (plan.ReactsToAttack) React(victim, attacker);
+    }
+
+    /// <summary>
+    /// ARC-AI-1515 (attack event 0x4A9650, the follower branch of a PC attacker, VBG4): the hero hit its direct follower. A deliberate hit changes the
+    /// reaction by AI parameter 9 (<see cref="GameSessionOwner.ReactToPcHit"/>, ARC-WORLD-021's profile: added in the Original setting, taken in Steamwoven; an accidental one
+    /// changes nothing); then the follow check runs with the follower limit ignored (<see cref="GameSessionOwner.CheckFollowerAfterHit"/>, 0x4AD950): a refusal makes the
+    /// follower leave and sets NPC flag 0x20 (JILTED) and the refusal line range of its reason is named (NOT READY: no line text is loaded, so none is floated; the range is traced,
+    /// as the loyalty step's), and a follower that stays (the check passed, or the leave was refused) says the accidental-attack line (lines 2300-2399) one time in three
+    /// (0x413DF0; likewise only named) when it is active (0x4AD800 is not read yet: the active test 0x45D790 stands for it). The leave is seen by
+    /// <see cref="ObserveLeaves"/> at the next look. Without the check's facts (the scene gives none) only the reaction changes.
+    /// </summary>
+    private void HitFollower(string victim, bool deliberate)
+    {
+        var changed = false;
+        if (deliberate && ReactionFacts(victim) is { } facts && Row(victim) is { } row)
+        {
+            var hit = _session.ReactToPcHit(_session.Version, victim, facts.Npc, facts.Pc, new(row.FollowerHitReaction, row.HostileReaction), deliberate: true);
+            changed = hit.Adjustment is { Delta: not 0 };
+        }
+        if (_scene.FollowFacts?.Invoke(victim) is not { } consent)
+        {
+            Trace(victim).FollowerHit = $"{(deliberate ? "deliberate" : "accidental")} reaction-changed={changed} follow check: no facts";
+            return;
+        }
+        var result = _session.CheckFollowerAfterHit(_session.Version, victim, consent);
+        string outcome;
+        if (result.Left && result.RefusalLines is { } lines)
+            outcome = $"left jilted, {(Active(victim) ? $"refusal lines {lines.First}-{lines.Last}" : "inactive: no refusal line")} ({result.Consent})";
+        else if (result.Disposition == GameSessionDisposition.Rejected) outcome = $"check refused ({result.Failure})";
+        else
+        {
+            // The original draws on every stay (0x4CEF00) and tests the can-speak only after a hit of 1 (its line pick's own draw is not made: no line text is loaded).
+            var rolled = result.Consent is not null && _session.AiRolls.Roll(AiRollPurpose.FollowerHitLine, 1, 3) == 1;
+            var speaks = rolled && Active(victim);
+            outcome = $"stays ({(result.Consent is { } reason ? reason.ToString() : "no check")}{(result.LeaveRefused ? ", leave refused" : "")})"
+                + (speaks ? ", accidental-attack lines 2300-2399" : "");
+        }
+        Trace(victim).FollowerHit = $"{(deliberate ? "deliberate" : "accidental")} reaction-changed={changed} follow check: {outcome}";
+        ObserveLeaves();
     }
 
     // The attack event's clear of NPC flag 0x800 on the victim (0x406D40 of field 0x118): the session's NPC flag layer takes it off the data's value; a victim without the bit writes nothing.
@@ -1279,6 +1323,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         var plan = HostilityRules.DangerUpdate(this, npc, _session.AiRolls, _session.Rules.Combat);
         Trace(npc).Danger = $"{plan.Path} {plan.Request?.ToString() ?? "-"} {plan.Target ?? "-"}";
         if (plan.Path == DangerUpdatePath.Flee) { _session.RunFleeSpellStep(_session.Version, npc, () => false); return; }
+        // ARC-AI-1518 (0x4AB460's end, ST5): a scan that found no target but perceived a concealed PC turns the scanner to face it; a step in progress goes on.
+        if (plan.Scan is { Target: null, TurnToward: { } toward } && TryNpc(npc, out var scanner) && Tile(toward) is { } facing) FaceNpc(scanner, facing, keepStep: true);
         if (plan.Unlocks) _session.UnlockDangerTarget(_session.Version, npc);
         // ARC-AI-1317 (VAG6): the pick's purge of the saved enemy list (the original runs it inside the pick, before the setter).
         if (plan.PurgesEnemies) _session.PurgeDangerEnemies(_session.Version, npc, enemy => Exists(Id(enemy)));
@@ -3176,6 +3222,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         if (id == Pc)
         {
             if (_session.QueryHeroLife() is not { } hero) return null;
+            var concealed = _session.IsConcealed(SessionCombatant.Hero);
             return new HostilityCritter
             {
                 Id = Pc, Kind = HostilityKind.Pc, Dead = hero.Status.IsDead, Unconscious = hero.Status.IsUnconscious,
@@ -3186,6 +3233,9 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
                 // ARC-DEV-358: the spell flags the hero's spells wrote (Invisibility, Sense Hidden, Sanctuary).
                 InvisibleSpell = (SpellFlagsOf(Pc, 0) & InvisibleSpell) != 0, DetectsInvisible = (SpellFlagsOf(Pc, 0) & DetectsInvisibleSpell) != 0,
                 Enshrouded = (SpellFlagsOf(Pc, 0) & EnshroudedSpell) != 0,
+                // ARC-AI-1518 (critter flag 0x1, 0x45EDE0; prowling trained to master): the scan hears a concealed hero at the silent level,
+                // remembers it, and refuses a master prowler it cannot see.
+                Concealed = concealed, MasterProwler = concealed && _session.QueryHeroSkills()?[Skill.Prowling].Training >= SkillTraining.Master,
             };
         }
         if (!_npcs.ContainsKey(id) && CompanionCell(id) is null) return null;
@@ -3340,8 +3390,38 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
             Rotation = GridActorMath.Octant(facing ?? Movers.FacingOf(observer, NeighborDirection.XPlus)),
             Stunned = facts?.Stunned ?? false, Sleeping = facts?.Asleep ?? false, Unconscious = facts?.Unconscious ?? false,
             TargetInvisible = Find(target) is { } seen && (seen.ObjectInvisible || seen.InvisibleSpell), DetectsInvisible = facts?.DetectsInvisible ?? false,
+            // The margin is read only where the sight check gets as far as Perception (not for a stunned, sleeping or unconscious observer, nor one facing away).
+            ProwlingMargin = facts is { Stunned: false, Asleep: false, Unconscious: false } && AwarenessRules.Faces(at, GridActorMath.Octant(facing ?? Movers.FacingOf(observer, NeighborDirection.XPlus)), there)
+                ? ProwlingMargin(observer, target, at, there, facts, map, true) : 0,
         };
         return AwarenessRules.See(sight, at, 0, 0, there, map, _session.Rules.Combat);
+    }
+
+    /// <summary>
+    /// ARC-AI-1518 (ledger AW4, AW5): the margin 0..100 by which a concealed hero lowers the observer's
+    /// Perception in one sight or hearing check, from the session's stealth facts (<see cref="GameSessionOwner.HeroProwlingMargin"/>) and
+    /// the observer's own: its conditions, dark sight, the light at the hero, and for sight the line from the observer to the hero (a
+    /// blocker hides the prowler, else the line's cover). 0 for any other target, or a hero that is not concealed. A concealed follower
+    /// is not handled here (it has no margin yet).
+    /// </summary>
+    private int ProwlingMargin(string observer, string target, CellCoord at, CellCoord there, HostilityCritter? facts, ILineOfFireMap<AreaObjectRecord> map, bool seeing)
+    {
+        if (target != Pc || observer == Pc || !_session.IsConcealed(SessionCombatant.Hero)) return 0;
+        var perception = Math.Clamp(facts?.Perception ?? 0, 0, AwarenessRules.MaxPerception);
+        var trace = seeing ? LineOfFireRules.Trace(at, 0, 0, there, map, _session.Rules.Combat) : null;
+        var state = LifeState(observer);
+        var conditions = (facts is { Stunned: true } && Paralysed(observer) ? SkillTargetConditions.Paralyzed : 0)
+            | (facts?.Unconscious == true ? SkillTargetConditions.Unconscious : 0)
+            | (state?.Conditions.HasFlag(LifeConditions.Stunned) == true ? SkillTargetConditions.Stunned : 0)
+            | (facts?.Asleep == true ? SkillTargetConditions.Sleeping : 0);
+        var observerFacts = new SkillDifficultyFacts
+        {
+            TargetConditions = conditions,
+            Light = Math.Clamp(CellLight(there), 0, AttackRules.MaxLightLevel),
+            ObserverDarkSight = ((Fields(observer)?.Critter?.Flags2 ?? 0) & DarkSight2) != 0,
+        };
+        if (trace is not null) observerFacts = AwarenessRules.WithProwlerLine(observerFacts, trace);
+        return _session.HeroProwlingMargin(perception, observerFacts, seeing).Margin;
     }
 
     public AwarenessResult Hear(string observer, string target, Loudness loudness)
@@ -3352,6 +3432,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         {
             Perception = Math.Clamp(facts?.Perception ?? 0, 0, AwarenessRules.MaxPerception),
             Stunned = facts?.Stunned ?? false, Sleeping = facts?.Asleep ?? false, Unconscious = facts?.Unconscious ?? false,
+            ProwlingMargin = facts is { Stunned: false, Unconscious: false } ? ProwlingMargin(observer, target, at, there, facts, map, false) : 0,
         };
         return AwarenessRules.Hear(hearing, at, 0, 0, there, loudness, new SoundMap(map), _session.Rules.Combat);
     }
@@ -3576,6 +3657,8 @@ public sealed class AreaAiTrace
     public string? Event { get; set; }
     /// <summary>ARC-DEV-292: its last immediate pass after a hit (<see cref="AreaAiHost.Struck"/>): the session's failure, the gate's stop and whether perform ran; null when none ran.</summary>
     public string? Struck { get; set; }
+    /// <summary>ARC-AI-1515: what the hero's hit on its follower did (the attack event's follower branch): the reaction change and the follow check's outcome with the line range named; null when none.</summary>
+    public string? FollowerHit { get; set; }
     public string? Reaction { get; set; }
     /// <summary>ARC-WORLD-099: the end-combat scripts (point 16) its subturn ends asked.</summary>
     public int EndCombatScripts { get; set; }

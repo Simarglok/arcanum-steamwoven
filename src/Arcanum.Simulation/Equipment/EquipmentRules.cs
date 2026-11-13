@@ -174,6 +174,19 @@ public static class EquipmentRules
         return total;
     }
 
+    /// <summary>
+    /// ARC-AI-1518: each worn armour item's silent-move adjustment plus its magic adjustment for this wearer, in item order: the
+    /// terms prowling's hearing check subtracts from its difficulty (ledger AW4).
+    /// </summary>
+    public static IReadOnlyList<int> SilentMoves(IEnumerable<EquipmentItem> worn, int aptitude)
+    {
+        ArgumentNullException.ThrowIfNull(worn);
+        var moves = new List<int>();
+        foreach (var item in worn)
+            if (item.Armor is { } armor) moves.Add(armor.SilentMoveAdjustment + AdjustMagic(armor.MagicSilentMoveAdjustment, item.MagickTechComplexity, aptitude));
+        return moves;
+    }
+
     /// <summary>The worn items' resistance adjustments (the worn part of the source's 0x43D6D0): every worn
     /// armour item's adjustment plus its magic adjustment for this wearer, per type. The base, the poison bonus of
     /// constitution, effects and the 0..95 clamp are the caller's.</summary>
@@ -326,7 +339,7 @@ public static class EquipmentRules
         if (item.Armor is { } a)
         {
             if (!Enum.IsDefined(a.Coverage) || ((int)a.Sizes & ~7) != 0) return false;
-            if (!All(a.AcAdjustment, a.MagicAcAdjustment, a.UnarmedBonusDamage) || !Resistances(a.Resistances) || !Resistances(a.MagicResistances))
+            if (!All(a.AcAdjustment, a.MagicAcAdjustment, a.UnarmedBonusDamage, a.SilentMoveAdjustment, a.MagicSilentMoveAdjustment) || !Resistances(a.Resistances) || !Resistances(a.MagicResistances))
                 return false;
             if (a.UnarmedBonusDamage < 0) return false;
         }
