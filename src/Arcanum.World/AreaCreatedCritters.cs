@@ -37,14 +37,21 @@ public sealed class AreaCreatedCritters
             var copy = CreatedObjectRows.CritterFrom(generator, made.Entity, made.Map.RuntimeMap, made.Cell.X, made.Cell.Y);
             if (copy.Row is not null) return copy;
         }
-        return CreatedObjectRows.Critter(prototypes, made.Prototype, made.Entity, made.Map.RuntimeMap, made.Cell.X, made.Cell.Y, SummonOf(session, made));
+        return CreatedObjectRows.Critter(prototypes, made.Prototype, made.Entity, made.Map.RuntimeMap, made.Cell.X, made.Cell.Y, SummonOf(session, template, made));
     }
 
-    // ARC-MAGIC-053 (SUM5): a critter a Summon made (spell flag 0x4000) has its experience cleared and takes the alignment of its summoner when that is the hero (the session keeps no NPC alignment, so an NPC
-    // summoner's is not known here); the row is built once, when the critter is first handed to the world, so the alignment is the hero's of that moment (a load builds it again from the hero's then).
-    private static CreatedCritterSummon? SummonOf(GameSessionOwner session, SessionCreatedObject made) =>
-        (made.SpellFlags & SessionCreatedObject.SummonedFlag) == 0 ? null
-        : new(made.Summoner == SessionSpellCaster.Hero ? session.QueryHero()?.Alignment : null);
+    // ARC-MAGIC-053 (SUM5): a critter a Summon made (spell flag 0x4000) has its experience cleared and takes the alignment of its summoner (0x4B0490 / 0x4B0980, stat 19); ARC-MAGIC-1169 (E1-f): an NPC summoner's alignment is its
+    // row's base stat 19 (the session keeps no NPC alignment and no stat effects are read here) and its faction (field 292: a script's set faction, else its row's) is copied too; a PC summoner leaves the prototype's faction.
+    // The row is built once, when the critter is first handed to the world, so the values are the summoner's of that moment (a load builds it again from the summoner's then).
+    internal static CreatedCritterSummon? SummonOf(GameSessionOwner session, Func<string, int, AreaObjectRecord?>? template, SessionCreatedObject made)
+    {
+        if ((made.SpellFlags & SessionCreatedObject.SummonedFlag) == 0) return null;
+        if (made.Summoner == SessionSpellCaster.Hero) return new(session.QueryHero()?.Alignment);
+        if (made.Summoner is not { } summoner || template?.Invoke(summoner, made.Map.RuntimeMap) is not { Type: CreatedObjectRows.NpcType } row || Arcanum.Data.Combat.CombatFieldReader.Read(row).Fields is not { Critter: { } critter, Npc: { } npc }) return new(null);
+        int? alignment = critter.BaseStats.Count > CreatedObjectRows.AlignmentStat ? critter.BaseStats[CreatedObjectRows.AlignmentStat] : null;
+        var faction = session.QueryMapChange(made.Map, MapChangeKey.ForEntity(summoner, AreaUseScriptHost.FactionProperty)) is { } set ? unchecked((int)set) : npc.Faction;
+        return new(alignment, faction);
+    }
 
     /// <param name="row">Builds the row of a created critter (a test gives synthetic rows).</param>
     /// <param name="inventorySource">ARC-DEV-386: the inventory source (field 0xEF) of a created critter's row; null reads it from the row's critter fields (a test gives synthetic rows no fields).</param>
