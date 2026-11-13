@@ -18,7 +18,7 @@ public sealed partial class AreaAiHost : IAiRedirectWorld
 
     /// <summary>
     /// The AIRedirect component's step: every NPC <see cref="AiGroundRules.Redirect"/> finds near <paramref name="target"/> is attacked by it in the host's attack event (0x4A9650, loudness 0, no flags) and then given the target as its combat
-    /// focus and who-hit-me-last (0x4A94C0). Answers how many NPCs were redirected; null when this host does not know the target (a target of another map). The candidate list is read once before the first attack event, as the original's is.
+    /// focus and who-hit-me-last (0x4A94C0). Answers how many NPCs were redirected; null when this host does not know the target (a target of another map). The vicinity is read once before the first attack event, as the original's list is (its dead, intelligence and flag tests run per candidate there; here they run before the first event, which no attack event changes).
     /// </summary>
     public int? SpellRedirect(string target, uint critterFlag, int minimumIntelligence)
     {
