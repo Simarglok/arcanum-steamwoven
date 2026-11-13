@@ -302,7 +302,9 @@ public partial class TerrainViewerApp
                 return $"{ai.ScriptAttack(attacker, victim)}";
             },
             // ARC-SCRIPT-1562: the magick-tech adjustments (91, 80) of a combat-point script read an NPC's effective aptitude from the session's life.
-            Aptitude: ScriptAptitude);
+            Aptitude: ScriptAptitude,
+            // ARC-SCRIPT-1735 (E5-a tail, NS5): a script's change art number writes the new art id only when an ART file of the module's content names it (0x502220).
+            ArtExists: aid => ExtraArt()?.Exists(aid) == true);
 
         var inventory = _inventoryHost;
         var host = new AreaUseScriptHost(owner, snapshot.RuntimeMap, snapshot.Objects, inventory?.Maps ?? [], content, world)
