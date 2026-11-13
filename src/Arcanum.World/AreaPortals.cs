@@ -13,6 +13,10 @@ public sealed record AreaPortal(AreaObjectKey Key, string Entity, AreaStepCell C
     /// <summary>ARC-SKILLS-006: the lock's difficulty (portal field 47, the record's slot 37), bounded to the session's range.</summary>
     public int LockDifficulty { get; init; }
 
+    /// <summary>ARC-SCRIPT-1778 (ledger AN10): the art id a script's change art number wrote (frame 0, the frame bits of the id are not kept: the session's frame is the open state); null while the portal has the art its map data gives.
+    /// <see cref="Art"/>, <see cref="FramesPerSecond"/> and <see cref="Frames"/> are then those of that art.</summary>
+    public uint? ArtId { get; init; }
+
     /// <summary>The visual of one frame of the portal's ART, or null when the ART has no such frame.</summary>
     public AreaVisualRecord? Visual(int frame) => Frames.FirstOrDefault(v => (int)((v.RawArt >> 14) & 31) == frame);
 
@@ -38,8 +42,14 @@ public sealed class AreaPortals
     /// <summary>ARC-SKILLS-006: the range of the use-item-with-skill goal that picks a lock (1, ledger PL3).</summary>
     public const int PickRange = 1;
     private readonly Dictionary<AreaObjectKey, AreaPortal> _portals;
+    // ARC-SCRIPT-1778: the portals as the map's data gives them (a portal a script gave another art returns to its entry here), and the portals by session entity.
+    private readonly Dictionary<AreaObjectKey, AreaPortal> _original;
+    private readonly Dictionary<string, AreaObjectKey> _byEntity;
 
-    private AreaPortals(SessionMapId map, Dictionary<AreaObjectKey, AreaPortal> portals) { Map = map; _portals = portals; }
+    private AreaPortals(SessionMapId map, Dictionary<AreaObjectKey, AreaPortal> portals)
+    {
+        Map = map; _portals = portals; _original = new(portals); _byEntity = portals.ToDictionary(p => p.Value.Entity, p => p.Key, StringComparer.Ordinal);
+    }
 
     /// <summary>The portals of a map made from already-built facts (a synthetic map of a test or a tool); <see cref="From"/> reads them from the map's data.</summary>
     public static AreaPortals Of(SessionMapId map, IEnumerable<AreaPortal> portals)
@@ -52,6 +62,23 @@ public sealed class AreaPortals
     public IReadOnlyCollection<AreaPortal> All => _portals.Values;
 
     public bool TryGet(AreaObjectKey key, [MaybeNullWhen(false)] out AreaPortal portal) => _portals.TryGetValue(key, out portal);
+
+    /// <summary>ARC-SCRIPT-1778: the portal of a session entity, as it is now (a script may have given it another art), or null.</summary>
+    public AreaPortal? ByEntity(string entity) => entity is not null && _byEntity.TryGetValue(entity, out var key) ? _portals[key] : null;
+
+    /// <summary>
+    /// ARC-SCRIPT-1778 (ledger AN10): gives the portal the art a script's change art number wrote: <paramref name="artId"/> (null: the art its map data gives, which returns the original entry), with
+    /// the facts of that art read by the caller (<paramref name="art"/>: door or window, rotation and frame count; <paramref name="framesPerSecond"/>; <paramref name="frames"/>: every frame of its group, in frame order).
+    /// What reads the portal afterwards (the open steps, the passage rule, the draw, a script's toggle) reads the new art's frame count. False when the portal is not of this map or already has this art.
+    /// </summary>
+    public bool Retarget(AreaObjectKey key, uint? artId, PortalArt art, int framesPerSecond, IReadOnlyList<AreaVisualRecord> frames)
+    {
+        ArgumentNullException.ThrowIfNull(frames);
+        if (!_portals.TryGetValue(key, out var current) || current.ArtId == artId) return false;
+        if (artId is null) { _portals[key] = _original[key]; return true; }
+        _portals[key] = _original[key] with { ArtId = artId, Art = art, FramesPerSecond = framesPerSecond, Frames = frames };
+        return true;
+    }
 
     /// <summary>The drawn doors and windows of a plan: every core portal body with its lock fields and ART. A map without a
     /// runtime number (not in the module's map list) has no session state, so its portals stay at T0 (none listed).</summary>

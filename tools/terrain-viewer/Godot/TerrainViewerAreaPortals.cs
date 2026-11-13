@@ -324,10 +324,19 @@ public partial class TerrainViewerApp
         AreaFrames();
         var overlay = _areaOverlay ?? throw new InvalidOperationException("AREA_OVERLAY_REQUIRED");
         var bodies = new Dictionary<AreaObjectKey, AreaDrawCommand>();
+        // ARC-SCRIPT-1778: the portals a script gave another art take its frames first.
+        SyncPortalArt();
         foreach (var portal in portals.All)
         {
-            if (portal.Frames.Count < 2) continue;
             var frame = DrawnFrame(portal, session);
+            // A portal with the art a script wrote is drawn from that art whatever its frame (its T0 body is the old art's).
+            if (portal.ArtId is not null)
+            {
+                if ((portal.Visual(frame) ?? portal.Visual(0)) is not { } newArt || !overlay.Bodies.TryGetValue(portal.Key, out var changed) || !overlay.Visuals.TryGetValue(changed.Visual, out var old)) continue;
+                bodies[portal.Key] = AreaScenePlan.PortalArtFrame(changed, area.Snapshot.Objects.Single(o => o.Key == portal.Key), old, newArt);
+                continue;
+            }
+            if (portal.Frames.Count < 2) continue;
             if (frame == portal.Baseline.Frame || portal.Visual(frame) is not { } visual) continue;
             if (!overlay.Bodies.TryGetValue(portal.Key, out var command) || !overlay.Visuals.TryGetValue(command.Visual, out var body)) continue;
             bodies[portal.Key] = AreaScenePlan.PortalFrame(command, area.Snapshot.Objects.Single(o => o.Key == portal.Key), body, visual);

@@ -1942,11 +1942,13 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
             LastHeal = _world!.ScriptHeal!(IsPc(request.Object) ? Arcanum.Simulation.Ai.AiSchedulerRules.Pc : request.Object.Code, request.Value);
     }
 
-    // ARC-SCRIPT-1735 (E5-a tail, ledger NS5, NS9): change art number (59) writes an object's art id (field 1). The plan of one request: what the run must refuse (an object the viewer cannot draw with another art), no change (the PC and the critter
-    // classes, a destroyed object, an id no ART file names, an id equal to the current one), or the art id to keep. Scenery of a loaded map only; the rest is refused so the run is left unapplied before anything applies.
+    // ARC-SCRIPT-1735 (E5-a tail, ledger NS5, NS9), ARC-SCRIPT-1778 (AN10, AN11): change art number (59) writes an object's art id (field 1). The plan of one request: what the run must refuse (an object the viewer cannot draw with
+    // another art), no change (the PC and the critter classes, a destroyed object, an id no ART file names), or the art id to keep. A scenery, a door or window and a container of a loaded map; the rest is refused so the run is left
+    // unapplied before anything applies. A door or window and a container hold their open state in the art id's frame (ledger LK10, LW2), which the action resets to 0 with the new id: the object is closed after it, whatever its frame was,
+    // and its lock fields stay (AN10).
     private const int ArtSlot = 0;
 
-    private readonly record struct ArtChange(string? Refusal, uint? Art, uint Baseline);
+    private readonly record struct ArtChange(string? Refusal, uint? Art, uint Baseline, AreaScriptOpenable? Openable = null);
 
     private ArtChange ArtPlan(ScrObjectRef obj, int number)
     {
@@ -1960,26 +1962,33 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         if (row.Type == NpcType)
             // A critter class (2 critter, 12 monster) answers the id 0: nothing changes. A unique NPC's art (13) takes a number, but the viewer draws an NPC from its body, not from one art id: not modelled.
             return ObjectArtNumber.IsCritterClass(baseline) ? default : new($"change art number of {obj.Code} is not modelled (an NPC of art class {ObjectArtNumber.Class(baseline)})", null, baseline);
-        if (row.Type != SceneryType) return new($"change art number of {obj.Code} is not modelled (only scenery takes a new art, not an object of type {row.Type})", null, baseline);
+        var portal = row.Type == Arcanum.Data.Combat.CombatFieldReader.PortalType; var container = row.Type == Arcanum.Data.Combat.CombatFieldReader.ContainerType;
+        if (row.Type != SceneryType && !portal && !container)
+            return new($"change art number of {obj.Code} is not modelled (only scenery, a door, a window and a container take a new art, not an object of type {row.Type})", null, baseline);
+        var expected = portal ? 3 : container ? 7 : 4;
         var current = _session.QueryObjectArt(new SessionMapId(obj.Map), obj.Code) ?? baseline;
-        if (ObjectArtNumber.Class(current) != 4)
+        if (ObjectArtNumber.Class(current) != expected)
             return new($"change art number of {obj.Code} is not modelled (art class {ObjectArtNumber.Class(current)})", null, baseline);
         var next = ObjectArtNumber.Changed(current, number, out _);
         if (_world?.ArtExists is not { } exists) return new($"change art number of {obj.Code} needs the module's art index", null, baseline);
         // 0x502220: the new id is written only when its ART file exists.
         if (!exists(next)) return new(null, null, baseline);
-        return new(null, next, baseline);
+        if (!portal && !container) return new(null, next, baseline);
+        // The openable's lock identity and T0 baseline (the shown map's door or container); the frame reset needs them.
+        return OpenableOf(obj) is { } openable ? new(null, next, baseline, openable) : new($"change art number of {obj.Code} is not modelled (the object is not a door or container of the shown map)", null, baseline);
     }
 
     private ArtChange ArtPlan(ScrObjectStateRequest request) => ArtPlan(request.Object, request.Value);
 
-    // The change of one request, written as the object's art id (the data's id returns the object to its baseline). False when the session refuses.
+    // The change of one request, written as the object's art id (the data's id returns the object to its baseline) and, for a door, window or container, the closed frame (AN10). False when the session refuses.
     private bool ApplyArt(ScrObjectStateRequest request)
     {
         var plan = ArtPlan(request);
         if (plan.Art is not { } art) return true;
         var set = _session.SetObjectArt(_session.Version, new SessionMapId(request.Object.Map), request.Object.Code, art, plan.Baseline);
-        return set.Disposition != GameSessionDisposition.Rejected;
+        if (set.Disposition == GameSessionDisposition.Rejected) return false;
+        if (plan.Openable is not { } openable) return true;
+        return _session.SetOpenableFrame(_session.Version, openable.Openable, openable.Baseline, 0).Disposition != GameSessionDisposition.Rejected;
     }
 
     // ARC-DEV-233: an NPC of the shown map, the only target the goal-starting actions (62, 69, 74, 76) are applied to; the PC, another map's object and a non-NPC are left as they are.
