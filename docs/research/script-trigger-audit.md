@@ -57,8 +57,8 @@ from line 0, static.
 | 10 | first heartbeat | 0x4AD2B2 | AI tick, shown map (`HeartbeatAdmission`) | 23 (6) | 23 (was 21) |
 | 11 | catching thief | 0x4AEFCD, 0x4C76E5, 0x4C7900 | pick pocket (use set) | 0 | — |
 | 12 | dying | 0x45DA57 | the session's life step asks the shown map's use-script host (`AreaUseScriptHost.RunDying`, `DyingAdmission`, ARC-DEV-312; every kill path) | 167 (61) | the installed 1805, 2137, 2173 whole; the others not counted yet |
-| 13 | enter combat | 0x4AAE29 | **none** | 9 (8) | — |
-| 14 | exit combat | 0x4AAF32 | **none** | 0 | — |
+| 13 | enter combat | 0x4AAE29 | the session's danger setter asks the host (`GameSessionOwner.DangerHookScript`, `AreaUseScriptHost.RunDangerPoint`, `DyingAdmission`, ARC-AI-1530) | 9 (8) | not counted yet |
+| 14 | exit combat | 0x4AAF32 | as 13 (ARC-AI-1530) | 0 | — |
 | 15 | start combat | 0x4A86A7 | **none** | 2 (2) | — |
 | 16 | end combat | 0x4A8688, 0x4B7681 | **none** | 0 | — |
 | 17 | buy object | 0x4621D7, 0x578446 | **none** | 0 | — |
@@ -82,8 +82,8 @@ from line 0, static.
 | 35 | critical miss | 0x4B2F35, 0x4B3163, 0x4B399C (and 0x4B47F8) | **none** | 2 (2) | — |
 
 
-Points the original fires for which Steamwoven has **no host**: 2 destroy, 3 unlock, 6 throw, 8 miss, 13 enter combat,
-14 exit combat, 15 start combat, 16 end combat, 17 buy object, 18 resurrect, 20 leader killing, 22 will KOS, 
+Points the original fires for which Steamwoven has **no host**: 2 destroy, 3 unlock, 6 throw, 8 miss,
+15 start combat, 16 end combat, 17 buy object, 18 resurrect, 20 leader killing, 22 will KOS, 
 27 new sector, 29 leader sleeping, 30 bust, 33 caught thief, 35 critical miss. Points with a **partial** host:
 7 hit, 26 critter hits and 34 critical hit (the hit step of the session's attacks, ARC-SCRIPT-1483: not the miss points, the hero's own script, a weapon without a row), 1 use (use clicks on guarded sites and written items; not the use goal on portals and containers, the bed, the trap disarm or the
 magick-tech component), 4/5/21/24/25/28/32 (the session's item scripts for the hero's own moves only), 9 dialog (talk,
@@ -145,7 +145,7 @@ carry their task code; the open ones are 5, 6, 7, 10, 11, 12, 13 and the rest of
 | 2 | Dialog-point commands | **Done in part** by ARC-SCRIPT-050 (S19) and ARC-DEV-178 (S23, get reaction). Left: critter disband (22) comes only with transform into basic prototype (40), all 17 rows script 30009; obj is wielding over everyone in the group (focus 13, 14 rows, script 1160) is a list condition (slice 11); set reaction (30, 0x447ABA: reaction_adj by the difference) and give gold (33); the loop-for talks 1105, 1111, 1116 need conditions over lists and actions 99, 81, 36 | talks that run default |
 | 3 | Tile scripts for every moved critter | The location change of TG2 for AI movers, visitors, a jump or teleport arrival, a created or placed critter, and the path walk 0x455350. **Done** for AI-host movers (ARC-DEV-206), pushed companions (ARC-DEV-298), carried companions (ARC-DEV-328) and arrivals (ARC-DEV-351). Open: a follower that travels with a same-map teleport, created or placed critters, the path walk | traps, guards and story tiles NPCs step on |
 | 4 | Dying and destroy | **Point 12 done** by ARC-DEV-312 (ledger [DY1–DY8](ledger/scripts.md#creature-dying-script-point-12-arc-dev-312-b21-follow-up)). Point 2 (destroy, 0x43CD0E) is open | 26 attachments |
-| 5 | Combat points | **Done in part** by ARC-SCRIPT-1483: hit, critter hits and critical hit (7, 26, 34) from the session's hit step (ledger [CP1–CP5](ledger/combat.md#combat-point-scripts-arc-script-1483); the poison weapon scripts wait for [#1562](https://github.com/Simarglok/arcanum-steamwoven/issues/1562)). Left: enter, exit, start, end combat (13–16), miss and critical miss (8, 35) (taking damage, 23, is done by ARC-DEV-261) | 61 attachments (Virgil's 1997 at enter combat), 48 of them at 7, 26 and 34 |
+| 5 | Combat points | **Done in part** by ARC-SCRIPT-1483: hit, critter hits and critical hit (7, 26, 34) from the session's hit step (ledger [CP1–CP5](ledger/combat.md#combat-point-scripts-arc-script-1483); the poison weapon scripts wait for [#1562](https://github.com/Simarglok/arcanum-steamwoven/issues/1562)). Enter and exit combat (13, 14) are done by ARC-AI-1530 (the danger setter's hook). Left: start and end combat (15, 16), miss and critical miss (8, 35) (taking damage, 23, is done by ARC-DEV-261) | 61 attachments (Virgil's 1997 at enter combat), 48 of them at 7, 26 and 34 |
 | 6 | Crime and KOS | will KOS (22, 0x4AE179), bust (30), caught thief (33) and the guard's catching thief (11 at 0x4AEFCD) | 124 attachments |
 | 7 | Use-set commands | get hit points (107), set lock state (53), change art (59), computed goto, focus 8 in use scripts | 246 refused use attachments |
 | 8 | Tile-script command groups | **Done in three groups**: ARC-SCRIPT-052 (S20, ledger TD1–TD3: call-ex, destroy, stop attacking), ARC-DEV-157 (S22, ledger GS1–GS4, bugs B20 and B23: get stat for the PC, vicinity loops) and ARC-DEV-298 (float line in the tile set; stage `tile-ghost`). Open: the remaining first refusals by group (action 32, action 22, change art 59, sector is blocked 45, condition 51, damage 60, play script eye candy 120, action 112, set day standpoint 45, monster generator disabled 46; 1779 stops at a computed goto) | tile scripts |

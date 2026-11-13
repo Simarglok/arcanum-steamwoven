@@ -205,7 +205,7 @@ history held about 500 runs of such copies of one template).
   the viewer's sources by the tests), the whole map battery (`full`, `map` without `--stages`) that of `map` and
   `resources`; a stage the viewer skipped (silently, as the AI stages without a hero, or with a `NONE`/`SKIP` line)
   makes the step `FAIL exit=3` with `FAIL exit=3 stages not run: ...` and up to three of the log's `NONE`/`SKIP`
-  lines (the missing stages' own first). The battery's other stages may report `NONE` where the map lacks what they
+  lines (the missing stages' own first). A stage whose own `PASS` line is not the whole check also needs the lines of `STAGE_ALSO_PASS` (ARC-DEV-1556): `transfer` needs the visitor-fight `PASS` after its own, so a `NONE` or `NO-TARGET` fight line fails it. The battery's other stages may report `NONE` where the map lacks what they
   need (a whole map has no window to stream), so it vouches only for those two. Before
   anything runs: a stage that needs a hero (`map` and the whole battery, `cast`, `turn-based`, `knockdown`, `ranged`,
   `container`, `junk`, `hover`, `barter`, `life`, `floaters`, `ai`, `ai-turn-based`, `ai-cast`, `ai-follower`, `premade`, `opening`, `pickpocket`, `loot-worn`, `inv-arrange`, `loot-room`, `transfer`, `follower-home` and the rest of `HERO_STAGES` in `tools/local_dev/smoke.py`) gets
@@ -775,6 +775,14 @@ on each later step, so `./arcanum run` keeps the command's output out of it by d
 
 Tests: `python3 -B -m unittest tools.local_dev.test_run_log` (error lines, summary, kept logs, quiet and `--verbose`
 wrapper runs).
+
+## All launcher tests in one command (ARC-DEV-1565)
+
+`python3 -B -m unittest discover -s tools/local_dev -t . -p 'test_*.py'` from the repository root runs every
+`tools/local_dev` test in one process (about 3 minutes on a quiet Mac; the whole tree is not part of the root checks, run it when a
+launcher change touches several modules). `-t .` names the modules `tools.local_dev.test_*`, which the modules'
+imports need; the per-module commands above stay the quick way to run one. The stopped-waiter and third-dotnet-place tests of `test_run_queue` hold their runs until released instead of
+timing them, so a loaded Mac cannot fail them.
 
 ## Root solution synthetic checks
 

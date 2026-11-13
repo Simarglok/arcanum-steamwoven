@@ -381,7 +381,7 @@ public sealed class AreaConversationHost
             detail = $"script {call.Script} SCR line {result.Refusal!.Line}: {result.Refusal.Code} type {result.Refusal.Type}";
             return false;
         }
-        if (result.Stop == ScrStop.NotModelled) { detail = $"script {call.Script}: NotModelled (get area on the start map, GA3)"; return false; }
+        if (result.Stop == ScrStop.NotModelled) { detail = $"script {call.Script}: NotModelled (a question the host cannot answer: get area on the start map GA3, or the vitals of an object it does not know VT1, VT2)"; return false; }
         if (result.Effects.Dialog is not null) { detail = $"script {call.Script}: a call that starts a conversation is not run by the viewer"; return false; }
         if (!Scripts.Apply(result.Effects)) { detail = $"script {call.Script} {result.Stop}: the session refused its effects"; return false; }
         detail = $"script {call.Script} {result.Stop} at SCR line {result.StopLine}";
