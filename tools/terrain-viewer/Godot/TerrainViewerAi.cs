@@ -654,6 +654,24 @@ public partial class TerrainViewerApp
         if (_sectorChart is { } chart && _sectorChartKey == (_areaSession, CurrentAreaMap) && _areaSession?.QuerySectors(new SessionMapId(CurrentAreaMap)) is { } state) chart.Request(state.Slots);
     }
 
+    // ARC-DEV-1692: what the chart over the loaded sectors holds now, for a smoke's line (idle, evidence present, sectors held, sectors the session's cache holds loaded).
+    private string SectorChartState() => _sectorChart is not { } chart ? "none"
+        : $"idle={chart.Idle} steps={(chart.Steps is null ? "none" : "held")} held={chart.Sectors.Count} cache={(_areaSession?.QuerySectors(new SessionMapId(CurrentAreaMap))?.Slots is { IsDefault: false } slots ? slots.Length.ToString() : "-")}";
+
+    // ARC-DEV-1692: a smoke's frames run in microseconds of wall time, while the chart reads the sectors the cache loaded on a background task (seconds for a sector outside the window), so a
+    // stage that expects the host to plan a route into such a sector must let the read finish first or its outcome depends on the machine's load. False: the read did not finish in the time.
+    private bool SettleSectorChartForSmoke(int timeoutMs = 60_000)
+    {
+        if (_sectorChart is not { } chart) return true;
+        var until = Time.GetTicksMsec() + (ulong)timeoutMs;
+        while (!chart.Idle)
+        {
+            if (Time.GetTicksMsec() > until) return false;
+            System.Threading.Thread.Sleep(1);
+        }
+        return true;
+    }
+
     private void DropSectorChart() { _sectorChart?.Dispose(); _sectorChart = null; _sectorChartKey = null; }
 
     // ARC-DEV-104 (MIG9 S4, RL11): each frame the hero's view square touches its sectors in the session's cache (an age bump, or a load and a

@@ -100,6 +100,8 @@ public partial class TerrainViewerApp
             PublishWorldSelection();
             var host = AreaAiHostNow();
             Require(host is not null, "the AI host is built");
+            RequestSectorChart(); // the placement moved the hero through the session's cache without asking the chart
+            Require(SettleSectorChartForSmoke(), "the sector chart's background read did not finish: " + SectorChartState());
             Require(session.QueryAiTick(entity) is not null, "the animal has its AI tick");
             session.Heal(session.Version, SessionLifeTarget.Hero, new LifeHeal { Fatigue = 1000 });
             session.Heal(session.Version, chosen.Build.Combat!.Target, new LifeHeal { Full = true, Fatigue = 1000, Resurrect = true });
@@ -111,6 +113,8 @@ public partial class TerrainViewerApp
                 _areaSmokeTime++;
                 SpellSmokeTick();
                 WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .05, true, SimulationTime.At(_areaSmokeTime, 20));
+                // ARC-DEV-1692: the frame's view touch may have asked the chart for more sectors; the next frame's AI step plans over them only when their read is done, which wall time (load) decides: wait for it.
+                Require(SettleSectorChartForSmoke(), "the sector chart's background read did not finish: " + SectorChartState());
             }
             CellCoord? lastTile = null;
             CellCoord TileOf()
@@ -195,7 +199,7 @@ public partial class TerrainViewerApp
             Require(witnessFlights.Length == fleeing.Count, $"the witness rule sent {fleeing.Count} bystander(s) fleeing from the hero but only {witnessFlights.Length} reached the setter with FLEE: {string.Join(",", fleeing.Keys.Select(w => Name(w) + "=" + noticeSetters[w]))}");
             GD.Print($"ARC-AI-1514 ai-react witnesses: {fleeing.Count} bystander(s) in the witness rule's flight, {witnessFlights.Length} asked the setter for FLEE from the hero: {string.Join(",", witnessFlights.Select(Name))}");
             GD.Print($"ARC-DEV-264 ai-react spell={spell.Data.Number} range={spellRange} distance={castDistance} (asked {distance}) hitFrame={hitFrame} danger={danger.State}/{danger.Focus}"
-                + $" struck={struckPass} runAtHit={runAtHit} event={host!.TraceOf(entity)?.Event} reaction={host.TraceOf(entity)?.Reaction} tile {atHit.X},{atHit.Y}->{after.X},{after.Y} hero {heroCell.X},{heroCell.Y} reacted={reacted} afterMs={reactedAfterMs}");
+                + $" struck={struckPass} runAtHit={runAtHit} event={host!.TraceOf(entity)?.Event} reaction={host.TraceOf(entity)?.Reaction} tile {atHit.X},{atHit.Y}->{after.X},{after.Y} hero {heroCell.X},{heroCell.Y} reacted={reacted} afterMs={reactedAfterMs} chart={SectorChartState()}");
             Require(focus, $"the animal took COMBAT_FOCUS on the hero at the hit of an aggressive spell from {castDistance} cells (the original's notice, 0x453EE0, runs the attack event on the target whatever the distance): it is {danger.State} on {danger.Focus}");
             Require(struckPass is not null, "the damage step ran the animal's AI pass at once (0x4B52FC): the trace holds no immediate pass");
             Require(reacted, $"the animal, in focus on the hero, came two or more cells toward the hero or attacked within ten seconds of game time (the original acts at the hit or at its next tick, at most five seconds away): it stood at {after.X},{after.Y}");
