@@ -245,6 +245,8 @@ public partial class TerrainViewerApp
             GD.Print($"ARC-DEV-094 ai smoke place entity={entity} cell={walked.Cell.X},{walked.Cell.Y} facing={walked.Facing} restored=true");
             Require(stepFrames.Count >= 3, $"its steps were drawn with its move cycle: {stepFrames.Count} distinct frames over {steppingFrames} stepping frames; "
                 + string.Join(", ", _bodyMoves.Values.Select(m => $"{m.Status} {m.Detail}")));
+            // ARC-RENDER-1485: its steps were drawn with the walk of the weapon it shows (none before the attempt; the animal's own walk file).
+            Require(_npcArmedWalkDraws > 0, $"its steps were drawn with the walk ART of the weapon it shows: {_npcArmedWalkDraws}; " + string.Join(", ", _armedArts.Values.Select(l => $"{l.Animation}/{l.Weapon} {l.Status} {l.Detail}")));
             Require(session.QueryCombatMode(SessionCombatant.Critter(entity)), "the attempt put it into combat mode (goal 19 node 5)");
             // ARC-WORLD-099: its attack run ends done, and in combat mode outside a round it starts its fidget (0x4B4320).
             var fidgets = _aiFidgets;

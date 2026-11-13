@@ -738,6 +738,7 @@ tools/terrain-viewer/Godot/TerrainViewerAttack.cs,InAttackReach,pending,
 tools/terrain-viewer/Godot/TerrainViewerAttack.cs,TraceLineOfFire,pending,
 tools/terrain-viewer/Godot/TerrainViewerAudioCues.cs,PlayDyingBark,pending,
 tools/terrain-viewer/Godot/TerrainViewerBloodPools.cs,LeaveBloodPoolsForNewDeaths,pending,
+tools/terrain-viewer/Godot/TerrainViewerBodyMoves.cs,ArmedWalk,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerBodyStyles.cs,SyncAreaBodyStyles,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerBodyStylesSmoke.cs,RunAreaBodyStylesStageAsync,exempt,reference
 tools/terrain-viewer/Godot/TerrainViewerCombatMode.cs,WorldRightRelease,pending,
