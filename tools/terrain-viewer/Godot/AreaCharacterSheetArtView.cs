@@ -68,6 +68,8 @@ public partial class AreaCharacterSheetArtView : Control
     public AreaCharacterSheetPageView Pages { get; } = new();
     /// <summary>ARC-UI-077: the spells page in the original's look (the right-hand panel, a sibling of <see cref="Pages"/>).</summary>
     public AreaCharacterSheetSpellsView Spells { get; } = new();
+    /// <summary>ARC-UI-1742: the auto-level scheme page in the original's look (a sibling of <see cref="Pages"/>).</summary>
+    public AreaCharacterSheetSchemesView Schemes { get; } = new();
 
     public bool ArtSet => _fonts is not null;
     public AreaSheetTab Tab => _tab;
@@ -89,6 +91,7 @@ public partial class AreaCharacterSheetArtView : Control
         AreaArtTextDraw.Prepare(this);
         AddChild(Pages);
         AddChild(Spells);
+        AddChild(Schemes);
     }
 
     /// <param name="alignmentHot">The hot point of each frame of art 254.</param>
