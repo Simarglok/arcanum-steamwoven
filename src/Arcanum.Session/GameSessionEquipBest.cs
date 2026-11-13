@@ -192,6 +192,7 @@ public sealed partial class GameSessionOwner
         private HashSet<string> _blocked = [];
         private (int DamageBonus, int Aptitude, bool ExtraordinaryIntelligence) _chooserStart;
         private string? _lastRun;
+        private string? _culprit;
         private readonly GlobalFlagVersion _flags = owner._flags.Version;
 
         /// <summary>The runs of the plan's moves, so far (the commit applies them with the plan).</summary>
@@ -214,6 +215,8 @@ public sealed partial class GameSessionOwner
             Fresh();
             _lastRun = entity;
             if (_runs.Failure != GameSessionFailure.None) throw new ScriptBlocked(entity);
+            // The first run that moves what the choice reads is the one to give up when a choice follows.
+            if (_culprit is null && _runs.NpcEffectChanges > 0 && (_runs.NpcSkillEffects || _runs.ChooserReads() != _chooserStart)) _culprit = entity;
         }
 
         // IE3: a removal unwields a worn item (wield off) and then runs remove item; IE4: an insertion wields an item put into a wear slot (wield on) and then runs insert item. Only the points the item carries run.
@@ -234,8 +237,7 @@ public sealed partial class GameSessionOwner
         /// <summary>The values the best-items choice reads of the wearer, as the earlier scripts left them, against the ones the plan started from.</summary>
         internal void CheckChooser()
         {
-            if (_runs is null || _lastRun is null || _runs.NpcEffectChanges == 0) return;
-            if (_runs.ChooserReads() != _chooserStart) throw new ScriptBlocked(_lastRun);
+            if (_culprit is not null) throw new ScriptBlocked(_culprit);
         }
 
         /// <summary>The hero's held items with the host's facts.</summary>

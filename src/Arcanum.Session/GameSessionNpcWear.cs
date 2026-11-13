@@ -67,8 +67,9 @@ public sealed partial class GameSessionOwner
     /// ARC-WORLD-103: the NPC's best-items wield at the end of its regeneration (0x463E20 calls 0x4654F0 for an NPC, type 16, after the
     /// lines, without a target, ledger RK15): for each slot from the helmet (1000) to the boots (1008) the rules of
     /// <see cref="EquipBest"/> (WB1–WB8) over the NPC's list in its order, starting from what it wears after the clear (its persistent
-    /// items keep their slots). Its insert check takes an item a step takes off. A choice with a move script or item spells is not
-    /// wielded (the session runs none; the original would), as for the hero. On success the NPC's worn items are recorded (the record then
+    /// items keep their slots). Its insert check takes an item a step takes off. ARC-MAGIC-1684: the moves run the items' item event scripts
+    /// when the host gives their context (<see cref="ISessionRestockWorld.NpcWieldScripts"/>), in the regeneration's one revision; without it, or for a script the session cannot apply, a choice with a move script is not
+    /// wielded (the original would), and a choice with item spells never is. On success the NPC's worn items are recorded (the record then
     /// replaces its map data's inventory locations); on a refusal nothing is recorded. Part of the regeneration's one revision.
     /// </summary>
     private SessionNpcWield WieldNpcBest(ISessionRestockWorld world, SessionMapId map, InventoryDomain.Seed seed, string npc)
@@ -86,7 +87,7 @@ public sealed partial class GameSessionOwner
     /// <paramref name="allSlots"/>), CHECK_WEAPON alone the best item of the weapon slot (0x465170 with 1004), over the NPC's list as the session
     /// shows it now and the NPC's ammunition stacks, so a bow whose ammunition the NPC no longer carries is not chosen and goes to its pack (fists
     /// when no weapon qualifies). The same rules, policy and refusals as <see cref="WieldNpcBest"/> (the world is the host's restock world; none, or no wielder for the NPC: <see cref="GameSessionFailure.EquipmentUnavailable"/>). One revision and the NPC's worn
-    /// record when a worn item changed, else <see cref="GameSessionDisposition.NoChange"/> with the NPC's record untouched.
+    /// record when a worn item changed, or one revision (the record untouched) when only the scripts of a step changed the session (ARC-MAGIC-1684), else <see cref="GameSessionDisposition.NoChange"/> with the NPC's record untouched.
     /// </summary>
     public EquipBestResult RewieldNpc(GameSessionVersion expected, string npc, bool allSlots, ISessionRestockWorld? world)
     {

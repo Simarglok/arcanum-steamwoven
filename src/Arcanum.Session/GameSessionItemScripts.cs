@@ -202,6 +202,11 @@ public sealed partial class GameSessionOwner
         /// <summary>The wearer's entity: the hero's, or the NPC's.</summary>
         private string Wearer => _npc?.Entity ?? SessionEventKinds.PlayerEntity;
 
+        /// <summary>ARC-MAGIC-1684: an effect the runs added to or removed from an NPC wearer's list changes a basic or tech skill, which the best-items choice reads (the weapon skill levels) and the session does not model.</summary>
+        internal bool NpcSkillEffects { get; private set; }
+
+        private static bool TouchesSkills(SessionEffectDefinition definition) => definition.Changes.Any(c => c.Kind is Arcanum.Data.Characters.EffectAttributeKind.BasicSkill or Arcanum.Data.Characters.EffectAttributeKind.TechSkill);
+
         /// <summary>ARC-MAGIC-1684: the number of actions the runs so far have made on an NPC wearer's effect list (0 for the hero).</summary>
         internal int NpcEffectChanges => _npcOps.Count;
 
@@ -336,6 +341,7 @@ public sealed partial class GameSessionOwner
             {
                 var index = _entries.FindIndex(entry => entry.Number == number);
                 if (index < 0) return GameSessionFailure.None;
+                if (_definitions.TryGetValue(number, out var leaving)) NpcSkillEffects |= TouchesSkills(leaving);
                 _entries.RemoveAt(index);
                 _npcOps.Add(new(null, default, 0, number, 1, null));
                 return GameSessionFailure.None;
@@ -348,6 +354,7 @@ public sealed partial class GameSessionOwner
             if (_definitions.TryGetValue(number, out var known) && !known.Changes.IsEmpty && !known.SameAs(definition)) return GameSessionFailure.EffectMismatch;
             if (_entries.Count >= SessionNpcEffectLimits.MaxEntries) return GameSessionFailure.EffectCapacityExceeded;
             _definitions[number] = definition;
+            NpcSkillEffects |= TouchesSkills(definition);
             _entries.Add(new SessionEffect(number, cause));
             _npcOps.Add(new(definition, cause, 1, null, 0, null));
             return GameSessionFailure.None;

@@ -19,7 +19,7 @@ namespace Arcanum.Session.Tests;
 public sealed class NpcWieldItemScriptTests
 {
     private const string Guard = "oid:guard";
-    internal const int Charm = 50, Genius = 51, AddCharm = 720, RemoveCharm = 721, AddGenius = 722, Broken = 723, Mark = 724;
+    internal const int Charm = 50, Genius = 51, AddCharm = 720, RemoveCharm = 721, AddGenius = 722, Broken = 723, Mark = 724, Say = 725;
 
     // The charm only touches the charisma (nothing the best-items choice reads); the genius raises the intelligence from 19 to the extraordinary 20.
     private static readonly SessionEffectDefinition CharmEffect = new(Charm, [new(EffectAttributeKind.Stat, 7, EffectChangeOperator.Add, 1)]);
@@ -38,6 +38,7 @@ public sealed class NpcWieldItemScriptTests
             [AddCharm] = Program(Do(C(ScrCatalogue.Action.AddEffect, (Triggerer, 0), N(Charm), N(5)))),
             [RemoveCharm] = Program(Do(C(ScrCatalogue.Action.RemoveEffect, (Triggerer, 0), N(Charm)))),
             [AddGenius] = Program(Do(C(ScrCatalogue.Action.AddEffect, (Triggerer, 0), N(Genius), N(5)))),
+            [Say] = Program(Do(C(ScrCatalogue.Action.PrintLine, N(1), N(6)))),
             // Keeps a count in the item's own slot (a run's change the session applies on any entity).
             [Mark] = Program(Do(C(ScrCatalogue.Action.Assign, (Counter, 0), N(7)))),
             // Adds an effect to the item instead of the wearer: not an effect the session can apply.
@@ -68,11 +69,17 @@ public sealed class NpcWieldItemScriptTests
         public bool GivesScripts { get; set; } = true;
         public SessionInsertCheck Insert { get; set; } = _ => SessionInsertVerdict.Accepted;
         // Intelligence 19: one more makes it extraordinary, which the choice reads.
-        public int[] Stored { get; } = [.. AttackStateTests.Stats()];
+        public int[] Stored { get; set; } = [.. AttackStateTests.Stats()];
         public SessionLifeTarget Target { get; } = SessionCritterCombat.From(Guard, AttackStateTests.Npc()).Combat!.Target;
         public Dictionary<string, SessionWearableItem?> Wear { get; } = [];
 
         public World() { Stored[4] = 19; }
+
+        public void Weapon(string entity, int name, int min, int max, params int[] points) =>
+            Wear[entity] = new(Facts(SessionItemType.Weapon, name).Kind, points, false, new EquipmentItem
+            {
+                Kind = EquipmentItemKind.Weapon, Weapon = new EquipmentWeapon { Skill = CombatSkill.Melee, Damage = DamageRanges.None with { Normal = new(min, max) } },
+            }) { Worth = max * 10, IdentifiedFlag = true };
 
         public LifeFacts? CritterFacts(SessionMapId map, string entity) => null;
         public RestockHolder? RestockFacts(SessionMapId map, string entity) => null;
@@ -95,7 +102,7 @@ public sealed class NpcWieldItemScriptTests
     private static GameSessionOwner Open(params (string Entity, int Name, int Location)[] items)
     {
         var owner = GameSessionOwner.Create(Descriptor() with { Hero = HeroStateTests.HalfElf() }).Owner!;
-        var seed = items.Select(item => new SessionSeedItem(item.Entity, Facts(SessionItemType.Armor, item.Name, item.Location), null)).ToArray();
+        var seed = items.Select(item => new SessionSeedItem(item.Entity, Facts(item.Name >= 3900 ? SessionItemType.Weapon : SessionItemType.Armor, item.Name, item.Location), null)).ToArray();
         Assert.AreEqual(GameSessionFailure.None, owner.AttachMapInventory(Exterior,
             new SessionMapInventorySeed([new(Guard, SessionHolderKind.Npc, false, false, [], items.Select(item => item.Entity).ToArray())], seed)).Failure);
         return owner;
@@ -214,5 +221,46 @@ public sealed class NpcWieldItemScriptTests
         var result = owner.RewieldNpc(owner.Version, Guard, allSlots: true, world);
         Assert.AreEqual(GameSessionDisposition.Changed, result.Disposition);
         CollectionAssert.AreEqual(new[] { (EquipmentSlot.Boots, "boots") }, Worn(owner));
+    }
+    [TestMethod]
+    public void TheScriptThatMovedTheChoiceIsTheOneGivenUpNotALaterHarmlessRun()
+    {
+        // The amulet (medallion slot, before the weapon's) makes the intelligence extraordinary; the worn weapon's wield off is harmless but runs in the weapon slot before the choice. The amulet is the one left in the pack: the weapon is taken off and the better sword wielded.
+        using var owner = Open(("amulet", 3803, 0), ("club", 3900, 1004), ("sword", 3901, 0));
+        var world = new World();
+        world.Wearable("amulet", 3803, ArmorCoverage.Medallion, 3, SessionScriptPoint.WieldOn);
+        world.Scripts.Slots[("amulet", SessionScriptPoint.WieldOn)] = AddGenius;
+        world.Weapon("club", 3900, 1, 4, SessionScriptPoint.WieldOff);
+        world.Scripts.Slots[("club", SessionScriptPoint.WieldOff)] = RemoveCharm;
+        world.Weapon("sword", 3901, 10, 20);
+        var result = owner.RewieldNpc(owner.Version, Guard, allSlots: true, world);
+        CollectionAssert.AreEqual(new[] { (EquipmentSlot.Weapon, "sword") }, Worn(owner));
+        Assert.AreEqual("amulet", result.Steps.First().Unsupported);
+        Assert.AreEqual(("club", "sword"), (result.Steps.Last().TakenOff, result.Steps.Last().Wielded));
+    }
+
+    [TestMethod]
+    public void StoredStatsThatDoNotFitTheCharacterRulesLeaveEveryScriptedItemInThePack()
+    {
+        using var owner = Open(("helm", 3800, 0), ("boots", 3802, 0));
+        var world = new World { Stored = [1, 2, 3] };
+        world.Wearable("helm", 3800, ArmorCoverage.Helmet, 5, SessionScriptPoint.WieldOn);
+        world.Wearable("boots", 3802, ArmorCoverage.Boots, 2);
+        world.Scripts.Slots[("helm", SessionScriptPoint.WieldOn)] = AddCharm;
+        var result = owner.RewieldNpc(owner.Version, Guard, allSlots: true, world);
+        CollectionAssert.AreEqual(new[] { (EquipmentSlot.Boots, "boots") }, Worn(owner));
+        Assert.AreEqual(("helm", GameSessionFailure.ItemScriptUnsupported), (result.Steps.First().Unsupported, result.Steps.First().Failure));
+    }
+
+    [TestMethod]
+    public void TheLinesAScriptPrintsComeBackWithTheResult()
+    {
+        using var owner = Open(("helm", 3800, 0));
+        var world = new World();
+        world.Wearable("helm", 3800, ArmorCoverage.Helmet, 5, SessionScriptPoint.WieldOn);
+        world.Scripts.Slots[("helm", SessionScriptPoint.WieldOn)] = Say;
+        var result = owner.RewieldNpc(owner.Version, Guard, allSlots: true, world);
+        Assert.AreEqual(GameSessionDisposition.Changed, result.Disposition);
+        Assert.AreEqual("npc line", result.Messages.Single().Text, "an NPC triggerer's line is read for the NPC");
     }
 }
