@@ -106,7 +106,7 @@ public sealed class ObjectArtCensusRealDataTests
         Assert.AreEqual((UserScripts, UserClauses), (users.Count, uses.Count), "the installed uses of change art number changed");
         CollectionAssert.AreEqual(new[] { 0, 1, 10, 12 }, uses.Select(u => u.Kind).Distinct().Order().ToArray(), "a use names its object by another kind");
 
-        // the looped uses: the nearest loop that starts above the line (the current looped object stays set after a loop ends or breaks, as in script 2561) runs over scenery (15, any scenery 16) or containers (17), never over critters (8)
+        // the looped uses (a loop's start is on the true branch of its line): the nearest loop that starts above the line (the current looped object stays set after a loop ends or breaks, as in script 2561) runs over scenery (15, any scenery 16) or containers (17), never over critters (8)
         var loopKinds = new SortedSet<int>();
         foreach (var use in uses.Where(u => u.Kind == 10))
         {
@@ -150,13 +150,30 @@ public sealed class ObjectArtCensusRealDataTests
         foreach (var map in catalog.Maps)
         {
             foreach (var coordinate in map.SectorFiles)
-                if (catalog.ReadSector(map, coordinate).Sector is { } sector) foreach (var item in sector.Objects) Look(item);
+            {
+                var read = catalog.ReadSector(map, coordinate);
+                Assert.IsTrue(read.Sector is { ObjectIssue: null }, $"a sector file of {map.Name} was refused: the census would be short");
+                foreach (var item in read.Sector!.Objects) Look(item);
+            }
             foreach (var item in catalog.ReadMobiles(map).Objects) Look(item);
         }
         var attachee = uses.Where(u => u.Kind == 1).Select(u => u.Script).Distinct().Order().ToArray();
         var unplaced = attachee.Where(s => !holderTypes.ContainsKey(s)).ToArray();
         var attacheeTypes = attachee.Where(holderTypes.ContainsKey).SelectMany(s => holderTypes[s]).Distinct().Order().ToArray();
         Console.WriteLine($"ARC-SCRIPT-1780 attachee uses: scripts={string.Join(",", attachee)}; holder object types={string.Join(",", attacheeTypes)}; scripts placed nowhere={string.Join(",", unplaced)}; names tested by the extra-object uses sit on object types={string.Join(",", namedTypes)}");
+        // the callers of the scripts whose object is not a looped one (kinds 0, 1, 12): the scenery scripts call 1337, the container script 2208, the item script 2978 and the unplaced 2205 call 2206; no NPC-held script calls one
+        var direct = uses.Where(u => u.Kind != 10).Select(u => u.Script).ToHashSet();
+        var callers = new SortedSet<int>();
+        foreach (var (number, program) in programs)
+            foreach (var line in program.Lines)
+                foreach (var clause in new[] { line.OnTrue, line.OnFalse })
+                    if (clause.Type is 7 or 54 or 55 or 81 && clause.Kind(0) == 3 && direct.Contains(clause.Value(0))) callers.Add(number);
+        CollectionAssert.AreEqual(new[] { 1314, 1332, 1333, 2205, 2208, 2854, 2855, 2856, 2978 }, callers.ToArray(), "the callers of the scripts that change the art of the attachee, extra object or triggerer changed");
+        Assert.IsFalse(callers.Any(c => holderTypes.TryGetValue(c, out var types) && types.Contains(AreaNpcRouteReader.NpcType)), "an NPC-held script calls a script that changes art");
+        // the scripts an NPC holds (heartbeat, dialog and dying points): they change looped scenery or containers only
+        var npcHeld = holderTypes.Where(p => p.Value.Contains(AreaNpcRouteReader.NpcType)).Select(p => p.Key).Order().ToArray();
+        CollectionAssert.AreEqual(new[] { 1067, 1269, 1299, 1388, 1393, 1636, 2083, 2108, 2782, 2983 }, npcHeld, "the art scripts NPCs hold changed");
+        Assert.IsTrue(npcHeld.All(n => uses.Where(u => u.Script == n).All(u => u.Kind == 10)), "an NPC-held script changes the art of an object that is not a looped one");
         // 2 container, 3 scenery; a script placed nowhere is called by another (1337 by the scenery scripts 1314, 1332, 1333, 2854-2856 with their attachee; 2206 by the container script 2208 and the item script 2978 with a looped
         // scenery) or is unplaced (1193, 2205)
         CollectionAssert.AreEqual(new[] { 2, 3 }, attacheeTypes, "an attachee use sits on another kind of object");
