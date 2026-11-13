@@ -173,9 +173,19 @@ public partial class AreaWorldMapArtView : Control
         Visible = false;
     }
 
-    public override void _ExitTree() => AreaGameBarPanel.InsetsChanged -= Place;
+    public override void _ExitTree()
+    {
+        AreaGameBarPanel.InsetsChanged -= Place;
+        if (_onTextureChanged is { } handler) foreach (var texture in _watched) texture.Changed -= handler;
+        _watched.Clear();
+    }
 
-    public void SetLook(AreaWorldMapArtLook look) => _look = look ?? throw new ArgumentNullException(nameof(look));
+    public void SetLook(AreaWorldMapArtLook look)
+    {
+        // ARC-UI-1197: the textures of a look this view no longer shows are let go.
+        if (_onTextureChanged is { } handler) { foreach (var texture in _watched) texture.Changed -= handler; _watched.Clear(); }
+        _look = look ?? throw new ArgumentNullException(nameof(look));
+    }
 
     public bool HasLook => _look is not null;
 
@@ -357,7 +367,46 @@ public partial class AreaWorldMapArtView : Control
         Scale = new Vector2(factor, factor);
         Position = new Vector2(MathF.Round((free.X - AreaWorldMapArtLayout.WindowWidth * factor) / 2),
             top + MathF.Round((free.Y - AreaWorldMapArtLayout.WindowHeight * factor) / 2));
+        RedrawOnScaleChange();
     }
+
+    // ARC-UI-1197: a change of the window's scale moves no pixel by itself (the canvas item is only stretched), so the frame is drawn again at the new device scale.
+    private float _drawnScale;
+
+    private void RedrawOnScaleChange()
+    {
+        var device = DeviceScale();
+        if (Math.Abs(device - _drawnScale) < 0.0005f) return;
+        _drawnScale = device;
+        Redraw();
+    }
+
+    // ARC-UI-1197: the generated interface paints the window's frame at the window's own device scale (the frame scale times the canvas transform's and the viewport's stretch,
+    // the bars' own rule). The view claims its look's textures at its draw; a texture swapped in by a worker redraws the window.
+    private readonly HashSet<HdInterfaceTexture> _watched = [];
+    private Action? _onTextureChanged;
+    private Func<float>? _deviceScale;
+
+    internal float DeviceScale() =>
+        GodotObject.IsInstanceValid(this) && IsInsideTree() ? GetGlobalTransformWithCanvas().Scale.X * GetViewport().GetStretchTransform().Scale.X : 1f;
+
+    private void ClaimScale()
+    {
+        if (_look is null) return;
+        _deviceScale ??= DeviceScale;
+        _onTextureChanged ??= () => { if (GodotObject.IsInstanceValid(this)) Redraw(); };
+        foreach (var frames in _look.Art.Values)
+            foreach (var texture in frames)
+            {
+                if (texture is not HdInterfaceTexture hd) continue;
+                hd.ScaleSource = _deviceScale;
+                if (_watched.Add(hd)) hd.Changed += _onTextureChanged;
+            }
+    }
+
+    /// <summary>ARC-UI-1197: the textures of the given art numbers that the window holds, every frame, with the art number of each (the native smoke).</summary>
+    internal IReadOnlyList<(int Art, HdInterfaceTexture Texture)> TexturesForSelfTest(IEnumerable<int> arts) =>
+        _look is null ? [] : [.. arts.Where(_look.Art.ContainsKey).SelectMany(number => _look.Art[number].OfType<HdInterfaceTexture>().Select(texture => (number, texture)))];
 
     public override void _Process(double delta)
     {
@@ -784,6 +833,7 @@ public partial class AreaWorldMapArtView : Control
     public override void _Draw()
     {
         // The background; the view and the buttons are the children above it.
+        ClaimScale();
         if (_look?.Art.TryGetValue(AreaWorldMapArtLayout.BackgroundArt, out var back) == true && back.Length > 0) DrawTexture(back[0], Vector2.Zero);
     }
 
