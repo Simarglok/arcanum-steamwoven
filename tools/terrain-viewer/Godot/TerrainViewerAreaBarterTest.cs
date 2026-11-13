@@ -1,3 +1,4 @@
+using Arcanum.Scripting.Dialog;
 using System.Reflection;
 using Arcanum.Data.Area;
 using Arcanum.Data.Characters;
@@ -474,6 +475,57 @@ public partial class TerrainViewerApp
             Firearms = build.Combat.Chooser(state).FirearmsLevel }));
     }
 
+    /// <summary>
+    /// ARC-UI-1765 native observation (stage `barter`, after the barter part, on the live session): the speaker's item identify and then item repair window opened through the path the
+    /// dialog replies `ii` and `ri` take show the original look (the own window's frame with the NPC's image art read, the round view, every art of the window read); a press on the first of the
+    /// hero's grid items quotes it (the item is remembered in the frame and the quote line holds the speaker's generated line) and a close frees the stack. The second press would pay, so none is made.
+    /// <c>ARC_AREA_SERVICE_CAPTURE=PREFIX</c> saves a readback of each window as PREFIX-identify.png and PREFIX-repair.png. Prints counts only.
+    /// </summary>
+    private async Task<string> ItemServiceArtForSmokeAsync(AreaConversationHost talk, string entity, int speaker)
+    {
+        static void Require(bool value, string why) { if (!value) throw new InvalidOperationException("ARC-UI-1765 item-service-art smoke: " + why); }
+        var parts = new List<string>();
+        foreach (var window in new[] { DialogWindowKind.ItemIdentify, DialogWindowKind.ItemRepair })
+        {
+            var name = window == DialogWindowKind.ItemIdentify ? "identify" : "repair";
+            QueueDialogItemService(talk, (window, entity, speaker));
+            TakeDialogItemService();
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            Require(ItemServiceOpen && _servicePanel is { IsOpen: true }, $"the {name} window opened: {_serviceStatus}");
+            var panel = _servicePanel!;
+            var area = panel.GridAreaForSelfTest;
+            var look = area.Look;
+            Require(panel.ArtMode && area.ServiceLook && look is not null && look.Art.ContainsKey(AreaServiceArtLayout.BackgroundArt), $"the {name} window shows the original look: " + (_inventoryArtContent?.Detail ?? "no art read"));
+            var image = area.ServiceFrame?.Image;
+            Require(image is null || look!.Art.ContainsKey(image.Value), $"the NPC's image {image} reads");
+            Require(panel.RoundViewShown, "the round view shows the game view around the PC");
+            var view = panel.ArtView!;
+            var quote = "-";
+            // The window's items are the hero's items the model lists (the coins in the grid are not one); a repair without the speaker's skills quotes none.
+            var listed = panel.View!.Items.Select(line => line.Entity).ToHashSet();
+            if (view.Grid.FirstOrDefault(entry => listed.Contains(entry.Entity)) is { } item)
+            {
+                area.PressAt(AreaInventoryGridArea.CellCentre(item.Slot));
+                await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                Require(area.ServiceFrame!.Selected == item.Entity && area.ServiceFrame.Quote.Length > 0, "a press remembered the item and quoted it: " + area.ServiceFrame.Quote);
+                quote = area.ServiceFrame.Quote;
+            }
+            if (System.Environment.GetEnvironmentVariable("ARC_AREA_SERVICE_CAPTURE") is { Length: > 0 } capture)
+            {
+                await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+                using var shot = GetViewport().GetTexture().GetImage();
+                if (shot.SavePng($"{capture}-{name}.png") != Error.Ok) throw new InvalidOperationException("AREA_SERVICE_CAPTURE_FAILED");
+            }
+            parts.Add($"{name}: image {area.ServiceFrame!.Image?.ToString() ?? "none"}, items {view.Grid.Count}, quote '{quote}'");
+            EndItemService();
+            Require(!ItemServiceOpen, "the close closed it");
+        }
+        var line = string.Join("; ", parts);
+        GD.Print("ARC-UI-1765 native-smoke item-service-art PASS " + line);
+        return line;
+    }
+
     /// <summary>ARC-UI-064 native observation (stage `barter`, on the live window): with the game's art the window shows the original barter
     /// window: mode 1, the background by the follower rule, the merchant's image and every shown item's inventory art read, the round view
     /// shown; a resting pointer on the first shown ware puts its quote on the quote line, and that ware pressed and released on its own grid
@@ -644,11 +696,14 @@ public partial class TerrainViewerApp
                 Container = live.Merchant.Container is null ? "none" : $"buys {live.Merchant.ContainerBuyList?.Status}, identified {session.Capture().Inventory.Identified.Count}",
                 Live = $"hero items {live.Hero.Count} (priced {live.Hero.Count(l => l.Quote.Price > 0)}), wares {live.Wares.Count} (priced {live.Wares.Count(l => l.Quote.Price > 0)}), gold {live.HeroGold}/{live.MerchantGold}, haggle {live.Haggle} {live.Training}, reaction {live.Reaction}",
                 Sold = sold.Text, Bought = bought, Art = art }));
+            // ARC-UI-1765: the same speaker's item identify and repair windows in the original look (the quote only: nothing is paid on the live session).
+            var service = await ItemServiceArtForSmokeAsync(talk, chosen.Entity, chosen.Index);
             await RunAreaRestockSmokeAsync(talk, chosen.Entity, chosen.Index, live);
         }
         finally
         {
             if (BarterOpen) EndBarter();
+            if (ItemServiceOpen) EndItemService();
             _worldFocusSimulationForSelfTest = simulatedFocus; _worldFocused = focused;
         }
     }

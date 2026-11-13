@@ -8,18 +8,40 @@ namespace Arcanum.Scripting.Dialog;
 /// </summary>
 public static class DialogFollowerComment
 {
-    /// <summary>The comment line <paramref name="first"/>..<paramref name="last"/> the speaker <paramref name="query"/> names says to the PC, over the greeting port's facts, texts and rolls.</summary>
+    /// <summary>The comment line <paramref name="first"/>..<paramref name="last"/> the speaker <paramref name="query"/> names says to the PC, over the greeting port's facts, texts and rolls.
+    /// ARC-UI-1765: <paramref name="price"/> fills the first <c>%d</c> of the picked line, as the item identify and repair windows' quote lines do (0x5786C0, 0x578760: the generated line goes through
+    /// the C formatter with the price); null leaves the line as it is.</summary>
     [OriginalFunction(0x414490, OriginalFunctionScope.Partial)]
-    public static DialogGenericGreetingResult Say(IDialogGreetingPort port, DialogReactionQuery query, int first, int last, DialogSpeakerNames names, DialogTextEncoding encoding, int maxTextBytes)
+    public static DialogGenericGreetingResult Say(IDialogGreetingPort port, DialogReactionQuery query, int first, int last, DialogSpeakerNames names, DialogTextEncoding encoding, int maxTextBytes,
+        int? price = null)
     {
         ArgumentNullException.ThrowIfNull(port);
         if (port.Facts(query) is not { } facts) return new(DialogGenericGreetingStatus.FactsUnknown);
         GreetingOutcome outcome;
         try { outcome = DialogGreeting.Comment(facts, port.Sources(query), port, names, encoding, maxTextBytes, first, last); }
         catch (DialogGreeting.InvalidGreetingRoll) { return new(DialogGenericGreetingStatus.Failed); }
+        return Said(outcome, price);
+    }
+
+    /// <summary>
+    /// ARC-UI-1765 (0x413910 → 0x418480): the NPC's class line of <paramref name="group"/> (the "no money" line of the item identify and repair windows is group 2000), as the greeting reads it:
+    /// the speaker's own override line 9999 + group / 1000 first, else a pick of the class file of the speaker's social class; no price is printed into it.
+    /// </summary>
+    public static DialogGenericGreetingResult SayClass(IDialogGreetingPort port, DialogReactionQuery query, int group, DialogSpeakerNames names, DialogTextEncoding encoding, int maxTextBytes)
+    {
+        ArgumentNullException.ThrowIfNull(port);
+        if (port.Facts(query) is not { } facts) return new(DialogGenericGreetingStatus.FactsUnknown);
+        GreetingOutcome outcome;
+        try { outcome = DialogGreeting.NpcClassGroup(group, facts, port.Sources(query), port, names, encoding, maxTextBytes); }
+        catch (DialogGreeting.InvalidGreetingRoll) { return new(DialogGenericGreetingStatus.Failed); }
+        return Said(outcome, null);
+    }
+
+    private static DialogGenericGreetingResult Said(GreetingOutcome outcome, int? price)
+    {
         if (outcome.Kind == GreetingOutcomeKind.Failed) return new(DialogGenericGreetingStatus.Failed);
         if (outcome.Kind != GreetingOutcomeKind.Line || outcome.Origin is not { } origin || origin.Kind == DialogLineOriginKind.Empty || outcome.Text.Length == 0)
             return new(DialogGenericGreetingStatus.NoLine);
-        return new(DialogGenericGreetingStatus.Said, outcome.Text, origin);
+        return new(DialogGenericGreetingStatus.Said, price is { } shown ? DialogConversation.FormatPrice(outcome.Text, shown) : outcome.Text, origin);
     }
 }
