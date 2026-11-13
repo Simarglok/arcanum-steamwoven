@@ -37,6 +37,8 @@ namespace Arcanum.World;
 /// without it a created critter's list stays empty. ARC-SCRIPT-1163 (E5-a, NS2): <see cref="ScriptReaction"/> changes an NPC of the shown map's reaction toward the PC (set reaction 30 when its flag is true, adjust reaction 31) in the AI host and answers what happened;
 /// without it a run with a reaction action is left unapplied. ARC-SCRIPT-1164 (E5-b, WO3, WO4): <see cref="Openable"/> answers a portal's or container's lock identity, T0 baseline and ART facts on the shown map
 /// (<see cref="AreaScriptOpenable"/>; null for an object that is neither or not shown), for set lock state (53), toggle open or closed (88) and obj is open (36); without it those runs are left unapplied and the condition stops the run.
+/// ARC-SCRIPT-1294 (RM6): <see cref="ScriptStopSpell"/> (object entity, spell) interrupts the first active run of the spell that holds the object (the cast host's <see cref="Arcanum.Session.SessionSpellCaster.StopSpellOnObject"/>) and answers what happened;
+/// without it a run with a stop spell is left unapplied.
 /// </summary>
 public sealed record AreaScriptWorld(Func<CellCoord?> PcCell, Func<AreaObjectRecord, bool> Gone, Func<int, AreaPrototypeItem?> Item, Func<IDropMap?> DropMap,
     Func<ScrObjectRef, bool>? Kill = null, Func<ScrObjectRef, bool>? CanKill = null, Func<ScrObjectRef, CellCoord?>? CritterCell = null,
@@ -45,7 +47,8 @@ public sealed record AreaScriptWorld(Func<CellCoord?> PcCell, Func<AreaObjectRec
     Func<ScrObjectRef, int, bool>? HealFatigue = null, Func<string, int, string>? ScriptAnimate = null, Func<string, string, string>? ScriptSteal = null, Func<string, string>? ScriptProne = null,
     Func<string?, string, int, bool, bool, string>? ScriptCast = null, Func<string, int, int, bool, string>? ScriptDamage = null, Func<string, int, string>? ScriptHeal = null,
     Func<string, bool>? ScriptDamageAsk = null, Func<int, bool>? Critter = null, Func<string, AreaObjectRecord?>? CreatedRow = null,
-    Action<string>? CritterMade = null, Func<string, int, bool, string>? ScriptReaction = null, Func<ScrObjectRef, AreaScriptOpenable?>? Openable = null);
+    Action<string>? CritterMade = null, Func<string, int, bool, string>? ScriptReaction = null, Func<ScrObjectRef, AreaScriptOpenable?>? Openable = null,
+    Func<string, int, string>? ScriptStopSpell = null);
 
 /// <summary>ARC-SCRIPT-1164 (WO3, WO4): what a script's lock and open actions need of a portal or container of the shown map: the session's lock identity and T0 baseline (<see cref="GameSessionOwner.QueryOpenable"/>) and, for a portal, its ART
 /// (<see cref="PortalArt"/>, the frames a toggle steps through, ledger LK10); for a container the ART's frame count (it opens to frame 1 when it has a second frame).</summary>
@@ -182,6 +185,9 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     /// <summary>ARC-DEV-243 (S14g): damage (60), apply unresistable damage (138) and heal hit points (75), which the placed and heartbeat sets admit.</summary>
     private static readonly int[] DamageActions = [ScrCatalogue.Action.Damage, ScrCatalogue.Action.DamageUnresistable, ScrCatalogue.Action.HealHitPoints];
 
+    /// <summary>ARC-SCRIPT-1294 (RM6): stop spell on object (130) of <see cref="ScrAdmissionSet.S42"/>, which the placed and heartbeat sets admit beside the cast actions.</summary>
+    private static readonly int[] StopSpellActions = [ScrCatalogue.Action.StopSpellOnObject];
+
     /// <summary>ARC-DEV-241 (S14f): the six cast actions (48, 61, 118, 121, 122, 136) the placed and heartbeat sets admit.</summary>
     private static readonly int[] CastActions = [ScrCatalogue.Action.CastSpell, ScrCatalogue.Action.CastSpellOn, ScrCatalogue.Action.CastFreeSpell, ScrCatalogue.Action.CastUnresistableSpellBy,
         ScrCatalogue.Action.CastFreeUnresistableSpell, ScrCatalogue.Action.CastUnresistableSpellOn];
@@ -194,11 +200,11 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     /// which the story tiles apply to the NPC that steps on them. ARC-DEV-157 (bug B20): plus the focus kinds everyone (8) and anyone (9) in
     /// the vicinity of <see cref="ScrAdmissionSet.S17"/> in actions (the loop over the critters around the tile, 443 refused tile rows in the
     /// audit), which <see cref="CrittersInVicinity"/> answers. ARC-DEV-298 (bug B20): plus float line (23), which the ghost of Brego's tile script (2768 calling 2789) uses to float the
-    /// ghost's lines over him (<see cref="TakeFloats"/>).
+    /// ghost's lines over him (<see cref="TakeFloats"/>). ARC-SCRIPT-1294: plus stop spell on object (130) of <see cref="ScrAdmissionSet.S42"/>.
     /// </summary>
     public static ScrAdmissionSet PlacedAdmission { get; } = new("S4-area-placed-dialog-actor", Admission.Conditions,
         Admission.Actions.Concat([ScrCatalogue.Action.Dialog, ScrCatalogue.Action.CallScriptEx, ScrCatalogue.Action.Destroy, ScrCatalogue.Action.StopAttacking,
-            ScrCatalogue.Action.WalkTo, ScrCatalogue.Action.RunTo, ScrCatalogue.Action.HealFatigue, ScrCatalogue.Action.PerformAnimation, ScrCatalogue.Action.StealCoins, ScrCatalogue.Action.BecomeProne, ScrCatalogue.Action.FloatLine, .. CastActions, .. DamageActions]),
+            ScrCatalogue.Action.WalkTo, ScrCatalogue.Action.RunTo, ScrCatalogue.Action.HealFatigue, ScrCatalogue.Action.PerformAnimation, ScrCatalogue.Action.StealCoins, ScrCatalogue.Action.BecomeProne, ScrCatalogue.Action.FloatLine, .. CastActions, .. StopSpellActions, .. DamageActions]),
         Admission.ValueKinds, Admission.FocusKinds.Concat([ScrFocusKind.EveryoneInVicinity, ScrFocusKind.AnyoneInVicinity]), counterIndexWraps: true);
 
     /// <summary>
@@ -215,7 +221,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     /// (33), and the actions call script in (54, through the session's queue), distance between (71) and set faction (134) of
     /// <see cref="ScrAdmissionSet.S18"/>. ARC-MAGIC-030 (MT21b): plus the spell conditions (14, 35, 48, 49) and give spell mastery in college (112) of <see cref="ScrAdmissionSet.S31"/>.
     /// ARC-SCRIPT-1359: plus get location (95) of <see cref="ScrAdmissionSet.S38"/> (the Crash Site Molochean agent's heartbeat 1717 reads where it stands before it runs to its tile).
-    /// ARC-SCRIPT-1166: plus loop break (20) of <see cref="ScrAdmissionSet.S40"/>.
+    /// ARC-SCRIPT-1166: plus loop break (20) of <see cref="ScrAdmissionSet.S40"/>. ARC-SCRIPT-1294: plus stop spell on object (130) of <see cref="ScrAdmissionSet.S42"/>.
     /// </summary>
     public static ScrAdmissionSet HeartbeatAdmission { get; } = new("S2-area-heartbeat-state-kill-talk-world",
         ScrAdmissionSet.S2.Conditions.Concat([ScrCatalogue.Condition.FollowingPc, ScrCatalogue.Condition.IsNamed, ScrCatalogue.Condition.IsDead,
@@ -223,7 +229,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         ScrAdmissionSet.S2.Actions.Concat([ScrCatalogue.Action.ToggleState, ScrCatalogue.Action.Kill, ScrCatalogue.Action.LoopFor, ScrCatalogue.Action.LoopEnd, ScrCatalogue.Action.LoopBreak,
             ScrCatalogue.Action.GetObjectType, ScrCatalogue.Action.CallScriptEx, ScrCatalogue.Action.Dialog, ScrCatalogue.Action.CallScriptIn,
             ScrCatalogue.Action.DistanceBetween, ScrCatalogue.Action.GetLocation, ScrCatalogue.Action.SetFaction, ScrCatalogue.Action.WalkTo, ScrCatalogue.Action.RunTo,
-            ScrCatalogue.Action.HealFatigue, ScrCatalogue.Action.PerformAnimation, ScrCatalogue.Action.StealCoins, ScrCatalogue.Action.BecomeProne, ScrCatalogue.Action.GiveSpellMastery, .. ScrAdmissionSet.StoryActions, .. ScrAdmissionSet.NpcStateHostActions, .. ScrAdmissionSet.WorldObjectHostActions, .. CastActions, .. DamageActions]),
+            ScrCatalogue.Action.HealFatigue, ScrCatalogue.Action.PerformAnimation, ScrCatalogue.Action.StealCoins, ScrCatalogue.Action.BecomeProne, ScrCatalogue.Action.GiveSpellMastery, .. ScrAdmissionSet.StoryActions, .. ScrAdmissionSet.NpcStateHostActions, .. ScrAdmissionSet.WorldObjectHostActions, .. CastActions, .. StopSpellActions, .. DamageActions]),
         ScrAdmissionSet.S2.ValueKinds.Concat(ScrAdmissionSet.StoreValueKinds),
         ScrAdmissionSet.S3.FocusKinds.Concat([ScrFocusKind.CurrentLoopedObject, ScrFocusKind.EveryoneInVicinity, ScrFocusKind.AnyoneInVicinity]));
 
@@ -561,7 +567,8 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     }
 
     // The points whose slot a run writes back as map changes (SlotProperty). ARC-DEV-312: the dying point's slot is kept under scr12.* (no save schema step: the keys are strings).
-    private static bool KeptAsMapChanges(int point) => point is ScrPoint.Examine or ScrPoint.Use or ScrPoint.Dialog or CatchingThiefPoint or ScrPoint.FirstHeartbeat or ScrPoint.Heartbeat or ScrPoint.TakingDamage or ScrPoint.LeaderSleeping or ScrPoint.Bust or ScrPoint.Dying;
+    private static bool KeptAsMapChanges(int point) => point is ScrPoint.Examine or ScrPoint.Use or ScrPoint.Dialog or CatchingThiefPoint or ScrPoint.FirstHeartbeat or ScrPoint.Heartbeat or ScrPoint.TakingDamage or ScrPoint.LeaderSleeping or ScrPoint.Bust or ScrPoint.Dying
+        or ScrPoint.Hit or ScrPoint.CritterHits or ScrPoint.CriticalHit;
 
     // The trap's view of the use slot: the loaded one under the session's script and counters; null without a use slot or for a stored
     // script number outside the catalogue's range (it names no script the content holds).
@@ -903,6 +910,43 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
             return Finish(run, _ => "a teleport from a taking-damage script is not modelled", writeback => WriteObjectSlot(writeback, attachee));
         }
         finally { _inTakingDamage = false; _clicked = previous; }
+    }
+
+    /// <summary>
+    /// ARC-SCRIPT-1483 (script trigger audit slice 5, ledger CP1–CP5): the set a combat-point script (hit 7, critter hits 26, critical hit 34) runs under: the placed set (<see cref="PlacedAdmission"/>), whose damage and cast actions deal the
+    /// installed poison weapons' damage and the college poison spell. A script outside it is refused and the hit goes on as without one.
+    /// </summary>
+    public static ScrAdmissionSet CombatPointAdmission => PlacedAdmission;
+
+    /// <summary>
+    /// ARC-SCRIPT-1483 (exe read 2026-11-13, ledger CP1–CP5): the combat-point script <paramref name="point"/> of <paramref name="attachee"/>, which the original's hit step runs once the hit is decided and before the damage step (0x4B3770 for a swing or an
+    /// arrow's strike: the calls at 0x4B37A3, 0x4B37CD and 0x4B37FC; 0x4B2F60 for a projectile's strike: 0x4B2F90, 0x4B2FD4, 0x4B3003; both through 0x441980, whose answer these call sites ignore). The three points: the hit script (7) of the attack
+    /// context's weapon (the weapon item, nothing for bare hands) with the attacker as the triggerer and the victim as the extra object; the critical-hit script (34) of the same weapon, for a critical hit, with the same objects; and the critter-hits
+    /// script (26) of the attacker with the victim as the triggerer and no extra object. The attachee is a row of the shown map (an NPC, or an item an NPC holds or lies there) or, for a carried item, a row the item host reads by identity
+    /// (<see cref="OtherMapRow"/>, as <see cref="RunItemUse"/> does); an object with no slot at the point has no script (<see cref="AreaScriptedUseOutcome.NoTeleport"/> with no run). Under <see cref="CombatPointAdmission"/>; the slot is kept as map
+    /// changes. A teleport and a conversation are not modelled from a hit and leave the run unapplied; no answer cancels the hit.
+    /// </summary>
+    public AreaScriptedUse RunCombatPoint(int point, ScrObjectRef attachee, ScrObjectRef? triggerer, ScrObjectRef? extra, ScrRuleProfile rules)
+    {
+        ArgumentNullException.ThrowIfNull(rules);
+        if (point is not (ScrPoint.Hit or ScrPoint.CritterHits or ScrPoint.CriticalHit)) throw new ArgumentOutOfRangeException(nameof(point), "Not a combat point.");
+        var previousItem = _itemUse;
+        // An item the host was not given a map of is read by identity, as an item's use is; every other object is a row of a loaded map.
+        _itemUse = attachee;
+        try
+        {
+            if (Row(attachee) is not { } row || Slot(attachee, point) is not { Script: > 0 }) return new(AreaScriptedUseOutcome.NoTeleport, null, [], null, "no script at the point");
+            if (_content is null) return new(AreaScriptedUseOutcome.ContentUnavailable, null, [], null, "no script content");
+            var previous = _clicked;
+            _clicked = (attachee.Code, row);
+            try
+            {
+                var run = ScrDispatcher.RunObject(new(point, attachee, triggerer, extra), this, new() { Rules = rules, Admission = CombatPointAdmission });
+                return Finish(run, _ => "a teleport from a combat-point script is not modelled", writeback => WriteObjectSlot(writeback, attachee));
+            }
+            finally { _clicked = previous; }
+        }
+        finally { _itemUse = previousItem; }
     }
 
     /// <summary>
@@ -1377,6 +1421,14 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
                     LastCast = _world!.ScriptCast!(request.Other is { } caster ? IsPc(caster) ? Arcanum.Simulation.Ai.AiSchedulerRules.Pc : caster.Code : null, IsPc(request.Object) ? Arcanum.Simulation.Ai.AiSchedulerRules.Pc : request.Object.Code, request.Value, free, unresistable);
                 continue;
             }
+            if (request.Change == ScrObjectStateChange.StopSpell)
+            {
+                // RM6 (0x4593F0): the PC or any object of the shown map; the lookup finds a run only where one holds the object, and the run goes on whatever it answers.
+                LastStopSpell = null;
+                if (IsPc(request.Object) || request.Object.Map == _shownMap)
+                    LastStopSpell = _world!.ScriptStopSpell!(IsPc(request.Object) ? Arcanum.Simulation.Ai.AiSchedulerRules.Pc : request.Object.Code, request.Value);
+                continue;
+            }
             if (request.Change == ScrObjectStateChange.BecomeProne)
             {
                 // GT187: an NPC of the shown map; the PC and any other object are left as they are (the run's other effects apply).
@@ -1564,6 +1616,9 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     /// <summary>ARC-DEV-236: what the AI host answered to the last become prone a run applied (smoke and test seam; null before any).</summary>
     public string? LastProne { get; private set; }
 
+    /// <summary>ARC-SCRIPT-1294: what the viewer answered to the last script stop spell a run applied (smoke and test seam; null before any).</summary>
+    public string? LastStopSpell { get; private set; }
+
     /// <summary>ARC-SCRIPT-1163 (NS2): what the AI host answered for the last reaction change a run applied (null: none yet).</summary>
     public string? LastReaction { get; private set; }
 
@@ -1672,6 +1727,11 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
             if (request.Change == ScrObjectStateChange.CastSpell)
             {
                 if (_world?.ScriptCast is null) return "cast spell needs the AI host";
+                continue;
+            }
+            if (request.Change == ScrObjectStateChange.StopSpell)
+            {
+                if (_world?.ScriptStopSpell is null) return "stop spell needs the AI host";
                 continue;
             }
             if (request.Change == ScrObjectStateChange.BecomeProne)

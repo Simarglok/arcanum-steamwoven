@@ -80,6 +80,9 @@ public sealed record EquipmentArmor
     public bool FemaleOnly { get; init; }
     public int AcAdjustment { get; init; }
     public int MagicAcAdjustment { get; init; }
+    /// <summary>The armour's silent-move adjustment (the noise penalty prowling's hearing check reads, ARC-AI-1518) and its magic adjustment.</summary>
+    public int SilentMoveAdjustment { get; init; }
+    public int MagicSilentMoveAdjustment { get; init; }
     public EquipmentResistances Resistances { get; init; } = EquipmentResistances.None;
     public EquipmentResistances MagicResistances { get; init; } = EquipmentResistances.None;
     /// <summary>The unarmed bonus damage a gauntlet adds to bare-hand melee attacks.</summary>

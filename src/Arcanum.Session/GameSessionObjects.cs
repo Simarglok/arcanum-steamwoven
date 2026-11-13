@@ -162,6 +162,8 @@ public sealed record SessionObjectAttack
     /// <summary>ARC-DEV-261 (GT198–GT199): the struck object's taking-damage script (point 0x17), asked by the damage apply right before an object takes the hit (not on a critical self-hit, whose victim is the hero): whether the damage goes on
     /// (false: the script skipped the default, which cancels the whole step, <see cref="SessionObjectAttackResult.Vetoed"/>). Null: it goes on.</summary>
     public Func<bool>? TakingDamage { get; init; }
+    /// <summary>ARC-SCRIPT-1483: as <see cref="SessionAttack.HitScripts"/>, for a hit on an object.</summary>
+    public Action<SessionHitScriptEvent>? HitScripts { get; init; }
 }
 
 /// <summary>What the host does after an object hit: the scripts, sounds and visual effects the session does not run.</summary>
@@ -457,6 +459,9 @@ public sealed partial class GameSessionOwner
             ? Launch(new PendingShot(ShotFacts.Of(hero), resolution, resolution.Outcome is AttackOutcome.Hit or AttackOutcome.CriticalHit, null, struckKey)
                 { Thrown = throwing ? new SessionThrownShot(thrown!, hero.Weapon.Range) : null, Boomerang = Boomerang(hero, thrown), WeaponItem = throwing ? thrown : WieldedEntity() },
                 ShotProjectiles(hero)) : [];
+        // ARC-SCRIPT-1483: the hit's combat-point scripts run before the damage step, at the landing for a shot that flew.
+        if (resolution.Refusal == AttackRefusal.None && !attack.Wall && (resolution.Outcome is AttackOutcome.Hit or AttackOutcome.CriticalHit) && !(pending is null && attack.Flight))
+            attack.HitScripts?.Invoke(new(pending is null ? WieldedEntity() : pending.WeaponItem, resolution.Outcome == AttackOutcome.CriticalHit, pending is not null, pending?.Thrown is not null));
         // ARC-DEV-261 (GT198): an invulnerable object's script is asked too (it comes before the invulnerable gate); a wall has none, and the answer cannot change the outcome.
         if (resolution.Refusal == AttackRefusal.None && !attack.Wall && resolution.Damage is { Prevented: not DamagePrevention.None, Recipient: DamageRecipient.Target }) attack.TakingDamage?.Invoke();
         if (resolution.Refusal != AttackRefusal.None || resolution.Damage is not { Prevented: DamagePrevention.None } damage)

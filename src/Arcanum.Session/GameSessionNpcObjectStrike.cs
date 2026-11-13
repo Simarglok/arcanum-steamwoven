@@ -23,6 +23,8 @@ public sealed record SessionNpcObjectAttack(SessionCritterCombat Attacker)
     public IDropMap? DropMap { get; init; }
     public bool Flight { get; init; }
     public Func<bool>? TakingDamage { get; init; }
+    /// <summary>ARC-SCRIPT-1483: as <see cref="SessionNpcAttack.HitScripts"/>, for a hit on an object.</summary>
+    public Action<SessionHitScriptEvent>? HitScripts { get; init; }
 }
 
 public sealed partial class GameSessionOwner
@@ -169,6 +171,9 @@ public sealed partial class GameSessionOwner
             }
             flying = shots;
         }
+        // ARC-SCRIPT-1483: the hit's combat-point scripts run before the damage step; a shot that flies asks at its strike.
+        if (resolution.Refusal == AttackRefusal.None && !attack.Wall && !flies && (resolution.Outcome is AttackOutcome.Hit or AttackOutcome.CriticalHit))
+            attack.HitScripts?.Invoke(new(arrow?.WeaponItem ?? attack.AttackerWorn?.GetValueOrDefault(EquipmentSlot.Weapon)?.Entity, resolution.Outcome == AttackOutcome.CriticalHit, arrow is not null));
         // ARC-DEV-261 (GT198): an invulnerable object's script is asked too (before the invulnerable gate); a wall has none.
         if (resolution.Refusal == AttackRefusal.None && !attack.Wall && resolution.Damage is { Prevented: not DamagePrevention.None, Recipient: DamageRecipient.Target }) attack.TakingDamage?.Invoke();
         if (resolution.Refusal != AttackRefusal.None || resolution.Damage is not { Prevented: DamagePrevention.None } damage)

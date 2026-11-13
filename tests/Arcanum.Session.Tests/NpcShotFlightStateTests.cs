@@ -104,6 +104,27 @@ public sealed class NpcShotFlightStateTests
     }
 
     [TestMethod]
+    public void TheHostsCombatPointScriptsAreAskedAtTheStrikeOfAFlyingShotNotAtTheShotAndNamingTheBow()
+    {
+        // ARC-SCRIPT-1483 (CP1–CP3, 0x4B2F60): a shot that flies tells the host at its strike (the projectile path, the bow as the weapon), never at the shot; one that lands at once tells at the attack (not the projectile path).
+        using var owner = Owner();
+        var archer = Combat(Archer, BowFields());
+        var heard = new List<SessionHitScriptEvent>();
+        var (shot, _) = Next(owner, Shoot(archer) with { HitScripts = heard.Add }, hit: true);
+        Assert.AreEqual(0, heard.Count, "the shot tells nothing: its hit waits for the strike");
+        var strike = owner.LandNpcShot(owner.Version, shot.Shot!.Value, new(archer) { AttackerWorn = Worn(), HitScripts = heard.Add });
+        Assert.AreEqual(GameSessionFailure.None, strike.Failure);
+        Assert.AreEqual(1, heard.Count);
+        Assert.AreEqual((Bow, strike.Resolution!.Outcome == AttackOutcome.CriticalHit, true, false), (heard[0].Weapon, heard[0].Critical, heard[0].Projectile, heard[0].Thrown));
+
+        heard.Clear();
+        var shoot = Shoot(archer, flight: false) with { HitScripts = heard.Add };
+        for (var attempt = 0; attempt < 600 && heard.Count == 0; attempt++) owner.AttackByNpc(owner.Version, shoot);
+        Assert.AreEqual(1, heard.Count, "an arrow that lands at once tells at the attack");
+        Assert.AreEqual((Bow, false), (heard[0].Weapon, heard[0].Projectile));
+    }
+
+    [TestMethod]
     public void AShotOfAnotherShooterOrOfNoShooterIsRefused()
     {
         using var owner = Owner();
