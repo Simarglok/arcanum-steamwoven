@@ -406,7 +406,7 @@ those of the player's `interface.mes` (the viewer's window ledgers carry them; e
 | --- | --- | --- | --- |
 | ARC-UI-148 | foundation and inventory | 221 pack, 223 paper doll | a window's own fractional scale, grid rule, grid lines; the drop, use and gamble boxes (224, 225, 342–348) are oval buttons with a coloured allowed or refused corner, kept as art |
 | ARC-UI-149 (issue #1194, ARC-UI-1194, [S4](#viewer-slice-s4-arc-ui-1194)) | loot, barter, steal | 234 loot, 235 barter and 825 follower barter, 349 loot doll, the three lenses 231–233; 337 barter doll and 341 doll cover are not built; the gamble boxes stay art | the same frame family as 148 with their own boxes |
-| ARC-UI-150 (issue #1195, ARC-UI-1195, [S5](#viewer-slice-s5-arc-ui-1195)) | character sheet | 22 main, 29 skills, 30 disciplines, 31 spells, tabs 34–36 and 568, the + and − buttons (23/24, 624/625, 647/648; 257/258 are `SP_Minus`/`SP_Plus`, which the sheet does not draw), the group and discipline buttons 302–313 | stat labels baked in the art stay pictures (kept rectangles); the schemes page 567 and the college tabs are not generated |
+| ARC-UI-150 (issue #1195, ARC-UI-1195, [S5](#viewer-slice-s5-arc-ui-1195)) | character sheet | 22 main, 29 skills, 30 disciplines, 31 spells, tabs 34–36 and 568, the + and − buttons (23/24, 624/625, 647/648; 257/258 are `SP_Minus`/`SP_Plus`, which the sheet does not draw), the group and discipline buttons 302–313 | stat labels baked in the art stay pictures (kept rectangles); the schemes page 567 and the sixteen college tabs follow in [S5b](#viewer-slice-s5b-arc-ui-1784); the spell icons stay pictures |
 | ARC-UI-151 (issue #1196, ARC-UI-1196, [S7](#viewer-slice-s7-arc-ui-1196)) | logbook | 264 side, 260 book, 261 page art, the seven tabs 265–271, the page buttons 272 and 273; 263, 259 and 262 are not drawn by the logbook | a parchment page material; the lens 198 is shared and stays art |
 | ARC-UI-152 (issue #1197, ARC-UI-1197, [S6](#viewer-slice-s6-arc-ui-1197)) | world and town map | 138 main (the one frame the two windows draw); 140 and 199 (`wp_main`, `WP_Cover`, 130 × 152) and 219 and 220 (`Tmp_Day`, `Tmp_Nght`, two 501 × 365 landscape pictures) are drawn by no window of the viewer, so they are not built (issue #1811) | the map picture itself stays art; the buttons 811–813, the compass button 139, the lens 198 and the cover 217 are issue #1810 |
 | ARC-UI-153 | schematic window | 365 base and its buttons and tabs | |
@@ -491,8 +491,7 @@ ones (D9); only the drawing changes. The frames are the player's `interface.mes`
 - **Buttons.** The generic button recipe (generated face and rim following the silhouette, the glyph kept) covers the stat + and − (23, 24), the skills page's (624, 625), the technology and spells
   pages' (647, 648), the four page tabs (34–36, 568), the four skill groups (302–305) and the eight disciplines (306–313). The issue named 257 and 258 as the + and −; they are `SP_Minus` and `SP_Plus` (22 × 13),
   which the sheet does not draw, so they carry a recipe for the day something does.
-- **Not generated.** The schemes page 567 (the auto-level tab, issue #1742, a separate task), the sixteen college tabs (their 24 × 24 art is the picture of a ball, the sockets under them are kept) and the spell
-  icons.
+- **Not generated here.** The schemes page 567 (the auto-level tab, issue #1742) and the sixteen college tabs came with [S5b](#viewer-slice-s5b-arc-ui-1784); the spell icons stay pictures (S5b says why).
 - **Scale.** `AreaCharacterSheetArtView` claims every sheet texture's scale source at its draw (the window's own device scale: the frame scale times the canvas and viewport stretch; the in-game sheet,
   the NPC's sheet and the creation editor share the textures, the one on screen claims them) and redraws, with the two page views, when a texture it claimed swaps in a painted frame.
 - **Checks.** `InterfaceChromeTests` (the recipes exist, every part lies inside its frame and no kept picture cuts into a generated box, the frames paint in bounds and deterministically at whole and
@@ -504,6 +503,22 @@ ones (D9); only the drawing changes. The frames are the player's `interface.mes`
   sheet stands at the whole factor 1 here (the bars are hidden in the smoke) and 2 in a 1600 × 1200 window, where the frames paint again. The composite (Legacy, HD pack, Generated for the three pages) is in the
   task thread, not in git. Seen there: the generated wood and slate are plainer than the painted ones, the stat boxes are rectangles with rivets where the original has brass ovals, and the kept label
   rectangles show a slightly different grain from the generated wood around them.
+
+## Viewer slice S5b (ARC-UI-1784)
+
+S5b draws what S5 left out, at the sheet's own device scale as in S5; positions, sizes, alpha tests and hit areas stay the Legacy ones (D9).
+
+- **Schemes page.** `Scheme_Rot.ART` (567, 235 × 325, the auto-level tab of #1742) is a `ChromeMaterial.Slate` panel with a rim on all sides, like the three other pages: a sunk plaque for the scheme's name with a rivet at each end (the original's brass plaque
+  without its curled ends), the list's pit and the scroll bar's track. The bar's arrows and thumb (317, 318, 238, 787, 240) are separate arts drawn over the track and stay pictures; the rows' names and the header are drawn text.
+- **College tabs.** The sixteen tabs of the spells page (`s_conveyance.art`, `s_divination.art`, `s_air.art`, `s_earth.art`, `s_fire.art`, `s_water.art`, `s_forc.art`, `s_mental.art`, `s_meta.art`, `s_morph.art`, `s_nature.art`, `s_evilnecro.art`,
+  `s_goodnecro.art`, `s_phantasm.art`, `s_summoning.art`, `s_temporal.art`; 24 × 24, three frames) are balls whose colour and glyph tell the college apart, so the button recipe of S5 (a generated brass face, only the glyph kept) would lose the
+  colour. A recipe with `KeepFace` draws the generated button rim (the silhouette smoothed, lit upper left, the down frame lit the other way) and keeps the whole picture of the ball inside it, from the HD pack when it has one. The game bar's spell pane
+  draws the same arts, and recipes are found by the art's name, so its college buttons take the same rim at the bars' scale; no check covers that pane (not verified).
+- **Spell icons.** The 80 spell icons (32 × 32, two frames, `s_NAME1.art`..`s_NAME5.art`) are illustrations (a college colour, a glyph and the rank's marks), like the portraits, so they have no recipe; the sunk pit under each is generated by S5. The owner's recheck
+  decides whether a generated frame around them is wanted.
+- **Scale.** The schemes page redraws with the window and the other pages when the window's scale changes or one of the sheet's textures swaps in a painted frame (S5 left it out, as the page did not exist).
+- **Checks.** `InterfaceChromeTests` (the recipes exist, the page paints in bounds and deterministically at whole and fractional scales, a ball keeps its colour and loses the Legacy outline at four scales, no icon has a recipe). The native smoke's
+  `ARC_AREA_WINDOW_ART` part now also checks the college tabs on the spells page and the schemes page (`sheet-schemes`) at the first size, at 1600 × 1200 and back.
 
 ## Viewer slice S6 (ARC-UI-1197)
 
