@@ -110,6 +110,8 @@ public partial class TerrainViewerApp
             revision = session.Version.Revision;
             WorldRouteClick(point);
             Require(session.Version.Revision == revision && _areaUseStatus.Contains("no known trap", StringComparison.Ordinal), $"a second press finds no trap: {_areaUseStatus}");
+            // 4. ARC-COMBAT-1777 (0x57A620 → 0x4C9050): a following NPC of the map is the better follower (the score seam), the press hands the disarm over to it and the hand-over line is asked; Ctrl and the option off leave it to the hero.
+            await DisarmHandOverSmokeAsync(session, area, map, target, host, traps, hotkey, point, mapId, scriptKey);
             GD.Print("ARC-SKILLS-1156 native-smoke disarm PASS " + System.Text.Json.JsonSerializer.Serialize(new { Map = _readyMapName, Container = entity }));
         }
         finally
@@ -121,6 +123,69 @@ public partial class TerrainViewerApp
             ReleaseSimulatedPadForSelfTest(); _worldFocusSimulationForSelfTest = simulatedFocus;
             _worldFocused = focused; RestoreWorldTestTime(testTime);
             PublishWorldSelection();
+        }
+    }
+
+    // ARC-COMBAT-1777: the hand-over step of the disarm stage (see the call).
+    private async Task DisarmHandOverSmokeAsync(GameSessionOwner session, AreaLoadResult area, AreaMapRuntime map, AreaObjectRecord target, AreaUseScriptHost host, AreaTraps traps, HotkeyEntry hotkey, Vector2 point, SessionMapId mapId, MapChangeKey scriptKey)
+    {
+        void Require(bool value, string why)
+        {
+            if (value) return;
+            GD.Print($"{DisarmCode} disarm hand-over smoke FAIL: " + why);
+            throw new InvalidOperationException("AREA_DISARM_HANDOVER_SMOKE_FAILED");
+        }
+        var pc = ((AreaGridSession)_worldActor.Session!).State.CommittedCell;
+        var before = _smokeLedNpc;
+        JoinLedMapNpcForSmoke(session, area, map, string.Empty, pc);
+        if (_smokeLedNpc is not { } follower || follower == before)
+        { GD.Print($"{DisarmCode} native-smoke disarm-handover NONE map={_readyMapName} (no NPC of the map could join as a follower)"); return; }
+        var settings = _gameSettings;
+        try
+        {
+            for (var i = 0; i < 900 && !(AreaAiHostNow()?.FollowerSkillUsers().Any(u => u.Loaded.Entity == follower) ?? false); i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            Require(AreaAiHostNow()?.FollowerSkillUsers().Any(u => u.Loaded.Entity == follower) == true, "the AI host runs the follower and lists it as a skill user");
+            void Retrap()
+            {
+                Require(session.ApplyChanges(session.Version, null, [new MapChangeEdit(mapId, scriptKey, 30001)]).Disposition != GameSessionDisposition.Rejected, "the trap script is written again");
+                if (!traps.KnownTrap(target))
+                    Require(session.MarkTrapSpotted(session.Version, AreaUseScriptHost.Trapped(target), host.TrapBaseline(target)!.Value, TrapObserver.Player).Disposition != GameSessionDisposition.Rejected, "the spot mark again");
+                Require(traps.KnownTrap(target), "the hero knows the trap");
+            }
+            void Press()
+            {
+                ActivateHotkey(hotkey, "smoke");
+                Require(DisarmArmed, "armed for the press");
+                WorldRouteClick(point);
+                Require(!DisarmArmed && _lastDisarm is not null, "the press ran a disarm");
+            }
+            // The score seam: the follower scores higher than the hero.
+            FollowerSkillsScoreForSelfTest = user => user is null ? 10 : 90;
+            _gameSettings = settings with { FollowerSkills = true };
+            FollowerSkillsCtrlForSelfTest = false;
+            Retrap(); LastFollowerSkillHandOver = null; _lastDisarm = null;
+            Press();
+            Require(LastFollowerSkillHandOver == follower, $"the follower disarmed: {LastFollowerSkillHandOver} {_areaUseStatus}");
+            Require(_lastDisarm!.Roll.Check is not null && _lastDisarm.Roll.Charge is null, "its roll is the session's own, charged no action points here");
+            // Ctrl skips it.
+            FollowerSkillsCtrlForSelfTest = true;
+            Retrap(); LastFollowerSkillHandOver = null; _lastDisarm = null;
+            Press();
+            Require(LastFollowerSkillHandOver is null, "with Ctrl held the hero did it");
+            // The option off leaves the hero.
+            FollowerSkillsCtrlForSelfTest = false;
+            _gameSettings = settings with { FollowerSkills = false };
+            Retrap(); LastFollowerSkillHandOver = null; _lastDisarm = null;
+            Press();
+            Require(LastFollowerSkillHandOver is null, "with the option off the hero did it");
+            GD.Print("ARC-COMBAT-1777 native-smoke disarm-handover PASS " + System.Text.Json.JsonSerializer.Serialize(new { Map = _readyMapName, Follower = follower }));
+        }
+        finally
+        {
+            FollowerSkillsScoreForSelfTest = null; FollowerSkillsCtrlForSelfTest = null; _gameSettings = settings;
+            if (DisarmArmed) CancelDisarm("the smoke ended");
+            session.LeaveParty(session.Version, follower, new PartyLeave(Force: true));
+            _smokeLedNpc = before;
         }
     }
 }

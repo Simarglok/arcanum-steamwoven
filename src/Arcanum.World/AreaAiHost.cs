@@ -1629,6 +1629,20 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         PerformChoice(npc, new AiPassChoice(AiPassAction.UseSkill, -1, skill, item, target));
     }
 
+    /// <summary>
+    /// ARC-COMBAT-1777 (0x571CB0, ledger PL3, PL5): the chosen follower's lock pick, as the lockpick item use hands it over: the skill starter (0x4350F0 → 0x436220, goal 33 with skill 14) on the lock <paramref name="target"/> (a door's entity or a container's
+    /// "inv:" string) with the follower's own <paramref name="item"/> (null: without lockpicks), so it walks within range 1 and picks at its attempt node (<see cref="AttemptPickLocks"/>). True when the run is in the table.
+    /// NOT READY: the original starts the use-item goal (0x28, no animation) for a follower that holds lockpicks and the timed pick-lock goal for one that holds none; both run as the timed goal 33 here.
+    /// </summary>
+    public bool StartPickLocks(string follower, string target, string? item)
+    {
+        ArgumentNullException.ThrowIfNull(follower);
+        ArgumentNullException.ThrowIfNull(target);
+        if (!_followers.ContainsKey(follower)) return false;
+        PerformSkill(follower, target, AiExecutorRules.PickLocksSkill, item);
+        return RunOf(follower) is { Bottom: { Goal: GoalType.UseSkill or GoalType.AttemptPickLocks, Skill: AiExecutorRules.PickLocksSkill } bottom } && bottom.Target == target;
+    }
+
     // An NPC that joined the hero since the host was built is the companions' (it counts as gone here); ARC-WORLD-115: a companion the
     // host runs is its own.
     public SessionLifeTarget? AiLifeTarget(string entity) =>
@@ -3721,6 +3735,42 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     /// </summary>
     public IReadOnlyList<SessionLifeTarget> FollowerLifeTargets() =>
         [.. Followers(Pc).Select(RawBuild).Where(build => build is not null).Select(build => build!.Target)];
+
+    /// <summary>
+    /// ARC-COMBAT-1777 (0x441260, 0x4C9050; ledger OH4, PL5): the users the best-follower chooser scores after the PC, in the PC's all-followers list's order (<see cref="FollowerSkillRules.AllFollowers"/>): each follower of the hero this host
+    /// runs and can build a life target and a sheet for (a follower it cannot read cannot be scored). NOT READY: the followers of a follower (the original's list recurses) are not a list this world keeps, so the list holds the hero's own.
+    /// </summary>
+    public IReadOnlyList<SessionNpcSkillUser> FollowerSkillUsers()
+    {
+        var users = new List<SessionNpcSkillUser>();
+        foreach (var id in FollowerSkillRules.AllFollowers(Pc, leader => leader == Pc ? Followers(Pc) : []))
+            if (Build(id) is { } follower && _scene.NpcSheet?.Invoke(id) is { } sheet && _followers.ContainsKey(id))
+                users.Add(new SessionNpcSkillUser(follower.Target, sheet.Loaded, sheet.Modifiers, _session.QueryCompanion(id).LedByPc));
+        return users;
+    }
+
+    /// <summary>
+    /// ARC-COMBAT-1777 (the chooser 0x4C9050): who the skill use goes to: the hero (null) or the follower with the strictly best score (<see cref="FollowerSkillRules.Choose"/>: the hero first, ties keep the earlier). <paramref name="score"/>
+    /// is the session's score of a user for the use (the hero for null; <see cref="GameSessionOwner.QueryPickLockScore"/>, <see cref="GameSessionOwner.QueryDisarmScore"/>); a user that cannot be scored is left out, and a hero that cannot is the user.
+    /// </summary>
+    public SessionNpcSkillUser? ChooseSkillUser(Func<SessionNpcSkillUser?, int?> score)
+    {
+        ArgumentNullException.ThrowIfNull(score);
+        if (score(null) is not { } hero) return null;
+        var scores = new List<int> { hero };
+        var candidates = new List<SessionNpcSkillUser?> { null };
+        foreach (var user in FollowerSkillUsers())
+            if (score(user) is { } value) { scores.Add(value); candidates.Add(user); }
+        return candidates[FollowerSkillRules.Choose(scores)];
+    }
+
+    /// <summary>ARC-COMBAT-1777 (PL4: the finder 0x462760 returns the first lockpicks in inventory order): the first lockpicks the NPC holds, else null (a follower picks with its own lockpicks if it has any, else without).</summary>
+    public string? FirstLockpicks(string id)
+    {
+        foreach (var listed in _session.QueryHolderItems(id) ?? [])
+            if (_scene.Combat.HeldItemFields(_session, id, listed.Entity) is { } fields && AreaLockpicks.From(listed.Entity, fields) is not null) return listed.Entity;
+        return null;
+    }
 
     /// <summary>
     /// ARC-WORLD-124 (E6-b; 0x4AA0D0, ledger TP2, awareness research section 7): the alarm a trap device of record 176 gives when the hero uses it, after the device is consumed. For every NPC in the

@@ -1596,4 +1596,33 @@ public sealed class AreaAiFollowerTests
         var scene = OpenFollowerHit(reaction: 100);
         Assert.IsNull(scene.Host.SayLoyaltyWarning(scene.Companion, Warned(LeaderWarning.LowReaction)));
     }
+
+    [TestMethod]
+    public void The_best_follower_chooser_scores_the_hero_first_and_a_follower_replaces_it_only_with_a_strictly_higher_score()
+    {
+        // ARC-COMBAT-1777 (0x4C9050, ledger PL5): the host lists the hero's followers it runs as skill users and picks by the session's score.
+        var (_, host, _, _, companion) = Open();
+        var users = host.FollowerSkillUsers();
+        Assert.AreEqual(companion, users.Single().Loaded.Entity);
+        Assert.IsTrue(users.Single().LedByPc);
+        Assert.IsNull(host.ChooseSkillUser(user => user is null ? 20 : 20), "a tie keeps the hero");
+        Assert.IsNull(host.ChooseSkillUser(user => user is null ? 20 : 19), "a lower score keeps the hero");
+        Assert.AreEqual(companion, host.ChooseSkillUser(user => user is null ? 20 : 21)?.Loaded.Entity, "a strictly higher score wins");
+        Assert.AreEqual(companion, host.ChooseSkillUser(user => user is null ? -5 : -4)?.Loaded.Entity, "negative scores compare the same way");
+        Assert.IsNull(host.ChooseSkillUser(user => user is null ? null : 99), "a hero that cannot be scored keeps the job");
+        Assert.IsNull(host.ChooseSkillUser(user => user is null ? 1 : null), "a follower that cannot be scored is left out");
+    }
+
+    [TestMethod]
+    public void A_follower_the_host_does_not_run_is_no_candidate_and_a_chosen_follower_starts_its_pick_lock_goal()
+    {
+        var (_, host, _, _, companion) = Open(followers: false);
+        Assert.AreEqual(0, host.FollowerSkillUsers().Count, "no follower source, no candidate");
+        Assert.IsFalse(host.StartPickLocks(companion, "door:1", null), "the host does not run it");
+        var (_, running, _, _, runner) = Open();
+        Assert.IsNull(running.FirstLockpicks(runner), "it holds no lockpicks");
+        Assert.IsTrue(running.StartPickLocks(runner, "door:1", null), $"goal 33 with skill 14 starts: {running.TraceOf(runner)?.Perform}");
+        var run = running.RunOf(runner);
+        Assert.AreEqual((Arcanum.Simulation.Goals.GoalType.UseSkill, "door:1", AiExecutorRules.PickLocksSkill), (run!.Bottom.Goal, run.Bottom.Target, run.Bottom.Skill));
+    }
 }

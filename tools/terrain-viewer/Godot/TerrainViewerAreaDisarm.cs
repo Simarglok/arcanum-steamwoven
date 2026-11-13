@@ -77,7 +77,10 @@ public partial class TerrainViewerApp
         var session = _areaSession!;
         ResumeLoadedRound();
         var world = session.QueryCombatRound() is not null ? AreaCombatWorldNow() : null;
-        var disarm = traps.Disarm(row, world, _inventoryHost!.InsertCheck);
+        // ARC-COMBAT-1777 (0x57A620 → 0x4C9050): with the follower skills option on and no Ctrl key held, the follower with the best score disarms instead of the hero.
+        var byFollower = DisarmByFollower(row, traps, out var refused);
+        if (refused) return;
+        var disarm = byFollower ?? traps.Disarm(row, world, _inventoryHost!.InsertCheck);
         _lastDisarm = disarm;
         if (disarm is null) { _areaUseStatus = "disarm traps: no known trap there"; RefreshAreaStatus(); return; }
         // ARC-COMBAT-020: the charge's round events (a refused charge's next subturn) go to the round log.

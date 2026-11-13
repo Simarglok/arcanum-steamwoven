@@ -53,7 +53,7 @@ public sealed class AreaGameOptionsTests
         Assert.AreEqual((int)RuleMode.Steamwoven, defaults["rules"], "Steamwoven is the default mode");
         CollectionAssert.AreEqual(new[]
             {
-                AreaOption.Difficulty, AreaOption.ViolenceFilter, AreaOption.DefaultCombatMode, AreaOption.AutoAttack, AreaOption.AutoSwitchWeapons, AreaOption.AlwaysRun, AreaOption.Brightness, AreaOption.Floats, AreaOption.FloatSpeed, AreaOption.CombatTaunts,
+                AreaOption.Difficulty, AreaOption.ViolenceFilter, AreaOption.DefaultCombatMode, AreaOption.AutoAttack, AreaOption.AutoSwitchWeapons, AreaOption.AlwaysRun, AreaOption.FollowerSkills, AreaOption.Brightness, AreaOption.Floats, AreaOption.FloatSpeed, AreaOption.CombatTaunts,
                 AreaOption.Effects, AreaOption.Voice, AreaOption.Music, AreaOption.Rules, AreaOption.ControlScheme, AreaOption.PromptStyle, AreaOption.EvidenceLog, AreaOption.TestTask,
             },
             AreaOptionTable.All.Where(c => c.Shown).Select(c => c.Option).ToArray(), "only the controls with a function are shown");
@@ -89,12 +89,12 @@ public sealed class AreaGameOptionsTests
         CollectionAssert.AreEqual(new[] { 4000, 4001, 4002, 4003 }, main.Buttons.Select(b => b.Message).ToArray(), "OP1 window 6 buttons");
         CollectionAssert.AreEqual(new[] { "Game", "Video", "Sound", "Done" }, Labels(main));
         Assert.AreEqual(AreaOptionsPage.Game, main.Page);
-        CollectionAssert.AreEqual(new[] { AreaOption.Difficulty, AreaOption.ViolenceFilter, AreaOption.DefaultCombatMode, AreaOption.AutoAttack, AreaOption.AutoSwitchWeapons, AreaOption.AlwaysRun, AreaOption.Rules },
+        CollectionAssert.AreEqual(new[] { AreaOption.Difficulty, AreaOption.ViolenceFilter, AreaOption.DefaultCombatMode, AreaOption.AutoAttack, AreaOption.AutoSwitchWeapons, AreaOption.AlwaysRun, AreaOption.FollowerSkills, AreaOption.Rules },
             main.Controls.Select(c => c.Option).ToArray());
         CollectionAssert.AreEqual(new[]
         {
             "Module: " + AreaOptionTable.NoModules,
-            "Default Combat Mode: " + AreaOptionTable.NoFastTurnBased, "Follower Skills: " + AreaOptionTable.NoFollowerSkills,
+            "Default Combat Mode: " + AreaOptionTable.NoFastTurnBased,
         }, main.HiddenNotes.ToArray());
         Assert.AreEqual(0, main.OptionsFocus);
         var play = Options(AreaMenuWindow.InPlay);
@@ -165,7 +165,7 @@ public sealed class AreaGameOptionsTests
         var menu = Options();
         Assert.AreEqual(new AreaMenuCommand(AreaMenuCommandKind.ChangeOption, Option: AreaOption.Difficulty, Value: 2), menu.Confirm());
         menu.Move(-1);
-        Assert.AreEqual(10, menu.OptionsFocus, "7 controls and 4 buttons, wrapping");
+        Assert.AreEqual(11, menu.OptionsFocus, "8 controls and 4 buttons, wrapping");
         Assert.AreEqual(AreaMenuCommand.Nothing, menu.Confirm(), "Done");
         Assert.AreEqual(AreaMenuWindow.Main, menu.Window);
     }
@@ -175,7 +175,7 @@ public sealed class AreaGameOptionsTests
     {
         // ARC-UI-146: HD graphics, HD interface and HD pack are the launcher screen's lines (ARC-UI-143); the saved settings are the same.
         var menu = Options(AreaMenuWindow.InPlay);
-        Assert.AreEqual(7, menu.Controls.Count, "the Game page ends with Rules");
+        Assert.AreEqual(8, menu.Controls.Count, "the Game page ends with Rules");
         Assert.AreEqual(HdPackSourceMode.Auto, AreaGameSettings.Defaults.HdPackSource);
         Assert.IsNull(AreaGameSettings.Defaults.HdPackPath);
         Assert.IsFalse(AreaGameSettings.Defaults.HdInterface);
@@ -188,12 +188,12 @@ public sealed class AreaGameOptionsTests
     {
         var menu = Options(AreaMenuWindow.InPlay);
         var rules = AreaOptionTable.Of(AreaOption.Rules);
-        Assert.AreEqual(6, menu.Controls.ToList().IndexOf(rules), "the Game page's first project line");
+        Assert.AreEqual(7, menu.Controls.ToList().IndexOf(rules), "the Game page's first project line");
         Assert.AreEqual((int)RuleMode.Steamwoven, Values.Value(AreaOption.Rules));
-        Assert.AreEqual(new AreaMenuCommand(AreaMenuCommandKind.ChangeOption, Option: AreaOption.Rules, Value: (int)RuleMode.Original), menu.Change(6, 1));
+        Assert.AreEqual(new AreaMenuCommand(AreaMenuCommandKind.ChangeOption, Option: AreaOption.Rules, Value: (int)RuleMode.Original), menu.Change(7, 1));
         menu.SetOptions(Values with { Rules = RuleMode.Original });
-        Assert.AreEqual(new AreaMenuCommand(AreaMenuCommandKind.ChangeOption, Option: AreaOption.Rules, Value: (int)RuleMode.Steamwoven), menu.Change(6, 1), "the list wraps");
-        Assert.AreEqual(new AreaMenuCommand(AreaMenuCommandKind.ChangeOption, Option: AreaOption.Rules, Value: (int)RuleMode.Steamwoven), menu.Change(6, -1));
+        Assert.AreEqual(new AreaMenuCommand(AreaMenuCommandKind.ChangeOption, Option: AreaOption.Rules, Value: (int)RuleMode.Steamwoven), menu.Change(7, 1), "the list wraps");
+        Assert.AreEqual(new AreaMenuCommand(AreaMenuCommandKind.ChangeOption, Option: AreaOption.Rules, Value: (int)RuleMode.Steamwoven), menu.Change(7, -1));
         Assert.AreEqual(Enum.GetValues<RuleMode>().Length - 1, rules.Max, "one value per built-in mode, no custom mix (after alpha)");
         // The project's texts only: a game file's message 108 is never its label, nor a message of any file its values.
         var game = AreaOptionsTexts.From((_, _) => "game text", "test");
@@ -247,6 +247,22 @@ public sealed class AreaGameOptionsTests
         Assert.AreEqual(new AreaMenuCommand(AreaMenuCommandKind.ChangeOption, Option: AreaOption.ControlScheme, Value: 3), menu.Change(4, -1), "the list wraps back to its last value");
         Assert.AreEqual(new AreaMenuCommand(AreaMenuCommandKind.ChangeOption, Option: AreaOption.CombatTaunts, Value: 0), menu.Change(3, 1), "ARC-AI-1527: the combat taunts line is on by default; On wraps to Off");
         Assert.AreEqual(new AreaMenuCommand(AreaMenuCommandKind.ChangeOption, Option: AreaOption.PromptStyle, Value: 1), menu.Change(5, 1));
+    }
+
+    [TestMethod]
+    public void Follower_skills_is_the_game_pages_seventh_original_slot_on_by_default_and_its_value_follows_the_setting()
+    {
+        // ARC-COMBAT-1777 (OH4): the skill module's init registers 1 (On); the row was hidden until the chooser (0x4C9050) was built.
+        var control = AreaOptionTable.Of(AreaOption.FollowerSkills);
+        Assert.IsTrue(control.Shown && !control.Project && control.Kind == AreaOptionKind.List && control.Page == AreaOptionsPage.Game && control.Slot == 7);
+        Assert.AreEqual(107, control.LabelMessage, "OP2: 100 + slot");
+        Assert.AreEqual((1, 1), (control.Default, control.Limit));
+        Assert.AreEqual("follower skills", control.Setting);
+        Assert.AreEqual(1, Values.Value(AreaOption.FollowerSkills));
+        Assert.AreEqual(0, (Values with { FollowerSkills = false }).Value(AreaOption.FollowerSkills));
+        var menu = Options(AreaMenuWindow.InPlay);
+        Assert.AreEqual(new AreaMenuCommand(AreaMenuCommandKind.ChangeOption, Option: AreaOption.FollowerSkills, Value: 0), menu.Change(6, -1), "Off is one step from On");
+        Assert.AreEqual("Follower Skills", AreaOptionsTexts.Project("test").Label(control));
     }
 
     [TestMethod]

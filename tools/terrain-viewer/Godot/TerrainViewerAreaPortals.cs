@@ -154,6 +154,8 @@ public partial class TerrainViewerApp
             return true;
         }
         // ARC-DEV-185 (MIG13 S12e): armed lockpicks on a door or window are the skill goal 33 with skill 14: the hero walks within range 1 (goal 8), turns, and the pick is made at the frame's next safe point (goal 67).
+        // ARC-COMBAT-1777 (0x571CB0 → 0x4C9050): the better follower picks instead of the hero unless the option is off or Ctrl is held.
+        if (HandOverLockpick(portal.Entity, pick, PortalName(portal))) return true;
         var lock_ = HeroRequests.Apply(new LockpickRequest(portal.Entity, pick));
         _portalNotice = lock_.Outcome == HeroRequestOutcome.Done ? $"{PortalName(portal)}: picking the lock" : $"{PortalName(portal)}: the pick was refused";
         _lockpickTrying = lock_.Outcome == HeroRequestOutcome.Done;
