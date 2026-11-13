@@ -165,7 +165,7 @@ public sealed class DyingScriptTests
             Assert.AreEqual(SessionCombatant.Hero, owner.QueryDanger(request.Victim).Focus, "the focus is written before the notice");
             var applied = owner.ApplyKillNotification(owner.Version, new SessionKillNotificationRequest
             {
-                Victim = SessionCombatant.Critter(request.Victim), Plan = new KillNotificationPlan(new StopFleeingStep(false, true), ["oid:mate"]),
+                Victim = SessionCombatant.Critter(request.Victim), Plan = new KillNotificationPlan(new StopFleeingStep(false, false), ["oid:mate"]),
             });
             Assert.AreEqual(GameSessionFailure.None, applied.Failure, "the version the host sees is current");
         };

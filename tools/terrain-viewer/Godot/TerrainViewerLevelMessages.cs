@@ -90,10 +90,20 @@ public partial class TerrainViewerApp
     private void AttachAreaEncumbranceEffect()
     {
         if (_areaSession is not { } session) return;
+        AttachAreaInnateEffects(session);
         var rule = _areaEffectRules?.Invoke(Arcanum.Simulation.Items.CarryRules.EffectNumber);
         try { session.AttachEncumbranceEffect(rule is null ? null : SessionEffectDefinition.FromRule(rule)); }
         catch (ArgumentException) { session.AttachEncumbranceEffect(null); GD.Print("ARC-WORLD-087 effect 158 refused: no encumbrance entries"); return; }
         GD.Print($"ARC-WORLD-087 effect 158 {(rule is null ? "missing" : "attached")}");
+    }
+
+    /// <summary>ARC-MAGIC-1509: gives the session the rules of the innate effects (race 64 to 74, the woman's 330) from the hero's effect tables, which an NPC's race or gender change by a spell adds (the base stat setter's gender and race cases); the session does not save them.</summary>
+    private void AttachAreaInnateEffects(GameSessionOwner session)
+    {
+        var rules = _areaEffectRules;
+        var numbers = Enumerable.Range(GameSessionOwner.RaceEffectBase, 11).Append(GameSessionOwner.FemaleEffectNumber);
+        try { session.AttachInnateEffects(rules is null ? null : numbers.Select(number => rules(number)).OfType<Arcanum.Data.Characters.EffectRule>().Select(SessionEffectDefinition.FromRule).ToArray()); }
+        catch (ArgumentException) { session.AttachInnateEffects(null); GD.Print("ARC-MAGIC-1509 innate effects refused: no race or gender swap"); }
     }
 
     /// <summary>ARC-WORLD-087: posts the message of the hero's latest encumbrance change once the texts are there (one entry for the

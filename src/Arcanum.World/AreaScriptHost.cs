@@ -16,7 +16,7 @@ namespace Arcanum.World;
 /// point of the map's speakers is modelled; everything the viewer does not model answers "no" (no generator, no trap,
 /// alive and free, not jilted).
 /// </summary>
-public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueries, IScrWorldQueries, IScrObjectStateQueries, IScrAreaQueries, IScrStoreQueries, IScrReactionQueries, IScrSpellQueries, IScrStoryQueries, IScrItemQueries
+public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueries, IScrWorldQueries, IScrObjectStateQueries, IScrAreaQueries, IScrStoreQueries, IScrReactionQueries, IScrSpellQueries, IScrStoryQueries, IScrItemQueries, IScrVitalQueries
 {
     /// <summary>The PC as the scripts see it; the viewer has one.</summary>
     public const string PcCode = SessionEventKinds.PlayerEntity;
@@ -87,12 +87,21 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
 
     /// <summary>ARC-MAGIC-041 (TI8): the set a deferred call of the event queue runs under: <see cref="AdmissionFor"/> plus wields an item named (21, which <see cref="WieldedItemName"/> answers for the hero without a use host) and use ammunition units (135
     /// script uses (<see cref="Apply"/> spends the cells through the session). A dialog script does not get it. ARC-SCRIPT-1482 (ledger WE2, WE4): plus the magick-tech adjustment (91, the ratio of a worn item for the hero, <see cref="PowerRatio"/>) and
-    /// play script eye candy (120, presentation only), which the deferred poison scripts of the wield-on items use; their damage (60, 138) and heal (75) come from <see cref="AdmissionFor"/> (ARC-SCRIPT-1563: the talk set holds them while the shown
+    /// play script eye candy (120, presentation only), and ARC-SCRIPT-1586 get hit points and get fatigue points (107, 108, <see cref="FatiguePoints"/>), which the deferred poison scripts of the wield-on items use; their damage (60, 138) and heal (75) come from <see cref="AdmissionFor"/> (ARC-SCRIPT-1563: the talk set holds them while the shown
     /// map's use host answers, and <see cref="Apply"/> hands them to it).</summary>
     public ScrAdmissionSet CallAdmissionFor(ScrObjectRef? attachee) => AmmoSets.GetOrAdd(AdmissionFor(attachee), set => new(set.Id + "-ammo",
         set.Conditions.Append(ScrCatalogue.Condition.IsWieldingItem),
-        set.Actions.Append(ScrCatalogue.Action.UseAmmoUnits).Append(ScrCatalogue.Action.MagickTechAdjustment).Append(ScrCatalogue.Action.PlayScriptEyeCandy),
+        set.Actions.Append(ScrCatalogue.Action.UseAmmoUnits).Append(ScrCatalogue.Action.MagickTechAdjustment).Append(ScrCatalogue.Action.PlayScriptEyeCandy)
+            .Append(ScrCatalogue.Action.GetHitPoints).Append(ScrCatalogue.Action.GetFatiguePoints),
         set.ValueKinds, set.FocusKinds, set.CounterIndexWraps));
+
+    /// <summary>ARC-SCRIPT-1586 (ledger VT1, VT2, PZ11): get hit points, the current and the maximum of the PC as the session's life gives them, or of what the shown map's use host answers while it answers (an NPC of that map); null for any other object (the run stops as not modelled).</summary>
+    public (int Current, int Maximum)? HitPoints(ScrObjectRef obj) => Queries is not null ? Answering.HitPoints(obj)
+        : IsPc(obj) && _session.QueryHeroLife() is { } life ? (life.Status.HitPoints, life.Status.MaxHitPoints) : null;
+
+    /// <summary>ARC-SCRIPT-1586 (VT2): get fatigue points, as <see cref="HitPoints"/>; the deferred wield-on poison scripts 2677, 2679, 2681 and 2682 read the wearer's fatigue after their first damage.</summary>
+    public (int Current, int Maximum)? FatiguePoints(ScrObjectRef obj) => Queries is not null ? Answering.FatiguePoints(obj)
+        : IsPc(obj) && _session.QueryHeroLife() is { } life ? (life.Status.Fatigue, life.Status.MaxFatigue) : null;
 
     /// <summary>ARC-SCRIPT-1482 (WE2): a worn item's power ratio for the PC (<see cref="GameSessionOwner.QueryWornPowerRatio"/>), the item found by its entity alone (a deferred call's item role keeps the map it was scheduled on after the hero travelled, as every role but the PC's and its followers' does); null for any other item or owner (the run stops, as for an object the host does not know).</summary>
     public int? PowerRatio(ScrObjectRef item, ScrObjectRef owner) => owner == Pc ? _session.QueryWornPowerRatio(item.Code) : null;
