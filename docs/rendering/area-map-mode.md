@@ -881,6 +881,14 @@ replaces it. A click beyond the route follower's 32-cell reach is walked along a
   other way, the second time while the hero is dead and without the item's sector; the map keeps its inventory and combat,
   an NPC killed before is drawn fallen and the hero keeps its armoured body: `ARC-COMBAT-024 native-smoke dead-window PASS`
   (half-ogre and human male, 2026-10-29: windows (1452,1290) → (1452,1291) → (1452,1292), the item from (1452,1289)).
+- **NPC without a dialog through a map change and a window move (ARC-AI-1695).** The follow smoke of the transfer stage (and of `follower-home`, `follower-far`,
+  `teleport-follow`, which run it first) force-joins one more NPC of the map next to the dialog companion: the nearest living free NPC without a dialog that the scene draws and
+  whose follow facts read (what Dominate Will does, no conversation), and requires a following companion with a led body (script 0) within the follow distance
+  (`ARC-AI-1695 native-smoke led-follow PASS`). In the transfer stage's carry to the Crash Site cave it is a visitor there whose body was read from its home map as a led NPC's
+  (`ARC-AI-1695 native-smoke led-carry PASS`); the hero then releases it and the cave's forced pass sends it back to its home map, as for the dialog companion
+  (`ARC-AI-1695 native-smoke led-home PASS`; no return trip). The two stages that move the main map's window (`follower-far` by the debug travel and a quick load,
+  `teleport-follow` by the spell) check it as well, where its map row lies far outside the new window: within the follow distance, drawn, its portrait bars matching its life
+  (`ARC-AI-1695 native-smoke led-far PASS`). The runner requires these lines (`STAGE_ALSO_PASS`).
 - **Former follower goes home (ARC-DEV-116, MIG11 S5).** Only when named (`--stages follower-home`, with a hero): the transfer stage's carry of the
   joined companion (Virgil) to the Crash Site cave, then the hero releases it there; the forced waypoint or standpoint pass the cave's sector fold would
   run (driven here by the AI host's own steps) finds a leaderless NPC whose teleport map (the map the carry took it from, FM6) is another map and asks for its

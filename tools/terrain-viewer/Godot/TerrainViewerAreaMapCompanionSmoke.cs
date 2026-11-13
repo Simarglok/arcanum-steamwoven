@@ -17,10 +17,12 @@ namespace Arcanum.TerrainViewer;
 public partial class TerrainViewerApp
 {
     private string? _smokeCompanion;
+    // ARC-AI-1695: the NPC of the start map without a dialog that the follow smoke force-joined as well (what Dominate Will does), so the transfer carries it too.
+    private string? _smokeLedNpc;
 
     private async Task RunAreaMapCompanionSmokeAsync()
     {
-        _smokeCompanion = null;
+        _smokeCompanion = null; _smokeLedNpc = null;
         if (_areaSession is not { } session || _conversationHost is not { PartyWired: true } host || _readyArea is not { } area
             || _worldActor.Session is not AreaGridSession grid)
         { GD.Print($"ARC-WORLD-037 native-smoke follow NONE map={_readyMapName} (no session party: {_companionData?.Detail})"); return; }
@@ -112,12 +114,91 @@ public partial class TerrainViewerApp
             GD.Print("ARC-WORLD-037 native-smoke follow PASS " + System.Text.Json.JsonSerializer.Serialize(new {
                 Map = _readyMapName, template.Speaker.ScriptId, Prototype = template.Speaker.Row.PrototypeNumber, template.Facts.Level, template.Facts.Thresholds,
                 From = map.Chart.ToWorld(template.HomeOrigin), Pc = map.Chart.ToWorld(pc), At = world, UnderRoof = underRoof, Frames = frames, Templates = _companionTemplates.Count, Parity = "NOT_VERIFIED" }));
+            JoinLedMapNpcForSmoke(session, area, map, template.Entity, pc);
         }
         finally
         {
             ReleaseSimulatedPadForSelfTest(); _worldFocusSimulationForSelfTest = simulatedFocus;
             _worldFocused = focused; RestoreWorldTestTime(testTime);
         }
+    }
+
+    /// <summary>
+    /// ARC-AI-1695: the part of the follow smoke that joins an NPC of the map without a dialog (a Dominate Will target: <c>ForceJoinParty</c>, no conversation) next to the dialog
+    /// companion. The nearest living free NPC of the map that is drawn, has follow facts and is not a dialog speaker joins; the group is rebuilt with its led body (script 0) and it
+    /// follows the hero within the follow distance, drawn. It stays following, so the transfer smoke that runs next carries it (<see cref="ReportAreaMapLedCarry"/>) and the window
+    /// moves of follower-far and teleport-follow check it on the main map (<see cref="_smokeLedNpc"/>).
+    /// </summary>
+    private void JoinLedMapNpcForSmoke(GameSessionOwner session, AreaLoadResult area, AreaMapRuntime map, string dialogCompanion, CellCoord pc)
+    {
+        static void Require(bool value, string why)
+        {
+            if (value) return;
+            GD.Print("ARC-AI-1695 led-follow smoke FAIL: " + why);
+            throw new InvalidOperationException("AREA_MAP_LED_FOLLOW_FAILED");
+        }
+        if (_inventoryHost?.Maps.SingleOrDefault(m => m.RuntimeMap == CurrentAreaMap) is not { } inventory)
+        { GD.Print($"ARC-AI-1695 native-smoke led-follow NONE map={_readyMapName} (no inventory of the map)"); return; }
+        var speakerKeys = AreaConversationHost.FindSpeakers(area.Snapshot).Select(sp => sp.Row.Key).ToHashSet();
+        var here = map.Chart.ToWorld(pc);
+        var candidate = session.QueryMapInventory(new(CurrentAreaMap))!.Holders
+            .Where(h => h.Kind == SessionHolderKind.Npc && !h.Dead && h.Entity != dialogCompanion && session.QueryCompanion(h.Entity).Standing == CompanionStanding.Free)
+            .Select(h => (Holder: h, Row: inventory.Row(h.Entity)))
+            // Not a pre-made hero's NPC (their heartbeat scripts 1781-1792 kill the unchosen ones once the AI runs, ARC-WORLD-114).
+            .Where(c => c.Row.Type == 16 && !speakerKeys.Contains(c.Row.Key) && c.Row.WorldX is not null && c.Row.WorldY is not null
+                && area.Plan.Commands.Any(command => command.Identity == c.Row.Key)
+                && AreaUseScriptHost.LoadedSlot(c.Row, Arcanum.Scripting.Scr.ScrPoint.Heartbeat)?.Script is not (>= 1781 and <= 1792)
+                && MapCompanionFacts(new AreaSpeaker(AreaCompanionTemplate.LedMapNpcIndexBase, c.Row, 0, c.Row.WorldX!.Value, c.Row.WorldY!.Value)) is not null)
+            .OrderBy(c => Math.Max(Math.Abs(c.Row.WorldX!.Value - here.X), Math.Abs(c.Row.WorldY!.Value - here.Y))).ThenBy(c => c.Holder.Entity, StringComparer.Ordinal)
+            .FirstOrDefault();
+        if (candidate.Holder is null)
+        { GD.Print($"ARC-AI-1695 native-smoke led-follow NONE map={_readyMapName} (no living free NPC without a dialog with follow facts that the scene draws)"); return; }
+        var led = candidate.Holder.Entity;
+        var joined = session.ForceJoinParty(session.Version, led);
+        Require(joined.Disposition != GameSessionDisposition.Rejected, "the NPC without a dialog was force-joined: " + joined.Failure);
+        var frames = 0;
+        for (; frames < 600 && (_areaCompanions?.Companions.SingleOrDefault(c => c.Entity == led) is not { } found || found.Speaker.ScriptId != 0
+            || found.Grid.State.Phase != MovementPhase.Settled || FollowDistanceRules.Distance(found.Grid.State.CommittedCell, ((AreaGridSession)_worldActor.Session!).State.CommittedCell) > FollowDistanceRules.Range); frames++) AreaSmokeFrame();
+        var companion = _areaCompanions?.Companions.SingleOrDefault(c => c.Entity == led);
+        Require(companion is { Standing: CompanionStanding.Following } && companion.Speaker.ScriptId == 0, "the NPC without a dialog is a following companion with a led body (script 0): " + _areaCompanions?.Status());
+        var cell = companion!.Grid.State.CommittedCell;
+        var close = FollowDistanceRules.Distance(cell, ((AreaGridSession)_worldActor.Session!).State.CommittedCell);
+        Require(close <= FollowDistanceRules.Range, $"it followed within {FollowDistanceRules.Range} of the PC in {frames} frames: {close}");
+        RecordAreaCompanions("led-follow smoke");
+        _smokeLedNpc = led;
+        GD.Print("ARC-AI-1695 native-smoke led-follow PASS " + System.Text.Json.JsonSerializer.Serialize(new {
+            Map = _readyMapName, Entity = led, Prototype = candidate.Row.PrototypeNumber, From = $"{candidate.Row.WorldX},{candidate.Row.WorldY}", Distance = close, Frames = frames }));
+    }
+
+    /// <summary>
+    /// ARC-AI-1695: after the transfer smoke, the NPC without a dialog that the follow smoke force-joined arrived with the hero as the dialog companion did: a companion with a led body (script 0), following,
+    /// within the follow distance and drawn; on another map it is a visitor whose body its home map's read built (the read lists it as led). The hero then releases it: the destination's forced pass sends it
+    /// back to its home map (<see cref="SendAreaMapFormerFollowerHome"/>, as the follower-home stage does for the dialog companion).
+    /// </summary>
+    private void ReportAreaMapLedCarry(string entity, string from, bool sameMap)
+    {
+        static void Require(bool value, string why)
+        {
+            if (value) return;
+            GD.Print("ARC-AI-1695 led-carry smoke FAIL: " + why);
+            throw new InvalidOperationException("AREA_MAP_LED_CARRY_FAILED");
+        }
+        var companion = _areaCompanions?.Companions.SingleOrDefault(c => c.Entity == entity);
+        Require(companion is not null, $"the NPC without a dialog came with the hero: {_areaCompanions?.Status()} unread {string.Join("; ", _unreadVisitors)}");
+        var pc = ((AreaGridSession)_worldActor.Session!).State.CommittedCell;
+        Require(companion!.Speaker.ScriptId == 0 && companion.Standing == CompanionStanding.Following && _areaSession!.QueryCompanion(entity).LedByPc, "it is a following companion with a led body (script 0)");
+        var distance = FollowDistanceRules.Distance(companion.Grid.State.CommittedCell, pc);
+        Require(distance <= FollowDistanceRules.Range, $"it stands within {FollowDistanceRules.Range} of the PC: {distance}");
+        var cell = _areaCompanions!.WorldCell(companion.Speaker);
+        var drawn = _canvas!.AreaVisibleCommands.Any(c => c.Identity == companion.Key && c.MapX == cell.X && c.MapY == cell.Y) || _canvas.AreaRoofCovers(companion.Key);
+        Require(drawn, $"its body is drawn on {cell.X},{cell.Y}");
+        var visiting = companion.Template.Home.RuntimeMap != CurrentAreaMap;
+        if (visiting)
+            Require(_unreadVisitors.Count == 0 && _homes?.Held(companion.Template.Home.RuntimeMap)?.Led.Contains(entity) == true,
+                $"its body came from its home map's read as a led NPC's: {string.Join("; ", _unreadVisitors)}");
+        GD.Print("ARC-AI-1695 native-smoke led-carry PASS " + System.Text.Json.JsonSerializer.Serialize(new {
+            From = from, To = _readyMapName, SameMap = sameMap, Visiting = visiting, Home = companion.Template.Home.RuntimeMap, At = $"{cell.X},{cell.Y}", Distance = distance }));
+        if (visiting) SendAreaMapFormerFollowerHome(entity);
     }
 
     /// <summary>After the transfer smoke: the companion the follow smoke joined stands where the PC arrived and is drawn there.</summary>
@@ -139,6 +220,8 @@ public partial class TerrainViewerApp
             From = from, To = _readyMapName, SameMap = sameMap, Visiting = companion.Template.Home.RuntimeMap != CurrentAreaMap,
             At = $"{cell.X},{cell.Y}", Drawn = drawn }));
         if (companion.Template.Home.RuntimeMap != CurrentAreaMap) { TalkToAreaMapVisitor(companion); GiveFromAreaMapVisitor(companion); FightNextToAreaMapVisitor(companion); ReadAreaMapVisitorBody(companion); }
+        // ARC-AI-1695: the NPC without a dialog that was force-joined with it arrived too (after the visitor checks, which run on the dialog companion and the hero's combat).
+        if (_smokeLedNpc is { } led) ReportAreaMapLedCarry(led, from, sameMap);
     }
 
     /// <summary>
