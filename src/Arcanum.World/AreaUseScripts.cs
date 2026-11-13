@@ -1110,15 +1110,29 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         var attachee = new ScrObjectRef(_shownMap, npc);
         if (Row(attachee) is not { } row || Slot(attachee, point) is not { Script: > 0 }) return new(AreaScriptedUseOutcome.NoTeleport, null, [], null, "no script at the point");
         if (_content is null) return new(AreaScriptedUseOutcome.ContentUnavailable, null, [], null, "no script content");
+        // ARC-AI-1634: a danger setter reached while another danger script of this host is being applied (the script's stop attacking or set-state effect, which the session commits while the outer run's effects are still
+        // being applied) runs its script nested, as the original's does (the setter has no guard: the state bits written before the script keep a call from entering twice); the run is counted, and the nesting is
+        // bounded so that a script chain cannot grow without end.
+        if (_dangerRunDepth >= MaxDangerRunDepth) return new(AreaScriptedUseOutcome.Refused, null, [], null, $"nested danger scripts: the depth bound {MaxDangerRunDepth} is reached");
+        if (_dangerRunDepth > 0) NestedDangerRuns++;
         var previous = _clicked;
         _clicked = (npc, row);
+        _dangerRunDepth++;
         try
         {
             var run = ScrDispatcher.RunObject(new(point, attachee, triggerer, null), this, new() { Rules = rules, Admission = DyingAdmission });
             return Finish(run, _ => "a teleport from a danger-point script is not modelled", writeback => WriteObjectSlot(writeback, attachee));
         }
-        finally { _clicked = previous; }
+        finally { _dangerRunDepth--; _clicked = previous; }
     }
+
+    /// <summary>ARC-AI-1634: how deep danger scripts may nest (the dispatcher's own call bound, <see cref="ScrRunOptions.MaxCallDepth"/>'s default).</summary>
+    public const int MaxDangerRunDepth = 16;
+
+    private int _dangerRunDepth;
+
+    /// <summary>ARC-AI-1634: how many danger-script runs of this host began while another was being applied (the logged nested runs of <see cref="RunDangerPoint"/>).</summary>
+    public int NestedDangerRuns { get; private set; }
 
     /// <summary>
     /// ARC-DEV-312 (DY2): whether a dying run (<see cref="RunDying"/>) stops the death processing: the dispatcher's "skip default" (return 0 of 0x441980 ends the kill at 0x45DA61), which a script that runs past its last line

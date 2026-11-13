@@ -76,6 +76,8 @@ public sealed class AreaDangerHookScriptTests
                 Do(new(ScrCatalogue.Action.ReturnRunDefault))));
             // 912 (an exit-combat script): sets global flag 2402.
             Write("scr/00912exit.scr", Program(Do(new(ScrCatalogue.Action.Assign, (GlobalFlag, ExitFlag), N(1))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
+            // 913 (ARC-AI-1634): an exit-combat script that stops its triggerer attacking, which reaches the danger setter again while this run's effects are applied.
+            Write("scr/00913stop.scr", Program(Do(new(ScrCatalogue.Action.StopAttacking, (Triggerer, 0))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
             using var content = ScriptContent.Open(ContentMountPlan.Discover(root.FullName, "Syn").Plan!).Content!;
             test(content);
         }
@@ -157,6 +159,38 @@ public sealed class AreaDangerHookScriptTests
             var calm = session.SetDangerState(session.Version, new() { Entity = id, State = DangerState.None });
             Assert.AreEqual(GameSessionDisposition.Changed, calm.Disposition);
             Assert.IsTrue(Flag(session, ExitFlag), "leaving the fight runs slot 14");
+        });
+    }
+
+    [TestMethod]
+    public void A_danger_setter_reached_while_a_danger_script_is_applied_runs_nested_and_is_counted()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var first = Row(1, (ScrPoint.ExitCombat, 913));
+            var second = Row(2, (ScrPoint.ExitCombat, 912));
+            var host = Host(session, content, first, second);
+            var (one, two) = (AreaUseScriptHost.EntityId(first), AreaUseScriptHost.EntityId(second));
+            var order = new List<string>();
+            session.DangerHookScript = hook =>
+            {
+                order.Add(hook.Attachee);
+                ScrObjectRef? triggerer = hook.Triggerer is null ? null : hook.Triggerer.IsHero ? host.Pc : new ScrObjectRef(1, hook.Triggerer.Entity!);
+                host.RunDangerPoint(hook.Point == DangerScriptPoint.EnterCombat ? ScrPoint.EnterCombat : ScrPoint.ExitCombat, hook.Attachee, triggerer, session.Rules.Scripts);
+            };
+            // Both fight each other; the first calms down, its exit script stops the second attacking, and the second's own exit script runs inside that.
+            Assert.AreEqual(GameSessionDisposition.Changed, session.SetDangerState(session.Version, new() { Entity = one, State = DangerState.CombatFocus, Target = SessionCombatant.Critter(two) }).Disposition);
+            Assert.AreEqual(GameSessionDisposition.Changed, session.SetDangerState(session.Version, new() { Entity = two, State = DangerState.CombatFocus, Target = SessionCombatant.Critter(one) }).Disposition);
+            order.Clear();
+            Assert.AreEqual(0, host.NestedDangerRuns);
+
+            var calm = session.SetDangerState(session.Version, new() { Entity = one, State = DangerState.None, Target = SessionCombatant.Critter(two) });
+            Assert.AreEqual(GameSessionDisposition.Changed, calm.Disposition);
+            CollectionAssert.AreEqual(new[] { one, two }, order, "the first's exit script, then the second's inside its effects");
+            Assert.IsTrue(Flag(session, ExitFlag), "the nested script ran");
+            Assert.AreEqual(1, host.NestedDangerRuns, "the nested run is counted");
+            Assert.AreEqual(DangerState.None, session.QueryDanger(two).State);
         });
     }
 }
