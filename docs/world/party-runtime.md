@@ -113,6 +113,13 @@ while an NPC leads it.
 - A follower of an NPC is never concealed: 0x45EE30 gives the joiner its leader's concealment, but the session's concealment is the
   hero party's (toggle, end on an attack, save), so a companion's summon does not sneak with it.
 - The leave of an NPC leader clears the follower's WAIT bit and removes its timer (the forced unwait 0x4AA8C0 inside 0x45DFC0).
+- Scripts (ARC-SCRIPT-1842): make follow (21, 0x45DE90 force 1) joins under any leader in the heartbeat and dying sets
+  (`AreaUseScriptHost.ApplyMakeFollow`: the follower an NPC standing on the shown map, the leader the PC or such an NPC; the PC as the
+  follower does nothing, the original's NPC test) and in the thrown item's script (the leader the PC or another object of the shown
+  map); disband (22, 0x45DFC0 force 1) leaves an NPC leader through `LeaveParty`. The scripts' leader query (condition 18, 0x45DE00)
+  answers the session's leader in every script host: the PC, or an NPC leader named on the critter's map. A join refused as a cycle
+  leaves the run going on. A free Create Undead whose caster is a looped NPC (the dying scripts 30118 and 30127) reaches the cast host
+  with that caster, whose join makes the risen critter its follower (ARC-MAGIC-1841).
 
 **NOT READY:** a waiting standing under an NPC leader (the original's wait 0x4AA7A0 keeps any leader; here the wait of an NPC-led
 follower sets the flag as for a leaderless NPC and the leave clears it); the catch-up of an NPC of the map whose chain reaches the hero

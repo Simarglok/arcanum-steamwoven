@@ -395,7 +395,9 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
     public ScrTrapCheck CheckTrapBeforeUse(ScrObjectRef triggerer, ScrObjectRef attachee) => ScrTrapCheck.NoTrap;
     public bool IsTrapObject(ScrObjectRef attachee) => false;
     public ScrObjectRef? Player() => Pc;
-    public ScrObjectRef? Leader(ScrObjectRef critter) => Speaker(critter) is { } speaker && _state.Follows(speaker.Index) ? Pc : null;
+    // ARC-SCRIPT-1842 (0x45DE00): a speaker of this map follows the PC as the conversation state holds it, else the NPC leader the session holds for it (named on the speaker's map).
+    public ScrObjectRef? Leader(ScrObjectRef critter) => Speaker(critter) is not { } speaker ? null : _state.Follows(speaker.Index) ? Pc
+        : _session.QueryLeader(critter.Code) is { } leader && leader != PcCode ? new ScrObjectRef(critter.Map, leader) : null;
     public bool IsJilted(ScrObjectRef critter) => false;
     public bool IsPc(ScrObjectRef critter) => critter == Pc;
 

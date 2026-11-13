@@ -18,7 +18,7 @@ namespace Arcanum.TerrainViewer.Tests;
 [TestClass]
 public sealed class AreaThrownItemScriptsTests
 {
-    private const int Map = 1, PetScript = 700, AggressorScript = 701, FlagScript = 702, PetPrototype = 28460, AggressorPrototype = 27391;
+    private const int Map = 1, PetScript = 700, AggressorScript = 701, FlagScript = 702, LedPetScript = 703, PetPrototype = 28460, AggressorPrototype = 27391;
     private static readonly SessionItemKind Gadget = new(SessionItemType.Generic, 15086, 7001, 15086);
     private static readonly SessionItemKind Plain = new(SessionItemType.Generic, 15087, 7002, 15087);
 
@@ -78,6 +78,9 @@ public sealed class AreaThrownItemScriptsTests
                 (ScrCatalogue.Action.Attack, [(8, 0), (1, 0)]), (ScrCatalogue.Action.ReturnRunDefault, [])));
             Write($"scr/{FlagScript:D5}flag.scr", Script((ScrCatalogue.Action.TransformObject, [(3, PetPrototype)]),
                 (ScrCatalogue.Action.SetGlobalFlag, [(3, 3)]), (ScrCatalogue.Action.ReturnRunDefault, [])));
+            // ARC-SCRIPT-1842: the pet follows the throw's target (the extra object), an NPC.
+            Write($"scr/{LedPetScript:D5}ledpet.scr", Script((ScrCatalogue.Action.TransformObject, [(3, PetPrototype)]),
+                (ScrCatalogue.Action.MakeFollow, [(1, 0), (12, 0)]), (ScrCatalogue.Action.ReturnRunDefault, [])));
             using var content = ScriptContent.Open(ContentMountPlan.Discover(root.FullName, "Syn").Plan!).Content!;
             return test(content);
         }
@@ -125,6 +128,31 @@ public sealed class AreaThrownItemScriptsTests
             Assert.AreEqual(0, session.QueryPlacedItems().Count, "the item is gone");
             Assert.IsTrue(session.QueryCompanion("oid:critter:1").LedByPc, "the follow joined the party");
             Assert.AreEqual(0, ran.Attacks.Count);
+            return 0;
+        });
+    }
+
+    [TestMethod]
+    public void A_pet_item_that_follows_the_throw_s_target_npc_joins_under_that_npc_and_not_the_party()
+    {
+        WithRig(LedPetScript, (session, rig) =>
+        {
+            // ARC-SCRIPT-1842 (#1322): the original's join (0x45DE90) takes any leader; the session holds the NPC leader beside the hero's party.
+            var ran = rig.Run(ScrPoint.Hit, "npc.9");
+            Assert.AreEqual(AreaThrownItemOutcome.Applied, ran.Outcome, ran.Detail);
+            Assert.IsTrue(ran.Followed);
+            Assert.AreEqual("npc.9", session.QueryLeader("oid:critter:1"));
+            CollectionAssert.AreEqual(new[] { "oid:critter:1" }, session.QueryFollowers("npc.9").ToArray());
+            Assert.IsFalse(session.QueryCompanion("oid:critter:1").LedByPc);
+            return 0;
+        });
+        // With no target the follow names no leader: nothing joins, the transform stays.
+        WithRig(LedPetScript, (session, rig) =>
+        {
+            var ran = rig.Run(ScrPoint.Miss);
+            Assert.AreEqual(AreaThrownItemOutcome.Applied, ran.Outcome, ran.Detail);
+            Assert.IsFalse(ran.Followed);
+            Assert.IsNull(session.QueryLeader("oid:critter:1"));
             return 0;
         });
     }
