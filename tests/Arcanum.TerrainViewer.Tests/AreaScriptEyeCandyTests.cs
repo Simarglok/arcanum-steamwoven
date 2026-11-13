@@ -172,6 +172,6 @@ public sealed class AreaScriptEyeCandyTests
         Assert.AreNotEqual(55, script);
         Assert.IsNull(EyeCandyEntryRef.Make(EyeCandyList.Script, -1));
         Assert.IsNull(EyeCandyEntryRef.Make(EyeCandyList.Script, EyeCandyEntryRef.MaxIndex + 1));
-        Assert.AreEqual(EyeCandyList.Spell, EyeCandyEntryRef.ListOf(-1), "a value outside the lists reads as the spell list");
+        Assert.IsFalse(Enum.IsDefined(EyeCandyEntryRef.ListOf(0x06000005)), "a value outside the lists is not read as the spell list");
     }
 }

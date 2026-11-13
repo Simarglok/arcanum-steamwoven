@@ -105,7 +105,7 @@ public sealed record EyeCandyListShape(string Path, int PerGroup, int FileStride
 {
     /// <summary>The spell list (0x5E7568): six entries for each ten messages, with the sound offsets of 0x5B0DC8.</summary>
     public static EyeCandyListShape Spell { get; } = new(SpellEyeCandyTable.Path, SpellEyeCandyTable.PerSpell, SpellEyeCandyTable.FileStride, SpellEyeCandyTable.SoundOffsets);
-    /// <summary>The script list (0x5E2FB0): the loader's defaults (the script module's init 0x4446E0 changes none): one entry per message, in a row from message 0, no sound offsets. A script's entry number is the message number.</summary>
+    /// <summary>The script list (0x5E2FB0): the loader's defaults (the script module's init 0x4446E0 changes none of them): one entry per message, in a row from message 0, no sound offsets. A script's entry number is the message number.</summary>
     public static EyeCandyListShape Script { get; } = new(SpellEyeCandyTable.ScriptPath, 1, 1, Array.Empty<int>());
 }
 

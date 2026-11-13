@@ -29,8 +29,8 @@ public static class EyeCandyEntryRef
     /// <summary>The entry of an index of a list; null for an index outside 0..<see cref="MaxIndex"/> (the original refuses an index past its table).</summary>
     public static int? Make(EyeCandyList list, int index) => index is >= 0 and <= MaxIndex ? ((int)list << IndexBits) | index : null;
 
-    /// <summary>The list an entry belongs to (a value outside the lists reads as the spell list, which no run holds).</summary>
-    public static EyeCandyList ListOf(int entry) => Enum.IsDefined((EyeCandyList)(int)((uint)entry >> IndexBits)) ? (EyeCandyList)(int)((uint)entry >> IndexBits) : EyeCandyList.Spell;
+    /// <summary>The list an entry belongs to; a value outside the defined lists (a corrupt save) is returned as it is, which no list resolves.</summary>
+    public static EyeCandyList ListOf(int entry) => (EyeCandyList)(int)((uint)entry >> IndexBits);
 
     /// <summary>The entry's index in its list.</summary>
     public static int IndexOf(int entry) => entry & MaxIndex;
