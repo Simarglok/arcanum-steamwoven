@@ -107,8 +107,8 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
     public IReadOnlyList<string> LastHits => _lastHits;
     private readonly List<string> _lastHits = [];
 
-    /// <summary>ARC-SCRIPT-1482 (WE2): a worn item's power ratio for the PC (<see cref="GameSessionOwner.QueryWornPowerRatio"/>); null for any other item or owner (the run stops, as for an object the host does not know).</summary>
-    public int? PowerRatio(ScrObjectRef item, ScrObjectRef owner) => owner == Pc && item.Map == _map.RuntimeMap ? _session.QueryWornPowerRatio(item.Code) : null;
+    /// <summary>ARC-SCRIPT-1482 (WE2): a worn item's power ratio for the PC (<see cref="GameSessionOwner.QueryWornPowerRatio"/>), the item found by its entity alone (a deferred call's item role keeps the map it was scheduled on after the hero travelled, as every role but the PC's and its followers' does); null for any other item or owner (the run stops, as for an object the host does not know).</summary>
+    public int? PowerRatio(ScrObjectRef item, ScrObjectRef owner) => owner == Pc ? _session.QueryWornPowerRatio(item.Code) : null;
 
     /// <summary>No set of this host holds the identified condition: the host knows no object's identified state.</summary>
     public bool? IsIdentified(ScrObjectRef obj) => null;

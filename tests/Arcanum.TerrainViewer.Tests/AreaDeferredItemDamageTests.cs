@@ -102,6 +102,8 @@ public sealed class AreaDeferredItemDamageTests
         With(hooks: true, complexity: 0, (host, session, pc, ring, hits) =>
         {
             Assert.AreEqual(100, host.Scripts.PowerRatio(new(ring.Map.RuntimeMap, "ring"), new(pc.Map.RuntimeMap, pc.Entity)));
+            // The item role may name the map the call was scheduled on after the hero travelled: the worn item is found by its entity alone.
+            Assert.AreEqual(100, host.Scripts.PowerRatio(new(ring.Map.RuntimeMap + 5, "ring"), new(pc.Map.RuntimeMap, pc.Entity)));
             Assert.IsNull(host.Scripts.PowerRatio(new(ring.Map.RuntimeMap, "stranger"), new(pc.Map.RuntimeMap, pc.Entity)));
             Assert.IsNull(host.Scripts.PowerRatio(new(ring.Map.RuntimeMap, "ring"), new(pc.Map.RuntimeMap, "oid:npc")));
             // A run whose item is not worn stops at the ratio (the original reads a null handle's fields) with nothing applied: no damage, and no next call.
@@ -125,6 +127,35 @@ public sealed class AreaDeferredItemDamageTests
             hits.Damage.Clear(); hits.Heal.Clear();
             Assert.IsTrue(host.RunCall(new SessionScriptCall(Healer, 0, new(pc.Map, "oid:npc"), ring), out detail), detail);
             Assert.AreEqual(0, hits.Damage.Count + hits.Heal.Count);
+        });
+    }
+
+    [TestMethod]
+    public void A_magickal_item_scales_the_damage_by_its_power_ratio_under_the_heros_aptitude()
+    {
+        With(hooks: true, complexity: 60, (host, session, pc, ring, hits) =>
+        {
+            var ratio = session.QueryWornPowerRatio("ring");
+            Assert.IsNotNull(ratio);
+            Assert.AreNotEqual(100, ratio, "a complexity of 60 against the fixture hero's aptitude is no neutral item");
+            Assert.IsTrue(host.RunCall(new SessionScriptCall(Poison, 0, pc, ring), out var detail), detail);
+            Assert.AreEqual((ratio!.Value * 40 + 50) / 100, hits.Damage.Single().Amount);
+        });
+    }
+
+    [TestMethod]
+    public void A_set_asked_before_the_hooks_exist_does_not_hide_the_damage_actions_afterwards()
+    {
+        With(hooks: false, complexity: 0, (host, _, _, _, _) =>
+        {
+            Assert.IsFalse(host.Scripts.CallAdmissionFor(null).Actions.Contains(ScrCatalogue.Action.Damage));
+            host.Scripts.ScriptDamage = (_, _, _, _) => "damaged";
+            Assert.IsFalse(host.Scripts.CallAdmissionFor(null).Actions.Contains(ScrCatalogue.Action.Damage), "the heal hook is still missing");
+            host.Scripts.ScriptHeal = (_, _) => "healed";
+            var set = host.Scripts.CallAdmissionFor(null);
+            Assert.IsTrue(set.Actions.Contains(ScrCatalogue.Action.Damage) && set.Actions.Contains(ScrCatalogue.Action.DamageUnresistable) && set.Actions.Contains(ScrCatalogue.Action.HealHitPoints));
+            host.Scripts.ScriptDamage = null;
+            Assert.IsFalse(host.Scripts.CallAdmissionFor(null).Actions.Contains(ScrCatalogue.Action.Damage), "and gone again with the hook");
         });
     }
 

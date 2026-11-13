@@ -237,7 +237,7 @@ public sealed partial class GameSessionOwner
     public SessionEquipmentState QueryEquipment() { ThrowIfDisposed(); return _equipment.Capture(); }
 
     /// <summary>
-    /// ARC-SCRIPT-1482 (ledger WE2, EQ9): the power ratio (0x461540) of a worn item for the hero, the magick-tech adjustment (91) of a deferred item script reads: 100 for a neutral item, else <c>100 × power / complexity</c> under the hero's
+    /// ARC-SCRIPT-1482 (ledger WE2, EQ9): the power ratio of a worn item for the hero, which the magick-tech adjustment (91) of a deferred item script reads: 100 for a neutral item, else <c>100 × power / complexity</c> under the hero's
     /// current aptitude. Null for an item the hero does not wear and without a hero.
     /// </summary>
     public int? QueryWornPowerRatio(string entity)
