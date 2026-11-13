@@ -88,7 +88,7 @@ public static class ScrCatalogue
     public static class Condition
     {
         public const int True = 0, LocalFlag = 3, Equal = 4, LessOrEqual = 5, PcQuestState = 6, HasItemNamed = 17, FollowingPc = 18, IsNamed = 20,
-            IsWieldingItem = 21, IsDead = 22, IsSwitchedOff = 27, HasReputation = 33, Jilted = 39, GlobalFlag = 43, Identified = 47, ItemsBeingRewielded = 50,
+            IsWieldingItem = 21, IsDead = 22, IsAnimal = 37, IsSwitchedOff = 27, HasReputation = 33, Jilted = 39, GlobalFlag = 43, Identified = 47, ItemsBeingRewielded = 50,
             HasBodySpell = 14, InfluencedBySpell = 35, KnowsSpell = 48, MasteredSpellCollege = 49,
             Daytime = 1, GlobalQuestState = 7, HasBlessing = 8, HasCurse = 9, RumorKnown = 40, RumorQuelled = 41,
             ObjIsOpen = 36, SectorIsBlocked = 45, MonsterGenDisabled = 46;
@@ -104,7 +104,7 @@ public static class ScrCatalogue
             RemoveScriptCall = 125, UseAmmoUnits = 135, StartSchematicUi = 129, SetAutoLevelScheme = 139, ShowBook = 64, ShowPicture = 65, ShowPlaque = 114,
             GetSkill = 47, UseItemWithSkill = 79, AssignObject = 15, GetObjectType = 34,
             SetPcQuestState = 16, MarkMapLocation = 49, SetRumor = 50, AddReputation = 72, RemoveReputation = 73,
-            AddEffect = 77, RemoveEffect = 78, MagickTechAdjustment = 91, PlayScriptEyeCandy = 120, Random = 37, CreateObject = 52,
+            AddEffect = 77, RemoveEffect = 78, GetMagickTechAdjustment = 80, MagickTechAdjustment = 91, PlayScriptEyeCandy = 120, Random = 37, CreateObject = 52,
             ToggleState = 56, Kill = 58, DistanceBetween = 71, SetFaction = 134, FloatLine = 23, GetArea = 84, Destroy = 68, StopAttacking = 109, GetStat = 33, GetReaction = 29,
             UnfogTownMap = 113, WalkTo = 69, RunTo = 74, HealFatigue = 76, PerformAnimation = 62, StealCoins = 115, BecomeProne = 93,
             CastSpell = 48, CastSpellOn = 61, CastFreeSpell = 118, CastUnresistableSpellBy = 121, CastFreeUnresistableSpell = 122, CastUnresistableSpellOn = 136,

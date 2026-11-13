@@ -115,8 +115,8 @@ public sealed class ScriptTriggerCensusTests
     /// <summary>
     /// ARC-SCRIPT-1483 (AC3, AC4; poison survey S9, ledger CP5): the installed scripts of the hit step's points (hit 7, critter hits 26, critical hit 34) and of the dialog point (9) that deal poison, as <c>--poison-census</c> names them (its
     /// <c>scripts_by_point</c>): 30032 at the hit point deals poison (action 60, damage type 1) and 30076 casts the college poison spell 11 there, 1345 at critter hits and 30199 at the critical hit deal poison, and 1059, the one
-    /// poison site at the dialog point. The placed set (<see cref="AreaUseScriptHost.CombatPointAdmission"/>) admits 1345 whole; the three weapon scripts (30032, 30076, 30199: the magick-tech weapons, which scale their chance by the
-    /// weapon's power ratio, action 91, and play eye candy, 120) are refused by it at their first command until the item power ratio is admitted for combat points (issue filed by ARC-SCRIPT-1483). The dialog site is read against
+    /// poison site at the dialog point. The combat-point set (<see cref="AreaUseScriptHost.CombatPointAdmission"/>) admits 1345 whole and, since ARC-SCRIPT-1562, the three magick-tech weapon scripts (30032, 30076, 30199: they scale their damage by the
+    /// weapon's power ratio, action 91, and the chance the victim's aptitude cancels it, action 80, and play eye candy, 120) and the hunting weapon 28007 (obj is animal, condition 37). The dialog site is read against
     /// the talk set (ARC-SCRIPT-1563: admitted whole, pinned). Every answer is reported (the file named by <c>ARC_COMBAT_POINT_POISON</c>, when set, receives it); only 1345 and 1059 are pinned. Opt-in: <c>DAT_ROOT</c>.
     /// </summary>
     [TestMethod, TestCategory("RealData")]
@@ -133,7 +133,9 @@ public sealed class ScriptTriggerCensusTests
             return admission;
         }
         Assert.IsTrue(Read(ScrPoint.CritterHits, 1345, AreaUseScriptHost.CombatPointAdmission).IsAdmitted, "1345, the critter-hits poison script, runs");
-        foreach (var (point, number) in new[] { (ScrPoint.Hit, 30032), (ScrPoint.Hit, 30076), (ScrPoint.CriticalHit, 30199) }) Read(point, number, AreaUseScriptHost.CombatPointAdmission);
+        // ARC-SCRIPT-1562: the poison weapons' hit (30032, 30076) and critical-hit (30199) scripts run since the combat-point set holds the magick-tech adjustments (91, 80) and play script eye candy (120); the hunting weapon 28007 and the NPC script 2188 need obj is animal (37).
+        foreach (var (point, number) in new[] { (ScrPoint.Hit, 30032), (ScrPoint.Hit, 30076), (ScrPoint.CriticalHit, 30199), (ScrPoint.Hit, 28007) })
+            Assert.IsTrue(Read(point, number, AreaUseScriptHost.CombatPointAdmission).IsAdmitted, $"{number}, the installed combat-point script, runs");
         // ARC-SCRIPT-1563: the dialog host applies a talk's damage, so the talk set admits 1059 whole (the plain dialog set, without the shown map's use host, still refuses it).
         Assert.IsTrue(Read(ScrPoint.Dialog, 1059, AreaScriptHost.SkillTalkAdmission).IsAdmitted, "1059, the dialog-point poison script, runs");
         Assert.IsFalse(Read(ScrPoint.Dialog, 1059, AreaScriptHost.Admission).IsAdmitted, "without the use host's queries the plain set refuses 1059");

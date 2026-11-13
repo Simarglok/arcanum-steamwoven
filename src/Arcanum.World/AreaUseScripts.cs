@@ -40,6 +40,7 @@ namespace Arcanum.World;
 /// (<see cref="AreaScriptOpenable"/>; null for an object that is neither or not shown), for set lock state (53), toggle open or closed (88) and obj is open (36); without it those runs are left unapplied and the condition stops the run.
 /// ARC-SCRIPT-1294 (RM6): <see cref="ScriptStopSpell"/> (object entity, spell) interrupts the first active run of the spell that holds the object (the cast host's <see cref="Arcanum.Session.SessionSpellCaster.StopSpellOnObject"/>) and answers what happened;
 /// without it a run with a stop spell is left unapplied.
+/// ARC-SCRIPT-1562 (WE2, CP7, CP8): <see cref="Aptitude"/> answers an NPC of the shown map's effective magick-tech aptitude (the hero's is the session's) for the magick-tech adjustments (91, 80) of a combat-point script; without it those runs stop at an NPC.
 /// </summary>
 public sealed record AreaScriptWorld(Func<CellCoord?> PcCell, Func<AreaObjectRecord, bool> Gone, Func<int, AreaPrototypeItem?> Item, Func<IDropMap?> DropMap,
     Func<ScrObjectRef, bool>? Kill = null, Func<ScrObjectRef, bool>? CanKill = null, Func<ScrObjectRef, CellCoord?>? CritterCell = null,
@@ -49,7 +50,8 @@ public sealed record AreaScriptWorld(Func<CellCoord?> PcCell, Func<AreaObjectRec
     Func<string?, string, int, bool, bool, string>? ScriptCast = null, Func<string, int, int, bool, string>? ScriptDamage = null, Func<string, int, string>? ScriptHeal = null,
     Func<string, bool>? ScriptDamageAsk = null, Func<int, bool>? Critter = null, Func<string, AreaObjectRecord?>? CreatedRow = null,
     Action<string>? CritterMade = null, Func<string, int, bool, string>? ScriptReaction = null, Func<ScrObjectRef, AreaScriptOpenable?>? Openable = null,
-    Func<string, int, string>? ScriptStopSpell = null, Func<string, AreaScriptVitals?>? Vitals = null, Func<string, int, int, string>? ScriptHealLife = null);
+    Func<string, int, string>? ScriptStopSpell = null, Func<string, AreaScriptVitals?>? Vitals = null, Func<string, int, int, string>? ScriptHealLife = null,
+    Func<string, int?>? Aptitude = null);
 
 /// <summary>ARC-SCRIPT-1481 (VT1–VT3): the vitals of an NPC of the shown map for get hit points (107), get fatigue points (108) and get stat of the poison level (24): the current and maximum hit points and fatigue and the poison level,
 /// as the session's life status gives them (<see cref="AreaScriptWorld.Vitals"/>).</summary>
@@ -125,7 +127,7 @@ public readonly record struct AreaPrintedLine(int Type, string Text);
 /// The PC's reputations are the session's (ARC-WORLD-044); no other object has one. Everything else the viewer does not model
 /// answers "no", as for the dialog and item hosts.
 /// </summary>
-public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrObjectQueries, IScrWorldQueries, IScrObjectStateQueries, IScrAreaQueries, IScrStoreQueries, IScrStatQueries, IScrSpellQueries, IScrStoryQueries, IScrVitalQueries, IScrItemQueries
+public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrObjectQueries, IScrWorldQueries, IScrObjectStateQueries, IScrAreaQueries, IScrStoreQueries, IScrStatQueries, IScrSpellQueries, IScrStoryQueries, IScrVitalQueries, IScrItemQueries, IScrMagickTechQueries, IScrCritterQueries
 {
     /// <summary>Map-change keys of an object's use slot.</summary>
     public const string LocalFlagsProperty = "use.lf", CountersProperty = "use.counters", ScriptProperty = "use.script";
@@ -452,14 +454,52 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     /// <summary>ARC-SCRIPT-1481 (VT2): get fatigue points, as <see cref="HitPoints"/>.</summary>
     public (int Current, int Maximum)? FatiguePoints(ScrObjectRef obj) => Vitals(obj) is { } v ? (v.Fatigue, v.MaxFatigue) : null;
 
-    /// <summary>ARC-SCRIPT-1481 (VT4, ledger WE2, EQ9): the item's power ratio for the PC that uses it, <see cref="Arcanum.Simulation.Equipment.EquipmentRules.EffectivePowerRatio"/> of its complexity and the PC's aptitude (stat 16, clamped to the
-    /// aptitude range); null for any other owner (not modelled) or an item the host does not know.</summary>
+    /// <summary>ARC-SCRIPT-1481 (VT4, ledger WE2, EQ9): the item's power ratio for the PC or NPC that holds it, <see cref="Arcanum.Simulation.Equipment.EquipmentRules.EffectivePowerRatio"/> of its complexity and the owner's aptitude (stat 16, clamped to the
+    /// aptitude range); null for any other owner (not modelled) or an item the host does not know. ARC-SCRIPT-1562: a hero's worn item is read as the session has it (<see cref="GameSessionOwner.QueryWornPowerRatio"/>, the helper of the deferred item calls; a made item has no row), the
+    /// rest of the items by their row; an NPC of the shown map has its aptitude from the world (<see cref="AreaScriptWorld.Aptitude"/>).</summary>
     public int? PowerRatio(ScrObjectRef item, ScrObjectRef owner)
     {
-        if (!IsPc(owner) || ComplexityOf(item) is not { } complexity || _session.QueryHeroScriptStat(Arcanum.Session.GameSessionOwner.ScriptStatAptitude) is not { } aptitude) return null;
+        if (IsPc(owner) && _session.QueryWornPowerRatio(item.Code) is { } worn) return worn;
+        if (ComplexityOf(item) is not { } complexity || CritterAptitude(owner) is not { Critter: true, Aptitude: { } aptitude }) return null;
         var limits = Arcanum.Simulation.Equipment.EquipmentLimits.MaxMagnitude;
         if (complexity < -limits || complexity > limits) return null;
         return Arcanum.Simulation.Equipment.EquipmentRules.EffectivePowerRatio(complexity, Math.Clamp(aptitude, Arcanum.Simulation.Equipment.EquipmentLimits.MinAptitude, Arcanum.Simulation.Equipment.EquipmentLimits.MaxAptitude));
+    }
+
+    /// <summary>
+    /// ARC-SCRIPT-1562 (CP7, exe read 2026-11-13: action 80 at 0x44933F, 0x461620; <see cref="Arcanum.Simulation.Combat.AttackRules.MagickCancelChance"/>): the chance in percent that the target's aptitude cancels the item for the attacker: 0 unless both
+    /// are a PC or an NPC (the original's type test of 0xF and 0x10); the aptitudes are the PC's of the session and an NPC's of the world. Null for an item without a row here, an NPC whose aptitude the world does not give, or an object the host has no row for.
+    /// </summary>
+    public int? MagickCancelPercent(ScrObjectRef item, ScrObjectRef attacker, ScrObjectRef target)
+    {
+        if (ComplexityOf(item) is not { } complexity || CritterAptitude(attacker) is not { } from || CritterAptitude(target) is not { } to) return null;
+        if (!from.Critter || !to.Critter) return 0;
+        return from.Aptitude is { } a && to.Aptitude is { } b ? Arcanum.Simulation.Combat.AttackRules.MagickCancelChance(complexity, a, b) : null;
+    }
+
+    private const uint AnimalCritterFlag = 0x8;
+
+    /// <summary>
+    /// ARC-SCRIPT-1562 (CP9, exe read 2026-11-13: condition 37 at 0x4451B0 case 0x25): whether the object is an NPC with the animal critter flag (0xDA bit 0x8) as the session has it (<see cref="GameSessionOwner.QueryObjectFlags"/> over the row's stored flags); false for the PC and
+    /// any other object type; null for an object this host has no row for or one whose fields do not read.
+    /// </summary>
+    public bool? IsAnimal(ScrObjectRef obj)
+    {
+        if (IsPc(obj)) return false;
+        if (Row(obj) is not { } row) return null;
+        if (row.Type != NpcType) return false;
+        return Arcanum.Data.Combat.CombatFieldReader.Read(row).Fields?.Critter is { } critter
+            ? (unchecked((uint)_session.QueryObjectFlags(obj.Code).Critter(unchecked((int)critter.Flags))) & AnimalCritterFlag) != 0 : null;
+    }
+
+    // ARC-SCRIPT-1562: what a critter-or-not object gives a magick-tech adjustment: Critter false for a row of the shown map that is neither the PC nor an NPC (no aptitude is read), else the aptitude (the PC's of the session, an NPC's of the world; null when not known).
+    // Null for an object this host has no row for.
+    private (bool Critter, int? Aptitude)? CritterAptitude(ScrObjectRef obj)
+    {
+        if (IsPc(obj)) return (true, _session.QueryHeroScriptStat(Arcanum.Session.GameSessionOwner.ScriptStatAptitude));
+        if (Row(obj) is not { } row) return null;
+        if (row.Type != NpcType) return (false, null);
+        return (true, obj.Map == _shownMap ? _world?.Aptitude?.Invoke(obj.Code) : null);
     }
 
     // The magick-tech complexity of an item the host has a row for (the item in use is a row of its origin map); null for an item without one (a made or kit item: not modelled).
@@ -961,9 +1001,11 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
 
     /// <summary>
     /// ARC-SCRIPT-1483 (script trigger audit slice 5, ledger CP1–CP5): the set a combat-point script (hit 7, critter hits 26, critical hit 34) runs under: the placed set (<see cref="PlacedAdmission"/>), whose damage and cast actions deal the
-    /// installed poison weapons' damage and the college poison spell. A script outside it is refused and the hit goes on as without one.
+    /// installed poison weapons' damage and the college poison spell. ARC-SCRIPT-1562 (CP7): plus the commands of <see cref="ScrAdmissionSet.S51"/> the poison weapon scripts 30032, 30076 and 30199 and the hunting weapon 28007 use: the magick-tech adjustments (91, 80), play script eye candy (120) and obj is animal (37). A script outside it is refused and the hit goes on as without one.
     /// </summary>
-    public static ScrAdmissionSet CombatPointAdmission => PlacedAdmission;
+    public static ScrAdmissionSet CombatPointAdmission { get; } = new("S4-area-combat-point", PlacedAdmission.Conditions.Append(ScrCatalogue.Condition.IsAnimal),
+        PlacedAdmission.Actions.Concat([ScrCatalogue.Action.GetMagickTechAdjustment, ScrCatalogue.Action.MagickTechAdjustment, ScrCatalogue.Action.PlayScriptEyeCandy]),
+        PlacedAdmission.ValueKinds, PlacedAdmission.FocusKinds, counterIndexWraps: true);
 
     /// <summary>
     /// ARC-SCRIPT-1483 (exe read 2026-11-13, ledger CP1–CP5): the combat-point script <paramref name="point"/> of <paramref name="attachee"/>, which the original's hit step runs once the hit is decided and before the damage step (0x4B3770 for a swing or an

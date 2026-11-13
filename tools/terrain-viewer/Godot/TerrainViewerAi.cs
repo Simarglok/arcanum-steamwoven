@@ -560,6 +560,14 @@ public partial class TerrainViewerApp
             ? new(life.Status.HitPoints, life.Status.MaxHitPoints, life.Status.Fatigue, life.Status.MaxFatigue, life.Record.State.PoisonLevel) : null;
     }
 
+    /// <summary>ARC-SCRIPT-1562 (WE2, CP7, CP8): the effective magick-tech aptitude (stat 16) of an NPC of the shown map for a combat-point script's magick-tech adjustments (91, 80): its combat values under its effect list and its poison and crippled legs
+    /// (<see cref="SessionCritterCombat.EffectiveStat"/>), the stat getter's range clamp left to the callers; null without combat values.</summary>
+    private int? ScriptAptitude(string npc)
+    {
+        if (_areaSession is not { } session || _combatHost?.Build(session, CurrentAreaMap, npc).Combat is not { } combat) return null;
+        return session.QueryLife(combat.Target).View is { } life ? session.WithNpcEffects(combat).EffectiveStat(Arcanum.Simulation.Character.CharacterStat.MagickTechAptitude, life.Record.State) : null;
+    }
+
     /// <summary>ARC-SCRIPT-1481 (VT2, VT3): a script's heal of fatigue (the hero's; an NPC's goes through <see cref="HealFatigueByScript"/>) and of poison of the PC (the scheduler id) or an NPC of the shown map by the session's heal: the fatigue damage and the
     /// poison level fall by the amounts to 0 at most (the heal applier's poison write, 0x4B5DF4, is the stat setter's, as heal poison's 0x44A77E: the poison timer event follows the level).</summary>
     private string HealLifeByScript(string victim, int fatigue, int poison)
