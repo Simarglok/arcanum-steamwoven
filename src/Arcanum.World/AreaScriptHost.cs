@@ -103,8 +103,8 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
     public (int Current, int Maximum)? FatiguePoints(ScrObjectRef obj) => Queries is not null ? Answering.FatiguePoints(obj)
         : IsPc(obj) && _session.QueryHeroLife() is { } life ? (life.Status.Fatigue, life.Status.MaxFatigue) : null;
 
-    /// <summary>ARC-SCRIPT-1482 (WE2): a worn item's power ratio for the PC (<see cref="GameSessionOwner.QueryWornPowerRatio"/>), the item found by its entity alone (a deferred call's item role keeps the map it was scheduled on after the hero travelled, as every role but the PC's and its followers' does); null for any other item or owner (the run stops, as for an object the host does not know).</summary>
-    public int? PowerRatio(ScrObjectRef item, ScrObjectRef owner) => owner == Pc ? _session.QueryWornPowerRatio(item.Code) : null;
+    /// <summary>ARC-SCRIPT-1482 (WE2): a worn item's power ratio for the PC (<see cref="GameSessionOwner.QueryWornPowerRatio"/>), the item found by its entity alone (a deferred call's item role keeps the map it was scheduled on after the hero travelled, as every role but the PC's and its followers' does); for any other owner the shown map's use host answers (<see cref="AreaUseScriptHost.PowerRatio"/>: ARC-SCRIPT-1662, 100 for a container or scenery owner) while it answers; null otherwise (the run stops, as for an object the host does not know).</summary>
+    public int? PowerRatio(ScrObjectRef item, ScrObjectRef owner) => owner == Pc ? _session.QueryWornPowerRatio(item.Code) : Queries?.PowerRatio(item, owner);
 
     /// <summary>No set of this host holds the identified condition: the host knows no object's identified state.</summary>
     public bool? IsIdentified(ScrObjectRef obj) => null;
