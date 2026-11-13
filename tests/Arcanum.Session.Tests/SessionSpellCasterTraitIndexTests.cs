@@ -1468,6 +1468,8 @@ public sealed partial class SessionSpellCasterTraitIndexTests
             // Adds a charm only while the items are being rewielded; the other program targets the item (not the wearer).
             [Gate] = WieldEventScriptTests.Program(WieldEventScriptTests.If(WieldEventScriptTests.C(ScrCatalogue.Condition.ItemsBeingRewielded),
                 WieldEventScriptTests.C(ScrCatalogue.Action.AddEffect, (WieldEventScriptTests.Triggerer, 0), WieldEventScriptTests.N(Charm), WieldEventScriptTests.N(5)))),
+            // ARC-MAGIC-1745: prints a line (entry type 6).
+            [714] = WieldEventScriptTests.Program(WieldEventScriptTests.Do(WieldEventScriptTests.C(ScrCatalogue.Action.PrintLine, WieldEventScriptTests.N(1), WieldEventScriptTests.N(6)))),
             [713] = WieldEventScriptTests.Program(WieldEventScriptTests.Do(WieldEventScriptTests.C(ScrCatalogue.Action.AddEffect, (WieldEventScriptTests.Attachee, 0), WieldEventScriptTests.N(Charm), WieldEventScriptTests.N(5)))),
         };
         public Dictionary<int, SessionEffectDefinition> Effects { get; } = new() { [Charm] = CharmEffect };
@@ -1485,6 +1487,7 @@ public sealed partial class SessionSpellCasterTraitIndexTests
         public bool IsJilted(ScrObjectRef critter) => false;
         public bool IsPc(ScrObjectRef critter) => critter.Code == SessionEventKinds.PlayerEntity;
         public SessionPrintedLine PrintedLine(int script, int line) => new(SessionPrintedLineStatus.Shown, "line", "test");
+        public SessionPrintedLine PrintedLineForNpc(int script, int line) => new(SessionPrintedLineStatus.Shown, "npc line", "test");
         public SessionEffectDefinition? EffectDefinition(int number) => Effects.TryGetValue(number, out var rule) ? rule : null;
     }
 
@@ -1530,6 +1533,47 @@ public sealed partial class SessionSpellCasterTraitIndexTests
         Assert.AreEqual((uint)second, owner.QueryItemScriptSlots().Single().Counters);
         Assert.IsTrue(owner.QueryNpcEffects(target)!.Entries.All(e => e.Cause == EffectCause.Item));
         Assert.IsFalse(caster.Log.Any(e => e.Kind == SpellCastEventKind.ComponentNotReady));
+    }
+
+    // ARC-MAGIC-1745: a line a wield script of an NPC's rewield prints is read for the NPC as triggerer and reaches the cast log for the message window, after the write and in print order; a rewield that is refused logs none.
+    [TestMethod]
+    public void A_line_an_npcs_rewield_prints_reaches_the_cast_log_read_for_the_npc()
+    {
+        var (owner, caster, _, _) = Ringed(714, 714);
+        using var o = owner;
+        Assert.AreEqual(SpellComponentOutcome.None, caster.Apply(Run(MagickPlus), 0, At(Rat, SpellTargetObject.Npc)));
+        Assert.IsFalse(NotReady(caster));
+        // Wield off then wield on: two lines, each with the entry type of the print action and the script.
+        var lines = caster.Log.Where(e => e.Kind == SpellCastEventKind.ItemScriptLine).ToArray();
+        Assert.AreEqual(2, lines.Length);
+        foreach (var line in lines) Assert.AreEqual(new SpellCastEvent(SpellCastEventKind.ItemScriptLine, line.Run, 6, Rat, 714) { Text = "npc line" }, line);
+
+        // A host that cannot read a line for an NPC triggerer makes the rewield not ready: nothing written, no line.
+        var (refused, refusedCaster, host, _) = Ringed(714, 714);
+        using var r = refused;
+        refusedCaster.ItemScripts = () => new HeroLinesHost(host);
+        Assert.IsNull(refusedCaster.Apply(Run(MagickPlus), 0, At(Rat, SpellTargetObject.Npc)).JumpTo);
+        Assert.IsTrue(NotReady(refusedCaster));
+        Assert.IsFalse(refusedCaster.Log.Any(e => e.Kind == SpellCastEventKind.ItemScriptLine));
+    }
+
+    // The same host with the default of a host that reads a hero's lines only.
+    private sealed class HeroLinesHost(NpcScriptHost inner) : ISessionItemScriptHost
+    {
+        public ScrSlot? Slot(ScrObjectRef attachee, int point) => inner.Slot(attachee, point);
+        public ScrScriptLookup Script(int number) => inner.Script(number);
+        public bool GlobalFlag(int index) => inner.GlobalFlag(index);
+        public int StoryState() => inner.StoryState();
+        public bool IsMonsterGenerator(ScrObjectRef attachee) => false;
+        public ScrDialogState DialogState(ScrObjectRef attachee) => ScrDialogState.Normal;
+        public ScrTrapCheck CheckTrapBeforeUse(ScrObjectRef triggerer, ScrObjectRef attachee) => ScrTrapCheck.NoTrap;
+        public bool IsTrapObject(ScrObjectRef attachee) => false;
+        public ScrObjectRef? Player() => inner.Player();
+        public ScrObjectRef? Leader(ScrObjectRef critter) => null;
+        public bool IsJilted(ScrObjectRef critter) => false;
+        public bool IsPc(ScrObjectRef critter) => inner.IsPc(critter);
+        public SessionPrintedLine PrintedLine(int script, int line) => new(SessionPrintedLineStatus.Shown, "line", "test");
+        public SessionEffectDefinition? EffectDefinition(int number) => inner.EffectDefinition(number);
     }
 
     [TestMethod]
@@ -1676,6 +1720,21 @@ public sealed partial class SessionSpellCasterTraitIndexTests
         Assert.IsTrue(NotReady(bareCaster));
         Assert.AreEqual(bareVersion, bare.Version);
         Assert.AreEqual(5, bare.QueryHeroStoredStat(22));
+    }
+
+    // ARC-MAGIC-1744 with ARC-MAGIC-1745: a line a wield script of the hero's rewield prints is read for the hero (the default reading) and reaches the cast log for the message window, after the write and in print order.
+    [TestMethod]
+    public void A_line_the_heros_rewield_prints_reaches_the_cast_log_read_for_the_hero()
+    {
+        var (owner, caster, _) = WornHero(714, 714);
+        using var o = owner;
+        var before = caster.Log.Count(e => e.Kind == SpellCastEventKind.ItemScriptLine);
+        Assert.AreEqual(SpellComponentOutcome.None, CastOnHero(caster, HeroPointsPlus));
+        Assert.IsFalse(NotReady(caster));
+        // Wield off then wield on: two lines, each with the entry type of the print action and the script.
+        var lines = caster.Log.Where(e => e.Kind == SpellCastEventKind.ItemScriptLine).Skip(before).ToArray();
+        Assert.AreEqual(2, lines.Length);
+        foreach (var line in lines) Assert.AreEqual(new SpellCastEvent(SpellCastEventKind.ItemScriptLine, line.Run, 6, Hero, 714) { Text = "line" }, line);
     }
 
     [TestMethod]

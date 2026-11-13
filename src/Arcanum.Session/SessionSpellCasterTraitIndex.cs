@@ -136,7 +136,12 @@ public sealed partial class SessionSpellCaster
         }
         var written = recorded is not null ? _owner.WriteNpcAdvancementStat(_owner.Version, map, obj.Id, data.Index, next) : _owner.WriteCritterStat(_owner.Version, map, obj.Id, data.Index, next);
         var outcome = Report(run, obj.Id, data, written);
-        if (rewield is not null && written.Disposition != GameSessionDisposition.Rejected) _owner.CommitRewield(rewield);
+        if (rewield is not null && written.Disposition != GameSessionDisposition.Rejected)
+        {
+            _owner.CommitRewield(rewield);
+            // ARC-MAGIC-1745: the lines the rewielded items' wield scripts printed go to the message window (the run's lines are the NPC triggerer's reading, RM3c).
+            foreach (var message in rewield.Messages) _log.Add(new(SpellCastEventKind.ItemScriptLine, run.Id, message.Kind, obj.Id, message.Script) { Text = message.Text });
+        }
         if (innate is not null && written.Disposition != GameSessionDisposition.Rejected && _owner.AddNpcInnate(critter.Combat.Target, innate, data.Index == 26) is { Disposition: GameSessionDisposition.Rejected } added)
             _log.Add(new(SpellCastEventKind.TraitIndexNotSaved, run.Id, (int)added.Failure, obj.Id));
         if (encumbrance is not null && written.Disposition != GameSessionDisposition.Rejected && _owner.RecalculateNpcEncumbrance(critter.Combat.Target, map, encumbrance, level) is { Disposition: GameSessionDisposition.Rejected } failed)
@@ -228,7 +233,12 @@ public sealed partial class SessionSpellCaster
         }
         var result = _owner.WriteHeroStat(_owner.Version, data.Index, next);
         var outcome = Report(run, Hero, data, result);
-        if (rewield is not null && result.Disposition != GameSessionDisposition.Rejected) _owner.CommitRewield(rewield);
+        if (rewield is not null && result.Disposition != GameSessionDisposition.Rejected)
+        {
+            _owner.CommitRewield(rewield);
+            // ARC-MAGIC-1745 (as for an NPC): the lines the rewielded items' wield scripts printed go to the message window.
+            foreach (var message in rewield.Messages) _log.Add(new(SpellCastEventKind.ItemScriptLine, run.Id, message.Kind, Hero, message.Script) { Text = message.Text });
+        }
         return outcome;
     }
 

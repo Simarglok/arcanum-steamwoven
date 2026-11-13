@@ -623,6 +623,12 @@ public static partial class GameSessionSnapshotCodec
         {
             AddField(Section(root, "flights"), "$.flights", "trapShots", new JsonArray());
         },
+        // ARC-UI-1740 (schema 101): the skill module's pre-thrown gambling roll. No older build held one (there was no gambling), so the step adds null: the next barter window throws the first.
+        [100] = root =>
+        {
+            if (root.ContainsKey("gamblingRoll")) throw new DecodeException(SnapshotDecodeFailure.UnknownField, "$.gamblingRoll");
+            root.Add("gamblingRoll", null);
+        },
     };
 
     /// <summary>The schemas with an upgrade step to the next one, ascending: every schema from
