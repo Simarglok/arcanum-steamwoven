@@ -86,7 +86,7 @@ public sealed partial class GameSessionOwner
     /// <summary>
     /// Stop fleeing (<see cref="MoraleRules.StopFleeing"/>) of an NPC in one revision: in FLEE the setter is asked for NONE with
     /// no target (<see cref="SessionDangerResult.Transition"/> is its step); in any other state nothing is written (a surrendered
-    /// NPC stays surrendered). Interrupting the NPC's flee goals, in every state, is the host's.
+    /// NPC stays surrendered). Interrupting the NPC's flee goals is the host's (the original does it in the FLEE state only, issue #1595).
     /// </summary>
     public SessionDangerResult StopFleeing(GameSessionVersion expected, string entity, DangerSetterFacts facts)
     {

@@ -592,6 +592,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         _steppedThisFrame.Clear();
         _nowMs = Math.Max(_nowMs, nowMs);
         ClaimSessionEnds();
+        DrainFleeInterrupts();
         Movers.Settle(_nowMs);
         ObserveLeaves();
         ObserveRound();
@@ -2309,8 +2310,26 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         return true;
     }
 
-    private void InterruptFleeRuns(string npc) =>
-        InterruptRunsWhere(npc, GoalInterruptRules.MaxLevel, r => r.Bottom.Goal == GoalType.Flee || r.Frames[^1].Goal == GoalType.Flee);
+    // The flee runs end at level 6. While the spell system holds the table (the start of mind control runs inside a spell run) the session refuses the interrupt: the NPC waits and its runs end when the table frees,
+    // at the next step of this host (DrainFleeInterrupts).
+    private readonly HashSet<string> _fleeInterruptsPending = [];
+
+    private void InterruptFleeRuns(string npc)
+    {
+        _fleeInterruptsPending.Remove(npc);
+        foreach (var run in RunsOf(npc).Where(r => !AiExecutorRules.IsOverlayRunGoal(r.Bottom.Goal) && (r.Bottom.Goal == GoalType.Flee || r.Frames[^1].Goal == GoalType.Flee)).ToArray())
+        {
+            var change = _session.InterruptGoal(run.Handle, GoalInterruptRules.MaxLevel);
+            if (change.Failure == SessionGoalFailure.PassInProgress) _fleeInterruptsPending.Add(npc);
+            else EndNodes(change.Steps);
+        }
+    }
+
+    private void DrainFleeInterrupts()
+    {
+        if (_fleeInterruptsPending.Count == 0) return;
+        foreach (var npc in _fleeInterruptsPending.ToArray()) InterruptFleeRuns(npc);
+    }
 
     // ARC-MAGIC-035: the interrupt of the helpers 0x44E050 and 0x44E4D0 ends only the runs that test true, not every run of the NPC (an eye candy or a burning run beside it is left): each at the level, with its end nodes.
     private bool InterruptRunsWhere(string npc, int level, Func<GoalRun, bool> test)
