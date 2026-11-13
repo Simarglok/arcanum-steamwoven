@@ -76,7 +76,7 @@ internal static class SessionFixtures
     // and recorded lighting (scheme 1 at 15:00), with an empty party and inventory, no hero, no roll from seed 0 and no life record.
     internal const string LightingTail = ",\"lighting\":{\"schemeId\":1,\"hour\":15}}";
     internal const string GoldenJson =
-        "{\"format\":\"arcanum-steamwoven-session\",\"schemaVersion\":96," +
+        "{\"format\":\"arcanum-steamwoven-session\",\"schemaVersion\":97," +
         "\"world\":\"11111111-1111-1111-1111-111111111111\",\"module\":\"22222222-2222-2222-2222-222222222222\",\"revision\":2," +
         "\"clock\":{\"schemaVersion\":1,\"policyId\":\"steamwoven-normalized-clock-v1\"," +
         "\"sourceRevision\":\"9bd80511f8663a41a25a20a701959e394e0065e4ffc68a8dc69fe19c23678d52\"," +
@@ -86,7 +86,7 @@ internal static class SessionFixtures
         "\"flags\":{\"revision\":0,\"entries\":[{\"flag\":3,\"value\":false},{\"flag\":7,\"value\":true},{\"flag\":9,\"value\":null}]}," +
         "\"actor\":{\"map\":79,\"x\":100,\"y\":200,\"facing\":\"XPlus\"}," +
         "\"maps\":[{\"map\":79,\"changes\":[{\"scope\":\"sector\",\"sector\":5,\"property\":\"door.open\",\"value\":1}," +
-        "{\"scope\":\"entity\",\"entity\":\"npc-1\",\"property\":\"hp\",\"value\":12}]}]" + EmptyStory + EmptyParty + NoHero + EmptyInventory + NoEquipment + NoDurability + NoSchematics + NoEffects + NoExperience + NoAdvancement + FreshRandom + NoLife + NoReactions + NoCombat + NoCombatMode + NoConcealment + NoDanger + NoSound + NoEvents + NoHotkeys + NoScripts + NoResidency + NoGoals + NoSpells + NoNewspaper + NoGenerators + NoFlights + LightingTail;
+        "{\"scope\":\"entity\",\"entity\":\"npc-1\",\"property\":\"hp\",\"value\":12}]}]" + EmptyStory + EmptyParty + NoHero + EmptyInventory + NoEquipment + NoDurability + NoSchematics + NoEffects + NoExperience + NoAdvancement + FreshRandom + NoLife + NoReactions + NoCombat + NoCombatMode + NoConcealment + NoDanger + NoSound + NoEvents + NoHotkeys + NoScripts + NoResidency + NoGoals + NoSpells + NoNewspaper + NoGenerators + NoFlights + NoEncounters + LightingTail;
 
     internal const string QuelledRumors = ",\"quelledRumors\":[]";
     internal const string NoReputations = ",\"reputations\":[]";
@@ -153,6 +153,8 @@ internal static class SessionFixtures
     // ARC-WORLD-1157 (schema 91): the generators section of a new game (no slot used, nothing made, no copy), written before the flights section.
     internal const string NoGenerators = ",\"generators\":{\"slots\":[],\"made\":[],\"copies\":[]}";
     // ARC-DEV-288 (schema 80): no projectile in flight, both counters at a new game's 0.
+    // ARC-WORLD-1159 (schema 97): the encounters section of a new game (no row used), written after the flights section.
+    internal const string NoEncounters = ",\"encounters\":{\"uses\":[]}";
     internal const string NoFlights80 = ",\"flights\":{\"lastProjectile\":0,\"projectiles\":[],\"nextShot\":0,\"heroShots\":[],\"npcThrows\":[],\"npcArrows\":[]}";
     // ARC-DEV-289 (schema 84): the flights section ends with the missile counter and the missiles in flight.
     internal const string NoFlights = ",\"flights\":{\"lastProjectile\":0,\"projectiles\":[],\"nextShot\":0,\"heroShots\":[],\"npcThrows\":[],\"npcArrows\":[],\"lastMissile\":0,\"missiles\":[]}";

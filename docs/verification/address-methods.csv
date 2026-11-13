@@ -68,6 +68,8 @@ src/Arcanum.Session/GameSessionCreatedObjects.cs,CreateCritterNear,pending,
 src/Arcanum.Session/GameSessionCritterIndexedWrites.cs,QueryNpcEffectiveStat,exempt,reference
 src/Arcanum.Session/GameSessionDanger.cs,AddDangerEnemy,pending,
 src/Arcanum.Session/GameSessionDanger.cs,PurgeDangerEnemies,exempt,host
+src/Arcanum.Session/GameSessionEncounters.cs,ArmRandomEncounter,exempt,host
+src/Arcanum.Session/GameSessionEncounters.cs,TakeEncounterNotices,exempt,host
 src/Arcanum.Session/GameSessionEncumbrance.cs,FireEncumbranceDrain,pending,
 src/Arcanum.Session/GameSessionEncumbrance.cs,RecalculateEncumbrance,pending,
 src/Arcanum.Session/GameSessionEquipBest.cs,CheckHeroWear,pending,
@@ -698,6 +700,8 @@ tools/terrain-viewer/Godot/TerrainViewerAreaBarter.cs,BarterCycle,exempt,referen
 tools/terrain-viewer/Godot/TerrainViewerAreaBarter.cs,BarterCycleSpeaker,exempt,reference
 tools/terrain-viewer/Godot/TerrainViewerAreaBarter.cs,BarterPointerStill,pending,
 tools/terrain-viewer/Godot/TerrainViewerAreaContainerLoot.cs,CloseContainer,pending,
+tools/terrain-viewer/Godot/TerrainViewerAreaEncounters.cs,EncounterSiteNow,exempt,host
+tools/terrain-viewer/Godot/TerrainViewerAreaEncounters.cs,HandleEncounterNotices,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAreaFate.cs,FateToggled,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAreaFate.cs,HandleFateKey,exempt,reference
 tools/terrain-viewer/Godot/TerrainViewerAreaFate.cs,RouteFateKey,exempt,reference

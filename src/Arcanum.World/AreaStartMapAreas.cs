@@ -25,4 +25,15 @@ public static class AreaStartMapAreas
             shown.TryGetValue(sector, out var loaded) ? loaded : data.AreaTownMaps.TryGetValue(sector, out var known) ? known : null;
         return WorldTravelGeometry.AreaAt(data.TravelAreas, new(cell.X, cell.Y), TownMap);
     }
+
+    /// <summary>ARC-WORLD-1159: whether the sector of a location of the start map has a town map of its own (a non-zero town map number); the roll is refused in such a sector. The sectors the shown map
+    /// loaded answer for themselves, an area's own sector from the world-map data; any other sector reads as none (a limit: its file is not read here).</summary>
+    public static bool InTownMapSector(AreaWorldMapData data, IReadOnlyList<AreaSectorRecord> shownSectors, TravelLocation location)
+    {
+        ArgumentNullException.ThrowIfNull(data); ArgumentNullException.ThrowIfNull(shownSectors);
+        var sector = WorldTravelGeometry.Sector(location);
+        foreach (var shown in shownSectors)
+            if (shown.Coordinate.X == sector.X && shown.Coordinate.Y == sector.Y) return shown.Present && (shown.Townmap ?? 0) != 0;
+        return data.AreaTownMaps.TryGetValue(sector, out var known) && known != 0;
+    }
 }

@@ -144,6 +144,14 @@ public partial class TerrainViewerApp
     private void OpenWorldMap()
     {
         if (!WorldMapActive || !WindowCanOpen(InterfaceMode.WorldMap)) return;
+        // ARC-WORLD-1159 (0x560720): the opener is refused (message 602) for 4,000 real milliseconds after an encounter.
+        if (_worldMapLockedUntilHostMs > _clockHostMs)
+        {
+            _worldMapStatus = "the world map cannot be opened right now (message 602)";
+            GD.Print("ARC-WORLD-1159 world map refused after an encounter");
+            RefreshAreaStatus();
+            return;
+        }
         AdoptWorldMapData();
         // ARC-UI-084 (WM5, WM65): a PC in a sector with a town map is not on the walkable world and the original look opens on the town map, on any map.
         var art = AdoptWorldMapArt();

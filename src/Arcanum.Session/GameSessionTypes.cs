@@ -665,8 +665,9 @@ public sealed class GameSessionSnapshot
     /// Schema 94 adds the item fields scripts wrote (written start, inventory display bit) to the inventory section (<see cref="SessionInventoryState.ItemFields"/>, ARC-SCRIPT-1279).
     /// Schema 95 adds the arranged slots of seed holders (a container's or an NPC's grid laid out at a loot, steal or See Contents open) to the inventory section (<see cref="SessionInventoryState.HolderSlots"/>, ARC-RES-1441).
     /// Schema 96 adds the wait flag to each party record (<see cref="SessionCompanion.WaitFlag"/>, the WAIT bit of an NPC with no leader or one that joined with it, ARC-SCRIPT-1136).
-    /// Schemas 1..55 are refused, not migrated; schemas 56 to 95 are upgraded on decode (ARC-UI-037).</summary>
-    public const int CurrentSchemaVersion = 96;
+    /// Schema 97 adds the encounters section: the use counts of the world-map random encounter rows (<see cref="SessionEncounterState"/>, ARC-WORLD-1159).
+    /// Schemas 1..55 are refused, not migrated; schemas 56 to 96 are upgraded on decode (ARC-UI-037).</summary>
+    public const int CurrentSchemaVersion = 97;
 
     internal GameSessionSnapshot(int schemaVersion, GlobalFlagIdentity identity, long revision,
         SessionClockState clock, SessionFlagState flags, ActorPlacement actor, SessionMapState[] maps, SessionStoryState story,
@@ -674,7 +675,7 @@ public sealed class GameSessionSnapshot
         SessionEffectState effects, SessionExperienceState experience, SessionAdvancementState advancement, SessionRandomState random,
         SessionLifeState life, SessionReactionState reactions, SessionCombatRound? combat, SessionCombatModeState combatMode,
         SessionConcealmentState concealment, SessionDangerState danger, SessionEventState events, SessionLightingState? lighting, SessionSoundState sound,
-        SessionHotkeyState? hotkeys = null, SessionObjectRecords? objects = null, SessionScriptState? scripts = null, SessionResidencyState? residency = null, SessionGoalState? goals = null, SessionSpellState? spells = null, SessionNewspaperState? newspaper = null, SessionFlightState? flights = null, SessionGeneratorState? generators = null)
+        SessionHotkeyState? hotkeys = null, SessionObjectRecords? objects = null, SessionScriptState? scripts = null, SessionResidencyState? residency = null, SessionGoalState? goals = null, SessionSpellState? spells = null, SessionNewspaperState? newspaper = null, SessionFlightState? flights = null, SessionGeneratorState? generators = null, SessionEncounterState? encounters = null)
     {
         SchemaVersion = schemaVersion; Identity = identity; Revision = revision;
         Clock = clock; Flags = flags; Actor = actor; Maps = Array.AsReadOnly(maps); Story = story; Party = party;
@@ -688,6 +689,7 @@ public sealed class GameSessionSnapshot
         Newspaper = newspaper ?? SessionNewspaperState.NewGame;
         Flights = flights ?? SessionFlightState.Empty;
         Generators = generators ?? SessionGeneratorState.Empty;
+        Encounters = encounters ?? SessionEncounterState.Empty;
     }
 
     public int SchemaVersion { get; }
@@ -753,6 +755,9 @@ public sealed class GameSessionSnapshot
     public SessionFlightState Flights { get; }
     /// <summary>The monster generators' counter table, the creatures they made and the slot mark of each critter they made (ARC-WORLD-1157, schema 91).</summary>
     public SessionGeneratorState Generators { get; }
+
+    /// <summary>The use counts of the world-map random encounter rows that fired (ARC-WORLD-1159, schema 97).</summary>
+    public SessionEncounterState Encounters { get; }
 }
 
 internal static class SessionValidation

@@ -108,6 +108,10 @@ public sealed class WorldTravelSectors
     public long WidthSectors => _grid.Header.WidthSectors;
     public long HeightSectors => _grid.Header.HeightSectors;
 
+    /// <summary>ARC-WORLD-1159: the terrain word of a sector of the start map, <see cref="TerrainWord.OutsideGrid"/> outside the grid (the read the encounter roll makes).</summary>
+    public ushort TerrainWordAt(long x, long y) =>
+        x < 0 || y < 0 || x >= _grid.Header.WidthSectors || y >= _grid.Header.HeightSectors ? TerrainWord.OutsideGrid : _grid[(int)x, (int)y];
+
     [OriginalFunction(0x4E8E00, OriginalFunctionScope.Full)]
     public bool TerrainBlocked(long x, long y)
     {

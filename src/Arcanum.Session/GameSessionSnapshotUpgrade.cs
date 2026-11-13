@@ -593,6 +593,12 @@ public static partial class GameSessionSnapshotCodec
                     AddField(row, $"$.party.{name}[{i}]", "waitFlag", false);
                 }
             }
+            },
+        // ARC-WORLD-1159 (schema 97): the encounters section, the use counts of the world-map random encounter rows. No older build rolled an encounter, so the step adds the empty section.
+        [96] = root =>
+        {
+            if (root.ContainsKey("encounters")) throw new DecodeException(SnapshotDecodeFailure.UnknownField, "$.encounters");
+            root.Add("encounters", new JsonObject { ["uses"] = new JsonArray() });
         },
     };
 

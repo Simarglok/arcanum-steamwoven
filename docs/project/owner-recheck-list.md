@@ -1062,3 +1062,17 @@ The quest NPC of the house at the first building (prototype 17156, dialog 2786, 
 | 2 | Accept quest 1158 and stand inside the house (the heartbeat runs every few seconds while the hero is near). | The NPC appears at his cell within a few seconds and his talk (dialog 2786) opens. | open |
 
 Known differences (documented, not bugs): a hero step is not blocked by the switched-on NPC yet (issue #1436).
+
+## ARC-WORLD-1159 — Random encounters on the world journey (E2-c, 2026-11-12)
+
+The rules are in [random encounters](../world/random-encounters-runtime.md) (ledger PO13–PO19). Compare them in both games on the outdoor map, with a hero of any level, away from towns. Encounters are rare by
+design (the chance is 5 per cent of each firing, one firing per 300 to 700 game minutes, five times that while resting), so a long journey or a long rest is needed.
+
+| # | Step | Expected (from the original executable and data) | Status |
+| --- | --- | --- | --- |
+| 1 | Open the world map in wilderness and travel far (many hours of game time). | Now and then the journey stops: the map closes and the party is back on the map where the marker stood, with a group of creatures standing close by. | open |
+| 2 | Press the world-map key right after such a stop. | The map does not open for about four seconds. | open |
+| 3 | Rest in the wilderness with the window's long options. | Sometimes the window closes by itself and creatures stand next to the party; the chance is five times higher than while walking. | open |
+| 4 | Look at where the creatures stand against the party. | Two rings: one side west of the party's tile or north of it, about six tiles away, in small columns of three. Ours do not turn toward the party (a known gap). | open |
+| 5 | Meet a second group in the same encounter (a table row with two creature kinds). | The first creature of the second kind is missing (the original destroys it, a quirk kept). | open |
+| 6 | Try the same in a town sector and while standing in a named area. | No encounter happens there. | open |
