@@ -156,7 +156,7 @@ public sealed class TeleportMapStateTests
         using var owner = Create();
         Changed(owner.EnsureTeleportMap(owner.Version, Virgil, Exterior), owner, 1);
         var text = GameSessionSnapshotCodec.Encode(owner.Capture());
-        StringAssert.Contains(text, "\"schemaVersion\":98,");
+        StringAssert.Contains(text, "\"schemaVersion\":99,");
         StringAssert.Contains(text, "\"state\":[{\"entity\":\"oid:virgil\",\"property\":\"npc.teleport\",\"map\":79,\"value\":79}]");
         using var restored = Restore(Decode(text));
         Assert.AreEqual(text, GameSessionSnapshotCodec.Encode(restored.Capture()));

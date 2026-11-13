@@ -20,7 +20,7 @@ namespace Arcanum.Session.Tests;
 // ARC-MAGIC-1295 (ledger RM3; exe read 0x452D80, 0x4B0740, 0x4B0980, 0x4B0FC0, 0x4B0FD0, 0x407340, 0x4072D0): the TraitIdx component adds its value to an NPC's stored base stat or resistance through the cast host.
 // Records, ids and numbers are invented; the NPC is an oid: entity whose stored values the host map gives.
 [TestClass]
-public sealed class SessionSpellCasterTraitIndexTests
+public sealed partial class SessionSpellCasterTraitIndexTests
 {
     private const string Hero = SessionSpellCaster.Hero, Rat = "oid:rat", Box = "oid:box";
     private static readonly SpellLocation HeroTile = new(5, 5), FarTile = new(8, 5);
@@ -249,7 +249,7 @@ public sealed class SessionSpellCasterTraitIndexTests
         using var _ = owner;
         var version = owner.Version;
         // The hero (the character owner's stats), an index and a field the host has no state for, strength of an NPC the map's seed does not list (its carried weight is unknown), and a PC that is not the hero.
-        Assert.IsNull(caster.Apply(Run(FirePlus), 0, At(Hero, SpellTargetObject.Pc)).JumpTo);
+        Assert.IsNull(caster.Apply(Run(BadField), 0, At(Hero, SpellTargetObject.Pc)).JumpTo);
         Assert.IsNull(caster.Apply(Run(BadIndex), 0, At(Rat, SpellTargetObject.Npc)).JumpTo);
         Assert.IsNull(caster.Apply(Run(BadField), 0, At(Rat, SpellTargetObject.Npc)).JumpTo);
         Assert.IsNull(caster.Apply(Run(StrengthPlus), 0, At(Rat, SpellTargetObject.Npc)).JumpTo);
@@ -784,9 +784,11 @@ public sealed class SessionSpellCasterTraitIndexTests
         caster.Apply(Run(StrengthMinusOne), 0, At(Rat, SpellTargetObject.Npc));
         // The world reports a strength of 20 (10000 carried): 800 is level 0 when the timer fires.
         owner.AdvanceGameTime(owner.QueryClockSnapshot().Token, 60_000, ClockAdvanceReason.OrdinaryAdvance);
-        Assert.AreEqual(GameSessionFailure.None, owner.ProcessEvents(new RatWorld(target, RatStats(owner, 20).Select((v, i) => i == 0 ? 20 : v).ToArray())).Failure);
+        var pass = owner.ProcessEvents(new RatWorld(target, RatStats(owner, 20).Select((v, i) => i == 0 ? 20 : v).ToArray()));
+        Assert.AreEqual(GameSessionFailure.None, pass.Failure);
         Assert.AreEqual(1, owner.QueryLifeRecord(Rat)!.Value.State.FatigueDamage, "it does not check the level before it drains");
         Assert.AreEqual(0, RatTimers(owner).Length);
+        Assert.AreEqual(0, pass.NpcEncumbranceEnds.Count, "a level below 4 ends the chain by the rule: nothing reported");
     }
 
     [TestMethod]
@@ -796,8 +798,46 @@ public sealed class SessionSpellCasterTraitIndexTests
         using var _ = owner;
         caster.Apply(Run(StrengthMinusOne), 0, At(Rat, SpellTargetObject.Npc));
         owner.AdvanceGameTime(owner.QueryClockSnapshot().Token, 60_000, ClockAdvanceReason.OrdinaryAdvance);
-        Assert.AreEqual(GameSessionFailure.None, owner.ProcessEvents(new RatWorld(target, null)).Failure);
+        var pass = owner.ProcessEvents(new RatWorld(target, null));
+        Assert.AreEqual(GameSessionFailure.None, pass.Failure);
         Assert.AreEqual(1, owner.QueryLifeRecord(Rat)!.Value.State.FatigueDamage);
+        Assert.AreEqual(0, RatTimers(owner).Length);
+        // ARC-MAGIC-1651: the end is reported.
+        Assert.AreEqual(SessionNpcEncumbranceEndReason.NoStoredStats, pass.NpcEncumbranceEnds.Single().Reason);
+        Assert.AreEqual(Rat, pass.NpcEncumbranceEnds.Single().Entity);
+    }
+
+    private sealed class PlainWorld(SessionLifeTarget target) : ISessionEventWorld
+    {
+        public LifeFacts? CritterFacts(SessionMapId map, string entity) => entity == Rat ? target.Facts : null;
+    }
+
+    [TestMethod]
+    public void A_pass_world_that_cannot_give_stored_stats_reports_the_npcs_chain_end()
+    {
+        var (owner, caster, target) = Carrying(3, [800]);
+        using var _ = owner;
+        caster.Apply(Run(StrengthMinusOne), 0, At(Rat, SpellTargetObject.Npc));
+        owner.AdvanceGameTime(owner.QueryClockSnapshot().Token, 60_000, ClockAdvanceReason.OrdinaryAdvance);
+        var pass = owner.ProcessEvents(new PlainWorld(target));
+        Assert.AreEqual(1, owner.QueryLifeRecord(Rat)!.Value.State.FatigueDamage, "it still drains");
+        Assert.AreEqual(SessionNpcEncumbranceEndReason.NoStatsWorld, pass.NpcEncumbranceEnds.Single().Reason);
+        Assert.AreEqual(0, RatTimers(owner).Length);
+    }
+
+    [TestMethod]
+    public void An_npc_the_seed_does_not_list_reports_its_chain_end_with_an_unreadable_level()
+    {
+        // The timer is scheduled by hand (the recalculation reads the level from the seed, which an unlisted NPC lacks); when it fires the level cannot be read either.
+        var (owner, _, target) = Carrying(3, [800], seeded: false);
+        using var _o = owner;
+        var map = owner.QueryActor().Map;
+        owner.ScheduleNpcEncumbranceDrain(target, map, 60_000);
+        Assert.AreEqual(1, RatTimers(owner).Length);
+        owner.AdvanceGameTime(owner.QueryClockSnapshot().Token, 60_000, ClockAdvanceReason.OrdinaryAdvance);
+        var pass = owner.ProcessEvents(new RatWorld(target, RatStats(owner, 2)));
+        Assert.AreEqual(GameSessionFailure.None, pass.Failure);
+        Assert.AreEqual(SessionNpcEncumbranceEndReason.LevelUnreadable, pass.NpcEncumbranceEnds.Single().Reason);
         Assert.AreEqual(0, RatTimers(owner).Length);
     }
 
@@ -1196,27 +1236,14 @@ public sealed class SessionSpellCasterTraitIndexTests
     }
 
     [TestMethod]
-    public void What_the_heros_state_does_not_hold_is_not_ready_and_a_derived_stat_is_read_not_written()
+    public void A_derived_stat_is_read_not_written_for_the_hero_and_an_index_outside_the_array_is_not_ready()
     {
-        // Stat 25, gender, race and a resistance (the hero stores none): a saved field is needed.
-        foreach (var index in new[] { 25, 26, 27 })
-        {
-            var number = 600 + index;
-            var records = new Dictionary<int, SessionSpellRecord>(Records) { [number] = Spell(number, StatField, index, 1) };
-            var (owner, caster) = HeroSession(SkilledHero(), records: records);
-            using var _ = owner;
-            var version = owner.Version;
-            Assert.IsNull(CastOnHero(caster, number).JumpTo, $"stat {index}");
-            Assert.AreEqual(version, owner.Version, $"stat {index}");
-            Assert.IsTrue(NotReady(caster), $"stat {index}");
-        }
         var (hero, cast) = HeroSession(SkilledHero());
         using var _h = hero;
         var before = hero.Version;
         Assert.AreEqual(SpellComponentOutcome.None, CastOnHero(cast, DerivedPlus), "stats 8 to 16 are read, not written");
         Assert.AreEqual(before, hero.Version);
         Assert.AreEqual(0, cast.Log.Count);
-        Assert.IsNull(CastOnHero(cast, FirePlus).JumpTo);
         Assert.IsNull(CastOnHero(cast, BadIndex).JumpTo);
     }
 

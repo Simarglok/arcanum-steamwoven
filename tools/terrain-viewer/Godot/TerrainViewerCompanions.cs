@@ -137,6 +137,8 @@ public partial class TerrainViewerApp
         var visitors = AreaVisitors.Here(session, new(CurrentAreaMap), [.. _ownCompanionTemplates, .. led],
             world => grid.Chart.Contains(grid.Chart.ToChart(new(world.X, world.Y))));
         var bodies = new List<AreaCompanionTemplate>(); var unread = new List<string>();
+        // ARC-AI-1646: one home read builds the bodies of every NPC the party holds that no dialog template covers.
+        _homes?.Lead(visitors.Select(v => v.Entity));
         // ARC-MAGIC-050: a created critter has no home map to read (its body is its own, below).
         foreach (var visitor in visitors.Where(v => SessionCreatedObject.KindOf(v.Entity) != SessionCreatedKind.Critter))
         {
@@ -290,6 +292,8 @@ public partial class TerrainViewerApp
         {
             if (result.Disposition == GameSessionDisposition.NoChange) continue;
             GD.Print(AreaCompanionLoyalty.Log(companion, result));
+            // ARC-AI-1677 (0x4AC380 → 0x413A90): a follower that left by the loyalty step floats the refusal line of its reason when it can speak (the same speaker as the hit's leave).
+            if (result.Step is { Kind: LoyaltyStepKind.Left } left) _aiHost?.SayLoyaltyLeave(companion.Entity, left);
             if (result.Step is { } step && AreaCompanionLoyalty.Shown(step) is { } shown) _companionNotice = $"companion script {companion.Speaker.ScriptId}: {shown}";
             else if (result.Disposition == GameSessionDisposition.Rejected) _companionNotice = $"companion script {companion.Speaker.ScriptId}: loyalty step refused ({result.Failure})";
         }

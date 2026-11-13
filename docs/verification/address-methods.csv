@@ -101,6 +101,7 @@ src/Arcanum.Session/GameSessionHeroThrow.cs,SplitAmmoForThrow,pending,
 src/Arcanum.Session/GameSessionHeroThrow.cs,SplitAmmoRefusal,pending,
 src/Arcanum.Session/GameSessionHeroThrow.cs,ThrowHeroItem,pending,
 src/Arcanum.Session/GameSessionHolderGrid.cs,ArrangeHolderGrid,exempt,host
+src/Arcanum.Session/GameSessionHolderGrid.cs,QueryHolderRoom,exempt,host
 src/Arcanum.Session/GameSessionHostility.cs,ApplyAttackEvent,pending,
 src/Arcanum.Session/GameSessionHotkeys.cs,QueryHotkeySameKind,pending,
 src/Arcanum.Session/GameSessionHotkeys.cs,RecordHotkeyAction,pending,
@@ -311,6 +312,7 @@ src/Arcanum.Simulation/Ai/ExecutorTypes.cs,StepClear,exempt,host
 src/Arcanum.Simulation/Ai/ExecutorTypes.cs,StepMeetsTrap,exempt,host
 src/Arcanum.Simulation/Ai/ExecutorTypes.cs,TileCritters,exempt,host
 src/Arcanum.Simulation/Ai/ExecutorTypes.cs,Unconscious,pending,
+src/Arcanum.Simulation/Ai/FollowerRules.cs,HeroAttackTauntFacts,exempt,reference
 src/Arcanum.Simulation/Ai/FollowerRules.cs,NearDeathOfHit,pending,
 src/Arcanum.Simulation/Ai/MoraleRules.cs,StartsFleeGoal,pending,
 src/Arcanum.Simulation/Ai/NpcRouteRules.cs,UnforcedStandpoint,pending,
@@ -364,6 +366,7 @@ src/Arcanum.Simulation/Items/CarryRules.cs,Fits,pending,
 src/Arcanum.Simulation/Items/CarryRules.cs,HolderMagicWeight,pending,
 src/Arcanum.Simulation/Items/DropPlacementRules.cs,PlaceCreated,pending,
 src/Arcanum.Simulation/Items/DropPlacementRules.cs,PlaceOnce,pending,
+src/Arcanum.Simulation/Items/JunkPileRules.cs,HolderFreeSlot,exempt,host
 src/Arcanum.Simulation/Items/RestockRules.cs,GenerateOnce,pending,
 src/Arcanum.Simulation/Items/RestockRules.cs,GeneratedOnceSeed,pending,
 src/Arcanum.Simulation/Locks/LockRules.cs,WriteBit,pending,

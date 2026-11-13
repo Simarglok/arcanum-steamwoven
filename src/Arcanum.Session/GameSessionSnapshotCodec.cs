@@ -71,7 +71,7 @@ public static partial class GameSessionSnapshotCodec
     private static readonly string[] FollowerFields = ["entity", "forced", "spreadOut", "loyalty", "waitFlag"];
     private static readonly string[] OtherFields = ["entity", "standing", "spreadOut", "jilted", "loyalty", "waitFlag"];
     private static readonly string[] HeroFields = ["prototype", "race", "gender", "stats", "level", "experience", "unspentPoints",
-        "alignment", "advancement", "raceEffect", "genderEffect", "innateSkills", "fatePoints", "armedFates", "background", "backgroundDescription", "playerName", "portrait", "scripts"];
+        "alignment", "advancement", "raceEffect", "genderEffect", "innateSkills", "fatePoints", "armedFates", "background", "backgroundDescription", "playerName", "portrait", "scripts", "resistances", "age"];
     private static readonly string[] EffectFields = ["effect", "modifiers"];
     private static readonly string[] InnateSkillFields = ["cause", "skill", "operator", "value"];
     // Skill names in Skill order (ARC-SKILLS-002), the innate skill change's causes.
@@ -455,6 +455,10 @@ public static partial class GameSessionSnapshotCodec
                 WriteScriptCells(w, "flags", snapshot.Scripts.PcFlags);
                 WriteScriptCells(w, "variables", snapshot.Scripts.PcVariables);
                 w.WriteEndObject();
+                // ARC-MAGIC-1658 (schema 99): the stored resistance array (field 31) and the stored age (stat 25, null when not read).
+                WriteInts(w, "resistances", hero.Resistances);
+                if (hero.Age is { } age) w.WriteNumber("age", age);
+                else w.WriteNull("age");
                 w.WriteEndObject();
             }
             else w.WriteNull("hero");
@@ -1874,7 +1878,16 @@ public static partial class GameSessionSnapshotCodec
             new FateState(Int(f["fatePoints"], p + ".fatePoints", int.MinValue, int.MaxValue),
                 Int(f["armedFates"], p + ".armedFates", int.MinValue, int.MaxValue)), Int(f["background"], p + ".background", int.MinValue, int.MaxValue),
             Int(f["backgroundDescription"], p + ".backgroundDescription", int.MinValue, int.MaxValue), PlayerName(f["playerName"], p + ".playerName"),
-            Int(f["portrait"], p + ".portrait", int.MinValue, int.MaxValue));
+            Int(f["portrait"], p + ".portrait", int.MinValue, int.MaxValue), HeroResistances(f["resistances"], p + ".resistances"),
+            f["age"].ValueKind == JsonValueKind.Null ? null : Int(f["age"], p + ".age", int.MinValue, int.MaxValue));
+    }
+
+    // ARC-MAGIC-1658: exactly the five stored resistances (the range of a value is the indexed write's: any 32-bit number).
+    private static ImmutableArray<int> HeroResistances(JsonElement element, string path)
+    {
+        var values = Ints(element, path);
+        if (values.Length != SessionHeroLimits.ResistanceCount) throw new DecodeException(SnapshotDecodeFailure.OutOfRange, path);
+        return values;
     }
 
     // ARC-UI-033: the player name's bytes as lowercase hex (canonical); the length and the NUL byte are Restore's (InvalidHero).

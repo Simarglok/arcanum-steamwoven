@@ -29,7 +29,8 @@ namespace Arcanum.Session;
 /// ARC-MAGIC-1510: an NPC whose stats the follower's advancement record holds reads and writes its sheet (<see cref="GameSessionOwner.WriteNpcAdvancementStat"/>), and the hero is written in its state (<c>TraitIndexHero</c>).
 /// ARC-MAGIC-1628: a record follower's gender is the stored field and the innate effect as for any NPC (the sheet holds none), its race the sheet's (not ready when the new race's ranges leave the sheet invalid); the hero's poison is its life state's level,
 /// its magick and tech points are stored when no worn item has a wield script (<see cref="GameSessionOwner.HeroRewieldReady"/>), and its experience runs the level recalculation (0x4A69C0) after the store, queueing the award for the host as an
-/// award does (<see cref="TakeExperienceAwards"/>); the level has no case and is stored alone. Not ready for the hero: a resistance and stat 25 (it stores none), gender and race.</item>
+/// award does (<see cref="TakeExperienceAwards"/>); the level has no case and is stored alone. ARC-MAGIC-1658: the hero's resistance (its stored array, schema 99), stat 25 (its stored age) and gender and race (the innate effects swapped, the character owner built again, <see cref="GameSessionOwner.WriteHeroInnate"/>) run; not ready for the hero:
+/// an age the session has not read (a save of schema 98 or before), a race of 11 and a swap the session refuses (<see cref="GameSessionOwner.HeroInnateReady"/>).</item>
 /// </list>
 /// </summary>
 public sealed partial class SessionSpellCaster
@@ -164,15 +165,21 @@ public sealed partial class SessionSpellCaster
     /// to the stored one, clamps it, asks the same guards for a lowering (with the hero's skills, college ranks and tech degrees), stores it and leaves the callbacks to the interface. Strength moves the encumbrance level as every revision compares it
     /// (0x45F820); alignment arms the followers' re-check (OL17). A derived stat (8 to 16) is read and not written. ARC-MAGIC-1628: poison is the life state's level (<see cref="PoisonStat"/>); magick and tech points run the rewield
     /// 0x465530 (<see cref="GameSessionOwner.HeroRewieldReady"/>); experience is stored and then recalculated (0x4A69C0, <see cref="GameSessionOwner.WriteHeroExperienceStat"/>) and its award waits in <see cref="TakeExperienceAwards"/> for the
-    /// host's level-up messages and followers' step, as an award's does; the level has no case in the setter and is stored alone. <b>Not ready</b>: a resistance and stat 25 (the hero stores none: a saved field is needed), gender and race (the
-    /// race and gender effects of the hero's character owner), a worn wield script for the points, and experience without the experience table.
+    /// host's level-up messages and followers' step, as an award's does; the level has no case in the setter and is stored alone. ARC-MAGIC-1658: a resistance (the hero's stored array, saved since schema 99), stat 25 (its stored age) and gender and race (the removal, store and add of the innate effects: the character owner is built again) run too.
+    /// <b>Not ready</b>: a worn wield script for the points, experience without the experience table, an age the session has not read (a save of schema 98 or before), a race of 11, and an innate swap the session refuses (<see cref="GameSessionOwner.HeroInnateReady"/>).
     /// </remarks>
     private SpellComponentOutcome? TraitIndexHero(SpellRun run, TraitIndexData data)
     {
-        if (_owner.QueryHero() is not { } hero || data.Field != StatIndexField || data.Index is < 0 or >= SessionCritterIndexedWrites.StatCount) return null;
+        if (_owner.QueryHero() is not { } hero) return null;
+        // ARC-MAGIC-1658: the stored resistance array (field 31), the indexed write 0x407340 as an NPC's: the sum, unclamped.
+        if (data.Field == ResistanceIndexField)
+            return _owner.QueryHeroStoredResistance(data.Index) is { } stored ? Report(run, Hero, data, _owner.WriteHeroResistance(_owner.Version, data.Index, unchecked(stored + data.Value))) : null;
+        if (data.Field != StatIndexField || data.Index is < 0 or >= SessionCritterIndexedWrites.StatCount) return null;
         if (data.Index is >= 8 and <= 16) return SpellComponentOutcome.None;
         // ARC-MAGIC-1628: poison is the life state's level, the hero's as the NPC's (the setter's case 0x18).
         if (data.Index == 24) return PoisonStat(run, Hero, data, SessionLifeTarget.Hero);
+        // ARC-MAGIC-1658: age (stat 25, no case in the setter: a clamp to 20..1000 and a store) and the gender and race cases (the removal of the old innate effect, the store, the add of the new one).
+        if (data.Index is 25 or 26 or 27) return TraitIndexHeroInnate(run, data, hero);
         if (_owner.QueryHeroStoredStat(data.Index) is not { } current || CharacterStatRules.StoredRange(hero.Race, data.Index) is not { } range) return null;
         // Magick and tech points run the rewield (0x465530) after the store: with a worn item that carries a wield script the session cannot run it, so nothing is written.
         if (data.Index is 22 or 23 && !_owner.HeroRewieldReady()) return null;
@@ -201,6 +208,18 @@ public sealed partial class SessionSpellCaster
             return Report(run, Hero, data, written.Result);
         }
         return Report(run, Hero, data, _owner.WriteHeroStat(_owner.Version, data.Index, next));
+    }
+
+    // ARC-MAGIC-1658: the hero's stat 25 (stored age), 26 (gender) and 27 (race). Not ready: an age the session has not read (a save of an older schema), a race of 11 (the table's last, a race the character rules do not have) and what
+    // the hero's innate swap refuses (GameSessionOwner.HeroInnateReady: no rule attached for the effect to add, a stat the new race's ranges do not admit, a durable effect with the number of the new innate one).
+    private SpellComponentOutcome? TraitIndexHeroInnate(SpellRun run, TraitIndexData data, SessionHeroState hero)
+    {
+        var current = data.Index switch { 25 => _owner.QueryHeroStoredAge(), 26 => _owner.QueryHeroStoredGender(), _ => _owner.QueryHeroStoredRace() };
+        if (current is not { } value || CharacterStatRules.StoredRange(hero.Race, data.Index) is not { } range) return null;
+        var next = Math.Clamp(unchecked(value + data.Value), range.Minimum, range.Maximum);
+        if (data.Index == 25) return Report(run, Hero, data, _owner.WriteHeroAge(_owner.Version, next));
+        if (data.Index == 27 && next > (int)CharacterRace.Orc || !_owner.HeroInnateReady(data.Index == 26, next)) return null;
+        return Report(run, Hero, data, _owner.WriteHeroInnate(_owner.Version, data.Index == 26, next));
     }
 
     /// <summary>

@@ -58,6 +58,7 @@ public sealed partial class GameSessionOwner : IDisposable
     private List<SessionWaitFiring>? _passWaits;
     private List<SessionRespawnFiring>? _passRespawns;
     private List<SessionDecayFiring>? _passDecays;
+    private List<SessionNpcEncumbranceEnd>? _passNpcEncumbranceEnds;
     private List<SessionBodyDecayFiring>? _passBodyDecays;
     private List<SessionAiTickFiring>? _passAiTicks;
     private List<SessionRestockFiring>? _passRestocks;
@@ -111,7 +112,7 @@ public sealed partial class GameSessionOwner : IDisposable
             hero = HeroDomain.Build(definition.Prototype, definition.Race, definition.Gender, definition.Stats, definition.Level,
                 definition.UnspentPoints, definition.Alignment, definition.RaceEffect, definition.GenderEffect, definition.Experience,
                 definition.Advancement, definition.InnateSkills, background: definition.Background,
-                backgroundDescription: definition.BackgroundDescription, playerName: definition.PlayerName, portrait: definition.Portrait);
+                backgroundDescription: definition.BackgroundDescription, playerName: definition.PlayerName, portrait: definition.Portrait, age: definition.Age);
             var kit = definition.Kit?.ToArray();
             if (hero is null || definition.Gold < 0 || kit is null || kit.Length > limits.MaxPcItems)
                 return Rejected(GameSessionFailure.InvalidHero);
@@ -1523,6 +1524,8 @@ public sealed partial class GameSessionOwner : IDisposable
         // ARC-DEV-132: a run whose step went missing (a host that threw, a step carried off the active map) is killed before the pass, so no run is left without one.
         var goalsReconciled = ReconcileGoalSteps();
         _passDecays = decays;
+        var npcEncumbranceEnds = new List<SessionNpcEncumbranceEnd>();
+        _passNpcEncumbranceEnds = npcEncumbranceEnds;
         _passBodyDecays = bodyDecays;
         _passAiTicks = aiTicks;
         _passRestocks = restocks;
@@ -1580,6 +1583,7 @@ public sealed partial class GameSessionOwner : IDisposable
             _passRespawns = null;
             _passSpellRuns = null;
             _passDecays = null;
+            _passNpcEncumbranceEnds = null;
             _passBodyDecays = null;
             _passAiTicks = null;
             _passRestocks = null;
@@ -1592,7 +1596,7 @@ public sealed partial class GameSessionOwner : IDisposable
         return new(pass.Failure == GameEventFailure.None ? GameSessionFailure.None : GameSessionFailure.InvalidEventPass, pass,
             firings.AsReadOnly(), new(_identity, _revision)) { ScriptCalls = calls.AsReadOnly(), Effects = effects.AsReadOnly(),
             Locks = locks.AsReadOnly(), Waits = waits.AsReadOnly(), Respawns = respawns.AsReadOnly(), SpellRuns = spellRuns.AsReadOnly(),
-            Decays = decays.AsReadOnly(), BodyDecays = bodyDecays.AsReadOnly(), AiTicks = aiTicks.AsReadOnly(), Restocks = restocks.AsReadOnly(), TrapDevices = trapDevices.AsReadOnly(), RealSteps = realSteps.AsReadOnly(), GoalSteps = goalSteps.AsReadOnly(), GoalsReconciled = goalsReconciled,
+            Decays = decays.AsReadOnly(), BodyDecays = bodyDecays.AsReadOnly(), AiTicks = aiTicks.AsReadOnly(), Restocks = restocks.AsReadOnly(), TrapDevices = trapDevices.AsReadOnly(), RealSteps = realSteps.AsReadOnly(), GoalSteps = goalSteps.AsReadOnly(), GoalsReconciled = goalsReconciled, NpcEncumbranceEnds = npcEncumbranceEnds.AsReadOnly(),
             DeferredFoldTicks = foldTicks, DeferredFoldTicksRefused = foldTicksRefused };
     }
 
@@ -2325,7 +2329,7 @@ public sealed partial class GameSessionOwner : IDisposable
         if (saved is null) return GameSessionFailure.None;
         hero = HeroDomain.Build(saved.Prototype, saved.Race, saved.Gender, saved.Stats, saved.Level, saved.UnspentPoints, saved.Alignment,
             saved.RaceEffect, saved.GenderEffect, saved.Experience, saved.Advancement, saved.InnateSkills, saved.Fate, saved.Background,
-            saved.BackgroundDescription, saved.PlayerName, saved.Portrait);
+            saved.BackgroundDescription, saved.PlayerName, saved.Portrait, saved.Resistances, saved.Age);
         return hero is null ? GameSessionFailure.InvalidHero : GameSessionFailure.None;
     }
 

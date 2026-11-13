@@ -121,7 +121,7 @@ public sealed partial class AreaAiHost
             CannotTake: npc is not null && NpcInsertVerdict(npc, view, item) != SessionInsertVerdict.Accepted, Off: off);
     }
 
-    // The insert check for an NPC (0x466510): the item's weight with the NPC as holder against its carry weight (the room test and the PC-only Technophobia do not apply to an NPC's list).
+    // The insert check for an NPC (0x466510): the item's weight with the NPC as holder against its carry weight, then the room in its grid (ARC-AI-1654); the PC-only Technophobia does not apply to an NPC's list.
     private SessionInsertVerdict NpcInsertVerdict(string npc, SessionMapInventory? view, SessionInventoryItem item)
     {
         if (Build(npc) is not { } build || LifeState(npc) is not { } state) return SessionInsertVerdict.TooHeavy;
@@ -130,7 +130,9 @@ public sealed partial class AreaAiHost
         // The NPC's whole list: the shown map's view lists it, and a companion carried here from another map lists on its home map's seed, which the session's holder query finds (ARC-AI-1486).
         var held = view?.Holders.FirstOrDefault(listed => listed.Entity == npc)?.Items ?? _session.QueryHolderItems(npc) ?? [];
         var total = CarryRules.TotalWeight(held.Select(CarriedBy), CarryHolder.Critter, aptitude);
-        return CarryRules.Fits(total, CarryRules.ItemWeight(CarriedBy(item), CarryHolder.Critter, aptitude), carry) ? SessionInsertVerdict.Accepted : SessionInsertVerdict.TooHeavy;
+        if (!CarryRules.Fits(total, CarryRules.ItemWeight(CarriedBy(item), CarryHolder.Critter, aptitude), carry)) return SessionInsertVerdict.TooHeavy;
+        // ARC-AI-1654: then the room (code 2): a free place in the NPC's 10 x 12 grid, an ammunition stack of the same prototype needing none.
+        return _session.QueryHolderRoom(npc, item) ? SessionInsertVerdict.Accepted : SessionInsertVerdict.NoRoom;
     }
 
     // An item as the weight reads it: the session's tracked weight facts first, else its listed facts; ammunition by its units.
@@ -171,7 +173,7 @@ public sealed partial class AreaAiHost
     /// <summary>
     /// ARC-AI-1309 (goal 16 → 0x42A9B0 → 0x42AA70): the pickup. A target with object flags OFF or DESTROYED (0x13 &amp; 3) is not taken and neither is an item whose holder is no junk pile (an item that lies nowhere: no action point is charged). In a round the actor's 1 action point is spent first (0x4B7CD0: none left ends its subturn and the pickup fails); then the item moves
     /// into the NPC's list (<see cref="GameSessionOwner.PickUpItemByNpc"/>, the insert check the carry weight of 0x466510) and a <see cref="AreaAiNoticeKind.PickUp"/> notice tells the viewer. The goal's end reads the item switch first (0x4681A0: a loot window open on a container, <see cref="NpcPickupsOn"/>, fails it before any action point), and an item of a standing junk pile of the map's data leaves its container (ARC-AI-1486, <see cref="MapPileOf"/>). NOT READY: the item's get and insert-item
-    /// scripts (an item with one is refused, #1655), the room test of the NPC's grid (#1654), the item sound of a local picker (0x4F0BF0) and the network round's flag.
+    /// scripts (an item with one is refused, #1655), the item sound of a local picker (0x4F0BF0) and the network round's flag.
     /// </summary>
     [OriginalFunction(0x42AA70, OriginalFunctionScope.Partial)]
     public void PickUp(string id, string item)
