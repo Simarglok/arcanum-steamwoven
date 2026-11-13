@@ -644,4 +644,75 @@ public sealed class InterfaceChromeTests
             }
         }
     }
+
+    // ARC-UI-1197: the world map and town map window's frame (138 `mapmain`, 800 x 400) with the map view's hole (150, 11, 501 x 365) and the portrait's square hole (25, 24, 89 x 89).
+    private static byte[] MapFrame()
+    {
+        var rgba = Frame(800, 400, holes: false);
+        void Clear(int x0, int y0, int w, int h)
+        {
+            for (var y = y0; y < y0 + h; y++)
+            for (var x = x0; x < x0 + w; x++) { var i = (y * 800 + x) * 4; (rgba[i], rgba[i + 1], rgba[i + 2], rgba[i + 3]) = (0, 0, 0, 0); }
+        }
+        Clear(150, 11, 501, 365); Clear(25, 24, 89, 89);
+        return rgba;
+    }
+
+    [TestMethod]
+    public void The_map_window_frame_has_a_recipe_and_the_arts_no_window_draws_have_none()
+    {
+        var recipe = InterfaceChromeRecipes.All.Single(r => r.File == "mapmain.art");
+        Assert.AreEqual(ChromeKind.Panel, recipe.Kind);
+        // 140 and 199 (the waypoint panel's pieces) and 219 and 220 (the two landscape pictures) are drawn by no window of the viewer; the picture stays art.
+        foreach (var file in new[] { "wp_main.art", "WP_Cover.ART", "Tmp_Day.ART", "Tmp_Nght.ART", "map_zoomed.bmp" })
+            CollectionAssert.DoesNotContain(InterfaceChromeRecipes.All.Select(r => r.File).ToArray(), file);
+        Assert.IsNotNull(InterfaceChromeRecipes.For(HdInterfaceKey.Query(HdInterfaceKey.Identity("MAPMAIN.ART", new byte[] { 1 }), 0, 1, 1, new byte[4])));
+    }
+
+    [TestMethod]
+    public void Every_part_of_the_map_recipe_lies_inside_its_frame_and_a_kept_picture_never_covers_a_generated_box()
+    {
+        var recipe = InterfaceChromeRecipes.All.Single(r => r.File == "mapmain.art");
+        var boxes = recipe.Parts.Select(part => part switch
+        {
+            ChromeSunk p => (X: p.X, Y: p.Y, Width: p.Width, Height: p.Height, Kind: "sunk"),
+            ChromeKeep p => (X: p.X, Y: p.Y, Width: p.Width, Height: p.Height, Kind: "keep"),
+            ChromeRoundView p => (X: (int)(p.CenterX - p.Radius), Y: (int)(p.CenterY - p.Radius), Width: (int)Math.Ceiling(2 * p.Radius), Height: (int)Math.Ceiling(2 * p.Radius), Kind: "view"),
+            _ => (X: 0, Y: 0, Width: 0, Height: 0, Kind: "other"),
+        }).Where(box => box.Kind != "other").ToArray();
+        Assert.IsTrue(boxes.Count(box => box.Kind == "sunk") == 3 && boxes.Count(box => box.Kind == "view") == 1);
+        foreach (var (x, y, w, h, kind) in boxes) Assert.IsTrue(x >= 0 && y >= 0 && x + w <= 801 && y + h <= 401, $"a {kind} at ({x}, {y}, {w} x {h}) lies inside 800 x 400");
+        foreach (var keep in boxes.Where(box => box.Kind == "keep"))
+        foreach (var other in boxes.Where(box => box.Kind == "sunk"))
+        {
+            // The route sketch lies wholly inside its sunk plate; no other kept picture touches a plate.
+            var overlaps = keep.X < other.X + other.Width && other.X < keep.X + keep.Width && keep.Y < other.Y + other.Height && other.Y < keep.Y + keep.Height;
+            var inside = keep.X >= other.X + 1 && keep.Y >= other.Y + 1 && keep.X + keep.Width <= other.X + other.Width - 1 && keep.Y + keep.Height <= other.Y + other.Height - 1;
+            Assert.IsTrue(!overlaps || inside, $"the kept picture at ({keep.X}, {keep.Y}) covers a generated plate at ({other.X}, {other.Y})");
+        }
+    }
+
+    [TestMethod]
+    public void The_map_frame_paints_in_bounds_deterministically_keeps_its_view_hole_clear_and_gives_the_round_portrait_no_square_rim()
+    {
+        var recipe = InterfaceChromeRecipes.All.Single(r => r.File == "mapmain.art");
+        var legacy = MapFrame();
+        foreach (var scale in new[] { 1.0, 1.5, 2.0, 2.4 })
+        {
+            var a = InterfaceChromeRenderer.Render(recipe, 800, 400, legacy, [], 0, scale);
+            var (pw, ph) = InterfaceChromeRenderer.PixelSize(800, 400, scale);
+            Assert.AreEqual(pw * ph * 4, a.Length, $"at {scale}");
+            CollectionAssert.AreEqual(a, InterfaceChromeRenderer.Render(recipe, 800, 400, legacy, [], 0, scale), $"deterministic at {scale}");
+            // The map view's hole (and the portrait's) stays transparent in its middle; the wood around the frame is opaque.
+            Assert.AreEqual(0, Pixel(a, pw, (int)(400 * scale), (int)(190 * scale)).A, $"the map view is clear at {scale}");
+            Assert.AreEqual(0, Pixel(a, pw, (int)(70 * scale), (int)(70 * scale)).A, $"the portrait hole is clear at {scale}");
+            Assert.AreEqual(255, Pixel(a, pw, (int)(140 * scale), (int)(200 * scale)).A, $"wood at {scale}");
+        }
+        var one = InterfaceChromeRenderer.Render(recipe, 800, 400, legacy, [], 0, 1);
+        // The square hole of the map view gets the brass rim every hole gets (its ink line is the outer pixel); the round portrait view does not get one around its square's corner.
+        Assert.IsTrue(Pixel(one, 800, 149, 200).R < 60, "the map view's rim");
+        Assert.IsTrue(Pixel(one, 800, 24, 24).R > 60, "no square rim at the portrait's corner");
+        // The readout plates are sunk black pits.
+        Assert.IsTrue(Pixel(one, 800, 727, 168).R < 12 && Pixel(one, 800, 727, 200).R < 12, "the two readout plates are black");
+    }
 }
