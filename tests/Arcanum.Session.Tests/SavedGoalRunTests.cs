@@ -217,7 +217,7 @@ public sealed class SavedGoalRunTests
         var upgraded = GameSessionSnapshotCodec.TryDecode(older);
         Assert.AreEqual(SnapshotDecodeFailure.None, upgraded.Failure, upgraded.Path);
         Assert.AreEqual(current, GameSessionSnapshotCodec.Encode(upgraded.Snapshot!));
-        var twice = GameSessionSnapshotCodec.TryDecode(SnapshotUpgradeTests.WithoutCritterEffects(current).Replace(NoEncounters, "").Replace(NoBarLights, "").Replace(NoHeroStoredKeys, "").Replace(SnapshotUpgradeTests.NoCreated, "}").Replace(NoHeroKeys, "").Replace(NoTownMapCells, "").Replace("\"schemaVersion\":100,\"world\"", "\"schemaVersion\":71,\"world\""));
+        var twice = GameSessionSnapshotCodec.TryDecode(SnapshotUpgradeTests.WithoutCritterEffects(current).Replace(NoEncounters, "").Replace(NoBarLights, "").Replace(NoGamblingRoll, "").Replace(NoHeroStoredKeys, "").Replace(SnapshotUpgradeTests.NoCreated, "}").Replace(NoHeroKeys, "").Replace(NoTownMapCells, "").Replace("\"schemaVersion\":101,\"world\"", "\"schemaVersion\":71,\"world\""));
         Assert.AreEqual(SnapshotDecodeFailure.UnknownField, twice.Failure);
         Assert.AreEqual("$.goals", twice.Path);
     }
