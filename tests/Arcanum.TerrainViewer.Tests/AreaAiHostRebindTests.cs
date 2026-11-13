@@ -87,13 +87,15 @@ public sealed class AreaAiHostRebindTests
         }
     }
 
-    internal static Fixture Open((int X, int Y)? standpointA = null, Func<SessionHeroDefinition, SessionHeroDefinition>? heroEdit = null, int? perceptionA = null)
+    internal static Fixture Open((int X, int Y)? standpointA = null, Func<AreaObjectRecord, AreaObjectRecord>? changeB = null,
+        Func<SessionHeroDefinition, SessionHeroDefinition>? heroEdit = null, int? perceptionA = null)
     {
         var rowA = Npc(0, CellA, standpointA ?? (1, 1));
         // ARC-AI-1518: the NPC's eight primary stats (field 38) all this value, 20 unless asked.
         if (perceptionA is { } perception)
             rowA = rowA with { EffectiveFields = [.. rowA.EffectiveFields.Select(f => f.Slot == 38 ? f with { Elements = [.. f.Elements.Select(e => e.Key < 8 ? e with { Words = [perception] } : e)] } : f)] };
         var rowB = Npc(1, CellB, (1, 1));
+        if (changeB is not null) rowB = changeB(rowB);
         var identity = new GlobalFlagIdentity(new WorldId(Guid.NewGuid()), new ModuleId(Guid.NewGuid()));
         var hero = new SessionHeroDefinition(16089, CharacterRace.Human, CharacterGender.Male, [8, 8, 8, 8, 8, 8, 8, 8, 0, 0], 1, 5, 0, null, null, 0, []);
         var created = GameSessionOwner.Create(new(ConversationSessionFixture.Clock, AreaStartingHero.NewGameFlags(identity, new OwnerEpoch(Guid.NewGuid()), null),
