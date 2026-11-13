@@ -71,6 +71,42 @@ public static class InventoryGridRules
         return -1;
     }
 
+    /// <summary>One item of a holder's list for <see cref="HolderFreeSlot"/>: its inventory location (field 0x5E: a grid slot; 1000..1008 worn and 2000..2009 on a quick slot take no cell;
+    /// −1 or any other value is no known place) and its size in cells.</summary>
+    public readonly record struct HolderListItem(int Location, int Width, int Height);
+
+    /// <summary>
+    /// ARC-AI-1654 (the room test of 0x466510: 0x4664C0 → 0x466260, 0x466310, 0x4675A0): the first free slot a holder's grid has for an item of <paramref name="width"/> × <paramref name="height"/>
+    /// cells, −1 when none (the insert check's answer code 2). The list's items mark their rectangles from their locations in one flat buffer of a container's size (the original's local
+    /// buffer holds 960 cells for either grid: a rectangle that crosses the right edge continues in the next row, one that ends past the buffer is dropped here where the original
+    /// writes beyond it) and only the first <paramref name="rows"/> rows are searched. An item with no known place (a made, given or picked-up item carries none in the session) takes
+    /// the first free place for its size after the items with a place, in list order, as the original's insert gave it one; one that finds none takes no cell. Godot-free.
+    /// </summary>
+    public static int HolderFreeSlot(IReadOnlyList<HolderListItem> list, int rows, int width, int height)
+    {
+        ArgumentNullException.ThrowIfNull(list);
+        if (rows is not (ContainerRows or CritterRows)) throw new ArgumentOutOfRangeException(nameof(rows));
+        if (width < 1 || height < 1) throw new ArgumentOutOfRangeException(width < 1 ? nameof(width) : nameof(height));
+        var buffer = new bool[ContainerRows * Columns];
+        void Mark(int slot, int itemWidth, int itemHeight)
+        {
+            // The loops stop at the buffer's end: an item's size may be up to 2^27 cells a side (a frame of 0 pixels), which must cost no more than the buffer.
+            for (var row = 0; row < itemHeight && slot + row * Columns < buffer.Length; row++)
+                for (var column = 0; column < itemWidth && slot + row * Columns + column < buffer.Length; column++)
+                    buffer[slot + row * Columns + column] = true;
+        }
+        var unplaced = new List<HolderListItem>();
+        foreach (var item in list)
+        {
+            if (item.Width < 1 || item.Height < 1 || item.Location is >= 1000 and <= 1008 or >= 2000 and <= 2009) continue;
+            if (item.Location is < 0 or >= ContainerRows * Columns) unplaced.Add(item);
+            else Mark(item.Location, item.Width, item.Height);
+        }
+        foreach (var item in unplaced)
+            if (item.Width <= Columns && item.Height <= rows && FindSlot(buffer.AsSpan(0, rows * Columns).ToArray(), item.Width, item.Height) is >= 0 and var slot) Mark(slot, item.Width, item.Height);
+        return width > Columns || height > rows ? -1 : FindSlot(buffer.AsSpan(0, rows * Columns).ToArray(), width, height);
+    }
+
     private static bool Free(IReadOnlyList<bool> occupied, int slot, int width, int height)
     {
         for (var row = 0; row < height; row++)
