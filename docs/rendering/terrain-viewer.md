@@ -2322,7 +2322,7 @@ project's, except as below.
   `N/10`. Game: Difficulty (Easy, Moderate, Hard), Default Combat Mode (Real Time, Turn Based), Auto Attack, Always
   Run and the project's Rules line (ARC-UI-014, below). Video: Floats (Never, Minimal, Verbose) and Float Speed (0–10). Sound: Effects, Voice and Music (0–10). The arrows (or Left and Right on the focused control, which Up and Down or
   a click on an arrow choose, or a controller's confirm) change the value at once, as the original's setters run on each step: a list wraps around at either end, a
-  slider stops there. Hidden with their reasons: Module (one module), Violence Filter, Auto Switch Weapons, Follower
+  slider stops there. Hidden with their reasons: Module (one module), Violence Filter, Auto Switch Weapons (its setting is the settings file's `auto switch` line since ARC-COMBAT-1720; no free slot on the Game page, issue 1729), Follower
   Skills, and the third combat mode Fast Turn Based (the list cycles Real Time and Turn Based).
 - **What each setting does.** Difficulty is the session's difficulty (its skill and experience readers, ARC-WORLD-030;
   a new game or a load takes the setting). Default Combat Mode is the turn-based setting Space also toggles: with a
