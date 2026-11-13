@@ -14,8 +14,7 @@ namespace Arcanum.Session;
 /// <item><b>Trait64</b> (type 23, 0x452E40): with the source <c>Target_Tile</c> the component writes the target's 64-bit field (<c>Teleport_Tile</c>, 242) with the run's target tile and field 243 (the teleport map) with the current map; with
 /// <c>Caster_Obj</c> or <c>Caster_Owner_Obj</c> (the original reads the same run field for both) it writes the run's parent handle into the field (<c>obj_f_critter_fleeing_from</c>, 230). Modelled for an NPC of the session
 /// (<see cref="GameSessionOwner.SetTeleportTile"/>, <see cref="GameSessionOwner.WriteFleeingFrom"/>); any other field, source or target is not ready. No installed spell uses it.</item>
-/// <item><b>TraitIdx</b> (type 22, 0x452D80) stays not ready: for a PC or NPC it adds the component's value to the current indexed stat (the effective stat through 0x4B0740 and the base stat set 0x4B0980) or resistance, and no installed
-/// spell uses it; the session holds no write for an NPC's base stats or resistances.</item>
+/// <item><b>TraitIdx</b> (type 22, 0x452D80): built later, in ARC-MAGIC-1295 (<c>SessionSpellCasterTraitIndex.cs</c>).</item>
 /// </list>
 /// And the spell stop on an object (0x459290 and the script action 130, 0x4593F0): <see cref="StopSpellOnObject"/>.
 /// </summary>

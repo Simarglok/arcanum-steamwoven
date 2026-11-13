@@ -31,7 +31,7 @@ Every scheme is an **input adapter** that emits the same semantic commands to th
 The foundation is a precondition for any fair comparison:
 
 1. **Scheme selector** in Options → Controls: `Original (mouse+keyboard)` always active;
-   `Pad scheme: A Direct / B Pointer`; `Touch: Off / C Touch+pad`. Switchable at run time without
+   `Pad scheme: A Direct / B Pointer`; `Touch: Off / C Touch+pad` (built as one Controls line: Original, A, B, C, [ARC-GPAD-1463](https://github.com/Simarglok/arcanum-steamwoven/issues/1463)). Switchable at run time without
    restart, persisted in user settings. Defaults for the test: none — the test script chooses.
 2. **Active device detection** ("last meaningful input wins"; both devices always live):
    - pad becomes active on a button or a stick/trigger beyond the deadzone (drift ignored);
@@ -200,7 +200,7 @@ All work items are GitHub issues under the epic [#1371](https://github.com/Simar
 | Piece | Issues |
 | --- | --- |
 | This document and coverage rows | [#1372](https://github.com/Simarglok/arcanum-steamwoven/issues/1372) |
-| Foundation §0: core, viewer wiring, pause and accessibility, evidence log | [#1373](https://github.com/Simarglok/arcanum-steamwoven/issues/1373), [#1374](https://github.com/Simarglok/arcanum-steamwoven/issues/1374), [#1375](https://github.com/Simarglok/arcanum-steamwoven/issues/1375), [#1376](https://github.com/Simarglok/arcanum-steamwoven/issues/1376) |
+| Foundation §0: core, viewer wiring (done), pause and accessibility, evidence log | [#1373](https://github.com/Simarglok/arcanum-steamwoven/issues/1373), [#1374](https://github.com/Simarglok/arcanum-steamwoven/issues/1374), [#1375](https://github.com/Simarglok/arcanum-steamwoven/issues/1375), [#1376](https://github.com/Simarglok/arcanum-steamwoven/issues/1376) |
 | UI scale on 1280×800 | [#1377](https://github.com/Simarglok/arcanum-steamwoven/issues/1377) ([result](handheld-ui-scale.md)) |
 | Focus layer; radials | [#1378](https://github.com/Simarglok/arcanum-steamwoven/issues/1378), [#1379](https://github.com/Simarglok/arcanum-steamwoven/issues/1379) |
 | Scheme B Pointer | [#1380](https://github.com/Simarglok/arcanum-steamwoven/issues/1380), [#1381](https://github.com/Simarglok/arcanum-steamwoven/issues/1381) |
@@ -237,6 +237,37 @@ The Godot-free parts of §0 live in `src/Arcanum.Input` and are tested in `tests
   on a Deck host (`SteamDeck` environment variable, read by the host) an Xbox-looking pad is the Deck. This is a
   heuristic and needs a check on a real Deck. Labels are text per physical position (Nintendo's bottom button is B).
 
+## Foundation in the viewer (ARC-GPAD-1374, merged parts)
+
+The viewer hosts the core (`tools/terrain-viewer/Godot/TerrainViewerControllers.cs`, the Godot-free `ControllerFoundation` and
+`PromptStrip` in `src/Arcanum.Input`):
+
+- **Scheme selector.** One **Controls** line, the Game page's eighth and last slot of the Options window (ARC-GPAD-1463; owner request
+  2026-11-12: one line instead of three), in the main menu and in play, the pattern of the removed HD lines: Original, A Direct, B Pointer,
+  C Touch+pad (`ControlChoice`). C uses the pad itself for walking and hotkeys, so it is chosen instead of a pad scheme, not beside one; an
+  old settings file with both on reads as C. The glyph family override is the Video page's `Prompt style` line (Auto, Xbox, PlayStation,
+  Nintendo, Steam Deck). One `AreaOption` each (`ControlScheme`, `PromptStyle`; `AreaGameOptions.cs`), saved with the game settings as the lines `pad scheme`,
+  `touch scheme` (the line sets both) and `prompt style` of the one settings file (`ViewerSettingsConfig`; a missing or unknown word is that
+  line's default, Off, Off, Auto), applied at once with no restart; the original mouse and keyboard are not a value.
+- **Device in hand.** Every input event of any pad (its device id, never assumed 0), the mouse, the keyboard and the touch screen
+  goes to the `ActiveDeviceTracker` from `_Input` (`ObserveControllerInput`); `_Process` applies a change after the 250 ms
+  hysteresis. The foundation holds no window or focus state, so a change of device or of a line resets no open window (checked in the
+  options self-test and the options smoke). The glyph family is resolved each time from the name and GUID of the pad of the latest pad
+  signal (`Input.GetJoyName/GetJoyGuid`), the `SteamDeck` environment variable and the Prompt style line.
+- **Prompt strip.** One line at the bottom of the screen (layer 90, ignores the mouse), empty while the mouse or keyboard is the active
+  device, so the original is unchanged (KM-01; no keyboard or mouse glyph is ever in a pad or touch line). With a pad in hand it names the
+  pad family and the scheme ("PlayStation pad - A Direct", "Xbox pad - original controls (Options > Controls)"); with touch the same
+  ("Touch - C Touch+pad"). Once a scheme has prompts (`PromptBindings.ForPad/ForTouch`, none built yet: a prompt must never name an input
+  that does nothing) the line lists them per context (`Modal` is the bottom line of every window, `Target` the near-target prompt) with the
+  glyphs of the pad's family, rebound by the user's remaps (`PromptBindings.Remapped`, by prompt id).
+- **Open, filed as issues:** the near-target prompt next to a highlighted world target needs the scheme's target highlight (with
+  [#1380](https://github.com/Simarglok/arcanum-steamwoven/issues/1380) and [#1382](https://github.com/Simarglok/arcanum-steamwoven/issues/1382));
+  the rest of the foundation: hold/toggle, pause rules and stick settings ([#1375](https://github.com/Simarglok/arcanum-steamwoven/issues/1375)),
+  the evidence log ([#1376](https://github.com/Simarglok/arcanum-steamwoven/issues/1376)). The strip on a real Deck and with a real pad
+  of each family is checked by a person (human gate of #1374).
+  The evidence log's scheme and device fields follow the foundation (`TerrainViewerEvidence.cs`): the device in hand, and its scheme (a pad
+  plays by the Pad line, touch by the Touch line, Off on either and the mouse and keyboard are `original`).
+
 ## Evidence log (ARC-GPAD-1376, merged)
 
 The metrics source of the human test (§0.8, §5). Off at every start and never saved; the owner turns it on for a test session
@@ -256,16 +287,14 @@ data folder, shown at start as `user=` in the run log).
   throwing into the game.
 - **Recording** (`EvidenceRecorder`): `RecordEvidence(command, outcome)` in the viewer is the one call a control layer makes. Wired
   today: window opens (refused ones as `refused`) and closes through the interface stack, target-mode opens, quick save and quick
-  load; the command is logged when it is issued, so a save or load the game then refuses still reads `ok`, and a window a script opens (a dialog, sleep) is logged like one the player opened, so the input count is an upper bound until the scheme slices record the player's own commands. The scheme and device fields stay `original` and `keyboard-mouse` until the controller foundation
-  ([#1374](https://github.com/Simarglok/arcanum-steamwoven/issues/1374)) sets them; the schemes' own slices call `RecordEvidence`
+  load; the command is logged when it is issued, so a save or load the game then refuses still reads `ok`, and a window a script opens (a dialog, sleep) is logged like one the player opened, so the input count is an upper bound until the scheme slices record the player's own commands. The scheme and device fields follow the controller foundation ([#1374](https://github.com/Simarglok/arcanum-steamwoven/issues/1374)): the schemes' own slices call `RecordEvidence`
   for their commands, cancels (`cancelled`) and wrong-target corrections (`wrong-target`), and the pause rules
   ([#1375](https://github.com/Simarglok/arcanum-steamwoven/issues/1375)) write `pause-on` and `pause-off`.
 - **Summariser** (`tools/input/evidence_summary.py`, `--self-test` on a synthetic session): `python3 -B tools/input/evidence_summary.py FILE... [--json]`
   prints, per file and per task, the task time, inputs, wrong targets, cancels, refused actions and pauses, then the session totals. A
   line that does not match the format is counted as rejected and never echoed.
 
-Still open in the foundation: the viewer wiring and storage ([#1374](https://github.com/Simarglok/arcanum-steamwoven/issues/1374)),
-hold/toggle, pause rules and stick settings ([#1375](https://github.com/Simarglok/arcanum-steamwoven/issues/1375)).
+Still open in the foundation: hold/toggle, pause rules and stick settings ([#1375](https://github.com/Simarglok/arcanum-steamwoven/issues/1375)).
 
 ## 5. Test protocol (human test)
 

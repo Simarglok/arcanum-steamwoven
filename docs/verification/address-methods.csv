@@ -65,6 +65,7 @@ src/Arcanum.Session/GameSessionCheckWield.cs,MarkCheckWield,exempt,reference
 src/Arcanum.Session/GameSessionCheckWield.cs,NpcHolderOfItem,exempt,reference
 src/Arcanum.Session/GameSessionCombatMode.cs,QueryCanExitCombatMode,pending,
 src/Arcanum.Session/GameSessionCreatedObjects.cs,CreateCritterNear,pending,
+src/Arcanum.Session/GameSessionCritterIndexedWrites.cs,QueryNpcEffectiveStat,exempt,reference
 src/Arcanum.Session/GameSessionDanger.cs,AddDangerEnemy,pending,
 src/Arcanum.Session/GameSessionDanger.cs,PurgeDangerEnemies,exempt,host
 src/Arcanum.Session/GameSessionEncounters.cs,ArmRandomEncounter,exempt,host
@@ -98,6 +99,7 @@ src/Arcanum.Session/GameSessionHeroName.cs,SetHeroPlayerName,pending,
 src/Arcanum.Session/GameSessionHeroThrow.cs,SplitAmmoForThrow,pending,
 src/Arcanum.Session/GameSessionHeroThrow.cs,SplitAmmoRefusal,pending,
 src/Arcanum.Session/GameSessionHeroThrow.cs,ThrowHeroItem,pending,
+src/Arcanum.Session/GameSessionHolderGrid.cs,ArrangeHolderGrid,exempt,host
 src/Arcanum.Session/GameSessionHostility.cs,ApplyAttackEvent,pending,
 src/Arcanum.Session/GameSessionHotkeys.cs,QueryHotkeySameKind,pending,
 src/Arcanum.Session/GameSessionHotkeys.cs,RecordHotkeyAction,pending,
@@ -134,6 +136,7 @@ src/Arcanum.Session/GameSessionNpcInventory.cs,AddItemToNpc,pending,
 src/Arcanum.Session/GameSessionNpcInventory.cs,RemoveItemFromNpc,pending,
 src/Arcanum.Session/GameSessionNpcObjectStrike.cs,AttackObjectByNpc,exempt,reference
 src/Arcanum.Session/GameSessionNpcPickPocket.cs,PickPocketByNpc,pending,
+src/Arcanum.Session/GameSessionNpcPickup.cs,PickUpItemByNpc,exempt,host
 src/Arcanum.Session/GameSessionNpcTransfer.cs,GiveAmmoToNpc,pending,
 src/Arcanum.Session/GameSessionNpcTransfer.cs,GiveGoldToHero,pending,
 src/Arcanum.Session/GameSessionNpcTransfer.cs,GiveGoldToNpc,pending,
@@ -477,6 +480,8 @@ src/Arcanum.World/AreaAiHost.cs,UseItemAtOnce,pending,
 src/Arcanum.World/AreaAiHost.cs,UseItemMagic,pending,
 src/Arcanum.World/AreaAiHost.cs,UsedItem,pending,
 src/Arcanum.World/AreaAiHostGenerators.cs,Spawn,exempt,host
+src/Arcanum.World/AreaAiHostGround.cs,LooseItems,exempt,host
+src/Arcanum.World/AreaAiHostGround.cs,StartPickup,exempt,host
 src/Arcanum.World/AreaAiHostRoutes.cs,RelocateAlongPath,pending,
 src/Arcanum.World/AreaAiHostRoutes.cs,RelocateToRandomTile,pending,
 src/Arcanum.World/AreaAiHostRoutes.cs,ScriptProne,pending,
@@ -606,6 +611,9 @@ tools/terrain-viewer/Core/AreaCharacterSheetArt.cs,RegionAt,pending,
 tools/terrain-viewer/Core/AreaCharacterSheetSpells.cs,HitAt,pending,
 tools/terrain-viewer/Core/AreaCursor.cs,Art,pending,
 tools/terrain-viewer/Core/AreaDialogBox.cs,Buttons,pending,
+tools/terrain-viewer/Core/AreaFateWindow.cs,Decide,exempt,reference
+tools/terrain-viewer/Core/AreaFateWindow.cs,Load,exempt,reference
+tools/terrain-viewer/Core/AreaFateWindow.cs,TextAt,exempt,reference
 tools/terrain-viewer/Core/AreaGameBar.cs,Exit,pending,
 tools/terrain-viewer/Core/AreaGameBar.cs,SkillButtonName,pending,
 tools/terrain-viewer/Core/AreaHoverDescriptions.cs,Dispatch,pending,
@@ -694,6 +702,11 @@ tools/terrain-viewer/Godot/TerrainViewerAreaBarter.cs,BarterPointerStill,pending
 tools/terrain-viewer/Godot/TerrainViewerAreaContainerLoot.cs,CloseContainer,pending,
 tools/terrain-viewer/Godot/TerrainViewerAreaEncounters.cs,EncounterSiteNow,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAreaEncounters.cs,HandleEncounterNotices,exempt,host
+tools/terrain-viewer/Godot/TerrainViewerAreaFate.cs,FateToggled,exempt,host
+tools/terrain-viewer/Godot/TerrainViewerAreaFate.cs,HandleFateKey,exempt,reference
+tools/terrain-viewer/Godot/TerrainViewerAreaFate.cs,RouteFateKey,exempt,reference
+tools/terrain-viewer/Godot/TerrainViewerAreaFate.cs,ToggleFate,exempt,host
+tools/terrain-viewer/Godot/TerrainViewerAreaHoverWindow.cs,DescribeObject,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAreaHoverWindow.cs,HoverCombatPanel,pending,
 tools/terrain-viewer/Godot/TerrainViewerAreaInventory.cs,ArmLockpick,pending,
 tools/terrain-viewer/Godot/TerrainViewerAreaInventory.cs,HealCritter,pending,
@@ -761,6 +774,7 @@ tools/terrain-viewer/Godot/TerrainViewerHotkeyHover.cs,HotkeyDescriptionLeft,pen
 tools/terrain-viewer/Godot/TerrainViewerHotkeys.cs,ActivateHotkey,pending,
 tools/terrain-viewer/Godot/TerrainViewerHotkeys.cs,ActivateSkillButton,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerHotkeys.cs,RecordRecentAction,pending,
+tools/terrain-viewer/Godot/TerrainViewerInterfaceModes.cs,ClearWindowsForProgrammaticOpen,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerInterfaceModes.cs,HandleGlobalKeyOverInterface,pending,
 tools/terrain-viewer/Godot/TerrainViewerInterfaceModes.cs,HandleRightPressOverWindow,pending,
 tools/terrain-viewer/Godot/TerrainViewerItemAiming.cs,ApplyItemAim,pending,

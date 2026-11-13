@@ -66,8 +66,8 @@ public static partial class GameSessionSnapshotCodec
     private static readonly string[] RumorFields = ["rumor", "timestampMs"];
     private static readonly string[] ReputationFields = ["reputation", "timestampMs"];
     private static readonly string[] PartyFields = ["followers", "others"];
-    private static readonly string[] FollowerFields = ["entity", "forced", "spreadOut", "loyalty"];
-    private static readonly string[] OtherFields = ["entity", "standing", "spreadOut", "jilted", "loyalty"];
+    private static readonly string[] FollowerFields = ["entity", "forced", "spreadOut", "loyalty", "waitFlag"];
+    private static readonly string[] OtherFields = ["entity", "standing", "spreadOut", "jilted", "loyalty", "waitFlag"];
     private static readonly string[] HeroFields = ["prototype", "race", "gender", "stats", "level", "experience", "unspentPoints",
         "alignment", "advancement", "raceEffect", "genderEffect", "innateSkills", "fatePoints", "armedFates", "background", "backgroundDescription", "playerName", "portrait", "scripts"];
     private static readonly string[] EffectFields = ["effect", "modifiers"];
@@ -83,9 +83,12 @@ public static partial class GameSessionSnapshotCodec
     // generated-once containers; ARC-WORLD-103 (schema 57): the dressed NPCs' worn items. The junk piles (schema 46), the pools of blood (schema 58) and the number marks (schema 60)
     // were inventory fields until schema 61 moved them to the objects section (ARC-DEV-091).
     private static readonly string[] InventoryFields = ["gold", "kit", "pc", "made", "npcs", "placed", "ammo", "given", "piles", "scriptSlots", "weights",
-        "identified", "lastDiscardedMade", "grid", "generated", "npcWorn", "itemFields"];
+        "identified", "lastDiscardedMade", "grid", "generated", "npcWorn", "itemFields", "holderSlots"];
     // ARC-SCRIPT-1279 (schema 94): the item fields scripts wrote.
     private static readonly string[] ItemFieldFields = ["entity", "writtenStart", "displayFlipped"];
+    // ARC-RES-1441 (schema 95): the arranged slots of seed holders.
+    private static readonly string[] HolderSlotsFields = ["holder", "slots"];
+    private static readonly string[] HolderSlotFields = ["item", "slot"];
     private static readonly string[] ObjectsFields = ["junkPiles", "bloodPools", "lastJunkNumber", "lastPoolNumber", "state", "links", "created", "lastCreatedNumber"];
     private static readonly string[] CreatedObjectFields = ["entity", "kind", "prototype", "map", "x", "y", "offsetX", "offsetY", "createdMs", "spellFlags", "summoner", "run"];
     private static readonly string[] ObjectFieldFields = ["entity", "property", "map", "value"];
@@ -384,6 +387,7 @@ public static partial class GameSessionSnapshotCodec
                 w.WriteBoolean("forced", follower.Forced);
                 w.WriteBoolean("spreadOut", follower.SpreadOut);
                 w.WriteNumber("loyalty", (int)follower.Loyalty);
+                w.WriteBoolean("waitFlag", follower.WaitFlag);
                 w.WriteEndObject();
             }
             w.WriteEndArray();
@@ -396,6 +400,7 @@ public static partial class GameSessionSnapshotCodec
                 w.WriteBoolean("spreadOut", other.SpreadOut);
                 w.WriteBoolean("jilted", other.Jilted);
                 w.WriteNumber("loyalty", (int)other.Loyalty);
+                w.WriteBoolean("waitFlag", other.WaitFlag);
                 w.WriteEndObject();
             }
             w.WriteEndArray();
@@ -623,6 +628,24 @@ public static partial class GameSessionSnapshotCodec
                 w.WriteString("entity", row.Entity);
                 if (row.Writes.WrittenStart is { } start) w.WriteNumber("writtenStart", start); else w.WriteNull("writtenStart");
                 w.WriteBoolean("displayFlipped", row.Writes.DisplayFlipped);
+                w.WriteEndObject();
+            }
+            w.WriteEndArray();
+            // ARC-RES-1441 (schema 95): the arranged slots of seed holders, by holder in ordinal order, each by item in ordinal order.
+            w.WriteStartArray("holderSlots");
+            foreach (var row in snapshot.Inventory.HolderSlots)
+            {
+                w.WriteStartObject();
+                w.WriteString("holder", row.Holder);
+                w.WriteStartArray("slots");
+                foreach (var slot in row.Slots)
+                {
+                    w.WriteStartObject();
+                    w.WriteString("item", slot.Item);
+                    w.WriteNumber("slot", slot.Slot);
+                    w.WriteEndObject();
+                }
+                w.WriteEndArray();
                 w.WriteEndObject();
             }
             w.WriteEndArray();
@@ -1768,7 +1791,7 @@ public static partial class GameSessionSnapshotCodec
             // The array order is meaningful, so it is kept; an entity may appear once in the whole party.
             if (!seen.Add(entity)) throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path + ".entity");
             followers[i] = new(entity, CompanionStanding.Following, Bool(item["forced"], path + ".forced"),
-                Bool(item["spreadOut"], path + ".spreadOut"), false, Loyalty(item["loyalty"], path + ".loyalty"));
+                Bool(item["spreadOut"], path + ".spreadOut"), false, Loyalty(item["loyalty"], path + ".loyalty"), Bool(item["waitFlag"], path + ".waitFlag"));
         }
         items = Array(f["others"], p + ".others", GameSessionLimits.PolicyMaxCompanions);
         if (followers.Length + items.Length > GameSessionLimits.PolicyMaxCompanions)
@@ -1788,8 +1811,9 @@ public static partial class GameSessionSnapshotCodec
                 _ => throw new DecodeException(SnapshotDecodeFailure.OutOfRange, path + ".standing"),
             };
             var record = new SessionCompanion(entity, standing, false, Bool(item["spreadOut"], path + ".spreadOut"),
-                Bool(item["jilted"], path + ".jilted"), Loyalty(item["loyalty"], path + ".loyalty"));
-            // Jilted only while free, and a free NPC without a flag is not listed.
+                Bool(item["jilted"], path + ".jilted"), Loyalty(item["loyalty"], path + ".loyalty"), Bool(item["waitFlag"], path + ".waitFlag"));
+            // Jilted only while free, the wait flag never with a waiting standing (that is the bit itself), and a free NPC without a flag is not listed.
+            if (standing == CompanionStanding.Waiting && record.WaitFlag) throw new DecodeException(SnapshotDecodeFailure.OutOfRange, path + ".waitFlag");
             if ((standing == CompanionStanding.Waiting && record.Jilted) || record.IsBaseline)
                 throw new DecodeException(SnapshotDecodeFailure.OutOfRange, path + ".jilted");
             others[i] = record;
@@ -2169,8 +2193,31 @@ public static partial class GameSessionSnapshotCodec
             if (i > 0 && string.CompareOrdinal(itemFields[i - 1].Entity, entity) >= 0) throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path + ".entity");
             itemFields[i] = new(entity, writes);
         }
+        // ARC-RES-1441: the arranged slots of seed holders by holder in strictly ascending ordinal order, none empty, each row's items in strictly ascending ordinal order (which holders and items may
+        // carry one is the owner's restore).
+        var holderRows = Array(f["holderSlots"], p + ".holderSlots", SessionInventoryState.MaxHolderSlots);
+        var holderSlots = new SessionHolderSlots[holderRows.Length];
+        for (var i = 0; i < holderRows.Length; i++)
+        {
+            var path = $"{p}.holderSlots[{i}]";
+            var row = Fields(holderRows[i], path, HolderSlotsFields);
+            var holder = Entity(row["holder"], path + ".holder");
+            if (i > 0 && string.CompareOrdinal(holderSlots[i - 1].Holder, holder) >= 0) throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path + ".holder");
+            var heldRows = Array(row["slots"], path + ".slots", Arcanum.Simulation.Items.InventoryGridRules.Columns * Arcanum.Simulation.Items.InventoryGridRules.ContainerRows);
+            if (heldRows.Length == 0) throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path + ".slots");
+            var slots = new SessionHolderSlot[heldRows.Length];
+            for (var j = 0; j < heldRows.Length; j++)
+            {
+                var at = $"{path}.slots[{j}]";
+                var slotRow = Fields(heldRows[j], at, HolderSlotFields);
+                var item = Entity(slotRow["item"], at + ".item");
+                if (j > 0 && string.CompareOrdinal(slots[j - 1].Item, item) >= 0) throw new DecodeException(SnapshotDecodeFailure.NotCanonical, at + ".item");
+                slots[j] = new(item, Int(slotRow["slot"], at + ".slot", 0, Arcanum.Simulation.Items.InventoryGridRules.Columns * Arcanum.Simulation.Items.InventoryGridRules.ContainerRows - 1));
+            }
+            holderSlots[i] = new(holder, System.Array.AsReadOnly(slots));
+        }
         return new(gold, kit, pc, made, npcs, placed, ammo, given, piles, scriptSlots, weights, identified,
-            Int(f["lastDiscardedMade"], p + ".lastDiscardedMade", 0, int.MaxValue), grid, generated, npcWorn) { ItemFields = itemFields };
+            Int(f["lastDiscardedMade"], p + ".lastDiscardedMade", 0, int.MaxValue), grid, generated, npcWorn) { ItemFields = itemFields, HolderSlots = holderSlots };
     }
 
     // ARC-DEV-091 (MIG6d-3, schema 61): the created objects the directory records, in the order they were made; the owner's restore checks the rest.

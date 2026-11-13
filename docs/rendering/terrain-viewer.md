@@ -1146,7 +1146,7 @@ inventory and loot lines show a stack's units (`×N`; [ammunition](../world/inve
   items of the cast host's own spell damage, payments and passes (ARC-UI-031). Wear values come from the hero load's kit (the best-items start's), a
   taken item's object row and, for an item the session made (a `made:` entity, no row in any map), its prototype's fields (ARC-DEV-305, B36, B01:
   `AreaInventoryHost` gets the prototype reader, `AreaPrototypeItems.Fields`; its use, healing, lockpick, item-spell and condition facts too, and the window's line offers
-  the same actions as a taken item's). A made item's writes (condition, charges, scripts) stay the session's; a copy an NPC was given keeps the prototype only (an instance's own fields are not carried). ARC-DEV-315 (B36, B01): the readers that looked an object row up by entity read a made item's prototype too, through one pure helper (`AreaMadeItems`, in `Arcanum.World`: the saved kind of a hero's made item, of a made or created item lying on the ground, and, when the holder is named, of a made item added to that NPC; the row is tried first): the art of an NPC-thrown made item (`AiLaunchThrown`: the row's art when the item has a row, else a made item's prototype current art), the hero's throw art (`HeldThrowArt`: a made weapon's missile art and, for any made item, its own art), the audio cues (`EntitySounds`: a made, created or placed made item's prototype sounds, for the pickup, the weapon's use sound and the other item cues) and the NPC armour a hit sounds on (`AreaCombat.WornArmorEntity`: the armour's entity, row or none, then `EntitySounds` with the NPC as holder, so a made armour and a starting-kit armour given to the NPC sound through their prototypes too; `WornArmor` still returns the row). The hover reads (`DescribeItem`, `HotkeyItemIcon`) take the hero's kit, taken and made items' kinds from `HeroItemKind` and fall back to the kind's prototype for the icon, name and colour when no row is found (`AreaItemIcons.Describe` and `Icon`; checked by reading, no change); NOT READY: the hover's examine-script step runs only for an item with a row, so a made item's examine script (attached from its prototype) is not run, and a made item lying on the ground or held by an NPC has no hover kind. A made no-drop flag and the thrown item's spells are read here. The header adds the original's weight lines (IW9): the carried
+  the same actions as a taken item's). A made item's writes (condition, charges, scripts) stay the session's; a copy an NPC was given keeps the prototype only (an instance's own fields are not carried). ARC-DEV-315 (B36, B01): the readers that looked an object row up by entity read a made item's prototype too, through one pure helper (`AreaMadeItems`, in `Arcanum.World`: the saved kind of a hero's made item, of a made or created item lying on the ground, and, when the holder is named, of a made item added to that NPC; the row is tried first): the art of an NPC-thrown made item (`AiLaunchThrown`: the row's art when the item has a row, else a made item's prototype current art), the hero's throw art (`HeldThrowArt`: a made weapon's missile art and, for any made item, its own art), the audio cues (`EntitySounds`: a made, created or placed made item's prototype sounds, for the pickup, the weapon's use sound and the other item cues) and the NPC armour a hit sounds on (`AreaCombat.WornArmorEntity`: the armour's entity, row or none, then `EntitySounds` with the NPC as holder, so a made armour and a starting-kit armour given to the NPC sound through their prototypes too; `WornArmor` still returns the row). The hover reads (`DescribeItem`, `HotkeyItemIcon`) take the hero's kit, taken and made items' kinds from `HeroItemKind` and fall back to the kind's prototype for the icon, name and colour when no row is found (`AreaItemIcons.Describe` and `Icon`; checked by reading, no change); NOT READY: the hover's examine-script step runs only for an item with a row, so a made item's examine script (attached from its prototype) is not run, and a made item held by an NPC has no hover kind (a made or kit item the hero dropped on the map has one since ARC-UI-1451, from the session's placed items). A made no-drop flag and the thrown item's spells are read here. The header adds the original's weight lines (IW9): the carried
   weight and the encumbrance level with the weight up to which it holds (`CarryRules.Threshold`). Without a hero the doll reads
   "no hero: nothing can be worn". Stack splitting is built for the drop and a dead NPC's take (ARC-UI-029, below); the hero's gold pile moves in the grid since ARC-UI-090, drops since ARC-UI-091 and throws since ARC-UI-094 (below). NOT READY with a worn taken
   (non-kit) item: the hero's attack wears none of its items (`AreaCombatHost.HeroWorn` knows only kit durability values), and a
@@ -1244,6 +1244,10 @@ inventory and loot lines show a stack's units (`×N`; [ammunition](../world/inve
   row by row (the first press after the window opens) or column by column (the next one), alternating. When one item finds no place nothing changes. The original
   runs no insert check, no item event and no action points. NOT READY: the shop NPC's grid (the viewer's wares have no grid slots), the pressed frame.
   The `inv-arrange` stage of the native smoke drives it.
+  **The open's own arrangement (ARC-RES-1410,** [ledger XR16 (g)](../research/ledger/spell-runs.md#magic-audit-executable-reads-arc-dev-357)**):** the open of the loot (mode 2), steal (mode 3)
+  and See Contents (mode 4) windows lays the shown holder's grid out again before it draws (`GameSessionOwner.ArrangeHolderGrid`, row by row, the same sort; 96 rows
+  for a container, 12 for a critter, worn and quick-slot items stay out, no room writes nothing), so a taken item's old cell closes up at the next open. The slots are
+  saved with the inventory section (ARC-RES-1441, schema 95), so a restored session draws the arranged layout. The `container-click` stage's loot smoke checks the arranged layout at the open and after a take.
 - **Steal window art (ARC-UI-065,** [ledger IW35–IW36](../research/ledger/ui-audio.md#steal-window-arc-ui-065)): the window of a
   pick-pocket victim (mode 3) draws the loot window's look without the Take all button (IW30), with the victim's image by its critter
   flags or race and the round view. A victim's item pressed and released on the hero's grid is one theft attempt, a hero's grid item
@@ -2304,7 +2308,7 @@ project's, except as below.
   arrows 667 and 668 at (+6, +21) and (+180, +21), a slider's bar 623 `SkilGauge` at (+47, +24) as wide as value × 120 / top, a
   list's value centred in red `Flare12Font` at (+47, +30). An arrow is a push button: the pointer over it shows its lit frame, a
   press its down frame with sound 3000, the release over it plays 3001 and changes the value. PROJECT: the shown controls take the
-  page's first slots in order (the Rules line the Game page's fifth and last, at (531, 122); ARC-UI-146 removed the HD graphics, HD interface and HD pack lines that stood after it, they are the [launcher screen](#launcher-screen-arc-ui-014)'s); the control with the keyboard or controller
+  page's first slots in order (the Rules line the Game page's fifth, at (531, 122), then the evidence log's two lines (ARC-GPAD-1376), with it the eight slots of the page; the Controls line (ARC-GPAD-1463) is the Game page's eighth and last; ARC-GPAD-1374's Prompt style line is the Video page's third, after the floats; ARC-UI-146 removed the HD graphics, HD interface and HD pack lines that stood after Rules, they are the [launcher screen](#launcher-screen-arc-ui-014)'s); the control with the keyboard or controller
   focus has its label lit in the page buttons' hover red; a text is one line. The line at the top names the hidden controls and the
   notice. Without the game's art (the synthetic self-tests) the whole window is the project's panel.
 
@@ -2616,7 +2620,8 @@ under the bars. Buttons:
 | Combat | bottom | Toggles the hero's combat mode (`R`). |
 | Spells | bottom | A toggle: on shows the spell pane (`M`), off hides it; `M` moves the button with the pane. |
 | Skills | bottom | A toggle (Spells goes up when it goes down; `K` does the same without the sound): shows the [skill pane](../world/spell-cast-host.md#the-skill-pane-in-the-bottom-strip-arc-ui-1113) (bar mode 2: the pane's art and the four skill-bar buttons) in the message window. |
-| Fate Points, Sleep | top | Say that their windows are not built. |
+| Fate Points | top | Opens the [Fate Point window](#fate-point-window-arc-ui-1112) as the key `F` does, or closes it when open. |
+| Sleep | top | The sleep window (`S`). |
 
 A button shows its idle, down and lit frames as the original's (GB4). It plays 3000 on the press and 3001 on the release
 over it, and acts on that release; a toggle plays 3000 turning on and 3001 turning off (GB3, GB6). The pointer over a
@@ -2641,10 +2646,10 @@ installed art and texts read). Native smoke on the original data, map mode on th
 name and lit frame, its down frame with 3000, the release with 3001 opening the sheet, Inventory switching from the sheet,
 Logbook and Schematics opening and closing their windows, the logbook lying between the strips and taking a press inside
 it, Map opening the world map with the bars hidden and back with no hover, Combat in and out of combat mode, Spells showing and hiding
-the pane, Fate Points refused, a press on the strip's clock not reaching the world, every sound started, and the
+the pane, Fate Points opening and closing its window (and, in the same smoke, the [Fate Point window](#fate-point-window-arc-ui-1112)'s own checks), a press on the strip's clock not reaching the world, every sound started, and the
 [clock](#clock-and-date-arc-ui-1111)). Not done: the
 hot-key bar (later slices; the vials since ARC-UI-020, the message log since ARC-UI-023, the vials' art, the follower frames
-and the hovered portrait since [ARC-UI-024](#panel-art-arc-ui-024); the skill pane since ARC-UI-1113), the fate window, the town map, the
+and the hovered portrait since [ARC-UI-024](#panel-art-arc-ui-024); the skill pane since ARC-UI-1113), the town map, the
 buttons' lit art the original sets from game events (0x556A90), the toggle to the compact interface (the viewer shows the
 compact panel whenever its bars are not drawn).
 
@@ -2679,6 +2684,40 @@ orders; with `DAT_ROOT` the arts' sizes in `AreaGameBarTests`). Native smoke, pa
 it writes no name, a press writes nothing and the release writes the line with the game's two labels and the day/month/year order,
 no sound plays, leaving it clears the entry, and an hour of game time later the window refreshes once. `ARC_AREA_BAR_CAPTURE=PREFIX`
 also saves the strip with and without the window and at three later hours for a graphics report (local files, never committed).
+
+### Fate Point window (ARC-UI-1112)
+
+The window the Fate Points button and the key `F` open, as the 1.0.7.4 executable builds and answers it (ledger
+[FW1–FW6](../research/ledger/ui-audio.md#fate-point-window-arc-ui-1112)); `AreaFateWindow.cs` (Core, Godot-free: `AreaFateLayout`, `AreaFateTexts`,
+`AreaFateContent`, `AreaFateButtons`, `AreaFateWindowRules`), `AreaFateView` (the drawing and the pointer) and `TerrainViewerAreaFate.cs` (the opening,
+the session calls and the key). The rules and the session calls exist since ARC-WORLD-054 ([fate points](../world/fate-points-runtime.md)).
+
+- **The window.** The interface art 292 at (0, 41) of the original's screen (the bars' whole factor, standing under the top strip), of its art's size;
+  twelve lines of `mes\fate_ui.mes` (0..11, one for each fate kind; the project's English names stand in when the file does not read) in the
+  white font art 229 at x 11, y 3 + 18 × kind, wrapped at the window's width, and twelve toggle buttons of art 293 at x 223, y 4 + 18 × kind
+  (frames idle, down, lit as the bar's, GB4). The window is no interface mode: the world keeps running and clicks outside it reach the world; a press
+  over it never does.
+- **Opening.** The button and the key `F` call one function: an open window closes; otherwise it opens for a living hero (a dead hero, or none, gets
+  a notice in the bar's status line). Neither opens it while another interface window (sheet, inventory, logbook, schematics, sleep), the dialog,
+  barter, reading, the world map, the save list, the menu or the palette owns the screen (the key is also ignored while a UI control owns input, as `S`
+  is), and a window opened by its own button or key closes it (the original's interface close paths close it with the others, 0x541710, 0x541D40 and
+  0x542200, F0 for which events call them). Space closes it and goes no further. PROJECT: it also closes when any of those covers the screen, when
+  the hero dies and when the session is replaced.
+- **The buttons.** A press flips a button (sound 3000 turning on, 3001 turning off; the release does nothing) and asks the session: on arms the kind
+  (`ArmHeroFate`: one point is spent, a kind already armed or no point left is refused; the full heal is applied at once) and off undoes it
+  (`UndoHeroFate`: the point comes back, up to 100). After each answer and each frame the buttons are set from the hero's armed kinds, so a refused
+  press pops back (lit under the pointer, as the original's pop, FW4), the full heal pops up at once and a kind an event used (a critical hit, a
+  skill check, a conversation start, a spell) pops its button up while the window is open (FW6). A kind armed when the window opens shows down.
+- **Technical bug, fixed (FW3).** The original makes an already armed kind's button without the toggle flag, so it works as a push button that
+  cannot stay armed until the window is opened again. Every button toggles here, in both rule modes (the technical bug rule).
+- **Not modelled.** The multiplayer network messages of the buttons (FT3, FT4); a button takes the pointer on its art's rectangle, not its opaque
+  pixels; the controller has no focus row in the window; the fate points left are not shown (the original window shows no count either).
+
+Tests `AreaFateWindowTests` (layout, hit areas, the lines, the toggle sounds and looks, the buttons following the armed kinds and the rules' answers,
+the open decision). Native smoke, a step of `ARC_AREA_MAP_SMOKE_ONLY=bar` (prints `ARC-UI-1112 native-smoke fate PASS`): after a new game the button
+opens the window at (0, 41), every button starts idle, the pointer lights a button, a press arms critical hit and gambling (points spent, 3000), the full
+heal is used at once and pops up, a press with no point left is refused and pops back, a second press undoes (the point back, 3001), an event's use of
+an armed kind pops its button, Space closes the window and `F` opens and closes it.
 
 ### Message log (ARC-UI-023)
 

@@ -72,28 +72,47 @@ public partial class TerrainViewerApp
     /// <summary>The bar mode a pane holds the window in: 8 the weapon's spells, 1 the spells, 2 the skills (ML8).</summary>
     private int MessagePaneMode => _itemPaneItem is not null ? 8 : _gameBar.IsOn(AreaBarButton.Spells) ? 1 : 2;
 
-    /// <summary>0x57CCF0 for an item the hero holds: the item's examine script first (<see cref="ExamineAllows"/>, ARC-DEV-326), then the item
-    /// window in the message mode (0x554F10's first part), its name in a pane's text area.</summary>
+    /// <summary>0x57CCF0 for an item: the item's examine script first (<see cref="ExamineAllows"/>, ARC-DEV-326), then the item
+    /// window in the message mode (0x554F10's first part), its name in a pane's text area. ARC-UI-1411 (ledger XR4): the original's wrapper
+    /// describes any object, so an item lying on the map or held by an NPC (its map row)
+    /// is described as well as the hero's own, an open window's and the barter panel's.</summary>
     private void DescribeItem(GameSessionOwner session, string item)
     {
-        if (InventoryItemKind(session, item) is not { } kind) return;
+        var kind = InventoryItemKind(session, item) ?? PlacedItemKind(session, item) ?? RowlessItemKind(session, item);
+        if (kind is null && ItemMapRow(item) is null) return;
         if (!ItemExamineAllows(session, item, out var row)) return;
         var catalog = _hoverNames?.Catalog;
-        var fallback = row is not null && _inventoryHost is { } host ? host.Name(item, catalog) : AreaInventoryHost.KindName(kind, catalog);
-        var described = _hotkeyItemIcons?.Describe(kind, row, session.QueryItemIdentified(item), catalog, fallback, ItemWindowContext(session, item))
+        var fallback = row is not null && _inventoryHost is { } host ? host.Name(item, catalog) : AreaInventoryHost.KindName(kind!.Value, catalog);
+        var described = _hotkeyItemIcons?.Describe(kind ?? default, row, session.QueryItemIdentified(item), catalog, fallback, ItemWindowContext(session, item))
             ?? new AreaItemDescription(null, fallback, AreaMessageColour.White);
         var shown = _messageLog.PaneMode ? _messageLog.ShowPaneName(MessagePaneMode, described.Name, item: true)
             : _messageLog.ShowItem(AreaHoverDescriptions.ItemWindow(described));
         if (shown) _gameBarPanel?.MessageLog.Render();
     }
 
+    /// <summary>ARC-UI-1451: the kind of an item the hero dropped or threw that lies on the map, from the session's placed items (a made item
+    /// has no map row; a kit item has none either). Null for any other item.</summary>
+    private static SessionItemKind? PlacedItemKind(GameSessionOwner session, string item) =>
+        session.QueryPlacedItems().FirstOrDefault(placed => placed.Entity == item)?.Kind;
+
+    /// <summary>ARC-UI-1458: the kind of a made or kit item that has no map row and that none of the hero's lists or the ground holds: one an NPC's or
+    /// a container's list holds (a made item added to an NPC, a kit item the hero gave it), from the session. Null for any other item.</summary>
+    private static SessionItemKind? RowlessItemKind(GameSessionOwner session, string item) =>
+        session.QueryPrototypeItemKind(item);
+
+    /// <summary>The map row of an item any held map lists (an item lying on the map, one an NPC or container holds, one the hero took); null for none.</summary>
+    private AreaObjectRecord? ItemMapRow(string item)
+    {
+        foreach (var map in _inventoryHost?.Maps ?? [])
+            if (map.TryGetRow(item, out var found)) return found;
+        return null;
+    }
+
     /// <summary>The first step of an item's description (<see cref="ExamineAllows"/> for an item with a row, <see cref="ExamineAllowsMade"/> for one the
     /// session made): false when the item's examine script answered skip default. <paramref name="row"/> is the item's map row, null for a made item.</summary>
     private bool ItemExamineAllows(GameSessionOwner session, string item, out AreaObjectRecord? row)
     {
-        row = null;
-        foreach (var map in _inventoryHost?.Maps ?? [])
-            if (map.TryGetRow(item, out var found)) { row = found; break; }
+        row = ItemMapRow(item);
         return row is not null ? ExamineAllows(row) : ExamineAllowsMade(session, item);
     }
 
@@ -115,7 +134,7 @@ public partial class TerrainViewerApp
     }
 
     /// <summary>
-    /// ARC-SCRIPT-1119 (HK24): the same first step for an item the session made (<c>made:n</c>), which has no object row: its examine script is the
+    /// ARC-SCRIPT-1119 (HK24), ARC-UI-1458: the same first step for an item the session made (<c>made:n</c>) or one of the hero's starting kit (<c>kit:n</c>), which has no object row: its examine script is the
     /// prototype's point 0 (or the slot a run kept on the item), run by the session as an item run with the hero as the triggerer
     /// (<see cref="GameSessionOwner.RunItemExamine"/>). The description follows only when the answer is not "skip default"; the printed lines go to the
     /// message window. An item with no script, a viewer without the script content or a run the session cannot apply (refused, nothing applied)
@@ -123,7 +142,7 @@ public partial class TerrainViewerApp
     /// </summary>
     private bool ExamineAllowsMade(GameSessionOwner session, string item)
     {
-        if (!item.StartsWith("made:", StringComparison.Ordinal) || _inventoryHost?.ItemScripts(session) is not { } host) return true;
+        if (RowlessItemKind(session, item) is null || _inventoryHost?.ItemScripts(session) is not { } host) return true;
         var ran = session.RunItemExamine(session.Version, item, host);
         if (ran.Scripts.Count == 0) return true;
         _examineRunsForSelfTest++;

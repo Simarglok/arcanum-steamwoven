@@ -133,7 +133,9 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     /// <summary>ARC-SCRIPT-052: the map-change key of an NPC a script's destroy (68) took out of the world (value 1). The original sets object
     /// flag 0x1 (TD2); a destroyed NPC is neither drawn nor in the object lists, and the view no longer reaches it (<see cref="Destroyed"/>).</summary>
     public const string DestroyedProperty = GameSessionOwner.ObjectDestroyedProperty;
-    private const int NpcType = 16, DestroyedObjectFlag = 0x1, OffObjectFlag = 0x2, FirstItemType = 5, LastItemType = 14, WrittenItemType = 13;
+    /// <summary>The object flag "off" (0x2) of the original.</summary>
+    public const int OffObjectFlagBit = 0x2;
+    private const int NpcType = 16, DestroyedObjectFlag = 0x1, OffObjectFlag = OffObjectFlagBit, FirstItemType = 5, LastItemType = 14, WrittenItemType = 13;
     private const string ScriptPart = "script", LocalFlagsPart = "lf", CountersPart = "counters";
 
     /// <summary>The map-change property of a slot's part at a point the host writes back: <c>use.*</c> for the use point,
@@ -215,7 +217,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     /// </summary>
     public static ScrAdmissionSet HeartbeatAdmission { get; } = new("S2-area-heartbeat-state-kill-talk-world",
         ScrAdmissionSet.S2.Conditions.Concat([ScrCatalogue.Condition.FollowingPc, ScrCatalogue.Condition.IsNamed, ScrCatalogue.Condition.IsDead,
-            ScrCatalogue.Condition.IsSwitchedOff, ScrCatalogue.Condition.HasReputation, .. ScrAdmissionSet.SpellQueryConditions, .. ScrAdmissionSet.StoryConditions, .. ScrAdmissionSet.WorldObjectConditions]),
+            ScrCatalogue.Condition.IsSwitchedOff, ScrCatalogue.Condition.HasReputation, ScrCatalogue.Condition.PcQuestState, .. ScrAdmissionSet.SpellQueryConditions, .. ScrAdmissionSet.StoryConditions, .. ScrAdmissionSet.WorldObjectConditions]),
         ScrAdmissionSet.S2.Actions.Concat([ScrCatalogue.Action.ToggleState, ScrCatalogue.Action.Kill, ScrCatalogue.Action.LoopFor, ScrCatalogue.Action.LoopEnd,
             ScrCatalogue.Action.GetObjectType, ScrCatalogue.Action.CallScriptEx, ScrCatalogue.Action.Dialog, ScrCatalogue.Action.CallScriptIn,
             ScrCatalogue.Action.DistanceBetween, ScrCatalogue.Action.GetLocation, ScrCatalogue.Action.SetFaction, ScrCatalogue.Action.WalkTo, ScrCatalogue.Action.RunTo,
@@ -227,6 +229,14 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     /// (<see cref="OffProperty"/>).</summary>
     public static bool SwitchedOff(GameSessionOwner session, int map, string entity) =>
         (session ?? throw new ArgumentNullException(nameof(session))).QueryMapChange(new SessionMapId(map), MapChangeKey.ForEntity(entity, OffProperty)) == 1;
+
+    /// <summary>
+    /// ARC-SCRIPT-1360: whether an NPC of the shown map is switched off now. Toggle state (56) flips the object flag "off" (0x2) of the original, so an NPC the map data
+    /// stores off (the quest NPCs a heartbeat switches on once the story reaches them) is off until a toggle clears the bit: the session's object-flag change over the data's
+    /// (<see cref="GameSessionOwner.WriteObjectFlag"/>), or a script's toggle of an NPC the data stores on (<see cref="OffProperty"/>).
+    /// </summary>
+    public static bool NpcOff(GameSessionOwner session, int map, string entity, long dataFlags) =>
+        (session ?? throw new ArgumentNullException(nameof(session))).QueryObjectFlags(entity).Object(unchecked((int)dataFlags)) is var flags && (flags & OffObjectFlag) != 0 || SwitchedOff(session, map, entity);
 
     /// <summary>ARC-SCRIPT-052: whether a script destroyed the NPC <paramref name="entity"/> of map <paramref name="map"/>
     /// (<see cref="DestroyedProperty"/>).</summary>
@@ -383,7 +393,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         if (centre.Map != _shownMap || Place(centre) is not { } at) return [];
         static bool Near(CellCoord cell, CellCoord at) => Math.Abs((long)cell.X - at.X) <= ScrWorld.VicinityReach && Math.Abs((long)cell.Y - at.Y) <= ScrWorld.VicinityReach;
         // Off in the play mask (0x5E2F88 = 3): destroyed or switched off in the map data (object flags 0x1, 0x2) or gone in the session.
-        var list = _npcs.Where(n => ((Number(n.Row, ObjectFlagsSlot) ?? 0) & (DestroyedObjectFlag | OffObjectFlag)) == 0 && _world?.Gone(n.Row) != true && Place(new ScrObjectRef(_shownMap, n.Entity)) is { } cell && Near(cell, at))
+        var list = _npcs.Where(n => ((Number(n.Row, ObjectFlagsSlot) ?? 0) & DestroyedObjectFlag) == 0 && !NpcOff(_session, _shownMap, n.Entity, Number(n.Row, ObjectFlagsSlot) ?? 0) && _world?.Gone(n.Row) != true && Place(new ScrObjectRef(_shownMap, n.Entity)) is { } cell && Near(cell, at))
             .Select(n => new ScrObjectRef(_shownMap, n.Entity)).ToList();
         if (Place(Pc) is { } pc && Near(pc, at)) list.Add(Pc);
         return list;
@@ -428,13 +438,14 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         return Row(obj) is { Type: NpcType } ? _session.QueryNpcDead(obj.Code) : null;
     }
 
-    /// <summary>ARC-SCRIPT-049 (HW2): the "off" object flag of the row's map data, or for an NPC of the shown map a script's toggle state
-    /// (<see cref="OffProperty"/>); the PC is never off; null for an object of no loaded row.</summary>
+    /// <summary>ARC-SCRIPT-049 (HW2): the "off" object flag of the row's map data, or for an NPC (of the shown map or a carried follower's home map, ARC-WORLD-1436) what <see cref="NpcOff"/> says:
+    /// the session's object-flag change over the data's and a script's toggle state (<see cref="OffProperty"/>); the PC is never off; null for an object of no loaded row.</summary>
     public bool? IsSwitchedOff(ScrObjectRef obj)
     {
         if (IsPc(obj)) return false;
         if (Row(obj) is not { } row) return null;
-        return ((Number(row, ObjectFlagsSlot) ?? 0) & OffObjectFlag) != 0 || row.Type == NpcType && obj.Map == _shownMap && SwitchedOff(_session, obj.Map, obj.Code);
+        var data = Number(row, ObjectFlagsSlot) ?? 0;
+        return row.Type == NpcType ? NpcOff(_session, obj.Map, obj.Code, data) : (data & OffObjectFlag) != 0;
     }
 
     // ARC-MAGIC-030 (MT21b, SC1): the object's spell flags (field 20) as the original's field getter reads them for any object type: a row's effective value, and for a
@@ -842,7 +853,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     /// ARC-WORLD-114: an NPC's first-heartbeat (10) or heartbeat (19) script, which the AI tick runs with the NPC as the attachee and
     /// the triggerer (0x4AD200), under <see cref="HeartbeatAdmission"/>; its slot is kept as map changes (<see cref="SlotProperty"/>).
     /// Its toggle state switches an NPC of the shown map off and back on (<see cref="OffProperty"/>), its kill goes to the world's
-    /// <see cref="AreaScriptWorld.Kill"/>; either for another object, or switching on an NPC its map data has off, leaves the run
+    /// <see cref="AreaScriptWorld.Kill"/>; either for another object leaves the run
     /// unapplied. The caller reads the outcome: anything but "run default" stops the tick's pass.
     /// </summary>
     public AreaScriptedUse RunHeartbeat(AreaObjectRecord row, int point, ScrRuleProfile rules)
@@ -1428,6 +1439,15 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
                 if (set.Disposition == GameSessionDisposition.Rejected) return false;
                 continue;
             }
+            // ARC-SCRIPT-1360: the original flips the object flag "off" itself. An NPC the map data stores off is switched on (and off again) through the session's object-flag change over
+            // the data's; one the data stores on keeps the toggle key.
+            if (Row(request.Object) is { Type: NpcType } toggledNpc && ((Number(toggledNpc, ObjectFlagsSlot) ?? 0) & OffObjectFlag) != 0)
+            {
+                var data = Number(toggledNpc, ObjectFlagsSlot) ?? 0;
+                var flipped = _session.WriteObjectFlag(_session.Version, request.Object.Code, SessionObjectFlagField.Object, OffObjectFlag, !NpcOff(_session, request.Object.Map, request.Object.Code, data), dataHas: true);
+                if (flipped.Disposition == GameSessionDisposition.Rejected) return false;
+                continue;
+            }
             var key = MapChangeKey.ForEntity(request.Object.Code, OffProperty);
             var toggled = _session.ApplyChanges(_session.Version, null,
                 [new(new SessionMapId(request.Object.Map), key, SwitchedOff(_session, request.Object.Map, request.Object.Code) ? null : 1)]);
@@ -1590,8 +1610,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     }
 
     // ARC-WORLD-114: the first toggle state or kill of the run the viewer cannot apply, named; null when every one can be. Both act on an NPC
-    // of the shown map only; a kill needs the world's kill, and an NPC its map data has off is never switched on (its T0 body is not
-    // drawn at all). ARC-SCRIPT-052: destroy takes an NPC of the shown map out of the world unless it follows the PC (the party removal is not
+    // of the shown map only; a kill needs the world's kill (ARC-SCRIPT-1360: an NPC its map data has off is switched on by a toggle, see NpcOff). ARC-SCRIPT-052: destroy takes an NPC of the shown map out of the world unless it follows the PC (the party removal is not
     // read) or has a destroy-point script (the destroy event is audit slice 4); stop attacking acts on the PC or an NPC of the shown map.
     private string? ObjectStateRefusal(ScrEffects effects)
     {
@@ -1744,8 +1763,6 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
                 return $"{name} of {request.Object.Code} is not modelled (only an NPC of the shown map)";
             if (request.Change == ScrObjectStateChange.Kill && (_world?.Kill is null || _world.CanKill?.Invoke(request.Object) == false))
                 return $"kill of {request.Object.Code} needs its combat values";
-            if (request.Change == ScrObjectStateChange.ToggleOff && ((Number(row, ObjectFlagsSlot) ?? 0) & OffObjectFlag) != 0)
-                return $"toggle state of {request.Object.Code}, off in its map data, is not modelled";
         }
         return null;
     }

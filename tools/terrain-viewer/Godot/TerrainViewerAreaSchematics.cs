@@ -71,9 +71,11 @@ public partial class TerrainViewerApp
     // The viewer keeps no inventory locations: every held item is in the bag; the session knows the worn and broken ones.
     private static readonly SessionCraftLookup SchematicItems = _ => new SessionCraftFacts(0);
 
-    private void OpenSchematics(SessionNpcCrafter? crafter = null)
+    /// <param name="replaceWindows">ARC-UI-1125: a script's request (the opener 0x56D130 pops whatever mode is on top, SA40): an open window other
+    /// than the dialog leaves first, once the window has a view to show (a refusal leaves the open window as it is).</param>
+    private void OpenSchematics(SessionNpcCrafter? crafter = null, bool replaceWindows = false)
     {
-        if (!SchematicsActive || !WindowCanOpen(InterfaceMode.Schematic)) return;
+        if (!SchematicsActive || !replaceWindows && !WindowCanOpen(InterfaceMode.Schematic)) return;
         AdoptSchematicData();
         // NC5: an NPC crafter resets the tab, discipline and page on every open (the state is the window's, shared with the hero's).
         if (!ReferenceEquals(_schematicSession, _areaSession) || crafter is not null)
@@ -95,6 +97,7 @@ public partial class TerrainViewerApp
             RefreshAreaStatus();
             return;
         }
+        if (replaceWindows && !ClearWindowsForProgrammaticOpen(InterfaceMode.Schematic, "script schematics")) { _schematicCrafter = null; return; }
         if (_schematicsPanel is null)
         {
             _schematicsPanel = new AreaSchematicsPanel(); AddChild(_schematicsPanel);
@@ -235,9 +238,12 @@ public partial class TerrainViewerApp
         if (_conversationHost is { } talk) QueueScriptSchematics(talk.Scripts.TakeSchematics());
         if (_schematicScriptOpen is not { } pending) return;
         if (!ReferenceEquals(pending.Session, _areaSession)) { _schematicScriptOpen = null; return; }
-        if (SchematicsOpen || WorldModal) return;
+        // ARC-UI-1125: an open window does not hold the request (its opener replaces it; the schematic opener toggles, 0x56D130 closes its own open window);
+        // the panels outside the stack and a dialog still do.
+        if (ProgrammaticOpenBlocked || ConversationOpen) return;
         _schematicScriptOpen = null;
-        OpenSchematics(pending.Crafter);
+        if (SchematicsOpen) { CloseSchematicsByPlayer(); return; }
+        OpenSchematics(pending.Crafter, replaceWindows: true);
     }
 
     /// <summary>ARC-TECHNOLOGY-006: `su` ended the conversation (<see cref="DialogEndKind.SchematicWindow"/>): the window opens with that NPC

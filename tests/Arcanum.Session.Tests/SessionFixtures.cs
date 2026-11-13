@@ -76,7 +76,7 @@ internal static class SessionFixtures
     // and recorded lighting (scheme 1 at 15:00), with an empty party and inventory, no hero, no roll from seed 0 and no life record.
     internal const string LightingTail = ",\"lighting\":{\"schemeId\":1,\"hour\":15}}";
     internal const string GoldenJson =
-        "{\"format\":\"arcanum-steamwoven-session\",\"schemaVersion\":95," +
+        "{\"format\":\"arcanum-steamwoven-session\",\"schemaVersion\":97," +
         "\"world\":\"11111111-1111-1111-1111-111111111111\",\"module\":\"22222222-2222-2222-2222-222222222222\",\"revision\":2," +
         "\"clock\":{\"schemaVersion\":1,\"policyId\":\"steamwoven-normalized-clock-v1\"," +
         "\"sourceRevision\":\"9bd80511f8663a41a25a20a701959e394e0065e4ffc68a8dc69fe19c23678d52\"," +
@@ -107,7 +107,7 @@ internal static class SessionFixtures
     internal const string NoMapNotes = ",\"mapNotes\":[]";
     internal const string EmptyParty = ",\"party\":{\"followers\":[],\"others\":[]}";
     internal const string NoHero = ",\"hero\":null";
-    internal const string EmptyInventory = ",\"inventory\":{\"gold\":0,\"kit\":[],\"pc\":[],\"made\":[],\"npcs\":[],\"placed\":[],\"ammo\":[],\"given\":[],\"piles\":[],\"scriptSlots\":[],\"weights\":[],\"identified\":[],\"lastDiscardedMade\":0,\"grid\":[],\"generated\":[],\"npcWorn\":[],\"itemFields\":[]},\"objects\":{\"junkPiles\":[],\"bloodPools\":[],\"lastJunkNumber\":0,\"lastPoolNumber\":0,\"state\":[],\"links\":[],\"created\":[],\"lastCreatedNumber\":0}";
+    internal const string EmptyInventory = ",\"inventory\":{\"gold\":0,\"kit\":[],\"pc\":[],\"made\":[],\"npcs\":[],\"placed\":[],\"ammo\":[],\"given\":[],\"piles\":[],\"scriptSlots\":[],\"weights\":[],\"identified\":[],\"lastDiscardedMade\":0,\"grid\":[],\"generated\":[],\"npcWorn\":[],\"itemFields\":[],\"holderSlots\":[]},\"objects\":{\"junkPiles\":[],\"bloodPools\":[],\"lastJunkNumber\":0,\"lastPoolNumber\":0,\"state\":[],\"links\":[],\"created\":[],\"lastCreatedNumber\":0}";
     internal const string FreshRandom = ",\"random\":{\"seed\":\"0000000000000000\",\"draws\":0}";
     internal const string NoLife = ",\"life\":{\"hero\":null,\"critters\":[]}";
     internal const string NoReactions = ",\"reactions\":{\"records\":[]}";
@@ -153,7 +153,7 @@ internal static class SessionFixtures
     // ARC-WORLD-1157 (schema 91): the generators section of a new game (no slot used, nothing made, no copy), written before the flights section.
     internal const string NoGenerators = ",\"generators\":{\"slots\":[],\"made\":[],\"copies\":[]}";
     // ARC-DEV-288 (schema 80): no projectile in flight, both counters at a new game's 0.
-    // ARC-WORLD-1159 (schema 95): the encounters section of a new game (no row used), written after the flights section.
+    // ARC-WORLD-1159 (schema 97): the encounters section of a new game (no row used), written after the flights section.
     internal const string NoEncounters = ",\"encounters\":{\"uses\":[]}";
     internal const string NoFlights80 = ",\"flights\":{\"lastProjectile\":0,\"projectiles\":[],\"nextShot\":0,\"heroShots\":[],\"npcThrows\":[],\"npcArrows\":[]}";
     // ARC-DEV-289 (schema 84): the flights section ends with the missile counter and the missiles in flight.

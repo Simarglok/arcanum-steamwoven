@@ -384,7 +384,7 @@ port, `IsWaiting`) and `WT` is the only one here without an installed field.
   the subset (the rule of `FP`). Each is recorded as a `CompanionCommand` in field order; none ends the string early, so the reply's hostile check still follows (HR2). A rejection fails the
   conversation (`CommandRejected`), a thrown exception is `CommandIndeterminate`.
 - **Session.** `SessionDialogCompanionPort` over `GameSessionOwner`: `QueryCompanion` (`LedByPc`, `Jilted`), `WaitParty` with the host's wait timer facts, `LeaveParty` with `Force`, `SetSpreadOut`. Waiting
-  while already waiting, leaving while not in the party and a flag already in the asked state are Applied with no change. `WA` on an NPC that is not in the party is Rejected (CF6).
+  while already waiting (the bit set), leaving while not in the party and a flag already in the asked state are Applied with no change. `WA` on an NPC that is not in the party sets the wait flag on its free record (ARC-SCRIPT-1136, CF8 to CF10, schema 96): the NPC stays free and the timer is the one of its wait index; the `WA 0/1` condition reads that bit alone (`SessionDialogPartyPort.IsWaiting`).
 - **Viewer.** The AREA conversation host passes the port for every speaker, also where the party port is not wired (the session party needs no hero; there `fo` reads the session record, which is free, and `wa` is refused); a wait gets the roster's timer facts (`AreaCompanionRoster.WaitFacts`) for a roster
   companion and none for another speaker.
 - **Installed data.** `FO` appears in 2 Player condition fields, `WT` in none; `WA` 49, `LV` 83, `SO` 47 and `SC` 49 action fields; none stops outside the subset. Both rule settings behave the same.
@@ -478,6 +478,8 @@ that became eligible since rolls its own): the original rebuilds its options wit
 | `y:` `n:` `s:` `e:` `f:` | PC lines 1–99, 100–199, 200–299, 400–499, 800–899 |
 | `b:` | PC lines 300–399, or 1600–1699 when the PC leads the NPC (`DialogGreetingFacts.NpcLedByPc`) |
 | `h:` `k:` `w:` `p:` `l:` | PC lines 700–799, 1500–1599, 1800–1899, 1900–1999, 2300–2399 |
+
+An exact `l:` reply is the world-map reply (state 30, ledger [VA1–VA5](../research/ledger/scripts.md#virgils-altar-talk-and-the-world-map-reply-l-arc-script-1358), ARC-SCRIPT-1358): with `IDialogWorldMapPort` (the viewer's map mode) its pick runs the reply's action and ends the talk with `DialogEndKind.WorldMapWindow` (transition `WorldMap`, no script continuation), and the host opens the world map as the Map button does; without the port it stays blocked.
 | `a:` `i:` | PC class lines from 1000 and 3000 (the insult, 0x419190) + 50 × the NPC's social class, 50 entries |
 | no reply qualifies | PC lines 400–499 (0x414E60) |
 

@@ -78,14 +78,24 @@ public sealed class DialogCompanionPortTests
     }
 
     [TestMethod]
-    public void Wa_on_an_npc_that_is_not_in_the_party_is_rejected_because_the_session_cannot_hold_that_state()
+    public void Wa_on_an_npc_that_is_not_in_the_party_sets_the_wait_flag_and_leaves_it_free_as_the_source_does()
     {
         using var owner = Create();
         var port = Port(owner, wait: Wait);
         var revision = owner.Version.Revision;
-        Assert.AreEqual(DialogCommandResult.Rejected, port.Execute(Do(DialogCompanionAction.Wait)));
-        Assert.AreEqual(GameSessionFailure.NotInParty, port.LastResult!.Value.Failure);
-        Assert.AreEqual(revision, owner.Version.Revision);
+        Assert.AreEqual(DialogCommandResult.Applied, port.Execute(Do(DialogCompanionAction.Wait)));
+        Assert.AreEqual(GameSessionDisposition.Changed, port.LastResult!.Value.Disposition);
+        var record = owner.QueryCompanion("virgil");
+        Assert.AreEqual(new SessionCompanion("virgil", CompanionStanding.Free, false, false, false, CompanionLoyalty.None, true), record);
+        Assert.IsFalse(record.LedByPc, "the NPC has no leader: fo stays false");
+        Assert.IsTrue(record.WaitBit);
+        Assert.IsNotNull(owner.QueryWaitTimer("virgil"), "the timer of its wait index 3 is queued (CF8)");
+        Assert.AreEqual(revision + 1, owner.Version.Revision);
+        Assert.AreEqual(0, owner.QueryParty().Followers.Count, "the follower array is not touched");
+        // The bit is already set: the second wa changes nothing.
+        Assert.AreEqual(DialogCommandResult.Applied, port.Execute(Do(DialogCompanionAction.Wait)));
+        Assert.AreEqual(GameSessionDisposition.NoChange, port.LastResult!.Value.Disposition);
+        Assert.AreEqual(revision + 1, owner.Version.Revision);
     }
 
     [TestMethod]

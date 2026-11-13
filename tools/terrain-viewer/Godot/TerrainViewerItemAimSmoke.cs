@@ -331,7 +331,84 @@ public partial class TerrainViewerApp
                 description = $"{carried} texts={ItemWindowTextsForSelfTest}";
                 GD.Print($"ARC-RES-1327 item-aim description item={carried} texts={ItemWindowTextsForSelfTest}");
             }
-            GD.Print("ARC-DEV-365 native-smoke item-aim PASS " + System.Text.Json.JsonSerializer.Serialize(new { Map = _readyMapName, Tile = tileGoal, Npc = npc.Id, Notice = _itemAimLast, Heal = healed, Pick = picked, Sheet = sheet, Contents = contents, Description = description }));
+            // 11. ARC-UI-1411 (E8-g, ledger XR4): the Identify answer for an item the hero does not hold (one lying on the map or held by an NPC: its map row) draws the item window too (the wrapper 0x57CCF0 describes any object).
+            var groundDescription = "NONE";
+            if (!_messageLog.PaneMode && _inventoryHost.Map(CurrentAreaMap) is { } groundMap && _readyArea is { } groundArea && _spellCastMap is { } groundCast)
+            {
+                var candidates = groundArea.Snapshot.Objects.Where(row => row.Type is >= 5 and <= 14 && groundMap.TryGetEntity(row.Key, out var e) && InventoryItemKind(session, e) is null
+                    && groundCast.IdOf(row.Key) is not null).Take(12).ToArray();
+                foreach (var row in candidates)
+                {
+                    groundMap.TryGetEntity(row.Key, out var groundItem);
+                    _messageLog.ClearHover(); LastIdentifyDescriptionForSelfTest = null;
+                    PostSpellLog(null, [new SpellCastEvent(SpellCastEventKind.IdentifyItem, 0, row.Type, groundCast.IdOf(row.Key)!)]);
+                    for (var i = 0; i < 20 && LastIdentifyDescriptionForSelfTest is null; i++) { Frame(); TakeDialogNpcSheet(); }
+                    if (LastIdentifyDescriptionForSelfTest is not { Shown: true }) continue;
+                    Require(ItemWindowTextsForSelfTest >= 1, "the item window of a map item has its name");
+                    groundDescription = $"{groundItem} type={row.Type} texts={ItemWindowTextsForSelfTest}";
+                    GD.Print($"ARC-UI-1411 item-aim ground description item={groundItem} type={row.Type} texts={ItemWindowTextsForSelfTest}");
+                    break;
+                }
+                if (groundDescription == "NONE")
+                {
+                    Require(candidates.Length == 0, $"no map item of {candidates.Length} candidates was described on map {_readyMapName}");
+                    GD.Print($"{ItemAimCode} item-aim ground description step NONE (no map item row on map {_readyMapName})");
+                }
+            }
+            // 12. ARC-UI-1411 (ledger XR4): the Identify answer for a portal or scenery draws the object's hover window (its image and name), with no pointer on it.
+            var objectWindows = new List<string>();
+            if (!_messageLog.PaneMode && _hoverIndex is { } objectIndex && _readyArea is { } objectArea && _spellCastMap is { } objectCast)
+            {
+                var named = objectArea.Snapshot.Objects.Where(row => row.Type is 1 or 3 && objectIndex.Contains(row.Key) && !string.IsNullOrEmpty(objectIndex.Name(row.Key)) && objectCast.IdOf(row.Key) is not null)
+                    .GroupBy(row => row.Type).Select(group => group.First()).ToArray();
+                foreach (var row in named)
+                {
+                    _messageLog.ClearHover(); LastIdentifyObjectForSelfTest = null;
+                    PostSpellLog(null, [new SpellCastEvent(SpellCastEventKind.IdentifyItem, 0, row.Type, objectCast.IdOf(row.Key)!)]);
+                    for (var i = 0; i < 20 && LastIdentifyObjectForSelfTest is null; i++) { Frame(); TakeDialogNpcSheet(); }
+                    if (LastIdentifyObjectForSelfTest is not { Shown: true } drawnObject || drawnObject.Key != row.Key) { objectWindows.Add($"type{row.Type}=skipped"); continue; }
+                    Require(_messageLog.Shown is { Kind: AreaMessageKind.Object } shownObject && shownObject.Title.Length > 0, $"the object window of type {row.Type} has its name");
+                    objectWindows.Add($"type{row.Type}={_messageLog.Shown!.Title}");
+                    GD.Print($"ARC-UI-1411 item-aim object window type={row.Type} name={_messageLog.Shown.Title}");
+                }
+                Require(named.Length == 0 || objectWindows.Any(window => !window.EndsWith("=skipped", StringComparison.Ordinal)), $"no portal or scenery window was drawn: {string.Join(' ', objectWindows)}");
+                if (named.Length == 0) GD.Print($"{ItemAimCode} item-aim object window step NONE (no named portal or scenery on map {_readyMapName})");
+            }
+            // 13. ARC-UI-1451 (ledger XR4): the Identify answer for a made item the hero dropped on the map (no map row, only the session's placed item) draws its item window too.
+            var droppedDescription = "NONE";
+            if (carriedItem is { } dropping && !_messageLog.PaneMode && _inventoryHost is { } dropHost && dropHost.GridMoveItem(session, dropping, _areaKitGridMove) is { } dropFacts && HeroLocationKnown())
+            {
+                var dropped = session.DropHeroItem(session.Version, dropping, dropFacts, dropHost.ItemScripts(session), ItemTriggersNow());
+                Require(dropped.Disposition == GameSessionDisposition.Changed && dropped.DeclinedBy is null && session.QueryPlacedItems().Any(placed => placed.Entity == dropping),
+                    $"the made item lies on the map: {dropped.Disposition} {dropped.Failure}");
+                Require(InventoryItemKind(session, dropping) is null && ItemMapRow(dropping) is null, "a dropped made item has neither a hero kind nor a map row");
+                _messageLog.ClearHover(); LastIdentifyDescriptionForSelfTest = null;
+                PostSpellLog(null, [new SpellCastEvent(SpellCastEventKind.IdentifyItem, 0, 5, dropping)]);
+                for (var i = 0; i < 20 && LastIdentifyDescriptionForSelfTest is null; i++) { Frame(); TakeDialogNpcSheet(); }
+                Require(LastIdentifyDescriptionForSelfTest is { Shown: true } lying && lying.Item == dropping, $"the item window is drawn for the dropped made item ({LastIdentifyDescriptionForSelfTest})");
+                Require(ItemWindowTextsForSelfTest >= 1, "the item window of a dropped made item has its name");
+                droppedDescription = $"{dropping} texts={ItemWindowTextsForSelfTest}";
+                GD.Print($"ARC-UI-1451 item-aim dropped description item={dropping} texts={ItemWindowTextsForSelfTest}");
+            }
+            else GD.Print($"{ItemAimCode} item-aim dropped description step NONE (no made item to drop, or a pane mode)");
+            // 14. ARC-UI-1458 (ledger XR4): the Identify answer for a made item an NPC holds (no map row, not on the ground, not the hero's) draws its item window too: the session names its kind.
+            var heldDescription = "NONE";
+            if (!_messageLog.PaneMode && _inventoryHost.Map(CurrentAreaMap) is { } holderMap && holderMap.TryGetEntity(npc.Row.Key, out var holderEntity) && data.Kind(15100) is { } heldKind)
+            {
+                var added = session.AddItemToNpc(session.Version, holderEntity, heldKind, AreaInventoryHost.DiagnosticInsertCheck);
+                Require(added.Disposition == GameSessionDisposition.Changed && added.Item is not null, $"the NPC was given a made item: {added.Disposition} {added.Failure}");
+                var held = added.Item!;
+                Require(InventoryItemKind(session, held) is null && PlacedItemKind(session, held) is null && ItemMapRow(held) is null && session.QueryPrototypeItemKind(held) is not null, "an NPC's made item has neither a hero kind nor a map row, only the session's kind");
+                _messageLog.ClearHover(); LastIdentifyDescriptionForSelfTest = null;
+                PostSpellLog(null, [new SpellCastEvent(SpellCastEventKind.IdentifyItem, 0, 5, held)]);
+                for (var i = 0; i < 20 && LastIdentifyDescriptionForSelfTest is null; i++) { Frame(); TakeDialogNpcSheet(); }
+                Require(LastIdentifyDescriptionForSelfTest is { Shown: true } heldWindow && heldWindow.Item == held, $"the item window is drawn for the made item an NPC holds ({LastIdentifyDescriptionForSelfTest})");
+                Require(ItemWindowTextsForSelfTest >= 1, "the item window of an NPC's made item has its name");
+                heldDescription = $"{held} texts={ItemWindowTextsForSelfTest}";
+                GD.Print($"ARC-UI-1458 item-aim npc-held description item={held} texts={ItemWindowTextsForSelfTest}");
+            }
+            else GD.Print($"{ItemAimCode} item-aim npc-held description step NONE (a pane mode, or no NPC entity)");
+            GD.Print("ARC-DEV-365 native-smoke item-aim PASS " + System.Text.Json.JsonSerializer.Serialize(new { Map = _readyMapName, Tile = tileGoal, Npc = npc.Id, Notice = _itemAimLast, Heal = healed, Pick = picked, Sheet = sheet, Contents = contents, Description = description, GroundDescription = groundDescription, DroppedDescription = droppedDescription, HeldDescription = heldDescription, ObjectWindow = objectWindows.Count == 0 ? "NONE" : string.Join(" ", objectWindows) }));
         }
         finally
         {

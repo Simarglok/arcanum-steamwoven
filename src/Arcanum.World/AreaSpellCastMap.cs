@@ -21,7 +21,7 @@ namespace Arcanum.World;
 public sealed class AreaSpellCastMap : ISpellCastMap
 {
     private const int ObjectFlagsSlot = 18, SpellFlagsSlot = 19, PcType = 15, NpcType = 16;
-    private const int DestroyedOrOff = 0x3, LockLevelSlot = 37;
+    private const int DestroyedOrOff = 0x3, OffFlag = 0x2, LockLevelSlot = 37;
 
     private readonly GameSessionOwner _session;
     private readonly int _map;
@@ -348,6 +348,9 @@ public sealed class AreaSpellCastMap : ISpellCastMap
         {
             // ARC-WORLD-102: the college ranks and mastery its fields store.
             Book = fields.Critter is { } critter ? SpellBookRules.FromFields(critter.SpellTech) : null,
+            // ARC-MAGIC-1295: the stored values the TraitIdx component adds to (the session lays what it wrote over them).
+            StoredStats = fields.Critter?.BaseStats, StoredResistances = resistances,
+            StoredBasicSkills = fields.Critter?.BasicSkills, StoredTechSkills = fields.Critter?.TechSkills,
         };
     }
 
@@ -494,7 +497,8 @@ public sealed class AreaSpellCastMap : ISpellCastMap
     private SpellTargetObject RowObject(string id, AreaObjectRecord row, (long X, long Y) cell)
     {
         var location = new SpellLocation(checked((uint)cell.X), checked((uint)cell.Y));
-        var objectFlags = Flags(row, ObjectFlagsSlot) | (_gone(row.Key) ? DestroyedOrOff : 0);
+        // ARC-SCRIPT-1360: an NPC the data stores off and a heartbeat switched on is no longer off; the gone set (the session's change over the data's) names the NPCs that are.
+        var objectFlags = (row.Type == NpcType ? Flags(row, ObjectFlagsSlot) & ~OffFlag : Flags(row, ObjectFlagsSlot)) | (_gone(row.Key) ? DestroyedOrOff : 0);
         if (row.Type == NpcType && Critter(id) is { } npc && _session.QueryLife(npc.Combat.Target).View is { } life)
             return new(id, NpcType, location, objectFlags, npc.SpellFlags, npc.CritterFlags, npc.CritterFlags2, life.Status.HitPoints,
                 life.Record.State.HitPointDamage, Poison: life.Record.State.PoisonLevel,

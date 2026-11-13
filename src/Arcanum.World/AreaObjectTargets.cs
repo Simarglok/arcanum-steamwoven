@@ -33,13 +33,14 @@ public sealed record AreaObjectAttackTarget(string Entity, AreaObjectRecord Row,
 /// </summary>
 public sealed class AreaObjectTargets
 {
-    private const int TypeFlagsSlot = 36, KeySlot = 38;
+    private const int TypeFlagsSlot = 36, KeySlot = 38, ObjectFlagsSlot = 18;
     private readonly SessionMapId _map;
     private readonly IReadOnlyDictionary<AreaObjectKey, (string Entity, SessionOpenableBaseline Baseline)> _portals;
     private readonly AreaInventoryMap? _inventory;
     private readonly Dictionary<AreaObjectKey, (AreaObjectRecord Row, string Entity, DamageableObjectKind Kind)> _objects = [];
     // ARC-WORLD-114: the NPC rows by key, with their session entity, which a script can switch off.
-    private readonly Dictionary<AreaObjectKey, string> _npcs = [];
+    // ARC-SCRIPT-1360: with the map data's object flags, since a toggle state switches an NPC the data stores off on.
+    private readonly Dictionary<AreaObjectKey, (string Entity, long Flags, CellCoord Cell)> _npcs = [];
 
     /// <summary>The targets of a shown map from its snapshot, its drawn portals and its inventory map (null without a seed).</summary>
     public static AreaObjectTargets From(AreaSnapshot snapshot, AreaPortals portals, AreaInventoryMap? inventory)
@@ -62,7 +63,8 @@ public sealed class AreaObjectTargets
         if (runtimeMap < 1) return;
         foreach (var row in rows)
         {
-            if (row.Type == CombatFieldReader.NpcType && row.WorldX is not null && row.WorldY is not null) _npcs.TryAdd(row.Key, AreaUseScriptHost.EntityId(row));
+            if (row.Type == CombatFieldReader.NpcType && row.WorldX is not null && row.WorldY is not null) _npcs.TryAdd(row.Key, (AreaUseScriptHost.EntityId(row), row.EffectiveFields.FirstOrDefault(f => f.Slot == ObjectFlagsSlot) is { Presence: AreaPresence.Value, Number: { } flags } ? flags : 0,
+                new(checked((int)row.WorldX.Value), checked((int)row.WorldY.Value))));
             DamageableObjectKind? kind = row.Type switch
             {
                 CombatFieldReader.PortalType => DamageableObjectKind.Portal,
@@ -146,11 +148,32 @@ public sealed class AreaObjectTargets
         if (_gone is { } known && known.Version == version) return known.Keys;
         var keys = _objects.Where(pair => session.QueryObjectCondition(_map, pair.Value.Entity, pair.Value.Kind) is SessionObjectCondition.Destroyed
             or SessionObjectCondition.Off).Select(pair => pair.Key)
-            .Concat(_npcs.Where(pair => AreaUseScriptHost.SwitchedOff(session, _map.RuntimeMap, pair.Value)
-                || AreaUseScriptHost.Destroyed(session, _map.RuntimeMap, pair.Value)).Select(pair => pair.Key)).ToHashSet();
+            .Concat(_npcs.Where(pair => AreaUseScriptHost.NpcOff(session, _map.RuntimeMap, pair.Value.Entity, pair.Value.Flags)
+                || AreaUseScriptHost.Destroyed(session, _map.RuntimeMap, pair.Value.Entity)).Select(pair => pair.Key)).ToHashSet();
         // An unchanged set keeps its reference, so overlays cached on it stay valid across unrelated revisions.
         IReadOnlySet<AreaObjectKey> result = _gone is { } previous && previous.Keys.SetEquals(keys) ? previous.Keys : keys;
         _gone = (version, result);
+        return result;
+    }
+
+    private (GameSessionVersion Version, IReadOnlyList<(AreaObjectKey Key, string Entity, CellCoord World)> Npcs)? _switchedOn;
+
+    /// <summary>
+    /// ARC-WORLD-1436: the NPCs the map data stores off (object flag 0x2) that the session has switched on (the quest NPCs a heartbeat switches on, ARC-SCRIPT-1360) and that are alive and
+    /// not destroyed, with the world cell of their map data. The T0 step evidence leaves a data-off record out of its blockers, so such an NPC blocks no step until the live overlay holds
+    /// its cell (<see cref="AreaOccupancy.WithHeld"/>); an NPC the AI host walked off its cell is the host's to hold. The same list is returned while the session's version is unchanged.
+    /// </summary>
+    public IReadOnlyList<(AreaObjectKey Key, string Entity, CellCoord World)> SwitchedOn(GameSessionOwner session)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        var version = session.Version;
+        if (_switchedOn is { } known && known.Version == version) return known.Npcs;
+        var list = _npcs.Where(pair => (pair.Value.Flags & AreaUseScriptHost.OffObjectFlagBit) != 0
+                && !AreaUseScriptHost.NpcOff(session, _map.RuntimeMap, pair.Value.Entity, pair.Value.Flags)
+                && !AreaUseScriptHost.Destroyed(session, _map.RuntimeMap, pair.Value.Entity) && !session.QueryNpcKilled(pair.Value.Entity))
+            .Select(pair => (pair.Key, pair.Value.Entity, pair.Value.Cell)).ToArray();
+        IReadOnlyList<(AreaObjectKey Key, string Entity, CellCoord World)> result = _switchedOn is { } previous && previous.Npcs.SequenceEqual(list) ? previous.Npcs : list;
+        _switchedOn = (version, result);
         return result;
     }
 

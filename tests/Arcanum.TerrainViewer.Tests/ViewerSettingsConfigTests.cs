@@ -1,3 +1,4 @@
+using Arcanum.Input;
 using Arcanum.Presentation.Audio;
 using Arcanum.Session;
 using Arcanum.Session.Launcher;
@@ -25,6 +26,7 @@ public sealed class ViewerSettingsConfigTests
     private static readonly AreaGameSettings Chosen = new(2, true, false)
     {
         Floats = 0, FloatSpeed = 9, HdInterface = true, GeneratedInterface = true, HdPackSource = HdPackSourceMode.Custom, HdPackPath = "/Volumes/Packs/HD pack",
+        Pad = PadScheme.Pointer, Touch = TouchScheme.Off, Prompts = PromptStyle.SteamDeck,
     };
 
     [TestMethod]
@@ -46,7 +48,7 @@ public sealed class ViewerSettingsConfigTests
     public void The_game_settings_round_trip_as_lines_and_a_missing_file_reads_the_defaults()
     {
         var text = ArcanumConfig.Format(ViewerSettingsConfig.GameChanges(Chosen).Select(change => new ArcanumConfigEntry(change.Name, change.Value!)));
-        Assert.AreEqual("difficulty=2\nturn-based=1\nauto attack=0\ntext floaters=0\nfloat speed=9\nhd interface=1\ngenerated interface=1\nhd pack=custom\nhd pack path=/Volumes/Packs/HD pack\n", text);
+        Assert.AreEqual("difficulty=2\nturn-based=1\nauto attack=0\ntext floaters=0\nfloat speed=9\nhd interface=1\ngenerated interface=1\nhd pack=custom\nhd pack path=/Volumes/Packs/HD pack\npad scheme=pointer\ntouch scheme=off\nprompt style=steamdeck\n", text);
         var read = Lines(text);
         Assert.AreEqual(Chosen, ViewerSettingsConfig.ReadGame(read));
         Assert.IsTrue(ViewerSettingsConfig.HasGame(read));
@@ -65,6 +67,31 @@ public sealed class ViewerSettingsConfigTests
         Assert.AreEqual((true, true, defaults.HdPackSource, "/x"), (settings.HdInterface, settings.GeneratedInterface, settings.HdPackSource, settings.HdPackPath));
         Assert.IsFalse(ViewerSettingsConfig.ReadGame(Lines("generated interface=1\n")).GeneratedInterface, "the generated interface is on only with the HD interface");
         Assert.AreEqual(HdPackSourceMode.GameFolder, ViewerSettingsConfig.ReadGame(Lines("HD PACK=Game\n")).HdPackSource);
+    }
+
+    [TestMethod]
+    public void The_controller_scheme_lines_default_to_off_and_a_bad_word_takes_that_lines_default_alone()
+    {
+        var defaults = ViewerSettingsConfig.ReadGame(ArcanumConfigRead.Empty(ArcanumConfigReadStatus.Missing));
+        Assert.AreEqual((PadScheme.Off, TouchScheme.Off, PromptStyle.Auto), (defaults.Pad, defaults.Touch, defaults.Prompts));
+        var read = ViewerSettingsConfig.ReadGame(Lines("pad scheme=Direct\ntouch scheme=1\nprompt style=gamecube\ndifficulty=2\n"));
+        Assert.AreEqual((PadScheme.Direct, TouchScheme.Off, PromptStyle.Auto, 2), (read.Pad, read.Touch, read.Prompts, read.Difficulty), "words are case-insensitive, a number or an unknown word is the default");
+        Assert.AreEqual(PadScheme.Off, ViewerSettingsConfig.ReadGame(Lines("pad scheme=off,direct\n")).Pad, "no list of values");
+        Assert.IsTrue(ViewerSettingsConfig.HasGame(Lines("pad scheme=off\n")), "a controller line alone is a saved game setting");
+        // An out-of-range value in a record never reaches the file: it is written as the default.
+        var bad = ViewerSettingsConfig.GameChanges(AreaGameSettings.Defaults with { Pad = (PadScheme)9, Prompts = (PromptStyle)9 });
+        Assert.AreEqual("off", bad.Single(change => change.Name == ViewerSettingsConfig.PadSchemeLine).Value);
+        Assert.AreEqual("auto", bad.Single(change => change.Name == ViewerSettingsConfig.PromptStyleLine).Value);
+        // Saved through the one file at once and read back after a restart.
+        var path = Path.Combine(_root, "user", ArcanumConfig.FileName);
+        Assert.AreEqual(ArcanumConfigSaveStatus.Saved, ArcanumConfig.Save(path, ViewerSettingsConfig.GameChanges(AreaGameSettings.Defaults with { Pad = PadScheme.Direct, Prompts = PromptStyle.Nintendo })));
+        var saved = ViewerSettingsConfig.ReadGame(ArcanumConfig.Read(path));
+        Assert.AreEqual((PadScheme.Direct, TouchScheme.Off, PromptStyle.Nintendo), (saved.Pad, saved.Touch, saved.Prompts));
+        Assert.AreEqual(ControlSchemeSettings.CurrentVersion, saved.Controls.Version);
+        // A file with both a pad scheme and the touch scheme on is C alone (the one Controls line shows C; the pad scheme beside it is dropped).
+        var both = ViewerSettingsConfig.ReadGame(Lines("pad scheme=direct\ntouch scheme=touchpad\n"));
+        Assert.AreEqual((PadScheme.Off, TouchScheme.TouchPad), (both.Controls.Pad, both.Controls.Touch));
+        Assert.IsTrue(saved.Controls.OriginalActive, "the original mouse and keyboard stay live whatever the lines hold");
     }
 
     [TestMethod]
@@ -142,7 +169,8 @@ public sealed class ViewerSettingsConfigTests
         var path = Path.Combine(_root, ArcanumConfig.FileName);
         Assert.AreEqual(ArcanumConfigSaveStatus.Saved, ArcanumConfig.Save(path, ViewerSettingsMigration.Import(legacy)));
         var read = ArcanumConfig.Read(path);
-        Assert.AreEqual(Chosen, ViewerSettingsConfig.ReadGame(read));
+        // The old file knew no controller lines: they come in at their defaults (Off, Off, Auto).
+        Assert.AreEqual(Chosen with { Pad = PadScheme.Off, Touch = TouchScheme.Off, Prompts = PromptStyle.Auto }, ViewerSettingsConfig.ReadGame(read));
         Assert.AreEqual(new AudioVolumes(4, 0, 10), ViewerSettingsConfig.ReadAudio(read));
         Assert.IsTrue(ViewerSettingsConfig.ReadAlwaysRun(read));
         Assert.AreEqual(VisualProfile.Hd, ViewerSettingsConfig.ReadVisualProfile(read));

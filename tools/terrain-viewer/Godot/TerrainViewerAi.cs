@@ -163,6 +163,7 @@ public partial class TerrainViewerApp
             Companions = () => _areaCompanions is { } group
                 ? group.Companions.Select(c => (c.Entity, c.Key, World(chart.ToWorld(c.Grid.State.CommittedCell)))).ToArray() : [],
             Removed = AreaRemovedObjects,
+            SwitchedOn = AreaSwitchedOnNpcs,
             LineOfFire = () => AiLineOfFire(host()),
             DropMap = AreaDropMapNow,
             // ARC-WORLD-1157 (SZ6): a generator's off-screen option reads the game window and the generator's drawn rectangle.
@@ -304,8 +305,8 @@ public partial class TerrainViewerApp
 
     /// <summary>ARC-SCRIPT-047: opens the conversation a heartbeat script asked for (the NPC's talk with the PC, 1100) after the event
     /// pump that ran the tick. The run is applied already (the heartbeat removed itself), so a talk that cannot open yet (a conversation
-    /// or a window is open, the hero is under attack) stays pending and opens once it can: a project choice, the original's behaviour in
-    /// those states is not read (audit U5). One for another map than the shown one, or left when the AI host retires, is dropped.</summary>
+    /// or a panel outside the stack is open, the hero is under attack) stays pending and opens once it can: a project choice, the original's
+    /// behaviour in those states is not read (audit U5). An open window does not hold it (ARC-UI-1125: the dialog opener pops the top mode). One for another map than the shown one, or left when the AI host retires, is dropped.</summary>
     private void OpenHeartbeatConversation()
     {
         if (_heartbeatDialog is not { } talk) return;
@@ -315,7 +316,8 @@ public partial class TerrainViewerApp
             GD.Print($"ARC-SCRIPT-047 heartbeat-talk dropped: the NPC {talk.Npc?.Code} is not on the shown map");
             return;
         }
-        if (ConversationOpen || WorldModal || !LeaveCombatModeForDialog()) return;
+        // ARC-UI-1125: an open window does not hold it any more (the dialog opener replaces it); the panels outside the stack and a dialog still do.
+        if (ConversationOpen || ProgrammaticOpenBlocked || !LeaveCombatModeForDialog()) return;
         _heartbeatDialog = null;
         BeginScriptedConversation(talk);
     }
@@ -514,6 +516,8 @@ public partial class TerrainViewerApp
     {
         if (_aiHost is { } host && ReferenceEquals(host.Session, _areaSession)) { host.Retire(); _areaSession!.KillNotice = null; }
         _aiHost = null; _aiHostArea = null;
+        // ARC-DEV-1426: the caches built over the retired map (its line of fire holds the map's rows and steps) go with the host.
+        _aiLineOfFire = null; _aiPcOccupancy = null;
         _heartbeatDialog = null;
         _npcTilePending.Clear();
     }
@@ -648,6 +652,13 @@ public partial class TerrainViewerApp
                     _aiNotice = $"{AiName(notice.Npc)} uses an item";
                     GD.Print($"ARC-WORLD-108 ai-item-use npc={notice.Npc} item={notice.Item} target={notice.Target} outcome={notice.ItemUse?.Outcome}"
                         + $" cast={notice.ItemUse?.Cast} fired={notice.ItemUse?.ItemUsed?.Spells.Count ?? 0} spent={notice.ItemUse?.Spent}");
+                    SyncAreaInventory();
+                    redraw = true;
+                    break;
+                case AreaAiNoticeKind.PickUp:
+                    // ARC-AI-1309: an NPC picked up an item (goal 16's end): the ground and the pile lose it, so the objects are drawn again.
+                    _aiNotice = $"{AiName(notice.Npc)} picks up an item";
+                    GD.Print($"ARC-AI-1309 ai-pickup npc={notice.Npc} item={notice.Item}");
                     SyncAreaInventory();
                     redraw = true;
                     break;
@@ -820,7 +831,33 @@ public partial class TerrainViewerApp
     private readonly Dictionary<AreaOccupancy, AreaOccupancy> _aiCompanionOccupancy = new(ReferenceEqualityComparer.Instance);
     private long _aiCompanionOccupancyVersion = -1;
 
-    private AreaOccupancy AiMoversOverlay(AreaOccupancy occupancy)
+    /// <summary>ARC-WORLD-1436: the NPCs the map data stores off that the session switched on, with their data cells (none without object targets or a session).</summary>
+    private IReadOnlyList<(AreaObjectKey Key, string Entity, CellCoord World)> AreaSwitchedOnNpcs() =>
+        _areaSession is { } session && ObjectTargets() is { } targets ? targets.SwitchedOn(session) : [];
+
+    private readonly Dictionary<object, AreaOccupancy?> _switchedOnOccupancy = new(ReferenceEqualityComparer.Instance);
+    private (object List, object? Host, long Moved)? _switchedOnStamp;
+    private static readonly object NoBase = new();
+
+    /// <summary>ARC-WORLD-1436: the overlay with the cells of the NPCs switched on from the map data's off flag held (the T0 evidence lists no blocker for them); the ones the AI walked off their cell are its movers', and a companion (which the AI host
+    /// does not run) has left its data cell.</summary>
+    private AreaOccupancy? WithSwitchedOn(AreaOccupancy? occupancy)
+    {
+        if (_worldActor.Session is not AreaGridSession grid || AreaSwitchedOnNpcs() is not { Count: > 0 } list) return occupancy;
+        var stamp = (List: (object)list, Host: (object?)_aiHost, Moved: _aiHost?.Movers.Version ?? -1);
+        if (_switchedOnStamp != stamp) { _switchedOnStamp = stamp; _switchedOnOccupancy.Clear(); }
+        var key = (object?)occupancy ?? NoBase;
+        if (_switchedOnOccupancy.TryGetValue(key, out var known)) return known;
+        var cells = list.Where(n => _aiHost is { } host ? host.Scene.Npcs.Any(m => m.Entity == n.Entity) && !host.Movers.IsMoved(n.Entity) : _areaCompanions?.Companions.Any(c => c.Entity == n.Entity) != true)
+            .Select(n => grid.Chart.ToChart(new(n.World.X, n.World.Y))).ToArray();
+        var value = cells.Length == 0 ? occupancy : (occupancy ?? AreaOccupancy.None).WithHeld(cells);
+        _switchedOnOccupancy[key] = value;
+        return value;
+    }
+
+    private AreaOccupancy AiMoversOverlay(AreaOccupancy occupancy) => WithSwitchedOn(AiMoversMoved(occupancy)) ?? occupancy;
+
+    private AreaOccupancy AiMoversMoved(AreaOccupancy occupancy)
     {
         if (_aiHost is not { } host || host.Movers.All.Count == 0 || _worldActor.Session is not AreaGridSession grid) return occupancy;
         if (_aiCompanionOccupancyVersion != host.Movers.Version || _aiCompanionOccupancy.Count > 64)

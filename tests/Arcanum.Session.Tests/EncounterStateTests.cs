@@ -9,7 +9,7 @@ using static Arcanum.Session.Tests.SessionFixtures;
 
 namespace Arcanum.Session.Tests;
 
-/// <summary>ARC-WORLD-1159 (E2-c, schema 95, ledger PO15–PO19): the Random Encounters event in the session: the chain a host with tables arms, the roll at its firing, the critters it creates, the use counts and the save. Invented tables.</summary>
+/// <summary>ARC-WORLD-1159 (E2-c, schema 97, ledger PO15–PO19): the Random Encounters event in the session: the chain a host with tables arms, the roll at its firing, the critters it creates, the use counts and the save. Invented tables.</summary>
 [TestClass]
 public sealed class EncounterStateTests
 {

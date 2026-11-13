@@ -59,6 +59,8 @@ public partial class TerrainViewerApp
             _conversationHost.GoldKindSource = () => { AdoptBarterData(); return _barterData?.Data?.GoldKind(); };
             // ARC-DEV-190: a co action is the hero's attack event on the speaker, run by the shown map's AI host (none without AI: the action stays unadmitted).
             _conversationHost.HeroAttackAvailable = () => AreaAiHostNow() is not null;
+            // ARC-SCRIPT-1358: an l: reply ends the talk and opens the world map; only in map mode, where the bar's Map button has one.
+            _conversationHost.WorldMapAvailable = () => WorldMapActive;
             _conversationHost.HeroAttack = entity => AreaAiHostNow() is { } ai && ai.OrderAttack(new Arcanum.Session.CompanionOrderAttack(Arcanum.Session.SessionCombatant.Hero, Arcanum.Session.SessionCombatant.Critter(entity), Arcanum.Simulation.Ai.Loudness.Normal, Arcanum.Simulation.Ai.AttackEventFlags.None));
             // ARC-SCRIPT-1135: an so action that newly sets the spread-out flag starts goal 69 on the shown map's AI host (CF4).
             _conversationHost.SpreadOutStart = entity => AreaAiHostNow() is { } spreadAi && spreadAi.StartSpreadOut(entity);
@@ -257,16 +259,23 @@ public partial class TerrainViewerApp
         if (_talkOpenPending is not { } speaker) return;
         _talkOpenPending = null;
         if (_worldLifecycleSession is not null || _worldResetPending || _worldReloadPending) _conversationNotice = "walk to talk cancelled: reset/reload";
-        else if (!_worldFocused || WorldModal || WorldUiFocus || !TalkMapActive || !SpeakerPresent(speaker)) _conversationNotice = "walk to talk dropped: input quarantined/modal";
-        else { BeginConversation(speaker); return; }
+        // ARC-UI-1125: an open window does not drop the dialog (the opener replaces it, 0x567460 with 0x553320); the panels outside the stack and a dialog still do.
+        else if (!_worldFocused || ProgrammaticOpenBlocked || ConversationOpen || WorldUiFocus || !TalkMapActive || !SpeakerPresent(speaker)) _conversationNotice = "walk to talk dropped: input quarantined/modal";
+        else { BeginConversation(speaker, replaceWindows: true); return; }
         RefreshReadyStatus();
     }
 
-    private void BeginConversation(AreaSpeaker speaker)
+    /// <param name="replaceWindows">ARC-UI-1125: a talk the hero's goal 21 asked for (not a click, which the game view's guard keeps out of every window):
+    /// an open window other than a dialog leaves first, as the original's dialog opener pops the top mode and pushes mode 3 (0x553320), after the
+    /// combat tests (0x567460 returns before it pops).</param>
+    private void BeginConversation(AreaSpeaker speaker, bool replaceWindows = false)
     {
-        if (_conversationHost is null || _conversationPanel is null || !WindowCanOpen(InterfaceMode.Dialog)) return;
+        if (_conversationHost is null || _conversationPanel is null) return;
+        if (!replaceWindows && !WindowCanOpen(InterfaceMode.Dialog)) return;
         // ARC-COMBAT-004: a dialog first leaves combat mode, and does not start while the hero is under attack.
         if (!LeaveCombatModeForDialog()) { RefreshReadyStatus(); return; }
+        // The opener's refusals come before it pops (0x567460): the dialog, the hero's state. The window leaves only once a window will open (below).
+        if (replaceWindows && (ConversationOpen || AnyWindowOpen && WindowRefusedForHero(InterfaceMode.Dialog))) return;
         QuarantineWorld();
         _conversationNotice = null;
         // ARC-WORLD-045: talking interrupts the speaker's goals, its follow goal too (OL19).
@@ -287,6 +296,7 @@ public partial class TerrainViewerApp
             RefreshReadyStatus();
             return;
         }
+        if (replaceWindows && !ClearWindowsForProgrammaticOpen(InterfaceMode.Dialog, "talk goal dialog")) return;
         OpenConversation(speaker, start);
         GD.Print($"ARC-SCRIPT-005 conversation status={start.Status} detail={start.Detail} phase={start.Conversation?.Phase}");
         // ARC-WORLD-058: the greeting texts (read at the host's first conversation) and where the first NPC line came from.
@@ -311,13 +321,15 @@ public partial class TerrainViewerApp
             GD.Print($"ARC-WORLD-118 scripted conversation held by the smoke script={dialog.Script} node={dialog.Node} speaker={speaker.ScriptId}");
             return;
         }
-        if (_conversationHost is null || _conversationPanel is null || ConversationOpen || WorldModal)
+        // ARC-UI-1125: an open window does not stop it (the opener replaces it); a conversation or a panel outside the stack still does.
+        if (_conversationHost is null || _conversationPanel is null || ConversationOpen || ProgrammaticOpenBlocked)
         {
-            GD.Print($"ARC-SCRIPT-046 scripted conversation not opened script={dialog.Script} node={dialog.Node}: a conversation or window is open");
+            GD.Print($"ARC-SCRIPT-046 scripted conversation not opened script={dialog.Script} node={dialog.Node}: a conversation or a panel is open");
             return;
         }
         if (HostOf(speaker) is not { } host) { _conversationNotice = $"dialog NPC script {speaker.ScriptId} has no host here"; RefreshReadyStatus(); return; }
         if (!LeaveCombatModeForDialog()) { RefreshReadyStatus(); return; }
+        if (AnyWindowOpen && WindowRefusedForHero(InterfaceMode.Dialog)) { GD.Print($"ARC-UI-1125 scripted dialog refused for the hero; the open window stays (stack {StackText()})"); return; }
         QuarantineWorld();
         _conversationNotice = null; _talkOpenPending = null; _conversationEndPending = null;
         _areaCompanions?.InterruptGoals(speaker.Row.Key);
@@ -327,6 +339,7 @@ public partial class TerrainViewerApp
         {
             start = new(AreaConversationStartStatus.EntryError, null, speaker, exception.GetType().Name);
         }
+        if (!ClearWindowsForProgrammaticOpen(InterfaceMode.Dialog, "scripted dialog")) return;
         OpenConversation(speaker, start);
         // ARC-SCRIPT-047: a start at the dialog point (a heartbeat's call-ex) resumes the speaker's dialog slot on "return to script".
         _conversationScripted = dialog.Point != Arcanum.Scripting.Scr.ScrPoint.Dialog;
@@ -428,6 +441,9 @@ public partial class TerrainViewerApp
         // ARC-UI-050: b: ended the talk; the barter window opens with the speaker as merchant and the talk does not resume (BT7).
         if (conversation?.End is { Kind: DialogEndKind.BarterWindow } && talkHost?.TakeBarterMerchant() is { } merchant && _areaSession is not null)
             QueueDialogBarter(talkHost, merchant);
+        // ARC-SCRIPT-1358: l: ended the talk; the world map opens as for the bar's Map button and the talk does not resume (ledger VA5).
+        if (conversation?.End is { Kind: DialogEndKind.WorldMapWindow } && talkHost?.TakeWorldMapRequest() == true && _areaSession is not null)
+            QueueDialogWorldMap();
         // ARC-UI-088: c-e ended the talk; the NPC's character sheet opens and the talk does not resume (WN2).
         if (conversation?.End is { Kind: DialogEndKind.NpcSheetWindow } && talkHost?.TakeNpcSheetSpeaker() is { } sheetSpeaker && _areaSession is not null)
             QueueDialogNpcSheet(talkHost, sheetSpeaker);

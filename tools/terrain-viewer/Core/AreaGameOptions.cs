@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json;
 using Arcanum.Data.Content;
 using Arcanum.Data.Messages;
+using Arcanum.Input;
 using Arcanum.Presentation.Hud;
 using Arcanum.Session;
 using Arcanum.Simulation.Combat;
@@ -18,7 +19,7 @@ public enum AreaOption
     Module, Difficulty, ViolenceFilter, DefaultCombatMode, AutoAttack, AutoSwitchWeapons, AlwaysRun, FollowerSkills,
     Brightness, TextDuration, Floats, FloatSpeed, CombatTaunts,
     Effects, Voice, Music,
-    Rules, EvidenceLog, TestTask,
+    Rules, EvidenceLog, TestTask, ControlScheme, PromptStyle,
 }
 
 /// <param name="Max">The original's highest value (a slider's 10 unless its record says otherwise, a list's last message number; a
@@ -77,6 +78,9 @@ public static class AreaOptionTable
     /// <summary>The test task control's values: none, then the test script's tasks 1 to 8 (ARC-GPAD-1376).</summary>
     public const string TestTasks = "project:test tasks";
     public const int TestTaskCount = 8;
+    /// <summary>ARC-GPAD-1374, ARC-GPAD-1463: the controller scheme controls' values (project lists, no game file): <see cref="ControlChoice"/> (the Game
+    /// page's one Controls line) and <see cref="Arcanum.Input.PromptStyle"/> (the Video page's) in their order.</summary>
+    public const string ControlSchemes = "project:control scheme", PromptStyles = "project:prompt style";
 
     /// <summary>Every control of the original's table (0x5CCD78, three pages of eight slots; OP2).</summary>
     public static IReadOnlyList<AreaOptionControl> All { get; } = Array.AsReadOnly(new AreaOptionControl[]
@@ -104,6 +108,11 @@ public static class AreaOptionTable
         new(AreaOption.EvidenceLog, AreaOptionsPage.Game, 9, AreaOptionKind.List, 1, 1, OffOnProject, "evidence log", 0, null, Project: true),
         // The marker of the test script's task (concept §5): the log's task start and end lines, so the summariser can time it.
         new(AreaOption.TestTask, AreaOptionsPage.Game, 10, AreaOptionKind.List, TestTaskCount, TestTaskCount, TestTasks, "test task", 0, null, Project: true),
+        // ARC-GPAD-1463 (concept docs/input/controller-schemes.md §0.1, owner request 2026-11-12): one Controls line, the original or one of the three
+        // experimental schemes, switching at run time and saved with the game settings; it takes the Game page's eighth slot. The original mouse and
+        // keyboard are live in every value. ARC-GPAD-1374: the prompt style (the glyph family override) is the Video page's.
+        new(AreaOption.ControlScheme, AreaOptionsPage.Game, 11, AreaOptionKind.List, 3, 3, ControlSchemes, "control scheme", (int)ControlChoice.Original, null, Project: true),
+        new(AreaOption.PromptStyle, AreaOptionsPage.Video, 5, AreaOptionKind.List, 4, 4, PromptStyles, "prompt style", (int)Arcanum.Input.PromptStyle.Auto, null, Project: true),
         // ARC-UI-146: the HD graphics, HD interface and HD pack lines (ARC-UI-089, ARC-UI-095, ARC-DEV-350) moved to the launcher screen (ARC-UI-143).
     });
 
@@ -120,8 +129,12 @@ public static class AreaOptionTable
 /// <paramref name="Rules"/> is the rule mode the session plays by (ARC-UI-014), <paramref name="Floats"/> and <paramref name="FloatSpeed"/>
 /// the floating text's level and speed (ARC-UI-021).</summary>
 public sealed record AreaGameOptions(int Difficulty, int CombatMode, bool AutoAttack, bool AlwaysRun, int Effects, int Voice, int Music,
-    RuleMode Rules = RuleMode.Steamwoven, int Floats = FloaterRules.DefaultLevel, int FloatSpeed = FloaterRules.DefaultSpeed, bool EvidenceLog = false, int TestTask = 0)
+    RuleMode Rules = RuleMode.Steamwoven, int Floats = FloaterRules.DefaultLevel, int FloatSpeed = FloaterRules.DefaultSpeed, bool EvidenceLog = false, int TestTask = 0,
+    ControlSchemeSettings? Controls = null)
 {
+    /// <summary>ARC-GPAD-1374: the controller scheme choice the three lines show (the defaults when the host passes none).</summary>
+    public ControlSchemeSettings Schemes => Controls ?? ControlSchemeSettings.Default;
+
     /// <summary>A shown control's value; null for a hidden one.</summary>
     public int? Value(AreaOption option) => option switch
     {
@@ -135,6 +148,8 @@ public sealed record AreaGameOptions(int Difficulty, int CombatMode, bool AutoAt
         AreaOption.Rules => (int)Rules,
         AreaOption.EvidenceLog => EvidenceLog ? 1 : 0,
         AreaOption.TestTask => TestTask,
+        AreaOption.ControlScheme => (int)Schemes.Choice,
+        AreaOption.PromptStyle => (int)Schemes.Prompts,
         AreaOption.Floats => Floats,
         AreaOption.FloatSpeed => FloatSpeed,
         _ => null,
@@ -177,6 +192,15 @@ public sealed record AreaGameSettings
 
     /// <summary>ARC-DEV-350: the folder the player chose for <see cref="HdPackSourceMode.Custom"/> (a pack or a folder of packs); null until chosen.</summary>
     public string? HdPackPath { get; init; }
+
+    /// <summary>ARC-GPAD-1374: the experimental controller scheme choice (concept §0.1): the pad scheme, the touch scheme and the prompt glyph
+    /// family; all default to Off/Off/Auto. The original mouse and keyboard stay live whatever they hold.</summary>
+    public PadScheme Pad { get; init; }
+    public TouchScheme Touch { get; init; }
+    public PromptStyle Prompts { get; init; }
+
+    /// <summary>The three as the foundation core's record (a value outside its enum reads as its default there; a file with both a pad and the touch scheme on is C alone, as the Controls line shows it).</summary>
+    public ControlSchemeSettings Controls { get { var raw = new ControlSchemeSettings(ControlSchemeSettings.CurrentVersion, Pad, Touch, Prompts).Validated(); return raw.WithChoice(raw.Choice); } }
 
     /// <summary>The "text floaters" level (<see cref="FloaterRules.Never"/>, messages, numbers).</summary>
     public int Floats
@@ -290,12 +314,18 @@ public sealed class AreaOptionsTexts
         [AreaOptionTable.FloatLevels] = ["Never", "Minimal", "Verbose"],
     };
     // ARC-UI-014: the project controls' texts, never looked up in the game's files.
-    private static readonly IReadOnlyDictionary<AreaOption, string> ProjectControlLabels = new Dictionary<AreaOption, string> { [AreaOption.Rules] = "Rules", [AreaOption.EvidenceLog] = "Evidence Log", [AreaOption.TestTask] = "Test Task" };
+    private static readonly IReadOnlyDictionary<AreaOption, string> ProjectControlLabels = new Dictionary<AreaOption, string>
+    {
+        [AreaOption.Rules] = "Rules", [AreaOption.EvidenceLog] = "Evidence Log", [AreaOption.TestTask] = "Test Task",
+        [AreaOption.ControlScheme] = "Controls", [AreaOption.PromptStyle] = "Prompt style",
+    };
     private static readonly IReadOnlyDictionary<string, string[]> ProjectControlValues = new Dictionary<string, string[]>(StringComparer.Ordinal)
     {
         [AreaOptionTable.RuleModes] = ["Steamwoven", "Original"],
         [AreaOptionTable.OffOnProject] = ["Off", "On"],
         [AreaOptionTable.TestTasks] = ["None", "Task 1", "Task 2", "Task 3", "Task 4", "Task 5", "Task 6", "Task 7", "Task 8"],
+        [AreaOptionTable.ControlSchemes] = ["Original", "A Direct", "B Pointer", "C Touch+pad"],
+        [AreaOptionTable.PromptStyles] = ["Auto", "Xbox", "PlayStation", "Nintendo", "Steam Deck"],
     };
     private readonly Func<string, int, string?> _original;
 

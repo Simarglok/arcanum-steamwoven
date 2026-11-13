@@ -17,7 +17,7 @@ namespace Arcanum.World;
 public sealed class AreaLineOfFire : ILineOfFireMap<AreaObjectRecord>
 {
     private const int WallType = 0, PortalType = 1, PcType = 15, NpcType = 16, ObjectFlagsSlot = 18, SpellFlagsSlot = 19;
-    private const uint DestroyedOrOff = 0x3, PassWalled = 0x100000, BustedArt = 0x200;
+    private const uint DestroyedOrOff = 0x3, DestroyedFlag = 0x1, PassWalled = 0x100000, BustedArt = 0x200;
     // The original's object mask 0x3801F less walls and portals: containers, scenery, projectiles, PCs, NPCs and traps.
     private static readonly int[] MetTypes = [2, 3, 4, PcType, NpcType, 17];
     private static readonly (int X, int Y)[] Offsets = [(-1, -1), (-1, 0), (-1, 1), (0, 1), (1, 1), (1, 0), (1, -1), (0, -1)];
@@ -49,7 +49,7 @@ public sealed class AreaLineOfFire : ILineOfFireMap<AreaObjectRecord>
         _portalOpen = portalOpen ?? throw new ArgumentNullException(nameof(portalOpen));
         foreach (var row in rows)
         {
-            if (row.WorldX is not { } x || row.WorldY is not { } y || moved.Contains(row.Key) || (Flags(row, ObjectFlagsSlot) & DestroyedOrOff) != 0) continue;
+            if (row.WorldX is not { } x || row.WorldY is not { } y || moved.Contains(row.Key) || (Flags(row, ObjectFlagsSlot) & (row.Type == NpcType ? DestroyedFlag : DestroyedOrOff)) != 0) continue;
             var cell = new CellCoord(checked((int)x), checked((int)y));
             if (row.Type is WallType or PortalType)
             {

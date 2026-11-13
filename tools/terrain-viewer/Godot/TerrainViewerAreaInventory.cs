@@ -5,6 +5,7 @@ using Arcanum.Simulation.Ai;
 using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Equipment;
 using Arcanum.Simulation.Items;
+using Arcanum.Simulation.Locks;
 using Arcanum.Simulation.Movement;
 using Arcanum.Simulation.Navigation;
 using Arcanum.TerrainViewer.Core;
@@ -151,7 +152,7 @@ public partial class TerrainViewerApp
     private void SyncAreaInventory()
     {
         if (_canvas is null) return;
-        if (!InventoryActive || _readyArea is null) { if (_canvas.AreaHidden is not null) _canvas.SetAreaHidden(null); return; }
+        if (!InventoryActive || _readyArea is null) { SyncAreaHiddenWithoutInventory(); return; }
         var stamp = (_areaSession!, _areaSession!.Version.Revision, CurrentAreaMap);
         if (!Equals(stamp, _inventoryHiddenStamp))
         {
@@ -167,6 +168,34 @@ public partial class TerrainViewerApp
         LeaveBloodPoolsForNewDeaths();
         // ARC-RENDER-033: an item picked up or dropped leaves or joins the drawn ground at once.
         if (SyncAreaGroundBodies()) _canvas.SetAreaMovingBodies(AreaMovingCommands());
+    }
+
+    private (GameSessionOwner Session, long Revision, object Area)? _goneOnlyStamp;
+    private (object Area, AreaObjectTargets Targets)? _goneOnlyTargets;
+    private IReadOnlySet<AreaObjectKey>? _goneOnlyHidden;
+
+    /// <summary>
+    /// ARC-WORLD-1436: the frame's hidden set when the shown map has no inventory host (a refused seed): the NPCs its data stores off, or that a script switched off or destroyed, are still not drawn. The scene plan keeps
+    /// the body of a data-off NPC (ARC-SCRIPT-1360), so the canvas must hide it; the targets are built without an inventory (no container entity then, which the NPC set does not read).
+    /// </summary>
+    private void SyncAreaHiddenWithoutInventory()
+    {
+        if (_canvas is null) return;
+        if (_readyArea is not { } area || _areaSession is not { } session || _readyMode != TerrainViewerMode.Area)
+        {
+            _goneOnlyStamp = null; _goneOnlyHidden = null;
+            if (_canvas.AreaHidden is not null) _canvas.SetAreaHidden(null);
+            return;
+        }
+        var stamp = (session, session.Version.Revision, (object)area);
+        if (!Equals(stamp, _goneOnlyStamp))
+        {
+            _goneOnlyStamp = stamp;
+            if (_goneOnlyTargets is not { } held || !ReferenceEquals(held.Area, area))
+                _goneOnlyTargets = held = (area, new AreaObjectTargets(area.Snapshot.RuntimeMap, area.Snapshot.Objects, new Dictionary<AreaObjectKey, (string, SessionOpenableBaseline)>(), null));
+            _goneOnlyHidden = held.Targets.Gone(session) is { Count: > 0 } gone ? gone : null;
+        }
+        if (!ReferenceEquals(_canvas.AreaHidden, _goneOnlyHidden)) _canvas.SetAreaHidden(_goneOnlyHidden);
     }
 
     private bool AreaTakenByPc(AreaDrawCommand command) => command.Identity is { } key && _inventoryHidden?.Contains(key) == true;
@@ -290,8 +319,18 @@ public partial class TerrainViewerApp
         _inventoryPanel.SetArtLook(InventoryArtLook());
         // ARC-UI-054: the open centres the game view on the window's holder, the PC (0x5732D5 → 0x4B8CE0, IW33).
         CentreGameViewOnHolder();
-        var view = InventoryView(holder);
-        if (!OpenWindowMode(mode, () => _inventoryPanel!.Open(view), () => _inventoryPanel!.CloseView()))
+        // ARC-RES-1410 (ledger XR16 (g), IW39): the open of the loot, steal and See Contents windows lays the holder's grid out again (0x5727B0 calls
+        // 0x4670A0 near its end, after its early returns) before the window draws; the stack's enter step is that point here. A refusal (no room) writes nothing.
+        void Show()
+        {
+            if (holder is not null && _areaSession is { } arranging)
+            {
+                var arranged = arranging.ArrangeHolderGrid(arranging.Version, holder);
+                GD.Print($"ARC-RES-1410 arrange at open holder={holder} disposition={arranged.Disposition} failure={arranged.Failure} no-room={arranged.NoRoom} moved={arranged.Moved}");
+            }
+            _inventoryPanel!.Open(InventoryView(holder));
+        }
+        if (!OpenWindowMode(mode, Show, () => _inventoryPanel!.CloseView()))
         {
             _junkPileSession = null; _contentsHolder = null;
             return;
