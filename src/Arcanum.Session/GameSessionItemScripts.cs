@@ -196,6 +196,10 @@ public sealed partial class GameSessionOwner
         /// <summary>ARC-MAGIC-1644 (IE7, WE6): the runs are the rewield's: the condition "items are being rewielded" answers true (0x5E87E8).</summary>
         internal bool Rewielding { get; init; }
 
+        /// <summary>ARC-MAGIC-1744 (ledger RM3c, IE7): for the hero's rewield, the hero's stored stats as the runs read them: the state's array with the store of the magick or tech points that caused the rewield laid in (the setter stores
+        /// before it rewields). Null for every other move: the runs read the hero as the session holds it.</summary>
+        internal IReadOnlyList<int>? HeroStored { get; init; }
+
         /// <summary>Whether the wearer is the hero (an NPC wearer's runs meet the hero as another object, which the session holds no stats of).</summary>
         internal bool WearsHero => _npc is null;
 
@@ -362,7 +366,7 @@ public sealed partial class GameSessionOwner
 
         // The wearer's magick/tech aptitude under the effect list the runs left.
         private int Aptitude() => _npc is { } npc ? _owner.NpcScriptAptitude(npc, _entries, _definitions) ?? 0
-            : _steps.Count == 0 ? _owner.HeroAptitude() : _owner.TrialAptitude(_entries, _definitions);
+            : _steps.Count == 0 && HeroStored is null ? _owner.HeroAptitude() : _owner.TrialAptitude(_entries, _definitions, HeroStored);
 
         /// <summary>
         /// ARC-DEV-366 (GS1, GS3): the stat <paramref name="stat"/> of an object as get stat reads it (0x4B0490): the hero's, under the effect
@@ -372,7 +376,7 @@ public sealed partial class GameSessionOwner
             obj.Map != _map || obj.Code != Wearer ? null : WearerStat(stat);
 
         private int? WearerStat(int stat) => _npc is { } npc ? _owner.NpcScriptStat(npc, stat, _entries, _definitions)
-            : _steps.Count == 0 ? _owner.QueryHeroScriptStat(stat) : _owner.TrialScriptStat(stat, _entries, _definitions);
+            : _steps.Count == 0 && HeroStored is null ? _owner.QueryHeroScriptStat(stat) : _owner.TrialScriptStat(stat, _entries, _definitions, HeroStored);
 
         /// <summary>WE2: an item of the move and its owner's power ratio (0x461540): the hero's aptitude for the PC, 100 for an owner that is
         /// one of the move's items (not a critter); null for anything else.</summary>
@@ -531,9 +535,9 @@ public sealed partial class GameSessionOwner
 
     /// <summary>ARC-SCRIPT-042: the hero's magick/tech aptitude, as <see cref="HeroAptitude"/> reads it, with the hero's effect list
     /// replaced by <paramref name="entries"/>.</summary>
-    private int TrialAptitude(IReadOnlyList<SessionEffect> entries, IReadOnlyDictionary<int, SessionEffectDefinition> definitions)
+    private int TrialAptitude(IReadOnlyList<SessionEffect> entries, IReadOnlyDictionary<int, SessionEffectDefinition> definitions, IReadOnlyList<int>? stored = null)
     {
-        var trial = TrialHero();
+        var trial = TrialHero(stored);
         foreach (var entry in entries) ApplyStats(trial.Stats, entry, definitions);
         return Math.Clamp(trial.Stats.Query(HeroStatContext()).Snapshot!.GetEffective(CharacterStat.MagickTechAptitude), EquipmentLimits.MinAptitude, EquipmentLimits.MaxAptitude);
     }
@@ -543,12 +547,12 @@ public sealed partial class GameSessionOwner
     /// left it): the effective stat under them with the life's poison and crippled legs. The level and the alignment are the stored values
     /// (effects on them are not read, GS3); null for a stat the session does not hold and without a hero.
     /// </summary>
-    private int? TrialScriptStat(int stat, IReadOnlyList<SessionEffect> entries, IReadOnlyDictionary<int, SessionEffectDefinition> definitions)
+    private int? TrialScriptStat(int stat, IReadOnlyList<SessionEffect> entries, IReadOnlyDictionary<int, SessionEffectDefinition> definitions, IReadOnlyList<int>? stored = null)
     {
         if (_hero is null) return null;
         if (stat is ScriptStatLevel or ScriptStatAlignment) return QueryHeroScriptStat(stat);
         if (stat is not (>= 0 and <= 7 or ScriptStatAptitude) || QueryHeroLife() is not { } life) return null;
-        var trial = TrialHero();
+        var trial = TrialHero(stored);
         foreach (var entry in entries) ApplyStats(trial.Stats, entry, definitions);
         var state = life.Record.State;
         var read = trial.Stats.Query(new(0, Math.Clamp(state.PoisonLevel, 0, CharacterStatRules.MaxPoisonLevel), state.Conditions.HasFlag(LifeConditions.CrippledLegsBoth)));

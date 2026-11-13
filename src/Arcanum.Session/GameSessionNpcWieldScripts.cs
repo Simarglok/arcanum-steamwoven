@@ -110,8 +110,8 @@ public sealed partial class GameSessionOwner
         return runs.Failure != GameSessionFailure.None ? (runs.Failure, null) : (GameSessionFailure.None, runs);
     }
 
-    /// <summary>ARC-MAGIC-1644: applies the runs <see cref="PlanNpcRewield"/> prepared: their flags, script stores, kept slots, the NPC's effect changes and the deferred calls, one revision when they change anything.</summary>
-    internal void CommitNpcRewield(ItemScriptRuns? runs)
+    /// <summary>ARC-MAGIC-1644: applies the runs <see cref="PlanNpcRewield"/> prepared (ARC-MAGIC-1744: or <see cref="PlanHeroRewield"/>): their flags, script stores, kept slots, the wearer's effect changes and the deferred calls, one revision when they change anything.</summary>
+    internal void CommitRewield(ItemScriptRuns? runs)
     {
         if (runs is null || !runs.Changes) return;
         runs.Commit();

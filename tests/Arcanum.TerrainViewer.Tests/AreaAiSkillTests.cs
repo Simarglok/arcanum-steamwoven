@@ -3,6 +3,8 @@ using Arcanum.Data.Traversal;
 using Arcanum.Session;
 using Arcanum.Simulation.Ai;
 using Arcanum.Simulation.Combat;
+using Arcanum.Simulation.Locks;
+using Arcanum.Simulation.Skills;
 using Arcanum.Simulation.Movement;
 using Arcanum.TerrainViewer.Core;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -15,8 +17,8 @@ namespace Arcanum.TerrainViewer.Tests;
 /// ARC-WORLD-109 (NPC AI slice I10, skill goals): the AI host's skill goals 33, 34, 86 and 67 over invented rows, no original data: a
 /// human NPC (0) at world cell (10, 20) with heal 5 points and every primary stat 20, holding a healing item (1, three uses) in its
 /// pack. Its heal skill on itself walks goal 33 into the attempt goal 34, turns, plays the stand-in skill animation and at the action
-/// frame heals through the session, which spends a use of its item; pickpocket (86) and pick locks (67) reach their attempts, which are
-/// not ready and change nothing.
+/// frame heals through the session, which spends a use of its item; pickpocket (86) and pick locks (67) reach their attempts; a scene that names no lock (ARC-COMBAT-1776) changes nothing, one that does
+/// has the NPC pick it through the session.
 /// </summary>
 [TestClass]
 public sealed class AreaAiSkillTests
@@ -57,7 +59,7 @@ public sealed class AreaAiSkillTests
 
     private sealed record Scene(GameSessionOwner Session, AreaAiHost Host, string Npc, string Item);
 
-    private static Scene Open(uint critterFlags = 0, bool hero = false)
+    private static Scene Open(uint critterFlags = 0, bool hero = false, Func<AreaAiScene, AreaAiScene>? tweak = null)
     {
         var session = hero ? ConversationSessionFixture.CreateWithHero() : ConversationSessionFixture.Create();
         var rows = new[] { Npc(0, critterFlags), Item(1) };
@@ -78,6 +80,7 @@ public sealed class AreaAiSkillTests
             HeroCell = () => new CellCoord(14, 20),
             NpcSheet = entity => combat.Fields(1, entity) is { } fields ? AreaAdvancement.Npc(entity, fields, _ => null) : null,
         };
+        if (tweak is not null) scene = tweak(scene);
         var host = new AreaAiHost(session, scene, new AreaEventWorld(() => combat, () => null), new AreaCombatWorld(1, () => [], _ => null));
         return new(session, host, Entity(0), Entity(1));
     }
@@ -254,6 +257,41 @@ public sealed class AreaAiSkillTests
         var locks = Run(host, npc, ref now).Single(n => n.Kind == AreaAiNoticeKind.Skill);
         Assert.AreEqual(AiExecutorRules.PickLocksSkill, locks.Skill);
         Assert.AreEqual(before, session.Version, "neither attempt changed the session");
+    }
+
+    [TestMethod]
+    public void An_npc_picks_the_lock_the_scene_names_through_the_session_with_its_own_skill()
+    {
+        // ARC-COMBAT-1776 (0x42A4E0): the pick-locks attempt is the session's PickLockByNpc on the lock the scene names, with the NPC's sheet and no action points of its own.
+        var door = new SessionPickLockTarget(new(new(1), "door:1"), new(OpenableKind.Portal, LockRules.LockedBit, 0, 0), 0);
+        var (session, host, npc, _) = Open(hero: true, tweak: scene => scene with { PickLockTarget = target => target == "door:1" ? door : null });
+        var hero = session.QueryHero();
+        var picked = false;
+        for (var attempt = 0; attempt < 400 && !picked; attempt++)
+        {
+            host.AttemptPickLocks(npc, "door:1", null);
+            var notice = host.DrainNotices().Single(n => n.Kind == AreaAiNoticeKind.Skill);
+            Assert.AreEqual(AiExecutorRules.PickLocksSkill, notice.Skill);
+            var pick = notice.PickLock ?? throw new AssertFailedException(host.TraceOf(npc)?.Skill ?? "no pick");
+            Assert.AreEqual((GameSessionDisposition.Changed, GameSessionFailure.None), (pick.Disposition, pick.Failure));
+            Assert.IsNull(pick.Charge);
+            Assert.IsFalse(pick.FateUsed, "an NPC has no fate");
+            StringAssert.StartsWith(host.TraceOf(npc)!.Skill, "pick locks door:1 Changed");
+            picked = pick.Check!.Success;
+            if (picked) Assert.AreEqual((PickLockResult.Unlocked, false), (pick.Outcome!.Value.Result, pick.State!.Value.Locked));
+            // A failure leaves the lock alone unless it jams; either way the lock is the session's.
+            else Assert.AreEqual(pick.Check.Critical ? PickLockResult.Jammed : PickLockResult.Failed, pick.Outcome!.Value.Result);
+            if (!picked && pick.Check.Critical) break;
+        }
+        Assert.IsTrue(picked || (session.QueryOpenable(door.Openable, door.Baseline).Flags & LockRules.JammedBit) != 0, "an unlock or a jam came up within 400 attempts");
+        Assert.AreEqual(hero, session.QueryHero(), "the hero is untouched");
+        // A target the scene does not name is a refusal that changes nothing.
+        var before = session.Version;
+        host.AttemptPickLocks(npc, "door:9", null);
+        var none = host.DrainNotices().Single(n => n.Kind == AreaAiNoticeKind.Skill);
+        Assert.IsNull(none.PickLock);
+        Assert.AreEqual("pick locks door:9: no lock target", host.TraceOf(npc)!.Skill);
+        Assert.AreEqual(before, session.Version);
     }
 
     [TestMethod]

@@ -646,11 +646,11 @@ public sealed partial class GameSessionOwner
                 throw new InvalidOperationException("Timer scheduling failed after admission.");
     }
 
-    // A character owner built from the hero's saved fields, for trials.
-    private HeroDomain TrialHero()
+    // A character owner built from the hero's saved fields, for trials. ARC-MAGIC-1744: with stats the stored array of the hero state is replaced by them (the rewield's reads, which come after the store).
+    private HeroDomain TrialHero(IReadOnlyList<int>? stats = null)
     {
         var hero = _hero!;
-        return HeroDomain.Build(hero.State.Prototype, hero.State.Race, hero.State.Gender, hero.State.Stats, hero.State.Level,
+        return HeroDomain.Build(hero.State.Prototype, hero.State.Race, hero.State.Gender, stats ?? hero.State.Stats, hero.State.Level,
             hero.State.UnspentPoints, hero.State.Alignment, hero.State.RaceEffect, hero.State.GenderEffect, hero.State.Experience,
             hero.State.Advancement, hero.State.InnateSkills)!;
     }
