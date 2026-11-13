@@ -837,7 +837,8 @@ public partial class TerrainViewerApp
             // A critical miss turned on the hero at the shot; anything else waits for the strike.
             if (result.Life is null) { _lastCritterAttackForSelfTest = result; SyncAreaInventory(); RefreshAreaStatus(); return; }
         }
-        FinishCritterHit(struck, result);
+        // ARC-AI-1639: the attack's end calls the taunt (0x4B6B90) unless it fired an ammunition shot (record bit 0x200 with a weapon ammunition type; a throwing weapon has none).
+        FinishCritterHit(struck, result, selfHitReachesTaunt: result.Shot is not { } fired || owner.QueryThrownShot(fired) is not null);
     }
 
     /// <summary>ARC-COMBAT-005: the hero's attack on <paramref name="struck"/> as the session sees it now (its worn items, cell and the
@@ -870,7 +871,7 @@ public partial class TerrainViewerApp
 
     /// <summary>What follows an attack on an NPC (at once, or when a projectile struck it): the sounds, the status line, a stun's
     /// end, the followers' levels, the death pose and the drawn bodies and inventory.</summary>
-    private void FinishCritterHit(AttackGoal struck, SessionAttackResult result, bool aimed = true)
+    private void FinishCritterHit(AttackGoal struck, SessionAttackResult result, bool aimed = true, bool selfHitReachesTaunt = true)
     {
         var owner = _areaSession!;
         _lastCritterAttackForSelfTest = result;
@@ -883,7 +884,7 @@ public partial class TerrainViewerApp
         _attackNotice = AreaCombatHost.Describe(result, life?.Status.HitPoints, life?.Status.MaxHitPoints);
         FloatCritterAttack(result, HeroFloater, struck.Entity);
         // ARC-AI-1527: the near-death line of a follower the hit brought low and the combat taunt of the hit's end (0x4AEAB0, 0x4B6B90).
-        FollowerAttackComments(result, HeroFloater, struck.Entity, aimed);
+        FollowerAttackComments(result, HeroFloater, struck.Entity, aimed, selfHitReachesTaunt);
         GD.Print($"ARC-COMBAT-005 attack-hit target={struck.Entity} disposition={result.Disposition} failure={result.Failure}"
             + $" outcome={result.Resolution?.Outcome} cause={result.Resolution?.MissCause} damage={result.Life?.HitPointDamage} events={result.Life?.Events}"
             + $" hp={life?.Status.HitPoints}/{life?.Status.MaxHitPoints} xp={result.HitAward?.Award}/{result.KillAward?.Award} step={result.StepFailure}"

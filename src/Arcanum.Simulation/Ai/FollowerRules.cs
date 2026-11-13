@@ -115,6 +115,29 @@ public static class FollowerRules
     }
 
     /// <summary>
+    /// ARC-AI-1639 (VB4-5): the taunt facts of one attack of the hero on a critter that <paramref name="outcome"/> resolved. The only writer of attack-record flag 0x8 is the critical-miss turn (0x4B6410, called from 0x4B3170 when
+    /// the record carries the critical bit without the hit bit): it makes the attacker the struck object, sets the hit bit and 0x8 and leaves the aimed object as it was. Such a self-hit is therefore a hit on an object other than the
+    /// aimed one under flag 0x8, and, as the PC-leader test (0x45DDA0) answers 0 for a PC, a struck object outside the party: kind 1 (a stray hit). A projectile strike never carries it (its record names the struck object as the
+    /// aimed one, or has no 0x8). <paramref name="selfHitReachesTaunt"/> is whether the attack's end calls 0x4B6B90 at all: a melee or ammunition-free attack does, an ammunition shot (record bit 0x200 with a weapon ammunition type)
+    /// and a held throw (item type 3) do not (the skipped call at 0x4B3170's start).
+    /// </summary>
+    public static TauntFacts HeroAttackTauntFacts(bool tauntsOn, AttackOutcome? outcome, bool struckInPcParty, bool aimed, bool selfHitReachesTaunt)
+    {
+        var selfHit = outcome is AttackOutcome.CriticalMiss && selfHitReachesTaunt;
+        return new TauntFacts
+        {
+            TauntsOn = tauntsOn,
+            AttackerIsPc = true,
+            Struck = true,
+            StruckInPcParty = !selfHit && struckInPcParty,
+            Hit = selfHit || outcome is AttackOutcome.Hit or AttackOutcome.CriticalHit,
+            Critical = outcome is AttackOutcome.CriticalHit,
+            StruckIsAimed = !selfHit && aimed,
+            StrayFlag = selfHit,
+        };
+    }
+
+    /// <summary>
     /// The combat taunt (0x4AE9E0) of kind <paramref name="kind"/> among the PC's follower array <paramref name="followers"/> (in
     /// its order): <c>random(1, 2)</c> (<see cref="AiRollPurpose.TauntSpeak"/>) must not be 1; with no follower nothing; one follower
     /// is drawn by <c>random(0, n − 1)</c> (<see cref="AiRollPurpose.TauntFollower"/>, no draw for one) and must be active
