@@ -111,7 +111,7 @@ or the triggerer alone for radius 0, none without a triggerer):
   damage effect (TT14) is the host's to show.
 - **Shot** (30002): no shooter, no effect at all (no spell either); with a shooter the
   result is `ShotNotReady` and nothing is applied yet: the shot (the dispatcher 0x4B3170
-  with a non-critter attacker, TT15), its draw and its spell are a later slice together. The
+  with a non-critter attacker, TT15), its draw and its spell are a later slice together, with the attack event that asks an NPC victim to fight the shooter object (ledger VB2-2 gap d; #1619). The
   host lists the shooter candidates around the triggerer; without a triggerer it lists none.
 - **Spell**: 30000, and any damage with a top byte (a shot's comes with the shot slice), starts the spell at the victim
   with no parent and no source (TT16); its BEGIN comes as an event of the host's pass. An

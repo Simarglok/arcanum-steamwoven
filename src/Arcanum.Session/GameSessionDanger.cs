@@ -412,6 +412,69 @@ public sealed partial class GameSessionOwner
         private readonly Dictionary<string, SessionDanger> _staged = new(StringComparer.Ordinal);
         private readonly HashSet<string> _leavesCombatMode = new(StringComparer.Ordinal);
         private readonly Dictionary<string, (SessionReaction? Write, ReactionAdjustment Adjustment)> _reactions = new(StringComparer.Ordinal);
+        // ARC-AI-1530: the hooks of the setter calls staged here, run after the commit in call order, each with the rules 8 and 9 it deferred.
+        private readonly List<(SessionDangerHook Hook, LateRules? Late)> _hooks = [];
+
+        // Rule 9 (focus := target) and rule 8 (the reaction lowered, with its facts) of an entering call, written after its enter-combat script; LockOn: the target lock (0x4AFBD0) asked
+        // for the same call, which the original decides after the setter returned, so on the state and focus the script and the two rules left.
+        internal sealed record LateRules(SessionCombatant? Target, bool WritesFocus, SessionDangerReaction? Reaction, bool LockOn = false);
+
+        // The lock the late phase decided for the call (null: none was deferred), which the target lock's result reports.
+        private bool? _lockedLate;
+
+        // ARC-AI-1530 (0x4AABE0, 0x441980): after the commit the host's script of each hook runs (slot 13 or 14, the target as triggerer, the NPC as attachee; the setter ignores the
+        // answer and a host that throws counts as none), then the entering call's deferred rules 8 and 9 are written against the state the script left. A host that throws something
+        // else does not lose the other hooks' rules: every hook is run and its rules written, and the first such error is raised at the end.
+        internal void RunHooks()
+        {
+            if (owner.DangerHookScript is not { } run) return;
+            System.Runtime.ExceptionServices.ExceptionDispatchInfo? failed = null;
+            foreach (var (hook, late) in _hooks.ToArray())
+            {
+                try { run(hook); }
+                catch (Exception error) when (error is InvalidOperationException or ArgumentException or OverflowException) { }
+                catch (Exception error) { failed ??= System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(error); }
+                if (late is not null) ApplyLate(hook.Attachee, late);
+            }
+            failed?.Throw();
+        }
+
+        // The focus the plan will have: an entering call's deferred rule 9 counts as written (the lock below reports it).
+        private SessionCombatant? FocusOf(string entity) =>
+            _hooks.LastOrDefault(h => h.Late is { WritesFocus: true } && h.Hook.Attachee == entity).Late is { } late ? late.Target : Get(entity).Focus;
+
+        // A focus written by a later call of the plan wins over an earlier entering call's deferred rule 9 (the original's order of the calls).
+        private void DropLateFocus(string entity)
+        {
+            for (var i = 0; i < _hooks.Count; i++)
+                if (_hooks[i].Hook.Attachee == entity && _hooks[i].Late is { WritesFocus: true } late) _hooks[i] = (_hooks[i].Hook, late with { WritesFocus = false });
+        }
+
+        // The deferred rules, each in its own revision so that a refusal of one (a full reaction table, say) leaves the others: rule 9, rule 8, then the lock.
+        private void ApplyLate(string entity, LateRules late)
+        {
+            if (late.WritesFocus)
+            {
+                var focus = new DangerPlan(owner);
+                focus.Update(entity, record => record with { Focus = late.Target });
+                focus.Commit(new SessionDangerResult(GameSessionDisposition.NoChange, GameSessionFailure.None, owner.Version));
+            }
+            if (late.Reaction is { } reaction)
+            {
+                var lowered = new DangerPlan(owner);
+                lowered.PlanReactionTo(entity, reaction.Npc, reaction.Pc, lowered.Get(entity).Enemies.Contains(SessionCombatant.Hero), reaction.HostileReaction,
+                    ReactionQuery.Hostility, lower: true, out _);
+                lowered.Commit(new SessionDangerResult(GameSessionDisposition.NoChange, GameSessionFailure.None, owner.Version));
+            }
+            if (!late.LockOn) return;
+            var after = owner._danger.Get(entity);
+            var locked = after.State == DangerState.CombatFocus && after.Focus == late.Target;
+            _lockedLate = locked;
+            if (!locked) return;
+            var lockPlan = new DangerPlan(owner);
+            lockPlan.Update(entity, record => record with { Flags = record.Flags | DangerFlags.TargetLocked });
+            lockPlan.Commit(new SessionDangerResult(GameSessionDisposition.NoChange, GameSessionFailure.None, owner.Version));
+        }
 
         internal SessionDanger Get(string entity) => _staged.TryGetValue(entity, out var record) ? record : owner._danger.Get(entity);
 
@@ -447,10 +510,17 @@ public sealed partial class GameSessionOwner
         internal SessionDangerResult Lock(SessionDangerRequest request)
         {
             Update(request.Entity, record => record with { Flags = record.Flags & ~DangerFlags.TargetLocked });
+            var queued = _hooks.Count;
             var result = Set(request with { State = DangerState.CombatFocus }, false);
             if (result.Failure != GameSessionFailure.None) return result;
             var after = Get(request.Entity);
-            var locked = after.State == DangerState.CombatFocus && after.Focus == request.Target;
+            var locked = after.State == DangerState.CombatFocus && FocusOf(request.Entity) == request.Target;
+            // ARC-AI-1530: an entering call's lock waits for its script and rules 8 and 9 (the late phase decides it); the result reports the lock as the call predicts it, the target lock's own call the decided one.
+            if (_hooks.Count > queued && _hooks[^1] is { Late: { } late } entering)
+            {
+                _hooks[^1] = (entering.Hook, late with { LockOn = true });
+                return result with { Locked = locked };
+            }
             if (locked) Update(request.Entity, record => record with { Flags = record.Flags | DangerFlags.TargetLocked });
             return result with { Locked = locked };
         }
@@ -479,18 +549,24 @@ public sealed partial class GameSessionOwner
             }
             var next = record with { Flags = flags };
             if (step.WritesFleeingFrom) next = next with { FleeingFrom = target };
-            if (step.WritesFocus) next = next with { Focus = target };
+            // ARC-AI-1530 (0x4AABE0): the original runs the enter-combat script (slot 13) between the state bits and rules 8 and 9 (the reaction lowered, the focus written); with a host
+            // for the hook the two rules wait for it (RunDangerHooks), otherwise they are written with the rest as before.
+            var deferred = step.Script == DangerScriptPoint.EnterCombat && owner.DangerHookScript is not null;
+            if (step.WritesFocus && !deferred) { next = next with { Focus = target }; DropLateFocus(entity); }
             ReactionAdjustment? adjustment = null;
             if (step.LowersReaction)
             {
                 if (request.Reaction is not { } reaction) return Failed(GameSessionFailure.InvalidDangerFacts);
-                var failure = PlanReactionTo(entity, reaction.Npc, reaction.Pc, record.Enemies.Contains(SessionCombatant.Hero), reaction.HostileReaction,
-                    ReactionQuery.Hostility, lower: true, out adjustment);
+                // A deferred rule 8 is decided now against a scratch plan (its refusal rejects the call as before, its adjustment is what the result reports) and written, decided again, after the hook.
+                var failure = (deferred ? new DangerPlan(owner) : this).PlanReactionTo(entity, reaction.Npc, reaction.Pc, record.Enemies.Contains(SessionCombatant.Hero),
+                    reaction.HostileReaction, ReactionQuery.Hostility, lower: true, out adjustment);
                 if (failure != GameSessionFailure.None) return Failed(failure);
             }
             _staged[entity] = next;
             SessionDangerHook? hook = step.Script is { } point
                 ? new SessionDangerHook(point, target, entity) : null;
+            if (hook is { } queued && owner.DangerHookScript is not null)
+                _hooks.Add((queued, deferred ? new LateRules(target, step.WritesFocus, step.LowersReaction ? request.Reaction : null) : null));
             return new(GameSessionDisposition.NoChange, GameSessionFailure.None, owner.Version)
             {
                 Transition = step with { AlertSound = step.AlertSound && alertSound }, Hook = hook, LeftCombatMode = left, Reaction = adjustment,
@@ -585,10 +661,14 @@ public sealed partial class GameSessionOwner
             // ARC-WORLD-045 (OL17): a reaction drop of a follower arms its leader check in the same revision.
             foreach (var arm in armed) owner._party.Put(arm, false);
             owner.Revise();
+            RunHooks();
             return with(result, GameSessionDisposition.Changed, owner.Version);
         }
 
-        internal SessionDangerResult Commit(SessionDangerResult result) =>
-            Commit(result, (r, disposition, version) => r with { Disposition = disposition, Version = version }, owner.RejectDanger);
+        internal SessionDangerResult Commit(SessionDangerResult result)
+        {
+            var committed = Commit(result, (r, disposition, version) => r with { Disposition = disposition, Version = version }, owner.RejectDanger);
+            return _lockedLate is { } locked && committed.Disposition != GameSessionDisposition.Rejected ? committed with { Locked = locked } : committed;
+        }
     }
 }
