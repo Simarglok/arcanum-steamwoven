@@ -27,7 +27,7 @@ public sealed class AreaCreatedCritters
     /// ARC-WORLD-1526 (ledger GS5): the row of a created critter. A monster generator's copy (the session holds its slot mark and its template, the generator's entity, <see cref="SessionCreatedObject.Summoner"/>) is a copy of the
     /// generator OBJECT in the original, so its row is built from the generator's row (<see cref="CreatedObjectRows.CritterFrom"/>: its instance fields, scripts, name, stats and flags over its prototype, unmarked); when the
     /// generator's row is not known (an older save whose copy names none, the generator's map not held, a template that is no critter's) the copy falls back to its prototype's row, as before this change. Every other created
-    /// critter is built from its prototype.
+    /// critter is built from its prototype. The row is built once per entity (and again after a load or a map change), so a copy built while its generator's row was unknown keeps the prototype row until then (a limit).
     /// </summary>
     internal static CreatedObjectRowResult RowOf(GameSessionOwner session, Func<int, PrototypeFile> prototypes, Func<string, int, AreaObjectRecord?>? template, SessionCreatedObject made)
     {

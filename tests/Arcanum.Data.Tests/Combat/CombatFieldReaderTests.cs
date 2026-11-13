@@ -443,6 +443,10 @@ public sealed class CombatFieldReaderTests
         Assert.AreEqual(CombatFieldReader.ReadPrototype(files, 29001).Fields!.Critter!.BaseStats[0], fromRow.Fields!.Critter!.BaseStats[0]);
         Assert.AreEqual(22, fromRow.Fields.Npc!.Faction);
         Assert.AreEqual(0u, fromRow.Fields.Npc.Flags & 0x80000, "the copy is no generator");
+        // 0x4BA720 touches nothing on an object without the generator bit: the object flags keep 0x400002 then.
+        var plain = generator with { EffectiveFields = [.. effective.Select(f => f.Slot == 69 ? Value(69, 0x1306) : f)], DirectFields = [.. own.Select(f => f.Slot == 69 ? Value(69, 0x1306) : f)] };
+        var unmarked = CreatedObjectRows.CritterFrom(plain, "oid:critter:10", 3, 50, 60).Row!;
+        Assert.AreEqual(0x400002L | 0x1000 | 0x2000, unmarked.DirectFields.Single(f => f.Slot == 18).Number);
         // The template is untouched.
         Assert.AreEqual(0x400002L | 0x1000, generator.DirectFields.Single(f => f.Slot == 18).Number);
     }

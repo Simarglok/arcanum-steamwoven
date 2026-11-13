@@ -121,7 +121,9 @@ public static class CreatedObjectRows
         long Base(int slot) => effective.TryGetValue(slot, out var held) && held.Presence == AreaPresence.Value ? held.Number ?? 0 : 0;
         void Own(int slot, long number) => direct[slot] = effective[slot] = new AreaFieldValue(slot, AreaPresence.Value, AreaValueOrigin.Instance, number, [], null);
         Own(LocationSlot, location);
-        Own(FlagsSlot, Base(FlagsSlot) & ~GeneratorObjectFlags | DynamicFlag);
+        // 0x4BA720 unmarks only an NPC that carries the generator bit (it returns 0 and touches nothing otherwise): the object flags 0x400002 go with the bit.
+        var marked = (Base(NpcFlagsSlot) & GeneratorNpcFlag) != 0;
+        Own(FlagsSlot, (marked ? Base(FlagsSlot) & ~GeneratorObjectFlags : Base(FlagsSlot)) | DynamicFlag);
         Own(NpcFlagsSlot, Base(NpcFlagsSlot) & ~GeneratorNpcFlag);
         Own(StandpointDaySlot, location);
         Own(StandpointNightSlot, location);
