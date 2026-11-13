@@ -606,6 +606,18 @@ public static partial class GameSessionSnapshotCodec
             if (root.ContainsKey("barLights")) throw new DecodeException(SnapshotDecodeFailure.UnknownField, "$.barLights");
             root.Add("barLights", null);
         },
+        // ARC-MAGIC-1658 (schema 99): the hero's stored resistance array (field 31) and stored age (stat 25). No older build kept either (the hero's resistances were the worn armour's and the effects' alone, so the array starts at zero
+        // as a new hero's does; its age was never read, so it is null, which the TraitIdx component takes as not ready).
+        [98] = root =>
+        {
+            if (!root.TryGetPropertyValue("hero", out var heroNode)) throw new DecodeException(SnapshotDecodeFailure.MissingField, "$.hero");
+            if (heroNode is JsonObject hero)
+            {
+                AddField(hero, "$.hero", "resistances", new JsonArray(0, 0, 0, 0, 0));
+                if (hero.ContainsKey("age")) throw new DecodeException(SnapshotDecodeFailure.UnknownField, "$.hero.age");
+                hero.Add("age", null);
+            }
+        },
     };
 
     /// <summary>The schemas with an upgrade step to the next one, ascending: every schema from
