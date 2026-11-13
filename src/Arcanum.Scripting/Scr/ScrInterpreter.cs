@@ -42,6 +42,8 @@ internal sealed class ScrInterpreter
         // ARC-SCRIPT-049: the objects the dispatch's toggle states left flipped (odd count) and the ones it killed, which its later dead and
         // switched-off tests read (the original flips the flag and kills at once).
         public readonly HashSet<ScrObjectRef> Toggled = new(), Killed = new();
+        // ARC-SCRIPT-1661 (CP12): the (object, stat) pairs the dispatch's adjust stats wrote, which a later get stat of the same pair cannot read (the original writes at once; the host applies after the run), so it ends the dispatch as not modelled.
+        public readonly HashSet<(ScrObjectRef Object, int Stat)> AdjustedStats = new();
         // ARC-SCRIPT-1163 (NS1): the objects the dispatch's critter disbands let go, which its later following tests read (the original removes the leader at once).
         public readonly HashSet<ScrObjectRef> Disbanded = new();
         // ARC-SCRIPT-1164 (E5-b): the sector and generator toggles of the dispatch, which its later conditions and toggles read back (the original writes the tables at once), the open states its open toggles left, and the requests themselves.
@@ -221,6 +223,8 @@ internal sealed class ScrInterpreter
             => ScrGuards.Holds(c.Type, Object(c, 0, line), Get(c, 1), 0, Queries),
         // CP9 (0x4451B0 case 0x25): the objects of the operand that are NPCs with the animal critter flag; the list rule of the other object tests.
         ScrCatalogue.Condition.IsAnimal => ListHolds(c, obj => Critters.IsAnimal(obj) ?? throw new MissingObjectStop(line)),
+        // CP11 (0x4451B0 case 0x1f): the objects of operand 0 that are a PC or an NPC with the combat-mode bit (0x4B3D50); the same list rule.
+        ScrCatalogue.Condition.IsInCombat => ListHolds(c, obj => Critters.IsInCombat(obj) ?? throw new MissingObjectStop(line)),
         // WE5: the identified count over the operand's objects; none identified is false and, for one object, all is true. An absent
         // object names none, so the condition fails (the set's focus kinds name at most one object).
         ScrCatalogue.Condition.Identified => Objects(c, 0).Count(obj => Items.IsIdentified(obj) ?? throw new MissingObjectStop(line)) > 0,
@@ -471,9 +475,24 @@ internal sealed class ScrInterpreter
                 // that cannot answer (GS3, not modelled) ends the whole dispatch with nothing applied, so the caller reports it as not ready.
                 var stat = Get(a, 0);
                 var who = Object(a, 1, line);
+                if (_shared.AdjustedStats.Contains((who, stat))) throw new CallRefusedStop(null, _number, ScrStop.NotModelled);
                 var value = Stats.EffectiveStat(who, stat) ?? throw new CallRefusedStop(null, _number, ScrStop.NotModelled);
                 if (stat == DumbStat && value > DumbStat && Stats.IsDumbByBackground(who)) value = 1;
                 Set(a, 2, value, line);
+                return (Step.Next, 0);
+            }
+            case ScrCatalogue.Action.AdjustStat:
+            {
+                // CP12 (0x447220 case 0x89): the stat number, the object, then the number; the object's base stat (0x4B0740) plus the number goes through the stat setter (0x4B0980: a PC or NPC and a stat 0..27 only, then the stat's range). An absent object
+                // (a null handle) does nothing, as the original's `if handle != 0`; a stat or object the host does not model ends the whole dispatch with nothing applied. Adjustments apply in order after the run (sequential adds clamp each time, as the setter does).
+                var stat = Get(a, 0);
+                if (OptionalObject(a, 1) is { } who)
+                {
+                    if (!AdjustStats.CanAdjustStat(who, stat)) throw new CallRefusedStop(null, _number, ScrStop.NotModelled);
+                    var delta = Get(a, 2);
+                    _states.Add(new(ScrStateKind.AdjustStat, who, stat, delta));
+                    _shared.AdjustedStats.Add((who, stat));
+                }
                 return (Step.Next, 0);
             }
             case ScrCatalogue.Action.GetReaction:
@@ -1328,6 +1347,9 @@ internal sealed class ScrInterpreter
 
     private IScrStatQueries Stats => _host as IScrStatQueries
         ?? throw new InvalidOperationException("SCR_STAT_QUERIES_REQUIRED: the admission set holds get stat and the host cannot answer it.");
+
+    private IScrStatAdjustQueries AdjustStats => _host as IScrStatAdjustQueries
+        ?? throw new InvalidOperationException("SCR_STAT_ADJUST_QUERIES_REQUIRED: the admission set holds adjust stat and the host cannot answer it.");
 
     private IScrVitalQueries Vitals => _host as IScrVitalQueries
         ?? throw new InvalidOperationException("SCR_VITAL_QUERIES_REQUIRED: the admission set holds get hit points or get fatigue points and the host cannot answer it.");

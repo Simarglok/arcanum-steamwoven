@@ -21,7 +21,7 @@ public sealed class AreaCombatPointScriptTests
 {
     private const byte Attachee = 1, Number = 3, GlobalFlag = 4, Local = 2, Triggerer = 0, Extra = 12;
     private const int AttackerIsNpc = 2410, VictimIsPc = 2411, AttacheeIsWeapon = 2412, CritterHitsTriggererIsPc = 2413, SecondHit = 2414, CriticalSeen = 2415;
-    private const int PcType = 15, NpcType = 16, WeaponType = 5, AnimalSeen = 2416;
+    private const int PcType = 15, NpcType = 16, WeaponType = 5, AnimalSeen = 2416, CombatSeen = 2417;
 
     private static AreaObjectKey Key(int index) => new(new string('a', 64), 1, AreaSourceKind.Mobile, 1, index, index * 100L, new string((char)('a' + index), 64), 100);
 
@@ -126,6 +126,9 @@ public sealed class AreaCombatPointScriptTests
                 Do(new(ScrCatalogue.Action.Damage, (Extra, 0), (Local, 0), N(1))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
             // 919 (a hunting weapon, as 28007): sets a global flag when the extra object (the victim) is an animal.
             Write("scr/00919animal.scr", Program(If(new(ScrCatalogue.Condition.IsAnimal, (Extra, 0)), new(ScrCatalogue.Action.Assign, (GlobalFlag, AnimalSeen), N(1)), new(0)), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
+            // ARC-SCRIPT-1661: 920 (an area weapon's test of the victim, as 30064's looped critter): sets a global flag when the extra object is in combat; 921 (the alignment weapon 30252's shape): the triggerer's alignment (stat 19) falls by 200.
+            Write("scr/00920incombat.scr", Program(If(new(ScrCatalogue.Condition.IsInCombat, (Extra, 0)), new(ScrCatalogue.Action.Assign, (GlobalFlag, CombatSeen), N(1)), new(0)), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
+            Write("scr/00921alignment.scr", Program(Do(new(ScrCatalogue.Action.AdjustStat, N(19), (Triggerer, 0), N(-200))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
             Write("scr/00918eyecandy.scr", Program(Do(new(ScrCatalogue.Action.PlayScriptEyeCandy, N(30), (Extra, 0))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
             using var content = ScriptContent.Open(ContentMountPlan.Discover(root.FullName, "Syn").Plan!).Content!;
             test(content);
@@ -244,7 +247,7 @@ public sealed class AreaCombatPointScriptTests
     {
         var set = AreaUseScriptHost.CombatPointAdmission;
         Assert.IsTrue(AreaUseScriptHost.PlacedAdmission.IsSubsetOf(set), "everything the placed set runs");
-        Assert.IsTrue(set.IsSubsetOfBesidesStores(ScrAdmissionSet.S51), "the interpreter's largest set holds it");
+        Assert.IsTrue(set.IsSubsetOfBesidesStores(ScrAdmissionSet.S52), "the interpreter's largest set holds it");
         foreach (var action in new[] { ScrCatalogue.Action.Damage, ScrCatalogue.Action.DamageUnresistable, ScrCatalogue.Action.CastSpell, ScrCatalogue.Action.CastFreeSpell,
             ScrCatalogue.Action.MagickTechAdjustment, ScrCatalogue.Action.GetMagickTechAdjustment, ScrCatalogue.Action.PlayScriptEyeCandy })
             Assert.IsTrue(set.Actions.Contains(action), "action " + action);
@@ -373,6 +376,101 @@ public sealed class AreaCombatPointScriptTests
             Assert.IsFalse(host.IsAnimal(host.Pc)!.Value);
             Assert.IsNull(host.IsAnimal(new(1, "oid:nobody")), "an object the host has no row for is not known");
         });
+    }
+
+    private static readonly SessionCombatModeContext NpcCombat = new() { Facts = new() { Speed = 7, Life = new Arcanum.Simulation.Combat.LifeFacts() } };
+
+    [TestMethod]
+    public void Obj_is_in_combat_reads_the_session_s_combat_mode_of_the_hero_and_of_an_NPC_and_is_false_for_other_objects()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.CreateWithHero(1);
+            var weapon = Row(1, WeaponType, 920, ScrPoint.Hit);
+            var attacker = Row(2, NpcType, 0, ScrPoint.Heartbeat);
+            var calm = Row(3, NpcType, 0, ScrPoint.Heartbeat);
+            var fighting = Row(4, NpcType, 0, ScrPoint.Heartbeat);
+            var scenery = Row(5, 3, 0, ScrPoint.Heartbeat);
+            var host = Host(session, content, null, weapon, attacker, calm, fighting, scenery);
+            var rules = session.Rules.Scripts;
+            bool Seen(ScrObjectRef victim)
+            {
+                var ran = host.RunCombatPoint(ScrPoint.Hit, Ref(weapon), Ref(attacker), victim, rules);
+                Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, ran.Outcome, ran.Detail);
+                return Flag(session, CombatSeen);
+            }
+            Assert.IsFalse(Seen(Ref(calm)), "an NPC the session holds in no combat mode");
+            Assert.IsFalse(Seen(host.Pc), "the hero before combat mode");
+            Assert.AreEqual(GameSessionDisposition.Changed, session.SetCombatMode(session.Version, SessionCombatant.Critter(AreaUseScriptHost.EntityId(fighting)), true, NpcCombat).Disposition);
+            Assert.IsTrue(host.IsInCombat(Ref(fighting)));
+            Assert.IsFalse(host.IsInCombat(Ref(calm))!.Value);
+            Assert.IsTrue(Seen(Ref(fighting)), "an NPC in combat mode");
+            Assert.AreEqual(GameSessionDisposition.Changed, session.SetCombatMode(session.Version, SessionCombatant.Hero, true, SessionCombatModeContext.RealTime).Disposition);
+            Assert.IsTrue(host.IsInCombat(host.Pc));
+            Assert.IsTrue(Seen(host.Pc), "the hero in combat mode");
+            // A scenery row is no critter whatever the session holds; an object the host has no row for is not known.
+            Assert.IsFalse(host.IsInCombat(Ref(scenery))!.Value);
+            Assert.IsNull(host.IsInCombat(new(1, "oid:nobody")));
+        });
+    }
+
+    [TestMethod]
+    public void Adjust_stat_lowers_the_hero_s_alignment_by_the_number_clamped_to_the_stat_range_in_action_order()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.CreateWithHero(1);
+            var weapon = Row(1, WeaponType, 921, ScrPoint.Hit, 0);
+            var victim = Row(2, NpcType, 0, ScrPoint.Heartbeat);
+            var host = Host(session, content, null, weapon, victim);
+            var rules = session.Rules.Scripts;
+            Assert.AreEqual(GameSessionDisposition.Changed, session.ChangeHeroAlignment(session.Version, 300).Disposition);
+            foreach (var (before, after) in new[] { (300, 100), (100, -100), (-100, -300), (-900, -1000), (-1000, -1000) })
+            {
+                if (session.QueryHeroStoredStat(19) != before) Assert.AreEqual(GameSessionDisposition.Changed, session.ChangeHeroAlignment(session.Version, before).Disposition);
+                var ran = host.RunCombatPoint(ScrPoint.Hit, Ref(weapon), host.Pc, Ref(victim), rules);
+                Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, ran.Outcome, ran.Detail);
+                Assert.AreEqual(after, session.QueryHeroStoredStat(19), $"{before} − 200, the setter clamps at −1000");
+            }
+        });
+    }
+
+    [TestMethod]
+    public void Adjust_stat_of_an_NPC_wielder_or_without_a_hero_ends_the_run_as_not_modelled_and_changes_nothing()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.CreateWithHero(1);
+            var weapon = Row(1, WeaponType, 921, ScrPoint.Hit, 0);
+            var wielder = Row(2, NpcType, 0, ScrPoint.Heartbeat);
+            var victim = Row(3, NpcType, 0, ScrPoint.Heartbeat);
+            var host = Host(session, content, null, weapon, wielder, victim);
+            var before = session.QueryHeroStoredStat(19);
+            var ran = host.RunCombatPoint(ScrPoint.Hit, Ref(weapon), Ref(wielder), Ref(victim), session.Rules.Scripts);
+            Assert.AreEqual(AreaScriptedUseOutcome.Refused, ran.Outcome, "an NPC's alignment is the world's, not the session's");
+            Assert.AreEqual(before, session.QueryHeroStoredStat(19));
+            Assert.IsFalse(host.CanAdjustStat(Ref(wielder), 19));
+            Assert.IsFalse(host.CanAdjustStat(host.Pc, 0), "the hero's strength is not modelled here");
+            Assert.IsTrue(host.CanAdjustStat(host.Pc, 19));
+        });
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var weapon = Row(1, WeaponType, 921, ScrPoint.Hit, 0);
+            var victim = Row(2, NpcType, 0, ScrPoint.Heartbeat);
+            var host = Host(session, content, null, weapon, victim);
+            Assert.IsFalse(host.CanAdjustStat(host.Pc, 19), "a session without a hero has no alignment to write");
+            Assert.AreEqual(AreaScriptedUseOutcome.Refused, host.RunCombatPoint(ScrPoint.Hit, Ref(weapon), host.Pc, Ref(victim), session.Rules.Scripts).Outcome);
+        });
+    }
+
+    [TestMethod]
+    public void The_combat_point_set_holds_obj_is_in_combat_and_adjust_stat_and_the_other_placed_sets_do_not()
+    {
+        Assert.IsTrue(AreaUseScriptHost.CombatPointAdmission.Conditions.Contains(ScrCatalogue.Condition.IsInCombat));
+        Assert.IsTrue(AreaUseScriptHost.CombatPointAdmission.Actions.Contains(ScrCatalogue.Action.AdjustStat));
+        Assert.IsFalse(AreaUseScriptHost.PlacedAdmission.Actions.Contains(ScrCatalogue.Action.AdjustStat));
+        Assert.IsFalse(AreaUseScriptHost.PlacedAdmission.Conditions.Contains(ScrCatalogue.Condition.IsInCombat));
     }
 
     [TestMethod]

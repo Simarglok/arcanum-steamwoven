@@ -128,7 +128,7 @@ public readonly record struct AreaPrintedLine(int Type, string Text);
 /// The PC's reputations are the session's (ARC-WORLD-044); no other object has one. Everything else the viewer does not model
 /// answers "no", as for the dialog and item hosts.
 /// </summary>
-public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrObjectQueries, IScrWorldQueries, IScrObjectStateQueries, IScrAreaQueries, IScrStoreQueries, IScrStatQueries, IScrSpellQueries, IScrStoryQueries, IScrVitalQueries, IScrItemQueries, IScrMagickTechQueries, IScrCritterQueries
+public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrObjectQueries, IScrWorldQueries, IScrObjectStateQueries, IScrAreaQueries, IScrStoreQueries, IScrStatQueries, IScrSpellQueries, IScrStoryQueries, IScrVitalQueries, IScrItemQueries, IScrMagickTechQueries, IScrCritterQueries, IScrStatAdjustQueries
 {
     /// <summary>Map-change keys of an object's use slot.</summary>
     public const string LocalFlagsProperty = "use.lf", CountersProperty = "use.counters", ScriptProperty = "use.script";
@@ -498,6 +498,24 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         return Arcanum.Data.Combat.CombatFieldReader.Read(row).Fields?.Critter is { } critter
             ? (unchecked((uint)_session.QueryObjectFlags(obj.Code).Critter(unchecked((int)critter.Flags))) & AnimalCritterFlag) != 0 : null;
     }
+
+    /// <summary>
+    /// ARC-SCRIPT-1661 (CP11): whether the object is a PC or an NPC with the combat-mode bit (critter flags 0xDA bit 0x40000) as the session has it (<see cref="GameSessionOwner.QueryCombatMode"/>: the hero's, or the NPC's by entity); false for any other object type; null for an object
+    /// this host has no row for.
+    /// </summary>
+    /// <remarks>Exe read 2026-11-13: condition 31 at 0x4451B0 case 0x1f, the test 0x4B3D50.</remarks>
+    public bool? IsInCombat(ScrObjectRef obj)
+    {
+        if (IsPc(obj)) return _session.QueryCombatMode(SessionCombatant.Hero);
+        if (Row(obj) is not { } row) return null;
+        return row.Type == NpcType && _session.QueryCombatMode(SessionCombatant.Critter(obj.Code));
+    }
+
+    /// <summary>
+    /// ARC-SCRIPT-1661 (CP12): this host adjusts the hero's alignment (stat 19) only, which the session stores as a base stat; an NPC's alignment, which the world keeps in its combat values and the session does not write, and every other stat stop the dispatch as not modelled.
+    /// </summary>
+    /// <remarks>Exe read 2026-11-13: action 137 at 0x447220 case 0x89, base stat 0x4B0740, stat setter 0x4B0980 with the range tables 0x5B5194 and 0x5B5204.</remarks>
+    public bool CanAdjustStat(ScrObjectRef obj, int stat) => stat == AreaScriptStory.AlignmentStat && IsPc(obj) && _session.QueryHero() is not null;
 
     // ARC-SCRIPT-1562: what a critter-or-not object gives a magick-tech adjustment: Critter false for a row of the shown map that is neither the PC nor an NPC (no aptitude is read), else the aptitude (the PC's of the session, an NPC's of the world; null when not known).
     // Null for an object this host has no row for.
@@ -1010,10 +1028,10 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
 
     /// <summary>
     /// ARC-SCRIPT-1483 (script trigger audit slice 5, ledger CP1–CP5): the set a combat-point script (hit 7, critter hits 26, critical hit 34) runs under: the placed set (<see cref="PlacedAdmission"/>), whose damage and cast actions deal the
-    /// installed poison weapons' damage and the college poison spell. ARC-SCRIPT-1562 (CP7): plus the commands of <see cref="ScrAdmissionSet.S51"/> the poison weapon scripts 30032, 30076 and 30199 and the hunting weapon 28007 use: the magick-tech adjustments (91, 80), play script eye candy (120) and obj is animal (37). A script outside it is refused and the hit goes on as without one.
+    /// installed poison weapons' damage and the college poison spell. ARC-SCRIPT-1562 (CP7): plus the commands of <see cref="ScrAdmissionSet.S51"/> the poison weapon scripts 30032, 30076 and 30199 and the hunting weapon 28007 use: the magick-tech adjustments (91, 80), play script eye candy (120) and obj is animal (37). ARC-SCRIPT-1661 (CP11, CP12): plus the commands of <see cref="ScrAdmissionSet.S52"/> the area weapon scripts 30064 and 30074 and the alignment weapon 30252 use: obj is in combat (31, <see cref="IsInCombat"/>) and adjust stat (137, the hero's alignment only, <see cref="CanAdjustStat"/>). A script outside it is refused and the hit goes on as without one.
     /// </summary>
-    public static ScrAdmissionSet CombatPointAdmission { get; } = new("S4-area-combat-point", PlacedAdmission.Conditions.Append(ScrCatalogue.Condition.IsAnimal),
-        PlacedAdmission.Actions.Concat([ScrCatalogue.Action.GetMagickTechAdjustment, ScrCatalogue.Action.MagickTechAdjustment, ScrCatalogue.Action.PlayScriptEyeCandy]),
+    public static ScrAdmissionSet CombatPointAdmission { get; } = new("S4-area-combat-point", PlacedAdmission.Conditions.Concat([ScrCatalogue.Condition.IsAnimal, ScrCatalogue.Condition.IsInCombat]),
+        PlacedAdmission.Actions.Concat([ScrCatalogue.Action.GetMagickTechAdjustment, ScrCatalogue.Action.MagickTechAdjustment, ScrCatalogue.Action.PlayScriptEyeCandy, ScrCatalogue.Action.AdjustStat]),
         PlacedAdmission.ValueKinds, PlacedAdmission.FocusKinds, counterIndexWraps: true);
 
     /// <summary>
