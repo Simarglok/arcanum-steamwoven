@@ -45,11 +45,30 @@ public sealed partial class GameSessionOwner
     {
         if (stat == ScriptStatLevel) return npc.Stored.Count == SessionCritterIndexedWrites.StatCount ? npc.Stored[17] : null;
         if (stat == ScriptStatAlignment) return npc.Stored.Count == SessionCritterIndexedWrites.StatCount ? npc.Stored[19] : null;
-        if (stat is not (>= 0 and <= 7 or ScriptStatAptitude) || NpcScriptOwner(npc, entries, definitions) is not { } owner) return null;
+        if (stat is not (>= 0 and <= 7 or ScriptStatAptitude)) return null;
+        return NpcScriptSnapshot(npc, entries, definitions)?.GetEffective(stat == ScriptStatAptitude ? CharacterStat.MagickTechAptitude : (CharacterStat)stat);
+    }
+
+    // The NPC wearer's effective stats under the given effect list, with its poison and crippled legs; null for stored values or a list the character rules refuse.
+    private CharacterStatsSnapshot? NpcScriptSnapshot(NpcWearer npc, IReadOnlyList<SessionEffect> entries, IReadOnlyDictionary<int, SessionEffectDefinition> definitions)
+    {
+        if (NpcScriptOwner(npc, entries, definitions) is not { } owner) return null;
         var state = QueryLife(npc.Target).View?.Record.State;
         var poison = state is { } life ? Math.Clamp(life.PoisonLevel, 0, CharacterStatRules.MaxPoisonLevel) : 0;
         var crippled = state is { } legs && legs.Conditions.HasFlag(LifeConditions.CrippledLegsBoth);
-        return owner.Query(new(0, poison, crippled)).Snapshot?.GetEffective(stat == ScriptStatAptitude ? CharacterStat.MagickTechAptitude : (CharacterStat)stat);
+        return owner.Query(new(0, poison, crippled)).Snapshot;
+    }
+
+    /// <summary>
+    /// ARC-MAGIC-1684: the NPC's stored stats with its advancement record's sheet laid over the ones the sheet holds (primary stats, level, unspent points, magick and tech points, race): a follower with a record keeps those
+    /// there (ledger RM3c), so the scripts read the record's values.
+    /// </summary>
+    internal IReadOnlyList<int> NpcStatsOverSheet(string npc, IReadOnlyList<int> stats)
+    {
+        if (QueryNpcAdvancement(npc) is not { } advanced || stats.Count != SessionCritterIndexedWrites.StatCount) return stats;
+        var values = stats.ToArray();
+        foreach (var index in new[] { 0, 1, 2, 3, 4, 5, 6, 7, 17, 21, 22, 23, 27 }) values[index] = SheetStat(advanced.Sheet, index)!.Value;
+        return Array.AsReadOnly(values);
     }
 
     // The NPC wearer's aptitude as the power ratio reads it (0x461540): the effective aptitude within the equipment rules' range.
@@ -63,7 +82,7 @@ public sealed partial class GameSessionOwner
     /// (cause item). Ready (<see cref="GameSessionFailure.None"/>, <c>Runs</c> null when no worn item has a wield script, so nothing runs) when the session lists the NPC (the holder of its map's inventory view, a dressed NPC's wear
     /// record laid over the map data); with a wield script and no <paramref name="host"/>, an NPC the session does not list, or a run the session cannot apply (a script outside the admitted set, an effect on another object, a rule the
     /// host does not know, a read that an earlier effect change of the same run would have moved, a list the life rules refuse), the failure that names it and nothing is applied. The light recalculation 0x467E80 is the host's
-    /// (RM3d); the printed lines and eye candy of the runs are not shown here.
+    /// (RM3d). ARC-MAGIC-1745: the NPC is the runs' triggerer, so a printed line is read for an NPC triggerer, and the runs' lines are in <c>Runs.Messages</c> for the host (the TraitIdx write logs them); their eye candy is not shown yet.
     /// </summary>
     [OriginalFunction(0x465530, OriginalFunctionScope.Partial)]
     internal (GameSessionFailure Failure, ItemScriptRuns? Runs) PlanNpcRewield(SessionMapId map, SessionLifeTarget target, string npc, IReadOnlyList<int> stored, ISessionItemScriptHost? host)
@@ -78,7 +97,7 @@ public sealed partial class GameSessionOwner
         var revision = _revision;
         var items = new Dictionary<string, int>(StringComparer.Ordinal);
         foreach (var item in worn) items[item.Entity] = item.Facts.Complexity;
-        var runs = new ItemScriptRuns(this, host, map.RuntimeMap, items, new NpcWearer(npc, target, stored)) { Rewielding = true };
+        var runs = new ItemScriptRuns(this, host, map.RuntimeMap, items, new NpcWearer(npc, target, stored)) { Rewielding = true, NpcTriggerer = true };
         foreach (var item in scripted)
         {
             if (item.Facts.HasScript(SessionScriptPoint.WieldOff)) runs.Run(SessionScriptPoint.WieldOff, item.Entity, npc, null);
@@ -91,8 +110,8 @@ public sealed partial class GameSessionOwner
         return runs.Failure != GameSessionFailure.None ? (runs.Failure, null) : (GameSessionFailure.None, runs);
     }
 
-    /// <summary>ARC-MAGIC-1644: applies the runs <see cref="PlanNpcRewield"/> prepared: their flags, script stores, kept slots, the NPC's effect changes and the deferred calls, one revision when they change anything.</summary>
-    internal void CommitNpcRewield(ItemScriptRuns? runs)
+    /// <summary>ARC-MAGIC-1644: applies the runs <see cref="PlanNpcRewield"/> prepared (ARC-MAGIC-1744: or <see cref="PlanHeroRewield"/>): their flags, script stores, kept slots, the wearer's effect changes and the deferred calls, one revision when they change anything.</summary>
+    internal void CommitRewield(ItemScriptRuns? runs)
     {
         if (runs is null || !runs.Changes) return;
         runs.Commit();

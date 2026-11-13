@@ -190,17 +190,38 @@ public sealed partial class GameSessionOwner
             _reads = new(owner, host, this);
         }
 
-        /// <summary>ARC-AI-1655: the runs are an NPC's ground pickup, whose triggerer is the NPC: a printed line is read for an NPC triggerer (<see cref="ISessionItemScriptHost.PrintedLineForNpc"/>). Every other move keeps the hero's reading, whatever its triggerer.</summary>
-        internal bool NpcPickup { get; init; }
+        /// <summary>ARC-AI-1655, ARC-MAGIC-1684: the runs' triggerer is an NPC (its ground pickup, its best-items wield): a printed line is read for an NPC triggerer (<see cref="ISessionItemScriptHost.PrintedLineForNpc"/>). Every other move keeps the hero's reading, whatever its triggerer.</summary>
+        internal bool NpcTriggerer { get; set; }
 
         /// <summary>ARC-MAGIC-1644 (IE7, WE6): the runs are the rewield's: the condition "items are being rewielded" answers true (0x5E87E8).</summary>
         internal bool Rewielding { get; init; }
+
+        /// <summary>ARC-MAGIC-1744 (ledger RM3c, IE7): for the hero's rewield, the hero's stored stats as the runs read them: the state's array with the store of the magick or tech points that caused the rewield laid in (the setter stores
+        /// before it rewields). Null for every other move: the runs read the hero as the session holds it.</summary>
+        internal IReadOnlyList<int>? HeroStored { get; init; }
 
         /// <summary>Whether the wearer is the hero (an NPC wearer's runs meet the hero as another object, which the session holds no stats of).</summary>
         internal bool WearsHero => _npc is null;
 
         /// <summary>The wearer's entity: the hero's, or the NPC's.</summary>
         private string Wearer => _npc?.Entity ?? SessionEventKinds.PlayerEntity;
+
+        /// <summary>ARC-MAGIC-1684: an effect the runs added to or removed from an NPC wearer's list changes a basic or tech skill, which the best-items choice reads (the weapon skill levels) and the session does not model.</summary>
+        internal bool NpcSkillEffects { get; private set; }
+
+        private static bool TouchesSkills(SessionEffectDefinition definition) => definition.Changes.Any(c => c.Kind is Arcanum.Data.Characters.EffectAttributeKind.BasicSkill or Arcanum.Data.Characters.EffectAttributeKind.TechSkill);
+
+        /// <summary>ARC-MAGIC-1684: the number of actions the runs so far have made on an NPC wearer's effect list (0 for the hero).</summary>
+        internal int NpcEffectChanges => _npcOps.Count;
+
+        /// <summary>
+        /// ARC-MAGIC-1684: what the best-items choice reads of an NPC wearer (<see cref="EquipmentChooser"/>: its damage bonus, aptitude and extraordinary intelligence) under the effect list the runs so far left, as the character
+        /// rules derive them from the NPC's stored stats; null for the hero as wearer and for stored values or a list the rules refuse.
+        /// </summary>
+        internal (int DamageBonus, int Aptitude, bool ExtraordinaryIntelligence)? ChooserReads() =>
+            _npc is { } npc && _owner.NpcScriptSnapshot(npc, _entries, _definitions) is { } snapshot
+                ? (snapshot.GetEffective(CharacterStat.DamageBonus), snapshot.GetEffective(CharacterStat.MagickTechAptitude), snapshot.GetEffective(CharacterStat.Intelligence) >= CharacterStatRules.ExtraordinaryThreshold)
+                : null;
 
         internal GameSessionFailure Failure { get; private set; }
         internal IReadOnlyList<SessionItemScriptRun> Runs => _runs.AsReadOnly();
@@ -218,7 +239,7 @@ public sealed partial class GameSessionOwner
                 extra is null ? null : new ScrObjectRef(_map, extra)), _reads, new() { Rules = _owner._rules.Scripts, Admission = SessionItemScripts.Admission });
             _owner.ThrowIfDisposed();
             _runs.Add(new(point, attachee, run));
-            Failure = _reads.UnknownFlag || _reads.UnknownObject ? GameSessionFailure.ItemScriptUnsupported : _owner.ItemScriptEffects(run, _host, _messages, NpcPickup);
+            Failure = _reads.UnknownFlag || _reads.UnknownObject ? GameSessionFailure.ItemScriptUnsupported : _owner.ItemScriptEffects(run, _host, _messages, NpcTriggerer);
             if (Failure == GameSessionFailure.None) Failure = Accept(run);
             return run;
         }
@@ -310,7 +331,7 @@ public sealed partial class GameSessionOwner
             _definitions[number] = definition;
             var entry = new SessionEffect(number, cause);
             _entries.Add(entry);
-            if (!EffectDomain.Bounded(_entries, _definitions)) return GameSessionFailure.InvalidEffect;
+            if (!EffectDomain.Bounded(_entries, _definitions, innate: _owner.HeroInnateRules())) return GameSessionFailure.InvalidEffect;
             _steps.Add(new(entry, -1));
             return GameSessionFailure.None;
         }
@@ -324,6 +345,7 @@ public sealed partial class GameSessionOwner
             {
                 var index = _entries.FindIndex(entry => entry.Number == number);
                 if (index < 0) return GameSessionFailure.None;
+                if (_definitions.TryGetValue(number, out var leaving)) NpcSkillEffects |= TouchesSkills(leaving);
                 _entries.RemoveAt(index);
                 _npcOps.Add(new(null, default, 0, number, 1, null));
                 return GameSessionFailure.None;
@@ -336,6 +358,7 @@ public sealed partial class GameSessionOwner
             if (_definitions.TryGetValue(number, out var known) && !known.Changes.IsEmpty && !known.SameAs(definition)) return GameSessionFailure.EffectMismatch;
             if (_entries.Count >= SessionNpcEffectLimits.MaxEntries) return GameSessionFailure.EffectCapacityExceeded;
             _definitions[number] = definition;
+            NpcSkillEffects |= TouchesSkills(definition);
             _entries.Add(new SessionEffect(number, cause));
             _npcOps.Add(new(definition, cause, 1, null, 0, null));
             return GameSessionFailure.None;
@@ -343,7 +366,7 @@ public sealed partial class GameSessionOwner
 
         // The wearer's magick/tech aptitude under the effect list the runs left.
         private int Aptitude() => _npc is { } npc ? _owner.NpcScriptAptitude(npc, _entries, _definitions) ?? 0
-            : _steps.Count == 0 ? _owner.HeroAptitude() : _owner.TrialAptitude(_entries, _definitions);
+            : _steps.Count == 0 && HeroStored is null ? _owner.HeroAptitude() : _owner.TrialAptitude(_entries, _definitions, HeroStored);
 
         /// <summary>
         /// ARC-DEV-366 (GS1, GS3): the stat <paramref name="stat"/> of an object as get stat reads it (0x4B0490): the hero's, under the effect
@@ -353,7 +376,7 @@ public sealed partial class GameSessionOwner
             obj.Map != _map || obj.Code != Wearer ? null : WearerStat(stat);
 
         private int? WearerStat(int stat) => _npc is { } npc ? _owner.NpcScriptStat(npc, stat, _entries, _definitions)
-            : _steps.Count == 0 ? _owner.QueryHeroScriptStat(stat) : _owner.TrialScriptStat(stat, _entries, _definitions);
+            : _steps.Count == 0 && HeroStored is null ? _owner.QueryHeroScriptStat(stat) : _owner.TrialScriptStat(stat, _entries, _definitions, HeroStored);
 
         /// <summary>WE2: an item of the move and its owner's power ratio (0x461540): the hero's aptitude for the PC, 100 for an owner that is
         /// one of the move's items (not a critter); null for anything else.</summary>
@@ -512,9 +535,9 @@ public sealed partial class GameSessionOwner
 
     /// <summary>ARC-SCRIPT-042: the hero's magick/tech aptitude, as <see cref="HeroAptitude"/> reads it, with the hero's effect list
     /// replaced by <paramref name="entries"/>.</summary>
-    private int TrialAptitude(IReadOnlyList<SessionEffect> entries, IReadOnlyDictionary<int, SessionEffectDefinition> definitions)
+    private int TrialAptitude(IReadOnlyList<SessionEffect> entries, IReadOnlyDictionary<int, SessionEffectDefinition> definitions, IReadOnlyList<int>? stored = null)
     {
-        var trial = TrialHero();
+        var trial = TrialHero(stored);
         foreach (var entry in entries) ApplyStats(trial.Stats, entry, definitions);
         return Math.Clamp(trial.Stats.Query(HeroStatContext()).Snapshot!.GetEffective(CharacterStat.MagickTechAptitude), EquipmentLimits.MinAptitude, EquipmentLimits.MaxAptitude);
     }
@@ -524,12 +547,12 @@ public sealed partial class GameSessionOwner
     /// left it): the effective stat under them with the life's poison and crippled legs. The level and the alignment are the stored values
     /// (effects on them are not read, GS3); null for a stat the session does not hold and without a hero.
     /// </summary>
-    private int? TrialScriptStat(int stat, IReadOnlyList<SessionEffect> entries, IReadOnlyDictionary<int, SessionEffectDefinition> definitions)
+    private int? TrialScriptStat(int stat, IReadOnlyList<SessionEffect> entries, IReadOnlyDictionary<int, SessionEffectDefinition> definitions, IReadOnlyList<int>? stored = null)
     {
         if (_hero is null) return null;
         if (stat is ScriptStatLevel or ScriptStatAlignment) return QueryHeroScriptStat(stat);
         if (stat is not (>= 0 and <= 7 or ScriptStatAptitude) || QueryHeroLife() is not { } life) return null;
-        var trial = TrialHero();
+        var trial = TrialHero(stored);
         foreach (var entry in entries) ApplyStats(trial.Stats, entry, definitions);
         var state = life.Record.State;
         var read = trial.Stats.Query(new(0, Math.Clamp(state.PoisonLevel, 0, CharacterStatRules.MaxPoisonLevel), state.Conditions.HasFlag(LifeConditions.CrippledLegsBoth)));

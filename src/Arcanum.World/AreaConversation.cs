@@ -518,6 +518,19 @@ public sealed class AreaConversationHost
     /// </summary>
     public string? SayFollowerLine(AreaSpeaker speaker, LoyaltyLines lines)
     {
+        var text = PickLine(speaker, lines);
+        if (text is not null) Scripts.Float(Scripts.Object(speaker), text);
+        return text;
+    }
+
+    /// <summary>
+    /// ARC-UI-1740 (0x418780 behind the phrase generators 0x414020 and its twins): a random line of <paramref name="lines"/> of the plain NPC files for the
+    /// speaker, its own override line first, as <see cref="SayFollowerLine"/> reads it but not floated: the barter window prints it on its quote line. The
+    /// text is read from the player's generated files and never stored. Returns null when nothing can be said (a speaker this host does not hold, texts that
+    /// did not load, a range without an entry, a refused roll). The line pick draws one random number of the session generator.
+    /// </summary>
+    public string? PickLine(AreaSpeaker speaker, LoyaltyLines lines)
+    {
         ArgumentNullException.ThrowIfNull(speaker);
         if (!Speakers.Contains(speaker)) return null;
         DialogGenericGreetingResult said;
@@ -533,9 +546,7 @@ public sealed class AreaConversationHost
         {
             return null;
         }
-        if (said.Status != DialogGenericGreetingStatus.Said) return null;
-        Scripts.Float(Scripts.Object(speaker), said.Text);
-        return said.Text;
+        return said.Status == DialogGenericGreetingStatus.Said ? said.Text : null;
     }
 
     /// <summary>
@@ -746,7 +757,7 @@ public sealed class AreaConversationHost
         public DialogHealerFacts Facts(DialogHealerQuery query)
         {
             if (query.PlayerCharacter != AreaConversationState.PcParticipant || query.Npc != npc) throw new ArgumentException("Not the talk's speaker.", nameof(query));
-            var facts = ai.HealerFacts(entity) ?? throw new InvalidOperationException("The speaker is no NPC of the AI host.");
+            var facts = ai.HealerFacts(entity, query.Skill) ?? throw new InvalidOperationException("The speaker is no NPC of the AI host.");
             return new(facts.Rank, facts.SkillAllowed, facts.SkillLevel, facts.SkillTraining, facts.LedByPc, facts.NoPcLeader);
         }
 
@@ -755,7 +766,7 @@ public sealed class AreaConversationHost
         public string? SpellName(int spell) => host.SpellName?.Invoke(spell);
 
         public DialogCommandResult Execute(HealerSkillCommand command) =>
-            command.PlayerCharacter == AreaConversationState.PcParticipant && command.Npc == npc && ai.HealerService(entity) ? DialogCommandResult.Applied : DialogCommandResult.Rejected;
+            command.PlayerCharacter == AreaConversationState.PcParticipant && command.Npc == npc && ai.HealerService(entity, command.Skill) ? DialogCommandResult.Applied : DialogCommandResult.Rejected;
 
         public DialogCommandResult Execute(HealerSpellCommand command) =>
             command.PlayerCharacter == AreaConversationState.PcParticipant && command.Npc == npc && ai.HealerCast(entity, command.Spell, command.Free) ? DialogCommandResult.Applied : DialogCommandResult.Rejected;

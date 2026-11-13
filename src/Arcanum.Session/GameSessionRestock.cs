@@ -62,6 +62,9 @@ public interface ISessionRestockWorld : ISessionEventWorld
     /// <summary>ARC-WORLD-103: the facts of an NPC's best-items wield after its regeneration (<see cref="SessionNpcWielder"/>); null when the
     /// host cannot give them, and the NPC then wears only what the clear left it (Not ready).</summary>
     SessionNpcWielder? RestockWielder(SessionMapId map, string npc) => null;
+    /// <summary>ARC-MAGIC-1684: what the item event scripts of an NPC's best-items wield need (<see cref="SessionNpcWieldScripts"/>); null when the host cannot give it, and a choice or a worn item with a move script is then not wielded (as
+    /// before the scripts were run).</summary>
+    SessionNpcWieldScripts? NpcWieldScripts(SessionMapId map, string npc) => null;
 }
 
 /// <summary>What one regeneration did (ARC-WORLD-094).</summary>

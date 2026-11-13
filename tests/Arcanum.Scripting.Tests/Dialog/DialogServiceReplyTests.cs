@@ -7,7 +7,7 @@ namespace Arcanum.Scripting.Tests.Dialog;
 
 /// <summary>
 /// ARC-SCRIPT-1534 (ledger DSV1–DSV3): the <c>u:</c> skill service reply as the executable's builder (0x416C10 → 0x4AE570) treats it: skill 12 (repair) is never offered (the target the dialog
-/// passes is the PC, not an item), takes a slot of the five eligible replies, and the other skills stay a frontier.
+/// passes is the PC, not an item), takes a slot of the five eligible replies, skill 14 (pick locks) likewise, and the other skills stay a frontier without the healer ports.
 /// </summary>
 [TestClass]
 public sealed class DialogServiceReplyTests
@@ -22,9 +22,9 @@ public sealed class DialogServiceReplyTests
     private static string Reply(int number, string text, string response = "20") => $"{{{number}}}{{{text}}}{{}}{{1}}{{}}{{{response}}}{{}}";
 
     [TestMethod]
-    public void A_repair_service_reply_is_not_offered_and_the_other_replies_are()
+    public void A_repair_or_pick_locks_service_reply_is_not_offered_and_the_other_replies_are()
     {
-        foreach (var text in new[] { "u:12", "U:12", "u: 12", "u:+12", "u:012", "u:12 repair", "U:12x", "u:4294967308" })
+        foreach (var text in new[] { "u:12", "U:12", "u: 12", "u:+12", "u:012", "u:12 repair", "U:12x", "u:4294967308", "u:14", "U:014", "u:+14" })
         {
             var conversation = Start(Reply(11, text) + Reply(12, "Plain."));
             Assert.AreEqual(DialogConversationPhase.AwaitingSelection, conversation.Phase, text);
@@ -44,7 +44,7 @@ public sealed class DialogServiceReplyTests
     [TestMethod]
     public void The_other_skill_numbers_and_unreadable_texts_stay_a_frontier()
     {
-        foreach (var text in new[] { "u:10", "u:14", "u:5", "u:", "u:x", "u:112", "u:-12", "u:1", "u:4294967296" })
+        foreach (var text in new[] { "u:10", "u:5", "u:", "u:x", "u:112", "u:-12", "u:1", "u:4294967296" })
         {
             var conversation = Start(Reply(11, text));
             Assert.AreEqual((DialogConversationPhase.AtFrontier, DialogFrontierKind.UnsupportedGeneratedText), (conversation.Phase, conversation.Frontier!.Kind), text);
