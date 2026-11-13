@@ -1098,3 +1098,14 @@ Known differences (documented, not bugs): a button takes the pointer on its art'
 | 2 | Press F8 with the newest save on another map than the one shown. | The same black screen with the clock until the saved map is there. | open |
 | 3 | Load a save whose map is missing or broken (rename its map folder in a copy). | The black screen goes and the menu (or the running game) comes back with the reason. | open |
 | 4 | Press F8 with a save on the map already shown. | No load screen is seen: the load of the shown map is one step in this build (issue #1504). | open |
+
+## ARC-UI-1365 — The experience progress strip under the hot-key bar (PR #1555, 2026-11-13)
+
+The strip is drawn as the draw 0x556C20 does ([experience strip](../rendering/terrain-viewer.md#experience-strip-arc-ui-1365), ledger GB13, GB14). Known and already documented: the viewer redraws the strip at
+once when experience changes; the original repaints it at its bar refresh events (and at once only while the character sheet is open).
+
+| # | Step | Expected (from the original executable and data) | Status |
+| --- | --- | --- | --- |
+| 1 | Start a new hero, look at the bottom bar under the ten hot-key slots. | No red segments at the start of a level. | open |
+| 2 | Gain about half of the experience a level needs (kill or quest), open and close the character sheet. | Red segments fill from the left, about five of ten at half; a thin bar under them grows by the rest. | open |
+| 3 | Gain experience until just below the next level, then reach it. | The strip is nearly full, then shows the new level's progress (almost empty) after the level-up message. | open |
