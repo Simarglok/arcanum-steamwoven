@@ -48,6 +48,14 @@ public readonly record struct MapChangeEdit(SessionMapId Map, MapChangeKey Key, 
 /// </summary>
 public readonly record struct SessionLightingState(int SchemeId, int Hour);
 
+/// <summary>
+/// ARC-UI-1542 (schema 98): the lit state of the top strip's buttons that the original keeps in the Intgame part of its save (0x54A1A0, ledger GB13):
+/// the five button art words and the map mode. The host records it after it changes a light and reads it back on a load; the session only keeps it.
+/// </summary>
+/// <param name="LitMask">Bit n set when the light slot n holds its lit art (0 Character, 1 Logbook, 2 town map, 3 world map, 4 Inventory; 0..31).</param>
+/// <param name="MapMode">The Map button's face: 2 the town map's, 3 the world map's (the slot numbers of the two faces).</param>
+public readonly record struct SessionBarLightsState(int LitMask, int MapMode);
+
 /// <summary>Session limits can be lowered, never raised above the policy maxima. ARC-DATA-029: each maximum is sized
 /// for a whole playthrough of any map against the census of all 81 installed maps (docs/world/limits-census.md); raising
 /// one only admits more and does not change the snapshot format.</summary>
@@ -191,7 +199,7 @@ public enum GameSessionFailure
 {
     None, InvalidDescriptor, ClockRejected, FlagsRejected, InvalidActor, InvalidMap, InvalidChangeKey,
     BudgetExceeded, StaleVersion, RevisionExhausted, UnsupportedSchema, WrongWorld, WrongModule,
-    IncompatibleClockProfile, InvalidSnapshot, InvalidQuest, InvalidQuestState, InvalidRumor, InvalidReputation, InvalidLighting,
+    IncompatibleClockProfile, InvalidSnapshot, InvalidQuest, InvalidQuestState, InvalidRumor, InvalidReputation, InvalidLighting, InvalidBarLights,
     // Party domain (ARC-WORLD-013).
     InvalidCompanion, InvalidConsentFacts, ConsentRefused, LeaveRefused, NotInParty, NotWaiting,
     // Inventory domain (ARC-WORLD-014).
@@ -666,8 +674,9 @@ public sealed class GameSessionSnapshot
     /// Schema 95 adds the arranged slots of seed holders (a container's or an NPC's grid laid out at a loot, steal or See Contents open) to the inventory section (<see cref="SessionInventoryState.HolderSlots"/>, ARC-RES-1441).
     /// Schema 96 adds the wait flag to each party record (<see cref="SessionCompanion.WaitFlag"/>, the WAIT bit of an NPC with no leader or one that joined with it, ARC-SCRIPT-1136).
     /// Schema 97 adds the encounters section: the use counts of the world-map random encounter rows (<see cref="SessionEncounterState"/>, ARC-WORLD-1159).
-    /// Schemas 1..55 are refused, not migrated; schemas 56 to 96 are upgraded on decode (ARC-UI-037).</summary>
-    public const int CurrentSchemaVersion = 97;
+    /// Schema 98 adds the lit state of the top strip's buttons and the Map button's face (<see cref="BarLights"/>, ARC-UI-1542).
+    /// Schemas 1..55 are refused, not migrated; schemas 56 to 97 are upgraded on decode (ARC-UI-037).</summary>
+    public const int CurrentSchemaVersion = 98;
 
     internal GameSessionSnapshot(int schemaVersion, GlobalFlagIdentity identity, long revision,
         SessionClockState clock, SessionFlagState flags, ActorPlacement actor, SessionMapState[] maps, SessionStoryState story,
@@ -675,7 +684,7 @@ public sealed class GameSessionSnapshot
         SessionEffectState effects, SessionExperienceState experience, SessionAdvancementState advancement, SessionRandomState random,
         SessionLifeState life, SessionReactionState reactions, SessionCombatRound? combat, SessionCombatModeState combatMode,
         SessionConcealmentState concealment, SessionDangerState danger, SessionEventState events, SessionLightingState? lighting, SessionSoundState sound,
-        SessionHotkeyState? hotkeys = null, SessionObjectRecords? objects = null, SessionScriptState? scripts = null, SessionResidencyState? residency = null, SessionGoalState? goals = null, SessionSpellState? spells = null, SessionNewspaperState? newspaper = null, SessionFlightState? flights = null, SessionGeneratorState? generators = null, SessionEncounterState? encounters = null)
+        SessionHotkeyState? hotkeys = null, SessionObjectRecords? objects = null, SessionScriptState? scripts = null, SessionResidencyState? residency = null, SessionGoalState? goals = null, SessionSpellState? spells = null, SessionNewspaperState? newspaper = null, SessionFlightState? flights = null, SessionGeneratorState? generators = null, SessionEncounterState? encounters = null, SessionBarLightsState? barLights = null)
     {
         SchemaVersion = schemaVersion; Identity = identity; Revision = revision;
         Clock = clock; Flags = flags; Actor = actor; Maps = Array.AsReadOnly(maps); Story = story; Party = party;
@@ -690,6 +699,7 @@ public sealed class GameSessionSnapshot
         Flights = flights ?? SessionFlightState.Empty;
         Generators = generators ?? SessionGeneratorState.Empty;
         Encounters = encounters ?? SessionEncounterState.Empty;
+        BarLights = barLights;
     }
 
     public int SchemaVersion { get; }
@@ -758,6 +768,8 @@ public sealed class GameSessionSnapshot
 
     /// <summary>The use counts of the world-map random encounter rows that fired (ARC-WORLD-1159, schema 97).</summary>
     public SessionEncounterState Encounters { get; }
+    /// <summary>The lit state of the top strip's buttons, or null when none was recorded (a session whose host never lit a button, or a save of schema 97 or older: all idle, ARC-UI-1542).</summary>
+    public SessionBarLightsState? BarLights { get; }
 }
 
 internal static class SessionValidation
@@ -771,6 +783,8 @@ internal static class SessionValidation
     internal static bool Entity(string? entity) => Code(entity, MaxEntityCharacters);
 
     internal static bool Lighting(SessionLightingState lighting) => lighting.SchemeId >= 1 && lighting.Hour is >= 0 and <= 23;
+
+    internal static bool BarLights(SessionBarLightsState lights) => lights.LitMask is >= 0 and <= 31 && lights.MapMode is 2 or 3;
 
     internal static bool Actor(ActorPlacement actor) => Map(actor.Map) &&
         actor.Cell.X >= 0 && actor.Cell.Y >= 0 && Enum.IsDefined(actor.Facing);
