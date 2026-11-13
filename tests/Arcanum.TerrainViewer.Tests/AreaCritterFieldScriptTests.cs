@@ -215,6 +215,34 @@ public sealed class AreaCritterFieldScriptTests
     }
 
     [TestMethod]
+    public void The_hero_s_invulnerability_toggles_through_the_session_and_renaming_the_hero_or_toggling_after_a_rename_in_one_run_behaves()
+    {
+        WithScripts(content =>
+        {
+            using var session = ConversationSessionFixture.CreateWithHero(1);
+            var weapon = Plain(1, 5, script: 941);
+            var attacker = Npc(2);
+            var host = new AreaUseScriptHost(session, 1, [weapon, attacker], [], content, new(() => null, _ => false, _ => null, () => null));
+            var ran = host.RunCombatPoint(ScrPoint.Hit, Ref(weapon), Ref(attacker), host.Pc, session.Rules.Scripts);
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, ran.Outcome, ran.Detail);
+            Assert.IsTrue(host.IsInvulnerable(host.Pc));
+            Assert.AreEqual(0x400000, session.QueryObjectFlags(AreaScriptHost.PcCode).ObjectSet);
+            ran = host.RunCombatPoint(ScrPoint.Hit, Ref(weapon), Ref(attacker), host.Pc, session.Rules.Scripts);
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, ran.Outcome, ran.Detail);
+            Assert.IsFalse(host.IsInvulnerable(host.Pc));
+            Assert.IsTrue(session.QueryObjectFlags(AreaScriptHost.PcCode).IsEmpty);
+            // The hero's name number is not kept: a rename of the hero refuses the run, nothing applies.
+            var rename = Plain(3, 5, script: 942);
+            var hosted = new AreaUseScriptHost(session, 1, [rename, attacker], [], content, new(() => null, _ => false, _ => null, () => null));
+            var before = session.Version;
+            var refused = hosted.RunCombatPoint(ScrPoint.Hit, Ref(rename), Ref(attacker), hosted.Pc, session.Rules.Scripts);
+            Assert.AreEqual(AreaScriptedUseOutcome.EffectsRejected, refused.Outcome, refused.Detail);
+            StringAssert.Contains(refused.Detail, "rename of the PC");
+            Assert.AreEqual(before, session.Version);
+        });
+    }
+
+    [TestMethod]
     public void The_use_placed_heartbeat_dying_and_combat_point_sets_hold_the_five_commands_and_the_talk_set_the_getters()
     {
         foreach (var set in new[] { AreaUseScriptHost.Admission, AreaUseScriptHost.PlacedAdmission, AreaUseScriptHost.HeartbeatAdmission, AreaUseScriptHost.DyingAdmission, AreaUseScriptHost.CombatPointAdmission })

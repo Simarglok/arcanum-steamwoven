@@ -42,6 +42,8 @@ public sealed class ScrCritterFieldTests
         public bool? CanHear(ScrObjectRef listener, ScrObjectRef source) => null;
         public bool? IsUndead(ScrObjectRef obj) => null;
         public bool? IsProwling(ScrObjectRef obj) => null;
+        public bool? HasBadAssociates(ScrObjectRef obj) => null;
+        public bool? IsMonsterOfType(ScrObjectRef obj, int type) => null;
         public int QuestState(ScrObjectRef obj, int quest) => 0;
         public bool HoldsItemNamed(ScrObjectRef obj, int name) => false;
         public int NameOf(ScrObjectRef obj) => Names.TryGetValue(obj, out var name) ? name : 0;
