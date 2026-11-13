@@ -363,13 +363,20 @@ public sealed class AreaNpcStateScriptTests
             Assert.AreEqual(again, session.Version, "an id equal to the current one moves no record");
             Assert.AreEqual(GameSessionDisposition.Changed, session.SetObjectArt(session.Version, new SessionMapId(1), made, prototype.Art, prototype.Art).Disposition);
             Assert.IsNull(session.QueryObjectArt(new SessionMapId(2), made));
-            // A prototype the world does not read, no art index and a made item the session deleted: refused, refused and left as it is.
+            // A prototype the world does not read (refused), no art index (refused) and an ART file that does not exist (nothing written).
             Assert.AreEqual(AreaScriptedUseOutcome.EffectsRejected, RunOnExtra(Host2(world with { Item = _ => null }), session, user, made).Outcome);
             Assert.AreEqual(AreaScriptedUseOutcome.EffectsRejected, RunOnExtra(Host2(world with { ArtExists = null }), session, user, made).Outcome);
             Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, RunOnExtra(Host2(world with { ArtExists = _ => false }), session, user, made).Outcome);
             Assert.IsNull(session.QueryObjectArt(new SessionMapId(2), made), "no ART file for the new id");
             // An entity the session does not know as made or carried is still refused (no row): the made number 99 holds nothing.
             Assert.AreEqual(AreaScriptedUseOutcome.EffectsRejected, RunOnExtra(Host2(null), session, user, "made:99").Outcome);
+            // A made item the session deleted is a destroyed object: its art record goes with it and the action leaves it as it is (the run goes on, nothing refused).
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, RunOnExtra(Host2(null), session, user, made).Outcome);
+            Assert.IsNotNull(session.QueryObjectArt(new SessionMapId(2), made));
+            Assert.AreEqual(GameSessionDisposition.Changed, session.DestroyLyingItem(session.Version, made).Disposition);
+            Assert.IsNull(session.QueryObjectArt(new SessionMapId(2), made), "the record of a deleted item is dropped");
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, RunOnExtra(Host2(null), session, user, made).Outcome);
+            Assert.IsNull(session.QueryObjectArt(new SessionMapId(2), made));
         });
     }
 

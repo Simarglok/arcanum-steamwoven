@@ -2110,6 +2110,8 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         if (IsPc(obj)) return default;
         // 0x43EB30: an object destroyed (object flag 0x1, or by a script) is left as it is, whatever its type.
         if (AlreadyDestroyed(obj)) return default;
+        // ARC-SCRIPT-1826 (AN16): an item the session deleted (its lists no longer name it, so no row or prototype is found for it) is a destroyed object too: left as it is, the run goes on.
+        if (_session.IsItemDestroyed(obj.Code)) return default;
         // ARC-SCRIPT-1826 (AN16): the object's row on a map the host holds; else, for an item, the row of its origin map (a map-data item carried here) or its prototype's art (a made or script-created item).
         int type; long? stored;
         if (Row(obj) is { } row) (type, stored) = (row.Type, Number(row, ArtSlot));
