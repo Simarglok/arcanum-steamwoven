@@ -194,9 +194,9 @@ public static partial class AiExecutorRules
                 return Next(5);
             case 5:
                 // 0x42BC10: the art becomes the kill's animation at frame 0 (the third argument of the starter, slot 14). The critter leaves combat mode (the session's kill did).
-                // ARC-UI-1737 (OH2): with the violence filter on it is the fall-down 7 whatever the kill stored, and a missing art 7 is not repaired: the art stays, the goal goes to the pool node.
+                // ARC-UI-1737 (OH2): with the violence filter on it is the fall-down 7 whatever the kill stored. (The original's missing-art refusal of 7, no repair to 18, is not built: the
+                // world's Clip port also answers null for a header that does not read, so it cannot tell a missing art from an unreadable one.)
                 var animation = DyingAnimationRules.Chosen(goal.Animation, world.ViolenceFilter);
-                if (DyingAnimationRules.FilterRefusesMissingArt(world.ViolenceFilter, world.Clip(owner, animation) is not null)) return Next(7);
                 world.ShowArt(owner, animation, 0);
                 return animation == goal.Animation ? Next(6) : new(Move.Next, 6, Top: goal with { Animation = animation });
             case 6:

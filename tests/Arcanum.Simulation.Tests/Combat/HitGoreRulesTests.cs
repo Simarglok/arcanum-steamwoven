@@ -50,8 +50,5 @@ public sealed class HitGoreRulesTests
             Assert.AreEqual(stored, DyingAnimationRules.Chosen(stored, false));
             Assert.AreEqual(DyingAnimationRules.FallDown, DyingAnimationRules.Chosen(stored, true));
         }
-        Assert.IsTrue(DyingAnimationRules.FilterRefusesMissingArt(true, false), "no repair to 18 with the filter on");
-        Assert.IsFalse(DyingAnimationRules.FilterRefusesMissingArt(true, true));
-        Assert.IsFalse(DyingAnimationRules.FilterRefusesMissingArt(false, false), "filter off: the original repairs to 18, the caller's step");
     }
 }

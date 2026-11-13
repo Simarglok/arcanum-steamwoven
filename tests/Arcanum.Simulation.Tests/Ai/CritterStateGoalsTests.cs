@@ -95,20 +95,6 @@ public sealed class CritterStateGoalsTests
     }
 
     [TestMethod]
-    public void WithTheFilterOnAMissingFallDownArtIsNotRepairedTheArtStaysAndTheGoalGoesStraightToThePoolNode()
-    {
-        // 0x42BC10 with the filter on logs an assertion and answers 0 (no repair to animation 18): the dying goal goes to its pool node with the art unchanged.
-        var world = Arena();
-        world.ViolenceFilter = true;
-        world.Clips[18] = new(5, 10);
-        var steps = ExecutorRulesTests.Drive(Run(AiExecutorRules.DyingFrame(18)), world, Steamwoven);
-        Assert.AreEqual(0, world.Writes.Count, "no art was set");
-        Assert.IsFalse(world.Arts.ContainsKey(Npc));
-        Assert.AreEqual(AiRunEnd.EndStep, steps[^1].End);
-        Assert.AreEqual(1, world.Finished, "the pool node and the end ran");
-    }
-
-    [TestMethod]
     public void DyingWithAnUnreadableHeaderStoresTheHundredMillisecondDelayAndEndsOnItsFirstFrame()
     {
         var world = Arena();
