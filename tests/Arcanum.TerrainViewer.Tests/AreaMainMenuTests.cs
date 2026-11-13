@@ -32,6 +32,23 @@ public sealed class AreaMainMenuTests
         Assert.AreEqual(AreaMenuCommandKind.None, menu.Activate(3).Kind, "with the intro hidden the fourth shown button is Cancel, not the intro");
     }
 
+    /// <summary>ARC-RENDER-1171: Credits (message 13, window 2) is shown and asks the host for the credits only when the host read the slide table
+    /// (<see cref="AreaMainMenu.CreditsRefusal"/> null); the menu stays on its window; it hides again with a reason when it cannot.</summary>
+    [TestMethod]
+    public void Credits_is_shown_and_asks_for_the_credits_only_when_the_host_read_the_slide_table()
+    {
+        var menu = Menu();
+        Assert.IsTrue(menu.HiddenNotes.Any(note => note.StartsWith("Credits: ", StringComparison.Ordinal)), "hidden until the host says it can");
+        menu.CreditsRefusal = null;
+        CollectionAssert.AreEqual(new[] { "Single Player", "Options", "Credits", "Exit Game" }, Labels(menu));
+        var command = menu.Activate(2);
+        Assert.AreEqual(AreaMenuCommandKind.Credits, command.Kind);
+        Assert.AreEqual(AreaMenuWindow.Main, menu.Window, "the credits show over the menu, which is there again after them");
+        menu.CreditsRefusal = "no slide table";
+        CollectionAssert.AreEqual(new[] { "Single Player", "Options", "Exit Game" }, Labels(menu));
+        CollectionAssert.AreEqual(new[] { "MultiPlayer: " + AreaMainMenu.NoNetworkPlay, "Credits: no slide table" }, menu.HiddenNotes.ToArray());
+    }
+
     [TestMethod]
     public void The_windows_list_the_originals_buttons_in_order_and_hide_what_is_not_built()
     {
