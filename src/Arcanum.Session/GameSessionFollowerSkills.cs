@@ -12,7 +12,7 @@ namespace Arcanum.Session;
 /// <see cref="SessionNpcPickPocket"/>'s and <see cref="SessionNpcHeal"/>'s). <see cref="LedByPc"/> picks the observer rules of a trap (<see cref="TrapObserver.LedNpc"/> knows what the PC spotted or placed,
 /// <see cref="TrapObserver.FreeNpc"/> knows what the PC did not place; TT2).
 /// </summary>
-public sealed record SessionNpcSkillUser(SessionLifeTarget User, SessionNpcAdvancement Loaded, AdvancementModifiers Modifiers, bool LedByPc = true);
+public sealed record SessionNpcSkillUser(SessionLifeTarget User, SessionNpcAdvancement Loaded, AdvancementModifiers Modifiers, bool LedByPc);
 
 public sealed partial class GameSessionOwner
 {

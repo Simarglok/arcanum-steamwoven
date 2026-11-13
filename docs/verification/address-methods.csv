@@ -86,6 +86,8 @@ src/Arcanum.Session/GameSessionExperience.cs,RecordNpcKill,pending,
 src/Arcanum.Session/GameSessionFate.cs,HeroFateArmed,pending,
 src/Arcanum.Session/GameSessionFate.cs,QueryHeroFate,pending,
 src/Arcanum.Session/GameSessionFate.cs,UseHeroFate,pending,
+src/Arcanum.Session/GameSessionFollowerSkills.cs,PickLockByNpc,exempt,host
+src/Arcanum.Session/GameSessionFollowerSkills.cs,RollNpcDisarmTrap,exempt,host
 src/Arcanum.Session/GameSessionFollowers.cs,ApplyFollowerRule,pending,
 src/Arcanum.Session/GameSessionGeneratedOnce.cs,GenerateContainerOnce,pending,
 src/Arcanum.Session/GameSessionGoals.cs,InsertGoalAtBottom,pending,
@@ -765,6 +767,7 @@ tools/terrain-viewer/Godot/TerrainViewerAreaBarter.cs,BarterCycleSpeaker,exempt,
 tools/terrain-viewer/Godot/TerrainViewerAreaBarter.cs,BarterPointerStill,pending,
 tools/terrain-viewer/Godot/TerrainViewerAreaBarter.cs,FollowerMenuFacts,exempt,reference
 tools/terrain-viewer/Godot/TerrainViewerAreaContainerLoot.cs,CloseContainer,pending,
+tools/terrain-viewer/Godot/TerrainViewerAreaContainerPick.cs,AiPickLockTarget,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAreaEncounters.cs,EncounterSiteNow,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAreaEncounters.cs,HandleEncounterNotices,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAreaFate.cs,FateToggled,exempt,host

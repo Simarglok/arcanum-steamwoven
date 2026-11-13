@@ -263,6 +263,7 @@ public sealed class AreaAiSkillTests
             else Assert.AreEqual(pick.Check.Critical ? PickLockResult.Jammed : PickLockResult.Failed, pick.Outcome!.Value.Result);
             if (!picked && pick.Check.Critical) break;
         }
+        Assert.IsTrue(picked || (session.QueryOpenable(door.Openable, door.Baseline).Flags & LockRules.JammedBit) != 0, "an unlock or a jam came up within 400 attempts");
         Assert.AreEqual(hero, session.QueryHero(), "the hero is untouched");
         // A target the scene does not name is a refusal that changes nothing.
         var before = session.Version;

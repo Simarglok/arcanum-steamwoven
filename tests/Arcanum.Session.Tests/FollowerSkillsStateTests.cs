@@ -147,7 +147,7 @@ public sealed class FollowerSkillsStateTests
         Refused(good, Target(), Lockpick(flags: 0), GameSessionFailure.InvalidLockpick);
         Refused(good, Target(), Lockpick(bonus: GameSessionOwner.MaxLockpickBonus + 1), GameSessionFailure.InvalidLockpick);
         Refused(good, Target(), Lockpick(scripts: [SessionLockpick.UseScript]), GameSessionFailure.ItemScriptUnsupported);
-        Refused(good, Target(), Lockpick(entity: "kit:4"), GameSessionFailure.ItemNotAvailable, null);
+        Refused(good, Target(), Lockpick(entity: owner.QueryHeroKit().Last().Entity), GameSessionFailure.ItemNotAvailable, null);
         Refused(good, Target(), null, GameSessionFailure.StaleVersion, new(owner.Version.Owner, owner.Version.Revision + 1));
     }
 
