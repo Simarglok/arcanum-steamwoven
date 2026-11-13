@@ -6,7 +6,7 @@ namespace Arcanum.TerrainViewer;
 
 public partial class TerrainViewerApp
 {
-    // ARC-UI-1364 (ledger GB13), part of the bar smoke (ARC_AREA_MAP_SMOKE_ONLY=bar): the top strip's buttons light from game events through the
+    // ARC-UI-1364 (ledger GB15), part of the bar smoke (ARC_AREA_MAP_SMOKE_ONLY=bar): the top strip's buttons light from game events through the
     // production route (the session's writes and the level-up hook), the art on the button is the lit art, the button's own window puts the light
     // out and a light is not stored while that window is open; the Map button shows the world map art in a sector without a town map.
     private async Task RunAreaBarLightsSmokeAsync(AreaGameBarPanel panel, Func<int, Task> frames, Func<AreaBarButton, Task> click)

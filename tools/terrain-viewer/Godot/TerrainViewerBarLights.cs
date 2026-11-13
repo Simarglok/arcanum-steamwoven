@@ -5,7 +5,7 @@ using Godot;
 
 namespace Arcanum.TerrainViewer;
 
-// ARC-UI-1364: the top strip's buttons lit by game events, and the Map button's face (ledger GB13; checked in the 1.0.7.4 executable: the light
+// ARC-UI-1364: the top strip's buttons lit by game events, and the Map button's face (ledger GB15; checked in the 1.0.7.4 executable: the light
 // callback 0x556A90 with the lit art table 0x5C6510, the map callback 0x556B70, both registered at 0x57C83E and called through 0x460790 and
 // 0x4607B0). The state is AreaBarLights (AreaGameBar.Lights); this file applies the events to it:
 //   Character: a level-up of the hero (0x4A69C0, ShowLevelUps) lights it; the character sheet open for the hero puts it out (0x5597C0).
@@ -27,17 +27,17 @@ public partial class TerrainViewerApp
     /// <summary>The lights lit since the app started (for the logs and the smoke).</summary>
     internal int BarLightsLitForSelfTest => _barLightsLit;
 
-    /// <summary>Whether the slot's own window is open (the light callback's test, GB13). The sheet counts only for the hero's own (an NPC's or companion's sheet is another window of the same mode).</summary>
+    /// <summary>Whether the slot's own window is open (the light callback's test, GB15). The sheet counts only for the hero's own (an NPC's or companion's sheet is another window of the same mode).</summary>
     private bool BarLightWindowOpen(AreaLightSlot slot) => slot switch
     {
         AreaLightSlot.Character => SheetOpen && _sheetNpc is null,
         AreaLightSlot.Logbook => LogbookOpen,
-        // The barter window is the inventory window in its barter mode (GB14), so the same flag.
+        // The barter window is the inventory window in its barter mode (GB16), so the same flag.
         AreaLightSlot.Inventory => InventoryOpen || BarterOpen,
         _ => WorldMapOpen,
     };
 
-    /// <summary>Lights a slot (the callback of GB13 with the flag set); true when that changed it.</summary>
+    /// <summary>Lights a slot (the callback of GB15 with the flag set); true when that changed it.</summary>
     private bool TryLight(AreaLightSlot slot)
     {
         if (!_gameBar.Lights.Light(slot, true, BarLightWindowOpen(slot))) return false;
@@ -46,7 +46,7 @@ public partial class TerrainViewerApp
         return true;
     }
 
-    /// <summary>A level-up of the hero lights the Character button unless the sheet is open (GB14).</summary>
+    /// <summary>A level-up of the hero lights the Character button unless the sheet is open (GB16).</summary>
     private void LightCharacterForLevelUp()
     {
         if (TryLight(AreaLightSlot.Character)) _gameBarPanel?.Render();

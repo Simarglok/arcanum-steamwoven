@@ -1,12 +1,12 @@
 namespace Arcanum.TerrainViewer.Core;
 
-/// <summary>The five light slots of the original's interface (ledger GB13): the order of its two button-art tables at 0x5C6524 (the idle
+/// <summary>The five light slots of the original's interface (ledger GB15): the order of its two button-art tables at 0x5C6524 (the idle
 /// art) and 0x5C6510 (the lit art), the slot number the game's light callback 0x556A90 takes. Slot 2 and slot 3 are the Map button's two
 /// faces, the town map's and the world map's; the map slot a redraw draws is the one the current map mode names (0x556B70).</summary>
 public enum AreaLightSlot { Character = 0, Logbook = 1, TownMap = 2, WorldMap = 3, Inventory = 4 }
 
 /// <summary>
-/// ARC-UI-1364 (ledger GB13, read in the 1.0.7.4 executable): the lit state of the top strip's Character, Logbook, Map and Inventory
+/// ARC-UI-1364 (ledger GB15, read in the 1.0.7.4 executable): the lit state of the top strip's Character, Logbook, Map and Inventory
 /// buttons and the Map button's face, Godot-free. The original keeps five art words (0x64C484, initially the idle table) and a map mode
 /// (0x64C534, initially 2). The light callback (0x556A90) with a non-zero flag stores the lit art in a slot unless that slot's window is
 /// open (its own test: the character sheet 0x55A220, the logbook 0x53F0D0, the world map 0x560F90 for both map slots, the inventory
@@ -46,7 +46,7 @@ public sealed class AreaBarLights
     /// current mode's); null for a button the lights do not touch (it keeps its layout art).</summary>
     public int? ArtOf(AreaBarButton button) => SlotOf(button, MapMode) is { } slot ? (IsLit(slot) ? LitArt : IdleArt)[(int)slot] : null;
 
-    /// <summary>The light callback (GB13): <paramref name="lit"/> stores the slot's lit art unless <paramref name="windowOpen"/> (the slot's
+    /// <summary>The light callback (GB15): <paramref name="lit"/> stores the slot's lit art unless <paramref name="windowOpen"/> (the slot's
     /// own test, see the class); not lit stores the idle art whatever is open. True when the stored state changed.</summary>
     public bool Light(AreaLightSlot slot, bool lit, bool windowOpen)
     {
@@ -57,7 +57,7 @@ public sealed class AreaBarLights
         return true;
     }
 
-    /// <summary>The map callback (GB13): the Map button's face (<see cref="AreaLightSlot.TownMap"/> or <see cref="AreaLightSlot.WorldMap"/>).
+    /// <summary>The map callback (GB15): the Map button's face (<see cref="AreaLightSlot.TownMap"/> or <see cref="AreaLightSlot.WorldMap"/>).
     /// True when the mode changed.</summary>
     public bool SetMapMode(AreaLightSlot mode)
     {
@@ -67,7 +67,7 @@ public sealed class AreaBarLights
         return true;
     }
 
-    /// <summary>The initial state (GB13): every slot idle, the town map's face. True when anything was lit or the mode differed.</summary>
+    /// <summary>The initial state (GB15): every slot idle, the town map's face. True when anything was lit or the mode differed.</summary>
     public bool Reset()
     {
         var changed = MapMode != AreaLightSlot.TownMap || _lit.Any(lit => lit);

@@ -86,7 +86,7 @@ public static class AreaGameBarLayout
     /// <summary>Every interface art number the bars draw (the clock's, ARC-UI-1111, and the lights' idle and lit arts, ARC-UI-1364, among them).</summary>
     public static IReadOnlyList<int> ArtNumbers { get; } =
         [.. new[] { TopArt, BottomArt }.Concat(Buttons.Select(spec => spec.Art)).Concat([HealthVialArt, PoisonedVialArt, FatigueVialArt, EmptyVialArt])
-            .Concat(AreaBarLights.ArtNumbers).Concat(AreaClockLayout.ArtNumbers).Distinct()];
+            .Concat(AreaBarLights.ArtNumbers).Concat(AreaClockLayout.ArtNumbers).Concat(AreaExperienceStripLayout.ArtNumbers).Distinct()];
 
     /// <summary>The frame a button draws (GB4): idle frame 0; down advances one frame and hovered two, each step wrapping to frame 0
     /// past the art's last frame (so a two-frame art shows frame 0 when hovered, a one-frame art always frame 0).</summary>
@@ -121,7 +121,7 @@ public sealed class AreaGameBar
 {
     private readonly HashSet<AreaBarButton> _on = [];
 
-    /// <summary>ARC-UI-1364: the lit state of the Character, Logbook, Map and Inventory buttons and the Map button's face (GB13); kept by
+    /// <summary>ARC-UI-1364: the lit state of the Character, Logbook, Map and Inventory buttons and the Map button's face (GB15); kept by
     /// the host, which applies the game's events to it. <see cref="Reset"/> leaves it alone: it forgets the pointer only.</summary>
     public AreaBarLights Lights { get; } = new();
 

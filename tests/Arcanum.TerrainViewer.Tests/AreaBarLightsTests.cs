@@ -3,7 +3,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace Arcanum.TerrainViewer.Tests;
 
-/// <summary>ARC-UI-1364 (ledger GB13): the lit state of the top strip's buttons and the Map button's face, as the callbacks 0x556A90 and 0x556B70 keep it.</summary>
+/// <summary>ARC-UI-1364 (ledger GB15): the lit state of the top strip's buttons and the Map button's face, as the callbacks 0x556A90 and 0x556B70 keep it.</summary>
 [TestClass]
 public sealed class AreaBarLightsTests
 {

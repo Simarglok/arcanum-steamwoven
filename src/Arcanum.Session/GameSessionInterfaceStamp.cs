@@ -1,7 +1,7 @@
 namespace Arcanum.Session;
 
 /// <summary>
-/// ARC-UI-1364: what the original's light callback hears about the local PC (ledger GB13): three stamps that change when the PC's logbook
+/// ARC-UI-1364: what the original's light callback hears about the local PC (ledger GB15): three stamps that change when the PC's logbook
 /// content, its held list or its known world-map areas change. A stamp is a hash that lives in this process only (never saved, never
 /// compared across runs); the host compares a stamp with the one it last saw and lights the matching button when they differ.
 /// </summary>

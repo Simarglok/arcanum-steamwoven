@@ -5,7 +5,7 @@ using static Arcanum.Session.Tests.SessionFixtures;
 
 namespace Arcanum.Session.Tests;
 
-// ARC-UI-1364 (ledger GB13): the stamps the host lights the top strip's buttons from.
+// ARC-UI-1364 (ledger GB15): the stamps the host lights the top strip's buttons from.
 [TestClass]
 public sealed class InterfaceStampTests
 {

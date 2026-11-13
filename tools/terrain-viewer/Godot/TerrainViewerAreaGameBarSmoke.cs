@@ -192,6 +192,89 @@ public partial class TerrainViewerApp
                 await CaptureClockTimesAsync(panel, clockSession, Frames);
             }
 
+            // ARC-UI-1365 (GB13, GB14): the experience strip under the hot-key bar draws the pieces the hero's progress asks of its table
+            // (none at the start of a level), follows an award of experience, and shows on the pixels. A level is not reached here.
+            {
+                var xpSession = _areaSession!;
+                async Task<Image> XpShotAsync(bool shown)
+                {
+                    panel.ExperienceShownForSelfTest = shown;
+                    await Frames(3);
+                    var shot = GetViewport().GetTexture().GetImage();
+                    Require(shot is not null, "the viewport can be read back");
+                    return shot!;
+                }
+                int XpChanged(Image hidden, Image shown)
+                {
+                    var rect = panel.StripRectForSelfTest(AreaBarStrip.Bottom);
+                    var changed = 0;
+                    for (var y = (int)(rect.Position.Y + AreaExperienceStripLayout.ClearY * panel.Factor); y < (int)(rect.Position.Y + (AreaExperienceStripLayout.ClearY + 30) * panel.Factor); y++)
+                        for (var x = (int)(rect.Position.X + AreaExperienceStripLayout.ClearX * panel.Factor); x < (int)(rect.Position.X + (AreaExperienceStripLayout.ClearX + AreaExperienceStripLayout.ClearWidth) * panel.Factor); x++)
+                        {
+                            var a = hidden.GetPixel(x, y); var b = shown.GetPixel(x, y);
+                            if (Math.Abs(a.R - b.R) + Math.Abs(a.G - b.G) + Math.Abs(a.B - b.B) > 0.05f) changed++;
+                        }
+                    return changed;
+                }
+                void XpCheck(string when)
+                {
+                    var view = xpSession.QueryHeroExperience();
+                    Require(view is { Progress: not null }, $"the hero's progress toward the next level is known ({when})");
+                    var expected = AreaExperienceStripLayout.Pieces(view!.Progress);
+                    var drawn = panel.ExperienceForSelfTest;
+                    Require(drawn.Count == expected.Count && drawn.Select(d => d.Piece).SequenceEqual(expected), $"the strip draws {string.Join(",", expected)} at progress {view.Progress} ({when}), drew {drawn.Count}");
+                    foreach (var (piece, width) in drawn)
+                    {
+                        var art = panel.ArtFrame(piece.Art);
+                        Require(art is not null && width == (piece.WidthPercent >= 100 ? art.GetWidth() : AreaExperienceStripLayout.CutWidth(art.GetWidth(), piece.WidthPercent)), $"piece art {piece.Art} drew {width} px ({when})");
+                    }
+                }
+                var xpStart = xpSession.QueryHeroExperience();
+                Require(xpStart is { Progress: not null, ToNextLevel: > 20 }, $"the hero's progress is known with a next level ahead: {xpStart}");
+                var xpStep = xpStart!.ToNextLevel!.Value;
+                XpCheck("start");
+                var xpHiddenAtStart = await XpShotAsync(false);
+                var xpZero = await XpShotAsync(true);
+                // A hero that starts a level has nothing to draw; one that starts with experience is checked by XpCheck alone.
+                if (xpStart.Progress == 0) Require(panel.ExperienceForSelfTest.Count == 0 && XpChanged(xpHiddenAtStart, xpZero) == 0, "the strip adds nothing at progress 0");
+                string? xpCapture = System.Environment.GetEnvironmentVariable("ARC_AREA_BAR_CAPTURE") is { Length: > 0 } c ? System.IO.Path.GetFullPath(c) : null;
+                void XpSave(Image image, string name)
+                {
+                    if (xpCapture is null) return;
+                    var rect = panel.StripRectForSelfTest(AreaBarStrip.Bottom);
+                    var path = xpCapture + $"-xp-{name}.png";
+                    System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(path)!);
+                    using var region = image.GetRegion(new Rect2I((int)rect.Position.X, (int)rect.Position.Y, (int)rect.Size.X, (int)rect.Size.Y));
+                    Require(region.SavePng(path) == Error.Ok, "ARC-UI-1365 capture saved: " + path);
+                    GD.Print($"ARC-UI-1365 xp capture {name} {region.GetWidth()}x{region.GetHeight()}");
+                }
+                XpSave(xpHiddenAtStart, "before");
+                var awarded = xpSession.AwardHeroExperience(xpSession.Version, xpStep / 2);
+                Require(awarded.Disposition == GameSessionDisposition.Changed, "experience is awarded: " + awarded.Disposition);
+                await Frames(2);
+                XpCheck("half");
+                var xpHalf = xpSession.QueryHeroExperience()!;
+                Require(xpHalf.Progress is > 0 and < 1000 && xpHalf.Level == xpStart.Level, $"half a level reached no level: {xpHalf}");
+                var xpHidden = await XpShotAsync(false);
+                var xpShown = await XpShotAsync(true);
+                var xpChanged = XpChanged(xpHidden, xpShown);
+                Require(xpChanged > 200, $"the strip shows on the pixels at progress {xpHalf.Progress}: {xpChanged} pixels differ");
+                XpSave(xpShown, $"after-{xpHalf.Progress}");
+                // Difficulty changes an award (easy adds half): three tenths of the remainder keeps every difficulty below the next level.
+                var more = xpSession.QueryHeroExperience()!.ToNextLevel!.Value * 3 / 10;
+                if (more > 0 && xpSession.AwardHeroExperience(xpSession.Version, more).Disposition == GameSessionDisposition.Changed)
+                {
+                    await Frames(2);
+                    var xpNear = xpSession.QueryHeroExperience()!;
+                    Require(xpNear.Level == xpStart.Level, $"no level is reached late in the step: {xpNear}");
+                    XpCheck("late in the step");
+                    XpSave(await XpShotAsync(true), $"after-{xpNear.Progress}");
+                }
+                GD.Print($"ARC-UI-1365 experience strip PASS step={xpStep} half={xpHalf.Progress} pieces={string.Join(",", panel.ExperienceForSelfTest.Select(d => $"{d.Piece.Art}x{d.Width}"))}");
+                panel.ExperienceShownForSelfTest = true;
+                await Frames(2);
+            }
+
             // Hover, press and release one button, watching its frames and sounds. ARC-UI-023: the name is a hover entry of the message
             // log, drawn only 3 s after the last stored entry (the new game may have posted one).
             _messageClockShiftForSelfTest += AreaMessageLog.QuietMilliseconds + 1;
