@@ -181,6 +181,9 @@ public partial class AreaInventoryGridArea : Control
     {
         if (ReferenceEquals(look, Look)) return;
         Look = look; _takeAllDown = false; _arrangeDown = false; _cycleDown = null; QueueRedraw();
+        // ARC-UI-1194: the textures of a look this view no longer shows are let go.
+        if (_onTextureChanged is { } handler)
+            foreach (var texture in _watched.Where(texture => look is null || !look.Art.Values.Contains(texture)).ToArray()) { texture.Changed -= handler; _watched.Remove(texture); }
     }
 
     // ARC-UI-148: the generated interface paints a window's frames at the window's own device scale: the frame scale times the canvas transform's and the

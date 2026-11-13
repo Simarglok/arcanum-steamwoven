@@ -449,12 +449,12 @@ S4 draws the loot, barter and steal windows (planned as ARC-UI-149, issue #1194)
 `interface.mes` arts, read from the installed game for this slice; the recipes hold only rectangles and colours of our own.
 
 - **Frames.** `loot.art` (234, 358 × 400: the round view's ring, the holder image's box with its six rivets, the sunk grid pit of 10 × 8 cells), `barter.art` (235) and
-  `barter_follower.art` (825, with the cycle buttons' plates kept): the same with the merchant's image box, the quote box (82, 125, 266 × 36) and the 10 × 7 pit; and
+  `barter_follower.art` (825, with the cycle buttons' plates kept): the same without the loot window's six rivets (two small ones under the image box) and with the merchant's image box, the quote box (82, 125, 266 × 36) and the 10 × 7 pit; and
   `loot_pd.art` (349, 358 × 266: the doll view of a body, a 10 × 9 grid of 21-pixel cells, the two curved bottom pits kept). `lns_bart.art`, `lns_loot.art` and
   `lns_papr.art` (231 to 233, 89 × 89) are the ring around the live game view's circle; 233 is the inventory window's.
 - **New parts.** `ChromeRoundView` lays the round hole's brass ring around the circle (the part of the ring that lies beyond a square hole's sides, in the frames,
-  and the ring in the corners of the lens, so both match) and keeps the square rim a square hole would get from being drawn; with `Shape` it also gives the circle an
-  anti-aliased edge (the lenses: their circle touches the frame's sides, so the hole finder takes it for the outside of the frame). `ChromeGrid.Closed` also draws the
+  and the ring in the corners of the lens, so both match) and keeps the square rim a square hole would get from being drawn; with `Shape` it also gives the circle's edge an
+  anti-aliased alpha (the lenses: their circle touches the frame's sides, so the hole finder takes it for the outside of the frame). `ChromeGrid.Closed` also draws the
   line of the last column and row (the pit of the loot and barter grids goes on for the scroll bar's chain). `ChromeKeep.Round` keeps only the inscribed circle (the barter
   window's medallion and the follower buttons' plates, so the square of the old wood around them is not copied).
 - **Inventory.** The paper doll's portrait ring (223) is now the same `ChromeRoundView` ring (its opaque box behind the live view is kept; `Shape` false), so it matches
@@ -471,7 +471,7 @@ S4 draws the loot, barter and steal windows (planned as ARC-UI-149, issue #1194)
   loot-room stages: `ARC_AREA_WINDOW_ART=legacy|hd|generated` (with `ARC_HD_PACK` for the last two) turns the interface on in that mode, in `generated` checks that every frame of the
   open window draws generated chrome at `round(size × paint scale)` pixels (the window's own device scale), resizes the window to 1920 × 1080, checks again and goes back
   (the inventory check of S3 is the same function), and `ARC_AREA_WINDOW_CAPTURE=PREFIX` saves the viewport as `PREFIX-WINDOW-MODE[-STAGE].png` (local, not in git); the
-  loot-room stage also shows the body's doll view (`loot_pd.art`).
+  loot-room stage also shows the body's doll view (`loot_pd.art`) and the hero's own inventory window (the S3 check by the same function, since the opt-in bar smoke does not reach it: it fails on main before the inventory, issue #1759).
 - **Local observation** (owner's Mac, 1280 × 800 window): the barter, container and loot-room stages pass in the generated, HD and Legacy runs; the device scale is 1.6 and
   2.4 in the 1920 × 1080 window. The composite (Legacy, HD pack, Generated for the barter, loot and body doll windows) is in the task thread, not in git. Seen there:
   the generated wood is plainer than the painted one, the rivets and the ring are ours (the ring is three units wide, the original's is wider), and the follower's plates

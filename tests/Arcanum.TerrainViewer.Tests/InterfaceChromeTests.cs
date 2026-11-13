@@ -437,13 +437,14 @@ public sealed class InterfaceChromeTests
                 var (pw, ph) = InterfaceChromeRenderer.PixelSize(w, h, scale);
                 Assert.AreEqual(pw * ph * 4, a.Length, $"{file} at {scale}");
                 CollectionAssert.AreEqual(a, InterfaceChromeRenderer.Render(recipe, w, h, legacy, [], 0, scale), $"{file} deterministic at {scale}");
-                // The silhouette is the Legacy one: opaque everywhere but the hole, clear in the hole's middle.
-                Assert.AreEqual(255, Pixel(a, pw, 2, 2).A, $"{file} corner at {scale}");
-                Assert.AreEqual(255, Pixel(a, pw, pw - 2, ph - 2).A, $"{file} far corner at {scale}");
+                // The silhouette is the Legacy one: a frame without a hole is opaque in every pixel; one with the 89 x 89 hole is opaque everywhere more than two pixels
+                // outside the hole's box and clear in the hole's middle.
                 Assert.AreEqual(hole ? 0 : 255, Pixel(a, pw, (int)(60.5 * scale), (int)(61.5 * scale)).A, $"{file} middle of the round view at {scale}");
-                var opaque = 0;
-                for (var i = 3; i < a.Length; i += 4) if (a[i] == 255) opaque++;
-                Assert.IsTrue(opaque >= pw * ph - (int)(89 * 89 * scale * scale) - pw, $"{file} is opaque but for the hole at {scale}");
+                int x0 = (int)(16 * scale) - 2, x1 = (int)Math.Ceiling(105 * scale) + 2, y0 = (int)(17 * scale) - 2, y1 = (int)Math.Ceiling(106 * scale) + 2;
+                for (var y = 0; y < ph; y++)
+                for (var x = 0; x < pw; x++)
+                    if (!hole || x < x0 || x >= x1 || y < y0 || y >= y1)
+                        Assert.AreEqual(255, a[(y * pw + x) * 4 + 3], $"{file} is opaque at ({x}, {y}) at {scale}");
             }
         }
     }
@@ -535,6 +536,9 @@ public sealed class InterfaceChromeTests
         var kept = InterfaceChromeRenderer.Render(Panel(new ChromeRoundView(20, 20, 15, false)), 40, 40, opaque, [], 0, 3);
         Assert.AreEqual(255, Pixel(kept, 120, 60, 60).A, "Shape false keeps what the Legacy frame has inside");
         var smoothed = InterfaceChromeRenderer.Render(Panel(new ChromeRoundView(20, 20, 15)), 40, 40, opaque, [], 0, 3);
-        Assert.AreEqual(0, Pixel(smoothed, 120, 60, 60).A, "Shape true (the default) clears the circle");
+        Assert.AreEqual(255, Pixel(smoothed, 120, 60, 60).A, "Shape true leaves the Legacy alpha deep inside the circle alone");
+        // 45 device pixels is the circle's radius at scale 3 (15 units); a pixel 0.2 inside the edge turns mostly transparent, one 4 outside is untouched.
+        Assert.IsTrue(Pixel(smoothed, 120, 60 + 44, 60).A < 255, "the circle's edge pixel is smoothed");
+        Assert.AreEqual(255, Pixel(smoothed, 120, 60 + 49, 60).A, "outside the circle the frame is opaque");
     }
 }

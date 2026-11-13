@@ -39,8 +39,8 @@ public sealed record ChromeGrid(int X, int Y, int Columns, int Rows, int Cell, b
 /// <summary>ARC-UI-1194: the round view of a window (the live game view's circle, <see cref="AreaInventoryHole"/>): a brass ring of the round hole's own style
 /// (<see cref="InterfaceChromeRenderer"/>'s socket ring) around the circle at (<paramref name="CenterX"/>, <paramref name="CenterY"/>) of <paramref name="Radius"/>,
 /// painted on the opaque pixels of the frame, and the square rim a square hole would get is not drawn. The lens arts (231-233) fill the circle's box with the same ring.
-/// <paramref name="Shape"/> (the default) also gives the circle an anti-aliased edge by making what lies inside it transparent where the Legacy frame is not opaque there
-/// already; a frame whose box behind the live view is opaque (the inventory's paper doll) passes false and keeps its pixels.</summary>
+/// <paramref name="Shape"/> (the default) also gives the circle's edge (the pixels within a unit and a half inside it) an anti-aliased alpha instead of the Legacy stairs;
+/// deeper inside the Legacy alpha is untouched. A frame whose box behind the live view is opaque (the inventory's paper doll) passes false and keeps its pixels.</summary>
 public sealed record ChromeRoundView(double CenterX, double CenterY, double Radius, bool Shape = true) : ChromePart;
 
 public enum ChromeKind
@@ -374,6 +374,13 @@ public static class InterfaceChromeRenderer
     {
         foreach (var part in recipe.Parts)
         {
+            // ARC-UI-1194: a round view covers its ring (the circle's edge and the three units beyond it), not the wood in the corners around it.
+            if (part is ChromeRoundView view)
+            {
+                double dx = x + 0.5 - view.CenterX, dy = y + 0.5 - view.CenterY, d = Math.Sqrt(dx * dx + dy * dy);
+                if (d >= view.Radius - 1 && d <= view.Radius + 4) return true;
+                continue;
+            }
             var (px, py, pw, ph) = part switch
             {
                 ChromePlate p => (p.X, p.Y, p.Width, p.Height),
@@ -636,7 +643,8 @@ public static class InterfaceChromeRenderer
         for (var x = Math.Max(0, (int)(cx - reach)); x < Math.Min(c.W, (int)(cx + reach)); x++)
         {
             float dx = x + 0.5f - cx, dy = y + 0.5f - cy, d = MathF.Sqrt(dx * dx + dy * dy);
-            if (d >= r + 0.5f || !view.Shape) continue;
+            // Only the circle's edge is smoothed (the pixels within a unit and a half inside it); deeper inside, the Legacy alpha stays whatever it is.
+            if (d >= r + 0.5f || d < r - 1.5f * c.S || !view.Shape) continue;
             var i = y * c.W + x;
             c.Alpha[i] = MathF.Min(c.Alpha[i], Math.Clamp(d - r + 0.5f, 0, 1));
             if (c.Alpha[i] > 0) c.Color[i] = Ink;

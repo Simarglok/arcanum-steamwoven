@@ -9,10 +9,17 @@ public partial class TerrainViewerApp
     // run is otherwise unchanged). With the open window's frames (the arts of its look) it turns the HD and generated interface on or off, checks in generated mode that
     // every frame draws generated chrome at the window's own device scale and again after a resize (VerifyGeneratedWindowAsync), saves the viewport (first size, bigger window, back) as
     // PREFIX-WINDOW-MODE[-STAGE].png when ARC_AREA_WINDOW_CAPTURE=PREFIX (local, never in git), and puts the settings back. A window without the variable is left alone.
+    private static bool WindowArtSmokeRequested => System.Environment.GetEnvironmentVariable("ARC_AREA_WINDOW_ART") is { Length: > 0 };
+
     private async Task WindowArtSmokeAsync(string window, AreaInventoryGridArea area, IReadOnlyList<int> arts)
     {
         var mode = System.Environment.GetEnvironmentVariable("ARC_AREA_WINDOW_ART");
-        if (mode is not ("legacy" or "hd" or "generated")) return;
+        if (string.IsNullOrEmpty(mode)) return;
+        if (mode is not ("legacy" or "hd" or "generated"))
+        {
+            GD.Print($"ARC-UI-1194 window art smoke FAIL ARC_AREA_WINDOW_ART={mode} is not legacy, hd or generated");
+            throw new InvalidOperationException("ARC-UI-1194 window art smoke: ARC_AREA_WINDOW_ART must be legacy, hd or generated");
+        }
         async Task Frames(int count) { for (var i = 0; i < count; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame); }
         var saved = _gameSettings;
         // ARC_AREA_WINDOW_CAPTURE=PREFIX saves the viewport after a drawn frame as PREFIX-WINDOW-MODE[-STAGE].png (local, never in git).
@@ -47,7 +54,7 @@ public partial class TerrainViewerApp
                     GD.Print($"ARC-UI-1194 window art smoke FAIL {window}: the {mode} frames are not generated ({drawn.Length} of {arts.Count} read)");
                     throw new InvalidOperationException("ARC-UI-1194 window art smoke: a " + mode + " frame is generated");
                 }
-                GD.Print($"ARC-UI-1194 window art {window} {mode} frames={drawn.Length}");
+                GD.Print($"ARC-UI-1194 window art {window} {mode} frames={drawn.Length} hd={drawn.Count(texture => texture.IsHd)}");
                 await Capture("first");
             }
         }
