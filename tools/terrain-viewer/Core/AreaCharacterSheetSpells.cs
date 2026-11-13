@@ -31,6 +31,9 @@ public static class AreaCharacterSheetSpellsLayout
         .. Enumerable.Range(0, Colleges).SelectMany(college => Enumerable.Range(0, Rows).Select(row => SpellArt(college, row))).Order(),
     ];
 
+    /// <summary>ARC-UI-1784: the arts of the sixteen college tabs, in college order.</summary>
+    public static IReadOnlyList<int> CollegeArtNumbers => CollegeArts;
+
     public static int CollegeArt(int college) => CollegeArts[college];
 
     public static int SpellArt(int college, int row) => CollegeArts[college] + 1 + row;
