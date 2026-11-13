@@ -33,6 +33,24 @@ public sealed class AutoLevelTablesTests
         Assert.IsNull(AutoLevelTables.Rule(game, user, 51));
     }
 
+    // ARC-UI-1742: the sheet's scheme page looks the names up as 0x4A6DE0 does.
+    [TestMethod]
+    public void SchemeNamesComeFromTheNameFilesByTheSameRangesPlusZero()
+    {
+        var game = Mes("{0}{game 0}\n{3}{game 3}\n{50}{game 50}\n{199}{game 199}\n{200}{game 200}\n{51}{}\n");
+        var user = Mes("{3}{user 3}\n{49}{user 49}\n{50}{user 50}\n");
+        Assert.AreEqual("game 0", Text(AutoLevelTables.Name(game, user, 0)), "scheme 0 is the game file's");
+        Assert.AreEqual("user 3", Text(AutoLevelTables.Name(game, user, 3)));
+        Assert.AreEqual("user 49", Text(AutoLevelTables.Name(game, user, 49)));
+        Assert.AreEqual("game 50", Text(AutoLevelTables.Name(game, user, 50)));
+        Assert.AreEqual("game 199", Text(AutoLevelTables.Name(game, user, 199)));
+        Assert.AreEqual("", Text(AutoLevelTables.Name(game, user, 51)), "an empty text is a name (the original returns its pointer)");
+        Assert.IsNull(AutoLevelTables.Name(game, user, 200));
+        Assert.IsNull(AutoLevelTables.Name(game, user, -1));
+        Assert.IsNull(AutoLevelTables.Name(game, user, 4), "no entry");
+        CollectionAssert.AreEqual(new[] { 0, 3, 49, 50, 51, 199 }, AutoLevelTables.NamedSchemes(game, user).ToArray());
+    }
+
     [TestMethod]
     public void ASpellsWillpowerIsItsIqKeyOrTheRankDefault()
     {

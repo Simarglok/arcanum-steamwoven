@@ -26,6 +26,9 @@ public sealed class AreaHeroRunsHostTests
         public bool MayStart() => May;
         public int StunEnds;
         public void HeroStunEnds() => StunEnds++;
+        // ARC-COMBAT-1741: how many more steps the stun nodes play before the stun ends (0: no stunned ART, the stun ends at its first step).
+        public int StunPlays, StunSteps;
+        public SessionGoalStepAnswer? StepHeroStun(GoalRun run) { StunSteps++; return StunPlays-- > 0 ? SessionGoalStepAnswer.After(100) : null; }
         public bool Forced, FellDown, StandsUp;
         public void HeroFalls(bool on) => Forced = on;
         public bool HeroFellDown => FellDown;
@@ -1377,6 +1380,22 @@ public sealed class AreaHeroRunsHostTests
         Assert.AreEqual(1, f.Feet.StunEnds);
     }
 
+    // ARC-COMBAT-1741: with a stunned ART the stun nodes keep the run alive; it ends, and clears the bit, when they say so.
+    [TestMethod]
+    public void AHeroStunWithAStunnedArtLastsAsLongAsTheNodesPlayItAndThenClearsTheBit()
+    {
+        using var f = new Fixture();
+        f.Feet.StunPlays = 3;
+        Assert.IsTrue(f.Session.StartGoal(new("pc", GoalStarters.Stun, AiExecutorRules.StunFrame(8)), new StunPorts()).Started);
+        f.Run(120);
+        Assert.IsNotNull(f.Host.StunRun, "the stun is still playing");
+        Assert.AreEqual(0, f.Feet.StunEnds, "the bit stays set while the stun plays");
+        f.Run(2000);
+        Assert.IsNull(f.Host.StunRun, "the stun ended after its plays");
+        Assert.AreEqual(4, f.Feet.StunSteps, "three playing steps and the step that ended it");
+        Assert.AreEqual(1, f.Feet.StunEnds);
+    }
+
     [TestMethod]
     public void ACutStunStillRunsItsEndNode()
     {
@@ -1419,8 +1438,29 @@ public sealed class AreaHeroRunsHostTests
         f.Run(200);
         Assert.IsNull(f.Host.DownRun);
         Assert.IsTrue(f.Session.StartGoal(new("pc", GoalStarters.Generic, AiExecutorRules.DyingFrame(7)), new StunPorts()).Started);
+        f.Feet.FellDown = true;
         f.Run(200);
-        Assert.IsNull(f.Host.DownRun, "dying ends at its first step: the death flow reads the life state");
+        Assert.IsNull(f.Host.DownRun, "dying ends once the hero lies: the death flow reads the life state");
+    }
+
+    // ARC-COMBAT-1741: the dying goal lasts while the viewer plays the hero's fall, so the death cover counts from its end; a viewer that cannot play it ends the goal at once.
+    [TestMethod]
+    public void TheHeroDyingGoalWaitsForTheFallToEnd()
+    {
+        using var f = new Fixture();
+        Assert.IsTrue(f.Session.StartGoal(new("pc", GoalStarters.Generic, AiExecutorRules.DyingFrame(7)), new StunPorts()).Started);
+        f.Run(200);
+        Assert.IsNotNull(f.Host.DownRun, "the dying animation is playing");
+        f.Run(400);
+        Assert.IsNotNull(f.Host.DownRun, "and keeps the goal on the table");
+        f.Feet.FellDown = true;
+        f.Run(200);
+        Assert.IsNull(f.Host.DownRun, "the goal ends with the animation");
+
+        f.Feet.FellDown = false; f.Feet.MayWait = false;
+        Assert.IsTrue(f.Session.StartGoal(new("pc", GoalStarters.Generic, AiExecutorRules.DyingFrame(7)), new StunPorts()).Started);
+        f.Run(200);
+        Assert.IsNull(f.Host.DownRun, "a hero the viewer cannot draw falling dies at once");
     }
 
     [TestMethod]

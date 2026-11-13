@@ -28,6 +28,7 @@ public partial class TerrainViewerApp
             throw new InvalidOperationException("AREA_KNOCKDOWN_SMOKE_FAILED");
         }
         var simulatedFocus = _worldFocusSimulationForSelfTest; var focused = _worldFocused; var testTime = _worldTestTime;
+        var aiBefore = _aiForSmoke;
         _worldFocusSimulationForSelfTest = true;
         var before = session.QueryHeroLife()!.Record.State.FatigueDamage;
         try
@@ -133,6 +134,66 @@ public partial class TerrainViewerApp
             // The goal's own step needs the area clock (a unit test covers it); the smoke cuts the goal, whose end node clears the bit as a reset or a quick load does.
             HeroRunsHost()!.LoseAll("SMOKE_STUN_CUT");
             Require(HeroRunsHost()?.StunRun is null && session.QueryHeroLife()!.Status.IsActive, "the cut stun goal's end node cleared the bit");
+            // ARC-COMBAT-1741: left to play, the stun lasts its animation (23) and counts its plays out: the hero stays unable to act, is drawn in the stunned ART frame by frame (when its body has
+            // the ART; a body without it ends the stun at its first step, as before), and acts again when the goal ends and clears the bit.
+            Require(HeroRunsHost()?.WalkRun is null, "no walk is left before the stun");
+            // The stun nodes run over the AI host's ports (the host is off in automated runs unless asked for): it is on for this part and off again after.
+            _aiForSmoke = true;
+            for (var i = 0; i < 4; i++) { Frame(); _areaAmbient!.AdvanceMilliseconds(50, AmbientSector()); }
+            Require(_aiHost is not null, "the AI host is built for the stun's nodes");
+            var stunLands = session.ApplyDamage(session.Version, SessionLifeTarget.Hero, new LifeDamage { Effects = CriticalHitEffects.Stun });
+            Require(stunLands.Outcome?.Events.HasFlag(LifeEvents.Stunned) == true && HeroRunsHost()?.StunRun is not null, $"the second stun started its goal: {stunLands.Disposition} {stunLands.Failure}");
+            var stunFramesDrawn = new HashSet<int>(); var stunTicks = 0;
+            var stunPlays = HeroRunsHost()!.StunRun!.Bottom.Count;
+            for (var i = 0; i < 1200 && HeroRunsHost()?.StunRun is not null; i++, stunTicks++)
+            {
+                Frame(); _areaAmbient!.AdvanceMilliseconds(50, AmbientSector());
+                if (_readyActor is { Action: ActorDiagnosticAction.Stunned } stunDrawn) stunFramesDrawn.Add(stunDrawn.Frame);
+                if (i is 3 or 60 or 110 or 160 && profile.Stunned is not null) await Capture($"stunned-{i}");
+                if (HeroRunsHost()?.StunRun is not null) Require(!session.QueryHeroLife()!.Status.IsActive, "the stunned hero cannot act while its goal plays");
+            }
+            if (profile.Stunned is { } stunArt)
+            {
+                var cycleTicks = (int)Math.Ceiling(stunArt.FramesPerGroup * 20.0 / Math.Max(stunArt.RawFramesPerSecond, 1));
+                Require(stunFramesDrawn.Count > 1 && stunTicks >= cycleTicks, $"the stun played {stunFramesDrawn.Count} frames over {stunTicks} ticks (one cycle is {cycleTicks})");
+                Require(stunPlays <= 1 || stunTicks >= cycleTicks * (stunPlays - 1), $"the stun lasted its {stunPlays} plays: {stunTicks} ticks of {cycleTicks}");
+            }
+            Frame();
+            Require(HeroRunsHost()?.StunRun is null && session.QueryHeroLife()!.Status.IsActive && _worldActor.DownPose is null,
+                $"the stun ended: the goal is gone, the bit is clear and the hero stands again (run {HeroRunsHost()?.StunRun is not null}, active {session.QueryHeroLife()!.Status.IsActive}, pose {_worldActor.DownPose})");
+            GD.Print($"ARC-COMBAT-1741 hero stun lasted ticks={stunTicks} frames={stunFramesDrawn.Count} plays={stunPlays} art={(profile.Stunned is null ? "none" : $"{profile.Stunned.FramesPerGroup}f@{profile.Stunned.RawFramesPerSecond}")}");
+            // ARC-COMBAT-1741: an NPC's stun likewise lasts its animation (23) where its art has one: the AI host shows the stunned art frame by frame, the viewer draws the pose, the stun ends and the NPC acts again; an
+            // NPC whose art has no stun ART is a typed fallback (its stun ends at once, as before).
+            var npcCandidate = _combatHost is null ? default : session.QueryMapInventory(new SessionMapId(CurrentAreaMap))?.Holders
+                .Where(h => h.Kind == SessionHolderKind.Npc && !h.Dead && session.QueryCompanion(h.Entity).Standing == CompanionStanding.Free)
+                .Select(h => (h.Entity, Combat: _combatHost.Build(session, CurrentAreaMap, h.Entity).Combat))
+                .Where(c => c.Combat is not null && session.QueryLife(c.Combat.Target).View?.Status is { IsDead: false, IsUnconscious: false, IsActive: true })
+                // Near the hero (at most 25 tiles): a far NPC's AI tick interrupts its animations (0x4AD200), a stun among them, as in the original.
+                .Select(c => (c.Entity, c.Combat, Distance: _aiHost?.DistanceToPc(c.Entity) ?? -1)).Where(c => c.Distance is >= 0 and <= 25)
+                .OrderBy(c => c.Distance).ThenBy(c => c.Entity, StringComparer.Ordinal).Select(c => (c.Entity, c.Combat)).FirstOrDefault() ?? default;
+            if (npcCandidate.Combat is null) GD.Print("ARC-COMBAT-1741 npc stun NONE (no living NPC with combat values within 25 tiles of the hero)");
+            else
+            {
+                var npc = npcCandidate.Entity; var npcTarget = npcCandidate.Combat.Target;
+                var npcClip = NpcAnimationClip(npc, AreaFallenPoses.Stunned);
+                var npcRow = _inventoryHost!.Maps.Single(m => m.RuntimeMap == CurrentAreaMap).Row(npc);
+                var npcLands = session.ApplyDamage(session.Version, npcTarget, new LifeDamage { Effects = CriticalHitEffects.Stun });
+                Require(npcLands.Outcome?.Events.HasFlag(LifeEvents.Stunned) == true, $"the NPC's stun landed: {npcLands.Disposition} {npcLands.Failure}");
+                var npcFrames = new HashSet<int>(); var npcTicks = 0; var npcSeen = false; var npcDrawn = false;
+                for (var i = 0; i < 1500; i++, npcTicks++)
+                {
+                    Frame(); _areaAmbient!.AdvanceMilliseconds(50, AmbientSector());
+                    SyncAreaCombatBodies();
+                    if (_aiHost?.ArtOf(npc) is { Animation: AreaFallenPoses.Stunned } art) { npcSeen = true; npcFrames.Add(art.Frame); npcDrawn |= _fallenBodies.ContainsKey(npcRow.Key); }
+                    else if (npcSeen || i > 60) break;
+                }
+                if (npcClip is { } clip)
+                    Require(npcSeen && npcFrames.Count > 1 && npcDrawn, $"the NPC's stun played {npcFrames.Count} frames over {npcTicks} ticks and was drawn as a pose ({npcDrawn})");
+                else Require(!npcSeen, "an NPC with no stunned ART shows none");
+                Frame();
+                Require(session.QueryLife(npcTarget).View?.Status.IsActive != false && _aiHost?.ArtOf(npc) is null, "the NPC's stun ended: its bit is clear and its art is back to standing");
+                GD.Print($"ARC-COMBAT-1741 npc stun lasted entity={npc} ticks={npcTicks} frames={npcFrames.Count} art={(npcClip is { } c ? $"{c.Frames}f@{c.FramesPerSecond}" : "none")}");
+            }
             // ARC-DEV-189 (MIG13 S13c): a knock-down result leaves the hero conscious and it still falls: the session starts goal 62, which interrupts the walk, forces the fall and ends when it lies;
             // the viewer's own rule then gets the conscious hero up.
             WorldRouteClick(Screen(far.Value));
@@ -158,6 +219,7 @@ public partial class TerrainViewerApp
         finally
         {
             ReleaseSimulatedPadForSelfTest(); _worldFocusSimulationForSelfTest = simulatedFocus;
+            if (_aiForSmoke != aiBefore) { _aiForSmoke = aiBefore; RetireAiHost(); _aiHostStamp = null; }
             _areaSmokeTime = (_areaSmokeTime + 19) / 20;
             var damage = session.QueryHeroLife()!.Record.State.FatigueDamage;
             if (damage > before) session.Heal(session.Version, SessionLifeTarget.Hero, new LifeHeal { Fatigue = damage - before });

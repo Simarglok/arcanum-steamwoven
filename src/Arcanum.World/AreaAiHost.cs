@@ -2154,6 +2154,26 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
 
     public AiAnimationClip? Clip(string id, int animation) => _scene.AnimationClip?.Invoke(id, animation);
 
+    /// <summary>
+    /// ARC-COMBAT-1741: the hero's stun run (goal 57, started by the session's life step) stepped by the NPC's stun nodes over this host's ports (the art writes, the clip of the hero's stunned ART, the round test), so the stun
+    /// lasts its frames and plays out the countdown as an NPC's does (GT26, GT27). The hero host owns the run's end hooks; nothing here frees it. No readable stun ART (the clip provider answers none) ends it at its first step.
+    /// </summary>
+    public SessionGoalStepAnswer StepHeroStun(GoalRun run)
+    {
+        ArgumentNullException.ThrowIfNull(run);
+        var step = AiExecutorRules.Step(run, this, _session.AiRolls, _session.Rules.Combat);
+        _steps++;
+        if (!step.Ended && step.Run is { } next) return SessionGoalStepAnswer.After(Math.Max(step.DelayMs, 1), next);
+        ClearHeroArt();
+        return SessionGoalStepAnswer.End;
+    }
+
+    /// <summary>ARC-COMBAT-1741: the hero shows its standing art again (its stun ended or was cut short).</summary>
+    public void ClearHeroArt()
+    {
+        if (_arts.Remove(Pc)) ArtRevision++;
+    }
+
     // An NPC with no art written lies in its fall when it is unconscious or dead (a body first seen), except a dead one whose dying goal is on the table: it was killed standing and the goal sets the art.
     public int ShownAnimation(string id) => SyncedArt(id) is { } art ? art.Animation
         : Status(id) switch { { IsDead: true } => DyingRunning(id) ? 0 : DyingAnimationRules.FallDown, { IsUnconscious: true } => DyingAnimationRules.FallDown, _ => 0 };

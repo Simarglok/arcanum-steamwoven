@@ -256,6 +256,9 @@ public partial class TerrainViewerApp
             for (var i = 0; i < 1200 && !(SheetOpen && _sheetNpc is not null); i++) { Frame(); TakeDialogNpcSheet(); }
             Require(SheetOpen && _sheetNpc is not null && LastIdentifySheetForSelfTest is { Opened: true } identified && identified.Entity == patientNpc.Id, $"the Identify answer opened the NPC's sheet: {_sheetNpcStatus}");
             Require(_sheetPanel!.ReadOnly, "the NPC's sheet is read only (no + or - buttons)");
+            // ARC-UI-1742 (ledger ALP7): the scheme page of the NPC's sheet lists the schemes read-only and names the NPC's own scheme.
+            Require(!_sheetPanel.ArtMode || (_sheetPanel.SchemesReadyForSelfTest && _sheetPanel.ArtViewForSelfTest!.Schemes.ReadOnly && NpcSchemes() is { } npcSchemes
+                && npcSchemes.Scheme == _sheetNpc!.AutoLevelScheme && npcSchemes.Entries.Count > 0), "the NPC's scheme page is read only and names the NPC's own scheme");
             sheet = _sheetNpc!.View.Name;
             GD.Print($"ARC-UI-1127 item-aim identify sheet entity={patientNpc.Id} name={sheet} level={_sheetNpc.View.Level}");
             EndSheet();
