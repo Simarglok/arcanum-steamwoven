@@ -996,6 +996,9 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         if (plan.ReactsToAttack) React(victim, attacker);
     }
 
+    // ARC-AI-1585 (0x413DF0): the accidental-attack line range, messages 0x8FC..0x95F.
+    private static readonly LoyaltyLines AccidentalAttackLines = new(2300, 2399);
+
     /// <summary>
     /// ARC-AI-1515 (attack event 0x4A9650, the follower branch of a PC attacker, VBG4): the hero hit its direct follower. A deliberate hit changes the
     /// reaction by AI parameter 9 (<see cref="GameSessionOwner.ReactToPcHit"/>, ARC-WORLD-021's profile: added in the Original setting, taken in Steamwoven; an accidental one
@@ -1004,8 +1007,6 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     /// (0x413DF0, through <see cref="FollowerSpeaks"/>) when it is active (0x4AD800 is not read yet: the active test 0x45D790 stands for it). The leave is seen by
     /// <see cref="ObserveLeaves"/> at the next look. Without the check's facts (the scene gives none) only the reaction changes.
     /// </summary>
-    private static readonly LoyaltyLines AccidentalAttackLines = new(2300, 2399);
-
     [OriginalFunction(0x413DF0, OriginalFunctionScope.Partial)]
     private void HitFollower(string victim, bool deliberate)
     {

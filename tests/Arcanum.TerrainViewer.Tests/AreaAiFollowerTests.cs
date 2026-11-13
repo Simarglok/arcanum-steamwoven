@@ -1187,6 +1187,17 @@ public sealed class AreaAiFollowerTests
     }
 
     [TestMethod]
+    public void Without_a_line_speaker_a_hit_follower_leaves_and_stays_as_before_and_says_nothing()
+    {
+        var left = OpenFollowerHit(reaction: 40);
+        left.Host.HeroAttacked(left.Companion);
+        AssertLeft(left, left: true);
+        var stays = OpenFollowerHit(reaction: 100);
+        for (var hit = 0; hit < 20; hit++) stays.Host.HeroStrayAttacked(stays.Companion);
+        AssertLeft(stays, left: false);
+    }
+
+    [TestMethod]
     public void A_forced_follower_is_accepted_by_the_check_whatever_its_reaction()
     {
         // The check accepts a forced follower before the reaction step (0x4AD950); the session test holds the refused leave (extraordinary charisma).
