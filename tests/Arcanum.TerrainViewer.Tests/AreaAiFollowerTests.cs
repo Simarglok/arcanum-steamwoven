@@ -1101,9 +1101,11 @@ public sealed class AreaAiFollowerTests
     {
         var (_, host, _, enemy, companion) = Open();
         host.PerformAttack(enemy, Pc);
+        host.PerformAttack(companion, enemy);
         Assert.AreEqual((GoalType.Attack, Pc), (host.RunOf(enemy)?.Bottom.Goal, host.RunOf(enemy)?.Bottom.Target), "the enemy attacks the hero");
         Assert.IsTrue(host.SpellPeace(enemy, companion), host.TraceOf(enemy)?.Setter);
         Assert.IsNull(host.RunOf(enemy), "the head of the companion is the hero: the attack at the hero ends");
+        Assert.IsNull(host.RunOf(companion), "the follower's attack at the NPC ends too");
     }
 
     [TestMethod]
