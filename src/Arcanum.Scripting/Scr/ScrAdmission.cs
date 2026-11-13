@@ -407,6 +407,12 @@ public sealed class ScrAdmissionSet
     /// </summary>
     public static ScrAdmissionSet S40 { get; } = new("S40", S38.Conditions, S38.Actions.Append(ScrCatalogue.Action.LoopBreak), S38.ValueKinds, S38.FocusKinds, counterIndexWraps: true);
 
+    /// <summary>
+    /// The spell-stop set (ARC-SCRIPT-1294, ledger RM6): <see cref="S40"/> plus stop spell on object (130, 0x4593F0), which hands the spell number and the first object of its operand to the host; the host finds the first active
+    /// run of that spell that holds the object (0x459290) and interrupts it (0x457110). It needs no answer: the run goes on whether a run was found or not. Four installed scripts carry it (1054, 2789, 2792, 3022).
+    /// </summary>
+    public static ScrAdmissionSet S42 { get; } = new("S42", S40.Conditions, S40.Actions.Append(ScrCatalogue.Action.StopSpellOnObject), S40.ValueKinds, S40.FocusKinds, counterIndexWraps: true);
+
     /// <summary>The conditions of <see cref="S37"/> a host answers through <see cref="IScrWorldObjectQueries"/>.</summary>
     public static IReadOnlySet<int> WorldObjectQueryConditions { get; } = new HashSet<int>(WorldObjectConditions);
 

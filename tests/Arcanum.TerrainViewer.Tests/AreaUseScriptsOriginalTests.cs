@@ -230,6 +230,7 @@ public sealed class AreaUseScriptsOriginalTests
         // script 1629, damage, casts); the sector counts are 17 and 3. Since ARC-SCRIPT-1165 (set S34, the story and time commands) 62 more tile scripts teleport (the Tulla battle interiors' exits, script 2698), 30 more run without one and 92 fewer are refused (68 teleports, 1,246 without, 1,520 refused, 178 rejected). Since ARC-SCRIPT-1163 (set S36, the NPC state actions: disband, standpoints, change script) 189 more tile scripts run without a teleport and 189 fewer are refused (68 teleports, 1,435 without, 1,331 refused, 178 rejected). ARC_TILE_CENSUS lists the first stops (the biggest: script 30286 not modelled, 584 tiles; see the B23 note).
         // Since ARC-SCRIPT-1164 (set S37, the world-object commands: the sector block pair, the generator pair, lock state, open toggle, create item, touch art) 151 more tile scripts run without a teleport and 151 fewer are refused (1,586 and 1,180),
         // and 2 more sector scripts run (19 and 1).
+        // Re-measured on 2026-11-13 (ARC-SCRIPT-1294; the numbers had not moved with the later sets): 35 more tile scripts run without a teleport and 35 fewer are refused (1,621 and 1,145), the same with and without the spell stop (130) of set S42.
         var tile = Arcanum.Data.Maps.MapTransitionTrigger.TileEntry; var sector = Arcanum.Data.Maps.MapTransitionTrigger.SectorEntry;
         // Since ARC-SCRIPT-1165 (set S34: the story and time commands) the 62 exit tiles of script 2698 on the Tulla battle interiors run to their teleport too.
         static bool IsTullaExit(string t) => t.StartsWith("tulla interior - battle - ", StringComparison.Ordinal) && t.EndsWith(":2698", StringComparison.Ordinal);
@@ -237,7 +238,7 @@ public sealed class AreaUseScriptsOriginalTests
         CollectionAssert.AreEquivalent(Enumerable.Repeat("iron clan hq:2203", 5).Append("void-kerghans castle:3070").ToArray(), teleports.Where(t => !IsTullaExit(t)).ToArray(), string.Join(", ", teleports));
         CollectionAssert.AreEquivalent(new[]
         {
-            ((tile, AreaScriptedUseOutcome.Teleport), 68), ((tile, AreaScriptedUseOutcome.NoTeleport), 1586), ((tile, AreaScriptedUseOutcome.Refused), 1180),
+            ((tile, AreaScriptedUseOutcome.Teleport), 68), ((tile, AreaScriptedUseOutcome.NoTeleport), 1621), ((tile, AreaScriptedUseOutcome.Refused), 1145),
             ((tile, AreaScriptedUseOutcome.EffectsRejected), 178), ((sector, AreaScriptedUseOutcome.NoTeleport), 19), ((sector, AreaScriptedUseOutcome.Refused), 1),
         }, placedOutcomes.Select(p => (p.Key, p.Value)).ToArray(), string.Join(", ", placedOutcomes.Select(p => $"{p.Key}={p.Value}")));
     }
