@@ -280,6 +280,8 @@ public partial class TerrainViewerApp : Node
                                 // ARC-DEV-370 (E1-c2): only when named, a critter the session creates by prototype is drawn, picked, moved by the AI's movers with a walk frame and gone once destroyed (--hero, a map window with the inventory).
                                 if (only?.Contains("created-critter") == true) await RunAreaCreatedCritterStageAsync();
                                 if (only?.Contains("trait-body") == true) await RunAreaTraitBodyStageAsync();
+                                // ARC-RENDER-1544: only when named, a companion and an NPC the AI never moved are drawn with the stand ART of the weapon they show after a re-wield, not the weapon letter of the map art (--hero, an AI host).
+                                if (only?.Contains("weapon-art") == true) await RunAreaWeaponArtStageAsync();
                                 // ARC-MAGIC-045 (E4-a2): only when named, the object flags a spell writes (translucent, shrunk, don't-draw, invisible) change how an NPC's body is drawn, and a hit on a shielded critter plays the run spell's hit eye candy (--hero, a map window with the inventory).
                                 if (only?.Contains("body-styles") == true) await RunAreaBodyStylesStageAsync();
                                 // ARC-DEV-371 (E1-c3): only when named, the installed tile script 1629 creates critters next to the hero (--hero, a map window with the inventory): flagged, hosted by the AI host, notified, destroyed.

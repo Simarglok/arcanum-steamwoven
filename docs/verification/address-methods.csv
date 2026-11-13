@@ -752,6 +752,7 @@ tools/terrain-viewer/Godot/TerrainViewerAttack.cs,TraceLineOfFire,pending,
 tools/terrain-viewer/Godot/TerrainViewerAudioCues.cs,PlayDyingBark,pending,
 tools/terrain-viewer/Godot/TerrainViewerBloodPools.cs,LeaveBloodPoolsForNewDeaths,pending,
 tools/terrain-viewer/Godot/TerrainViewerBodyMoves.cs,ArmedWalk,exempt,host
+tools/terrain-viewer/Godot/TerrainViewerBodyMoves.cs,UnmovedArmedBodies,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerBodyStyles.cs,SyncAreaBodyStyles,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerBodyStylesSmoke.cs,RunAreaBodyStylesStageAsync,exempt,reference
 tools/terrain-viewer/Godot/TerrainViewerCombatMode.cs,WorldRightRelease,pending,
@@ -859,3 +860,4 @@ tools/terrain-viewer/Godot/TerrainViewerTrapDevices.cs,PlaceScriptTrapUse,pendin
 tools/terrain-viewer/Godot/TerrainViewerTrapDevices.cs,PlaceTrapDeviceUse,pending,
 tools/terrain-viewer/Godot/TerrainViewerTraps.cs,HeroStepGate,pending,
 tools/terrain-viewer/Godot/TerrainViewerTurnBased.cs,ProcessTurnBasedRound,pending,
+tools/terrain-viewer/Godot/TerrainViewerWeaponArtSmoke.cs,RunAreaWeaponArtStageAsync,exempt,reference

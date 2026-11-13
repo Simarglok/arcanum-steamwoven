@@ -9,7 +9,8 @@ namespace Arcanum.Session.Tests;
 [TestClass]
 public sealed class SnapshotUpgradeTests
 {
-    private const string Current = "\"schemaVersion\":97,\"world\"";
+    private const string Current = "\"schemaVersion\":98,\"world\"";
+    private const string Current97 = "\"schemaVersion\":97,\"world\"";
     private const string Current96 = "\"schemaVersion\":96,\"world\"";
     private const string Current95 = "\"schemaVersion\":95,\"world\"";
     private const string Current94 = "\"schemaVersion\":94,\"world\"";
@@ -269,9 +270,18 @@ public sealed class SnapshotUpgradeTests
     // ARC-WORLD-1159: the schema 96 text of a schema 97 one with no encounter use: the text loses the empty encounters section. A text with a used row has no older literal: no build before rolled an encounter.
     internal static string Schema96(string text)
     {
-        StringAssert.Contains(text, Current);
+        text = Schema97(text);
+        StringAssert.Contains(text, Current97);
         Assert.AreEqual(1, text.Split(NoEncounters).Length - 1, "the encounters section is a new game's (no row used)");
-        return text.Replace(NoEncounters, "").Replace(Current, Current96);
+        return text.Replace(NoEncounters, "").Replace(Current97, Current96);
+    }
+
+    // ARC-UI-1542: the schema 97 text of a schema 98 one with no lit state recorded: the text loses the null bar lights section. A text with a recorded state has no older literal: no build before saved one.
+    internal static string Schema97(string text)
+    {
+        StringAssert.Contains(text, Current);
+        Assert.AreEqual(1, text.Split(NoBarLights).Length - 1, "the bar lights section is a session's with none recorded");
+        return text.Replace(NoBarLights, "").Replace(Current, Current97);
     }
 
     internal static string Schema95(string text)
@@ -693,6 +703,6 @@ public sealed class SnapshotUpgradeTests
         Fails(With("\"format\":\"arcanum-steamwoven-session\"", "\"format\":\"other-save\""), SnapshotDecodeFailure.WrongFormat, "$.format");
         // Schemas older than the oldest readable one, and newer ones, stay refused.
         Fails(GoldenJson.Replace(Current, "\"schemaVersion\":55,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
-        Fails(GoldenJson.Replace(Current, "\"schemaVersion\":98,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
+        Fails(GoldenJson.Replace(Current, "\"schemaVersion\":99,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
     }
 }

@@ -600,6 +600,12 @@ public static partial class GameSessionSnapshotCodec
             if (root.ContainsKey("encounters")) throw new DecodeException(SnapshotDecodeFailure.UnknownField, "$.encounters");
             root.Add("encounters", new JsonObject { ["uses"] = new JsonArray() });
         },
+        // ARC-UI-1542 (schema 98): the lit state of the top strip's buttons. No older build saved it (the lights lived in the viewer for the session only), so the step adds null: all idle, the face from the hero's sector.
+        [97] = root =>
+        {
+            if (root.ContainsKey("barLights")) throw new DecodeException(SnapshotDecodeFailure.UnknownField, "$.barLights");
+            root.Add("barLights", null);
+        },
     };
 
     /// <summary>The schemas with an upgrade step to the next one, ascending: every schema from

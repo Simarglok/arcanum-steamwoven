@@ -117,7 +117,7 @@ public sealed class ScriptTriggerCensusTests
     /// <c>scripts_by_point</c>): 30032 at the hit point deals poison (action 60, damage type 1) and 30076 casts the college poison spell 11 there, 1345 at critter hits and 30199 at the critical hit deal poison, and 1059, the one
     /// poison site at the dialog point. The placed set (<see cref="AreaUseScriptHost.CombatPointAdmission"/>) admits 1345 whole; the three weapon scripts (30032, 30076, 30199: the magick-tech weapons, which scale their chance by the
     /// weapon's power ratio, action 91, and play eye candy, 120) are refused by it at their first command until the item power ratio is admitted for combat points (issue filed by ARC-SCRIPT-1483). The dialog site is read against
-    /// the talk set. Every answer is reported (the file named by <c>ARC_COMBAT_POINT_POISON</c>, when set, receives it); only 1345 is pinned. Opt-in: <c>DAT_ROOT</c>.
+    /// the talk set (ARC-SCRIPT-1563: admitted whole, pinned). Every answer is reported (the file named by <c>ARC_COMBAT_POINT_POISON</c>, when set, receives it); only 1345 and 1059 are pinned. Opt-in: <c>DAT_ROOT</c>.
     /// </summary>
     [TestMethod, TestCategory("RealData")]
     public void The_installed_poison_scripts_of_the_combat_points_and_the_dialog_point_are_read_against_their_sets()
@@ -134,7 +134,9 @@ public sealed class ScriptTriggerCensusTests
         }
         Assert.IsTrue(Read(ScrPoint.CritterHits, 1345, AreaUseScriptHost.CombatPointAdmission).IsAdmitted, "1345, the critter-hits poison script, runs");
         foreach (var (point, number) in new[] { (ScrPoint.Hit, 30032), (ScrPoint.Hit, 30076), (ScrPoint.CriticalHit, 30199) }) Read(point, number, AreaUseScriptHost.CombatPointAdmission);
-        Read(ScrPoint.Dialog, 1059, AreaScriptHost.SkillTalkAdmission);
+        // ARC-SCRIPT-1563: the dialog host applies a talk's damage, so the talk set admits 1059 whole (the plain dialog set, without the shown map's use host, still refuses it).
+        Assert.IsTrue(Read(ScrPoint.Dialog, 1059, AreaScriptHost.SkillTalkAdmission).IsAdmitted, "1059, the dialog-point poison script, runs");
+        Assert.IsFalse(Read(ScrPoint.Dialog, 1059, AreaScriptHost.Admission).IsAdmitted, "without the use host's queries the plain set refuses 1059");
         if (Environment.GetEnvironmentVariable("ARC_COMBAT_POINT_POISON") is { Length: > 0 } output) File.WriteAllLines(output, report);
     }
 

@@ -404,13 +404,15 @@ public sealed partial class DialogConversation
     {
         var offers = new List<DialogOption>();
         var plans = new Dictionary<int, OfferPlan>();
-        foreach (var reply in step.Replies)
+        // The source takes the first five eligible records (0x414F50) before the reply builder (0x416C10) drops one, so a dropped q: reply still counts.
+        var eligible = 0;
+        foreach (var planned in step.Replies)
         {
-            if (offers.Count == MaxEligible)
+            if (eligible == MaxEligible)
             {
                 break;
             }
-            var open = IsEligible(reply);
+            var open = IsEligible(planned);
             if (open is null)
             {
                 return;
@@ -418,6 +420,20 @@ public sealed partial class DialogConversation
             if (open == false)
             {
                 continue;
+            }
+            eligible++;
+            var reply = planned;
+            if (planned.QuestReply is not null)
+            {
+                if (!ResolveQuestReply(planned, step, out var resolved))
+                {
+                    return;
+                }
+                if (resolved is null)
+                {
+                    continue;
+                }
+                reply = resolved;
             }
             var block = reply.Block;
             StepPlan? target = null;
@@ -1492,20 +1508,23 @@ public sealed partial class DialogConversation
     }
 
     /// <summary>Plans one Player record. Condition grammar failures propagate to the step; action failures block only this reply.</summary>
-    private ReplyPlan? PlanReply(DlgRecord record, DialogNodeId node, out DialogConversationFrontier? frontier, out DialogConversationFailure? failure)
+    private ReplyPlan? PlanReply(DlgRecord record, DialogNodeId node, out DialogConversationFrontier? frontier, out DialogConversationFailure? failure,
+        DlgRecord? gates = null, bool nestedQuest = false)
     {
         frontier = null;
         failure = null;
+        // ARC-SCRIPT-1532: a q: reply's chosen record gives the text, response and action; the gates (gender, IQ, condition) stay the q: record's (0x416C10 only recurses for the record).
+        var gate = gates ?? record;
         var response = new DialogResponseId(record.Id);
-        var gender = ParseGender(record);
+        var gender = ParseGender(gate);
         if (gender is null)
         {
             failure = new DialogConversationFailure(DialogConversationFailureKind.InvalidOperation, node,
-                new DialogOperationSource(new DialogNodeId(record.Id), record.SerializedIndex, DlgFieldKind.AlternateText,
-                    record.AlternateText.PayloadOffset, 0, record.AlternateText.Length, 0), response);
+                new DialogOperationSource(new DialogNodeId(gate.Id), gate.SerializedIndex, DlgFieldKind.AlternateText,
+                    gate.AlternateText.PayloadOffset, 0, gate.AlternateText.Length, 0), response);
             return null;
         }
-        var condition = ParseField(record, record.Condition, ConversationField.PlayerCondition);
+        var condition = ParseField(gate, gate.Condition, ConversationField.PlayerCondition);
         if (MissingCapability(condition) is { } missing)
         {
             frontier = new DialogConversationFrontier(DialogFrontierKind.CapabilityUnavailable, node, missing, response);
@@ -1528,6 +1547,12 @@ public sealed partial class DialogConversation
         RumorOffer? rumor = null;
         var story = false;
         var found = DialogText.Marker(text, out var exact);
+        if (found is { Letter: 'q' } && !nestedQuest && QuestReplyAvailable && ParseQuestReply(text) is { } questReply)
+        {
+            // ARC-SCRIPT-1532 (ledger DQR1): the reply is chosen when the offers are built (BuildOffers → ResolveQuestReply): the record it shows depends on the PC's quest state.
+            return new ReplyPlan(record, gender.Value, record.IqValue!.Value, condition, DialogOptionTextKind.Record, string.Empty, null, DialogOptionTransition.Exit, null, null, null, null,
+                null, QuestReply: questReply);
+        }
         if (found is { Letter: 'd' or 'q' or 'u' or 'x' })
         {
             // Their visibility depends on world, quest or skill state this runtime cannot read.
@@ -1768,7 +1793,7 @@ public sealed partial class DialogConversation
                 line = null;
             }
         }
-        return new ReplyPlan(record, gender.Value, record.IqValue!.Value, condition, kind, text, marker, transition, target, line, action, block,
+        return new ReplyPlan(record, gender.Value, gate.IqValue!.Value, condition, kind, text, marker, transition, target, line, action, block,
             block is null ? insult : null, block is null ? barter : null, block is null ? worldMap : null, phrase, block is null ? trainer : null, block is null ? rumor : null, block is null && story);
     }
 
@@ -1927,7 +1952,8 @@ public sealed partial class DialogConversation
         bool Phrase = false,
         int[]? Trainer = null,
         RumorOffer? Rumor = null,
-        bool Story = false);
+        bool Story = false,
+        int? QuestReply = null);
 
     private sealed record OfferPlan(ReplyPlan Reply, StepPlan? Target);
 }
