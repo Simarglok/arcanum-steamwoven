@@ -42,6 +42,19 @@ public sealed record SessionLoyaltyResult(GameSessionDisposition Disposition, Ga
     GameSessionVersion Version);
 
 /// <summary>
+/// Outcome of the follow check after the PC hit its own follower (<see cref="GameSessionOwner.CheckFollowerAfterHit"/>, the attack event's
+/// follower branch). <see cref="Consent"/> is the check's result (null when no check ran); <see cref="Left"/> says the follower left,
+/// jilted, after a refusal; <see cref="LeaveRefused"/> says it was refused but the leave was not (the leader's extraordinary charisma, or
+/// mind control), so it stays. The host floats <see cref="RefusalLines"/> after a leave.
+/// </summary>
+public sealed record SessionFollowerHitCheck(GameSessionDisposition Disposition, GameSessionFailure Failure, FollowConsent? Consent, bool Left,
+    bool LeaveRefused, GameSessionVersion Version)
+{
+    /// <summary>The refusal line range of a follower that left, else null.</summary>
+    public LoyaltyLines? RefusalLines => Left && Consent is { } reason ? CompanionLoyaltyRules.RefusalLines(reason) : null;
+}
+
+/// <summary>
 /// ARC-WORLD-045: the wait timer and follower loyalty of the original (ARC-RES-064 rows OL17–OL26). A follower told to wait
 /// with <see cref="PartyWaitFacts"/> gets the original's game-time event (<see cref="SessionEventKinds.PartyWait"/>) on the map
 /// it waits on; every way out of waiting removes it; when it comes due the NPC stops waiting, jilted, after the reaction change
@@ -94,6 +107,37 @@ public sealed partial class GameSessionOwner
         Revise();
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, step, Version);
     }
+
+    /// <summary>
+    /// ARC-AI-1515 (attack event 0x4A9650, follower branch of the PC attacker): the follow check (0x4AD950) of a follower the PC hit, with the
+    /// follower limit ignored (its last argument 1); a refusal makes it leave unforced (0x45DFC0) and then sets the JILTED bit, so it
+    /// is free and jilted, unless the leave is refused (the leader's extraordinary charisma, or mind control); the caller then floats the
+    /// refusal line (<see cref="SessionFollowerHitCheck.RefusalLines"/>), or, when the follower stays, the accidental-attack line one time
+    /// in three. A waiting NPC is checked too (it still has the PC as leader); a free one is NoChange with no check. Unlike
+    /// <see cref="RunLoyaltyStep"/> no loyalty mark is read or cleared. With a hero the PC's side is the hero's. One revision when the
+    /// record changed. Facts naming another leader are <see cref="GameSessionFailure.InvalidConsentFacts"/>.
+    /// </summary>
+    public SessionFollowerHitCheck CheckFollowerAfterHit(GameSessionVersion expected, string entity, PartyConsentFacts facts)
+    {
+        ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(facts);
+        if (!SessionValidation.Entity(entity)) return RejectFollowerHit(GameSessionFailure.InvalidCompanion);
+        if (!ValidFacts(facts) || facts.OtherLeaderCharisma is not null) return RejectFollowerHit(GameSessionFailure.InvalidConsentFacts);
+        if (!IsCurrent(expected)) return RejectFollowerHit(GameSessionFailure.StaleVersion);
+        var current = _party.Get(entity);
+        if (current.Standing == CompanionStanding.Free) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, null, false, false, Version);
+        var consent = Consent(facts, current.Forced, ignoreLimit: true);
+        if (consent == FollowConsent.Accepted) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, consent, false, false, Version);
+        var (_, charisma) = Leader(facts.PcPersuasion, facts.PcCharisma);
+        var left = LeaveParty(expected, entity, new PartyLeave(Force: false, LeaderCharisma: charisma, MindControlled: facts.MindControlledByPc, Jilt: true));
+        if (left.Disposition == GameSessionDisposition.Rejected)
+            return left.Failure == GameSessionFailure.LeaveRefused
+                ? new(GameSessionDisposition.NoChange, GameSessionFailure.None, consent, false, true, Version)
+                : RejectFollowerHit(left.Failure);
+        return new(left.Disposition, GameSessionFailure.None, consent, true, false, left.Version);
+    }
+
+    private SessionFollowerHitCheck RejectFollowerHit(GameSessionFailure failure) => new(GameSessionDisposition.Rejected, failure, null, false, false, Version);
 
     /// <summary>
     /// The PC's alignment changed from <paramref name="previous"/> to <paramref name="current"/> (OL17, the stat setter): each
