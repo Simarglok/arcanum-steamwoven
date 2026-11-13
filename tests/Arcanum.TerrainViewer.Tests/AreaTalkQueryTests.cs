@@ -76,6 +76,14 @@ public sealed class AreaTalkQueryTests
                 If(new(ScrCatalogue.Condition.Equal, (Local, 0), N(62)), new(ScrCatalogue.Action.SetGlobalFlag, N(AreaFlag)), new(ScrCatalogue.Action.DoNothing)),
                 Do(new(ScrCatalogue.Action.ReturnSkipDefault))));
             Write("dlg/00792reaction.dlg", Encoding.Latin1.GetBytes("{1}{Hello.}{}{}{}{}{}\n"));
+            // 793 (ARC-SCRIPT-1563): sets global flag 100, damages the PC for 40 of type 1 (poison) and the attachee for 7 of type 0 unresistably, heals the attachee for 5, skip default; a poison talk like the installed 1059.
+            Write("scr/00793damage.scr", Program(
+                Do(new(ScrCatalogue.Action.SetGlobalFlag, N(AreaFlag))),
+                Do(new(ScrCatalogue.Action.Damage, (Triggerer, -1), N(40), N(1))),
+                Do(new(ScrCatalogue.Action.DamageUnresistable, (Attachee, -1), N(7), N(0))),
+                Do(new(ScrCatalogue.Action.HealHitPoints, (Attachee, -1), N(5))),
+                Do(new(ScrCatalogue.Action.ReturnSkipDefault))));
+            Write("dlg/00793damage.dlg", Encoding.Latin1.GetBytes("{1}{Hello.}{}{}{}{}{}\n"));
             // 791: sets global flag 100, then floats line 2 of 790's DLG shape (an action field the viewer does not run).
             Write("scr/00791acting.scr", Program(
                 Do(new(ScrCatalogue.Action.SetGlobalFlag, N(AreaFlag))),
@@ -97,7 +105,8 @@ public sealed class AreaTalkQueryTests
     }
 
     // The PC stands next to the NPC (row cell (11, 20)); the shown map's map-list row has the given area.
-    private static Talk Create(ScriptContent content, int dialog, (int Area, bool StartMap)? mapArea, int useMap = Map, Func<CellCoord, int?>? startMapAreaAt = null, int reaction = 50)
+    private static Talk Create(ScriptContent content, int dialog, (int Area, bool StartMap)? mapArea, int useMap = Map, Func<CellCoord, int?>? startMapAreaAt = null, int reaction = 50,
+        Func<string, int, int, bool, string>? damage = null, Func<string, int, string>? heal = null)
     {
         var session = ConversationSessionFixture.Create(Map);
         var row = Row(1, dialog);
@@ -106,7 +115,7 @@ public sealed class AreaTalkQueryTests
         var state = new AreaConversationState(session, map, [AreaConversationState.EntityId(row)], reaction);
         var use = new AreaUseScriptHost(session, useMap, [row], [], content,
             new AreaScriptWorld(() => new(12, 20), _ => false, _ => null, () => null, MapArea: () => mapArea,
-                StartMapAreaAt: startMapAreaAt));
+                StartMapAreaAt: startMapAreaAt, ScriptDamage: damage, ScriptHeal: heal));
         var host = new AreaScriptHost(session, map, [speaker], state, content) { QueryHost = () => use };
         return new(session, speaker, host);
     }
@@ -215,6 +224,59 @@ public sealed class AreaTalkQueryTests
         });
     }
 
+    /// <summary>ARC-SCRIPT-1563 (GT194–GT196): a talk's damage and heal actions are applied by the dialog host through the use host's session path, in action order, the PC by its scheduler id.</summary>
+    [TestMethod]
+    public void A_talks_damage_and_heal_are_applied_through_the_use_hosts_session_path()
+    {
+        WithContent(content =>
+        {
+            var calls = new List<string>();
+            using var talk = Create(content, 793, (7, false),
+                damage: (victim, amount, type, unresistable) => { calls.Add($"damage {victim} {amount} {type} {unresistable}"); return "damaged"; },
+                heal: (victim, amount) => { calls.Add($"heal {victim} {amount}"); return "healed"; });
+            var npc = talk.Host.Object(talk.Speaker).Code;
+            var run = talk.Run();
+            Assert.AreEqual((ScrOutcome.SkipDefault, ScrStop.ReturnSkipDefault), (run.Outcome, run.Stop), run.Refusal?.ToString());
+            Assert.AreEqual(3, run.Effects.ObjectStates.Count);
+            Assert.IsTrue(talk.Host.Apply(run.Effects));
+            CollectionAssert.AreEqual(new[] { $"damage {Arcanum.Simulation.Ai.AiSchedulerRules.Pc} 40 1 False", $"damage {npc} 7 0 True", $"heal {npc} 5" }, calls);
+            Assert.IsTrue(talk.Flag, "the run's other effects apply");
+            Assert.AreEqual("damaged", talk.Host.LastDamage);
+            Assert.AreEqual("healed", talk.Host.LastHeal);
+        });
+    }
+
+    /// <summary>ARC-SCRIPT-1563: a world that cannot damage refuses the run whole (the flag before the damage action is not applied), and without the shown map's use host the talk set holds no damage action, so the run is refused at it.</summary>
+    [TestMethod]
+    public void A_talks_damage_the_world_cannot_apply_refuses_the_run_whole()
+    {
+        WithContent(content =>
+        {
+            using var noWorld = Create(content, 793, (7, false));
+            var run = noWorld.Run();
+            Assert.AreEqual(ScrOutcome.SkipDefault, run.Outcome, run.Refusal?.ToString());
+            Assert.IsFalse(noWorld.Host.Apply(run.Effects));
+            Assert.IsFalse(noWorld.Flag, "nothing applied");
+            Assert.IsNull(noWorld.Host.LastDamage);
+            // Damage with no heal in the world: the damage runs, the heal request alone refuses.
+            using var noHeal = Create(content, 793, (7, false), damage: (_, _, _, _) => "damaged");
+            Assert.IsFalse(noHeal.Host.Apply(noHeal.Run().Effects));
+            Assert.IsFalse(noHeal.Flag);
+            // Heal with no damage in the world's hands the other way round: the heal request alone refuses.
+            using var noDamage = Create(content, 793, (7, false), heal: (_, _) => "healed");
+            Assert.IsFalse(noDamage.Host.Apply(noDamage.Run().Effects));
+            Assert.IsFalse(noDamage.Flag);
+            // A use host of another map answers nothing for this talk: the set is the plain one and refuses at the first damage line's earlier command or at it.
+            using var otherMap = Create(content, 793, (7, false), useMap: Map + 1, damage: (_, _, _, _) => "damaged", heal: (_, _) => "healed");
+            Assert.AreEqual(ScrOutcome.Refused, otherMap.Run().Outcome);
+            // No use host of the map: the talk set is the plain one and the run is refused at the first damage action.
+            using var noQueries = Create(content, 793, (7, false), damage: (_, _, _, _) => "damaged", heal: (_, _) => "healed");
+            noQueries.Host.QueryHost = null;
+            var refused = noQueries.Run();
+            Assert.AreEqual((ScrOutcome.Refused, ScrCatalogue.Action.Damage), (refused.Outcome, refused.Refusal!.Type));
+        });
+    }
+
     [TestMethod]
     public void The_talk_set_widens_only_while_a_use_host_of_its_map_answers()
     {
@@ -229,7 +291,9 @@ public sealed class AreaTalkQueryTests
             Assert.IsTrue(AreaScriptHost.Admission.IsSubsetOf(AreaScriptHost.TalkAdmission) && AreaScriptHost.SkillAdmission.IsSubsetOf(AreaScriptHost.SkillTalkAdmission));
             // ARC-DEV-178: plus get reaction (29) of S23; ARC-MAGIC-030: plus give spell mastery (112) and the four spell conditions of S31.
             Assert.IsTrue(AreaScriptHost.SkillTalkAdmission.IsSubsetOfBesidesStores(ScrAdmissionSet.S35));
-            CollectionAssert.AreEquivalent(new[] { ScrCatalogue.Action.Random, ScrCatalogue.Action.FloatLine, ScrCatalogue.Action.GetArea, ScrCatalogue.Action.GetReaction, ScrCatalogue.Action.GiveSpellMastery },
+            // ARC-SCRIPT-1563: plus damage (60), apply unresistable damage (138) and heal hit points (75) of S30.
+            CollectionAssert.AreEquivalent(new[] { ScrCatalogue.Action.Random, ScrCatalogue.Action.FloatLine, ScrCatalogue.Action.GetArea, ScrCatalogue.Action.GetReaction, ScrCatalogue.Action.GiveSpellMastery,
+                ScrCatalogue.Action.Damage, ScrCatalogue.Action.DamageUnresistable, ScrCatalogue.Action.HealHitPoints },
                 AreaScriptHost.TalkAdmission.Actions.Except(AreaScriptHost.Admission.Actions).ToArray());
             CollectionAssert.AreEquivalent(ScrAdmissionSet.ObjectQueryConditions.Concat(ScrAdmissionSet.ObjectStateQueryConditions).Concat(ScrAdmissionSet.SpellQueryConditions).ToArray(),
                 AreaScriptHost.TalkAdmission.Conditions.Except(AreaScriptHost.Admission.Conditions).ToArray());

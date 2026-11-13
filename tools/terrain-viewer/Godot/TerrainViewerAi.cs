@@ -708,6 +708,7 @@ public partial class TerrainViewerApp
                 case AreaAiNoticeKind.Rewield:
                     // ARC-RENDER-1485: the gate's re-wield (or a pickup's CHECK_WIELD) changed what the NPC wears: its body shows the new weapon and shield (0x465020), so it is drawn again.
                     GD.Print($"ARC-RENDER-1485 ai-rewield npc={notice.Npc} shown={host.ShownWeapon(notice.Npc)}");
+                    RewieldedNpcs(host).Add(notice.Npc);
                     redraw = true;
                     break;
                 case AreaAiNoticeKind.Skill:
@@ -867,10 +868,12 @@ public partial class TerrainViewerApp
     /// (ARC-WORLD-111).</summary>
     private IReadOnlyList<AreaDrawCommand> AiMoverCommands()
     {
-        if (_aiHost is not { } host || host.Movers.All.Count == 0 || _areaOverlay is not { } overlay || !ReferenceEquals(overlay.Area, _readyArea)) return [];
+        if (_aiHost is not { } host || _areaOverlay is not { } overlay || !ReferenceEquals(overlay.Area, _readyArea)) return [];
         // The movers' steps and attack plays run on the host's clock (the frame step's world milliseconds).
         var now = host.NowMs;
-        return AnimateAiMovers(host, host.Movers.Commands(key => _fallenBodies.TryGetValue(key, out var fallen) ? fallen : NpcT0Body(key), now), now);
+        var walked = host.Movers.All.Count == 0 ? [] : AnimateAiMovers(host, host.Movers.Commands(key => _fallenBodies.TryGetValue(key, out var fallen) ? fallen : NpcT0Body(key), now), now);
+        // ARC-RENDER-1544: the re-wielded NPCs the AI never moved stand with the weapon they show.
+        return UnmovedArmedBodies(host, now) is { Count: > 0 } standing ? [.. walked, .. standing] : walked;
     }
 
     /// <summary>The hero's overlay with the NPCs the AI moved: their T0 records moved and the cells they hold blocking.</summary>
