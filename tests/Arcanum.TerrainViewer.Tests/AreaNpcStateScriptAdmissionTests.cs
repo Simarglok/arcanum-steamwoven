@@ -57,6 +57,6 @@ public sealed class AreaNpcStateScriptAdmissionTests
         // ARC-SCRIPT-1279 (the four item commands got a host): the placed set admits 123 and the dying set 150 (3 more each); the use and heartbeat sets stay at 56 and 91.
         // ARC-SCRIPT-1359 (set S38, get location 95): the heartbeat set admits 94 and the dying set 153 (3 more each, among them the Crash Site agent's heartbeat 1717).
         // ARC-SCRIPT-1481 (set S43, the vitals commands and the use set's heal, destroy and magick-tech commands): the dying set admits one more.
-        Assert.AreEqual((270, 208, 56, 123, 94, 154), (withState, counts["S36"], counts["use"], counts["placed"], counts["heartbeat"], counts["dying"]));
+        Assert.AreEqual((270, 208, 57, 135, 96, 174), (withState, counts["S36"], counts["use"], counts["placed"], counts["heartbeat"], counts["dying"]));
     }
 }
