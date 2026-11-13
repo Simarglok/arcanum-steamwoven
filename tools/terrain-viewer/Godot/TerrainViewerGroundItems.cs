@@ -160,9 +160,16 @@ public partial class TerrainViewerApp
                 if (map?.TryGetRow(entity, out var own) == true) row = own;
                 else if (placedItems.GetValueOrDefault(entity) is { Origin: { } origin }
                     && _inventoryHost?.Maps.FirstOrDefault(m => m.RuntimeMap == origin.RuntimeMap) is { } home && home.TryGetRow(entity, out var taken)) row = taken;
-                // A T0 body standing on the item's own cell already draws it.
-                if (row is not null && row.Key.RuntimeMap == area.Snapshot.RuntimeMap && overlay.Bodies.ContainsKey(row.Key)
-                    && row.WorldX == ground.Cell.X && row.WorldY == ground.Cell.Y) continue;
+                // ARC-SCRIPT-1779 (ledger AN10): the ground art a script's change art number wrote for the item (object field 1, kept by the item's identity, so it follows the item from map to map and from holder to ground).
+                var written = session.QueryObjectArt(new SessionMapId(CurrentAreaMap), entity);
+                // A T0 body standing on the item's own cell already draws it, from the new art where a script changed it.
+                if (row is not null && row.Key.RuntimeMap == area.Snapshot.RuntimeMap && overlay.Bodies.TryGetValue(row.Key, out var itemBody)
+                    && row.WorldX == ground.Cell.X && row.WorldY == ground.Cell.Y)
+                {
+                    if (written is { } newArt && overlay.Visuals.TryGetValue(itemBody.Visual, out var itemVisual) && newArt != itemVisual.RawArt && Frame(newArt, "object-art") is { } newFrame)
+                        bodies[row.Key] = AreaScenePlan.Repose(itemBody, row, itemVisual, newFrame.Key, newFrame.Frame.Width, newFrame.Frame.Height, newFrame.Visual.HotX, newFrame.Visual.HotY);
+                    continue;
+                }
                 // ARC-WORLD-070: a made item (an assembly product left on the tile) takes its prototype's art from the schematic data;
                 // ARC-WORLD-081: an item a script created, and a made item the schematic data does not know (a picked-up herb dropped again),
                 // takes its prototype's own art.
@@ -170,6 +177,7 @@ public partial class TerrainViewerApp
                 uint? aid = row is not null ? Number(row, CurrentArtSlot) : KitArt(entity)
                     ?? (placedItem is { Source: SessionPlacedSource.Made } made ? _schematicData?.Data?.ArtOf(made.Kind.Prototype) : null)
                     ?? (placedItem is { Source: SessionPlacedSource.Made or SessionPlacedSource.Created } lying ? PrototypeItems()?.Item(lying.Kind.Prototype)?.Art : null);
+                aid = written ?? aid;
                 if (aid is not { } art)
                 {
                     if (_groundReported.Add("noart:" + entity)) GD.Print($"ARC-RENDER-033 ground-item entity={entity} not drawn: no ground art known");
