@@ -361,8 +361,8 @@ and a type the lists do not admit (`InvalidItem`). The kit's numbers skip its pl
   seed not attached, and for a kit or made item, the session does not know the scripts and the item goes unchecked. The light and armour of the hero follow its equipment at once.
 - The PC's re-wield after losing a weapon (PI5): with the "auto switch" setting on, the original wields the best weapon. Since
   ARC-COMBAT-1720 the session has the step (`WieldBestWeapon`, [best items](equipment-runtime.md#best-items-arc-world-034)) and the
-  viewer calls it, with the setting on, after a wear that broke the hero's weapon; the no-ammunition caller (0x4B3170) and the
-  struck PC's item-loss branches (0x4B4390) are not built, and the slot stays empty there.
+  viewer calls it, with the setting on, after a wear that broke the hero's weapon, an attack the ammunition check refused (0x4B3170) and an NPC's strike that took the
+  hero's weapon (0x4B4390, ARC-COMBAT-1738); the hero's self-hit, a spell, trap or script hit are not built, and the slot stays empty there.
 - NPC made items (ARC-WORLD-055) can use this store later. The viewer draws placed items and picks
   them up since ARC-RENDER-033 ([ground items](#ground-items-in-the-viewer-arc-render-033)); a placed made item (an assembly
   product left on the tile) is drawn from its product prototype's art since ARC-WORLD-070.
