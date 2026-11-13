@@ -587,6 +587,7 @@ src/Arcanum.World/AreaSpellTeleport.cs,MapAreaLocation,pending,
 src/Arcanum.World/AreaSpellTeleport.cs,Portal,pending,
 src/Arcanum.World/AreaTraps.cs,Attack,pending,
 src/Arcanum.World/AreaTraps.cs,Step,pending,
+src/Arcanum.World/AreaTraps.cs,StepEndsWalk,exempt,host
 src/Arcanum.World/AreaTraps.cs,StepNpc,exempt,host
 src/Arcanum.World/AreaTraps.cs,Use,pending,
 src/Arcanum.World/AreaTraps.cs,UseNpc,exempt,host

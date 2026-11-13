@@ -562,6 +562,45 @@ public sealed class AreaTrapsTests
     }
 
     [TestMethod]
+    public void A_step_ends_its_walk_on_any_trap_object_the_mover_does_not_step_over_even_where_no_meeting_is_made()
+    {
+        // ARC-WORLD-1582 (TT17): the step function ends the walk on every trap object it lists, whatever the entry point answered.
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var effects = new Effects();
+            var shot = Row(1, TrapObject, 30002, 0x0000_0201, x: 50, objectFlags: TrapRules.DontDrawFlag);
+            var ordinary = Row(2, TrapObject, 700, x: 52, objectFlags: TrapRules.DontDrawFlag);
+            var native = Row(3, TrapObject, 30004, 0x0000_0201, x: 54, objectFlags: TrapRules.DontDrawFlag);
+            var gone = new HashSet<AreaObjectKey>();
+            var (host, traps) = Hosts(session, content, () => effects.Side, gone, shot, ordinary, native);
+            Assert.IsFalse(traps.StepEndsWalk(new(51, 20)), "no trap object there");
+            Assert.IsFalse(traps.StepEndsWalk(new(51, 20), Free()));
+            Assert.IsNull(traps.StepNpc(Free(), Cell(shot)), "the 30002 shot is no meeting");
+            Assert.IsNull(traps.StepNpc(Free(), Cell(ordinary)), "an ordinary script is no meeting on a step");
+            foreach (var row in new[] { shot, ordinary, native })
+            {
+                Assert.IsTrue(traps.StepEndsWalk(Cell(row)), "the hero's walk ends there");
+                Assert.IsTrue(traps.StepEndsWalk(Cell(row), Free()), "and a free NPC's");
+                Assert.IsTrue(traps.StepEndsWalk(Cell(row), Led()), "and a companion's");
+            }
+            effects.WalkerFlags["oid:ghost"] = TrapRules.StepImmuneSpellFlags & 0x2;
+            Assert.IsFalse(traps.StepEndsWalk(Cell(native), Free("oid:ghost")), "a mover with the step-over spell flags runs none of it");
+            effects.SpellFlags = 0x4;
+            Assert.IsFalse(traps.StepEndsWalk(Cell(native)), "nor does the hero with them");
+            effects.SpellFlags = 0;
+            effects.ByCritter = false;
+            Assert.IsTrue(traps.StepEndsWalk(Cell(native), Free()), "a cast host that cannot take a critter's trap still ends the walk");
+            // A trap object the session destroyed is not listed.
+            effects.ByCritter = true;
+            Assert.IsNotNull(traps.StepNpc(Free(), Cell(native)));
+            Assert.AreEqual(false, host.IsTrap(native), "the fired trap removed itself");
+            gone.Add(native.Key);
+            Assert.IsFalse(traps.StepEndsWalk(Cell(native)), "a trap object the session destroyed is not listed");
+        });
+    }
+
+    [TestMethod]
     public void A_walker_whose_spell_flags_step_over_traps_sets_none_off_and_without_the_critter_side_no_trap_is_met()
     {
         WithContent(content =>

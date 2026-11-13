@@ -115,10 +115,13 @@ public partial class TerrainViewerApp
         if (session is not AreaGridSession grid || AreaTrapsNow() is not { } traps) return;
         foreach (var evidence in advance.AreaEvidence)
         {
-            if ((evidence.Live?.Disposition ?? evidence.Assessment.Disposition) != Arcanum.Data.Traversal.CardinalTraversalDisposition.Open
-                || traps.Step(WorldCellOf(grid, evidence.Key.To)) is not { } met) continue;
-            NoteTrapMeeting(met);
-            if (!met.EndsWalk) continue;
+            if ((evidence.Live?.Disposition ?? evidence.Assessment.Disposition) != Arcanum.Data.Traversal.CardinalTraversalDisposition.Open) continue;
+            var cell = WorldCellOf(grid, evidence.Key.To);
+            // ARC-WORLD-1582 (TT17): the step function ends the walk on any trap object's tile the hero does not step over, whatever the entry point answered.
+            var ends = traps.StepEndsWalk(cell);
+            var met = traps.Step(cell);
+            if (met is not null) NoteTrapMeeting(met);
+            if (met?.EndsWalk != true && !ends) continue;
             StopWorldRoute("ROUTE_ENDED_BY_TRAP");
             break;
         }
@@ -142,11 +145,12 @@ public partial class TerrainViewerApp
     }
 
     /// <summary>ARC-WORLD-1469 (TT9): a following companion on its own walk (the AI host does not hold it) arrives on tiles; each meets the first trap object there with the companion as the triggerer. The walk is
-    /// not cut short yet: the follow goal plans its route again from where the companion stands.</summary>
+    /// cut short at a trap object's tile (ARC-WORLD-1582, TT17): its goal stops there and the follow goal plans again from where the companion stands.</summary>
     private void RunCompanionTraps(IEnumerable<(AreaCompanion Companion, Arcanum.Data.Traversal.AreaStepCell Cell)> stepped)
     {
         if (_aiHost is not { } host) return;
-        foreach (var (companion, cell) in stepped) host.TrapMetOn(companion.Entity, new(checked((int)cell.X), checked((int)cell.Y)));
+        foreach (var (companion, cell) in stepped)
+            if (host.TrapMetOn(companion.Entity, new(checked((int)cell.X), checked((int)cell.Y)))) _areaCompanions?.EndWalkOnTrap(companion.Entity);
         if (NoteWalkerTraps(host)) _canvas?.SetAreaMovingBodies(AreaMovingCommands());
     }
 
