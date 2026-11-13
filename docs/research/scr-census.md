@@ -497,3 +497,16 @@ behaviour behind a switch of the Original setting).
 | X8 | A counter write shifts the value into its byte without masking it (script 0x44BB50), so a value above 255 or negative spills into the higher counters. | A reconstruction slip: the original masks counter writes to 8 bits (ledger row X8). S2 decides masking. |
 | X9 | Float newspaper headline (86) reads its object from slot 1, outside the editor signature (script 0x447220). | Not admitted in S1; the one installed clause has kind 1 in slot 0 and 0 (triggerer) in slot 1. |
 | X10 | A global-flag write shifts the value into the flag's bit without masking it (script 0x444D20), so an arithmetic or get-story-state result of 2 sets the neighbouring flag and a negative one every higher flag of the same 32-flag word. | Found in the ARC-SCRIPT-007 review; S1 admits global-flag write targets, S2 decides masking. |
+
+## Door and window use scripts (ARC-WORLD-1805)
+
+Probe mode `--door-use-census` (read-only, numbers only; the file `DoorUseCensusProbe.cs`) asks which use scripts (attachment point 1) of portals (object type 1) can reach a
+conversation (action 4), a teleport (44) or a fade-and-teleport (102), calls followed as the other censuses do (the same live set). On the installed module: 2,399 scripts, 60 placed
+sector-object sites on 22 scripts (no mobile, aggregate or prototype of a portal carries a use script), and **three scripts on four doors reach a teleport**: 2591 (two doors of map 5067),
+2595 (map 5068) and 2643 (map 5071). Each is two lines: line 0, always true, teleports the triggerer to a literal map, x and y; line 1, always true, returns "run default". **No door or window use script
+starts a conversation, fades or branches.** The reading of what the original does with them is [ledger TT20](ledger/technology.md#trap-state-arc-world-076).
+
+```sh
+"$DOTNET" run --project tools/research/Arcanum.CrashSiteProbe --no-build -- --door-use-census-self-test
+"$DOTNET" run --project tools/research/Arcanum.CrashSiteProbe --no-build -- --door-use-census --game-root "$GAME"
+```

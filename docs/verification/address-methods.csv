@@ -575,6 +575,7 @@ src/Arcanum.World/AreaLootArt.cs,Arrange,pending,
 src/Arcanum.World/AreaLootArt.cs,HolderImage,pending,
 src/Arcanum.World/AreaLootArt.cs,Release,pending,
 src/Arcanum.World/AreaLootArt.cs,RightRelease,pending,
+src/Arcanum.World/AreaMapTransfers.cs,QueueDoorTeleport,exempt,reference
 src/Arcanum.World/AreaNewCharacter.cs,BeginName,pending,
 src/Arcanum.World/AreaNewCharacter.cs,WieldStart,pending,
 src/Arcanum.World/AreaNpcSheet.cs,Mark,pending,
@@ -787,6 +788,7 @@ tools/terrain-viewer/Godot/TerrainViewerAreaPanelArt.cs,HoverPortrait,pending,
 tools/terrain-viewer/Godot/TerrainViewerAreaPickPocket.cs,ArmPickPocketFromBar,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAreaPickPocket.cs,HeroFaceSkill,pending,
 tools/terrain-viewer/Godot/TerrainViewerAreaPickPocket.cs,PickPocketOn,exempt,reference
+tools/terrain-viewer/Godot/TerrainViewerAreaPortals.cs,DoorUseScriptStops,exempt,reference
 tools/terrain-viewer/Godot/TerrainViewerAreaPortals.cs,HeroDoorScript,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAreaPortals.cs,HeroDoorUse,pending,
 tools/terrain-viewer/Godot/TerrainViewerAreaPortals.cs,OpenerDoorScript,exempt,host

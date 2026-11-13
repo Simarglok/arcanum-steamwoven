@@ -1345,10 +1345,12 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     /// ARC-MAGIC-048 (E4-c, ledger CN6, CN7): the use script (attachment point 1) of <paramref name="target"/>, an object of the shown map, run through the script dispatcher (0x441980) with any triggerer (<paramref name="triggerer"/>;
     /// null: none) and any extra object (<paramref name="extra"/>), which is the seam the Use spell component (0x452ED0) needs: it passes the target in all three object pairs, so the object runs its own use script as if it had used itself. The attachee is the target,
     /// line 0, under <see cref="Admission"/>; its slot is kept as map changes (<see cref="SlotProperty"/>). An object that is not a row of the shown map, or has no use slot with a script, has none (no run: the original's dispatcher finds no
-    /// attachment). Not modelled: the trap preamble of the dispatcher's use point (0x4BBFE0, 0x4BBE40: a trapped target does not meet its trap here, <see cref="AreaTraps.Use"/> is the PC's) and a teleport the script asks for (it leaves
-    /// the run unapplied). One method per original address: the PC's use is <see cref="Run"/>.
+    /// attachment). Not modelled: the trap preamble of the dispatcher's use point (0x4BBFE0, 0x4BBE40: a trapped target does not meet its trap here, <see cref="AreaTraps.Use"/> is the PC's) and a teleport the script asks for
+    /// unless the caller takes it (<paramref name="teleportRefusal"/>; without one the run is left unapplied). One method per original address: the PC's use is <see cref="Run"/>.
+    /// ARC-WORLD-1805: a caller that can queue the hero's change of place (the door's use node for the hero, ledger TT18, TT20) passes <paramref name="teleportRefusal"/>, which names why it cannot take the asked teleport (or null);
+    /// a run that asked for one applied returns <see cref="AreaScriptedUseOutcome.Teleport"/> with it, for the caller to queue (the original's action only records the request, 0x447220 case 0x2C → 0x4D3380).
     /// </summary>
-    public AreaScriptedUse RunUseScript(string target, ScrObjectRef? triggerer, ScrObjectRef? extra, ScrRuleProfile rules)
+    public AreaScriptedUse RunUseScript(string target, ScrObjectRef? triggerer, ScrObjectRef? extra, ScrRuleProfile rules, Func<ScrTeleport, string?>? teleportRefusal = null)
     {
         ArgumentNullException.ThrowIfNull(target); ArgumentNullException.ThrowIfNull(rules);
         var attachee = new ScrObjectRef(_shownMap, target);
@@ -1360,22 +1362,23 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         try
         {
             var run = ScrDispatcher.RunObject(new(ScrPoint.Use, attachee, triggerer, extra), this, new() { Rules = rules, Admission = Admission });
-            return Finish(run, _ => "a teleport from a use component's script is not modelled", writeback => WriteObjectSlot(writeback, attachee));
+            return Finish(run, teleportRefusal ?? (_ => "a teleport from a use component's script is not modelled"), writeback => WriteObjectSlot(writeback, attachee));
         }
         finally { _clicked = previous; }
     }
 
     /// <summary>
     /// ARC-WORLD-1668 (ledger TT18, 0x428A10 → 0x441980 point 1): whether the use script a door's use node ran (<see cref="RunUseScript"/>, the opener as the triggerer and the extra object) stops the use: the dispatcher's answer 0, "skip default",
-    /// which includes a script that runs past its last line. A run that was not applied (refused by the admission, effects the viewer cannot apply, an unreadable or changed file, a requested teleport), an object with no use script and a native trap script the trap code left unmet stop nothing:
-    /// the use goes on (the original's node returns 1 for no attachment: 0x441980 answers 1).
+    /// which includes a script that runs past its last line. A run that was not applied (refused by the admission, effects the viewer cannot apply, an unreadable or changed file, a requested teleport the caller could not take), an object with no use script and a native trap script the trap code left unmet stop nothing:
+    /// the use goes on (the original's node returns 1 for no attachment: 0x441980 answers 1). ARC-WORLD-1805: a run that asked for a teleport the caller took (<see cref="AreaScriptedUseOutcome.Teleport"/>) answers as its script does: the teleport is only a request
+    /// the script recorded (0x4D3380), so "run default" lets the door open first and "skip default" keeps it shut, the request standing either way.
     /// </summary>
     public static bool UseStops(AreaScriptedUse ran)
     {
         ArgumentNullException.ThrowIfNull(ran);
         // The dispatcher's stop at a native trap script (30000..30007) is no answer of a script: the trap code runs those, and a trap whose meeting could not be made here (no cast host, a critter the host cannot apply
         // it for) was left unmet, so the use goes on as before and the door opens (a divergence: the original fires and, for a self-removing trap, consumes it).
-        return ran.Outcome is AreaScriptedUseOutcome.NoTeleport && ran.Run is { } run && run.Outcome == ScrOutcome.SkipDefault && run.Stop != ScrStop.TrapScript;
+        return ran.Outcome is AreaScriptedUseOutcome.NoTeleport or AreaScriptedUseOutcome.Teleport && ran.Run is { } run && run.Outcome == ScrOutcome.SkipDefault && run.Stop != ScrStop.TrapScript;
     }
 
     /// <summary>ARC-DEV-326: whether an examine run (<see cref="RunExamine"/>) leaves the object without a description: the dispatcher's
