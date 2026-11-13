@@ -205,7 +205,7 @@ history held about 500 runs of such copies of one template).
   the viewer's sources by the tests), the whole map battery (`full`, `map` without `--stages`) that of `map` and
   `resources`; a stage the viewer skipped (silently, as the AI stages without a hero, or with a `NONE`/`SKIP` line)
   makes the step `FAIL exit=3` with `FAIL exit=3 stages not run: ...` and up to three of the log's `NONE`/`SKIP`
-  lines (the missing stages' own first). The battery's other stages may report `NONE` where the map lacks what they
+  lines (the missing stages' own first). A stage whose own `PASS` line is not the whole check also needs the lines of `STAGE_ALSO_PASS` (ARC-DEV-1556): `transfer` needs the visitor-fight `PASS` after its own, so a `NONE` or `NO-TARGET` fight line fails it. The battery's other stages may report `NONE` where the map lacks what they
   need (a whole map has no window to stream), so it vouches only for those two. Before
   anything runs: a stage that needs a hero (`map` and the whole battery, `cast`, `turn-based`, `knockdown`, `ranged`,
   `container`, `junk`, `hover`, `barter`, `life`, `floaters`, `ai`, `ai-turn-based`, `ai-cast`, `ai-follower`, `premade`, `opening`, `pickpocket`, `loot-worn`, `inv-arrange`, `loot-room`, `transfer`, `follower-home` and the rest of `HERO_STAGES` in `tools/local_dev/smoke.py`) gets
