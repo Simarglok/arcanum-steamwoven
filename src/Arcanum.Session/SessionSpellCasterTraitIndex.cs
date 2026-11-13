@@ -141,6 +141,8 @@ public sealed partial class SessionSpellCaster
             _owner.CommitRewield(rewield);
             // ARC-MAGIC-1745: the lines the rewielded items' wield scripts printed go to the message window (the run's lines are the NPC triggerer's reading, RM3c).
             foreach (var message in rewield.Messages) _log.Add(new(SpellCastEventKind.ItemScriptLine, run.Id, message.Kind, obj.Id, message.Script) { Text = message.Text });
+            // ARC-MAGIC-1830: and the eye candy the same scripts made, played as any script's eye candy.
+            foreach (var candy in rewield.EyeCandies) _log.Add(new(SpellCastEventKind.ItemScriptEyeCandy, run.Id, candy.Number, obj.Id) { EyeCandy = candy });
         }
         if (innate is not null && written.Disposition != GameSessionDisposition.Rejected && _owner.AddNpcInnate(critter.Combat.Target, innate, data.Index == 26) is { Disposition: GameSessionDisposition.Rejected } added)
             _log.Add(new(SpellCastEventKind.TraitIndexNotSaved, run.Id, (int)added.Failure, obj.Id));
@@ -238,6 +240,8 @@ public sealed partial class SessionSpellCaster
             _owner.CommitRewield(rewield);
             // ARC-MAGIC-1745 (as for an NPC): the lines the rewielded items' wield scripts printed go to the message window.
             foreach (var message in rewield.Messages) _log.Add(new(SpellCastEventKind.ItemScriptLine, run.Id, message.Kind, Hero, message.Script) { Text = message.Text });
+            // ARC-MAGIC-1830 (as for an NPC): and the eye candy the same scripts made.
+            foreach (var candy in rewield.EyeCandies) _log.Add(new(SpellCastEventKind.ItemScriptEyeCandy, run.Id, candy.Number, Hero) { EyeCandy = candy });
         }
         return outcome;
     }

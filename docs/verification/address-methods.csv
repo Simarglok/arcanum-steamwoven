@@ -90,6 +90,8 @@ src/Arcanum.Session/GameSessionFate.cs,HeroFateArmed,pending,
 src/Arcanum.Session/GameSessionFate.cs,QueryHeroFate,pending,
 src/Arcanum.Session/GameSessionFate.cs,UseHeroFate,pending,
 src/Arcanum.Session/GameSessionFollowerSkills.cs,PickLockByNpc,exempt,host
+src/Arcanum.Session/GameSessionFollowerSkills.cs,QueryDisarmScore,exempt,host
+src/Arcanum.Session/GameSessionFollowerSkills.cs,QueryPickLockScore,exempt,host
 src/Arcanum.Session/GameSessionFollowerSkills.cs,RollNpcDisarmTrap,exempt,host
 src/Arcanum.Session/GameSessionFollowers.cs,ApplyFollowerRule,pending,
 src/Arcanum.Session/GameSessionGeneratedOnce.cs,GenerateContainerOnce,pending,
@@ -133,6 +135,7 @@ src/Arcanum.Session/GameSessionJunkPiles.cs,CloseMapJunkPile,pending,
 src/Arcanum.Session/GameSessionJunkPiles.cs,DissolveJunkPile,pending,
 src/Arcanum.Session/GameSessionKillLog.cs,RecordHeroInjuries,pending,
 src/Arcanum.Session/GameSessionKillLog.cs,RecordKillLog,pending,
+src/Arcanum.Session/GameSessionLeaders.cs,ForceJoinLeader,exempt,reference
 src/Arcanum.Session/GameSessionLocks.cs,WriteOpenableFlag,pending,
 src/Arcanum.Session/GameSessionLoyalty.cs,CheckFollowerAfterHit,exempt,host
 src/Arcanum.Session/GameSessionMissiles.cs,CreateMissile,pending,
@@ -418,6 +421,7 @@ src/Arcanum.Simulation/Navigation/RoutePlanner.cs,Toward,pending,
 src/Arcanum.Simulation/Navigation/RouteTypes.cs,StepEntersCritter,pending,
 src/Arcanum.Simulation/Party/CompanionFollow.cs,Interrupt,pending,
 src/Arcanum.Simulation/Reaction/ReactionRules.cs,PcHit,pending,
+src/Arcanum.Simulation/Skills/FollowerSkillRules.cs,AllFollowers,exempt,host
 src/Arcanum.Simulation/Skills/PickPocketRules.cs,Caught,pending,
 src/Arcanum.Simulation/Skills/PickPocketRules.cs,NotAllowed,pending,
 src/Arcanum.Simulation/Skills/SkillCheckRules.cs,DifficultyReasons,pending,
@@ -440,12 +444,15 @@ src/Arcanum.World/AreaAiHost.cs,CanHealAndFight,pending,
 src/Arcanum.World/AreaAiHost.cs,Cast,pending,
 src/Arcanum.World/AreaAiHost.cs,CastActionFrame,pending,
 src/Arcanum.World/AreaAiHost.cs,CatchUp,pending,
+src/Arcanum.World/AreaAiHost.cs,ChooseSkillUser,exempt,host
 src/Arcanum.World/AreaAiHost.cs,DeadCritter,exempt,reference
 src/Arcanum.World/AreaAiHost.cs,DyingRunning,pending,
 src/Arcanum.World/AreaAiHost.cs,EndCast,pending,
 src/Arcanum.World/AreaAiHost.cs,FaceCast,pending,
 src/Arcanum.World/AreaAiHost.cs,FactionSame,pending,
+src/Arcanum.World/AreaAiHost.cs,FirstLockpicks,exempt,host
 src/Arcanum.World/AreaAiHost.cs,FirstStepClear,pending,
+src/Arcanum.World/AreaAiHost.cs,FollowerSkillUsers,exempt,host
 src/Arcanum.World/AreaAiHost.cs,Gone,exempt,reference
 src/Arcanum.World/AreaAiHost.cs,Grenade,pending,
 src/Arcanum.World/AreaAiHost.cs,HasSkillArt,pending,
@@ -465,6 +472,7 @@ src/Arcanum.World/AreaAiHost.cs,InterruptForHold,pending,
 src/Arcanum.World/AreaAiHost.cs,ItemHolder,pending,
 src/Arcanum.World/AreaAiHost.cs,Jump,pending,
 src/Arcanum.World/AreaAiHost.cs,LaunchCast,pending,
+src/Arcanum.World/AreaAiHost.cs,Leader,exempt,host
 src/Arcanum.World/AreaAiHost.cs,LineOfFire,pending,
 src/Arcanum.World/AreaAiHost.cs,LineOfFireBlocker,pending,
 src/Arcanum.World/AreaAiHost.cs,LineOfFireStruck,pending,
@@ -474,6 +482,7 @@ src/Arcanum.World/AreaAiHost.cs,NeedsAmmunition,exempt,host
 src/Arcanum.World/AreaAiHost.cs,NoticeKill,exempt,host
 src/Arcanum.World/AreaAiHost.cs,ObserveLeaves,pending,
 src/Arcanum.World/AreaAiHost.cs,ObserveRound,pending,
+src/Arcanum.World/AreaAiHost.cs,PcLeader,exempt,host
 src/Arcanum.World/AreaAiHost.cs,Perform,pending,
 src/Arcanum.World/AreaAiHost.cs,PerformAttack,pending,
 src/Arcanum.World/AreaAiHost.cs,PerformSkill,pending,
@@ -502,6 +511,7 @@ src/Arcanum.World/AreaAiHost.cs,SpellStopFleeing,pending,
 src/Arcanum.World/AreaAiHost.cs,SquareAround,pending,
 src/Arcanum.World/AreaAiHost.cs,StandardReaction,pending,
 src/Arcanum.World/AreaAiHost.cs,StartCast,pending,
+src/Arcanum.World/AreaAiHost.cs,StartPickLocks,exempt,host
 src/Arcanum.World/AreaAiHost.cs,StartPleaseMove,exempt,host
 src/Arcanum.World/AreaAiHost.cs,StartSpreadOut,exempt,host
 src/Arcanum.World/AreaAiHost.cs,StepClear,exempt,host
@@ -620,6 +630,7 @@ src/Arcanum.World/AreaSpellCastMap.cs,TileBlocked,pending,
 src/Arcanum.World/AreaSpellTeleport.cs,MapAreaLocation,pending,
 src/Arcanum.World/AreaSpellTeleport.cs,Portal,pending,
 src/Arcanum.World/AreaTraps.cs,Attack,pending,
+src/Arcanum.World/AreaTraps.cs,DisarmByNpc,exempt,host
 src/Arcanum.World/AreaTraps.cs,Step,pending,
 src/Arcanum.World/AreaTraps.cs,StepEndsWalk,exempt,host
 src/Arcanum.World/AreaTraps.cs,StepNpc,exempt,host
@@ -634,6 +645,7 @@ src/Arcanum.World/AreaUseScripts.cs,CanHear,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,CanSee,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,DyingStops,pending,
 src/Arcanum.World/AreaUseScripts.cs,ExamineSkips,pending,
+src/Arcanum.World/AreaUseScripts.cs,FactionOf,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,HasBadAssociates,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,IsAnimal,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,IsInDialog,exempt,host
@@ -643,6 +655,7 @@ src/Arcanum.World/AreaUseScripts.cs,IsSurrendered,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,IsTrap,pending,
 src/Arcanum.World/AreaUseScripts.cs,MagickCancelPercent,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,MetPcBefore,exempt,host
+src/Arcanum.World/AreaUseScripts.cs,OriginOf,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,RaiseRefuses,exempt,reference
 src/Arcanum.World/AreaUseScripts.cs,RunBed,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,RunBust,pending,
@@ -656,6 +669,7 @@ src/Arcanum.World/AreaUseScripts.cs,RunRaise,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,RunTakingDamage,pending,
 src/Arcanum.World/AreaUseScripts.cs,RunTrapScript,pending,
 src/Arcanum.World/AreaUseScripts.cs,RunUseScript,pending,
+src/Arcanum.World/AreaUseScripts.cs,SocialClassOf,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,TakingDamageVetoes,pending,
 src/Arcanum.World/AreaUseScripts.cs,UseStops,exempt,host
 src/Arcanum.World/AreaWorldMap.cs,Passes,exempt,host

@@ -591,9 +591,10 @@ public sealed partial class GameSessionOwner
     private bool _tempusAnyHolds;
 
     // ARC-MAGIC-1190 (XR7, TF3): the join tail of 0x45DE90 copies the leader's Tempus Fugit flag by a plain write (no run, no count): a critter that joins a leader holding it holds it from then on.
-    // The leader is the hero (a follower of another leader is #1142's). An entity the written flags do not cover (not a mobile object) needs no write.
-    private bool JoinCopiesTempusFugit(string follower) => ObjectFlagEntity(follower)
-        && (_objectFlags.GetValueOrDefault(SessionSpellCaster.Hero).Spell(0) & TempusFugitSpell) != 0;
+    // ARC-WORLD-1840: the leader is any critter, the hero by default; an NPC leader's flag is read from the session's written flags (a bit only its map data stores is not seen, TF3).
+    // An entity the written flags do not cover (not a mobile object) needs no write.
+    private bool JoinCopiesTempusFugit(string follower, string leader = SessionSpellCaster.Hero) => ObjectFlagEntity(follower)
+        && (_objectFlags.GetValueOrDefault(leader).Spell(0) & TempusFugitSpell) != 0;
 
     private void WriteTempusFugitOnJoin(string follower) =>
         _objectFlags = _objectFlags.SetItem(follower, _objectFlags.GetValueOrDefault(follower).With(SessionObjectFlagField.Spell, TempusFugitSpell, true));

@@ -5,8 +5,8 @@ namespace Arcanum.Session;
 /// <summary>
 /// What the host knows for the move list of a PC's change of place (ARC-DEV-073, migration step MIG10; research FM1, FM2, RL22, RL23):
 /// whether a direct follower is unconscious (0x45D800: not undead and no fatigue left; null answers none), the follower array of an
-/// NPC for the followers of followers (null answers none: the session does not model NPC leaders yet, so a host that has them supplies
-/// the relation), the wait timer facts of a follower ordered to wait (null: no timer) and the request's "no wait orders" flag
+/// NPC for the followers of followers (null answers none; ARC-WORLD-1840: the session holds NPC leaders (<see cref="GameSessionOwner.QueryFollowers"/>), but the viewer carries only the
+/// hero's companions, so the host passes the relation only when it can move what it names), the wait timer facts of a follower ordered to wait (null: no timer) and the request's "no wait orders" flag
 /// (0x100, the teleport spells').
 /// </summary>
 public sealed record SessionTransferFacts

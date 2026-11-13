@@ -366,12 +366,9 @@ public sealed partial class GameSessionOwner
         return DisarmStep(expected, trapped, baseline, HeroSkillRequest(Skill.DisarmTraps, null), trapDifficulty, light, TrapObserver.Player, charge);
     }
 
-    // The check, the skill's own case and the disarm of an attempt on the request of its user (the hero's, or a follower's: no fate and no local-PC term in its
-    // request, its own observer rules for the known trap); the rolls, the fate point and the disarm are one revision.
-    private SessionDisarmRoll DisarmStep(GameSessionVersion expected, SessionTrapped trapped, SessionTrapBaseline baseline, SkillCheckRequest request, int trapDifficulty,
-        int light, TrapObserver disarmer, SessionCombatResult? charge)
-    {
-        request = request with
+    // The trap's terms of a disarm-traps request (the light at it and, for a trap object only, its difficulty): the check's and the best-follower chooser's score share them.
+    private static SkillCheckRequest WithTrapFacts(SkillCheckRequest request, SessionTrapBaseline baseline, int trapDifficulty, int light) =>
+        request with
         {
             Difficulty = request.Difficulty with
             {
@@ -380,6 +377,13 @@ public sealed partial class GameSessionOwner
                 TrapDifficulty = baseline.Carrier == TrapCarrier.TrapObject ? trapDifficulty : 0,
             },
         };
+
+    // The check, the skill's own case and the disarm of an attempt on the request of its user (the hero's, or a follower's: no fate and no local-PC term in its
+    // request, its own observer rules for the known trap); the rolls, the fate point and the disarm are one revision.
+    private SessionDisarmRoll DisarmStep(GameSessionVersion expected, SessionTrapped trapped, SessionTrapBaseline baseline, SkillCheckRequest request, int trapDifficulty,
+        int light, TrapObserver disarmer, SessionCombatResult? charge)
+    {
+        request = WithTrapFacts(request, baseline, trapDifficulty, light);
         var rolls = new SkillRolls(new SeededRandom(_random.Seed, _random.Draws));
         SkillCheckResult check;
         bool success, critical, second = false;

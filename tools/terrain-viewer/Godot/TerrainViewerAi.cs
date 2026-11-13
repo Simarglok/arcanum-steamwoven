@@ -849,6 +849,8 @@ public partial class TerrainViewerApp
                     RewieldedNpcs(host).Add(notice.Npc);
                     // ARC-MAGIC-1684: a line a moved item's wield or insert script printed goes to the message window.
                     PostNpcPickupLines(notice);
+                    // ARC-MAGIC-1830: and the eye candy they made.
+                    QueueScriptEyeCandies(notice.EyeCandies);
                     redraw = true;
                     break;
                 case AreaAiNoticeKind.Skill:
