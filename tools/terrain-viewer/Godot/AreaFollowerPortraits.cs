@@ -46,31 +46,42 @@ public partial class AreaArtBar : Control
 
 /// <summary>
 /// ARC-WORLD-046 follower portraits: one frame per follower in the PC's array (the original's portrait list; waiting NPCs have none,
-/// OL16), each opening, on the right button's release, the order menu of the original's portrait (walk, attack, stay close, spread out, back off, wait, inventory,
-/// character sheet; the rule leaves wait out for a mind-controlled follower, which the viewer does not model yet). Inventory and
-/// character sheet are shown disabled (not modelled for followers). The menu is an inline panel of buttons that take no focus, not a
-/// popup window: an embedded popup takes the world window's focus, which quarantines the world and refuses the choice.
+/// OL16), each opening, on the right button's release, the order menu of the original's portrait (art 826 and eight rows: walk, attack, stay
+/// close, spread out, back off, wait, inventory, character sheet).
 /// ARC-UI-020 (ledger CH9): each frame's health bar (in its poisoned art while the follower is poisoned) and fatigue bar are cropped
 /// to the follower's percent (<see cref="LifeBarRules.PortraitFill"/>); below 20 % health the portrait turns red
 /// (<see cref="LifeBarRules.PortraitTinted"/>). A follower without combat values shows empty bars.
 /// ARC-UI-024 (ledger CH9, PA6): the frames are the original's, drawn with its art at its places (<see cref="AreaFollowerFrameLayout"/>:
 /// frame 503, bars 505/616 and 504, the follower's portrait at 32 × 32, the red added over it) on the 800 × 600 screen centred at the
 /// interface bars' whole factor, its top at the window's top. Without the art (no game folder) the frame is a dark rectangle with the
-/// name's first letters and plain bars. NOT READY: more than six followers (the original scrolls the list with its arrow buttons, the
-/// viewer shows the first six) and the critter art the original draws for a follower without a portrait.
+/// name's first letters and plain bars. NOT READY: the critter art the original draws for a follower without a portrait.
+/// ARC-UI-1736 (ledger FP1–FP13, <see cref="AreaFollowerPanelRules"/>): the show/hide button (art 501, 502 while hidden) and, from seven
+/// followers, the two scroll arrows (arts 506–509) with the six frames showing <c>offset .. offset + 5</c>; the shown flag and the offset are
+/// session-only (the original saves them, FP2; FR-LIFECYCLE-004 keeps saves for game state). The menu is the original's: art 826 at the
+/// slot's right edge, eight 118 × 15 rows 18 pixels apart (Wait greyed for a mind-controlled follower, Inventory greyed when the follower
+/// cannot be opened), and with the menu open every release is the menu's (FP9): a row runs after the menu closes, any other left or right
+/// release closes it, and the portraits, the button and the arrows are not handled.
 /// </summary>
 public partial class AreaFollowerPortraits : CanvasLayer
 {
-    private sealed record Entry(Button Button, ColorRect Back, TextureRect Frame, TextureRect Portrait, Label Initials, ColorRect Tint,
+    private sealed record Entry(int Slot, Button Button, ColorRect Back, TextureRect Frame, TextureRect Portrait, Label Initials, ColorRect Tint,
         AreaArtBar Health, AreaArtBar Fatigue);
 
+    private static readonly Color MenuWhite = new(1, 1, 1), MenuGrey = new(.5f, .5f, .5f), MenuBright = new(0, 0xD2 / 255f, 1);
+
     private Control _root = null!;
-    private PanelContainer _menu = null!;
-    private VBoxContainer _menuItems = null!;
+    private Control _menu = null!;
     private string? _menuEntity;
     private string _signature = "";
     private readonly Dictionary<string, Entry> _entries = new(StringComparer.Ordinal);
+    private readonly List<(FollowerMenuItem Item, Control Row, bool Greyed)> _menuRows = [];
+    private IReadOnlyList<(string Entity, string Label, AreaLife? Life, Texture2D? Portrait)> _followers = [];
     private IReadOnlyDictionary<int, Texture2D> _art = new Dictionary<int, Texture2D>();
+    private bool _panelShown = true;
+    private int _offset;
+    private Button? _toggle, _up, _down;
+    private TextureRect? _toggleArt, _upArt, _downArt;
+    private Vector2 _menuOrigin;
     /// <summary>The width of a frame's bars, in the original's pixels (the bar art's).</summary>
     public const int BarWidth = AreaFollowerFrameLayout.BarWidth;
     private static readonly Color Back = new(14 / 255f, 16 / 255f, 22 / 255f, .85f);
@@ -78,7 +89,8 @@ public partial class AreaFollowerPortraits : CanvasLayer
     /// <summary>A menu item chosen for a follower: its entity and the item.</summary>
     public event Action<string, FollowerMenuItem>? ItemChosen;
 
-    /// <summary>The left button was released over a follower's portrait (no menu open): a click on that follower (ARC-DEV-280).</summary>
+    /// <summary>The left button was released over a follower's portrait (no menu open): a click on that follower (ARC-DEV-280, and the aim of a
+    /// spell, a skill or an item in the target modes, FP6).</summary>
     public event Action<string>? PortraitClicked;
 
     /// <summary>ARC-UI-1281 (ledger HK26, callback 0x56A9D0, strip message type 1, code 2): the pointer entered a follower's portrait button while no
@@ -89,6 +101,10 @@ public partial class AreaFollowerPortraits : CanvasLayer
     /// highlight go.</summary>
     public event Action? PortraitHoverLeft;
 
+    /// <summary>ARC-UI-1736 (FP8, FP11): what the menu of a follower needs to draw its rows: whether it is mind controlled (Wait greyed) and whether
+    /// its inventory can be opened (Inventory greyed otherwise). Without it the menu has no greyed row.</summary>
+    public Func<string, (bool MindControlled, bool CanOpenInventory)>? MenuFacts { get; set; }
+
     private string? _hovered;
 
     internal IReadOnlyList<string> EntitiesForSelfTest { get; private set; } = [];
@@ -96,7 +112,7 @@ public partial class AreaFollowerPortraits : CanvasLayer
 
     /// <summary>The screen centre of a follower's frame, or of an item of the open menu, for the native smoke's mouse presses.</summary>
     internal Vector2? PortraitCentreForSelfTest(string entity) =>
-        _entries.TryGetValue(entity, out var entry) ? entry.Button.GetGlobalRect().GetCenter() : null;
+        _entries.TryGetValue(entity, out var entry) ? CentreOf(entry.Button) : null;
     /// <summary>A follower frame's bar fills (in the original's pixels), whether its health bar is the poisoned one, and its red tint.</summary>
     internal (int Health, int Fatigue, bool Poisoned, bool Tinted)? BarsForSelfTest(string entity) =>
         _entries.TryGetValue(entity, out var entry)
@@ -112,7 +128,32 @@ public partial class AreaFollowerPortraits : CanvasLayer
     /// <summary>The follower whose portrait the pointer rests on now (null none), as the strip's hover tracks it.</summary>
     internal string? HoveredForSelfTest => _hovered;
     internal Vector2? MenuItemCentreForSelfTest(FollowerMenuItem item) =>
-        _menuItems.GetChildren().OfType<Button>().FirstOrDefault(b => b.HasMeta(ItemMeta) && (int)b.GetMeta(ItemMeta) == (int)item)?.GetGlobalRect().GetCenter();
+        _menuRows.Where(row => row.Item == item).Select(row => (Vector2?)CentreOf(row.Row)).FirstOrDefault();
+    /// <summary>ARC-UI-1736: a row of the open menu is greyed (FP8), null when no menu is open.</summary>
+    internal FollowerMenuRowState? MenuRowStateForSelfTest(FollowerMenuItem item) =>
+        _menuRows.Where(row => row.Item == item).Select(row => (FollowerMenuRowState?)(row.Greyed ? FollowerMenuRowState.Greyed : FollowerMenuRowState.Normal)).FirstOrDefault();
+    /// <summary>ARC-UI-1736: a menu row's size in the menu's own pixels (FP8: 118 × 15).</summary>
+    internal Vector2? MenuRowSizeForSelfTest(FollowerMenuItem item) => _menuRows.Where(row => row.Item == item).Select(row => (Vector2?)row.Row.Size).FirstOrDefault();
+    /// <summary>ARC-UI-1736: the open menu's rectangle on the screen and its rows' count (FP7, FP8).</summary>
+    internal (Rect2 Rect, int Rows, bool Art)? MenuForSelfTest => _menu.Visible ? (RectOf(_menu), _menuRows.Count, _art.ContainsKey(AreaFollowerPanelRules.MenuArt)) : null;
+    /// <summary>ARC-UI-1736: whether the panel is shown (the show/hide flag, FP5), the scroll offset, the followers' count and the show/hide button's and the arrows' art.</summary>
+    internal (bool Shown, int Offset, int Count, int? ToggleArt, int? UpArt, int? DownArt) PanelForSelfTest =>
+        (_panelShown, _offset, _followers.Count, _toggle is null ? null : AreaFollowerPanelRules.ToggleArt(_panelShown),
+            _up is null ? null : AreaFollowerPanelRules.UpArtAt(_offset), _down is null ? null : AreaFollowerPanelRules.DownArtAt(_offset, _followers.Count));
+    /// <summary>ARC-UI-1736: the screen centre of the show/hide button, the up arrow or the down arrow (null when it is not there).</summary>
+    internal Vector2? ButtonCentreForSelfTest(string which) =>
+        (which switch { "toggle" => _toggle, "up" => _up, "down" => _down, _ => null }) is { } button ? CentreOf(button) : null;
+    /// <summary>ARC-UI-1736: whether a button's art was drawn (the art read), by "toggle", "up", "down".</summary>
+    internal bool? ButtonArtForSelfTest(string which) =>
+        which switch { "toggle" => _toggle is null ? null : _toggleArt?.Texture is not null, "up" => _up is null ? null : _upArt?.Texture is not null,
+            "down" => _down is null ? null : _downArt?.Texture is not null, _ => null };
+
+    /// <summary>The whole factor the panel is drawn at (the interface bars').</summary>
+    internal float ScaleForSelfTest => _root.Scale.X;
+
+    // The screen rectangle and centre of a control under the panel's scale (Control.GetGlobalRect ignores the scale).
+    private static Rect2 RectOf(Control control) { var transform = control.GetGlobalTransform(); return new(transform.Origin, transform.BasisXform(control.Size)); }
+    private static Vector2 CentreOf(Control control) => RectOf(control).GetCenter();
 
     /// <summary>The window x of the frames' right edge while any is shown, else 0: the diagnostic HUD starts right of it.</summary>
     public float RightEdge => Visible && _entries.Count > 0
@@ -123,24 +164,17 @@ public partial class AreaFollowerPortraits : CanvasLayer
     /// <summary>Whether the order menu is shown.</summary>
     public bool MenuShown => _menu.Visible;
 
-    private const string ItemMeta = "follower_menu_item";
-
     public override void _Ready()
     {
         Layer = 3;
         // Nearest, as the bars' strips: the frames are scaled by the same whole factor.
         _root = new Control { Name = "FollowerPortraits", MouseFilter = Control.MouseFilterEnum.Ignore, TextureFilter = CanvasItem.TextureFilterEnum.Nearest };
         AddChild(_root);
-        _menu = new PanelContainer { Name = "FollowerOrders", MouseFilter = Control.MouseFilterEnum.Stop, Visible = false };
-        _menu.AddThemeStyleboxOverride("panel", new StyleBoxFlat
-        {
-            BgColor = new Color(22 / 255f, 25 / 255f, 34 / 255f, .95f),
-            ContentMarginLeft = 4, ContentMarginRight = 4, ContentMarginTop = 4, ContentMarginBottom = 4,
-        });
+        // The menu (FP7, FP8): art 826 with the rows over it, a window of its own over the others; it takes every release it is under (FP9).
+        _menu = new Control { Name = "FollowerOrders", MouseFilter = Control.MouseFilterEnum.Stop, Visible = false, TextureFilter = CanvasItem.TextureFilterEnum.Nearest };
         AddChild(_menu);
-        // ARC-DEV-280 (0x56AC47): a release that no menu button takes closes the menu, also over the panel's own margins.
+        // ARC-DEV-280 (0x56AC47): a release that no menu row takes closes the menu, also over the menu's own margins (FP9).
         _menu.GuiInput += input => { if (input is InputEventMouseButton { Pressed: false, ButtonIndex: MouseButton.Left or MouseButton.Right }) CloseMenu(); };
-        _menuItems = new VBoxContainer(); _menu.AddChild(_menuItems);
         GetViewport().SizeChanged += Resized;
         Place();
         Hide();
@@ -148,7 +182,7 @@ public partial class AreaFollowerPortraits : CanvasLayer
 
     private void Resized() { CloseMenu(); Place(); EdgeChanged?.Invoke(); }
 
-    /// <summary>Gives the frames their interface art (frame 0 of 503, 504, 505 and 616 by number); missing numbers draw the fallback.</summary>
+    /// <summary>Gives the frames their interface art (frame 0 of 503, 504, 505 and 616 by number, and the panel's); missing numbers draw the fallback.</summary>
     public void Bind(IReadOnlyDictionary<int, Texture2D> art)
     {
         _art = art ?? throw new ArgumentNullException(nameof(art));
@@ -156,12 +190,22 @@ public partial class AreaFollowerPortraits : CanvasLayer
         _signature = "\0";
     }
 
-    /// <summary>Shows one frame per follower (entity, label, life, portrait) in array order, at most six, with its bars; hidden when
-    /// there is none. The frames are rebuilt only when the followers, their labels or portraits change; the bars follow every call.</summary>
+    /// <summary>ARC-UI-1736 (FP1, the module's reset 0x56A880): the panel is shown again and the scroll offset is 0 (a new game or a load).</summary>
+    public void ResetPanel()
+    {
+        CloseMenu();
+        _panelShown = true; _offset = 0;
+    }
+
+    /// <summary>Shows the frames of the followers (entity, label, life, portrait) in array order: six at most, from the scroll offset, none while the
+    /// panel is hidden; the show/hide button stands while there is a follower and the arrows from seven (FP3, FP5). The frames are rebuilt only when
+    /// the followers, their labels, portraits, the offset or the shown flag change; the bars follow every call.</summary>
     public void Show(IReadOnlyList<(string Entity, string Label, AreaLife? Life, Texture2D? Portrait)> followers)
     {
-        var shown = followers.Take(AreaFollowerFrameLayout.Slots).ToArray();
-        var signature = string.Join("\n", shown.Select(f => f.Entity + "\t" + f.Label + "\t" + f.Portrait?.GetRid().Id));
+        _followers = followers.ToArray();
+        _offset = AreaFollowerPanelRules.ClampOffset(_offset, _followers.Count);
+        var shown = AreaFollowerPanelRules.VisibleIndexes(_panelShown, _offset, _followers.Count).Select(i => _followers[i]).ToArray();
+        var signature = $"{_panelShown}|{_offset}|{_followers.Count}|" + string.Join("\n", shown.Select(f => f.Entity + "\t" + f.Label + "\t" + f.Portrait?.GetRid().Id));
         if (signature != _signature)
         {
             _signature = signature;
@@ -169,57 +213,12 @@ public partial class AreaFollowerPortraits : CanvasLayer
             if (_hovered is not null) { _hovered = null; PortraitHoverLeft?.Invoke(); }
             foreach (var child in _root.GetChildren()) { _root.RemoveChild(child); child.QueueFree(); }
             _entries.Clear();
+            _toggle = _up = _down = null; _toggleArt = _upArt = _downArt = null;
             EntitiesForSelfTest = shown.Select(f => f.Entity).ToArray();
             if (_menuEntity is { } open && !EntitiesForSelfTest.Contains(open)) CloseMenu();
-            for (var slot = 0; slot < shown.Length; slot++)
-            {
-                var (entity, label, _, portrait) = shown[slot];
-                var (x, y) = AreaFollowerFrameLayout.Slot(slot);
-                var size = new Vector2(AreaFollowerFrameLayout.Width, AreaFollowerFrameLayout.Height);
-                var button = new Button { Flat = true, FocusMode = Control.FocusModeEnum.None, TooltipText = label, Position = new Vector2(x, y), Size = size, CustomMinimumSize = size, ClipContents = true };
-                // ARC-DEV-280 (B33, 0x56A9D0): the order menu opens on the RIGHT button's release over the portrait (an open menu is closed by it
-                // instead), and the left button's release is a click on the follower (a talk, 0x54EA80 -> 0x54ED30), which only closes an open menu.
-                button.Pressed += () => { if (_menu.Visible) CloseMenu(); else PortraitClicked?.Invoke(entity); };
-                button.GuiInput += input =>
-                {
-                    if (input is not InputEventMouseButton { ButtonIndex: MouseButton.Right, Pressed: false } release) return;
-                    if (_menu.Visible) { CloseMenu(); return; }
-                    if (new Rect2(Vector2.Zero, button.Size).HasPoint(release.Position)) OpenMenu(entity, button);
-                };
-                // ARC-UI-1281 (HK26): entering a portrait with no menu open is the follower's hover; leaving it clears (0x550720).
-                button.MouseEntered += () => { _hovered = entity; if (!_menu.Visible) PortraitHovered?.Invoke(entity); };
-                button.MouseExited += () => { if (_hovered != entity) return; _hovered = null; PortraitHoverLeft?.Invoke(); };
-                button.SetMeta(EntityMeta, entity);
-                var frame = _art.GetValueOrDefault(AreaFollowerFrameLayout.FrameArt);
-                var back = new ColorRect { Color = Back, Size = size, MouseFilter = Control.MouseFilterEnum.Ignore, Visible = frame is null };
-                var image = new Rect2(AreaFollowerFrameLayout.ImageX, AreaFollowerFrameLayout.ImageY, AreaFollowerFrameLayout.PortraitSize, AreaFollowerFrameLayout.PortraitSize);
-                // The expand mode first: with the default one the 64 × 64 image would hold the rectangle at its own size.
-                var picture = new TextureRect
-                {
-                    ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize, StretchMode = TextureRect.StretchModeEnum.Scale,
-                    Texture = portrait, Visible = portrait is not null, Position = image.Position, Size = image.Size, MouseFilter = Control.MouseFilterEnum.Ignore,
-                };
-                var initials = new Label
-                {
-                    Text = new string(label.Where(char.IsLetter).Take(3).ToArray()), Visible = portrait is null, Position = image.Position, Size = image.Size,
-                    HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, MouseFilter = Control.MouseFilterEnum.Ignore,
-                };
-                initials.AddThemeFontSizeOverride("font_size", 9);
-                // The original adds pure red to the image's pixels (0x51E0A0).
-                var tint = new ColorRect
-                {
-                    Color = new Color(1, 0, 0), Position = image.Position, Size = image.Size, MouseFilter = Control.MouseFilterEnum.Ignore, Visible = false,
-                    Material = new CanvasItemMaterial { BlendMode = CanvasItemMaterial.BlendModeEnum.Add },
-                };
-                var frameRect = new TextureRect { Texture = frame, Size = size, MouseFilter = Control.MouseFilterEnum.Ignore };
-                var health = new AreaArtBar { Name = "Health", Position = new Vector2(AreaFollowerFrameLayout.BarX, AreaFollowerFrameLayout.HealthBarY) };
-                var fatigue = new AreaArtBar { Name = "Fatigue", Position = new Vector2(AreaFollowerFrameLayout.BarX, AreaFollowerFrameLayout.FatigueBarY) };
-                // The frame (503) first, the image and bars over it, as the original draws them.
-                foreach (Control child in new Control[] { back, frameRect, picture, initials, tint, health, fatigue }) button.AddChild(child);
-                _root.AddChild(button);
-                _entries[entity] = new(button, back, frameRect, picture, initials, tint, health, fatigue);
-            }
-            Visible = shown.Length > 0;
+            for (var slot = 0; slot < shown.Length; slot++) BuildFrame(slot, shown[slot]);
+            BuildChrome();
+            Visible = _followers.Count > 0;
             Place();
             EdgeChanged?.Invoke();
         }
@@ -236,36 +235,156 @@ public partial class AreaFollowerPortraits : CanvasLayer
         }
     }
 
-    /// <summary>Opens the order menu of a follower next to its frame (opening the menu of the follower that is open closes it).</summary>
-    public void OpenMenu(string entity, Control? anchor = null, bool mindControlled = false)
+    private void BuildFrame(int slot, (string Entity, string Label, AreaLife? Life, Texture2D? Portrait) follower)
     {
+        var (entity, label, _, portrait) = follower;
+        var (x, y) = AreaFollowerFrameLayout.Slot(slot);
+        var size = new Vector2(AreaFollowerFrameLayout.Width, AreaFollowerFrameLayout.Height);
+        var button = new Button { Flat = true, FocusMode = Control.FocusModeEnum.None, TooltipText = label, Position = new Vector2(x, y), Size = size, CustomMinimumSize = size, ClipContents = true };
+        // ARC-DEV-280 (B33, 0x56A9D0): the order menu opens on the RIGHT button's release over the portrait (an open menu is closed by it
+        // instead), and the left button's release is a click on the follower (a talk, 0x54EA80 -> 0x54ED30, or in a target mode the aim of the
+        // spell, skill or item, FP6), which only closes an open menu (FP9).
+        button.Pressed += () => { if (_menu.Visible) CloseMenu(); else PortraitClicked?.Invoke(entity); };
+        button.GuiInput += input =>
+        {
+            if (input is not InputEventMouseButton { ButtonIndex: MouseButton.Right, Pressed: false } release) return;
+            if (_menu.Visible) { CloseMenu(); return; }
+            if (new Rect2(Vector2.Zero, button.Size).HasPoint(release.Position)) OpenMenu(entity);
+        };
+        // ARC-UI-1281 (HK26): entering a portrait with no menu open is the follower's hover; leaving it clears (0x550720).
+        button.MouseEntered += () => { _hovered = entity; if (!_menu.Visible) PortraitHovered?.Invoke(entity); };
+        button.MouseExited += () => { if (_hovered != entity) return; _hovered = null; PortraitHoverLeft?.Invoke(); };
+        button.SetMeta(EntityMeta, entity);
+        var frame = _art.GetValueOrDefault(AreaFollowerFrameLayout.FrameArt);
+        var back = new ColorRect { Color = Back, Size = size, MouseFilter = Control.MouseFilterEnum.Ignore, Visible = frame is null };
+        var image = new Rect2(AreaFollowerFrameLayout.ImageX, AreaFollowerFrameLayout.ImageY, AreaFollowerFrameLayout.PortraitSize, AreaFollowerFrameLayout.PortraitSize);
+        // The expand mode first: with the default one the 64 × 64 image would hold the rectangle at its own size.
+        var picture = new TextureRect
+        {
+            ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize, StretchMode = TextureRect.StretchModeEnum.Scale,
+            Texture = portrait, Visible = portrait is not null, Position = image.Position, Size = image.Size, MouseFilter = Control.MouseFilterEnum.Ignore,
+        };
+        var initials = new Label
+        {
+            Text = new string(label.Where(char.IsLetter).Take(3).ToArray()), Visible = portrait is null, Position = image.Position, Size = image.Size,
+            HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, MouseFilter = Control.MouseFilterEnum.Ignore,
+        };
+        initials.AddThemeFontSizeOverride("font_size", 9);
+        // The original adds pure red to the image's pixels (0x51E0A0).
+        var tint = new ColorRect
+        {
+            Color = new Color(1, 0, 0), Position = image.Position, Size = image.Size, MouseFilter = Control.MouseFilterEnum.Ignore, Visible = false,
+            Material = new CanvasItemMaterial { BlendMode = CanvasItemMaterial.BlendModeEnum.Add },
+        };
+        var frameRect = new TextureRect { Texture = frame, Size = size, MouseFilter = Control.MouseFilterEnum.Ignore };
+        var health = new AreaArtBar { Name = "Health", Position = new Vector2(AreaFollowerFrameLayout.BarX, AreaFollowerFrameLayout.HealthBarY) };
+        var fatigue = new AreaArtBar { Name = "Fatigue", Position = new Vector2(AreaFollowerFrameLayout.BarX, AreaFollowerFrameLayout.FatigueBarY) };
+        // The frame (503) first, the image and bars over it, as the original draws them.
+        foreach (Control child in new Control[] { back, frameRect, picture, initials, tint, health, fatigue }) button.AddChild(child);
+        _root.AddChild(button);
+        _entries[entity] = new(slot, button, back, frameRect, picture, initials, tint, health, fatigue);
+    }
+
+    /// <summary>The show/hide button (while there is a follower) and the scroll arrows (panel shown, seven or more followers), FP1, FP5.</summary>
+    private void BuildChrome()
+    {
+        var count = _followers.Count;
+        if (AreaFollowerPanelRules.ToggleShown(count))
+            (_toggle, _toggleArt) = ChromeButton(AreaFollowerPanelRules.ToggleRect, AreaFollowerPanelRules.ToggleArt(_panelShown), _panelShown ? "hide" : "show", Toggle);
+        if (!AreaFollowerPanelRules.ArrowsShown(_panelShown, count)) return;
+        (_up, _upArt) = ChromeButton(AreaFollowerPanelRules.UpRect, AreaFollowerPanelRules.UpArtAt(_offset), "up",
+            () => Scroll(AreaFollowerPanelRules.ScrollUp(_offset, count)));
+        (_down, _downArt) = ChromeButton(AreaFollowerPanelRules.DownRect, AreaFollowerPanelRules.DownArtAt(_offset, count), "down",
+            () => Scroll(AreaFollowerPanelRules.ScrollDown(_offset, count)));
+    }
+
+    private (Button, TextureRect) ChromeButton((int X, int Y, int Width, int Height) rect, int art, string fallback, Action pressed)
+    {
+        var size = new Vector2(rect.Width, rect.Height);
+        var button = new Button { Flat = true, FocusMode = Control.FocusModeEnum.None, Position = new Vector2(rect.X, rect.Y), Size = size, CustomMinimumSize = size, ClipContents = true };
+        var texture = _art.GetValueOrDefault(art);
+        var picture = new TextureRect
+        {
+            ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize, StretchMode = TextureRect.StretchModeEnum.Scale, Texture = texture, Size = size,
+            MouseFilter = Control.MouseFilterEnum.Ignore,
+        };
+        button.AddChild(picture);
+        if (texture is null)
+        {
+            // Without the art (no game folder): a dark plate with a word.
+            button.AddChild(new ColorRect { Color = Back, Size = size, MouseFilter = Control.MouseFilterEnum.Ignore });
+            var word = new Label { Text = fallback, Size = size, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, MouseFilter = Control.MouseFilterEnum.Ignore };
+            word.AddThemeFontSizeOverride("font_size", 9);
+            button.AddChild(word);
+        }
+        // A release with a menu open is the menu's (FP9): it closes the menu and nothing else happens.
+        button.Pressed += () => { if (_menu.Visible) CloseMenu(); else pressed(); };
+        _root.AddChild(button);
+        return (button, picture);
+    }
+
+    private void Toggle()
+    {
+        _panelShown = !_panelShown;
+        Show(_followers);
+    }
+
+    private void Scroll(int offset)
+    {
+        if (offset == _offset) return;
+        _offset = offset;
+        Show(_followers);
+    }
+
+    /// <summary>Opens the order menu of a follower at its frame's right edge (FP7; opening the menu of the follower that is open closes it).</summary>
+    public void OpenMenu(string entity)
+    {
+        if (!_entries.TryGetValue(entity, out var entry)) return;
         if (_menu.Visible && _menuEntity == entity) { CloseMenu(); return; }
         _menuEntity = entity;
-        foreach (var child in _menuItems.GetChildren()) { _menuItems.RemoveChild(child); child.QueueFree(); }
+        foreach (var child in _menu.GetChildren()) { _menu.RemoveChild(child); child.QueueFree(); }
+        _menuRows.Clear();
+        var (mind, canOpen) = MenuFacts?.Invoke(entity) ?? (false, true);
+        var art = _art.GetValueOrDefault(AreaFollowerPanelRules.MenuArt);
+        var size = art?.GetSize() ?? new Vector2(138, 3 + 18 * Enum.GetValues<FollowerMenuItem>().Length + 3);
+        _menu.Size = size;
+        _menu.AddChild(art is null
+            ? new ColorRect { Color = new Color(22 / 255f, 25 / 255f, 34 / 255f, .95f), Size = size, MouseFilter = Control.MouseFilterEnum.Ignore }
+            : new TextureRect { Texture = art, Size = size, MouseFilter = Control.MouseFilterEnum.Ignore });
         foreach (var item in Enum.GetValues<FollowerMenuItem>())
         {
-            if (item == FollowerMenuItem.Wait && CompanionOrderRules.PortraitOrder(item, mindControlled) is null) continue;
-            var button = new Button
+            var (x, y, width, height) = AreaFollowerPanelRules.MenuRow(item);
+            var greyed = AreaFollowerPanelRules.RowState(item, mind, canOpen) == FollowerMenuRowState.Greyed;
+            // A row is a plain control with its word, not a button: a button's own minimum size (theme margins) would make it taller than the original's 15 pixels.
+            var row = new Control
             {
-                Text = AreaCompanionOrders.Label(item), Alignment = HorizontalAlignment.Left, FocusMode = Control.FocusModeEnum.None,
-                Disabled = item is FollowerMenuItem.Inventory or FollowerMenuItem.CharacterSheet,
+                MouseFilter = Control.MouseFilterEnum.Stop, Position = new Vector2(x, y), Size = new Vector2(width, height), CustomMinimumSize = new Vector2(width, height), ClipContents = true,
             };
-            button.SetMeta(ItemMeta, (int)item);
-            button.Pressed += () => Choose(item);
-            // A right release over an item, or a left one over an item that is not modelled (disabled), is taken by no menu button: it closes the menu.
-            button.GuiInput += input =>
+            // FP8: white, the bright colour under the pointer, mid grey when greyed (a greyed row has no pointer colour).
+            var word = new Label
             {
-                if (input is InputEventMouseButton { Pressed: false } release
-                    && (release.ButtonIndex == MouseButton.Right || release.ButtonIndex == MouseButton.Left && button.Disabled)) CloseMenu();
+                Text = AreaFollowerPanelRules.MenuText(item), Size = new Vector2(width, height), VerticalAlignment = VerticalAlignment.Center,
+                MouseFilter = Control.MouseFilterEnum.Ignore, LabelSettings = new LabelSettings { FontSize = 10, FontColor = greyed ? MenuGrey : MenuWhite },
             };
-            _menuItems.AddChild(button);
+            row.AddChild(word);
+            if (!greyed)
+            {
+                row.MouseEntered += () => word.LabelSettings.FontColor = MenuBright;
+                row.MouseExited += () => word.LabelSettings.FontColor = MenuWhite;
+            }
+            // The release on a row runs it after the menu closes (FP9, code 1); a right release over a row, or a left one over a greyed row, is taken by no menu row: it closes the menu.
+            row.GuiInput += input =>
+            {
+                if (input is not InputEventMouseButton { Pressed: false } release) return;
+                if (release.ButtonIndex == MouseButton.Left && !greyed) Choose(item);
+                else if (release.ButtonIndex is MouseButton.Left or MouseButton.Right) CloseMenu();
+            };
+            _menu.AddChild(row);
+            _menuRows.Add((item, row, greyed));
         }
-        _menu.ResetSize();
-        var size = GetViewport().GetVisibleRect().Size;
-        var anchorRect = anchor?.GetGlobalRect();
-        var wanted = anchorRect is { } rect ? rect.Position + new Vector2(rect.Size.X + 4, 0) : new Vector2(24, 24);
-        var menuSize = _menu.GetCombinedMinimumSize();
-        _menu.Position = new(Math.Min(wanted.X, Math.Max(0, size.X - menuSize.X)), Math.Clamp(wanted.Y, 0, Math.Max(0, size.Y - menuSize.Y)));
+        var (originX, originY) = AreaFollowerPanelRules.MenuOrigin(entry.Slot);
+        _menuOrigin = new Vector2(originX, originY);
+        PlaceMenu();
         _menu.Show();
     }
 
@@ -287,5 +406,14 @@ public partial class AreaFollowerPortraits : CanvasLayer
         var factor = AreaGameBarPanel.ScreenFactor(size);
         _root.Position = new(AreaGameBarPanel.ScreenLeft(size, factor), 0);
         _root.Scale = new(factor, factor);
+        PlaceMenu();
+    }
+
+    // The menu is a window of its own at the screen's scale, at the open slot's right edge (FP7: no clamp to the screen).
+    private void PlaceMenu()
+    {
+        if (_menu is null) return;
+        _menu.Scale = _root.Scale;
+        _menu.Position = _root.Position + _menuOrigin * _root.Scale.X;
     }
 }

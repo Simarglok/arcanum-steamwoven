@@ -121,6 +121,8 @@ public partial class TerrainViewerApp
         // ARC-UI-020: the combat host gives the portraits' bars their values.
         var stamp = (_areaSession, _areaSession?.Version.Revision ?? -1, _areaCompanions, WorldModal, (object?)_hoverIndex, (object?)_combatHost);
         if (_portraitStamp == stamp && (_portraitLifeRetry is not { } retry || Engine.GetProcessFrames() < retry)) return;
+        // ARC-UI-1736 (FP1, the module's reset 0x56A880): a new session (a new game, a load) shows the panel again from the first follower.
+        if (_portraitStamp is { } previous && !ReferenceEquals(previous.Session, _areaSession) && _areaSession is not null) _followerPortraits?.ResetPanel();
         _portraitStamp = stamp;
         _portraitLifeRetry = null;
         if (_areaSession is not { } session || _areaCompanions is not { } group || _conversationHost is not { PartyWired: true } || WorldModal)
@@ -137,6 +139,7 @@ public partial class TerrainViewerApp
             _followerPortraits.PortraitClicked += FollowerPortraitClick;
             _followerPortraits.PortraitHovered += FollowerPortraitHovered;
             _followerPortraits.PortraitHoverLeft += FollowerPortraitHoverLeft;
+            _followerPortraits.MenuFacts = FollowerMenuFacts;
             // ARC-UI-024: the frames stand at the window's top left, where the diagnostic HUD starts.
             _followerPortraits.EdgeChanged += () => _hud?.SetLeftInset(_followerPortraits.RightEdge);
         }
@@ -158,9 +161,23 @@ public partial class TerrainViewerApp
     /// </summary>
     private void FollowerPortraitClick(string entity)
     {
-        if (!WorldClickInputOpen || AreaTransferPending || HeroLyingDown || _gameCursorItem is not null || _spellTargeting is not null || _spellGoal is not null
-            || ItemTargetOpen || PickPocketArmed || DisarmArmed || _pendingOrder is not null
-            || _areaSession?.QueryCombatRound() is { } round && CombatModeActive && !round.Actor.IsHero)
+        // The round guard first (0x4B6D70, 0x4B6D80), then the interface mode (0x551A00, FP6).
+        if (!WorldClickInputOpen || AreaTransferPending || HeroLyingDown || _areaSession?.QueryCombatRound() is { } round && CombatModeActive && !round.Actor.IsHero)
+        {
+            _companionNotice = "follower click ignored: a window, a cursor or another's turn owns the input";
+            RefreshReadyStatus();
+            return;
+        }
+        // ARC-UI-1736 (FP6, the portrait dispatcher 0x54EA80): in the spell target mode (1), the skill target mode (2) and the item mode (16) the portrait is a
+        // second way to aim at the follower (a heal, a buff, a repair); the target's own valid-target test decides.
+        if (_gameCursorItem is null && _spellGoal is null && _pendingOrder is null)
+        {
+            if (_spellTargeting is not null) { FollowerAimSpell(entity); return; }
+            if (_itemAiming is not null) { FollowerAimItem(entity); return; }
+            if (PickPocketArmed) { FollowerAimPickPocket(entity); return; }
+            if (DisarmArmed) { CancelDisarm("a follower is no trap"); _companionNotice = "disarm traps: a follower is no trap"; RefreshReadyStatus(); return; }
+        }
+        if (_gameCursorItem is not null || _spellTargeting is not null || _spellGoal is not null || ItemTargetOpen || PickPocketArmed || DisarmArmed || _pendingOrder is not null)
         {
             _companionNotice = "follower click ignored: a window, a cursor or another's turn owns the input";
             RefreshReadyStatus();
@@ -184,6 +201,37 @@ public partial class TerrainViewerApp
         SetObjectApproachGait();
     }
 
+    /// <summary>The cast host's id of a follower (its row on the shown map), or null for a visiting follower, which has none here.</summary>
+    private string? FollowerObjectId(string entity) =>
+        _areaCompanions?.Companions.FirstOrDefault(c => c.Entity == entity) is { } companion ? SpellPickId(companion.Key) : null;
+
+    /// <summary>ARC-UI-1736 (FP6, 0x4F2680 then the spell handler 0x57C110): the open spell cursor takes the follower as the object target, with no tile.</summary>
+    private void FollowerAimSpell(string entity)
+    {
+        if (_spellTargeting is not { } targeting || InventoryOpen) return;
+        if (FollowerObjectId(entity) is not { } at || SpellCasterNow() is not { } caster) { _spellNotice = "no target here"; RefreshAreaStatus(); return; }
+        var pick = caster.PickTarget(SessionSpellCaster.Hero, targeting.Spell, targeting.Mask, at, null);
+        GD.Print($"ARC-UI-1736 portrait-aim spell={targeting.Spell} follower={entity} passes={pick.Test.Passes} reason=0x{pick.Test.Reason:X}");
+        SpellTargetApply(targeting, pick.Object?.Id, pick.Tile, pick.Test);
+    }
+
+    /// <summary>ARC-UI-1736 (FP6, the item handler 0x571CB0): the open item cursor takes the follower as the object target, as a press on its body would.</summary>
+    private void FollowerAimItem(string entity)
+    {
+        if (_itemAiming is not { } aim) return;
+        if (ItemAimPickAt(aim, FollowerObjectId(entity), null) is not { } pick) { ItemAimNotice("no target here"); return; }
+        GD.Print($"ARC-UI-1736 portrait-aim item={aim.Item} follower={entity} passes={pick.Test.Passes}");
+        if (!pick.Test.Passes) { ItemAimRefused(pick); return; }
+        ApplyItemAim(aim, pick.Object?.Id, pick.Tile, false, false);
+    }
+
+    /// <summary>ARC-UI-1736 (FP6, the skill handler 0x57A1F0): the armed pick pocket takes the follower as its victim (the skill's own rules decide).</summary>
+    private void FollowerAimPickPocket(string entity)
+    {
+        CancelAreaAttack("an armed pick pocket took the press");
+        PickPocketOn(_areaCompanions?.Companions.FirstOrDefault(c => c.Entity == entity)?.Key);
+    }
+
     private void FollowerMenuChosen(string entity, FollowerMenuItem item)
     {
         // A new choice replaces a walk or attack order still waiting for its target.
@@ -194,7 +242,10 @@ public partial class TerrainViewerApp
             RefreshReadyStatus();
             return;
         }
-        if (CompanionOrderRules.PortraitOrder(item, false) is not { } type)
+        // ARC-UI-1736 (FP11, FP12): the two window rows open the follower's windows (the order rules have nothing to send for them).
+        if (item == FollowerMenuItem.Inventory) { OpenFollowerInventory(entity); return; }
+        if (item == FollowerMenuItem.CharacterSheet) { OpenFollowerSheet(entity); return; }
+        if (CompanionOrderRules.PortraitOrder(item, FollowerMenuFacts(entity).MindControlled) is not { } type)
         {
             _companionNotice = $"{AreaCompanionOrders.Label(item)}: not modelled for followers";
             RefreshReadyStatus();
@@ -229,6 +280,14 @@ public partial class TerrainViewerApp
             return;
         }
         IssueAreaOrder("portrait", new(type, CompanionOrderAddressing.Portrait, [], entity, AreaCompanionOrders.Label(item)));
+    }
+
+    /// <summary>ARC-UI-1736 (FP12, 0x56AB68, the editor 0x5597C0 with mode 2): the follower's character sheet, the NPC sheet (never greyed; the editor's own refusal for a dead hero).</summary>
+    private void OpenFollowerSheet(string entity)
+    {
+        if (_areaCompanions?.Companions.FirstOrDefault(c => c.Entity == entity) is not { } companion) return;
+        GD.Print($"ARC-UI-1736 follower character sheet entity={entity}");
+        OpenNpcSheet(() => BuildNpcSheet(companion.Speaker.Row, entity), entity);
     }
 
     private bool HeroCannotPickOrderTarget => _areaSession?.QueryHeroLife()?.Status is { IsDead: true } or { IsUnconscious: true };
