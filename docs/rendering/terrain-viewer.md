@@ -2361,8 +2361,8 @@ Steamwoven on the session, the O key closing the menu; ARC-UI-059: the art read,
 while a control has the focus, the pointer lighting Sound and a click on it showing the Sound page; `ARC_AREA_OPTIONS_CAPTURE=PATH`
 saves the Game page's picture to an ignored path; ARC-UI-061: the controls at the first slots on the Game and Sound pages, the
 pointer lighting Music's left arrow, a press showing it down with 3000 and the release over it playing 3001 and lowering the music, a release away from it changing nothing;
-the capture also saves the Sound page next to it with `-sound` before the extension). Not done: Brightness, Text Duration, Combat
-Taunts, Module, Violence Filter, Auto Switch Weapons, Follower Skills and Fast Turn Based (no function yet).
+the capture also saves the Sound page next to it with `-sound` before the extension). Not done: Brightness, Text Duration,
+Module, Violence Filter, Auto Switch Weapons, Follower Skills and Fast Turn Based (no function yet).
 
 ### New-character window (ARC-UI-030)
 

@@ -109,12 +109,17 @@ public partial class TerrainViewerApp
 
             // ARC-UI-021: the Video page's floating text level and speed apply at once.
             Letter('v');
-            Require(_mainMenu!.Page == AreaOptionsPage.Video && Controls().SequenceEqual(["Floats: Minimal", "Float Speed: 2/10", "Prompt style: Auto"]), "Video page: " + string.Join("|", Controls()));
+            Require(_mainMenu!.Page == AreaOptionsPage.Video && Controls().SequenceEqual(["Floats: Minimal", "Float Speed: 2/10", "Combat Taunts: On", "Prompt style: Auto"]), "Video page: " + string.Join("|", Controls()));
             Require(panel.NoteForSelfTest.Contains("Text Duration: ", StringComparison.Ordinal), "its hidden controls are named: " + panel.NoteForSelfTest);
             panel.ChangeForSelfTest(0, 1);
             panel.ChangeForSelfTest(1, -1);
             Require(_gameSettings.Floats == 2 && _gameSettings.FloatSpeed == 1 && Controls()[0] == "Floats: Verbose" && Controls()[1] == "Float Speed: 1/10",
                 "floats verbose, speed 1: " + string.Join("|", Controls()));
+            // ARC-AI-1527: Combat Taunts is the Video page's fifth slot (OP2), on at the start; the list wraps and is saved at once.
+            panel.ChangeForSelfTest(2, 1);
+            Require(!_gameSettings.CombatTaunts && Controls()[2] == "Combat Taunts: Off", "taunts off: " + string.Join("|", Controls()));
+            panel.ChangeForSelfTest(2, 1);
+            Require(_gameSettings.CombatTaunts && Controls()[2] == "Combat Taunts: On", "the list wrapped back to on: " + string.Join("|", Controls()));
 
             // ARC-GPAD-1374, ARC-GPAD-1463: the Controls line (the Game page's) and the Prompt style line (the Video page's) switch at run time with no restart
             // and no window is closed; the strip follows the device in hand.
@@ -125,11 +130,11 @@ public partial class TerrainViewerApp
                 && PromptStripForSelfTest.StartsWith("PlayStation pad", StringComparison.Ordinal) && PromptStripForSelfTest.Contains("original controls", StringComparison.Ordinal),
                 "pad 7 is in hand, PlayStation glyphs: " + PromptStripForSelfTest);
             Require(MainMenuOpen && _mainMenu!.Window == AreaMenuWindow.Options, "a change of device resets no window");
-            panel.ChangeForSelfTest(2, 1);
-            Require(_gameSettings.Prompts == PromptStyle.Xbox && Controls()[2] == "Prompt style: Xbox" && Controllers.Family == GlyphFamily.Xbox, "the override wins: " + Controls()[2]);
-            panel.ChangeForSelfTest(2, -1); panel.ChangeForSelfTest(2, -1);
-            Require(_gameSettings.Prompts == PromptStyle.SteamDeck && Controls()[2] == "Prompt style: Steam Deck", "a list wraps back to its last value");
-            panel.ChangeForSelfTest(2, 1);
+            panel.ChangeForSelfTest(3, 1);
+            Require(_gameSettings.Prompts == PromptStyle.Xbox && Controls()[3] == "Prompt style: Xbox" && Controllers.Family == GlyphFamily.Xbox, "the override wins: " + Controls()[3]);
+            panel.ChangeForSelfTest(3, -1); panel.ChangeForSelfTest(3, -1);
+            Require(_gameSettings.Prompts == PromptStyle.SteamDeck && Controls()[3] == "Prompt style: Steam Deck", "a list wraps back to its last value");
+            panel.ChangeForSelfTest(3, 1);
             Require(_gameSettings.Prompts == PromptStyle.Auto && Controllers.Family == GlyphFamily.PlayStation, "Auto follows the pad again");
             Letter('g');
             Require(_mainMenu!.Page == AreaOptionsPage.Game && Controls()[7] == "Controls: Original", "the Game page ends with Controls: " + string.Join("|", Controls()));
