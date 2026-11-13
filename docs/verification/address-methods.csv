@@ -755,6 +755,16 @@ tools/terrain-viewer/Core/AreaPremadeBrowserArt.cs,Break,pending,
 tools/terrain-viewer/Core/AreaPremadeBrowserArt.cs,Button,pending,
 tools/terrain-viewer/Core/AreaPremadeBrowserArt.cs,Centred,pending,
 tools/terrain-viewer/Core/AreaPremadeBrowserArt.cs,Wrap,pending,
+tools/terrain-viewer/Core/AreaReadingArt.cs,BookPages,exempt,reference
+tools/terrain-viewer/Core/AreaReadingArt.cs,Break,exempt,reference
+tools/terrain-viewer/Core/AreaReadingArt.cs,Draw,exempt,reference
+tools/terrain-viewer/Core/AreaReadingArt.cs,FitText,exempt,reference
+tools/terrain-viewer/Core/AreaReadingArt.cs,HeaderLine,exempt,reference
+tools/terrain-viewer/Core/AreaReadingArt.cs,Height,exempt,reference
+tools/terrain-viewer/Core/AreaReadingArt.cs,LensContains,exempt,reference
+tools/terrain-viewer/Core/AreaReadingArt.cs,Newspaper,exempt,reference
+tools/terrain-viewer/Core/AreaReadingArt.cs,Page,exempt,reference
+tools/terrain-viewer/Core/AreaReadingArt.cs,Telegram,exempt,reference
 tools/terrain-viewer/Core/AreaSaveListArt.cs,Button,pending,
 tools/terrain-viewer/Core/AreaSaveListArt.cs,Centred,pending,
 tools/terrain-viewer/Core/AreaSaveListArt.cs,Date,pending,
@@ -788,6 +798,7 @@ tools/terrain-viewer/Godot/AreaCharacterSheetSpellsView.cs,Greyed,pending,
 tools/terrain-viewer/Godot/AreaFollowerPortraits.cs,ResetPanel,exempt,reference
 tools/terrain-viewer/Godot/AreaLogbookArtView.cs,Turn,pending,
 tools/terrain-viewer/Godot/AreaMessageLogView.cs,ApplyArt,pending,
+tools/terrain-viewer/Godot/AreaReadingPanel.cs,UpdateRoundView,exempt,reference
 tools/terrain-viewer/Godot/AreaSaveListArtView.cs,Render,pending,
 tools/terrain-viewer/Godot/AreaSchematicsPanel.cs,UpdateRoundView,pending,
 tools/terrain-viewer/Godot/AreaWorldMapArtView.cs,AcceptNoteEdit,pending,
