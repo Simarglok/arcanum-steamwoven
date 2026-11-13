@@ -84,7 +84,7 @@ public sealed class AreaRestockHost
         var (inventoryMap, holder) = found;
         var seed = inventoryMap.RestockSeed(entity);
         if (holder.Kind == SessionHolderKind.Npc)
-            return new(RestockHolderKind.Npc, seed.InventorySource, _session.QueryNpcDead(entity), _session.QueryCompanion(entity).LedByPc, 0, false);
+            return new(RestockHolderKind.Npc, seed.InventorySource, _session.QueryNpcDead(entity), _session.QueryPcLeader(entity) is not null, 0, false);
         return new(RestockHolderKind.Container, seed.InventorySource, false, false, seed.ContainerFlags, OnScreen(inventoryMap, entity));
     }
 
@@ -118,7 +118,7 @@ public sealed class AreaRestockHost
         var (minX, minY, maxX, maxY) = Vicinity(at, _screen.WindowSize);
         foreach (var npc in inventoryMap.Seed.Holders.Where(holder => holder.Kind == SessionHolderKind.Npc))
             if (Cell(inventoryMap, npc.Entity) is { } cell && cell.X >= minX && cell.X <= maxX && cell.Y >= minY && cell.Y <= maxY &&
-                inventoryMap.Substitute(npc.Entity) is { } substitute && substitute.Entity == container && !_session.QueryCompanion(npc.Entity).LedByPc &&
+                inventoryMap.Substitute(npc.Entity) is { } substitute && substitute.Entity == container && _session.QueryLeader(npc.Entity) is null &&
                 Arcanum.Simulation.Ai.AiExecutorRules.Distance(cell, substitute.Cell) <= AreaBarterMerchant.SubstituteRange)
                 return npc.Entity;
         return null;
