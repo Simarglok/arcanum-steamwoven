@@ -38,7 +38,7 @@ public partial class TerrainViewerApp
     private bool InterfaceBarsOn => _areaSession is not null && _readyMode == TerrainViewerMode.Area && (!ViewerAutomatedStorage.Automated || _gameBarForSelfTest);
 
     private bool GameBarActive => InterfaceBarsOn
-        && !MainMenuOpen && !ConversationOpen && !BarterOpen && !SaveListOpen && !ReadingOpen && !PaletteOpen && !WorldMapOpen;
+        && !MainMenuOpen && !ConversationOpen && !BarterOpen && !ItemServiceOpen && !SaveListOpen && !ReadingOpen && !PaletteOpen && !WorldMapOpen;
 
     /// <summary>Per frame: shows the bars while an area session plays (reading their art once a run) and follows the spell pane.</summary>
     private void SyncGameBar()
@@ -183,7 +183,7 @@ public partial class TerrainViewerApp
             case AreaBarButton.FatePoints:
                 // ARC-UI-1112: the button and the key F call one function (0x56FBF0); only the dialog's modal hook and the panels outside the stack keep the press from acting.
                 if (!FateActive) _gameBarNotice = "fate points: not available here";
-                else if (!FateOpen && (WorldModal || ConversationOpen || BarterOpen || ReadingOpen || WorldMapOpen)) _gameBarNotice = "fate points: ignored while another window owns input";
+                else if (!FateOpen && (WorldModal || ConversationOpen || BarterOpen || ItemServiceOpen || ReadingOpen || WorldMapOpen)) _gameBarNotice = "fate points: ignored while another window owns input";
                 else ToggleFate("button");
                 break;
             case AreaBarButton.Clock: ClockButton(); break;
@@ -221,6 +221,7 @@ public partial class TerrainViewerApp
         if (SchematicsOpen) CloseSchematicsByPlayer();
         if (WorldMapOpen) CloseWorldMapByPlayer();
         if (BarterOpen) CloseBarterByPlayer();
+        if (ItemServiceOpen) EndItemService();
         if (ReadingOpen) CloseReadingByPlayer();
         if (SleepOpen) EndSleep();
         // ARC-UI-1112: the original's interface close paths close the Fate Point window with the others (0x541710, 0x541D40, 0x542200).

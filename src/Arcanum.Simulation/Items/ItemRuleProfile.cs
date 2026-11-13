@@ -52,12 +52,22 @@ public sealed record ItemRuleProfile
     /// </summary>
     public bool RestockDelayIsNarrow { get; init; }
 
+    /// <summary>
+    /// Ledger IS5 (ARC-UI-1731, 0x573850 with the quotes 0x5786C0 and 0x578760): the item repair and identify windows keep the price of the
+    /// last <em>quoted</em> item in one global (0x681440, -1 after an open and after each payment) and a refused quote (an item already
+    /// identified, an item with nothing to repair, a broken item for a repairer who is not a master) writes nothing, so after quoting
+    /// item A, selecting a refused item B and clicking B again the service runs on B (which changes nothing) and the hero pays A's price. The
+    /// retail executable does that (owner rule 2026-10-28 for gameplay slips: the original behind this setting); Steamwoven clears the
+    /// price at a refused quote, so a refused item costs nothing.
+    /// </summary>
+    public bool ServiceKeepsStalePrice { get; init; }
+
     /// <summary>The original with every recorded fix; the default setting.</summary>
     public static readonly ItemRuleProfile Steamwoven = new() { Name = "steamwoven" };
 
     /// <summary>The retail 1.0.7.4 behaviour.</summary>
     public static readonly ItemRuleProfile Original = new() { Name = "original", RepairQuoteCountsDamageTwice = true, ContainerStackLookupFails = true,
-        EncumbranceLagsOnStackMerge = true, WornMoveNeedsRoom = true, RestockDelayIsNarrow = true };
+        EncumbranceLagsOnStackMerge = true, WornMoveNeedsRoom = true, RestockDelayIsNarrow = true, ServiceKeepsStalePrice = true };
 
     /// <summary>Both settings, default first.</summary>
     public static IReadOnlyList<ItemRuleProfile> All { get; } = new[] { Steamwoven, Original };

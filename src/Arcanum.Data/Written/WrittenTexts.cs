@@ -191,6 +191,34 @@ public sealed class WrittenTexts
         return result.AsReadOnly();
     }
 
+    /// <summary>The first default issue's offset above <see cref="DefaultIssueBase"/>, and the step between the probed numbers (0x4BF330: 5010, 5020, ...).</summary>
+    public const int DefaultIssueBase = 5000, DefaultIssueStep = 10;
+
+    /// <summary>
+    /// The headline of newspaper issue <paramref name="number"/> as the interface's message hook gives it (0x56CCA0, ARC-UI-1739, ledger NP2): message <paramref name="number"/> of the newspaper file with the markup
+    /// of the written texts taken off (0x56C9F0, under <paramref name="rules"/> as in <see cref="Read"/>) and every line feed made a space. An issue with no message, or no newspaper file, gives an empty text (the hook clears its buffer first).
+    /// </summary>
+    [OriginalFunction(0x56CCA0, OriginalFunctionScope.Partial)]
+    public string Headline(int number, WrittenRuleProfile? rules = null)
+    {
+        if (File(WrittenSubtype.Newspaper)?.Find(number) is not { } message) return string.Empty;
+        return Markup(number, Encoding.Latin1.GetString(message.Bytes.Span), rules).Text.Replace('\n', ' ');
+    }
+
+    /// <summary>
+    /// How many default issues the newspaper file offers above <see cref="DefaultIssueBase"/> (the probe loop of 0x4BF330, ledger NQ4): the headlines of 5010, 5020, ... are asked one after the other and the count is how many came
+    /// back with text before the first that did not. The default issue is then 5000 + 10 × a number drawn from 0 to the count, so the count is the draw's upper bound.
+    /// </summary>
+    [OriginalFunction(0x4BF330, OriginalFunctionScope.Partial)]
+    public int DefaultIssueChoices(WrittenRuleProfile? rules = null)
+    {
+        var count = 0;
+        // The numbers of a file are int; the probe stops at the first missing headline, so it never runs past the file.
+        for (long number = DefaultIssueBase + DefaultIssueStep; number <= int.MaxValue; number += DefaultIssueStep, count++)
+            if (Headline((int)number, rules).Length == 0) break;
+        return count;
+    }
+
     /// <summary>
     /// The markup of book, plaque and newspaper messages (0x56C9F0): the font is atoi of the text (leading whitespace and a sign
     /// admitted), as an interface art number; the parser then skips the leading digits only, tests the next character for <c>c</c> or

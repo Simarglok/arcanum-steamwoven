@@ -1484,7 +1484,7 @@ combined freely (sprites HD with a Legacy interface, or the reverse). The third 
 version 1–4 files read it as off) is the experimental [generated interface](hd-interface-density.md#viewer-slice-s1-arc-ui-140): it keeps the
 HD interface on and draws the chrome of the two HUD strips and the bar buttons by code, with the pictures from the HD redraw (else from the
 Legacy frame); only the drawing changes, every frame keeps its Legacy size, place, alpha test and hit area. ARC-UI-141 paints the chrome at
-the window's exact whole device scale on a worker (the first draw no longer stalls), see [S2](hd-interface-density.md#viewer-slice-s2-arc-ui-141); ARC-UI-148 adds the inventory window's two frames at that window's own (fractional) device scale, see [S3](hd-interface-density.md#viewer-slice-s3-arc-ui-148) and the [plan for the other windows](hd-interface-density.md#generated-windows-plan-arc-ui-148155). **HD pack: Auto/Game/Custom** (ARC-DEV-350, default Auto) is the
+the window's exact whole device scale on a worker (the first draw no longer stalls), see [S2](hd-interface-density.md#viewer-slice-s2-arc-ui-141); ARC-UI-148 adds the inventory window's two frames at that window's own (fractional) device scale, see [S3](hd-interface-density.md#viewer-slice-s3-arc-ui-148) and the [plan for the other windows](hd-interface-density.md#generated-windows-plan-arc-ui-148155); ARC-UI-1194 adds the loot, barter and steal windows and the three lenses, see [S4](hd-interface-density.md#viewer-slice-s4-arc-ui-1194); ARC-UI-1195 adds the character sheet, see [S5](hd-interface-density.md#viewer-slice-s5-arc-ui-1195). **HD pack: Auto/Game/Custom** (ARC-DEV-350, default Auto) is the
 third project line: where the active pack is read from, saved in the same file (`hdPack`, `hdPackPath`; file version 4, version 1–3 files
 read it as Auto). Auto prefers the player's iCloud pack folder (macOS, only when that folder exists on this device) when the pack in it
 is whole, and falls back to the installed copy in the game's own `user://hd-packs`; Game reads the installed copy alone; Custom opens the
@@ -2322,7 +2322,7 @@ project's, except as below.
   `N/10`. Game: Difficulty (Easy, Moderate, Hard), Default Combat Mode (Real Time, Turn Based), Auto Attack, Always
   Run and the project's Rules line (ARC-UI-014, below). Video: Floats (Never, Minimal, Verbose) and Float Speed (0–10). Sound: Effects, Voice and Music (0–10). The arrows (or Left and Right on the focused control, which Up and Down or
   a click on an arrow choose, or a controller's confirm) change the value at once, as the original's setters run on each step: a list wraps around at either end, a
-  slider stops there. Hidden with their reasons: Module (one module), Violence Filter, Auto Switch Weapons, Follower
+  slider stops there. Hidden with their reasons: Module (one module), Violence Filter, Auto Switch Weapons (its setting is the settings file's `auto switch` line since ARC-COMBAT-1720; no free slot on the Game page, issue 1729), Follower
   Skills, and the third combat mode Fast Turn Based (the list cycles Real Time and Turn Based).
 - **What each setting does.** Difficulty is the session's difficulty (its skill and experience readers, ARC-WORLD-030;
   a new game or a load takes the setting). Default Combat Mode is the turn-based setting Space also toggles: with a
@@ -3010,6 +3010,17 @@ inventory source of its own whose set the project admits and combat values is sc
 best items through the production event world, and the session's list shows the slots its record names (SKIP on a map without such an
 NPC; [NPC best items](../world/barter-runtime.md#npc-best-items-after-a-regeneration-arc-world-103)).
 
+
+### Item identify and repair windows (ARC-UI-1731)
+
+A dialog reply `ii` or `ri` ends the talk (the original's interface-mode change, ledger WN1, WN2) and the viewer opens the **item identify window** (the interface mode `InventoryKind5`) or the
+**item repair window** (`InventoryKind6`) over the area session once nothing else owns input and the barter data is loaded
+([contract](../world/item-service-runtime.md), ledger IS1–IS7). The window is a PROJECT diagnostic list (`AreaItemServicePanel`: the hero's items, one button each with its quote, the hero's
+gold, the NPC's name and the last message); the first click on an item selects and quotes it, the next click on the same item pays and does the service through the model
+(`AreaItemService`, [`TerrainViewerAreaItemService.cs`](../../tools/terrain-viewer/Godot/TerrainViewerAreaItemService.cs)). Like the barter window it is modal (gate closed, clock paused, a walk stopped),
+is the inventory family at Escape (the limited in-play menu opens and closes it), and closes with a replaced session, a dead hero or a map change; the NPC is held as the talk partner while it is open. The viewer's
+self-test stage `AreaItemService` covers both windows over a synthetic hero and merchant (identify, two clicks, Escape, repair, a replaced session); `ARC_UI_ITEM_SERVICE_CAPTURE` (a folder) saves a PNG
+of each step for a graphics comparison. The original look is [#1765](https://github.com/Simarglok/arcanum-steamwoven/issues/1765).
 ### Reading window (ARC-UI-049)
 
 The inventory window shows a `Read:` button for each written item the hero holds; the session decides the use

@@ -25,6 +25,13 @@ public sealed record SessionEquipBestStep(EquipmentSlot Slot, string? TakenOff, 
     public GameSessionFailure Failure { get; init; }
 }
 
+/// <summary>
+/// ARC-COMBAT-1720: the target a weapon re-wield chooses against (the best-item call's target object, 0x465170 parameters 4 and 5): its distance
+/// from the hero in cells (0x441AE0) and whether it is under magnetic inversion (a firearm scores 20 lower, <see cref="AttackRules.AttackEffectiveness"/>).
+/// An eligible weapon that reaches the distance wins over a better one that does not.
+/// </summary>
+public readonly record struct SessionWieldTarget(int Distance, bool MagneticInversion);
+
 /// <summary>Outcome of <see cref="GameSessionOwner.EquipBest"/>: the steps in slot order (none when refused).</summary>
 public sealed record EquipBestResult(GameSessionDisposition Disposition, GameSessionFailure Failure, IReadOnlyList<SessionEquipBestStep> Steps,
     GameSessionVersion Version);
@@ -46,6 +53,19 @@ public sealed partial class GameSessionOwner
     [OriginalFunction(0x4654F0, OriginalFunctionScope.Partial)]
     public EquipBestResult EquipBest(GameSessionVersion expected, SessionWearableLookup items, SessionWearArtCheck artCheck, SessionInsertCheck insertCheck) =>
         Best(expected, items, artCheck, insertCheck, Enum.GetValues<EquipmentSlot>(), emptyOnly: false);
+
+    /// <summary>
+    /// ARC-COMBAT-1720 (ledger PI5, OH3; 0x4B83E0 → 0x465170): the hero's re-wield after losing its weapon: the weapon slot (1004) takes the best weapon the
+    /// hero holds for <paramref name="target"/> (an eligible weapon that reaches it wins over a stronger one that does not), as <see cref="WieldBest"/> chooses it,
+    /// with the same refusals, policy and single revision as <see cref="EquipBest"/>; with no usable weapon the slot stays empty. The gates of 0x4B83E0 are the
+    /// host's: the "auto switch" setting (0x4B8330) on, and the lost weapon the PC's own (the single-player test of the network bits always holds here). The host calls
+    /// it right after a weapon wear that broke the weapon (<see cref="SessionWearStepKind.AttackerWeapon"/> with a break, 0x4B5580); the other callers (no ammunition,
+    /// the struck PC's lost weapon, 0x4B3170 and 0x4B4390) are not built.
+    /// </summary>
+    [OriginalFunction(0x4B83E0, OriginalFunctionScope.Partial)]
+    public EquipBestResult WieldBestWeapon(GameSessionVersion expected, SessionWearableLookup items, SessionWearArtCheck artCheck, SessionInsertCheck insertCheck,
+        SessionWieldTarget? target) =>
+        Best(expected, items, artCheck, insertCheck, [EquipmentSlot.Weapon], emptyOnly: false, target);
 
     /// <summary>
     /// ARC-UI-036: the start of a new character's game (the original's menu close 0x5412E0 with the best-items flag 0x64C424 that the
@@ -71,8 +91,9 @@ public sealed partial class GameSessionOwner
     }
 
     private EquipBestResult Best(GameSessionVersion expected, SessionWearableLookup items, SessionWearArtCheck artCheck, SessionInsertCheck insertCheck,
-        IReadOnlyList<EquipmentSlot> slots, bool emptyOnly)
+        IReadOnlyList<EquipmentSlot> slots, bool emptyOnly, SessionWieldTarget? target = null)
     {
+        if (target is { Distance: < 0 }) throw new ArgumentOutOfRangeException(nameof(target));
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(items);
         ArgumentNullException.ThrowIfNull(artCheck);
@@ -85,7 +106,7 @@ public sealed partial class GameSessionOwner
         try
         {
             plan.Collect(items);
-            foreach (var slot in slots) if (!emptyOnly || !plan.Worn.ContainsKey(slot)) WieldBest(plan, slot);
+            foreach (var slot in slots) if (!emptyOnly || !plan.Worn.ContainsKey(slot)) WieldBest(plan, slot, target);
         }
         catch (BestPlan.Refused refused) { return RejectBest(refused.Failure); }
         var changed = plan.Worn.Count != _equipment.Worn.Count || plan.Worn.Any(pair => !_equipment.Worn.TryGetValue(pair.Key, out var worn) || worn != pair.Value);
@@ -104,7 +125,7 @@ public sealed partial class GameSessionOwner
     /// taken from the world), and the choice is wielded as by <see cref="Equip"/>; with no choice an empty weapon slot stays empty.
     /// </summary>
     [OriginalFunction(0x465170, OriginalFunctionScope.Partial)]
-    private static void WieldBest(BestPlan plan, EquipmentSlot slot)
+    private static void WieldBest(BestPlan plan, EquipmentSlot slot, SessionWieldTarget? target = null)
     {
         var step = new StepRecord(slot);
         int? keptWorth = null;
@@ -117,7 +138,7 @@ public sealed partial class GameSessionOwner
         }
         var held = plan.Held;
         var candidates = held.Select(plan.Candidate).ToArray();
-        var best = EquipmentChoice.ChooseBest(slot, candidates, i => plan.Eligible(held[i], plan.Facts[held[i]], slot), keptWorth, plan.Wielder);
+        var best = EquipmentChoice.ChooseBest(slot, candidates, i => plan.Eligible(held[i], plan.Facts[held[i]], slot), keptWorth, plan.Wielder, target?.Distance, target?.MagneticInversion ?? false);
         if (best is { } index) plan.Wield(held[index], slot, step);
         // An unsupported choice leaves the slot as the call found it: an item taken off for it goes back on.
         if (step.Unsupported is not null && start is not null && step.TakenOff == start.Entity)

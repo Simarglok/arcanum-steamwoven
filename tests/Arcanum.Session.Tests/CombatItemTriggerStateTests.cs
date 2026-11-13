@@ -262,6 +262,22 @@ public sealed class CombatItemTriggerStateTests
         Assert.AreEqual(0, owner.QueryShotEndItemEvents(flying, tile).Count, "a shot no longer in flight");
     }
 
+    // ARC-COMBAT-1719 (0x4B2870, PF9, PS5): the weapon's scripts at the end of a flight run for the hero as the shooter and the bow as the parent item, with the shot's target as the extra object.
+    [TestMethod]
+    public void A_shot_s_end_names_the_shooter_the_weapon_and_the_target_for_the_weapon_s_scripts()
+    {
+        using var owner = BowOwner();
+        var golem = GolemCombat();
+        var shot = owner.AttackCritter(owner.Version, new(golem) { Distance = 3, Flight = true, TargetWorn = Worn(owner) });
+        Assert.AreEqual(GameSessionFailure.None, shot.Failure);
+        var flying = shot.Shots[0];
+        var ends = owner.QueryShotEndScripts(flying)!.Value;
+        Assert.AreEqual((Hero, Blade, false), (ends.Attacker, ends.Weapon, ends.Thrown), "the hero shoots with the worn bow, which stays in the hand");
+        Assert.AreEqual(shot.Resolution!.Outcome is AttackOutcome.CriticalHit or AttackOutcome.CriticalMiss, ends.Critical, "the critical flag is the decided check's");
+        foreach (var each in shot.Shots) owner.EndShot(each);
+        Assert.IsNull(owner.QueryShotEndScripts(flying), "a shot no longer in flight runs nothing");
+    }
+
     private sealed class Map(GameSessionOwner owner) : ISpellCastMap
     {
         public SpellTargetObject? Object(string id) =>

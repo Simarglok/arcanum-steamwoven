@@ -33,7 +33,9 @@ public static class ScrPoint
         // ARC-MAGIC-042 (TI4): the weapon's hit (7) and miss (8) points, run for a thrown item's strike or landing.
         Hit = 7, Miss = 8,
         // ARC-SCRIPT-1483: the attacker's critter-hits point (26) and the weapon's critical-hit point (34), run from the hit step with the hit point (7).
-        CritterHits = 26, CriticalHit = 34;
+        CritterHits = 26, CriticalHit = 34,
+        // ARC-COMBAT-1719: the weapon's critical-miss point (35), run after the miss point (8) at the range end of a critical shot (0x4B2870).
+        CriticalMiss = 35;
 }
 
 /// <summary>
