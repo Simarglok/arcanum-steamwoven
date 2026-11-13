@@ -229,6 +229,19 @@ public sealed class AreaTraps
     public AreaTrapMeeting? Step(CellCoord cell) => TrapObjectsOn(cell) is [var first, ..] ? Meet(first, SessionTrapCause.Step) : null;
 
     /// <summary>
+    /// ARC-WORLD-1582 (ledger TT17, 0x4305D0): whether the step that arrives on <paramref name="cell"/> ends the walk there: the step function lists the trap objects on the tile and, unless
+    /// the mover's spell flags hold 0x2 or 0x4, ends the walk whatever the entry point answered (a trap it knows or not, an ordinary script, a shot, an empty one, a refused meeting).
+    /// <paramref name="walker"/> is null for the hero. A trap object the session destroyed or switched off is not listed.
+    /// </summary>
+    public bool StepEndsWalk(CellCoord cell, AreaTrapWalker? walker = null)
+    {
+        if (TrapObjectsOn(cell).Count == 0) return false;
+        var effects = _effects();
+        var flags = walker is null ? effects?.PlayerSpellFlags ?? 0 : effects?.SpellFlagsOf?.Invoke(walker.Entity) ?? 0;
+        return TrapRules.StepTriggers(flags);
+    }
+
+    /// <summary>
     /// ARC-WORLD-1469 (ledger TT9, TT7): a non-hero critter's step arrives on <paramref name="cell"/> (0x4305D0 runs for every mover): the first trap object there meets it through the object entry
     /// point with the critter as the triggerer (cause Step: a critter whose spell flags hold 0x2 or 0x4 steps over it; a trap it knows fires too, a free NPC knowing every trap the PC did not place;
     /// one it does not know gets the entry point's spot attempt with its own roll, E2). A trap it spots now is marked on the PC's side (a companion) and the step is cancelled, as the hero's; any

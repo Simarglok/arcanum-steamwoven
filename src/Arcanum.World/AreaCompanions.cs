@@ -327,6 +327,11 @@ public sealed class AreaCompanionGroup
         return companion.Follow.WalkTo(next, companion.Grid.State.Time);
     }
 
+    /// <summary>ARC-WORLD-1582 (ledger TT17): the companion's own walk ends on the tile of a trap object it just stepped onto: its goal stops (a started step still ends at its cell centre)
+    /// and the follow goal plans again from there. False for a companion not here or one with no goal running.</summary>
+    public bool EndWalkOnTrap(string entity) =>
+        _companions.FirstOrDefault(c => c.Entity == entity) is { } companion && companion.Follow.EndWalkOnTrap(companion.Grid.State.Time);
+
     /// <summary>ARC-WORLD-115: the AI host's turn of a settled companion toward the chart cell <paramref name="toward"/> (its grid stands
     /// again on its cell with the new facing; a companion mid-step keeps its facing).</summary>
     public void FaceTo(string entity, CellCoord toward)
