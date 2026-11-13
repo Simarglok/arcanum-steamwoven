@@ -23,7 +23,7 @@ namespace Arcanum.TerrainViewer.Tests;
 public sealed class AreaScriptSpellTests
 {
     private const byte Triggerer = 0, Attachee = 1, Number = 3;
-    private const int KnowsFlag = 2370, KnowsNotFlag = 2371, BodyFlag = 2372, MasteredFlag = 2373, InfluencedFlag = 2374, Map = 1;
+    private const int KnowsFlag = 2370, KnowsNotFlag = 2371, BodyFlag = 2372, MasteredFlag = 2373, InfluencedFlag = 2374, PolymorphedFlag = 2375, ShrunkFlag = 2376, MirrorFlag = 2377, EyeCandyFlag = 2378, Map = 1;
 
     private static AreaObjectKey Key(int index) => new(new string('a', 64), 1, AreaSourceKind.Mobile, 1, index, index * 100L, new string((char)('a' + index), 64), 100);
 
@@ -89,6 +89,17 @@ public sealed class AreaScriptSpellTests
             Write("scr/00925influenced.scr", Program(
                 If(new(ScrCatalogue.Condition.InfluencedBySpell, (Attachee, -1), N(7)), SetFlag(InfluencedFlag), Nothing),
                 Do(new(ScrCatalogue.Action.ReturnRunDefault))));
+            // 926: the attachee is polymorphed, shrunk or has a mirror image: flags 2375, 2376, 2377 (ARC-SCRIPT-1734). 927: spell and script eye candy actions, then flag 2378 (the run is admitted and goes on).
+            Write("scr/00926spellstate.scr", Program(
+                If(new(ScrCatalogue.Condition.IsPolymorphed, (Attachee, -1)), SetFlag(PolymorphedFlag), Nothing),
+                If(new(ScrCatalogue.Condition.IsShrunk, (Attachee, -1)), SetFlag(ShrunkFlag), Nothing),
+                If(new(ScrCatalogue.Condition.HasMirrorImage, (Attachee, -1)), SetFlag(MirrorFlag), Nothing),
+                Do(new(ScrCatalogue.Action.ReturnRunDefault))));
+            Write("scr/00927eyecandy.scr", Program(
+                Do(new(ScrCatalogue.Action.PlaySpellEyeCandy, N(12), (Attachee, -1))),
+                Do(new(ScrCatalogue.Action.StopScriptEyeCandy, N(3), (Attachee, -1))),
+                Do(SetFlag(EyeCandyFlag)),
+                Do(new(ScrCatalogue.Action.ReturnRunDefault))));
             using var content = ScriptContent.Open(ContentMountPlan.Discover(root.FullName, "Syn").Plan!).Content!;
             test(content);
         }
@@ -146,6 +157,39 @@ public sealed class AreaScriptSpellTests
             var stopped = Run(Host(bare, content, row), bare, row);
             Assert.AreEqual(ScrStop.MissingObject, stopped.Run?.Stop, stopped.Detail);
             Assert.IsFalse(Flag(bare, KnowsFlag));
+        });
+    }
+
+    [TestMethod]
+    public void Polymorphed_shrunk_and_mirror_image_read_one_bit_each_of_the_stored_and_written_spell_flags()
+    {
+        WithContent(content =>
+        {
+            foreach (var (flags, polymorphed, shrunk, mirror) in new (uint, bool, bool, bool)[] { (0x20000, true, false, false), (0x80000, false, true, false), (0x40000, false, false, true), (0xE0000, true, true, true), (0x3C, false, false, false), (0, false, false, false) })
+            {
+                using var session = ConversationSessionFixture.CreateWithHero(Map);
+                var row = Row(1, 16, 926, flags);
+                Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, Run(Host(session, content, row), session, row).Outcome, $"flags {flags:X}");
+                Assert.AreEqual((polymorphed, shrunk, mirror), (Flag(session, PolymorphedFlag), Flag(session, ShrunkFlag), Flag(session, MirrorFlag)), $"stored spell flags 0x{flags:X}");
+            }
+            // The bit a spell component wrote on the NPC counts (the shrunk bit is the one the ObjFlag component writes for the shrink spell).
+            using var written = ConversationSessionFixture.CreateWithHero(Map);
+            var npc = Row(1, 16, 926, 0u);
+            written.WriteObjectFlag(written.Version, AreaUseScriptHost.EntityId(npc), SessionObjectFlagField.Spell, 0x80000, true);
+            Run(Host(written, content, npc), written, npc);
+            Assert.AreEqual((false, true, false), (Flag(written, PolymorphedFlag), Flag(written, ShrunkFlag), Flag(written, MirrorFlag)), "a written shrunk bit");
+        });
+    }
+
+    [TestMethod]
+    public void The_spell_eye_candy_actions_are_admitted_by_the_use_host_and_the_run_goes_on()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.CreateWithHero(Map);
+            var row = Row(1, 16, 927);
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, Run(Host(session, content, row), session, row).Outcome);
+            Assert.IsTrue(Flag(session, EyeCandyFlag), "play spell eye candy (104) and stop script eye candy (124) do not refuse the script");
         });
     }
 
@@ -275,13 +319,16 @@ public sealed class AreaScriptSpellTests
         {
             foreach (var condition in ScrAdmissionSet.SpellQueryConditions) Assert.IsTrue(set.Conditions.Contains(condition), $"{set.Id}: condition {condition}");
             Assert.IsTrue(set.Actions.Contains(ScrCatalogue.Action.GiveSpellMastery), $"{set.Id}: action 112");
-            Assert.IsTrue(set.IsSubsetOfBesidesStores(ScrAdmissionSet.S54), set.Id);
+            Assert.IsTrue(set.IsSubsetOfBesidesStores(ScrAdmissionSet.S55), set.Id);
         }
         // A dialog host without a query host cannot answer the questions: its own sets stay without them.
         Assert.IsFalse(AreaScriptHost.Admission.Conditions.Overlaps(ScrAdmissionSet.SpellQueryConditions));
         Assert.IsFalse(AreaScriptHost.Admission.Actions.Contains(ScrCatalogue.Action.GiveSpellMastery));
         Assert.IsTrue(typeof(IScrSpellQueries).IsAssignableFrom(typeof(AreaUseScriptHost)) && typeof(IScrSpellQueries).IsAssignableFrom(typeof(AreaScriptHost)));
     }
+
+    // The four conditions of S31 (ledger SC9 counts the scripts that use one of them or give spell mastery); ARC-SCRIPT-1734's three spell-state conditions are counted by their own check.
+    private static readonly HashSet<int> OriginalSpellConditions = [ScrCatalogue.Condition.HasBodySpell, ScrCatalogue.Condition.InfluencedBySpell, ScrCatalogue.Condition.KnowsSpell, ScrCatalogue.Condition.MasteredSpellCollege];
 
     [TestMethod, TestCategory("RealData")]
     public void The_installed_scripts_with_the_spell_commands_are_admitted_by_the_hosts_sets()
@@ -301,7 +348,7 @@ public sealed class AreaScriptSpellTests
         for (var number = 0; number <= ScrCatalogue.MaxScriptNumber; number++)
         {
             if (content.Script(number) is not { Status: ScriptContentStatus.Read, Program: { } program }) continue;
-            var uses = program.Lines.Any(l => ScrAdmissionSet.SpellQueryConditions.Contains(l.Condition.Type) || l.OnTrue.Type == ScrCatalogue.Action.GiveSpellMastery || l.OnFalse.Type == ScrCatalogue.Action.GiveSpellMastery);
+            var uses = program.Lines.Any(l => OriginalSpellConditions.Contains(l.Condition.Type) || l.OnTrue.Type == ScrCatalogue.Action.GiveSpellMastery || l.OnFalse.Type == ScrCatalogue.Action.GiveSpellMastery);
             if (!uses) continue;
             withSpell++;
             foreach (var (name, set) in sets) if (ScrAdmission.Admit(program, set).IsAdmitted) counts[name]++;
@@ -316,5 +363,34 @@ public sealed class AreaScriptSpellTests
         Console.WriteLine("first refusal under the talk set: " + string.Join(", ", blockers.Select(b => $"{b.Key} x{b.Value}")));
         // Ledger SC9: 46 installed scripts use one of the five commands; the sets admit few of them whole. ARC-SCRIPT-1481: the placed set admits one more (the use set gained the heal, destroy and vitals commands).
         Assert.AreEqual((46, 1, 4, 1, 1), (withSpell, counts["use"], counts["placed"], counts["heartbeat"], counts["talk"]));
+    }
+
+    [TestMethod, TestCategory("RealData")]
+    public void The_installed_scripts_with_the_spell_state_commands_are_admitted_by_the_hosts_sets()
+    {
+        // ARC-SCRIPT-1734: obj is polymorphed (12), obj is shrunk (13), obj has mirror image (16), play spell eye candy (104) and stop script eye candy (124).
+        var root = Environment.GetEnvironmentVariable("DAT_ROOT");
+        if (string.IsNullOrWhiteSpace(root)) Assert.Fail("DAT_ROOT is required for the opt-in spell-state check; this is not a synthetic pass.");
+        var discovery = ContentMountPlan.Discover(root);
+        Assert.AreEqual(ContentMountStatus.Ready, discovery.Status, discovery.Detail);
+        var opened = ContentStack.Open(discovery.Plan!);
+        Assert.AreEqual(ContentStackStatus.Ready, opened.Status, opened.Detail);
+        using var content = ScriptContent.Over(opened.Stack!);
+        int[] conditions = [ScrCatalogue.Condition.IsPolymorphed, ScrCatalogue.Condition.IsShrunk, ScrCatalogue.Condition.HasMirrorImage];
+        int[] actions = [ScrCatalogue.Action.PlaySpellEyeCandy, ScrCatalogue.Action.StopScriptEyeCandy];
+        var sets = new (string Name, ScrAdmissionSet Set)[] { ("use", AreaUseScriptHost.Admission), ("placed", AreaUseScriptHost.PlacedAdmission), ("heartbeat", AreaUseScriptHost.HeartbeatAdmission),
+            ("dying", AreaUseScriptHost.DyingAdmission), ("talk", AreaScriptHost.SkillTalkAdmission), ("combat", AreaUseScriptHost.CombatPointAdmission) };
+        var counts = sets.ToDictionary(s => s.Name, _ => 0);
+        var withState = 0;
+        for (var number = 0; number <= ScrCatalogue.MaxScriptNumber; number++)
+        {
+            if (content.Script(number) is not { Status: ScriptContentStatus.Read, Program: { } program }) continue;
+            if (!program.Lines.Any(l => conditions.Contains(l.Condition.Type) || actions.Contains(l.OnTrue.Type) || actions.Contains(l.OnFalse.Type))) continue;
+            withState++;
+            foreach (var (name, set) in sets) if (ScrAdmission.Admit(program, set).IsAdmitted) counts[name]++;
+        }
+        Console.WriteLine($"installed scripts with a spell-state command {withState}; admitted whole: " + string.Join(", ", counts.Select(c => $"{c.Key} {c.Value}")));
+        // 60 installed scripts use one of the five commands; the main map's 21 heartbeats that stop a script eye candy stay refused by other commands the narrow heartbeat set never admitted (assign object 15, get reaction 29, float line 23).
+        Assert.AreEqual((60, 21, 28, 1, 30, 0, 28), (withState, counts["use"], counts["placed"], counts["heartbeat"], counts["dying"], counts["talk"], counts["combat"]));
     }
 }

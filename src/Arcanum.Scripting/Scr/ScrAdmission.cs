@@ -460,6 +460,14 @@ public sealed class ScrAdmissionSet
     /// </summary>
     public static ScrAdmissionSet S54 { get; } = new("S54", S53.Conditions.Concat(CritterTailConditions), S53.Actions, S53.ValueKinds, S53.FocusKinds, counterIndexWraps: true);
 
+    /// <summary>
+    /// The spell-state set (ARC-SCRIPT-1734, ledger SC18, WE11, WE12): <see cref="S54"/> plus the conditions obj is polymorphed (12, bit 0x20000), obj is shrunk (13, 0x80000) and obj has mirror image (16, 0x40000) of the object's spell flags
+    /// (<see cref="IScrSpellQueries"/>, as condition 14 reads its body bits), and the eye candy actions play spell eye candy (104, 0x456E60) and stop script eye candy (124, 0x44C800), which hand their number and object to the host as
+    /// <see cref="ScrEyeCandy"/> requests (presentation only).
+    /// </summary>
+    public static ScrAdmissionSet S55 { get; } = new("S55", S54.Conditions.Concat([ScrCatalogue.Condition.IsPolymorphed, ScrCatalogue.Condition.IsShrunk, ScrCatalogue.Condition.HasMirrorImage]),
+        S54.Actions.Concat([ScrCatalogue.Action.PlaySpellEyeCandy, ScrCatalogue.Action.StopScriptEyeCandy]), S54.ValueKinds, S54.FocusKinds, counterIndexWraps: true);
+
     /// <summary>The conditions of <see cref="S51"/> and <see cref="S52"/> a host answers through <see cref="IScrCritterQueries"/>.</summary>
     public static IReadOnlySet<int> CritterQueryConditions { get; } = new HashSet<int> { ScrCatalogue.Condition.IsAnimal, ScrCatalogue.Condition.IsInCombat };
 
@@ -480,9 +488,9 @@ public sealed class ScrAdmissionSet
     public static IReadOnlySet<int> StoryQueryActions { get; } = new HashSet<int> { ScrCatalogue.Action.GetDaySinceStartup, ScrCatalogue.Action.GetCurrentHour, ScrCatalogue.Action.GetCurrentMinute,
         ScrCatalogue.Action.GetHoursSinceStartup, ScrCatalogue.Action.SetGlobalQuestState, ScrCatalogue.Action.SetPcQuestUnbotched };
 
-    /// <summary>The conditions of <see cref="S31"/> a host answers through <see cref="IScrSpellQueries"/>.</summary>
+    /// <summary>The conditions of <see cref="S31"/> and <see cref="S53"/> a host answers through <see cref="IScrSpellQueries"/>.</summary>
     public static IReadOnlySet<int> SpellQueryConditions { get; } = new HashSet<int> { ScrCatalogue.Condition.HasBodySpell, ScrCatalogue.Condition.InfluencedBySpell, ScrCatalogue.Condition.KnowsSpell,
-        ScrCatalogue.Condition.MasteredSpellCollege };
+        ScrCatalogue.Condition.MasteredSpellCollege, ScrCatalogue.Condition.IsPolymorphed, ScrCatalogue.Condition.IsShrunk, ScrCatalogue.Condition.HasMirrorImage };
 
     /// <summary>The actions of <see cref="S15"/>, <see cref="S18"/> and <see cref="S19"/> a host answers through <see cref="IScrWorldQueries"/>.</summary>
     public static IReadOnlySet<int> WorldQueryActions { get; } = new HashSet<int>
