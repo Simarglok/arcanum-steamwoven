@@ -166,8 +166,8 @@ public sealed partial class GameSessionOwner
 
     /// <summary>
     /// ARC-WORLD-1157 (E2-a, ledger PO2 to PO6, the spawner 0x4BA790 with the placement 0x4BA910 and the copy 0x4EF920): one tick of a monster generator. The room, the slot's block, the hour, the view
-    /// and the budget decide how many creatures are asked for (<see cref="GeneratorRules.Request"/>); each is a copy of the generator's object (here: a created critter of its prototype,
-    /// <see cref="SessionCreatedKind.Critter"/>, one number of the shared counter) put on the generator's tile when its cap is 1, else on a spot of up to ten tries
+    /// and the budget decide how many creatures are asked for (<see cref="GeneratorRules.Request"/>); each is a copy of the generator's object (here: a created critter of its prototype that keeps the generator as its template,
+    /// <see cref="SessionCreatedKind.Critter"/>, <see cref="SessionCreatedObject.Summoner"/>, one number of the shared counter) put on the generator's tile when its cap is 1, else on a spot of up to ten tries
     /// (<see cref="DropPlacementRules.PlaceGenerated"/>, drawn from the session's generator); a failed creation ends the loop with the count so far. The live count of the slot rises by the number made, the count
     /// made too unless the budget is ignored, and each copy keeps the slot (the death releases it, <see cref="ReleaseGeneratorSlot"/>). The answer is the next tick's delay by the rate (PO6) whatever was
     /// made: the original answers success also when nothing was made. One revision when anything was made; nothing is written otherwise. Refused before any effect: an invalid input, the version, the revision bound.
@@ -181,7 +181,7 @@ public sealed partial class GameSessionOwner
         ArgumentNullException.ThrowIfNull(run);
         SessionGeneratorResult Reject(GameSessionFailure failure) => new(GameSessionDisposition.Rejected, failure, [], 0, new(_identity, _revision));
         if (!SessionValidation.Entity(run.Entity) || !SessionValidation.Map(run.Map) || !DropCellFits(run.Cell) || run.Prototype is < 1 or > SessionCreatedObject.MaxPrototype || run.Rate is < 0 or > 7 ||
-            run.DropMap is null) return Reject(GameSessionFailure.InvalidCreatedObject);
+            run.DropMap is null || run.Entity == SessionEventKinds.AbsentRole) return Reject(GameSessionFailure.InvalidCreatedObject);
         if (!IsCurrent(expected)) return Reject(GameSessionFailure.StaleVersion);
         var settings = GeneratorSettings.Unpack(run.Packed);
         if (_generators.Made(run.Entity) is { } written) settings = settings with { Made = written };
@@ -201,7 +201,8 @@ public sealed partial class GameSessionOwner
             try { spot = settings.Cap == 1 ? run.Cell : DropPlacementRules.PlaceGenerated(run.Cell, run.DropMap, rolls, accepted); }
             catch (SessionDropRolls.ExhaustedException) { break; }
             if (!DropCellFits(spot)) break;
-            var copy = CreateCreatedObject(SessionCreatedKind.Critter, run.Prototype, run.Map, spot, 0, 0, now);
+            // ARC-WORLD-1526 (GS5): the copy is of the generator object, not of its prototype: the generator's entity is kept as the copy's template (the created record's source), so the world builds the copy's row from the generator's fields.
+            var copy = CreateCreatedObject(SessionCreatedKind.Critter, run.Prototype, run.Map, spot, 0, 0, now, summoner: run.Entity);
             _generators.AddCopy(copy.Entity, settings.Slot);
             made.Add(copy);
         }
