@@ -208,6 +208,7 @@ public partial class TerrainViewerApp
                 if (flow.Kind == SceneFlowKind.LoadSave && _menuLoadingSave)
                 {
                     _menuLoadingSave = false;
+                    ClearTransition(); // ARC-UI-1362
                     if (_mainMenu is { } waiting) { waiting.Notice = "the save's map did not load"; RenderMainMenu(); }
                 }
                 // ARC-UI-038: the opening shop's session the flow carried goes with it.
@@ -357,7 +358,7 @@ public partial class TerrainViewerApp
                 if (_menuAwaitsScene)
                 {
                     if (BeginSaveSceneFlow(latest.Name, "Last save ") is { } lastRefused) { _mainMenu.Notice = lastRefused; break; }
-                    ShowSaveLoadingNotice();
+                    ShowSaveLoadingMenu();
                     return;
                 }
                 if (LoadGame(SaveLibrary.Slot(latest.Name), "Last save ", MainMenuTables(), AreaLoadMessageRoute.Result)) { EndMainMenu("last save " + latest.Name); return; }
