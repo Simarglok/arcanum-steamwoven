@@ -9,6 +9,7 @@ using Arcanum.Scripting.NpcDialog;
 using Arcanum.Scripting.Scr;
 using Arcanum.Session;
 using Arcanum.Simulation.Character;
+using Arcanum.Simulation.Party;
 using Arcanum.Simulation.Reaction;
 using Arcanum.Simulation;
 
@@ -504,6 +505,34 @@ public sealed class AreaConversationHost
         if (said.Status != DialogGenericGreetingStatus.Said) return new(AreaConversationStartStatus.GenericGreeting, null, speaker, detail + $" (the generic greeting says nothing: {said.Status})");
         Scripts.Float(Scripts.Object(speaker), said.Text);
         return new(AreaConversationStartStatus.GenericGreeting, null, speaker, detail + $" (the generic greeting: {said.Origin!.Kind} {said.Origin.Number})", GreetingLine: said.Text);
+    }
+
+    /// <summary>
+    /// ARC-AI-1527 (FR-DIALOG-003, VB4-1, VB4-2, VB4-4): a follower's comment line (the combat taunt 0x413F50, the upset line 0x414370, the near-death line 0x414490): a random line of <paramref name="lines"/> of the plain NPC files,
+    /// the speaker's own override line first (<see cref="DialogFollowerComment.Say"/>), floated over the speaker as a script's float line (<see cref="AreaScriptHost.TakeFloats"/>, the original's callback 0x5F8488). The
+    /// text is read from the player's generated files and never stored. Returns the line said, or null when nothing was said (a speaker this host does not hold, texts that did not load, a range without an entry, a refused roll).
+    /// No voice is played. The can-speak test is the caller's.
+    /// </summary>
+    public string? SayFollowerLine(AreaSpeaker speaker, LoyaltyLines lines)
+    {
+        ArgumentNullException.ThrowIfNull(speaker);
+        if (!Speakers.Contains(speaker)) return null;
+        DialogGenericGreetingResult said;
+        try
+        {
+            var greeting = Greeting(speaker);
+            if (greeting is null) return null;
+            said = DialogFollowerComment.Say(greeting, new DialogReactionQuery(AreaConversationState.Npc(speaker.Index), AreaConversationState.PcParticipant), lines.First, lines.Last, Profile.Names,
+                DialogTextEncoding.Windows1252, DialogConversationOptions.HardMaxTextBytes);
+        }
+        // A comment is a courtesy of the fight, not its gate: a texts, facts or session failure says nothing and never escapes the host (typed failure at the boundary).
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            return null;
+        }
+        if (said.Status != DialogGenericGreetingStatus.Said) return null;
+        Scripts.Float(Scripts.Object(speaker), said.Text);
+        return said.Text;
     }
 
     /// <summary>

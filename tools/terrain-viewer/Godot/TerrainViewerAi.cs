@@ -112,6 +112,7 @@ public partial class TerrainViewerApp
         host.ProjectileEnds = ProjectileRunEnded;
         host.KnockbackEnds = KnockbackRunEnded;
         host.HeroEnds = HeroRunEnded;
+        host.FollowerSpeaks = SayFollowerLine;
         session.KillNotice = request => { if (request.Map == mapNumber) host.NoticeKill(request.Victim, request.Killer); };
         // ARC-DEV-104 (MIG9 S4): a whole map opens its residency and sector cache once per map open; the arrival pre-cache folds the 3 × 3
         // sectors around the hero, whose NPCs get their first tick there. The delayed ticks below go only to NPCs without one.
@@ -395,7 +396,7 @@ public partial class TerrainViewerApp
     /// <summary>
     /// ARC-DEV-245 (MIG13 S14i, GT195): what a script's damage does to a critter beyond its hit points: fire damage above 0 after resistance (<see cref="AttackDamage.DamagesArmor"/>) wears the torso armour by 10 (the session's armour wear
     /// with the critter's worn items; an NPC's broken item is no longer worn), and a follower of the PC that falls from 20 % or more to below it floats its near-death line toward its leader (<see cref="FollowerRules.NearDeathOfHit"/>:
-    /// lines 5500–5599, shown as the log and the answer's text like the other loyalty lines, none is spoken yet). The text says what happened ("" for nothing).
+    /// lines 5500–5599, floated over the follower through the AI host's follower speech, ARC-AI-1527; the answer's text names the range as well). The text says what happened ("" for nothing).
     /// </summary>
     private string ScriptDamageAftermath(GameSessionOwner session, string id, SessionScriptHit hit)
     {
@@ -413,16 +414,10 @@ public partial class TerrainViewerApp
                 if (step?.Item is { } done) text += done.Break is Arcanum.Simulation.Items.ItemBreakStep.Broken or Arcanum.Simulation.Items.ItemBreakStep.Deleted ? ", the armour breaks" : ", the armour wears";
             }
         }
-        if (!hero && hit.Outcome is { } outcome && session.QueryCompanion(id).LedByPc
-            && _combatHost?.Build(session, CurrentAreaMap, id).Combat is { } combat && session.QueryLife(combat.Target).View is { } view)
+        if (!hero && FollowerHurt(id, hit.Outcome) is { } comment)
         {
-            var after = view.Status.HitPoints;
-            var near = FollowerRules.NearDeathOfHit(id, true, after + outcome.HitPointDamage, after, view.Status.MaxHitPoints, outcome.Events.HasFlag(LifeEvents.Died));
-            if (near is { } comment)
-            {
-                GD.Print($"ARC-DEV-245 script-near-death follower={comment.Speaker} lines={comment.Lines.First}-{comment.Lines.Last}");
-                text += $", near-death lines {comment.Lines.First}-{comment.Lines.Last}";
-            }
+            GD.Print($"ARC-DEV-245 script-near-death follower={comment.Speaker} lines={comment.Lines.First}-{comment.Lines.Last}");
+            text += $", near-death lines {comment.Lines.First}-{comment.Lines.Last}";
         }
         return text;
     }
@@ -827,6 +822,8 @@ public partial class TerrainViewerApp
         _aiNotice = $"{AiName(notice.Npc)} attacks {(hero ? "the hero" : AiName(notice.Target!))}: "
             + AreaCombatHost.Describe(result, life?.Status.HitPoints, life?.Status.MaxHitPoints);
         FloatCritterAttack(result, notice.Npc, hero ? HeroFloater : notice.Target!);
+        // ARC-AI-1527 (0x4AEAB0): a follower of the PC an NPC's hit brought below a fifth of its hit points says its near-death line.
+        FollowerAttackComments(result, notice.Npc, hero ? HeroFloater : notice.Target!);
         GD.Print($"ARC-WORLD-092 ai-hit npc={notice.Npc} target={notice.Target} disposition={result.Disposition} failure={result.Failure}"
             + $" outcome={result.Resolution?.Outcome} recipient={result.Recipient} damage={result.Life?.HitPointDamage} events={result.Life?.Events}"
             + $" hp={life?.Status.HitPoints}/{life?.Status.MaxHitPoints} step={result.StepFailure}");
