@@ -68,7 +68,8 @@ public sealed partial class GameSessionOwner
         if (!ValidFacts(facts) || facts.OtherLeaderCharisma is not null) return RejectLoyalty(GameSessionFailure.InvalidConsentFacts);
         if (!IsCurrent(expected)) return RejectLoyalty(GameSessionFailure.StaleVersion);
         var current = _party.Get(entity);
-        if (current.Standing != CompanionStanding.Following) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, null, Version);
+        // CF9: the loyalty step (0x4AC380) returns early for a set WAIT bit (a follower that joined with the flag set).
+        if (current.Standing != CompanionStanding.Following || current.WaitFlag) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, null, Version);
         var consent = Consent(facts, current.Forced, ignoreLimit: true);
         var (persuasion, charisma) = Leader(facts.PcPersuasion, facts.PcCharisma);
         // ARC-WORLD-067: the leader check's warning reads the hero's alignment, as the follow check above does.
@@ -130,6 +131,10 @@ public sealed partial class GameSessionOwner
         return CompanionLoyaltyRules.WaitTimerMs(timer.WaitIndex, persuasion, charisma, timer.MindControlled);
     }
 
+    // ARC-SCRIPT-1136 (CF8): the wait of an NPC with no leader reads no leader: its index alone picks the timer (the leader's stat test and Persuasion training read a null handle's slot, inferred 0 both), the mind-control test stands.
+    private static long? LeaderlessWaitDelay(PartyWaitFacts? timer) =>
+        timer is null ? null : CompanionLoyaltyRules.WaitTimerMs(timer.WaitIndex, PersuasionTraining.None, 0, timer.MindControlled);
+
     private bool WaitTimerFits(long delayMs, string entity)
     {
         var now = _clock.QueryClockSnapshot().GameTimestampMs;
@@ -161,7 +166,9 @@ public sealed partial class GameSessionOwner
         var e = firing.Event;
         var entity = e.Payload.Entities[0];
         var current = _party.Get(entity.Code);
-        // Every way out of waiting removes the timer and a restore admits one only for a waiting NPC, so this is a defect guard; at
+        // ARC-SCRIPT-1136 (CF9): the handler (0x4AA990) acts only for a non-null leader, so the timer of a free NPC with the wait flag runs out and nothing happens: the flag stays, no jilting, no reaction change.
+        if (current.Standing == CompanionStanding.Free && current.WaitFlag) return GameEventHandlerOutcome.Completed;
+        // Every way out of waiting removes the timer and a restore admits one only for a waiting NPC or a free one with the flag, so this is a defect guard; at
         // revision exhaustion the queue has already taken the event, so the NPC then waits on without a timer.
         if (current.Standing != CompanionStanding.Waiting || _revision == long.MaxValue) return GameEventHandlerOutcome.Refused;
         var charisma = _hero is null ? (int)e.Payload.Values[2] : Leader(PersuasionTraining.None, 0).Charisma;

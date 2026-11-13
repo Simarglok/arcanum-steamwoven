@@ -13,14 +13,23 @@ public enum CompanionStanding { Free = 0, Following = 1, Waiting = 2 }
 /// clears it); <see cref="SpreadOut"/> in any standing. <see cref="Loyalty"/> (ARC-WORLD-045) are the follower's loyalty marks
 /// in any standing: a reaction change arms them while the PC leads it, the loyalty step clears them, and marks armed just
 /// before the leader is cleared stay until the NPC follows again (OL22). An NPC without a record is free with no flags.
+/// <see cref="WaitFlag"/> (ARC-SCRIPT-1136, ledger CF8 to CF10) is the WAIT bit (0x8) of the NPC's flag word while the standing does not imply it: the dialog <c>wa</c> of an NPC with no leader sets it
+/// (a free NPC, the original does not test the leader), and a join keeps it (0x45DE90 never touches that bit), so a follower in the array can carry it. A waiting standing is that bit with the PC as leader and the NPC
+/// outside the array, so <see cref="WaitFlag"/> is never set with it.
 /// </summary>
 public readonly record struct SessionCompanion(string Entity, CompanionStanding Standing, bool Forced, bool SpreadOut, bool Jilted,
-    CompanionLoyalty Loyalty = CompanionLoyalty.None)
+    CompanionLoyalty Loyalty = CompanionLoyalty.None, bool WaitFlag = false)
 {
     /// <summary>The source's "leader is this PC" (dialog FO, SCR FOLLOWING): true while waiting too.</summary>
     public bool LedByPc => Standing != CompanionStanding.Free;
 
-    internal bool IsBaseline => Standing == CompanionStanding.Free && !SpreadOut && !Jilted && Loyalty == CompanionLoyalty.None;
+    /// <summary>The source's WAIT bit (0x8): a waiting standing, or the flag on a free or following NPC (the dialog <c>wa</c> condition reads this bit alone, CF9).</summary>
+    public bool WaitBit => Standing == CompanionStanding.Waiting || WaitFlag;
+
+    /// <summary>A wait timer can be pending for it: a waiting standing, or a free NPC with the flag (CF8 queues the timer; at its expiry nothing happens without a leader, CF9).</summary>
+    internal bool HoldsWaitTimer => Standing == CompanionStanding.Waiting || (Standing == CompanionStanding.Free && WaitFlag);
+
+    internal bool IsBaseline => Standing == CompanionStanding.Free && !SpreadOut && !Jilted && Loyalty == CompanionLoyalty.None && !WaitFlag;
 }
 
 /// <summary>

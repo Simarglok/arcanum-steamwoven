@@ -9,6 +9,11 @@ public enum PadScheme { Off, Direct, Pointer }
 /// <summary>Touch scheme: <see cref="TouchPad"/> is scheme C (touch for the world and windows, pad for walking and hotkeys).</summary>
 public enum TouchScheme { Off, TouchPad }
 
+/// <summary>ARC-GPAD-1463: the one Options line "Controls": the original alone, or one of the three experimental schemes. The original mouse and
+/// keyboard stay live in every value. <see cref="TouchPad"/> is scheme C, which uses the pad itself for walking and hotkeys, so it is chosen
+/// instead of a pad scheme, not beside one.</summary>
+public enum ControlChoice { Original, Direct, Pointer, TouchPad }
+
 /// <summary>Which button glyph family prompts show; <see cref="Auto"/> follows the connected pad (§0.3).</summary>
 public enum PromptStyle { Auto, Xbox, PlayStation, Nintendo, SteamDeck }
 
@@ -19,6 +24,23 @@ public sealed record ControlSchemeSettings(int Version = 1, PadScheme Pad = PadS
 {
     public const int CurrentVersion = 1;
     public static ControlSchemeSettings Default => new();
+
+    /// <summary>The one Options line's value: a touch scheme wins (a settings file with both on reads as scheme C), else the pad scheme.</summary>
+    public ControlChoice Choice => Touch == TouchScheme.TouchPad ? ControlChoice.TouchPad : Pad switch
+    {
+        PadScheme.Direct => ControlChoice.Direct,
+        PadScheme.Pointer => ControlChoice.Pointer,
+        _ => ControlChoice.Original
+    };
+
+    /// <summary>The settings for a choice of the line; the prompt style is not part of it and stays.</summary>
+    public ControlSchemeSettings WithChoice(ControlChoice choice) => choice switch
+    {
+        ControlChoice.Direct => this with { Pad = PadScheme.Direct, Touch = TouchScheme.Off },
+        ControlChoice.Pointer => this with { Pad = PadScheme.Pointer, Touch = TouchScheme.Off },
+        ControlChoice.TouchPad => this with { Pad = PadScheme.Off, Touch = TouchScheme.TouchPad },
+        _ => this with { Pad = PadScheme.Off, Touch = TouchScheme.Off }
+    };
 
     /// <summary>The original mouse and keyboard stay live whatever else is chosen.</summary>
     public bool OriginalActive => true;

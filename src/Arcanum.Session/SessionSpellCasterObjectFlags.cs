@@ -235,7 +235,12 @@ public sealed partial class SessionSpellCaster
 
         public SpellCastCritter? Critter(string entity)
         {
-            if (map.Critter(entity) is not { } critter) return null;
+            if (map.Critter(entity) is not { } data) return null;
+            // ARC-MAGIC-1295: the base stats and resistances the TraitIdx component wrote lie over the data's, so the next one reads the value it left.
+            var critter = data;
+            if (owner.QueryCritterIndexedWrites(entity) is { IsEmpty: false } indexed)
+                critter = data with { StoredStats = indexed.OverStats(data.StoredStats), StoredResistances = indexed.OverResistances(data.StoredResistances),
+                    StoredMagicResistance = indexed.Resistances.TryGetValue(4, out var magic) ? magic : data.StoredMagicResistance };
             var written = owner.QueryObjectFlags(entity);
             return written.IsEmpty ? critter : critter with { ObjectFlags = written.Object(critter.ObjectFlags), SpellFlags = written.Spell(critter.SpellFlags), CritterFlags = written.Critter(critter.CritterFlags), CritterFlags2 = written.Critter2(critter.CritterFlags2) };
         }

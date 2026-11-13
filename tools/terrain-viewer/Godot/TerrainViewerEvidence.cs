@@ -15,11 +15,11 @@ public partial class TerrainViewerApp
     public const string EvidenceTestDirectoryVariable = "EVIDENCE_LOG_TEST_DIR";
     private EvidenceRecorder? _evidence;
     // The device in hand and the scheme it plays by, from the controller foundation (ARC-GPAD-1374): the mouse and keyboard are the original; a pad
-    // plays by the Pad scheme line and touch by the Touch line (Off on either is the original, as its prompts and commands are).
+    // plays by the Controls line (A and B are its pad schemes; C uses the pad too; Original is the original, as its prompts and commands are).
     private ActiveDevice _evidenceDevice => Controllers.Device;
     private EvidenceScheme _evidenceScheme => Controllers.Device switch
     {
-        ActiveDevice.Pad => Controllers.Settings.Pad switch { PadScheme.Direct => EvidenceScheme.Direct, PadScheme.Pointer => EvidenceScheme.Pointer, _ => EvidenceScheme.Original },
+        ActiveDevice.Pad => Controllers.Settings.Pad switch { PadScheme.Direct => EvidenceScheme.Direct, PadScheme.Pointer => EvidenceScheme.Pointer, _ => Controllers.Settings.Touch == TouchScheme.TouchPad ? EvidenceScheme.TouchPad : EvidenceScheme.Original },
         ActiveDevice.Touch => Controllers.Settings.Touch == TouchScheme.TouchPad ? EvidenceScheme.TouchPad : EvidenceScheme.Original,
         _ => EvidenceScheme.Original,
     };

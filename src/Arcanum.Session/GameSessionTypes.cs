@@ -664,8 +664,9 @@ public sealed class GameSessionSnapshot
     /// Schema 93 adds the NPC flags change to each critter's written flags (<see cref="SessionObjectFlags.NpcSet"/>, ARC-MAGIC-1142).
     /// Schema 94 adds the item fields scripts wrote (written start, inventory display bit) to the inventory section (<see cref="SessionInventoryState.ItemFields"/>, ARC-SCRIPT-1279).
     /// Schema 95 adds the arranged slots of seed holders (a container's or an NPC's grid laid out at a loot, steal or See Contents open) to the inventory section (<see cref="SessionInventoryState.HolderSlots"/>, ARC-RES-1441).
-    /// Schemas 1..55 are refused, not migrated; schemas 56 to 94 are upgraded on decode (ARC-UI-037).</summary>
-    public const int CurrentSchemaVersion = 95;
+    /// Schema 96 adds the wait flag to each party record (<see cref="SessionCompanion.WaitFlag"/>, the WAIT bit of an NPC with no leader or one that joined with it, ARC-SCRIPT-1136).
+    /// Schemas 1..55 are refused, not migrated; schemas 56 to 95 are upgraded on decode (ARC-UI-037).</summary>
+    public const int CurrentSchemaVersion = 96;
 
     internal GameSessionSnapshot(int schemaVersion, GlobalFlagIdentity identity, long revision,
         SessionClockState clock, SessionFlagState flags, ActorPlacement actor, SessionMapState[] maps, SessionStoryState story,

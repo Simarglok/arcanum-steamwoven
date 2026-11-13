@@ -165,12 +165,12 @@ public sealed partial class GameSessionOwner
                 foreach (var seed in _inventory.Seeds.Values) if (seed.RemoveCreatedHolder(entity)) _inventory.SeedGeneration++;
                 _inventory.Objects.RemoveCreated(entity);
                 // ARC-MAGIC-053 (E1-e): a summoned creature the mind control made a follower leaves the party with its destruction (the record would otherwise name an object that is gone).
-                if (_party.Get(entity) is { Standing: not CompanionStanding.Free } following)
+                if (_party.Get(entity) is var following && (following.Standing != CompanionStanding.Free || following.WaitFlag))
                 {
-                    _party.Put(following with { Standing = CompanionStanding.Free, Forced = false }, false);
+                    _party.Put(following with { Standing = CompanionStanding.Free, Forced = false, WaitFlag = false }, false);
                     _combat.Concealed.Remove(entity);
                     ClearNoAttackOnLeave(entity);
-                    if (following.Standing == CompanionStanding.Waiting) CancelWaitTimers(entity);
+                    if (following.WaitBit) CancelWaitTimers(entity);
                 }
                 // ARC-DEV-371: the flags written on it (the encounter flag every script-made critter carries) go with it, so a long run of created critters does not fill the written-flags bound; its other state records stay (E1-c1).
                 _objectFlags = _objectFlags.Remove(entity);

@@ -65,6 +65,7 @@ src/Arcanum.Session/GameSessionCheckWield.cs,MarkCheckWield,exempt,reference
 src/Arcanum.Session/GameSessionCheckWield.cs,NpcHolderOfItem,exempt,reference
 src/Arcanum.Session/GameSessionCombatMode.cs,QueryCanExitCombatMode,pending,
 src/Arcanum.Session/GameSessionCreatedObjects.cs,CreateCritterNear,pending,
+src/Arcanum.Session/GameSessionCritterIndexedWrites.cs,QueryNpcEffectiveStat,exempt,reference
 src/Arcanum.Session/GameSessionDanger.cs,AddDangerEnemy,pending,
 src/Arcanum.Session/GameSessionDanger.cs,PurgeDangerEnemies,exempt,host
 src/Arcanum.Session/GameSessionEncumbrance.cs,FireEncumbranceDrain,pending,
@@ -133,6 +134,7 @@ src/Arcanum.Session/GameSessionNpcInventory.cs,AddItemToNpc,pending,
 src/Arcanum.Session/GameSessionNpcInventory.cs,RemoveItemFromNpc,pending,
 src/Arcanum.Session/GameSessionNpcObjectStrike.cs,AttackObjectByNpc,exempt,reference
 src/Arcanum.Session/GameSessionNpcPickPocket.cs,PickPocketByNpc,pending,
+src/Arcanum.Session/GameSessionNpcPickup.cs,PickUpItemByNpc,exempt,host
 src/Arcanum.Session/GameSessionNpcTransfer.cs,GiveAmmoToNpc,pending,
 src/Arcanum.Session/GameSessionNpcTransfer.cs,GiveGoldToHero,pending,
 src/Arcanum.Session/GameSessionNpcTransfer.cs,GiveGoldToNpc,pending,
@@ -476,6 +478,8 @@ src/Arcanum.World/AreaAiHost.cs,UseItemAtOnce,pending,
 src/Arcanum.World/AreaAiHost.cs,UseItemMagic,pending,
 src/Arcanum.World/AreaAiHost.cs,UsedItem,pending,
 src/Arcanum.World/AreaAiHostGenerators.cs,Spawn,exempt,host
+src/Arcanum.World/AreaAiHostGround.cs,LooseItems,exempt,host
+src/Arcanum.World/AreaAiHostGround.cs,StartPickup,exempt,host
 src/Arcanum.World/AreaAiHostRoutes.cs,RelocateAlongPath,pending,
 src/Arcanum.World/AreaAiHostRoutes.cs,RelocateToRandomTile,pending,
 src/Arcanum.World/AreaAiHostRoutes.cs,ScriptProne,pending,
@@ -766,6 +770,7 @@ tools/terrain-viewer/Godot/TerrainViewerHotkeyHover.cs,HotkeyDescriptionLeft,pen
 tools/terrain-viewer/Godot/TerrainViewerHotkeys.cs,ActivateHotkey,pending,
 tools/terrain-viewer/Godot/TerrainViewerHotkeys.cs,ActivateSkillButton,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerHotkeys.cs,RecordRecentAction,pending,
+tools/terrain-viewer/Godot/TerrainViewerInterfaceModes.cs,ClearWindowsForProgrammaticOpen,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerInterfaceModes.cs,HandleGlobalKeyOverInterface,pending,
 tools/terrain-viewer/Godot/TerrainViewerInterfaceModes.cs,HandleRightPressOverWindow,pending,
 tools/terrain-viewer/Godot/TerrainViewerItemAiming.cs,ApplyItemAim,pending,

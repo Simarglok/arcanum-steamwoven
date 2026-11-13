@@ -38,6 +38,8 @@ public sealed record SessionSpellComponent(SpellRunAction Action, int Index, Spe
     public RechargeData? Recharge { get; init; }
     /// <summary>ARC-MAGIC-1146: a Trait64 component's field and source, else null.</summary>
     public Trait64Data? Trait64 { get; init; }
+    /// <summary>ARC-MAGIC-1295: a TraitIdx component's field, index and value, else null.</summary>
+    public TraitIndexData? TraitIdx { get; init; }
 }
 
 /// <summary>ARC-MAGIC-017: an EyeCandy component's data: its number in the spell's eye-candy group, Add or Remove, the <c>Play:</c> flags.</summary>
@@ -89,7 +91,7 @@ public static class SessionSpellRecords
                 Effect = component.Data as EffectData, Summon = component.Data as SummonData, Movement = component.Data as MovementData, Trait = component.Data as TraitData,
                 ChargeBranch = component.Data as ChargeBranchData, TestBranch = component.Data as TestBranchData,
                 Cast = component.Type == SpellComponentType.Cast ? component.Data as SpellReferenceData : null,
-                Recharge = component.Data as RechargeData, Trait64 = component.Data as Trait64Data });
+                Recharge = component.Data as RechargeData, Trait64 = component.Data as Trait64Data, TraitIdx = component.Data as TraitIndexData });
         }
         var invocation = new SpellInvocationRecord(record.IsTechnology, record.Range, unchecked((int)record.DisallowedCasterSpellFlags),
             unchecked((int)record.DisallowedTargetSpellFlags), unchecked((int)record.DisallowedTargetCritterFlags));
