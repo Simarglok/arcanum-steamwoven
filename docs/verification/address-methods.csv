@@ -736,6 +736,7 @@ tools/terrain-viewer/Godot/TerrainViewerAreaMapTransfer.cs,RunMapEnteredSteps,pe
 tools/terrain-viewer/Godot/TerrainViewerAreaPanelArt.cs,HoverPortrait,pending,
 tools/terrain-viewer/Godot/TerrainViewerAreaPickPocket.cs,ArmPickPocketFromBar,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAreaPickPocket.cs,HeroFaceSkill,pending,
+tools/terrain-viewer/Godot/TerrainViewerAreaPortals.cs,HeroDoorTrap,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAreaPortals.cs,HeroDoorUse,pending,
 tools/terrain-viewer/Godot/TerrainViewerAreaPortals.cs,OpenerDoorTrap,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAreaQuickSave.cs,RouteQuickSaveOverWindow,pending,
