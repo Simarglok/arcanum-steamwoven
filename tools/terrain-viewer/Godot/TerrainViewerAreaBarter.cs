@@ -112,7 +112,10 @@ public partial class TerrainViewerApp
         var state = host.State;
         return (new AreaBarter(session, inventory, data, merchant, () => state.Reaction(speaker),
             delta => session.AdjustReaction(session.Version, entity, state.NpcFacts(), state.PcFactsFor(speaker), delta).Disposition == GameSessionDisposition.Changed,
-            (item, kind) => inventory.Maps.Any(map => map.TryGetRow(item, out _)) ? inventory.Name(item, _hoverNames?.Catalog) : AreaInventoryHost.KindName(kind, _hoverNames?.Catalog)), null);
+            (item, kind) => inventory.Maps.Any(map => map.TryGetRow(item, out _)) ? inventory.Name(item, _hoverNames?.Catalog) : AreaInventoryHost.KindName(kind, _hoverNames?.Catalog),
+            // ARC-UI-1740: the merchant's Gambling skill from its sheet, and its generated lines for the bet (the gate's refusals, the confirm, the won and lost lines).
+            merchantGambling: () => AreaFollowerSheet(entity) is { } sheet ? session.QueryNpcSkills(sheet.Loaded, sheet.Modifiers)[Arcanum.Simulation.Skills.Skill.Gambling] : null,
+            npcLine: category => host.PickLine(host.Speakers[speaker], new(GamblingRules.LineRange(category).First, GamblingRules.LineRange(category).Last))), null);
     }
 
     /// <summary>Shows the window over the area session for <paramref name="barter"/> (the dialog path above, or a self-test's model), after
@@ -155,6 +158,7 @@ public partial class TerrainViewerApp
             _barterPanel.SellRequested += SellToMerchant;
             _barterPanel.BuyRequested += BuyFromMerchant;
             _barterPanel.DropRequested += BarterDrop;
+            _barterPanel.GambleEntered += BarterGambleEntered;
             _barterPanel.PointerStill += BarterPointerStill;
             _barterPanel.ArrangeRequested += BarterArrange;
             _barterPanel.CycleRequested += BarterCycle;
@@ -335,7 +339,45 @@ public partial class TerrainViewerApp
         GD.Print($"ARC-UI-064 barter drag kind={drop.Kind} item={drop.Held.Entity} cell={drop.GridSlot?.ToString() ?? "-"}");
         if (drop.Kind == AreaInventoryDropKind.Buy) Trade(drop.Held.Entity, sell: false);
         else if (drop.Kind == AreaInventoryDropKind.Sell) Trade(drop.Held.Entity, sell: true);
+        else if (drop.Kind == AreaInventoryDropKind.Gamble) Gamble(drop.Held.Entity);
         else SyncAreaBarter(force: true);
+    }
+
+    /// <summary>
+    /// ARC-UI-1740 (BW3): an item held over the bet box entered it: the bet gate (0x579840) runs once and writes its line on the quote line (the merchant's
+    /// refusal or its confirm line with the price); the box shows art 344 when it passes and 346 when it does not.
+    /// </summary>
+    private void BarterGambleEntered(AreaInventoryHeld held)
+    {
+        if (!BarterOpen || _barter is null || _barterPanel is null || !BarterActive) return;
+        var check = _barter.CheckGamble(held.Entity);
+        _barterMessage = check.Text;
+        _barterPanel.ShowQuote(check.Text);
+        _barterPanel.SetGambleGate(check.Allowed);
+        GD.Print($"ARC-UI-1740 barter gamble gate item={held.Entity} allowed={check.Allowed} refusal={check.Gate.Refusal} price={check.Price} text={check.Text}");
+    }
+
+    /// <summary>ARC-UI-1740 (0x579B60): the merchant's item released on the bet box is bet. A refused gate says nothing (the hover's line stays); a settled bet
+    /// prints its line, asks the trade sound (0x578EA0, SN31) and rebuilds the window.</summary>
+    private void Gamble(string entity)
+    {
+        if (!BarterOpen || _barter is null || !BarterActive) return;
+        var result = _barter.Gamble(entity);
+        if (result.Bet is null)
+        {
+            GD.Print($"ARC-UI-1740 barter gamble item={entity} refused by the gate: {result.Gate.Refusal}");
+            SyncAreaBarter(force: true);
+            return;
+        }
+        _barterMessage = result.Text;
+        GD.Print($"ARC-UI-1740 barter gamble item={entity} settled={result.Settled} won={result.Won} paid={result.Paid} reaction={result.ReactionChange} failure={result.Bet.Failure} roll={result.Bet.Check?.Check.Roll.ToString() ?? "-"} effectiveness={result.Bet.Check?.Check.Effectiveness.ToString() ?? "-"} fate={result.Bet.FateUsed} text={result.Text}");
+        if (result.Settled)
+        {
+            if (_barterSounds.Count == 16) _barterSounds.Dequeue();
+            _barterSounds.Enqueue(BarterTradeSound);
+            PlayInterfaceSound(BarterTradeSound, "barter gamble");
+        }
+        SyncAreaBarter(force: true);
     }
 
     /// <summary>ARC-UI-064: the pointer rested on an item of the original look: its quote goes on the quote line (PROJECT text, 0x578330 prints
