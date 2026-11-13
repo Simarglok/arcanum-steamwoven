@@ -112,6 +112,31 @@ public sealed class NpcWieldItemScriptTests
 
     private static (EquipmentSlot, string)[] Worn(GameSessionOwner owner) => owner.QueryNpcWorn(Guard)!.Worn.Select(worn => (worn.Slot, worn.Item)).ToArray();
 
+    // ARC-MAGIC-1743 (IE3, IE5, IE6): the hero loots a worn scripted item off a body; with the NPC's context its wield-off run changes the NPC's own effects (the NPC is the triggerer), without it the run meets another object.
+    [TestMethod]
+    public void LootingAWornScriptedHelmetRunsWieldOffOverTheNpcsOwnEffects()
+    {
+        using var owner = GameSessionOwner.Create(Descriptor() with { Hero = HeroStateTests.HalfElf() }).Owner!;
+        var helm = new SessionSeedItem("helm", Facts(SessionItemType.Armor, 3800, 1000, 0, null, SessionScriptPoint.WieldOff, SessionScriptPoint.RemoveItem), null);
+        Assert.AreEqual(GameSessionFailure.None, owner.AttachMapInventory(Exterior,
+            new SessionMapInventorySeed([new(Guard, SessionHolderKind.Npc, true, false, [], ["helm"])], [helm])).Failure);
+        var world = new World();
+        world.Scripts.Slots[("helm", SessionScriptPoint.WieldOff)] = AddCharm;
+        world.Scripts.Slots[("helm", SessionScriptPoint.RemoveItem)] = Say;
+        // Without the NPC's context the wield-off run adds the effect to an object the session does not hold: refused, nothing moved.
+        var refused = owner.LootItem(owner.Version, Guard, "helm", _ => SessionInsertVerdict.Accepted, world.Scripts);
+        Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.ItemScriptUnsupported), (refused.Disposition, refused.Failure));
+        Assert.AreEqual(0, owner.QueryPcInventory().Count);
+
+        var looted = owner.LootItem(owner.Version, Guard, "helm", _ => SessionInsertVerdict.Accepted, world.Scripts, npcWearer: world.NpcWieldScripts(Exterior, Guard));
+        Assert.AreEqual((GameSessionDisposition.Changed, GameSessionFailure.None), (looted.Disposition, looted.Failure));
+        CollectionAssert.AreEqual(new[] { (SessionScriptPoint.Transfer, SessionEventKinds.PlayerEntity), (SessionScriptPoint.WieldOff, "helm"), (SessionScriptPoint.RemoveItem, "helm") },
+            looted.Scripts.Select(run => (run.Point, run.Attachee)).ToArray());
+        Assert.AreEqual(1, Charms(owner, world), "wield off ran over the NPC's own effect list");
+        Assert.AreEqual("npc line", looted.Messages.Single().Text, "the NPC is the triggerer of the printed line");
+        CollectionAssert.AreEqual(new[] { "helm" }, owner.QueryPcInventory().Select(item => item.Entity).ToArray());
+    }
+
     [TestMethod]
     public void AScriptedHelmetIsWieldedAndItsWieldOnRunsWithTheNpcAsTriggerer()
     {
