@@ -502,7 +502,7 @@ C library's atoi) is a skill the NPC would use on the PC. The original asks the 
   The option text is the PC line 900..999 with the skill's name (empty for a number without one). Both need the healer menu's ports (`Healer`, `Greeting`, `World`, `Gold` and `Purse` or `Trainer`); without them the reply stays a frontier, as before.
 - **The pick** runs the reply's action, then offers the skill as the healer menu's option does (ledger HLR7, HLR9, HLR10; states 0xE then 0x10): a follower of the PC (its leader is the PC) is served at once and free, anyone else is quoted `(level + 2) × (tier + 1)` of the NPC's *named* skill on the reaction scale, paid
   and then served by the NPC's skill goal 33 on the PC (tool: the healing item for skill 10, none for other skills, 0x4C91F0). The host starts the goal for any of the 16 skills; the attempt goal of a skill other than heal and pick pocket is not built in the AI host (`AttemptSkill`: nothing happens and the goal ends), so a
-  `u:N` other than 10 pays and does nothing yet (no installed reply has one). A number outside the 16 skills starts nothing.
+  `u:N` other than 10 and 5 (pick pocket: the NPC tries to steal the PC's gold) pays and does nothing yet (no installed reply has one). A number outside the 16 skills starts nothing.
 - **`z:N` (a spell sold for gold)** has no filter: the option text is the PC line 1000..1099 with the spell's name, the pick sells spell N for 100 on the reaction scale (free for a follower), and the NPC casts it on the PC (ledger HLR8, HLR11, DSV3). No installed reply uses it. Without the healer menu's ports it stays an offered blocked reply.
 
 ## Trainer reply (ARC-SCRIPT-1150)

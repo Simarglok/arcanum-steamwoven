@@ -137,6 +137,18 @@ public sealed class DialogServiceOfferTests
     }
 
     [TestMethod]
+    public void A_blocked_service_reply_keeps_its_test_and_its_named_phrase()
+    {
+        var refused = new Rig();
+        refused.Healer.Facts = new(5, false, 4, 1, false, true);
+        CollectionAssert.AreEqual(new[] { "Plain." }, Texts(refused.Start(Reply(11, "u:10", action: "FL 20") + Reply(12, "Plain."))),
+            "the builder drops a reply the NPC cannot serve before any window or transfer of its action matters");
+        var blocked = Only(new Rig().Start(Reply(11, "z:62", action: "FL 20")));
+        Assert.AreEqual(DialogOptionBlockKind.UnsupportedInteraction, blocked.Block!.Kind);
+        Assert.AreEqual("1000 pc2m Spell62", blocked.Text, "a blocked spell reply still shows its named line");
+    }
+
+    [TestMethod]
     public void The_skill_service_is_quoted_by_the_named_skills_level_and_tier_paid_and_run()
     {
         var rig = new Rig(reaction: 0);

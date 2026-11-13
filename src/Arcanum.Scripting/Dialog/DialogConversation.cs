@@ -456,7 +456,7 @@ public sealed partial class DialogConversation
                 continue;
             }
             // ARC-SCRIPT-1798 (ledger DSV1, DSV2): a skill service reply the NPC cannot do for the PC (0x4AE570 answers non-zero) is left out the same way.
-            if (reply.Service is { } service)
+            if (reply.ServiceFilter is { } service)
             {
                 var offered = ServiceOffered(service);
                 if (offered is null)
@@ -500,7 +500,7 @@ public sealed partial class DialogConversation
             {
                 return;
             }
-            if (reply.Service is { } named && !ServiceText(named, text, out text))
+            if (reply.ServiceFilter is { } named && !ServiceText(named, text, out text))
             {
                 return;
             }
@@ -1914,7 +1914,7 @@ public sealed partial class DialogConversation
         }
         return new ReplyPlan(record, gender.Value, gate.IqValue!.Value, condition, kind, text, marker, transition, target, line, action, block,
             block is null ? insult : null, block is null ? barter : null, block is null ? worldMap : null, phrase, block is null ? trainer : null, block is null ? rumor : null, block is null && story,
-            Directions: block is null ? directions : null, DirectionsFilter: directions, Newspaper: block is null && newspaper, Healer: block is null && healer, Service: block is null ? service : null);
+            Directions: block is null ? directions : null, DirectionsFilter: directions, Newspaper: block is null && newspaper, Healer: block is null && healer, Service: block is null ? service : null, ServiceFilter: service);
     }
 
     private static bool CheckTokens(string text, DialogNodeId node, DialogResponseId? response, out DialogConversationFrontier? frontier, out DialogConversationFailure? failure)
@@ -2079,7 +2079,8 @@ public sealed partial class DialogConversation
         bool Newspaper = false,
         bool Healer = false,
         bool NeverOffered = false,
-        TrainerChoice? Service = null);
+        TrainerChoice? Service = null,
+        TrainerChoice? ServiceFilter = null);
 
     private sealed record OfferPlan(ReplyPlan Reply, StepPlan? Target);
 }
