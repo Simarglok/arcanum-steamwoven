@@ -165,9 +165,19 @@ also shifted the count by one to three commands (a changed body drawn as a copy 
 view of the sweep itself (a command hidden at some view and never drawn, or stood for by a drawn copy under its identity, is accounted for), and `taken` is read again after the sweeps for the report. On the
 town sector (`Arcanum1-024-fixed --sector 1409,1314`, about 393 MB live heap, a 15.7 MB bound) the heap then showed the next check: the first reload
 adds 92 MB once (content the earlier stages had not made) and the following reloads alternate by about 16 MB without a trend (485, 503, 488, 503, 503,
-483 MB; the launch queue's run logs on the owner's Mac), so one repeated reload landed above the bound. A real retention grows the heap at every reload,
-so up to two repeated reloads are made, each must publish and collect its predecessor, and the mean growth per reload since the first one is bound (the pair averages the alternation out; the first one under the bound ends it). The cause of the
-alternating 16 MB is not established.
+483 MB; the launch queue's run logs on the owner's Mac), so one repeated reload landed above the bound. ARC-BUG-1501 then made up to two repeated
+reloads and bound their mean growth.
+
+ARC-RENDER-1538 (#1538) found the cause of that alternation: the measurement, not the heap. The stage read `GC.GetTotalMemory(false)` after its
+collections, and that is the runtime's approximate sum of the space each generation has allocated in its GC regions (about 4 MB each on .NET 8),
+not the objects the collection kept. On the town sector after the map battery, with six more reloads (2026-11-14, launch queue run logs on the
+owner's Mac): heap snapshots (`dotnet-gcdump`, a scratch tool outside git) after each reload held 463.6 MB of objects within about 10 KB, and the
+collection's own figure (`GCMemoryInfo` heap size less its free space) stayed at 464.9 MB within about 30 KB, while `GetTotalMemory` read 490
+to 508 MB. The gap moved in steps of about 4 MB (25.0 or 29.0 MB) from one sample to the next, a frame apart, while no thread allocated (the
+process's allocated-byte count grew by about 2 KB across each sample). A caching or pooled buffer was ruled out too: no buffer of 1 MB or more went
+through the shared array pool over those reloads, and the 16 MiB cap of the index mappings bounds GPU row textures, not managed memory. On the Crash
+Site start (no battery before the stage) the two figures agree within about 1 MB. The stage now samples the collection's own figure, which stays flat between
+reloads, and makes one repeated reload again, as before ARC-BUG-1501.
 
 ## Body blends and wading (ARC-RENDER-018)
 

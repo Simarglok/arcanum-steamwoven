@@ -134,12 +134,20 @@ public partial class TerrainViewerApp
         // ARC-RENDER-025: the last collection of each sample compacts the large-object heap. Before, on a 64-sector map whose
         // large-object heap held 96 to 208 MB of free space, samples differed from the live bytes by up to tens of megabytes
         // from run to run; compacted, they equal the live bytes to within about 10 KB (observed, not a runtime guarantee).
+        // ARC-RENDER-1538: the sample is what that blocking collection left, its heap size less its free space (GCMemoryInfo),
+        // not GC.GetTotalMemory: the runtime's approximate sum counts space by GC region (about 4 MB each on .NET 8), and on the
+        // town sector after the map battery it read 25 to 44 MB above the live bytes, in steps of about 4 MB that changed from one
+        // sample to the next while no thread allocated; that was the 16 MB alternation between reloads (#1538).
         static long Managed()
         {
             GC.Collect(); GC.WaitForPendingFinalizers();
             System.Runtime.GCSettings.LargeObjectHeapCompactionMode = System.Runtime.GCLargeObjectHeapCompactionMode.CompactOnce;
+            var before = GC.CollectionCount(2);
             GC.Collect();
-            return GC.GetTotalMemory(false);
+            var collected = GC.GetGCMemoryInfo(GCKind.FullBlocking);
+            // The info must be this sample's own collection: a blocking full one counted after `before`.
+            Require(GC.CollectionCount(2) > before && collected.Generation == 2 && collected.Index > 0, "MANAGED_SAMPLE");
+            return collected.HeapSizeBytes - collected.FragmentedBytes;
         }
         static long Resident() { using var process = System.Diagnostics.Process.GetCurrentProcess(); process.Refresh(); return process.WorkingSet64; }
         static int Handles() => System.IO.Directory.GetFileSystemEntries("/dev/fd").Length;
@@ -216,25 +224,21 @@ public partial class TerrainViewerApp
         // Over the limit, one more reload tells the two apart: a retention every replaced generation adds grows the heap again by as
         // much, a one-time fill does not. The bound then holds one generation's retention, not the pair's: a retention between half
         // the bound and the bound per generation, which the pair alone showed, now passes.
-        // ARC-BUG-1501: the post-GC heap of a large map also alternates by about 16 MB between reloads with nothing retained (town sector 1409,1314:
-        // 485, 503, 488, 503, 503, 483 MB after the first six reloads, baseline 393 MB), so a single repeated reload can land on the high side.
-        // A retention every replaced generation adds grows the heap at every reload, so up to two more reloads are made and the mean growth per
-        // reload since the first one is bound (a pair of reloads averages the alternation out; the first one under the limit ends it).
+        // ARC-BUG-1501 saw the heap alternate by about 16 MB between reloads on the town sector and made up to two repeated reloads; that was
+        // GC.GetTotalMemory's region accounting, not live objects (ARC-RENDER-1538, see Managed above: the live heap stayed within about
+        // 10 KB over six reloads), so one repeated reload is made again.
         long? repeated = null;
         if (growth >= limit)
         {
-            for (var attempt = 1; attempt <= 2 && (repeated is null || repeated >= limit); attempt++)
-            {
-                var published = CaptureAreaResourceBaseline();
-                await StartLoadAsync(arguments, false);
-                Require(_readyArea is not null && _readyArea.Generation == _generation && _generation > published.Generation, "STALE_PUBLICATION");
-                await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
-                await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
-                var againSamples = await ManagedSamples();
-                repeated = (againSamples.Min() - after.Managed) / attempt;
-                GD.Print($"ARC-RENDER-007 resources reload again {attempt} generation={_generation} managed={againSamples.Min()} samples={string.Join(',', againSamples)} growth={growth} perReload={repeated} limit={limit}");
-                Require(!published.Result.IsAlive && !published.Frames.IsAlive, "RETIRED_GENERATION_ALIVE");
-            }
+            var published = CaptureAreaResourceBaseline();
+            await StartLoadAsync(arguments, false);
+            Require(_readyArea is not null && _readyArea.Generation == _generation && _generation > published.Generation, "STALE_PUBLICATION");
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+            var againSamples = await ManagedSamples();
+            repeated = againSamples.Min() - after.Managed;
+            GD.Print($"ARC-RENDER-007 resources reload again generation={_generation} managed={againSamples.Min()} samples={string.Join(',', againSamples)} growth={growth} repeated={repeated} limit={limit}");
+            Require(!published.Result.IsAlive && !published.Frames.IsAlive, "RETIRED_GENERATION_ALIVE");
         }
         Require(Math.Min(growth, repeated ?? growth) < limit, "MANAGED_RETENTION");
         var resources = new { Outcome = "PASS", SweepSteps = steps, SweepCommands = sweptCommands, SweepTaken = taken, MaxVisible = maxVisible, MaxGpuFrames = maxLive,
