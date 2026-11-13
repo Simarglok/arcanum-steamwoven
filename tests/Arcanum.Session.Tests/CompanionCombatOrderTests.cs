@@ -24,7 +24,7 @@ public sealed class CompanionCombatOrderTests
     private static readonly SessionPeaceFacts Combat = new() { Reaction = new(Npc60, Pc), CombatMode = Living };
 
     /// <summary>The hero ("pc"), its followers and a wolf, as the follower rule reads them.</summary>
-    private sealed class World : IHostilityWorld
+    internal sealed class World : IHostilityWorld
     {
         public readonly Dictionary<string, HostilityCritter> Critters = [];
 
