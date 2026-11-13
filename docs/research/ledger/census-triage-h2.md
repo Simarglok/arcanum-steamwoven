@@ -254,7 +254,7 @@ One row each in the registry (the full reading is its reason column); the first 
 | --- | --- | --- |
 | 57B180 | rest window open decision | The rest hook (bed or wait): refuses for a dead PC or in a network game, closes an open window, refuses an unconscious PC (line 11), waiting where the town map does not allow it (20), combat that cannot be left (9), a bed script that |
 | 57B450 | rest window close | Closes an open rest window: removes the pending rest events (kind 0xF), hides the window, resumes ambient lighting, takes the sleeper out of the bed when there was one and clears the rest globals. Ours has no rest. |
-| 57B710 | rest option click | A click on one of the 7 or 8 rest options: removes the pending rest events, takes the option's length from a table (hours, or the special until-morning, until-evening, until-healed values), hides the buttons, runs the followers' sleeping |
+| 57B710 | rest option click | A click on one of the 7 or 8 rest options: removes the pending rest events, takes the option's length from a table (hours, or the special until-morning, until-evening, until-healed values), runs the followers' sleeping |
 | 57B7F0 | rest step | Every 200 ms step jumps game time by one hour; when resting (not waiting) heals the sleeper and followers each hour; |
 | 57B9E0 | rest overlay start | On rest start (once): begins a black screen overlay effect and switches the ambient hourly light apply off while hours pass. Ours has no rest. |
 | 57BA70 | rest overlay end | On rest end: switches the ambient light apply back on (it applies the current hour at once), ends the overlay effect and closes the rest window. Ours has no rest. |
