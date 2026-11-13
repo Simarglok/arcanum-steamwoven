@@ -171,7 +171,7 @@ public partial class TerrainViewerApp
     {
         if (_aiHost is not { } host || _readyArea is not { } area) return false;
         var row = area.Snapshot.Objects.FirstOrDefault(o => o.Key == portal.Key);
-        return row is not null && (host.TrapMetByUse(opener, row) || DoorUseScriptStops(area, row, new(CurrentAreaMap, opener)));
+        return row is not null && (host.TrapMetByUse(opener, row) || DoorUseScriptStops(area, row, new(CompanionHomeMap(opener) ?? CurrentAreaMap, opener)));
     }
 
     /// <summary>ARC-WORLD-1581, ARC-WORLD-1668 (TT18, TT7): the use node of goal 12 for the hero runs the door's use script (0x428A10 → 0x441980, the hero the triggerer and the extra object; the viewer asks it after the 2 action points of <see cref="HeroDoorUse"/>, which the node charges first): the door's trap meets the hero as a trapped container's does

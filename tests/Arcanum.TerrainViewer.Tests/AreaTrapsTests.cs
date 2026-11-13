@@ -224,6 +224,12 @@ public sealed class AreaTrapsTests
             var none = host.RunUseScript(AreaUseScriptHost.EntityId(plainDoor), pc, pc, session.Rules.Scripts);
             Assert.IsNull(none.Run);
             Assert.IsFalse(AreaUseScriptHost.UseStops(none));
+            // A native trap script the trap code left unmet (no cast host) is the dispatcher's trap stop, no answer of a script: the use goes on.
+            var native = Row(4, 1, 30001);
+            var (unmetHost, _) = Hosts(session, content, () => null, null, native);
+            var unmet = unmetHost.RunUseScript(AreaUseScriptHost.EntityId(native), pc, pc, session.Rules.Scripts);
+            Assert.AreEqual(ScrStop.TrapScript, unmet.Run?.Stop, unmet.Detail);
+            Assert.IsFalse(AreaUseScriptHost.UseStops(unmet), "an unmet native trap does not keep the door shut");
             // A run the host did not apply (an object that is no row of the map) stops nothing.
             Assert.IsFalse(AreaUseScriptHost.UseStops(host.RunUseScript("oid:nobody", pc, pc, session.Rules.Scripts)));
         });

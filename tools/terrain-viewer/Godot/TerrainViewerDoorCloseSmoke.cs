@@ -103,15 +103,16 @@ public partial class TerrainViewerApp
         { GD.Print($"ARC-WORLD-1668 native-smoke door-trap NONE map={_readyMapName} (no trap host or cast host)"); return "none: no trap host or cast host"; }
         PortalSmokeUntil(() => doors.GoalOf(door) is null, 3000);
         Require(portals.Frame(session, door) == 0 && doors.GoalOf(door) is null, $"the door stands shut with no run: frame {portals.Frame(session, door)} goal {doors.GoalOf(door)}");
-        var original = host.UseScriptOf(row);
         var mapId = new SessionMapId(CurrentAreaMap);
-        var scriptKey = MapChangeKey.ForEntity(AreaUseScriptHost.EntityId(row), AreaUseScriptHost.SlotProperty(ScrPoint.Use, "script"));
-        var countersKey = MapChangeKey.ForEntity(AreaUseScriptHost.EntityId(row), AreaUseScriptHost.SlotProperty(ScrPoint.Use, "counters"));
-        var originalCounters = AreaUseScriptHost.LoadedSlot(row, ScrPoint.Use)?.Counters ?? 0;
+        var entity = AreaUseScriptHost.EntityId(row);
+        var scriptKey = MapChangeKey.ForEntity(entity, AreaUseScriptHost.SlotProperty(ScrPoint.Use, "script"));
+        var countersKey = MapChangeKey.ForEntity(entity, AreaUseScriptHost.SlotProperty(ScrPoint.Use, "counters"));
+        var stateKey = MapChangeKey.ForEntity(entity, GameSessionOwner.TrapStateProperty);
+        // The three keys as the session held them before the part (null: no change), written back at its end.
+        var before = new[] { scriptKey, countersKey, stateKey }.Select(key => session.QueryMapChange(mapId, key)).ToArray();
         // The native script 30001 (normal damage to the triggerer alone) with counters 0 (a damage of 0 to 0) makes the door trapped and harmless; a content without it leaves the part undone.
         Require(session.ApplyChanges(session.Version, null, [new MapChangeEdit(mapId, scriptKey, 30001), new MapChangeEdit(mapId, countersKey, 0)]).Disposition == GameSessionDisposition.Changed, "the trap script is written");
-        // The slot as the data had it and no trap state of the smoke's (a spot mark, a removal).
-        MapChangeEdit[] RestoreEdits() => [new(mapId, scriptKey, original), new(mapId, countersKey, (long)originalCounters), new(mapId, MapChangeKey.ForEntity(AreaUseScriptHost.EntityId(row), GameSessionOwner.TrapStateProperty), null)];
+        MapChangeEdit[] RestoreEdits() => [new(mapId, scriptKey, before[0]), new(mapId, countersKey, before[1]), new(mapId, stateKey, before[2])];
         try
         {
             if (host.TrapState(row) is not { Trapped: true })
@@ -135,7 +136,7 @@ public partial class TerrainViewerApp
         }
         finally
         {
-            // The slot as the data had it, whatever the part did.
+            // The use slot and the trap state as the session held them (the spot roll's draws and any experience it awarded stay).
             session.ApplyChanges(session.Version, null, RestoreEdits());
         }
     }
