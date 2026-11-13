@@ -15,4 +15,6 @@ public sealed class AreaSpellSocial(Func<AreaAiHost?> host) : ISpellSocialHost
     public bool Flee(string npc, string from) => host()?.SpellFlee(npc, from) == true;
 
     public bool StopFleeing(string npc) => host()?.SpellStopFleeing(npc) == true;
+
+    public void EndFleeGoals(string npc) => host()?.SpellEndFleeGoals(npc);
 }

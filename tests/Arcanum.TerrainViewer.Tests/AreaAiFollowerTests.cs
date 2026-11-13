@@ -938,6 +938,34 @@ public sealed class AreaAiFollowerTests
     }
 
     [TestMethod]
+    public void Set_no_flee_first_stops_the_fleeing_and_ends_the_flee_goals()
+    {
+        // ARC-AI-1513 (ledger VB2-7; 0x4AF1D0 → 0x4AF170): an NPC in FLEE goes to NONE through the setter, its flee goals end, then NO_FLEE is set, in one revision.
+        var scene = Open();
+        Assert.IsTrue(scene.Host.SpellFlee(scene.Enemy, Pc), "the enemy flees from the hero");
+        var flee = Leftover(scene.Host, scene.Enemy, GoalType.Flee);
+        var revision = scene.Session.Version.Revision;
+        scene.Host.SetNoFlee(scene.Enemy);
+        var danger = scene.Session.QueryDanger(scene.Enemy);
+        Assert.AreEqual(DangerState.None, danger.State, "the stop fleeing asked the setter for none");
+        Assert.IsTrue(danger.Flags.HasFlag(DangerFlags.NoFlee), "then NO_FLEE");
+        Assert.IsFalse(Alive(scene.Host, flee), "the flee goal was interrupted");
+        Assert.AreEqual(revision + 1, scene.Session.Version.Revision, "one revision for the setter and the bit");
+        Assert.IsFalse(scene.Host.SpellFlee(scene.Enemy, Pc) && scene.Session.QueryDanger(scene.Enemy).State == DangerState.Flee, "a flee request now becomes combat focus (setter rule 2)");
+
+        // An NPC that is not fleeing: only the bit is written; its flee run (a leftover of another state) is not touched, as the original's stop fleeing acts in FLEE only.
+        var other = Open();
+        var leftover = Leftover(other.Host, other.Enemy, GoalType.Flee);
+        var before = other.Session.QueryDanger(other.Enemy).State;
+        other.Host.SetNoFlee(other.Enemy);
+        Assert.AreEqual(before, other.Session.QueryDanger(other.Enemy).State, "the state is unchanged");
+        Assert.IsTrue(other.Session.QueryDanger(other.Enemy).Flags.HasFlag(DangerFlags.NoFlee));
+        Assert.IsTrue(Alive(other.Host, leftover), "no flee goal is ended outside FLEE");
+        other.Host.SetNoFlee(Pc);
+        other.Host.SetNoFlee("oid:unknown");
+    }
+
+    [TestMethod]
     public void The_reactions_setter_asks_for_no_alerted_sound_so_the_attack_goal_carries_none()
     {
         // ARC-RENDER-1126 (0x4A92D0, 0x4AABE0, 0x4296D0): only the danger update's setter call asks for the alerted sound (its pass record's bark slot, the host's UpdateDanger);

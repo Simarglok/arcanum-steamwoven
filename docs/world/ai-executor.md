@@ -62,7 +62,7 @@ the pending cost again (EX6); Steamwoven charges nothing there.
 
 | Operation | Original | What it does |
 | --- | --- | --- |
-| `SetNoFlee(entity)` | 0x4AF1D0 | `DangerFlags.NoFlee` on the NPC's danger record, for good, one revision (none when set). The setter's rule 2 reads it besides the caller's `DangerSetterFacts.NoFlee`. |
+| `SetNoFlee(entity)` | 0x4AF1D0 | Stop fleeing first (0x4AF170: an NPC in FLEE goes to NONE through the setter; the host then ends its flee goals), then `DangerFlags.NoFlee` on the NPC's danger record, for good, one revision (none when not fleeing and set). The setter's rule 2 reads it besides the caller's `DangerSetterFacts.NoFlee` (ARC-AI-1513). |
 
 **State.** `DangerFlags.NoFlee` (critter flag 0x8000000 as the AI sets it) is saved in both settings: the snapshot moves to schema
 45 (flag name `NoFlee`; schemas 1..44 are refused, not migrated). A map change keeps it. The run itself is the host's and is not
