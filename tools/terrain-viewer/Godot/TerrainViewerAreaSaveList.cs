@@ -114,7 +114,7 @@ public partial class TerrainViewerApp
     /// <summary>Runs one step of the window (a selection, a confirm, an answer) and then the command it returns.</summary>
     private void SaveListCommand(Func<AreaSaveCommand> step)
     {
-        if (!SaveListOpen || _saveList is null) return;
+        if (!SaveListOpen || _saveList is null || _pendingLoad is not null) return; // ARC-UI-1504: the window takes no input while its load waits for the screen
         var command = step();
         switch (command.Kind)
         {
@@ -138,8 +138,10 @@ public partial class TerrainViewerApp
                     ShowSaveLoadingMenu();
                     return;
                 }
-                if (LoadGame(slot, "Load ", _mainMenu is { Root: AreaMenuWindow.Main } ? MainMenuTables() : null, AreaLoadMessageRoute.Result)) { EndSaveList(finished: true); return; }
-                RefreshSaveList(command.Name, _quickSaveStatus);
+                // ARC-UI-1504: the load shows the load screen first; the window closes with a load that began and stays, with the reason, when it was refused.
+                var loadName = command.Name;
+                LoadGameShown(slot, "Load ", _mainMenu is { Root: AreaMenuWindow.Main } ? MainMenuTables() : null, AreaLoadMessageRoute.Result,
+                    ok => { if (ok) EndSaveList(finished: true); else RefreshSaveList(loadName, _quickSaveStatus); });
                 return;
             case AreaSaveCommandKind.Delete:
                 var deleted = SaveLibrary.Delete(command.Name!);

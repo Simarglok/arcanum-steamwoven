@@ -58,9 +58,17 @@ public static class AreaAdvancement
     /// monster flag; its effects' stat, skill and maxima changes through <paramref name="effect"/> (null for a number without a rule,
     /// which changes nothing). Null when the fields are not a critter's or give no admissible sheet.
     /// </summary>
-    public static (SessionNpcAdvancement Loaded, AdvancementModifiers Modifiers)? Npc(string entity, CombatFields fields, Func<int, EffectRule?> effect)
+    public static (SessionNpcAdvancement Loaded, AdvancementModifiers Modifiers)? Npc(string entity, CombatFields fields, Func<int, EffectRule?> effect) =>
+        Npc(null, entity, fields, effect);
+
+    /// <summary>
+    /// ARC-MAGIC-1475: <see cref="Npc(string, CombatFields, Func{int, EffectRule?})"/> over the base stats a spell wrote into the NPC (<see cref="SessionCritterIndexedWrites.Apply"/>): the
+    /// sheet a script reads and the one a recruit's advancement record is seeded from start from the written stats. The stored fields without a session.
+    /// </summary>
+    public static (SessionNpcAdvancement Loaded, AdvancementModifiers Modifiers)? Npc(GameSessionOwner? session, string entity, CombatFields fields, Func<int, EffectRule?> effect)
     {
         ArgumentNullException.ThrowIfNull(fields);
+        if (session is not null) fields = session.QueryCritterIndexedWrites(entity).Apply(fields);
         ArgumentNullException.ThrowIfNull(effect);
         if (fields.Critter is not { } critter || critter.BaseStats.Count <= RaceStat || critter.SpellTech.Count < MasteryIndex + 1 + AutoLevelRules.TechDisciplines ||
             critter.BaseStats[RaceStat] is < 0 or > 10) return null;

@@ -1,3 +1,4 @@
+using Arcanum.Session;
 using Arcanum.Simulation.Ai;
 using Arcanum.Simulation.Goals;
 using Arcanum.Simulation.Movement;
@@ -64,6 +65,10 @@ public partial class TerrainViewerApp
             { GD.Print($"ARC-DEV-209 native-smoke npc-door NONE map={_readyMapName} (no closed openable door with an open step across it among {portals.All.Count} portals)"); return; }
             var heroTile = grid.Chart.ToWorld(grid.State.CommittedCell);
             var heroCell = new CellCoord(checked((int)heroTile.X), checked((int)heroTile.Y));
+            // ARC-BUG-1503: the NPC the map data stores off beside a door (the quest NPC of the first building, ARC-SCRIPT-1360) is gone until its story switches it on; the stage switches on the ones
+            // within 8 cells of the first doors' near cells, as the toggle does, so a free NPC stands next to them (the farther NPCs' own routes take them off a long order).
+            var nearCells = candidates.OrderBy(c => AiExecutorRules.Distance(c.From, heroCell)).Take(6).Select(c => c.From).ToArray();
+            if (SwitchOnStoredOffNpcs(session, host, n => host.Tile(n) is { } at && nearCells.Any(c => AiExecutorRules.Distance(at, c) <= 8)) > 0) { Frames(5); host = AreaAiHostNow()!; }
             var npcs = host.Scene.Npcs.Where(n => !host.RunCompanions.Contains(n.Entity) && !host.Gone(n.Entity) && host.Tile(n.Entity) is not null).Select(n => n.Entity).ToArray();
             string? Settle(string npc, CellCoord world, int cap)
             {

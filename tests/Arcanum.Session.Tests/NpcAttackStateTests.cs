@@ -164,6 +164,28 @@ public sealed class NpcAttackStateTests
     }
 
     [TestMethod]
+    public void TheHostsCombatPointScriptsAreAskedForAnNpcsBiteAndAreNotAskedForAMiss()
+    {
+        // ARC-SCRIPT-1483 (CP1–CP3): an NPC's resolved hit tells the host before the damage step; a monster's own table holds no weapon item; a miss tells nothing.
+        using var owner = Owner();
+        var rat = Combat();
+        var victim = Combat(entity: Other);
+        var heard = new List<SessionHitScriptEvent>();
+        var hits = 0; var misses = 0;
+        for (var attempt = 0; attempt < 600 && (hits < 3 || misses < 3); attempt++)
+        {
+            var before = heard.Count;
+            var result = owner.AttackByNpc(owner.Version, new SessionNpcAttack(rat) { Target = victim, HitScripts = heard.Add });
+            if (result.Resolution?.Refusal != AttackRefusal.None) continue;
+            var hit = result.Resolution?.Outcome is AttackOutcome.Hit or AttackOutcome.CriticalHit;
+            Assert.AreEqual(before + (hit ? 1 : 0), heard.Count);
+            if (hit) { hits++; Assert.AreEqual((null, result.Resolution!.Outcome == AttackOutcome.CriticalHit, false, false), (heard[^1].Weapon, heard[^1].Critical, heard[^1].Projectile, heard[^1].Thrown)); }
+            else misses++;
+        }
+        Assert.IsTrue(hits >= 3 && misses >= 3, $"hits {hits}, misses {misses}");
+    }
+
+    [TestMethod]
     public void ATakingDamageScriptThatSkipsTheDefaultCancelsAnNpcAttacksDamageStep()
     {
         // ARC-DEV-261 (GT198/GT199): the NPC's attack asks the victim's point-0x17 script before the damage apply; false ends the step.

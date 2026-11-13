@@ -31,7 +31,9 @@ public static class ScrPoint
 {
     public const int Examine = 0, Destroy = 2, Use = 1, Dialog = 9, FirstHeartbeat = 10, Dying = 12, Heartbeat = 19, TakingDamage = 23, LeaderSleeping = 29, Bust = 30, DialogOverride = 31, Count = 36,
         // ARC-MAGIC-042 (TI4): the weapon's hit (7) and miss (8) points, run for a thrown item's strike or landing.
-        Hit = 7, Miss = 8;
+        Hit = 7, Miss = 8,
+        // ARC-SCRIPT-1483: the attacker's critter-hits point (26) and the weapon's critical-hit point (34), run from the hit step with the hit point (7).
+        CritterHits = 26, CriticalHit = 34;
 }
 
 /// <summary>
@@ -376,6 +378,9 @@ public enum ScrObjectStateChange
     /// (the first object of 48, 118, 121 and 122's operand 0; none for 61 and 136, which have no caster), <see cref="ScrObjectStateRequest.Value"/> the spell and <see cref="ScrObjectStateRequest.Value2"/> the invocation
     /// flags (<see cref="ScrCastFlags"/>). The host runs the spell dispatcher without the spell UI's cost, line-of-fire and reach checks.</summary>
     CastSpell,
+    /// <summary>ARC-SCRIPT-1294 (RM6, 0x4593F0): stop spell on object (130): <see cref="ScrObjectStateRequest.Object"/> is the first object of operand 1 and <see cref="ScrObjectStateRequest.Value"/> the spell of operand 0. The host interrupts the first
+    /// active run of that spell that holds the object as its target or in one of its object lists (0x459290, 0x457110); the run goes on whether it found one or not.</summary>
+    StopSpell,
     /// <summary>ARC-DEV-243 (S14g, GT194): damage (60) of one object of its operand: <see cref="ScrObjectStateRequest.Value"/> the amount, <see cref="ScrObjectStateRequest.Value2"/> the damage type (0 normal, 1 poison, 2 electrical, 3 fire, 4 fatigue);
     /// no attacker, resistances apply.</summary>
     Damage,
@@ -869,7 +874,7 @@ public sealed class ScrRunResult
 }
 
 /// <summary>How a dispatch runs: the rule mode's script switches, the admitted set (default <see cref="ScrAdmissionSet.S5"/>,
-/// at most <see cref="ScrAdmissionSet.S40"/>, admitted for the lines reachable from the event's line), the executed-line
+/// at most <see cref="ScrAdmissionSet.S42"/>, admitted for the lines reachable from the event's line), the executed-line
 /// budget and the call depth.</summary>
 public sealed record ScrRunOptions
 {
@@ -890,7 +895,7 @@ public sealed record ScrRunOptions
         ArgumentNullException.ThrowIfNull(Admission);
         if (MaxExecutedLines is <= 0 or > OriginalLineBudget) throw new ArgumentOutOfRangeException(nameof(MaxExecutedLines), "The line budget is 1..1000.");
         if (MaxCallDepth is < 1 or > 64) throw new ArgumentOutOfRangeException(nameof(MaxCallDepth), "The call depth is 1..64.");
-        if (!Admission.IsSubsetOf(ScrAdmissionSet.S40)) throw new ArgumentException("The interpreter runs only the commands of ScrAdmissionSet.S40.", nameof(Admission));
+        if (!Admission.IsSubsetOf(ScrAdmissionSet.S42)) throw new ArgumentException("The interpreter runs only the commands of ScrAdmissionSet.S42.", nameof(Admission));
     }
 
     // A set with a guard condition needs a host that answers it, checked before any event runs.
