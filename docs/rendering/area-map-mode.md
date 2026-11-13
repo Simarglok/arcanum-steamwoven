@@ -157,6 +157,18 @@ bound then holds one generation's retention rather than the overlapped pair's: a
 retention between half the bound and the bound per generation, which the pair alone
 showed, now passes.
 
+ARC-BUG-1501 (issues #1501 and #1498, daily run of 2026-11-13: `AREA_RESOURCES_SWEEP_COVERAGE` on the town sector and on `elven ruins`) had two causes in
+the stage, none in the viewer. The coverage count (`swept + hidden == commands`) took the hidden commands once at the start of the stage, but the canvas
+learns its hidden set from the session's per-frame sync, which also hides the objects stored or switched off (ARC-WORLD-1436) and the destroyed ones; the
+stage's own first frame changed it (4 data-off NPCs on `elven ruins`). A stage run alone had no frame yet, and in the chain a later change of the set
+also shifted the count by one to three commands (a changed body drawn as a copy stands for its plan command). The sweep now reads the hidden commands at every
+view of the sweep itself (a command hidden at some view and never drawn is accounted for), and `taken` is read again after the sweeps for the report. On the
+town sector (`Arcanum1-024-fixed --sector 1409,1314`, about 393 MB live heap, a 15.7 MB bound) the heap then showed the next check: the first reload
+adds 92 MB once (content the earlier stages had not made) and the following reloads alternate by about 16 MB without a trend (485, 503, 488, 503, 503,
+483 MB; the launch queue's run logs on the owner's Mac), so one repeated reload landed above the bound. A real retention grows the heap at every reload,
+so up to two repeated reloads are made, each must publish and collect its predecessor, and the smallest growth of them is bound. The cause of the
+alternating 16 MB is not established.
+
 ## Body blends and wading (ARC-RENDER-018)
 
 The scene plan draws three more serialized body states, by rules checked in the

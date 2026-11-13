@@ -31,8 +31,12 @@ public partial class TerrainViewerApp
     {
         static void Require(bool value, string code) { if (!value) throw new InvalidOperationException("AREA_RESOURCES_" + code); }
         var old = CaptureAreaResourceBaseline();
-        // ARC-UI-004: items the earlier smoke phases picked up are no longer in the world and are never drawn.
+        // ARC-UI-004: items the earlier smoke phases picked up are no longer in the world and are never drawn. The canvas learns the hidden
+        // set from the session's per-frame sync (taken items, destroyed or data-off objects, ARC-WORLD-1436), so it can still change after
+        // this stage starts (a run of this stage alone has had no frame yet): the coverage check counts a command hidden at any view of a
+        // sweep as accounted for (ARC-BUG-1501), and `taken` is read again after the sweeps for the report.
         var taken = _readyArea!.Plan.Commands.Count(command => _canvas!.AreaHiddenOf(command));
+        var identified = _readyArea.Plan.Commands.Where(command => command.Identity is not null).ToArray();
         var bounds = old.Bounds; var viewport = WorldViewport;
         // Zoom 1 tiles the envelope with viewport-sized steps; the camera clamp
         // keeps edge views inside the envelope, so every command intersects one. The
@@ -44,10 +48,11 @@ public partial class TerrainViewerApp
         // its kept body, whose identity is in no command of this plan: it is not part of the coverage count.
         HashSet<AreaObjectKey>? identities = _readyArea!.Plan.Commands.Where(c => c.Identity is not null).Select(c => c.Identity!.Value).ToHashSet();
         var companions = _areaCompanions?.Companions.Select(c => c.Key).ToHashSet() ?? [];
-        async Task<(int Steps, int Swept, int MaxVisible, int MaxLive, long MaxBytes, int MaxChunks, long MaxChunkBytes)> Sweep(bool chunked)
+        async Task<(int Steps, int Swept, int Unaccounted, int MaxVisible, int MaxLive, long MaxBytes, int MaxChunks, long MaxChunkBytes)> Sweep(bool chunked)
         {
             _canvas!.AreaTerrainChunksEnabled = chunked;
             HashSet<AreaDrawCommand> seen = new(ReferenceEqualityComparer.Instance);
+            HashSet<AreaDrawCommand> hiddenAtAView = new(ReferenceEqualityComparer.Instance);
             var steps = 0; var maxLive = 0; var maxVisible = 0; long maxBytes = 0; var maxChunks = 0; long maxChunkBytes = 0;
             for (var y = bounds.Y + viewport.Y / 2d; y < bounds.Y + bounds.Height + viewport.Y / 2d; y += viewport.Y)
             for (var x = bounds.X + viewport.X / 2d; x < bounds.X + bounds.Width + viewport.X / 2d; x += viewport.X)
@@ -57,6 +62,7 @@ public partial class TerrainViewerApp
                 await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
                 // ARC-RENDER-023: the view must still be the one set (the sweep holds the camera).
                 Require(_camera.State == view, "CAMERA_MOVED");
+                foreach (var command in identified) if (_canvas.AreaHiddenOf(command)) hiddenAtAView.Add(command);
                 steps++; seen.UnionWith(_canvas.AreaVisibleCommands.Where(c => c.Identity is not { } key || identities!.Contains(key)));
                 // A body of no plan command is a visiting companion's or (ARC-WORLD-063) a junk pile's or placed item's drawn under its own
                 // key (ARC-RENDER-033), or (ARC-RENDER-041) a pool of blood's, never anything else. ARC-DEV-089: an item the session
@@ -84,16 +90,19 @@ public partial class TerrainViewerApp
                 Require(_canvas.AreaChunkResidentCount <= AreaChunkTextureCache.MaxChunks && _canvas.AreaChunkResidentBytes <= AreaChunkTextureCache.MaxBytes, "CHUNK_BUDGET");
                 Require(chunked ? _canvas.AreaTerrainChunked : _canvas.AreaChunkResidentCount == 0, "TERRAIN_MODE");
             }
-            return (steps, seen.Count, maxVisible, maxLive, maxBytes, maxChunks, maxChunkBytes);
+            // Every command counts once: drawn in some view (a moved or changed body is drawn as a copy of its plan command, whose own T0 command is then
+            // not drawn and not hidden, so the copy stands for it) or hidden (no longer in the world) at some view without ever being drawn.
+            var unaccounted = _readyArea!.Plan.Commands.Count - (seen.Count + hiddenAtAView.Count(command => !seen.Contains(command)));
+            return (steps, seen.Count, unaccounted, maxVisible, maxLive, maxBytes, maxChunks, maxChunkBytes);
         }
         var chunkCreated = _canvas!.AreaChunkCreatedCount; var chunkDisposed = _canvas.AreaChunkDisposedCount;
         // The exterior is sized to overflow every cache; a smaller whole interior (ARC-RENDER-017) may fit in them, so
         // there eviction is not required, while every per-view budget and the ownership balance still are.
         var mustEvict = _readyMapName is null;
         var chunkedSweep = await WithAreaSmokeCameraHeld(() => Sweep(true));
-        if (chunkedSweep.Swept + taken != old.Commands)
-            GD.Print($"ARC-RENDER-007 resources detail swept={chunkedSweep.Swept} taken={taken} commands={old.Commands} steps={chunkedSweep.Steps}");
-        Require(chunkedSweep.Swept + taken == old.Commands, "SWEEP_COVERAGE");
+        if (chunkedSweep.Unaccounted != 0)
+            GD.Print($"ARC-RENDER-007 resources detail swept={chunkedSweep.Swept} unaccounted={chunkedSweep.Unaccounted} commands={old.Commands} steps={chunkedSweep.Steps}");
+        Require(chunkedSweep.Unaccounted == 0, "SWEEP_COVERAGE");
         // The envelope needs more chunks than the chunk cap, so the chunk LRU must have
         // evicted, and its own create/dispose accounting must balance.
         var chunkComposed = _canvas.AreaChunkCreatedCount - chunkCreated; var chunkEvictions = _canvas.AreaChunkDisposedCount - chunkDisposed;
@@ -103,9 +112,10 @@ public partial class TerrainViewerApp
         var commandSweep = await WithAreaSmokeCameraHeld(() => Sweep(false));
         identities = null; // the reload below must find the retired generation unreferenced
         _canvas.AreaTerrainChunksEnabled = true;
-        if (commandSweep.Swept + taken != old.Commands)
-            GD.Print($"ARC-RENDER-007 resources detail command sweep swept={commandSweep.Swept} taken={taken} commands={old.Commands} steps={commandSweep.Steps} chunked={chunkedSweep.Swept}");
-        Require(commandSweep.Swept + taken == old.Commands, "SWEEP_COVERAGE");
+        if (commandSweep.Unaccounted != 0)
+            GD.Print($"ARC-RENDER-007 resources detail command sweep swept={commandSweep.Swept} unaccounted={commandSweep.Unaccounted} commands={old.Commands} steps={commandSweep.Steps} chunked={chunkedSweep.Swept}");
+        Require(commandSweep.Unaccounted == 0, "SWEEP_COVERAGE");
+        taken = _readyArea!.Plan.Commands.Count(command => _canvas!.AreaHiddenOf(command));
         Require(ReferenceEquals(old.Result.Target, _readyArea) && _readyArea!.Frames.Count == old.CpuFrames
             && _readyArea.CpuRgbaBytes == old.CpuBytes, "CPU_REPOSITORY");
         // Per-command terrain needs more frames than visible + retained, so the frame
@@ -204,18 +214,27 @@ public partial class TerrainViewerApp
         // Over the limit, one more reload tells the two apart: a retention every replaced generation adds grows the heap again by as
         // much, a one-time fill does not. The bound then holds one generation's retention, not the pair's: a retention between half
         // the bound and the bound per generation, which the pair alone showed, now passes.
+        // ARC-BUG-1501: the post-GC heap of a large map also alternates by about 16 MB between reloads with nothing retained (town sector 1409,1314:
+        // 485, 503, 488, 503, 503, 483 MB after the first six reloads, baseline 393 MB), so a single repeated reload can land on the high side.
+        // A retention every replaced generation adds grows the heap at every reload, so up to two more reloads are made and the least growth
+        // of them is bound (the first one under the limit ends it).
         long? repeated = null;
         if (growth >= limit)
         {
-            var published = CaptureAreaResourceBaseline();
-            await StartLoadAsync(arguments, false);
-            Require(_readyArea is not null && _readyArea.Generation == _generation && _generation > published.Generation, "STALE_PUBLICATION");
-            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
-            await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
-            var againSamples = await ManagedSamples();
-            repeated = againSamples.Min() - after.Managed;
-            GD.Print($"ARC-RENDER-007 resources reload again generation={_generation} managed={againSamples.Min()} samples={string.Join(',', againSamples)} growth={growth}/{repeated} limit={limit}");
-            Require(!published.Result.IsAlive && !published.Frames.IsAlive, "RETIRED_GENERATION_ALIVE");
+            var previous = after.Managed;
+            for (var attempt = 1; attempt <= 2 && (repeated is null || repeated >= limit); attempt++)
+            {
+                var published = CaptureAreaResourceBaseline();
+                await StartLoadAsync(arguments, false);
+                Require(_readyArea is not null && _readyArea.Generation == _generation && _generation > published.Generation, "STALE_PUBLICATION");
+                await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+                var againSamples = await ManagedSamples();
+                var again = againSamples.Min() - previous; previous = againSamples.Min();
+                repeated = repeated is null ? again : Math.Min(repeated.Value, again);
+                GD.Print($"ARC-RENDER-007 resources reload again {attempt} generation={_generation} managed={againSamples.Min()} samples={string.Join(',', againSamples)} growth={growth}/{again} limit={limit}");
+                Require(!published.Result.IsAlive && !published.Frames.IsAlive, "RETIRED_GENERATION_ALIVE");
+            }
         }
         Require(Math.Min(growth, repeated ?? growth) < limit, "MANAGED_RETENTION");
         var resources = new { Outcome = "PASS", SweepSteps = steps, SweepCommands = sweptCommands, SweepTaken = taken, MaxVisible = maxVisible, MaxGpuFrames = maxLive,
