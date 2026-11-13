@@ -2,6 +2,7 @@ using Arcanum.Data.Area;
 using Arcanum.Data.Combat;
 using Arcanum.Data.Traversal;
 using Arcanum.Session;
+using Arcanum.Simulation.Character;
 using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Magic;
 using Arcanum.Simulation.Movement;
@@ -351,6 +352,9 @@ public sealed class AreaSpellCastMap : ISpellCastMap
             // ARC-MAGIC-1295: the stored values the TraitIdx component adds to (the session lays what it wrote over them).
             StoredStats = fields.Critter?.BaseStats, StoredResistances = resistances,
             StoredBasicSkills = fields.Critter?.BasicSkills, StoredTechSkills = fields.Critter?.TechSkills,
+            // ARC-MAGIC-1476: the tech degrees (the values after the 16 college ranks and the mastery) the intelligence guard reads.
+            StoredDegrees = fields.Critter is { } c && c.SpellTech.Count >= SpellBookRules.Colleges + 1 + AutoLevelRules.TechDisciplines
+                ? [.. c.SpellTech.Skip(SpellBookRules.Colleges + 1).Take(AutoLevelRules.TechDisciplines)] : null,
         };
     }
 
