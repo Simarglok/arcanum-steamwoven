@@ -74,7 +74,7 @@ public partial class TerrainViewerApp
             var launch = flight.Launch;
             // A projectile whose run is gone (dropped at the restore) would hang in the air: it is given up below like one whose rows are gone.
             var running = owner.QueryGoals().RunsOf(saved.Entity).Any(run => !run.Done);
-            var target = launch.Target is { } entity ? ProjectileRowOf(owner, entity) : null;
+            var target = launch.Target is { } entity ? ProjectileRowOf(owner, entity) ?? (owner.QueryTrapShot(flight.Shot) is not null ? _spellCastMap?.Row(entity) : null) : null;
             AreaObjectRecord? shooter = null, thrower = null;
             var resolved = running && target is not null && saved.Map.RuntimeMap == CurrentAreaMap
                 && (launch.Shooter is not { } s || (shooter = ProjectileRowOf(owner, s)) is not null || owner.QueryTrapShot(flight.Shot) is not null)

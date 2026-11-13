@@ -31,7 +31,7 @@ public partial class TerrainViewerApp
     /// </summary>
     private bool LaunchTrapShotFlight(SessionTrapShotLaunch launch)
     {
-        if (_areaSession is not { } owner || _spellCastMap is not { } cast || owner.QueryTrapShot(launch.Shot) is null) return false;
+        if (_areaSession is not { } owner || _spellCastMap is not { } cast || owner.QueryTrapShot(launch.Shot) is null || !AttackMapActive || AreaLineOfFireNow() is null) return false;
         var victim = launch.Victim == SessionSpellCaster.Hero ? HeroRow : cast.Row(launch.Victim);
         if (victim is null) return false;
         var shooter = cast.Row(launch.Shooter) ?? TrapShooterStandIn;
