@@ -349,5 +349,5 @@ The lines come from the player's generated NPC files (one draw each); without th
 A release on the box bets (`AreaBarter.Gamble`, the session's `GameSessionOwner.Gamble`): the Gambling check of the hero against the merchant's level
 on the saved d100; a win moves the item for nothing and costs the merchant the item's worth in reaction (`GamblingRules.WonReaction`), a loss moves it
 for the unit price like a buy. A stack goes whole. The saved roll is thrown at the first barter window (`GameSessionOwner.EnsureGamblingRoll`), the
-check's own draw replaces it for the next bet, and the roll is part of the snapshot (schema 100). A refused move (no room, a script, too few coins for
+check's own draw replaces it for the next bet, and the roll is part of the snapshot (schema 101). A refused move (no room, a script, too few coins for
 a lost stack) leaves the roll, the generator and the fate as they were.

@@ -777,7 +777,7 @@ public sealed class GameSessionSnapshot
     /// <summary>The lit state of the top strip's buttons, or null when none was recorded (a session whose host never lit a button, or a save of schema 97 or older: all idle, ARC-UI-1542).</summary>
     public SessionBarLightsState? BarLights { get; }
 
-    /// <summary>The skill module's pre-thrown gambling roll 1..100 (the original's one saved roll, 0x4C5DE0, ledger SR12, PS14), or null when none was thrown yet (a new session before its first barter window, or a save of schema 99 or older, ARC-UI-1740).</summary>
+    /// <summary>The skill module's pre-thrown gambling roll 1..100 (the original's one saved roll, 0x4C5DE0, ledger SR12, PS14), or null when none was thrown yet (a new session before its first barter window, or a save of schema 100 or older, ARC-UI-1740).</summary>
     public int? GamblingRoll { get; }
 }
 

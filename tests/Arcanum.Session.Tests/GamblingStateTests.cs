@@ -191,7 +191,7 @@ public sealed class GamblingStateTests
     }
 
     [TestMethod]
-    public void A_schema_99_save_upgrades_with_no_roll_and_a_damaged_one_is_refused()
+    public void A_schema_100_save_upgrades_with_no_roll_and_a_damaged_one_is_refused()
     {
         using var owner = Gambler(0);
         var current = GameSessionSnapshotCodec.Encode(owner.Capture());

@@ -61,7 +61,7 @@ public sealed partial class GameSessionOwner
     /// pays as for a buy). The reaction of the merchant is the caller's (a win costs it the item's worth, <see cref="GamblingRules.WonReaction"/>;
     /// a loss is an ordinary buy's, <see cref="Arcanum.Simulation.Items.TradeRules.GiftAmount"/>). The gate (<see cref="GamblingRules.Gate"/>) is the
     /// caller's too. A saved roll that does not exist yet is thrown first (<see cref="EnsureGamblingRoll"/>'s draw, in this call's revision).
-    /// <para>The roll, the draws, the fate and the move are one revision: a move that is refused (no room for the item, a script, a budget, the hero's
+    /// <para>The roll, the draws, the fate and the move are one revision: a move that is refused without changing anything (no room for the item, a script, a budget, the hero's
     /// coins for a lost stack) leaves the saved roll, the generator and the fate as they were, so a refused bet never rerolls. Refused before any
     /// effect: no living hero (<see cref="GameSessionFailure.GamblingUnavailable"/>), a merchant level outside 0..20, the version, and
     /// <see cref="BarterBuy"/>'s own refusals.</para>

@@ -53,7 +53,7 @@ The session keeps a **project generator**, not the original LCG (decision of thi
   continuation. Without one it starts the default seed 0 at draw 0, as a new session without a seed; the owner still
   reads no clock. The saved `random` section is decoded and checked in both modes, and the next capture writes the
   generator the session went on with. The original's one saved roll, the skill module's pre-rolled gambling value
-  (PS14, the `GamblingRoll` of a skill check), is a separate datum outside this switch: since ARC-UI-1740 (schema 100) the session holds it
+  (PS14, the `GamblingRoll` of a skill check), is a separate datum outside this switch: since ARC-UI-1740 (schema 101) the session holds it
   (`QueryGamblingRoll`, `gamblingRoll` in the snapshot), throws it at the first barter window with one draw of the session generator, and
   restores it in both modes.
 
