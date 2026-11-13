@@ -136,12 +136,22 @@ public sealed partial class GameSessionOwner
     {
         // The counters stay where the session's own increments can go on (CreateProjectile stops at int.MaxValue - 1; a shot id needs room for a full budget).
         if (saved.LastProjectile is < 0 or > int.MaxValue - 1 || saved.NextShot is < 0 or > long.MaxValue - MaxShotsInFlight) return GameSessionFailure.InvalidSnapshot;
-        if (saved.Projectiles.Count > SessionProjectile.MaxProjectiles || saved.HeroShots.Count + saved.NpcThrows.Count + saved.NpcArrows.Count + saved.TrapShots.Count > MaxShotsInFlight)
+        // ARC-COMBAT-1717: an NPC's thrown weapon is in both lists (the item to land, the check to strike with): one shot.
+        var thrownIds = saved.NpcThrows.Select(s => s.Shot.Id).ToHashSet();
+        if (saved.Projectiles.Count > SessionProjectile.MaxProjectiles || saved.HeroShots.Count + saved.NpcThrows.Count + saved.NpcArrows.Count(a => !thrownIds.Contains(a.Shot.Id)) + saved.TrapShots.Count > MaxShotsInFlight)
             return GameSessionFailure.BudgetExceeded;
         if (!hero && saved.HeroShots.Count > 0) return GameSessionFailure.InvalidSnapshot;
         var shots = new HashSet<long>();
-        foreach (var shot in saved.HeroShots.Select(s => s.Shot).Concat(saved.NpcThrows.Select(s => s.Shot)).Concat(saved.NpcArrows.Select(s => s.Shot)).Concat(saved.TrapShots.Select(s => s.Shot)))
+        foreach (var shot in saved.HeroShots.Select(s => s.Shot).Concat(saved.NpcThrows.Select(s => s.Shot)).Concat(saved.TrapShots.Select(s => s.Shot)))
             if (shot.Id < 1 || shot.Id > saved.NextShot || !shots.Add(shot.Id)) return GameSessionFailure.InvalidSnapshot;
+        var arrowIds = new HashSet<long>();
+        foreach (var arrow in saved.NpcArrows)
+        {
+            // An arrow's shot is its own, or the shot of the thrown weapon the same NPC threw (ARC-COMBAT-1717).
+            var throwsIt = saved.NpcThrows.FirstOrDefault(t => t.Shot == arrow.Shot);
+            if (arrow.Shot.Id < 1 || arrow.Shot.Id > saved.NextShot || !arrowIds.Add(arrow.Shot.Id) || throwsIt is null && !shots.Add(arrow.Shot.Id)
+                || throwsIt is not null && throwsIt.Thrower != arrow.Shooter) return GameSessionFailure.InvalidSnapshot;
+        }
         foreach (var shot in saved.HeroShots)
         {
             if (shot.Entity is not null && shot.Object is not null) return GameSessionFailure.InvalidSnapshot;
@@ -210,7 +220,10 @@ public sealed partial class GameSessionOwner
                 Thrown = shot.Thrown, WeaponItem = shot.WeaponItem, Struck = shot.Struck, Boomerang = shot.Boomerang, Returning = shot.Returning,
             });
         foreach (var shot in saved.NpcThrows) _npcShots.Add(shot.Shot, new NpcShot(shot.Thrower, shot.Thrown));
-        foreach (var shot in saved.NpcArrows) _npcArrows.Add(shot.Shot, new NpcArrow(shot.Shooter, shot.Values, shot.Check.Resolution(), shot.Hit, shot.Target));
+        // ARC-COMBAT-1717: the arrow of a thrown weapon (its shot is also an NPC throw) strikes with the thrown item as the strike's weapon.
+        foreach (var shot in saved.NpcArrows)
+            _npcArrows.Add(shot.Shot, new NpcArrow(shot.Shooter, shot.Values, shot.Check.Resolution(), shot.Hit, shot.Target,
+                saved.NpcThrows.FirstOrDefault(t => t.Shot == shot.Shot)?.Thrown.Item));
         foreach (var shot in saved.TrapShots) _trapShots.Add(shot.Shot, new(shot.Shooter, shot.Victim, shot.Amount));
         // ARC-DEV-289: the spell missiles and their counter.
         foreach (var missile in saved.Missiles) _missileObjects.Add(missile.Entity, missile);
