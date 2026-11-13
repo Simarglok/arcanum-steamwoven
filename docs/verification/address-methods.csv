@@ -108,6 +108,7 @@ src/Arcanum.Session/GameSessionHeroName.cs,SetHeroPlayerName,pending,
 src/Arcanum.Session/GameSessionHeroThrow.cs,SplitAmmoForThrow,pending,
 src/Arcanum.Session/GameSessionHeroThrow.cs,SplitAmmoRefusal,pending,
 src/Arcanum.Session/GameSessionHeroThrow.cs,ThrowHeroItem,pending,
+src/Arcanum.Session/GameSessionHeroWieldScripts.cs,PlanHeroRewield,exempt,host
 src/Arcanum.Session/GameSessionHolderGrid.cs,ArrangeHolderGrid,exempt,host
 src/Arcanum.Session/GameSessionHolderGrid.cs,QueryHolderRoom,exempt,host
 src/Arcanum.Session/GameSessionHolderGrid.cs,StoreInsertPlace,exempt,host

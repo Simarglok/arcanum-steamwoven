@@ -579,6 +579,8 @@ public partial class TerrainViewerApp
         ProcessAreaSpells();
         // ARC-MAGIC-018: spell missiles fly after the casting goal's release frame.
         ProcessSpellMissiles();
+        // ARC-SCRIPT-1592: the scripts' eye candy (action 120) starts before the eye candies are drawn.
+        SyncScriptEyeCandies();
         ProcessAreaEyeCandy();
         // ARC-DEV-352: the eye candies' callbacks call their spell runs back.
         ProcessEyeCandyCallbacks();
