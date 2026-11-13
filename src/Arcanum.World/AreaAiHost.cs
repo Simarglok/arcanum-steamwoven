@@ -71,6 +71,9 @@ public sealed record AreaAiScene
     public Func<string, AreaObjectAttackTarget?>? ObjectAttackTarget { get; init; }
     /// <summary>The hero's world cell now, or null without a hero on this map.</summary>
     public required Func<CellCoord?> HeroCell { get; init; }
+    /// <summary>ARC-SCRIPT-1773 (CS5, AW3): the hero's current facing as the object rotation 0..7 (the octant the sight check compares: <see cref="GridActorMath.Octant"/>), for a sight check with the hero as the observer
+    /// (<see cref="AreaAiHost.ScriptCanSee"/>); null (the provider, or its answer): the hero's facing is not known, and that check stops as not modelled.</summary>
+    public Func<int?>? HeroRotation { get; init; }
     /// <summary>ARC-DEV-116 (MIG11 S5): whether the map list holds a map (the destination of an NPC's change of place, the original's map list lookup);
     /// null: only the shown map is listed.</summary>
     public Func<int, bool>? MapListed { get; init; }
@@ -317,7 +320,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     // at their raw rate: NPC ART is not read yet.
     private static readonly (int Frames, int ActionFrame, int RawFramesPerSecond) FixedSkillArt = FixedAttackArt;
     // ARC-WORLD-109: object flag 0x10000 and critter flags stunned and paralysed refuse an action's turn and start (0x42C0F0, 0x42CB10).
-    private const uint ActionRefusedObject = 0x10000, StunnedCritter = 0x20, ParalysedCritter = 0x40;
+    private const uint ActionRefusedObject = 0x10000, StunnedCritter = 0x20, ParalysedCritter = 0x40, ProwlingCritter = 0x1;
     // ARC-DEV-135 (MIG13 S5): the levels of the host's own interrupts (GS20): the AI tick's far path, the follower catch-up and the waypoint and standpoint moves interrupt at 4
     // (TL42), a follower's removal from the party at 5 (0x45E040).
     private const int FarPathLevel = 4, LeaveLevel = 5;
@@ -2201,6 +2204,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
 
     /// <summary>ARC-AI-1519: critter flag 0x20 (the stun condition, or the flag the data or a spell wrote), without paralysis 0x40, as the sight and hearing checks read it.</summary>
     private bool Stunned(string id) =>
+        id == Pc ? (HeroLifeState()?.Conditions.HasFlag(LifeConditions.Stunned) ?? false) || (_session.QueryObjectFlags(Pc).Critter(0) & unchecked((int)StunnedCritter)) != 0 :
         (LifeState(id)?.Conditions.HasFlag(LifeConditions.Stunned) ?? false) || Fields(id)?.Critter is { } critter && (CritterFlagsOf(id, critter.Flags) & StunnedCritter) != 0;
 
     public bool Paralysed(string id) => (_session.QueryObjectFlags(id).Critter(id == Pc ? 0 : unchecked((int)(Fields(id)?.Critter?.Flags ?? 0))) & ParalysedCritter) != 0
@@ -3731,32 +3735,51 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         Tile(observer) is { } from && Tile(target) is { } to ? SeeFacing(observer, target, AreaCombatHost.Facing(from, to)) : See(observer, target);
 
     /// <summary>
-    /// ARC-SCRIPT-1733 (CS5, exe 0x4451B0 case 28 → 0x4AF260): whether a script's obj can see obj holds: the sight check of an NPC this host holds sight facts of toward an NPC or the hero, which needs nothing more than the NPC's own facing (excess 0). Null for an observer that
-    /// is the hero (its facing is not tracked here, <see cref="SeeToward"/>) or that is not an NPC of this host, and for a target it holds no facts of: the script stops as not modelled.
+    /// ARC-SCRIPT-1733 / ARC-SCRIPT-1773 (CS5, exe 0x4451B0 case 28 → 0x4AF260): whether a script's obj can see obj holds: the sight check of an NPC or the hero this host holds sight facts of toward an NPC or the hero, which needs nothing more than the observer's own
+    /// facing (excess 0). An NPC's facing is its mover's; the hero's is the scene's <see cref="AreaAiScene.HeroRotation"/> (the hero's conditions come from its life state, the sleeping bit from the session's flags: <see cref="SightFacts"/>). Null (the script stops as not
+    /// modelled) for an observer or target it holds no facts of, a hero observer when the scene gives no hero facing, a hero observer and a target that is concealed (the hero's check reads the margin of a prowling target, which is not built for it, <see cref="HeroSeesProwler"/>), the
+    /// hero toward itself, and while the scene has no line-of-fire map.
     /// </summary>
     public bool? ScriptCanSee(string observer, string target) =>
-        observer == Pc || Find(observer) is null || Find(target) is null || _scene.LineOfFire?.Invoke() is null ? null : See(observer, target).Excess == 0;
+        ScriptAware(observer, target) && (observer != Pc || _scene.HeroRotation?.Invoke() is not null) ? See(observer, target).Excess == 0 : null;
 
-    /// <summary>ARC-SCRIPT-1733 (CS6, case 29 → 0x4AF470 with loudness 1): the hearing check of an NPC toward an NPC or the hero at the normal loudness; null as <see cref="ScriptCanSee"/>.</summary>
+    /// <summary>ARC-SCRIPT-1733 / ARC-SCRIPT-1773 (CS6, case 29 → 0x4AF470 with loudness 1): the hearing check of an NPC or the hero toward an NPC or the hero at the normal loudness; null as <see cref="ScriptCanSee"/> (hearing needs no facing).</summary>
     public bool? ScriptCanHear(string listener, string source) =>
-        listener == Pc || Find(listener) is null || Find(source) is null || _scene.LineOfFire?.Invoke() is null ? null : Hear(listener, source, Loudness.Normal).Excess == 0;
+        ScriptAware(listener, source) ? Hear(listener, source, Loudness.Normal).Excess == 0 : null;
+
+    // What both script checks need: facts of both ends, a line-of-fire map, and for the hero as the observer no prowling target (its margin is not built, ARC-SCRIPT-1773) and not itself.
+    private bool ScriptAware(string from, string to) =>
+        Find(from) is not null && Find(to) is { } target && _scene.LineOfFire?.Invoke() is not null && (from != Pc || (to != Pc && !HeroSeesProwler(to, target)));
+
+    // The hero's own check reads the prowling margin of its target (0x4C62E0 with the target as the prowler: ledger AW4); this host builds it for a concealed hero toward an NPC, and for a concealed follower toward an NPC observer, not toward the hero:
+    // a concealed target and an NPC with the prowling bit of its own flags (0xDA bit 0x1) refuse.
+    private bool HeroSeesProwler(string to, HostilityCritter target) =>
+        target.Concealed || (CritterFlagsOf(to, Fields(to)?.Critter?.Flags ?? 0) & ProwlingCritter) != 0;
+
+    // The observer's rotation for a sight check: the turned one when the caller gives it, else the hero's own facing (<see cref="AreaAiScene.HeroRotation"/>, ARC-SCRIPT-1773) or the NPC's mover's.
+    private int ObserverRotation(string observer, NeighborDirection? facing) =>
+        facing is { } turned ? GridActorMath.Octant(turned)
+        : observer == Pc && _scene.HeroRotation?.Invoke() is { } hero ? hero & 7
+        : GridActorMath.Octant(Movers.FacingOf(observer, NeighborDirection.XPlus));
 
     private AwarenessResult SeeFacing(string observer, string target, NeighborDirection? facing)
     {
         if (Tile(observer) is not { } at || Tile(target) is not { } there || _scene.LineOfFire?.Invoke() is not { } map) return new(AwarenessRules.NotPerceived, AwarenessReason.State);
         var facts = Find(observer);
         var stunned = Stunned(observer);
-        var blinded = Blinded(observer);
+        var blinded = observer == Pc ? HeroLifeState()?.Conditions.HasFlag(LifeConditions.Blinded) ?? false : Blinded(observer);
+        var rotation = ObserverRotation(observer, facing);
+        var sleeping = observer == Pc ? (_session.QueryObjectFlags(Pc).Critter(0) & unchecked((int)SleepingFlag)) != 0 : facts?.Asleep ?? false;
         var sight = new SightFacts
         {
             Perception = Math.Clamp(facts?.Perception ?? 0, 0, AwarenessRules.MaxPerception),
-            Rotation = GridActorMath.Octant(facing ?? Movers.FacingOf(observer, NeighborDirection.XPlus)),
+            Rotation = rotation,
             // ARC-AI-1519 (VBG8): the refusal flags 0x10A0 are stunned 0x20, blinded 0x80 and sleeping 0x1000, not paralysis 0x40; Perception 20 or more (0x4B0EE0) sees the invisible.
-            Stunned = stunned, Blinded = blinded, Sleeping = facts?.Asleep ?? false, Unconscious = facts?.Unconscious ?? false,
+            Stunned = stunned, Blinded = blinded, Sleeping = sleeping, Unconscious = facts?.Unconscious ?? false,
             ExtraordinaryPerception = (facts?.Perception ?? 0) >= AwarenessRules.ExtraordinaryPerceptionMin,
             TargetInvisible = Find(target) is { } seen && (seen.ObjectInvisible || seen.InvisibleSpell), DetectsInvisible = facts?.DetectsInvisible ?? false,
             // The margin is read only where the sight check gets as far as Perception (not for a stunned, blinded, sleeping or unconscious observer, nor one facing away).
-            ProwlingMargin = facts is { Asleep: false, Unconscious: false } && !stunned && !blinded && AwarenessRules.Faces(at, GridActorMath.Octant(facing ?? Movers.FacingOf(observer, NeighborDirection.XPlus)), there)
+            ProwlingMargin = facts is { Unconscious: false } && !sleeping && !stunned && !blinded && AwarenessRules.Faces(at, rotation, there)
                 ? ProwlingMargin(observer, target, at, there, facts, map, true) : 0,
         };
         var (offsetX, offsetY) = ObserverOffset(observer);
@@ -3825,11 +3848,12 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         if (Tile(observer) is not { } at || Tile(target) is not { } there || _scene.LineOfFire?.Invoke() is not { } map) return new(AwarenessRules.NotPerceived, AwarenessReason.State);
         var facts = Find(observer);
         var stunned = Stunned(observer);
+        var sleeping = observer == Pc ? (_session.QueryObjectFlags(Pc).Critter(0) & unchecked((int)SleepingFlag)) != 0 : facts?.Asleep ?? false;
         var hearing = new HearingFacts
         {
             Perception = Math.Clamp(facts?.Perception ?? 0, 0, AwarenessRules.MaxPerception),
             // ARC-AI-1519 (VBG8): hearing refuses critter flag 0x20 only; a paralysed observer still hears.
-            Stunned = stunned, Sleeping = facts?.Asleep ?? false, Unconscious = facts?.Unconscious ?? false,
+            Stunned = stunned, Sleeping = sleeping, Unconscious = facts?.Unconscious ?? false,
             ProwlingMargin = facts is { Unconscious: false } && !stunned ? ProwlingMargin(observer, target, at, there, facts, map, false) : 0,
         };
         var (offsetX, offsetY) = ObserverOffset(observer);
@@ -3915,6 +3939,9 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
 
     // ARC-MAGIC-027: the NPC's combat values under its effect list (speed, strength and the rest, resistances), for the readers of its combat values.
     private SessionCritterCombat? Build(string id) => RawBuild(id) is { } combat ? _session.WithNpcEffects(combat) : null;
+
+    // ARC-SCRIPT-1773: the hero's conditions (stunned, blinded) as the session's life state has them, for the sight and hearing checks with the hero as the observer.
+    private LifeState? HeroLifeState() => _session.QueryHeroLife()?.Record.State;
 
     private LifeState? LifeState(string id) => RawBuild(id) is { } build ? _session.QueryLife(build.Target).View?.Record.State : null;
 
