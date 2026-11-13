@@ -278,6 +278,8 @@ public partial class TerrainViewerApp
         var owner = _areaSession!;
         // ARC-COMBAT-1720: a weapon the wear broke is replaced at once (0x4B5580 → 0x4B83E0); an object has no magnetic inversion.
         if (byHero) HeroWeaponWornOut(result.Wear, target.Row, false);
+        // ARC-COMBAT-1738 (0x4B3170 → 0x4B83E0): the ammunition check refused the attack, so the best weapon for the target is wielded.
+        if (byHero) HeroOutOfAmmunition(result.Resolution?.Refusal, target.Row, false);
         // A blocker the line of fire struck instead (ARC-COMBAT-012) does not end the goal on the clicked target when it breaks.
         if (goal is not null && target.Row.Key == goal.Row.Key)
             goal.Broke = result.Object?.Broken == true || result.Item?.Break is Arcanum.Simulation.Items.ItemBreakStep.Broken or Arcanum.Simulation.Items.ItemBreakStep.Deleted;
@@ -793,6 +795,9 @@ public partial class TerrainViewerApp
             });
             goal.Attacks++;
             goal.Stop = result.Disposition == GameSessionDisposition.Rejected || result.Resolution?.Refusal is { } refusal && refusal != AttackRefusal.None;
+            // ARC-COMBAT-1738: a wall takes the same re-wields (a worn-out weapon, no ammunition) as any struck object.
+            HeroWeaponWornOut(result.Wear, blocker, false);
+            HeroOutOfAmmunition(result.Resolution?.Refusal, blocker, false);
             if (result.Shot is { } shot)
             {
                 foreach (var projectile in result.Shots) LaunchProjectile(goal, projectile, flight!.Value, result.Resolution!, blocker, null, null, null);
@@ -881,6 +886,8 @@ public partial class TerrainViewerApp
         _lastCritterAttackForSelfTest = result;
         // ARC-COMBAT-1720: a weapon the wear broke is replaced at once (0x4B5580 → 0x4B83E0), before anything else reads the hero's equipment.
         HeroWeaponWornOut(result.Wear, struck.Row, struck.Combat?.MagneticInversion == true);
+        // ARC-COMBAT-1738 (0x4B3170 → 0x4B83E0): no ammunition for the attack, so the best weapon for the target is wielded.
+        HeroOutOfAmmunition(result.Resolution?.Refusal, struck.Row, struck.Combat?.MagneticInversion == true);
         // ARC-DEV-292: a hit or a miss that ran the attack event gives the NPC victim its immediate AI pass (0x4B52FC, the miss paths 0x4B30F5 and 0x4B3948): after the attack event (the victim has its focus), before the sounds and bookkeeping.
         // ARC-DEV-303 (RS10): the hit effect (0x4B6930 → 0x459A30): a hit that reached an entangled NPC asks its save again, before its pass.
         if (AreaAiHost.HitReached(result)) _spellCaster?.CritterHit(struck.Entity);
