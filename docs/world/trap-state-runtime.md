@@ -146,7 +146,7 @@ ARC-AI-1636: the NPC then fights the object. The danger update keeps the focus w
 the focus on the next pass (calm down, or the next target). Combat perform (0x4AC6E0) starts the attack goal on the object as on a critter; the goal's tests read a type 15 or 16 only for death (0x429450, 0x4294F0:
 `AreaAiHost.DeadCritter` answers false for an object) and the object's flags 0x1 and 0x2 for its presence (`Gone`). The goal walks next to the object and its hit step is the session's object attack
 (`AreaAiHost.HitObjectFocus` → `GameSessionOwner.AttackObjectByNpc`, no skill roll, the viewer's `AreaAiScene.ObjectStruck` follow-up as for a blocker of the line of fire), after which the attack event of the record (0x4B3170 → 0x4A9650)
-goes out for the object as victim. Not built: the attack animation reads the object's art (0x42B9C0 node 5 reads the target's art and flag 0x80), which the host takes as a standing critter's, and the NPC's spell and item choice for an
+goes out for the object as victim. Not built ([#1755](https://github.com/Simarglok/arcanum-steamwoven/issues/1755), [#1756](https://github.com/Simarglok/arcanum-steamwoven/issues/1756)): the attack animation reads the object's art (0x42B9C0 node 5 reads the target's art and flag 0x80), which the host takes as a standing critter's, and the NPC's spell and item choice for an
 object target (0x4ABC70 reads no target type) runs over the cast host's targets unchanged.
 
 ## Viewer (ARC-WORLD-110)
