@@ -26,11 +26,22 @@ public sealed record ChromeSunk(int X, int Y, int Width, int Height, ChromeMater
 public sealed record ChromeRivet(double X, double Y, double Radius) : ChromePart;
 
 /// <summary>A picture region: its pixels come from the art (the HD redraw when the pack has one, else the Legacy frame).</summary>
-public sealed record ChromeKeep(int X, int Y, int Width, int Height) : ChromePart;
+/// <remarks>ARC-UI-1194: <paramref name="Round"/> copies only the circle (ellipse) inscribed in the rectangle, anti-aliased, so a round picture (the barter window's
+/// medallion) does not bring the square of the old wood around it.</remarks>
+public sealed record ChromeKeep(int X, int Y, int Width, int Height, bool Round = false) : ChromePart;
 
 /// <summary>ARC-UI-148: the lines between the cells of a grid (an inventory grid): one-unit lines on the last pixel of every cell but the last
 /// of each row and column, in <paramref name="Columns"/> × <paramref name="Rows"/> cells of <paramref name="Cell"/> Legacy pixels from (X, Y).</summary>
-public sealed record ChromeGrid(int X, int Y, int Columns, int Rows, int Cell) : ChromePart;
+/// <remarks>ARC-UI-1194: <paramref name="Closed"/> also draws the line on the last pixel of the last column and row (a grid whose pit goes on past the last cell:
+/// the loot and barter windows' scroll bar column, the bottom edge).</remarks>
+public sealed record ChromeGrid(int X, int Y, int Columns, int Rows, int Cell, bool Closed = false) : ChromePart;
+
+/// <summary>ARC-UI-1194: the round view of a window (the live game view's circle, <see cref="AreaInventoryHole"/>): a brass ring of the round hole's own style
+/// (<see cref="InterfaceChromeRenderer"/>'s socket ring) around the circle at (<paramref name="CenterX"/>, <paramref name="CenterY"/>) of <paramref name="Radius"/>,
+/// painted on the opaque pixels of the frame, and the square rim a square hole would get is not drawn. The lens arts (231-233) fill the circle's box with the same ring.
+/// <paramref name="Shape"/> (the default) also gives the circle an anti-aliased edge by making what lies inside it transparent where the Legacy frame is not opaque there
+/// already; a frame whose box behind the live view is opaque (the inventory's paper doll) passes false and keeps its pixels.</summary>
+public sealed record ChromeRoundView(double CenterX, double CenterY, double Radius, bool Shape = true) : ChromePart;
 
 public enum ChromeKind
 {
@@ -104,13 +115,39 @@ public static class InterfaceChromeRecipes
             new ChromeSunk(124, 25, 223, 55, ChromeMaterial.Pit),
             new ChromeSunk(18, 100, 330, 310, ChromeMaterial.Pit), // runs off the frame's bottom: the original's box has no bottom edge between its corners
             new ChromeGrid(23, 107, 10, 9, 32),
-            new ChromeKeep(0, 0, 106, 100),
+            new ChromeKeep(11, 9, 89, 89), // the opaque box behind the live round view
+            new ChromeRoundView(55.5, 53.5, 44.5, false),
             new ChromeKeep(10, 303, 112, 97),
             new ChromeKeep(244, 303, 114, 97),
         ]);
+        // ARC-UI-1194: the loot, barter and steal windows' frames (Legacy pixels of each art). The grids' last column and row carry a line too (their pit goes on
+        // for the scroll bar's chain, which is kept). The curly flourishes of the original's boxes are not drawn (as in the inventory).
+        List<ChromePart> lootParts = [new ChromeRoundView(60.5, 61.5, 44.5), new ChromeSunk(181, 31, 68, 68, ChromeMaterial.Pit)];
+        foreach (var x in new[] { 171.0, 258.0 })
+            foreach (var y in new[] { 45.5, 64.5, 82.5 }) lootParts.Add(new ChromeRivet(x, y, 2.5));
+        lootParts.AddRange([new ChromeSunk(6, 134, 342, 260, ChromeMaterial.Pit), new ChromeGrid(8, 136, 10, 8, 32, true), new ChromeKeep(332, 136, 12, 256)]);
+        var loot = new ChromeRecipe("loot.art", ChromeKind.Panel, ChromeMaterial.Wood, ChromeSides.None, lootParts);
+        List<ChromePart> barterParts =
+        [
+            new ChromeSunk(181, 31, 68, 68, ChromeMaterial.Pit), new ChromeSunk(82, 125, 266, 36, ChromeMaterial.Pit),
+            new ChromeSunk(6, 166, 343, 228, ChromeMaterial.Pit), new ChromeGrid(8, 168, 10, 7, 32, true), new ChromeKeep(332, 168, 12, 224),
+            new ChromeRivet(147.5, 112, 2.5), new ChromeRivet(282.5, 112, 2.5),
+        ];
+        var barter = new ChromeRecipe("barter.art", ChromeKind.Panel, ChromeMaterial.Wood, ChromeSides.None, [new ChromeKeep(12, 13, 98, 95, true), .. barterParts]);
+        var follower = new ChromeRecipe("barter_follower.art", ChromeKind.Panel, ChromeMaterial.Wood, ChromeSides.None,
+            [new ChromeRoundView(60.5, 61.5, 44.5), new ChromeKeep(145, 45, 40, 40, true), new ChromeKeep(247, 45, 40, 40, true), .. barterParts]);
+        var lootDoll = new ChromeRecipe("loot_pd.art", ChromeKind.Panel, ChromeMaterial.Wood, ChromeSides.None,
+        [
+            new ChromeSunk(70, 46, 215, 194, ChromeMaterial.Pit),
+            new ChromeGrid(73, 49, 10, 9, 21),
+            new ChromeKeep(62, 174, 82, 70),
+            new ChromeKeep(212, 174, 80, 70),
+        ]);
+        // The three lenses (231 barter, 232 loot, 233 own window) are the round view's ring around the live game view's circle.
+        var lenses = new[] { "lns_bart.art", "lns_loot.art", "lns_papr.art" }.Select(file => new ChromeRecipe(file, ChromeKind.Panel, ChromeMaterial.Wood, ChromeSides.None, [new ChromeRoundView(44.5, 44.5, 44.5)]));
         string[] buttons = ["char_but.art", "log_but.art", "invn_but.art", "tmap_but.art", "lilgrnbut.art",
             "combat_button.art", "skills_button.art", "spells_button.art", "schematics_button.art"];
-        return [top, bottom, inventory, doll, .. buttons.Select(file => new ChromeRecipe(file, ChromeKind.Button, ChromeMaterial.Face, ChromeSides.None, []))];
+        return [top, bottom, inventory, doll, loot, barter, follower, lootDoll, .. lenses, .. buttons.Select(file => new ChromeRecipe(file, ChromeKind.Button, ChromeMaterial.Face, ChromeSides.None, []))];
     }
 }
 
@@ -294,13 +331,15 @@ public static class InterfaceChromeRenderer
                 case ChromeGrid grid: Grid(c, grid); break;
             }
         }
-        foreach (var hole in Holes(c)) HoleRim(c, hole);
+        foreach (var hole in Holes(c))
+            if (!recipe.Parts.OfType<ChromeRoundView>().Any(view => view.CenterX >= hole.X0 && view.CenterX < hole.X1 && view.CenterY >= hole.Y0 && view.CenterY < hole.Y1)) HoleRim(c, hole);
         foreach (var part in recipe.Parts)
         {
             switch (part)
             {
+                case ChromeRoundView view: RoundView(c, view); break;
                 case ChromeRivet rivet: Rivet(c, rivet); break;
-                case ChromeKeep keep: Keep(c, c.Edge(keep.X), c.Edge(keep.Y), c.Edge(keep.X + keep.Width) - c.Edge(keep.X), c.Edge(keep.Y + keep.Height) - c.Edge(keep.Y)); break;
+                case ChromeKeep keep: Keep(c, c.Edge(keep.X), c.Edge(keep.Y), c.Edge(keep.X + keep.Width) - c.Edge(keep.X), c.Edge(keep.Y + keep.Height) - c.Edge(keep.Y), keep.Round); break;
             }
         }
         Rim(c, recipe.Rim);
@@ -439,14 +478,14 @@ public static class InterfaceChromeRenderer
     private static void Grid(Canvas c, ChromeGrid grid)
     {
         int left = c.Edge(grid.X), top = c.Edge(grid.Y), right = c.Edge(grid.X + grid.Columns * grid.Cell), bottom = c.Edge(grid.Y + grid.Rows * grid.Cell);
-        for (var k = 1; k < grid.Columns; k++)
+        for (var k = 1; k < grid.Columns + (grid.Closed ? 1 : 0); k++)
         {
             var x0 = c.Edge(grid.X + grid.Cell * k) - c.S; // the last S device pixels of the cell, never over the next one
             for (var x = Math.Max(0, x0); x < Math.Min(right, x0 + c.S); x++)
             for (var y = Math.Max(0, top); y < Math.Min(c.H, bottom); y++)
                 c.Color[y * c.W + x] = GridLine;
         }
-        for (var k = 1; k < grid.Rows; k++)
+        for (var k = 1; k < grid.Rows + (grid.Closed ? 1 : 0); k++)
         {
             var y0 = c.Edge(grid.Y + grid.Cell * k) - c.S;
             for (var y = Math.Max(0, y0); y < Math.Min(bottom, y0 + c.S); y++)
@@ -470,11 +509,20 @@ public static class InterfaceChromeRenderer
         }
     }
 
-    private static void Keep(Canvas c, int x0, int y0, int w, int h)
+    private static void Keep(Canvas c, int x0, int y0, int w, int h, bool round = false)
     {
+        float cx = x0 + w * 0.5f, cy = y0 + h * 0.5f, rx = w * 0.5f, ry = h * 0.5f;
         for (var y = Math.Max(0, y0); y < Math.Min(c.H, y0 + h); y++)
         for (var x = Math.Max(0, x0); x < Math.Min(c.W, x0 + w); x++)
-            if (c.Alpha[y * c.W + x] > 0) c.Color[y * c.W + x] = c.PictureAt(x, y);
+        {
+            var i = y * c.W + x;
+            if (c.Alpha[i] <= 0) continue;
+            if (!round) { c.Color[i] = c.PictureAt(x, y); continue; }
+            // Inside the inscribed ellipse; its edge is anti-aliased by the distance to the edge, measured along the ray from the centre.
+            float dx = (x + 0.5f - cx) / rx, dy = (y + 0.5f - cy) / ry, d = MathF.Sqrt(dx * dx + dy * dy);
+            var edge = (1f - d) * MathF.Min(rx, ry);
+            c.Blend(x, y, c.PictureAt(x, y), Math.Clamp(edge + 0.5f, 0, 1));
+        }
     }
 
     private static void Rim(Canvas c, ChromeSides sides)
@@ -562,6 +610,45 @@ public static class InterfaceChromeRenderer
     {
         float cx = (float)((hole.X0 + hole.X1) * 0.5 * c.Scale), cy = (float)((hole.Y0 + hole.Y1) * 0.5 * c.Scale);
         var r = (float)(((hole.X1 - hole.X0) + (hole.Y1 - hole.Y0)) * 0.25 * c.Scale);
+        var reach = (int)(r + 3f * c.S + 2);
+        for (var y = Math.Max(0, (int)(cy - reach)); y < Math.Min(c.H, (int)(cy + reach)); y++)
+        for (var x = Math.Max(0, (int)(cx - reach)); x < Math.Min(c.W, (int)(cx + reach)); x++)
+        {
+            var i = y * c.W + x;
+            float dx = x + 0.5f - cx, dy = y + 0.5f - cy, d = MathF.Sqrt(dx * dx + dy * dy);
+            if (d >= r + 0.5f) continue;
+            if (x < c.Edge(hole.X0) || y < c.Edge(hole.Y0) || x >= c.Edge(hole.X1) || y >= c.Edge(hole.Y1)) continue;
+            // Inside the socket: the anti-aliased circular edge replaces the Legacy stairs.
+            c.Alpha[i] = MathF.Min(c.Alpha[i], Math.Clamp(d - r + 0.5f, 0, 1));
+            if (c.Alpha[i] > 0) c.Color[i] = Ink;
+        }
+        RingBand(c, cx, cy, r);
+    }
+
+    // ARC-UI-1194: a window's round view. The circle's inside is smoothed like a round hole's socket (the Legacy stairs give way to an anti-aliased edge),
+    // then the ring is laid outside it. A lens art (the circle touches the frame's sides, so the hole finder takes it for the outside of the frame) has no
+    // hole of its own to find; its recipe names the circle.
+    private static void RoundView(Canvas c, ChromeRoundView view)
+    {
+        float cx = (float)(view.CenterX * c.Scale), cy = (float)(view.CenterY * c.Scale), r = (float)(view.Radius * c.Scale);
+        var reach = (int)(r + 2);
+        for (var y = Math.Max(0, (int)(cy - reach)); y < Math.Min(c.H, (int)(cy + reach)); y++)
+        for (var x = Math.Max(0, (int)(cx - reach)); x < Math.Min(c.W, (int)(cx + reach)); x++)
+        {
+            float dx = x + 0.5f - cx, dy = y + 0.5f - cy, d = MathF.Sqrt(dx * dx + dy * dy);
+            if (d >= r + 0.5f || !view.Shape) continue;
+            var i = y * c.W + x;
+            c.Alpha[i] = MathF.Min(c.Alpha[i], Math.Clamp(d - r + 0.5f, 0, 1));
+            if (c.Alpha[i] > 0) c.Color[i] = Ink;
+        }
+        RingBand(c, cx, cy, r);
+    }
+
+    // The brass ring around a circle (centre and radius in device pixels), on the opaque pixels outside it: an ink edge, lit brass on the upper left,
+    // shaded on the lower right, an ink edge again; three units wide. A round hole's socket and a window's round view (ChromeRoundView) share it.
+    private static void RingBand(Canvas c, double centreX, double centreY, double radius)
+    {
+        float cx = (float)centreX, cy = (float)centreY, r = (float)radius;
         var ring = 3f * c.S;
         var reach = (int)(r + ring + 2);
         for (var y = Math.Max(0, (int)(cy - reach)); y < Math.Min(c.H, (int)(cy + reach)); y++)
@@ -569,15 +656,7 @@ public static class InterfaceChromeRenderer
         {
             var i = y * c.W + x;
             float dx = x + 0.5f - cx, dy = y + 0.5f - cy, d = MathF.Sqrt(dx * dx + dy * dy);
-            if (d < r + 0.5f)
-            {
-                if (x < c.Edge(hole.X0) || y < c.Edge(hole.Y0) || x >= c.Edge(hole.X1) || y >= c.Edge(hole.Y1)) continue;
-                // Inside the socket: the anti-aliased circular edge replaces the Legacy stairs.
-                c.Alpha[i] = MathF.Min(c.Alpha[i], Math.Clamp(d - r + 0.5f, 0, 1));
-                if (c.Alpha[i] > 0) c.Color[i] = Ink;
-                continue;
-            }
-            if (c.Alpha[i] <= 0 || d > r + ring + 0.5f) continue;
+            if (d < r + 0.5f || c.Alpha[i] <= 0 || d > r + ring + 0.5f) continue;
             var t = (d - r) / ring;
             var facing = -(dx + dy) / (1.4142f * d);
             var brass = Rgb.Lerp(BrassDark, BrassLight, Math.Clamp(0.5f + 0.5f * (t < 0.5f ? -facing : facing), 0, 1));

@@ -1169,3 +1169,22 @@ The original shows the load screen for every successful load of a save, the save
 | 2 | Open the in-play menu, Load Game and choose a save on the shown map. | The same black screen with the clock, then the window is closed and the game is the saved one. | open |
 | 3 | The same with a save whose file is damaged (copy one and break it). | The screen goes at once, the load window stays with the reason (F8: the running game stays, the message window says the load failed). | open |
 | 4 | Press F8 with no save at all. | No black screen; only the two notes, as before. | open |
+
+## ARC-UI-1194 — Generated interface: the loot, barter and steal windows (S4, 2026-11-13)
+
+The rules are in [viewer slice S4](../rendering/hd-interface-density.md#viewer-slice-s4-arc-ui-1194). Set the HD interface line on the launcher screen to **Generated (experimental)**,
+start a game and open a container, a body (the toggles under the picture switch to the doll), pick a pocket and talk to a merchant for the barter window. Compare with **HD** and **Legacy**.
+
+| # | Step | Expected | Status |
+| --- | --- | --- | --- |
+| 1 | Open a chest in a 1280 × 800 window. | The ring of the round view, the box of the image with its six rivets and the grid with its chain are drawn by code in the same places as in HD; the grid's cells, Take all and every click land where they did. | open |
+| 2 | Open a body and press the doll toggle. | The doll view (nine slots, two curved pits) is drawn by code; worn items sit on their slots as before. | open |
+| 3 | Talk to a merchant and open barter; with a follower in the party open it again. | The medallion stays a picture, the merchant's image, name and quote sit in their boxes; a follower's window keeps its two cycle buttons on their plates. | open |
+| 4 | Make the window bigger and smaller while one of these windows is open. | The frames redraw at the new size (the previous picture stays until it is ready); lines stay one unit wide. | open |
+| 5 | Open the inventory and one of these windows in turn. | The ring of the round view looks the same in both (the paper doll's ring is generated too now). | open |
+
+Known differences (documented, not bugs):
+
+- The curved flourishes at the corners of the original's boxes are not drawn; the ring around the round view is three units wide, narrower than the original's.
+- The follower's plates keep a little of the old wood at their inner ends; the barter doll and the doll cover are not built yet.
+

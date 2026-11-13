@@ -80,6 +80,13 @@ public partial class TerrainViewerApp
         {
             OpenInventory(body.Entity);
             Require(InventoryOpen && InventoryActive, "the window on the body opens");
+            // ARC-UI-1194: with ARC_AREA_WINDOW_ART the body window's doll view (the loot doll 349 over the loot art) is checked in the generated interface and captured.
+            if (_inventoryPanel is { ArtMode: true } bodyPanel && bodyPanel.GridAreaForSelfTest is { TogglesShown: true } bodyArea)
+            {
+                bodyArea.SetBodyDoll(true);
+                await WindowArtSmokeAsync("loot-doll", bodyArea, [AreaLootArtLayout.LootArt, AreaLootArtLayout.DollViewArt, AreaInventoryHole.LootArt]);
+                bodyArea.SetBodyDoll(false);
+            }
             var before = session.QueryPcInventory().Count;
             TakeAllFromBody();
             var movedFirst = plain.Where(entity => session.QueryPcInventory().Any(item => item.Entity == entity)).ToArray();
