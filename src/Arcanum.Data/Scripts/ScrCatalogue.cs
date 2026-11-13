@@ -114,7 +114,7 @@ public static class ScrCatalogue
             GetDaySinceStartup = 96, GetCurrentHour = 97, GetCurrentMinute = 98, GetHoursSinceStartup = 105, GrantFatePoint = 117, SetPcQuestUnbotched = 119,
             CritterDisband = 22, SetReaction = 30, AdjustReaction = 31, SetDayStandpoint = 45, SetNightStandpoint = 46, ChangeArtNumber = 59, ChangeScript = 99, SetDayStandpointEx = 140, SetNightStandpointEx = 141,
             TransferItem = 41, SetLockState = 53, CreateItem = 66, ToggleOpenClosed = 88, SetWrittenStart = 94, ToggleSectorBlocked = 106, ToggleMonsterGenerator = 110, TouchArt = 123,
-            DestroyItemNamed = 126, ToggleItemInventoryDisplay = 127, GetLocation = 95;
+            DestroyItemNamed = 126, ToggleItemInventoryDisplay = 127, GetLocation = 95, StopSpellOnObject = 130;
     }
 
     /// <summary>Script file flags.</summary>

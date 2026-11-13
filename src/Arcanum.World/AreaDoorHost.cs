@@ -46,6 +46,12 @@ public sealed class AreaDoorHost : IAiDoorWorld, IGoalStepHost
     public Func<AreaPortal, bool>? HeroUse { get; set; }
     public Action<AreaPortal, AreaPortalUse>? HeroNotice { get; set; }
 
+    /// <summary>
+    /// ARC-WORLD-1469 (ledger TT7, 0x428A10 → 0x441980 point 1): the viewer's side of an NPC or a companion as opener: the use node of goal 12 for it meets the door's trap with the opener as the
+    /// triggerer (the opener's entity and the portal in; true when the use stops, so the opener's run ends). Null: no trap is met, as before.
+    /// </summary>
+    public Func<string, AreaPortal, bool>? OpenerTrap { get; set; }
+
     /// <summary>The session this host's doors belong to.</summary>
     public GameSessionOwner Session => _session;
 
@@ -121,7 +127,8 @@ public sealed class AreaDoorHost : IAiDoorWorld, IGoalStepHost
         return refusal is not null;
     }
 
-    public bool UseDoor(string opener, string door) => opener != AreaHeroRunsHost.Hero || Portal(door) is not { } portal || HeroUse?.Invoke(portal) != false;
+    public bool UseDoor(string opener, string door) => Portal(door) is not { } portal
+        || (opener == AreaHeroRunsHost.Hero ? HeroUse?.Invoke(portal) != false : OpenerTrap?.Invoke(opener, portal) != true);
 
     public bool DoorHeld(string door) => Portal(door) is { } portal && (State(portal).Flags & LockRules.MagicallyHeldBit) != 0;
 

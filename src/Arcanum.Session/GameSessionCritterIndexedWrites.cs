@@ -123,6 +123,7 @@ public sealed partial class GameSessionOwner
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(entity);
         if (!entity.StartsWith(ObjectStateVocabulary.EntityPrefix, StringComparison.Ordinal)) return SessionCritterIndexedWrites.None;
+        if (!_maps.MayHaveIndexedWrites(entity)) return SessionCritterIndexedWrites.None;
         // Most NPCs have none written and this is read for every build of an NPC's combat values: the builders are made on the first hit only.
         ImmutableSortedDictionary<int, int>.Builder? stats = null, resistances = null;
         for (var i = 0; i < SessionCritterIndexedWrites.StatCount; i++)
@@ -143,7 +144,15 @@ public sealed partial class GameSessionOwner
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(target);
         ArgumentNullException.ThrowIfNull(stored);
-        if (stored.Count != SessionCritterIndexedWrites.StatCount || !CharacterStatRules.IsPrimary(stat) || stored[27] is < 0 or > 10 || stored[26] is not (0 or 1)) return null;
+        if (!CharacterStatRules.IsPrimary(stat)) return null;
+        return NpcStats(target, stored, stat, baseValue)?.Query(new(0, 0)).Snapshot?.GetEffective(stat);
+    }
+
+    // The NPC's stats as the character owner holds them: the stored primary stats, each clamped to its race's range (<paramref name="stat"/> with <paramref name="baseValue"/> instead of its stored value), the NPC's effect list
+    // (the session's, else the one its data stores) laid over them. Null when the stats or the list do not fit the character rules.
+    private CharacterStatsOwner? NpcStats(SessionLifeTarget target, IReadOnlyList<int> stored, CharacterStat stat, int baseValue)
+    {
+        if (stored.Count != SessionCritterIndexedWrites.StatCount || stored[27] is < 0 or > 10 || stored[26] is not (0 or 1)) return null;
         var created = CharacterStatsOwner.Create(new((CharacterRace)stored[27], stored[26] == 0 ? CharacterGender.Female : CharacterGender.Male, InnateEffectTable.Empty,
             CharacterStatLimits.Default with { MaxAppliedEffects = SessionNpcEffectLimits.MaxEntries }));
         if (created.Owner is not { } owner) return null;
@@ -157,6 +166,6 @@ public sealed partial class GameSessionOwner
             foreach (var entry in list.Entries)
                 if (list.Definitions.FirstOrDefault(rule => rule.Number == entry.Number) is { } rule && EffectDomain.Stats(rule) is { } modifiers
                     && owner.AddEffect(modifiers, EffectCause.Spell).Disposition == CharacterStatsDisposition.Rejected) return null;
-        return owner.Query(new(0, 0)).Snapshot?.GetEffective(stat);
+        return owner;
     }
 }

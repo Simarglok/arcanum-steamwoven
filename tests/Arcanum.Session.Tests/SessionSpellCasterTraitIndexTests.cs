@@ -1,10 +1,13 @@
+using Arcanum.Data.Characters;
 using Arcanum.Data.Combat;
 using Arcanum.Data.Magic;
+using Arcanum.Simulation;
 using Arcanum.Simulation.Character;
 using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Magic;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using static Arcanum.Session.Tests.HeroStateTests;
+using static Arcanum.Session.Tests.InventoryStateTests;
 using static Arcanum.Session.Tests.SessionFixtures;
 using static Arcanum.Session.Tests.SessionSpellRecordsTests;
 
@@ -69,7 +72,7 @@ public sealed class SessionSpellCasterTraitIndexTests
                 Areas = [new(0x4, 0, 0, 0, -1), new(0, 0, 0, 0, -1), new(0, 0, 0, 0, -1), new(0, 0, 0, 0, -1), new(0, 0, 0, 0, -1)] });
 
     // Resistance 1 (fire) +25, resistance 4 (magic) -200, dexterity -1 / -2 / -20 / +5 / +5 again, intelligence +1, a derived stat (9), charisma +1, an index outside field 220.
-    private const int FirePlus = 200, MagicMinus = 201, DexMinusOne = 210, DexMinusTwo = 211, DexMinusMany = 212, DexPlusFive = 213, IntPlus = 214, DerivedPlus = 215, CharismaPlus = 216, BadIndex = 217, BadField = 218, StrengthPlus = 219, LevelPlus = 220;
+    private const int FirePlus = 200, MagicMinus = 201, DexMinusOne = 210, DexMinusTwo = 211, DexMinusMany = 212, DexPlusFive = 213, IntPlus = 214, DerivedPlus = 215, CharismaPlus = 216, BadIndex = 217, BadField = 218, StrengthPlus = 219, LevelPlus = 220, StrengthMinusOne = 221, StrengthMinusTen = 222;
 
     // Intelligence -1 / -2 / -10, willpower -1 / -2, level -5 / +100, experience, alignment, fate points, unspent points and stat 25 by large amounts.
     private static SessionSpellRecord IntMinusOne => Spell(230, StatField, 4, -1);
@@ -92,7 +95,7 @@ public sealed class SessionSpellCasterTraitIndexTests
         Spell(FirePlus, ResistField, 1, 25), Spell(MagicMinus, ResistField, 4, -200),
         Spell(DexMinusOne, StatField, 1, -1), Spell(DexMinusTwo, StatField, 1, -2), Spell(DexMinusMany, StatField, 1, -20), Spell(DexPlusFive, StatField, 1, 5),
         Spell(IntPlus, StatField, 4, 1), Spell(DerivedPlus, StatField, 9, 3), Spell(CharismaPlus, StatField, 7, 1),
-        Spell(BadIndex, StatField, 28, 1), Spell(BadField, 99, 0, 1), Spell(StrengthPlus, StatField, 0, 1), Spell(LevelPlus, StatField, 17, 1),
+        Spell(BadIndex, StatField, 28, 1), Spell(BadField, 99, 0, 1), Spell(StrengthPlus, StatField, 0, 1), Spell(LevelPlus, StatField, 17, 1), Spell(StrengthMinusOne, StatField, 0, -1), Spell(StrengthMinusTen, StatField, 0, -10),
         IntMinusOne, IntMinusTwo, IntMinusMany, Stat25MinusMany, WillMinusOne, WillMinusTwo, LevelMinusMany, LevelPlusMany, ExperiencePlusMany, AlignmentPlusMany, AlignmentMinusMany, FatePlusMany, UnspentMinusMany, Stat25PlusMany,
     }.ToDictionary(r => r.Data.Number);
 
@@ -238,7 +241,7 @@ public sealed class SessionSpellCasterTraitIndexTests
         var (owner, caster) = Session();
         using var _ = owner;
         var version = owner.Version;
-        // The hero (the character owner's stats), an index and a field the host has no state for, strength (the encumbrance recalculation needs the NPC's carried weight), and a PC that is not the hero.
+        // The hero (the character owner's stats), an index and a field the host has no state for, strength of an NPC the map's seed does not list (its carried weight is unknown), and a PC that is not the hero.
         Assert.IsNull(caster.Apply(Run(FirePlus), 0, At(Hero, SpellTargetObject.Pc)).JumpTo);
         Assert.IsNull(caster.Apply(Run(BadIndex), 0, At(Rat, SpellTargetObject.Npc)).JumpTo);
         Assert.IsNull(caster.Apply(Run(BadField), 0, At(Rat, SpellTargetObject.Npc)).JumpTo);
@@ -251,8 +254,8 @@ public sealed class SessionSpellCasterTraitIndexTests
     [TestMethod]
     public void The_stats_whose_setter_does_more_than_store_are_not_ready_with_the_reason_in_the_ledger()
     {
-        // Magick points and tech points (the rewield of the worn items), poison (the poison timer and the life state), gender and race (the innate effect swap): each is read and not written.
-        foreach (var index in new[] { 22, 23, 24, 26, 27 })
+        // Poison (the poison timer and the life state), gender and race (the innate effect swap): each is read and not written (magick and tech points run the rewield, ARC-MAGIC-1507, below).
+        foreach (var index in new[] { 24, 26, 27 })
         {
             var (owner, _) = Session();
             using var _o = owner;
@@ -385,5 +388,211 @@ public sealed class SessionSpellCasterTraitIndexTests
         Assert.AreEqual(GameSessionFailure.StaleVersion, owner.WriteCritterResistance(owner.Version with { Revision = owner.Version.Revision + 1 }, map, Rat, 1, 5).Failure);
         Assert.AreEqual(GameSessionDisposition.Changed, owner.WriteCritterResistance(owner.Version, map, Rat, 1, 5).Disposition);
         Assert.AreEqual(GameSessionDisposition.NoChange, owner.WriteCritterResistance(owner.Version, map, Rat, 1, 5).Disposition, "the same value again");
+    }
+
+    // ARC-MAGIC-1507 (ledger RM3b; exe read 0x4B0980 cases 0x16 and 0x17, 0x465530, 0x467E80, 0x4649C0): magick points (22) and tech points (23) are stored after the clamp 0 to 210, then the rewield runs each worn slot's
+    // light recalculation and item script points 25 and 24. Ready when the session lists the NPC and no worn item has a wield script.
+    private const int MagickPlus = 260, TechPlus = 261, MagickMinusMany = 262, TechPlusMany = 263;
+
+    private static (GameSessionOwner Owner, SessionSpellCaster Caster) Dressed(params SessionSeedItem[] items)
+    {
+        var owner = CreateWith(HalfElf());
+        var attached = owner.AttachMapInventory(Exterior, new SessionMapInventorySeed([new(Rat, SessionHolderKind.Npc, false, false, [], items.Select(item => item.Entity).ToArray())], items));
+        Assert.AreEqual(GameSessionFailure.None, attached.Failure);
+        var records = new Dictionary<int, SessionSpellRecord>(Records)
+        {
+            [MagickPlus] = Spell(MagickPlus, StatField, 22, 7), [TechPlus] = Spell(TechPlus, StatField, 23, 9),
+            [MagickMinusMany] = Spell(MagickMinusMany, StatField, 22, -500), [TechPlusMany] = Spell(TechPlusMany, StatField, 23, 500),
+        };
+        return (owner, new SessionSpellCaster(owner, n => records.GetValueOrDefault(n), new Map(owner, RatFields()), new Events()));
+    }
+
+    private static SessionSeedItem Gear(string entity, int location, params int[] scripts) => new(entity, Facts(SessionItemType.Armor, 2800 + location, location, scripts: scripts), null);
+
+    [TestMethod]
+    public void Magick_and_tech_points_are_stored_after_the_clamp_for_an_npc_whose_worn_items_have_no_wield_script()
+    {
+        // A worn vest and helmet (other script points do not count), a carried item with a wield script (not worn: the rewield walks the wear slots only).
+        var (owner, caster) = Dressed(Gear("vest", 1006), Gear("helmet", 1000, SessionScriptPoint.Examine), Gear("spare", -1, SessionScriptPoint.WieldOn, SessionScriptPoint.WieldOff));
+        using var _ = owner;
+        Assert.AreEqual(SpellComponentOutcome.None, caster.Apply(Run(MagickPlus), 0, At(Rat, SpellTargetObject.Npc)));
+        Assert.AreEqual(SpellComponentOutcome.None, caster.Apply(Run(TechPlus), 0, At(Rat, SpellTargetObject.Npc)));
+        var stats = owner.QueryCritterIndexedWrites(Rat).Stats;
+        Assert.AreEqual(RatFields().Critter!.BaseStats[22] + 7, stats[22]);
+        Assert.AreEqual(RatFields().Critter!.BaseStats[23] + 9, stats[23]);
+        caster.Apply(Run(TechPlusMany), 0, At(Rat, SpellTargetObject.Npc));
+        Assert.AreEqual(210, owner.QueryCritterIndexedWrites(Rat).Stats[23], "the maximum 210");
+        caster.Apply(Run(MagickMinusMany), 0, At(Rat, SpellTargetObject.Npc));
+        Assert.AreEqual(0, owner.QueryCritterIndexedWrites(Rat).Stats[22], "the minimum 0, no guard on a point pool");
+        Assert.IsFalse(NotReady(caster));
+        Assert.IsFalse(caster.Log.Any(e => e.Kind == SpellCastEventKind.TraitIndexRefused));
+    }
+
+    [TestMethod]
+    public void A_worn_item_with_a_wield_script_or_an_unlisted_npc_leaves_the_points_not_ready()
+    {
+        foreach (var point in new[] { SessionScriptPoint.WieldOn, SessionScriptPoint.WieldOff })
+        {
+            var (owner, caster) = Dressed(Gear("vest", 1006), Gear("ring", 1003, point));
+            using var _ = owner;
+            var version = owner.Version;
+            Assert.IsNull(caster.Apply(Run(MagickPlus), 0, At(Rat, SpellTargetObject.Npc)).JumpTo, $"point {point}");
+            Assert.IsNull(caster.Apply(Run(TechPlus), 0, At(Rat, SpellTargetObject.Npc)).JumpTo, $"point {point}");
+            Assert.AreEqual(version, owner.Version);
+            Assert.IsTrue(owner.QueryCritterIndexedWrites(Rat).IsEmpty);
+            Assert.AreEqual(2, caster.Log.Count(e => e.Kind == SpellCastEventKind.ComponentNotReady));
+        }
+        // The session does not list the NPC (no inventory view of its map, or a view without it): nothing says what it wears.
+        var (plain, _) = Session();
+        using var _p = plain;
+        var records = new Dictionary<int, SessionSpellRecord>(Records) { [MagickPlus] = Spell(MagickPlus, StatField, 22, 7) };
+        var tried = new SessionSpellCaster(plain, n => records.GetValueOrDefault(n), new Map(plain, RatFields()), new Events());
+        Assert.IsNull(tried.Apply(Run(MagickPlus), 0, At(Rat, SpellTargetObject.Npc)).JumpTo, "no inventory view");
+        Assert.IsTrue(NotReady(tried));
+        Assert.IsTrue(plain.QueryCritterIndexedWrites(Rat).IsEmpty);
+        // A view that lists other holders only.
+        var other = CreateWith(HalfElf());
+        using var _x = other;
+        Assert.AreEqual(GameSessionFailure.None, other.AttachMapInventory(Exterior, new SessionMapInventorySeed([new("oid:other", SessionHolderKind.Npc, false, false, [], [])], [])).Failure);
+        var viewed = new SessionSpellCaster(other, n => records.GetValueOrDefault(n), new Map(other, RatFields()), new Events());
+        Assert.IsNull(viewed.Apply(Run(MagickPlus), 0, At(Rat, SpellTargetObject.Npc)).JumpTo, "a view without the NPC");
+        Assert.IsTrue(other.QueryCritterIndexedWrites(Rat).IsEmpty);
+    }
+
+    // ARC-MAGIC-1506 (ledger RM3b; exe read 0x4B0980 case 0, 0x45F790, 0x45F820, 0x461410): strength reads the encumbrance level before the store and recalculates after it. The rat's list weighs what its seed items weigh;
+    // a strength of 3 carries 1500 (500 a point), so the levels step at 15 / 30 / 45 / 60 / 75 / 90 % of it.
+    private static readonly SessionEffectDefinition Slow = new(158, [new(EffectAttributeKind.Stat, 11, EffectChangeOperator.Add, -2)]);
+
+    private static SessionMapInventorySeed RatSeed(params int[] weights) => new(
+        [new(Rat, SessionHolderKind.Npc, false, false, [], weights.Select((_, i) => "stone-" + i).ToArray())],
+        weights.Select((w, i) => new SessionSeedItem("stone-" + i, InventoryStateTests.Facts(SessionItemType.Generic, 5600 + i) with { Weight = w }, null)).ToArray());
+
+    private static (GameSessionOwner Owner, SessionSpellCaster Caster, SessionLifeTarget Target) Carrying(int strength, int[] weights, bool rule = true, bool seeded = true)
+    {
+        var fields = RatFields();
+        var stats = fields.Critter!.BaseStats.ToArray();
+        stats[0] = strength;
+        fields = fields with { Critter = fields.Critter with { BaseStats = stats } };
+        var (owner, caster) = Session(fields);
+        if (seeded) Assert.AreEqual(GameSessionDisposition.Changed, owner.AttachMapInventory(Exterior, RatSeed(weights)).Disposition);
+        if (rule) owner.AttachEncumbranceEffect(Slow);
+        return (owner, caster, SessionCritterCombat.From(Rat, fields).Combat!.Target);
+    }
+
+    private static int Entries(GameSessionOwner owner, SessionLifeTarget target) => owner.QueryNpcEffects(target)!.Count(158);
+
+    [TestMethod]
+    public void A_stronger_npc_that_drops_a_level_loses_the_encumbrance_entries()
+    {
+        // Strength 2 carries 1000: 200 is level 1 (150 to 299); strength 3 carries 1500, where 200 is below 15 % (225): level 0.
+        var (owner, caster, target) = Carrying(2, [200]);
+        using var _ = owner;
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.AddNpcEffect(owner.Version, target, Slow, EffectCause.Item, 1).Disposition);
+        Assert.AreEqual(1, Entries(owner, target));
+        Assert.AreEqual(SpellComponentOutcome.None, caster.Apply(Run(StrengthPlus), 0, At(Rat, SpellTargetObject.Npc)));
+        Assert.AreEqual(3, owner.QueryCritterIndexedWrites(Rat).Stats[0]);
+        Assert.AreEqual(0, Entries(owner, target), "the recalculation removed every entry of effect 158");
+        Assert.IsFalse(NotReady(caster));
+        CollectionAssert.AreEqual(new[] { SpellCastEventKind.TraitIndexWritten }, caster.Log.Select(e => e.Kind).ToArray());
+    }
+
+    [TestMethod]
+    public void A_weaker_npc_that_gains_levels_gets_one_item_entry_a_level()
+    {
+        // Strength 3 carries 1500 (800 is level 3: 675 to 899); strength 2 carries 1000, where 800 is level 5 (a timer: not ready, below). Strength 4 carries 2000, where 800 is level 2 (600 to 899).
+        var (owner, caster, target) = Carrying(3, [300, 500]);
+        using var _ = owner;
+        Assert.AreEqual(SpellComponentOutcome.None, caster.Apply(Run(StrengthPlus), 0, At(Rat, SpellTargetObject.Npc)));
+        Assert.AreEqual(4, owner.QueryCritterIndexedWrites(Rat).Stats[0]);
+        Assert.AreEqual(2, Entries(owner, target), "level 3 to level 2: two entries");
+        Assert.AreEqual(2, owner.QueryNpcEffects(target)!.Entries.Count(e => e.Number == 158 && e.Cause == EffectCause.Item));
+    }
+
+    [TestMethod]
+    public void A_level_that_does_not_change_runs_no_recalculation()
+    {
+        var (owner, caster, target) = Carrying(3, [10]);
+        using var _ = owner;
+        var revision = owner.Version.Revision;
+        Assert.AreEqual(SpellComponentOutcome.None, caster.Apply(Run(StrengthPlus), 0, At(Rat, SpellTargetObject.Npc)));
+        Assert.AreEqual(4, owner.QueryCritterIndexedWrites(Rat).Stats[0]);
+        Assert.AreEqual(revision + 1, owner.Version.Revision, "the store alone");
+        Assert.AreEqual(0, Entries(owner, target));
+        Assert.AreEqual(0, owner.QueryNpcEffects(target)!.Entries.Count);
+    }
+
+    [TestMethod]
+    public void The_old_entries_of_effect_158_are_replaced_whatever_added_them()
+    {
+        // 800 at strength 3 is level 3; at 4 it is level 2: a spell's own entry of effect 158 goes with the item entries, and two item entries are added.
+        var (owner, caster, target) = Carrying(3, [800]);
+        using var _ = owner;
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.AddNpcEffect(owner.Version, target, Slow, EffectCause.Spell, 1).Disposition);
+        caster.Apply(Run(StrengthPlus), 0, At(Rat, SpellTargetObject.Npc));
+        var entries = owner.QueryNpcEffects(target)!.Entries.Where(e => e.Number == 158).ToArray();
+        CollectionAssert.AreEqual(new[] { EffectCause.Item, EffectCause.Item }, entries.Select(e => e.Cause).ToArray());
+    }
+
+    [TestMethod]
+    public void A_level_with_the_fatigue_timer_is_not_ready_and_writes_nothing()
+    {
+        // 800 at strength 2 (1000 carried) is 80 %, level 5 (75 to 89 %): the timer of 0x45E820 mode 1, which the session keeps for the hero alone.
+        var (owner, caster, target) = Carrying(3, [800]);
+        using var _ = owner;
+        var version = owner.Version;
+        Assert.IsNull(caster.Apply(Run(StrengthMinusOne), 0, At(Rat, SpellTargetObject.Npc)).JumpTo);
+        Assert.IsTrue(NotReady(caster));
+        Assert.AreEqual(version, owner.Version);
+        Assert.IsTrue(owner.QueryCritterIndexedWrites(Rat).IsEmpty);
+        Assert.AreEqual(0, Entries(owner, target));
+    }
+
+    [TestMethod]
+    public void Strength_is_not_ready_without_the_list_or_the_rule_of_effect_158()
+    {
+        // The NPC is no holder of the map's seed: its carried weight is unknown. And a level change without the rule has no entries to add; the same change that stays at its level writes.
+        foreach (var (rule, seeded) in new[] { (true, false), (false, true) })
+        {
+            var (owner, caster, _) = Carrying(2, [200], rule, seeded);
+            using var _o = owner;
+            var version = owner.Version;
+            Assert.IsNull(caster.Apply(Run(StrengthPlus), 0, At(Rat, SpellTargetObject.Npc)).JumpTo, $"rule {rule}, seeded {seeded}");
+            Assert.IsTrue(NotReady(caster));
+            Assert.AreEqual(version, owner.Version);
+        }
+        var (same, tried, _) = Carrying(3, [10], rule: false);
+        using var _s = same;
+        Assert.AreEqual(SpellComponentOutcome.None, tried.Apply(Run(StrengthPlus), 0, At(Rat, SpellTargetObject.Npc)));
+        Assert.AreEqual(4, same.QueryCritterIndexedWrites(Rat).Stats[0]);
+    }
+
+    [TestMethod]
+    public void The_level_after_the_store_is_read_with_the_clamped_strength()
+    {
+        // 10 points down clamp at strength 1 (a minimum of 1 for the primary stats): 500 carried, where 200 is 40 % (level 2); at 3 it was 13 % (level 0). The raw sum, below 1, would carry the 300 floor.
+        var (owner, caster, target) = Carrying(3, [200]);
+        using var _ = owner;
+        Assert.AreEqual(SpellComponentOutcome.None, caster.Apply(Run(StrengthMinusTen), 0, At(Rat, SpellTargetObject.Npc)));
+        Assert.AreEqual(1, owner.QueryCritterIndexedWrites(Rat).Stats[0], "3 - 10 clamped to 1");
+        Assert.AreEqual(2, Entries(owner, target));
+    }
+
+    [TestMethod]
+    public void The_weight_of_the_list_counts_the_seed_items_and_the_made_items_the_session_added()
+    {
+        var (owner, _, target) = Carrying(3, [100, 300]);
+        using var _ = owner;
+        var stats = RatFields().Critter!.BaseStats.ToArray();
+        Assert.AreEqual(400, owner.QueryNpcCarry(Exterior, target, stats, 3)!.Weight);
+        Assert.AreEqual(1500, owner.QueryNpcCarry(Exterior, target, stats, 3)!.CarryWeight);
+        Assert.AreEqual(1, owner.QueryNpcCarry(Exterior, target, stats, 3)!.Level, "400 of 1500 is 26 %: level 1");
+        Assert.AreEqual(1000, owner.QueryNpcCarry(Exterior, target, stats, 2)!.CarryWeight);
+        Assert.AreEqual(2, owner.QueryNpcCarry(Exterior, target, stats, 2)!.Level, "400 of 1000 is 40 %");
+        Assert.IsNull(owner.QueryNpcCarry(new SessionMapId(80), target, stats, 3), "no seed of that map");
+        // A made item the session adds to the NPC weighs its prototype's weight (the session's row, not the seed's facts).
+        owner.AttachItemWeights(_ => new SessionItemWeight(50));
+        var kind = InventoryStateTests.Facts(SessionItemType.Generic, 5700).Kind;
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.AddItemToNpc(owner.Version, Rat, kind, _ => SessionInsertVerdict.Accepted).Disposition);
+        Assert.AreEqual(450, owner.QueryNpcCarry(Exterior, target, stats, 3)!.Weight);
     }
 }

@@ -473,7 +473,9 @@ object field reader; flat, as every placed pile of the interiors carries `OF_FLA
 `[junk pile]` (a project label: the pile has no map row to name it), takes items from it there and runs `CloseJunkPile` when the window
 closes. While the window shows a pile, the event pump's world reports a container shown (`ISessionLootWindowWorld`), so the items'
 decay waits a minute (ID3, ID6). Native smoke `ARC-DEV-310 native-smoke map-pile` (the same stage, first: a junk pile of the map's data is opened as a container, Take all, still standing while the window shows it, gone and not drawn after the close; on 2026-11-08 the Crash Site cave's pile of 3 items); native smoke `ARC-WORLD-063 native-smoke junk-pile` (map mode, `ARC_AREA_MAP_SMOKE_ONLY=junk`, run last
-in the map battery): the hero breaks the shown map's weakest container with two items or more through the session's object attack;
+in the map battery): the hero breaks the shown map's weakest container with two items or more through the session's object attack (ARC-BUG-1536: a hero
+whose weapon an earlier stage of the map chain destroyed takes the container down to its damage threshold and no further, so after 20 attacks in a
+row without a hit point lost the container takes its remaining hit points as damage that is no attack, the same break and spill);
 its items gather into one pile on its cell, which is drawn from the pile art, picked, opened with its items listed and their decay
 held; one item is taken and the window closed. On 2026-10-28: Crash Site cave, a chest of 5 items, all 5 in the pile; Elven Ruins, a
 chest of 3 (one with the no-decay flag), all 3 in the pile.
