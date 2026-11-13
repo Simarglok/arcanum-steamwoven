@@ -303,6 +303,12 @@ public sealed class LifeRulesTests
         var killed = LifeRules.PoisonDamage(Hurt(27, poison: 199), Plain);
         Assert.AreEqual((LifeEvents.Died, DeathAnimation.Plain), (killed.Events, killed.Death));
 
+        // ARC-MAGIC-1508 (setter 0x4B0980, stat 24): the level is clamped to 0..1000, 0 for an effective constitution of 20, and nothing else changes (no death check).
+        Assert.AreEqual(Hurt(poison: 300), LifeRules.SetPoison(Hurt(poison: 20), Plain, 300).After);
+        Assert.AreEqual(Hurt(poison: 1000), LifeRules.SetPoison(Hurt(poison: 20), Plain, 5000).After);
+        Assert.AreEqual(Hurt(), LifeRules.SetPoison(Hurt(poison: 20), Plain, -4).After);
+        Assert.AreEqual(Hurt(), LifeRules.SetPoison(Hurt(poison: 20), Plain with { Constitution = 20 }, 300).After);
+        Assert.AreEqual(LifeEvents.None, LifeRules.SetPoison(Hurt(LifeLimits.DeathHitPointDamage, poison: 20), Plain, 900).Events);
         Assert.AreEqual(Hurt(poison: 12), LifeRules.PoisonRecoveryTick(Hurt(poison: 20), Plain).After);
         Assert.AreEqual(Hurt(), LifeRules.PoisonRecoveryTick(Hurt(poison: 5), Plain).After);
         // The recovery tick does not check for death.
