@@ -54,7 +54,9 @@ public enum ChromeKind
 /// <summary>How to generate the chrome of every frame of one interface art file. The Legacy frame still decides the size, the
 /// silhouette (alpha), the holes and hit tests; only the drawn pixels change. A button's <paramref name="DownFrame"/> draws pressed
 /// and its <paramref name="HoverFrame"/> lit (the bar's arts: idle 0, down 1, hover 2).</summary>
-public sealed record ChromeRecipe(string File, ChromeKind Kind, ChromeMaterial Base, ChromeSides Rim, IReadOnlyList<ChromePart> Parts, int DownFrame = 1, int HoverFrame = 2)
+/// <remarks>ARC-UI-1784: <paramref name="KeepFace"/> (a button only) keeps the art's whole picture inside the generated rim (a ball whose colour tells the college
+/// apart), where a plain button keeps only the glyph on a generated brass face.</remarks>
+public sealed record ChromeRecipe(string File, ChromeKind Kind, ChromeMaterial Base, ChromeSides Rim, IReadOnlyList<ChromePart> Parts, int DownFrame = 1, int HoverFrame = 2, bool KeepFace = false)
 {
     public string NameSha256 { get; } = HdInterfaceKey.NameSha256(File);
 }
@@ -63,6 +65,14 @@ public sealed record ChromeRecipe(string File, ChromeKind Kind, ChromeMaterial B
 /// pixels of each frame (layout facts of the original windows, as in the ledgers); everything drawn is ours.</summary>
 public static class InterfaceChromeRecipes
 {
+    /// <summary>ARC-UI-1784: the file names of the sixteen college tab arts of the sheet's spells page (<c>interface.mes</c> numbers 11, 44, 38, 92, 50, 86, 56, 98, 62, 68, 74, 104, 110, 80, 116, 122,
+    /// the order of <see cref="AreaCharacterSheetSpellsLayout.CollegeArt"/>).</summary>
+    public static readonly IReadOnlyList<string> CollegeTabFiles =
+    [
+        "s_conveyance.art", "s_divination.art", "s_air.art", "s_earth.art", "s_fire.art", "s_water.art", "s_forc.art", "s_mental.art",
+        "s_meta.art", "s_morph.art", "s_nature.art", "s_phantasm.art", "s_goodnecro.art", "s_evilnecro.art", "s_summoning.art", "s_temporal.art",
+    ];
+
     public static IReadOnlyList<ChromeRecipe> All { get; } = Build();
 
     private static readonly Dictionary<string, ChromeRecipe> ByName = All.ToDictionary(recipe => recipe.NameSha256, StringComparer.Ordinal);
@@ -152,7 +162,9 @@ public static class InterfaceChromeRecipes
             "char_Common_Skills.art", "char_Tech_Skills.art", "char_Spells_Skills.art", "char_Schem_Skills.ART",
             "Combat_But.ART", "Thieving_But.ART", "Social_But.ART", "Technological_But.ART",
             "Anatomical_But.ART", "Chemistry_But.ART", "Electrical_But.ART", "Explosives_But.ART", "GunSmithy_But.ART", "Mechanical_But.ART", "Smithy_But.ART", "Therapeutics_But.ART"];
-        return [top, bottom, inventory, doll, loot, barter, follower, lootDoll, .. lenses, .. SheetPanels(), .. buttons.Select(file => new ChromeRecipe(file, ChromeKind.Button, ChromeMaterial.Face, ChromeSides.None, []))];
+        return [top, bottom, inventory, doll, loot, barter, follower, lootDoll, .. lenses, .. SheetPanels(), .. buttons.Select(file => new ChromeRecipe(file, ChromeKind.Button, ChromeMaterial.Face, ChromeSides.None, [])),
+            // ARC-UI-1784: the spells page's sixteen college tabs (24 x 24 balls, three frames): a generated rim around the ball's own picture.
+            .. CollegeTabFiles.Select(file => new ChromeRecipe(file, ChromeKind.Button, ChromeMaterial.Face, ChromeSides.None, [], KeepFace: true))];
     }
 
     // ARC-UI-1195: the character sheet's frames (Legacy pixels of each art). Its window (22) is wood with the sunk name box, the info box and the page pit; the stat ovals are
@@ -194,6 +206,13 @@ public static class InterfaceChromeRecipes
             new ChromeRecipe("Skills_Window.ART", ChromeKind.Panel, ChromeMaterial.Slate, ChromeSides.All, skills),
             new ChromeRecipe("Disciplines_Window.ART", ChromeKind.Panel, ChromeMaterial.Slate, ChromeSides.All, disciplines),
             new ChromeRecipe("char_spells.art", ChromeKind.Panel, ChromeMaterial.Slate, ChromeSides.All, spells),
+            // ARC-UI-1784: the schemes page (567, the auto-level tab): a sunk plaque for the scheme's name with a rivet at each end, the list's pit and the scroll bar's track
+            // (the bar's arrows and thumb are their own arts, drawn over the track).
+            new ChromeRecipe("Scheme_Rot.ART", ChromeKind.Panel, ChromeMaterial.Slate, ChromeSides.All,
+            [
+                new ChromeSunk(4, 13, 227, 33, ChromeMaterial.Pit), new ChromeRivet(13.5, 29.5, 3.5), new ChromeRivet(221.5, 29.5, 3.5),
+                new ChromeSunk(12, 57, 194, 258, ChromeMaterial.Pit), new ChromeSunk(206, 57, 20, 258, ChromeMaterial.Pit),
+            ]),
         ];
     }
 }
@@ -295,7 +314,7 @@ public static class InterfaceChromeRenderer
         if (frameIndex < 0) throw new ArgumentOutOfRangeException(nameof(frameIndex));
 
         var canvas = new Canvas(width, height, legacy.ToArray(), picture.IsEmpty ? null : picture.ToArray(), scale);
-        if (recipe.Kind == ChromeKind.Button) PaintButton(canvas, frameIndex == recipe.DownFrame, frameIndex == recipe.HoverFrame && recipe.HoverFrame != recipe.DownFrame);
+        if (recipe.Kind == ChromeKind.Button) PaintButton(canvas, frameIndex == recipe.DownFrame, frameIndex == recipe.HoverFrame && recipe.HoverFrame != recipe.DownFrame, recipe.KeepFace);
         else PaintPanel(canvas, recipe);
 
         var output = new byte[canvas.W * canvas.H * 4];
@@ -722,7 +741,7 @@ public static class InterfaceChromeRenderer
         }
     }
 
-    private static void PaintButton(Canvas c, bool down, bool hover)
+    private static void PaintButton(Canvas c, bool down, bool hover, bool keepFace = false)
     {
         // The silhouette's box and kind (round when its fill is a circle's share of the box).
         int x0 = int.MaxValue, y0 = int.MaxValue, x1 = -1, y1 = -1, count = 0;
@@ -761,7 +780,7 @@ public static class InterfaceChromeRenderer
             // Hover lifts the face and the rim toward light brass (the original's hover frame is the lit one).
             if (hover) { face = Rgb.Lerp(face, BrassLight, 0.3f); rim = Rgb.Lerp(rim, White, 0.2f); }
             Rgb colour = inset < c.S ? Ink : inset < 3 * c.S ? rim : inset < 3.6f * c.S ? Ink : face;
-            if (inset >= 3.6f * c.S && glyph[Math.Min(c.Cell(y), c.LegacyH - 1) * c.LegacyW + Math.Min(c.Cell(x), c.LegacyW - 1)]) colour = c.PictureAt(x, y);
+            if (inset >= 3.6f * c.S && (keepFace || glyph[Math.Min(c.Cell(y), c.LegacyH - 1) * c.LegacyW + Math.Min(c.Cell(x), c.LegacyW - 1)])) colour = c.PictureAt(x, y);
             c.Color[i] = colour;
         }
     }
