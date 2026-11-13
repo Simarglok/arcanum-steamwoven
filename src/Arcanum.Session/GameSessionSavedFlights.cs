@@ -69,6 +69,10 @@ public sealed record SessionSavedNpcThrow(SessionShot Shot, string Thrower, Sess
 /// its target (an NPC's entity, or <see cref="SessionNpcShotFacts.HeroTarget"/>).</summary>
 public sealed record SessionSavedNpcArrow(SessionShot Shot, string Shooter, SessionNpcAttackValues Values, SessionCarriedCheck Check, bool Hit, string Target);
 
+/// <summary>ARC-TECHNOLOGY-1635 (schema 100): a native trap's shot (script 30002) in flight as a save keeps it: the shooter object's entity (the cast map's id), the victim it was shot at and the amount the strike deals
+/// (the original's projectile field 0x4F).</summary>
+public sealed record SessionSavedTrapShot(SessionShot Shot, string Shooter, string Victim, int Amount);
+
 /// <summary>
 /// ARC-DEV-288 (schema 80, the <c>flights</c> section; docs/architecture/saved-runs.md §3.5): the projectiles of the active map in flight with the shots they carry, and the two
 /// counters. The original saves a projectile as an ordinary object made in play with its flight run (SV5, SV6) and goes on with it after the load; the session saves the
@@ -84,8 +88,10 @@ public sealed record SessionFlightState(int LastProjectile, IReadOnlyList<Sessio
     public int LastMissile { get; init; }
     /// <summary>ARC-DEV-289: the spell missiles in flight, ascending by number.</summary>
     public IReadOnlyList<SessionMissile> Missiles { get; init; } = [];
+    /// <summary>ARC-TECHNOLOGY-1635 (schema 100): the native traps' shots in flight, ascending by shot.</summary>
+    public IReadOnlyList<SessionSavedTrapShot> TrapShots { get; init; } = [];
 
-    public bool IsEmpty => Projectiles.Count == 0 && HeroShots.Count == 0 && NpcThrows.Count == 0 && NpcArrows.Count == 0 && Missiles.Count == 0;
+    public bool IsEmpty => Projectiles.Count == 0 && HeroShots.Count == 0 && NpcThrows.Count == 0 && NpcArrows.Count == 0 && Missiles.Count == 0 && TrapShots.Count == 0;
 }
 
 public sealed partial class GameSessionOwner
@@ -97,7 +103,7 @@ public sealed partial class GameSessionOwner
         && _goals.Runs.Single(run => string.Equals(run.Owner, projectile.Entity, StringComparison.Ordinal)) is { Done: false } run
         && AiExecutorRules.IsProjectileRunGoal(run.Bottom.Goal) && _goals.SteppingSlot != run.Handle.Slot && GoalRunIsSavedKind(run);
 
-    private bool ShotInFlight(SessionShot shot) => _shots.ContainsKey(shot) || _npcShots.ContainsKey(shot) || _npcArrows.ContainsKey(shot);
+    private bool ShotInFlight(SessionShot shot) => _shots.ContainsKey(shot) || _npcShots.ContainsKey(shot) || _npcArrows.ContainsKey(shot) || _trapShots.ContainsKey(shot);
 
     // A projectile's run is saved with its projectile only (the goals capture asks this for an owner of the projectile origin).
     private bool ProjectileRunIsSaved(GoalRun run) =>
@@ -115,9 +121,11 @@ public sealed partial class GameSessionOwner
         var throws = _npcShots.Where(pair => carried.Contains(pair.Key)).OrderBy(pair => pair.Key.Id).Select(pair => new SessionSavedNpcThrow(pair.Key, pair.Value.Thrower, pair.Value.Thrown)).ToArray();
         var arrows = _npcArrows.Where(pair => carried.Contains(pair.Key)).OrderBy(pair => pair.Key.Id)
             .Select(pair => new SessionSavedNpcArrow(pair.Key, pair.Value.Shooter, pair.Value.Values, SessionCarriedCheck.Of(pair.Value.Check), pair.Value.Hit, pair.Value.Target)).ToArray();
+        var trapShots = _trapShots.Where(pair => carried.Contains(pair.Key)).OrderBy(pair => pair.Key.Id)
+            .Select(pair => new SessionSavedTrapShot(pair.Key, pair.Value.Shooter, pair.Value.Victim, pair.Value.Amount)).ToArray();
         return new(_lastProjectileNumber, projectiles, _nextShot, hero, throws, arrows)
         {
-            LastMissile = _lastMissileNumber, Missiles = [.. _missileObjects.Values.Where(MissileIsSaved).OrderBy(m => SessionMissile.Number(m.Entity))],
+            TrapShots = trapShots, LastMissile = _lastMissileNumber, Missiles = [.. _missileObjects.Values.Where(MissileIsSaved).OrderBy(m => SessionMissile.Number(m.Entity))],
         };
     }
 
@@ -128,12 +136,22 @@ public sealed partial class GameSessionOwner
     {
         // The counters stay where the session's own increments can go on (CreateProjectile stops at int.MaxValue - 1; a shot id needs room for a full budget).
         if (saved.LastProjectile is < 0 or > int.MaxValue - 1 || saved.NextShot is < 0 or > long.MaxValue - MaxShotsInFlight) return GameSessionFailure.InvalidSnapshot;
-        if (saved.Projectiles.Count > SessionProjectile.MaxProjectiles || saved.HeroShots.Count + saved.NpcThrows.Count + saved.NpcArrows.Count > MaxShotsInFlight)
+        // ARC-COMBAT-1717: an NPC's thrown weapon is in both lists (the item to land, the check to strike with): one shot.
+        var thrownIds = saved.NpcThrows.Select(s => s.Shot.Id).ToHashSet();
+        if (saved.Projectiles.Count > SessionProjectile.MaxProjectiles || saved.HeroShots.Count + saved.NpcThrows.Count + saved.NpcArrows.Count(a => !thrownIds.Contains(a.Shot.Id)) + saved.TrapShots.Count > MaxShotsInFlight)
             return GameSessionFailure.BudgetExceeded;
         if (!hero && saved.HeroShots.Count > 0) return GameSessionFailure.InvalidSnapshot;
         var shots = new HashSet<long>();
-        foreach (var shot in saved.HeroShots.Select(s => s.Shot).Concat(saved.NpcThrows.Select(s => s.Shot)).Concat(saved.NpcArrows.Select(s => s.Shot)))
+        foreach (var shot in saved.HeroShots.Select(s => s.Shot).Concat(saved.NpcThrows.Select(s => s.Shot)).Concat(saved.TrapShots.Select(s => s.Shot)))
             if (shot.Id < 1 || shot.Id > saved.NextShot || !shots.Add(shot.Id)) return GameSessionFailure.InvalidSnapshot;
+        var arrowIds = new HashSet<long>();
+        foreach (var arrow in saved.NpcArrows)
+        {
+            // An arrow's shot is its own, or the shot of the thrown weapon the same NPC threw (ARC-COMBAT-1717).
+            var throwsIt = saved.NpcThrows.FirstOrDefault(t => t.Shot == arrow.Shot);
+            if (arrow.Shot.Id < 1 || arrow.Shot.Id > saved.NextShot || !arrowIds.Add(arrow.Shot.Id) || throwsIt is null && !shots.Add(arrow.Shot.Id)
+                || throwsIt is not null && throwsIt.Thrower != arrow.Shooter) return GameSessionFailure.InvalidSnapshot;
+        }
         foreach (var shot in saved.HeroShots)
         {
             if (shot.Entity is not null && shot.Object is not null) return GameSessionFailure.InvalidSnapshot;
@@ -146,6 +164,8 @@ public sealed partial class GameSessionOwner
         foreach (var shot in saved.NpcArrows)
             if (!SessionValidation.Entity(shot.Shooter) || shot.Target != SessionNpcShotFacts.HeroTarget && !SessionValidation.Entity(shot.Target) || shot.Values.SkillLevel < 0
                 || !CarriedCheckFits(shot.Check, shot.Hit)) return GameSessionFailure.InvalidSnapshot;
+        foreach (var shot in saved.TrapShots)
+            if (!SessionValidation.Entity(shot.Shooter) || !SessionValidation.Entity(shot.Victim) || shot.Amount < 0) return GameSessionFailure.InvalidSnapshot;
         var carried = new HashSet<long>();
         var numbers = new HashSet<int>();
         foreach (var projectile in saved.Projectiles)
@@ -156,7 +176,9 @@ public sealed partial class GameSessionOwner
             // The launch's kind is the shot's: a hero's shot names no shooter or thrower, an NPC's arrow its shooter, an NPC's throw its thrower.
             var arrow = saved.NpcArrows.FirstOrDefault(s => s.Shot == flight.Shot);
             var thrown = saved.NpcThrows.FirstOrDefault(s => s.Shot == flight.Shot);
-            if (launch.Shooter != arrow?.Shooter || launch.Thrower != thrown?.Thrower) return GameSessionFailure.InvalidSnapshot;
+            // ARC-TECHNOLOGY-1635: a trap's shot names its shooter object and its victim, the projectile's target.
+            var trap = saved.TrapShots.FirstOrDefault(s => s.Shot == flight.Shot);
+            if (launch.Shooter != (arrow?.Shooter ?? trap?.Shooter) || launch.Thrower != thrown?.Thrower || trap is not null && launch.Target != trap.Victim) return GameSessionFailure.InvalidSnapshot;
             if (launch.Target is { } target && !SessionValidation.Entity(target) || launch.Shooter is { } shooter && !SessionValidation.Entity(shooter)
                 || launch.Thrower is { } thrower && !SessionValidation.Entity(thrower) || launch.Critter && launch.Object) return GameSessionFailure.InvalidSnapshot;
             if (!DropCellFits(flight.Destination) || !DropCellFits(flight.LineStart) || !DropCellFits(flight.LineEnd) || flight.State.Range < 0 || flight.Scale is < 0 or > 100
@@ -198,7 +220,11 @@ public sealed partial class GameSessionOwner
                 Thrown = shot.Thrown, WeaponItem = shot.WeaponItem, Struck = shot.Struck, Boomerang = shot.Boomerang, Returning = shot.Returning,
             });
         foreach (var shot in saved.NpcThrows) _npcShots.Add(shot.Shot, new NpcShot(shot.Thrower, shot.Thrown));
-        foreach (var shot in saved.NpcArrows) _npcArrows.Add(shot.Shot, new NpcArrow(shot.Shooter, shot.Values, shot.Check.Resolution(), shot.Hit, shot.Target));
+        // ARC-COMBAT-1717: the arrow of a thrown weapon (its shot is also an NPC throw) strikes with the thrown item as the strike's weapon.
+        foreach (var shot in saved.NpcArrows)
+            _npcArrows.Add(shot.Shot, new NpcArrow(shot.Shooter, shot.Values, shot.Check.Resolution(), shot.Hit, shot.Target,
+                saved.NpcThrows.FirstOrDefault(t => t.Shot == shot.Shot)?.Thrown.Item));
+        foreach (var shot in saved.TrapShots) _trapShots.Add(shot.Shot, new(shot.Shooter, shot.Victim, shot.Amount));
         // ARC-DEV-289: the spell missiles and their counter.
         foreach (var missile in saved.Missiles) _missileObjects.Add(missile.Entity, missile);
         _lastMissileNumber = saved.LastMissile;

@@ -126,6 +126,14 @@ from the hero's content prototypes and yes to the art and insert checks (one dia
 armour and boots on, except the human woman, whose body armour 8220 carries wield-on and wield-off scripts and stays in the
 pack.
 
+ARC-COMBAT-1720 (ledger PI5, OH3): `GameSessionOwner.WieldBestWeapon(expected, items, artCheck, insertCheck, target)` is the hero's re-wield after
+its weapon wore out (0x4B83E0 → 0x465170): the weapon slot only, the same plan, refusals, policy and single revision, with the target the best-item
+call is given (`SessionWieldTarget`: its cell distance and magnetic inversion): an eligible weapon that reaches the target wins over a stronger one that
+does not, and with no usable weapon the slot stays empty (NoChange). The gates of 0x4B83E0 are the host's: the "auto switch" setting (the settings
+file's `auto switch` line, default off: the original never registers it) and the lost weapon the PC's own; the viewer asks right after an attack whose
+wear step (`SessionWearStepKind.AttackerWeapon`) broke or deleted the hero's weapon, on a critter or an object. The callers for no ammunition (0x4B3170)
+and for a struck PC's lost weapon (0x4B4390) are not built.
+
 Since ARC-WORLD-103 the same plan dresses an NPC at the end of its regeneration (0x463E20 → 0x4654F0, ledger RK15), with the NPC's
 wearer and chooser from the host and its list in place of the hero's items; the session then keeps what the NPC wears
 (`inventory.npcWorn`, schema 57), which replaces its map data's inventory locations

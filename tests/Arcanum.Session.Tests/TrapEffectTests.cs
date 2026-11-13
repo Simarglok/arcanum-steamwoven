@@ -13,10 +13,10 @@ namespace Arcanum.Session.Tests;
 [TestClass]
 public sealed class TrapEffectTests
 {
-    private const string Hero = SessionSpellCaster.Hero, Guard = "oid:guard", Trap = "oid:trap", Box = "oid:box";
-    private static readonly SpellLocation HeroTile = new(5, 5), GuardTile = new(6, 5), TrapTile = new(5, 6);
+    internal const string Hero = SessionSpellCaster.Hero, Guard = "oid:guard", Trap = "oid:trap", Box = "oid:box";
+    internal static readonly SpellLocation HeroTile = new(5, 5), GuardTile = new(6, 5), TrapTile = new(5, 6);
 
-    private sealed class Map(GameSessionOwner owner, SpellCastCritter guard) : ISpellCastMap
+    internal sealed class Map(GameSessionOwner owner, SpellCastCritter guard) : ISpellCastMap
     {
         public List<(SpellLocation Centre, int Radius, int Mask)> Squares { get; } = [];
 
@@ -53,7 +53,7 @@ public sealed class TrapEffectTests
         }
     }
 
-    private sealed class Events : ISessionEventWorld
+    internal sealed class Events : ISessionEventWorld
     {
         public LifeFacts? CritterFacts(SessionMapId map, string entity) => null;
     }
@@ -66,22 +66,29 @@ public sealed class TrapEffectTests
         DisallowedCasterSpellFlags = 0, DisallowedTargetSpellFlags = 0, DisallowedTargetCritterFlags = 0,
     });
 
-    private static (GameSessionOwner Owner, SessionSpellCaster Caster, Map Map) Session(uint guardFlags2 = 0, bool experience = false)
+    internal static (GameSessionOwner Owner, SessionSpellCaster Caster, Map Map) Session(uint guardFlags2 = 0, bool experience = false)
     {
         var owner = experience ? GameSessionOwner.Create(SessionFixtures.Descriptor() with { Hero = HeroStateTests.HalfElf(), Experience = ExperienceStateTests.Rules() }).Owner!
             : HeroStateTests.CreateWith(HeroStateTests.HalfElf());
+        var (caster, map) = CasterOf(owner, guardFlags2);
+        return (owner, caster, map);
+    }
+
+    // ARC-TECHNOLOGY-1635: a cast host over the synthetic map for any session (a restored one included).
+    internal static (SessionSpellCaster Caster, Map Map) CasterOf(GameSessionOwner owner, uint guardFlags2 = 0)
+    {
         var fields = AttackStateTests.Npc(stats: AttackStateTests.Stats(), critterFlags: 0, flags2: guardFlags2);
         var map = new Map(owner, new(SessionCritterCombat.From(Guard, fields).Combat!, 0, 0, 0, 0, 0));
         var record = Spell();
-        return (owner, new SessionSpellCaster(owner, n => n == record.Data.Number ? record : null, map, new Events()), map);
+        return (new SessionSpellCaster(owner, n => n == record.Data.Number ? record : null, map, new Events()), map);
     }
 
-    private static int Counters(int spell, int tag, int second, int low) => unchecked((int)((uint)spell << 24 | (uint)tag << 16 | (uint)second << 8 | (uint)low));
+    internal static int Counters(int spell, int tag, int second, int low) => unchecked((int)((uint)spell << 24 | (uint)tag << 16 | (uint)second << 8 | (uint)low));
 
-    private static SessionTrapFiring Firing(int script, int counters, uint headerFlags, string? triggerer = Hero, int objectFlags = 0) =>
+    internal static SessionTrapFiring Firing(int script, int counters, uint headerFlags, string? triggerer = Hero, int objectFlags = 0) =>
         new(Trap, triggerer, TrapRules.NativeRun(script, TrapRules.NonmagicalFlag | headerFlags)!.Value, counters, objectFlags);
 
-    private static int HeroHitPoints(GameSessionOwner owner) => owner.QueryHeroLife()!.Status.HitPoints;
+    internal static int HeroHitPoints(GameSessionOwner owner) => owner.QueryHeroLife()!.Status.HitPoints;
 
     [TestMethod]
     public void A_damage_trap_hits_every_critter_in_its_square_with_one_draw_each_and_no_kill_credit()
