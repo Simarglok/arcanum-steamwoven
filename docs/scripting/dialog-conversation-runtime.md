@@ -498,6 +498,7 @@ C library's atoi) is a skill the NPC would use on the PC. The original asks the 
 
 - **Skill 12 (repair) is built as the original behaves: never offered.** The test wants the target to be an item, and the dialog hands it the PC (a critter), so the reply never shows, whatever the NPC and the data: the 8 installed `u: 12` replies
   (3 files) are dead data in both rule settings, and the repair is reached through the `ri` action ([item services](../world/item-service-runtime.md)). The reply is planned as a left-out reply (`DialogConversation.IsRepairServiceReply`, tests `DialogServiceReplyTests`).
+- In the original a `u:` text whose atoi is 0 and any number other than 10, 12 and 14 pass the test and are offered (PC line 900..999, state 0xE); they stay a frontier here.
 - **Not built:** `u:10` (heal), `u:14` (pick locks), any other number and `z:` (a spell sold for gold) stay a frontier, as before (`u`) or an offered blocked reply (`z`). They share the skill-service and spell-sale machinery of the healer menu
   (`h:`, [#1732](https://github.com/Simarglok/arcanum-steamwoven/issues/1732)); no installed reply uses them. Follow-up: [#1798](https://github.com/Simarglok/arcanum-steamwoven/issues/1798), blocked by #1732.
 

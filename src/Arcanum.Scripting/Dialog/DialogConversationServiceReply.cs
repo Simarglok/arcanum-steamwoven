@@ -15,7 +15,7 @@ public sealed partial class DialogConversation
     internal static bool IsRepairServiceReply(string text) => text.Length >= 2 && ReadAtoi(text, 2) == RepairSkillNumber;
 
     // The C library's atoi: blanks, an optional sign, then decimal digits up to the first other character; nothing readable is 0.
-    private static long ReadAtoi(string text, int start)
+    private static int ReadAtoi(string text, int start)
     {
         var at = start;
         while (at < text.Length && text[at] is ' ' or '\t' or '\n' or '\v' or '\f' or '\r')
@@ -28,12 +28,13 @@ public sealed partial class DialogConversation
             negative = text[at] == '-';
             at++;
         }
-        long value = 0;
-        while (at < text.Length && text[at] is >= '0' and <= '9' && value < int.MaxValue)
+        var value = 0;
+        while (at < text.Length && text[at] is >= '0' and <= '9')
         {
-            value = value * 10 + (text[at] - '0');
+            // No cap: the original's loop wraps modulo 2^32 (0x589C22).
+            value = unchecked(value * 10 + (text[at] - '0'));
             at++;
         }
-        return negative ? -value : value;
+        return negative ? unchecked(-value) : value;
     }
 }

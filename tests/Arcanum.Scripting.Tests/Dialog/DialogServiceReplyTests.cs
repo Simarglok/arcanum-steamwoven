@@ -24,7 +24,7 @@ public sealed class DialogServiceReplyTests
     [TestMethod]
     public void A_repair_service_reply_is_not_offered_and_the_other_replies_are()
     {
-        foreach (var text in new[] { "u:12", "U:12", "u: 12", "u:+12", "u:012", "u:12 repair", "U:12x" })
+        foreach (var text in new[] { "u:12", "U:12", "u: 12", "u:+12", "u:012", "u:12 repair", "U:12x", "u:4294967308" })
         {
             var conversation = Start(Reply(11, text) + Reply(12, "Plain."));
             Assert.AreEqual(DialogConversationPhase.AwaitingSelection, conversation.Phase, text);
@@ -44,7 +44,7 @@ public sealed class DialogServiceReplyTests
     [TestMethod]
     public void The_other_skill_numbers_and_unreadable_texts_stay_a_frontier()
     {
-        foreach (var text in new[] { "u:10", "u:14", "u:5", "u:", "u:x", "u:112", "u:-12", "u:1" })
+        foreach (var text in new[] { "u:10", "u:14", "u:5", "u:", "u:x", "u:112", "u:-12", "u:1", "u:4294967296" })
         {
             var conversation = Start(Reply(11, text));
             Assert.AreEqual((DialogConversationPhase.AtFrontier, DialogFrontierKind.UnsupportedGeneratedText), (conversation.Phase, conversation.Frontier!.Kind), text);
