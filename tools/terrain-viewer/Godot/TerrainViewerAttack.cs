@@ -252,6 +252,7 @@ public partial class TerrainViewerApp
         {
             // ARC-DEV-261 (GT198): the struck object's taking-damage script, with the hero as the attacker.
             TakingDamage = () => TakingDamageGoesOn(struckEntity, SessionSpellCaster.Hero),
+            HitScripts = HeroHitScripts(struckEntity),
             DropMap = AreaDropMapNow(), Flight = flight is not null,
             // ARC-COMBAT-017: a weapon that "default throws" leaves the hand and flies (ledger RH2).
             Throw = flight is null ? null : HeroThrow(goal),
@@ -849,6 +850,7 @@ public partial class TerrainViewerApp
         {
             // ARC-DEV-261 (GT198): the struck NPC's taking-damage script, with the hero as the attacker; the hero's own (a critical self-hit) has none.
             TakingDamage = recipient => recipient != Arcanum.Simulation.Combat.DamageRecipient.Target || TakingDamageGoesOn(struck.Entity, SessionSpellCaster.Hero),
+            HitScripts = HeroHitScripts(struck.Entity),
             Aim = struck.Aim, Distance = distance,
             // ARC-COMBAT-015: the bow and firearms skills read the line of fire's cost and blocker (SC8).
             LineOfFire = line,

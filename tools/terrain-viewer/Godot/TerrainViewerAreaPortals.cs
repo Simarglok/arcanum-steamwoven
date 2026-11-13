@@ -60,7 +60,7 @@ public partial class TerrainViewerApp
             _areaPortals = AreaPortals.From(area.Snapshot, area.Plan);
             _areaPortalsStamp = stamp; _portalBodies = []; _lockpickPending = null; _lockpickTrying = false;
             if (_areaDoors is not null) { _retiredDoors = _areaDoors; _retiredDoorsAge = 0; }
-            _areaDoors = new(session, _areaPortals, DoorCritterCells, PlayDoorSound) { HeroUse = HeroDoorUse, HeroNotice = HeroDoorNotice };
+            _areaDoors = new(session, _areaPortals, DoorCritterCells, PlayDoorSound) { HeroUse = HeroDoorUse, HeroNotice = HeroDoorNotice, OpenerTrap = OpenerDoorTrap };
             DisarmLockpicks();
             GD.Print($"ARC-WORLD-051 portals bound map={_readyMapName} portals={_areaPortals.All.Count} multi-frame={_areaPortals.All.Count(p => p.Frames.Count > 1)}");
         }
@@ -164,6 +164,14 @@ public partial class TerrainViewerApp
 
     /// <summary>Goal 67's node asked for the pick: it is made at the next safe point.</summary>
     internal void HeroPickLockAsked(string target, string item) => _lockpickPending = (target, item);
+
+    /// <summary>ARC-WORLD-1469 (TT7): the use node of goal 12 for an NPC or a companion opener (0x428A10 → 0x441980): the door's trap meets the opener, who is its triggerer; true when the use stops and the opener's run ends.</summary>
+    private bool OpenerDoorTrap(string opener, AreaPortal portal)
+    {
+        if (_aiHost is not { } host || _readyArea is not { } area) return false;
+        var row = area.Snapshot.Objects.FirstOrDefault(o => o.Key == portal.Key);
+        return row is not null && host.TrapMetByUse(opener, row);
+    }
 
     /// <summary>ARC-DEV-176: the use node of goal 12 for the hero (0x428A10): the open that got through the attempt costs 2 action points in a turn-based round (ledger CT3, GT40); false ends the run (nothing is charged for a refused open).</summary>
     private bool HeroDoorUse(AreaPortal portal)

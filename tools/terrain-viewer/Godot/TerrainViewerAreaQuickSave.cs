@@ -42,7 +42,7 @@ public partial class TerrainViewerApp
     private readonly QuickKeyGate _quickKeys = new();
     private string? _quickSaveStatus;
 
-    private enum QuickBusy { None, NoActor, Lifecycle, TransferPending, MapLoading }
+    private enum QuickBusy { None, NoActor, Lifecycle, TransferPending, MapLoading, LoadPending }
 
     // ARC-DEV-407: the folder follows the launch map, so the menu's Load Game before the start map has loaded reads the map saves.
     private GameSaveLibrary SaveLibrary => _saveLibraryForSelfTest ?? (AreaSaveFolder.UsesMapFolder(_readyMapName, _launchArguments?.AreaMapName)
@@ -100,6 +100,7 @@ public partial class TerrainViewerApp
         if (_worldActor.Session is not AreaGridSession || _readyArea is null) return QuickBusy.NoActor;
         if (_worldLifecycleSession is not null || _worldResetPending || _worldReloadPending) return QuickBusy.Lifecycle;
         if (_mapHandoff is not null) return QuickBusy.MapLoading;
+        if (_pendingLoad is not null) return QuickBusy.LoadPending;
         if (AreaTransferPending) return QuickBusy.TransferPending;
         return QuickBusy.None;
     }
@@ -110,6 +111,7 @@ public partial class TerrainViewerApp
         QuickBusy.Lifecycle => "reset/reload in progress",
         QuickBusy.TransferPending => "map transfer pending",
         QuickBusy.MapLoading => "another map is loading",
+        QuickBusy.LoadPending => "a load is starting",
         _ => "ready",
     };
 
@@ -134,6 +136,8 @@ public partial class TerrainViewerApp
         ProcessPickPocketPending(); ProcessLockpickPending(); ProcessItemUsePending();
         // The attempt may run a caught-thief script that starts a transfer: the busy check again.
         if ((busy = QuickBusyReason()) != QuickBusy.None) { SetQuickStatus(prefix + "save refused: " + Describe(busy)); return null; }
+        // ARC-UI-1542: a light the session's changes of this frame (an input handler, the attempt just made) cause is recorded before the capture, or a load would take the new stamps as its baseline and lose it.
+        SyncBarLights();
         // ARC-DEV-318 (MIG14 S9c): the hero's casting goal and the casts queued beneath it are saved with their runs (the gate ARC-MAGIC-015 set is gone).
         var grid = (AreaGridSession)_worldActor.Session!;
         var cell = grid.Chart.ToWorld(grid.State.CommittedCell);
@@ -196,8 +200,64 @@ public partial class TerrainViewerApp
     private void QuickLoad()
     {
         RecordEvidence(EvidenceCommand.QuickLoad); // ARC-GPAD-1376
-        LoadGame(SaveLibrary.Latest() is { } latest ? SaveLibrary.Slot(latest.Name) : QuickSaveSlot, "F8 ",
-            messages: SaveLibrary.Latest() is null ? AreaLoadMessageRoute.NotesOnly : AreaLoadMessageRoute.QuickKey);
+        LoadGameShown(SaveLibrary.Latest() is { } latest ? SaveLibrary.Slot(latest.Name) : QuickSaveSlot, "F8 ", null,
+            SaveLibrary.Latest() is null ? AreaLoadMessageRoute.NotesOnly : AreaLoadMessageRoute.QuickKey, done: null);
+    }
+
+    // ARC-UI-1504: the original shows the load screen for every successful load of a save, the map already open too (ledger LS4: every map open closes the map
+    // and reloads its sectors through the clock-ticking loader). A same-map load is one synchronous step, so the screen is raised first and the load runs on
+    // a later frame, after the screen was drawn at least once; the load then ends the screen (a save on another map keeps it until that map is there).
+    private sealed class PendingLoad(GameSessionSaveSlot slot, string prefix, AreaHeroLoad? heroTables, AreaLoadMessageRoute messages, Action<bool>? done)
+    {
+        public GameSessionSaveSlot Slot { get; } = slot;
+        public string Prefix { get; } = prefix;
+        public AreaHeroLoad? HeroTables { get; } = heroTables;
+        public AreaLoadMessageRoute Messages { get; } = messages;
+        public Action<bool>? Done { get; } = done;
+        /// <summary>The frames the screen has been up for (the load runs on the second tick, so a frame was drawn before it).</summary>
+        public int Ticks { get; set; }
+    }
+
+    private PendingLoad? _pendingLoad;
+
+    // An automated run (self-test, smoke) loads at once, as every smoke that loads expects its result in the same step; the smoke of this change turns the screen on.
+    private bool _loadScreenDeferForSelfTest;
+    private bool LoadScreenDeferred => !ViewerAutomatedStorage.Automated || _loadScreenDeferForSelfTest;
+
+    /// <summary>The player's load of a save (F8, the load window, the menu's Last Save): like <see cref="LoadGame"/> but behind the load screen. The result goes to
+    /// <paramref name="done"/>: at once when the load is refused before anything shows (busy, no save listed, a fade waits) or runs immediately, else on the frame
+    /// that runs it. A refused load clears the screen and keeps the running game.</summary>
+    private void LoadGameShown(GameSessionSaveSlot slot, string prefix, AreaHeroLoad? heroTables, AreaLoadMessageRoute messages, Action<bool>? done)
+    {
+        // With no save listed the original's quick load returns before its load function (no load, no screen); a busy viewer refuses in LoadGame.
+        // A queued transfer is superseded by the load at once (LoadGame), as before, so it shows no screen of its own.
+        var showable = QuickBusyReason() == QuickBusy.None && !TransitionFadePending && slot.Exists;
+        if (!LoadScreenDeferred || !showable) { var ok = LoadGame(slot, prefix, heroTables, messages); done?.Invoke(ok); return; }
+        BeginTransitionLoad();
+        _pendingLoad = new(slot, prefix, heroTables, messages, done);
+    }
+
+    /// <summary>Per frame of the load screen: the load that waited for the screen runs once the screen has been drawn.</summary>
+    private void TickPendingLoad()
+    {
+        if (_pendingLoad is not { } pending || pending.Ticks++ < 1) return;
+        WorldObservation(RunPendingLoad);
+    }
+
+    private void RunPendingLoad()
+    {
+        if (_pendingLoad is not { } pending) return;
+        _pendingLoad = null;
+        var ok = false;
+        try { ok = LoadGame(pending.Slot, pending.Prefix, pending.HeroTables, pending.Messages); }
+        finally
+        {
+            // A refusal clears the screen and keeps the game; a load that opens another map keeps it until that map is there (StartMapTransfers).
+            // (a transfer that began meanwhile owns the screen: only the load's own is cleared)
+            if (!ok) { if (_mapHandoff is null && !TransitionFadePending) ClearTransition(); }
+            else if (_mapHandoff is null) ReleaseTransition();
+        }
+        pending.Done?.Invoke(ok);
     }
 
     /// <summary>Loads one save of the list. True when the loaded session was adopted or its map load started; on false the running
@@ -211,7 +271,7 @@ public partial class TerrainViewerApp
         using var span = PerfProbe.Span("game.load");
         // A load supersedes a queued transfer; it waits only for a reset/reload.
         var busy = QuickBusyReason();
-        if (busy is QuickBusy.NoActor or QuickBusy.Lifecycle or QuickBusy.MapLoading) { SetQuickStatus(prefix + "quick load refused: " + Describe(busy)); return false; }
+        if (busy is QuickBusy.NoActor or QuickBusy.Lifecycle or QuickBusy.MapLoading or QuickBusy.LoadPending) { SetQuickStatus(prefix + "quick load refused: " + Describe(busy)); return false; }
         // ARC-DEV-168 (B35): F8 says it is loading before it reads (0x549770, message 5061).
         if (messages is AreaLoadMessageRoute.QuickKey or AreaLoadMessageRoute.NotesOnly) PostMessage(AreaSaveMessages.Note(SaveMessageTexts(), AreaSaveMessages.Loading), "load note");
         var maps = AreaRuntimes();
@@ -284,7 +344,7 @@ public partial class TerrainViewerApp
         GD.Print("ARC-WORLD-038 quick-load map " + System.Text.Json.JsonSerializer.Serialize(new { From = _readyArea.Snapshot.RuntimeMap, To = map, actor.Cell }));
         SetQuickStatus($"{status}; loading '{map.Name}'");
         // ARC-UI-1362: a load that opens another map shows the load screen (black with the clock) until that map is there, as a change of place does (PS29, LS4).
-        BeginTransitionLoad();
+        if (!_transitionScreen.Loading) BeginTransitionLoad();
         _lastLoad = LoadTransferAsync(next);
     }
 
@@ -401,6 +461,20 @@ public partial class TerrainViewerApp
             // ARC-DEV-168 (B34): the message window starts empty and quiet, so F7's notes can be drawn.
             var messages = SaveMessageTexts();
             ClearLevelMessages(); _messageClockShiftForSelfTest += AreaMessageLog.QuietMilliseconds + 1;
+            // ARC-UI-1542 (ledger GB13): the top strip's lit buttons and the Map button's face are part of the save. A quest accepted lights the Logbook
+            // button (the production route: the stamp of the session's logbook), the Map face is turned to the other one, then F7 saves.
+            var lightQuest = Enumerable.Range(1000, 40).First(number => _areaSession!.QueryQuest(number) is null);
+            var faceBefore = _gameBar.Lights.MapMode; var litBefore = _gameBar.Lights.LitMask;
+            var savedFace = faceBefore == AreaLightSlot.TownMap ? AreaLightSlot.WorldMap : AreaLightSlot.TownMap;
+            _gameBar.Lights.SetMapMode(savedFace);
+            var lightSession = _areaSession!; RecordBarLights(lightSession);
+            Require(lightSession.SetQuestState(lightSession.Version, lightQuest, SessionQuestState.Accepted).Disposition == GameSessionDisposition.Changed, "a quest was accepted");
+            for (var frame = 0; frame < 3; frame++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            // Earlier steps of the smoke may have lit other buttons: the save holds whatever is lit, with the Logbook added.
+            var savedMask = _gameBar.Lights.LitMask;
+            Require(_gameBar.Lights.IsLit(AreaLightSlot.Logbook) && _gameBar.Lights.MapMode == savedFace && savedMask == (litBefore | 1 << (int)AreaLightSlot.Logbook),
+                $"the quest lit the Logbook button: before {litBefore}, now {savedMask}");
+            Require(_areaSession!.QueryBarLights() == new SessionBarLightsState(savedMask, (int)savedFace), "the session holds the lit state for the save: " + _areaSession.QueryBarLights());
             QuickKey(Key.F7);
             var slot = _saveLibraryForSelfTest.AutoSlot;
             Require(slot.Exists && _quickSaveStatus?.StartsWith("F7 quick saved", StringComparison.Ordinal) == true, "F7 saved: " + _quickSaveStatus);
@@ -427,7 +501,8 @@ public partial class TerrainViewerApp
             Require(_areaTransitions.CurrentMap == 79 && InCave, "the entrance took the actor into the cave");
             var caveSession = _areaSession;
             for (var i = 0; i < 3; i++) AreaSmokeFrame();
-            QuickKey(Key.F8);
+            // ARC-UI-1504: the load of the shown map (a cave to its exterior is one map's load) shows the screen first and runs on a later frame.
+            DeferredQuickLoadForSelfTest(Require, "F8 from the cave");
             Require(_quickSaveStatus?.StartsWith("F8 quick loaded", StringComparison.Ordinal) == true, "F8 loaded: " + _quickSaveStatus);
             Require(!ReferenceEquals(caveSession, _areaSession) && _areaTransitions.CurrentMap == 1 && !InCave && ReferenceEquals(_readyArea, _exteriorArea),
                 "F8 restored the exterior under a new session");
@@ -445,11 +520,18 @@ public partial class TerrainViewerApp
                 await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
             }
 
+            // ARC-UI-1542: the loaded session shows the Logbook button lit again and the saved Map face; the sector's answer holds no sway until it changes.
+            Require(!ReferenceEquals(caveSession, _areaSession) && _areaSession!.QueryBarLights() is { } restoredLights && restoredLights.LitMask == savedMask && restoredLights.MapMode == (int)savedFace,
+                "the loaded session holds the saved lights: " + _areaSession.QueryBarLights());
+            Require(_gameBar.Lights.LitMask == savedMask && _gameBar.Lights.ArtOf(AreaBarButton.Logbook) == 560 && _gameBar.Lights.MapMode == savedFace,
+                $"F8 brought back the lit buttons {savedMask} (the Logbook among them) and the Map face {savedFace}: lit {_gameBar.Lights.LitMask}, face {_gameBar.Lights.MapMode}");
+            _gameBar.Lights.Light(AreaLightSlot.Logbook, false, true); _gameBar.Lights.SetMapMode(faceBefore); RecordBarLights(_areaSession!); _gameBarPanel?.Render();
+
             // A damaged slot: F8 fails, the running session and map stay.
             System.IO.File.WriteAllText(slot.Path, "{\"format\":\"arcanum-steamwoven-session\",");
             var running = _areaSession; var revision = _areaSession!.Version.Revision;
             for (var i = 0; i < 3; i++) AreaSmokeFrame();
-            QuickKey(Key.F8);
+            DeferredQuickLoadForSelfTest(Require, "F8 with a damaged slot"); // ARC-UI-1504: the refusal clears the screen and keeps the game
             Require(_quickSaveStatus?.StartsWith("F8 quick load FAILED: the save file is damaged", StringComparison.Ordinal) == true, "damaged slot reported: " + _quickSaveStatus);
             Require(_messageLog.Count == 2 && _messageLog.Shown is { Kind: AreaMessageKind.Message } failedLoad && failedLoad.Title == messages.Text(AreaSaveMessages.LoadFailed),
                 "F8 says the load failed: " + _messageLog.Shown?.Title);
@@ -474,6 +556,28 @@ public partial class TerrainViewerApp
             _worldFocused = focused; RestoreWorldTestTime(testTime);
             System.IO.Directory.Delete(directory, recursive: true);
         }
+    }
+
+    // ARC-UI-1504: F8 with the load screen on (an automated run loads at once otherwise). The key raises the screen over the game that still runs, one frame
+    // draws it, the next runs the load and ends it; a refused load ends it too.
+    private void DeferredQuickLoadForSelfTest(Action<bool, string> require, string what)
+    {
+        var before = _areaSession; var screens = _transitionLoads;
+        _loadScreenDeferForSelfTest = true;
+        try
+        {
+            QuickKey(Key.F8);
+            require(_pendingLoad is not null && ReferenceEquals(before, _areaSession) && _transitionScreen.Loading && _transitionScreen.Alpha >= 1
+                && _transitionLoads == screens + 1 && _transitionPanel is { Visible: true }, $"{what}: the load screen shows from the key, before the load runs: pending={_pendingLoad is not null} loads={_transitionLoads - screens}");
+            AreaSmokeFrame();
+            require(_pendingLoad is not null && ReferenceEquals(before, _areaSession) && _transitionScreen.Loading && _transitionPanel is { Visible: true },
+                $"{what}: a frame was drawn with the screen before the session was adopted");
+            AreaSmokeFrame();
+            require(_pendingLoad is null && !_transitionScreen.Covering && _transitionPanel is { Visible: false } && _mapHandoff is null,
+                $"{what}: the load ran and the screen went: shade={_transitionScreen.Shade} loading={_transitionScreen.Loading}");
+            GD.Print($"ARC-UI-1504 {what}: load screen shown for {_transitionLoads - screens} load, ended with the load, session replaced={!ReferenceEquals(before, _areaSession)}");
+        }
+        finally { _loadScreenDeferForSelfTest = false; }
     }
 
     // One key press and release through the production keyboard route.

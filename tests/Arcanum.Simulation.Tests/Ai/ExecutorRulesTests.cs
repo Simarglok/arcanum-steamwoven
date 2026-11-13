@@ -105,6 +105,15 @@ public sealed class ExecutorRulesTests
             return running ? RunMs : WalkMs;
         }
 
+        // ARC-WORLD-1469 (TT9): the cells whose trap object the step onto them meets (spotted or set off), which ends the walk there.
+        public readonly HashSet<CellCoord> TrapAt = [];
+        public bool StepMeetsTrap(string id, CellCoord next)
+        {
+            if (!TrapAt.Contains(next)) return false;
+            Calls.Add($"trap {next.X},{next.Y}");
+            return true;
+        }
+
         public int GetUp(string id) { Calls.Add("get up"); Movers[id] = Mover(id) with { KnockedDown = false }; return 300; }
         // ARC-DEV-137: the get-up is the real goal 63 now; its start shows animation 8, which stands the fake critter up.
         public void ShowArt(string id, int animation, int frame)
@@ -801,6 +810,21 @@ public sealed class ExecutorRulesTests
         world.Held = false;
         var walked = Drive(held[^1].Run!, world, Steamwoven);
         Assert.AreNotEqual(new CellCoord(10, 10), world.At[Npc], "the walk goes on");
+    }
+
+    [TestMethod]
+    public void AStepOntoATrapObjectEndsTheWalkOnThatTile()
+    {
+        // ARC-WORLD-1469 (TT9, 0x4305D0): the step that meets a trap object ends the walk on its tile; the attack goal's walk then ends and the next frame plans again from there.
+        var world = Arena(14);
+        world.Weapon = true;
+        world.Range = 10;
+        world.TrapAt.Add(new(12, 10));
+        Drive(AttackRun(), world, Steamwoven);
+        var at = world.Calls.IndexOf("trap 12,10");
+        Assert.AreEqual(1, world.Calls.Count(c => c == "trap 12,10"), "met once: " + string.Join("; ", world.Calls));
+        Assert.AreEqual("step 12,10", world.Calls[at - 1], "the trap is the one the step onto 12,10 met");
+        Assert.AreEqual("plan Attack", world.Calls[at + 1], "the walk ended there (the path index became its length): the next step is a new plan from the trap's tile, not the old path's next tile");
     }
 
     [TestMethod]

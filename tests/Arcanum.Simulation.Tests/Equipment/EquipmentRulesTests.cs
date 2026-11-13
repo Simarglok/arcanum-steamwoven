@@ -176,6 +176,20 @@ public sealed class EquipmentRulesTests
         Assert.AreEqual(-1, EquipmentRules.AdjustMagic(-5, 3, 0), "power 1: −5 × 1 / 3 truncates toward zero");
     }
 
+    // ARC-AI-1518: the terms prowling's hearing check reads: each worn armour item's silent-move adjustment plus its magic adjustment.
+    [TestMethod]
+    public void WornArmourGivesItsSilentMoveAdjustmentsInItemOrder()
+    {
+        static EquipmentItem Noisy(int silent, int magic, int complexity) => Armor(complexity: complexity) with
+        {
+            Armor = Armor(complexity: complexity).Armor! with { SilentMoveAdjustment = silent, MagicSilentMoveAdjustment = magic },
+        };
+        // −10 and a magic −10 at power 40/50 give −10 − 8; the neutral item gives its whole magic value; the sword adds nothing.
+        var worn = new[] { Noisy(-10, -10, 50), Sword(), Noisy(4, 6, 0) };
+        CollectionAssert.AreEqual(new[] { -18, 10 }, EquipmentRules.SilentMoves(worn, 30).ToArray());
+        Assert.AreEqual(0, EquipmentRules.SilentMoves([], 0).Count);
+    }
+
     [TestMethod]
     public void WornArmourAddsArmourClassAndResistances()
     {

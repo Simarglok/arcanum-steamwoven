@@ -473,7 +473,8 @@ public partial class TerrainViewerApp
             // A refused strike leaves the shot in the session: it ends there too (a boomerang turns back). ARC-MAGIC-042: a thrown item's hit script runs for a hit, its miss script for anything else.
             end = StruckEnd(projectile, result.Disposition != GameSessionDisposition.Rejected && result.Resolution?.Outcome is Arcanum.Simulation.Combat.AttackOutcome.Hit or Arcanum.Simulation.Combat.AttackOutcome.CriticalHit, goal.Entity);
             // ARC-DEV-292: the attack event of the aimed NPC was raised at the shot; an NPC the arrow met on the way gets its own at the strike (as an NPC's stray shot does, AreaAiHost.LandShot), before its pass.
-            if (result.Disposition != GameSessionDisposition.Rejected && result.Resolution?.Refusal == AttackRefusal.None && !(struck.Key == projectile.Target.Key && projectile.Critter is AttackGoal)) _aiHost?.HeroAttacked(goal.Entity);
+            // ARC-AI-1516 (EX14): the stray strike's event carries the accidental bit.
+            if (result.Disposition != GameSessionDisposition.Rejected && result.Resolution?.Refusal == AttackRefusal.None && !(struck.Key == projectile.Target.Key && projectile.Critter is AttackGoal)) _aiHost?.HeroStrayAttacked(goal.Entity);
             if (result.Disposition != GameSessionDisposition.Rejected) FinishCritterHit(goal, result);
         }
         else if (!IsAreaCompanion(struck.Key) && (struck.Key == projectile.Target.Key && projectile.Object is { } aimedObject ? aimedObject
@@ -481,7 +482,7 @@ public partial class TerrainViewerApp
         {
             if (ObjectTargets()?.Target(owner, target.Row.Key, AreaTrapped) is { Refusal: null } now) target = now;
             var result = owner.LandShotOnObject(owner.Version, projectile.Shot,
-                target.Attack(1, null, AreaCombatHost.HeroWorn(owner, _areaKitDurability)) with { DropMap = AreaDropMapNow(), TakingDamage = () => TakingDamageGoesOn(target.Entity, SessionSpellCaster.Hero) });
+                target.Attack(1, null, AreaCombatHost.HeroWorn(owner, _areaKitDurability)) with { DropMap = AreaDropMapNow(), TakingDamage = () => TakingDamageGoesOn(target.Entity, SessionSpellCaster.Hero), HitScripts = HeroHitScripts(target.Entity) });
             Ended(projectile, kind, target.Entity, $"disposition={result.Disposition} failure={result.Failure} outcome={result.Resolution?.Outcome}"
                 + $" damage={result.Object?.Damage}");
             end = StruckEnd(projectile, result.Disposition != GameSessionDisposition.Rejected && result.Resolution?.Outcome is Arcanum.Simulation.Combat.AttackOutcome.Hit or Arcanum.Simulation.Combat.AttackOutcome.CriticalHit, target.Entity);

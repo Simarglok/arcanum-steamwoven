@@ -23,7 +23,7 @@ public sealed class AreaHostileConversationTests
         CollectionAssert.AreEqual(new[] { f.Entity }, asked, "once, on the speaker's entity");
         Assert.AreEqual(DialogEndKind.HostileRefusal, talk.End!.Kind);
         Assert.AreEqual("Well?", talk.NpcLine!.Text);
-        Assert.AreEqual("[the NPC turned hostile and ended the dialog: its generated reply is not loaded]", AreaConversationText.Outcome(talk));
+        Assert.AreEqual("[the NPC turned hostile and ended the dialog with its last line]", AreaConversationText.Outcome(talk));
         Assert.IsTrue(f.Host.EndReaction());
     }
 

@@ -45,6 +45,8 @@ public partial class TerrainViewerApp
     {
         // ARC-MAGIC-026: a drop of the maintain bar's open count ends the closed slots' spells whether the bars show or not.
         SyncMaintainClosing();
+        // ARC-UI-1364: the buttons' lights follow the session whether the bars show or not (the original's art words live on).
+        SyncBarLights();
         // ARC-UI-1111: the clock's chain runs under the session whether the bars show or not (the original's interface stays made).
         SyncGameClock();
         if (!GameBarActive)
@@ -99,6 +101,8 @@ public partial class TerrainViewerApp
         }
         _gameBarPanel.Visible = true;
         _gameBarPanel.SetClock(_gameClock.Face);
+        // ARC-UI-1365 (GB13): the experience strip follows the hero's progress toward the next level (null without a hero or experience data).
+        _gameBarPanel.SetExperience(_areaSession?.QueryHeroExperience()?.Progress);
         _hud?.SetTopInset(AreaGameBarPanel.TopInset);
         SyncHotkeyBar();
         SyncMaintainBar();

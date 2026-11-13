@@ -306,6 +306,15 @@ public sealed partial class DialogConversation
             Greet(plan, greeting, previous);
             return;
         }
+        if (plan.InsultLine)
+        {
+            // ARC-SCRIPT-1505 (ledger INS1): the insulted line, the NPC's race line 1000; the node's replies follow as for a plain line.
+            if (!NpcRaceTalkLine(InsultGroup, out var insulted))
+            {
+                return;
+            }
+            NpcLine = insulted;
+        }
         BuildOffers(plan);
     }
 
@@ -395,13 +404,15 @@ public sealed partial class DialogConversation
     {
         var offers = new List<DialogOption>();
         var plans = new Dictionary<int, OfferPlan>();
-        foreach (var reply in step.Replies)
+        // The source takes the first five eligible records (0x414F50) before the reply builder (0x416C10) drops one, so a dropped q: reply still counts.
+        var eligible = 0;
+        foreach (var planned in step.Replies)
         {
-            if (offers.Count == MaxEligible)
+            if (eligible == MaxEligible)
             {
                 break;
             }
-            var open = IsEligible(reply);
+            var open = IsEligible(planned);
             if (open is null)
             {
                 return;
@@ -409,6 +420,20 @@ public sealed partial class DialogConversation
             if (open == false)
             {
                 continue;
+            }
+            eligible++;
+            var reply = planned;
+            if (planned.QuestReply is not null)
+            {
+                if (!ResolveQuestReply(planned, step, out var resolved))
+                {
+                    return;
+                }
+                if (resolved is null)
+                {
+                    continue;
+                }
+                reply = resolved;
             }
             var block = reply.Block;
             StepPlan? target = null;
@@ -931,7 +956,7 @@ public sealed partial class DialogConversation
     /// <summary>
     /// The reply step's hostile check (0x413130, ledger HR1–HR3, ARC-DEV-193): after the picked reply's action string returned 1 (no FL, JO, UW,
     /// ET or SU in it) the hostility port is asked whether the NPC is alive and kill-on-sight toward the PC now; when it is, the NPC speaks a
-    /// generated line (group 1000, not loaded) and the talk ends as <see cref="DialogEndKind.HostileRefusal"/> before the insult and the
+    /// generated line (race group 1000, ARC-SCRIPT-1505) and the talk ends as <see cref="DialogEndKind.HostileRefusal"/> before the insult and the
     /// reply's transition. Without the port the check is not made. False when the talk ended or failed.
     /// </summary>
     [OriginalFunction(0x413130, OriginalFunctionScope.Partial)]
@@ -955,14 +980,40 @@ public sealed partial class DialogConversation
         {
             return true;
         }
+        if (!SpeakLastWords())
+        {
+            return false;
+        }
         Finish(new DialogConversationEnd(DialogEndKind.HostileRefusal, null));
         return false;
     }
 
     /// <summary>
+    /// ARC-SCRIPT-1505 (ledger INS2, HR3): the NPC's last words after an insult that ends the talk or a refusal to talk on, its race line 1000
+    /// (no replies, end state 4). Without the greeting port, or when its facts are unknown, the line stays as it was. False when the line could not be picked (the conversation failed).
+    /// </summary>
+    private bool SpeakLastWords()
+    {
+        if (_ports.Greeting is null)
+        {
+            return true;
+        }
+        if (!NpcRaceTalkLine(InsultGroup, out var last))
+        {
+            return false;
+        }
+        // A host whose facts are unknown picks no line (origin null): the line stays as it was rather than going blank.
+        if (last.Origin is not null)
+        {
+            NpcLine = last;
+        }
+        return true;
+    }
+
+    /// <summary>
     /// The insult of a picked Player <c>i:</c> reply (0x4191E0): the NPC's reaction changes by <see cref="InsultReaction"/>
     /// through the reaction port (the PC's adjustment effects and skips are the owner's), then the effective reaction is read;
-    /// at most <see cref="InsultEndsAtOrBelow"/> the NPC ends the talk with a generated line (not loaded,
+    /// at most <see cref="InsultEndsAtOrBelow"/> the NPC ends the talk with its generated race line 1000 (ARC-SCRIPT-1505, with the greeting port;
     /// <see cref="DialogEndKind.Insulted"/>), otherwise the reply's own transition follows. False when the talk ended or stopped.
     /// </summary>
     [OriginalFunction(0x4191E0, OriginalFunctionScope.Partial)]
@@ -974,6 +1025,10 @@ public sealed partial class DialogConversation
         }
         if (value <= InsultEndsAtOrBelow)
         {
+            if (!SpeakLastWords())
+            {
+                return false;
+            }
             Finish(new DialogConversationEnd(DialogEndKind.Insulted, null));
             return false;
         }
@@ -1382,6 +1437,7 @@ public sealed partial class DialogConversation
                 ? $"{(char)raw[0]}:{(raw.Count > 2 ? "+" : string.Empty)}" : string.Empty;
             var marker = DialogText.Marker(markerText, out var exact);
             GreetingPlan? greeting = null;
+            var insultLine = false;
             if (marker is { Letter: 'g' } && _ports.Greeting is not null && withReplies && !nested)
             {
                 // ARC-WORLD-058: the greeting's slot targets are planned now, so a slot never half-runs a node.
@@ -1390,6 +1446,12 @@ public sealed partial class DialogConversation
                 {
                     return null;
                 }
+                text = string.Empty;
+            }
+            else if (marker is { Letter: 'i' } && exact && _ports.Greeting is not null && withReplies && !nested)
+            {
+                // ARC-SCRIPT-1505 (ledger INS1): an NPC node that is exactly "i:" says the NPC's race line 1000 (0x416840 → 0x4185F0), picked when the node is entered.
+                insultLine = true;
                 text = string.Empty;
             }
             else if (marker is { Letter: 'g' or 'm' or 'r' } || marker is { Letter: 'i' } && exact)
@@ -1427,7 +1489,7 @@ public sealed partial class DialogConversation
                 }
                 replies.Add(reply);
             }
-            return new StepPlan(npc, action, DialogText.Substitute(text, _request.Names), replies.AsReadOnly(), greeting);
+            return new StepPlan(npc, action, DialogText.Substitute(text, _request.Names), replies.AsReadOnly(), greeting, insultLine);
         }
         catch (DialogOperationParseException exception)
         {
@@ -1446,20 +1508,23 @@ public sealed partial class DialogConversation
     }
 
     /// <summary>Plans one Player record. Condition grammar failures propagate to the step; action failures block only this reply.</summary>
-    private ReplyPlan? PlanReply(DlgRecord record, DialogNodeId node, out DialogConversationFrontier? frontier, out DialogConversationFailure? failure)
+    private ReplyPlan? PlanReply(DlgRecord record, DialogNodeId node, out DialogConversationFrontier? frontier, out DialogConversationFailure? failure,
+        DlgRecord? gates = null, bool nestedQuest = false)
     {
         frontier = null;
         failure = null;
+        // ARC-SCRIPT-1532: a q: reply's chosen record gives the text, response and action; the gates (gender, IQ, condition) stay the q: record's (0x416C10 only recurses for the record).
+        var gate = gates ?? record;
         var response = new DialogResponseId(record.Id);
-        var gender = ParseGender(record);
+        var gender = ParseGender(gate);
         if (gender is null)
         {
             failure = new DialogConversationFailure(DialogConversationFailureKind.InvalidOperation, node,
-                new DialogOperationSource(new DialogNodeId(record.Id), record.SerializedIndex, DlgFieldKind.AlternateText,
-                    record.AlternateText.PayloadOffset, 0, record.AlternateText.Length, 0), response);
+                new DialogOperationSource(new DialogNodeId(gate.Id), gate.SerializedIndex, DlgFieldKind.AlternateText,
+                    gate.AlternateText.PayloadOffset, 0, gate.AlternateText.Length, 0), response);
             return null;
         }
-        var condition = ParseField(record, record.Condition, ConversationField.PlayerCondition);
+        var condition = ParseField(gate, gate.Condition, ConversationField.PlayerCondition);
         if (MissingCapability(condition) is { } missing)
         {
             frontier = new DialogConversationFrontier(DialogFrontierKind.CapabilityUnavailable, node, missing, response);
@@ -1482,6 +1547,12 @@ public sealed partial class DialogConversation
         RumorOffer? rumor = null;
         var story = false;
         var found = DialogText.Marker(text, out var exact);
+        if (found is { Letter: 'q' } && !nestedQuest && QuestReplyAvailable && ParseQuestReply(text) is { } questReply)
+        {
+            // ARC-SCRIPT-1532 (ledger DQR1): the reply is chosen when the offers are built (BuildOffers → ResolveQuestReply): the record it shows depends on the PC's quest state.
+            return new ReplyPlan(record, gender.Value, record.IqValue!.Value, condition, DialogOptionTextKind.Record, string.Empty, null, DialogOptionTransition.Exit, null, null, null, null,
+                null, QuestReply: questReply);
+        }
         if (found is { Letter: 'd' or 'q' or 'u' or 'x' })
         {
             // Their visibility depends on world, quest or skill state this runtime cannot read.
@@ -1722,7 +1793,7 @@ public sealed partial class DialogConversation
                 line = null;
             }
         }
-        return new ReplyPlan(record, gender.Value, record.IqValue!.Value, condition, kind, text, marker, transition, target, line, action, block,
+        return new ReplyPlan(record, gender.Value, gate.IqValue!.Value, condition, kind, text, marker, transition, target, line, action, block,
             block is null ? insult : null, block is null ? barter : null, block is null ? worldMap : null, phrase, block is null ? trainer : null, block is null ? rumor : null, block is null && story);
     }
 
@@ -1819,7 +1890,7 @@ public sealed partial class DialogConversation
     }
 
     private sealed record StepPlan(DlgRecord Npc, IReadOnlyList<ConversationOperation> Action, string NpcText, IReadOnlyList<ReplyPlan> Replies,
-        GreetingPlan? Greeting = null);
+        GreetingPlan? Greeting = null, bool InsultLine = false);
 
     /// <summary>A greeting's slots and the planned nodes of its jump and floating slots.</summary>
     private sealed record GreetingPlan(DialogGreetingSlot[] Slots, IReadOnlyDictionary<int, StepPlan> Jumps, IReadOnlyDictionary<int, StepPlan> Floats);
@@ -1881,7 +1952,8 @@ public sealed partial class DialogConversation
         bool Phrase = false,
         int[]? Trainer = null,
         RumorOffer? Rumor = null,
-        bool Story = false);
+        bool Story = false,
+        int? QuestReply = null);
 
     private sealed record OfferPlan(ReplyPlan Reply, StepPlan? Target);
 }

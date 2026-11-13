@@ -174,6 +174,42 @@ public sealed class AttackStateTests
     }
 
     [TestMethod]
+    public void TheHostsCombatPointScriptsAreAskedForEveryHitBeforeTheDamageAndForNoMiss()
+    {
+        // ARC-SCRIPT-1483 (CP1–CP3): a resolved hit (a critical one too) tells the host before its damage step (0x4B3770); a miss tells nothing. Bare hands hold no weapon, and a swing is not the projectile path.
+        using var owner = Owner();
+        var tough = Combat(Npc(hpAdjustment: 5000));
+        var heard = new List<(SessionHitScriptEvent Hit, int HitPointsThen, int HitPointsBefore)>();
+        var hits = 0; var criticals = 0; var misses = 0;
+        for (var attempt = 0; attempt < 600 && (hits < 3 || misses < 3 || criticals < 1); attempt++)
+        {
+            var before = heard.Count;
+            var hitPointsBefore = owner.QueryLife(tough.Target).View!.Status.HitPoints;
+            var result = owner.AttackCritter(owner.Version, new SessionAttack(tough)
+            {
+                HitScripts = hit => heard.Add((hit, owner.QueryLife(tough.Target).View!.Status.HitPoints, hitPointsBefore)),
+            });
+            var outcome = result.Resolution?.Outcome;
+            if (result.Resolution?.Refusal != AttackRefusal.None) { Assert.AreEqual(before, heard.Count, "a refused attack tells nothing"); continue; }
+            if (outcome is AttackOutcome.Hit or AttackOutcome.CriticalHit)
+            {
+                Assert.AreEqual(before + 1, heard.Count, "one event for a hit");
+                Assert.AreEqual((null, outcome == AttackOutcome.CriticalHit, false, false), (heard[^1].Hit.Weapon, heard[^1].Hit.Critical, heard[^1].Hit.Projectile, heard[^1].Hit.Thrown));
+                hits++; if (outcome == AttackOutcome.CriticalHit) criticals++;
+            }
+            else
+            {
+                Assert.AreEqual(before, heard.Count, "a miss tells nothing");
+                misses++;
+            }
+        }
+        Assert.IsTrue(hits >= 3 && misses >= 3, $"hits {hits}, misses {misses}");
+        Assert.AreEqual(hits, heard.Count);
+        Assert.IsTrue(heard.All(entry => entry.HitPointsThen == entry.HitPointsBefore), "every event came before its hit's damage step");
+        Assert.IsFalse(owner.AttackCritter(owner.Version, new SessionAttack(tough)).Vetoed, "no host: the hit goes on");
+    }
+
+    [TestMethod]
     public void ATakingDamageScriptIsAskedBeforeTheInvulnerableGateAndItsAnswerChangesNothing()
     {
         // ARC-DEV-261 (GT198): the script comes before the invulnerable gate, so a nigh-invulnerable victim's script runs for a prevented hit too; the hit stays prevented, not vetoed.

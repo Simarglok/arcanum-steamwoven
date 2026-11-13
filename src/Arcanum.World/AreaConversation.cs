@@ -1,6 +1,7 @@
 using Arcanum.Data;
 using Arcanum.Data.Area;
 using Arcanum.Data.Audio;
+using Arcanum.Data.Messages;
 using Arcanum.Data.Scripts;
 using Arcanum.Scripting.Dialog;
 using Arcanum.Scripting.GlobalFlags;
@@ -615,7 +616,9 @@ public sealed class AreaConversationHost
                 // ARC-SCRIPT-1304: the paid r: rumor reads the hero's own gold.
                 _session.QueryHero() is null ? null : new SessionDialogPursePort(_session, AreaConversationState.PcParticipant),
                 // ARC-SCRIPT-1358: an l: reply asks for the world map once the talk ended; the viewer says whether it has one (map mode) and opens it.
-                WorldMapAvailable?.Invoke() == true ? new WorldMapPort(this) : null));
+                WorldMapAvailable?.Invoke() == true ? new WorldMapPort(this) : null,
+                // ARC-SCRIPT-1532: a q: reply picks its record from the module's quest rules table; without the table the reply stays a frontier.
+                _greetingTexts?.QuestReplies is { } questReplies ? new QuestReplyPort(questReplies) : null));
         return new(AreaConversationStartStatus.Started, conversation, speaker, $"script {dialog.Script} SCR line {dialog.Line} -> DLG node {dialog.Node}", party,
             document, dialog.Script) { Greeting = greeting };
     }
@@ -799,6 +802,12 @@ public sealed class AreaConversationHost
     }
 
     // l: (ledger VA5): the original's dialog state 6 opens the world map for the local PC only (0x567E30 tests the handle against the local PC, 0x40D9F0).
+    /// <summary>ARC-SCRIPT-1532: the module's <c>rules\gamequest.mes</c> numbers for the <c>q:</c> reply.</summary>
+    private sealed class QuestReplyPort(QuestReplyTable table) : IDialogQuestReplyPort
+    {
+        public int? Field(int quest, int index) => table.Field(quest, index);
+    }
+
     private sealed class WorldMapPort(AreaConversationHost host) : IDialogWorldMapPort
     {
         public DialogCommandResult Execute(OpenWorldMapCommand command)
@@ -1193,8 +1202,8 @@ public static class AreaConversationText
         DialogConversationPhase.Ended when conversation.End!.Kind == DialogEndKind.ReturnToScript =>
             $"[dialog ended; the caller script would continue at SCR line {conversation.End.ScriptLine!.Value.Value} (not executed)]",
         DialogConversationPhase.Ended when conversation.End!.Kind == DialogEndKind.NpcFinalLine => "[dialog ended with the NPC's final line]",
-        DialogConversationPhase.Ended when conversation.End!.Kind == DialogEndKind.Insulted => "[the insult ended the dialog: the NPC's generated reply is not loaded]",
-        DialogConversationPhase.Ended when conversation.End!.Kind == DialogEndKind.HostileRefusal => "[the NPC turned hostile and ended the dialog: its generated reply is not loaded]",
+        DialogConversationPhase.Ended when conversation.End!.Kind == DialogEndKind.Insulted => "[the insult ended the dialog with the NPC's last line]",
+        DialogConversationPhase.Ended when conversation.End!.Kind == DialogEndKind.HostileRefusal => "[the NPC turned hostile and ended the dialog with its last line]",
         DialogConversationPhase.Ended => "[dialog closed]",
         DialogConversationPhase.AtFrontier => $"[stopped at a frontier: {conversation.Frontier!.Kind} at node {conversation.Frontier.Node.Value}{Where(conversation.Frontier.Source)}]",
         DialogConversationPhase.Failed => $"[failed: {conversation.Failure!.Kind} at node {conversation.Failure.Node.Value}{Where(conversation.Failure.Source)}]",

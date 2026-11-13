@@ -162,6 +162,9 @@ public partial class TerrainViewerApp
             HeroCell = () => _worldActor.Session is AreaGridSession hero ? World(hero.Chart.ToWorld(hero.State.CommittedCell)) : null,
             Companions = () => _areaCompanions is { } group
                 ? group.Companions.Select(c => (c.Entity, c.Key, World(chart.ToWorld(c.Grid.State.CommittedCell)))).ToArray() : [],
+            // ARC-AI-1515 (0x4A9650): the follow check of a companion the hero hit reads the conversation state's PC side, as its loyalty step does.
+            FollowFacts = entity => _areaCompanions?.Companions.FirstOrDefault(c => c.Entity == entity) is { } companion && _conversationHost is { } conversation
+                ? AreaCompanionLoyalty.Facts(session, companion, conversation.State) : null,
             Removed = AreaRemovedObjects,
             SwitchedOn = AreaSwitchedOnNpcs,
             LineOfFire = () => AiLineOfFire(host()),
@@ -200,6 +203,8 @@ public partial class TerrainViewerApp
             ObjectStruck = NpcObjectHit,
             // ARC-DEV-261 (GT198): the victims' taking-damage scripts (point 0x17) of the NPCs' attacks, throws and knockback bumps.
             TakingDamage = TakingDamageGoesOn,
+            // ARC-SCRIPT-1483: the combat-point scripts (hit, critter hits, critical hit) of the NPCs' hits.
+            HitScripts = RunHitScripts,
             // ARC-WORLD-115: the hero's companions here fight beside it, stepping and turning through their own walk (ARC-WORLD-119: the
             // free ones act as any NPC through the same walk).
             Followers = _areaCompanions is { } followerGroup ? new AiFollowers(followerGroup, () => _areaCompanions, chart) : null,
@@ -440,6 +445,43 @@ public partial class TerrainViewerApp
         return !vetoed;
     }
 
+    /// <summary>ARC-SCRIPT-1483: the combat-point scripts of a hero's hit on <paramref name="victim"/>, the hit event the session raised before its damage step.</summary>
+    private Action<SessionHitScriptEvent> HeroHitScripts(string victim) => hit => RunHitScripts(SessionSpellCaster.Hero, victim, hit);
+
+    /// <summary>
+    /// ARC-SCRIPT-1483 (script trigger audit slice 5, ledger CP1–CP5; 0x4B3770, 0x4B2F60): the combat-point scripts of a hit, asked by the session before the damage step, through the shown map's use-script host
+    /// (<see cref="AreaUseScriptHost.RunCombatPoint"/>), in the original's order (but for a hero's thrown item, whose hit script is the thrown-item host's, run after the strike): the weapon's hit script (7) and, for a critical hit, its critical-hit script (34), each with the attacker as the triggerer and the victim as the extra
+    /// object, then the attacker's critter-hits script (26) with the victim as the triggerer. The hero has no script data (no attachment of its own here), so point 26 runs for an NPC attacker only; the hero's thrown item's hit script
+    /// is the thrown-item host's (ARC-MAGIC-042). The answers cancel nothing (the original's call sites ignore them); a run that is refused or whose effects the host cannot apply is said and the hit goes on. An attacker or victim that is not on
+    /// the shown map runs nothing here.
+    /// </summary>
+    private void RunHitScripts(string attacker, string victim, SessionHitScriptEvent hit)
+    {
+        if (_areaSession is not { } owner || _readyArea is not { } area || UseScriptHost(area.Snapshot) is not { } host) return;
+        var map = CurrentAreaMap;
+        static bool IsHero(string id) => id == SessionSpellCaster.Hero || id == Arcanum.Simulation.Ai.AiSchedulerRules.Pc;
+        Arcanum.Scripting.Scr.ScrObjectRef Ref(string id) => IsHero(id) ? host.Pc : new(map, ScriptCodeOfCast(id));
+        var attackerRef = Ref(attacker);
+        var victimRef = Ref(victim);
+        void Run(int point, Arcanum.Scripting.Scr.ScrObjectRef attachee, Arcanum.Scripting.Scr.ScrObjectRef? triggerer, Arcanum.Scripting.Scr.ScrObjectRef? extra)
+        {
+            var ran = Awarded(host, host.RunCombatPoint(point, attachee, triggerer, extra, owner.Rules.Scripts));
+            if (ran.Run is not null)
+                GD.Print($"ARC-SCRIPT-1483 combat-point point={point} attacker={attacker} victim={victim} attachee={attachee.Code} outcome={ran.Outcome} run={ran.Run.Outcome} stop={ran.Run.Stop} detail={ran.Detail}");
+        }
+        if (hit.Weapon is { } weapon)
+        {
+            // A carried item's row is read by identity from the map the hero took it on; an NPC's weapon is a row of the shown map.
+            var weaponMap = IsHero(attacker) && owner.QueryPcInventory().FirstOrDefault(held => held.Entity == weapon) is { Entity: not null } carried ? carried.Origin.RuntimeMap : map;
+            var weaponRef = new Arcanum.Scripting.Scr.ScrObjectRef(weaponMap, weapon);
+            if (!(hit.Thrown && IsHero(attacker))) Run(Arcanum.Scripting.Scr.ScrPoint.Hit, weaponRef, attackerRef, victimRef);
+            // 0x4B2F60 (CP2): on the projectile path the critical-hit script runs only for a weapon item (object type 5): a thrown potion, ammunition or junk item runs none. An NPC's thrown item is its wielded weapon; the hero's item is read from its list (an item not found counts as the wielded weapon).
+            var isWeapon = !IsHero(attacker) || owner.QueryPcInventory().FirstOrDefault(held => held.Entity == weapon) is not { Entity: not null } kindHolder || kindHolder.Kind.Type == SessionItemType.Weapon;
+            if (hit.Critical && (!hit.Projectile || isWeapon)) Run(Arcanum.Scripting.Scr.ScrPoint.CriticalHit, weaponRef, attackerRef, victimRef);
+        }
+        if (!IsHero(attacker)) Run(Arcanum.Scripting.Scr.ScrPoint.CritterHits, attackerRef, victimRef, null);
+    }
+
     /// <summary>
     /// ARC-MAGIC-048 (E4-c, CN6): the Use component's call (0x452ED0 → 0x441980, point 1): the target's own use script, with the target as the triggerer. True when a script ran. The PC has no script here (no attachment data), an
     /// object that is not a row of the shown map has none; the target is also the extra object (the three object pairs of 0x452ED0); the run's awards, float lines and created objects are taken as for any other script run.
@@ -613,6 +655,7 @@ public partial class TerrainViewerApp
         }
         // ARC-DEV-206: tile scripts that waited for an open conversation.
         if (_npcTilePending.Count > 0 && RunNpcTilePending()) redraw = true;
+        if (NoteWalkerTraps(host)) redraw = true;
         foreach (var notice in host.DrainNotices())
         {
             switch (notice.Kind)
@@ -665,6 +708,7 @@ public partial class TerrainViewerApp
                 case AreaAiNoticeKind.Rewield:
                     // ARC-RENDER-1485: the gate's re-wield (or a pickup's CHECK_WIELD) changed what the NPC wears: its body shows the new weapon and shield (0x465020), so it is drawn again.
                     GD.Print($"ARC-RENDER-1485 ai-rewield npc={notice.Npc} shown={host.ShownWeapon(notice.Npc)}");
+                    RewieldedNpcs(host).Add(notice.Npc);
                     redraw = true;
                     break;
                 case AreaAiNoticeKind.Skill:
@@ -824,10 +868,12 @@ public partial class TerrainViewerApp
     /// (ARC-WORLD-111).</summary>
     private IReadOnlyList<AreaDrawCommand> AiMoverCommands()
     {
-        if (_aiHost is not { } host || host.Movers.All.Count == 0 || _areaOverlay is not { } overlay || !ReferenceEquals(overlay.Area, _readyArea)) return [];
+        if (_aiHost is not { } host || _areaOverlay is not { } overlay || !ReferenceEquals(overlay.Area, _readyArea)) return [];
         // The movers' steps and attack plays run on the host's clock (the frame step's world milliseconds).
         var now = host.NowMs;
-        return AnimateAiMovers(host, host.Movers.Commands(key => _fallenBodies.TryGetValue(key, out var fallen) ? fallen : NpcT0Body(key), now), now);
+        var walked = host.Movers.All.Count == 0 ? [] : AnimateAiMovers(host, host.Movers.Commands(key => _fallenBodies.TryGetValue(key, out var fallen) ? fallen : NpcT0Body(key), now), now);
+        // ARC-RENDER-1544: the re-wielded NPCs the AI never moved stand with the weapon they show.
+        return UnmovedArmedBodies(host, now) is { Count: > 0 } standing ? [.. walked, .. standing] : walked;
     }
 
     /// <summary>The hero's overlay with the NPCs the AI moved: their T0 records moved and the cells they hold blocking.</summary>

@@ -71,7 +71,7 @@ public sealed class SectorHistoryStateTests
         CollectionAssert.AreEqual(new[] { new SessionSectorEviction(0, T0 + 4_000), new SessionSectorEviction(SectorOne, T0 + 4_000) }, saved.Residency.History.ToArray(),
             "ascending sector id, the save's game time");
         var text = GameSessionSnapshotCodec.Encode(saved);
-        StringAssert.Contains(text, $",\"residency\":{{\"map\":79,\"history\":[[0,{T0 + 4_000}],[{SectorOne},{T0 + 4_000}]]}}" + NoGoals + NoSpells + NoNewspaper + NoGenerators + NoFlights + NoEncounters + ",\"lighting\":");
+        StringAssert.Contains(text, $",\"residency\":{{\"map\":79,\"history\":[[0,{T0 + 4_000}],[{SectorOne},{T0 + 4_000}]]}}" + NoGoals + NoSpells + NoNewspaper + NoGenerators + NoFlights + NoEncounters + NoBarLights + ",\"lighting\":");
         using var restored = Reload(owner);
         Assert.AreEqual(text, GameSessionSnapshotCodec.Encode(restored.Capture()), "a restored session saves the history it was given, before its cache opens");
         Assert.AreEqual(saved.Residency.History.Count, restored.Capture().Residency.History.Count);

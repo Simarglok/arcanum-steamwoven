@@ -242,6 +242,43 @@ like the trainer's and the rumor talk ([DTR1–DTR9](#trainer-reply-arc-script-1
 Not read here: the file's missing entry (the generated-line fetch 0x4D43A0 then shows the static missing-line text, as for every generated line, rule GD-A1), the
 network branches, the debug-prefix branch of 0x416C10 (the debug flag 0x5D1A0C).
 
+
+## Insult line (ARC-SCRIPT-1505)
+
+Source: the [conversation runtime](../../scripting/dialog-conversation-runtime.md#insult-line-arc-script-1505) and the installed dialogs (counts only, never text: 15
+NPC nodes in 9 files are exactly `i:`; no NPC node starts with `m:` or `r:` in the 709 installed dialog files; the 122 Player `i:` replies are DR4's). Question:
+which line does the original speak when an NPC node is `i:`, and what does the NPC say when an insult, or a hostile turn, ends the talk? Read statically on
+2026-11-13 by one reader (the implementing session, method step 6, with the exports in `research-private`: the decompiled C of 0x416840, 0x4185F0, 0x4191E0,
+0x413130, 0x416C10, 0x418A40, 0x418FC0, 0x418B30, 0x414810); a second reader (the independent review) checks every row against the decompiled C. It closes the open
+part of DR4 and DR5 (the NPC's generated reply) and HR3's "generated line, not loaded".
+
+| ID | Function (address) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| INS1 | NPC line step (0x416840 → 0x4185F0) | After the node's action ran (0x415BA0), the text is tested for a marker: exactly `i:` (case-insensitive, 0x5A0A90) makes the NPC line the race line of group 1000 (0x4185F0, the race generator of RG6: the override record 10999 + 1 first, else the race file by the two genders, the dumb file for a dumb NPC, group 1000 + 50 × (0 when the PC's race is the NPC's, else the PC's race + 1), the GP2 pick, the names substituted; not the class generator 0x418480) and the function returns 1, so the node's replies are built after it as for a plain line. The prefix `g:` is the greeting (ARC-WORLD-058); a text that only starts with `i:` is a plain text. | Original |
+| INS2 | insult end (0x4191E0), hostile check (0x413130) | After the −10 reaction change, at an effective reaction below 21 the NPC's line is written by 0x4185F0 with 1000 (the race line of INS1), the number of options is set to 0 and the dialog state to 4 (a final line); the hostile check of a picked reply (HR2, HR3) writes the same line and state 4 when the NPC is alive and kill-on-sight, before the insult. The talk ends with that line shown; the SCR script does not continue. | Original |
+| INS3 | NPC lines `m:` and `r:` (0x416840 → 0x418A40, 0x418FC0) | `m:` followed by `$price,node` is the price screen of the trainer's talk (0x418A40: the class generator's line 1000 with the price on the reaction scale, PC lines 1..99 and 100..199, state 4 pays then follows the yes value, the no option follows the node's own response); `r:` followed by `$price,list` is the rumor draw of the PC's reply (0x418FC0: the same screens as RMR1–RMR9, the draw and the tale of 0x4190E0). Both return 0 so no reply of the node is built. No installed NPC node has either marker, so neither is built ([#1535](https://github.com/Simarglok/arcanum-steamwoven/issues/1535)). | Original; not built |
+| INS4 | `IN` hand-over to the PC (0x415BA0 case 9, DAC5) | The negative `IN` moves the item to the PC's list; when the insert check refuses (no grid room, weight, Technophobia) the item is detached and placed at the PC's location (0x466E00, 0x466E50). This was already built by ARC-WORLD-1131 (PR #1209, `GameSessionOwner.GiveItemToPc` with the host's insert check, the refused item on the hero's tile), so the open "room test" note of WE10 and of the coverage row was stale. | Original; built before this slice |
+
+Not read here: the debug-prefix branch of 0x416C10 (the debug flag 0x5D1A0C), the network branches, and the start-of-talk hostile answer (0x412FD0, DR2), which the host
+still does not make.
+
+## Quest-state reply (ARC-SCRIPT-1532)
+
+Source: the [conversation runtime](../../scripting/dialog-conversation-runtime.md#quest-state-reply-arc-script-1532) and the installed dialogs (counts only, never text: 5 Player
+`q:` replies in 1 file, `01000praetor.dlg`, naming quests 1000 and 1001). Question: which record does a Player `q:N` reply show? Read statically on 2026-11-13 by one reader
+(the implementing session, method step 6, with the exports in `research-private`: the decompiled C of 0x416C10, 0x4C4C00, 0x4C4CB0, 0x4C4860, 0x414E60, 0x416AB0); a second
+reader (the independent review) checks every row against the decompiled C.
+
+| ID | Function (address) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| DQR1 | option builder (0x416C10, prefix `q:` 0x5A0AD0) | A Player record whose text starts with `q:` (either case, the string compare of two characters) takes the number after it (atoi) as the quest and asks the chooser 0x4C4C00 for a record id; -1 makes the builder return 0 (the reply is dropped); otherwise the builder calls itself with that id and the same slot, so the option takes its text, response value and action from that record (the gender, IQ and condition fields were tested on the `q:` record before, by 0x414F50). A chosen record that is itself a `q:` record is chosen through in turn; the recursion has no bound in the original. Steamwoven admits only a number of digits (spaces around allowed) within 1000..1999 and leaves other spellings atoi would read (leading zeros, trailing letters) a frontier. | Original |
+| DQR2 | quest reply chooser (0x4C4C00 → 0x4C4CB0, 0x4B0490, 0x4C0CC0) | Only for a critter PC (type 15; any other object makes the chooser return 0, so the builder recurses with record id 0, never reached by a PC): the quest state of the PC (0x4C4CB0: the PC's record state, 6 when the 0x100 bit is set), then the PC's Intelligence (stat 4, 0x4B0490): below 5 gives table field 16 + state; otherwise the NPC's reaction toward the PC (0x4C0CC0): below 20 gives field 9 + state, else field 2 + state. The reaction is read only for a PC that is not dull. The cell value is the DLG record id. | Original |
+| DQR3 | table fill (0x4C4860) | For each quest 1000..1999 present in `rules\gamequest.mes` (the table lookup 0x4D45E0, the file opened with 0x4D4290) the entry text is split at spaces, one token call per field, each converted by atoi into 23 consecutive 4-byte cells of the quest's block (25-cell stride; fields 0 and 1 are the experience level and a second number, 2..8, 9..15 and 16..22 the three groups of seven). An entry with fewer than 23 numbers is read where the original crashes (the same note as the experience level load 0x4C4670). | Original |
+| DQR4 | missing record | In the installed file the table names records the dialog does not hold (quest 1000 and 1001, states 5 and 6: records 308 and 313 are absent). The record lookup (0x416AB0) then fails and the builder reads a stack copy it never filled: undefined in the original. Steamwoven leaves that option blocked (`TargetInvalid`), as for any chosen record that is no Player record. | Not specified by the original |
+| DQR5 | eligible count (0x414E60 → 0x414F50) | The up-to-five eligible records are collected before the builder runs, so a `q:` reply that is dropped (-1) still took one of the five places. | Original |
+
+Not read here: the debug-prefix branch of 0x416C10 (the debug flag 0x5D1A0C), the network branches.
+
 ## Followers across maps (ARC-RES-076)
 
 Source: [followers across maps](../follower-map-transfer.md) (rows FM1–FM14 with their full text and addresses). Read on
