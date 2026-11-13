@@ -17,7 +17,7 @@ namespace Arcanum.Session.Tests;
 public sealed class NpcThrowStateTests
 {
     internal const string Thrower = "thrower", Dagger = "dagger", Other = "other", Grenade = "grenade";
-    private static readonly CellCoord ThrowerCell = new(90, 200), HeroCell = Start.Cell;
+    internal static readonly CellCoord ThrowerCell = new(90, 200), HeroCell = Start.Cell;
 
     private static CombatFields DaggerFields() =>
         new(CombatFieldOrigin.AreaObject, new CombatObjectFields(5, 5000, 0, 0, 0, 0, 0, 10, 0, 0, 4, [0, 0, 0, 0, 0], 0),
@@ -25,7 +25,7 @@ public sealed class NpcThrowStateTests
             new CombatWeaponFields(CombatWeaponFlags.DefaultThrows, CombatWeaponSkill.Melee, 0, 0, [new(2, 6), new(0, 0), new(0, 0), new(0, 0), new(0, 0)],
                 [0, 0, 0, 0, 0], 10, 0, 1, 0, 0, 0, 10000, 0, 0, 0, 0, 0, 0, 0), null, null, null, null, null);
 
-    private static SessionCritterCombat Combat(string entity = Thrower, bool armed = true, int throwing = 5)
+    internal static SessionCritterCombat Combat(string entity = Thrower, bool armed = true, int throwing = 5)
     {
         var skills = new int[12];
         skills[(int)BasicCombatSkill.Throwing] = throwing;
@@ -45,10 +45,10 @@ public sealed class NpcThrowStateTests
         return owner;
     }
 
-    private static Dictionary<EquipmentSlot, SessionWearItem> Wielded(bool noDrop = false) =>
+    internal static Dictionary<EquipmentSlot, SessionWearItem> Wielded(bool noDrop = false) =>
         new() { [EquipmentSlot.Weapon] = new SessionWearItem(Dagger, new(20, 0, 0, false)) { NoDrop = noDrop } };
 
-    private static SessionNpcThrow AtHero(int throwing = 5) => new(Combat(throwing: throwing), Dagger, 15, ThrowerCell, HeroCell)
+    internal static SessionNpcThrow AtHero(int throwing = 5) => new(Combat(throwing: throwing), Dagger, 15, ThrowerCell, HeroCell)
     {
         StruckHero = true, StruckCell = HeroCell, ThrowerWorn = Wielded(),
     };
