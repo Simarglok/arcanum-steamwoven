@@ -60,7 +60,7 @@ public static class AreaOptionTable
 {
     public const string NoModules = "one module is offered; choosing a module is not built";
     public const string NoViolenceFilter = "its effect on blood and death art is not built";
-    public const string NoAutoSwitch = "switching weapons by itself is not built";
+    public const string NoAutoSwitch = "the Game page has no free slot; the setting is the settings file's auto switch line";
     public const string NoFollowerSkills = "followers do not use skills on their own yet";
     public const string NoBrightness = "the gamma control is not built";
     public const string NoTextDuration = "text bubbles are not built";
@@ -211,6 +211,9 @@ public sealed record AreaGameSettings
 
     /// <summary>ARC-AI-1527: the "combat taunts" setting (OH5, 0x4B82E0; default on, the original registers 1): at the end of a hit the hero's followers may comment (<see cref="Arcanum.Simulation.Ai.FollowerRules.TauntKindOf"/>).</summary>
     public bool CombatTaunts { get; init; } = true;
+
+    /// <summary>ARC-COMBAT-1720: the "auto switch" setting (OH3, getter 0x4B8330; the original never registers it, so it reads 0 until written: default off): the hero's weapon wearing out wields the best remaining weapon for the target (0x4B83E0). The settings file's <c>auto switch</c> line; the options window shows no row yet (the Game page's eight slots are full, issue 1729).</summary>
+    public bool AutoSwitchWeapons { get; init; }
 
     /// <summary>The "float speed" (a step of speed + 1 px).</summary>
     public int FloatSpeed
