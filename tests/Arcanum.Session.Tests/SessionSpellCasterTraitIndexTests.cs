@@ -1,6 +1,7 @@
 using Arcanum.Data.Characters;
 using Arcanum.Data.Combat;
 using Arcanum.Data.Magic;
+using Arcanum.Data.Scripts;
 using Arcanum.Scripting.Scr;
 using Arcanum.Simulation;
 using Arcanum.Simulation.Character;
@@ -1396,5 +1397,145 @@ public sealed partial class SessionSpellCasterTraitIndexTests
         Assert.AreEqual(CharacterRace.Dwarf, owner.QueryNpcAdvancement(Rat)!.Sheet.Race);
         CollectionAssert.AreEqual(held, Held(owner, caster.LifeTarget(Rat)!));
         Assert.IsTrue(caster.Log.Skip(log).Any(e => e.Kind == SpellCastEventKind.ComponentNotReady));
+    }
+    // ARC-MAGIC-1644 (ledger RM3c, IE7, WE6, TI7; exe read 0x465530, 0x441980): an NPC's rewield runs the wield scripts of its worn items, wield off (25) and then wield on (24), the item as the attachee and the NPC as the
+    // triggerer, with the condition "items are being rewielded" true. Script numbers, programs, effects and values are invented (the installed shape of the technological items, TI7).
+    private const int NpcWieldOn = 710, NpcWieldOff = 711, Gate = 712, Charm = 50;
+    private static readonly SessionEffectDefinition CharmEffect = new(Charm, [new(EffectAttributeKind.Stat, 0, EffectChangeOperator.Add, 1)]);
+
+    private sealed class NpcScriptHost : ISessionItemScriptHost
+    {
+        public Dictionary<(string, int), int> Slots { get; } = [];
+        public Dictionary<int, ScrProgram> Programs { get; } = new()
+        {
+            [NpcWieldOn] = WieldEventScriptTests.Scaled, [NpcWieldOff] = WieldEventScriptTests.CallOff,
+            // Adds a charm only while the items are being rewielded; the other program targets the item (not the wearer).
+            [Gate] = WieldEventScriptTests.Program(WieldEventScriptTests.If(WieldEventScriptTests.C(ScrCatalogue.Condition.ItemsBeingRewielded),
+                WieldEventScriptTests.C(ScrCatalogue.Action.AddEffect, (WieldEventScriptTests.Triggerer, 0), WieldEventScriptTests.N(Charm), WieldEventScriptTests.N(5)))),
+            [713] = WieldEventScriptTests.Program(WieldEventScriptTests.Do(WieldEventScriptTests.C(ScrCatalogue.Action.AddEffect, (WieldEventScriptTests.Attachee, 0), WieldEventScriptTests.N(Charm), WieldEventScriptTests.N(5)))),
+        };
+        public Dictionary<int, SessionEffectDefinition> Effects { get; } = new() { [Charm] = CharmEffect };
+
+        public ScrSlot? Slot(ScrObjectRef attachee, int point) => Slots.TryGetValue((attachee.Code, point), out var script) ? new ScrSlot(script, 0, 0) : null;
+        public ScrScriptLookup Script(int number) => Programs.TryGetValue(number, out var program) ? ScrScriptLookup.Of(program) : ScrScriptLookup.Missing;
+        public bool GlobalFlag(int index) => throw new InvalidOperationException("the session reads flags itself");
+        public int StoryState() => throw new InvalidOperationException("not admitted");
+        public bool IsMonsterGenerator(ScrObjectRef attachee) => false;
+        public ScrDialogState DialogState(ScrObjectRef attachee) => ScrDialogState.Normal;
+        public ScrTrapCheck CheckTrapBeforeUse(ScrObjectRef triggerer, ScrObjectRef attachee) => ScrTrapCheck.NoTrap;
+        public bool IsTrapObject(ScrObjectRef attachee) => false;
+        public ScrObjectRef? Player() => new ScrObjectRef(Exterior.RuntimeMap, SessionEventKinds.PlayerEntity);
+        public ScrObjectRef? Leader(ScrObjectRef critter) => null;
+        public bool IsJilted(ScrObjectRef critter) => false;
+        public bool IsPc(ScrObjectRef critter) => critter.Code == SessionEventKinds.PlayerEntity;
+        public SessionPrintedLine PrintedLine(int script, int line) => new(SessionPrintedLineStatus.Shown, "line", "test");
+        public SessionEffectDefinition? EffectDefinition(int number) => Effects.TryGetValue(number, out var rule) ? rule : null;
+    }
+
+    // An NPC wearing a ring (slot 1003) of magickal complexity 40 whose wield points carry the given scripts, with the host's slots and the caster wired to the host.
+    private static (GameSessionOwner Owner, SessionSpellCaster Caster, NpcScriptHost Host, SessionLifeTarget Target) Ringed(int on = NpcWieldOn, int off = NpcWieldOff, params SessionSeedItem[] more)
+    {
+        var ring = new SessionSeedItem("ring", Facts(SessionItemType.Armor, 3803, 1003, 40, null, SessionScriptPoint.WieldOn, SessionScriptPoint.WieldOff), null);
+        var (owner, caster) = Dressed([ring, .. more]);
+        var host = new NpcScriptHost();
+        host.Slots[("ring", SessionScriptPoint.WieldOn)] = on;
+        host.Slots[("ring", SessionScriptPoint.WieldOff)] = off;
+        caster.ItemScripts = () => host;
+        return (owner, caster, host, SessionCritterCombat.From(Rat, RatFields()).Combat!.Target);
+    }
+
+    // The charms the scaled wield-on script adds: ten times the item's power ratio under the NPC's aptitude, rounded, the aptitude from the stored magick and tech points as the stat getter derives it.
+    private static int ExpectedCharms(int magick, int tech, int complexity = 40) =>
+        (EquipmentRules.EffectivePowerRatio(complexity, Math.Clamp((50 * magick - 55 * tech) / 10, EquipmentLimits.MinAptitude, EquipmentLimits.MaxAptitude)) * 10 + 50) / 100;
+
+    private static int Charms(GameSessionOwner owner, SessionLifeTarget target) => owner.QueryNpcEffects(target)!.Entries.Count(e => e.Number == Charm && e.Cause == EffectCause.Item);
+
+    [TestMethod]
+    public void An_npcs_rewield_runs_wield_off_then_wield_on_of_its_worn_items_over_the_new_points()
+    {
+        var (owner, caster, _, target) = Ringed();
+        using var o = owner;
+        var stats = RatFields().Critter!.BaseStats;
+        var version = owner.Version.Revision;
+        Assert.AreEqual(SpellComponentOutcome.None, caster.Apply(Run(MagickPlus), 0, At(Rat, SpellTargetObject.Npc)));
+        Assert.IsFalse(NotReady(caster));
+        var first = ExpectedCharms(stats[22] + 7, stats[23]);
+        Assert.IsTrue(first > 0, "the fixture adds charms");
+        Assert.AreEqual(stats[22] + 7, owner.QueryCritterIndexedWrites(Rat).Stats[22]);
+        Assert.AreEqual(first, Charms(owner, target), "the run read the aptitude with the new magick points laid in; wield off found no counter yet");
+        Assert.AreEqual(new SessionItemScriptSlot("ring", SessionScriptPoint.WieldOn, NpcWieldOn, 0, (uint)first), owner.QueryItemScriptSlots().Single(), "counter 0 keeps the count");
+        Assert.IsTrue(owner.Version.Revision > version);
+
+        // The second write: wield off (through call-ex into the wield-on script) removes the charms the first run counted, wield on adds the count of the new aptitude: the order is off then on.
+        Assert.AreEqual(SpellComponentOutcome.None, caster.Apply(Run(TechPlus), 0, At(Rat, SpellTargetObject.Npc)));
+        var second = ExpectedCharms(stats[22] + 7, stats[23] + 9);
+        Assert.AreNotEqual(first, second, "the tech points moved the aptitude");
+        Assert.AreEqual(second, Charms(owner, target));
+        Assert.AreEqual((uint)second, owner.QueryItemScriptSlots().Single().Counters);
+        Assert.IsTrue(owner.QueryNpcEffects(target)!.Entries.All(e => e.Cause == EffectCause.Item));
+        Assert.IsFalse(caster.Log.Any(e => e.Kind == SpellCastEventKind.ComponentNotReady));
+    }
+
+    [TestMethod]
+    public void The_condition_items_are_being_rewielded_is_true_in_an_npcs_rewield()
+    {
+        var (owner, caster, _, target) = Ringed(Gate, 0);
+        using var o = owner;
+        Assert.AreEqual(SpellComponentOutcome.None, caster.Apply(Run(MagickPlus), 0, At(Rat, SpellTargetObject.Npc)));
+        Assert.AreEqual(1, Charms(owner, target));
+        Assert.IsFalse(NotReady(caster));
+    }
+
+    [TestMethod]
+    public void An_npc_rewield_the_session_cannot_apply_writes_nothing()
+    {
+        // No rule of the effect the script adds: the run is refused, the stat is not written.
+        var (owner, caster, host, target) = Ringed();
+        using var primary = owner;
+        host.Effects.Clear();
+        var version = owner.Version;
+        Assert.IsNull(caster.Apply(Run(MagickPlus), 0, At(Rat, SpellTargetObject.Npc)).JumpTo);
+        Assert.IsTrue(NotReady(caster));
+        Assert.AreEqual(version, owner.Version);
+        Assert.IsTrue(owner.QueryCritterIndexedWrites(Rat).IsEmpty);
+        Assert.AreEqual(0, Charms(owner, target));
+
+        // A script that changes another object's effects (the item's) is not the wearer's: refused too.
+        var (other, otherCaster, _, otherTarget) = Ringed(713, 0);
+        using var _o = other;
+        Assert.IsNull(otherCaster.Apply(Run(MagickPlus), 0, At(Rat, SpellTargetObject.Npc)).JumpTo);
+        Assert.IsTrue(NotReady(otherCaster));
+        Assert.IsTrue(other.QueryCritterIndexedWrites(Rat).IsEmpty);
+        Assert.AreEqual(0, Charms(other, otherTarget));
+
+        // Without a host (or a host that answers none) the same ring leaves the points not ready, as before.
+        var (bare, bareCaster, _, _) = Ringed();
+        using var _b = bare;
+        bareCaster.ItemScripts = () => null;
+        Assert.IsNull(bareCaster.Apply(Run(MagickPlus), 0, At(Rat, SpellTargetObject.Npc)).JumpTo);
+        Assert.IsTrue(NotReady(bareCaster));
+        Assert.IsTrue(bare.QueryCritterIndexedWrites(Rat).IsEmpty);
+    }
+    [TestMethod]
+    public void An_npc_rewield_walks_the_slots_in_order_and_a_later_refusal_leaves_everything_unapplied()
+    {
+        // A helmet (slot 1000) whose wield on adds a charm while rewielding, then the ring (slot 1003): the helmet's effect lands before the ring's run reads the list.
+        var helm = new SessionSeedItem("helm", Facts(SessionItemType.Armor, 3800, 1000, 0, null, SessionScriptPoint.WieldOn), null);
+        var (owner, caster, host, target) = Ringed(NpcWieldOn, NpcWieldOff, helm);
+        using var o = owner;
+        host.Slots[("helm", SessionScriptPoint.WieldOn)] = Gate;
+        Assert.AreEqual(SpellComponentOutcome.None, caster.Apply(Run(MagickPlus), 0, At(Rat, SpellTargetObject.Npc)));
+        var expected = 1 + ExpectedCharms(RatFields().Critter!.BaseStats[22] + 7, RatFields().Critter!.BaseStats[23]);
+        Assert.AreEqual(expected, Charms(owner, target), "both items' runs applied together");
+
+        // The ring's script (a later slot) is refused: the helmet's earlier run is not applied either, and the stat is not written.
+        var (other, otherCaster, otherHost, otherTarget) = Ringed(713, 0, new SessionSeedItem("helm", Facts(SessionItemType.Armor, 3800, 1000, 0, null, SessionScriptPoint.WieldOn), null));
+        using var p = other;
+        otherHost.Slots[("helm", SessionScriptPoint.WieldOn)] = Gate;
+        var version = other.Version;
+        Assert.IsNull(otherCaster.Apply(Run(MagickPlus), 0, At(Rat, SpellTargetObject.Npc)).JumpTo);
+        Assert.AreEqual(version, other.Version);
+        Assert.AreEqual(0, Charms(other, otherTarget));
+        Assert.IsTrue(other.QueryCritterIndexedWrites(Rat).IsEmpty);
     }
 }
