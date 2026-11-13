@@ -45,10 +45,11 @@ public partial class TerrainViewerApp
         {
             (uint, AreaExtraFrame)? best = null; long bestArea = -1;
             var range = Math.Min(ObjectArtNumber.ItemRange(current), 60u);
+            var currentKey = art.Load(current).Frame?.Key;
             for (var number = 0; number < range; number++)
             {
                 var candidate = ObjectArtNumber.Changed(current, number, out var outOfRange);
-                if (outOfRange || candidate == current || !art.Exists(candidate) || art.Load(candidate).Frame is not { } loaded) continue;
+                if (outOfRange || candidate == current || !art.Exists(candidate) || art.Load(candidate).Frame is not { } loaded || loaded.Key == currentKey) continue; // another number may name the same ART file
                 var size = (long)loaded.Frame.Width * loaded.Frame.Height;
                 if (size > bestArea) { bestArea = size; best = (candidate, loaded); }
             }
@@ -84,7 +85,7 @@ public partial class TerrainViewerApp
                 Require(session.QueryObjectArt(map, entity) == picked.Next, "the session answers the new art id");
                 await Settle();
                 var after = _groundBodies.GetValueOrDefault(itemRow.Key);
-                Require(after is not null && after.Frame == picked.Frame.Key && after.Frame != before.Frame, "the dropped item is drawn from the new ground ART");
+                Require(after is not null && after.Frame == picked.Frame.Key && after.Frame != before.Frame, $"the dropped item is drawn from the new ground ART (after={(after is null ? "none" : "drawn")} field=0x{session.QueryObjectArt(map, entity) ?? 0:X8} map={map.RuntimeMap}/{CurrentAreaMap})");
                 Require(AreaInventoryTargetOf(itemRow.Key) is { Kind: AreaInventoryTargetKind.GroundItem }, "still picked as a ground item");
                 SaveFrame("item-after", picked.Frame.Frame);
                 var saved = GameSessionSnapshotCodec.Encode(session.Capture());
