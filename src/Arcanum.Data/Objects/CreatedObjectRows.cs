@@ -22,9 +22,10 @@ public sealed record CreatedObjectRowResult(CreatedRowFailure Failure, AreaObjec
 
 /// <summary>
 /// ARC-MAGIC-053 (E1-e, ledger SUM5): what the Summon effect (0x450C40) writes on the NPC it makes besides its flags: its experience worth and pool are cleared (fields 285 and 286: a summoned creature gives and takes no
-/// experience) and, when the run has a parent, the parent's alignment (stat 19) is copied (<see cref="Alignment"/>, null when the parent's is not known: the faction rule that copies an NPC summoner's faction is E1-f's).
+/// experience) and, when the run has a parent, the parent's alignment (stat 19) is copied (<see cref="Alignment"/>, null when the parent's is not known); ARC-MAGIC-1169 (E1-f): when the parent is an NPC its faction (field 292, the NPC block's slot 81) is copied too
+/// (<see cref="Faction"/>, null for a parent that is no NPC: a PC summoner leaves the prototype's faction).
 /// </summary>
-public sealed record CreatedCritterSummon(int? Alignment);
+public sealed record CreatedCritterSummon(int? Alignment, int? Faction = null);
 
 /// <summary>
 /// ARC-DEV-359 (E1-c): the base record of an object the session created from a prototype, built by the rule a map object's record is built by
@@ -82,9 +83,10 @@ public static class CreatedObjectRows
         Own(StandpointNightSlot, location);
         if (summon is not null)
         {
-            // SUM5: the experience worth and pool cleared; the parent's alignment copied into the stat array's element 19.
+            // SUM5: the experience worth and pool cleared; the parent's alignment copied into the stat array's element 19; an NPC parent's faction copied (field 292).
             Own(ExperienceWorthSlot, 0);
             Own(ExperiencePoolSlot, 0);
+            if (summon.Faction is { } faction) Own(FactionSlot, faction);
             if (summon.Alignment is { } alignment && effective.TryGetValue(StatSlot, out var stats) && stats.Presence == AreaPresence.Array)
             {
                 var elements = stats.Elements.Where(element => element.Key != AlignmentStat).Append(new AreaSparseElement(AlignmentStat, [unchecked((long)(uint)alignment)])).OrderBy(element => element.Key).ToArray();
@@ -140,7 +142,7 @@ public static class CreatedObjectRows
     public const int LocationSlot = 1, FlagsSlot = 18, NpcFlagsSlot = 69, StandpointDaySlot = 78, StandpointNightSlot = 79;
 
     /// <summary>ARC-MAGIC-053: the slots of an NPC's experience worth and pool (fields 285 and 286 of the executable), of the critter's stat array and the alignment's element in it (stat 19).</summary>
-    public const int ExperienceWorthSlot = 74, ExperiencePoolSlot = 75, StatSlot = 38, AlignmentStat = 19;
+    public const int ExperienceWorthSlot = 74, ExperiencePoolSlot = 75, FactionSlot = 81, StatSlot = 38, AlignmentStat = 19;
 
     /// <summary>OF_DYNAMIC (object flag 0x2000), which the original's create finish sets on the new object (OM16); and ONF_WAYPOINTS_DAY (NPC flag 0x2), which its create sets on an NPC (OM13).</summary>
     public const long DynamicFlag = 0x2000, WaypointsDayFlag = 0x2;

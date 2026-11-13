@@ -1202,6 +1202,17 @@ start a game and press `C`. Compare with **HD** and **Legacy**.
 | 4 | Resize the window and open the sheet again. | The frames are sharp at the new size, no seam between the window and the pages. | open |
 | 5 | Open an NPC's sheet in a dialog (reply `c-e`). | The same look, with no + or − buttons. | open |
 
+## ARC-UI-1784 — Generated interface: the schemes page and the college tabs (S5b, 2026-11-13)
+
+The rules are in [viewer slice S5b](../rendering/hd-interface-density.md#viewer-slice-s5b-arc-ui-1784). Set the HD interface line to **Generated (experimental)**, start a game and press `C`. Compare with **HD** and **Legacy**.
+
+| # | Step | Expected | Status |
+| --- | --- | --- | --- |
+| 1 | Open the spells tab. | The sixteen college balls keep their colours and glyphs inside a brass ring drawn by code; hover and the pressed look change the ring and the ball as before. | open |
+| 2 | Open the schemes tab (the fourth, the one with the scroll icon). | The page is dark stone like the other pages: the scheme's name in a sunk plaque with a rivet at each end, the list's pit and the scroll bar's track; the names, the bar's arrows and thumb are where they were. | open |
+| 3 | Resize the window and look at both pages again. | The frames are sharp at the new size. | open |
+| 4 | Look at the spell icons next to the generated pits. | Judge whether they need a generated frame (they are pictures in S5b). | open |
+
 ## ARC-UI-1197 — Generated interface: the world map and the town map (S6, 2026-11-13)
 
 The rules are in [viewer slice S6](../rendering/hd-interface-density.md#viewer-slice-s6-arc-ui-1197). Set the HD interface line on the launcher screen to **Generated (experimental)**,
@@ -1256,3 +1267,15 @@ Known differences (documented, not bugs):
 
 - The pages are plainer than the original's (soft clouds, no grain), the cover is a flat weave and the page edges are light regular stripes where the original's are a dark speckle.
 - The ring of the round view (art 198) is the HD pack's (or Legacy) frame: it is shared with the character sheet and the world map.
+
+## ARC-UI-1740 — Gambling: bets in the barter window (2026-11-13)
+
+The rules are in [barter](../world/barter-runtime.md#gambling-arc-ui-1740). Start a game, spend skill points on Gambling for the hero and talk to a merchant who has Gambling points (most shops do).
+
+| # | Step | Expected | Status |
+| --- | --- | --- | --- |
+| 1 | Open barter and drag one of your own items onto the bet box on the right of the window. | The box stays in its rest art, the item goes back to your grid, nothing is printed. | open |
+| 2 | Drag one of the merchant's wares over the box without releasing. | The box changes to the lit art and the merchant's confirm line with the price shows in the quote line; a very expensive ware (above your limit) or a hero with too little money shows the dark art and the merchant's refusal line instead. | open |
+| 3 | Release the ware on the box. | The merchant says a won or lost line. A win gives the ware for nothing, a loss takes its price in coins and gives the ware; the trade sound plays once; the box returns to rest. | open |
+| 4 | Open barter once, close it and save; bet and note the result; load that save, open barter and bet the same ware. | The outcome is the same win or loss as the first time (the roll is saved, reloading does not reroll). | open |
+

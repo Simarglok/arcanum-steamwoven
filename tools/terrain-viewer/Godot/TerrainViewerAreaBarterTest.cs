@@ -127,7 +127,23 @@ public partial class TerrainViewerApp
             SyncAreaBarter();
             Require(!BarterOpen, "a replaced session closes the window");
             Require(!AreaBarter.HeroCanTrade(replacement), "a session without a hero cannot trade");
-            return "sell 55, buy 760, keys, close, " + art + ", replaced session";
+            // ARC-UI-1740: a gambler hero in a session of its own (the merchant's seed attached again), the bet through real pointer calls.
+            int[] basic = new int[12];
+            basic[(int)Arcanum.Simulation.Skills.Skill.Gambling] = 5;
+            var gambler = new SessionHeroDefinition(16089, CharacterRace.HalfElf, CharacterGender.Male, [20, 20, 20, 20, 20, 20, 20, 20, 0, 0], 1, 5, 0,
+                null, null, 1000, [new SessionHeroKitItem(new(SessionItemType.Weapon, Sword, 4100, 34100))],
+                Advancement: SessionHeroAdvancement.None with { BasicSkills = [.. basic] });
+            var second = AreaTransitionCoordinator.CreateSession(replacement.QueryClockSnapshot().ProfileBinding, Guid.NewGuid(), Guid.NewGuid(),
+                new(actor.Cell.X, actor.Cell.Y), actor.Map.RuntimeMap,
+                new AreaHeroLoad(AreaHeroStatus.Ready, AreaStartingHero.Find("half-elf-male")!, gambler, 2352, 0, null, "synthetic")).Owner
+                ?? throw new InvalidOperationException("AREA barter: gambler session");
+            ReplaceAreaSession(second, AreaRuntimes(), actor.Map.RuntimeMap, _conversationHost?.Rebind(second));
+            Require(second.AttachMapInventory(actor.Map, seed).Failure == GameSessionFailure.None, "the merchant's seed attached to the gambler's session");
+            var gamble = await AreaBarterGambleForSelfTestAsync(second, on => new AreaBarter(on, _inventoryHost ?? new AreaInventoryHost([]), data, merchant, () => 50,
+                delta => { changes.Add(delta); return true; }, (entity, _) => entity,
+                merchantGambling: () => new(Arcanum.Simulation.Skills.Skill.Gambling, 3, 3, 0, SkillTraining.None),
+                npcLine: category => category is 4 or 8 or 1 ? $"line{category} %d" : $"line{category}"));
+            return "sell 55, buy 760, keys, close, " + art + ", replaced session, " + gamble;
         }
         finally
         {
@@ -140,21 +156,87 @@ public partial class TerrainViewerApp
     /// 235, the merchant's name), a resting pointer puts a ware's quote on the quote line, the hero's item dragged onto the merchant's grid is
     /// sold and the merchant's dragged onto the hero's grid bought (coins and the trade sound as the buttons'), a right release on the hero's
     /// item sells it (IW36), a ware released back on its grid changes nothing, the switch shows the diagnostic window and back, and a release on the round view closes the window.</summary>
-    private async Task<string> AreaBarterArtForSelfTestAsync(GameSessionOwner owner, Func<GameSessionOwner, AreaBarter> model)
+    // Blank arts of the original sizes: the original look of the barter window without the player's game.
+    private static AreaInventoryArtLook SyntheticBarterLook()
     {
-        static void Require(bool value, string why) { if (!value) throw new InvalidOperationException("ARC-UI-064 barter art: " + why); }
-        static Vector2 Ware(int location) => new(AreaBarterArtLayout.GridX + (location % 10 + .5f) * AreaBarterArtLayout.CellPixels,
-            AreaBarterArtLayout.GridY + (location / 10 + .5f) * AreaBarterArtLayout.CellPixels);
         static Texture2D Blank(int width, int height) => ImageTexture.CreateFromImage(Image.CreateEmpty(width, height, false, Image.Format.Rgba8));
-        if (BarterOpen) CloseBarterByPlayer();
-        var host = _inventoryHost;
-        _inventoryHost ??= new AreaInventoryHost([]);
-        _inventoryArtLookForSelfTest = new(AreaInventoryArtContent.Numbers.ToDictionary(number => number, number => number switch
+        return new(AreaInventoryArtContent.Numbers.ToDictionary(number => number, number => number switch
         {
             AreaBarterArtLayout.BarterArt or AreaBarterArtLayout.FollowerArt or AreaInventoryArtLayout.DollArt or AreaLootArtLayout.LootArt => Blank(358, 400),
             AreaInventoryArtLayout.PackArt => Blank(442, 400),
             _ => Blank(80, 43),
         }), _ => null, AreaInventoryTexts.Project("self-test")) { LootReady = true, BarterReady = true };
+    }
+
+    /// <summary>
+    /// ARC-UI-1740 over the synthetic art set: a gambler hero (intelligence 20, 5 Gambling points) against a merchant of level 0 that gambles. A ware carried
+    /// over the bet box asks the gate once (art 344, the confirm line with the price), moving out sets 345, and a ware released on the box is bet: the item
+    /// moves to the hero's grid, a win for nothing and a loss for the price (the capped effectiveness is 95, so either can come), with the trade sound and the
+    /// won or lost line; the hero's own item carried over the box shows the refused art and goes back.
+    /// </summary>
+    private async Task<string> AreaBarterGambleForSelfTestAsync(GameSessionOwner owner, Func<GameSessionOwner, AreaBarter> model)
+    {
+        static void Require(bool value, string why) { if (!value) throw new InvalidOperationException("ARC-UI-1740 barter gamble: " + why); }
+        static Vector2 Ware(int location) => new(AreaBarterArtLayout.GridX + (location % 10 + .5f) * AreaBarterArtLayout.CellPixels,
+            AreaBarterArtLayout.GridY + (location / 10 + .5f) * AreaBarterArtLayout.CellPixels);
+        var box = new Vector2(AreaBarterArtLayout.GambleBox.X + 4, AreaBarterArtLayout.GambleBox.Y + 4);
+        var host = _inventoryHost;
+        _inventoryHost ??= new AreaInventoryHost([]);
+        _inventoryArtLookForSelfTest = SyntheticBarterLook();
+        try
+        {
+            OpenBarterWindow(model(owner));
+            var panel = _barterPanel!;
+            var area = panel.GridAreaForSelfTest;
+            Require(panel.ArtMode && area.BarterLook && owner.QueryGamblingRoll() is >= 1 and <= 100, "the original look opened and the open threw the first roll");
+            var ware = panel.ArtView!.LootGrid.Single(item => item.Entity == "axe");
+            var price = panel.View!.Wares.Single(line => line.Entity == "axe").Quote.Price;
+            Require(price > 0 && price <= owner.QueryGold(), $"the axe is affordable ({price} of {owner.QueryGold()})");
+            Require(area.GambleArtNow == AreaBarterArtLayout.GambleArt, "the box rests on 345");
+
+            // The hero's own item over the box: the gate refuses it (art 346) and a release only puts it back.
+            area.PressAt(AreaInventoryGridArea.CellCentre(panel.ArtView!.Grid.Single(item => item.Entity == "kit:1").Slot));
+            area.TrackGambleAt(box);
+            Require(area.GambleArtNow == AreaBarterArtLayout.GambleRefusedArt && area.BarterFrame!.Quote == "line2", "the hero's own item is refused: " + area.BarterFrame!.Quote);
+            var roll = owner.QueryGamblingRoll();
+            area.ReleaseAt(box);
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            Require(area.Held is null && owner.QueryGamblingRoll() == roll && panel.ArtView!.Grid.Any(item => item.Entity == "kit:1"), "released on the box it went back, no bet");
+
+            // The merchant's ware: 344 on entering with the confirm line, 345 on leaving.
+            area.PressAt(Ware(ware.Location));
+            area.TrackGambleAt(box);
+            Require(area.GambleArtNow == AreaBarterArtLayout.GambleOnArt && area.BarterFrame!.Quote == $"line8 {price}", $"entering shows 344 and the confirm line: {area.GambleArtNow} '{area.BarterFrame!.Quote}'");
+            area.TrackGambleAt(Ware(69));
+            Require(area.GambleArtNow == AreaBarterArtLayout.GambleArt, "moving out sets 345");
+            area.TrackGambleAt(box);
+            var (gold, sounds) = (owner.QueryGold(), _barterSounds.Count);
+            area.ReleaseAt(box);
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            Require(area.Held is null && panel.ArtView!.Grid.Any(item => item.Entity == "axe") && !panel.ArtView.LootGrid.Any(item => item.Entity == "axe"), "the bet moved the axe to the hero's grid");
+            var won = owner.QueryGold() == gold;
+            Require(won || owner.QueryGold() == gold - price, $"a win costs nothing and a loss {price}: {gold} to {owner.QueryGold()}");
+            Require(_barterSounds.Count == sounds + 1 && owner.QueryGamblingRoll() is >= 1 and <= 100, "the trade sound was asked and the next roll is thrown");
+            Require(area.BarterFrame!.Quote == (won ? "line0" : $"line1 {price}"), "the won or lost line is on the quote line: " + area.BarterFrame.Quote);
+            return $"{(won ? "won" : "lost")} the axe (344 and 346 arts, confirm line, one trade sound)";
+        }
+        finally
+        {
+            if (BarterOpen) EndBarter();
+            _inventoryArtLookForSelfTest = null;
+            _inventoryHost = host;
+        }
+    }
+
+    private async Task<string> AreaBarterArtForSelfTestAsync(GameSessionOwner owner, Func<GameSessionOwner, AreaBarter> model)
+    {
+        static void Require(bool value, string why) { if (!value) throw new InvalidOperationException("ARC-UI-064 barter art: " + why); }
+        static Vector2 Ware(int location) => new(AreaBarterArtLayout.GridX + (location % 10 + .5f) * AreaBarterArtLayout.CellPixels,
+            AreaBarterArtLayout.GridY + (location / 10 + .5f) * AreaBarterArtLayout.CellPixels);
+        if (BarterOpen) CloseBarterByPlayer();
+        var host = _inventoryHost;
+        _inventoryHost ??= new AreaInventoryHost([]);
+        _inventoryArtLookForSelfTest = SyntheticBarterLook();
         try
         {
             OpenBarterWindow(model(owner));
@@ -441,6 +523,35 @@ public partial class TerrainViewerApp
     }
 
     /// <summary>
+    /// ARC-UI-1740 native observation (stage `barter`, on the live window with the game's art): a ware pressed and carried over the bet box asks the gate once
+    /// (art 344 when it passes, 346 when it refuses, with the gate's line on the quote line), moving out sets the resting art 345, and the ware released on its
+    /// own grid goes back. Nothing is released on the box (that would bet on the live session). Prints counts only.
+    /// </summary>
+    private async Task<string> BarterGambleHoverSmokeAsync()
+    {
+        static void Require(bool value, string why) { if (!value) throw new InvalidOperationException("ARC-UI-1740 barter-gamble smoke: " + why); }
+        var panel = _barterPanel!;
+        var area = panel.GridAreaForSelfTest;
+        var view = panel.ArtView;
+        if (!panel.ArtMode || view is null || area.Look is null) return "no original look";
+        if (view.LootGrid.FirstOrDefault(item => AreaBarterArtLayout.ItemRect(item, area.LootScroll) is not null) is not { } ware) return "no ware shown";
+        Require(area.GambleArtNow == AreaBarterArtLayout.GambleArt, "the box rests on art 345");
+        var rect = AreaBarterArtLayout.ItemRect(ware, area.LootScroll)!.Value;
+        area.PressAt(new(rect.X + 16, rect.Y + 16));
+        Require(area.Held is { Partner: true }, "the ware is on the cursor");
+        area.TrackGambleAt(new(AreaBarterArtLayout.GambleBox.X + 4, AreaBarterArtLayout.GambleBox.Y + 4));
+        var over = area.GambleArtNow;
+        Require(over is AreaBarterArtLayout.GambleOnArt or AreaBarterArtLayout.GambleRefusedArt, $"held over the box it shows 344 or 346, not {over}");
+        var line = area.BarterFrame!.Quote;
+        area.TrackGambleAt(new(AreaBarterArtLayout.GridX + 1, AreaBarterArtLayout.GridY + 1));
+        Require(area.GambleArtNow == AreaBarterArtLayout.GambleArt, "moving out sets 345 again");
+        area.ReleaseAt(new(AreaBarterArtLayout.GridX + 1, AreaBarterArtLayout.GridY + 1));
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        Require(area.Held is null && panel.ArtView!.LootGrid.Any(item => item.Entity == ware.Entity), "released on its own grid it went back");
+        return $"art {over}, line '{line}'";
+    }
+
+    /// <summary>
     /// ARC-UI-050 native observation on the original data (stage `barter`, with --hero): a living NPC speaker of the shown map, a merchant
     /// when one is there, is passed to the production path a `b:` reply takes once its talk ended; the window opens over the live session
     /// with its quotes (ARC-WORLD-090: the open moves a substitute container's coins onto the merchant and identifies the goods, its only
@@ -483,10 +594,14 @@ public partial class TerrainViewerApp
             Require(BarterOpen && _barterPanel!.View is { } view && view.Merchant.Entity == chosen.Entity, "the window opened with the speaker: " + _barterStatus);
             var live = _barterPanel!.View!;
             // ARC-WORLD-090: the open's coins and identification; ARC-WORLD-096: the restock schedule of the shown object.
-            Require(session.Version.Revision - revision is >= 0 and <= 2, "the open is two revisions at most");
+            // ARC-UI-1740: the first open of the session also throws the gambling roll (one revision, once).
+            Require(session.Version.Revision - revision is >= 0 and <= 3, "the open is three revisions at most");
             revision = session.Version.Revision;
             var art = await BarterArtForSmokeAsync();
             Require(session.Version.Revision == revision, "the original look's checks changed nothing");
+            // ARC-UI-1740: the bet box's hover (its gate's line is a random pick of the session generator, so it comes after the no-change check).
+            var gamble = await BarterGambleHoverSmokeAsync();
+            revision = session.Version.Revision;
             CloseBarterByPlayer();
             Require(!BarterOpen && session.Version.Revision == revision, "the player's close closed it; nothing changed");
 
@@ -498,8 +613,10 @@ public partial class TerrainViewerApp
             Require(_inventoryHost?.Attach(copy) == GameSessionFailure.None, "seeds attached to the copy");
             var buysAll = live.Merchant with { BuyList = new InventorySourceBuyList(InventorySourceBuyStatus.Everything, []) };
             var inventory = _inventoryHost!;
+            // ARC-UI-1740: the copy's merchant gambles (3 points, level 12) with the fallback lines (the generated ones draw from the live session).
             var model = new AreaBarter(copy, inventory, data, buysAll, () => 50, _ => true,
-                (item, kind) => inventory.Maps.Any(map => map.TryGetRow(item, out _)) ? inventory.Name(item, _hoverNames?.Catalog) : AreaInventoryHost.KindName(kind, _hoverNames?.Catalog));
+                (item, kind) => inventory.Maps.Any(map => map.TryGetRow(item, out _)) ? inventory.Name(item, _hoverNames?.Catalog) : AreaInventoryHost.KindName(kind, _hoverNames?.Catalog),
+                merchantGambling: () => new(Arcanum.Simulation.Skills.Skill.Gambling, 3, 3, 12, Arcanum.Simulation.Combat.SkillTraining.None));
             var before = model.View();
             var sellable = before.Hero.FirstOrDefault(line => line.Quote.Price > 0);
             Require(sellable is not null, "no hero item sells to a merchant buying everything");
@@ -508,7 +625,20 @@ public partial class TerrainViewerApp
             Require(sold.Moved && copy.QueryGold() == gold + sold.Total, "the sale moved the item and paid at most the merchant's coins: " + sold.Text);
             var ware = model.View().Wares.FirstOrDefault(line => line.Quote.Price > 0 && (long)line.Quote.Price * line.Count <= copy.QueryGold());
             var bought = ware is null ? "none affordable" : model.Buy(ware.Entity) is var trade && trade.Moved ? trade.Text : "refused: " + trade.Text;
+            // ARC-UI-1740: a bet on the copy when its gate lets one ware through (the hero's Gambling decides): the item moves in one revision, a win for
+            // nothing and a loss for the quote, and the next roll was thrown.
+            var betText = "no ware passed the gate";
+            if (model.View().Wares.FirstOrDefault(line => model.CheckGamble(line.Entity).Allowed) is { } stake)
+            {
+                var price = stake.Quote.Price; var goldBefore = copy.QueryGold(); var rollBefore = copy.QueryGamblingRoll();
+                var bet = model.Gamble(stake.Entity);
+                Require(bet.Settled && copy.QueryPcInventory().Any(item => item.Entity == stake.Entity), "the bet moved the ware to the hero: " + bet.Text);
+                Require(copy.QueryGold() == goldBefore - bet.Paid && bet.Paid == (bet.Won ? 0 : price * stake.Count), "a win costs nothing and a loss the quote");
+                Require(copy.QueryGamblingRoll() == bet.Bet!.Check!.NextGamblingRoll && rollBefore is not null, "the check's draw is the next saved roll");
+                betText = $"{(bet.Won ? "won" : "lost")} {stake.Text} (roll {bet.Bet.Check.Check.Roll} against {bet.Bet.Check.Check.Effectiveness}, paid {bet.Paid}, reaction {bet.ReactionChange})";
+            }
             Require(session.Version.Revision == revision, "the live session is untouched");
+            GD.Print("ARC-UI-1740 native-smoke barter-gamble PASS " + gamble + "; copy: " + betText);
             GD.Print("ARC-UI-050 native-smoke barter PASS " + System.Text.Json.JsonSerializer.Serialize(new {
                 Merchant = $"speaker {chosen.Index} of {talk.Speakers.Count}, multiplier {live.Merchant.Multiplier}, buys {live.Merchant.BuyList.Status}, fence {live.Merchant.Fence}, script {live.Merchant.BuyScript}",
                 Container = live.Merchant.Container is null ? "none" : $"buys {live.Merchant.ContainerBuyList?.Status}, identified {session.Capture().Inventory.Identified.Count}",

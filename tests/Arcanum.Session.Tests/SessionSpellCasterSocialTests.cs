@@ -64,6 +64,8 @@ public sealed class SessionSpellCasterSocialTests
         public bool Flee(string npc, string from) => Record($"flee {npc} {from}");
         public bool StopFleeing(string npc) => Record($"stop-fleeing {npc}");
         public void EndFleeGoals(string npc) => Record($"end-flee-goals {npc}");
+        public int? RedirectAnswer { get; set; } = 3;
+        public int? Redirect(string target, uint critterFlag, int minimumIntelligence) { Calls.Add($"redirect {target} {critterFlag} {minimumIntelligence}"); return RedirectAnswer; }
     }
 
     private static SpellCastCritter TargetCritter()
@@ -80,6 +82,14 @@ public sealed class SessionSpellCasterSocialTests
                 DisallowedCasterSpellFlags = 0, DisallowedTargetSpellFlags = 0, DisallowedTargetCritterFlags = 0, CancelsSpellFlags = 0,
                 SpellFlagsSet = field == SessionSpellCaster.SpellFlagsField ? flag : 0,
                 Areas = [new(0x4, 0, 0, 0, -1), new(0, 0, 0, 0, -1), new(0x4, 0, 0, 0, -1), new(0, 0, 0, 0, -1), new(0, 0, 0, 0, -1)] });
+
+    // ARC-MAGIC-1169 (E1-f, ledger AR1): a spell whose BEGIN is one AIRedirect component on the target object (Animal Lure's shape).
+    private static SessionSpellRecord Redirect(uint flag = 8, int minimumIntelligence = -1, int number = 183) =>
+        SessionSpellRecords.Translate(Record(number: number, beginTargets: 0x4, info: SpellInfo.Neutral,
+            components: [new(SpellAction.Begin, SpellComponentType.AIRedirect, new(0x4, 0, 0, 0, -1), 0, 0, new AiRedirectData(flag, minimumIntelligence))])
+            with { Cost = 10, Range = 99, DurationSeconds = 0, DurationStat = -1, DurationTriggerCount = 0, ResistStat = -1, NoStack = 0, NoReflect = true,
+                DisallowedCasterSpellFlags = 0, DisallowedTargetSpellFlags = 0, DisallowedTargetCritterFlags = 0, CancelsSpellFlags = 0,
+                Areas = [new(0x4, 0, 0, 0, -1), new(0, 0, 0, 0, -1), new(0, 0, 0, 0, -1), new(0, 0, 0, 0, -1), new(0, 0, 0, 0, -1)] });
 
     private static (GameSessionOwner Owner, SessionSpellCaster Caster, Social Host) Session(SessionSpellRecord record, int dataSpellFlags = 0, int dataCritterFlags = 0, bool host = true)
     {
@@ -357,5 +367,35 @@ public sealed class SessionSpellCasterSocialTests
             Assert.IsTrue(owner.QueryObjectFlags(Target).IsEmpty);
             Assert.AreEqual(CompanionStanding.Free, owner.QueryCompanion(Target).Standing);
         }
+    }
+
+    [TestMethod]
+    public void The_ai_redirect_component_asks_the_ai_host_to_turn_the_npcs_near_its_target_on_it_with_the_records_flag_and_threshold()
+    {
+        var record = Redirect(flag: 8, minimumIntelligence: 4);
+        var (owner, caster, host) = Session(record);
+        using var _ = owner;
+        var run = Cast(owner, caster, record);
+        CollectionAssert.AreEqual(new[] { $"redirect {Target} 8 4" }, host.Calls, Trail(caster));
+        var line = Social_(caster).Single();
+        Assert.AreEqual((run, SessionSpellCaster.SocialRedirect, Target, 3), (line.Run, line.Value, line.Object, line.Detail));
+        Assert.IsFalse(caster.Log.Any(e => e.Kind == SpellCastEventKind.ComponentNotReady), Trail(caster));
+    }
+
+    [TestMethod]
+    public void The_ai_redirect_component_logs_a_host_that_does_not_run_the_target_as_refused_and_is_not_ready_without_a_social_host()
+    {
+        var record = Redirect();
+        var (owner, caster, host) = Session(record);
+        using var _ = owner;
+        host.RedirectAnswer = null;
+        Cast(owner, caster, record);
+        var line = Social_(caster).Single();
+        Assert.AreEqual((SessionSpellCaster.SocialRefused, SessionSpellCaster.SocialRedirect), (line.Value, line.Detail));
+        var (owner2, caster2, host2) = Session(record, host: false);
+        using var __ = owner2;
+        Cast(owner2, caster2, record);
+        Assert.IsTrue(caster2.Log.Any(e => e.Kind == SpellCastEventKind.ComponentNotReady), Trail(caster2));
+        Assert.AreEqual(0, host2.Calls.Count);
     }
 }

@@ -60,7 +60,12 @@ public sealed class AreaBarterArtTests
         Assert.AreEqual(new AreaBarterHit(null, null, null, true), AreaBarterArtLayout.HitTest(782.9f, 278.9f, 0, (80, 43)));
         Assert.AreEqual(AreaBarterHit.None, AreaBarterArtLayout.HitTest(703, 236, 0, (0, 0)), "no gamble art: no box");
         Assert.AreEqual(AreaBarterHit.None, AreaBarterArtLayout.HitTest(160, 130, 0, (80, 43)), "the hero's doll is not shown: no slot");
-        Assert.AreEqual(345, AreaBarterArtLayout.GambleArt, "NOT READY: the gamble check, the box keeps its off art");
+        Assert.AreEqual(345, AreaBarterArtLayout.GambleArt, "the resting art, which also sizes the box");
+        // ARC-UI-1740: an item held over the box shows 344 when the gate passes and 346 when it refuses; nothing held, or moving out, 345.
+        Assert.AreEqual(345, AreaBarterArtLayout.GambleBoxArt(false, true));
+        Assert.AreEqual(345, AreaBarterArtLayout.GambleBoxArt(false, false));
+        Assert.AreEqual(344, AreaBarterArtLayout.GambleBoxArt(true, true));
+        Assert.AreEqual(346, AreaBarterArtLayout.GambleBoxArt(true, false));
     }
 
     [TestMethod]
@@ -92,7 +97,9 @@ public sealed class AreaBarterArtTests
         Assert.AreEqual(new AreaInventoryHeld("own:1", null, 0), own);
         Assert.AreEqual(new AreaInventoryDrop(AreaInventoryDropKind.Sell, own!, GridSlot: 3), AreaBarterArtLayout.Release(own!, new AreaBarterHit(null, null, 3, false)));
         Assert.AreEqual(AreaInventoryDropKind.PutBack, AreaBarterArtLayout.Release(own!, new AreaBarterHit(7, null, null, false)).Kind, "NOT READY: grid moves");
-        Assert.AreEqual(AreaInventoryDropKind.PutBack, AreaBarterArtLayout.Release(own!, new AreaBarterHit(null, null, null, true)).Kind, "NOT READY: the gamble");
+        Assert.AreEqual(AreaInventoryDropKind.PutBack, AreaBarterArtLayout.Release(own!, new AreaBarterHit(null, null, null, true)).Kind, "the hero's own item on the bet box only goes back: the gate refuses it silently");
+        // ARC-UI-1740: the merchant's item released on the bet box is a bet (0x579B60).
+        Assert.AreEqual(new AreaInventoryDrop(AreaInventoryDropKind.Gamble, ware!), AreaBarterArtLayout.Release(ware!, new AreaBarterHit(null, null, null, true)));
         Assert.AreEqual(AreaInventoryDropKind.PutBack, AreaBarterArtLayout.Release(own!, new AreaBarterHit(null, AreaInventoryIcon.Use, null, false)).Kind);
     }
 

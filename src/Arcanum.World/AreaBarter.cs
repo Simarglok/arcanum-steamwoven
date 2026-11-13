@@ -7,6 +7,7 @@ using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Items;
 using Arcanum.Simulation.Movement;
 using Arcanum.Simulation.Reaction;
+using Arcanum.Simulation.Skills;
 using Arcanum.Simulation;
 
 namespace Arcanum.World;
@@ -133,6 +134,9 @@ public sealed record AreaBarterMerchant(string Entity, string Name, int Multipli
 public sealed record AreaBarterLine(string Entity, string Text, int Count, TradeQuote Quote, int Worth, SessionItemKind Kind)
 {
     public bool Stack => Kind.Type == SessionItemType.Ammo;
+
+    /// <summary>ARC-UI-1740: the item's flags (field 0x57; the bet gate reads the "won't sell" bit, 0x2).</summary>
+    public uint ItemFlags { get; init; }
 }
 
 /// <summary>The window's state: both sides' gold and lines, the hero's haggle and the merchant's reaction.</summary>
@@ -147,6 +151,20 @@ internal sealed record AreaItemFacts(CombatItemFields? Item, bool Identified, in
 public sealed record AreaBarterTrade(InventoryMutationResult Result, int Count, int Total, int ReactionChange, string Text)
 {
     public bool Moved => Result.Disposition == GameSessionDisposition.Changed;
+}
+
+/// <summary>ARC-UI-1740: what the bet gate (0x579840) says of an item held over the bet box: the gate, the unit price it read and the line the quote area
+/// shows (the refusal, or the confirm line with the price).</summary>
+public sealed record AreaBarterGambleCheck(GambleGate Gate, int Price, string Text)
+{
+    public bool Allowed => Gate.Allowed;
+}
+
+/// <summary>ARC-UI-1740: one bet's outcome: the gate (a refused one ran nothing and says nothing, as the release's silent gate), the session's result, whether
+/// the hero won, the coins paid, the reaction change asked of the merchant, and the line the quote area shows.</summary>
+public sealed record AreaBarterGambleResult(GambleGate Gate, SessionGambleResult? Bet, bool Won, int Paid, int ReactionChange, string Text)
+{
+    public bool Settled => Bet?.Settled == true;
 }
 
 /// <summary>
@@ -167,12 +185,18 @@ public sealed class AreaBarter
     private readonly Func<int> _reaction;
     private readonly Func<int, bool> _adjustReaction;
     private readonly Func<string, SessionItemKind, string> _name;
+    private readonly Func<SessionSkill?>? _merchantGambling;
+    private readonly Func<int, string?>? _npcLine;
 
     /// <param name="reaction">The merchant's standard effective reaction to the hero.</param>
     /// <param name="adjustReaction">Applies a reaction change to the merchant through the session; false when the session refused it.</param>
     /// <param name="name">An item's shown name by entity and kind (the window's own text).</param>
+    /// <param name="merchantGambling">ARC-UI-1740: the merchant's Gambling skill (its points open the bet, its level opposes the hero's check); null
+    /// when the host cannot read the merchant's sheet (then the merchant has no Gambling points and no bet is accepted).</param>
+    /// <param name="npcLine">ARC-UI-1740: a generated NPC line of the merchant for a line category (<see cref="GamblingRules.LineRange"/>), or null
+    /// when none can be read (the window then prints its own text).</param>
     public AreaBarter(GameSessionOwner session, AreaInventoryHost inventory, AreaBarterData data, AreaBarterMerchant merchant, Func<int> reaction,
-        Func<int, bool> adjustReaction, Func<string, SessionItemKind, string> name)
+        Func<int, bool> adjustReaction, Func<string, SessionItemKind, string> name, Func<SessionSkill?>? merchantGambling = null, Func<int, string?>? npcLine = null)
     {
         _session = session ?? throw new ArgumentNullException(nameof(session));
         _inventory = inventory ?? throw new ArgumentNullException(nameof(inventory));
@@ -181,13 +205,15 @@ public sealed class AreaBarter
         _reaction = reaction ?? throw new ArgumentNullException(nameof(reaction));
         _adjustReaction = adjustReaction ?? throw new ArgumentNullException(nameof(adjustReaction));
         _name = name ?? throw new ArgumentNullException(nameof(name));
+        _merchantGambling = merchantGambling;
+        _npcLine = npcLine;
     }
 
     public AreaBarterMerchant Merchant { get; }
 
     /// <summary>ARC-WORLD-090: the same window for the merchant's own list (its substitute container gone).</summary>
     public AreaBarter WithoutContainer() => new(_session, _inventory, _data, Merchant with { Container = null, ContainerBuyList = null }, _reaction,
-        _adjustReaction, _name);
+        _adjustReaction, _name, _merchantGambling, _npcLine);
 
     /// <summary>Whether the window opens: a hero that is alive (the original's open refuses only a dead or missing PC, 0x572370).</summary>
     public static bool HeroCanTrade(GameSessionOwner session) =>
@@ -195,8 +221,14 @@ public sealed class AreaBarter
 
     /// <summary>ARC-WORLD-090: the open's session part (0x572640): the container's coins onto the merchant and, outside a follower's
     /// window, every item of the merchant and of the container identified.</summary>
-    public SessionBarterOpenResult Open() => _session.OpenBarter(_session.Version, Merchant.Entity, Merchant.Container, identify: !Merchant.Follower, GoldKind(),
-        AreaInventoryHost.DiagnosticInsertCheck);
+    public SessionBarterOpenResult Open()
+    {
+        var opened = _session.OpenBarter(_session.Version, Merchant.Entity, Merchant.Container, identify: !Merchant.Follower, GoldKind(),
+            AreaInventoryHost.DiagnosticInsertCheck);
+        // ARC-UI-1740: the skill module's gambling roll is thrown before anyone can bet and saved with the session (SR12).
+        if (opened.Disposition != GameSessionDisposition.Rejected) _session.EnsureGamblingRoll(_session.Version);
+        return opened with { Version = _session.Version };
+    }
 
     /// <summary>The window's lines now.</summary>
     public AreaBarterView View()
@@ -246,6 +278,90 @@ public sealed class AreaBarter
         return Settle(TradeDirection.PcSells, line with { Quote = line.Quote with { Price = price } }, result);
     }
 
+    // ARC-UI-1740: the fallback texts of the bet's lines when no generated NPC line can be read (the window's own text, not the original's).
+    private static readonly Dictionary<int, string> BetFallbacks = new()
+    {
+        [2] = "Only the merchant's wares can be staked.",
+        [9] = "The merchant does not gamble.",
+        [3] = "That is worth more than your skill can stake.",
+        [4] = "You cannot cover %d coins if you lose.",
+        [5] = "Staking a worn item needs Expert gambling.",
+        [6] = "Staking an item that is not for sale needs Master gambling.",
+        [7] = "A risky stake.",
+        [8] = "Stake it? A loss costs %d coins.",
+        [0] = "You win it.",
+        [1] = "You lose and pay %d coins.",
+    };
+
+    private string BetLine(int category, int? price = null)
+    {
+        var text = _npcLine?.Invoke(category);
+        if (string.IsNullOrEmpty(text)) text = BetFallbacks[category];
+        return price is { } value ? GamblingRules.WithPrice(text, value) : text;
+    }
+
+    private (GambleGate Gate, AreaBarterLine? Line, int Price) BetGate(AreaBarterView view, string entity)
+    {
+        var line = view.Wares.FirstOrDefault(item => item.Entity == entity);
+        var hero = _session.QueryHeroSkills() is { } skills ? skills[Skill.Gambling] : default;
+        var price = line?.Quote.Price ?? 0;
+        var facts = new GambleFacts(MerchantsItem: line is not null, _merchantGambling?.Invoke()?.Points ?? 0, price, hero.Level, hero.Training, view.HeroGold,
+            Worn: false, WontSell: line is not null && (line.ItemFlags & TradeRules.WontSellFlag) != 0);
+        return (GamblingRules.Gate(facts), line, price);
+    }
+
+    /// <summary>
+    /// ARC-UI-1740 (0x579840 with its text on, called as an item first enters the bet box, BW3): the gate on <paramref name="entity"/>, an item held over the
+    /// box. A refusal's text is the merchant's line of the refusal's category (the price in the poor line); an allowed bet's text is the training warning line
+    /// when the item needs one, then the confirm line with the price. The generated lines are drawn through <c>npcLine</c> (one draw each), so the caller asks
+    /// once per entry into the box, as the original's box art change does.
+    /// </summary>
+    public AreaBarterGambleCheck CheckGamble(string entity)
+    {
+        var view = View();
+        var (gate, _, price) = BetGate(view, entity);
+        if (!gate.Allowed) return new(gate, price, BetLine(GamblingRules.LineCategory(gate.Refusal), gate.Refusal == GambleRefusal.TooPoor ? price : null));
+        var warning = gate.Warned ? BetLine(GamblingRules.WarningCategory) + " " : "";
+        return new(gate, price, warning + BetLine(GamblingRules.ConfirmCategory, price));
+    }
+
+    /// <summary>
+    /// ARC-UI-1740 (0x579B60, ledger BT6): the hero bets <paramref name="entity"/>, a merchant's item. The gate runs again with its text off, so a refused bet
+    /// is silent (the text the hover showed stays). Then the session's bet (<see cref="GameSessionOwner.Gamble"/>): a win moves the item for nothing and costs the
+    /// merchant reaction (<see cref="GamblingRules.WonReaction"/>), a loss moves it for its price like a buy (and a generous price lifts the reaction of a
+    /// merchant in love, as a buy does). A stack goes whole (the window's rule). The roll for the next bet is thrown in the same step.
+    /// </summary>
+    public AreaBarterGambleResult Gamble(string entity)
+    {
+        var view = View();
+        var (gate, line, price) = BetGate(view, entity);
+        if (!gate.Allowed || line is null) return new(gate, null, false, 0, 0, "");
+        var bet = new SessionGambleBet(Merchant.Entity, _merchantGambling?.Invoke()?.Level ?? 0, entity, line.Count, price, line.Kind, GoldKind(), Merchant.Container);
+        var result = _session.Gamble(_session.Version, bet, _inventory.InsertCheck, AreaInventoryHost.DiagnosticInsertCheck, _inventory.ItemScripts(_session));
+        if (!result.Settled)
+        {
+            var text = result.Move is { } move
+                ? move.Failure == GameSessionFailure.GoldShort ? "not enough money" : $"refused: {AreaInventoryHost.Refusal(move.Failure, move.Verdict)}"
+                : $"refused: {result.Failure}";
+            return new(gate, result, result.Won, 0, 0, text);
+        }
+        var change = 0;
+        string said;
+        if (result.Won)
+        {
+            change = GamblingRules.WonReaction(line.Worth, line.Count, ReactionRules.Category(_reaction()));
+            said = BetLine(GamblingRules.WonCategory);
+        }
+        else
+        {
+            if (TradeRules.GiftAmount(TradeDirection.PcBuys, line.Worth, price, line.Count) is { } amount)
+                change = TradeRules.GiftReaction(amount, ReactionRules.Category(_reaction()));
+            said = BetLine(GamblingRules.LostCategory, result.Paid);
+        }
+        if (change != 0 && !_adjustReaction(change)) change = 0;
+        return new(gate, result, result.Won, result.Paid, change, said);
+    }
+
     private AreaBarterTrade Settle(TradeDirection direction, AreaBarterLine line, InventoryMutationResult result)
     {
         var total = line.Quote.Price * line.Count;
@@ -278,7 +394,7 @@ public sealed class AreaBarter
         var quote = Merchant.Follower ? new TradeQuote(0, TradeRefusal.None)
             : TradeRules.Price(direction, trade, parties with { Deals = Merchant.Deals(kind.Prototype - 20) });
         var text = _name(entity, kind) + (count > 1 ? $" ×{count}" : "") + (worn ? " (worn)" : "");
-        return new(entity, text, count, quote, worth, kind);
+        return new(entity, text, count, quote, worth, kind) { ItemFlags = item?.Flags ?? 0 };
     }
 
     /// <summary>ARC-UI-1731: what the trade and the item services read of an item: its stored item fields, whether it counts as identified (the

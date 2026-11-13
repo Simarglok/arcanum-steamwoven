@@ -82,7 +82,7 @@ public sealed partial class GameSessionOwner
     /// (cause item). Ready (<see cref="GameSessionFailure.None"/>, <c>Runs</c> null when no worn item has a wield script, so nothing runs) when the session lists the NPC (the holder of its map's inventory view, a dressed NPC's wear
     /// record laid over the map data); with a wield script and no <paramref name="host"/>, an NPC the session does not list, or a run the session cannot apply (a script outside the admitted set, an effect on another object, a rule the
     /// host does not know, a read that an earlier effect change of the same run would have moved, a list the life rules refuse), the failure that names it and nothing is applied. The light recalculation 0x467E80 is the host's
-    /// (RM3d); the printed lines and eye candy of the runs are not shown here.
+    /// (RM3d). ARC-MAGIC-1745: the NPC is the runs' triggerer, so a printed line is read for an NPC triggerer, and the runs' lines are in <c>Runs.Messages</c> for the host (the TraitIdx write logs them); their eye candy is not shown yet.
     /// </summary>
     [OriginalFunction(0x465530, OriginalFunctionScope.Partial)]
     internal (GameSessionFailure Failure, ItemScriptRuns? Runs) PlanNpcRewield(SessionMapId map, SessionLifeTarget target, string npc, IReadOnlyList<int> stored, ISessionItemScriptHost? host)
@@ -97,7 +97,7 @@ public sealed partial class GameSessionOwner
         var revision = _revision;
         var items = new Dictionary<string, int>(StringComparer.Ordinal);
         foreach (var item in worn) items[item.Entity] = item.Facts.Complexity;
-        var runs = new ItemScriptRuns(this, host, map.RuntimeMap, items, new NpcWearer(npc, target, stored)) { Rewielding = true };
+        var runs = new ItemScriptRuns(this, host, map.RuntimeMap, items, new NpcWearer(npc, target, stored)) { Rewielding = true, NpcTriggerer = true };
         foreach (var item in scripted)
         {
             if (item.Facts.HasScript(SessionScriptPoint.WieldOff)) runs.Run(SessionScriptPoint.WieldOff, item.Entity, npc, null);
