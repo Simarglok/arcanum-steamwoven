@@ -41,6 +41,7 @@ public partial class TerrainViewerApp
     {
         if (_readingDataModule == arguments.ModulePath) return;
         _readingDataModule = arguments.ModulePath; _readingData = null;
+        BindAreaReadingArt(arguments);
         var module = arguments.ModulePath;
         _readingDataTask = Task.Run(() => AreaReading.LoadData(module));
     }
@@ -132,7 +133,10 @@ public partial class TerrainViewerApp
             _readingPanel = new AreaReadingPanel(); AddChild(_readingPanel);
             _readingPanel.CloseRequested += CloseReadingByPlayer;
             _readingPanel.PageRequested += TurnReadingPage;
+            _readingPanel.HolderView = InventoryHolderView;
         }
+        // ARC-UI-1877: the original look once its art has read (the panel keeps the diagnostic layout until then).
+        AttachReadingArt(_readingPanel);
         // A quick key held across the window must not act on its release afterwards (its press predates the window).
         QuarantineWorld(); _quickKeys.Reset();
         _reading = (document, title, 0, _areaSession!);
@@ -144,7 +148,7 @@ public partial class TerrainViewerApp
         _readingStatus = null;
         ReadingSound(BookOpenSound, "reading open");
         GD.Print($"ARC-UI-049 reading open title={title} subtype={view.Subtype} start={document.StartLine} art={view.BackgroundArt} spreads={view.Spreads} " +
-            $"header={view.Header.Count} body={document.Body.Count} note={view.Note ?? "none"}");
+            $"header={view.Header.Count} body={document.Body.Count} note={view.Note ?? "none"} look={(_readingPanel!.ArtMode ? "original" : "diagnostic")}");
         RefreshReadyStatus();
     }
 
@@ -158,6 +162,12 @@ public partial class TerrainViewerApp
     /// <summary>A book's previous and next turn two pages and play 3010; nothing past the first or last spread.</summary>
     private void TurnReadingPage(int by)
     {
+        // ARC-UI-1877: the original look pages the book by pixel height (its own spreads); the diagnostic layout below pages by characters.
+        if (ReadingOpen && _readingPanel is { ArtMode: true } art && by != 0)
+        {
+            if (art.TurnArt(Math.Sign(by))) ReadingSound(BookPageSound, "reading page");
+            return;
+        }
         if (!ReadingOpen || _reading is not { } reading || _readingPanel!.View is not { } view || _readingData?.Data is not { } data) return;
         if (by < 0 ? !view.HasPrevious : !view.HasNext) return;
         _reading = reading with { Spread = view.Spread + Math.Sign(by) };

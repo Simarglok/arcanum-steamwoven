@@ -1297,3 +1297,23 @@ Known differences (documented, not bugs):
 - The page is plainer than the original's (soft clouds and a plain ruling in place of its stains, ragged edges and the printed connecting lines between the record and the two component boxes, which are not drawn).
 - The tabs and arrows follow the Legacy outlines and marks; the assemble face (the two lamps), the found and missing tints and the record's picture stay pictures.
 - The ring of the round view (art 231) is the barter window's recipe and sits on a patch of wood whose grain differs a little from the window's.
+
+## ARC-UI-1877 — The reading window in the original's look (2026-11-14)
+
+The rules are in [reading window runtime](../world/reading-window-runtime.md#viewer-area-area-exterior-cave-and---area-map) and the ledger rows [WR17–WR23](../research/ledger/ui-audio.md#reading-window-arc-ui-049).
+Open a written item from the inventory with the **Read** button (or the right button on it), and a plaque or picture through a script that shows one. Compare with the original game on the
+same text. The look is the original's whether the HD interface is on or off; the Generated mode follows in issue #1201.
+
+| # | Step | Expected (from the original executable) | Status |
+| --- | --- | --- | --- |
+| 1 | Read a book (for example the one in the Crash Site's items). | The wood frame on the left with the round view of your hero in a ring (the ring closes the window when you release the left button in it), the book open on the right; two pages, the text in the book's own fonts, a next button on the right page's top and, from the second spread, a previous button on the left. | open |
+| 2 | Turn the pages with the buttons and compare where a page ends with the original. | A page ends where the next line no longer fits its 290 pixels; the next page continues with the same word. A message that is cut starts the next page mid-text. | open |
+| 3 | Read a note. | The note's paper with its text in one block, no page buttons. | open |
+| 4 | Read a telegram. | The form's printed lines (names, date, address) in their places and the message below, each line ending with STOP. | open |
+| 5 | Read a newspaper. | The masthead (three headings at the top, the dateline below), a headline, and the news and the fillers in four columns; a long item continues at the top of the next column. | open |
+| 6 | Read a plaque (a script shows it). | The plaque's background with white text. | open |
+
+Known differences (documented, not bugs):
+
+- Where the executable leaves a detail unread, the viewer takes a plain reading and says so in the ledger: the lens ring is art 231, the text is black (the plaque's white), and a font of unequal glyph heights steps by its space glyph (WR17, WR21, WR22).
+- The mouse wheel, Left/Right and Page Up/Down also turn a book's pages (the original has the two buttons only).

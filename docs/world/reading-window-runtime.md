@@ -112,10 +112,18 @@ only for a player viewer (no dead check). Action 94 (set a written item's first 
   every text of the panel has an explicit size (none under 9 px); the header lines (a telegram's form in Courier10, a newspaper's masthead in its
   fonts) are one label each at their original font's size with the text-only whole factor for a font under 9 px (Garmond8 → 16 px, Garmond6 → 12 px:
   `AreaReadingText.HeaderLinePx`, `AreaUiScale.TextOnlyFactor`; `AreaReadingView.HeaderFonts`). Tests `AreaReadingTextTests`, `AreaUiScaleTests`.
-- **Diagnostic layout (PROJECT, NOT_VERIFIED for parity):** a plain panel instead of the original's background, frame and page art
-  and its fonts; the header line names the kind and the arts; a newspaper's masthead is one centred label per entry and three filler messages follow the
-  body (the original fills its columns); a picture names its art instead of drawing it; a book pages by 700 characters instead of
-  the original's pixel height, keeping two pages a spread and the turn of two.
+- **Original look (ARC-UI-1877, ledger WR17–WR23):** when the window's art and fonts read (the arts 494, 231, 477, 489, 487, 491, 633, 495, 496 and the fonts the texts need, all or nothing) the
+  window is the original's: 800 × 399 docked under the top strip at the bars' whole factor, the frame 494 at (0, 0), the background art of the kind at (132, 0) (a picture's own art; 817 for the
+  alternate newspaper prototype), the hero's round view in the lens (art 231 over (25, 24, 89 × 89); a left release inside it closes the window) and a book's previous and next buttons (arts 495 and
+  496 at (213, 77) and (675, 77), shown only when there is such a page). The text is the game's own in the original's fonts (`AreaReadingFlow`): a book flows its messages over pages of 200 × 290 at
+  (227, 57) and (476, 57) by pixel height (the fit test 0x56C800: a message that does not fit is cut at its last fitting break and goes on on the next page, at most 100 pages), a note in
+  (349, 49, 215 × 300), a telegram's eleven form lines at their points with its body in (327, 126, 250 × 240), a newspaper's masthead, headline and four columns with the fillers, a plaque (white) in
+  (269, 40, 428 × 327). Code: `AreaReadingArtLayout` and `AreaReadingFlow` (Godot-free, `AreaReadingArt.cs`), `AreaReadingArtView` and the loading in `TerrainViewerAreaReadingArt.cs`. PROJECT: the
+  wheel, Left/Right, Page Up/Down and the menu directions turn a book's pages too; the picture art is read when first shown. Each frame is drawn through the interface art route, so an HD pack's
+  frames of these arts apply as to any window; the Generated recipes are the Generated windows plan's reading slice (issue #1201).
+- **Diagnostic layout (PROJECT, NOT_VERIFIED for parity):** the fallback when the art or a font did not read and in the synthetic self-tests: a plain panel instead of the original's background, frame
+  and page art and its fonts; the header line names the kind and the arts; a newspaper's masthead is one centred label per entry and three filler messages follow the body; a picture names its art
+  instead of drawing it; a book pages by 700 characters instead of the original's pixel height, keeping two pages a spread, the turn of two and the bound of 100 pages.
 
 ## Installed data (opt-in census, `WrittenRealDataTests`)
 
