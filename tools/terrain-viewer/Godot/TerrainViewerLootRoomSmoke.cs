@@ -126,7 +126,7 @@ public partial class TerrainViewerApp
                 if (InventoryOpen) EndInventory();
                 OpenInventory();
                 Require(_inventoryPanel is { ArtMode: true }, "the own window shows the original's look");
-                await WindowArtSmokeAsync("inventory", _inventoryPanel!.GridAreaForSelfTest, [AreaInventoryArtLayout.PackArt, AreaInventoryArtLayout.DollArt, AreaInventoryHole.InventoryArt]);
+                await WindowArtSmokeAsync("inventory", _inventoryPanel!.GridAreaForSelfTest, [AreaInventoryArtLayout.PackArt, AreaInventoryArtLayout.DollArt, AreaInventoryHole.InventoryArt, AreaInventoryArtLayout.ArrangeArt]);
                 // ARC-UI-1196: and the logbook (the opt-in bar smoke does not reach it: issue #1759).
                 await LogbookArtSmokeAsync();
             }
