@@ -184,7 +184,7 @@ def render(sessions: list[Session]) -> str:
             out.append(f"  {t.task:>4}  {t.scheme:<10}  {time:>10}  {t.stats.inputs:>6}  {t.stats.wrong_targets:>5}  {t.stats.cancels:>7}  "
                        f"{t.stats.refused:>7}  {t.stats.pauses:>6}")
         if not s.tasks:
-            out.append("  (no task markers: set the Test Task line in Options before each task)")
+            out.append("  (no task markers: step the Evidence Log line in Options to the task before each task)")
     return "\n".join(out)
 
 

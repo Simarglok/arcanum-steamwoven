@@ -47,7 +47,7 @@ public partial class TerrainViewerApp
         return changed ? null : "no place to write the log on this device";
     }
 
-    /// <summary>The Test Task line: ends the running task and starts the chosen one (0 = none). Null when it took effect.</summary>
+    /// <summary>The task part of the Evidence Log line (ARC-UI-1797): ends the running task and starts the chosen one (0 = none). Null when it took effect.</summary>
     private string? SetEvidenceTask(int task)
     {
         if (task < 0 || task > AreaOptionTable.TestTaskCount) return "no such task";

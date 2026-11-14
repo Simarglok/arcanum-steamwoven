@@ -116,8 +116,8 @@ public partial class TerrainViewerApp
 
             // ARC-UI-021: the Video page's floating text level and speed apply at once.
             Letter('v');
-            Require(_mainMenu!.Page == AreaOptionsPage.Video && Controls().SequenceEqual(["Brightness: 0/9", "Floats: Minimal", "Float Speed: 2/10", "Combat Taunts: On", "Controls: Original", "Prompt style: Auto", "Evidence Log: Off", "Test Task: None"]), "Video page: " + string.Join("|", Controls()));
-            Require(panel.NoteForSelfTest.Contains("Text Duration: ", StringComparison.Ordinal), "its hidden controls are named: " + panel.NoteForSelfTest);
+            Require(_mainMenu!.Page == AreaOptionsPage.Video && Controls().SequenceEqual(["Brightness: 0/9", "Text Duration: 6/10", "Floats: Minimal", "Float Speed: 2/10", "Combat Taunts: On", "Controls: Original", "Prompt style: Auto", "Evidence Log: Off"]), "Video page: " + string.Join("|", Controls()));
+            Require(panel.NoteForSelfTest.Length == 0 || !panel.NoteForSelfTest.Contains("Text Duration", StringComparison.Ordinal), "Text Duration is no longer hidden (ARC-UI-1797): " + panel.NoteForSelfTest);
             // ARC-UI-1737 (OH1): Brightness is the Video page's first line, 0 to 9; the final colour layer shows at 1 and above with the factor 1.0 + 0.1 x value, hides at 0.
             Require(_brightnessLayer is null || !_brightnessLayer.Visible, "brightness 0 draws no layer: today's picture");
             panel.ChangeForSelfTest(0, 1);
@@ -129,15 +129,15 @@ public partial class TerrainViewerApp
             Require(_gameSettings.Brightness == 9, "the slider stops at 9 (the factor 2.0 is out of range in the original)");
             for (var i = 0; i < 9; i++) panel.ChangeForSelfTest(0, -1);
             Require(_gameSettings.Brightness == 0 && !_brightnessLayer!.Visible && Controls()[0] == "Brightness: 0/9", "back at 0 the layer is hidden again");
-            panel.ChangeForSelfTest(1, 1);
-            panel.ChangeForSelfTest(2, -1);
-            Require(_gameSettings.Floats == 2 && _gameSettings.FloatSpeed == 1 && Controls()[1] == "Floats: Verbose" && Controls()[2] == "Float Speed: 1/10",
+            panel.ChangeForSelfTest(2, 1);
+            panel.ChangeForSelfTest(3, -1);
+            Require(_gameSettings.Floats == 2 && _gameSettings.FloatSpeed == 1 && Controls()[2] == "Floats: Verbose" && Controls()[3] == "Float Speed: 1/10",
                 "floats verbose, speed 1: " + string.Join("|", Controls()));
             // ARC-AI-1527: Combat Taunts is the Video page's fifth slot (OP2), on at the start; the list wraps and is saved at once.
-            panel.ChangeForSelfTest(3, 1);
-            Require(!_gameSettings.CombatTaunts && Controls()[3] == "Combat Taunts: Off", "taunts off: " + string.Join("|", Controls()));
-            panel.ChangeForSelfTest(3, 1);
-            Require(_gameSettings.CombatTaunts && Controls()[3] == "Combat Taunts: On", "the list wrapped back to on: " + string.Join("|", Controls()));
+            panel.ChangeForSelfTest(4, 1);
+            Require(!_gameSettings.CombatTaunts && Controls()[4] == "Combat Taunts: Off", "taunts off: " + string.Join("|", Controls()));
+            panel.ChangeForSelfTest(4, 1);
+            Require(_gameSettings.CombatTaunts && Controls()[4] == "Combat Taunts: On", "the list wrapped back to on: " + string.Join("|", Controls()));
 
             // ARC-GPAD-1374, ARC-GPAD-1463: the Controls line (the Game page's) and the Prompt style line (the Video page's) switch at run time with no restart
             // and no window is closed; the strip follows the device in hand.
@@ -148,25 +148,25 @@ public partial class TerrainViewerApp
                 && PromptStripForSelfTest.StartsWith("PlayStation pad", StringComparison.Ordinal) && PromptStripForSelfTest.Contains("original controls", StringComparison.Ordinal),
                 "pad 7 is in hand, PlayStation glyphs: " + PromptStripForSelfTest);
             Require(MainMenuOpen && _mainMenu!.Window == AreaMenuWindow.Options, "a change of device resets no window");
-            panel.ChangeForSelfTest(5, 1);
-            Require(_gameSettings.Prompts == PromptStyle.Xbox && Controls()[5] == "Prompt style: Xbox" && Controllers.Family == GlyphFamily.Xbox, "the override wins: " + Controls()[5]);
-            panel.ChangeForSelfTest(5, -1); panel.ChangeForSelfTest(5, -1);
-            Require(_gameSettings.Prompts == PromptStyle.SteamDeck && Controls()[5] == "Prompt style: Steam Deck", "a list wraps back to its last value");
-            panel.ChangeForSelfTest(5, 1);
+            panel.ChangeForSelfTest(6, 1);
+            Require(_gameSettings.Prompts == PromptStyle.Xbox && Controls()[6] == "Prompt style: Xbox" && Controllers.Family == GlyphFamily.Xbox, "the override wins: " + Controls()[6]);
+            panel.ChangeForSelfTest(6, -1); panel.ChangeForSelfTest(6, -1);
+            Require(_gameSettings.Prompts == PromptStyle.SteamDeck && Controls()[6] == "Prompt style: Steam Deck", "a list wraps back to its last value");
+            panel.ChangeForSelfTest(6, 1);
             Require(_gameSettings.Prompts == PromptStyle.Auto && Controllers.Family == GlyphFamily.PlayStation, "Auto follows the pad again");
-            Require(_mainMenu!.Page == AreaOptionsPage.Video && Controls()[4] == "Controls: Original", "the Video page holds the Controls line before the prompt style: " + string.Join("|", Controls()));
-            panel.ChangeForSelfTest(4, 1);
-            Require(_gameSettings.Pad == PadScheme.Direct && _gameSettings.Touch == TouchScheme.Off && Controls()[4] == "Controls: A Direct" && Controllers.Settings.Pad == PadScheme.Direct,
-                "Controls: A Direct at once: " + Controls()[4]);
+            Require(_mainMenu!.Page == AreaOptionsPage.Video && Controls()[5] == "Controls: Original", "the Video page holds the Controls line before the prompt style: " + string.Join("|", Controls()));
+            panel.ChangeForSelfTest(5, 1);
+            Require(_gameSettings.Pad == PadScheme.Direct && _gameSettings.Touch == TouchScheme.Off && Controls()[5] == "Controls: A Direct" && Controllers.Settings.Pad == PadScheme.Direct,
+                "Controls: A Direct at once: " + Controls()[5]);
             clock += .3; SyncControllerPrompts();
             Require(PromptStripForSelfTest == "PlayStation pad - A Direct", "the strip follows the switch: " + PromptStripForSelfTest);
-            panel.ChangeForSelfTest(4, 1);
-            Require(_gameSettings.Pad == PadScheme.Pointer && Controls()[4] == "Controls: B Pointer", "B Pointer");
+            panel.ChangeForSelfTest(5, 1);
+            Require(_gameSettings.Pad == PadScheme.Pointer && Controls()[5] == "Controls: B Pointer", "B Pointer");
             Hand(new InputEventScreenTouch { Index = 0, Position = new(100, 100), Pressed = true });
             Require(Controllers.Device == ActiveDevice.Touch && PromptStripForSelfTest.StartsWith("Touch", StringComparison.Ordinal) && PromptStripForSelfTest.Contains("original controls", StringComparison.Ordinal),
                 "a touch is in hand: " + PromptStripForSelfTest);
-            panel.ChangeForSelfTest(4, 1);
-            Require(_gameSettings.Touch == TouchScheme.TouchPad && _gameSettings.Pad == PadScheme.Off && Controls()[4] == "Controls: C Touch+pad", "Controls: C Touch+pad (no pad scheme beside it)");
+            panel.ChangeForSelfTest(5, 1);
+            Require(_gameSettings.Touch == TouchScheme.TouchPad && _gameSettings.Pad == PadScheme.Off && Controls()[5] == "Controls: C Touch+pad", "Controls: C Touch+pad (no pad scheme beside it)");
             clock += .3; SyncControllerPrompts();
             Require(PromptStripForSelfTest == "Touch - C Touch+pad", "touch line: " + PromptStripForSelfTest);
             foreach (var shown in new[] { "mouse", "keyboard", "click", "Esc" })
@@ -175,8 +175,8 @@ public partial class TerrainViewerApp
             clock += 1; Hand(new InputEventKey { Keycode = Key.A, PhysicalKeycode = Key.A, Pressed = true });
             Require(Controllers.Device == ActiveDevice.KeyboardMouse && PromptStripForSelfTest.Length == 0, "the mouse takes the strip away: " + PromptStripForSelfTest);
             Require(MainMenuOpen && _mainMenu!.Window == AreaMenuWindow.Options, "the window stayed open through every device change");
-            panel.ChangeForSelfTest(4, 1);
-            Require(_gameSettings.Pad == PadScheme.Off && _gameSettings.Touch == TouchScheme.Off && Controls()[4] == "Controls: Original", "the list wraps back to Original");
+            panel.ChangeForSelfTest(5, 1);
+            Require(_gameSettings.Pad == PadScheme.Off && _gameSettings.Touch == TouchScheme.Off && Controls()[5] == "Controls: Original", "the list wraps back to Original");
 
             // The Sound page: a volume moves its channel; a slider stops at its end.
             Letter('s');
