@@ -767,22 +767,29 @@ public partial class TerrainViewerApp
     /// exports): the release of O opens the options window directly, in play, over any window and over the dialog (the dialog's handler
     /// lets the release through, SA43), at the Game page, without the pause Escape raises (kind 4 skips the pause counter). The only guard
     /// is a focused text field and a menu already up; the hero's state and another participant's turn do not refuse it. The press only arms the route.
+    /// ARC-UI-2066 (OP9, OP7): the branch reads the scan code 0x18 of a type 5 message (the keyboard poll 0x52B380), not the typed character, so the
+    /// physical O key acts on every layout (as the options window's own O does) and a typed O on another key does nothing; while Ctrl or Alt is held
+    /// the poll queues no scan code for a non-modifier key, so Ctrl+O and Alt+O do nothing (Shift+O works).
     /// </summary>
-    private bool RouteOptionsKey(WorldKeyDecision decision)
+    private bool RouteOptionsKey(InputEventKey key, WorldKeyDecision decision)
     {
-        if (!QuickKeysActive || decision.Key != WorldKey.O) return false;
-        if (decision.Echo) return true;
-        if (decision.Pressed) { _optionsKeyArmed = _mainMenu is null; return true; }
-        if (!_optionsKeyArmed) return true;
+        if (!QuickKeysActive) return false;
+        if (key.PhysicalKeycode != Key.O) return decision.Key == WorldKey.O; // a typed O elsewhere on the layout is no key of the original (swallowed, nothing happens)
+        // A letter typed on the physical O key is a separate character message in the original (its own route goes on); only a typed O is the key itself.
+        var consumed = decision.Key == WorldKey.O;
+        if (key.CtrlPressed || key.AltPressed || key.MetaPressed) return consumed;
+        if (decision.Echo) return consumed;
+        if (decision.Pressed) { _optionsKeyArmed = _mainMenu is null; return consumed; }
+        if (!_optionsKeyArmed) return consumed;
         _optionsKeyArmed = false;
-        if (_mainMenu is not null) return true;
-        if (!_worldFocused || PanelOutsideStackOpen || WorldUiFocus) { _mainMenuStatus = "O ignored: palette, menu or UI focus owns input"; RefreshAreaStatus(); return true; }
+        if (_mainMenu is not null) return consumed;
+        if (!_worldFocused || PanelOutsideStackOpen || WorldUiFocus) { _mainMenuStatus = "O ignored: palette, menu or UI focus owns input"; RefreshAreaStatus(); return consumed; }
         if (_worldLifecycleSession is not null || _worldResetPending || _worldReloadPending || _mapHandoff is { Kind: not MapHandoffKind.Stream })
         {
-            _mainMenuStatus = "O ignored: a load is in progress"; RefreshAreaStatus(); return true;
+            _mainMenuStatus = "O ignored: a load is in progress"; RefreshAreaStatus(); return consumed;
         }
         OpenInPlayMenuOverWindows(optionsWindow: true);
-        return true;
+        return consumed;
     }
 
     private bool _optionsKeyArmed;

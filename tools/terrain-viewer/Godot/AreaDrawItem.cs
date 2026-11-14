@@ -146,7 +146,7 @@ public partial class AreaDrawItem : Node2D
     internal AreaCarriedBinding? Carried { get; set; }
     /// <summary>ARC-RES-1978: what the relit look treats this item as (<see cref="AreaRelight.KindNone"/> .. KindCritter); read only while it is on.</summary>
     internal int RelightKind { get; set; }
-    private (bool Relit, int Kind)? _relitState;
+    private (bool Relit, int Kind, int Scale)? _relitState;
     /// <summary>Shared index rows owned by the canvas. A standalone item (tests, probes)
     /// keeps a private cache holding only its current row.</summary>
     internal AreaMappingCache? Mappings { get; set; }
@@ -208,7 +208,7 @@ public partial class AreaDrawItem : Node2D
             _material.Shader = command.Multiply ? MultiplyShader.Value
                 : relit ? (command.Additive ? RelitAddShader.Value : RelitNormalShader.Value)
                 : command.Additive ? AddShader.Value : NormalShader.Value;
-            _relitState = (relit, -1);
+            _relitState = (relit, -1, -1);
             Material = _material;
             _material.SetShaderParameter("body_alpha", command.Alpha / 255f);
             _material.SetShaderParameter("wade_rows", command.WadeRows);
@@ -243,10 +243,12 @@ public partial class AreaDrawItem : Node2D
         }
         var mode = Lattice is not null || Carried is not null ? 2 : AmbientRight != Ambient ? 1 : 0;
         var raster = mode == 0 && command.WadeRows == 0 && !relit ? default : new Vector4(transform.Origin.X, transform.Origin.Y, transform.X.X, transform.Y.Y);
-        if (relit && _relitState?.Kind != RelightKind)
+        if (relit && (_relitState?.Kind != RelightKind || _relitState?.Scale != HdScale))
         {
             _material.SetShaderParameter("relight_kind", RelightKind);
-            _relitState = (true, RelightKind);
+            // ARC-RENDER-2060: an N-times HD frame has N times the texels over the same drawn size, so its luminance steps are 1/N as big: the gradient gain scales with N.
+            _material.SetShaderParameter("relight_scale", HdScale);
+            _relitState = (true, RelightKind, HdScale);
         }
         var light = (mode, AmbientRight, Lattice, Carried, mode == 1 || command.WadeRows > 0 ? command.Destination : default, raster);
         if (_lightState != light)

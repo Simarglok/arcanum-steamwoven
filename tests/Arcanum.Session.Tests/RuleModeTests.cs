@@ -116,6 +116,11 @@ public sealed class RuleModeTests
         // ARC-UI-2025: the dialog reply band's click rows drift against the drawn rows in the original (y / 20 against a 19 px pitch); Steamwoven hits the drawn row.
         Assert.IsTrue(GameRules.Original.Interface.DialogReplyRowsDrift);
         Assert.IsFalse(GameRules.Steamwoven.Interface.DialogReplyRowsDrift);
+        // ARC-UI-2023: the dialog window's diagnostic chrome (header, outcome, effects, hint, Leave) is a project addition; the original shows only the reply rows.
+        Assert.IsTrue(GameRules.Original.Interface.DialogDiagnosticChromeHidden);
+        Assert.IsFalse(GameRules.Steamwoven.Interface.DialogDiagnosticChromeHidden);
+        Assert.IsTrue(GameRules.Original.Interface.DialogBarStays, "DB1: the original's dialog leaves the bars drawn");
+        Assert.IsFalse(GameRules.Steamwoven.Interface.DialogBarStays);
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => GameRules.For((RuleMode)7));
     }
 

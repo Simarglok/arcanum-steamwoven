@@ -43,7 +43,7 @@ public partial class TerrainViewerApp
         var keep = !string.IsNullOrEmpty(captureDir) && captureDir.StartsWith('/');
         if (keep) DirAccess.MakeDirRecursiveAbsolute(captureDir);
         var city = string.IsNullOrWhiteSpace(OS.GetEnvironment("ARC_RELIGHT_CITY")) ? "city" : OS.GetEnvironment("ARC_RELIGHT_CITY");
-        var wasEnabled = driver.Enabled; var wasMode = AreaRelight.Current; var wasStrength = AreaRelight.Strength; var wasVsync = DisplayServer.WindowGetVsyncMode();
+        var wasEnabled = driver.Enabled; var wasMode = AreaRelight.DeveloperMode; var wasStrength = AreaRelight.Strength; var wasVsync = DisplayServer.WindowGetVsyncMode();
         var simulatedFocus = _worldFocusSimulationForSelfTest; var focused = _worldFocused; var testTime = _worldTestTime; var modal = WorldModal; var hudVisible = _hud?.Visible ?? false;
         var map = mapMode is { Area: { } mapArea, AreaStepSnapshot: { } mapSteps }
             ? new AreaMapRuntime(mapArea.Snapshot, mapSteps, mapArea.Plan.Chart) : _areaTransitions!.Current;
