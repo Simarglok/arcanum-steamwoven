@@ -188,25 +188,43 @@ public static class AttackRules
         return (int)Math.Clamp(ac, 0, MaxArmorClass);
     }
 
+    /// <summary>The wielded weapon's art subtype (use-art bits 6..9) that backstabs at any training, and the ones that need training above apprentice (0x45F9D0).</summary>
+    public const int BackstabAnyTrainingSubtype = 2;
+
+    /// <summary>The art subtypes that backstab at training above apprentice (0x45F9D0: 3, 4 and 7).</summary>
+    public static bool BackstabTrainedSubtype(int artSubtype) => artSubtype is 3 or 4 or 7;
+
     /// <summary>
-    /// Whether a melee attack is a backstab (ARC-RES-030, backstab eligibility): the attacker has backstab training,
-    /// the target does not face it, and it wields a dagger, or as an expert or master a sword, axe or two-handed sword.
-    /// It is a true backstab when the target can neither see nor hear the attacker.
+    /// Whether a melee attack is a backstab (0x45F9D0, ARC-COMBAT-1929; the context builder 0x4B2210 calls it for a critter attacker
+    /// and a critter target and sets context flags 0x4000, and 0x8000 for a true backstab): the attacker's effective backstab level is
+    /// above 0 (the training does not matter), the target does not face it (0x45EFF0), and it wields an item whose art subtype is
+    /// <see cref="BackstabAnyTrainingSubtype"/>, or 3, 4 or 7 at training above apprentice; bare hands never qualify. It is a true
+    /// backstab when the target neither sees (0x4AF260) nor hears (0x4AF470, silent) the attacker. The tests run in the original's
+    /// order and the facts of the world are asked only when they are reached, so a caller pays for none of them for an attacker
+    /// that cannot backstab.
     /// </summary>
-    [OriginalFunction(0x45F9D0, OriginalFunctionScope.Partial)]
+    /// <param name="backstabLevel">The attacker's backstab skill level (0x4C5EB0).</param>
+    /// <param name="backstabTraining">The attacker's backstab training (0x4C60C0).</param>
+    /// <param name="weapon">What the attacker strikes with; only <see cref="WeaponKind.Weapon"/>, a wielded item, qualifies.</param>
+    /// <param name="wieldedArtSubtype">The wielded item's use-art subtype (item field 0x5F).</param>
+    /// <param name="targetFacesAttacker">0x45EFF0 with the target as the observer.</param>
+    /// <param name="targetPerceivesAttacker">Whether the target sees or hears the attacker (excess 0 of 0x4AF260 or of 0x4AF470).</param>
+    [OriginalFunction(0x45F9D0, OriginalFunctionScope.Full)]
     public static BackstabKind Backstab(
-        SkillTraining backstabTraining, bool targetFacesAttacker, WeaponKind weapon, BackstabWeaponClass weaponClass,
-        bool targetSeesOrHearsAttacker)
+        int backstabLevel, SkillTraining backstabTraining, WeaponKind weapon, int wieldedArtSubtype,
+        Func<bool> targetFacesAttacker, Func<bool> targetPerceivesAttacker)
     {
+        ArgumentNullException.ThrowIfNull(targetFacesAttacker);
+        ArgumentNullException.ThrowIfNull(targetPerceivesAttacker);
+        if (backstabLevel is < 0 or > MaxSkillLevel) throw new ArgumentOutOfRangeException(nameof(backstabLevel));
         CheckTraining(backstabTraining, nameof(backstabTraining));
         if (!Enum.IsDefined(weapon)) throw new ArgumentOutOfRangeException(nameof(weapon));
-        if (!Enum.IsDefined(weaponClass)) throw new ArgumentOutOfRangeException(nameof(weaponClass));
-        if (backstabTraining == SkillTraining.None || targetFacesAttacker || weapon != WeaponKind.Weapon) return BackstabKind.None;
-        var allowed = weaponClass == BackstabWeaponClass.Dagger
-            || (backstabTraining >= SkillTraining.Expert
-                && weaponClass is BackstabWeaponClass.Sword or BackstabWeaponClass.Axe or BackstabWeaponClass.TwoHandedSword);
+        if (wieldedArtSubtype is < 0 or > CombatWearRules.MaxArtSubtype) throw new ArgumentOutOfRangeException(nameof(wieldedArtSubtype));
+        if (backstabLevel == 0 || targetFacesAttacker() || weapon != WeaponKind.Weapon) return BackstabKind.None;
+        var allowed = wieldedArtSubtype == BackstabAnyTrainingSubtype
+            || (backstabTraining > SkillTraining.Apprentice && BackstabTrainedSubtype(wieldedArtSubtype));
         if (!allowed) return BackstabKind.None;
-        return targetSeesOrHearsAttacker ? BackstabKind.Backstab : BackstabKind.TrueBackstab;
+        return targetPerceivesAttacker() ? BackstabKind.Backstab : BackstabKind.TrueBackstab;
     }
 
     /// <summary>

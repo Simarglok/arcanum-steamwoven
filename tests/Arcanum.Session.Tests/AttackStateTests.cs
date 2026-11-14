@@ -365,4 +365,49 @@ public sealed class AttackStateTests
         Assert.IsTrue(owner.QueryNpcKilled(Rat));
         Assert.IsNull(owner.QueryNpcExperience(Rat));
     }
+
+    // ARC-COMBAT-1929 (0x45F9D0): the hero's melee strike with a wielded weapon of art subtype 2 on an NPC facing away adds its backstab
+    // level to the normal damage (five times it unseen and unheard); the host's facts decide, and none means no backstab.
+    [TestMethod]
+    public void TheHeroStrikesFromBehindWithADaggerAndAddsItsBackstabLevel()
+    {
+        var basic = new int[12];
+        basic[(int)Arcanum.Simulation.Skills.Skill.Backstab] = 3 | 1 << 6;
+        var hero = HalfElf() with { Advancement = SessionHeroAdvancement.None with { BasicSkills = [.. basic] } };
+        var rat = Combat();
+        var dagger = new EquipmentItem
+        {
+            Kind = EquipmentItemKind.Weapon, HitPoints = 20, MaxHitPoints = 20,
+            Weapon = new EquipmentWeapon { Skill = CombatSkill.Melee, Damage = DamageRanges.None with { Normal = new(4, 4) }, SpeedFactor = 10, Range = 1 },
+        };
+        var worn = new Dictionary<EquipmentSlot, SessionWearItem> { [EquipmentSlot.Weapon] = new("kit:1", new(1000, 0, 0, false)) { ArtSubtype = 2 } };
+
+        int RolledNormal(SessionBackstabFacts? facts, out int level, int subtype = 2)
+        {
+            var created = GameSessionOwner.Create(Descriptor() with { Hero = hero, Experience = ExperienceStateTests.Rules() });
+            Assert.AreEqual(GameSessionFailure.None, created.Failure);
+            using var owner = created.Owner!;
+            Assert.AreEqual(GameSessionFailure.None, owner.Equip(owner.Version, "kit:1", EquipmentSlot.Weapon, new(Kit[0].Kind, [], false, dagger), (_, _) => true, Accept).Failure);
+            level = owner.QueryHeroAttack()!.Combatant.BackstabLevel;
+            var items = new Dictionary<EquipmentSlot, SessionWearItem> { [EquipmentSlot.Weapon] = worn[EquipmentSlot.Weapon] with { ArtSubtype = subtype } };
+            for (var attempt = 0; attempt < 400; attempt++)
+            {
+                var result = owner.AttackCritter(owner.Version, new(rat) { HeroWorn = items, Backstab = facts });
+                Assert.AreEqual(GameSessionFailure.None, result.Failure);
+                if (result.Resolution is { Refusal: AttackRefusal.None, Outcome: AttackOutcome.Hit or AttackOutcome.CriticalHit, Damage.Recipient: DamageRecipient.Target } resolution)
+                    return resolution.Damage.Rolled.Normal;
+            }
+            Assert.Fail("no hit within the bounded run");
+            return 0;
+        }
+
+        var plain = RolledNormal(null, out var backstabLevel);
+        Assert.IsTrue(backstabLevel > 0, "the hero has backstab points");
+        var seen = new SessionBackstabFacts(() => false, () => true);
+        var unseen = new SessionBackstabFacts(() => false, () => false);
+        Assert.AreEqual(plain + backstabLevel, RolledNormal(seen, out _), "the target does not face the hero but hears or sees it");
+        Assert.AreEqual(plain + 5 * backstabLevel, RolledNormal(unseen, out _), "a true backstab");
+        Assert.AreEqual(plain, RolledNormal(new(() => true, () => false), out _), "a target facing the hero");
+        Assert.AreEqual(plain, RolledNormal(unseen, out _, subtype: 8), "the art subtype of a bow is no backstab weapon");
+    }
 }
