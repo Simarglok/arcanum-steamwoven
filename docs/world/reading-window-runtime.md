@@ -120,7 +120,7 @@ only for a player viewer (no dead check). Action 94 (set a written item's first 
   (349, 49, 215 × 300), a telegram's eleven form lines at their points with its body in (327, 126, 250 × 240), a newspaper's masthead, headline and four columns with the fillers, a plaque (white) in
   (269, 40, 428 × 327). Code: `AreaReadingArtLayout` and `AreaReadingFlow` (Godot-free, `AreaReadingArt.cs`), `AreaReadingArtView` and the loading in `TerrainViewerAreaReadingArt.cs`. PROJECT: the
   wheel, Left/Right, Page Up/Down and the menu directions turn a book's pages too; the picture art is read when first shown. Each frame is drawn through the interface art route, so an HD pack's
-  frames of these arts apply as to any window; the Generated recipes are the Generated windows plan's reading slice (issue #1201).
+  frames of these arts apply as to any window; the Generated recipes are [slice S11](../rendering/hd-interface-density.md#viewer-slice-s11-arc-ui-1201) of the Generated windows plan (ARC-UI-1201).
 - **Diagnostic layout (PROJECT, NOT_VERIFIED for parity):** the fallback when the art or a font did not read and in the synthetic self-tests: a plain panel instead of the original's background, frame
   and page art and its fonts; the header line names the kind and the arts; a newspaper's masthead is one centred label per entry and three filler messages follow the body; a picture names its art
   instead of drawing it; a book pages by 700 characters instead of the original's pixel height, keeping two pages a spread, the turn of two and the bound of 100 pages.
