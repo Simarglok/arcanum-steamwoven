@@ -112,7 +112,7 @@ public partial class TerrainViewerApp
     internal long BubbleClockForSelfTest { get; set; }
 
     /// <summary>ARC-UI-1997: a text bubble over <paramref name="owner"/> (the speech display makes one): the owner's old bubble is replaced; true when it was made.</summary>
-    private bool Bubble(string owner, string text)
+    private bool Bubble(string owner, string text, bool dialogLine = false, bool persistent = false)
     {
         if (_readyMode != TerrainViewerMode.Area || _readyArea is null || string.IsNullOrWhiteSpace(text)) return false;
         var layer = FloaterLayer();
@@ -120,8 +120,38 @@ public partial class TerrainViewerApp
         if (FloaterCell(owner) is { } cell) _floaterCells[owner] = cell;
         layer.Bubbles.SetTextDuration(_gameSettings.TextDuration);
         layer.AddBubble(owner, text, owner == HeroFloater ? BubbleColor.Green : BubbleColor.White, BubbleNowMs());
-        _scriptFloats++;
+        if (persistent) layer.Bubbles.SetLife(owner, TextBubbleRules.Persistent, BubbleNowMs());
+        if (!dialogLine) _scriptFloats++;
         return true;
+    }
+
+    /// <summary>The open dialog's speaker as a bubble owner (its entity id), or null.</summary>
+    private string? DialogBubbleOwner() => _conversationSpeaker is { } speaker ? AreaConversationState.EntityId(speaker.Row) : null;
+
+    /// <summary>
+    /// ARC-UI-2027 (ledger TB23): the NPC's line in an open dialog is a persistent bubble over the NPC (life −2: it
+    /// does not age while the window is open); the window lists only the PC's options. The speaker's old bubble is replaced. A dialog that no longer awaits a reply (its final line) shows the line with the default life.
+    /// </summary>
+    private void ShowDialogLineBubble(string text, bool persistent)
+    {
+        if (DialogBubbleOwner() is not { } owner) return;
+        // The reply's own float lines (a script's float over the speaker) ran before the answer is shown: they go first, so the answer's bubble is the one that stays.
+        TickScriptFloats();
+        if (!Bubble(owner, text, dialogLine: true, persistent: persistent)) return;
+        GD.Print($"ARC-UI-2027 dialog line bubble owner={owner} persistent={persistent} text={text}");
+    }
+
+    /// <summary>ARC-UI-2027 (ledger TB24): a processed reply removes the speaker's bubble before the answer shows.</summary>
+    private void RemoveDialogLineBubble()
+    {
+        if (DialogBubbleOwner() is { } owner && _floaters is { } layer && layer.Bubbles.Remove(owner)) layer.Redraw();
+    }
+
+    /// <summary>ARC-UI-2027 (ledger TB25): the dialog's end gives the speaker's bubble its default life from now (it was persistent).</summary>
+    private void ExpireDialogLineBubble(AreaSpeaker? speaker)
+    {
+        if (speaker is null || _floaters is not { } layer) return;
+        layer.Bubbles.SetLife(AreaConversationState.EntityId(speaker.Row), TextBubbleRules.DefaultLife, BubbleNowMs());
     }
 
     private void TickScriptFloats()

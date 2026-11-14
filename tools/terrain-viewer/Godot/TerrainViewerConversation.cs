@@ -83,6 +83,8 @@ public partial class TerrainViewerApp
         if (_conversationPanel is null)
         {
             _conversationPanel = new AreaConversationPanel { NumberedSource = () => DialogRepliesNumbered, OriginalRowsSource = () => DialogReplyRowsDrift }; AddChild(_conversationPanel);
+            _conversationPanel.NpcLineShown += ShowDialogLineBubble;
+            _conversationPanel.ReplyPicking += RemoveDialogLineBubble;
             _conversationPanel.Picked += () => { if (_audio is not null) ExecuteVoice(DialogVoicePlayer.Picked()); };
             // Only the player's close resumes the dialog script; teardown, reset and map changes just close.
             _conversationPanel.CloseRequested += () => EndConversation(resume: true);
@@ -442,6 +444,8 @@ public partial class TerrainViewerApp
         // ARC-SCRIPT-009: a "return to script" end resumes the speaker's dialog script through the dispatcher; a new
         // dialog action opens the next conversation, anything else is a notice.
         var speaker = _conversationSpeaker; _conversationSpeaker = null;
+        // ARC-UI-2027 (0x5678D0 → 0x4D6160 −1): the NPC's line bubble stops being persistent.
+        ExpireDialogLineBubble(speaker);
         var talkHost = _conversationHost;
         var scripted = _conversationScripted; _conversationScripted = false;
         // ARC-TECHNOLOGY-006: SU ended the talk; the window opens with the NPC as crafter and the talk does not resume (NC2).
