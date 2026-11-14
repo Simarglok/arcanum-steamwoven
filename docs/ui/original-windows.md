@@ -89,7 +89,7 @@ side, 338 `PD_lil_butt` at (713, 37) and 339 `Inven_lil_butt` at (751, 37), and 
 its grid, the hero's worn items and the covers of its empty slots in the nine rectangles of the own window's doll moved 348 pixels right (499, 107 for the helmet), the weight, encumbrance and speed lines at (431, 32), (431, 47), (431, 62)
 and the damage and armour numbers at (425, 358) and (609, 358); the weapon's slot is filled dark red when the weapon is too heavy (IW43). A press on a worn item lifts it (not in the See Contents window), released on another hero slot in the loot and steal windows it is
 worn there, released on its own slot (or anywhere in the barter window's doll) it goes back. The buttons draw their first frame and play the press and release sounds. Not built: the cross-holder moves of the slots ([issue #1925](https://github.com/Simarglok/arcanum-steamwoven/issues/1925)), the stat-line popups over the numbers (#1924).
-The cover 341 is drawn from the game's art; its generated recipe is [#1750](https://github.com/Simarglok/arcanum-steamwoven/issues/1750).
+The cover 341 is drawn from the game's art, and in the Generated interface as `pd_cover4inven.art` (ARC-UI-1750, [S4](../rendering/hd-interface-density.md#viewer-slice-s4-arc-ui-1194)).
 
 The steal window (done: ARC-UI-065, rows [IW35–IW36](../research/ledger/ui-audio.md#steal-window-arc-ui-065)): mode 3 draws the loot
 window's frame, image and grids without the Take all button (made in mode 2 alone, IW30). In the original look of the viewer the
@@ -142,7 +142,7 @@ boxes inside the barter window, the follower's weight lines, the scroll bar's ar
 ARC-UI-1917 built the merchant's doll view and its two toggles in the barter window (IW29, IW30): the buttons 338 and 339 at (8, 123) and (46, 123), the toggle clear at every open;
 with it set the window draws 337 `Barter_PD` at (0, 157) with the merchant's worn items in the nine rectangles of table 0x5CAD78 (the same rectangles as the loot windows' doll),
 a cover on each empty slot, the doll's two values and the weapon slot's fill (where the combat host covers the map; a body the session's lists do not show shows covers only), and hides the shown grid. Left for the next barter slices (each its own task): buying a worn item
-by dragging it from the doll (issue #1926), the two hot spots of IW30, the generated look of 337 and the doll cover 341 ([#1750](https://github.com/Simarglok/arcanum-steamwoven/issues/1750)).
+by dragging it from the doll (issue #1926), the two hot spots of IW30. The generated look of 337 and of the doll cover 341 is ARC-UI-1750 ([S4](../rendering/hd-interface-density.md#viewer-slice-s4-arc-ui-1194)).
 
 ## Character sheet
 
