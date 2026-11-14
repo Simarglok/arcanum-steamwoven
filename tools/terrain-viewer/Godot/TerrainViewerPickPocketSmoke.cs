@@ -186,6 +186,8 @@ public partial class TerrainViewerApp
             else { _inventoryPanel.EmitPlantForSelfTest(item); await Attempted(); }
             Require(_lastPickPocket is { Result: { Moved: 1, FateUsed: true, Alignment: null } }, "a fated plant: " + _inventoryStatus);
             Require(!HeroHolds(item) && VictimHolds(item), "the item moved back to the victim: " + _inventoryStatus);
+            // ARC-UI-1925 (IW35, IW45): the hero's doll slots: a worn item planted and stolen back by drag, a steal onto an occupied slot refused.
+            if (art && InventoryOpen && grid.HeroTogglesShown) GD.Print($"ARC-UI-1925 pickpocket {await HeroDollStealMovesStepAsync(grid, panel, session, victim, mapId, Fated, Attempted, HeroHolds, VictimHolds)}");
 
             int attempts = 0, successes = 0;
             SessionPickPocketResult? failed = null;

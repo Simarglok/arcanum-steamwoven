@@ -154,23 +154,30 @@ public static class AreaBarterArtLayout
     /// <summary>
     /// A left release with an item held (BT5): the merchant's item on the hero's grid is a buy (0x575200), the hero's item on the shown grid a
     /// sale (0x575360); ARC-UI-1740: the merchant's item on the bet box is a bet (0x579B60: the original puts the item back first, then runs the
-    /// bet; the hero's own item there only goes back, as the gate refuses it silently); anything else puts it back. NOT READY: the hero's grid
+    /// bet; the hero's own item there only goes back, as the gate refuses it silently); anything else puts it back. ARC-UI-1925 (IW35, IW45): with the
+    /// hero's doll shown the merchant's item on a slot is bought and worn at once (<see cref="AreaInventoryDropKind.BuyWear"/>, 0x575200 with a slot) and the hero's item on another slot
+    /// of its doll is worn there (a ring to the other ring slot; the own window's move, 0x464D20 then 0x5788C0). NOT READY: the hero's grid
     /// moves, drop and use boxes of the barter window (the item goes back; the own window has them).
     /// </summary>
     public static AreaInventoryDrop Release(AreaInventoryHeld held, AreaBarterHit hit)
     {
         ArgumentNullException.ThrowIfNull(held);
         if (hit.Gamble) return held.Partner ? new(AreaInventoryDropKind.Gamble, held) : new(AreaInventoryDropKind.PutBack, held);
-        if (held.Partner) return hit.Cell is { } target ? new(AreaInventoryDropKind.Buy, held, GridSlot: target) : new(AreaInventoryDropKind.PutBack, held);
+        if (held.Partner)
+        {
+            if (hit.Slot is { } heroSlot) return new(AreaInventoryDropKind.BuyWear, held, Slot: heroSlot);
+            return hit.Cell is { } target ? new(AreaInventoryDropKind.Buy, held, GridSlot: target) : new(AreaInventoryDropKind.PutBack, held);
+        }
+        if (hit.Slot is { } slot && slot != held.Worn) return new(AreaInventoryDropKind.Wear, held, Slot: slot);
         return hit.Location is { } location ? new(AreaInventoryDropKind.Sell, held, GridSlot: location) : new(AreaInventoryDropKind.PutBack, held);
     }
 
     /// <summary>A right release with nothing held (0x574262..0x574430, IW36, read by ARC-UI-065): in mode 1 the item under the point moves to
-    /// the other side, the merchant's to the hero (a buy) and the hero's grid item to the shown object (a sale), through the same moves as a
-    /// drag (0x575200, 0x575360); null on no item. The receiving side's room test (0x466510) is the session's insert check.</summary>
+    /// the other side, the merchant's to the hero (a buy) and the hero's item, worn or in its grid (ARC-UI-1925: the move has no unwear step of its own, the
+    /// executor 0x461CA0 unwears), to the shown object (a sale), through the same moves as a drag (0x575200, 0x575360); null on no item. The receiving
+    /// side's room test (0x466510) is the session's insert check.</summary>
     public static AreaInventoryDrop? RightRelease(AreaInventoryView view, AreaBarterHit hit) => Press(view, hit) is not { } item ? null
-        // ARC-UI-1918: NOT READY: the right release on an item the hero wears (a slot of its doll) does nothing (issue #1925).
-        : item.Worn is not null ? null : new(item.Partner ? AreaInventoryDropKind.Buy : AreaInventoryDropKind.Sell, item);
+        : new(item.Partner ? AreaInventoryDropKind.Buy : AreaInventoryDropKind.Sell, item);
 
     /// <summary>The art the drop and use boxes show while <paramref name="held"/> is over them: the merchant's item the refused art, the
     /// hero's item the "on" art (IW23, as the loot window's).</summary>

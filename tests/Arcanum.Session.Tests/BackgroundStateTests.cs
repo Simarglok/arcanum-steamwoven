@@ -108,6 +108,23 @@ public sealed class BackgroundStateTests
         Assert.AreEqual("kit:2", owner.QueryEquipment().Worn.Single().Entity);
     }
 
+    // ARC-UI-1925: the wear rules asked before an item of another holder is taken or bought, with no effect.
+    [TestMethod]
+    public void The_wear_refusal_is_asked_without_moving_anything()
+    {
+        using var owner = CreateWith(HalfElf() with { Background = SessionBackgrounds.MagickAllergy });
+        var mail = new EquipmentItem
+        {
+            Kind = EquipmentItemKind.Armor, MagickTechComplexity = 10,
+            Armor = new EquipmentArmor { Coverage = ArmorCoverage.Torso, Sizes = ArmorSizes.Medium, AcAdjustment = 12 },
+        };
+        var revision = owner.Version.Revision;
+        Assert.AreEqual(EquipmentRefusal.WieldMagicItems, owner.QueryWearRefusal(new(Kit[1].Kind, [], false, mail), EquipmentSlot.Armor));
+        Assert.AreEqual(EquipmentRefusal.None, owner.QueryWearRefusal(new(Kit[1].Kind, [], false, mail with { MagickTechComplexity = -10 }), EquipmentSlot.Armor));
+        Assert.AreEqual(revision, owner.Version.Revision, "no revision");
+        Assert.AreEqual(0, owner.QueryEquipment().Worn.Count);
+    }
+
     [TestMethod]
     public void A_magick_allergic_hero_cannot_wear_a_magickal_item()
     {

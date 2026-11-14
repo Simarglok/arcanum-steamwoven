@@ -151,14 +151,14 @@ public sealed class AreaLootArtTests
     }
 
     [TestMethod]
-    public void TheHerosItemMovesAsInItsOwnWindowAndNotIntoTheHolder()
+    public void TheHerosItemMovesAsInItsOwnWindowOrIntoTheHolder()
     {
         var view = View();
         var own = AreaLootArtLayout.Press(view, new AreaLootHit(0, null, null, false));
         Assert.AreEqual(new AreaInventoryHeld("own:1", null, 0), own);
         Assert.AreEqual(new AreaInventoryDrop(AreaInventoryDropKind.GridMove, own!, GridSlot: 7), AreaLootArtLayout.Release(own!, new AreaLootHit(7, null, null, false), AreaInventoryMode.Loot));
         Assert.AreEqual(AreaInventoryDropKind.DropToGround, AreaLootArtLayout.Release(own!, new AreaLootHit(null, AreaInventoryIcon.Drop, null, false), AreaInventoryMode.Loot).Kind);
-        Assert.AreEqual(AreaInventoryDropKind.PutBack, AreaLootArtLayout.Release(own!, new AreaLootHit(null, null, 3, false), AreaInventoryMode.Loot).Kind, "NOT READY: into the holder");
+        Assert.AreEqual(new AreaInventoryDrop(AreaInventoryDropKind.Give, own!, GridSlot: 3), AreaLootArtLayout.Release(own!, new AreaLootHit(null, null, 3, false), AreaInventoryMode.Loot), "ARC-UI-1925: the move into the holder, 0x575360");
     }
 
     [TestMethod]
@@ -241,7 +241,7 @@ public sealed class AreaLootArtTests
         Assert.AreEqual(AreaInventoryDropKind.Take, AreaLootArtLayout.RightRelease(view, lower, AreaInventoryMode.Loot)!.Kind);
         Assert.AreEqual(new AreaInventoryDrop(AreaInventoryDropKind.Plant, new AreaInventoryHeld("own:1", null, 0)),
             AreaLootArtLayout.RightRelease(view, new AreaLootHit(0, null, null, false), AreaInventoryMode.Steal));
-        Assert.IsNull(AreaLootArtLayout.RightRelease(view, new AreaLootHit(0, null, null, false), AreaInventoryMode.Loot), "NOT READY: into the holder");
+        Assert.AreEqual(new AreaInventoryDrop(AreaInventoryDropKind.Give, new AreaInventoryHeld("own:1", null, 0)), AreaLootArtLayout.RightRelease(view, new AreaLootHit(0, null, null, false), AreaInventoryMode.Loot), "ARC-UI-1925: the move into the holder");
         Assert.IsNull(AreaLootArtLayout.RightRelease(view, new AreaLootHit(null, null, 12, false), AreaInventoryMode.Steal), "no item");
         Assert.IsNull(AreaLootArtLayout.RightRelease(view, new AreaLootHit(null, AreaInventoryIcon.Drop, null, false), AreaInventoryMode.Steal));
         Assert.IsNull(AreaLootArtLayout.RightRelease(view, lower, AreaInventoryMode.Own), "the own window's right release is the use (IW5)");

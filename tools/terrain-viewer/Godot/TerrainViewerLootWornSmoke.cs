@@ -92,6 +92,8 @@ public partial class TerrainViewerApp
             Require(!grid.BodyDoll, "the bag button shows the grid again");
             // ARC-UI-1918 (IW26, IW30): the hero's own doll toggle of the same window (mode 2): its two buttons, the doll view with the hero's slots and no grid, and the bag button back.
             GD.Print($"ARC-UI-1918 loot-worn {await HeroDollWindowStepAsync(grid, panel.ViewForSelfTest!, "loot")} heroWorn={heroWorn.Length}");
+            // ARC-UI-1925 (IW35, IW45): the cross-holder moves of the hero's doll slots: the item taken by the drag worn on a free hero slot, given to the body and taken and worn again.
+            GD.Print($"ARC-UI-1925 loot-worn {(dragged is null ? "not driven (no item taken by the drag)" : await HeroDollLootMovesStepAsync(grid, panel, session, body.Entity, mapId, dragged))}");
         }
         else GD.Print($"ARC-DEV-202 loot-worn: no original-look window (open={InventoryOpen}); the doll view is not driven (named, the interface art does not read)");
         if (InventoryOpen) EndInventory();

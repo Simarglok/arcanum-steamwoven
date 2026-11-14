@@ -220,15 +220,24 @@ public static class AreaLootArtLayout
     /// <summary>A left release with an item held: the holder's item on the hero's grid is taken (<see cref="AreaInventoryDropKind.Take"/>;
     /// in the steal window an attempt to steal it, 0x574EB8 → 0x575180, IW35); on a box the refused art shows (IW23) and it goes back; the
     /// hero's item on its grid or a box as in mode 0. ARC-UI-065: in the steal window the hero's item released on the holder's grid is an
-    /// attempt to plant it (<see cref="AreaInventoryDropKind.Plant"/>, 0x575100). NOT READY: in the loot window that release (the move into
-    /// the holder, 0x575360) and either window's move of a holder's item within its own grid go back.</summary>
+    /// attempt to plant it (<see cref="AreaInventoryDropKind.Plant"/>, 0x575100; ARC-UI-1925: a worn item too, the helper only asks that the item came from the hero).
+    /// ARC-UI-1925 (IW35, IW45): in the loot window it is the move into the holder (<see cref="AreaInventoryDropKind.Give"/>, 0x575360); the holder's item released
+    /// on a slot of the hero's own doll is <see cref="AreaInventoryDropKind.TakeWear"/> (0x574BF7, the wear test and then the hero's helper: worn in the loot window, a steal
+    /// attempt in the steal window). NOT READY: either window's move of a holder's item within its own grid goes back.</summary>
     public static AreaInventoryDrop Release(AreaInventoryHeld held, AreaLootHit hit, AreaInventoryMode mode)
     {
         ArgumentNullException.ThrowIfNull(held);
-        if (held.Partner) return hit.Cell is { } target ? new(AreaInventoryDropKind.Take, held, GridSlot: target) : new(AreaInventoryDropKind.PutBack, held);
-        // A doll slot (a location of 1000 and up, ARC-UI-072) is not a grid place of the victim: a hero's item released on it goes back.
-        // ARC-UI-1918: NOT READY: the hero's worn item released on the holder's grid (a plant of a worn item, the move into the holder) goes back; on a slot of its own doll it is worn there.
-        if (hit.Location is { } location and < 1000 && mode == AreaInventoryMode.Steal && held.Worn is null) return new(AreaInventoryDropKind.Plant, held, GridSlot: location);
+        if (held.Partner)
+        {
+            if (hit.Slot is { } heroSlot) return new(AreaInventoryDropKind.TakeWear, held, Slot: heroSlot);
+            return hit.Cell is { } target ? new(AreaInventoryDropKind.Take, held, GridSlot: target) : new(AreaInventoryDropKind.PutBack, held);
+        }
+        // A doll slot (a location of 1000 and up, ARC-UI-072) is not a grid place of the holder: a hero's item released on it goes back.
+        if (hit.Location is { } location and < 1000)
+        {
+            if (mode == AreaInventoryMode.Steal) return new(AreaInventoryDropKind.Plant, held, GridSlot: location);
+            if (mode == AreaInventoryMode.Loot) return new(AreaInventoryDropKind.Give, held, GridSlot: location);
+        }
         if (hit.Location is not null || hit.TakeAll) return new(AreaInventoryDropKind.PutBack, held);
         return AreaInventoryDrag.Release(held, new AreaInventoryHit(hit.Cell, hit.Slot, hit.Icon));
     }
@@ -236,8 +245,8 @@ public static class AreaLootArtLayout
     /// <summary>
     /// ARC-UI-065: a right release with nothing held (0x574262..0x574430, IW36): in modes 1–3 the item under the point moves to the other
     /// side, the holder's to the hero (<see cref="AreaInventoryDropKind.Take"/>; in the steal window an attempt to steal it) and the hero's
-    /// grid item to the holder (in the steal window an attempt to plant it, <see cref="AreaInventoryDropKind.Plant"/>). Null on no item and
-    /// for the hero's item in the loot window (NOT READY: the move into the holder, 0x575360). The original first asks the receiving side
+    /// item, worn or in its grid (ARC-UI-1925), to the holder (in the steal window an attempt to plant it, <see cref="AreaInventoryDropKind.Plant"/>; in the loot window
+    /// the move into the holder, <see cref="AreaInventoryDropKind.Give"/>, 0x575360). Null on no item. The original first asks the receiving side
     /// for room (0x466510; a refusal prints its reason, 0x4673F0, and nothing else happens); PROJECT: the session's insert check of the move
     /// decides instead.
     /// </summary>
@@ -246,8 +255,7 @@ public static class AreaLootArtLayout
         ArgumentNullException.ThrowIfNull(view);
         if (mode is not (AreaInventoryMode.Loot or AreaInventoryMode.Steal) || Press(view, hit) is not { } item) return null;
         if (item.Partner) return new(AreaInventoryDropKind.Take, item);
-        // ARC-UI-1918: NOT READY: the right release on an item the hero wears (a plant of a worn item) does nothing.
-        return mode == AreaInventoryMode.Steal && item.Worn is null ? new(AreaInventoryDropKind.Plant, item) : null;
+        return new(mode == AreaInventoryMode.Steal ? AreaInventoryDropKind.Plant : AreaInventoryDropKind.Give, item);
     }
 
     /// <summary>The art a box shows while <paramref name="held"/> is over it: the holder's own item the refused art (348, 347), the hero's

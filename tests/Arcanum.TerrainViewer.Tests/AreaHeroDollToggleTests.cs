@@ -127,27 +127,34 @@ public sealed class AreaHeroDollToggleTests
     }
 
     [TestMethod]
-    public void AWornItemReleasedOnTheHoldersGridGoesBackAndIsNoPlantNotReady()
+    public void AHeroItemReleasedOnTheHoldersGridIsAPlantInTheStealWindowAndAMoveIntoTheHolderInTheLootWindow()
     {
         var worn = new AreaInventoryHeld("helm:1", EquipmentSlot.Helmet, 0);
         var plain = new AreaInventoryHeld("own:1", null, 0);
         var onGrid = new AreaLootHit(null, null, 3, false);
-        Assert.AreEqual(AreaInventoryDropKind.PutBack, AreaLootArtLayout.Release(worn, onGrid, AreaInventoryMode.Steal).Kind);
-        Assert.AreEqual(AreaInventoryDropKind.Plant, AreaLootArtLayout.Release(plain, onGrid, AreaInventoryMode.Steal).Kind, "a grid item is still a plant attempt");
-        Assert.AreEqual(AreaInventoryDropKind.PutBack, AreaLootArtLayout.Release(worn, onGrid, AreaInventoryMode.Loot).Kind);
+        // 0x575100 only asks that the item came from the hero, so a worn item is planted too; 0x575360 moves it into the holder (the executor unwears it).
+        Assert.AreEqual(new AreaInventoryDrop(AreaInventoryDropKind.Plant, worn, GridSlot: 3), AreaLootArtLayout.Release(worn, onGrid, AreaInventoryMode.Steal));
+        Assert.AreEqual(AreaInventoryDropKind.Plant, AreaLootArtLayout.Release(plain, onGrid, AreaInventoryMode.Steal).Kind);
+        Assert.AreEqual(new AreaInventoryDrop(AreaInventoryDropKind.Give, worn, GridSlot: 3), AreaLootArtLayout.Release(worn, onGrid, AreaInventoryMode.Loot));
+        Assert.AreEqual(AreaInventoryDropKind.Give, AreaLootArtLayout.Release(plain, onGrid, AreaInventoryMode.Loot).Kind);
+        // A location of the holder's doll slots (1000 and up) is no grid place: the item goes back.
+        Assert.AreEqual(AreaInventoryDropKind.PutBack, AreaLootArtLayout.Release(worn, new AreaLootHit(null, null, 1000, false), AreaInventoryMode.Loot).Kind);
     }
 
     [TestMethod]
-    public void TheHoldersItemOnAHeroSlotGoesBackAndARightReleaseOnAWornItemMovesNothing()
+    public void TheHoldersItemOnAHeroSlotIsTakenAndWornAndARightReleaseOnAWornItemMovesItToTheHolder()
     {
         var partner = new AreaInventoryHeld("loot:1", null, 0) { Partner = true };
-        Assert.AreEqual(AreaInventoryDropKind.PutBack, AreaLootArtLayout.Release(partner, new AreaLootHit(null, null, null, false, EquipmentSlot.Helmet), AreaInventoryMode.Loot).Kind,
-            "NOT READY: a holder's item worn on the hero's slot");
+        foreach (var mode in new[] { AreaInventoryMode.Loot, AreaInventoryMode.Steal })
+            Assert.AreEqual(new AreaInventoryDrop(AreaInventoryDropKind.TakeWear, partner, Slot: EquipmentSlot.Helmet),
+                AreaLootArtLayout.Release(partner, new AreaLootHit(null, null, null, false, EquipmentSlot.Helmet), mode), mode.ToString());
         var view = View();
         var onWorn = new AreaLootHit(null, null, null, false, EquipmentSlot.Helmet);
-        Assert.IsNull(AreaLootArtLayout.RightRelease(view, onWorn, AreaInventoryMode.Steal), "NOT READY: a plant of a worn item");
-        Assert.IsNull(AreaLootArtLayout.RightRelease(view, onWorn, AreaInventoryMode.Loot));
-        Assert.AreEqual(AreaInventoryDropKind.Plant, AreaLootArtLayout.RightRelease(view, new AreaLootHit(0, null, null, false), AreaInventoryMode.Steal)?.Kind, "a grid item is still planted");
+        Assert.AreEqual(AreaInventoryDropKind.Plant, AreaLootArtLayout.RightRelease(view, onWorn, AreaInventoryMode.Steal)?.Kind, "a plant of a worn item");
+        Assert.AreEqual(AreaInventoryDropKind.Give, AreaLootArtLayout.RightRelease(view, onWorn, AreaInventoryMode.Loot)?.Kind, "the move into the holder");
+        Assert.AreEqual(AreaInventoryDropKind.Plant, AreaLootArtLayout.RightRelease(view, new AreaLootHit(0, null, null, false), AreaInventoryMode.Steal)?.Kind, "a grid item is planted");
+        Assert.IsNull(AreaLootArtLayout.RightRelease(view, onWorn, AreaInventoryMode.Contents), "the contents window lifts nothing");
+        Assert.IsNull(AreaLootArtLayout.RightRelease(view, new AreaLootHit(null, null, null, false, EquipmentSlot.Boots), AreaInventoryMode.Loot), "an empty slot");
     }
 
     [TestMethod]
@@ -162,10 +169,13 @@ public sealed class AreaHeroDollToggleTests
         var view = View();
         var held = AreaBarterArtLayout.Press(view, hit);
         Assert.AreEqual(new AreaInventoryHeld("helm:1", EquipmentSlot.Helmet, 0), held);
-        // A worn item sold on the shown grid is a sale (the barter lines list the worn items); on a hero slot or anywhere else it goes back (NOT READY: the hero's moves in the window).
+        // A worn item sold on the shown grid is a sale (the barter lines list the worn items); on another hero slot it is worn there, on its own slot or anywhere else it goes back.
         Assert.AreEqual(AreaInventoryDropKind.Sell, AreaBarterArtLayout.Release(held!, new AreaBarterHit(null, null, 4, false)).Kind);
-        Assert.AreEqual(AreaInventoryDropKind.PutBack, AreaBarterArtLayout.Release(held!, new AreaBarterHit(null, null, null, false, EquipmentSlot.Armor)).Kind);
-        Assert.IsNull(AreaBarterArtLayout.RightRelease(view, hit), "NOT READY: a right release on a worn item");
+        Assert.AreEqual(new AreaInventoryDrop(AreaInventoryDropKind.Wear, held!, Slot: EquipmentSlot.Armor), AreaBarterArtLayout.Release(held!, new AreaBarterHit(null, null, null, false, EquipmentSlot.Armor)));
+        Assert.AreEqual(AreaInventoryDropKind.PutBack, AreaBarterArtLayout.Release(held!, new AreaBarterHit(null, null, null, false, EquipmentSlot.Helmet)).Kind);
+        Assert.AreEqual(AreaInventoryDropKind.Sell, AreaBarterArtLayout.RightRelease(view, hit)?.Kind, "a right release on a worn item sells it");
+        var ware = new AreaInventoryHeld("ware:1", null, 0) { Partner = true };
+        Assert.AreEqual(new AreaInventoryDrop(AreaInventoryDropKind.BuyWear, ware, Slot: EquipmentSlot.Helmet), AreaBarterArtLayout.Release(ware, new AreaBarterHit(null, null, null, false, EquipmentSlot.Helmet)));
         Assert.AreEqual(AreaInventoryDropKind.Sell, AreaBarterArtLayout.RightRelease(view, new AreaBarterHit(0, null, null, false))?.Kind, "a grid item is still sold");
     }
 }

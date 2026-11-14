@@ -50,6 +50,21 @@ public sealed class ContainerInsertPlaceStateTests
         Assert.AreEqual("kit:2@21 kit:3@20", Tail(owner), "the freed place is the first free one again");
     }
 
+    // ARC-UI-1925 (0x575360 in the loot window): the hero's item goes into the shown container's list at its first free place; a holder that is no shown container refuses.
+    [TestMethod]
+    public void TheHeroGivesAnItemToTheShownContainerAndAHolderThatIsNoContainerRefuses()
+    {
+        using var owner = Open();
+        var before = owner.Version;
+        var given = owner.GiveItemToContainer(before, Chest, "kit:1", Accept);
+        Assert.AreEqual(GameSessionDisposition.Changed, given.Disposition);
+        Assert.AreEqual("kit:1@20", Tail(owner), "the first free place");
+        Assert.AreEqual(GameSessionFailure.StaleVersion, owner.GiveItemToContainer(before, Chest, "kit:2", Accept).Failure);
+        Assert.AreEqual(GameSessionFailure.UnknownHolder, owner.GiveItemToContainer(owner.Version, Merchant, "kit:2", Accept).Failure, "an NPC is not a container");
+        Assert.AreEqual(GameSessionFailure.UnknownHolder, owner.GiveItemToContainer(owner.Version, "nowhere", "kit:2", Accept).Failure);
+        Assert.AreEqual(GameSessionFailure.ItemNotAvailable, owner.GiveItemToContainer(owner.Version, Chest, "kit:1", Accept).Failure, "the item left the hero");
+    }
+
     [TestMethod]
     public void AnItemAScriptMovedIntoTheContainerTakesAPlace()
     {
