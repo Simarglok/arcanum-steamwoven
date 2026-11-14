@@ -47,11 +47,13 @@ public partial class TerrainViewerApp
 
     private SpellEyeCandyTable? EyeCandyTable => _spellData?.EyeCandy;
 
-    /// <summary>ARC-SCRIPT-1592: the eye-candy entry of a goal's entry reference (the list and the index in it, <see cref="EyeCandyEntryRef"/>): the spell list or the script list; the other lists (animation, weapon, combat, trap) are not read yet.</summary>
+    /// <summary>ARC-SCRIPT-1592: the eye-candy entry of a goal's entry reference (the list and the index in it, <see cref="EyeCandyEntryRef"/>): the spell, script or animation list; the other lists (weapon, combat, trap) are not read yet.</summary>
     private SpellEyeCandyEntry? EyeCandyEntryOf(int entry) => EyeCandyEntryRef.ListOf(entry) switch
     {
         EyeCandyList.Spell => EyeCandyTable?.At(EyeCandyEntryRef.IndexOf(entry)),
         EyeCandyList.Script => _spellData?.ScriptEyeCandy?.At(EyeCandyEntryRef.IndexOf(entry)),
+        // ARC-RENDER-1794: the animation list (0x5DE670), the blood of a hit.
+        EyeCandyList.Anim => _spellData?.AnimEyeCandy?.At(EyeCandyEntryRef.IndexOf(entry)),
         _ => null,
     };
     private const int ForegroundSlots = 7, BackgroundSlots = 7, UnderlaySlots = 4;
@@ -167,10 +169,10 @@ public partial class TerrainViewerApp
 
     /// <summary>An eye candy played by a goal run of its own (ag_eye_candy and its kin): the release's secondary cast entry or an EyeCandy component's, with the component's play flags. Only an animating entry with a foreground or underlay part plays
     /// (0x4CD49D); the run is the add 0x4CCF70 (<see cref="AreaEyeCandyHost.Play"/>).</summary>
-    private void PlayEyeCandy(string obj, int index, int run, uint play = 0)
+    private void PlayEyeCandy(string obj, int index, int run, uint play = 0, int limit = -1)
     {
         if (EyeCandyHostNow() is not { } host) return;
-        var started = host.Play(obj, index, play, run);
+        var started = host.Play(obj, index, play, run, null, limit);
         if (started) GD.Print($"ARC-MAGIC-017 eye-candy-play object={obj} entry={index} run={run} play=0x{play:X} goal={AiExecutorRules.EyeCandyGoalOf(play)}");
         // ARC-DEV-352 (EC11): a callback-flagged add the run waits for that could not play after all calls back at once.
         else EyeCandyNotPlayed(index, run, play);
@@ -186,12 +188,14 @@ public partial class TerrainViewerApp
     /// <summary>The cast host's eye-candy entries (EyeCandy components) as eye candy on their objects, and its AGoal components for the floating goal 44 as hovers.</summary>
     private void TakeEyeCandyEvent(SpellCastEvent entry)
     {
-        if (entry.Object is not { } obj || entry.Kind is not (SpellCastEventKind.EyeCandyAdded or SpellCastEventKind.EyeCandyRemoved or SpellCastEventKind.Hover or SpellCastEventKind.HoverEnded)) return;
+        if (entry.Object is not { } obj || entry.Kind is not (SpellCastEventKind.EyeCandyAdded or SpellCastEventKind.EyeCandyRemoved or SpellCastEventKind.Hover or SpellCastEventKind.HoverEnded or SpellCastEventKind.HitGore)) return;
         if (_eyeCandyTaken.Count >= 256) _eyeCandyTaken.Clear();
         if (!_eyeCandyTaken.Add(entry)) return;
         switch (entry.Kind)
         {
             case SpellCastEventKind.EyeCandyAdded: PlayEyeCandy(obj, entry.Value, entry.Run, unchecked((uint)entry.Detail)); break;
+            // ARC-RENDER-1794: the blood of a hit (0x433020): the animation list's entry on the struck critter, no tag, the add's limit in the detail.
+            case SpellCastEventKind.HitGore: PlayEyeCandy(obj, entry.Value, entry.Run, 0, entry.Detail); break;
             case SpellCastEventKind.EyeCandyRemoved: RemoveEyeCandy(obj, entry.Value, entry.Run, (entry.Detail & 0x100) != 0); break;
             case SpellCastEventKind.Hover:
                 GD.Print($"ARC-DEV-143 hover-start object={obj} run={entry.Run} started={EyeCandyHostNow()?.StartHover(obj)}");

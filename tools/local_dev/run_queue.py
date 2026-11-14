@@ -1140,6 +1140,89 @@ def status(history: int = 0) -> list[str]:
     return result
 
 
+WAIT_POLL_SECONDS = 1.0  # a waiter only reads the ticket files (libproc, no process spawned: ARC-DEV-1401), so a second is cheap
+WAIT_TIMEOUT_EXIT = 123  # ./arcanum queue --wait gave up waiting: the run is not stopped
+WAIT_UNKNOWN_EXIT = 122  # ./arcanum queue --wait RUN_ID: no such run (not live, not in the history); a run's own 122/123 looks the same
+
+
+def history_entry(seq: int) -> dict[str, Any] | None:
+    """The history line of finished ticket seq, None when there is none (never run here, or cut from the history)."""
+    try:
+        lines = (_open_folder() / "history.jsonl").read_text(errors="replace").splitlines()
+    except FileNotFoundError:
+        return None
+    for line in reversed(lines):
+        try:
+            entry = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(entry, dict) and entry.get("seq") == seq:
+            return entry
+    return None
+
+
+def _wait_lines(seq: int, entry: dict[str, Any]) -> list[str]:
+    """The quiet-style result of a finished run: run_log.summary of its log (PASS/FAIL, first error), else one line."""
+    code = entry.get("exit")
+    code = code if isinstance(code, int) and not isinstance(code, bool) else 1
+    started, ended = entry.get("startedAt"), entry.get("endedAt")
+    ran = ended - started if isinstance(started, (int, float)) and isinstance(ended, (int, float)) else None
+    logs = sorted(run_log.folder().glob(f"run-{seq:012d}-*.log"))
+    if logs:
+        lines = run_log.summary(logs[-1], code, ran)
+    else:
+        timing = f" ran={ran:.0f}s" if ran is not None else ""
+        lines = [f"{'PASS' if code == 0 else 'FAIL'} exit={code}{timing} (no log: a --verbose run or the log was removed)"]
+    lines[0] += f" ticket={seq} kind={entry.get('kind')} label=\"{entry.get('label', '')}\""
+    return lines
+
+
+def wait(seq: int | None = None, minutes: float = 0.0, *, sleep: Callable[[float], None] = time.sleep,
+         clock: Callable[[], float] = time.monotonic) -> int:
+    """ARC-DEV-1983: block until run `seq` (the ticket number `./arcanum queue` and the `ARCANUM_QUEUE log ticket=N`
+    line show) has ended and return its exit code, printing its quiet-style result; seq None: until no run holds a place
+    or waits (the pause is not a run). `minutes` > 0 limits the waiting: WAIT_TIMEOUT_EXIT, the run keeps going.
+    WAIT_UNKNOWN_EXIT when the run is neither live nor in the history. The waiter holds no place, starts or stops no run of its own and spawns nothing; like every reader of the
+    queue it drops dead tickets. Refused inside a queued run (a deadlock with the runs behind it)."""
+    if os.environ.get(TICKET_ENV, "").isdigit():  # a run holds its place while it waits, so the runs behind it would wait for it
+        raise ValueError("this command runs inside a queued run's place: waiting for the queue from there can deadlock "
+                         "(the runs behind it wait for it); wait from outside the run")
+    started = clock()
+    last: Any = None
+    while True:
+        with _QueueLock():
+            live = [item for _, item in tickets() if not item.get("paused")]
+        if seq is None:
+            others = live
+            if not others:
+                print("queue empty", flush=True)
+                return 0
+            state: Any = (len(others), sum(1 for item in others if item.get("startedAt")))
+            note = f"{state[1]} running, {len(others) - state[1]} waiting"
+        else:
+            mine = next((item for item in live if item["seq"] == seq), None)
+            if mine is None:
+                entry = history_entry(seq)
+                if entry is None:
+                    print(f"FAIL unknown ticket={seq}: not running or waiting, and not in the history (wrapper killed, or "
+                          f"a number that was never given)", flush=True)
+                    return WAIT_UNKNOWN_EXIT
+                print("\n".join(_wait_lines(seq, entry)), flush=True)
+                code = entry.get("exit")
+                return code if isinstance(code, int) and not isinstance(code, bool) else 1
+            state = bool(mine.get("startedAt"))
+            note = _describe(mine) + (" running" if state else " waiting")
+        if state != last:
+            say(f"waiting {note}")
+            last = state
+        if minutes > 0 and clock() - started >= minutes * 60:
+            what = "the queue" if seq is None else f"ticket {seq}"
+            print(f"TIMEOUT exit={WAIT_TIMEOUT_EXIT} waited={clock() - started:.0f}s: {what} is not finished ({note}); "
+                  f"nothing was stopped", flush=True)
+            return WAIT_TIMEOUT_EXIT
+        sleep(WAIT_POLL_SECONDS)
+
+
 def settings_line() -> str:
     """The caps in force, for ./arcanum queue (ARC-DEV-1353): the short lanes (the heavy lane and an export come on top)."""
     lanes, source = lanes_setting()

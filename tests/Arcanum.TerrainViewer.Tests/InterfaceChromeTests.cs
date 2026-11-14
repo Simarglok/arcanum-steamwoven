@@ -409,7 +409,7 @@ public sealed class InterfaceChromeTests
     }
 
     // ARC-UI-1194: the loot, barter and steal windows' frames.
-    private static readonly string[] LootWindowFrames = ["loot.art", "barter.art", "barter_follower.art", "loot_pd.art", "lns_bart.art", "lns_loot.art", "lns_papr.art"];
+    private static readonly string[] LootWindowFrames = ["loot.art", "barter.art", "barter_follower.art", "loot_pd.art", "barter_pd.art", "pd_cover4inven.art", "lns_bart.art", "lns_loot.art", "lns_papr.art"];
 
     [TestMethod]
     public void The_loot_barter_and_steal_frames_and_lenses_have_recipes_and_the_state_boxes_stay_art()
@@ -426,7 +426,7 @@ public sealed class InterfaceChromeTests
     public void The_loot_window_recipes_paint_in_bounds_deterministically_at_whole_and_fractional_scales()
     {
         // Synthetic frames of the windows' sizes (no game art): wood colour, with the square hole the loot and follower frames have at (16, 17) of 89.
-        foreach (var (file, w, h, hole) in new[] { ("loot.art", 358, 400, true), ("barter.art", 358, 400, false), ("barter_follower.art", 358, 400, true), ("loot_pd.art", 358, 266, false), ("pdoll.art", 358, 400, false) })
+        foreach (var (file, w, h, hole) in new[] { ("loot.art", 358, 400, true), ("barter.art", 358, 400, false), ("barter_follower.art", 358, 400, true), ("loot_pd.art", 358, 266, false), ("barter_pd.art", 358, 243, false), ("pd_cover4inven.art", 341, 400, false), ("pdoll.art", 358, 400, false) })
         {
             var legacy = Frame(w, h, holes: false);
             if (hole)
@@ -449,6 +449,65 @@ public sealed class InterfaceChromeTests
                         Assert.AreEqual(255, a[(y * pw + x) * 4 + 3], $"{file} is opaque at ({x}, {y}) at {scale}");
             }
         }
+    }
+
+    // ARC-UI-1750: the doll cover 341 has four clear columns at its right edge that show the pack under it; they stay clear and take no brass rim.
+    [TestMethod]
+    public void The_doll_cover_keeps_its_clear_right_columns_clear_and_rimless()
+    {
+        const int w = 341, h = 400;
+        var legacy = Frame(w, h, holes: false);
+        for (var y = 0; y < h; y++)
+        for (var x = 337; x < w; x++) legacy[(y * w + x) * 4 + 3] = 0;
+        var recipe = InterfaceChromeRecipes.All.Single(r => r.File == "pd_cover4inven.art");
+        var brass = recipe with { Holes = ChromeHoles.Brass };
+        foreach (var scale in new[] { 1.0, 1.345, 2.0, 2.5 })
+        {
+            var a = InterfaceChromeRenderer.Render(recipe, w, h, legacy, [], 0, scale);
+            var rim = InterfaceChromeRenderer.Render(brass, w, h, legacy, [], 0, scale);
+            var (pw, ph) = InterfaceChromeRenderer.PixelSize(w, h, scale);
+            for (var y = 0; y < ph; y++)
+            {
+                Assert.AreEqual(0, Pixel(a, pw, pw - 1, y).A, $"the last column is clear at row {y}, scale {scale}");
+                Assert.AreEqual(255, Pixel(a, pw, (int)(100 * scale), y).A, $"the frame is opaque inside at row {y}, scale {scale}");
+            }
+            // Without the rule the hole's rim would be painted beside the clear columns: the renderings differ there and only there.
+            var x336 = (int)(336 * scale);
+            var differs = Enumerable.Range(0, ph).Any(y => Pixel(a, pw, x336, y) != Pixel(rim, pw, x336, y));
+            Assert.IsTrue(differs, $"the brass rule would draw a rim beside the clear columns at scale {scale}");
+        }
+    }
+
+    // ARC-UI-1750: the barter doll 337 is the loot doll 349 cut 23 pixels shorter at the top; the doll cover 341 is the inventory doll's pit, grid and bottom pits 13 pixels to the left.
+    [TestMethod]
+    public void The_barter_doll_and_the_doll_cover_recipes_follow_the_frames_they_sit_beside()
+    {
+        static ChromeRecipe Of(string file) => InterfaceChromeRecipes.All.Single(r => r.File == file);
+        static IEnumerable<ChromePart> Moved(IEnumerable<ChromePart> parts, int dx, int dy) => parts.Select<ChromePart, ChromePart>(part => part switch
+        {
+            ChromeSunk p => p with { X = p.X + dx, Y = p.Y + dy },
+            ChromeGrid p => p with { X = p.X + dx, Y = p.Y + dy },
+            ChromeKeep p => p with { X = p.X + dx, Y = p.Y + dy },
+            _ => throw new AssertFailedException("a part this test does not move: " + part),
+        });
+        // 337: the pit, the grid of 21-pixel cells and the two slot pits (the weapon's and the armour's, which keep the original's picture) are 349's, 23 pixels higher.
+        CollectionAssert.AreEqual(Moved(Of("loot_pd.art").Parts, 0, -23).ToArray(), Of("barter_pd.art").Parts.ToArray());
+        Assert.AreEqual(2, Of("barter_pd.art").Parts.OfType<ChromeKeep>().Count());
+        // 341: the inventory doll's 330 x 310 pit with its 10 x 9 grid of 32-pixel cells and its two bottom pits, 13 pixels to the left (the cover is 17 pixels narrower), and a name box of its own.
+        var cover = Of("pd_cover4inven.art").Parts;
+        Assert.AreEqual(1, cover.OfType<ChromeGrid>().Count());
+        var doll = Of("pdoll.art").Parts;
+        Assert.AreEqual(doll.OfType<ChromeGrid>().Single() with { X = 10 }, cover.OfType<ChromeGrid>().Single());
+        Assert.AreEqual(doll.OfType<ChromeSunk>().Single(p => p.Y == 100) with { X = 5 }, cover.OfType<ChromeSunk>().Single(p => p.Y == 100));
+        Assert.AreEqual(new ChromeSunk(54, 28, 221, 55, ChromeMaterial.Pit), cover.OfType<ChromeSunk>().Single(p => p.Y == 28), "the name box");
+        // The inventory doll's two bottom keeps moved 13 pixels left and clipped to the 341-pixel frame.
+        CollectionAssert.AreEqual(new[] { new ChromeKeep(0, 303, 109, 97), new ChromeKeep(231, 303, 110, 97) }, cover.OfType<ChromeKeep>().ToArray());
+        var dollKeeps = doll.OfType<ChromeKeep>().Where(keep => keep.Y == 303).ToArray();
+        Assert.AreEqual(Math.Max(0, dollKeeps[0].X - 13), cover.OfType<ChromeKeep>().First().X);
+        Assert.AreEqual(dollKeeps[1].X - 13, cover.OfType<ChromeKeep>().Last().X);
+        Assert.IsTrue(Of("barter_pd.art").Parts.OfType<ChromeSunk>().All(p => p.Y + p.Height <= 243), "the barter pit ends inside the 243-pixel frame");
+        Assert.AreEqual(ChromeHoles.None, Of("pd_cover4inven.art").Holes, "the clear right edge of the cover is not a hole");
+        Assert.IsTrue(cover.OfType<ChromeKeep>().All(keep => keep.X >= 0 && keep.X + keep.Width <= 341 && keep.Y + keep.Height <= 400), "the kept corners lie in the 341 x 400 frame");
     }
 
     [TestMethod]

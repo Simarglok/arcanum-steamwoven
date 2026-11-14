@@ -98,4 +98,20 @@ public sealed class AreaAiStruckTests
         Assert.IsFalse(AreaAiHost.VictimReached(Result(Resolution(AttackRefusal.None, Damage(DamageRecipient.Target, DamagePrevention.Invulnerable)))), "the damage step ends before the pass");
         Assert.IsFalse(AreaAiHost.VictimReached(Result(Resolution(AttackRefusal.None, Damage(DamageRecipient.Target, DamagePrevention.Wall)))));
     }
+
+    [TestMethod]
+    public void The_attack_end_reads_the_damage_the_victim_took_and_the_critical_flag_of_a_hit_that_reached_it()
+    {
+        // ARC-RENDER-1794 (0x4B6930): a hit with a damage step on the target hands it on; a critical hit says so; a miss, a hit on the attacker and a refused attack run no attack end.
+        var step = Damage(DamageRecipient.Target, DamagePrevention.None);
+        var hit = Result(Resolution(AttackRefusal.None, step) with { Outcome = AttackOutcome.Hit });
+        Assert.AreEqual((step, false), AreaAiHost.AttackEndOf(hit));
+        Assert.AreEqual((step, true), AreaAiHost.AttackEndOf(Result(Resolution(AttackRefusal.None, step) with { Outcome = AttackOutcome.CriticalHit })));
+        Assert.AreEqual((null, false), AreaAiHost.AttackEndOf(Result(Resolution(AttackRefusal.None, null) with { Outcome = AttackOutcome.Hit })), "a hit with no damage step: the hit effect only");
+        Assert.AreEqual((null, false), AreaAiHost.AttackEndOf(Result(Resolution(AttackRefusal.None, Damage(DamageRecipient.Attacker, DamagePrevention.None)) with { Outcome = AttackOutcome.Hit })), "the damage fell on the attacker");
+        Assert.IsNull(AreaAiHost.AttackEndOf(Result(Missed)));
+        Assert.IsNull(AreaAiHost.AttackEndOf(null));
+        Assert.IsNull(AreaAiHost.AttackEndOf(hit with { Vetoed = true }));
+        Assert.IsNull(AreaAiHost.AttackEndOf(Result(Resolution(AttackRefusal.TargetDead, null) with { Outcome = AttackOutcome.Hit })));
+    }
 }

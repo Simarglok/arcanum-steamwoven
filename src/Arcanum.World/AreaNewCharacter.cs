@@ -185,9 +185,16 @@ public sealed class AreaNewCharacter
 
     internal void Record(AreaCreationPress press) => _presses.Add(press);
 
+    /// <summary>ARC-UI-1792: the auto-level scheme the character editor's scheme tab chose (a release on a row writes the new character's scheme,
+    /// ledger ALP8); null while no press changed it, so the generic prototype's scheme stays. <see cref="ApplyChoices"/> writes it into every session
+    /// made for the character, so the draft the editor works on and the started game hold it.</summary>
+    public int? Scheme { get; private set; }
+
+    internal void RecordScheme(int scheme) => Scheme = scheme;
+
     /// <summary>
-    /// The window's choices on <paramref name="owner"/> as <see cref="Apply"/> sets them, without the editor's presses: the name and
-    /// the background (the draft session the editor works on is made with this).
+    /// The window's choices on <paramref name="owner"/> as <see cref="Apply"/> sets them, without the editor's presses: the name,
+    /// the auto-level scheme (ARC-UI-1792) and the background (the draft session the editor works on is made with this).
     /// </summary>
     public string? ApplyChoices(GameSessionOwner owner, Func<int, EffectRule?> effects)
     {
@@ -198,6 +205,10 @@ public sealed class AreaNewCharacter
         if (CharacterNameRules.Accept(Name, DefaultName) is { Accepted: true, Name: var accepted }
             && owner.SetHeroPlayerName(owner.Version, accepted) is { Disposition: GameSessionDisposition.Rejected } named)
             return $"the name was refused ({named.Failure})";
+        // ARC-UI-1792: the scheme the editor's scheme tab chose; nothing is bought now (ALP8: the original's creation ran its scheme before the editor, so the
+        // choice counts from the next level step, AL12). A scheme the session already holds changes nothing.
+        if (Scheme is { } scheme && owner.SetAutoLevelScheme(owner.Version, SessionSchemeTarget.Hero, scheme) is { Disposition: GameSessionDisposition.Rejected } chosenScheme)
+            return $"the auto-level scheme {scheme} was refused ({chosenScheme.Failure})";
         if (Chosen is not { } choice) return null;
         var effect = effects(choice.Effect) is { } rule ? SessionEffectDefinition.FromRule(rule) : new SessionEffectDefinition(choice.Effect, []);
         var set = owner.SetHeroBackground(owner.Version, choice, effect);

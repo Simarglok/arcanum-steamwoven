@@ -162,13 +162,18 @@ public sealed class AreaEyeCandyHost : IAiOverlayWorld, IGoalStepHost
 
     /// <summary>
     /// The add 0x4CCF70 for an entry that animates with a foreground or underlay part: refused when the owner has no free place in a list the parts go to, or (play flag 0x80) when a goal-45 run of the owner has the same art and tag; started through the
-    /// no-interrupt starter, or (play flag 0x2) inserted under the previous eye candy run so that it plays after it. Returns whether a run holds the eye candy now.
+    /// no-interrupt starter, or (play flag 0x2) inserted under the previous eye candy run so that it plays after it. <paramref name="limit"/> is the request's limit (−1: none, the default of 0x4CCD20): see the foreground count below.
+    /// Returns whether a run holds the eye candy now.
     /// </summary>
-    public bool Play(string owner, int entryIndex, uint play, int tag, string? source = null)
+    public bool Play(string owner, int entryIndex, uint play, int tag, string? source = null, int limit = -1)
     {
         if (_entry(entryIndex) is not { Art: { } art } entry || PartsOf(entryIndex) is not { } parts) return false;
         if (!SpellEyeCandyRules.Plays((entry.Flags & SpellEyeCandyFlags.Animates) != 0, parts)) return false;
         if (!PlacesFree(owner, parts)) { Skipped++; return false; }
+        // ARC-RENDER-1794 (0x4CCF70, the request's limit word +0x20; the damage effect 0x433020 asks 3): with a limit above 0 an entry with a foreground part is refused once more than that many eye candies with the same art
+        // number (0x502710) already stand in the owner's foreground list: the loop counts them and gives up at the first that goes past the limit, so a fourth one still plays and a fifth does not. The cast animations the
+        // viewer shows besides carry no art here and are not counted.
+        if (limit > 0 && parts.Foreground && SameArtForeground(owner, art) > limit) { Skipped++; return false; }
         // ARC-MAGIC-1229 (IW2): a lit entry needs a free overlay light slot on the owner; with all four in use the add refuses like a full part list, so no run is built and nothing plays.
         if (entry.Light is not null && !LightSlotFree(owner)) { Skipped++; return false; }
         if ((play & AiExecutorRules.PlayCheckAlready) != 0
@@ -254,6 +259,9 @@ public sealed class AreaEyeCandyHost : IAiOverlayWorld, IGoalStepHost
 
     /// <summary>Whether the owner has a free place in every list the parts go to: the shown eye candies of the owner count 7 foreground, 7 background and 4 underlay at most (0x4CCF70).</summary>
     public bool PlacesFree(string owner, EyeCandyParts parts) => PlacesFree(owner, parts, null);
+
+    // The owner's shown runs in the foreground list whose art has the same number as the entry's (the limit's count).
+    private int SameArtForeground(string owner, uint art) => Shown().Count(s => s.Owner == owner && s.Parts.Foreground && EyeCandyArt.Number(s.Eye.Art) == EyeCandyArt.Number(art));
 
     // The run being stepped is left out of the count when it asks for its own places: a queued eye candy begins in the step that popped the one before it, whose parts the table still shows (the finish 0x431A40 freed them first).
     private bool PlacesFree(string owner, EyeCandyParts parts, int? steppingSlot)

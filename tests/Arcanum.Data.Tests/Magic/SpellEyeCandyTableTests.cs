@@ -190,6 +190,17 @@ public sealed class SpellEyeCandyTableTests
         Assert.AreEqual(SpellEyeCandyTable.Path, SpellEyeCandyTable.Read(Mes("{5}{Art: 3}\n"), AllLoad).Refusal!.File, "the spell list's default");
     }
 
+    [TestMethod]
+    public void The_animation_list_is_the_blood_list_one_entry_per_message_and_names_its_own_file()
+    {
+        // ARC-RENDER-1794: rules\AnimEyeCandy.mes is the animation module's list (0x5DE670), the loader's defaults like the script list: entry n is message n (the hit's blood, indices 0 to 10).
+        var read = SpellEyeCandyTable.Read(Mes("{0}{Art: 3, Flags: overlay_f | animates}\n{1}{Art: 4, Flags: overlay_f | animates}\n{2}{Art: 5, Flags: overlay_f | animates}\n"), AllLoad, EyeCandyListShape.Anim);
+        Assert.AreEqual(SpellDataStatus.Read, read.Status);
+        Assert.AreEqual(3, read.Table!.Entries.Count);
+        Assert.AreEqual(4, EyeCandyArt.Number(read.Table.At(1).Art!.Value));
+        Assert.AreEqual(SpellEyeCandyTable.AnimPath, SpellEyeCandyTable.Read(Mes("{5}{Art: 3}\n"), AllLoad, EyeCandyListShape.Anim).Refusal!.File);
+    }
+
     private static SpellEyeCandyTable Read(string text)
     {
         var read = SpellEyeCandyTable.Read(Mes(text), AllLoad);

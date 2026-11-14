@@ -42,7 +42,7 @@ public partial class TerrainViewerApp
     /// <summary>The values the options window shows: the host's settings as they are now.</summary>
     private AreaGameOptions CurrentGameOptions() => new(_gameSettings.Difficulty, _turnBasedSetting ? 1 : 0, _gameSettings.AutoAttack, _alwaysRunOption,
         _audioVolumes.Effects, _audioVolumes.Voice, _audioVolumes.Music, _ruleMode, _gameSettings.Floats, _gameSettings.FloatSpeed,
-        EvidenceRecording, EvidenceRecording ? _evidenceTask : 0, _gameSettings.Controls, _gameSettings.CombatTaunts, _gameSettings.ViolenceFilter, _gameSettings.Brightness, _gameSettings.AutoSwitchWeapons, _gameSettings.FollowerSkills);
+        EvidenceRecording, EvidenceRecording ? _evidenceTask : 0, _gameSettings.Controls, _gameSettings.CombatTaunts, _gameSettings.ViolenceFilter, _gameSettings.Brightness, _gameSettings.AutoSwitchWeapons, _gameSettings.FollowerSkills, _gameSettings.TextDuration);
 
     private AreaBrightnessLayer? _brightnessLayer;
 
@@ -115,6 +115,11 @@ public partial class TerrainViewerApp
                 if (value < 0 || value > BrightnessRules.Max) { refused = "out of range"; break; }
                 SaveGameSettings(_gameSettings with { Brightness = value });
                 break;
+            // ARC-UI-1797: the text duration setting: saved in the settings file; no text bubble reads it yet (the bubbles are not built).
+            case AreaOption.TextDuration:
+                if (value < 0 || value > AreaOptionTable.TextDurationMax) { refused = "out of range"; break; }
+                SaveGameSettings(_gameSettings with { TextDuration = value });
+                break;
             // ARC-COMBAT-1738: the auto switch setting (OH3): the hero's attack and a strike read the saved setting when its weapon is lost.
             case AreaOption.AutoSwitchWeapons:
                 if (value is not (0 or 1)) { refused = "out of range"; break; }
@@ -138,8 +143,11 @@ public partial class TerrainViewerApp
                 if (_areaSession is { } ruled) ApplySessionSettings(ruled);
                 break;
             // ARC-GPAD-1376: the controller test's evidence log and its task marker; this run only, never saved.
-            case AreaOption.EvidenceLog: refused = value is 0 or 1 ? SetEvidenceLog(value == 1) : "out of range"; break;
-            case AreaOption.TestTask: refused = SetEvidenceTask(value); break;
+            // ARC-UI-1797: one line: 0 off, 1 on without a task, 2 to 9 on with Task 1 to 8 (a chosen task starts the log first).
+            case AreaOption.EvidenceLog:
+                if (value < 0 || value > 1 + AreaOptionTable.TestTaskCount) { refused = "out of range"; break; }
+                refused = SetEvidenceLog(value > 0) ?? SetEvidenceTask(Math.Max(0, value - 1));
+                break;
             // ARC-GPAD-1374, ARC-GPAD-1463: the Controls line (the original or scheme A, B or C) and the prompt style, switched at run time with no restart and saved at once; the original mouse and keyboard stay live.
             case AreaOption.ControlScheme:
                 if (!Enum.IsDefined((Arcanum.Input.ControlChoice)value)) { refused = "no such control scheme"; break; }

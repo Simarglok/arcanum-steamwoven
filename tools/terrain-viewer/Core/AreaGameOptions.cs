@@ -20,7 +20,7 @@ public enum AreaOption
     Module, Difficulty, ViolenceFilter, DefaultCombatMode, AutoAttack, AutoSwitchWeapons, AlwaysRun, FollowerSkills,
     Brightness, TextDuration, Floats, FloatSpeed, CombatTaunts,
     Effects, Voice, Music,
-    Rules, ControlScheme, PromptStyle, EvidenceLog, TestTask,
+    Rules, ControlScheme, PromptStyle, EvidenceLog,
 }
 
 /// <param name="Max">The original's highest value (a slider's 10 unless its record says otherwise, a list's last message number; a
@@ -60,20 +60,20 @@ public sealed record AreaOptionControl(AreaOption Option, AreaOptionsPage Page, 
 public static class AreaOptionTable
 {
     public const string NoModules = "one module is offered; choosing a module is not built";
-    public const string NoTextDuration = "text bubbles are not built";
     public const string NoFastTurnBased = "Fast Turn Based is not built";
-    public const string NoVideoPage = "text bubbles are not built";
+    public const string NoVideoPage = "no video control is built";
     public const string OffOn = "mes/OptionsOffOn.mes";
     public const string Difficulties = "mes/OptionsDifficulty.mes";
     public const string CombatModes = "mes/OptionsCombatMode.mes";
     public const string FloatLevels = "mes/OptionsFloats.mes";
     /// <summary>The rule mode control's values (a project list, no game file): <see cref="RuleMode"/> in its order.</summary>
     public const string RuleModes = "project:rule modes";
-    /// <summary>The evidence log control's values (a project list): Off, On (ARC-GPAD-1376).</summary>
-    public const string OffOnProject = "project:off on";
-    /// <summary>The test task control's values: none, then the test script's tasks 1 to 8 (ARC-GPAD-1376).</summary>
-    public const string TestTasks = "project:test tasks";
+    /// <summary>The evidence log control's values since ARC-UI-1797: Off, On (a session without a task), then the test script's tasks 1 to 8 (each starts
+    /// the session if it is off); ARC-GPAD-1376's two lines (the log and its task marker) are this one line.</summary>
+    public const string EvidenceLogValues = "project:evidence log";
     public const int TestTaskCount = 8;
+    /// <summary>ARC-UI-1797: the original registers "text duration" 6 (OP5); the Video page shows it and the settings file keeps it.</summary>
+    public const int TextDurationDefault = 6, TextDurationMax = 10;
     /// <summary>ARC-GPAD-1374, ARC-GPAD-1463: the controller scheme controls' values (project lists, no game file): <see cref="ControlChoice"/> (the Game
     /// page's one Controls line) and <see cref="Arcanum.Input.PromptStyle"/> (the Video page's) in their order.</summary>
     public const string ControlSchemes = "project:control scheme", PromptStyles = "project:prompt style";
@@ -90,7 +90,7 @@ public static class AreaOptionTable
         new(AreaOption.AlwaysRun, AreaOptionsPage.Game, 6, AreaOptionKind.List, 1, 1, OffOn, "always run", 0, null),
         new(AreaOption.FollowerSkills, AreaOptionsPage.Game, 7, AreaOptionKind.List, 1, 1, OffOn, "follower skills", 1, null),
         new(AreaOption.Brightness, AreaOptionsPage.Video, 0, AreaOptionKind.Slider, 9, 9, null, "brightness", 0, null),
-        new(AreaOption.TextDuration, AreaOptionsPage.Video, 1, AreaOptionKind.Slider, 10, 10, null, "text duration", 6, NoTextDuration),
+        new(AreaOption.TextDuration, AreaOptionsPage.Video, 1, AreaOptionKind.Slider, TextDurationMax, TextDurationMax, null, "text duration", TextDurationDefault, null),
         // ARC-UI-021: the floating text (CH10).
         new(AreaOption.Floats, AreaOptionsPage.Video, 2, AreaOptionKind.List, 2, 2, FloatLevels, "text floaters", FloaterRules.DefaultLevel, null),
         new(AreaOption.FloatSpeed, AreaOptionsPage.Video, 3, AreaOptionKind.Slider, 10, 10, null, "float speed", FloaterRules.DefaultSpeed, null),
@@ -106,11 +106,11 @@ public static class AreaOptionTable
         // seven original lines it shows or will show, and Rules), so the Controls line moved to the Video page, next to the prompt style.
         new(AreaOption.ControlScheme, AreaOptionsPage.Video, 5, AreaOptionKind.List, 3, 3, ControlSchemes, "control scheme", (int)ControlChoice.Original, null, Project: true),
         new(AreaOption.PromptStyle, AreaOptionsPage.Video, 6, AreaOptionKind.List, 4, 4, PromptStyles, "prompt style", (int)Arcanum.Input.PromptStyle.Auto, null, Project: true),
-        // ARC-GPAD-1376: the opt-in evidence log of the controller test (concept §0.8); off at every start, never saved. ARC-UI-1737: the original's Violence
-        // Filter needs a Game page slot and the page holds eight lines, so the two test lines moved to the Video page.
-        new(AreaOption.EvidenceLog, AreaOptionsPage.Video, 7, AreaOptionKind.List, 1, 1, OffOnProject, "evidence log", 0, null, Project: true),
-        // The marker of the test script's task (concept §5): the log's task start and end lines, so the summariser can time it.
-        new(AreaOption.TestTask, AreaOptionsPage.Video, 8, AreaOptionKind.List, TestTaskCount, TestTaskCount, TestTasks, "test task", 0, null, Project: true),
+        // ARC-GPAD-1376: the opt-in evidence log of the controller test (concept §0.8) and the marker of the test script's task (concept §5: the log's task
+        // start and end lines, so the summariser can time it); off at every start, never saved. ARC-UI-1737: the original's Violence Filter needs a Game page
+        // slot and the page holds eight lines, so the two test lines moved to the Video page; ARC-UI-1797: Text Duration needs the Video page's second slot,
+        // so the two lines became one: Off, On, then Task 1 to 8 (the log and the task marker at once).
+        new(AreaOption.EvidenceLog, AreaOptionsPage.Video, 7, AreaOptionKind.List, 1 + TestTaskCount, 1 + TestTaskCount, EvidenceLogValues, "evidence log", 0, null, Project: true),
         // ARC-UI-146: the HD graphics, HD interface and HD pack lines (ARC-UI-089, ARC-UI-095, ARC-DEV-350) moved to the launcher screen (ARC-UI-143).
     });
 
@@ -128,7 +128,7 @@ public static class AreaOptionTable
 /// the floating text's level and speed (ARC-UI-021).</summary>
 public sealed record AreaGameOptions(int Difficulty, int CombatMode, bool AutoAttack, bool AlwaysRun, int Effects, int Voice, int Music,
     RuleMode Rules = RuleMode.Steamwoven, int Floats = FloaterRules.DefaultLevel, int FloatSpeed = FloaterRules.DefaultSpeed, bool EvidenceLog = false, int TestTask = 0,
-    ControlSchemeSettings? Controls = null, bool CombatTaunts = true, bool ViolenceFilter = false, int Brightness = 0, bool AutoSwitchWeapons = false, bool FollowerSkills = true)
+    ControlSchemeSettings? Controls = null, bool CombatTaunts = true, bool ViolenceFilter = false, int Brightness = 0, bool AutoSwitchWeapons = false, bool FollowerSkills = true, int TextDuration = AreaOptionTable.TextDurationDefault)
 {
     /// <summary>ARC-GPAD-1374: the controller scheme choice the three lines show (the defaults when the host passes none).</summary>
     public ControlSchemeSettings Schemes => Controls ?? ControlSchemeSettings.Default;
@@ -144,8 +144,8 @@ public sealed record AreaGameOptions(int Difficulty, int CombatMode, bool AutoAt
         AreaOption.Voice => Voice,
         AreaOption.Music => Music,
         AreaOption.Rules => (int)Rules,
-        AreaOption.EvidenceLog => EvidenceLog ? 1 : 0,
-        AreaOption.TestTask => TestTask,
+        AreaOption.EvidenceLog => EvidenceLog ? 1 + TestTask : 0, // ARC-UI-1797: Off, On, Task 1 to 8 (a task runs only while the log is on)
+        AreaOption.TextDuration => TextDuration,
         AreaOption.ControlScheme => (int)Schemes.Choice,
         AreaOption.PromptStyle => (int)Schemes.Prompts,
         AreaOption.Floats => Floats,
@@ -219,6 +219,14 @@ public sealed record AreaGameSettings
     public bool ViolenceFilter { get; init; }
 
     private readonly int _brightness;
+    private readonly int _textDuration = AreaOptionTable.TextDurationDefault;
+
+    /// <summary>ARC-UI-1797: the "text duration" setting (the original's, default 6, whole values 0 to <see cref="AreaOptionTable.TextDurationMax"/>; its text bubbles live this many seconds, 0x4D5EB0). The options line shows it and the settings file keeps it; no text bubble reads it yet (the bubbles are not built).</summary>
+    public int TextDuration
+    {
+        get => _textDuration;
+        init => _textDuration = value is < 0 or > AreaOptionTable.TextDurationMax ? throw new ArgumentOutOfRangeException(nameof(value)) : value;
+    }
 
     /// <summary>ARC-UI-1737: the "brightness" setting (OH1, whole values 0 to <see cref="BrightnessRules.Max"/>; default 0): the display's gamma factor 1.0 + 0.1 × the value, here the final colour multiply.</summary>
     public int Brightness
@@ -339,14 +347,13 @@ public sealed class AreaOptionsTexts
     // ARC-UI-014: the project controls' texts, never looked up in the game's files.
     private static readonly IReadOnlyDictionary<AreaOption, string> ProjectControlLabels = new Dictionary<AreaOption, string>
     {
-        [AreaOption.Rules] = "Rules", [AreaOption.EvidenceLog] = "Evidence Log", [AreaOption.TestTask] = "Test Task",
+        [AreaOption.Rules] = "Rules", [AreaOption.EvidenceLog] = "Evidence Log",
         [AreaOption.ControlScheme] = "Controls", [AreaOption.PromptStyle] = "Prompt style",
     };
     private static readonly IReadOnlyDictionary<string, string[]> ProjectControlValues = new Dictionary<string, string[]>(StringComparer.Ordinal)
     {
         [AreaOptionTable.RuleModes] = ["Steamwoven", "Original"],
-        [AreaOptionTable.OffOnProject] = ["Off", "On"],
-        [AreaOptionTable.TestTasks] = ["None", "Task 1", "Task 2", "Task 3", "Task 4", "Task 5", "Task 6", "Task 7", "Task 8"],
+        [AreaOptionTable.EvidenceLogValues] = ["Off", "On", "Task 1", "Task 2", "Task 3", "Task 4", "Task 5", "Task 6", "Task 7", "Task 8"],
         [AreaOptionTable.ControlSchemes] = ["Original", "A Direct", "B Pointer", "C Touch+pad"],
         [AreaOptionTable.PromptStyles] = ["Auto", "Xbox", "PlayStation", "Nintendo", "Steam Deck"],
     };

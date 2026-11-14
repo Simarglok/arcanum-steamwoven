@@ -259,6 +259,7 @@ src/Arcanum.Session/SessionSpellCasterAi.cs,AiSpell,pending,
 src/Arcanum.Session/SessionSpellCasterAi.cs,AiUnderInfluence,pending,
 src/Arcanum.Session/SessionSpellCasterAi.cs,CastByAi,pending,
 src/Arcanum.Session/SessionSpellCasterDisarm.cs,DropWeapon,exempt,host
+src/Arcanum.Session/SessionSpellCasterEffects.cs,AttackEnd,exempt,host
 src/Arcanum.Session/SessionSpellCasterEffects.cs,CacheReAimedKind,pending,
 src/Arcanum.Session/SessionSpellCasterEffects.cs,DamageEffect,exempt,host
 src/Arcanum.Session/SessionSpellCasterEffects.cs,RunProvidingFlag,exempt,host
@@ -880,6 +881,7 @@ tools/terrain-viewer/Godot/TerrainViewerBodyStyles.cs,SyncAreaBodyStyles,exempt,
 tools/terrain-viewer/Godot/TerrainViewerBodyStylesSmoke.cs,RunAreaBodyStylesStageAsync,exempt,reference
 tools/terrain-viewer/Godot/TerrainViewerCombatMode.cs,WorldRightRelease,pending,
 tools/terrain-viewer/Godot/TerrainViewerCompanionOrders.cs,FollowerAimItem,exempt,reference
+tools/terrain-viewer/Godot/TerrainViewerCompanionOrders.cs,FollowerAimLockpick,exempt,reference
 tools/terrain-viewer/Godot/TerrainViewerCompanionOrders.cs,FollowerAimPickPocket,exempt,reference
 tools/terrain-viewer/Godot/TerrainViewerCompanionOrders.cs,FollowerAimSpell,exempt,reference
 tools/terrain-viewer/Godot/TerrainViewerCompanionOrders.cs,FollowerPortraitClick,pending,

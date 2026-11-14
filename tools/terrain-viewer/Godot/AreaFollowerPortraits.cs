@@ -106,6 +106,9 @@ public partial class AreaFollowerPortraits : CanvasLayer
     /// its inventory can be opened (Inventory greyed otherwise). Without it the menu has no greyed row.</summary>
     public Func<string, (bool MindControlled, bool CanOpenInventory)>? MenuFacts { get; set; }
 
+    /// <summary>ARC-UI-1786 (FP8): the rows' words from <c>mes\follower_ui.mes</c>; a row whose message is missing is not drawn. Null (nothing read yet) draws the project's English words.</summary>
+    public AreaFollowerMenuTexts? MenuTexts { get; set; }
+
     private string? _hovered;
 
     internal IReadOnlyList<string> EntitiesForSelfTest { get; private set; } = [];
@@ -133,6 +136,9 @@ public partial class AreaFollowerPortraits : CanvasLayer
     /// <summary>ARC-UI-1736: a row of the open menu is greyed (FP8), null when no menu is open.</summary>
     internal FollowerMenuRowState? MenuRowStateForSelfTest(FollowerMenuItem item) =>
         _menuRows.Where(row => row.Item == item).Select(row => (FollowerMenuRowState?)(row.Greyed ? FollowerMenuRowState.Greyed : FollowerMenuRowState.Normal)).FirstOrDefault();
+    /// <summary>ARC-UI-1786: the word an open menu's row draws, null when the row is not drawn (its message is missing).</summary>
+    internal string? MenuRowTextForSelfTest(FollowerMenuItem item) =>
+        _menuRows.Where(row => row.Item == item).Select(row => row.Row.GetChildren().OfType<Label>().FirstOrDefault()?.Text).FirstOrDefault();
     /// <summary>ARC-UI-1736: a menu row's size in the menu's own pixels (FP8: 118 × 15).</summary>
     internal Vector2? MenuRowSizeForSelfTest(FollowerMenuItem item) => _menuRows.Where(row => row.Item == item).Select(row => (Vector2?)row.Row.Size).FirstOrDefault();
     /// <summary>ARC-UI-1736: the open menu's rectangle on the screen and its rows' count (FP7, FP8).</summary>
@@ -144,6 +150,9 @@ public partial class AreaFollowerPortraits : CanvasLayer
     /// <summary>ARC-UI-1736: the screen centre of the show/hide button, the up arrow or the down arrow (null when it is not there).</summary>
     internal Vector2? ButtonCentreForSelfTest(string which) =>
         (which switch { "toggle" => _toggle, "up" => _up, "down" => _down, _ => null }) is { } button ? CentreOf(button) : null;
+    /// <summary>ARC-UI-1785: the window rectangle (the original's pixels) of the show/hide button, the up arrow or the down arrow (null when it is not there).</summary>
+    internal Rect2? ButtonRectForSelfTest(string which) =>
+        (which switch { "toggle" => _toggle, "up" => _up, "down" => _down, _ => null }) is { } button ? new Rect2(button.Position, button.Size) : null;
     /// <summary>ARC-UI-1736: whether a button's art was drawn (the art read), by "toggle", "up", "down".</summary>
     internal bool? ButtonArtForSelfTest(string which) =>
         which switch { "toggle" => _toggle is null ? null : _toggleArt?.Texture is not null, "up" => _up is null ? null : _upArt?.Texture is not null,
@@ -177,6 +186,7 @@ public partial class AreaFollowerPortraits : CanvasLayer
         // ARC-DEV-280 (0x56AC47): a release that no menu row takes closes the menu, also over the menu's own margins (FP9).
         _menu.GuiInput += input => { if (input is InputEventMouseButton { Pressed: false, ButtonIndex: MouseButton.Left or MouseButton.Right }) CloseMenu(); };
         GetViewport().SizeChanged += Resized;
+        AreaGameBarPanel.InsetsChanged += PlaceChrome;
         Place();
         Hide();
     }
@@ -237,6 +247,8 @@ public partial class AreaFollowerPortraits : CanvasLayer
         _followers = followers.ToArray();
         _offset = AreaFollowerPanelRules.ClampOffset(_offset, _followers.Count);
         var shown = AreaFollowerPanelRules.VisibleIndexes(_panelShown, _offset, _followers.Count).Select(i => _followers[i]).ToArray();
+        // ARC-UI-1855: shown before the rebuild raises EdgeChanged, whose listener reads RightEdge (0 while hidden): the diagnostic HUD would not move right of the frames.
+        Visible = _followers.Count > 0;
         var signature = $"{_panelShown}|{_offset}|{_followers.Count}|" + string.Join("\n", shown.Select(f => f.Entity + "\t" + f.Label + "\t" + f.Portrait?.GetRid().Id));
         if (signature != _signature)
         {
@@ -254,7 +266,6 @@ public partial class AreaFollowerPortraits : CanvasLayer
             Place();
             EdgeChanged?.Invoke();
         }
-        Visible = _followers.Count > 0;
         foreach (var (entity, _, life, _) in shown)
         {
             var entry = _entries[entity];
@@ -323,12 +334,23 @@ public partial class AreaFollowerPortraits : CanvasLayer
     {
         var count = _followers.Count;
         if (AreaFollowerPanelRules.ToggleShown(count))
-            (_toggle, _toggleArt) = ChromeButton(AreaFollowerPanelRules.ToggleRect, AreaFollowerPanelRules.ToggleArt(_panelShown), _panelShown ? "hide" : "show", Toggle);
+            (_toggle, _toggleArt) = ChromeButton(AreaFollowerPanelRules.ToggleRectFor(BarsDrawn), AreaFollowerPanelRules.ToggleArt(_panelShown), _panelShown ? "hide" : "show", Toggle);
         if (!AreaFollowerPanelRules.ArrowsShown(_panelShown, count)) return;
-        (_up, _upArt) = ChromeButton(AreaFollowerPanelRules.UpRect, AreaFollowerPanelRules.UpArtAt(_offset), "up",
+        (_up, _upArt) = ChromeButton(AreaFollowerPanelRules.UpRectFor(BarsDrawn), AreaFollowerPanelRules.UpArtAt(_offset), "up",
             () => Scroll(AreaFollowerPanelRules.ScrollUp(_offset, count)));
-        (_down, _downArt) = ChromeButton(AreaFollowerPanelRules.DownRect, AreaFollowerPanelRules.DownArtAt(_offset, count), "down",
+        (_down, _downArt) = ChromeButton(AreaFollowerPanelRules.DownRectFor(BarsDrawn), AreaFollowerPanelRules.DownArtAt(_offset, count), "down",
             () => Scroll(AreaFollowerPanelRules.ScrollDown(_offset, count)));
+    }
+
+    /// <summary>ARC-UI-1785 (FP1, SZ11): whether the interface bars are drawn: the layout the three buttons stand in (the bars-drawn places or the hidden-interface ones).</summary>
+    private static bool BarsDrawn => AreaGameBarPanel.BottomInset > 0;
+
+    // The layout is chosen again at every resize in the original (SZ11): the bars shown or hidden move the three buttons, the portraits stay.
+    private void PlaceChrome()
+    {
+        var barsDrawn = BarsDrawn;
+        foreach (var (button, rect) in new[] { (_toggle, AreaFollowerPanelRules.ToggleRectFor(barsDrawn)), (_up, AreaFollowerPanelRules.UpRectFor(barsDrawn)), (_down, AreaFollowerPanelRules.DownRectFor(barsDrawn)) })
+            if (button is not null) button.Position = new Vector2(rect.X, rect.Y);
     }
 
     private (Button, TextureRect) ChromeButton((int X, int Y, int Width, int Height) rect, int art, string fallback, Action pressed)
@@ -384,7 +406,8 @@ public partial class AreaFollowerPortraits : CanvasLayer
         _menu.AddChild(art is null
             ? new ColorRect { Color = new Color(22 / 255f, 25 / 255f, 34 / 255f, .95f), Size = size, MouseFilter = Control.MouseFilterEnum.Ignore }
             : new TextureRect { Texture = art, Size = size, MouseFilter = Control.MouseFilterEnum.Ignore });
-        foreach (var item in Enum.GetValues<FollowerMenuItem>())
+        var texts = MenuTexts ?? AreaFollowerMenuTexts.Project("no texts read");
+        foreach (var item in texts.Rows)
         {
             var (x, y, width, height) = AreaFollowerPanelRules.MenuRow(item);
             var greyed = AreaFollowerPanelRules.RowState(item, mind, canOpen) == FollowerMenuRowState.Greyed;
@@ -396,7 +419,7 @@ public partial class AreaFollowerPortraits : CanvasLayer
             // FP8: white, the bright colour under the pointer, mid grey when greyed (a greyed row has no pointer colour).
             var word = new Label
             {
-                Text = AreaFollowerPanelRules.MenuText(item), Size = new Vector2(width, height), VerticalAlignment = VerticalAlignment.Center,
+                Text = texts.Text(item), Size = new Vector2(width, height), VerticalAlignment = VerticalAlignment.Center,
                 MouseFilter = Control.MouseFilterEnum.Ignore, LabelSettings = new LabelSettings { FontSize = 10, FontColor = greyed ? MenuGrey : MenuWhite },
             };
             row.AddChild(word);
@@ -431,7 +454,11 @@ public partial class AreaFollowerPortraits : CanvasLayer
 
     public void CloseMenu() { _menu.Hide(); _menuEntity = null; }
 
-    public override void _ExitTree() => GetViewport().SizeChanged -= Resized;
+    public override void _ExitTree()
+    {
+        GetViewport().SizeChanged -= Resized;
+        AreaGameBarPanel.InsetsChanged -= PlaceChrome;
+    }
 
     private void Place()
     {

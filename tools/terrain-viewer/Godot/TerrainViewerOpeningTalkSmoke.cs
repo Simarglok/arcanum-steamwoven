@@ -1,3 +1,4 @@
+using Arcanum.Scripting.Dialog;
 using Arcanum.Scripting.Scr;
 using Arcanum.Simulation.Movement;
 using Arcanum.TerrainViewer.Core;
@@ -63,6 +64,11 @@ public partial class TerrainViewerApp
                 $"the DLG of script {OpeningDialogScript} with Virgil: {_voiceStart?.Status} {_voiceStart?.Detail}");
             Require(!_conversationScripted, "a talk at the dialog point resumes his dialog slot");
             var node = _conversationPanel!.Conversation?.CurrentNode.Value;
+            // ARC-SCRIPT-1987: node 1's `in -2804` hands over the item Virgil wears (the transfer takes it off him), so the talk goes on to its first replies
+            // (no CommandRejected, phase AwaitingSelection), the item is in the hero's pack and Virgil no longer wears it.
+            Require(_conversationPanel.Conversation is { Phase: DialogConversationPhase.AwaitingSelection }, $"his talk reaches its first replies: {_conversationPanel.Conversation?.Phase} {_conversationNotice}");
+            Require(session.QueryPcInventory().Any(item => item.Kind.Name == 2804), "the item 2804 of node 1's `in -2804` is in the hero's pack");
+            Require(session.QueryHolderItems(entity)?.Any(item => item.Facts.Kind.Name == 2804 && item.Facts.Worn) != true, "Virgil no longer wears item 2804");
             var opened = frames;
             var host = UseScriptHost(_readyArea!.Snapshot);
             Require(host?.Slot(new(map.RuntimeMap, entity), ScrPoint.Heartbeat) is { Script: 0 }, "the heartbeat removed itself");
