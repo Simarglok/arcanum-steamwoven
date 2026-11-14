@@ -248,7 +248,7 @@ public sealed class AreaCritterFieldScriptTests
         foreach (var set in new[] { AreaUseScriptHost.Admission, AreaUseScriptHost.PlacedAdmission, AreaUseScriptHost.HeartbeatAdmission, AreaUseScriptHost.DyingAdmission, AreaUseScriptHost.CombatPointAdmission })
         {
             Assert.IsTrue(new[] { 38, 39, 57, 89, 92 }.All(set.Actions.Contains), set.Id);
-            Assert.IsTrue(set.IsSubsetOfBesidesStores(ScrAdmissionSet.S58), set.Id);
+            Assert.IsTrue(set.IsSubsetOfBesidesStores(ScrAdmissionSet.S59), set.Id);
         }
         Assert.IsTrue(new[] { 38, 39, 89 }.All(AreaScriptHost.TalkAdmission.Actions.Contains));
         Assert.IsFalse(AreaScriptHost.TalkAdmission.Actions.Contains(ScrCatalogue.Action.ToggleInvulnerability) || AreaScriptHost.TalkAdmission.Actions.Contains(ScrCatalogue.Action.Rename));

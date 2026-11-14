@@ -835,6 +835,19 @@ destruction; destroy of any other non-NPC object stays refused. `RunItemUse(…,
 `AreaVitalScriptTests` (the host over a session, an NPC's vitals, the self-destroying item and, with `DAT_ROOT`, the installed 30282 admitted and a whole hero leaving the potion alone). Under S43 the census (`--script-refusal-census --set S43`) admits 1,575 attached scripts
 on 6,856 placed sites (S38: 1,558 on 6,113). Not built: an NPC that eats. Script eye candy is played by the viewer since ARC-SCRIPT-1592 ([ledger VT9](../research/ledger/scripts.md)).
 
+## Newspaper commands (ARC-SCRIPT-1764, set S59)
+
+`ScrAdmissionSet.S59` is S58 plus queue newspaper (85) and float newspaper headline (86); the interpreter runs at most S59. Both hand `ScrNewspaperRequest` effects (`ScrEffects.Newspapers`, in action order) to the host and the run goes on.
+Queue newspaper reads its two operands as numbers (the issue, and the front flag by its value, 0 or not) and the host writes the session's queue by the rule of `GameSessionOwner.QueueNewspaper` (the original's 0x4BF140, the same rule the dialog code `np` uses).
+Float newspaper headline takes its object from operand slot **1** (census anomaly X9: the editor's signature puts it in slot 0, the interpreter reads slot 1 and never reads slot 0): the admission checks slot 1 as an object and leaves slot 0 alone, the interpreter requests the headline float over the object
+(`OptionalObject`, a group's first), and nothing for an absent object. The host reads the head issue's headline (`WrittenTexts.Headline`, 0x56CCA0), punctuates it as the vendor's headline line does (`WrittenTexts.PunctuatedHeadline`: a stop unless it ends in `.`, `?` or `!`, then a space)
+and floats it through its float list (`TakeFloats`, with the float line's `AreaScriptFloat`); an empty headline (no newspaper file, an issue with no message) floats nothing.
+
+Hosts: the dialog host (`AreaScriptHost.Admission` and the three sets built on it) and the use host (`AreaUseScriptHost.Admission`, with the placed, dying and combat-point sets built on it, and `HeartbeatAdmission`) apply both through `AreaScriptNewspaper` (a queue request the session refuses for a limit stops the
+later steps of the apply, like the other session requests). The thrown-item host, the item script host and the slide scripts stay outside (their sets are their own and no installed script of them holds a newspaper action). Tests: `ScrNewspaperTests` (the interpreter and the admission, including the slot-1 reading),
+`AreaScriptNewspaperTests` (the dialog host over a session and a content stack with a newspaper file) and `AreaUseScriptHostTests` (a tile script queues and floats). Ledger [NP9–NP12](../research/ledger/scripts.md#script-actions-queue-newspaper-and-float-newspaper-headline-arc-script-1764); census numbers in
+[the refusal census](../research/script-refusal-census.md).
+
 ## Checks
 
 - `tests/Arcanum.Scripting.Tests/Scr/ScrDispatcherTests.cs`: every step of the

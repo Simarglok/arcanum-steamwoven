@@ -819,6 +819,19 @@ public enum ScrSlideKind
 /// (<see cref="Slide"/> is 0, never read). Requests come in action order.</summary>
 public readonly record struct ScrSlideRequest(ScrSlideKind Kind, int Slide);
 
+/// <summary>ARC-SCRIPT-1764: what a newspaper script action asks of the host (ledger NP9, NP10).</summary>
+public enum ScrNewspaperKind
+{
+    /// <summary>Queue newspaper (85, 0x447220 case 0x55 → 0x4BF140): the issue joins the session's queue by the rule of ledger NQ3.</summary>
+    Queue,
+    /// <summary>Float newspaper headline (86, case 0x56): the head issue's headline floats over the object of operand slot 1 (0x56CCA0 text, X9).</summary>
+    FloatHeadline,
+}
+
+/// <summary>ARC-SCRIPT-1764 (script actions 85 and 86, ledger NP9, NP10): a queued issue (<see cref="Issue"/> and <see cref="Front"/>, the operands as read; the second is the dialog code's "second operand not 0")
+/// or the float of the head issue's headline over <see cref="Speaker"/> (the issue and <see cref="Front"/> unused). Requests come in action order.</summary>
+public readonly record struct ScrNewspaperRequest(ScrNewspaperKind Kind, int Issue, bool Front, ScrObjectRef? Speaker);
+
 /// <summary>The final value of a global flag the run changed.</summary>
 public readonly record struct ScrFlagWrite(int Index, bool Value);
 
@@ -897,8 +910,9 @@ public sealed class ScrEffects
         IReadOnlyList<ScrEffectRequest>? effectChanges = null, IReadOnlyList<ScrEyeCandy>? eyeCandies = null, IReadOnlyList<ScrWriteback>? slotWrites = null,
         IReadOnlyList<ScrCreateRequest>? creations = null, IReadOnlyList<ScrObjectStateRequest>? objectStates = null, IReadOnlyList<ScrFloatLine>? floats = null,
         ScrStoreWrites? stores = null, IReadOnlyList<int>? townMaps = null, IReadOnlyList<ScrAmmoUse>? ammoUses = null, IReadOnlyList<ScrFade>? fades = null,
-        IReadOnlyList<ScrWorldRequest>? worldChanges = null, IReadOnlyList<ScrSlideRequest>? slides = null)
+        IReadOnlyList<ScrWorldRequest>? worldChanges = null, IReadOnlyList<ScrSlideRequest>? slides = null, IReadOnlyList<ScrNewspaperRequest>? newspapers = null)
     {
+        Newspapers = newspapers ?? Array.Empty<ScrNewspaperRequest>();
         Slides = slides ?? Array.Empty<ScrSlideRequest>();
         WorldChanges = worldChanges ?? Array.Empty<ScrWorldRequest>();
         Fades = fades ?? Array.Empty<ScrFade>();
@@ -984,11 +998,13 @@ public sealed class ScrEffects
     public IReadOnlyList<ScrWorldRequest> WorldChanges { get; }
     /// <summary>ARC-RENDER-1171: the queue slide (131) and end game (132) requests, in action order (ledger SS3, SS4).</summary>
     public IReadOnlyList<ScrSlideRequest> Slides { get; }
+    /// <summary>ARC-SCRIPT-1764: the queue newspaper (85) and float newspaper headline (86) requests, in action order (ledger NP9, NP10).</summary>
+    public IReadOnlyList<ScrNewspaperRequest> Newspapers { get; }
     public bool IsEmpty => Writeback is null && DestroyTrapObject is null && GlobalFlags.Count == 0 && StoryState is null && Dialog is null && Calls.Count == 0
         && Lines.Count == 0 && Sounds.Count == 0 && Teleports.Count == 0 && Schemes.Count == 0 && Schematics.Count == 0 && Readings.Count == 0 && SkillUses.Count == 0 && States.Count == 0
         && EffectChanges.Count == 0 && EyeCandies.Count == 0 && SlotWrites.Count == 0 && Creations.Count == 0 && ObjectStates.Count == 0
         && Floats.Count == 0 && GlobalVariables.Count == 0 && PcVariables.Count == 0 && PcFlags.Count == 0
-        && TownMaps.Count == 0 && AmmoUses.Count == 0 && Fades.Count == 0 && WorldChanges.Count == 0 && Slides.Count == 0;
+        && TownMaps.Count == 0 && AmmoUses.Count == 0 && Fades.Count == 0 && WorldChanges.Count == 0 && Slides.Count == 0 && Newspapers.Count == 0;
 }
 
 /// <summary>One executed line: the condition, whether it held, the action of the branch taken and where the run went
@@ -1015,7 +1031,7 @@ public sealed class ScrRunResult
 }
 
 /// <summary>How a dispatch runs: the rule mode's script switches, the admitted set (default <see cref="ScrAdmissionSet.S5"/>,
-/// at most <see cref="ScrAdmissionSet.S58"/>, admitted for the lines reachable from the event's line), the executed-line
+/// at most <see cref="ScrAdmissionSet.S59"/>, admitted for the lines reachable from the event's line), the executed-line
 /// budget and the call depth.</summary>
 public sealed record ScrRunOptions
 {
@@ -1036,7 +1052,7 @@ public sealed record ScrRunOptions
         ArgumentNullException.ThrowIfNull(Admission);
         if (MaxExecutedLines is <= 0 or > OriginalLineBudget) throw new ArgumentOutOfRangeException(nameof(MaxExecutedLines), "The line budget is 1..1000.");
         if (MaxCallDepth is < 1 or > 64) throw new ArgumentOutOfRangeException(nameof(MaxCallDepth), "The call depth is 1..64.");
-        if (!Admission.IsSubsetOf(ScrAdmissionSet.S58)) throw new ArgumentException("The interpreter runs only the commands of ScrAdmissionSet.S58.", nameof(Admission));
+        if (!Admission.IsSubsetOf(ScrAdmissionSet.S59)) throw new ArgumentException("The interpreter runs only the commands of ScrAdmissionSet.S59.", nameof(Admission));
     }
 
     // A set with a guard condition needs a host that answers it, checked before any event runs.

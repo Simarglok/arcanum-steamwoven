@@ -65,6 +65,8 @@ internal sealed class ScrInterpreter
         public readonly List<ScrFade> Fades = new();
         // ARC-RENDER-1171: the queue slide and end game requests (131, 132), in action order.
         public readonly List<ScrSlideRequest> Slides = new();
+        // ARC-SCRIPT-1764: the queue newspaper and float newspaper headline requests (85, 86), in action order.
+        public readonly List<ScrNewspaperRequest> Newspapers = new();
         // ARC-SCRIPT-042: the slots call-ex runs changed, in order, and the latest of each, which a later call-ex run of the same slot reads.
         public readonly List<ScrWriteback> SlotWrites = new();
         public readonly Dictionary<(ScrObjectRef, int), ScrSlot> Slots = new();
@@ -212,7 +214,8 @@ internal sealed class ScrInterpreter
             _shared.AmmoUses.Count == 0 ? null : Array.AsReadOnly(_shared.AmmoUses.ToArray()),
             _shared.Fades.Count == 0 ? null : Array.AsReadOnly(_shared.Fades.ToArray()),
             _shared.WorldChanges.Count == 0 ? null : Array.AsReadOnly(_shared.WorldChanges.ToArray()),
-            _shared.Slides.Count == 0 ? null : Array.AsReadOnly(_shared.Slides.ToArray()));
+            _shared.Slides.Count == 0 ? null : Array.AsReadOnly(_shared.Slides.ToArray()),
+            _shared.Newspapers.Count == 0 ? null : Array.AsReadOnly(_shared.Newspapers.ToArray()));
     }
 
     private bool Condition(ScrClause c, int line) => c.Type switch
@@ -437,6 +440,14 @@ internal sealed class ScrInterpreter
                 _shared.Fades.Add(new(Get(a, 0), Get(a, 1), Get(a, 2), Get(a, 3)));
                 return (Step.Next, 0);
             }
+            case ScrCatalogue.Action.QueueNewspaper:
+                // NP9 (case 0x55 → 0x4BF140): the first number is the issue and the second the front flag, both as read (0x44BA70); the host applies the queue's rule (NQ3).
+                _shared.Newspapers.Add(new(ScrNewspaperKind.Queue, Get(a, 0), Get(a, 1) != 0, null));
+                return (Step.Next, 0);
+            case ScrCatalogue.Action.FloatNewspaperHeadline:
+                // NP10 (case 0x56, X9): the object is operand slot 1 (0x44B960: a group's first object); slot 0 is never read. The host reads the head issue's headline and floats it over the object; without an object nothing floats.
+                if (OptionalObject(a, 1) is { } speaker) _shared.Newspapers.Add(new(ScrNewspaperKind.FloatHeadline, 0, false, speaker));
+                return (Step.Next, 0);
             case ScrCatalogue.Action.QueueSlide:
                 // SS3 (case 0x83, 0x460B80 → 0x569AA0): the operand's value is the slide number the show's queue takes; the host keeps the 100-slide bound.
                 _shared.Slides.Add(new(ScrSlideKind.Queue, Get(a, 0)));
