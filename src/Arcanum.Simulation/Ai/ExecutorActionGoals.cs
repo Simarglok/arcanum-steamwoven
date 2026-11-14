@@ -16,6 +16,9 @@ public static partial class AiExecutorRules
     /// <summary>The skill numbers the skill goal branches on (0x42A490, 0x42A440).</summary>
     public const int PickpocketSkill = 5, PickLocksSkill = 14;
 
+    /// <summary>The dialog skill service's extra start flag 0x2000 (0x419CB0 passes it to 0x4350F0 when 0x45DDA0 of the NPC is 0, no PC leads it); see <see cref="StartUseSkill"/> for what the goals do with it (nothing).</summary>
+    public const int NoPcLeaderRequestFlag = 0x2000;
+
     // ---- starters ----
 
     /// <summary>
@@ -58,9 +61,12 @@ public static partial class AiExecutorRules
     /// tool <paramref name="item"/> (null: none): pick locks goes to its own starter (<see cref="StartPickLocks"/>); otherwise the start
     /// gate with <see cref="TurnBasedRules.UseSkillCost"/>; goal 33 with the target, the item and the skill, run flag 0x4000 and running
     /// for an NPC with current fatigue above 8. A missing target refuses (inference: the original asserts on it).
+    /// <paramref name="requestFlags"/> is the starter's last argument (0x4350F0 ORs it into the goal record's word +0x70; <see cref="NoPcLeaderRequestFlag"/> is the dialog service's 0x2000,
+    /// ARC-SCRIPT-1789, ledger HLR10/SK8). Of the goal's nodes only the plant bit 0x1 of the pick-pocket goals is read (0x429160, 0x42A2A0, 0x42A4E0 map it to the attempt's 0x2); the node that maps
+    /// 0x2000 to a forced success (0x428E10) belongs to the use-item-with-skill goal 40, so the flag changes no run built here: it is accepted, never stored and never read, as in the original.
     /// </summary>
     [OriginalFunction(0x4350F0, OriginalFunctionScope.Partial)]
-    public static AiPerformResult StartUseSkill(IAiPerformWorld world, string npc, string? target, int skill, string? item, GoalRun? current)
+    public static AiPerformResult StartUseSkill(IAiPerformWorld world, string npc, string? target, int skill, string? item, GoalRun? current, int requestFlags = 0)
     {
         ArgumentNullException.ThrowIfNull(world);
         ArgumentNullException.ThrowIfNull(npc);

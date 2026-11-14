@@ -776,7 +776,7 @@ public sealed class AreaConversationHost
         public string? SpellName(int spell) => host.SpellName?.Invoke(spell);
 
         public DialogCommandResult Execute(HealerSkillCommand command) =>
-            command.PlayerCharacter == AreaConversationState.PcParticipant && command.Npc == npc && ai.HealerService(entity, command.Skill) ? DialogCommandResult.Applied : DialogCommandResult.Rejected;
+            command.PlayerCharacter == AreaConversationState.PcParticipant && command.Npc == npc && ai.HealerService(entity, command.Skill, command.NoPcLeader) ? DialogCommandResult.Applied : DialogCommandResult.Rejected;
 
         public DialogCommandResult Execute(HealerSpellCommand command) =>
             command.PlayerCharacter == AreaConversationState.PcParticipant && command.Npc == npc && ai.HealerCast(entity, command.Spell, command.Free) ? DialogCommandResult.Applied : DialogCommandResult.Rejected;

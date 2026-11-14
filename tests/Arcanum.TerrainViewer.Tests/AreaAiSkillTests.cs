@@ -172,6 +172,20 @@ public sealed class AreaAiSkillTests
         Assert.AreEqual((GoalType.UseSkill, AiSchedulerRules.Pc, 3, (string?)null), (goal.Goal, goal.Target, goal.Skill, goal.Item), "goal 33 with the named skill and no tool (0x4C91F0 answers none)");
     }
 
+    // ARC-SCRIPT-1789 (ledger HLR10): the leaderless service's flag is passed on and the goal is the one of a service with a leader.
+    [TestMethod]
+    public void The_leaderless_service_flag_changes_no_goal()
+    {
+        var (_, plain, npc, item) = Open(hero: true);
+        var (_, flagged, npc2, _) = Open(hero: true);
+        Assert.IsTrue(plain.HealerService(npc));
+        Assert.IsTrue(flagged.HealerService(npc2, AiPassChoice.HealSkill, noPcLeader: true));
+        var goal = flagged.RunOf(npc2)?.Bottom ?? throw new AssertFailedException($"no run: {flagged.TraceOf(npc2)?.Perform}");
+        Assert.AreEqual((GoalType.UseSkill, AiSchedulerRules.Pc, AiPassChoice.HealSkill, item), (goal.Goal, goal.Target, goal.Skill, goal.Item));
+        Assert.AreEqual(plain.RunOf(npc)!.Bottom, goal, "the flag 0x2000 is dropped by the skill goals (SK8), as in the original");
+        Assert.AreEqual(plain.RunOf(npc)!.Flags, flagged.RunOf(npc2)!.Flags);
+    }
+
     // Hurts the NPC to half its hit points (below the heal skill's 90 %, above the 30 % care line).
     private static int Hurt(GameSessionOwner session, AreaAiHost host, string npc)
     {
