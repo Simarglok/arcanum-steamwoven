@@ -131,6 +131,9 @@ public sealed class AreaScriptHostTests
         Assert.AreEqual(before + 35_000, f.Session.QueryClockSnapshot().GameTimestampMs, "30 s and 5 s, each by its own jump");
         CollectionAssert.AreEqual(new[] { new AreaScriptFade(30_000, 4, 1, 0, 0) }, f.Host.TakeFades().ToArray(), "the movie with its audio track");
         Assert.AreEqual(0, f.Host.TakeFades().Count, "taken once");
+        // ARC-UI-2034 (TB16): every fade empties the speech bubbles first, whether or not it asks for a movie or a sound (the third has seconds only).
+        Assert.AreEqual(3, f.Host.TakeFadeClears(), "one clear-all for each of the three fades");
+        Assert.AreEqual(0, f.Host.TakeFadeClears(), "taken once");
         CollectionAssert.AreEqual(new[] { new ScrSound(ScrSoundKind.Effect, 7) }, f.Host.TakeSounds().ToArray(), "no movie: the sound plays as an effect sound");
     }
 
