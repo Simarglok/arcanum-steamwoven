@@ -704,7 +704,7 @@ A Player reply with the marker `p:` (exact, as the other generated replies; ledg
 - **Price and payment.** The price screen of the other talks with the base price 2; yes pays (gold to the NPC) and gives the issue, then the NPC class line 15000 and the PC class line 1000.
 - **Viewer.** `AreaConversationHost.NewspaperStandPort` reads the session's queue, the headline through `WrittenTexts.Headline`, and gives a new newspaper (prototype 14064, the executable's basic number; the project's 14084) through the viewer's item maker `GiveHeroItem` (`AreaUseScripts.GiveHeroPrototypeItem` with the inventory's insert check), then writes the issue as the item's written start line (`SetItemWrittenStart`). The player reads it through the reading window's use path ([WR1](../world/reading-window-runtime.md)): right click or use on the item in the pack. A pack with no room leaves the paper on the hero's tile.
 - **Daily event.** Not a dialog matter: see [the event queue](../world/game-event-queue-runtime.md#daily-newspaper-event-arc-ui-1739).
-- **Not built.** The script actions a85 `queue_newspaper` and a86 `float_newspaper_headline`.
+- **Script actions.** The script actions a85 `queue_newspaper` and a86 `float_newspaper_headline` came with ARC-SCRIPT-1764 ([the dispatcher runtime](scr-dispatcher-runtime.md#newspaper-commands-arc-script-1764-set-s59)); a85 queues by the rule `np` uses.
 
 ```sh
 "$DOTNET" test tests/Arcanum.Scripting.Tests/Arcanum.Scripting.Tests.csproj --no-build --filter "FullyQualifiedName~DialogNewspaperTests"   # ARC-UI-1739

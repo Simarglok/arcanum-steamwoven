@@ -50,8 +50,8 @@ public enum ScrOperandRole : byte
 /// numbers and signatures are format facts read from the source's interpreter (docs/research/scr-census.md) and cross-checked
 /// against the ScriptEd 1.50 editor data and the installed scripts (ARC-RES-045); only the types
 /// the project reads by name have named constants. Signatures are the editor's; for action 86
-/// (float newspaper headline) the interpreter reading takes the object from slot 1 instead (census anomaly X9), so
-/// a slice that admits 86 must decide which slot it checks.</summary>
+/// (float newspaper headline) the interpreter reading takes the object from slot 1 instead (census anomaly X9): the admission checks the
+/// object in slot 1 and ignores slot 0 (<see cref="Action.FloatNewspaperHeadline"/>; ARC-SCRIPT-1764, ledger NP9).</summary>
 public static class ScrCatalogue
 {
     public const int ConditionTypes = 53, ActionTypes = 142, ValueKinds = 7, FocusKinds = 24;
@@ -116,7 +116,7 @@ public static class ScrCatalogue
             GetDaySinceStartup = 96, GetCurrentHour = 97, GetCurrentMinute = 98, GetHoursSinceStartup = 105, GrantFatePoint = 117, SetPcQuestUnbotched = 119,
             CritterDisband = 22, SetReaction = 30, AdjustReaction = 31, SetDayStandpoint = 45, SetNightStandpoint = 46, ChangeArtNumber = 59, ChangeScript = 99, SetDayStandpointEx = 140, SetNightStandpointEx = 141,
             TransferItem = 41, SetLockState = 53, CreateItem = 66, ToggleOpenClosed = 88, SetWrittenStart = 94, ToggleSectorBlocked = 106, ToggleMonsterGenerator = 110, TouchArt = 123,
-            DestroyItemNamed = 126, ToggleItemInventoryDisplay = 127, QueueSlide = 131, EndGame = 132, GetLocation = 95, StopSpellOnObject = 130, PlaySpellEyeCandy = 104, StopScriptEyeCandy = 124, GetHitPoints = 107, GetFatiguePoints = 108, HealPoison = 128, AdjustStat = 137,
+            DestroyItemNamed = 126, ToggleItemInventoryDisplay = 127, QueueSlide = 131, EndGame = 132, QueueNewspaper = 85, FloatNewspaperHeadline = 86, GetLocation = 95, StopSpellOnObject = 130, PlaySpellEyeCandy = 104, StopScriptEyeCandy = 124, GetHitPoints = 107, GetFatiguePoints = 108, HealPoison = 128, AdjustStat = 137,
             GetSocialClass = 38, GetOrigin = 39, ToggleInvulnerability = 57, GetFaction = 89, Rename = 92;
     }
 
