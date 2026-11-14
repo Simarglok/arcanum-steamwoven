@@ -154,6 +154,8 @@ the focus on the next pass (calm down, or the next target). Combat perform (0x4A
 goes out for the object as victim. Not built ([#1755](https://github.com/Simarglok/arcanum-steamwoven/issues/1755), [#1756](https://github.com/Simarglok/arcanum-steamwoven/issues/1756)): the attack animation reads the object's art (0x42B9C0 node 5 reads the target's art and flag 0x80), which the host takes as a standing critter's, and the NPC's spell and item choice for an
 object target (0x4ABC70 reads no target type) runs over the cast host's targets unchanged.
 
+Viewer smoke (ARC-AI-1757): the stage `npc-object` (`./arcanum smoke pr --stages npc-object`, the town) runs this fight on the real map: a free NPC is put into the focus on the scenery or container with the fewest hit points by the object's attack event, walks to it, damages it through the session's object attack and, when the object is busted, drops the focus and holds no attack goal on it ([area map mode](../rendering/area-map-mode.md)).
+
 ## Viewer (ARC-WORLD-110)
 
 The AREA viewer's trap host (`src/Arcanum.World/AreaTraps.cs`) meets the shown map's
