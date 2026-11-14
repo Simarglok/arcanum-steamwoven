@@ -80,14 +80,15 @@ public sealed class CrossMapHolderStateTests
     }
 
     [TestMethod]
-    public void ARefusalOfTheMoveChangesNothingAndTheOtherRulesStayTheSame()
+    public void AWornItemOfTheCompanionGoesToTheHeroAndTheOtherRulesStayTheSame()
     {
         using var owner = Both();
+        // ARC-SCRIPT-1987: the transfer tests no worn state, so the companion's worn item is taken off it.
         var worn = owner.GiveItemToPc(owner.Version, "pal", 2100, Accept);
-        Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.WornItemUnsupported), (worn.Disposition, worn.Failure));
-        Assert.AreEqual(0L, owner.Version.Revision);
-        Assert.AreEqual(0, Pc(owner).Length);
-        CollectionAssert.AreEqual(new[] { "locket", "bow", "locket-2" }, Listed(owner, Cave, "pal"));
+        Assert.AreEqual((GameSessionDisposition.Changed, "bow"), (worn.Disposition, worn.Item));
+        Assert.AreEqual(1L, owner.Version.Revision);
+        CollectionAssert.AreEqual(new[] { "bow" }, Pc(owner));
+        CollectionAssert.AreEqual(new[] { "locket", "locket-2" }, Listed(owner, Cave, "pal"));
         // A name no list holds, and an unknown NPC, are what they were.
         Assert.AreEqual(GameSessionFailure.UnknownHolder, owner.GiveItemToPc(owner.Version, "ghost", 5700, Accept).Failure);
     }
