@@ -22,6 +22,9 @@ public partial class TerrainViewerApp
     // the run carries the free flag exactly when no PC leads the NPC (HLR11), and the hero's hit points rise while the conversation is still open (the AI gate holds the partner, GT138). The hero's hit points are put
     // down first and healed at the end; the gold the stage had to grant is kept. ARC-SCRIPT-1996 second pass: Virgil joins the hero (a companion, run through the host's follower list) and the same DLG node is
     // opened again: the h: reply is offered, the pick of the spell starts the cast at once (no price screen, no gold paid, no free flag: the hero leads him, HLR8, HLR11) and the hero's hit points rise.
+    // ARC-DEV-2074 (0x567460, the order of the dialog start's refusals, both the click's and the script's way in): before the healer talks, the hero dead (silent, before the can-speak test), then Virgil in combat focus
+    // with the hero in combat mode (can-speak answer 2, not the combat-mode refusal; the hero stays in it), the dead hero's refusal with a walk order of the NPC that it must not end; at the open conversation the walk order is
+    // ended by the can-speak test's level-2 interrupt although the second-dialog refusal follows (the click's and the script's way), and the cast run of the leaderless pass (priority 3) answers 3 and stays.
     private async Task RunAreaHealerTalkSmokeAsync(TerrainLoadResult? mapMode = null)
     {
         if (_areaSession is not { } session || session.QueryHero() is null || _combatHost is null || _conversationHost is not { } host || _readyArea is not { } area || !InventoryActive)
@@ -77,6 +80,66 @@ public partial class TerrainViewerApp
             for (var i = 0; i < 10; i++) AreaSmokeFrame();
             if (HeroInCombatMode) session.SetCombatMode(session.Version, SessionCombatant.Hero, false, SessionCombatModeContext.RealTime);
 
+            // ARC-DEV-2074: a cell 5..8 cells from the NPC for its walk orders (the runs the refusals must leave alone, or the interrupt must end).
+            CellCoord? walkCell = null;
+            foreach (var (dx, dy) in new[] { (6, 0), (-6, 0), (0, 6), (0, -6), (5, 5), (-5, -5), (5, -5), (-5, 5), (8, 0), (-8, 0), (0, 8), (0, -8) })
+            {
+                var far = new CellCoord(at.X + dx, at.Y + dy);
+                if (!map.Chart.Contains(far)) continue;
+                try { walkCell = AreaSmokeStandable(map, far, 1); break; } catch (InvalidOperationException) { }
+            }
+            Require(walkCell is not null, "a standable cell for the healer's walk orders");
+            var dialogStart = new ScrDialogStart(new ScrObjectRef(map.RuntimeMap, AreaScriptHost.PcCode), new ScrObjectRef(map.RuntimeMap, entity), speaker.ScriptId, 0, HealerTalkHubNode);
+            void WalkOrder(AreaAiHost aiHost, string why)
+            {
+                var order = aiHost.OrderWalk(entity, walkCell!.Value);
+                Require(aiHost.RunOf(entity) is not null, $"{why}: the walk order gave the NPC a run ({order})");
+            }
+            // The two ways in a dialog start comes: a click's talk goal (BeginConversation, replacing windows) and a script's dialog action.
+            void StartBothWays(Action<string> check)
+            {
+                foreach (var way in new[] { "click", "script" })
+                {
+                    _conversationNotice = null; _combatModeNotice = "";
+                    if (way == "click") BeginConversation(speaker, replaceWindows: true); else BeginScriptedConversation(speaker, dialogStart);
+                    Require(!ConversationOpen && !WorldModal, $"[{way}] no dialog opened");
+                    check(way);
+                }
+            }
+
+            // 1. The hero down: the first refusal, silent, before the can-speak test, so the NPC's walk is not interrupted and nothing is said.
+            WalkOrder(ai, "hero down");
+            hurt = true;
+            Require(session.ApplyDamage(session.Version, SessionLifeTarget.Hero, new LifeDamage { HitPoints = 1_000_000 }).Disposition == GameSessionDisposition.Changed, "the hero went down");
+            // No frame runs while the hero is down (the death cover starts in a frame).
+            Require(HeroDownState() is (true, _) or (_, true), $"the hero is down: {HeroDownState()}");
+            StartBothWays(way =>
+            {
+                Require(_conversationNotice?.Contains("hero is dead or unconscious", StringComparison.Ordinal) == true, $"[{way}] the dead hero's refusal is the first one: {_conversationNotice}");
+                Require(ai.RunOf(entity) is not null, $"[{way}] the NPC's walk is untouched: the can-speak test's interrupt did not run");
+            });
+            Require(session.Heal(session.Version, SessionLifeTarget.Hero, new LifeHeal { Full = true, Fatigue = 1000, Resurrect = true }).Disposition != GameSessionDisposition.Rejected && HeroDownState() == (false, false), "the hero is up again");
+            ai.InterruptForTalk(entity);
+            Require(ai.RunOf(entity) is null, "the NPC's walk is ended for the next steps");
+
+            // 2. The NPC in combat focus on the hero (danger state 1) and the hero in combat mode: the can-speak test refuses (answer 2) before the combat-mode leave, which would refuse too (under attack): the notice says which came first.
+            Require(session.SetCombatMode(session.Version, SessionCombatant.Hero, true, SessionCombatModeContext.RealTime).Disposition != GameSessionDisposition.Rejected && HeroInCombatMode, "the hero is in combat mode");
+            // The attack event (the way the other smokes make a fight) also lowers the NPC's reaction toward the hero, which stays: a fight on the hero needs the reaction record, so the danger state is not written alone.
+            ai.HeroAttacked(entity);
+            Require(session.QueryDanger(entity) is { State: Arcanum.Simulation.Ai.DangerState.CombatFocus }, $"the NPC fights the hero: {session.QueryDanger(entity).State}");
+            StartBothWays(way =>
+            {
+                Require(_conversationNotice?.Contains("cannot speak (answer 2)", StringComparison.Ordinal) == true, $"[{way}] the can-speak test refused first, with answer 2: {_conversationNotice}");
+                Require(HeroInCombatMode && !_combatModeNotice.Contains("under attack", StringComparison.Ordinal), $"[{way}] the combat-mode leave was not asked; the hero stays in combat mode: {_combatModeNotice}");
+            });
+            CalmNpcsForSmoke(session, [entity]);
+            Require(session.QueryDanger(entity).State == Arcanum.Simulation.Ai.DangerState.None, "the NPC is calm again");
+            session.SetCombatMode(session.Version, SessionCombatant.Hero, false, SessionCombatModeContext.RealTime);
+            Require(!HeroInCombatMode, "the hero is out of combat mode again");
+            ai.InterruptForTalk(entity);
+            Require(ai.RunOf(entity) is null, $"the fight left the NPC no run for the talks that follow: {ai.TraceOf(entity)?.Perform}");
+            hurt = false;
+
             // The hero is hurt so the heal shows, and holds the gold the quote asks (the reaction scale keeps it under 300 for the base 100).
             var max = session.QueryHeroLife()!.Status.MaxHitPoints;
             Require(session.ApplyDamage(session.Version, SessionLifeTarget.Hero, new LifeDamage { HitPoints = max / 2 }).Disposition == GameSessionDisposition.Changed, "the hero is hurt");
@@ -97,6 +160,17 @@ public partial class TerrainViewerApp
                 var pc = new ScrObjectRef(map.RuntimeMap, AreaScriptHost.PcCode);
                 BeginScriptedConversation(talker, new ScrDialogStart(pc, new ScrObjectRef(map.RuntimeMap, entity), talker.ScriptId, 0, HealerTalkHubNode));
                 Require(ConversationOpen && ReferenceEquals(_conversationSpeaker, talker), $"[{pass}] the healer's conversation opened ({_conversationNotice})");
+                if (!led)
+                {
+                    // ARC-DEV-2074: with the conversation open (the second dialog), the can-speak test's level-2 interrupt still ends the NPC's walk before the second-dialog refusal, by the click's way and by the script's.
+                    foreach (var way in new[] { "click", "script" })
+                    {
+                        WalkOrder(talkAi, $"[{way}] open conversation");
+                        if (way == "click") BeginConversation(talker, replaceWindows: true); else BeginScriptedConversation(talker, dialogStart);
+                        Require(ConversationOpen && ReferenceEquals(_conversationSpeaker, talker), $"[{way}] the second dialog opened nothing: the first one stays");
+                        Require(talkAi.RunOf(entity) is null, $"[{way}] the interrupt of the can-speak test stayed after the second-dialog refusal");
+                    }
+                }
                 var panel = _conversationPanel!;
                 var conversation = panel.Conversation;
                 Require(conversation is { Phase: DialogConversationPhase.AwaitingSelection }, $"[{pass}] the talk awaits a reply ({conversation?.Phase} {conversation?.Failure})");
@@ -149,6 +223,11 @@ public partial class TerrainViewerApp
                 Require(run.Bottom.Goal is GoalType.CastSpell or GoalType.CastSpellWithAnimation && run.Bottom.Target == Arcanum.Simulation.Ai.AiSchedulerRules.Pc, $"[{pass}] the NPC's run is the casting goal on the hero: {run.Bottom.Goal} {run.Bottom.Target}");
                 var spellRun = run.Bottom.SpellRun is { } id ? session.QuerySpellRuns()[id] : null;
                 Require(spellRun is { Spell: 60 }, $"[{pass}] the run's spell is 60: {spellRun?.Spell}");
+                if (!led)
+                {
+                    // ARC-DEV-2074: the cast goal (priority 3) refuses the level-2 interrupt: the can-speak test answers 3 and leaves the run as it was.
+                    Require(DialogStartCanSpeak(talker) == Arcanum.Simulation.Reaction.CanSpeakRules.Busy && ReferenceEquals(talkAi.RunOf(entity), run), $"[{pass}] the priority-3 cast run answers can-speak 3 and stays");
+                }
                 var free = spellRun!.Free;
                 Require(free == !led, $"[{pass}] the run's free flag is set exactly when no PC leads the NPC (free={free}, led={led}) (HLR11)");
                 Require(ConversationOpen && ConversationPartnerEntity() == entity, $"[{pass}] the conversation is still open while the cast plays");
