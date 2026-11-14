@@ -1,3 +1,4 @@
+using Arcanum.Simulation.Clock;
 using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Magic;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -27,7 +28,7 @@ public sealed class SessionHitGoreTests
         public int Direction(SpellLocation from, SpellLocation to) => 0;
         public IReadOnlyList<SpellTargetObject> Party(SpellTargetObject source) => [];
         public SpellLineOfFire LineOfFire(SpellObjectFacts parent, SpellLocation tile) => new(0, null);
-        public SpellCastCritter? Critter(string entity) => entity == Victim
+        public SpellCastCritter? Critter(string entity) => entity is Victim or SessionSpellCaster.Hero
             ? new(SessionCritterCombat.From(entity, AttackStateTests.Npc(AttackStateTests.Stats())).Combat!, 0, objectFlags, spellFlags, critterFlags, critterFlags2) : null;
         public CombatWeapon WieldedWeapon(string entity) => CombatWeapon.Unarmed();
         public IReadOnlyList<SpellAcidItem> WornItems(string entity) => [];
@@ -126,5 +127,48 @@ public sealed class SessionHitGoreTests
         // A native trap's attack end runs inside the damage step before the packet's hit-point field is written (0): its normal blood is index 0 whatever the damage, never a tier.
         caster.TrapDamageHit(Victim, Damage(12, new(12, 0, 0, 0, 0)));
         CollectionAssert.AreEqual(new[] { 9, 2, 0 }, Asked(caster).ToArray(), "a spell is kind 1 (tier 9 for 12), a trap's electrical slot kind 3, a spell that dealt nothing asks none, a trap's normal damage has no tier");
+    }
+
+    private static SessionEventPassResult PoisonPass(GameSessionOwner owner, SessionSpellCaster caster, int level)
+    {
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.SetPoisonLevel(owner.Version, SessionLifeTarget.Hero, level).Disposition);
+        owner.AdvanceGameTime(owner.QueryClockSnapshot().Token, SessionEventKinds.PoisonDamageDelayMs, ClockAdvanceReason.OrdinaryAdvance);
+        return caster.ProcessEvents();
+    }
+
+    [TestMethod]
+    public void A_poison_tick_that_hurt_the_hero_asks_the_poison_blood_whatever_the_violence_filter_says()
+    {
+        // ARC-RENDER-1991 (RH2, RH5): the poison event calls the damage effect with kind 2 after its damage step; kind 2 skips the filter and flag choice of kind 1 and the damage tier (index 1, the poison splotch).
+        foreach (var filter in new[] { false, true })
+        {
+            var (owner, caster) = Setup(filter: filter);
+            using var _ = owner;
+            var pass = PoisonPass(owner, caster, 600);
+            Assert.AreEqual(1, pass.Life.Count(f => f.Event.Kind == SessionEventKinds.HeroPoisonDamage), "one tick ran");
+            Assert.AreEqual(3, pass.Life.Single(f => f.Event.Kind == SessionEventKinds.HeroPoisonDamage).Life.Outcome!.HitPointDamage, "level 600: 3 points");
+            CollectionAssert.AreEqual(new[] { 1 }, Asked(caster, SessionSpellCaster.Hero).ToArray(), $"filter {filter}");
+            Assert.AreEqual(HitGoreRules.PlayLimit, caster.Log.Single(e => e.Kind == SpellCastEventKind.HitGore).Detail);
+        }
+    }
+
+    [TestMethod]
+    public void A_poison_tick_asks_no_blood_for_a_destroyed_or_off_hero_or_one_that_forbids_it_and_none_before_it_is_due()
+    {
+        // The hero has no data flags, only the session's writes.
+        foreach (var (field, mask) in new[] { (SessionObjectFlagField.Critter2, SessionSpellCaster.NoDamageEffectCritterFlag2), (SessionObjectFlagField.Object, SpellTargetObject.Destroyed), (SessionObjectFlagField.Object, SpellTargetObject.Off) })
+        {
+            var (o, c) = Setup();
+            using var _ = o;
+            Assert.AreEqual(GameSessionDisposition.Changed, o.WriteObjectFlag(o.Version, SessionSpellCaster.Hero, field, mask, true).Disposition);
+            Assert.AreEqual(1, PoisonPass(o, c, 600).Life.Count, "the tick ran");
+            Assert.AreEqual(0, Asked(c, SessionSpellCaster.Hero).Length, $"{field} {mask}");
+        }
+        var (owner, caster) = Setup();
+        using var _o = owner;
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.SetPoisonLevel(owner.Version, SessionLifeTarget.Hero, 600).Disposition);
+        owner.AdvanceGameTime(owner.QueryClockSnapshot().Token, SessionEventKinds.PoisonDamageDelayMs - 1, ClockAdvanceReason.OrdinaryAdvance);
+        Assert.AreEqual(0, caster.ProcessEvents().Life.Count);
+        Assert.AreEqual(0, Asked(caster, SessionSpellCaster.Hero).Length, "not due yet");
     }
 }
