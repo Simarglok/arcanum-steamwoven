@@ -196,6 +196,14 @@ public partial class TerrainViewerApp
             InventoryKey(Key.O);
             Require(!MainMenuOpen && _mainMenu is null, "the O key closed the menu from play");
 
+            // ARC-UI-2026 (main loop O branch, menu start kind 4): in plain play the release of O opens the options window at the Game page without the pause.
+            InputWorld(new InputEventKey { Keycode = Key.O, PhysicalKeycode = Key.O, Pressed = true });
+            Require(!MainMenuOpen && _mainMenu is null, "the O press alone opens nothing in play");
+            InputWorld(new InputEventKey { Keycode = Key.O, PhysicalKeycode = Key.O, Pressed = false });
+            Require(_mainMenu?.Window == AreaMenuWindow.Options && panel.HeaderForSelfTest == "Options: Game" && !WorldMenuPause, "the O release opened the options window without the pause");
+            Letter('d');
+            Require(!MainMenuOpen && _mainMenu is null, "Done closed the menu the O key opened");
+
             // From the main menu: Options, then Done goes back to it.
             OpenMainMenu(MainMenuTexts(arguments));
             Letter('o');

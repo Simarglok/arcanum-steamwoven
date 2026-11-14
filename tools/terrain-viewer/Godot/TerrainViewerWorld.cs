@@ -180,7 +180,7 @@ public partial class TerrainViewerApp
     // This is the hero's INPUT gate and the cursor's, not the clock's: since ARC-DEV-126 (MIG12 S7, GQ3 A) a window, the palette or the bug report no longer stops the world.
     private bool WorldModal => PaletteOpen || AnyWindowOpen || SaveListOpen || MainMenuOpen || HeroDeathCovering || MovieCovering || BugReportOpen;
     // ARC-DEV-126: the one raiser of the pause is the Esc menu and a save or load list (TL23); the options screen the menu leads to is under it. `_mainMenu` covers the frames in which the menu's panel is hidden while it waits for the save list to open.
-    private bool WorldMenuPause => MainMenuOpen || SaveListOpen || _mainMenu is not null;
+    private bool WorldMenuPause => (MainMenuOpen || SaveListOpen || _mainMenu is not null) && _mainMenu is not { OpenedByOptionsKey: true }; // ARC-UI-2026: the O key's options window does not pause (0x541180 kind 4)
     // ARC-DEV-126: the death cover and its slide show are frames in which the original does not ping (TL25): no stamp is observed and no clock moves.
     // ARC-RENDER-1170: a movie is such a frame too (TL25).
     private bool WorldFrozenFrame => HeroDeathCovering || MovieCovering;
@@ -247,7 +247,7 @@ public partial class TerrainViewerApp
     private void QuarantineWorldObserved()
     {
         TraceWorldInput("Quarantine");
-        _gameMenuEscapeArmed = false; // ARC-INPUT-1124: a held Escape whose release another owner may take opens nothing later.
+        _gameMenuEscapeArmed = false; _optionsKeyArmed = false; // ARC-INPUT-1124: a held Escape (ARC-UI-2026: O) whose release another owner may take opens nothing later.
         _worldGate.Close(); _worldReducer.Quarantine();
         // Palette, focus loss, device change, reset/reload and faults all pass here:
         // the route stops, and the step already started still ends at its cell centre.
@@ -418,7 +418,7 @@ public partial class TerrainViewerApp
         WorldObservation(() =>
         {
             _worldFocused = focused;
-            if (!focused) { CancelPendingOrder("the window lost focus"); _orderKeyArmed = null; _gameMenuEscapeArmed = false; CancelArmedLockpicks("the window lost focus"); }
+            if (!focused) { CancelPendingOrder("the window lost focus"); _orderKeyArmed = null; _gameMenuEscapeArmed = false; _optionsKeyArmed = false; CancelArmedLockpicks("the window lost focus"); }
             _worldReducer.FocusChanged(focused); QuarantineWorld(); RefreshReadyStatus();
             TraceWorldInput("NativeFocus:transition");
         });
@@ -1109,7 +1109,7 @@ public partial class TerrainViewerApp
             // ARC-INPUT-004: Ctrl, Alt or Command with a character letter (A C F I L R S T W) is no key in the original:
             // no window opens and nothing is reported as reserved.
             // ARC-WORLD-011: F7/F8 are quick save/load while an AREA game session exists.
-            if (!OriginalWorldKeyboard.CharacterKeySilenced(decision.Key, modifiers) && !RouteQuickKey(decision) && !RouteGameMenuKey(decision) && !RouteOrderKey(decision, modifiers) && !RouteHomeKey(decision) && !RouteInventoryKey(decision) && !RouteSheetKey(decision) && !RouteLogbookKey(decision) && !RouteSpellKey(decision) && !RouteSkillKey(decision) && !RouteHotkeyKey(decision, modifiers) && !RouteSchematicsKey(decision) && !RouteSleepKey(decision) && !RouteFateKey(decision) && !RouteWorldMapKey(decision) && !RouteVisualKey(decision, modifiers) && !RouteNumLockKey(decision) && !RouteTurnBasedKey(decision) && !RouteCombatModeKey(decision) && decision.Role == WorldKeyRole.OriginalReserved && decision.Pressed && !decision.Echo && !WorldModal && !WorldUiFocus)
+            if (!OriginalWorldKeyboard.CharacterKeySilenced(decision.Key, modifiers) && !RouteQuickKey(decision) && !RouteGameMenuKey(decision) && !RouteOptionsKey(decision) && !RouteOrderKey(decision, modifiers) && !RouteHomeKey(decision) && !RouteInventoryKey(decision) && !RouteSheetKey(decision) && !RouteLogbookKey(decision) && !RouteSpellKey(decision) && !RouteSkillKey(decision) && !RouteHotkeyKey(decision, modifiers) && !RouteSchematicsKey(decision) && !RouteSleepKey(decision) && !RouteFateKey(decision) && !RouteWorldMapKey(decision) && !RouteVisualKey(decision, modifiers) && !RouteNumLockKey(decision) && !RouteTurnBasedKey(decision) && !RouteCombatModeKey(decision) && decision.Role == WorldKeyRole.OriginalReserved && decision.Pressed && !decision.Echo && !WorldModal && !WorldUiFocus)
             {
                 _worldLastReserved = $"{routedKey} = {decision.OriginalAction} (original; NOT IMPLEMENTED)";
                 _hud?.SetNotice($"Reserved: {routedKey} = {decision.OriginalAction} (NOT IMPLEMENTED)");
