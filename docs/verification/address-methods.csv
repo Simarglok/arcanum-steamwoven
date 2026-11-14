@@ -486,6 +486,8 @@ src/Arcanum.World/AreaAiHost.cs,ItemHolder,pending,
 src/Arcanum.World/AreaAiHost.cs,Jump,pending,
 src/Arcanum.World/AreaAiHost.cs,LaunchCast,pending,
 src/Arcanum.World/AreaAiHost.cs,Leader,exempt,host
+src/Arcanum.World/AreaAiHost.cs,LeaderCharisma,exempt,host
+src/Arcanum.World/AreaAiHost.cs,LeaveUnforced,exempt,host
 src/Arcanum.World/AreaAiHost.cs,LineOfFire,pending,
 src/Arcanum.World/AreaAiHost.cs,LineOfFireBlocker,pending,
 src/Arcanum.World/AreaAiHost.cs,LineOfFireStruck,pending,
