@@ -50,6 +50,14 @@ public partial class TerrainViewerApp
 
         public AttackGoal(AreaObjectAttackTarget target, HitLocation? aim) : this(target.Row, target.Entity, aim) => Object = target;
 
+        // ARC-COMBAT-1941 (0x54ED30, the combat-mode table): a wall (type 0) is a target of the Alt click; its hit takes nothing (OD1), so it has no baseline (no <see cref="Object"/>).
+        public AttackGoal(AreaObjectRecord wall, HitLocation? aim) : this(wall, WallEntity(wall), aim) => Wall = true;
+
+        public static string WallEntity(AreaObjectRecord wall) => $"wall:{wall.Key.SourceIndex}";
+
+        /// <summary>The target is a wall.</summary>
+        public bool Wall { get; }
+
         public AreaObjectRecord Row { get; } = row;
         public string Entity { get; } = entity;
         // ARC-COMBAT-005: an NPC target with its combat values; ARC-COMBAT-008: an object target instead.
@@ -145,7 +153,7 @@ public partial class TerrainViewerApp
     private bool TryAreaAttack(Vector2 screen, bool alt, bool shift = false)
     {
         // ARC-COMBAT-008: an object is attacked only with Alt held (ledger OD14); without it the click uses the object as out of combat.
-        if (CombatTargetAt(screen) is not { } target) return alt && TryAreaObjectAttack(screen);
+        if (CombatTargetAt(screen) is not { } target) return alt && TryAreaObjectAttack(screen, shift);
         // FA6: a hero that cannot act (stoned, stunned, paralysed, unconscious, dead) does nothing with the click.
         if (_areaSession!.QueryHeroLife() is not { Status.IsActive: true })
         {
@@ -212,10 +220,13 @@ public partial class TerrainViewerApp
     /// <summary>ARC-COMBAT-008: a guarded left press with Alt in combat mode on a door, window, container or scenery: the original's click
     /// gives these the attack goal (ledger OD14; an item on the ground is picked up and a trap walked to, as without combat mode): true
     /// when the press belongs to combat.</summary>
-    private bool TryAreaObjectAttack(Vector2 screen)
+    private bool TryAreaObjectAttack(Vector2 screen, bool shift = false)
     {
-        if (!AttackMapActive || !HeroInCombatMode || AreaObjectAtScreen(screen) is not { } key || ObjectTargets()?.Target(_areaSession!, key, AreaTrapped) is not { } target
-            || target.Kind is Arcanum.Simulation.Combat.DamageableObjectKind.Item or Arcanum.Simulation.Combat.DamageableObjectKind.Trap)
+        if (!AttackMapActive || !HeroInCombatMode || AreaObjectAtScreen(screen) is not { } key) return false;
+        AreaObjectAttackTarget? target = ObjectTargets()?.Target(_areaSession!, key, AreaTrapped);
+        // ARC-COMBAT-1941 (VC62): a wall is no object target (it has no damage baseline) but takes the attack goal all the same.
+        var wall = target is null && _readyArea?.Snapshot.Objects.FirstOrDefault(o => o.Key == key) is { Type: 0, WorldX: not null, WorldY: not null } row ? row : null;
+        if (target is null && wall is null || target?.Kind is Arcanum.Simulation.Combat.DamageableObjectKind.Item or Arcanum.Simulation.Combat.DamageableObjectKind.Trap)
             return false;
         if (_areaSession!.QueryHeroLife() is not { Status.IsActive: true })
         {
@@ -223,7 +234,7 @@ public partial class TerrainViewerApp
             RefreshAreaStatus();
             return true;
         }
-        if (target.Refusal is not null)
+        if (target?.Refusal is not null)
         {
             _attackNotice = $"cannot attack: {target.Refusal}";
             GD.Print($"ARC-COMBAT-008 object-attack refused entity={target.Entity} detail={target.Refusal}");
@@ -231,9 +242,11 @@ public partial class TerrainViewerApp
             return true;
         }
         CancelTalkApproach("an attack replaced it"); CancelAreaUseApproach("an attack replaced it"); CancelInventoryApproach("an attack replaced it");
-        if (_attack is { } running && running.Entity == target.Entity && !running.Stop) return true;
+        var entity = target?.Entity ?? AttackGoal.WallEntity(wall!);
+        // ARC-COMBAT-1941: the same target clicked again keeps its goal, a Shift click on a plain attack's target (or the reverse) restarts it as the other goal (as for a creature, ARC-DEV-270).
+        if (_attack is { } running && running.Entity == entity && !running.Stop && running.NoWalk == shift) return true;
         CancelAreaAttack(null);
-        _attack = new(target, HeldAim());
+        _attack = target is not null ? new(target, HeldAim()) { NoWalk = shift } : new(wall!, HeldAim()) { NoWalk = shift };
         StartAttackGoal(_attack);
         return true;
     }
@@ -390,7 +403,7 @@ public partial class TerrainViewerApp
         if (_worldActor.Session is not AreaGridSession || _areaSession is null || HeroRunsHost() is null) { CancelAreaAttack("no actor"); return; }
         _attackOwner = _areaSession;
         goal.ClearShotStop = false; goal.TestedCell = null;
-        var request = HeroRequests.Apply(new ObjectClickRequest(AttackTargetOf(goal), Alt: goal.Object is not null, Shift: goal.NoWalk && goal.Object is null));
+        var request = HeroRequests.Apply(new ObjectClickRequest(AttackTargetOf(goal), Alt: goal.Object is not null || goal.Wall, Shift: goal.NoWalk));
         GD.Print($"ARC-DEV-181 attack-click outcome={request.Outcome} goal={request.Click} target={goal.Entity}");
         if (request.Outcome != HeroRequestOutcome.Done) CancelAreaAttack(request.Click is Arcanum.Simulation.Goals.HeroClickGoal.Attack or Arcanum.Simulation.Goals.HeroClickGoal.AttemptAttack ? "the click was refused" : $"the click is {request.Click}");
     }
@@ -416,7 +429,9 @@ public partial class TerrainViewerApp
         _attackOwner = owner;
         var entity = target["atk:".Length..];
         AttackGoal? goal = _combatHost?.Target(owner, entity) is { Build.Combat: { } combat } npc ? new(npc, combat, null)
-            : ObjectTargets() is { } objects && objects.KeyOfEntity(entity) is { } key && objects.Target(owner, key, AreaTrapped) is { Refusal: null } thing ? new(thing, null) : null;
+            : ObjectTargets() is { } objects && objects.KeyOfEntity(entity) is { } key && objects.Target(owner, key, AreaTrapped) is { Refusal: null } thing ? new(thing, null)
+            // ARC-COMBAT-1941: a wall the attack run names (its entity is the wall's source index; a map with two walls of one index adopts none).
+            : _readyArea?.Snapshot.Objects.Where(o => o.Type == 0 && o.WorldX is not null && o.WorldY is not null && AttackGoal.WallEntity(o) == entity).ToArray() is [{ } wall] ? new(wall, null) : null;
         if (goal is null) { GD.Print($"ARC-DEV-317 attack-adopt target={entity} refused (no target here)"); return null; }
         goal.NoWalk = (run.Flags & Arcanum.Simulation.Goals.GoalRunFlags.NoWalk) != 0;
         _attack = goal;
@@ -450,7 +465,7 @@ public partial class TerrainViewerApp
         var tile = new CellCoord(checked((int)x), checked((int)y));
         // An object stays a target while the session draws it and the last hit did not break it (ARC-COMBAT-008).
         var now = goal.Combat is null ? null : _combatHost!.Target(owner, goal.Row.Key);
-        var dead = goal.Combat is null ? goal.Broke || _objectTargets?.Target(owner, goal.Row.Key) is null
+        var dead = goal.Wall ? false : goal.Combat is null ? goal.Broke || _objectTargets?.Target(owner, goal.Row.Key) is null
             : now?.Dead != false || owner.QueryLife(goal.Combat.Target).View?.Status.IsDead != false;
         return new(tile, dead);
     }
@@ -684,6 +699,7 @@ public partial class TerrainViewerApp
         var trace = RangedPath(owner.QueryHeroAttack()) ? LoggedLineOfFire(session, goal.Row) : null;
         if (trace?.Blocker is { } blocker && blocker.Key != goal.Row.Key) { StrikeBlocker(goal, blocker, session); return; }
         if (goal.Object is { } struck) { RunObjectAttackHit(goal, struck, (int)distance); return; }
+        if (goal.Wall) { StrikeWall(goal, goal.Row, (int)distance, false); return; }
         HitCritter(goal, goal, (int)distance, ShotLine(trace, goal.Row));
     }
 
@@ -782,41 +798,47 @@ public partial class TerrainViewerApp
             RunObjectAttackHit(goal, struck, distance);
             return;
         }
-        if (blocker.Type == 0)
-        {
-            GD.Print($"ARC-COMBAT-015 line-of-fire strikes wall={blocker.Key.Kind}:{blocker.Key.SourceIndex} instead of {goal.Entity}");
-            _lineOfFireStruck = $"wall:{blocker.Key.SourceIndex}";
-            var flight = ShotFlight(owner.QueryHeroAttack());
-            var result = owner.AttackObject(owner.Version, new SessionObjectAttack
-            {
-                Wall = true, Aim = goal.Aim, Distance = distance, HeroWorn = AreaCombatHost.HeroWorn(owner, _areaKitDurability), DropMap = AreaDropMapNow(),
-                // ARC-COMBAT-016: the projectile flies to the wall and strikes it on arrival.
-                Flight = flight is not null, Throw = flight is null ? null : HeroThrow(goal),
-            });
-            goal.Attacks++;
-            goal.Stop = result.Disposition == GameSessionDisposition.Rejected || result.Resolution?.Refusal is { } refusal && refusal != AttackRefusal.None;
-            // ARC-COMBAT-1738: a wall takes the same re-wields (a worn-out weapon, no ammunition) as any struck object.
-            HeroWeaponWornOut(result.Wear, blocker, false);
-            HeroOutOfAmmunition(result.Resolution?.Refusal, blocker, false);
-            if (result.Shot is { } shot)
-            {
-                foreach (var projectile in result.Shots) LaunchProjectile(goal, projectile, flight!.Value, result.Resolution!, blocker, null, null, null);
-                // ARC-COMBAT-017: a throw is the throw goal, not the attack goal: nothing repeats it (ledger TW1).
-                if (owner.QueryThrownShot(shot) is not null) goal.Stop = true;
-                if (result.Life is null) { SyncAreaInventory(); RefreshAreaStatus(); return; }
-            }
-            _attackNotice = "the line of fire struck a wall: " + AreaObjectTargets.Describe(result);
-            FloatObjectAttack(result, $"wall:{blocker.Key.SourceIndex}", null);
-            GD.Print($"ARC-COMBAT-015 wall-hit disposition={result.Disposition} failure={result.Failure} outcome={result.Resolution?.Outcome}"
-                + $" prevented={result.Resolution?.Damage?.Prevented} ammo={result.Ammunition?.UnitsAfter.ToString() ?? "none"} step={result.StepFailure}");
-            if (result.Life is { } self && self.Events.HasFlag(LifeEvents.Stunned)) HeroStunned(owner);
-            SyncAreaInventory();
-            RefreshAreaStatus();
-            return;
-        }
+        if (blocker.Type == 0) { StrikeWall(goal, blocker, distance, true); return; }
         goal.Stop = true;
         _attackNotice = $"the line of fire stops at {(IsAreaCompanion(blocker.Key) ? "a companion" : $"an object of type {blocker.Type}")}: striking it is not ready";
         GD.Print($"ARC-COMBAT-012 line-of-fire stopped type={blocker.Type} (not ready)");
+        RefreshAreaStatus();
+    }
+
+    /// <summary>
+    /// ARC-COMBAT-015, ARC-COMBAT-1941: the hit on a wall, the one the line of fire struck instead of the target (<paramref name="byLine"/>) or the one the click's goal targets: the session's wall attack, which takes nothing from the wall (OD1)
+    /// and spends the weapon's ammunition, the throw and the wear as any attack does. The wall's own hit scripts (RH5: the weapon's hit script and the wall's points 26 and 23) are not run on this path.
+    /// </summary>
+    private void StrikeWall(AttackGoal goal, AreaObjectRecord wall, int distance, bool byLine)
+    {
+        var owner = _areaSession!;
+        GD.Print(byLine ? $"ARC-COMBAT-015 line-of-fire strikes wall={wall.Key.Kind}:{wall.Key.SourceIndex} instead of {goal.Entity}" : $"ARC-COMBAT-1941 wall-attack target={goal.Entity}");
+        if (byLine) _lineOfFireStruck = AttackGoal.WallEntity(wall);
+        var flight = ShotFlight(owner.QueryHeroAttack());
+        var result = owner.AttackObject(owner.Version, new SessionObjectAttack
+        {
+            Wall = true, Aim = goal.Aim, Distance = distance, HeroWorn = AreaCombatHost.HeroWorn(owner, _areaKitDurability), DropMap = AreaDropMapNow(),
+            // ARC-COMBAT-016: the projectile flies to the wall and strikes it on arrival.
+            Flight = flight is not null, Throw = flight is null ? null : HeroThrow(goal),
+        });
+        goal.Attacks++;
+        goal.Stop = result.Disposition == GameSessionDisposition.Rejected || result.Resolution?.Refusal is { } refusal && refusal != AttackRefusal.None;
+        // ARC-COMBAT-1738: a wall takes the same re-wields (a worn-out weapon, no ammunition) as any struck object.
+        HeroWeaponWornOut(result.Wear, wall, false);
+        HeroOutOfAmmunition(result.Resolution?.Refusal, wall, false);
+        if (result.Shot is { } shot)
+        {
+            foreach (var projectile in result.Shots) LaunchProjectile(goal, projectile, flight!.Value, result.Resolution!, wall, null, null, null);
+            // ARC-COMBAT-017: a throw is the throw goal, not the attack goal: nothing repeats it (ledger TW1).
+            if (owner.QueryThrownShot(shot) is not null) goal.Stop = true;
+            if (result.Life is null) { SyncAreaInventory(); RefreshAreaStatus(); return; }
+        }
+        _attackNotice = (byLine ? "the line of fire struck a wall: " : "the wall: ") + AreaObjectTargets.Describe(result);
+        FloatObjectAttack(result, AttackGoal.WallEntity(wall), null);
+        GD.Print($"ARC-COMBAT-015 wall-hit disposition={result.Disposition} failure={result.Failure} outcome={result.Resolution?.Outcome}"
+            + $" prevented={result.Resolution?.Damage?.Prevented} ammo={result.Ammunition?.UnitsAfter.ToString() ?? "none"} step={result.StepFailure}");
+        if (result.Life is { } self && self.Events.HasFlag(LifeEvents.Stunned)) HeroStunned(owner);
+        SyncAreaInventory();
         RefreshAreaStatus();
     }
 
