@@ -543,7 +543,7 @@ public sealed partial class GameSessionOwner
             // XP9: the killer's PC leader gets the kill award; a self-hit has no killer.
             if (stepFailure == GameSessionFailure.None && recipient == DamageRecipient.Target && outcome.Events.HasFlag(LifeEvents.Died) && !applied.DeathStopped)
             {
-                var kill = RecordNpcKill(Version, struck.Experience, creditsHero: _party.Get(attacker.Entity).LedByPc);
+                var kill = RecordNpcKill(Version, struck.Experience, creditsHero: PcLeads(attacker.Entity));
                 killAward = kill.Award;
                 if (kill.Disposition == GameSessionDisposition.Rejected) stepFailure = kill.Failure;
             }
@@ -551,7 +551,7 @@ public sealed partial class GameSessionOwner
         // ARC-UI-097: the hero's kill and injury log. A death the hero's follower dealt is a kill of the hero (0x4F5330, the killer's PC leader);
         // a hit that scars, blinds or cripples the hero is an injury (0x4F5690) whose cause is the attacker as the hero knows it.
         if (stepFailure == GameSessionFailure.None && recipient == DamageRecipient.Target && struck is not null && outcome.Events.HasFlag(LifeEvents.Died) && !applied.DeathStopped
-            && _party.Get(attacker.Entity).LedByPc)
+            && PcLeads(attacker.Entity))
             stepFailure = RecordKillLog(Levelled(struck));
         else if (stepFailure == GameSessionFailure.None && recipient == DamageRecipient.Target && struck is null)
             stepFailure = RecordHeroInjuries(outcome.Events, AttackerCause(attacker));

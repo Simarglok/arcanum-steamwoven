@@ -431,14 +431,28 @@ public sealed class AreaSpellCastMap : ISpellCastMap
         return element is { Words: [var word] } && word is >= 0 and <= uint.MaxValue ? unchecked((int)(uint)word) : 0;
     }
 
-    public bool DamageObject(string id, AttackDamage damage)
+    public bool DamageObject(string id, AttackDamage damage) => DamageObject(id, damage, null);
+
+    /// <summary>ARC-AI-2112 (GW10): as above, with the attacker of the damage record (a spell's caster): the hit keeps it as <see cref="AreaObjectHit.Actor"/> and carries the witness steps (<see cref="SessionObjectHostSteps.WitnessesHearBreak"/> or
+    /// <see cref="SessionObjectHostSteps.WitnessesHearAttack"/>), which the host's guard witness call reads after the break.</summary>
+    public bool DamageObject(string id, AttackDamage damage, string? attacker)
     {
         ArgumentNullException.ThrowIfNull(damage);
         if (ObjectTarget(id) is { } target)
         {
-            var result = _session.DamageObject(_session.Version, target, damage.HitPointDamage);
-            if (result.Hit is not { } hit) return false;
-            _objectHits.Add(new(id, hit, result.Host) { Source = DamageSource is { } named && named.Target == id ? named.Source : null });
+            var result = _session.DamageObject(_session.Version, target, damage.HitPointDamage, attacker is not null);
+            if (result.Hit is not { } hit)
+            {
+                // ARC-AI-2123 (GW1, GW8): a hit of 0 on an object that stays whole changes nothing and shows no damage, but the damage end still calls the witnesses (mode 1) for an attacker: queue a hit only they read.
+                if (attacker is not null && (result.Host & SessionObjectHostSteps.WitnessesHearAttack) != 0)
+                {
+                    _objectHits.Add(new(id, new ObjectHitOutcome(0, 0, false, ObjectBreak.None, 0), result.Host) { Actor = attacker, WitnessOnly = true });
+                    ObjectHitMade?.Invoke();
+                }
+                return false;
+            }
+            _objectHits.Add(new(id, hit, result.Host) { Source = DamageSource is { } named && named.Target == id ? named.Source : null, Actor = attacker });
+            if (attacker is not null) ObjectHitMade?.Invoke();
             return result.Disposition == GameSessionDisposition.Changed;
         }
         // ARC-COMBAT-025 (OD1–OD4, OD12): an item takes the same damage through its durability.
@@ -450,6 +464,10 @@ public sealed class AreaSpellCastMap : ISpellCastMap
     }
 
     private readonly List<AreaObjectHit> _objectHits = [];
+
+    /// <summary>ARC-AI-2124 (GW9): told right after a hit with an attacker (a spell's damage on an object, a zero hit that only the witnesses read) was queued, inside the damage step that made it: the original runs the object's break and the guard witnesses
+    /// (0x4AEE50) there, before the cast's next step, so the shown map takes the queued hits at once (<see cref="TakeObjectHits"/>) instead of at the cast log's flush. A damage with no attacker (script, burn, trap) does not call it and waits for the flush. Null: nothing happens.</summary>
+    public Action? ObjectHitMade { get; set; }
 
     /// <summary>ARC-TECHNOLOGY-1760 (OD4, OD15): the attacker of the context that strikes <c>Target</c> now (a trap's shot: the shooter object's cast id), kept on the hit that reaches that object only (not on damage a script or an item event of the
     /// strike deals to another object) as the BUST breaker (<see cref="AreaObjectHit.Source"/>). Null: damage with no attacker. The host sets it around one strike and clears it.</summary>
@@ -553,6 +571,12 @@ public sealed record AreaObjectHit(string Id, ObjectHitOutcome Hit, SessionObjec
 {
     /// <summary>ARC-TECHNOLOGY-1760: the cast id of the attacker of the hit when it was no one the hit-point step names (a trap's shot: the shooter object), the breaker of the BUST script; null: no attacker.</summary>
     public string? Source { get; init; }
+
+    /// <summary>ARC-AI-2112 (GW10): the attacker of the damage record (a spell's caster, its other object first) the damage end's guard witnesses read; null: a record with no attacker (script, burn, trap damage).</summary>
+    public string? Actor { get; init; }
+
+    /// <summary>ARC-AI-2123 (GW8): a hit of 0 that left the object whole and changed nothing: it has no damage to log, float or run a break for; only the guard witnesses (mode 1, loud) read it. <see cref="Hit"/> is then an empty outcome.</summary>
+    public bool WitnessOnly { get; init; }
 }
 
 /// <summary>ARC-COMBAT-025: one hit that reached an item (lying on the ground or worn): its cast id, the durability result and the host's steps.</summary>

@@ -43,12 +43,12 @@ public sealed class AreaAiFollowerTests
 
     // A human NPC (type 16, no monster flags unless given) with every primary stat 20, level 1, 20 hit points, at the world cell; heal 5
     // points when it heals.
-    private static AreaObjectRecord Npc(int index, CellCoord cell, int heal = 0, uint critterFlags = 0, int alignment = 0) => new(Key(index), 0, 16, 28359, "p", "p", "r", "s", AreaScope.Core, null, cell.X, cell.Y,
+    private static AreaObjectRecord Npc(int index, CellCoord cell, int heal = 0, uint critterFlags = 0, int alignment = 0, int charisma = 20) => new(Key(index), 0, 16, 28359, "p", "p", "r", "s", AreaScope.Core, null, cell.X, cell.Y,
         Arcanum.Data.Area.AreaDisposition.BodyEligibleConditionally, [],
         [
             Field(0, 0x60000000), Field(18, 0), Field(19, 0), Field(21, 1), Field(22, 2), Field(25, 0), Field(26, 20), Field(27, 0), Field(28, 0), Field(29, 4),
             Array(30), Empty(31),
-            Field(36, critterFlags), Field(37, 0), Array(38, 20, 20, 20, 20, 20, 20, 20, 20, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, alignment, 0, 0, 0, 0, 0, 20, 1, 0),
+            Field(36, critterFlags), Field(37, 0), Array(38, 20, 20, 20, 20, 20, 20, 20, charisma, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, alignment, 0, 0, 0, 0, 0, 20, 1, 0),
             Array(39, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, heal, 0), Array(40), Array(41), Field(42, 10), Field(43, 0), Field(44, 0), Field(45, 0), Empty(46), Empty(47),
             Field(57, 0), Field(63, 0), Field(69, 0), Field(71, 0), Field(74, 10), Field(75, 10), Field(81, 0), Field(82, 0), Field(84, 0), Field(85, 0), Field(89, 0),
             Array(92),
@@ -115,7 +115,7 @@ public sealed class AreaAiFollowerTests
 
     private static Scene Open(bool companionWaits = false, bool followers = true, CellCoord? companionAt = null, CellCoord? corner = null,
         CellCoord? companionHome = null, bool healer = false, uint enemyFlags = 0, bool free = false, bool visitor = false, bool onDemand = false, bool homeless = false, string? dialogPartner = null, Action<string>? dialogEnded = null, Func<string, int?>? alertedSound = null,
-        PartyConsentFacts? joinFacts = null, Func<string, PartyConsentFacts?>? followFacts = null, AiParameterTable? table = null, CellCoord? enemyAt = null, bool enemyLed = false, int companionAlignment = 0, bool spells = false)
+        PartyConsentFacts? joinFacts = null, Func<string, PartyConsentFacts?>? followFacts = null, AiParameterTable? table = null, CellCoord? enemyAt = null, bool enemyLed = false, int companionAlignment = 0, bool spells = false, int companionCharisma = 20)
     {
         var identity = new GlobalFlagIdentity(new WorldId(Guid.NewGuid()), new ModuleId(Guid.NewGuid()));
         var hero = new SessionHeroDefinition(16089, CharacterRace.Human, CharacterGender.Male, [8, 8, 8, 8, 8, 8, 8, 8, 0, 0], 1, 5, 0, null, null, 0, []);
@@ -127,8 +127,8 @@ public sealed class AreaAiFollowerTests
         // A healer companion holds a healing item (2) and has heal 5 points.
         // ARC-DEV-075: a visitor is a companion of another home map (2): it has no holder or row on this map, its record is its home map's,
         // given to the resolver (visitor) or read from a source on demand with the session naming the home (onDemand).
-        var rows = healer ? new[] { Npc(0, enemy, critterFlags: enemyFlags), Npc(1, start, 5, alignment: companionAlignment), Item(2) }
-            : visitor ? new[] { Npc(0, enemy, critterFlags: enemyFlags) } : new[] { Npc(0, enemy, critterFlags: enemyFlags), Npc(1, start, alignment: companionAlignment) };
+        var rows = healer ? new[] { Npc(0, enemy, critterFlags: enemyFlags), Npc(1, start, 5, alignment: companionAlignment, charisma: companionCharisma), Item(2) }
+            : visitor ? new[] { Npc(0, enemy, critterFlags: enemyFlags) } : new[] { Npc(0, enemy, critterFlags: enemyFlags), Npc(1, start, alignment: companionAlignment, charisma: companionCharisma) };
         SessionSeedHolder[] holders = visitor ? [new(Entity(0), SessionHolderKind.Npc, false, false, [], [])]
             : [new(Entity(0), SessionHolderKind.Npc, false, false, [], []), new(Entity(1), SessionHolderKind.Npc, false, false, [], healer ? [Entity(2)] : [])];
         var map = new AreaInventoryMap(1,
@@ -273,6 +273,48 @@ public sealed class AreaAiFollowerTests
         Assert.AreEqual(0, scene.Session.QueryGoals().RunsOf(scene.Companion).Length);
     }
 
+    // ARC-WORLD-2117 (0x4AABE0 → 0x45DE00 → 0x4B0EE0): the danger setter reads the DIRECT leader's charisma, an NPC leader's too: FLEE under a leader of charisma 20 or more becomes COMBAT_FOCUS, under a lesser one stays FLEE.
+    [TestMethod]
+    public void An_npc_led_by_a_companion_flees_only_when_the_companions_charisma_is_below_twenty()
+    {
+        foreach (var (charisma, expected) in new[] { (20, DangerState.CombatFocus), (19, DangerState.Flee) })
+        {
+            var scene = Open(enemyAt: new(4, 20), companionCharisma: charisma);
+            var (session, host, enemy, companion) = (scene.Session, scene.Host, scene.Enemy, scene.Companion);
+            Assert.AreEqual(GameSessionDisposition.Changed, session.ForceJoinLeader(session.Version, enemy, companion).Disposition);
+            Assert.AreEqual(charisma, host.LeaderCharisma(enemy), "the direct leader's effective charisma");
+            Assert.IsTrue(host.SpellFlee(enemy, companion), $"charisma {charisma}: {host.TraceOf(enemy)?.Setter}");
+            Assert.AreEqual(expected, session.QueryDanger(enemy).State, $"charisma {charisma}");
+        }
+    }
+
+    // ARC-WORLD-2117: the leader read is the direct one, never the chain: an NPC led by a companion that is led by the hero reads the companion's charisma, a leaderless NPC reads none.
+    [TestMethod]
+    public void The_leader_charisma_is_the_direct_leaders_and_none_without_a_leader()
+    {
+        var scene = Open(enemyAt: new(4, 20), companionCharisma: 12);
+        var (session, host, enemy, companion) = (scene.Session, scene.Host, scene.Enemy, scene.Companion);
+        Assert.IsNull(host.LeaderCharisma(enemy), "no leader");
+        Assert.AreEqual(GameSessionDisposition.Changed, session.ForceJoinLeader(session.Version, enemy, companion).Disposition);
+        Assert.AreEqual(12, host.LeaderCharisma(enemy), "the companion's charisma, not the hero's (the chain's top)");
+        Assert.AreEqual(8, host.LeaderCharisma(companion), "the hero's effective charisma for its follower");
+    }
+
+    // ARC-WORLD-2117 (0x45DFC0 unforced): an NPC-led follower's unforced leave is refused under an NPC leader of charisma 20 or more or under mind control, and goes through below 20.
+    [TestMethod]
+    public void An_unforced_leave_of_an_npc_led_follower_reads_the_npc_leaders_charisma()
+    {
+        var strong = Open(enemyAt: new(4, 20), companionCharisma: 20);
+        Assert.AreEqual(GameSessionDisposition.Changed, strong.Session.ForceJoinLeader(strong.Session.Version, strong.Enemy, strong.Companion).Disposition);
+        Assert.AreEqual(GameSessionFailure.LeaveRefused, strong.Host.LeaveUnforced(strong.Enemy, false).Failure);
+        Assert.AreEqual(strong.Companion, strong.Host.Leader(strong.Enemy), "still led");
+        var weak = Open(enemyAt: new(4, 20), companionCharisma: 19);
+        Assert.AreEqual(GameSessionDisposition.Changed, weak.Session.ForceJoinLeader(weak.Session.Version, weak.Enemy, weak.Companion).Disposition);
+        Assert.AreEqual(GameSessionFailure.LeaveRefused, weak.Host.LeaveUnforced(weak.Enemy, true).Failure, "mind control");
+        Assert.AreEqual(GameSessionDisposition.Changed, weak.Host.LeaveUnforced(weak.Enemy, false).Disposition);
+        Assert.IsNull(weak.Host.Leader(weak.Enemy));
+    }
+
     // ARC-WORLD-1840 (#1322): an NPC leads followers as in the original: the host answers the direct leader (0x45DE00), the chain's player character (0x45DDA0) and the followers of any
     // critter, one faction holds a leader and its followers, and a leave of an NPC leader ends the follower's run as the hero's leave does.
     [TestMethod]
@@ -287,7 +329,7 @@ public sealed class AreaAiFollowerTests
         Assert.AreEqual(Pc, host.Leader(companion));
         CollectionAssert.AreEqual(new[] { enemy }, host.Followers(companion).ToArray());
         Assert.IsTrue(host.FactionSame(enemy, companion) && host.FactionSame(companion, enemy) && host.FactionSame(Pc, enemy), "the leader, its follower and the hero at the top");
-        Assert.IsFalse(host.CatchUp(enemy).HasPcLeader, "the host cannot move an NPC of the map onto the hero, so it does not catch up (the original's chain catch-up is a named tail)");
+        Assert.IsTrue(host.CatchUp(enemy).HasPcLeader, "the chain query (0x45DDA0) reaches the hero through the companion: ARC-WORLD-2116");
         // Its tick's perform starts the follow goal toward its own leader, not the hero.
         Fire(scene, enemy);
         var run = session.QueryGoals().RunsOf(enemy).Single();
@@ -298,6 +340,46 @@ public sealed class AreaAiFollowerTests
         Assert.IsNull(host.PcLeader(enemy));
         CollectionAssert.AreEqual(new[] { enemy }, host.ObserveLeaves().ToArray());
         Assert.AreEqual(0, session.QueryGoals().RunsOf(enemy).Length);
+    }
+
+    // ARC-WORLD-2116 (0x4AD4D0 → 0x43E770): an NPC of the map led through the hero's companion, more than thirty tiles from the hero, is moved onto the hero's cell (the chain's PC, not its immediate leader), and a
+    // waiting leader does not hold it back; a waiting NPC-led follower (the flag) stays where it waits.
+    [TestMethod]
+    public void An_npc_led_through_a_companion_far_from_the_hero_catches_up_onto_the_hero()
+    {
+        var far = Open(enemyAt: new(60, 20), companionWaits: true);
+        var (session, host, enemy, companion) = (far.Session, far.Host, far.Enemy, far.Companion);
+        Assert.IsFalse(host.CatchUp(enemy).HasPcLeader, "no leader yet");
+        Assert.AreEqual(GameSessionDisposition.Changed, session.ForceJoinLeader(session.Version, enemy, companion).Disposition);
+        var facts = host.CatchUp(enemy);
+        Assert.IsTrue(facts.HasPcLeader && facts.Active && !facts.Waiting && facts.LeaderDistance > AiSchedulerRules.ActivityRange, $"{facts}: the leader waits, the follower is tested alone");
+        var tick = Fire(far, enemy);
+        Assert.IsTrue(tick.Steps.HasFlag(AiTickSteps.CaughtUp), $"{tick.Steps}");
+        Assert.AreEqual(HeroCell, host.Tile(enemy), "it stands on the hero's cell, not the leader's");
+        Assert.AreEqual(0, host.DistanceToPc(enemy));
+        Assert.AreEqual(0, far.Walks.Jumps, "the follower source did not move it: the NPC mover did");
+        var landed = host.DrainNotices().Where(n => n.Kind == AreaAiNoticeKind.Entered && n.Npc == enemy).ToArray();
+        Assert.AreEqual(HeroCell, landed.Single().Cell!.Value, "the landing tile's script is told");
+
+        // A follower of the NPC that waits under it (the wait keeps the leader, so the chain still reaches the hero) stays where it waits.
+        var waiting = Open(enemyAt: new(60, 20));
+        Assert.AreEqual(GameSessionDisposition.Changed, waiting.Session.ForceJoinLeader(waiting.Session.Version, waiting.Enemy, waiting.Companion).Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, waiting.Session.WaitParty(waiting.Session.Version, waiting.Enemy).Disposition);
+        Assert.IsTrue(waiting.Host.CatchUp(waiting.Enemy).Waiting);
+        Assert.IsFalse(Fire(waiting, waiting.Enemy).Steps.HasFlag(AiTickSteps.CaughtUp));
+        Assert.AreEqual(new CellCoord(60, 20), waiting.Host.Tile(waiting.Enemy));
+    }
+
+    // ARC-WORLD-2116 (0x4A9B80): the attack event tells the followers of any leader; here the attacker is an NPC that leads the companion, so the companion, a follower of that NPC, is told about the hero.
+    [TestMethod]
+    public void An_npc_attacker_tells_its_own_npc_led_followers()
+    {
+        var (session, host, _, enemy, companion) = Open();
+        Assert.AreEqual(GameSessionDisposition.Changed, session.ForceJoinLeader(session.Version, companion, enemy).Disposition);
+        CollectionAssert.AreEqual(new[] { companion }, host.Followers(enemy).ToArray());
+        host.PerformAttack(enemy, Pc);
+        Run(host, enemy);
+        StringAssert.StartsWith(host.TraceOf(companion)!.Event, "told Attacker", host.TraceOf(companion)?.Event);
     }
 
     // The NPC's tick, fired through the session's event pass with the host as its world: an immediate tick due 1 ms ahead, the clock moved 10 ms.

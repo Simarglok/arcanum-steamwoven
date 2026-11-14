@@ -1,4 +1,5 @@
 using Arcanum.Data.Area;
+using Arcanum.Data.Combat;
 using Arcanum.Data.Traversal;
 using Arcanum.Session;
 using Arcanum.Simulation.Combat;
@@ -99,6 +100,62 @@ public sealed class AreaSpellCastObjectDamageTests
         Assert.IsNull(f.Targets.Target(f.Session, f.Rows[0].Key), "a destroyed door is no target any more");
         Assert.IsTrue(f.Targets.Gone(f.Session).Contains(f.Rows[0].Key), "and the view stops drawing it");
         Assert.IsFalse(f.Caster.ApplyScriptDamage(id, 5, 0, unresistable: true).Applied, "a destroyed object takes nothing");
+    }
+
+    [TestMethod]
+    public void ADamageRecordsAttackerStaysOnTheHitWithTheWitnessStepsAndAScriptsHitHasNone()
+    {
+        // ARC-AI-2112 (GW10): a spell's damage record names its caster, so the hit carries the actor and the guard witness step (mode 1 whole, mode 0 broken); a script's record has no attacker.
+        var f = Create();
+        var id = f.Map.Id(f.Rows[0]);
+        var step = AttackResolver.DamageStep(new() { Attacker = new Combatant(), Target = new Combatant(), TargetKind = AttackTargetKind.OtherObject, Damage = DamageByType.Zero.With(DamageType.Normal, 4) });
+        Assert.IsTrue(f.Map.DamageObject(id, step, SessionSpellCaster.Hero));
+        var whole = f.Map.TakeObjectHits().Single();
+        Assert.AreEqual((SessionSpellCaster.Hero, SessionObjectHostSteps.WitnessesHearAttack), (whole.Actor, whole.Host));
+        var big = AttackResolver.DamageStep(new() { Attacker = new Combatant(), Target = new Combatant(), TargetKind = AttackTargetKind.OtherObject, Damage = DamageByType.Zero.With(DamageType.Normal, 40) });
+        Assert.IsTrue(f.Map.DamageObject(id, big, "oid:guard"));
+        var broke = f.Map.TakeObjectHits().Single();
+        Assert.AreEqual(("oid:guard", true, SessionObjectHostSteps.WitnessesHearBreak), (broke.Actor, broke.Hit.Broken, broke.Host));
+        var other = f.Map.Id(f.Rows[1]);
+        Assert.IsTrue(f.Caster.ApplyScriptDamage(other, 12, 0, unresistable: true).Applied);
+        var script = f.Map.TakeObjectHits().Single();
+        Assert.AreEqual((null, SessionObjectHostSteps.None), (script.Actor, script.Host), "script damage has no attacker, so no witnesses");
+    }
+
+    [TestMethod]
+    public void AZeroHitOfACasterOnAWholeObjectQueuesAWitnessOnlyHitAndAScriptsDoesNot()
+    {
+        // ARC-AI-2123 (GW1, GW8): a spell's damage of 0 on a whole object changes nothing and is no shown hit, but the damage end still calls the witnesses (mode 1): the map queues a hit only they read, with the caster as actor.
+        var f = Create();
+        var id = f.Map.Id(f.Rows[0]);
+        var zero = AttackResolver.DamageStep(new() { Attacker = new Combatant(), Target = new Combatant(), TargetKind = AttackTargetKind.OtherObject, Damage = DamageByType.Zero });
+        Assert.AreEqual(0, zero.HitPointDamage);
+        Assert.IsFalse(f.Map.DamageObject(id, zero, SessionSpellCaster.Hero), "nothing changed");
+        var witnessed = f.Map.TakeObjectHits().Single();
+        Assert.AreEqual((id, SessionSpellCaster.Hero, true, SessionObjectHostSteps.WitnessesHearAttack), (witnessed.Id, witnessed.Actor, witnessed.WitnessOnly, witnessed.Host));
+        Assert.IsFalse(f.Map.DamageObject(id, zero), "no attacker: the original skips the call");
+        Assert.AreEqual(0, f.Map.TakeObjectHits().Count);
+    }
+
+    [TestMethod]
+    public void AHitWithAnAttackerTellsTheHostInsideTheDamageStepAndOneWithoutDoesNot()
+    {
+        // ARC-AI-2124 (GW9): the damage end calls the guard witnesses inside each object's damage step, so the map tells its host the moment the hit (and the zero witness-only hit) is queued, with the hit already takeable; a script's damage waits for the flush.
+        var f = Create();
+        var door = f.Map.Id(f.Rows[0]);
+        var seen = new List<(string Id, string? Actor, bool WitnessOnly)>();
+        f.Map.ObjectHitMade = () => seen.AddRange(f.Map.TakeObjectHits().Select(h => (h.Id, h.Actor, h.WitnessOnly)));
+        var four = AttackResolver.DamageStep(new() { Attacker = new Combatant(), Target = new Combatant(), TargetKind = AttackTargetKind.OtherObject, Damage = DamageByType.Zero.With(DamageType.Normal, 4) });
+        var zero = AttackResolver.DamageStep(new() { Attacker = new Combatant(), Target = new Combatant(), TargetKind = AttackTargetKind.OtherObject, Damage = DamageByType.Zero });
+        Assert.IsTrue(f.Map.DamageObject(door, four, SessionSpellCaster.Hero));
+        CollectionAssert.AreEqual(new[] { (door, (string?)SessionSpellCaster.Hero, false) }, seen, "told at once, the hit already queued");
+        seen.Clear();
+        Assert.IsFalse(f.Map.DamageObject(door, zero, "oid:guard"));
+        CollectionAssert.AreEqual(new[] { (door, (string?)"oid:guard", true) }, seen, "a zero hit is told as well");
+        seen.Clear();
+        Assert.IsTrue(f.Caster.ApplyScriptDamage(f.Map.Id(f.Rows[2]), 12, 0, unresistable: true).Applied);
+        Assert.AreEqual(0, seen.Count, "damage with no attacker is not told");
+        Assert.AreEqual(1, f.Map.TakeObjectHits().Count, "it waits in the queue for the flush");
     }
 
     [TestMethod]

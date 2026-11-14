@@ -183,6 +183,31 @@ public sealed class RouteCorridorTests
     }
 
     [TestMethod]
+    public void A_corridor_leg_the_local_request_cannot_find_is_walked_on_the_corridor_cells_not_on_the_straight_line()
+    {
+        // ARC-DEV-2100: a wall across the way with its only gap far off the straight line; the local request's budget (here lowered to 20) cannot
+        // plan the detour of a leg, and the PC's straight line (LR4) would run into the wall (ROUTE_STEP_DENIED). Steamwoven's corridor walks its
+        // own cells there; the walk without a corridor (Original) keeps the straight line.
+        var rows = Enumerable.Range(0, 40).Select(y => new string('.', 30) + (y == 30 ? "." : "#") + new string('.', 69)).ToArray();
+        var source = new GridSource(rows);
+        var limits = new RouteLimits(budget: 20);
+        var host = new RouteHost(source, new(20, 10), Step);
+        var follower = new RouteFollower(source, limits, corridorLimits: new(), straightRetry: true);
+        follower.SetTarget(new(60, 10), host.State.Time);
+        var methods = new HashSet<RouteMethod>();
+        for (var i = 0; i < 4 * 400 && follower.Status == RouteFollowStatus.Following; i++)
+        {
+            host.Frames(follower, 1);
+            if (follower.LastPlan?.Method is { } method) methods.Add(method);
+        }
+        Assert.AreEqual((RouteFollowStatus.Arrived, "ROUTE_ARRIVED", new CellCoord(60, 10)), (follower.Status, follower.StopReason, host.State.CommittedCell));
+        Assert.IsTrue(methods.Contains(RouteMethod.CorridorWalk), "the leg was walked on the corridor's cells");
+        Assert.IsFalse(methods.Contains(RouteMethod.StraightRetry));
+        Assert.IsFalse(host.Events.Any(e => e.Kind == MovementEventKind.StepRejected), "no step ran into the wall");
+        Assert.IsTrue(host.Committed().Contains(new(30, 30)), "through the gap");
+    }
+
+    [TestMethod]
     public void The_same_far_goal_clicked_again_after_a_switch_is_a_new_goal()
     {
         var source = GridSource.Open(200, 3);
