@@ -26,6 +26,16 @@ public sealed partial class GameSessionOwner
         return _hero?.State.Age;
     }
 
+    /// <summary>
+    /// ARC-UI-1791: the hero's age as the effective stat getter (0x4B0490, stat 25) gives it: the stored base age under the range the getter clamps to (0x4B0FC0, 0x4B0FD0: 20 to 1000).
+    /// The session models no effect on stat 25, so the stored age is the base. Null without a hero or when the session has not read the age (<see cref="QueryHeroStoredAge"/>).
+    /// </summary>
+    public int? QueryHeroEffectiveAge()
+    {
+        ThrowIfDisposed();
+        return _hero is { } hero && hero.State.Age is { } age && CharacterStatRules.StoredRange(hero.State.Race, 25) is { } range ? Math.Clamp(age, range.Minimum, range.Maximum) : null;
+    }
+
     /// <summary>Stores resistance <paramref name="index"/> of the hero's array as the indexed write does: the value is kept as it is, unclamped.</summary>
     /// <remarks>
     /// ARC-MAGIC-1658: the stored array is what the hero's resistance readers lay the worn armour and the effects over (<c>HeroStoredResistances</c>). Refused, in order: no hero (<see cref="GameSessionFailure.InvalidHero"/>), an index

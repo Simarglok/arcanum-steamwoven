@@ -111,6 +111,7 @@ src/Arcanum.Session/GameSessionHeroGrid.cs,ArrangeHeroGrid,pending,
 src/Arcanum.Session/GameSessionHeroGrid.cs,AttachItemArtSizes,pending,
 src/Arcanum.Session/GameSessionHeroGrid.cs,MoveHeroGold,pending,
 src/Arcanum.Session/GameSessionHeroGrid.cs,SettleHeroGrid,pending,
+src/Arcanum.Session/GameSessionHeroInnate.cs,QueryHeroEffectiveAge,exempt,host
 src/Arcanum.Session/GameSessionHeroName.cs,SetHeroPlayerName,pending,
 src/Arcanum.Session/GameSessionHeroThrow.cs,SplitAmmoForThrow,pending,
 src/Arcanum.Session/GameSessionHeroThrow.cs,SplitAmmoRefusal,pending,
@@ -558,6 +559,7 @@ src/Arcanum.World/AreaBarter.cs,HeroCanTrade,pending,
 src/Arcanum.World/AreaBarter.cs,Open,pending,
 src/Arcanum.World/AreaBeds.cs,IsBedArt,exempt,reference
 src/Arcanum.World/AreaBeds.cs,OccupiedFrame,exempt,host
+src/Arcanum.World/AreaCharacterSheetIcon.cs,NpcArt,exempt,host
 src/Arcanum.World/AreaCharacterSheetTexts.cs,DerivedName,pending,
 src/Arcanum.World/AreaCharacterSheetTexts.cs,SchemeNumbers,exempt,host
 src/Arcanum.World/AreaCombat.cs,NpcHolder,pending,

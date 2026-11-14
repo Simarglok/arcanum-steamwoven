@@ -196,4 +196,24 @@ public sealed class AreaCharacterSheetTests
         }
         finally { Directory.Delete(directory, recursive: true); }
     }
+
+    /// <summary>ARC-UI-1791 (ledger CHW25): the hero's sheet carries the age the session stores (effective stat 25, clamped to 20..1000), and none when the session has not read it.</summary>
+    [TestMethod]
+    public void The_sheet_carries_the_heros_stored_age_and_leaves_it_out_when_unread()
+    {
+        using (var unread = Start(Definition(), Rules()))
+        {
+            Assert.IsNull(Sheet(unread).Age, "an age the session did not read gives no line");
+            Assert.IsNull(Sheet(unread).IconArt, "the hero's slot is the portrait's: never an icon");
+            Assert.IsFalse(AreaCharacterSheet.Lines(Sheet(unread))[0].Contains("age", StringComparison.Ordinal));
+        }
+        using var session = Start(Definition() with { Age = 33 }, Rules());
+        var view = Sheet(session);
+        Assert.AreEqual(33, view.Age);
+        Assert.AreEqual("half-elf-male | half-elf, male, age 33", AreaCharacterSheet.Lines(view)[0]);
+        using var young = Start(Definition() with { Age = 5 }, Rules());
+        Assert.AreEqual(20, Sheet(young).Age, "the getter's minimum");
+        using var old = Start(Definition() with { Age = 5000 }, Rules());
+        Assert.AreEqual(1000, Sheet(old).Age, "the getter's maximum");
+    }
 }

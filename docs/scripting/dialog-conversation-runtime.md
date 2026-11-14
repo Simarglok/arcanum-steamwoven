@@ -614,7 +614,7 @@ The AREA host passes the port when the viewer gives it the shown map's AI host (
 and the session has a hero; the spell names come from the viewer's loaded spell data (`SpellName`). The port (`AreaConversationHost.HealerPort`) reads the facts from `AreaAiHost.HealerFacts`
 (the NPC's college rank from the host's spell facts, the heal tool and test the AI heal already uses, its heal skill's level and tier, its leaders) and starts the effects through
 `AreaAiHost.HealerService` (the skill starter's goal 33 on the hero) and `AreaAiHost.HealerCast` (the script cast entry with the NPC as the caster). Tests: `DialogHealerTests` (synthetic),
-`AreaAiSkillTests` and `AreaHealerConversationTests` (the host side) and the opt-in `DialogHealerRealDataTests` (`DAT_ROOT`: the census of the 52 installed `h:` replies in 15 files, the lines the talk
+`AreaAiSkillTests`, `AreaHealerCastTests` (the cast host) and `AreaHealerConversationTests` (the host side), the smoke stage `healer-talk` (`./arcanum smoke pr --stages healer-talk`, Crash Site, ARC-SCRIPT-1790) and the opt-in `DialogHealerRealDataTests` (`DAT_ROOT`: the census of the 52 installed `h:` replies in 15 files, the lines the talk
 reads and an installed healer's talk to the spell).
 
 ## Directions reply (ARC-SCRIPT-1533)

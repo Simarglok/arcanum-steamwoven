@@ -32,6 +32,18 @@ public sealed record AreaCharacterSheetView(string Name, CharacterRace Race, Cha
 {
     /// <summary>ARC-UI-088: false for a monstrous NPC's sheet, which shows neither race nor gender.</summary>
     public bool ShowRaceGender { get; init; } = true;
+
+    /// <summary>ARC-UI-1791: the age the sheet prints (effective stat 25, a PC's sheet only: 0x55A240); null for an NPC and for a hero whose age the session has not read (no line).</summary>
+    public int? Age { get; init; }
+
+    /// <summary>ARC-UI-1791: the interface art of the icon drawn in the portrait slot (<see cref="AreaCharacterSheetIcon.NpcArt"/>); null for the hero (the portrait slot) and for an NPC that shows its portrait.</summary>
+    public int? IconArt { get; init; }
+
+    /// <summary>ARC-UI-1791: an NPC led by the local PC (0x45DDA0): it shows its own portrait when it has one, else the icon.</summary>
+    public bool LedByHero { get; init; }
+
+    /// <summary>ARC-UI-1791: the stored portrait number the NPC's slot shows (a led NPC that stores one); null otherwise.</summary>
+    public int? PortraitId { get; init; }
 }
 
 /// <summary>A sheet or the reason it does not open.</summary>
@@ -100,7 +112,8 @@ public static class AreaCharacterSheet
         };
         return new(AreaSheetRefusal.None, new(AreaStartingHero.Name(hero), hero.Race, hero.Gender, experience.Level, experience.Experience,
             experience.ToNextLevel, experience.UnspentPoints, hero.Alignment / 10, Math.Max(0, aptitude), Math.Max(0, -aptitude),
-            life.Status.HitPoints, life.Status.MaxHitPoints, life.Status.Fatigue, life.Status.MaxFatigue, primary, secondary, resistances));
+            life.Status.HitPoints, life.Status.MaxHitPoints, life.Status.Fatigue, life.Status.MaxFatigue, primary, secondary, resistances)
+            { Age = session.QueryHeroEffectiveAge() });
     }
 
     /// <summary>The original's colour rule (0x55B2A0): the base value adjusted by the effects that
@@ -130,7 +143,7 @@ public static class AreaCharacterSheet
             : "next level unknown (no experience data)";
         return
         [
-            $"{view.Name} | {RaceName(view.Race)}, {(view.Gender == CharacterGender.Female ? "female" : "male")}",
+            $"{view.Name} | {RaceName(view.Race)}, {(view.Gender == CharacterGender.Female ? "female" : "male")}" + (view.Age is { } age ? $", age {age}" : string.Empty),
             $"Level {view.Level} | experience {view.Experience}, {next} | unspent points {view.UnspentPoints}",
             $"Alignment {view.Alignment} | magick aptitude {view.MagickAptitude}, tech aptitude {view.TechAptitude}",
             $"Hit points {view.HitPoints}/{view.MaxHitPoints} | fatigue {view.Fatigue}/{view.MaxFatigue}",
