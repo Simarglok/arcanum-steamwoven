@@ -60,7 +60,7 @@ Twelve functions were read and found implemented by methods of ours that carried
 | 0x4B7C30 | From the weapon speed: above 24 costs 1, above 20 costs 2, else 8 less a third of the speed, at least 1. | `TurnBasedRules.AttackCost` | Takes the weapon speed as an argument; the original reads the wielded weapon and its speed itself (0x465CF0). |
 | 0x4B7CD0 | Only for the critter whose turn it is: paid when the points cover the cost; else the local player with points left and fatigue above 1 pays with 2 fatigue damage and ends at 0 points; else the action is refused and the next subturn starts. | `TurnBasedRules.Charge` | The pure part (paid, overexerted or refused); the gates, the fatigue damage call, the call that ends the subturn and the action point display callback are the host's. |
 
-The other 80 rows are `not implemented`. Two were read as a whole: 0x4B0450 writes the 28 default base values of an object's stats from a fixed table (no method of ours is tied to it; the only mention is a comment in `GameSessionFate`), and 0x4B2810 returns what a projectile does with an object it meets: 1 for no object, 2 when a type 5 object has flag 1 of field 0x70 set, 0 when it has flag 2 set, otherwise 1 (no method of ours is tied to it; the projectile end host may fold it in, which V2 decides). The 78 F0 rows are the functions not read as a whole; each reason says what the structure shows.
+The other 80 rows are `not implemented`. Two were read as a whole: 0x4B0450 writes the 28 default base values of an object's stats from a fixed table (no method of ours is tied to it; the only mention is a comment in `GameSessionFate`), and 0x4B2810 returns the loudness of a weapon's attack event (the first reading called it what a projectile does with an object it meets): 1 for no object or a non-weapon, 2 when a type 5 object has flag 1 of field 0x70 set, 0 when it has flag 2 set, otherwise 1 (ARC-COMBAT-1930 ties `AwarenessRules.WeaponLoudness` to it). The 78 F0 rows are the functions not read as a whole; each reason says what the structure shows.
 
 ## Findings
 
@@ -129,7 +129,7 @@ Registered rows are not repeated. `Size` is in bytes (the census), `B` the basis
 | 0x4B2410 | 224 | R | not relevant: module lifecycle | settings callback of the fast turn-based setting; our settings are our own |
 | 0x4B24F0 | 352 | S | implemented, unmarked | projectile creation for a ranged attack (GameSessionProjectileObjects, GameSessionProjectiles) |
 | 0x4B2650 | 64 | R | not relevant: wrapper of another function | projectile end without a target, calls 0x4B2690 |
-| 0x4B2810 | 96 | R | not implemented (read) | class of an object a projectile meets (blocks, passes or ignored, by type and flags); no method of ours is tied to it |
+| 0x4B2810 | 96 | R | full (read; ARC-COMBAT-1930) | the loudness of a weapon's attack event (1 for no object or a non-weapon, 2 for flag 0x1, 0 for flag 0x2 of weapon field 0x70); `AwarenessRules.WeaponLoudness` |
 | 0x4B2F60 | 528 | S | implemented, unmarked | projectile hit resolution, miss and damage (AttackResolver, GameSessionAttack) |
 | 0x4B3170 | 1536 | S | implemented, unmarked | attack resolution (1536 bytes), spread over GameSessionAttack, GameSessionNpcAttack and AttackResolver |
 | 0x4B3770 | 576 | S | implemented per documents, no address in code | melee attack, spread over GameSessionAttack and AttackResolver |

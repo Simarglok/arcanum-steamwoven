@@ -1,3 +1,4 @@
+using Arcanum.Simulation.Ai;
 using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Equipment;
 using Arcanum.Simulation.Items;
@@ -22,6 +23,8 @@ public sealed record SessionWearItem(string Entity, ItemCondition Baseline)
     public uint? MissileArt { get; init; }
     /// <summary>The item's no-drop flag (item flag 0x20): the original's drop refuses it, also a critical's (ARC-COMBAT-009).</summary>
     public bool NoDrop { get; init; }
+    /// <summary>ARC-COMBAT-1930 (0x4B2810): the loudness an attack event of this item as the weapon carries (<see cref="AwarenessRules.WeaponLoudness"/>): loud for weapon flag 0x1, silent for 0x2, else normal (also a non-weapon).</summary>
+    public Loudness Noise { get; init; } = Loudness.Normal;
 
     /// <summary>The wear values of an item from its stored fields (ARC-DATA-021); null for an object that is not an item or a
     /// condition outside the durability rules' bounds.</summary>
@@ -34,6 +37,7 @@ public sealed record SessionWearItem(string Entity, ItemCondition Baseline)
             Invulnerable = (fields.Object.Flags & InvulnerableObject) != 0,
             ArtSubtype = fields.Weapon is null ? 0 : Arcanum.Data.Combat.CombatItemArt.Subtype(item.UseArtFragment),
             NoDrop = (item.Flags & NoDropFlag) != 0,
+            Noise = AwarenessRules.WeaponLoudness(fields.Weapon is { } noisy ? (uint)noisy.Flags : null),
             MissileArt = fields.Weapon is { } weapon && weapon.MissileArt != Arcanum.Data.Combat.CombatWeaponFields.NoMissileArt ? unchecked((uint)weapon.MissileArt) : null,
         };
     }

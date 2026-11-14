@@ -131,6 +131,19 @@ public static class AwarenessRules
     /// <summary>The noise radius of a loudness (0x5B50C0): 2, 8 or 15 tiles, the half-size of an attack's alert squares (AW9).</summary>
     public static int NoiseRadius(Loudness loudness) => NoiseRadii[Index(loudness)];
 
+    /// <summary>The weapon flag "loud" (weapon field 0x70 bit 0x1), <see cref="WeaponLoudness"/>.</summary>
+    public const uint LoudWeaponFlag = 0x1;
+    /// <summary>The weapon flag "silent" (weapon field 0x70 bit 0x2), <see cref="WeaponLoudness"/>.</summary>
+    public const uint SilentWeaponFlag = 0x2;
+
+    /// <summary>
+    /// ARC-COMBAT-1930 (0x4B2810, ledger VC28, VCG9): the loudness an attack event of a weapon carries: loud for weapon flag 0x1, else silent for flag 0x2, else normal. The original reads the flags only for a weapon item
+    /// (item type 5): a missing weapon (bare hands, a thrown bottle) is normal, which is <paramref name="weaponFlags"/> null. The loud flag wins when both are set.
+    /// </summary>
+    [OriginalFunction(0x4B2810, OriginalFunctionScope.Full)]
+    public static Loudness WeaponLoudness(uint? weaponFlags) =>
+        weaponFlags is not { } flags ? Loudness.Normal : (flags & LoudWeaponFlag) != 0 ? Loudness.Loud : (flags & SilentWeaponFlag) != 0 ? Loudness.Silent : Loudness.Normal;
+
     /// <summary>
     /// 0x45EFF0: whether an observer whose current art has <paramref name="observerRotation"/> faces a target, by the direction
     /// from its tile to the target's (<see cref="LineOfFireRules.Rotation"/>, 5 for the same tile): <c>k = (direction − rotation

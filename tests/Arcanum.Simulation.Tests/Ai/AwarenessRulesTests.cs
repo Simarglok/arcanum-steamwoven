@@ -67,6 +67,19 @@ public sealed class AwarenessRulesTests
     // The first tile the line from the observer to the target enters, and the edge it crosses there.
     private static LineWalkStep FirstStep(CellCoord target) => LineOfFireRules.Walk(Observer, 0, 0, target, _ => true)![0];
 
+    // ARC-COMBAT-1930 (0x4B2810): no weapon object is normal; weapon flag 0x1 is loud, flag 0x2 silent (loud first), other bits change nothing.
+    [TestMethod]
+    public void WeaponLoudnessReadsTheLoudAndSilentFlags()
+    {
+        Assert.AreEqual(Loudness.Normal, AwarenessRules.WeaponLoudness(null));
+        Assert.AreEqual(Loudness.Normal, AwarenessRules.WeaponLoudness(0));
+        Assert.AreEqual(Loudness.Loud, AwarenessRules.WeaponLoudness(0x1));
+        Assert.AreEqual(Loudness.Silent, AwarenessRules.WeaponLoudness(0x2));
+        Assert.AreEqual(Loudness.Loud, AwarenessRules.WeaponLoudness(0x3));
+        Assert.AreEqual(Loudness.Normal, AwarenessRules.WeaponLoudness(0x4 | 0x10 | 0x100));
+        Assert.AreEqual(Loudness.Silent, AwarenessRules.WeaponLoudness(0xF0000002));
+    }
+
     [TestMethod]
     public void PerceptionDistanceClampsToOneThroughTen()
     {
