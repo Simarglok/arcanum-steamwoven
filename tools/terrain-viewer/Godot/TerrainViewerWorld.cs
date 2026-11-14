@@ -1138,6 +1138,13 @@ public partial class TerrainViewerApp
         // ARC-DEV-1251: never earlier than what the queue has observed (a quarantine at the wall clock before the first frame).
         _worldTestTime = observationTime ?? SelfTestFrameClock.Next(_worldTestTime ?? _worldActor.Session?.State.Time ?? WorldTime, _worldGridInput.Newest);
         WorldObservation(() => ApplyWorldObservedFrame(delta, complete, keyboard, controllers, "SIMULATION complete-level frame (not physical evidence)"));
+        // ARC-DEV-1748: every smoke frame (AreaSmokeFrame, the cast/talk smokes' own frames, the AI stages') ends here, and the frame's view touch may have asked the chart over the loaded sectors for more;
+        // the next frame's AI step plans a route into such a sector only once the background read is done, which wall time (machine load) would otherwise decide. Nothing to wait for without a chart.
+        if (!SettleSectorChartForSmoke())
+        {
+            GD.Print("ARC-DEV-1748 smoke frame FAIL: the sector chart's background read did not finish: " + SectorChartState());
+            throw new InvalidOperationException("SMOKE_SECTOR_CHART_NOT_SETTLED");
+        }
     }
     private RawInputFrame WorldKeyboardRouting(RawInputFrame raw)
     {
