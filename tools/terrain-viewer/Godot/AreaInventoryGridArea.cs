@@ -466,6 +466,21 @@ public partial class AreaInventoryGridArea : Control
     internal static Vector2 IconCentre(AreaInventoryIcon icon) => new(AreaInventoryDrag.IconX + AreaInventoryDrag.IconWidth / 2,
         (icon == AreaInventoryIcon.Drop ? AreaInventoryDrag.DropIconY : AreaInventoryDrag.UseIconY) + AreaInventoryDrag.IconHeight / 2);
 
+    /// <summary>A frame point on the screen (for the self-test).</summary>
+    internal Vector2 FrameToScreenForSelfTest(Vector2 frame) => GetGlobalTransformWithCanvas() * (frame * _scale);
+
+    /// <summary>
+    /// ARC-UI-2071 (ledger DH10, IW34, IS3): the left release of the dialog reply press that opened this window, a release no press of this window began. The original's window
+    /// handler takes it as any release: the round view's square first (the window closes), else an item of the identify or repair window is quoted or paid for as a click on it.
+    /// A Godot control gets a release only from its own press, so the app hands this one in (screen point); the diagnostic list has neither.
+    /// </summary>
+    internal void LoneRelease(Vector2 screen)
+    {
+        var frame = GetGlobalTransformWithCanvas().AffineInverse() * screen / _scale;
+        if (Look is not null && !_menuUp && AreaInventoryHole.Contains(LookMode, frame.X, frame.Y)) { ReleaseAt(frame); return; }
+        if (ServiceLook && _view is { } view && AreaServiceArtLayout.ItemAt(view, frame.X, frame.Y) is { } entity) Callable.From(() => ServiceItemPressed?.Invoke(entity)).CallDeferred();
+    }
+
     /// <summary>A left release at a point of the frame: the held item's drop, then the cursor is empty.</summary>
     internal void ReleaseAt(Vector2 frame)
     {

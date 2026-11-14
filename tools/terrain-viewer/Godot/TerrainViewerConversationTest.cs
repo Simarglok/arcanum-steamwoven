@@ -447,6 +447,16 @@ public partial class TerrainViewerApp
             TerrainViewerSelfTest.Require(ConversationOpen && _conversationPanel!.Conversation is null, "polled keyboard Confirm/Cancel/menu levels do not drive the dialog");
             ToggleWorldSettings();
             TerrainViewerSelfTest.Require(!PaletteOpen && ConversationOpen, "the palette cannot open over the conversation");
+            // ARC-UI-2071: a left press while the dialog is open owes its release to the window a reply opens; a release with the dialog still open is the dialog's own and owes nothing;
+            // a press with no dialog owes nothing.
+            {
+                var at = GetViewport().GetVisibleRect().Size / 2;
+                InputEventMouseButton Left(bool pressed) => new() { ButtonIndex = MouseButton.Left, Pressed = pressed, Position = at, GlobalPosition = at };
+                InputWorld(Left(true));
+                TerrainViewerSelfTest.Require(_replyPressDown, "a left press while the dialog is open is remembered");
+                InputWorld(Left(false));
+                TerrainViewerSelfTest.Require(!_replyPressDown && _replyRelease is null && ConversationOpen, "a release with the dialog still open owes nothing");
+            }
             _conversationPanel!.LeaveForSelfTest.EmitSignal(BaseButton.SignalName.Pressed);
             TerrainViewerSelfTest.Require(!ConversationOpen && !WorldModal, "Close ends the modal surface");
             // ARC-UI-2052: Close and the replies act on the press, so the panel is gone when the matching left release arrives: that lone release

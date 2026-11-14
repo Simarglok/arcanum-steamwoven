@@ -186,6 +186,15 @@ public partial class AreaSchematicsPanel : CanvasLayer
     // ARC-UI-018: the bar panel's inset event is static; a freed panel must leave it.
     public override void _ExitTree() => AreaGameBarPanel.InsetsChanged -= ResizePanel;
 
+    /// <summary>ARC-UI-2071 (ledger DH10, SW12): the lone left release after the reply that opened the window (screen point); only the original look takes it (its lens closes the window).
+    /// True when the window took it into account.</summary>
+    public bool LoneRelease(Vector2 screen)
+    {
+        if (!IsOpen || !ArtMode) return false;
+        _artView.LoneRelease(screen);
+        return true;
+    }
+
     /// <summary>ARC-UI-142: the lens shows the game view around the hero while the original look is up (the view-window mode 1 of 0x550DA0).</summary>
     private void UpdateRoundView()
     {
