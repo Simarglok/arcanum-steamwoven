@@ -336,6 +336,86 @@ public sealed class ThrowStateTests
         Assert.AreEqual((GameSessionFailure.None, target), (fromCell.Failure, fromCell.Scatter));
     }
 
+    // ARC-COMBAT-1968 (0x4B3C00 and 0x4B2870): the original clears the context's backstab flags (0x4000, 0x8000) after the builder 0x4B2210 for a
+    // throw and for a shot, so neither is a backstab even from behind with a dagger-subtype weapon. The same facts and weapon make a melee strike
+    // from behind one (the control), so the throw's and the shot's equal damage is the rule and not a missing fact.
+    private static GameSessionOwner BackstabOwner(CombatSkill skill, int range)
+    {
+        var basic = new int[12];
+        basic[(int)Arcanum.Simulation.Skills.Skill.Backstab] = 3 | 1 << 6;
+        var hero = HalfElf() with { Advancement = SessionHeroAdvancement.None with { BasicSkills = [.. basic] } };
+        var owner = GameSessionOwner.Create(Descriptor() with { Hero = hero }).Owner!;
+        var weapon = new EquipmentItem
+        {
+            Kind = EquipmentItemKind.Weapon, HitPoints = 20, MaxHitPoints = 20,
+            Weapon = new EquipmentWeapon { Skill = skill, Damage = DamageRanges.None with { Normal = new(4, 4) }, SpeedFactor = 10, Range = range },
+        };
+        Assert.AreEqual(GameSessionFailure.None, owner.Equip(owner.Version, "kit:1", EquipmentSlot.Weapon, new(Kit[0].Kind, [], false, weapon),
+            (_, _) => true, Accept).Failure);
+        Assert.IsTrue(owner.QueryHeroAttack()!.Combatant.BackstabLevel > 0, "the setup gives the hero backstab points");
+        return owner;
+    }
+
+    private static readonly IReadOnlyDictionary<EquipmentSlot, SessionWearItem> DaggerSubtype =
+        new Dictionary<EquipmentSlot, SessionWearItem> { [EquipmentSlot.Weapon] = new("kit:1", new(1000, 0, 0, false)) { ArtSubtype = 2 } };
+
+    private static readonly SessionBackstabFacts FromBehindUnseen = new(() => false, () => false);
+
+    private static int MeleeNormal(SessionBackstabFacts? facts)
+    {
+        using var owner = BackstabOwner(CombatSkill.Melee, 1);
+        var rat = Rat();
+        for (var attempt = 0; attempt < 400; attempt++)
+        {
+            var result = owner.AttackCritter(owner.Version, new(rat) { HeroWorn = DaggerSubtype, Backstab = facts });
+            Assert.AreEqual(GameSessionFailure.None, result.Failure);
+            if (result.Resolution is { Refusal: AttackRefusal.None, Outcome: AttackOutcome.Hit or AttackOutcome.CriticalHit, Damage.Recipient: DamageRecipient.Target } resolution)
+                return resolution.Damage.Rolled.Normal;
+        }
+        Assert.Fail("no hit within the bounded run");
+        return 0;
+    }
+
+    // The damage a flying shot (a throw or an arrow) deals at its landing, through the facts and the worn dagger-subtype weapon.
+    private static int LandedDamage(CombatSkill skill, bool thrown, SessionBackstabFacts? facts)
+    {
+        using var owner = BackstabOwner(skill, 15);
+        var rat = Rat();
+        for (var attempt = 0; attempt < 60; attempt++)
+        {
+            var shot = owner.AttackCritter(owner.Version, new(rat)
+            {
+                Distance = 3, Flight = true, Throw = thrown ? Dagger : null, HeroWorn = DaggerSubtype, Backstab = facts,
+            });
+            Assert.AreEqual(GameSessionFailure.None, shot.Failure);
+            if (shot.Resolution!.Outcome is AttackOutcome.Hit or AttackOutcome.CriticalHit)
+            {
+                var struck = owner.LandShot(owner.Version, shot.Shot!.Value, new(rat) { HeroWorn = thrown ? null : DaggerSubtype, Backstab = facts });
+                Assert.AreEqual(GameSessionFailure.None, struck.Failure);
+                return struck.Life!.HitPointDamage;
+            }
+            Assert.IsTrue(owner.EndShot(shot.Shot!.Value));
+            if (thrown) Rewield(owner);
+        }
+        Assert.Fail("no hit within the bounded run");
+        return 0;
+    }
+
+    [TestMethod]
+    public void AThrownDaggerFromBehindIsNoBackstab()
+    {
+        Assert.IsTrue(MeleeNormal(FromBehindUnseen) > MeleeNormal(null), "control: a melee strike from behind adds the backstab level");
+        Assert.AreEqual(LandedDamage(CombatSkill.Melee, thrown: true, null), LandedDamage(CombatSkill.Melee, thrown: true, FromBehindUnseen),
+            "a thrown dagger from behind deals the plain damage (0x4B3C00 clears the backstab flags)");
+    }
+
+    [TestMethod]
+    public void AnArrowFromBehindIsNoBackstab()
+    {
+        Assert.AreEqual(LandedDamage(CombatSkill.Bow, thrown: false, null), LandedDamage(CombatSkill.Bow, thrown: false, FromBehindUnseen),
+            "a shot from behind deals the plain damage (0x4B2870 drops the builder's backstab flags)");
+    }
+
     // A map where every step leaves it.
     private sealed class NoSteps : Arcanum.Simulation.Items.IDropMap
     {
