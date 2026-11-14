@@ -37,6 +37,11 @@ public partial class AreaConversationPanel : CanvasLayer
     private int _bandWidth = DialogReplyBand.MinWidth;
     private DialogReplyBand.Hover? _hover;
     private (int Width, int Rows) _hoverKey;
+    // ARC-UI-2052: the pointer's last place as a viewport point (null: left the band or never seen; the panel moves under a stationary pointer when its
+    // texts change, so a band-local point would go stale) and whether the hover is to be recomputed; a re-render (a reply rebuilt the rows) redraws
+    // them against the pointer, as the original's row drawer does against the live cursor.
+    private Vector2? _pointer;
+    private bool _hoverStale;
     private DialogConversation? _conversation;
     private string _title = string.Empty;
     private string? _message;
@@ -176,7 +181,7 @@ public partial class AreaConversationPanel : CanvasLayer
         };
         _band.AddChild(_bandShade);
         _band.GuiInput += input => { if (HandleBandInput(input)) _band.AcceptEvent(); };
-        _band.MouseExited += () => { _hover?.Leave(); };
+        _band.MouseExited += () => { _pointer = null; _hover?.Leave(); };
         AddChild(_band);
         _bandTop = new Control { Name = "BandTop", MouseFilter = Control.MouseFilterEnum.Ignore, Visible = false };
         _options.AddChild(_bandTop);
@@ -229,7 +234,7 @@ public partial class AreaConversationPanel : CanvasLayer
 
     public void CloseView()
     {
-        _conversation = null; Hide();
+        _conversation = null; _pointer = null; Hide();
         GetViewport().GuiReleaseFocus();
     }
 
@@ -394,7 +399,7 @@ public partial class AreaConversationPanel : CanvasLayer
     }
 
     /// <summary>
-    /// ARC-UI-2022 (ledger DH7, DH10): a band row's text is broken at the box width minus 12; only a line that fits the 16 px row whole is placed
+    /// ARC-UI-2022 (ledger DH7, DH13): a band row's text is broken at the box width minus 12; only a line that fits the 16 px row whole is placed
     /// (<see cref="AreaArtParagraph.Room"/>); a word wider than the row draws nothing; the drawn width plus 1 and 12 widens the box (and re-centres it) when larger.
     /// </summary>
     private void LayoutBandRow(Button button, AreaArtParagraph art)
@@ -431,7 +436,23 @@ public partial class AreaConversationPanel : CanvasLayer
         _options.CustomMinimumSize = new(0, _originalRows ? DialogReplyBand.Height : 0);
         if (_originalRows) _options.AddThemeConstantOverride("separation", DialogReplyBand.RowPitch - DialogReplyBand.RowHeight);
         else _options.RemoveThemeConstantOverride("separation");
-        _hover = null;
+        _hover = null; _hoverStale = true;
+    }
+
+    /// <summary>
+    /// ARC-UI-2052 (ledger DH9): every frame the hover is recomputed from the pointer's viewport place (the last one seen in the band, else the live mouse
+    /// once after a rebuild), so a row under a stationary pointer is lit without a motion even when the panel moved. Waits until the band has a width.
+    /// </summary>
+    private void RefreshHover()
+    {
+        var width = (int)_band.Size.X;
+        if (width <= 0) return;
+        var at = _pointer is { } viewport ? _band.GetGlobalTransformWithCanvas().AffineInverse() * viewport
+            : _hoverStale ? _band.GetLocalMousePosition() : (Vector2?)null;
+        if (at is not { } local) return;
+        if (_hover is null || _hoverKey != (width, _buttons.Count)) { _hover = new DialogReplyBand.Hover(width, _buttons.Count); _hoverKey = (width, _buttons.Count); }
+        _hover.Move((int)local.X, (int)local.Y);
+        _hoverStale = false;
     }
 
     /// <summary>A reply row of the band: 16 px tall, no frame, the pointer reaches it through the band, not the button.</summary>
@@ -481,10 +502,12 @@ public partial class AreaConversationPanel : CanvasLayer
         switch (input)
         {
             case InputEventMouseMotion motion:
+                _pointer = _band.GetGlobalTransformWithCanvas() * motion.Position;
                 if (_hover is null || _hoverKey != (width, _buttons.Count)) { _hover = new DialogReplyBand.Hover(width, _buttons.Count); _hoverKey = (width, _buttons.Count); }
                 _hover.Move((int)motion.Position.X, (int)motion.Position.Y);
                 return false;
             case InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: true } press:
+                _pointer = _band.GetGlobalTransformWithCanvas() * press.Position;
                 var hit = DialogReplyBand.Press((int)press.Position.X, (int)press.Position.Y, width, _buttons.Count, clickBandsDrift: true);
                 if (hit.Kind == DialogReplyHitKind.Outside) { _hover?.Leave(); return false; }
                 if (hit.Kind == DialogReplyHitKind.Row && !_buttons[hit.Row].Disabled) _buttons[hit.Row].EmitSignal(BaseButton.SignalName.Pressed);
@@ -515,7 +538,7 @@ public partial class AreaConversationPanel : CanvasLayer
     }
 
     /// <summary>
-    /// ARC-UI-2022 (ledger DH4, DH8, DB3): the band over the game view: 100 px tall, as wide as the rows made it (at least 400), centred, its top at 299 in a
+    /// ARC-UI-2022 (ledger DH4, DH11, DB3): the band over the game view: 100 px tall, as wide as the rows made it (at least 400), centred, its top at 299 in a
     /// 400 px view else the view height minus 181; the view is the part the bars leave free (the original's iso window, (0, 41, 800, 400) with the
     /// interface on, ledger DB3), so the band lies above the bottom bar. The stack inside it is 6 px in on both sides. A diagnostic panel that is still drawn sits above the band.
     /// </summary>
@@ -547,7 +570,7 @@ public partial class AreaConversationPanel : CanvasLayer
         if (NumberedSource is { } source) NumberedReplies = source();
         if (OriginalRowsSource is { } rows) OriginalReplyRows = rows();
         if (ChromeHiddenSource is { } chrome) DiagnosticChromeHidden = chrome();
-        if (_originalRows) LightRows();
+        if (_originalRows) { if (_hoverStale || _pointer is not null) RefreshHover(); LightRows(); }
         ResizePanel();
     }
     public override void _ExitTree() => GetViewport().SizeChanged -= ResizePanel;

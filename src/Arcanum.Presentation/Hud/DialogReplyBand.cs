@@ -39,7 +39,7 @@ public static class DialogReplyBand
     [OriginalFunction(0x4C9720, OriginalFunctionScope.Partial)]
     public static int BoxTop(int viewHeight) => viewHeight == 400 ? 299 : viewHeight - 181;
 
-    /// <summary>ARC-UI-2022 (ledger DH4, DH10): the box left, centred in a view <paramref name="viewWidth"/> px wide: (view width - box width) / 2.</summary>
+    /// <summary>ARC-UI-2022 (ledger DH4, DH13): the box left, centred in a view <paramref name="viewWidth"/> px wide: (view width - box width) / 2.</summary>
     public static int BoxLeft(int viewWidth, int boxWidth) => (viewWidth - boxWidth) / 2;
 
     /// <summary>
