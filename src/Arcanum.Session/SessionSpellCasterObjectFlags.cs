@@ -251,6 +251,7 @@ public sealed partial class SessionSpellCaster
         public (Combatant Combatant, AttackTargetKind Kind)? ObjectCombat(string id) => map.ObjectCombat(id);
         public bool DamageObject(string id, AttackDamage damage) => map.DamageObject(id, damage);
         public SpellOpenable? Openable(string id) => map.Openable(id);
+        public int ObjectMagicResistance(string id) => map.ObjectMagicResistance(id);
         public IReadOnlyDictionary<EquipmentSlot, SessionWearItem>? WornBySlot(string entity) => map.WornBySlot(entity);
         public IDropMap? DropMap => map.DropMap;
     }

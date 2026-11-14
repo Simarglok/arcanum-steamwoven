@@ -243,6 +243,7 @@ src/Arcanum.Session/SessionSpellCaster.cs,EndMaintainedSpells,pending,
 src/Arcanum.Session/SessionSpellCaster.cs,Facing,pending,
 src/Arcanum.Session/SessionSpellCaster.cs,Knockback,pending,
 src/Arcanum.Session/SessionSpellCaster.cs,ObjectGone,pending,
+src/Arcanum.Session/SessionSpellCaster.cs,ObjectMagicResistance,exempt,reference
 src/Arcanum.Session/SessionSpellCaster.cs,PickTarget,pending,
 src/Arcanum.Session/SessionSpellCaster.cs,TestTarget,pending,
 src/Arcanum.Session/SessionSpellCasterAi.cs,AiCanUseItem,pending,

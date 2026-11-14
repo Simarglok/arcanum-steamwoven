@@ -178,6 +178,10 @@ public sealed partial class SessionSpellCaster
     /// was shot at (where it stands on the line), or another critter it met when it flew past (a stray strike). The shot ends with the strike. Null for a shot not in flight. The strike is as the shot without a flight:
     /// the attack event of the shooter object goes out (<see cref="AiNotice"/>), the victim's taking-damage script is asked, the damage step takes the amount in the normal slot, and the hit effect of a PC or NPC victim
     /// runs. The context names the shooter as the damage source, so the player credit of a PC-placed trap is lost (TT15). The result's <see cref="SessionTrapVictim.Spell"/> is nothing: the spell went with the shot.
+    /// ARC-TECHNOLOGY-1760 (TT15): <paramref name="struck"/> may be an object the missile met when it flew free past its destination (an obstruction of 0x4B2870: a door, window, container, scenery or trap; a wall takes nothing and
+    /// is the host's to end): the same hit (0x4B2F60) runs with no event (0x4A9650 returns: the attacker is no PC or NPC and the victim no NPC), the object's taking-damage script, the damage step of an object with the amount in the normal slot (the
+    /// resistance, the material of a portal or container) and the object's damage through the map (<see cref="ISpellCastMap.DamageObject"/>: hit points, the break at 0, the trap with no triggerer for a ranged context and the BUST
+    /// script with the shooter as the breaker, which the host owes); no witnesses (0x4B4390 passes the damage source, the shooter object, to 0x4AEE50, which returns for a source that is no PC or NPC) and no hit effect (0x4B6930 reads a critter only).
     /// </summary>
     public SessionTrapVictim? StrikeTrapShot(SessionShot shot, string struck)
     {
@@ -194,7 +198,8 @@ public sealed partial class SessionSpellCaster
     // The projectile's end (0x4B2690): the attack event of the shooter object, then the hit (0x4B2F60) and the attack end (0x4B6930).
     private (SessionTrapHit Hit, AttackDamage? Step, int HitPoints) ShotStrike(TrapEffect effect, string shooter, string victim, int amount)
     {
-        AiNotice?.Invoke(shooter, victim);
+        // ARC-TECHNOLOGY-1760 (0x4A9650, read 2026-11-14): the shooter object is no PC or NPC and the victim is no NPC, so the event returns before it does anything for a struck object (a door, window, container, scenery or trap the missile met).
+        if (_map.Object(victim) is not { Type: not (SpellTargetObject.Pc or SpellTargetObject.Npc) }) AiNotice?.Invoke(shooter, victim);
         var (hit, step, hitPoints) = TrapDamage(effect, amount, victim, shooter, killer: null, hitEffectFirst: false);
         // 0x4B6930 runs after the hit whatever the damage step did: for a PC or NPC victim the damage effect (a positive amount) or the critter hit (none) asks an entangled victim's save again. A veto and an invulnerable
         // target leave the slots as drawn (0x4B4390 returns early), a nigh-invulnerable critter's are zeroed.
