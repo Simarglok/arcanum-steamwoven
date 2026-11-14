@@ -301,6 +301,8 @@ public partial class TerrainViewerApp
         }
         GD.Print($"ARC-DEV-258 npc-throw-launch shot={shot.Id} thrower={thrower} item={thrown.Item} range={thrown.Range} from={from.X},{from.Y} to={destination.X},{destination.Y} direction={direction}"
             + $" art={(art is { } a ? $"0x{a:X8}" : "none")}" + (weapon ? $" weapon check={(hit ? "hit " + aimedId : "miss")}" : ""));
+        _npcThrowLaunchesForSelfTest.Add((shot.Id, thrown.Item, hit, thrower, from, destination, owner.QueryItemInFlight(thrown.Item),
+            owner.QueryMapInventory(new SessionMapId(CurrentAreaMap))?.Ground.FirstOrDefault(ground => ground.Item.Entity == thrown.Item)?.Cell));
         SyncAreaProjectileBodies();
         return true;
     }

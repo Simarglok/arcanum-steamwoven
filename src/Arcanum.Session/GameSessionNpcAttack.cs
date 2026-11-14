@@ -33,6 +33,8 @@ public sealed record SessionNpcAttack(SessionCritterCombat Attacker)
     public Action<SessionHitScriptEvent>? HitScripts { get; init; }
     /// <summary>ARC-DEV-282 (PF1, PF2): the host can fly a shot. A bow or firearms attack whose wielded weapon has a projectile art (<see cref="SessionWearItem.MissileArt"/>) is then decided now and its hit's damage waits for the strike (<see cref="GameSessionOwner.LandNpcShot"/>); the result names the shots in flight. Without it (or without the art) the attack lands at once, as ARC-DEV-273's.</summary>
     public bool Flight { get; init; }
+    /// <summary>ARC-AI-1756 (0x4B3170, SC16): the target is the occupant the attack pulled out of a bed it struck (the record's target replaced), so the check carries -30 (<see cref="AttackRequest.TargetWasInBed"/>).</summary>
+    public bool TargetWasInBed { get; init; }
     /// <summary>ARC-MAGIC-1188: the trigger host the damage step's item events fire through (as <see cref="SessionAttack.ItemTriggers"/>, ARC-MAGIC-023): the attacker's worn items fire "damages opponent", "target hit" and the knockdown events, the victim's (an NPC's, or the hero's from the session) "parent hit" and the others (0x4B4390 for any attacker, IC2); a host of this session. Null: they fire nothing, as before ARC-MAGIC-1188.</summary>
     public Arcanum.Session.ISessionItemTriggers? ItemTriggers { get; init; }
 }
@@ -67,6 +69,9 @@ public sealed record SessionNpcThrow(SessionCritterCombat Thrower, string Item, 
     /// (<see cref="GameSessionOwner.LandNpcShot"/>) and the item lands where the flight ends (<see cref="GameSessionOwner.LandThrownItem"/>). A throw at a location with no struck critter flies unchecked
     /// as a generic item does. Without it the throw lands at once, as before.</summary>
     public bool Flight { get; init; }
+    /// <summary>ARC-COMBAT-1761 (0x4B3C00, 0x466E00 → 0x467860, 0x441980): the shown map's item script host with the thrower's life target and stored stats (<see cref="SessionNpcWieldScripts"/>, as an NPC's wield gets them), which
+    /// runs the item's removal scripts (wield off 25 for a worn item, remove-item 28) and its throw script (6), the thrower as the triggerer. Null: an item with a throw or remove-item script, or a wield-off script while worn, is refused, as before (an item with only a wield-off script that is not worn has nothing to run).</summary>
+    public SessionNpcWieldScripts? Scripts { get; init; }
 }
 
 /// <summary>ARC-WORLD-113: what <see cref="GameSessionOwner.ThrowByNpc"/> did: the attack on the struck critter (null without one or
@@ -80,6 +85,15 @@ public sealed record SessionNpcThrowResult(GameSessionDisposition Disposition, G
     /// <summary>ARC-DEV-258: the tile a thrown item flies to: the throw goal's location for a generic item or an unstruck weapon; ARC-COMBAT-1717: for a weapon thrown at a critter the struck critter's cell (a hit) or the scatter tile (a miss, a flight
     /// without a target); null when it did not fly.</summary>
     public CellCoord? Destination { get; init; }
+    /// <summary>ARC-COMBAT-1761 (0x4B3C00): the item's throw script (point 6) answered skip default, so nothing was thrown: the item went back to the thrower's list unworn (the original puts it on the thrower's tile and inserts it again, 0x4415C0, 0x4617F0),
+    /// the removal's and the throw script's own changes kept. The result is <see cref="GameSessionDisposition.Changed"/> with no attack, shot or landing.</summary>
+    public bool ScriptDeclined { get; init; }
+    /// <summary>ARC-COMBAT-1761: the lines the removal and throw scripts printed, in order, for the host to post as it posts any script's printed line (<see cref="InventoryMutationResult.Messages"/>).</summary>
+    public IReadOnlyList<SessionScriptMessage> Messages { get; init; } = [];
+    /// <summary>ARC-COMBAT-1761: the eye candy requests of those scripts, in order, for the host to play.</summary>
+    public IReadOnlyList<Arcanum.Scripting.Scr.ScrEyeCandy> EyeCandies { get; init; } = [];
+    /// <summary>ARC-COMBAT-1761: the script runs that were made (removal, then throw), as the dispatcher answered them.</summary>
+    public IReadOnlyList<SessionItemScriptRun> Scripts { get; init; } = [];
 }
 
 /// <summary>ARC-DEV-282: an NPC's arrow in flight (<see cref="GameSessionOwner.QueryNpcShot"/>): its shooter's entity, whether the check decided at the shot was a hit, and the weapon's range.</summary>
@@ -110,14 +124,14 @@ public sealed partial class GameSessionOwner
     /// follow with the thrower's hand empty (its critical miss finds no weapon). Without a struck critter nothing is rolled and the item
     /// lands on the location. ARC-DEV-258: a generic item the NPC holds (a grenade) is not thrown here but flies (<see cref="ThrowNpcGeneric"/>). ARC-COMBAT-1717 (<see cref="SessionNpcThrow.Flight"/>): the thrown weapon flies
     /// too, decided now and struck later (the strike is <see cref="LandNpcShot"/>'s, a miss's stray strikes PF6, PF7 forced hits, the landing <see cref="LandThrownItem"/>, the item event at its end PF10); the result then names the shot
-    /// (<see cref="SessionNpcThrowResult.Shots"/>) and its destination, with no landing and no damage yet. NOT READY: a non-critter
+    /// (<see cref="SessionNpcThrowResult.Shots"/>) and its destination, with no landing and no damage yet. ARC-COMBAT-1761 (TW1, TW3): with <see cref="SessionNpcThrow.Scripts"/> the item's removal scripts (wield off for a worn item, remove-item) and its throw
+    /// script (point 6) run first, the thrower as the triggerer (<see cref="RunNpcThrowScripts"/>); a throw script that answers skip default throws nothing and puts the item back with the thrower (<see cref="SessionNpcThrowResult.ScriptDeclined"/>). NOT READY: a non-critter
     /// blocker (the host names none), a thrown item other than the weapon the NPC wields and a generic item (a food, an ammunition, a key) or an item
-    /// the session added to the NPC (no seed holds it), the throw and remove-item
-    /// scripts (an item with any script point is refused) and the unwear of its item spells. Refused before any roll: no hero
+    /// the session added to the NPC (no seed holds it), an item with a script at another point than those three (the insert-item script of the give-back included) and the unwear of its item spells. Refused before any roll: no hero
     /// (<see cref="GameSessionFailure.AttackUnavailable"/>), a cell outside 0 .. 2^24 − 1, a weight outside 0 ..
     /// <see cref="ThrowRules.MaxWeight"/>, a struck critter without its cell or both struck kinds, a no-drop item
     /// (<see cref="GameSessionFailure.InvalidAttack"/>), an item not in the NPC's seed list (<see cref="GameSessionFailure.ItemNotAvailable"/>),
-    /// an item with scripts (<see cref="GameSessionFailure.ItemScriptUnsupported"/>), an item that is not the wielded melee weapon
+    /// an item with a script the session does not run (<see cref="GameSessionFailure.ItemScriptUnsupported"/>: another point, or a removal or throw script without a host or one it cannot apply), an item that is not the wielded melee weapon
     /// (<see cref="GameSessionFailure.AttackUnsupported"/>), then <see cref="AttackByNpc"/>'s refusals (without a struck critter the
     /// thrower's: its life record, its worn items), the version, the revision. A resolver refusal throws nothing (NoChange, as the
     /// hero's), as does an inactive thrower without a struck critter.
@@ -137,13 +151,45 @@ public sealed partial class GameSessionOwner
             return Refused(GameSessionFailure.InvalidAttack);
         // An item a critical or an earlier throw dropped, or one destroyed, is no longer the NPC's.
         if (NpcItemSeed(request.Thrower.Entity, request.Item) is not { } listed || Gone(request.Item)) return Refused(GameSessionFailure.ItemNotAvailable);
-        if (listed.Facts.ScriptPoints.Count > 0) return Refused(GameSessionFailure.ItemScriptUnsupported);
+        // ARC-COMBAT-1761: the scripts the throw runs (the removal's wield off 25 and remove-item 28, the throw's own 6) are run below under a host; a script point the session does not model on a throw (get, drop, hit, insert-item ...) stays refused.
+        if (listed.Facts.ScriptPoints.Any(point => point is not (SessionScriptPoint.Throw or SessionScriptPoint.RemoveItem or SessionScriptPoint.WieldOff))) return Refused(GameSessionFailure.ItemScriptUnsupported);
         // ARC-DEV-258 (MIG13 S14n): a generic item (a grenade) is not a wielded weapon: it flies to the location as a projectile.
-        if (listed.Facts.Kind.Type == SessionItemType.Generic) return ThrowNpcGeneric(expected, request);
-        if (listed.Facts.Kind.Type != SessionItemType.Weapon || request.ThrowerWorn?.GetValueOrDefault(EquipmentSlot.Weapon) is not { } wielded ||
-            wielded.Entity != request.Item) return Refused(GameSessionFailure.AttackUnsupported);
-        // The remove check (0x466DA0) keeps a no-drop item: the attack starter never throws it.
-        if (wielded.NoDrop) return Refused(GameSessionFailure.InvalidAttack);
+        var generic = listed.Facts.Kind.Type == SessionItemType.Generic;
+        if (!generic)
+        {
+            if (listed.Facts.Kind.Type != SessionItemType.Weapon || request.ThrowerWorn?.GetValueOrDefault(EquipmentSlot.Weapon) is not { } wielded ||
+                wielded.Entity != request.Item) return Refused(GameSessionFailure.AttackUnsupported);
+            // The remove check (0x466DA0) keeps a no-drop item: the attack starter never throws it.
+            if (wielded.NoDrop) return Refused(GameSessionFailure.InvalidAttack);
+        }
+        var worn = request.ThrowerWorn?.Values.Any(item => item.Entity == request.Item) == true;
+        ItemScriptRuns? runs = null;
+        var applied = false;
+        if (listed.Facts.HasScript(SessionScriptPoint.Throw) || listed.Facts.HasScript(SessionScriptPoint.RemoveItem) || worn && listed.Facts.HasScript(SessionScriptPoint.WieldOff))
+        {
+            var scripted = RunNpcThrowScripts(expected, request, listed.Facts, worn, generic, struck);
+            if (scripted.Done is { } done) return done;
+            (runs, applied) = (scripted.Runs, scripted.Applied);
+            expected = Version;
+        }
+        var result = ThrowNpcPlanned(expected, request, generic, struck);
+        if (runs is null) return result;
+        // What the scripts did stays whatever the throw came to: a refusal after them is a changed session with the failure named (the original removed the item before it threw).
+        // The lines and eye candy of the scripts are the host's to show only once they took effect: a refused throw whose scripts changed nothing shows none.
+        var rejected = result.Disposition == GameSessionDisposition.Rejected;
+        if (rejected && !applied) return result with { Scripts = runs.Runs };
+        return result with
+        {
+            Disposition = rejected ? GameSessionDisposition.Changed : result.Disposition,
+            Messages = runs.Messages, EyeCandies = runs.EyeCandies, Scripts = runs.Runs,
+        };
+    }
+
+    // The throw once its scripts ran (or it has none): ARC-DEV-258's generic flight, an unstruck weapon's landing or flight, the attack on the struck critter.
+    private SessionNpcThrowResult ThrowNpcPlanned(GameSessionVersion expected, SessionNpcThrow request, bool generic, bool struck)
+    {
+        SessionNpcThrowResult Refused(GameSessionFailure failure) => new(GameSessionDisposition.Rejected, failure, null, null, Version);
+        if (generic) return ThrowNpcGeneric(expected, request);
         if (!struck)
         {
             // The thrower's own checks, as the attack's: its life record, its worn items, the wielded melee weapon (TW7); an inactive
@@ -380,6 +426,7 @@ public sealed partial class GameSessionOwner
             Difficulty = _difficulty,
             DeferHit = flies,
             AmmunitionShort = unsupplied,
+            TargetWasInBed = attack.TargetWasInBed,
         };
         var rolls = new TrialCombatRolls(new SeededRandom(_random.Seed, _random.Draws));
         AttackResolution resolution;
