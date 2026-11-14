@@ -1477,4 +1477,148 @@ public sealed class InterfaceChromeTests
             Assert.IsTrue(At(telegram, 186, 60) < At(telegram, 195, 60) - 80, $"the form box's edge is ink on the paper at {scale}");
         }
     }
+
+    // ARC-UI-1818: the quantity pane (298 `MultiMove_Base`, 416 x 112) and its five buttons (299 `Sm_RightArrow` 23 x 23, 805 `OldChar_Plus` and 804 `OldChar_Minus` 13 x 10, 33 `Done_Big` and 32 `Cncl_Big` 38 x 37; the 13 x 10 pair stay pictures);
+    // synthetic stand-ins, no game art. The places are the pane's (`QuantityPaneRules`, screen coordinates less the background's (196, 492)).
+    private const int QuantityWidth = 416, QuantityHeight = 112;
+    private static readonly (string File, int Art, int Width, int Height, bool Round)[] QuantityButtons =
+        [("Sm_RightArrow.ART", 299, 23, 23, true), ("OldChar_Plus.ART", 805, 13, 10, false), ("OldChar_Minus.ART", 804, 13, 10, false), ("Done_Big.ART", 33, 38, 37, true), ("Cncl_Big.ART", 32, 38, 37, true)];
+    // The three that are drawn as generated buttons; 805 and 804 are too small for the generic button (a ten-unit button is all rim and would lose its glyph) and stay pictures on the kept counter.
+    private static readonly (string File, int Art, int Width, int Height, bool Round)[] QuantityRecipeButtons = [.. QuantityButtons.Where(b => b.Art is not (805 or 804))];
+
+    private static (int X, int Y) QuantityPlace(int art)
+    {
+        var button = Arcanum.Presentation.Hud.QuantityPaneRules.Buttons.Single(b => b.Art == art);
+        return (button.X - Arcanum.Presentation.Hud.QuantityPaneRules.BackgroundX, button.Y - Arcanum.Presentation.Hud.QuantityPaneRules.BackgroundY);
+    }
+
+    private static bool Overlaps((int X, int Y, int W, int H) a, (int X, int Y, int W, int H) b) => a.X < b.X + b.W && b.X < a.X + a.W && a.Y < b.Y + b.H && b.Y < a.Y + a.H;
+
+    [TestMethod]
+    public void The_quantity_pane_and_its_five_buttons_have_recipes_found_by_name()
+    {
+        var pane = Recipe("MultiMove_Base.ART");
+        Assert.AreEqual(ChromeKind.Panel, pane.Kind);
+        Assert.AreEqual(ChromeMaterial.Slate, pane.Base);
+        Assert.AreEqual(ChromeSides.All, pane.Rim);
+        Assert.AreEqual(ChromeHoles.None, pane.Holes);
+        foreach (var file in new[] { "OldChar_Plus.ART", "OldChar_Minus.ART" })
+            Assert.IsNull(InterfaceChromeRecipes.For(HdInterfaceKey.Query(HdInterfaceKey.Identity(file, new byte[] { 1 }), 0, 1, 1, new byte[4])), $"{file} stays a picture");
+        foreach (var (file, _, _, _, _) in QuantityRecipeButtons)
+        {
+            Assert.AreEqual(ChromeKind.Button, Recipe(file).Kind, file);
+            Assert.IsTrue(Recipe(file).KeepFace, $"{file}: the ball's own picture is kept inside the generated rim");
+            Assert.IsNotNull(InterfaceChromeRecipes.For(HdInterfaceKey.Query(HdInterfaceKey.Identity(file.ToUpperInvariant(), new byte[] { 1 }), 0, 1, 1, new byte[4])), file);
+        }
+        // The pane's arts are the five buttons' and the background; the count's font (25) is drawn text and has no recipe.
+        CollectionAssert.AreEquivalent(Arcanum.Presentation.Hud.QuantityPaneRules.ArtNumbers.ToArray(), QuantityButtons.Select(b => b.Art).Append(298).ToArray());
+        Assert.IsNull(InterfaceChromeRecipes.For(HdInterfaceKey.Query(HdInterfaceKey.Identity("rollerfont.art", new byte[] { 1 }), 0, 1, 1, new byte[4])));
+    }
+
+    [TestMethod]
+    public void Every_part_of_the_quantity_recipe_lies_inside_its_frame_the_icon_recess_holds_the_icon_and_the_kept_counter_cuts_into_no_pit_or_button()
+    {
+        var parts = Recipe("MultiMove_Base.ART").Parts;
+        var pit = parts.OfType<ChromeSunk>().Single();
+        var keep = parts.OfType<ChromeKeep>().Single();
+        Assert.AreEqual(2, parts.Count);
+        Assert.IsTrue(pit.X >= 0 && pit.Y >= 0 && pit.X + pit.Width <= QuantityWidth && pit.Y + pit.Height <= QuantityHeight, "the pit lies inside 416 x 112");
+        Assert.IsTrue(keep.X >= 0 && keep.Y >= 0 && keep.X + keep.Width <= QuantityWidth && keep.Y + keep.Height <= QuantityHeight, "the kept counter lies inside 416 x 112");
+        // The icon (71 x 41 at (269, 534) of the screen) lies in the pit's fill, its two-unit frame left out.
+        var icon = (X: Arcanum.Presentation.Hud.QuantityPaneRules.IconX - Arcanum.Presentation.Hud.QuantityPaneRules.BackgroundX, Y: Arcanum.Presentation.Hud.QuantityPaneRules.IconY - Arcanum.Presentation.Hud.QuantityPaneRules.BackgroundY);
+        Assert.IsTrue(icon.X >= pit.X + 2 && icon.Y >= pit.Y + 2 && icon.X + 71 <= pit.X + pit.Width - 2 && icon.Y + 41 <= pit.Y + pit.Height - 2, "the pit holds the icon");
+        var pitBox = (pit.X, pit.Y, pit.Width, pit.Height);
+        var keepBox = (keep.X, keep.Y, keep.Width, keep.Height);
+        Assert.IsFalse(Overlaps(pitBox, keepBox), "the kept counter and the pit do not meet");
+        // The count starts inside the kept counter and the up and down buttons lie on it; every other button stays off both.
+        var count = (X: Arcanum.Presentation.Hud.QuantityPaneRules.CountX - Arcanum.Presentation.Hud.QuantityPaneRules.BackgroundX, Y: Arcanum.Presentation.Hud.QuantityPaneRules.CountY - Arcanum.Presentation.Hud.QuantityPaneRules.BackgroundY);
+        Assert.IsTrue(count.X >= keep.X && count.Y >= keep.Y && count.Y + 20 <= keep.Y + keep.Height, "the count's first cell and the font's 20 rows lie in the kept counter");
+        foreach (var (file, art, w, h, _) in QuantityButtons)
+        {
+            var (x, y) = QuantityPlace(art);
+            Assert.IsTrue(x >= 0 && y >= 0 && x + w <= QuantityWidth && y + h <= QuantityHeight, $"{file} lies inside the pane");
+            var box = (x, y, w, h);
+            Assert.IsFalse(Overlaps(pitBox, box), $"{file} stays off the icon pit");
+            if (art is 805 or 804) Assert.IsTrue(x >= keep.X && y >= keep.Y && x + w <= keep.X + keep.Width && y + h <= keep.Y + keep.Height, $"{file} lies on the kept counter");
+            else Assert.IsFalse(Overlaps(keepBox, box), $"{file} stays off the kept counter");
+        }
+    }
+
+    [TestMethod]
+    public void The_quantity_pane_paints_in_bounds_deterministically_opaque_with_a_black_icon_pit_and_its_counter_kept_at_whole_and_fractional_scales()
+    {
+        var recipe = Recipe("MultiMove_Base.ART");
+        var keep = recipe.Parts.OfType<ChromeKeep>().Single();
+        var legacy = Flat(QuantityWidth, QuantityHeight, (60, 60, 64));
+        // The Legacy counter is silver: its pixels must come through.
+        for (var y = keep.Y; y < keep.Y + keep.Height; y++)
+        for (var x = keep.X; x < keep.X + keep.Width; x++)
+        {
+            var i = (y * QuantityWidth + x) * 4;
+            (legacy[i], legacy[i + 1], legacy[i + 2]) = (200, 200, 210);
+        }
+        foreach (var scale in new[] { 1.0, 1.25, 1.5, 2.0, 2.4 })
+        {
+            var a = InterfaceChromeRenderer.Render(recipe, QuantityWidth, QuantityHeight, legacy, [], 0, scale);
+            var (pw, ph) = InterfaceChromeRenderer.PixelSize(QuantityWidth, QuantityHeight, scale);
+            Assert.AreEqual(pw * ph * 4, a.Length, $"at {scale}");
+            CollectionAssert.AreEqual(a, InterfaceChromeRenderer.Render(recipe, QuantityWidth, QuantityHeight, legacy, [], 0, scale), $"deterministic at {scale}");
+            for (var i = 3; i < a.Length; i += 4) Assert.AreEqual(255, a[i], $"the pane is opaque at {scale}");
+            // The icon recess is black under the icon.
+            foreach (var (x, y) in new[] { (73, 44), (143, 44), (73, 82), (143, 82), (108, 63) })
+            {
+                var pixel = Pixel(a, pw, (int)(x * scale), (int)(y * scale));
+                Assert.IsTrue(pixel.R < 12 && pixel.G < 12 && pixel.B < 14, $"the icon pit is black at ({x}, {y}) at {scale}");
+            }
+            // The kept counter shows the Legacy silver (well above the generated slate), the slate round it is generated.
+            var counter = Pixel(a, pw, (int)((keep.X + keep.Width / 2) * scale), (int)((keep.Y + keep.Height / 2) * scale));
+            Assert.IsTrue(counter.R > 170 && counter.B > 180, $"the counter keeps its Legacy picture at {scale}");
+            var stone = Pixel(a, pw, (int)(180 * scale), (int)(95 * scale));
+            Assert.IsTrue(stone.R > 15 && stone.R < 120, $"the slate at {scale}");
+            bool BrassWithin(int y0) => Enumerable.Range(y0, (int)Math.Ceiling(3 * scale) + 1).Any(y => Pixel(a, pw, (int)(300 * scale), y) is var q && q.R > q.B + 60);
+            Assert.IsTrue(BrassWithin(0), $"the pane's top rim is brass at {scale}");
+        }
+    }
+
+    // A button of a dark face with a coloured mark in the middle (a round one inside its box's circle).
+    private static byte[] QuantityButton(int width, int height, bool round, (byte R, byte G, byte B) mark)
+    {
+        var rgba = new byte[width * height * 4];
+        for (var y = 0; y < height; y++)
+        for (var x = 0; x < width; x++)
+        {
+            double dx = x + 0.5 - width / 2.0, dy = y + 0.5 - height / 2.0;
+            var inside = !round || dx * dx + dy * dy <= Math.Min(width, height) / 2.0 * Math.Min(width, height) / 2.0;
+            var marked = Math.Abs(dx) < width / 5.0 && Math.Abs(dy) < height / 5.0;
+            var i = (y * width + x) * 4;
+            (rgba[i], rgba[i + 1], rgba[i + 2], rgba[i + 3]) = !inside ? ((byte)0, (byte)0, (byte)0, (byte)0) : marked ? (mark.R, mark.G, mark.B, (byte)255) : ((byte)40, (byte)44, (byte)24, (byte)255);
+        }
+        return rgba;
+    }
+
+    [TestMethod]
+    public void The_quantity_buttons_follow_their_silhouette_keep_their_mark_and_differ_on_the_down_and_lit_frames()
+    {
+        foreach (var (file, art, width, height, round) in QuantityRecipeButtons)
+        {
+            var mark = art == 33 ? ((byte)30, (byte)170, (byte)30) : ((byte)170, (byte)30, (byte)30);
+            var legacy = QuantityButton(width, height, round, mark);
+            foreach (var scale in new[] { 1.0, 1.5, 2.0 })
+            {
+                var frames = Enumerable.Range(0, 3).Select(f => InterfaceChromeRenderer.Render(Recipe(file), width, height, legacy, [], f, scale)).ToArray();
+                var (pw, ph) = InterfaceChromeRenderer.PixelSize(width, height, scale);
+                foreach (var frame in frames)
+                {
+                    Assert.AreEqual(pw * ph * 4, frame.Length, $"{file} at {scale}");
+                    if (round) Assert.AreEqual(0, Pixel(frame, pw, 0, 0).A, $"{file}: the corner stays outside the round silhouette at {scale}");
+                    var middle = Pixel(frame, pw, pw / 2, ph / 2);
+                    Assert.AreEqual(255, middle.A, $"{file}: the middle is opaque at {scale}");
+                    Assert.IsTrue(mark.Item2 > mark.Item1 ? middle.G > middle.R + 60 : middle.R > middle.G + 60, $"{file}: the mark keeps its colour at {scale}");
+                }
+                CollectionAssert.AreNotEqual(frames[0], frames[1], $"{file}: the down frame is drawn differently at {scale}");
+                CollectionAssert.AreNotEqual(frames[0], frames[2], $"{file}: the lit frame is drawn differently at {scale}");
+                CollectionAssert.AreEqual(frames[1], InterfaceChromeRenderer.Render(Recipe(file), width, height, legacy, [], 1, scale), $"{file}: deterministic at {scale}");
+            }
+        }
+    }
 }

@@ -50,6 +50,17 @@ public partial class TerrainViewerApp
         _quantityPaneView.SetState(bar.Count, QuantityIcon());
     }
 
+    // ARC-UI-1818: the opt-in generated-chrome part (see WindowArtSmokeAsync) for the pane while the question is up: the background (298) and the three buttons' idle frames (299, 33, 32; the 13 x 10 up and down buttons stay pictures) draw at the strip's own device scale.
+    private Task QuantityPaneArtSmokeAsync() => WindowArtSmokeAsync("quantity-pane", () =>
+        {
+            var view = _quantityPaneView;
+            var found = new List<HdInterfaceTexture>();
+            if (view?.BackgroundForSelfTest is HdInterfaceTexture background) found.Add(background);
+            foreach (var button in QuantityPaneRules.Buttons.Where(button => button.Art is not (805 or 804)))
+                if (view?.ButtonArtForSelfTest(button.Action) is HdInterfaceTexture texture) found.Add(texture);
+            return found;
+        }, [QuantityPaneRules.BackgroundArt, .. QuantityPaneRules.Buttons.Select(button => button.Art).Where(art => art is not (805 or 804))], BarDeviceScale, () => _quantityPaneView?.BackgroundForSelfTest is not null, new Vector2I(1600, 1200));
+
     /// <summary>The bars went away or the question ended: no pane is drawn and the diagnostic row is as it was.</summary>
     private void HideQuantityPane()
     {

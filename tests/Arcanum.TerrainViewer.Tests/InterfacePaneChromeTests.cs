@@ -56,8 +56,8 @@ public sealed class InterfacePaneChromeTests
         }
         Assert.AreEqual(ChromeKind.Button, Recipe("FateBut.ART").Kind);
         // The Fate and Sleep windows share the button art 293; the other modes' panes (7 mess_rot, 128 skill_ro, 200 MpWt_Rot, 288 Combine_Rot, 290 Trap_Rot, 291 Broadcast_Rot), the multiplayer
-        // move window (298), the old sleep window (218 Slp_Main) are drawn by no window of this slice (the dialog box, 822 to 824, is ARC-UI-1819's).
-        foreach (var file in new[] { "mess_rot.art", "skill_ro.art", "MpWt_Rot.ART", "Combine_Rot.ART", "Trap_Rot.ART", "Broadcast_Rot.art", "MultiMove_Base.ART", "Slp_Main.ART" })
+        // move window (298, since ARC-UI-1884 the quantity pane, whose recipe is ARC-UI-1818's), the old sleep window (218 Slp_Main) are drawn by no window of this slice (the dialog box, 822 to 824, is ARC-UI-1819's).
+        foreach (var file in new[] { "mess_rot.art", "skill_ro.art", "MpWt_Rot.ART", "Combine_Rot.ART", "Trap_Rot.ART", "Broadcast_Rot.art", "Slp_Main.ART" })
             Assert.IsNull(InterfaceChromeRecipes.For(HdInterfaceKey.Query(HdInterfaceKey.Identity(file, [1]), 0, 1, 1, new byte[4])), file);
     }
 

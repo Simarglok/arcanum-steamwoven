@@ -1406,3 +1406,21 @@ Known differences (documented, not bugs):
 
 - The sheets are plain where the original's are crumpled with ragged edges and stains; the masthead's griffins and flourishes, the book's binding detail and the plaque's carved border and cracks are not drawn.
 - The ring of the round view (art 231) is the barter window's recipe.
+
+## ARC-UI-1818 — Generated interface: the quantity pane (S15, 2026-11-14)
+
+The rules are in [viewer slice S15](../rendering/hd-interface-density.md#viewer-slice-s15-arc-ui-1818). Set the HD interface line on the launcher screen to **Generated (experimental)**, start a game with gold or ammunition in the pack, and drag
+the stack onto another window or the ground so the pane asks how many. Compare with **HD** and **Legacy**.
+
+| # | Step | Expected | Status |
+| --- | --- | --- | --- |
+| 1 | Open the quantity pane in a 1280 × 800 window. | The bottom strip's pane is a slate plate with a black recess under the kind icon and a counter strip at the original's place; the All, Accept and Cancel buttons are the original's dark glass balls in a generated brass rim; all at the same places and sizes as in Legacy. | open |
+| 2 | Click up and down, then All. | The count changes as before; the digits are black (inferred from the original's colour channel, not seen in the original) and sit in the counter strip. | open |
+| 3 | Accept and Cancel. | The stack moves or stays as before; the pane goes away. | open |
+| 4 | Resize the window (or go full screen) with the pane open. | The pane is sharp at the new size, with no seam. | open |
+| 5 | Open the Save or Load window and look at the Delete Save Game button (it is the same art as the pane's Cancel button, 32). | It is a dark glass ball with its mark in a generated brass rim; clicks work as before. | open |
+
+Known differences (documented, not bugs):
+
+- The up and down buttons (805, 804) stay the original's pictures: the generic button recipe would lose their + and − marks at 13 × 10 units.
+- The slate is plainer than the original's marbling; the kind icon and the count keep the original's pixels and font.
