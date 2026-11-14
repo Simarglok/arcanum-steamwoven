@@ -1621,4 +1621,76 @@ public sealed class InterfaceChromeTests
             }
         }
     }
+
+    // ARC-UI-1751: the loot window's Take all (808, 51 x 50, three frames), the body window's doll and bag toggles (338, 339, 28 x 27, two frames) and the barter window's follower cycle buttons (757, 758, 23 x 23,
+    // three frames) are dark glass balls in a brass ring with a mark; the synthetic frames below have the arts' sizes and frame counts (a dark olive disc inside a gold outline, a red mark in its middle, and
+    // for the big button a wooden bezel round the ring), no game data.
+    private static byte[] BallButton(int w, int h, bool bezel)
+    {
+        var rgba = new byte[w * h * 4];
+        for (var y = 0; y < h; y++)
+        for (var x = 0; x < w; x++)
+        {
+            double dx = (x + 0.5 - w / 2.0) / (w / 2.0), dy = (y + 0.5 - h / 2.0) / (h / 2.0), d = Math.Sqrt(dx * dx + dy * dy);
+            if (d >= 1) continue;
+            var mark = Math.Abs(dx) < .2 && Math.Abs(dy) < .2;
+            var colour = mark ? ((byte)220, (byte)20, (byte)20)
+                : bezel && d > .82 ? ((byte)110, (byte)70, (byte)40)
+                : d > (bezel ? .7 : .78) ? ((byte)200, (byte)150, (byte)40) : ((byte)40, (byte)36, (byte)8);
+            var i = (y * w + x) * 4;
+            (rgba[i], rgba[i + 1], rgba[i + 2], rgba[i + 3]) = (colour.Item1, colour.Item2, colour.Item3, (byte)255);
+        }
+        return rgba;
+    }
+
+    [TestMethod]
+    public void The_window_buttons_of_the_loot_barter_and_steal_windows_are_balls_with_kept_pictures_in_a_generated_rim()
+    {
+        var sizes = new Dictionary<string, (int W, int H, int Frames, bool Bezel)>
+        {
+            ["TakeAllButt.ART"] = (51, 50, 3, true), ["PD_lil_butt.ART"] = (28, 27, 2, false), ["Inven_lil_butt.ART"] = (28, 27, 2, false),
+            ["MPCycleLeftButton.ART"] = (23, 23, 3, false), ["MPCycleRightButton.ART"] = (23, 23, 3, false),
+        };
+        CollectionAssert.AreEquivalent(sizes.Keys.ToArray(), InterfaceChromeRecipes.WindowBallButtonFiles.ToArray(), "the five arts the windows' own buttons are");
+        foreach (var (file, (w, h, frames, bezel)) in sizes)
+        {
+            var recipe = Recipe(file);
+            Assert.AreEqual(ChromeKind.Button, recipe.Kind, file);
+            Assert.IsTrue(recipe.KeepFace, $"{file}: the ball's own picture (the mark is the button's meaning) stays inside the rim");
+            var legacy = BallButton(w, h, bezel);
+            var rendered = new List<byte[]>();
+            foreach (var scale in new[] { 1.0, 1.345, 2.0, 2.5 })
+            {
+                var (pw, ph) = InterfaceChromeRenderer.PixelSize(w, h, scale);
+                for (var frame = 0; frame < frames; frame++)
+                {
+                    var rgba = InterfaceChromeRenderer.Render(recipe, w, h, legacy, [], frame, scale);
+                    Assert.AreEqual(pw * ph * 4, rgba.Length, $"{file} frame {frame} at {scale}");
+                    CollectionAssert.AreEqual(rgba, InterfaceChromeRenderer.Render(recipe, w, h, legacy, [], frame, scale), $"{file} frame {frame}: deterministic at {scale}");
+                    Assert.AreEqual(0, Pixel(rgba, pw, 0, 0).A, $"{file} frame {frame}: the corner is outside the round silhouette at {scale}");
+                    Assert.AreEqual(255, Pixel(rgba, pw, pw / 2, ph / 2).A, $"{file} frame {frame}: the middle is drawn at {scale}");
+                    var mark = Pixel(rgba, pw, pw / 2, ph / 2);
+                    Assert.IsTrue(mark.R > 150 && mark.G < 70 && mark.B < 70, $"{file} frame {frame}: the red mark stays at {scale}: {mark}");
+                    // Glass of the ball: left of the mark, a quarter of the way in from the rim, the dark olive stays (the plain recipe would paint the brass face there).
+                    var glass = Pixel(rgba, pw, (int)(pw * 0.32), ph / 2);
+                    Assert.IsTrue(glass.A == 255 && glass.R < 90 && glass.G < 90, $"{file} frame {frame}: the dark glass stays at {scale}: {glass}");
+                    if (scale is 1.0 or 2.0)
+                    {
+                        // The silhouette is the art's: no opaque pixel where the art is transparent (the size and the hit area are the art's).
+                        var s = (int)scale;
+                        for (var y = 0; y < ph; y++)
+                        for (var x = 0; x < pw; x++)
+                            if (legacy[((y / s) * w + x / s) * 4 + 3] == 0) Assert.AreEqual(0, Pixel(rgba, pw, x, y).A, $"{file} frame {frame}: ({x}, {y}) lies outside the art's silhouette at {scale}");
+                    }
+                    if (scale == 2.0) rendered.Add(rgba);
+                }
+            }
+            // The frames differ: the down frame is sunk and the hover frame lit.
+            for (var a = 0; a < rendered.Count; a++)
+            for (var b = a + 1; b < rendered.Count; b++) CollectionAssert.AreNotEqual(rendered[a], rendered[b], $"{file}: frames {a} and {b} differ");
+            // KeepFace is what keeps the ball: a plain button recipe paints the brass face over the same art.
+            var plain = new ChromeRecipe("plain.art", ChromeKind.Button, ChromeMaterial.Face, ChromeSides.None, []);
+            CollectionAssert.AreNotEqual(rendered[0], InterfaceChromeRenderer.Render(plain, w, h, legacy, [], 0, 2), file);
+        }
+    }
 }

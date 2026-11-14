@@ -127,7 +127,7 @@ the fatigue from before the pass.
 
 Further limits of the host:
 - The run's object list (+0x130) is the run's own (`SpellRun.ObjectList`, ARC-MAGIC-1234: [run object list](#run-object-list-arc-magic-1234)); the summoned list (+0x134) is the session's created objects of the run.
-- An object that is not a critter has magic resistance 0.
+- An object that is not a critter has the magic resistance its row stores (the resistance array's element 4, `ISpellCastMap.ObjectMagicResistance`, ARC-AI-1755; the original reads it for any target object, 0x4072D0 field 0x1F), with no effects and no aptitude scaling; a row with none has 0.
 - A refused call (a session rejection) may still have applied the components that ran before it.
 - A critter without a life record in the session has no payer and pays nothing.
 

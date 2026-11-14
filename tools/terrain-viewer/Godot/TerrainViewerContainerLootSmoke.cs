@@ -86,7 +86,8 @@ public partial class TerrainViewerApp
         RequireArranged("first open");
         Require(arrangedAtOpen > 0, "the first open had a list the original can lay out");
         // ARC-UI-1194: with ARC_AREA_WINDOW_ART the loot window's frames (the loot art, its lens, the pack) are checked in the generated interface and captured.
-        await WindowArtSmokeAsync("loot", _inventoryPanel!.GridAreaForSelfTest, [AreaLootArtLayout.LootArt, AreaInventoryHole.LootArt, AreaInventoryArtLayout.PackArt, AreaInventoryArtLayout.ArrangeArt]);
+        // ARC-UI-1751: and its own buttons: Take all (a container's window has no doll and bag toggles) and the arrange button.
+        await WindowArtSmokeAsync("loot", _inventoryPanel!.GridAreaForSelfTest, [AreaLootArtLayout.LootArt, AreaInventoryHole.LootArt, AreaInventoryArtLayout.PackArt, AreaInventoryArtLayout.ArrangeArt, AreaLootArtLayout.TakeAllArt]);
         var current = session.QueryMapInventory(mapId)!.Holders.Single(h => h.Entity == crate.Entity).Items;
         var takeable = listed.FirstOrDefault(entity => current.Any(item => item.Entity == entity && item.Facts.Kind.Type is not SessionItemType.Gold
             and not SessionItemType.Ammo and not SessionItemType.Key and not SessionItemType.KeyRing && !item.Facts.Worn && item.Facts.ScriptPoints.Count == 0));

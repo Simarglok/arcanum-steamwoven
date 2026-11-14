@@ -185,6 +185,26 @@ public sealed class AreaObjectBreakHostTests
     }
 
     [TestMethod]
+    public void An_object_that_is_the_attacker_of_a_break_is_the_bust_breaker_and_fires_the_trap_with_no_triggerer()
+    {
+        // ARC-TECHNOLOGY-1760 (OD4, OD15): a trap's shot is a ranged context whose attacker is the shooter object: the trap of the broken object has no triggerer, the BUST script has the shooter object as its triggerer.
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var chest = Row(1, Container, 30001, 830);
+            var shooter = Row(2, Scenery, 0, 0);
+            var probe = new Probe();
+            var (host, traps) = Hosts(session, content, probe, true, chest, shooter);
+            var shooterEntity = AreaUseScriptHost.EntityId(shooter);
+            var ran = AreaObjectBreakHost.Run(host, traps, chest, Both, byHero: false, ranged: true, session.Rules.Scripts, shooterEntity);
+            Assert.IsTrue(host.GlobalFlag(BustFlag));
+            CollectionAssert.AreEqual(new[] { "trap-none:30001:bust=False" }, probe.Order, "a ranged context fires the trap with no triggerer");
+            CollectionAssert.AreEqual(new[] { shooterEntity + ":4" }, probe.Damaged.ToArray(), "the shooter object is the triggerer of the script's action");
+            Assert.IsNotNull(ran.Bust?.Run);
+        });
+    }
+
+    [TestMethod]
     public void An_ordinary_trap_script_runs_on_an_attack_and_a_native_trap_without_a_cast_host_is_not_consumed()
     {
         WithContent(content =>

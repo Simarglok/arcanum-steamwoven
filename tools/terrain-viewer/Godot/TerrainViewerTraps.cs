@@ -55,17 +55,17 @@ public partial class TerrainViewerApp
     /// <summary>
     /// ARC-DEV-260 (ledger OD4, OD15): what the host owes after a hit that brought a door, window, container, scenery, trap or item to 0 hit points:
     /// the object's trap, then its BUST script (<see cref="AreaObjectBreakHost"/>). <paramref name="byHero"/> says the hero's attack broke it,
-    /// <paramref name="ranged"/> that the attack was ranged (no trap triggerer). A trap's effect can damage objects in turn; those hits are handled by
+    /// <paramref name="ranged"/> that the attack was ranged (no trap triggerer); <paramref name="breaker"/> (ARC-TECHNOLOGY-1760) the script entity of an object that is the attacker, the BUST breaker (a trap's shot: the shooter object). A trap's effect can damage objects in turn; those hits are handled by
     /// <see cref="LogObjectHits"/>, which the caller runs after.
     /// </summary>
-    private void RunObjectBreakSteps(AreaObjectRecord row, SessionObjectHostSteps steps, bool byHero, bool ranged)
+    private void RunObjectBreakSteps(AreaObjectRecord row, SessionObjectHostSteps steps, bool byHero, bool ranged, string? breaker = null)
     {
-        RunObjectBreakScripts(row, steps, byHero, ranged);
+        RunObjectBreakScripts(row, steps, byHero, ranged, breaker);
         // ARC-RENDER-1126 (OD15): the busting or destroying sound plays after the dispatch.
         PlayObjectBreakSounds(row, steps);
     }
 
-    private void RunObjectBreakScripts(AreaObjectRecord row, SessionObjectHostSteps steps, bool byHero, bool ranged)
+    private void RunObjectBreakScripts(AreaObjectRecord row, SessionObjectHostSteps steps, bool byHero, bool ranged, string? breaker = null)
     {
         if ((steps & (SessionObjectHostSteps.TrapFires | SessionObjectHostSteps.BustScript)) == 0) return;
         if (_areaSession is not { } owner || _readyArea is not { } area || UseScriptHost(area.Snapshot) is not { } host) return;
@@ -74,7 +74,7 @@ public partial class TerrainViewerApp
         var outer = _objectBreakRunning;
         _objectBreakRunning = true;
         AreaObjectBreakRun ran;
-        try { ran = AreaObjectBreakHost.Run(host, AreaTrapsNow(), row, steps, byHero, ranged, owner.Rules.Scripts); }
+        try { ran = AreaObjectBreakHost.Run(host, AreaTrapsNow(), row, steps, byHero, ranged, owner.Rules.Scripts, breaker); }
         finally { _objectBreakRunning = outer; }
         if ((ran.Bust ?? ran.TrapScript) is { } scripted) Awarded(host, scripted);
         if (!ran.Any) return;
