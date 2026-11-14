@@ -588,6 +588,8 @@ public partial class TerrainViewerApp
             _ => 0,
         };
         if (digit != 0) _conversationPanel.ChooseByDigit(digit);
+        // ARC-UI-2068 (DB2): the A key is a prefilter ahead of the dialog's hook (0x57DC60 → 0x54FCF0 on the latest recent action); the bars stay only in Original.
+        else if (code == Key.A && DialogBarStays && !PaletteOpen && HotkeysActive && _areaSession is { } session && session.QueryHotkeys().Recent[0] is { IsEmpty: false } latest) ActivateHotkey(latest, "A");
         return true;
     }
 
