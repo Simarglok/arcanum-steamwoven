@@ -641,6 +641,7 @@ src/Arcanum.World/AreaTraps.cs,Use,pending,
 src/Arcanum.World/AreaTraps.cs,UseNpc,exempt,host
 src/Arcanum.World/AreaTraps.cs,WalkCheck,pending,
 src/Arcanum.World/AreaTraps.cs,WalkCheckNpc,exempt,host
+src/Arcanum.World/AreaUseScripts.cs,ApplyMakeFollow,exempt,reference
 src/Arcanum.World/AreaUseScripts.cs,ApplyScriptAttack,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,AreaOf,pending,
 src/Arcanum.World/AreaUseScripts.cs,AttackRefusal,exempt,host
@@ -656,7 +657,9 @@ src/Arcanum.World/AreaUseScripts.cs,IsMonsterOfType,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,IsProwling,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,IsSurrendered,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,IsTrap,pending,
+src/Arcanum.World/AreaUseScripts.cs,Leader,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,MagickCancelPercent,exempt,host
+src/Arcanum.World/AreaUseScripts.cs,MakeFollowRefusal,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,MetPcBefore,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,OriginOf,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,RaiseRefuses,exempt,reference
