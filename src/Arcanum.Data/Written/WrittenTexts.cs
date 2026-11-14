@@ -191,6 +191,18 @@ public sealed class WrittenTexts
         return result.AsReadOnly();
     }
 
+    /// <summary>ARC-UI-1877: the distinct font arts (above 0) the markup of the book, newspaper and plaque messages names, as the original reads it (a message with no prefix
+    /// names font 0 and is left out): the fonts the original-look window must load.</summary>
+    public IReadOnlyList<int> MarkupFonts()
+    {
+        var fonts = new SortedSet<int>();
+        foreach (var file in new[] { _files[0], _files[2], _files[4] })
+            if (file is not null)
+                foreach (var message in file.Messages)
+                    if (Markup(message.Number, Encoding.Latin1.GetString(message.Bytes.Span), null).Font is > 0 and var font) fonts.Add(font);
+        return Array.AsReadOnly(fonts.ToArray());
+    }
+
     /// <summary>The first default issue's offset above <see cref="DefaultIssueBase"/>, and the step between the probed numbers (0x4BF330: 5010, 5020, ...).</summary>
     public const int DefaultIssueBase = 5000, DefaultIssueStep = 10;
 
