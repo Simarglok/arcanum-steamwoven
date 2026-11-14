@@ -299,6 +299,9 @@ public partial class TerrainViewerApp
                 Destroyed = (found.ObjectFlags & Arcanum.Simulation.Magic.SpellTargetObject.Destroyed) != 0, Off = (found.ObjectFlags & Arcanum.Simulation.Magic.SpellTargetObject.Off) != 0,
                 DontDraw = (found.ObjectFlags & Arcanum.Simulation.Magic.SpellTargetObject.DontDraw) != 0, Invulnerable = (found.ObjectFlags & Arcanum.Simulation.Magic.SpellTargetObject.Invulnerable) != 0,
                 Busted = AiObjectBusted(id),
+                // ARC-AI-1756 (0x42B9C0 node 5): the object's art and flags the attack animation reads.
+                Art = unchecked((uint)(_spellCastMap.Row(id)?.EffectiveFields.FirstOrDefault(field => field.Slot == 0 && field.Presence == AreaPresence.Value)?.Number ?? 0)),
+                Flags = unchecked((uint)found.ObjectFlags),
             }
             : null;
 
