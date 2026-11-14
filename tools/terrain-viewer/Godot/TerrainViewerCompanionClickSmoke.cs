@@ -273,6 +273,33 @@ public partial class TerrainViewerApp
                 }
             }
 
+            // 12b. ARC-UI-1787 (FP6, 0x54EA80): armed lockpicks are interface mode 16, so the portrait takes the follower as the lockpicks' target object, which is no lock: the pick ends,
+            // the mode pops and no talk starts. The follower order's target mode (18) is no mode of the dispatcher's three, so there the click is the ordinary one, a talk.
+            {
+                portraits.CloseMenu();
+                Require(OpenTargetMode(InterfaceMode.ItemTarget, _ => _lockpickArmed = null), "the item target mode opened for the lockpicks");
+                _lockpickArmed = "smoke:lockpicks";
+                await ClickPortraitAsync(MouseButton.Left);
+                for (var frame = 0; frame < 20; frame++) AreaSmokeTalkFrame();
+                Fact("armed lockpicks take his portrait as a target that is no lock: the pick ends, no talk",
+                    _lockpickArmed is null && !TargetModeOpen(InterfaceMode.ItemTarget) && !ConversationOpen && TargetsMatchStack && _portalNotice.Contains("not a door, window or container"),
+                    $"armed {_lockpickArmed is not null} mode16 {TargetModeOpen(InterfaceMode.ItemTarget)} talk {ConversationOpen} notice {_portalNotice}");
+                if (ConversationOpen) CloseConversation();
+                Settle();
+
+                Require(OpenOverlayMode(InterfaceMode.FollowerOrder, _ => _pendingOrder = null), "the follower order mode opened");
+                _pendingOrder = (follower, CompanionOrderType.WalkHere);
+                await ClickPortraitAsync(MouseButton.Left);
+                for (var frame = 0; frame < 600 && !ConversationOpen; frame++) AreaSmokeTalkFrame();
+                var orderTalk = ConversationOpen && _conversationSpeaker?.Row.Key == companion.Key;
+                Fact("a pending order's mode leaves his portrait click the ordinary one: a talk, the order mode popped by the dialog",
+                    orderTalk && _pendingOrder is null && !TargetModeOpen(InterfaceMode.FollowerOrder) && TargetsMatchStack,
+                    $"talk {orderTalk} order {_pendingOrder is not null} mode18 {TargetModeOpen(InterfaceMode.FollowerOrder)} {_conversationNotice}");
+                if (ConversationOpen) CloseConversation();
+                if (_pendingOrder is not null) CancelPendingOrder("the smoke ended");
+                Settle();
+            }
+
             // 12. ARC-UI-1736 (FP3, FP5): eight followers scroll by their arrows, six frames from the offset, and clamp at both ends (a panel of its own with synthetic followers).
             {
                 var strip = new AreaFollowerPortraits();
