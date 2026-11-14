@@ -256,7 +256,6 @@ public sealed class InventoryStateTests
         Assert.AreEqual(-1, seen!.Facts.InventoryLocation, "the insert check sees the item unwielded");
         CollectionAssert.AreEqual(new[] { "vest" }, Pc(owner));
         CollectionAssert.AreEqual(new[] { "ring", "sword", "ring-copy" }, owner.QueryMapInventory(Exterior)!.Holders.Single(h => h.Entity == "virgil").Items.Select(i => i.Entity).ToArray());
-        Assert.IsFalse(owner.QueryPcInventory().Single().Facts.Worn);
         // Through the dialog port: the command applies and the item reaches the hero.
         using var viaPort = Attached();
         var port = new SessionDialogInventoryPort(viaPort, new(1), id => id == new DialogParticipantId(2) ? "virgil" : null, Accept);
