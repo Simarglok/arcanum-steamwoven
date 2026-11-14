@@ -677,8 +677,10 @@ own response field. `r:$price,list`: the [rumor draw](#rumor-reply-arc-script-13
 notice of line 7000 and the no). The numbers are read as the Player replies read theirs (`ParseNpcPriceLine`, `ParseRumorReply`). The line needs the greeting port and the money ports (`World`, `Gold`
 and a purse or the trainer port; `r:` also the rumor port, and the money ports only for a price of at least 1), else the node stays a frontier (`UnsupportedGeneratedText`), as it does with
 arguments outside the subset (no `$` or no comma after it, a negative `m:` price, a rumor outside 1000..2999) and where the node is planned without its replies or nested (a final line's target, a greeting slot). The
-follow nodes are planned one level deep when the node is planned, before its action runs, so a missing or Player-role follow fails the step and a follow that is itself a generated line (`g:`, `m:`, `r:`) is a
-frontier. The effect and turn budgets are checked before the payment. Tests: `DialogNpcTalkTests` (synthetic).
+follow nodes are planned when the node is planned, before its action runs, so a missing or Player-role follow fails the step. A follow that is a plain, `g:` or `i:` node is planned then as an ordinary entry; a follow
+that is itself an `m:` or `r:` node the ports can run is planned when the way is taken (ARC-SCRIPT-1746, [#1746](https://github.com/Simarglok/arcanum-steamwoven/issues/1746), 0x414810 enters any node), so
+chains run and a cycle is bounded by the turn limit; the plan is made before the price of a yes is paid, so a chained node that cannot run (a follow of its own that is missing or has the Player role) stops or fails the pick with no gold spent, instead of failing the first node's entry.
+The effect and turn budgets are checked before the payment. Tests: `DialogNpcTalkTests` (synthetic).
 
 ## Barter reply (ARC-UI-050)
 
