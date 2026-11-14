@@ -584,6 +584,15 @@ public partial class TerrainViewerApp
         }
         // ARC-UI-1194: with ARC_AREA_WINDOW_ART the window's frames (its background, the lens, the pack) are checked in the generated interface and captured.
         await WindowArtSmokeAsync("barter", area, [background, AreaInventoryHole.BarterArt, AreaInventoryArtLayout.PackArt, AreaInventoryArtLayout.ArrangeArt]);
+        // ARC-UI-1751: the follower's window (825 on the follower background) also draws the two cycle buttons (757, 758): with ARC_AREA_WINDOW_ART they are checked in the generated interface too.
+        if (WindowArtSmokeRequested)
+        {
+            var merchantFrame = area.BarterFrame!;
+            area.SetBarter(merchantFrame with { Background = AreaBarterArtLayout.FollowerArt });
+            Require(area.CycleShown, "the follower background shows the cycle buttons for the window art run");
+            await WindowArtSmokeAsync("barter-follower", area, [AreaBarterArtLayout.FollowerArt, AreaInventoryHole.BarterArt, AreaInventoryArtLayout.PackArt, AreaInventoryArtLayout.ArrangeArt, AreaBarterArtLayout.CycleLeftArt, AreaBarterArtLayout.CycleRightArt]);
+            area.SetBarter(merchantFrame);
+        }
         if (System.Environment.GetEnvironmentVariable("ARC_AREA_BARTER_CAPTURE") is { Length: > 0 } capture)
         {
             await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
