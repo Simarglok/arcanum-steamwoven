@@ -449,6 +449,6 @@ public sealed class NpcLeaderStateTests
         Assert.AreEqual(new SessionNpcFollower(Summon, Mage, true), owner.QueryNpcLink(Summon));
         Changed(owner.ForceJoinParty(owner.Version, Virgil));
         Assert.IsNull(owner.QueryNpcLink(Virgil), "the hero's follower has no NPC link");
-        Assert.ThrowsException<ArgumentException>(() => owner.QueryNpcLink(""));
+        Assert.ThrowsExactly<ArgumentException>(() => owner.QueryNpcLink(""));
     }
 }
