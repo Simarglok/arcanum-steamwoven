@@ -563,7 +563,7 @@ ground click cancels that walk-to-use, clicks again and lets the route walk ther
 before the use, then in the cave accepts a use and resets before the next frame,
 checking that the reset drops the transfer; it prints `ARC-WORLD-009 native-smoke transition PASS`.
 A clock phase follows (ARC-WORLD-010, [area lighting](area-lighting.md#verification)): the session clock flows to the
-next hour at literal host times, holds while the palette and a dialog are open, waits +1 hour during the pause
+next hour at literal host times, keeps flowing while the palette and a dialog are open (only the Esc menu pauses it), waits +1 hour on top of the flow
 and round-trips through a snapshot; it prints `ARC-WORLD-010 native-smoke clock PASS`.
 `ARC_AREA_TRANSITION_CAPTURE` saves views of both maps. The real-data Core test
 `AreaTransitionOriginalTests` walks to each trigger over the step evidence and
@@ -1160,7 +1160,7 @@ inventory and loot lines show a stack's units (`×N`; [ammunition](../world/inve
   sweep of the native smoke counts those bodies as taken.
 - **Window.** `I` (the original Inventory key, logical key down) toggles it while the area
   inventory exists; I, Escape, the Close button or a controller cancel close it. It is
-  modal like the dialog panel (actor gate closed, clock paused, palette chord refused,
+  modal like the dialog panel (actor gate closed, the clock keeps flowing, ARC-DEV-126, palette chord refused,
   every key owned by the window). Left: the PC's list in the order items entered it, each
   with its display name (the hover rule: the examine function's (0x441B60) order from the description
   tables, type fallback without them), type and weight. When looting, right: the dead NPC's
