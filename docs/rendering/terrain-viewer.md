@@ -109,8 +109,10 @@ reason the start opens the stored folder at once. `--launcher` with other viewer
   after alpha); three HD lines (ARC-UI-143, below); "Show this screen at every start"; "Debug mode" (ARC-DEV-050, off by default:
   [debug mode](area-map-mode.md#debug-mode-arc-dev-050)); Play, Reset settings and Quit. The project's own look, not a
   window of the original's menu.
-- **HD lines (ARC-UI-143).** After the rules the screen has three HD lines (the Game page of the options window had them until ARC-UI-146), one row of choices each: **HD graphics**
-  Off/On (the visual profile, the `visual profile` line of `arcanum.cfg`), **HD interface** Off/On/Generated (experimental) and **HD pack** Auto/Game/Custom
+- **HD lines (ARC-UI-143, ARC-RENDER-2060).** After the rules the screen has four HD lines (the Game page of the options window had them until ARC-UI-146), one row of choices each: **HD graphics**
+  Off/On (the visual profile, the `visual profile` line of `arcanum.cfg`), **HD lighting** Off/On (ARC-RENDER-2060: the relit look, the `relit look` line, 0 or 1, default off;
+  it draws only while HD graphics is On, so HD graphics Off, the H key included, is Legacy byte for byte whatever the line says; its own `RELIT_LOOK_TEST_PATH` isolates tests and the smoke runner gives each run its own file;
+  what the look is: [relit look](area-lighting.md#relit-look-arc-render-2060)), **HD interface** Off/On/Generated (experimental) and **HD pack** Auto/Game/Custom
   (the `hd interface`, `generated interface`, `hd pack` and `hd pack path` lines of `arcanum.cfg`, [HD pack source](../workflow/hd-pack.md#hd-pack-source-arc-dev-350)).
   They are the only saved-settings screen for them (the options window has no HD line since ARC-UI-146; the `H` key and the palette still
   switch the visual profile in play, HD interface and HD pack change only here, with Shift held at the start): a choice is saved at once in the settings file (not at Play) and the game that Play
@@ -3378,7 +3380,7 @@ The first ordinary start after this change moves the settings of the files the v
 `audio_volumes_v1.json`, `always_run_v1.json`, `visual_profile_v1.json`, `launcher_v1.json`, in `user://`) into `arcanum.cfg`, once, only
 when `arcanum.cfg` does not exist yet (`ViewerSettingsFile.UserFile`, `ViewerSettingsMigration`): each old file is read by its own old codec,
 an invalid one is skipped, and the old files stay where they are, unread and unchanged (the player may delete them). The test variables
-`GAME_SETTINGS_TEST_PATH`, `AUDIO_VOLUMES_TEST_PATH`, `ALWAYS_RUN_TEST_PATH`, `VISUAL_PROFILE_TEST_PATH` and `LAUNCHER_SETTINGS_TEST_PATH`
+`GAME_SETTINGS_TEST_PATH`, `AUDIO_VOLUMES_TEST_PATH`, `ALWAYS_RUN_TEST_PATH`, `VISUAL_PROFILE_TEST_PATH`, `RELIT_LOOK_TEST_PATH` (ARC-RENDER-2060, the `relit look` line) and `LAUNCHER_SETTINGS_TEST_PATH`
 keep their names and each now names a settings file; an automated run without one has no file. **Not in the file** (own files, own
 owners): the WORLD diagnostic's input and zoom preferences (`world_diagnostic_*_v1.json`, development diagnostics with their own validation),
 the HD device budget (`hd_budget_v1.json`, a measurement, not a setting) and the labs' files. Checks: `ArcanumConfigTests`,
