@@ -592,6 +592,7 @@ public partial class TerrainViewerApp
     /// </summary>
     private void NpcObjectHit(string shooter, AreaObjectRecord row, AreaObjectAttackTarget? target, SessionObjectAttackResult result)
     {
+        if (_aiForSmoke) _npcObjectStrikesForSelfTest.Add((shooter, target?.Entity, result.Object?.Damage));
         if (target is not null) FinishObjectHit(null, target, result, ranged: true, byHero: false, attacker: shooter);
         else
         {
