@@ -829,8 +829,9 @@ public enum ScrNewspaperKind
 }
 
 /// <summary>ARC-SCRIPT-1764 (script actions 85 and 86, ledger NP9, NP10): a queued issue (<see cref="Issue"/> and <see cref="Front"/>, the operands as read; the second is the dialog code's "second operand not 0")
-/// or the float of the head issue's headline over <see cref="Speaker"/> (the issue and <see cref="Front"/> unused). Requests come in action order.</summary>
-public readonly record struct ScrNewspaperRequest(ScrNewspaperKind Kind, int Issue, bool Front, ScrObjectRef? Speaker);
+/// or the float of the head issue's headline over <see cref="Speaker"/> (the issue and <see cref="Front"/> unused). Requests come in action order.
+/// ARC-UI-2055 (TB26): <see cref="Listener"/> is the run's triggerer, which the original hands to the speech display unchecked (0x447220 case 0x56), so it can be null.</summary>
+public readonly record struct ScrNewspaperRequest(ScrNewspaperKind Kind, int Issue, bool Front, ScrObjectRef? Speaker, ScrObjectRef? Listener = null);
 
 /// <summary>The final value of a global flag the run changed.</summary>
 public readonly record struct ScrFlagWrite(int Index, bool Value);

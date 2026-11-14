@@ -51,7 +51,7 @@ internal static class AreaScriptNewspaper
         {
             if (request.Kind != ScrNewspaperKind.FloatHeadline || request.Speaker is not { } speaker) continue;
             text ??= texts() is { } read ? WrittenTexts.PunctuatedHeadline(read.Headline(session.QueryNewspaper().HeadIssue, session.Rules.Written)) : string.Empty;
-            if (text.Length > 0) (floats ??= []).Add(new(speaker, text));
+            if (text.Length > 0) (floats ??= []).Add(new(speaker, text, request.Listener));
         }
         return floats ?? (IReadOnlyList<AreaScriptFloat>)[];
     }
