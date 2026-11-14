@@ -775,19 +775,21 @@ public partial class TerrainViewerApp
     {
         if (!QuickKeysActive) return false;
         if (key.PhysicalKeycode != Key.O) return decision.Key == WorldKey.O; // a typed O elsewhere on the layout is no key of the original (swallowed, nothing happens)
-        if (key.CtrlPressed || key.AltPressed || key.MetaPressed) return true;
-        if (decision.Echo) return true;
-        if (decision.Pressed) { _optionsKeyArmed = _mainMenu is null; return true; }
-        if (!_optionsKeyArmed) return true;
+        // A letter typed on the physical O key is a separate character message in the original (its own route goes on); only a typed O is the key itself.
+        var consumed = decision.Key == WorldKey.O;
+        if (key.CtrlPressed || key.AltPressed || key.MetaPressed) return consumed;
+        if (decision.Echo) return consumed;
+        if (decision.Pressed) { _optionsKeyArmed = _mainMenu is null; return consumed; }
+        if (!_optionsKeyArmed) return consumed;
         _optionsKeyArmed = false;
-        if (_mainMenu is not null) return true;
-        if (!_worldFocused || PanelOutsideStackOpen || WorldUiFocus) { _mainMenuStatus = "O ignored: palette, menu or UI focus owns input"; RefreshAreaStatus(); return true; }
+        if (_mainMenu is not null) return consumed;
+        if (!_worldFocused || PanelOutsideStackOpen || WorldUiFocus) { _mainMenuStatus = "O ignored: palette, menu or UI focus owns input"; RefreshAreaStatus(); return consumed; }
         if (_worldLifecycleSession is not null || _worldResetPending || _worldReloadPending || _mapHandoff is { Kind: not MapHandoffKind.Stream })
         {
-            _mainMenuStatus = "O ignored: a load is in progress"; RefreshAreaStatus(); return true;
+            _mainMenuStatus = "O ignored: a load is in progress"; RefreshAreaStatus(); return consumed;
         }
         OpenInPlayMenuOverWindows(optionsWindow: true);
-        return true;
+        return consumed;
     }
 
     private bool _optionsKeyArmed;

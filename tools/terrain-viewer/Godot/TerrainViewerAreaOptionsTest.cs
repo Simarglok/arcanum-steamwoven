@@ -265,6 +265,13 @@ public partial class TerrainViewerApp
             Require(_mainMenu?.Window == AreaMenuWindow.Options, "the letter O on another key does not close the window");
             LayoutKey(Key.S, Key.O);
             Require(!MainMenuOpen && _mainMenu is null, "the physical O key closed it");
+            // A letter typed on the physical O key (Dvorak: R) is a separate character message in the original: its own route goes on (not consumed), the options window still opens.
+            static InputEventKey RKey(bool pressed) => new() { Keycode = Key.R, PhysicalKeycode = Key.O, Pressed = pressed };
+            Require(!RouteOptionsKey(RKey(true), new(WorldKey.R, true, false, WorldKeyRole.OriginalReserved, false, false, null)) && _optionsKeyArmed, "the typed letter's route goes on and the press arms the options key");
+            Require(!RouteOptionsKey(RKey(false), new(WorldKey.R, false, false, WorldKeyRole.OriginalReserved, false, false, null)) && _mainMenu?.Window == AreaMenuWindow.Options,
+                "the release opens the options window and still leaves the typed letter to its route");
+            LayoutKey(Key.S, Key.O);
+            Require(!MainMenuOpen && _mainMenu is null, "closed again");
 
             // From the main menu: Options, then Done goes back to it.
             OpenMainMenu(MainMenuTexts(arguments));
