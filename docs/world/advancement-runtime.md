@@ -142,8 +142,7 @@ skill target.
 
 ## Not ready
 
-- The scheme choice (the character screen's auto-level selection) and point purchases by the player; the Educator
-  background.
+- Point purchases by the player on the original's own pages beyond the sheet's; the Educator background. (The scheme choice on the sheet's fourth tab, in play and in the creation editor, is built: ARC-UI-1742, ARC-UI-1792.)
 - The waiting followers' rectangle uses the original's 800 × 400 play view; that this view's handle is the one 0x43A570 receives
   is NOT_VERIFIED (its caller is not traced). No native smoke reaches a level step (without `--hero` the session has no scheme
   data); the rules are covered by synthetic and opt-in tests.
