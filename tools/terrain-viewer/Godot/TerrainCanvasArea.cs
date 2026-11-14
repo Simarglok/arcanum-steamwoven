@@ -484,6 +484,8 @@ public partial class TerrainCanvas
             item.Hide(); item.FrameTexture = null; item.HdScale = 1; item.ReleaseMapping();
         }
         _areaActive = visible.Length;
+        // ARC-RES-1978: while the relit look is on, the carried lights stand where they stand now and the shaders read the merged list.
+        UploadRelightLights();
         for (var index = 0; index < visible.Length; index++)
         {
             var item = _areaItems[index];
@@ -502,6 +504,10 @@ public partial class TerrainCanvas
             else if (index == highlightIndex) (item.Ambient, item.AmbientRight, item.Lattice, item.Carried) = (AreaHighlightColour, AreaHighlightColour, null, null);
             else if (index == ringUnderIndex || index == ringOverIndex) (item.Ambient, item.AmbientRight, item.Lattice, item.Carried) = (ringTint, ringTint, null, null);
             else (item.Ambient, item.AmbientRight, item.Lattice, item.Carried) = AreaItemLight(command, isActor);
+            // ARC-RES-1978: what the relit look treats the item as (read only while it is on): masks, roofs, the hover highlight and the rings stay as they were.
+            item.RelightKind = mask || roof || index == highlightIndex || index == ringUnderIndex || index == ringOverIndex ? AreaRelight.KindNone
+                : isActor || command.ArtClass is 2 or 12 or 13 or 14 ? AreaRelight.KindCritter
+                : command.Identity is null ? AreaRelight.KindGround : AreaRelight.KindObject;
             item.RoofCorners = roof ? roofs[index - roofStart].Corners : null;
             // The source drops every alpha mode for an additive (or sub/mul) object, and a constant-alpha body
             // replaces them with its own, so such a wall never fades (ARC-RENDER-018).
@@ -513,6 +519,27 @@ public partial class TerrainCanvas
         AreaVisibleCommands = Array.AsReadOnly(logical.Where(command => command.Identity != ActorSentinel).ToArray());
         AreaVisibleCount = AreaVisibleCommands.Count;
         _areaView = state;
+    }
+    // ARC-RES-1978: the carried lights as they stand now, merged with the map's, for the relit shaders (nothing while the relit look is off).
+    private void UploadRelightLights()
+    {
+        if (!AreaRelight.Active) return;
+        // No lighting shown (toggled off, or the area released): no lights either, so a stale list does not light the next view.
+        if (_areaAmbient is not { } relitAmbient) { AreaRelight.SetCarriedLights([]); AreaRelight.SetMapLights([]); AreaRelight.Upload(); return; }
+        AreaRelight.SetCarriedLights((_areaCarriedNow?.CarriedPlacements ?? []).Select(p => AreaRelight.FromPlacement(p.Light, p.Rect, relitAmbient.Pair))
+            .Where(light => light is not null).Select(light => light!.Value));
+        AreaRelight.Upload();
+    }
+    /// <summary>ARC-RES-1978: the hero's current frame texture (null when none is shown).</summary>
+    internal ImageTexture? HeroFrame() => _areaItems.Take(_areaActive).FirstOrDefault(item => item.Visible && item.Actor is not null)?.FrameTexture;
+    /// <summary>ARC-RES-1978: the frame textures of the shown items with what the relit look treats them as (for the lab's real-frame checks).</summary>
+    internal IEnumerable<(int Kind, ImageTexture Texture)> RelightFrames() =>
+        _areaItems.Take(_areaActive).Where(item => item.Visible && item.FrameTexture is not null).Select(item => (item.RelightKind, item.FrameTexture!));
+    /// <summary>ARC-RES-1978: redraws the shown items after the relit look was switched (their shader program is picked at draw time), without a new submission.</summary>
+    internal void RefreshRelight()
+    {
+        UploadRelightLights();
+        for (var index = 0; index < _areaActive && index < _areaItems.Count; index++) _areaItems[index].QueueRedraw();
     }
     // A large view (Fit at minimum zoom) must not leave tens of thousands of hidden
     // nodes behind once the view shrinks. Every frame, still or moving, frees at most
