@@ -32,11 +32,19 @@ public sealed record InterfaceRuleProfile
     /// </summary>
     public bool DialogRepliesUnnumbered { get; init; }
 
+    /// <summary>
+    /// ARC-UI-2025, ledger DH3: the original's dialog reply band picks the pressed row as y / 20 although the rows are drawn every 19 px, so the
+    /// click bands of the lower rows lie up to 4 px lower than the rows seen (an arithmetic slip of the original, never an intended
+    /// feature). Steamwoven picks the row whose drawn pixels the pointer is on (owner classification proposed with the fix, 2026-11-14);
+    /// Original keeps the slip.
+    /// </summary>
+    public bool DialogReplyRowsDrift { get; init; }
+
     /// <summary>The original with every recorded fix and addition; the default setting.</summary>
     public static readonly InterfaceRuleProfile Steamwoven = new() { Name = "steamwoven" };
 
     /// <summary>The retail 1.0.7.4 behaviour.</summary>
-    public static readonly InterfaceRuleProfile Original = new() { Name = "original", CalledShotCursorsSwapped = true, TurnOrderListHidden = true, DialogRepliesUnnumbered = true };
+    public static readonly InterfaceRuleProfile Original = new() { Name = "original", CalledShotCursorsSwapped = true, TurnOrderListHidden = true, DialogRepliesUnnumbered = true, DialogReplyRowsDrift = true };
 
     /// <summary>Both settings, default first.</summary>
     public static IReadOnlyList<InterfaceRuleProfile> All { get; } = new[] { Steamwoven, Original };

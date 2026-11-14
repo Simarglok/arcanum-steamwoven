@@ -82,7 +82,7 @@ public partial class TerrainViewerApp
         else _conversationHost = null;
         if (_conversationPanel is null)
         {
-            _conversationPanel = new AreaConversationPanel { NumberedSource = () => DialogRepliesNumbered }; AddChild(_conversationPanel);
+            _conversationPanel = new AreaConversationPanel { NumberedSource = () => DialogRepliesNumbered, OriginalRowsSource = () => DialogReplyRowsDrift }; AddChild(_conversationPanel);
             _conversationPanel.NpcLineShown += ShowDialogLineBubble;
             _conversationPanel.ReplyPicking += RemoveDialogLineBubble;
             _conversationPanel.Picked += () => { if (_audio is not null) ExecuteVoice(DialogVoicePlayer.Picked()); };
@@ -413,6 +413,7 @@ public partial class TerrainViewerApp
             // ARC-UI-071 (B29): the panel's texts in the original's font art (null without a game folder: the viewer's font).
             _conversationPanel!.SetFonts(TextFonts());
             _conversationPanel.NumberedReplies = DialogRepliesNumbered;
+            _conversationPanel.OriginalReplyRows = DialogReplyRowsDrift;
             _conversationPanel.Open(title, conversation, note);
         }, () => _conversationPanel!.CloseView());
 
@@ -501,6 +502,9 @@ public partial class TerrainViewerApp
     }
 
     /// <summary>ARC-UI-2019: replies are numbered, and a digit chooses one, except under the Original interface setting (no session: Steamwoven).</summary>
+    /// <summary>ARC-UI-2025: the Original interface setting lays the replies out as the original's band and hits its rows with the original's click bands (no session: Steamwoven).</summary>
+    private bool DialogReplyRowsDrift => _areaSession?.Rules.Interface.DialogReplyRowsDrift == true;
+
     private bool DialogRepliesNumbered => _areaSession?.Rules.Interface.DialogRepliesUnnumbered != true;
 
     private void HandleConversationPulse(IntentFrame intent)
