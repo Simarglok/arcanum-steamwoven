@@ -214,7 +214,7 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
 
     /// <summary>ARC-DEV-324: queues a line for the viewer to float over <paramref name="speaker"/> as a script's float line does (the generic greeting, which is a
     /// floating line and no window).</summary>
-    internal void Float(ScrObjectRef speaker, string text) => _floats.Add(new(speaker, text));
+    internal void Float(ScrObjectRef speaker, string text, ScrObjectRef? listener = null) => _floats.Add(new(speaker, text, listener));
 
     /// <summary>ARC-SCRIPT-050: the float lines of the runs applied since the last call, in order, each with its text, for the viewer to
     /// float over its speaker.</summary>
@@ -468,7 +468,7 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
             if (_content?.Dialog(line.Script, _session.Rules.Data) is not { Status: ScriptContentStatus.Read, Document: { } document }) continue;
             var printed = ScrPrintedLine.Read(document, line.Line, _profile.Pc.Gender != Arcanum.Scripting.Dialog.DialogPcGender.Male, _profile.Names);
             if (printed.Status != ScrPrintedLineStatus.Shown) return false;
-            floats.Add(new(line.Speaker, printed.Text));
+            floats.Add(new(line.Speaker, printed.Text, line.Pc));
         }
         // ARC-SCRIPT-1764 (NP10): the float newspaper headline requests, read before anything applies.
         floats.AddRange(AreaScriptNewspaper.Floats(_session, effects, _newspaperTexts.Get));
@@ -606,8 +606,8 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
     public static SessionScriptRole? Role(ScrObjectRef? obj) => obj is { } o ? new SessionScriptRole(new SessionMapId(o.Map), o.Code) : null;
 }
 
-/// <summary>ARC-SCRIPT-050: one float line a run applied: the object it floats over and its text.</summary>
-public readonly record struct AreaScriptFloat(ScrObjectRef Speaker, string Text);
+/// <summary>ARC-SCRIPT-050: one float line a run applied: the object it floats over and its text. ARC-UI-2055 (TB26): <see cref="Listener"/> is the object the speech display turns an idle living speaker to (the script float line's nearby PC, the headline's triggerer, a follower's leader), or null for no turn.</summary>
+public readonly record struct AreaScriptFloat(ScrObjectRef Speaker, string Text, ScrObjectRef? Listener = null);
 
 /// <summary>ARC-TECHNOLOGY-005: how a start schematic UI request resolved.</summary>
 public enum AreaSchematicScriptStatus

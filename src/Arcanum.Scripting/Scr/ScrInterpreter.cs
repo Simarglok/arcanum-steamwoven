@@ -446,7 +446,7 @@ internal sealed class ScrInterpreter
                 return (Step.Next, 0);
             case ScrCatalogue.Action.FloatNewspaperHeadline:
                 // NP10 (case 0x56, X9): the object is operand slot 1 (0x44B960: a group's first object); slot 0 is never read. The host reads the head issue's headline and floats it over the object; without an object nothing floats.
-                if (OptionalObject(a, 1) is { } speaker) _shared.Newspapers.Add(new(ScrNewspaperKind.FloatHeadline, 0, false, speaker));
+                if (OptionalObject(a, 1) is { } speaker) _shared.Newspapers.Add(new(ScrNewspaperKind.FloatHeadline, 0, false, speaker, _roles.Triggerer));
                 return (Step.Next, 0);
             case ScrCatalogue.Action.QueueSlide:
                 // SS3 (case 0x83, 0x460B80 → 0x569AA0): the operand's value is the slide number the show's queue takes; the host keeps the 100-slide bound.
