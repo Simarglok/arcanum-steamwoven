@@ -428,7 +428,7 @@ public sealed class AreaSpellCastMap : ISpellCastMap
         {
             var result = _session.DamageObject(_session.Version, target, damage.HitPointDamage);
             if (result.Hit is not { } hit) return false;
-            _objectHits.Add(new(id, hit, result.Host));
+            _objectHits.Add(new(id, hit, result.Host) { Source = DamageSource });
             return result.Disposition == GameSessionDisposition.Changed;
         }
         // ARC-COMBAT-025 (OD1–OD4, OD12): an item takes the same damage through its durability.
@@ -440,6 +440,10 @@ public sealed class AreaSpellCastMap : ISpellCastMap
     }
 
     private readonly List<AreaObjectHit> _objectHits = [];
+
+    /// <summary>ARC-TECHNOLOGY-1760 (OD4, OD15): the cast id of the object whose context the damage dealt now belongs to (a trap's shot: the shooter object, the attacker of the context), kept on the object hits it causes as the BUST
+    /// breaker (<see cref="AreaObjectHit.Source"/>). Null: damage with no attacker. The host sets it around one strike and clears it.</summary>
+    public string? DamageSource { get; set; }
 
     /// <summary>ARC-DEV-255: the hits the damage reached objects with since the last call (id, outcome, host steps), for the host to log and
     /// show; the objects' state itself is the session's.</summary>
@@ -535,7 +539,11 @@ public sealed class AreaSpellCastMap : ISpellCastMap
 }
 
 /// <summary>ARC-DEV-255: one hit that reached a door, window, container, scenery or trap: its cast id, the outcome and the host's steps.</summary>
-public sealed record AreaObjectHit(string Id, ObjectHitOutcome Hit, SessionObjectHostSteps Host);
+public sealed record AreaObjectHit(string Id, ObjectHitOutcome Hit, SessionObjectHostSteps Host)
+{
+    /// <summary>ARC-TECHNOLOGY-1760: the cast id of the attacker of the hit when it was no one the hit-point step names (a trap's shot: the shooter object), the breaker of the BUST script; null: no attacker.</summary>
+    public string? Source { get; init; }
+}
 
 /// <summary>ARC-COMBAT-025: one hit that reached an item (lying on the ground or worn): its cast id, the durability result and the host's steps.</summary>
 public sealed record AreaItemHit(string Id, ItemDurabilityResult Item, SessionObjectHostSteps Host)

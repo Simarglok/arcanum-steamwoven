@@ -11,7 +11,7 @@ namespace Arcanum.TerrainViewer;
 // ARC-TECHNOLOGY-1635 (ledger TT15, docs/world/trap-state-runtime.md "Shot"): the missile of a native trap's shot (script 30002). The cast host applies the shot's dispatcher part at the trap (the amount, the two
 // d100 rolls, the fate branch, the spell) and hands the missile to the projectile host here: one projectile of the default art (0x40000000, scenery art 0, faced along its line) leaves the shooter object's tile for the
 // victim's location with the amount in the session's shot (the original's field 0x4F); where it meets the victim the strike goes through the cast host (the attack event, the victim's taking-damage script, the damage step);
-// a victim that left the line is not struck and the missile flies on to its range (0x14), striking another critter only by the stray rule of 0x4B2870. The flight is saved with the session (the `trapShots` list of the
+// a victim that left the line is not struck and the missile flies on to its range (0x14), striking another critter by the stray rule of 0x4B2870 or an object that stops a step (an obstruction, ARC-TECHNOLOGY-1760). The flight is saved with the session (the `trapShots` list of the
 // flights section, schema 100).
 public partial class TerrainViewerApp
 {
@@ -56,27 +56,39 @@ public partial class TerrainViewerApp
     }
 
     /// <summary>
-    /// A trap's shot's projectile ended on a crossing (<see cref="CrossTile"/>): met the victim where it stands on the line (<see cref="ProjectileStrikeKind.Target"/>) or another living critter by the stray rule
-    /// (<see cref="ProjectileStrikeKind.Stray"/>), the strike is the cast host's (<see cref="SessionSpellCaster.StrikeTrapShot"/>: the attack event of the shooter object, then the damage with the shooter as the damage source);
-    /// an obstruction object or the end of the range ends the shot with no strike (an object struck by a trap's missile is not modelled: the amount would go through the object's damage step; recorded in the ledger).
+    /// A trap's shot's projectile ended on a crossing (<see cref="CrossTile"/>): met the victim where it stands on the line (<see cref="ProjectileStrikeKind.Target"/>), another living critter by the stray rule
+    /// (<see cref="ProjectileStrikeKind.Stray"/>) or, flying free, the obstruction of a step (<see cref="ProjectileStrikeKind.Obstruction"/>: a door, window, container, scenery or trap, or a wall). The strike is the cast host's
+    /// (<see cref="SessionSpellCaster.StrikeTrapShot"/>: for a critter the attack event of the shooter object, then the damage with the shooter as the damage source; ARC-TECHNOLOGY-1760 for an object no event, the amount through
+    /// the object's damage step, and the BUST script of a break with the shooter object as the breaker, <see cref="AreaSpellCastMap.DamageSource"/>). A wall takes nothing (the damage step leaves at once for a wall), an object the
+    /// cast host does not name and the end of the range end the shot with no strike.
     /// </summary>
     private ProjectileCrossResult TrapShotEnd(AreaProjectile projectile, ProjectileStrikeKind kind, AreaObjectRecord? struck)
     {
         var owner = projectile.Owner;
         _projectileHost?.Finish(projectile);
-        var id = struck is null ? null : struck.Key == HeroRow.Key ? SessionSpellCaster.Hero : _spellCastMap?.IdOf(struck.Key);
-        if (kind is ProjectileStrikeKind.Target or ProjectileStrikeKind.Stray && id is not null && ReferenceEquals(owner, _areaSession) && SpellCasterNow() is { } caster
-            && ReferenceEquals(caster.Owner, owner) && caster.StrikeTrapShot(projectile.Shot, id) is { } result)
+        var id = struck is null || struck.Type == 0 ? null : struck.Key == HeroRow.Key ? SessionSpellCaster.Hero : _spellCastMap?.IdOf(struck.Key);
+        var shooter = owner.QueryTrapShot(projectile.Shot)?.Shooter;
+        if (kind is ProjectileStrikeKind.Target or ProjectileStrikeKind.Stray or ProjectileStrikeKind.Obstruction && id is not null && ReferenceEquals(owner, _areaSession) && SpellCasterNow() is { } caster
+            && ReferenceEquals(caster.Owner, owner))
         {
-            _trapShotEndsForSelfTest.Add((projectile.Shot.Id, kind, id, result.Hit, result.HitPointDamage));
-            Ended(projectile, kind, id, $"a trap's shot: hit={result.Hit} amount={result.Amount} hit-points={result.HitPointDamage} shooter={result.Shooter}");
-            FlushSpellLog(null);
-            RefreshAreaStatus();
-            return ProjectileCrossResult.Ended;
+            // ARC-TECHNOLOGY-1760 (OD4, OD15): the shooter object is the attacker of an object's break, the BUST breaker; cleared as the strike returns.
+            if (_spellCastMap is { } cast) cast.DamageSource = kind == ProjectileStrikeKind.Obstruction ? shooter : null;
+            SessionTrapVictim? result;
+            try { result = caster.StrikeTrapShot(projectile.Shot, id); }
+            finally { if (_spellCastMap is { } done) done.DamageSource = null; }
+            if (result is { } struckResult)
+            {
+                _trapShotEndsForSelfTest.Add((projectile.Shot.Id, kind, id, struckResult.Hit, struckResult.HitPointDamage));
+                Ended(projectile, kind, id, $"a trap's shot: hit={struckResult.Hit} amount={struckResult.Amount} hit-points={struckResult.HitPointDamage} shooter={struckResult.Shooter}");
+                FlushSpellLog(null);
+                RefreshAreaStatus();
+                return ProjectileCrossResult.Ended;
+            }
         }
         owner.EndShot(projectile.Shot);
         _trapShotEndsForSelfTest.Add((projectile.Shot.Id, kind, null, null, 0));
-        Ended(projectile, kind, null, kind == ProjectileStrikeKind.Obstruction ? "a trap's shot met an object: its strike is not modelled" : "a trap's shot struck nothing");
+        Ended(projectile, kind, null, kind != ProjectileStrikeKind.Obstruction ? "a trap's shot struck nothing"
+            : struck?.Type == 0 ? "a trap's shot met a wall: it takes nothing (0x4B4390)" : "a trap's shot met an object the cast host does not name: no strike");
         return ProjectileCrossResult.Ended;
     }
 
