@@ -35,7 +35,8 @@ and its link holds the detail.
   and big reviews; one thread = one issue, stop right after merge, anything found
   on the way = new issue + new thread; audit slices at most 15-20 functions;
   recon and exe reading through a subagent so only the conclusion enters the
-  context; wait for the Mac queue with one blocking command, never sleep/poll
+  context; wait for the Mac queue with one blocking command (`./arcanum run`, or
+  `./arcanum queue --wait [RUN_ID]` for a run already started), never sleep/poll
   loops, and batch checks into one queue run; no interim status posts, only
   results, questions and failures; no long-lived multi-task threads.
 - **Naming** ([task naming](docs/workflow/task-naming.md)): `ARC-TYPE-NNN`
