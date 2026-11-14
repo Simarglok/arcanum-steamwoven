@@ -96,6 +96,26 @@ public partial class AreaInventoryGridArea : Control
     internal AreaBarterFrame? BarterFrame => _barter;
     private AreaBarterFrame? _barter;
 
+    /// <summary>
+    /// ARC-UI-1765: the frame is the item identify or repair window's original look (interface modes 5 and 6, ledger IS2): the hero's own window without its boxes and weight lines, with the NPC's image
+    /// and quote line (<see cref="AreaServiceArtLayout"/>). The service panel's, with the inventory art set and the hero's own view.
+    /// </summary>
+    public bool ServiceLook => _service is not null && Look is not null && _view is { Holder: null };
+
+    /// <summary>ARC-UI-1765: the service window's own parts (null outside the service panel).</summary>
+    internal AreaServiceFrame? ServiceFrame => _service;
+    private AreaServiceFrame? _service;
+
+    /// <summary>ARC-UI-1765: an item of the hero was pressed in the service window's frame (its entity): the app quotes it, and pays on the next press of the same item (IS3).</summary>
+    public event Action<string>? ServiceItemPressed;
+
+    /// <summary>ARC-UI-1765: the grid draws the item service window's frame with <paramref name="frame"/>'s parts (null: the own window's).</summary>
+    public void SetService(AreaServiceFrame? frame)
+    {
+        if (frame == _service) return;
+        _service = frame; QueueRedraw();
+    }
+
     /// <summary>ARC-UI-060: the window's interface mode (IW26): the own window, or a holder's loot or steal window; ARC-UI-064: the barter
     /// window in the barter panel.</summary>
     internal AreaInventoryMode Mode => _barter is not null ? AreaInventoryMode.Barter
@@ -342,6 +362,13 @@ public partial class AreaInventoryGridArea : Control
         if (CycleAt(frame) is { } cycle) { _cycleDown = cycle; SoundRequested?.Invoke(Arcanum.TerrainViewer.Core.AreaGameBarLayout.PressSound); QueueRedraw(); return; }
         // ARC-DEV-339: the arrange button takes the press first (the button system, not the window's handler, serves it), with its press sound.
         if (ArrangeAt(frame)) { _arrangeDown = true; SoundRequested?.Invoke(Arcanum.TerrainViewer.Core.AreaGameBarLayout.PressSound); QueueRedraw(); return; }
+        // ARC-UI-1765: in the item identify and repair windows nothing is picked up (the left press of 0x573850 serves the inventory modes 8, 10, 11 and 4, IW2): a press on an item is its quote and
+        // payment event, which the app runs through the model (IS3: the original's event is the still pointer or the click, ledger IS3 says which was not settled).
+        if (ServiceLook)
+        {
+            if (AreaServiceArtLayout.ItemAt(_view, frame.X, frame.Y) is { } entity) Callable.From(() => ServiceItemPressed?.Invoke(entity)).CallDeferred();
+            return;
+        }
         if (BarterLook) Held = AreaBarterArtLayout.Press(_view, BarterHit(frame));
         else if (LootLook)
         {
@@ -386,6 +413,8 @@ public partial class AreaInventoryGridArea : Control
         // steal window a theft or a plant attempt; ARC-UI-064: in the barter window a buy or a sale. ARC-UI-052: it uses an item only in the
         // player's own window (mode 0, IW5).
         if (TargetPicking) { Callable.From(() => PickCancelled?.Invoke()).CallDeferred(); return; }
+        // ARC-UI-1765: the right release is the inventory modes' (IW36, modes 0 to 3); the service windows (5 and 6) ignore it.
+        if (ServiceLook) return;
         if (BarterLook)
         {
             if (AreaBarterArtLayout.RightRelease(_view, BarterHit(frame)) is { } trade) Callable.From(() => DropRequested?.Invoke(trade)).CallDeferred();
@@ -600,12 +629,32 @@ public partial class AreaInventoryGridArea : Control
             DrawString(font, new(box.Position.X, box.Position.Y + (box.Size.Y + size) / 2 - 2), text, HorizontalAlignment.Left, box.Size.X, size, AreaInventoryArtLook.TextColour);
         }
         if (_view is null) return;
-        var lines = look.Texts.Lines(_view.Carry, _view.Speed);
-        for (var i = 0; i < lines.Count; i++) Text(AreaInventoryArtLayout.Lines[i], lines[i]);
+        // ARC-UI-1765 (0x576520 modes 5 and 6): the NPC's image at half its size, then its quote line in its rectangle; the weight lines are mode 0's alone (IW24) and the boxes are not made (IW19).
+        var service = ServiceLook ? _service : null;
+        if (service is not null)
+        {
+            if (service.Image is { } image && look.Art.GetValueOrDefault(image) is { } picture)
+            {
+                var (ix, iy, iw, ih) = AreaServiceArtLayout.ImageRect(picture.GetWidth(), picture.GetHeight());
+                DrawTextureRect(picture, Scaled(ix, iy, iw, ih), false);
+            }
+            if (service.Quote.Length > 0)
+            {
+                var (qx, qy, qw, qh) = AreaServiceArtLayout.QuoteLine;
+                var lineHeight = Math.Max(1f, font.GetHeight(size));
+                DrawMultilineString(font, new(qx * _scale, qy * _scale + font.GetAscent(size)), service.Quote, HorizontalAlignment.Left, qw * _scale, size,
+                    Math.Max(1, (int)(qh * _scale / lineHeight)), AreaInventoryArtLook.TextColour);
+            }
+        }
+        else
+        {
+            var lines = look.Texts.Lines(_view.Carry, _view.Speed);
+            for (var i = 0; i < lines.Count; i++) Text(AreaInventoryArtLayout.Lines[i], lines[i]);
+        }
         var counts = new[] { _view.Gold }.Concat(Enumerable.Range(0, 4).Select(type => type < _view.Ammo.Count ? _view.Ammo[type] : 0)).ToArray();
         for (var i = 0; i < counts.Length; i++) Text(AreaInventoryArtLayout.Counts[i], counts[i].ToString(System.Globalization.CultureInfo.InvariantCulture));
         var over = Held is null ? null : AreaInventoryDrag.HitTest(_pointer.X / _scale, _pointer.Y / _scale).Icon;
-        foreach (var icon in new[] { AreaInventoryIcon.Use, AreaInventoryIcon.Drop })
+        foreach (var icon in service is not null ? Array.Empty<AreaInventoryIcon>() : new[] { AreaInventoryIcon.Use, AreaInventoryIcon.Drop })
         {
             var (x, y) = AreaInventoryArtLayout.Box(icon);
             Art(AreaInventoryArtLayout.BoxArt(icon, over == icon), x, y);
@@ -626,6 +675,12 @@ public partial class AreaInventoryGridArea : Control
         }
         // ARC-DEV-339: the arrange button, drawn with its first frame as the other buttons are.
         Art(AreaInventoryArtLayout.ArrangeArt, AreaInventoryArtLayout.ArrangeButton.X, AreaInventoryArtLayout.ArrangeButton.Y);
+        // ARC-UI-1765: the remembered item's cells are filled before its art is drawn (the redraw 0x576520 tests the remembered object 0x681458 in its grid pass).
+        if (service is not null && AreaServiceArtLayout.SelectedRect(_view, service.Selected) is { } selected)
+        {
+            var (red, green, blue) = AreaServiceArtLayout.SelectedFill;
+            DrawRect(Scaled(selected.X, selected.Y, selected.Width, selected.Height), new Color(red / 255f, green / 255f, blue / 255f));
+        }
         foreach (var item in _view.Grid)
         {
             // The held item stays in its place but is not drawn there (the original's item flag 0x10, IW2).

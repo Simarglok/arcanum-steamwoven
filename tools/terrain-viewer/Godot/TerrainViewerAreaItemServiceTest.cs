@@ -142,13 +142,62 @@ public partial class TerrainViewerApp
             Require(owner.QueryGold() == 900 - quote.Price && owner.QueryItemCondition("kit:1", stock)!.Value.Damage < 20, "the repair was paid and restored hit points: " + _servicePanel.MessageForSelfTest);
             await Capture("repair-2-paid");
 
+            // ARC-UI-1765: the original look over a synthetic art set (blank arts of the original sizes): mode 6's frame with the NPC's generated quote line, a press quotes (and
+            // the remembered item is named in the frame), the boxes and the right release do nothing, the switch shows the diagnostic list and back, a release on the round view closes.
+            EndItemService(); // the repair window above is still open
+            Require(!ItemServiceOpen, "the repair window closed");
+            var inventoryHost = _inventoryHost;
+            _inventoryHost ??= new AreaInventoryHost([]);
+            _inventoryArtLookForSelfTest = SyntheticBarterLook();
+            try
+            {
+                OpenItemServiceWindow(new AreaItemService(new AreaBarter(owner, _inventoryHost, data, merchant, () => 50, _ => true, (entity, _) => entity), ItemServiceKind.Repair,
+                    () => repairer, (first, last, price) => $"line{first}-{last} {price?.ToString() ?? "-"}", group => $"class{group}"));
+                var panel = _servicePanel!;
+                var area = panel.GridAreaForSelfTest;
+                Require(panel.ArtMode && area.ServiceLook && area.LookMode == AreaInventoryMode.Own && area.ServiceFrame is { Selected: null, Quote: "" },
+                    $"the original look opened in the own window's frame (art {panel.ArtMode}, service {area.ServiceLook}, look {area.Look is not null}, mode {area.LookMode}, frame {area.ServiceFrame})");
+                Require(panel.LookToggleForSelfTest is { Visible: true, Text: "Diagnostic view" } && !panel.ButtonsForSelfTest[0].IsVisibleInTree(), "the switch below the frame, the list hidden");
+                var sword = panel.ArtView!.Grid.Single(item => item.Entity == "kit:1");
+                area.PressAt(AreaInventoryGridArea.CellCentre(sword.Slot));
+                await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                Require(area.ServiceFrame!.Selected == "kit:1" && area.ServiceFrame.Quote.StartsWith("line", StringComparison.Ordinal), "a press quoted the sword with the generated line: " + area.ServiceFrame.Quote);
+                var revision = owner.Version.Revision;
+                var stray = 0;
+                area.UseRequested += _ => stray++; area.DropRequested += _ => stray++; area.ItemPicked += _ => stray++;
+                area.PressAt(AreaInventoryGridArea.IconCentre(AreaInventoryIcon.Drop)); area.RightReleaseAt(AreaInventoryGridArea.CellCentre(sword.Slot));
+                await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                Require(stray == 0 && owner.Version.Revision == revision && area.Held is null && area.ServiceFrame.Selected == "kit:1", $"the drop box and the right release do nothing ({stray} stray events)");
+                // The pad: the D-pad steps over the hero's items and quotes the one it lands on, confirm clicks the remembered one.
+                var items = panel.View!.Items;
+                panel.Navigate(items.Count > 1 && items[0].Entity == "kit:1" ? 1 : -1);
+                await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                Require(items.Count < 2 || area.ServiceFrame.Selected != "kit:1", "the pad moved to another item and quoted it: " + area.ServiceFrame.Selected);
+                panel.LookToggleForSelfTest.EmitSignal(BaseButton.SignalName.Pressed);
+                await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                Require(!panel.ArtMode && panel.ButtonsForSelfTest.Count > 0 && panel.ButtonsForSelfTest[0].IsVisibleInTree(), "the switch shows the diagnostic list");
+                panel.LookToggleForSelfTest.EmitSignal(BaseButton.SignalName.Pressed);
+                await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                Require(panel.ArtMode, "and the original look again");
+                var (holeX, holeY) = AreaInventoryHole.Corner(AreaInventoryMode.Own);
+                area.ReleaseAt(new(holeX + 10, holeY + 10));
+                await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                Require(!ItemServiceOpen, "a release on the round view closed the window");
+            }
+            finally
+            {
+                if (ItemServiceOpen) EndItemService();
+                _inventoryArtLookForSelfTest = null;
+                _inventoryHost = inventoryHost;
+            }
+
             // A replaced session without a hero closes the window.
             var replacement = AreaTransitionCoordinator.CreateSession(owner.QueryClockSnapshot().ProfileBinding, Guid.NewGuid(), Guid.NewGuid(),
                 new(actor.Cell.X, actor.Cell.Y), actor.Map.RuntimeMap).Owner!;
             ReplaceAreaSession(replacement, AreaRuntimes(), actor.Map.RuntimeMap, _conversationHost?.Rebind(replacement));
             SyncAreaItemService();
             Require(!ItemServiceOpen, "a replaced session closes the window");
-            return $"identify 100, repair {quote.Price}, keys, close, replaced session";
+            return $"identify 100, repair {quote.Price}, original look, keys, close, replaced session";
         }
         finally
         {

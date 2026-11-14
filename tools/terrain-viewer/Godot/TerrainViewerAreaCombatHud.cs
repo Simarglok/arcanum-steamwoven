@@ -105,8 +105,7 @@ public partial class TerrainViewerApp
     internal bool EndTurnClickForSelfTest()
     {
         if (_combatHud is not { EndTurnShownForSelfTest: true } hud) return false;
-        var at = hud.EndTurnRectForSelfTest.GetCenter();
-        hud.EndTurnClickForSelfTest(at);
+        hud.EndTurnClickForSelfTest();
         return true;
     }
 

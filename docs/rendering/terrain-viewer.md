@@ -1009,8 +1009,8 @@ mode with a round), with a hero, while no window the bars do not reach is open.
   cost) or 315 (the shortfall), 11 × 12 at the x of the table 0x5CAA48 (22, 35, 48, 61, 74, then 93 .. 145, 164 .. 216, 235 .. 287) and y 10 of the panel, an unlit lamp showing the
   socket of the panel art; the end-turn button is the art 297 (31 × 15 at (320, 9) of the panel, frames idle and pressed as the other bar buttons): its release over it ends the hero's
   subturn as E does (CT5: the hero must be idle, a window over the world refuses it), with the bar's press and release sounds. The panel takes no pointer (the art is not a hit area, as the
-  plain panel was); only the button does. Without the art (no game folder, the automated runs) the plain controls above draw. In the Generated interface the panel art is a picture
-  until [#1821](https://github.com/Simarglok/arcanum-steamwoven/issues/1821) gives it a recipe.
+  plain panel was); only the button does. Without the art (no game folder, the automated runs) the plain controls above draw. In the Generated interface the panel (294) and the end-turn button (297)
+  are generated chrome ([S11](hd-interface-density.md#viewer-slice-s11-arc-ui-1821), ARC-UI-1821); the lamps stay pictures.
 - **Not done.** The 25-point bar of the hidden-interface layout (the viewer has no hide toggle), the item and skill cursors' previews, the Alt variants of the original's preview (attack check on a portal, container or party member), a throw's own cost in the preview (it shows the attack's), the hero's name in the list, a created critter's name in the list (it shows its entity id), the lamps for a negative point count (the original lights the shortfall, the viewer nothing; points are never negative in a round). Visual parity NOT VERIFIED.
 
 Checks: `CombatHudTests` (shares, the three cases of the 20-lamp cap, the cue, the list window), `AreaActionPointPreviewTests`, `RuleModeTests`, `AreaCombatLampLayoutTests` (the panel's tables and the shares' arts, ARC-UI-1888); the native smoke
@@ -3049,7 +3049,11 @@ gold, the NPC's name and the last message); the first click on an item selects a
 (`AreaItemService`, [`TerrainViewerAreaItemService.cs`](../../tools/terrain-viewer/Godot/TerrainViewerAreaItemService.cs)). Like the barter window it is modal (gate closed, clock paused, a walk stopped),
 is the inventory family at Escape (the limited in-play menu opens and closes it), and closes with a replaced session, a dead hero or a map change; the NPC is held as the talk partner while it is open. The viewer's
 self-test stage `AreaItemService` covers both windows over a synthetic hero and merchant (identify, two clicks, Escape, repair, a replaced session); `ARC_UI_ITEM_SERVICE_CAPTURE` (a folder) saves a PNG
-of each step for a graphics comparison. The original look is [#1765](https://github.com/Simarglok/arcanum-steamwoven/issues/1765).
+of each step for a graphics comparison. ARC-UI-1765: with the game's art the window draws the **original look** (ledger IS8–IS11): the inventory window's frame of modes 5 and 6 (`AreaInventoryGridArea` in its service look, `AreaServiceArtLayout`): background 223, the hero's
+grid and wear slots, counts, arrange button and round view as in the own window, without the weight lines and the drop and use boxes, the NPC's image (`HolderImage`, the loot window's rules) at (141, 36) at half size,
+the NPC's generated quote line (`AreaConversationHost.PickLine` / `PickClassLine`; the price in the quote's `%d`) in the rectangle (180, 29, 155 × 65), and the remembered item's cells filled dark red. A press on an item
+is the click (the first quotes, the next on the same item pays: PROJECT substitute for IS3's undecided event); the switch below the frame ("Diagnostic view") shows the list and back; a release on the round view closes it.
+Positions, sizes and hit areas stay the Legacy ones. Without the art (self-tests) or behind the switch the diagnostic list stays. A pad or the keyboard: the D-pad steps over the hero's items and quotes the one it lands on, confirm clicks the remembered item (the second click pays); the switch is the mouse's. `ARC_AREA_ITEM_SERVICE_PROBE=1` runs the self-test stage alone; the native `barter` stage also opens both windows on the real data and checks the original look (`ARC_AREA_SERVICE_CAPTURE=PREFIX` saves PREFIX-identify.png and PREFIX-repair.png).
 ### Reading window (ARC-UI-049)
 
 The inventory window shows a `Read:` button for each written item the hero holds; the session decides the use

@@ -335,12 +335,13 @@ public partial class TerrainViewerApp
     private AreaScriptOpenable? ScriptOpenable(Arcanum.Scripting.Scr.ScrObjectRef obj)
     {
         if (_readyArea is not { } area || obj.Map != area.Snapshot.RuntimeMap) return null;
-        if (_areaPortals is { } portals && portals.All.FirstOrDefault(p => p.Entity == obj.Code) is { } portal)
+        // ARC-SCRIPT-1778: a portal or container a script's change art number gave another art offers the new art's frames (the plan before it asked for them; the sync reads the session).
+        SyncPortalArt();
+        if (_areaPortals is { } portals && portals.ByEntity(obj.Code) is { } portal)
             return new(portals.Openable(portal), portal.Baseline, portal.Art, portal.Frames.Count);
         var row = area.Snapshot.Objects.FirstOrDefault(o => o.Type == Arcanum.Data.Combat.CombatFieldReader.ContainerType && AreaUseScriptHost.EntityId(o) == obj.Code);
         if (row is null || Arcanum.Data.Combat.CombatFieldReader.ReadBreakable(row).Fields is not { } fields) return null;
-        var frames = area.Snapshot.Visuals.FirstOrDefault(v => v.Key.Layer == AreaLayerKind.Body && v.Key.Object == row.Key)?.FrameCount ?? 0;
-        return new(new(new(obj.Map), obj.Code), AreaObjectTargets.ContainerBaseline(row, fields), null, frames);
+        return new(new(new(obj.Map), obj.Code), AreaObjectTargets.ContainerBaseline(row, fields), null, ContainerFrameCount(row));
     }
 
     private static CellCoord? LiveCell(AreaGridSession grid)

@@ -4,6 +4,7 @@ using Arcanum.Data.Content;
 using Arcanum.Data.Scripts;
 using Arcanum.Scripting.Scr;
 using Arcanum.Session;
+using Arcanum.Simulation.Locks;
 using Arcanum.TerrainViewer.Core;
 using Arcanum.World;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -317,6 +318,81 @@ public sealed class AreaNpcStateScriptTests
             var refusedNpc = Scenery(7, 828, (13u << 28) | (5u << 20), type: 16);
             Assert.AreEqual(AreaScriptedUseOutcome.EffectsRejected, Host(session, content, any, refusedNpc).Run(refusedNpc, session.Rules.Scripts).Outcome);
             Assert.IsNull(AreaUseScriptHost.Standpoint(session, 1, AreaUseScriptHost.EntityId(refusedNpc), day: true), "nothing applied before the refused art change");
+        });
+    }
+
+    // ARC-SCRIPT-1778: the art id of a door (class 3: number bits 19..27, door bit 10, frame bits 14..18) and of a container (class 7: number bits 19..27, frame bits 14..18).
+    private static uint DoorArt(uint number, uint frame = 0) => (3u << 28) | (number << 19) | (frame << 14) | (1u << 10);
+    private static uint ContainerArt(uint number, uint frame = 0) => (7u << 28) | (number << 19) | (frame << 14);
+
+    [TestMethod]
+    public void Change_art_number_gives_a_door_and_a_container_the_new_art_closed_with_their_lock_fields_kept()
+    {
+        // AD1: the open state of a door or window and of a container is the frame of its art id; the action writes the new id with frame 0, so the object is closed after it, and its lock fields are not touched.
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var map = new SessionMapId(1);
+            var any = (SessionOpenable openable, SessionOpenableBaseline baseline) => new AreaScriptWorld(() => null, _ => false, _ => null, () => null, ArtExists: _ => true,
+                Openable: _ => new AreaScriptOpenable(openable, baseline, null, 3));
+            foreach (var (type, art, kind, opened) in new[] { (1, DoorArt(9, 2), OpenableKind.Portal, 2), (2, ContainerArt(9, 1), OpenableKind.Container, 1) })
+            {
+                var row = Scenery(type * 10, 825, art, type: type);
+                var entity = AreaUseScriptHost.EntityId(row);
+                var openable = new SessionOpenable(map, entity);
+                var baseline = new SessionOpenableBaseline(kind, LockRules.LockedBit | LockRules.JammedBit, 0, opened);
+                Assert.AreEqual(opened, session.QueryOpenable(openable, baseline).Frame, "the T0 frame is the open state");
+                var ran = Host(session, content, any(openable, baseline), row).Run(row, session.Rules.Scripts);
+                Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, ran.Outcome, ran.Detail);
+                var after = session.QueryOpenable(openable, baseline);
+                Assert.AreEqual(0, after.Frame, $"type {type}: the new art is on frame 0, closed");
+                Assert.AreEqual(LockRules.LockedBit | LockRules.JammedBit, after.Flags, "the lock fields are kept");
+                var written = session.QueryObjectArt(map, entity);
+                Assert.AreEqual(type == 1 ? DoorArt(4) : ContainerArt(4), written, "number 4, frame 0, the other bits kept");
+            }
+        });
+    }
+
+    [TestMethod]
+    public void Change_art_number_with_the_same_number_still_closes_an_open_door()
+    {
+        // 0x502C40 runs after the number setter whatever the number was: the id is written with frame 0 (AN3), so an open door of the same art closes.
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var map = new SessionMapId(1);
+            var row = Scenery(1, 825, DoorArt(4, 2), type: 1);
+            var entity = AreaUseScriptHost.EntityId(row);
+            var openable = new SessionOpenable(map, entity); var baseline = new SessionOpenableBaseline(OpenableKind.Portal, 0, 0, 2);
+            var world = new AreaScriptWorld(() => null, _ => false, _ => null, () => null, ArtExists: _ => true, Openable: _ => new AreaScriptOpenable(openable, baseline, null, 3));
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, Host(session, content, world, row).Run(row, session.Rules.Scripts).Outcome);
+            Assert.AreEqual(0, session.QueryOpenable(openable, baseline).Frame);
+            Assert.AreEqual(DoorArt(4), session.QueryObjectArt(map, entity), "the id with frame 0 differs from the data's open id, so it is recorded");
+        });
+    }
+
+    [TestMethod]
+    public void Change_art_number_of_a_door_or_container_without_an_openable_or_a_file_is_refused_or_changes_nothing()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var map = new SessionMapId(1);
+            var door = Scenery(1, 825, DoorArt(9, 2), type: 1);
+            // No openable (the object is not on the shown map's portals): the run is left unapplied before anything applies.
+            var none = new AreaScriptWorld(() => null, _ => false, _ => null, () => null, ArtExists: _ => true);
+            Assert.AreEqual(AreaScriptedUseOutcome.EffectsRejected, Host(session, content, none, door).Run(door, session.Rules.Scripts).Outcome);
+            Assert.IsNull(session.QueryObjectArt(map, AreaUseScriptHost.EntityId(door)));
+            // No ART file for the new id: nothing changes, the door stays open (0x502220 before the write).
+            var openable = new SessionOpenable(map, AreaUseScriptHost.EntityId(door)); var baseline = new SessionOpenableBaseline(OpenableKind.Portal, 0, 0, 2);
+            var missing = new AreaScriptWorld(() => null, _ => false, _ => null, () => null, ArtExists: _ => false, Openable: _ => new AreaScriptOpenable(openable, baseline, null, 3));
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, Host(session, content, missing, door).Run(door, session.Rules.Scripts).Outcome);
+            Assert.AreEqual(2, session.QueryOpenable(openable, baseline).Frame);
+            Assert.IsNull(session.QueryObjectArt(map, AreaUseScriptHost.EntityId(door)));
+            // A door whose art id is not a door's class is refused.
+            var odd = Scenery(2, 825, ContainerArt(9), type: 1);
+            var any = new AreaScriptWorld(() => null, _ => false, _ => null, () => null, ArtExists: _ => true, Openable: _ => new AreaScriptOpenable(openable, baseline, null, 3));
+            Assert.AreEqual(AreaScriptedUseOutcome.EffectsRejected, Host(session, content, any, odd).Run(odd, session.Rules.Scripts).Outcome);
         });
     }
 
