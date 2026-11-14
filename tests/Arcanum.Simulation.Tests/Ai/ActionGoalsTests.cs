@@ -403,6 +403,21 @@ public sealed class ActionGoalsTests
         Assert.AreEqual(AiStartRefusal.Gate, AiExecutorRules.StartUseSkill(world, Npc, Foe, 10, null, null).Refusal);
     }
 
+    // ARC-SCRIPT-1789 (ledger HLR10, SK8): the dialog service's flag 0x2000 reaches the starter and no goal it queues reads it.
+    [TestMethod]
+    public void TheNoPcLeaderRequestFlagReachesTheSkillStarterAndChangesNoRun()
+    {
+        var world = Arena(3);
+        foreach (var skill in new[] { AiPassChoice.HealSkill, AiExecutorRules.PickpocketSkill, 3, AiExecutorRules.PickLocksSkill })
+        {
+            var plain = AiExecutorRules.StartUseSkill(world, Npc, Foe, skill, Kit, null);
+            var flagged = AiExecutorRules.StartUseSkill(world, Npc, Foe, skill, Kit, null, AiExecutorRules.NoPcLeaderRequestFlag);
+            Assert.IsTrue(flagged.Started, $"skill {skill}");
+            Assert.AreEqual(plain.Run!.Bottom, flagged.Run!.Bottom, $"skill {skill}: the same goal frame");
+            Assert.AreEqual(plain.Run.Flags, flagged.Run.Flags, $"skill {skill}: the same run flags");
+        }
+    }
+
     [TestMethod]
     public void TheHealSkillWalksToThePatientAndAttemptsAtTheActionFrame()
     {
