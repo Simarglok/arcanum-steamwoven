@@ -120,6 +120,7 @@ public partial class TerrainViewerApp
         if (FloaterCell(owner) is { } cell) _floaterCells[owner] = cell;
         layer.Bubbles.SetTextDuration(_gameSettings.TextDuration);
         layer.AddBubble(owner, text, owner == HeroFloater ? BubbleColor.Green : BubbleColor.White, BubbleNowMs());
+        _bubbleGone.Note(owner, BubbleOwnerGone(owner));
         if (persistent) layer.Bubbles.SetLife(owner, TextBubbleRules.Persistent, BubbleNowMs());
         if (!dialogLine) _scriptFloats++;
         return true;
@@ -154,8 +155,45 @@ public partial class TerrainViewerApp
         layer.Bubbles.SetLife(AreaConversationState.EntityId(speaker.Row), TextBubbleRules.DefaultLife, BubbleNowMs());
     }
 
+    // ARC-UI-2034 (ledger TB16): the last destroyed-or-off state read for each bubble owner.
+    private readonly TextBubbleGoneWatch<string> _bubbleGone = new();
+
+    /// <summary>ARC-UI-2034 (TB16): whether the object a bubble floats over has been destroyed or switched off: a map object the session removed (the same set the view and the
+    /// step rules use), or a created critter the session no longer holds. The hero never is; an owner that is no object of the scene is not.</summary>
+    private bool BubbleOwnerGone(string owner)
+    {
+        if (owner == HeroFloater || _areaSession is not { } session) return false;
+        if (owner.StartsWith(SessionCreatedObject.CritterPrefix, StringComparison.Ordinal)) return session.QueryCreatedObject(owner) is null;
+        return _inventoryHost?.Maps.FirstOrDefault(m => m.RuntimeMap == CurrentAreaMap) is { } map && map.TryGetRow(owner, out var row) && AreaRemovedObjects().Contains(row.Key);
+    }
+
+    /// <summary>ARC-UI-2034 (TB16): an object destroyed or switched off takes its bubble with it (the original's object teardown and off-flag setter call the bubble remove, ledger TB16); death removes nothing.</summary>
+    private void RemoveBubblesOfGoneObjects(AreaFloaterLayer layer)
+    {
+        if (layer.Bubbles.Count == 0) { _bubbleGone.Step([], _ => false); return; }
+        var removed = false;
+        foreach (var owner in _bubbleGone.Step(layer.Bubbles.Bubbles.Select(b => b.Owner).ToArray(), BubbleOwnerGone))
+        {
+            if (!layer.Bubbles.Remove(owner)) continue;
+            removed = true;
+            GD.Print($"ARC-UI-2034 bubble removed owner={owner} (object destroyed or off)");
+        }
+        if (removed) layer.Redraw();
+    }
+
+    /// <summary>ARC-UI-2034 (TB16): a script's fade (action 103; the original's case clears all first, before its operands are read, in single player, ledger TB16) empties the bubble table; the run's own float lines show after it.</summary>
+    private void ClearBubblesOfScriptFades()
+    {
+        var runs = (_conversationHost?.Scripts.TakeFadeClears() ?? 0) + (_useScriptHost?.Host.TakeFadeClears() ?? 0);
+        if (runs == 0 || _floaters is not { } layer) return;
+        layer.Bubbles.Clear();
+        layer.Redraw();
+        GD.Print($"ARC-UI-2034 fade clear-all runs={runs}");
+    }
+
     private void TickScriptFloats()
     {
+        ClearBubblesOfScriptFades();
         while (_tileScriptFloats.Count > 0)
         {
             var (tileOwner, tileText) = _tileScriptFloats.Dequeue();
@@ -226,6 +264,7 @@ public partial class TerrainViewerApp
         TickCasterDamage();
         if (_floaters is not { } layer) return;
         DropFloatersOfOldScene(layer);
+        RemoveBubblesOfGoneObjects(layer);
         layer.Level = _gameSettings.Floats;
         // ARC-UI-1997: the Text Duration line changes the live bubbles' life at once, then the real clock ages them.
         if (layer.Bubbles.TextDuration != _gameSettings.TextDuration) layer.Bubbles.SetTextDuration(_gameSettings.TextDuration);
