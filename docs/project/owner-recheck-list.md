@@ -1250,6 +1250,7 @@ Rules in [ledger VC27](../research/ledger/combat.md#partial-rows-by-risk-combat-
 | 2 | Do it again from behind a creature that has not noticed you (sneak up quietly; it neither sees nor hears you). | A true backstab: five times the backstab level is added to the damage and the creature's armour does not count for a trained hero. | open |
 | 3 | Try the same with bare hands, a bow, a club or a mace, and with a sword while the skill is at apprentice. | No backstab bonus (only the dagger at any training, and the sword, axe and two-handed sword above apprentice). | open |
 | 4 | Let a creature with the backstab skill and a dagger (a thief or assassin) hit you or a companion from behind. | The same bonus applies to its hit. | open |
+| 5 | ARC-COMBAT-1968: from behind a creature that has not noticed you, throw the dagger (a throwing dagger, default throws) and shoot a bow. | No backstab bonus: the original clears the backstab flags for a throw and a shot, so the damage is the plain damage. | open |
 
 ## ARC-SCRIPT-1732 — The healer menu behind `h:` (2026-11-13)
 

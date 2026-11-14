@@ -95,20 +95,6 @@ public static class AreaFollowerPanelRules
         _ => FollowerMenuRowState.Normal,
     };
 
-    /// <summary>The words the menu draws (the original reads them from <c>mes\follower_ui.mes</c> 0–7, FP8; the viewer has no message reader here, so these are the English texts of the retail file as the ledger lists them).</summary>
-    public static string MenuText(FollowerMenuItem item) => item switch
-    {
-        FollowerMenuItem.Walk => "Walk",
-        FollowerMenuItem.Attack => "Attack",
-        FollowerMenuItem.StayClose => "Stay Close",
-        FollowerMenuItem.SpreadOut => "Spread Out",
-        FollowerMenuItem.BackOff => "Back Off",
-        FollowerMenuItem.Wait => "Wait",
-        FollowerMenuItem.Inventory => "Inventory",
-        FollowerMenuItem.CharacterSheet => "Character Sheet",
-        _ => throw new ArgumentOutOfRangeException(nameof(item)),
-    };
-
     /// <summary>The spell flag that marks a mind-controlled follower (FP8).</summary>
     public const uint MindControlledSpellFlag = 0x8000000;
 

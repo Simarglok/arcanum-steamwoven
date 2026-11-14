@@ -205,6 +205,21 @@ public partial class TerrainViewerApp
                 Fact("Wait and Character Sheet are normal rows", portraits.MenuRowStateForSelfTest(FollowerMenuItem.Wait) == FollowerMenuRowState.Normal
                     && portraits.MenuRowStateForSelfTest(FollowerMenuItem.CharacterSheet) == FollowerMenuRowState.Normal, "row states");
             }
+            // ARC-UI-1786 (FP8): the rows' words are the ones read from mes\follower_ui.mes (the project's English only without a game folder), and a row whose message is missing is not drawn.
+            {
+                var read = portraits.MenuTexts;
+                Fact("the rows' words are the follower_ui.mes texts", read is not null && Enum.GetValues<FollowerMenuItem>().All(item => portraits.MenuRowTextForSelfTest(item) == read.Text(item)),
+                    $"{read?.Detail}: {string.Join("|", Enum.GetValues<FollowerMenuItem>().Select(item => portraits.MenuRowTextForSelfTest(item)))}");
+                portraits.CloseMenu();
+                portraits.MenuTexts = AreaFollowerMenuTexts.From(number => number == (int)FollowerMenuItem.StayClose ? null : $"row {number}", "smoke: message 2 missing");
+                await ClickPortraitAsync(MouseButton.Right);
+                Fact("a row without a message is skipped, the others keep their places and words",
+                    portraits.MenuForSelfTest is { Rows: 7 } && portraits.MenuItemCentreForSelfTest(FollowerMenuItem.StayClose) is null
+                    && portraits.MenuRowTextForSelfTest(FollowerMenuItem.SpreadOut) == "row 3", $"{portraits.MenuForSelfTest?.Rows} rows");
+                portraits.CloseMenu();
+                portraits.MenuTexts = read;
+                await ClickPortraitAsync(MouseButton.Right);
+            }
             var inventoryState = portraits.MenuRowStateForSelfTest(FollowerMenuItem.Inventory);
             // 10. ARC-UI-1736 (FP12): Character Sheet opens his NPC sheet over him (read-only, no plus and minus buttons).
             await ReleaseAtAsync(portraits.MenuItemCentreForSelfTest(FollowerMenuItem.CharacterSheet), MouseButton.Left);
