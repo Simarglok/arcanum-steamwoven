@@ -375,6 +375,8 @@ public partial class TerrainViewerApp : Node
                         if (_readyMapName is not null && only?.Contains("movies") == true) await RunAreaMoviesSmokeAsync();
                         // ARC-DEV-282: only when named (with --hero), an NPC archer of the map shoots the hero: the arrow flies as a projectile and strikes through the AI host.
                         if (_readyMapName is not null && only?.Contains("npc-shot") == true) await RunAreaNpcShotSmokeAsync();
+                        // ARC-AI-1757: only when named (with --hero), an NPC put into COMBAT_FOCUS on a scenery or container of the map by the object's attack event fights it, damages it and drops the focus when it is busted.
+                        if (_readyMapName is not null && only?.Contains("npc-object") == true) await RunAreaNpcObjectFocusSmokeAsync();
                         // ARC-UI-048: after the stream, as the landing loads the start map around another place.
                         if (_readyMapName is not null && Stage("worldmap")) await RunAreaWorldMapSmokeAsync();
                         // ARC-DEV-050: only when named (with --debug-mode), the debug teleport from this map to a far area.
