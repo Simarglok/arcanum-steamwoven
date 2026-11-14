@@ -159,7 +159,6 @@ goes out for the object as victim. The NPC's spell and item choice for an object
 reads the object's stored magic resistance (`ISpellCastMap.ObjectMagicResistance`). ARC-AI-1756: the swing's animation reads the object's own art and flags (`AreaAiObjectFacts.Art`, `Flags`; 0x42B9C0 node 5, flag 0x80 draws the low attack) in place of a standing critter's, and a blow on a scenery that holds an occupant (a bed's sleeper, field 0x46) is the attack on the occupant (0x4B3170: the occupant takes the target's place in both slots, is pulled out of the bed by the unseat 0x45F3A0 and its check carries -30; `AreaAiHost.OccupantInPlaceOf`); a bed the hero rests in is not redirected (NOT READY, [#1939](https://github.com/Simarglok/arcanum-steamwoven/issues/1939)).
 
 Viewer smoke (ARC-AI-1757): the stage `npc-object` (`./arcanum smoke pr --stages npc-object`, the town) runs this fight on the real map: a free NPC is put into the focus on the scenery or container with the fewest hit points by the object's attack event, walks to it, damages it through the session's object attack and, when the object is busted, drops the focus and holds no attack goal on it ([area map mode](../rendering/area-map-mode.md)).
->>>>>>> origin/main
 
 ## Viewer (ARC-WORLD-110)
 
