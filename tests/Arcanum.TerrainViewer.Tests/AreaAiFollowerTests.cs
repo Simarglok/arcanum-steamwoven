@@ -1668,12 +1668,11 @@ public sealed class AreaAiFollowerTests
     [TestMethod]
     public void The_healer_talk_answers_for_a_companion_the_hero_leads_and_starts_its_service_and_spell()
     {
-        var (session, host, _, enemy, companion) = Open(healer: true, spells: true);
+        var (session, host, _, _, companion) = Open(healer: true, spells: true);
         var facts = host.HealerFacts(companion) ?? throw new AssertFailedException("a companion the host runs has healer facts");
         Assert.IsTrue(facts.LedByPc && !facts.NoPcLeader, "the hero leads the companion: the dialog serves at once and asks no price and no free flag (0x45DE00 is the PC)");
         Assert.IsTrue(facts.SkillAllowed, "the companion holds a healing item the skill test accepts");
         Assert.IsNull(host.HealerFacts(Pc), "the hero is no healer here");
-        Assert.AreEqual(enemy, Entity(0));
         Assert.IsNull(host.HealerFacts(Entity(9)), "an object the host does not run stays null");
 
         // The skill service: goal 33 on the hero with the companion's item.

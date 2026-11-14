@@ -22,7 +22,7 @@ public sealed partial class AreaAiHost
     /// <summary>The facts of a speaker the host runs, an NPC or a companion of the shown map (ARC-SCRIPT-1996: a follower is run through the same host, in its follower list); null for an object the host does not run (the hero's own facts are not asked).</summary>
     public AreaHealerFacts? HealerFacts(string npc, int skillNumber = AiPassChoice.HealSkill)
     {
-        if (npc == Pc || !Walks(npc)) return null;
+        if (npc == Pc || !Walks(npc) || Unresolved(npc)) return null;
         // ARC-SCRIPT-1798 (ledger DSV2, DSV5): the test of 0x4AE570 is the heal skill's (a healing item the NPC holds and may use on the PC); any other skill the dialog offers passes it. The level and
         // tier are the NPC's own in that skill (0 for a number outside the 16 skills, as the getters 0x4C5EB0 and 0x4C65E0 answer).
         var skill = Enum.IsDefined((Skill)skillNumber) && skillNumber >= 0 ? NpcSkill(npc, (Skill)skillNumber) : null;
@@ -39,7 +39,7 @@ public sealed partial class AreaAiHost
     /// </summary>
     public bool HealerService(string npc, int skillNumber = AiPassChoice.HealSkill, bool noPcLeader = false)
     {
-        if (npc == Pc || !Walks(npc)) return false;
+        if (npc == Pc || !Walks(npc) || Unresolved(npc)) return false;
         // ARC-SCRIPT-1798 (ledger DSV5): the starter takes any skill number the reply names; the tool is the heal item for skill 10 and none for the others (0x4C91F0). A number outside the 16 skills
         // is passed on by the original's starter and is a no-op here (no goal is started for it); the goal's attempt of a skill other than heal and pick pocket is not built (AttemptSkill).
         if (skillNumber < 0 || !Enum.IsDefined((Skill)skillNumber)) return true;
@@ -57,7 +57,7 @@ public sealed partial class AreaAiHost
     /// </summary>
     public bool HealerCast(string npc, int spell, bool free)
     {
-        if (npc == Pc || !Walks(npc) || _scene.Spells?.Invoke() is null) return false;
+        if (npc == Pc || !Walks(npc) || Unresolved(npc) || _scene.Spells?.Invoke() is null) return false;
         ScriptCast(npc, Pc, spell, free, unresistable: false);
         return true;
     }

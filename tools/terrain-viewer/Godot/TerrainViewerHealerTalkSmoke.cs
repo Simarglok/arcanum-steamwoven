@@ -89,7 +89,7 @@ public partial class TerrainViewerApp
             }
 
             // One talk with the healer at the hub node: the leaderless pass pays the quote at the price screen; the led pass (the hero leads him, HLR7, HLR8) is served at once and free.
-            async Task<(int Paid, int HpBefore, int HpAfter, bool Free)> TalkAsync(AreaSpeaker talker, bool led)
+            async Task<(int Paid, int HpBefore, int HpAfter, bool Free)> TalkAsync(AreaSpeaker talker, bool led, bool skillAllowed)
             {
                 var pass = led ? "led" : "leaderless";
                 var talkAi = AreaAiHostNow() ?? throw new InvalidOperationException("AREA_HEALER_TALK_SMOKE_FAILED no AI host");
@@ -111,7 +111,7 @@ public partial class TerrainViewerApp
                 var menu = conversation!.Options;
                 Require(menu.Count(o => o.Transition == DialogOptionTransition.HealerStep) >= 1 && conversation.NpcLine?.Text.Length > 0, $"[{pass}] the menu offers the healer steps: {string.Join(",", menu.Select(o => o.Transition))}");
                 // The skill service (when allowed) is the first option; the first submenu (spells 60 and 62) is the next.
-                var submenu = menu.Where(o => o.Transition == DialogOptionTransition.HealerStep).ElementAt(facts.SkillAllowed ? 1 : 0);
+                var submenu = menu.Where(o => o.Transition == DialogOptionTransition.HealerStep).ElementAt(skillAllowed ? 1 : 0);
                 panel.Choose(submenu.Number);
                 await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
                 conversation = panel.Conversation!;
@@ -141,7 +141,7 @@ public partial class TerrainViewerApp
                     // The hero leads him (0x45DE00 is the PC): the pick of the spell is the effect, with no price screen and no coin moving.
                     paid = goldBefore - session.QueryGold();
                     Require(paid == 0 && (session.QueryNpcGold(entity) ?? 0) == npcGoldBefore, $"[{pass}] no coin moved ({paid} paid)");
-                    Require(conversation.NpcLine?.Text.Any(char.IsAsciiDigit) != true || conversation.Options.Count == 1, $"[{pass}] no price screen follows the pick ({conversation.Options.Count} options)");
+                    Require(conversation.Options.Count == 1, $"[{pass}] no price screen (yes and no) follows the pick, only the one way out ({conversation.Options.Count} options)");
                 }
 
                 // The effect: the casting goal starts at once on the NPC (HealerCast, flags 0x2 when no PC leads it) and plays while the conversation is still open.
@@ -167,7 +167,7 @@ public partial class TerrainViewerApp
                 return (paid, hpBefore, hpAfter, free);
             }
 
-            var first = await TalkAsync(speaker, led: false);
+            var first = await TalkAsync(speaker, led: false, facts.SkillAllowed);
 
             // ARC-SCRIPT-1996: Virgil follows the hero (the session's forced join, as the follower smokes join a speaker), is run by the AI host as a companion, and the same node is opened again: the AI host's NPC list
             // does not hold him any more, so the reply was blocked before this task. The hero is hurt again and the reply is served at once.
@@ -186,9 +186,10 @@ public partial class TerrainViewerApp
             Require(followerAi is not null && followerAi.RunCompanions.Contains(entity) && Near() <= 4, $"the AI host runs the healer as a companion near the hero: {_areaCompanions?.Status()}");
             var companionFacts = followerAi!.HealerFacts(entity);
             Require(companionFacts is { LedByPc: true, NoPcLeader: false }, $"the host answers for the companion: {companionFacts}");
-            var second = await TalkAsync(template.Speaker, led: true);
+            var second = await TalkAsync(template.Speaker, led: true, companionFacts!.Value.SkillAllowed);
             session.LeaveParty(session.Version, entity, new PartyLeave(Force: true));
             joinedHealer = null;
+            for (var f = 0; f < 20; f++) AreaSmokeFrame();
 
             GD.Print("ARC-SCRIPT-1790 native-smoke healer-talk PASS " + System.Text.Json.JsonSerializer.Serialize(new { Map = map.RuntimeMap, Speaker = speaker.ScriptId, Node = HealerTalkHubNode, Spell = 60, Free = first.Free, Paid = first.Paid,
                 HitPointsBefore = first.HpBefore, HitPointsAfter = first.HpAfter, GoldGranted = granted, FollowerFree = second.Free, FollowerPaid = second.Paid, FollowerHitPointsBefore = second.HpBefore, FollowerHitPointsAfter = second.HpAfter,
