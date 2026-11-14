@@ -109,5 +109,5 @@ an undefined bit, an invalid handle, a repeated enemy and the budgets. Schema 40
   reaction owner's queries now read the session's list.
 - **Not read by other owners yet.** The exit gate's threats (`SessionCombatThreat`) still come from the host; the combat
   category refresh after an add (0x4B80E0) is presentation.
-- **Data.** NO_FLEE, invulnerability and the leader's charisma are caller facts; spells and scripts that
+- **Data.** NO_FLEE, invulnerability and the leader's charisma are caller facts (the host reads the direct leader's charisma, the hero's or an NPC's: [NPC leaders](party-runtime.md#npc-leaders-arc-world-1840), ARC-WORLD-2117); spells and scripts that
   write them (MR13, EX12, SU17) are later slices'.
