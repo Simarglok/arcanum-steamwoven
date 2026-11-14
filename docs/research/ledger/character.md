@@ -19,7 +19,7 @@ Source: [skills](../skills-evidence.md#8-anomalies-found-by-this-reading),
 | SK5 | gamble gate `sub_579840` | The Expert and Master gates read the **PC's** gambling training. | Reconstruction slip |
 | SK6 | `basic_skill_effectiveness` | Prowling's formula unreachable, backstab 0. | Original |
 | SK7 | `skill_invocation_run` (0x4C7160), repair | HP restored and durability lost whatever the roll. | Original |
-| SK8 | `dialog_use_skill` (0x419CB0), `anim_goal_use_skill_on` (0x4350F0), `sub_42A2A0` | The paid service's forced-success request is dropped; it rolls like any use. | Original bug |
+| SK8 | `dialog_use_skill` (0x419CB0), `anim_goal_use_skill_on` (0x4350F0), `sub_42A2A0` | The paid service's forced-success request is dropped; it rolls like any use. Read again by ARC-SCRIPT-1789: the starter's flag 0x2000 lands in the goal record's word +0x70, which only the use-item-with-skill node 0x428E10 maps to the forced-success bit 0x1000; the goals the starter queues (33, 34, 86, 67) do not. Built: passed to the starter, no effect. | Original bug |
 | LM1 | `item_wield_best` (0x465170) | The damage loop **adds** the five types. | Reconstruction slip |
 | LM2 | `item_wield_best` | The best in-range weapon's score is stored; the best in-range weapon wins. | Reconstruction slip |
 | LM11 | `level_recalc` (0x4A69C0) | The cap is level 50; reaching 51 sets XP back to the **level-50** threshold (the earlier reading: level-51 threshold). | Cap Original; XP value reconstruction slip |
