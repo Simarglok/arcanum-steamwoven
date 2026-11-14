@@ -93,8 +93,8 @@ public partial class TerrainViewerApp
         return entry is { Whole: true } ? AreaRestTownMap.WaitAllowed : AreaRestTownMap.WaitRefused;
     }
 
-    // The exit gate's facts (0x4B3D90): the attack the hero is playing and the NPCs near him that fight him or his party.
-    private SessionCombatExit RestCombatExit() => new()
+    // The exit gate's facts (0x4B3D90): the attack the hero is playing and the NPCs near him that fight him or his party. Every caller of the gate passes them: the rest window, the R key, the right release and the dialog start (ARC-COMBAT-1935).
+    private SessionCombatExit CombatExitFacts() => new()
     {
         AttemptingAttack = AttackPlaying,
         Threats = _aiHost is { } ai && ReferenceEquals(ai.Session, _areaSession) ? ai.CombatThreats() : [],
@@ -121,7 +121,7 @@ public partial class TerrainViewerApp
             RefreshAreaStatus();
             return;
         }
-        var exit = RestCombatExit();
+        var exit = CombatExitFacts();
         var opening = AreaRestRules.Decide(RestFacts(exit, bed is not null));
         GD.Print($"ARC-WORLD-1160 sleep open decision={opening.Outcome} wait={opening.Wait} message={opening.Message?.ToString() ?? "-"} leaves-combat={opening.LeavesCombatMode} bed={bed is not null}");
         switch (opening.Outcome)

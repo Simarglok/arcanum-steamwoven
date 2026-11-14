@@ -194,6 +194,7 @@ public partial class TerrainViewerApp
             var danger = session.QueryDanger(entity);
             Require(danger.State == DangerState.CombatFocus && danger.Focus == SessionCombatant.Hero,
                 $"the NPC fights the hero: {danger.State} {host.TraceOf(entity)?.Reaction} {host.TraceOf(entity)?.Setter}");
+            RunAreaCombatExitThreatSmoke(session, host, entity, candidates.Select(c => c.Holder.Entity));
 
             _areaSmokeTime *= 20; _worldTestTime = SimulationTime.At(_areaSmokeTime, 20);
             var frames = 0; var drawnMoved = false; var swing = false; var probeSum = (Opaque: 0, Picked: 0, Other: 0, None: 0); var probeLogged = 0;

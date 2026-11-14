@@ -544,7 +544,7 @@ ledger [DA1–DA6](../research/ledger/combat.md#dying-animation-arc-render-040))
 ## Not ready
 
 - AI: no NPC fights back, flees, joins combat mode or changes its reaction when attacked; the attacked NPC's AI pass, combat
-  focus and taunts; the exit gate's threats are still empty.
+  focus and taunts; the exit gate's threats come from the AI host (ARC-COMBAT-1935).
 - The [proposed split](#proposed-split-of-true-ranged-combat-not-ready) is done: a
   melee-skill weapon with reach, the ammunition per shot and the line of fire are in since ARC-COMBAT-012, bow and firearm shots
   since ARC-COMBAT-015, projectiles in flight since ARC-COMBAT-016, the "default throws" weapon since ARC-COMBAT-017, a bow's second projectile and a

@@ -10,8 +10,9 @@ namespace Arcanum.TerrainViewer;
 
 // ARC-COMBAT-004: the hero's combat mode in the AREA view, in real time (the viewer has no turn-based setting yet). The
 // original Ready/Unready key R toggles it through the session (refused while the hero cannot: unconscious, stunned, dead);
-// leaving goes through the exit gate, which the viewer's NPCs never close (no AI combat focus yet). A dialog start and a
-// map change leave combat mode first, as the source's dialog and teleport do. Running in combat mode charges one fatigue
+// leaving goes through the exit gate, which the attack playing and an active NPC near the hero that fights it or its followers
+// close (ARC-COMBAT-1935: the R key, the right release and the dialog start pass the AI host's threat scan, as the rest window does).
+// A dialog start and a map change leave combat mode first, as the source's dialog and teleport do. Running in combat mode charges one fatigue
 // every fifth run step of a move (fatigue-limiting and -draining heroes do not exist yet); a hero out of fatigue walks.
 // The status line shows the mode and the hero's fatigue. In combat mode the original's left click attacks a living NPC;
 // that click is ARC-COMBAT-005's, so a click still talks here, and the dialog leaves combat mode first. ARC-COMBAT-022: a right
@@ -51,8 +52,8 @@ public partial class TerrainViewerApp
         if (session.QueryHero() is null) { _combatModeNotice = "combat mode needs a hero (start with --hero)"; RefreshAreaStatus(); return; }
         // ARC-COMBAT-005: an attack animation playing keeps the hero in combat mode (the exit gate's attempt-attack test).
         // ARC-COMBAT-020: with the turn-based setting on, entering starts a round and leaving ends it.
-        var result = session.ToggleHeroCombatMode(session.Version, CombatModeContext(),
-            AttackPlaying ? new SessionCombatExit { AttemptingAttack = true } : SessionCombatExit.Clear);
+        // ARC-COMBAT-1935 (ledger VC59, VC60): and the NPCs near the hero that fight it or its followers keep it in combat mode too (the gate's NPC threat scan).
+        var result = session.ToggleHeroCombatMode(session.Version, CombatModeContext(), CombatExitFacts());
         if (!HeroInCombatMode) CancelAreaAttack("left combat mode");
         if (result.Round is { Disposition: GameSessionDisposition.Changed } && session.QueryCombatRound() is not null) InterruptForRound();
         LogRound(result.Round?.Events ?? []);
@@ -117,7 +118,7 @@ public partial class TerrainViewerApp
     {
         if (!HeroInCombatMode) return true;
         var session = _areaSession!;
-        var result = session.LeaveHeroCombatMode(session.Version, CombatModeContext(), SessionCombatExit.Clear);
+        var result = session.LeaveHeroCombatMode(session.Version, CombatModeContext(), CombatExitFacts());
         GD.Print($"ARC-COMBAT-004 dialog-leave disposition={result.Disposition} refusal={result.Refusal} on={result.InCombatMode}");
         if (result.Refusal == SessionCombatModeRefusal.UnderAttack) { _combatModeNotice = "no dialog: " + Refusal(result.Refusal); return false; }
         if (result.Disposition == GameSessionDisposition.Changed) _combatModeNotice = "left combat mode to talk";
