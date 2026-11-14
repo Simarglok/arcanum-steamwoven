@@ -129,6 +129,8 @@ public partial class TerrainViewerApp
             () => _areaKitDurability,
             // ARC-MAGIC-1232 (DW2): a spell's weapon drop (Disarm) places the item as a critical drop does.
             AreaDropMapNow);
+        // ARC-AI-2124 (GW9): a spell's damage on an object runs its hit steps (damage line, break, guard witnesses) inside that damage step, as the original's damage end does, not when the cast log is flushed.
+        map.ObjectHitMade = LogObjectHits;
         var runtimeMap = area.Snapshot.RuntimeMap;
         _spellCaster = new SessionSpellCaster(owner, n => n >= 0 && n < records.Length ? records[n] : null, map, AreaEvents,
             id => HeroItemSpells(id, true) ?? _combatHost!.NpcItemSpells(owner, id));
@@ -915,7 +917,7 @@ public partial class TerrainViewerApp
 
     /// <summary>ARC-DEV-255 (GT195): the hits damage that is no hero attack (a spell, a script, a burn, a trap) dealt to a door, window, container,
     /// scenery or trap since the last call, logged; since ARC-DEV-260 the object's trap and its BUST script run for a hit that broke it (no attacker: no
-    /// triggerer, no breaker); since ARC-AI-2112 a hit with an actor (a spell's caster) then calls the guard witnesses. A trap's or a script's own damage queues hits in turn, which the next round takes (bounded). The redraw of what a hit destroyed
+    /// triggerer, no breaker); since ARC-AI-2112 a hit with an actor (a spell's caster) then calls the guard witnesses, and since ARC-AI-2124 that hit is taken the moment the damage step makes it (<see cref="AreaSpellCastMap.ObjectHitMade"/>), the rest at the cast log's flush. A trap's or a script's own damage queues hits in turn, which the next round takes (bounded). The redraw of what a hit destroyed
     /// or busted follows from the session's version (the per-frame inventory sync).</summary>
     private void LogObjectHits()
     {
