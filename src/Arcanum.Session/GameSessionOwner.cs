@@ -910,7 +910,8 @@ public sealed partial class GameSessionOwner : IDisposable
     /// in the source, an NPC already in the array counts toward the limit itself. A refusal is
     /// <see cref="GameSessionFailure.ConsentRefused"/> with the reason in <see cref="PartyMutationResult.Consent"/>.
     /// Facts naming another leader for an NPC the PC already leads (following or waiting) contradict the session and
-    /// are <see cref="GameSessionFailure.InvalidConsentFacts"/>.
+    /// are <see cref="GameSessionFailure.InvalidConsentFacts"/>; so are facts naming none for an NPC another NPC leads
+    /// (ARC-WORLD-2119: the check compares that leader's charisma, and tests the NPC link's forced bit).
     /// </summary>
     [OriginalFunction(0x45DE90, OriginalFunctionScope.Partial)]
     public PartyMutationResult JoinParty(GameSessionVersion expected, string entity, PartyConsentFacts facts, bool force)
@@ -922,7 +923,13 @@ public sealed partial class GameSessionOwner : IDisposable
         if (!IsCurrent(expected)) return RejectParty(GameSessionFailure.StaleVersion);
         var current = _party.Get(entity);
         if (current.LedByPc && facts.OtherLeaderCharisma is not null) return RejectParty(GameSessionFailure.InvalidConsentFacts);
-        var consent = Consent(facts, current.Forced, force);
+        // ARC-WORLD-2119 (0x4AD950): a critter an NPC leads has that other leader, whose charisma the check reads (the direct leader 0x45DE00, compared like the hero's), so the facts must name it (the session
+        // holds no NPC's stats); and the forced bit it tests is the follower's own (field 0x118 bit 0x400), which for an NPC-led follower is the NPC link's, not the free hero record's.
+        var npcLed = _party.NpcLed.TryGetValue(entity, out var link);
+        // The check reads that charisma only past its mind-control and Persuasion Master exits, so facts that name none are valid for those two.
+        var persuasion = HeroPartySide() is { } side ? side.Persuasion : facts.PcPersuasion;
+        if (npcLed && facts.OtherLeaderCharisma is null && !facts.MindControlledByPc && persuasion != PersuasionTraining.Master) return RejectParty(GameSessionFailure.InvalidConsentFacts);
+        var consent = Consent(facts, npcLed ? link.Forced : current.Forced, force);
         if (consent != FollowConsent.Accepted) return RejectParty(GameSessionFailure.ConsentRefused, consent);
         return Append(current, force, consent);
     }

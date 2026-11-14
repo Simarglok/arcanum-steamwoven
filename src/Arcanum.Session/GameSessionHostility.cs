@@ -148,7 +148,8 @@ public sealed partial class GameSessionOwner
             return RejectPeace(GameSessionFailure.InvalidDangerFacts);
         if (!IsCurrent(expected)) return RejectPeace(GameSessionFailure.StaleVersion);
         // ARC-AI-1634: with a host for the exit script, the call is checked whole first (a script cuts the real run in two, at each setter call).
-        var npcs = request.Combatant.IsHero ? _party.Order.ToArray() : [request.Combatant.Entity!];
+        // ARC-WORLD-2119 (0x4AA4A0): for the PC the original recurses over its whole follower tree (0x441260: the followers of followers too); an NPC gets NO_ATTACK when the chain of its leaders reaches a PC.
+        var npcs = request.Combatant.IsHero ? FollowerTreeOf(SessionEventKinds.PlayerEntity).ToArray() : [request.Combatant.Entity!];
         GameSessionFailure Build(DangerPlan plan, List<SessionPeaceStep> into) => PlanStopAttacking(plan, npcs, 0, request.Facts, into);
         var refused = PreviewDanger(Build);
         if (refused != GameSessionFailure.None) return RejectPeace(refused);
@@ -176,7 +177,7 @@ public sealed partial class GameSessionOwner
         var facts = given.TryGetValue(npc, out var found) ? found : new SessionPeaceFacts();
         GameSessionFailure Close(DangerPlan rest, SessionPeaceStep step)
         {
-            if (LedByPc(npc))
+            if (PcLeads(npc))
             {
                 rest.Update(npc, record => record with { Flags = record.Flags | DangerFlags.NoAttack });
                 step = step with { NoAttack = true };

@@ -279,9 +279,9 @@ public sealed partial class GameSessionOwner
         _danger.Put(record with { Flags = record.Flags | bit });
     }
 
-    // The hero, or an NPC the PC leads (following or waiting), avoids only a spotted trap on the drop's path; another NPC avoids
+    // The hero, or an NPC whose chain of leaders reaches the PC (0x4BBFE0 reads 0x45DDA0, ARC-WORLD-2119), avoids only a spotted trap on the drop's path; another NPC avoids
     // every trap (0x4BBFE0).
-    private DropOwner DropOwnerOf(SessionLifeTarget who) => who.IsHero || _party.Get(who.Entity!).LedByPc ? DropOwner.PcSide : DropOwner.Npc;
+    private DropOwner DropOwnerOf(SessionLifeTarget who) => who.IsHero || PcLeads(who.Entity!) ? DropOwner.PcSide : DropOwner.Npc;
 
     // The seed listing of an NPC's item still in its list on the actor's map, or null (an added made item, another map's).
     private SessionSeedItem? NpcItemSeed(string npc, string item) =>
@@ -309,7 +309,7 @@ public sealed partial class GameSessionOwner
             // After a refused step, as the other steps, nothing more is applied or reported.
             if (failure != GameSessionFailure.None) return;
             // ARC-DEV-283 (CR15, RA3): the gate of 0x4B65D0: an NPC whose leader chain reaches no PC spends nothing; a PC or an NPC led by one spends from its own stack.
-            var holder = side.Life is { IsHero: true } ? SessionAmmoHolder.Hero : side.Life?.Entity is { } npc && LedByPc(npc) ? new SessionAmmoHolder(npc) : (SessionAmmoHolder?)null;
+            var holder = side.Life is { IsHero: true } ? SessionAmmoHolder.Hero : side.Life?.Entity is { } npc && PcLeads(npc) ? new SessionAmmoHolder(npc) : (SessionAmmoHolder?)null;
             if (holder is not { } who)
             {
                 steps.Add(new(kind, damage.Recipient, EquipmentSlot.Weapon, null, SessionCriticalStepOutcome.NoAmmunition, null));

@@ -2303,10 +2303,10 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     private bool AlreadyDestroyed(ScrObjectRef obj) =>
         Row(obj) is { } row && ((Number(row, ObjectFlagsSlot) ?? 0) & DestroyedObjectFlag) != 0 || Destroyed(_session, obj.Map, obj.Code);
 
-    // ARC-SCRIPT-052 (TD3): the NPCs a stop attacking of the object reaches (the PC's followers for the PC) with the world's facts for each.
+    // ARC-SCRIPT-052 (TD3): the NPCs a stop attacking of the object reaches (the PC's whole follower tree for the PC (0x4AA4A0, ARC-WORLD-2119)) with the world's facts for each.
     private Dictionary<string, SessionPeaceFacts> StopFacts(ScrObjectRef obj)
     {
-        var npcs = IsPc(obj) ? _session.QueryParty().Followers.Select(f => f.Entity).ToArray() : [obj.Code];
+        var npcs = IsPc(obj) ? _session.QueryFollowerTree(AreaScriptHost.PcCode).ToArray() : [obj.Code];
         return npcs.ToDictionary(npc => npc, npc => _world?.PeaceFacts?.Invoke(npc) ?? new SessionPeaceFacts(), StringComparer.Ordinal);
     }
 
@@ -2317,7 +2317,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         foreach (var (npc, facts) in StopFacts(obj))
         {
             if (_session.QueryDanger(npc).Focus is not { } focus) continue;
-            if ((focus.IsHero || _session.QueryCompanion(focus.Entity!).LedByPc) && facts.Reaction is null)
+            if ((focus.IsHero || _session.QueryPcLeader(focus.Entity!) is not null) && facts.Reaction is null)
                 return $"stop attacking of {npc}, which fights the hero's side, needs its reaction facts";
             if (_session.QueryCombatMode(SessionCombatant.Critter(npc)) && facts.CombatMode?.Facts is null)
                 return $"stop attacking of {npc}, in combat mode, needs its combat-mode facts";

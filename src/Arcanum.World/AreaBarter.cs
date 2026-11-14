@@ -101,6 +101,14 @@ public sealed record AreaBarterMerchant(string Entity, string Name, int Multipli
     /// <summary>The substitute container's reach in tiles (0x45F650, ledger BT4).</summary>
     public const int SubstituteRange = 20;
 
+    /// <summary>ARC-WORLD-2119: whether any critter leads the merchant (its direct leader 0x45DE00 is not null, the hero or an NPC): the substitute test of 0x45F650. <see cref="Follower"/> is the
+    /// narrower hero-led case, the window's follower barter (0x5727B0 compares the direct leader with the hero).</summary>
+    public bool Led { get; init; }
+
+    /// <summary>ARC-WORLD-2119: whether the merchant's chain of leaders reaches the PC (0x45DDA0), the test of the open's identify step (0x572640): such a merchant's items are not identified, a follower's
+    /// and one led through another follower alike.</summary>
+    public bool PcLeads { get; init; }
+
     /// <summary>ARC-WORLD-090: the substitute container the window shows and fills, or null.</summary>
     public string? Container { get; init; }
     /// <summary>ARC-WORLD-090: the container's buy list (its inventory source, field 0x3D), or null.</summary>
@@ -115,8 +123,16 @@ public sealed record AreaBarterMerchant(string Entity, string Name, int Multipli
     public AreaBarterMerchant WithSubstitute(AreaSubstituteContainer? substitute, CellCoord cell, AreaBarterData data)
     {
         ArgumentNullException.ThrowIfNull(data);
-        if (substitute is null || Follower || Arcanum.Simulation.Ai.AiExecutorRules.Distance(cell, substitute.Cell) > SubstituteRange) return this;
+        if (substitute is null || Follower || Led || Arcanum.Simulation.Ai.AiExecutorRules.Distance(cell, substitute.Cell) > SubstituteRange) return this;
         return this with { Container = substitute.Entity, ContainerBuyList = data.BuyList(substitute.InventorySource) };
+    }
+
+    /// <summary>The merchant facts of an NPC's stored fields with its leaders read from the session (ARC-WORLD-2119): follower of the hero (direct leader), led by anyone, chain to the PC; null for anything that is not an NPC.</summary>
+    public static AreaBarterMerchant? From(string entity, string name, CombatFields fields, AreaBarterData data, GameSessionOwner session)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        return From(entity, name, fields, data, session.QueryCompanion(entity).LedByPc) is { } merchant
+            ? merchant with { Led = session.QueryLeader(entity) is not null, PcLeads = session.QueryPcLeader(entity) is not null } : null;
     }
 
     /// <summary>The merchant facts of an NPC's stored fields; null for anything that is not an NPC.</summary>
@@ -223,7 +239,7 @@ public sealed class AreaBarter
     /// window, every item of the merchant and of the container identified.</summary>
     public SessionBarterOpenResult Open()
     {
-        var opened = _session.OpenBarter(_session.Version, Merchant.Entity, Merchant.Container, identify: !Merchant.Follower, GoldKind(),
+        var opened = _session.OpenBarter(_session.Version, Merchant.Entity, Merchant.Container, identify: !Merchant.Follower && !Merchant.PcLeads, GoldKind(),
             AreaInventoryHost.DiagnosticInsertCheck);
         // ARC-UI-1740: the skill module's gambling roll is thrown before anyone can bet and saved with the session (SR12).
         if (opened.Disposition != GameSessionDisposition.Rejected) _session.EnsureGamblingRoll(_session.Version);
@@ -274,6 +290,7 @@ public sealed class AreaBarter
         if (line.Quote.Price == 0 && !Merchant.Follower) return Refused($"won't buy ({line.Quote.Refusal})");
         var price = Merchant.Follower ? 0 : TradeRules.SalePayment(line.Quote.Price, _session.QueryNpcGold(Merchant.Entity) ?? 0);
         var result = _session.BarterSell(_session.Version, Merchant.Entity, entity, line.Count, price, line.Kind, AreaInventoryHost.DiagnosticInsertCheck,
+            // The sale's identify step is not read separately from the window's follower flag here: it keeps the follower test (the open's chain read, 0x572640, is the only one read).
             Merchant.Container, identify: !Merchant.Follower, scripts: _inventory.ItemScripts(_session));
         return Settle(TradeDirection.PcSells, line with { Quote = line.Quote with { Price = price } }, result);
     }

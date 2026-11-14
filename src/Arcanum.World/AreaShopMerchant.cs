@@ -177,7 +177,7 @@ public sealed class AreaShopSession : IDisposable
         var merchantRegeneration = owner.RegenerateInventory(owner.Version, map.Merchant, world);
         if (merchantRegeneration.Disposition == GameSessionDisposition.Rejected) { refused = $"the merchant's inventory did not regenerate ({merchantRegeneration.Failure})"; return null; }
         var row = map.MerchantRow;
-        if (AreaBarterMerchant.From(map.Merchant, merchantName, map.MerchantFields, data, owner.QueryCompanion(map.Merchant).LedByPc) is not { } merchant)
+        if (AreaBarterMerchant.From(map.Merchant, merchantName, map.MerchantFields, data, owner) is not { } merchant)
         {
             refused = "the shop map's merchant is not an NPC";
             return null;

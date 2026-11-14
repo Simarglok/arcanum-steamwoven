@@ -46,6 +46,14 @@ public sealed partial class GameSessionOwner
         return FollowersOf(leader);
     }
 
+    /// <summary>The follower tree of <paramref name="leader"/> as the original's tree walk builds it (ARC-WORLD-2119): its direct followers in array order, then each follower's own tree after them. An invalid id throws.</summary>
+    public IReadOnlyList<string> QueryFollowerTree(string leader)
+    {
+        ThrowIfDisposed();
+        if (!SessionValidation.Entity(leader)) throw new ArgumentException("Invalid entity id.", nameof(leader));
+        return FollowerTreeOf(leader);
+    }
+
     /// <summary>
     /// The forced join (0x45DE90 with force 1, no follow check) of <paramref name="entity"/> under <paramref name="leader"/>, any critter: the hero's is <see cref="ForceJoinParty"/>. Under an NPC
     /// leader the joiner first leaves the leader it has (0x45DFC0 with force 1: a follower or waiting NPC of the hero leaves the hero's party with the leave's side effects; a follower of another NPC

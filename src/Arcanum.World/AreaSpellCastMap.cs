@@ -331,7 +331,8 @@ public sealed class AreaSpellCastMap : ISpellCastMap
         ArgumentNullException.ThrowIfNull(source);
         if (source.Id != SessionSpellCaster.Hero) return [];
         SyncVisitors();
-        return _npcs.Where(id => _session.QueryCompanion(id).LedByPc).Select(Object).OfType<SpellTargetObject>().ToArray();
+        // ARC-WORLD-2119 (0x4F2D20): the party bits of a spell's area test pass a target whose chain of leaders reaches the PC (0x45DDA0), so followers of followers count.
+        return _npcs.Where(id => _session.QueryPcLeader(id) is not null).Select(Object).OfType<SpellTargetObject>().ToArray();
     }
 
     // ---- ISpellCastMap ----
@@ -544,7 +545,7 @@ public sealed class AreaSpellCastMap : ISpellCastMap
         if (row.Type == NpcType && Critter(id) is { } npc && _session.QueryLife(npc.Combat.Target).View is { } life)
             return new(id, NpcType, location, objectFlags, npc.SpellFlags, npc.CritterFlags, npc.CritterFlags2, life.Status.HitPoints,
                 life.Record.State.HitPointDamage, Poison: life.Record.State.PoisonLevel,
-                PcLeader: _session.QueryCompanion(id).LedByPc ? SessionSpellCaster.Hero : null);
+                PcLeader: _session.QueryPcLeader(id) is not null ? SessionSpellCaster.Hero : null);
         // ARC-MAGIC-037: a portal's or container's lock flags are the session's, so a spell's "locked" and "not magically held" area tests see what a spell wrote.
         var lockFlags = row.Type is SpellTargetObject.Portal or SpellTargetObject.Container ? LockFlagsNow(id) : 0;
         return new(id, row.Type, location, objectFlags, Flags(row, SpellFlagsSlot), HitPoints: 1,
