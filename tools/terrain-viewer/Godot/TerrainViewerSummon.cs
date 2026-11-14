@@ -42,6 +42,8 @@ public partial class TerrainViewerApp
         caster.SummonPrototypes = SummonPrototypeOf;
         caster.SummonMap = new SessionMapId(CurrentAreaMap);
         caster.EyeCandyPlays = index => EyeCandyHostNow()?.Plays(index) ?? false;
+        // ARC-RENDER-1990: a weapon's own hit effect is added at once on the struck critter (the add's answer vetoes the blood and the hit effect that follow).
+        caster.WeaponEyeCandyAdd = (victim, entry, limit) => EyeCandyHostNow()?.Play(victim, entry, 0, -1, null, limit) ?? false;
         caster.CritterSummoned = CritterSummonedHere;
     }
 

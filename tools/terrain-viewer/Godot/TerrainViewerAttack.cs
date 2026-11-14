@@ -909,9 +909,16 @@ public partial class TerrainViewerApp
         };
     }
 
+    /// <summary>ARC-RENDER-1990: the prototype number of the weapon of the hero's attack (the context's weapon, 0x4B2210): the thrown item of a throw, else the weapon the hero wields; null for none, or an item whose kind the session cannot name.</summary>
+    private int? HeroWeaponPrototype(GameSessionOwner owner, string? thrownItem)
+    {
+        var item = thrownItem ?? owner.QueryEquipment().Worn.FirstOrDefault(worn => worn.Slot == Arcanum.Simulation.Equipment.EquipmentSlot.Weapon)?.Entity;
+        return item is null ? null : (HeroItemKind(owner, item) ?? PlacedItemKind(owner, item) ?? RowlessItemKind(owner, item))?.Prototype;
+    }
+
     /// <summary>What follows an attack on an NPC (at once, or when a projectile struck it): the sounds, the status line, a stun's
     /// end, the followers' levels, the death pose and the drawn bodies and inventory.</summary>
-    private void FinishCritterHit(AttackGoal struck, SessionAttackResult result, bool aimed = true, bool selfHitReachesTaunt = false)
+    private void FinishCritterHit(AttackGoal struck, SessionAttackResult result, bool aimed = true, bool selfHitReachesTaunt = false, string? thrownItem = null)
     {
         var owner = _areaSession!;
         _lastCritterAttackForSelfTest = result;
@@ -922,7 +929,8 @@ public partial class TerrainViewerApp
         // ARC-DEV-292: a hit or a miss that ran the attack event gives the NPC victim its immediate AI pass (0x4B52FC, the miss paths 0x4B30F5 and 0x4B3948): after the attack event (the victim has its focus), before the sounds and bookkeeping.
         // ARC-DEV-303 (RS10): the hit effect (0x4B6930 → 0x459A30): a hit that reached an entangled NPC asks its save again, before its pass.
         // ARC-RENDER-1794: and the damage effect of a hit with damage plays the blood of the hit (0x433020) before that.
-        if (AreaAiHost.HitReached(result)) AreaAiHost.AttackEnd(SpellCasterNow(), struck.Entity, result);
+        // ARC-RENDER-1990: the weapon's own hit effect (0x4377C0) comes first and, when it plays, replaces both: the context's weapon is the thrown item for a throw, else the wielded weapon.
+        if (AreaAiHost.HitReached(result)) AreaAiHost.AttackEnd(SpellCasterNow(), struck.Entity, result, HeroWeaponPrototype(owner, thrownItem));
         if (AreaAiHost.VictimReached(result)) _aiHost?.Struck(struck.Entity);
         PlayAttackResultSounds(result, struck.Row, struck.Entity);
         var life = owner.QueryLife(struck.Combat!.Target).View;
