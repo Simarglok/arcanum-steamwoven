@@ -82,7 +82,7 @@ public partial class TerrainViewerApp
         else _conversationHost = null;
         if (_conversationPanel is null)
         {
-            _conversationPanel = new AreaConversationPanel { NumberedSource = () => DialogRepliesNumbered, OriginalRowsSource = () => DialogReplyRowsDrift }; AddChild(_conversationPanel);
+            _conversationPanel = new AreaConversationPanel { NumberedSource = () => DialogRepliesNumbered, OriginalRowsSource = () => DialogReplyRowsDrift, ChromeHiddenSource = () => DialogChromeHidden }; AddChild(_conversationPanel);
             _conversationPanel.NpcLineShown += (text, persistent) => { FaceHeroFromSpeaker(); ShowDialogLineBubble(text, persistent); };
             _conversationPanel.ReplyPicking += () => { FaceHeroTowardSpeaker(); RemoveDialogLineBubble(); };
             _conversationPanel.Picked += () => { if (_audio is not null) ExecuteVoice(DialogVoicePlayer.Picked()); };
@@ -494,6 +494,7 @@ public partial class TerrainViewerApp
             _conversationPanel!.SetFonts(TextFonts());
             _conversationPanel.NumberedReplies = DialogRepliesNumbered;
             _conversationPanel.OriginalReplyRows = DialogReplyRowsDrift;
+            _conversationPanel.DiagnosticChromeHidden = DialogChromeHidden;
             _conversationPanel.Open(title, conversation, note);
         }, () => _conversationPanel!.CloseView());
 
@@ -594,11 +595,14 @@ public partial class TerrainViewerApp
     /// <summary>ARC-UI-2025: the Original interface setting lays the replies out as the original's band and hits its rows with the original's click bands (no session: Steamwoven).</summary>
     private bool DialogReplyRowsDrift => _areaSession?.Rules.Interface.DialogReplyRowsDrift == true;
 
+    /// <summary>ARC-UI-2023: the Original interface setting hides the panel's diagnostic chrome (header, outcome, effects, hint, Leave and the cancel leave): the original's window shows only the reply rows (no session: Steamwoven).</summary>
+    private bool DialogChromeHidden => _areaSession?.Rules.Interface.DialogDiagnosticChromeHidden == true;
+
     private bool DialogRepliesNumbered => _areaSession?.Rules.Interface.DialogRepliesUnnumbered != true;
 
     private void HandleConversationPulse(IntentFrame intent)
     {
-        if (intent.Cancel) _conversationPanel!.Leave();
+        if (intent.Cancel) _conversationPanel!.Cancel();
         else if (intent.MenuPressedDirection != 0) _conversationPanel!.Navigate(intent.MenuPressedDirection);
         else if (intent.Confirm) _conversationPanel!.Confirm();
     }

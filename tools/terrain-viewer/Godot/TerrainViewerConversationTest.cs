@@ -68,6 +68,42 @@ public static partial class TerrainViewerSelfTest
             await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
             await ScreenshotAsync(host, "steamwoven-numbered");
             Require(panel.ButtonsForSelfTest[0].Text == "1. Why is it closed?", "Steamwoven draws the number again");
+            // ARC-UI-2023: Steamwoven keeps the diagnostic chrome; Original shows only the reply rows (no header, outcome, effects, hint, Leave, nor a cancel leave).
+            Require(panel.ChromeShownForSelfTest.Header && panel.ChromeShownForSelfTest.Hint && panel.ChromeShownForSelfTest.Leave && panel.LeaveOfferedForSelfTest, "Steamwoven keeps the diagnostic chrome");
+            await ScreenshotAsync(host, "steamwoven-chrome");
+            panel.DiagnosticChromeHidden = true; panel.NumberedReplies = false; panel.OriginalReplyRows = true;
+            await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+            await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+            await ScreenshotAsync(host, "original-chrome-hidden");
+            Require(panel.ChromeShownForSelfTest == (false, false, false, false, false) && !panel.LeaveOfferedForSelfTest && panel.ButtonsForSelfTest.Count > 0,
+                $"Original shows only the reply rows: {panel.ChromeShownForSelfTest}");
+            var closedAtCancel = closed;
+            panel.Cancel();
+            Require(closed == closedAtCancel && panel.IsOpen && conversation.Phase == DialogConversationPhase.AwaitingSelection, "Original: the cancel does not leave an awaiting dialog");
+            panel.DiagnosticChromeHidden = false; panel.NumberedReplies = true; panel.OriginalReplyRows = false;
+            // ARC-UI-2023: an awaiting dialog with no enabled reply (every reply blocked) and a message-only panel keep Leave under Original: no soft-lock.
+            {
+                var blockedOnly = DialogConversation.Start(DlgReader.Read(Encoding.Latin1.GetBytes("{1}{Hi.}{}{}{}{}{}{4}{b:}{}{1}{}{0}{}")),
+                    new DialogConversationRequest(new DialogNodeId(1),
+                        new DialogParticipants(new DialogId(5), AreaConversationState.PcParticipant, AreaConversationState.Npc(0)),
+                        new DialogScriptLine(4), AreaConversationProfile.Diagnostic.Pc, AreaConversationProfile.Diagnostic.Names),
+                    new DialogConversationPorts(state, state, session.Flags, state));
+                var shut = closed; var mark = lines.Count;
+                panel.DiagnosticChromeHidden = true;
+                panel.Open("Synthetic NPC", blockedOnly);
+                Require(blockedOnly.Phase == DialogConversationPhase.AwaitingSelection && panel.ButtonsForSelfTest.All(button => button.Disabled) && panel.LeaveOfferedForSelfTest,
+                    "Original: an awaiting dialog with no enabled reply keeps Leave");
+                panel.Cancel();
+                Require(closed == shut + 1 && !panel.IsOpen, "Original: the cancel leaves a dialog with no enabled reply");
+                panel.Open("Synthetic NPC", null, "No dialog could start");
+                Require(panel.LeaveOfferedForSelfTest && panel.OutcomeForSelfTest == "No dialog could start", "Original: a message-only panel keeps its message and Close");
+                panel.Cancel();
+                panel.DiagnosticChromeHidden = false;
+                panel.Open("Synthetic NPC", conversation);
+                closed = shut; // the closes of this side check are not part of the flow counted below
+                lines.RemoveRange(mark, lines.Count - mark); // the bubbles of this side check are not part of the flow asserted below
+                await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+            }
             // ARC-UI-2025: under Original rows a blocked reply (row 2, y 40-59) and an empty slot (row 3) are refused by a press and change nothing.
             panel.OriginalReplyRows = true;
             await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
@@ -106,7 +142,12 @@ public static partial class TerrainViewerSelfTest
                 "typed effects reached the session");
             panel.Choose(1);
             Require(closed == 1 && !panel.IsOpen, "any choice dismisses a finished dialog");
-            panel.Open("Synthetic NPC", conversation); panel.LeaveForSelfTest.EmitSignal(BaseButton.SignalName.Pressed);
+            // ARC-UI-2023: a finished dialog keeps its Close button even under Original (nothing else could close it); the rest of the chrome stays hidden.
+            panel.DiagnosticChromeHidden = true;
+            panel.Open("Synthetic NPC", conversation);
+            Require(panel.LeaveOfferedForSelfTest && panel.ChromeShownForSelfTest is { Leave: true, Header: false, Hint: false }, "Original: a finished dialog keeps only Close");
+            panel.LeaveForSelfTest.EmitSignal(BaseButton.SignalName.Pressed);
+            panel.DiagnosticChromeHidden = false;
             Require(closed == 2 && !panel.IsOpen, "Close dismisses a finished dialog");
             // ARC-UI-2027: a reply that ends on a new final line removes the bubble, then shows the line with the default life (not persistent).
             {
@@ -324,6 +365,21 @@ public partial class TerrainViewerApp
             Press(Key.Escape);
             TerrainViewerSelfTest.Require(ConversationOpen && (!MainMenuOpen || _mainMenu!.Window == AreaMenuWindow.InPlayLimited), "Escape opens only the limited menu over the dialog");
             if (MainMenuOpen) { Press(Key.Escape); TerrainViewerSelfTest.Require(!MainMenuOpen && ConversationOpen, "Escape in the menu continues play with the dialog still open"); }
+            // ARC-UI-2026 (SA43, main loop O branch 0x401560, menu start kind 4): the dialog's handler lets the release of O through; it opens the
+            // options window (window 6) over the dialog, which stays; the press alone opens nothing, the clock is not paused, and O closes it again.
+            {
+                void OKey(bool pressed) => InputWorld(new InputEventKey { Keycode = Key.O, PhysicalKeycode = Key.O, Pressed = pressed });
+                OKey(true);
+                TerrainViewerSelfTest.Require(ConversationOpen && !MainMenuOpen && _mainMenu is null, "the O press alone opens nothing over the dialog");
+                OKey(false);
+                TerrainViewerSelfTest.Require(ConversationOpen && MainMenuOpen && _mainMenu is { Window: AreaMenuWindow.Options, OpenedByOptionsKey: true } && !WorldMenuPause,
+                    "the O release opens the options window over the dialog without the pause: " + (_mainMenu?.Window.ToString() ?? "no menu"));
+                OKey(true); OKey(false);
+                TerrainViewerSelfTest.Require(ConversationOpen && !MainMenuOpen && _mainMenu is null, "O closes the options window and the dialog is still open");
+                // A release whose press another owner took (the menu was open) opens nothing later.
+                OKey(false);
+                TerrainViewerSelfTest.Require(ConversationOpen && !MainMenuOpen, "a lone O release opens nothing");
+            }
             // Polled keyboard levels too: full simulated frames with held Escape/Enter/Down-equivalent levels.
             var none = new RawInputFrame(-1, default);
             // The key and click events above were observed at real time; the simulated frames continue after the newest
