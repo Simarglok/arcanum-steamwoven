@@ -280,6 +280,14 @@ public sealed class RouteFollower
                 else if (LocalGoal(cell, goal) is not { } waypoint) { Finish(RouteFollowStatus.Stopped, "ROUTE_PARTIAL"); return ActorIntent.Neutral; }
                 else { local = waypoint; plan = Plan(cell, waypoint, corridor: true); }
             }
+            // ARC-DEV-2100: a leg of Steamwoven's corridor that the local request cannot find from here (its search is bounded, LR1-LR3; the
+            // walker may stand off the corridor's cells, the local plans break ties their own way) is walked on the cells of a corridor to the
+            // same cell built from here (which the shared search reaches, so an occupant on the cell still stops the walk): the PC's straight
+            // line (LR4) would run into the wall the corridor goes around. A walk without a corridor (the Original rule mode never has one,
+            // LR7) is unchanged.
+            if (plan.Outcome == RouteOutcome.NoRoute && !_retried && Corridor is not null && _corridorLimits is { } ownLimits && _farCorridorForGoal
+                && local is { } leg && RouteCorridor.Plan(_source, cell, leg, ownLimits).WalkPlan(_limits) is { } walk)
+            { plan = walk; corridorStop = null; }
             // LR4: no path for the PC: a straight line toward the cell it heads for, tested as it is walked; from then on every plan.
             if (plan.Outcome != RouteOutcome.Found && _straightRetry && !_retried && plan.Outcome == RouteOutcome.NoRoute)
             {
