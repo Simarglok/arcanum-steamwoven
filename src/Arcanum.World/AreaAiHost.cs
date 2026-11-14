@@ -749,7 +749,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     /// (<see cref="HostilityRules.NoiseWitnesses{T}"/>, <see cref="HostilityRules.Witness"/>). ARC-WORLD-115: the attacker's and the
     /// victim's followers are told (<see cref="TellFollowers"/>).
     /// </summary>
-    public void HeroAttacked(string victim) => AttackEvent(Pc, victim);
+    /// <remarks>ARC-COMBAT-1930 (VCG9): <paramref name="loudness"/> is the weapon's (<see cref="AwarenessRules.WeaponLoudness"/>), which sets the noise radius of the witnesses; a stray strike (accidental) raises no noise.</remarks>
+    public void HeroAttacked(string victim, Loudness loudness = Loudness.Normal) => AttackEvent(Pc, victim, loudness: loudness);
 
     /// <summary>
     /// ARC-AI-1516 (EX14, VBG5): the attack event of the hero's missile that met <paramref name="victim"/> on its way, not the aimed target: the accidental
@@ -2388,13 +2389,18 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         // ARC-AI-1636: the focus is an object that is no critter (a door, container, scenery or trap) and nothing stops the line to it: the attack is the session's object attack.
         if (target == aimed && target != Pc && _scene.ObjectFacts?.Invoke(target) is not null) { HitObjectFocus(id, target); return; }
         if (NpcAttackOf(id, target, flight: _scene.LaunchShot is not null, inBed) is not { } attack) return;
+        // ARC-COMBAT-1930 (0x4B2810): the loudness is the context weapon's, read before the roll (a critical may drop or break the weapon).
+        var noise = AwarenessRules.WeaponLoudness(Wielded(id).Flags);
         var result = _session.AttackByNpc(_session.Version, attack);
         Trace(id).Hit = $"{result.Disposition} {result.Failure} {result.Resolution?.Outcome} {result.Life?.HitPointDamage}" + (target == aimed ? "" : $" (the line of fire struck {target} instead of {aimed})");
         _notices.Add(new(AreaAiNoticeKind.Hit, id, target) { Result = result });
         NeedsAmmunition(id, result.Resolution);
         if (result.Disposition != GameSessionDisposition.Rejected && result.Resolution?.Refusal == AttackRefusal.None)
         {
-            AttackEvent(id, target);
+            // ARC-COMBAT-1930 (0x4B3170, PF1, VC28, VCG9): a shot that flies sends no attack event at the shot; the projectile's end alerts only the object it strikes. A shot decided a hit raises its event here for the aimed target
+            // (its arrival's time is the accepted deviation A), a shot decided a miss raises none (PF5, PF6: it never strikes its aimed target; a stray it meets is alerted by LandShot). An attack that does not fly raises it,
+            // hit or miss, with the weapon's loudness (0x4B2810).
+            if (result.Shots.Count == 0 || result.Resolution.Outcome is AttackOutcome.Hit or AttackOutcome.CriticalHit) AttackEvent(id, target, loudness: noise);
             // ARC-DEV-292: a hit or a miss on an NPC that did not fly (a shot's damage is LandShot's) gives the victim its immediate pass (0x4B52FC, 0x4B3948, the ranged miss 0x4B30F5).
             HitEffect(target, result);
             if (VictimReached(result)) Struck(target);
@@ -3116,7 +3122,10 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         var attackedVictim = struck?.Who is { } hurt && attack is { Disposition: not GameSessionDisposition.Rejected, Resolution.Refusal: AttackRefusal.None } ? hurt : null;
         if (attackedVictim is { } victim)
         {
-            AttackEvent(id, victim);
+            // ARC-COMBAT-1930 (0x4B3170, PF1, PF5, VCG9): a thrown item flies and sends no event at the throw; only a throw decided a hit raises it here (the strike's alert, at the shot: deviation A), with the loudness of the thrown item
+            // as a weapon (0x4B2810); a throw decided a miss alerts nobody it does not strike. A throw that does not fly (no shot) keeps its event.
+            if (result.Shots.Count == 0 || attack!.Resolution!.Outcome is AttackOutcome.Hit or AttackOutcome.CriticalHit)
+                AttackEvent(id, victim, loudness: AwarenessRules.WeaponLoudness(fields.Weapon is { } thrownWeapon ? (uint)thrownWeapon.Flags : null));
             // ARC-DEV-292: the thrown item's hit on the struck critter is a damage step on it (the session applied it above).
             HitEffect(victim, attack);
             if (VictimReached(attack)) Struck(victim);

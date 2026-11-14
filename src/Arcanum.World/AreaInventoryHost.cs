@@ -613,6 +613,21 @@ public sealed class AreaInventoryHost
     /// row's fields (<see cref="SessionEquipmentFacts.Wearable"/> with the saved kind). a made item's from its prototype (ARC-DEV-305).
     /// Null for an item worn nowhere, an item the session no longer has, or a session without a hero.
     /// </summary>
+    /// <summary>
+    /// ARC-COMBAT-1930 (VCG9): the loudness an attack event of the hero's item <paramref name="entity"/> carries as the weapon (<see cref="AwarenessRules.WeaponLoudness"/>): from the kit item's wear values
+    /// (<paramref name="kitDurability"/>), or the stored fields of an item the session made or the hero took from the map; normal for anything else (an item it cannot read, a non-weapon).
+    /// </summary>
+    public Arcanum.Simulation.Ai.Loudness WeaponNoise(GameSessionOwner session, string entity, IReadOnlyList<SessionWearItem?>? kitDurability)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        ArgumentNullException.ThrowIfNull(entity);
+        if (session.QueryHeroKit().Any(item => item.Entity == entity))
+            return KitNumber(entity) is { } number && kitDurability is not null && number >= 1 && number <= kitDurability.Count ? kitDurability[number - 1]?.Noise ?? Arcanum.Simulation.Ai.Loudness.Normal : Arcanum.Simulation.Ai.Loudness.Normal;
+        Arcanum.Data.Combat.CombatFields? fields = MadeFacts(session, entity) is { } made ? made.Fields
+            : session.QueryPcInventory().Any(item => item.Entity == entity) && TakenRow(session, entity) is { } row ? Arcanum.Data.Combat.CombatFieldReader.Read(row).Fields : null;
+        return Arcanum.Simulation.Ai.AwarenessRules.WeaponLoudness(fields?.Weapon is { } weapon ? (uint)weapon.Flags : null);
+    }
+
     public SessionWearableItem? Wearable(GameSessionOwner session, string entity, IReadOnlyList<SessionWearableItem?>? kitWear)
     {
         ArgumentNullException.ThrowIfNull(session);

@@ -1,4 +1,5 @@
 using Arcanum.Data.Combat;
+using Arcanum.Simulation.Ai;
 using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Equipment;
 using Arcanum.Simulation.Items;
@@ -207,6 +208,25 @@ public sealed class AttackWearStateTests
         var torch = SessionWearItem.FromCombatFields("t", Stored(0, 0x60000000 | 4 << 6, null))!;
         Assert.AreEqual((false, 0), (torch.Invulnerable, torch.ArtSubtype), "only a weapon's subtype is read");
         Assert.IsNull(SessionWearItem.FromCombatFields("g", AttackStateTests.Npc()), "a critter is no item");
+    }
+
+    // ARC-COMBAT-1930 (0x4B2810, VCG9): the loudness an item's attack event carries comes from the weapon flags of its stored fields: loud 0x1, silent 0x2, a non-weapon normal.
+    [TestMethod]
+    public void NoiseComesFromAWeaponsLoudAndSilentFlags()
+    {
+        SessionWearItem Item(CombatWeaponFlags flags, bool weapon = true)
+        {
+            var w = new CombatWeaponFields(flags, CombatWeaponSkill.Melee, 0, 0, [new(1, 4), new(0, 0), new(0, 0), new(0, 0), new(0, 0)],
+                [0, 0, 0, 0, 0], 11, 0, 1, 0, 7, 0, CombatFieldReader.NoAmmo, 0, 0, 0, 0, 0, 0, 0);
+            return SessionWearItem.FromCombatFields("i", new(CombatFieldOrigin.Prototype,
+                new(5, 6000, 0, 0, 1, 2, 0, 30, 5, 7, 0, [0, 0, 0, 0, 0], 0x60000000),
+                new(0, 10, 50, 0, 40, 0, -1, [10000, 10000, 10000, 10000, 10000], 0, 0, 0x60000000, 0x60000000), weapon ? w : null, null, null, weapon ? null : new(0, 0, 0), null, null))!;
+        }
+        Assert.AreEqual(Loudness.Normal, Item(CombatWeaponFlags.None).Noise);
+        Assert.AreEqual(Loudness.Loud, Item(CombatWeaponFlags.Loud).Noise);
+        Assert.AreEqual(Loudness.Silent, Item(CombatWeaponFlags.Silent).Noise);
+        Assert.AreEqual(Loudness.Loud, Item(CombatWeaponFlags.Loud | CombatWeaponFlags.Silent).Noise, "the loud flag is tested first");
+        Assert.AreEqual(Loudness.Normal, Item(CombatWeaponFlags.None, weapon: false).Noise, "a non-weapon reads no weapon flags");
     }
 
     [TestMethod]

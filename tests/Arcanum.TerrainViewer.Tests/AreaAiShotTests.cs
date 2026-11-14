@@ -32,14 +32,14 @@ public sealed class AreaAiShotTests
     private static AreaFieldValue Empty(int slot) => new(slot, AreaPresence.Empty, AreaValueOrigin.Instance, null, [], null);
 
     // A bow (type 5) wielded (location 1004): weight 15, normal damage 2..6, range 12, arrow ammunition (type 0), projectile art 0x20000.
-    private static AreaObjectRecord Item(int index, uint weaponFlags = 0, uint itemFlags = 0, int weight = 15, int worth = 1, int location = 1004, long useArt = 0x60000000) => new(Key(index), 0, 5, BowPrototype, "p", "p", "r", "s",
+    private static AreaObjectRecord Item(int index, uint weaponFlags = 0, uint itemFlags = 0, int weight = 15, int worth = 1, int location = 1004, long useArt = 0x60000000, long toHit = 0) => new(Key(index), 0, 5, BowPrototype, "p", "p", "r", "s",
         AreaScope.Core, null, null, null, Arcanum.Data.Area.AreaDisposition.BodyEligibleConditionally, [],
         [
             Field(0, 0x60000000), Field(18, 0), Field(19, 0), Field(21, 1), Field(22, 2), Field(25, 0), Field(26, 10), Field(27, 0), Field(28, 0), Field(29, 4),
             Array(30), Empty(31),
             Field(36, itemFlags), Field(38, weight), Field(39, 0), Field(40, worth), Field(41, 0), Field(42, 0x60000000), Field(43, location), Field(44, useArt), Field(45, 0),
             Field(46, 0), Field(49, 10000), Field(50, 10000), Field(51, 10000), Field(52, 10000), Field(53, 10000), Field(54, 0), Field(55, 0),
-            Field(59, weaponFlags), Field(61, 0), Field(62, 0), Array(63, 2, 0, 0, 0, 0), Array(64, 6, 0, 0, 0, 0), Array(65, 0, 0, 0, 0, 0),
+            Field(59, weaponFlags), Field(61, toHit), Field(62, 0), Array(63, 2, 0, 0, 0, 0), Array(64, 6, 0, 0, 0, 0), Array(65, 0, 0, 0, 0, 0),
             Field(66, 10), Field(67, 0), Field(68, 12), Field(69, 0), Field(70, 0), Field(71, 0), Field(72, 0), Field(73, 1), Field(74, 0x20000),
             Field(76, 0), Field(77, 0), Field(78, 0), Field(79, 0), Field(80, 0), Field(81, 0),
         ], true, true, true);
@@ -146,7 +146,7 @@ public sealed class AreaAiShotTests
         Action<string, AreaObjectRecord, AreaObjectAttackTarget?, SessionObjectAttackResult>? struck = null,
         IReadOnlyList<(AreaObjectRecord Row, SessionSeedItem Seed)>? ground = null, string? junkPiles = null, long bowUseArt = 0x60000000, long faction = 0, bool bystanderOnLine = true,
         bool npcHome2 = false, int bowWeight = 15, Func<bool>? lootWindowOpen = null, ISessionItemScriptHost? itemScripts = null, (int Index, CellCoord At, IReadOnlyList<(AreaObjectRecord Row, SessionSeedItem Seed)> Items)? mapPile = null,
-        int[]? slabRows = null)
+        int[]? slabRows = null, long bowToHit = 0)
     {
         var identity = new GlobalFlagIdentity(new WorldId(Guid.NewGuid()), new ModuleId(Guid.NewGuid()));
         var hero = new SessionHeroDefinition(16089, CharacterRace.Human, CharacterGender.Male, [8, 8, 8, 8, 8, 8, 8, 8, 0, 0], 1, 5, 0, null, null, 0, []);
@@ -160,7 +160,7 @@ public sealed class AreaAiShotTests
             session.Dispose();
             session = GameSessionOwner.Restore(snapshot, new(snapshot.Identity, snapshot.Clock.Profile, new OwnerEpoch(Guid.NewGuid()))).Owner!;
         }
-        var rows = (bystander ? new[] { Npc(0, null, faction), Item(1, useArt: bowUseArt), Npc(3, BystanderCell, faction) } : new[] { Npc(0), Item(1, useArt: bowUseArt) }).Concat(ground?.Select(g => g.Row) ?? [])
+        var rows = (bystander ? new[] { Npc(0, null, faction), Item(1, useArt: bowUseArt, toHit: bowToHit), Npc(3, BystanderCell, faction) } : new[] { Npc(0), Item(1, useArt: bowUseArt, toHit: bowToHit) }).Concat(ground?.Select(g => g.Row) ?? [])
             .Concat(Enumerable.Range(0, slabRows?.Length ?? 0).Select(i => Item(20 + i, weight: 1, location: 0)))
             .Concat(mapPile is { } piled ? [PileRow(piled.Index, piled.At), .. piled.Items.Select(i => i.Row)] : []).ToArray();
         // ARC-AI-1486: npcHome2 lists the NPC and its bow on map 2's seed only, as a companion carried from another map is (its home map's seed; the shown map's view does not list it).
@@ -332,17 +332,50 @@ public sealed class AreaAiShotTests
         Assert.AreEqual(npc, session.QueryDanger(Entity(3)).HitBy?.Entity, "another faction: the event writes the shooter");
     }
 
+    // Opens a fresh scene and shoots once at the line's blocker (the bystander is the shot's target) until the shot is decided as asked; the first shot of its scene, so the bystander has no earlier event.
+    private static (GameSessionOwner Session, AreaAiHost Host, string Npc, SessionShot Shot) FirstShotOnBystander(bool hit, long faction)
+    {
+        for (var attempt = 0; attempt < 200; attempt++)
+        {
+            var launched = new List<SessionShot>();
+            var (session, host, npc, _) = Open((_, _, shot, _, _) => { launched.Add(shot); return true; }, bystander: true, faction: faction);
+            host.Hit(npc, AiSchedulerRules.Pc);
+            if (launched.Count == 1 && session.QueryNpcShot(launched[0]) is { } facts && facts.Hit == hit) return (session, host, npc, launched[0]);
+        }
+        throw new AssertFailedException("no first shot decided " + (hit ? "a hit" : "a miss"));
+    }
+
     [TestMethod]
     public void The_aimed_target_of_a_shot_at_an_ally_is_a_deliberate_event_still()
     {
-        var launched = new List<SessionShot>();
-        var (session, host, npc, _) = Open((_, _, shot, _, _) => { launched.Add(shot); return true; }, bystander: true, faction: 5);
-        for (var attempt = 0; attempt < 80 && launched.Count == 0; attempt++) host.Hit(npc, AiSchedulerRules.Pc);
-        Assert.AreEqual(1, launched.Count, host.TraceOf(npc)?.Hit);
-        Assert.AreEqual(npc, session.QueryDanger(Entity(3)).HitBy?.Entity, "the line's blocker is the shot's target: its event is raised at the shot, deliberate (EX15)");
+        var (session, host, npc, shot) = FirstShotOnBystander(hit: true, faction: 5);
+        Assert.AreEqual(npc, session.QueryDanger(Entity(3)).HitBy?.Entity, "the line's blocker is the shot's target: a shot decided a hit raises its event at the shot, deliberate (EX15)");
         host.DrainNotices();
-        Assert.IsNotNull(host.LandShot(npc, launched[0], Entity(3)));
+        Assert.IsNotNull(host.LandShot(npc, shot, Entity(3)));
         Assert.AreEqual(npc, session.QueryDanger(Entity(3)).HitBy?.Entity, "the strike of the aimed target stays recorded");
+    }
+
+    // ARC-COMBAT-1930 (0x4B3170 PF1, 0x4B2870 PF5/PF6, VC28, VCG9): a flying shot sends no attack event at the shot, and one decided a miss never strikes its aimed target: the aimed critter (here the hero) is not alerted at all;
+    // one decided a hit raises its event at the shot (the arrival's time is the accepted deviation A).
+    [TestMethod]
+    public void A_flying_shot_raises_the_event_for_its_aimed_target_only_when_decided_a_hit()
+    {
+        // A bow with a to-hit penalty of 200 misses (the check has a floor), a plain bow hits at this range.
+        foreach (var (bonus, wantHit) in new[] { (-200L, false), (0L, true) })
+        {
+            var decided = 0;
+            for (var attempt = 0; attempt < 60 && decided < 3; attempt++)
+            {
+                var launched = new List<SessionShot>();
+                var (session, host, npc, _) = Open((_, _, shot, _, _) => { launched.Add(shot); return true; }, bowToHit: bonus);
+                host.Hit(npc, AiSchedulerRules.Pc);
+                if (launched.Count != 1 || session.QueryNpcShot(launched[0]) is not { } facts || facts.Hit != wantHit) continue;
+                decided++;
+                Assert.AreEqual(wantHit, host.TraceOf(AiSchedulerRules.Pc)?.Event is not null,
+                    wantHit ? "a shot decided a hit raised its event at the shot (the arrival's time is deviation A)" : "a shot decided a miss never strikes the hero: no event for it");
+            }
+            Assert.IsTrue(decided > 0, $"a shot decided a {(wantHit ? "hit" : "miss")} was seen");
+        }
     }
 
     // ARC-COMBAT-1140 (RA4, RH5): a container that stops the line of fire takes the NPC's shot in place of the hero: the shot is decided a hit on it without a skill roll, the viewer is asked to fly it at the blocker,

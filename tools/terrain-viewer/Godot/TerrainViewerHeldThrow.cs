@@ -415,9 +415,11 @@ public partial class TerrainViewerApp
             return null;
         }
         if (result.Disposition == GameSessionDisposition.NoChange) { SetHeldThrowNotice("the hero cannot act (the item stays in the pack)"); RefreshAreaStatus(); return null; }
-        if (aimed is not null && result.Attack?.Resolution?.Refusal == AttackRefusal.None) _aiHost?.HeroAttacked(aimed.Entity);
         var (art, unfaced) = HeldThrowArt(held.Item, wearable);
         var hit = result.Attack?.Resolution?.Outcome is AttackOutcome.Hit or AttackOutcome.CriticalHit;
+        // ARC-COMBAT-1930 (0x4B3170, PF1, PF5, VCG9): a throw sends no attack event at the throw; the projectile's end alerts only the object it strikes. A throw decided a hit raises it here for the aimed critter (the arrival's
+        // time is the accepted deviation A) with the thrown item's loudness as a weapon (0x4B2810); a throw decided a miss never strikes its aimed target and alerts none.
+        if (aimed is not null && hit && result.Attack?.Resolution?.Refusal == AttackRefusal.None) _aiHost?.HeroAttacked(aimed.Entity, KitItemNoise(held.Item));
         foreach (var shot in result.Shots)
             FlyShot(shot, result.Destination ?? tile, art, unfaced, range, hit, aimed?.Row ?? HeroRow, aimed, null, result.Destination is not null,
                 sizeArc: facts.Kind.Type != SessionItemType.Weapon);

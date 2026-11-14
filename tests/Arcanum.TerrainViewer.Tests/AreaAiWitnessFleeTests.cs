@@ -35,10 +35,10 @@ public sealed class AreaAiWitnessFleeTests
     }
 
     // The victim A beside the hero and a bystander B a few tiles off, both on the map's one sector.
-    private static (AreaAiHostRebindTests.Fixture F, AreaAiHost Host) Open(int witnessClass)
+    private static (AreaAiHostRebindTests.Fixture F, AreaAiHost Host) Open(int witnessClass, CellCoord? bystander = null)
     {
         var f = AreaAiHostRebindTests.Open(changeB: row => WithGuardClass(row, witnessClass));
-        var scene = f.Scene(0, AreaAiHostRebindTests.Sector(0, 0), [AreaAiHostRebindTests.NpcA(f), new(f.B, f.RowB, Near)]) with { LineOfFire = () => new OpenField() };
+        var scene = f.Scene(0, AreaAiHostRebindTests.Sector(0, 0), [AreaAiHostRebindTests.NpcA(f), new(f.B, f.RowB, bystander ?? Near)]) with { LineOfFire = () => new OpenField() };
         return (f, f.Build(scene));
     }
 
@@ -55,6 +55,21 @@ public sealed class AreaAiWitnessFleeTests
         Assert.IsNotNull(setter, $"the witness rule's flee reached the setter (event {host.TraceOf(f.A)?.Event})");
         StringAssert.StartsWith(setter, $"{DangerState.Flee} {AiSchedulerRules.Pc}", "FLEE from the attacker (the hero): " + setter);
         Assert.AreEqual(DangerState.Flee, f.Session.QueryDanger(f.B).State, "the setter applied it: " + setter);
+    }
+
+    // ARC-COMBAT-1930 (0x4B2810, 0x4A9650, VCG9): the weapon's loudness is the noise radius of the attack event's witnesses (2, 8 or 15 tiles): a bystander 14 tiles from the attacker and 10 from the victim is no witness of a normal attack and is one of a loud weapon's.
+    [TestMethod]
+    public void A_loud_weapons_attack_event_reaches_a_bystander_a_normal_one_does_not()
+    {
+        var far = new CellCoord(72, 14);
+        var (normal, normalHost) = Open(0, far);
+        using var _ = normal;
+        normalHost.HeroAttacked(normal.A);
+        Assert.AreEqual(DangerState.None, normal.Session.QueryDanger(normal.B).State, "normal noise carries 8 tiles");
+        var (loud, loudHost) = Open(0, far);
+        using var __ = loud;
+        loudHost.HeroAttacked(loud.A, Loudness.Loud);
+        Assert.AreEqual(DangerState.Flee, loud.Session.QueryDanger(loud.B).State, "loud noise carries 15 tiles: " + loudHost.TraceOf(loud.B)?.Setter);
     }
 
     [TestMethod]

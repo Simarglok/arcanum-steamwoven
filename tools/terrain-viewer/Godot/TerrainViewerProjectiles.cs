@@ -133,6 +133,15 @@ public partial class TerrainViewerApp
         return weight is { } w ? new(w) { Target = GoalTile(goal) } : null;
     }
 
+    /// <summary>ARC-COMBAT-1930 (VCG9): the loudness of an attack event of the hero's wielded weapon (loud for weapon flag 0x1, silent for 0x2, else normal; bare hands and a non-weapon are normal). Asked before the attack,
+    /// as a thrown weapon leaves the hand at it.</summary>
+    private Arcanum.Simulation.Ai.Loudness HeroWeaponNoise(GameSessionOwner owner) =>
+        owner.QueryEquipment().Worn.FirstOrDefault(w => w.Slot == Arcanum.Simulation.Equipment.EquipmentSlot.Weapon) is { Entity: { } wielded } ? KitItemNoise(wielded) : Arcanum.Simulation.Ai.Loudness.Normal;
+
+    /// <summary>ARC-COMBAT-1930: the loudness of the hero's item <paramref name="entity"/> (a kit item, one the hero took or one the session made) as the weapon of an attack event (<see cref="HeroWeaponNoise"/>); normal when it cannot be read.</summary>
+    private Arcanum.Simulation.Ai.Loudness KitItemNoise(string entity) =>
+        _areaSession is { } owner && _inventoryHost?.WeaponNoise(owner, entity, _areaKitDurability) is { } noise ? noise : Arcanum.Simulation.Ai.Loudness.Normal;
+
     // The goal target's tile (its map data's cell; NPCs do not move here).
     private static CellCoord GoalTile(AttackGoal goal) => new(checked((int)goal.Row.WorldX!.Value), checked((int)goal.Row.WorldY!.Value));
 

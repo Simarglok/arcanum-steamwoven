@@ -74,6 +74,19 @@ public sealed class AreaMadeItemFactsTests
         Assert.IsNull(host.UseFacts(session, "made:3", null));
     }
 
+    // ARC-COMBAT-1930 (VCG9): the loudness of the hero's attack event comes from the stored weapon flags of an item the session made (a non-weapon, and an item it cannot read, are normal).
+    [TestMethod]
+    public void AMadeItemsWeaponFlagsGiveTheLoudnessOfItsAttackEvent()
+    {
+        using var session = HeroWithProducts();
+        CombatFields? Loud(int prototype) => ProductFields(prototype) is { } fields
+            ? fields with { Weapon = new CombatWeaponFields(CombatWeaponFlags.Loud, CombatWeaponSkill.Melee, 0, 0, [new(1, 4), new(0, 0), new(0, 0), new(0, 0), new(0, 0)],
+                [0, 0, 0, 0, 0], 11, 0, 1, 0, 7, 0, CombatFieldReader.NoAmmo, 0, 0, 0, 0, 0, 0, 0) } : null;
+        Assert.AreEqual(Arcanum.Simulation.Ai.Loudness.Loud, new AreaInventoryHost([], prototypeFields: Loud).WeaponNoise(session, "made:1", null));
+        Assert.AreEqual(Arcanum.Simulation.Ai.Loudness.Normal, new AreaInventoryHost([], prototypeFields: ProductFields).WeaponNoise(session, "made:1", null), "a non-weapon reads no weapon flags");
+        Assert.AreEqual(Arcanum.Simulation.Ai.Loudness.Normal, new AreaInventoryHost([], prototypeFields: Loud).WeaponNoise(session, "made:3", null), "an item the session never made");
+    }
+
     [TestMethod]
     public void AMadeItemIsWornThroughTheHostAndItsWindowLineOffersTheSlot()
     {
