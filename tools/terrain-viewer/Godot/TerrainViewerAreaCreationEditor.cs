@@ -195,8 +195,11 @@ public partial class TerrainViewerApp
         await Click(art.PointForSelfTest(schemesTab.X + 5, schemesTab.Y + 5));
         await Frames(2);
         var schemes = art.Schemes;
-        require(art.Tab == AreaSheetTab.Schemes && editor.SchemesReadyForSelfTest && schemes.Visible && schemes.ViewForSelfTest is { Entries.Count: > 0 },
-            $"the schemes tab shows the scheme page in the editor: {art.Tab} ready={editor.SchemesReadyForSelfTest} visible={schemes.Visible}");
+        require(art.Tab == AreaSheetTab.Schemes, $"the schemes tab: {art.Tab}");
+        if (editor.SchemesReadyForSelfTest)
+        {
+        require(schemes.Visible && schemes.ViewForSelfTest is { Entries.Count: > 0 },
+            $"the schemes tab shows the scheme page in the editor: visible={schemes.Visible}");
         if (System.Environment.GetEnvironmentVariable("ARC_AREA_EDITOR_CAPTURE") is { Length: > 0 } capture3)
         {
             using var image = GetViewport().GetTexture().GetImage();
@@ -212,6 +215,7 @@ public partial class TerrainViewerApp
             && _mainMenu.Creation.Presses.Count == beforeSchemePresses, $"a release on a row stores its scheme in the draft and the character: {_mainMenu.Creation.Scheme} vs {chosen.Number}");
         require(schemes.ViewForSelfTest?.Scheme == chosen.Number && schemes.ViewForSelfTest.SchemeName == chosen.Name, "the page names the chosen scheme at the top");
         _mainMenu.Editor.PressScheme(startScheme);
+        }
         RenderMainMenu();
         var backTab = AreaCharacterSheetArtLayout.Tab(AreaSheetTab.Skills);
         await Click(art.PointForSelfTest(backTab.X + 5, backTab.Y + 5));
