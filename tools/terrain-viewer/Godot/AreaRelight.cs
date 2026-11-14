@@ -15,7 +15,8 @@ namespace Arcanum.TerrainViewer;
 /// </summary>
 internal static class AreaRelight
 {
-    /// <summary>Lights the shader reads (a 32 x 2 float texture); the carried lights come first, then the map's lights nearest the first carried light (source order when there is none), then the synthetic extras; the rest are dropped.</summary>
+    /// <summary>Lights the shader reads (a 32 x 2 float texture). ARC-RES-2007 culling rule: of the carried, map and synthetic lights, the ones whose disk reaches the shown view are kept
+    /// and the 32 whose centre is nearest the view's centre are uploaded (every light when no view is known); the rest are dropped.</summary>
     internal const int MaxLights = 32;
 
     /// <summary>How the relit term is combined with the Legacy colour (the three baked-light mitigations of the handoff).</summary>
@@ -41,6 +42,7 @@ internal static class AreaRelight
     private static readonly List<Light> MapLights = [];
     private static readonly List<Light> CarriedLights = [];
     private static string _lastKey = "";
+    private static Rect2? _view;
 
     /// <summary>The mode now; the environment (<c>ARC_RELIGHT</c> = off, add, night, delight) picks the first one.</summary>
     internal static Mode Current { get; private set; } = FromEnvironment();
@@ -57,6 +59,11 @@ internal static class AreaRelight
     internal static List<Light> Extra { get; } = [];
     /// <summary>The lights of the last upload (for the smoke's report).</summary>
     internal static int UploadedCount { get; private set; }
+    /// <summary>ARC-RES-2007: how many lights reached the view at the last upload before the 32 cap (the cap's overflow is this minus <see cref="UploadedCount"/>), and how many of those were carried.</summary>
+    internal static int InViewCount { get; private set; }
+    internal static int CarriedInViewCount { get; private set; }
+    /// <summary>The shown view in world pixels (the area canvas sets it with each submission).</summary>
+    internal static void SetView(Rect2 world) => _view = world;
 
     private static float FloatFromEnvironment(string name, float fallback) =>
         float.TryParse(OS.GetEnvironment(name), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var value) ? value : fallback;
@@ -104,9 +111,22 @@ internal static class AreaRelight
     {
         if (!Active) return;
         EnsureRegistered();
-        var near = CarriedLights.Count > 0 ? CarriedLights[0] : (Light?)null;
-        var map = near is { } anchor ? MapLights.OrderBy(l => (l.X - anchor.X) * (l.X - anchor.X) + (l.Y - anchor.Y) * (l.Y - anchor.Y)) : MapLights.AsEnumerable();
-        var all = CarriedLights.Concat(map).Concat(Extra).Take(MaxLights).ToArray();
+        IEnumerable<Light> candidates = CarriedLights.Concat(MapLights).Concat(Extra);
+        var reach = candidates.ToArray();
+        var centre = new Vector2(0, 0);
+        if (_view is { } view)
+        {
+            centre = view.GetCenter();
+            reach = reach.Where(l =>
+            {
+                // The light's disk (centre, radius) meets the view rectangle.
+                var nx = Math.Clamp(l.X, view.Position.X, view.End.X); var ny = Math.Clamp(l.Y, view.Position.Y, view.End.Y);
+                return (l.X - nx) * (l.X - nx) + (l.Y - ny) * (l.Y - ny) < l.Radius * l.Radius;
+            }).ToArray();
+        }
+        InViewCount = reach.Length;
+        CarriedInViewCount = reach.Count(l => CarriedLights.Contains(l));
+        var all = (_view is null ? reach.AsEnumerable() : reach.OrderBy(l => (l.X - centre.X) * (l.X - centre.X) + (l.Y - centre.Y) * (l.Y - centre.Y))).Take(MaxLights).ToArray();
         var key = string.Join('|', all.Select(l => $"{l.X:0.#},{l.Y:0.#},{l.Radius:0.#},{l.Colour.R:0.##},{l.Colour.G:0.##},{l.Colour.B:0.##}"));
         if (key != _lastKey)
         {
