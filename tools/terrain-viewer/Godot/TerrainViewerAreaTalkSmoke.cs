@@ -102,6 +102,18 @@ public partial class TerrainViewerApp
                     Require(_voicesPlayed == played + 1 && _voiceHandle is not null, $"script {speaker.ScriptId}: the voiced line played its voice ({_voiceNotice})");
                 var voice = speech is null ? "none" : $"{speech.Folder}/{speech.Line} {speech.Status}";
                 var turns = 0; var phrases = 0;
+                // ARC-UI-2027 (0x5684C0, 0x567E30, 0x5678D0): the NPC's line is a persistent bubble over the speaker, the panel does not repeat it, a reply replaces it, the end gives it its default life.
+                var bubbleOwner = AreaConversationState.EntityId(speaker.Row);
+                var bubbleChecks = 0;
+                void RequireLineBubble(string when)
+                {
+                    if (conversation is not { Phase: DialogConversationPhase.AwaitingSelection, NpcLine.Text.Length: > 0 }) return;
+                    var bubble = _floaters?.Bubbles.Of(bubbleOwner);
+                    Require(bubble is { Persistent: true } && bubble.Text == conversation.NpcLine.Text, $"script {speaker.ScriptId} {when}: the NPC line is a persistent bubble ({bubble?.Text ?? "none"} / {conversation.NpcLine.Text})");
+                    Require(_conversationPanel!.ArtTextsForSelfTest().All(text => text.Name != "npc"), $"script {speaker.ScriptId} {when}: the panel has no NPC line");
+                    bubbleChecks++;
+                }
+                RequireLineBubble("at the start");
                 // ARC-SCRIPT-043: with the module's texts loaded, every offered reply that is an exact phrase marker (and the
                 // no-reply farewell) shows a phrase from the generated-dialog files, never the placeholder.
                 // A speaker whose stored fields give no greeting facts keeps empty phrases.
@@ -125,11 +137,13 @@ public partial class TerrainViewerApp
                     TickDialogVoice();
                     await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
                     if (!ReferenceEquals(_conversationPanel.Conversation, conversation)) break;
+                    RequireLineBubble("after a reply");
                 }
                 var effects = conversation?.Effects.Count ?? 0; var phase = conversation?.Phase.ToString();
                 // Close; a dialog script that opens the next conversation is closed again.
                 for (var close = 0; close < 4 && ConversationOpen; close++) _conversationPanel.LeaveForSelfTest.EmitSignal(BaseButton.SignalName.Pressed);
                 Require(!ConversationOpen && !WorldModal, "Close ends the modal panel");
+                Require(_floaters?.Bubbles.Of(bubbleOwner) is not { Persistent: true }, $"script {speaker.ScriptId}: the end left no persistent bubble");
                 // ARC-WORLD-043: every close ends the NPC's reaction conversation, so a started talk leaves it remembering the PC.
                 Require(host.ReactionOpen is null, $"script {speaker.ScriptId}: Close ends the NPC's reaction conversation");
                 var metBefore = session.QueryReactionRecord(AreaConversationState.EntityId(speaker.Row)) is { MetBefore: true, InConversation: false };
