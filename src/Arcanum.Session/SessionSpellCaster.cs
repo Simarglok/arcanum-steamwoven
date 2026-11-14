@@ -70,6 +70,9 @@ public interface ISpellCastMap : ISpellTargetWorld
 
     /// <summary>ARC-SCRIPT-1576: the cast id of the object a script names by <paramref name="entity"/> (the script host's entity: a session entity, <c>sector:S:N</c> for a sector object, <c>oid:</c> and the object id digest for a mobile row); the entity itself when the host has no other id for it.</summary>
     string CastIdOfScriptEntity(string entity) => entity;
+
+    /// <summary>ARC-AI-1755 (RE2, RS5): the stored magic resistance (resistance array, index 4) of a map object that is neither the hero nor an NPC, which the spell resistance (0x4537B0) and the AI's fail-chance predictor (0x453B20) read for any target object through the array getter 0x4072D0; 0 for an object the host holds no row of.</summary>
+    int ObjectMagicResistance(string id) => 0;
 }
 
 /// <summary>ARC-MAGIC-037 (MA-6): a portal or container a spell reaches: its session identity, its T0 lock baseline (the session's state is read over it) and its lock level (portal field 47, container field 57),
@@ -452,7 +455,8 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
         var statValue = record.HasSave ? Stat(obj, record.ResistStat) ?? 0 : 0;
         // The hero stores no magic resistance of its own in the session (its pre-made fields hold none). ARC-MAGIC-033 (D6c, both modes): the save reads the resistance under the target's
         // resistmagic effect changes (Resist Magick works), which the original's save does not (RE2).
-        var resistance = obj.Id == Hero ? _owner.HeroSaveMagicResistance() : npc is null ? 0 : _owner.WithNpcEffects(npc.Combat).SaveMagicResistance(npc.StoredMagicResistance);
+        // ARC-AI-1755 (RE2): an object that is no critter has its own stored value (no effects, no scaling: its aptitude reads 0, 0x4B0490 answers 0 for any type but 15 and 16).
+        var resistance = obj.Id == Hero ? _owner.HeroSaveMagicResistance() : npc is null ? _map.ObjectMagicResistance(obj.Id) : _owner.WithNpcEffects(npc.Combat).SaveMagicResistance(npc.StoredMagicResistance);
         return new(obj.Id == parent, kind, ((npc?.CritterFlags2 ?? 0) & 0x2000) != 0, resistance,
             obj.Id == Hero ? HeroStat(CharacterStat.MagickTechAptitude) ?? 0 : npc is null ? 0 : NpcStat(npc, CharacterStat.MagickTechAptitude) ?? 0,
             statValue, record.ResistStat is >= 0 and <= 7 && statValue >= CharacterStatRules.ExtraordinaryThreshold);
