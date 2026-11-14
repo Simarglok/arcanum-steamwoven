@@ -2381,7 +2381,7 @@ project's, except as below.
 Self-test `ARC-UI-013 self-test PASS synthetic options window` (the production app over the synthetic area owner
 launched without the menu, no preference file): in-play Options opening the window at its Game page, each arrow
 applying the difficulty (on the session), the turn-based setting, auto attack, Always Run, the floaters' level and
-speed on the Video page (its hidden controls named) and a volume at once, lists wrapping and sliders stopping, Escape doing nothing, Done and O closing the menu
+speed on the Video page (Text Duration, ARC-UI-1797, is shown) and a volume at once, lists wrapping and sliders stopping, Escape doing nothing, Done and O closing the menu
 from play, Done going back from the main menu, the Rules line switching the session to Original and back. Native smoke on the original data, map mode on the start map with
 `--main-menu true`: `ARC_AREA_MAP_SMOKE_ONLY=options` prints `ARC-UI-013 native-smoke options PASS` (all 27 option
 texts from the game, the original's defaults shown, Original chosen on the Rules line, a music step moving the channel,
