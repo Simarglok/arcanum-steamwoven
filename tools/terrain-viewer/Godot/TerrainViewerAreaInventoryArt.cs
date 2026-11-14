@@ -126,9 +126,11 @@ public partial class TerrainViewerApp
     }
 
     /// <summary>ARC-UI-052: the kind of an item the hero holds or the open loot window's holder holds (ARC-UI-064: or the barter window's
-    /// shown object); null otherwise.</summary>
+    /// shown object, ARC-UI-1917: or its merchant's worn item); null otherwise.</summary>
     private SessionItemKind? InventoryItemKind(GameSessionOwner session, string item) =>
         HeroItemKind(session, item) ?? (InventoryOpen ? _inventoryPanel?.CurrentView?.LootGrid.FirstOrDefault(entry => entry.Entity == item)?.Kind : null)
             ?? (InventoryOpen ? _inventoryPanel?.CurrentView?.BodyDoll.FirstOrDefault(entry => entry.Entity == item)?.Kind : null)
-            ?? _barterPanel?.ArtView?.LootGrid.FirstOrDefault(entry => entry.Entity == item)?.Kind;
+            ?? _barterPanel?.ArtView?.LootGrid.FirstOrDefault(entry => entry.Entity == item)?.Kind
+            // ARC-UI-1917: the merchant's worn items, drawn in the barter window's doll view.
+            ?? _barterPanel?.ArtView?.BodyDoll.FirstOrDefault(entry => entry.Entity == item)?.Kind;
 }

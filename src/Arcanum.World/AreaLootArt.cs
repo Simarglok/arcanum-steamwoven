@@ -81,7 +81,7 @@ public static class AreaLootArtLayout
     public static readonly (int Red, int Green, int Blue) TooHeavyFill = (0x40, 0, 0);
 
     /// <summary>ARC-UI-072: the window makes the doll and bag buttons in the loot and steal windows when the shown object is not a container
-    /// (0x572B03..0x572CC9, IW30); the barter window has its own (8, 123) and (46, 123), not built.</summary>
+    /// (0x572B03..0x572CC9, IW30); the barter window's own (8, 123) and (46, 123) are <c>AreaBarterArtLayout</c>'s in the viewer (ARC-UI-1917).</summary>
     public static bool TogglesShown(AreaInventoryMode mode, AreaInventoryView view) =>
         mode is AreaInventoryMode.Loot or AreaInventoryMode.Steal && view is { Holder: not null, HolderContainer: false };
 
