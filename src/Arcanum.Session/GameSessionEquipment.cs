@@ -329,6 +329,17 @@ public sealed partial class GameSessionOwner
         return result with { ItemSpells = spells.AsReadOnly(), Version = Version };
     }
 
+    /// <summary>
+    /// ARC-UI-1925 (the wear test of a release on a slot of the hero's doll, ledger IW35): the refusal <see cref="Equip"/> would give <paramref name="item"/> for <paramref name="slot"/> from the hero's wear rules (slot fit,
+    /// two-handed weapon against a shield, race and gender of an armour) over what the hero wears now, asked before an item of another holder is taken or bought, so a refused wear moves nothing. No effect; <see cref="EquipmentRefusal.None"/> without a hero.
+    /// </summary>
+    public EquipmentRefusal QueryWearRefusal(SessionWearableItem item, EquipmentSlot slot)
+    {
+        ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(item);
+        return _hero is null ? EquipmentRefusal.None : EquipmentRules.CheckWear(item.Item, slot, HeroWearer(), _equipment.Items());
+    }
+
     private EquipmentMutationResult EquipMove(GameSessionVersion expected, string entity, EquipmentSlot slot, SessionWearableItem item,
         SessionWearArtCheck artCheck, SessionInsertCheck insertCheck, ISessionItemScriptHost? scripts, ISessionItemTriggers? triggers)
     {

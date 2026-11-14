@@ -641,6 +641,18 @@ public sealed class AreaInventoryHost
     }
 
     /// <summary>
+    /// ARC-UI-1925 (the wear test of a release on a slot of the hero's doll, ledger IW35): the wear facts of an item the PC does not hold yet, a looted holder's or a merchant's (its row among the
+    /// held maps, else a made item's prototype facts), with the kind the window shows it with; null when the facts do not read or the item is destroyed.
+    /// </summary>
+    public SessionWearableItem? HolderItemWearable(GameSessionOwner session, string entity, SessionItemKind kind)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        if (session.QueryHero() is null || session.IsItemDestroyed(entity)) return null;
+        if (MadeFacts(session, entity) is { } made) return SessionEquipmentFacts.Wearable(made.Kind, made.Fields);
+        return RowOf(entity) is { } row && CombatFieldReader.Read(row).Fields is { } fields ? SessionEquipmentFacts.Wearable(kind, fields) : null;
+    }
+
+    /// <summary>
     /// ARC-UI-019: the facts of an item the PC holds for a move in its grid (<see cref="GameSessionOwner.MoveHeroItem"/>): a kit item's from
     /// <paramref name="kitMove"/> (the hero load's, by kit number), a taken item's from its object row's fields with the saved kind, a made
     /// item's from its prototype's fields when the host has a prototype reader (ARC-DEV-305), else its kind with no no-drop flag and no scripts. Null for an item the session no

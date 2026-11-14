@@ -582,6 +582,12 @@ public partial class TerrainViewerApp
                 if (holder is not null && holder == _pickPocketVictim) { PickPocketAttempt(Arcanum.Simulation.Skills.PickPocketDirection.Plant, item); return; }
                 message = $"{name} went back to its place";
                 break;
+            case AreaInventoryDropKind.Give:
+                GiveToHolder(drop);
+                return;
+            case AreaInventoryDropKind.TakeWear:
+                TakeWearFromHolder(drop);
+                return;
             case AreaInventoryDropKind.UseIcon:
                 // The item goes back to its place and is used: at the hero with a Shift key held, with no target otherwise (IW6).
                 UseHeroItem(item, AreaItemUseSource.UseIcon, Godot.Input.IsKeyPressed(Key.Shift));
