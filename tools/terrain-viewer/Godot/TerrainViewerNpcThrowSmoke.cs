@@ -14,7 +14,7 @@ namespace Arcanum.TerrainViewer;
 public partial class TerrainViewerApp
 {
     // ARC-DEV-1762: the NPC throws the viewer launched (shot, thrown item, the check's decided hit, thrower, the cells it flew between), for the npc-throw stage.
-    private readonly List<(long Shot, string Item, bool Hit, string Thrower, CellCoord From, CellCoord To)> _npcThrowLaunchesForSelfTest = [];
+    private readonly List<(long Shot, string Item, bool Hit, string Thrower, CellCoord From, CellCoord To, bool InFlight, CellCoord? Lying)> _npcThrowLaunchesForSelfTest = [];
 
     // ARC-DEV-1762 native observation (stage "npc-throw", only when named, map mode with --hero): a free NPC of the map whose wielded weapon is a seed item (the AI host throws no item the session added) is lent the
     // installed throwing dagger's own fields (prototype 6072, the "default throws" weapon with a projectile art; no NPC of the installed town wields one), and the hero stands four to six cells from it with a clear line;
@@ -112,17 +112,13 @@ public partial class TerrainViewerApp
             var heroAtThrow = session.QueryHeroLife()!.Status.HitPoints;
             // The dagger left the NPC's hand at the throw and lies hidden on the thrower's cell while it flies (the shot holds it in both NPC stores).
             Require(_combatHost.WornItems(session, runtime, entity)?.ContainsKey(EquipmentSlot.Weapon) != true, "the dagger left the thrower's hand");
-            if (_projectiles.Count > 0)
-            {
-                SyncAreaGroundBodies();
-                var lyingInFlight = Lying();
-                Require(session.QueryItemInFlight(dagger) && lyingInFlight == launch.From && !_groundBodies.ContainsKey(bodyKey),
-                    $"it lies hidden on the thrower's cell {launch.From.X},{launch.From.Y} while it flies (in flight {session.QueryItemInFlight(dagger)}, lying {lyingInFlight?.X},{lyingInFlight?.Y})");
-            }
+            // The dagger lies hidden on the thrower's cell while it flies: the session holds it in flight on that cell (the ground bodies skip an item in flight) as of the launch itself, even when the flight ends in the same frame.
+            Require(launch.InFlight && launch.Lying == launch.From, $"it lies hidden on the thrower's cell {launch.From.X},{launch.From.Y} while it flies (in flight {launch.InFlight}, lying {launch.Lying?.X},{launch.Lying?.Y})");
             for (var f = 0; f < 3000 && (_projectiles.Count > 0 || session.QueryShotsInFlight().Count > 0 && _thrownLandingsForSelfTest.Count == 0); f++) Frame();
             Require(_projectiles.Count == 0 && _thrownLandingsForSelfTest.Count > 0, $"the flight ended and the dagger landed ({_projectiles.Count} in flight, {_thrownLandingsForSelfTest.Count} landings)");
             Require(!session.QueryShotsInFlight().Any(), $"no shot is left in the session ({session.QueryShotsInFlight().Count})");
-            var landing = _thrownLandingsForSelfTest.First(l => l.Item == dagger);
+            var landing = _thrownLandingsForSelfTest.FirstOrDefault(l => l.Item == dagger);
+            Require(landing.Item == dagger, "the dagger's own landing was recorded");
             Require(landing.Disposition != GameSessionDisposition.Rejected, $"the landing was accepted ({landing.Disposition})");
             var end = _projectileEndsForSelfTest.FirstOrDefault(e => e.Shot.Id == launch.Shot);
             var strike = _npcShotStrikesForSelfTest.FirstOrDefault(s => s.Shot == launch.Shot);
