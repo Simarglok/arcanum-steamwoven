@@ -211,7 +211,7 @@ public sealed partial class SessionSpellCaster
                 SessionTrapHit.Prevented => step!.Prevented != DamagePrevention.NighInvulnerable && amount > 0,
                 _ => step is { Final: var final } && (final.Normal > 0 || final.Poison > 0 || final.Electrical > 0 || final.Fire > 0),
             };
-            if (positive) DamageEffect(victim); else CritterHit(victim);
+            if (positive) DamageEffect(victim, step is { Final: var slots } && HitGoreRules.AttackEndKind(false, slots) is { } kind ? kind : 1, step?.HitPointDamage ?? 0); else CritterHit(victim);
         }
         return (hit, step, hitPoints);
     }

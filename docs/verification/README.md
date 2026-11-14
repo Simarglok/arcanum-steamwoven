@@ -87,7 +87,7 @@ Counts of the run on 2026-11-11 (retail 1.0.7.4, SHA-256 `9bd80511…3678d52`):
 | | Functions |
 | --- | --- |
 | In the census | 5,815 (the Ghidra trial of 2026-10-17 found 5,551) |
-| Registered (rows of `functions.csv`) | 871 of the registry's 871; 867 of them are also found by the scan on its own |
+| Registered (rows of `functions.csv`) | 872 of the registry's 872; 868 of them are also found by the scan on its own |
 | Cited in a document, not registered | 2,656 (the plan's 2,078 counted call targets only) |
 | `reach` registered / loop / both / none | 724 / 79 / 2,840 / 2,172 |
 | `address_taken` | 1,185 |

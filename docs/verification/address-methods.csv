@@ -259,6 +259,7 @@ src/Arcanum.Session/SessionSpellCasterAi.cs,AiSpell,pending,
 src/Arcanum.Session/SessionSpellCasterAi.cs,AiUnderInfluence,pending,
 src/Arcanum.Session/SessionSpellCasterAi.cs,CastByAi,pending,
 src/Arcanum.Session/SessionSpellCasterDisarm.cs,DropWeapon,exempt,host
+src/Arcanum.Session/SessionSpellCasterEffects.cs,AttackEnd,exempt,host
 src/Arcanum.Session/SessionSpellCasterEffects.cs,CacheReAimedKind,pending,
 src/Arcanum.Session/SessionSpellCasterEffects.cs,DamageEffect,exempt,host
 src/Arcanum.Session/SessionSpellCasterEffects.cs,RunProvidingFlag,exempt,host

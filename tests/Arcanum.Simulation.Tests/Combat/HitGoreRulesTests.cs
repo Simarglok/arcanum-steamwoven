@@ -43,6 +43,22 @@ public sealed class HitGoreRulesTests
     }
 
     [TestMethod]
+    public void TheAttackEndTakesTheKindOfTheLargestPositiveSlotAndNoneForACriticalOrNoDamage()
+    {
+        // ARC-RENDER-1794 (0x4B6930, ER5, TT14): 1 + the type of the largest positive slot among normal, poison, electrical and fire; the first on a tie; none when nothing is positive.
+        Assert.AreEqual(1, HitGoreRules.AttackEndKind(false, new(5, 0, 0, 0, 0)));
+        Assert.AreEqual(2, HitGoreRules.AttackEndKind(false, new(5, 6, 0, 0, 0)));
+        Assert.AreEqual(3, HitGoreRules.AttackEndKind(false, new(5, 6, 9, 0, 0)));
+        Assert.AreEqual(4, HitGoreRules.AttackEndKind(false, new(5, 6, 9, 10, 0)));
+        Assert.AreEqual(1, HitGoreRules.AttackEndKind(false, new(5, 5, 5, 5, 0)), "the first on a tie");
+        Assert.AreEqual(3, HitGoreRules.AttackEndKind(false, new(0, 0, 2, 2, 7)), "fatigue is not a slot of the loop");
+        Assert.IsNull(HitGoreRules.AttackEndKind(false, DamageByType.Zero));
+        Assert.IsNull(HitGoreRules.AttackEndKind(false, new(0, 0, 0, 0, 12)));
+        // The packet's critical flag skips the loop: the damage effect (kind 6, index 5) is never run for a critical hit.
+        Assert.IsNull(HitGoreRules.AttackEndKind(true, new(30, 0, 0, 0, 0)));
+    }
+
+    [TestMethod]
     public void TheDyingAnimationIsTheFallDownWithTheFilterOnAndTheKillsOwnOtherwise()
     {
         foreach (var stored in new[] { 7, 17, 18, 19 })

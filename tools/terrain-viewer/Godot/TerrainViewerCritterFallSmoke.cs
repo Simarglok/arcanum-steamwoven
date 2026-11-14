@@ -122,6 +122,21 @@ public partial class TerrainViewerApp
             HoverAtForSelfTest(point);
             Require(HoverActionForSelfTest == AreaHoverAction.Cast, $"the cast hover {HoverActionForSelfTest}");
             var casts = _spellCasts;
+            // ARC-RENDER-1794: ARC_CRITTER_FALL_BLOOD_CAPTURE=FOLDER saves the view before the cast and while the blood of the hit shows (before-/blood-<filter>.png, for the thread's composite; never committed).
+            var bloodDir = System.Environment.GetEnvironmentVariable("ARC_CRITTER_FALL_BLOOD_CAPTURE");
+            // The shot before the cast draws the frame as it stands (a frame step would move the running animal off the clicked point); the later ones step two frames first.
+            async Task BloodShot(string name, int steps = 2)
+            {
+                if (string.IsNullOrEmpty(bloodDir)) return;
+                for (var f = 0; f < steps; f++) { Frame(); await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw); }
+                if (steps == 0) await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+                System.IO.Directory.CreateDirectory(bloodDir);
+                using var shot = GetViewport().GetTexture().GetImage();
+                shot.SavePng(System.IO.Path.Combine(bloodDir, $"{name}-{(_gameSettings.ViolenceFilter ? "filter-on" : "filter-off")}.png"));
+            }
+            await BloodShot("before", 0);
+            _eyeCandyDrawnForSelfTest.Clear();
+            var goreFrom = _spellCaster!.Log.Count;
             _worldTestTime = SimulationTime.At(_areaSmokeTime, 20);
             _UnhandledInput(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = true, Position = point, GlobalPosition = point });
             Require(_spellCasts == casts + 1, "the click cast: " + _spellNotice);
@@ -135,9 +150,21 @@ public partial class TerrainViewerApp
             }
             var killed = session.QueryLife(npc).View?.Status.IsDead == true;
             Require(killed, $"the spell killed the animal within {castFrames} frames (hit points {session.QueryLife(npc).View?.Status.HitPoints}); spell log: {string.Join(",", _spellCaster!.Log.TakeLast(6).Select(e => e.Kind))}");
+            // ARC-RENDER-1794 (0x433020, ER5, OH2): the spell's damage on the animal asked the blood of the hit from the animation list, and the overlay host runs it on the animal: with the violence filter on it is the clean effect (7).
+            var gore = _spellCaster.Log.Skip(goreFrom).Where(e => e.Kind == SpellCastEventKind.HitGore).ToArray();
+            Require(gore.Length >= 1 && gore.All(e => EyeCandyEntryRef.ListOf(e.Value) == EyeCandyList.Anim), $"the hit asked the blood of the animation list: {string.Join(",", gore.Select(e => e.Value))}");
+            var goreIndex = EyeCandyEntryRef.IndexOf(gore[0].Value);
+            if (_gameSettings.ViolenceFilter) Require(gore.All(e => EyeCandyEntryRef.IndexOf(e.Value) == HitGoreRules.CleanIndex), "with the violence filter on the blood is the clean effect whatever the damage");
+            else Require(goreIndex is 0 or >= 6 and <= 10, $"the blood of an animal's hit is a tier, the normal or a flag's effect: {goreIndex}");
+            bool BloodShows() => ShownEyeCandyHost?.Shown().Any(o => EyeCandyEntryRef.ListOf(o.Eye.Entry) == EyeCandyList.Anim && o.Eye.Entry == gore[0].Value) == true;
             Require(cellsRun.Count >= 2, $"the animal ran over at least two cells before it died ({cellsRun.Count})");
             Require(steppingAtDeath, "the animal was in the middle of a step when the session said it was dead (the stage needs a running animal)");
 
+            // The blood runs as an overlay run of the animation list and its parts are drawn (it may have begun while the animal fell, so the frames since the click count).
+            var bloodFrames = 0;
+            for (; bloodFrames < 40 && !(BloodShows() || _eyeCandyDrawnForSelfTest.Contains(gore[0].Value)); bloodFrames++) Frame();
+            Require(BloodShows() || _eyeCandyDrawnForSelfTest.Contains(gore[0].Value), "the blood eye candy of the hit runs on the animal");
+            if (BloodShows()) await BloodShot("blood");
             // Three seconds of game time from the first frame the session says it is dead.
             var samples = new List<(int Frame, CellCoord Mover, int DrawX, int DrawY, bool Stepping, CellCoord? Place)>();
             string? cause = null;
@@ -193,7 +220,7 @@ public partial class TerrainViewerApp
             }
             GD.Print("ARC-DEV-248 native-smoke critter-fall PASS " + System.Text.Json.JsonSerializer.Serialize(new {
                 map.RuntimeMap, CalmedAtStart = inDanger, Animal = target.Row.PrototypeNumber, Spell = spell.Data.Number, RanOver = cellsRun.Count, SteppingAtDeath = steppingAtDeath, CastFrames = castFrames,
-                SettledAfterFrames = settledAt, DiedOn = $"{first.Mover.X},{first.Mover.Y}", LyingOn = $"{final.Mover.X},{final.Mover.Y}", Pool = pool is null ? "none (violence filter on)" : $"{pool.Cell.X},{pool.Cell.Y}", ViolenceFilter = filterOn,
+                Blood = $"anim entry {goreIndex}", SettledAfterFrames = settledAt, DiedOn = $"{first.Mover.X},{first.Mover.Y}", LyingOn = $"{final.Mover.X},{final.Mover.Y}", Pool = pool is null ? "none (violence filter on)" : $"{pool.Cell.X},{pool.Cell.Y}", ViolenceFilter = filterOn,
                 Parity = "NOT_VERIFIED (rules read in the original executable; no original-runtime run)" }));
         }
         finally
