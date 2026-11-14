@@ -330,6 +330,7 @@ public partial class TerrainViewerApp
     private void TickCarriedLight()
     {
         if (_canvas is null) return;
+        TickWispGlow();
         var lighting = _readyArea?.Lighting;
         var lit = _areaAmbient is { Enabled: true };
         var size = HeroCarriedSize();

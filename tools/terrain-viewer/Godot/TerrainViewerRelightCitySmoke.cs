@@ -96,12 +96,13 @@ public partial class TerrainViewerApp
                 CritterLights = all.CritterLights.Count,
             };
             GD.Print("ARC-RES-2007 relight-city survey " + System.Text.Json.JsonSerializer.Serialize(survey));
-            Require(lit.Length > 0, "the window holds lit lights");
+            // ARC-RENDER-2064: the wisp shots stand at named tiles and need no lit light (a wilderness window of dark object lights only is fine).
+            Require(lit.Length > 0 || OS.GetEnvironment("ARC_RELIGHT_WISP_SHOTS") == "1", "the window holds lit lights");
 
             // Three spots: the densest cluster of lit lights (most other lit lights within 350 px), and the densest one at least 800 px from it.
             Vector2 Centre((StationaryLight Light, TerrainRect Rect) p) => new(p.Rect.X + p.Rect.Width / 2f, p.Rect.Y + p.Rect.Height / 2f);
             int Density((StationaryLight Light, TerrainRect Rect) p) => lit.Count(q => Centre(q).DistanceTo(Centre(p)) < 350f);
-            var spotA = lit.OrderByDescending(Density).First();
+            var spotA = lit.Length > 0 ? lit.OrderByDescending(Density).First() : default;
             var spotB = lit.Where(p => Centre(p).DistanceTo(Centre(spotA)) >= 800f).OrderByDescending(Density).Select(p => ((StationaryLight Light, TerrainRect Rect)?)p).FirstOrDefault();
             var spots = new List<(string Name, (StationaryLight Light, TerrainRect Rect) Lamp)> { ("a", spotA) };
             if (spotB is { } b) spots.Add(("b", b));
@@ -151,6 +152,25 @@ public partial class TerrainViewerApp
                         }
                         else Look(Stand(lamp));
                         PushAreaAmbient(); await Frames();
+                        // ARC-RENDER-2064: ARC_RELIGHT_WISP_SHOTS=1 captures the wisps' glow instead: Legacy with the glow on and off (they must be identical), the relit look (night weighted at the
+                        // player's strength) without the glow and with it, and logs the wisp lights standing in reach and the lights the relit upload kept.
+                        if (OS.GetEnvironment("ARC_RELIGHT_WISP_SHOTS") == "1")
+                        {
+                            var wasWisps = WispGlowOn;
+                            try
+                            {
+                                AreaRelight.SetMode(AreaRelight.Mode.Off); SetWispGlow(true); PushAreaAmbient();
+                                var legacyOn = await Capture($"shot-{spotName}-h{hour:00}-1-legacy");
+                                SetWispGlow(false); var legacyOff = await Capture($"shot-{spotName}-h{hour:00}-1b-legacy-glow-off");
+                                AreaRelight.SetMode(AreaRelight.Mode.NightAdd); AreaRelight.Strength = AreaRelight.LookStrength; PushAreaAmbient();
+                                var without = await Capture($"shot-{spotName}-h{hour:00}-2-relit-no-glow");
+                                SetWispGlow(true); var withGlow = await Capture($"shot-{spotName}-h{hour:00}-3-relit-wisp-glow");
+                                shotLog.Add(new { Spot = spotName, Hour = hour, LegacyGlowOnOffDiffering = Differing(legacyOn, legacyOff), RelitGlowDiffering = Differing(without, withGlow),
+                                    WispLights = WispRelitLights().Count(), InView = AreaRelight.InViewCount, CarriedInView = AreaRelight.CarriedInViewCount, Uploaded = AreaRelight.UploadedCount });
+                            }
+                            finally { SetWispGlow(wasWisps); }
+                        }
+                        else
                         foreach (var (variant, mode, strength) in new[] { ("1-legacy", AreaRelight.Mode.Off, wasStrength), ("2-night-10", AreaRelight.Mode.NightAdd, 1.0f), ("3-night-16", AreaRelight.Mode.NightAdd, 1.6f) })
                         {
                             AreaRelight.SetMode(mode); AreaRelight.Strength = strength; PushAreaAmbient();

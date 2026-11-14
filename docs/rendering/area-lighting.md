@@ -210,6 +210,13 @@ and writes the slot back as no light when the run ends ([IW2–IW5](../research/
   light, LT10) or a created critter's cell. The canvas draws it with the other carried lights and `AreaCellLightLevel` (FR-LIGHT-011) reads the same source, so the
   darkness term rises while the spell holds and returns when its run ends. The source is handed to the canvas again when the number of glows changes
   (`TickCarriedLight`).
+- **Wisp glow (ARC-RENDER-2064, FR-LIGHT-013).** The glowing-orb creature (art species 24, `wowuwxaa.art`, a 40x40 glow disc with a white core) exists in four palettes, prototypes 28471 (violet, "Love Lights"),
+  28472 (amber, "Will-o-the-Wisp"), 28473 (cyan, "Volar's Wisp") and 28474 (red, "Death Lantern"); none holds a light (the original lights nothing round a wisp). `AreaWispGlows.Table` keys a presentation glow by
+  the prototype (the disc's own saturated tone, radius 130 px, strength 0.9, lift 20 px), so every wisp on every map has it. It is **not** part of the Legacy carried lattice and not a saved light: only the relit look
+  (`AreaRelight`, HD graphics with the HD lighting setting) gets it, as extra lights appended to the carried lights of the relit upload (`TerrainViewerApp.WispRelitLights`, `TerrainCanvas.SetAreaRelitExtra`), in the same
+  32-light list with the view-culling rule. A wisp's light stands at its row's T0 cell and offsets, and at the pose of the AI host's mover or the companion group once it moved (`AreaWispGlows.Place` over
+  `AreaCritterLights.Stand`, LT10); a dead or gone critter and a companion on another map have none. Legacy (HD off) is pixel-identical (smoke check: Legacy with the glow on and off differs by 0 pixels).
+  `ARC_RELIGHT_WISPS=off` and `ARC_RELIGHT_WISP_STRENGTH` (a factor, default 1) are tuning switches. Not ready: a wisp made at run time has no map row and no glow.
 - **After a load (ARC-MAGIC-1280).** The original writes the live light back into the object's fields at the save (LT11) and the sector load builds it again (LT4);
   Steamwoven saves the overlay runs ([saved runs](../architecture/saved-runs.md#overlay-runs-arc-magic-1280): the goals section holds the maintained Illuminate's looping eye candy
   with its tag, the spell run is saved as before), so a loaded game shows the glow again with no second cast: the overlay host of the loaded session is built by the first step of a
