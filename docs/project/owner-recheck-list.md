@@ -1302,7 +1302,7 @@ Known differences (documented, not bugs):
 
 The rules are in [reading window runtime](../world/reading-window-runtime.md#viewer-area-area-exterior-cave-and---area-map) and the ledger rows [WR17–WR23](../research/ledger/ui-audio.md#reading-window-arc-ui-049).
 Open a written item from the inventory with the **Read** button (or the right button on it), and a plaque or picture through a script that shows one. Compare with the original game on the
-same text. The look is the original's whether the HD interface is on or off; the Generated mode follows in issue #1201.
+same text. The look is the original's whether the HD interface is on or off; the Generated mode is [ARC-UI-1201](#arc-ui-1201--generated-interface-the-reading-windows-s14-2026-11-14).
 
 | # | Step | Expected (from the original executable) | Status |
 | --- | --- | --- | --- |
@@ -1388,3 +1388,21 @@ Known differences (documented, not bugs):
 
 - The curved flourishes at the corners of the original's boxes are not drawn; the name plate is a plain rectangle with a brass rim.
 - The arrange button's ring is the project's brass ring around the original's dark ball.
+
+## ARC-UI-1201 — Generated interface: the reading windows (S14, 2026-11-14)
+
+The plan is [hd-interface-density](../rendering/hd-interface-density.md#viewer-slice-s14-arc-ui-1201). Turn on the HD interface and the generated one in the game settings, open a written item (a book, a note, a newspaper, a telegram; a plaque or picture through a script).
+Compare with **HD** (generated off) and **Legacy**.
+
+| # | Step | Expected | Status |
+| --- | --- | --- | --- |
+| 1 | Read a book in a 1280 × 800 window. | The table is wood with the side bar's grain continuing under the book; the book is a cloth cover with two parchment pages, the page-edge stacks and the clasps at the fold; the text is as before. | open |
+| 2 | Turn the pages with the next and previous buttons. | The buttons are the parchment under them with the original's arrow (no box of another colour); the pages turn as before. | open |
+| 3 | Read a note, a telegram and a newspaper (an Extra edition if you have one). | A parchment sheet on the table; the telegram has its two form boxes and the double rule under the title, the newspaper the EXTRA boxes, the rules under the masthead and between the four columns; the text sits inside them as in the original. | open |
+| 4 | Read a plaque (through a script that shows one). | A dark slate slab with a second panel inside it; the white text sits on it. | open |
+| 5 | Make the window bigger and smaller while one is open. | The frames redraw at the new size; the rules stay one unit wide. | open |
+
+Known differences (documented, not bugs):
+
+- The sheets are plain where the original's are crumpled with ragged edges and stains; the masthead's griffins and flourishes, the book's binding detail and the plaque's carved border and cracks are not drawn.
+- The ring of the round view (art 231) is the barter window's recipe.
