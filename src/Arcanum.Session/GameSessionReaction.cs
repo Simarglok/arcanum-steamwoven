@@ -242,7 +242,7 @@ public sealed partial class GameSessionOwner
         var follow = followCheck?.Invoke() ?? false;
         if (requested is not { } value) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, null, follow, Version);
         if (!ReactionLimits.InRange(value)) return RejectReaction(GameSessionFailure.InvalidReactionAmount, follow);
-        var planned = PlanReaction(record, stored, (int)value, npc, pc, LedByPc(entity), out var adjustment, out var updated);
+        var planned = PlanReaction(record, stored, (int)value, npc, pc, LedByPc(entity), PcLeads(entity), out var adjustment, out var updated);
         if (!adjustment.Applies) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, adjustment, follow, Version);
         if (planned != GameSessionFailure.None) return RejectReaction(planned, follow);
         return Commit(expected, updated, adjustment, follow);
@@ -250,9 +250,9 @@ public sealed partial class GameSessionOwner
 
     // The change's decision and the record it writes; a new stored value beyond the bounds is InvalidReactionAmount.
     private static GameSessionFailure PlanReaction(SessionReaction record, int stored, int delta, ReactionNpcFacts npc, ReactionPcFacts pc,
-        bool ledByPc, out ReactionAdjustment adjustment, out SessionReaction updated)
+        bool ledByPc, bool pcLeads, out ReactionAdjustment adjustment, out SessionReaction updated)
     {
-        adjustment = ReactionRules.Adjust(delta, npc, pc, ledByPc);
+        adjustment = ReactionRules.Adjust(delta, npc, pc, ledByPc, pcLeads);
         updated = record;
         if (!adjustment.Applies) return GameSessionFailure.None;
         var next = (long)stored + adjustment.Delta;

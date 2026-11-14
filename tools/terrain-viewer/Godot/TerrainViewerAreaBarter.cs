@@ -102,7 +102,7 @@ public partial class TerrainViewerApp
         if (speaker < 0 || speaker >= host.Speakers.Count || CombatFieldReader.Read(host.Speakers[speaker].Row).Fields is not { } fields) return Refuse("no data of the merchant");
         // ARC-DEV-297 (NR2): the window's name is the examine rule for the PC (0x441B60 at the open): the merchant's own description once it remembers the hero.
         var name = AreaHoverIndex.Text(host.Speakers[speaker].Row, _hoverNames?.Catalog, WindowRecognition(host.Speakers[speaker].Row)) ?? "merchant";
-        if (AreaBarterMerchant.From(entity, name, fields, data, session.QueryCompanion(entity).LedByPc) is not { } merchant) return Refuse("the speaker is not an NPC");
+        if (AreaBarterMerchant.From(entity, name, fields, data, session) is not { } merchant) return Refuse("the speaker is not an NPC");
         var inventory = _inventoryHost ?? new AreaInventoryHost([]);
         // ARC-WORLD-090: the substitute container of a merchant without a leader within 20 tiles of where it talked (BT4).
         var talker = host.Speakers[speaker];

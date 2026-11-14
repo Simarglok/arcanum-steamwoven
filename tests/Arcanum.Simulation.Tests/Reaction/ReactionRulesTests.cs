@@ -108,6 +108,8 @@ public sealed class ReactionRulesTests
         var charming = Pc() with { ExtraordinaryCharisma = true };
         Assert.AreEqual(ReactionSkip.LeaderCharisma, ReactionRules.Adjust(-5, Npc(), charming, true).Skip);
         Assert.AreEqual(new ReactionAdjustment(ReactionSkip.None, 5, false), ReactionRules.Adjust(5, Npc(), charming, true), "positive applies");
+        Assert.AreEqual(ReactionSkip.LeaderCharisma, ReactionRules.Adjust(-5, Npc(), charming, false, pcLeads: true).Skip, "ARC-WORLD-2119: the skip reads the chain, an NPC led through a follower too");
+        Assert.AreEqual(new ReactionAdjustment(ReactionSkip.None, -5, false), ReactionRules.Adjust(-5, Npc(), charming, false, pcLeads: false), "the leader check stays direct");
         Assert.AreEqual(new ReactionAdjustment(ReactionSkip.None, -5, false), ReactionRules.Adjust(-5, Npc(), charming, false), "not led");
         Assert.AreEqual(new ReactionAdjustment(ReactionSkip.None, -5, true), ReactionRules.Adjust(-5, Npc(), Pc(), true), "leader check");
         Assert.AreEqual(new ReactionAdjustment(ReactionSkip.None, 5, false), ReactionRules.Adjust(5, Npc(), Pc(), true), "only a drop checks");
