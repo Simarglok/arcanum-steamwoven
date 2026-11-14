@@ -41,15 +41,35 @@ a snapshot that is not strictly published; a list that is not dense or whose ele
 ID; a declared count that differs from the list length; an element that names no mobile record, or a
 record that is not an item; an item listed twice; a listed item whose parent field names another object
 or that lacks the inventory flag; a ground item with a
-parent or without a location; a critter gold handle that is not a gold item in that critter's own list;
+parent or without a location;
 an item or holder from a sector file (not admitted); a key ring with keys (not modelled); a missing
 mandatory field; duplicate mobile IDs or source indices; more than 2,048 items or holders or 512 list elements.
 
 The research reconciliation covers the list, parent, flag, double-listing and count rules. The other
 refusals were added by ARC-DATA-012 and are observed to hold on the exterior and the cave only: ground
-items unparented and located, gold handles inside the holder's own list, no sector-file items or holders,
-no filled key ring. A context holder whose item lies outside the loaded area would also refuse the view
-(`ListedObjectUnresolved`); that does not occur in either profile.
+items unparented and located, no sector-file items or holders, no filled key ring. A holder whose listed item
+is not a record of the loaded area refuses the view (`ListedObjectUnresolved`); that does not occur in either
+whole-map profile, and a window of the main map no longer meets it (next section but one).
+A critter gold handle that names no gold item of its own list is not a refusal any more (`GoldHandleMismatch` stays in the enum, unused): see below.
+
+## Stale gold handles and held items outside a window (ARC-WORLD-2036)
+
+Two data facts of the main map's city windows refused the whole view, and with it the window's inventory, combat and AI hosts (no moving NPCs, loot or fights there):
+
+- **A gold handle outside the holder's own list.** In Ashbury five NPCs (source indices 1162, 3030, 3377, 4068 and 6955 in the aggregate; in Tarant one, 1461) have a
+  gold handle (`OBJ_F_CRITTER_GOLD`) that does not name a gold item of their own list. NPC 1162 (prototype 17146) names a gold stack that NPC 5664 (the same prototype)
+  lists and whose parent is 5664. The handle is kept as `AreaInventoryHolder.StaleGoldHandle` (with the source index of the named record when it is in the area) and the
+  holder has no `GoldItem`; the holder's own list is read as it stands. Nothing reads the field: the seed and the hosts find gold through the list. How the original
+  reads a shared handle (GT164 reads a victim's gold through it) is not modelled here; [#2088](https://github.com/Simarglok/arcanum-steamwoven/issues/2088) holds it. The viewer's `inventory-seed` line adds `N gold handles outside their holder's list (stale)`.
+- **A listed item whose own location lies outside the window.** A held item keeps the location it had when it was made or picked up, not its holder's, and a window keeps
+  the mobile records that stand in its sectors, so a holder inside the window could list an item the window did not hold (Tarant: in the window at sector 969,1026 NPC 599 lists an item whose own location is in another sector, one such item; the window at 970,1026 has seven). A **window** plan now also admits every mobile item (types 5..14) whose parent field names a mobile
+  object admitted by location, wherever the item lies: `AreaDataOwner` builds it after the located rows as a **context** row (no body, disposition `ContextOnly`, its own
+  serialized location kept) and the plan counts it and its prototype with the window's objects. `AreaReconciliation` still counts by serialized location (the item counts as
+  outside), so its numbers do not change. Whole maps and the pinned profiles are unchanged. An item whose parent is not admitted stays out (it is a detached item
+  of the next section if flagged, or a ground item of the area it stands in).
+
+Real data (opt-in `RealData`, `CityWindowInventoryRealDataTests`): the windows 504..506,975..977 (Ashbury) and 969,1026 and 970,1026 (Tarant) read, with the stale handles above; the synthetic
+tests are `AreaInventoryTests.A_gold_handle_outside_the_holders_list_is_kept_apart_not_refused` and `AreaWindowTests.A_window_admits_the_items_its_holder_lists_wherever_they_lie_and_no_other_outside_record`.
 
 ## Detached items (ARC-DEV-085, MIG6b)
 

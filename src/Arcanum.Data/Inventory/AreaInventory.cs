@@ -43,7 +43,8 @@ public enum AreaInventoryFailure
     GroundItemParented,
     /// <summary>A ground item without a serialized world location.</summary>
     GroundItemUnlocated,
-    /// <summary>A critter gold handle that does not name a gold item in that critter's own list.</summary>
+    /// <summary>Retired by ARC-WORLD-2036: a critter gold handle that does not name a gold item in that critter's own list is no longer a refusal; the holder keeps it as
+    /// <see cref="AreaInventoryHolder.StaleGoldHandle"/> and has no <see cref="AreaInventoryHolder.GoldItem"/>. The value stays so the numbering of the others does not move.</summary>
     GoldHandleMismatch,
     /// <summary>A key ring with a non-empty key list; key-ring contents are not modelled.</summary>
     KeyRingContentsUnsupported,
@@ -94,6 +95,11 @@ public sealed record AreaInventoryHolder(AreaObjectKey Key, AreaInventoryHolderT
     uint? ContainerFlags, int? ContainerKeyId, int? GoldItem, AreaInventoryHandle? Leader, AreaInventoryHandle? SubstituteInventory)
 {
     public int SourceIndex => Key.SourceIndex;
+
+    /// <summary>ARC-WORLD-2036: the critter's gold handle when it names no gold item of the critter's own list (then <see cref="GoldItem"/> is null). The data holds such a
+    /// handle: in the main map's Ashbury, an NPC (prototype 17146) names a gold stack that another NPC of the same prototype lists. Its <see cref="AreaInventoryHandle.SourceIndex"/>
+    /// is set when the named object is a record of the loaded area. Nothing in this view or the seed reads it; it is kept so the case is visible, not refused.</summary>
+    public AreaInventoryHandle? StaleGoldHandle { get; init; }
 }
 
 /// <summary>The reconciled read-only T0 inventory graph of one strict Area snapshot (ARC-DATA-012).</summary>
@@ -145,7 +151,7 @@ public sealed record AreaInventoryReadResult(AreaInventoryFailure Failure, AreaI
 /// the snapshot keys each record by. Fail-closed reconciliation over every mobile record: each list
 /// element resolves to exactly one item record, whose parent names its holder and which carries the
 /// inventory flag; no flagged item is unlisted; no item is listed twice; counts equal list lengths;
-/// ground items are unparented and located; a critter gold handle names a gold item in its own list.
+/// ground items are unparented and located; a critter gold handle that names a gold item in its own list is its gold item, any other is kept apart as stale (ARC-WORLD-2036).
 /// NOT READY: life state, display text, chest generation, transfers and the dialog IN command.
 /// </summary>
 public static class AreaInventoryReader
@@ -263,19 +269,20 @@ public static class AreaInventoryReader
             token.ThrowIfCancellationRequested();
             var container = o.Type == ContainerType;
             var list = lists[o];
-            int? gold = null;
+            int? gold = null; AreaInventoryHandle? staleGold = null;
             if (!container && Handle(o, CritterGoldSlot) is { } goldId)
             {
                 var index = Array.FindIndex(list, i => i.Key.ObjectIdSha256 == goldId);
-                if (index < 0 || list[index].Type != (int)AreaItemType.Gold) throw new Refusal(AreaInventoryFailure.GoldHandleMismatch, o.Key.SourceIndex);
-                gold = list[index].Key.SourceIndex;
+                // ARC-WORLD-2036: a handle outside the critter's own list is kept apart (it was a refusal of the whole view, and so of the whole window's inventory, AI and combat hosts).
+                if (index < 0 || list[index].Type != (int)AreaItemType.Gold) staleGold = new(goldId, byId.TryGetValue(goldId, out var goldRow) ? goldRow.Key.SourceIndex : null);
+                else gold = list[index].Key.SourceIndex;
             }
             AreaInventoryHandle? Resolve(int slot) => Handle(o, slot) is { } id ? new(id, byId.TryGetValue(id, out var row) ? row.Key.SourceIndex : null) : null;
             holders.Add(new(o.Key, (AreaInventoryHolderType)o.Type, o.PrototypeNumber, o.Scope, o.WorldX, o.WorldY, (uint)Number(o, ObjectFlagsSlot),
                 Number(o, DescriptionSlot), Number(o, container ? ContainerSourceSlot : CritterSourceSlot),
                 Array.AsReadOnly(list.Select(i => i.Key.SourceIndex).ToArray()), Scripts(o),
                 container ? (uint)Number(o, ContainerFlagsSlot) : null, container ? Number(o, ContainerKeySlot) : null, gold,
-                o.Type == NpcType ? Resolve(NpcLeaderSlot) : null, o.Type == NpcType ? Resolve(NpcSubstituteSlot) : null));
+                o.Type == NpcType ? Resolve(NpcLeaderSlot) : null, o.Type == NpcType ? Resolve(NpcSubstituteSlot) : null) { StaleGoldHandle = staleGold });
         }
         return new AreaInventory(snapshot, holders, items, detached);
     }
