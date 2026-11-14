@@ -127,6 +127,16 @@ public partial class TerrainViewerApp
                 // ARC-UI-043: the first NPC line's voice plays on the voice channel when the module has its file.
                 var played = _voicesPlayed;
                 TickDialogVoice();
+                if (System.Environment.GetEnvironmentVariable("ARC_AREA_TALK_CAPTURE") is { Length: > 0 } talkCapture && conversation is { Phase: DialogConversationPhase.AwaitingSelection, NpcLine.Text.Length: > 0 }
+                    && !System.IO.File.Exists($"{talkCapture}.png"))
+                {
+                    await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                    await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                    await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+                    using var talkImage = GetViewport().GetTexture().GetImage();
+                    talkImage.SavePng($"{talkCapture}.png");
+                    GD.Print($"ARC-UI-2027 capture saved {talkCapture}.png");
+                }
                 var identity = _voiceStart?.VoiceIdentity(conversation?.NpcLine) ?? -1;
                 var gender = host.Profile.Pc.Gender == DialogPcGender.Female ? Arcanum.Data.Audio.SpeechGender.Female : Arcanum.Data.Audio.SpeechGender.Male;
                 var speech = identity == -1 || AreaSoundCatalog() is not { } voices ? null : voices.ResolveSpeech(identity, gender);
@@ -134,6 +144,18 @@ public partial class TerrainViewerApp
                     Require(_voicesPlayed == played + 1 && _voiceHandle is not null, $"script {speaker.ScriptId}: the voiced line played its voice ({_voiceNotice})");
                 var voice = speech is null ? "none" : $"{speech.Folder}/{speech.Line} {speech.Status}";
                 var turns = 0; var phrases = 0;
+                // ARC-UI-2027 (0x5684C0, 0x567E30, 0x5678D0): the NPC's line is a persistent bubble over the speaker, the panel does not repeat it, a reply replaces it, the end gives it its default life.
+                var bubbleOwner = AreaConversationState.EntityId(speaker.Row);
+                var bubbleChecks = 0;
+                void RequireLineBubble(string when)
+                {
+                    if (conversation is not { Phase: DialogConversationPhase.AwaitingSelection, NpcLine.Text.Length: > 0 }) return;
+                    var bubble = _floaters?.Bubbles.Of(bubbleOwner);
+                    Require(bubble is { Persistent: true } && bubble.Text == conversation.NpcLine.Text, $"script {speaker.ScriptId} {when}: the NPC line is a persistent bubble ({bubble?.Text ?? "none"} / {conversation.NpcLine.Text})");
+                    Require(_conversationPanel!.ArtTextsForSelfTest().All(text => text.Name != "npc"), $"script {speaker.ScriptId} {when}: the panel has no NPC line");
+                    bubbleChecks++;
+                }
+                RequireLineBubble("at the start");
                 // ARC-SCRIPT-043: with the module's texts loaded, every offered reply that is an exact phrase marker (and the
                 // no-reply farewell) shows a phrase from the generated-dialog files, never the placeholder.
                 // A speaker whose stored fields give no greeting facts keeps empty phrases.
@@ -158,17 +180,24 @@ public partial class TerrainViewerApp
                     TickDialogVoice();
                     await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
                     if (!ReferenceEquals(_conversationPanel.Conversation, conversation)) break;
+                    RequireLineBubble("after a reply");
                 }
                 // ARC-UI-2028: a reply that led to the NPC's last line closed the window in the same call and floated the line over the NPC.
-                if (conversation is not null && AreaConversationText.EndLine(conversation) is not null)
+                if (conversation is { End.Kind: DialogEndKind.NpcFinalLine } && !string.IsNullOrWhiteSpace(conversation.NpcLine?.Text))
                 {
                     Require(!ConversationOpen && _floaters?.Bubbles.Of(AreaConversationState.EntityId(speaker.Row)) is { Persistent: false }, $"script {speaker.ScriptId}: the last line floats as a timed bubble and the window is gone");
                     await CaptureFinalLineAsync(speaker, conversation);
                 }
                 var effects = conversation?.Effects.Count ?? 0; var phase = conversation?.Phase.ToString();
+                // A conversation that started awaiting a reply had its line checked at least once; one still awaiting at the close ends with its line's bubble no longer persistent (the default life from the end).
+                Require(!(conversation is { NpcLine.Text.Length: > 0 } && offered) || bubbleChecks > 0, $"script {speaker.ScriptId}: the line bubble was checked");
+                var awaitingAtClose = conversation is { Phase: DialogConversationPhase.AwaitingSelection, NpcLine.Text.Length: > 0 };
+                var lastLine = conversation?.NpcLine?.Text;
                 // Close; a dialog script that opens the next conversation is closed again.
                 for (var close = 0; close < 4 && ConversationOpen; close++) _conversationPanel.LeaveForSelfTest.EmitSignal(BaseButton.SignalName.Pressed);
                 Require(!ConversationOpen && !WorldModal, "Close ends the modal panel");
+                Require(_floaters?.Bubbles.Of(bubbleOwner) is not { Persistent: true }, $"script {speaker.ScriptId}: the end left no persistent bubble");
+                Require(!awaitingAtClose || _floaters?.Bubbles.Of(bubbleOwner) is { Persistent: false } kept && kept.Text == lastLine, $"script {speaker.ScriptId}: the line stays as a timed bubble after the end");
                 // ARC-WORLD-043: every close ends the NPC's reaction conversation, so a started talk leaves it remembering the PC.
                 Require(host.ReactionOpen is null, $"script {speaker.ScriptId}: Close ends the NPC's reaction conversation");
                 var metBefore = session.QueryReactionRecord(AreaConversationState.EntityId(speaker.Row)) is { MetBefore: true, InConversation: false };

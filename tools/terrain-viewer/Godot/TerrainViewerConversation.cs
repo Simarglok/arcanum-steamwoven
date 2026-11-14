@@ -82,7 +82,9 @@ public partial class TerrainViewerApp
         else _conversationHost = null;
         if (_conversationPanel is null)
         {
-            _conversationPanel = new AreaConversationPanel { NumberedSource = () => DialogRepliesNumbered }; AddChild(_conversationPanel);
+            _conversationPanel = new AreaConversationPanel { NumberedSource = () => DialogRepliesNumbered, OriginalRowsSource = () => DialogReplyRowsDrift }; AddChild(_conversationPanel);
+            _conversationPanel.NpcLineShown += ShowDialogLineBubble;
+            _conversationPanel.ReplyPicking += RemoveDialogLineBubble;
             _conversationPanel.Picked += () => { if (_audio is not null) ExecuteVoice(DialogVoicePlayer.Picked()); };
             // Only the player's close resumes the dialog script; teardown, reset and map changes just close.
             _conversationPanel.CloseRequested += () => EndConversation(resume: true);
@@ -375,20 +377,15 @@ public partial class TerrainViewerApp
     private bool _smokeTakesScriptedConversations;
 
     /// <summary>
-    /// ARC-UI-2028 (ledger DF1, DF2): the NPC's last line is said as a bubble over the NPC with the default (Text Duration) life and its voice, and the dialog
-    /// ends with it: no window frame, no Close button. The old bubble of the node before is replaced (the speech display removes it first).
+    /// ARC-UI-2028 (ledger DF1, DF2): the NPC's last line is spoken as the dialog ends: its voice plays on (the voice of the node before stops first), and a dialog that ended at its start also floats the line as a bubble
+    /// (<paramref name="bubble"/>; a reply's answer line is floated by the panel, ARC-UI-2027, before the window closes). The dialog's own bubble owner is the speaker (<see cref="_conversationSpeaker"/>).
     /// </summary>
-    private void SpeakFinalLine(AreaSpeaker speaker, DialogConversation conversation)
+    private void SpeakFinalLine(DialogConversation conversation, bool bubble)
     {
-        var text = AreaConversationText.EndLine(conversation);
-        if (text is not null && Bubble(AreaConversationState.EntityId(speaker.Row), text))
-            GD.Print($"ARC-UI-2028 final line speaker={speaker.ScriptId} end={conversation.End?.Kind} text={text}");
-        // The line's voice (its speech id); the voice of the node before stops first.
-        if (text is not null && _audio is not null && _voiceStart is { } start && ReferenceEquals(start.Conversation, conversation))
-        {
-            _dialogVoice.Release();
+        if (conversation.NpcLine is not { Text.Length: > 0 } line) return;
+        if (bubble) ShowDialogLineBubble(line.Text, persistent: false);
+        if (_audio is not null && _voiceStart is { } start && ReferenceEquals(start.Conversation, conversation))
             foreach (var command in _dialogVoice.Update(conversation, conversation.Turn, start.VoiceIdentity(conversation.NpcLine))) ExecuteVoice(command);
-        }
     }
 
     /// <summary>
@@ -405,7 +402,7 @@ public partial class TerrainViewerApp
         _conversationParty = start.Party;
         _conversationSpeaker = speaker;
         _voiceStart = start;
-        SpeakFinalLine(speaker, conversation);
+        SpeakFinalLine(conversation, bubble: true);
         GD.Print($"ARC-UI-2028 dialog ended at its start end={conversation.End?.Kind} turns={conversation.Turn} effects={conversation.Effects.Count}");
         FinishConversation(conversation, resume: true);
         return true;
@@ -450,6 +447,7 @@ public partial class TerrainViewerApp
             // ARC-UI-071 (B29): the panel's texts in the original's font art (null without a game folder: the viewer's font).
             _conversationPanel!.SetFonts(TextFonts());
             _conversationPanel.NumberedReplies = DialogRepliesNumbered;
+            _conversationPanel.OriginalReplyRows = DialogReplyRowsDrift;
             _conversationPanel.Open(title, conversation, note);
         }, () => _conversationPanel!.CloseView());
 
@@ -464,8 +462,8 @@ public partial class TerrainViewerApp
         var conversation = _conversationPanel.Conversation;
         GD.Print($"ARC-SCRIPT-005 conversation closed phase={conversation?.Phase} end={conversation?.End?.Kind} turns={conversation?.Turn} effects={conversation?.Effects.Count}");
         CloseWindowMode(InterfaceMode.Dialog);
-        // ARC-UI-2028: an end with the NPC's last line floats it as a bubble over the NPC, in the close itself (ledger DF1).
-        if (conversation is not null && AreaConversationText.EndsWithNpcLine(conversation) && _conversationSpeaker is { } lastSpeaker) SpeakFinalLine(lastSpeaker, conversation);
+        // ARC-UI-2028: an end with the NPC's last line speaks its voice in the close itself (the panel floated the line, ledger DF1).
+        if (conversation is not null && AreaConversationText.EndsWithNpcLine(conversation)) SpeakFinalLine(conversation, bubble: false);
         FinishConversation(conversation, resume);
     }
 
@@ -488,6 +486,8 @@ public partial class TerrainViewerApp
         // ARC-SCRIPT-009: a "return to script" end resumes the speaker's dialog script through the dispatcher; a new
         // dialog action opens the next conversation, anything else is a notice.
         var speaker = _conversationSpeaker; _conversationSpeaker = null;
+        // ARC-UI-2027 (0x5678D0 → 0x4D6160 −1): the NPC's line bubble stops being persistent.
+        ExpireDialogLineBubble(speaker);
         var talkHost = _conversationHost;
         var scripted = _conversationScripted; _conversationScripted = false;
         // ARC-TECHNOLOGY-006: SU ended the talk; the window opens with the NPC as crafter and the talk does not resume (NC2).
@@ -545,6 +545,9 @@ public partial class TerrainViewerApp
     }
 
     /// <summary>ARC-UI-2019: replies are numbered, and a digit chooses one, except under the Original interface setting (no session: Steamwoven).</summary>
+    /// <summary>ARC-UI-2025: the Original interface setting lays the replies out as the original's band and hits its rows with the original's click bands (no session: Steamwoven).</summary>
+    private bool DialogReplyRowsDrift => _areaSession?.Rules.Interface.DialogReplyRowsDrift == true;
+
     private bool DialogRepliesNumbered => _areaSession?.Rules.Interface.DialogRepliesUnnumbered != true;
 
     private void HandleConversationPulse(IntentFrame intent)

@@ -24,7 +24,6 @@ public sealed class AreaCombatConversationTests
         CollectionAssert.AreEqual(new[] { f.Entity }, attacked, "once, on the speaker's entity");
         Assert.AreEqual(DialogEndKind.NpcFinalLine, talk.End!.Kind);
         Assert.IsTrue(AreaConversationText.EndsWithNpcLine(talk), "ARC-UI-2028: the final line is said as a bubble and the window closes at once");
-        Assert.AreEqual("Argh.", AreaConversationText.EndLine(talk));
         Assert.IsInstanceOfType<StartCombatCommand>(talk.Effects[^1].Command);
         Assert.IsTrue(f.Host.EndReaction());
     }

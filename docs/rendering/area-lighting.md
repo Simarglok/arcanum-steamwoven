@@ -377,7 +377,8 @@ A switchable, off-by-default presentation experiment: with `ARC_RELIGHT` set (`a
 normal-mapped diffuse term for the map's stationary lights and the carried lights, with the normal derived per sprite pixel from its
 luminance. With it off nothing in this document changes (the `relight` smoke stage compares Legacy captures byte for byte). It reads
 the same light sources as the lattice above, changes no luminance a check reads and adds no input or launch argument. Findings, numbers
-and the recommendation: [relighting experiment](../research/relighting-experiment.md).
+and the recommendation: [relighting experiment](../research/relighting-experiment.md). ARC-RES-2007 added the culling rule of the relit light list (of the carried and map lights the ones whose disk meets the
+shown view, the 32 nearest the view's centre are uploaded; `AreaRelight.SetView`) and the night-city captures of Tarant and Ashbury (stage `relight` with `ARC_RELIGHT_SCENE=city`).
 
 ## Open reads (F0)
 

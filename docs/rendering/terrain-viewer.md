@@ -267,6 +267,13 @@ setting each reply line carries its number (`1. …`, up to 5) and the digit key
 panel awaits a choice; a blocked or absent number, a finished dialog and every other key do nothing. Under the Original setting the reply is drawn as its text
 alone (the original shows no number) and no digit chooses anything. The self-test covers both settings on the panel and the digit routing in the app.
 
+ARC-UI-2025 (ledger DH1–DH7; rule `Arcanum.Presentation.Hud.DialogReplyBand`, switch `InterfaceRuleProfile.DialogReplyRowsDrift`, [rule modes](../world/rule-modes.md)): in both
+settings a reply is chosen on the mouse press, not on the release, as in the original. Under the Original setting `AreaConversationPanel.OriginalReplyRows` lays the
+reply stack out as the original's band (100 px tall, five 16 px rows every 19 px starting 3 px down, no wrapping) and resolves a left press by the band's rules:
+the row is y / 20 (so a press in a gap picks a row and the fifth row's first pixel picks the fourth), an empty slot, the release and a blocked reply choose
+nothing; the hover lights a row as the original's move records do (DH5). Under the Steamwoven setting each button is its own hit area. Not yet the band: its
+400 px centred width and look (#2022). The self-test (`TerrainViewerConversationTest`) covers the press mode and the band's refusals.
+
 ## Integrated world diagnostic policy
 
 Merged [PR #44](https://github.com/Simarglok/arcanum-steamwoven/pull/44)
@@ -1082,8 +1089,10 @@ floating lines, so above the objects and below the numbers) in the original's fo
 
 - **What makes a bubble.** The lines the viewer already queued as floats: a dialog script's float line (action 23), a tile script's, the
   followers' comment lines (ARC-AI-1527) and a greeting that opens no window (ARC-DEV-324): white for anyone, green for a PC speaker
-  (path 0x568430). They no longer rise as floating lines. A new line over the same object replaces its bubble. The NPC's line in an
-  open dialog is still drawn by the conversation panel, not as a persistent bubble (issue #2027).
+  (path 0x568430). They no longer rise as floating lines. A new line over the same object replaces its bubble. **The NPC's line in an open dialog** (ARC-UI-2027, ledger TB23–TB25) is a white
+  persistent bubble over the NPC (life −2: the Text Duration does not age it while the window is open); the conversation panel lists only the PC's
+  replies and draws no NPC line (both rule modes). A processed reply removes the bubble and its answer is a new one; a reply that ends the
+  dialog leaves no persistent bubble, and the end of the dialog (`EndConversation`) gives the last bubble its default life from then.
 - **Life.** The Text Duration line of the Video page (0–10, default 6) × 1000 ms on the **real** clock: pause, the Esc menu, turn-based mode
   and a dialog do not freeze a bubble. A bubble goes when its age is above its life (0: after the next frame). Changing the line sets
   the live bubbles' life at once (from their own start; the original's 1,000,000 factor in that callback is a unit slip, fixed in both rule
@@ -1094,11 +1103,11 @@ floating lines, so above the objects and below the numbers) in the original's fo
   drawn and kept (the region constants of the original's 800 × 600 view are taken from the view's centre here, so a larger window
   behaves as the original does at its centre). The table holds eight bubbles; a ninth takes the oldest non-persistent one. A new scene
   drops every bubble. The text keeps the screen's pixels at any zoom (the original has no zoom either).
-- **Not done.** The persistent NPC-line bubble and the final-line close of a dialog (#2027, #2028), the speaker's turn toward the listener
+- **Not done.** The final-line close of a dialog (#2028), the speaker's turn toward the listener
   and the speech voice, the objects' draw offsets, the exact word-break rules (TB22).
 
 Checks: `TextBubblesTests` (colours, life, wrap, slots and slot choice, the table's reuse and eviction, life rules, the setting change) and
-the `floaters` smoke stage's bubble part (a PC's and an NPC's bubble over their objects, green and white, wrapped within 200 px,
+the `map` stage's talk smoke (the NPC line of every started conversation is a persistent bubble, replaced on each reply, not persistent after the end; no `npc` text in the panel); `ARC_AREA_TALK_CAPTURE=PATH` saves the first open dialog as `PATH.png` and the `floaters` smoke stage's bubble part (a PC's and an NPC's bubble over their objects, green and white, wrapped within 200 px,
 alive at 6000 ms and gone after it, a Text Duration change to 2 shortening a live bubble at once; `ARC-UI-1997 bubbles over objects PASS`;
 `ARC_AREA_FLOATERS_CAPTURE` saves `bubble-before` (the old white rising line) and `bubble-after`) and the `spirit-talk` stage (the greeting over the corpse is a bubble). Original visual parity NOT VERIFIED.
 

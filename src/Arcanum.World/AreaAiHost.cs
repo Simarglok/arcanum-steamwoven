@@ -811,6 +811,18 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         caster.AttackEnd(victim, end.Damage, end.Critical, weapon);
     }
 
+    /// <summary>
+    /// ARC-RENDER-2011 (ledger RH9): the NPC's weapon's own effect of <paramref name="kind"/> (<see cref="WeaponHitEffectRules.Begin"/> at the attack's start, <see cref="WeaponHitEffectRules.Swing"/> in the strike) for <paramref name="weapon"/>, the prototype
+    /// number it wielded when the attack began (read before the strike, which a critical may take it out of the hand; null: none, no effect), on the NPC itself, turned to <paramref name="toward"/>, the tile it attacks (an attacker faces its target;
+    /// the movers' facing is not kept for a follower, which the viewer walks). The cast host is asked only for an armed attacker, since its factory rebuilds a stale host.
+    /// </summary>
+    private void WeaponAttackEffect(string id, int kind, int? weapon, CellCoord? toward)
+    {
+        if (weapon is not { } prototype || _scene.Spells?.Invoke() is not { } caster) return;
+        var facing = Tile(id) is { } here && toward is { } there && AreaCombatHost.Facing(here, there) is { } turned ? turned : Movers.FacingOf(id, NeighborDirection.XPlus);
+        caster.WeaponAttackEffect(id, kind, prototype, GridActorMath.Octant(facing));
+    }
+
     /// <summary>ARC-RENDER-1990: the prototype number (<see cref="CombatObjectFields.Prototype"/>) of the weapon an NPC wields now, null when it wields none or its worn items are unknown.</summary>
     private int? WieldedPrototype(string id) =>
         _scene.Combat.Worn(_session, id)?.FirstOrDefault(item => item.Slot == EquipmentSlot.Weapon && item.Entity is not null) is { Entity: not null } weapon ? weapon.Fields.Object.Prototype : null;
@@ -2327,6 +2339,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         // ARC-RENDER-1126 (0x432700): every attacking PC or NPC rolls 1..4 at the attack's start and barks on 1; the roll comes from the session's generator here, so a headless host draws it as the viewer's does.
         var bark = _session.Roll("combat.AttackSound", 1, RealTimeCombatRules.AttackSoundSides).Roll?.Value == 1;
         _notices.Add(new(AreaAiNoticeKind.Swing, id, target) { Swing = swing, Play = play, AttackBark = bark });
+        // ARC-RENDER-2011 (0x432700, the last step of the begin node): the weapon's begin effect (kind 0) on the attacker.
+        WeaponAttackEffect(id, WeaponHitEffectRules.Begin, WieldedPrototype(id), Tile(target));
         return swing;
     }
 
@@ -2411,6 +2425,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         if (NpcAttackOf(id, target, flight: _scene.LaunchShot is not null, inBed) is not { } attack) return;
         // ARC-COMBAT-1930 (0x4B2810): the loudness is the context weapon's, read before the roll (a critical may drop or break the weapon).
         var noise = AwarenessRules.WeaponLoudness(Wielded(id).Flags);
+        var weapon = WieldedPrototype(id); // the context's weapon, read before the strike (a critical may drop or break it)
         var result = _session.AttackByNpc(_session.Version, attack);
         Trace(id).Hit = $"{result.Disposition} {result.Failure} {result.Resolution?.Outcome} {result.Life?.HitPointDamage}" + (target == aimed ? "" : $" (the line of fire struck {target} instead of {aimed})");
         _notices.Add(new(AreaAiNoticeKind.Hit, id, target) { Result = result });
@@ -2421,6 +2436,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
             // (its arrival's time is the accepted deviation A), a shot decided a miss raises none (PF5, PF6: it never strikes its aimed target; a stray it meets is alerted by LandShot). An attack that does not fly raises it,
             // hit or miss, with the weapon's loudness (0x4B2810).
             if (result.Shots.Count == 0 || result.Resolution.Outcome is AttackOutcome.Hit or AttackOutcome.CriticalHit) AttackEvent(id, target, loudness: noise);
+            // ARC-RENDER-2011 (0x4B3170): the weapon's swing effect (kind 1) on the attacker for every attack that was not refused, hit or miss, after the roll and the strike and before the hit effect.
+            WeaponAttackEffect(id, WeaponHitEffectRules.Swing, weapon, Tile(target));
             // ARC-DEV-292: a hit or a miss on an NPC that did not fly (a shot's damage is LandShot's) gives the victim its immediate pass (0x4B52FC, 0x4B3948, the ranged miss 0x4B30F5).
             HitEffect(target, result, WieldedPrototype(id));
             if (VictimReached(result)) Struck(target);
@@ -2520,6 +2537,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     {
         var struck = info?.Object;
         if (Build(id) is not { } attacker) return null;
+        var weapon = WieldedPrototype(id);
         var result = _session.AttackObjectByNpc(_session.Version, new SessionNpcObjectAttack(attacker)
         {
             Target = struck, Wall = struck is null, Distance = AiExecutorRules.Distance(from, cell), AttackerWorn = _scene.Combat.WornItems(_session, id), AttackerCell = from, DropMap = _scene.DropMap?.Invoke(),
@@ -2528,6 +2546,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         Trace(id).Hit = $"{what}: {result.Disposition} {result.Failure} {result.Resolution?.Outcome} {result.Object?.Damage}";
         NeedsAmmunition(id, result.Resolution);
         if (result.Disposition == GameSessionDisposition.Rejected) return result;
+        // ARC-RENDER-2011 (0x4B3170): the swing effect of an attack on an object or a wall too, unless the attack was refused (out of ammunition).
+        if (result.Resolution?.Refusal == AttackRefusal.None) WeaponAttackEffect(id, WeaponHitEffectRules.Swing, weapon, to);
         if ((result.Shots.Count == 0 || result.Life is not null) && result.Resolution?.Refusal == AttackRefusal.None) _scene.ObjectStruck?.Invoke(id, blocker, info, result);
         // The arrows leave the shooter's tile for the aimed target's; one the viewer cannot fly strikes the blocker at once.
         foreach (var shot in result.Shots)

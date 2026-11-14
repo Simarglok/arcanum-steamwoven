@@ -113,6 +113,9 @@ public sealed class RuleModeTests
         // ARC-UI-2019: numbered replies and the digit choice are a Steamwoven addition; the original's dialog shows no number and reads no key.
         Assert.IsTrue(GameRules.Original.Interface.DialogRepliesUnnumbered);
         Assert.IsFalse(GameRules.Steamwoven.Interface.DialogRepliesUnnumbered);
+        // ARC-UI-2025: the dialog reply band's click rows drift against the drawn rows in the original (y / 20 against a 19 px pitch); Steamwoven hits the drawn row.
+        Assert.IsTrue(GameRules.Original.Interface.DialogReplyRowsDrift);
+        Assert.IsFalse(GameRules.Steamwoven.Interface.DialogReplyRowsDrift);
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => GameRules.For((RuleMode)7));
     }
 

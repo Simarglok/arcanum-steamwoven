@@ -1344,12 +1344,6 @@ public static class AreaConversationText
     public static bool EndsWithNpcLine(DialogConversation conversation) =>
         conversation.Phase == DialogConversationPhase.Ended && conversation.End?.Kind is DialogEndKind.NpcFinalLine or DialogEndKind.Insulted or DialogEndKind.HostileRefusal;
 
-    /// <summary>ARC-UI-2028: the text the dialog's end says as a bubble, or null when it says none: the last words after an insult or a refusal are a line of their own only when the host picked one (it has an origin);
-    /// otherwise the line is the node's old one, already said.</summary>
-    public static string? EndLine(DialogConversation conversation) =>
-        EndsWithNpcLine(conversation) && (conversation.End?.Kind == DialogEndKind.NpcFinalLine || conversation.NpcLine?.Origin is not null) && !string.IsNullOrWhiteSpace(conversation.NpcLine?.Text)
-            ? conversation.NpcLine!.Text : null;
-
     public static string Outcome(DialogConversation conversation) => conversation.Phase switch
     {
         DialogConversationPhase.Ended when conversation.End!.Kind == DialogEndKind.ReturnToScript =>

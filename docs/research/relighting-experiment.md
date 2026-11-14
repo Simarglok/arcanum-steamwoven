@@ -109,6 +109,60 @@ What the pictures show, as a reading of the author, for the owner to judge:
 - The hero and critters take the term from their own pixels (silhouette bevel plus luminance slope); a 30×82 sprite gets a plausible
   normal (see the lab's `normals` output), but a sprite this small has little to bend.
 
+## Night cities: Tarant and Ashbury (ARC-RES-2007)
+
+Follow-up after the owner's answer to [#2001](https://github.com/Simarglok/arcanum-steamwoven/issues/2001) (continue the experiment on a night city with the original
+lighting). Same hook, same three modes; new in this round: a **view culling rule** for the light list, and the smoke stage `relight` with
+`ARC_RELIGHT_SCENE=city`. Everything stays opt-in (`ARC_RELIGHT`), Legacy untouched while it is off (the cave `relight` stage and the main-map `map` stage still pass).
+
+**Where the cities are.** Tarant and Ashbury are not maps of their own: they are main-map windows (the interiors `tarant sewers`, `ashbury haunted castle` and the like are
+other maps). The area table `mes/gamearea.mes` puts the markers at sector 972,1026 (Tarant) and 505,976 (Ashbury); the lit streets lie west of them, so the captures use the
+windows `--sector 969,1026` (Tarant: 356 fixed lights at night, 301 lit) and `--sector 504,975` (Ashbury: 253 fixed lights at night, 170 lit, 83 dark). About three quarters
+of the lit lights are large (a rectangle half-width of 220 to 240 pixels); 9 to 15 are outdoor-tinted. The fixed lights are the sector's stationary lights plus the object lights
+of nocturnal scenery (the lamps, ARC-RENDER-030), which the Legacy lattice already uses.
+
+**The light list.** The 32-light budget is not reached: in a 1280×800 view at zoom 1 between 6 and 18 lights reach the view (Tarant 13, 6 and 8 at the three captured spots,
+Ashbury 11, 18 and 14). The rule is now: of the carried, map and synthetic lights keep those whose disk meets the shown view, and upload the 32 whose centre is nearest the view's centre
+(`AreaRelight.SetView`, `InViewCount`); the earlier rule (carried first, then the map's lights nearest the first carried one) would have kept the first 32 of 300 in file order
+in a city with no torch.
+
+**Moving lights.** The saved data of the windows holds **no critter with a light** (a scan of 3×3-sector windows, centres every third sector from −9 to +9 round each marker, by `ObjectLightReader`: 0 critter lights;
+the object lights, up to 263 in a window, are all scenery), and the AI host cannot be built over these windows (a defect, [#2036](https://github.com/Simarglok/arcanum-steamwoven/issues/2036): the
+window's inventory seed is refused with `GoldHandleMismatch` or `ListedObjectUnresolved`), so no NPC's worn light could be listed either; in the one Ashbury window that does seed (sector 505,979,
+15 NPCs) none wears a light. The Ashbury wisps the owner remembers are therefore **not found in the saved data**; they may be made by a script or an effect (open: the owner was asked where
+and when). As a stand-in the capture uses the original's own moving-light mechanism (a carried light follows its creature, LT10, LT12): the hero wears an extra-large torch (cold white 244/255/255,
+the colour a wisp-like light would have) and walks towards a cell eight away; Legacy draws that light too, so the comparison is fair. The relit look follows it frame by frame; the pool on the stones and the
+hero's own highlights move with the light (two frames cannot show flicker; the check on real walk-cycle frames is still [#2000](https://github.com/Simarglok/arcanum-steamwoven/issues/2000)).
+
+**Numbers** (the owner's Mac, 1280×800, vsync off, mean of 90 frames, one run each; noise about a millisecond):
+
+| City | Legacy | Relit night 0.6 | Relit add 0.6 | Lights in view (with the hero's torch) |
+| --- | --- | --- | --- | --- |
+| Tarant spot a (indoors, the densest cluster) | 7.5 ms | 9.0 ms | 9.0 ms | 14 |
+| Ashbury spot a | 6.1 ms | 8.1 ms | 8.2 ms | 12 |
+
+The relit term costs about 1.5 to 2 ms here (against up to 1.5 ms in the cave): the city's lights are large, so most pixels of the view are inside several of them, and the per-pixel
+cost grows with covered pixels times lights in reach. Still a desktop-class number; the Steam Deck run remains open ([#2000](https://github.com/Simarglok/arcanum-steamwoven/issues/2000)).
+Pixels differing from Legacy at the three spots, of 1,024,000 (night 0.6): Tarant 823,000 / 481,000 / 468,000; Ashbury 836,000 / 872,000 / 357,000; that is the whole lit area, not
+only a pool, because most city lights are 440 px wide (the difference is small per pixel).
+
+**Reading** (the author's, for the owner to judge from the composites posted in the project thread):
+
+- Night weighted at strength 1.6 is the clearest on the street: a lamp lights the cobbles and the wall beside it with the stone's own grain, from the side facing the lamp, where Legacy has
+  a flat tint. At 0.6 (add or night) the effect is faint at this size.
+- Indoors the candles and lanterns give a warm directional wash on the floor boards; strong at 1.6, a little patchy on large floor areas.
+- Most Ashbury streets at night are close to black in Legacy (few lights), and relighting cannot add light where there is none: the look needs the light sources, not the normals.
+- De-light 0.6 again only softens the art and is not worth keeping as built.
+- The hero's torch pool in the walk frames is nicer relit: the stones round the hero show the direction of the light.
+
+The 32-light rule has two known edges: with more than 32 lights in view (a zoomed-out view, a denser city) the hero's torch can be dropped when it is far from the view's centre, and
+lights enter and leave the list as the view pans (a hard cut at the 32nd). Neither happens at zoom 1 in these cities. The strengths above (0.6, 1.6) are set by the smoke itself,
+whatever `ARC_RELIGHT_STRENGTH` says.
+
+**Updated recommendation.** Unchanged in kind (conditional go for a bounded night-and-indoor option, no-go for daylight and for de-light as built), with two additions: the night weighted
+mode at about 1.2 to 1.6 is the one to tune, and the cost in a city is about 2 ms (to be checked on the Deck), so the option should be a switchable profile, not a default. Open: where
+the Ashbury wisps come from, and the AI-host-less city windows ([#2036](https://github.com/Simarglok/arcanum-steamwoven/issues/2036)).
+
 ## Verdict
 
 **Conditional go, for a bounded "night and indoor" relit option; no-go for daylight and for de-light as built.** The experiment
@@ -142,6 +196,11 @@ From the repository root, through the [launch queue](../workflow/toolchain.md#la
 
     ./arcanum smoke map "crash site cave" --stages relight --env ARC_RELIGHT_CAPTURE=/absolute/dir
     ./arcanum smoke map Arcanum1-024-fixed --stages relight --env ARC_RELIGHT_CAPTURE=/absolute/dir
+
+The night cities (ARC-RES-2007; PNGs named by `ARC_RELIGHT_CITY`):
+
+    ./arcanum smoke map Arcanum1-024-fixed --stages relight --hero human-male --sector 969,1026 --env ARC_RELIGHT_SCENE=city --env ARC_RELIGHT_CITY=tarant --env ARC_RELIGHT_CAPTURE=/absolute/dir
+    ./arcanum smoke map Arcanum1-024-fixed --stages relight --hero human-male --sector 504,975 --env ARC_RELIGHT_SCENE=city --env ARC_RELIGHT_CITY=ashbury --env ARC_RELIGHT_CAPTURE=/absolute/dir
 
 The PNGs under `ARC_RELIGHT_CAPTURE` are derived from the player's art: keep them outside git. The lab:
 `experiments/relight-lab/README.md`.
