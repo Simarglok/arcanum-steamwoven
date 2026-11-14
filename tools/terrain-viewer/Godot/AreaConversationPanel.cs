@@ -32,6 +32,11 @@ public partial class AreaConversationPanel : CanvasLayer
     private Control _bandTop = null!;
     private DialogReplyBand.Hover? _hover;
     private (int Width, int Rows) _hoverKey;
+    // ARC-UI-2052: the pointer's last place as a viewport point (null: left the band or never seen; the panel moves under a stationary pointer when its
+    // texts change, so a band-local point would go stale) and whether the hover is to be recomputed; a re-render (a reply rebuilt the rows) redraws
+    // them against the pointer, as the original's row drawer does against the live cursor.
+    private Vector2? _pointer;
+    private bool _hoverStale;
     private DialogConversation? _conversation;
     private string _title = string.Empty;
     private string? _message;
@@ -122,7 +127,7 @@ public partial class AreaConversationPanel : CanvasLayer
         _header = new Label { Modulate = new Color(.7f, .75f, .8f), AutowrapMode = TextServer.AutowrapMode.WordSmart };
         _options = new VBoxContainer();
         _options.GuiInput += input => { if (HandleBandInput(input)) _options.AcceptEvent(); };
-        _options.MouseExited += () => { _hover?.Leave(); };
+        _options.MouseExited += () => { _pointer = null; _hover?.Leave(); };
         _bandTop = new Control { Name = "BandTop", MouseFilter = Control.MouseFilterEnum.Ignore, Visible = false };
         _options.AddChild(_bandTop);
         _outcome = new Label { Modulate = new Color(1f, .85f, .55f), AutowrapMode = TextServer.AutowrapMode.WordSmart };
@@ -174,7 +179,7 @@ public partial class AreaConversationPanel : CanvasLayer
 
     public void CloseView()
     {
-        _conversation = null; Hide();
+        _conversation = null; _pointer = null; Hide();
         GetViewport().GuiReleaseFocus();
     }
 
@@ -335,7 +340,23 @@ public partial class AreaConversationPanel : CanvasLayer
         _options.CustomMinimumSize = new(0, _originalRows ? DialogReplyBand.Height : 0);
         if (_originalRows) _options.AddThemeConstantOverride("separation", DialogReplyBand.RowPitch - DialogReplyBand.RowHeight);
         else _options.RemoveThemeConstantOverride("separation");
-        _hover = null;
+        _hover = null; _hoverStale = true;
+    }
+
+    /// <summary>
+    /// ARC-UI-2052 (ledger DH9): every frame the hover is recomputed from the pointer's viewport place (the last one seen in the band, else the live mouse
+    /// once after a rebuild), so a row under a stationary pointer is lit without a motion even when the panel moved. Waits until the band has a width.
+    /// </summary>
+    private void RefreshHover()
+    {
+        var width = (int)_options.Size.X;
+        if (width <= 0) return;
+        var at = _pointer is { } viewport ? _options.GetGlobalTransformWithCanvas().AffineInverse() * viewport
+            : _hoverStale ? _options.GetLocalMousePosition() : (Vector2?)null;
+        if (at is not { } local) return;
+        if (_hover is null || _hoverKey != (width, _buttons.Count)) { _hover = new DialogReplyBand.Hover(width, _buttons.Count); _hoverKey = (width, _buttons.Count); }
+        _hover.Move((int)local.X, (int)local.Y);
+        _hoverStale = false;
     }
 
     /// <summary>A reply row of the band: 16 px tall, no frame, the pointer reaches it through the band, not the button.</summary>
@@ -375,10 +396,12 @@ public partial class AreaConversationPanel : CanvasLayer
         switch (input)
         {
             case InputEventMouseMotion motion:
+                _pointer = _options.GetGlobalTransformWithCanvas() * motion.Position;
                 if (_hover is null || _hoverKey != (width, _buttons.Count)) { _hover = new DialogReplyBand.Hover(width, _buttons.Count); _hoverKey = (width, _buttons.Count); }
                 _hover.Move((int)motion.Position.X, (int)motion.Position.Y);
                 return false;
             case InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: true } press:
+                _pointer = _options.GetGlobalTransformWithCanvas() * press.Position;
                 var hit = DialogReplyBand.Press((int)press.Position.X, (int)press.Position.Y, width, _buttons.Count, clickBandsDrift: true);
                 if (hit.Kind == DialogReplyHitKind.Outside) { _hover?.Leave(); return false; }
                 if (hit.Kind == DialogReplyHitKind.Row && !_buttons[hit.Row].Disabled) _buttons[hit.Row].EmitSignal(BaseButton.SignalName.Pressed);
@@ -407,7 +430,7 @@ public partial class AreaConversationPanel : CanvasLayer
         if (!IsOpen) return;
         if (NumberedSource is { } source) NumberedReplies = source();
         if (OriginalRowsSource is { } rows) OriginalReplyRows = rows();
-        if (_originalRows) LightRows();
+        if (_originalRows) { if (_hoverStale || _pointer is not null) RefreshHover(); LightRows(); }
         ResizePanel();
     }
     public override void _ExitTree() => GetViewport().SizeChanged -= ResizePanel;
