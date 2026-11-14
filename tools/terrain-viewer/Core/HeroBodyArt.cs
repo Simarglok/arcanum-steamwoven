@@ -203,6 +203,9 @@ public static class HeroBodyArt
                 (ActorDiagnosticAction.Idle, 0, false), (ActorDiagnosticAction.Walk, 1, false), (ActorDiagnosticAction.Run, 6, false),
                 (ActorDiagnosticAction.Vault, 13, false), (ActorDiagnosticAction.Attack, WeaponArtRules.AttackAnimation, false),
                 (ActorDiagnosticAction.FallDown, 7, true), (ActorDiagnosticAction.GetUp, 8, true), (ActorDiagnosticAction.LowAttack, WeaponArtRules.LowAttackAnimation, true),
+                // ARC-COMBAT-1865: the stunned ART (23, unarmed, N1) and the bloody dying ARTs (17 decapitation, 18 blown-out chunk, 19 severed leg), each optional: a species without one stuns at once / falls plain.
+                (ActorDiagnosticAction.Stunned, (int)HeroBody.StunnedAnimation, true), (ActorDiagnosticAction.Decapitation, 17, true),
+                (ActorDiagnosticAction.BlownOutChunk, 18, true), (ActorDiagnosticAction.SeveredLeg, 19, true),
             ];
             foreach (var (action, animation, optional) in wanted)
             {
@@ -221,7 +224,10 @@ public static class HeroBodyArt
                     var (archive, entries) = archives.Select(a => (Archive: a, Entries: Named(a, path))).FirstOrDefault(f => f.Entries.Length != 0, (null!, []));
                     if (entries.Length == 0) continue;
                     if (entries.Length != 1) throw Failure(TerrainViewerErrorCode.ActorMetadata, TerrainViewerFailureStage.ActorMetadata);
-                    var bytes = archive.ReadEntry(entries[0]);
+                    byte[] bytes;
+                    // ARC-COMBAT-1865: a stunned or bloody dying ART over the archive's entry size limit (the air elemental's stunned ART is 1.2 MB) is no ART of the species: the body loads without it.
+                    try { bytes = archive.ReadEntry(entries[0]); }
+                    catch (DatLimitExceededException) when (action is ActorDiagnosticAction.Stunned or ActorDiagnosticAction.Decapitation or ActorDiagnosticAction.BlownOutChunk or ActorDiagnosticAction.SeveredLeg) { continue; }
                     ArtMetadata metadata;
                     try { metadata = ArtDecoder.Inspect(bytes, options); }
                     catch (ArtException) { continue; }

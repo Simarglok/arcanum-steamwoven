@@ -50,6 +50,8 @@ public readonly record struct HeroBody(int Body, int Gender, int Armor = 0, int 
     {
         >= 6 and <= 19 => 0,
         WeaponArtRules.AttackAnimation or WeaponArtRules.LowAttackAnimation => Weapon == 0 ? 1 : Weapon,
+        // ARC-COMBAT-1865 (N1): the stunned animation names the unarmed weapon part whatever the body wields.
+        (int)StunnedAnimation => WeaponArtRules.Unarmed,
         _ => Weapon,
     };
 

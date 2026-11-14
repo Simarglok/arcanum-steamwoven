@@ -174,6 +174,9 @@ public sealed class HeroBodyArtTests
         Assert.AreEqual((0, 1), ((int)(calm.MonsterSelector(1) & 15), (int)(fighting.MonsterSelector(1) & 15)));
         foreach (var animation in new[] { 6, 7, 8, 13, 14 }) Assert.AreEqual(0, (int)(fighting.MonsterSelector(animation) & 15), $"animation {animation} clears the weapon");
         foreach (var animation in new[] { 20, 21 }) Assert.AreEqual((1, 1), ((int)(calm.MonsterSelector(animation) & 15), (int)(fighting.MonsterSelector(animation) & 15)), $"animation {animation}");
+        foreach (var animation in new[] { 17, 18, 19 }) Assert.AreEqual(0, (int)(fighting.MonsterSelector(animation) & 15), $"animation {animation} clears the weapon (bloody dying)");
+        // ARC-COMBAT-1865 (N1): the stunned animation (23) names weapon part 1 (unarmed) in and out of combat mode.
+        Assert.AreEqual((1, 1), ((int)(calm.MonsterSelector(23) & 15), (int)(fighting.MonsterSelector(23) & 15)), "animation 23");
         Assert.AreEqual(26, (int)(fighting.MonsterSelector(20) >> 23 & 31)); Assert.AreEqual(1, (int)(fighting.MonsterSelector(20) >> 4 & 3));
         // PR4: stand 0 -> stand 1; walk 1 -> walk 0; run -> walk 0; the others have no repair of their own here.
         CollectionAssert.AreEqual(new[] { calm.MonsterSelector(0), fighting.MonsterSelector(0) }, calm.MonsterCandidates(0).ToArray());
@@ -223,11 +226,14 @@ public sealed class HeroBodyArtTests
                     Assert.IsNull(p.Throw, $"species {species}: the throw is not loaded");
                     Assert.IsTrue(p.Actions.All(a => p.Resource(a).Palette is 0 or 1), $"species {species}");
                     report.Add($"species={species} {Name(Arcanum.Data.Area.AreaMappingRole.MonsterNames, species)} combat={combat} palette={palette} keys={load.Textures.Count} bytes={load.RgbaBytes} "
-                        + $"actions={string.Join(",", p.Actions.Select(a => a + ":" + p.Resource(a).Palette))} low={(p.LowAttack is null ? "none" : "own")}");
+                        + $"actions={string.Join(",", p.Actions.Select(a => a + ":" + p.Resource(a).Palette))} low={(p.LowAttack is null ? "none" : "own")} "
+                        + $"stunned={(p.Stunned is null ? "none" : p.Stunned.FramesPerGroup)} dying={(p.Decapitation is null ? "-" : "17")}{(p.BlownOutChunk is null ? "-" : "18")}{(p.SeveredLeg is null ? "-" : "19")}");
                 }
                 catch (TerrainViewerException error) { failures.Add($"species={species} combat={combat} palette={palette} {error.Error.Code}"); }
             }
             Console.WriteLine(string.Join("\n", report)); Console.WriteLine("FAILURES\n" + string.Join("\n", failures));
+            var dump = Environment.GetEnvironmentVariable("ARC_MONSTER_BODY_REPORT");
+            if (!string.IsNullOrEmpty(dump)) File.WriteAllLines(dump, report.Concat(["FAILURES"]).Concat(failures));
             // The spider queen (30) does not decode in any palette (no installed spell makes it); everything else reads.
             Assert.AreEqual(0, failures.Count(f => !f.StartsWith("species=30 ")), string.Join("; ", failures));
         }
@@ -284,10 +290,66 @@ public sealed class HeroBodyArtTests
         Assert.IsNull(load.Profile.Throw, "the throw files are there, and not read");
     }
 
-    // A DAT holding the synthetic species "air": each key is the letters after "airuwX" (weapon letter, animation letter), each value the palettes (0..3) the ART holds.
-    private static DatArchive MonsterArchive(Dictionary<string, int[]> files)
+    // ARC-COMBAT-1865: the optional stunned (23) and bloody dying (17 to 19) ARTs of a species are read as the human body's are, and a species without them falls back.
+    [TestMethod]
+    public void AMonsterBodyReadsTheStunnedAndBloodyDyingArtsWhenTheSpeciesHasThem()
     {
-        var entries = files.Select(f => (Name: $"art/monster/air/airuwX{f.Key}.art", Bytes: SyntheticArt(f.Value))).ToList();
+        // Files: the five, the fall (ah) and get up (ai), the stunned ART (bx: weapon 1, animation 23), the three bloody dying ARTs (ar, as, at).
+        using var archive = MonsterArchive(new() { ["ba"] = [0], ["ab"] = [0], ["bu"] = [0], ["ah"] = [0], ["ai"] = [0], ["bx"] = [0], ["ar"] = [0], ["as"] = [0], ["at"] = [0] });
+        foreach (var combat in new[] { false, true })
+        {
+            var body = HeroBody.Monster(28, 0, combat ? 1 : 0);
+            var profile = HeroBodyArt.LoadMonster([archive], body, Name).Profile;
+            Assert.AreEqual(body.MonsterSelector(23), profile.Stunned!.Selector, $"stunned combat={combat}");
+            Assert.AreEqual(1, (int)(profile.Stunned.Selector & 15), "the unarmed weapon part");
+            Assert.AreEqual(ActorDiagnosticAction.Stunned, profile.ActionFor(profile.Stunned.Selector));
+            Assert.AreEqual(body.MonsterSelector(17), profile.Decapitation!.Selector); Assert.AreEqual(body.MonsterSelector(18), profile.BlownOutChunk!.Selector);
+            Assert.AreEqual(body.MonsterSelector(19), profile.SeveredLeg!.Selector);
+            Assert.AreEqual(ActorDiagnosticAction.Decapitation, profile.DyingArt(17)!.Value.Action);
+            Assert.AreEqual(ActorDiagnosticAction.BlownOutChunk, profile.DyingArt(18)!.Value.Action);
+            Assert.AreEqual(ActorDiagnosticAction.SeveredLeg, profile.DyingArt(19)!.Value.Action);
+            Assert.AreEqual(ActorDiagnosticAction.FallDown, profile.DyingArt(7)!.Value.Action);
+        }
+    }
+
+    [TestMethod]
+    public void AMonsterBodyWithoutTheStunnedAndBloodyDyingArtsFallsBack()
+    {
+        // The fall and get up only; and one species with a single bloody ART (the severed leg).
+        using var plain = MonsterArchive(new() { ["ba"] = [0], ["ab"] = [0], ["bu"] = [0], ["ah"] = [0], ["ai"] = [0] });
+        var profile = HeroBodyArt.LoadMonster([plain], HeroBody.Monster(28, 0), Name).Profile;
+        Assert.IsNull(profile.Stunned, "no stunned file: the stun ends at once");
+        Assert.IsNull(profile.Decapitation); Assert.IsNull(profile.BlownOutChunk); Assert.IsNull(profile.SeveredLeg);
+        foreach (var animation in new[] { 17, 18, 19 }) Assert.AreEqual(ActorDiagnosticAction.FallDown, profile.DyingArt(animation)!.Value.Action, $"animation {animation} falls plain");
+        using var one = MonsterArchive(new() { ["ba"] = [0], ["ab"] = [0], ["bu"] = [0], ["ah"] = [0], ["ai"] = [0], ["at"] = [0] });
+        var partial = HeroBodyArt.LoadMonster([one], HeroBody.Monster(28, 0), Name).Profile;
+        Assert.AreEqual(ActorDiagnosticAction.SeveredLeg, partial.DyingArt(19)!.Value.Action);
+        Assert.AreEqual(ActorDiagnosticAction.FallDown, partial.DyingArt(17)!.Value.Action);
+        // A species with no fall takes no bloody ART (nothing is drawn falling), but may still stun.
+        using var noFall = MonsterArchive(new() { ["ba"] = [0], ["ab"] = [0], ["bu"] = [0], ["bx"] = [0], ["ar"] = [0] });
+        var bare = HeroBodyArt.LoadMonster([noFall], HeroBody.Monster(28, 0), Name).Profile;
+        Assert.IsNotNull(bare.Stunned); Assert.IsNull(bare.Decapitation); Assert.IsNull(bare.DyingArt(17));
+    }
+
+    // ARC-COMBAT-1865: a stunned or bloody dying ART over the archive's entry size limit is no ART of the species (the real air elemental's stunned ART): the body loads without it, the others stay.
+    [TestMethod]
+    public void AnOversizedOptionalStunnedOrDyingArtIsLeftOutAndTheBodyStillLoads()
+    {
+        using var archive = MonsterArchive(new() { ["ba"] = [0], ["ab"] = [0], ["bu"] = [0], ["ah"] = [0], ["ai"] = [0], ["bx"] = [0], ["ar"] = [0], ["as"] = [0] }, ["bx", "ar"]);
+        var profile = HeroBodyArt.LoadMonster([archive], HeroBody.Monster(28, 0), Name).Profile;
+        Assert.IsNull(profile.Stunned); Assert.IsNull(profile.Decapitation);
+        Assert.IsNotNull(profile.BlownOutChunk, "the ART in limit is read");
+        Assert.AreEqual(ActorDiagnosticAction.FallDown, profile.DyingArt(17)!.Value.Action);
+        // The fall is not optional in the same way: an oversized required file is still a typed refusal.
+        using var big = MonsterArchive(new() { ["ba"] = [0], ["ab"] = [0], ["bu"] = [0] }, ["ab"]);
+        Assert.Throws<TerrainViewerException>(() => HeroBodyArt.LoadMonster([big], HeroBody.Monster(28, 0), Name));
+    }
+
+    // A DAT holding the synthetic species "air": each key is the letters after "airuwX" (weapon letter, animation letter), each value the palettes (0..3) the ART holds.
+    private static DatArchive MonsterArchive(Dictionary<string, int[]> files, string[]? oversized = null)
+    {
+        // An oversized file is one byte over the reader's entry limit (the air elemental's stunned ART, 1.27 MB, is such a file).
+        var entries = files.Select(f => (Name: $"art/monster/air/airuwX{f.Key}.art", Bytes: oversized?.Contains(f.Key) == true ? new byte[(1 << 20) + 1] : SyntheticArt(f.Value))).ToList();
         entries.Add(("art/monster/monster.mes", []));
         using var output = new MemoryStream();
         var offsets = new List<uint>();
@@ -303,7 +365,7 @@ public sealed class HeroBodyArtTests
         table.Position = 0; table.CopyTo(output);
         output.Write(new byte[16]); output.Write("1TAD"u8);
         WriteU32(output, (uint)entries.Count); WriteU32(output, (uint)(table.Length + 28));
-        return DatArchive.Open(new MemoryStream(output.ToArray(), writable: false), new DatReaderOptions { MaxArchiveBytes = 1 << 20, MaxStoredEntryBytes = 1 << 20, MaxDecodedEntryBytes = 1 << 20 });
+        return DatArchive.Open(new MemoryStream(output.ToArray(), writable: false), new DatReaderOptions { MaxArchiveBytes = 8 << 20, MaxStoredEntryBytes = 1 << 20, MaxDecodedEntryBytes = 1 << 20 });
     }
 
     // An ART of eight rotations of two one-pixel frames holding the given palettes.
