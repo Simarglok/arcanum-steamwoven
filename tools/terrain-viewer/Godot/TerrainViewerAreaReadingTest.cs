@@ -381,12 +381,12 @@ public partial class TerrainViewerApp
     /// <summary>ARC-UI-1877: a prototype's document of this kind that has text first; the plaque has none (a script opens it), so the first message number that reads; null when there is none.</summary>
     private static Arcanum.Session.SessionWrittenFacts? ReadingFactFor(Arcanum.Session.GameSessionOwner session, AreaReadingData data, IReadOnlyList<Arcanum.Session.SessionWrittenFacts> facts, WrittenSubtype kind)
     {
-        var fact = facts.Where(candidate => candidate.Subtype == (int)kind)
-            .FirstOrDefault(candidate => session.QueryWrittenDocument(candidate, data.Texts) is { Readable: true, Body.Count: > 0 });
-        if (fact.Subtype != (int)kind)
-            for (var number = 0; number < 4000 && fact.Subtype != (int)kind; number++)
-                if (kind == WrittenSubtype.Plaque && session.QueryWrittenDocument(new((int)kind, number), data.Texts) is { Readable: true, Body.Count: > 0 }) fact = new((int)kind, number);
-        return fact.Subtype == (int)kind ? fact : null;
+        var found = facts.Where(candidate => candidate.Subtype == (int)kind && session.QueryWrittenDocument(candidate, data.Texts) is { Readable: true, Body.Count: > 0 })
+            .Cast<Arcanum.Session.SessionWrittenFacts?>().FirstOrDefault();
+        if (found is null && kind == WrittenSubtype.Plaque)
+            for (var number = 0; number < 4000 && found is null; number++)
+                if (session.QueryWrittenDocument(new((int)kind, number), data.Texts) is { Readable: true, Body.Count: > 0 }) found = new((int)kind, number);
+        return found;
     }
 
     // ARC-UI-1201: the reading window's drawn frames in the generated interface (ARC_AREA_WINDOW_ART=legacy|hd|generated, with ARC_HD_PACK for the last two), once for every kind of document: the side
@@ -395,7 +395,8 @@ public partial class TerrainViewerApp
     // pictures. ARC_AREA_WINDOW_CAPTURE=PREFIX saves the viewport as PREFIX-reading-KIND-MODE[-big|-back].png (local, never in git).
     private async Task ReadingWindowArtSmokeAsync(Arcanum.Session.GameSessionOwner session, AreaReadingData data, IReadOnlyList<Arcanum.Session.SessionWrittenFacts> facts)
     {
-        if (!WindowArtSmokeRequested || _readingArtLook is not { } look) return;
+        if (!WindowArtSmokeRequested) return;
+        if (_readingArtLook is not { } look) throw new InvalidOperationException("ARC-UI-1201 reading window art smoke: the window's art is not read");
         foreach (var kind in ReadingKinds)
         {
             if (ReadingFactFor(session, data, facts, kind) is not { } fact) { GD.Print($"ARC-UI-1201 reading window art smoke {kind}: no document"); continue; }

@@ -1418,6 +1418,18 @@ public sealed class InterfaceChromeTests
         for (var i = 0; i < rules.Length; i++)
             Assert.IsTrue(rules[i] > AreaReadingArtLayout.Columns[i].X + AreaReadingArtLayout.Columns[i].Width - 12 && rules[i] < AreaReadingArtLayout.Columns[i + 1].X, $"rule {i} lies between column {i} and {i + 1}");
         Assert.AreEqual(rules.Length, Recipe("vendnewsback.ART").Parts.OfType<ChromePlate>().Count(p => p.Width == 1 && p.Height > 100), "the alternate newspaper is ruled the same way");
+        // No column rule runs through the headline's rectangle or the plaque's text lies inside its inner panel.
+        var headline = AreaReadingArtLayout.Headline;
+        foreach (var file in new[] { "NewsBackground.ART", "vendnewsback.ART" })
+            foreach (var rule in Recipe(file).Parts.OfType<ChromePlate>().Where(p => p.Width == 1 && p.Height > 100))
+            {
+                var x = rule.X + AreaReadingArtLayout.BackgroundCorner.X;
+                Assert.IsFalse(x >= headline.X && x < headline.X + headline.Width && rule.Y < headline.Y + headline.Height && rule.Y + rule.Height > headline.Y, $"{file}: the rule at {x} runs through the headline");
+            }
+        var inner = Recipe("Stone_Plaque.ART").Parts.OfType<ChromePlate>().Last();
+        var text = AreaReadingArtLayout.PlaqueText;
+        Assert.IsTrue(text.X - AreaReadingArtLayout.BackgroundCorner.X >= inner.X && text.X - AreaReadingArtLayout.BackgroundCorner.X + text.Width <= inner.X + inner.Width
+            && text.Y >= inner.Y && text.Y + text.Height <= inner.Y + inner.Height, "the plaque's text rectangle lies inside its inner panel");
     }
 
     [TestMethod]

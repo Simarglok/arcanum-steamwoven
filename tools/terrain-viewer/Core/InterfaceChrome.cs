@@ -146,7 +146,7 @@ public static class InterfaceChromeRecipes
     /// are sampled at that origin and the wood continues the side bar's). The side bar (494, 132 x 400) is plain wood: the lens art 231 is the barter window's recipe. Every background is the table
     /// with what lies on it: the book (477) is a cloth cover, the stacks of page edges, the two parchment pages and the clasps of the fold (the logbook's book); the note (489) and the telegram (491) are a sheet of
     /// parchment, the telegram with the two boxes of its form and a double rule under its title; the newspaper (487, and the alternate prototype's 817) is a sheet with the boxes of its two EXTRA marks, the double rule
-    /// under the masthead and the rules between its four columns; the plaque (633) is a slate slab with an inner panel. A page button (495, 496) is the page under it and the Legacy arrow. The griffins, the
+    /// under the masthead and the rules between its four columns (the first starts under the headline's rectangle, where the first two columns begin); the plaque (633) is a slate slab with an inner panel. A page button (495, 496) is the page under it and the Legacy arrow. The griffins, the
     /// ragged paper edges, stains and the plaque's carved border are pictures the generated interface does not draw.</summary>
     private static IEnumerable<ChromeRecipe> ReadingRecipes()
     {
@@ -173,8 +173,8 @@ public static class InterfaceChromeRecipes
             yield return Table(file, [new ChromePlate(41, 24, 567, 353, ChromeMaterial.Parchment),
                 .. Outline(61, 44, 49, 24), .. Outline(533, 44, 49, 24),
                 new ChromePlate(61, 83, 520, 1, ChromeMaterial.Dark, Bevel: false), new ChromePlate(61, 86, 520, 1, ChromeMaterial.Dark, Bevel: false),
-                new ChromePlate(189, 101, 1, 268, ChromeMaterial.Dark, Bevel: false), new ChromePlate(320, 101, 1, 268, ChromeMaterial.Dark, Bevel: false), new ChromePlate(452, 101, 1, 268, ChromeMaterial.Dark, Bevel: false)]);
-        yield return Table("Stone_Plaque.ART", new ChromePlate(85, 19, 535, 367, ChromeMaterial.Slate), new ChromePlate(109, 43, 487, 319, ChromeMaterial.Slate));
+                new ChromePlate(189, 190, 1, 179, ChromeMaterial.Dark, Bevel: false), new ChromePlate(320, 101, 1, 268, ChromeMaterial.Dark, Bevel: false), new ChromePlate(452, 101, 1, 268, ChromeMaterial.Dark, Bevel: false)]);
+        yield return Table("Stone_Plaque.ART", new ChromePlate(85, 19, 535, 367, ChromeMaterial.Slate), new ChromePlate(109, 34, 487, 338, ChromeMaterial.Slate));
         yield return new ChromeRecipe("WrtnBookLArro.ART", ChromeKind.Panel, ChromeMaterial.Parchment, ChromeSides.None, [new ChromeGlyph(0, 0, 18, 22)], Holes: ChromeHoles.None,
             OriginX: AreaReadingArtLayout.PreviousCorner.X - ox, OriginY: AreaReadingArtLayout.PreviousCorner.Y - oy);
         yield return new ChromeRecipe("WrtnBookRArro.ART", ChromeKind.Panel, ChromeMaterial.Parchment, ChromeSides.None, [new ChromeGlyph(0, 0, 18, 22)], Holes: ChromeHoles.None,
