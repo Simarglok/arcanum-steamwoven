@@ -216,10 +216,17 @@ public sealed class NpcAttackStateTests
     {
         // XP10: the pool loses the share whoever attacked, only a PC attacker gets it; XP9: the killer's PC leader gets the award,
         // else nothing and the worth stays.
-        foreach (var led in new[] { false, true })
+        // ARC-WORLD-1864: the killer's PC leader is the chain's player character (0x45DDA0, in 0x45DA20), so a follower of the hero's companion pays the kill too (mode 2).
+        foreach (var mode in new[] { 0, 1, 2 })
         {
+            var led = mode > 0;
             using var owner = Owner();
-            if (led) Assert.AreEqual(GameSessionDisposition.Changed, owner.JoinParty(owner.Version, Rat, PartyStateTests.Facts(maxFollowers: 5), false).Disposition);
+            if (mode == 1) Assert.AreEqual(GameSessionDisposition.Changed, owner.JoinParty(owner.Version, Rat, PartyStateTests.Facts(maxFollowers: 5), false).Disposition);
+            if (mode == 2)
+            {
+                Assert.AreEqual(GameSessionDisposition.Changed, owner.ForceJoinParty(owner.Version, "oid:mid").Disposition);
+                Assert.AreEqual(GameSessionDisposition.Changed, owner.ForceJoinLeader(owner.Version, Rat, "oid:mid").Disposition);
+            }
             var rat = Combat();
             var victim = Combat(entity: Other);
             var experience = owner.QueryHeroExperience()!.Experience;

@@ -302,4 +302,28 @@ public sealed class DangerStateTests
         Assert.AreEqual(0, owner.QueryDangerRecords().Records.Count);
         Changed(owner.SetDangerHitBy(owner.Version, Virgil, Hero), owner, 3);
     }
+
+    // ARC-WORLD-1864: the team add (0x4AF8C0) and the enemy add (0x4AF930) read the chain of leaders (0x45DDA0), so a companion's summon is the hero's side and the hero's team holds the followers of followers (0x441260).
+    [TestMethod]
+    public void TheTeamAndTheSameSideSkipFollowTheChainOfLeadersUpToTheHero()
+    {
+        using var owner = Owner();
+        const string Summon = "oid:imp", Free = "oid:free", Pet = "oid:pet", SoggPet = "oid:soggpet";
+        Join(owner, Virgil);
+        Join(owner, Sogg);
+        Assert.AreEqual(GameSessionFailure.None, owner.ForceJoinLeader(owner.Version, Summon, Virgil).Failure);
+        Assert.AreEqual(GameSessionFailure.None, owner.ForceJoinLeader(owner.Version, Pet, Summon).Failure);
+        Assert.AreEqual(GameSessionFailure.None, owner.ForceJoinLeader(owner.Version, SoggPet, Sogg).Failure);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.AddDangerEnemyTeam(owner.Version, Wolf, SessionCombatant.Critter(Pet)).Disposition);
+        CollectionAssert.AreEqual(new[] { Hero, VirgilHandle, SoggHandle, SessionCombatant.Critter(Summon), SessionCombatant.Critter(Pet), SessionCombatant.Critter(SoggPet) }, owner.QueryDanger(Wolf).Enemies.ToArray(),
+            "the offender's chain reaches the hero: the hero, its followers in array order, then each follower's tree in turn (not breadth first)");
+        // The summon of the hero's companion is on the hero's side: it lists neither the hero nor a follower of the hero; a critter outside the chain does.
+        Assert.AreEqual(GameSessionDisposition.NoChange, owner.AddDangerEnemyTeam(owner.Version, Summon, Hero).Disposition);
+        Assert.AreEqual(GameSessionDisposition.NoChange, owner.AddDangerEnemy(owner.Version, Pet, SoggHandle).Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.AddDangerEnemy(owner.Version, Summon, SessionCombatant.Critter(Free)).Disposition);
+        // A free NPC whose chain never reaches the hero (it follows the wolf) is its own team: only it is listed, not the hero's side.
+        Assert.AreEqual(GameSessionFailure.None, owner.ForceJoinLeader(owner.Version, Free, Wolf).Failure);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.AddDangerEnemyTeam(owner.Version, Sogg, SessionCombatant.Critter(Free)).Disposition);
+        CollectionAssert.AreEqual(new[] { SessionCombatant.Critter(Free) }, owner.QueryDanger(Sogg).Enemies.ToArray());
+    }
 }
