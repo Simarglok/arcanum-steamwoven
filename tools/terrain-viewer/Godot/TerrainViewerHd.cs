@@ -31,9 +31,6 @@ public partial class TerrainViewerApp
 {
     private HdFrameSource? _hdSource;
     private VisualProfileSettingsStore? _visualStore;
-    // ARC-RENDER-2060: the HD lighting setting (the relit look, in force only while the visual profile is HD).
-    private RelitLookSettingsStore? _relitLookStore;
-    private bool _relitLook;
     // What decided the startup profile, the active pack line and the last request's save outcome.
     private string _visualOrigin = "default";
     private string _visualPack = "not chosen at startup";
@@ -52,8 +49,6 @@ public partial class TerrainViewerApp
     private void ConfigureVisualProfile()
     {
         _visualStore = new VisualProfileSettingsStore(AutomatedVisualRun);
-        _relitLookStore = new RelitLookSettingsStore(AutomatedVisualRun);
-        _relitLook = _relitLookStore.Load();
         var packPath = System.Environment.GetEnvironmentVariable("ARC_HD_PACK");
         var requested = System.Environment.GetEnvironmentVariable("ARC_VISUAL_PROFILE")?.Trim().ToLowerInvariant();
         VisualProfile profile;
@@ -207,18 +202,23 @@ public partial class TerrainViewerApp
         if (InterfaceHd.Configure(_canvas?.HdSource?.Pack, _gameSettings.HdInterface, _gameSettings.GeneratedInterface)) InterfaceHd.RedrawAll(GetTree().Root);
     }
 
-    /// <summary>ARC-RENDER-2060: per frame, the relit look follows the HD lighting setting and the active visual profile (HD graphics on). A change refreshes the
-    /// lights the shaders read; with the look off nothing about the draw differs from Legacy.</summary>
-    internal static bool RelitLookWanted(bool setting, VisualProfile? profile) => setting && profile == VisualProfile.Hd;
+    /// <summary>ARC-RENDER-2060, ARC-RENDER-2076: the relit look is a component of HD graphics, not a setting of its own: it is on exactly while the active
+    /// visual profile is HD (launcher line, H key, ARC_VISUAL_PROFILE). An old <c>relit look</c> line of the settings file is not read.</summary>
+    internal static bool RelitLookWanted(VisualProfile? profile) => profile == VisualProfile.Hd;
 
+    // Set only by the HD identity smoke (HD equals Legacy pixel for pixel), which needs the look out of the way.
+    private bool _relitLookHeld;
+
+    /// <summary>Per frame, the relit look follows the active visual profile. A change refreshes the lights the shaders read; with the look off
+    /// nothing about the draw differs from Legacy.</summary>
     private void SyncRelitLook()
     {
-        var want = RelitLookWanted(_relitLook, _canvas?.VisualProfile);
+        var want = !_relitLookHeld && RelitLookWanted(_canvas?.VisualProfile);
         if (want == AreaRelight.Look) return;
         AreaRelight.SetLook(want);
         PushAreaAmbient();
         _canvas?.RefreshRelight();
-        GD.Print($"ARC-RENDER-2060 relit look {(want ? "on" : "off")} (HD lighting setting={(_relitLook ? "on" : "off")}, profile={_canvas?.VisualProfile})");
+        GD.Print($"ARC-RENDER-2076 relit look {(want ? "on" : "off")} (profile={_canvas?.VisualProfile})");
     }
 
     private void BindVisualPalette()
@@ -261,24 +261,4 @@ public sealed class VisualProfileSettingsStore
 
     /// <summary>Writes the profile; false when it could not be saved (the caller reports it).</summary>
     public bool Save(VisualProfile profile) => _path is not null && ArcanumConfig.Save(_path, ViewerSettingsConfig.VisualProfileChanges(profile)) == ArcanumConfigSaveStatus.Saved;
-}
-
-/// <summary>ARC-RENDER-2060: the HD lighting preference (the <c>relit look</c> line of the settings file, 0 or 1, default off), saved like the visual profile:
-/// <c>RELIT_LOOK_TEST_PATH</c> names a settings file for tests; an automated run without it has no file (off, nothing saved).</summary>
-public sealed class RelitLookSettingsStore
-{
-    public const string TestVariable = "RELIT_LOOK_TEST_PATH";
-    private readonly string? _path;
-
-    public RelitLookSettingsStore(bool automated) => _path = ViewerSettingsFile.Choose(TestVariable, automated);
-
-    /// <summary>A store on an explicit settings file (a test's).</summary>
-    public RelitLookSettingsStore(string path) => _path = path;
-
-    public bool Persistent => _path is not null;
-
-    public bool Load() => _path is not null && ViewerSettingsConfig.ReadRelitLook(ArcanumConfig.Read(_path));
-
-    /// <summary>Writes the setting; false when it could not be saved (the caller reports it).</summary>
-    public bool Save(bool on) => _path is not null && ArcanumConfig.Save(_path, ViewerSettingsConfig.RelitLookChanges(on)) == ArcanumConfigSaveStatus.Saved;
 }

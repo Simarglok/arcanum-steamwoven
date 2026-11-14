@@ -48,12 +48,12 @@ internal static class AreaRelight
     private static bool _look;
 
     /// <summary>The mode now. ARC-RENDER-2060: the developer override (the environment's <c>ARC_RELIGHT</c> = off, add, night, delight, or <see cref="SetMode"/> of the smokes
-    /// and the palette) wins when it is not Off; else the player's look (<see cref="SetLook"/>, the HD lighting setting while HD graphics is on) is the night-weighted mode.</summary>
+    /// and the palette) wins when it is not Off; else the player's look (<see cref="SetLook"/>, on exactly while HD graphics is on) is the night-weighted mode.</summary>
     internal static Mode Current => _developerMode != Mode.Off ? _developerMode : _look ? Mode.NightAdd : Mode.Off;
     internal static bool Active => Current != Mode.Off;
     /// <summary>The developer override alone (what a smoke saves and restores; <see cref="Current"/> also folds in the look).</summary>
     internal static Mode DeveloperMode => _developerMode;
-    /// <summary>ARC-RENDER-2060: the player's relit look is on (the HD lighting setting, and only with HD graphics; the caller decides).</summary>
+    /// <summary>ARC-RENDER-2060: the player's relit look is on (a part of HD graphics, ARC-RENDER-2076; the caller decides).</summary>
     internal static bool Look => _look;
     /// <summary>ARC-RENDER-2060: the energy of the player's look: the night-weighted mode at 1.6 after the experiment ARC-RES-2007 (<c>ARC_RELIGHT_LOOK_STRENGTH</c> overrides it for tuning by eye).</summary>
     internal static float LookStrength { get; } = FloatFromEnvironment("ARC_RELIGHT_LOOK_STRENGTH", 1.6f);
@@ -90,7 +90,7 @@ internal static class AreaRelight
 
     internal static void SetMode(Mode mode) => _developerMode = mode;
 
-    /// <summary>ARC-RENDER-2060: turns the player's relit look on or off (the viewer calls it whenever the HD lighting setting or the visual profile changes).</summary>
+    /// <summary>ARC-RENDER-2060: turns the player's relit look on or off (the viewer calls it whenever the visual profile changes).</summary>
     internal static void SetLook(bool on) => _look = on;
 
     /// <summary>Steps off, add, night, delight, off ... (the diagnostic palette action).</summary>

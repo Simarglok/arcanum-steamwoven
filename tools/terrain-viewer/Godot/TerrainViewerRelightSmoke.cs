@@ -61,6 +61,8 @@ public partial class TerrainViewerApp
         {
             _worldFocused = true; SelectSimulatedPadForSelfTest();
             driver.Enabled = true;
+            // ARC-RENDER-2076: the Legacy baselines below need Legacy (an HD profile would turn the look on).
+            _canvas.SetVisualProfile(VisualProfile.Legacy, _canvas.HdSource, _canvas.HdBudget); SyncRelitLook();
             AreaRelight.SetMode(AreaRelight.Mode.Off); PushAreaAmbient();
             // Stand the hero near the map's first lit light when it has a standable cell there, else where the map starts.
             var start = home;
@@ -131,44 +133,36 @@ public partial class TerrainViewerApp
             Require(counts["day-3-night"] <= counts["day-2-add"] && counts["night-3-night"] <= counts["night-2-add"], "the night-weighted mode changes no more pixels than add");
 
 
-            // ARC-RENDER-2060: the HD lighting setting (the player's relit look), at the night hour the loop above left. Legacy stays Legacy with HD graphics Off whatever the setting is;
-            // with both On the look is the night-weighted mode at the look's strength (the same pixels as the developer mode set to that), and Off again gives Legacy back.
-            // The setting's persisted value is checked through its own store on a scratch settings file.
-            var scratch = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"relit-look-{System.Environment.ProcessId}.cfg");
+            // ARC-RENDER-2060, ARC-RENDER-2076: the player's relit look is a part of HD graphics, at the night hour the loop above left. With HD graphics Off it is Legacy,
+            // byte for byte; with it On the look is the night-weighted mode at the look's strength (the same pixels as the developer mode set to that), and Off again gives Legacy back.
             var settingReport = new Dictionary<string, object>();
-            var wasLook = _relitLook; var wasProfile = _canvas.VisualProfile; var wasSource = _canvas.HdSource; var wasBudget = _canvas.HdBudget;
+            var wasProfile = _canvas.VisualProfile; var wasSource = _canvas.HdSource; var wasBudget = _canvas.HdBudget;
             try
             {
-                var store = new RelitLookSettingsStore(scratch);
-                Require(!store.Load(), "the HD lighting setting defaults to off");
-                Require(store.Save(true) && store.Load() && System.IO.File.ReadAllText(scratch) == "relit look=1\n", "the HD lighting setting is saved as its line and read back");
-                Require(store.Save(false) && !store.Load(), "the HD lighting setting off is saved and read back");
+                _canvas.SetVisualProfile(VisualProfile.Legacy, wasSource, wasBudget); SyncRelitLook(); PushAreaAmbient();
+                Require(!RelitLookWanted(VisualProfile.Legacy) && RelitLookWanted(VisualProfile.Hd) && !RelitLookWanted(null), "the relit look is wanted exactly with HD graphics");
+                Require(!AreaRelight.Look && !AreaRelight.Active, "HD graphics Off puts the look out of force");
                 var nightLegacy = await Capture("setting-1-legacy");
-                _relitLook = true; _canvas.SetVisualProfile(VisualProfile.Legacy, wasSource, wasBudget); SyncRelitLook(); PushAreaAmbient();
-                Require(!AreaRelight.Look && !AreaRelight.Active, "HD lighting On with HD graphics Off puts the look out of force");
-                var settingOnLegacyProfile = Differing(nightLegacy, await Capture("setting-2-on-profile-legacy"));
-                Require(settingOnLegacyProfile == 0, $"HD lighting On with HD graphics Off is byte-identical to Legacy ({settingOnLegacyProfile} pixels differ)");
                 _canvas.SetVisualProfile(VisualProfile.Hd, wasSource, wasBudget); SyncRelitLook(); PushAreaAmbient();
-                Require(AreaRelight.Look && AreaRelight.Current == AreaRelight.Mode.NightAdd, "HD lighting On with HD graphics On is the night-weighted mode");
-                var lookImage = await Capture("setting-3-on-hd");
+                Require(AreaRelight.Look && AreaRelight.Current == AreaRelight.Mode.NightAdd, "HD graphics On is the night-weighted look");
+                var lookImage = await Capture("setting-2-on-hd");
                 var lookDiff = Differing(nightLegacy, lookImage, near);
                 Require(lookDiff > 0, "the relit look differs from Legacy near the hero's light at night");
-                _relitLook = false; SyncRelitLook(); // the developer mode alone from here, so the per-frame sync does not turn the look back on
+                _canvas.SetVisualProfile(VisualProfile.Legacy, wasSource, wasBudget); SyncRelitLook(); // the developer mode alone from here, so the per-frame sync does not turn the look back on
                 AreaRelight.SetMode(AreaRelight.Mode.NightAdd); var wasStrength = AreaRelight.Strength; AreaRelight.Strength = AreaRelight.LookStrength; PushAreaAmbient();
-                var developerImage = await Capture("setting-4-developer-night");
+                var developerImage = await Capture("setting-3-developer-night");
                 AreaRelight.Strength = wasStrength; AreaRelight.SetMode(AreaRelight.Mode.Off);
                 var lookVsDeveloper = Differing(lookImage, developerImage);
                 Require(lookVsDeveloper == 0, $"the look is the night-weighted mode at the look's strength ({lookVsDeveloper} pixels differ)");
                 PushAreaAmbient();
-                Require(!AreaRelight.Look, "HD lighting Off puts the look out of force");
-                var settingOff = Differing(nightLegacy, await Capture("setting-5-off-again"));
-                Require(settingOff == 0, $"HD lighting Off again is byte-identical to Legacy ({settingOff} pixels differ)");
+                Require(!AreaRelight.Look, "HD graphics Off puts the look out of force");
+                var settingOff = Differing(nightLegacy, await Capture("setting-4-off-again"));
+                Require(settingOff == 0, $"HD graphics Off again is byte-identical to Legacy ({settingOff} pixels differ)");
                 settingReport["Strength"] = AreaRelight.LookStrength; settingReport["NearDiffering"] = lookDiff; settingReport["Lights"] = AreaRelight.UploadedCount;
             }
             finally
             {
-                _relitLook = wasLook; _canvas.SetVisualProfile(wasProfile, wasSource, wasBudget); SyncRelitLook(); PushAreaAmbient();
-                try { System.IO.File.Delete(scratch); } catch (Exception error) when (error is IOException or UnauthorizedAccessException) { }
+                _canvas.SetVisualProfile(wasProfile, wasSource, wasBudget); SyncRelitLook(); PushAreaAmbient();
             }
 
             // A walk with the torch: the same held-stick walk twice, Legacy then relit (the simulation is deterministic, so frame i is the same

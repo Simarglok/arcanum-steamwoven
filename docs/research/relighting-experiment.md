@@ -196,7 +196,7 @@ The owner's go / no-go is [#2001](https://github.com/Simarglok/arcanum-steamwove
 ## Taken into the game (ARC-RENDER-2060)
 
 The owner's decision of 2026-11-14 ("composition looks very promising, add it to the game under the HD graphics option") made the night-weighted variant at strength 1.6 a player setting: the
-launcher's HD lighting line (`relit look`, default off, in force only with HD graphics On; [relit look](../rendering/area-lighting.md#relit-look-arc-render-2060)). De-light stays rejected. Frame time of the
+relit look as a part of the HD graphics option (on exactly with HD graphics, no setting of its own after ARC-RENDER-2076; [relit look](../rendering/area-lighting.md#relit-look-arc-render-2060)). De-light stays rejected. Frame time of the
 shipped variant on the Mac, 1280x800: cave 3.4 to 4.7 ms, Tarant at night 5.9 to 8.7 ms, Ashbury 5.6 to 7.8 ms; the Steam Deck is still unmeasured (#2000).
 
 ## Reproduce

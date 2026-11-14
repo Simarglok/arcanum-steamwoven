@@ -95,7 +95,9 @@ source index on one axis.
    this contract.
 4. **Nearest-replicated HD is invisible.** If every HD texel equals its parent Legacy
    texel (a nearest `N×` upscale), the HD raster equals the Legacy raster pixel for
-   pixel. This is the identity oracle for fallback and toggle tests.
+   pixel. This is the identity oracle for fallback and toggle tests. (The relit night look of
+   [area lighting](area-lighting.md#relit-look-arc-render-2060), which HD graphics turns on since
+   ARC-RENDER-2076, is the one intended difference: the identity smoke holds it off.)
 
 Literal oracle values for `N = 2` (independent of GPU output and of the production
 sampler; asserted in `HdScaledCropTests`):
