@@ -232,8 +232,6 @@ public sealed class HeroBodyArtTests
                 catch (TerrainViewerException error) { failures.Add($"species={species} combat={combat} palette={palette} {error.Error.Code}"); }
             }
             Console.WriteLine(string.Join("\n", report)); Console.WriteLine("FAILURES\n" + string.Join("\n", failures));
-            var dump = Environment.GetEnvironmentVariable("ARC_MONSTER_BODY_REPORT");
-            if (!string.IsNullOrEmpty(dump)) File.WriteAllLines(dump, report.Concat(["FAILURES"]).Concat(failures));
             // The spider queen (30) does not decode in any palette (no installed spell makes it); everything else reads.
             Assert.AreEqual(0, failures.Count(f => !f.StartsWith("species=30 ")), string.Join("; ", failures));
         }

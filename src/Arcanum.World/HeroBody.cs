@@ -45,7 +45,7 @@ public readonly record struct HeroBody(int Body, int Gender, int Armor = 0, int 
         (12u << 28) | ((uint)MonsterSpecies << 23) | ((uint)animation << 6) | ((uint)Palette << 4) | (uint)weapon;
 
     /// <summary>The weapon part the art id of an animation carries (MA2): the animations 6 to 19 (run, fall, get up, vault, throw) clear it, the attack (20) and the low attack (21) take 1 even out of combat
-    /// mode (every installed attack file is a weapon part 1 one, and nothing attacks out of combat mode; the human body does the same), the rest keep the body's.</summary>
+    /// mode (every installed attack file is a weapon part 1 one, and nothing attacks out of combat mode; the human body does the same), the stunned animation (23) takes 1 too (N1: unarmed, ARC-COMBAT-1865), the rest keep the body's.</summary>
     public int MonsterWeaponPart(int animation) => animation switch
     {
         >= 6 and <= 19 => 0,
