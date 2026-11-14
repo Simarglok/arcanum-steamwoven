@@ -63,6 +63,10 @@ public partial class AreaInventoryGridArea : Control
     /// follower), 1 the right (next).</summary>
     public event Action<int>? CycleRequested;
     private int? _cycleDown;
+    /// <summary>ARC-UI-1924 (IW46): a stat hot spot was released over (after its press) or entered by the pointer: the weapon or armour stat lines of the hero or the other party, with the ratings
+    /// the window shows for them (null when the reader gave none).</summary>
+    public event Action<AreaStatRequest>? StatRequested;
+    private AreaStatTarget? _statDown, _statHover;
     // ARC-UI-072 (B30): the other party's doll view is on (the original's toggle 0x681514; clear at every open) and the toggle button a
     // press is waiting on (true the doll button, false the bag button).
     private bool _bodyDoll;
@@ -257,7 +261,7 @@ public partial class AreaInventoryGridArea : Control
     {
         _view = view ?? throw new ArgumentNullException(nameof(view));
         // ARC-UI-052: another holder (or none) starts the holder's grid at its top (the open sets the scroll to 0, 0x5731FA).
-        if (view.Holder != _lootHolder) { _lootHolder = view.Holder; _lootScroll = 0; _takeAllDown = false; _bodyDoll = false; _toggleDown = null; _heroDoll = false; _heroToggleDown = null; _arrangeDown = false; _cycleDown = null; }
+        if (view.Holder != _lootHolder) { _lootHolder = view.Holder; _lootScroll = 0; _takeAllDown = false; _bodyDoll = false; _toggleDown = null; _heroDoll = false; _heroToggleDown = null; _arrangeDown = false; _cycleDown = null; _statDown = null; _statHover = null; }
         _lootScroll = Math.Clamp(_lootScroll, 0, ScrollMax(view));
         // A held item that is no longer where it was taken from (another move changed its place) cannot be dropped any more.
         if (Held is { } held && (held.Partner ? !view.LootGrid.Any(item => item.Entity == held.Entity) && view.BodyDoll.All(slot => slot.Entity != held.Entity)
@@ -277,6 +281,7 @@ public partial class AreaInventoryGridArea : Control
         if (@event is InputEventMouseMotion motion)
         {
             _pointer = motion.Position; _movedAt = Time.GetTicksMsec(); _stillReported = false;
+            StatHoverAt(motion.Position / _scale);
             TrackGamble();
             if (Held is not null) QueueRedraw();
             return;
@@ -328,7 +333,7 @@ public partial class AreaInventoryGridArea : Control
     internal void ResetStill() { _stillItem = null; _stillReported = true; }
 
     /// <summary>ARC-UI-052: the window opened: the holder's grid starts at its top (0x5731FA sets the scroll to 0 at every open).</summary>
-    internal void ResetLoot() { _lootHolder = null; _lootScroll = 0; _takeAllDown = false; _bodyDoll = false; _toggleDown = null; _heroDoll = false; _heroToggleDown = null; _arrangeDown = false; _cycleDown = null; }
+    internal void ResetLoot() { _lootHolder = null; _lootScroll = 0; _takeAllDown = false; _bodyDoll = false; _toggleDown = null; _heroDoll = false; _heroToggleDown = null; _arrangeDown = false; _cycleDown = null; _statDown = null; _statHover = null; }
 
     /// <summary>ARC-UI-072: the doll or bag button was pressed and released over it (0x573986 sets the toggle, 0x57393B clears it).</summary>
     internal void SetBodyDoll(bool doll) { if (_bodyDoll == doll) return; _bodyDoll = doll; QueueRedraw(); }
@@ -360,6 +365,29 @@ public partial class AreaInventoryGridArea : Control
     internal bool ArrangeAt(Vector2 frame) => ArrangeShown && Look!.Art[AreaInventoryArtLayout.ArrangeArt] is { } art &&
         AreaInventoryArtLayout.ArrangeHit(frame.X, frame.Y, (art.GetWidth(), art.GetHeight()));
 
+    /// <summary>
+    /// ARC-UI-1924 (IW46): the stat hot spot under <paramref name="frame"/>: the hero's art buttons and its rectangles over the damage and armour numbers (all the time in the windows of modes 0, 5 and 6, with the
+    /// hero's doll toggle in those of modes 1 to 4) and the other party's two rectangles over its doll's numbers (its doll view on); the arts size their buttons, the diagnostic look has none.
+    /// </summary>
+    internal AreaStatTarget? StatAt(Vector2 frame)
+    {
+        if (Look is null) return null;
+        (int, int) Size(int art) => Look.Art.TryGetValue(art, out var texture) ? (texture.GetWidth(), texture.GetHeight()) : (0, 0);
+        return AreaStatHotSpots.Hit(LookMode, HeroDoll, BodyDoll, frame.X, frame.Y, Size(AreaStatHotSpots.WeaponArt), Size(AreaStatHotSpots.ArmourArt));
+    }
+
+    private AreaStatRequest StatRequest(AreaStatTarget target, bool release) =>
+        new(target, target is AreaStatTarget.HeroWeapon or AreaStatTarget.HeroArmour ? _view?.HeroRatings : _view?.BodyRatings, release);
+
+    /// <summary>ARC-UI-1924: the pointer at a point of the frame: entering a stat hot spot is the button's hover-in (message subtype 2), which shows its stat lines without changing the bar's mode.</summary>
+    internal void StatHoverAt(Vector2 frame)
+    {
+        var target = Held is null && !Blocked && _view is not null ? StatAt(frame) : null;
+        if (target == _statHover) return;
+        _statHover = target;
+        if (target is { } entered) StatRequested?.Invoke(StatRequest(entered, release: false));
+    }
+
     /// <summary>ARC-UI-1120 (BW6): whether the barter window's cycle buttons are drawn: the original barter look on the follower background with both
     /// arts read.</summary>
     internal bool CycleShown => BarterLook && _barter is { } frame && AreaBarterArtLayout.CycleShown(frame.Background)
@@ -372,10 +400,12 @@ public partial class AreaInventoryGridArea : Control
     /// <summary>A left press at a point of the frame (the self-test drives it too).</summary>
     internal void PressAt(Vector2 frame)
     {
-        _arrangeDown = false; _cycleDown = null; _heroToggleDown = null;
+        _arrangeDown = false; _cycleDown = null; _heroToggleDown = null; _statDown = null;
         if (Held is not null || _view is null) return;
         // ARC-UI-1918 (0x573850): the hero's toggle buttons are the button system's (the button handler), served in every mode that makes them (1 to 4, the See Contents window too); the press takes the press sound.
         if (HeroToggleAt(frame) is { } heroToggle) { _heroToggleDown = heroToggle; SoundRequested?.Invoke(Arcanum.TerrainViewer.Core.AreaGameBarLayout.PressSound); QueueRedraw(); return; }
+        // ARC-UI-1924 (IW46): the stat hot spots are buttons of the button system too (no sound), served in every mode that makes them; the stat lines come on their release.
+        if (StatAt(frame) is { } stat) { _statDown = stat; return; }
         // ARC-RES-1327 (ledger XR16): the See Contents window (mode 4) is not served by the left press of modes 0 to 3 (0x573850 skips it for modes 4, 5 and 6): nothing is picked, not even by a
         // spell or an item cursor, and no toggle or Take all is pressed. The arrange button is the button system's (a press on it is served above all).
         if (Mode == AreaInventoryMode.Contents && !ArrangeAt(frame)) { QueueRedraw(); return; }
@@ -493,6 +523,13 @@ public partial class AreaInventoryGridArea : Control
                 SoundRequested?.Invoke(Arcanum.TerrainViewer.Core.AreaGameBarLayout.ReleaseSound);
                 Callable.From(() => CycleRequested?.Invoke(pressed)).CallDeferred();
             }
+            return;
+        }
+        if (_statDown is { } statPressed)
+        {
+            // ARC-UI-1924 (IW46): a hot spot acts on its release over it (message subtype 0): the bar goes to the message mode and the stat lines are shown.
+            _statDown = null;
+            if (StatAt(frame) == statPressed) Callable.From(() => StatRequested?.Invoke(StatRequest(statPressed, release: true))).CallDeferred();
             return;
         }
         if (_heroToggleDown is { } heroPressed)
@@ -735,6 +772,12 @@ public partial class AreaInventoryGridArea : Control
         }
         // ARC-DEV-339: the arrange button, drawn with its first frame as the other buttons are.
         Art(AreaInventoryArtLayout.ArrangeArt, AreaInventoryArtLayout.ArrangeButton.X, AreaInventoryArtLayout.ArrangeButton.Y);
+        // ARC-UI-1924 (IW46): the hot spots' art buttons 676 and 677 beside the damage and armour numbers (visible in the windows of modes 0, 5 and 6).
+        foreach (var weapon in new[] { true, false })
+        {
+            var (bx, by) = AreaStatHotSpots.ArtButton(AreaInventoryMode.Own, weapon);
+            Art(weapon ? AreaStatHotSpots.WeaponArt : AreaStatHotSpots.ArmourArt, bx, by);
+        }
         // ARC-UI-1765: the remembered item's cells are filled before its art is drawn (the redraw 0x576520 tests the remembered object 0x681458 in its grid pass).
         if (service is not null && AreaServiceArtLayout.SelectedRect(_view, service.Selected) is { } selected)
         {
@@ -966,6 +1009,13 @@ public partial class AreaInventoryGridArea : Control
             Art(AreaLootArtLayout.DollButtonArt, AreaHeroDollToggle.DollButton.X, AreaHeroDollToggle.DollButton.Y);
             Art(AreaLootArtLayout.BagButtonArt, AreaHeroDollToggle.BagButton.X, AreaHeroDollToggle.BagButton.Y);
         }
+        // ARC-UI-1924 (IW46): the hero's hot spots' art buttons at (374, 318) and (599, 319): made hidden by the open, shown with the hero's doll toggle.
+        if (HeroDoll)
+            foreach (var weapon in new[] { true, false })
+            {
+                var (bx, by) = AreaStatHotSpots.ArtButton(Mode, weapon);
+                Art(weapon ? AreaStatHotSpots.WeaponArt : AreaStatHotSpots.ArmourArt, bx, by);
+            }
         if (Held is { } held)
         {
             var (w, h, name) = held.Partner && view.LootGrid.FirstOrDefault(item => item.Entity == held.Entity) is { } loot ? (loot.Width, loot.Height, loot.Name)

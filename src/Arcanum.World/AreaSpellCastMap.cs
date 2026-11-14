@@ -446,10 +446,14 @@ public sealed class AreaSpellCastMap : ISpellCastMap
             {
                 // ARC-AI-2123 (GW1, GW8): a hit of 0 on an object that stays whole changes nothing and shows no damage, but the damage end still calls the witnesses (mode 1) for an attacker: queue a hit only they read.
                 if (attacker is not null && (result.Host & SessionObjectHostSteps.WitnessesHearAttack) != 0)
+                {
                     _objectHits.Add(new(id, new ObjectHitOutcome(0, 0, false, ObjectBreak.None, 0), result.Host) { Actor = attacker, WitnessOnly = true });
+                    ObjectHitMade?.Invoke();
+                }
                 return false;
             }
             _objectHits.Add(new(id, hit, result.Host) { Source = DamageSource is { } named && named.Target == id ? named.Source : null, Actor = attacker });
+            if (attacker is not null) ObjectHitMade?.Invoke();
             return result.Disposition == GameSessionDisposition.Changed;
         }
         // ARC-COMBAT-025 (OD1–OD4, OD12): an item takes the same damage through its durability.
@@ -461,6 +465,10 @@ public sealed class AreaSpellCastMap : ISpellCastMap
     }
 
     private readonly List<AreaObjectHit> _objectHits = [];
+
+    /// <summary>ARC-AI-2124 (GW9): told right after a hit with an attacker (a spell's damage on an object, a zero hit that only the witnesses read) was queued, inside the damage step that made it: the original runs the object's break and the guard witnesses
+    /// (0x4AEE50) there, before the cast's next step, so the shown map takes the queued hits at once (<see cref="TakeObjectHits"/>) instead of at the cast log's flush. A damage with no attacker (script, burn, trap) does not call it and waits for the flush. Null: nothing happens.</summary>
+    public Action? ObjectHitMade { get; set; }
 
     /// <summary>ARC-TECHNOLOGY-1760 (OD4, OD15): the attacker of the context that strikes <c>Target</c> now (a trap's shot: the shooter object's cast id), kept on the hit that reaches that object only (not on damage a script or an item event of the
     /// strike deals to another object) as the BUST breaker (<see cref="AreaObjectHit.Source"/>). Null: damage with no attacker. The host sets it around one strike and clears it.</summary>

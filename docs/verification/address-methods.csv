@@ -805,6 +805,9 @@ tools/terrain-viewer/Core/AreaSheetScrollBar.cs,PartAt,exempt,reference
 tools/terrain-viewer/Core/AreaSheetScrollBar.cs,PressArrow,exempt,reference
 tools/terrain-viewer/Core/AreaSheetScrollBar.cs,PressTrack,exempt,reference
 tools/terrain-viewer/Core/AreaSheetScrollBar.cs,public,exempt,reference
+tools/terrain-viewer/Core/AreaStatLines.cs,Armour,exempt,reference
+tools/terrain-viewer/Core/AreaStatLines.cs,Title,exempt,reference
+tools/terrain-viewer/Core/AreaStatLines.cs,Weapon,exempt,reference
 tools/terrain-viewer/Core/AreaTextFonts.cs,Centred,pending,
 tools/terrain-viewer/Core/AreaTextFonts.cs,Place,pending,
 tools/terrain-viewer/Core/AreaTownMapArt.cs,ToLocation,pending,
@@ -877,6 +880,7 @@ tools/terrain-viewer/Godot/TerrainViewerAreaSheetArt.cs,SheetHoverEntry,pending,
 tools/terrain-viewer/Godot/TerrainViewerAreaSleep.cs,ApplyBedUse,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAreaSleep.cs,BedScriptAnswer,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAreaSleep.cs,SleepPressed,exempt,host
+tools/terrain-viewer/Godot/TerrainViewerAreaStatLines.cs,LeaveBarPane,exempt,reference
 tools/terrain-viewer/Godot/TerrainViewerAreaWorldMap.cs,AppendTownRoute,pending,
 tools/terrain-viewer/Godot/TerrainViewerAreaWorldMap.cs,MarkTownMapByScenery,pending,
 tools/terrain-viewer/Godot/TerrainViewerAreaWorldMap.cs,WorldMapTravelCheck,pending,

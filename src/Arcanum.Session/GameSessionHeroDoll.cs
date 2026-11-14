@@ -62,6 +62,9 @@ public sealed partial class GameSessionOwner
         var resistances = CombatantRules.Resistances(stored.Damage, equipment.Resistances, snapshot.GetEffective(CharacterStat.Constitution), false, effects);
         var magic = CombatantRules.MagicResistance(stored.Magic, equipment.Resistances.Magic, false, effects.Magic);
         var armour = DollRatings.Armour(armorClass, resistances.Normal, resistances.Fire, resistances.Electrical, resistances.Poison, magic);
-        return new(damage, armour, slots.Contains(EquipmentSlot.Weapon) && DollRatings.TooHeavy(hero.Weapon.MinimumStrength, hero.Combatant.Strength));
+        return new(damage, armour, slots.Contains(EquipmentSlot.Weapon) && DollRatings.TooHeavy(hero.Weapon.MinimumStrength, hero.Combatant.Strength))
+        {
+            Detail = new(effectiveness, DollRatings.Ranges(hero.Weapon, hero.Combatant.DamageBonus, hero.Skill), armorClass, resistances.Normal, resistances.Fire, resistances.Electrical, resistances.Poison, magic),
+        };
     }
 }

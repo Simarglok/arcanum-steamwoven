@@ -161,6 +161,7 @@ public partial class TerrainViewerApp
             _barterPanel.GambleEntered += BarterGambleEntered;
             _barterPanel.PointerStill += BarterPointerStill;
             _barterPanel.ArrangeRequested += BarterArrange;
+            _barterPanel.StatRequested += ShowStatLines;
             _barterPanel.CycleRequested += BarterCycle;
             _barterPanel.SoundRequested += id => PlayInterfaceSound(id, "barter arrange button");
             _barterPanel.HolderView = InventoryHolderView;

@@ -69,7 +69,7 @@ public sealed partial class GameSessionOwner
         if (!IsCurrent(expected)) return RejectParty(GameSessionFailure.StaleVersion);
         if (entity == leader || LeadsUpTo(leader, entity)) return RejectParty(GameSessionFailure.InvalidCompanion);
         var linked = _party.NpcLed.TryGetValue(entity, out var current);
-        if (linked && current.Leader == leader && current.Forced && _party.NpcArrays[leader][^1] == entity)
+        if (linked && current.Leader == leader && current.Forced && FollowersOf(leader).LastOrDefault() == entity)
             return new(GameSessionDisposition.NoChange, GameSessionFailure.None, null, new(_identity, _revision));
         if (!linked && _party.NpcLed.Count >= MaxNpcFollowers) return RejectParty(GameSessionFailure.BudgetExceeded);
         var copyTempus = JoinCopiesTempusFugit(entity, leader);
@@ -79,8 +79,9 @@ public sealed partial class GameSessionOwner
         if (hero.Standing != CompanionStanding.Free) LeaveHero(hero);
         else if (linked) LeaveNpcLeader(entity);
         // The join clears the NPC flag 0x20 (jilted); the WAIT bit it does not touch (CF9), and like the hero's join the session drops the timer of a free NPC that joins with it.
+        // ARC-WORLD-2116: the flag on a follower of an NPC means it waits outside the leader's array, so a free NPC that carries it (CF9 keeps it in the original, in the array) joins an NPC without it.
         var record = _party.Get(entity);
-        if (record.Jilted) _party.Put(record with { Jilted = false }, false);
+        if (record.Jilted || record.WaitFlag) _party.Put(record with { Jilted = false, WaitFlag = false }, false);
         if (hero.WaitBit) CancelWaitTimers(entity);
         _party.PutNpcLed(new(entity, leader, true));
         if (copyTempus) WriteTempusFugitOnJoin(entity);
@@ -120,9 +121,38 @@ public sealed partial class GameSessionOwner
         return tree;
     }
 
+    // ARC-WORLD-2116: a follower that waits under its NPC leader (the wait flag on its record) has left the leader's array (0x4AA7A0's forced leave) and kept the leader handle.
     private IReadOnlyList<string> FollowersOf(string leader) =>
         leader == SessionEventKinds.PlayerEntity ? _party.Order.ToArray()
-        : _party.NpcArrays.TryGetValue(leader, out var array) ? array.ToArray() : [];
+        : _party.NpcArrays.TryGetValue(leader, out var array) ? array.Where(entity => !_party.Get(entity).WaitFlag).ToArray() : [];
+
+    // Whether the critter waits under an NPC leader: the wait flag with an NPC leader kept (the hero's waiting NPC is a standing, a leaderless one has no leader).
+    private bool WaitsUnderNpcLeader(string entity) => _party.NpcLed.ContainsKey(entity) && _party.Get(entity).WaitFlag;
+
+    // The forced unwait of a follower waiting under an NPC leader (0x4AA8C0 with force 1, then the join 0x45DE90 with force 1): the flag and the timers go, the leader is joined again, appended at the end of
+    // its array, forced, jilted cleared, the leader's Tempus Fugit flag copied. The caller has checked the wait and has the revision room.
+    private void RejoinNpcLeader(string entity)
+    {
+        var led = _party.NpcLed[entity];
+        var record = _party.Get(entity);
+        _party.Put(record with { WaitFlag = false, Jilted = false }, false);
+        CancelWaitTimers(entity);
+        _party.RemoveNpcLed(entity);
+        _party.PutNpcLed(new(entity, led.Leader, true));
+        ClearTempusFugitOnLeave(entity);
+        if (JoinCopiesTempusFugit(entity, led.Leader) && (_objectFlags.ContainsKey(entity) || _objectFlags.Count < MaxObjectFlagCritters)) WriteTempusFugitOnJoin(entity);
+        _combat.Concealed.Remove(entity);
+    }
+
+    private PartyMutationResult UnwaitUnderNpcLeader(string entity)
+    {
+        // The join's Tempus Fugit copy needs room in the written-flags bound: a full bound refuses before anything changes, as every join does (the death's forced unwait alone leaves the copy out).
+        if (JoinCopiesTempusFugit(entity, _party.NpcLed[entity].Leader) && !_objectFlags.ContainsKey(entity) && _objectFlags.Count >= MaxObjectFlagCritters) return RejectParty(GameSessionFailure.BudgetExceeded);
+        if (_revision == long.MaxValue) return RejectParty(GameSessionFailure.RevisionExhausted);
+        RejoinNpcLeader(entity);
+        Revise();
+        return new(GameSessionDisposition.Changed, GameSessionFailure.None, null, new(_identity, _revision));
+    }
 
     // Whether `critter`'s chain of leaders reaches `ancestor` (a join of `ancestor` under `critter` would close a cycle).
     private bool LeadsUpTo(string critter, string ancestor)
