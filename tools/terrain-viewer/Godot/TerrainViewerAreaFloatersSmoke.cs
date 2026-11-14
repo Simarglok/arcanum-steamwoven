@@ -223,7 +223,7 @@ public partial class TerrainViewerApp
             Require(Bubble(HeroFloater, heroSays) && Bubble(entity, "Hello"), "bubbles over the hero and the NPC were made");
             Require(layer.Bubbles.Of(HeroFloater) is { Color: BubbleColor.Green, LifeMs: 6000, Persistent: false } && layer.Bubbles.Of(entity) is { Color: BubbleColor.White, LifeMs: 6000 },
                 "the PC's bubble is green, the NPC's white, both live the default 6 s");
-            var bubbles = layer.BubblesDrawnForSelfTest();
+            var bubbles = layer.LayOutBubbles();
             Require(bubbles.Count == 2 && bubbles.Any(b => b.Owner == HeroFloater), $"both bubbles draw ({bubbles.Count} bubbles)");
             var heroBubble = bubbles.First(b => b.Owner == HeroFloater);
             Require(heroBubble.Lines.Count > 1 && heroBubble.Rect.Size.X <= TextBubbleRules.BoxSize + 1, $"the long line wrapped to {heroBubble.Lines.Count} lines within 200 px");

@@ -37,7 +37,7 @@ public partial class AreaFloaterLayer : CanvasLayer
     /// <summary>ARC-UI-1997: the text bubbles over objects (the original's TB table of eight), drawn under the floating lines.</summary>
     public TextBubbleField<string> Bubbles { get; } = new();
     public int BubbleLineHeight { get; }
-    /// <summary>The screen point an owner's bubble anchors on (its tile centre, with the original's (40, 20)), or null when it is not on the shown map.</summary>
+    /// <summary>The screen point an owner's bubble anchors on (its tile centre, with the original's (40, 20), no draw offset), or null when it is not on the shown map.</summary>
     public Func<string, Vector2?> BubbleAnchor { get; set; } = _ => null;
     /// <summary>The view's rectangle the bubbles are placed in; the whole layer when null.</summary>
     public Func<Rect2>? BubbleView { get; set; }
@@ -75,7 +75,7 @@ public partial class AreaFloaterLayer : CanvasLayer
     public int MeasureText(string text) => _face is { } face ? face.Font.Measure(text).Width
         : (int)Math.Ceiling(_font.GetStringSize(text, HorizontalAlignment.Left, -1, FontSize).X);
 
-    /// <summary>Makes a bubble over <paramref name="owner"/> (0x4D5FE0): the text wrapped and measured once, as the original renders it.</summary>
+    /// <summary>Makes a bubble over <paramref name="owner"/>: the text wrapped and measured once, as the original renders it.</summary>
     public int AddBubble(string owner, string text, BubbleColor color, long nowMs)
     {
         var index = Bubbles.Create(owner, text, TextBubbleRules.Layout(text, BubbleLineHeight, MeasureText), color, nowMs);
@@ -84,8 +84,8 @@ public partial class AreaFloaterLayer : CanvasLayer
     }
 
     /// <summary>What a bubble draw shows now: per bubble with an anchor, its lines (text, screen position), colour and placement slot. A bubble's slot is
-    /// chosen the first time it is laid out with an anchor (0x4D63B0) and kept.</summary>
-    internal IReadOnlyList<(string Owner, BubbleColor Color, int Slot, Rect2 Rect, IReadOnlyList<(string Text, Vector2 Position)> Lines)> BubblesDrawnForSelfTest()
+    /// chosen the first time it is laid out with an anchor and kept. The draw and the smokes both read it.</summary>
+    internal IReadOnlyList<(string Owner, BubbleColor Color, int Slot, Rect2 Rect, IReadOnlyList<(string Text, Vector2 Position)> Lines)> LayOutBubbles()
     {
         var drawn = new List<(string, BubbleColor, int, Rect2, IReadOnlyList<(string, Vector2)>)>();
         var view = BubbleView?.Invoke() ?? _bubbleSurface.GetRect();
@@ -106,7 +106,7 @@ public partial class AreaFloaterLayer : CanvasLayer
     private void DrawBubbles()
     {
         var ascent = _font.GetAscent(FontSize);
-        foreach (var (_, color, _, _, lines) in BubblesDrawnForSelfTest())
+        foreach (var (_, color, _, _, lines) in LayOutBubbles())
         {
             var (r, g, b) = TextBubbleRules.Rgb(color);
             var (sr, sg, sb) = TextBubbleRules.ShadowRgb;

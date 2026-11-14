@@ -1067,7 +1067,7 @@ smoke's clock raises them 3 px a step and the drawn opacity is the fade's; the N
 lands (red lines over the hero) or is dodged (a white dodge); at level 1 the numbers go, at level 0 nothing is drawn;
 it prints `ARC-UI-021 native-smoke floaters PASS`. Since ARC-COMBAT-1138 the stage also checks a script's damage on a map object (a door, container or scenery with hit points to spare): `HT N` in white over it, N what the
 object lost after its material (`ARC-COMBAT-1138 floaters object-damage`; its capture hides the diagnostic HUD). Not done: spell blinding, the draw offsets of the boxes' objects (the hero's while walking), the
-original's font art 229. Original visual parity NOT VERIFIED. The text bubbles over objects (Text Duration) are [below](#text-bubbles-arc-ui-1997). ARC-AI-1527: the PC's followers' comment lines (the combat taunt at the end of the hero's hit, the near-death line of a hurt follower, the complaint's upset line) float as white lines over the follower through the script float queue, with a random line of the player's generated NPC files (no text is stored).
+original's font art 229. Original visual parity NOT VERIFIED. The text bubbles over objects (Text Duration) are [below](#text-bubbles-arc-ui-1997). ARC-AI-1527: the PC's followers' comment lines (the combat taunt at the end of the hero's hit, the near-death line of a hurt follower, the complaint's upset line) show as text bubbles (ARC-UI-1997) over the follower through the script float queue, with a random line of the player's generated NPC files (no text is stored).
 
 ### Text bubbles (ARC-UI-1997)
 

@@ -106,15 +106,15 @@ public partial class TerrainViewerApp
     // ARC-DEV-298 (B20): the float lines of tile scripts (owner, text), queued when the run was applied.
     private readonly Queue<(string Owner, string Text)> _tileScriptFloats = new();
 
-    /// <summary>The bubble clock: the real one (the original's timeGetTime, 0x402580), or the smoke's own.</summary>
+    /// <summary>The bubble clock: the real one (the original's timeGetTime), or the smoke's own.</summary>
     private long BubbleNowMs() => _floaterClockForSelfTest ? BubbleClockForSelfTest : (long)Time.GetTicksMsec();
 
     internal long BubbleClockForSelfTest { get; set; }
 
-    /// <summary>ARC-UI-1997: a text bubble over <paramref name="owner"/> (0x568540 → 0x4D5FE0): the owner's old bubble is replaced; true when it was made.</summary>
+    /// <summary>ARC-UI-1997: a text bubble over <paramref name="owner"/> (the speech display makes one): the owner's old bubble is replaced; true when it was made.</summary>
     private bool Bubble(string owner, string text)
     {
-        if (_readyMode != TerrainViewerMode.Area || _readyArea is null || text.Length == 0) return false;
+        if (_readyMode != TerrainViewerMode.Area || _readyArea is null || string.IsNullOrWhiteSpace(text)) return false;
         var layer = FloaterLayer();
         DropFloatersOfOldScene(layer);
         if (FloaterCell(owner) is { } cell) _floaterCells[owner] = cell;
@@ -197,10 +197,11 @@ public partial class TerrainViewerApp
         if (_floaters is not { } layer) return;
         DropFloatersOfOldScene(layer);
         layer.Level = _gameSettings.Floats;
-        // ARC-UI-1997: the Text Duration line changes the live bubbles' life at once (0x4D67F0), then the real clock ages them (0x4D5EB0).
+        // ARC-UI-1997: the Text Duration line changes the live bubbles' life at once, then the real clock ages them.
         if (layer.Bubbles.TextDuration != _gameSettings.TextDuration) layer.Bubbles.SetTextDuration(_gameSettings.TextDuration);
-        layer.Bubbles.Tick(BubbleNowMs());
-        if (layer.Bubbles.Count > 0) layer.Redraw();
+        // An expired last bubble needs one more draw, to be wiped from the surface.
+        var expired = layer.Bubbles.Tick(BubbleNowMs());
+        if (expired || layer.Bubbles.Count > 0) layer.Redraw();
         if (layer.Field.Count == 0) return;
         if (!_floaterClockForSelfTest) layer.Field.Advance((long)Time.GetTicksMsec(), _gameSettings.FloatSpeed);
         layer.Redraw();
@@ -227,7 +228,7 @@ public partial class TerrainViewerApp
     /// <summary>The screen point 90 px (at the view's zoom) above an owner's tile centre, the floater box's bottom centre.</summary>
     private Vector2? FloaterAnchor(string owner) => ObjectScreenPoint(owner, FloaterRules.BoxRise);
 
-    /// <summary>ARC-UI-1997: a bubble's anchor, the owner's tile centre on the screen with the original's (40, 20) (0x4D6410).</summary>
+    /// <summary>ARC-UI-1997: a bubble's anchor, the owner's tile centre on the screen with the original's (40, 20), without the draw offset.</summary>
     private Vector2? BubbleAnchorOf(string owner) => ObjectScreenPoint(owner, 0);
 
     private Vector2? ObjectScreenPoint(string owner, int rise)

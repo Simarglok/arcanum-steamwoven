@@ -140,7 +140,7 @@ public partial class TerrainViewerApp
                 TickFloaters();
                 Require(_scriptFloats > floatedBefore, $"the greeting floated over the corpse: {_scriptFloats - floatedBefore}");
                 // ARC-UI-1997: the greeting is a text bubble over the corpse (the wrapped lines read back as the line).
-                var drawn = FloatersForSelfTest?.BubblesDrawnForSelfTest().Where(d => d.Owner == entity).Select(d => string.Join(" ", d.Lines.Select(l => l.Text))).ToArray() ?? [];
+                var drawn = FloatersForSelfTest?.LayOutBubbles().Where(d => d.Owner == entity).Select(d => string.Join(" ", d.Lines.Select(l => l.Text))).ToArray() ?? [];
                 Require(drawn.Contains(line), $"the corpse's line is a bubble over it: \"{line}\" among [{string.Join(" | ", drawn)}]");
                 origin = "generic greeting";
                 GD.Print($"ARC-DEV-324 spirit-talk generic greeting over the corpse: {line} ({_voiceStart.Detail})");

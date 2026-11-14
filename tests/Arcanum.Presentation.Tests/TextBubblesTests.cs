@@ -161,4 +161,30 @@ public sealed class TextBubblesTests
         field.Clear();
         Assert.AreEqual(0, field.Count);
     }
+
+    [TestMethod]
+    public void Edge_cases_are_refused_or_empty()
+    {
+        Assert.AreEqual(0, Layout("   ").Lines.Count, "a whitespace-only text has no line");
+        Assert.AreEqual(0, TextBubbleRules.Layout("hi", 201, Measure).Lines.Count, "a line height above the box leaves no room for a line");
+        var field = new TextBubbleField<string>();
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => field.SetTextDuration(-1));
+        field.SetSlot("nobody", 3);
+        Assert.AreEqual(0, field.Count, "a slot for an object without a bubble is ignored");
+        field.Create("a", "x", Layout(), BubbleColor.White, 0);
+        field.SetSlot("a", 5);
+        Assert.AreEqual(5, field.Of("a")!.Slot);
+        Assert.IsFalse(field.Tick(0), "nothing expired yet: the ping says so");
+        Assert.IsTrue(field.Tick(100_000_000_000), "an age far above the clamp is still above the life");
+    }
+
+    [TestMethod]
+    public void The_slot_choice_fits_the_edges_exactly_and_follows_the_view()
+    {
+        // A box touching the bottom edge still fits (the compare is inclusive); one pixel taller does not and the next slot of the order wins.
+        Assert.AreEqual(4, TextBubbleRules.ChooseSlot(400, 300, 100, 290, 0, 0, 800, 600));
+        Assert.AreEqual(2, TextBubbleRules.ChooseSlot(400, 300, 100, 291, 0, 0, 800, 600));
+        // A view that starts at x = 100: the anchor's regions are taken from its centre (500), and a box left of its edge does not fit.
+        Assert.AreEqual(4, TextBubbleRules.ChooseSlot(150, 100, 100, 40, 100, 0, 800, 600), "top left of that view: below the anchor");
+    }
 }

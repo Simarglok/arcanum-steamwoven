@@ -23,7 +23,7 @@ public static class TextBubbleRules
     /// <summary>The shadow's offset in pixels (drawn first, in <see cref="ShadowRgb"/>, font flag 0x08) and the shadow colour (0x630D50).</summary>
     public const int ShadowOffset = 1;
     public static readonly (byte R, byte G, byte B) ShadowRgb = (10, 10, 10);
-    /// <summary>The bubble's anchor is the object's tile centre: its screen point + (40, 20) (0x4D6410), plus the object's draw offset.</summary>
+    /// <summary>The bubble's anchor is the object's tile centre: its screen point + (40, 20) (the original adds the object's draw offset too; the viewer does not yet).</summary>
     public const int AnchorX = 40, AnchorY = 20;
 
     /// <summary>A bubble font's colour (0x5B8EA0).</summary>
@@ -36,8 +36,7 @@ public static class TextBubbleRules
         _ => throw new ArgumentOutOfRangeException(nameof(color)),
     };
 
-    /// <summary>The default life in milliseconds: the "text duration" setting × 1000 (0x4D67F0).</summary>
-    [OriginalFunction(0x4D67F0, OriginalFunctionScope.Partial)]
+    /// <summary>The default life in milliseconds: the "text duration" setting × 1000 (the setting's callback is <see cref="TextBubbleField{TKey}.SetTextDuration"/>).</summary>
     public static long LifeMs(int textDuration)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(textDuration);
@@ -45,11 +44,10 @@ public static class TextBubbleRules
     }
 
     /// <summary>
-    /// The text's lines (0x4D5FE0 renders it once into the bubble's own 200 × 200 buffer; breaker 0x535C40, whose word-break detail is
+    /// The text's lines (the original renders it once into the bubble's own 200 × 200 buffer at creation; the line breaker's word-break detail is
     /// not read: words are broken at spaces, a word wider than the box stands alone): lines are added while the next one fits in the
     /// 200 px height; the rest is cut. Each line is centred in the rect, which is the tight box of the lines plus the shadow's pixel.
     /// </summary>
-    [OriginalFunction(0x4D5FE0, OriginalFunctionScope.Partial)]
     public static TextBubbleLayout Layout(string text, int lineHeight, Func<string, int> measure)
     {
         ArgumentNullException.ThrowIfNull(text);
@@ -150,7 +148,7 @@ public sealed class TextBubbleField<TKey> where TKey : notnull
     /// <summary>The "text duration" setting changed (0x4D67F0, also the setting's callback): new bubbles live n seconds and every live
     /// non-persistent bubble now lives n seconds from its own start. The original multiplies the live ones by 1,000,000 instead of 1000
     /// (a unit slip: they stay about 100 minutes); that technical bug is fixed in both modes, no switch (ledger TB17).</summary>
-    [OriginalFunction(0x4D67F0, OriginalFunctionScope.Full)]
+    [OriginalFunction(0x4D67F0, OriginalFunctionScope.Partial)]
     public void SetTextDuration(int textDuration)
     {
         var life = TextBubbleRules.LifeMs(textDuration);
@@ -179,7 +177,7 @@ public sealed class TextBubbleField<TKey> where TKey : notnull
         return index;
     }
 
-    /// <summary>The bubble's placement slot, chosen at its first layout and kept (0x4D63B0).</summary>
+    /// <summary>The bubble's placement slot, chosen at its first layout and kept (see <see cref="TextBubbleRules.ChooseSlot"/>).</summary>
     public void SetSlot(TKey owner, int slot)
     {
         var index = Array.FindIndex(_entries, e => e is not null && EqualityComparer<TKey>.Default.Equals(e.Owner, owner));
@@ -199,7 +197,7 @@ public sealed class TextBubbleField<TKey> where TKey : notnull
     }
 
     /// <summary>Removes an object's bubble (0x4D62B0); false when it had none.</summary>
-    [OriginalFunction(0x4D62B0, OriginalFunctionScope.Full)]
+    [OriginalFunction(0x4D62B0, OriginalFunctionScope.Partial)]
     public bool Remove(TKey owner)
     {
         var index = Array.FindIndex(_entries, e => e is not null && EqualityComparer<TKey>.Default.Equals(e.Owner, owner));
@@ -210,7 +208,7 @@ public sealed class TextBubbleField<TKey> where TKey : notnull
 
     /// <summary>The ping (0x4D5EB0): every live, non-persistent bubble older than its life goes (the age is clamped to 0x7FFFFFFF, the compare
     /// is strict: a life of 0 lasts until the first ping with a later time). True when any went.</summary>
-    [OriginalFunction(0x4D5EB0, OriginalFunctionScope.Full)]
+    [OriginalFunction(0x4D5EB0, OriginalFunctionScope.Partial)]
     public bool Tick(long nowMs)
     {
         var removed = false;
@@ -224,6 +222,6 @@ public sealed class TextBubbleField<TKey> where TKey : notnull
     }
 
     /// <summary>Removes every bubble (0x4D6320: a new map, a reset, a script's black fade).</summary>
-    [OriginalFunction(0x4D6320, OriginalFunctionScope.Full)]
+    [OriginalFunction(0x4D6320, OriginalFunctionScope.Partial)]
     public void Clear() => Array.Clear(_entries);
 }
