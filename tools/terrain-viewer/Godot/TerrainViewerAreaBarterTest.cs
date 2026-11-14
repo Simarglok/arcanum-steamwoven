@@ -165,6 +165,10 @@ public partial class TerrainViewerApp
         {
             AreaBarterArtLayout.BarterArt or AreaBarterArtLayout.FollowerArt or AreaInventoryArtLayout.DollArt or AreaLootArtLayout.LootArt => Blank(358, 400),
             AreaInventoryArtLayout.PackArt => Blank(442, 400),
+            // ARC-UI-1917: the merchant's doll view (358 × 243) and its two toggle buttons (small, so the two do not overlap).
+            AreaBarterArtLayout.DollViewArt => Blank(358, 243),
+            AreaLootArtLayout.DollViewArt => Blank(358, 266),
+            AreaLootArtLayout.DollButtonArt or AreaLootArtLayout.BagButtonArt => Blank(30, 20),
             _ => Blank(80, 43),
         }), _ => null, AreaInventoryTexts.Project("self-test")) { LootReady = true, BarterReady = true };
     }
@@ -287,6 +291,32 @@ public partial class TerrainViewerApp
             Require(buttonSounds.Count(id => id == AreaGameBarLayout.PressSound) == 3 && buttonSounds.Count(id => id == AreaGameBarLayout.ReleaseSound) == 2, "press and release sounds: " + string.Join(",", buttonSounds));
             area.SetBarter(plain);
             Require(!area.CycleShown, "the merchant background takes the buttons away");
+
+            // ARC-UI-1917 (IW29, IW30): the merchant's doll view and its two toggle buttons at (8, 123) and (46, 123).
+            var (dollPoint, bagPoint) = (new Vector2(AreaBarterArtLayout.DollButton.X + 5, AreaBarterArtLayout.DollButton.Y + 5), new Vector2(AreaBarterArtLayout.BagButton.X + 5, AreaBarterArtLayout.BagButton.Y + 5));
+            Require(area.TogglesShown && !area.BodyDoll, "the doll and bag buttons are shown and the grid view is on first");
+            Require(area.ToggleAt(dollPoint) == true && area.ToggleAt(bagPoint) == false && area.ToggleAt(new(AreaLootArtLayout.DollButton.X + 5, AreaLootArtLayout.DollButton.Y + 5)) is null,
+                "the buttons are at the barter window's places, not the loot window's");
+            area.PressAt(dollPoint);
+            Require(area.Held is null, "a press on a toggle picks nothing up");
+            area.ReleaseAt(new(dollPoint.X + 100, dollPoint.Y));
+            Require(!area.BodyDoll, "a release away from the pressed button does nothing");
+            area.PressAt(dollPoint); area.ReleaseAt(dollPoint);
+            Require(area.BodyDoll && area.Held is null, "the doll button shows the doll view");
+            var worn = panel.ArtView!.BodyDoll.Where(slot => slot.Entity is not null).ToArray();
+            Require(panel.ArtView.BodyDoll.Count == 9 && worn.Length == 1 && worn[0] is { Slot: Arcanum.Simulation.Equipment.EquipmentSlot.Armor, Entity: "vest" },
+                "the view carries the merchant's nine slots and its worn vest in the armour slot: " + string.Join(",", worn.Select(slot => slot.Entity)));
+            Require(area.BarterHit(Ware(sword.Location)) == AreaBarterHit.None && area.BarterHit(new(160, 190)) == AreaBarterHit.None, "the doll view hides the grid and picks nothing");
+            area.PressAt(Ware(sword.Location));
+            Require(area.Held is null, "a press where the grid was picks nothing in the doll view");
+            area.ScrollLoot(1);
+            Require(area.LootScroll == 0, "the wheel leaves the hidden grid's scroll alone");
+            area.PressAt(bagPoint); area.ReleaseAt(bagPoint);
+            Require(!area.BodyDoll && area.BarterHit(Ware(sword.Location)).Location == sword.Location, "the bag button shows the grid again");
+            area.PressAt(dollPoint); area.ReleaseAt(dollPoint);
+            area.Render(panel.ArtView!);
+            Require(area.BodyDoll, "a redraw of the same window (a trade's) keeps the toggle");
+            area.PressAt(bagPoint); area.ReleaseAt(bagPoint);
 
             var revision = owner.Version.Revision;
             area.PressAt(Ware(sword.Location)); area.ReleaseAt(Ware(69));
@@ -584,6 +614,9 @@ public partial class TerrainViewerApp
         }
         // ARC-UI-1194: with ARC_AREA_WINDOW_ART the window's frames (its background, the lens, the pack) are checked in the generated interface and captured.
         await WindowArtSmokeAsync("barter", area, [background, AreaInventoryHole.BarterArt, AreaInventoryArtLayout.PackArt, AreaInventoryArtLayout.ArrangeArt]);
+        string doll;
+        try { doll = await BarterDollForSmokeAsync(panel, area); }
+        catch (Exception failure) { GD.Print("ARC-UI-1917 native-smoke barter-doll FAIL " + failure.Message); throw; }
         if (System.Environment.GetEnvironmentVariable("ARC_AREA_BARTER_CAPTURE") is { Length: > 0 } capture)
         {
             await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
@@ -592,9 +625,37 @@ public partial class TerrainViewerApp
             if (shot.SavePng(capture) != Error.Ok) throw new InvalidOperationException("AREA_BARTER_CAPTURE_FAILED");
         }
         var line = $"background {background}, image {view.HolderImage?.ToString() ?? "none"}, shown {view.LootGrid.Count} (drawn {drawn}, container {view.HolderContainer}), "
-            + $"hero grid {view.Grid.Count}, quote '{quote}'";
+            + $"hero grid {view.Grid.Count}, quote '{quote}', {doll}";
         GD.Print("ARC-UI-064 native-smoke barter-art PASS " + line);
         return line;
+    }
+
+    /// <summary>
+    /// ARC-UI-1917 native observation (stage `barter`, on the live window with the game's art): the doll and bag buttons are made at (8, 123) and (46, 123), the doll button shows the
+    /// merchant's doll view (337 <c>Barter_PD</c> at (0, 157)) with its nine slots (a worn item's art or the slot's cover) and hides the grid, and the bag button shows the grid again; the
+    /// toggle starts clear. With ARC_AREA_WINDOW_ART legacy or hd the doll's frame is checked in that mode and captured (the generated interface has no recipe for 337 yet: issue #1750);
+    /// ARC_AREA_WINDOW_CAPTURE=PREFIX saves it as PREFIX-barter-doll-MODE.png. Prints counts only; a window without the buttons (the doll arts did not read) says so.
+    /// </summary>
+    private async Task<string> BarterDollForSmokeAsync(AreaBarterPanel panel, AreaInventoryGridArea area)
+    {
+        static void Require(bool value, string why) { if (!value) throw new InvalidOperationException("ARC-UI-1917 barter-doll smoke: " + why); }
+        if (area.Look is not { } look || !area.TogglesShown) return "doll none (the doll arts did not read)";
+        Require(!area.BodyDoll, "the toggle starts clear at every open");
+        var (dollPoint, bagPoint) = (new Vector2(AreaBarterArtLayout.DollButton.X + 2, AreaBarterArtLayout.DollButton.Y + 2), new Vector2(AreaBarterArtLayout.BagButton.X + 2, AreaBarterArtLayout.BagButton.Y + 2));
+        Require(area.ToggleAt(dollPoint) == true && area.ToggleAt(bagPoint) == false, "the buttons are at (8, 123) and (46, 123)");
+        area.PressAt(dollPoint); area.ReleaseAt(dollPoint);
+        Require(area.BodyDoll && area.Held is null, "the doll button shows the doll view");
+        var body = panel.ArtView!.BodyDoll;
+        Require(body.Count == 9 || panel.ArtView.HolderContainer, $"the merchant's nine slots are in the view ({body.Count})");
+        var worn = body.Count(slot => slot.Entity is not null);
+        Require(body.Where(slot => slot.Entity is not null).All(slot => look.ItemArt(slot.Entity!) is not null), "every worn item has its art");
+        Require(body.Where(slot => slot.Entity is null).All(slot => look.Art.ContainsKey(AreaInventoryArtLayout.Covers[slot.Slot])), "every empty slot has its cover art");
+        Require(area.BarterHit(new(AreaBarterArtLayout.GridX + 5, AreaBarterArtLayout.GridY + 5)) == AreaBarterHit.None, "the grid is hidden in the doll view");
+        if (System.Environment.GetEnvironmentVariable("ARC_AREA_WINDOW_ART") is { Length: > 0 } mode && mode != "generated")
+            await WindowArtSmokeAsync("barter-doll", area, [AreaBarterArtLayout.DollViewArt]);
+        area.PressAt(bagPoint); area.ReleaseAt(bagPoint);
+        Require(!area.BodyDoll, "the bag button shows the grid again");
+        return $"doll {body.Count} slots ({worn} worn)";
     }
 
     /// <summary>
