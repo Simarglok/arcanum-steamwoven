@@ -36,7 +36,7 @@ public static class AreaHeroDollToggle
     /// <summary>The damage and armour rating numbers' rectangles with the toggle set (0x5CAF18, 0x5CAF28), the own window's (0x5CAEF8, 0x5CAF08) moved 345 and 348 pixels right.</summary>
     public static readonly (int X, int Y, int Width, int Height) DamageRatingBox = (425, 358, 23, 35), ArmourRatingBox = (609, 358, 23, 35);
 
-    /// <summary>The toggle buttons are made in the windows of modes 1 to 4 (the open 0x5727B0); the own window (mode 0) and the item service windows (5, 6) draw the doll without a toggle.</summary>
+    /// <summary>The toggle buttons are made in the windows of modes 1 to 4 (the open); the own window (mode 0) and the item service windows (5, 6) draw the doll without a toggle.</summary>
     public static bool TogglesShown(AreaInventoryMode mode) => mode is AreaInventoryMode.Barter or AreaInventoryMode.Loot or AreaInventoryMode.Steal or AreaInventoryMode.Contents;
 
     /// <summary>The toggle button under the point (sized by its art): true the doll button, false the bag button, null none.</summary>
@@ -48,7 +48,7 @@ public static class AreaHeroDollToggle
     }
 
     /// <summary>
-    /// The place under a point of the hero's side with the toggle set (0x575CB0): a slot of <see cref="SlotRects"/> first, as the own window's (<see cref="AreaInventoryDrag.HitTest"/>);
+    /// The place under a point of the hero's side with the toggle set (the hit test): a slot of <see cref="SlotRects"/> first, as the own window's (<see cref="AreaInventoryDrag.HitTest"/>);
     /// the drop and use boxes are the same; no grid cell exists (the grid is not shown).
     /// </summary>
     public static AreaInventoryHit HitTest(float x, float y)
