@@ -51,7 +51,7 @@ public sealed class ScrNewspaperTests
         {
             new ScrNewspaperRequest(ScrNewspaperKind.Queue, 12, false, null),
             new ScrNewspaperRequest(ScrNewspaperKind.Queue, 0, true, null),
-        }, run.Effects.Newspapers.ToArray());
+        }, run.Effects.Newspapers.ToArray(), "ARC-UI-2055 (TB26): the headline's listener is the run's triggerer, whatever the speaker");
     }
 
     [TestMethod]
@@ -62,8 +62,8 @@ public sealed class ScrNewspaperTests
         var run = Run(program);
         CollectionAssert.AreEqual(new[]
         {
-            new ScrNewspaperRequest(ScrNewspaperKind.FloatHeadline, 0, false, Pc),
-            new ScrNewspaperRequest(ScrNewspaperKind.FloatHeadline, 0, false, Npc),
+            new ScrNewspaperRequest(ScrNewspaperKind.FloatHeadline, 0, false, Pc, Pc),
+            new ScrNewspaperRequest(ScrNewspaperKind.FloatHeadline, 0, false, Npc, Pc),
         }, run.Effects.Newspapers.ToArray());
     }
 

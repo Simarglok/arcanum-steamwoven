@@ -249,8 +249,8 @@ sticky limitations, wrapped/scrollable detail and content at 480x320, 640x360,
 800x500, and 1280x800; resizing affects HUD layout only, not world state.
 
 In `area` mode, the original left click on an NPC whose effective SAP_DIALOG
-attachment names a script talks to it (ARC-SCRIPT-005): within 3 tiles at once (project
-diagnostic reach), otherwise after the click-to-move route walks within reach. The modal
+attachment names a script talks to it (ARC-SCRIPT-005): since ARC-DEV-169 the click orders the hero's goal 21 (`ag_talk`), which
+talks from less than 5 cells at once and otherwise walks the hero next to the NPC first (the original's range, 0x42AE10; no project reach). The modal
 conversation panel closes the actor gate; replies are clicked (controller menu navigates and
 confirms), keyboard keys stay reserved and are not redirected, and a diagnostic Leave button
 closes the dialog. Since ARC-SCRIPT-009 the talk request and the script's continuation after a
@@ -262,8 +262,8 @@ self-test covers a synthetic panel, an off-NPC click, keyboard events and polled
 palette guard in AREA mode (the positive NPC hit test is an opt-in original-data test). ARC-UI-071 (B29): the panel's texts (header, NPC
 line, replies, outcome, effects, hint, Leave) are drawn in the original's font art 229 with the MW31 blend (`AreaArtParagraph`, broken at the
 panel's content width by `AreaTextFontLayout.Place`) once the viewer has read the text fonts (ARC-DEV-156), and in the viewer's font
-without them; the self-test also covers the art-text mode on synthetic glyphs and the `wreck` smoke checks it on the installed fonts. PROJECT:
-the font of the original's own talk window is not read; 229 is the dialog box's and the message window's text font.
+without them; the self-test also covers the art-text mode on synthetic glyphs and the `wreck` smoke checks it on the installed fonts. The reply band of the original's own talk window is built with font art 229 too
+(0x4C9280, F1), the one font of the dialog box and the message window; the diagnostic panel is not the band and keeps its own look.
 ARC-UI-2019 (a Steamwoven addition, owner request; switch `InterfaceRuleProfile.DialogRepliesUnnumbered`, [rule modes](../world/rule-modes.md)): under the Steamwoven
 setting each reply line carries its number (`1. …`, up to 5) and the digit keys 1–5 (row or keypad, no modifier) choose the reply with that number while the
 panel awaits a choice; a blocked or absent number, a finished dialog and every other key do nothing. Under the Original setting the reply is drawn as its text
@@ -565,7 +565,7 @@ ground click cancels that walk-to-use, clicks again and lets the route walk ther
 before the use, then in the cave accepts a use and resets before the next frame,
 checking that the reset drops the transfer; it prints `ARC-WORLD-009 native-smoke transition PASS`.
 A clock phase follows (ARC-WORLD-010, [area lighting](area-lighting.md#verification)): the session clock flows to the
-next hour at literal host times, holds while the palette and a dialog are open, waits +1 hour during the pause
+next hour at literal host times, keeps flowing while the palette and a dialog are open (only the Esc menu pauses it), waits +1 hour on top of the flow
 and round-trips through a snapshot; it prints `ARC-WORLD-010 native-smoke clock PASS`.
 `ARC_AREA_TRANSITION_CAPTURE` saves views of both maps. The real-data Core test
 `AreaTransitionOriginalTests` walks to each trigger over the step evidence and
@@ -750,7 +750,7 @@ left click would do there (FR-UI-005). Nothing is clicked or changed by hovering
   ([below](#original-cursor-art-arc-ui-056)) and these system shapes only while that art is not read (the self-test, an
   unreadable game folder); the action is still decided, named in the tooltip's second line and the status line.
   The decision follows `WorldRouteClick` in its order and guards without running it:
-  a dialog NPC is *talk* within the 3-tile reach, else *walk to talk*; the cave
+  a dialog NPC is *talk* within the talk range (less than 5 cells, goal 21 node 4; ARC-DEV-169), else *walk to talk*; the cave
   entrance or exit is *use* within use range 2, else *walk to use*; anything else is a
   ground goal: *no route* when the route planner refuses it without a search (the cell or
   the actor outside the area, or no neighbour step entering the cell), else *walk here*;
@@ -1162,7 +1162,7 @@ inventory and loot lines show a stack's units (`×N`; [ammunition](../world/inve
   sweep of the native smoke counts those bodies as taken.
 - **Window.** `I` (the original Inventory key, logical key down) toggles it while the area
   inventory exists; I, Escape, the Close button or a controller cancel close it. It is
-  modal like the dialog panel (actor gate closed, clock paused, palette chord refused,
+  modal like the dialog panel (actor gate closed, the clock keeps flowing, ARC-DEV-126, palette chord refused,
   every key owned by the window). Left: the PC's list in the order items entered it, each
   with its display name (the hover rule: the examine function's (0x441B60) order from the description
   tables, type fallback without them), type and weight. When looting, right: the dead NPC's
@@ -2418,7 +2418,7 @@ project's, except as below.
   default and no other setting changes. Each change is saved at
   once (the original writes `arcanum.cfg` when the game exits). Space's toggle also saves the turn-based setting now. An
   automated run (self-test, native smoke) reads and writes no file; `GAME_SETTINGS_TEST_PATH` names a settings file for a test.
-- **Opening by O (ARC-UI-2026, OP9).** The release of the O key opens this window at its Game page in play, over any window and over the dialog (the press only arms it; Escape's route is the same). It raises no pause (the Esc menu does) and refuses only while a text entry or a menu is open; the inventory family closes under it as under Escape. The dialog stays and goes on after Done.
+- **Opening by O (ARC-UI-2026, OP9).** The release of the O key opens this window at its Game page in play, over any window and over the dialog (the press only arms it; Escape's route is the same). It raises no pause (the Esc menu does) and refuses only while a text entry or a menu is open; the inventory family closes under it as under Escape. The dialog stays and goes on after Done. The key is the physical O key (the scan code, as in the options window's own O), whatever the layout types on it; Ctrl+O and Alt+O do nothing. A hero's death behind the open window closes it, and the death screen comes 0.3 s later (ARC-UI-2066).
 - **Closing.** Done goes back to the main menu, or from play closes the menu and play goes on; from play the O key
   does the same. Escape does nothing in this window, as in the original's key table.
 
@@ -2702,7 +2702,10 @@ button writes its name from `mes\intgame.mes` (1000–1009) where the original's
 on the bars. The main menu's, in-play menu's and options window's buttons play 3026 when the pointer enters one and 3027 on
 the press (GB7). The bars are drawn over the windows they open, and those windows (character sheet, inventory, logbook,
 schematics) lay themselves out in the part the bars leave free; while a conversation, barter, reading, the save list,
-the palette, the menu or the world map is open the bars are hidden, and they come back with no button lit or held. The
+the palette, the menu or the world map is open the bars are hidden, and they come back with no button lit or held (a conversation hides them under
+Steamwoven only: since ARC-UI-2024 the Original setting `DialogBarStays` keeps them drawn under the dialog, as the original does, lays the conversation panel in the part
+they leave free and shows the speaker's description of the dialog start in the description area; the bar's buttons stay without effect while the dialog is open, and
+a click on a hotkey slot does nothing, [ledger DB1-DB4](../research/ledger/ui-audio.md#the-bars-under-the-dialog-arc-ui-2024)). The
 diagnostic HUD moves below the top strip and the follower portraits and spell pane above the bottom strip. Since ARC-UI-020 the health and fatigue vials show the PC's
 [gauges](#health-and-fatigue-bars-arc-ui-020), and since ARC-UI-023 the bottom strip's message window is the
 [message log](#message-log-arc-ui-023), where the button names appear. Since ARC-UI-027 the hot-key slots, the recent-action buttons and
