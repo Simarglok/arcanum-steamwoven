@@ -211,7 +211,19 @@ public partial class TerrainViewerApp
 
     // Off sends no ambient at all (identical white pixels), so unlit views keep terrain chunks
     // even where a chunk mixes indoor and outdoor tiles. Local lights are part of the lit view only.
-    private void PushAreaAmbient() => _canvas?.SetAreaAmbient(_areaAmbient is { Enabled: true } driver && _readyArea?.Lighting is { } lighting
+    private void PushAreaAmbient() { PushRelightMapLights(); PushAreaAmbientView(); }
+
+    // ARC-RES-1978: the map's stationary lights of the shown hour, for the relit look (read only; nothing is drawn from it while that look is off).
+    private void PushRelightMapLights()
+    {
+        if (!AreaRelight.Active) return;
+        if (_areaAmbient is { Enabled: true } driver && _readyArea?.Lighting is { } lighting && LightsNow(lighting.Local, driver) is { } now)
+            AreaRelight.SetMapLights(now.Field.Placements.Select(p => AreaRelight.FromPlacement(p.Light, p.Rect, driver.Effective))
+                .Where(light => light is not null).Select(light => light!.Value));
+        else AreaRelight.SetMapLights([]);
+    }
+
+    private void PushAreaAmbientView() => _canvas?.SetAreaAmbient(_areaAmbient is { Enabled: true } driver && _readyArea?.Lighting is { } lighting
         ? new AreaAmbientView(driver.Effective, lighting.Channels)
         {
             // ARC-RENDER-030: the hour picks the night or the day form of the object lights; ARC-RENDER-031: the animated

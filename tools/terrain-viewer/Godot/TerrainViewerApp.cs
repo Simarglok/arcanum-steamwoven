@@ -253,6 +253,8 @@ public partial class TerrainViewerApp : Node
                                 if (only?.Contains("movement") == true) await RunAreaMovementSmokeAsync(result);
                                 // ARC-DEV-335 (V7d, B50): only when named, a light worn by the hero lights the area around it (with --hero, a lit map).
                                 if (only?.Contains("worn-light") == true) await RunAreaWornLightSmokeAsync(result);
+                                // ARC-RES-1978 (FR-LIGHT-013 experiment): only when named, the relit look against Legacy on a lit map (with --hero; PNGs only with ARC_RELIGHT_CAPTURE).
+                                if (only?.Contains("relight") == true) await RunAreaRelightSmokeAsync(result);
                                 // ARC-MAGIC-1229 (FR-LIGHT-011, IW6): only when named, Illuminate keeps a live light on the hero and on an NPC while the spell holds, the darkness sampler sees it and the END takes it off (--hero, a lit map with a living NPC).
                                 if (only?.Contains("eye-light") == true) await RunAreaEyeLightSmokeAsync(result);
                                 // ARC-SCRIPT-1592 (FR-SCRIPT-002): only when named, the installed void exit tile script 2549 plays script eye candy (action 120) on the hero: the use host keeps the request, the viewer starts the entry of the script list as an overlay run and draws it (--hero, the main map).
@@ -275,6 +277,8 @@ public partial class TerrainViewerApp : Node
                                 if (only?.Contains("perf-menu") == true) await RunAreaPerfMenuSmokeAsync();
                                 // ARC-DEV-304 (B24, SM26): only when named, spell 56 sets the spoken-with-dead flag on a corpse: the click talks to it instead of looting it, and loots again when the flag is gone (--hero, Crash Site).
                                 if (only?.Contains("spirit-talk") == true) await RunAreaSpiritTalkSmokeAsync(result);
+                                // ARC-SCRIPT-1790 (HLR1-HLR11): only when named, an installed healer's talk (the h: reply) buys a spell: the quote is paid to the NPC, the cast starts through the AI host (free flag exactly when no PC leads it) and the hero's hit points rise with the talk open (--hero, the Crash Site).
+                                if (only?.Contains("healer-talk") == true) await RunAreaHealerTalkSmokeAsync(result);
                                 // ARC-WORLD-1160 (E3-a): only when named, the sleep window on the hero (--hero): a rest of one hour, until healed and until morning jumps the clock and heals him, the window closes at the end, the screen fades and the key toggles it.
                                 if (only?.Contains("sleep") == true) await RunAreaSleepSmokeAsync();
                                 // ARC-WORLD-1162 (E3-d): only when named, the beds of the Crash Site cave (--hero, the cave): a bed with no script refuses the hero (message 8), an occupied one (10), the scripted bed seats him in a sleep window that heals twice the ground and empties on the close.

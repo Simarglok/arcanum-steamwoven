@@ -114,6 +114,9 @@ public sealed class AreaLocalLighting
     /// <summary>The critters' carried lights of this view (0 for none).</summary>
     public int CarriedLightCount => _carried?.Source.Lights.Count ?? 0;
 
+    /// <summary>ARC-RES-1978 (presentation experiment): the carried lights with their chart screen rectangles, read only (empty for none).</summary>
+    public IReadOnlyList<(StationaryLight Light, TerrainRect Rect)> CarriedPlacements => _carried?.Placements ?? [];
+
     /// <summary>ARC-DEV-335: the carried lights alone as a terrain lattice over the carried lights' rectangles (null without any); the
     /// terrain draws it next to the sector lights' lattice.</summary>
     public StationaryLightLattice? CarriedLattice(AmbientPair pair) => _carried?.Lattice(pair);

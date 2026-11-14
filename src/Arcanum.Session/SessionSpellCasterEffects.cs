@@ -213,4 +213,22 @@ public sealed partial class SessionSpellCaster
         ArgumentNullException.ThrowIfNull(step);
         return HitGoreRules.AttackEndKind(false, step.Final) is { } kind ? DamageEffect(victim, kind, 0) : CritterHit(victim);
     }
+
+    /// <summary>The kind the poison event (0x4B1170) passes to the damage effect: 2, the poison splotch (index 1 of the animation list).</summary>
+    public const int PoisonDamageEffectKind = 2;
+
+    /// <summary>
+    /// ARC-RENDER-1991 (ledger RH2, RH7): the tail of the poison tick (the event 0x4B1170) of a life timer that ran in a pass: when the tick's damage step dealt hit-point damage (the packet's "damage dealt"
+    /// flag 0x200000, RH1: not set for a vetoed, invulnerable or already dead victim), the damage effect of kind 2 runs on the victim (<see cref="DamageEffect"/>: the poison blood, then the hit effect, so an entangled victim asks
+    /// its save again). Kind 2 never reads the violence filter or the critter's undead and mechanical flags (they only change kind 1), so the blood is index 1 whatever they say. It runs after the pass, not between the
+    /// tick and the next event. Not a poison damage firing, or one that dealt nothing, runs nothing. Returns whether the critter's entangle ended now.
+    /// </summary>
+    private bool PoisonTickHit(SessionLifeFiring firing)
+    {
+        if (firing.Event.Kind is not (SessionEventKinds.HeroPoisonDamage or SessionEventKinds.NpcPoisonDamage)) return false;
+        if (firing.Life.Outcome is not { HitPointDamage: > 0 } outcome) return false;
+        var entities = firing.Event.Payload.Entities;
+        var victim = firing.Event.Kind == SessionEventKinds.HeroPoisonDamage ? Hero : entities.IsEmpty ? null : entities[0].Code;
+        return victim is not null && DamageEffect(victim, PoisonDamageEffectKind, outcome.HitPointDamage);
+    }
 }

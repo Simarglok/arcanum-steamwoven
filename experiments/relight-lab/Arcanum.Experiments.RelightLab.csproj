@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>Arcanum.Experiments.RelightLab</AssemblyName>
+    <RootNamespace>Arcanum.Experiments.RelightLab</RootNamespace>
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Remove="tests/**" />
+    <ProjectReference Include="../../src/Arcanum.Data/Arcanum.Data.csproj" />
+  </ItemGroup>
+</Project>
