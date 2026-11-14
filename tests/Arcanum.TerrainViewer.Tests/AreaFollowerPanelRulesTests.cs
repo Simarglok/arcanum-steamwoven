@@ -90,4 +90,14 @@ public sealed class AreaFollowerPanelRulesTests
         }
         Assert.AreEqual(FollowerMenuRowState.Normal, AreaFollowerPanelRules.RowState(FollowerMenuItem.CharacterSheet, true, false), "FP8: the sheet is never greyed");
     }
+
+    [TestMethod]
+    public void The_dialog_holds_the_panel_drawn_and_inert_only_under_the_setting_with_nothing_else_covering()
+    {
+        // ARC-UI-2069 (DB1, DB2): Original keeps the portraits drawn under the dialog; a cover or another window hides them as before.
+        Assert.IsTrue(AreaFollowerPanelRules.HeldUnderDialog(dialogBarStays: true, dialogOnTop: true, otherCover: false));
+        Assert.IsFalse(AreaFollowerPanelRules.HeldUnderDialog(false, true, false), "Steamwoven hides the panel under the dialog");
+        Assert.IsFalse(AreaFollowerPanelRules.HeldUnderDialog(true, false, false), "another window on top hides it");
+        Assert.IsFalse(AreaFollowerPanelRules.HeldUnderDialog(true, true, true), "a menu, palette, save list or cover over the dialog hides it");
+    }
 }
