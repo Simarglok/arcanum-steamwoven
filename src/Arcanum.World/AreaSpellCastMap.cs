@@ -428,7 +428,7 @@ public sealed class AreaSpellCastMap : ISpellCastMap
         {
             var result = _session.DamageObject(_session.Version, target, damage.HitPointDamage);
             if (result.Hit is not { } hit) return false;
-            _objectHits.Add(new(id, hit, result.Host) { Source = DamageSource });
+            _objectHits.Add(new(id, hit, result.Host) { Source = DamageSource is { } named && named.Target == id ? named.Source : null });
             return result.Disposition == GameSessionDisposition.Changed;
         }
         // ARC-COMBAT-025 (OD1–OD4, OD12): an item takes the same damage through its durability.
@@ -441,9 +441,9 @@ public sealed class AreaSpellCastMap : ISpellCastMap
 
     private readonly List<AreaObjectHit> _objectHits = [];
 
-    /// <summary>ARC-TECHNOLOGY-1760 (OD4, OD15): the cast id of the object whose context the damage dealt now belongs to (a trap's shot: the shooter object, the attacker of the context), kept on the object hits it causes as the BUST
-    /// breaker (<see cref="AreaObjectHit.Source"/>). Null: damage with no attacker. The host sets it around one strike and clears it.</summary>
-    public string? DamageSource { get; set; }
+    /// <summary>ARC-TECHNOLOGY-1760 (OD4, OD15): the attacker of the context that strikes <c>Target</c> now (a trap's shot: the shooter object's cast id), kept on the hit that reaches that object only (not on damage a script or an item event of the
+    /// strike deals to another object) as the BUST breaker (<see cref="AreaObjectHit.Source"/>). Null: damage with no attacker. The host sets it around one strike and clears it.</summary>
+    public (string Target, string Source)? DamageSource { get; set; }
 
     /// <summary>ARC-DEV-255: the hits the damage reached objects with since the last call (id, outcome, host steps), for the host to log and
     /// show; the objects' state itself is the session's.</summary>

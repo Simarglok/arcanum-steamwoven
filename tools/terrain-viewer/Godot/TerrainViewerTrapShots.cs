@@ -59,7 +59,7 @@ public partial class TerrainViewerApp
     /// A trap's shot's projectile ended on a crossing (<see cref="CrossTile"/>): met the victim where it stands on the line (<see cref="ProjectileStrikeKind.Target"/>), another living critter by the stray rule
     /// (<see cref="ProjectileStrikeKind.Stray"/>) or, flying free, the obstruction of a step (<see cref="ProjectileStrikeKind.Obstruction"/>: a door, window, container, scenery or trap, or a wall). The strike is the cast host's
     /// (<see cref="SessionSpellCaster.StrikeTrapShot"/>: for a critter the attack event of the shooter object, then the damage with the shooter as the damage source; ARC-TECHNOLOGY-1760 for an object no event, the amount through
-    /// the object's damage step, and the BUST script of a break with the shooter object as the breaker, <see cref="AreaSpellCastMap.DamageSource"/>). A wall takes nothing (the damage step leaves at once for a wall), an object the
+    /// the object's damage step, and the BUST script of a break with the shooter object as the breaker, <see cref="AreaSpellCastMap.DamageSource"/>, kept for the struck object's own hit only). A wall takes nothing (the damage step leaves at once for a wall), an object the
     /// cast host does not name and the end of the range end the shot with no strike.
     /// </summary>
     private ProjectileCrossResult TrapShotEnd(AreaProjectile projectile, ProjectileStrikeKind kind, AreaObjectRecord? struck)
@@ -72,7 +72,7 @@ public partial class TerrainViewerApp
             && ReferenceEquals(caster.Owner, owner))
         {
             // ARC-TECHNOLOGY-1760 (OD4, OD15): the shooter object is the attacker of an object's break, the BUST breaker; cleared as the strike returns.
-            if (_spellCastMap is { } cast) cast.DamageSource = kind == ProjectileStrikeKind.Obstruction ? shooter : null;
+            if (_spellCastMap is { } cast) cast.DamageSource = kind == ProjectileStrikeKind.Obstruction && shooter is not null ? (id, shooter) : null;
             SessionTrapVictim? result;
             try { result = caster.StrikeTrapShot(projectile.Shot, id); }
             finally { if (_spellCastMap is { } done) done.DamageSource = null; }
