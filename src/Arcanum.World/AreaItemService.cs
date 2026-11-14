@@ -51,13 +51,21 @@ public sealed class AreaItemService
     private string? _selected;
     private int _price = ItemServiceRules.NoPrice;
     private string _message = string.Empty;
+    private readonly Func<int, int, int?, string?>? _npcLine;
+    private readonly Func<int, string?>? _classLine;
 
     /// <param name="barter">The item model of the NPC's own trade window (the hero's items, their facts and the NPC as merchant).</param>
     /// <param name="npc">The NPC's levelled sheet and effect modifiers for its Repair skill (null: unknown, a repair is not offered).</param>
-    public AreaItemService(AreaBarter barter, ItemServiceKind kind, Func<(SessionNpcAdvancement Loaded, AdvancementModifiers Modifiers)?> npc)
+    /// <param name="npcLine">ARC-UI-1765: the speaker's generated plain NPC line of a message range (first, last) with the price its <c>%d</c> takes (null: none), or null when it cannot be said; the
+    /// window's quote line (0x5786C0, 0x578760). Without it, or when it says nothing, the window prints its PROJECT text.</param>
+    /// <param name="classLine">ARC-UI-1765: the speaker's generated class line of a group (the "no money" line, group 2000), or null when it cannot be said.</param>
+    public AreaItemService(AreaBarter barter, ItemServiceKind kind, Func<(SessionNpcAdvancement Loaded, AdvancementModifiers Modifiers)?> npc,
+        Func<int, int, int?, string?>? npcLine = null, Func<int, string?>? classLine = null)
     {
         _barter = barter ?? throw new ArgumentNullException(nameof(barter));
         _npc = npc ?? throw new ArgumentNullException(nameof(npc));
+        _npcLine = npcLine;
+        _classLine = classLine;
         Kind = kind;
     }
 
@@ -90,13 +98,18 @@ public sealed class AreaItemService
         var selecting = entity != _selected;
         _selected = entity;
         _price = ItemServiceRules.KeptPrice(_price, quote, profile);
-        if (selecting) return Report(new(AreaItemServiceAction.Selected, quote, 0, null, QuoteText(quote)));
+        // Every click quotes the item again (0x573850 calls the quote before it looks at the kept price): one generated line, one draw.
+        var generated = GeneratedQuote(quote);
+        var text = generated ?? ProjectText(quote);
+        if (selecting) return Report(new(AreaItemServiceAction.Selected, quote, 0, null, text));
         var price = _price;
         _price = ItemServiceRules.NoPrice;
-        if (price <= 0) return Report(new(AreaItemServiceAction.Refused, quote, 0, null, QuoteText(quote)));
+        if (price <= 0) return Report(new(AreaItemServiceAction.Refused, quote, 0, null, text));
         if (_barter.Session.QueryGold() < price) return Report(new(AreaItemServiceAction.NoMoney, quote, 0, null,
-            $"not enough money (class line {ItemServiceRules.NoMoneyGroup}): {price} gold wanted"));
-        return Report(Perform(entity, line, quote, price));
+            _classLine?.Invoke(ItemServiceRules.NoMoneyGroup) is { Length: > 0 } said ? said : $"not enough money (class line {ItemServiceRules.NoMoneyGroup}): {price} gold wanted"));
+        // A paid service leaves the quote line as the quote made it (the window prints no line of its own after the service): the view's message.
+        var done = Perform(entity, line, quote, price);
+        return Report(done, done.Action == AreaItemServiceAction.Done ? generated : null);
     }
 
     private AreaItemServiceStep Perform(string entity, AreaBarterLine line, ItemServiceQuote quote, int price)
@@ -139,13 +152,20 @@ public sealed class AreaItemService
         return ItemServiceRules.Repair(ItemDurabilityRules.RepairQuote(facts.Condition, price, training, session.Rules.Items));
     }
 
-    private AreaItemServiceStep Report(AreaItemServiceStep step)
+    // The window's message is the step's text, or <paramref name="shown"/> when the original's quote line stays as the quote made it (a paid service prints none of its own, so the
+    // frame keeps the quote line while the step's text, the log and the diagnostic list still say what ran).
+    private AreaItemServiceStep Report(AreaItemServiceStep step, string? shown = null)
     {
-        _message = step.Text;
+        _message = shown ?? step.Text;
         return step;
     }
 
-    private string QuoteText(ItemServiceQuote quote) => quote.Status switch
+    // The quote line: the speaker's generated line of the quote's range (the price goes into a quote's %d, a refusal's line is copied as it is: 0x5786C0 formats the identify quote with
+    // 0x589BD0, 0x414540 copies the identified line), else the PROJECT text.
+    private string? GeneratedQuote(ItemServiceQuote quote) =>
+        _npcLine?.Invoke(quote.LineFirst, quote.LineLast, quote.Quoted ? quote.Price : null) is { Length: > 0 } said ? said : null;
+
+    private string ProjectText(ItemServiceQuote quote) => quote.Status switch
     {
         ItemServiceStatus.Quoted => $"{(Kind == ItemServiceKind.Identify ? "identify" : "repair")} for {quote.Price} gold: click the item again to pay",
         ItemServiceStatus.AlreadyIdentified => "already identified",

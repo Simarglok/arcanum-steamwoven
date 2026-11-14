@@ -1,8 +1,8 @@
 namespace Arcanum.Data.Area;
 
-/// <summary>The ART file and frame selection an art id of a scenery (class 4), item (class 6), container (class 7) or eye candy
+/// <summary>The ART file and frame selection an art id of a portal (class 3, ARC-SCRIPT-1778), scenery (class 4), item (class 6), container (class 7) or eye candy
 /// (class 14, ARC-MAGIC-017) names.</summary>
-/// <param name="Path">The content path, under <c>art/scenery/</c>, <c>art/item/</c>, <c>art/container/</c> or <c>art/eye_candy/</c>.</param>
+/// <param name="Path">The content path, under <c>art/portal/</c>, <c>art/scenery/</c>, <c>art/item/</c>, <c>art/container/</c> or <c>art/eye_candy/</c>.</param>
 /// <param name="Lookup">The art id the selection is keyed by (an item's without its two palette-free bits).</param>
 public sealed record AreaObjectArtPath(string Path, uint Lookup, int Nominal, int Group, int Frame, int Palette);
 
@@ -21,24 +21,27 @@ public static class AreaObjectArt
     /// <summary>The name table of a mapping role a class-4, -6 or -7 art id reads (the area plans bind the same paths).</summary>
     public static string MappingPath(AreaMappingRole role) => role switch
     {
+        AreaMappingRole.Portal => "art/portal/portal.mes",
         AreaMappingRole.Scenery => "art/scenery/scenery.mes",
         AreaMappingRole.Container => "art/container/container.mes",
         AreaMappingRole.ItemGround => "art/item/item_ground.mes",
         AreaMappingRole.EyeCandy => Arcanum.Data.Magic.EyeCandyArt.NamesPath,
         AreaMappingRole.ItemInventory => "art/item/item_inven.mes",
+        AreaMappingRole.ItemPaper => "art/item/item_paper.mes",
         // ARC-DEV-370: the name tables of the monster (12) and unique NPC (13) critter art ids.
         AreaMappingRole.MonsterNames => "art/monster/monster.mes",
         AreaMappingRole.UniqueNpcNames => "art/unique_npc/unique_npc.mes",
         _ => throw new ArgumentOutOfRangeException(nameof(role)),
     };
 
-    /// <summary>The ART an art id of class 4 (scenery), 6 (item) or 7 (container) names, through <paramref name="name"/> (the
+    /// <summary>The ART an art id of class 3 (door or window, ARC-SCRIPT-1778), 4 (scenery), 6 (item) or 7 (container) names, through <paramref name="name"/> (the
     /// role's table entry for a number, null when the table has none).</summary>
     public static AreaObjectArtResolution Resolve(uint aid, Func<AreaMappingRole, int, string?> name)
     {
         ArgumentNullException.ThrowIfNull(name);
         var cls = aid >> 28;
         if (cls == Arcanum.Data.Magic.EyeCandyArt.Class) return EyeCandy(aid, name);
+        if (cls == 3) return Portal(aid, name);
         if (cls is not (4 or 6 or 7)) return new(AreaObjectArtStatus.OtherClass, null, $"class {cls}");
         var frame = cls == 6 ? 0 : (int)((aid >> 14) & 31); var nominal = cls == 6 ? 0 : (int)((aid >> 11) & 7);
         var palette = (int)((aid >> 4) & 3);
@@ -62,6 +65,24 @@ public static class AreaObjectArt
         return new(AreaObjectArtStatus.Resolved, new(folder + entry, lookup, nominal, nominal, frame, palette), $"{role} {key}");
     }
 
+    // ARC-SCRIPT-1778: a door or window's art id (the area owner's portal rule, shared with the builder's body: number bits 19..27, type bit 10 (1 door, 0 window: the table entry
+    // number + 1001), busted bit 9 (the name's sixth-from-last letter becomes D), rotation bits 11..13, frame bits 14..18; one group; flag bits 1..3 and the unused bits 6..8 are not admitted).
+    private static AreaObjectArtResolution Portal(uint aid, Func<AreaMappingRole, int, string?> name)
+    {
+        if ((aid & 0x1CE) != 0) return new(AreaObjectArtStatus.Unsupported, null, "portal art flag bits");
+        var number = (int)((aid >> 19) & 511); var door = ((aid >> 10) & 1) != 0; var key = door ? number : number + 1001;
+        if (name(AreaMappingRole.Portal, key) is not { } entry) return new(AreaObjectArtStatus.UnnamedNumber, null, $"{AreaMappingRole.Portal} {key}");
+        var space = entry.IndexOf(' '); if (space >= 0) entry = entry[..space];
+        if ((aid & 0x200) != 0)
+        {
+            if (entry.Length < 6) return new(AreaObjectArtStatus.Unsupported, null, "busted portal art name");
+            entry = string.Concat(entry.AsSpan(0, entry.Length - 6), "D", entry.AsSpan(entry.Length - 5));
+        }
+        if (!Safe(entry)) return new(AreaObjectArtStatus.UnsafeName, null, $"{AreaMappingRole.Portal} {key}");
+        var rotation = (int)((aid >> 11) & 7);
+        return new(AreaObjectArtStatus.Resolved, new("art/portal/" + entry, aid, rotation, 0, (int)((aid >> 14) & 31), (int)((aid >> 4) & 3)), $"{AreaMappingRole.Portal} {key}");
+    }
+
     /// <summary>
     /// ARC-UI-032: the ART an item's inventory art id names (class 6 with the art's place bits 12..13 equal to 1; the item art name 0x4EC290):
     /// the same number as a ground art id's (bits 17..27 + 20 × (subtype bits 6..9 + 50 × type bits 0..3), an armour's coverage bits 14..16
@@ -81,6 +102,24 @@ public static class AreaObjectArt
         if (name(AreaMappingRole.ItemInventory, key) is not { } entry) return new(AreaObjectArtStatus.UnnamedNumber, null, $"{AreaMappingRole.ItemInventory} {key}");
         if (!Safe(entry)) return new(AreaObjectArtStatus.UnsafeName, null, $"{AreaMappingRole.ItemInventory} {key}");
         return new(AreaObjectArtStatus.Resolved, new("art/item/" + entry, aid & ~0x30U, 0, 0, 0, (int)((aid >> 4) & 3)), $"{AreaMappingRole.ItemInventory} {key}");
+    }
+
+    /// <summary>
+    /// ARC-UI-1884: the ART an item art id of place 2 names (class 6, bits 12..13 equal to 2; the item art name 0x4EC290): the same number as a
+    /// ground or inventory art id's looked up in <c>art\item\item_paper.mes</c>. The quantity window's kind icon is such an id (0x551210, bar
+    /// mode 9: gold is number 0 of type 3, an ammunition type n is number n of type 1, subtype 0). Frame, group and rotation are 0 and the
+    /// palette is bits 4..5, as for the inventory place.
+    /// </summary>
+    public static AreaObjectArtResolution ResolveItemPaper(uint aid, Func<AreaMappingRole, int, string?> name)
+    {
+        ArgumentNullException.ThrowIfNull(name);
+        if (aid >> 28 != 6) return new(AreaObjectArtStatus.OtherClass, null, $"class {aid >> 28}");
+        if (((aid >> 12) & 3) != 2) return new(AreaObjectArtStatus.Unsupported, null, $"item art place {(aid >> 12) & 3}");
+        var type = aid & 15; var subtype = (aid >> 6) & 15; var number = (aid >> 17) & 2047; var coverage = (aid >> 14) & 7;
+        var key = checked((int)(number + 20 * (subtype + 50 * type) + (type == 2 && coverage != 0 ? 20 * (5 * coverage + 10) : 0)));
+        if (name(AreaMappingRole.ItemPaper, key) is not { } entry) return new(AreaObjectArtStatus.UnnamedNumber, null, $"{AreaMappingRole.ItemPaper} {key}");
+        if (!Safe(entry)) return new(AreaObjectArtStatus.UnsafeName, null, $"{AreaMappingRole.ItemPaper} {key}");
+        return new(AreaObjectArtStatus.Resolved, new("art/item/" + entry, aid & ~0x30U, 0, 0, 0, (int)((aid >> 4) & 3)), $"{AreaMappingRole.ItemPaper} {key}");
     }
 
     // ARC-MAGIC-017: an eye-candy art id (class 14, ledger EC rows) names art\eye_candy\<name>_<F|B|U>.art by its number in

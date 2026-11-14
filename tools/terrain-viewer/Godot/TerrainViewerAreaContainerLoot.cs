@@ -66,7 +66,7 @@ public partial class TerrainViewerApp
         _lastContainerOpen = null;
         // ARC-DEV-109: another window on the stack refuses the open before the session part below runs (the container would stay open there).
         if (!InventoryActive || InventoryOpen || !WindowCanOpen(InterfaceMode.Loot) || _inventoryHost!.Map(CurrentAreaMap) is not { } map) return;
-        var frames = _readyArea?.Snapshot.Visuals.FirstOrDefault(v => v.Key.Layer == AreaLayerKind.Body && v.Key.Object == target.Row.Key)?.FrameCount ?? 0;
+        var frames = ContainerFrameCount(target.Row);
         var open = AreaContainerLoot.Open(_areaSession!, map, target.Entity, frames, AreaEvents, ContainerUseScript);
         _lastContainerOpen = open;
         var done = open.Generation?.Regeneration;

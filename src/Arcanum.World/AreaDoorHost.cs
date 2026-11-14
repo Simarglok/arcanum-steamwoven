@@ -22,7 +22,6 @@ public sealed class AreaDoorHost : IAiDoorWorld, IGoalStepHost
 {
     private readonly GameSessionOwner _session;
     private readonly AreaPortals _portals;
-    private readonly Dictionary<string, AreaPortal> _byEntity;
     private readonly Func<IEnumerable<AreaStepCell>> _critters;
     private readonly Action<AreaPortal, DoorSound> _sound;
     private readonly StartPorts _startPorts;
@@ -35,7 +34,6 @@ public sealed class AreaDoorHost : IAiDoorWorld, IGoalStepHost
         _portals = portals ?? throw new ArgumentNullException(nameof(portals));
         _critters = critters ?? throw new ArgumentNullException(nameof(critters));
         _sound = sound ?? throw new ArgumentNullException(nameof(sound));
-        _byEntity = portals.All.ToDictionary(p => p.Entity, StringComparer.Ordinal);
         _startPorts = new(this);
     }
 
@@ -67,7 +65,7 @@ public sealed class AreaDoorHost : IAiDoorWorld, IGoalStepHost
     public int Steps { get; private set; }
 
     /// <summary>Whether <paramref name="entity"/> is a door or window of the shown map.</summary>
-    public bool Owns(string entity) => _byEntity.ContainsKey(entity);
+    public bool Owns(string entity) => _portals.ByEntity(entity) is not null;
 
     /// <summary>Starts the door's opening as its own run (goal 12's node 8, starter 0x4246E0): the runs of the door end first (level 3), the first step comes 5 animation milliseconds later. False
     /// when the table refused the start. <paramref name="opener"/> is the critter that opened it.</summary>
@@ -98,7 +96,7 @@ public sealed class AreaDoorHost : IAiDoorWorld, IGoalStepHost
     /// and a killed run skips them (GS21). The AI host hands the ends it drains here.</summary>
     public void EndNodes(GoalRunEnd end)
     {
-        if (end.Kind is GoalEndKind.Reset or GoalEndKind.Killed || !_byEntity.ContainsKey(end.Run.Owner)) return;
+        if (end.Kind is GoalEndKind.Reset or GoalEndKind.Killed || !Owns(end.Run.Owner)) return;
         AiExecutorRules.EndDoorRun(end.Run, this);
     }
 
@@ -107,7 +105,7 @@ public sealed class AreaDoorHost : IAiDoorWorld, IGoalStepHost
     {
         ArgumentNullException.ThrowIfNull(run);
         // A door of another window of the map (the view moved on) has no portal here: its run ends and the door stays where it stands.
-        if (!_byEntity.ContainsKey(run.Owner)) return SessionGoalStepAnswer.End;
+        if (!Owns(run.Owner)) return SessionGoalStepAnswer.End;
         Steps++;
         var stepped = GoalStepper.StepDoor(run, this);
         if (stepped.End is GoalStepperEnd.Killed or GoalStepperEnd.NodeLimit or GoalStepperEnd.Overflow) AiExecutorRules.EndDoorRun(run, this);
@@ -117,7 +115,7 @@ public sealed class AreaDoorHost : IAiDoorWorld, IGoalStepHost
 
     // ---- the door ports ----
 
-    private AreaPortal? Portal(string door) => _byEntity.GetValueOrDefault(door);
+    private AreaPortal? Portal(string door) => _portals.ByEntity(door);
 
     public bool DoorValid(string door) => Portal(door) is { } portal
         && _session.QueryObjectCondition(_portals.Map, portal.Entity, DamageableObjectKind.Portal) != SessionObjectCondition.Destroyed;

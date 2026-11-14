@@ -239,7 +239,7 @@ public partial class TerrainViewerApp
             Require(_combatHud!.LampColorForSelfTest(0) == new Color(0f, 1f, 0f) && (orangeLamps == 0 || _combatHud.LampColorForSelfTest(greenLamps) == new Color(1f, .5f, 0f)),
                 "ARC-UI-1114: the drawn lamps' colours");
             var panelRect = _combatHud.PlacementForSelfTest.Panel;
-            Require(new Rect2(Vector2.Zero, GetViewport().GetVisibleRect().Size).Encloses(panelRect) && _combatHud.LampRectForSelfTest(0).Size.X > 0, $"ARC-UI-1114: the lamp panel is inside the window: {panelRect}");
+            Require(new Rect2(Vector2.Zero, GetViewport().GetVisibleRect().Size).Encloses(panelRect) && _combatHud.FirstLampRectForSelfTest.Size.X > 0, $"ARC-UI-1114: the lamp panel is inside the window: {panelRect}");
             await HudShot("hero-preview");
             // ARC-UI-1888: the original's art panel (synthetic art here: an automated run does not read the game's): the panel, the lamps as the arts of their shares at the
             // table's places (a lit lamp only), the end-turn button, all in one scale; the plain controls hide.
@@ -259,9 +259,10 @@ public partial class TerrainViewerApp
             if (plain) { Require(!_combatHud.ArtShownForSelfTest && !_combatHud.EndTurnShownForSelfTest, "ARC-UI-1888: no art, no art panel"); await HudShot("hero-preview-plain"); }
             else {
             Require(_combatHud.ArtShownForSelfTest && _combatHud.EndTurnShownForSelfTest, "ARC-UI-1888: the art panel is drawn");
-            var factor = _combatHud.PanelArtRectForSelfTest.Size.X / AreaCombatLampLayout.PanelWidth;
+            // A control's global rectangle holds its own (unscaled) size and its position in window pixels: the bars' whole factor scales the positions, not the sizes.
+            var factor = AreaGameBarPanel.ScreenFactor(GetViewport().GetVisibleRect().Size);
             var origin = _combatHud.PanelArtRectForSelfTest.Position;
-            Require(factor >= 1 && Mathf.IsEqualApprox(_combatHud.PanelArtRectForSelfTest.Size.Y, AreaCombatLampLayout.PanelHeight * factor), $"ARC-UI-1888: the panel keeps the original's proportion: {_combatHud.PanelArtRectForSelfTest}");
+            Require(_combatHud.PanelArtRectForSelfTest.Size.IsEqualApprox(new Vector2(AreaCombatLampLayout.PanelWidth, AreaCombatLampLayout.PanelHeight)), $"ARC-UI-1888: the panel keeps the original's size: {_combatHud.PanelArtRectForSelfTest}");
             var shareArt = _combatHud.LampsForSelfTest!.Select(l => AreaCombatLampLayout.LampArt(l) ?? -1).ToArray();
             for (var i = 0; i < ActionPointRules.LampCount; i++)
             {
@@ -269,16 +270,20 @@ public partial class TerrainViewerApp
                 if (shareArt[i] < 0) continue;
                 var rect = _combatHud.LampArtRectForSelfTest(i);
                 Require(rect.Position.IsEqualApprox(origin + new Vector2(AreaCombatLampLayout.LampX[i], AreaCombatLampLayout.LampY) * factor)
-                    && rect.Size.IsEqualApprox(new Vector2(AreaCombatLampLayout.LampWidth, AreaCombatLampLayout.LampHeight) * factor), $"ARC-UI-1888: lamp {i} at the table's place: {rect}");
+                    && rect.Size.IsEqualApprox(new Vector2(AreaCombatLampLayout.LampWidth, AreaCombatLampLayout.LampHeight)), $"ARC-UI-1888: lamp {i} at the table's place: {rect}");
             }
             var button = _combatHud.EndTurnRectForSelfTest;
             Require(button.Position.IsEqualApprox(origin + new Vector2(AreaCombatLampLayout.EndTurnX, AreaCombatLampLayout.EndTurnY) * factor)
-                && button.Size.IsEqualApprox(new Vector2(AreaCombatLampLayout.EndTurnWidth, AreaCombatLampLayout.EndTurnHeight) * factor) && _combatHud.EndTurnFrameForSelfTest == 0, $"ARC-UI-1888: the end-turn button at its place: {button}");
+                && button.Size.IsEqualApprox(new Vector2(AreaCombatLampLayout.EndTurnWidth, AreaCombatLampLayout.EndTurnHeight)) && _combatHud.EndTurnFrameForSelfTest == 0, $"ARC-UI-1888: the end-turn button at its place: {button}");
             await HudShot("hero-preview-art");
-            // ARC-UI-1888: with ARC_AREA_WINDOW_ART=legacy|hd (and ARC_HD_PACK for hd) the five arts are checked in that interface mode (none generated; the generated mode is #1821's).
-            if (realArt && WindowArtSmokeRequested && System.Environment.GetEnvironmentVariable("ARC_AREA_WINDOW_ART") != "generated")
-                await WindowArtSmokeAsync("combat-lamps", () => AreaCombatLampLayout.ArtNumbers.Select(number => _gameBarPanel!.ArtFrame(number)).OfType<HdInterfaceTexture>().ToArray(),
-                    AreaCombatLampLayout.ArtNumbers, () => _gameBarPanel!.Factor, () => _combatHud.ArtShownForSelfTest);
+            // ARC-UI-1888, ARC-UI-1821: with ARC_AREA_WINDOW_ART=legacy|hd|generated (and ARC_HD_PACK for the last two) the panel's arts are checked in that interface mode: in legacy and hd all five are
+            // plain frames; in generated the panel (294) and the end-turn button (297) are generated chrome at the bars' device scale (again in a 1600 x 1200 window), the three lamps (295, 296, 315) stay pictures.
+            if (realArt && WindowArtSmokeRequested)
+            {
+                IReadOnlyList<int> checkedArts = System.Environment.GetEnvironmentVariable("ARC_AREA_WINDOW_ART") == "generated" ? [AreaCombatLampLayout.PanelArt, AreaCombatLampLayout.EndTurnArt] : AreaCombatLampLayout.ArtNumbers;
+                await WindowArtSmokeAsync("combat-lamps", () => checkedArts.Select(number => _gameBarPanel!.ArtFrame(number)).OfType<HdInterfaceTexture>().ToArray(),
+                    checkedArts, BarDeviceScale, () => _combatHud.ArtShownForSelfTest, new Vector2I(1600, 1200));
+            }
             }
             HoverReleaseForSelfTest(); // the pointer leaves: the pending cost stays (an action that runs no check leaves it, CH4)
             Require(_apPending == TurnBasedRules.WalkStepCost, $"ARC-UI-1114: the pending cost stays after the pointer leaves: {_apPending}");

@@ -11,10 +11,14 @@ public sealed class AreaObjectArtTests
     {
         (AreaMappingRole.Scenery, 2005) => "rubble.art",
         (AreaMappingRole.Container, 1003) => "chest.art",
+        (AreaMappingRole.Portal, 7) => "Door7U1.art extra words",
+        (AreaMappingRole.Portal, 1008) => "Wind8U1.art",
         (AreaMappingRole.ItemGround, 1043) => "plate.art",
         (AreaMappingRole.ItemGround, 3) => "bad/name.art",
         (AreaMappingRole.ItemInventory, 1043) => "plate_inv.art",
         (AreaMappingRole.ItemInventory, 2304) => "helm_inv.art",
+        (AreaMappingRole.ItemPaper, 3000) => "gold_paper.art",
+        (AreaMappingRole.ItemPaper, 1002) => "arrow_paper.art",
         _ => null,
     };
 
@@ -29,6 +33,19 @@ public sealed class AreaObjectArtTests
         var item = AreaObjectArt.Resolve(0x60000000u | 1u | (2u << 6) | (3u << 17) | (2u << 4), Name);
         Assert.AreEqual(("art/item/plate.art", 0, 0, 2, 0x60000000u | 1u | (2u << 6) | (3u << 17)),
             (item.Path!.Path, item.Path.Frame, item.Path.Group, item.Path.Palette, item.Path.Lookup));
+    }
+
+    [TestMethod]
+    public void ADoorOrWindowNamesItsPortalFileByTheBuildersRule()
+    {
+        // ARC-SCRIPT-1778: number bits 19..27 (a window adds 1001), the first name token, rotation bits 11..13, frame bits 14..18, one group; the busted bit 9 turns the sixth-from-last letter into D.
+        var door = AreaObjectArt.Resolve((3u << 28) | (7u << 19) | (1u << 10) | (3u << 14) | (2u << 11) | (1u << 4), Name);
+        Assert.AreEqual(new AreaObjectArtPath("art/portal/Door7U1.art", (3u << 28) | (7u << 19) | (1u << 10) | (3u << 14) | (2u << 11) | (1u << 4), 2, 0, 3, 1), door.Path);
+        Assert.AreEqual("art/portal/Wind8U1.art", AreaObjectArt.Resolve((3u << 28) | (7u << 19), Name).Path!.Path, "a window (bit 10 clear) names the entry number + 1001");
+        var busted = AreaObjectArt.Resolve((3u << 28) | (7u << 19) | (1u << 10) | 0x200u, Name);
+        Assert.AreEqual("art/portal/Door7D1.art", busted.Path?.Path, "the busted bit turns the U of Door7U1.art into D");
+        Assert.AreEqual(AreaObjectArtStatus.Unsupported, AreaObjectArt.Resolve((3u << 28) | (7u << 19) | (1u << 10) | (1u << 6), Name).Status, "bits 6..8 are not admitted");
+        Assert.AreEqual(AreaObjectArtStatus.UnnamedNumber, AreaObjectArt.Resolve((3u << 28) | (9u << 19) | (1u << 10), Name).Status);
     }
 
     [TestMethod]
@@ -58,5 +75,19 @@ public sealed class AreaObjectArtTests
         Assert.AreEqual(AreaObjectArtStatus.OtherClass, AreaObjectArt.ResolveItemInventory(0x40000000u, Name).Status);
         Assert.AreEqual(AreaObjectArtStatus.UnnamedNumber, AreaObjectArt.ResolveItemInventory(0x60000000u | (1u << 12) | (9u << 17), Name).Status);
         Assert.AreEqual(AreaObjectArtStatus.Unsupported, AreaObjectArt.Resolve(aid, Name).Status, "the area owner keeps refusing inventory art");
+    }
+
+    [TestMethod]
+    public void ItemPaperArtNamesItsFileInThePaperTable()
+    {
+        // ARC-UI-1884 (0x4EC290): place bits 12..13 = 2; gold is number 0 of type 3: 0 + 20 × (0 + 50 × 3) = 3000, ammunition type 2: 2 + 20 × 50 = 1002.
+        var gold = AreaObjectArt.ResolveItemPaper(0x60002003u, Name);
+        Assert.AreEqual(new AreaObjectArtPath("art/item/gold_paper.art", 0x60002003u, 0, 0, 0, 0), gold.Path);
+        Assert.AreEqual("art/item/arrow_paper.art", AreaObjectArt.ResolveItemPaper(0x60002001u | (2u << 17), Name).Path!.Path);
+        Assert.AreEqual("art/item/item_paper.mes", AreaObjectArt.MappingPath(AreaMappingRole.ItemPaper));
+        Assert.AreEqual(AreaObjectArtStatus.Unsupported, AreaObjectArt.ResolveItemPaper(0x60001003u, Name).Status, "an inventory art id");
+        Assert.AreEqual(AreaObjectArtStatus.Unsupported, AreaObjectArt.ResolveItemInventory(0x60002003u, Name).Status, "the inventory resolver keeps leaving the paper place out");
+        Assert.AreEqual(AreaObjectArtStatus.OtherClass, AreaObjectArt.ResolveItemPaper(0x40002003u, Name).Status);
+        Assert.AreEqual(AreaObjectArtStatus.UnnamedNumber, AreaObjectArt.ResolveItemPaper(0x60002003u | (9u << 17), Name).Status);
     }
 }

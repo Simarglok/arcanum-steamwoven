@@ -51,14 +51,15 @@ public partial class AreaCombatHud : CanvasLayer
     /// <summary>The art number a lamp's picture shows (-1: the lamp is not drawn lit), for the art panel.</summary>
     internal int LampArtNumberForSelfTest(int lamp) => _lampArt[lamp].Visible && _lampArt[lamp].HasMeta("art") ? (int)_lampArt[lamp].GetMeta("art") : -1;
     internal Rect2 LampArtRectForSelfTest(int lamp) => _lampArt[lamp].GetGlobalRect();
+    /// <summary>The first lamp's rectangle in window pixels, whichever look draws.</summary>
+    internal Rect2 FirstLampRectForSelfTest => _artShown ? _lampArt[0].GetGlobalRect() : _lamps[0].GetGlobalRect();
     internal Rect2 PanelArtRectForSelfTest => _panelArt.GetGlobalRect();
     internal Rect2 EndTurnRectForSelfTest => _endTurn.GetGlobalRect();
     internal bool EndTurnShownForSelfTest => _artShown && _endTurn.Visible;
-    /// <summary>A left press and release at <paramref name="global"/> (the button's own input path).</summary>
-    internal void EndTurnClickForSelfTest(Vector2 global)
+    /// <summary>A left press and release at the middle of the button (its own input path).</summary>
+    internal void EndTurnClickForSelfTest()
     {
-        var rect = _endTurn.GetGlobalRect();
-        var local = (global - rect.Position) * _endTurn.Size / rect.Size;
+        var local = _endTurn.Size / 2;
         EndTurnInput(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = true, Position = local });
         EndTurnInput(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = false, Position = local });
     }

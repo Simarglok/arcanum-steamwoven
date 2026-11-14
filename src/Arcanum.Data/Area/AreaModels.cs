@@ -171,7 +171,7 @@ public sealed class AreaInputSet
     }
     internal IReadOnlyList<AreaInput> Inputs { get; }
 }
-public enum AreaMappingRole { Tile, Facade, Scenery, Container, ItemGround, MonsterNames, UniqueNpcNames, MissingPolicy, WallStructure, WallName, Portal, Roof, RoofShade, EyeCandy, ItemInventory }
+public enum AreaMappingRole { Tile, Facade, Scenery, Container, ItemGround, MonsterNames, UniqueNpcNames, MissingPolicy, WallStructure, WallName, Portal, Roof, RoofShade, EyeCandy, ItemInventory, ItemPaper }
 public sealed record AreaMappingBinding(AreaMappingRole Role, AreaEntryIdentity Entry, string PayloadSha256);
 public sealed record AreaArtBinding(uint RawArt, AreaEntryIdentity Entry);
 /// <summary>One resource source in content-stack search order (ARC-DATA-018): an archive input

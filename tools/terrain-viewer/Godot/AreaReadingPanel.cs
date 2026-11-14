@@ -10,6 +10,8 @@ namespace Arcanum.TerrainViewer;
 /// left and right pages of a book spread or the one page of any other kind, the previous and next buttons of a book (the original's
 /// arts 495 and 496 turn two pages), a close button (the original's hotspot on the frame) and a note. A plain layout instead of the
 /// original's background and frame art (interface arts 477..633 and 494, not drawn here) and fonts; the text is the data's.
+/// ARC-UI-1877: when the window's art and fonts read, the original's window (<see cref="AreaReadingArtView"/>, with the round view's lens) replaces this layout; the
+/// diagnostic layout stays as the fallback and for the synthetic self-tests.
 /// </summary>
 public partial class AreaReadingPanel : CanvasLayer
 {
@@ -24,9 +26,20 @@ public partial class AreaReadingPanel : CanvasLayer
     private Label _note = null!;
     private Button _previous = null!, _next = null!, _close = null!;
     private AreaReadingView? _view;
+    private AreaReadingArtView _artView = null!;
+    private AreaRoundView _roundView = null!;
 
     public event Action? CloseRequested;
     public event Action<int>? PageRequested;
+    /// <summary>ARC-UI-1877: the round view's holder (the foot point and the zoom of the game view around the hero), or null for none.</summary>
+    public Func<(Vector2 Foot, float Zoom)?>? HolderView { get; set; }
+    /// <summary>ARC-UI-1877: whether the window shows in the original's look (its art and fonts read).</summary>
+    public bool ArtMode => !DiagnosticLook && _artView.ArtSet;
+    /// <summary>PROJECT: shows the diagnostic layout although the art has read (the smoke's before-and-after capture); set before the next render.</summary>
+    public bool DiagnosticLook { get; set; }
+    public AreaReadingArtView ArtView => _artView;
+    internal AreaReadingArtView ArtViewForSelfTest => _artView;
+    internal bool RoundViewShown => _roundView.Visible;
     public bool IsOpen => Visible;
     public AreaReadingView? View => _view;
     internal AreaReadingView? ViewForSelfTest => _view;
@@ -37,6 +50,10 @@ public partial class AreaReadingPanel : CanvasLayer
     public override void _Ready()
     {
         Layer = 4;
+        _artView = new AreaReadingArtView(); AddChild(_artView);
+        _artView.CloseRequested += () => CloseRequested?.Invoke();
+        _artView.PageRequested += by => PageRequested?.Invoke(by);
+        _roundView = new AreaRoundView(); AddChild(_roundView);
         _panel = new PanelContainer { Name = "AreaReading", MouseFilter = Control.MouseFilterEnum.Stop };
         _panel.AddThemeStyleboxOverride("panel", new StyleBoxFlat
         {
@@ -94,15 +111,22 @@ public partial class AreaReadingPanel : CanvasLayer
     public void Open(AreaReadingView view, string title)
     {
         Show(); Render(view, title);
-        _close.GrabFocus();
+        if (!ArtMode) _close.GrabFocus();
     }
 
-    public void CloseView() { Hide(); _view = null; GetViewport().GuiReleaseFocus(); }
+    public void CloseView() { Hide(); _view = null; _artView.CloseView(); _roundView.Visible = false; GetViewport().GuiReleaseFocus(); }
 
     public void Render(AreaReadingView view, string title)
     {
         ArgumentNullException.ThrowIfNull(view);
         _view = view;
+        if (ArtMode && _artView.Render(view))
+        {
+            _panel.Visible = false;
+            UpdateRoundView();
+            return;
+        }
+        _panel.Visible = true; _artView.Visible = false; UpdateRoundView();
         var book = view.Subtype == WrittenSubtype.Book;
         _previous.Visible = book; _next.Visible = book;
         _previous.Disabled = !view.HasPrevious; _next.Disabled = !view.HasNext;
@@ -126,15 +150,32 @@ public partial class AreaReadingPanel : CanvasLayer
         _note.Text = view.Note ?? "";
     }
 
+    /// <summary>ARC-UI-1877: turns the original-look book by a spread (−1, 1); false when it is not shown or there is none.</summary>
+    public bool TurnArt(int by) => ArtMode && _artView.Visible && _artView.Turn(by);
+
+    /// <summary>ARC-UI-1877: the lens shows the game view around the hero while the original look is up (the view-window mode 1 of 0x550DA0).</summary>
+    private void UpdateRoundView()
+    {
+        var holder = IsOpen && ArtMode && _artView.Visible && _view is not null ? HolderView?.Invoke() : null;
+        var (origin, side) = _artView.LensOnScreen;
+        _roundView.Update(origin, side, holder);
+        _artView.LensCut = holder is not null;
+    }
+
+    public override void _Process(double delta) { if (IsOpen && ArtMode && _artView.Visible) { _artView.Place(); UpdateRoundView(); } }
+
     /// <summary>Controller confirm: the focused button.</summary>
     public void Confirm()
     {
+        if (ArtMode) return;
         foreach (var button in new[] { _previous, _next, _close })
             if (button.HasFocus() && button.Visible && !button.Disabled) { button.EmitSignal(BaseButton.SignalName.Pressed); return; }
     }
 
     public void Navigate(int direction)
     {
+        // PROJECT: in the original look the menu left and right turn a book's pages (it has no focus ring).
+        if (ArtMode) { if (direction != 0) PageRequested?.Invoke(Math.Sign(direction)); return; }
         var enabled = new[] { _previous, _next, _close }.Where(b => b.Visible && !b.Disabled).ToList();
         var focus = enabled.FindIndex(b => b.HasFocus());
         enabled[Math.Clamp(focus < 0 ? 0 : focus + direction, 0, enabled.Count - 1)].GrabFocus();

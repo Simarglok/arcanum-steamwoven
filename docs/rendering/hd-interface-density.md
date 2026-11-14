@@ -412,8 +412,9 @@ those of the player's `interface.mes` (the viewer's window ledgers carry them; e
 | ARC-UI-153 (issue #1199, ARC-UI-1199, [S8](#viewer-slice-s8-arc-ui-1199)) | schematic window | 365 base, the eight discipline tabs 355, 356, 361–364, 368, 369, the two list buttons 6, the assemble button 357, the page buttons 372 and 373; the lens 231 is the barter window's recipe | the assemble face 358–360, the found and missing tints 830 and 831 and the record's own art stay art; the two gears with a mortarboard and a scroll (the list buttons' labels, painted in the base) stay pictures |
 | ARC-UI-154 (issue #1200, ARC-UI-1200, [S9](#viewer-slice-s9-arc-ui-1200)) | message window, spell and skill panes, Fate, Sleep | 354 message window, 8 spell pane, 274 skill pane (410 × 107), 292 Fate, 565 Sleep and the button 293; 7, 128, 200, 288, 290, 291 (the other modes' 410 × 107 rows), 298 and 218 are drawn by no window and are not built (issue #1870); the dialog box 822–824 is issue #1819 | the Sleep window's art is 565 (ARC-UI-1363), not the 218 the plan named |
 | ARC-UI-1819 (issue #1819, [S10](#viewer-slice-s10-arc-ui-1819)) | common dialog box | 822 `DialogueBox` (325 × 136), the buttons 823 `Lil_Accept` and 824 `Lil_Cancel` (28 × 29, three frames) | the quit question and the death load question; the font 229 and the check and cross marks stay pictures |
-| ARC-UI-1817 (issue #1817, [S11](#viewer-slice-s11-arc-ui-1817)) | follower panel and order menu | 501 `FollowerArrow_DWN` and 502 `FollowerArrow_UP` (67 × 13), 503 `FollowerFrame` (40 × 49), 506–509 `Follow_Scroll_up`, `Follow_Scroll_up_OFF`, `Follow_Scroll_dwn`, `Follow_Scroll_dwn_OFF` (33 or 34 × 13), 826 `FollwerComandMenu` (136 × 148) | the bars 504 `FollowerFrame_FT`, 505 `FollowerFrame_HP` and 616 `FollowerFrame_PO` (34 × 3) and the follower portraits stay pictures |
-| ARC-UI-155 | reading windows and the remaining small panels | 477, 487, 489, 491, 500 backgrounds, 494 side bar, and what is left | |
+| ARC-UI-1821 (issue #1821, [S11](#viewer-slice-s11-arc-ui-1821)) | HUD contents: combat lamp panel, hotkey slot | 294 `ap_bar` (356 × 30), 297 `EndTurn_But` (31 × 15), 173 `HKSlt1` (32 × 32); the lamps 295, 296, 315, the clock 207–216, the light button 182, the gauges and icons stay pictures; the message window and the skill and spell panes are S9's | audit of the HUD; needed the original art panel first (issue #1888) |
+| ARC-UI-1817 (issue #1817, [S12](#viewer-slice-s12-arc-ui-1817)) | follower panel and order menu | 501 `FollowerArrow_DWN` and 502 `FollowerArrow_UP` (67 × 13), 503 `FollowerFrame` (40 × 49), 506–509 `Follow_Scroll_up`, `Follow_Scroll_up_OFF`, `Follow_Scroll_dwn`, `Follow_Scroll_dwn_OFF` (33 or 34 × 13), 826 `FollwerComandMenu` (136 × 148) | the bars 504 `FollowerFrame_FT`, 505 `FollowerFrame_HP` and 616 `FollowerFrame_PO` (34 × 3) and the follower portraits stay pictures |
+| ARC-UI-155 (issue #1201) | reading windows | 477, 487, 489, 491 and 633 backgrounds (the plaque's is 633, not 500), 494 frame, the lens 231 and the book's page buttons 495 and 496 | The reading window had no original look to replace: ARC-UI-1877 draws it first (Legacy and HD, [ledger WR17–WR23](../research/ledger/ui-audio.md#reading-window-arc-ui-049)); this slice adds the Generated recipes. The remaining small panels of the old plan are their own issues (#1751, #1750, #1810, #1817–#1821, #1870) |
 
 A slice is done when its frames draw generated chrome at the window's own device scale in the native smoke (Generated and HD runs), the unit
 tests pass, a composite of before, after and the Legacy frame is posted in the task thread (never committed) and a fresh review of the diff is
@@ -655,9 +656,41 @@ The box already drew the Legacy or HD art (its textures are interface textures),
   1280 × 800 window and 1.8 in the 1920 × 1080 one, where they paint again. The composite (before = the HD pack art that the Generated mode drew until now, after, Legacy, after at the bigger window) is in the task thread, not in git. Seen there: the generated stone is plainer than the
   original's (soft clouds in place of its cracks), the text field is a plain rectangle with a thin brass line where the original has curled corners, and the buttons are the project's brass buttons around the original's check and cross.
 
-## Viewer slice S11 (ARC-UI-1817)
+## Viewer slice S11 (ARC-UI-1821)
 
-S11 draws the follower panel (the ARC-UI-1736 companions screen: six portrait frames down the screen's left edge, the show/hide button, the two scroll arrows) and the follower order menu in the generated interface (planned as issue #1817), at the panel's own
+S11 draws the HUD contents that are chrome in the generated interface (issue #1821, from the Generated UI coverage audit of 2026-11-13), at the bars' device scale. Positions, sizes, alpha tests and hit areas are the Legacy ones (D9); only the drawing changes.
+The combat lamp panel drew no original art before [issue #1888](https://github.com/Simarglok/arcanum-steamwoven/issues/1888) (plain Godot rectangles), so that came first as its own PR; S11 is the second.
+
+**Audit** (what the HUD draws, and what is a frame):
+
+| Piece | Arts | Result |
+| --- | --- | --- |
+| Message window, spell and skill panes | 354, 8, 274 | frames, done in [S9](#viewer-slice-s9-arc-ui-1200) |
+| Combat lamp panel | 294 `ap_bar` | frame: recipe |
+| End-turn button | 297 `EndTurn_But` (31 × 15, three frames) | button: recipe |
+| Action-point lamps | 295, 296, 315 | state pictures (the lit share): kept |
+| Turn-order list | none (a Steamwoven addition, CH6) | a Godot control, no art |
+| Hotkey slot | 173 `HKSlt1` (the one of ten slot arts the bar draws) | a dark wood tile under the icon: recipe |
+| Hotkey light button, recent-action buttons, slot icons | 182 (183), spell, skill and item arts | state glyph and pictures: kept |
+| Clock and date button | 207 (day strip), 208–215 (moon), 216 (needle) | pictures that scroll; the window's frame is the strip's hole (S1): no recipe |
+| Health and fatigue gauges, vials, hover bars, follower bars | 18–20, 463–466, 504, 505 | values drawn as cropped pictures: kept |
+| Combat panel over a hovered critter | 582 bullseye, icons 583–588, 845, 846 | pictures and state glyphs: kept |
+
+- **Lamp panel.** `ap_bar.art` is a `ChromeMaterial.Slate` panel with a rim on all sides: a sunk channel for each of the four groups of five lamps, an unlit bead (a brass disc of `ChromeRivet`) at each lamp's place (the lit lamp's picture, drawn over, covers it, so an unlit lamp still shows), a sunk seat for the
+  end-turn button and a rivet at each end of the channels. The original's brass rail between the lamps and its crosses are not drawn. No picture is kept in the frame: the lamps are separate arts.
+- **End-turn button.** `EndTurn_But.art` is the generic button recipe of [S1](#viewer-slice-s1-arc-ui-140): a generated face and rim following the oval silhouette, sunk on the pressed frame, the glyph kept.
+- **Hotkey slot.** `HKSlt1.ART` is a `ChromeMaterial.WoodDark` panel with no parts: the strip's wells (S1) already frame the slot, the art is the wood under the icon. The other nine slot arts are never drawn (HK11) and have no recipe.
+- **Scale.** The panel and the slot are textures of the bars (`InterfaceHd.GeneratedScale`: the bars' whole factor times the viewport's stretch), as the bar buttons and the panes of S9.
+- **Checks.** `InterfaceHudChromeTests` (the recipes exist and the pictures have none; every part lies inside the frame, a channel holds every lamp and the seat the button, a bead lies at every lamp's centre and no pit meets another; the frames paint in bounds, deterministically and opaque at whole and fractional scales with black pits; the
+  button keeps its cut corners and glyph and sinks on its pressed frame). The native smoke: the stages `turn-based` (the lamp panel; `ARC_AREA_HUD_BARS=1` draws it over the game's bars) and `cast` (the hotkey bar), run with `ARC_AREA_WINDOW_ART=legacy|hd|generated` (with `ARC_HD_PACK` for the last two): in `generated` the panel,
+  the end-turn button and the slot are generated chrome at `round(size × paint scale)` pixels of the bars' device scale, again in a 1600 × 1200 window and back; in `hd` and `legacy` none is (and the three lamp arts are never).
+- **Local observation** (owner's Mac, 1280 × 800 window): the stages `turn-based` and `cast` pass in the Generated, HD and Legacy runs; in the Generated run the panel (294), the end-turn button (297) and the slot (173) are generated at the bars' device scale 1, again at 2 in the 1600 × 1200 window, and in the
+  HD and Legacy runs none is. The composite (before = the HD pack art that the Generated mode drew until now, after, Legacy) is in the task thread, not in git. Seen there: the generated panel is a plain slate bar with four gold-ringed channels where the original has one continuous brass rail with crosses, the unlit beads are
+  brass discs (the original's are dark green glass) and the end-turn button sits in a plain seat; the hotkey slot is a flat dark wood tile where the original's has a grain. The lit lamps and the clock stay the original's pictures.
+
+## Viewer slice S12 (ARC-UI-1817)
+
+S12 draws the follower panel (the ARC-UI-1736 companions screen: six portrait frames down the screen's left edge, the show/hide button, the two scroll arrows) and the follower order menu in the generated interface (planned as issue #1817), at the panel's own
 device scale. Positions, sizes, alpha tests and hit areas are the Legacy ones (D9); only the drawing changes. The arts are the ones `AreaFollowerPortraits` draws (ledger FP1–FP13, `AreaFollowerFrameLayout`, `AreaFollowerPanelRules`; the file names are the messages of
 `interface.mes`): 503 `FollowerFrame` (40 × 49), 501 `FollowerArrow_DWN` (shown panel) and 502 `FollowerArrow_UP` (hidden panel) (67 × 13, one frame), 506 `Follow_Scroll_up` and 508 `Follow_Scroll_dwn` (33 and 34 × 13, two frames), their end looks 507 `Follow_Scroll_up_OFF`
 and 509 `Follow_Scroll_dwn_OFF`, and the menu 826 `FollwerComandMenu` (136 × 148). The panel draws the first frame of each art (the pressed frame of a scroll arrow is not drawn today).

@@ -85,6 +85,16 @@ public partial class TerrainViewerApp
         session.AttachItemNoDrop(prototype => PrototypeItems()?.Item(prototype)?.NoDrop == true);
     }
 
+    /// <summary>The frame of an art id no body drew at T0 (the extra art read from the module), added to the shown map's repository; null when it does not read (said once).</summary>
+    private AreaExtraFrame? ExtraArtFrame(uint aid, string what)
+    {
+        if (ExtraArt() is not { } art) return null;
+        var load = art.Load(aid);
+        if (load.Frame is { } frame) { ((AreaFrameOverlay)AreaFrames()).Add(frame.Key, frame.Frame); _extraVisuals[frame.Visual.Key] = frame.Visual; return frame; }
+        if (_groundReported.Add($"{what}:{aid}")) GD.Print($"ARC-RENDER-033 extra-art {what} art=0x{aid:X8} status={load.Status} detail={load.Detail}");
+        return null;
+    }
+
     /// <summary>
     /// The shown map's bodies drawn from extra art, recomputed when the session or the map changes: a scenery or trap the session
     /// busted takes its destroyed ART (field 24) at its own anchor, and every item lying on the map's ground away from a T0 body
@@ -116,16 +126,11 @@ public partial class TerrainViewerApp
         var bodies = new Dictionary<AreaObjectKey, AreaDrawCommand>();
         var only = new Dictionary<AreaObjectKey, (string, CellCoord, AreaObjectRecord)>();
         var placedItems = session.QueryPlacedItems().ToDictionary(p => p.Entity, StringComparer.Ordinal);
-        AreaExtraFrame? Frame(uint aid, string what)
-        {
-            if (ExtraArt() is not { } art) return null;
-            var load = art.Load(aid);
-            if (load.Frame is { } frame) { frames.Add(frame.Key, frame.Frame); _extraVisuals[frame.Visual.Key] = frame.Visual; return frame; }
-            if (_groundReported.Add($"{what}:{aid}")) GD.Print($"ARC-RENDER-033 extra-art {what} art=0x{aid:X8} status={load.Status} detail={load.Detail}");
-            return null;
-        }
+        AreaExtraFrame? Frame(uint aid, string what) => ExtraArtFrame(aid, what);
         lap?.Step("busted");
         // ARC-RENDER-1781: a scenery whose art id a script's change art number wrote is drawn with the scenery bodies (TerrainViewerSceneryArt.cs: its loop's frame of the new art, frame 0 when it is still); the destroyed ART of a busted one below wins.
+        // ARC-SCRIPT-1778 (ledger AD1, LW2, LK13): a container off its T0 art or frame is drawn from its current art and frame (the open lid, a script's new art).
+        foreach (var (containerKey, containerBody) in ContainerArtBodies(area, session, overlay.Bodies, overlay.Visuals, Frame)) bodies[containerKey] = containerBody;
         // A busted scenery or trap: its destroyed ART where its T0 body stood.
         if (ObjectTargets() is { } targets)
             foreach (var key in targets.Busted(session))
