@@ -82,4 +82,25 @@ public sealed class SpellEyeCandyRealDataTests
         Assert.AreEqual(0, entries.Count(e => (e.Flags & (SpellEyeCandyFlags.Background | SpellEyeCandyFlags.Underlay | SpellEyeCandyFlags.Forever)) != 0), "no background, underlay or looping entry");
         Assert.AreEqual(3, entries.Count(e => EyeCandyArt.Translucent(e.Art!.Value)), "the poison, electrical and fire splotches are translucent");
     }
+
+    [TestMethod, TestCategory("RealData")]
+    public void The_installed_weapon_list_names_a_hit_effect_for_the_tesla_rod_and_bronwycks_gun_only()
+    {
+        // ARC-RENDER-1990: rules\WeaponEyeCandy.mes (0x5DE610): 150 groups of five entries; the hit entries (kind 3, message 10g + 4) with art belong to two weapons, the Tesla Rod (prototype 6060) and Bronwyck's Gun (6069); counts and flags only.
+        var root = Environment.GetEnvironmentVariable("DAT_ROOT");
+        if (string.IsNullOrWhiteSpace(root)) Assert.Inconclusive("DAT_ROOT is required for the opt-in eye-candy check; this is not a synthetic pass.");
+        using var stack = ContentStack.Open(ContentMountPlan.Discover(root).Plan!).Stack!;
+        var read = SpellEyeCandyTable.OpenWeapon(stack);
+        Assert.AreEqual(SpellDataStatus.Read, read.Status, $"{read.Refusal}");
+        var entries = read.Table!.Entries;
+        Assert.AreEqual(750, entries.Count);
+        var hits = Enumerable.Range(0, entries.Count / 5).Where(g => entries[g * 5 + 3].Art is not null).Select(g => g + 6029 + 20).ToArray();
+        CollectionAssert.AreEqual(new[] { 6060, 6069 }, hits);
+        foreach (var prototype in hits)
+        {
+            var entry = entries[(prototype - 20 - 6029) * 5 + 3];
+            Assert.AreEqual(SpellEyeCandyFlags.Foreground | SpellEyeCandyFlags.Background | SpellEyeCandyFlags.Animates, entry.Flags & (SpellEyeCandyFlags.Foreground | SpellEyeCandyFlags.Background | SpellEyeCandyFlags.Underlay | SpellEyeCandyFlags.Animates | SpellEyeCandyFlags.Forever), "both overlay parts, animating, not looping");
+            Assert.IsTrue(EyeCandyArt.Translucent(entry.Art!.Value), "additive");
+        }
+    }
 }

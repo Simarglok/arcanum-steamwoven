@@ -21,6 +21,9 @@ public sealed record AreaSpellDataLoad(AreaSpellDataStatus Status, SpellData? Da
     /// <summary>ARC-RENDER-1794: the animation eye-candy list (<c>rules\AnimEyeCandy.mes</c>, the animation module's init 0x421B00), the table of a hit's blood (0x433020); null when the file does not read.</summary>
     public SpellEyeCandyTable? AnimEyeCandy { get; init; }
     public string? AnimEyeCandyDetail { get; init; }
+    /// <summary>ARC-RENDER-1990: the weapon eye-candy list (<c>rules\WeaponEyeCandy.mes</c>, the same init 0x421B00), the table of a weapon's own hit effect (0x4377C0); null when the file does not read (no weapon then has an effect of its own).</summary>
+    public SpellEyeCandyTable? WeaponEyeCandy { get; init; }
+    public string? WeaponEyeCandyDetail { get; init; }
 }
 
 /// <summary>How a rank of the shown college looks: known (full colour), the next to learn, or above it (greyed).</summary>
@@ -95,6 +98,8 @@ public static class AreaSpellsPage
         var scriptEyeCandy = SpellEyeCandyTable.OpenScript(stack);
         // ARC-RENDER-1794: and rules\AnimEyeCandy.mes, the list of a hit's blood (the animation module reads it).
         var animEyeCandy = SpellEyeCandyTable.OpenAnim(stack);
+        // ARC-RENDER-1990: and rules\WeaponEyeCandy.mes, the list of a weapon's own effects (the same init).
+        var weaponEyeCandy = SpellEyeCandyTable.OpenWeapon(stack);
         return new(AreaSpellDataStatus.Ready, loaded.Data, "spell data loaded")
         {
             EyeCandy = eyeCandy.Table,
@@ -102,6 +107,8 @@ public static class AreaSpellsPage
             ScriptEyeCandy = scriptEyeCandy.Table,
             AnimEyeCandy = animEyeCandy.Table,
             AnimEyeCandyDetail = animEyeCandy.Table is { } anim ? $"anim eye candy {anim.Entries.Count} entries" : $"anim eye candy {animEyeCandy.Status} {animEyeCandy.Refusal}",
+            WeaponEyeCandy = weaponEyeCandy.Table,
+            WeaponEyeCandyDetail = weaponEyeCandy.Table is { } weapon ? $"weapon eye candy {weapon.Entries.Count} entries" : $"weapon eye candy {weaponEyeCandy.Status} {weaponEyeCandy.Refusal}",
             ScriptEyeCandyDetail = scriptEyeCandy.Table is { } script ? $"script eye candy {script.Entries.Count} entries" : $"script eye candy {scriptEyeCandy.Status} {scriptEyeCandy.Refusal}",
         };
     }

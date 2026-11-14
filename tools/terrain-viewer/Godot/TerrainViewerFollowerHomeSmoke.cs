@@ -50,7 +50,7 @@ public partial class TerrainViewerApp
             if (!host!.RunWaypoints(entity)) host.RunStandpoints(entity);
             var route = host.TraceOf(entity)?.Route;
             Require(route is not null && route.Contains("RequestTeleport", StringComparison.Ordinal) && route.Contains($"to map {home.RuntimeMap}", StringComparison.Ordinal),
-                "the forced pass asked for the change of place to its teleport map: " + route);
+                $"the forced pass asked for the change of place to its teleport map: {route} (hidden {host.Hidden(entity)}, stored object flags 0x{_combatHost?.Fields(entity)?.Object.Flags:X} written 0x{session.QueryObjectFlags(entity).Object(0):X} / all-set 0x{session.QueryObjectFlags(entity).Object(-1):X}, gone {host.Gone(entity)}, leader {host.Leader(entity) ?? "none"}, sleeping {host.Sleeping(entity)}, teleport map {session.QueryTeleportMap(entity)?.ToString() ?? "none"})");
             // The frame: the request waiting in the host is made and pinged.
             ProcessNpcChangeOfPlace(host);
             var where = AreaCompanionPlacement.Where(session, home, entity);

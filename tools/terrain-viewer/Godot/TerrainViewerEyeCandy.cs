@@ -47,13 +47,15 @@ public partial class TerrainViewerApp
 
     private SpellEyeCandyTable? EyeCandyTable => _spellData?.EyeCandy;
 
-    /// <summary>ARC-SCRIPT-1592: the eye-candy entry of a goal's entry reference (the list and the index in it, <see cref="EyeCandyEntryRef"/>): the spell, script or animation list; the other lists (weapon, combat, trap) are not read yet.</summary>
+    /// <summary>ARC-SCRIPT-1592: the eye-candy entry of a goal's entry reference (the list and the index in it, <see cref="EyeCandyEntryRef"/>): the spell, script, animation or weapon list; the other lists (combat, trap) are not read yet.</summary>
     private SpellEyeCandyEntry? EyeCandyEntryOf(int entry) => EyeCandyEntryRef.ListOf(entry) switch
     {
         EyeCandyList.Spell => EyeCandyTable?.At(EyeCandyEntryRef.IndexOf(entry)),
         EyeCandyList.Script => _spellData?.ScriptEyeCandy?.At(EyeCandyEntryRef.IndexOf(entry)),
         // ARC-RENDER-1794: the animation list (0x5DE670), the blood of a hit.
         EyeCandyList.Anim => _spellData?.AnimEyeCandy?.At(EyeCandyEntryRef.IndexOf(entry)),
+        // ARC-RENDER-1990: the weapon list (0x5DE610), a weapon's own hit effect.
+        EyeCandyList.Weapon => _spellData?.WeaponEyeCandy?.At(EyeCandyEntryRef.IndexOf(entry)),
         _ => null,
     };
     private const int ForegroundSlots = 7, BackgroundSlots = 7, UnderlaySlots = 4;

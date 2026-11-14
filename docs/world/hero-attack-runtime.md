@@ -514,7 +514,7 @@ A critter that dies leaves a pool of blood, as the original does (read in the ex
   its critter's pixels, never hovered or picked; a pool this view left plays its frames, any other shows its last frame. The
   log says `ARC-RENDER-041 blood-pool critter=… disposition=… refusal=…` for each death and `blood-pool-art 0x…` once.
 - **Not ready**: an NPC stoned by the session is not seen as stoned (its map data's spell flags are read); the violence filter (no such
-  setting); the weapon's own hit effect and its veto of the hit's blood (0x4377C0, issue 1990); the dead critter's own one-day decay; a visiting companion from another
+  setting); the weapon's own hit effect of the swing, the begin and the projectile speed (0x4377C0 kinds 0 to 2) and its second add (the hit's own effect and its veto of the blood are built, ARC-RENDER-1990); the dead critter's own one-day decay; a visiting companion from another
   map's seed (such as Virgil in the cave) that dies on the shown map leaves no pool (the view reads the shown map's seed holders
   only); the multiplayer and editor cases.
 

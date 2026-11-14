@@ -145,7 +145,9 @@ public partial class TerrainViewerApp
             .Where(h => h.Kind == SessionHolderKind.Npc && !h.Dead && h.Entity != dialogCompanion && session.QueryCompanion(h.Entity).Standing == CompanionStanding.Free)
             .Select(h => (Holder: h, Row: inventory.Row(h.Entity)))
             // Not a pre-made hero's NPC (their heartbeat scripts 1781-1792 kill the unchosen ones once the AI runs, ARC-WORLD-114).
+            // ARC-AI-1851: not an NPC whose stored object is off or not drawn (0x2 / 0x100: the AI host takes it for hidden, so no forced pass sends it home, and no spell targets it).
             .Where(c => c.Row.Type == 16 && !speakerKeys.Contains(c.Row.Key) && c.Row.WorldX is not null && c.Row.WorldY is not null
+                && (_combatHost?.Fields(c.Holder.Entity)?.Object.Flags & 0x102) == 0
                 && area.Plan.Commands.Any(command => command.Identity == c.Row.Key)
                 && AreaUseScriptHost.LoadedSlot(c.Row, Arcanum.Scripting.Scr.ScrPoint.Heartbeat)?.Script is not (>= 1781 and <= 1792)
                 && MapCompanionFacts(new AreaSpeaker(AreaCompanionTemplate.LedMapNpcIndexBase, c.Row, 0, c.Row.WorldX!.Value, c.Row.WorldY!.Value)) is not null)
@@ -194,8 +196,15 @@ public partial class TerrainViewerApp
         Require(drawn, $"its body is drawn on {cell.X},{cell.Y}");
         var visiting = companion.Template.Home.RuntimeMap != CurrentAreaMap;
         if (visiting)
-            Require(_unreadVisitors.Count == 0 && _homes?.Held(companion.Template.Home.RuntimeMap)?.Led.Contains(entity) == true,
-                $"its body came from its home map's read as a led NPC's: {string.Join("; ", _unreadVisitors)}");
+        {
+            // ARC-AI-1851: the directory may hold several reads of the home map (the viewer's own window and the led read around the stored cell); Held(map) answers the first,
+            // so the check looks at every held read of the map for the one that was asked for this NPC.
+            var homeMap = companion.Template.Home.RuntimeMap;
+            var homeReads = _homes?.Reads.Where(read => read.Map == homeMap).ToArray() ?? [];
+            Require(_unreadVisitors.Count == 0 && homeReads.Any(read => read.Led.Contains(entity) && read.Template(entity) is not null),
+                $"its body came from its home map's read as a led NPC's: unread [{string.Join("; ", _unreadVisitors)}] reads of map {homeMap}: " +
+                string.Join(", ", homeReads.Select(read => $"window={read.CoreSectors is not null} led={read.Led.Count} body={read.Template(entity) is not null}")));
+        }
         GD.Print("ARC-AI-1695 native-smoke led-carry PASS " + System.Text.Json.JsonSerializer.Serialize(new {
             From = from, To = _readyMapName, SameMap = sameMap, Visiting = visiting, Home = companion.Template.Home.RuntimeMap, At = $"{cell.X},{cell.Y}", Distance = distance }));
         // The carry is reported again after the jump smoke: the released NPC is checked once (it stands on its home map afterwards).

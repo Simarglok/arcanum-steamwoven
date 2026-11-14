@@ -112,7 +112,7 @@ public sealed record SpellEyeCandyRead(SpellDataStatus Status, SpellEyeCandyTabl
 /// <paramref name="PerGroup"/> messages in a row, the next group starts <paramref name="FileStride"/> messages after the group before; the groups run from message 0 while the group's first message exists (0x4CDCD0). A list with sound offsets gives an entry
 /// without <c>Sound:</c> its group's first entry's sound plus its offset (0x4CDF3B).
 /// </summary>
-public sealed record EyeCandyListShape(string Path, int PerGroup, int FileStride, IReadOnlyList<int> SoundOffsets)
+public sealed record EyeCandyListShape(string Path, int PerGroup, int FileStride, IReadOnlyList<int> SoundOffsets, int FirstMessage = 0)
 {
     /// <summary>The spell list (0x5E7568): six entries for each ten messages, with the sound offsets of 0x5B0DC8.</summary>
     public static EyeCandyListShape Spell { get; } = new(SpellEyeCandyTable.Path, SpellEyeCandyTable.PerSpell, SpellEyeCandyTable.FileStride, SpellEyeCandyTable.SoundOffsets);
@@ -120,6 +120,9 @@ public sealed record EyeCandyListShape(string Path, int PerGroup, int FileStride
     public static EyeCandyListShape Script { get; } = new(SpellEyeCandyTable.ScriptPath, 1, 1, Array.Empty<int>());
     /// <summary>ARC-RENDER-1794: the animation list (0x5DE670, loaded by the animation module's init 0x421B00): <c>rules\AnimEyeCandy.mes</c> with the loader's defaults too (the init presets a count of 11 that the loader's own count 0x4CDCD0 overwrites): one entry per message from message 0, no sound offsets. Entry 0 to 5 are the normal, poison, electrical, fire, fatigue and critical splotches, 6 and 7 the undead and the clean effect, 8 to 10 the damage tiers (the hit's blood, <c>HitGoreRules</c>).</summary>
     public static EyeCandyListShape Anim { get; } = new(SpellEyeCandyTable.AnimPath, 1, 1, Array.Empty<int>());
+    /// <summary>ARC-RENDER-1990: the weapon list (0x5DE610, loaded by the same init 0x421B00 with the list's own settings: first message 1, five entries per group, a stride of ten messages, no sound offsets): <c>rules\WeaponEyeCandy.mes</c>, entry <c>5g + k</c> is message <c>10g + 1 + k</c>
+    /// (k: 0 begin, 1 swing, 2 projectile speed, 3 hit, 4 never asked), the groups counted while message <c>10g + 1</c> exists (the count 0x4CDCD0 starts at the list's first message).</summary>
+    public static EyeCandyListShape Weapon { get; } = new(SpellEyeCandyTable.WeaponPath, 5, 10, Array.Empty<int>(), 1);
 }
 
 /// <summary>
@@ -139,6 +142,8 @@ public sealed class SpellEyeCandyTable
     public const string ScriptPath = "rules/ScriptEyeCandy.mes";
     /// <summary>ARC-RENDER-1794: the animation eye-candy list (0x5DE670, the animation module's init 0x421B00), the blood of a hit: laid out as <see cref="EyeCandyListShape.Anim"/>.</summary>
     public const string AnimPath = "rules/AnimEyeCandy.mes";
+    /// <summary>ARC-RENDER-1990: the weapon eye-candy list (0x5DE610, the animation module's init 0x421B00): laid out as <see cref="EyeCandyListShape.Weapon"/>.</summary>
+    public const string WeaponPath = "rules/WeaponEyeCandy.mes";
     public const int PerSpell = 6, FileStride = 10;
     public const int Cast = 0, Projectile = 1, Destination = 2, SecondaryDestination = 3, SecondaryCast = 4;
 
@@ -179,6 +184,9 @@ public sealed class SpellEyeCandyTable
     /// <summary>ARC-RENDER-1794: <c>rules\AnimEyeCandy.mes</c> read as the animation list (<see cref="EyeCandyListShape.Anim"/>: one entry per message), the table of a hit's blood.</summary>
     public static SpellEyeCandyRead OpenAnim(ContentStack stack, MesReaderOptions? options = null) => Open(stack, EyeCandyListShape.Anim, options);
 
+    /// <summary>ARC-RENDER-1990: <c>rules\WeaponEyeCandy.mes</c> read as the weapon list (<see cref="EyeCandyListShape.Weapon"/>), the table of a weapon's own begin, swing, projectile and hit effects.</summary>
+    public static SpellEyeCandyRead OpenWeapon(ContentStack stack, MesReaderOptions? options = null) => Open(stack, EyeCandyListShape.Weapon, options);
+
     private static SpellEyeCandyRead Open(ContentStack stack, EyeCandyListShape shape, MesReaderOptions? options)
     {
         var path = shape.Path;
@@ -203,14 +211,14 @@ public sealed class SpellEyeCandyTable
         ArgumentNullException.ThrowIfNull(artExists);
         shape ??= EyeCandyListShape.Spell;
         var path = shape.Path;
-        // The count (0x4CDCD0): the entries of a group for each message the stride puts a group's first at that exists, from 0 on.
+        // The count (0x4CDCD0): the entries of a group for each message the stride puts a group's first at that exists, from the list's first message on.
         var groups = 0;
-        while (file.Find(groups * shape.FileStride) is not null) groups++;
+        while (file.Find(shape.FirstMessage + groups * shape.FileStride) is not null) groups++;
         if (groups == 0) return Refused(new(SpellDataStatus.FileEmpty, path));
         var entries = new SpellEyeCandyEntry[groups * shape.PerGroup];
         for (var index = 0; index < entries.Length; index++)
         {
-            var number = index / shape.PerGroup * shape.FileStride + index % shape.PerGroup;
+            var number = shape.FirstMessage + index / shape.PerGroup * shape.FileStride + index % shape.PerGroup;
             var text = SpellTexts.Text(file, number);
             // A missing or empty message is an entry without art (0x4CE2A0, 0x4CDE54).
             if (text is null || text.Length == 0) { entries[index] = SpellEyeCandyEntry.Empty; continue; }
