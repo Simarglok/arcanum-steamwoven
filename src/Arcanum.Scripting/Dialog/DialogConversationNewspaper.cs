@@ -73,12 +73,7 @@ public sealed partial class DialogConversation
     /// <summary>
     /// A headline followed by the NPC's line of a range (0x41A620): a headline that does not end in a full stop, a question mark or an exclamation mark gets a full stop, then one space (an empty headline adds nothing).
     /// </summary>
-    internal static string PunctuatedHeadline(string headline)
-    {
-        if (headline.Length == 0) return headline;
-        var last = headline[^1];
-        return last is '.' or '?' or '!' ? headline + " " : headline + ". ";
-    }
+    internal static string PunctuatedHeadline(string headline) => Arcanum.Data.Written.WrittenTexts.PunctuatedHeadline(headline);
 
     // The NPC's plain line of a range (0x418780), behind a headline when one is given (the text the message hook gave, then the line).
     private bool NewspaperNpcLine(int first, int last, string? headline, out DialogNpcLine line)
