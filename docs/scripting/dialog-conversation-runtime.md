@@ -738,7 +738,7 @@ the source (its dialog text control reads only mouse messages, F0); the controll
 cancels. Keyboard keys are not redirected to dialog actions: the WORLD keyboard route keeps
 them reserved for their original actions ([palette and keyboard route](../input/diagnostic-palette.md)),
 so `T`, digits, `Esc` and `Enter` do nothing in the dialog (ARC-UI-2019: under the Steamwoven setting the digits 1–5 choose the reply with that number, a Steamwoven addition behind `InterfaceRuleProfile.DialogRepliesUnnumbered`; Original shows no reply number and keeps the digits dead). A reply is chosen on the mouse press (ARC-UI-2025, ledger DH1–DH7; under Original rows are hit by the band's y / 20 click bands, `InterfaceRuleProfile.DialogReplyRowsDrift`). A diagnostic **Leave** button
-closes an awaiting dialog without a reply. The panel is modal, so the actor gate stays closed. `AreaConversationHost` (viewer Core) reads scripts and dialogs
+closes an awaiting dialog without a reply (ARC-UI-2023: under Original the panel shows no header, outcome, effects ledger, hint or Leave button and the controller cancel does not leave, as the original's window has only the reply rows, `InterfaceRuleProfile.DialogDiagnosticChromeHidden`; a start message with no dialog and a finished dialog keep their text and Close). The panel is modal, so the actor gate stays closed. `AreaConversationHost` (viewer Core) reads scripts and dialogs
 through the game's content stack (ARC-SCRIPT-011, [script content](script-content.md): the original's name for
 each script number and the winning copy, so Virgil's script is `Arcanum4.dat`'s, as the game opens it), runs SAP_DIALOG through the
 [SCR dispatcher](scr-dispatcher-runtime.md#dialogue-arc-script-009-slice-s3) (ARC-SCRIPT-009: Following from

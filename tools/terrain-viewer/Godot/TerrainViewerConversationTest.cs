@@ -68,6 +68,19 @@ public static partial class TerrainViewerSelfTest
             await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
             await ScreenshotAsync(host, "steamwoven-numbered");
             Require(panel.ButtonsForSelfTest[0].Text == "1. Why is it closed?", "Steamwoven draws the number again");
+            // ARC-UI-2023: Steamwoven keeps the diagnostic chrome; Original shows only the reply rows (no header, outcome, effects, hint, Leave, nor a cancel leave).
+            Require(panel.ChromeShownForSelfTest.Header && panel.ChromeShownForSelfTest.Hint && panel.ChromeShownForSelfTest.Leave && panel.LeaveOfferedForSelfTest, "Steamwoven keeps the diagnostic chrome");
+            await ScreenshotAsync(host, "steamwoven-chrome");
+            panel.DiagnosticChromeHidden = true; panel.NumberedReplies = false; panel.OriginalReplyRows = true;
+            await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+            await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+            await ScreenshotAsync(host, "original-chrome-hidden");
+            Require(panel.ChromeShownForSelfTest == (false, false, false, false, false) && !panel.LeaveOfferedForSelfTest && panel.ButtonsForSelfTest.Count > 0,
+                $"Original shows only the reply rows: {panel.ChromeShownForSelfTest}");
+            var closedAtCancel = closed;
+            panel.Cancel();
+            Require(closed == closedAtCancel && panel.IsOpen && conversation.Phase == DialogConversationPhase.AwaitingSelection, "Original: the cancel does not leave an awaiting dialog");
+            panel.DiagnosticChromeHidden = false; panel.NumberedReplies = true; panel.OriginalReplyRows = false;
             // ARC-UI-2025: under Original rows a blocked reply (row 2, y 40-59) and an empty slot (row 3) are refused by a press and change nothing.
             panel.OriginalReplyRows = true;
             await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
@@ -106,7 +119,12 @@ public static partial class TerrainViewerSelfTest
                 "typed effects reached the session");
             panel.Choose(1);
             Require(closed == 1 && !panel.IsOpen, "any choice dismisses a finished dialog");
-            panel.Open("Synthetic NPC", conversation); panel.LeaveForSelfTest.EmitSignal(BaseButton.SignalName.Pressed);
+            // ARC-UI-2023: a finished dialog keeps its Close button even under Original (nothing else could close it); the rest of the chrome stays hidden.
+            panel.DiagnosticChromeHidden = true;
+            panel.Open("Synthetic NPC", conversation);
+            Require(panel.LeaveOfferedForSelfTest && panel.ChromeShownForSelfTest is { Leave: true, Header: false, Hint: false }, "Original: a finished dialog keeps only Close");
+            panel.LeaveForSelfTest.EmitSignal(BaseButton.SignalName.Pressed);
+            panel.DiagnosticChromeHidden = false;
             Require(closed == 2 && !panel.IsOpen, "Close dismisses a finished dialog");
             // ARC-UI-2027: a reply that ends on a new final line removes the bubble, then shows the line with the default life (not persistent).
             {
