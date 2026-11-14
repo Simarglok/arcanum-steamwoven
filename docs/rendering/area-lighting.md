@@ -31,7 +31,7 @@ key 5, payload digest bound into the profile; `AreaAmbientDriver.ClockProfile`).
 frame `AreaAmbientDriver.Tick` admits host time through
 [`GameTimeFlow`](../world/game-clock-runtime.md#host-time-flow-arc-world-010) (8× the
 admitted interval, so one game hour per 7.5 real minutes) and holds a `Menu` pause
-while the diagnostic palette or a dialog is open, releasing only a Menu pause it holds
+while the Esc menu is open (the diagnostic palette and a dialog do not pause it, ARC-DEV-126), releasing only a Menu pause it holds
 (a Menu pause already on the session when the driver binds, as after a restore, counts
 as held; User or TurnBased pauses are left alone); resume has no catch-up. Time keeps
 flowing while the window is unfocused or minimised: only the Esc menu (and a save or load list) pauses it; no other window does (ARC-DEV-126, MIG12 S7). **Game time +1 hour** is an explicit wait (`ExplicitWait`) that also
@@ -250,7 +250,7 @@ live in the diagnostic palette (Ctrl+Shift+F9 / gamepad Start), never on origina
 game keys. In `area` the palette has **Game time +1 hour** (a one-hour wait) and
 **Ambient lighting on/off** (off shows unlit source pixels) plus a lighting status
 line. The HUD shows the game time, DAY/NIGHT (`[06:00,18:00)`), whether time flows
-(`time flows 8x`) or is paused (`PAUSED (dialog/palette/inventory open)`), the scheme id and
+(`time flows 8x`) or is paused (`PAUSED (the menu is open)`), the scheme id and
 whether it came from the map default. Without loaded lighting (other WORLD modes)
 both actions report "unavailable". No launch argument or key binding was added.
 
@@ -379,6 +379,27 @@ luminance. With it off nothing in this document changes (the `relight` smoke sta
 the same light sources as the lattice above, changes no luminance a check reads and adds no input or launch argument. Findings, numbers
 and the recommendation: [relighting experiment](../research/relighting-experiment.md). ARC-RES-2007 added the culling rule of the relit light list (of the carried and map lights the ones whose disk meets the
 shown view, the 32 nearest the view's centre are uploaded; `AreaRelight.SetView`) and the night-city captures of Tarant and Ashbury (stage `relight` with `ARC_RELIGHT_SCENE=city`).
+
+## Relit look (ARC-RENDER-2060)
+
+The best variant of the experiment is a player setting: the launcher's **HD lighting** line, Off or On, saved as the `relit look` line of `arcanum.cfg`
+([HD lines](terrain-viewer.md)). It is **default off** and in force only while the visual profile is HD (`SyncRelitLook` follows the setting and the profile every frame: HD graphics
+Off, by the H key too, puts the look out of force and the draw is Legacy byte for byte). In force it is the night-weighted mode (`NightAdd`) at the strength **1.6**
+(`AreaRelight.LookStrength`, the experiment's pick; `ARC_RELIGHT_LOOK_STRENGTH` changes it for tuning by eye): terrain, scenery, bodies and the hero take a normal derived per pixel from the sprite's
+luminance and the dynamic point-light term, weighted by how dark the item's own ambient is, so daylight stays Legacy and a dark scene takes the full term. The hero's carried light and the map's
+lights are one list with the view-culling rule above (32 nearest the view's centre). The environment's `ARC_RELIGHT` modes stay as a developer override (when set they win over the setting and use
+`ARC_RELIGHT_STRENGTH`). No gameplay luminance, clock or RNG is read or changed (FR-LIGHT-009 and FR-LIGHT-011 untouched).
+
+*HD frames.* An N-times HD frame has N times the texels over the same drawn size, so its luminance steps are 1/N as big: the relit program gets the item's scale (`relight_scale`, the item's `HdScale`)
+and multiplies the Sobel gain by it, and the silhouette bevel reads its alpha N texels away, so the look matches the 1x look (the Godot-free twin check: `experiments/relight-lab` test
+`An_n_times_smooth_redraw_with_the_gain_times_n_bends_the_normal_like_the_original`). No HD pack of the world's sprites exists on the owner's Mac yet (the installed pack is the interface redraw),
+so a capture on real HD world frames is still open ([#2060](https://github.com/Simarglok/arcanum-steamwoven/issues/2060) tail).
+
+*Cost, Mac (1280x800, vsync off, 90 frames).* Crash Site cave with 6 lights: 3.4 ms Legacy, 4.7 ms with the look; Tarant at night with 14 lights: 5.9 ms and 8.7 ms; Ashbury with 12 lights: 5.6 ms and 7.8 ms (about 1.3 to 2.8 ms more).
+The Steam Deck is not measured ([#2000](https://github.com/Simarglok/arcanum-steamwoven/issues/2000)); the line is off by default and the light list is bounded at 32, so a slow device simply leaves it off.
+
+Checks: stage `relight` (Legacy byte-identical with the setting off, also after the look was on and off; the setting On with HD graphics Off is byte-identical to Legacy; On with HD graphics On equals the night-weighted mode at the look's strength;
+the setting's saved value; frame times), the launcher self-test (the line's default, its saved line, shown again by the next launcher, Reset leaving it alone) and `ViewerSettingsConfigTests`.
 
 ## Open reads (F0)
 

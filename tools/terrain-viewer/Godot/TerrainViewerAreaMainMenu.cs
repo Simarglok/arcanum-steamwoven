@@ -741,6 +741,13 @@ public partial class TerrainViewerApp
         {
             _mainMenuStatus = "Escape ignored: a load is in progress"; RefreshAreaStatus(); return true;
         }
+        OpenInPlayMenuOverWindows(optionsWindow: false);
+        return true;
+    }
+
+    /// <summary>The in-play menu's start (0x541180), shared by Escape (the in-play window) and the O key (the options window, ARC-UI-2026).</summary>
+    private void OpenInPlayMenuOverWindows(bool optionsWindow)
+    {
         var limited = AnotherHasTheTurn || ConversationOpen || WorldMapOpen || BarterOpen || ItemServiceOpen;
         // 0x573440 (the menu's start, 0x541180): the inventory window closes, with any overlay over it; barter (the inventory family) too.
         // Target modes over the base and the other windows stay as they are, and Continue returns to them (0x5412D0).
@@ -748,10 +755,37 @@ public partial class TerrainViewerApp
         if (BarterOpen) CloseBarterByPlayer();
         // ARC-UI-1731: the item identify and repair windows are the inventory window in its modes 5 and 6 (the same family).
         if (ItemServiceOpen) EndItemService();
-        GD.Print($"ARC-DEV-111 Escape opens the in-play menu kind={(limited ? 3 : 2)} (stack {StackText()})");
+        GD.Print($"ARC-DEV-111 {(optionsWindow ? "the O key opens the options window" : "Escape opens the in-play menu")} kind={(optionsWindow ? 4 : limited ? 3 : 2)} (stack {StackText()})");
         OpenMainMenu(MainMenuTexts(_arguments ?? _launchArguments!), limited ? AreaMenuWindow.InPlayLimited : AreaMenuWindow.InPlay);
+        if (optionsWindow && _mainMenu is { } menu && MenuOpenedHere(menu)) { menu.OpenOptionsWindow(); RenderMainMenu(); }
+    }
+
+    private bool MenuOpenedHere(AreaMainMenu menu) => ReferenceEquals(menu, _mainMenu) && menu.Window is AreaMenuWindow.InPlay or AreaMenuWindow.InPlayLimited;
+
+    /// <summary>
+    /// ARC-UI-2026 (main loop 0x401560, the O branch in the key-up arm like Escape's; menu start 0x541180 with kind 4 = window 6; read in the
+    /// exports): the release of O opens the options window directly, in play, over any window and over the dialog (the dialog's handler
+    /// lets the release through, SA43), at the Game page, without the pause Escape raises (kind 4 skips the pause counter). The only guard
+    /// is a focused text field and a menu already up; the hero's state and another participant's turn do not refuse it. The press only arms the route.
+    /// </summary>
+    private bool RouteOptionsKey(WorldKeyDecision decision)
+    {
+        if (!QuickKeysActive || decision.Key != WorldKey.O) return false;
+        if (decision.Echo) return true;
+        if (decision.Pressed) { _optionsKeyArmed = _mainMenu is null; return true; }
+        if (!_optionsKeyArmed) return true;
+        _optionsKeyArmed = false;
+        if (_mainMenu is not null) return true;
+        if (!_worldFocused || PanelOutsideStackOpen || WorldUiFocus) { _mainMenuStatus = "O ignored: palette, menu or UI focus owns input"; RefreshAreaStatus(); return true; }
+        if (_worldLifecycleSession is not null || _worldResetPending || _worldReloadPending || _mapHandoff is { Kind: not MapHandoffKind.Stream })
+        {
+            _mainMenuStatus = "O ignored: a load is in progress"; RefreshAreaStatus(); return true;
+        }
+        OpenInPlayMenuOverWindows(optionsWindow: true);
         return true;
     }
+
+    private bool _optionsKeyArmed;
 
     // ARC-INPUT-1124: an Escape pressed while the in-play route owned it; its release opens the menu (the original acts on key up).
     private bool _gameMenuEscapeArmed;

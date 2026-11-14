@@ -332,7 +332,7 @@ owns; with an event world it also runs the passes. See [the frame step](game-clo
   (`BudgetLeft`).
 - **A wait is a jump.** The palette's +1 hour is one `ExplicitWait` jump and then the passes: each timer due inside it
   fires once, late, and counts the elapsed time, as the source's sleep and other jumps do (K4).
-- **A paused clock** (a dialog, the palette or the inventory open) moves no game or animation time; real time still moves, so a
+- **A paused clock** (the Esc menu open; a dialog, the palette and the inventory do not pause it, ARC-DEV-126) moves no game or animation time; real time still moves, so a
   paused frame is one step with a pass either side (MIG12 S4; the old pump ran the first pass only).
 - **The world** (`AreaEventWorld`, an `ISessionScriptWorld`) answers from the viewer's current hosts at each question:
   an NPC's life facts from its combat fields (`AreaCombatHost.Build`, as the hero's attack uses them), so its timers run

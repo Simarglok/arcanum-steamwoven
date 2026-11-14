@@ -10,9 +10,9 @@ using Godot;
 namespace Arcanum.TerrainViewer;
 
 // ARC-SCRIPT-005: the original left click on a dialog NPC talks in crash-site-area mode. It arrives through the
-// guarded ground-click path (WorldRouteClick: focus, modal, gate, lifecycle, pending transfer). Within the
-// diagnostic reach the dialog opens at once; farther away the click-to-move route walks within reach first and
-// the talk starts on arrival, like a walk-to-use. The panel is modal: the actor gate stays closed, replies are
+// guarded ground-click path (WorldRouteClick: focus, modal, gate, lifecycle, pending transfer). Since ARC-DEV-169 the
+// click orders the hero's goal 21 (ag_talk): within less than 5 cells the dialog opens at once; farther away the goal
+// walks the hero next to the NPC (goal 8) and the talk starts on arrival. The panel is modal: the actor gate stays closed, replies are
 // chosen by mouse (as in the source) or controller menu, and keyboard keys are not redirected to dialog actions
 // (the WORLD keyboard route reserves them). Speakers come from the exterior map; in the cave only a companion that
 // stands there (ARC-WORLD-017) can be talked to, and on the exterior a companion away in the cave cannot.
@@ -82,7 +82,7 @@ public partial class TerrainViewerApp
         else _conversationHost = null;
         if (_conversationPanel is null)
         {
-            _conversationPanel = new AreaConversationPanel { NumberedSource = () => DialogRepliesNumbered, OriginalRowsSource = () => DialogReplyRowsDrift }; AddChild(_conversationPanel);
+            _conversationPanel = new AreaConversationPanel { NumberedSource = () => DialogRepliesNumbered, OriginalRowsSource = () => DialogReplyRowsDrift, ChromeHiddenSource = () => DialogChromeHidden }; AddChild(_conversationPanel);
             _conversationPanel.NpcLineShown += (text, persistent) => { FaceHeroFromSpeaker(); ShowDialogLineBubble(text, persistent); };
             _conversationPanel.ReplyPicking += () => { FaceHeroTowardSpeaker(); RemoveDialogLineBubble(); };
             _conversationPanel.Picked += () => { if (_audio is not null) ExecuteVoice(DialogVoicePlayer.Picked()); };
@@ -474,6 +474,7 @@ public partial class TerrainViewerApp
             _conversationPanel!.SetFonts(TextFonts());
             _conversationPanel.NumberedReplies = DialogRepliesNumbered;
             _conversationPanel.OriginalReplyRows = DialogReplyRowsDrift;
+            _conversationPanel.DiagnosticChromeHidden = DialogChromeHidden;
             _conversationPanel.Open(title, conversation, note);
         }, () => _conversationPanel!.CloseView());
 
@@ -574,11 +575,14 @@ public partial class TerrainViewerApp
     /// <summary>ARC-UI-2025: the Original interface setting lays the replies out as the original's band and hits its rows with the original's click bands (no session: Steamwoven).</summary>
     private bool DialogReplyRowsDrift => _areaSession?.Rules.Interface.DialogReplyRowsDrift == true;
 
+    /// <summary>ARC-UI-2023: the Original interface setting hides the panel's diagnostic chrome (header, outcome, effects, hint, Leave and the cancel leave): the original's window shows only the reply rows (no session: Steamwoven).</summary>
+    private bool DialogChromeHidden => _areaSession?.Rules.Interface.DialogDiagnosticChromeHidden == true;
+
     private bool DialogRepliesNumbered => _areaSession?.Rules.Interface.DialogRepliesUnnumbered != true;
 
     private void HandleConversationPulse(IntentFrame intent)
     {
-        if (intent.Cancel) _conversationPanel!.Leave();
+        if (intent.Cancel) _conversationPanel!.Cancel();
         else if (intent.MenuPressedDirection != 0) _conversationPanel!.Navigate(intent.MenuPressedDirection);
         else if (intent.Confirm) _conversationPanel!.Confirm();
     }
@@ -598,7 +602,7 @@ public partial class TerrainViewerApp
             return " | talk: no dialog NPC on this map";
         return ActorCell() is { } cell && NearestTalkable(cell.X, cell.Y) is { } speaker
             ? $" | dialog NPC script {speaker.ScriptId} in reach: left-click it to talk"
-            : $" | talk: left-click a dialog NPC ({_conversationHost!.Speakers.Count(SpeakerPresent)} on this map; walks within {_conversationHost.Profile.Reach} tiles first)";
+            : $" | talk: left-click a dialog NPC ({_conversationHost!.Speakers.Count(SpeakerPresent)} on this map; walks next to it first)";
     }
 
     // ARC-SCRIPT-006: what the dialogs left in the session (survives the cave trip). The status line is rebuilt

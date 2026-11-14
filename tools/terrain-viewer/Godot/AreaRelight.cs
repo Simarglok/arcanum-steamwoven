@@ -44,11 +44,23 @@ internal static class AreaRelight
     private static string _lastKey = "";
     private static Rect2? _view;
 
-    /// <summary>The mode now; the environment (<c>ARC_RELIGHT</c> = off, add, night, delight) picks the first one.</summary>
-    internal static Mode Current { get; private set; } = FromEnvironment();
+    private static Mode _developerMode = FromEnvironment();
+    private static bool _look;
+
+    /// <summary>The mode now. ARC-RENDER-2060: the developer override (the environment's <c>ARC_RELIGHT</c> = off, add, night, delight, or <see cref="SetMode"/> of the smokes
+    /// and the palette) wins when it is not Off; else the player's look (<see cref="SetLook"/>, the HD lighting setting while HD graphics is on) is the night-weighted mode.</summary>
+    internal static Mode Current => _developerMode != Mode.Off ? _developerMode : _look ? Mode.NightAdd : Mode.Off;
     internal static bool Active => Current != Mode.Off;
-    /// <summary>Overall energy of the relit term (0.6 is a mild one).</summary>
+    /// <summary>The developer override alone (what a smoke saves and restores; <see cref="Current"/> also folds in the look).</summary>
+    internal static Mode DeveloperMode => _developerMode;
+    /// <summary>ARC-RENDER-2060: the player's relit look is on (the HD lighting setting, and only with HD graphics; the caller decides).</summary>
+    internal static bool Look => _look;
+    /// <summary>ARC-RENDER-2060: the energy of the player's look: the night-weighted mode at 1.6 after the experiment ARC-RES-2007 (<c>ARC_RELIGHT_LOOK_STRENGTH</c> overrides it for tuning by eye).</summary>
+    internal static float LookStrength { get; } = FloatFromEnvironment("ARC_RELIGHT_LOOK_STRENGTH", 1.6f);
+    /// <summary>Overall energy of the relit term in a developer mode (0.6 is a mild one); the player's look uses <see cref="LookStrength"/>.</summary>
     internal static float Strength { get; set; } = FloatFromEnvironment("ARC_RELIGHT_STRENGTH", 0.6f);
+    /// <summary>The energy the shader gets now.</summary>
+    private static float EffectiveStrength => _developerMode != Mode.Off ? Strength : LookStrength;
     /// <summary>How much of the baked shading mode <see cref="Mode.DelightAdd"/> flattens (0..1).</summary>
     internal static float Delight { get; set; } = FloatFromEnvironment("ARC_RELIGHT_DELIGHT", 0.35f);
     /// <summary>Light height above the ground in screen pixels (Godot's <c>PointLight2D.height</c>).</summary>
@@ -76,10 +88,13 @@ internal static class AreaRelight
         _ => Mode.Off,
     };
 
-    internal static void SetMode(Mode mode) => Current = mode;
+    internal static void SetMode(Mode mode) => _developerMode = mode;
+
+    /// <summary>ARC-RENDER-2060: turns the player's relit look on or off (the viewer calls it whenever the HD lighting setting or the visual profile changes).</summary>
+    internal static void SetLook(bool on) => _look = on;
 
     /// <summary>Steps off, add, night, delight, off ... (the diagnostic palette action).</summary>
-    internal static Mode Cycle() { Current = (Mode)(((int)Current + 1) % 4); return Current; }
+    internal static Mode Cycle() { _developerMode = (Mode)(((int)_developerMode + 1) % 4); return _developerMode; }
 
     internal static void SetMapLights(IEnumerable<Light> lights) { MapLights.Clear(); MapLights.AddRange(lights); }
     internal static void SetCarriedLights(IEnumerable<Light> lights) { CarriedLights.Clear(); CarriedLights.AddRange(lights); }
@@ -140,7 +155,7 @@ internal static class AreaRelight
             _lightTexture!.Update(_lightImage);
         }
         UploadedCount = all.Length;
-        RenderingServer.GlobalShaderParameterSet("relight_params", new Vector4((float)Current, Strength, Delight, Height));
+        RenderingServer.GlobalShaderParameterSet("relight_params", new Vector4((float)Current, EffectiveStrength, Delight, Height));
         RenderingServer.GlobalShaderParameterSet("relight_kinds", new Vector4(NormalGain.Ground, NormalGain.Object, NormalGain.Critter, all.Length));
     }
 
@@ -152,8 +167,9 @@ internal static class AreaRelight
         global uniform vec4 relight_params;
         global uniform vec4 relight_kinds;
         uniform int relight_kind = 0;
+        uniform int relight_scale = 1;
         float rl_lum(vec3 c) { return dot(c, vec3(0.299, 0.587, 0.114)); }
-        void rl_taps(sampler2D tex, ivec2 p, vec4 centre, out mat3 h, out mat3 a) {
+        void rl_taps(sampler2D tex, ivec2 p, vec4 centre, int stride, out mat3 h, out mat3 a) {
             ivec2 size = textureSize(tex, 0);
             float hc = rl_lum(centre.rgb);
             for (int x = 0; x < 3; x++) for (int y = 0; y < 3; y++) {
@@ -164,6 +180,11 @@ internal static class AreaRelight
                     vec4 t = texelFetch(tex, q, 0);
                     h[x][y] = t.a < 0.5 ? hc : rl_lum(t.rgb);
                     a[x][y] = t.a;
+                }
+                // An N-times HD frame: the silhouette bevel looks N Legacy-pixel-widths less far than in the 1x look unless the alpha taps reach N texels.
+                if (stride > 1 && !(x == 1 && y == 1)) {
+                    ivec2 r = p + ivec2(x - 1, y - 1) * stride;
+                    a[x][y] = (any(lessThan(r, ivec2(0))) || any(greaterThanEqual(r, size))) ? 0.0 : texelFetch(tex, r, 0).a;
                 }
             }
         }
@@ -184,21 +205,21 @@ internal static class AreaRelight
             int count = int(relight_kinds.w + 0.5);
             if (mode == 0 || relight_kind == 0 || texel.a <= 0.0 || (count == 0 && mode != 3)) return vec4(base, texel.a * alpha);
             vec2 world = (frag - raster.xy) / raster.zw;
-            float gain = relight_kind == 1 ? relight_kinds.x : (relight_kind == 2 ? relight_kinds.y : relight_kinds.z);
+            float gain = (relight_kind == 1 ? relight_kinds.x : (relight_kind == 2 ? relight_kinds.y : relight_kinds.z)) * float(max(relight_scale, 1));
             float bevel = relight_kind == 1 ? 0.0 : 0.6;
             vec3 sum = vec3(0.0);
             mat3 hh; mat3 aa;
             bool have = false;
             vec3 n = vec3(0.0, 0.0, 1.0);
             // De-light flattens the baked shading everywhere (not only near a light), so the base has no step at a light's edge.
-            if (mode == 3) { rl_taps(tex, p, texel, hh, aa); n = rl_normal(hh, aa, gain, bevel); have = true; }
+            if (mode == 3) { rl_taps(tex, p, texel, relight_scale, hh, aa); n = rl_normal(hh, aa, gain, bevel); have = true; }
             for (int i = 0; i < count; i++) {
                 vec4 l0 = texelFetch(relight_lights, ivec2(i, 0), 0);
                 vec3 c = texelFetch(relight_lights, ivec2(i, 1), 0).rgb;
                 vec2 d = l0.xy - world;
                 float att = max(1.0 - length(d) / max(l0.w, 1.0), 0.0);
                 if (att <= 0.0) continue;
-                if (!have) { rl_taps(tex, p, texel, hh, aa); n = rl_normal(hh, aa, gain, bevel); have = true; }
+                if (!have) { rl_taps(tex, p, texel, relight_scale, hh, aa); n = rl_normal(hh, aa, gain, bevel); have = true; }
                 vec3 l = normalize(vec3(d, l0.z));
                 sum += c * att * att * max(dot(n, l), 0.0);
             }
