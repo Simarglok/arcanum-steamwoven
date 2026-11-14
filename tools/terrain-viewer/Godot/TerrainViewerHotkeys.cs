@@ -107,8 +107,8 @@ public partial class TerrainViewerApp
 
     /// <summary>ARC-UI-2068, ARC-UI-2086 (0x57BC70, 0x57C080): the spell activation pops the dialog after its own refusal tests (a valid spell). A BEGIN area with the
     /// inventory bit 0x2000000 skips that pop in 0x57BC70 only because the inventory opener 0x572240 → 0x572510 pops first (0x551A80(0), the mode 3 leave
-    /// ends the dialog) and then pushes mode 8: the dialog ends before the window opens, never stays below it (ARC-UI-2086, F1). The place of the action-point
-    /// test against the pop is not read (issue #2087).</summary>
+    /// ends the dialog) and then pushes mode 8: the dialog ends before the window opens, never stays below it (ARC-UI-2086, F1). The pop comes before the
+    /// action-point test (ARC-RES-2087), which is the viewer's order.</summary>
     private bool SpellEndsDialog(int spell) => SpellCasterNow() is not null && _spellRecords is { } records && spell >= 0 && spell < records.Length && records[spell].Data.Enabled;
 
     /// <summary>The activation (0x54FCF0): the PC's test, then the entry's type.</summary>
