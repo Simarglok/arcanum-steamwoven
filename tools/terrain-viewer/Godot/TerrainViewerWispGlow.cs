@@ -30,19 +30,33 @@ public partial class TerrainViewerApp
         var poses = CritterPoses();
         var absent = _areaCompanions?.Absent;
         var host = _aiHost is { } ai && ReferenceEquals(ai.Session, _areaSession) ? ai : null;
-        var entities = host?.Scene.Npcs.ToDictionary(npc => npc.Row.Key, npc => npc.Entity);
+        var entities = host is null ? null : WispEntities(host);
         var lights = new List<AreaRelight.Light>();
         foreach (var (row, glow) in _wispRows)
         {
             if (absent?.Contains(row.Key) == true) continue;
-            if (host is not null && entities is not null && entities.TryGetValue(row.Key, out var entity) && (host.Gone(entity) || host.DeadCritter(entity))) continue;
             poses.TryGetValue(row.Key, out var pose);
             var stood = AreaWispGlows.Place(row, glow, poses.ContainsKey(row.Key) ? pose : null);
             var tile = TerrainGeometry.Project(checked((int)(stood.CellX - local.Chart.OriginX)), checked((int)(stood.CellY - local.Chart.OriginY)));
-            lights.Add(new AreaRelight.Light(tile.X + stood.OffsetX + 40f, tile.Y + stood.OffsetY + 20f - glow.Lift, glow.Radius,
-                new Color(glow.Red / 255f * glow.Strength * WispStrengthFactor, glow.Green / 255f * glow.Strength * WispStrengthFactor, glow.Blue / 255f * glow.Strength * WispStrengthFactor)));
+            var light = new AreaRelight.Light(tile.X + stood.OffsetX + 40f, tile.Y + stood.OffsetY + 20f - glow.Lift, glow.Radius,
+                new Color(glow.Red / 255f * glow.Strength * WispStrengthFactor, glow.Green / 255f * glow.Strength * WispStrengthFactor, glow.Blue / 255f * glow.Strength * WispStrengthFactor));
+            // The cheap test first: a wisp whose glow cannot reach the view costs no life query.
+            if (!AreaRelight.ReachesView(light)) continue;
+            if (entities is not null && entities.TryGetValue(row.Key, out var entity) && (host!.Gone(entity) || host.DeadCritter(entity))) continue;
+            lights.Add(light);
         }
         return lights;
+    }
+
+    // The AI host's entity of each wisp row (built again when the host's scene changes; a duplicate key keeps the first).
+    private AreaAiScene? _wispEntitiesScene;
+    private Dictionary<AreaObjectKey, string> _wispEntities = [];
+    private Dictionary<AreaObjectKey, string> WispEntities(AreaAiHost host)
+    {
+        if (ReferenceEquals(_wispEntitiesScene, host.Scene)) return _wispEntities;
+        var map = new Dictionary<AreaObjectKey, string>();
+        foreach (var npc in host.Scene.Npcs) map.TryAdd(npc.Row.Key, npc.Entity);
+        _wispEntitiesScene = host.Scene; return _wispEntities = map;
     }
 
     /// <summary>Per frame: gives the canvas the wisps' glow source (a no-op once it has it).</summary>

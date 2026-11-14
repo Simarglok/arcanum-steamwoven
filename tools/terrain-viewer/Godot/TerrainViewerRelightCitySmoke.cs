@@ -165,6 +165,7 @@ public partial class TerrainViewerApp
                                 AreaRelight.SetMode(AreaRelight.Mode.NightAdd); AreaRelight.Strength = AreaRelight.LookStrength; PushAreaAmbient();
                                 var without = await Capture($"shot-{spotName}-h{hour:00}-2-relit-no-glow");
                                 SetWispGlow(true); var withGlow = await Capture($"shot-{spotName}-h{hour:00}-3-relit-wisp-glow");
+                                Require(Differing(legacyOn, legacyOff) == 0, "Legacy (the relit look off) is identical with the wisp glow on and off");
                                 shotLog.Add(new { Spot = spotName, Hour = hour, LegacyGlowOnOffDiffering = Differing(legacyOn, legacyOff), RelitGlowDiffering = Differing(without, withGlow),
                                     WispLights = WispRelitLights().Count(), InView = AreaRelight.InViewCount, CarriedInView = AreaRelight.CarriedInViewCount, Uploaded = AreaRelight.UploadedCount });
                             }

@@ -39,13 +39,13 @@ public static class AreaWispGlows
     /// <summary>The glow of a creature prototype, null when it is not a wisp.</summary>
     public static WispGlow? Of(int prototype) => ByPrototype.TryGetValue(prototype, out var glow) ? glow : null;
 
-    /// <summary>The map rows that are wisps (an NPC-type object whose prototype is in the table), in row order.</summary>
+    /// <summary>The map rows that are wisps (a core-scope NPC-type object with a cell whose prototype is in the table, the rows the critter lights read too), in row order.</summary>
     public static IReadOnlyList<(AreaObjectRecord Row, WispGlow Glow)> Rows(IEnumerable<AreaObjectRecord> objects)
     {
         ArgumentNullException.ThrowIfNull(objects);
         var found = new List<(AreaObjectRecord, WispGlow)>();
         foreach (var row in objects)
-            if (row.Type == AreaNpcRouteReader.NpcType && row.WorldX is not null && row.WorldY is not null && Of(row.PrototypeNumber) is { } glow) found.Add((row, glow));
+            if (row.Type == AreaNpcRouteReader.NpcType && row.Scope == AreaScope.Core && row.WorldX is not null && row.WorldY is not null && Of(row.PrototypeNumber) is { } glow) found.Add((row, glow));
         return found;
     }
 

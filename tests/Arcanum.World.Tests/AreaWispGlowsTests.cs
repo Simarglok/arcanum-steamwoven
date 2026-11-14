@@ -9,8 +9,10 @@ namespace Arcanum.World.Tests;
 [TestClass]
 public sealed class AreaWispGlowsTests
 {
-    private static AreaObjectRecord Row(int type, int prototype, long? x, long? y, params AreaFieldValue[] fields)
-        => new(new(new string('a', 64), 1, AreaSourceKind.Mobile, 1, prototype, 600L + prototype, new string('b', 64), 100), 0, type, prototype, "p", "p", "r", "s", AreaScope.Core, null, x, y,
+    private static AreaObjectRecord Row(int type, int prototype, long? x, long? y, params AreaFieldValue[] fields) => Row(type, prototype, x, y, AreaScope.Core, fields);
+
+    private static AreaObjectRecord Row(int type, int prototype, long? x, long? y, AreaScope scope, params AreaFieldValue[] fields)
+        => new(new(new string('a', 64), 1, AreaSourceKind.Mobile, 1, prototype, 600L + prototype, new string('b', 64), 100), 0, type, prototype, "p", "p", "r", "s", scope, null, x, y,
             Arcanum.Data.Area.AreaDisposition.BodyEligibleConditionally, [], fields, true, true, true);
 
     [TestMethod]
@@ -27,7 +29,8 @@ public sealed class AreaWispGlowsTests
     public void RowsKeepOnlyNpcRowsOfAWispPrototypeWithACell()
     {
         var wisp = Row(AreaNpcRouteReader.NpcType, 28471, 100, 200);
-        var rows = AreaWispGlows.Rows([wisp, Row(AreaNpcRouteReader.NpcType, 28470, 100, 200), Row(2, 28471, 100, 200), Row(AreaNpcRouteReader.NpcType, 28472, null, null)]);
+        var rows = AreaWispGlows.Rows([wisp, Row(AreaNpcRouteReader.NpcType, 28470, 100, 200), Row(2, 28471, 100, 200), Row(AreaNpcRouteReader.NpcType, 28472, null, null),
+            Row(AreaNpcRouteReader.NpcType, 28473, 100, 200, AreaScope.Context), Row(AreaNpcRouteReader.NpcType, 28474, 100, 200, AreaScope.Outside)]);
         Assert.AreEqual(1, rows.Count);
         Assert.AreSame(wisp, rows[0].Row);
         Assert.AreEqual(28471, rows[0].Glow.Prototype);
@@ -42,9 +45,9 @@ public sealed class AreaWispGlowsTests
         Assert.AreEqual((100L, 200L, 5, -7), (home.CellX, home.CellY, home.OffsetX, home.OffsetY));
         var pose = new AreaCritterPose(row.Key, 103, 198, 11, 13);
         var moved = AreaWispGlows.Place(row, glow, pose);
-        // The same arithmetic as a critter's carried light (LT10): the pose's cell, and the offsets that put the light the pose's shift from the T0 anchor.
-        var (cx, cy, ox, oy) = AreaCritterLights.Stand(100, 200, 5, -7, pose);
-        Assert.AreEqual((cx, cy, ox, oy), (moved.CellX, moved.CellY, moved.OffsetX, moved.OffsetY));
+        // Independent expectation: the pose's cell, and the offsets that put the light the pose's shift from the T0 anchor (the tile moves by the projection of the cell difference).
+        var tile = TerrainGeometry.Project(103 - 100, 198 - 200); var origin = TerrainGeometry.Project(0, 0);
+        Assert.AreEqual((5 + 11 - (tile.X - origin.X), -7 + 13 - (tile.Y - origin.Y)), (moved.OffsetX, moved.OffsetY));
         Assert.AreEqual((103L, 198L), (moved.CellX, moved.CellY));
     }
 }
