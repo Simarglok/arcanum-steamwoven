@@ -368,7 +368,11 @@ public sealed partial class GameSessionOwner
             if (_equipment.SlotOf(item) is { } slot) _equipment.Worn.Remove(slot);
             _inventory.Hero.Remove(item);
             // The item stays taken (no seed shows it); a kit or taken item remembers where it came from.
-            if (kind == SessionHolderKind.Container) _inventory.AddToContainer(npc, new SessionMadeItem(item, held.Kind, held.Complexity));
+            if (kind == SessionHolderKind.Container)
+            {
+                _inventory.AddToContainer(npc, new SessionMadeItem(item, held.Kind, held.Complexity));
+                StoreInsertPlace(npc, item, container: true);
+            }
             else
             {
                 _inventory.AddToNpc(npc, new SessionMadeItem(item, held.Kind, held.Complexity));
@@ -572,7 +576,7 @@ public sealed partial class GameSessionOwner
         if (_revision != revision || _inventory.SeedGeneration != seeds) { refusal = RejectItem(GameSessionFailure.StaleVersion, verdict); return null; }
         if (verdict != SessionInsertVerdict.Accepted) { refusal = RejectItem(GameSessionFailure.InsertRefused, verdict); return null; }
         var made = CreateMadeItem(new(entity, kind, holder == SessionHolderKind.Container ? SessionCreatePlace.ContainerList : SessionCreatePlace.NpcList, weight, Holder: npc));
-        if (holder != SessionHolderKind.Container) StoreInsertPlace(npc, made.Entity);
+        StoreInsertPlace(npc, made.Entity, container: holder == SessionHolderKind.Container);
         return made;
     }
 
