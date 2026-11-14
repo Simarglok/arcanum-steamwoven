@@ -99,8 +99,8 @@ incompatible version" and the next F7 overwrites it. No host kept combat mode be
 - The hero's attack is the next slice, ARC-COMBAT-005 ([hero attack runtime](hero-attack-runtime.md)): the combat-mode
   click on a living NPC, the attack cursor and ART, damage, death and loot, played by these rules. Ranged attacks and the
   repeat shot have no host yet.
-- AI: NPC combat mode, combat focus and fighting (the exit gate's threats are always empty in the viewer, so the right
-  click's and R's refusal under attack does not happen there yet), the attacked NPC's AI pass, NPC attacks.
+- AI: NPC combat mode, combat focus and fighting (the viewer passes the AI host's threats to the exit gate in the R key, the right
+  release and the dialog start, ARC-COMBAT-1935, so their refusal under attack happens there), the attacked NPC's AI pass, NPC attacks.
 - After the right release the original also restarts the idle (a fidget in combat mode, RR5); the viewer's hero never fidgets (TH9),
   so it does not. The interrupt at priority 3 and the turn toward the pointer are modelled (ARC-DEV-145); since ARC-DEV-146 the hero's walk (goals 3 and 4) and its turn (goal 53) are runs of the goal table, so the interrupt is the table's level-3 interrupt of the hero's runs.
 - The turn-based setting in the viewer (Space) and its round came with ARC-COMBAT-020

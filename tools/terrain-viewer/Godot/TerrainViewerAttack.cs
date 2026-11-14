@@ -879,6 +879,8 @@ public partial class TerrainViewerApp
             DropMap = AreaDropMapNow(),
             // ARC-MAGIC-060: the damage step's item events (ledger IC1-IC6): the hero's worn items fire on its hit (a cell weapon's Target_Hit, 0x4CBE70), the struck NPC's on being hit.
             ItemTriggers = ItemTriggersNow(),
+            // ARC-COMBAT-1929: the target's facing and awareness of the hero decide a backstab (0x45F9D0).
+            Backstab = _aiHost?.HeroBackstabFacts(struck.Entity),
         };
     }
 

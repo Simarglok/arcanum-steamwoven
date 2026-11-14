@@ -80,7 +80,7 @@ beyond S33 is not counted.
 ```sh
 "$DOTNET" run --project tools/research/Arcanum.CrashSiteProbe --no-build -- --script-refusal-census-self-test
 "$DOTNET" run --project tools/research/Arcanum.CrashSiteProbe --no-build -- --script-refusal-census \
-  --game-root "$GAME" [--set S30|S31|S32|S33|S38|S43|S52|S53|S54|S56] > "$PRIVATE/refusal-census.json"
+  --game-root "$GAME" [--set S30|S31|S32|S33|S38|S43|S52|S53|S54|S55|S56|S58|S59] > "$PRIVATE/refusal-census.json"
 ```
 
 The run takes about five seconds and is deterministic: two runs on the owner's installation
@@ -518,3 +518,10 @@ The probe takes `--set S56` too: **S56** is S55 plus get social class (38), get 
 scripts on 7,268 placed sites are admitted whole and 43 roots (251 sites) are refused for a type; under **S56** 1,720 scripts on 7,341 sites are admitted (+8 scripts, +73 sites) and 35 roots (178 sites) are refused for a type. The CRQ group, 8 roots on 73 sites on 2 maps under S55 (each root freed by it alone),
 is empty: the heartbeat point 19 loses 13 blocked sites (76 to 63), the dialog point 9 none (the dialog-talk set holds only the getters, and its blocking types are others). The issue's estimate (about +9 roots on 80 sites) was close; the difference is that the census counts what the set admits whole, and the
 installed scripts that use these five actions are 8 roots on 73 sites. What the host does with the two writes is limited to the hero and NPCs (ledger CQ8); the use, placed, heartbeat, dying and combat-point sets hold all five actions, the dialog-talk set the getters.
+
+## After the newspaper actions (ARC-SCRIPT-1764, 2026-11-14)
+
+The probe takes `--set S58` and `--set S59` too: **S58** is S56 plus queue slide (131) and end game (132) (the slide set of ARC-RENDER-1171), **S59** is S58 plus queue newspaper (85) and float newspaper headline (86) (ledger [NP9–NP12](ledger/scripts.md#script-actions-queue-newspaper-and-float-newspaper-headline-arc-script-1764)).
+The runs are on the owner's installation (module `Arcanum`, the same 1,809 roots and 7,766 placed sites as before). Under **S58** 1,723 attached scripts on 7,342 placed sites are admitted whole and 32 roots (177 sites) are refused for a type; under **S59** 1,732 scripts on 7,360
+sites are admitted (+9 scripts, +18 sites) and 23 roots (159 sites) are refused for a type. The two types are gone from the refused table (S58 had six): **a85** blocked 8 roots on 14 sites on 2 maps (the main map 13 sites, Caladon's sewers 1; attachment points 9, 12 and 19, and 9 tile or sector sites), each root alone, and **a86**
+blocked 1 root on 4 sites on one map at the first-heartbeat point 10, alone. What is left refused for a type under S59 is a32 (7 roots, 110 sites), a90 (14 roots, 47 sites), a70 and a111 (1 root each).

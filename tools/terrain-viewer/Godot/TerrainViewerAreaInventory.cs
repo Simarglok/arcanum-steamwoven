@@ -367,8 +367,9 @@ public partial class TerrainViewerApp
                // ARC-RES-1327 (XR3, XR16): the container window See Contents opened (window mode 4) moves nothing.
                Contents = holder is not null && holder == _contentsHolder,
                BodyRatings = holder is not null && _combatHost is { } combat && combat.Covers(CurrentAreaMap) ? combat.DollRatings(_areaSession!, holder) : null,
-               // ARC-UI-1267 (IW25): the hero's own window prints its damage and armour ratings and fills a too heavy weapon's slot.
-               HeroRatings = holder is null ? _combatHost?.HeroDollRatings(_areaSession!) : null };
+               // ARC-UI-1267 (IW25): the hero's own window prints its damage and armour ratings and fills a too heavy weapon's slot. ARC-UI-1918 (IW26): so do the windows of modes 1 to 4 once
+               // the hero's doll toggle is set.
+               HeroRatings = _combatHost?.HeroDollRatings(_areaSession!) };
 
     // The last heal's message, for the item cursor's notice (the cursor reads it after the use returns; no window is open then).
     private string? _healMessage;

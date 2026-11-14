@@ -8,8 +8,9 @@ namespace Arcanum.World;
 public sealed record AreaLootGridItem(string Entity, int Location, int Width, int Height, string Name, SessionItemKind Kind);
 
 /// <summary>ARC-UI-052: a point of the loot window: a cell of the hero's grid (as <see cref="AreaInventoryDrag"/>), a box, a location of the
-/// looted holder's grid (scroll included), the Take all button, or none.</summary>
-public readonly record struct AreaLootHit(int? Cell, AreaInventoryIcon? Icon, int? Location, bool TakeAll)
+/// looted holder's grid (scroll included), the Take all button, or none. ARC-UI-1918: or a slot of the hero's own doll, with its toggle set
+/// (<see cref="AreaHeroDollToggle"/>).</summary>
+public readonly record struct AreaLootHit(int? Cell, AreaInventoryIcon? Icon, int? Location, bool TakeAll, Arcanum.Simulation.Equipment.EquipmentSlot? Slot = null)
 {
     public static AreaLootHit None => default;
 }
@@ -20,7 +21,7 @@ public readonly record struct AreaLootHit(int? Cell, AreaInventoryIcon? Icon, in
 /// window's 800 × 400 (<see cref="AreaInventoryArtLayout"/>): the background 0x5782D0 is art 234 <c>Loot</c> at (0, 0) and the pack art
 /// 221 at (358, 0) as in mode 0; the holder's image at (183, 33); the holder's grid of 10 columns by 8 shown rows of 32 pixels from (8, 136),
 /// scrolled by whole rows; the Take all button 808 at (301, 47); the hero's grid, counts and boxes as in mode 0, the hero's doll and weight
-/// lines not drawn (the toggle 0x68150C is clear at every open). ARC-UI-065: the steal window (mode 3, a living NPC whose pocket the hero
+/// lines not drawn unless the hero's toggle 0x68150C is set (it is clear at every open; ARC-UI-1918 builds it, <see cref="AreaHeroDollToggle"/>). ARC-UI-065: the steal window (mode 3, a living NPC whose pocket the hero
 /// picks) is the same frame without the Take all button (made in mode 2 alone, IW30); a drop across the two grids and a right release are
 /// pick-pocket attempts (ledger IW35–IW36). Godot-free.
 /// </summary>
@@ -139,7 +140,7 @@ public static class AreaLootArtLayout
 
     /// <summary>The point's place in the loot window: the hero's grid, the boxes (as mode 0), the holder's grid (x − 8, y − 136 in 32-pixel
     /// cells, 10 × 8, plus the scroll's rows: location = (row + scroll) × 10 + column, 0x575E35), or the Take all button.</summary>
-    public static AreaLootHit HitTest(float x, float y, int scroll, (int Width, int Height) takeAll, bool doll = false)
+    public static AreaLootHit HitTest(float x, float y, int scroll, (int Width, int Height) takeAll, bool doll = false, bool heroDoll = false)
     {
         if (x >= TakeAll.X && x < TakeAll.X + takeAll.Width && y >= TakeAll.Y && y < TakeAll.Y + takeAll.Height) return new(null, null, null, true);
         // ARC-UI-072 (IW29, 0x575DC3..0x575E27): in the doll view the holder's side hits only its nine slot rectangles, as the location
@@ -153,7 +154,13 @@ public static class AreaLootArtLayout
         if (!doll && x >= GridX && y >= GridY && x < GridX + Columns * CellPixels && y < GridY + ShownRows * CellPixels)
             return new(null, null, ((int)((y - GridY) / CellPixels) + scroll) * Columns + (int)((x - GridX) / CellPixels), false);
         if (x < AreaInventoryArtLayout.PackX) return AreaLootHit.None;
-        // The hero's own side: its grid and boxes; its doll is not shown in this mode, so no slot is hit.
+        // ARC-UI-1918 (IW26, 0x575CB0): with the hero's toggle set its doll's slots (table 0x5CACE8) are hit and no grid cell.
+        if (heroDoll)
+        {
+            var ownDoll = AreaHeroDollToggle.HitTest(x, y);
+            return ownDoll.Slot is not null || ownDoll.Icon is not null ? new(null, ownDoll.Icon, null, false, ownDoll.Slot) : AreaLootHit.None;
+        }
+        // The hero's own side: its grid and boxes; its doll is not shown without the toggle, so no slot is hit.
         var own = AreaInventoryDrag.HitTest(x, y);
         return own.Slot is not null ? AreaLootHit.None : new(own.Cell, own.Icon, null, false);
     }
@@ -199,6 +206,9 @@ public static class AreaLootArtLayout
     public static AreaInventoryHeld? Press(AreaInventoryView view, AreaLootHit hit)
     {
         ArgumentNullException.ThrowIfNull(view);
+        // ARC-UI-1918: a slot of the hero's own doll (its toggle set) lifts the item worn there, as the own window's press does.
+        if (hit.Slot is { } heroSlot)
+            return view.Doll.FirstOrDefault(entry => entry.Slot == heroSlot)?.Entity is { } wornByHero ? new(wornByHero, heroSlot, 0) : null;
         // ARC-UI-072: a location of the worn slots (1000..1008) is the body's doll slot; the grid has none there.
         if (hit.Location is >= 1000 and <= 1008 and var slot)
             return view.BodyDoll.FirstOrDefault(entry => (int)entry.Slot == slot)?.Entity is { } worn ? new(worn, null, 0) { Partner = true } : null;
@@ -217,9 +227,10 @@ public static class AreaLootArtLayout
         ArgumentNullException.ThrowIfNull(held);
         if (held.Partner) return hit.Cell is { } target ? new(AreaInventoryDropKind.Take, held, GridSlot: target) : new(AreaInventoryDropKind.PutBack, held);
         // A doll slot (a location of 1000 and up, ARC-UI-072) is not a grid place of the victim: a hero's item released on it goes back.
-        if (hit.Location is { } location and < 1000 && mode == AreaInventoryMode.Steal) return new(AreaInventoryDropKind.Plant, held, GridSlot: location);
+        // ARC-UI-1918: NOT READY: the hero's worn item released on the holder's grid (a plant of a worn item, the move into the holder) goes back; on a slot of its own doll it is worn there.
+        if (hit.Location is { } location and < 1000 && mode == AreaInventoryMode.Steal && held.Worn is null) return new(AreaInventoryDropKind.Plant, held, GridSlot: location);
         if (hit.Location is not null || hit.TakeAll) return new(AreaInventoryDropKind.PutBack, held);
-        return AreaInventoryDrag.Release(held, new AreaInventoryHit(hit.Cell, null, hit.Icon));
+        return AreaInventoryDrag.Release(held, new AreaInventoryHit(hit.Cell, hit.Slot, hit.Icon));
     }
 
     /// <summary>
@@ -235,7 +246,8 @@ public static class AreaLootArtLayout
         ArgumentNullException.ThrowIfNull(view);
         if (mode is not (AreaInventoryMode.Loot or AreaInventoryMode.Steal) || Press(view, hit) is not { } item) return null;
         if (item.Partner) return new(AreaInventoryDropKind.Take, item);
-        return mode == AreaInventoryMode.Steal ? new(AreaInventoryDropKind.Plant, item) : null;
+        // ARC-UI-1918: NOT READY: the right release on an item the hero wears (a plant of a worn item) does nothing.
+        return mode == AreaInventoryMode.Steal && item.Worn is null ? new(AreaInventoryDropKind.Plant, item) : null;
     }
 
     /// <summary>The art a box shows while <paramref name="held"/> is over it: the holder's own item the refused art (348, 347), the hero's

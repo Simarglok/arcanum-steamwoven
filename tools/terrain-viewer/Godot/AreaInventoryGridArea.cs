@@ -67,6 +67,9 @@ public partial class AreaInventoryGridArea : Control
     // press is waiting on (true the doll button, false the bag button).
     private bool _bodyDoll;
     private bool? _toggleDown;
+    // ARC-UI-1918 (IW26, IW30): the hero's own doll view is on (the original's toggle 0x68150C; clear at every open) and the hero's toggle button a press is waiting on.
+    private bool _heroDoll;
+    private bool? _heroToggleDown;
     private ulong _movedAt;
     private bool _stillReported = true;
     private string? _stillItem;
@@ -92,6 +95,13 @@ public partial class AreaInventoryGridArea : Control
 
     /// <summary>ARC-UI-072: the body's doll view is on (the toggles shown and the doll button chosen).</summary>
     internal bool BodyDoll => _bodyDoll && TogglesShown;
+
+    /// <summary>ARC-UI-1918: the frame shows the hero's own doll toggle (modes 1 to 4 of the original look, with the doll cover and both buttons' arts read).</summary>
+    internal bool HeroTogglesShown => (LootLook || BarterLook) && AreaHeroDollToggle.ArtNumbers.All(number => Look!.Art.ContainsKey(number)) && AreaHeroDollToggle.TogglesShown(Mode);
+
+    /// <summary>ARC-UI-1918: the hero's own doll view is on (the toggles shown and the doll button chosen): 341 over the pack, the worn items and covers in the table 0x5CACE8, the
+    /// weight lines and ratings, and no grid.</summary>
+    internal bool HeroDoll => _heroDoll && HeroTogglesShown;
 
     /// <summary>ARC-UI-064: the frame is the barter window's original look (the barter panel's, its art set and a shown object).</summary>
     public bool BarterLook => _barter is not null && Look is { BarterReady: true } && _view is { Holder: not null };
@@ -208,7 +218,7 @@ public partial class AreaInventoryGridArea : Control
     public void SetLook(AreaInventoryArtLook? look)
     {
         if (ReferenceEquals(look, Look)) return;
-        Look = look; _takeAllDown = false; _arrangeDown = false; _cycleDown = null; QueueRedraw();
+        Look = look; _takeAllDown = false; _arrangeDown = false; _cycleDown = null; _heroToggleDown = null; QueueRedraw();
         // ARC-UI-1194: the textures of a look this view no longer shows are let go.
         if (_onTextureChanged is { } handler)
             foreach (var texture in _watched.Where(texture => look is null || !look.Art.Values.Contains(texture)).ToArray()) { texture.Changed -= handler; _watched.Remove(texture); }
@@ -247,7 +257,7 @@ public partial class AreaInventoryGridArea : Control
     {
         _view = view ?? throw new ArgumentNullException(nameof(view));
         // ARC-UI-052: another holder (or none) starts the holder's grid at its top (the open sets the scroll to 0, 0x5731FA).
-        if (view.Holder != _lootHolder) { _lootHolder = view.Holder; _lootScroll = 0; _takeAllDown = false; _bodyDoll = false; _toggleDown = null; _arrangeDown = false; _cycleDown = null; }
+        if (view.Holder != _lootHolder) { _lootHolder = view.Holder; _lootScroll = 0; _takeAllDown = false; _bodyDoll = false; _toggleDown = null; _heroDoll = false; _heroToggleDown = null; _arrangeDown = false; _cycleDown = null; }
         _lootScroll = Math.Clamp(_lootScroll, 0, ScrollMax(view));
         // A held item that is no longer where it was taken from (another move changed its place) cannot be dropped any more.
         if (Held is { } held && (held.Partner ? !view.LootGrid.Any(item => item.Entity == held.Entity) && view.BodyDoll.All(slot => slot.Entity != held.Entity)
@@ -318,7 +328,7 @@ public partial class AreaInventoryGridArea : Control
     internal void ResetStill() { _stillItem = null; _stillReported = true; }
 
     /// <summary>ARC-UI-052: the window opened: the holder's grid starts at its top (0x5731FA sets the scroll to 0 at every open).</summary>
-    internal void ResetLoot() { _lootHolder = null; _lootScroll = 0; _takeAllDown = false; _bodyDoll = false; _toggleDown = null; _arrangeDown = false; _cycleDown = null; }
+    internal void ResetLoot() { _lootHolder = null; _lootScroll = 0; _takeAllDown = false; _bodyDoll = false; _toggleDown = null; _heroDoll = false; _heroToggleDown = null; _arrangeDown = false; _cycleDown = null; }
 
     /// <summary>ARC-UI-072: the doll or bag button was pressed and released over it (0x573986 sets the toggle, 0x57393B clears it).</summary>
     internal void SetBodyDoll(bool doll) { if (_bodyDoll == doll) return; _bodyDoll = doll; QueueRedraw(); }
@@ -330,6 +340,17 @@ public partial class AreaInventoryGridArea : Control
         var (doll, bag) = (Look!.Art[AreaLootArtLayout.DollButtonArt], Look.Art[AreaLootArtLayout.BagButtonArt]);
         return BarterLook ? AreaBarterArtLayout.ToggleHit(frame.X, frame.Y, (doll.GetWidth(), doll.GetHeight()), (bag.GetWidth(), bag.GetHeight()))
             : AreaLootArtLayout.ToggleHit(frame.X, frame.Y, (doll.GetWidth(), doll.GetHeight()), (bag.GetWidth(), bag.GetHeight()));
+    }
+
+    /// <summary>ARC-UI-1918: the hero's doll or bag button was pressed and released over it (the button handler sets the toggle on the doll button and clears it on the bag button, ledger IW45).</summary>
+    internal void SetHeroDoll(bool doll) { if (_heroDoll == doll) return; _heroDoll = doll; QueueRedraw(); }
+
+    /// <summary>ARC-UI-1918: the hero's toggle button under <paramref name="frame"/> (true the doll button, false the bag button), or null (sized by its art).</summary>
+    internal bool? HeroToggleAt(Vector2 frame)
+    {
+        if (!HeroTogglesShown) return null;
+        var (doll, bag) = (Look!.Art[AreaLootArtLayout.DollButtonArt], Look.Art[AreaLootArtLayout.BagButtonArt]);
+        return AreaHeroDollToggle.ToggleHit(frame.X, frame.Y, (doll.GetWidth(), doll.GetHeight()), (bag.GetWidth(), bag.GetHeight()));
     }
 
     /// <summary>ARC-DEV-339: whether the arrange button is drawn: the original look with its art read (the diagnostic look has none).</summary>
@@ -351,8 +372,10 @@ public partial class AreaInventoryGridArea : Control
     /// <summary>A left press at a point of the frame (the self-test drives it too).</summary>
     internal void PressAt(Vector2 frame)
     {
-        _arrangeDown = false; _cycleDown = null;
+        _arrangeDown = false; _cycleDown = null; _heroToggleDown = null;
         if (Held is not null || _view is null) return;
+        // ARC-UI-1918 (0x573850): the hero's toggle buttons are the button system's (the button handler), served in every mode that makes them (1 to 4, the See Contents window too); the press takes the press sound.
+        if (HeroToggleAt(frame) is { } heroToggle) { _heroToggleDown = heroToggle; SoundRequested?.Invoke(Arcanum.TerrainViewer.Core.AreaGameBarLayout.PressSound); QueueRedraw(); return; }
         // ARC-RES-1327 (ledger XR16): the See Contents window (mode 4) is not served by the left press of modes 0 to 3 (0x573850 skips it for modes 4, 5 and 6): nothing is picked, not even by a
         // spell or an item cursor, and no toggle or Take all is pressed. The arrange button is the button system's (a press on it is served above all).
         if (Mode == AreaInventoryMode.Contents && !ArrangeAt(frame)) { QueueRedraw(); return; }
@@ -396,14 +419,14 @@ public partial class AreaInventoryGridArea : Control
     {
         // ARC-UI-065: the steal window has no Take all button (IW30), so nothing hits it.
         var button = AreaLootArtLayout.TakeAllShown(Mode) ? Look?.Art.GetValueOrDefault(AreaLootArtLayout.TakeAllArt) : null;
-        return AreaLootArtLayout.HitTest(frame.X, frame.Y, _lootScroll, button is null ? (0, 0) : (button.GetWidth(), button.GetHeight()), BodyDoll);
+        return AreaLootArtLayout.HitTest(frame.X, frame.Y, _lootScroll, button is null ? (0, 0) : (button.GetWidth(), button.GetHeight()), BodyDoll, HeroDoll);
     }
 
     /// <summary>ARC-UI-064: the barter window's point under <paramref name="frame"/> with the current scroll.</summary>
     internal AreaBarterHit BarterHit(Vector2 frame)
     {
         var box = Look?.Art.GetValueOrDefault(AreaBarterArtLayout.GambleArt);
-        return AreaBarterArtLayout.HitTest(frame.X, frame.Y, _lootScroll, box is null ? (0, 0) : (box.GetWidth(), box.GetHeight()), BodyDoll);
+        return AreaBarterArtLayout.HitTest(frame.X, frame.Y, _lootScroll, box is null ? (0, 0) : (box.GetWidth(), box.GetHeight()), BodyDoll, HeroDoll);
     }
 
     /// <summary>ARC-UI-052: scrolls the holder's grid by <paramref name="rows"/> within 0..the holder's maximum.</summary>
@@ -454,6 +477,17 @@ public partial class AreaInventoryGridArea : Control
             {
                 SoundRequested?.Invoke(Arcanum.TerrainViewer.Core.AreaGameBarLayout.ReleaseSound);
                 Callable.From(() => CycleRequested?.Invoke(pressed)).CallDeferred();
+            }
+            return;
+        }
+        if (_heroToggleDown is { } heroPressed)
+        {
+            // ARC-UI-1918: a toggle button acts on its release over it, with its release sound (3001).
+            _heroToggleDown = null;
+            if (HeroToggleAt(frame) == heroPressed)
+            {
+                SoundRequested?.Invoke(Arcanum.TerrainViewer.Core.AreaGameBarLayout.ReleaseSound);
+                SetHeroDoll(heroPressed);
             }
             return;
         }
@@ -783,6 +817,33 @@ public partial class AreaInventoryGridArea : Control
                     AreaInventoryArtLook.TextColour);
         }
         Art(AreaInventoryArtLayout.PackArt, AreaInventoryArtLayout.PackX, 0);
+        // ARC-UI-1918 (IW26, 0x576520): with the hero's toggle set the doll cover 341 is drawn over the pack at (361, 0), then the three weight lines in the rectangles of 0x5CAEC8
+        // and the two ratings in those of 0x5CAF18 (the own window's lines and ratings, moved).
+        var heroDoll = HeroDoll;
+        if (heroDoll)
+        {
+            Art(AreaHeroDollToggle.CoverArt, AreaHeroDollToggle.Cover.X, AreaHeroDollToggle.Cover.Y);
+            var lines = look.Texts.Lines(view.Carry, view.Speed);
+            for (var i = 0; i < lines.Count && lines[i].Length > 0; i++)
+            {
+                var (lx, ly, lw, lh) = AreaHeroDollToggle.Lines[i];
+                var lineBox = Scaled(lx, ly, lw, lh);
+                DrawString(font, new(lineBox.Position.X, lineBox.Position.Y + (lineBox.Size.Y + size) / 2 - 2), lines[i], HorizontalAlignment.Left, lineBox.Size.X, size, AreaInventoryArtLook.TextColour);
+            }
+            if (view.HeroRatings is { } heroRatings)
+            {
+                // The damage rating ends at the right edge of its rectangle, the armour rating starts at the left edge of its (as the own window's; PROJECT: the text's top sits on the rectangle's top).
+                void HeroRating(int value, (int X, int Y, int Width, int Height) rect, bool rightAligned)
+                {
+                    var box = Scaled(rect.X, rect.Y, rect.Width, rect.Height);
+                    var text = value.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                    var width = font.GetStringSize(text, HorizontalAlignment.Left, -1, size).X;
+                    DrawString(font, new(rightAligned ? box.End.X - width : box.Position.X, box.Position.Y + size), text, HorizontalAlignment.Left, -1, size, AreaInventoryArtLook.TextColour);
+                }
+                HeroRating(heroRatings.Damage, AreaHeroDollToggle.DamageRatingBox, true);
+                HeroRating(heroRatings.Armour, AreaHeroDollToggle.ArmourRatingBox, false);
+            }
+        }
         var counts = new[] { view.Gold }.Concat(Enumerable.Range(0, 4).Select(type => type < view.Ammo.Count ? view.Ammo[type] : 0)).ToArray();
         for (var i = 0; i < counts.Length; i++)
         {
@@ -799,11 +860,27 @@ public partial class AreaInventoryGridArea : Control
             Art(barter is not null ? AreaBarterArtLayout.BoxArt(icon, Held, over == icon) : AreaLootArtLayout.BoxArt(icon, Held, over == icon), x, y);
         }
         if (barter is not null) Art(GambleArtNow, AreaBarterArtLayout.GambleBox.X, AreaBarterArtLayout.GambleBox.Y);
-        foreach (var item in view.Grid)
+        // ARC-UI-1918 (0x576520): the hero's grid items are drawn only while its toggle is clear; with it set the worn items fill the slot rectangles of 0x5CACE8 at full size (PROJECT: scaled
+        // down to fit), the weapon's slot dark red first when its weapon is too heavy (IW43), and a cover, at its own size, on the top-left of every slot with no item or whose item is on the cursor.
+        foreach (var item in heroDoll ? [] : view.Grid)
         {
             if (item.Entity == Held?.Entity) continue;
             Item(look.ItemArt(item.Entity), (AreaInventoryDrag.GridX + item.Slot % 10 * AreaInventoryDrag.CellPixels,
                 AreaInventoryDrag.GridY + item.Slot / 10 * AreaInventoryDrag.CellPixels, item.Width * AreaInventoryDrag.CellPixels, item.Height * AreaInventoryDrag.CellPixels), item.Name);
+        }
+        if (heroDoll)
+        {
+            foreach (var (slot, rect) in AreaHeroDollToggle.SlotRects)
+            {
+                var entry = view.Doll.FirstOrDefault(entry => entry.Slot == slot);
+                if (slot == Arcanum.Simulation.Equipment.EquipmentSlot.Weapon && entry?.Entity is { } wielded && wielded != Held?.Entity && view.HeroRatings is { WeaponTooHeavy: true })
+                {
+                    var (red, green, blue) = AreaLootArtLayout.TooHeavyFill;
+                    DrawRect(Scaled(rect.X, rect.Y, rect.Width, rect.Height), new Color(red / 255f, green / 255f, blue / 255f));
+                }
+                if (entry?.Entity is { } worn && worn != Held?.Entity) Item(look.ItemArt(worn), rect, entry.Name ?? "?");
+                else Art(AreaInventoryArtLayout.Covers[slot], rect.X, rect.Y);
+            }
         }
         var (shownTop, shownBottom) = barter is not null
             ? (AreaBarterArtLayout.GridY, AreaBarterArtLayout.GridY + AreaBarterArtLayout.ShownRows * AreaBarterArtLayout.CellPixels)
@@ -868,10 +945,20 @@ public partial class AreaInventoryGridArea : Control
             Art(AreaLootArtLayout.DollButtonArt, dollButton.X, dollButton.Y);
             Art(AreaLootArtLayout.BagButtonArt, bagButton.X, bagButton.Y);
         }
+        // ARC-UI-1918 (IW30): the hero's own doll and bag buttons at (713, 37) and (751, 37), the same arts, in the windows of modes 1 to 4.
+        if (HeroTogglesShown)
+        {
+            Art(AreaLootArtLayout.DollButtonArt, AreaHeroDollToggle.DollButton.X, AreaHeroDollToggle.DollButton.Y);
+            Art(AreaLootArtLayout.BagButtonArt, AreaHeroDollToggle.BagButton.X, AreaHeroDollToggle.BagButton.Y);
+        }
         if (Held is { } held)
         {
             var (w, h, name) = held.Partner && view.LootGrid.FirstOrDefault(item => item.Entity == held.Entity) is { } loot ? (loot.Width, loot.Height, loot.Name)
                 : view.Grid.FirstOrDefault(item => item.Entity == held.Entity) is { } own ? (own.Width, own.Height, own.Name)
+                // ARC-UI-1918: the hero's worn item lifted from its doll takes its art's cells, as in the own window.
+                : held.Worn is not null && view.Doll.FirstOrDefault(slot => slot.Entity == held.Entity) is { } heroWorn && look.ItemArt(held.Entity) is { } heroArt
+                    ? (Arcanum.Simulation.Items.InventoryGridRules.CellsOf(((uint)heroArt.GetWidth(), (uint)heroArt.GetHeight())).Item1,
+                       Arcanum.Simulation.Items.InventoryGridRules.CellsOf(((uint)heroArt.GetWidth(), (uint)heroArt.GetHeight())).Item2, heroWorn.Name ?? "?")
                 : held.Partner && view.BodyDoll.FirstOrDefault(slot => slot.Entity == held.Entity) is { } wornSlot && look.ItemArt(held.Entity) is { } art
                     ? (Arcanum.Simulation.Items.InventoryGridRules.CellsOf(((uint)art.GetWidth(), (uint)art.GetHeight())).Item1,
                        Arcanum.Simulation.Items.InventoryGridRules.CellsOf(((uint)art.GetWidth(), (uint)art.GetHeight())).Item2, wornSlot.Name ?? "?")
