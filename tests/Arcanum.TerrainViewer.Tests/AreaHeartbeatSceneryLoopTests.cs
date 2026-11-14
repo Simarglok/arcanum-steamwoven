@@ -114,7 +114,8 @@ public sealed class AreaHeartbeatSceneryLoopTests
             Assert.IsTrue(host.GlobalFlag(LoopFlag), "the loop body ran for the near scenery");
             // The loop's stop eye candy (124) is asked once, for the near scenery only: not for the gone or the far one, nor for the NPC.
             CollectionAssert.AreEqual(new[] { (2, ScrEyeCandyKind.StopScript, AreaUseScriptHost.EntityId(near)) }, ran.Run!.Effects.EyeCandies.Select(e => (e.Number, e.Kind, e.Object.Code)).ToArray());
-            Assert.AreEqual(0, host.TakeEyeCandies().Count, "a stop is no play request (#1828 holds the stop itself)");
+            // ARC-SCRIPT-1828: the host hands the stop on to the viewer as a stop request of the same entry and object.
+            CollectionAssert.AreEqual(new[] { new AreaScriptEyeCandy(new(1, AreaUseScriptHost.EntityId(near)), 2, Stop: true) }, host.TakeEyeCandies().ToArray());
         });
         WithContent(content =>
         {
