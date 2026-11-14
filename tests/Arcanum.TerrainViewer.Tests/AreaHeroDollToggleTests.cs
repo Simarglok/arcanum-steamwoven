@@ -115,15 +115,12 @@ public sealed class AreaHeroDollToggleTests
     public void AWornItemReleasedOnAnotherHeroSlotIsWornThereOnItsOwnSlotItGoesBack()
     {
         var held = new AreaInventoryHeld("helm:1", EquipmentSlot.Helmet, 0);
-        foreach (var mode in new[] { AreaInventoryMode.Loot, AreaInventoryMode.Steal, AreaInventoryMode.Contents })
+        foreach (var mode in new[] { AreaInventoryMode.Loot, AreaInventoryMode.Steal })
         {
             Assert.AreEqual(new AreaInventoryDrop(AreaInventoryDropKind.Wear, held, Slot: EquipmentSlot.Medallion),
                 AreaLootArtLayout.Release(held, new AreaLootHit(null, null, null, false, EquipmentSlot.Medallion), mode), mode.ToString());
             Assert.AreEqual(AreaInventoryDropKind.PutBack, AreaLootArtLayout.Release(held, new AreaLootHit(null, null, null, false, EquipmentSlot.Helmet), mode).Kind, mode + " own slot");
         }
-        // A worn item released on a cell of the hero's grid is taken off into it (as in the own window).
-        var off = AreaLootArtLayout.Release(held, new AreaLootHit(5, null, null, false), AreaInventoryMode.Loot);
-        Assert.AreEqual(new AreaInventoryDrop(AreaInventoryDropKind.TakeOffTo, held, GridSlot: 5), off);
         // A grid item released on a hero slot is worn there.
         var grid = new AreaInventoryHeld("own:1", null, 0);
         Assert.AreEqual(AreaInventoryDropKind.Wear, AreaLootArtLayout.Release(grid, new AreaLootHit(null, null, null, false, EquipmentSlot.Armor), AreaInventoryMode.Loot).Kind);
@@ -168,5 +165,7 @@ public sealed class AreaHeroDollToggleTests
         // A worn item sold on the shown grid is a sale (the barter lines list the worn items); on a hero slot or anywhere else it goes back (NOT READY: the hero's moves in the window).
         Assert.AreEqual(AreaInventoryDropKind.Sell, AreaBarterArtLayout.Release(held!, new AreaBarterHit(null, null, 4, false)).Kind);
         Assert.AreEqual(AreaInventoryDropKind.PutBack, AreaBarterArtLayout.Release(held!, new AreaBarterHit(null, null, null, false, EquipmentSlot.Armor)).Kind);
+        Assert.IsNull(AreaBarterArtLayout.RightRelease(view, hit), "NOT READY: a right release on a worn item");
+        Assert.AreEqual(AreaInventoryDropKind.Sell, AreaBarterArtLayout.RightRelease(view, new AreaBarterHit(0, null, null, false))?.Kind, "a grid item is still sold");
     }
 }

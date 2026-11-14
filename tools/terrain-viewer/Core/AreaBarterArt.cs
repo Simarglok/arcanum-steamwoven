@@ -134,7 +134,8 @@ public static class AreaBarterArtLayout
     /// the other side, the merchant's to the hero (a buy) and the hero's grid item to the shown object (a sale), through the same moves as a
     /// drag (0x575200, 0x575360); null on no item. The receiving side's room test (0x466510) is the session's insert check.</summary>
     public static AreaInventoryDrop? RightRelease(AreaInventoryView view, AreaBarterHit hit) => Press(view, hit) is not { } item ? null
-        : new(item.Partner ? AreaInventoryDropKind.Buy : AreaInventoryDropKind.Sell, item);
+        // ARC-UI-1918: NOT READY: the right release on an item the hero wears (a slot of its doll) does nothing (issue #1925).
+        : item.Worn is not null ? null : new(item.Partner ? AreaInventoryDropKind.Buy : AreaInventoryDropKind.Sell, item);
 
     /// <summary>The art the drop and use boxes show while <paramref name="held"/> is over them: the merchant's item the refused art, the
     /// hero's item the "on" art (IW23, as the loot window's).</summary>
