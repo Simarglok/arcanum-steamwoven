@@ -495,7 +495,7 @@ behaviour behind a switch of the Original setting).
 | --- | --- | --- |
 | X7 | Divide stores the **sum** of its operands when the divisor is not 0, and stores nothing when it is (script 0x447220). | A reconstruction slip: the original stores the signed quotient (ledger row X7); 14 divide clauses, 10 live. S1 admits the type; the interpreter slice (S2) chooses quotient or source sum. |
 | X8 | A counter write shifts the value into its byte without masking it (script 0x44BB50), so a value above 255 or negative spills into the higher counters. | A reconstruction slip: the original masks counter writes to 8 bits (ledger row X8). S2 decides masking. |
-| X9 | Float newspaper headline (86) reads its object from slot 1, outside the editor signature (script 0x447220). | Not admitted in S1; the one installed clause has kind 1 in slot 0 and 0 (triggerer) in slot 1. |
+| X9 | Float newspaper headline (86) reads its object from slot 1, outside the editor signature (script 0x447220). | Not admitted in S1; the one installed clause has kind 1 in slot 0 and 0 (triggerer) in slot 1. Admitted in S59 (ARC-SCRIPT-1764, [ledger NP10](ledger/scripts.md#script-actions-queue-newspaper-and-float-newspaper-headline-arc-script-1764)): the admission checks slot 1 as the object and leaves slot 0 unread. |
 | X10 | A global-flag write shifts the value into the flag's bit without masking it (script 0x444D20), so an arithmetic or get-story-state result of 2 sets the neighbouring flag and a negative one every higher flag of the same 32-flag word. | Found in the ARC-SCRIPT-007 review; S1 admits global-flag write targets, S2 decides masking. |
 
 ## Door and window use scripts (ARC-WORLD-1805)

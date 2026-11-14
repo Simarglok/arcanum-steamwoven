@@ -218,6 +218,17 @@ public sealed class WrittenTexts
     }
 
     /// <summary>
+    /// The headline as the vendor's headline line and the float newspaper headline action punctuate it (ARC-SCRIPT-1764, ledger NP2, NP10): a headline that does not end in a full stop, a question mark or an
+    /// exclamation mark gets a full stop, then one space; an empty headline stays empty.
+    /// </summary>
+    public static string PunctuatedHeadline(string headline)
+    {
+        ArgumentNullException.ThrowIfNull(headline);
+        if (headline.Length == 0) return headline;
+        return headline[^1] is '.' or '?' or '!' ? headline + " " : headline + ". ";
+    }
+
+    /// <summary>
     /// How many default issues the newspaper file offers above <see cref="DefaultIssueBase"/> (the probe loop of 0x4BF330, ledger NQ4): the headlines of 5010, 5020, ... are asked one after the other and the count is how many came
     /// back with text before the first that did not. The default issue is then 5000 + 10 × a number drawn from 0 to the count, so the count is the draw's upper bound.
     /// </summary>

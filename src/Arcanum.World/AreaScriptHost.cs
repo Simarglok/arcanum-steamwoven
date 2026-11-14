@@ -35,13 +35,14 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
     /// <see cref="ScrAdmissionSet.S13"/> (ARC-SCRIPT-019). ARC-SCRIPT-1241: plus fade (103) of <see cref="ScrAdmissionSet.S35"/>, which jumps the game clock and hands its movie to the viewer
     /// (<see cref="TakeFades"/>; Kerghan's dialog script 1105 plays movies 2, 3 and 6). ARC-RENDER-1171: plus end game and play slides (132), which asks the viewer for the end-game
     /// slide show (<see cref="TakeEndGame"/>; script 1105 ends the game after its movies).
+    /// ARC-SCRIPT-1764: plus queue newspaper (85) and float newspaper headline (86) of <see cref="ScrAdmissionSet.S59"/> (<see cref="AreaScriptNewspaper"/>; the headline floats through <see cref="TakeFloats"/>).
     /// </summary>
     public static ScrAdmissionSet Admission { get; } = new("S3-area-sound-calls-scheme-schematic-reading-story", ScrAdmissionSet.S3.Conditions.Concat(ScrAdmissionSet.StoryConditions),
         ScrAdmissionSet.S3.Actions
             .Concat([ScrCatalogue.Action.SetPcQuestState, ScrCatalogue.Action.MarkMapLocation, ScrCatalogue.Action.SetRumor,
                 ScrCatalogue.Action.AddReputation, ScrCatalogue.Action.RemoveReputation, ScrCatalogue.Action.PlaySound, ScrCatalogue.Action.PlaySoundOn, ScrCatalogue.Action.PlaySoundScheme,
                 ScrCatalogue.Action.CallScriptIn, ScrCatalogue.Action.RemoveScriptCall, ScrCatalogue.Action.SetAutoLevelScheme,
-                ScrCatalogue.Action.StartSchematicUi, ScrCatalogue.Action.ShowBook, ScrCatalogue.Action.ShowPicture, ScrCatalogue.Action.ShowPlaque, .. ScrAdmissionSet.StoryActions, ScrCatalogue.Action.Fade, ScrCatalogue.Action.EndGame]),
+                ScrCatalogue.Action.StartSchematicUi, ScrCatalogue.Action.ShowBook, ScrCatalogue.Action.ShowPicture, ScrCatalogue.Action.ShowPlaque, .. ScrAdmissionSet.StoryActions, ScrCatalogue.Action.Fade, ScrCatalogue.Action.EndGame, ScrCatalogue.Action.QueueNewspaper, ScrCatalogue.Action.FloatNewspaperHeadline]),
         ScrAdmissionSet.S3.ValueKinds.Concat(ScrAdmissionSet.StoreValueKinds), ScrAdmissionSet.S3.FocusKinds);
 
     /// <summary>ARC-SKILLS-009: <see cref="Admission"/> plus get skill (47) of <see cref="ScrAdmissionSet.S11"/>, the set a run uses while
@@ -206,6 +207,8 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
         return eyeCandies;
     }
     private bool _endGame;
+    private AreaScriptNewspaper.TextsCache? _newspaperTextsField;
+    private AreaScriptNewspaper.TextsCache _newspaperTexts => _newspaperTextsField ??= new(() => _content);
 
     /// <summary>ARC-DEV-324: queues a line for the viewer to float over <paramref name="speaker"/> as a script's float line does (the generic greeting, which is a
     /// floating line and no window).</summary>
@@ -456,6 +459,8 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
             if (printed.Status != ScrPrintedLineStatus.Shown) return false;
             floats.Add(new(line.Speaker, printed.Text));
         }
+        // ARC-SCRIPT-1764 (NP10): the float newspaper headline requests, read before anything applies.
+        floats.AddRange(AreaScriptNewspaper.Floats(_session, effects, _newspaperTexts.Get));
         _floats.AddRange(floats);
         // The effect rule of every blessing or curse the run adds is known before anything applies (a missing rule refuses the run whole).
         if (!AreaScriptStory.BlessingRulesResolve(_session, effects, IsPc, BlessingEffects)) return false;
@@ -470,6 +475,8 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
         if (!_session.ApplyScriptStores(effects)) return false;
         // ARC-SCRIPT-019: the story-state number and the quest, area, rumor and reputation requests, for the PC.
         if (!AreaScriptStory.Apply(_session, effects, IsPc, _state.AddAward, BlessingEffects)) return false;
+        // ARC-SCRIPT-1764 (NP9): the queue newspaper requests, in action order, by the rule of the original's queue (0x4BF140).
+        if (!AreaScriptNewspaper.Queue(_session, effects)) return false;
         // ARC-SCRIPT-040: scheme pairs are the session's request, in action order; one the session drops (sound locked, as the
         // original drops it) or refuses (a negative id, a project guard) changes nothing and stops nothing. Effect sounds wait
         // for the viewer. Like the flags, they stay applied when a later step is refused (the original applies as it goes).
