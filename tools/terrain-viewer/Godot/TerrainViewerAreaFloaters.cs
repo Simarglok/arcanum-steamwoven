@@ -1,6 +1,7 @@
 using Arcanum.Data.Area;
 using Arcanum.Data.Terrain;
 using Arcanum.Presentation.Hud;
+using Arcanum.Scripting.Scr;
 using Arcanum.Session;
 using Arcanum.Simulation.Ai;
 using Arcanum.TerrainViewer.Core;
@@ -104,7 +105,7 @@ public partial class TerrainViewerApp
     private int _scriptFloats;
 
     // ARC-DEV-298 (B20): the float lines of tile scripts (owner, text), queued when the run was applied.
-    private readonly Queue<(string Owner, string Text)> _tileScriptFloats = new();
+    private readonly Queue<(string Owner, string Text, string? Listener)> _tileScriptFloats = new();
 
     /// <summary>The bubble clock: the real one (the original's timeGetTime), or the smoke's own.</summary>
     private long BubbleNowMs() => _floaterClockForSelfTest ? BubbleClockForSelfTest : (long)Time.GetTicksMsec();
@@ -112,7 +113,7 @@ public partial class TerrainViewerApp
     internal long BubbleClockForSelfTest { get; set; }
 
     /// <summary>ARC-UI-1997: a text bubble over <paramref name="owner"/> (the speech display makes one): the owner's old bubble is replaced; true when it was made.</summary>
-    private bool Bubble(string owner, string text, bool dialogLine = false, bool persistent = false)
+    private bool Bubble(string owner, string text, bool dialogLine = false, bool persistent = false, string? listener = null)
     {
         if (_readyMode != TerrainViewerMode.Area || _readyArea is null || string.IsNullOrWhiteSpace(text)) return false;
         var layer = FloaterLayer();
@@ -122,8 +123,28 @@ public partial class TerrainViewerApp
         layer.AddBubble(owner, text, owner == HeroFloater ? BubbleColor.Green : BubbleColor.White, BubbleNowMs());
         if (persistent) layer.Bubbles.SetLife(owner, TextBubbleRules.Persistent, BubbleNowMs());
         if (!dialogLine) _scriptFloats++;
+        // ARC-UI-2055 (ledger TB26): the speech display also turns an idle living speaker to its listener, for every caller that passes one.
+        if (listener is not null) FaceListenerOf(owner, listener);
         return true;
     }
+
+    /// <summary>
+    /// ARC-UI-2055 (ledger TB26): the stop-and-face step of the speech display for a float line or a bark: a living speaker that runs no animation of its own turns to its listener; the listener never turns. An
+    /// NPC speaker turns through the AI host (<see cref="AreaAiHost.FaceListener"/>), the hero through the hero request host's rotate starter (<see cref="FaceRequest"/>: refused for a hero that cannot act or has a main run).
+    /// Nothing turns for a listener that is the speaker itself (the script float line over the PC) or one with no cell here. True when the speaker was turned (the hero: when its rotate starter started a turn).
+    /// </summary>
+    private bool FaceListenerOf(string speaker, string listener)
+    {
+        if (speaker == listener) return false;
+        if (speaker != HeroFloater) return AreaAiHostNow()?.FaceListener(speaker, listener) ?? false;
+        if (FloaterCell(listener) is not { } at) return false;
+        var result = HeroRequests.Apply(new FaceRequest(new(checked((int)at.X), checked((int)at.Y))));
+        GD.Print($"ARC-UI-2055 hero speaker faces its listener={listener} outcome={result.Outcome} rotation={result.Rotation?.ToString() ?? "-"}");
+        return result.Rotation is not null;
+    }
+
+    /// <summary>The bubble owner a float line's listener names: the hero's, or the object's entity code; null when the line has no listener.</summary>
+    private static string? ListenerOwner(ScrObjectRef? listener) => listener is not { } object_ ? null : object_.Code == AreaScriptHost.PcCode ? HeroFloater : object_.Code;
 
     /// <summary>The open dialog's speaker as a bubble owner (its entity id), or null.</summary>
     private string? DialogBubbleOwner() => _conversationSpeaker is { } speaker ? AreaConversationState.EntityId(speaker.Row) : null;
@@ -158,14 +179,14 @@ public partial class TerrainViewerApp
     {
         while (_tileScriptFloats.Count > 0)
         {
-            var (tileOwner, tileText) = _tileScriptFloats.Dequeue();
-            if (Bubble(tileOwner, tileText)) GD.Print($"ARC-DEV-298 float owner={tileOwner} floated={_scriptFloats} text={tileText}");
+            var (tileOwner, tileText, tileListener) = _tileScriptFloats.Dequeue();
+            if (Bubble(tileOwner, tileText, listener: tileListener)) GD.Print($"ARC-DEV-298 float owner={tileOwner} floated={_scriptFloats} text={tileText}");
         }
         if (_conversationHost?.Scripts is not { } scripts) return;
         foreach (var line in scripts.TakeFloats())
         {
             var owner = line.Speaker == scripts.Pc ? HeroFloater : line.Speaker.Code;
-            if (Bubble(owner, line.Text)) GD.Print($"ARC-SCRIPT-050 float owner={owner} floated={_scriptFloats} text={line.Text}");
+            if (Bubble(owner, line.Text, listener: ListenerOwner(line.Listener))) GD.Print($"ARC-SCRIPT-050 float owner={owner} floated={_scriptFloats} text={line.Text}");
         }
     }
 

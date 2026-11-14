@@ -139,7 +139,7 @@ public sealed class AreaHeartbeatSceneryLoopTests
             var ran = host.RunHeartbeat(npc, ScrPoint.Heartbeat, session.Rules.Scripts);
             Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, ran.Outcome, ran.Detail);
             Assert.IsTrue(host.GlobalFlag(AssignFlag));
-            CollectionAssert.AreEqual(new[] { new AreaScriptFloat(new(1, AreaUseScriptHost.EntityId(npc)), "Mind the gears.") }, host.TakeFloats().ToArray());
+            CollectionAssert.AreEqual(new[] { new AreaScriptFloat(new(1, AreaUseScriptHost.EntityId(npc)), "Mind the gears.", host.Pc) }, host.TakeFloats().ToArray());
             Assert.AreEqual(0, host.TakeFloats().Count, "taken once");
         });
     }

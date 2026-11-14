@@ -232,7 +232,10 @@ public partial class TerrainViewerApp
             Require(layer.Bubbles.Count == 2, "a bubble lives its whole life (age 6000 ms is not above 6000)");
             BubbleClockForSelfTest = 1000 + 6001; TickFloaters();
             Require(layer.Bubbles.Count == 0, "and goes just after it");
-            Require(Bubble(entity, "Again"), "a new bubble");
+            // ARC-UI-2055 (TB26, TB27): a speaker is never turned to itself; an NPC speaker with the hero as listener goes through the AI host's turn.
+            Require(!FaceListenerOf(entity, entity) && !FaceListenerOf(HeroFloater, HeroFloater), "a speaker that is its own listener turns nothing");
+            Require(Bubble(entity, "Again", listener: HeroFloater), "a new bubble with the hero as its listener");
+            GD.Print($"ARC-UI-2055 float speaker turn entity={entity} aiHost={AreaAiHostNow() is not null}");
             _gameSettings = _gameSettings with { TextDuration = 2 }; TickFloaters();
             Require(layer.Bubbles.Of(entity)?.LifeMs == 2000, $"the Text Duration line changed the live bubble's life at once: {layer.Bubbles.Of(entity)?.LifeMs}");
             BubbleClockForSelfTest = 1000 + 6001 + 2001; TickFloaters();

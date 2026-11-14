@@ -519,7 +519,7 @@ public sealed class AreaConversationHost
     public string? SayFollowerLine(AreaSpeaker speaker, LoyaltyLines lines)
     {
         var text = PickLine(speaker, lines);
-        if (text is not null) Scripts.Float(Scripts.Object(speaker), text);
+        if (text is not null) Scripts.Float(Scripts.Object(speaker), text, Scripts.Pc);
         return text;
     }
 
