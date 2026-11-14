@@ -41,7 +41,19 @@ public partial class AreaConversationPanel : CanvasLayer
     public event Action? Picked;
     public bool IsOpen => Visible;
     /// <summary>ARC-UI-2019: whether each reply shows its number and a digit key chooses it (Steamwoven); Original draws and reads neither. Set before <see cref="Open"/>.</summary>
-    public bool NumberedReplies { get; set; } = true;
+    public bool NumberedReplies
+    {
+        get => _numberedReplies;
+        set
+        {
+            if (_numberedReplies == value) return;
+            _numberedReplies = value;
+            if (IsNodeReady() && IsOpen) Render(_message);
+        }
+    }
+    private bool _numberedReplies = true;
+    /// <summary>ARC-UI-2019: where an open panel reads the setting from every frame, so a rule-mode switch made over the dialog (Esc, Options) draws and reads at once.</summary>
+    public Func<bool>? NumberedSource { get; set; }
     public DialogConversation? Conversation => _conversation;
     internal IReadOnlyList<Button> ButtonsForSelfTest => _buttons;
     internal string NpcLineForSelfTest => _npcLine.Text;
@@ -261,6 +273,11 @@ public partial class AreaConversationPanel : CanvasLayer
         _panel.Position = new(Mathf.Round((size.X - width) / 2), Mathf.Round(Math.Max(24, size.Y - height - 24)));
     }
 
-    public override void _Process(double delta) { if (IsOpen) ResizePanel(); }
+    public override void _Process(double delta)
+    {
+        if (!IsOpen) return;
+        if (NumberedSource is { } source) NumberedReplies = source();
+        ResizePanel();
+    }
     public override void _ExitTree() => GetViewport().SizeChanged -= ResizePanel;
 }

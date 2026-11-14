@@ -50,12 +50,13 @@ public static partial class TerrainViewerSelfTest
             // ARC-UI-2019: Steamwoven numbers the replies and a digit key chooses an offered, unblocked one; Original draws no number and reads no digit.
             var turn = conversation.Turn;
             Require(!panel.ChooseByDigit(3) && !panel.ChooseByDigit(9) && !panel.ChooseByDigit(0) && conversation.Turn == turn, "a blocked or absent number chooses nothing");
-            panel.NumberedReplies = false; panel.Open("Synthetic NPC", conversation);
+            // The setting switched while the panel is open (an Options change over the dialog) redraws it at once and moves the digits with it.
+            panel.NumberedReplies = false;
             Require(panel.ButtonsForSelfTest[0].Text == "Why is it closed?" && !panel.ButtonsForSelfTest[2].Text.StartsWith("3.") && !panel.ChooseByDigit(1) && conversation.Turn == turn,
                 "Original draws no number and a digit chooses nothing");
             await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
             await ScreenshotAsync(host, "original-unnumbered");
-            panel.NumberedReplies = true; panel.Open("Synthetic NPC", conversation);
+            panel.NumberedReplies = true;
             await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
             await ScreenshotAsync(host, "steamwoven-numbered");
             Require(panel.ButtonsForSelfTest[0].Text == "1. Why is it closed?", "Steamwoven draws the number again");

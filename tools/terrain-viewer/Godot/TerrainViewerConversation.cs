@@ -82,7 +82,7 @@ public partial class TerrainViewerApp
         else _conversationHost = null;
         if (_conversationPanel is null)
         {
-            _conversationPanel = new AreaConversationPanel(); AddChild(_conversationPanel);
+            _conversationPanel = new AreaConversationPanel { NumberedSource = () => DialogRepliesNumbered }; AddChild(_conversationPanel);
             _conversationPanel.Picked += () => { if (_audio is not null) ExecuteVoice(DialogVoicePlayer.Picked()); };
             // Only the player's close resumes the dialog script; teardown, reset and map changes just close.
             _conversationPanel.CloseRequested += () => EndConversation(resume: true);
@@ -483,10 +483,13 @@ public partial class TerrainViewerApp
     private bool HandleConversationKey(InputEventKey key)
     {
         if (!key.Pressed || key.Echo || key.CtrlPressed || key.AltPressed || key.ShiftPressed || key.MetaPressed || _conversationPanel is null) return true;
-        var digit = key.Keycode switch
+        // The live setting, not the one at open: a rule-mode switch over the open dialog (Esc, Options) changes the digits at once.
+        _conversationPanel.NumberedReplies = DialogRepliesNumbered;
+        var code = key.Keycode != Key.None ? key.Keycode : key.PhysicalKeycode;
+        var digit = code switch
         {
-            >= Key.Key1 and <= Key.Key5 => (int)(key.Keycode - Key.Key0),
-            >= Key.Kp1 and <= Key.Kp5 => (int)(key.Keycode - Key.Kp0),
+            >= Key.Key1 and <= Key.Key5 => (int)(code - Key.Key0),
+            >= Key.Kp1 and <= Key.Kp5 => (int)(code - Key.Kp0),
             _ => 0,
         };
         if (digit != 0) _conversationPanel.ChooseByDigit(digit);
