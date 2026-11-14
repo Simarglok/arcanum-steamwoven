@@ -163,6 +163,48 @@ public sealed class AreaScriptEyeCandyTests
         Assert.AreEqual(0, f.Session.QueryGoals().InUseCount);
     }
 
+    // ARC-SCRIPT-1829 (0x44C7A0 hands the add the object's art rotation, 0x502880; the add turns the entry's art, 0x502930).
+    [TestMethod]
+    public void A_play_turns_the_entrys_art_to_the_objects_rotation_and_a_rotation_of_zero_leaves_it()
+    {
+        using var f = new Fixture();
+        var art = EyeCandyArt.Make(12, 0, 0, false, 0, 0, 4)!.Value;
+        var script = EyeCandyEntryRef.Make(EyeCandyList.Script, 5)!.Value;
+        f.Entries[script] = Entry(art);
+        Assert.IsTrue(f.Host.PlayScript(Hero, 5, 3));
+        Assert.AreEqual(3, EyeCandyArt.Rotation(f.Session.QueryGoals().RunsOf(Hero).Single().Top.EyeCandy!.Art), "turned to the facing");
+        Assert.AreEqual(EyeCandyArt.Number(art), EyeCandyArt.Number(f.Session.QueryGoals().RunsOf(Hero).Single().Top.EyeCandy!.Art), "the same picture");
+        using var plain = new Fixture();
+        plain.Entries[script] = Entry(art);
+        Assert.IsTrue(plain.Host.PlayScript(Hero, 5));
+        Assert.AreEqual(art, plain.Session.QueryGoals().RunsOf(Hero).Single().Top.EyeCandy!.Art, "no modifier: the entry's own art");
+    }
+
+    [TestMethod]
+    public void A_play_reports_the_entrys_sound_and_a_looping_entrys_run()
+    {
+        using var f = new Fixture();
+        var script = (int index) => EyeCandyEntryRef.Make(EyeCandyList.Script, index)!.Value;
+        const SpellEyeCandyFlags run = SpellEyeCandyFlags.Foreground | SpellEyeCandyFlags.Animates;
+        f.Entries[script(1)] = new(0x1000, run, 207, null, (0, 0, 0), 0);
+        f.Entries[script(2)] = new(0x2000, run | SpellEyeCandyFlags.Forever, 41, null, (0, 0, 0), 0);
+        f.Entries[script(3)] = new(0x3000, SpellEyeCandyFlags.Foreground, 55, null, (0, 0, 0), 0);
+        f.Entries[script(4)] = new(0x4000, run, -1, null, (0, 0, 0), 0);
+        var once = f.Host.PlayScriptSounded(Hero, 1);
+        Assert.IsTrue(once.Started && once.Run is not null);
+        Assert.AreEqual((207, false), (once.Sound, once.Loops), "a run's sound plays once at its begin");
+        var loop = f.Host.PlayScriptSounded(Hero, 2);
+        Assert.IsTrue(loop.Started);
+        Assert.AreEqual((41, true), (loop.Sound, loop.Loops), "an anim_forever entry's sound loops until the run ends");
+        Assert.AreNotEqual(once.Run, loop.Run);
+        Assert.AreEqual(loop.Run, f.Session.QueryGoals().RunsOf(Hero).Single(r => !r.Done && r.Handle.Equals(loop.Run!.Value)).Handle);
+        var stat = f.Host.PlayScriptSounded(Hero, 3);
+        Assert.AreEqual((false, null, 55, false), (stat.Started, stat.Run, stat.Sound, stat.Loops), "a static entry installs nothing but sounds once");
+        Assert.AreEqual(-1, f.Host.PlayScriptSounded(Hero, 4).Sound);
+        Assert.IsFalse(f.Host.PlayScriptSounded(Hero, 9).Started, "no such entry");
+        Assert.AreEqual(-1, f.Host.PlayScriptSounded(Hero, 9).Sound, "and no sound");
+    }
+
     [TestMethod]
     public void An_entry_reference_names_its_list_and_keeps_a_spell_entry_as_it_was()
     {
