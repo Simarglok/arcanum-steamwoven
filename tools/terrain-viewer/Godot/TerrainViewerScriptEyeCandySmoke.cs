@@ -103,7 +103,7 @@ public partial class TerrainViewerApp
             var heroRef = new ScrObjectRef(CurrentAreaMap, AreaScriptHost.PcCode);
             QueueScriptEyeCandies([new ScrEyeCandy(number, heroRef), new ScrEyeCandy(number, heroRef, ScrEyeCandyKind.StopScript)]);
             await Frames(1);
-            Require(_scriptEyeCandyStopTaken == stopFrom + 1 && _scriptEyeCandyStoppedForSelfTest.SequenceEqual([(owner, number)]), $"the stop request was taken once and took the run its play started off: taken {_scriptEyeCandyStopTaken - stopFrom}, stopped {string.Join(";", _scriptEyeCandyStoppedForSelfTest)}");
+            Require(_scriptEyeCandyStopTaken == stopFrom + 1 && _scriptEyeCandyStoppedForSelfTest.SequenceEqual([(owner, number)]), $"the stop request was taken once and took a run of the entry off the hero: taken {_scriptEyeCandyStopTaken - stopFrom}, stopped {string.Join(";", _scriptEyeCandyStoppedForSelfTest)}");
             Require(Runs() <= runsBefore, $"the stop left no more eye-candy runs on the hero than before ({runsBefore} -> {Runs()})");
             await Shot("stopped");
             // ARC-MAGIC-1830: the queue the session moves hand their scripts' requests to (an NPC's or the hero's rewield, a regeneration's wield) plays through the same pump: a request queued for the hero starts the same entry again (the stop above took the run of its own play off, so this one is a fresh run).

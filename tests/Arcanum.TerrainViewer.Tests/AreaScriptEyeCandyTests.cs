@@ -250,7 +250,7 @@ public sealed class AreaScriptEyeCandyTests
     }
 
     [TestMethod]
-    public void A_stop_leaves_a_run_another_tag_holds_and_a_looping_entry_played_as_a_stack_run()
+    public void A_stop_leaves_a_run_of_the_same_entry_that_carries_another_tag()
     {
         using var f = new Fixture();
         var script = EyeCandyEntryRef.Make(EyeCandyList.Script, 3)!.Value;

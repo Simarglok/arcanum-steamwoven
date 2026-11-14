@@ -609,7 +609,7 @@ public readonly record struct ScrEffectRequest(ScrEffectChange Change, ScrObject
 public enum ScrEyeCandyKind { PlayScript, PlaySpell, StopScript }
 
 /// <summary>ARC-SCRIPT-042: a play-script-eye-candy action (120, ledger WE4): the entry of the script eye-candy table and the object it
-/// plays on; ARC-SCRIPT-1734 adds play spell eye candy (104) and stop script eye candy (124, ledger WE11, WE12) in order with it (<see cref="Kind"/>), the number as read. Presentation only; the host shows it (no host plays any yet, #1592).</summary>
+/// plays on; ARC-SCRIPT-1734 adds play spell eye candy (104) and stop script eye candy (124, ledger WE11, WE12) in order with it (<see cref="Kind"/>), the number as read. Presentation only; the host shows the play (120, #1592) and the stop (124, #1828); the spell play (104) is not shown yet.</summary>
 public readonly record struct ScrEyeCandy(int Number, ScrObjectRef Object, ScrEyeCandyKind Kind = ScrEyeCandyKind.PlayScript);
 
 /// <summary>

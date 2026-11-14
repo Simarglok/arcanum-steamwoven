@@ -65,7 +65,8 @@ public partial class TerrainViewerApp
         else if (request.Object.Map == CurrentAreaMap) owner = caster.CastIdOf(request.Object.Code);
         else return;
         _scriptEyeCandyStopTaken++;
-        var stopped = EyeCandyHostNow()?.StopScript(owner, request.Number) ?? 0;
+        // The shown session's eye-candy host only (a play builds it): with none built nothing was played that a stop could take off, and the heartbeat's stops over a map's scenery cost nothing there.
+        var stopped = ShownEyeCandyHost?.StopScript(owner, request.Number) ?? 0;
         if (stopped == 0) return;
         _scriptEyeCandyStopped += stopped;
         _scriptEyeCandyStoppedForSelfTest.Add((owner, request.Number));
