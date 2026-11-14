@@ -226,7 +226,6 @@ public sealed class AreaBarterArtTests
         // ARC-UI-1926 (0x575CB0): a point of a slot rectangle is the location 1000 + slot (the helmet at (157, 182)).
         var helmet = (int)Arcanum.Simulation.Equipment.EquipmentSlot.Helmet;
         Assert.AreEqual(new AreaBarterHit(null, null, helmet, false), AreaBarterArtLayout.HitTest(160, 190, 0, (80, 43), doll: true));
-        Assert.IsTrue(helmet >= 1000 && helmet <= 1008);
         Assert.AreEqual(AreaBarterHit.None, AreaBarterArtLayout.HitTest(157 + 42, 182, 0, (80, 43), doll: true), "right of the helmet's rectangle");
         Assert.AreEqual(new AreaBarterHit(0, null, null, false), AreaBarterArtLayout.HitTest(368, 8, 0, (80, 43), doll: true), "the hero's grid is still there");
         Assert.AreEqual(new AreaBarterHit(null, null, null, true), AreaBarterArtLayout.HitTest(703, 236, 0, (80, 43), doll: true), "and the gamble box");

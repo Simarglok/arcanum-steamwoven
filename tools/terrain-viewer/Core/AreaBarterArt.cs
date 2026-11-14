@@ -118,7 +118,7 @@ public static class AreaBarterArtLayout
 
     /// <summary>The point's place: the shown object's grid (x − 8, y − 168 in 32-pixel cells, 10 × 7, plus the scroll's rows: location =
     /// (row + scroll) × 10 + column, 0x575D56), the gamble box (its art's size, 0x681110, 0x681114), else the hero's grid and boxes as in mode 0
-    /// (no doll: no slot). With <paramref name="doll"/> (the merchant's doll view) the grid is not there and the doll's side hits nothing. ARC-UI-1918: with <paramref name="heroDoll"/>
+    /// (no doll: no slot). With <paramref name="doll"/> (the merchant's doll view, ARC-UI-1926) the grid is not there and the doll's side hits only the nine slot rectangles, as the location 1000 + slot. ARC-UI-1918: with <paramref name="heroDoll"/>
     /// (the hero's own doll toggle) the hero's side hits its doll's slots and no grid cell.</summary>
     public static AreaBarterHit HitTest(float x, float y, int scroll, (int Width, int Height) gamble, bool doll = false, bool heroDoll = false)
     {
