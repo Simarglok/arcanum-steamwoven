@@ -135,15 +135,35 @@ public sealed partial class SessionSpellCaster
     /// <summary>Critter flags 2 (field 0xDB) bit 0x100: the damage effect (0x433020) returns before it reaches the hit effect for such a critter (the "no blood splotch" bit), so no re-resistance follows.</summary>
     public const int NoDamageEffectCritterFlag2 = 0x100;
 
+    /// <summary>ARC-RENDER-1794: the violence filter setting (the animation module's global 0x5DE6A4) as it stands now, read at each damage effect; null reads as off.</summary>
+    public Func<bool>? ViolenceFilter { get; set; }
+
     /// <summary>
-    /// ARC-MAGIC-1143 (ledger RH1–RH5): the damage effect of a hit on a PC or NPC (0x433020), which ends by calling the hit effect (0x459A30, <see cref="CritterHit"/>). It returns first (no hit
-    /// effect, so no re-resistance) for a critter that is destroyed or switched off (object flags 0x1, 0x2) and for one whose critter flags 2 hold <see cref="NoDamageEffectCritterFlag2"/>; the multiplayer gate does not apply here. Returns whether the critter's entangle ended now.
+    /// ARC-MAGIC-1143 (ledger RH1–RH5), ARC-RENDER-1794 (OH2): the damage effect of a hit on a PC or NPC (0x433020) of <paramref name="kind"/> (1: the hit's gore) for a packet that dealt <paramref name="packetDamage"/> hit points
+    /// (the packet's field 0x5C), which ends by calling the hit effect (0x459A30, <see cref="CritterHit"/>). It returns first (no blood, no hit effect, so no re-resistance) for a critter that is destroyed or switched off (object flags
+    /// 0x1, 0x2) and for one whose critter flags 2 hold <see cref="NoDamageEffectCritterFlag2"/>; the multiplayer gate does not apply here. Otherwise it asks the blood eye candy of the animation list at the index
+    /// <see cref="HitGoreRules.Index"/> picks (<see cref="SpellCastEventKind.HitGore"/>), then runs the hit effect. Returns whether the critter's entangle ended now.
     /// </summary>
-    private bool DamageEffect(string victim)
+    private bool DamageEffect(string victim, int kind = 1, int packetDamage = 0)
     {
         if ((CurrentFlags(victim, SessionObjectFlagField.Object) & (SpellTargetObject.Destroyed | SpellTargetObject.Off)) != 0) return false;
         if ((CurrentFlags(victim, SessionObjectFlagField.Critter2) & NoDamageEffectCritterFlag2) != 0) return false;
+        var index = HitGoreRules.Index(kind, ViolenceFilter?.Invoke() ?? false, unchecked((uint)CurrentFlags(victim, SessionObjectFlagField.Critter)),
+            unchecked((uint)CurrentFlags(victim, SessionObjectFlagField.Spell)), packetDamage);
+        if (EyeCandyEntryRef.Make(EyeCandyList.Anim, index) is { } entry) _log.Add(new(SpellCastEventKind.HitGore, NoRun, entry, victim, HitGoreRules.PlayLimit));
         return CritterHit(victim);
+    }
+
+    /// <summary>
+    /// ARC-RENDER-1794 (ledger ER5, TT14): the attack end (0x4B6930) of a weapon's hit on the PC or NPC <paramref name="victim"/> that dealt <paramref name="damage"/> (the resolution's damage step, null when it has none): a hit with
+    /// a positive slot runs the damage effect of kind 1 + the slot's type (<see cref="HitGoreRules.AttackEndKind"/>: the blood of the hit, then the hit effect); a hit with none, and a critical hit, calls the hit effect
+    /// (<see cref="CritterHit"/>) directly. The caller has made the gates that come before it (a hit that reached its victim). Returns whether the critter's entangle ended now. Not modelled: the weapon's own hit effect (0x4377C0, an
+    /// entry of the weapon eye-candy list, which vetoes both), the packet flag 0x80 that skips the damage effect, the multiplayer client gate.
+    /// </summary>
+    public bool AttackEnd(string victim, AttackDamage? damage, bool critical)
+    {
+        ArgumentNullException.ThrowIfNull(victim);
+        return damage is not null && HitGoreRules.AttackEndKind(critical, damage.Final) is { } kind ? DamageEffect(victim, kind, damage.HitPointDamage) : CritterHit(victim);
     }
 
     /// <summary>
@@ -156,20 +176,20 @@ public sealed partial class SessionSpellCaster
     {
         ArgumentNullException.ThrowIfNull(victim);
         ArgumentNullException.ThrowIfNull(step);
-        return step.Prevented == DamagePrevention.None && (step.HitPointDamage > 0 || step.FatigueDamage > 0) && DamageEffect(victim);
+        return step.Prevented == DamagePrevention.None && (step.HitPointDamage > 0 || step.FatigueDamage > 0) && DamageEffect(victim, 1, step.HitPointDamage);
     }
 
     /// <summary>
     /// ARC-MAGIC-1143 (RH4): the attack end (0x4B6930) a native trap's damage runs through its context flag 0x80000 (TT13; set for the damage scripts 30001 and 30003..30006), inside the damage step on the critter
     /// <paramref name="victim"/>: after the immunity zeroing and the resistance step (0x4B6860) but before the dead test, so it reads the per-type amounts that are left (<see cref="AttackDamage.Final"/>: normal, poison,
     /// electrical, fire). An amount above 0 in any of them runs the damage effect (<see cref="DamageEffect"/>); none (fully resisted or immune) calls the hit effect directly (<see cref="CritterHit"/>). The caller has made
-    /// the gates that come before it in the original (the victim's taking-damage script, the invulnerable and destroyed gate). Returns whether the critter's entangle ended now.
+    /// the gates that come before it in the original (the victim's taking-damage script, the invulnerable and destroyed gate). The packet's hit-point field 0x5C is still 0 here (the damage step writes it after this attack end), so a
+    /// trap's blood is never a damage tier (ARC-RENDER-1794). Returns whether the critter's entangle ended now.
     /// </summary>
     public bool TrapDamageHit(string victim, AttackDamage step)
     {
         ArgumentNullException.ThrowIfNull(victim);
         ArgumentNullException.ThrowIfNull(step);
-        var positive = step.Final.Normal > 0 || step.Final.Poison > 0 || step.Final.Electrical > 0 || step.Final.Fire > 0;
-        return positive ? DamageEffect(victim) : CritterHit(victim);
+        return HitGoreRules.AttackEndKind(false, step.Final) is { } kind ? DamageEffect(victim, kind, 0) : CritterHit(victim);
     }
 }

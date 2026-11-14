@@ -66,4 +66,20 @@ public sealed class SpellEyeCandyRealDataTests
         Assert.AreEqual((75, 75, 75, 33, 13, 22), (entries.Count, entries.Count(e => e.Art is not null), entries.Count(e => e.Art is not null && (e.Flags & SpellEyeCandyFlags.Animates) != 0),
             entries.Count(e => (e.Flags & SpellEyeCandyFlags.Forever) != 0), entries.Count(e => e.Light is not null), entries.Count(e => e.Sound >= 0)));
     }
+
+    [TestMethod, TestCategory("RealData")]
+    public void The_installed_animation_list_holds_the_blood_of_a_hit_as_eleven_entries()
+    {
+        // ARC-RENDER-1794: rules\AnimEyeCandy.mes (0x5DE670): entries 0 to 10 are the normal, poison, electrical, fire, fatigue and critical splotches, the undead and the clean effect and the damage tiers; counts and flags only.
+        var root = Environment.GetEnvironmentVariable("DAT_ROOT");
+        if (string.IsNullOrWhiteSpace(root)) Assert.Inconclusive("DAT_ROOT is required for the opt-in eye-candy check; this is not a synthetic pass.");
+        using var stack = ContentStack.Open(ContentMountPlan.Discover(root).Plan!).Stack!;
+        var read = SpellEyeCandyTable.OpenAnim(stack);
+        Assert.AreEqual(SpellDataStatus.Read, read.Status, $"{read.Refusal}");
+        var entries = read.Table!.Entries;
+        Assert.AreEqual(11, entries.Count);
+        Assert.IsTrue(entries.All(e => e.Art is not null && (e.Flags & (SpellEyeCandyFlags.Foreground | SpellEyeCandyFlags.Animates)) == (SpellEyeCandyFlags.Foreground | SpellEyeCandyFlags.Animates)), "every entry has art, a foreground part and animates");
+        Assert.AreEqual(0, entries.Count(e => (e.Flags & (SpellEyeCandyFlags.Background | SpellEyeCandyFlags.Underlay | SpellEyeCandyFlags.Forever)) != 0), "no background, underlay or looping entry");
+        Assert.AreEqual(3, entries.Count(e => EyeCandyArt.Translucent(e.Art!.Value)), "the poison, electrical and fire splotches are translucent");
+    }
 }

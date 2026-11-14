@@ -796,9 +796,24 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     /// </summary>
     public void HitEffect(string victim, SessionAttackResult? result)
     {
-        if (!HitReached(result)) return;
-        _scene.Spells?.Invoke()?.CritterHit(victim == Pc ? SessionSpellCaster.Hero : victim);
+        // The cast host is asked only for a hit that reached the victim: its factory rebuilds a stale host (and clears the eye candy), which a miss must not do.
+        if (AttackEndOf(result) is not null) AttackEnd(_scene.Spells?.Invoke(), victim == Pc ? SessionSpellCaster.Hero : victim, result);
     }
+
+    /// <summary>
+    /// ARC-RENDER-1794 (ledger ER5): the attack end of a weapon's attack on the PC or NPC <paramref name="victim"/> (the cast host's id, <see cref="SessionSpellCaster.Hero"/> for the hero): a hit that reached the victim
+    /// (<see cref="HitReached"/>) runs the damage effect with the blood of the hit, or the hit effect when no slot is positive or the hit was critical (<see cref="SessionSpellCaster.AttackEnd"/>); a miss and a refused attack do nothing.
+    /// </summary>
+    public static void AttackEnd(SessionSpellCaster? caster, string victim, SessionAttackResult? result)
+    {
+        if (caster is null || AttackEndOf(result) is not { } end) return;
+        caster.AttackEnd(victim, end.Damage, end.Critical);
+    }
+
+    /// <summary>ARC-RENDER-1794: what the attack end reads of an attack result: the damage step the victim took (null when the hit had none or the damage fell on the attacker) and the packet's critical flag; null when the attack
+    /// is no hit that reached its victim (<see cref="HitReached"/>).</summary>
+    public static (AttackDamage? Damage, bool Critical)? AttackEndOf(SessionAttackResult? result) =>
+        HitReached(result) ? (result!.Resolution!.Damage is { Recipient: DamageRecipient.Target } damage ? damage : null, result.Resolution.Outcome == AttackOutcome.CriticalHit) : null;
 
     /// <summary>ARC-DEV-303: whether an attack result is a hit that reached its victim (<see cref="VictimReached"/> with the hit or critical-hit outcome): the attack end's hit flag (0x4B6930 tests it).</summary>
     public static bool HitReached(SessionAttackResult? result) =>

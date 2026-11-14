@@ -269,6 +269,10 @@ public enum SpellCastEventKind
     /// <summary>ARC-MAGIC-1830 (the same rewield, hero or NPC): an eye candy request an item event script of the object <see cref="SpellCastEvent.Object"/> made, in order after the printed lines; <see cref="SpellCastEvent.EyeCandy"/> carries it (the object it names, the entry
     /// and the kind) and <see cref="SpellCastEvent.Value"/> the entry number. The viewer plays it as any script's eye candy.</summary>
     ItemScriptEyeCandy,
+    /// <summary>ARC-RENDER-1794 (ledger ER5, OH2): the damage effect (0x433020) of a hit on a PC or NPC asks the blood eye candy: <see cref="SpellCastEvent.Value"/> is the entry of the animation list (0x5DE670) as an
+    /// <c>EyeCandyEntryRef</c>, <see cref="SpellCastEvent.Object"/> the struck critter and <see cref="SpellCastEvent.Detail"/> the add's play limit (<c>HitGoreRules.PlayLimit</c>). The viewer plays it as an overlay run of the
+    /// owner (no tag, no play flags); the add may refuse it (no free place, three of the kind already on the critter), which is not the cast host's to know.</summary>
+    HitGore,
 }
 
 /// <summary>

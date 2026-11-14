@@ -96,7 +96,7 @@ public sealed partial class SessionSpellCasterTests
         Assert.AreEqual((before.Fatigue - 7, before.HitPoints - 3), Hero(owner), "the cost and the damage");
         Assert.IsNull(owner.QuerySpellRuns()[run], "an instant spell ends and is freed at once");
         // The component applies during the pass; the host pays the stage's payment from the call's notes after it.
-        CollectionAssert.AreEquivalent(new[] { SpellCastEventKind.FatiguePaid, SpellCastEventKind.Damaged, SpellCastEventKind.Freed },
+        CollectionAssert.AreEquivalent(new[] { SpellCastEventKind.FatiguePaid, SpellCastEventKind.Damaged, SpellCastEventKind.HitGore, SpellCastEventKind.Freed },
             caster.Log.Select(e => e.Kind).ToArray());
     }
 
