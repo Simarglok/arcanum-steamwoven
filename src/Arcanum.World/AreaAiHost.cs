@@ -3569,6 +3569,20 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     }
 
     /// <summary>
+    /// ARC-UI-2085 (the order handler's move order): the please-move starter asked with the hero first and the follower <paramref name="follower"/> second
+    /// (<see cref="AiTileSharerRules.PleaseMove"/>: the follower, not a player character, moves away from the hero when the start gate with cost 0 passes and it is not busy). True when
+    /// goal 68 started, which decides the order's line (the acknowledgement; else the refusal). False for a follower this host does not run.
+    /// </summary>
+    public bool AskToMove(string follower)
+    {
+        ArgumentNullException.ThrowIfNull(follower);
+        if (!_followers.ContainsKey(follower) || follower == Pc) return false;
+        var goals = _session.QueryGoals();
+        return AiTileSharerRules.PleaseMove(this, new AiTileCritter(Pc, true, !DeadCritter(Pc), goals.BusyRun(Pc) is not null, 0),
+            new AiTileCritter(follower, false, !DeadCritter(follower), goals.BusyRun(follower) is not null, 1));
+    }
+
+    /// <summary>
     /// ARC-SCRIPT-1135 (CF4): the dialog <c>so</c> action's goal start (0x436960 right after the flag, ledger OL8/CF4): the spread-out goal (69) on the follower <paramref name="npc"/> toward the hero, through the
     /// executor's starter (gate with cost 0) and the table's own start (level 3, a duplicate refused). The answer of the starter is never seen by the action. False: not a follower this host runs, one the hero
     /// does not lead (no leader: the original's null-leader case is not followed), or a start the gate or the table refused (the text is in the NPC's trace).
