@@ -16,8 +16,8 @@ public partial class TerrainViewerApp
         var texts = _gameBarContent?.Texts ?? AreaGameBarTexts.Project("no interface bars");
         var weapon = request.Target is AreaStatTarget.HeroWeapon or AreaStatTarget.PartnerWeapon;
         var entry = weapon ? AreaStatLines.Weapon(request.Ratings, texts) : AreaStatLines.Armour(request.Ratings, texts);
-        if (entry is null) return;
         if (request.Release) LeaveBarPane();
+        if (entry is null) return;
         LastStatLinesForSelfTest = (request, entry);
         var shown = _messageLog.PaneMode ? _messageLog.ShowPaneName(MessagePaneMode, entry.Title) : _messageLog.ShowItem(entry);
         if (shown) _gameBarPanel?.MessageLog.Render();

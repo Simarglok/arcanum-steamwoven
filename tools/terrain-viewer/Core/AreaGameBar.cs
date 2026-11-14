@@ -227,7 +227,7 @@ public sealed class AreaGameBarTexts
         [AreaHoverWindow.AlignmentMessage] = "Alignment", [AreaHoverWindow.SneakMessage] = "Sneak",
         [AreaHoverWindow.SneakSeenMessage] = "Noticed", [AreaHoverWindow.SneakSeenMessage - 1] = "Nearly noticed",
         [AreaHoverWindow.SneakSeenMessage - 2] = "Close", [AreaHoverWindow.SneakSeenMessage - 3] = "Far", [AreaHoverWindow.SneakHiddenMessage] = "Hidden",
-        // ARC-UI-1924 (IW46): the weapon and armour stat lines' labels (the project's words until the game's file reads; 59 is the fatigue label both lines share).
+        // ARC-UI-1924 (IW46): the weapon and armour stat lines' labels (the project's words until the game's file reads; 59, the fatigue damage line's label, is the spell hint's cost label too).
         [AreaStatLines.WeaponTitleMessage] = "Damage", [AreaStatLines.WeaponNormalMessage] = "Normal", [AreaStatLines.WeaponElectricalMessage] = "Electrical",
         [AreaStatLines.WeaponFireMessage] = "Fire", [AreaStatLines.WeaponPoisonMessage] = "Poison", [AreaStatLines.SkillMessage] = "Skill", [AreaStatLines.ArmourTitleMessage] = "Armor",
         [AreaStatLines.ArmourNormalMessage] = "Normal", [AreaStatLines.ArmourMagicMessage] = "Magic", [AreaStatLines.ArmourElectricalMessage] = "Electrical",
