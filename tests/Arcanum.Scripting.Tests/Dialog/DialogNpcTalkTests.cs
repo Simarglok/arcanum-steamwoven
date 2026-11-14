@@ -211,8 +211,13 @@ public sealed class DialogNpcTalkTests
     }
 
     // ARC-SCRIPT-1746: a follow that is itself an m: or r: node (node 30 is the yes node, node 20 the node's own response) is planned when the way is taken.
-    private static string Chained(string text, string yes, string own = "{20}{Own node.}") =>
-        Nodes(text).Replace("{30}{Yes node.}", yes).Replace("{20}{Own node.}", own);
+    private static string Chained(string text, string yes, string own = "{20}{Own node.}")
+    {
+        var plain = Nodes(text);
+        var chained = plain.Replace("{30}{Yes node.}", yes).Replace("{20}{Own node.}", own);
+        Assert.AreNotEqual(plain, chained, "the fixture fragments the replacement looks for are still there");
+        return chained;
+    }
 
     [TestMethod]
     public void A_yes_follow_that_is_an_m_node_runs_as_an_ordinary_entry_and_pays_again()
@@ -280,7 +285,17 @@ public sealed class DialogNpcTalkTests
         var own = new Rig();
         var ownFailed = own.Start(Chained("m:$100,30", "{30}{Yes node.}", "{20}{m:$1,99}"));
         ownFailed.Select(ownFailed.Options[1].Token);
-        Assert.AreEqual(DialogConversationFailureKind.MissingTarget, ownFailed.Failure!.Kind);
+        Assert.AreEqual((DialogConversationPhase.Failed, DialogConversationFailureKind.MissingTarget, 0), (ownFailed.Phase, ownFailed.Failure!.Kind, ownFailed.Options.Count));
+        Assert.AreEqual(0, own.Pay.Moved.Count);
+
+        // The first node's action ran at its entry; the stop comes on the pick (ARC-SCRIPT-1746).
+        var acted = new Rig();
+        var late = acted.Start(Chained("m:$100,30", "{30}{m:$1,99}"), options: null);
+        Assert.AreEqual(DialogConversationPhase.AwaitingSelection, late.Phase);
+        var viaRumor = new Rig();
+        var rumorLate = viaRumor.Start(Chained("r:$0,1000", "{30}{Yes node.}", "{20}{m:$1,99}"));
+        rumorLate.Select(rumorLate.Options[0].Token);
+        Assert.AreEqual(DialogConversationFailureKind.MissingTarget, rumorLate.Failure!.Kind, "the way on after a rumor plans its m: node when taken");
     }
 
     [TestMethod]
