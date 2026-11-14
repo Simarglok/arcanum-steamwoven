@@ -67,7 +67,7 @@ public sealed class NpcShotObjectStrikeTests
             var arrowShot = Shot(owner, archer, hit: true);
             last = owner.LandNpcShotOnObject(owner.Version, arrowShot, new(archer) { Target = door, AttackerWorn = Worn() });
             Assert.AreEqual((GameSessionFailure.None, GameSessionFailure.None), (last.Failure, last.StepFailure));
-            Assert.AreEqual(SessionObjectHostSteps.None, last.Host & (SessionObjectHostSteps.WitnessesHearAttack | SessionObjectHostSteps.WitnessesHearBreak), "no witnesses of an NPC's arrow");
+            Assert.AreNotEqual(SessionObjectHostSteps.None, last.Host & (SessionObjectHostSteps.WitnessesHearAttack | SessionObjectHostSteps.WitnessesHearBreak), "the witness step stays (the AI host's rule admits only a PC-led shooter, ARC-AI-2084)");
         }
         Assert.IsTrue(last!.Object!.Broken, "the door breaks within a bounded run");
         Assert.AreEqual(SessionObjectCondition.Destroyed, owner.QueryObject(door).Condition);

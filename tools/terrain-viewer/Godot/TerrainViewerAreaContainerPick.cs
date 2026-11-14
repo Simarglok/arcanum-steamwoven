@@ -31,7 +31,7 @@ public partial class TerrainViewerApp
         return true;
     }
 
-    /// <summary>The pick goal 67 asked for on a container: the session's answer on the HUD (the original plays no sound for a pick; witnesses are not modelled, as for a door).</summary>
+    /// <summary>The pick goal 67 asked for on a container: the session's answer on the HUD (the original plays no sound for a pick; its witnesses are ARC-AI-2084's).</summary>
     private void PickContainer(AreaInventoryTarget target, string item)
     {
         var session = _areaSession!;
@@ -52,6 +52,8 @@ public partial class TerrainViewerApp
             }}{(result.FateUsed ? " (fate point)" : "")}";
         GD.Print($"ARC-UI-1127 container pick entity={target.Entity} disposition={result.Disposition} failure={result.Failure} success={result.Check?.Success} critical={result.Check?.Critical} " +
             $"result={result.Outcome?.Result} locked={result.State?.Locked}");
+        // ARC-AI-2084 (0x4C7160 → 0x4AEE50): the guards near the container see or hear the hero's pick, silent (mode 0: the lock opened, mode 1: it failed).
+        if (result.Disposition != GameSessionDisposition.Rejected) WitnessesOfLockPick(target.Entity, target.Row, Arcanum.Simulation.Ai.AiSchedulerRules.Pc, result.Outcome);
         RefreshAreaStatus();
     }
 

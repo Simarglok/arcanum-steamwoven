@@ -989,6 +989,9 @@ public partial class TerrainViewerApp
             TakeMovementEvent(entry);
             TakeTeleportEvent(entry);
             TakeHoldEvent(entry);
+            // ARC-AI-2084 (0x454A10 → 0x4AEE50, mode 0, loud): the guards near a portal or container whose lock a spell cleared; the alert is logged for a critter caster, which the host's rule limits to the hero and its followers.
+            if (entry is { Kind: SpellCastEventKind.LockGuardAlert, Object: { } guarded, Actor: { } caster } && ObjectRowByEntity(guarded) is { } guardedRow)
+                WitnessesOfLockSpell(guarded, guardedRow, caster == SessionSpellCaster.Hero ? Arcanum.Simulation.Ai.AiSchedulerRules.Pc : caster);
             TakeTraitEvent(entry);
             TakeIdentifyEvent(entry);
             // ARC-MAGIC-1745: a line a wield script of an NPC's rewield printed (the TraitIdx magick and tech points) goes to the message window as any script's printed line.

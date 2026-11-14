@@ -46,7 +46,7 @@ public sealed partial class SessionSpellCaster
                 _log.Add(new(SpellCastEventKind.Resisted, run.Id, 0, obj.Id));
                 if (IsLocalPlayer(run.Parent)) _log.Add(new(SpellCastEventKind.Message, run.Id, ResistedMessage));
             }
-            if (run.Parent is { IsCritter: true }) _log.Add(new(SpellCastEventKind.LockGuardAlert, run.Id, 2, obj.Id, refused ? 1 : 0));
+            if (run.Parent is { IsCritter: true } caster) _log.Add(new(SpellCastEventKind.LockGuardAlert, run.Id, 2, obj.Id, refused ? 1 : 0) { Actor = caster.Id });
             if (refused) return true;
         }
         WriteLockFlag(run, obj.Id, openable, mask, data.On);

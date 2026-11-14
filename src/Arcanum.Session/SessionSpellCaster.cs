@@ -87,6 +87,9 @@ public sealed record SpellCastEvent(SpellCastEventKind Kind, int Run, int Value 
     /// <summary>ARC-MAGIC-1745 (<see cref="SpellCastEventKind.ItemScriptLine"/>): the printed line's text, which the viewer's message window posts by the entry type <see cref="Value"/>.</summary>
     public string? Text { get; init; }
 
+    /// <summary>ARC-AI-2084 (<see cref="SpellCastEventKind.LockGuardAlert"/>): the critter whose cast raised the entry (the run's parent: <see cref="SessionSpellCaster.Hero"/> for the hero), which the viewer's guard witnesses name as the actor.</summary>
+    public string? Actor { get; init; }
+
     /// <summary>ARC-MAGIC-1830 (<see cref="SpellCastEventKind.ItemScriptEyeCandy"/>): the eye candy request an item event script of an NPC's rewield made, as the script ran it (the viewer plays it as any script's eye candy).</summary>
     public Arcanum.Scripting.Scr.ScrEyeCandy? EyeCandy { get; init; }
 }
