@@ -19,6 +19,11 @@ public partial class AreaArtParagraph : AreaArtTextBlock
     public AreaArtParagraph() => FitContent = true;
 
     public string Text => _text;
+    /// <summary>The colour the text is drawn in.</summary>
+    public (byte R, byte G, byte B) Colour => _colour;
+    /// <summary>ARC-UI-2022: the width of the first line (0 without fonts or text), where the original measures a band row's drawn text.</summary>
+    public int FirstLineWidth => Items.Count == 0 || Items[0].Lines.Count == 0 || Items[0].Lines[0].Glyphs.Count == 0 ? 0
+        : Items[0].Lines[0].X + Items[0].Lines[0].Glyphs[^1].X + Items[0].Lines[0].Glyphs[^1].Glyph.Width;
     /// <summary>The lines the text takes at its wrap width (0 without fonts or text).</summary>
     public int LineCount => Items.Count == 0 ? 0 : Items[0].Lines.Count;
 

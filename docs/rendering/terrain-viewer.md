@@ -269,10 +269,16 @@ alone (the original shows no number) and no digit chooses anything. The self-tes
 
 ARC-UI-2025 (ledger DH1–DH7; rule `Arcanum.Presentation.Hud.DialogReplyBand`, switch `InterfaceRuleProfile.DialogReplyRowsDrift`, [rule modes](../world/rule-modes.md)): in both
 settings a reply is chosen on the mouse press, not on the release, as in the original. Under the Original setting `AreaConversationPanel.OriginalReplyRows` lays the
-reply stack out as the original's band (100 px tall, five 16 px rows every 19 px starting 3 px down, no wrapping) and resolves a left press by the band's rules:
+reply stack out as the original's band (100 px tall, five 16 px rows every 19 px starting 3 px down) and resolves a left press by the band's rules:
 the row is y / 20 (so a press in a gap picks a row and the fifth row's first pixel picks the fourth), an empty slot, the release and a blocked reply choose
-nothing; the hover lights a row as the original's move records do (DH5). Under the Steamwoven setting each button is its own hit area. Not yet the band: its
-400 px centred width and look (#2022). The self-test (`TerrainViewerConversationTest`) covers the press mode and the band's refusals.
+nothing; the hover lights a row as the original's move records do (DH5). Under the Steamwoven setting each button is its own hit area. The self-test (`TerrainViewerConversationTest`) covers the press mode and the band's refusals.
+
+ARC-UI-2022 (ledger DH8–DH11): under the Original setting the reply stack sits in `AreaConversationPanel`'s band over the game view, not in the framed panel: a 100 px tall strip, 400 px wide
+(a row's text plus 13 px that is wider widens it by that and re-centres it; the press x-bound is the band's width), centred, its top at 299 in a 400 px view else the view height minus 181 (the viewer
+hides the interface bars during a dialog, so the view is the whole window). The strip darkens what is under it by a subtract blend of (18, 18, 18), as the original's fill (a saturating subtract, not an alpha mix). Rows
+are white, the hovered row yellow (the original's two fonts of art 229), each with a drop shadow one pixel right and down in (10, 10, 10); the text is broken at the box width minus 12 and only the first line fits the
+16 px row; a word wider than the row draws nothing. The diagnostic chrome (header, outcome, effects, hint, Leave) still draws in the framed panel, which stands above the band (#2023 removes it). The self-test covers the rectangle,
+the shade, the colours, the shadow and the press bound.
 
 ## Integrated world diagnostic policy
 

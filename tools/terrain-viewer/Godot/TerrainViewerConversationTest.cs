@@ -1,6 +1,7 @@
 using System.Text;
 using Arcanum.Data;
 using Arcanum.Data.Area;
+using Arcanum.Presentation.Hud;
 using Arcanum.Scripting.Dialog;
 using Arcanum.TerrainViewer.Core;
 using Arcanum.TerrainViewer.Tests;
@@ -93,10 +94,28 @@ public static partial class TerrainViewerSelfTest
             Require(!panel.BandInputForSelfTest(Press(new(-3, 5))) && !panel.BandInputForSelfTest(Press(new(10, 100))), "a press outside the band is not taken");
             Require(panel.BandInputForSelfTest(Press(new(10, 25))) && conversation.CurrentNode.Value == node, "an empty slot is refused");
             Require(!panel.BandInputForSelfTest(Release(new(10, 2))) && conversation.CurrentNode.Value == node, "the band takes no release (the reply buttons act on the press, not the release)");
+            // ARC-UI-2022: the band is the original's strip over the view: 400 px wide (short replies), centred, 100 tall, its top by the view height, a subtract shade of 18.
+            var view = host.GetViewport().GetVisibleRect().Size;
+            var rect = panel.BandRectForSelfTest;
+            Require(panel.BandShownForSelfTest && rect.W == DialogReplyBand.MinWidth && rect.H == DialogReplyBand.Height && rect.X == DialogReplyBand.BoxLeft((int)view.X, rect.W) && rect.Y == DialogReplyBand.BoxTop((int)view.Y),
+                $"Original: the band is a 400x100 strip centred in the view at {DialogReplyBand.BoxTop((int)view.Y)}: {rect} in {view}");
+            Require(panel.BandShadeForSelfTest == "18,18,18|Sub", $"the band darkens by subtracting 18: {panel.BandShadeForSelfTest}");
+            Require(!panel.BandInputForSelfTest(Press(new(rect.W, 5))) && !panel.BandInputForSelfTest(Press(new(rect.W + 50, 5))), "a press right of the band's width is outside it (not the panel's width)");
+            Require(panel.RowColourForSelfTest(0) is (255, 255, 255), $"a normal row is pure white: {panel.RowColourForSelfTest(0)}");
+            if (panel.ArtFontsForSelfTest) Require(panel.RowShadowForSelfTest(0) == new Vector2(1, 1), "a row draws a shadow one pixel right and down");
+            await ScreenshotAsync(host, "original-band");
             panel.BandInputForSelfTest(new InputEventMouseMotion { Position = new(10, 5) });
             Require(panel.RowLitForSelfTest(0), "the pointer on the first row's drawn pixels lights it");
+            // The process-frame signal comes before the nodes' own process: two frames make sure the panel's _Process has coloured the row.
+            await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+            await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+            Require(panel.RowColourForSelfTest(0) is (255, 255, 0), $"the lit row is yellow: {panel.RowColourForSelfTest(0)}");
+            await ScreenshotAsync(host, "original-band-lit");
             panel.BandInputForSelfTest(new InputEventMouseMotion { Position = new(10, 20) });
             Require(!panel.RowLitForSelfTest(0), "moving off the row (into the gap below) unlights it");
+            await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+            await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+            Require(panel.RowColourForSelfTest(0) is (255, 255, 255), "the unlit row is white again");
             Require(panel.BandInputForSelfTest(Press(new(10, 2))), "a press above the first row's drawn top is still in its click band");
             await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
             Require(picks == 2 && lines.Count == 4 && lines[3] == "removed", $"the ending reply removes the bubble and shows no new persistent one: {string.Join("|", lines)}");

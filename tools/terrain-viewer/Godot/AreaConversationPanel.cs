@@ -30,6 +30,11 @@ public partial class AreaConversationPanel : CanvasLayer
     private readonly List<Button> _buttons = new();
     private Button _leave = null!;
     private Control _bandTop = null!;
+    private VBoxContainer _contents = null!;
+    // ARC-UI-2022: the Original band: a translucent strip over the game view (the shade subtracts 18 from each channel under it), the reply stack inside it.
+    private Control _band = null!;
+    private ColorRect _bandShade = null!;
+    private int _bandWidth = DialogReplyBand.MinWidth;
     private DialogReplyBand.Hover? _hover;
     private (int Width, int Rows) _hoverKey;
     private DialogConversation? _conversation;
@@ -88,7 +93,17 @@ public partial class AreaConversationPanel : CanvasLayer
     internal string OutcomeForSelfTest => _outcome.Text;
     internal Button LeaveForSelfTest => _leave;
     /// <summary>ARC-UI-2025: the reply stack's width (the band's) and whether row i draws lit now.</summary>
-    internal int BandWidthForSelfTest => (int)_options.Size.X;
+    internal int BandWidthForSelfTest => (int)_band.Size.X;
+    /// <summary>ARC-UI-2022: the band's place in the view ((left, top, width, height)), whether it is shown and the shade's blend mode name.</summary>
+    internal (int X, int Y, int W, int H) BandRectForSelfTest => ((int)_band.Position.X, (int)_band.Position.Y, (int)_band.Size.X, (int)_band.Size.Y);
+    internal bool BandShownForSelfTest => _band.Visible && _originalRows && IsOpen;
+    internal string BandShadeForSelfTest => $"{_bandShade.Color.R8},{_bandShade.Color.G8},{_bandShade.Color.B8}|{(_bandShade.Material as CanvasItemMaterial)?.BlendMode}";
+    /// <summary>ARC-UI-2022: the text colour of reply row i (the main paragraph's, or the button's font colour without the original's fonts).</summary>
+    internal (byte R, byte G, byte B)? RowColourForSelfTest(int row) => row < 0 || row >= _buttons.Count ? null
+        : _buttons[row].GetNodeOrNull<AreaArtParagraph>(ArtName) is { } art ? art.Colour
+        : ((byte)(_buttons[row].GetThemeColor("font_color").R8), (byte)_buttons[row].GetThemeColor("font_color").G8, (byte)_buttons[row].GetThemeColor("font_color").B8);
+    /// <summary>ARC-UI-2022: whether row i has its drop shadow paragraph, and where (relative to the row).</summary>
+    internal Vector2? RowShadowForSelfTest(int row) => row < 0 || row >= _buttons.Count ? null : _buttons[row].GetNodeOrNull<AreaArtParagraph>(ShadowName)?.Position;
     internal bool RowLitForSelfTest(int row) => _hover is { } hover && hover.IsLit(row);
     /// <summary>ARC-UI-2025: an event as the reply stack receives it (point relative to the band's top-left); true when the band took it.</summary>
     internal bool BandInputForSelfTest(InputEvent input) => HandleBandInput(input);
@@ -106,7 +121,7 @@ public partial class AreaConversationPanel : CanvasLayer
             if (button.GetNodeOrNull<AreaArtParagraph>(ArtName) is { } reply) found.Add((button.Name, reply.Text, reply.LineCount, reply.WrapWidth, reply.Visible));
         return found;
     }
-    private const string ReplyTextMeta = "replyText", ArtName = "Art";
+    private const string ReplyTextMeta = "replyText", ArtName = "Art", ShadowName = "Shadow";
 
     public override void _Ready()
     {
@@ -118,11 +133,21 @@ public partial class AreaConversationPanel : CanvasLayer
             ContentMarginLeft = 16, ContentMarginRight = 16, ContentMarginTop = 12, ContentMarginBottom = 12,
         });
         AddChild(_panel);
-        var contents = new VBoxContainer(); _panel.AddChild(contents);
+        var contents = _contents = new VBoxContainer(); _panel.AddChild(contents);
         _header = new Label { Modulate = new Color(.7f, .75f, .8f), AutowrapMode = TextServer.AutowrapMode.WordSmart };
         _options = new VBoxContainer();
-        _options.GuiInput += input => { if (HandleBandInput(input)) _options.AcceptEvent(); };
-        _options.MouseExited += () => { _hover?.Leave(); };
+        // ARC-UI-2022: the band (the Original setting) takes the pointer; its stack lives inside it, the plain stack in the panel.
+        _band = new Control { Name = "ReplyBand", MouseFilter = Control.MouseFilterEnum.Stop, Visible = false };
+        _bandShade = new ColorRect
+        {
+            Name = "Shade", MouseFilter = Control.MouseFilterEnum.Ignore,
+            Color = new Color(DialogReplyBand.DarkenBy / 255f, DialogReplyBand.DarkenBy / 255f, DialogReplyBand.DarkenBy / 255f, 1f),
+            Material = new CanvasItemMaterial { BlendMode = CanvasItemMaterial.BlendModeEnum.Sub },
+        };
+        _band.AddChild(_bandShade);
+        _band.GuiInput += input => { if (HandleBandInput(input)) _band.AcceptEvent(); };
+        _band.MouseExited += () => { _hover?.Leave(); };
+        AddChild(_band);
         _bandTop = new Control { Name = "BandTop", MouseFilter = Control.MouseFilterEnum.Ignore, Visible = false };
         _options.AddChild(_bandTop);
         _outcome = new Label { Modulate = new Color(1f, .85f, .55f), AutowrapMode = TextServer.AutowrapMode.WordSmart };
@@ -247,6 +272,8 @@ public partial class AreaConversationPanel : CanvasLayer
     private void Render(string? message)
     {
         _message = message; _artDirty = true;
+        // ARC-UI-2022 (0x4C9720): every new reply set starts the box at its 400 px again.
+        _bandWidth = DialogReplyBand.MinWidth;
         foreach (var button in _buttons) { _options.RemoveChild(button); button.QueueFree(); }
         _buttons.Clear();
         var conversation = _conversation;
@@ -270,10 +297,16 @@ public partial class AreaConversationPanel : CanvasLayer
                 if (_fonts is null) button.Text = text;
                 else
                 {
-                    var art = new AreaArtParagraph { Name = ArtName, Position = new(ButtonPadX, _originalRows ? 0 : ButtonPadY), WrapWidth = _originalRows ? NoWrap : Math.Max(1, _contentWidth - 2 * ButtonPadX) };
+                    // ARC-UI-2022 (0x4C9810, 0x5351D0): a band row is the text at its row's left with a drop shadow 1 px right and down, the shadow drawn first.
+                    if (_originalRows)
+                    {
+                        var shadow = new AreaArtParagraph { Name = ShadowName, Position = new(1, 1) };
+                        shadow.SetFonts(_fonts); button.AddChild(shadow); shadow.SetText(text, DialogReplyBand.ShadowColour);
+                    }
+                    var art = new AreaArtParagraph { Name = ArtName, Position = new(_originalRows ? 0 : ButtonPadX, _originalRows ? 0 : ButtonPadY), WrapWidth = _originalRows ? _bandWidth - DialogReplyBand.Margins : Math.Max(1, _contentWidth - 2 * ButtonPadX) };
                     art.SetFonts(_fonts);
                     button.AddChild(art);
-                    art.SetText(text, option.Block is not null ? BlockedColour : ReplyColour);
+                    art.SetText(text, option.Block is not null ? BlockedColour : _originalRows ? DialogReplyBand.RowColour : ReplyColour);
                 }
                 // Rebuild after the emitting button's signal returns: Render frees the buttons.
                 button.Pressed += () => Callable.From(() => ChooseToken(token)).CallDeferred();
@@ -314,24 +347,48 @@ public partial class AreaConversationPanel : CanvasLayer
         foreach (var button in _buttons.Append(_leave))
         {
             if (button.GetNodeOrNull<AreaArtParagraph>(ArtName) is not { } art) continue;
-            if (_originalRows && button != _leave) { art.WrapWidth = NoWrap; button.CustomMinimumSize = new(0, DialogReplyBand.RowHeight); continue; }
+            if (_originalRows && button != _leave) { LayoutBandRow(button, art); continue; }
             art.WrapWidth = Math.Max(1, _contentWidth - 2 * ButtonPadX);
             button.CustomMinimumSize = new(0, art.GetMinimumSize().Y + 2 * ButtonPadY);
         }
     }
 
-    private const int NoWrap = 100000;
+    /// <summary>
+    /// ARC-UI-2022 (ledger DH7, DH10): a band row's text is broken at the box width minus 12; only the first line fits the 16 px row (the
+    /// button clips the rest); a word wider than the row draws nothing; the drawn width plus 1 and 12 widens the box (and re-centres it) when larger.
+    /// </summary>
+    private void LayoutBandRow(Button button, AreaArtParagraph art)
+    {
+        button.CustomMinimumSize = new(0, DialogReplyBand.RowHeight);
+        var wrap = _bandWidth - DialogReplyBand.Margins;
+        art.WrapWidth = wrap;
+        var shadow = button.GetNodeOrNull<AreaArtParagraph>(ShadowName);
+        if (shadow is not null) shadow.WrapWidth = wrap;
+        var fits = (int)art.GetMinimumSize().X <= wrap;
+        art.Visible = fits;
+        if (shadow is not null) shadow.Visible = fits;
+        if (fits) _bandWidth = DialogReplyBand.Widened(_bandWidth, art.FirstLineWidth);
+    }
+
     private const string LitMeta = "rowLit";
     private bool _focusLit;
-    private static readonly StyleBoxFlat PlainRow = RowStyle(0f), LitRow = RowStyle(.16f);
-    private static StyleBoxFlat RowStyle(float alpha) => new() { BgColor = new Color(1f, 1f, 1f, alpha), ContentMarginLeft = 0, ContentMarginRight = 0, ContentMarginTop = 0, ContentMarginBottom = 0 };
+    private static readonly StyleBoxFlat PlainRow = new() { BgColor = new Color(1f, 1f, 1f, 0f), ContentMarginLeft = 0, ContentMarginRight = 0, ContentMarginTop = 0, ContentMarginBottom = 0 };
 
-    /// <summary>ARC-UI-2025: the reply stack as the original's band (a 100 px tall area, rows every 19 px starting 3 px down) or as the plain stack.</summary>
+    /// <summary>ARC-UI-2025: the reply stack as the original's band (a 100 px tall area, rows every 19 px starting 3 px down) or as the plain stack.
+    /// ARC-UI-2022: the band's stack lives in the band over the game view; the plain one in the panel.</summary>
     private void ApplyRowGeometry()
     {
+        var home = _originalRows ? (Node)_band : _contents;
+        if (_options.GetParent() != home)
+        {
+            _options.GetParent()?.RemoveChild(_options);
+            home.AddChild(_options);
+            if (!_originalRows) _contents.MoveChild(_options, _headerArt.GetIndex() + 1);
+        }
+        _band.Visible = _originalRows;
         // The empty first child makes the stack's 3 px separation the 3 px between the band's top and the first row.
         _bandTop.Visible = _originalRows;
-        _options.MouseFilter = _originalRows ? Control.MouseFilterEnum.Stop : Control.MouseFilterEnum.Pass;
+        _options.MouseFilter = _originalRows ? Control.MouseFilterEnum.Ignore : Control.MouseFilterEnum.Pass;
         _options.CustomMinimumSize = new(0, _originalRows ? DialogReplyBand.Height : 0);
         if (_originalRows) _options.AddThemeConstantOverride("separation", DialogReplyBand.RowPitch - DialogReplyBand.RowHeight);
         else _options.RemoveThemeConstantOverride("separation");
@@ -348,9 +405,17 @@ public partial class AreaConversationPanel : CanvasLayer
         button.AddThemeFontSizeOverride("font_size", 11);
         foreach (var name in new[] { "normal", "hover", "pressed", "disabled", "hover_pressed" }) button.AddThemeStyleboxOverride(name, PlainRow);
         button.AddThemeStyleboxOverride("focus", new StyleBoxEmpty());
+        SetRowFontColour(button, DialogReplyBand.RowColour);
     }
 
-    /// <summary>The row the pointer or the keyboard focus is on draws lit (the original's second font, here a light shade).</summary>
+    /// <summary>The viewer's font colour of a band row (without the original's fonts), in every button state.</summary>
+    private static void SetRowFontColour(Button button, (byte R, byte G, byte B) colour)
+    {
+        var tint = new Color(colour.R / 255f, colour.G / 255f, colour.B / 255f);
+        foreach (var name in new[] { "font_color", "font_hover_color", "font_pressed_color", "font_focus_color", "font_hover_pressed_color" }) button.AddThemeColorOverride(name, tint);
+    }
+
+    /// <summary>The row the pointer or the keyboard focus is on draws lit: the original's second font, yellow (ledger DH6; a blocked row, which the original has none of, stays grey).</summary>
     private void LightRows()
     {
         for (var i = 0; i < _buttons.Count; i++)
@@ -358,9 +423,11 @@ public partial class AreaConversationPanel : CanvasLayer
             // The keyboard or controller focus lights a row only once it was moved by Navigate: the original has none, and the focus the panel
             // gives the first reply on opening must not light it under a pointer that is elsewhere.
             var lit = !_buttons[i].Disabled && (_hover?.IsLit(i) == true || (_focusLit && _buttons[i].HasFocus()));
-            if (_buttons[i].HasMeta(LitMeta) && _buttons[i].GetMeta(LitMeta).AsBool() == lit) continue;
+            if (_buttons[i].Disabled || (_buttons[i].HasMeta(LitMeta) && _buttons[i].GetMeta(LitMeta).AsBool() == lit)) continue;
             _buttons[i].SetMeta(LitMeta, lit);
-            _buttons[i].AddThemeStyleboxOverride("normal", lit ? LitRow : PlainRow);
+            var colour = lit ? DialogReplyBand.LitColour : DialogReplyBand.RowColour;
+            if (_buttons[i].GetNodeOrNull<AreaArtParagraph>(ArtName) is { } art) art.SetText(art.Text, colour);
+            SetRowFontColour(_buttons[i], colour);
         }
     }
 
@@ -371,7 +438,7 @@ public partial class AreaConversationPanel : CanvasLayer
     private bool HandleBandInput(InputEvent input)
     {
         if (!_originalRows || !IsOpen) return false;
-        var width = (int)_options.Size.X;
+        var width = (int)_band.Size.X;
         switch (input)
         {
             case InputEventMouseMotion motion:
@@ -400,6 +467,24 @@ public partial class AreaConversationPanel : CanvasLayer
         _panel.Size = new(width, height);
         // Whole pixels: the art text's glyphs are drawn pixel for pixel (MW31).
         _panel.Position = new(Mathf.Round((size.X - width) / 2), Mathf.Round(Math.Max(24, size.Y - height - 24)));
+        if (_originalRows) PlaceBand(size, height);
+    }
+
+    /// <summary>
+    /// ARC-UI-2022 (ledger DH4, DH8): the band over the game view: 100 px tall, as wide as the rows made it (at least 400), centred, its top at 299 in a
+    /// 400 px view else the view height minus 181; the stack inside it 6 px in on both sides. The remaining diagnostic panel (#2023) sits above the band.
+    /// </summary>
+    private void PlaceBand(Vector2 view, float panelHeight)
+    {
+        var left = DialogReplyBand.BoxLeft((int)view.X, _bandWidth);
+        var top = DialogReplyBand.BoxTop((int)view.Y);
+        _band.Position = new(left, top);
+        _band.Size = new(_bandWidth, DialogReplyBand.Height);
+        _bandShade.Position = Vector2.Zero;
+        _bandShade.Size = _band.Size;
+        _options.Position = new(DialogReplyBand.TextX, 0);
+        _options.Size = new(_bandWidth - DialogReplyBand.Margins, DialogReplyBand.Height);
+        _panel.Position = new(_panel.Position.X, Mathf.Round(Math.Max(0, top - panelHeight - 8)));
     }
 
     public override void _Process(double delta)

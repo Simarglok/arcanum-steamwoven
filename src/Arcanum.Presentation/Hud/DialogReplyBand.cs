@@ -28,6 +28,31 @@ public static class DialogReplyBand
     public const int RowPitch = 19, FirstRowTop = 3;
     /// <summary>A press and a move pick the row as (y - top) / 20 (0x4C9A10): the band height divided by the slot count.</summary>
     public const int ClickBand = Height / Slots;
+    /// <summary>ARC-UI-2022 (0x4C9720, 0x4C9810): the box starts 400 px wide; a row's text starts 6 px in and is broken at the box width minus the 12 px of both margins.</summary>
+    public const int MinWidth = 400, TextX = 6, Margins = 2 * TextX;
+    /// <summary>ARC-UI-2022 (0x4C9BE0, fill 0x523120 mode 1): the backdrop is darkened by subtracting 18 from each colour channel, saturating at 0 (a subtract, not an alpha mix).</summary>
+    public const int DarkenBy = 18;
+    /// <summary>ARC-UI-2022 (0x4C9810, 0x5351D0): a row's text is white, lit (hovered) yellow, with a drop shadow one pixel right and down in (10, 10, 10).</summary>
+    public static readonly (byte R, byte G, byte B) RowColour = (255, 255, 255), LitColour = (255, 255, 0), ShadowColour = (10, 10, 10);
+
+    /// <summary>ARC-UI-2022 (0x4C9720): the box top in a view <paramref name="viewHeight"/> px tall: 299 in a 400 px view, else the view height minus 181.</summary>
+    [OriginalFunction(0x4C9720, OriginalFunctionScope.Partial)]
+    public static int BoxTop(int viewHeight) => viewHeight == 400 ? 299 : viewHeight - 181;
+
+    /// <summary>ARC-UI-2022 (ledger DH4, DH10): the box left, centred in a view <paramref name="viewWidth"/> px wide: (view width - box width) / 2.</summary>
+    public static int BoxLeft(int viewWidth, int boxWidth) => (viewWidth - boxWidth) / 2;
+
+    /// <summary>
+    /// ARC-UI-2022 (0x4C9810): the box width after a row whose drawn text was <paramref name="drawnWidth"/> px wide (the widest line, shadow pixel not yet counted):
+    /// the text width plus the shadow pixel plus the 12 px of margins when that exceeds the width, else unchanged. The box never shrinks. Because the text is
+    /// broken at width - 12, a line is at most 1 px wider than that, so the widening is at most 1 px a row.
+    /// </summary>
+    [OriginalFunction(0x4C9810, OriginalFunctionScope.Partial)]
+    public static int Widened(int boxWidth, int drawnWidth) => Math.Max(boxWidth, drawnWidth + 1 + Margins);
+
+    /// <summary>ARC-UI-2022 (0x523120 mode 1): a colour channel after the band's darkening.</summary>
+    [OriginalFunction(0x4C9BE0, OriginalFunctionScope.Partial)]
+    public static int Darken(int channel) => Math.Max(channel - DarkenBy, 0);
 
     /// <summary>The top of the drawn row <paramref name="row"/>.</summary>
     public static int RowTop(int row)
