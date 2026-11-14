@@ -246,6 +246,30 @@ public sealed class InventoryStateTests
         Assert.AreEqual(GameSessionFailure.WornItemUnsupported, other.TakeItemFromNpc(other.Version, "virgil", "vest", Accept).Failure);
     }
 
+    // ARC-SCRIPT-1987 (WL3): the dialog's negative IN is the transfer 0x461CA0, which tests no worn state of its source; its removal takes the worn item off the NPC.
+    [TestMethod]
+    public void NegativeInTakesAWornItemOffTheNpcAndMarksItToReWield()
+    {
+        using var owner = Attached();
+        SessionInventoryItem? seen = null;
+        Took(owner.GiveItemToPc(owner.Version, "virgil", 2800, item => { seen = item; return SessionInsertVerdict.Accepted; }), owner, "vest", 1);
+        Assert.AreEqual(-1, seen!.Facts.InventoryLocation, "the insert check sees the item unwielded");
+        CollectionAssert.AreEqual(new[] { "vest" }, Pc(owner));
+        CollectionAssert.AreEqual(new[] { "ring", "sword", "ring-copy" }, owner.QueryMapInventory(Exterior)!.Holders.Single(h => h.Entity == "virgil").Items.Select(i => i.Entity).ToArray());
+        // Through the dialog port: the command applies and the item reaches the hero.
+        using var viaPort = Attached();
+        var port = new SessionDialogInventoryPort(viaPort, new(1), id => id == new DialogParticipantId(2) ? "virgil" : null, Accept);
+        Assert.AreEqual(DialogCommandResult.Applied, port.Execute(new GiveItemCommand(new(2), new(1), 2800)));
+        CollectionAssert.AreEqual(new[] { "vest" }, Pc(viaPort));
+        // A refused insert check puts the item on the hero's tile, worn no more; the NPC's list lost it too.
+        using var heavy = Attached();
+        var result = heavy.GiveItemToPc(heavy.Version, "virgil", 2800, _ => SessionInsertVerdict.TooHeavy);
+        Assert.AreEqual((GameSessionDisposition.Changed, "vest"), (result.Disposition, result.Item));
+        Assert.AreEqual(0, Pc(heavy).Length);
+        Assert.IsTrue(heavy.QueryPlacedItems().Any(placed => placed.Entity == "vest"));
+        CollectionAssert.AreEqual(new[] { "ring", "sword", "ring-copy" }, heavy.QueryMapInventory(Exterior)!.Holders.Single(h => h.Entity == "virgil").Items.Select(i => i.Entity).ToArray());
+    }
+
     [TestMethod]
     public void NegativeInGivesTheFirstItemWithTheNameAndAMissingNameChangesNothing()
     {
@@ -260,7 +284,6 @@ public sealed class InventoryStateTests
         CollectionAssert.AreEqual(new[] { "ring", "ring-copy" }, Pc(owner));
         CollectionAssert.AreEqual(new[] { "sword", "vest" }, owner.QueryMapInventory(Exterior)!.Holders[0].Items.Select(i => i.Entity).ToArray());
 
-        Refused(owner.GiveItemToPc(owner.Version, "virgil", 2800, Accept), owner, GameSessionFailure.WornItemUnsupported, 2);
         Refused(owner.GiveItemToPc(owner.Version, "merchant", 3200, Accept), owner, GameSessionFailure.ItemTypeUnsupported, 2);
         Refused(owner.GiveItemToPc(owner.Version, "merchant", 2804, Accept), owner, GameSessionFailure.SubstituteInventoryUnsupported, 2);
         Refused(owner.GiveItemToPc(owner.Version, "chest", 2804, Accept), owner, GameSessionFailure.UnknownHolder, 2);
@@ -374,8 +397,6 @@ public sealed class InventoryStateTests
         Assert.AreEqual(DialogCommandResult.Applied, port.Execute(new GiveItemCommand(npc, pc, 2804)), "no such item: the source does nothing");
         Assert.AreEqual(GameSessionDisposition.NoChange, port.LastResult!.Value.Disposition);
 
-        Assert.AreEqual(DialogCommandResult.Rejected, port.Execute(new GiveItemCommand(npc, pc, 2800)));
-        Assert.AreEqual(GameSessionFailure.WornItemUnsupported, port.LastResult!.Value.Failure);
         Assert.AreEqual(DialogCommandResult.Rejected, port.Execute(new GiveItemCommand(new(3), pc, 2000)));
         Assert.IsNull(port.LastResult);
         Assert.AreEqual(DialogCommandResult.Rejected, port.Execute(new GiveItemCommand(npc, new(4), 2000)));

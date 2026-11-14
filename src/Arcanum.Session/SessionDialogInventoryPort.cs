@@ -12,6 +12,7 @@ namespace Arcanum.Session;
 /// replaces the owner. An item's insert-item script runs through <paramref name="scripts"/> (ARC-SCRIPT-013); its printed
 /// lines are in <see cref="LastResult"/>. ARC-DEV-087 (MIG6e): <paramref name="prepare"/> is called with the NPC's entity before the move, for a host
 /// that attaches the seed of the map listing it first (a companion carried here from its home map): the session then takes the item from that seed.
+/// ARC-SCRIPT-1987: an item the NPC wears is taken off it by the move; <paramref name="npcWearer"/> gives the NPC's script context for the item's wield-off run (as a looted body's).
 /// </summary>
 public sealed class SessionDialogInventoryPort(
     GameSessionOwner session,
@@ -19,7 +20,8 @@ public sealed class SessionDialogInventoryPort(
     Func<DialogParticipantId, string?> entityOf,
     SessionInsertCheck insertCheck,
     ISessionItemScriptHost? scripts = null,
-    Action<string>? prepare = null) : IDialogInventoryPort
+    Action<string>? prepare = null,
+    Func<string, SessionNpcWieldScripts?>? npcWearer = null) : IDialogInventoryPort
 {
     private readonly GameSessionOwner _session = session ?? throw new ArgumentNullException(nameof(session));
     private readonly Func<DialogParticipantId, string?> _entityOf = entityOf ?? throw new ArgumentNullException(nameof(entityOf));
@@ -34,7 +36,7 @@ public sealed class SessionDialogInventoryPort(
         LastResult = null;
         if (command.PlayerCharacter != playerCharacter || _entityOf(command.Npc) is not { } entity) return DialogCommandResult.Rejected;
         prepare?.Invoke(entity);
-        var result = _session.GiveItemToPc(_session.Version, entity, command.ItemName, _insertCheck, scripts);
+        var result = _session.GiveItemToPc(_session.Version, entity, command.ItemName, _insertCheck, scripts, npcWearer: npcWearer?.Invoke(entity));
         LastResult = result;
         return result.Disposition == GameSessionDisposition.Rejected ? DialogCommandResult.Rejected : DialogCommandResult.Applied;
     }
