@@ -3011,7 +3011,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     /// <see cref="StruckAt"/>), then the attack event on it for a resolved attack (the projectile's end alerts the struck object, PF8).
     /// The item must be one the NPC holds (an item gone or taken fails, AG10). A <see cref="AreaAiNoticeKind.Throw"/> notice tells the
     /// viewer. ARC-DEV-258: a generic item (a grenade) flies as a projectile the scene launches (<see cref="AreaAiScene.LaunchThrown"/>; without a viewer it lands
-    /// on the location at once), the thrower the event's parent. ARC-COMBAT-1717: a thrown weapon flies the same way when the scene can fly it (<see cref="AreaAiScene.LaunchThrown"/>): to the struck critter's tile (a hit, the strike is <see cref="LandShot"/>'s at the viewer's crossing) or free to the scatter tile (a miss); a flight that does not launch resolves at once, a decided hit striking first. NOT READY: a first blocker on the line that is a scenery, a wall,
+    /// on the location at once), the thrower the event's parent. ARC-COMBAT-1717: a thrown weapon flies the same way when the scene can fly it (<see cref="AreaAiScene.LaunchThrown"/>): to the struck critter's tile (a hit, the strike is <see cref="LandShot"/>'s at the viewer's crossing) or free to the scatter tile (a miss); a flight that does not launch resolves at once, a decided hit striking first. ARC-COMBAT-1761: the item's removal and throw scripts run through the scene's item script host before the throw is decided (the session's <see cref="SessionNpcThrow.Scripts"/>); a throw script that
+    /// answers skip default throws nothing, puts the item back with the thrower and still answers true (the goal's action frame ran), with the printed lines and eye candy in the notice. NOT READY: a first blocker on the line that is a scenery, a wall,
     /// a dead or unknown critter, and the hero on the line to another target (the line's map holds no hero): the item then lands on the
     /// tile, striking nothing.
     /// </summary>
@@ -3052,12 +3053,15 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
             ItemTriggers = _scene.Spells?.Invoke()?.ItemTriggers,
             // ARC-COMBAT-1717: a thrown weapon flies when the scene can fly a thrown item (the viewer); otherwise it lands at once.
             Flight = _scene.LaunchThrown is not null,
+            // ARC-COMBAT-1761 (0x466E00 → 0x467860, 0x441980): the shown map's item script host and the thrower's life target and stored stats run the item's removal and throw scripts.
+            Scripts = (_events as ISessionRestockWorld)?.NpcWieldScripts(_session.QueryActor().Map, id),
         };
         var result = _session.ThrowByNpc(_session.Version, request);
         var attack = result.Attack;
         Trace(id).Throw = $"throw {item} at {tile.X},{tile.Y} struck={struck?.Who ?? "-"} {result.Disposition} {result.Failure} {attack?.Resolution?.Outcome}"
             + $" landed={(result.Landed is { } at ? $"{at.X},{at.Y}" : "-")}";
-        _notices.Add(new(AreaAiNoticeKind.Throw, id, struck?.Who) { Item = item, Throw = result, Result = attack });
+        if (result.ScriptDeclined) Trace(id).Throw += " script-declined";
+        _notices.Add(new(AreaAiNoticeKind.Throw, id, struck?.Who) { Item = item, Throw = result, Result = attack, Messages = result.Messages, EyeCandies = result.EyeCandies });
         // The attack event on the struck critter comes first (the projectile's end alerts it, PF8), before a flight's strike or the at-once fallback's pass.
         var attackedVictim = struck?.Who is { } hurt && attack is { Disposition: not GameSessionDisposition.Rejected, Resolution.Refusal: AttackRefusal.None } ? hurt : null;
         if (attackedVictim is { } victim)
