@@ -105,11 +105,11 @@ public partial class TerrainViewerApp
         EndConversation();
     }
 
-    /// <summary>ARC-UI-2068 (0x57BC70, 0x57C080): the spell activation pops the dialog after its own refusal tests (a valid spell) unless the BEGIN
-    /// area carries the inventory bit 0x2000000, whose window opens over the dialog in the original (SU3; the viewer's opener refuses while a window is open, so
-    /// the dialog stays and nothing opens). The place of the action-point test against the pop is not read (issue #2087).</summary>
-    private bool SpellEndsDialog(int spell) => SpellCasterNow() is not null && _spellRecords is { } records && spell >= 0 && spell < records.Length && records[spell].Data.Enabled
-        && !SpellUiRules.TargetsInventory(records[spell].Areas.Length > 0 ? records[spell].Areas[0].Targets : 0);
+    /// <summary>ARC-UI-2068, ARC-UI-2086 (0x57BC70, 0x57C080): the spell activation pops the dialog after its own refusal tests (a valid spell). A BEGIN area with the
+    /// inventory bit 0x2000000 skips that pop in 0x57BC70 only because the inventory opener 0x572240 → 0x572510 pops first (0x551A80(0), the mode 3 leave
+    /// ends the dialog) and then pushes mode 8: the dialog ends before the window opens, never stays below it (ARC-UI-2086, F1). The place of the action-point
+    /// test against the pop is not read (issue #2087).</summary>
+    private bool SpellEndsDialog(int spell) => SpellCasterNow() is not null && _spellRecords is { } records && spell >= 0 && spell < records.Length && records[spell].Data.Enabled;
 
     /// <summary>The activation (0x54FCF0): the PC's test, then the entry's type.</summary>
     private void ActivateHotkey(HotkeyEntry entry, string key)
@@ -130,8 +130,9 @@ public partial class TerrainViewerApp
                 outcome = ActivateItemSpellHotkey(session, entry.Item!, entry.Index);
                 break;
             case HotkeyKind.Skill:
-                // 0x579FA0: the opener pops the dialog unless the skill row keeps it (row 3, the repair button: its item window opens over the dialog).
-                if ((SkillBarButton)entry.Index != SkillBarButton.Repair) EndDialogForHotkey();
+                // 0x579FA0: the opener pops the dialog unless the skill row keeps the pop for later (row 3, the repair button, mask bit 0x2000000): its inventory
+                // opener 0x572240 → 0x572510 pops it (the mode 3 leave) just before it pushes the inventory window, so the dialog ends before the window opens (ARC-UI-2086).
+                EndDialogForHotkey();
                 outcome = ActivateSkillButton(session, (SkillBarButton)entry.Index);
                 break;
             case HotkeyKind.Item:
