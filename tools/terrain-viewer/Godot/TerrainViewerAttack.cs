@@ -53,7 +53,10 @@ public partial class TerrainViewerApp
         // ARC-COMBAT-1941 (0x54ED30, the combat-mode table): a wall (type 0) is a target of the Alt click; its hit takes nothing (OD1), so it has no baseline (no <see cref="Object"/>).
         public AttackGoal(AreaObjectRecord wall, HitLocation? aim) : this(wall, WallEntity(wall), aim) => Wall = true;
 
-        public static string WallEntity(AreaObjectRecord wall) => $"wall:{wall.Key.SourceIndex}";
+        // The goal's identity: the source index alone is only unique inside one sector, so the sector is part of it. The floater and the line-of-fire log keep their own short id (<see cref="WallFloaterId"/>).
+        public static string WallEntity(AreaObjectRecord wall) => $"wall:{wall.Key.Sector}:{wall.Key.SourceIndex}";
+
+        public static string WallFloaterId(AreaObjectRecord wall) => $"wall:{wall.Key.SourceIndex}";
 
         /// <summary>The target is a wall.</summary>
         public bool Wall { get; }
@@ -217,7 +220,7 @@ public partial class TerrainViewerApp
         return _objectTargets;
     }
 
-    /// <summary>ARC-COMBAT-008: a guarded left press with Alt in combat mode on a door, window, container or scenery: the original's click
+    /// <summary>ARC-COMBAT-008: a guarded left press with Alt in combat mode on a door, window, container, scenery or (ARC-COMBAT-1941) a wall, Shift picking the attempt attack without a walk: the original's click
     /// gives these the attack goal (ledger OD14; an item on the ground is picked up and a trap walked to, as without combat mode): true
     /// when the press belongs to combat.</summary>
     private bool TryAreaObjectAttack(Vector2 screen, bool shift = false)
@@ -418,7 +421,7 @@ public partial class TerrainViewerApp
     private GameSessionOwner? _attackOwner;
 
     /// <summary>
-    /// ARC-DEV-317 (MIG14 S9b): the attack a load restored. The run's target string names the session entity; the viewer's attack is rebuilt from it (an NPC with its combat values, or an attackable object), with no aim (the
+    /// ARC-DEV-317 (MIG14 S9b): the attack a load restored. The run's target string names the session entity; the viewer's attack is rebuilt from it (an NPC with its combat values, an attackable object or a wall), with no aim (the
     /// held aim is the click's) and the Shift click's no-walk from the run's flag. A swing the save cut between its start and its hit (goal 19 at node 2) replays from its first frame without charging again: the hit comes at the
     /// restored step. A session the viewer has held an attack in adopts nothing (an attack it cancelled is not taken up again).
     /// </summary>
@@ -430,7 +433,7 @@ public partial class TerrainViewerApp
         var entity = target["atk:".Length..];
         AttackGoal? goal = _combatHost?.Target(owner, entity) is { Build.Combat: { } combat } npc ? new(npc, combat, null)
             : ObjectTargets() is { } objects && objects.KeyOfEntity(entity) is { } key && objects.Target(owner, key, AreaTrapped) is { Refusal: null } thing ? new(thing, null)
-            // ARC-COMBAT-1941: a wall the attack run names (its entity is the wall's source index; a map with two walls of one index adopts none).
+            // ARC-COMBAT-1941: a wall the attack run names (its entity names the wall's sector and source index).
             : _readyArea?.Snapshot.Objects.Where(o => o.Type == 0 && o.WorldX is not null && o.WorldY is not null && AttackGoal.WallEntity(o) == entity).ToArray() is [{ } wall] ? new(wall, null) : null;
         if (goal is null) { GD.Print($"ARC-DEV-317 attack-adopt target={entity} refused (no target here)"); return null; }
         goal.NoWalk = (run.Flags & Arcanum.Simulation.Goals.GoalRunFlags.NoWalk) != 0;
@@ -813,7 +816,7 @@ public partial class TerrainViewerApp
     {
         var owner = _areaSession!;
         GD.Print(byLine ? $"ARC-COMBAT-015 line-of-fire strikes wall={wall.Key.Kind}:{wall.Key.SourceIndex} instead of {goal.Entity}" : $"ARC-COMBAT-1941 wall-attack target={goal.Entity}");
-        if (byLine) _lineOfFireStruck = AttackGoal.WallEntity(wall);
+        if (byLine) _lineOfFireStruck = AttackGoal.WallFloaterId(wall);
         var flight = ShotFlight(owner.QueryHeroAttack());
         var result = owner.AttackObject(owner.Version, new SessionObjectAttack
         {
@@ -834,7 +837,7 @@ public partial class TerrainViewerApp
             if (result.Life is null) { SyncAreaInventory(); RefreshAreaStatus(); return; }
         }
         _attackNotice = (byLine ? "the line of fire struck a wall: " : "the wall: ") + AreaObjectTargets.Describe(result);
-        FloatObjectAttack(result, AttackGoal.WallEntity(wall), null);
+        FloatObjectAttack(result, AttackGoal.WallFloaterId(wall), null);
         GD.Print($"ARC-COMBAT-015 wall-hit disposition={result.Disposition} failure={result.Failure} outcome={result.Resolution?.Outcome}"
             + $" prevented={result.Resolution?.Damage?.Prevented} ammo={result.Ammunition?.UnitsAfter.ToString() ?? "none"} step={result.StepFailure}");
         if (result.Life is { } self && self.Events.HasFlag(LifeEvents.Stunned)) HeroStunned(owner);

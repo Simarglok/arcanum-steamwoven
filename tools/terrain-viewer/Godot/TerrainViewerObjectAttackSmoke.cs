@@ -175,7 +175,7 @@ public partial class TerrainViewerApp
 
     // ARC-COMBAT-1941 (VC62): in combat mode the Alt click on a wall is the attack goal (0x54ED30, the combat table: a wall, portal or scenery with Alt attacks): the hero swings from a cell next to it; the wall takes nothing (OD1,
     // the damage step leaves a wall at once), so the hit is the session's wall attack (ammunition, wear, the weapon's hit sound). NONE when no pickable wall has a cell to stand on within reach and a clear shot.
-    private async Task WallAttackLegAsync(AreaMapRuntime map, IReadOnlyDictionary<AreaObjectKey, AreaDrawCommand> commands, HashSet<AreaObjectKey> pickable, Action<bool, string> require)
+    private async Task WallAttackLegAsync(AreaMapRuntime map, IReadOnlyDictionary<AreaObjectKey, AreaDrawCommand> commands, HashSet<AreaObjectKey?> pickable, Action<bool, string> require)
     {
         if (_areaSession is not { } session || _readyArea is not { } area || _worldActor.Session is not AreaGridSession grid || session.QueryHeroAttack() is not { } heroAttack)
         { GD.Print("ARC-COMBAT-1941 wall attack NONE (no hero or no attack map)"); return; }
