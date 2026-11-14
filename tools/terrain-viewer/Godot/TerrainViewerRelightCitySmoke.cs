@@ -117,6 +117,38 @@ public partial class TerrainViewerApp
                 GD.Print($"ARC-RES-2007 relight-city spot fallback: no standable cell near the lamp at {lamp.Light.X},{lamp.Light.Y}; standing at the window's start");
                 return AreaSmokeStandable(map, home, 4);
             }
+            // ARC-RES-2050: "shots" mode (ARC_RELIGHT_SCENE=city plus ARC_RELIGHT_SHOTS=1): full-frame captures only. Up to three spots at least 700 px apart, each with at least four lit lights
+            // within 350 px, each captured at every hour of ARC_RELIGHT_HOURS (default 20,23,3) in Legacy, night 1.0 and night 1.6. Names: city-shot-<spot>-h<hour>-<variant>.png.
+            if (OS.GetEnvironment("ARC_RELIGHT_SHOTS") == "1")
+            {
+                var shotSpots = new List<(string Name, (StationaryLight Light, TerrainRect Rect) Lamp)>();
+                foreach (var candidate in lit.OrderByDescending(Density))
+                {
+                    if (shotSpots.Count == 3 || Density(candidate) < 4) break;
+                    if (shotSpots.All(x => Centre(x.Lamp).DistanceTo(Centre(candidate)) >= 700f)) shotSpots.Add(((shotSpots.Count + 1).ToString(), candidate));
+                }
+                Require(shotSpots.Count > 0, "the window has a spot with at least four lit lights within reach");
+                var hours = (OS.GetEnvironment("ARC_RELIGHT_HOURS") is { Length: > 0 } list ? list : "20,23,3").Split(',').Select(h => int.Parse(h.Trim())).ToArray();
+                var shotLog = new List<object>();
+                foreach (var hour in hours)
+                {
+                    for (var h = 0; h < 24 && driver.Clock.Hour != hour; h++) { driver.AdvanceHours(1, AmbientSector()); LogAreaEvents(driver); }
+                    foreach (var (spotName, lamp) in shotSpots)
+                    {
+                        Look(Stand(lamp)); PushAreaAmbient(); await Frames();
+                        foreach (var (variant, mode, strength) in new[] { ("1-legacy", AreaRelight.Mode.Off, wasStrength), ("2-night-10", AreaRelight.Mode.NightAdd, 1.0f), ("3-night-16", AreaRelight.Mode.NightAdd, 1.6f) })
+                        {
+                            AreaRelight.SetMode(mode); AreaRelight.Strength = strength; PushAreaAmbient();
+                            await Capture($"shot-{spotName}-h{hour:00}-{variant}");
+                            if (mode == AreaRelight.Mode.NightAdd && strength > 1.5f) shotLog.Add(new { Spot = spotName, Hour = hour, Density = Density(lamp), InView = AreaRelight.InViewCount });
+                        }
+                        AreaRelight.SetMode(AreaRelight.Mode.Off); AreaRelight.Strength = wasStrength; PushAreaAmbient();
+                    }
+                }
+                GD.Print("ARC-RES-2050 relight-city shots " + System.Text.Json.JsonSerializer.Serialize(new { City = city, Spots = shotSpots.Count, Hours = hours, Scenes = shotLog }));
+                GD.Print("ARC-RES-1978 native-smoke relight PASS ARC-RES-2050 shots " + city);
+                return;
+            }
             var variants = new (string Name, AreaRelight.Mode Mode, float Strength)[]
             {
                 ("2-add-06", AreaRelight.Mode.Add, 0.6f), ("3-night-06", AreaRelight.Mode.NightAdd, 0.6f), ("4-delight-06", AreaRelight.Mode.DelightAdd, 0.6f),
