@@ -96,4 +96,30 @@ public sealed class NormalMapGeneratorTests
         Assert.ThrowsExactly<ArgumentException>(() => NormalMapGenerator.Generate(new byte[10], 2, 2, NormalMapOptions.For(SpriteKind.Object)));
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => NormalMapGenerator.Generate(new byte[16], 2, 2, new NormalMapOptions(0.5, 9, 0)));
     }
+
+    [TestMethod]
+    public void An_n_times_smooth_redraw_with_the_gain_times_n_bends_the_normal_like_the_original()
+    {
+        // ARC-RENDER-2060: the shader scales the Sobel gain with the HD frame's scale N (relight_scale): an N-times copy has 1/N of the luminance step per texel.
+        const int size = 24, scale = 4;
+        double Height(double x, double y) => 128 + 60 * Math.Sin(x * 0.35) * Math.Cos(y * 0.28);
+        var legacy = Solid(size, size, (x, y) => (byte)Math.Round(Height(x, y)));
+        var hd = Solid(size * scale, size * scale, (x, y) => (byte)Math.Round(Height((x + 0.5) / scale - 0.5, (y + 0.5) / scale - 0.5)));
+        var options = NormalMapOptions.For(SpriteKind.Object) with { Bevel = 0 };
+        var legacyMap = NormalMapGenerator.Generate(legacy, size, size, options, NormalConvention.ImageSpace);
+        var scaled = NormalMapGenerator.Generate(hd, size * scale, size * scale, options with { Gain = options.Gain * scale }, NormalConvention.ImageSpace);
+        var unscaled = NormalMapGenerator.Generate(hd, size * scale, size * scale, options, NormalConvention.ImageSpace);
+        double Tilt(NormalMap map, int x, int y) { var (nx, ny, _) = map.Normal(x, y); return Math.Sqrt(nx * nx + ny * ny); }
+        double scaledError = 0, unscaledError = 0; var n = 0;
+        for (var y = 4; y < size - 4; y++)
+            for (var x = 4; x < size - 4; x++)
+            {
+                var reference = Tilt(legacyMap, x, y);
+                scaledError += Math.Abs(Tilt(scaled, x * scale + scale / 2, y * scale + scale / 2) - reference);
+                unscaledError += Math.Abs(Tilt(unscaled, x * scale + scale / 2, y * scale + scale / 2) - reference);
+                n++;
+            }
+        scaledError /= n; unscaledError /= n;
+        Assert.IsTrue(scaledError < unscaledError / 3, $"gain x N keeps the HD tilt near the 1x tilt ({scaledError:0.000} against {unscaledError:0.000} unscaled)");
+    }
 }
