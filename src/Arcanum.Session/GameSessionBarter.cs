@@ -125,9 +125,12 @@ public sealed partial class GameSessionOwner
     /// comes out of the container's current list (a seed item or one a sale put there: <see cref="TakeItemFromNpc"/>'s rules with the
     /// container as holder, or units of one of its stacks); the coins still go to the NPC (0x578EA0 pays the NPC object, never the
     /// container); a container its seed does not list is <see cref="GameSessionFailure.UnknownHolder"/>.
+    /// ARC-UI-1926: with <paramref name="wornItem"/> the item is one the NPC wears (the barter window's doll view): the move takes it off its slot as a loot does
+    /// (<see cref="TakeItemFromNpc"/> with <c>unwield</c>, over <paramref name="npcWearer"/>), no container.
     /// </summary>
     public InventoryMutationResult BarterBuy(GameSessionVersion expected, string npc, string item, int count, int unitPrice, SessionItemKind newStackKind,
-        SessionItemKind pileKind, SessionInsertCheck heroInsert, SessionInsertCheck npcInsert, ISessionItemScriptHost? scripts = null, string? container = null)
+        SessionItemKind pileKind, SessionInsertCheck heroInsert, SessionInsertCheck npcInsert, ISessionItemScriptHost? scripts = null, string? container = null,
+        bool wornItem = false, SessionNpcWieldScripts? npcWearer = null)
     {
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(heroInsert);
@@ -159,7 +162,8 @@ public sealed partial class GameSessionOwner
             }
         }
         var moved = container is not null ? TakeFromContainer(container, item, stack, count, newStackKind, heroInsert, scripts)
-            : stack ? TakeAmmoFromNpc(Version, npc, item, count, newStackKind, heroInsert) : TakeItemFromNpc(Version, npc, item, heroInsert, scripts);
+            : stack ? TakeAmmoFromNpc(Version, npc, item, count, newStackKind, heroInsert)
+                : TakeItemFromNpc(Version, npc, item, heroInsert, scripts, unwield: wornItem, npcWearer: npcWearer);
         if (moved.Disposition != GameSessionDisposition.Changed || total == 0) return moved;
         var paid = GiveGoldToNpc(Version, npc, (int)total, pileKind, npcInsert);
         return paid.Disposition == GameSessionDisposition.Changed ? moved with { Version = Version } : paid with { Item = moved.Item, Version = Version };

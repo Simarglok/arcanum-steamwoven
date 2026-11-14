@@ -157,7 +157,12 @@ public sealed record AreaBarterLine(string Entity, string Text, int Count, Trade
 
 /// <summary>The window's state: both sides' gold and lines, the hero's haggle and the merchant's reaction.</summary>
 public sealed record AreaBarterView(AreaBarterMerchant Merchant, int HeroGold, int MerchantGold, int Haggle, SkillTraining Training, int Reaction,
-    IReadOnlyList<AreaBarterLine> Hero, IReadOnlyList<AreaBarterLine> Wares);
+    IReadOnlyList<AreaBarterLine> Hero, IReadOnlyList<AreaBarterLine> Wares)
+{
+    /// <summary>ARC-UI-1926 (0x575200 on a location of 1000 and up): the merchant's own worn items, the ones its doll view shows; they are not in <see cref="Wares"/> (the diagnostic list and the
+    /// bet leave them out). Their buy quote is 0 below Master haggle (0x462230).</summary>
+    public IReadOnlyList<AreaBarterLine> WornWares { get; init; } = [];
+}
 
 /// <summary>ARC-UI-1731: an item's facts for a quote: its stored item fields (null when none were read), whether it counts as identified, its stored
 /// worth, the worth a quote starts from, its condition (the default when its fields give none) and its stored condition (null when the fields give none).</summary>
@@ -266,19 +271,29 @@ public sealed class AreaBarter
             .Select(item => Line(item.Entity, item.Facts.Kind, TradeDirection.PcBuys, parties, false,
                 item.Facts.AmmoType is not null ? item.Facts.Quantity ?? 1 : 1))
             .ToArray();
-        return new(Merchant, _session.QueryGold(), _session.QueryNpcGold(Merchant.Entity) ?? 0, haggle, training, reaction, hero, wares);
+        // ARC-UI-1926: the doll view's items are the real merchant's, even when a substitute container is the shown grid (0x575CB0 returns the merchant as owner).
+        var merchantHolder = Merchant.Container is null ? holder : _session.QueryMapInventory(_session.QueryActor().Map)?.Holders.FirstOrDefault(h => h.Entity == Merchant.Entity);
+        var wornWares = (merchantHolder?.Items ?? [])
+            .Where(item => item.Facts.Worn && item.Facts.Kind.Type != SessionItemType.Gold)
+            .Select(item => Line(item.Entity, item.Facts.Kind, TradeDirection.PcBuys, parties, true, 1))
+            .ToArray();
+        return new(Merchant, _session.QueryGold(), _session.QueryNpcGold(Merchant.Entity) ?? 0, haggle, training, reaction, hero, wares) { WornWares = wornWares };
     }
 
     /// <summary>The hero buys a merchant's item (all units of a stack) at its quote.</summary>
     [OriginalFunction(0x575200, OriginalFunctionScope.Partial)]
     public AreaBarterTrade Buy(string entity)
     {
-        var line = View().Wares.FirstOrDefault(item => item.Entity == entity);
+        var view = View();
+        // ARC-UI-1926: a worn item of the merchant (its doll view) is taken from the merchant itself, never from the substitute container.
+        var worn = view.WornWares.FirstOrDefault(item => item.Entity == entity);
+        var line = worn ?? view.Wares.FirstOrDefault(item => item.Entity == entity);
         if (line is null) return Refused("not one of the merchant's wares");
         if (line.Quote.Price == 0 && !Merchant.Follower) return Refused($"won't sell ({line.Quote.Refusal})");
         if (_session.QueryGold() < line.Quote.Price) return Refused("not enough money");
         var result = _session.BarterBuy(_session.Version, Merchant.Entity, entity, line.Count, Merchant.Follower ? 0 : line.Quote.Price, line.Kind,
-            GoldKind(), _inventory.InsertCheck, AreaInventoryHost.DiagnosticInsertCheck, _inventory.ItemScripts(_session), Merchant.Container);
+            GoldKind(), _inventory.InsertCheck, AreaInventoryHost.DiagnosticInsertCheck, _inventory.ItemScripts(_session), worn is null ? Merchant.Container : null,
+            wornItem: worn is not null, npcWearer: worn is null ? null : _inventory.NpcWearer?.Invoke(_session.QueryActor().Map, Merchant.Entity));
         return Settle(TradeDirection.PcBuys, line, result);
     }
 

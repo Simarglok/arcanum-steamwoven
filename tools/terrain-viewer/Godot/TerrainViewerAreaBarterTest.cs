@@ -312,9 +312,33 @@ public partial class TerrainViewerApp
             var worn = panel.ArtView!.BodyDoll.Where(slot => slot.Entity is not null).ToArray();
             Require(panel.ArtView.BodyDoll.Count == 9 && worn.Length == 1 && worn[0] is { Slot: Arcanum.Simulation.Equipment.EquipmentSlot.Armor, Entity: "vest" },
                 "the view carries the merchant's nine slots and its worn vest in the armour slot: " + string.Join(",", worn.Select(slot => slot.Entity)));
-            Require(area.BarterHit(Ware(sword.Location)) == AreaBarterHit.None && area.BarterHit(new(160, 190)) == AreaBarterHit.None, "the doll view hides the grid and picks nothing");
+            // ARC-UI-1926 (0x575CB0, 0x575200): the doll view hides the grid; a slot's rectangle is the location 1000 + slot and lifts the merchant's worn item, which is refused at no price
+            // below Master haggle (0x462230): the hover quotes it, a release on the hero's grid and a right release buy nothing and it stays worn; an empty slot and a point off the slots lift nothing.
+            var (vestPoint, emptyPoint) = (new Vector2(150, 240), new Vector2(160, 190));
+            Require(area.BarterHit(Ware(sword.Location)) == AreaBarterHit.None && area.BarterHit(new(8, 380)) == AreaBarterHit.None, "the doll view hides the grid");
+            Require(area.BarterHit(vestPoint).Location == (int)Arcanum.Simulation.Equipment.EquipmentSlot.Armor && area.BarterHit(emptyPoint).Location == (int)Arcanum.Simulation.Equipment.EquipmentSlot.Helmet,
+                "a slot's rectangle is the location 1000 + slot");
             area.PressAt(Ware(sword.Location));
             Require(area.Held is null, "a press where the grid was picks nothing in the doll view");
+            area.PressAt(emptyPoint);
+            Require(area.Held is null, "an empty slot lifts nothing");
+            area.StillAt(vestPoint);
+            Require(area.BarterFrame!.Quote.Contains("vest", StringComparison.OrdinalIgnoreCase) && area.BarterFrame.Quote.Contains("no price", StringComparison.Ordinal), "the resting pointer quotes the worn vest: " + area.BarterFrame.Quote);
+            var (wornGold, wornMerchantGold, wornRevision) = (owner.QueryGold(), owner.QueryNpcGold("merchant") ?? 0, owner.Version.Revision);
+            area.PressAt(vestPoint);
+            Require(area.Held is { Entity: "vest", Partner: true, Worn: null }, "a press on the merchant's armour slot lifts the worn vest");
+            area.ReleaseAt(vestPoint);
+            Require(area.Held is null && owner.Version.Revision == wornRevision, "released on its own doll it goes back");
+            area.PressAt(vestPoint); area.ReleaseAt(AreaInventoryGridArea.CellCentre(119));
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            Require(owner.QueryGold() == wornGold && owner.QueryNpcGold("merchant") == wornMerchantGold && owner.Version.Revision == wornRevision && area.Held is null && panel.ArtView!.BodyDoll.Any(slot => slot.Entity == "vest"),
+                "the worn vest dragged onto the hero's grid was refused (no price below Master haggle) and stays worn: " + area.BarterFrame!.Quote);
+            Require(area.BarterFrame!.Quote.Contains("won't sell", StringComparison.Ordinal), "the refusal is on the quote line: " + area.BarterFrame.Quote);
+            area.RightReleaseAt(vestPoint);
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            Require(owner.QueryGold() == wornGold && owner.Version.Revision == wornRevision && panel.ArtView!.BodyDoll.Any(slot => slot.Entity == "vest"), "a right release on the worn vest buys nothing either");
+            area.PressAt(AreaInventoryGridArea.CellCentre(axe.Slot)); area.ReleaseAt(vestPoint);
+            Require(area.Held is null && owner.Version.Revision == wornRevision, "the hero's item released on a slot of the merchant's doll goes back (NOT READY: the wear test and the sale onto the slot)");
             area.ScrollLoot(1);
             Require(area.LootScroll == 0, "the wheel leaves the hidden grid's scroll alone");
             area.PressAt(bagPoint); area.ReleaseAt(bagPoint);

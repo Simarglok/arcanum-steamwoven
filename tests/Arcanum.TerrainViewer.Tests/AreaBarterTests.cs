@@ -32,19 +32,33 @@ public sealed class AreaBarterTests
     private static AreaBarterData Data(string buy = "{1}{4010 4020}") => AreaBarterData.Create(Mes("{1}{Smith: 1,1}{2}{End: 1,1}"), Mes(buy),
         new Dictionary<int, CombatFields> { [KitSword] = Weapon(KitSword, 100), [Axe] = Weapon(Axe, 400), [AreaBarterData.GoldPrototype] = Gold() });
 
-    private static GameSessionOwner Session()
+    // ARC-UI-1926: a hero whose haggle (skill 9 of the twelve basic skills) is Master, level 20.
+    private static SessionHeroAdvancement MasterHaggleAdvancement()
+    {
+        int[] basic = new int[12];
+        basic[(int)Arcanum.Simulation.Skills.Skill.Haggle] = 20 | (int)Arcanum.Simulation.Combat.SkillTraining.Master << 6;
+        return new([.. basic], [.. new int[4]], [.. new int[16]], [.. new int[8]], 0, 0, 0);
+    }
+
+    private static GameSessionOwner Session(bool masterHaggle = false, bool chest = false)
     {
         var hero = new SessionHeroDefinition(16089, CharacterRace.HalfElf, CharacterGender.Male, [8, 8, 8, 8, 8, 8, 8, 8, 0, 0], 1, 5, 0,
-            null, null, 1000, [new SessionHeroKitItem(new(SessionItemType.Weapon, KitSword, 4100, 34100))]);
+            null, null, 1000, [new SessionHeroKitItem(new(SessionItemType.Weapon, KitSword, 4100, 34100))],
+            Advancement: masterHaggle ? MasterHaggleAdvancement() : null);
         var load = new AreaHeroLoad(AreaHeroStatus.Ready, AreaStartingHero.Find("half-elf-male")!, hero, 2352, 0, null, "synthetic");
         var session = AreaTransitionCoordinator.CreateSession(ConversationSessionFixture.Clock, Guid.NewGuid(), Guid.NewGuid(),
             AreaGridSession.Cell(AreaGridSession.Spawn), 1, load).Owner!;
         SessionItemFacts Facts(SessionItemType type, int prototype, int location = 0, int? quantity = null) =>
             new(new(type, prototype, 4200, 34200), 10, 0, location, quantity, []);
-        var seed = new SessionMapInventorySeed(
-            [new("merchant", SessionHolderKind.Npc, false, false, [], ["axe", "vest", "coins"])],
-            [new("axe", Facts(SessionItemType.Weapon, Axe), null), new("vest", Facts(SessionItemType.Weapon, Axe, location: 1006), null),
-             new("coins", Facts(SessionItemType.Gold, AreaBarterData.GoldPrototype, quantity: 100), null)]);
+        List<SessionSeedHolder> holders = [new("merchant", SessionHolderKind.Npc, false, false, [], ["axe", "vest", "coins"])];
+        List<SessionSeedItem> items = [new("axe", Facts(SessionItemType.Weapon, Axe), null), new("vest", Facts(SessionItemType.Weapon, Axe, location: 1006), null),
+             new("coins", Facts(SessionItemType.Gold, AreaBarterData.GoldPrototype, quantity: 100), null)];
+        if (chest)
+        {
+            holders.Add(new("chest", SessionHolderKind.Container, false, false, [], ["chest-axe"]));
+            items.Add(new("chest-axe", Facts(SessionItemType.Weapon, Axe), null));
+        }
+        var seed = new SessionMapInventorySeed(holders, items);
         Assert.AreEqual(GameSessionFailure.None, session.AttachMapInventory(session.QueryActor().Map, seed).Failure);
         return session;
     }
@@ -83,6 +97,64 @@ public sealed class AreaBarterTests
         CollectionAssert.AreEqual(Array.Empty<int>(), changes, "a neutral merchant's reaction does not move");
         var free = Barter(session, Data(), changes, follower: true).Buy("kit:1");
         Assert.AreEqual((true, 295, 805), (free.Moved, session.QueryGold(), session.QueryNpcGold("merchant")));
+    }
+
+    // ARC-UI-1926 (0x575200 on a location of 1000 and up, 0x462230): the merchant's worn items are not wares; the doll view's buy takes them, at no price below Master haggle.
+    [TestMethod]
+    public void A_worn_item_of_the_merchant_is_quoted_with_no_price_and_not_bought_below_master_haggle()
+    {
+        using var session = Session();
+        var barter = Barter(session, Data(), []);
+        var view = barter.View();
+        var vest = view.WornWares.Single();
+        Assert.AreEqual(("vest", 0, TradeRefusal.Worn), (vest.Entity, vest.Quote.Price, vest.Quote.Refusal));
+        CollectionAssert.DoesNotContain(view.Wares.Select(line => line.Entity).ToArray(), "vest", "the diagnostic wares leave worn items out");
+        var refused = barter.Buy("vest");
+        Assert.AreEqual((false, 1000, 100, "won't sell (Worn)"), (refused.Moved, session.QueryGold(), session.QueryNpcGold("merchant"), refused.Text));
+        Assert.AreEqual("vest", barter.View().WornWares.Single().Entity, "still worn");
+    }
+
+    [TestMethod]
+    public void A_master_of_haggle_buys_a_worn_item_which_leaves_the_merchants_slot_and_is_paid_for()
+    {
+        using var session = Session(masterHaggle: true);
+        var barter = Barter(session, Data(), []);
+        var vest = barter.View().WornWares.Single();
+        Assert.AreEqual(TradeRefusal.None, vest.Quote.Refusal);
+        Assert.IsTrue(vest.Quote.Price > 0, "a priced worn item");
+        var bought = barter.Buy("vest");
+        Assert.IsTrue(bought.Moved, bought.Text);
+        Assert.AreEqual((1000 - vest.Quote.Price, 100 + vest.Quote.Price), (session.QueryGold(), session.QueryNpcGold("merchant")));
+        Assert.AreEqual(0, barter.View().WornWares.Count, "it left the slot");
+        CollectionAssert.Contains(barter.View().Hero.Select(line => line.Entity).ToArray(), "vest");
+    }
+
+    [TestMethod]
+    public void A_worn_item_is_bought_from_the_merchant_itself_when_a_substitute_container_is_shown()
+    {
+        using var session = Session(masterHaggle: true, chest: true);
+        var data = Data();
+        var barter = new AreaBarter(session, new AreaInventoryHost([]), data,
+            new AreaBarterMerchant("merchant", "Smith", 100, false, false, data.BuyList(1), false) { Container = "chest", ContainerBuyList = data.BuyList(1) },
+            () => 50, _ => true, (entity, _) => entity);
+        var view = barter.View();
+        Assert.AreEqual("vest", view.WornWares.Single().Entity, "the doll view is the merchant's");
+        Assert.AreEqual("chest-axe", view.Wares.Single().Entity, "the shown grid is the container's");
+        var bought = barter.Buy("vest");
+        Assert.IsTrue(bought.Moved, bought.Text);
+        Assert.AreEqual("chest-axe", barter.View().Wares.Single().Entity, "the container's list is untouched");
+    }
+
+    [TestMethod]
+    public void A_followers_worn_item_is_taken_for_nothing_and_leaves_its_slot()
+    {
+        using var session = Session();
+        var barter = Barter(session, Data(), [], follower: true);
+        var taken = barter.Buy("vest");
+        Assert.IsTrue(taken.Moved, taken.Text);
+        Assert.AreEqual((1000, 100), (session.QueryGold(), session.QueryNpcGold("merchant")), "no coins change hands");
+        Assert.AreEqual(0, barter.View().WornWares.Count, "it left the slot");
+        CollectionAssert.Contains(barter.View().Hero.Select(line => line.Entity).ToArray(), "vest");
     }
 
     [TestMethod]

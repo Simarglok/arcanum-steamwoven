@@ -218,15 +218,40 @@ public sealed class AreaBarterArtTests
     }
 
     [TestMethod]
-    public void TheDollViewReplacesTheShownGridAndItsSideHitsNothing()
+    public void TheDollViewReplacesTheShownGridAndItsSlotsHitTheMerchantsWornItems()
     {
         Assert.AreEqual(new AreaBarterHit(null, null, 0, false), AreaBarterArtLayout.HitTest(8, 168, 0, (80, 43)));
         Assert.AreEqual(AreaBarterHit.None, AreaBarterArtLayout.HitTest(8, 168, 0, (80, 43), doll: true), "the grid is hidden in the doll view");
-        Assert.AreEqual(AreaBarterHit.None, AreaBarterArtLayout.HitTest(160, 190, 0, (80, 43), doll: true), "NOT READY: a worn item is not picked from the doll");
+        Assert.AreEqual(AreaBarterHit.None, AreaBarterArtLayout.HitTest(8, 400 - 1, 0, (80, 43), doll: true), "no slot there");
+        // ARC-UI-1926 (0x575CB0): a point of a slot rectangle is the location 1000 + slot (the helmet at (157, 182)).
+        var helmet = (int)Arcanum.Simulation.Equipment.EquipmentSlot.Helmet;
+        Assert.AreEqual(new AreaBarterHit(null, null, helmet, false), AreaBarterArtLayout.HitTest(160, 190, 0, (80, 43), doll: true));
+        Assert.AreEqual(AreaBarterHit.None, AreaBarterArtLayout.HitTest(157 + 42, 182, 0, (80, 43), doll: true), "right of the helmet's rectangle");
         Assert.AreEqual(new AreaBarterHit(0, null, null, false), AreaBarterArtLayout.HitTest(368, 8, 0, (80, 43), doll: true), "the hero's grid is still there");
         Assert.AreEqual(new AreaBarterHit(null, null, null, true), AreaBarterArtLayout.HitTest(703, 236, 0, (80, 43), doll: true), "and the gamble box");
-        Assert.IsNull(AreaBarterArtLayout.Press(View(new AreaLootGridItem("w1", 0, 1, 1, "Ware", Kind)), AreaBarterArtLayout.HitTest(160, 190, 0, (80, 43), doll: true)), "nothing is picked on the doll");
-        var held = new AreaInventoryHeld("own:1", null, 0);
-        Assert.AreEqual(AreaInventoryDropKind.PutBack, AreaBarterArtLayout.Release(held, AreaBarterArtLayout.HitTest(160, 190, 0, (80, 43), doll: true)).Kind, "a hero's item released on the doll goes back, no sale");
+        var view = View(new AreaLootGridItem("w1", 0, 1, 1, "Ware", Kind)) with
+        {
+            BodyDoll = [new AreaDollSlot(Arcanum.Simulation.Equipment.EquipmentSlot.Helmet, "helm:1", "Helm")],
+        };
+        var hit = AreaBarterArtLayout.HitTest(160, 190, 0, (80, 43), doll: true);
+        Assert.AreEqual(new AreaInventoryHeld("helm:1", null, 0) { Partner = true }, AreaBarterArtLayout.Press(view, hit), "the worn item is lifted as a grid item of the merchant");
+        Assert.IsNull(AreaBarterArtLayout.Press(view, AreaBarterArtLayout.HitTest(136 + 5, 230, 0, (80, 43), doll: true)), "an empty slot lifts nothing");
+        // Released on the hero's grid it is a buy; elsewhere it goes back; a right release buys it.
+        var held = AreaBarterArtLayout.Press(view, hit)!;
+        Assert.AreEqual(AreaInventoryDropKind.Buy, AreaBarterArtLayout.Release(held, AreaBarterArtLayout.HitTest(368, 8, 0, (80, 43), doll: true)).Kind);
+        Assert.AreEqual(AreaInventoryDropKind.PutBack, AreaBarterArtLayout.Release(held, hit).Kind, "on its own doll it goes back");
+        Assert.AreEqual(AreaInventoryDropKind.Buy, AreaBarterArtLayout.RightRelease(view, hit)?.Kind);
+        // The hero's item released on a slot of the merchant's doll goes back (NOT READY: the wear test 0x464D20 and the sale onto the slot).
+        var own = new AreaInventoryHeld("own:1", null, 0);
+        Assert.AreEqual(AreaInventoryDropKind.PutBack, AreaBarterArtLayout.Release(own, hit).Kind);
+    }
+
+    [TestMethod]
+    public void TheQuoteLineQuotesTheMerchantsWornItem()
+    {
+        var merchant = new AreaBarterMerchant("npc:1", "Smith", 100, false, false, InventorySourceBuyList.Nothing, false);
+        var vest = new AreaBarterLine("vest:1", "Vest (worn)", 1, new TradeQuote(0, TradeRefusal.Worn), 100, Kind);
+        var view = new AreaBarterView(merchant, 100, 50, 10, SkillTraining.None, 50, [], []) { WornWares = [vest] };
+        Assert.AreEqual("Buy Vest (worn): no price (Worn)", AreaBarterArtLayout.Quote(view, "vest:1"));
     }
 }

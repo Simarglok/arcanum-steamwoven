@@ -397,13 +397,16 @@ public sealed partial class GameSessionOwner
     /// input, the version, no seed for the actor's map (<see cref="GameSessionFailure.InventoryUnavailable"/>), a holder that is not an NPC of
     /// it (<see cref="GameSessionFailure.UnknownHolder"/>), an item not in its current list (<see cref="GameSessionFailure.ItemNotAvailable"/>),
     /// gold (<see cref="TakeGoldFromNpc"/>) or, for a session without a hero, a key (<see cref="GameSessionFailure.ItemTypeUnsupported"/>; a key otherwise folds into the hero's key list, ARC-WORLD-123), and the rules of
-    /// <see cref="LootItem"/>. One revision. ARC-MAGIC-022: with <paramref name="triggers"/> the pickup executor runs after the move
+    /// <see cref="LootItem"/>. One revision. ARC-UI-1926: a worn item is refused unless <paramref name="unwield"/> takes it off its slot as the loot of a body does (the barter window's doll
+    /// view: 0x575200 → 0x5788C0 → 0x461CA0, whose removal 0x466E00 → 0x467860 unwields), over the NPC's own wield context when <paramref name="npcWearer"/> gives it. ARC-MAGIC-022: with <paramref name="triggers"/> the pickup executor runs after the move
     /// (<see cref="InventoryMutationResult.ItemSpells"/>).
     /// </summary>
     public InventoryMutationResult TakeItemFromNpc(GameSessionVersion expected, string npc, string item, SessionInsertCheck insertCheck,
-        ISessionItemScriptHost? scripts = null, ISessionItemTriggers? triggers = null) => PickedUp(TakeFromNpc(expected, npc, item, insertCheck, scripts), triggers);
+        ISessionItemScriptHost? scripts = null, ISessionItemTriggers? triggers = null, bool unwield = false, SessionNpcWieldScripts? npcWearer = null) =>
+        PickedUp(TakeFromNpc(expected, npc, item, insertCheck, scripts, unwield, npcWearer), triggers);
 
-    private InventoryMutationResult TakeFromNpc(GameSessionVersion expected, string npc, string item, SessionInsertCheck insertCheck, ISessionItemScriptHost? scripts)
+    private InventoryMutationResult TakeFromNpc(GameSessionVersion expected, string npc, string item, SessionInsertCheck insertCheck, ISessionItemScriptHost? scripts,
+        bool unwield = false, SessionNpcWieldScripts? npcWearer = null)
     {
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(insertCheck);
@@ -412,11 +415,11 @@ public sealed partial class GameSessionOwner
         // ARC-DEV-087 (MIG6e): an NPC of another attached map (a companion carried here) moves its item from that map's seed.
         if (!NpcHolderSeed(npc, out var map, out var seed, out _)) return RejectItem(UnseededHolder());
         if (_inventory.AddedTo(npc).FirstOrDefault(added => added.Entity == item) is { Entity: not null } added)
-            return Take(seed, new(item, _inventory.Worn(npc, item, _inventory.AddedFacts(added))), npc, insertCheck, scripts, map);
+            return Take(seed, new(item, _inventory.Worn(npc, item, _inventory.AddedFacts(added))), npc, insertCheck, scripts, map, unwield: unwield, npcWearer: npcWearer);
         if (!seed.HolderOf.TryGetValue(item, out var of) || of != npc || _inventory.Taken.Contains(item) || DroppedCell(map, seed, item) is not null)
             return RejectItem(GameSessionFailure.ItemNotAvailable);
         // ARC-WORLD-103: worn as the session's lists show it (a dressed NPC's record over its map data).
-        return Take(seed, new(item, _inventory.Worn(npc, item, _inventory.WithAmmo(item, seed.Items[item].Facts))), npc, insertCheck, scripts, map);
+        return Take(seed, new(item, _inventory.Worn(npc, item, _inventory.WithAmmo(item, seed.Items[item].Facts))), npc, insertCheck, scripts, map, unwield: unwield, npcWearer: npcWearer);
     }
 
     /// <summary>
