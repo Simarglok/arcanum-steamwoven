@@ -176,20 +176,25 @@ public partial class TerrainViewerApp
                 "the Auto Switch Weapons line turned the setting on and saved it: " + Controls()[4]);
             panel.ChangeForSelfTest(4, 1);
             Require(!_gameSettings.AutoSwitchWeapons && Controls()[4] == "Auto Switch Weapons: Off" && _gameSettingsStore?.Load().AutoSwitchWeapons == false, "and off again: " + Controls()[4]);
-            // The evidence log's two lines are the Video page's (ARC-UI-1737).
+            // The evidence log's line is the Video page's last (ARC-UI-1737; ARC-UI-1797: the log and its task marker are one line, Off, On, Task 1 to 8).
             Key(Godot.Key.V, 'v');
-            Require(_mainMenu!.Page == AreaOptionsPage.Video && Controls()[6] == "Evidence Log: Off" && Controls()[7] == "Test Task: None", "the Video page holds the evidence log's lines: " + string.Join("|", Controls()));
+            Require(_mainMenu!.Page == AreaOptionsPage.Video && Controls()[1] == "Text Duration: 6/10" && Controls()[7] == "Evidence Log: Off", "the Video page holds Text Duration and the evidence log's one line: " + string.Join("|", Controls()));
+            // ARC-UI-1797: Text Duration is shown, changes at once and is saved in the settings file (no text bubble reads it yet).
+            panel.ChangeForSelfTest(1, 1);
+            Require(_gameSettings.TextDuration == 7 && Controls()[1] == "Text Duration: 7/10" && _gameSettingsStore is { Persistent: true } && _gameSettingsStore.Load().TextDuration == 7, "Text Duration 7 is saved: " + Controls()[1]);
+            panel.ChangeForSelfTest(1, -1);
+            Require(_gameSettings.TextDuration == 6 && _gameSettingsStore?.Load().TextDuration == 6, "and back at the original's default 6");
             // ARC-GPAD-1376: the evidence log is off at the start, a session writes its closed lines to the device's own folder and ends cleanly.
             Require(!EvidenceRecording && _evidenceTask == 0, "the evidence log starts off");
             panel.ChangeForSelfTest(7, 1);
-            Require(!EvidenceRecording && Controls()[7] == "Test Task: None", "a task marker with the log off is refused: " + Controls()[7]);
-            panel.ChangeForSelfTest(6, 1);
-            Require(EvidenceRecording && Controls()[6] == "Evidence Log: On", "the Evidence Log line turned the log on");
+            Require(EvidenceRecording && _evidenceTask == 0 && Controls()[7] == "Evidence Log: On", "the Evidence Log line turned the log on");
             panel.ChangeForSelfTest(7, 1);
-            Require(_evidenceTask == 1 && Controls()[7] == "Test Task: Task 1", "the Test Task line started task 1");
+            Require(_evidenceTask == 1 && Controls()[7] == "Evidence Log: Task 1", "the next step started task 1");
             RecordEvidence(EvidenceCommand.Examine, EvidenceOutcome.WrongTarget);
-            panel.ChangeForSelfTest(6, 1);
-            Require(!EvidenceRecording && _evidenceTask == 0 && Controls()[6] == "Evidence Log: Off", "the line turned it off again");
+            panel.ChangeForSelfTest(7, -1);
+            Require(EvidenceRecording && _evidenceTask == 0 && Controls()[7] == "Evidence Log: On", "back to On: the task ended, the log runs");
+            panel.ChangeForSelfTest(7, -1);
+            Require(!EvidenceRecording && _evidenceTask == 0 && Controls()[7] == "Evidence Log: Off", "the line turned it off again");
             var evidenceFiles = System.IO.Directory.GetFiles(System.IO.Path.Combine(ViewerAutomatedStorage.Folder(), "evidence"), "evidence-*.jsonl");
             Require(evidenceFiles.Length == 1, "one evidence file in the isolated folder: " + evidenceFiles.Length);
             var evidenceLines = System.IO.File.ReadAllLines(evidenceFiles[0]);
@@ -200,17 +205,17 @@ public partial class TerrainViewerApp
                 "the file holds the session's closed lines: " + string.Join(" | ", evidenceLines));
             // ARC-GPAD-1463: the Controls line (the Video page's, ARC-UI-1737) changes at run time, no restart, and is saved at once in the smoke's own settings
             // file; ARC-GPAD-1374: the prompt style is the Video page's. The strip shows nothing while the mouse is in hand and names the pad when one is used.
-            Require(_mainMenu!.Page == AreaOptionsPage.Video && Controls()[4] == "Controls: Original", "the Video page holds the Controls line before the prompt style: " + string.Join("|", Controls()));
-            panel.ChangeForSelfTest(4, 1);
-            Require(Controls()[4] == "Controls: A Direct" && _gameSettings is { Pad: Arcanum.Input.PadScheme.Direct, Touch: Arcanum.Input.TouchScheme.Off },
-                "the Controls line changed at once: " + Controls()[4]);
+            Require(_mainMenu!.Page == AreaOptionsPage.Video && Controls()[5] == "Controls: Original", "the Video page holds the Controls line before the prompt style: " + string.Join("|", Controls()));
+            panel.ChangeForSelfTest(5, 1);
+            Require(Controls()[5] == "Controls: A Direct" && _gameSettings is { Pad: Arcanum.Input.PadScheme.Direct, Touch: Arcanum.Input.TouchScheme.Off },
+                "the Controls line changed at once: " + Controls()[5]);
             Require(_gameSettingsStore is { Persistent: true } && _gameSettingsStore.Load() is { Pad: Arcanum.Input.PadScheme.Direct, Touch: Arcanum.Input.TouchScheme.Off },
                 "the Controls line is saved in the settings file");
             Key(Godot.Key.V, 'v');
-            Require(_mainMenu!.Page == AreaOptionsPage.Video && Controls().Length == 8 && Controls()[0] == "Brightness: 0/9" && Controls()[3] == "Combat Taunts: On" && Controls()[4] == "Controls: A Direct" && Controls()[5] == "Prompt style: Auto", "the Video page holds the brightness, the floats, the taunts, the prompt style and the test lines: " + string.Join("|", Controls()));
-            panel.ChangeForSelfTest(5, 1); panel.ChangeForSelfTest(5, 1);
-            Require(Controls()[5] == "Prompt style: PlayStation" && _gameSettings.Prompts == Arcanum.Input.PromptStyle.PlayStation
-                && _gameSettingsStore?.Load().Prompts == Arcanum.Input.PromptStyle.PlayStation, "the prompt style changed and is saved: " + Controls()[5]);
+            Require(_mainMenu!.Page == AreaOptionsPage.Video && Controls().Length == 8 && Controls()[0] == "Brightness: 0/9" && Controls()[4] == "Combat Taunts: On" && Controls()[5] == "Controls: A Direct" && Controls()[6] == "Prompt style: Auto", "the Video page holds the brightness, the text duration, the floats, the taunts, the prompt style and the evidence log: " + string.Join("|", Controls()));
+            panel.ChangeForSelfTest(6, 1); panel.ChangeForSelfTest(6, 1);
+            Require(Controls()[6] == "Prompt style: PlayStation" && _gameSettings.Prompts == Arcanum.Input.PromptStyle.PlayStation
+                && _gameSettingsStore?.Load().Prompts == Arcanum.Input.PromptStyle.PlayStation, "the prompt style changed and is saved: " + Controls()[6]);
             // ARC-UI-1737 (OH1): the Brightness slider is the Video page's first line; the pixels are checked below, on the Sound page (the Video page redraws its own slider).
             Require(Controls()[0] == "Brightness: 0/9", "the Brightness slider starts at 0: " + Controls()[0]);
             Require(PromptStripForSelfTest.Length == 0 && MainMenuOpen && _mainMenu!.Window == AreaMenuWindow.Options, "the mouse shows no strip and no window was reset");
@@ -232,13 +237,13 @@ public partial class TerrainViewerApp
             clock += .3; await Frames(2);
             Require(PromptStripForSelfTest.Length == 0, "a key takes the strip away: " + PromptStripForSelfTest);
             _controllerClockForSelfTest = null; _padIdentityForSelfTest = null;
-            panel.ChangeForSelfTest(5, 1); panel.ChangeForSelfTest(5, 1); panel.ChangeForSelfTest(5, 1);
-            Require(_gameSettings.Prompts == Arcanum.Input.PromptStyle.Auto, "the prompt style wrapped back to Auto: " + Controls()[5]);
+            panel.ChangeForSelfTest(6, 1); panel.ChangeForSelfTest(6, 1); panel.ChangeForSelfTest(6, 1);
+            Require(_gameSettings.Prompts == Arcanum.Input.PromptStyle.Auto, "the prompt style wrapped back to Auto: " + Controls()[6]);
             Require(_mainMenu!.Page == AreaOptionsPage.Video, "still on the Video page");
-            panel.ChangeForSelfTest(4, 1); panel.ChangeForSelfTest(4, 1);
-            Require(_gameSettings is { Pad: Arcanum.Input.PadScheme.Off, Touch: Arcanum.Input.TouchScheme.TouchPad } && Controls()[4] == "Controls: C Touch+pad", "C Touch+pad: " + Controls()[4]);
-            panel.ChangeForSelfTest(4, 1);
-            Require(_gameSettings is { Pad: Arcanum.Input.PadScheme.Off, Touch: Arcanum.Input.TouchScheme.Off } && Controls()[4] == "Controls: Original", "back to Original: " + Controls()[4]);
+            panel.ChangeForSelfTest(5, 1); panel.ChangeForSelfTest(5, 1);
+            Require(_gameSettings is { Pad: Arcanum.Input.PadScheme.Off, Touch: Arcanum.Input.TouchScheme.TouchPad } && Controls()[5] == "Controls: C Touch+pad", "C Touch+pad: " + Controls()[5]);
+            panel.ChangeForSelfTest(5, 1);
+            Require(_gameSettings is { Pad: Arcanum.Input.PadScheme.Off, Touch: Arcanum.Input.TouchScheme.Off } && Controls()[5] == "Controls: Original", "back to Original: " + Controls()[5]);
             // ARC-DEV-350: the HD pack problem box: the reason on screen, Continue closes it, Close game quits (the smoke takes the quit over).
             var quits = 0;
             _hdPackProblemQuitForSelfTest = () => quits++;

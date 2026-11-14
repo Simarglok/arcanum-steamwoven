@@ -76,6 +76,8 @@ public partial class AreaCharacterSheetArtView : Control
     internal AreaCharacterSheetView? ViewForSelfTest => Visible ? _view : null;
     internal int? RegionForSelfTest => _region;
     internal bool PortraitForSelfTest => Visible && _portrait is not null;
+    /// <summary>ARC-UI-1791: whether the icon art of the view is held (the slot then shows it).</summary>
+    internal bool IconForSelfTest => Visible && _portrait is null && _view?.IconArt is { } icon && Art(icon) is not null;
     internal IReadOnlyList<AreaSheetText> TextsForSelfTest => _view is { } view && _fonts is { } fonts
         ? AreaCharacterSheetArtLayout.Texts(view, _texts, (font, text) => fonts.For(font).Font.Measure(text).Width) : [];
     /// <summary>The window position of a window-relative point of the sheet.</summary>
@@ -233,6 +235,8 @@ public partial class AreaCharacterSheetArtView : Control
         if (Art(AreaCharacterSheetArtLayout.BackgroundArt) is { } window) DrawTextureRect(window, new Rect2(0, 0, window.GetWidth(), window.GetHeight()), false);
         // The portrait in its slot (141, 21), at its own size (0x4CE470).
         if (_portrait is not null) DrawTextureRect(_portrait, new Rect2(141, 21, _portrait.GetWidth(), _portrait.GetHeight()), false);
+        // ARC-UI-1791 (ledger CHW25): an NPC without a portrait to show has its icon blitted at the same place at its own size (0x559ABC); the hero never has one.
+        else if (view.IconArt is { } icon && Art(icon) is { } image) DrawTextureRect(image, new Rect2(141, 21, image.GetWidth(), image.GetHeight()), false);
         // 0x55EC90: the alignment gauge by its hot point, the aptitude marker by its top-left.
         var frames = _art.TryGetValue(AreaCharacterSheetArtLayout.AlignmentArt, out var gauge) ? gauge.Length : 0;
         var frame = AreaCharacterSheetArtLayout.AlignmentFrame(view.Alignment, frames);
