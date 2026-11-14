@@ -341,6 +341,13 @@ public partial class AreaSchematicWindowView : Control
         }
     }
 
+    /// <summary>ARC-UI-2071 (ledger DH10, SW12): the lone left release after the reply that opened the window (screen point). The window's mouse branch (0x56D530, type 0,
+    /// subtype 1) reads no press state: a release inside the lens's square closes it; no button acts on a release it did not see pressed.</summary>
+    internal void LoneRelease(Vector2 screen) => _GuiInput(new InputEventMouseButton
+    {
+        ButtonIndex = MouseButton.Left, Pressed = false, Position = GetGlobalTransformWithCanvas().AffineInverse() * screen, GlobalPosition = screen,
+    });
+
     private void Act(Hit hit)
     {
         switch (hit.Kind)

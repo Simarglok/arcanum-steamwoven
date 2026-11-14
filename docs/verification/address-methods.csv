@@ -815,6 +815,7 @@ tools/terrain-viewer/Core/HeroAttackArt.cs,Clip,pending,
 tools/terrain-viewer/Godot/AreaCharacterArtDraw.cs,Centred,pending,
 tools/terrain-viewer/Godot/AreaCharacterArtDraw.cs,Character,pending,
 tools/terrain-viewer/Godot/AreaCharacterSheetArtView.cs,HitAt,pending,
+tools/terrain-viewer/Godot/AreaCharacterSheetArtView.cs,LoneRelease,exempt,reference
 tools/terrain-viewer/Godot/AreaCharacterSheetSchemesView.cs,ArrowFrame,exempt,reference
 tools/terrain-viewer/Godot/AreaCharacterSheetSpellsView.cs,Greyed,pending,
 tools/terrain-viewer/Godot/AreaFollowerPortraits.cs,ResetPanel,exempt,reference
@@ -822,6 +823,7 @@ tools/terrain-viewer/Godot/AreaLogbookArtView.cs,Turn,pending,
 tools/terrain-viewer/Godot/AreaMessageLogView.cs,ApplyArt,pending,
 tools/terrain-viewer/Godot/AreaReadingPanel.cs,UpdateRoundView,exempt,reference
 tools/terrain-viewer/Godot/AreaSaveListArtView.cs,Render,pending,
+tools/terrain-viewer/Godot/AreaSchematicWindowView.cs,LoneRelease,exempt,reference
 tools/terrain-viewer/Godot/AreaSchematicsPanel.cs,UpdateRoundView,pending,
 tools/terrain-viewer/Godot/AreaWorldMapArtView.cs,AcceptNoteEdit,pending,
 tools/terrain-viewer/Godot/TerrainCanvasArea.cs,AreaBodyRect,pending,

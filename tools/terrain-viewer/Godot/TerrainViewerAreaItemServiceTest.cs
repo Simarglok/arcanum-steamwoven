@@ -149,10 +149,11 @@ public partial class TerrainViewerApp
             var inventoryHost = _inventoryHost;
             _inventoryHost ??= new AreaInventoryHost([]);
             _inventoryArtLookForSelfTest = SyntheticBarterLook();
+            AreaItemService ArtModel() => new(new AreaBarter(owner, _inventoryHost, data, merchant, () => 50, _ => true, (entity, _) => entity), ItemServiceKind.Repair,
+                () => repairer, (first, last, price) => $"line{first}-{last} {price?.ToString() ?? "-"}", group => $"class{group}");
             try
             {
-                OpenItemServiceWindow(new AreaItemService(new AreaBarter(owner, _inventoryHost, data, merchant, () => 50, _ => true, (entity, _) => entity), ItemServiceKind.Repair,
-                    () => repairer, (first, last, price) => $"line{first}-{last} {price?.ToString() ?? "-"}", group => $"class{group}"));
+                OpenItemServiceWindow(ArtModel());
                 var panel = _servicePanel!;
                 var area = panel.GridAreaForSelfTest;
                 Require(panel.ArtMode && area.ServiceLook && area.LookMode == AreaInventoryMode.Own && area.ServiceFrame is { Selected: null, Quote: "" },
@@ -179,6 +180,44 @@ public partial class TerrainViewerApp
                 panel.LookToggleForSelfTest.EmitSignal(BaseButton.SignalName.Pressed);
                 await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
                 Require(panel.ArtMode, "and the original look again");
+                // ARC-UI-2071 (ledger DH10): the release of the reply click that opened the window (a press that began over the dialog, a release no press of the window began) reaches the window in both settings
+                // (an item quotes as a click on it, the round view's square closes); a release whose press did not begin over the dialog is no reply's.
+                {
+                    var other = items.First(line => line.Entity != area.ServiceFrame!.Selected).Entity;
+                    var otherCell = panel.ArtView!.Grid.Single(item => item.Entity == other).Slot;
+                    var onOther = area.FrameToScreenForSelfTest(AreaInventoryGridArea.CellCentre(otherCell));
+                    var (roundX, roundY) = AreaInventoryHole.Corner(AreaInventoryMode.Own);
+                    var onRound = area.FrameToScreenForSelfTest(new(roundX + 10, roundY + 10));
+                    InputEventMouseButton Release(Vector2 at) => new() { ButtonIndex = MouseButton.Left, Pressed = false, Position = at, GlobalPosition = at };
+                    async Task ReplyClick(Vector2 at, bool pressedOverDialog)
+                    {
+                        _replyPressDown = pressedOverDialog; ReplyReleaseTargetForSelfTest = null;
+                        InputWorld(Release(at));
+                        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                    }
+                    try
+                    {
+                        var kept = area.ServiceFrame!.Selected;
+                        await ReplyClick(onOther, false); await ReplyClick(onRound, false);
+                        Require(ItemServiceOpen && area.ServiceFrame!.Selected == kept && ReplyReleaseTargetForSelfTest is null, "a release whose press did not begin over the dialog is nobody's");
+                        await ReplyClick(onOther, true);
+                        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                        Require(ItemServiceOpen && ReplyReleaseTargetForSelfTest == "item-service" && area.ServiceFrame!.Selected == other && area.ServiceFrame.Quote.Length > 0,
+                            $"The release quoted the item under it ({kept} -> {area.ServiceFrame.Selected}, {ReplyReleaseTargetForSelfTest})");
+                        await ReplyClick(onRound, true);
+                        Require(!ItemServiceOpen && ReplyReleaseTargetForSelfTest == "item-service", "The release on the round view closed the window");
+                        // The window is not there yet at the release: the release waits for it (the viewer opens it a frame later) and is dropped when none opens.
+                        _replyPressDown = true; ReplyReleaseTargetForSelfTest = null;
+                        InputWorld(Release(onRound));
+                        Require(_replyRelease is not null, "no window yet: the release is kept");
+                        for (var frame = 0; frame < ReplyReleaseWaitFrames + 1; frame++) SyncReplyRelease();
+                        Require(_replyRelease is null && ReplyReleaseTargetForSelfTest == "dropped", "no window opened: the release was dropped");
+                    }
+                    finally { _replyPressDown = false; _replyRelease = null; }
+                    OpenItemServiceWindow(ArtModel());
+                    panel = _servicePanel!; area = panel.GridAreaForSelfTest;
+                    Require(ItemServiceOpen && panel.ArtMode, "the window opened again");
+                }
                 var (holeX, holeY) = AreaInventoryHole.Corner(AreaInventoryMode.Own);
                 area.ReleaseAt(new(holeX + 10, holeY + 10));
                 await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
