@@ -229,9 +229,9 @@ public partial class TerrainViewerApp
         ApplyItemAim(aim, pick.Object?.Id, pick.Tile, false, false);
     }
 
-    /// <summary>ARC-UI-1787 (FP6, mode 16 with the lockpicks, the item handler 0x571CB0 after the target test 0x4F2680, whose mask for an item with no spell is any object): the
+    /// <summary>ARC-UI-1787 (FP6, mode 16 with the lockpicks, the item handler 0x571CB0 after the target test 0x4F2680, whose mask for an item with no spell is any object, then the use 0x462CC0, whose lockpick branch tests the target's type with 0x441CF0): the
     /// armed lockpicks take the follower as the target object, as a press on a body that is no door, window or container does (<see cref="TryAreaPortalUse"/>): a critter is
-    /// no lock (PL2, the target's type test), so the pick ends and the item mode pops (SA51).</summary>
+    /// no lock (the type test 0x441CF0 answers no, PL2), so the pick ends and the item mode pops (SA51). Like the original's use it touches no goal of the hero (the world press also drops a walk to talk or use, a limit of that press).</summary>
     private void FollowerAimLockpick()
     {
         CancelAreaAttack("armed lockpicks took the portrait click");
