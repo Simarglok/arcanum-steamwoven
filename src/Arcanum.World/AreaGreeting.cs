@@ -139,6 +139,19 @@ public sealed class AreaGreeting : IDialogGreetingPort
 
     private const int IntelligenceStat = 4, GenderStat = 26, RaceStat = 27, DumbIntelligence = 4;
 
+    /// <summary>
+    /// ARC-AI-2114: the listener's facts of a line whose listener is an NPC (the guard witness's shout is said to the actor, which can be a follower of the PC): its gender (stat 26), race (27) and intelligence (4) from its
+    /// fields, as the plain NPC line generator reads the listener's gender (stat 26 of the listener object, never the PC's). Null when the fields are not an NPC's critter stats.
+    /// </summary>
+    /// <remarks>The generator is 0x418780.</remarks>
+    public static DialogPcFacts? ListenerFacts(CombatFields? fields)
+    {
+        if (fields?.Critter is not { } critter || critter.BaseStats.Count != CombatFieldReader.BaseStats) return null;
+        var stats = critter.BaseStats;
+        return new(stats[GenderStat] == (int)Arcanum.Simulation.Character.CharacterGender.Male ? DialogPcGender.Male : DialogPcGender.Female, stats[IntelligenceStat],
+            stats[IntelligenceStat] <= DumbIntelligence, stats[RaceStat]);
+    }
+
     public DialogGreetingSources Sources(DialogReactionQuery query) => _sources;
 
     public IReadOnlyList<int> ReputationCandidates(DialogReactionQuery query, DialogReactionCategory category)
