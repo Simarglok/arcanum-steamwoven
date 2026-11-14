@@ -1399,6 +1399,9 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         return ran.Outcome is AreaScriptedUseOutcome.NoTeleport && ran.Run is { } run && run.Outcome == ScrOutcome.SkipDefault;
     }
 
+    /// <summary>ARC-TECHNOLOGY-1760: the script reference of an object of the shown map by its script entity (<see cref="EntityId"/>), as a BUST breaker.</summary>
+    public ScrObjectRef ObjectRef(string entity) => new(_shownMap, entity);
+
     /// <summary>
     /// ARC-DEV-260 (ledger OD4, OD15): the BUST script (attachment point 30) of <paramref name="victim"/>, an object of the shown map, which the break
     /// (0x43F1C0) runs through the script dispatcher (0x441980) with <paramref name="breaker"/> as the triggerer (null: a break with no attacker,
