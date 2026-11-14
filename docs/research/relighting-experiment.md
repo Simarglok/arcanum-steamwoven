@@ -163,8 +163,8 @@ lights enter and leave the list as the view pans (a hard cut at the 32nd). Neith
 whatever `ARC_RELIGHT_STRENGTH` says.
 
 **Updated recommendation.** Unchanged in kind (conditional go for a bounded night-and-indoor option, no-go for daylight and for de-light as built), with two additions: the night weighted
-mode at about 1.2 to 1.6 is the one to tune, and the cost in a city is about 2 ms (to be checked on the Deck), so the option should be a switchable profile, not a default. Open: where
-the Ashbury wisps come from, and the AI-host-less city windows ([#2036](https://github.com/Simarglok/arcanum-steamwoven/issues/2036)).
+mode at about 1.2 to 1.6 is the one to tune, and the cost in a city is about 2 ms (to be checked on the Deck), so the option should be a switchable profile, not a default. Open: whether
+the wisps should be emitters in an HD variant (the owner's call), and the AI-host-less city windows ([#2036](https://github.com/Simarglok/arcanum-steamwoven/issues/2036)).
 
 ## Verdict
 
@@ -207,7 +207,7 @@ The night cities (ARC-RES-2007; PNGs named by `ARC_RELIGHT_CITY`):
 
 Full-frame night shots for the owner (ARC-RES-2050): add `--env ARC_RELIGHT_SHOTS=1` (and optionally `--env ARC_RELIGHT_HOURS=20,23,3`) to the city commands. The stage then skips the walk and
 the timing and captures up to three spots at least 700 px apart (each with at least four lit lights within 350 px) at every hour, in Legacy, night 1.0 and night 1.6
-(`<city>-shot-<spot>-h<hour>-<variant>.png`, 1280×800). `ARC_RELIGHT_AT=x,y;x,y` (world tiles) stands at those tiles instead (spots `at1`, `at2`, ...; the wisps were found at sector 505,975 with `32340,62389;32379,62519`). In the first runs the ambient colour changed only slightly between the night hours 20, 23 and 3, so the hours differ less than the spots.
+(`<city>-shot-<spot>-h<hour>-<variant>.png`, 1280×800). `ARC_RELIGHT_AT=x,y;x,y` (world tiles) stands near those tiles instead (the nearest standable cell within 2, 5 or 9 cells, else the window's start; spots `at1`, `at2`, ...; the window must still hold lit lights; the wisps were found in the window centred on sector 505,975 with `32340,62389;32379,62519`). In the first runs the ambient colour changed only slightly between the night hours 20, 23 and 3, so the hours differ less than the spots.
 
 The PNGs under `ARC_RELIGHT_CAPTURE` are derived from the player's art: keep them outside git. The lab:
 `experiments/relight-lab/README.md`.
