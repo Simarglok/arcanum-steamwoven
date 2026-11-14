@@ -16,7 +16,8 @@ public sealed class SessionDialogPartyPort(
     GameSessionOwner session,
     DialogParticipantId playerCharacter,
     Func<DialogParticipantId, string?> entityOf,
-    Func<DialogParticipantId, PartyConsentFacts?> factsOf) : IDialogPartyPort
+    Func<DialogParticipantId, PartyConsentFacts?> factsOf,
+    Func<DialogParticipantId, NpcLeaderUnwaitFacts?>? npcLeaderFactsOf = null) : IDialogPartyPort
 {
     private readonly GameSessionOwner _session = session ?? throw new ArgumentNullException(nameof(session));
     private readonly Func<DialogParticipantId, string?> _entityOf = entityOf ?? throw new ArgumentNullException(nameof(entityOf));
@@ -43,6 +44,14 @@ public sealed class SessionDialogPartyPort(
     public DialogJoinResult Execute(UnwaitCommand command)
     {
         ArgumentNullException.ThrowIfNull(command);
+        // ARC-WORLD-2127: a follower waiting under an NPC leader is unwaited by the follow check against that leader (UnwaitNpcLed, the leader's facts); the hero's facts say nothing of it, so
+        // without the leader's facts the command is rejected.
+        if (command.PlayerCharacter == playerCharacter && _entityOf(command.Npc) is { } waiting && _session.QueryLeader(waiting) is { } leader && leader != SessionEventKinds.PlayerEntity)
+        {
+            LastRefusal = null;
+            if (npcLeaderFactsOf?.Invoke(command.Npc) is not { } leaderFacts) return DialogJoinResult.Rejected;
+            return Result(_session.UnwaitNpcLed(_session.Version, waiting, leaderFacts));
+        }
         return Run(command.Npc, command.PlayerCharacter, (entity, facts) => _session.UnwaitParty(_session.Version, entity, facts, false));
     }
 
@@ -51,7 +60,11 @@ public sealed class SessionDialogPartyPort(
     {
         LastRefusal = null;
         if (pc != playerCharacter || _entityOf(npc) is not { } entity || _factsOf(npc) is not { } facts) return DialogJoinResult.Rejected;
-        var result = change(entity, facts);
+        return Result(change(entity, facts));
+    }
+
+    private DialogJoinResult Result(PartyMutationResult result)
+    {
         if (result.Disposition != GameSessionDisposition.Rejected) return DialogJoinResult.Accepted;
         if (result.Failure != GameSessionFailure.ConsentRefused) return DialogJoinResult.Rejected;
         LastRefusal = result.Consent;

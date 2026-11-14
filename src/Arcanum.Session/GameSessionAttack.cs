@@ -379,6 +379,18 @@ public sealed class SessionCritterCombat
         _stats.Query(StatContext(state))
             .Snapshot!.GetEffective(stat);
 
+    /// <summary>
+    /// ARC-WORLD-2127: the NPC's max followers (stat 15 through the getter 0x4B0490, ledger AP4) in this life state: its effective charisma / 4, plus one at Persuasion training Expert or Master
+    /// (<paramref name="persuasion"/>), then its effects on that stat, clamped to 1..7 (the hero's value is <see cref="GameSessionOwner.QueryHeroPartySide"/>).
+    /// </summary>
+    public int MaxFollowers(LifeState state, Arcanum.Simulation.Party.PersuasionTraining persuasion)
+    {
+        var snapshot = _stats.Query(StatContext(state)).Snapshot!;
+        var unclamped = snapshot.GetEffective(CharacterStat.Charisma) / 4 + (persuasion >= Arcanum.Simulation.Party.PersuasionTraining.Expert ? 1 : 0);
+        return Math.Clamp(CharacterStatRules.ApplyModifiers(CharacterStat.MaxFollowers, unclamped, snapshot.AppliedEffects),
+            Arcanum.Simulation.Party.FollowConsentRules.MinMaxFollowers, Arcanum.Simulation.Party.FollowConsentRules.MaxMaxFollowers);
+    }
+
     /// <summary>What the NPC defends as in this life state: effective stats under its poison and crippled legs, armour class
     /// (<see cref="AttackRules.ArmorClass"/> under <paramref name="profile"/>), resistances, dodge, light and conditions.</summary>
     public Combatant Combatant(LifeStatus status, LifeState state, CombatAnomalyProfile profile)

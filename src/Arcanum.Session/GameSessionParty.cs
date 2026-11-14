@@ -81,6 +81,23 @@ public sealed record PartyConsentFacts(
     int MaxFollowers);
 
 /// <summary>
+/// ARC-WORLD-2127: the facts of the unforced unwait of a follower waiting under an NPC leader L (<see cref="GameSessionOwner.UnwaitNpcLed"/>), read by the caller where the NPCs' stats are: L's Persuasion
+/// training, alignment, level and max followers (stat 15 under L's effects), the follower's alignment, level and the thresholds of its AI row, and whether a mind-controlled follower is accepted by the
+/// first check (its controller is L, or no controller is found and the chain of leaders from the follower reaches a player character) and by the join's second check (the handle is then cleared, so only
+/// a controller equal to L accepts). Both are false for a follower that is not mind controlled.
+/// </summary>
+public sealed record NpcLeaderUnwaitFacts(
+    PersuasionTraining LeaderPersuasion,
+    int LeaderAlignment,
+    int LeaderLevel,
+    int MaxFollowers,
+    FollowThresholds Thresholds,
+    int NpcAlignment,
+    int NpcLevel,
+    bool MindControlAccepted,
+    bool MindControlAcceptedAfterUnlink);
+
+/// <summary>
 /// An unforced leave is refused while <paramref name="LeaderCharisma"/> is extraordinary or the NPC is mind
 /// controlled; a forced one (dialog LV, script disband) always applies. <paramref name="Jilt"/> marks the NPC jilted
 /// (the loyalty and wait-timeout paths of the source).

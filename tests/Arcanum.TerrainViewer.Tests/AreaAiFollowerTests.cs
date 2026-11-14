@@ -315,6 +315,47 @@ public sealed class AreaAiFollowerTests
         Assert.IsNull(weak.Host.Leader(weak.Enemy));
     }
 
+    // ARC-WORLD-2127 (0x4AA7A0): the wait timer's leader facts are the direct NPC leader's (its effective charisma and Persuasion training, the follower's wait index); none without a leader or under the hero.
+    [TestMethod]
+    public void The_wait_facts_of_a_follower_of_an_npc_are_the_npc_leaders()
+    {
+        var scene = Open(enemyAt: new(4, 20), companionCharisma: 12);
+        var (session, host, enemy, companion) = (scene.Session, scene.Host, scene.Enemy, scene.Companion);
+        Assert.IsNull(host.LeaderWaitFacts(enemy), "no leader");
+        Assert.IsNull(host.LeaderWaitFacts(companion), "the hero leads the companion: the caller's hero-side facts stand");
+        Assert.AreEqual(GameSessionDisposition.Changed, session.ForceJoinLeader(session.Version, enemy, companion).Disposition);
+        var facts = host.LeaderWaitFacts(enemy);
+        Assert.IsNotNull(facts);
+        Assert.AreEqual((12, PersuasionTraining.None, false), (facts.LeaderCharisma, facts.LeaderPersuasion, facts.MindControlled), "the companion's charisma, not the hero's");
+    }
+
+    // ARC-WORLD-2127 (0x4AA8C0 → 0x4AD950): the host reads the NPC leader's side and the follower's AI row and the unforced unwait runs the check against the leader.
+    [TestMethod]
+    public void The_unforced_unwait_of_a_follower_waiting_under_an_npc_runs_the_follow_check_against_the_leader()
+    {
+        var scene = Open(enemyAt: new(4, 20), companionCharisma: 12, table: Parameter9(5));
+        var (session, host, enemy, companion) = (scene.Session, scene.Host, scene.Enemy, scene.Companion);
+        Assert.IsNull(host.UnwaitUnforced(enemy), "no NPC leader: no facts");
+        Assert.AreEqual(GameSessionDisposition.Changed, session.ForceJoinLeader(session.Version, enemy, companion).Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, session.WaitParty(session.Version, enemy, host.LeaderWaitFacts(enemy)).Disposition);
+        var facts = host.LeaderUnwaitFacts(enemy);
+        Assert.IsNotNull(facts, "the leader's stats and the follower's AI row are readable");
+        Assert.AreEqual(PersuasionTraining.None, facts.LeaderPersuasion);
+        Assert.AreEqual(3, facts.MaxFollowers, "12 / 4");
+        Assert.IsFalse(facts.MindControlAccepted);
+        var result = host.UnwaitUnforced(enemy);
+        Assert.IsNotNull(result);
+        // The follower's level and alignment against the leader's decide: whichever way, the check ran with the leader's facts, and a refusal changes nothing.
+        if (result.Value.Disposition == GameSessionDisposition.Changed)
+            Assert.IsFalse(session.QueryCompanion(enemy).WaitFlag);
+        else
+        {
+            Assert.AreEqual(GameSessionFailure.ConsentRefused, result.Value.Failure);
+            Assert.IsTrue(session.QueryCompanion(enemy).WaitFlag);
+            Assert.AreEqual(companion, host.Leader(enemy));
+        }
+    }
+
     // ARC-WORLD-1840 (#1322): an NPC leads followers as in the original: the host answers the direct leader (0x45DE00), the chain's player character (0x45DDA0) and the followers of any
     // critter, one faction holds a leader and its followers, and a leave of an NPC leader ends the follower's run as the hero's leave does.
     [TestMethod]

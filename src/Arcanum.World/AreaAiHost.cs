@@ -4293,6 +4293,42 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     internal GameSessionMutationResult LeaveUnforced(string npc, bool mindControlled) =>
         _session.LeaveParty(_session.Version, npc, new PartyLeave(Force: false, LeaderCharisma: LeaderCharisma(npc) ?? 0, MindControlled: mindControlled));
 
+    // ARC-WORLD-2127: an NPC's stat-side values as the party rules read them, for the NPC leading a follower: its Persuasion training (0x4C60C0, the NPC's sheet skill), effective charisma, level, alignment
+    // (the stored base value: the effects on that stat are not applied here) and max followers (stat 15 under its effects). Null when the NPC's stats are not readable here (another map's, no sheet).
+    private (PersuasionTraining Persuasion, int Charisma, int Level, int Alignment, int MaxFollowers)? NpcLeaderSide(string leader)
+    {
+        if (Build(leader) is not { } build || LifeState(leader) is not { } state || Find(leader) is not { } critter || NpcSkill(leader, Skill.Persuasion) is not { } persuasion) return null;
+        var training = (PersuasionTraining)(int)persuasion.Training;
+        return (training, build.EffectiveStat(CharacterStat.Charisma, state), build.Level, critter.Alignment, build.MaxFollowers(state, training));
+    }
+
+    /// <summary>
+    /// ARC-WORLD-2127: the facts of the wait timer (0x4AA7A0) of a follower of an NPC leader: the DIRECT leader's Persuasion training and effective charisma (0x4B0EE0, 0x4C60C0), the follower's wait index
+    /// (field 300) and its mind-control flag. Null when the NPC has no NPC leader, or the leader's stats are not readable here: the caller's facts (the hero's side) then stand.
+    /// </summary>
+    internal PartyWaitFacts? LeaderWaitFacts(string npc)
+    {
+        if (Leader(npc) is not { } leader || leader == Pc || Fields(npc)?.Npc is not { } fields || NpcLeaderSide(leader) is not { } side) return null;
+        return new(fields.Wait, side.Persuasion, side.Charisma, (SpellFlagsOf(npc, Fields(npc)!.Object.SpellFlags) & MindControlledSpell) != 0);
+    }
+
+    /// <summary>
+    /// ARC-WORLD-2127: the facts of the unforced unwait (0x4AA8C0 → 0x4AD950 with the NPC leader as the player) of a follower waiting under an NPC leader, read here: the leader's side, the follower's alignment,
+    /// level and the thresholds of its AI row, and the mind-control acceptance (no controller is tracked, so the first check accepts a mind-controlled follower whose chain of leaders reaches a player character,
+    /// the join's second check none). Null when the NPC has no NPC leader, no AI row or the leader's stats are not readable here.
+    /// </summary>
+    internal NpcLeaderUnwaitFacts? LeaderUnwaitFacts(string npc)
+    {
+        if (Leader(npc) is not { } leader || leader == Pc || NpcLeaderSide(leader) is not { } side || Fields(npc) is not { Critter: { } critter } fields || Row(npc) is not { } row || Build(npc) is not { } build) return null;
+        var mind = (SpellFlagsOf(npc, fields.Object.SpellFlags) & MindControlledSpell) != 0;
+        return new(side.Persuasion, side.Alignment, side.Level, side.MaxFollowers, new(row.FollowReaction, row.FollowAlignmentAbove, row.FollowAlignmentBelow, row.JoinLevelGap),
+            critter.BaseStats.Count > AreaCompanionData.AlignmentStat ? critter.BaseStats[AreaCompanionData.AlignmentStat] : 0, build.Level, mind && PcLeader(npc) is not null, false);
+    }
+
+    /// <summary>The unforced unwait of a follower waiting under an NPC leader with the facts read here (<see cref="LeaderUnwaitFacts"/>); null when they cannot be read.</summary>
+    internal PartyMutationResult? UnwaitUnforced(string npc) =>
+        LeaderUnwaitFacts(npc) is { } facts ? _session.UnwaitNpcLed(_session.Version, npc, facts) : null;
+
     // The setter's facts of the NPC: invulnerable (or nigh-invulnerable), NO_FLEE (the stored flag ORed with the session bit), the
     // direct leader's extraordinary charisma (0x4AABE0 → 0x45DE00 → 0x4B0EE0: a PC or NPC leader, stat 7 at 20 or more).
     private DangerSetterFacts SetterFacts(string npc)
