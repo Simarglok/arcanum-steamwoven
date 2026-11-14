@@ -88,7 +88,7 @@ public partial class TerrainViewerApp
                 if (index.TryGetValue(here, out var on) && on > reached) { reached = on; lastProgress = frames; }
                 for (var i = Math.Min(path.Count - 1, reached + ProgressAhead); i > reached; i--)
                     if (Math.Max(Math.Abs(path[i].X - here.X), Math.Abs(path[i].Y - here.Y)) <= ProgressNear) { reached = i; lastProgress = frames; break; }
-                Require(follower.Status != RouteFollowStatus.Stopped, $"FOLLOWER_STOPPED {follower.StopReason} at={here} target={follower.Target}");
+                if (follower.Status == RouteFollowStatus.Stopped) Require(false, $"FOLLOWER_STOPPED {follower.StopReason} at={here} target={follower.Target} hereIndex={(index.TryGetValue(here, out var hereAt) ? hereAt : -1)} reached={reached} targetIndex={(follower.Target is { } stopTarget && index.TryGetValue(walking.Chart.ToWorld(stopTarget), out var targetAt) ? targetAt : -1)} {DescribeWorldRoute(follower)} planMethod={follower.LastPlan?.Method} planFrom={follower.LastPlan?.From} planSteps={follower.LastPlan?.Steps.Count} corridor={follower.Corridor is not null}");
                 if (here == goal || ReferenceEquals(walking, steered) && follower.Status == RouteFollowStatus.Following) return;
                 bool Shown(int i) => walking.Chart.Contains(walking.Chart.ToChart(path[i]));
                 // The route's first cell inside the window from the progress on, then as far as the route stays inside it.

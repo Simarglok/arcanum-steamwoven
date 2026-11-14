@@ -118,12 +118,17 @@ public static class AreaBarterArtLayout
 
     /// <summary>The point's place: the shown object's grid (x − 8, y − 168 in 32-pixel cells, 10 × 7, plus the scroll's rows: location =
     /// (row + scroll) × 10 + column, 0x575D56), the gamble box (its art's size, 0x681110, 0x681114), else the hero's grid and boxes as in mode 0
-    /// (no doll: no slot). With <paramref name="doll"/> (the merchant's doll view) the grid is not there and the doll's side hits nothing. ARC-UI-1918: with <paramref name="heroDoll"/>
+    /// (no doll: no slot). With <paramref name="doll"/> (the merchant's doll view, ARC-UI-1926) the grid is not there and the doll's side hits only the nine slot rectangles, as the location 1000 + slot. ARC-UI-1918: with <paramref name="heroDoll"/>
     /// (the hero's own doll toggle) the hero's side hits its doll's slots and no grid cell.</summary>
     public static AreaBarterHit HitTest(float x, float y, int scroll, (int Width, int Height) gamble, bool doll = false, bool heroDoll = false)
     {
-        // ARC-UI-1917 (0x575CB0 with 0x681514 set): the merchant's doll view replaces the shown grid, and its slots pick the merchant's worn items. NOT READY: that pick (a worn item bought by
-        // dragging it onto the hero's grid, the buy handler 0x575200 on a location of 1000 and up): the doll's side hits nothing, so a release there puts the item back.
+        // ARC-UI-1926 (0x575CB0 with 0x681514 set, IW29): the merchant's doll view replaces the shown grid, and a point in a slot rectangle of table 0x5CAD78 is the location 1000 + slot of the
+        // merchant (as the loot window's); elsewhere on the doll's side nothing is hit.
+        if (doll && x < AreaInventoryArtLayout.PackX)
+        {
+            foreach (var (slot, rect) in BodySlotRects)
+                if (x >= rect.X && x < rect.X + rect.Width && y >= rect.Y && y < rect.Y + rect.Height) return new(null, null, (int)slot, false);
+        }
         if (!doll && x >= GridX && y >= GridY && x < GridX + Columns * CellPixels && y < GridY + ShownRows * CellPixels)
             return new(null, null, ((int)((y - GridY) / CellPixels) + scroll) * Columns + (int)((x - GridX) / CellPixels), false);
         if (x >= GambleBox.X && x < GambleBox.X + gamble.Width && y >= GambleBox.Y && y < GambleBox.Y + gamble.Height) return new(null, null, null, true);
@@ -146,6 +151,9 @@ public static class AreaBarterArtLayout
         // ARC-UI-1918: a slot of the hero's own doll (its toggle set) lifts the item worn there.
         if (hit.Slot is { } heroSlot)
             return view.Doll.FirstOrDefault(entry => entry.Slot == heroSlot)?.Entity is { } worn ? new(worn, heroSlot, 0) : null;
+        // ARC-UI-1926 (0x575FA0 on 1000 + slot): the merchant's worn item goes on the cursor as its grid items do (grab offset 0), and stays on its slot until released.
+        if (hit.Location is >= 1000 and <= 1008 and var slot)
+            return view.BodyDoll.FirstOrDefault(entry => (int)entry.Slot == slot)?.Entity is { } wornByMerchant ? new(wornByMerchant, null, 0) { Partner = true } : null;
         if (hit.Location is { } location)
             return AreaLootArtLayout.ItemAt(view.LootGrid, location) is { } item ? new(item.Entity, null, location - item.Location) { Partner = true } : null;
         return hit.Cell is { } cell && AreaInventoryDrag.ItemAt(view.Grid, cell) is { } own ? new(own.Entity, null, cell - own.Slot) : null;
@@ -169,7 +177,9 @@ public static class AreaBarterArtLayout
             return hit.Cell is { } target ? new(AreaInventoryDropKind.Buy, held, GridSlot: target) : new(AreaInventoryDropKind.PutBack, held);
         }
         if (hit.Slot is { } slot && slot != held.Worn) return new(AreaInventoryDropKind.Wear, held, Slot: slot);
-        return hit.Location is { } location ? new(AreaInventoryDropKind.Sell, held, GridSlot: location) : new(AreaInventoryDropKind.PutBack, held);
+        // ARC-UI-1926: a slot of the merchant's doll (1000 and up) is not a place of its grid: the original asks the wear test 0x464D20 and sells onto the slot (0x575360 with 1000 + slot, the merchant
+        // wears it); NOT READY (issue filed): the item goes back.
+        return hit.Location is { } location and < 1000 ? new(AreaInventoryDropKind.Sell, held, GridSlot: location) : new(AreaInventoryDropKind.PutBack, held);
     }
 
     /// <summary>A right release with nothing held (0x574262..0x574430, IW36, read by ARC-UI-065): in mode 1 the item under the point moves to
@@ -212,6 +222,7 @@ public static class AreaBarterArtLayout
         ArgumentNullException.ThrowIfNull(view);
         if (item is null) return string.Empty;
         if (view.Hero.FirstOrDefault(line => line.Entity == item) is { } sold) return Quote(sold, sale: true, view.Merchant.Follower);
+        if (view.WornWares.FirstOrDefault(line => line.Entity == item) is { } wornWare) return Quote(wornWare, sale: false, view.Merchant.Follower);
         return view.Wares.FirstOrDefault(line => line.Entity == item) is { } bought ? Quote(bought, sale: false, view.Merchant.Follower) : string.Empty;
     }
 }

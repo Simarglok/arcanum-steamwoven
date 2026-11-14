@@ -66,4 +66,20 @@ public sealed class DollRatingsTests
         Assert.AreEqual(0, CombatantRules.MagicResistance(10, -40, false, []), "and not below 0");
         Assert.AreEqual(130, CombatantRules.MagicResistance(90, 40, true, []), "a monstrous NPC keeps its sum");
     }
+
+    // ARC-UI-1924 (ledger IW46): the five ranges the weapon stat lines print are the ones the damage rating averages.
+    [TestMethod]
+    public void TheRangesAreTheFiveTypesOfTheWeaponInDamageTypeOrder()
+    {
+        var weapon = new CombatWeapon
+        {
+            Kind = WeaponKind.Weapon,
+            Damage = new DamageRanges(new(10, 20), new(2, 4), new(0, 0), new(8, 10), new(1, 3)),
+        };
+        var ranges = DollRatings.Ranges(weapon, 0, CombatSkill.Bow);
+        CollectionAssert.AreEqual(new[] { (10, 20), (2, 4), (0, 0), (8, 10), (1, 3) }, ranges.ToArray());
+        // A melee damage bonus lifts the normal range only, and the rating averages the very same ranges: (15 × 60 + 12 × 19 + 12 × 3 + 15 × 9 + 12 × 2) / 90.
+        Assert.AreEqual(14, DollRatings.Ranges(weapon, 4, CombatSkill.Melee)[(int)DamageType.Normal].Min);
+        Assert.AreEqual((900 + 12 * 15 + 12 * 3 + 15 * 9 + 12 * 2) / 90, DollRatings.Damage(weapon, 0, CombatSkill.Bow, 60));
+    }
 }

@@ -61,7 +61,7 @@ public sealed class AreaMessageLog
     public AreaMessagePost Post(AreaMessageEntry entry, long nowMilliseconds)
     {
         ArgumentNullException.ThrowIfNull(entry);
-        if (entry.Kind is AreaMessageKind.Item or AreaMessageKind.Object) throw new ArgumentException("an item or object window is drawn with ShowItem", nameof(entry));
+        if (entry.Kind is AreaMessageKind.Item or AreaMessageKind.Object or AreaMessageKind.StatLines) throw new ArgumentException("an item, object or stat lines window is drawn with ShowItem", nameof(entry));
         if (!entry.Stored)
         {
             // 0x552770: shown only in the message mode and more than 3 s after the last stored entry; the scroll position stays.
@@ -90,7 +90,7 @@ public sealed class AreaMessageLog
     public bool ShowItem(AreaMessageEntry entry)
     {
         ArgumentNullException.ThrowIfNull(entry);
-        if (entry.Kind is not (AreaMessageKind.Item or AreaMessageKind.Object)) throw new ArgumentException("not an item or object window", nameof(entry));
+        if (entry.Kind is not (AreaMessageKind.Item or AreaMessageKind.Object or AreaMessageKind.StatLines)) throw new ArgumentException("not an item, object or stat lines window", nameof(entry));
         if (PaneMode) return false;
         Shown = entry;
         return true;
@@ -285,7 +285,7 @@ public static class AreaMessageLayout
     /// <see cref="HotkeyBarRules.CollegeIcon"/>), the items' type icons (item windows) and the hovered objects' images (ARC-UI-057).</summary>
     public static IReadOnlyList<int> ArtNumbers { get; } =
         [.. new[] { BackgroundArt }.Concat(Enum.GetValues<AreaMessageKind>().Select(Icon)).Concat(HotkeyBarRules.CollegeIcons).Concat(HotkeyBarRules.TypeIconNumbers)
-            .Concat(AreaHoverWindow.ImageNumbers).Concat(AreaCombatPanelLayout.ArtNumbers).Distinct()];
+            .Concat(AreaHoverWindow.ImageNumbers).Concat(AreaCombatPanelLayout.ArtNumbers).Concat([AreaStatLines.WeaponArt, AreaStatLines.ArmourArt]).Distinct()];
 
     /// <summary>The entry's drawing; <paramref name="wide"/> the second layout of a text entry whose text did not fit.</summary>
     public static AreaMessageDraw Draw(AreaMessageEntry entry, bool wide = false)
@@ -321,6 +321,8 @@ public static class AreaMessageLayout
                 .. Line(lines.Third, Third, false, AreaMessageColour.White), .. Line(lines.ThirdRight, Third, true, AreaMessageColour.White),
                 .. Line(lines.Weight, AreaHoverWindow.FourthLine, false, AreaMessageColour.Red), .. Line(lines.HitPoints, AreaHoverWindow.FourthLine, true, AreaMessageColour.Red)], false);
         }
+        // ARC-UI-1924 (IW46, 0x556220, 0x5566B0): the weapon or armour stat lines: the art at the image's place, the title, and three rows of two cells.
+        if (entry.Kind == AreaMessageKind.StatLines) return new(entry.Icon, AreaStatLines.Texts(entry), false);
         // ARC-UI-057 (OH6): a hovered object's image and name in the title font (font art 0x739F88, white). ARC-UI-107 (OH6, OH10): then the
         // fourth line (0x5C70F8) in the text font, red (0x64C49C): a portal's or container's lock state left-aligned (flag 1), and the hit
         // points "%d/%d" right-aligned (flag 2) at the rectangle's right edge.

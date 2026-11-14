@@ -98,4 +98,25 @@ public sealed class DollValuesTests
         Assert.IsFalse(Combat([Item(5, EquipmentSlot.Weapon, weapon: Weapon(9))]).DollValues(Healthy, LifeState.Unharmed, CombatAnomalyProfile.Steamwoven, 0, _ => true, []).WeaponTooHeavy,
             "and it fills nothing");
     }
+
+    // ARC-UI-1924 (ledger IW46): the facts behind the two ratings, which the weapon and armour stat lines print.
+    [TestMethod]
+    public void TheDetailHoldsTheValuesTheTwoRatingsAreMadeOf()
+    {
+        var combat = Combat([Item(5, EquipmentSlot.Weapon, weapon: Weapon()), Helmet(ac: 30, magicAc: 0, resistances: [10, 20, 30, 40, 5], magicResistances: [0, 0, 0, 0, 0])], resistances: [20, 0, 0, 5, 0]);
+        var values = Values(combat, storedMagic: 10);
+        var detail = values.Detail;
+        Assert.IsNotNull(detail);
+        Assert.AreEqual(5, detail.Ranges.Count);
+        Assert.AreEqual(values.Armour, DollRatings.Armour(detail.ArmorClass, detail.Normal, detail.Fire, detail.Electrical, detail.Poison, detail.Magic), "the armour rating is made of the detail");
+        var bare = Values(Combat([Item(5, EquipmentSlot.Weapon, weapon: Weapon())], resistances: [20, 0, 0, 5, 0]), storedMagic: 0).Detail!;
+        Assert.IsTrue(detail.ArmorClass > bare.ArmorClass, "the worn helmet's armour class counts");
+        Assert.IsTrue(detail.Magic > bare.Magic, "the stored magic resistance counts");
+        Assert.IsTrue(detail.Fire > bare.Fire && detail.Electrical > bare.Electrical, "the helmet's resistances count");
+        var attack = combat.AttackValues(Healthy, LifeState.Unharmed, CombatAnomalyProfile.Steamwoven);
+        CollectionAssert.AreEqual(DollRatings.Ranges(attack.Weapon, attack.Combatant.DamageBonus, attack.Skill).ToArray(), detail.Ranges.ToArray(), "the weapon's five ranges under the NPC's damage bonus (strength 2 takes 4 off melee)");
+        Assert.AreEqual(Math.Max(0, 10 + attack.Combatant.DamageBonus), detail.Ranges[(int)DamageType.Normal].Min, "the weapon's normal range 10..20 under the bonus");
+        Assert.AreEqual(AttackRules.AttackEffectiveness(attack.Skill, attack.SkillLevel, attack.Combatant.ExtraordinaryIntelligence, false, GameDifficulty.Normal, false), detail.SkillEffectiveness);
+        Assert.AreEqual(values.Damage, DollRatings.Damage(attack.Weapon, attack.Combatant.DamageBonus, attack.Skill, detail.SkillEffectiveness), "the damage rating is made of the detail");
+    }
 }

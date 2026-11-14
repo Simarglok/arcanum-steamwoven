@@ -539,8 +539,9 @@ public sealed partial class GameSessionOwner
 
         internal void AllowAttacking(SessionCombatant combatant)
         {
-            var npcs = combatant.IsHero ? owner._party.Order.ToArray()
-                : owner.LedByPc(combatant.Entity!) ? new[] { combatant.Entity! } : System.Array.Empty<string>();
+            // ARC-WORLD-2119 (0x4AA580, the mirror of 0x4AA4A0): the PC's whole follower tree, or an NPC whose chain of leaders reaches a PC.
+            var npcs = combatant.IsHero ? owner.FollowerTreeOf(SessionEventKinds.PlayerEntity).ToArray()
+                : owner.PcLeads(combatant.Entity!) ? new[] { combatant.Entity! } : System.Array.Empty<string>();
             foreach (var npc in npcs) Update(npc, record => record with { Flags = record.Flags & ~DangerFlags.NoAttack });
         }
 
@@ -643,7 +644,7 @@ public sealed partial class GameSessionOwner
             if (lower ? value <= bound : value >= bound) return GameSessionFailure.None;
             var delta = ReactionRules.DeltaTo(bound, value);
             if (!ReactionLimits.InRange(delta)) return GameSessionFailure.InvalidReactionAmount;
-            var failure = PlanReaction(record, stored, (int)delta, npc, pc, owner.LedByPc(entity), out var adjustment, out var updated);
+            var failure = PlanReaction(record, stored, (int)delta, npc, pc, owner.LedByPc(entity), owner.PcLeads(entity), out var adjustment, out var updated);
             planned = adjustment;
             if (failure != GameSessionFailure.None) return failure;
             _reactions[entity] = (adjustment.Applies ? updated : staged.Write, adjustment);
@@ -656,7 +657,7 @@ public sealed partial class GameSessionOwner
         {
             var npc = facts with { PcOnEnemyList = Get(entity).Enemies.Contains(SessionCombatant.Hero) };
             var record = _reactions.TryGetValue(entity, out var staged) && staged.Write is { } write ? write : owner._reactions.Get(entity);
-            var failure = PlanReaction(record, record.Stored(npc.BaseReaction), delta, npc, pc, owner.LedByPc(entity), out var adjustment, out var updated);
+            var failure = PlanReaction(record, record.Stored(npc.BaseReaction), delta, npc, pc, owner.LedByPc(entity), owner.PcLeads(entity), out var adjustment, out var updated);
             planned = adjustment;
             if (failure != GameSessionFailure.None) return failure;
             _reactions[entity] = (adjustment.Applies ? updated : staged.Write, adjustment);

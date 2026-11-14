@@ -60,6 +60,7 @@ src/Arcanum.Session/GameSessionAttack.cs,CriticalAndWearSteps,pending,
 src/Arcanum.Session/GameSessionAttack.cs,DollValues,exempt,host
 src/Arcanum.Session/GameSessionAttack.cs,FirearmsLevel,pending,
 src/Arcanum.Session/GameSessionAttack.cs,LandShot,pending,
+src/Arcanum.Session/GameSessionAttack.cs,MaxFollowers,exempt,host
 src/Arcanum.Session/GameSessionAttack.cs,QueryHeroAttackChance,pending,
 src/Arcanum.Session/GameSessionAttack.cs,ShotAmmunition,pending,
 src/Arcanum.Session/GameSessionAttack.cs,WithEffects,pending,
@@ -487,6 +488,8 @@ src/Arcanum.World/AreaAiHost.cs,Jump,pending,
 src/Arcanum.World/AreaAiHost.cs,LaunchCast,pending,
 src/Arcanum.World/AreaAiHost.cs,Leader,exempt,host
 src/Arcanum.World/AreaAiHost.cs,LeaderCharisma,exempt,host
+src/Arcanum.World/AreaAiHost.cs,LeaderUnwaitFacts,exempt,host
+src/Arcanum.World/AreaAiHost.cs,LeaderWaitFacts,exempt,host
 src/Arcanum.World/AreaAiHost.cs,LeaveUnforced,exempt,host
 src/Arcanum.World/AreaAiHost.cs,LineOfFire,pending,
 src/Arcanum.World/AreaAiHost.cs,LineOfFireBlocker,pending,
@@ -805,6 +808,9 @@ tools/terrain-viewer/Core/AreaSheetScrollBar.cs,PartAt,exempt,reference
 tools/terrain-viewer/Core/AreaSheetScrollBar.cs,PressArrow,exempt,reference
 tools/terrain-viewer/Core/AreaSheetScrollBar.cs,PressTrack,exempt,reference
 tools/terrain-viewer/Core/AreaSheetScrollBar.cs,public,exempt,reference
+tools/terrain-viewer/Core/AreaStatLines.cs,Armour,exempt,reference
+tools/terrain-viewer/Core/AreaStatLines.cs,Title,exempt,reference
+tools/terrain-viewer/Core/AreaStatLines.cs,Weapon,exempt,reference
 tools/terrain-viewer/Core/AreaTextFonts.cs,Centred,pending,
 tools/terrain-viewer/Core/AreaTextFonts.cs,Place,pending,
 tools/terrain-viewer/Core/AreaTownMapArt.cs,ToLocation,pending,
@@ -877,6 +883,7 @@ tools/terrain-viewer/Godot/TerrainViewerAreaSheetArt.cs,SheetHoverEntry,pending,
 tools/terrain-viewer/Godot/TerrainViewerAreaSleep.cs,ApplyBedUse,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAreaSleep.cs,BedScriptAnswer,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAreaSleep.cs,SleepPressed,exempt,host
+tools/terrain-viewer/Godot/TerrainViewerAreaStatLines.cs,LeaveBarPane,exempt,reference
 tools/terrain-viewer/Godot/TerrainViewerAreaWorldMap.cs,AppendTownRoute,pending,
 tools/terrain-viewer/Godot/TerrainViewerAreaWorldMap.cs,MarkTownMapByScenery,pending,
 tools/terrain-viewer/Godot/TerrainViewerAreaWorldMap.cs,WorldMapTravelCheck,pending,

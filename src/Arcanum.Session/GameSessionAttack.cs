@@ -379,6 +379,18 @@ public sealed class SessionCritterCombat
         _stats.Query(StatContext(state))
             .Snapshot!.GetEffective(stat);
 
+    /// <summary>
+    /// ARC-WORLD-2127: the NPC's max followers (stat 15 through the getter 0x4B0490, ledger AP4) in this life state: its effective charisma / 4, plus one at Persuasion training Expert or Master
+    /// (<paramref name="persuasion"/>), then its effects on that stat, clamped to 1..7 (the hero's value is <see cref="GameSessionOwner.QueryHeroPartySide"/>).
+    /// </summary>
+    public int MaxFollowers(LifeState state, Arcanum.Simulation.Party.PersuasionTraining persuasion)
+    {
+        var snapshot = _stats.Query(StatContext(state)).Snapshot!;
+        var unclamped = snapshot.GetEffective(CharacterStat.Charisma) / 4 + (persuasion >= Arcanum.Simulation.Party.PersuasionTraining.Expert ? 1 : 0);
+        return Math.Clamp(CharacterStatRules.ApplyModifiers(CharacterStat.MaxFollowers, unclamped, snapshot.AppliedEffects),
+            Arcanum.Simulation.Party.FollowConsentRules.MinMaxFollowers, Arcanum.Simulation.Party.FollowConsentRules.MaxMaxFollowers);
+    }
+
     /// <summary>What the NPC defends as in this life state: effective stats under its poison and crippled legs, armour class
     /// (<see cref="AttackRules.ArmorClass"/> under <paramref name="profile"/>), resistances, dodge, light and conditions.</summary>
     public Combatant Combatant(LifeStatus status, LifeState state, CombatAnomalyProfile profile)
@@ -475,7 +487,10 @@ public sealed class SessionCritterCombat
         var resistances = CombatantRules.Resistances(_storedResistances, equipment.Resistances, snapshot.GetEffective(CharacterStat.Constitution), Monstrous, _effectResistances);
         var magic = CombatantRules.MagicResistance(storedMagicResistance, equipment.Resistances.Magic, Monstrous, _effectResistances.Magic);
         var armour = DollRatings.Armour(armorClass, resistances.Normal, resistances.Fire, resistances.Electrical, resistances.Poison, magic);
-        return new(damage, armour, worn.ContainsKey(EquipmentSlot.Weapon) && DollRatings.TooHeavy(values.Weapon.MinimumStrength, values.Combatant.Strength));
+        return new(damage, armour, worn.ContainsKey(EquipmentSlot.Weapon) && DollRatings.TooHeavy(values.Weapon.MinimumStrength, values.Combatant.Strength))
+        {
+            Detail = new(effectiveness, DollRatings.Ranges(values.Weapon, values.Combatant.DamageBonus, values.Skill), armorClass, resistances.Normal, resistances.Fire, resistances.Electrical, resistances.Poison, magic),
+        };
     }
 
     /// <summary>
@@ -559,7 +574,17 @@ public sealed record SessionNpcAttackValues(Combatant Combatant, CombatWeapon We
 /// ARC-UI-1121: the two numbers a doll view prints (the displayed damage rating, 0x464630, and armour rating, 0x464700) and whether the weapon in its
 /// weapon slot is too heavy for its wearer (the slot is filled, 0x465E90), as <see cref="SessionCritterCombat.DollValues"/> reads them.
 /// </summary>
-public sealed record SessionDollRatings(int Damage, int Armour, bool WeaponTooHeavy);
+public sealed record SessionDollRatings(int Damage, int Armour, bool WeaponTooHeavy)
+{
+    /// <summary>ARC-UI-1924 (ledger IW46): the values behind the two ratings that the weapon and armour stat lines print (0x556220, 0x5566B0); null when the reader gave none.</summary>
+    public SessionDollDetail? Detail { get; init; }
+}
+
+/// <summary>
+/// ARC-UI-1924 (ledger IW46): the facts of the weapon stat lines, the weapon skill's effectiveness (the percent line) and the five damage ranges in <see cref="DamageType"/> order,
+/// and of the armour stat lines, the displayed armour class and the five displayed resistances (normal, fire, electrical, poison, magic), as the two ratings are made of them.
+/// </summary>
+public sealed record SessionDollDetail(int SkillEffectiveness, IReadOnlyList<(int Min, int Max)> Ranges, int ArmorClass, int Normal, int Fire, int Electrical, int Poison, int Magic);
 
 /// <summary>
 /// What the hero attacks with (<see cref="GameSessionOwner.QueryHeroAttack"/>): its <see cref="Combatant"/> under its life state,
