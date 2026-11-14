@@ -237,10 +237,27 @@ public sealed class AreaInventoryTests
     }
 
     [TestMethod]
+    public void A_gold_handle_outside_the_holders_list_is_kept_apart_not_refused()
+    {
+        // ARC-WORLD-2036: the main map's Ashbury has an NPC whose gold handle names a gold stack another NPC lists. It refused the whole window's inventory view
+        // (GoldHandleMismatch), and with it the inventory, combat and AI hosts of the window. The three shapes of such a handle now read: a list item that is no gold
+        // (object id 2, the armor 11), an object of the area that is not in the list (id 9, the chest 20), and an object the area does not hold (id 99).
+        foreach (var (named, source) in new (int Handle, int? Source)[] { (2, 11), (9, 20), (99, null) })
+        {
+            var holder = Read(With(0, Critter(10, 1, [2, 4, 3], gold: named))).Holders.Single(h => h.SourceIndex == 10);
+            Assert.IsNull(holder.GoldItem, $"handle {named}");
+            Assert.IsNotNull(holder.StaleGoldHandle, $"handle {named}");
+            Assert.AreEqual(source, holder.StaleGoldHandle.SourceIndex, $"handle {named}");
+            CollectionAssert.AreEqual(new[] { 11, 13, 12 }, holder.Items.ToArray(), $"handle {named}: the list is the holder's own");
+        }
+        // The control: a handle that names a gold item of the list is its gold item and not stale.
+        var normal = Read(With(0, Critter(10, 1, [2, 4, 3], gold: 4))).Holders.Single(h => h.SourceIndex == 10);
+        Assert.IsNotNull(normal.GoldItem); Assert.IsNull(normal.StaleGoldHandle);
+    }
+
+    [TestMethod]
     public void Handles_shapes_and_unadmitted_objects_are_typed_refusals()
     {
-        Refused(AreaInventoryFailure.GoldHandleMismatch, 10, With(0, Critter(10, 1, [2, 4, 3], gold: 2)));
-        Refused(AreaInventoryFailure.GoldHandleMismatch, 10, With(0, Critter(10, 1, [2, 4, 3], gold: 9)));
         Refused(AreaInventoryFailure.DuplicateIdentity, 60, World().Append(Row(60, 7, 3, [Value(18, 0)])));
         Refused(AreaInventoryFailure.StaticInventoryObjectUnsupported, 61, World().Append(Item(61, 61, Generic, null, 5600, kind: AreaSourceKind.Static)));
         Refused(AreaInventoryFailure.StaticInventoryObjectUnsupported, 63, World().Append(Chest(63, 63, [], kind: AreaSourceKind.Static)));
