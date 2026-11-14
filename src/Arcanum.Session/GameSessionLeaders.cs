@@ -85,9 +85,8 @@ public sealed partial class GameSessionOwner
         if (hero.WaitBit) CancelWaitTimers(entity);
         _party.PutNpcLed(new(entity, leader, true));
         if (copyTempus) WriteTempusFugitOnJoin(entity);
-        // 0x45EE30 gives the joiner its leader's concealment; the session's concealment is the hero's party's (its toggle, its end on an attack and its save cover the hero's followers),
-        // so a follower of an NPC is never concealed here (named: a companion's summon does not sneak with it).
-        _combat.Concealed.Remove(entity);
+        // 0x45EE30 gives the joiner (and its own followers) its leader's concealment (ARC-WORLD-2118): a companion's summon sneaks with the hero, and a leader outside the hero's chain conceals no one.
+        TakeLeaderConcealment(entity, leader);
         Revise();
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, null, new(_identity, _revision));
     }
@@ -220,7 +219,7 @@ public sealed partial class GameSessionOwner
     private void LeaveHero(SessionCompanion current)
     {
         _party.Put(current with { Standing = CompanionStanding.Free, Forced = false, WaitFlag = false }, false);
-        _combat.Concealed.Remove(current.Entity);
+        DropConcealmentOfSubtree(current.Entity);
         ClearNoAttackOnLeave(current.Entity);
         ClearTempusFugitOnLeave(current.Entity);
         if (current.WaitBit) CancelWaitTimers(current.Entity);
@@ -236,9 +235,9 @@ public sealed partial class GameSessionOwner
             _party.Put(record with { WaitFlag = false }, false);
             CancelWaitTimers(entity);
         }
+        DropConcealmentOfSubtree(entity);
         _party.RemoveNpcLed(entity);
         ClearTempusFugitOnLeave(entity);
-        _combat.Concealed.Remove(entity);
     }
 
     // The forced leave of a follower of an NPC (LeaveParty for a critter the hero does not lead): NoChange without an NPC leader; an unforced leave is refused under an extraordinary-charisma leader
@@ -258,6 +257,10 @@ public sealed partial class GameSessionOwner
     {
         if (_party.NpcLed.ContainsKey(entity)) LeaveNpcLeader(entity);
         if (!_party.NpcArrays.TryGetValue(entity, out var array)) return;
-        foreach (var follower in array.ToArray()) _party.RemoveNpcLed(follower);
+        foreach (var follower in array.ToArray())
+        {
+            DropConcealmentOfSubtree(follower);
+            _party.RemoveNpcLed(follower);
+        }
     }
 }
