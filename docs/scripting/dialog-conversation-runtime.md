@@ -737,7 +737,7 @@ cancels it (like the cave walk-to-use). The cave map has no dialog NPC. Replies 
 the source (its dialog text control reads only mouse messages, F0); the controller menu navigates, confirms and
 cancels. Keyboard keys are not redirected to dialog actions: the WORLD keyboard route keeps
 them reserved for their original actions ([palette and keyboard route](../input/diagnostic-palette.md)),
-so `T`, digits, `Esc` and `Enter` do nothing in the dialog (ARC-UI-2019: under the Steamwoven setting the digits 1–5 choose the reply with that number, a Steamwoven addition behind `InterfaceRuleProfile.DialogRepliesUnnumbered`; Original shows no reply number and keeps the digits dead). A diagnostic **Leave** button
+so `T`, digits, `Esc` and `Enter` do nothing in the dialog (ARC-UI-2019: under the Steamwoven setting the digits 1–5 choose the reply with that number, a Steamwoven addition behind `InterfaceRuleProfile.DialogRepliesUnnumbered`; Original shows no reply number and keeps the digits dead). A reply is chosen on the mouse press (ARC-UI-2025, ledger DH1–DH7; under Original rows are hit by the band's y / 20 click bands, `InterfaceRuleProfile.DialogReplyRowsDrift`). A diagnostic **Leave** button
 closes an awaiting dialog without a reply. The panel is modal, so the actor gate stays closed. `AreaConversationHost` (viewer Core) reads scripts and dialogs
 through the game's content stack (ARC-SCRIPT-011, [script content](script-content.md): the original's name for
 each script number and the winning copy, so Virgil's script is `Arcanum4.dat`'s, as the game opens it), runs SAP_DIALOG through the
