@@ -162,7 +162,7 @@ public partial class TerrainViewerApp
 
     /// <summary>
     /// ARC-COMBAT-1935 (ledger VC58, VC59, VC60): with an active NPC near the hero in the combat-focus state with the hero as its focus, the hero in combat mode stays in it for the R key, the
-    /// right release and a dialog start (the exit gate's refusal, intgame message 24, no dialog); once the NPC is calm the same R leaves it. The NPC's fight is put back afterwards.
+    /// right release and a dialog start (the exit gate's refusal, intgame message 24, no dialog) and the world map's opener (message 600, no map, ARC-UI-1940); once the NPC is calm the same R leaves it. The NPC's fight is put back afterwards.
     /// </summary>
     private void RunAreaCombatExitThreatSmoke(GameSessionOwner session, AreaAiHost host, string entity, IEnumerable<string> pack)
     {
@@ -189,6 +189,12 @@ public partial class TerrainViewerApp
         Require(HeroInCombatMode && _combatModeNotice.Contains(Refused, StringComparison.Ordinal), $"the right release keeps combat mode: {_combatModeNotice}");
         _combatModeNotice = "";
         Require(!LeaveCombatModeForDialog() && HeroInCombatMode && _combatModeNotice.Contains(Refused, StringComparison.Ordinal), $"a dialog start opens no dialog and keeps combat mode: {_combatModeNotice}");
+        // ARC-UI-1940 (WM3, VC60): the world map's opener asks the same gate: message 600 and no map while the NPC fights the hero, the hero still in combat mode.
+        Require(WorldMapActive && WindowCanOpen(InterfaceMode.WorldMap), "the world map can be opened here");
+        _worldMapStatus = null;
+        OpenWorldMap();
+        Require(HeroInCombatMode && !WorldMapOpen && _worldMapStatus?.Contains("message 600", StringComparison.Ordinal) == true, $"the world map opener keeps combat mode and shows message 600: open={WorldMapOpen} status={_worldMapStatus}");
+        _worldMapStatus = null;
         // The NPC calm: the same key leaves, and the fight is put back for the stage that follows.
         // Every NPC of the map's pack is calmed (a neighbour that joined the fight would keep the gate shut): the scan then finds no threat.
         CalmNpcsForSmoke(session, pack.Append(entity));
@@ -200,7 +206,7 @@ public partial class TerrainViewerApp
         Require(HeroInCombatMode, "R enters combat mode again");
         host.HeroAttacked(entity);
         Require(session.QueryDanger(entity) is { State: DangerState.CombatFocus, Focus.IsHero: true }, "the NPC fights the hero again");
-        GD.Print("ARC-COMBAT-1935 native-smoke combat-exit PASS (R, right release and dialog start refused under attack; R leaves when calm)");
+        GD.Print("ARC-COMBAT-1935 native-smoke combat-exit PASS (R, right release, dialog start and the world map opener refused under attack; R leaves when calm)");
     }
 
     /// <summary>The first cell at least 12 cells (Chebyshev) from <paramref name="start"/> on open steps, else the farthest such cell
