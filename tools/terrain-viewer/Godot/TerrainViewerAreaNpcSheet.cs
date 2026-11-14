@@ -146,10 +146,10 @@ public partial class TerrainViewerApp
         AdoptSkillTexts();
         var name = AreaHoverIndex.Text(row, _hoverNames?.Catalog) ?? entity;
         var life = _combatHost is { } combat ? AreaLife.Of(session, combat, entity) : null;
-        var pages = AreaNpcSheet.Build(session, name, fields, loaded, life, _skillTexts?.Texts, AreaHoverIndex.TextProfile) ?? Refuse("the speaker is not a critter");
         // ARC-UI-1791 (ledger CHW25, 0x553D10): an NPC the local PC leads that stores a portrait shows it (a file that does not read leaves the slot empty); any other NPC shows its icon.
-        _sheetNpcPortrait = pages is { View.LedByHero: true } ? AreaPortraits.Stored(row) : null;
-        return _sheetNpcPortrait is null || pages is null ? pages : pages with { View = pages.View with { IconArt = null } };
+        var pages = AreaNpcSheet.Build(session, name, fields, loaded, life, _skillTexts?.Texts, AreaHoverIndex.TextProfile, AreaPortraits.Stored(row)) ?? Refuse("the speaker is not a critter");
+        _sheetNpcPortrait = pages?.View.PortraitId;
+        return pages;
     }
 
     // ARC-UI-1791: the stored portrait the NPC sheet just built shows in its slot (null: the icon or nothing).

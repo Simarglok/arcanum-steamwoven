@@ -41,6 +41,9 @@ public sealed record AreaCharacterSheetView(string Name, CharacterRace Race, Cha
 
     /// <summary>ARC-UI-1791: an NPC led by the local PC (0x45DDA0): it shows its own portrait when it has one, else the icon.</summary>
     public bool LedByHero { get; init; }
+
+    /// <summary>ARC-UI-1791: the stored portrait number the NPC's slot shows (a led NPC that stores one); null otherwise.</summary>
+    public int? PortraitId { get; init; }
 }
 
 /// <summary>A sheet or the reason it does not open.</summary>

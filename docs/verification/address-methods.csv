@@ -558,6 +558,7 @@ src/Arcanum.World/AreaBarter.cs,HeroCanTrade,pending,
 src/Arcanum.World/AreaBarter.cs,Open,pending,
 src/Arcanum.World/AreaBeds.cs,IsBedArt,exempt,reference
 src/Arcanum.World/AreaBeds.cs,OccupiedFrame,exempt,host
+src/Arcanum.World/AreaCharacterSheetIcon.cs,NpcArt,exempt,host
 src/Arcanum.World/AreaCharacterSheetTexts.cs,DerivedName,pending,
 src/Arcanum.World/AreaCharacterSheetTexts.cs,SchemeNumbers,exempt,host
 src/Arcanum.World/AreaCombat.cs,NpcHolder,pending,

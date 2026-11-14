@@ -183,6 +183,7 @@ public sealed class AreaCharacterSheetArtTests
         Assert.IsFalse(new AreaCharacterSheetArtContent(noGauge, AreaCharacterSheetTexts.Project("t"), "t").ArtReady);
         Assert.IsFalse(AreaCharacterSheetArtContent.Empty("self-test").ArtReady);
     }
+
     /// <summary>ARC-UI-1791 (ledger CHW25): a PC's sheet adds the Age line (charedit.mes 6, `": %d "`) at (337, 72) in the label font, white; none without an age.</summary>
     [TestMethod]
     public void The_age_line_stands_under_race_and_gender_for_a_pc_only()
