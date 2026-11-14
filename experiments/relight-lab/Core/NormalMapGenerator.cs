@@ -41,8 +41,8 @@ public sealed record NormalMap(int Width, int Height, byte[] Rgba, NormalConvent
 /// ARC-RES-1978 (FR-LIGHT-013 experiment): a small deterministic normal-map generator for the original sprites, which are pre-rendered with
 /// their shading baked in, so there is no height map to read: the height is the luminance. The normal comes from the 3x3 Sobel of that
 /// height (optionally blurred first), alpha aware: a transparent neighbour takes the centre's height (a silhouette is not a cliff) and the
-/// alpha edge adds an outward bevel. It is the CPU twin of the viewer's relit shader (<c>tools/terrain-viewer/Godot/AreaRelight.cs</c>), so
-/// a frame can be checked, batch-generated for a later HD pack, or measured here. Integer maths where it matters, no random numbers, no
+/// alpha edge adds an outward bevel. It is the CPU counterpart of the viewer's relit shader (<c>tools/terrain-viewer/Godot/AreaRelight.cs</c>: the same Sobel, bevel sign and
+/// gains; the shader has no blur and uses a continuous alpha in the bevel), so a frame can be checked, batch-generated for a later HD pack, or measured here. Integer maths where it matters, no random numbers, no
 /// time: the same pixels and options always give the same bytes.
 /// </summary>
 public static class NormalMapGenerator

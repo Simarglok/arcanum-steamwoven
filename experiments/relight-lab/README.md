@@ -2,7 +2,7 @@
 
 Godot-free C# generator and measuring tool for the [relighting experiment](../../docs/research/relighting-experiment.md). The
 viewer's relit shader (`tools/terrain-viewer/Godot/AreaRelight.cs`) derives a normal per sprite pixel on the GPU; `Core/NormalMapGenerator.cs`
-is its CPU twin, so a frame can be checked, measured or batch-generated for a later HD pack. It reads no game data by itself.
+is its CPU counterpart (same Sobel, bevel sign and gains; the shader has no blur and a continuous alpha in the bevel), so a frame can be checked, measured or batch-generated for a later HD pack. It reads no game data by itself.
 
 - Height is the luminance (the original sprites have their light baked in, so there is no height map). The normal is the 3×3 Sobel of
   the height (optionally box-blurred first), alpha aware: an empty neighbour takes the centre's height, and the silhouette adds an

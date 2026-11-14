@@ -126,6 +126,7 @@ public partial class TerrainViewerApp
             }
             GD.Print("ARC-RES-1978 relight pixels differing from Legacy near the hero " + System.Text.Json.JsonSerializer.Serialize(counts));
             Require(counts["night-2-add"] > 0, "the relit night frame differs from Legacy near the hero's light");
+            Require(counts["day-3-night"] <= counts["day-2-add"] && counts["night-3-night"] <= counts["night-2-add"], "the night-weighted mode changes no more pixels than add");
 
 
             // A walk with the torch: the same held-stick walk twice, Legacy then relit (the simulation is deterministic, so frame i is the same
@@ -172,12 +173,12 @@ public partial class TerrainViewerApp
                 }
                 var legacyWalk = await Walk(AreaRelight.Mode.Off);
                 var relitWalk = await Walk(AreaRelight.Mode.NightAdd);
-                Rect2I RegionAt(int f) => new Rect2I(160, 100, 960, 600).Intersection(new Rect2I(Vector2I.Zero, legacyWalk[0].GetSize()));
+                Rect2I Region() => new Rect2I(160, 100, 960, 600).Intersection(new Rect2I(Vector2I.Zero, legacyWalk[0].GetSize()));
                 static float Lum(Color c) => 0.299f * c.R + 0.587f * c.G + 0.114f * c.B;
                 for (var f = 0; f + 1 < Steps; f++)
                 {
                     double term = 0, plain = 0; var n = 0;
-                    var region = RegionAt(f);
+                    var region = Region();
                     for (var y = region.Position.Y; y < region.End.Y; y += 2)
                         for (var x = region.Position.X; x < region.End.X; x += 2)
                         {
@@ -196,6 +197,7 @@ public partial class TerrainViewerApp
                         relitWalk[f].SavePng($"{captureDir}/walk-relit-{f:00}.png");
                     }
             }
+            Require(walkSteps > 0, "a walk of the hero was found and recorded");
             AreaRelight.SetMode(AreaRelight.Mode.Off); PushAreaAmbient();
             AreaSmokePlace(map, start); _worldFitView = false; _camera!.ResetWorld(WorldAnchor, WorldViewport, _worldPreferredZoom); PublishWorldSelection();
             var walkReport = new { Direction = direction is { } w ? $"{w.X},{w.Y}" : "none", Steps = walkSteps, MeanTermStep = Math.Round(walkSteps > 0 ? walkTermStep / walkSteps : 0, 5),
@@ -222,8 +224,8 @@ public partial class TerrainViewerApp
                     var centre = all.Field.Placements.Count > 0 ? all.Field.Placements[0].Rect : default;
                     var p = _canvas.AreaActorPlacementNow;
                     var hero = p is null ? new Vector2(centre.X + centre.Width / 2f, centre.Y + centre.Height / 2f)
-                        : new Vector2(TerrainGeometry.Project(checked((int)p.MapX!.Value), checked((int)p.MapY!.Value)).X + (p.InstanceOffsetX ?? 0) + 40,
-                            TerrainGeometry.Project(checked((int)p.MapX!.Value), checked((int)p.MapY!.Value)).Y + (p.InstanceOffsetY ?? 0) + 20);
+                        : new Vector2(TerrainGeometry.Project(checked((int)(p.MapX ?? 0)), checked((int)(p.MapY ?? 0))).X + (p.InstanceOffsetX ?? 0) + 40,
+                            TerrainGeometry.Project(checked((int)(p.MapX ?? 0)), checked((int)(p.MapY ?? 0))).Y + (p.InstanceOffsetY ?? 0) + 20);
                     AreaRelight.Extra.Add(new AreaRelight.Light(hero.X + (float)Math.Cos(angle) * radius, hero.Y + (float)Math.Sin(angle) * radius * .5f, 110f,
                         new Color(1f, .75f, .45f)));
                 }

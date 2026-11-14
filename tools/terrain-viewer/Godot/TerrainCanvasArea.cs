@@ -523,7 +523,9 @@ public partial class TerrainCanvas
     // ARC-RES-1978: the carried lights as they stand now, merged with the map's, for the relit shaders (nothing while the relit look is off).
     private void UploadRelightLights()
     {
-        if (!AreaRelight.Active || _areaAmbient is not { } relitAmbient) return;
+        if (!AreaRelight.Active) return;
+        // No lighting shown (toggled off, or the area released): no lights either, so a stale list does not light the next view.
+        if (_areaAmbient is not { } relitAmbient) { AreaRelight.SetCarriedLights([]); AreaRelight.SetMapLights([]); AreaRelight.Upload(); return; }
         AreaRelight.SetCarriedLights((_areaCarriedNow?.CarriedPlacements ?? []).Select(p => AreaRelight.FromPlacement(p.Light, p.Rect, relitAmbient.Pair))
             .Where(light => light is not null).Select(light => light!.Value));
         AreaRelight.Upload();

@@ -8,14 +8,14 @@ namespace Arcanum.TerrainViewer;
 /// ARC-RES-1978 (experiment, FR-LIGHT-013 / FR-PRODUCT-007): a switchable "relit" look of the area draw. Off by default; while off nothing here
 /// touches the draw (the Legacy shader programs and their uniforms are the ones the viewer always had). While on, the area item shaders are
 /// replaced by variants that, per pixel, derive a normal from the sprite's own luminance (Sobel, alpha aware: the CPU twin is
-/// <c>experiments/relight-lab</c> <c>NormalMapGenerator</c>) and add a normal-mapped diffuse term for the map's stationary lights and the carried
+/// <c>experiments/relight-lab</c> <c>NormalMapGenerator</c>, similar, not bit-exact) and add a normal-mapped diffuse term for the map's stationary lights and the carried
 /// lights (the same sources the Legacy lattice uses), on top of the Legacy colour. It is a presentation-only variant: no geometry, clock,
 /// RNG or gameplay luminance is read from or changed by it. The lights reach every item through global shader uniforms, so no per-item
 /// uniform changes with the light list.
 /// </summary>
 internal static class AreaRelight
 {
-    /// <summary>Lights the shader reads (a 32 x 2 float texture); extra ones are dropped, nearest to the first ones kept in source order.</summary>
+    /// <summary>Lights the shader reads (a 32 x 2 float texture); the carried lights come first, then the map's lights nearest the first carried light (source order when there is none), then the synthetic extras; the rest are dropped.</summary>
     internal const int MaxLights = 32;
 
     /// <summary>How the relit term is combined with the Legacy colour (the three baked-light mitigations of the handoff).</summary>
@@ -104,7 +104,9 @@ internal static class AreaRelight
     {
         if (!Active) return;
         EnsureRegistered();
-        var all = MapLights.Concat(CarriedLights).Concat(Extra).Take(MaxLights).ToArray();
+        var near = CarriedLights.Count > 0 ? CarriedLights[0] : (Light?)null;
+        var map = near is { } anchor ? MapLights.OrderBy(l => (l.X - anchor.X) * (l.X - anchor.X) + (l.Y - anchor.Y) * (l.Y - anchor.Y)) : MapLights.AsEnumerable();
+        var all = CarriedLights.Concat(map).Concat(Extra).Take(MaxLights).ToArray();
         var key = string.Join('|', all.Select(l => $"{l.X:0.#},{l.Y:0.#},{l.Radius:0.#},{l.Colour.R:0.##},{l.Colour.G:0.##},{l.Colour.B:0.##}"));
         if (key != _lastKey)
         {
@@ -145,41 +147,45 @@ internal static class AreaRelight
                 }
             }
         }
-        vec3 rl_normal(mat3 h, mat3 a, float gain) {
+        vec3 rl_normal(mat3 h, mat3 a, float gain, float bevel) {
             float dx = (h[2][0] + 2.0 * h[2][1] + h[2][2]) - (h[0][0] + 2.0 * h[0][1] + h[0][2]);
             float dy = (h[0][2] + 2.0 * h[1][2] + h[2][2]) - (h[0][0] + 2.0 * h[1][0] + h[2][0]);
             // Outward bevel at a silhouette edge (a missing neighbour on the right pushes the normal to the right).
             float ex = ((a[0][0] + 2.0 * a[0][1] + a[0][2]) - (a[2][0] + 2.0 * a[2][1] + a[2][2])) * 0.25;
             float ey = ((a[0][0] + 2.0 * a[1][0] + a[2][0]) - (a[0][2] + 2.0 * a[1][2] + a[2][2])) * 0.25;
-            return normalize(vec3(-dx * gain * 2.0 + ex * 0.6, -dy * gain * 2.0 + ey * 0.6, 1.0));
+            return normalize(vec3(-dx * gain * 2.0 + ex * bevel, -dy * gain * 2.0 + ey * bevel, 1.0));
         }
         // The relit pixel: the Legacy colour (texel x the lattice tint) plus the normal-mapped diffuse term of the lights, per the mode.
+        // ambient is the item's own Legacy ambient (a uniform of the program), the night weight's measure of darkness.
         vec4 relit_color(sampler2D tex, vec4 texel, ivec2 p, vec2 frag, float alpha) {
             vec3 tint = light_tint(frag);
             vec3 base = texel.rgb * tint;
             int mode = int(relight_params.x + 0.5);
             int count = int(relight_kinds.w + 0.5);
-            if (mode == 0 || relight_kind == 0 || count == 0 || texel.a <= 0.0) return vec4(base, texel.a * alpha);
+            if (mode == 0 || relight_kind == 0 || texel.a <= 0.0 || (count == 0 && mode != 3)) return vec4(base, texel.a * alpha);
             vec2 world = (frag - raster.xy) / raster.zw;
             float gain = relight_kind == 1 ? relight_kinds.x : (relight_kind == 2 ? relight_kinds.y : relight_kinds.z);
+            float bevel = relight_kind == 1 ? 0.0 : 0.6;
             vec3 sum = vec3(0.0);
             mat3 hh; mat3 aa;
             bool have = false;
             vec3 n = vec3(0.0, 0.0, 1.0);
+            // De-light flattens the baked shading everywhere (not only near a light), so the base has no step at a light's edge.
+            if (mode == 3) { rl_taps(tex, p, texel, hh, aa); n = rl_normal(hh, aa, gain, bevel); have = true; }
             for (int i = 0; i < count; i++) {
                 vec4 l0 = texelFetch(relight_lights, ivec2(i, 0), 0);
                 vec3 c = texelFetch(relight_lights, ivec2(i, 1), 0).rgb;
                 vec2 d = l0.xy - world;
                 float att = max(1.0 - length(d) / max(l0.w, 1.0), 0.0);
                 if (att <= 0.0) continue;
-                if (!have) { rl_taps(tex, p, texel, hh, aa); n = rl_normal(hh, aa, gain); have = true; }
+                if (!have) { rl_taps(tex, p, texel, hh, aa); n = rl_normal(hh, aa, gain, bevel); have = true; }
                 vec3 l = normalize(vec3(d, l0.z));
                 sum += c * att * att * max(dot(n, l), 0.0);
             }
             if (!have) return vec4(base, texel.a * alpha);
             float w = relight_params.y;
             // Night weighting: a bright ambient (day) leaves the Legacy pixel, a dark one takes the full term.
-            if (mode >= 2) w *= clamp(1.0 - rl_lum(tint), 0.0, 1.0);
+            if (mode >= 2) w *= clamp(1.0 - rl_lum(ambient), 0.0, 1.0);
             if (mode == 3) {
                 // Partial de-light: pull the baked shading towards the local mean luminance (contrast reduced by the set share).
                 float mean = 0.0;
