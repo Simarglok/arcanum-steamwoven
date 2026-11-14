@@ -12,7 +12,7 @@ namespace Arcanum.TerrainViewer;
 // original Ready/Unready key R toggles it through the session (refused while the hero cannot: unconscious, stunned, dead);
 // leaving goes through the exit gate, which the attack playing and an active NPC near the hero that fights it or its followers
 // close (ARC-COMBAT-1935: the R key, the right release and the dialog start pass the AI host's threat scan, as the rest window does).
-// A dialog start and a map change leave combat mode first, as the source's dialog and teleport do. Running in combat mode charges one fatigue
+// A dialog start, the world map's opener (ARC-UI-1940, WM3: message 600 and no map when the gate refuses) and a map change leave combat mode first, as the source's dialog, world map and teleport do. Running in combat mode charges one fatigue
 // every fifth run step of a move (fatigue-limiting and -draining heroes do not exist yet); a hero out of fatigue walks.
 // The status line shows the mode and the hero's fatigue. In combat mode the original's left click attacks a living NPC;
 // that click is ARC-COMBAT-005's, so a click still talks here, and the dialog leaves combat mode first. ARC-COMBAT-022: a right
@@ -123,6 +123,20 @@ public partial class TerrainViewerApp
         if (result.Refusal == SessionCombatModeRefusal.UnderAttack) { _combatModeNotice = "no dialog: " + Refusal(result.Refusal); return false; }
         if (result.Disposition == GameSessionDisposition.Changed) _combatModeNotice = "left combat mode to talk";
         return true;
+    }
+
+    /// <summary>
+    /// ARC-UI-1940 (WM3, ledger VC60): the hero leaves combat mode as the world map opens, after the opener has asked the exit gate (<see cref="HeroInCombatMode"/> and
+    /// <c>QueryCanExitCombatMode</c>; a refusal there is message 600 and no map). A stunned hero the leave refuses stays in it and the open goes on, as for a dialog start.
+    /// </summary>
+    private void LeaveCombatModeForWorldMap()
+    {
+        if (!HeroInCombatMode) return;
+        var session = _areaSession!;
+        var result = session.LeaveHeroCombatMode(session.Version, CombatModeContext(), CombatExitFacts());
+        GD.Print($"ARC-UI-1940 world-map-leave disposition={result.Disposition} refusal={result.Refusal} on={result.InCombatMode}");
+        if (!HeroInCombatMode) CancelAreaAttack("left combat mode");
+        if (result.Disposition == GameSessionDisposition.Changed) _combatModeNotice = "left combat mode to open the world map";
     }
 
     /// <summary>A new move starts its run counter at 0 (the source counts per move goal).</summary>

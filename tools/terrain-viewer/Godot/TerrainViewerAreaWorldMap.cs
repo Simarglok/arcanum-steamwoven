@@ -152,6 +152,16 @@ public partial class TerrainViewerApp
             RefreshAreaStatus();
             return;
         }
+        // ARC-UI-1940 (WM3, ledger VC60): a PC in combat mode asks the exit gate (0x4B3D90) with the threat facts; a gate that refuses gives message 600 and no map, one that allows
+        // leaves combat mode (0x4B3F20) and the open goes on (a stunned hero the leave refuses goes on too, as the dialog start does). The gate is asked first, as in the original;
+        // the hero leaves only once this viewer's own refusals below (the loaded data, the start map, a pending transfer, a moving actor) have let the open through.
+        if (HeroInCombatMode && !_areaSession!.QueryCanExitCombatMode(CombatExitFacts()))
+        {
+            _worldMapStatus = $"the world map cannot be opened: {Refusal(SessionCombatModeRefusal.UnderAttack)} (message 600)";
+            GD.Print("ARC-UI-1940 world map refused under attack (message 600)");
+            RefreshAreaStatus();
+            return;
+        }
         AdoptWorldMapData();
         // ARC-UI-084 (WM5, WM65): a PC in a sector with a town map is not on the walkable world and the original look opens on the town map, on any map.
         var art = AdoptWorldMapArt();
@@ -164,7 +174,6 @@ public partial class TerrainViewerApp
         string? refused = _worldMapData is not { Data: { } data } ? $"world-map data {(_worldMapData is null ? "loading" : _worldMapData.Status.ToString())}"
             : townLoading ? "the town maps are still loading"
             : _readyArea!.Snapshot.RuntimeMap != data.StartRuntime && !DebugMode && !teleport && townShow is null ? $"only on the start map ({data.StartMap})"
-            : HeroInCombatMode ? "leave combat mode first"
             : AreaTransferPending ? "a transfer is pending"
             : _worldActor.Session is not AreaGridSession { State.Phase: Arcanum.Simulation.Movement.MovementPhase.Settled } ? "the actor is moving"
             : null;
@@ -175,6 +184,7 @@ public partial class TerrainViewerApp
             RefreshAreaStatus();
             return;
         }
+        LeaveCombatModeForWorldMap();
         var session = (AreaGridSession)_worldActor.Session!;
         var cell = session.Chart.ToWorld(session.State.CommittedCell);
         // ARC-DEV-050: off the start map (debug mode only) the view has no position and only teleports.
