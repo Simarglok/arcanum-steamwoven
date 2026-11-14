@@ -106,4 +106,44 @@ public sealed class DialogReplyBandTests
         Assert.IsTrue(hover.IsLit(4), "only the remembered row is redrawn plain on leaving: row 4 stays lit, as in the original");
         Assert.IsFalse(hover.IsLit(3));
     }
+
+    [TestMethod]
+    public void The_box_is_400_wide_centred_and_placed_by_the_view_height()
+    {
+        // ARC-UI-2022 (0x4C9720): y 299 in a 400 px view, else the view height minus 181; x = (view width - box width) / 2.
+        Assert.AreEqual(299, DialogReplyBand.BoxTop(400));
+        Assert.AreEqual(419, DialogReplyBand.BoxTop(600));
+        Assert.AreEqual(899, DialogReplyBand.BoxTop(1080));
+        Assert.AreEqual(200, DialogReplyBand.BoxLeft(800, 400));
+        Assert.AreEqual(760, DialogReplyBand.BoxLeft(1920, 400));
+        Assert.AreEqual(759, DialogReplyBand.BoxLeft(1920, 401), "integer division: a box widened by one px moves left by 0 or 1 px");
+        CollectionAssert.AreEqual(new[] { 400, 6, 12, 18 }, new[] { DialogReplyBand.MinWidth, DialogReplyBand.TextX, DialogReplyBand.Margins, DialogReplyBand.DarkenBy });
+    }
+
+    [TestMethod]
+    public void The_box_widens_to_the_drawn_text_plus_the_shadow_pixel_and_the_margins_and_never_shrinks()
+    {
+        Assert.AreEqual(400, DialogReplyBand.Widened(400, 100), "a short line leaves the box");
+        Assert.AreEqual(400, DialogReplyBand.Widened(400, 387), "387 + 1 + 12 = 400 does not exceed it");
+        Assert.AreEqual(401, DialogReplyBand.Widened(400, 388));
+        Assert.AreEqual(401, DialogReplyBand.Widened(401, 50), "no shrink within a reply set");
+        Assert.AreEqual(500, DialogReplyBand.Widened(400, 487));
+    }
+
+    [TestMethod]
+    public void The_darkening_subtracts_18_per_channel_and_saturates_at_zero()
+    {
+        Assert.AreEqual(237, DialogReplyBand.Darken(255));
+        Assert.AreEqual(0, DialogReplyBand.Darken(18));
+        Assert.AreEqual(0, DialogReplyBand.Darken(5));
+        Assert.AreEqual(82, DialogReplyBand.Darken(100));
+    }
+
+    [TestMethod]
+    public void Row_text_is_white_lit_yellow_with_a_dark_shadow()
+    {
+        Assert.AreEqual(((byte)255, (byte)255, (byte)255), DialogReplyBand.RowColour);
+        Assert.AreEqual(((byte)255, (byte)255, (byte)0), DialogReplyBand.LitColour);
+        Assert.AreEqual(((byte)10, (byte)10, (byte)10), DialogReplyBand.ShadowColour);
+    }
 }

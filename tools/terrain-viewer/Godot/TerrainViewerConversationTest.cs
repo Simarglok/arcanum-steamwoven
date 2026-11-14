@@ -1,6 +1,7 @@
 using System.Text;
 using Arcanum.Data;
 using Arcanum.Data.Area;
+using Arcanum.Presentation.Hud;
 using Arcanum.Scripting.Dialog;
 using Arcanum.Session;
 using Arcanum.TerrainViewer.Core;
@@ -114,6 +115,7 @@ public static partial class TerrainViewerSelfTest
             await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
             Require(conversation.Turn == before && conversation.Phase == DialogConversationPhase.AwaitingSelection, "the blocked reply and the empty slot choose nothing");
             panel.OriginalReplyRows = false;
+            Require(!panel.BandShownForSelfTest && !panel.StackInBandForSelfTest, "Steamwoven: the stack is back in the panel and the band is gone");
             Require(panel.ChooseByDigit(1), "a digit chooses the numbered reply");
             Require(conversation.CurrentNode.Value == 10 && panel.NpcLineForSelfTest.StartsWith("A bridge fell.") && panel.ButtonsForSelfTest.Count == 1, "Direct reply continues");
             Require(picks == 1 && lines.Count == 3 && lines[1] == "removed" && lines[2].StartsWith("P:A bridge fell."), $"a processed reply removes the bubble, then the answer is a new persistent one: {string.Join("|", lines)}");
@@ -130,8 +132,23 @@ public static partial class TerrainViewerSelfTest
             Require(!panel.BandInputForSelfTest(Press(new(-3, 5))) && !panel.BandInputForSelfTest(Press(new(10, 100))), "a press outside the band is not taken");
             Require(panel.BandInputForSelfTest(Press(new(10, 25))) && conversation.CurrentNode.Value == node, "an empty slot is refused");
             Require(!panel.BandInputForSelfTest(Release(new(10, 2))) && conversation.CurrentNode.Value == node, "the band takes no release (the reply buttons act on the press, not the release)");
+            // ARC-UI-2022: the band is the original's strip over the view: 400 px wide (short replies), centred, 100 tall, its top by the view height, a subtract shade of 18.
+            var view = host.GetViewport().GetVisibleRect().Size;
+            var rect = panel.BandRectForSelfTest;
+            Require(panel.BandShownForSelfTest && rect.W == DialogReplyBand.MinWidth && rect.H == DialogReplyBand.Height && rect.X == DialogReplyBand.BoxLeft((int)view.X, rect.W) && rect.Y == DialogReplyBand.BoxTop((int)view.Y),
+                $"Original: the band is a 400x100 strip centred in the view at {DialogReplyBand.BoxTop((int)view.Y)}: {rect} in {view}");
+            Require(panel.BandShadeForSelfTest == "18,18,18|Sub", $"the band darkens by subtracting 18: {panel.BandShadeForSelfTest}");
+            Require(!panel.BandInputForSelfTest(Press(new(rect.W, 5))) && !panel.BandInputForSelfTest(Press(new(rect.W + 50, 5))), "a press right of the band's width is outside it (not the panel's width)");
+            Require(panel.RowColourForSelfTest(0) is (255, 255, 255), $"a normal row is pure white: {panel.RowColourForSelfTest(0)}");
+            if (panel.ArtFontsForSelfTest) Require(panel.RowShadowForSelfTest(0) == new Vector2(1, 1), "a row draws a shadow one pixel right and down");
+            await ScreenshotAsync(host, "original-band");
             panel.BandInputForSelfTest(new InputEventMouseMotion { Position = new(10, 5) });
             Require(panel.RowLitForSelfTest(0), "the pointer on the first row's drawn pixels lights it");
+            // The process-frame signal comes before the nodes' own process: two frames make sure the panel's _Process has coloured the row.
+            await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+            await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+            Require(panel.RowColourForSelfTest(0) is (255, 255, 0), $"the lit row is yellow: {panel.RowColourForSelfTest(0)}");
+            await ScreenshotAsync(host, "original-band-lit");
             // ARC-UI-2052: the rows are rebuilt (here by the numbering) under a stationary pointer: the new row is lit against the live cursor, no motion needed.
             panel.NumberedReplies = false;
             await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
@@ -155,10 +172,24 @@ public static partial class TerrainViewerSelfTest
             panel.BandInputForSelfTest(new InputEventMouseMotion { Position = new(-5, 5) });
             await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
             Require(!panel.RowLitForSelfTest(0), "a pointer outside the band lights nothing");
+            await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+            await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+            Require(panel.RowColourForSelfTest(0) is (255, 255, 255), "the unlit row is white again");
+            // With the chrome hidden (ARC-UI-2023) the framed panel is empty and not drawn: the band alone is on screen.
+            Require(panel.PanelShownForSelfTest, "Original with the chrome shown still draws the framed panel above the band");
+            panel.DiagnosticChromeHidden = true;
+            await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+            await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+            Require(!panel.PanelShownForSelfTest && panel.BandShownForSelfTest, "Original with the chrome hidden draws only the band");
+            await ScreenshotAsync(host, "original-band-only");
+            panel.DiagnosticChromeHidden = false;
+            await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
             Require(panel.BandInputForSelfTest(Press(new(10, 2))), "a press above the first row's drawn top is still in its click band");
             await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
             Require(picks == 2 && lines.Count == 4 && lines[3] == "removed", $"the ending reply removes the bubble and shows no new persistent one: {string.Join("|", lines)}");
             Require(conversation.Phase == DialogConversationPhase.Ended && panel.OutcomeForSelfTest.Contains("SCR line 5") && panel.ButtonsForSelfTest.Count == 0, "Exit returns to the caller's next SCR line");
+            await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+            Require(!panel.BandShownForSelfTest, "a finished dialog has no reply, so no band is drawn");
             panel.OriginalReplyRows = false;
             Require(state.LocalFlag(0, 2) && session.QueryQuest(1003)?.State == Arcanum.Session.SessionQuestState.Mentioned && session.QueryRumor(1001) is not null,
                 "typed effects reached the session");
