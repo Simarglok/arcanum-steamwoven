@@ -730,10 +730,9 @@ effective SAP_DIALOG attachment names a script talks to it. The NPC must be the
 [hover pick](../rendering/terrain-viewer.md#hover-tooltip-and-action-cursor-arc-ui-005) under the
 pointer: the frontmost opaque body that is not click-through (ARC-UI-005). The click takes the guarded
 ground-click path of the [click-to-move route](../world/click-route-runtime.md) (focus, modal, gate,
-lifecycle, pending map transfer). Within 3 tiles (Chebyshev; project rule, not source range)
-the dialog opens at once; farther away the route walks to the nearest standable cell within
-reach and the talk starts on arrival, unless a stick, another click, a reset/reload or a modal
-cancels it (like the cave walk-to-use). The cave map has no dialog NPC. Replies are chosen by **mouse**, as in
+lifecycle, pending map transfer). Since ARC-DEV-169 the click orders the hero's goal 21 (`ag_talk`, [goal table](../architecture/goal-table.md)): within less than 5 cells
+(the original's range, node 0x42AE10; not the earlier 3-tile project rule) the dialog opens at once; farther away goal 8 walks the hero next to the NPC
+and the range is tested again, and the talk is ended by a stick, another order, a reset/reload or a modal (like the cave walk-to-use). The cave map has no dialog NPC. Replies are chosen by **mouse**, as in
 the source (its dialog text control reads only mouse messages, F0); the controller menu navigates, confirms and
 cancels. Keyboard keys are not redirected to dialog actions: the WORLD keyboard route keeps
 them reserved for their original actions ([palette and keyboard route](../input/diagnostic-palette.md)),
