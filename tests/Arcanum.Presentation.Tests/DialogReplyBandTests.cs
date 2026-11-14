@@ -93,4 +93,17 @@ public sealed class DialogReplyBandTests
         hover.Leave();
         Assert.IsFalse(hover.IsLit(1));
     }
+
+    [TestMethod]
+    public void Hover_keeps_the_stale_lit_row_the_original_leaves_behind()
+    {
+        var hover = new DialogReplyBand.Hover(400, 5);
+        hover.Move(10, 85);
+        hover.Move(10, 79);
+        Assert.IsTrue(hover.IsLit(4), "row 4 is redrawn lit at y 79 while row 3 is the remembered one");
+        Assert.AreEqual(3, hover.Remembered);
+        hover.Leave();
+        Assert.IsTrue(hover.IsLit(4), "only the remembered row is redrawn plain on leaving: row 4 stays lit, as in the original");
+        Assert.IsFalse(hover.IsLit(3));
+    }
 }

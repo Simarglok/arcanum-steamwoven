@@ -150,7 +150,7 @@ public partial class AreaConversationPanel : CanvasLayer
     /// <summary>Shows a conversation, or only a message when none could start.</summary>
     public void Open(string title, DialogConversation? conversation, string? message = null)
     {
-        _title = title; _conversation = conversation; _message = message;
+        _title = title; _conversation = conversation; _message = message; _focusLit = false;
         Show(); Render(message);
     }
 
@@ -206,6 +206,7 @@ public partial class AreaConversationPanel : CanvasLayer
 
     public void Navigate(int direction)
     {
+        _focusLit = true;
         var enabled = _buttons.Where(button => !button.Disabled).Append(_leave).ToList();
         if (enabled.Count == 0) return;
         var focus = enabled.FindIndex(button => button.HasFocus());
@@ -297,6 +298,8 @@ public partial class AreaConversationPanel : CanvasLayer
     }
 
     private const int NoWrap = 100000;
+    private const string LitMeta = "rowLit";
+    private bool _focusLit;
     private static readonly StyleBoxFlat PlainRow = RowStyle(0f), LitRow = RowStyle(.16f);
     private static StyleBoxFlat RowStyle(float alpha) => new() { BgColor = new Color(1f, 1f, 1f, alpha), ContentMarginLeft = 0, ContentMarginRight = 0, ContentMarginTop = 0, ContentMarginBottom = 0 };
 
@@ -329,7 +332,11 @@ public partial class AreaConversationPanel : CanvasLayer
     {
         for (var i = 0; i < _buttons.Count; i++)
         {
-            var lit = !_buttons[i].Disabled && (_hover?.IsLit(i) == true || _buttons[i].HasFocus());
+            // The keyboard or controller focus lights a row only once it was moved by Navigate: the original has none, and the focus the panel
+            // gives the first reply on opening must not light it under a pointer that is elsewhere.
+            var lit = !_buttons[i].Disabled && (_hover?.IsLit(i) == true || (_focusLit && _buttons[i].HasFocus()));
+            if (_buttons[i].HasMeta(LitMeta) && _buttons[i].GetMeta(LitMeta).AsBool() == lit) continue;
+            _buttons[i].SetMeta(LitMeta, lit);
             _buttons[i].AddThemeStyleboxOverride("normal", lit ? LitRow : PlainRow);
         }
     }
@@ -350,7 +357,7 @@ public partial class AreaConversationPanel : CanvasLayer
                 return false;
             case InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: true } press:
                 var hit = DialogReplyBand.Press((int)press.Position.X, (int)press.Position.Y, width, _buttons.Count, clickBandsDrift: true);
-                if (hit.Kind == DialogReplyHitKind.Outside) return false;
+                if (hit.Kind == DialogReplyHitKind.Outside) { _hover?.Leave(); return false; }
                 if (hit.Kind == DialogReplyHitKind.Row && !_buttons[hit.Row].Disabled) _buttons[hit.Row].EmitSignal(BaseButton.SignalName.Pressed);
                 return true;
             default:

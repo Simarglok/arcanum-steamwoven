@@ -60,6 +60,15 @@ public static partial class TerrainViewerSelfTest
             await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
             await ScreenshotAsync(host, "steamwoven-numbered");
             Require(panel.ButtonsForSelfTest[0].Text == "1. Why is it closed?", "Steamwoven draws the number again");
+            // ARC-UI-2025: under Original rows a blocked reply (row 2, y 40-59) and an empty slot (row 3) are refused by a press and change nothing.
+            panel.OriginalReplyRows = true;
+            await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+            await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+            var before = conversation.Turn;
+            Require(panel.BandInputForSelfTest(Press(new(10, 45))) && panel.BandInputForSelfTest(Press(new(10, 65))), "a press on the blocked reply or the empty slot is taken");
+            await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+            Require(conversation.Turn == before && conversation.Phase == DialogConversationPhase.AwaitingSelection, "the blocked reply and the empty slot choose nothing");
+            panel.OriginalReplyRows = false;
             Require(panel.ChooseByDigit(1), "a digit chooses the numbered reply");
             Require(conversation.CurrentNode.Value == 10 && panel.NpcLineForSelfTest.StartsWith("A bridge fell.") && panel.ButtonsForSelfTest.Count == 1, "Direct reply continues");
             await ScreenshotAsync(host, "synthetic");
@@ -74,7 +83,7 @@ public static partial class TerrainViewerSelfTest
             var node = conversation.CurrentNode.Value;
             Require(!panel.BandInputForSelfTest(Press(new(-3, 5))) && !panel.BandInputForSelfTest(Press(new(10, 100))), "a press outside the band is not taken");
             Require(panel.BandInputForSelfTest(Press(new(10, 25))) && conversation.CurrentNode.Value == node, "an empty slot is refused");
-            Require(!panel.BandInputForSelfTest(Release(new(10, 2))) && conversation.CurrentNode.Value == node, "the release chooses nothing");
+            Require(!panel.BandInputForSelfTest(Release(new(10, 2))) && conversation.CurrentNode.Value == node, "the band takes no release (the reply buttons act on the press, not the release)");
             panel.BandInputForSelfTest(new InputEventMouseMotion { Position = new(10, 5) });
             Require(panel.RowLitForSelfTest(0), "the pointer on the first row's drawn pixels lights it");
             panel.BandInputForSelfTest(new InputEventMouseMotion { Position = new(10, 20) });
