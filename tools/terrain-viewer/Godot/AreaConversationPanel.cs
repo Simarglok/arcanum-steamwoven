@@ -128,12 +128,12 @@ public partial class AreaConversationPanel : CanvasLayer
 
     /// <summary>ARC-UI-2027 (ledger TB23): hands the conversation's current NPC line to the owner (nothing for an empty one, nor for one a window-opening reply
     /// leaves unchanged: the barter, sheet, schematic and other windows open with no new line). A dialog that no longer awaits a reply shows its last line with the default life.</summary>
-    private void ShowNpcLine(string? previous = null)
+    private void ShowNpcLine(DialogNpcLine? previous = null)
     {
-        if (_conversation?.NpcLine?.Text is not { Length: > 0 } line) return;
+        if (_conversation?.NpcLine is not { Text.Length: > 0 } current) return;
         var awaiting = _conversation.Phase == DialogConversationPhase.AwaitingSelection;
-        if (!awaiting && (line == previous || IsWindowEnd(_conversation.End?.Kind))) return;
-        NpcLineShown?.Invoke(line, awaiting);
+        if (!awaiting && (ReferenceEquals(current, previous) || IsWindowEnd(_conversation.End?.Kind))) return;
+        NpcLineShown?.Invoke(current.Text, awaiting);
     }
 
     private static bool IsWindowEnd(DialogEndKind? kind) => kind is DialogEndKind.SchematicWindow or DialogEndKind.BarterWindow or DialogEndKind.NpcSheetWindow
@@ -170,16 +170,18 @@ public partial class AreaConversationPanel : CanvasLayer
     private void ChooseToken(DialogOptionToken token)
     {
         if (_conversation is not { Phase: DialogConversationPhase.AwaitingSelection } conversation) return;
+        var before = conversation.NpcLine;
         var result = conversation.Select(token);
         if (result.Status == DialogConversationSelectStatus.NotOffered) return;
-        var previousLine = conversation.NpcLine?.Text;
-        var processed = result.Status is not (DialogConversationSelectStatus.UnsupportedTransition or DialogConversationSelectStatus.StaleSelection
-            or DialogConversationSelectStatus.WrongPhase);
-        if (processed) { Picked?.Invoke(); ReplyPicking?.Invoke(); }
+        // Only a reply that ran (the dialog went on or ended) is processed; one the dialog refused or left at the frontier ran nothing and keeps the bubble.
+        var processed = result.Status is DialogConversationSelectStatus.Continued or DialogConversationSelectStatus.Ended;
+        if (result.Status is not (DialogConversationSelectStatus.UnsupportedTransition or DialogConversationSelectStatus.StaleSelection
+            or DialogConversationSelectStatus.WrongPhase)) Picked?.Invoke();
+        if (processed) ReplyPicking?.Invoke();
         Render(result.Status is DialogConversationSelectStatus.UnsupportedTransition or DialogConversationSelectStatus.StaleSelection
             ? $"[{result.Status}: the reply was not executed]" : null);
         // ARC-UI-2027: the reply's answer line (the next node's) becomes the new bubble; a reply that was not processed keeps the old bubble.
-        if (processed) ShowNpcLine(previousLine);
+        if (processed) ShowNpcLine(before);
         // ARC-TECHNOLOGY-006: SU ends the dialog at once for the schematic window, with no further NPC line (ledger NC1–NC2); ARC-UI-050:
         // b: for the barter window (BT7); ARC-UI-088: c-e for the NPC's sheet (WN2).
         if (IsWindowEnd(conversation.End?.Kind)) CloseRequested?.Invoke();

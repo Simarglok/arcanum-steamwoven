@@ -22,6 +22,9 @@ public static partial class TerrainViewerSelfTest
         "{10}{A bridge fell. Take care on the way north.}{}{}{}{}{RU 1001}" +
         "{11}{Thank you.}{}{1}{}{0}{LF 2 1}";
 
+    // ARC-UI-2027: one reply whose action is a final line (FL 10): the dialog ends on the NPC's line of node 10.
+    private const string FinalLineDialog = "{1}{Hello.}{Hello.}{}{}{}{}{2}{Go on.}{}{1}{}{10}{FL 10}{10}{Fine.}{}{}{}{}{}";
+
     // ARC-UI-2019: one reply to a closing line, for the digit-key check of the app routing.
     internal const string DigitDialog = "{1}{Hello.}{Hello.}{}{}{}{}{2}{Go on.}{}{1}{}{10}{}{10}{Fine.}{}{}{}{}{}";
 
@@ -78,6 +81,26 @@ public static partial class TerrainViewerSelfTest
             Require(closed == 1 && !panel.IsOpen, "any choice dismisses a finished dialog");
             panel.Open("Synthetic NPC", conversation); panel.LeaveForSelfTest.EmitSignal(BaseButton.SignalName.Pressed);
             Require(closed == 2 && !panel.IsOpen, "Close dismisses a finished dialog");
+            // ARC-UI-2027: a reply that ends on a new final line removes the bubble, then shows the line with the default life (not persistent).
+            {
+                var finalLines = new List<string>(); var finalPanel = new AreaConversationPanel(); host.AddChild(finalPanel);
+                try
+                {
+                    await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+                    finalPanel.NpcLineShown += (text, persistent) => finalLines.Add($"{(persistent ? "P" : "T")}:{text}"); finalPanel.ReplyPicking += () => finalLines.Add("removed");
+                    using var finalSession = ConversationSessionFixture.Create();
+                    var finalState = new AreaConversationState(finalSession, new(1), ["oid:synthetic-0"], 50);
+                    var finalDialog = DialogConversation.Start(DlgReader.Read(Encoding.Latin1.GetBytes(FinalLineDialog)),
+                        new DialogConversationRequest(new DialogNodeId(1),
+                            new DialogParticipants(new DialogId(5), AreaConversationState.PcParticipant, AreaConversationState.Npc(0)),
+                            new DialogScriptLine(4), AreaConversationProfile.Diagnostic.Pc, AreaConversationProfile.Diagnostic.Names),
+                        new DialogConversationPorts(finalState, finalState, finalSession.Flags, finalState));
+                    finalPanel.Open("Final line", finalDialog);
+                    finalPanel.Choose(1);
+                    Require(finalDialog.End?.Kind == DialogEndKind.NpcFinalLine && string.Join("|", finalLines) == "P:Hello.|removed|T:Fine.", $"a reply that ends on a new final line: {string.Join("|", finalLines)} / {finalDialog.End?.Kind}");
+                }
+                finally { finalPanel.QueueFree(); }
+            }
             GD.Print("ARC-SCRIPT-005 self-test PASS synthetic conversation panel; original runtime parity NOT_VERIFIED");
         }
         finally { panel.QueueFree(); }

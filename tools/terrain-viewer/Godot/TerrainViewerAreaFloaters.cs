@@ -112,7 +112,7 @@ public partial class TerrainViewerApp
     internal long BubbleClockForSelfTest { get; set; }
 
     /// <summary>ARC-UI-1997: a text bubble over <paramref name="owner"/> (the speech display makes one): the owner's old bubble is replaced; true when it was made.</summary>
-    private bool Bubble(string owner, string text, bool dialogLine = false)
+    private bool Bubble(string owner, string text, bool dialogLine = false, bool persistent = false)
     {
         if (_readyMode != TerrainViewerMode.Area || _readyArea is null || string.IsNullOrWhiteSpace(text)) return false;
         var layer = FloaterLayer();
@@ -120,15 +120,13 @@ public partial class TerrainViewerApp
         if (FloaterCell(owner) is { } cell) _floaterCells[owner] = cell;
         layer.Bubbles.SetTextDuration(_gameSettings.TextDuration);
         layer.AddBubble(owner, text, owner == HeroFloater ? BubbleColor.Green : BubbleColor.White, BubbleNowMs());
-        if (dialogLine) layer.Bubbles.SetLife(owner, TextBubbleRules.Persistent, BubbleNowMs());
-        else _scriptFloats++;
+        if (persistent) layer.Bubbles.SetLife(owner, TextBubbleRules.Persistent, BubbleNowMs());
+        if (!dialogLine) _scriptFloats++;
         return true;
     }
 
     /// <summary>The open dialog's speaker as a bubble owner (its entity id), or null.</summary>
     private string? DialogBubbleOwner() => _conversationSpeaker is { } speaker ? AreaConversationState.EntityId(speaker.Row) : null;
-
-    private int _dialogBubblesForSelfTest;
 
     /// <summary>
     /// ARC-UI-2027 (ledger TB23): the NPC's line in an open dialog is a persistent bubble over the NPC (life −2: it
@@ -136,8 +134,10 @@ public partial class TerrainViewerApp
     /// </summary>
     private void ShowDialogLineBubble(string text, bool persistent)
     {
-        if (DialogBubbleOwner() is not { } owner || !Bubble(owner, text, dialogLine: persistent)) return;
-        _dialogBubblesForSelfTest++;
+        if (DialogBubbleOwner() is not { } owner) return;
+        // The reply's own float lines (a script's float over the speaker) ran before the answer is shown: they go first, so the answer's bubble is the one that stays.
+        TickScriptFloats();
+        if (!Bubble(owner, text, dialogLine: true, persistent: persistent)) return;
         GD.Print($"ARC-UI-2027 dialog line bubble owner={owner} persistent={persistent} text={text}");
     }
 

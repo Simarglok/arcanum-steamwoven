@@ -150,10 +150,15 @@ public partial class TerrainViewerApp
                     RequireLineBubble("after a reply");
                 }
                 var effects = conversation?.Effects.Count ?? 0; var phase = conversation?.Phase.ToString();
+                // A conversation that started awaiting a reply had its line checked at least once; one still awaiting at the close ends with its line's bubble no longer persistent (the default life from the end).
+                Require(!(conversation is { NpcLine.Text.Length: > 0 } && offered) || bubbleChecks > 0, $"script {speaker.ScriptId}: the line bubble was checked");
+                var awaitingAtClose = conversation is { Phase: DialogConversationPhase.AwaitingSelection, NpcLine.Text.Length: > 0 };
+                var lastLine = conversation?.NpcLine?.Text;
                 // Close; a dialog script that opens the next conversation is closed again.
                 for (var close = 0; close < 4 && ConversationOpen; close++) _conversationPanel.LeaveForSelfTest.EmitSignal(BaseButton.SignalName.Pressed);
                 Require(!ConversationOpen && !WorldModal, "Close ends the modal panel");
                 Require(_floaters?.Bubbles.Of(bubbleOwner) is not { Persistent: true }, $"script {speaker.ScriptId}: the end left no persistent bubble");
+                Require(!awaitingAtClose || _floaters?.Bubbles.Of(bubbleOwner) is { Persistent: false } kept && kept.Text == lastLine, $"script {speaker.ScriptId}: the line stays as a timed bubble after the end");
                 // ARC-WORLD-043: every close ends the NPC's reaction conversation, so a started talk leaves it remembering the PC.
                 Require(host.ReactionOpen is null, $"script {speaker.ScriptId}: Close ends the NPC's reaction conversation");
                 var metBefore = session.QueryReactionRecord(AreaConversationState.EntityId(speaker.Row)) is { MetBefore: true, InConversation: false };
