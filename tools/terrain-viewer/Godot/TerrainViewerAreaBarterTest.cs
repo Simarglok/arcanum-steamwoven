@@ -121,6 +121,12 @@ public partial class TerrainViewerApp
             Require(!BarterOpen && MainMenuOpen && _mainMenu!.Window == AreaMenuWindow.InPlayLimited && WindowPanelsMatchStack, "Escape opened the limited menu, which closed the barter");
             InventoryKey(Key.Escape);
             Require(!BarterOpen && !MainMenuOpen && !WorldModal, "Escape continued play");
+            // ARC-UI-2066 (OP9): the release of O opens the options window over the barter, which closes under it as under Escape (the inventory family).
+            OpenBarterWindow(Model(owner));
+            InventoryKey(Key.O);
+            Require(!BarterOpen && MainMenuOpen && _mainMenu!.Window == AreaMenuWindow.Options && !WorldMenuPause && WindowPanelsMatchStack, "O opened the options window, which closed the barter");
+            InventoryKey(Key.O);
+            Require(!BarterOpen && !MainMenuOpen && !WorldModal, "O closed the options window");
             OpenBarterWindow(Model(owner));
             var replacement = AreaTransitionCoordinator.CreateSession(owner.QueryClockSnapshot().ProfileBinding, Guid.NewGuid(), Guid.NewGuid(),
                 new(actor.Cell.X, actor.Cell.Y), actor.Map.RuntimeMap).Owner!;

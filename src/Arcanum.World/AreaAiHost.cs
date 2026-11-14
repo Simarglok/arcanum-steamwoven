@@ -1726,6 +1726,12 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
 
     private bool InterruptRuns(string npc, int level) => InterruptOwner(npc, level).Freed;
 
+    /// <summary>ARC-UI-2030: the interrupt the can-speak test 0x4AD800 makes at flag 0 on a talk start (0x424070, level 2, the NPC's runs, the first refusal stops the walk). False when a run refused it (the test answers 3).</summary>
+    public bool InterruptForTalk(string npc) => InterruptOwner(npc, TalkInterruptLevel).Succeeded;
+
+    /// <summary>The level of the can-speak test's interrupt (0x4AD800: <c>0x424070(NPC, 2, 0, 0)</c>).</summary>
+    public const int TalkInterruptLevel = 2;
+
     // A drop of the NPC's runs at the highest level, which every goal and overlay yields to (GS18): the host's own end of a run (a map reset's level, GS19).
     private void DropRun(string npc) => InterruptRuns(npc, GoalInterruptRules.MaxLevel);
 

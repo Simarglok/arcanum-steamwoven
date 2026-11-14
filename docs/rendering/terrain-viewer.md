@@ -272,7 +272,7 @@ ARC-UI-2025 (ledger DH1–DH7; rule `Arcanum.Presentation.Hud.DialogReplyBand`, 
 settings a reply is chosen on the mouse press, not on the release, as in the original. Under the Original setting `AreaConversationPanel.OriginalReplyRows` lays the
 reply stack out as the original's band (100 px tall, five 16 px rows every 19 px starting 3 px down, no wrapping) and resolves a left press by the band's rules:
 the row is y / 20 (so a press in a gap picks a row and the fifth row's first pixel picks the fourth), an empty slot, the release and a blocked reply choose
-nothing; the hover lights a row as the original's move records do (DH5). Under the Steamwoven setting each button is its own hit area. Not yet the band: its
+nothing; the hover lights a row as the original's move records do (DH5) and, ARC-UI-2052, again after every rebuild of the rows against the live pointer (DH9). The release that follows a closing press reaches the viewer with no panel under it and sets no route and opens nothing (DH8, DH10; the routing self-test pushes it; the windows a reply opens, which in the original take a lone release, are #2071). Under the Steamwoven setting each button is its own hit area. Not yet the band: its
 400 px centred width and look (#2022). The self-test (`TerrainViewerConversationTest`) covers the press mode and the band's refusals.
 
 ## Integrated world diagnostic policy
@@ -2417,7 +2417,7 @@ project's, except as below.
   default and no other setting changes. Each change is saved at
   once (the original writes `arcanum.cfg` when the game exits). Space's toggle also saves the turn-based setting now. An
   automated run (self-test, native smoke) reads and writes no file; `GAME_SETTINGS_TEST_PATH` names a settings file for a test.
-- **Opening by O (ARC-UI-2026, OP9).** The release of the O key opens this window at its Game page in play, over any window and over the dialog (the press only arms it; Escape's route is the same). It raises no pause (the Esc menu does) and refuses only while a text entry or a menu is open; the inventory family closes under it as under Escape. The dialog stays and goes on after Done.
+- **Opening by O (ARC-UI-2026, OP9).** The release of the O key opens this window at its Game page in play, over any window and over the dialog (the press only arms it; Escape's route is the same). It raises no pause (the Esc menu does) and refuses only while a text entry or a menu is open; the inventory family closes under it as under Escape. The dialog stays and goes on after Done. The key is the physical O key (the scan code, as in the options window's own O), whatever the layout types on it; Ctrl+O and Alt+O do nothing. A hero's death behind the open window closes it, and the death screen comes 0.3 s later (ARC-UI-2066).
 - **Closing.** Done goes back to the main menu, or from play closes the menu and play goes on; from play the O key
   does the same. Escape does nothing in this window, as in the original's key table.
 
@@ -2701,7 +2701,10 @@ button writes its name from `mes\intgame.mes` (1000–1009) where the original's
 on the bars. The main menu's, in-play menu's and options window's buttons play 3026 when the pointer enters one and 3027 on
 the press (GB7). The bars are drawn over the windows they open, and those windows (character sheet, inventory, logbook,
 schematics) lay themselves out in the part the bars leave free; while a conversation, barter, reading, the save list,
-the palette, the menu or the world map is open the bars are hidden, and they come back with no button lit or held. The
+the palette, the menu or the world map is open the bars are hidden, and they come back with no button lit or held (a conversation hides them under
+Steamwoven only: since ARC-UI-2024 the Original setting `DialogBarStays` keeps them drawn under the dialog, as the original does, lays the conversation panel in the part
+they leave free and shows the speaker's description of the dialog start in the description area; the bar's buttons stay without effect while the dialog is open, and
+a click on a hotkey slot or a recent-action button, and the A key, end the dialog (an item, skill or spell entry that acts, ARC-UI-2068) and then act as without one, an empty entry or a hero who cannot act leaves it open, the follower portraits and their gauges stay drawn and take no input (ARC-UI-2069, DB5), [ledger DB1-DB5](../research/ledger/ui-audio.md#the-bars-under-the-dialog-arc-ui-2024)). The
 diagnostic HUD moves below the top strip and the follower portraits and spell pane above the bottom strip. Since ARC-UI-020 the health and fatigue vials show the PC's
 [gauges](#health-and-fatigue-bars-arc-ui-020), and since ARC-UI-023 the bottom strip's message window is the
 [message log](#message-log-arc-ui-023), where the button names appear. Since ARC-UI-027 the hot-key slots, the recent-action buttons and

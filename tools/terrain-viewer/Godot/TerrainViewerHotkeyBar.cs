@@ -209,6 +209,7 @@ public partial class TerrainViewerApp
     /// <summary>A left click on a slot (0x57DC60): the held item goes on the entry, otherwise the entry activates.</summary>
     private void HotkeySlotClicked(int entry)
     {
+        // ARC-UI-2068 (DB2): the slot is not blocked under the dialog (0x57DC60 runs before the hook); the activation ends the dialog where the original pops it.
         if (!HotkeysActive || _areaSession is not { } session) return;
         _hotkeyBarClicksForSelfTest++;
         switch (HotkeyBarRules.ClickEntry(_hotkeyDrag is not null, HotkeyItemHeld, session.QueryHotkeys().Entries[entry].IsEmpty))

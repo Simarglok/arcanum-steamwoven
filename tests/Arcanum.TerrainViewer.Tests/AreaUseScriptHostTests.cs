@@ -826,7 +826,7 @@ public sealed class AreaUseScriptHostTests
             var ran = host.RunPlaced(tile, session.Rules.Scripts);
             Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, ran.Outcome, ran.Detail);
             Assert.IsTrue(host.GlobalFlag(48), "the lines after the float ran");
-            CollectionAssert.AreEqual(new[] { new AreaScriptFloat(host.Pc, "Help me.") }, host.TakeFloats().ToArray());
+            CollectionAssert.AreEqual(new[] { new AreaScriptFloat(host.Pc, "Help me.", host.Pc) }, host.TakeFloats().ToArray());
             Assert.AreEqual(0, host.TakeFloats().Count);
         });
     }
@@ -853,7 +853,7 @@ public sealed class AreaUseScriptHostTests
             var queue = session.QueryNewspaper();
             Assert.AreEqual(7, queue.Count);
             CollectionAssert.AreEqual(new[] { -1, -1, -1, -1, 5000, 7, 5030 }, queue.Entries.Take(7).ToArray(), "the head stays, 7 went in behind it at the front, 5030 queued after the count");
-            CollectionAssert.AreEqual(new[] { new AreaScriptFloat(host.Pc, "Big news at the harbour. ") }, host.TakeFloats().ToArray());
+            CollectionAssert.AreEqual(new[] { new AreaScriptFloat(host.Pc, "Big news at the harbour. ", host.Pc) }, host.TakeFloats().ToArray());
             Assert.AreEqual(0, host.TakeFloats().Count);
         });
     }

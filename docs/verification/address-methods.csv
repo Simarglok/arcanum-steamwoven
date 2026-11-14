@@ -430,6 +430,7 @@ src/Arcanum.Simulation/Navigation/RoutePlanner.cs,AwayTile,exempt,host
 src/Arcanum.Simulation/Navigation/RoutePlanner.cs,Toward,pending,
 src/Arcanum.Simulation/Navigation/RouteTypes.cs,StepEntersCritter,pending,
 src/Arcanum.Simulation/Party/CompanionFollow.cs,Interrupt,pending,
+src/Arcanum.Simulation/Reaction/CanSpeakRules.cs,Test,exempt,host
 src/Arcanum.Simulation/Reaction/ReactionRules.cs,PcHit,pending,
 src/Arcanum.Simulation/Skills/FollowerSkillRules.cs,AllFollowers,exempt,host
 src/Arcanum.Simulation/Skills/PickPocketRules.cs,Caught,pending,
@@ -480,6 +481,7 @@ src/Arcanum.World/AreaAiHost.cs,HostileToHero,pending,
 src/Arcanum.World/AreaAiHost.cs,Hurt,exempt,host
 src/Arcanum.World/AreaAiHost.cs,IdleRestart,pending,
 src/Arcanum.World/AreaAiHost.cs,InterruptForHold,pending,
+src/Arcanum.World/AreaAiHost.cs,InterruptForTalk,exempt,host
 src/Arcanum.World/AreaAiHost.cs,ItemHolder,pending,
 src/Arcanum.World/AreaAiHost.cs,Jump,pending,
 src/Arcanum.World/AreaAiHost.cs,LaunchCast,pending,
@@ -894,6 +896,7 @@ tools/terrain-viewer/Godot/TerrainViewerCompanionOrders.cs,FollowerPortraitClick
 tools/terrain-viewer/Godot/TerrainViewerCompanionOrders.cs,OpenFollowerSheet,exempt,reference
 tools/terrain-viewer/Godot/TerrainViewerCompanions.cs,LeaveFollowersCombatMode,pending,
 tools/terrain-viewer/Godot/TerrainViewerCompanions.cs,TransferFacts,pending,
+tools/terrain-viewer/Godot/TerrainViewerConversation.cs,DialogStartRefused,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerConversation.cs,ProcessConversationEnd,pending,
 tools/terrain-viewer/Godot/TerrainViewerConversation.cs,RequestTalkDialog,pending,
 tools/terrain-viewer/Godot/TerrainViewerConversation.cs,TryAreaTalk,pending,
@@ -905,10 +908,12 @@ tools/terrain-viewer/Godot/TerrainViewerEyeCandy.cs,PlayEyeCandy,pending,
 tools/terrain-viewer/Godot/TerrainViewerEyeCandy.cs,RemoveEyeCandy,pending,
 tools/terrain-viewer/Godot/TerrainViewerEyeCandy.cs,StartCastEyeCandy,pending,
 tools/terrain-viewer/Godot/TerrainViewerEyeCandy.cs,SyncEyeCandyBodies,pending,
+tools/terrain-viewer/Godot/TerrainViewerFollowerComments.cs,DialogStartCanSpeak,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerFollowerComments.cs,FollowerAttackComments,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerFollowerComments.cs,FollowerCanSpeak,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerFollowerComments.cs,FollowerHurt,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerFollowerComments.cs,SayFollowerLine,exempt,host
+tools/terrain-viewer/Godot/TerrainViewerFollowerComments.cs,SpeakerCanSpeakFacts,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerHeldThrow.cs,GameCursorPress,pending,
 tools/terrain-viewer/Godot/TerrainViewerHeldThrow.cs,HeroBeginThrow,pending,
 tools/terrain-viewer/Godot/TerrainViewerHeldThrow.cs,HeroThrowItem,pending,
@@ -929,7 +934,9 @@ tools/terrain-viewer/Godot/TerrainViewerHotkeyHover.cs,ExamineAllows,pending,
 tools/terrain-viewer/Godot/TerrainViewerHotkeyHover.cs,HotkeyDescriptionLeft,pending,
 tools/terrain-viewer/Godot/TerrainViewerHotkeys.cs,ActivateHotkey,pending,
 tools/terrain-viewer/Godot/TerrainViewerHotkeys.cs,ActivateSkillButton,exempt,host
+tools/terrain-viewer/Godot/TerrainViewerHotkeys.cs,EndDialogForHotkey,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerHotkeys.cs,RecordRecentAction,pending,
+tools/terrain-viewer/Godot/TerrainViewerHotkeys.cs,SpellEndsDialog,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerInterfaceModes.cs,ClearWindowsForProgrammaticOpen,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerInterfaceModes.cs,HandleGlobalKeyOverInterface,pending,
 tools/terrain-viewer/Godot/TerrainViewerInterfaceModes.cs,HandleRightPressOverWindow,pending,

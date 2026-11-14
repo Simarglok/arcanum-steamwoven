@@ -2,6 +2,7 @@ using System.Text;
 using Arcanum.Data;
 using Arcanum.Data.Area;
 using Arcanum.Scripting.Dialog;
+using Arcanum.Session;
 using Arcanum.TerrainViewer.Core;
 using Arcanum.TerrainViewer.Tests;
 using Arcanum.World;
@@ -131,8 +132,29 @@ public static partial class TerrainViewerSelfTest
             Require(!panel.BandInputForSelfTest(Release(new(10, 2))) && conversation.CurrentNode.Value == node, "the band takes no release (the reply buttons act on the press, not the release)");
             panel.BandInputForSelfTest(new InputEventMouseMotion { Position = new(10, 5) });
             Require(panel.RowLitForSelfTest(0), "the pointer on the first row's drawn pixels lights it");
+            // ARC-UI-2052: the rows are rebuilt (here by the numbering) under a stationary pointer: the new row is lit against the live cursor, no motion needed.
+            panel.NumberedReplies = false;
+            await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+            await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+            Require(panel.RowLitForSelfTest(0) && panel.ButtonsForSelfTest[0].HasMeta("rowLit") && panel.ButtonsForSelfTest[0].GetMeta("rowLit").AsBool(),
+                "after a re-render the row under the stationary pointer is lit again, with no new motion");
             panel.BandInputForSelfTest(new InputEventMouseMotion { Position = new(10, 20) });
             Require(!panel.RowLitForSelfTest(0), "moving off the row (into the gap below) unlights it");
+            panel.NumberedReplies = true;
+            await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+            await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+            Require(!panel.RowLitForSelfTest(0), "after a re-render with the pointer in the gap no row is lit");
+            panel.BandInputForSelfTest(new InputEventMouseMotion { Position = new(10, 5) });
+            Require(panel.RowLitForSelfTest(0), "the pointer back on the row lights it");
+            panel.NumberedReplies = false;
+            await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+            await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+            panel.NumberedReplies = true;
+            await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+            Require(panel.RowLitForSelfTest(0), "the row stays lit across two re-renders under the stationary pointer");
+            panel.BandInputForSelfTest(new InputEventMouseMotion { Position = new(-5, 5) });
+            await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+            Require(!panel.RowLitForSelfTest(0), "a pointer outside the band lights nothing");
             Require(panel.BandInputForSelfTest(Press(new(10, 2))), "a press above the first row's drawn top is still in its click band");
             await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
             Require(picks == 2 && lines.Count == 4 && lines[3] == "removed", $"the ending reply removes the bubble and shows no new persistent one: {string.Join("|", lines)}");
@@ -396,6 +418,56 @@ public partial class TerrainViewerApp
             TerrainViewerSelfTest.Require(!PaletteOpen && ConversationOpen, "the palette cannot open over the conversation");
             _conversationPanel!.LeaveForSelfTest.EmitSignal(BaseButton.SignalName.Pressed);
             TerrainViewerSelfTest.Require(!ConversationOpen && !WorldModal, "Close ends the modal surface");
+            // ARC-UI-2052: Close and the replies act on the press, so the panel is gone when the matching left release arrives: that lone release
+            // (through the world's input callback and the unhandled path) sets no route, picks nothing, opens nothing.
+            {
+                var clickBefore = _worldRouteClick; var routeBefore = _worldRouteDiagnostic;
+                var releaseAt = GetViewport().GetVisibleRect().Size / 2;
+                var lone = new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = false, Position = releaseAt, GlobalPosition = releaseAt };
+                InputWorld(lone); _UnhandledInput(lone);
+                TerrainViewerSelfTest.Require(_worldRouteClick == clickBefore && _worldRouteDiagnostic == routeBefore && !ConversationOpen && !WorldModal,
+                    $"the lone left release after the closing press acts on nothing (click '{clickBefore}' -> '{_worldRouteClick}')");
+            }
+            // ARC-UI-2024 (DB1, DB3): Original leaves the bars drawn under the dialog and lays the panel above them; Steamwoven hides them under it.
+            {
+                var session = _areaSession!;
+                var priorRules = session.Rules.Mode; var priorBars = _gameBarForSelfTest;
+                _gameBarForSelfTest = true;
+                try
+                {
+                    foreach (var rules in new[] { RuleMode.Original, RuleMode.Steamwoven })
+                    {
+                        TerrainViewerSelfTest.Require(session.SelectRules(rules) != GameSessionDisposition.Rejected, $"{rules} selected");
+                        var stays = rules == RuleMode.Original;
+                        SyncGameBar();
+                        TerrainViewerSelfTest.Require(_gameBarPanel is { Visible: true } && AreaGameBarPanel.BottomInset > 0, $"{rules}: the bars show before the dialog");
+                        using var barSession = ConversationSessionFixture.Create();
+                        var barState = new AreaConversationState(barSession, new(1), ["oid:synthetic-0"], 50);
+                        var barDialog = DialogConversation.Start(DlgReader.Read(System.Text.Encoding.Latin1.GetBytes(TerrainViewerSelfTest.DigitDialog)),
+                            new DialogConversationRequest(new DialogNodeId(1),
+                                new DialogParticipants(new DialogId(5), AreaConversationState.PcParticipant, AreaConversationState.Npc(0)),
+                                new DialogScriptLine(4), AreaConversationProfile.Diagnostic.Pc, AreaConversationProfile.Diagnostic.Names),
+                            new DialogConversationPorts(barState, barState, barSession.Flags, barState));
+                        ShowConversationPanel("Bars test", barDialog, null);
+                        SyncGameBar();
+                        TerrainViewerSelfTest.Require(ConversationOpen && (_gameBarPanel is { Visible: true } && AreaGameBarPanel.BottomInset > 0) == stays,
+                            $"{rules}: the bars {(stays ? "stay" : "hide")} under the open dialog (bars={_gameBarPanel?.Visible} inset={AreaGameBarPanel.BottomInset})");
+                        // A 100 px tall panel lies above the bottom bar when the bars show and 24 px above the view's bottom when not.
+                        var view = GetViewport().GetVisibleRect().Size;
+                        var at = AreaConversationPanel.PanelPosition(view, 752, 100);
+                        TerrainViewerSelfTest.Require(stays ? at.Y + 100 <= view.Y - AreaGameBarPanel.BottomInset && at.Y >= AreaGameBarPanel.TopInset : Math.Abs(at.Y - (view.Y - 124)) < 1f,
+                            $"{rules}: the dialog panel lies in the part the bars leave free (y {at.Y} view {view.Y} insets {AreaGameBarPanel.TopInset}/{AreaGameBarPanel.BottomInset})");
+                        // DB2: the clock and the pane buttons are consumed without effect while the dialog is open.
+                        var presses = _skillBarPressesForSelfTest + _spellBarPressesForSelfTest;
+                        ClockButton(); SkillBarReleased(0, true); SpellBarSpellReleased(0, true);
+                        TerrainViewerSelfTest.Require(ClockLineForSelfTest is null && _skillBarPressesForSelfTest + _spellBarPressesForSelfTest == presses, $"{rules}: the clock and the pane buttons do nothing under the dialog");
+                        CloseWindowMode(InterfaceMode.Dialog);
+                        TerrainViewerSelfTest.Require(!ConversationOpen, $"{rules}: the dialog closed");
+                        SyncGameBar();
+                    }
+                }
+                finally { session.SelectRules(priorRules); _gameBarForSelfTest = priorBars; SyncGameBar(); }
+            }
             // ARC-UI-2019: with a numbered conversation open the digit keys choose a reply (an unknown number and Enter do nothing).
             {
                 using var digitSession = ConversationSessionFixture.Create();

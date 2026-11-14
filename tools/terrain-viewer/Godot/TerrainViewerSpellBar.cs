@@ -84,7 +84,8 @@ public partial class TerrainViewerApp
     /// <summary>0x54BAF5: the release over a spell's button activates it, the latest recent action first.</summary>
     private void SpellBarSpellReleased(int spell, bool over)
     {
-        if (!over) return;
+        // ARC-UI-2024 (DB2): consumed without effect while the dialog's hook is set.
+        if (!over || ConversationOpen) return;
         PlayBarSound(AreaGameBarLayout.ReleaseSound, "spell pane spell");
         _spellBarPressesForSelfTest++;
         PressPaneSpell(spell);
