@@ -184,12 +184,24 @@ public static class AreaMapPlans
         var mobiles = catalog.ReadMobiles(map);
         // A window keeps the mobile objects standing in its sectors; the owner still reads the whole file (ledger SS7).
         var windowSectors = window?.Select(w => w.Source.Coordinate).ToHashSet();
+        var standing = new HashSet<string>(StringComparer.Ordinal);
         foreach (var item in mobiles.Objects)
         {
             if (windowSectors is not null && (item.Location is not { } location || !windowSectors.Contains(WorldSectorCoordinate.Containing(location)))) continue;
             objects++;
+            if (windowSectors is not null) standing.Add(item.OwnIdSha256);
             if (item.PrototypeNumber is { } number) prototypes.Add(number);
         }
+        // ARC-WORLD-2036: the builder also admits, as context rows, the held items (types 5..14) whose parent is a mobile object standing in the window, wherever they
+        // lie; they are counted here, with their prototypes, as the builder will meet them.
+        if (windowSectors is not null)
+            foreach (var item in mobiles.Objects)
+            {
+                if (item.Location is { } location && windowSectors.Contains(WorldSectorCoordinate.Containing(location))) continue;
+                if (item.Location is null || item.Type is < 5 or > 14 || !item.Fields.TryGetValue(AreaDataOwner.ItemParentSlot, out var parent) || parent.Fingerprint is not { } parentId || !standing.Contains(parentId)) continue;
+                objects++;
+                if (item.PrototypeNumber is { } number) prototypes.Add(number);
+            }
 
         // Resource sources in search order: each archive that wins a name under art/, and each
         // loose file a folder wins there. Every resource name's winner is then a listed source.

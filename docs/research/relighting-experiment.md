@@ -127,13 +127,13 @@ Ashbury 11, 18 and 14). The rule is now: of the carried, map and synthetic light
 in a city with no torch.
 
 **Moving lights.** The saved data of the windows holds **no critter with a light** (a scan of 3×3-sector windows, centres every third sector from −9 to +9 round each marker, by `ObjectLightReader`: 0 critter lights;
-the object lights, up to 263 in a window, are all scenery), and the AI host cannot be built over these windows (a defect, [#2036](https://github.com/Simarglok/arcanum-steamwoven/issues/2036): the
-window's inventory seed is refused with `GoldHandleMismatch` or `ListedObjectUnresolved`), so no NPC's worn light could be listed either; in the one Ashbury window that does seed (sector 505,979,
+the object lights, up to 263 in a window, are all scenery), and the AI host could not be built over these windows when this was written (a defect, [#2036](https://github.com/Simarglok/arcanum-steamwoven/issues/2036), fixed by ARC-WORLD-2036: the
+window's inventory seed was refused with `GoldHandleMismatch` or `ListedObjectUnresolved`), so no NPC's worn light could be listed either; in the one Ashbury window that does seed (sector 505,979,
 15 NPCs) none wears a light. The Ashbury wisps the owner remembers are therefore **not lit critters**: no critter holds a light item either (checked over the windows round the city). ARC-RES-2061 found them by
 capturing the east and north-east of the city at night (`ARC_RELIGHT_AT=x,y;x,y` in the shots mode): a violet orb critter standing on the field east of the town (most likely prototype 28471,
 seven of them in the central window, more north and west) that is **bright only in its own sprite and lights nothing**: in Legacy and in every relit mode the corn round it stays dark.
 To make wisps light their surroundings the relit look would have to treat such critters as emitters (a colour from the sprite, a radius of our own), a deliberate difference from the original
-that is the owner's call (HD variant). Whether they move cannot be seen yet: the AI host does not build over the Ashbury windows (#2036). As a stand-in the capture uses the original's own moving-light mechanism (a carried light follows its creature, LT10, LT12): the hero wears an extra-large torch (cold white 244/255/255,
+that is the owner's call (HD variant). Whether they move cannot be seen yet: the AI host did not build over the Ashbury windows (#2036, since fixed). As a stand-in the capture uses the original's own moving-light mechanism (a carried light follows its creature, LT10, LT12): the hero wears an extra-large torch (cold white 244/255/255,
 the colour a wisp-like light would have) and walks towards a cell eight away; Legacy draws that light too, so the comparison is fair. The relit look follows it frame by frame; the pool on the stones and the
 hero's own highlights move with the light (two frames cannot show flicker; the check on real walk-cycle frames is still [#2000](https://github.com/Simarglok/arcanum-steamwoven/issues/2000)).
 

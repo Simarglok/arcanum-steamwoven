@@ -177,6 +177,7 @@ public sealed partial class AreaDataOwner
         }
         _budget.BeginPhase(AreaBudgetPhase.I4);
         var partitions = new int[4]; var aggregate = new Dictionary<string, Correspondence>(StringComparer.Ordinal);
+        List<(int Offset, int Index, string Parent)>? heldOutside = null;
         // ARC-DATA-028: the original applies map.patch to the map's mobile objects as they are loaded, before any sector.
         MapPatchFile? patch = null;
         if (_plan.MapPatch is not null)
@@ -213,7 +214,28 @@ public sealed partial class AreaDataOwner
                     AddObject(record, source, null, index, offset, scope, null, definitions, prototypes, objects, visuals, mappings, issues, token, output,
                         patch is not null && record.Own.Entity is { Kind: 2 } entity ? patch.For(MapPatchFile.ObjectGuid(entity)) : null);
                 else if (scope == AreaScope.Unknown) issues.Add(new(AreaErrorCode.UnknownLocation, AreaStage.Aggregate, offset, index));
+                // ARC-WORLD-2036: a held item (types 5..14, parent field 37 names its holder) keeps the location it had when it was made or picked up, not its
+                // holder's, so in a window it can lie outside while its holder is admitted; its record is looked at again once every holder is known.
+                else if (_plan.Window is not null && record.Type is >= 5 and <= 14 && record.Fields.TryGetValue(ItemParentSlot, out var parentField) && parentField.Fingerprint is { } parentId)
+                    (heldOutside ??= []).Add((offset, index, parentId));
                 offset = checked(offset + record.Length); index++;
+            }
+            // ARC-WORLD-2036: the items an admitted holder lists travel with it, whatever location they carry (the original keeps a holder's items with the holder;
+            // the inventory view reconciles every list element and refused the whole window when one lay outside, so a city window had no inventory, combat or AI host).
+            // They enter as context (no body: they stand nowhere), after every in-window row, so the rows of the window itself are the same as before.
+            if (heldOutside is not null)
+            {
+                var holders = objects.Where(o => o.Key.Kind == AreaSourceKind.Mobile).Select(o => o.Key.ObjectIdSha256).ToHashSet(StringComparer.Ordinal);
+                foreach (var (heldOffset, heldIndex, parentId) in heldOutside)
+                {
+                    token.ThrowIfCancellationRequested();
+                    if (!holders.Contains(parentId)) continue;
+                    using var wire = new AreaOwnership(_budget);
+                    var record = ReadWire(bytes.AsSpan(heldOffset), AreaStage.Aggregate, heldOffset, heldIndex, ownership: wire);
+                    construction.Allocate(512);
+                    AddObject(record, source, null, heldIndex, heldOffset, AreaScope.Context, null, definitions, prototypes, objects, visuals, mappings, issues, token, output,
+                        patch is not null && record.Own.Entity is { Kind: 2 } entity ? patch.For(MapPatchFile.ObjectGuid(entity)) : null);
+                }
             }
         }
         _budget.BeginPhase(AreaBudgetPhase.I5);
@@ -447,6 +469,8 @@ public sealed partial class AreaDataOwner
     }
     /// <summary>The first type-specific slot: a scenery's scenery flags.</summary>
     private const int SceneryFlagsSlot = 36;
+    /// <summary>ARC-WORLD-2036: <c>OBJ_F_ITEM_PARENT</c>, the first-group slot of an item that names its holder (the inventory view reads the same slot).</summary>
+    internal const int ItemParentSlot = 37;
     private static long Optional(IReadOnlyDictionary<int, ObjectWireValue> fields, int slot) =>
         fields.TryGetValue(slot, out var value) && value.Presence == ObjectWirePresence.Value && value.Number is { } number ? number : 0;
     private static long Number(IReadOnlyDictionary<int, ObjectWireValue> fields, int slot) => fields.TryGetValue(slot, out var value) && value.Presence == ObjectWirePresence.Value && value.Number.HasValue ? value.Number.Value : throw Fail(AreaErrorCode.UnsupportedVersionOrSchema, AreaStage.Appearance);
