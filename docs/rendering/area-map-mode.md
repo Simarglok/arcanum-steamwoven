@@ -894,8 +894,8 @@ replaces it. A click beyond the route follower's 32-cell reach is walked along a
   (half-ogre and human male, 2026-10-29: windows (1452,1290) → (1452,1291) → (1452,1292), the item from (1452,1289)).
 - **NPC without a dialog through a map change and a window move (ARC-AI-1695).** The follow smoke of the transfer stage (and of `follower-home`, `follower-far`,
   `teleport-follow`, which run it first) force-joins one more NPC of the map next to the dialog companion: the nearest living free NPC without a dialog that the scene draws and
-  whose follow facts read (what Dominate Will does, no conversation), and requires a following companion with a led body (script 0) within the follow distance
-  (`ARC-AI-1695 native-smoke led-follow PASS`). In the transfer stage's carry to the Crash Site cave it is a visitor there whose body was read from its home map as a led NPC's
+  whose follow facts read and whose stored object is neither off nor not drawn (flags 0x2, 0x100: the AI host takes such an NPC for hidden, so no forced pass sends it home; ARC-AI-1851; what Dominate Will does, no conversation), and requires a following companion with a led body (script 0) within the follow distance
+  (`ARC-AI-1695 native-smoke led-follow PASS`). In the transfer stage's carry to the Crash Site cave it is a visitor there whose body was read from its home map as a led NPC's, in any of the home map's held reads (the directory holds the viewer's own window of it and the led read; ARC-AI-1851)
   (`ARC-AI-1695 native-smoke led-carry PASS`); the hero then releases it and the cave's forced pass sends it back to its home map, as for the dialog companion
   (`ARC-AI-1695 native-smoke led-home PASS`; no return trip of its own; from then on it is off the party, stands on its home map and its teleported mark waits there, for the rest of the transfer stage). The two stages that move the main map's window (`follower-far` by the debug travel and a quick load,
   `teleport-follow` by the spell) check it as well, where its map row lies far outside the new window: within the follow distance, drawn, its portrait bars matching its life
