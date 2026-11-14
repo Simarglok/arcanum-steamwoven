@@ -84,7 +84,7 @@ public partial class AreaConversationPanel : CanvasLayer
     /// <summary>
     /// ARC-UI-2023: the Original interface setting. The original's dialog window shows only the PC's reply rows (ways out: a DLG reply, or a window or
     /// event that pops mode 3, 0x5678D0), so the header, the outcome line, the effects ledger, the hint and the Leave button are hidden and the
-    /// controller cancel does not leave an awaiting dialog; false (Steamwoven): the diagnostic chrome stays. A message-only panel (no conversation
+    /// controller cancel does not leave an awaiting dialog that has an enabled reply; false (Steamwoven): the diagnostic chrome stays. A message-only panel (no conversation
     /// could start) keeps its message and a finished dialog keeps its Close button: nothing else could close them. Set before <see cref="Open"/>.
     /// </summary>
     public bool DiagnosticChromeHidden
@@ -101,8 +101,8 @@ public partial class AreaConversationPanel : CanvasLayer
     /// <summary>ARC-UI-2023: where an open panel reads <see cref="DiagnosticChromeHidden"/> from every frame (a rule-mode switch made over the dialog).</summary>
     public Func<bool>? ChromeHiddenSource { get; set; }
     private bool Awaiting => _conversation is { Phase: DialogConversationPhase.AwaitingSelection };
-    /// <summary>Whether the Leave button is offered: hidden under Original while a reply is awaited (the original has no way out but a reply).</summary>
-    private bool LeaveOffered => !(_chromeHidden && Awaiting);
+    /// <summary>Whether the Leave button is offered: hidden under Original while a reply can be chosen (the original has no way out but a reply); with no enabled reply (none offered, all blocked, a refused reply) it stays so that the modal panel cannot lock.</summary>
+    private bool LeaveOffered => !(_chromeHidden && Awaiting && _buttons.Any(button => !button.Disabled));
     internal bool LeaveOfferedForSelfTest => LeaveOffered;
     /// <summary>ARC-UI-2023: which diagnostic parts draw now (a label or an art paragraph is visible): header, outcome, effects, hint, Leave.</summary>
     internal (bool Header, bool Outcome, bool Effects, bool Hint, bool Leave) ChromeShownForSelfTest =>
