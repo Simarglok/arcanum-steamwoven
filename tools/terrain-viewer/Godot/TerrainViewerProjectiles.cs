@@ -532,7 +532,7 @@ public partial class TerrainViewerApp
             // ARC-DEV-292: the attack event of the aimed NPC was raised at the shot; an NPC the arrow met on the way gets its own at the strike (as an NPC's stray shot does, AreaAiHost.LandShot), before its pass.
             // ARC-AI-1516 (EX14): the stray strike's event carries the accidental bit.
             if (result.Disposition != GameSessionDisposition.Rejected && result.Resolution?.Refusal == AttackRefusal.None && !(struck.Key == projectile.Target.Key && projectile.Critter is AttackGoal)) _aiHost?.HeroStrayAttacked(goal.Entity);
-            if (result.Disposition != GameSessionDisposition.Rejected) FinishCritterHit(goal, result, aimed: struck.Key == projectile.Target.Key && projectile.Critter is AttackGoal);
+            if (result.Disposition != GameSessionDisposition.Rejected) FinishCritterHit(goal, result, aimed: struck.Key == projectile.Target.Key && projectile.Critter is AttackGoal, thrownItem: projectile.Thrown?.Item);
         }
         else if (!IsAreaCompanion(struck.Key) && (struck.Key == projectile.Target.Key && projectile.Object is { } aimedObject ? aimedObject
                 : ObjectTargets()?.Target(owner, struck.Key, AreaTrapped) is { Refusal: null } found && found.Kind is not DamageableObjectKind.Item ? found : null) is { } target)

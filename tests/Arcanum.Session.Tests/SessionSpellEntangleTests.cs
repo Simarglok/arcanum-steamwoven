@@ -206,6 +206,31 @@ public sealed class SessionSpellEntangleTests
     }
 
     [TestMethod]
+    public void A_weapons_own_hit_effect_that_plays_ends_the_attack_end_before_the_blood_and_the_hit_effect()
+    {
+        // ARC-RENDER-1990 (0x4B6930 → 0x4377C0): the attack end asks the weapon's own hit effect first; when it plays, neither the blood nor the hit effect (the entangled victim's save) follows.
+        var hit = new AttackDamage(DamageRecipient.Target, new(5, 0, 0, 0, 0), new(5, 0, 0, 0, 0), 5, 0, 0, DamageMultiplier.None, false, CriticalHitEffects.None, CriticalMissEffects.None, false, DamagePrevention.None);
+        var asked = new List<(string Victim, int Entry, int Limit)>();
+        foreach (var (plays, weapon, veto) in new (bool, int?, bool)[] { (true, 6060, true), (false, 6060, false), (true, null, false), (true, 6040, false) })
+        {
+            var record = Entangle(100);
+            var (owner, caster) = Setup(RuleMode.Steamwoven, record);
+            using var _ = owner;
+            var run = Cast(owner, caster, record);
+            asked.Clear();
+            caster.WeaponEyeCandyAdd = (victim, entry, limit) => { asked.Add((victim, entry, limit)); return plays; };
+            var ended = caster.AttackEnd(SessionSpellCaster.Hero, hit, false, weapon);
+            var broken = caster.Log.Any(e => e.Kind == SpellCastEventKind.EntangleBroken && e.Run == run);
+            Assert.AreEqual(!veto, ended, $"plays {plays}, weapon {weapon}: the hit effect asks the save again unless the weapon's effect played");
+            Assert.AreEqual(!veto, broken);
+            Assert.AreEqual(!veto, caster.Log.Any(e => e.Kind == SpellCastEventKind.HitGore), "the blood follows unless it played");
+            // The Tesla Rod (prototype 6060: basic 6040, 11 above the first weapon, kind 3) asks its own entry with the limit 2; a weapon below the list's first and no weapon ask nothing.
+            if (weapon == 6060) CollectionAssert.AreEqual(new[] { (SessionSpellCaster.Hero, EyeCandyEntryRef.Make(EyeCandyList.Weapon, 58)!.Value, 2) }, asked);
+            else Assert.AreEqual(0, asked.Count);
+        }
+    }
+
+    [TestMethod]
     public void A_missed_save_the_caster_and_a_critter_without_the_flag_keep_everything_as_it_is()
     {
         var record = Entangle(-100);

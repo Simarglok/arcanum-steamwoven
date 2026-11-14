@@ -47,13 +47,15 @@ public partial class TerrainViewerApp
 
     private SpellEyeCandyTable? EyeCandyTable => _spellData?.EyeCandy;
 
-    /// <summary>ARC-SCRIPT-1592: the eye-candy entry of a goal's entry reference (the list and the index in it, <see cref="EyeCandyEntryRef"/>): the spell, script or animation list; the other lists (weapon, combat, trap) are not read yet.</summary>
+    /// <summary>ARC-SCRIPT-1592: the eye-candy entry of a goal's entry reference (the list and the index in it, <see cref="EyeCandyEntryRef"/>): the spell, script, animation or weapon list; the other lists (combat, trap) are not read yet.</summary>
     private SpellEyeCandyEntry? EyeCandyEntryOf(int entry) => EyeCandyEntryRef.ListOf(entry) switch
     {
         EyeCandyList.Spell => EyeCandyTable?.At(EyeCandyEntryRef.IndexOf(entry)),
         EyeCandyList.Script => _spellData?.ScriptEyeCandy?.At(EyeCandyEntryRef.IndexOf(entry)),
         // ARC-RENDER-1794: the animation list (0x5DE670), the blood of a hit.
         EyeCandyList.Anim => _spellData?.AnimEyeCandy?.At(EyeCandyEntryRef.IndexOf(entry)),
+        // ARC-RENDER-1990: the weapon list (0x5DE610), a weapon's own hit effect.
+        EyeCandyList.Weapon => _spellData?.WeaponEyeCandy?.At(EyeCandyEntryRef.IndexOf(entry)),
         _ => null,
     };
     private const int ForegroundSlots = 7, BackgroundSlots = 7, UnderlaySlots = 4;
@@ -305,6 +307,17 @@ public partial class TerrainViewerApp
         if (obj == SessionSpellCaster.Hero) return HeroWorldCell();
         // ARC-DEV-352: a summoned object (the flash) at its cell.
         if (CreatedCell(owner, obj) is { } created) return created;
-        return _spellCastMap?.Row(obj) is { } row ? LiveCell(owner, row) : null;
+        // ARC-SCRIPT-1829: a created critter (where its mover stands, else its created cell) and an item lying on the shown map (made, created or dropped: the placed item's cell); an item nobody has put on the ground has no place to draw.
+        if (CreatedCritterCell(owner, obj) is { } critter) return critter;
+        if (_spellCastMap?.Row(obj) is { } row) return LiveCell(owner, row);
+        return owner.QueryPlacedItems().FirstOrDefault(i => i.Entity == obj && i.Map == new SessionMapId(CurrentAreaMap)) is { } item ? item.Cell : null;
+    }
+
+    /// <summary>ARC-SCRIPT-1829: the cell of a critter the session created on the shown map (a summoned or generated one), where the AI has moved it, else where it was made; null for another kind, another map or one that is gone.</summary>
+    private CellCoord? CreatedCritterCell(GameSessionOwner owner, string entity)
+    {
+        if (SessionCreatedObject.KindOf(entity) is not SessionCreatedKind.Critter || owner.QueryCreatedObject(entity) is not { } made || made.Map != new SessionMapId(CurrentAreaMap)) return null;
+        if (AreaAiHostNow() is { } ai && ReferenceEquals(ai.Session, owner) && ai.Movers.Of(entity) is { } mover) return new(checked((int)mover.Cell.X), checked((int)mover.Cell.Y));
+        return made.Cell;
     }
 }

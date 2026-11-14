@@ -139,8 +139,9 @@ public partial class TerrainViewerApp
                 // A smoke's frames do not run the viewer's process step, which floats the queued script lines: tick it by hand.
                 TickFloaters();
                 Require(_scriptFloats > floatedBefore, $"the greeting floated over the corpse: {_scriptFloats - floatedBefore}");
-                var drawn = FloatersForSelfTest?.DrawnForSelfTest().Where(d => d.Owner == entity).Select(d => d.Text).ToArray() ?? [];
-                Require(drawn.Contains(line), $"the corpse's line is drawn over it: \"{line}\" among [{string.Join(" | ", drawn)}]");
+                // ARC-UI-1997: the greeting is a text bubble over the corpse (the wrapped lines read back as the line).
+                var drawn = FloatersForSelfTest?.LayOutBubbles().Where(d => d.Owner == entity).Select(d => string.Join(" ", d.Lines.Select(l => l.Text))).ToArray() ?? [];
+                Require(drawn.Contains(line), $"the corpse's line is a bubble over it: \"{line}\" among [{string.Join(" | ", drawn)}]");
                 origin = "generic greeting";
                 GD.Print($"ARC-DEV-324 spirit-talk generic greeting over the corpse: {line} ({_voiceStart.Detail})");
             }

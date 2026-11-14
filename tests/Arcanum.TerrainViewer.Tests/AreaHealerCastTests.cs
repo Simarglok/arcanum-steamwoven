@@ -20,11 +20,11 @@ namespace Arcanum.TerrainViewer.Tests;
 [TestClass]
 public sealed class AreaHealerCastTests
 {
-    private const int Spell = 60, Cost = 4, Healed = 7;
+    internal const int Spell = 60, Cost = 4, Healed = 7;
     private static readonly CellCoord HeroCell = new(58, 12), NpcCell = new(59, 14);
 
     // An invented healing spell of the healing college's number: BEGIN heals its target by 7 (no save, any target), cost 4 fatigue, no casting animation (the casting goal 26).
-    private static SessionSpellRecord Record() => SessionSpellRecords.Translate(new SpellRecord
+    internal static SessionSpellRecord Record() => SessionSpellRecords.Translate(new SpellRecord
     {
         Number = Spell, MinimumWillpower = 0, Cost = Cost, MaintainCost = 0, MaintainPeriod = 0, DurationSeconds = 0, DurationStat = -1, DurationStatLevel = 0, DurationStatModifier = 1, DurationTriggerCount = 0,
         ResistStat = -1, ResistModifier = 0, Range = 99, IsTechnology = false, ChargesFromCells = false, SkipsBeginCost = false, Info = SpellInfo.Friendly, Enabled = true, NoResist = false, NoReflect = true,

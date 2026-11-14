@@ -69,8 +69,8 @@ public partial class TerrainViewerApp
             await Frames(5);
             var heroCell = HeroWorldCell() ?? throw new InvalidOperationException("AREA_SCRIPT_EYE_CANDY_NO_HERO_CELL");
             Require((ShownEyeCandyHost?.Shown().Count() ?? 0) == 0, "no eye candy shows before the run");
-            _scriptEyeCandyPlayedForSelfTest.Clear();
-            var takenBefore = _scriptEyeCandyTaken;
+            _scriptEyeCandyPlayedForSelfTest.Clear(); _scriptEyeCandyTurnedForSelfTest.Clear();
+            var takenBefore = _scriptEyeCandyTaken; var soundsBefore = _scriptEyeCandySounds; var facingAtPlay = _worldActor.State.Facing & 7;
             await Shot("before");
             var placed = new Arcanum.Data.Maps.MapPlacedScript(Arcanum.Data.Maps.MapTransitionTrigger.TileEntry, new(0, 0), -1, new(heroCell.X, heroCell.Y), 0, 0, VoidExitScript);
             var ran = _mapTransfers!.PlacedRunner!(placed, _ => null);
@@ -87,7 +87,11 @@ public partial class TerrainViewerApp
             for (var i = 0; i < 200 && !(ShownEyeCandyHost?.Shown().Any(o => o.Owner == owner && o.Eye.Entry == entryRef) ?? false); i += 2) await Frames(2);
             var shown = ShownEyeCandyHost?.Shown().FirstOrDefault(o => o.Owner == owner && o.Eye.Entry == entryRef);
             Require(shown is not null, "the eye candy of the script list shows on the hero");
-            Require(shown!.Eye.Art == entry.Art, "the run holds the list entry's art");
+            // ARC-SCRIPT-1829: the entry's art is turned to the hero's facing at the play (0x502880 into 0x502930), its sound plays at the hero's cell when the entry has one.
+            var turned = _scriptEyeCandyTurnedForSelfTest.First(t => t.Owner == owner);
+            Require(turned.Rotation == facingAtPlay, $"the play took the hero's facing as the art modifier: {turned.Rotation} against {facingAtPlay}");
+            Require(shown!.Eye.Art == EyeCandyArt.TurnTo(entry.Art!.Value, turned.Rotation), "the run holds the list entry's art turned to the facing");
+            Require(entry.Sound < 0 || _scriptEyeCandySounds > soundsBefore, $"the entry's sound {entry.Sound} was asked for");
             var first = shown.Eye.Frame;
             for (var i = 0; i < 100 && (ShownEyeCandyHost?.Shown().FirstOrDefault(o => o.Handle.Equals(shown.Handle))?.Eye.Frame ?? first) == first; i += 2) await Frames(2);
             var moved = ShownEyeCandyHost?.Shown().FirstOrDefault(o => o.Handle.Equals(shown.Handle));
@@ -113,7 +117,29 @@ public partial class TerrainViewerApp
             await Frames(1);
             Require(_scriptEyeCandyTaken == queuedFrom + 1 && _scriptEyeCandyPlayedForSelfTest.SequenceEqual([(owner, number)]), $"the queued request was taken once and played on the hero: taken {_scriptEyeCandyTaken - queuedFrom}, played {string.Join(";", _scriptEyeCandyPlayedForSelfTest)}");
             await Shot("queued");
-            GD.Print("ARC-SCRIPT-1592 native-smoke script-eye-candy PASS " + System.Text.Json.JsonSerializer.Serialize(new { Map = _readyMapName, Script = VoidExitScript, Number = number, Entry = entryRef, Looping = (entry.Flags & SpellEyeCandyFlags.Forever) != 0, FirstFrame = first, MovedTo = moved?.Eye.Frame, Stopped = _scriptEyeCandyStopped }));
+            // ARC-SCRIPT-1829: an object that is no critter plays too: a scenery, container or portal row of the map with a cell, named the way the script host names it (a ground item and a created critter follow the same cell lookup).
+            var still = area.Snapshot.Objects.FirstOrDefault(o => o.Type is 1 or 2 or 3 && o.WorldX is not null && o.WorldY is not null && _spellCastMap?.IdOf(o.Key) is not null && ObjectTargets()?.Gone(session).Contains(o.Key) != true);
+            var stillNote = "NONE (the map has no scenery, container or portal row)";
+            if (still is not null)
+            {
+                var id = _spellCastMap!.IdOf(still.Key)!;
+                _scriptEyeCandyPlayedForSelfTest.Clear();
+                QueueScriptEyeCandies([new ScrEyeCandy(number, new ScrObjectRef(CurrentAreaMap, AreaUseScriptHost.EntityId(still)))]);
+                await Frames(1);
+                Require(_scriptEyeCandyPlayedForSelfTest.Count == 1 && _scriptEyeCandyPlayedForSelfTest[0].Owner == id, $"the request on the row {id} (type {still.Type}) played on it: {string.Join(";", _scriptEyeCandyPlayedForSelfTest)}");
+                for (var i = 0; i < 200 && !(ShownEyeCandyHost?.Shown().Any(o => o.Owner == id && o.Eye.Entry == entryRef) ?? false); i += 2) await Frames(2);
+                Require(ShownEyeCandyHost?.Shown().Any(o => o.Owner == id && o.Eye.Entry == entryRef) ?? false, $"the eye candy shows on the row {id}");
+                // ARC-SCRIPT-1828: the stop of that entry on the same row (the heartbeat's stop on a scenery) takes its run off.
+                _scriptEyeCandyStoppedForSelfTest.Clear();
+                QueueScriptEyeCandies([new ScrEyeCandy(number, new ScrObjectRef(CurrentAreaMap, AreaUseScriptHost.EntityId(still)), ScrEyeCandyKind.StopScript)]);
+                await Frames(1);
+                Require(_scriptEyeCandyStoppedForSelfTest.SequenceEqual([(id, number)]), $"the stop request took the run off the row {id}: {string.Join(";", _scriptEyeCandyStoppedForSelfTest)}");
+                Require(!(ShownEyeCandyHost?.Shown().Any(o => o.Owner == id && o.Eye.Entry == entryRef) ?? false), $"the stopped eye candy no longer shows on the row {id}");
+                stillNote = $"PASS type={still.Type} id={id}";
+                await Shot("object");
+            }
+            GD.Print("ARC-SCRIPT-1829 script-eye-candy object-without-critter " + stillNote);
+            GD.Print("ARC-SCRIPT-1592 native-smoke script-eye-candy PASS " + System.Text.Json.JsonSerializer.Serialize(new { Map = _readyMapName, Script = VoidExitScript, Number = number, Entry = entryRef, Rotation = turned.Rotation, Sound = entry.Sound, SoundsAsked = _scriptEyeCandySounds, Looping = (entry.Flags & SpellEyeCandyFlags.Forever) != 0, FirstFrame = first, MovedTo = moved?.Eye.Frame, Stopped = _scriptEyeCandyStopped }));
         }
         finally
         {
