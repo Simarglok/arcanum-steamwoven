@@ -191,7 +191,7 @@ public static class AttackRules
     /// <summary>The wielded weapon's art subtype (use-art bits 6..9) that backstabs at any training, and the ones that need training above apprentice (0x45F9D0).</summary>
     public const int BackstabAnyTrainingSubtype = 2;
 
-    /// <summary>The art subtypes that backstab at training above apprentice (0x45F9D0: 3, 4 and 7).</summary>
+    /// <summary>The art subtypes that backstab at training above apprentice (3, 4 and 7).</summary>
     public static bool BackstabTrainedSubtype(int artSubtype) => artSubtype is 3 or 4 or 7;
 
     /// <summary>

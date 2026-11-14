@@ -28,11 +28,11 @@ public sealed class AreaAiHostBackstabFactsTests
     }
 
     // The NPC stands at x 62; the hero two tiles west of it (behind its +x facing) or two east (in front).
-    private static (AreaAiHostRebindTests.Fixture Fixture, AreaAiHost Host) Setup(int heroX, int perception)
+    private static (AreaAiHostRebindTests.Fixture Fixture, AreaAiHost Host) Setup(int heroX, int perception, bool lineOfFire = true)
     {
         var f = AreaAiHostRebindTests.Open(perceptionA: perception);
         var scene = f.Scene(0, AreaAiHostRebindTests.Sector(0, 0), [AreaAiHostRebindTests.NpcA(f)])
-            with { HeroCell = () => new CellCoord(heroX, 10), LineOfFire = () => new OpenMap(), HeroRotation = () => 5 };
+            with { HeroCell = () => new CellCoord(heroX, 10), LineOfFire = lineOfFire ? () => new OpenMap() : null, HeroRotation = () => 5 };
         return (f, f.Build(scene));
     }
 
@@ -70,5 +70,13 @@ public sealed class AreaAiHostBackstabFactsTests
         Assert.IsNull(host.BackstabFacts(f.A, f.A), "an attacker is not its own target");
         Assert.IsNull(host.BackstabFacts(f.A, "oid:nobody"), "an unknown critter has no tile");
         Assert.IsNull(host.HeroBackstabFacts("oid:nobody"));
+    }
+
+    [TestMethod]
+    public void A_scene_without_a_line_of_fire_map_gives_no_facts_rather_than_a_false_true_backstab()
+    {
+        var (f, host) = Setup(60, 3, lineOfFire: false);
+        using var _ = f;
+        Assert.IsNull(host.HeroBackstabFacts(f.A), "sight and hearing cannot be asked without the map");
     }
 }
