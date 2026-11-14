@@ -89,8 +89,9 @@ facts' `MindControlled`); the host keeps them consistent. No new saved state: no
   asks for an object the same way (ARC-WORLD-117): the next left press's object is the target (none on an empty spot), and with the
   AI host the orders run each follower's AI pass ([AI host](ai-host.md#followers-in-combat-arc-world-115)); F2's target is the
   object under the pointer at the release. The strip is hidden and its menu closed
-  while a modal window is open, and a menu choice is refused unless the world owns input (as for F1–F6). The menu's labels are
-  the viewer's own words (the original reads `mes\follower_ui.mes`); the Original name addressing compares them as the label.
+  while a modal window is open, and a menu choice is refused unless the world owns input (as for F1–F6). The menu's rows draw the
+  words of `mes\follower_ui.mes` (ARC-UI-1786); the label an order sends and the Original name addressing compares (`AreaCompanionOrders.Label`) is still the viewer's own
+  lower-case word (the original joins the follower's name with the file's text).
 - **Facts** (`AreaCompanionOrders.Facts`): the following and waiting companions of the shown map, the hover name (else "script N"),
   the Chebyshev distance of its cell to the PC's, the loyalty step's follow facts and `AreaCompanionRoster.WaitFacts`. The PC side
   of both is the session hero with `--hero` (ARC-WORLD-067, [party runtime](party-runtime.md#the-session-hero-as-the-pc-side-arc-world-067)),
@@ -129,10 +130,12 @@ follower module; its Godot-free rules are `AreaFollowerPanelRules` (tools/terrai
   above. A new session (the panel's `ResetPanel`, the module's reset 0x56A880) shows the panel again from the first follower.
 - **FP2 decision**: the shown flag and the offset are session-only. The original writes them into its save (two 32-bit values with no gameplay effect); FR-LIFECYCLE-004
   keeps saves for game state, so the viewer does not add a schema step for them.
-- **Hidden-interface layout (SZ11)**: the original moves the three buttons to y 587, 574 and 574 while the interface bars are hidden. The viewer has no hidden interface
-  layout for the strip yet, so the buttons stand at the bars-drawn places; this stays open with the hidden-interface layout itself.
+- **Hidden-interface layout (SZ11, issue #1785)**: the original moves the three buttons to y 587, 574 and 574 while the interface bars are hidden (the portraits stay). The
+  viewer takes the layout from the bars' state (`AreaGameBarPanel.BottomInset > 0` means drawn; `AreaFollowerPanelRules.ToggleRectFor/UpRectFor/DownRectFor`) and moves the
+  existing buttons at once when the bars are shown or hidden (the follower companion smoke checks both).
 - **Menu (FP7–FP9)**: art 826 at the slot's right edge (x 51, the slot's y), not clamped to the screen, with eight rows (Walk, Attack, Stay Close, Spread Out, Back Off,
-  Wait, Inventory, Character Sheet) at (10, 3 + 18 × row), 118 × 15: white, mid grey when greyed, bright (0, 0xD2, 0xFF) under the pointer. Wait is greyed for a
+  Wait, Inventory, Character Sheet; the words are `mes\follower_ui.mes` messages 0–7 read through `AreaFollowerMenuTexts` with the shown content, ARC-UI-1786: a row whose
+  message is missing is not drawn and the others keep their places, the draw loop 0x56B970 stepping y by 18 for every index; without a readable file the project's English words stand in) at (10, 3 + 18 × row), 118 × 15: white, mid grey when greyed, bright (0, 0xD2, 0xFF) under the pointer. Wait is greyed for a
   mind-controlled follower (spell flag 0x8000000), Inventory when the can-open test (0x575080, `BarterCycleSpeaker`) fails. With the menu open every release is the menu's:
   a row runs after the menu closes, any other left or right release closes it, and the portraits, the button and the arrows are not handled.
 - **Rows 6 and 7 (FP11, FP12)**: Inventory opens the follower's barter window in its follower form (the pending open the dialog's `b:` reply uses); Character Sheet
@@ -142,8 +145,8 @@ follower module; its Godot-free rules are `AreaFollowerPanelRules` (tools/terrai
   his body would, and the area test decides; the disarm cursor is cancelled (a follower is no trap). In any other mode the click is the ordinary one (a talk, B33). A visiting
   follower has no cast id on the shown map and refuses a spell or item target. The lockpick cursor and the follower order's own target mode (walk, attack) leave the click as it
   was (ignored).
-- **Tests**: `AreaFollowerPanelRulesTests`; the `companion-click` stage's facts (the hide and show buttons, the menu's rows and place, the margin release, the sheet and
-  the barter window, eight synthetic followers scrolled by their arrows). `ARC_AREA_FOLLOWER_PANEL_CAPTURE` saves readbacks of the stage to a caller's ignored path.
+- **Tests**: `AreaFollowerPanelRulesTests`, `AreaFollowerMenuTextsTests`; the `companion-click` stage's facts (the hide and show buttons, the menu's rows and place, the margin release, the sheet and
+  the barter window, the rows' words and the skipped row, eight synthetic followers scrolled by their arrows). `ARC_AREA_FOLLOWER_PANEL_CAPTURE` saves readbacks of the stage to a caller's ignored path.
 
 ## Tests
 

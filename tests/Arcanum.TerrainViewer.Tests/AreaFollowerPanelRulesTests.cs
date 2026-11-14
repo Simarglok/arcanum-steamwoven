@@ -66,6 +66,18 @@ public sealed class AreaFollowerPanelRulesTests
     }
 
     [TestMethod]
+    public void With_the_interface_bars_hidden_the_buttons_stand_at_587_and_574_and_the_bars_drawn_places_are_kept()
+    {
+        Assert.AreEqual((0, 587, 67, 13), AreaFollowerPanelRules.ToggleRectFor(false), "FP1, SZ11: the show/hide button at y 587");
+        Assert.AreEqual((0, 574, 33, 13), AreaFollowerPanelRules.UpRectFor(false), "the up arrow at y 574");
+        Assert.AreEqual((33, 574, 34, 13), AreaFollowerPanelRules.DownRectFor(false), "the down arrow at y 574");
+        Assert.AreEqual(AreaFollowerPanelRules.ToggleRect, AreaFollowerPanelRules.ToggleRectFor(true));
+        Assert.AreEqual(AreaFollowerPanelRules.UpRect, AreaFollowerPanelRules.UpRectFor(true));
+        Assert.AreEqual(AreaFollowerPanelRules.DownRect, AreaFollowerPanelRules.DownRectFor(true));
+        Assert.AreEqual(600, AreaFollowerPanelRules.HiddenToggleRect.Y + AreaFollowerPanelRules.HiddenToggleRect.Height, "the hidden button ends at the screen's bottom");
+    }
+
+    [TestMethod]
     public void Wait_is_greyed_for_a_mind_controlled_follower_and_inventory_when_it_cannot_be_opened()
     {
         foreach (var item in Enum.GetValues<FollowerMenuItem>())
