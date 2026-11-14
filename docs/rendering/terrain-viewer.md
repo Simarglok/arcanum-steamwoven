@@ -1662,7 +1662,7 @@ With `--hero`, the original Ready/Unready key **R** (fresh press, world focused,
 combat mode in real time through the session ([real-time combat runtime](../world/real-time-combat-runtime.md#viewer-area)).
 The HUD shows `combat mode: ON (real time)` or `off`, the hero's fatigue and the last notice; an unconscious, stunned or
 dead hero is refused with the reason. Without `--hero` R reports that combat mode needs a hero. A dialog start leaves
-combat mode first (the exit gate never closes here: no NPC has a combat focus yet), and the cave transfer leaves it as the
+combat mode first (the exit gate closes while an active NPC near the hero fights it or its followers, ARC-COMBAT-1935, or a swing or throw is playing, and a dialog start then opens none; an NPC's own talk stays pending until the gate lets go), and the cave transfer leaves it as the
 original's teleport does. Running in combat mode costs one fatigue every fifth run step of a move; a hero out of fatigue
 walks, and so does a hero at encumbrance level 4 or more (ARC-WORLD-087, ledger WE9), and the viewer does not run the session's event queue, so that fatigue only returns with a quick load. In combat
 mode a left click on a living NPC attacks it (below). Native smoke with `--hero` (after the run stage):

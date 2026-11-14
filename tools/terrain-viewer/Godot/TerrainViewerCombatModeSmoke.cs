@@ -1,3 +1,4 @@
+using Arcanum.Simulation.Ai;
 using Arcanum.Session;
 using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Movement;
@@ -157,6 +158,49 @@ public partial class TerrainViewerApp
             ReleaseSimulatedPadForSelfTest(); _worldFocusSimulationForSelfTest = simulatedFocus;
             _worldFocused = focused; RestoreWorldTestTime(testTime);
         }
+    }
+
+    /// <summary>
+    /// ARC-COMBAT-1935 (ledger VC58, VC59, VC60): with an active NPC near the hero in the combat-focus state with the hero as its focus, the hero in combat mode stays in it for the R key, the
+    /// right release and a dialog start (the exit gate's refusal, intgame message 24, no dialog); once the NPC is calm the same R leaves it. The NPC's fight is put back afterwards.
+    /// </summary>
+    private void RunAreaCombatExitThreatSmoke(GameSessionOwner session, AreaAiHost host, string entity, IEnumerable<string> pack)
+    {
+        static void Require(bool value, string why)
+        {
+            if (value) return;
+            GD.Print("ARC-COMBAT-1935 combat-exit smoke FAIL: " + why);
+            throw new InvalidOperationException("AREA_COMBAT_EXIT_SMOKE_FAILED");
+        }
+        Require(HeroInCombatMode, "the hero is in combat mode");
+        Require(host.CombatThreats().Any(t => t.Active && t.Fighting && t.Focus.IsHero), "the NPC is a threat the scan sees");
+        const string Refused = "cannot leave combat mode when under attack";
+        Vector2 Screen() => _canvas!.GetGlobalTransformWithCanvas() * new Vector2(WorldViewport.X / 2f, WorldViewport.Y / 2f);
+        void PressR()
+        {
+            InputWorld(new InputEventKey { Keycode = Key.R, PhysicalKeycode = Key.R, Pressed = true });
+            InputWorld(new InputEventKey { Keycode = Key.R, PhysicalKeycode = Key.R, Pressed = false });
+        }
+        _combatModeNotice = "";
+        PressR();
+        Require(HeroInCombatMode && _combatModeNotice.Contains(Refused, StringComparison.Ordinal), $"R keeps combat mode while the NPC fights the hero: {_combatModeNotice}");
+        _combatModeNotice = "";
+        WorldRightRelease(Screen());
+        Require(HeroInCombatMode && _combatModeNotice.Contains(Refused, StringComparison.Ordinal), $"the right release keeps combat mode: {_combatModeNotice}");
+        _combatModeNotice = "";
+        Require(!LeaveCombatModeForDialog() && HeroInCombatMode && _combatModeNotice.Contains(Refused, StringComparison.Ordinal), $"a dialog start opens no dialog and keeps combat mode: {_combatModeNotice}");
+        // The NPC calm: the same key leaves, and the fight is put back for the stage that follows.
+        // Every NPC of the map's pack is calmed (a neighbour that joined the fight would keep the gate shut): the scan then finds no threat.
+        CalmNpcsForSmoke(session, pack.Append(entity));
+        Require(session.QueryDanger(entity).State == DangerState.None, "the NPC is calm: " + session.QueryDanger(entity).State);
+        Require(host.CombatThreats().All(t => !(t.Focus.IsHero && t.Active)), $"calm NPCs are no threat: {host.CombatThreats().Count} left");
+        PressR();
+        Require(!HeroInCombatMode, $"R leaves combat mode once no NPC fights the hero: {_combatModeNotice}");
+        PressR();
+        Require(HeroInCombatMode, "R enters combat mode again");
+        host.HeroAttacked(entity);
+        Require(session.QueryDanger(entity) is { State: DangerState.CombatFocus, Focus.IsHero: true }, "the NPC fights the hero again");
+        GD.Print("ARC-COMBAT-1935 native-smoke combat-exit PASS (R, right release and dialog start refused under attack; R leaves when calm)");
     }
 
     /// <summary>The first cell at least 12 cells (Chebyshev) from <paramref name="start"/> on open steps, else the farthest such cell
