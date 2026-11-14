@@ -18,11 +18,12 @@ namespace Arcanum.TerrainViewer;
 public partial class TerrainViewerApp
 {
     // Smoke seams and the log: the requests taken, and those the host started.
-    private int _scriptEyeCandyTaken, _scriptEyeCandyPlayed, _scriptEyeCandySounds;
+    private int _scriptEyeCandyTaken, _scriptEyeCandyPlayed, _scriptEyeCandySounds, _scriptEyeCandyStopTaken, _scriptEyeCandyStopped;
     // ARC-SCRIPT-1829: the rotation the last plays turned their art to, and the looping voices of the runs still shown (stopped when their run ends).
     private readonly List<(string Owner, int Number, int Rotation, int Sound)> _scriptEyeCandyTurnedForSelfTest = [];
     private readonly Dictionary<Arcanum.Simulation.Goals.GoalHandle, ViewerAudioHandle> _scriptEyeCandyVoices = [];
     private readonly List<(string Owner, int Number)> _scriptEyeCandyPlayedForSelfTest = [];
+    private readonly List<(string Owner, int Number)> _scriptEyeCandyStoppedForSelfTest = [];
     // ARC-MAGIC-1830: the requests of the item event scripts a session move ran (an NPC's rewield or wield), queued by the code that applied the move and taken with the script hosts' above.
     private readonly List<AreaScriptEyeCandy> _queuedScriptEyeCandies = [];
 
@@ -43,6 +44,7 @@ public partial class TerrainViewerApp
         var caster = SpellCasterNow();
         foreach (var request in requests)
         {
+            if (request.Stop) { StopScriptEyeCandy(request, caster); continue; }
             _scriptEyeCandyTaken++;
             if (caster is null) { GD.Print($"ARC-SCRIPT-1592 script-eye-candy dropped number={request.Number} object={request.Object.Code} (no cast host)"); continue; }
             // The hero is the PC whatever map the run names; any other object must be of the shown map.
@@ -92,5 +94,25 @@ public partial class TerrainViewerApp
             _audio?.Stop(voice);
             _positionalVoices.RemoveAll(v => v.Handle == voice);
         }
+    }
+
+    /// <summary>
+    /// ARC-SCRIPT-1828 (WE12): a stop request (action 124) takes the owner's run of the script-list entry off at once, in the order the requests came (<see cref="AreaEyeCandyHost.StopScript"/>; the first matching run only, as the original's walk 0x4243E0 does).
+    /// An object nothing played on (a play with no cell to draw on is dropped) has no run, so its stop ends nothing and says nothing: the main map's heartbeats stop the entry on every scenery around an NPC each time they run. The voice of a looping entry stops when its run is over (<see cref="StopEndedScriptEyeCandyVoices"/>), a stopped one included.
+    /// </summary>
+    private void StopScriptEyeCandy(AreaScriptEyeCandy request, SessionSpellCaster? caster)
+    {
+        if (caster is null) return;
+        string owner;
+        if (request.Object.Code == AreaScriptHost.PcCode) owner = SessionSpellCaster.Hero;
+        else if (request.Object.Map == CurrentAreaMap) owner = caster.CastIdOf(request.Object.Code);
+        else return;
+        _scriptEyeCandyStopTaken++;
+        // The shown session's eye-candy host only (a play builds it): with none built nothing was played that a stop could take off, and the heartbeat's stops over a map's scenery cost nothing there.
+        var stopped = ShownEyeCandyHost?.StopScript(owner, request.Number) ?? 0;
+        if (stopped == 0) return;
+        _scriptEyeCandyStopped += stopped;
+        _scriptEyeCandyStoppedForSelfTest.Add((owner, request.Number));
+        GD.Print($"ARC-SCRIPT-1828 script-eye-candy-stop object={owner} number={request.Number} stopped={stopped}");
     }
 }
