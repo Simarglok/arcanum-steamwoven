@@ -13,7 +13,7 @@ namespace Arcanum.TerrainViewer;
 public partial class TerrainViewerApp
 {
     // The node of Virgil's DLG 1324 that offers the h: reply (the hub his follower dialog returns to); a script's dialog action can start the DLG at any node (ledger HLR1).
-    private const int HealerTalkHubNode = 385;
+    private const int HealerTalkHubNode = 385, HealerTalkScript = 1324;
 
     // ARC-SCRIPT-1790 (ledger HLR1-HLR11) native observation (stage "healer-talk", only when named, with --hero, on the Crash Site): the installed healer of the start window (Virgil, DLG 1324) talks to the hero through
     // the AREA conversation host and the shown map's AI host. Virgil's own first talk is the story talk (it ends with him joining), so the conversation is opened the way a script's dialog action opens it, at the DLG node
@@ -35,9 +35,10 @@ public partial class TerrainViewerApp
         ForgetNpcPlacesForSmoke(session, map.RuntimeMap);
         var simulatedFocus = _worldFocusSimulationForSelfTest; var focused = _worldFocused; var testTime = _worldTestTime; var takesScripted = _smokeTakesScriptedConversations;
         _worldFocusSimulationForSelfTest = true; _smokeTakesScriptedConversations = true;
+        var aiBefore = _aiForSmoke;
         _aiForSmoke = true;
         var heroBefore = session.QueryHeroLife()!.Record.State;
-        var hurt = false;
+        var hurt = false; var paidBack = (Entity: (string?)null, Coins: 0);
         try
         {
             _worldFocused = true; SelectSimulatedPadForSelfTest();
@@ -49,9 +50,9 @@ public partial class TerrainViewerApp
             var candidates = host.Speakers
                 .Where(s => SpeakerPresent(s) && s.Row.WorldX is not null && s.Row.WorldY is not null)
                 .Select(s => (Speaker: s, Entity: AreaConversationState.EntityId(s.Row), Facts: ai.HealerFacts(AreaConversationState.EntityId(s.Row))))
-                .Where(c => c.Facts is { Rank: > 0, NoPcLeader: true })
+                .Where(c => c.Speaker.ScriptId == HealerTalkScript && c.Facts is { Rank: > 0, NoPcLeader: true })
                 .ToArray();
-            if (candidates.Length == 0) { GD.Print($"ARC-SCRIPT-1790 native-smoke healer-talk NONE map={map.RuntimeMap} (no leaderless speaker with a healing college rank; speakers={host.Speakers.Count})"); return; }
+            if (candidates.Length == 0) { GD.Print($"ARC-SCRIPT-1790 native-smoke healer-talk NONE map={map.RuntimeMap} (no leaderless speaker of script 1324 (Virgil) with a healing college rank; speakers={host.Speakers.Count})"); return; }
             var (speaker, entity, firstFacts) = candidates[0];
             var facts = firstFacts!.Value;
             GD.Print($"ARC-SCRIPT-1790 healer-talk speaker={speaker.ScriptId} rank={facts.Rank} skill-allowed={facts.SkillAllowed} no-pc-leader={facts.NoPcLeader} led={facts.LedByPc}");
@@ -121,6 +122,7 @@ public partial class TerrainViewerApp
             await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
             conversation = panel.Conversation!;
             var paid = goldBefore - session.QueryGold();
+            paidBack = (entity, paid);
             Require(paid is > 0 and <= 300, $"the quote was paid by the hero's own gold ({paid} coins)");
             Require((session.QueryNpcGold(entity) ?? 0) == npcGoldBefore + paid, $"the coins went to the NPC ({npcGoldBefore} to {session.QueryNpcGold(entity)})");
 
@@ -149,10 +151,13 @@ public partial class TerrainViewerApp
         finally
         {
             if (ConversationOpen) EndConversation();
+            // The quote goes back from the NPC to the hero (the take gives the coins to the hero), so the later stages see the economy as it was.
+            if (paidBack.Entity is { } payee && paidBack.Coins > 0) session.TakeGoldFromNpc(session.Version, payee, paidBack.Coins);
             if (hurt) session.Heal(session.Version, SessionLifeTarget.Hero, new LifeHeal { Full = true, Fatigue = 1000, Resurrect = true });
             if (HeroInCombatMode) session.SetCombatMode(session.Version, SessionCombatant.Hero, false, SessionCombatModeContext.RealTime);
             CancelInventoryApproach(null);
             RestoreHeroForSmoke(session, heroBefore);
+            if (!aiBefore) { _aiForSmoke = false; RetireAiHost(); _aiHostStamp = null; }
             ReleaseSimulatedPadForSelfTest(); _worldFocusSimulationForSelfTest = simulatedFocus; _smokeTakesScriptedConversations = takesScripted;
             _worldFocused = focused; RestoreWorldTestTime(testTime);
             PublishWorldSelection();

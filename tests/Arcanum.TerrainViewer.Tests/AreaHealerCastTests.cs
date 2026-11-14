@@ -60,16 +60,14 @@ public sealed class AreaHealerCastTests
 
     private static int HeroHitPoints(Open o) => o.F.Session.QueryHeroLife()!.Status.HitPoints;
 
-    // Steps the host until the NPC's cast ended (the casting goal's run), at most 200 frames of 50 ms; the notices given.
-    private static List<AreaAiNotice> Play(Open o, ref long now)
+    // Steps the host until the NPC's cast ended (the casting goal's run), at most 200 frames of 50 ms.
+    private static void Play(Open o)
     {
-        var notices = new List<AreaAiNotice>();
         for (var frame = 0; frame < 200 && (frame == 0 || o.Host.RunOf(o.F.B) is not null); frame++)
         {
-            o.Host.Frames().AdvanceHost(50); now += 50;
-            notices.AddRange(o.Host.DrainNotices());
+            o.Host.Frames().AdvanceHost(50);
+            o.Host.DrainNotices();
         }
-        return notices;
     }
 
     [TestMethod]
@@ -87,8 +85,7 @@ public sealed class AreaHealerCastTests
         Assert.IsTrue((run.Flags & SpellRunFlags.Free) != 0, "AC1: the flag word has the free flag 0x2");
         Assert.AreEqual((SpellRunFlags)0, run.Flags & SpellRunFlags.Unresistable, "the healer's cast asks no unresistable flag");
 
-        var now = 0L;
-        Play(o, ref now);
+        Play(o);
         Assert.IsNull(o.Host.RunOf(o.F.B), "the casting goal ended");
         Assert.AreEqual(before + Healed, HeroHitPoints(o), "the hero's hit points rose by the spell's heal: " + string.Join(",", o.Caster.Log.Select(e => $"{e.Kind}:{e.Value}")));
         Assert.IsFalse(o.Caster.Log.Any(e => e.Kind == SpellCastEventKind.FatiguePaid), "a free cast pays nothing");
@@ -106,10 +103,9 @@ public sealed class AreaHealerCastTests
         var run = o.F.Session.QuerySpellRuns()[goal.SpellRun ?? -1] ?? throw new AssertFailedException("no magic run");
         Assert.AreEqual((SpellRunFlags)0, run.Flags & SpellRunFlags.Free, "AC1: no free flag for a follower of a PC");
 
-        var now = 0L;
-        Play(o, ref now);
+        Play(o);
         Assert.AreEqual(before + Healed, HeroHitPoints(o), "the hero's hit points rose: " + string.Join(",", o.Caster.Log.Select(e => $"{e.Kind}:{e.Value}")));
-        Assert.IsTrue(o.Caster.Log.Any(e => e.Kind == SpellCastEventKind.FatiguePaid), "the follower paid the cast as any cast does");
+        Assert.IsTrue(o.Caster.Log.Any(e => e.Kind == SpellCastEventKind.FatiguePaid && e.Value == Cost), "the follower paid the spell's cost as any cast does");
     }
 
     [TestMethod]
@@ -118,10 +114,12 @@ public sealed class AreaHealerCastTests
         // The talk's gate holds the speaker's AI pass (GT138: the host answers the speaker as the hero's conversation partner); the casting goal of the run the talk started plays on.
         using var o = Create(talking: true);
         Assert.AreEqual(AiConversation.Pc, o.Host.Conversation(o.F.B), "the speaker is the hero's partner: the gate holds it");
+        Assert.AreEqual(AiGateStop.Conversation, o.F.Session.RunAiPass(o.F.Session.Version, o.F.B, o.Host).Pass?.Gate?.Stop, "the AI pass stops at the conversation test");
+        using (var free = Create())
+            Assert.AreNotEqual(AiGateStop.Conversation, free.F.Session.RunAiPass(free.F.Session.Version, free.F.B, free.Host).Pass?.Gate?.Stop, "control: with no talk open the pass goes past that test");
         var before = HeroHitPoints(o);
         Assert.IsTrue(o.Host.HealerCast(o.F.B, Spell, free: true));
-        var now = 0L;
-        Play(o, ref now);
+        Play(o);
         Assert.AreEqual(before + Healed, HeroHitPoints(o), "the heal landed while the partner was held");
         Assert.AreEqual(AiConversation.Pc, o.Host.Conversation(o.F.B), "the talk is still open");
     }
