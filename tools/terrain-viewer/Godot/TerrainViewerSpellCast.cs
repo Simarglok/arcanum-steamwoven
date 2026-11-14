@@ -927,6 +927,13 @@ public partial class TerrainViewerApp
             any = true;
             foreach (var hit in hits)
             {
+                // ARC-AI-2123: a zero hit on a whole object has nothing to log, float or break; the guards still see it.
+                if (hit.WitnessOnly)
+                {
+                    if (hit.Actor is { } witnessed && _spellCastMap?.Row(hit.Id) is { } wholeRow)
+                        WitnessesOfObjectHit(hit.Id, wholeRow, hit.Host, witnessed == SessionSpellCaster.Hero ? Arcanum.Simulation.Ai.AiSchedulerRules.Pc : witnessed);
+                    continue;
+                }
                 GD.Print($"ARC-DEV-255 object-damage target={hit.Id} damage={hit.Hit.Damage - hit.Hit.DamageBefore} total={hit.Hit.Damage} broken={hit.Hit.Broken} break={hit.Hit.Break} host={hit.Host}");
                 // ARC-COMBAT-1138: the damage function floats the object's damage line whoever dealt it (CH12, CH13).
                 FloatObjectDamage(hit.Id, _spellCastMap?.Row(hit.Id), AreaCombatFloaters.Of(hit));

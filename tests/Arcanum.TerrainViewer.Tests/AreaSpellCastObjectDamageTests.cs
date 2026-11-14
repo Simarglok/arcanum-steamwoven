@@ -123,6 +123,21 @@ public sealed class AreaSpellCastObjectDamageTests
     }
 
     [TestMethod]
+    public void AZeroHitOfACasterOnAWholeObjectQueuesAWitnessOnlyHitAndAScriptsDoesNot()
+    {
+        // ARC-AI-2123 (GW1, GW8): a spell's damage of 0 on a whole object changes nothing and is no shown hit, but the damage end still calls the witnesses (mode 1): the map queues a hit only they read, with the caster as actor.
+        var f = Create();
+        var id = f.Map.Id(f.Rows[0]);
+        var zero = AttackResolver.DamageStep(new() { Attacker = new Combatant(), Target = new Combatant(), TargetKind = AttackTargetKind.OtherObject, Damage = DamageByType.Zero });
+        Assert.AreEqual(0, zero.HitPointDamage);
+        Assert.IsFalse(f.Map.DamageObject(id, zero, SessionSpellCaster.Hero), "nothing changed");
+        var witnessed = f.Map.TakeObjectHits().Single();
+        Assert.AreEqual((id, SessionSpellCaster.Hero, true, SessionObjectHostSteps.WitnessesHearAttack), (witnessed.Id, witnessed.Actor, witnessed.WitnessOnly, witnessed.Host));
+        Assert.IsFalse(f.Map.DamageObject(id, zero), "no attacker: the original skips the call");
+        Assert.AreEqual(0, f.Map.TakeObjectHits().Count);
+    }
+
+    [TestMethod]
     public void AnAmountThatTheMaterialTakesAllOfDoesNothing()
     {
         var f = Create();

@@ -441,7 +441,13 @@ public sealed class AreaSpellCastMap : ISpellCastMap
         if (ObjectTarget(id) is { } target)
         {
             var result = _session.DamageObject(_session.Version, target, damage.HitPointDamage, attacker is not null);
-            if (result.Hit is not { } hit) return false;
+            if (result.Hit is not { } hit)
+            {
+                // ARC-AI-2123 (GW1, GW8): a hit of 0 on an object that stays whole changes nothing and shows no damage, but the damage end still calls the witnesses (mode 1) for an attacker: queue a hit only they read.
+                if (attacker is not null && (result.Host & SessionObjectHostSteps.WitnessesHearAttack) != 0)
+                    _objectHits.Add(new(id, new ObjectHitOutcome(0, 0, false, ObjectBreak.None, 0), result.Host) { Actor = attacker, WitnessOnly = true });
+                return false;
+            }
             _objectHits.Add(new(id, hit, result.Host) { Source = DamageSource is { } named && named.Target == id ? named.Source : null, Actor = attacker });
             return result.Disposition == GameSessionDisposition.Changed;
         }
@@ -560,6 +566,9 @@ public sealed record AreaObjectHit(string Id, ObjectHitOutcome Hit, SessionObjec
 
     /// <summary>ARC-AI-2112 (GW10): the attacker of the damage record (a spell's caster, its other object first) the damage end's guard witnesses read; null: a record with no attacker (script, burn, trap damage).</summary>
     public string? Actor { get; init; }
+
+    /// <summary>ARC-AI-2123 (GW8): a hit of 0 that left the object whole and changed nothing: it has no damage to log, float or run a break for; only the guard witnesses (mode 1, loud) read it. <see cref="Hit"/> is then an empty outcome.</summary>
+    public bool WitnessOnly { get; init; }
 }
 
 /// <summary>ARC-COMBAT-025: one hit that reached an item (lying on the ground or worn): its cast id, the durability result and the host's steps.</summary>
