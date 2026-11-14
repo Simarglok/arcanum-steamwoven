@@ -85,6 +85,48 @@ public sealed class TrapShotFlightTests
     }
 
     [TestMethod]
+    public void A_missile_that_meets_an_obstruction_deals_the_amount_through_the_objects_damage_step_with_no_event()
+    {
+        // ARC-TECHNOLOGY-1760 (TT15; 0x4B2870 obstruction, 0x4B2F60, 0x4B4390, 0x4A9650 read 2026-11-14): a missile that flew free past its destination and meets a door, window, container, scenery or trap strikes it as a
+        // context with the shooter as attacker: no event (0x4A9650 returns for a victim that is no PC or NPC), the taking-damage script asked with the shooter as the attacker, the damage step of an object with the amount in the normal slot,
+        // the object's damage through the map; the hero it was shot at is not hurt and the shot ends.
+        var (owner, caster, map) = TrapEffectTests.Session();
+        using var __ = owner;
+        var launches = new List<SessionTrapShotLaunch>();
+        var events = new List<(string? Attacker, string Victim)>();
+        var asked = new List<(string Victim, string? Attacker)>();
+        caster.LaunchTrapShot = launch => { launches.Add(launch); return true; };
+        caster.AiNotice = (attacker, victim) => events.Add((attacker, victim));
+        caster.TakingDamage = (victim, attacker) => { asked.Add((victim, attacker)); return true; };
+        var before = HeroHitPoints(owner);
+        var amount = caster.ApplyTrapEffect(Shot()).Victims.Single().Amount;
+        var draws = owner.QueryRandom().Draws;
+        var struck = caster.StrikeTrapShot(launches.Single().Shot, Trap)!;
+        Assert.AreEqual((SessionTrapHit.Damaged, Trap, amount, Box), (struck.Hit, struck.Entity, struck.Amount, struck.Shooter));
+        Assert.AreEqual(new DamageByType(amount, 0, 0, 0, 0), struck.Step!.Rolled, "the amount goes into the normal slot");
+        Assert.AreEqual((amount, Trap), (struck.HitPointDamage, map.ObjectDamage.Single().Id));
+        Assert.AreEqual(amount, map.ObjectDamage.Single().Damage.HitPointDamage);
+        Assert.AreEqual(0, events.Count, "a struck object raises no attack event");
+        CollectionAssert.AreEqual(new[] { (Trap, (string?)Box) }, asked, "the object's taking-damage script is asked with the shooter as the attacker");
+        Assert.AreEqual(before, HeroHitPoints(owner), "the hero it was shot at is not hurt");
+        Assert.AreEqual((0, draws), (owner.QueryShotsInFlight().Count, owner.QueryRandom().Draws), "the shot ends and the strike draws nothing");
+    }
+
+    [TestMethod]
+    public void An_obstruction_whose_taking_damage_script_vetoes_the_strike_takes_nothing()
+    {
+        var (owner, caster, map) = TrapEffectTests.Session();
+        using var __ = owner;
+        var launches = new List<SessionTrapShotLaunch>();
+        caster.LaunchTrapShot = launch => { launches.Add(launch); return true; };
+        caster.TakingDamage = (_, _) => false;
+        caster.ApplyTrapEffect(Shot());
+        var struck = caster.StrikeTrapShot(launches.Single().Shot, Trap)!;
+        Assert.AreEqual((SessionTrapHit.Vetoed, 0), (struck.Hit, map.ObjectDamage.Count));
+        Assert.AreEqual(0, owner.QueryShotsInFlight().Count);
+    }
+
+    [TestMethod]
     public void A_launch_the_host_refuses_leaves_no_shot_and_the_shot_strikes_at_once()
     {
         var (owner, caster, launches, events) = Flying();
