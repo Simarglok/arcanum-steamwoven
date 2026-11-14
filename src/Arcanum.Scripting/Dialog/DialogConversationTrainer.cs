@@ -286,17 +286,20 @@ public sealed partial class DialogConversation
                 return Result();
             default:
                 // The way out: the reply's own response (0x414810 case 0, 1 or 2 on the value the reply was built with), its action not run again.
-                Follow(talk.Reply.Transition, talk.Target, talk.Reply.ScriptLine);
+                Follow(talk.Reply.Transition, talk.Target, talk.Reply.ScriptLine, talk.Reply.Target);
                 return Result();
         }
     }
 
     // Leaves the talk by a response: the next node (entered as an ordinary step), the script line, or the end that returns to the caller's next line.
-    private void Follow(DialogOptionTransition transition, StepPlan? target, DialogScriptLine? line)
+    // A target not planned yet (an m: or r: node, ARC-SCRIPT-1746) is planned from its record here.
+    private void Follow(DialogOptionTransition transition, StepPlan? target, DialogScriptLine? line, DlgRecord? pending = null)
     {
         switch (transition)
         {
             case DialogOptionTransition.Direct:
+                target = ResolveTarget(target, pending);
+                if (target is null && pending is not null) return;
                 if (!Admit(target, 0)) return;
                 _talk = null;
                 Enter(target!);
