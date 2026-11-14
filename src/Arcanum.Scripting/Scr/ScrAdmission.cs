@@ -485,6 +485,12 @@ public sealed class ScrAdmissionSet
     public static ScrAdmissionSet S58 { get; } = new("S58", S56.Conditions, S56.Actions.Concat([ScrCatalogue.Action.QueueSlide, ScrCatalogue.Action.EndGame]), S56.ValueKinds, S56.FocusKinds, counterIndexWraps: true);
 
     /// <summary>
+    /// The newspaper set (ARC-SCRIPT-1764, ledger NP9–NP12): <see cref="S58"/> plus queue newspaper (85) and float newspaper headline (86), which hand <see cref="ScrNewspaperRequest"/> effects to the host in action order.
+    /// Queue newspaper is the script side of the issue queue (0x4BF140, ledger NQ1–NQ3); float newspaper headline reads its object from operand slot 1 (census anomaly X9), so the admission checks slot 1 as an object and leaves slot 0 unread.
+    /// </summary>
+    public static ScrAdmissionSet S59 { get; } = new("S59", S58.Conditions, S58.Actions.Concat([ScrCatalogue.Action.QueueNewspaper, ScrCatalogue.Action.FloatNewspaperHeadline]), S58.ValueKinds, S58.FocusKinds, counterIndexWraps: true);
+
+    /// <summary>
     /// The set the engine runs the slide scripts with (ARC-RENDER-1171, ledger SS2): true, equal, less or equal, local and global flag and PC quest state conditions; the control and arithmetic actions, call script
     /// (997 calls the ending scripts, which call each other) and queue slide; no object but the player, the triggerer and the attachee (a call's own operands, which are absent here), the extra object and the run's object variables.
     /// </summary>
@@ -668,6 +674,10 @@ public static class ScrAdmission
         return program.Count + 1;
     }
 
+    // The operand roles the interpreter reads for float newspaper headline (X9): the object in slot 1, nothing in the others.
+    private static readonly IReadOnlyList<ScrOperandRole> FloatHeadlineRoles = Array.AsReadOnly(new[]
+        { ScrOperandRole.Unused, ScrOperandRole.Object, ScrOperandRole.Unused, ScrOperandRole.Unused, ScrOperandRole.Unused, ScrOperandRole.Unused, ScrOperandRole.Unused, ScrOperandRole.Unused });
+
     private static ScrRefusal? Check(ScrLine line, ScrClauseSide side, ScrClause clause, ScrAdmissionSet set, int count)
     {
         var condition = side == ScrClauseSide.Condition;
@@ -677,6 +687,8 @@ public static class ScrAdmission
         if (!(condition ? set.Conditions : set.Actions).Contains(type))
             return new(line.Number, side, condition ? ScrRefusalCode.ConditionNotAdmitted : ScrRefusalCode.ActionNotAdmitted, type);
         var signature = ScrCatalogue.Signature(side, type)!;
+        // X9 (0x447220 case 0x56, ARC-SCRIPT-1764, ledger NP10): float newspaper headline takes its object from slot 1; slot 0 is never read.
+        if (!condition && type == ScrCatalogue.Action.FloatNewspaperHeadline) signature = FloatHeadlineRoles;
         for (var slot = 0; slot < ScrClause.Operands; slot++)
         {
             var kind = clause.Kind(slot); var value = clause.Value(slot);
