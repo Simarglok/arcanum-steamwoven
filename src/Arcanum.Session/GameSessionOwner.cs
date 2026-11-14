@@ -2210,7 +2210,7 @@ public sealed partial class GameSessionOwner : IDisposable
         if (folds && (facts.KeyId is not { } keyNumber || !SessionStoryLimits.IsKey(keyNumber))) return RejectItem(GameSessionFailure.InvalidItem);
         if (folds && _story.HeroKeys.Count >= SessionStoryLimits.MaxKeys) return RejectItem(GameSessionFailure.KeyRingFull);
         // ARC-DEV-202 (B03): the removal 0x466E00 → 0x467860 of a looted body's item takes a worn one off its slot (wield-off event 25, then
-        // remove-item 28; PI2, NT3); the transfer 0x461CA0 and Take all (0x579770) test no worn state. Only the loot (`unwield`) takes worn
+        // remove-item 28; PI2, NT3); the transfer 0x461CA0 and Take all (0x579770) test no worn state. The loot and the dialog's negative IN (ARC-SCRIPT-1987, `unwield`) take worn
         // items; the other paths of a parented move keep refusing them.
         var worn = parented && facts.Worn;
         if (worn && !unwield) return RejectItem(GameSessionFailure.WornItemUnsupported);
