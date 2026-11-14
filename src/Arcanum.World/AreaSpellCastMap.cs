@@ -22,7 +22,7 @@ namespace Arcanum.World;
 public sealed class AreaSpellCastMap : ISpellCastMap
 {
     private const int ObjectFlagsSlot = 18, SpellFlagsSlot = 19, PcType = 15, NpcType = 16;
-    private const int DestroyedOrOff = 0x3, OffFlag = 0x2, LockLevelSlot = 37;
+    private const int DestroyedOrOff = 0x3, OffFlag = 0x2, LockLevelSlot = 37, ResistanceSlot = 30, MagicResistanceIndex = 4;
 
     private readonly GameSessionOwner _session;
     private readonly int _map;
@@ -420,6 +420,16 @@ public sealed class AreaSpellCastMap : ISpellCastMap
     public (Combatant Combatant, AttackTargetKind Kind)? ObjectCombat(string id) =>
         ObjectTarget(id) is { } target ? _session.QueryObjectCombat(target)
         : ItemTarget(id) is { } item ? _session.QueryItemCombat(item.Wear, item.Facts) : null;
+
+    /// <summary>ARC-AI-1755 (RE2, RS5): the stored magic resistance of a row that is no critter, the resistance array's element 4 (the 32-bit word as signed); 0 for no row, a critter row or a missing element.</summary>
+    public int ObjectMagicResistance(string id)
+    {
+        ArgumentNullException.ThrowIfNull(id);
+        SyncVisitors();
+        if (!_rows.TryGetValue(id, out var row) || row.Type is PcType or NpcType) return 0;
+        var element = row.EffectiveFields.FirstOrDefault(f => f.Slot == ResistanceSlot && f.Presence == AreaPresence.Array)?.Elements.FirstOrDefault(e => e.Key == MagicResistanceIndex);
+        return element is { Words: [var word] } && word is >= 0 and <= uint.MaxValue ? unchecked((int)(uint)word) : 0;
+    }
 
     public bool DamageObject(string id, AttackDamage damage)
     {
