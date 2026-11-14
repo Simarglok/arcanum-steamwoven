@@ -136,12 +136,12 @@ hero's own highlights move with the light (two frames cannot show flicker; the c
 
 **Numbers** (the owner's Mac, 1280×800, vsync off, mean of 90 frames, one run each; noise about a millisecond):
 
-| City | Legacy | Relit night 0.6 | Relit add 0.6 | Lights in view |
+| City | Legacy | Relit night 0.6 | Relit add 0.6 | Lights in view (with the hero's torch) |
 | --- | --- | --- | --- | --- |
-| Tarant spot a (indoors, the densest cluster) | 7.5 ms | 9.3 ms | 9.9 ms | 14 |
-| Ashbury spot a | 7.1 ms | 9.0 ms | 9.0 ms | 12 |
+| Tarant spot a (indoors, the densest cluster) | 7.5 ms | 9.0 ms | 9.0 ms | 14 |
+| Ashbury spot a | 6.1 ms | 8.1 ms | 8.2 ms | 12 |
 
-The relit term costs about 1.8 to 2.4 ms here (against up to 1.5 ms in the cave): the city's lights are large, so most pixels of the view are inside several of them, and the per-pixel
+The relit term costs about 1.5 to 2 ms here (against up to 1.5 ms in the cave): the city's lights are large, so most pixels of the view are inside several of them, and the per-pixel
 cost grows with covered pixels times lights in reach. Still a desktop-class number; the Steam Deck run remains open ([#2000](https://github.com/Simarglok/arcanum-steamwoven/issues/2000)).
 Pixels differing from Legacy at the three spots, of 1,024,000 (night 0.6): Tarant 823,000 / 481,000 / 468,000; Ashbury 836,000 / 872,000 / 357,000; that is the whole lit area, not
 only a pool, because most city lights are 440 px wide (the difference is small per pixel).
@@ -154,6 +154,10 @@ only a pool, because most city lights are 440 px wide (the difference is small p
 - Most Ashbury streets at night are close to black in Legacy (few lights), and relighting cannot add light where there is none: the look needs the light sources, not the normals.
 - De-light 0.6 again only softens the art and is not worth keeping as built.
 - The hero's torch pool in the walk frames is nicer relit: the stones round the hero show the direction of the light.
+
+The 32-light rule has two known edges: with more than 32 lights in view (a zoomed-out view, a denser city) the hero's torch can be dropped when it is far from the view's centre, and
+lights enter and leave the list as the view pans (a hard cut at the 32nd). Neither happens at zoom 1 in these cities. The strengths above (0.6, 1.6) are set by the smoke itself,
+whatever `ARC_RELIGHT_STRENGTH` says.
 
 **Updated recommendation.** Unchanged in kind (conditional go for a bounded night-and-indoor option, no-go for daylight and for de-light as built), with two additions: the night weighted
 mode at about 1.2 to 1.6 is the one to tune, and the cost in a city is about 2 ms (to be checked on the Deck), so the option should be a switchable profile, not a default. Open: where

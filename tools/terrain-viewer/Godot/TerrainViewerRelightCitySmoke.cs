@@ -114,6 +114,7 @@ public partial class TerrainViewerApp
                 var at = map.Chart.ToChart(new(lamp.Light.X, lamp.Light.Y));
                 foreach (var radius in new[] { 4, 8, 14 })
                     try { return AreaSmokeStandable(map, new CellCoord(at.X + 2, at.Y + 2), radius); } catch (InvalidOperationException) { }
+                GD.Print($"ARC-RES-2007 relight-city spot fallback: no standable cell near the lamp at {lamp.Light.X},{lamp.Light.Y}; standing at the window's start");
                 return AreaSmokeStandable(map, home, 4);
             }
             var variants = new (string Name, AreaRelight.Mode Mode, float Strength)[]
@@ -162,7 +163,7 @@ public partial class TerrainViewerApp
             async Task<List<Image>> Walk(string label, AreaRelight.Mode mode, float strength)
             {
                 AreaRelight.SetMode(mode); AreaRelight.Strength = strength; PushAreaAmbient();
-                AreaSmokePlace(map, start);
+                Look(start);
                 long hostMs = 31_000_000L; TickAreaClock(hostMs);
                 var origin = ((AreaGridSession)_worldActor.Session!).State.CommittedCell;
                 HeroRequests.Apply(new WalkRequest(new CellCoord(origin.X + dir.X, origin.Y + dir.Y), Ctrl: false));
@@ -204,7 +205,9 @@ public partial class TerrainViewerApp
                     var now = Time.GetTicksUsec(); times.Add((now - last) / 1000d); last = now;
                 }
                 times.Sort();
-                return new { MeanMs = Math.Round(times.Average(), 2), P95Ms = Math.Round(times[(int)(times.Count * .95)], 2), Uploaded = AreaRelight.UploadedCount, InView = AreaRelight.InViewCount };
+                // The counts are those of the last upload, which only a relit mode makes (the hero's torch is in the list during this run).
+                var relit = mode != AreaRelight.Mode.Off;
+                return new { MeanMs = Math.Round(times.Average(), 2), P95Ms = Math.Round(times[(int)(times.Count * .95)], 2), Uploaded = relit ? AreaRelight.UploadedCount : (int?)null, InView = relit ? AreaRelight.InViewCount : (int?)null };
             }
             var timing = new Dictionary<string, object>();
             foreach (var (name, mode) in new[] { ("legacy", AreaRelight.Mode.Off), ("relit-night", AreaRelight.Mode.NightAdd), ("relit-add", AreaRelight.Mode.Add), ("legacy-again", AreaRelight.Mode.Off) })
