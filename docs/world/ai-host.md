@@ -211,6 +211,8 @@ throw goal 37 at its target's tile instead of an attack ([action goals](ai-actio
 No new state: the thrown item's ground cell is a map change (`item.dropped`, as a critical's drop), which the snapshot already
 carries; the schema stays 57.
 
+Viewer smoke (ARC-DEV-1762): the stage `npc-throw` (`./arcanum smoke pr --stages npc-throw`, the town) makes a real NPC throw the dagger through the real projectile host, with the dagger's own fields lent to the NPC's wielded seed weapon (no NPC of the installed town wields the dagger, [area map mode](../rendering/area-map-mode.md)).
+
 ## Item use (ARC-WORLD-108)
 
 The support rules' item half and the item-use goal get their host: an NPC lists the items it holds, heals with them at the pass's heal

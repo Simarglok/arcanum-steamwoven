@@ -431,6 +431,15 @@ public sealed class AreaCombatHost : IAreaEventObjects
         return fields is not null;
     }
 
+    /// <summary>ARC-DEV-1762 (smoke only): lends the item the given combat fields in place of its object row's (a null <paramref name="fields"/> gives the row's own back), so a smoke can make a seed
+    /// item of a real NPC another kind of weapon (the throwing dagger) without any item the session added, which the AI host does not throw. Every cache of worn sets and builds is dropped.</summary>
+    public void LendItemFieldsForSmoke(string entity, CombatFields? fields)
+    {
+        ArgumentNullException.ThrowIfNull(entity);
+        if (fields is null) _rowFields.Remove(entity); else _rowFields[entity] = fields;
+        _wornNow.Clear(); _wornStamp = null; _wornBuilds.Clear(); _builds.Clear();
+    }
+
     private bool RowFields(AreaInventoryMap map, string entity, out CombatFields? fields)
     {
         fields = null;
