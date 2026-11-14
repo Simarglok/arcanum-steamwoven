@@ -396,10 +396,19 @@ public partial class AreaConversationPanel : CanvasLayer
         var content = Math.Max(1, (int)width - 2 * ContentMargin);
         if (content != _contentWidth || _artDirty) { _contentWidth = content; _artDirty = false; LayoutArt(); }
         _panel.Size = new(width, 0);
-        var height = Math.Min(_panel.GetCombinedMinimumSize().Y, Math.Max(1, size.Y - 48));
+        // ARC-UI-2024 (DB3): the panel lies in the part the bars leave free (the original's band is in the game view above the bottom bar).
+        var (_, free) = AreaGameBarPanel.FreeArea(size);
+        var height = Math.Min(_panel.GetCombinedMinimumSize().Y, Math.Max(1, free.Y - 48));
         _panel.Size = new(width, height);
-        // Whole pixels: the art text's glyphs are drawn pixel for pixel (MW31).
-        _panel.Position = new(Mathf.Round((size.X - width) / 2), Mathf.Round(Math.Max(24, size.Y - height - 24)));
+        _panel.Position = PanelPosition(size, width, height);
+    }
+
+    /// <summary>ARC-UI-2024: the panel's top left corner: centred, its bottom 24 px above the bottom bar (the view's bottom without the bars), and not above
+    /// the top strip's 24 px. Whole pixels: the art text's glyphs are drawn pixel for pixel (MW31).</summary>
+    internal static Vector2 PanelPosition(Vector2 viewSize, float width, float height)
+    {
+        var (freeTop, free) = AreaGameBarPanel.FreeArea(viewSize);
+        return new(Mathf.Round((viewSize.X - width) / 2), Mathf.Round(freeTop + Math.Max(24, free.Y - height - 24)));
     }
 
     public override void _Process(double delta)

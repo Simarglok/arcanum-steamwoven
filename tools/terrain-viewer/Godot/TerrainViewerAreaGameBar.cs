@@ -9,7 +9,7 @@ namespace Arcanum.TerrainViewer;
 // checked in the 1.0.7.4 executable, ledger GB1–GB7). The bar buttons open the viewer's windows as their keys do; a button whose
 // window another bar window covers switches to it (the original's interface mode change leaves the old mode first). The bars are
 // over the windows they open, which lay themselves out in the part the bars leave free; they hide under the windows they cannot
-// reach or that do not fit (conversation, barter, reading, save list, palette, menu, world map). Automated runs draw no bars unless
+// reach or that do not fit (conversation (not under Original: ARC-UI-2024), barter, reading, save list, palette, menu, world map). Automated runs draw no bars unless
 // their smoke asks, so world presses at fixed screen points are not taken by them. ARC-UI-023: the bottom strip's message window draws
 // the message log (ledger ML1–ML8), and the bar's hover names are hover entries of that log. ARC-MAGIC-026: the top strip's maintain bar
 // (TerrainViewerMaintainBar.cs).
@@ -37,8 +37,11 @@ public partial class TerrainViewerApp
     /// them. The dialog start's description is made only then (0x567460); the viewer asks the same of the barter window's still pointer (PROJECT).</summary>
     private bool InterfaceBarsOn => _areaSession is not null && _readyMode == TerrainViewerMode.Area && (!ViewerAutomatedStorage.Automated || _gameBarForSelfTest);
 
+    /// <summary>ARC-UI-2024 (DB1): the dialog leaves the bars drawn (Original); Steamwoven hides them under the dialog's panel.</summary>
+    private bool DialogBarStays => _areaSession?.Rules.Interface.DialogBarStays == true;
+
     private bool GameBarActive => InterfaceBarsOn
-        && !MainMenuOpen && !ConversationOpen && !BarterOpen && !ItemServiceOpen && !SaveListOpen && !ReadingOpen && !PaletteOpen && !WorldMapOpen;
+        && !MainMenuOpen && (!ConversationOpen || DialogBarStays) && !BarterOpen && !ItemServiceOpen && !SaveListOpen && !ReadingOpen && !PaletteOpen && !WorldMapOpen;
 
     /// <summary>Per frame: shows the bars while an area session plays (reading their art once a run) and follows the spell pane.</summary>
     private void SyncGameBar()

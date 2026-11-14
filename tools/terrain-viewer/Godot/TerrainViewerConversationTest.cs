@@ -1,3 +1,4 @@
+using Arcanum.Session;
 using System.Text;
 using Arcanum.Data;
 using Arcanum.Data.Area;
@@ -340,6 +341,41 @@ public partial class TerrainViewerApp
             TerrainViewerSelfTest.Require(!PaletteOpen && ConversationOpen, "the palette cannot open over the conversation");
             _conversationPanel!.LeaveForSelfTest.EmitSignal(BaseButton.SignalName.Pressed);
             TerrainViewerSelfTest.Require(!ConversationOpen && !WorldModal, "Close ends the modal surface");
+            // ARC-UI-2024 (DB1, DB3): Original leaves the bars drawn under the dialog and lays the panel above them; Steamwoven hides them under it.
+            {
+                var session = _areaSession!;
+                var priorRules = session.Rules.Mode; var priorBars = _gameBarForSelfTest;
+                _gameBarForSelfTest = true;
+                try
+                {
+                    foreach (var rules in new[] { RuleMode.Original, RuleMode.Steamwoven })
+                    {
+                        TerrainViewerSelfTest.Require(session.SelectRules(rules) != GameSessionDisposition.Rejected, $"{rules} selected");
+                        var stays = rules == RuleMode.Original;
+                        SyncGameBar();
+                        TerrainViewerSelfTest.Require(_gameBarPanel is { Visible: true } && AreaGameBarPanel.BottomInset > 0, $"{rules}: the bars show before the dialog");
+                        using var barSession = ConversationSessionFixture.Create();
+                        var barState = new AreaConversationState(barSession, new(1), ["oid:synthetic-0"], 50);
+                        var barDialog = DialogConversation.Start(DlgReader.Read(System.Text.Encoding.Latin1.GetBytes(TerrainViewerSelfTest.DigitDialog)),
+                            new DialogConversationRequest(new DialogNodeId(1),
+                                new DialogParticipants(new DialogId(5), AreaConversationState.PcParticipant, AreaConversationState.Npc(0)),
+                                new DialogScriptLine(4), AreaConversationProfile.Diagnostic.Pc, AreaConversationProfile.Diagnostic.Names),
+                            new DialogConversationPorts(barState, barState, barSession.Flags, barState));
+                        ShowConversationPanel("Bars test", barDialog, null);
+                        SyncGameBar();
+                        TerrainViewerSelfTest.Require(ConversationOpen && (_gameBarPanel is { Visible: true } && AreaGameBarPanel.BottomInset > 0) == stays,
+                            $"{rules}: the bars {(stays ? "stay" : "hide")} under the open dialog (bars={_gameBarPanel?.Visible} inset={AreaGameBarPanel.BottomInset})");
+                        // A 100 px tall panel in an 800 x 600 view lies above the bottom bar when the bars show and at the old place (24 px above the view's bottom) when not.
+                        var at = AreaConversationPanel.PanelPosition(new(800, 600), 752, 100);
+                        TerrainViewerSelfTest.Require(stays ? at.Y + 100 <= 600 - AreaGameBarPanel.BottomInset && at.Y >= AreaGameBarPanel.TopInset : Math.Abs(at.Y - 476) < .5f,
+                            $"{rules}: the dialog panel lies in the part the bars leave free (y {at.Y} insets {AreaGameBarPanel.TopInset}/{AreaGameBarPanel.BottomInset})");
+                        CloseWindowMode(InterfaceMode.Dialog);
+                        TerrainViewerSelfTest.Require(!ConversationOpen, $"{rules}: the dialog closed");
+                        SyncGameBar();
+                    }
+                }
+                finally { session.SelectRules(priorRules); _gameBarForSelfTest = priorBars; SyncGameBar(); }
+            }
             // ARC-UI-2019: with a numbered conversation open the digit keys choose a reply (an unknown number and Enter do nothing).
             {
                 using var digitSession = ConversationSessionFixture.Create();
