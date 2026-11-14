@@ -849,6 +849,8 @@ tools/terrain-viewer/Godot/TerrainViewerAreaInventory.cs,TryAreaInventoryClick,p
 tools/terrain-viewer/Godot/TerrainViewerAreaInventoryArt.cs,AttachAreaItemArtSizes,pending,
 tools/terrain-viewer/Godot/TerrainViewerAreaInventoryTest.cs,StillPointerForSmoke,pending,
 tools/terrain-viewer/Godot/TerrainViewerAreaItemUse.cs,DropToGround,pending,
+tools/terrain-viewer/Godot/TerrainViewerAreaMainMenu.cs,OpenInPlayMenuOverWindows,exempt,host
+tools/terrain-viewer/Godot/TerrainViewerAreaMainMenu.cs,RouteOptionsKey,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAreaMapTransfer.cs,NoteScriptCreations,pending,
 tools/terrain-viewer/Godot/TerrainViewerAreaMapTransfer.cs,QueueCreationNotice,pending,
 tools/terrain-viewer/Godot/TerrainViewerAreaMapTransfer.cs,RunMapEnteredSteps,pending,

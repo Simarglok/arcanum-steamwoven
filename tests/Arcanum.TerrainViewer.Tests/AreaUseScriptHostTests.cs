@@ -606,6 +606,8 @@ public sealed class AreaUseScriptHostTests
             Assert.AreEqual(before + 12_000, session.QueryClockSnapshot().GameTimestampMs);
             CollectionAssert.AreEqual(new[] { new AreaScriptFade(12_000, 3, 0, 0, 0) }, host.TakeFades().ToArray());
             Assert.AreEqual(0, host.TakeFades().Count, "taken once");
+            Assert.AreEqual(1, host.TakeFadeClears(), "ARC-UI-2034 (TB16): the fade empties the speech bubbles");
+            Assert.AreEqual(0, host.TakeFadeClears(), "taken once");
             Assert.IsTrue(host.GlobalFlag(49), "the run's other effects apply");
         });
     }

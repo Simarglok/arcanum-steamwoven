@@ -210,6 +210,17 @@ public sealed class AreaMainMenu
         return new(AreaMenuCommandKind.ChangeOption, Option: control.Option, Value: next);
     }
 
+    /// <summary>ARC-UI-2026: the menu was opened by the O key straight at the options window (menu start kind 4, 0x541180), which raises no pause.</summary>
+    public bool OpenedByOptionsKey { get; private set; }
+
+    /// <summary>ARC-UI-2026: the O key from play opens the options window (window 6) at its Game page over the in-play root, so Done and O close the whole menu (OP6, OP7).</summary>
+    public void OpenOptionsWindow()
+    {
+        if (Root == AreaMenuWindow.Main || Window == AreaMenuWindow.Options) return;
+        OpenedByOptionsKey = true;
+        Open(AreaMenuWindow.Options);
+    }
+
     /// <summary>ARC-UI-013: the physical O key: from play it closes the options window and the menu (the original's key table, OP7).</summary>
     public AreaMenuCommand OptionsKey() => Window == AreaMenuWindow.Options && Root != AreaMenuWindow.Main && !QuitPending
         ? new(AreaMenuCommandKind.Continue) : AreaMenuCommand.Nothing;

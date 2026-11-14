@@ -187,4 +187,39 @@ public sealed class TextBubblesTests
         // A view that starts at x = 100: the anchor's regions are taken from its centre (500), and a box left of its edge does not fit.
         Assert.AreEqual(4, TextBubbleRules.ChooseSlot(150, 100, 100, 40, 100, 0, 800, 600), "top left of that view: below the anchor");
     }
+
+    // ARC-UI-2034 (ledger TB16): only the change to destroyed or off removes a bubble; a bubble made over an object already gone stays.
+    [TestMethod]
+    public void The_gone_watch_hands_back_the_owners_whose_object_went_from_standing_to_gone()
+    {
+        var watch = new TextBubbleGoneWatch<string>();
+        var gone = new HashSet<string>();
+        watch.Note("a", false); watch.Note("b", false);
+        CollectionAssert.AreEqual(Array.Empty<string>(), watch.Step(["a", "b"], gone.Contains).ToArray(), "nothing changed");
+        gone.Add("b");
+        CollectionAssert.AreEqual(new[] { "b" }, watch.Step(["a", "b"], gone.Contains).ToArray(), "b was torn down or switched off");
+        CollectionAssert.AreEqual(Array.Empty<string>(), watch.Step(["a", "b"], gone.Contains).ToArray(), "reported once; its bubble is removed by the caller");
+        watch.Note("c", true);
+        gone.Add("c");
+        CollectionAssert.AreEqual(Array.Empty<string>(), watch.Step(["a", "c"], gone.Contains).ToArray(), "a bubble made over an object already gone stays");
+        gone.Remove("c");
+        gone.Add("c");
+        CollectionAssert.AreEqual(Array.Empty<string>(), watch.Step(["a", "c"], gone.Contains).ToArray(), "no read between: no change seen");
+        gone.Remove("c");
+        watch.Step(["a", "c"], gone.Contains);
+        gone.Add("c");
+        CollectionAssert.AreEqual(new[] { "c" }, watch.Step(["a", "c"], gone.Contains).ToArray(), "switched on and off again: the new change removes");
+    }
+
+    [TestMethod]
+    public void The_gone_watch_records_an_unmet_owner_and_forgets_an_owner_without_a_bubble()
+    {
+        var watch = new TextBubbleGoneWatch<string>();
+        var gone = new HashSet<string> { "x" };
+        CollectionAssert.AreEqual(Array.Empty<string>(), watch.Step(["x"], gone.Contains).ToArray(), "first met already gone: only recorded");
+        gone.Clear();
+        watch.Step([], gone.Contains);
+        gone.Add("x");
+        CollectionAssert.AreEqual(Array.Empty<string>(), watch.Step(["x"], gone.Contains).ToArray(), "its old state was forgotten with its bubble");
+    }
 }

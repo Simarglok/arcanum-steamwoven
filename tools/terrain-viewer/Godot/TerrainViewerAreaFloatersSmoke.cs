@@ -232,7 +232,7 @@ public partial class TerrainViewerApp
             Require(layer.Bubbles.Count == 2, "a bubble lives its whole life (age 6000 ms is not above 6000)");
             BubbleClockForSelfTest = 1000 + 6001; TickFloaters();
             Require(layer.Bubbles.Count == 0, "and goes just after it");
-            // ARC-UI-2055 (TB26, TB27): a speaker is never turned to itself; an NPC speaker with the hero as listener goes through the AI host's turn.
+            // ARC-UI-2055 (TB26, TB28): a speaker is never turned to itself; an NPC speaker with the hero as listener goes through the AI host's turn.
             Require(!FaceListenerOf(entity, entity) && !FaceListenerOf(HeroFloater, HeroFloater), "a speaker that is its own listener turns nothing");
             Require(Bubble(entity, "Again", listener: HeroFloater), "a new bubble with the hero as its listener");
             GD.Print($"ARC-UI-2055 float speaker turn entity={entity} aiHost={AreaAiHostNow() is not null}");
@@ -240,6 +240,31 @@ public partial class TerrainViewerApp
             Require(layer.Bubbles.Of(entity)?.LifeMs == 2000, $"the Text Duration line changed the live bubble's life at once: {layer.Bubbles.Of(entity)?.LifeMs}");
             BubbleClockForSelfTest = 1000 + 6001 + 2001; TickFloaters();
             Require(layer.Bubbles.Count == 0, "the shortened bubble is gone after 2 s");
+            // ARC-UI-2034 (TB16): the off flag and the teardown of an object take its bubble with them (0x43D0E0, 0x43CFF0 → 0x4D62B0); the hero's stays; a bubble made over an
+            // object already gone stays (only the change removes); a script's fade (0x67) clears all (the hosts' counters, unit tests). The NPC's flags are put back afterwards.
+            BubbleClockForSelfTest = 20_000; layer.Bubbles.Clear();
+            Require(Bubble(entity, "Going dark") && Bubble(HeroFloater, "Staying"), "bubbles made over the NPC and the hero");
+            TickFloaters();
+            Require(layer.Bubbles.Count == 2, "a standing NPC keeps its bubble");
+            Require(session.WriteObjectFlag(session.Version, entity, SessionObjectFlagField.Object, AreaUseScriptHost.OffObjectFlagBit, true, dataHas: false).Disposition == GameSessionDisposition.Changed, "the off flag written");
+            TickFloaters();
+            Require(layer.Bubbles.Of(entity) is null && layer.Bubbles.Of(HeroFloater) is not null, "the off flag removed the NPC's bubble and not the hero's");
+            Require(Bubble(entity, "Already off"), "a bubble over an object that is off");
+            TickFloaters();
+            Require(layer.Bubbles.Of(entity) is not null, "it stays: only the change removes");
+            Require(session.WriteObjectFlag(session.Version, entity, SessionObjectFlagField.Object, AreaUseScriptHost.OffObjectFlagBit, false, dataHas: false).Disposition == GameSessionDisposition.Changed, "the off flag cleared");
+            TickFloaters();
+            Require(Bubble(entity, "Torn down"), "a bubble over the standing NPC");
+            TickFloaters();
+            var destroyKey = MapChangeKey.ForEntity(entity, AreaUseScriptHost.DestroyedProperty);
+            Require(session.ApplyChanges(session.Version, null, [new(mapId, destroyKey, 1)]).Disposition == GameSessionDisposition.Changed, "the NPC destroyed by a script");
+            TickFloaters();
+            Require(layer.Bubbles.Of(entity) is null && layer.Bubbles.Of(HeroFloater) is not null, "the teardown removed the NPC's bubble");
+            Require(session.ApplyChanges(session.Version, null, [new(mapId, destroyKey, null)]).Disposition != GameSessionDisposition.Rejected, "the destroyed mark put back");
+            TickFloaters();
+            Require(!BubbleOwnerGone(entity), "the NPC stands again: neither off nor destroyed");
+            layer.Bubbles.Clear();
+            GD.Print($"ARC-UI-2034 bubbles removed by off flag and teardown PASS npc={entity}");
             GD.Print($"ARC-UI-1997 bubbles over objects PASS heroSlot={heroBubble.Slot} lines={heroBubble.Lines.Count} rect={heroBubble.Rect}");
             GD.Print($"ARC-UI-021 native-smoke floaters PASS map={_readyMapName} npc={entity} h={h} npcLines={lines.Length} heroLines={heroLines}"
                 + $" hero={landed.Resolution!.Outcome} texts={texts.Detail} first='{lines[0].Text}' Parity=NOT_VERIFIED");

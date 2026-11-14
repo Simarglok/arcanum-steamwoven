@@ -198,6 +198,7 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
     private readonly List<ScrReadingRequest> _readings = [];
     private readonly List<AreaScriptFloat> _floats = [];
     private readonly List<AreaScriptFade> _fades = [];
+    private int _fadeClears;
     private readonly List<AreaScriptEyeCandy> _eyeCandies = [];
 
     /// <summary>ARC-SCRIPT-1592: the script eye candy (action 120) of the runs applied since the last call, in order, for the viewer to play on its objects (<see cref="AreaEyeCandyHost.PlayScript"/>).</summary>
@@ -258,6 +259,15 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
         var fades = _fades.ToArray();
         _fades.Clear();
         return fades;
+    }
+
+    /// <summary>ARC-UI-2034 (ledger TB16): how many fade actions (103) the runs applied since the last call, whether or not they ask for a movie or a sound. Each one empties the speech
+    /// bubble table first (the original's case for it clears the table before it reads an operand, in single player, ledger TB16), so the viewer clears its bubbles for each.</summary>
+    public int TakeFadeClears()
+    {
+        var count = _fadeClears;
+        _fadeClears = 0;
+        return count;
     }
 
     /// <summary>ARC-RENDER-1171 (SS4): whether a run applied since the last call asked for the end of the game (132); the viewer starts the end-game show once the movies of the same run have played.</summary>
@@ -539,6 +549,7 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
             if (IsPc(request.Viewer)) _readings.Add(request);
         // ARC-SCRIPT-1241 (MV5): each fade's clock jump, then its movie for the viewer, or (no movie) its sound as an effect sound; the later steps stop when the clock refuses.
         var asked = new List<AreaScriptFade>();
+        _fadeClears += effects.Fades.Count;
         var fadesApplied = AreaScriptFades.Apply(_session, effects, asked);
         foreach (var fade in asked)   // the fades before a refused jump keep their movie or sound, as their clock jumps stay
             if (fade.Movie != 0) _fades.Add(fade); else _sounds.Add(new(ScrSoundKind.Effect, fade.Sound));

@@ -324,6 +324,21 @@ public partial class TerrainViewerApp
             Press(Key.Escape);
             TerrainViewerSelfTest.Require(ConversationOpen && (!MainMenuOpen || _mainMenu!.Window == AreaMenuWindow.InPlayLimited), "Escape opens only the limited menu over the dialog");
             if (MainMenuOpen) { Press(Key.Escape); TerrainViewerSelfTest.Require(!MainMenuOpen && ConversationOpen, "Escape in the menu continues play with the dialog still open"); }
+            // ARC-UI-2026 (SA43, main loop O branch 0x401560, menu start kind 4): the dialog's handler lets the release of O through; it opens the
+            // options window (window 6) over the dialog, which stays; the press alone opens nothing, the clock is not paused, and O closes it again.
+            {
+                void OKey(bool pressed) => InputWorld(new InputEventKey { Keycode = Key.O, PhysicalKeycode = Key.O, Pressed = pressed });
+                OKey(true);
+                TerrainViewerSelfTest.Require(ConversationOpen && !MainMenuOpen && _mainMenu is null, "the O press alone opens nothing over the dialog");
+                OKey(false);
+                TerrainViewerSelfTest.Require(ConversationOpen && MainMenuOpen && _mainMenu is { Window: AreaMenuWindow.Options, OpenedByOptionsKey: true } && !WorldMenuPause,
+                    "the O release opens the options window over the dialog without the pause: " + (_mainMenu?.Window.ToString() ?? "no menu"));
+                OKey(true); OKey(false);
+                TerrainViewerSelfTest.Require(ConversationOpen && !MainMenuOpen && _mainMenu is null, "O closes the options window and the dialog is still open");
+                // A release whose press another owner took (the menu was open) opens nothing later.
+                OKey(false);
+                TerrainViewerSelfTest.Require(ConversationOpen && !MainMenuOpen, "a lone O release opens nothing");
+            }
             // Polled keyboard levels too: full simulated frames with held Escape/Enter/Down-equivalent levels.
             var none = new RawInputFrame(-1, default);
             // The key and click events above were observed at real time; the simulated frames continue after the newest
