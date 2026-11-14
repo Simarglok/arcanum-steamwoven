@@ -206,6 +206,38 @@ public partial class TerrainViewerApp
                 && added < expected.Length, $"level 1 drops the numbers ({added} of {expected.Length})");
             layer.Level = FloaterRules.Never;
             Require(layer.DrawnForSelfTest().Count == 0, "level 0 draws nothing");
+            // ARC-UI-1997 (TB1–TB22): text bubbles over objects live the Text Duration setting on the real clock; the line changes the live ones' life at once.
+            BubbleClockForSelfTest = 1000; layer.Bubbles.Clear();
+            _gameSettings = _gameSettings with { TextDuration = 6 };
+            const string heroSays = "A long line the hero says out loud so that it wraps onto several lines of the bubble";
+            // The capture's "before" is the old look of a script's line: a white floater rising over the speaker (the bubbles replace it).
+            if (!string.IsNullOrWhiteSpace(capture))
+            {
+                layer.Level = FloaterRules.Numbers; layer.Field.Clear();
+                layer.Field.Add(HeroFloater, "Hello", FloaterColor.White); layer.Field.Add(entity, "Hello", FloaterColor.White);
+                for (var step = 0; step < 6; step++) layer.Field.Advance(step * 100L, FloaterRules.DefaultSpeed);
+                layer.Redraw();
+                await Capture("bubble-before");
+                layer.Field.Clear(); layer.Redraw();
+            }
+            Require(Bubble(HeroFloater, heroSays) && Bubble(entity, "Hello"), "bubbles over the hero and the NPC were made");
+            Require(layer.Bubbles.Of(HeroFloater) is { Color: BubbleColor.Green, LifeMs: 6000, Persistent: false } && layer.Bubbles.Of(entity) is { Color: BubbleColor.White, LifeMs: 6000 },
+                "the PC's bubble is green, the NPC's white, both live the default 6 s");
+            var bubbles = layer.LayOutBubbles();
+            Require(bubbles.Count == 2 && bubbles.Any(b => b.Owner == HeroFloater), $"both bubbles draw ({bubbles.Count} bubbles)");
+            var heroBubble = bubbles.First(b => b.Owner == HeroFloater);
+            Require(heroBubble.Lines.Count > 1 && heroBubble.Rect.Size.X <= TextBubbleRules.BoxSize + 1, $"the long line wrapped to {heroBubble.Lines.Count} lines within 200 px");
+            if (!string.IsNullOrWhiteSpace(capture)) { layer.Redraw(); await Capture("bubble-after"); }
+            BubbleClockForSelfTest = 1000 + 6000; TickFloaters();
+            Require(layer.Bubbles.Count == 2, "a bubble lives its whole life (age 6000 ms is not above 6000)");
+            BubbleClockForSelfTest = 1000 + 6001; TickFloaters();
+            Require(layer.Bubbles.Count == 0, "and goes just after it");
+            Require(Bubble(entity, "Again"), "a new bubble");
+            _gameSettings = _gameSettings with { TextDuration = 2 }; TickFloaters();
+            Require(layer.Bubbles.Of(entity)?.LifeMs == 2000, $"the Text Duration line changed the live bubble's life at once: {layer.Bubbles.Of(entity)?.LifeMs}");
+            BubbleClockForSelfTest = 1000 + 6001 + 2001; TickFloaters();
+            Require(layer.Bubbles.Count == 0, "the shortened bubble is gone after 2 s");
+            GD.Print($"ARC-UI-1997 bubbles over objects PASS heroSlot={heroBubble.Slot} lines={heroBubble.Lines.Count} rect={heroBubble.Rect}");
             GD.Print($"ARC-UI-021 native-smoke floaters PASS map={_readyMapName} npc={entity} h={h} npcLines={lines.Length} heroLines={heroLines}"
                 + $" hero={landed.Resolution!.Outcome} texts={texts.Detail} first='{lines[0].Text}' Parity=NOT_VERIFIED");
         }

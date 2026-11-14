@@ -19,6 +19,7 @@ public partial class AreaFloaterLayer : CanvasLayer
     private readonly Font _font = ThemeDB.FallbackFont;
     private readonly AreaArtFontFace? _face;
     private Control _surface = null!;
+    private Control _bubbleSurface = null!;
 
     public AreaFloaterLayer() : this(null) { }
 
@@ -29,7 +30,17 @@ public partial class AreaFloaterLayer : CanvasLayer
         _face = face;
         LineHeight = FloaterRules.LineHeight(face is null ? (int)Math.Ceiling(_font.GetHeight(FontSize)) : AreaTextFontLayout.LineHeight(face.Frames));
         Field = new FloaterField<string>(LineHeight);
+        // ARC-UI-1997 (TB1–TB22): a bubble's line height is the font's text height (the floater's without its 2 pixels).
+        BubbleLineHeight = LineHeight - 2;
     }
+
+    /// <summary>ARC-UI-1997: the text bubbles over objects (the original's TB table of eight), drawn under the floating lines.</summary>
+    public TextBubbleField<string> Bubbles { get; } = new();
+    public int BubbleLineHeight { get; }
+    /// <summary>The screen point an owner's bubble anchors on (its tile centre, with the original's (40, 20), no draw offset), or null when it is not on the shown map.</summary>
+    public Func<string, Vector2?> BubbleAnchor { get; set; } = _ => null;
+    /// <summary>The view's rectangle the bubbles are placed in; the whole layer when null.</summary>
+    public Func<Rect2>? BubbleView { get; set; }
 
     /// <summary>Whether the original's font art draws the lines.</summary>
     internal bool ArtFontForSelfTest => _face is not null;
@@ -45,6 +56,12 @@ public partial class AreaFloaterLayer : CanvasLayer
     {
         Name = "AreaFloaters";
         Layer = 1;
+        // Added first, so the bubbles draw under the floating lines (the original draws them first, 0x4D5F10 then 0x4D5310).
+        _bubbleSurface = new Control { Name = "BubbleSurface", MouseFilter = Control.MouseFilterEnum.Ignore };
+        _bubbleSurface.SetAnchorsPreset(Control.LayoutPreset.FullRect);
+        _bubbleSurface.Draw += DrawBubbles;
+        if (_face is not null) AreaArtTextDraw.Prepare(_bubbleSurface);
+        AddChild(_bubbleSurface);
         _surface = new Control { Name = "FloaterSurface", MouseFilter = Control.MouseFilterEnum.Ignore };
         _surface.SetAnchorsPreset(Control.LayoutPreset.FullRect);
         _surface.Draw += DrawLines;
@@ -52,7 +69,62 @@ public partial class AreaFloaterLayer : CanvasLayer
         AddChild(_surface);
     }
 
-    public void Redraw() { if (IsInsideTree()) _surface.QueueRedraw(); }
+    public void Redraw() { if (IsInsideTree()) { _surface.QueueRedraw(); _bubbleSurface.QueueRedraw(); } }
+
+    /// <summary>The width of a bubble's text in the layer's font.</summary>
+    public int MeasureText(string text) => _face is { } face ? face.Font.Measure(text).Width
+        : (int)Math.Ceiling(_font.GetStringSize(text, HorizontalAlignment.Left, -1, FontSize).X);
+
+    /// <summary>Makes a bubble over <paramref name="owner"/>: the text wrapped and measured once, as the original renders it.</summary>
+    public int AddBubble(string owner, string text, BubbleColor color, long nowMs)
+    {
+        var index = Bubbles.Create(owner, text, TextBubbleRules.Layout(text, BubbleLineHeight, MeasureText), color, nowMs);
+        Redraw();
+        return index;
+    }
+
+    /// <summary>What a bubble draw shows now: per bubble with an anchor, its lines (text, screen position), colour and placement slot. A bubble's slot is
+    /// chosen the first time it is laid out with an anchor and kept. The draw and the smokes both read it.</summary>
+    internal IReadOnlyList<(string Owner, BubbleColor Color, int Slot, Rect2 Rect, IReadOnlyList<(string Text, Vector2 Position)> Lines)> LayOutBubbles()
+    {
+        var drawn = new List<(string, BubbleColor, int, Rect2, IReadOnlyList<(string, Vector2)>)>();
+        var view = BubbleView?.Invoke() ?? _bubbleSurface.GetRect();
+        foreach (var bubble in Bubbles.Bubbles.ToArray())
+        {
+            if (BubbleAnchor(bubble.Owner) is not { } anchor) continue;
+            var ax = (int)Math.Round(anchor.X); var ay = (int)Math.Round(anchor.Y);
+            var slot = bubble.Slot ?? TextBubbleRules.ChooseSlot(ax, ay, bubble.Layout.Width, bubble.Layout.Height,
+                (int)view.Position.X, (int)view.Position.Y, (int)view.Size.X, (int)view.Size.Y);
+            if (bubble.Slot is null) Bubbles.SetSlot(bubble.Owner, slot);
+            var (left, top) = TextBubbleRules.SlotPosition(slot, ax, ay, bubble.Layout.Width, bubble.Layout.Height);
+            var lines = bubble.Layout.Lines.Select((l, i) => (l.Text, new Vector2(left + l.Left, top + i * BubbleLineHeight))).ToArray();
+            drawn.Add((bubble.Owner, bubble.Color, slot, new Rect2(left, top, bubble.Layout.Width, bubble.Layout.Height), lines));
+        }
+        return drawn;
+    }
+
+    private void DrawBubbles()
+    {
+        var ascent = _font.GetAscent(FontSize);
+        foreach (var (_, color, _, _, lines) in LayOutBubbles())
+        {
+            var (r, g, b) = TextBubbleRules.Rgb(color);
+            var (sr, sg, sb) = TextBubbleRules.ShadowRgb;
+            foreach (var (text, position) in lines)
+            {
+                if (_face is { } face)
+                {
+                    // The shadow first at +1,+1 (font flag 0x08), then the line.
+                    AreaArtTextDraw.Text(_bubbleSurface, face, text, (int)position.X + TextBubbleRules.ShadowOffset, (int)position.Y + TextBubbleRules.ShadowOffset, (sr, sg, sb));
+                    AreaArtTextDraw.Text(_bubbleSurface, face, text, (int)position.X, (int)position.Y, (r, g, b));
+                    continue;
+                }
+                var baseline = position + new Vector2(0, ascent);
+                _bubbleSurface.DrawStringOutline(_font, baseline, text, HorizontalAlignment.Left, -1, FontSize, 3, Outline);
+                _bubbleSurface.DrawString(_font, baseline, text, HorizontalAlignment.Left, -1, FontSize, Color.Color8(r, g, b));
+            }
+        }
+    }
 
     /// <summary>What a draw shows now: per owner with a point, each line's text, colour, screen position and opacity.</summary>
     internal IReadOnlyList<(string Owner, string Text, FloaterColor Color, Vector2 Position, int Alpha)> DrawnForSelfTest()

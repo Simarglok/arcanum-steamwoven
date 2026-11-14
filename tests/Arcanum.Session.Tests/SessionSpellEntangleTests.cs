@@ -206,6 +206,58 @@ public sealed class SessionSpellEntangleTests
     }
 
     [TestMethod]
+    public void A_weapons_own_hit_effect_that_plays_ends_the_attack_end_before_the_blood_and_the_hit_effect()
+    {
+        // ARC-RENDER-1990 (0x4B6930 → 0x4377C0): the attack end asks the weapon's own hit effect first; when it plays, neither the blood nor the hit effect (the entangled victim's save) follows.
+        var hit = new AttackDamage(DamageRecipient.Target, new(5, 0, 0, 0, 0), new(5, 0, 0, 0, 0), 5, 0, 0, DamageMultiplier.None, false, CriticalHitEffects.None, CriticalMissEffects.None, false, DamagePrevention.None);
+        var asked = new List<(string Victim, int Entry, int Limit)>();
+        foreach (var (plays, weapon, veto) in new (bool, int?, bool)[] { (true, 6060, true), (false, 6060, false), (true, null, false), (true, 6040, false) })
+        {
+            var record = Entangle(100);
+            var (owner, caster) = Setup(RuleMode.Steamwoven, record);
+            using var _ = owner;
+            var run = Cast(owner, caster, record);
+            asked.Clear();
+            caster.WeaponEyeCandyAdd = (victim, entry, limit, rotation) => { asked.Add((victim, entry, limit)); Assert.AreEqual(0, rotation, "a hit's art is not rotated"); return plays; };
+            var ended = caster.AttackEnd(SessionSpellCaster.Hero, hit, false, weapon);
+            var broken = caster.Log.Any(e => e.Kind == SpellCastEventKind.EntangleBroken && e.Run == run);
+            Assert.AreEqual(!veto, ended, $"plays {plays}, weapon {weapon}: the hit effect asks the save again unless the weapon's effect played");
+            Assert.AreEqual(!veto, broken);
+            Assert.AreEqual(!veto, caster.Log.Any(e => e.Kind == SpellCastEventKind.HitGore), "the blood follows unless it played");
+            // The Tesla Rod (prototype 6060: basic 6040, 11 above the first weapon, kind 3) asks its own entry with the limit 2; a weapon below the list's first and no weapon ask nothing.
+            if (weapon == 6060) CollectionAssert.AreEqual(new[] { (SessionSpellCaster.Hero, EyeCandyEntryRef.Make(EyeCandyList.Weapon, 58)!.Value, 2) }, asked);
+            else Assert.AreEqual(0, asked.Count);
+        }
+    }
+
+    [TestMethod]
+    public void A_weapons_begin_and_swing_effects_go_on_the_attacker_turned_to_its_facing()
+    {
+        // ARC-RENDER-2011 (0x4377C0 kinds 0 and 1): the entry (prototype − 0x178D) · 5 + kind of the weapon list goes on the attacker with the limit 2 and the art rotated to its facing; a hit's kind is asked only by the attack end.
+        var (owner, caster) = Setup(RuleMode.Steamwoven, Entangle(100));
+        using var _ = owner;
+        var asked = new List<(string Owner, int Entry, int Limit, int Rotation)>();
+        caster.WeaponEyeCandyAdd = (who, entry, limit, rotation) => { asked.Add((who, entry, limit, rotation)); return true; };
+        // The prototype 6069 (Bronwyck's Gun): basic 6049, 20 above the first weapon.
+        Assert.IsTrue(caster.WeaponAttackEffect(SessionSpellCaster.Hero, WeaponHitEffectRules.Swing, 6069, 5));
+        Assert.IsTrue(caster.WeaponAttackEffect(Npc, WeaponHitEffectRules.Begin, 6069, 2));
+        CollectionAssert.AreEqual(new[]
+        {
+            (SessionSpellCaster.Hero, EyeCandyEntryRef.Make(EyeCandyList.Weapon, 101)!.Value, 2, 5),
+            (Npc, EyeCandyEntryRef.Make(EyeCandyList.Weapon, 100)!.Value, 2, 2),
+        }, asked);
+        asked.Clear();
+        Assert.IsFalse(caster.WeaponAttackEffect(SessionSpellCaster.Hero, WeaponHitEffectRules.Swing, null, 3), "no weapon, no effect");
+        Assert.IsFalse(caster.WeaponAttackEffect(SessionSpellCaster.Hero, WeaponHitEffectRules.Swing, 6040, 3), "a prototype below the list's first names no entry");
+        Assert.IsFalse(caster.WeaponAttackEffect(SessionSpellCaster.Hero, WeaponHitEffectRules.Hit, 6069, 3), "the hit is the attack end's");
+        Assert.AreEqual(0, asked.Count);
+        caster.WeaponEyeCandyAdd = (_, _, _, _) => false;
+        Assert.IsFalse(caster.WeaponAttackEffect(SessionSpellCaster.Hero, WeaponHitEffectRules.Swing, 6069, 3), "the add refused");
+        caster.WeaponEyeCandyAdd = null;
+        Assert.IsFalse(caster.WeaponAttackEffect(SessionSpellCaster.Hero, WeaponHitEffectRules.Swing, 6069, 3), "no host");
+    }
+
+    [TestMethod]
     public void A_missed_save_the_caster_and_a_critter_without_the_flag_keep_everything_as_it_is()
     {
         var record = Entangle(-100);

@@ -218,6 +218,28 @@ public partial class TerrainViewerApp
                 Require(image.SavePng(capture) == Error.Ok, "the capture saved to " + capture);
                 GD.Print($"ARC-UI-1737 critter-fall capture {capture} body={final.DrawX},{final.DrawY} filter={filterOn} brightness={_gameSettings.Brightness}");
             }
+            // ARC-RENDER-1991 (0x4B1170, RH2/RH7): the hero's poison tick (15 game seconds after the level is written) deals its 3 points through the damage step and runs the damage effect of kind 2: the poison splotch
+            // (index 1 of the animation list, whatever the violence filter says) plays on the hero. The level goes back to 0 afterwards.
+            var poisonFrom = _spellCaster!.Log.Count;
+            _eyeCandyDrawnForSelfTest.Clear();
+            await BloodShot("before-poison", 0);
+            Require(session.SetPoisonLevel(session.Version, SessionLifeTarget.Hero, 600).Disposition == GameSessionDisposition.Changed, "the hero's poison level was written");
+            try
+            {
+                var poisonFrames = 0;
+                // Another animal of the area may bite the hero meanwhile (blood of its own, index 0 or a tier, or the clean effect): only the poison splotch, index 1 of the animation list, is the tick's.
+                bool PoisonBlood(SpellCastEvent e) => e.Kind == SpellCastEventKind.HitGore && e.Object == SessionSpellCaster.Hero && EyeCandyEntryRef.ListOf(e.Value) == EyeCandyList.Anim && EyeCandyEntryRef.IndexOf(e.Value) == 1;
+                for (; poisonFrames < 400 && !_spellCaster.Log.Skip(poisonFrom).Any(PoisonBlood); poisonFrames++) Frame();
+                var poison = _spellCaster.Log.Skip(poisonFrom).Where(PoisonBlood).ToArray();
+                Require(poison.Length >= 1, $"the hero's poison tick ran the damage effect (the poison blood, index 1, whatever the violence filter says) within {poisonFrames} frames: {string.Join(",", _spellCaster.Log.Skip(poisonFrom).Where(e => e.Kind == SpellCastEventKind.HitGore).Select(e => EyeCandyEntryRef.IndexOf(e.Value)))}");
+                bool PoisonShows() => ShownEyeCandyHost?.Shown().Any(o => o.Eye.Entry == poison[0].Value) == true;
+                var poisonShown = 0;
+                for (; poisonShown < 40 && !(PoisonShows() || _eyeCandyDrawnForSelfTest.Contains(poison[0].Value)); poisonShown++) Frame();
+                Require(PoisonShows() || _eyeCandyDrawnForSelfTest.Contains(poison[0].Value), "the poison blood eye candy runs on the hero");
+                if (PoisonShows()) await BloodShot("poison");
+                GD.Print($"ARC-RENDER-1991 critter-fall poison blood index=1 frames={poisonFrames} filter={_gameSettings.ViolenceFilter}");
+            }
+            finally { session.SetPoisonLevel(session.Version, SessionLifeTarget.Hero, 0); }
             GD.Print("ARC-DEV-248 native-smoke critter-fall PASS " + System.Text.Json.JsonSerializer.Serialize(new {
                 map.RuntimeMap, CalmedAtStart = inDanger, Animal = target.Row.PrototypeNumber, Spell = spell.Data.Number, RanOver = cellsRun.Count, SteppingAtDeath = steppingAtDeath, CastFrames = castFrames,
                 Blood = $"anim entry {goreIndex}", SettledAfterFrames = settledAt, DiedOn = $"{first.Mover.X},{first.Mover.Y}", LyingOn = $"{final.Mover.X},{final.Mover.Y}", Pool = pool is null ? "none (violence filter on)" : $"{pool.Cell.X},{pool.Cell.Y}", ViolenceFilter = filterOn,

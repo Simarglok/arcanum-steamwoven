@@ -264,6 +264,7 @@ public partial class TerrainViewerApp
         // ARC-COMBAT-016: with a projectile art the shot flies and strikes on arrival (ledger PF1).
         var flight = ShotFlight(owner.QueryHeroAttack());
         var struckEntity = target.Entity;
+        var weaponBefore = HeroWeaponPrototype(owner, null); // the context's weapon, read before the strike (a thrown or broken weapon leaves the hand)
         var result = owner.AttackObject(owner.Version, target.Attack(distance, goal.Aim, AreaCombatHost.HeroWorn(owner, _areaKitDurability)) with
         {
             // ARC-DEV-261 (GT198): the struck object's taking-damage script, with the hero as the attacker.
@@ -275,6 +276,7 @@ public partial class TerrainViewerApp
         });
         goal.Attacks++;
         goal.Stop = result.Disposition == GameSessionDisposition.Rejected || result.Resolution?.Refusal is { } refusal && refusal != AttackRefusal.None;
+        HeroSwingEffect(goal, result.Disposition, result.Resolution?.Refusal, weaponBefore);
         if (result.Shot is { } shot)
         {
             // ARC-COMBAT-018: a bow at expert shoots two projectiles on the same line.
@@ -648,7 +650,7 @@ public partial class TerrainViewerApp
         goal.Player = new AreaAttackPlayer(clip, WorldMilliseconds());
         goal.Animation = animation; goal.Action = action;
         _worldActor.AttackPose = (action, goal.Octant, 0);
-        if (!replay) PlayAttackStartSounds(sound.Roll?.Value);
+        if (!replay) { PlayAttackStartSounds(sound.Roll?.Value); HeroWeaponEffect(WeaponHitEffectRules.Begin, goal.Octant, _areaSession is { } begun ? HeroWeaponPrototype(begun, null) : null); }
         GD.Print($"ARC-COMBAT-005 attack-start target={goal.Entity} weapon={weapon} animation={animation} drawn={action} art=0x{art.Selector:x8} frames={clip.Frames} action={clip.ActionFrame} pause={clip.PauseMs} rate={rate}"
             + $" sound={sound.Roll?.Value.ToString() ?? (replay ? "replay" : sound.Failure.ToString())} aim={goal.Aim?.ToString() ?? "none"}");
         PublishWorldSelection();
@@ -818,6 +820,7 @@ public partial class TerrainViewerApp
         GD.Print(byLine ? $"ARC-COMBAT-015 line-of-fire strikes wall={wall.Key.Kind}:{wall.Key.SourceIndex} instead of {goal.Entity}" : $"ARC-COMBAT-1941 wall-attack target={goal.Entity}");
         if (byLine) _lineOfFireStruck = AttackGoal.WallFloaterId(wall);
         var flight = ShotFlight(owner.QueryHeroAttack());
+        var weaponBefore = HeroWeaponPrototype(owner, null); // the context's weapon, read before the strike (a thrown or broken weapon leaves the hand)
         var result = owner.AttackObject(owner.Version, new SessionObjectAttack
         {
             Wall = true, Aim = goal.Aim, Distance = distance, HeroWorn = AreaCombatHost.HeroWorn(owner, _areaKitDurability), DropMap = AreaDropMapNow(),
@@ -826,6 +829,7 @@ public partial class TerrainViewerApp
         });
         goal.Attacks++;
         goal.Stop = result.Disposition == GameSessionDisposition.Rejected || result.Resolution?.Refusal is { } refusal && refusal != AttackRefusal.None;
+        HeroSwingEffect(goal, result.Disposition, result.Resolution?.Refusal, weaponBefore);
         // ARC-COMBAT-1738: a wall takes the same re-wields (a worn-out weapon, no ammunition) as any struck object.
         HeroWeaponWornOut(result.Wear, wall, false);
         HeroOutOfAmmunition(result.Resolution?.Refusal, wall, false);
@@ -854,6 +858,7 @@ public partial class TerrainViewerApp
         var flight = ShotFlight(owner.QueryHeroAttack());
         var noise = HeroWeaponNoise(owner);
         // ARC-COMBAT-017: a weapon that "default throws" leaves the hand and flies (ledger RH2).
+        var weaponBefore = HeroWeaponPrototype(owner, null); // the context's weapon, read before the strike (a thrown or broken weapon leaves the hand)
         var result = owner.AttackCritter(owner.Version, CritterAttack(struck, distance, line) with
         {
             Flight = flight is not null, Throw = flight is null ? null : HeroThrow(goal),
@@ -866,6 +871,7 @@ public partial class TerrainViewerApp
             && (result.Shot is null || result.Resolution.Outcome is AttackOutcome.Hit or AttackOutcome.CriticalHit)) _aiHost?.HeroAttacked(struck.Entity, noise);
         // A refused attack, or one the resolver refused, ends the goal: repeating it would refuse again.
         goal.Stop = result.Disposition == GameSessionDisposition.Rejected || result.Resolution?.Refusal is { } refusal && refusal != AttackRefusal.None;
+        HeroSwingEffect(goal, result.Disposition, result.Resolution?.Refusal, weaponBefore);
         if (result.Shot is { } shot)
         {
             // ARC-COMBAT-018: a bow at expert shoots two projectiles on the same line; a missed throw flies to its scattered tile.
@@ -877,6 +883,22 @@ public partial class TerrainViewerApp
         }
         // ARC-AI-1639: the attack's end calls the taunt (0x4B6B90) only for an attack without a flight: a shot or a throw has record bit 0x200 and 0x4B3170 skips the call (a default-throw weapon has weapon type 3).
         FinishCritterHit(struck, result, selfHitReachesTaunt: result.Shot is null);
+    }
+
+    /// <summary>
+    /// ARC-RENDER-2011 (ledger RH9): the weapon's own effect of <paramref name="kind"/> (<see cref="WeaponHitEffectRules.Begin"/> at the attack animation's start; <see cref="WeaponHitEffectRules.Swing"/> in the strike) on the hero, with
+    /// the art turned to its facing <paramref name="octant"/>. No weapon wielded, or no cast host on the map: none.
+    /// </summary>
+    private void HeroWeaponEffect(int kind, int octant, int? weapon)
+    {
+        if (weapon is null || SpellCasterNow() is not { } caster) return;
+        caster.WeaponAttackEffect(SessionSpellCaster.Hero, kind, weapon, octant);
+    }
+
+    /// <summary>ARC-RENDER-2011 (the strike): the swing effect of an attack the session took (not rejected, no refusal such as out of ammunition), on a creature, an object or a wall alike, hit or miss.</summary>
+    private void HeroSwingEffect(AttackGoal goal, GameSessionDisposition disposition, AttackRefusal? refusal, int? weapon)
+    {
+        if (disposition != GameSessionDisposition.Rejected && refusal is null or AttackRefusal.None) HeroWeaponEffect(WeaponHitEffectRules.Swing, goal.Octant, weapon);
     }
 
     /// <summary>ARC-COMBAT-005: the hero's attack on <paramref name="struck"/> as the session sees it now (its worn items, cell and the
@@ -909,9 +931,16 @@ public partial class TerrainViewerApp
         };
     }
 
+    /// <summary>ARC-RENDER-1990: the prototype number of the weapon of the hero's attack (the context's weapon, 0x4B2210): the thrown item of a throw, else the weapon the hero wields; null for none, or an item whose kind the session cannot name.</summary>
+    private int? HeroWeaponPrototype(GameSessionOwner owner, string? thrownItem)
+    {
+        var item = thrownItem ?? owner.QueryEquipment().Worn.FirstOrDefault(worn => worn.Slot == Arcanum.Simulation.Equipment.EquipmentSlot.Weapon)?.Entity;
+        return item is null ? null : (HeroItemKind(owner, item) ?? PlacedItemKind(owner, item) ?? RowlessItemKind(owner, item))?.Prototype;
+    }
+
     /// <summary>What follows an attack on an NPC (at once, or when a projectile struck it): the sounds, the status line, a stun's
     /// end, the followers' levels, the death pose and the drawn bodies and inventory.</summary>
-    private void FinishCritterHit(AttackGoal struck, SessionAttackResult result, bool aimed = true, bool selfHitReachesTaunt = false)
+    private void FinishCritterHit(AttackGoal struck, SessionAttackResult result, bool aimed = true, bool selfHitReachesTaunt = false, string? thrownItem = null)
     {
         var owner = _areaSession!;
         _lastCritterAttackForSelfTest = result;
@@ -922,7 +951,8 @@ public partial class TerrainViewerApp
         // ARC-DEV-292: a hit or a miss that ran the attack event gives the NPC victim its immediate AI pass (0x4B52FC, the miss paths 0x4B30F5 and 0x4B3948): after the attack event (the victim has its focus), before the sounds and bookkeeping.
         // ARC-DEV-303 (RS10): the hit effect (0x4B6930 → 0x459A30): a hit that reached an entangled NPC asks its save again, before its pass.
         // ARC-RENDER-1794: and the damage effect of a hit with damage plays the blood of the hit (0x433020) before that.
-        if (AreaAiHost.HitReached(result)) AreaAiHost.AttackEnd(SpellCasterNow(), struck.Entity, result);
+        // ARC-RENDER-1990: the weapon's own hit effect (0x4377C0) comes first and, when it plays, replaces both: the context's weapon is the thrown item for a throw, else the wielded weapon.
+        if (AreaAiHost.HitReached(result)) AreaAiHost.AttackEnd(SpellCasterNow(), struck.Entity, result, HeroWeaponPrototype(owner, thrownItem));
         if (AreaAiHost.VictimReached(result)) _aiHost?.Struck(struck.Entity);
         PlayAttackResultSounds(result, struck.Row, struck.Entity);
         var life = owner.QueryLife(struck.Combat!.Target).View;
