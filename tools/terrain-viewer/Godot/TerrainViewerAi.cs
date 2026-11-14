@@ -125,6 +125,7 @@ public partial class TerrainViewerApp
         host.KnockbackEnds = KnockbackRunEnded;
         host.HeroEnds = HeroRunEnded;
         host.FollowerSpeaks = SayFollowerLine;
+        host.AiBarks = (entity, lines, listener) => SayLine(entity, lines, listener, refusesFightOrFlee: false);
         session.KillNotice = request => { if (request.Map == mapNumber) host.NoticeKill(request.Victim, request.Killer); };
         // ARC-DEV-104 (MIG9 S4): a whole map opens its residency and sector cache once per map open; the arrival pre-cache folds the 3 × 3
         // sectors around the hero, whose NPCs get their first tick there. The delayed ticks below go only to NPCs without one.

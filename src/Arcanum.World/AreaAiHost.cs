@@ -1131,6 +1131,22 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     private void Speak(string follower, LoyaltyLines lines) => FollowerSpeaks?.Invoke(follower, lines);
 
     /// <summary>
+    /// ARC-UI-2079 (ledger TB28): the viewer's line speaker for an AI bark that has its own listener: the speaker's session entity, the message range and the listener the speech display turns the speaker to (an entity
+    /// id; <c>"pc"</c> for the hero; null: no listener). The same line pick and float as <see cref="FollowerSpeaks"/>, which stays the PC-listener path of the follower comments. Null: nobody says it.
+    /// </summary>
+    public Action<string, LoyaltyLines, string?>? AiBarks { get; set; }
+
+    /// <summary>The fleeing line (0x413EA0, can-speak flag 1): said when an NPC takes a fleeing or surrendered state it was not in, and when a surrendered NPC keeps its surrender and runs from a new attacker.</summary>
+    public static readonly LoyaltyLines FleeBarkLines = new(3000, 3099);
+
+    // The AI float callback (0x5F8488) of an active NPC (0x45D790): the speaker and the listener the speech display turns it to (the attacker or the danger object).
+    private void Bark(string npc, LoyaltyLines lines, string? listener)
+    {
+        if (AiBarks is not { } barks || !Active(npc)) return;
+        barks(npc, lines, listener);
+    }
+
+    /// <summary>
     /// ARC-AI-1677: a follower that left by the loyalty step (<see cref="GameSessionOwner.RunLoyaltyStep"/>, not by the hero's hit) sets JILTED and, when it is active and a line
     /// callback exists, says the refusal line of its reason (the same line as the hit's leave) through <see cref="FollowerSpeaks"/>. Returns the line range asked, or null when the step did not leave, the
     /// follower is not active or nobody listens. The can-speak test with flag 1 (its head and the viewer's float, <see cref="Arcanum.Simulation.Reaction.CanSpeakRules.Tail"/> for the rest) is the speaker's.
@@ -1351,7 +1367,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
                 break;
             case { Step: AttackReactionStep.FleeGoal }:
                 // The starter's own gate, level-3 interrupt and duplicate test are the table's (Started); its answer is not read by the reaction.
-                // The surrendered NPC's floating line (0x413EA0 and the callback 0x5F8488 before the starter) is not shown by this host.
+                // ARC-UI-2079: the surrendered NPC's fleeing line (0x413EA0, speaker the NPC, listener the new attacker) comes before the starter, as the callback 0x5F8488 does in the original.
+                Bark(npc, FleeBarkLines, attacker);
                 Started(npc, RunOf(npc), AiExecutorRules.StartFlee(this, npc, attacker, RunOf(npc)));
                 break;
         }
@@ -1781,6 +1798,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         };
         var result = _session.SetDangerState(_session.Version, request);
         Trace(npc).Setter = $"{state} {target ?? "-"} {result.Disposition} {result.Failure} {result.Transition?.Rule}";
+        // ARC-UI-2079 (ledger TB28): the setter's fleeing line (0x413EA0) when the NPC takes a fleeing or surrendered state it was not in; the listener is the requested target (null: none).
+        if (result.Transition is { FleeLine: true }) Bark(npc, FleeBarkLines, target);
         return result;
     }
 
@@ -4199,7 +4218,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     {
         var critter = Find(npc);
         var charisma = Leader(npc) == Pc && _session.QueryHeroStats(new(0))?.Snapshot?.IsExtraordinary(CharacterStat.Charisma) == true;
-        return new(Invulnerable: critter is { Invulnerable: true } or { NighInvulnerable: true }, NoFlee: critter?.NoFlee ?? false, LeaderExtraordinaryCharisma: charisma);
+        return new(Invulnerable: critter is { Invulnerable: true } or { NighInvulnerable: true }, NoFlee: critter?.NoFlee ?? false, LeaderExtraordinaryCharisma: charisma,
+            FloatsLine: AiBarks is not null && Active(npc));
     }
 
     private (ReactionNpcFacts Npc, ReactionPcFacts Pc)? ReactionFacts(string npc)
