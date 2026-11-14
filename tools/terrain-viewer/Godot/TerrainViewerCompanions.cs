@@ -548,6 +548,16 @@ public partial class TerrainViewerApp
             }
             // ARC-UI-1736 (FP5): the show/hide button hides the frames and shows them again; one follower has no arrows (they stand from seven).
             Require(_followerPortraits!.PanelForSelfTest is { Shown: true, Count: 1, ToggleArt: 501, UpArt: null, DownArt: null }, "the panel is shown with the hide button and no arrows: " + _followerPortraits.PanelForSelfTest);
+            // ARC-UI-1817: with ARC_AREA_WINDOW_ART (the shared opt-in part of the window smokes) the panel's frames are checked in the generated interface: the portrait frame (503), the hide
+            // button (501) and the order menu's art (826), whose frame is painted whether or not the menu is open. The scroll arrows (506-509) stand from seven followers, so the renderer's own tests cover them.
+            if (WindowArtSmokeRequested)
+            {
+                var panel = _followerPortraits;
+                int[] arts = [AreaFollowerFrameLayout.FrameArt, AreaFollowerPanelRules.ShownArt, AreaFollowerPanelRules.MenuArt];
+                await WindowArtSmokeAsync("followers", () => arts.Select(art => panel.TextureForSelfTest(art)
+                    ?? throw new InvalidOperationException($"ARC-UI-1817 follower panel art smoke: art {art} is no interface texture")).ToArray(),
+                    arts, panel.DeviceScale, () => panel.Visible && panel.EntitiesForSelfTest.Count > 0, new Vector2I(1600, 1200)); // the bars' whole factor steps to 2 only from 1200 high
+            }
             await ClickAsync(_followerPortraits.ButtonCentreForSelfTest("toggle"), "the hide button");
             Require(_followerPortraits.PanelForSelfTest is { Shown: false, ToggleArt: 502 } && _followerPortraits.EntitiesForSelfTest.Count == 0 && _followerPortraits.RightEdge == 0,
                 "hiding removed the frame and set the show art: " + _followerPortraits.PanelForSelfTest);
