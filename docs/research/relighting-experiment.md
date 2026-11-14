@@ -129,8 +129,11 @@ in a city with no torch.
 **Moving lights.** The saved data of the windows holds **no critter with a light** (a scan of 3×3-sector windows, centres every third sector from −9 to +9 round each marker, by `ObjectLightReader`: 0 critter lights;
 the object lights, up to 263 in a window, are all scenery), and the AI host cannot be built over these windows (a defect, [#2036](https://github.com/Simarglok/arcanum-steamwoven/issues/2036): the
 window's inventory seed is refused with `GoldHandleMismatch` or `ListedObjectUnresolved`), so no NPC's worn light could be listed either; in the one Ashbury window that does seed (sector 505,979,
-15 NPCs) none wears a light. The Ashbury wisps the owner remembers are therefore **not found in the saved data**; they may be made by a script or an effect (open: the owner was asked where
-and when). As a stand-in the capture uses the original's own moving-light mechanism (a carried light follows its creature, LT10, LT12): the hero wears an extra-large torch (cold white 244/255/255,
+15 NPCs) none wears a light. The Ashbury wisps the owner remembers are therefore **not lit critters**: no critter holds a light item either (checked over the windows round the city). ARC-RES-2061 found them by
+capturing the east and north-east of the city at night (`ARC_RELIGHT_AT=x,y;x,y` in the shots mode): a violet orb critter standing on the field east of the town (most likely prototype 28471,
+seven of them in the central window, more north and west) that is **bright only in its own sprite and lights nothing**: in Legacy and in every relit mode the corn round it stays dark.
+To make wisps light their surroundings the relit look would have to treat such critters as emitters (a colour from the sprite, a radius of our own), a deliberate difference from the original
+that is the owner's call (HD variant). Whether they move cannot be seen yet: the AI host does not build over the Ashbury windows (#2036). As a stand-in the capture uses the original's own moving-light mechanism (a carried light follows its creature, LT10, LT12): the hero wears an extra-large torch (cold white 244/255/255,
 the colour a wisp-like light would have) and walks towards a cell eight away; Legacy draws that light too, so the comparison is fair. The relit look follows it frame by frame; the pool on the stones and the
 hero's own highlights move with the light (two frames cannot show flicker; the check on real walk-cycle frames is still [#2000](https://github.com/Simarglok/arcanum-steamwoven/issues/2000)).
 
@@ -160,8 +163,8 @@ lights enter and leave the list as the view pans (a hard cut at the 32nd). Neith
 whatever `ARC_RELIGHT_STRENGTH` says.
 
 **Updated recommendation.** Unchanged in kind (conditional go for a bounded night-and-indoor option, no-go for daylight and for de-light as built), with two additions: the night weighted
-mode at about 1.2 to 1.6 is the one to tune, and the cost in a city is about 2 ms (to be checked on the Deck), so the option should be a switchable profile, not a default. Open: where
-the Ashbury wisps come from, and the AI-host-less city windows ([#2036](https://github.com/Simarglok/arcanum-steamwoven/issues/2036)).
+mode at about 1.2 to 1.6 is the one to tune, and the cost in a city is about 2 ms (to be checked on the Deck), so the option should be a switchable profile, not a default. Open: whether
+the wisps should be emitters in an HD variant (the owner's call), and the AI-host-less city windows ([#2036](https://github.com/Simarglok/arcanum-steamwoven/issues/2036)).
 
 ## Verdict
 
@@ -204,7 +207,7 @@ The night cities (ARC-RES-2007; PNGs named by `ARC_RELIGHT_CITY`):
 
 Full-frame night shots for the owner (ARC-RES-2050): add `--env ARC_RELIGHT_SHOTS=1` (and optionally `--env ARC_RELIGHT_HOURS=20,23,3`) to the city commands. The stage then skips the walk and
 the timing and captures up to three spots at least 700 px apart (each with at least four lit lights within 350 px) at every hour, in Legacy, night 1.0 and night 1.6
-(`<city>-shot-<spot>-h<hour>-<variant>.png`, 1280×800). In the first runs the ambient colour changed only slightly between the night hours 20, 23 and 3, so the hours differ less than the spots.
+(`<city>-shot-<spot>-h<hour>-<variant>.png`, 1280×800). `ARC_RELIGHT_AT=x,y;x,y` (world tiles) stands near those tiles instead (the nearest standable cell within 2, 5 or 9 cells, else the window's start; spots `at1`, `at2`, ...; the window must still hold lit lights; the wisps were found in the window centred on sector 505,975 with `32340,62389;32379,62519`). In the first runs the ambient colour changed only slightly between the night hours 20, 23 and 3, so the hours differ less than the spots.
 
 The PNGs under `ARC_RELIGHT_CAPTURE` are derived from the player's art: keep them outside git. The lab:
 `experiments/relight-lab/README.md`.
