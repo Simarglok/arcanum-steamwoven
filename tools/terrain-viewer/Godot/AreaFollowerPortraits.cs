@@ -106,6 +106,9 @@ public partial class AreaFollowerPortraits : CanvasLayer
     /// its inventory can be opened (Inventory greyed otherwise). Without it the menu has no greyed row.</summary>
     public Func<string, (bool MindControlled, bool CanOpenInventory)>? MenuFacts { get; set; }
 
+    /// <summary>ARC-UI-1786 (FP8): the rows' words from <c>mes\follower_ui.mes</c>; a row whose message is missing is not drawn. Null (nothing read yet) draws the project's English words.</summary>
+    public AreaFollowerMenuTexts? MenuTexts { get; set; }
+
     private string? _hovered;
 
     internal IReadOnlyList<string> EntitiesForSelfTest { get; private set; } = [];
@@ -133,6 +136,9 @@ public partial class AreaFollowerPortraits : CanvasLayer
     /// <summary>ARC-UI-1736: a row of the open menu is greyed (FP8), null when no menu is open.</summary>
     internal FollowerMenuRowState? MenuRowStateForSelfTest(FollowerMenuItem item) =>
         _menuRows.Where(row => row.Item == item).Select(row => (FollowerMenuRowState?)(row.Greyed ? FollowerMenuRowState.Greyed : FollowerMenuRowState.Normal)).FirstOrDefault();
+    /// <summary>ARC-UI-1786: the word an open menu's row draws, null when the row is not drawn (its message is missing).</summary>
+    internal string? MenuRowTextForSelfTest(FollowerMenuItem item) =>
+        _menuRows.Where(row => row.Item == item).Select(row => row.Row.GetChildren().OfType<Label>().FirstOrDefault()?.Text).FirstOrDefault();
     /// <summary>ARC-UI-1736: a menu row's size in the menu's own pixels (FP8: 118 × 15).</summary>
     internal Vector2? MenuRowSizeForSelfTest(FollowerMenuItem item) => _menuRows.Where(row => row.Item == item).Select(row => (Vector2?)row.Row.Size).FirstOrDefault();
     /// <summary>ARC-UI-1736: the open menu's rectangle on the screen and its rows' count (FP7, FP8).</summary>
@@ -384,7 +390,8 @@ public partial class AreaFollowerPortraits : CanvasLayer
         _menu.AddChild(art is null
             ? new ColorRect { Color = new Color(22 / 255f, 25 / 255f, 34 / 255f, .95f), Size = size, MouseFilter = Control.MouseFilterEnum.Ignore }
             : new TextureRect { Texture = art, Size = size, MouseFilter = Control.MouseFilterEnum.Ignore });
-        foreach (var item in Enum.GetValues<FollowerMenuItem>())
+        var texts = MenuTexts ?? AreaFollowerMenuTexts.Project("no texts read");
+        foreach (var item in texts.Rows)
         {
             var (x, y, width, height) = AreaFollowerPanelRules.MenuRow(item);
             var greyed = AreaFollowerPanelRules.RowState(item, mind, canOpen) == FollowerMenuRowState.Greyed;
@@ -396,7 +403,7 @@ public partial class AreaFollowerPortraits : CanvasLayer
             // FP8: white, the bright colour under the pointer, mid grey when greyed (a greyed row has no pointer colour).
             var word = new Label
             {
-                Text = AreaFollowerPanelRules.MenuText(item), Size = new Vector2(width, height), VerticalAlignment = VerticalAlignment.Center,
+                Text = texts.Text(item), Size = new Vector2(width, height), VerticalAlignment = VerticalAlignment.Center,
                 MouseFilter = Control.MouseFilterEnum.Ignore, LabelSettings = new LabelSettings { FontSize = 10, FontColor = greyed ? MenuGrey : MenuWhite },
             };
             row.AddChild(word);

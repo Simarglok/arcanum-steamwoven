@@ -103,10 +103,10 @@ public static class AreaPortraits
 }
 
 /// <summary>ARC-UI-024: what the follower frames draw from the game folder: their interface art (503–505, 616), the portrait
-/// catalogue and the portrait images read so far (32 × 32 draws, the small files). Failures are reported, never thrown.
-/// Godot-free.</summary>
+/// catalogue, the portrait images read so far (32 × 32 draws, the small files) and, from ARC-UI-1786, the order menu's words
+/// (<c>mes\follower_ui.mes</c>). Failures are reported, never thrown. Godot-free.</summary>
 public sealed record AreaPortraitContent(IReadOnlyDictionary<int, AreaInterfaceArtLoad> Art, PortraitCatalogue? Catalogue,
-    IReadOnlyDictionary<int, AreaPortraitFile> Portraits, string Detail)
+    IReadOnlyDictionary<int, AreaPortraitFile> Portraits, string Detail, AreaFollowerMenuTexts? Menu = null)
 {
     public bool ArtReady => AreaFollowerFrameLayout.ArtNumbers.All(number => Art.TryGetValue(number, out var load) && load.Status == AreaInterfaceArtStatus.Ready);
 
@@ -137,11 +137,12 @@ public sealed record AreaPortraitContent(IReadOnlyDictionary<int, AreaInterfaceA
             catalogue = load.Catalogue;
             catalogueDetail = $"catalogue {load.Status}";
         }
+        var menu = known?.Menu ?? AreaFollowerMenuTexts.Load(stack);
         var portraits = new Dictionary<int, AreaPortraitFile>(known?.Portraits ?? new Dictionary<int, AreaPortraitFile>());
         foreach (var (id, file) in AreaPortraits.Load(stack, catalogue, wanted, AreaFollowerFrameLayout.PortraitSize)) portraits[id] = file;
         var failed = art.Values.Count(load => load.Status != AreaInterfaceArtStatus.Ready);
         return new(art, catalogue, portraits,
-            $"art {art.Count - failed}/{art.Count} read; {catalogueDetail}; portraits {portraits.Values.Count(p => p.Status == AreaPortraitStatus.Ready)}/{portraits.Count} read");
+            $"art {art.Count - failed}/{art.Count} read; {catalogueDetail}; portraits {portraits.Values.Count(p => p.Status == AreaPortraitStatus.Ready)}/{portraits.Count} read; menu {menu.Detail}", menu);
     }
 
     // The game folder did not open: the wanted ids are recorded as unread, so a later load does not try them again.
