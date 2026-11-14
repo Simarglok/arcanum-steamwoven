@@ -1,4 +1,5 @@
 using Arcanum.Data.Hd;
+using Arcanum.Simulation.Party;
 using Arcanum.TerrainViewer.Core;
 using Arcanum.World;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -1197,5 +1198,175 @@ public sealed class InterfaceChromeTests
                 CollectionAssert.AreEqual(frames[1], InterfaceChromeRenderer.Render(Recipe(file), DialogButtonWidth, DialogButtonHeight, legacy, [], 1, scale), $"{file}: deterministic at {scale}");
             }
         }
+    }
+
+    // ARC-UI-1817: the follower panel's frames (synthetic stand-ins of the frames' sizes and holes; no game art).
+    private static readonly (string File, int W, int H)[] FollowerFiles =
+    [
+        ("FollowerFrame.ART", 40, 49), ("FollowerArrow_DWN.ART", 67, 13), ("FollowerArrow_UP.ART", 67, 13), ("Follow_Scroll_up.ART", 33, 13), ("Follow_Scroll_up_OFF.ART", 33, 13),
+        ("Follow_Scroll_dwn.ART", 34, 13), ("Follow_Scroll_dwn_OFF.ART", 34, 13), ("FollwerComandMenu.ART", InterfaceChromeRecipes.MenuWidth, InterfaceChromeRecipes.MenuHeight),
+    ];
+
+    // The portrait frame: opaque iron with the 32 x 32 portrait hole at (4, 4) transparent.
+    private static byte[] FollowerFrameLegacy(bool hole = true)
+    {
+        var rgba = Flat(40, 49, (60, 55, 60));
+        if (!hole) return rgba;
+        for (var y = 4; y < 36; y++)
+        for (var x = 4; x < 36; x++) rgba[(y * 40 + x) * 4 + 3] = 0;
+        return rgba;
+    }
+
+    // An arrow strip: grey plate, a green triangle in the middle and a bronze rivet at each end.
+    private static byte[] FollowerStrip(int w, int h)
+    {
+        var rgba = Flat(w, h, (110, 106, 110));
+        void Set(int x, int y, (byte R, byte G, byte B) c) { var i = (y * w + x) * 4; (rgba[i], rgba[i + 1], rgba[i + 2]) = c; }
+        for (var y = 4; y < 9; y++)
+        for (var x = w / 2 - (y - 3); x <= w / 2 + (y - 3); x++) Set(x, y, ((x + y) % 2 == 0 ? (byte)40 : (byte)20, (byte)200, (byte)40));
+        if (w > 40) foreach (var x in new[] { 5, w - 6 }) for (var y = 4; y < 9; y++) for (var dx = -2; dx <= 2; dx++) Set(x + dx, y, (150, 100, 40));
+        return rgba;
+    }
+
+    [TestMethod]
+    public void The_follower_panel_frames_have_recipes_laid_out_by_the_panel_layout_and_the_bars_stay_art()
+    {
+        var names = InterfaceChromeRecipes.All.Select(r => r.File).ToArray();
+        CollectionAssert.AllItemsAreUnique(names);
+        CollectionAssert.IsSubsetOf(FollowerFiles.Select(f => f.File).ToArray(), names);
+        foreach (var (file, w, h) in FollowerFiles)
+        {
+            var recipe = Recipe(file);
+            Assert.AreEqual(ChromeKind.Panel, recipe.Kind, file);
+            // Every recipe part lies inside its frame.
+            foreach (var part in recipe.Parts)
+            {
+                var (x, y, pw, ph) = part switch
+                {
+                    ChromePlate p => (p.X, p.Y, p.Width, p.Height), ChromeSunk p => (p.X, p.Y, p.Width, p.Height), ChromeKeep p => (p.X, p.Y, p.Width, p.Height),
+                    ChromeMarks p => (p.X, p.Y, p.Width, p.Height), _ => (0, 0, 0, 0),
+                };
+                Assert.IsTrue(x >= 0 && y >= 0 && x + pw <= w && y + ph <= h, $"{file}: {part}");
+            }
+        }
+        // The frame's size is the layout's, the strips' and scroll buttons' are the rectangles of the panel's rules, the menu's is the art 826's.
+        Assert.AreEqual((AreaFollowerFrameLayout.Width, AreaFollowerFrameLayout.Height), (40, 49));
+        Assert.AreEqual((AreaFollowerPanelRules.ToggleRect.Width, AreaFollowerPanelRules.ToggleRect.Height), (67, 13));
+        Assert.AreEqual((AreaFollowerPanelRules.UpRect.Width, AreaFollowerPanelRules.DownRect.Width), (33, 34));
+        // The bars (504, 505, 616) are pictures: no recipe.
+        foreach (var file in new[] { "FollowerFrame_FT.ART", "FollowerFrame_HP.ART", "FollowerFrame_PO.ART" })
+            CollectionAssert.DoesNotContain(names.Select(n => n.ToLowerInvariant()).ToArray(), file.ToLowerInvariant());
+        // The two bar channels hold the bars (34 x 3 at (3, 39) and (3, 44)): the black pit covers both, and no iron plate lies over them.
+        var frame = Recipe("FollowerFrame.ART");
+        Assert.AreEqual(ChromeHoles.None, frame.Holes, "the original's portrait frame has no rim around its hole");
+        var pit = frame.Parts.OfType<ChromePlate>().Single(p => p.Material == ChromeMaterial.Pit && p.Y >= 37);
+        // The black line around the portrait hole (32 x 32 at (4, 4)) is one unit wide and lies clear of the bars.
+        var ring = frame.Parts.OfType<ChromePlate>().Single(p => p.Material == ChromeMaterial.Pit && p.Y < 37);
+        Assert.AreEqual((AreaFollowerFrameLayout.ImageX - 1, AreaFollowerFrameLayout.ImageY - 1, AreaFollowerFrameLayout.PortraitSize + 2, AreaFollowerFrameLayout.PortraitSize + 2), (ring.X, ring.Y, ring.Width, ring.Height));
+        Assert.IsTrue(ring.Y + ring.Height <= AreaFollowerFrameLayout.HealthBarY, "the ring stays above the bars");
+        foreach (var barY in new[] { AreaFollowerFrameLayout.HealthBarY, AreaFollowerFrameLayout.FatigueBarY })
+            Assert.IsTrue(pit.X <= AreaFollowerFrameLayout.BarX && pit.X + pit.Width >= AreaFollowerFrameLayout.BarX + AreaFollowerFrameLayout.BarWidth
+                && pit.Y <= barY && pit.Y + pit.Height >= barY + AreaFollowerFrameLayout.BarHeight, $"the pit holds the bar at y {barY}");
+        foreach (var plate in frame.Parts.OfType<ChromePlate>().Where(p => p.Material == ChromeMaterial.Iron && p.Height < AreaFollowerFrameLayout.Height))
+            foreach (var barY in new[] { AreaFollowerFrameLayout.HealthBarY, AreaFollowerFrameLayout.FatigueBarY })
+                Assert.IsTrue(plate.Y + plate.Height <= barY || plate.Y >= barY + AreaFollowerFrameLayout.BarHeight, $"a plate cuts into the bar at y {barY}");
+        // The kept marks of a strip or scroll button lie inside its plate (they never reach the plate's bevel rows); the menu's dark bands sit under the odd rows (y 3 + 18 row, 118 x 15 at x 10).
+        foreach (var file in FollowerFiles.Select(f => f.File).Where(f => f.StartsWith("Follow", StringComparison.Ordinal) && f != "FollowerFrame.ART" && f != "FollwerComandMenu.ART"))
+        {
+            var plate = Recipe(file).Parts.OfType<ChromePlate>().Single();
+            var marks = Recipe(file).Parts.OfType<ChromeMarks>().Single();
+            Assert.IsTrue(marks.X > plate.X && marks.Y > plate.Y && marks.X + marks.Width < plate.X + plate.Width && marks.Y + marks.Height < plate.Y + plate.Height, file);
+        }
+        var bands = Recipe("FollwerComandMenu.ART").Parts.OfType<ChromePlate>().Where(p => p.Material == ChromeMaterial.Dark).ToArray();
+        Assert.AreEqual(4, bands.Length);
+        for (var k = 0; k < 4; k++)
+        {
+            var (rx, ry, rw, rh) = AreaFollowerPanelRules.MenuRow((FollowerMenuItem)(2 * k + 1));
+            Assert.IsTrue(bands[k].X <= rx && bands[k].X + bands[k].Width >= rx + rw && bands[k].Y <= ry && bands[k].Y + bands[k].Height >= ry + rh, $"band {k} holds row {2 * k + 1}");
+        }
+    }
+
+    [TestMethod]
+    public void The_follower_frames_paint_in_bounds_deterministically_at_whole_and_fractional_scales()
+    {
+        foreach (var (file, w, h) in FollowerFiles)
+        {
+            var legacy = file == "FollowerFrame.ART" ? FollowerFrameLegacy() : file.StartsWith("FollowerArrow", StringComparison.Ordinal) || file.StartsWith("Follow_Scroll", StringComparison.Ordinal) ? FollowerStrip(w, h) : Flat(w, h, (50, 50, 50));
+            var recipe = Recipe(file);
+            foreach (var scale in new[] { 1.0, 1.345, 2.0, 3.0 })
+            {
+                var a = InterfaceChromeRenderer.Render(recipe, w, h, legacy, [], 0, scale);
+                var (pw, ph) = InterfaceChromeRenderer.PixelSize(w, h, scale);
+                Assert.AreEqual(pw * ph * 4, a.Length, $"{file} at {scale}");
+                CollectionAssert.AreEqual(a, InterfaceChromeRenderer.Render(recipe, w, h, legacy, [], 0, scale), $"{file} deterministic at {scale}");
+                // The silhouette is the Legacy one: opaque where it is opaque, the portrait hole transparent.
+                if (file == "FollowerFrame.ART")
+                {
+                    Assert.AreEqual(0, Pixel(a, pw, (int)(20 * scale), (int)(20 * scale)).A, $"the portrait hole stays clear at {scale}");
+                    Assert.AreEqual(255, Pixel(a, pw, (int)(1 * scale), (int)(20 * scale)).A, $"the border is opaque at {scale}");
+                }
+                else for (var i = 3; i < a.Length; i += 4) Assert.AreEqual(255, a[i], $"{file} at {scale}");
+            }
+        }
+    }
+
+    [TestMethod]
+    public void The_follower_frame_leaves_the_portrait_hole_plain_and_sinks_the_bar_channels()
+    {
+        const int Scale = 3;
+        var with = InterfaceChromeRenderer.Render(Recipe("FollowerFrame.ART"), 40, 49, FollowerFrameLegacy(), [], 0, Scale);
+        var without = InterfaceChromeRenderer.Render(Recipe("FollowerFrame.ART"), 40, 49, FollowerFrameLegacy(hole: false), [], 0, Scale);
+        // The border pixel next to the hole is the frame's own iron, with no rim of the hole.
+        Assert.AreEqual(Pixel(without, 120, 4 * Scale - 2, 20 * Scale), Pixel(with, 120, 4 * Scale - 2, 20 * Scale), "the portrait hole has no rim");
+        // A bar channel is a dark pit: darker than the iron border above the hole.
+        int Lum((int R, int G, int B, int A) c) => c.R + c.G + c.B;
+        Assert.IsTrue(Lum(Pixel(with, 120, 10 * Scale, 40 * Scale)) * 2 < Lum(Pixel(with, 120, 20 * Scale, 1 * Scale)) + 1, "the bar channel is dark");
+        Assert.IsTrue(Lum(Pixel(with, 120, 10 * Scale, 45 * Scale)) * 2 < Lum(Pixel(with, 120, 20 * Scale, 1 * Scale)) + 1, "the second channel is dark");
+    }
+
+    [TestMethod]
+    public void A_follower_button_keeps_the_coloured_marks_of_the_art_and_not_its_grey_grain()
+    {
+        foreach (var (file, w, h) in FollowerFiles.Where(f => f.File.StartsWith("FollowerArrow", StringComparison.Ordinal) || f.File.StartsWith("Follow_Scroll", StringComparison.Ordinal)))
+        {
+            var legacy = FollowerStrip(w, h);
+            // Grey grain on the plate: a few bright and dark pixels that must not carry over.
+            for (var x = 1; x < w - 1; x += 3) { var i = (3 * w + x) * 4; (legacy[i], legacy[i + 1], legacy[i + 2]) = (200, 198, 200); }
+            foreach (var scale in new[] { 1.0, 2.0, 3.0 })
+            {
+                var painted = InterfaceChromeRenderer.Render(Recipe(file), w, h, legacy, [], 0, scale);
+                var pw = InterfaceChromeRenderer.PixelSize(w, h, scale).Width;
+                // The triangle's centre pixel (a green one in the Legacy frame) is the Legacy green.
+                var centre = Pixel(painted, pw, (int)((w / 2 + 0.5) * scale), (int)(7.5 * scale));
+                Assert.IsTrue(centre.G > 150 && centre.R < 80, $"{file} at {scale}: the triangle is kept ({centre})");
+                // The grain pixel at (4, 3) is the generated iron, not the Legacy bright grey.
+                foreach (var gx in new[] { 4, 28 }) // the first lies in the marks' rectangle of a scroll button, the second in that of every button
+                {
+                    var grain = Pixel(painted, pw, (int)((gx + 0.5) * scale), (int)(3.5 * scale));
+                    Assert.AreNotEqual((200, 198, 200), (grain.R, grain.G, grain.B), $"{file} at {scale}: the grey grain at x {gx} stays out");
+                }
+            }
+        }
+        // The rivets of a strip are generated brass, not the Legacy bronze (150, 100, 40), and the plate between the rivet and the triangle is the generated iron (grey).
+        var strip = InterfaceChromeRenderer.Render(Recipe("FollowerArrow_UP.ART"), 67, 13, FollowerStrip(67, 13), [], 0, 2);
+        var rivet = Pixel(strip, 134, 5 * 2 + 1, 6 * 2);
+        Assert.IsTrue(rivet.R > rivet.B + 60, $"the rivet is brass: {rivet}");
+        Assert.AreNotEqual((150, 100, 40), (rivet.R, rivet.G, rivet.B), "the rivet is generated, not kept");
+        var plate = Pixel(strip, 134, 14 * 2, 6 * 2);
+        Assert.IsTrue(Math.Abs(plate.R - plate.B) < 40, $"the plate is grey iron: {plate}");
+    }
+
+    [TestMethod]
+    public void The_follower_menu_is_a_slab_with_dark_bands_under_the_odd_rows()
+    {
+        const int Scale = 2;
+        var menu = InterfaceChromeRenderer.Render(Recipe("FollwerComandMenu.ART"), InterfaceChromeRecipes.MenuWidth, InterfaceChromeRecipes.MenuHeight,
+            Flat(InterfaceChromeRecipes.MenuWidth, InterfaceChromeRecipes.MenuHeight, (40, 40, 40)), [], 0, Scale);
+        var width = InterfaceChromeRecipes.MenuWidth * Scale;
+        int Lum((int R, int G, int B, int A) c) => c.R + c.G + c.B;
+        // The middle of a sunk band (the row Attack, y 21 to 35) is darker than the middle of the row above it (Walk, y 3 to 17).
+        var (_, attackY, _, attackH) = AreaFollowerPanelRules.MenuRow(FollowerMenuItem.Attack);
+        var (_, walkY, _, walkH) = AreaFollowerPanelRules.MenuRow(FollowerMenuItem.Walk);
+        Assert.IsTrue(Lum(Pixel(menu, width, 60 * Scale, (attackY + attackH / 2) * Scale)) < Lum(Pixel(menu, width, 60 * Scale, (walkY + walkH / 2) * Scale)), "the odd rows sit in a dark band");
     }
 }

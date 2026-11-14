@@ -139,6 +139,24 @@ public sealed class AreaHeartbeatScriptTests
             Write("scr/00809attacks.scr", Program(Do(new(ScrCatalogue.Action.Attack, (Player, 0), (Attachee, -1))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
             Write("scr/00810attacked.scr", Program(Do(new(ScrCatalogue.Action.Attack, (Attachee, -1), (Player, 0))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
             Write("scr/00811walkattack.scr", Program(Do(new(ScrCatalogue.Action.SetGlobalFlag, N(ChosenFlag))), Do(new(ScrCatalogue.Action.Attack, (Player, 0), (Attachee, -1))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
+            // ARC-SCRIPT-1842 (#1322, TI6): 812 is the shape of the installed NPC-leader scripts (2201 at the first heartbeat, 30117, 30119, 30124 and 30126 at the heartbeat): for everyone in the vicinity, the attachee is made to follow a looped NPC
+            // (force 1; the installed ones pick it by name, here by type 16). The attachee itself is looped too, and the session refuses it as its own leader without stopping the run. 813 makes the attachee follow the player.
+            Write("scr/00812npcleader.scr", Program(
+                Do(new(ScrCatalogue.Action.LoopFor, (Everyone, 0))),
+                Do(new(ScrCatalogue.Action.GetObjectType, (Looped, 0), (Local, 0))),
+                If(new(ScrCatalogue.Condition.Equal, (Local, 0), N(16)), new(ScrCatalogue.Action.MakeFollow, (Attachee, -1), (Looped, 0)), new(ScrCatalogue.Action.DoNothing)),
+                Do(new(ScrCatalogue.Action.LoopEnd)),
+                Do(new(ScrCatalogue.Action.ReturnRunDefault))));
+            // 814 is the shape of the dying scripts 30118 and 30127: for everyone in the vicinity, the looped object casts spell 58 free (118) at the dying attachee; the installed ones pick the caster by name, here by the following condition (18):
+            // the attachee follows the looped object.
+            Write("scr/00814leadercast.scr", Program(
+                Do(new(ScrCatalogue.Action.LoopFor, (Everyone, 0))),
+                If(new(ScrCatalogue.Condition.FollowingPc, (Attachee, -1), (Looped, 0)), new(ScrCatalogue.Action.CastFreeSpell, (Looped, 0), N(58), (Attachee, -1)), new(ScrCatalogue.Action.DoNothing)),
+                Do(new(ScrCatalogue.Action.LoopEnd)),
+                Do(new(ScrCatalogue.Action.ReturnRunDefault))));
+            // 815 destroys its attachee (a dying script's destroy, 68).
+            Write("scr/00815destroy.scr", Program(Do(new(ScrCatalogue.Action.Destroy, (Attachee, -1))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
+            Write("scr/00813followpc.scr", Program(Do(new(ScrCatalogue.Action.MakeFollow, (Attachee, -1), (Player, 0))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
             Write("scr/00808stoppc.scr", Program(Do(new(ScrCatalogue.Action.StopSpellOnObject, N(12), (Player, 0))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
             // ARC-SCRIPT-1360: 806 has the shape of 2787, the heartbeat of the NPC in the first building: PC quest 1158 unknown: run the default; else switch the attachee on (toggle state) and remove the script.
             Write("scr/00806quest.scr", Program(
@@ -572,6 +590,107 @@ public sealed class AreaHeartbeatScriptTests
             host.ApplyScriptAttack(request);
             host.ApplyScriptAttack(new(ScrObjectStateChange.Attack, home, Other: Ref(1)));
             CollectionAssert.AreEqual(new[] { (home.Code, Entity(1)), (Entity(1), home.Code) }, asked);
+        });
+    }
+
+    [TestMethod]
+    public void A_heartbeat_make_follow_joins_the_attachee_under_a_looped_npc_and_the_script_leader_query_names_it()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            // ARC-SCRIPT-1842 (#1322): the attachee (1) and two NPCs near it (2, 3); the PC stands near too but is no NPC. The loop joins the attachee under 2, then under 3 (leaving 2): one leader at a time.
+            var follower = Row(1, 16, 812);
+            var first = Row(2, 16, 0);
+            var second = Row(3, 16, 0);
+            var host = HostAt(session, content, null, new CellCoord(12, 20), follower, first, second);
+            var run = host.RunHeartbeat(follower, ScrPoint.Heartbeat, session.Rules.Scripts);
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, run.Outcome, run.Detail + ": the self-join refusal does not stop the applied run");
+            Assert.AreEqual(ScrOutcome.RunDefault, run.Run!.Outcome);
+            Assert.AreEqual(Entity(3), session.QueryLeader(Entity(1)));
+            CollectionAssert.AreEqual(new[] { Entity(1) }, session.QueryFollowers(Entity(3)).ToArray());
+            Assert.AreEqual(0, session.QueryFollowers(Entity(2)).Count, "left with the second join");
+            Assert.IsNull(session.QueryPcLeader(Entity(1)), "no PC at the top of the chain");
+            Assert.AreEqual(0, session.QueryParty().Followers.Count, "the hero's party is untouched");
+            // 0x45DE00 through the script host: the NPC leader on the critter's map; the leader itself has none, nor has the PC.
+            Assert.AreEqual(Ref(3), host.Leader(Ref(1)));
+            Assert.IsNull(host.Leader(Ref(3)));
+            Assert.IsNull(host.Leader(new ScrObjectRef(1, AreaScriptHost.PcCode)));
+            // The same join again changes nothing.
+            var version = session.Version;
+            Assert.IsTrue(host.ApplyMakeFollow(new(ScrObjectStateChange.MakeFollow, Ref(1), Other: Ref(3))));
+            Assert.AreEqual(version, session.Version);
+            // 813: the attachee is made to follow the PC; it leaves the NPC leader's array and the leader query answers the PC.
+            var toPc = Row(1, 16, 813);
+            var pcHost = HostAt(session, content, null, new CellCoord(12, 20), toPc, first, second);
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, pcHost.RunHeartbeat(toPc, ScrPoint.Heartbeat, session.Rules.Scripts).Outcome);
+            Assert.AreEqual(0, session.QueryFollowers(Entity(3)).Count);
+            Assert.AreEqual(AreaScriptHost.PcCode, session.QueryLeader(Entity(1)));
+            Assert.AreEqual(new ScrObjectRef(1, AreaScriptHost.PcCode), pcHost.Leader(Ref(1)));
+        });
+    }
+
+    [TestMethod]
+    public void A_dying_script_s_following_condition_finds_the_npc_leader_and_its_free_cast_goes_to_the_ai_host_with_that_caster()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            // ARC-SCRIPT-1842 (#1322): the dying follower (1) of the NPC leader (2) beside another NPC (3): only the leader casts, at the attachee (30118's and 30127's Create Undead by their leader).
+            var dying = Row(1, 16, 814, point: ScrPoint.Dying);
+            Assert.AreEqual(GameSessionDisposition.Changed, session.ForceJoinLeader(session.Version, Entity(1), Entity(2)).Disposition);
+            var asked = new List<(string? Caster, string Target, int Spell, bool Free, bool Unresistable)>();
+            var host = new AreaUseScriptHost(session, 1, [dying, Row(2, 16, 0), Row(3, 16, 0)], [], content, new AreaScriptWorld(() => null, _ => false, _ => null, () => null,
+                ScriptCast: (caster, target, spell, free, unresistable) => { asked.Add((caster, target, spell, free, unresistable)); return "cast"; }));
+            var run = host.RunDying(Entity(1), null, session.Rules.Scripts);
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, run.Outcome, run.Detail);
+            CollectionAssert.AreEqual(new[] { ((string?)Entity(2), Entity(1), 58, true, false) }, asked);
+        });
+    }
+
+    [TestMethod]
+    public void A_script_destroy_of_an_npc_that_leads_or_follows_an_npc_is_refused_whole()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            // ARC-SCRIPT-1842: the destroy writes a map change only and never reaches the session's unlink (0x45E180), so a linked NPC is left as it is.
+            Assert.AreEqual(GameSessionDisposition.Changed, session.ForceJoinLeader(session.Version, Entity(2), Entity(1)).Disposition);
+            var host = new AreaUseScriptHost(session, 1, [Row(1, 16, 815, point: ScrPoint.Dying), Row(2, 16, 815, point: ScrPoint.Dying), Row(3, 16, 815, point: ScrPoint.Dying)], [], content,
+                new AreaScriptWorld(() => null, _ => false, _ => null, () => null));
+            foreach (var linked in new[] { 1, 2 })
+            {
+                var run = host.RunDying(Entity(linked), null, session.Rules.Scripts);
+                Assert.AreEqual(AreaScriptedUseOutcome.EffectsRejected, run.Outcome, linked.ToString());
+                StringAssert.Contains(run.Detail, "leads or follows an NPC");
+            }
+            var free = host.RunDying(Entity(3), null, session.Rules.Scripts);
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, free.Outcome, free.Detail);
+        });
+    }
+
+    [TestMethod]
+    public void A_make_follow_of_or_under_an_npc_that_stands_elsewhere_is_refused_whole_and_the_pc_as_the_follower_does_nothing()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var host = Host(session, content, null, Row(1, 16, 0), Row(2, 16, 0));
+            var request = new ScrObjectStateRequest(ScrObjectStateChange.MakeFollow, Ref(2), Other: Ref(1));
+            Assert.IsNull(host.MakeFollowRefusal(request));
+            Assert.IsNull(host.MakeFollowRefusal(request with { Other = new ScrObjectRef(1, AreaScriptHost.PcCode) }));
+            Assert.IsNull(host.MakeFollowRefusal(request with { Object = new ScrObjectRef(1, AreaScriptHost.PcCode) }), "the PC as the follower: the join does nothing");
+            StringAssert.Contains(host.MakeFollowRefusal(request with { Object = new ScrObjectRef(2, "oid:away") })!, "only an NPC standing on the shown map follows");
+            StringAssert.Contains(host.MakeFollowRefusal(request with { Other = new ScrObjectRef(2, "oid:away") })!, "only the PC or an NPC standing on the shown map leads");
+            StringAssert.Contains(host.MakeFollowRefusal(request with { Other = null })!, "no leader");
+            var version = session.Version;
+            Assert.IsTrue(host.ApplyMakeFollow(request with { Object = new ScrObjectRef(1, AreaScriptHost.PcCode) }));
+            Assert.AreEqual(version, session.Version, "nothing for the PC");
+            // A cycle is refused by the session and the run goes on.
+            Assert.IsTrue(host.ApplyMakeFollow(request));
+            Assert.IsTrue(host.ApplyMakeFollow(request with { Object = Ref(1), Other = Ref(2) }));
+            Assert.AreEqual(Entity(1), session.QueryLeader(Entity(2)));
+            Assert.IsNull(session.QueryLeader(Entity(1)), "the cycle was not written");
         });
     }
 

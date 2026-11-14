@@ -253,6 +253,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     /// (21 heartbeats of point 19) loops over the scenery around its NPC and stops a script eye candy on each; the scenery focus was the one thing the set lacked for it (the host answers it as for a use click,
     /// <see cref="SceneryInVicinity"/>). The original's script executor (0x447220) has no per-point restriction, so a command the host can answer runs the same in a heartbeat; assign object only writes the run's own roles
     /// and variables, and float line reaches the viewer through the same <see cref="TakeFloats"/> as for a tile script. Get reaction (29) stays out: this host has no reaction answer (<see cref="IScrReactionQueries"/>).
+    /// ARC-SCRIPT-1842 (#1322): plus make follow (21) of <see cref="ScrAdmissionSet.S33"/>, which the heartbeat and dying scripts use to make an NPC follow another NPC (<see cref="MakeFollowRefusal"/>).
     /// </summary>
     public static ScrAdmissionSet HeartbeatAdmission { get; } = new("S2-area-heartbeat-state-kill-talk-world",
         ScrAdmissionSet.S2.Conditions.Concat([ScrCatalogue.Condition.FollowingPc, ScrCatalogue.Condition.IsNamed, ScrCatalogue.Condition.IsDead,
@@ -260,7 +261,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         ScrAdmissionSet.S2.Actions.Concat([ScrCatalogue.Action.ToggleState, ScrCatalogue.Action.Kill, ScrCatalogue.Action.LoopFor, ScrCatalogue.Action.LoopEnd, ScrCatalogue.Action.LoopBreak,
             ScrCatalogue.Action.GetObjectType, ScrCatalogue.Action.CallScriptEx, ScrCatalogue.Action.Dialog, ScrCatalogue.Action.CallScriptIn,
             ScrCatalogue.Action.DistanceBetween, ScrCatalogue.Action.GetLocation, ScrCatalogue.Action.SetFaction, ScrCatalogue.Action.WalkTo, ScrCatalogue.Action.RunTo,
-            ScrCatalogue.Action.HealFatigue, ScrCatalogue.Action.PerformAnimation, ScrCatalogue.Action.StealCoins, ScrCatalogue.Action.BecomeProne, ScrCatalogue.Action.GiveSpellMastery, ScrCatalogue.Action.Attack, ScrCatalogue.Action.AssignObject, ScrCatalogue.Action.FloatLine, .. CritterFieldWriteActions, .. ScrAdmissionSet.StoryActions, .. ScrAdmissionSet.NpcStateHostActions, .. ScrAdmissionSet.WorldObjectHostActions, .. CastActions, .. StopSpellActions, .. DamageActions, .. EyeCandyActions]),
+            ScrCatalogue.Action.HealFatigue, ScrCatalogue.Action.PerformAnimation, ScrCatalogue.Action.StealCoins, ScrCatalogue.Action.BecomeProne, ScrCatalogue.Action.GiveSpellMastery, ScrCatalogue.Action.Attack, ScrCatalogue.Action.MakeFollow, ScrCatalogue.Action.AssignObject, ScrCatalogue.Action.FloatLine, .. CritterFieldWriteActions, .. ScrAdmissionSet.StoryActions, .. ScrAdmissionSet.NpcStateHostActions, .. ScrAdmissionSet.WorldObjectHostActions, .. CastActions, .. StopSpellActions, .. DamageActions, .. EyeCandyActions]),
         ScrAdmissionSet.S2.ValueKinds.Concat(ScrAdmissionSet.StoreValueKinds),
         ScrAdmissionSet.S3.FocusKinds.Concat([ScrFocusKind.CurrentLoopedObject, ScrFocusKind.EveryoneInVicinity, ScrFocusKind.AnyoneInVicinity, ScrFocusKind.EverySceneryInVicinity, ScrFocusKind.LocalObject]));
 
@@ -652,7 +653,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     }
 
     /// <summary>
-    /// ARC-SCRIPT-1771 (CS12, exe read 2026-11-13: condition 11 at 0x4451B0 → 0x45F460): for the PC the PC itself, else the object's leader (the hero for a follower of the hero, the only leader the session holds; none: false). True when one of the leader's followers (the session's party)
+    /// ARC-SCRIPT-1771 (CS12, exe read 2026-11-13: condition 11 at 0x4451B0 → 0x45F460): for the PC the PC itself, else the object's leader (0x45DE00: the hero, or since ARC-SCRIPT-1842 an NPC leader; none: false). True when one of the leader's followers (the hero's party, or the NPC leader's follower array)
     /// is summoned (spell flag 0x4000), has no NPC flag 0x8000 and no animal critter flag and has neither object flag 0x102; a follower with 0x102 only logs a warning and the walk goes on. A follower this host cannot read (it has no row on the shown map) is unknown and the answer is null unless
     /// another follower decides it. The followers of a follower (0x441260 recurses) are not held by the session and are not walked.
     /// </summary>
@@ -662,12 +663,14 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         else
         {
             if (Row(obj) is not { } row) return null;
-            if (row.Type != NpcType || Leader(obj) is null) return false;
+            if (row.Type != NpcType || _session.QueryLeader(obj.Code) is null) return false;
         }
+        var leader = IsPc(obj) ? AreaScriptHost.PcCode : _session.QueryLeader(obj.Code)!;
         var unknown = false;
-        foreach (var follower in _session.QueryParty().Followers)
+        var followers = leader == AreaScriptHost.PcCode ? _session.QueryParty().Followers.Select(f => f.Entity).ToList() : _session.QueryFollowers(leader);
+        foreach (var follower in followers)
         {
-            var who = new ScrObjectRef(_shownMap, follower.Entity);
+            var who = new ScrObjectRef(_shownMap, follower);
             if (SpellFlags(who) is not { } spell || Row(who) is not { } followerRow) { unknown = true; continue; }
             if ((unchecked((uint)spell) & SummonedSpellFlag) == 0) continue;
             if (Arcanum.Data.Combat.CombatFieldReader.Read(followerRow).Fields?.Npc is not { } npc) { unknown = true; continue; }
@@ -985,7 +988,16 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     public bool IsTrapObject(ScrObjectRef attachee) => false;
     public ScrObjectRef? Player() => Pc;
     public bool IsPc(ScrObjectRef critter) => critter.Code == AreaScriptHost.PcCode;
-    public ScrObjectRef? Leader(ScrObjectRef critter) => !IsPc(critter) && _session.QueryCompanion(critter.Code).LedByPc ? Pc : null;
+    /// <summary>ARC-SCRIPT-1842 (0x45DE00): the critter's leader as the session holds it: the PC for a follower or waiting NPC of the hero, the NPC leader of a follower of an NPC (named on the critter's map), else null.</summary>
+    public ScrObjectRef? Leader(ScrObjectRef critter) => IsPc(critter) ? null : _session.QueryLeader(critter.Code) switch
+    {
+        null => null,
+        AreaScriptHost.PcCode => Pc,
+        var leader => new ScrObjectRef(critter.Map, leader),
+    };
+
+    // The hero's side: the PC's follower or waiting NPC (the host's own reads that mean the hero's party, not the script leader query).
+    private bool FollowsPc(ScrObjectRef critter) => !IsPc(critter) && _session.QueryCompanion(critter.Code).LedByPc;
     public bool IsJilted(ScrObjectRef critter) => !IsPc(critter) && _session.QueryCompanion(critter.Code).Jilted;
 
     // SG1: the PC's own entry (botched reads as 6); any other object the quest's global state. A number outside the quest
@@ -1787,6 +1799,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
             }
             if (request.Change is ScrObjectStateChange.Damage or ScrObjectStateChange.DamageUnresistable) { ApplyScriptDamage(request); continue; }
             if (request.Change == ScrObjectStateChange.Attack) { ApplyScriptAttack(request); continue; }
+            if (request.Change == ScrObjectStateChange.MakeFollow) { if (!ApplyMakeFollow(request)) return false; continue; }
             if (request.Change == ScrObjectStateChange.GiveSpellMastery)
             {
                 // SC5: the PC, or an NPC of the shown map (ObjectStateRefusal checked its sheet); any other object does nothing in the original. The spell-book rule decides, the run goes on.
@@ -1841,7 +1854,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
             }
             if (request.Change == ScrObjectStateChange.Disband)
             {
-                // NS1: a follower or waiting NPC of the PC is let go (the session's leave with the follow check skipped); a free object, the PC and any object that is no party member do nothing. The AI host sees the leave on its next tick.
+                // NS1: a follower or waiting NPC of the PC, or (ARC-SCRIPT-1842) a follower of an NPC, is let go (the session's leave with the follow check skipped); a free object, the PC and any object that follows no one do nothing. The AI host sees the leave on its next tick.
                 if (IsPc(request.Object)) continue;
                 var left = _session.LeaveParty(_session.Version, request.Object.Code, new PartyLeave(Force: true));
                 if (left.Disposition == GameSessionDisposition.Rejected && left.Failure != GameSessionFailure.InvalidCompanion) return false;
@@ -2066,6 +2079,33 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         if (request.Other is { } attacker && (IsPc(request.Object) || StandsHere(request.Object))) LastAttack = _world!.ScriptAttack!(attacker.Code, request.Object.Code);
     }
 
+    /// <summary>
+    /// ARC-SCRIPT-1842 (#1322, TI6): why one make follow (21) request of a run cannot be applied here, null when it can. The original's join (0x45DE90, force 1) tests only that the follower is an NPC, and the leader may be any object; here the follower is
+    /// the PC (the join does nothing for it), or an NPC standing on the shown map (a carried follower by identity, <see cref="StandsHere"/>), and the leader the PC or such an NPC. Not modelled: an NPC of another map that no companion stands for, and a leader
+    /// that is neither (an object of the shown map that is no critter: the session would keep it as a leader no host describes).
+    /// </summary>
+    public string? MakeFollowRefusal(ScrObjectStateRequest request)
+    {
+        if (request.Other is not { } leader) return "make follow has no leader";
+        if (IsPc(request.Object)) return null;
+        if (!StandsHere(request.Object)) return $"make follow of {request.Object.Code} is not modelled (only an NPC standing on the shown map follows)";
+        if (!IsPc(leader) && !StandsHere(leader)) return $"make follow under {leader.Code} is not modelled (only the PC or an NPC standing on the shown map leads)";
+        return null;
+    }
+
+    /// <summary>
+    /// ARC-SCRIPT-1842 (#1322, TI6): one make follow (21) request of a run, applied (<see cref="MakeFollowRefusal"/> said it can be): the session's forced join under the leader (<see cref="GameSessionOwner.ForceJoinLeader"/>, 0x45DE90 with force 1): the
+    /// follower leaves any leader it had, the hero's party or an NPC's array, and joins the leader's array at its end. The PC as the follower does nothing (the original's NPC test). A join the session refuses as a follower of itself or a cycle of leaders
+    /// (a project choice: the original would write the cycle), or over the session's bounds (the hero's companion limit, 256 followers of an NPC, the written-flags bound: the original's forced join has no limit), joins nothing and leaves
+    /// the run going on; any other refusal (a stale version) stops it. The AI host sees the new leader on its next tick.
+    /// </summary>
+    public bool ApplyMakeFollow(ScrObjectStateRequest request)
+    {
+        if (IsPc(request.Object) || request.Other is not { } leader) return true;
+        var joined = _session.ForceJoinLeader(_session.Version, request.Object.Code, IsPc(leader) ? AreaScriptHost.PcCode : leader.Code);
+        return joined.Disposition != GameSessionDisposition.Rejected || joined.Failure is GameSessionFailure.InvalidCompanion or GameSessionFailure.BudgetExceeded;
+    }
+
     /// <summary>ARC-SCRIPT-1168: whether the world gives the script cast (<see cref="ApplyScriptCast"/>) this host applies; the dialog host asks before it applies anything, so a run it cannot finish is refused whole.</summary>
     public bool CanApplyScriptCast => _world?.ScriptCast is not null;
 
@@ -2285,7 +2325,10 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
                     return $"destroy of {request.Object.Code} is not modelled (only an NPC of the shown map)";
                 // TD2: one destroyed in its map data, or by an earlier run, is left as it is.
                 if (AlreadyDestroyed(request.Object)) continue;
-                if (Leader(request.Object) is not null) return $"destroy of {request.Object.Code}, a follower of the PC, is not modelled";
+                if (FollowsPc(request.Object)) return $"destroy of {request.Object.Code}, a follower of the PC, is not modelled";
+                // ARC-SCRIPT-1842: the map change does not reach the session's destroy (which unlinks, 0x45E180), so a leader or follower of an NPC is left as it is.
+                if (_session.QueryLeader(request.Object.Code) is not null || _session.QueryFollowers(request.Object.Code).Count > 0)
+                    return $"destroy of {request.Object.Code}, which leads or follows an NPC, is not modelled";
                 if (LoadedSlot(npc, ScrPoint.Destroy) is { Script: not 0 } own) return $"destroy of {request.Object.Code} runs its destroy script {own.Script}, which is not modelled";
                 continue;
             }
@@ -2310,6 +2353,11 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
             {
                 if (_world?.ScriptAttack is null) return "attack needs the AI host";
                 if (AttackRefusal(request) is { } why) return why;
+                continue;
+            }
+            if (request.Change == ScrObjectStateChange.MakeFollow)
+            {
+                if (MakeFollowRefusal(request) is { } why) return why;
                 continue;
             }
             // ARC-MAGIC-030 (SC5): give spell mastery acts on the PC and on an NPC of the shown map whose sheet its map data gives; a PC or NPC row of another map, or an object of no loaded
@@ -2480,7 +2528,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     // object an object.
     private DropOwner OwnerOf(ScrObjectRef near)
     {
-        if (IsPc(near) || Leader(near) is not null) return DropOwner.PcSide;
+        if (IsPc(near) || FollowsPc(near)) return DropOwner.PcSide;
         return Row(near) is { Type: 15 or 16 } ? DropOwner.Npc : DropOwner.Object;
     }
 
