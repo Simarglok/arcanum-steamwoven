@@ -135,7 +135,7 @@ while an NPC leads it.
   array. The session writes it as the follower's NPC link kept with the wait flag on its free record (no schema step; saved as such, the
   timer with it): `QueryLeader` and `QueryPcLeader` still answer the leader and the chain, `QueryFollowers` leaves it out, the AI host's tell
   followers and catch-up gate (the waiting NPC stays put) read it so. The timer is the one of the wait index alone, as a leaderless NPC's (the original reads the leader's charisma and
-  Persuasion; every caller's wait facts are the hero's, and an NPC leader's own stats are #2117) and runs out as the hero's does, but the reaction change is written
+  Persuasion; every caller's wait facts are the hero's and the session holds no NPC's stats) and runs out as the hero's does, but the reaction change is written
   only toward a player character: the follower is freed, jilted and leaderless, no reaction change. A forced unwait (the death's) joins the
   leader again, appended at the end of its array, forced, the leader's Tempus Fugit flag copied; an unforced unwait needs the leader's stats
   and changes nothing. A join under an NPC leader of a free NPC that carries the wait flag clears the flag (the original keeps it, in the
@@ -144,11 +144,14 @@ while an NPC leads it.
 - The AI host tells followers of any leader (0x4A9B80, ARC-WORLD-2116, NLD7): the leader's array the host runs, each through the follower
   rule; an NPC leader's follower complains in words alone (the −5 reaction is written only toward a player character).
 
-**NOT READY:** the concealment of NPC-led followers; an NPC leader's own charisma
-for the danger setter's extraordinary-charisma test (0x4AABE0 reads the leader's; the host reads only the hero's) and for its
-followers' unforced leave; the followers of a hero's companion travelling with the hero (the move list's followers of followers, GR14:
+**An NPC leader's charisma** (ARC-WORLD-2117, read in the executable): the danger setter 0x4AABE0 reads the DIRECT leader (0x45DE00, never the chain, a PC or an NPC) and lowers FLEE or SURRENDER to COMBAT_FOCUS when 0x4B0EE0
+passes (the leader's type is PC or NPC and its stat 7 through the getter 0x4B0490 is 20 or more). The host (`AreaAiHost.LeaderCharisma`) reads it for any leader: the hero's effective charisma, or a leading NPC's under its effects in its life
+state (none for a leader of another map); the setter facts use it, and `AreaAiHost.LeaveUnforced` gives the unforced leave of an NPC-led follower the same value (an NPC leader of 20 or more refuses it, as does mind control). The session still holds no NPC's
+stats, so `PartyLeave.LeaderCharisma` stays the caller's for an NPC leader. No loop of the original's loyalty checks reaches an NPC-led follower yet, so `LeaveUnforced` has no production caller.
+
+**NOT READY:** the concealment of NPC-led followers; the followers of a hero's companion travelling with the hero (the move list's followers of followers, GR14:
 the viewer carries only the hero's companions); the dying follower's leave (0x45DA20 leaves the leader and keeps the handle; the
-session keeps the hero's dead followers in the array as before, and an NPC's too). An unforced unwait of a follower waiting under an NPC leader, and the dialog's wait facts for one (the leader's stats). Tails: #2117 (charisma), #2118 (travel, concealment), #2119 (join check, barter, the remaining direct sites).
+session keeps the hero's dead followers in the array as before, and an NPC's too); an unforced unwait of a follower waiting under an NPC leader and the dialog's wait facts for one (the session holds no NPC's stats). Tails: #2118 (travel, concealment), #2119 (join check, barter, the remaining direct sites), #2127 (the unforced unwait).
 
 ## Wait timer and loyalty (ARC-WORLD-045)
 
