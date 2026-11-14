@@ -142,6 +142,39 @@ public partial class AreaConversationPanel : CanvasLayer
     internal bool RowLitForSelfTest(int row) => _hover is { } hover && hover.IsLit(row);
     /// <summary>ARC-UI-2025: an event as the reply stack receives it (point relative to the band's top-left); true when the band took it.</summary>
     internal bool BandInputForSelfTest(InputEvent input) => HandleBandInput(input);
+    /// <summary>ARC-UI-2083: the width of the first line a band row would draw for <paramref name="text"/> broken at <paramref name="wrap"/>, in the original's fonts (0 without them).</summary>
+    internal int FirstLineWidthForSelfTest(string text, int wrap)
+    {
+        if (_fonts is null) return 0;
+        var lines = AreaPremadeBrowserArtLayout.Wrap(_fonts.Text.Font, text, wrap);
+        return lines.Count == 0 || lines[0].Count == 0 ? 0 : lines[0][^1].X + lines[0][^1].Glyph.Width;
+    }
+    /// <summary>
+    /// ARC-UI-2083: lays the texts out as a new reply set of the band (the box back at its 400 px first, the rows widening it as the original's row drawer does) and
+    /// returns the band's rectangle (the band's rows are used for the probe whatever the setting is); null without the original's fonts or an open panel.
+    /// <see cref="RestoreRepliesForSelfTest"/> puts the setting and the conversation's own set back.
+    /// </summary>
+    internal (int X, int Y, int W, int H)? ShowReplySetForSelfTest(IReadOnlyList<string> texts)
+    {
+        if (_fonts is null || !IsOpen) return null;
+        _probedRows ??= _originalRows;
+        _originalRows = true;
+        _bandWidth = DialogReplyBand.MinWidth;
+        foreach (var button in _buttons) { _options.RemoveChild(button); button.QueueFree(); }
+        _buttons.Clear();
+        ApplyRowGeometry();
+        for (var row = 0; row < texts.Count; row++) AddReplyRow($"Probe{row}", texts[row], false, () => { });
+        _artDirty = true;
+        ResizePanel();
+        return BandRectForSelfTest;
+    }
+    /// <summary>ARC-UI-2083: draws the conversation's own reply set again after <see cref="ShowReplySetForSelfTest"/>.</summary>
+    internal void RestoreRepliesForSelfTest()
+    {
+        if (_probedRows is { } rows) { _originalRows = rows; _probedRows = null; }
+        Render(_message);
+    }
+    private bool? _probedRows;
     /// <summary>Whether the original's font art draws the panel's texts (false: the viewer's font).</summary>
     internal bool ArtFontsForSelfTest => _fonts is not null;
     /// <summary>The text a reply button shows, in either font.</summary>
@@ -311,6 +344,36 @@ public partial class AreaConversationPanel : CanvasLayer
         else if (_conversation is not { Phase: DialogConversationPhase.AwaitingSelection }) CloseRequested?.Invoke();
     }
 
+    /// <summary>One reply row (a button, in the band's geometry under Original), added to the stack; <paramref name="chosen"/> runs after the pressing signal returns.</summary>
+    private void AddReplyRow(string name, string text, bool blocked, Action chosen)
+    {
+        var button = new Button
+        {
+            Name = name, Alignment = HorizontalAlignment.Left,
+            AutowrapMode = _originalRows ? TextServer.AutowrapMode.Off : TextServer.AutowrapMode.WordSmart, Disabled = blocked,
+            FocusMode = Control.FocusModeEnum.All, ActionMode = BaseButton.ActionModeEnum.Press,
+        };
+        if (_originalRows) StyleBandRow(button);
+        button.SetMeta(ReplyTextMeta, text);
+        if (_fonts is null) button.Text = text;
+        else
+        {
+            // ARC-UI-2022 (0x4C9810, 0x5351D0): a band row is the text at its row's left with a drop shadow 1 px right and down, the shadow drawn first.
+            if (_originalRows)
+            {
+                var shadow = new AreaArtParagraph { Name = ShadowName, Position = new(1, 1) };
+                shadow.SetFonts(_fonts); button.AddChild(shadow); shadow.SetText(text, DialogReplyBand.ShadowColour);
+            }
+            var art = new AreaArtParagraph { Name = ArtName, Position = new(_originalRows ? 0 : ButtonPadX, _originalRows ? 0 : ButtonPadY), WrapWidth = _originalRows ? _bandWidth - DialogReplyBand.Margins : Math.Max(1, _contentWidth - 2 * ButtonPadX) };
+            art.SetFonts(_fonts);
+            button.AddChild(art);
+            art.SetText(text, blocked ? BlockedColour : _originalRows ? DialogReplyBand.RowColour : ReplyColour);
+        }
+        // Rebuild after the emitting button's signal returns: Render frees the buttons.
+        button.Pressed += () => Callable.From(chosen).CallDeferred();
+        _options.AddChild(button); _buttons.Add(button);
+    }
+
     private void Render(string? message)
     {
         _message = message; _artDirty = true;
@@ -328,32 +391,7 @@ public partial class AreaConversationPanel : CanvasLayer
             foreach (var option in conversation.Options)
             {
                 var token = option.Token;
-                var button = new Button
-                {
-                    Name = $"Reply{option.Number}", Alignment = HorizontalAlignment.Left,
-                    AutowrapMode = _originalRows ? TextServer.AutowrapMode.Off : TextServer.AutowrapMode.WordSmart, Disabled = option.Block is not null,
-                    FocusMode = Control.FocusModeEnum.All, ActionMode = BaseButton.ActionModeEnum.Press,
-                };
-                if (_originalRows) StyleBandRow(button);
-                var text = AreaConversationText.OptionText(option, NumberedReplies);
-                button.SetMeta(ReplyTextMeta, text);
-                if (_fonts is null) button.Text = text;
-                else
-                {
-                    // ARC-UI-2022 (0x4C9810, 0x5351D0): a band row is the text at its row's left with a drop shadow 1 px right and down, the shadow drawn first.
-                    if (_originalRows)
-                    {
-                        var shadow = new AreaArtParagraph { Name = ShadowName, Position = new(1, 1) };
-                        shadow.SetFonts(_fonts); button.AddChild(shadow); shadow.SetText(text, DialogReplyBand.ShadowColour);
-                    }
-                    var art = new AreaArtParagraph { Name = ArtName, Position = new(_originalRows ? 0 : ButtonPadX, _originalRows ? 0 : ButtonPadY), WrapWidth = _originalRows ? _bandWidth - DialogReplyBand.Margins : Math.Max(1, _contentWidth - 2 * ButtonPadX) };
-                    art.SetFonts(_fonts);
-                    button.AddChild(art);
-                    art.SetText(text, option.Block is not null ? BlockedColour : _originalRows ? DialogReplyBand.RowColour : ReplyColour);
-                }
-                // Rebuild after the emitting button's signal returns: Render frees the buttons.
-                button.Pressed += () => Callable.From(() => ChooseToken(token)).CallDeferred();
-                _options.AddChild(button); _buttons.Add(button);
+                AddReplyRow($"Reply{option.Number}", AreaConversationText.OptionText(option, NumberedReplies), option.Block is not null, () => ChooseToken(token));
             }
         }
         var outcome = conversation is null ? string.Empty : AreaConversationText.Outcome(conversation);
