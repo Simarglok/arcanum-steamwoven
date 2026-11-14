@@ -125,6 +125,8 @@ public partial class TerrainViewerApp
                     using var shot = GetViewport().GetTexture().GetImage();
                     if (shot.SavePng(capture) != Error.Ok) throw new InvalidOperationException("AREA_STEAL_CAPTURE_FAILED");
                 }
+                // ARC-UI-1918 (IW26, IW30): the hero's own doll toggle of the steal window (mode 3).
+                GD.Print($"ARC-UI-1918 pickpocket {await HeroDollWindowStepAsync(grid, panel.ViewForSelfTest!, "steal")}");
             }
             // The fated theft: a drag from the victim's grid to a free cell of the hero's in the original look, else the Steal button's take.
             var dragged = "-";

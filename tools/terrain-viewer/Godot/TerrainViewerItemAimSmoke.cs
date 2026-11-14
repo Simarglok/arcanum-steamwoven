@@ -303,6 +303,8 @@ public partial class TerrainViewerApp
                         Require(contentsGrid.Held is null, "a press on the hero's item lifts nothing either");
                         contentsGrid.ReleaseAt(AreaInventoryGridArea.CellCentre(view.Grid[0].Slot));
                     }
+                    // ARC-UI-1918 (IW26, IW30): the hero's own doll toggle works in mode 4 (the button system's), while its worn items lift nothing there.
+                    GD.Print($"ARC-UI-1918 item-aim contents {await HeroDollWindowStepAsync(contentsGrid, view, "contents", picks: false)}");
                     for (var i = 0; i < 4; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
                     Require(session.QueryPcInventory().Count == heldBefore && ContentsWindow, "nothing moved");
                     var shown = view.LootGrid.Count;

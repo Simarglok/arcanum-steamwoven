@@ -3,8 +3,9 @@ using Arcanum.World;
 namespace Arcanum.TerrainViewer.Core;
 
 /// <summary>ARC-UI-064: a point of the barter window: a cell of the hero's grid (as <see cref="AreaInventoryDrag"/>), the drop or use box,
-/// the gamble box, a location of the shown object's grid (scroll included), or none.</summary>
-public readonly record struct AreaBarterHit(int? Cell, AreaInventoryIcon? Icon, int? Location, bool Gamble)
+/// the gamble box, a location of the shown object's grid (scroll included), or none. ARC-UI-1918: or a slot of the hero's own doll, with its toggle set
+/// (<see cref="AreaHeroDollToggle"/>).</summary>
+public readonly record struct AreaBarterHit(int? Cell, AreaInventoryIcon? Icon, int? Location, bool Gamble, Arcanum.Simulation.Equipment.EquipmentSlot? Slot = null)
 {
     public static AreaBarterHit None => default;
 }
@@ -117,8 +118,9 @@ public static class AreaBarterArtLayout
 
     /// <summary>The point's place: the shown object's grid (x − 8, y − 168 in 32-pixel cells, 10 × 7, plus the scroll's rows: location =
     /// (row + scroll) × 10 + column, 0x575D56), the gamble box (its art's size, 0x681110, 0x681114), else the hero's grid and boxes as in mode 0
-    /// (no doll: no slot). With <paramref name="doll"/> (the merchant's doll view) the grid is not there and the doll's side hits nothing.</summary>
-    public static AreaBarterHit HitTest(float x, float y, int scroll, (int Width, int Height) gamble, bool doll = false)
+    /// (no doll: no slot). With <paramref name="doll"/> (the merchant's doll view) the grid is not there and the doll's side hits nothing. ARC-UI-1918: with <paramref name="heroDoll"/>
+    /// (the hero's own doll toggle) the hero's side hits its doll's slots and no grid cell.</summary>
+    public static AreaBarterHit HitTest(float x, float y, int scroll, (int Width, int Height) gamble, bool doll = false, bool heroDoll = false)
     {
         // ARC-UI-1917 (0x575CB0 with 0x681514 set): the merchant's doll view replaces the shown grid, and its slots pick the merchant's worn items. NOT READY: that pick (a worn item bought by
         // dragging it onto the hero's grid, the buy handler 0x575200 on a location of 1000 and up): the doll's side hits nothing, so a release there puts the item back.
@@ -126,6 +128,12 @@ public static class AreaBarterArtLayout
             return new(null, null, ((int)((y - GridY) / CellPixels) + scroll) * Columns + (int)((x - GridX) / CellPixels), false);
         if (x >= GambleBox.X && x < GambleBox.X + gamble.Width && y >= GambleBox.Y && y < GambleBox.Y + gamble.Height) return new(null, null, null, true);
         if (x < AreaInventoryArtLayout.PackX) return AreaBarterHit.None;
+        // ARC-UI-1918 (0x575CB0): with the hero's toggle set its doll's slots are hit and no grid cell.
+        if (heroDoll)
+        {
+            var ownDoll = AreaHeroDollToggle.HitTest(x, y);
+            return ownDoll.Slot is not null || ownDoll.Icon is not null ? new(null, ownDoll.Icon, null, false, ownDoll.Slot) : AreaBarterHit.None;
+        }
         var own = AreaInventoryDrag.HitTest(x, y);
         return own.Slot is not null ? AreaBarterHit.None : new(own.Cell, own.Icon, null, false);
     }
@@ -135,6 +143,9 @@ public static class AreaBarterArtLayout
     public static AreaInventoryHeld? Press(AreaInventoryView view, AreaBarterHit hit)
     {
         ArgumentNullException.ThrowIfNull(view);
+        // ARC-UI-1918: a slot of the hero's own doll (its toggle set) lifts the item worn there.
+        if (hit.Slot is { } heroSlot)
+            return view.Doll.FirstOrDefault(entry => entry.Slot == heroSlot)?.Entity is { } worn ? new(worn, heroSlot, 0) : null;
         if (hit.Location is { } location)
             return AreaLootArtLayout.ItemAt(view.LootGrid, location) is { } item ? new(item.Entity, null, location - item.Location) { Partner = true } : null;
         return hit.Cell is { } cell && AreaInventoryDrag.ItemAt(view.Grid, cell) is { } own ? new(own.Entity, null, cell - own.Slot) : null;
@@ -158,7 +169,8 @@ public static class AreaBarterArtLayout
     /// the other side, the merchant's to the hero (a buy) and the hero's grid item to the shown object (a sale), through the same moves as a
     /// drag (0x575200, 0x575360); null on no item. The receiving side's room test (0x466510) is the session's insert check.</summary>
     public static AreaInventoryDrop? RightRelease(AreaInventoryView view, AreaBarterHit hit) => Press(view, hit) is not { } item ? null
-        : new(item.Partner ? AreaInventoryDropKind.Buy : AreaInventoryDropKind.Sell, item);
+        // ARC-UI-1918: NOT READY: the right release on an item the hero wears (a slot of its doll) does nothing (issue #1925).
+        : item.Worn is not null ? null : new(item.Partner ? AreaInventoryDropKind.Buy : AreaInventoryDropKind.Sell, item);
 
     /// <summary>The art the drop and use boxes show while <paramref name="held"/> is over them: the merchant's item the refused art, the
     /// hero's item the "on" art (IW23, as the loot window's).</summary>
