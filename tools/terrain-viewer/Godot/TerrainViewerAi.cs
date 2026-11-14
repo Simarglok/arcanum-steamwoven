@@ -329,7 +329,8 @@ public partial class TerrainViewerApp
         if ((map.TryGetRow(npc, out var held) ? held : CreatedCrittersRow(npc)) is not { } row) return true;
         var scrPoint = point == AiScriptPoint.Heartbeat ? Arcanum.Scripting.Scr.ScrPoint.Heartbeat : Arcanum.Scripting.Scr.ScrPoint.FirstHeartbeat;
         if (host.Slot(new(CurrentAreaMap, npc), scrPoint) is not { Script: > 0 }) return true;
-        var ran = host.RunHeartbeat(row, scrPoint, session.Rules.Scripts);
+        // ARC-SCRIPT-1815: a heartbeat's float lines, awards and created items are taken at once as for any other run (the heartbeat set admits float line since this task; unread they would pile up in the host until the next click).
+        var ran = Awarded(host, host.RunHeartbeat(row, scrPoint, session.Rules.Scripts));
         if (ran.Outcome != AreaScriptedUseOutcome.NoTeleport)
         {
             if (_heartbeatRefusalsLogged.Add($"{npc}|{scrPoint}|{ran.Outcome}|{ran.Run?.Script}"))
