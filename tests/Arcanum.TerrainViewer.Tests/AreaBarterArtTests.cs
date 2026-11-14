@@ -181,4 +181,52 @@ public sealed class AreaBarterArtTests
         Assert.IsNull(AreaBarterCycle.Step(list, "x", next: true, _ => true), "a follower not in the list does not move the window");
         Assert.IsNull(AreaBarterCycle.Step([], "a", next: false, _ => true));
     }
+
+    // ARC-UI-1917 (ledger IW29, IW30): the merchant's doll view and its two toggle buttons.
+    [TestMethod]
+    public void TheMerchantsDollHasItsOwnArtButtonsAndTheOriginalsTableRectangles()
+    {
+        Assert.AreEqual((0, 157), AreaBarterArtLayout.DollView);
+        Assert.AreEqual((8, 123), AreaBarterArtLayout.DollButton);
+        Assert.AreEqual((46, 123), AreaBarterArtLayout.BagButton);
+        CollectionAssert.AreEqual(new[] { 337, 338, 339 }, AreaBarterArtLayout.DollArtNumbers.ToArray());
+        CollectionAssert.IsSubsetOf(AreaBarterArtLayout.DollArtNumbers.ToArray(), AreaInventoryArtContent.Numbers.ToArray());
+        CollectionAssert.DoesNotContain(AreaBarterArtLayout.ArtNumbers.ToArray(), 337, "a window whose doll arts do not read keeps the grid view, not the diagnostic window");
+        // Table 0x5CAD78 (mode 1): the helmet 157, 182, 42 × 42 first, the boots 156, 330, 42 × 42 last; the armour 136, 224, 84 × 106 (all in frame coordinates, as the loot table).
+        Assert.AreEqual(9, AreaBarterArtLayout.BodySlotRects.Count);
+        Assert.AreEqual((157, 182, 42, 42), AreaBarterArtLayout.BodySlotRects[Arcanum.Simulation.Equipment.EquipmentSlot.Helmet]);
+        Assert.AreEqual((136, 224, 84, 106), AreaBarterArtLayout.BodySlotRects[Arcanum.Simulation.Equipment.EquipmentSlot.Armor]);
+        Assert.AreEqual((156, 330, 42, 42), AreaBarterArtLayout.BodySlotRects[Arcanum.Simulation.Equipment.EquipmentSlot.Boots]);
+        foreach (var (_, rect) in AreaBarterArtLayout.BodySlotRects)
+            Assert.IsTrue(rect.X >= 0 && rect.X + rect.Width <= 358 && rect.Y >= AreaBarterArtLayout.DollView.Y && rect.Y + rect.Height <= 400, $"{rect} lies on the 337 doll's 358 × 243 area");
+    }
+
+    [TestMethod]
+    public void TheMerchantsTogglesShowWheneverAMerchantIsShownAndHitBySizeOfTheirArt()
+    {
+        Assert.IsTrue(AreaBarterArtLayout.TogglesShown(View()));
+        Assert.IsTrue(AreaBarterArtLayout.TogglesShown(View() with { HolderContainer = true }), "the test is the merchant's (before its substitute container is shown), not the shown object's");
+        Assert.IsFalse(AreaBarterArtLayout.TogglesShown(new([], null, null, [])), "no shown object: no buttons");
+        Assert.AreEqual(true, AreaBarterArtLayout.ToggleHit(8, 123, (30, 20), (30, 20)));
+        Assert.AreEqual(true, AreaBarterArtLayout.ToggleHit(8 + 29.9f, 123 + 19.9f, (30, 20), (30, 20)));
+        Assert.IsNull(AreaBarterArtLayout.ToggleHit(8 + 30, 123, (30, 20), (30, 20)));
+        Assert.AreEqual(false, AreaBarterArtLayout.ToggleHit(46, 123, (30, 20), (30, 20)));
+        Assert.AreEqual(false, AreaBarterArtLayout.ToggleHit(46 + 29, 123 + 19, (30, 20), (30, 20)));
+        Assert.IsNull(AreaBarterArtLayout.ToggleHit(46, 122.9f, (30, 20), (30, 20)));
+        Assert.IsNull(AreaBarterArtLayout.ToggleHit(23, 108, (30, 20), (30, 20)), "the loot window's place is not the barter window's");
+        Assert.IsNull(AreaBarterArtLayout.ToggleHit(8, 123, (0, 0), (0, 0)), "an art that did not read has no hit area");
+    }
+
+    [TestMethod]
+    public void TheDollViewReplacesTheShownGridAndItsSideHitsNothing()
+    {
+        Assert.AreEqual(new AreaBarterHit(null, null, 0, false), AreaBarterArtLayout.HitTest(8, 168, 0, (80, 43)));
+        Assert.AreEqual(AreaBarterHit.None, AreaBarterArtLayout.HitTest(8, 168, 0, (80, 43), doll: true), "the grid is hidden in the doll view");
+        Assert.AreEqual(AreaBarterHit.None, AreaBarterArtLayout.HitTest(160, 190, 0, (80, 43), doll: true), "NOT READY: a worn item is not picked from the doll");
+        Assert.AreEqual(new AreaBarterHit(0, null, null, false), AreaBarterArtLayout.HitTest(368, 8, 0, (80, 43), doll: true), "the hero's grid is still there");
+        Assert.AreEqual(new AreaBarterHit(null, null, null, true), AreaBarterArtLayout.HitTest(703, 236, 0, (80, 43), doll: true), "and the gamble box");
+        Assert.IsNull(AreaBarterArtLayout.Press(View(new AreaLootGridItem("w1", 0, 1, 1, "Ware", Kind)), AreaBarterArtLayout.HitTest(160, 190, 0, (80, 43), doll: true)), "nothing is picked on the doll");
+        var held = new AreaInventoryHeld("own:1", null, 0);
+        Assert.AreEqual(AreaInventoryDropKind.PutBack, AreaBarterArtLayout.Release(held, AreaBarterArtLayout.HitTest(160, 190, 0, (80, 43), doll: true)).Kind, "a hero's item released on the doll goes back, no sale");
+    }
 }
