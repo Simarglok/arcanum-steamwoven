@@ -21,7 +21,7 @@ public sealed class AreaAiBedAttackTests
     private static readonly AreaObjectRecord BedRow = new(new(new string('a', 64), 1, AreaSourceKind.Mobile, 1, 5, 500L, new string('f', 64), 100), 0, 3, 9999, "p", "p", "r", "s", AreaScope.Core, null,
         BedCell.X, BedCell.Y, Arcanum.Data.Area.AreaDisposition.BodyEligibleConditionally, [], [], true, true, true);
 
-    private static (AreaAiHostRebindTests.Fixture F, AreaAiHost Host, AreaBedOccupancy Occupancy, List<string> Struck) Open(Func<AreaBedOccupancy, string?> sleeper, AreaAiObjectFacts? facts = null)
+    private static (AreaAiHostRebindTests.Fixture F, AreaAiHost Host, AreaBedOccupancy Occupancy, List<string> Struck) Open(Func<AreaBedOccupancy, string?> sleeper, AreaAiObjectFacts? facts = null, bool asleep = true)
     {
         var f = AreaAiHostRebindTests.Open();
         var occupancy = new AreaBedOccupancy();
@@ -37,7 +37,12 @@ public sealed class AreaAiBedAttackTests
                 Beds = new AreaAiBeds(occupancy, () => [(BedRow.Key, BedCell)]),
             };
         var host = f.Build(scene);
-        if (sleeper(occupancy) is { } who) Assert.IsTrue(occupancy.Seat(BedRow.Key, who == "A" ? f.A : who));
+        if (sleeper(occupancy) is { } who)
+        {
+            Assert.IsTrue(occupancy.Seat(BedRow.Key, who == "A" ? f.A : who));
+            // A sleeper holds the critter flag 0x1000 and the object flag 0x100 (what the seat step writes); one without them is a stale seat the host's first bed question takes out.
+            if (who == "A" && asleep) Assert.AreEqual(GameSessionFailure.None, f.Session.WriteObjectFlag(f.Session.Version, f.A, SessionObjectFlagField.Critter, 0x1000, true, false).Failure);
+        }
         return (f, host, occupancy, struck);
     }
 
@@ -57,6 +62,20 @@ public sealed class AreaAiBedAttackTests
         Assert.AreEqual(-30, notice.Result?.Resolution?.Difficulty?.Invocation, "SC16: the check's invocation modifier is -30: " + host.TraceOf(f.B)?.Hit + " / " + notice.Result?.Resolution?.Refusal);
         Assert.AreEqual(hp, f.Session.QueryHeroLife()!.Status.HitPoints, "the hero is not struck");
         StringAssert.Contains(host.TraceOf(f.B)?.Item, "pulled out");
+    }
+
+    [TestMethod]
+    public void A_seat_of_an_npc_that_does_not_sleep_is_taken_out_first_and_the_blow_strikes_the_bed()
+    {
+        // A load leaves the shared occupancy seating an NPC whose saved state is awake: the host's first bed question (this blow) syncs it before the occupant is read.
+        var (f, host, occupancy, struck) = Open(_ => "A", asleep: false);
+        using var _ = f;
+
+        host.Hit(f.B, Bed);
+
+        CollectionAssert.AreEqual(new[] { Bed }, struck, "the bed took the blow: " + host.TraceOf(f.B)?.Hit);
+        Assert.IsNull(occupancy.Occupant(BedRow.Key), "the stale seat is gone");
+        Assert.IsFalse(host.DrainNotices().Any(n => n.Kind == AreaAiNoticeKind.Hit), "no critter was struck");
     }
 
     [TestMethod]

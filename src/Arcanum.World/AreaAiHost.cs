@@ -2521,10 +2521,14 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     private string? OccupantInPlaceOf(string attacker, string target)
     {
         if (target == Pc || _scene.Beds is not { } beds || _scene.ObjectFacts?.Invoke(target) is not { Type: 3 }
-            || _scene.ObjectAttackTarget?.Invoke(target) is not { } info || beds.Occupancy.Occupant(info.Row.Key) is not { } occupant || !TryNpc(occupant, out _)) return null;
+            || _scene.ObjectAttackTarget?.Invoke(target) is not { } info) return null;
+        // The host's first bed question syncs the shared occupancy with the NPCs' saved sleeping state (a load), so the occupant is read after it.
         ReconcileBeds(beds);
+        if (beds.Occupancy.Occupant(info.Row.Key) is not { } occupant || !TryNpc(occupant, out _)) return null;
         var text = Unseat(occupant, beds, info.Row.Key);
-        Trace(attacker).Item = $"attack on bed {target}: {occupant} pulled out, {text}";
+        if (text == "unseat refused") return null;
+        var trace = Trace(attacker);
+        trace.Item = (trace.Item is { Length: > 0 } earlier ? earlier + "; " : "") + $"attack on bed {target}: {occupant} pulled out, {text}";
         return occupant;
     }
 
