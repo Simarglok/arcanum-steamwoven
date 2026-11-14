@@ -548,6 +548,23 @@ public partial class TerrainViewerApp
             }
             // ARC-UI-1736 (FP5): the show/hide button hides the frames and shows them again; one follower has no arrows (they stand from seven).
             Require(_followerPortraits!.PanelForSelfTest is { Shown: true, Count: 1, ToggleArt: 501, UpArt: null, DownArt: null }, "the panel is shown with the hide button and no arrows: " + _followerPortraits.PanelForSelfTest);
+            // ARC-UI-1785 (FP1, SZ11): the three buttons stand at the bars-drawn places (y 428; the arrows 415) while the bars show and at y 587 (arrows 574) with the bars hidden; the layout
+            // follows the bars at once and the frame is where it was.
+            if (_gameBarPanel is { } barPanel)
+            {
+                var wasVisible = barPanel.Visible;
+                var frameAt = _followerPortraits.FrameForSelfTest(companion.Entity)!.Value.Rect.Position;
+                foreach (var barsOn in new[] { true, false })
+                {
+                    barPanel.Visible = barsOn;
+                    var toggleRect = _followerPortraits.ButtonRectForSelfTest("toggle");
+                    var wanted = AreaFollowerPanelRules.ToggleRectFor(barsOn);
+                    Require(AreaGameBarPanel.BottomInset > 0 == barsOn, $"the bars' inset follows their visibility ({barsOn})");
+                    Require(toggleRect is { } rect && (int)rect.Position.Y == (barsOn ? 428 : 587) && (int)rect.Position.X == wanted.X, $"the show/hide button stands at y {(barsOn ? 428 : 587)} with the bars {(barsOn ? "drawn" : "hidden")}: {toggleRect}");
+                    Require(_followerPortraits.FrameForSelfTest(companion.Entity)!.Value.Rect.Position == frameAt, "the portrait frame does not move with the layout");
+                }
+                barPanel.Visible = wasVisible;
+            }
             // ARC-UI-1817: with ARC_AREA_WINDOW_ART (the shared opt-in part of the window smokes) the panel's frames are checked in the generated interface: the portrait frame (503), the hide
             // button (501) and the order menu's art (826), whose frame is painted whether or not the menu is open. The scroll arrows (506-509) stand from seven followers, so the renderer's own tests cover them.
             if (WindowArtSmokeRequested)

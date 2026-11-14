@@ -129,8 +129,9 @@ follower module; its Godot-free rules are `AreaFollowerPanelRules` (tools/terrai
   above. A new session (the panel's `ResetPanel`, the module's reset 0x56A880) shows the panel again from the first follower.
 - **FP2 decision**: the shown flag and the offset are session-only. The original writes them into its save (two 32-bit values with no gameplay effect); FR-LIFECYCLE-004
   keeps saves for game state, so the viewer does not add a schema step for them.
-- **Hidden-interface layout (SZ11)**: the original moves the three buttons to y 587, 574 and 574 while the interface bars are hidden. The viewer has no hidden interface
-  layout for the strip yet, so the buttons stand at the bars-drawn places; this stays open with the hidden-interface layout itself.
+- **Hidden-interface layout (SZ11, issue #1785)**: the original moves the three buttons to y 587, 574 and 574 while the interface bars are hidden (the portraits stay). The
+  viewer takes the layout from the bars' state (`AreaGameBarPanel.BottomInset > 0` means drawn; `AreaFollowerPanelRules.ToggleRectFor/UpRectFor/DownRectFor`) and moves the
+  existing buttons at once when the bars are shown or hidden (the follower companion smoke checks both).
 - **Menu (FP7–FP9)**: art 826 at the slot's right edge (x 51, the slot's y), not clamped to the screen, with eight rows (Walk, Attack, Stay Close, Spread Out, Back Off,
   Wait, Inventory, Character Sheet) at (10, 3 + 18 × row), 118 × 15: white, mid grey when greyed, bright (0, 0xD2, 0xFF) under the pointer. Wait is greyed for a
   mind-controlled follower (spell flag 0x8000000), Inventory when the can-open test (0x575080, `BarterCycleSpeaker`) fails. With the menu open every release is the menu's:
