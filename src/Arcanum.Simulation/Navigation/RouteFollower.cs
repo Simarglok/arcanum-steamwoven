@@ -285,7 +285,7 @@ public sealed class RouteFollower
             // same cell built from here (which the shared search reaches, so an occupant on the cell still stops the walk): the PC's straight
             // line (LR4) would run into the wall the corridor goes around. A walk without a corridor (the Original rule mode never has one,
             // LR7) is unchanged.
-            if (plan.Outcome == RouteOutcome.NoRoute && !_retried && Corridor is not null && _corridorLimits is { } ownLimits && _farCorridorForGoal
+            if (plan.Outcome == RouteOutcome.NoRoute && !_retried && corridorStop is null && Corridor is not null && _corridorLimits is { } ownLimits && _farCorridorForGoal
                 && local is { } leg && RouteCorridor.Plan(_source, cell, leg, ownLimits).WalkPlan(_limits) is { } walk)
             { plan = walk; corridorStop = null; }
             // LR4: no path for the PC: a straight line toward the cell it heads for, tested as it is walked; from then on every plan.

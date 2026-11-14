@@ -46,6 +46,8 @@ public sealed class RouteCorridor
     public IReadOnlyList<CellCoord> Path { get; }
     public CellCoord? End => Waypoints.Count == 0 ? null : Waypoints[^1];
 
+    private static readonly NeighborDirection[] Directions = Enum.GetValues<NeighborDirection>();
+
     /// <summary>
     /// The corridor's own walk (ARC-DEV-2100): its cells from <see cref="From"/> to its end as a found plan, the segment its first steps. The
     /// follower walks it for a leg the local planner cannot find from where the walker stands (the original's request is a bounded search of
@@ -60,7 +62,7 @@ public sealed class RouteCorridor
         var cell = From;
         foreach (var next in Path)
         {
-            steps.Add(Enum.GetValues<NeighborDirection>().First(d => RoutePlanner.Neighbor(cell, d) == next));
+            steps.Add(Directions.First(d => RoutePlanner.Neighbor(cell, d) == next));
             cell = next;
         }
         return new RoutePlan(From, Target, RouteOutcome.Found, RouteMethod.CorridorWalk, "ROUTE_CORRIDOR_WALK", steps.ToArray(), limits.SegmentSteps, 0, 0, 0, 0, 0);

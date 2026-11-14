@@ -157,7 +157,7 @@ long route (LR7):
   cannot find from where the actor stands (its search is bounded, LR1-LR3, so a detour around a wall can pass its limits) is walked on the
   cells of a corridor to the leg's own cell, built from the actor's cell (plan `ROUTE_CORRIDOR_WALK`, method `CorridorWalk`), not on the PC's
   straight line (LR4), which ran into the wall (`ROUTE_STEP_DENIED`, ARC-DEV-2100, the flaky walk smoke); a leg cell no corridor reaches (an
-  occupant on it) stops as before. Project policy under Steamwoven only: a walk without a corridor (Original, LR7) is unchanged. At the
+  occupant on it) keeps the old outcome (the straight-line retry where the host has it, else the leg's reason). Project policy under Steamwoven only: a walk without a corridor (Original, LR7) is unchanged. At the
   end of a partial corridor it stops with `ROUTE_PARTIAL`; a corridor that reaches no cell stops with its own reason. A goal outside the source is still refused (`ROUTE_TARGET_OUTSIDE_AREA`, no step): a host heads for
   one through its own partial corridor, as the streamed main map does ([map mode](../rendering/area-map-mode.md#the-main-world-map-arc-render-024)).
 - The far click is a rule-mode switch (ARC-WORLD-072, ledger LR4/LR7, owner decision 2026-10-21): a follower may take
