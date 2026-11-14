@@ -57,6 +57,17 @@ public static class EyeCandyArt
         return (aid & ~0xC0u) | (v << 6);
     }
 
+    /// <summary>
+    /// ARC-SCRIPT-1829 (WE4, the art rotation reader and setter the script play uses; the setter's row is marked on <c>ProjectileRules.FacedArt</c>): the entry's art turned to an object's rotation. A modifier of 0 leaves the art alone (an object whose art has no rotation, or faces rotation 0); otherwise the rotation replaces bits 9..11 of
+    /// a class 14 art id, a value of 8 or more taken as 0 and a negative one as 7 (the setter's clamp). An art of another class passes through (the original also remaps wall art and mirrors portal art there; no eye-candy entry has such art).
+    /// </summary>
+    public static uint TurnTo(uint aid, int rotation)
+    {
+        if (rotation == 0 || !IsEyeCandy(aid)) return aid;
+        var turned = rotation >= 8 ? 0 : rotation < 0 ? 7 : rotation;
+        return (aid & ~(7u << 9)) | ((uint)turned << 9);
+    }
+
     /// <summary>The same art id at another frame (0..127).</summary>
     public static uint WithFrame(uint aid, int frame) =>
         (uint)frame < 0x80 ? (aid & ~(0x7Fu << 12)) | ((uint)frame << 12) : throw new ArgumentOutOfRangeException(nameof(frame));

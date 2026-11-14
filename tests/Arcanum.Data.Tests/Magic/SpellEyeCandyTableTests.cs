@@ -11,6 +11,20 @@ public sealed class SpellEyeCandyTableTests
 {
     private static readonly Func<uint, bool> AllLoad = _ => true;
 
+    // ARC-SCRIPT-1829: the art modifier 0x502930 for an eye-candy art id.
+    [TestMethod]
+    public void TurnToReplacesTheRotationBitsAndClampsLikeTheOriginal()
+    {
+        var aid = EyeCandyArt.Make(27, 5, 2, true, 1, 2, 6)!.Value;
+        Assert.AreEqual(aid, EyeCandyArt.TurnTo(aid, 0), "a modifier of 0 leaves the art as it is, whatever its own rotation");
+        var turned = EyeCandyArt.TurnTo(aid, 5);
+        Assert.AreEqual(5, EyeCandyArt.Rotation(turned));
+        Assert.AreEqual(EyeCandyArt.Make(27, 5, 5, true, 1, 2, 6), turned, "nothing else changes");
+        Assert.AreEqual(0, EyeCandyArt.Rotation(EyeCandyArt.TurnTo(aid, 8)), "8 or more is taken as 0");
+        Assert.AreEqual(7, EyeCandyArt.Rotation(EyeCandyArt.TurnTo(aid, -3)), "a negative one as 7");
+        Assert.AreEqual(0x4000u, EyeCandyArt.TurnTo(0x4000, 3), "another art class passes through");
+    }
+
     [TestMethod]
     public void ArtIdPacksAndReadsEveryPart()
     {
