@@ -66,6 +66,10 @@ public partial class TerrainViewerApp
             void Frame(Vec2 stick = default)
             {
                 _areaSmokeTime++;
+                // ARC-DEV-2043: a native smoke's viewer does not tick the area clock, so the AI host's own frame part never runs, and with the AI host on (the stun and dying parts) nothing else drains the session's unclaimed
+                // goal ends. A kill that lands while the lying hero's knock-down goal (62) is still on the table (the fall reached Down between two of the goal's steps) ends it by the dying start: without its end node
+                // (HeroFalls(false)) the forced fall stayed on and the raised hero never got up. The game drains them at its next frame; the smoke's frame does the same.
+                if (AiEnabled && _aiHost is { } ai) foreach (var end in session.DrainGoalEnds()) ai.RunEndNodes(end);
                 WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(stick) }, .05, true, SimulationTime.At(_areaSmokeTime, 20));
             }
             var grid = (AreaGridSession)_worldActor.Session!;
@@ -260,7 +264,7 @@ public partial class TerrainViewerApp
                         $"the lying hero keeps its fall when killed: {_worldActor.DownPose} {_heroKnockdown.Stage}");
                     session.Heal(session.Version, SessionLifeTarget.Hero, new LifeHeal { Full = true, Fatigue = 1000, Resurrect = true });
                     for (var i = 0; i < 600 && !(_heroKnockdown.Stage == AreaKnockdownStage.Standing && HeroRunsHost()?.DownRun is null); i++) { Frame(); _areaAmbient!.AdvanceMilliseconds(50, AmbientSector()); }
-                    Require(!_heroKnockdown.Lying && session.QueryHeroLife()!.Status is { IsDead: false, IsActive: true }, $"the hero was raised again: {_heroKnockdown.Stage}");
+                    Require(!_heroKnockdown.Lying && session.QueryHeroLife()!.Status is { IsDead: false, IsActive: true }, $"the hero was raised again: {_heroKnockdown.Stage} forced={_heroForcedDown} status={session.QueryHeroLife()!.Status} run={HeroRunsHost()?.DownRun?.Bottom?.Goal}");
                 }
                 GD.Print("ARC-COMBAT-1793 hero dying " + string.Join(" ", dyingReport) + $" art={(profile.Decapitation is null ? "none" : "17+18+19")} filter={_gameSettings.ViolenceFilter}");
             }
