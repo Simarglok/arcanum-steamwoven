@@ -22,6 +22,9 @@ public static partial class TerrainViewerSelfTest
         "{10}{A bridge fell. Take care on the way north.}{}{}{}{}{RU 1001}" +
         "{11}{Thank you.}{}{1}{}{0}{LF 2 1}";
 
+    // ARC-UI-2028: one reply that leads to a final line (the action fl 3).
+    internal const string FinalLineDialog = "{1}{Well?}{}{}{}{}{}{2}{Bye.}{}{1}{}{0}{fl 3}{3}{Farewell.}{}{}{}{}{}";
+
     // ARC-UI-2019: one reply to a closing line, for the digit-key check of the app routing.
     internal const string DigitDialog = "{1}{Hello.}{Hello.}{}{}{}{}{2}{Go on.}{}{1}{}{10}{}{10}{Fine.}{}{}{}{}{}";
 
@@ -71,6 +74,18 @@ public static partial class TerrainViewerSelfTest
             Require(closed == 1 && !panel.IsOpen, "any choice dismisses a finished dialog");
             panel.Open("Synthetic NPC", conversation); panel.LeaveForSelfTest.EmitSignal(BaseButton.SignalName.Pressed);
             Require(closed == 2 && !panel.IsOpen, "Close dismisses a finished dialog");
+            // ARC-UI-2028: a reply that leads to the NPC's final line closes the window at once (the host floats the line); no finished panel stays to be dismissed.
+            var finalConversation = DialogConversation.Start(DlgReader.Read(Encoding.Latin1.GetBytes(FinalLineDialog)),
+                new DialogConversationRequest(new DialogNodeId(1),
+                    new DialogParticipants(new DialogId(5), AreaConversationState.PcParticipant, AreaConversationState.Npc(0)),
+                    new DialogScriptLine(4), AreaConversationProfile.Diagnostic.Pc, AreaConversationProfile.Diagnostic.Names),
+                new DialogConversationPorts(state, state, session.Flags, state));
+            panel.Open("Synthetic NPC", finalConversation);
+            await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+            var closedBefore = closed;
+            panel.Choose(1);
+            Require(finalConversation.End?.Kind == DialogEndKind.NpcFinalLine && AreaConversationText.EndsWithNpcLine(finalConversation) && finalConversation.NpcLine?.Text == "Farewell." && closed == closedBefore + 1 && !panel.IsOpen,
+                "the final line ends the dialog and closes the window at once");
             GD.Print("ARC-SCRIPT-005 self-test PASS synthetic conversation panel; original runtime parity NOT_VERIFIED");
         }
         finally { panel.QueueFree(); }
@@ -285,6 +300,24 @@ public partial class TerrainViewerApp
                 Press(Key.Key1);
                 TerrainViewerSelfTest.Require(digitDialog.CurrentNode.Value == 10, "the digit key 1 chose the first reply");
                 CloseWindowMode(InterfaceMode.Dialog);
+            }
+            // ARC-UI-2028: the reply that leads to a final line closes the window in the same call and floats the line over the speaker as a timed bubble.
+            {
+                using var finalSession = ConversationSessionFixture.Create();
+                var state = new AreaConversationState(finalSession, new(1), ["oid:synthetic-0"], 50);
+                var finalDialog = DialogConversation.Start(DlgReader.Read(System.Text.Encoding.Latin1.GetBytes(TerrainViewerSelfTest.FinalLineDialog)),
+                    new DialogConversationRequest(new DialogNodeId(1),
+                        new DialogParticipants(new DialogId(5), AreaConversationState.PcParticipant, AreaConversationState.Npc(0)),
+                        new DialogScriptLine(4), AreaConversationProfile.Diagnostic.Pc, AreaConversationProfile.Diagnostic.Names),
+                    new DialogConversationPorts(state, state, finalSession.Flags, state));
+                ShowConversationPanel("Final line test", finalDialog, null);
+                _conversationSpeaker = _selfTestStandInSpeaker;
+                var speakerKey = AreaConversationState.EntityId(_selfTestStandInSpeaker!.Row);
+                Press(Key.Key1);
+                var bubble = _floaters?.Bubbles.Of(speakerKey);
+                TerrainViewerSelfTest.Require(finalDialog.End?.Kind == DialogEndKind.NpcFinalLine && !ConversationOpen && !WorldModal && bubble is { Text: "Farewell.", Persistent: false },
+                    $"the final line closed the window at once and floats as a timed bubble (open={ConversationOpen} bubble={bubble?.Text})");
+                _floaters?.Bubbles.Clear();
             }
         }
         finally { _worldFocusSimulationForSelfTest = simulatedFocus; _selfTestStandInSpeaker = null; }
