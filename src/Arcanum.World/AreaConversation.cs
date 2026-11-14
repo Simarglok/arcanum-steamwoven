@@ -740,9 +740,16 @@ public sealed class AreaConversationHost
         var entity = AreaConversationState.EntityId(speaker.Row);
         return new SessionDialogCompanionPort(_session, AreaConversationState.PcParticipant,
             participant => participant == npc ? entity : null,
-            participant => participant == npc && FactsOf(speaker) is { } facts
-                ? HealerHost?.Invoke()?.LeaderWaitFacts(entity) is { } leaderWait ? leaderWait with { WaitIndex = facts.WaitIndex } : AreaCompanionRoster.WaitFacts(facts, _session.QueryHeroPartySide()) : null,
+            participant => participant == npc && FactsOf(speaker) is { } facts ? WaitFactsOf(facts, entity) : null,
             entity => SpreadOutStart?.Invoke(entity));
+    }
+
+    // ARC-WORLD-2127 (0x4AA7A0): the wait timer reads the DIRECT leader's values. A speaker an NPC leads gets that leader's (the AI host reads them); when they cannot be read, the index alone (no leader step), never the
+    // hero's side. Any other speaker has the hero (or the diagnostic PC) as leader.
+    private PartyWaitFacts WaitFactsOf(AreaCompanionFacts facts, string entity)
+    {
+        if (_session.QueryLeader(entity) is not { } leader || leader == SessionEventKinds.PlayerEntity) return AreaCompanionRoster.WaitFacts(facts, _session.QueryHeroPartySide());
+        return HealerHost?.Invoke()?.LeaderWaitFacts(entity) is { } read ? read with { WaitIndex = facts.WaitIndex } : new(facts.WaitIndex, PersuasionTraining.None, 0, false);
     }
 
     /// <summary>The session party port for a roster speaker when the party is wired; facts are read at each call.</summary>

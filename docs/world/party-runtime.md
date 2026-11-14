@@ -135,7 +135,7 @@ while an NPC leads it.
   array. The session writes it as the follower's NPC link kept with the wait flag on its free record (no schema step; saved as such, the
   timer with it): `QueryLeader` and `QueryPcLeader` still answer the leader and the chain, `QueryFollowers` leaves it out, the AI host's tell
   followers and catch-up gate (the waiting NPC stays put) read it so. The timer reads the facts the caller gives as the DIRECT leader's (its effective charisma and Persuasion training, the follower's wait index;
-  ARC-WORLD-2127: `AreaAiHost.LeaderWaitFacts` for an NPC leader, which the dialog's wait uses for a speaker an NPC leads; never the hero's side) and runs out as the hero's does, but the reaction change is written
+  ARC-WORLD-2127: `AreaAiHost.LeaderWaitFacts` for an NPC leader, which the dialog's wait uses for a speaker an NPC leads; when the leader's stats cannot be read the index alone, never the hero's side) and runs out as the hero's does, but the reaction change is written
   only toward a player character: the follower is freed, jilted and leaderless, no reaction change. A forced unwait (the death's) joins the
   leader again, appended at the end of its array, forced, the leader's Tempus Fugit flag copied. The unforced unwait (ARC-WORLD-2127, 0x4AA8C0 → 0x4AD950 with the NPC leader as the player,
   `GameSessionOwner.UnwaitNpcLed` with `NpcLeaderUnwaitFacts`, read by `AreaAiHost.LeaderUnwaitFacts`; the dialog's UW takes it for a speaker an NPC leads) runs the check twice, as the original does: before the handle is cleared
@@ -164,7 +164,7 @@ stats, so `PartyLeave.LeaderCharisma` stays the caller's for an NPC leader. No l
 
 **NOT READY:** the concealment of NPC-led followers; the followers of a hero's companion travelling with the hero (the move list's followers of followers, GR14:
 the viewer carries only the hero's companions); the dying follower's leave (0x45DA20 leaves the leader and keeps the handle; the
-session keeps the hero's dead followers in the array as before, and an NPC's too). Tails: #2118 (travel, concealment), #2119 (join check, barter, the remaining direct sites). The dialog's UW also runs the check 0x4AD950(NPC, dialog PC) before 0x4AA8C0 (the argument's source is F0 at 0x415BA0): modelled for the hero's followers as the one check, not for a speaker an NPC leads; the NPC's alignment is its stored base value, the effects on it not applied in the host.
+session keeps the hero's dead followers in the array as before, and an NPC's too). Tails: #2118 (travel, concealment), #2119 (join check, barter, the remaining direct sites). The dialog's UW also runs the check 0x4AD950(NPC, dialog PC) before 0x4AA8C0 (the argument's source is F0 at 0x415BA0): modelled for the hero's followers as the one check, not for a speaker an NPC leads; an NPC's alignment (the leader's and the follower's) is its stored base value, neither its effects nor a script's alignment change applied in the host; a dialog UW whose leader facts cannot be read changes nothing, as before.
 
 ## Wait timer and loyalty (ARC-WORLD-045)
 

@@ -44,12 +44,12 @@ public sealed class SessionDialogPartyPort(
     public DialogJoinResult Execute(UnwaitCommand command)
     {
         ArgumentNullException.ThrowIfNull(command);
-        // ARC-WORLD-2127: a follower waiting under an NPC leader is unwaited by the follow check against that leader (UnwaitNpcLed, the leader's facts); the hero's facts say nothing of it, so
-        // without the leader's facts the command is rejected.
-        if (command.PlayerCharacter == playerCharacter && _entityOf(command.Npc) is { } waiting && _session.QueryLeader(waiting) is { } leader && leader != SessionEventKinds.PlayerEntity)
+        // ARC-WORLD-2127: a follower waiting under an NPC leader is unwaited by the follow check against that leader (UnwaitNpcLed, the leader's facts); when those facts cannot be read (no map host, a leader
+        // without a sheet or on another map) the command goes the old way: the hero-side facts say nothing of such a follower and the unwait changes nothing.
+        if (command.PlayerCharacter == playerCharacter && _entityOf(command.Npc) is { } waiting && SessionValidation.Entity(waiting)
+            && _session.QueryLeader(waiting) is { } leader && leader != SessionEventKinds.PlayerEntity && npcLeaderFactsOf?.Invoke(command.Npc) is { } leaderFacts)
         {
             LastRefusal = null;
-            if (npcLeaderFactsOf?.Invoke(command.Npc) is not { } leaderFacts) return DialogJoinResult.Rejected;
             return Result(_session.UnwaitNpcLed(_session.Version, waiting, leaderFacts));
         }
         return Run(command.Npc, command.PlayerCharacter, (entity, facts) => _session.UnwaitParty(_session.Version, entity, facts, false));
