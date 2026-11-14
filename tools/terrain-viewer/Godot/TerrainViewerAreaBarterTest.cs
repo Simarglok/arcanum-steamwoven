@@ -516,6 +516,16 @@ public partial class TerrainViewerApp
                 await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
                 using var shot = GetViewport().GetTexture().GetImage();
                 if (shot.SavePng($"{capture}-{name}.png") != Error.Ok) throw new InvalidOperationException("AREA_SERVICE_CAPTURE_FAILED");
+                // The "before" of the graphics comparison: the diagnostic list behind the switch.
+                panel.LookToggleForSelfTest.EmitSignal(BaseButton.SignalName.Pressed);
+                await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+                using var list = GetViewport().GetTexture().GetImage();
+                if (list.SavePng($"{capture}-{name}-diagnostic.png") != Error.Ok) throw new InvalidOperationException("AREA_SERVICE_CAPTURE_FAILED");
+                panel.LookToggleForSelfTest.EmitSignal(BaseButton.SignalName.Pressed);
+                await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                Require(panel.ArtMode, "the switch went back to the original look");
             }
             parts.Add($"{name}: image {area.ServiceFrame!.Image?.ToString() ?? "none"}, items {view.Grid.Count}, quote '{quote}'");
             EndItemService();

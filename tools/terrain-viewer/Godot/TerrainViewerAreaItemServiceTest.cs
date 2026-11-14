@@ -144,6 +144,8 @@ public partial class TerrainViewerApp
 
             // ARC-UI-1765: the original look over a synthetic art set (blank arts of the original sizes): mode 6's frame with the NPC's generated quote line, a press quotes (and
             // the remembered item is named in the frame), the boxes and the right release do nothing, the switch shows the diagnostic list and back, a release on the round view closes.
+            EndItemService(); // the repair window above is still open
+            Require(!ItemServiceOpen, "the repair window closed");
             var inventoryHost = _inventoryHost;
             _inventoryHost ??= new AreaInventoryHost([]);
             _inventoryArtLookForSelfTest = SyntheticBarterLook();
@@ -153,7 +155,8 @@ public partial class TerrainViewerApp
                     () => repairer, (first, last, price) => $"line{first}-{last} {price?.ToString() ?? "-"}", group => $"class{group}"));
                 var panel = _servicePanel!;
                 var area = panel.GridAreaForSelfTest;
-                Require(panel.ArtMode && area.ServiceLook && area.LookMode == AreaInventoryMode.Own && area.ServiceFrame is { Selected: null, Quote: "" }, "the original look opened in the own window's frame");
+                Require(panel.ArtMode && area.ServiceLook && area.LookMode == AreaInventoryMode.Own && area.ServiceFrame is { Selected: null, Quote: "" },
+                    $"the original look opened in the own window's frame (art {panel.ArtMode}, service {area.ServiceLook}, look {area.Look is not null}, mode {area.LookMode}, frame {area.ServiceFrame})");
                 Require(panel.LookToggleForSelfTest is { Visible: true, Text: "Diagnostic view" } && !panel.ButtonsForSelfTest[0].IsVisibleInTree(), "the switch below the frame, the list hidden");
                 var sword = panel.ArtView!.Grid.Single(item => item.Entity == "kit:1");
                 area.PressAt(AreaInventoryGridArea.CellCentre(sword.Slot));
