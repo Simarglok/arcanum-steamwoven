@@ -1911,11 +1911,10 @@ first, 59 in the installed game) in white, the hovered row in blue, and the orig
 when the list is longer than fifteen. A release on a row writes the hero's scheme through `AreaSchemesPage.Choose` (no cost, no sound; the next level step runs it, AL12) and the
 list keeps its place while the sheet stays open. The NPC sheet (mode 2) names the NPC's scheme and scrolls the list; its rows answer nothing. Model: `AreaSchemesPage` (World),
 `AreaCharacterSheetSchemes`/`AreaSheetScrollBar` (Core, Godot-free), `AreaCharacterSheetSchemesView` (Godot). F0: the thumb arts are stretched from 11 to the bar's 17 pixels.
-The creation editor (window 14) keeps the NOT READY note ([#1792](https://github.com/Simarglok/arcanum-steamwoven/issues/1792)); the age line and the race icon are [#1791](https://github.com/Simarglok/arcanum-steamwoven/issues/1791). Native smoke: the sheet art stage (`--stages map`) and the
-item-aim stage (NPC page) print `PASS` lines for the page.
+The creation editor (window 14) shows the same tab in the original look (ARC-UI-1792, ALP8): a release on a row writes the scheme into the draft hero (`AreaCreationEditor.PressScheme`), the choice is kept in `AreaNewCharacter.Scheme` and written into the started session by `ApplyChoices` (no cost, no points spent: the original ran its scheme before the editor, so it counts from the next level step); the diagnostic panel of an editor without the game's art keeps the NOT READY note. The age line and the race icon are [#1791](https://github.com/Simarglok/arcanum-steamwoven/issues/1791). Native smoke: the sheet art stage (`--stages map`), the
+item-aim stage (NPC page) and the menu stage (the creation editor's page) print `PASS` lines for the page.
 
-**Not yet in the original's look:** the age line (the session has no age); the race icons as portrait fallback; a button takes the pointer on its rectangle, not on its opaque pixels. The creation editor (window 14) shows the schemes tab's NOT READY note and keeps the diagnostic
-look. Without a game folder (the synthetic self-tests) or when an art does not read, the whole sheet is the diagnostic panel above.
+**Not yet in the original's look:** the age line (the session has no age); the race icons as portrait fallback; a button takes the pointer on its rectangle, not on its opaque pixels. The creation editor (window 14) in the diagnostic look (its art did not read) shows the schemes tab's NOT READY note. Without a game folder (the synthetic self-tests) or when an art does not read, the whole sheet is the diagnostic panel above.
 Native smoke: `./arcanum smoke pr --stages map --map "elven ruins" --hero elf-female` prints `ARC-UI-075 native-smoke sheet art PASS`
 (`ARC_AREA_SHEET_CAPTURE=PATH.png` saves readbacks `PATH-skills.png`, `PATH-tech.png`, `PATH-spells.png`).
 

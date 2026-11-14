@@ -107,6 +107,8 @@ public sealed record EyeCandyListShape(string Path, int PerGroup, int FileStride
     public static EyeCandyListShape Spell { get; } = new(SpellEyeCandyTable.Path, SpellEyeCandyTable.PerSpell, SpellEyeCandyTable.FileStride, SpellEyeCandyTable.SoundOffsets);
     /// <summary>The script list (0x5E2FB0): the loader's defaults (the script module's init 0x4446E0 changes none of them): one entry per message, in a row from message 0, no sound offsets. A script's entry number is the message number.</summary>
     public static EyeCandyListShape Script { get; } = new(SpellEyeCandyTable.ScriptPath, 1, 1, Array.Empty<int>());
+    /// <summary>ARC-RENDER-1794: the animation list (0x5DE670, loaded by the animation module's init 0x421B00): <c>rules\AnimEyeCandy.mes</c> with the loader's defaults too (the init presets a count of 11 that the loader's own count 0x4CDCD0 overwrites): one entry per message from message 0, no sound offsets. Entry 0 to 5 are the normal, poison, electrical, fire, fatigue and critical splotches, 6 and 7 the undead and the clean effect, 8 to 10 the damage tiers (the hit's blood, <c>HitGoreRules</c>).</summary>
+    public static EyeCandyListShape Anim { get; } = new(SpellEyeCandyTable.AnimPath, 1, 1, Array.Empty<int>());
 }
 
 /// <summary>
@@ -124,6 +126,8 @@ public sealed class SpellEyeCandyTable
     /// <summary>ARC-SCRIPT-1592: the script eye-candy list (0x5E2FB0, loaded by the script module's init 0x4446E0) is the same module list over <c>rules\ScriptEyeCandy.mes</c>, laid out as <see cref="EyeCandyListShape.Script"/> (one entry per message):
     /// its entry <c>n</c> is the number a script's play action names (0x44C7A0 passes it as the index).</summary>
     public const string ScriptPath = "rules/ScriptEyeCandy.mes";
+    /// <summary>ARC-RENDER-1794: the animation eye-candy list (0x5DE670, the animation module's init 0x421B00), the blood of a hit: laid out as <see cref="EyeCandyListShape.Anim"/>.</summary>
+    public const string AnimPath = "rules/AnimEyeCandy.mes";
     public const int PerSpell = 6, FileStride = 10;
     public const int Cast = 0, Projectile = 1, Destination = 2, SecondaryDestination = 3, SecondaryCast = 4;
 
@@ -160,6 +164,9 @@ public sealed class SpellEyeCandyTable
 
     /// <summary>ARC-SCRIPT-1592: <c>rules\ScriptEyeCandy.mes</c> read as the script list (<see cref="EyeCandyListShape.Script"/>: one entry per message).</summary>
     public static SpellEyeCandyRead OpenScript(ContentStack stack, MesReaderOptions? options = null) => Open(stack, EyeCandyListShape.Script, options);
+
+    /// <summary>ARC-RENDER-1794: <c>rules\AnimEyeCandy.mes</c> read as the animation list (<see cref="EyeCandyListShape.Anim"/>: one entry per message), the table of a hit's blood.</summary>
+    public static SpellEyeCandyRead OpenAnim(ContentStack stack, MesReaderOptions? options = null) => Open(stack, EyeCandyListShape.Anim, options);
 
     private static SpellEyeCandyRead Open(ContentStack stack, EyeCandyListShape shape, MesReaderOptions? options)
     {

@@ -139,6 +139,8 @@ public partial class TerrainViewerApp
         _spellCaster.CastCombat = castCombat;
         // ARC-DEV-254: a script's damage asks the victim's taking-damage script (point 0x17) first.
         _spellCaster.TakingDamage = TakingDamageGoesOn;
+        // ARC-RENDER-1794 (OH2): the damage effect's blood of a hit reads the violence filter as the options set it.
+        _spellCaster.ViolenceFilter = () => _gameSettings.ViolenceFilter;
         // ARC-MAGIC-1167 (MA-10): a Heal with the raise bit asks a dead target's raise script (point 0x12) first.
         _spellCaster.RaiseScript = RaiseGoesOn;
         // ARC-AI-1680: a spell's, trap's or burn's damage step asks a follower's near-death line (0x4AEAB0) as it lands, as the damage step 0x4B4390 does.
