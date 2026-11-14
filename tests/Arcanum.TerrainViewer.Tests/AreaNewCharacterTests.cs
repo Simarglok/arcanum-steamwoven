@@ -397,6 +397,30 @@ public sealed class AreaNewCharacterTests
         editor.Dispose();
     }
 
+    [TestMethod]
+    public void The_editor_s_scheme_press_is_stored_in_the_draft_and_the_start_runs_it_without_spending_points()
+    {
+        var (creation, hero) = ElfWoman();
+        var draft = Session(hero);
+        Assert.IsNull(creation.ApplyChoices(draft, Effect));
+        using var editor = new AreaCreationEditor(creation, draft);
+        Assert.IsNull(creation.Scheme, "no press yet: the prototype's scheme stays");
+        Assert.AreEqual(0, draft.QueryHero()!.Advancement.AutoLevelScheme);
+        Assert.IsTrue(editor.PressStat(2, spend: true).Changed);
+        Assert.AreEqual(GameSessionDisposition.Changed, editor.PressScheme(91).Disposition);
+        Assert.AreEqual(GameSessionDisposition.NoChange, editor.PressScheme(91).Disposition, "the same scheme again changes nothing");
+        Assert.AreEqual(GameSessionDisposition.Rejected, editor.PressScheme(200).Disposition, "a scheme past the table is refused and not recorded");
+        Assert.AreEqual((91, 91), (creation.Scheme, draft.QueryHero()!.Advancement.AutoLevelScheme));
+        Assert.AreEqual(1, creation.Presses.Count, "a scheme is not a point press");
+        Assert.AreEqual(4, editor.Stats()!.UnspentPoints, "nothing is bought now (ALP8)");
+
+        using var started = Session(hero);
+        Assert.IsNull(creation.Apply(started, Effect));
+        var made = started.QueryHero()!;
+        Assert.AreEqual((91, 4, 9), (made.Advancement.AutoLevelScheme, made.UnspentPoints, made.Stats[(int)CharacterStat.Strength]), "the started game holds the scheme and the unspent points");
+        Assert.IsFalse(started.HeroEditorOpen);
+    }
+
     private static bool Did(SessionPointResult result) => result.Disposition == GameSessionDisposition.Changed;
 
     [TestMethod]
