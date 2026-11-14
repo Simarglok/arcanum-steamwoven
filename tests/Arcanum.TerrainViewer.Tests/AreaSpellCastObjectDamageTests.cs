@@ -138,6 +138,27 @@ public sealed class AreaSpellCastObjectDamageTests
     }
 
     [TestMethod]
+    public void AHitWithAnAttackerTellsTheHostInsideTheDamageStepAndOneWithoutDoesNot()
+    {
+        // ARC-AI-2124 (GW9): the damage end calls the guard witnesses inside each object's damage step, so the map tells its host the moment the hit (and the zero witness-only hit) is queued, with the hit already takeable; a script's damage waits for the flush.
+        var f = Create();
+        var door = f.Map.Id(f.Rows[0]);
+        var seen = new List<(string Id, string? Actor, bool WitnessOnly)>();
+        f.Map.ObjectHitMade = () => seen.AddRange(f.Map.TakeObjectHits().Select(h => (h.Id, h.Actor, h.WitnessOnly)));
+        var four = AttackResolver.DamageStep(new() { Attacker = new Combatant(), Target = new Combatant(), TargetKind = AttackTargetKind.OtherObject, Damage = DamageByType.Zero.With(DamageType.Normal, 4) });
+        var zero = AttackResolver.DamageStep(new() { Attacker = new Combatant(), Target = new Combatant(), TargetKind = AttackTargetKind.OtherObject, Damage = DamageByType.Zero });
+        Assert.IsTrue(f.Map.DamageObject(door, four, SessionSpellCaster.Hero));
+        CollectionAssert.AreEqual(new[] { (door, (string?)SessionSpellCaster.Hero, false) }, seen, "told at once, the hit already queued");
+        seen.Clear();
+        Assert.IsFalse(f.Map.DamageObject(door, zero, "oid:guard"));
+        CollectionAssert.AreEqual(new[] { (door, (string?)"oid:guard", true) }, seen, "a zero hit is told as well");
+        seen.Clear();
+        Assert.IsTrue(f.Caster.ApplyScriptDamage(f.Map.Id(f.Rows[2]), 12, 0, unresistable: true).Applied);
+        Assert.AreEqual(0, seen.Count, "damage with no attacker is not told");
+        Assert.AreEqual(1, f.Map.TakeObjectHits().Count, "it waits in the queue for the flush");
+    }
+
+    [TestMethod]
     public void AnAmountThatTheMaterialTakesAllOfDoesNothing()
     {
         var f = Create();

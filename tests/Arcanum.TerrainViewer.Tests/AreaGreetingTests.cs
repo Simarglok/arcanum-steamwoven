@@ -46,6 +46,29 @@ public sealed class AreaGreetingTests
     }
 
     [TestMethod]
+    public void An_npc_listeners_facts_are_its_own_gender_race_and_intelligence_not_the_pcs()
+    {
+        // ARC-AI-2114 (0x418780): the line's listener object's stat 26 picks the file, so a follower that is the actor of a guard witness's shout speaks to its own gender.
+        var stats = new int[CombatFieldReader.BaseStats];
+        stats[4] = 4; stats[26] = 1; stats[27] = 3;
+        Assert.AreEqual(new DialogPcFacts(DialogPcGender.Male, 4, true, 3), AreaGreeting.ListenerFacts(Npc(stats, 0)));
+        stats[4] = 9; stats[26] = 0; stats[27] = 5;
+        var female = AreaGreeting.ListenerFacts(Npc(stats, 0))!;
+        Assert.AreEqual(new DialogPcFacts(DialogPcGender.Female, 9, false, 5), female);
+        // The facts of the line a male NPC says to that listener: the PC-side gender is the listener's, not the hero's.
+        var facts = AreaGreeting.FactsFor(Npc(new int[CombatFieldReader.BaseStats].Select((v, i) => i == 26 ? 1 : v).ToArray(), 0), female, 50, false, dead: false)!;
+        Assert.AreEqual((true, false, 5), (facts.NpcMale, facts.PcMale, facts.PcRace));
+        Assert.IsNull(AreaGreeting.ListenerFacts(null));
+        var pc = new DialogPcFacts(DialogPcGender.Male, 8, false, 0);
+        var fields = Npc(stats, 0);
+        Assert.AreEqual(female, AreaConversationHost.ListenerFactsOf("npc:1", pc, entity => entity == "npc:1" ? fields : null), "an NPC listener speaks for itself");
+        Assert.AreEqual(pc, AreaConversationHost.ListenerFactsOf(Arcanum.Simulation.Ai.AiSchedulerRules.Pc, pc, _ => fields), "the hero listener is the PC's facts");
+        Assert.AreEqual(pc, AreaConversationHost.ListenerFactsOf(null, pc, _ => fields), "no listener: the PC's");
+        Assert.AreEqual(pc, AreaConversationHost.ListenerFactsOf("oid:critter:9", pc, _ => null), "an object the host holds no fields of (a created critter that is no speaker) falls back to the PC's");
+        Assert.IsNull(AreaGreeting.ListenerFacts(Npc(stats, 0) with { Critter = null }), "no critter stats: the PC's facts stay");
+    }
+
+    [TestMethod]
     public void Candidates_rolls_and_rules_are_the_sessions()
     {
         using var source = new AreaOwnerFixture(motionBodies: true);
