@@ -2702,7 +2702,10 @@ button writes its name from `mes\intgame.mes` (1000–1009) where the original's
 on the bars. The main menu's, in-play menu's and options window's buttons play 3026 when the pointer enters one and 3027 on
 the press (GB7). The bars are drawn over the windows they open, and those windows (character sheet, inventory, logbook,
 schematics) lay themselves out in the part the bars leave free; while a conversation, barter, reading, the save list,
-the palette, the menu or the world map is open the bars are hidden, and they come back with no button lit or held. The
+the palette, the menu or the world map is open the bars are hidden, and they come back with no button lit or held (a conversation hides them under
+Steamwoven only: since ARC-UI-2024 the Original setting `DialogBarStays` keeps them drawn under the dialog, as the original does, lays the conversation panel in the part
+they leave free and shows the speaker's description of the dialog start in the description area; the bar's buttons stay without effect while the dialog is open, and
+a click on a hotkey slot does nothing, [ledger DB1-DB4](../research/ledger/ui-audio.md#the-bars-under-the-dialog-arc-ui-2024)). The
 diagnostic HUD moves below the top strip and the follower portraits and spell pane above the bottom strip. Since ARC-UI-020 the health and fatigue vials show the PC's
 [gauges](#health-and-fatigue-bars-arc-ui-020), and since ARC-UI-023 the bottom strip's message window is the
 [message log](#message-log-arc-ui-023), where the button names appear. Since ARC-UI-027 the hot-key slots, the recent-action buttons and
