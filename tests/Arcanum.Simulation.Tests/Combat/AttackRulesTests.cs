@@ -153,20 +153,44 @@ public sealed class AttackRulesTests
     [TestMethod]
     public void BackstabEligibility()
     {
-        Assert.AreEqual(BackstabKind.TrueBackstab, Backstab(SkillTraining.Apprentice, BackstabWeaponClass.Dagger, seen: false));
-        Assert.AreEqual(BackstabKind.Backstab, Backstab(SkillTraining.Apprentice, BackstabWeaponClass.Dagger, seen: true));
-        Assert.AreEqual(BackstabKind.None, Backstab(SkillTraining.None, BackstabWeaponClass.Dagger, seen: false));
-        Assert.AreEqual(BackstabKind.None, Backstab(SkillTraining.Apprentice, BackstabWeaponClass.Sword, seen: false));
-        Assert.AreEqual(BackstabKind.TrueBackstab, Backstab(SkillTraining.Expert, BackstabWeaponClass.Sword, seen: false));
-        Assert.AreEqual(BackstabKind.TrueBackstab, Backstab(SkillTraining.Expert, BackstabWeaponClass.Axe, seen: false));
-        Assert.AreEqual(BackstabKind.TrueBackstab, Backstab(SkillTraining.Master, BackstabWeaponClass.TwoHandedSword, seen: false));
-        Assert.AreEqual(BackstabKind.None, Backstab(SkillTraining.Master, BackstabWeaponClass.Other, seen: false));
-        Assert.AreEqual(BackstabKind.None, Backstab(SkillTraining.Master, BackstabWeaponClass.Dagger, seen: false, facing: true));
-        Assert.AreEqual(BackstabKind.None,
-            AttackRules.Backstab(SkillTraining.Master, false, WeaponKind.Unarmed, BackstabWeaponClass.Dagger, false));
+        // 0x45F9D0 (ARC-COMBAT-1929): a nonzero level, a target not facing the attacker, and the wielded art subtype 2 at any training
+        // or 3, 4 or 7 above apprentice; a true backstab when the target neither sees nor hears.
+        Assert.AreEqual(BackstabKind.TrueBackstab, Backstab(3, SkillTraining.Apprentice, 2, perceives: false));
+        Assert.AreEqual(BackstabKind.Backstab, Backstab(3, SkillTraining.Apprentice, 2, perceives: true));
+        Assert.AreEqual(BackstabKind.TrueBackstab, Backstab(1, SkillTraining.None, 2, perceives: false), "the level counts, not the training");
+        Assert.AreEqual(BackstabKind.None, Backstab(0, SkillTraining.Master, 2, perceives: false), "no points: the training does not help");
+        foreach (var subtype in new[] { 3, 4, 7 })
+        {
+            Assert.AreEqual(BackstabKind.None, Backstab(3, SkillTraining.Apprentice, subtype, perceives: false), $"subtype {subtype} needs more than apprentice");
+            Assert.AreEqual(BackstabKind.None, Backstab(3, SkillTraining.None, subtype, perceives: false));
+            Assert.AreEqual(BackstabKind.TrueBackstab, Backstab(3, SkillTraining.Expert, subtype, perceives: false));
+            Assert.AreEqual(BackstabKind.TrueBackstab, Backstab(3, SkillTraining.Master, subtype, perceives: false));
+        }
+        foreach (var subtype in new[] { 0, 1, 5, 6, 8, 9, 13, 15 })
+            Assert.AreEqual(BackstabKind.None, Backstab(20, SkillTraining.Master, subtype, perceives: false), $"subtype {subtype} never backstabs");
+        Assert.AreEqual(BackstabKind.None, Backstab(3, SkillTraining.Master, 2, perceives: false, faces: true), "the target faces the attacker");
+        Assert.AreEqual(BackstabKind.None, AttackRules.Backstab(3, SkillTraining.Master, WeaponKind.Unarmed, 2, () => false, () => false), "bare hands");
+        Assert.AreEqual(BackstabKind.None, AttackRules.Backstab(3, SkillTraining.Master, WeaponKind.ThrownItem, 2, () => false, () => false));
 
-        static BackstabKind Backstab(SkillTraining training, BackstabWeaponClass weapon, bool seen, bool facing = false) =>
-            AttackRules.Backstab(training, facing, WeaponKind.Weapon, weapon, seen);
+        // The facts are asked in the original's order and only when reached: no points, no ask; a facing target, no awareness ask.
+        var asked = new List<string>();
+        Func<bool> Face(bool value) => () => { asked.Add("faces"); return value; };
+        Func<bool> Perceive(bool value) => () => { asked.Add("perceives"); return value; };
+        AttackRules.Backstab(0, SkillTraining.Master, WeaponKind.Weapon, 2, Face(false), Perceive(false));
+        Assert.AreEqual(0, asked.Count);
+        AttackRules.Backstab(3, SkillTraining.Master, WeaponKind.Weapon, 2, Face(true), Perceive(false));
+        CollectionAssert.AreEqual(new[] { "faces" }, asked);
+        asked.Clear();
+        AttackRules.Backstab(3, SkillTraining.Apprentice, WeaponKind.Weapon, 3, Face(false), Perceive(false));
+        CollectionAssert.AreEqual(new[] { "faces" }, asked, "a subtype the training does not allow never asks the awareness");
+        asked.Clear();
+        AttackRules.Backstab(3, SkillTraining.Apprentice, WeaponKind.Weapon, 2, Face(false), Perceive(false));
+        CollectionAssert.AreEqual(new[] { "faces", "perceives" }, asked);
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => Backstab(21, SkillTraining.Master, 2, perceives: false));
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => Backstab(3, SkillTraining.Master, 16, perceives: false));
+
+        static BackstabKind Backstab(int level, SkillTraining training, int subtype, bool perceives, bool faces = false) =>
+            AttackRules.Backstab(level, training, WeaponKind.Weapon, subtype, () => faces, () => perceives);
     }
 
     [TestMethod]

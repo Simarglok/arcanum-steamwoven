@@ -2599,8 +2599,26 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
             // ARC-DEV-273 (RA4): a bow or firearms attack reads the line to the target (a melee one ignores it).
             LineOfFire = Distance(id, target) > 1 && Tile(id) is { } from && Tile(target) is { } to && _scene.LineOfFire?.Invoke() is { } map ? LineTo(from, to, Key(target), map) : null,
             Flight = flight,
+            Backstab = BackstabFacts(id, target),
             TargetWasInBed = inBed,
         };
+    }
+
+    /// <summary>ARC-COMBAT-1929: <see cref="BackstabFacts"/> of the hero's melee strike on the NPC <paramref name="target"/>.</summary>
+    public SessionBackstabFacts? HeroBackstabFacts(string target) => BackstabFacts(Pc, target);
+
+    /// <summary>
+    /// ARC-COMBAT-1929 (0x45F9D0 from the context builder 0x4B2210): what decides whether <paramref name="attacker"/>'s melee strike on
+    /// <paramref name="target"/> is a backstab, as the session asks it (<see cref="SessionAttack.Backstab"/>): whether the target faces the
+    /// attacker (0x45EFF0: its facing, an NPC's mover's, the hero's the scene's) and whether it sees (0x4AF260) or hears (0x4AF470, silent) it,
+    /// both read when the session asks. Null for a pair this host holds no tile of, and while the scene has no line-of-fire map.
+    /// </summary>
+    public SessionBackstabFacts? BackstabFacts(string attacker, string target)
+    {
+        // Without a line-of-fire map sight and hearing answer 'not perceived', which would over-grant true backstabs: no facts, no backstab.
+        if (attacker == target || Tile(attacker) is not { } from || Tile(target) is not { } to || _scene.LineOfFire?.Invoke() is null) return null;
+        return new(() => AwarenessRules.Faces(to, ObserverRotation(target, null), from),
+            () => See(target, attacker).Perceived || Hear(target, attacker, Loudness.Silent).Perceived);
     }
 
     /// <summary>

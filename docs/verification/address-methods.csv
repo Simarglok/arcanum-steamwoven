@@ -55,6 +55,7 @@ src/Arcanum.Session/GameSessionAmmo.cs,SpendAmmo,pending,
 src/Arcanum.Session/GameSessionAssembly.cs,QueryHeroAssembly,pending,
 src/Arcanum.Session/GameSessionAttack.cs,AttackCritter,pending,
 src/Arcanum.Session/GameSessionAttack.cs,AttackValues,pending,
+src/Arcanum.Session/GameSessionAttack.cs,BackstabOf,exempt,host
 src/Arcanum.Session/GameSessionAttack.cs,CriticalAndWearSteps,pending,
 src/Arcanum.Session/GameSessionAttack.cs,DollValues,exempt,host
 src/Arcanum.Session/GameSessionAttack.cs,FirearmsLevel,pending,
@@ -444,6 +445,7 @@ src/Arcanum.World/AreaAiHost.cs,Active,pending,
 src/Arcanum.World/AreaAiHost.cs,AnimationPriority,pending,
 src/Arcanum.World/AreaAiHost.cs,ApplyStop,pending,
 src/Arcanum.World/AreaAiHost.cs,AttackEnded,exempt,host
+src/Arcanum.World/AreaAiHost.cs,BackstabFacts,exempt,host
 src/Arcanum.World/AreaAiHost.cs,BeginAttack,pending,
 src/Arcanum.World/AreaAiHost.cs,BlastRadius,pending,
 src/Arcanum.World/AreaAiHost.cs,CanHealAndFight,pending,
