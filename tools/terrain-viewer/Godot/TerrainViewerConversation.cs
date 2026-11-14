@@ -302,7 +302,7 @@ public partial class TerrainViewerApp
         {
             _voiceStart = start; // smokes read the status; the voice acts only while a conversation is open
             // ARC-UI-2029 (TB26): the greeting is a speech display with the hero as listener (0x5681C0): the NPC turns to it when idle.
-            AreaAiHostNow()?.FaceListener(AreaConversationState.EntityId(speaker.Row), Arcanum.Simulation.Ai.AiSchedulerRules.Pc);
+            if (start.GreetingLine is not null) AreaAiHostNow()?.FaceListener(AreaConversationState.EntityId(speaker.Row), Arcanum.Simulation.Ai.AiSchedulerRules.Pc);
             GD.Print($"ARC-DEV-324 generic greeting speaker={speaker.ScriptId} line={start.GreetingLine ?? "none"} detail={start.Detail}");
             RefreshReadyStatus();
             return;
@@ -385,7 +385,7 @@ public partial class TerrainViewerApp
         _voiceStart = start;
         var title = $"Dialog NPC (script {speaker.ScriptId}, prototype {speaker.Row.PrototypeNumber})";
         var barsOn = InterfaceBarsOn;
-        // ARC-UI-2029 (TB26): the dialog start's tail (0x567460) stops the hero's runs and turns it to the NPC before the first line; the concealment of both ended in the session's reaction start.
+        // ARC-UI-2029 (TB26): the dialog start's tail (0x567460) stops the hero's runs and turns it to the NPC before the first line; the concealment of both ended already in the session's reaction start (before the turn, where the original unconceals after it: a concealed hero turns at goal 53's speed here, the original's level-5 unconceal snaps it, TB26 F2).
         if (start.Status == AreaConversationStartStatus.Started) FaceHeroTowardSpeaker(interrupt: true);
         var shown = ShowConversationPanel(title, start.Conversation, start.Status == AreaConversationStartStatus.Started ? null : $"[{start.Status}: {start.Detail}]");
         // ARC-UI-1120 (HK25): the dialog start (0x567460, the single-player branch) describes the speaker for the hero (0x57CD60, 0x553BE0, 0x43C270) as the
