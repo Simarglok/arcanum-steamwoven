@@ -155,15 +155,36 @@ public sealed partial class SessionSpellCaster
     }
 
     /// <summary>
-    /// ARC-RENDER-1794 (ledger ER5, TT14): the attack end (0x4B6930) of a weapon's hit on the PC or NPC <paramref name="victim"/> that dealt <paramref name="damage"/> (the resolution's damage step, null when it has none): a hit with
-    /// a positive slot runs the damage effect of kind 1 + the slot's type (<see cref="HitGoreRules.AttackEndKind"/>: the blood of the hit, then the hit effect); a hit with none, and a critical hit, calls the hit effect
-    /// (<see cref="CritterHit"/>) directly. The caller has made the gates that come before it (a hit that reached its victim). Returns whether the critter's entangle ended now. Not modelled: the weapon's own hit effect (0x4377C0, an
-    /// entry of the weapon eye-candy list, which vetoes both), the packet flag 0x80 that skips the damage effect, the multiplayer client gate.
+    /// ARC-RENDER-1990: the host's add of an eye candy of the weapon list (0x5DE610) on a critter for the weapon's own hit effect (0x4377C0 → the add 0x4CCF70): the victim, the entry (<see cref="EyeCandyEntryRef"/> of the weapon list) and the add's limit
+    /// (<see cref="WeaponHitEffectRules.AddLimit"/>); true when an eye candy of the entry holds on the victim now (the host played it). The host plays at once, since the answer vetoes what follows in the attack end; null (no host) plays nothing, so no weapon has an effect.
     /// </summary>
-    public bool AttackEnd(string victim, AttackDamage? damage, bool critical)
+    public Func<string, int, int, bool>? WeaponEyeCandyAdd { get; set; }
+
+    /// <summary>
+    /// ARC-RENDER-1794 (ledger ER5, TT14), ARC-RENDER-1990: the attack end (0x4B6930) of a weapon's hit on the PC or NPC <paramref name="victim"/> that dealt <paramref name="damage"/> (the resolution's damage step, null when it has none).
+    /// It asks the weapon's own hit effect first (0x4377C0, kind 3, <see cref="WeaponHitEffect"/>) for <paramref name="weapon"/>, the prototype number of the attack's weapon (its prototype file's number; null: unarmed, or a weapon the host does not name): when an
+    /// eye candy of the weapon list's hit entry plays on the victim, the attack end ends there (no blood, no hit effect, so no re-resistance of an entangled victim). Otherwise a hit with a positive slot runs the damage effect of kind
+    /// 1 + the slot's type (<see cref="HitGoreRules.AttackEndKind"/>: the blood of the hit, then the hit effect); a hit with none, and a critical hit, calls the hit effect (<see cref="CritterHit"/>) directly. The caller has made the gates that
+    /// come before it (a hit that reached its victim). Returns whether the critter's entangle ended now. Not modelled: the second add of the weapon effect (its index is the next weapon's begin entry, empty in the installed data), the packet flag
+    /// 0x80 that skips the damage effect, the multiplayer client gate.
+    /// </summary>
+    public bool AttackEnd(string victim, AttackDamage? damage, bool critical, int? weapon = null)
     {
         ArgumentNullException.ThrowIfNull(victim);
+        if (weapon is { } prototype && WeaponHitEffect(victim, prototype)) return false;
         return damage is not null && HitGoreRules.AttackEndKind(critical, damage.Final) is { } kind ? DamageEffect(victim, kind, damage.HitPointDamage) : CritterHit(victim);
+    }
+
+    /// <summary>
+    /// ARC-RENDER-1990 (0x4377C0, kind 3): the weapon's own hit effect on the victim: the entry <see cref="WeaponHitEffectRules.Index"/> names in the weapon list is added to the victim (<see cref="WeaponEyeCandyAdd"/>, limit
+    /// <see cref="WeaponHitEffectRules.AddLimit"/>), which the add refuses for a destroyed victim (object flag 0x1), an entry without art, no free place and a duplicate past the limit. True when it played (the attack end's veto).
+    /// </summary>
+    [OriginalFunction(0x4377C0, OriginalFunctionScope.Partial)]
+    private bool WeaponHitEffect(string victim, int prototype)
+    {
+        if (WeaponEyeCandyAdd is not { } add || WeaponHitEffectRules.Index(prototype, WeaponHitEffectRules.Hit) is not { } index || EyeCandyEntryRef.Make(EyeCandyList.Weapon, index) is not { } entry) return false;
+        if ((CurrentFlags(victim, SessionObjectFlagField.Object) & SpellTargetObject.Destroyed) != 0) return false;
+        return add(victim, entry, WeaponHitEffectRules.AddLimit);
     }
 
     /// <summary>
@@ -191,5 +212,23 @@ public sealed partial class SessionSpellCaster
         ArgumentNullException.ThrowIfNull(victim);
         ArgumentNullException.ThrowIfNull(step);
         return HitGoreRules.AttackEndKind(false, step.Final) is { } kind ? DamageEffect(victim, kind, 0) : CritterHit(victim);
+    }
+
+    /// <summary>The kind the poison event (0x4B1170) passes to the damage effect: 2, the poison splotch (index 1 of the animation list).</summary>
+    public const int PoisonDamageEffectKind = 2;
+
+    /// <summary>
+    /// ARC-RENDER-1991 (ledger RH2, RH7): the tail of the poison tick (the event 0x4B1170) of a life timer that ran in a pass: when the tick's damage step dealt hit-point damage (the packet's "damage dealt"
+    /// flag 0x200000, RH1: not set for a vetoed, invulnerable or already dead victim), the damage effect of kind 2 runs on the victim (<see cref="DamageEffect"/>: the poison blood, then the hit effect, so an entangled victim asks
+    /// its save again). Kind 2 never reads the violence filter or the critter's undead and mechanical flags (they only change kind 1), so the blood is index 1 whatever they say. It runs after the pass, not between the
+    /// tick and the next event. Not a poison damage firing, or one that dealt nothing, runs nothing. Returns whether the critter's entangle ended now.
+    /// </summary>
+    private bool PoisonTickHit(SessionLifeFiring firing)
+    {
+        if (firing.Event.Kind is not (SessionEventKinds.HeroPoisonDamage or SessionEventKinds.NpcPoisonDamage)) return false;
+        if (firing.Life.Outcome is not { HitPointDamage: > 0 } outcome) return false;
+        var entities = firing.Event.Payload.Entities;
+        var victim = firing.Event.Kind == SessionEventKinds.HeroPoisonDamage ? Hero : entities.IsEmpty ? null : entities[0].Code;
+        return victim is not null && DamageEffect(victim, PoisonDamageEffectKind, outcome.HitPointDamage);
     }
 }

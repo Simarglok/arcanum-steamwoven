@@ -104,6 +104,12 @@ public partial class AreaDrawItem : Node2D
         .Replace("blend_mix", "blend_add", StringComparison.Ordinal) });
     private static readonly Lazy<Shader> MultiplyShader = new(() => new Shader { Code = Code.Replace("BODY_COLOR", MultiplyColor, StringComparison.Ordinal)
         .Replace("blend_mix", "blend_mul", StringComparison.Ordinal) });
+    // ARC-RES-1978: the relit variants (normal-mapped light term, AreaRelight). Built only when the relit look is first asked for; the three
+    // Legacy programs above are never edited. The multiply body is not relit (it has no light of its own).
+    private static string RelitCode(string blend) => Code.Replace("void fragment()", AreaRelight.Declarations + "\n        void fragment()", StringComparison.Ordinal)
+        .Replace("BODY_COLOR", AreaRelight.BlendColor, StringComparison.Ordinal).Replace("blend_mix", blend, StringComparison.Ordinal);
+    private static readonly Lazy<Shader> RelitNormalShader = new(() => { AreaRelight.EnsureRegistered(); return new Shader { Code = RelitCode("blend_mix") }; });
+    private static readonly Lazy<Shader> RelitAddShader = new(() => { AreaRelight.EnsureRegistered(); return new Shader { Code = RelitCode("blend_add") }; });
     private ShaderMaterial? _material;
     private (bool Additive, bool Multiply, int Alpha, int WadeRows)? _materialState;
     private Color? _ambientState;
@@ -138,6 +144,9 @@ public partial class AreaDrawItem : Node2D
     internal AreaLatticeBinding? Lattice { get; set; }
     /// <summary>ARC-DEV-335: the carried lights' lattice, or null.</summary>
     internal AreaCarriedBinding? Carried { get; set; }
+    /// <summary>ARC-RES-1978: what the relit look treats this item as (<see cref="AreaRelight.KindNone"/> .. KindCritter); read only while it is on.</summary>
+    internal int RelightKind { get; set; }
+    private (bool Relit, int Kind)? _relitState;
     /// <summary>Shared index rows owned by the canvas. A standalone item (tests, probes)
     /// keeps a private cache holding only its current row.</summary>
     internal AreaMappingCache? Mappings { get; set; }
@@ -193,9 +202,13 @@ public partial class AreaDrawItem : Node2D
         var size = (Vector2I)viewport.GetVisibleRect().Size;
         var state = (transform, source, command.Destination, command.FlipX, command.FlipY, size);
         _material ??= new ShaderMaterial();
-        if (_materialState != (command.Additive, command.Multiply, command.Alpha, command.WadeRows) || Material != _material)
+        var relit = AreaRelight.Active && !command.Multiply;
+        if (_materialState != (command.Additive, command.Multiply, command.Alpha, command.WadeRows) || Material != _material || _relitState?.Relit != relit)
         {
-            _material.Shader = command.Additive ? AddShader.Value : command.Multiply ? MultiplyShader.Value : NormalShader.Value;
+            _material.Shader = command.Multiply ? MultiplyShader.Value
+                : relit ? (command.Additive ? RelitAddShader.Value : RelitNormalShader.Value)
+                : command.Additive ? AddShader.Value : NormalShader.Value;
+            _relitState = (relit, -1);
             Material = _material;
             _material.SetShaderParameter("body_alpha", command.Alpha / 255f);
             _material.SetShaderParameter("wade_rows", command.WadeRows);
@@ -229,7 +242,12 @@ public partial class AreaDrawItem : Node2D
             _cornerState = corners;
         }
         var mode = Lattice is not null || Carried is not null ? 2 : AmbientRight != Ambient ? 1 : 0;
-        var raster = mode == 0 && command.WadeRows == 0 ? default : new Vector4(transform.Origin.X, transform.Origin.Y, transform.X.X, transform.Y.Y);
+        var raster = mode == 0 && command.WadeRows == 0 && !relit ? default : new Vector4(transform.Origin.X, transform.Origin.Y, transform.X.X, transform.Y.Y);
+        if (relit && _relitState?.Kind != RelightKind)
+        {
+            _material.SetShaderParameter("relight_kind", RelightKind);
+            _relitState = (true, RelightKind);
+        }
         var light = (mode, AmbientRight, Lattice, Carried, mode == 1 || command.WadeRows > 0 ? command.Destination : default, raster);
         if (_lightState != light)
         {

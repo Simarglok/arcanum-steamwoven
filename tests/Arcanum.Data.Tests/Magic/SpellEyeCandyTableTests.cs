@@ -201,6 +201,23 @@ public sealed class SpellEyeCandyTableTests
         Assert.AreEqual(SpellEyeCandyTable.AnimPath, SpellEyeCandyTable.Read(Mes("{5}{Art: 3}\n"), AllLoad, EyeCandyListShape.Anim).Refusal!.File);
     }
 
+    [TestMethod]
+    public void The_weapon_list_is_five_entries_for_each_ten_messages_from_message_one()
+    {
+        // ARC-RENDER-1990: the weapon list (0x5DE610) starts at message 1, five entries a group, ten messages apart: entry 5g + k is message 10g + 1 + k, the groups counted while message 10g + 1 exists. Messages 0 and 10 (the labels) are no entry.
+        var read = SpellEyeCandyTable.Read(Mes("{0}{Art: 9, Flags: overlay_f | animates}\n{1}{Art: 3, Flags: overlay_f | animates}\n{4}{Art: 6, Flags: overlay_f | animates}\n{10}{Art: 9, Flags: overlay_f | animates}\n{11}{Art: 4, Flags: overlay_f | animates}\n{12}{Art: 5, Flags: overlay_f | animates}\n{20}{Art: 9}\n"),
+            AllLoad, EyeCandyListShape.Weapon);
+        Assert.AreEqual(SpellDataStatus.Read, read.Status);
+        var table = read.Table!;
+        Assert.AreEqual(10, table.Entries.Count, "two groups of five: messages 1 and 11 exist, 21 does not");
+        Assert.AreEqual(3, EyeCandyArt.Number(table.At(0).Art!.Value), "entry 0 is message 1");
+        Assert.AreEqual(6, EyeCandyArt.Number(table.At(3).Art!.Value), "entry 3, the hit, is message 4");
+        Assert.AreEqual(4, EyeCandyArt.Number(table.At(5).Art!.Value), "entry 5 is message 11");
+        Assert.AreEqual(5, EyeCandyArt.Number(table.At(6).Art!.Value), "entry 6 is message 12");
+        Assert.IsNull(table.At(1).Art);
+        Assert.AreEqual(SpellEyeCandyTable.WeaponPath, SpellEyeCandyTable.Read(Mes("{5}{Art: 3}\n"), AllLoad, EyeCandyListShape.Weapon).Refusal!.File, "a file without message 1 is empty and names its own file");
+    }
+
     private static SpellEyeCandyTable Read(string text)
     {
         var read = SpellEyeCandyTable.Read(Mes(text), AllLoad);
