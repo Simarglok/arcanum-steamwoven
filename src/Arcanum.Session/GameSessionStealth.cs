@@ -156,18 +156,19 @@ public sealed partial class GameSessionOwner
     {
         var changed = _combat.HeroConcealed || _combat.Concealed.Contains(entity);
         _combat.HeroConcealed = false;
-        _combat.Concealed.Remove(entity);
+        // 0x45EE30 with 0 on the talk partner reaches its own followers too (ARC-WORLD-2118).
+        if (_combat.Concealed.Contains(entity)) SetConcealment(entity, false);
         return changed;
     }
 
-    // The attack event (0x4A9650, ST4): when the victim is the hero or an NPC the hero leads (following or waiting), the hero and
+    // The attack event (0x4A9650, ST4): when the victim is the hero or a critter the hero leads (following or waiting, or through a chain of leaders), the hero and
     // the followers in its follower list are no longer concealed; a waiting victim is not in that list and keeps its state. The
     // attacker is not touched as the attacker: the hero attacking its own follower is in the victim's party and loses it too. True
     // when that changed anything.
     private bool EndConcealmentForAttackOn(SessionCombatant victim)
     {
-        if (!victim.IsHero && (victim.Entity is not { } entity || !_party.Records.TryGetValue(entity, out var record) ||
-            record.Standing is not (CompanionStanding.Following or CompanionStanding.Waiting)))
+        // 0x4A9650 takes the victim's PC-chain head (0x45DDA0, else the victim itself) and ends its concealment with 0x45EE30: a victim the hero leads directly or through a chain of leaders (ARC-WORLD-2118).
+        if (!victim.IsHero && (victim.Entity is not { } entity || !PcLeads(entity)))
             return false;
         var tree = FollowerTreeOf(SessionEventKinds.PlayerEntity);
         var changed = _combat.HeroConcealed || tree.Any(_combat.Concealed.Contains);
@@ -200,7 +201,7 @@ public sealed partial class GameSessionOwner
     /// ARC-AI-1653 (the unconceal goal's end node 0x42AFB0 → 0x45EE30, ledger VBG19): the NPC's own goal run stood it up and, unless its leader is
     /// concealed, ends its concealment. The leader is the hero while the NPC is led by it (following or waiting, HK2 keeps the leader); a
     /// follower of a sneaking hero therefore stays concealed (it only stands up), while a concealed NPC whose hero is not concealed, or that has
-    /// no leader, stops prowling. The NPC's own followers (the call reaches them too) are not modelled: a follower leads none. One revision of its
+    /// no leader, stops prowling. One revision of its
     /// own; no change (not concealed, or its leader is) is <see cref="GameSessionDisposition.NoChange"/>. The hero's own concealment is never touched here.
     /// ARC-WORLD-2118: the leader is the hero or an NPC (<see cref="LeaderConcealed"/>), and the NPC's own followers stand up with it.
     /// </summary>

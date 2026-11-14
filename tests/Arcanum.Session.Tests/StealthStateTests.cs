@@ -304,4 +304,19 @@ public sealed class StealthStateTests
         Assert.AreEqual(GameSessionDisposition.NoChange, owner.EndNpcConcealmentForUnconceal(owner.Version, Summon).Disposition, "its leader, the companion, is concealed");
         Assert.IsTrue(owner.IsConcealed(SessionCombatant.Critter(Imp)));
     }
+
+    [TestMethod]
+    public void AnAttackOnAFollowerOfAFollowerEndsTheHerosWholeConcealment()
+    {
+        using var owner = Owner();
+        owner.ForceJoinLeader(owner.Version, Summon, Pal);
+        owner.ToggleHeroConcealment(owner.Version);
+        // 0x4A9650: the victim's PC-chain head (0x45DDA0) is the hero, so the hit on the companion's summon reveals the hero and the whole tree.
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.EndConcealmentForAttackEvent(owner.Version, SessionCombatant.Critter(Summon)).Disposition);
+        Assert.IsFalse(owner.IsConcealed(SessionCombatant.Hero) || owner.IsConcealed(SessionCombatant.Critter(Pal)) || owner.IsConcealed(SessionCombatant.Critter(Summon)));
+        // A critter outside the hero's chain is no group of the session's.
+        owner.ForceJoinLeader(owner.Version, Imp, Stranger);
+        owner.ToggleHeroConcealment(owner.Version);
+        Assert.AreEqual(GameSessionDisposition.NoChange, owner.EndConcealmentForAttackEvent(owner.Version, SessionCombatant.Critter(Imp)).Disposition);
+    }
 }
