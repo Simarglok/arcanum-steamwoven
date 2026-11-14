@@ -113,9 +113,9 @@ public partial class TerrainViewerApp
             // ARC-DEV-176: a door or window is a portal for the click rules (a use out of combat mode and in it).
             if (app._areaDoors?.PortalOf(target) is not null)
                 return new(session is not null && app.HeroActing(session), false, false, false, app.HeroInCombatMode, HeroClickTarget.Portal, Alt: alt, Shift: shift);
-            // ARC-DEV-181: the attack the viewer decided on (a creature, or with Alt an object) is an attack for the click rules, in combat mode.
+            // ARC-DEV-181: the attack the viewer decided on (a creature, or with Alt an object or, ARC-COMBAT-1941, a wall) is an attack for the click rules, in combat mode.
             if (target.StartsWith("atk:", StringComparison.Ordinal))
-                return new(session is not null && app.HeroActing(session), false, false, false, true, app._attack is { Object: not null } ? HeroClickTarget.Scenery : HeroClickTarget.Critter, Alt: alt, Shift: shift);
+                return new(session is not null && app.HeroActing(session), false, false, false, true, app._attack is { Wall: true } ? HeroClickTarget.Wall : app._attack is { Object: not null } ? HeroClickTarget.Scenery : HeroClickTarget.Critter, Alt: alt, Shift: shift);
             // A trigger object (an exit, a scripted object) is scenery for the click rules; anything else is a speaker.
             if (app.UseKeyOf(target) is { } key)
             {

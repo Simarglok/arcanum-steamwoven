@@ -114,7 +114,7 @@ public interface IHeroActions
     bool StartUse(string target, bool container, bool run) => false;
     /// <summary>ARC-DEV-175: starts the hero's pickup goal 15 at <paramref name="target"/> (an item on the ground), running when <paramref name="run"/>; false when the movement gate or a run's refusal stopped it.</summary>
     bool StartPickup(string target, bool run) => false;
-    /// <summary>ARC-DEV-181: starts the hero's attack goal 18 at <paramref name="target"/> (a creature, or with Alt a door, container or scenery object), running when <paramref name="run"/>; false when the movement gate or a run's refusal stopped it.</summary>
+    /// <summary>ARC-DEV-181: starts the hero's attack goal 18 at <paramref name="target"/> (a creature, or with Alt a door, container, scenery object or wall), running when <paramref name="run"/>; false when the movement gate or a run's refusal stopped it.</summary>
     bool StartAttack(string target, bool run) => false;
     /// <summary>ARC-DEV-270: starts the hero's attempt attack goal 19 at <paramref name="target"/> with the run flag 0x100 (the click had Shift, GS27): the hero swings from where it stands and walks no approach; false when the movement gate or a run's refusal stopped it.</summary>
     bool StartAttemptAttack(string target) => false;

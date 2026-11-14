@@ -109,6 +109,25 @@ public partial class TerrainViewerApp
             var blockedSteps = BlockedSteps(grid, key, targetCell);
             var revision = session.Version.Revision;
             _areaSmokeTime *= 20; _worldTestTime = SimulationTime.At(_areaSmokeTime, 20);
+            // ARC-COMBAT-1941 (VC62, 0x54ED30): Shift with Alt on the object is the attempt attack 19 with run flag 0x100 (no walk, no running), not the attack 18 with its approach: from a cell out of reach the hero stays where it is and the
+            // attack ends. The leg runs only from out of reach (the Alt-click below is the plain attack, with the walk).
+            if (_worldActor.Session is AreaGridSession shiftSession && Chebyshev(target.Row, (shiftSession.Chart.ToWorld(shiftSession.State.CommittedCell).X, shiftSession.Chart.ToWorld(shiftSession.State.CommittedCell).Y)) > reach)
+            {
+                var stood = shiftSession.State.CommittedCell;
+                _UnhandledInput(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = true, Position = point, GlobalPosition = point, AltPressed = true, ShiftPressed = true });
+                Require(_attack is { Object: not null, NoWalk: true }, "the Shift+Alt-click started an object attack with the no-walk flag: " + _attackNotice);
+                var shiftRun = HeroRunsHost()?.AttackRun;
+                Require(shiftRun is not null && shiftRun.Frames.Any(f => f.Goal == Arcanum.Simulation.Goals.GoalType.AttemptAttack) && shiftRun.Frames.All(f => f.Goal != Arcanum.Simulation.Goals.GoalType.Attack)
+                    && (shiftRun.Flags & Arcanum.Simulation.Goals.GoalRunFlags.NoWalk) != 0, "the Shift+Alt-click's run is the attempt attack 19 with run flag 0x100");
+                AttackSettleForSelfTest();
+                Require(!AttackApproaching && shiftSession.State.CommittedCell == stood, "the Shift+Alt-click walks no approach: the hero stays where it stood");
+                GD.Print($"ARC-COMBAT-1941 shift-alt object attack PASS target={target.Entity} notice={_attackNotice}");
+                CancelAreaAttack(null);
+                // The settle frames may have moved the view: the object's point under the pointer is found again.
+                if (await HoverPointAsync(this, commands[key]) is not { } again) Require(false, "the object is still under the pointer after the Shift+Alt leg");
+                else { point = again; HoverAtForSelfTest(point); }
+            }
+            else GD.Print("ARC-COMBAT-1941 shift-alt object attack SKIP (the start is within reach)");
             _UnhandledInput(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = true, Position = point, GlobalPosition = point, AltPressed = true });
             Require(_attack is { Object: not null }, "the Alt-click started an object attack: " + _attackNotice);
             AttackSettleForSelfTest();
@@ -138,6 +157,8 @@ public partial class TerrainViewerApp
                 { Coverage: Arcanum.Data.Traversal.CardinalTraversalCoverage.Supported, Disposition: Arcanum.Data.Traversal.CardinalTraversalDisposition.Open });
             Require(!gone || freed == blockedSteps.Length, $"a removed object blocks no step onto its tile ({freed}/{blockedSteps.Length})");
             Require(gone || freed == 0, $"a standing object still blocks ({freed}/{blockedSteps.Length})");
+            // ARC-COMBAT-1941: the hero's attack run on a wall (the Alt click of the combat-mode table, 0x54ED30).
+            await WallAttackLegAsync(map, commands, pickable, Require);
             ToggleCombatMode();
             HoverReleaseForSelfTest();
             GD.Print("ARC-COMBAT-008 native-smoke object-attack PASS " + System.Text.Json.JsonSerializer.Serialize(new {
@@ -153,6 +174,55 @@ public partial class TerrainViewerApp
             ReleaseSimulatedPadForSelfTest(); _worldFocusSimulationForSelfTest = simulatedFocus;
             _worldFocused = focused; RestoreWorldTestTime(testTime);
         }
+    }
+
+    // ARC-COMBAT-1941 (VC62): in combat mode the Alt click on a wall is the attack goal (0x54ED30, the combat table: a wall, portal or scenery with Alt attacks): the hero swings from a cell next to it; the wall takes nothing (OD1,
+    // the damage step leaves a wall at once), so the hit is the session's wall attack (ammunition, wear, the weapon's hit sound). NONE when no pickable wall has a cell to stand on within reach and a clear shot.
+    private async Task WallAttackLegAsync(AreaMapRuntime map, IReadOnlyDictionary<AreaObjectKey, AreaDrawCommand> commands, HashSet<AreaObjectKey?> pickable, Action<bool, string> require)
+    {
+        if (_areaSession is not { } session || _readyArea is not { } area || _worldActor.Session is not AreaGridSession grid || session.QueryHeroAttack() is not { } heroAttack)
+        { GD.Print("ARC-COMBAT-1941 wall attack NONE (no hero or no attack map)"); return; }
+        var from = grid.Chart.ToWorld(grid.State.CommittedCell);
+        var skipped = new List<string>();
+        var walls = area.Snapshot.Objects.Where(row => row.Type == 0 && row.Scope == AreaScope.Core && row.WorldX is not null && row.WorldY is not null && commands.ContainsKey(row.Key)
+                && pickable.Contains(row.Key) && _canvas?.AreaRoofCovers(row.Key) != true)
+            .OrderBy(row => Chebyshev(row, (from.X, from.Y))).ThenBy(row => row.Key.SourceIndex).Take(12).ToArray();
+        foreach (var wall in walls)
+        {
+            CellCoord standable;
+            try { standable = AreaSmokeStandable(map, map.Chart.ToChart(new(wall.WorldX!.Value, wall.WorldY!.Value)), 1); }
+            catch (InvalidOperationException) { skipped.Add($"wall:{wall.Key.SourceIndex}:no standable cell"); continue; }
+            var world = map.Chart.ToWorld(standable);
+            if (!InAttackReach(wall, new(checked((int)world.X), checked((int)world.Y)), heroAttack)) { skipped.Add($"wall:{wall.Key.SourceIndex}:no clear shot"); continue; }
+            // The placement builds the session at the smoke clock in whole units; the leg's own frames count twentieths (as the stage's legs above scale it).
+            _areaSmokeTime = (_areaSmokeTime + 19) / 20;
+            AreaSmokePlace(map, standable);
+            _areaSmokeTime *= 20; _worldTestTime = SimulationTime.At(_areaSmokeTime, 20);
+            PublishWorldSelection();
+            if (await HoverPointAsync(this, commands[wall.Key]) is not { } point) { skipped.Add($"wall:{wall.Key.SourceIndex}:not under the pointer"); continue; }
+            HoverAtForSelfTest(point);
+            CancelAreaAttack(null);
+            _UnhandledInput(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = true, Position = point, GlobalPosition = point, AltPressed = true });
+            require(_attack is { Wall: true, NoWalk: false }, "the Alt-click on a wall started the attack goal: " + _attackNotice);
+            var run = HeroRunsHost()?.AttackRun;
+            require(run is not null && run.Frames.Any(f => f.Goal is Arcanum.Simulation.Goals.GoalType.Attack or Arcanum.Simulation.Goals.GoalType.AttemptAttack), "the wall's attack is a run of the attack goal");
+            AttackSettleForSelfTest();
+            var goal = _attack!;
+            var frames = 0;
+            for (; frames < 4000 && _attack is not null && goal.Attacks == 0; frames++)
+            {
+                _areaSmokeTime++; SmokeTickHeroRuns();
+                WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .05, true, SimulationTime.At(_areaSmokeTime, 20));
+            }
+            var attacks = goal.Attacks;
+            CancelAreaAttack(null);
+            require(attacks > 0, $"the hero's swing reached the wall (notice {_attackNotice})");
+            GD.Print($"ARC-COMBAT-1941 wall attack PASS wall={wall.Key.SourceIndex} attacks={attacks} frames={frames} notice={_attackNotice}");
+            return;
+        }
+        var all = area.Snapshot.Objects.Where(row => row.Type == 0).ToArray();
+        GD.Print($"ARC-COMBAT-1941 wall attack NONE map={_readyMapName} walls={walls.Length} (type 0 rows {all.Length}, core {all.Count(r => r.Scope == AreaScope.Core)}, drawn {all.Count(r => commands.ContainsKey(r.Key))},"
+            + $" pickable {all.Count(r => pickable.Contains(r.Key))}; every candidate skipped: {string.Join("; ", skipped)})");
     }
 
     // ARC-WORLD-065: the steps onto an object's tile that its T0 record alone blocks (no terrain, wall, other object or gap).

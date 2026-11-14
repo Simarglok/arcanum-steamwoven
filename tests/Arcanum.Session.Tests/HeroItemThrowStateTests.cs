@@ -73,6 +73,24 @@ public sealed class HeroItemThrowStateTests
         Assert.AreEqual(0, thrown.Attack!.Resolution!.Difficulty!.Range, "within the thrown range and half the Perception: no range penalty");
     }
 
+    // ARC-COMBAT-1766 (0x4B2870): the critical points ask that the projectile's parent item is a weapon; the session reads the kind while the thrown item still lies hidden on the hero's cell (a landing that transforms the item
+    // takes the row away), so a thrown armour is no weapon and the hero's thrown weapon is one.
+    [TestMethod]
+    public void ThePackItemsKindIsReadForTheEndScriptsWhileItFlies()
+    {
+        using var owner = Owner();
+        var thrown = owner.ThrowHeroItem(owner.Version, AtRat(owner));
+        Assert.AreEqual(GameSessionFailure.None, thrown.Failure);
+        var ends = owner.QueryShotEndScripts(thrown.Shots[0])!.Value;
+        Assert.AreEqual((SessionEventKinds.PlayerEntity, "kit:2", true, false), (ends.Attacker, ends.Weapon, ends.Thrown, ends.IsWeapon), "a thrown armour is not a weapon");
+        Assert.IsTrue(owner.EndShot(thrown.Shots[0]));
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, "kit:2", Accept).Disposition);
+        Assert.AreEqual(GameSessionFailure.None, owner.Equip(owner.Version, "kit:1", EquipmentSlot.Weapon, new(Kit[0].Kind, [], false, Sword), (_, _) => true, Accept).Failure);
+        var weapon = owner.ThrowHeroItem(owner.Version, new("kit:1", new(Kit[0].Kind, false, []), Here(owner, 2)));
+        Assert.AreEqual(GameSessionFailure.None, weapon.Failure);
+        Assert.IsTrue(owner.QueryShotEndScripts(weapon.Shots[0])!.Value.IsWeapon, "a thrown weapon is one");
+    }
+
     [TestMethod]
     public void AHitStrikesWithTheDamageOfTheItemsWeightAndTheItemLands()
     {

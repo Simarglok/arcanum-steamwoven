@@ -14,6 +14,7 @@ public readonly record struct SessionHitScriptEvent(string? Weapon, bool Critica
 /// <see cref="SessionEventKinds.PlayerEntity"/>, or an NPC's entity) that the original passes as the triggerer, <see cref="Weapon"/> the projectile's parent item (field 0x50: the thrown item, or the weapon wielded at the shot) whose
 /// scripts run, <see cref="Critical"/> the shot's critical flag (the check decided at the shot was a critical hit or a critical miss; an NPC's thrown item keeps no check, so it is false), <see cref="Thrown"/> that the item was thrown
 /// (the hero's thrown item runs its hit and miss scripts in the thrown-item host, ARC-MAGIC-042) and <see cref="Target"/> the shot's target the original passes as the extra object (null for a shot with no target, a scattered throw, and
-/// for a target the session cannot name).
+/// for a target the session cannot name). <see cref="IsWeapon"/> is whether the parent item is a weapon (object type 5), which the critical points ask (0x4B2870): read by the session before the end, while a thrown item still
+/// lies hidden on the hero's cell (a landing that transforms it, as a creature item's, removes the row the host would read afterwards); an item the session does not list counts as a weapon, and so does an NPC's.
 /// </summary>
-public readonly record struct SessionShotEndScripts(string Attacker, string Weapon, bool Critical, bool Thrown, string? Target);
+public readonly record struct SessionShotEndScripts(string Attacker, string Weapon, bool Critical, bool Thrown, string? Target, bool IsWeapon = true);

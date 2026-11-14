@@ -7,6 +7,7 @@ using Arcanum.Simulation.Movement;
 using Arcanum.TerrainViewer.Core;
 using Arcanum.World;
 using Godot;
+using ScrPoint = Arcanum.Scripting.Scr.ScrPoint;
 
 namespace Arcanum.TerrainViewer;
 
@@ -19,6 +20,21 @@ public partial class TerrainViewerApp
     private const int LentBowRange = 10;
     // ARC-COMBAT-016: the projectile art the smoke lends its bow: scenery number 0, the art of every installed bow (combat census).
     private const int LentMissileArt = 0x40000000;
+
+    // ARC-COMBAT-1766 (0x4B2870, ledger PF9, PS5): checks the weapon's end points the viewer asked for the hero's flight that just ended (<see cref="_shotEndScriptsForSelfTest"/>, cleared before the shot): a crossing end without a
+    // strike (the range end or the destination) asks them once, with the hero as the shooter; the first of an ordinary shot is the hit point (7) at the destination or the miss point (8) at the range end, and the hero's thrown item
+    // leaves those two to the thrown-item host (the guard against a double run). A strike, or the goal's own end (a flight that never took a step: crossed false), asks none here.
+    private void RequireShotEndScripts(ProjectileStrikeKind end, bool crossed, bool thrown, string? wieldedWeapon, string label)
+    {
+        var expected = crossed && end is ProjectileStrikeKind.RangeEnd or ProjectileStrikeKind.DestinationEnd ? 1 : 0;
+        var asked = _shotEndScriptsForSelfTest.ToArray();
+        var ok = asked.Length == expected && asked.All(e => e.Attacker == SessionEventKinds.PlayerEntity && e.Thrown == thrown && (wieldedWeapon is null || e.Weapon == wieldedWeapon)
+            && e.Destination == (end == ProjectileStrikeKind.DestinationEnd)
+            && (thrown ? e.Points.All(point => point is not (ScrPoint.Hit or ScrPoint.Miss)) : e.Points.Count > 0 && e.Points[0] == (e.Destination ? ScrPoint.Hit : ScrPoint.Miss)));
+        if (ok) return;
+        GD.Print($"ARC-COMBAT-1766 ranged smoke FAIL: {label} end {end} asked {asked.Length} of {expected} end-script sets ({string.Join(",", asked.Select(e => $"{e.Attacker}:{e.Weapon}:thrown={e.Thrown}:{(e.Destination ? "dest" : "range")}:{string.Join("/", e.Points)}"))})");
+        throw new InvalidOperationException("AREA_RANGED_SMOKE_FAILED");
+    }
 
     // Native observation (ARC-COMBAT-015) with --hero, in map mode after the line-of-fire stage (or alone with
     // ARC_AREA_MAP_SMOKE_ONLY=ranged): the hero's ranged attack. No kit holds a bow, so the stage lends the wielded kit weapon a bow's
@@ -227,7 +243,8 @@ public partial class TerrainViewerApp
             for (var shots = 0; shots < 12 && (hits == 0 || misses.Count == 0); shots++)
             {
                 Heal();
-                _projectileEndsForSelfTest.Clear();
+                _projectileEndsForSelfTest.Clear(); _shotEndScriptsForSelfTest.Clear();
+                var unlaunchedArrow = _projectilesUnlaunchedForSelfTest;
                 var result = await ShootOnce(pick.Target, expectWalk: false);
                 Require(result?.Shot is { } && _projectiles.Count == 1, $"the shot flies ({result?.Failure} {result?.Resolution?.Outcome}, {_projectiles.Count} in flight)");
                 var hit = result!.Resolution!.Outcome is AttackOutcome.Hit or AttackOutcome.CriticalHit;
@@ -243,6 +260,8 @@ public partial class TerrainViewerApp
                 }
                 Require(_projectiles.Count == 0 && _projectileEndsForSelfTest.Count == 1, $"the flight ended ({_projectiles.Count} in flight, {_projectileEndsForSelfTest.Count} ends)");
                 var end = _projectileEndsForSelfTest[0];
+                // ARC-COMBAT-1766 (0x4B2870, PF9, PS5): an end without a strike runs the weapon's end points once (hit 7 at the destination, miss 8 at the range end); a strike runs none of them here.
+                RequireShotEndScripts(end.Strike, unlaunchedArrow == _projectilesUnlaunchedForSelfTest, thrown: false, wieldedWeapon: null, $"arrow shot {shots}");
                 if (hit)
                 {
                     Require(end.Strike == ProjectileStrikeKind.Target && end.Struck == pick.Target.Entity && Hp() <= before,
@@ -438,7 +457,7 @@ public partial class TerrainViewerApp
                 _areaSmokeTime *= 20; _worldTestTime = SimulationTime.At(_areaSmokeTime, 20);
                 PublishWorldSelection();
                 await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
-                _projectileEndsForSelfTest.Clear(); _thrownLandingsForSelfTest.Clear(); _shotEndItemEventsForSelfTest.Clear();
+                _projectileEndsForSelfTest.Clear(); _thrownLandingsForSelfTest.Clear(); _shotEndItemEventsForSelfTest.Clear(); _shotEndScriptsForSelfTest.Clear();
                 var unlaunched = _projectilesUnlaunchedForSelfTest;
                 var result = await ShootOnce(pick.Target, expectWalk: false);
                 var heroCell = session.QueryActor().Cell;
@@ -467,6 +486,8 @@ public partial class TerrainViewerApp
                 Require(placed.Cell == landing.Tile && !session.QueryItemInFlight(wielded.Entity) && session.QueryShotsInFlight().Count == 0
                     && session.QueryItemDecays().All(d => d.Entity != wielded.Entity), $"it lies where the projectile ended, without decay ({placed.Cell} vs {landing.Tile})");
                 var end = _projectileEndsForSelfTest.Single();
+                // ARC-COMBAT-1766: the hero's thrown item leaves its hit and miss scripts (7, 8) to the thrown-item host (the guard against a double run): only its critical points are asked here.
+                RequireShotEndScripts(end.Strike, unlaunched == _projectilesUnlaunchedForSelfTest, thrown: true, wieldedWeapon: wielded.Entity, $"throw {throws}");
                 // A throw whose flight goal ended before its first tick (the scatter back onto the hero's own cell) ends through the end node, which fires no item event.
                 if (lentSpell is { } expected && end.Strike != ProjectileStrikeKind.None && unlaunched == _projectilesUnlaunchedForSelfTest)
                 {
@@ -524,7 +545,8 @@ public partial class TerrainViewerApp
                 _areaSmokeTime *= 20; _worldTestTime = SimulationTime.At(_areaSmokeTime, 20);
                 PublishWorldSelection();
                 await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
-                _projectileEndsForSelfTest.Clear(); _boomerangTurnsForSelfTest.Clear();
+                _projectileEndsForSelfTest.Clear(); _boomerangTurnsForSelfTest.Clear(); _shotEndScriptsForSelfTest.Clear();
+                var unlaunchedBoomerang = _projectilesUnlaunchedForSelfTest;
                 var result = await ShootOnce(pick.Target, expectWalk: false);
                 // ARC-RENDER-039: a returning weapon attacks with the throw (WA4), drawn with the body's throw ART.
                 Require(lastStart == (Arcanum.Simulation.Equipment.WeaponArtRules.ThrowAnimation, ActorDiagnosticAction.Throw),
@@ -554,6 +576,16 @@ public partial class TerrainViewerApp
                 Require(_projectileEndsForSelfTest.Count == 2 && _projectileEndsForSelfTest[1].Strike == ProjectileStrikeKind.DestinationEnd,
                     $"its first end and its return ({string.Join(",", _projectileEndsForSelfTest.Select(e => $"{e.Strike}:{e.Struck}"))})");
                 var first = _projectileEndsForSelfTest[0];
+                // ARC-COMBAT-1766 (0x4B2870, 0x4B2690): the first end without a strike turns the boomerang back and then runs the end points; its return runs them once more, unless it turned on the hero's own tile (no flight back, ARC-COMBAT-1766 limit).
+                var turn = _boomerangTurnsForSelfTest[0];
+                var firstScripts = first.Strike is ProjectileStrikeKind.RangeEnd or ProjectileStrikeKind.DestinationEnd ? 1 : 0;
+                var returnScripts = turn.From == turn.To ? 0 : 1;
+                // A flight that never took a step ends through the goal's own end, which asks no scripts (ARC-DEV-140, GT53): the exact count holds only for crossing ends.
+                if (unlaunchedBoomerang != _projectilesUnlaunchedForSelfTest) { returnScripts = 0; firstScripts = Math.Min(firstScripts, _shotEndScriptsForSelfTest.Count); }
+                Require(_shotEndScriptsForSelfTest.Count == firstScripts + returnScripts
+                    && _shotEndScriptsForSelfTest.All(e => e.Attacker == SessionEventKinds.PlayerEntity && e.Weapon == wielded.Entity && !e.Thrown && e.Points.Count > 0 && e.Points[0] is ScrPoint.Hit or ScrPoint.Miss)
+                    && (returnScripts == 0 || _shotEndScriptsForSelfTest[^1].Destination && _shotEndScriptsForSelfTest[^1].Points[0] == ScrPoint.Hit),
+                    $"the boomerang's ends ran the weapon's end points ({string.Join(",", _shotEndScriptsForSelfTest.Select(e => $"{(e.Destination ? "dest" : "range")}:{string.Join("/", e.Points)}"))} for first {first.Strike}, turn {turn.From}->{turn.To})");
                 hit = result!.Resolution!.Outcome is AttackOutcome.Hit or AttackOutcome.CriticalHit;
                 if (hit) Require(first.Strike == ProjectileStrikeKind.Target && first.Struck == pick.Target.Entity, $"a hit turns at its target ({first.Strike} {first.Struck})");
                 else Require(first.Strike != ProjectileStrikeKind.Target, "a miss never strikes its target");

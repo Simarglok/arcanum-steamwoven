@@ -78,7 +78,7 @@ public partial class TerrainViewerApp
             Require(host is not null && session.QueryAiTick(entity) is not null, "the AI host is built and the archer has its AI tick");
             session.Heal(session.Version, shooter.Target.Build.Combat!.Target, new LifeHeal { Full = true, Fatigue = 1000, Resurrect = true });
             host!.HeroAttacked(entity);
-            _npcShotLaunchesForSelfTest.Clear(); _npcShotStrikesForSelfTest.Clear(); _projectileEndsForSelfTest.Clear();
+            _npcShotLaunchesForSelfTest.Clear(); _npcShotStrikesForSelfTest.Clear(); _projectileEndsForSelfTest.Clear(); _shotEndScriptsForSelfTest.Clear();
             var heroHp = session.QueryHeroLife()!.Status.HitPoints;
 
             _areaSmokeTime *= 20; _worldTestTime = SimulationTime.At(_areaSmokeTime, 20);
@@ -99,6 +99,13 @@ public partial class TerrainViewerApp
             Require(_projectiles.Count == 0 && !session.QueryShotsInFlight().Contains(new SessionShot(first.Shot)), "the arrow's flight ended and the session holds no shot");
             var end = _projectileEndsForSelfTest.FirstOrDefault(e => e.Shot.Id == first.Shot);
             GD.Print($"ARC-DEV-282 npc-shot flight shot={first.Shot} hit={first.Hit} strike={end.Strike} struck={end.Struck ?? "none"} launches={_npcShotLaunchesForSelfTest.Count} strikes={_npcShotStrikesForSelfTest.Count}");
+            // ARC-COMBAT-1766 (0x4B2870, PF9, PS5): an arrow that ends without a strike (the range end, the destination) asked the bow's end points once with the archer as the shooter and the hero as the extra object (the marker target mapped
+            // to the player); a strike asked none here (the hit's own scripts are the AI host's). The archer's bow is the session's item when the map names it, so an end that asked nothing is printed, not judged.
+            var arrowScripts = _shotEndScriptsForSelfTest.Where(e => e.Shot.Id == first.Shot).ToArray();
+            var arrowEndedFree = end.Strike is ProjectileStrikeKind.RangeEnd or ProjectileStrikeKind.DestinationEnd;
+            Require(arrowScripts.Length <= (arrowEndedFree ? 1 : 0) && arrowScripts.All(e => e.Attacker == entity && !e.Thrown && e.Target == SessionEventKinds.PlayerEntity && e.Points.Count > 0 && e.Points[0] == (e.Destination ? Arcanum.Scripting.Scr.ScrPoint.Hit : Arcanum.Scripting.Scr.ScrPoint.Miss)),
+                $"the arrow's end asked the bow's end points for the archer and the hero ({arrowScripts.Length} sets, end {end.Strike})");
+            GD.Print($"ARC-COMBAT-1766 npc-shot end-scripts shot={first.Shot} strike={end.Strike} asked={arrowScripts.Length} points={string.Join(",", arrowScripts.Select(e => string.Join("/", e.Points)))}");
             // A shot decided as a hit that struck its target damages it; this one is aimed at the hero, so the damage is the hero's lost hit points (a stray strike before the target is printed, not judged).
             var lost = heroAtShot - session.QueryHeroLife()!.Status.HitPoints;
             if (first.Hit && _npcShotStrikesForSelfTest.Any(s => s.Shot == first.Shot && s.Struck == AiSchedulerRules.Pc))
