@@ -1349,5 +1349,5 @@ and look at the panel on the screen's left edge. Compare with **HD** and **Legac
 
 Known differences (documented, not bugs):
 
-- The iron is plainer and bluer than the original's marbling; the portrait frame's border is thinner.
+- The iron is plainer and bluer than the original's marbling; the portrait frame's border is thinner; the menu's bands are darker and flat.
 - The pressed frames of the scroll arrows are not drawn by the panel (as before).

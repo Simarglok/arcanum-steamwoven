@@ -679,7 +679,7 @@ and 509 `Follow_Scroll_dwn_OFF`, and the menu 826 `FollwerComandMenu` (136 × 14
   `ARC_AREA_WINDOW_CAPTURE=PREFIX` saves the viewport as `PREFIX-followers-MODE[-big|-back].png` (local, not in git).
 - **Local observation** (owner's Mac, 1280 × 800 window): the Crash Site smoke passes in the Generated, HD and Legacy runs; in the Generated run three frames are generated at the panel's own scale, 1 at 1280 × 800 and 2 in the 1600 × 1200 window, where they paint again. (One Generated run
   failed at the cave transition, before the panel, and passed when repeated: issue #1900.) The composite (before = the HD pack art that Generated drew until now, after, Legacy) is in the task thread, not in git. Seen there: the iron is plainer and bluer than the original's marbling; the scroll arrows
-  and strips keep their arrows exactly; the portrait frame's border is thinner than the original's; the menu's bands are flat.
+  and strips keep their arrows exactly; the portrait frame's border is thinner than the original's; the menu's bands are darker than the original's and flat.
 
 ## Synthetic comparison
 
