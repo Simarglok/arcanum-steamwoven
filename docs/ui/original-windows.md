@@ -252,6 +252,17 @@ and the required expertise (fonts 300 and 229), and the round view's lens (89 ×
 ([layout](../../src/Arcanum.World/AreaSchematicWindowLayout.cs), [view](../../tools/terrain-viewer/Godot/AreaSchematicWindowView.cs)) draws it when the arts read
 and keeps the diagnostic panel as the fallback; every action, sound and key of the diagnostic window is unchanged.
 
+## Reading window (done: ARC-UI-1877)
+
+Entry: the reading start 0x56BB60 and open 0x56BC00 (an item's use, script actions 64, 65 and 114; ledger [WR1–WR16](../research/ledger/ui-audio.md#reading-window-arc-ui-049)).
+Read in the create 0x56BCC0, the redraw 0x56C050, the callback 0x56BFC0, the text draws 0x56C630, 0x56C750, 0x56C800 and 0x535570 and the tables 0x5CA478..0x5CA777 (rows
+WR17–WR23). The window is 800 × 399 at the screen's (0, 41): the frame art 494 at (0, 0), the background art of the kind (477 book, 489 note, 487 newspaper, 491 telegram, 633 plaque,
+817 for the alternate newspaper prototype, a picture's own art) at (132, 0), the round view's lens (art 231, 89 × 89 at (25, 24)) whose left release closes the window, a book's two page
+buttons (arts 495 and 496 at (213, 77) and (675, 77)) and the text in the original's fonts: a book's two pages of 200 × 290 at (227, 57) and (476, 57) paged by pixel height, a note in
+(349, 49, 215 × 300), a telegram's eleven form lines and body, a newspaper's masthead, headline and four columns, a plaque (white text) in (269, 40, 428 × 327). The viewer
+([layout and text flow](../../tools/terrain-viewer/Core/AreaReadingArt.cs), [view](../../tools/terrain-viewer/Godot/AreaReadingArtView.cs)) draws it when the arts and fonts read and keeps the
+diagnostic panel as the fallback; every action, sound and key of the diagnostic window is unchanged.
+
 ## Main menu (done: ARC-UI-058)
 
 The owner's bug report of 2026-10-29 (build `6e793c18`): the main menu and its windows (options, save and load, character creation)

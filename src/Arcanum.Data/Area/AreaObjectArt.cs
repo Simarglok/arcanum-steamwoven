@@ -27,6 +27,7 @@ public static class AreaObjectArt
         AreaMappingRole.ItemGround => "art/item/item_ground.mes",
         AreaMappingRole.EyeCandy => Arcanum.Data.Magic.EyeCandyArt.NamesPath,
         AreaMappingRole.ItemInventory => "art/item/item_inven.mes",
+        AreaMappingRole.ItemPaper => "art/item/item_paper.mes",
         // ARC-DEV-370: the name tables of the monster (12) and unique NPC (13) critter art ids.
         AreaMappingRole.MonsterNames => "art/monster/monster.mes",
         AreaMappingRole.UniqueNpcNames => "art/unique_npc/unique_npc.mes",
@@ -101,6 +102,24 @@ public static class AreaObjectArt
         if (name(AreaMappingRole.ItemInventory, key) is not { } entry) return new(AreaObjectArtStatus.UnnamedNumber, null, $"{AreaMappingRole.ItemInventory} {key}");
         if (!Safe(entry)) return new(AreaObjectArtStatus.UnsafeName, null, $"{AreaMappingRole.ItemInventory} {key}");
         return new(AreaObjectArtStatus.Resolved, new("art/item/" + entry, aid & ~0x30U, 0, 0, 0, (int)((aid >> 4) & 3)), $"{AreaMappingRole.ItemInventory} {key}");
+    }
+
+    /// <summary>
+    /// ARC-UI-1884: the ART an item art id of place 2 names (class 6, bits 12..13 equal to 2; the item art name 0x4EC290): the same number as a
+    /// ground or inventory art id's looked up in <c>art\item\item_paper.mes</c>. The quantity window's kind icon is such an id (0x551210, bar
+    /// mode 9: gold is number 0 of type 3, an ammunition type n is number n of type 1, subtype 0). Frame, group and rotation are 0 and the
+    /// palette is bits 4..5, as for the inventory place.
+    /// </summary>
+    public static AreaObjectArtResolution ResolveItemPaper(uint aid, Func<AreaMappingRole, int, string?> name)
+    {
+        ArgumentNullException.ThrowIfNull(name);
+        if (aid >> 28 != 6) return new(AreaObjectArtStatus.OtherClass, null, $"class {aid >> 28}");
+        if (((aid >> 12) & 3) != 2) return new(AreaObjectArtStatus.Unsupported, null, $"item art place {(aid >> 12) & 3}");
+        var type = aid & 15; var subtype = (aid >> 6) & 15; var number = (aid >> 17) & 2047; var coverage = (aid >> 14) & 7;
+        var key = checked((int)(number + 20 * (subtype + 50 * type) + (type == 2 && coverage != 0 ? 20 * (5 * coverage + 10) : 0)));
+        if (name(AreaMappingRole.ItemPaper, key) is not { } entry) return new(AreaObjectArtStatus.UnnamedNumber, null, $"{AreaMappingRole.ItemPaper} {key}");
+        if (!Safe(entry)) return new(AreaObjectArtStatus.UnsafeName, null, $"{AreaMappingRole.ItemPaper} {key}");
+        return new(AreaObjectArtStatus.Resolved, new("art/item/" + entry, aid & ~0x30U, 0, 0, 0, (int)((aid >> 4) & 3)), $"{AreaMappingRole.ItemPaper} {key}");
     }
 
     // ARC-MAGIC-017: an eye-candy art id (class 14, ledger EC rows) names art\eye_candy\<name>_<F|B|U>.art by its number in

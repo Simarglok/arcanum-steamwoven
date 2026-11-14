@@ -1,4 +1,5 @@
 using Arcanum.Data.Content;
+using Arcanum.Presentation.Hud;
 using Arcanum.World;
 
 namespace Arcanum.TerrainViewer.Core;
@@ -18,7 +19,9 @@ public static class AreaTextFontLayout
 {
     /// <summary>ARC-UI-124: the number font (art 230 <c>Flare14Font</c>, white, 0x64C4A0) of the combat panel's hit chance.</summary>
     public const int TitleArt = 27, TextArt = 229, NumberArt = 230;
-    public static IReadOnlyList<int> ArtNumbers { get; } = [TitleArt, TextArt, NumberArt];
+    /// <summary>ARC-UI-1884: the roller font (art 25 <c>rollerfont</c>, 0x56A020) of the quantity pane's count (ledger QW3a); optional like the number font.</summary>
+    public const int RollerArt = QuantityPaneRules.FontArt;
+    public static IReadOnlyList<int> ArtNumbers { get; } = [TitleArt, TextArt, NumberArt, RollerArt];
     /// <summary>The arts without which no original font is used (the number font is optional).</summary>
     public static IReadOnlyList<int> RequiredArtNumbers { get; } = [TitleArt, TextArt];
 
@@ -85,6 +88,9 @@ public sealed record AreaTextFontContent(IReadOnlyDictionary<int, AreaInterfaceA
 
     /// <summary>ARC-UI-124: the combat panel's number font (art 230) read; without it the text font draws the number.</summary>
     public bool NumberArtReady => Ready(AreaTextFontLayout.NumberArt);
+
+    /// <summary>ARC-UI-1884: the quantity pane's roller font (art 25) read; without it the pane draws no count.</summary>
+    public bool RollerArtReady => Ready(AreaTextFontLayout.RollerArt);
 
     private bool Ready(int number) => Art.TryGetValue(number, out var load) && load.Status == AreaInterfaceArtStatus.Ready && load.Frames.Count > 0;
 

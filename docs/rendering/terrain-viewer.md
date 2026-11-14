@@ -985,13 +985,13 @@ toggle. Original visual parity NOT VERIFIED.
 ### Combat action points and turn order (ARC-UI-1114)
 
 Slice 2 of the [combat HUD plan](../research/combat-hud.md#slices) (FR-COMBAT-011, FR-COMBAT-003, FR-UI-005), in `area` with plain Godot
-controls (no original interface art), read in the 1.0.7.4 executable ([ledger CH2–CH6 and CH14](../research/ledger/ui-audio.md#combat-hud-arc-ui-017)).
+controls (the lamp panel took the original's art in ARC-UI-1888, see **Lamp panel art** below), read in the 1.0.7.4 executable ([ledger CH2–CH6 and CH14](../research/ledger/ui-audio.md#combat-hud-arc-ui-017)).
 The rules are `ActionPointRules` and `TurnOrderRules` in `Arcanum.Presentation.Hud`, the cost preview is `AreaActionPointPreview` in
 `Arcanum.World`; the view is `AreaCombatHud` and its host `TerrainViewerAreaCombatHud.cs`. Shown only while a turn-based round runs (a combat
 mode with a round), with a hero, while no window the bars do not reach is open.
 
 - **Lamps** (CH2). A panel of 20 lamps in four groups of five at the original's place just above the interface bar (the lamp panel at 222, 412 of the
-  800 × 600 screen, scaled with the bars; the lamp art and exact lamp places are not drawn, plain rectangles stand for them). On the hero's subturn they
+  800 × 600 screen, scaled with the bars; the plain rectangles stand for the art when the game's art did not read, see **Lamp panel art**). On the hero's subturn they
   light from the left in three shares: the points left after the previewed action (green), the action's cost (orange) and the part of it the points do not
   cover (red), the colours of the original's hidden-interface bar (CH3); more than 20 show what fits, no points light nothing. On another participant's
   subturn three green lights run along the lamps, seven apart, one step every 100 ms (CH5); the lights' clock runs only while another participant acts and starts again with each round, as the original's.
@@ -1004,13 +1004,19 @@ mode with a round), with a hero, while no window the bars do not reach is open.
   participants in round order, the one whose subturn it is marked with `>` (the hero as `Hero`, an NPC by the name the hover gives it). More than 8 participants
   show 8 from the current one on and `+N more`. It hides behind any open window. The list is shown in the Steamwoven rule mode and hidden in Original
   (`InterfaceRuleProfile.TurnOrderListHidden`, [rule modes](../world/rule-modes.md)); the lamps show in both.
-- **Not done.** The 25-point bar of the hidden-interface layout (the viewer has no hide toggle), the lamp arts and positions, the end-turn button on the lamp panel,
-  the item and skill cursors' previews, the Alt variants of the original's preview (attack check on a portal, container or party member), a throw's own cost in the preview (it shows the attack's), the hero's name in the list, a created critter's name in the list (it shows its entity id), the lamps for a negative point count (the original lights the shortfall, the viewer nothing; points are never negative in a round). Visual parity NOT VERIFIED.
+- **Lamp panel art** (ARC-UI-1888, CH1, CH2, CH5, CT5). With the game's art read (arts 294, 295, 296, 315, 297 come with the bars' art) the panel is the original's
+  (`AreaCombatLampLayout`): the panel art 294 (`ap_bar`, 356 × 30) at (222, 412) of the screen, a lit lamp as the art 295 (the points left and the running lights), 296 (the
+  cost) or 315 (the shortfall), 11 × 12 at the x of the table 0x5CAA48 (22, 35, 48, 61, 74, then 93 .. 145, 164 .. 216, 235 .. 287) and y 10 of the panel, an unlit lamp showing the
+  socket of the panel art; the end-turn button is the art 297 (31 × 15 at (320, 9) of the panel, frames idle and pressed as the other bar buttons): its release over it ends the hero's
+  subturn as E does (CT5: the hero must be idle, a window over the world refuses it), with the bar's press and release sounds. The panel takes no pointer (the art is not a hit area, as the
+  plain panel was); only the button does. Without the art (no game folder, the automated runs) the plain controls above draw. In the Generated interface the panel art is a picture
+  until [#1821](https://github.com/Simarglok/arcanum-steamwoven/issues/1821) gives it a recipe.
+- **Not done.** The 25-point bar of the hidden-interface layout (the viewer has no hide toggle), the item and skill cursors' previews, the Alt variants of the original's preview (attack check on a portal, container or party member), a throw's own cost in the preview (it shows the attack's), the hero's name in the list, a created critter's name in the list (it shows its entity id), the lamps for a negative point count (the original lights the shortfall, the viewer nothing; points are never negative in a round). Visual parity NOT VERIFIED.
 
-Checks: `CombatHudTests` (shares, the three cases of the 20-lamp cap, the cue, the list window), `AreaActionPointPreviewTests`, `RuleModeTests`; the native smoke
+Checks: `CombatHudTests` (shares, the three cases of the 20-lamp cap, the cue, the list window), `AreaActionPointPreviewTests`, `RuleModeTests`, `AreaCombatLampLayoutTests` (the panel's tables and the shares' arts, ARC-UI-1888); the native smoke
 stage `turn-based` reads the HUD in a real round on `Arcanum1-024-fixed`: three running lights and a marked NPC on the NPC's subturn, the hero's points as lamps and
 the marked hero on its own, the walk preview's 2 shown as the cost, the same cost kept after the step, the attack preview equal to the weapon's cost, and the HUD gone
-with the round (`ARC_AREA_HUD_CAPTURE=<ignored path prefix>` saves the readbacks the graphics composite is made from).
+with the round; with synthetic art the art panel's lamps stand at the table's places in the shares' arts and the end-turn button ends the hero's subturn (`ARC_AREA_HUD_BARS=1` draws the interface bars of the game's art so the panel draws the game's own, `ARC_AREA_HUD_ART=plain` keeps the plain controls for the "before" frame, `ARC_AREA_WINDOW_ART=legacy|hd` checks the five arts in that interface mode; `ARC_AREA_HUD_CAPTURE=<ignored path prefix> saves the readbacks the graphics composite is made from).
 
 ### Floating text (ARC-UI-021)
 
@@ -1198,8 +1204,12 @@ inventory and loot lines show a stack's units (`×N`; [ammunition](../world/inve
   answers with its first pile (the session's `TakeGoldFromNpc`, NT1), so a take from the second asks with its coins but moves from
   the first (no installed NPC holds two). The loot list
   shows a gold pile's coins (×N) and the header the hero's gold and its four ammunition counts (arrows, bullets, charges, fuel; IW9).
-  A junk pile's stacks ask the same way (ARC-UI-1328): the session moves the count and leaves the rest in the pile, which keeps its items and its dissolve rules (a window that shows it keeps it standing; closing it dissolves one item or none); a container's stacks asked since ARC-WORLD-101. NOT READY: the question in the barter window, the art of the original's
-  bar. The self-test takes 2 of 12 synthetic arrows by keypad and buttons, cancels with Escape, and drops 1 of the 2
+  A junk pile's stacks ask the same way (ARC-UI-1328): the session moves the count and leaves the rest in the pile, which keeps its items and its dissolve rules (a window that shows it keeps it standing; closing it dissolves one item or none); a container's stacks asked since ARC-WORLD-101. NOT READY: the question in the barter window. **Art pane (ARC-UI-1884).** With the interface bars up and art 298 read, the question is the original's pane in the bottom strip
+  instead of the diagnostic row ([QW3a](../research/ledger/ui-audio.md#quantity-window-arc-ui-029); `QuantityPaneRules`, `AreaQuantityPaneView`): the background art 298 over the message
+  window's place, the five buttons (All 299, up 805, down 804, Accept 33, Cancel 32; the bar's push buttons, which act on the release over them), the kind's icon at (269, 534) (an item art of
+  place 2, `item_paper.mes`: gold, or the stack's ammunition type; none for a type the pane leaves unset) and the count in the roller font (art 25, black) at (404, 545), six
+  cells without leading zeros. The diagnostic row stays focusable (keyboard and pad) but is neither drawn nor clicked while the pane shows; without the bars, or when the background, any of the five buttons or the count's font did not read, it is the question as before.
+  The pane draws the Legacy art and, with the HD profile, the HD frames of the arts that have them; the generated look is #1818. The self-test takes 2 of 12 synthetic arrows by keypad and buttons, cancels with Escape, and drops 1 of the 2
   (`ARC-UI-029 self-test quantity`); the native smoke drops one unit of an ammunition stack of the hero's
   through its *Drop* button, keypad 1 and Enter, and takes it back (`ARC-UI-029 native-smoke quantity PASS`; the crash site holds no
   stack, so 5 arrows of the installed prototype are lent to the hero through an NPC there first and stay with it).
@@ -3039,7 +3049,11 @@ gold, the NPC's name and the last message); the first click on an item selects a
 (`AreaItemService`, [`TerrainViewerAreaItemService.cs`](../../tools/terrain-viewer/Godot/TerrainViewerAreaItemService.cs)). Like the barter window it is modal (gate closed, clock paused, a walk stopped),
 is the inventory family at Escape (the limited in-play menu opens and closes it), and closes with a replaced session, a dead hero or a map change; the NPC is held as the talk partner while it is open. The viewer's
 self-test stage `AreaItemService` covers both windows over a synthetic hero and merchant (identify, two clicks, Escape, repair, a replaced session); `ARC_UI_ITEM_SERVICE_CAPTURE` (a folder) saves a PNG
-of each step for a graphics comparison. The original look is [#1765](https://github.com/Simarglok/arcanum-steamwoven/issues/1765).
+of each step for a graphics comparison. ARC-UI-1765: with the game's art the window draws the **original look** (ledger IS8–IS11): the inventory window's frame of modes 5 and 6 (`AreaInventoryGridArea` in its service look, `AreaServiceArtLayout`): background 223, the hero's
+grid and wear slots, counts, arrange button and round view as in the own window, without the weight lines and the drop and use boxes, the NPC's image (`HolderImage`, the loot window's rules) at (141, 36) at half size,
+the NPC's generated quote line (`AreaConversationHost.PickLine` / `PickClassLine`; the price in the quote's `%d`) in the rectangle (180, 29, 155 × 65), and the remembered item's cells filled dark red. A press on an item
+is the click (the first quotes, the next on the same item pays: PROJECT substitute for IS3's undecided event); the switch below the frame ("Diagnostic view") shows the list and back; a release on the round view closes it.
+Positions, sizes and hit areas stay the Legacy ones. Without the art (self-tests) or behind the switch the diagnostic list stays. A pad or the keyboard: the D-pad steps over the hero's items and quotes the one it lands on, confirm clicks the remembered item (the second click pays); the switch is the mouse's. `ARC_AREA_ITEM_SERVICE_PROBE=1` runs the self-test stage alone; the native `barter` stage also opens both windows on the real data and checks the original look (`ARC_AREA_SERVICE_CAPTURE=PREFIX` saves PREFIX-identify.png and PREFIX-repair.png).
 ### Reading window (ARC-UI-049)
 
 The inventory window shows a `Read:` button for each written item the hero holds; the session decides the use

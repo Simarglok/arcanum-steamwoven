@@ -14,6 +14,8 @@ public sealed record AreaCombatHudView(ActionPointLamp[] Lamps, bool HeroTurn, i
 /// with the bars) and the turn-order list under the top strip at the right. A lit lamp is green for the points left after the previewed action,
 /// orange for its cost and red for the part the points do not cover (the colours of the original's hidden-interface bar, CH3); the
 /// running lights of another participant's subturn are green. The list marks the participant whose subturn it is with <c>&gt;</c>.
+/// ARC-UI-1888: with the game's art (<see cref="SetArt"/>) the panel is the original's (<see cref="AreaCombatLampLayout"/>: the panel art 294, the lamps as
+/// the arts 295, 296 and 315 at the original's table and the end-turn button 297, CH1, CH2, CT5), at the same place; without it the plain controls stay.
 /// </summary>
 public partial class AreaCombatHud : CanvasLayer
 {
@@ -25,6 +27,12 @@ public partial class AreaCombatHud : CanvasLayer
     private Control _root = null!;
     private ColorRect _panel = null!;
     private readonly ColorRect[] _lamps = new ColorRect[ActionPointRules.LampCount];
+    // ARC-UI-1888: the original's art version of the panel: the panel picture, one picture a lamp (shown only when lit) and the end-turn button.
+    private TextureRect _panelArt = null!;
+    private readonly TextureRect[] _lampArt = new TextureRect[ActionPointRules.LampCount];
+    private TextureRect _endTurn = null!;
+    private Func<int, Texture2D[]?>? _art;
+    private bool _artShown, _endTurnHeld;
     private PanelContainer _list = null!;
     private VBoxContainer _rows = null!;
     private AreaGameBarPanel? _bars;
@@ -32,7 +40,29 @@ public partial class AreaCombatHud : CanvasLayer
     private AreaCombatHudView? _view;
     private string? _rowsKey;
 
+    /// <summary>The end-turn button went down (for its sound).</summary>
+    public event Action? EndTurnPressed;
+    /// <summary>The end-turn button came up, and whether the pointer was still over it: a release over it ends the hero's subturn as E does (CT5).</summary>
+    public event Action<bool>? EndTurnReleased;
+
     internal ActionPointLamp[]? LampsForSelfTest => _view?.Lamps;
+    /// <summary>Whether the last <see cref="Show"/> drew the original's art panel.</summary>
+    internal bool ArtShownForSelfTest => _artShown && _panelArt.Visible;
+    /// <summary>The art number a lamp's picture shows (-1: the lamp is not drawn lit), for the art panel.</summary>
+    internal int LampArtNumberForSelfTest(int lamp) => _lampArt[lamp].Visible && _lampArt[lamp].HasMeta("art") ? (int)_lampArt[lamp].GetMeta("art") : -1;
+    internal Rect2 LampArtRectForSelfTest(int lamp) => _lampArt[lamp].GetGlobalRect();
+    internal Rect2 PanelArtRectForSelfTest => _panelArt.GetGlobalRect();
+    internal Rect2 EndTurnRectForSelfTest => _endTurn.GetGlobalRect();
+    internal bool EndTurnShownForSelfTest => _artShown && _endTurn.Visible;
+    /// <summary>A left press and release at <paramref name="global"/> (the button's own input path).</summary>
+    internal void EndTurnClickForSelfTest(Vector2 global)
+    {
+        var rect = _endTurn.GetGlobalRect();
+        var local = (global - rect.Position) * _endTurn.Size / rect.Size;
+        EndTurnInput(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = true, Position = local });
+        EndTurnInput(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = false, Position = local });
+    }
+    internal int EndTurnFrameForSelfTest => _endTurn.HasMeta("frame") ? (int)_endTurn.GetMeta("frame") : -1;
     internal bool ListShownForSelfTest => _list.Visible;
     internal IReadOnlyList<string> RowTextsForSelfTest => _rows.GetChildren().OfType<Label>().Select(l => l.Text).ToArray();
     internal bool ShownForSelfTest => Visible;
@@ -48,11 +78,18 @@ public partial class AreaCombatHud : CanvasLayer
         AddChild(_root);
         _panel = new ColorRect { Name = "LampPanel", Color = new Color(0f, 0f, 0f, .62f), MouseFilter = Control.MouseFilterEnum.Ignore };
         _root.AddChild(_panel);
+        _panelArt = ArtRect("PanelArt", Control.MouseFilterEnum.Ignore);
+        _panel.AddChild(_panelArt);
         for (var i = 0; i < _lamps.Length; i++)
         {
             _lamps[i] = new ColorRect { Name = "Lamp" + i, Color = OffColor, MouseFilter = Control.MouseFilterEnum.Ignore };
             _panel.AddChild(_lamps[i]);
+            _lampArt[i] = ArtRect("LampArt" + i, Control.MouseFilterEnum.Ignore);
+            _panel.AddChild(_lampArt[i]);
         }
+        _endTurn = ArtRect("EndTurn", Control.MouseFilterEnum.Stop);
+        _endTurn.GuiInput += EndTurnInput;
+        _panel.AddChild(_endTurn);
         _list = new PanelContainer { Name = "TurnOrder", MouseFilter = Control.MouseFilterEnum.Ignore };
         _list.AddThemeStyleboxOverride("panel", new StyleBoxFlat { BgColor = new Color(0f, 0f, 0f, .68f), ContentMarginLeft = 6, ContentMarginRight = 8, ContentMarginTop = 4, ContentMarginBottom = 4 });
         _rows = new VBoxContainer { Name = "Rows", MouseFilter = Control.MouseFilterEnum.Ignore };
@@ -69,12 +106,69 @@ public partial class AreaCombatHud : CanvasLayer
         AreaGameBarPanel.InsetsChanged -= Place;
     }
 
+    private static TextureRect ArtRect(string name, Control.MouseFilterEnum filter) => new()
+    {
+        Name = name, MouseFilter = filter, ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize, StretchMode = TextureRect.StretchModeEnum.Scale, Visible = false,
+    };
+
+    /// <summary>Gives the HUD the game's art (the frames of an interface art number, null when it did not read); without the five arts of
+    /// <see cref="AreaCombatLampLayout.ArtNumbers"/> the plain controls draw. Call before <see cref="Show"/>.</summary>
+    public void SetArt(Func<int, Texture2D[]?>? art) => _art = art;
+
+    /// <summary>Whether the end-turn button takes the pointer (off while a window over the world is open: the HUD's layer is above the windows').</summary>
+    public void SetEndTurnActive(bool active)
+    {
+        _endTurn.MouseFilter = active ? Control.MouseFilterEnum.Stop : Control.MouseFilterEnum.Ignore;
+        if (!active) _endTurnHeld = false;
+    }
+
+    private Texture2D? ArtFrame(int number, int frame = 0) => _art?.Invoke(number) is { Length: > 0 } frames ? frames[Math.Min(frame, frames.Length - 1)] : null;
+
+    private bool ArtReady => AreaCombatLampLayout.ArtNumbers.All(number => ArtFrame(number) is not null);
+
+    private void EndTurnInput(InputEvent input)
+    {
+        if (input is not InputEventMouseButton { ButtonIndex: MouseButton.Left } click) return;
+        _endTurn.AcceptEvent();
+        if (click.Pressed) { _endTurnHeld = true; ShowEndTurnFrame(AreaBarButtonLook.Down); EndTurnPressed?.Invoke(); return; }
+        if (!_endTurnHeld) return;
+        _endTurnHeld = false;
+        ShowEndTurnFrame(AreaBarButtonLook.Idle);
+        EndTurnReleased?.Invoke(new Rect2(Vector2.Zero, _endTurn.Size).HasPoint(click.Position));
+    }
+
+    private void ShowEndTurnFrame(AreaBarButtonLook look)
+    {
+        var frames = _art?.Invoke(AreaCombatLampLayout.EndTurnArt);
+        if (frames is not { Length: > 0 }) return;
+        var frame = AreaGameBarLayout.Frame(look, frames.Length);
+        _endTurn.Texture = frames[frame];
+        _endTurn.SetMeta("frame", frame);
+    }
+
     /// <summary>Draws <paramref name="view"/> (null hides the HUD), over the bars of <paramref name="bars"/> when given and shown.</summary>
     public void Show(AreaCombatHudView? view, AreaGameBarPanel? bars)
     {
         _view = view;
         _bars = bars;
-        if (view is null) { Hide(); return; }
+        if (view is null) { _endTurnHeld = false; Hide(); return; }
+        _artShown = ArtReady;
+        _panel.Color = _artShown ? Colors.Transparent : new Color(0f, 0f, 0f, .62f);
+        _panelArt.Visible = _artShown;
+        if (_artShown)
+        {
+            _panelArt.Texture = ArtFrame(AreaCombatLampLayout.PanelArt);
+            if (!_endTurnHeld) ShowEndTurnFrame(AreaBarButtonLook.Idle);
+        }
+        else _endTurnHeld = false;
+        _endTurn.Visible = _artShown;
+        for (var i = 0; i < _lamps.Length; i++)
+        {
+            var art = AreaCombatLampLayout.LampArt(view.Lamps[i]);
+            _lampArt[i].Visible = _artShown && art is not null;
+            if (_artShown && art is { } number) { _lampArt[i].Texture = ArtFrame(number); _lampArt[i].SetMeta("art", number); }
+            _lamps[i].Visible = !_artShown;
+        }
         for (var i = 0; i < _lamps.Length; i++)
             _lamps[i].Color = view.Lamps[i] switch
             {
@@ -119,11 +213,27 @@ public partial class AreaCombatHud : CanvasLayer
         var factor = _inBars ? _bars!.Factor : AreaGameBarPanel.ScreenFactor(size);
         _root.Position = new(AreaGameBarPanel.ScreenLeft(size, factor), size.Y - AreaGameBarLayout.ScreenHeight * factor);
         _root.Scale = new(factor, factor);
-        _panel.Position = PanelWindow.Position; _panel.Size = PanelWindow.Size;
-        for (var i = 0; i < _lamps.Length; i++)
+        if (_artShown)
         {
-            _lamps[i].Position = new(LampInset + ActionPointRules.LampX(i, GroupGap), LampTop);
-            _lamps[i].Size = new(LampSize, LampSize);
+            // ARC-UI-1888: the original's places (table 0x5CAA48 and the window table 0x5CAA38).
+            _panel.Position = new(AreaCombatLampLayout.PanelX, AreaCombatLampLayout.PanelY); _panel.Size = new(AreaCombatLampLayout.PanelWidth, AreaCombatLampLayout.PanelHeight);
+            _panelArt.Position = Vector2.Zero; _panelArt.Size = _panel.Size;
+            for (var i = 0; i < _lampArt.Length; i++)
+            {
+                _lampArt[i].Position = new(AreaCombatLampLayout.LampX[i], AreaCombatLampLayout.LampY);
+                _lampArt[i].Size = new(AreaCombatLampLayout.LampWidth, AreaCombatLampLayout.LampHeight);
+            }
+            _endTurn.Position = new(AreaCombatLampLayout.EndTurnX, AreaCombatLampLayout.EndTurnY);
+            _endTurn.Size = new(AreaCombatLampLayout.EndTurnWidth, AreaCombatLampLayout.EndTurnHeight);
+        }
+        else
+        {
+            _panel.Position = PanelWindow.Position; _panel.Size = PanelWindow.Size;
+            for (var i = 0; i < _lamps.Length; i++)
+            {
+                _lamps[i].Position = new(LampInset + ActionPointRules.LampX(i, GroupGap), LampTop);
+                _lamps[i].Size = new(LampSize, LampSize);
+            }
         }
         // The list under the top strip at the right (the follower portraits stand at the left edge), unscaled (its text is a normal label).
         _list.ResetSize();

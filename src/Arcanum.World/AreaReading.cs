@@ -27,13 +27,26 @@ public sealed class AreaReadingData
 
 public sealed record AreaReadingDataLoad(AreaReadingDataStatus Status, AreaReadingData? Data, string Detail);
 
+/// <summary>ARC-UI-1877: one message of the original-look window: its text as stored, one character a byte (after the markup), the font art the markup names (0 when none) and
+/// whether it is centred.</summary>
+public sealed record AreaReadingMessage(string Text, int Font, bool Centred);
+
+/// <summary>
+/// ARC-UI-1877: what the original-look window draws of a document (ledger WR17–WR23), the structure the diagnostic strings lose: the subtype, the background
+/// art (a picture's own art number), the header entries (a telegram's form 1000..1011, a newspaper's masthead; each with its font), the body messages (a note's
+/// and a telegram's joined into <see cref="Joined"/>), a newspaper's filler messages after the body (as many as its columns can take) and whether the newspaper
+/// is the alternate one (prototype 14092, its own masthead table).
+/// </summary>
+public sealed record AreaReadingArtDocument(WrittenSubtype Subtype, int BackgroundArt, bool Alternate, IReadOnlyList<AreaReadingMessage> Header,
+    IReadOnlyList<AreaReadingMessage> Body, IReadOnlyList<AreaReadingMessage> Fillers, string Joined);
+
 /// <summary>
 /// One spread of the reading window as the diagnostic panel draws it: the subtype, its background and frame art, the header lines (a
 /// telegram's form, a newspaper's masthead), the left and right page texts (a book shows two pages a spread and turns two at a time;
 /// every other subtype shows one page), the spread index and count, a picture's art, and a note.
 /// </summary>
 public sealed record AreaReadingView(WrittenSubtype Subtype, int BackgroundArt, IReadOnlyList<string> Header, string Left, string Right,
-    int Spread, int Spreads, int? PictureArt, string? Note, IReadOnlyList<int>? HeaderFonts = null)
+    int Spread, int Spreads, int? PictureArt, string? Note, IReadOnlyList<int>? HeaderFonts = null, AreaReadingArtDocument? Art = null)
 {
     /// <summary>The interface art number of the font of header line <paramref name="index"/> (ARC-UI-1428, for the handheld text rule);
     /// 0 when the document gave none.</summary>
@@ -56,6 +69,8 @@ public static class AreaReading
     public const int BookPageCharacters = 700;
     /// <summary>How many newspaper filler messages the diagnostic panel shows after the body (the original fills the columns).</summary>
     public const int NewspaperFillerShown = 3;
+    /// <summary>ARC-UI-1877: how many filler messages the original-look window asks for (its four columns take far fewer; the fill stops when they are full).</summary>
+    public const int NewspaperFillerForArt = 150;
     /// <summary>The telegram's font art (WR7, Courier10): its form texts carry no font of their own, the original draws them in it.</summary>
     public const int TelegramFont = 480;
 
@@ -87,19 +102,32 @@ public static class AreaReading
         if (!document.Readable || document.Subtype is not { } subtype) return null;
         var header = document.Header.Select(h => Decode(h.Text, profile)).ToArray();
         var headerFonts = document.Header.Select(h => document.Subtype == WrittenSubtype.Telegram ? TelegramFont : h.Font).ToArray();
+        var art = ArtDocument(document, subtype, texts, rules);
         if (subtype == WrittenSubtype.Picture)
-            return new(subtype, document.BackgroundArt, header, "", "", 0, 1, document.PictureArt, "the picture is interface art " + document.PictureArt + " (not drawn here)", headerFonts);
+            return new(subtype, document.BackgroundArt, header, "", "", 0, 1, document.PictureArt, "the picture is interface art " + document.PictureArt + " (not drawn here)", headerFonts, art);
         var body = document.Body.Select(m => (m.Centered ? "[centred] " : "") + Decode(m.Text, profile)).ToList();
         if (subtype == WrittenSubtype.Newspaper)
             body.AddRange(texts.NewspaperFiller(document.StartLine, NewspaperFillerShown, rules).Select(m => "[filler] " + Decode(m.Text, profile)));
         var text = string.Join(subtype is WrittenSubtype.Note or WrittenSubtype.Telegram ? "" : "\n", body);
         if (subtype != WrittenSubtype.Book)
-            return new(subtype, document.BackgroundArt, header, text, "", 0, 1, null, body.Count == 0 ? "no text at the start line" : null, headerFonts);
+            return new(subtype, document.BackgroundArt, header, text, "", 0, 1, null, body.Count == 0 ? "no text at the start line" : null, headerFonts, art);
         var pages = Pages(text);
         var spreads = Math.Max(1, (pages.Count + 1) / 2);
         var shown = Math.Clamp(spread, 0, spreads - 1);
         return new(subtype, document.BackgroundArt, header, pages.ElementAtOrDefault(2 * shown) ?? "", pages.ElementAtOrDefault(2 * shown + 1) ?? "",
-            shown, spreads, null, body.Count == 0 ? "no text at the start line" : null, headerFonts);
+            shown, spreads, null, body.Count == 0 ? "no text at the start line" : null, headerFonts, art);
+    }
+
+    /// <summary>ARC-UI-1877: the structure the original-look window draws (decoded messages, fonts, centring, the newspaper's filler).</summary>
+    private static AreaReadingArtDocument ArtDocument(WrittenDocument document, WrittenSubtype subtype, WrittenTexts texts, WrittenRuleProfile? rules)
+    {
+        // The art fonts draw the game's bytes (a glyph is the frame of byte − 31), so the text stays the Latin-1 string as stored, not the viewer's decoded text.
+        AreaReadingMessage Message(WrittenMessage message) => new(message.Text, message.Font, message.Centered);
+        var body = document.Body.Select(Message).ToArray();
+        var fillers = subtype == WrittenSubtype.Newspaper
+            ? texts.NewspaperFiller(document.StartLine, NewspaperFillerForArt, rules).Select(Message).ToArray() : [];
+        return new(subtype, document.BackgroundArt, subtype != WrittenSubtype.Picture && document.BackgroundArt == WrittenTexts.NewspaperAlternateArt,
+            document.Header.Select(Message).ToArray(), body, fillers, subtype is WrittenSubtype.Note or WrittenSubtype.Telegram ? string.Concat(body.Select(m => m.Text)) : "");
     }
 
     /// <summary>A script opener's document facts: a book (subtype 0), a picture (4) or a plaque (6) at the action's number.</summary>

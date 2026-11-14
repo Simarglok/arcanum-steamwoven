@@ -17,10 +17,12 @@ public sealed class AreaTextFontsTests
     }
 
     [TestMethod]
-    public void The_fonts_are_arts_27_229_and_230_and_the_line_is_the_tallest_glyph()
+    public void The_fonts_are_arts_27_229_230_and_25_and_the_line_is_the_tallest_glyph()
     {
         // ARC-UI-124: art 230 is the combat panel's number font.
-        CollectionAssert.AreEqual(new[] { 27, 229, 230 }, AreaTextFontLayout.ArtNumbers.ToArray());
+        // ARC-UI-1884: art 25 is the roller font of the quantity pane's count; it is optional like the number font.
+        CollectionAssert.AreEqual(new[] { 27, 229, 230, 25 }, AreaTextFontLayout.ArtNumbers.ToArray());
+        CollectionAssert.AreEqual(new[] { 27, 229 }, AreaTextFontLayout.RequiredArtNumbers.ToArray());
         Assert.AreEqual(12, AreaTextFontLayout.LineHeight(Font(12).Frames));
         Assert.AreEqual(0, AreaTextFontLayout.LineHeight([]));
         Assert.IsFalse(AreaTextFontContent.Empty("none").ArtReady);

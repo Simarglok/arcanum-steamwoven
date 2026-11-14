@@ -103,6 +103,21 @@ public partial class AreaInventoryPanel : CanvasLayer
     /// <summary>ARC-UI-029: the quantity window is up.</summary>
     public bool Asking => _bar is not null;
     internal QuantityBar? QuantityForSelfTest => _bar;
+    /// <summary>ARC-UI-1884: the quantity window's count and maximum while it asks (the original's art pane draws them), null otherwise.</summary>
+    public QuantityBar? Quantity => _bar;
+    private bool _quantityRowHidden;
+
+    /// <summary>
+    /// ARC-UI-1884: the original's art pane in the bottom strip shows the question, so the diagnostic row is not drawn (hidden: <paramref name="hidden"/>); its
+    /// buttons stay focusable for the keyboard and the pad but take no mouse.
+    /// </summary>
+    public void HideQuantityRow(bool hidden)
+    {
+        if (hidden == _quantityRowHidden) return;
+        _quantityRowHidden = hidden;
+        _quantity.Modulate = hidden ? new Color(1, 1, 1, 0) : Colors.White;
+        foreach (var button in _quantityButtons) button.MouseFilter = hidden ? Control.MouseFilterEnum.Ignore : Control.MouseFilterEnum.Stop;
+    }
     internal IReadOnlyList<Button> QuantityButtonsForSelfTest => _quantityButtons;
     internal string QuantityTextForSelfTest => _quantityLabel.Text;
     /// <summary>The looted holder's entity, or null in the plain inventory view.</summary>
