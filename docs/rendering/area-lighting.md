@@ -31,7 +31,7 @@ key 5, payload digest bound into the profile; `AreaAmbientDriver.ClockProfile`).
 frame `AreaAmbientDriver.Tick` admits host time through
 [`GameTimeFlow`](../world/game-clock-runtime.md#host-time-flow-arc-world-010) (8× the
 admitted interval, so one game hour per 7.5 real minutes) and holds a `Menu` pause
-while the diagnostic palette or a dialog is open, releasing only a Menu pause it holds
+while the Esc menu is open (the diagnostic palette and a dialog do not pause it, ARC-DEV-126), releasing only a Menu pause it holds
 (a Menu pause already on the session when the driver binds, as after a restore, counts
 as held; User or TurnBased pauses are left alone); resume has no catch-up. Time keeps
 flowing while the window is unfocused or minimised: only the Esc menu (and a save or load list) pauses it; no other window does (ARC-DEV-126, MIG12 S7). **Game time +1 hour** is an explicit wait (`ExplicitWait`) that also
@@ -250,7 +250,7 @@ live in the diagnostic palette (Ctrl+Shift+F9 / gamepad Start), never on origina
 game keys. In `area` the palette has **Game time +1 hour** (a one-hour wait) and
 **Ambient lighting on/off** (off shows unlit source pixels) plus a lighting status
 line. The HUD shows the game time, DAY/NIGHT (`[06:00,18:00)`), whether time flows
-(`time flows 8x`) or is paused (`PAUSED (dialog/palette/inventory open)`), the scheme id and
+(`time flows 8x`) or is paused (`PAUSED (the menu is open)`), the scheme id and
 whether it came from the map default. Without loaded lighting (other WORLD modes)
 both actions report "unavailable". No launch argument or key binding was added.
 

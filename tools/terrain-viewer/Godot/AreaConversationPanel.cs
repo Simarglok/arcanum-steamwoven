@@ -12,7 +12,7 @@ namespace Arcanum.TerrainViewer;
 /// → 0x568540) and its window lists only the PC's options; the panel hands the line to its owner through <see cref="NpcLineShown"/> and tells it when a reply is picked (<see cref="ReplyPicking"/>). It renders a <see cref="DialogConversation"/>; it owns no dialog rules. ARC-UI-071 (B29): with the
 /// original's text fonts (<see cref="SetFonts"/>) every text of the panel, the replies' too, is drawn in font art 229 with the original's
 /// blend (<see cref="AreaArtParagraph"/>), the font of the original's dialog box (DB1); without them (no game folder) the labels and buttons
-/// draw in the viewer's font. PROJECT: the font of the original's talk window itself is not read.
+/// draw in the viewer's font. The original's own reply band is built with the same font art 229 (0x4C9280); this panel is not that band.
 /// </summary>
 public partial class AreaConversationPanel : CanvasLayer
 {
