@@ -60,6 +60,33 @@ public sealed class AreaLocalLightingTests
     }
 
     [TestMethod]
+    public void A_body_on_a_cell_without_a_tile_is_lit_by_the_plain_ambient_of_its_art_channel()
+    {
+        // ARC-RENDER-1831: a ground or companion body outside the loaded window (the resources stage sweeps the view) used to throw
+        // AREA_LIGHT_TILE_REQUIRED from the body colour; it now takes the plain ambient of its channel, as a body drawn without a lighting does.
+        var body = AreaCompositionFixture.Body(0);
+        var visual = AreaCompositionFixture.Visual(body, 160, 160, 40, 80);
+        var command = AreaScenePlan.Create([], [body], [visual]).Commands.Single();
+        var local = Local([visual], Light(92930, 82560, 0, 0));
+        var outside = command with { MapX = 92930, MapY = 82560 };
+        Assert.IsFalse(local.HasTile(outside.MapX, outside.MapY));
+        var expectedOutdoor = new AreaLitColors(Pair.Outdoor, Pair.Outdoor);
+        Assert.AreEqual(expectedOutdoor, local.Body(outside, AreaAmbientChannel.Outdoor, Pair), "no stationary light reaches a cell without a tile");
+        Assert.AreEqual(expectedOutdoor, local.Body(outside, AreaAmbientChannel.Outdoor, Pair, lit: false));
+        var indoor = new AreaLitColors(Pair.Indoor, Pair.Indoor);
+        Assert.AreEqual(indoor, local.Body(outside, visual, AreaAmbientChannel.Indoor, Pair));
+        Assert.AreEqual(AreaLitColors.Neutral, local.Body(outside, AreaAmbientChannel.Unlit, Pair));
+        Assert.ThrowsExactly<InvalidOperationException>(() => local.LightLevel(outside.MapX, outside.MapY, Pair), "the cell light level stays defined by the viewer's HasTile guard");
+        // A wall (rotation 0 reads the tile channel) on such a cell: plain ambient from Body, the basis kept by AddCarried; nothing throws.
+        var wall = Wall(0);
+        Assert.AreEqual(expectedOutdoor, local.Body(outside, wall, AreaAmbientChannel.Outdoor, Pair));
+        Assert.AreEqual(expectedOutdoor, local.Body(outside, wall, AreaAmbientChannel.Outdoor, Pair, lit: false));
+        var frame = AreaStationaryLightSource.Create(5000, [], [Uniform(1, 400, 400, 200, 200, 100)]).Frames[1];
+        var carried = local.WithCarried(frame, [new CarriedLight(92930, 82560, 0, 0, CarriedLightSize.Large)]);
+        Assert.AreEqual(expectedOutdoor, carried.AddCarried(outside, wall, Pair, expectedOutdoor), "no tile: the basis is kept");
+    }
+
+    [TestMethod]
     public void Carried_light_is_added_after_the_sector_lights_to_bodies_terrain_and_the_actor()
     {
         // ARC-DEV-335 (V7d, ledger LT10, LT12): the critter's light stands where the critter stands, never dark, ART 1 in the size's colour.
@@ -238,8 +265,9 @@ public sealed class AreaLocalLightingTests
         Assert.AreEqual(new AmbientColor(110, 20, 30), local.Body(command with { MapX = 92929 }, AreaAmbientChannel.Outdoor, Pair).Left);
         // Without lights the body is its tile's plain ambient.
         Assert.AreEqual(new AmbientColor(50, 60, 70), Local([visual]).Body(command, AreaAmbientChannel.Outdoor, Pair).Left);
-        // A cell without a core tile is refused, never defaulted.
-        Assert.ThrowsExactly<InvalidOperationException>(() => local.Body(command with { MapY = 82561 }, AreaAmbientChannel.Outdoor, Pair));
+        // ARC-RENDER-1831: a cell without a core tile has a defined colour: the plain ambient of the art channel, no light (the light level of
+        // the cell itself, LightLevel, still refuses it; the viewer guards that with HasTile).
+        Assert.AreEqual(new AmbientColor(10, 20, 30), local.Body(command with { MapY = 82561 }, AreaAmbientChannel.Outdoor, Pair).Left);
         Assert.ThrowsExactly<ArgumentException>(() => local.Body(command with { Identity = null }, AreaAmbientChannel.Outdoor, Pair));
     }
 
