@@ -250,6 +250,22 @@ def _set_max_load(text: str) -> int:
     return 0
 
 
+def run_id(text: str) -> str:
+    if text != "all" and not (text.isascii() and text.isdigit() and int(text) > 0):
+        raise argparse.ArgumentTypeError("RUN_ID is a ticket number (see ./arcanum queue)")
+    return text
+
+
+def positive_minutes(text: str) -> float:
+    try:
+        value = float(text)
+    except ValueError:
+        value = float("nan")
+    if not (0 < value < float("inf")):
+        raise argparse.ArgumentTypeError("MIN must be a positive number of minutes")
+    return value
+
+
 def lane_count(text: str) -> str:
     if text != "default" and not (text.isascii() and text.isdigit() and int(text) <= run_queue.MAX_SHORT_LANES):
         raise argparse.ArgumentTypeError(f"N must be 'default' or a whole number from 0 to {run_queue.MAX_SHORT_LANES}")
@@ -267,6 +283,24 @@ def max_load_value(text: str) -> str:
 
 
 def queue(args: argparse.Namespace) -> int:
+    if args.timeout is not None and args.wait is None and not args.all:
+        print("arcanum queue: --timeout goes with --wait", file=sys.stderr)
+        return 2
+    if args.wait is not None or args.all:  # ARC-DEV-1983: block until a run (or the whole queue) has finished
+        if args.pause or args.resume or args.app or args.lanes or args.history or args.set_lanes is not None \
+                or args.set_max_load is not None:
+            print("arcanum queue: --wait cannot be combined with another queue option", file=sys.stderr)
+            return 2
+        if args.all and args.wait not in (None, "all"):
+            print("arcanum queue: --all waits for the whole queue; give --wait RUN_ID or --all, not both", file=sys.stderr)
+            return 2
+        try:
+            return run_queue.wait(None if args.wait in (None, "all") else int(args.wait), args.timeout or 0.0)
+        except KeyboardInterrupt:
+            return 130
+        except (OSError, ValueError) as error:
+            print(f"arcanum queue: {error}", file=sys.stderr)
+            return 1
     if args.pause or args.resume:  # ARC-DEV-1344: the same flag the menu-bar app sets
         try:
             changed = run_queue.set_paused(args.pause)
@@ -451,7 +485,7 @@ def parser() -> argparse.ArgumentParser:
                                   "of that commit (ARC-DEV-062)")
     daily.configure(command)
     command.set_defaults(func=daily.run)
-    command = commands.add_parser("queue", help="show the launch queue: the runs holding a place and the waiters in order")
+    command = commands.add_parser("queue", help="show the launch queue: the runs holding a place and the waiters in order; --wait blocks until a run or the queue is done")
     command.add_argument("--history", type=positive, default=0, metavar="N", help="show the last N finished runs instead")
     command.add_argument("--lanes", action="store_true", help="count the finished runs and the red ones per Godot lane, alone and "
                          "beside other runs, with the load of the latest red ones (ARC-DEV-400; --history N limits the runs)")
@@ -468,6 +502,16 @@ def parser() -> argparse.ArgumentParser:
     command.add_argument("--set-max-load", metavar="X", type=max_load_value,
                          help="load guard: a Godot run that is next does not start while another Godot run is running and the "
                               "one-minute load average is above X (a lone run always starts); 'off' removes it")
+    command.add_argument("--wait", nargs="?", const="all", metavar="RUN_ID", type=run_id,
+                         help="block until run RUN_ID (the ticket number of ./arcanum queue or of the ARCANUM_QUEUE log/start "
+                              "line) has ended; print its PASS/FAIL result, log path and first error, and exit with its exit "
+                              "code; without RUN_ID: until the queue is empty (ARC-DEV-1983). A waiter holds no place, spawns "
+                              "no process and stops nothing; Ctrl-C only ends the wait")
+    command.add_argument("--all", action="store_true", help="same as --wait without a RUN_ID: until the queue is empty")
+    command.add_argument("--timeout", type=positive_minutes, metavar="MIN",
+                         help="with --wait: give up after MIN minutes with exit code " + str(run_queue.WAIT_TIMEOUT_EXIT)
+                         + " (the run keeps going; default no limit); exit " + str(run_queue.WAIT_UNKNOWN_EXIT)
+                         + " when RUN_ID is neither queued nor in the history")
     command.set_defaults(func=queue)
     return result
 

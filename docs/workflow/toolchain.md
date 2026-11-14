@@ -420,6 +420,7 @@ before it. It replaces the earlier
     ./arcanum queue --pause         # no waiting run starts (running ones finish), for every checkout, until --resume (ARC-DEV-1344)
     ./arcanum queue --resume
     ./arcanum queue --app           # start the menu-bar view of the queue now (a queued run starts it by itself)
+    ./arcanum queue --wait [RUN_ID | --all] [--timeout MIN]   # block until that run (or the whole queue) has ended (ARC-DEV-1983)
 
 | Kind | Use it for | Rule | Default limit |
 |---|---|---|---|
@@ -440,6 +441,16 @@ before it. It replaces the earlier
   first minute that one of the `queued` or `start` lines is there and, after `start`, the command itself as
   [above](#checking-that-a-run-started-arc-dev-029).
   A queued run is not stuck: `./arcanum queue` shows what it waits for.
+- **Waiting for a run (ARC-DEV-1983).** `./arcanum queue --wait RUN_ID` blocks until ticket `RUN_ID` (the number `./arcanum queue`
+  lists and the `ARCANUM_QUEUE log|start ticket=N` line shows) has ended, prints the same quiet result as the run itself (`PASS`/`FAIL`
+  with `ticket=N`, the exit code, the log path and the first error) and exits with the run's exit code; a run that ended earlier answers
+  at once from `history.jsonl`. `./arcanum queue --wait` (or `--all`) blocks until no run holds a place or waits (the pause is not a
+  run; a waiter started inside a queued run does not wait for that run). `--timeout MIN` gives up after MIN minutes with exit **123**
+  and `TIMEOUT` on stdout without stopping anything (a run's own limit exits 124, a run that is neither queued nor in the history
+  exits 122, bad arguments 2, Ctrl-C 130). A waiter takes no place and changes no lane or ordering rule; it only reads the ticket
+  files once a second and spawns no process (libproc, ARC-DEV-1401). Use it when a run was started in the background (`./arcanum run
+  ... &`, or a Bash `run_in_background`) or the thread must wait for other threads' runs; never a `sleep` or polling loop. A thread
+  waiting for its own foreground `./arcanum run` needs nothing: that call already blocks.
 - **Limits.** A run that exceeds its limit has its whole process group stopped (SIGTERM, then SIGKILL after 10 s) and
   exits 124 with `ARCANUM_QUEUE timeout`. `--timeout MIN` changes the limit, `--timeout 0` removes it. Stopping the
   wrapper (Ctrl-C, SIGTERM, SIGHUP, a stopped background task) stops its command and gives up its place; the wrapper

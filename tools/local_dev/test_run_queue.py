@@ -1082,6 +1082,103 @@ class QueueRunTests(unittest.TestCase):
         finally:
             run_queue.set_paused(False)
 
+    def waiter(self, *args: str) -> subprocess.Popen:
+        return subprocess.Popen([sys.executable, "-B", str(ARCANUM), "queue", *args], stdout=subprocess.PIPE,
+                                stderr=subprocess.PIPE, text=True, cwd=REPO)
+
+    def test_wait_blocks_until_the_run_ends_and_exits_with_its_status(self) -> None:  # ARC-DEV-1983
+        code = (f"import os, sys, time\n"
+                f"while not os.path.exists({str(self.root / 'release')!r}): time.sleep(0.05)\n"
+                f"sys.exit(3)")
+        self.wrapper("window", "exits-three", [sys.executable, "-c", code])
+        seq = self.runs()[0]["seq"]
+        waiting = self.waiter("--wait", str(seq))
+        self.processes.append(waiting)
+        time.sleep(1.5)
+        self.assertIsNone(waiting.poll(), "the waiter returned while the run was still going")
+        self.release()
+        out, err = waiting.communicate(timeout=30)
+        self.assertEqual(waiting.returncode, 3, out + err)
+        self.assertIn("FAIL exit=3", out)
+        self.assertIn(f"ticket={seq}", out)
+        self.assertIn("log=", out)
+        again = self.waiter("--wait", str(seq))  # a finished run answers from the history at once
+        self.processes.append(again)
+        out, _ = again.communicate(timeout=30)
+        self.assertEqual(again.returncode, 3, out)
+
+    def test_wait_for_a_passing_run_prints_pass_and_exits_zero(self) -> None:
+        run = self.wrapper("quick", "passes", [sys.executable, "-c", "import time; time.sleep(0.5)"])
+        seq = self.runs()[0]["seq"]
+        done = subprocess.run([sys.executable, "-B", str(ARCANUM), "queue", "--wait", str(seq)], capture_output=True, text=True,
+                              cwd=REPO, timeout=60)
+        run.wait(30)
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertTrue(done.stdout.startswith("PASS exit=0"), done.stdout)
+
+    def test_wait_without_an_id_waits_until_the_queue_is_empty(self) -> None:
+        self.held("window", "a")
+        self.held("dotnet", "b")
+        waiting = self.waiter("--wait")
+        self.processes.append(waiting)
+        time.sleep(1.5)
+        self.assertIsNone(waiting.poll())
+        self.release()
+        out, err = waiting.communicate(timeout=30)
+        self.assertEqual(waiting.returncode, 0, out + err)
+        self.assertIn("queue empty", out)
+        self.assertEqual(self.runs(), [])
+        done = subprocess.run([sys.executable, "-B", str(ARCANUM), "queue", "--all"], capture_output=True, text=True,
+                              cwd=REPO, timeout=60)
+        self.assertEqual((done.returncode, done.stdout.strip()), (0, "queue empty"))
+
+    def test_wait_ignores_the_pause(self) -> None:
+        run_queue.set_paused(True, "test")
+        try:
+            done = subprocess.run([sys.executable, "-B", str(ARCANUM), "queue", "--wait"], capture_output=True, text=True,
+                                  cwd=REPO, timeout=60)
+            self.assertEqual((done.returncode, done.stdout.strip()), (0, "queue empty"))
+        finally:
+            run_queue.set_paused(False)
+
+    def test_wait_times_out_with_its_own_exit_code_and_leaves_the_run_alone(self) -> None:
+        run = self.held("window", "slow")
+        seq = self.runs()[0]["seq"]
+        done = subprocess.run([sys.executable, "-B", str(ARCANUM), "queue", "--wait", str(seq), "--timeout", "0.01"],
+                              capture_output=True, text=True, cwd=REPO, timeout=60)
+        self.assertEqual(done.returncode, run_queue.WAIT_TIMEOUT_EXIT, done.stdout + done.stderr)
+        self.assertIn("TIMEOUT", done.stdout)
+        self.assertNotIn(done.returncode, (0, run_queue.TIMEOUT_EXIT, run_queue.WAIT_UNKNOWN_EXIT))
+        self.assertIsNone(run.poll())  # the run is not stopped
+        self.assertEqual([item["seq"] for item in self.runs()], [seq])
+        self.release()
+        self.assertEqual(run.wait(30), 0)
+
+    def test_wait_for_an_unknown_run_and_bad_arguments(self) -> None:
+        def run(*args: str) -> subprocess.CompletedProcess:
+            return subprocess.run([sys.executable, "-B", str(ARCANUM), "queue", *args], capture_output=True, text=True,
+                                  cwd=REPO, timeout=60)
+        self.assertEqual(run("--wait", "424242").returncode, run_queue.WAIT_UNKNOWN_EXIT)
+        self.assertNotEqual(run("--wait", "abc").returncode, 0)
+        self.assertNotEqual(run("--wait", "0").returncode, 0)
+        self.assertEqual(run("--timeout", "5").returncode, 2)  # --timeout without --wait
+        self.assertEqual(run("--wait", "--pause").returncode, 2)
+        self.assertEqual(run("--all", "--wait", "5").returncode, 2)
+        self.assertFalse(run_queue.pause_file().exists())
+
+    def test_a_waiter_spawns_no_process_and_never_waits_for_its_own_run(self) -> None:
+        self.held("window", "watched")
+        seq = self.runs()[0]["seq"]
+        with patch.object(subprocess, "run", side_effect=AssertionError("spawned")), \
+                patch.object(subprocess, "Popen", side_effect=AssertionError("spawned")), \
+                patch("builtins.print"):
+            self.assertEqual(run_queue.wait(seq, 0.0001, sleep=lambda _: None), run_queue.WAIT_TIMEOUT_EXIT)
+        with patch.dict(os.environ, {run_queue.TICKET_ENV: str(seq)}):
+            with self.assertRaises(ValueError):
+                run_queue.wait(seq)
+            with patch("builtins.print"):  # --all inside the run: that run is the only one, so the queue is empty for it
+                self.assertEqual(run_queue.wait(None), 0)
+
 
 if __name__ == "__main__":
     unittest.main()
