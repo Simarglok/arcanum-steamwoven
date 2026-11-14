@@ -276,7 +276,7 @@ public static class InterfaceChromeRecipes
 
     // ARC-UI-1818: the quantity pane of the bottom strip (bar mode 9, ARC-UI-1884): 298 `MultiMove_Base` (416 x 112 at (196, 492)), the stone every strip pane is, with a rim on all sides and no holes. The icon's recess
     // (the original's black field for the kind's picture, measured at 71..154 across and 42..89 down, drawn under the 71 x 41 icon at (73, 42)) is a sunk pit; the counter (six silver roller cells in a bronze frame at
-    // 205..297 across and 54..79 down, with the + and - buttons over its right end) is a kept picture, because the digits are drawn over its cells. The buttons are the generic button recipe with the glyph kept:
+    // 205..297 across and 54..79 down, with the + and - buttons over its right end) is a kept picture, because the digits are drawn over its cells. The buttons are round balls (a dark glass face with a mark), the generic button recipe with KeepFace: the art's own picture inside a generated rim (the glyph-only recipe cut the ball smaller and left a notch where the art's brass arc leaves the circle):
     // 299 `Sm_RightArrow` (All), 33 `Done_Big` and 32 `Cncl_Big` (Accept and Cancel, the green and red marks). 805 `OldChar_Plus` and 804 `OldChar_Minus` (up and down, 13 x 10) get no recipe: the generic
     // button's rim and ink take 3.6 units of a button's edge and its glyph mask starts five units in, so a button ten units high is all rim and would lose its + or -; they lie on the kept counter and stay pictures.
     private static IEnumerable<ChromeRecipe> QuantityRecipes()
@@ -284,7 +284,7 @@ public static class InterfaceChromeRecipes
         yield return new ChromeRecipe("MultiMove_Base.ART", ChromeKind.Panel, ChromeMaterial.Slate, ChromeSides.All,
             [new ChromeSunk(69, 40, 87, 51, ChromeMaterial.Pit), new ChromeKeep(204, 52, 94, 28)], Holes: ChromeHoles.None);
         foreach (var file in new[] { "Sm_RightArrow.ART", "Done_Big.ART", "Cncl_Big.ART" })
-            yield return new ChromeRecipe(file, ChromeKind.Button, ChromeMaterial.Face, ChromeSides.None, []);
+            yield return new ChromeRecipe(file, ChromeKind.Button, ChromeMaterial.Face, ChromeSides.None, [], KeepFace: true);
     }
 
     public static IReadOnlyList<ChromeRecipe> All { get; } = Build();

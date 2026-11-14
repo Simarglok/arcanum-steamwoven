@@ -735,7 +735,9 @@ ones (D9); only the drawing changes. The strip pane is a texture of the bars and
 
 - **Pane (298).** `ChromeMaterial.Slate` with a rim on every side, no holes: a sunk black recess (69, 40, 87 × 51) under the kind icon, as the icon is a picture drawn over it, and the counter's strip (204, 52, 94 × 28) kept as
   the original's pixels so the black digits keep the original's ground. No kept part cuts into the recess or into a button.
-- **Buttons (299, 33, 32).** The generic button recipe of [S1](#viewer-slice-s1-arc-ui-140): a generated face and rim following the silhouette, sunk on the down frame, the glyph kept.
+- **Buttons (299, 33, 32).** The round ball recipe of the college tabs ([S5b](#viewer-slice-s5b-arc-ui-1784), `KeepFace`): the art's own picture (a dark glass ball with its mark) inside a generated rim that follows the silhouette, sunk on the down
+  frame. A first try with the glyph-only generic recipe of [S1](#viewer-slice-s1-arc-ui-140) drew the ball smaller and left a notch where the art's brass arc leaves the circle, so it was dropped.
+- **Recipes are keyed by file name.** 33 `Done_Big`, 32 `Cncl_Big` and 299 are generated wherever a window draws them in the Generated interface: the save list's Delete Save Game button is art 32, so it is a generated ball too (the same recipe; HD and Legacy are untouched). No smoke covers that button; the owner recheck list has a step for it.
 - **805 and 804 stay pictures.** The generic recipe's glyph mask starts 5 units inside the silhouette and the rim and ink take 3.6 units, so a button about ten units high is all rim and would lose its + or − mark; a test records
   that these two arts have no recipe. A recipe with its own part layout can replace them later.
 - **Checks.** `InterfaceChromeTests` (the pane and its buttons have recipes found by name, the font and the 13 × 10 buttons have none; every part lies inside its frame, the icon recess holds the icon and the kept counter cuts into no pit

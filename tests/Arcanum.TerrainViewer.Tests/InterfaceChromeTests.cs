@@ -1400,7 +1400,7 @@ public sealed class InterfaceChromeTests
         foreach (var (file, _, _, _, _) in QuantityRecipeButtons)
         {
             Assert.AreEqual(ChromeKind.Button, Recipe(file).Kind, file);
-            Assert.IsFalse(Recipe(file).KeepFace, $"{file}: the face is generated, only the glyph is kept");
+            Assert.IsTrue(Recipe(file).KeepFace, $"{file}: the ball's own picture is kept inside the generated rim");
             Assert.IsNotNull(InterfaceChromeRecipes.For(HdInterfaceKey.Query(HdInterfaceKey.Identity(file.ToUpperInvariant(), new byte[] { 1 }), 0, 1, 1, new byte[4])), file);
         }
         // The pane's arts are the five buttons' and the background; the count's font (25) is drawn text and has no recipe.

@@ -1379,10 +1379,11 @@ the stack onto another window or the ground so the pane asks how many. Compare w
 
 | # | Step | Expected | Status |
 | --- | --- | --- | --- |
-| 1 | Open the quantity pane in a 1280 × 800 window. | The bottom strip's pane is a slate plate with a black recess under the kind icon and a counter strip at the original's place; the All, Accept and Cancel buttons are generated; all at the same places and sizes as in Legacy. | open |
+| 1 | Open the quantity pane in a 1280 × 800 window. | The bottom strip's pane is a slate plate with a black recess under the kind icon and a counter strip at the original's place; the All, Accept and Cancel buttons are the original's dark glass balls in a generated brass rim; all at the same places and sizes as in Legacy. | open |
 | 2 | Click up and down, then All. | The count changes as before; the digits are black (inferred from the original's colour channel, not seen in the original) and sit in the counter strip. | open |
 | 3 | Accept and Cancel. | The stack moves or stays as before; the pane goes away. | open |
 | 4 | Resize the window (or go full screen) with the pane open. | The pane is sharp at the new size, with no seam. | open |
+| 5 | Open the Save or Load window and look at the Delete Save Game button (it is the same art as the pane's Cancel button, 32). | It is a dark glass ball with its mark in a generated brass rim; clicks work as before. | open |
 
 Known differences (documented, not bugs):
 
