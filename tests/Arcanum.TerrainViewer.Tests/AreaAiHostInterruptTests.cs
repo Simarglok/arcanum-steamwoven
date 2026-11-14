@@ -44,6 +44,19 @@ public sealed class AreaAiHostInterruptTests
     private static bool Alive(AreaAiHost host, GoalHandle handle) => host.Session.QueryGoals().TryGet(handle, out var run) && !run.Done;
 
     [TestMethod]
+    public void A_speaker_that_runs_an_animation_of_its_own_neither_stops_nor_turns_to_its_listener()
+    {
+        // ARC-UI-2029 (TB26): the speech display's turn needs a living speaker with no main run; the level-3 interrupt before the turn finds only overlays, so a walker keeps walking.
+        var (f, host) = Open();
+        using var fixture = f;
+        var walk = Own(host, f.A, GoalType.MoveToTile);
+        Assert.IsFalse(host.FaceListener(f.A, f.B), "the walking speaker is not turned");
+        Assert.IsTrue(Alive(host, walk), "and its walk is not interrupted");
+        host.Session.InterruptGoals(f.A, GoalInterruptRules.OrdinaryActions);
+        Assert.IsTrue(host.FaceListener(f.A, f.B), "once idle it turns to the listener");
+    }
+
+    [TestMethod]
     public void A_starter_ends_the_replaced_run_at_level_3_with_its_end_nodes_and_starts_its_own()
     {
         var (f, host) = Open();

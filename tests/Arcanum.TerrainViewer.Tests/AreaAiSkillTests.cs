@@ -337,9 +337,6 @@ public sealed class AreaAiSkillTests
         Assert.AreEqual(NeighborDirection.XPlus, host.Movers.FacingOf(npc, NeighborDirection.YMinus));
         Assert.IsFalse(host.FaceListener(npc, Entity(9)), "a listener without a cell: nothing to face");
         Assert.IsFalse(host.FaceListener(AiSchedulerRules.Pc, npc), "the host walks no hero: the hero's turn is the request host's");
-        Assert.AreEqual(AiActionStart.Started, host.BeginAction(npc, AiActionAnimation.Skill).Start);
-        Assert.IsTrue(host.AnimationRunning(npc), "the action is an animation run");
-        Assert.IsFalse(host.FaceListener(npc, AiSchedulerRules.Pc), "a speaker that runs an animation neither stops nor turns");
         var (_, stunnedHost, stunned, _) = Open(critterFlags: 0x60);
         Assert.IsFalse(stunnedHost.FaceListener(stunned, AiSchedulerRules.Pc), "a critter that cannot act is not turned");
     }
