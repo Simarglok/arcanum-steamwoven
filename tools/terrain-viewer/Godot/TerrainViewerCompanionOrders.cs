@@ -109,7 +109,7 @@ public partial class TerrainViewerApp
     }
 
     /// <summary>
-    /// ARC-UI-2079 (ledger TB28, the broadcast callback 0x5FDC88 of 0x4C31A0): each reached follower says the acknowledgement line its order gives (2100-2199, the refusal 2200-2299, the farewells 1900-2099) to the broadcaster, the hero, who is the
+    /// ARC-UI-2079 (ledger TB28, the order handler's broadcast callback): each reached follower says the acknowledgement line its order gives (2100-2199, the refusal 2200-2299, the farewells 1900-2099) to the broadcaster, the hero, who is the
     /// listener its speech display turns it to. The follower's can-speak test is the line builder's (flag 1 for an acknowledgement; flag 0 for a refusal or a farewell, which also refuses a follower in combat focus or fleeing). No active
     /// test stands before them, unlike the AI sites. Not modelled: the curse's race line, and the move order's lines (the viewer sends no move order).
     /// </summary>

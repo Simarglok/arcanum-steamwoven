@@ -1083,7 +1083,8 @@ public partial class TerrainViewerApp
             var backOff = IssueAreaOrder("smoke", new(CompanionOrderType.BackOff, CompanionOrderAddressing.All, []))?.Outcomes.SingleOrDefault(o => o.Entity == follower);
             // ARC-UI-2079 (TB28): the order's acknowledgement line (2100-2199) is said by the follower to the hero; the text comes from the player's generated files (a run without them reports SKIP).
             var ackTexts = _conversationHost?.GreetingTexts?.Status == AreaGreetingTextsStatus.Ready;
-            GD.Print(ackTexts && _followerLinesSaid == ackBefore + 1 ? "ARC-UI-2079 native-smoke ai-order-ack PASS said=1" : $"ARC-UI-2079 native-smoke ai-order-ack SKIP textsReady={ackTexts} said={_followerLinesSaid - ackBefore}");
+            if (ackTexts) Require(_followerLinesSaid == ackBefore + 1, $"the back-off order's acknowledgement line was said once: {_followerLinesSaid - ackBefore}");
+            GD.Print(ackTexts ? "ARC-UI-2079 native-smoke ai-order-ack PASS said=1" : "ARC-UI-2079 native-smoke ai-order-ack SKIP textsReady=False");
             // The host's interrupt comes before the pass, whose gate then finds the follower idle.
             Require(backOff is { Effect: CompanionOrderEffect.Stopped, Stop.Interrupted: true, Pass: { Failure: GameSessionFailure.None, Pass.Gate.Passed: true } }
                 && session.QueryDanger(follower).State == DangerState.None && host.RunOf(follower) is null,
