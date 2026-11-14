@@ -329,6 +329,22 @@ public sealed class AreaAiSkillTests
     }
 
     [TestMethod]
+    public void A_speaking_idle_npc_faces_its_listener_and_a_busy_or_unable_one_does_not()
+    {
+        // ARC-UI-2029 (TB26): the speech display turns a living speaker that runs no animation of its own to its listener (the dialog's NPC line, the greeting).
+        var (_, host, npc, _) = Open();
+        Assert.IsTrue(host.FaceListener(npc, AiSchedulerRules.Pc), "an idle living NPC turns to the hero");
+        Assert.AreEqual(NeighborDirection.XPlus, host.Movers.FacingOf(npc, NeighborDirection.YMinus));
+        Assert.IsFalse(host.FaceListener(npc, Entity(9)), "a listener without a cell: nothing to face");
+        Assert.IsFalse(host.FaceListener(AiSchedulerRules.Pc, npc), "the host walks no hero: the hero's turn is the request host's");
+        Assert.AreEqual(AiActionStart.Started, host.BeginAction(npc, AiActionAnimation.Skill).Start);
+        Assert.IsTrue(host.AnimationRunning(npc), "the action is an animation run");
+        Assert.IsFalse(host.FaceListener(npc, AiSchedulerRules.Pc), "a speaker that runs an animation neither stops nor turns");
+        var (_, stunnedHost, stunned, _) = Open(critterFlags: 0x60);
+        Assert.IsFalse(stunnedHost.FaceListener(stunned, AiSchedulerRules.Pc), "a critter that cannot act is not turned");
+    }
+
+    [TestMethod]
     public void The_skill_and_throw_animations_stand_in_with_the_fixed_art()
     {
         var (_, host, npc, _) = Open();

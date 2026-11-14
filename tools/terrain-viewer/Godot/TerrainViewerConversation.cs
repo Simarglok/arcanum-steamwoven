@@ -83,8 +83,8 @@ public partial class TerrainViewerApp
         if (_conversationPanel is null)
         {
             _conversationPanel = new AreaConversationPanel { NumberedSource = () => DialogRepliesNumbered, OriginalRowsSource = () => DialogReplyRowsDrift }; AddChild(_conversationPanel);
-            _conversationPanel.NpcLineShown += ShowDialogLineBubble;
-            _conversationPanel.ReplyPicking += RemoveDialogLineBubble;
+            _conversationPanel.NpcLineShown += (text, persistent) => { FaceHeroFromSpeaker(); ShowDialogLineBubble(text, persistent); };
+            _conversationPanel.ReplyPicking += () => { FaceHeroTowardSpeaker(); RemoveDialogLineBubble(); };
             _conversationPanel.Picked += () => { if (_audio is not null) ExecuteVoice(DialogVoicePlayer.Picked()); };
             // Only the player's close resumes the dialog script; teardown, reset and map changes just close.
             _conversationPanel.CloseRequested += () => EndConversation(resume: true);
@@ -301,6 +301,8 @@ public partial class TerrainViewerApp
         if (start.Status == AreaConversationStartStatus.GenericGreeting)
         {
             _voiceStart = start; // smokes read the status; the voice acts only while a conversation is open
+            // ARC-UI-2029 (TB26): the greeting is a speech display with the hero as listener (0x5681C0): the NPC turns to it when idle.
+            AreaAiHostNow()?.FaceListener(AreaConversationState.EntityId(speaker.Row), Arcanum.Simulation.Ai.AiSchedulerRules.Pc);
             GD.Print($"ARC-DEV-324 generic greeting speaker={speaker.ScriptId} line={start.GreetingLine ?? "none"} detail={start.Detail}");
             RefreshReadyStatus();
             return;
@@ -383,11 +385,35 @@ public partial class TerrainViewerApp
         _voiceStart = start;
         var title = $"Dialog NPC (script {speaker.ScriptId}, prototype {speaker.Row.PrototypeNumber})";
         var barsOn = InterfaceBarsOn;
+        // ARC-UI-2029 (TB26): the dialog start's tail (0x567460) stops the hero's runs and turns it to the NPC before the first line; the concealment of both ended in the session's reaction start.
+        if (start.Status == AreaConversationStartStatus.Started) FaceHeroTowardSpeaker(interrupt: true);
         var shown = ShowConversationPanel(title, start.Conversation, start.Status == AreaConversationStartStatus.Started ? null : $"[{start.Status}: {start.Detail}]");
         // ARC-UI-1120 (HK25): the dialog start (0x567460, the single-player branch) describes the speaker for the hero (0x57CD60, 0x553BE0, 0x43C270) as the
         // world's hover does: the speaker's examine script runs, and its window follows unless the script answered skip default.
         // Only with the interface on (0x5578C0 answers 0).
         if (shown && barsOn && start.Status == AreaConversationStartStatus.Started) DescribeDialogSpeaker(speaker);
+    }
+
+    /// <summary>
+    /// ARC-UI-2029 (ledger TB26): the hero turns to the dialog's speaker: at the dialog start after the level-3 interrupt of its runs (<paramref name="interrupt"/>), and when its chosen reply is shown (the speech
+    /// display's turn of a living, idle speaker toward its listener). The turn is the rotate starter's (<see cref="FaceRequest"/>): refused for a hero that cannot act, one with a main run, or one that is not the current
+    /// participant of a round; nothing happens when it already faces the speaker.
+    /// </summary>
+    private void FaceHeroTowardSpeaker(bool interrupt = false)
+    {
+        if (_conversationSpeaker is not { } speaker || !SpeakerPresent(speaker) || ShownHeroRunsHost is not { } runs) return;
+        if (interrupt) runs.Interrupt(Arcanum.Simulation.Goals.GoalInterruptRules.OrdinaryActions, "DIALOG_START");
+        var (x, y) = SpeakerCell?.Invoke(speaker) ?? (speaker.WorldX, speaker.WorldY);
+        var result = HeroRequests.Apply(new FaceRequest(new(checked((int)x), checked((int)y))));
+        GD.Print($"ARC-UI-2029 hero faces the dialog speaker outcome={result.Outcome} rotation={result.Rotation?.ToString() ?? "-"} interrupt={interrupt}");
+    }
+
+    /// <summary>ARC-UI-2029 (ledger TB26): the NPC's dialog line is a speech display with the hero as listener: a living NPC that runs no animation of its own turns to the hero.</summary>
+    private void FaceHeroFromSpeaker()
+    {
+        if (DialogBubbleOwner() is not { } owner || AreaAiHostNow() is not { } ai) return;
+        var turned = ai.FaceListener(owner, Arcanum.Simulation.Ai.AiSchedulerRules.Pc);
+        GD.Print($"ARC-UI-2029 dialog speaker faces the hero turned={turned}");
     }
 
     /// <summary>ARC-UI-1120 (HK25): the examine of the dialog's speaker at the dialog start, once; the speaker's window is described again even when
