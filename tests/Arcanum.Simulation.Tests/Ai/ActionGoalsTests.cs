@@ -117,7 +117,7 @@ public sealed class ActionGoalsTests
         public void LeaveCombatMode(string npc) { }
         public string? Leader(string npc) => null;
         public bool Waiting(string npc) => false;
-        public void LoyaltyCheck(string npc) { }
+        public void LoyaltyCheck(string npc, bool followStarted) { }
         public void RunRoutine(string npc) { }
         public bool StartBackOff(string npc, string? target) => false;
         public AiGrenadeResult Grenade(string npc, string target) { Calls.Add("grenade?"); return GrenadeAnswer; }

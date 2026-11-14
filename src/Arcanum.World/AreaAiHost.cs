@@ -3505,7 +3505,6 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     /// <summary>ARC-WORLD-1840: the player character at the top of the critter's chain of leaders (0x45DDA0): the hero for a follower of the hero or of anyone the hero leads, else null.</summary>
     public string? PcLeader(string npc) => npc == Pc ? null : _session.QueryPcLeader(npc);
     public bool Waiting(string npc) => _session.QueryCompanion(npc).WaitBit;
-    public void LoyaltyCheck(string npc) { }
     /// <summary>ARC-DEV-170 (B06): the routine of a leaderless NPC (the non-combat perform's branch, 0x4AC583): the unforced waypoint step, the unforced standpoint step when it answered 0
     /// (WS11), each starting the walk goal to the waypoint or the standpoint. Left out (NOT READY): the fidget start (0x435CE0), the step apart (0x4364D0) after both answered 0 and the
     /// 1 in 100 bark (0x4A8F90).</summary>
@@ -4277,21 +4276,24 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
 
     /// <summary>
     /// ARC-WORLD-2117: the effective charisma (stat 7 through the getter 0x4B0490) of the NPC's DIRECT leader (0x45DE00, never the chain): the hero's, or a leading NPC's under its effects in its life state. Null without a leader or when the
-    /// leader's stats are not readable here (a leader of another map): the setter then reads no extraordinary charisma, as for a leaderless NPC.
+    /// leader's stats are not readable here (a leader of another map, ARC-WORLD-2130): the setter then reads no extraordinary charisma, as for a leaderless NPC, and the loyalty step does not run.
     /// </summary>
-    internal int? LeaderCharisma(string npc)
+    internal int? LeaderCharisma(string npc) => Leader(npc) is { } leader ? CharismaOf(leader) : null;
+
+    // The effective charisma of a critter this host can read: the hero's, or an NPC's under its effects in its life state (any life status: the getters 0x4B0490 → 0x4B0740 test the object type and the stat only).
+    private int? CharismaOf(string critter)
     {
-        if (Leader(npc) is not { } leader) return null;
-        if (leader == Pc) return _session.QueryHeroStats(new(0))?.Snapshot?.GetEffective(CharacterStat.Charisma);
-        return Build(leader) is { } build && LifeState(leader) is { } state ? build.EffectiveStat(CharacterStat.Charisma, state) : null;
+        if (critter == Pc) return _session.QueryHeroStats(new(0))?.Snapshot?.GetEffective(CharacterStat.Charisma);
+        return Build(critter) is { } build && LifeState(critter) is { } state ? build.EffectiveStat(CharacterStat.Charisma, state) : null;
     }
 
     /// <summary>
     /// ARC-WORLD-2117: the unforced leave (0x45DFC0 without the force flag) of a follower from its direct leader, with the leader's charisma read here: an extraordinary-charisma leader (20 or more, 0x4B0EE0) or
     /// <paramref name="mindControlled"/> refuses it (<see cref="GameSessionFailure.LeaveRefused"/>), an NPC leader's included (the session holds no NPC's stats, so the caller of an NPC-led leave is this host).
+    /// <paramref name="jilt"/> (ARC-WORLD-2130, 0x4AC380 after a leave that went through) sets the JILTED flag.
     /// </summary>
-    internal GameSessionMutationResult LeaveUnforced(string npc, bool mindControlled) =>
-        _session.LeaveParty(_session.Version, npc, new PartyLeave(Force: false, LeaderCharisma: LeaderCharisma(npc) ?? 0, MindControlled: mindControlled));
+    internal GameSessionMutationResult LeaveUnforced(string npc, bool mindControlled, bool jilt = false) =>
+        _session.LeaveParty(_session.Version, npc, new PartyLeave(Force: false, LeaderCharisma: LeaderCharisma(npc) ?? 0, MindControlled: mindControlled, Jilt: jilt));
 
     // ARC-WORLD-2127: an NPC's stat-side values as the party rules read them, for the NPC leading a follower: its Persuasion training (0x4C60C0, the NPC's sheet skill), effective charisma, level, alignment
     // (the stored base value: the effects on that stat are not applied here) and max followers (stat 15 under its effects). Null when the NPC's stats are not readable here (another map's, no sheet).
@@ -4330,13 +4332,13 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         LeaderUnwaitFacts(npc) is { } facts ? _session.UnwaitNpcLed(_session.Version, npc, facts) : null;
 
     // The setter's facts of the NPC: invulnerable (or nigh-invulnerable), NO_FLEE (the stored flag ORed with the session bit), the
-    // direct leader's extraordinary charisma (0x4AABE0 → 0x45DE00 → 0x4B0EE0: a PC or NPC leader, stat 7 at 20 or more).
+    // direct leader's extraordinary charisma (0x4AABE0 → 0x45DE00 → 0x4B0EE0: a PC or NPC leader, stat 7 at 20 or more). ARC-WORLD-2130: the charisma is read only where the setter reads it (a FLEE
+    // that NO_FLEE did not turn into COMBAT_FOCUS, or a SURRENDER, after the invulnerable test), through the facts' lazy read.
     private DangerSetterFacts SetterFacts(string npc)
     {
         var critter = Find(npc);
-        var charisma = LeaderCharisma(npc) >= FollowConsentRules.ExtraordinaryCharisma;
-        return new(Invulnerable: critter is { Invulnerable: true } or { NighInvulnerable: true }, NoFlee: critter?.NoFlee ?? false, LeaderExtraordinaryCharisma: charisma,
-            FloatsLine: AiBarks is not null && Active(npc));
+        return new(Invulnerable: critter is { Invulnerable: true } or { NighInvulnerable: true }, NoFlee: critter?.NoFlee ?? false,
+            FloatsLine: AiBarks is not null && Active(npc), ReadLeaderCharisma: () => LeaderCharisma(npc) >= FollowConsentRules.ExtraordinaryCharisma);
     }
 
     private (ReactionNpcFacts Npc, ReactionPcFacts Pc)? ReactionFacts(string npc)

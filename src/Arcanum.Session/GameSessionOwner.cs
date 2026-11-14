@@ -1027,7 +1027,7 @@ public sealed partial class GameSessionOwner : IDisposable
     /// <summary>
     /// Leave (C6): a follower or waiting NPC becomes free, forced and waiting cleared, spread out kept; jilted when
     /// <see cref="PartyLeave.Jilt"/>. ARC-WORLD-1840: a follower of an NPC leader leaves that leader's array (<see cref="ForceJoinLeader"/>; the unforced refusals read
-    /// <see cref="PartyLeave.LeaderCharisma"/> and <see cref="PartyLeave.MindControlled"/>, jilt is not written: the session keeps no jilted mark for an NPC-led follower). An unforced leave is <see cref="GameSessionFailure.LeaveRefused"/> under an
+    /// <see cref="PartyLeave.LeaderCharisma"/> and <see cref="PartyLeave.MindControlled"/>, a jilt is written as the record a free NPC keeps, ARC-WORLD-2130). An unforced leave is <see cref="GameSessionFailure.LeaveRefused"/> under an
     /// extraordinary-charisma leader or mind control. A free NPC is NoChange (with a wait flag too: no leader to leave, CF3, CF9). A waiting NPC's wait timer is removed (OL25); a follower that carries the flag loses it with the leave.
     /// </summary>
     [OriginalFunction(0x45E040, OriginalFunctionScope.Partial)]

@@ -60,7 +60,8 @@ public enum DangerFlags
 /// <summary>
 /// What the setter reads besides the NPC's danger bits (0x4AABE0). <see cref="Invulnerable"/>: object flag 0x400000, critter
 /// flag 2 0x200 (nigh-invulnerable) or the clockwork decoy (name 6719). <see cref="NoFlee"/>: critter flag 0x8000000.
-/// <see cref="LeaderExtraordinaryCharisma"/>: the NPC's leader has extraordinary charisma. <see cref="NpcFightingOff"/>: the
+/// <see cref="LeaderExtraordinaryCharisma"/>: the NPC's leader has extraordinary charisma; <see cref="ReadLeaderCharisma"/> is the host's read of it, called only where the original reads the leader (ARC-WORLD-2130,
+/// 0x4AABE0: a FLEE that NO_FLEE did not already turn into COMBAT_FOCUS, or a SURRENDER, after the invulnerable test; never for NONE or COMBAT_FOCUS). <see cref="NpcFightingOff"/>: the
 /// global "NPC fighting" switch (0x5B50CC) is off; it is on in a normal game, so the default facts are the usual ones.
 /// <see cref="FloatsLine"/>: the host's float callback is set and
 /// the NPC is active (0x45D790), the condition of the fleeing line. <see cref="TargetIsPc"/>: the target is a PC (rule 8).
@@ -71,7 +72,12 @@ public readonly record struct DangerSetterFacts(
     bool LeaderExtraordinaryCharisma = false,
     bool NpcFightingOff = false,
     bool FloatsLine = false,
-    bool TargetIsPc = false);
+    bool TargetIsPc = false,
+    Func<bool>? ReadLeaderCharisma = null)
+{
+    /// <summary>The leader test: the stored fact, or the host's read when it gave one.</summary>
+    internal bool LeaderCharismaExtraordinary() => LeaderExtraordinaryCharisma || ReadLeaderCharisma?.Invoke() == true;
+}
 
 /// <summary>The rule that decided the applied state (it may equal the requested one, as NONE for an invulnerable NPC), or stopped
 /// the setter early.</summary>
@@ -176,7 +182,7 @@ public static class DangerRules
         var rule = DangerSetterRule.None;
         if (facts.Invulnerable) (state, rule) = (DangerState.None, DangerSetterRule.Invulnerable);
         if (state == DangerState.Flee && (facts.NoFlee || flags.HasFlag(DangerFlags.NoFlee))) (state, rule) = (DangerState.CombatFocus, DangerSetterRule.NoFlee);
-        else if (state is DangerState.Flee or DangerState.Surrender && facts.LeaderExtraordinaryCharisma)
+        else if (state is DangerState.Flee or DangerState.Surrender && facts.LeaderCharismaExtraordinary())
             (state, rule) = (DangerState.CombatFocus, DangerSetterRule.LeaderCharisma);
         if (state == DangerState.CombatFocus && (facts.NpcFightingOff || flags.HasFlag(DangerFlags.NoAttack)))
             (state, rule) = (DangerState.None, facts.NpcFightingOff ? DangerSetterRule.FightingOff : DangerSetterRule.NoAttack);

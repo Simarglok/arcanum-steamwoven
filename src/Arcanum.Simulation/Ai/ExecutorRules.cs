@@ -205,7 +205,7 @@ public static partial class AiExecutorRules
                 if (world.Leader(npc) is not { } leader) { world.RunRoutine(npc); return new(AiPerformKind.Routine, current); }
                 if (world.Waiting(npc)) return new(AiPerformKind.Waiting, current);
                 var follow = StartFollow(world, npc, leader, current);
-                world.LoyaltyCheck(npc);
+                world.LoyaltyCheck(npc, follow.Started);
                 return follow with { Kind = AiPerformKind.Follow };
             case DangerState.CombatFocus:
                 // The back-off starts and runs in the same perform (0x4AC6E0 calls 0x4AC7B0 at once): the pass is the back-off's, with no grenade and no attack.

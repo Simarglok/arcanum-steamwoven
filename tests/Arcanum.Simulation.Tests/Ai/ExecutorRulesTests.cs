@@ -188,7 +188,7 @@ public sealed class ExecutorRulesTests
         public void LeaveCombatMode(string npc) => Calls.Add("leave combat mode");
         public string? Leader(string npc) => Leaders.TryGetValue(npc, out var l) ? l : null;
         public bool Waiting(string npc) => Waits.Contains(npc);
-        public void LoyaltyCheck(string npc) => Calls.Add("loyalty");
+        public void LoyaltyCheck(string npc, bool followStarted) => Calls.Add(followStarted ? "loyalty started" : "loyalty");
         public void RunRoutine(string npc) => Calls.Add("routine");
         public bool StartBackOff(string npc, string? target) { Calls.Add("back-off start?"); return BackOffStart; }
         public AiGrenadeResult Grenade(string npc, string target)
@@ -904,7 +904,7 @@ public sealed class ExecutorRulesTests
         Assert.AreEqual(AiStartRefusal.LeaderNear, AiExecutorRules.Perform(world, Npc, null, null, null, null).Refusal);
         world.Waits.Add(Npc);
         Assert.AreEqual(AiPerformKind.Waiting, AiExecutorRules.Perform(world, Npc, null, null, null, null).Kind);
-        CollectionAssert.AreEqual(new[] { "leave combat mode", "routine", "leave combat mode", "loyalty", "leave combat mode", "loyalty",
+        CollectionAssert.AreEqual(new[] { "leave combat mode", "routine", "leave combat mode", "loyalty started", "leave combat mode", "loyalty",
             "leave combat mode", "loyalty", "leave combat mode" }, world.Calls);
     }
 

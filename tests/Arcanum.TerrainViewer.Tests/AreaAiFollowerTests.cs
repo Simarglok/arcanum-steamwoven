@@ -1882,4 +1882,69 @@ public sealed class AreaAiFollowerTests
         Assert.IsTrue(host.HealerCast(companion, AreaHealerCastTests.Spell, free: true));
         Assert.IsNotNull(host.RunOf(companion), "the free cast starts too");
     }
+
+    // ARC-WORLD-2130 (0x4AC380 → 0x4AD950, 0x45DFC0): the loyalty step of an NPC-led follower. The thresholds are the follower's AI row fields 5-8 (reaction, alignment above, alignment below, level gap).
+    private static AiParameterTable Follow(int dislike, int above, int below, int gate)
+    {
+        var row = string.Join(' ', Enumerable.Range(0, 17).Select(i => i switch { 5 => dislike, 6 => above, 7 => below, 8 => gate, _ => 0 }));
+        return AiParameterTable.Create(MesFile.Parse(System.Text.Encoding.ASCII.GetBytes("{0}{" + row + "}")).File!, null);
+    }
+
+    private static (Scene Scene, string Enemy, string Companion) OpenLed(AiParameterTable table, int leaderAlignment = 0, int charisma = 19)
+    {
+        var scene = Open(enemyAt: new(4, 20), companionCharisma: charisma, companionAlignment: leaderAlignment, table: table);
+        Assert.AreEqual(GameSessionDisposition.Changed, scene.Session.ForceJoinLeader(scene.Session.Version, scene.Enemy, scene.Companion).Disposition);
+        return (scene, scene.Enemy, scene.Companion);
+    }
+
+    [TestMethod]
+    public void The_follow_check_of_an_npc_led_follower_reads_the_leaders_own_reaction_alignment_and_level()
+    {
+        // A non-PC leader gives the fixed reaction 50: refused at an AI field 5 of 50 or more, kept at 49.
+        var dislike = OpenLed(Follow(50, 2000, 2000, 1000));
+        Assert.AreEqual(FollowConsent.Dislike, dislike.Scene.Host.NpcLedConsent(dislike.Enemy, dislike.Companion, forced: false));
+        var kept = OpenLed(Follow(49, 2000, 2000, 1000));
+        Assert.AreEqual(FollowConsent.Accepted, kept.Scene.Host.NpcLedConsent(kept.Enemy, kept.Companion, forced: false));
+        // The leader's alignment above the follower's by more than field 6 is "too good"; at or below it, a gap above field 7 is "too bad" (field 7 of -1 makes an equal alignment too bad).
+        var good = OpenLed(Follow(0, 100, 2000, 1000), leaderAlignment: 101);
+        Assert.AreEqual(FollowConsent.TooGood, good.Scene.Host.NpcLedConsent(good.Enemy, good.Companion, forced: false));
+        var edge = OpenLed(Follow(0, 100, 2000, 1000), leaderAlignment: 100);
+        Assert.AreEqual(FollowConsent.Accepted, edge.Scene.Host.NpcLedConsent(edge.Enemy, edge.Companion, forced: false));
+        var bad = OpenLed(Follow(0, 2000, -1, 1000));
+        Assert.AreEqual(FollowConsent.TooBad, bad.Scene.Host.NpcLedConsent(bad.Enemy, bad.Companion, forced: false));
+        // Both are level 20 here: a level gap of 0 refuses ("low level"), a forced follower is accepted whatever the thresholds say.
+        var level = OpenLed(Follow(0, 2000, 2000, 0));
+        Assert.AreEqual(FollowConsent.LowLevel, level.Scene.Host.NpcLedConsent(level.Enemy, level.Companion, forced: false));
+        Assert.AreEqual(FollowConsent.Accepted, level.Scene.Host.NpcLedConsent(level.Enemy, level.Companion, forced: true));
+        // A leader this host cannot read (another map) gives no check at all.
+        Assert.IsNull(level.Scene.Host.NpcLedConsent(level.Enemy, "oid:critter:elsewhere", forced: false));
+    }
+
+    [TestMethod]
+    public void A_refused_npc_led_follower_leaves_jilted_unless_the_leaders_charisma_is_twenty_or_more()
+    {
+        var weak = OpenLed(Follow(50, 2000, 2000, 1000), charisma: 19);
+        Assert.AreEqual(FollowConsent.Dislike, weak.Scene.Host.NpcLoyaltyStep(weak.Enemy, weak.Companion, forced: false));
+        Assert.IsNull(weak.Scene.Host.Leader(weak.Enemy), "it left");
+        Assert.IsTrue(weak.Scene.Session.QueryCompanion(weak.Enemy).Jilted);
+        var strong = OpenLed(Follow(50, 2000, 2000, 1000), charisma: 20);
+        Assert.AreEqual(FollowConsent.Dislike, strong.Scene.Host.NpcLoyaltyStep(strong.Enemy, strong.Companion, forced: false));
+        Assert.AreEqual(strong.Companion, strong.Scene.Host.Leader(strong.Enemy), "an extraordinary leader keeps it");
+        Assert.IsFalse(strong.Scene.Session.QueryCompanion(strong.Enemy).Jilted);
+        var accepted = OpenLed(Follow(0, 2000, 2000, 1000), charisma: 19);
+        Assert.AreEqual(FollowConsent.Accepted, accepted.Scene.Host.NpcLoyaltyStep(accepted.Enemy, accepted.Companion, forced: false));
+        Assert.AreEqual(accepted.Companion, accepted.Scene.Host.Leader(accepted.Enemy));
+    }
+
+    [TestMethod]
+    public void The_loyalty_check_of_the_pass_skips_a_follow_start_and_runs_no_step_for_a_hero_led_or_forced_follower()
+    {
+        var led = OpenLed(Follow(50, 2000, 2000, 1000));
+        led.Scene.Host.LoyaltyCheck(led.Enemy, followStarted: true);
+        Assert.AreEqual(led.Companion, led.Scene.Host.Leader(led.Enemy), "the follow request just started the follow goal");
+        led.Scene.Host.LoyaltyCheck(led.Enemy, followStarted: false);
+        Assert.AreEqual(led.Companion, led.Scene.Host.Leader(led.Enemy), "a joined-by-script follower is forced: accepted");
+        led.Scene.Host.LoyaltyCheck(led.Companion, followStarted: false);
+        Assert.AreEqual(Pc, led.Scene.Host.Leader(led.Companion), "the hero's follower is the party's step, not the host's");
+    }
 }
