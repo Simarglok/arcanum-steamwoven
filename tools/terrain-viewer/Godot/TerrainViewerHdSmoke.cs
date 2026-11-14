@@ -72,6 +72,7 @@ public partial class TerrainViewerApp
         var root = System.IO.Directory.CreateTempSubdirectory("arc-hd-smoke-").FullName;
         var hudVisible = hud.Visible;
         HdFrameSource? source = null;
+        _relitLookHeld = true; SyncRelitLook(); // ARC-RENDER-2076: the identity oracle compares HD with Legacy, so the relit look (the one intended difference) is held off meanwhile
         try
         {
             var write = Stopwatch.StartNew();
@@ -131,6 +132,7 @@ public partial class TerrainViewerApp
         {
             hud.Visible = hudVisible;
             canvas.SetVisualProfile(profile, previous, budget);
+            _relitLookHeld = false;
             source?.Dispose();
             System.IO.Directory.Delete(root, true);
         }

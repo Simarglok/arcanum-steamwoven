@@ -109,10 +109,9 @@ reason the start opens the stored folder at once. `--launcher` with other viewer
   after alpha); three HD lines (ARC-UI-143, below); "Show this screen at every start"; "Debug mode" (ARC-DEV-050, off by default:
   [debug mode](area-map-mode.md#debug-mode-arc-dev-050)); Play, Reset settings and Quit. The project's own look, not a
   window of the original's menu.
-- **HD lines (ARC-UI-143, ARC-RENDER-2060).** After the rules the screen has four HD lines (the Game page of the options window had them until ARC-UI-146), one row of choices each: **HD graphics**
-  Off/On (the visual profile, the `visual profile` line of `arcanum.cfg`), **HD lighting** Off/On (ARC-RENDER-2060: the relit look, the `relit look` line, 0 or 1, default off;
-  it draws only while HD graphics is On, so HD graphics Off, the H key included, is Legacy byte for byte whatever the line says; its own `RELIT_LOOK_TEST_PATH` isolates tests and the smoke runner gives each run its own file;
-  what the look is: [relit look](area-lighting.md#relit-look-arc-render-2060)), **HD interface** Off/On/Generated (experimental) and **HD pack** Auto/Game/Custom
+- **HD lines (ARC-UI-143, ARC-RENDER-2076).** After the rules the screen has three HD lines (the Game page of the options window had them until ARC-UI-146), one row of choices each: **HD graphics**
+  Off/On (the visual profile, the `visual profile` line of `arcanum.cfg`; ARC-RENDER-2076: the relit night look, [relit look](area-lighting.md#relit-look-arc-render-2060), is a part of it,
+  on exactly while HD graphics is On and not a line of its own, so HD graphics Off, the H key included, is Legacy byte for byte; a `relit look` line that an older file has is ignored and left where it is), **HD interface** Off/On/Generated (experimental) and **HD pack** Auto/Game/Custom
   (the `hd interface`, `generated interface`, `hd pack` and `hd pack path` lines of `arcanum.cfg`, [HD pack source](../workflow/hd-pack.md#hd-pack-source-arc-dev-350)).
   They are the only saved-settings screen for them (the options window has no HD line since ARC-UI-146; the `H` key and the palette still
   switch the visual profile in play, HD interface and HD pack change only here, with Shift held at the start): a choice is saved at once in the settings file (not at Play) and the game that Play
@@ -271,10 +270,15 @@ alone (the original shows no number) and no digit chooses anything. The self-tes
 
 ARC-UI-2025 (ledger DH1–DH7; rule `Arcanum.Presentation.Hud.DialogReplyBand`, switch `InterfaceRuleProfile.DialogReplyRowsDrift`, [rule modes](../world/rule-modes.md)): in both
 settings a reply is chosen on the mouse press, not on the release, as in the original. Under the Original setting `AreaConversationPanel.OriginalReplyRows` lays the
-reply stack out as the original's band (100 px tall, five 16 px rows every 19 px starting 3 px down, no wrapping) and resolves a left press by the band's rules:
+reply stack out as the original's band (100 px tall, five 16 px rows every 19 px starting 3 px down) and resolves a left press by the band's rules:
 the row is y / 20 (so a press in a gap picks a row and the fifth row's first pixel picks the fourth), an empty slot, the release and a blocked reply choose
-nothing; the hover lights a row as the original's move records do (DH5). Under the Steamwoven setting each button is its own hit area. Not yet the band: its
-400 px centred width and look (#2022). The self-test (`TerrainViewerConversationTest`) covers the press mode and the band's refusals.
+nothing; the hover lights a row as the original's move records do (DH5) and, ARC-UI-2052, again after every rebuild of the rows against the live pointer (DH9). The release that follows a closing press reaches the viewer with no panel under it and sets no route and opens nothing (DH8, DH10; the routing self-test pushes it; the windows a reply opens, which in the original take a lone release, are #2071). Under the Steamwoven setting each button is its own hit area. The self-test (`TerrainViewerConversationTest`) covers the press mode and the band's refusals.
+
+ARC-UI-2022 (ledger DH11–DH14): under the Original setting the reply stack sits in `AreaConversationPanel`'s band over the game view, not in the framed panel: a 100 px tall strip, 400 px wide
+(a row's text plus 13 px that is wider widens it by that and re-centres it; the press x-bound is the band's width), centred, its top at 299 in a 400 px view else the view height minus 181, the view being the part the bars leave free (the original's iso window), so the band lies above the bottom bar. The strip darkens what is under it by a subtract blend of (18, 18, 18), as the original's fill (a saturating subtract, not an alpha mix). Rows
+are white, the hovered row yellow (the original's two fonts of art 229), each with a drop shadow one pixel right and down in (10, 10, 10); the text is broken at the box width minus 12 and only the first line fits the
+16 px row; a word wider than the row draws nothing. The diagnostic chrome (header, outcome, effects, hint, Leave) is hidden under the Original setting by ARC-UI-2023; the framed panel then holds nothing and is not drawn, so the band alone is on screen (with the chrome shown, as in Steamwoven or for a message-only panel, the panel stands above the band). The self-test covers the rectangle,
+the shade, the colours, the shadow and the press bound.
 
 ## Integrated world diagnostic policy
 
@@ -2418,7 +2422,7 @@ project's, except as below.
   default and no other setting changes. Each change is saved at
   once (the original writes `arcanum.cfg` when the game exits). Space's toggle also saves the turn-based setting now. An
   automated run (self-test, native smoke) reads and writes no file; `GAME_SETTINGS_TEST_PATH` names a settings file for a test.
-- **Opening by O (ARC-UI-2026, OP9).** The release of the O key opens this window at its Game page in play, over any window and over the dialog (the press only arms it; Escape's route is the same). It raises no pause (the Esc menu does) and refuses only while a text entry or a menu is open; the inventory family closes under it as under Escape. The dialog stays and goes on after Done.
+- **Opening by O (ARC-UI-2026, OP9).** The release of the O key opens this window at its Game page in play, over any window and over the dialog (the press only arms it; Escape's route is the same). It raises no pause (the Esc menu does) and refuses only while a text entry or a menu is open; the inventory family closes under it as under Escape. The dialog stays and goes on after Done. The key is the physical O key (the scan code, as in the options window's own O), whatever the layout types on it; Ctrl+O and Alt+O do nothing. A hero's death behind the open window closes it, and the death screen comes 0.3 s later (ARC-UI-2066).
 - **Closing.** Done goes back to the main menu, or from play closes the menu and play goes on; from play the O key
   does the same. Escape does nothing in this window, as in the original's key table.
 
@@ -2702,7 +2706,10 @@ button writes its name from `mes\intgame.mes` (1000–1009) where the original's
 on the bars. The main menu's, in-play menu's and options window's buttons play 3026 when the pointer enters one and 3027 on
 the press (GB7). The bars are drawn over the windows they open, and those windows (character sheet, inventory, logbook,
 schematics) lay themselves out in the part the bars leave free; while a conversation, barter, reading, the save list,
-the palette, the menu or the world map is open the bars are hidden, and they come back with no button lit or held. The
+the palette, the menu or the world map is open the bars are hidden, and they come back with no button lit or held (a conversation hides them under
+Steamwoven only: since ARC-UI-2024 the Original setting `DialogBarStays` keeps them drawn under the dialog, as the original does, lays the conversation panel in the part
+they leave free and shows the speaker's description of the dialog start in the description area; the bar's buttons stay without effect while the dialog is open, and
+a click on a hotkey slot or a recent-action button, and the A key, end the dialog (an item, skill or spell entry that acts, ARC-UI-2068) and then act as without one, an empty entry or a hero who cannot act leaves it open, the follower portraits and their gauges stay drawn and take no input (ARC-UI-2069, DB5), [ledger DB1-DB5](../research/ledger/ui-audio.md#the-bars-under-the-dialog-arc-ui-2024)). The
 diagnostic HUD moves below the top strip and the follower portraits and spell pane above the bottom strip. Since ARC-UI-020 the health and fatigue vials show the PC's
 [gauges](#health-and-fatigue-bars-arc-ui-020), and since ARC-UI-023 the bottom strip's message window is the
 [message log](#message-log-arc-ui-023), where the button names appear. Since ARC-UI-027 the hot-key slots, the recent-action buttons and
@@ -3380,7 +3387,7 @@ The first ordinary start after this change moves the settings of the files the v
 `audio_volumes_v1.json`, `always_run_v1.json`, `visual_profile_v1.json`, `launcher_v1.json`, in `user://`) into `arcanum.cfg`, once, only
 when `arcanum.cfg` does not exist yet (`ViewerSettingsFile.UserFile`, `ViewerSettingsMigration`): each old file is read by its own old codec,
 an invalid one is skipped, and the old files stay where they are, unread and unchanged (the player may delete them). The test variables
-`GAME_SETTINGS_TEST_PATH`, `AUDIO_VOLUMES_TEST_PATH`, `ALWAYS_RUN_TEST_PATH`, `VISUAL_PROFILE_TEST_PATH`, `RELIT_LOOK_TEST_PATH` (ARC-RENDER-2060, the `relit look` line) and `LAUNCHER_SETTINGS_TEST_PATH`
+`GAME_SETTINGS_TEST_PATH`, `AUDIO_VOLUMES_TEST_PATH`, `ALWAYS_RUN_TEST_PATH`, `VISUAL_PROFILE_TEST_PATH` and `LAUNCHER_SETTINGS_TEST_PATH`
 keep their names and each now names a settings file; an automated run without one has no file. **Not in the file** (own files, own
 owners): the WORLD diagnostic's input and zoom preferences (`world_diagnostic_*_v1.json`, development diagnostics with their own validation),
 the HD device budget (`hd_budget_v1.json`, a measurement, not a setting) and the labs' files. Checks: `ArcanumConfigTests`,

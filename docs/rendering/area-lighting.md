@@ -382,12 +382,12 @@ shown view, the 32 nearest the view's centre are uploaded; `AreaRelight.SetView`
 
 ## Relit look (ARC-RENDER-2060)
 
-The best variant of the experiment is a player setting: the launcher's **HD lighting** line, Off or On, saved as the `relit look` line of `arcanum.cfg`
-([HD lines](terrain-viewer.md)). It is **default off** and in force only while the visual profile is HD (`SyncRelitLook` follows the setting and the profile every frame: HD graphics
-Off, by the H key too, puts the look out of force and the draw is Legacy byte for byte). In force it is the night-weighted mode (`NightAdd`) at the strength **1.6**
+The best variant of the experiment is a part of the **HD graphics** option (ARC-RENDER-2076 folded the separate HD lighting row, the `relit look` line of ARC-RENDER-2060, into it; an old `relit look`
+line of `arcanum.cfg` is ignored and left alone). It is in force exactly while the visual profile is HD (`SyncRelitLook` follows the profile every frame: HD graphics
+Off, by the H key too, puts the look out of force and the draw is Legacy byte for byte; [HD lines](terrain-viewer.md)). In force it is the night-weighted mode (`NightAdd`) at the strength **1.6**
 (`AreaRelight.LookStrength`, the experiment's pick; `ARC_RELIGHT_LOOK_STRENGTH` changes it for tuning by eye): terrain, scenery, bodies and the hero take a normal derived per pixel from the sprite's
 luminance and the dynamic point-light term, weighted by how dark the item's own ambient is, so daylight stays Legacy and a dark scene takes the full term. The hero's carried light and the map's
-lights are one list with the view-culling rule above (32 nearest the view's centre). The environment's `ARC_RELIGHT` modes stay as a developer override (when set they win over the setting and use
+lights are one list with the view-culling rule above (32 nearest the view's centre). The environment's `ARC_RELIGHT` modes stay as a developer override (when set they win over the look and use
 `ARC_RELIGHT_STRENGTH`). No gameplay luminance, clock or RNG is read or changed (FR-LIGHT-009 and FR-LIGHT-011 untouched).
 
 *HD frames.* An N-times HD frame has N times the texels over the same drawn size, so its luminance steps are 1/N as big: the relit program gets the item's scale (`relight_scale`, the item's `HdScale`)

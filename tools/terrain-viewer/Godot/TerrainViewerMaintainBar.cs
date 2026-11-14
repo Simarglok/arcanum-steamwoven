@@ -61,7 +61,8 @@ public partial class TerrainViewerApp
 
     private void MaintainSlotReleased(int slot, bool over)
     {
-        if (!over || _areaSession is not { } session) return;
+        // ARC-UI-2024 (DB2, F2: the maintain bar's own handler was not read, taken as the bar's): consumed without effect while the dialog's hook is set.
+        if (!over || ConversationOpen || _areaSession is not { } session) return;
         PlayBarSound(AreaGameBarLayout.ReleaseSound, "maintain slot");
         StopMaintainSlot(session, slot, "click");
         RefreshAreaStatus();

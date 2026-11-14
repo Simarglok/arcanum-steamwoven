@@ -274,6 +274,25 @@ public partial class TerrainViewerApp
         RefreshReadyStatus();
     }
 
+    /// <summary>
+    /// ARC-UI-2030 (0x567460, the head of its refusal chain; the dialog-start callback of a click's talk goal and of a script's dialog action): true, with a notice, when the hero is dead or unconscious or the NPC cannot speak to the
+    /// hero (0x4AD800 at flag 0, <see cref="DialogStartCanSpeak"/>: the NPC's can-speak head, its combat focus or flight, a run that refuses the level-2 interrupt). Nothing is opened, floated or said; the open window stays.
+    /// </summary>
+    private bool DialogStartRefused(AreaSpeaker speaker)
+    {
+        if (WindowRefusedForHero(InterfaceMode.Dialog))
+        {
+            _conversationNotice = "no dialog: the hero is dead or unconscious";
+            GD.Print($"ARC-UI-2030 dialog start refused: hero down script={speaker.ScriptId}");
+            return true;
+        }
+        var answer = DialogStartCanSpeak(speaker);
+        if (answer == Arcanum.Simulation.Reaction.CanSpeakRules.Free) return false;
+        _conversationNotice = $"no dialog: the NPC cannot speak (answer {answer})";
+        GD.Print($"ARC-UI-2030 dialog start refused: can-speak answer={answer} script={speaker.ScriptId}");
+        return true;
+    }
+
     /// <param name="replaceWindows">ARC-UI-1125: a talk the hero's goal 21 asked for (not a click, which the game view's guard keeps out of every window):
     /// an open window other than a dialog leaves first, as the original's dialog opener pops the top mode and pushes mode 3 (0x553320), after the
     /// combat tests (0x567460 returns before it pops).</param>
@@ -281,10 +300,11 @@ public partial class TerrainViewerApp
     {
         if (_conversationHost is null || _conversationPanel is null) return;
         if (!replaceWindows && !WindowCanOpen(InterfaceMode.Dialog)) return;
-        // ARC-COMBAT-004: a dialog first leaves combat mode, and does not start while the hero is under attack.
+        // ARC-UI-2030 (0x567460): the refusals in the original's order, all silent: the hero dead or unconscious, the NPC that cannot speak (0x4AD800), a second dialog (mode 3), then the combat-mode leave
+        // (ARC-COMBAT-004: a dialog leaves combat mode first and does not start while the hero is under attack). The opener returns before it pops, so an open window stays.
+        if (DialogStartRefused(speaker)) { RefreshReadyStatus(); return; }
+        if (replaceWindows && ConversationOpen) return;
         if (!LeaveCombatModeForDialog()) { RefreshReadyStatus(); return; }
-        // The opener's refusals come before it pops (0x567460): the dialog, the hero's state. The window leaves only once a window will open (below).
-        if (replaceWindows && (ConversationOpen || AnyWindowOpen && WindowRefusedForHero(InterfaceMode.Dialog))) return;
         QuarantineWorld();
         _conversationNotice = null;
         // ARC-WORLD-045: talking interrupts the speaker's goals, its follow goal too (OL19).
@@ -340,8 +360,8 @@ public partial class TerrainViewerApp
             return;
         }
         if (HostOf(speaker) is not { } host) { _conversationNotice = $"dialog NPC script {speaker.ScriptId} has no host here"; RefreshReadyStatus(); return; }
+        if (DialogStartRefused(speaker)) { RefreshReadyStatus(); return; }
         if (!LeaveCombatModeForDialog()) { RefreshReadyStatus(); return; }
-        if (AnyWindowOpen && WindowRefusedForHero(InterfaceMode.Dialog)) { GD.Print($"ARC-UI-1125 scripted dialog refused for the hero; the open window stays (stack {StackText()})"); return; }
         QuarantineWorld();
         _conversationNotice = null; _talkOpenPending = null; _conversationEndPending = null;
         _areaCompanions?.InterruptGoals(speaker.Row.Key);
@@ -568,6 +588,8 @@ public partial class TerrainViewerApp
             _ => 0,
         };
         if (digit != 0) _conversationPanel.ChooseByDigit(digit);
+        // ARC-UI-2068 (DB2): the A key is a prefilter ahead of the dialog's hook (0x57DC60 → 0x54FCF0 on the latest recent action); the bars stay only in Original.
+        else if (code == Key.A && DialogBarStays && !PaletteOpen && HotkeysActive && _areaSession is { } session && session.QueryHotkeys().Recent[0] is { IsEmpty: false } latest) ActivateHotkey(latest, "A");
         return true;
     }
 

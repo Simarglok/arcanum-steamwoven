@@ -174,6 +174,27 @@ public partial class AreaFollowerPortraits : CanvasLayer
     /// <summary>Whether the order menu is shown.</summary>
     public bool MenuShown => _menu.Visible;
 
+    private bool _inert;
+
+    /// <summary>
+    /// ARC-UI-2069 (ledger DB1, DB2): the panel stays drawn (frames, portraits, bars) but takes no input: the original's follower handler 0x56A9D0 returns at once while
+    /// the PC's dialog flag is set (0x567400), and its draw routine 0x56B290 does not test the dialog. Turning it on closes the menu, forgets the hover without a hover-exit (the original fires none, and the dialog start's description in the description area must stay) and drops the tooltips;
+    /// the buttons still consume the pointer (the dialog's hook consumes every record, 0x5517A0).
+    /// </summary>
+    public bool Inert
+    {
+        get => _inert;
+        set
+        {
+            if (_inert == value) return;
+            _inert = value;
+            if (value) { CloseMenu(); _hovered = null; }
+            foreach (var (entity, entry) in _entries) entry.Button.TooltipText = value ? "" : LabelOf(entity);
+        }
+    }
+
+    private string LabelOf(string entity) => _followers.FirstOrDefault(f => f.Entity == entity).Label ?? "";
+
     public override void _Ready()
     {
         Layer = 3;
@@ -287,19 +308,20 @@ public partial class AreaFollowerPortraits : CanvasLayer
         var (entity, label, _, portrait) = follower;
         var (x, y) = AreaFollowerFrameLayout.Slot(slot);
         var size = new Vector2(AreaFollowerFrameLayout.Width, AreaFollowerFrameLayout.Height);
-        var button = new Button { Flat = true, FocusMode = Control.FocusModeEnum.None, TooltipText = label, Position = new Vector2(x, y), Size = size, CustomMinimumSize = size, ClipContents = true };
+        var button = new Button { Flat = true, FocusMode = Control.FocusModeEnum.None, TooltipText = _inert ? "" : label, Position = new Vector2(x, y), Size = size, CustomMinimumSize = size, ClipContents = true };
         // ARC-DEV-280 (B33, 0x56A9D0): the order menu opens on the RIGHT button's release over the portrait (an open menu is closed by it
         // instead), and the left button's release is a click on the follower (a talk, 0x54EA80 -> 0x54ED30, or in a target mode the aim of the
         // spell, skill or item, FP6), which only closes an open menu (FP9).
-        button.Pressed += () => { if (_menu.Visible) CloseMenu(); else PortraitClicked?.Invoke(entity); };
+        button.Pressed += () => { if (_inert) return; if (_menu.Visible) CloseMenu(); else PortraitClicked?.Invoke(entity); };
         button.GuiInput += input =>
         {
+            if (_inert) return;
             if (input is not InputEventMouseButton { ButtonIndex: MouseButton.Right, Pressed: false } release) return;
             if (_menu.Visible) { CloseMenu(); return; }
             if (new Rect2(Vector2.Zero, button.Size).HasPoint(release.Position)) OpenMenu(entity);
         };
         // ARC-UI-1281 (HK26): entering a portrait with no menu open is the follower's hover; leaving it clears (0x550720).
-        button.MouseEntered += () => { _hovered = entity; if (!_menu.Visible) PortraitHovered?.Invoke(entity); };
+        button.MouseEntered += () => { if (_inert) return; _hovered = entity; if (!_menu.Visible) PortraitHovered?.Invoke(entity); };
         button.MouseExited += () => { if (_hovered != entity) return; _hovered = null; PortraitHoverLeft?.Invoke(); };
         button.SetMeta(EntityMeta, entity);
         var frame = _art.GetValueOrDefault(AreaFollowerFrameLayout.FrameArt);
@@ -376,7 +398,7 @@ public partial class AreaFollowerPortraits : CanvasLayer
             button.AddChild(word);
         }
         // A release with a menu open is the menu's (FP9): it closes the menu and nothing else happens.
-        button.Pressed += () => { if (_menu.Visible) CloseMenu(); else pressed(); };
+        button.Pressed += () => { if (_inert) return; if (_menu.Visible) CloseMenu(); else pressed(); };
         _root.AddChild(button);
         return (button, picture);
     }
@@ -397,7 +419,7 @@ public partial class AreaFollowerPortraits : CanvasLayer
     /// <summary>Opens the order menu of a follower at its frame's right edge (FP7; opening the menu of the follower that is open closes it).</summary>
     public void OpenMenu(string entity)
     {
-        if (!_entries.TryGetValue(entity, out var entry)) return;
+        if (_inert || !_entries.TryGetValue(entity, out var entry)) return;
         if (_menu.Visible && _menuEntity == entity) { CloseMenu(); return; }
         _menuEntity = entity;
         foreach (var child in _menu.GetChildren()) { _menu.RemoveChild(child); child.QueueFree(); }
