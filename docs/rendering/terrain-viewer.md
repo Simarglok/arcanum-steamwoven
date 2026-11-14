@@ -273,7 +273,7 @@ ARC-UI-2025 (ledger DH1–DH7; rule `Arcanum.Presentation.Hud.DialogReplyBand`, 
 settings a reply is chosen on the mouse press, not on the release, as in the original. Under the Original setting `AreaConversationPanel.OriginalReplyRows` lays the
 reply stack out as the original's band (100 px tall, five 16 px rows every 19 px starting 3 px down, no wrapping) and resolves a left press by the band's rules:
 the row is y / 20 (so a press in a gap picks a row and the fifth row's first pixel picks the fourth), an empty slot, the release and a blocked reply choose
-nothing; the hover lights a row as the original's move records do (DH5). Under the Steamwoven setting each button is its own hit area. Not yet the band: its
+nothing; the hover lights a row as the original's move records do (DH5) and, ARC-UI-2052, again after every rebuild of the rows against the live pointer (DH9). The release that follows a closing press reaches the viewer with no panel under it and sets no route and opens nothing (DH8, DH10; the routing self-test pushes it; the windows a reply opens, which in the original take a lone release, are #2071). Under the Steamwoven setting each button is its own hit area. Not yet the band: its
 400 px centred width and look (#2022). The self-test (`TerrainViewerConversationTest`) covers the press mode and the band's refusals.
 
 ## Integrated world diagnostic policy
