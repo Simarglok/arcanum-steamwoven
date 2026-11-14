@@ -410,6 +410,7 @@ public partial class TerrainViewerApp
         {
             // ARC-UI-071 (B29): the panel's texts in the original's font art (null without a game folder: the viewer's font).
             _conversationPanel!.SetFonts(TextFonts());
+            _conversationPanel.NumberedReplies = DialogRepliesNumbered;
             _conversationPanel.Open(title, conversation, note);
         }, () => _conversationPanel!.CloseView());
 
@@ -475,7 +476,25 @@ public partial class TerrainViewerApp
     }
 
     /// <summary>While the panel is open it owns every key: none is redirected to a dialog or original action.</summary>
-    private static bool HandleConversationKey(InputEventKey key) => true;
+    /// <summary>
+    /// The open dialog owns every key event. ARC-UI-2019: under the Steamwoven setting a plain digit key 1-5 (row or keypad) chooses the reply
+    /// with that number; the original's dialog reads no key (F0), so Original and every other key do nothing.
+    /// </summary>
+    private bool HandleConversationKey(InputEventKey key)
+    {
+        if (!key.Pressed || key.Echo || key.CtrlPressed || key.AltPressed || key.ShiftPressed || key.MetaPressed || _conversationPanel is null) return true;
+        var digit = key.Keycode switch
+        {
+            >= Key.Key1 and <= Key.Key5 => (int)(key.Keycode - Key.Key0),
+            >= Key.Kp1 and <= Key.Kp5 => (int)(key.Keycode - Key.Kp0),
+            _ => 0,
+        };
+        if (digit != 0) _conversationPanel.ChooseByDigit(digit);
+        return true;
+    }
+
+    /// <summary>ARC-UI-2019: replies are numbered, and a digit chooses one, except under the Original interface setting (no session: Steamwoven).</summary>
+    private bool DialogRepliesNumbered => _areaSession?.Rules.Interface.DialogRepliesUnnumbered != true;
 
     private void HandleConversationPulse(IntentFrame intent)
     {
@@ -487,7 +506,7 @@ public partial class TerrainViewerApp
     private string ConversationStatus()
     {
         if (_conversationHost is null) return string.Empty;
-        if (ConversationOpen) return " | conversation open: click a reply";
+        if (ConversationOpen) return DialogRepliesNumbered ? " | conversation open: click a reply or press its number" : " | conversation open: click a reply";
         return ConversationPrompt() + StoryStatus();
     }
 

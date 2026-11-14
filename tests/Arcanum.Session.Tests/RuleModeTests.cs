@@ -110,6 +110,9 @@ public sealed class RuleModeTests
         Assert.IsFalse(GameRules.Steamwoven.Interface.CalledShotCursorsSwapped);
         Assert.IsTrue(GameRules.Original.Interface.TurnOrderListHidden, "CH6: the original shows no turn order");
         Assert.IsFalse(GameRules.Steamwoven.Interface.TurnOrderListHidden, "the turn-order list is a Steamwoven addition");
+        // ARC-UI-2019: numbered replies and the digit choice are a Steamwoven addition; the original's dialog shows no number and reads no key.
+        Assert.IsTrue(GameRules.Original.Interface.DialogRepliesUnnumbered);
+        Assert.IsFalse(GameRules.Steamwoven.Interface.DialogRepliesUnnumbered);
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => GameRules.For((RuleMode)7));
     }
 
