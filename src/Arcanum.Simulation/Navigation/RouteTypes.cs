@@ -37,7 +37,7 @@ public interface IRouteStepSource
 public enum RouteOutcome { Found, AlreadyAtTarget, Refused, NoRoute }
 /// <summary>How a found plan was made: the request's direct attempt, its search, or (ARC-WORLD-073, ledger LR4) the PC's one
 /// straight-line retry after no path, whose steps are not tested when planned.</summary>
-public enum RouteMethod { Direct, LocalSearch, StraightRetry }
+public enum RouteMethod { Direct, LocalSearch, StraightRetry, CorridorWalk }
 
 /// <summary>Planner limits can be lowered, never raised above the policy maxima.</summary>
 public sealed class RouteLimits

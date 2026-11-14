@@ -35,8 +35,11 @@ public sealed record AreaMessageEntry(AreaMessageKind Kind, string Title, string
     /// <summary>ARC-UI-108: an item window's lines after the name (0x554F10, ledger OH12–OH18); null when the item's facts are not known.</summary>
     public AreaItemLines? ItemLines { get; init; }
 
+    /// <summary>ARC-UI-1924 (IW46): the weapon or armour stat lines (0x556220, 0x5566B0) after the title: the six cells of the three lines under it; null for the other kinds.</summary>
+    public AreaStatCells? StatCells { get; init; }
+
     public static AreaMessageEntry Text(AreaMessageKind kind, string text) =>
-        kind is AreaMessageKind.LevelUp or AreaMessageKind.PoisonAbsorbed or AreaMessageKind.SkillHint or AreaMessageKind.SpellHint or AreaMessageKind.Item or AreaMessageKind.Object
+        kind is AreaMessageKind.LevelUp or AreaMessageKind.PoisonAbsorbed or AreaMessageKind.SkillHint or AreaMessageKind.SpellHint or AreaMessageKind.Item or AreaMessageKind.Object or AreaMessageKind.StatLines
             ? throw new ArgumentException("a level-up entry, a poison notice, a hint and an item or object window have lines", nameof(kind)) : new(kind, text ?? throw new ArgumentNullException(nameof(text)));
 
     /// <summary>Hover texts and hints are shown, never stored (the original's types 6–12, ML2), and so is the item window; the types 0 to 5 are
@@ -64,3 +67,10 @@ public sealed record AreaItemLines(string Speed = "", string Second = "", string
 {
     public static AreaItemLines Empty { get; } = new();
 }
+
+/// <summary>
+/// ARC-UI-1924 (ledger IW46): the six cells of the stat lines' three rows under the title (0x556220, 0x5566B0): the left cell of the row on the left, the right cell on the right half of the
+/// row, each text already formatted. A weapon's rows are the skill's effectiveness and the normal damage, the fatigue and electrical damage, the fire and poison damage; an armour's
+/// the armour class and the normal resistance, the magic and electrical resistances, the fire and poison resistances.
+/// </summary>
+public sealed record AreaStatCells(string Left1, string Right1, string Left2, string Right2, string Left3, string Right3);

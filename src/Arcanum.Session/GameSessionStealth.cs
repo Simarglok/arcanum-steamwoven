@@ -67,7 +67,8 @@ public sealed partial class GameSessionOwner
         if (_revision == long.MaxValue) return Reject(GameSessionFailure.RevisionExhausted);
         var on = !_combat.HeroConcealed;
         _combat.HeroConcealed = on;
-        foreach (var follower in _party.Order)
+        // 0x45EE30 forces the state on the PC and its recursive follower list (0x441260): the followers of followers too (ARC-WORLD-2118).
+        foreach (var follower in FollowerTreeOf(SessionEventKinds.PlayerEntity))
             if (on) _combat.Concealed.Add(follower); else _combat.Concealed.Remove(follower);
         Revise();
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, Version);
@@ -155,22 +156,24 @@ public sealed partial class GameSessionOwner
     {
         var changed = _combat.HeroConcealed || _combat.Concealed.Contains(entity);
         _combat.HeroConcealed = false;
-        _combat.Concealed.Remove(entity);
+        // 0x45EE30 with 0 on the talk partner reaches its own followers too (ARC-WORLD-2118).
+        if (_combat.Concealed.Contains(entity)) SetConcealment(entity, false);
         return changed;
     }
 
-    // The attack event (0x4A9650, ST4): when the victim is the hero or an NPC the hero leads (following or waiting), the hero and
+    // The attack event (0x4A9650, ST4): when the victim is the hero or a critter the hero leads (following or waiting, or through a chain of leaders), the hero and
     // the followers in its follower list are no longer concealed; a waiting victim is not in that list and keeps its state. The
     // attacker is not touched as the attacker: the hero attacking its own follower is in the victim's party and loses it too. True
     // when that changed anything.
     private bool EndConcealmentForAttackOn(SessionCombatant victim)
     {
-        if (!victim.IsHero && (victim.Entity is not { } entity || !_party.Records.TryGetValue(entity, out var record) ||
-            record.Standing is not (CompanionStanding.Following or CompanionStanding.Waiting)))
+        // 0x4A9650 takes the victim's PC-chain head (0x45DDA0, else the victim itself) and ends its concealment with 0x45EE30: a victim the hero leads directly or through a chain of leaders (ARC-WORLD-2118).
+        if (!victim.IsHero && (victim.Entity is not { } entity || !PcLeads(entity)))
             return false;
-        var changed = _combat.HeroConcealed || _party.Order.Any(_combat.Concealed.Contains);
+        var tree = FollowerTreeOf(SessionEventKinds.PlayerEntity);
+        var changed = _combat.HeroConcealed || tree.Any(_combat.Concealed.Contains);
         _combat.HeroConcealed = false;
-        foreach (var follower in _party.Order) _combat.Concealed.Remove(follower);
+        foreach (var follower in tree) _combat.Concealed.Remove(follower);
         return changed;
     }
 
@@ -186,7 +189,7 @@ public sealed partial class GameSessionOwner
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(victim);
         if (!IsCurrent(expected)) return Reject(GameSessionFailure.StaleVersion);
-        var concealed = _combat.HeroConcealed || _party.Order.Any(_combat.Concealed.Contains);
+        var concealed = _combat.HeroConcealed || FollowerTreeOf(SessionEventKinds.PlayerEntity).Any(_combat.Concealed.Contains);
         if (!concealed) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, Version);
         if (_revision == long.MaxValue) return Reject(GameSessionFailure.RevisionExhausted);
         if (!EndConcealmentForAttackOn(victim)) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, Version);
@@ -198,8 +201,9 @@ public sealed partial class GameSessionOwner
     /// ARC-AI-1653 (the unconceal goal's end node 0x42AFB0 → 0x45EE30, ledger VBG19): the NPC's own goal run stood it up and, unless its leader is
     /// concealed, ends its concealment. The leader is the hero while the NPC is led by it (following or waiting, HK2 keeps the leader); a
     /// follower of a sneaking hero therefore stays concealed (it only stands up), while a concealed NPC whose hero is not concealed, or that has
-    /// no leader, stops prowling. The NPC's own followers (the call reaches them too) are not modelled: a follower leads none. One revision of its
+    /// no leader, stops prowling. One revision of its
     /// own; no change (not concealed, or its leader is) is <see cref="GameSessionDisposition.NoChange"/>. The hero's own concealment is never touched here.
+    /// ARC-WORLD-2118: the leader is the hero or an NPC (<see cref="LeaderConcealed"/>), and the NPC's own followers stand up with it.
     /// </summary>
     [OriginalFunction(0x42AFB0, OriginalFunctionScope.Partial)]
     public GameSessionMutationResult EndNpcConcealmentForUnconceal(GameSessionVersion expected, string entity)
@@ -207,18 +211,60 @@ public sealed partial class GameSessionOwner
         ThrowIfDisposed();
         if (!SessionValidation.Entity(entity)) return Reject(GameSessionFailure.InvalidCompanion);
         if (!IsCurrent(expected)) return Reject(GameSessionFailure.StaleVersion);
-        if (!_combat.Concealed.Contains(entity) || _party.Get(entity).LedByPc && _combat.HeroConcealed)
+        if (!_combat.Concealed.Contains(entity) || LeaderConcealed(entity))
             return new(GameSessionDisposition.NoChange, GameSessionFailure.None, Version);
         if (_revision == long.MaxValue) return Reject(GameSessionFailure.RevisionExhausted);
-        _combat.Concealed.Remove(entity);
+        // 0x45EE30 with 0 reaches the NPC's own followers too (ARC-WORLD-2118).
+        SetConcealment(entity, false);
         Revise();
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, Version);
+    }
+
+    // ARC-WORLD-2118: 0x45EE30 (critter, state): the state on the critter (0x45EE90) and on every critter of its recursive follower list (0x441260). The session holds a concealment only for the critters
+    // whose chain of leaders reaches the hero, so a critter outside the chain is never added.
+    private void SetConcealment(string critter, bool on)
+    {
+        foreach (var entity in FollowerTreeOf(critter).Prepend(critter))
+            if (on && PcLeads(entity)) _combat.Concealed.Add(entity); else _combat.Concealed.Remove(entity);
+    }
+
+    // The join's concealment (0x45DE90 → 0x45EE30 with the leader's 0x45EDE0 answer): the joiner and its own followers take the state of the leader they join; the hero's is its flag, an NPC's the set.
+    private void TakeLeaderConcealment(string joiner, string leader) =>
+        SetConcealment(joiner, leader == SessionEventKinds.PlayerEntity ? _combat.HeroConcealed : _combat.Concealed.Contains(leader));
+
+    // Whether the critter's leader (0x45DE00) is concealed (0x45EDE0): the hero's flag or an NPC leader's entry.
+    private bool LeaderConcealed(string critter) => LeaderOf(critter) switch
+    {
+        null => false,
+        SessionEventKinds.PlayerEntity => _combat.HeroConcealed,
+        var leader => _combat.Concealed.Contains(leader),
+    };
+
+    // A critter leaves its leader or loses it (0x45E040: a concealed leaver is revealed with 0x45EE30, its followers with it). The session holds a concealment only for the hero's chain, so the leaver's
+    // whole follower tree drops it, concealed or not (the original leaves a follower of a leaver concealed that has stood up on its own; it is no longer in the hero's chain). Call before the links change.
+    private void DropConcealmentOfSubtree(string critter)
+    {
+        _combat.Concealed.Remove(critter);
+        foreach (var entity in FollowerTreeOf(critter)) _combat.Concealed.Remove(entity);
     }
 
     private SessionConcealmentState CaptureConcealment() =>
         new(_hero is not null && _combat.HeroConcealed, _combat.Concealed.ToArray());
 
-    // The hero's flag needs a hero; NPC ids are valid, unique, in ordinal order, and followers (following or waiting).
+    // Whether the critter's chain of leaders reaches the hero (the import's PcLeads: the session is not built yet).
+    private static bool ChainReachesHero(PartyDomain party, string critter)
+    {
+        var at = critter;
+        for (var step = 0; step <= party.NpcLed.Count + 1; step++)
+        {
+            if (party.Records.TryGetValue(at, out var record) && record.LedByPc) return true;
+            if (!party.NpcLed.TryGetValue(at, out var led)) return false;
+            at = led.Leader;
+        }
+        return false;
+    }
+
+    // The hero's flag needs a hero; NPC ids are valid, unique, in ordinal order, and followers of the hero's chain (following or waiting, or led by such a follower: ARC-WORLD-2118).
     private static GameSessionFailure ImportConcealment(SessionConcealmentState? saved, bool hero, PartyDomain party, CombatDomain combat)
     {
         if (saved?.Npcs is not { } npcs) return GameSessionFailure.InvalidSnapshot;
@@ -226,7 +272,7 @@ public sealed partial class GameSessionOwner
         if (npcs.Count > SessionConcealmentState.MaxNpcs) return GameSessionFailure.BudgetExceeded;
         for (var i = 0; i < npcs.Count; i++)
             if (!SessionValidation.Entity(npcs[i]) || i > 0 && string.CompareOrdinal(npcs[i - 1], npcs[i]) >= 0 ||
-                !party.Records.TryGetValue(npcs[i], out var record) || record.Standing is not (CompanionStanding.Following or CompanionStanding.Waiting))
+                !(party.Records.TryGetValue(npcs[i], out var record) && record.Standing is CompanionStanding.Following or CompanionStanding.Waiting || ChainReachesHero(party, npcs[i])))
                 return GameSessionFailure.InvalidConcealment;
         combat.HeroConcealed = saved.Hero;
         foreach (var entity in npcs) combat.Concealed.Add(entity);

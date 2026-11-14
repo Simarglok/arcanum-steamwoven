@@ -100,7 +100,7 @@ public sealed partial class GameSessionOwner
         // ARC-SKILLS-008 (ST2): a follower that leaves is no longer concealed.
         if (next.Standing == CompanionStanding.Free)
         {
-            _combat.Concealed.Remove(next.Entity);
+            DropConcealmentOfSubtree(next.Entity);
             ClearNoAttackOnLeave(next.Entity);
             ClearTempusFugitOnLeave(next.Entity);
         }
@@ -176,6 +176,11 @@ public sealed partial class GameSessionOwner
     }
 
     // ARC-SCRIPT-1136 (CF8): the wait of an NPC with no leader reads no leader: its index alone picks the timer (the leader's stat test and Persuasion training read a null handle's slot, inferred 0 both), the mind-control test stands.
+    // ARC-WORLD-2116 (0x4AA7A0): the wait of a follower of an NPC leader reads that leader's charisma and Persuasion training (0x4B0EE0, 0x4C60C0 take a player character or an NPC alike). ARC-WORLD-2127:
+    // the session holds no NPC's stats, so the caller's wait facts are the DIRECT leader's (the host's LeaderWaitFacts for an NPC leader), never the hero's side; they are read as given. Without facts no timer.
+    private static long? NpcLeaderWaitDelay(PartyWaitFacts? timer) =>
+        timer is null ? null : CompanionLoyaltyRules.WaitTimerMs(timer.WaitIndex, timer.LeaderPersuasion, timer.LeaderCharisma, timer.MindControlled);
+
     private static long? LeaderlessWaitDelay(PartyWaitFacts? timer) =>
         timer is null ? null : CompanionLoyaltyRules.WaitTimerMs(timer.WaitIndex, PersuasionTraining.None, 0, timer.MindControlled);
 
@@ -210,6 +215,17 @@ public sealed partial class GameSessionOwner
         var e = firing.Event;
         var entity = e.Payload.Entities[0];
         var current = _party.Get(entity.Code);
+        // ARC-WORLD-2116 (0x4AA990, 0x4C0DE0): the wait of a follower of an NPC leader runs out as the hero's does, but the reaction change is written only toward a player character: the NPC is no longer waiting,
+        // jilted and has lost its leader (the array is already without it); its reaction and loyalty marks stay.
+        if (WaitsUnderNpcLeader(entity.Code))
+        {
+            if (_revision == long.MaxValue) return GameEventHandlerOutcome.Refused;
+            _party.RemoveNpcLed(entity.Code);
+            _party.Put(current with { WaitFlag = false, Jilted = true }, false);
+            Revise();
+            _passWaits?.Add(new(e, entity.Code, (int)e.Payload.Values[2], null, GameSessionFailure.None));
+            return GameEventHandlerOutcome.Completed;
+        }
         // ARC-SCRIPT-1136 (CF9): the handler (0x4AA990) acts only for a non-null leader, so the timer of a free NPC with the wait flag runs out and nothing happens: the flag stays, no jilting, no reaction change.
         if (current.Standing == CompanionStanding.Free && current.WaitFlag) return GameEventHandlerOutcome.Completed;
         // Every way out of waiting removes the timer and a restore admits one only for a waiting NPC or a free one with the flag, so this is a defect guard; at
@@ -226,7 +242,7 @@ public sealed partial class GameSessionOwner
         if (!ReactionLimits.InRange(delta)) failure = GameSessionFailure.InvalidReactionAmount;
         else if (npc is not null && pc is not null && ResolveReaction(entity.Code, npc, pc, out var record) == GameSessionFailure.None)
         {
-            failure = PlanReaction(record, record.Stored(npc.BaseReaction), (int)delta, npc, pc, true, out var planned, out var updated);
+            failure = PlanReaction(record, record.Stored(npc.BaseReaction), (int)delta, npc, pc, true, true, out var planned, out var updated);
             adjustment = planned;
             var recorded = _reactions.Records.TryGetValue(entity.Code, out var known);
             if (failure == GameSessionFailure.None && (recorded ? known != updated : !updated.IsBaseline))
@@ -244,7 +260,7 @@ public sealed partial class GameSessionOwner
         }
         _party.Put(current with { Standing = CompanionStanding.Free, Forced = false, Jilted = true, Loyalty = loyalty }, false);
         // ARC-SKILLS-008 (ST2): the waiting follower that leaves is no longer concealed.
-        _combat.Concealed.Remove(current.Entity);
+        DropConcealmentOfSubtree(current.Entity);
         ClearNoAttackOnLeave(current.Entity);
         ClearTempusFugitOnLeave(current.Entity);
         Revise();

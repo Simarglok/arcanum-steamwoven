@@ -231,4 +231,92 @@ public sealed class StealthStateTests
         using var stale = Owner();
         Assert.AreEqual(GameSessionFailure.StaleVersion, stale.ToggleHeroConcealment(new(stale.Identity, 99)).Failure);
     }
+
+    // ARC-WORLD-2118 (0x45EE30 reaches the recursive follower list; the join 0x45DE90 gives the joiner its leader's state): the followers of a companion sneak with the hero.
+    private const string Summon = "oid:critter:7", Imp = "oid:imp";
+
+    [TestMethod]
+    public void TheToggleReachesTheFollowersOfAFollowerAndTheSnapshotKeepsThem()
+    {
+        using var owner = Owner();
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.ForceJoinLeader(owner.Version, Summon, Pal).Disposition);
+        Assert.IsFalse(owner.IsConcealed(SessionCombatant.Critter(Summon)));
+        owner.ToggleHeroConcealment(owner.Version);
+        Assert.IsTrue(owner.IsConcealed(SessionCombatant.Critter(Summon)), "a companion's summon sneaks with the hero");
+        var text = GameSessionSnapshotCodec.Encode(owner.Capture());
+        using var restored = Restore(Decode(text));
+        Assert.IsTrue(restored.IsConcealed(SessionCombatant.Critter(Summon)));
+        // A concealed critter that nobody of the hero's chain leads is refused by the restore.
+        var free = GameSessionOwner.Restore(Decode(text.Replace("\"npcs\":[\"oid:critter:7\",\"oid:pal\"]", "\"npcs\":[\"oid:critter:7\",\"oid:pal\",\"oid:stranger\"]")), RestoreOptions());
+        Assert.AreEqual(GameSessionFailure.InvalidConcealment, free.Failure);
+        owner.ToggleHeroConcealment(owner.Version);
+        Assert.IsFalse(owner.IsConcealed(SessionCombatant.Critter(Summon)));
+    }
+
+    [TestMethod]
+    public void AJoinUnderANpcLeaderTakesThatLeadersConcealmentAndANpcOutsideTheChainConcealsNoOne()
+    {
+        using var owner = Owner();
+        owner.ToggleHeroConcealment(owner.Version);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.ForceJoinLeader(owner.Version, Summon, Pal).Disposition);
+        Assert.IsTrue(owner.IsConcealed(SessionCombatant.Critter(Summon)), "the concealed companion's summon");
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.ForceJoinLeader(owner.Version, Imp, Summon).Disposition);
+        Assert.IsTrue(owner.IsConcealed(SessionCombatant.Critter(Imp)), "the joiner takes the state of its own leader");
+        // A leader outside the hero's chain conceals no one, concealed hero or not.
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.ForceJoinLeader(owner.Version, Imp, Stranger).Disposition);
+        Assert.IsFalse(owner.IsConcealed(SessionCombatant.Critter(Imp)));
+        // The hero's own join gives the state to the joiner's followers as well.
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.ForceJoinLeader(owner.Version, Summon, Stranger).Disposition);
+        Assert.IsFalse(owner.IsConcealed(SessionCombatant.Critter(Summon)));
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.ForceJoinParty(owner.Version, Stranger).Disposition);
+        Assert.IsTrue(owner.IsConcealed(SessionCombatant.Critter(Stranger)) && owner.IsConcealed(SessionCombatant.Critter(Summon)) && owner.IsConcealed(SessionCombatant.Critter(Imp)),
+            "0x45EE30 reaches the joiner's own followers");
+    }
+
+    [TestMethod]
+    public void ALeavingCompanionTakesItsFollowersOutOfTheHerosConcealmentAndAnAttackEndsTheWholeTree()
+    {
+        using var owner = Owner();
+        owner.ForceJoinLeader(owner.Version, Summon, Pal);
+        owner.ToggleHeroConcealment(owner.Version);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.LeaveParty(owner.Version, Pal, new PartyLeave(Force: true)).Disposition);
+        Assert.IsFalse(owner.IsConcealed(SessionCombatant.Critter(Pal)));
+        Assert.IsFalse(owner.IsConcealed(SessionCombatant.Critter(Summon)), "the summon is no longer in the hero's chain");
+        owner.ForceJoinParty(owner.Version, Pal);
+        Assert.IsTrue(owner.IsConcealed(SessionCombatant.Critter(Summon)), "the companion's rejoin gives its followers the hero's state");
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.EndConcealmentForAttackEvent(owner.Version, SessionCombatant.Hero).Disposition);
+        Assert.AreEqual(0, owner.QueryConcealment().Npcs.Count);
+        // An NPC follower that leaves its NPC leader is revealed.
+        owner.ToggleHeroConcealment(owner.Version);
+        Assert.IsTrue(owner.IsConcealed(SessionCombatant.Critter(Summon)));
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.LeaveParty(owner.Version, Summon, new PartyLeave(Force: true)).Disposition);
+        Assert.IsFalse(owner.IsConcealed(SessionCombatant.Critter(Summon)));
+    }
+
+    [TestMethod]
+    public void TheUnconcealEndReadsTheNpcLeadersConcealment()
+    {
+        using var owner = Owner();
+        owner.ForceJoinLeader(owner.Version, Summon, Pal);
+        owner.ForceJoinLeader(owner.Version, Imp, Summon);
+        owner.ToggleHeroConcealment(owner.Version);
+        Assert.AreEqual(GameSessionDisposition.NoChange, owner.EndNpcConcealmentForUnconceal(owner.Version, Imp).Disposition, "its leader, the summon, is concealed");
+        Assert.AreEqual(GameSessionDisposition.NoChange, owner.EndNpcConcealmentForUnconceal(owner.Version, Summon).Disposition, "its leader, the companion, is concealed");
+        Assert.IsTrue(owner.IsConcealed(SessionCombatant.Critter(Imp)));
+    }
+
+    [TestMethod]
+    public void AnAttackOnAFollowerOfAFollowerEndsTheHerosWholeConcealment()
+    {
+        using var owner = Owner();
+        owner.ForceJoinLeader(owner.Version, Summon, Pal);
+        owner.ToggleHeroConcealment(owner.Version);
+        // 0x4A9650: the victim's PC-chain head (0x45DDA0) is the hero, so the hit on the companion's summon reveals the hero and the whole tree.
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.EndConcealmentForAttackEvent(owner.Version, SessionCombatant.Critter(Summon)).Disposition);
+        Assert.IsFalse(owner.IsConcealed(SessionCombatant.Hero) || owner.IsConcealed(SessionCombatant.Critter(Pal)) || owner.IsConcealed(SessionCombatant.Critter(Summon)));
+        // A critter outside the hero's chain is no group of the session's.
+        owner.ForceJoinLeader(owner.Version, Imp, Stranger);
+        owner.ToggleHeroConcealment(owner.Version);
+        Assert.AreEqual(GameSessionDisposition.NoChange, owner.EndConcealmentForAttackEvent(owner.Version, SessionCombatant.Critter(Imp)).Disposition);
+    }
 }

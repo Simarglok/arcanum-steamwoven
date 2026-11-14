@@ -170,7 +170,7 @@ public sealed partial class GameSessionOwner
                 if (_party.Get(entity) is var following && (following.Standing != CompanionStanding.Free || following.WaitFlag))
                 {
                     _party.Put(following with { Standing = CompanionStanding.Free, Forced = false, WaitFlag = false }, false);
-                    _combat.Concealed.Remove(entity);
+                    DropConcealmentOfSubtree(entity);
                     ClearNoAttackOnLeave(entity);
                     if (following.WaitBit) CancelWaitTimers(entity);
                 }

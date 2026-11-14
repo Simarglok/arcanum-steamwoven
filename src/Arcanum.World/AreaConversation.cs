@@ -1,6 +1,7 @@
 using Arcanum.Data;
 using Arcanum.Data.Area;
 using Arcanum.Data.Audio;
+using Arcanum.Data.Combat;
 using Arcanum.Data.Messages;
 using Arcanum.Data.Scripts;
 using Arcanum.Scripting.Dialog;
@@ -519,7 +520,8 @@ public sealed class AreaConversationHost
     /// </summary>
     public string? SayFollowerLine(AreaSpeaker speaker, LoyaltyLines lines, string? listener = AreaScriptHost.PcCode)
     {
-        var text = PickLine(speaker, lines);
+        var text = SayLine(speaker, (greeting, query) => DialogFollowerComment.Say(greeting, query, lines.First, lines.Last, Profile.Names, DialogTextEncoding.Windows1252,
+            DialogConversationOptions.HardMaxTextBytes, null), ListenerFacts(listener));
         if (text is not null) Scripts.Float(Scripts.Object(speaker), text, listener is null ? null : Scripts.Entity(listener));
         return text;
     }
@@ -554,14 +556,25 @@ public sealed class AreaConversationHost
         return text;
     }
 
-    private string? SayLine(AreaSpeaker speaker, Func<AreaGreeting, DialogReactionQuery, DialogGenericGreetingResult> say)
+    // ARC-AI-2114 (0x418780): the line's listener facts when the listener is an NPC speaker of this host (its gender and race, from its written fields), else the PC's.
+    private DialogPcFacts ListenerFacts(string? listener) => ListenerFactsOf(listener, Profile.Pc, entity =>
+        Speakers.FirstOrDefault(candidate => AreaConversationState.EntityId(candidate.Row) == entity) is { } other ? AreaWrittenCritterFields.Read(_session, other.Row) : null);
+
+    /// <summary>ARC-AI-2114: the facts of a line's listener: the PC's for the hero, none, or an object whose fields <paramref name="fieldsOf"/> cannot give; an NPC's own (<see cref="AreaGreeting.ListenerFacts"/>) otherwise.</summary>
+    public static DialogPcFacts ListenerFactsOf(string? listener, DialogPcFacts pc, Func<string, CombatFields?> fieldsOf)
+    {
+        ArgumentNullException.ThrowIfNull(pc); ArgumentNullException.ThrowIfNull(fieldsOf);
+        return listener is null || listener == AreaScriptHost.PcCode ? pc : AreaGreeting.ListenerFacts(fieldsOf(listener)) ?? pc;
+    }
+
+    private string? SayLine(AreaSpeaker speaker, Func<AreaGreeting, DialogReactionQuery, DialogGenericGreetingResult> say, DialogPcFacts? listener = null)
     {
         ArgumentNullException.ThrowIfNull(speaker);
         if (!Speakers.Contains(speaker)) return null;
         DialogGenericGreetingResult said;
         try
         {
-            var greeting = Greeting(speaker);
+            var greeting = Greeting(speaker, listener);
             if (greeting is null) return null;
             said = say(greeting, new DialogReactionQuery(AreaConversationState.Npc(speaker.Index), AreaConversationState.PcParticipant));
         }
@@ -709,25 +722,34 @@ public sealed class AreaConversationHost
     private AreaConversationHost KeepingGreetingTexts(AreaGreetingTexts? texts) { _greetingTexts = texts; return this; }
 
     // The greeting port of a speaker, or null (a g: node then stays a frontier) when the texts did not load.
-    private AreaGreeting? Greeting(AreaSpeaker speaker)
+    private AreaGreeting? Greeting(AreaSpeaker speaker, DialogPcFacts? listener = null)
     {
         _greetingTexts ??= AreaGreetingTexts.Load(_content!.Plan);
         if (_greetingTexts.Status != AreaGreetingTextsStatus.Ready) return null;
         // The override dialog is read with the session's current data-fix rules, as the conversation's own DLG.
         var overrides = AreaGreeting.OverrideScript(speaker) is { } script && _content!.Dialog(script, _session.Rules.Data) is { Status: ScriptContentStatus.Read } read
             ? read.Document : null;
-        return new AreaGreeting(_session, speaker, State, Profile.Pc, _greetingTexts, overrides);
+        return new AreaGreeting(_session, speaker, State, listener ?? Profile.Pc, _greetingTexts, overrides);
     }
 
-    /// <summary>ARC-DEV-195: the companion port of a speaker: the party record of its entity in the session; a wait timer is scheduled for a roster speaker (its wait index and the hero's side), none for another.</summary>
+    /// <summary>ARC-DEV-195: the companion port of a speaker: the party record of its entity in the session; a wait timer is scheduled for a roster speaker (its wait index and the hero's side; ARC-WORLD-2127: the NPC leader's side
+    /// when an NPC leads it and the AI host reads that leader), none for another.</summary>
     private SessionDialogCompanionPort CompanionPort(AreaSpeaker speaker)
     {
         var npc = AreaConversationState.Npc(speaker.Index);
         var entity = AreaConversationState.EntityId(speaker.Row);
         return new SessionDialogCompanionPort(_session, AreaConversationState.PcParticipant,
             participant => participant == npc ? entity : null,
-            participant => participant == npc && FactsOf(speaker) is { } facts ? AreaCompanionRoster.WaitFacts(facts, _session.QueryHeroPartySide()) : null,
+            participant => participant == npc && FactsOf(speaker) is { } facts ? WaitFactsOf(facts, entity) : null,
             entity => SpreadOutStart?.Invoke(entity));
+    }
+
+    // ARC-WORLD-2127 (0x4AA7A0): the wait timer reads the DIRECT leader's values. A speaker an NPC leads gets that leader's (the AI host reads them); when they cannot be read, the index alone (no leader step), never the
+    // hero's side. Any other speaker has the hero (or the diagnostic PC) as leader.
+    private PartyWaitFacts WaitFactsOf(AreaCompanionFacts facts, string entity)
+    {
+        if (_session.QueryLeader(entity) is not { } leader || leader == SessionEventKinds.PlayerEntity) return AreaCompanionRoster.WaitFacts(facts, _session.QueryHeroPartySide());
+        return HealerHost?.Invoke()?.LeaderWaitFacts(entity) is { } read ? read with { WaitIndex = facts.WaitIndex } : new(facts.WaitIndex, PersuasionTraining.None, 0, false);
     }
 
     /// <summary>The session party port for a roster speaker when the party is wired; facts are read at each call.</summary>
@@ -739,7 +761,9 @@ public sealed class AreaConversationHost
         return new SessionDialogPartyPort(_session, AreaConversationState.PcParticipant,
             participant => participant == npc ? entity : null,
             participant => participant == npc ? AreaCompanionRoster.Facts(facts, State.Alignment, State.Reaction(speaker.Index),
-                AreaAdvancement.Level(_session, entity, facts.Level), _session.QueryHeroPartySide()) : null);
+                AreaAdvancement.Level(_session, entity, facts.Level), _session.QueryHeroPartySide()) : null,
+            // ARC-WORLD-2127: a speaker waiting under an NPC leader is unwaited against that leader's side, read by the AI host.
+            participant => participant == npc ? HealerHost?.Invoke()?.LeaderUnwaitFacts(entity) : null);
     }
 
     // ARC-DEV-081: negative IN goes to the session by the speaker's entity, a carried companion's too: the session finds its seed holder
