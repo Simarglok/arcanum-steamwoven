@@ -242,7 +242,7 @@ public sealed partial class GameSessionOwner
         if (!ReactionLimits.InRange(delta)) failure = GameSessionFailure.InvalidReactionAmount;
         else if (npc is not null && pc is not null && ResolveReaction(entity.Code, npc, pc, out var record) == GameSessionFailure.None)
         {
-            failure = PlanReaction(record, record.Stored(npc.BaseReaction), (int)delta, npc, pc, true, out var planned, out var updated);
+            failure = PlanReaction(record, record.Stored(npc.BaseReaction), (int)delta, npc, pc, true, true, out var planned, out var updated);
             adjustment = planned;
             var recorded = _reactions.Records.TryGetValue(entity.Code, out var known);
             if (failure == GameSessionFailure.None && (recorded ? known != updated : !updated.IsBaseline))

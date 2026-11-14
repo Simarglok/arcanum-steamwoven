@@ -193,6 +193,28 @@ public sealed class AreaBarterTests
         Assert.AreEqual(400, barter.View().Hero.Single(line => line.Entity == "magic-axe").Worth, "a bought item stays identified");
     }
 
+    /// <summary>ARC-WORLD-2119: the substitute container is for a merchant with no leader at all (0x45F650 reads the direct leader, null), so a merchant an NPC leads gets none; the open's identify step
+    /// (0x572640) reads the chain to the PC, so a merchant led through a follower is not identified though no follower barter opens.</summary>
+    [TestMethod]
+    public void A_merchant_led_by_an_npc_gets_no_substitute_and_one_led_through_a_follower_is_not_identified()
+    {
+        using var session = StockSession();
+        var data = StockData();
+        var own = new AreaBarterMerchant("merchant", "Smith", 100, false, false, data.BuyList(2), false);
+        var chest = new AreaSubstituteContainer("chest", 1, new(40, 40));
+        Assert.IsNull((own with { Led = true }).WithSubstitute(chest, new(40, 40), data).Container, "a merchant an NPC leads has a leader");
+        Assert.IsNotNull(own.WithSubstitute(chest, new(40, 40), data).Container);
+        using var other = StockSession();
+        var identified = new AreaBarter(other, new AreaInventoryHost([]), data, own.WithSubstitute(chest, new(40, 40), data), () => 50, _ => true, (entity, _) => entity);
+        identified.Open();
+        Assert.AreEqual(760, identified.View().Wares.Single().Quote.Price, "a merchant with no leader: identified");
+        // A led merchant never gets a container; it is attached directly here only to see the open's identify flag act on the chest's items.
+        var chained = own with { Led = true, PcLeads = true, Container = "chest", ContainerBuyList = data.BuyList(1) };
+        var barter = new AreaBarter(session, new AreaInventoryHost([]), data, chained, () => 50, _ => true, (entity, _) => entity);
+        barter.Open();
+        Assert.AreEqual(570, barter.View().Wares.Single().Quote.Price, "not identified: the chain reaches the PC");
+    }
+
     /// <summary>Opt-in (DAT_ROOT = the game folder): the installed buy lists by status, and the
     /// NPCs of every whole map that are merchants (an inventory source that buys something, their own or their substitute container's), with
     /// their price multipliers. Counts only.</summary>
