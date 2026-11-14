@@ -74,7 +74,8 @@ public sealed class AreaAiThrowTests
 
     private sealed record Scene(GameSessionOwner Session, AreaAiHost Host, string Npc, string Item);
 
-    private static Scene Open(uint weaponFlags = 0x200, bool grenade = false, long grenadeFlags = 0x1, Func<string, SessionShot, CellCoord, CellCoord, bool>? launch = null, ulong seed = 0, long weight = 15)
+    private static Scene Open(uint weaponFlags = 0x200, bool grenade = false, long grenadeFlags = 0x1, Func<string, SessionShot, CellCoord, CellCoord, bool>? launch = null, ulong seed = 0, long weight = 15,
+        ISessionItemScriptHost? itemScripts = null, int[]? daggerScripts = null)
     {
         var identity = new GlobalFlagIdentity(new WorldId(Guid.NewGuid()), new ModuleId(Guid.NewGuid()));
         var hero = new SessionHeroDefinition(16089, CharacterRace.Human, CharacterGender.Male, [8, 8, 8, 8, 8, 8, 8, 8, 0, 0], 1, 5, 0, null, null, 0, []);
@@ -84,8 +85,8 @@ public sealed class AreaAiThrowTests
         var rows = grenade ? new[] { Npc(0), Item(1, weaponFlags, weight), Grenade(2, grenadeFlags) } : new[] { Npc(0), Item(1, weaponFlags, weight) };
         var map = new AreaInventoryMap(1,
             new([new(Entity(0), SessionHolderKind.Npc, false, false, [], grenade ? [Entity(1), Entity(2)] : [Entity(1)])],
-                grenade ? [new SessionSeedItem(Entity(1), new(Dagger, 15, 0, 1004, null, []), null), new SessionSeedItem(Entity(2), new(GrenadeKind, 3, 0, 0, null, []), null)]
-                    : [new SessionSeedItem(Entity(1), new(Dagger, 15, 0, 1004, null, []), null)]),
+                grenade ? [new SessionSeedItem(Entity(1), new(Dagger, 15, 0, 1004, null, daggerScripts ?? []), null), new SessionSeedItem(Entity(2), new(GrenadeKind, 3, 0, 0, null, []), null)]
+                    : [new SessionSeedItem(Entity(1), new(Dagger, 15, 0, 1004, null, daggerScripts ?? []), null)]),
             rows.ToDictionary(row => Entity(row.Key.SourceIndex)));
         var inventory = new AreaInventoryHost([map]);
         Assert.AreEqual(GameSessionFailure.None, inventory.Attach(session));
@@ -101,7 +102,7 @@ public sealed class AreaAiThrowTests
             HeroCell = () => HeroCell, LaunchThrown = launch,
             NpcSheet = entity => combat.Fields(entity) is { } fields ? AreaAdvancement.Npc(entity, fields, _ => null) : null,
         };
-        var host = new AreaAiHost(session, scene, new AreaEventWorld(() => combat, () => null), new AreaCombatWorld(1, () => [], _ => null));
+        var host = new AreaAiHost(session, scene, new AreaEventWorld(() => combat, () => null, itemScripts: () => itemScripts), new AreaCombatWorld(1, () => [], _ => null));
         return new(session, host, Entity(0), Entity(1));
     }
 
@@ -200,6 +201,70 @@ public sealed class AreaAiThrowTests
         var landing = new CellCoord(13, 20);
         Assert.AreEqual(GameSessionDisposition.Changed, session.LandThrownItem(session.Version, shot, landing).Disposition);
         Assert.IsFalse(session.QueryItemInFlight(grenade));
+    }
+
+    // ARC-COMBAT-1761: the scene's item script host reaches the session's throw. The dagger's throw script (point 6) prints a line and answers skip default, so nothing is thrown, the dagger stays with the NPC and the line is in the notice.
+    private sealed class ThrowScriptHost : ISessionItemScriptHost
+    {
+        private const int ScriptNumber = 710;
+        private readonly Arcanum.Data.Scripts.ScrProgram _refuse = Build(
+            (Arcanum.Data.Scripts.ScrCatalogue.Action.PrintLine, [(3, 1), (3, 6)]), (Arcanum.Data.Scripts.ScrCatalogue.Action.ReturnSkipDefault, []));
+
+        // Lines of (action type, operands (kind, value)): value kind 3 is a number.
+        private static Arcanum.Data.Scripts.ScrProgram Build(params (int Type, (byte Kind, int Value)[] Operands)[] lines)
+        {
+            var bytes = new byte[64 + lines.Length * 132];
+            System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(52), lines.Length);
+            System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(56), lines.Length);
+            for (var line = 0; line < lines.Length; line++)
+            {
+                var slot = bytes.AsSpan(64 + line * 132 + 44, 44);
+                System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(slot, lines[line].Type);
+                for (var i = 0; i < lines[line].Operands.Length; i++)
+                {
+                    slot[4 + i] = lines[line].Operands[i].Kind;
+                    System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(slot[(12 + 4 * i)..], lines[line].Operands[i].Value);
+                }
+            }
+            var read = Arcanum.Data.Scripts.ScrProgram.Read(bytes);
+            Assert.AreEqual(Arcanum.Data.Scripts.ScrReadStatus.Read, read.Status);
+            return read.Program!;
+        }
+
+        public Arcanum.Scripting.Scr.ScrSlot? Slot(Arcanum.Scripting.Scr.ScrObjectRef attachee, int point) => point == SessionScriptPoint.Throw ? new(ScriptNumber, 0, 0) : null;
+        public Arcanum.Scripting.Scr.ScrScriptLookup Script(int number) => number == ScriptNumber ? Arcanum.Scripting.Scr.ScrScriptLookup.Of(_refuse) : Arcanum.Scripting.Scr.ScrScriptLookup.Missing;
+        public bool GlobalFlag(int index) => false;
+        public int StoryState() => 0;
+        public bool IsMonsterGenerator(Arcanum.Scripting.Scr.ScrObjectRef attachee) => false;
+        public Arcanum.Scripting.Scr.ScrDialogState DialogState(Arcanum.Scripting.Scr.ScrObjectRef attachee) => Arcanum.Scripting.Scr.ScrDialogState.Normal;
+        public Arcanum.Scripting.Scr.ScrTrapCheck CheckTrapBeforeUse(Arcanum.Scripting.Scr.ScrObjectRef triggerer, Arcanum.Scripting.Scr.ScrObjectRef attachee) => Arcanum.Scripting.Scr.ScrTrapCheck.NoTrap;
+        public bool IsTrapObject(Arcanum.Scripting.Scr.ScrObjectRef attachee) => false;
+        public Arcanum.Scripting.Scr.ScrObjectRef? Player() => null;
+        public Arcanum.Scripting.Scr.ScrObjectRef? Leader(Arcanum.Scripting.Scr.ScrObjectRef critter) => null;
+        public bool IsJilted(Arcanum.Scripting.Scr.ScrObjectRef critter) => false;
+        public bool IsPc(Arcanum.Scripting.Scr.ScrObjectRef critter) => false;
+        public SessionPrintedLine PrintedLine(int script, int line) => new(SessionPrintedLineStatus.Shown, "hero text", "line 1");
+        public SessionPrintedLine PrintedLineForNpc(int script, int line) => new(SessionPrintedLineStatus.Shown, "It hums.", "line 1");
+    }
+
+    [TestMethod]
+    public void A_throw_script_that_refuses_keeps_the_dagger_with_the_npc_and_its_line_is_in_the_notice()
+    {
+        // Without the scene's script host the scripted dagger is refused, as before.
+        var bare = Open(daggerScripts: [SessionScriptPoint.Throw]);
+        bare.Host.ThrowItem(bare.Npc, bare.Item, HeroCell);
+        Assert.AreEqual(GameSessionFailure.ItemScriptUnsupported, bare.Host.DrainNotices().Single(n => n.Kind == AreaAiNoticeKind.Throw).Throw!.Failure, "no host: refused");
+        Assert.AreEqual(bare.Npc, bare.Host.ItemHolder(bare.Item));
+
+        var scene = Open(itemScripts: new ThrowScriptHost(), daggerScripts: [SessionScriptPoint.Throw]);
+        var draws = scene.Session.QueryRandom().Draws;
+        Assert.IsTrue(scene.Host.ThrowItem(scene.Npc, scene.Item, HeroCell), scene.Host.TraceOf(scene.Npc)?.Throw);
+        var notice = scene.Host.DrainNotices().Single(n => n.Kind == AreaAiNoticeKind.Throw);
+        Assert.AreEqual((GameSessionFailure.None, true, (SessionAttackResult?)null), (notice.Throw!.Failure, notice.Throw.ScriptDeclined, notice.Result));
+        CollectionAssert.AreEqual(new[] { "It hums." }, notice.Messages.Select(message => message.Text).ToArray(), "the line the throw script printed");
+        Assert.AreEqual(draws, scene.Session.QueryRandom().Draws, "nothing was rolled");
+        Assert.AreEqual(scene.Npc, scene.Host.ItemHolder(scene.Item), "the dagger is back with the thrower");
+        Assert.IsTrue(scene.Host.TraceOf(scene.Npc)!.Throw!.Contains("script-declined", StringComparison.Ordinal));
     }
 
     // ARC-COMBAT-1717: the seed whose throw at the hero decides a hit (or a miss), found by a bounded search; the scene it opened.

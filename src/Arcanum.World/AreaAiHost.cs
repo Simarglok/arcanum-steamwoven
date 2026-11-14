@@ -213,6 +213,10 @@ public sealed record AreaAiObjectFacts(int Type, CellCoord Cell)
     public bool DontDraw { get; init; }
     public bool Invulnerable { get; init; }
     public bool Busted { get; init; }
+    /// <summary>ARC-AI-1756 (0x42B9C0 node 5): the object's current art id (field 1), which the attack animation's height and animation tests read; 0 where the viewer reads none.</summary>
+    public uint Art { get; init; }
+    /// <summary>ARC-AI-1756 (0x42B9C0 node 5): the object flags (field 0x13) whose bit 0x80 (shrunk) picks the low attack.</summary>
+    public uint Flags { get; init; }
 }
 
 /// <summary>What the AI host tells the viewer: an NPC's attack swing (its pose), the hit's result, a step, a sound, (ARC-WORLD-099)
@@ -2341,6 +2345,10 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     {
         var (use, flags, shield) = Wielded(id);
         var targetFields = Fields(target);
+        // ARC-AI-1756 (0x42B9C0 node 5): the node reads the target's art (field 1) and object flags (field 0x13) whatever the target is. An object that is no critter (a bed, a trap's shooter, a door) has its own: the
+        // flag 0x80 can pick the low attack, its art type is no body so its animation reads 0 and its height 1 (0x503E20, 0x503F60), and it is never lying (the status tests are a critter's).
+        if (target != Pc && targetFields is null && _scene.ObjectFacts?.Invoke(target) is { } facts)
+            return AreaAiAttackArtRules.Request(use, flags, shield, facts.Flags, WeaponArtRules.AnimationOf(facts.Art), facts.Art);
         var lying = Status(target) is { IsUnconscious: true } or { IsDead: true };
         var targetArt = targetFields?.Object.CurrentArt ?? BodyArmorArtRules.CritterArt << 28;
         return AreaAiAttackArtRules.Request(use, flags, shield, targetFields?.Object.Flags ?? 0,
@@ -2370,13 +2378,16 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     /// art is decided here and its arrow flies (<see cref="AreaAiScene.LaunchShot"/>); its damage is <see cref="LandShot"/>'s, at the strike.</summary>
     public void Hit(string id, string target)
     {
+        // ARC-AI-1756 (0x4B3170, SC16): a scenery target that holds an occupant (a bed's sleeper) is replaced by the occupant in both target slots before anything else; the check then carries -30.
+        var inBed = false;
+        if (OccupantInPlaceOf(id, target) is { } occupant) { target = occupant; inBed = true; }
         var aimed = target;
         // ARC-COMBAT-1140 (RA4, RH5): a door, container, scenery, trap or wall that stops the line of fire takes the shot in place of the target.
         if (HitBlockingObject(id, target)) return;
         target = LineOfFireStruck(id, target);
         // ARC-AI-1636: the focus is an object that is no critter (a door, container, scenery or trap) and nothing stops the line to it: the attack is the session's object attack.
         if (target == aimed && target != Pc && _scene.ObjectFacts?.Invoke(target) is not null) { HitObjectFocus(id, target); return; }
-        if (NpcAttackOf(id, target, flight: _scene.LaunchShot is not null) is not { } attack) return;
+        if (NpcAttackOf(id, target, flight: _scene.LaunchShot is not null, inBed) is not { } attack) return;
         var result = _session.AttackByNpc(_session.Version, attack);
         Trace(id).Hit = $"{result.Disposition} {result.Failure} {result.Resolution?.Outcome} {result.Life?.HitPointDamage}" + (target == aimed ? "" : $" (the line of fire struck {target} instead of {aimed})");
         _notices.Add(new(AreaAiNoticeKind.Hit, id, target) { Result = result });
@@ -2502,6 +2513,26 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     }
 
     /// <summary>
+    /// ARC-AI-1756 (VB2-2 gap d; 0x4B3170, SC16): the attack record's first step. A target of type 3 (scenery) whose occupant field 0x46 is set is replaced by that occupant, in both target slots, and the occupant leaves
+    /// the object through the unseat 0x45F3A0 (the sleeper's flags, its latch and the bed's occupied frame, <see cref="Unseat"/>); the attack is then the attack on the occupant, its check carrying the invocation modifier -30
+    /// (<see cref="AttackRequest.TargetWasInBed"/>) and its event naming the occupant. Only a bed holds an occupant. Returns the occupant, or null for any other target. NOT READY: a bed the hero rests in (its occupant is the hero,
+    /// who is woken by the rest window, not by an NPC's blow here) is struck as a scenery.
+    /// </summary>
+    private string? OccupantInPlaceOf(string attacker, string target)
+    {
+        if (target == Pc || _scene.Beds is not { } beds || _scene.ObjectFacts?.Invoke(target) is not { Type: 3 }
+            || _scene.ObjectAttackTarget?.Invoke(target) is not { } info) return null;
+        // The host's first bed question syncs the shared occupancy with the NPCs' saved sleeping state (a load), so the occupant is read after it.
+        ReconcileBeds(beds);
+        if (beds.Occupancy.Occupant(info.Row.Key) is not { } occupant || !TryNpc(occupant, out _)) return null;
+        var text = Unseat(occupant, beds, info.Row.Key);
+        if (text == "unseat refused") return null;
+        var trace = Trace(attacker);
+        trace.Item = (trace.Item is { Length: > 0 } earlier ? earlier + "; " : "") + $"attack on bed {target}: {occupant} pulled out, {text}";
+        return occupant;
+    }
+
+    /// <summary>
     /// ARC-AI-1636 (VB2-2 gap d; the attack goal's hit step 0x4B3170 on a target that is no critter, exe read in the ledger): an NPC's attack on the object it holds as its COMBAT_FOCUS (a trap's shooter object a trap shot put there,
     /// <see cref="AttackEvent"/>'s <c>VictimFightsObject</c>). The session damages the object as it does a blocker (<see cref="GameSessionOwner.AttackObjectByNpc"/>, no skill roll: an object has no dodge, RH5) and the attack event of the
     /// record then goes out for the object as the victim (it tells the NPC's followers and stops). An object the session cannot damage (no target hook, a refusal) is swung at with no effect, as the trace says.
@@ -2547,7 +2578,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     }
 
     // The NPC's attack facts on the hero or another NPC (null: no combat values); ARC-DEV-282: <paramref name="flight"/> lets a shot on the ranged path fly.
-    private SessionNpcAttack? NpcAttackOf(string id, string target, bool flight)
+    private SessionNpcAttack? NpcAttackOf(string id, string target, bool flight, bool inBed = false)
     {
         if (Build(id) is not { } attacker) return null;
         var targetBuild = target == Pc ? null : Build(target);
@@ -2568,6 +2599,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
             // ARC-DEV-273 (RA4): a bow or firearms attack reads the line to the target (a melee one ignores it).
             LineOfFire = Distance(id, target) > 1 && Tile(id) is { } from && Tile(target) is { } to && _scene.LineOfFire?.Invoke() is { } map ? LineTo(from, to, Key(target), map) : null,
             Flight = flight,
+            TargetWasInBed = inBed,
         };
     }
 
@@ -3011,7 +3043,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     /// <see cref="StruckAt"/>), then the attack event on it for a resolved attack (the projectile's end alerts the struck object, PF8).
     /// The item must be one the NPC holds (an item gone or taken fails, AG10). A <see cref="AreaAiNoticeKind.Throw"/> notice tells the
     /// viewer. ARC-DEV-258: a generic item (a grenade) flies as a projectile the scene launches (<see cref="AreaAiScene.LaunchThrown"/>; without a viewer it lands
-    /// on the location at once), the thrower the event's parent. ARC-COMBAT-1717: a thrown weapon flies the same way when the scene can fly it (<see cref="AreaAiScene.LaunchThrown"/>): to the struck critter's tile (a hit, the strike is <see cref="LandShot"/>'s at the viewer's crossing) or free to the scatter tile (a miss); a flight that does not launch resolves at once, a decided hit striking first. NOT READY: a first blocker on the line that is a scenery, a wall,
+    /// on the location at once), the thrower the event's parent. ARC-COMBAT-1717: a thrown weapon flies the same way when the scene can fly it (<see cref="AreaAiScene.LaunchThrown"/>): to the struck critter's tile (a hit, the strike is <see cref="LandShot"/>'s at the viewer's crossing) or free to the scatter tile (a miss); a flight that does not launch resolves at once, a decided hit striking first. ARC-COMBAT-1761: the item's removal and throw scripts run through the scene's item script host before the throw is decided (the session's <see cref="SessionNpcThrow.Scripts"/>); a throw script that
+    /// answers skip default throws nothing, puts the item back with the thrower and still answers true (the goal's action frame ran), with the printed lines and eye candy in the notice. NOT READY: a first blocker on the line that is a scenery, a wall,
     /// a dead or unknown critter, and the hero on the line to another target (the line's map holds no hero): the item then lands on the
     /// tile, striking nothing.
     /// </summary>
@@ -3052,12 +3085,15 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
             ItemTriggers = _scene.Spells?.Invoke()?.ItemTriggers,
             // ARC-COMBAT-1717: a thrown weapon flies when the scene can fly a thrown item (the viewer); otherwise it lands at once.
             Flight = _scene.LaunchThrown is not null,
+            // ARC-COMBAT-1761 (0x466E00 → 0x467860, 0x441980): the shown map's item script host and the thrower's life target and stored stats run the item's removal and throw scripts.
+            Scripts = (_events as ISessionRestockWorld)?.NpcWieldScripts(_session.QueryActor().Map, id),
         };
         var result = _session.ThrowByNpc(_session.Version, request);
         var attack = result.Attack;
         Trace(id).Throw = $"throw {item} at {tile.X},{tile.Y} struck={struck?.Who ?? "-"} {result.Disposition} {result.Failure} {attack?.Resolution?.Outcome}"
             + $" landed={(result.Landed is { } at ? $"{at.X},{at.Y}" : "-")}";
-        _notices.Add(new(AreaAiNoticeKind.Throw, id, struck?.Who) { Item = item, Throw = result, Result = attack });
+        if (result.ScriptDeclined) Trace(id).Throw += " script-declined";
+        _notices.Add(new(AreaAiNoticeKind.Throw, id, struck?.Who) { Item = item, Throw = result, Result = attack, Messages = result.Messages, EyeCandies = result.EyeCandies });
         // The attack event on the struck critter comes first (the projectile's end alerts it, PF8), before a flight's strike or the at-once fallback's pass.
         var attackedVictim = struck?.Who is { } hurt && attack is { Disposition: not GameSessionDisposition.Rejected, Resolution.Refusal: AttackRefusal.None } ? hurt : null;
         if (attackedVictim is { } victim)

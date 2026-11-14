@@ -160,6 +160,7 @@ src/Arcanum.Session/GameSessionNpcInventory.cs,RemoveItemFromNpc,pending,
 src/Arcanum.Session/GameSessionNpcObjectStrike.cs,AttackObjectByNpc,exempt,reference
 src/Arcanum.Session/GameSessionNpcPickPocket.cs,PickPocketByNpc,pending,
 src/Arcanum.Session/GameSessionNpcPickup.cs,PickUpItemByNpc,exempt,host
+src/Arcanum.Session/GameSessionNpcThrowScripts.cs,RunNpcThrowScripts,exempt,host
 src/Arcanum.Session/GameSessionNpcTransfer.cs,GiveAmmoToNpc,pending,
 src/Arcanum.Session/GameSessionNpcTransfer.cs,GiveGoldToHero,pending,
 src/Arcanum.Session/GameSessionNpcTransfer.cs,GiveGoldToNpc,pending,
@@ -487,6 +488,7 @@ src/Arcanum.World/AreaAiHost.cs,NeedsAmmunition,exempt,host
 src/Arcanum.World/AreaAiHost.cs,NoticeKill,exempt,host
 src/Arcanum.World/AreaAiHost.cs,ObserveLeaves,pending,
 src/Arcanum.World/AreaAiHost.cs,ObserveRound,pending,
+src/Arcanum.World/AreaAiHost.cs,OccupantInPlaceOf,exempt,reference
 src/Arcanum.World/AreaAiHost.cs,PcLeader,exempt,host
 src/Arcanum.World/AreaAiHost.cs,Perform,pending,
 src/Arcanum.World/AreaAiHost.cs,PerformAttack,pending,
