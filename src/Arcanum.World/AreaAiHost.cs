@@ -2308,6 +2308,21 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         if (TryNpc(id, out var npc) && Tile(toward) is { } there) FaceNpc(npc, there);
     }
 
+    /// <summary>
+    /// ARC-UI-2029 (ledger TB26): the stop-and-face step of the speech display for a speaking NPC. With a listener, a speaker that is alive (hit points 1 or more), able to act and running no animation
+    /// of its own (an overlay is no animation) turns to the listener's cell; the display's level-3 interrupt of the speaker's runs finds only overlays at that point and ends nothing, so a walking
+    /// or acting speaker neither stops nor turns. The turn is the host's instant one (<see cref="FaceNpc"/>), as every other host turn. False when nothing turned: no listener cell, not an NPC the host
+    /// walks, dead, unconscious, unable to act, or busy.
+    /// </summary>
+    [OriginalFunction(0x568540, OriginalFunctionScope.Partial)]
+    public bool FaceListener(string speaker, string listener)
+    {
+        if (!TryNpc(speaker, out var npc) || Tile(listener) is not { } there) return false;
+        if (Status(speaker) is not { IsDead: false, IsUnconscious: false } || !CanAct(speaker) || AnimationRunning(speaker)) return false;
+        FaceNpc(npc, there);
+        return true;
+    }
+
     public void PlaySound(string id, int sound) => _notices.Add(new(AreaAiNoticeKind.Sound, id, null) { Sound = sound });
 
     /// <summary>

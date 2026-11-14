@@ -82,9 +82,9 @@ public partial class TerrainViewerApp
         else _conversationHost = null;
         if (_conversationPanel is null)
         {
-            _conversationPanel = new AreaConversationPanel { NumberedSource = () => DialogRepliesNumbered }; AddChild(_conversationPanel);
-            _conversationPanel.NpcLineShown += ShowDialogLineBubble;
-            _conversationPanel.ReplyPicking += RemoveDialogLineBubble;
+            _conversationPanel = new AreaConversationPanel { NumberedSource = () => DialogRepliesNumbered, OriginalRowsSource = () => DialogReplyRowsDrift }; AddChild(_conversationPanel);
+            _conversationPanel.NpcLineShown += (text, persistent) => { FaceHeroFromSpeaker(); ShowDialogLineBubble(text, persistent); };
+            _conversationPanel.ReplyPicking += () => { FaceHeroTowardSpeaker(); RemoveDialogLineBubble(); };
             _conversationPanel.Picked += () => { if (_audio is not null) ExecuteVoice(DialogVoicePlayer.Picked()); };
             // Only the player's close resumes the dialog script; teardown, reset and map changes just close.
             _conversationPanel.CloseRequested += () => EndConversation(resume: true);
@@ -301,10 +301,13 @@ public partial class TerrainViewerApp
         if (start.Status == AreaConversationStartStatus.GenericGreeting)
         {
             _voiceStart = start; // smokes read the status; the voice acts only while a conversation is open
+            // ARC-UI-2029 (TB26): the greeting is a speech display with the hero as listener (0x5681C0): the NPC turns to it when idle.
+            if (start.GreetingLine is not null) AreaAiHostNow()?.FaceListener(AreaConversationState.EntityId(speaker.Row), Arcanum.Simulation.Ai.AiSchedulerRules.Pc);
             GD.Print($"ARC-DEV-324 generic greeting speaker={speaker.ScriptId} line={start.GreetingLine ?? "none"} detail={start.Detail}");
             RefreshReadyStatus();
             return;
         }
+        if (EndsAtStart(speaker, start, scripted: false)) { RefreshReadyStatus(); return; }
         if (replaceWindows && !ClearWindowsForProgrammaticOpen(InterfaceMode.Dialog, "talk goal dialog")) return;
         OpenConversation(speaker, start);
         GD.Print($"ARC-SCRIPT-005 conversation status={start.Status} detail={start.Detail} phase={start.Conversation?.Phase}");
@@ -348,6 +351,7 @@ public partial class TerrainViewerApp
         {
             start = new(AreaConversationStartStatus.EntryError, null, speaker, exception.GetType().Name);
         }
+        if (EndsAtStart(speaker, start, scripted: dialog.Point != Arcanum.Scripting.Scr.ScrPoint.Dialog)) { RefreshReadyStatus(); return; }
         if (!ClearWindowsForProgrammaticOpen(InterfaceMode.Dialog, "scripted dialog")) return;
         OpenConversation(speaker, start);
         // ARC-SCRIPT-047: a start at the dialog point (a heartbeat's call-ex) resumes the speaker's dialog slot on "return to script".
@@ -374,6 +378,38 @@ public partial class TerrainViewerApp
     // ARC-WORLD-118: set by a native smoke stage that observes scripted conversations (the wreck and opening stages); the others hold them.
     private bool _smokeTakesScriptedConversations;
 
+    /// <summary>
+    /// ARC-UI-2028 (ledger DF1, DF2): the NPC's last line is spoken as the dialog ends: its voice plays on (the voice of the node before stops first), and a dialog that ended at its start also floats the line as a bubble
+    /// (<paramref name="bubble"/>; a reply's answer line is floated by the panel, ARC-UI-2027, before the window closes). The dialog's own bubble owner is the speaker (<see cref="_conversationSpeaker"/>).
+    /// </summary>
+    private void SpeakFinalLine(DialogConversation conversation, bool bubble)
+    {
+        if (conversation.NpcLine is not { Text.Length: > 0 } line) return;
+        if (bubble) ShowDialogLineBubble(line.Text, persistent: false);
+        if (_audio is not null && _voiceStart is { } start && ReferenceEquals(start.Conversation, conversation))
+            foreach (var command in _dialogVoice.Update(conversation, conversation.Turn, start.VoiceIdentity(conversation.NpcLine))) ExecuteVoice(command);
+    }
+
+    /// <summary>
+    /// ARC-UI-2028: a dialog that starts on the NPC's last line (a refusal to talk, a script's start at a final node) opens no window (ledger DF2): the line is
+    /// said and the dialog is over at once, its consequences applied as any end applies them. True when it did; the caller opens nothing then.
+    /// </summary>
+    private int _finalLineStartsForSelfTest;
+
+    private bool EndsAtStart(AreaSpeaker speaker, AreaConversationStart start, bool scripted)
+    {
+        if (start.Conversation is not { } conversation || !AreaConversationText.EndsWithNpcLine(conversation)) return false;
+        _finalLineStartsForSelfTest++;
+        _conversationScripted = scripted;
+        _conversationParty = start.Party;
+        _conversationSpeaker = speaker;
+        _voiceStart = start;
+        SpeakFinalLine(conversation, bubble: true);
+        GD.Print($"ARC-UI-2028 dialog ended at its start end={conversation.End?.Kind} turns={conversation.Turn} effects={conversation.Effects.Count}");
+        FinishConversation(conversation, resume: true);
+        return true;
+    }
+
     private void OpenConversation(AreaSpeaker speaker, AreaConversationStart start)
     {
         if (!WindowCanOpen(InterfaceMode.Dialog)) return;
@@ -383,11 +419,35 @@ public partial class TerrainViewerApp
         _voiceStart = start;
         var title = $"Dialog NPC (script {speaker.ScriptId}, prototype {speaker.Row.PrototypeNumber})";
         var barsOn = InterfaceBarsOn;
+        // ARC-UI-2029 (TB26): the dialog start's tail (0x567460) stops the hero's runs and turns it to the NPC before the first line; the concealment of both ended already in the session's reaction start (before the turn, where the original unconceals after it: a concealed hero turns at goal 53's speed here, the original's level-5 unconceal snaps it, TB26 F2).
+        if (start.Status == AreaConversationStartStatus.Started) FaceHeroTowardSpeaker(interrupt: true);
         var shown = ShowConversationPanel(title, start.Conversation, start.Status == AreaConversationStartStatus.Started ? null : $"[{start.Status}: {start.Detail}]");
         // ARC-UI-1120 (HK25): the dialog start (0x567460, the single-player branch) describes the speaker for the hero (0x57CD60, 0x553BE0, 0x43C270) as the
         // world's hover does: the speaker's examine script runs, and its window follows unless the script answered skip default.
         // Only with the interface on (0x5578C0 answers 0).
         if (shown && barsOn && start.Status == AreaConversationStartStatus.Started) DescribeDialogSpeaker(speaker);
+    }
+
+    /// <summary>
+    /// ARC-UI-2029 (ledger TB26): the hero turns to the dialog's speaker: at the dialog start after the level-3 interrupt of its runs (<paramref name="interrupt"/>), and when its chosen reply is shown (the speech
+    /// display's turn of a living, idle speaker toward its listener). The turn is the rotate starter's (<see cref="FaceRequest"/>): refused for a hero that cannot act, one with a main run, or one that is not the current
+    /// participant of a round; nothing happens when it already faces the speaker.
+    /// </summary>
+    private void FaceHeroTowardSpeaker(bool interrupt = false)
+    {
+        if (_conversationSpeaker is not { } speaker || !SpeakerPresent(speaker) || ShownHeroRunsHost is not { } runs) return;
+        if (interrupt) runs.Interrupt(Arcanum.Simulation.Goals.GoalInterruptRules.OrdinaryActions, "DIALOG_START");
+        var (x, y) = SpeakerCell?.Invoke(speaker) ?? (speaker.WorldX, speaker.WorldY);
+        var result = HeroRequests.Apply(new FaceRequest(new(checked((int)x), checked((int)y))));
+        GD.Print($"ARC-UI-2029 hero faces the dialog speaker outcome={result.Outcome} rotation={result.Rotation?.ToString() ?? "-"} interrupt={interrupt}");
+    }
+
+    /// <summary>ARC-UI-2029 (ledger TB26): the NPC's dialog line is a speech display with the hero as listener: a living NPC that runs no animation of its own turns to the hero.</summary>
+    private void FaceHeroFromSpeaker()
+    {
+        if (DialogBubbleOwner() is not { } owner || AreaAiHostNow() is not { } ai) return;
+        var turned = ai.FaceListener(owner, Arcanum.Simulation.Ai.AiSchedulerRules.Pc);
+        GD.Print($"ARC-UI-2029 dialog speaker faces the hero turned={turned}");
     }
 
     /// <summary>ARC-UI-1120 (HK25): the examine of the dialog's speaker at the dialog start, once; the speaker's window is described again even when
@@ -413,6 +473,7 @@ public partial class TerrainViewerApp
             // ARC-UI-071 (B29): the panel's texts in the original's font art (null without a game folder: the viewer's font).
             _conversationPanel!.SetFonts(TextFonts());
             _conversationPanel.NumberedReplies = DialogRepliesNumbered;
+            _conversationPanel.OriginalReplyRows = DialogReplyRowsDrift;
             _conversationPanel.Open(title, conversation, note);
         }, () => _conversationPanel!.CloseView());
 
@@ -427,6 +488,14 @@ public partial class TerrainViewerApp
         var conversation = _conversationPanel.Conversation;
         GD.Print($"ARC-SCRIPT-005 conversation closed phase={conversation?.Phase} end={conversation?.End?.Kind} turns={conversation?.Turn} effects={conversation?.Effects.Count}");
         CloseWindowMode(InterfaceMode.Dialog);
+        // ARC-UI-2028: an end with the NPC's last line speaks its voice in the close itself (the panel floated the line, ledger DF1).
+        if (conversation is not null && AreaConversationText.EndsWithNpcLine(conversation)) SpeakFinalLine(conversation, bubble: false);
+        FinishConversation(conversation, resume);
+    }
+
+    /// <summary>The end of a conversation after its window is gone (or never opened): the reaction closes, the speaker's consequences are applied, a follow-up window or script opens.</summary>
+    private void FinishConversation(DialogConversation? conversation, bool resume)
+    {
         // ARC-WORLD-043: every exit closes the NPC's reaction conversation (the original's dialog end), before a resumed
         // script may start the next one; the NPC now remembers the PC.
         if (_conversationHost is { } talk && !talk.EndReaction() && talk.ReactionFailure != Arcanum.Session.GameSessionFailure.None)
@@ -473,7 +542,8 @@ public partial class TerrainViewerApp
                 resumed = new(AreaConversationStartStatus.EntryError, null, speaker, exception.GetType().Name);
             }
             GD.Print($"ARC-SCRIPT-009 script resumed line={line.Value} status={resumed.Status} detail={resumed.Detail}");
-            if (resumed.Status == AreaConversationStartStatus.Started) { OpenConversation(speaker, resumed); RefreshReadyStatus(); return; }
+            // ARC-UI-2028: a resumed script that lands on the NPC's last line ends at its start as well (no window).
+            if (resumed.Status == AreaConversationStartStatus.Started) { if (!EndsAtStart(speaker, resumed, scripted: false)) OpenConversation(speaker, resumed); RefreshReadyStatus(); return; }
             _conversationNotice = $"script continued: {resumed.Status}: {resumed.Detail}";
         }
         QuarantineWorld(); RefreshReadyStatus();
@@ -501,6 +571,9 @@ public partial class TerrainViewerApp
     }
 
     /// <summary>ARC-UI-2019: replies are numbered, and a digit chooses one, except under the Original interface setting (no session: Steamwoven).</summary>
+    /// <summary>ARC-UI-2025: the Original interface setting lays the replies out as the original's band and hits its rows with the original's click bands (no session: Steamwoven).</summary>
+    private bool DialogReplyRowsDrift => _areaSession?.Rules.Interface.DialogReplyRowsDrift == true;
+
     private bool DialogRepliesNumbered => _areaSession?.Rules.Interface.DialogRepliesUnnumbered != true;
 
     private void HandleConversationPulse(IntentFrame intent)

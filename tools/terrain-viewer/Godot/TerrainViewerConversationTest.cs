@@ -23,7 +23,7 @@ public static partial class TerrainViewerSelfTest
         "{11}{Thank you.}{}{1}{}{0}{LF 2 1}";
 
     // ARC-UI-2027: one reply whose action is a final line (FL 10): the dialog ends on the NPC's line of node 10.
-    private const string FinalLineDialog = "{1}{Hello.}{Hello.}{}{}{}{}{2}{Go on.}{}{1}{}{10}{FL 10}{10}{Fine.}{}{}{}{}{}";
+    internal const string FinalLineDialog = "{1}{Hello.}{Hello.}{}{}{}{}{2}{Go on.}{}{1}{}{10}{FL 10}{10}{Fine.}{}{}{}{}{}";
 
     // ARC-UI-2019: one reply to a closing line, for the digit-key check of the app routing.
     internal const string DigitDialog = "{1}{Hello.}{Hello.}{}{}{}{}{2}{Go on.}{}{1}{}{10}{}{10}{Fine.}{}{}{}{}{}";
@@ -68,13 +68,40 @@ public static partial class TerrainViewerSelfTest
             await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
             await ScreenshotAsync(host, "steamwoven-numbered");
             Require(panel.ButtonsForSelfTest[0].Text == "1. Why is it closed?", "Steamwoven draws the number again");
+            // ARC-UI-2025: under Original rows a blocked reply (row 2, y 40-59) and an empty slot (row 3) are refused by a press and change nothing.
+            panel.OriginalReplyRows = true;
+            await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+            await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+            var before = conversation.Turn;
+            Require(panel.BandInputForSelfTest(Press(new(10, 45))) && panel.BandInputForSelfTest(Press(new(10, 65))), "a press on the blocked reply or the empty slot is taken");
+            await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+            Require(conversation.Turn == before && conversation.Phase == DialogConversationPhase.AwaitingSelection, "the blocked reply and the empty slot choose nothing");
+            panel.OriginalReplyRows = false;
             Require(panel.ChooseByDigit(1), "a digit chooses the numbered reply");
             Require(conversation.CurrentNode.Value == 10 && panel.NpcLineForSelfTest.StartsWith("A bridge fell.") && panel.ButtonsForSelfTest.Count == 1, "Direct reply continues");
             Require(picks == 1 && lines.Count == 3 && lines[1] == "removed" && lines[2].StartsWith("P:A bridge fell."), $"a processed reply removes the bubble, then the answer is a new persistent one: {string.Join("|", lines)}");
             await ScreenshotAsync(host, "synthetic");
-            panel.Choose(1);
+            // ARC-UI-2025: a reply is chosen on the press, in both settings (Steamwoven: the button; Original: the band, y / 20, empty slots refused).
+            Require(panel.ButtonsForSelfTest.All(button => button.ActionMode == BaseButton.ActionModeEnum.Press) && panel.LeaveForSelfTest.ActionMode == BaseButton.ActionModeEnum.Press,
+                "the reply buttons act on the press");
+            panel.OriginalReplyRows = true;
+            await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+            await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+            var button0 = panel.ButtonsForSelfTest[0];
+            Require(panel.BandWidthForSelfTest > 0 && Math.Abs(button0.Position.Y - 3) < .5f && Math.Abs(button0.Size.Y - 16) < .5f, $"Original: the first row is 16 px tall 3 px down ({button0.Position.Y}, {button0.Size.Y})");
+            var node = conversation.CurrentNode.Value;
+            Require(!panel.BandInputForSelfTest(Press(new(-3, 5))) && !panel.BandInputForSelfTest(Press(new(10, 100))), "a press outside the band is not taken");
+            Require(panel.BandInputForSelfTest(Press(new(10, 25))) && conversation.CurrentNode.Value == node, "an empty slot is refused");
+            Require(!panel.BandInputForSelfTest(Release(new(10, 2))) && conversation.CurrentNode.Value == node, "the band takes no release (the reply buttons act on the press, not the release)");
+            panel.BandInputForSelfTest(new InputEventMouseMotion { Position = new(10, 5) });
+            Require(panel.RowLitForSelfTest(0), "the pointer on the first row's drawn pixels lights it");
+            panel.BandInputForSelfTest(new InputEventMouseMotion { Position = new(10, 20) });
+            Require(!panel.RowLitForSelfTest(0), "moving off the row (into the gap below) unlights it");
+            Require(panel.BandInputForSelfTest(Press(new(10, 2))), "a press above the first row's drawn top is still in its click band");
+            await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
             Require(picks == 2 && lines.Count == 4 && lines[3] == "removed", $"the ending reply removes the bubble and shows no new persistent one: {string.Join("|", lines)}");
             Require(conversation.Phase == DialogConversationPhase.Ended && panel.OutcomeForSelfTest.Contains("SCR line 5") && panel.ButtonsForSelfTest.Count == 0, "Exit returns to the caller's next SCR line");
+            panel.OriginalReplyRows = false;
             Require(state.LocalFlag(0, 2) && session.QueryQuest(1003)?.State == Arcanum.Session.SessionQuestState.Mentioned && session.QueryRumor(1001) is not null,
                 "typed effects reached the session");
             panel.Choose(1);
@@ -101,10 +128,25 @@ public static partial class TerrainViewerSelfTest
                 }
                 finally { finalPanel.QueueFree(); }
             }
+            // ARC-UI-2028: a reply that leads to the NPC's final line closes the window at once (the host floats the line); no finished panel stays to be dismissed.
+            var finalConversation = DialogConversation.Start(DlgReader.Read(Encoding.Latin1.GetBytes(FinalLineDialog)),
+                new DialogConversationRequest(new DialogNodeId(1),
+                    new DialogParticipants(new DialogId(5), AreaConversationState.PcParticipant, AreaConversationState.Npc(0)),
+                    new DialogScriptLine(4), AreaConversationProfile.Diagnostic.Pc, AreaConversationProfile.Diagnostic.Names),
+                new DialogConversationPorts(state, state, session.Flags, state));
+            panel.Open("Synthetic NPC", finalConversation);
+            await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+            var closedBefore = closed;
+            panel.Choose(1);
+            Require(finalConversation.End?.Kind == DialogEndKind.NpcFinalLine && AreaConversationText.EndsWithNpcLine(finalConversation) && finalConversation.NpcLine?.Text == "Fine." && closed == closedBefore + 1 && !panel.IsOpen,
+                "the final line ends the dialog and closes the window at once");
             GD.Print("ARC-SCRIPT-005 self-test PASS synthetic conversation panel; original runtime parity NOT_VERIFIED");
         }
         finally { panel.QueueFree(); }
     }
+
+    private static InputEventMouseButton Press(Vector2 at) => new() { ButtonIndex = MouseButton.Left, Pressed = true, Position = at };
+    private static InputEventMouseButton Release(Vector2 at) => new() { ButtonIndex = MouseButton.Left, Pressed = false, Position = at };
 
     /// <summary>ARC-UI-071 (B29): the synthetic flow with the original's text fonts (synthetic glyphs): every text, the replies' and Leave's too,
     /// is drawn as art text broken at the panel's content width, the buttons take their art text's height, a reply still works, and taking
@@ -315,6 +357,24 @@ public partial class TerrainViewerApp
                 Press(Key.Key1);
                 TerrainViewerSelfTest.Require(digitDialog.CurrentNode.Value == 10, "the digit key 1 chose the first reply");
                 CloseWindowMode(InterfaceMode.Dialog);
+            }
+            // ARC-UI-2028: the reply that leads to a final line closes the window in the same call and floats the line over the speaker as a timed bubble.
+            {
+                using var finalSession = ConversationSessionFixture.Create();
+                var state = new AreaConversationState(finalSession, new(1), ["oid:synthetic-0"], 50);
+                var finalDialog = DialogConversation.Start(DlgReader.Read(System.Text.Encoding.Latin1.GetBytes(TerrainViewerSelfTest.FinalLineDialog)),
+                    new DialogConversationRequest(new DialogNodeId(1),
+                        new DialogParticipants(new DialogId(5), AreaConversationState.PcParticipant, AreaConversationState.Npc(0)),
+                        new DialogScriptLine(4), AreaConversationProfile.Diagnostic.Pc, AreaConversationProfile.Diagnostic.Names),
+                    new DialogConversationPorts(state, state, finalSession.Flags, state));
+                ShowConversationPanel("Final line test", finalDialog, null);
+                _conversationSpeaker = _selfTestStandInSpeaker;
+                var speakerKey = AreaConversationState.EntityId(_selfTestStandInSpeaker!.Row);
+                Press(Key.Key1);
+                var bubble = _floaters?.Bubbles.Of(speakerKey);
+                TerrainViewerSelfTest.Require(finalDialog.End?.Kind == DialogEndKind.NpcFinalLine && !ConversationOpen && !WorldModal && bubble is { Text: "Fine.", Persistent: false },
+                    $"the final line closed the window at once and floats as a timed bubble (open={ConversationOpen} bubble={bubble?.Text})");
+                _floaters?.Bubbles.Clear();
             }
         }
         finally { _worldFocusSimulationForSelfTest = simulatedFocus; _selfTestStandInSpeaker = null; }

@@ -19,6 +19,34 @@ public partial class TerrainViewerApp
 
     private bool _talkSmokeGateEnded;
 
+    private bool _finalLineCaptured;
+
+    /// <summary>
+    /// ARC-UI-2028: when ARC_AREA_DIALOG_CAPTURE names a folder, one dialog's end is saved twice as PNG for the graphics report (never committed): after.png is the game view with the line floating over the NPC and
+    /// no window; before.png is the old picture, the ended conversation shown in the panel (the NPC line, the end note and Close) over the same view. A dialog that really ended on its last line is captured as it is;
+    /// without one on the map (they are rare) <paramref name="said"/> is a synthetic line floated over the last speaker and the panel shows <paramref name="note"/>. Nothing is judged and nothing is written without the variable.
+    /// </summary>
+    private async Task CaptureFinalLineAsync(AreaSpeaker speaker, DialogConversation conversation, string? said = null, string? note = null)
+    {
+        if (_finalLineCaptured || System.Environment.GetEnvironmentVariable("ARC_AREA_DIALOG_CAPTURE") is not { Length: > 0 } folder) return;
+        _finalLineCaptured = true;
+        Directory.CreateDirectory(folder);
+        var owner = AreaConversationState.EntityId(speaker.Row);
+        if (said is not null) Bubble(owner, said);
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+        GetViewport().GetTexture().GetImage().SavePng(System.IO.Path.Combine(folder, "after.png"));
+        _floaters?.Bubbles.Remove(owner); _floaters?.Redraw();
+        ShowConversationPanel($"Dialog NPC (script {speaker.ScriptId}, prototype {speaker.Row.PrototypeNumber})", conversation, note);
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+        GetViewport().GetTexture().GetImage().SavePng(System.IO.Path.Combine(folder, "before.png"));
+        CloseWindowMode(InterfaceMode.Dialog);
+        if (said is not null) Bubble(owner, said);
+        GD.Print($"ARC-UI-2028 final line capture saved in {folder} script={speaker.ScriptId} synthetic={said is not null}");
+    }
+
     private async Task RunAreaTalkSmokeAsync()
     {
         if (_conversationHost is not { } host || _areaSession is not { } session || _readyArea is not { } area || _worldActor.Session is not AreaGridSession grid)
@@ -40,6 +68,7 @@ public partial class TerrainViewerApp
         var simulatedFocus = _worldFocusSimulationForSelfTest; var focused = _worldFocused; var testTime = _worldTestTime;
         _worldFocusSimulationForSelfTest = true;
         var tried = new List<object>(); object? passed = null, started = null; var opens = 0;
+        (AreaSpeaker Speaker, DialogConversation Conversation)? lastTalk = null;
         try
         {
             _worldFocused = true; SelectSimulatedPadForSelfTest();
@@ -73,10 +102,13 @@ public partial class TerrainViewerApp
                     revision = session.Version.Revision;
                     _voiceStart = null;
                     _talkSmokeExaminesBefore = _dialogExaminesForSelfTest; _talkSmokeBarsOn = InterfaceBarsOn;
+                    var finalLineStarts = _finalLineStartsForSelfTest;
                     AreaSmokeClick(pixel);
                     // ARC-DEV-324: a speaker whose dialog point ran default shows the generic greeting (a floating line) and opens no window; that is no dialog to check here.
-                    for (frames = 0; frames < 600 && !ConversationOpen && _voiceStart is null; frames++) AreaSmokeTalkFrame();
+                    for (frames = 0; frames < 600 && !ConversationOpen && _voiceStart is null && _finalLineStartsForSelfTest == finalLineStarts; frames++) AreaSmokeTalkFrame();
                     if (ConversationOpen) { opened = true; walked = from is not null; break; }
+                    // ARC-UI-2028: a dialog that starts on the NPC's last line floats it and opens no window.
+                    if (_finalLineStartsForSelfTest != finalLineStarts) { walkStopped = "the dialog starts on the NPC's last line: it floats, no window"; break; }
                     if (_voiceStart is { Status: AreaConversationStartStatus.GenericGreeting }) { walkStopped = "the dialog point ran default: the generic greeting floats, no window"; break; }
                     Require(from is not null, $"script {speaker.ScriptId}: a click within reach opened the conversation ({_conversationNotice})");
                     walkStopped = _conversationNotice ?? "the walk did not open it";
@@ -141,13 +173,20 @@ public partial class TerrainViewerApp
                 while (conversation is { Phase: DialogConversationPhase.AwaitingSelection } && conversation.Turn < 32)
                 {
                     CountPhrases();
-                    var option = conversation.Options.FirstOrDefault(o => o.Block is null);
+                    // ARC-UI-2028: a reply that leads to the NPC's last line is taken when offered, so the real data exercises the close-at-once path.
+                    var option = conversation.Options.FirstOrDefault(o => o.Block is null && o.Transition == DialogOptionTransition.FinalLine) ?? conversation.Options.FirstOrDefault(o => o.Block is null);
                     if (option is null) break;
                     _conversationPanel.Choose(option.Number); turns++;
                     TickDialogVoice();
                     await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
                     if (!ReferenceEquals(_conversationPanel.Conversation, conversation)) break;
                     RequireLineBubble("after a reply");
+                }
+                // ARC-UI-2028: a reply that led to the NPC's last line closed the window in the same call and floated the line over the NPC.
+                if (conversation is { End.Kind: DialogEndKind.NpcFinalLine } && !string.IsNullOrWhiteSpace(conversation.NpcLine?.Text))
+                {
+                    Require(!ConversationOpen && _floaters?.Bubbles.Of(AreaConversationState.EntityId(speaker.Row)) is { Persistent: false }, $"script {speaker.ScriptId}: the last line floats as a timed bubble and the window is gone");
+                    await CaptureFinalLineAsync(speaker, conversation);
                 }
                 var effects = conversation?.Effects.Count ?? 0; var phase = conversation?.Phase.ToString();
                 // A conversation that started awaiting a reply had its line checked at least once; one still awaiting at the close ends with its line's bubble no longer persistent (the default life from the end).
@@ -183,9 +222,12 @@ public partial class TerrainViewerApp
                 var record = new { speaker.ScriptId, Prototype = speaker.Row.PrototypeNumber, Walked = walked, WalkStopped = walkStopped, Hover = hover.ToString(), Frames = frames,
                     Status = status, Offered = offered, Phase = phase, Frontier = conversation?.Frontier is { } f ? $"{f.Kind} {f.Source}" : null, Turns = turns, Phrases = phrases, Effects = effects, SessionChanges = session.Version.Revision - revision, MetBefore = metBefore, Voice = voice, VoicesPlayed = _voicesPlayed - played };
                 tried.Add(record); opens++;
-                if (offered) { passed = record; break; }
+                if (conversation is not null) lastTalk = (speaker, conversation);
+                // A capture run goes on to the next speaker until one has ended on its last line.
+                if (offered) { passed ??= record; if (_finalLineCaptured || System.Environment.GetEnvironmentVariable("ARC_AREA_DIALOG_CAPTURE") is not { Length: > 0 }) break; }
                 started ??= conversation is not null ? record : null;
             }
+            if (!_finalLineCaptured && lastTalk is { } last) await CaptureFinalLineAsync(last.Speaker, last.Conversation, "Farewell, traveler.", "[dialog ended with the NPC's final line]");
             var verdict = passed is not null ? "PASS" : started is not null ? "FRONTIER" : opens > 0 ? "NOT-STARTED" : "NO-REACHABLE-SPEAKER";
             GD.Print($"ARC-WORLD-032 native-smoke talk {verdict} " + System.Text.Json.JsonSerializer.Serialize(new {
                 Map = _readyMapName, Speakers = host.Speakers.Count, Tried = tried, Parity = "NOT_VERIFIED" }));
