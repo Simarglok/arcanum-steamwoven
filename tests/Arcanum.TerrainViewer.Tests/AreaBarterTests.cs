@@ -85,6 +85,33 @@ public sealed class AreaBarterTests
         Assert.AreEqual((true, 295, 805), (free.Moved, session.QueryGold(), session.QueryNpcGold("merchant")));
     }
 
+    // ARC-UI-1926 (0x575200 on a location of 1000 and up, 0x462230): the merchant's worn items are not wares; the doll view's buy takes them, at no price below Master haggle.
+    [TestMethod]
+    public void A_worn_item_of_the_merchant_is_quoted_with_no_price_and_not_bought_below_master_haggle()
+    {
+        using var session = Session();
+        var barter = Barter(session, Data(), []);
+        var view = barter.View();
+        var vest = view.WornWares.Single();
+        Assert.AreEqual(("vest", 0, TradeRefusal.Worn), (vest.Entity, vest.Quote.Price, vest.Quote.Refusal));
+        CollectionAssert.DoesNotContain(view.Wares.Select(line => line.Entity).ToArray(), "vest", "the diagnostic wares leave worn items out");
+        var refused = barter.Buy("vest");
+        Assert.AreEqual((false, 1000, 100, "won't sell (Worn)"), (refused.Moved, session.QueryGold(), session.QueryNpcGold("merchant"), refused.Text));
+        Assert.AreEqual("vest", barter.View().WornWares.Single().Entity, "still worn");
+    }
+
+    [TestMethod]
+    public void A_followers_worn_item_is_taken_for_nothing_and_leaves_its_slot()
+    {
+        using var session = Session();
+        var barter = Barter(session, Data(), [], follower: true);
+        var taken = barter.Buy("vest");
+        Assert.IsTrue(taken.Moved, taken.Text);
+        Assert.AreEqual((1000, 100), (session.QueryGold(), session.QueryNpcGold("merchant")), "no coins change hands");
+        Assert.AreEqual(0, barter.View().WornWares.Count, "it left the slot");
+        CollectionAssert.Contains(barter.View().Hero.Select(line => line.Entity).ToArray(), "vest");
+    }
+
     [TestMethod]
     public void A_sale_pays_at_most_the_merchants_coins()
     {
