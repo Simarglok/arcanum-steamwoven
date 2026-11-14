@@ -556,6 +556,15 @@ Source: FR-UI-005 (dialog reply choice). Read on 2026-11-14 in the exports of th
 
 The conversation panel is a generic diagnostic surface, not the band: reply buttons chosen on the press since ARC-UI-2025 (a Godot button used to act on the release), each button its own hit area. Under the Original setting the reply stack takes the band's geometry (five 16 px rows every 19 px, 3 px down, 100 px tall, no wrapping) and resolves a press and a hover with `DialogReplyBand` (rows y / 20, empty slot and the release refused, hover lit as DH5). What is still not the band: its 400 px centred width, widened to the longest line, and the translucent look (the stack is the panel's width, so a press far right of the text hits a row and a reply wider than the panel is clipped, issue #2022), the removal of the diagnostic chrome (#2023). The keyboard or controller focus lights a row only after it was moved (the original has none). The Steamwoven press rule (`clickBandsDrift: false`) is for a host that draws the band; the panel's Steamwoven setting hits its buttons. The auto-repeat refusal of DH1 is not modelled: a Godot press is one event.
 
+### The dialog's last line (ARC-UI-2028)
+
+| # | Subject | Fact | Level |
+|---|---|---|---|
+| DF1 | reply to a final line (0x567E30 state 4) | After the reply's actions the old bubble of the node before goes (0x4EF630 → 0x4D62B0), the voice of that node stops (0x5689B0), the NPC line is spoken through 0x568540 (NPC colour 0, life -1: the default Text Duration life from now, its speech id as voice) and the dialog ends in the same call (0x5678D0 pops the dialog mode). No further window frame, no Close button. A single-player PC says nothing for the picked reply (0x5686C0 makes a bubble only for a non-local PC). | F1 |
+| DF2 | dialog start on state 4 (0x567460) | The refusal line (state 4 set by 0x412FD0 when the NPC will not talk, F2 for that meaning) is spoken by 0x568540 with life -1 and its voice; no window opens (0x553320 is not reached) and 0x5678D0 is not called; only 0x413280 (the NPC remembers the PC) and 0x412F40 (the dialog file reference) run. | F1 |
+| DF3 | every close | Esc, the exit replies, the final line and 0x568830 all end through 0x5678D0, which does nothing the second time (its active word is cleared first); it also gives the NPC's bubble the default life (0x4D6160, -1). The insult and refusal last lines have no close path of their own: they arrive as state 4 (F2). | F1 |
+| DF4 | viewer | A reply that ends the talk with the NPC's last line (final line, last words after an insult, refusal to talk on) floats that line as a bubble over the NPC with the default life and its voice and closes the window in the same call; a dialog that starts on such a line opens no window and ends as any end does (the reaction closes, the NPC remembers the PC). Not modelled: the NPC's turn toward the PC in the speech display (0x568540). | Built |
+
 ## Panel art (ARC-UI-024)
 
 Source: FR-UI-002, the in-game panel's art after the interface bars (GB1–GB7) and the life bars (CH7–CH9): how the PC's

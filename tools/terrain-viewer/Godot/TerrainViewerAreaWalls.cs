@@ -46,6 +46,9 @@ public partial class TerrainViewerApp
         var state = check.State;
         if (state.Fades.Count == 0) throw new InvalidOperationException("AREA_WALL_FADE_EMPTY");
         var zoom = _camera!.State.Zoom; _hud!.Visible = false;
+        // ARC-DEV-2005: the controller prompt strip (a bottom overlay on its own layer) follows the device in hand after a hysteresis on the host's clock, so under machine load it
+        // showed or went away between the three captures (a 300x24 block of unstable pixels): the compare is of the world's walls only.
+        EnsurePromptStrip(); var promptLayer = _promptLayer!; var promptShown = promptLayer.Visible; promptLayer.Visible = false;
         try
         {
             _camera.ResetWorld(WorldAnchor, WorldViewport, 2);
@@ -58,6 +61,7 @@ public partial class TerrainViewerApp
             var transform = AreaDrawItem.RasterTransform(GetViewport());
             var walls = _canvas.AreaVisibleCommands.Where(command => command.Identity is { } key && state.Fades.ContainsKey(key)).ToArray();
             int changed = 0, outside = 0, unstable = 0;
+            int unstableMinX = int.MaxValue, unstableMinY = int.MaxValue, unstableMaxX = -1, unstableMaxY = -1;
             if (faded.GetFormat() != opaque.GetFormat() || faded.GetSize() != opaque.GetSize() || faded.GetSize() != again.GetSize())
                 throw new InvalidOperationException("AREA_WALL_CAPTURE_FORMAT");
             byte[] a = faded.GetData(), b = opaque.GetData(), c = again.GetData();
@@ -65,13 +69,18 @@ public partial class TerrainViewerApp
             for (var pixel = 0; pixel < a.Length / stride; pixel++)
             {
                 var at = pixel * stride;
-                if (!a.AsSpan(at, stride).SequenceEqual(c.AsSpan(at, stride))) unstable++;
+                if (!a.AsSpan(at, stride).SequenceEqual(c.AsSpan(at, stride)))
+                {
+                    unstable++;
+                    unstableMinX = Math.Min(unstableMinX, pixel % width); unstableMaxX = Math.Max(unstableMaxX, pixel % width);
+                    unstableMinY = Math.Min(unstableMinY, pixel / width); unstableMaxY = Math.Max(unstableMaxY, pixel / width);
+                }
                 if (a.AsSpan(at, stride).SequenceEqual(b.AsSpan(at, stride))) continue;
                 changed++;
                 if (!walls.Any(command => AreaAlphaAt(command, _readyArea!.Frames, transform, pixel % width, pixel / width) != 0)) outside++;
             }
             if (walls.Length == 0 || changed == 0 || outside != 0 || unstable != 0)
-                throw new InvalidOperationException($"AREA_WALL_FADE_NOT_OBSERVED visible={walls.Length} changed={changed} outside={outside} unstable={unstable}");
+                throw new InvalidOperationException($"AREA_WALL_FADE_NOT_OBSERVED visible={walls.Length} changed={changed} outside={outside} unstable={unstable} unstable-box={(unstable == 0 ? "-" : $"{unstableMinX},{unstableMinY}-{unstableMaxX},{unstableMaxY}")} view={width}x{faded.GetHeight()}");
             // ARC-UI-005: a faded wall is see-through for the pick (original OWAF_TRANS_LEFT/RIGHT); drawn opaque it is picked.
             var wallKeys = state.Fades.Keys.ToHashSet();
             var wallPixels = new List<Vector2>();
@@ -92,7 +101,7 @@ public partial class TerrainViewerApp
                 Block = new[] { state.BlockX, state.BlockY }, Regions = state.Regions.ToString(), Faded = state.Fades.Count,
                 VisibleFaded = walls.Length, ChangedPixels = changed, state.SharedEdgeTiles, Parity = "NOT_VERIFIED" }));
         }
-        finally { _hud.Visible = true; _camera.ResetWorld(WorldAnchor, WorldViewport, zoom); }
+        finally { _hud.Visible = true; promptLayer.Visible = promptShown; _camera.ResetWorld(WorldAnchor, WorldViewport, zoom); }
     }
     private async Task WallFrames()
     {
