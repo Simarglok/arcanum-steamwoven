@@ -298,7 +298,7 @@ public partial class TerrainViewerApp
         // ARC-DEV-394: a stage run earlier in the process can leave the world's test time set (RestoreWorldTestTime keeps it at the session's time), and then ProcessWorld does not run in a
         // native smoke, so the frame never reaches ProcessAreaAi, which hands the session's created critters to the AI host (SyncCreatedCritters). The frames of this stage ask for the host
         // themselves, which is that same sync, so the stage does not depend on what ran before it.
-        // ARC-DEV-1919: these frames only ask for the host (the creation sync); no frame here touches the view or plans a route, so the sector chart is never asked for more and there is nothing to wait for.
+        // ARC-DEV-1919: these frames only ask for the host (the creation sync); no frame here touches the view or steps the host's runs, so no route is planned and nothing waits on the chart (a host build or rebind asks the chart once, but nothing here plans a route).
         async Task Settle(int frames = 3)
         {
             for (var i = 0; i < frames; i++) { await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame); AreaAiHostNow(); SyncAreaInventory(); }
