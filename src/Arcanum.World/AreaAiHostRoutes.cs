@@ -205,7 +205,7 @@ public sealed partial class AreaAiHost
     public string ScriptProne(string npc)
     {
         if (!Walks(npc)) return "not an NPC of this host";
-        var (_, succeeded) = InterruptOwner(npc, ScriptProneLevel);
+        var (_, succeeded, _) = InterruptOwner(npc, ScriptProneLevel);
         if (!succeeded) return "refused by a run of the NPC";
         var last = Math.Max((Clip(npc, DyingAnimationRules.FallDown)?.Frames ?? 1) - 1, 0);
         ShowArt(npc, DyingAnimationRules.FallDown, last);

@@ -165,7 +165,7 @@ public partial class TerrainViewerApp
                 _gameBarSoundsForSelfTest.Clear();
                 var clockAt = panel.ClockCentreForSelfTest;
                 await Move(clockAt);
-                Require(_gameBar.Hovered == AreaBarButton.Clock && panel.HoverTextForSelfTest == "", "the pointer over the clock writes no name");
+                Require(_gameBar.Hovered == AreaBarButton.Clock && panel.HoverTextForSelfTest == "", $"the pointer over the clock writes no name: hovered {_gameBar.Hovered}, text '{panel.HoverTextForSelfTest}'");
                 var clockBefore = clockSession.QueryClockSnapshot();
                 await Button(clockAt, true);
                 Require(_gameBar.Held == AreaBarButton.Clock && ClockLineForSelfTest is null, "a press on the clock writes nothing yet");

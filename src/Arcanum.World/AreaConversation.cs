@@ -541,6 +541,19 @@ public sealed class AreaConversationHost
     public string? PickClassLine(AreaSpeaker speaker, int group) =>
         SayLine(speaker, (greeting, query) => DialogFollowerComment.SayClass(greeting, query, group, Profile.Names, DialogTextEncoding.Windows1252, DialogConversationOptions.HardMaxTextBytes));
 
+    /// <summary>
+    /// ARC-UI-2085: the speaker's race line of <paramref name="group"/> (the curse order's insult is group 1000, the builder 0x413D40 over the race generator), its own override line first (<see cref="DialogFollowerComment.SayRace"/>),
+    /// floated over the speaker toward <paramref name="listener"/> as <see cref="SayFollowerLine"/> floats a range. Returns the line said, or null when nothing was said (a speaker this host does not hold, texts that did not load,
+    /// a refused roll). The can-speak test is the caller's.
+    /// </summary>
+    [OriginalFunction(0x413D40, OriginalFunctionScope.Partial)]
+    public string? SayRaceLine(AreaSpeaker speaker, int group, string? listener = AreaScriptHost.PcCode)
+    {
+        var text = SayLine(speaker, (greeting, query) => DialogFollowerComment.SayRace(greeting, query, group, Profile.Names, DialogTextEncoding.Windows1252, DialogConversationOptions.HardMaxTextBytes));
+        if (text is not null) Scripts.Float(Scripts.Object(speaker), text, listener is null ? null : Scripts.Entity(listener));
+        return text;
+    }
+
     private string? SayLine(AreaSpeaker speaker, Func<AreaGreeting, DialogReactionQuery, DialogGenericGreetingResult> say)
     {
         ArgumentNullException.ThrowIfNull(speaker);

@@ -8,7 +8,7 @@ namespace Arcanum.TerrainViewer;
 // ARC-COMBAT-1777 (Follower Skills slice 2, ledger OH4, PL5, SP3; the chooser 0x4C9050): with the "follower skills" option on (default on), the hero's lockpick use on a door, window or container (0x571CB0; left Ctrl skips it) and the skill bar's
 // Disarm Traps press (0x57A620; either Ctrl key skips it) let the follower with the strictly best effectiveness minus difficulty (the hero scored first, ties keep it) do the job instead, and a hand-over line (4700..4799 of its dialog override or of the
 // gender pair's file) floats over the follower. The lock pick is the follower's own skill goal (it walks within range 1 and picks with its own lockpicks if it holds any, AreaAiHost.StartPickLocks); the disarm is made at once from where it stands.
-// NOT READY: the original's list recurses into followers of followers; the viewer cannot tell the left Ctrl key from the right one; the follower's critical-success device lands in the hero's pack; witnesses are #1860.
+// NOT READY: the original's list recurses into followers of followers; the viewer cannot tell the left Ctrl key from the right one; the follower's critical-success device lands in the hero's pack; the lock pick's witnesses are ARC-AI-2084's, the others #1860.
 public partial class TerrainViewerApp
 {
     /// <summary>Self-test seam: the Ctrl state the chooser reads instead of the keyboard (null: the keyboard).</summary>

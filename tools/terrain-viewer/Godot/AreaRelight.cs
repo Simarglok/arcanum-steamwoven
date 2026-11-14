@@ -77,6 +77,14 @@ internal static class AreaRelight
     /// <summary>The shown view in world pixels (the area canvas sets it with each submission).</summary>
     internal static void SetView(Rect2 world) => _view = world;
 
+    /// <summary>ARC-RENDER-2064: the light's disk (centre, radius) meets the shown view rectangle (true when no view is known): the cheap test before a wisp's life is asked.</summary>
+    internal static bool ReachesView(Light l)
+    {
+        if (_view is not { } view) return true;
+        var nx = Math.Clamp(l.X, view.Position.X, view.End.X); var ny = Math.Clamp(l.Y, view.Position.Y, view.End.Y);
+        return (l.X - nx) * (l.X - nx) + (l.Y - ny) * (l.Y - ny) < l.Radius * l.Radius;
+    }
+
     private static float FloatFromEnvironment(string name, float fallback) =>
         float.TryParse(OS.GetEnvironment(name), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var value) ? value : fallback;
 
@@ -132,12 +140,7 @@ internal static class AreaRelight
         if (_view is { } view)
         {
             centre = view.GetCenter();
-            reach = reach.Where(l =>
-            {
-                // The light's disk (centre, radius) meets the view rectangle.
-                var nx = Math.Clamp(l.X, view.Position.X, view.End.X); var ny = Math.Clamp(l.Y, view.Position.Y, view.End.Y);
-                return (l.X - nx) * (l.X - nx) + (l.Y - ny) * (l.Y - ny) < l.Radius * l.Radius;
-            }).ToArray();
+            reach = reach.Where(ReachesView).ToArray();
         }
         InViewCount = reach.Length;
         CarriedInViewCount = reach.Count(l => CarriedLights.Contains(l));

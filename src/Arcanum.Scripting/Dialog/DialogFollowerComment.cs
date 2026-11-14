@@ -37,6 +37,20 @@ public static class DialogFollowerComment
         return Said(outcome, null);
     }
 
+    /// <summary>
+    /// ARC-UI-2085: the NPC's race line of <paramref name="group"/> (the curse order's insult is group 1000), as the race generator reads it: the speaker's own override line 10999 + group / 1000 first,
+    /// else a pick of the race file by the speaker's and the PC's races. No price is printed into it. The can-speak test is the caller's.
+    /// </summary>
+    public static DialogGenericGreetingResult SayRace(IDialogGreetingPort port, DialogReactionQuery query, int group, DialogSpeakerNames names, DialogTextEncoding encoding, int maxTextBytes)
+    {
+        ArgumentNullException.ThrowIfNull(port);
+        if (port.Facts(query) is not { } facts) return new(DialogGenericGreetingStatus.FactsUnknown);
+        GreetingOutcome outcome;
+        try { outcome = DialogGreeting.NpcRaceGroup(group, facts, port.Sources(query), port, names, encoding, maxTextBytes); }
+        catch (DialogGreeting.InvalidGreetingRoll) { return new(DialogGenericGreetingStatus.Failed); }
+        return Said(outcome, null);
+    }
+
     private static DialogGenericGreetingResult Said(GreetingOutcome outcome, int? price)
     {
         if (outcome.Kind == GreetingOutcomeKind.Failed) return new(DialogGenericGreetingStatus.Failed);

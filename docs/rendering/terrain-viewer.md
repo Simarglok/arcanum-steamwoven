@@ -278,7 +278,7 @@ ARC-UI-2022 (ledger DH11–DH14): under the Original setting the reply stack sit
 (a row's text plus 13 px that is wider widens it by that and re-centres it; the press x-bound is the band's width), centred, its top at 299 in a 400 px view else the view height minus 181, the view being the part the bars leave free (the original's iso window), so the band lies above the bottom bar. The strip darkens what is under it by a subtract blend of (18, 18, 18), as the original's fill (a saturating subtract, not an alpha mix). Rows
 are white, the hovered row yellow (the original's two fonts of art 229), each with a drop shadow one pixel right and down in (10, 10, 10); the text is broken at the box width minus 12 and only the first line fits the
 16 px row; a word wider than the row draws nothing. The diagnostic chrome (header, outcome, effects, hint, Leave) is hidden under the Original setting by ARC-UI-2023; the framed panel then holds nothing and is not drawn, so the band alone is on screen (with the chrome shown, as in Steamwoven or for a message-only panel, the panel stands above the band). The self-test covers the rectangle,
-the shade, the colours, the shadow and the press bound.
+the shade, the colours, the shadow and the press bound. ARC-UI-2083 (DH13, DH15): the `wreck` smoke stage, on the installed font art, lays out a reply of 388 px (the widest line the original's break at 388 allows) after and before short replies and requires the band 401 px wide and centred, not shrinking within the set and back at 400 for the next set, and checks as a sanity test that the reply stack holds at most the band's five slots (the source builder keeps five, DH15; its cap is covered by the Scripting tests).
 
 ## Integrated world diagnostic policy
 

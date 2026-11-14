@@ -137,6 +137,13 @@ that is the owner's call (HD variant). Whether they move cannot be seen yet: the
 the colour a wisp-like light would have) and walks towards a cell eight away; Legacy draws that light too, so the comparison is fair. The relit look follows it frame by frame; the pool on the stones and the
 hero's own highlights move with the light (two frames cannot show flicker; the check on real walk-cycle frames is still [#2000](https://github.com/Simarglok/arcanum-steamwoven/issues/2000)).
 
+**Wisps (ARC-RENDER-2064).** By look there is one wisp species: art species 24 (`art/monster/wow/wowuwxaa.art`, 8 facings of 16 frames at 12 fps, a 40×40 px soft disc with a white-hot core and a slow pulse), in four palettes,
+one prototype each: 28471 "Love Lights" (violet, disc tone 9957D3), 28472 "Will-o-the-Wisp" (amber B09949, the only one whose peak is not pure white), 28473 "Volar's Wisp" (cyan 57D3D3), 28474 "Death Lantern" (red E53B3A).
+The range 28310..28471 of the monster file ends at the violet one; the other three are the next numbers (loose prototype files). Places (all NPC placements, none in the static sector data): 28471, 11 on the main map,
+in the sectors (503,975), (504,974), (504,975), (504,977), (505,975), (505,976), east of Ashbury; 28472, 6, and 28474, 3, all in sector (1695,1317); 28473, 5, in (1551,758) and (1695,1316..1317); the Vormantown module's
+multiplayer map holds 28472 ×7 and 28474 ×3. No wisp stands on an interior or dungeon map of the Arcanum module. No other creature looks like an orb of light (the air elemental is a dark cloud, the Araya a jellyfish with
+tentacles). Created critters (summons, script action 52) are not scanned. With the relit look the four kinds now glow in their own tone (the area lighting document, "Wisp glow"); the open choice was the owner's: only in HD, Legacy unchanged.
+
 **Numbers** (the owner's Mac, 1280×800, vsync off, mean of 90 frames, one run each; noise about a millisecond):
 
 | City | Legacy | Relit night 0.6 | Relit add 0.6 | Lights in view (with the hero's torch) |
@@ -164,7 +171,7 @@ whatever `ARC_RELIGHT_STRENGTH` says.
 
 **Updated recommendation.** Unchanged in kind (conditional go for a bounded night-and-indoor option, no-go for daylight and for de-light as built), with two additions: the night weighted
 mode at about 1.2 to 1.6 is the one to tune, and the cost in a city is about 2 ms (to be checked on the Deck), so the option should be a switchable profile, not a default. Open: whether
-the wisps should be emitters in an HD variant (the owner's call), and the AI-host-less city windows ([#2036](https://github.com/Simarglok/arcanum-steamwoven/issues/2036)).
+the wisps' glow (done, ARC-RENDER-2064), and the AI-host-less city windows ([#2036](https://github.com/Simarglok/arcanum-steamwoven/issues/2036)).
 
 ## Verdict
 
@@ -213,7 +220,7 @@ The night cities (ARC-RES-2007; PNGs named by `ARC_RELIGHT_CITY`):
 
 Full-frame night shots for the owner (ARC-RES-2050): add `--env ARC_RELIGHT_SHOTS=1` (and optionally `--env ARC_RELIGHT_HOURS=20,23,3`) to the city commands. The stage then skips the walk and
 the timing and captures up to three spots at least 700 px apart (each with at least four lit lights within 350 px) at every hour, in Legacy, night 1.0 and night 1.6
-(`<city>-shot-<spot>-h<hour>-<variant>.png`, 1280×800). `ARC_RELIGHT_AT=x,y;x,y` (world tiles) stands near those tiles instead (the nearest standable cell within 2, 5 or 9 cells, else the window's start; spots `at1`, `at2`, ...; the window must still hold lit lights; the wisps were found in the window centred on sector 505,975 with `32340,62389;32379,62519`). In the first runs the ambient colour changed only slightly between the night hours 20, 23 and 3, so the hours differ less than the spots.
+(`<city>-shot-<spot>-h<hour>-<variant>.png`, 1280×800). `ARC_RELIGHT_AT=x,y;x,y` (world tiles) stands near those tiles instead (the nearest standable cell within 2, 5 or 9 cells, else the window's start; spots `at1`, `at2`, ...; the window must still hold lit lights, except under `ARC_RELIGHT_WISP_SHOTS=1`; the wisps were found in the window centred on sector 505,975 with `32340,62389;32379,62519`). ARC-RENDER-2064: `--env ARC_RELIGHT_WISP_SHOTS=1` (with the shots mode and `ARC_RELIGHT_AT`) captures per spot Legacy with the wisp glow on and off, the relit look without and with the glow, and logs the pixel differences (Legacy on/off must be 0), the wisp lights in reach and the lights uploaded; it needs no lit light in the window (the amber and cyan wisps were captured in the window centred on sector 1694,1317 with `108500,84300;108515,84320`, the violet ones as above). In the first runs the ambient colour changed only slightly between the night hours 20, 23 and 3, so the hours differ less than the spots.
 
 The PNGs under `ARC_RELIGHT_CAPTURE` are derived from the player's art: keep them outside git. The lab:
 `experiments/relight-lab/README.md`.

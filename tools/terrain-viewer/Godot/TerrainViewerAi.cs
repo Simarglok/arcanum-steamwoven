@@ -218,6 +218,7 @@ public partial class TerrainViewerApp
             // ARC-WORLD-114: the NPCs' first-heartbeat and heartbeat scripts (the Crash Site's unchosen pre-made heroes die by theirs).
             Heartbeat = AiHeartbeat,
             CatchingThief = AiCatchingThief,
+            GuardCatchingThief = AiGuardCatchingThief,
             // ARC-DEV-258 (MIG13 S14n): an NPC's thrown grenade flies as a projectile.
             LaunchThrown = AiLaunchThrown,
             // ARC-DEV-282: an NPC's arrow or bullet flies as a projectile and strikes through the AI host.
@@ -881,11 +882,13 @@ public partial class TerrainViewerApp
                     GD.Print($"ARC-WORLD-109 ai-skill npc={notice.Npc} skill={notice.Skill} target={notice.Target} disposition={notice.Heal?.Disposition.ToString() ?? "none"}"
                         + $" failure={notice.Heal?.Failure} success={notice.Heal?.Check?.Success} hp={notice.Heal?.Heal?.HitPoints} uses={notice.Heal?.UsesLeft}");
                     if (notice.Heal is { Disposition: GameSessionDisposition.Changed }) AiSpellTook();
-                    // ARC-COMBAT-1776: an NPC's pick of a lock (the session's answer); witnesses and the hand-over line are not built.
+                    // ARC-COMBAT-1776: an NPC's pick of a lock (the session's answer); the hand-over line is not built (the witnesses are ARC-AI-2084).
                     if (notice.PickLock is { } pick)
                     {
                         _aiNotice = $"{AiName(notice.Npc)} picks a lock: {(pick.Disposition == GameSessionDisposition.Rejected ? $"refused ({pick.Failure})" : pick.Outcome!.Value.Result.ToString())}";
                         GD.Print($"ARC-COMBAT-1776 ai-pick-lock npc={notice.Npc} target={notice.Target} disposition={pick.Disposition} failure={pick.Failure} success={pick.Check?.Success} result={pick.Outcome?.Result} locked={pick.State?.Locked}");
+                        // ARC-AI-2084 (PL6, 0x4C7160): the guards near the lock see or hear a follower's pick; silent, mode 0 for the opened lock, mode 1 for a failed attempt.
+                        if (notice.Target is { } pickTarget) WitnessesOfNpcLockPick(notice.Npc, pickTarget, pick);
                     }
                     break;
                 case AreaAiNoticeKind.Throw:
