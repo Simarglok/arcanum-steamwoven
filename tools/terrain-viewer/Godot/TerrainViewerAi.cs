@@ -1,6 +1,7 @@
 using Arcanum.Data.Area;
 using Arcanum.Session;
 using Arcanum.Simulation.Ai;
+using Arcanum.Simulation.ChangeOfPlace;
 using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Movement;
 using Arcanum.TerrainViewer.Core;
@@ -60,6 +61,16 @@ public partial class TerrainViewerApp
         if (_homecomingQueue is { } held && ReferenceEquals(held.Session, session) && held.Map == map) return held.Queue;
         var queue = new List<(string, int, CellCoord)>();
         _homecomingQueue = (session, map, queue);
+        return queue;
+    }
+
+    // ARC-WORLD-1837: likewise the script teleports waiting for the slot.
+    private (GameSessionOwner Session, int Map, List<(string Npc, int Map, CellCoord Cell, ChangeOfPlaceFlags Flags, int Seconds)> Queue)? _scriptTeleportQueue;
+    private List<(string Npc, int Map, CellCoord Cell, ChangeOfPlaceFlags Flags, int Seconds)> ScriptTeleportQueue(GameSessionOwner session, int map)
+    {
+        if (_scriptTeleportQueue is { } held && ReferenceEquals(held.Session, session) && held.Map == map) return held.Queue;
+        var queue = new List<(string, int, CellCoord, ChangeOfPlaceFlags, int)>();
+        _scriptTeleportQueue = (session, map, queue);
         return queue;
     }
 
@@ -233,6 +244,7 @@ public partial class TerrainViewerApp
             // ARC-DEV-116 (MIG11 S5): the maps an NPC's change of place can name.
             MapListed = MapListedNow,
             Homecomings = HomecomingQueue(session, mapNumber),
+            ScriptTeleports = ScriptTeleportQueue(session, mapNumber),
             // ARC-WORLD-1162 (SWB17–SWB21): the shown map's beds and who lies in them, the hero's rest's occupancy too.
             Beds = new AreaAiBeds(_bedOccupancy, PlacedBeds),
             // ARC-AI-1313: the dark wander compares the light of a candidate tile with the NPC's own (the light-aware checks' sampler).

@@ -307,7 +307,15 @@ public partial class TerrainViewerApp
             CanSee: (observer, target) => AreaAiHostNow()?.ScriptCanSee(observer, target),
             CanHear: (listener, source) => AreaAiHostNow()?.ScriptCanHear(listener, source),
             // ARC-SCRIPT-1735 (E5-a tail, NS5): a script's change art number writes the new art id only when an ART file of the module's content names it.
-            ArtExists: aid => ExtraArt()?.Exists(aid) == true);
+            ArtExists: aid => ExtraArt()?.Exists(aid) == true,
+            // ARC-WORLD-1837 (TT20): a script's teleport of an NPC alone to a cell of the shown map is a request in the session's one slot; the AI host's relocation carries it out at the next ping (PingNpcChangeOfPlace).
+            NpcTeleportRefusal: teleport => AreaAiHostNow() is { } ai ? ai.ScriptTeleportRefusal(teleport.Object.Code, new(teleport.X, teleport.Y)) : "no AI host",
+            RequestNpcTeleport: teleport =>
+            {
+                if (AreaAiHostNow() is not { } ai) return;
+                var (flags, seconds) = AreaChangeOfPlace.Flags(teleport.Fade);
+                GD.Print($"ARC-WORLD-1837 script-teleport npc={teleport.Object.Code} to={teleport.X},{teleport.Y} request={ai.RequestScriptTeleport(teleport.Object.Code, new(teleport.X, teleport.Y), flags, seconds)}");
+            });
 
         var inventory = _inventoryHost;
         var host = new AreaUseScriptHost(owner, snapshot.RuntimeMap, snapshot.Objects, inventory?.Maps ?? [], content, world)

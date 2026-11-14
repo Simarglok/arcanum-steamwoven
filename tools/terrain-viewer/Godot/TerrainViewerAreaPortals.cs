@@ -192,7 +192,7 @@ public partial class TerrainViewerApp
 
     /// <summary>ARC-WORLD-1668 (TT18): the door's use script (point 1) through the object entry point (<see cref="AreaUseScriptHost.RunUseScript"/>: the opener as the triggerer and the extra object; the trap meeting was asked before), its effects applied as a
     /// use's are (awards, floats, creations, the printed lines to the message window). ARC-WORLD-1805 (TT20): the hero's run takes a teleport of the hero (the installed doors that teleport do so unconditionally and answer "run default"): the script only records the request
-    /// (0x447220 case 0x2C → 0x4D3380), so the transfer is queued here and the door opens as the answer says; it is applied at the frame's next safe point. An NPC's or a companion's teleport is not modelled (the run is then not applied and the use goes on), and so is a
+    /// (0x447220 case 0x2C → 0x4D3380), so the transfer is queued here and the door opens as the answer says; it is applied at the frame's next safe point. ARC-WORLD-1837: a free NPC opener's teleport of itself to a cell of the shown map is a request in the session's slot (the use host's NPC hooks, carried out at the ping); a follower's, another map's and a mixed run's is not modelled (the run is then not applied and the use goes on), and so is a
     /// conversation a door's script asks for (no installed door or window use script starts one, census of ARC-WORLD-1805). True when the answer is "skip default" (<see cref="AreaUseScriptHost.UseStops"/>).</summary>
     private bool DoorUseScriptStops(AreaLoadResult area, AreaObjectRecord row, Arcanum.Scripting.Scr.ScrObjectRef opener, bool hero = false)
     {

@@ -88,6 +88,8 @@ public sealed class AreaTrapsTests
             Write("scr/00700plain.scr", Program(0, skip));
             Write("scr/00710port.scr", TeleportProgram(5076, 5, 6, ScrCatalogue.Action.ReturnRunDefault));
             Write("scr/00711port.scr", TeleportProgram(5076, 5, 6, skip));
+            Write("scr/00712port.scr", TeleportProgram(5000, 5, 6, ScrCatalogue.Action.ReturnRunDefault));
+            Write("scr/00713port.scr", TeleportProgram(5000, 5, 6, skip));
             using var content = ScriptContent.Open(ContentMountPlan.Discover(root.FullName, "Syn").Plan!).Content!;
             test(content);
         }
@@ -288,6 +290,54 @@ public sealed class AreaTrapsTests
             var other = host.RunUseScript(AreaUseScriptHost.EntityId(skipping), npc, npc, session.Rules.Scripts, _ => null);
             Assert.AreEqual(AreaScriptedUseOutcome.EffectsRejected, other.Outcome, other.Detail);
             Assert.IsFalse(AreaUseScriptHost.UseStops(other), "an unapplied run stops nothing");
+        });
+    }
+
+    // ARC-WORLD-1837 (ledger TT20): the NPC side of the same request: the opener's own teleport (the triggerer) to a cell of the shown map is recorded after the run applied, the door goes on as the script's answer says.
+    [TestMethod]
+    public void A_doors_use_script_teleport_of_an_npc_opener_is_a_request_recorded_after_the_run_applied()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.CreateWithHero();
+            const int NpcRowType = 16;
+            var runDefault = Row(1, 1, 712);
+            var skipping = Row(2, 1, 713);
+            var elsewhere = Row(3, 1, 710);   // catalogue 5076: another map
+            var npcRow = Row(4, NpcRowType, 0, x: 30);
+            var npc = new ScrObjectRef(1, AreaUseScriptHost.EntityId(npcRow));
+            var log = new List<string>();
+            string? refusal = null;
+            var world = new AreaScriptWorld(() => null, _ => false, _ => null, () => null,
+                NpcTeleportRefusal: t => { log.Add($"check {t.Object.Code}"); return refusal; },
+                RequestNpcTeleport: t => log.Add($"request {t.Object.Code} {t.X},{t.Y}"));
+            var host = new AreaUseScriptHost(session, 1, [runDefault, skipping, elsewhere, npcRow], [], content, world);
+
+            var opens = host.RunUseScript(AreaUseScriptHost.EntityId(runDefault), npc, npc, session.Rules.Scripts);
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, opens.Outcome, opens.Detail);
+            Assert.AreEqual(npc, opens.NpcTeleports.Single().Object);
+            CollectionAssert.AreEqual(new[] { $"check {npc.Code}", $"request {npc.Code} 5,6" }, log, "asked first, recorded after the run applied");
+            Assert.IsFalse(AreaUseScriptHost.UseStops(opens), "run default: the door opens, the NPC moves at the next ping");
+            var shut = host.RunUseScript(AreaUseScriptHost.EntityId(skipping), npc, npc, session.Rules.Scripts);
+            Assert.IsTrue(AreaUseScriptHost.UseStops(shut), "skip default keeps the door shut, the request standing");
+            Assert.AreEqual(4, log.Count);
+
+            // A refusal of the host leaves the run unapplied (the door opens as before), nothing recorded.
+            log.Clear(); refusal = "target not held";
+            var refused = host.RunUseScript(AreaUseScriptHost.EntityId(runDefault), npc, npc, session.Rules.Scripts);
+            Assert.AreEqual(AreaScriptedUseOutcome.EffectsRejected, refused.Outcome, refused.Detail);
+            Assert.IsFalse(AreaUseScriptHost.UseStops(refused));
+            CollectionAssert.AreEqual(new[] { $"check {npc.Code}" }, log);
+
+            // Another map, an opener that is no NPC row of the shown map, and the hero's own teleport (the caller's, not the NPC hooks') stay as before.
+            log.Clear(); refusal = null;
+            Assert.AreEqual(AreaScriptedUseOutcome.EffectsRejected, host.RunUseScript(AreaUseScriptHost.EntityId(elsewhere), npc, npc, session.Rules.Scripts).Outcome);
+            var stranger = new ScrObjectRef(1, "oid:thug");
+            Assert.AreEqual(AreaScriptedUseOutcome.EffectsRejected, host.RunUseScript(AreaUseScriptHost.EntityId(runDefault), stranger, stranger, session.Rules.Scripts).Outcome);
+            var pc = host.Pc;
+            var hero = host.RunUseScript(AreaUseScriptHost.EntityId(runDefault), pc, pc, session.Rules.Scripts, _ => null);
+            Assert.AreEqual(AreaScriptedUseOutcome.Teleport, hero.Outcome, hero.Detail);
+            Assert.AreEqual(0, log.Count, "no NPC hook ran for these");
         });
     }
 

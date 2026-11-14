@@ -6,6 +6,7 @@ using Arcanum.Data.Traversal;
 using Arcanum.Session;
 using Arcanum.Simulation;
 using Arcanum.Simulation.Ai;
+using Arcanum.Simulation.ChangeOfPlace;
 using Arcanum.Simulation.Character;
 using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Equipment;
@@ -80,6 +81,8 @@ public sealed record AreaAiScene
     /// <summary>ARC-DEV-116: the requests of NPCs waiting for the session's slot (Steamwoven). The viewer owns the list, so a rebuilt host (a companion
     /// joined or went home, a reload of the area) goes on with the requests the earlier host held; null: the host keeps its own.</summary>
     public List<(string Npc, int Map, CellCoord Cell)>? Homecomings { get; init; }
+    /// <summary>ARC-WORLD-1837: the same for the script teleports of NPCs waiting for the session's slot (Steamwoven), with the request's flags and clock seconds; null: the host keeps its own.</summary>
+    public List<(string Npc, int Map, CellCoord Cell, ChangeOfPlaceFlags Flags, int Seconds)>? ScriptTeleports { get; init; }
     /// <summary>The companions standing here: their session entity, the T0 record they were made from (a visitor's is a row of its home map) and
     /// the world cells they hold now (their live overlay). ARC-DEV-075: the entity is given, never read back from the key on the shown map.</summary>
     public Func<IReadOnlyList<(string Entity, AreaObjectKey Key, CellCoord Cell)>>? Companions { get; init; }
