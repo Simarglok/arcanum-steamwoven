@@ -97,37 +97,75 @@ public partial class TerrainViewerApp
         layer.Redraw();
     }
 
-    // ARC-SCRIPT-050: the float lines (23) of the dialog scripts the viewer ran, over their speakers. The original hands them to the dialog
-    // interface's float callback (0x568430 → its speech display 0x568540), which is not modelled; here they are the floater field's white lines.
+    // ARC-SCRIPT-050, ARC-UI-1997: the float lines (23) of the dialog scripts the viewer ran, over their speakers. The original hands them to the dialog
+    // interface's float callback (0x568430 → its speech display 0x568540), which makes a text bubble over the speaker (0x4D5FE0, ledger TB19): white for
+    // anyone, green for a PC, living the "text duration" setting. The same queue carries the lines of tile scripts, of the followers' comments and of a
+    // greeting that opens no window.
     private int _scriptFloats;
 
     // ARC-DEV-298 (B20): the float lines of tile scripts (owner, text), queued when the run was applied.
     private readonly Queue<(string Owner, string Text)> _tileScriptFloats = new();
+
+    /// <summary>The bubble clock: the real one (the original's timeGetTime), or the smoke's own.</summary>
+    private long BubbleNowMs() => _floaterClockForSelfTest ? BubbleClockForSelfTest : (long)Time.GetTicksMsec();
+
+    internal long BubbleClockForSelfTest { get; set; }
+
+    /// <summary>ARC-UI-1997: a text bubble over <paramref name="owner"/> (the speech display makes one): the owner's old bubble is replaced; true when it was made.</summary>
+    private bool Bubble(string owner, string text, bool dialogLine = false, bool persistent = false)
+    {
+        if (_readyMode != TerrainViewerMode.Area || _readyArea is null || string.IsNullOrWhiteSpace(text)) return false;
+        var layer = FloaterLayer();
+        DropFloatersOfOldScene(layer);
+        if (FloaterCell(owner) is { } cell) _floaterCells[owner] = cell;
+        layer.Bubbles.SetTextDuration(_gameSettings.TextDuration);
+        layer.AddBubble(owner, text, owner == HeroFloater ? BubbleColor.Green : BubbleColor.White, BubbleNowMs());
+        if (persistent) layer.Bubbles.SetLife(owner, TextBubbleRules.Persistent, BubbleNowMs());
+        if (!dialogLine) _scriptFloats++;
+        return true;
+    }
+
+    /// <summary>The open dialog's speaker as a bubble owner (its entity id), or null.</summary>
+    private string? DialogBubbleOwner() => _conversationSpeaker is { } speaker ? AreaConversationState.EntityId(speaker.Row) : null;
+
+    /// <summary>
+    /// ARC-UI-2027 (ledger TB23): the NPC's line in an open dialog is a persistent bubble over the NPC (life −2: it
+    /// does not age while the window is open); the window lists only the PC's options. The speaker's old bubble is replaced. A dialog that no longer awaits a reply (its final line) shows the line with the default life.
+    /// </summary>
+    private void ShowDialogLineBubble(string text, bool persistent)
+    {
+        if (DialogBubbleOwner() is not { } owner) return;
+        // The reply's own float lines (a script's float over the speaker) ran before the answer is shown: they go first, so the answer's bubble is the one that stays.
+        TickScriptFloats();
+        if (!Bubble(owner, text, dialogLine: true, persistent: persistent)) return;
+        GD.Print($"ARC-UI-2027 dialog line bubble owner={owner} persistent={persistent} text={text}");
+    }
+
+    /// <summary>ARC-UI-2027 (ledger TB24): a processed reply removes the speaker's bubble before the answer shows.</summary>
+    private void RemoveDialogLineBubble()
+    {
+        if (DialogBubbleOwner() is { } owner && _floaters is { } layer && layer.Bubbles.Remove(owner)) layer.Redraw();
+    }
+
+    /// <summary>ARC-UI-2027 (ledger TB25): the dialog's end gives the speaker's bubble its default life from now (it was persistent).</summary>
+    private void ExpireDialogLineBubble(AreaSpeaker? speaker)
+    {
+        if (speaker is null || _floaters is not { } layer) return;
+        layer.Bubbles.SetLife(AreaConversationState.EntityId(speaker.Row), TextBubbleRules.DefaultLife, BubbleNowMs());
+    }
 
     private void TickScriptFloats()
     {
         while (_tileScriptFloats.Count > 0)
         {
             var (tileOwner, tileText) = _tileScriptFloats.Dequeue();
-            if (_readyMode != TerrainViewerMode.Area || _readyArea is null) continue;
-            var tileLayer = FloaterLayer();
-            DropFloatersOfOldScene(tileLayer);
-            if (FloaterCell(tileOwner) is { } tileCell) _floaterCells[tileOwner] = tileCell;
-            if (tileLayer.Field.Add(tileOwner, tileText, FloaterColor.White)) _scriptFloats++;
-            GD.Print($"ARC-DEV-298 float owner={tileOwner} floated={_scriptFloats} text={tileText}");
-            tileLayer.Redraw();
+            if (Bubble(tileOwner, tileText)) GD.Print($"ARC-DEV-298 float owner={tileOwner} floated={_scriptFloats} text={tileText}");
         }
         if (_conversationHost?.Scripts is not { } scripts) return;
         foreach (var line in scripts.TakeFloats())
         {
-            if (_readyMode != TerrainViewerMode.Area || _readyArea is null) continue;
             var owner = line.Speaker == scripts.Pc ? HeroFloater : line.Speaker.Code;
-            var layer = FloaterLayer();
-            DropFloatersOfOldScene(layer);
-            if (FloaterCell(owner) is { } cell) _floaterCells[owner] = cell;
-            if (layer.Field.Add(owner, line.Text, FloaterColor.White)) _scriptFloats++;
-            GD.Print($"ARC-SCRIPT-050 float owner={owner} floated={_scriptFloats} text={line.Text}");
-            layer.Redraw();
+            if (Bubble(owner, line.Text)) GD.Print($"ARC-SCRIPT-050 float owner={owner} floated={_scriptFloats} text={line.Text}");
         }
     }
 
@@ -135,7 +173,7 @@ public partial class TerrainViewerApp
     {
         if (_floaters is { } layer) return layer;
         // ARC-DEV-156 (B28): the lines in the original's font art 229 when it read (the viewer's font without a game folder).
-        _floaters = new AreaFloaterLayer(TextFonts()?.Text) { Anchor = FloaterAnchor };
+        _floaters = new AreaFloaterLayer(TextFonts()?.Text) { Anchor = FloaterAnchor, BubbleAnchor = BubbleAnchorOf, BubbleView = () => new Rect2(Vector2.Zero, GetViewport().GetVisibleRect().Size) };
         AddChild(_floaters);
         // First among the app's children: on its layer it draws under the diagnostic HUD.
         MoveChild(_floaters, 0);
@@ -147,7 +185,7 @@ public partial class TerrainViewerApp
     private void DropFloatersOfOldScene(AreaFloaterLayer layer)
     {
         if (ReferenceEquals(_floaterScene, _readyArea)) return;
-        layer.Field.Clear(); _floaterCells.Clear(); _floaterScene = _readyArea; layer.Redraw();
+        layer.Field.Clear(); layer.Bubbles.Clear(); _floaterCells.Clear(); _floaterScene = _readyArea; layer.Redraw();
     }
 
     /// <summary>
@@ -189,6 +227,11 @@ public partial class TerrainViewerApp
         if (_floaters is not { } layer) return;
         DropFloatersOfOldScene(layer);
         layer.Level = _gameSettings.Floats;
+        // ARC-UI-1997: the Text Duration line changes the live bubbles' life at once, then the real clock ages them.
+        if (layer.Bubbles.TextDuration != _gameSettings.TextDuration) layer.Bubbles.SetTextDuration(_gameSettings.TextDuration);
+        // An expired last bubble needs one more draw, to be wiped from the surface.
+        var expired = layer.Bubbles.Tick(BubbleNowMs());
+        if (expired || layer.Bubbles.Count > 0) layer.Redraw();
         if (layer.Field.Count == 0) return;
         if (!_floaterClockForSelfTest) layer.Field.Advance((long)Time.GetTicksMsec(), _gameSettings.FloatSpeed);
         layer.Redraw();
@@ -213,12 +256,17 @@ public partial class TerrainViewerApp
     }
 
     /// <summary>The screen point 90 px (at the view's zoom) above an owner's tile centre, the floater box's bottom centre.</summary>
-    private Vector2? FloaterAnchor(string owner)
+    private Vector2? FloaterAnchor(string owner) => ObjectScreenPoint(owner, FloaterRules.BoxRise);
+
+    /// <summary>ARC-UI-1997: a bubble's anchor, the owner's tile centre on the screen with the original's (40, 20), without the draw offset.</summary>
+    private Vector2? BubbleAnchorOf(string owner) => ObjectScreenPoint(owner, 0);
+
+    private Vector2? ObjectScreenPoint(string owner, int rise)
     {
         if (_canvas is null || _readyArea is not { } area || _readyMode != TerrainViewerMode.Area || FloaterCell(owner) is not { } cell) return null;
         var chart = area.Plan.Chart;
         var projected = TerrainGeometry.Project(checked((int)(cell.X - chart.OriginX)), checked((int)(cell.Y - chart.OriginY)));
-        return _canvas.GetGlobalTransformWithCanvas() * new Vector2(projected.X + 40, projected.Y + 20 - FloaterRules.BoxRise);
+        return _canvas.GetGlobalTransformWithCanvas() * new Vector2(projected.X + TextBubbleRules.AnchorX, projected.Y + TextBubbleRules.AnchorY - rise);
     }
 
     internal AreaFloaterLayer? FloatersForSelfTest => _floaters;

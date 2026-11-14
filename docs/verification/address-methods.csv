@@ -263,6 +263,7 @@ src/Arcanum.Session/SessionSpellCasterDisarm.cs,DropWeapon,exempt,host
 src/Arcanum.Session/SessionSpellCasterEffects.cs,AttackEnd,exempt,host
 src/Arcanum.Session/SessionSpellCasterEffects.cs,CacheReAimedKind,pending,
 src/Arcanum.Session/SessionSpellCasterEffects.cs,DamageEffect,exempt,host
+src/Arcanum.Session/SessionSpellCasterEffects.cs,PoisonTickHit,exempt,host
 src/Arcanum.Session/SessionSpellCasterEffects.cs,RunProvidingFlag,exempt,host
 src/Arcanum.Session/SessionSpellCasterEffects.cs,SpellDamageHit,exempt,host
 src/Arcanum.Session/SessionSpellCasterEffects.cs,TrapDamageHit,exempt,host
@@ -873,6 +874,7 @@ tools/terrain-viewer/Godot/TerrainViewerAreaWorldMap.cs,MarkTownMapByScenery,pen
 tools/terrain-viewer/Godot/TerrainViewerAreaWorldMap.cs,WorldMapTravelCheck,pending,
 tools/terrain-viewer/Godot/TerrainViewerAttack.cs,AttackApproachCell,pending,
 tools/terrain-viewer/Godot/TerrainViewerAttack.cs,HeroAttackRepeats,pending,
+tools/terrain-viewer/Godot/TerrainViewerAttack.cs,HeroWeaponPrototype,exempt,reference
 tools/terrain-viewer/Godot/TerrainViewerAttack.cs,InAttackReach,pending,
 tools/terrain-viewer/Godot/TerrainViewerAttack.cs,TraceLineOfFire,pending,
 tools/terrain-viewer/Godot/TerrainViewerAudioCues.cs,PlayDyingBark,pending,
@@ -952,6 +954,7 @@ tools/terrain-viewer/Godot/TerrainViewerProjectiles.cs,RunShotEndScripts,exempt,
 tools/terrain-viewer/Godot/TerrainViewerProjectiles.cs,Strike,pending,
 tools/terrain-viewer/Godot/TerrainViewerProjectiles.cs,TurnBack,pending,
 tools/terrain-viewer/Godot/TerrainViewerSceneryAnimation.cs,AddOccupiedBeds,exempt,host
+tools/terrain-viewer/Godot/TerrainViewerScriptEyeCandy.cs,StopScriptEyeCandy,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerSkillBar.cs,RouteSkillKey,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerSkillBar.cs,SkillBarDrag,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerSkillBar.cs,SkillBarEntered,exempt,host
@@ -1000,3 +1003,4 @@ tools/terrain-viewer/Godot/TerrainViewerTrapDevices.cs,PlaceTrapDeviceUse,pendin
 tools/terrain-viewer/Godot/TerrainViewerTraps.cs,HeroStepGate,pending,
 tools/terrain-viewer/Godot/TerrainViewerTurnBased.cs,ProcessTurnBasedRound,pending,
 tools/terrain-viewer/Godot/TerrainViewerWeaponArtSmoke.cs,RunAreaWeaponArtStageAsync,exempt,reference
+tools/terrain-viewer/Godot/TerrainViewerWeaponHitSmoke.cs,RunAreaWeaponHitStageAsync,exempt,reference

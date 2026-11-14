@@ -114,6 +114,9 @@ public sealed class AreaLocalLighting
     /// <summary>The critters' carried lights of this view (0 for none).</summary>
     public int CarriedLightCount => _carried?.Source.Lights.Count ?? 0;
 
+    /// <summary>ARC-RES-1978 (presentation experiment): the carried lights with their chart screen rectangles, read only (empty for none).</summary>
+    public IReadOnlyList<(StationaryLight Light, TerrainRect Rect)> CarriedPlacements => _carried?.Placements ?? [];
+
     /// <summary>ARC-DEV-335: the carried lights alone as a terrain lattice over the carried lights' rectangles (null without any); the
     /// terrain draws it next to the sector lights' lattice.</summary>
     public StationaryLightLattice? CarriedLattice(AmbientPair pair) => _carried?.Lattice(pair);
@@ -228,6 +231,9 @@ public sealed class AreaLocalLighting
         ArgumentNullException.ThrowIfNull(command); ArgumentNullException.ThrowIfNull(visual);
         if (command.Identity is null) throw new ArgumentException("A body command is required.", nameof(command));
         if (artChannel == AreaAmbientChannel.Unlit) return AreaLitColors.Neutral;
+        // ARC-RENDER-1831: a body whose cell has no core tile in this lighting (a ground or companion body outside the loaded window while the
+        // view sweeps) is lit by nothing here: the plain ambient of its art channel, the same colour as a body drawn without a lighting.
+        if (!HasTile(command.MapX, command.MapY)) { var plain = Ambient(artChannel, pair); return new(plain, plain); }
         if (visual.RawArt >> 28 == 1) return Wall(command, visual, pair, lit);
         var color = lit ? Point(command.MapX, command.MapY, visual.ObjectOffsetX, visual.ObjectOffsetY, pair)
             : Ambient(TileChannel(command.MapX, command.MapY), pair);
@@ -253,7 +259,8 @@ public sealed class AreaLocalLighting
     {
         ArgumentNullException.ThrowIfNull(command); ArgumentNullException.ThrowIfNull(visual);
         if (_carried is null) return basis;
-        if (visual.RawArt >> 28 == 1) return Wall(command, visual, pair, true, basis);
+        // ARC-RENDER-1831: a wall whose cell has no core tile in this lighting keeps the colour it has (Wall reads the tile's channel).
+        if (visual.RawArt >> 28 == 1) return HasTile(command.MapX, command.MapY) ? Wall(command, visual, pair, true, basis) : basis;
         var tile = TileScreen(command.MapX, command.MapY);
         var color = Sample(checked(tile.X + visual.ObjectOffsetX + 40L), checked(tile.Y + visual.ObjectOffsetY + 20L), basis.Left, pair, null, true);
         return new(color, color);

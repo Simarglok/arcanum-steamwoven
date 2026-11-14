@@ -610,11 +610,11 @@ Picking it runs the reply's action (the hostile check too), then:
 | Payment | the PC's own gold must cover the price (else the notice 2000); the effect budget is checked before it; the gold goes to the NPC through the gold port, then the effect runs |
 | Effect | `HealerSkillCommand` (the heal skill 10, flag `NoPcLeader`, which the AREA host passes to the skill starter as the start flag 0x2000; no skill goal reads it, so it changes no run, ledger HLR10) or `HealerSpellCommand` (the spell, `Free` when no PC leads the NPC) through the healer port, recorded as an effect; `Rejected` fails the conversation (`CommandRejected`); then the NPC's line 15000 and the PC's class line 1000 as the only way on, which follows the reply's own transition |
 
-The AREA host passes the port when the viewer gives it the shown map's AI host (`AreaConversationHost.HealerHost`) and the speaker is an NPC that host runs, the module's skill texts have loaded
+The AREA host passes the port when the viewer gives it the shown map's AI host (`AreaConversationHost.HealerHost`) and the speaker is an NPC or a companion that host runs (ARC-SCRIPT-1996: a follower is in the host's follower list, not its NPC list), the module's skill texts have loaded
 and the session has a hero; the spell names come from the viewer's loaded spell data (`SpellName`). The port (`AreaConversationHost.HealerPort`) reads the facts from `AreaAiHost.HealerFacts`
 (the NPC's college rank from the host's spell facts, the heal tool and test the AI heal already uses, its heal skill's level and tier, its leaders) and starts the effects through
 `AreaAiHost.HealerService` (the skill starter's goal 33 on the hero) and `AreaAiHost.HealerCast` (the script cast entry with the NPC as the caster). Tests: `DialogHealerTests` (synthetic),
-`AreaAiSkillTests`, `AreaHealerCastTests` (the cast host) and `AreaHealerConversationTests` (the host side), the smoke stage `healer-talk` (`./arcanum smoke pr --stages healer-talk`, Crash Site, ARC-SCRIPT-1790) and the opt-in `DialogHealerRealDataTests` (`DAT_ROOT`: the census of the 52 installed `h:` replies in 15 files, the lines the talk
+`AreaAiSkillTests`, `AreaAiFollowerTests` (a companion's facts, service and spell), `AreaHealerCastTests` (the cast host) and `AreaHealerConversationTests` (the host side), the smoke stage `healer-talk` (`./arcanum smoke pr --stages healer-talk`, Crash Site, ARC-SCRIPT-1790) and the opt-in `DialogHealerRealDataTests` (`DAT_ROOT`: the census of the 52 installed `h:` replies in 15 files, the lines the talk
 reads and an installed healer's talk to the spell).
 
 ## Directions reply (ARC-SCRIPT-1533)
@@ -737,7 +737,7 @@ cancels it (like the cave walk-to-use). The cave map has no dialog NPC. Replies 
 the source (its dialog text control reads only mouse messages, F0); the controller menu navigates, confirms and
 cancels. Keyboard keys are not redirected to dialog actions: the WORLD keyboard route keeps
 them reserved for their original actions ([palette and keyboard route](../input/diagnostic-palette.md)),
-so `T`, digits, `Esc` and `Enter` do nothing in the dialog. A diagnostic **Leave** button
+so `T`, digits, `Esc` and `Enter` do nothing in the dialog (ARC-UI-2019: under the Steamwoven setting the digits 1–5 choose the reply with that number, a Steamwoven addition behind `InterfaceRuleProfile.DialogRepliesUnnumbered`; Original shows no reply number and keeps the digits dead). A diagnostic **Leave** button
 closes an awaiting dialog without a reply. The panel is modal, so the actor gate stays closed. `AreaConversationHost` (viewer Core) reads scripts and dialogs
 through the game's content stack (ARC-SCRIPT-011, [script content](script-content.md): the original's name for
 each script number and the winning copy, so Virgil's script is `Arcanum4.dat`'s, as the game opens it), runs SAP_DIALOG through the

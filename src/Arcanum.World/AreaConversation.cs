@@ -767,7 +767,7 @@ public sealed class AreaConversationHost
         public DialogHealerFacts Facts(DialogHealerQuery query)
         {
             if (query.PlayerCharacter != AreaConversationState.PcParticipant || query.Npc != npc) throw new ArgumentException("Not the talk's speaker.", nameof(query));
-            var facts = ai.HealerFacts(entity, query.Skill) ?? throw new InvalidOperationException("The speaker is no NPC of the AI host.");
+            var facts = ai.HealerFacts(entity, query.Skill) ?? throw new InvalidOperationException("The speaker is neither an NPC nor a companion of the AI host.");
             return new(facts.Rank, facts.SkillAllowed, facts.SkillLevel, facts.SkillTraining, facts.LedByPc, facts.NoPcLeader);
         }
 
@@ -1322,7 +1322,10 @@ public sealed class AreaConversationState : IDialogStateQueryPort, IDialogComman
 /// <summary>Display strings for the diagnostic panel. They carry decoded record text and typed identifiers only.</summary>
 public static class AreaConversationText
 {
-    public static string Option(DialogOption option)
+    public static string Option(DialogOption option) => OptionText(option, numbered: true);
+
+    /// <summary>ARC-UI-2019: a reply's line, with its number in front (the Steamwoven setting) or without it (Original).</summary>
+    public static string OptionText(DialogOption option, bool numbered)
     {
         var text = option.TextKind switch
         {
@@ -1333,7 +1336,7 @@ public static class AreaConversationText
             _ => "[no reply qualifies: generated farewell; generic text not loaded]",
         };
         var block = option.Block is { } blocked ? $"  (not supported here: {blocked.Kind}{Where(blocked.Source)})" : string.Empty;
-        return $"{option.Number}. {text}{block}";
+        return numbered ? $"{option.Number}. {text}{block}" : $"{text}{block}";
     }
 
     public static string Outcome(DialogConversation conversation) => conversation.Phase switch

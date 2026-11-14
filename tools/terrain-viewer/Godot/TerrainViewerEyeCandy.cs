@@ -47,13 +47,15 @@ public partial class TerrainViewerApp
 
     private SpellEyeCandyTable? EyeCandyTable => _spellData?.EyeCandy;
 
-    /// <summary>ARC-SCRIPT-1592: the eye-candy entry of a goal's entry reference (the list and the index in it, <see cref="EyeCandyEntryRef"/>): the spell, script or animation list; the other lists (weapon, combat, trap) are not read yet.</summary>
+    /// <summary>ARC-SCRIPT-1592: the eye-candy entry of a goal's entry reference (the list and the index in it, <see cref="EyeCandyEntryRef"/>): the spell, script, animation or weapon list; the other lists (combat, trap) are not read yet.</summary>
     private SpellEyeCandyEntry? EyeCandyEntryOf(int entry) => EyeCandyEntryRef.ListOf(entry) switch
     {
         EyeCandyList.Spell => EyeCandyTable?.At(EyeCandyEntryRef.IndexOf(entry)),
         EyeCandyList.Script => _spellData?.ScriptEyeCandy?.At(EyeCandyEntryRef.IndexOf(entry)),
         // ARC-RENDER-1794: the animation list (0x5DE670), the blood of a hit.
         EyeCandyList.Anim => _spellData?.AnimEyeCandy?.At(EyeCandyEntryRef.IndexOf(entry)),
+        // ARC-RENDER-1990: the weapon list (0x5DE610), a weapon's own hit effect.
+        EyeCandyList.Weapon => _spellData?.WeaponEyeCandy?.At(EyeCandyEntryRef.IndexOf(entry)),
         _ => null,
     };
     private const int ForegroundSlots = 7, BackgroundSlots = 7, UnderlaySlots = 4;
@@ -299,12 +301,45 @@ public partial class TerrainViewerApp
         return (cell.X, cell.Y, ranks.First, ranks.Second);
     }
 
+    // The weapon eye-candy entries whose sound the add played, for the self-test (entry, owner).
+    private readonly List<(int Entry, string Owner)> _weaponEyeCandySoundsForSelfTest = [];
+
+    /// <summary>
+    /// ARC-RENDER-1990, ARC-RENDER-2011 (the weapon effect's add): an entry of the weapon list added to <paramref name="owner"/> (the victim of a hit, the attacker of a begin or a swing), its art turned to <paramref name="rotation"/> (the attacker's
+    /// facing). The entry's sound plays on the owner's tile when the add took (the run started: the goal's begin plays it once) and also for an entry with no art (the add plays it before it answers 0); a refused add (no place, a duplicate past the limit)
+    /// plays none. A looping entry's sound loops in the original; here it plays once. True when a run holds the eye candy now.
+    /// </summary>
+    private bool WeaponEyeCandyAddNow(string owner, int entry, int limit, int rotation)
+    {
+        if (EyeCandyHostNow() is not { } host) return false;
+        var played = host.Play(owner, entry, 0, -1, null, limit, rotation);
+        if (_spellData?.WeaponEyeCandy?.At(EyeCandyEntryRef.IndexOf(entry)) is { Sound: >= 0 } shape && (played || shape.Art is null)
+            && _areaSession is { } session && EyeCandyCell(session, owner) is { } cell)
+        {
+            _weaponEyeCandySoundsForSelfTest.Add((entry, owner));
+            if (_weaponEyeCandySoundsForSelfTest.Count > 64) _weaponEyeCandySoundsForSelfTest.RemoveAt(0);
+            PlayCueAt(new Arcanum.Simulation.Sound.SoundCue(shape.Sound), cell.X, cell.Y, Arcanum.Presentation.Audio.PositionalSize.Large, "weapon eye candy");
+        }
+        return played;
+    }
+
     /// <summary>Where an eye candy's object stands: the hero at its committed cell, an NPC or companion at its live cell.</summary>
     private CellCoord? EyeCandyCell(GameSessionOwner owner, string obj)
     {
         if (obj == SessionSpellCaster.Hero) return HeroWorldCell();
         // ARC-DEV-352: a summoned object (the flash) at its cell.
         if (CreatedCell(owner, obj) is { } created) return created;
-        return _spellCastMap?.Row(obj) is { } row ? LiveCell(owner, row) : null;
+        // ARC-SCRIPT-1829: a created critter (where its mover stands, else its created cell) and an item lying on the shown map (made, created or dropped: the placed item's cell); an item nobody has put on the ground has no place to draw.
+        if (CreatedCritterCell(owner, obj) is { } critter) return critter;
+        if (_spellCastMap?.Row(obj) is { } row) return LiveCell(owner, row);
+        return owner.QueryPlacedItems().FirstOrDefault(i => i.Entity == obj && i.Map == new SessionMapId(CurrentAreaMap)) is { } item ? item.Cell : null;
+    }
+
+    /// <summary>ARC-SCRIPT-1829: the cell of a critter the session created on the shown map (a summoned or generated one), where the AI has moved it, else where it was made; null for another kind, another map or one that is gone.</summary>
+    private CellCoord? CreatedCritterCell(GameSessionOwner owner, string entity)
+    {
+        if (SessionCreatedObject.KindOf(entity) is not SessionCreatedKind.Critter || owner.QueryCreatedObject(entity) is not { } made || made.Map != new SessionMapId(CurrentAreaMap)) return null;
+        if (AreaAiHostNow() is { } ai && ReferenceEquals(ai.Session, owner) && ai.Movers.Of(entity) is { } mover) return new(checked((int)mover.Cell.X), checked((int)mover.Cell.Y));
+        return made.Cell;
     }
 }

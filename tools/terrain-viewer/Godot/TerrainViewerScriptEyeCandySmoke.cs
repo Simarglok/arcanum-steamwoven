@@ -1,6 +1,7 @@
 using Arcanum.Data.Magic;
 using Arcanum.Scripting.Scr;
 using Arcanum.Session;
+using Arcanum.Simulation.Goals;
 using Arcanum.Simulation.Magic;
 using Arcanum.Simulation.Movement;
 using Arcanum.TerrainViewer.Core;
@@ -17,10 +18,9 @@ public partial class TerrainViewerApp
     private const int VoidExitScript = 2549;
 
     /// <summary>
-    /// ARC-SCRIPT-1592 (FR-SCRIPT-002, FR-RENDER; ledger WE4, WE5) native observation (stage "script-eye-candy", only when named, with --hero, on a map window with the inventory active): the installed tile script 2549 (script eye candy
+    /// ARC-SCRIPT-1592 (FR-SCRIPT-002, FR-RENDER; ledger WE4, WE5; ARC-SCRIPT-1828, WE12: the stop) native observation (stage "script-eye-candy", only when named, with --hero, on a map window with the inventory active): the installed tile script 2549 (script eye candy
     /// on the player, then the teleport) runs for the hero through the map's own placed-script runner (its teleport is taken as accepted and not carried out). The stage checks that the use host kept the play request, that the viewer's pump
-    /// started it as an overlay run of the script list on the hero (entry reference of the script list, the table's own art), that the run begins and its frame advances, that the draw placed its parts, and that the run ends (or is taken off) at
-    /// the end. NONE when the script does not play eye candy here. <c>ARC_AREA_SCRIPT_EYE_CANDY_CAPTURE=FOLDER</c> saves a readback of the view before the run and while the eye candy shows (for the thread's before/after picture; never committed).
+    /// started it as an overlay run of the script list on the hero (entry reference of the script list, the table's own art), that the run begins and its frame advances, that the draw placed its parts, and that a queued stop request (action 124) takes the run off and a second finds nothing, and that a queued play starts it again. NONE when the script does not play eye candy here. <c>ARC_AREA_SCRIPT_EYE_CANDY_CAPTURE=FOLDER</c> saves a readback of the view before the run and while the eye candy shows (for the thread's before/after picture; never committed).
     /// </summary>
     private async Task RunAreaScriptEyeCandyStageAsync(TerrainLoadResult? mapMode = null)
     {
@@ -69,8 +69,8 @@ public partial class TerrainViewerApp
             await Frames(5);
             var heroCell = HeroWorldCell() ?? throw new InvalidOperationException("AREA_SCRIPT_EYE_CANDY_NO_HERO_CELL");
             Require((ShownEyeCandyHost?.Shown().Count() ?? 0) == 0, "no eye candy shows before the run");
-            _scriptEyeCandyPlayedForSelfTest.Clear();
-            var takenBefore = _scriptEyeCandyTaken;
+            _scriptEyeCandyPlayedForSelfTest.Clear(); _scriptEyeCandyTurnedForSelfTest.Clear();
+            var takenBefore = _scriptEyeCandyTaken; var soundsBefore = _scriptEyeCandySounds; var facingAtPlay = _worldActor.State.Facing & 7;
             await Shot("before");
             var placed = new Arcanum.Data.Maps.MapPlacedScript(Arcanum.Data.Maps.MapTransitionTrigger.TileEntry, new(0, 0), -1, new(heroCell.X, heroCell.Y), 0, 0, VoidExitScript);
             var ran = _mapTransfers!.PlacedRunner!(placed, _ => null);
@@ -87,30 +87,59 @@ public partial class TerrainViewerApp
             for (var i = 0; i < 200 && !(ShownEyeCandyHost?.Shown().Any(o => o.Owner == owner && o.Eye.Entry == entryRef) ?? false); i += 2) await Frames(2);
             var shown = ShownEyeCandyHost?.Shown().FirstOrDefault(o => o.Owner == owner && o.Eye.Entry == entryRef);
             Require(shown is not null, "the eye candy of the script list shows on the hero");
-            Require(shown!.Eye.Art == entry.Art, "the run holds the list entry's art");
+            // ARC-SCRIPT-1829: the entry's art is turned to the hero's facing at the play (0x502880 into 0x502930), its sound plays at the hero's cell when the entry has one.
+            var turned = _scriptEyeCandyTurnedForSelfTest.First(t => t.Owner == owner);
+            Require(turned.Rotation == facingAtPlay, $"the play took the hero's facing as the art modifier: {turned.Rotation} against {facingAtPlay}");
+            Require(shown!.Eye.Art == EyeCandyArt.TurnTo(entry.Art!.Value, turned.Rotation), "the run holds the list entry's art turned to the facing");
+            Require(entry.Sound < 0 || _scriptEyeCandySounds > soundsBefore, $"the entry's sound {entry.Sound} was asked for");
             var first = shown.Eye.Frame;
             for (var i = 0; i < 100 && (ShownEyeCandyHost?.Shown().FirstOrDefault(o => o.Handle.Equals(shown.Handle))?.Eye.Frame ?? first) == first; i += 2) await Frames(2);
             var moved = ShownEyeCandyHost?.Shown().FirstOrDefault(o => o.Handle.Equals(shown.Handle));
             Require(moved is null || moved.Eye.Frame != first, $"the frame advances ({first} -> {moved?.Eye.Frame})");
             Require(_eyeCandyDrawnForSelfTest.Contains(entryRef), "the draw placed the entry's parts");
             await Shot("during");
-            // It runs to its end (a looping entry is taken off: the original's script has no stop action modelled yet, so the stage ends it as a map change does).
-            var forever = (entry.Flags & SpellEyeCandyFlags.Forever) != 0;
-            if (!forever)
-            {
-                for (var i = 0; i < 1200 && (ShownEyeCandyHost?.Shown().Any(o => o.Owner == owner && o.Eye.Entry == entryRef) ?? false); i += 5) await Frames(5);
-                Require(!(ShownEyeCandyHost?.Shown().Any(o => o.Owner == owner && o.Eye.Entry == entryRef) ?? false), "the eye candy ran to its end");
-            }
-            // ARC-MAGIC-1830: the queue the session moves hand their scripts' requests to (an NPC's or the hero's rewield, a regeneration's wield) plays through the same pump: a request queued for the hero starts the same entry again.
+            // ARC-SCRIPT-1828 (WE12): the script's stop action (124) takes the run of the entry off at once, as the hosts' requests queue it. A play and a stop queued together are taken in order in one pump, so the stop finds the run its play started
+            // (the play's flags 0 give even a looping entry the goal-45 run the original's walk 0x4243E0 removes), whether or not the first run has ended by itself; the owner's eye-candy runs are then no more than before.
+            int Runs() => ShownEyeCandyHost?.Session.QueryGoals().RunsOf(owner).Count(r => !r.Done && r.Bottom.Goal == GoalType.EyeCandy) ?? 0;
+            var runsBefore = Runs();
+            _scriptEyeCandyStoppedForSelfTest.Clear();
+            var stopFrom = _scriptEyeCandyStopTaken;
+            var heroRef = new ScrObjectRef(CurrentAreaMap, AreaScriptHost.PcCode);
+            QueueScriptEyeCandies([new ScrEyeCandy(number, heroRef), new ScrEyeCandy(number, heroRef, ScrEyeCandyKind.StopScript)]);
+            await Frames(1);
+            Require(_scriptEyeCandyStopTaken == stopFrom + 1 && _scriptEyeCandyStoppedForSelfTest.SequenceEqual([(owner, number)]), $"the stop request was taken once and took a run of the entry off the hero: taken {_scriptEyeCandyStopTaken - stopFrom}, stopped {string.Join(";", _scriptEyeCandyStoppedForSelfTest)}");
+            Require(Runs() <= runsBefore, $"the stop left no more eye-candy runs on the hero than before ({runsBefore} -> {Runs()})");
+            await Shot("stopped");
+            // ARC-MAGIC-1830: the queue the session moves hand their scripts' requests to (an NPC's or the hero's rewield, a regeneration's wield) plays through the same pump: a request queued for the hero starts the same entry again (the stop above took the run of its own play off, so this one is a fresh run).
             _scriptEyeCandyPlayedForSelfTest.Clear();
             var queuedFrom = _scriptEyeCandyTaken;
-            QueueScriptEyeCandies([new ScrEyeCandy(number, new ScrObjectRef(CurrentAreaMap, AreaScriptHost.PcCode)), new ScrEyeCandy(number, new ScrObjectRef(CurrentAreaMap, AreaScriptHost.PcCode), ScrEyeCandyKind.StopScript)]);
+            QueueScriptEyeCandies([new ScrEyeCandy(number, new ScrObjectRef(CurrentAreaMap, AreaScriptHost.PcCode))]);
             await Frames(1);
-            Require(_scriptEyeCandyTaken == queuedFrom + 1 && _scriptEyeCandyPlayedForSelfTest.All(p => p == (owner, number)), $"the queued request was taken once and the stop request played nothing: taken {_scriptEyeCandyTaken - queuedFrom}, played {string.Join(";", _scriptEyeCandyPlayedForSelfTest)}");
-            // A looping entry may still run from the first request, so only an ended one must have started again.
-            Require(forever || _scriptEyeCandyPlayedForSelfTest.Count == 1, "the queued request started the entry again on the hero");
+            Require(_scriptEyeCandyTaken == queuedFrom + 1 && _scriptEyeCandyPlayedForSelfTest.SequenceEqual([(owner, number)]), $"the queued request was taken once and played on the hero: taken {_scriptEyeCandyTaken - queuedFrom}, played {string.Join(";", _scriptEyeCandyPlayedForSelfTest)}");
             await Shot("queued");
-            GD.Print("ARC-SCRIPT-1592 native-smoke script-eye-candy PASS " + System.Text.Json.JsonSerializer.Serialize(new { Map = _readyMapName, Script = VoidExitScript, Number = number, Entry = entryRef, Looping = forever, FirstFrame = first, MovedTo = moved?.Eye.Frame }));
+            // ARC-SCRIPT-1829: an object that is no critter plays too: a scenery, container or portal row of the map with a cell, named the way the script host names it (a ground item and a created critter follow the same cell lookup).
+            var still = area.Snapshot.Objects.FirstOrDefault(o => o.Type is 1 or 2 or 3 && o.WorldX is not null && o.WorldY is not null && _spellCastMap?.IdOf(o.Key) is not null && ObjectTargets()?.Gone(session).Contains(o.Key) != true);
+            var stillNote = "NONE (the map has no scenery, container or portal row)";
+            if (still is not null)
+            {
+                var id = _spellCastMap!.IdOf(still.Key)!;
+                _scriptEyeCandyPlayedForSelfTest.Clear();
+                QueueScriptEyeCandies([new ScrEyeCandy(number, new ScrObjectRef(CurrentAreaMap, AreaUseScriptHost.EntityId(still)))]);
+                await Frames(1);
+                Require(_scriptEyeCandyPlayedForSelfTest.Count == 1 && _scriptEyeCandyPlayedForSelfTest[0].Owner == id, $"the request on the row {id} (type {still.Type}) played on it: {string.Join(";", _scriptEyeCandyPlayedForSelfTest)}");
+                for (var i = 0; i < 200 && !(ShownEyeCandyHost?.Shown().Any(o => o.Owner == id && o.Eye.Entry == entryRef) ?? false); i += 2) await Frames(2);
+                Require(ShownEyeCandyHost?.Shown().Any(o => o.Owner == id && o.Eye.Entry == entryRef) ?? false, $"the eye candy shows on the row {id}");
+                // ARC-SCRIPT-1828: the stop of that entry on the same row (the heartbeat's stop on a scenery) takes its run off.
+                _scriptEyeCandyStoppedForSelfTest.Clear();
+                QueueScriptEyeCandies([new ScrEyeCandy(number, new ScrObjectRef(CurrentAreaMap, AreaUseScriptHost.EntityId(still)), ScrEyeCandyKind.StopScript)]);
+                await Frames(1);
+                Require(_scriptEyeCandyStoppedForSelfTest.SequenceEqual([(id, number)]), $"the stop request took the run off the row {id}: {string.Join(";", _scriptEyeCandyStoppedForSelfTest)}");
+                Require(!(ShownEyeCandyHost?.Shown().Any(o => o.Owner == id && o.Eye.Entry == entryRef) ?? false), $"the stopped eye candy no longer shows on the row {id}");
+                stillNote = $"PASS type={still.Type} id={id}";
+                await Shot("object");
+            }
+            GD.Print("ARC-SCRIPT-1829 script-eye-candy object-without-critter " + stillNote);
+            GD.Print("ARC-SCRIPT-1592 native-smoke script-eye-candy PASS " + System.Text.Json.JsonSerializer.Serialize(new { Map = _readyMapName, Script = VoidExitScript, Number = number, Entry = entryRef, Rotation = turned.Rotation, Sound = entry.Sound, SoundsAsked = _scriptEyeCandySounds, Looping = (entry.Flags & SpellEyeCandyFlags.Forever) != 0, FirstFrame = first, MovedTo = moved?.Eye.Frame, Stopped = _scriptEyeCandyStopped }));
         }
         finally
         {

@@ -46,4 +46,30 @@ public sealed class ScrScriptEyeCandyCensusRealDataTests
         CollectionAssert.AreEqual(new[] { 438 }, numbers.Where(n => n >= table.Entries.Count || table.At(n).Art is null).ToArray());
         Assert.AreEqual(1, rows.Count(r => r.Number is null));
     }
+    /// <summary>ARC-SCRIPT-1828: the census of stop script eye candy (124, 0x44C800, ledger WE12): the installed scripts that use it, with the entry number and the object kind of each clause. Only script numbers, line numbers, entry numbers and focus kinds are printed.</summary>
+    [TestMethod, TestCategory("RealData")]
+    public void The_installed_scripts_that_stop_script_eye_candy_name_entries_of_the_installed_list()
+    {
+        var root = Environment.GetEnvironmentVariable("DAT_ROOT");
+        if (string.IsNullOrWhiteSpace(root)) Assert.Fail("DAT_ROOT is required for the opt-in script eye-candy census; this is not a synthetic pass.");
+        var discovery = ContentMountPlan.Discover(root);
+        Assert.AreEqual(ContentMountStatus.Ready, discovery.Status, discovery.Detail);
+        using var stack = ContentStack.Open(discovery.Plan!).Stack!;
+        var table = SpellEyeCandyTable.OpenScript(stack).Table!;
+        var rows = new List<(string Script, int Line, int? Number, ScrFocusKind Object)>();
+        foreach (var key in stack.Keys().Where(k => k.EndsWith(".scr", StringComparison.Ordinal)))
+        {
+            var read = ScrProgram.Read(stack.Read(stack.Resolve(key).Winner!).Bytes!);
+            if (read.Program is not { } program) continue;
+            var name = Path.GetFileNameWithoutExtension(key);
+            foreach (var line in program.Lines)
+                foreach (var clause in new[] { line.OnTrue, line.OnFalse })
+                    if (clause.Type == ScrCatalogue.Action.StopScriptEyeCandy)
+                        rows.Add((name, line.Number, clause.Kind(0) == 3 ? clause.Value(0) : null, (ScrFocusKind)clause.Kind(1)));
+        }
+        foreach (var row in rows) Console.WriteLine($"STOP-EYE-CANDY-CENSUS|{row.Script}|line {row.Line}|number {row.Number?.ToString() ?? "variable"}|object {row.Object}");
+        Console.WriteLine($"STOP-EYE-CANDY-CENSUS|clauses {rows.Count}|scripts {rows.Select(r => r.Script).Distinct().Count()}|numbers {string.Join(',', rows.Where(r => r.Number is not null).Select(r => r.Number!.Value).Distinct().Order())}");
+        Assert.IsTrue(rows.Count > 0);
+        Assert.AreEqual(75, table.Entries.Count);
+    }
 }

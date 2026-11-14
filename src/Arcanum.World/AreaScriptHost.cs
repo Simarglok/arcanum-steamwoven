@@ -36,13 +36,14 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
     /// (<see cref="TakeFades"/>; Kerghan's dialog script 1105 plays movies 2, 3 and 6). ARC-RENDER-1171: plus end game and play slides (132), which asks the viewer for the end-game
     /// slide show (<see cref="TakeEndGame"/>; script 1105 ends the game after its movies).
     /// ARC-SCRIPT-1764: plus queue newspaper (85) and float newspaper headline (86) of <see cref="ScrAdmissionSet.S59"/> (<see cref="AreaScriptNewspaper"/>; the headline floats through <see cref="TakeFloats"/>).
+    /// ARC-SCRIPT-1828 (WE12): plus stop script eye candy (124) of <see cref="ScrAdmissionSet.S55"/>, beside the play (120) the story actions hold: its request goes through <see cref="TakeEyeCandies"/> in action order (no installed dialog script uses it; the 22 that do are the ground rune tile scripts and the main map's heartbeat 2231).
     /// </summary>
     public static ScrAdmissionSet Admission { get; } = new("S3-area-sound-calls-scheme-schematic-reading-story", ScrAdmissionSet.S3.Conditions.Concat(ScrAdmissionSet.StoryConditions),
         ScrAdmissionSet.S3.Actions
             .Concat([ScrCatalogue.Action.SetPcQuestState, ScrCatalogue.Action.MarkMapLocation, ScrCatalogue.Action.SetRumor,
                 ScrCatalogue.Action.AddReputation, ScrCatalogue.Action.RemoveReputation, ScrCatalogue.Action.PlaySound, ScrCatalogue.Action.PlaySoundOn, ScrCatalogue.Action.PlaySoundScheme,
                 ScrCatalogue.Action.CallScriptIn, ScrCatalogue.Action.RemoveScriptCall, ScrCatalogue.Action.SetAutoLevelScheme,
-                ScrCatalogue.Action.StartSchematicUi, ScrCatalogue.Action.ShowBook, ScrCatalogue.Action.ShowPicture, ScrCatalogue.Action.ShowPlaque, .. ScrAdmissionSet.StoryActions, ScrCatalogue.Action.Fade, ScrCatalogue.Action.EndGame, ScrCatalogue.Action.QueueNewspaper, ScrCatalogue.Action.FloatNewspaperHeadline]),
+                ScrCatalogue.Action.StartSchematicUi, ScrCatalogue.Action.ShowBook, ScrCatalogue.Action.ShowPicture, ScrCatalogue.Action.ShowPlaque, .. ScrAdmissionSet.StoryActions, ScrCatalogue.Action.Fade, ScrCatalogue.Action.EndGame, ScrCatalogue.Action.QueueNewspaper, ScrCatalogue.Action.FloatNewspaperHeadline, ScrCatalogue.Action.StopScriptEyeCandy]),
         ScrAdmissionSet.S3.ValueKinds.Concat(ScrAdmissionSet.StoreValueKinds), ScrAdmissionSet.S3.FocusKinds);
 
     /// <summary>ARC-SKILLS-009: <see cref="Admission"/> plus get skill (47) of <see cref="ScrAdmissionSet.S11"/>, the set a run uses while

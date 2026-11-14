@@ -22,11 +22,20 @@ public static partial class TerrainViewerSelfTest
         "{10}{A bridge fell. Take care on the way north.}{}{}{}{}{RU 1001}" +
         "{11}{Thank you.}{}{1}{}{0}{LF 2 1}";
 
+    // ARC-UI-2027: one reply whose action is a final line (FL 10): the dialog ends on the NPC's line of node 10.
+    private const string FinalLineDialog = "{1}{Hello.}{Hello.}{}{}{}{}{2}{Go on.}{}{1}{}{10}{FL 10}{10}{Fine.}{}{}{}{}{}";
+
+    // ARC-UI-2019: one reply to a closing line, for the digit-key check of the app routing.
+    internal const string DigitDialog = "{1}{Hello.}{Hello.}{}{}{}{}{2}{Go on.}{}{1}{}{10}{}{10}{Fine.}{}{}{}{}{}";
+
     /// <summary>Synthetic panel flow: open, answer by number, end, dismiss. Headless and native.</summary>
     private static async Task AssertConversationPanelAsync(Node host)
     {
         var panel = new AreaConversationPanel(); host.AddChild(panel);
         var closed = 0; panel.CloseRequested += () => { closed++; panel.CloseView(); };
+        // ARC-UI-2027: the NPC line goes to the owner (as a persistent bubble while a reply is awaited), a processed reply removes it first.
+        var lines = new List<string>(); var picks = 0;
+        panel.NpcLineShown += (text, persistent) => lines.Add($"{(persistent ? "P" : "T")}:{text}"); panel.ReplyPicking += () => { picks++; lines.Add("removed"); };
         try
         {
             await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
@@ -40,14 +49,31 @@ public static partial class TerrainViewerSelfTest
             panel.Open("Synthetic NPC", conversation);
             await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
             Require(panel.IsOpen && panel.NpcLineForSelfTest == "Greetings, [PC]. The road is closed.", "panel shows the substituted NPC line");
+            Require(lines.Count == 1 && lines[0] == "P:Greetings, [PC]. The road is closed.", $"the open hands the NPC line out as a persistent bubble: {string.Join("|", lines)}");
             Require(panel.ButtonsForSelfTest.Count == 3 && panel.ButtonsForSelfTest[0].Text == "1. Why is it closed?", "eligible replies in order");
             Require(panel.ButtonsForSelfTest[2].Disabled && panel.ButtonsForSelfTest[2].Text.Contains("UnsupportedInteraction"), "generated barter is shown blocked");
             panel.Choose(3);
             Require(conversation.Turn == 1 && panel.OutcomeForSelfTest.Contains("UnsupportedTransition"), "blocked reply runs nothing");
-            panel.Choose(1);
+            Require(picks == 0 && lines.Count == 1, "a reply that was not processed keeps the bubble");
+            // ARC-UI-2019: Steamwoven numbers the replies and a digit key chooses an offered, unblocked one; Original draws no number and reads no digit.
+            var turn = conversation.Turn;
+            Require(!panel.ChooseByDigit(3) && !panel.ChooseByDigit(9) && !panel.ChooseByDigit(0) && conversation.Turn == turn, "a blocked or absent number chooses nothing");
+            // The setting switched while the panel is open (an Options change over the dialog) redraws it at once and moves the digits with it.
+            panel.NumberedReplies = false;
+            Require(panel.ButtonsForSelfTest[0].Text == "Why is it closed?" && !panel.ButtonsForSelfTest[2].Text.StartsWith("3.") && !panel.ChooseByDigit(1) && conversation.Turn == turn,
+                "Original draws no number and a digit chooses nothing");
+            await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+            await ScreenshotAsync(host, "original-unnumbered");
+            panel.NumberedReplies = true;
+            await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+            await ScreenshotAsync(host, "steamwoven-numbered");
+            Require(panel.ButtonsForSelfTest[0].Text == "1. Why is it closed?", "Steamwoven draws the number again");
+            Require(panel.ChooseByDigit(1), "a digit chooses the numbered reply");
             Require(conversation.CurrentNode.Value == 10 && panel.NpcLineForSelfTest.StartsWith("A bridge fell.") && panel.ButtonsForSelfTest.Count == 1, "Direct reply continues");
+            Require(picks == 1 && lines.Count == 3 && lines[1] == "removed" && lines[2].StartsWith("P:A bridge fell."), $"a processed reply removes the bubble, then the answer is a new persistent one: {string.Join("|", lines)}");
             await ScreenshotAsync(host, "synthetic");
             panel.Choose(1);
+            Require(picks == 2 && lines.Count == 4 && lines[3] == "removed", $"the ending reply removes the bubble and shows no new persistent one: {string.Join("|", lines)}");
             Require(conversation.Phase == DialogConversationPhase.Ended && panel.OutcomeForSelfTest.Contains("SCR line 5") && panel.ButtonsForSelfTest.Count == 0, "Exit returns to the caller's next SCR line");
             Require(state.LocalFlag(0, 2) && session.QueryQuest(1003)?.State == Arcanum.Session.SessionQuestState.Mentioned && session.QueryRumor(1001) is not null,
                 "typed effects reached the session");
@@ -55,6 +81,26 @@ public static partial class TerrainViewerSelfTest
             Require(closed == 1 && !panel.IsOpen, "any choice dismisses a finished dialog");
             panel.Open("Synthetic NPC", conversation); panel.LeaveForSelfTest.EmitSignal(BaseButton.SignalName.Pressed);
             Require(closed == 2 && !panel.IsOpen, "Close dismisses a finished dialog");
+            // ARC-UI-2027: a reply that ends on a new final line removes the bubble, then shows the line with the default life (not persistent).
+            {
+                var finalLines = new List<string>(); var finalPanel = new AreaConversationPanel(); host.AddChild(finalPanel);
+                try
+                {
+                    await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+                    finalPanel.NpcLineShown += (text, persistent) => finalLines.Add($"{(persistent ? "P" : "T")}:{text}"); finalPanel.ReplyPicking += () => finalLines.Add("removed");
+                    using var finalSession = ConversationSessionFixture.Create();
+                    var finalState = new AreaConversationState(finalSession, new(1), ["oid:synthetic-0"], 50);
+                    var finalDialog = DialogConversation.Start(DlgReader.Read(Encoding.Latin1.GetBytes(FinalLineDialog)),
+                        new DialogConversationRequest(new DialogNodeId(1),
+                            new DialogParticipants(new DialogId(5), AreaConversationState.PcParticipant, AreaConversationState.Npc(0)),
+                            new DialogScriptLine(4), AreaConversationProfile.Diagnostic.Pc, AreaConversationProfile.Diagnostic.Names),
+                        new DialogConversationPorts(finalState, finalState, finalSession.Flags, finalState));
+                    finalPanel.Open("Final line", finalDialog);
+                    finalPanel.Choose(1);
+                    Require(finalDialog.End?.Kind == DialogEndKind.NpcFinalLine && string.Join("|", finalLines) == "P:Hello.|removed|T:Fine.", $"a reply that ends on a new final line: {string.Join("|", finalLines)} / {finalDialog.End?.Kind}");
+                }
+                finally { finalPanel.QueueFree(); }
+            }
             GD.Print("ARC-SCRIPT-005 self-test PASS synthetic conversation panel; original runtime parity NOT_VERIFIED");
         }
         finally { panel.QueueFree(); }
@@ -85,8 +131,8 @@ public static partial class TerrainViewerSelfTest
             var wrap = Math.Max(1, Math.Min(960, (int)host.GetViewport().GetVisibleRect().Size.X - 48)) - 32;
             Require(panel.ArtFontsForSelfTest && panel.NpcLineForSelfTest == "Greetings, [PC]. The road is closed.", "art mode shows the substituted NPC line");
             var texts = panel.ArtTextsForSelfTest();
-            var npc = texts.Single(text => text.Name == "npc");
-            Require(npc.Visible && npc.Text == panel.NpcLineForSelfTest && npc.Lines > 0 && npc.Wrap == wrap, $"the NPC line is art text at the content width {wrap}: {npc}");
+            // ARC-UI-2027: the NPC line is a bubble over the NPC, no longer a paragraph of the panel.
+            Require(texts.All(text => text.Name != "npc"), "the panel draws no NPC line (it is a bubble over the NPC)");
             Require(texts.Where(text => text.Name is "header" or "hint" or "leave").All(text => text.Visible && text.Lines > 0), "header, hint and Leave are art text");
             Require(panel.ButtonsForSelfTest.Count == 3 && AreaConversationPanel.ReplyTextForSelfTest(panel.ButtonsForSelfTest[0]) == "1. Why is it closed?"
                 && panel.ButtonsForSelfTest.All(button => button.Text.Length == 0), "the replies are art text, the buttons draw none");
@@ -99,7 +145,7 @@ public static partial class TerrainViewerSelfTest
             Require(panel.ButtonsForSelfTest[2].Disabled, "the blocked reply stays disabled");
             panel.Choose(1);
             await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
-            Require(conversation.CurrentNode.Value == 10 && panel.ArtTextsForSelfTest().Single(text => text.Name == "npc").Text.StartsWith("A bridge fell."), "a reply continues the dialog in art mode");
+            Require(conversation.CurrentNode.Value == 10 && panel.NpcLineForSelfTest.StartsWith("A bridge fell."), "a reply continues the dialog in art mode");
             panel.SetFonts(null);
             Require(!panel.ArtFontsForSelfTest && panel.ButtonsForSelfTest.Count == 1 && panel.ButtonsForSelfTest[0].Text.Length > 0
                 && panel.ArtTextsForSelfTest().All(text => !text.Visible), "without the fonts the labels and buttons draw again");
@@ -252,6 +298,24 @@ public partial class TerrainViewerApp
             TerrainViewerSelfTest.Require(!PaletteOpen && ConversationOpen, "the palette cannot open over the conversation");
             _conversationPanel!.LeaveForSelfTest.EmitSignal(BaseButton.SignalName.Pressed);
             TerrainViewerSelfTest.Require(!ConversationOpen && !WorldModal, "Close ends the modal surface");
+            // ARC-UI-2019: with a numbered conversation open the digit keys choose a reply (an unknown number and Enter do nothing).
+            {
+                using var digitSession = ConversationSessionFixture.Create();
+                var state = new AreaConversationState(digitSession, new(1), ["oid:synthetic-0"], 50);
+                var digitDialog = DialogConversation.Start(DlgReader.Read(System.Text.Encoding.Latin1.GetBytes(TerrainViewerSelfTest.DigitDialog)),
+                    new DialogConversationRequest(new DialogNodeId(1),
+                        new DialogParticipants(new DialogId(5), AreaConversationState.PcParticipant, AreaConversationState.Npc(0)),
+                        new DialogScriptLine(4), AreaConversationProfile.Diagnostic.Pc, AreaConversationProfile.Diagnostic.Names),
+                    new DialogConversationPorts(state, state, digitSession.Flags, state));
+                ShowConversationPanel("Digit test", digitDialog, null);
+                TerrainViewerSelfTest.Require(ConversationOpen && DialogRepliesNumbered && _conversationPanel!.Conversation == digitDialog
+                    && AreaConversationPanel.ReplyTextForSelfTest(_conversationPanel.ButtonsForSelfTest[0]).StartsWith("1. "), "the Steamwoven panel numbers its replies");
+                Press(Key.Key9); Press(Key.Enter);
+                TerrainViewerSelfTest.Require(digitDialog.CurrentNode.Value == 1, "an unknown digit and Enter choose nothing");
+                Press(Key.Key1);
+                TerrainViewerSelfTest.Require(digitDialog.CurrentNode.Value == 10, "the digit key 1 chose the first reply");
+                CloseWindowMode(InterfaceMode.Dialog);
+            }
         }
         finally { _worldFocusSimulationForSelfTest = simulatedFocus; _selfTestStandInSpeaker = null; }
     }
