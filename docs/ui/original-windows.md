@@ -51,7 +51,7 @@ Left for the next inventory slices (each its own task):
   [hero grid](../world/inventory-runtime.md#hero-inventory-grid-arc-ui-019)).
 - **Paper-doll art** of worn weapons and armour (fields 0x71, 0x97, art place 2 of 0x4EC290, F0).
 - **Fonts**: the original's art fonts (0x682C74, 0x68345C; font arts 226–230) for the lines and counts.
-- **Other modes**: loot (done by ARC-UI-052 without the doll views, below), barter (done by ARC-UI-064 without the doll views and the
+- **Other modes**: loot (done by ARC-UI-052 without the doll views, below), barter (done by ARC-UI-064, its merchant's doll view added by ARC-UI-1917; without the hero's doll view and the
   gamble, below), steal (done by ARC-UI-065, below); the doll toggle buttons (338, 339 at 0x5738A9/0x5738F9; toggle 0x68150C draws
   341 `PD_Cover4Inven` at (361, 0) and moves the doll's rectangles 348 pixels to the right (table 0x5CACE8), F0).
 - The doll art's empty box at its top-left (about 18, 14 to 160, 157): the mode-0 redraw draws nothing there (only
@@ -136,7 +136,7 @@ boxes inside the barter window, the follower's weight lines, the scroll bar's ar
 
 ARC-UI-1917 built the merchant's doll view and its two toggles in the barter window (IW29, IW30): the buttons 338 and 339 at (8, 123) and (46, 123), the toggle clear at every open;
 with it set the window draws 337 `Barter_PD` at (0, 157) with the merchant's worn items in the nine rectangles of table 0x5CAD78 (the same rectangles as the loot windows' doll),
-a cover on each empty slot, the doll's two values and the weapon slot's fill, and hides the shown grid. Left for the next barter slices (each its own task): buying a worn item
+a cover on each empty slot, the doll's two values and the weapon slot's fill (where the combat host covers the map; a body the session's lists do not show shows covers only), and hides the shown grid. Left for the next barter slices (each its own task): buying a worn item
 by dragging it from the doll (issue #1926), the two hot spots of IW30, the generated look of 337 and the doll cover 341 ([#1750](https://github.com/Simarglok/arcanum-steamwoven/issues/1750)).
 
 ## Character sheet

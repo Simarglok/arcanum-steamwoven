@@ -639,14 +639,20 @@ public partial class TerrainViewerApp
     private async Task<string> BarterDollForSmokeAsync(AreaBarterPanel panel, AreaInventoryGridArea area)
     {
         static void Require(bool value, string why) { if (!value) throw new InvalidOperationException("ARC-UI-1917 barter-doll smoke: " + why); }
-        if (area.Look is not { } look || !area.TogglesShown) return "doll none (the doll arts did not read)";
+        if (area.Look is not { } look) return "doll none (no look)";
+        if (!area.TogglesShown)
+        {
+            // Without all three arts the window keeps the grid view by design; with them read, missing buttons are a regression.
+            Require(!AreaBarterArtLayout.DollArtNumbers.All(look.Art.ContainsKey), "the doll arts read but the toggles are not shown");
+            return "doll none (the doll arts did not read)";
+        }
         Require(!area.BodyDoll, "the toggle starts clear at every open");
         var (dollPoint, bagPoint) = (new Vector2(AreaBarterArtLayout.DollButton.X + 2, AreaBarterArtLayout.DollButton.Y + 2), new Vector2(AreaBarterArtLayout.BagButton.X + 2, AreaBarterArtLayout.BagButton.Y + 2));
         Require(area.ToggleAt(dollPoint) == true && area.ToggleAt(bagPoint) == false, "the buttons are at (8, 123) and (46, 123)");
         area.PressAt(dollPoint); area.ReleaseAt(dollPoint);
         Require(area.BodyDoll && area.Held is null, "the doll button shows the doll view");
         var body = panel.ArtView!.BodyDoll;
-        Require(body.Count == 9 || panel.ArtView.HolderContainer, $"the merchant's nine slots are in the view ({body.Count})");
+        Require(body.Count == 9, $"the merchant's nine slots are in the view ({body.Count})");
         var worn = body.Count(slot => slot.Entity is not null);
         Require(body.Where(slot => slot.Entity is not null).All(slot => look.ItemArt(slot.Entity!) is not null), "every worn item has its art");
         Require(body.Where(slot => slot.Entity is null).All(slot => look.Art.ContainsKey(AreaInventoryArtLayout.Covers[slot.Slot])), "every empty slot has its cover art");

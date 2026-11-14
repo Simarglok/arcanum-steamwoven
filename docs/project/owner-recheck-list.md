@@ -1186,7 +1186,7 @@ start a game and open a container, a body (the toggles under the picture switch 
 Known differences (documented, not bugs):
 
 - The curved flourishes at the corners of the original's boxes are not drawn; the ring around the round view is three units wide, narrower than the original's.
-- The follower's plates keep a little of the old wood at their inner ends; the barter doll and the doll cover are not built yet.
+- The follower's plates keep a little of the old wood at their inner ends; the barter doll is built (ARC-UI-1917) and the doll cover is not.
 
 
 ## ARC-UI-1195 — Generated interface: the character sheet (S5, 2026-11-13)

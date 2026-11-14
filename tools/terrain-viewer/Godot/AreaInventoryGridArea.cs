@@ -409,7 +409,7 @@ public partial class AreaInventoryGridArea : Control
     /// <summary>ARC-UI-052: scrolls the holder's grid by <paramref name="rows"/> within 0..the holder's maximum.</summary>
     internal void ScrollLoot(int rows)
     {
-        if (_view is null || _bodyDoll) return; // the grid is hidden in the doll view: its scroll stays
+        if (_view is null || BodyDoll) return; // the grid is hidden in the doll view: its scroll stays
         var scroll = Math.Clamp(_lootScroll + rows, 0, ScrollMax(_view));
         if (scroll == _lootScroll) return;
         _lootScroll = scroll; QueueRedraw();
