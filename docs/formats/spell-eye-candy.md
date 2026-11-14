@@ -71,4 +71,4 @@ The same init (0x421B00) loads the list 0x5DE610 from `Rules\WeaponEyeCandy.mes`
 
 ## Not ready
 
-- Sounds and tinting are read but not played (the live light of a lit entry is built, ARC-MAGIC-1229, and its run is saved, ARC-MAGIC-1280); `can_autoscale` and the rotation are carried in the art id but not applied.
+- Sounds and tinting are read but not played, except the weapon list's (ARC-RENDER-2011: the add plays the entry's sound once); the art rotation is applied only through the add's art modifier (`AreaEyeCandyHost.Play(..., artModifier)`, `EyeCandyArt.TurnTo`: the script list's object rotation, ARC-SCRIPT-1829, and the weapon list's begin and swing effects, the attacker's facing, ARC-RENDER-2011) (the live light of a lit entry is built, ARC-MAGIC-1229, and its run is saved, ARC-MAGIC-1280); `can_autoscale` and the rotation are carried in the art id but not applied.

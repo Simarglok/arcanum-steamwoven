@@ -20,7 +20,7 @@ public partial class TerrainViewerApp
     /// ARC-RENDER-1990 (FR-COMBAT-006; ledger ER5, TT14) native observation (stage "weapon-hit", only when named, with --hero, on a map window with the inventory active): the attack end (0x4B6930) of a hit on the hero asks the weapon's own hit
     /// effect (0x4377C0) first. The stage runs the cast host's attack end for the hero as the victim with the prototype of the Tesla Rod (6060) and of Bronwyck's Gun (6069): the weapon list's hit entry plays as an overlay run on the hero (the entry's own
     /// art, additive, both overlay parts) and the blood of the hit is not asked; with no weapon, and with a weapon whose hit entry is empty (6050), the blood of the hit is asked and no entry of the weapon list plays. NONE when the weapon list is
-    /// not read. <c>ARC_WEAPON_HIT_CAPTURE=FOLDER</c> saves a readback of the view while the blood (before the change: what every weapon did), the Tesla Rod's and Bronwyck's effect shows (for the thread's composite; never committed).
+    /// not read. <c>ARC_WEAPON_HIT_CAPTURE=FOLDER</c> saves a readback of the view while the blood (before the change: what every weapon did), the Tesla Rod's and Bronwyck's effect shows, and (ARC-RENDER-2011) before and while the swing flash of a firearm shows on the hero (for the thread's composite; never committed).
     /// </summary>
     private async Task RunAreaWeaponHitStageAsync(TerrainLoadResult? mapMode = null)
     {
@@ -115,7 +115,37 @@ public partial class TerrainViewerApp
                 await Shot(name);
                 GD.Print($"{WeaponHitCode} weapon-hit {name} prototype={prototype} entry={Entry(prototype)} art=0x{entry.Art!.Value:X8} frame={first}");
             }
-            GD.Print($"{WeaponHitCode} native-smoke weapon-hit PASS " + System.Text.Json.JsonSerializer.Serialize(new { Map = _readyMapName, Tesla = Entry(TeslaRodPrototype), Bronwyck = Entry(BronwycksGunPrototype) }));
+            // ARC-RENDER-2011: the weapon's swing (kind 1) and begin (kind 0) effects go on the attacker (the hero here), turned to its facing, hit or miss, and play the entry's sound.
+            var swingGroup = Enumerable.Range(0, table.Entries.Count / WeaponHitEffectRules.PerWeapon).FirstOrDefault(g => table.At(g * WeaponHitEffectRules.PerWeapon + WeaponHitEffectRules.Swing) is { Art: not null } e && (e.Flags & SpellEyeCandyFlags.Animates) != 0, -1);
+            if (swingGroup < 0) { GD.Print($"{WeaponHitCode} weapon-swing NONE (no weapon with an animating swing entry)"); }
+            else
+            {
+                var swingPrototype = WeaponHitEffectRules.FirstPrototype + WeaponHitEffectRules.PrototypeFileOffset + swingGroup;
+                var swingEntry = EyeCandyEntryRef.Make(EyeCandyList.Weapon, swingGroup * WeaponHitEffectRules.PerWeapon + WeaponHitEffectRules.Swing)!.Value;
+                var swingShape = table.At(EyeCandyEntryRef.IndexOf(swingEntry));
+                bool SwingShows() => ShownEyeCandyHost?.Shown().Any(o => o.Owner == SessionSpellCaster.Hero && o.Eye.Entry == swingEntry) == true;
+                await Clear();
+                Require(table.At(WeaponHitEffectRules.Index(PlainWeaponPrototype, WeaponHitEffectRules.Swing)!.Value).Art is null, "the plain weapon's swing entry is empty");
+                Require(!caster.WeaponAttackEffect(SessionSpellCaster.Hero, WeaponHitEffectRules.Swing, PlainWeaponPrototype, 3), "a weapon with an empty swing entry plays none");
+                Require(!caster.WeaponAttackEffect(SessionSpellCaster.Hero, WeaponHitEffectRules.Swing, null, 3), "unarmed plays none");
+                await Frames(2);
+                Require(!AnyWeaponShows(), "and nothing of the weapon list shows");
+                await Shot("swing-before");
+                var soundsBefore = _weaponEyeCandySoundsForSelfTest.Count;
+                var octant = 5;
+                Require(caster.WeaponAttackEffect(SessionSpellCaster.Hero, WeaponHitEffectRules.Swing, swingPrototype, octant), $"the swing entry {swingEntry} of prototype {swingPrototype} plays on the hero: {swingShape}");
+                for (var i = 0; i < 40 && !SwingShows(); i += 2) await Frames(2);
+                var swing = ShownEyeCandyHost?.Shown().FirstOrDefault(o => o.Owner == SessionSpellCaster.Hero && o.Eye.Entry == swingEntry);
+                Require(swing is not null, "the swing entry shows on the attacker");
+                Require(EyeCandyArt.Rotation(swing!.Eye.Art) == octant && EyeCandyArt.Number(swing.Eye.Art) == EyeCandyArt.Number(swingShape.Art!.Value), $"its art is the entry's turned to the facing {octant}: 0x{swing.Eye.Art:X8}");
+                Require(swingShape.Sound < 0 || _weaponEyeCandySoundsForSelfTest.Count == soundsBefore + 1, "the entry's sound was played with the add");
+                Require(!BloodShows(), "a swing asks no blood");
+                for (var i = 0; i < 100 && !_eyeCandyDrawnForSelfTest.Contains(swingEntry); i += 2) await Frames(2);
+                Require(_eyeCandyDrawnForSelfTest.Contains(swingEntry), "the draw placed the swing entry's parts");
+                for (var k = 0; k < 6; k++) { await Shot($"swing-{k}"); await Frames(1); }
+                GD.Print($"{WeaponHitCode} weapon-swing prototype={swingPrototype} entry={swingEntry} art=0x{swing.Eye.Art:X8} octant={octant} sound={swingShape.Sound}");
+            }
+            GD.Print("ARC-RENDER-1990 native-smoke weapon-hit PASS " + System.Text.Json.JsonSerializer.Serialize(new { Map = _readyMapName, Tesla = Entry(TeslaRodPrototype), Bronwyck = Entry(BronwycksGunPrototype), Swing = swingGroup }));
         }
         finally
         {
