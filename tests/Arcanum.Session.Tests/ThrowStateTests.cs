@@ -99,6 +99,7 @@ public sealed class ThrowStateTests
         // ARC-COMBAT-1719: the thrown item's end scripts name the hero, the item and the target; the hero's thrown item's hit and miss are the thrown-item host's (Thrown).
         var ends = owner.QueryShotEndScripts(shot.Shot.Value)!.Value;
         Assert.AreEqual((SessionEventKinds.PlayerEntity, "kit:1", true), (ends.Attacker, ends.Weapon, ends.Thrown));
+        Assert.IsTrue(ends.IsWeapon, "ARC-COMBAT-1766: the thrown dagger is a weapon, read by the session while it lies hidden on the hero's cell");
         Assert.AreEqual(GameSessionFailure.None, owner.LandShot(owner.Version, shot.Shot.Value, new(rat)).Failure);
         Assert.IsNull(owner.QueryShotEndScripts(shot.Shot.Value), "struck: the strike ran the scripts, the landing the session splits off runs none");
         Assert.AreEqual(0, owner.QueryShotEndItemEvents(shot.Shot.Value, tile).Count, "struck: the landing the session splits off fires nothing more");

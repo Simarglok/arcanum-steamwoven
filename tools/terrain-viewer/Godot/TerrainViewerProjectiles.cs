@@ -35,6 +35,8 @@ public partial class TerrainViewerApp
     private int _projectilesUnlaunchedForSelfTest;
     // ARC-DEV-140 (B14): the item events a shot's end fired so far, for the smoke: the shot, the item, the tile, the item spells the executor fired (spell numbers) and how many of them started.
     private readonly List<(SessionShot Shot, string Item, CellCoord Tile, IReadOnlyList<int> Spells, int Started)> _shotEndItemEventsForSelfTest = [];
+    // ARC-COMBAT-1766: the weapon's scripts the viewer asked at a flight's end (the points it ran the host for, whether or not a script sits at them), for the ranged and npc-shot stages.
+    private readonly List<(SessionShot Shot, bool Destination, string Attacker, string Weapon, string? Target, bool Thrown, IReadOnlyList<int> Points)> _shotEndScriptsForSelfTest = [];
 
     /// <summary>The projectiles in flight now (the shown session's host, in the order they left); none without one (ARC-DEV-240: a host of a replaced session shows none).</summary>
     private IReadOnlyList<AreaProjectile> _projectiles => ShownProjectileHost?.Projectiles ?? [];
@@ -415,6 +417,8 @@ public partial class TerrainViewerApp
         GD.Print($"ARC-COMBAT-019 boomerang-turn shot={projectile.Shot.Id} from={from.X},{from.Y} to={hero.X},{hero.Y} line={flight is not null}");
         if (flight is null)
         {
+            // ARC-COMBAT-1766 (ledger PF9, limit): the original's turn back (0x435A00) cannot fail on the hero's own tile; its flight tick (0x42F6A0) calls the crossing (0x4B2870, the second end's scripts) only on a tile change, which the
+            // exports do not show here, so the second end's scripts are not run (no second end is read for a flight of no length).
             EndProjectile(projectile, ProjectileStrikeKind.DestinationEnd, null, "turned on the hero's tile: back at once");
             BoomerangReturned(projectile);
             return false;
@@ -700,13 +704,15 @@ public partial class TerrainViewerApp
         var isCarried = carried.Entity is not null;
         var placed = hero && !isCarried ? owner.QueryPlacedItems().FirstOrDefault(item => item.Entity == ends.Weapon) : null;
         var weaponMap = isCarried ? carried.Origin.RuntimeMap : placed is not null ? (placed.Origin ?? placed.Map).RuntimeMap : map;
-        // 0x4B2870: the critical points ask that the parent item is a weapon (object type 5); an item the session does not list counts as the wielded weapon, an NPC's as a weapon.
-        var isWeapon = !hero || (isCarried ? carried.Kind.Type : placed?.Kind.Type ?? SessionItemType.Weapon) == SessionItemType.Weapon;
+        // 0x4B2870: the critical points ask that the parent item is a weapon (object type 5); the session read it before the end (ARC-COMBAT-1766: a thrown item the landing transformed has no placed row any more).
+        var isWeapon = ends.IsWeapon;
         Arcanum.Scripting.Scr.ScrObjectRef Ref(string id) => IsHero(id) ? host.Pc : new(map, ScriptCodeOfCast(id));
         var weaponRef = new Arcanum.Scripting.Scr.ScrObjectRef(weaponMap, ends.Weapon);
         var attackerRef = Ref(ends.Attacker);
         var targetRef = ends.Target is { } target ? Ref(target) : (Arcanum.Scripting.Scr.ScrObjectRef?)null;
         var points = AreaShotEndScripts.Points(destination, ends.Critical, isWeapon, hero && ends.Thrown);
+        _shotEndScriptsForSelfTest.Add((projectile.Shot, destination, ends.Attacker, ends.Weapon, ends.Target, ends.Thrown, [.. points]));
+        if (_shotEndScriptsForSelfTest.Count > 64) _shotEndScriptsForSelfTest.RemoveAt(0);
         foreach (var point in points)
         {
             var ran = Awarded(host, host.RunCombatPoint(point, weaponRef, attackerRef, targetRef, owner.Rules.Scripts));

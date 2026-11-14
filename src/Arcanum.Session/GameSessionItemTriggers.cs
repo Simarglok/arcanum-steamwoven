@@ -142,8 +142,12 @@ public sealed partial class GameSessionOwner
                     arrow.Target == HeroArrowTarget ? SessionEventKinds.PlayerEntity : arrow.Target)
                 : null;
         if (!_shots.TryGetValue(shot, out var pending) || pending.Struck || pending.WeaponItem is not { } item) return null;
-        return new(SessionEventKinds.PlayerEntity, item, pending.Check.Outcome is AttackOutcome.CriticalHit or AttackOutcome.CriticalMiss, pending.Thrown is not null, pending.Entity);
+        return new(SessionEventKinds.PlayerEntity, item, pending.Check.Outcome is AttackOutcome.CriticalHit or AttackOutcome.CriticalMiss, pending.Thrown is not null, pending.Entity, HeroShotItemIsWeapon(item));
     }
+
+    // ARC-COMBAT-1766: the kind of the hero's projectile item, read while the shot flies: a thrown item lies placed (hidden) on the hero's cell, a wielded weapon is held; an item the session does not list counts as a weapon.
+    private bool HeroShotItemIsWeapon(string item) =>
+        (_inventory.PlacedItem(item)?.Kind.Type ?? HeroHeld().Where(held => held.Entity == item).Select(held => (SessionItemType?)held.Kind.Type).FirstOrDefault()) is null or SessionItemType.Weapon;
 
     /// <summary>
     /// ARC-MAGIC-024: the item event of <paramref name="target"/>'s dying animation's end (0x42FF40, IC5,
