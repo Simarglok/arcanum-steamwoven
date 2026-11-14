@@ -89,6 +89,28 @@ public sealed class HostilityTests
         Assert.AreEqual(GameSessionFailure.InvalidDangerTarget, owner.MakePeace(owner.Version, new() { Entity = "bad id", Other = SoggHandle }).Failure);
     }
 
+    // ARC-WORLD-1864: 0x4AA300 takes its head from the chain of leaders (0x45DDA0) and walks the head's follower tree (0x441260), so a companion's summon makes peace with the hero's side, and an NPC
+    // head that is no one's follower lists its own followers.
+    [TestMethod]
+    public void PeaceHeadFollowsTheChainOfLeadersAndItsFollowerTree()
+    {
+        using var owner = Owner();
+        const string Summon = "oid:imp", Boss = "oid:boss", Minion = "oid:minion";
+        Join(owner, Virgil);
+        Assert.AreEqual(GameSessionFailure.None, owner.ForceJoinLeader(owner.Version, Summon, Virgil).Failure);
+        Changed(owner.AddDangerEnemy(owner.Version, Wolf, Hero).Disposition);
+        Changed(owner.SetDangerState(owner.Version, Fight(Wolf, SessionCombatant.Critter(Summon))).Disposition);
+        var peace = owner.MakePeace(owner.Version, new() { Entity = Wolf, Other = SessionCombatant.Critter(Summon), Facts = WithReaction }).Steps.Single();
+        Assert.AreEqual(Hero, peace.Head, "the summon's chain reaches the hero");
+        CollectionAssert.AreEqual(new[] { Virgil, Summon }, peace.Followers.ToArray(), "the hero's follower tree: the followers, then the followers of followers");
+        Assert.AreEqual(0, owner.QueryDanger(Wolf).Enemies.Count);
+
+        Assert.AreEqual(GameSessionFailure.None, owner.ForceJoinLeader(owner.Version, Minion, Boss).Failure);
+        var free = owner.MakePeace(owner.Version, new() { Entity = Wolf, Other = SessionCombatant.Critter(Boss) }).Steps.Single();
+        Assert.AreEqual(SessionCombatant.Critter(Boss), free.Head, "no chain reaches a PC: the other itself");
+        CollectionAssert.AreEqual(new[] { Minion }, free.Followers.ToArray());
+    }
+
     [TestMethod]
     public void StopAttackingMakesPeaceLeavesCombatModeAndStopsEachFollower()
     {

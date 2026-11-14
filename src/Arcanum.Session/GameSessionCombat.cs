@@ -644,7 +644,7 @@ public sealed partial class GameSessionOwner
     private LifeState NpcState(string entity, SessionCombatantFacts facts) =>
         _life.Critters.TryGetValue(entity, out var record) ? record.State : facts.Loaded;
 
-    private bool InPcParty(SessionCombatant participant) => participant.IsHero || LedByPc(participant.Entity!);
+    private bool InPcParty(SessionCombatant participant) => participant.IsHero || PcLeads(participant.Entity!);
 
     private LifeStatus HeroStatus(CombatPlan? plan = null)
     {

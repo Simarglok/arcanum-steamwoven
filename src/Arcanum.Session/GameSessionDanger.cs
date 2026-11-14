@@ -522,19 +522,19 @@ public sealed partial class GameSessionOwner
         internal void AddEnemy(string entity, SessionCombatant entry)
         {
             var record = Get(entity);
-            var sameLeader = owner.LedByPc(entity) && (entry.IsHero || owner.LedByPc(entry.Entity!));
+            var sameLeader = owner.PcLeads(entity) && (entry.IsHero || owner.PcLeads(entry.Entity!));
             if (DangerRules.SkipsEnemy(record.Enemies, entry, sameLeader)) return;
             _staged[entity] = record with { Enemies = [.. record.Enemies, entry] };
         }
 
-        // The team add (0x4AF8C0): the offender's PC leader (the hero for its followers) or the offender, and for the hero its
-        // follower array in order.
+        // The team add (0x4AF8C0): the offender's PC leader up the chain (0x45DDA0: the hero for its followers and their followers) or the offender, and for the hero its follower tree (0x4413E0 → 0x441260:
+        // the direct followers in array order, then each follower's own followers).
         internal void AddTeam(string entity, SessionCombatant offender)
         {
-            var head = offender.IsHero || owner.LedByPc(offender.Entity!) ? SessionCombatant.Hero : offender;
+            var head = offender.IsHero || owner.PcLeads(offender.Entity!) ? SessionCombatant.Hero : offender;
             AddEnemy(entity, head);
             if (head.IsHero)
-                foreach (var follower in owner._party.Order) AddEnemy(entity, SessionCombatant.Critter(follower));
+                foreach (var follower in owner.FollowerTreeOf(SessionEventKinds.PlayerEntity)) AddEnemy(entity, SessionCombatant.Critter(follower));
         }
 
         internal void AllowAttacking(SessionCombatant combatant)
