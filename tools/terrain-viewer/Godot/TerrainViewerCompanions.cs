@@ -179,8 +179,9 @@ public partial class TerrainViewerApp
 
     /// <summary>
     /// ARC-DEV-073 (MIG10): what the session's move list asks the viewer for. A follower that is unconscious (0x45D800: no fatigue left,
-    /// not undead) is ordered to wait and stays behind, with its wait timer from the roster facts; NPC-led followers of followers are
-    /// not modelled (no source of leaders), so none travel below a follower.
+    /// not undead) is ordered to wait and stays behind, with its wait timer from the roster facts. ARC-WORLD-2118 (GR14): the followers of a follower
+    /// travel too (the move list's walk 0x4D3760 reads each follower's array), those this viewer can move: a created critter (the session moves the whole object) and a critter the shown group
+    /// holds (it arrives with the group's placement edits). An NPC of the map that the AI host holds, led by a companion, has no body edit here and stays (NOT READY, party-runtime.md).
     /// </summary>
     private SessionTransferFacts TransferFacts()
     {
@@ -190,6 +191,8 @@ public partial class TerrainViewerApp
             // ARC-DEV-076 (MIG3): by identity, wherever the companion stands (no home-map fallback).
             NoFatigue = entity => session is not null && host is not null && _areaCompanions?.Companions.Any(c => c.Entity == entity) == true
                 && AreaLife.Unconscious(session, host, entity) == true,
+            FollowersOf = leader => session is null ? [] : session.QueryFollowers(leader)
+                .Where(follower => SessionCreatedObject.KindOf(follower) == SessionCreatedKind.Critter || _areaCompanions?.Companions.Any(c => c.Entity == follower) == true).ToArray(),
             WaitFacts = entity => session is not null && _areaCompanions?.Companions.FirstOrDefault(c => c.Entity == entity) is { } companion
                 ? AreaCompanionRoster.WaitFacts(companion.Facts, session.QueryHeroPartySide()) : null,
         };

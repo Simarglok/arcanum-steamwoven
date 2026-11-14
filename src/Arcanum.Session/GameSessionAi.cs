@@ -289,7 +289,7 @@ public sealed partial class GameSessionOwner
     }
 
     // The gate's critter-flags write (CL5) in one revision: the life conditions, the danger bits of the word, combat mode and
-    // concealment. Concealment is held only for the hero's followers, so a set bit for another NPC is not stored.
+    // concealment. Concealment is held only for the critters the hero leads (its followers and theirs: ARC-WORLD-2118), so a set bit for another NPC is not stored.
     private GameSessionFailure WriteAiCritterFlags(string npc, AiCritterFlags flags, (LifeState State, LifeFacts Facts, SessionLifeTarget Target)? life)
     {
         var recorded = _life.Critters.TryGetValue(npc, out var record);
@@ -297,7 +297,7 @@ public sealed partial class GameSessionOwner
         var danger = _danger.Get(npc);
         var bits = (danger.Flags & ~AiCritterFlags.CritterBits) | (flags.Danger & AiCritterFlags.CritterBits);
         var combat = _combat.Critters.Contains(npc) != flags.CombatMode;
-        var conceal = _combat.Concealed.Contains(npc) != flags.Concealed && (!flags.Concealed || _party.Order.Contains(npc));
+        var conceal = _combat.Concealed.Contains(npc) != flags.Concealed && (!flags.Concealed || PcLeads(npc));
         if (!lifeChanges && bits == danger.Flags && !combat && !conceal) return GameSessionFailure.None;
         if (lifeChanges && !recorded && _life.Critters.Count >= _limits.MaxLifeRecords) return GameSessionFailure.BudgetExceeded;
         var next = danger with { Flags = bits };
