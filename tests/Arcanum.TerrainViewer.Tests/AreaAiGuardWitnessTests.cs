@@ -1,5 +1,6 @@
 using Arcanum.Session;
 using Arcanum.Data.Area;
+using Arcanum.Data.Objects;
 using Arcanum.Simulation.Ai;
 using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Movement;
@@ -159,5 +160,24 @@ public sealed class AreaAiGuardWitnessTests
         var (f, host) = Open(GuardClass);
         using var _ = f;
         Assert.AreEqual(0, host.GuardWitnesses(f.A, Door1, Portal, 6402, Door, GuardWitnessMode.Done, Loudness.Loud).Count, "an NPC no PC leads");
+    }
+    [TestMethod]
+    public void A_created_or_summoned_critter_in_the_square_is_a_witness_as_a_map_npc_is()
+    {
+        // The scene's second witness stands 20 tiles off; the critter the session created (the fixture's creation row is a name-1 NPC) is in the square beside the door.
+        var (f, host) = Open(witnessClass: 0, new CellCoord(40, 14));
+        using var _ = f;
+        var created = new AreaCreatedCritters(f.Session, made => new CreatedObjectRowResult(CreatedRowFailure.None,
+            AreaAiHostRebindTests.NpcWith(new("created", made.Map.RuntimeMap, AreaSourceKind.Mobile, null, 0, 0, CreatedObjectRows.KeyId(made.Entity), 0), made.Cell, (1, 1))));
+        var made = f.Session.CreateObject(f.Session.Version, SessionCreatedKind.Critter, 28359, new(1), Near);
+        Assert.AreEqual(GameSessionFailure.None, made.Failure);
+        f.Inventory.Resolver.SetCreated(created.Maps(new(1)));
+        var before = host.GuardWitnesses(AiSchedulerRules.Pc, Door1, Portal, notifyNpc: 1, Door, GuardWitnessMode.Done, Loudness.Loud).Select(r => r.Witness).ToArray();
+        CollectionAssert.DoesNotContain(before, made.Object!.Entity, "before the host syncs the created critter it is not in the square");
+
+        host.SyncCreated(created.Npcs(new(1)));
+        var reports = host.GuardWitnesses(AiSchedulerRules.Pc, Door1, Portal, notifyNpc: 1, Door, GuardWitnessMode.Done, Loudness.Loud);
+
+        CollectionAssert.Contains(reports.Select(r => r.Witness).ToArray(), made.Object.Entity, "the created critter is listed by the witness search like any NPC of the map: " + host.TraceOf(made.Object.Entity)?.Setter);
     }
 }

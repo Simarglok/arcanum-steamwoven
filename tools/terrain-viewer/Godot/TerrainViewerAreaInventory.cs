@@ -293,6 +293,7 @@ public partial class TerrainViewerApp
             _inventoryPanel.TakeRequested += item => { if (!ContentsWindow) TakeFromBody(item); };
             _inventoryPanel.TakeAllRequested += () => { if (!ContentsWindow) TakeAllFromBody(); };
             _inventoryPanel.ArrangeRequested += ArrangeFromWindow;
+            _inventoryPanel.StatRequested += ShowStatLines;
             _inventoryPanel.SoundRequested += id => PlayInterfaceSound(id, "inventory arrange button");
             _inventoryPanel.PlantRequested += item => { if (!ContentsWindow) PickPocketAttempt(Arcanum.Simulation.Skills.PickPocketDirection.Plant, item); };
             _inventoryPanel.UseRequested += item => { if (!ContentsWindow) UseItemFromWindow(item); };

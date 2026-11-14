@@ -30,8 +30,8 @@ public sealed class RouteCorridorLimits
 /// </summary>
 public sealed class RouteCorridor
 {
-    private RouteCorridor(CellCoord from, CellCoord target, RouteCorridorOutcome outcome, string reason, IReadOnlyList<CellCoord> waypoints, int cells, int expansions)
-    { From = from; Target = target; Outcome = outcome; ReasonCode = reason; Waypoints = waypoints; Cells = cells; Expansions = expansions; }
+    private RouteCorridor(CellCoord from, CellCoord target, RouteCorridorOutcome outcome, string reason, IReadOnlyList<CellCoord> waypoints, int cells, int expansions, IReadOnlyList<CellCoord>? path = null)
+    { From = from; Target = target; Outcome = outcome; ReasonCode = reason; Waypoints = waypoints; Cells = cells; Expansions = expansions; Path = path ?? []; }
 
     public CellCoord From { get; }
     public CellCoord Target { get; }
@@ -42,7 +42,31 @@ public sealed class RouteCorridor
     /// <summary>Cells entered from <see cref="From"/> to the corridor's end.</summary>
     public int Cells { get; }
     public int Expansions { get; }
+    /// <summary>The cells entered from <see cref="From"/> to the corridor's end, in order (the cells the shared search accepted step by step).</summary>
+    public IReadOnlyList<CellCoord> Path { get; }
     public CellCoord? End => Waypoints.Count == 0 ? null : Waypoints[^1];
+
+    private static readonly NeighborDirection[] Directions = Enum.GetValues<NeighborDirection>();
+
+    /// <summary>
+    /// The corridor's own walk (ARC-DEV-2100): its cells from <see cref="From"/> to its end as a found plan, the segment its first steps. The
+    /// follower walks it for a leg the local planner cannot find from where the walker stands (the original's request is a bounded search of
+    /// its own, ledger LR1-LR3, and a detour around a wall can pass its limits) instead of the PC's straight line, which runs into the wall.
+    /// Null unless the corridor <see cref="RouteCorridorOutcome.Found"/> its target.
+    /// </summary>
+    public RoutePlan? WalkPlan(RouteLimits? limits = null)
+    {
+        if (Outcome != RouteCorridorOutcome.Found || Path.Count == 0) return null;
+        limits ??= new RouteLimits();
+        var steps = new List<NeighborDirection>(Path.Count);
+        var cell = From;
+        foreach (var next in Path)
+        {
+            steps.Add(Directions.First(d => RoutePlanner.Neighbor(cell, d) == next));
+            cell = next;
+        }
+        return new RoutePlan(From, Target, RouteOutcome.Found, RouteMethod.CorridorWalk, "ROUTE_CORRIDOR_WALK", steps.ToArray(), limits.SegmentSteps, 0, 0, 0, 0, 0);
+    }
 
     public static RouteCorridor Plan(IRouteStepSource source, CellCoord from, CellCoord target, RouteCorridorLimits? limits = null)
     {
@@ -66,7 +90,7 @@ public sealed class RouteCorridor
             var waypoints = new List<CellCoord>();
             for (var index = limits.WaypointSteps - 1; index < cells.Count - 1; index += limits.WaypointSteps) waypoints.Add(cells[index]);
             waypoints.Add(cells[^1]);
-            return new(from, target, outcome, reason, waypoints.AsReadOnly(), cells.Count, search.Expansions);
+            return new(from, target, outcome, reason, waypoints.AsReadOnly(), cells.Count, search.Expansions, cells.AsReadOnly());
         }
     }
 }

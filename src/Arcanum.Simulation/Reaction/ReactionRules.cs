@@ -120,20 +120,22 @@ public static class ReactionRules
 
     /// <summary>
     /// A reaction change by <paramref name="delta"/> (R2). Nothing happens for a delta of 0, while this PC mind-controls the
-    /// NPC, or for a negative delta while the PC has extraordinary charisma and leads the NPC (<paramref name="ledByPc"/>:
+    /// NPC, or for a negative delta while the PC has extraordinary charisma and leads the NPC (<paramref name="pcLeads"/>, the chain; <paramref name="ledByPc"/>:
     /// the NPC follows or waits for this PC). Otherwise the delta passes through the PC's bad (negative) or good (positive)
     /// reaction effects and is added to the stored value; a negative change of a follower of this PC also asks for the
-    /// leader check. Invalid facts or a delta outside <see cref="ReactionLimits.MaxMagnitude"/> throw.
+    /// leader check. <paramref name="pcLeads"/> (ARC-WORLD-2119) is whether the chain of the NPC's leaders reaches this PC (0x45DDA0), which the extraordinary-charisma skip reads; it defaults to
+    /// <paramref name="ledByPc"/>. Invalid facts or a delta outside <see cref="ReactionLimits.MaxMagnitude"/> throw.
     /// </summary>
     [OriginalFunction(0x4C0DE0, OriginalFunctionScope.Full)]
-    public static ReactionAdjustment Adjust(int delta, ReactionNpcFacts npc, ReactionPcFacts pc, bool ledByPc)
+    public static ReactionAdjustment Adjust(int delta, ReactionNpcFacts npc, ReactionPcFacts pc, bool ledByPc, bool? pcLeads = null)
     {
         if (!IsValid(npc)) throw new ArgumentException("Invalid NPC reaction facts.", nameof(npc));
         if (!IsValid(pc)) throw new ArgumentException("Invalid PC reaction facts.", nameof(pc));
         if (!ReactionLimits.InRange(delta)) throw new ArgumentOutOfRangeException(nameof(delta));
         if (delta == 0) return new(ReactionSkip.ZeroDelta, 0, false);
         if (npc.MindControlledByPc) return new(ReactionSkip.MindControlled, 0, false);
-        if (delta < 0 && pc.ExtraordinaryCharisma && ledByPc) return new(ReactionSkip.LeaderCharisma, 0, false);
+        // ARC-WORLD-2119 (0x4C0DE0): the skip reads the CHAIN query 0x45DDA0 (a PC at the top of the NPC's leaders), the leader check that follows reads the DIRECT leader.
+        if (delta < 0 && pc.ExtraordinaryCharisma && (pcLeads ?? ledByPc)) return new(ReactionSkip.LeaderCharisma, 0, false);
         var adjusted = ApplyEffects(delta, delta < 0 ? pc.BadReactionEffects : pc.GoodReactionEffects);
         return new(ReactionSkip.None, adjusted, delta < 0 && ledByPc);
     }

@@ -38,14 +38,31 @@ public static class DollRatings
     {
         ArgumentNullException.ThrowIfNull(weapon);
         long total = (long)SkillWeight * skillEffectiveness, weights = SkillWeight;
-        foreach (var type in Enum.GetValues<DamageType>())
+        var ranges = Ranges(weapon, damageBonus, skill);
+        for (var type = 0; type < ranges.Count; type++)
         {
-            var range = AttackRules.WeaponDamageRange(weapon, damageBonus, skill, type, magicCancelled: false);
-            var weight = DamageTypeWeights[(int)type];
-            total += (long)((range.Min + range.Max) / 2) * weight;
+            var weight = DamageTypeWeights[type];
+            total += (long)((ranges[type].Min + ranges[type].Max) / 2) * weight;
             weights += weight;
         }
         return (int)(total / (weights + DivisorOffset));
+    }
+
+    /// <summary>
+    /// ARC-UI-1924 (ledger IW46): the five damage ranges the damage rating averages and the weapon stat lines print (<see cref="AttackRules.WeaponDamageRange"/> per type with the magic adjustments counted and the
+    /// melee damage bonus), in <see cref="DamageType"/> order (normal, poison, electrical, fire, fatigue).
+    /// </summary>
+    public static IReadOnlyList<(int Min, int Max)> Ranges(CombatWeapon weapon, int damageBonus, CombatSkill skill)
+    {
+        ArgumentNullException.ThrowIfNull(weapon);
+        var types = Enum.GetValues<DamageType>();
+        var ranges = new (int Min, int Max)[types.Length];
+        foreach (var type in types)
+        {
+            var range = AttackRules.WeaponDamageRange(weapon, damageBonus, skill, type, magicCancelled: false);
+            ranges[(int)type] = (range.Min, range.Max);
+        }
+        return ranges;
     }
 
     /// <summary>
