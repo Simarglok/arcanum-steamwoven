@@ -147,6 +147,9 @@ public partial class TerrainDiagnosticHud : CanvasLayer
         if (_failure is not null) _failure.OffsetLeft = 16 + inset;
     }
 
+    /// <summary>Self-test (ARC-UI-1994): the left inset last set by <see cref="SetLeftInset"/>.</summary>
+    internal float LeftInsetForSelfTest => _panel is null ? 0 : _panel.OffsetLeft - 16;
+
     private void ResizeForViewport()
     {
         if (_panel is null) return;

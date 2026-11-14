@@ -582,6 +582,18 @@ public partial class TerrainViewerApp
             Require(ReferenceEquals(_worldRouteClick, lastClick), "the GUI took the hide press");
             await ClickAsync(_followerPortraits.ButtonCentreForSelfTest("toggle"), "the show button");
             Require(_followerPortraits.PanelForSelfTest is { Shown: true, ToggleArt: 501 } && _followerPortraits.EntitiesForSelfTest.Contains(companion.Entity), "showing brought the frame back");
+            // ARC-UI-1994: a modal window covers the frames (the HUD starts at the window's left edge) and its close brings them back with the HUD right of them again.
+            Require(_hud is not null && _hud.LeftInsetForSelfTest > 0 && Math.Abs(_hud.LeftInsetForSelfTest - _followerPortraits.RightEdge) < 0.5f, $"the HUD starts right of the frames: inset {_hud?.LeftInsetForSelfTest} edge {_followerPortraits.RightEdge}");
+            OpenInventory();
+            Require(AnyWindowOpen, "the inventory window opened for the HUD inset step");
+            for (var frame = 0; frame < 3; frame++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            RefreshFollowerPortraits();
+            Require(_hud!.LeftInsetForSelfTest == 0, "a modal window covering the frames took the HUD inset back to 0: " + _hud.LeftInsetForSelfTest);
+            EndInventory();
+            for (var frame = 0; frame < 3; frame++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            RefreshFollowerPortraits();
+            Require(!AnyWindowOpen && _followerPortraits.RightEdge > 0 && Math.Abs(_hud.LeftInsetForSelfTest - _followerPortraits.RightEdge) < 0.5f,
+                $"the modal's close put the HUD right of the frames again: inset {_hud.LeftInsetForSelfTest} edge {_followerPortraits.RightEdge}");
             // ARC-DEV-280 (B33): the original opens the menu on the right button's release over the portrait.
             await ClickAsync(_followerPortraits!.PortraitCentreForSelfTest(companion.Entity), "his portrait button", MouseButton.Right);
             Require(_followerPortraits.MenuShown, "a right click on his portrait opened the order menu");
