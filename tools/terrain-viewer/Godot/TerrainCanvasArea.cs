@@ -527,9 +527,17 @@ public partial class TerrainCanvas
         if (!AreaRelight.Active) return;
         // No lighting shown (toggled off, or the area released): no lights either, so a stale list does not light the next view.
         if (_areaAmbient is not { } relitAmbient) { AreaRelight.SetCarriedLights([]); AreaRelight.SetMapLights([]); AreaRelight.Upload(); return; }
+        // ARC-RENDER-2064: the wisps' glows ride with the carried lights, in the relit look only (the Legacy lattice never sees them).
         AreaRelight.SetCarriedLights((_areaCarriedNow?.CarriedPlacements ?? []).Select(p => AreaRelight.FromPlacement(p.Light, p.Rect, relitAmbient.Pair))
-            .Where(light => light is not null).Select(light => light!.Value));
+            .Where(light => light is not null).Select(light => light!.Value).Concat(_areaRelitExtra?.Invoke() ?? []));
         AreaRelight.Upload();
+    }
+    private Func<IEnumerable<AreaRelight.Light>>? _areaRelitExtra;
+    /// <summary>ARC-RENDER-2064: the relit lights that are not part of the Legacy lighting (the wisps' glows); read at each submission while the relit look is on.</summary>
+    internal void SetAreaRelitExtra(Func<IEnumerable<AreaRelight.Light>>? source)
+    {
+        if (ReferenceEquals(_areaRelitExtra, source)) return;
+        _areaRelitExtra = source; _areaView = null; QueueRedraw();
     }
     /// <summary>ARC-RES-1978: the hero's current frame texture (null when none is shown).</summary>
     internal ImageTexture? HeroFrame() => _areaItems.Take(_areaActive).FirstOrDefault(item => item.Visible && item.Actor is not null)?.FrameTexture;
