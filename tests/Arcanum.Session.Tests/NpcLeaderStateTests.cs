@@ -196,7 +196,7 @@ public sealed class NpcLeaderStateTests
     }
 
     [TestMethod]
-    public void A_follower_of_an_npc_is_never_concealed_and_its_leave_clears_the_wait_bit()
+    public void A_follower_of_a_leader_outside_the_hero_chain_is_not_concealed_and_its_leave_clears_the_wait_bit()
     {
         using var owner = Create();
         Changed(owner.ForceJoinLeader(owner.Version, Summon, Mage));

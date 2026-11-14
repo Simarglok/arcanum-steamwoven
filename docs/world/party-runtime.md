@@ -110,8 +110,14 @@ while an NPC leads it.
   0x45DE00), and a leave of an NPC leader (also the first half of a join under another leader) ends the follower's run as the hero's
   leave does (`ObserveLeaves`). The catch-up (0x4AD4D0) reads the chain too, but the host can jump only the hero's companions onto the
   hero, so an NPC of the map led through another leader does not catch up (NOT READY below, #2116).
-- A follower of an NPC is never concealed: 0x45EE30 gives the joiner its leader's concealment, but the session's concealment is the
-  hero party's (toggle, end on an attack, save), so a companion's summon does not sneak with it.
+- Concealment of NPC-led followers (ARC-WORLD-2118, read in the executable): 0x45EE30 forces the state on a critter and on its recursive follower list (0x441260), so the hero's toggle, the attack event's end and the
+  unconceal goal's end (unless the leader is concealed: the hero's flag or an NPC leader's entry) reach the followers of followers. The join 0x45DE90 gives the joiner and its own followers the state of the leader it joins (0x45EDE0 on the
+  leader), and a leave 0x45E040 reveals a concealed leaver with its followers. The session holds a concealment only for the critters whose chain of leaders reaches the hero (`Concealed`, saved in `concealment.npcs`: a follower of the
+  hero, or an NPC led by one), so an NPC leader outside the chain conceals no one and a leaver, a destroyed leader or a cut link drops the whole subtree's entry (the original leaves a follower that stood up alone concealed;
+  the session cannot, being outside the chain).
+- Travel of followers of followers (ARC-WORLD-2118, GR14): the move list walk (0x4D3760) lists a follower's own followers before it; the session's `FollowersOf` fact answers them. The viewer names the followers it can move: a created
+  critter (the session moves the whole object with its events) and a critter of the shown companion group (it arrives with the group's placement edits). An NPC of the map that the AI host holds, led by a companion, has no body edit
+  and stays behind (NOT READY below).
 - The leave of an NPC leader clears the follower's WAIT bit and removes its timer (the forced unwait 0x4AA8C0 inside 0x45DFC0).
 - Scripts (ARC-SCRIPT-1842): make follow (21, 0x45DE90 force 1) joins under any leader in the heartbeat and dying sets
   (`AreaUseScriptHost.ApplyMakeFollow`: the follower an NPC standing on the shown map, the leader the PC or such an NPC; the PC as the
@@ -137,9 +143,8 @@ stats, so `PartyLeave.LeaderCharisma` stays the caller's for an NPC leader. No l
 
 **NOT READY:** a waiting standing under an NPC leader (the original's wait 0x4AA7A0 keeps any leader; here the wait of an NPC-led
 follower sets the flag as for a leaderless NPC and the leave clears it); the catch-up of an NPC of the map whose chain reaches the hero
-through another leader; the concealment of NPC-led followers; the followers of a hero's companion travelling with the hero (the move list's followers of followers, GR14:
-the viewer carries only the hero's companions); the dying follower's leave (0x45DA20 leaves the leader and keeps the handle; the
-session keeps the hero's dead followers in the array as before, and an NPC's too). Tails: #2116 (AI host: catch-up, wait, TellFollowers), #2118 (travel, concealment), #2119 (join check, barter, the remaining direct sites).
+through another leader; the followers of a hero's companion that are map NPCs held by the AI host (the move list carries created critters and the companion group's critters only: no body edit for the others, GR14); the dying follower's leave (0x45DA20 leaves the leader and keeps the handle; the
+session keeps the hero's dead followers in the array as before, and an NPC's too). Tails: #2116 (AI host: catch-up, wait, TellFollowers), #2118 (travel, concealment: done but for the AI host's map NPCs, #2132), #2119 (join check, barter, the remaining direct sites).
 
 ## Wait timer and loyalty (ARC-WORLD-045)
 

@@ -1027,7 +1027,7 @@ public sealed partial class GameSessionOwner : IDisposable
         // The NPC already has a record, so a flagged free record needs no new budget.
         _party.Put(current with { Standing = CompanionStanding.Free, Forced = false, Jilted = leave.Jilt, WaitFlag = false }, false);
         // ARC-SKILLS-008 (ST2): a follower that leaves is no longer concealed.
-        _combat.Concealed.Remove(entity);
+        DropConcealmentOfSubtree(entity);
         ClearNoAttackOnLeave(entity);
         ClearTempusFugitOnLeave(entity);
         if (current.WaitBit) CancelWaitTimers(entity);
@@ -2005,8 +2005,8 @@ public sealed partial class GameSessionOwner : IDisposable
         if (copyTempus) WriteTempusFugitOnJoin(current.Entity);
         // Not modelled (ARC-SCRIPT-1136): the original keeps the timer of a free NPC that joins with the flag, and its expiry would jilt the follower in the array; here the join removes it.
         if (current.WaitBit) CancelWaitTimers(current.Entity);
-        // ARC-SKILLS-008 (ST2): a new follower takes its leader's concealment.
-        if (_combat.HeroConcealed) _combat.Concealed.Add(current.Entity); else _combat.Concealed.Remove(current.Entity);
+        // ARC-SKILLS-008 (ST2): a new follower takes its leader's concealment (0x45EE30 reaches its own followers too, ARC-WORLD-2118).
+        TakeLeaderConcealment(current.Entity, SessionEventKinds.PlayerEntity);
         Revise();
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, consent, new(_identity, _revision));
     }
@@ -2026,7 +2026,7 @@ public sealed partial class GameSessionOwner : IDisposable
         // A waiting NPC lost the flag at the wait (0x4AA7A0), so the leave half of the join has nothing to clear; the clear keeps the join's order all the same.
         ClearTempusFugitOnLeave(entity);
         if (JoinCopiesTempusFugit(entity) && (_objectFlags.ContainsKey(entity) || _objectFlags.Count < MaxObjectFlagCritters)) WriteTempusFugitOnJoin(entity);
-        if (_combat.HeroConcealed) _combat.Concealed.Add(entity); else _combat.Concealed.Remove(entity);
+        TakeLeaderConcealment(entity, SessionEventKinds.PlayerEntity);
     }
 
     private PartyMutationResult RejectParty(GameSessionFailure failure, FollowConsent? consent = null) =>

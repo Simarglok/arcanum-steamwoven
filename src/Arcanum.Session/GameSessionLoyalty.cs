@@ -100,7 +100,7 @@ public sealed partial class GameSessionOwner
         // ARC-SKILLS-008 (ST2): a follower that leaves is no longer concealed.
         if (next.Standing == CompanionStanding.Free)
         {
-            _combat.Concealed.Remove(next.Entity);
+            DropConcealmentOfSubtree(next.Entity);
             ClearNoAttackOnLeave(next.Entity);
             ClearTempusFugitOnLeave(next.Entity);
         }
@@ -244,7 +244,7 @@ public sealed partial class GameSessionOwner
         }
         _party.Put(current with { Standing = CompanionStanding.Free, Forced = false, Jilted = true, Loyalty = loyalty }, false);
         // ARC-SKILLS-008 (ST2): the waiting follower that leaves is no longer concealed.
-        _combat.Concealed.Remove(current.Entity);
+        DropConcealmentOfSubtree(current.Entity);
         ClearNoAttackOnLeave(current.Entity);
         ClearTempusFugitOnLeave(current.Entity);
         Revise();
