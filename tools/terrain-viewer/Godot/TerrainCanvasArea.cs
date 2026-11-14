@@ -485,6 +485,7 @@ public partial class TerrainCanvas
         }
         _areaActive = visible.Length;
         // ARC-RES-1978: while the relit look is on, the carried lights stand where they stand now and the shaders read the merged list.
+        AreaRelight.SetView(world);
         UploadRelightLights();
         for (var index = 0; index < visible.Length; index++)
         {

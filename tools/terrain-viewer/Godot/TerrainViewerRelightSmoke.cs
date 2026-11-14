@@ -26,6 +26,8 @@ public partial class TerrainViewerApp
     // The clock is left at the night hour and the hero's item is put back.
     private async Task RunAreaRelightSmokeAsync(TerrainLoadResult? mapMode = null)
     {
+        // ARC-RES-2007: the night-city variant of this stage (Tarant, Ashbury), in its own file.
+        if (OS.GetEnvironment("ARC_RELIGHT_SCENE") == "city") { await RunAreaRelightCityAsync(mapMode); return; }
         if (_areaSession is not { } session || session.QueryHero() is null || _worldActor.Session is not AreaGridSession || _canvas is null
             || _areaAmbient is not { } driver || _readyArea is not { Lighting: { Local: { } all, CarriedFrame: { } } } area)
         { GD.Print("ARC-RES-1978 native-smoke relight NONE map=" + _readyMapName + " (needs a hero on a lit map)"); return; }
