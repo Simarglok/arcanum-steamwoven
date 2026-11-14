@@ -413,6 +413,7 @@ those of the player's `interface.mes` (the viewer's window ledgers carry them; e
 | ARC-UI-154 (issue #1200, ARC-UI-1200, [S9](#viewer-slice-s9-arc-ui-1200)) | message window, spell and skill panes, Fate, Sleep | 354 message window, 8 spell pane, 274 skill pane (410 × 107), 292 Fate, 565 Sleep and the button 293; 7, 128, 200, 288, 290, 291 (the other modes' 410 × 107 rows), 298 and 218 are drawn by no window and are not built (issue #1870); the dialog box 822–824 is issue #1819 | the Sleep window's art is 565 (ARC-UI-1363), not the 218 the plan named |
 | ARC-UI-1819 (issue #1819, [S10](#viewer-slice-s10-arc-ui-1819)) | common dialog box | 822 `DialogueBox` (325 × 136), the buttons 823 `Lil_Accept` and 824 `Lil_Cancel` (28 × 29, three frames) | the quit question and the death load question; the font 229 and the check and cross marks stay pictures |
 | ARC-UI-1821 (issue #1821, [S11](#viewer-slice-s11-arc-ui-1821)) | HUD contents: combat lamp panel, hotkey slot | 294 `ap_bar` (356 × 30), 297 `EndTurn_But` (31 × 15), 173 `HKSlt1` (32 × 32); the lamps 295, 296, 315, the clock 207–216, the light button 182, the gauges and icons stay pictures; the message window and the skill and spell panes are S9's | audit of the HUD; needed the original art panel first (issue #1888) |
+| ARC-UI-1820 (issue #1820, [S12](#viewer-slice-s12-arc-ui-1820)) | item identify and repair windows | 223 `PDoll` and 221 `Inventor` (the own window's), the lens 233, the arrange button 340 `tiny_butt` (28 × 27, shared by every inventory window); the NPC's image, the item arts, the empty slot covers 241–249 stay pictures | the windows had no original look to replace: ARC-UI-1765 draws it first (Legacy and HD, [ledger IS8–IS11](../research/ledger/items.md#item-identify-and-repair-windows-arc-ui-1731)); this slice adds the Generated drawing |
 | ARC-UI-155 (issue #1201) | reading windows | 477, 487, 489, 491 and 633 backgrounds (the plaque's is 633, not 500), 494 frame, the lens 231 and the book's page buttons 495 and 496 | The reading window had no original look to replace: ARC-UI-1877 draws it first (Legacy and HD, [ledger WR17–WR23](../research/ledger/ui-audio.md#reading-window-arc-ui-049)); this slice adds the Generated recipes. The remaining small panels of the old plan are their own issues (#1751, #1750, #1810, #1817–#1821, #1870) |
 
 A slice is done when its frames draw generated chrome at the window's own device scale in the native smoke (Generated and HD runs), the unit
@@ -686,6 +687,36 @@ The combat lamp panel drew no original art before [issue #1888](https://github.c
 - **Local observation** (owner's Mac, 1280 × 800 window): the stages `turn-based` and `cast` pass in the Generated, HD and Legacy runs; in the Generated run the panel (294), the end-turn button (297) and the slot (173) are generated at the bars' device scale 1, again at 2 in the 1600 × 1200 window, and in the
   HD and Legacy runs none is. The composite (before = the HD pack art that the Generated mode drew until now, after, Legacy) is in the task thread, not in git. Seen there: the generated panel is a plain slate bar with four gold-ringed channels where the original has one continuous brass rail with crosses, the unlit beads are
   brass discs (the original's are dark green glass) and the end-turn button sits in a plain seat; the hotkey slot is a flat dark wood tile where the original's has a grain. The lit lamps and the clock stay the original's pictures.
+
+## Viewer slice S12 (ARC-UI-1820)
+
+S12 draws the item identify and item repair windows (interface modes 5 and 6 of the inventory window, opened by the dialog replies `ii` and `ri`) in the generated interface at the window's own device scale ([S3](#viewer-slice-s3-arc-ui-148)). Positions, sizes,
+alpha tests and hit areas are the Legacy ones (D9); only the drawing changes. The windows had no original look before [issue #1765](https://github.com/Simarglok/arcanum-steamwoven/issues/1765) (a diagnostic list), so that came first as its own PR; S12 is the second.
+The windows are the own inventory window without its boxes, weight lines and map drop (ledger IW20, IW26–IW27, IS8–IS11), so they draw the arts of the own window and the generated recipes of S3 and S4 already cover most of them.
+
+**Audit** (the art numbers the windows draw, as read from the viewer: `AreaInventoryGridArea.DrawOriginal` in the service look, re-read for this slice):
+
+| Piece | Arts | Result |
+| --- | --- | --- |
+| Hero's paper doll frame, with the NPC's name plate, the 10 × 9 doll grid and the portrait ring | 223 `PDoll` (358 × 400) | frame: recipe of [S3](#viewer-slice-s3-arc-ui-148) (`pdoll.art`) |
+| Hero's pack frame: grid pit and cell lines, count bars, icon column | 221 `Inventor` (442 × 400) | frame: recipe of S3 (`inventor.art`) |
+| Round view's lens over the live game view | 233 `lns_papr` (89 × 89) | frame: recipe of [S4](#viewer-slice-s4-arc-ui-1194) |
+| Arrange button | 340 `tiny_butt` (28 × 27, two frames; the windows draw the first) | button: recipe (new, see below) |
+| NPC's image (at half size over the name plate), item arts, remembered item's fill | NPC image art, item arts, the red fill (a rectangle of colour, not art) | pictures: kept |
+| Empty slot covers | 241–249 | state pictures (dark silhouettes of what belongs in the slot): kept, as in S3 |
+| Drop, use and gamble boxes | 224, 225, 342–348 | not drawn in modes 5 and 6 (IW19); stay art in the other modes (S3) |
+| Quote line, counts, ratings | drawn text (the original's font 229 is art glyphs, as before) | not a frame |
+
+- **Arrange button.** `tiny_butt.art` is a `ChromeKind.Button` recipe with `KeepFace`: the original's button is a dark glass ball in a brass ring with no glyph, so like the spells page's college tabs ([S5b](#viewer-slice-s5b-arc-ui-1784)) the ball's own picture
+  stays inside a generated rim that follows the round silhouette, sunk on the second frame. The art is shared: the own, loot, steal, barter and contents windows make the same button (IW30, IW37), so it is generated in all of them (it was a chrome frame of these windows still drawn as the HD or Legacy picture).
+- **NPC image and quote line.** The image (141, 36) at half size and the quote rectangle (180, 29, 155 × 65) lie on the `PDoll` frame's sunk name plate (124, 25, 223 × 55: `AreaServiceArtLayout.NamePlate`, the recipe's own part). The image is a kept picture drawn over the plate, not part of the frame, so
+  no frame region is kept there; an image that would cross the plate's edge (more than 409 × 85 pixels of art) is refused by the smoke. The first three lines of the quote lie on the plate; the rectangle is 10 units taller than the plate and a longer quote runs on
+  the frame's wood below it, as it does on the original's art.
+- **Scale.** The service window draws through the same view as the own window (`AreaInventoryGridArea`), which claims every texture of its look as the scale source at its draw; nothing new was needed. The window redraws when a worker's finished frame replaces the one it drew.
+- **Checks.** `AreaServiceArtTests` (the recipe has the name plate the image and the quote lie on; an image art that fits the plate is told from one that does not; no kept picture of the `PDoll` recipe cuts into the plate and every part lies inside the frame; the three frames paint in bounds and deterministically at
+  whole and fractional scales; the arrange button keeps its dark ball in a generated rim at every scale and sinks on its second frame). The native smoke (stage `barter`, which opens both windows; the stages `loot-room`, `container` and `barter` check the shared button in the own, loot and barter windows), run with `ARC_AREA_WINDOW_ART=legacy|hd|generated`
+  and `ARC_HD_PACK` for the last two: in `generated` the frames 223, 221, 233 and 340 are generated chrome at `round(size × paint scale)` pixels of the window's own device scale, again in a bigger window and back; in `hd` and `legacy` none is; the NPC's image fits the name plate;
+  `ARC_AREA_WINDOW_CAPTURE=PREFIX` saves the viewport as `PREFIX-item-service-identify|repair-MODE[-big|-back].png` (local, not in git).
 
 ## Synthetic comparison
 
