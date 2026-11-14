@@ -1,5 +1,6 @@
 using Arcanum.Scripting.Dialog;
 using Arcanum.TerrainViewer.Core;
+using Arcanum.World;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace Arcanum.TerrainViewer.Tests;
@@ -22,6 +23,7 @@ public sealed class AreaCombatConversationTests
         Assert.AreEqual(DialogConversationSelectStatus.Ended, talk.Select(talk.Options[0].Token).Status);
         CollectionAssert.AreEqual(new[] { f.Entity }, attacked, "once, on the speaker's entity");
         Assert.AreEqual(DialogEndKind.NpcFinalLine, talk.End!.Kind);
+        Assert.IsTrue(AreaConversationText.EndsWithNpcLine(talk), "ARC-UI-2028: the final line is said as a bubble and the window closes at once");
         Assert.IsInstanceOfType<StartCombatCommand>(talk.Effects[^1].Command);
         Assert.IsTrue(f.Host.EndReaction());
     }

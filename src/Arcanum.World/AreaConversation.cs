@@ -1339,6 +1339,11 @@ public static class AreaConversationText
         return numbered ? $"{option.Number}. {text}{block}" : $"{text}{block}";
     }
 
+    /// <summary>ARC-UI-2028 (ledger DF1–DF3): the dialog ended with the NPC's last line (a final line, the last words after an insult, a refusal to talk on): the original says it as a
+    /// bubble and closes the dialog at once, so no window shows it.</summary>
+    public static bool EndsWithNpcLine(DialogConversation conversation) =>
+        conversation.Phase == DialogConversationPhase.Ended && conversation.End?.Kind is DialogEndKind.NpcFinalLine or DialogEndKind.Insulted or DialogEndKind.HostileRefusal;
+
     public static string Outcome(DialogConversation conversation) => conversation.Phase switch
     {
         DialogConversationPhase.Ended when conversation.End!.Kind == DialogEndKind.ReturnToScript =>
