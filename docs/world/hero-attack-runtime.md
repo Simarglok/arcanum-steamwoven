@@ -430,7 +430,7 @@ fatigue −3 kept standing and acting.
   while the hero already lay or fell, keep the plain fall, as an NPC's does, 0x45D730; a goal a frame late, after a kill inside a spell run, is
   read until the plain fall has ended) and the knockdown machine plays that ART instead of the fall; the dying goal waits for it to end, so the
   death cover's 5 s count from the end of the bloody animation. A window move or transfer keeps the animation of the dead hero (its corpse keeps
-  the bloody last frame); a new session (a load) reads the saved goal if there is one, else the hero lies on the plain fall. A monster body (hero in a monster body, ARC-MAGIC-052) loads none of them and falls plain.
+  the bloody last frame); a new session (a load) reads the saved goal if there is one, else the hero lies on the plain fall. A monster body (hero in a monster body, ARC-MAGIC-052) loads the species' own optional 17, 18 and 19 ARTs the same way (ARC-COMBAT-1865: the file is named by N1 with weapon part 0, a file over the archive entry limit counts as missing) and falls plain for the animation the species lacks; the same bodies read the stunned ART (23, weapon part 1).
 - Log lines `ARC-COMBAT-021 hero knockdown stage=… fatigue=…`; the status line adds ` | hero: falling`, `unconscious`, `dead` or
   `getting up`.
 - Native smoke `ARC-COMBAT-021 native-smoke knockdown PASS` (with `--hero`, after the audio stage on the Crash Site exterior and in

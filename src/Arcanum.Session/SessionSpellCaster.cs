@@ -58,6 +58,10 @@ public interface ISpellCastMap : ISpellTargetWorld
     /// <summary>Applies a step's damage to a non-critter object (its object rules); false when that is not ready.</summary>
     bool DamageObject(string id, AttackDamage damage);
 
+    /// <summary>ARC-AI-2112 (ledger GW10): the same damage step with the attacker the damage record carries (the spell run's other object, else its parent; the damage end's guard witnesses read it): the host keeps it on the hit it queues so
+    /// the shown map can call the witnesses. A host with no use for it answers as <see cref="DamageObject(string, AttackDamage)"/>.</summary>
+    bool DamageObject(string id, AttackDamage damage, string? attacker) => DamageObject(id, damage);
+
     /// <summary>ARC-MAGIC-037 (MA-6): a portal's or container's lock facts for the ObjFlag component's lock fields and the Dispel component's held bit, or null when the object is none
     /// (or the host has no lock domain): the session's object, its T0 baseline and its lock level.</summary>
     SpellOpenable? Openable(string id) => null;
@@ -1308,7 +1312,7 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
                 // ARC-MAGIC-1143 (RH1, RH3): the Damage component's tail (0x4518D0, 0x451AE2) runs the damage effect, so an entangled victim that took the damage asks its save again; a dead victim took nothing.
                 if (applied.Outcome is { Changed: true }) SpellDamageHit(step.Object, step.Damage);
             }
-            else if (step.Life is null && damage.Prevented == DamagePrevention.None && _map.DamageObject(step.Object, damage))
+            else if (step.Life is null && damage.Prevented == DamagePrevention.None && _map.DamageObject(step.Object, damage, (run.Other ?? run.Parent)?.Id))
                 _log.Add(new(SpellCastEventKind.Damaged, run.Id, damage.HitPointDamage, step.Object));
         }
     }

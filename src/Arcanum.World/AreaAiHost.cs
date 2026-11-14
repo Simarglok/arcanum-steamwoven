@@ -4268,12 +4268,30 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     private AiParameterRow? Row(string npc) =>
         _scene.Parameters is { } table && Fields(npc)?.Npc is { } fields && table.Lookup(fields) is { Status: AiParameterLookupStatus.Found, Row: { } row } ? row : null;
 
+    /// <summary>
+    /// ARC-WORLD-2117: the effective charisma (stat 7 through the getter 0x4B0490) of the NPC's DIRECT leader (0x45DE00, never the chain): the hero's, or a leading NPC's under its effects in its life state. Null without a leader or when the
+    /// leader's stats are not readable here (a leader of another map): the setter then reads no extraordinary charisma, as for a leaderless NPC.
+    /// </summary>
+    internal int? LeaderCharisma(string npc)
+    {
+        if (Leader(npc) is not { } leader) return null;
+        if (leader == Pc) return _session.QueryHeroStats(new(0))?.Snapshot?.GetEffective(CharacterStat.Charisma);
+        return Build(leader) is { } build && LifeState(leader) is { } state ? build.EffectiveStat(CharacterStat.Charisma, state) : null;
+    }
+
+    /// <summary>
+    /// ARC-WORLD-2117: the unforced leave (0x45DFC0 without the force flag) of a follower from its direct leader, with the leader's charisma read here: an extraordinary-charisma leader (20 or more, 0x4B0EE0) or
+    /// <paramref name="mindControlled"/> refuses it (<see cref="GameSessionFailure.LeaveRefused"/>), an NPC leader's included (the session holds no NPC's stats, so the caller of an NPC-led leave is this host).
+    /// </summary>
+    internal GameSessionMutationResult LeaveUnforced(string npc, bool mindControlled) =>
+        _session.LeaveParty(_session.Version, npc, new PartyLeave(Force: false, LeaderCharisma: LeaderCharisma(npc) ?? 0, MindControlled: mindControlled));
+
     // The setter's facts of the NPC: invulnerable (or nigh-invulnerable), NO_FLEE (the stored flag ORed with the session bit), the
-    // leader's extraordinary charisma.
+    // direct leader's extraordinary charisma (0x4AABE0 → 0x45DE00 → 0x4B0EE0: a PC or NPC leader, stat 7 at 20 or more).
     private DangerSetterFacts SetterFacts(string npc)
     {
         var critter = Find(npc);
-        var charisma = Leader(npc) == Pc && _session.QueryHeroStats(new(0))?.Snapshot?.IsExtraordinary(CharacterStat.Charisma) == true;
+        var charisma = LeaderCharisma(npc) >= FollowConsentRules.ExtraordinaryCharisma;
         return new(Invulnerable: critter is { Invulnerable: true } or { NighInvulnerable: true }, NoFlee: critter?.NoFlee ?? false, LeaderExtraordinaryCharisma: charisma,
             FloatsLine: AiBarks is not null && Active(npc));
     }

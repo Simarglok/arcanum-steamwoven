@@ -145,27 +145,32 @@ public partial class TerrainViewerApp
             _aiForSmoke = true;
             for (var i = 0; i < 4; i++) { Frame(); _areaAmbient!.AdvanceMilliseconds(50, AmbientSector()); }
             Require(_aiHost is not null, "the AI host is built for the stun's nodes");
-            var stunLands = session.ApplyDamage(session.Version, SessionLifeTarget.Hero, new LifeDamage { Effects = CriticalHitEffects.Stun });
-            Require(stunLands.Outcome?.Events.HasFlag(LifeEvents.Stunned) == true && HeroRunsHost()?.StunRun is not null, $"the second stun started its goal: {stunLands.Disposition} {stunLands.Failure}");
-            var stunFramesDrawn = new HashSet<int>(); var stunTicks = 0;
-            var stunPlays = HeroRunsHost()!.StunRun!.Bottom.Count;
-            for (var i = 0; i < 1200 && HeroRunsHost()?.StunRun is not null; i++, stunTicks++)
+            // ARC-COMBAT-1865: the hero's stun that plays out and the deaths of its dying goal, as local steps run for the hero's own body and again for a hero in a monster body (<paramref name="label"/> names the body in the output and the captures).
+            async Task HeroStunPlays(ActorDiagnosticProfile bodyProfile, string label)
             {
-                Frame(); _areaAmbient!.AdvanceMilliseconds(50, AmbientSector());
-                if (_readyActor is { Action: ActorDiagnosticAction.Stunned } stunDrawn) stunFramesDrawn.Add(stunDrawn.Frame);
-                if (i is 3 or 60 or 110 or 160 && profile.Stunned is not null) await Capture($"stunned-{i}");
-                if (HeroRunsHost()?.StunRun is not null) Require(!session.QueryHeroLife()!.Status.IsActive, "the stunned hero cannot act while its goal plays");
+                var stunLands = session.ApplyDamage(session.Version, SessionLifeTarget.Hero, new LifeDamage { Effects = CriticalHitEffects.Stun });
+                Require(stunLands.Outcome?.Events.HasFlag(LifeEvents.Stunned) == true && HeroRunsHost()?.StunRun is not null, $"the second stun started its goal: {stunLands.Disposition} {stunLands.Failure}");
+                var stunFramesDrawn = new HashSet<int>(); var stunTicks = 0;
+                var stunPlays = HeroRunsHost()!.StunRun!.Bottom.Count;
+                for (var i = 0; i < 1200 && HeroRunsHost()?.StunRun is not null; i++, stunTicks++)
+                {
+                    Frame(); _areaAmbient!.AdvanceMilliseconds(50, AmbientSector());
+                    if (_readyActor is { Action: ActorDiagnosticAction.Stunned } stunDrawn) stunFramesDrawn.Add(stunDrawn.Frame);
+                    if (i is 3 or 60 or 110 or 160 && bodyProfile.Stunned is not null) await Capture($"{label}stunned-{i}");
+                    if (HeroRunsHost()?.StunRun is not null) Require(!session.QueryHeroLife()!.Status.IsActive, "the stunned hero cannot act while its goal plays");
+                }
+                if (bodyProfile.Stunned is { } stunArt)
+                {
+                    var cycleTicks = (int)Math.Ceiling(stunArt.FramesPerGroup * 20.0 / Math.Max(stunArt.RawFramesPerSecond, 1));
+                    Require(stunFramesDrawn.Count > 1 && stunTicks >= cycleTicks, $"the stun played {stunFramesDrawn.Count} frames over {stunTicks} ticks (one cycle is {cycleTicks})");
+                    Require(stunPlays <= 1 || stunTicks >= cycleTicks * (stunPlays - 1), $"the stun lasted its {stunPlays} plays: {stunTicks} ticks of {cycleTicks}");
+                }
+                Frame();
+                Require(HeroRunsHost()?.StunRun is null && session.QueryHeroLife()!.Status.IsActive && _worldActor.DownPose is null,
+                    $"the stun ended: the goal is gone, the bit is clear and the hero stands again (run {HeroRunsHost()?.StunRun is not null}, active {session.QueryHeroLife()!.Status.IsActive}, pose {_worldActor.DownPose})");
+                GD.Print($"ARC-COMBAT-1741 hero stun lasted {label} ticks={stunTicks} frames={stunFramesDrawn.Count} plays={stunPlays} art={(bodyProfile.Stunned is null ? "none" : $"{bodyProfile.Stunned.FramesPerGroup}f@{bodyProfile.Stunned.RawFramesPerSecond}")}");
             }
-            if (profile.Stunned is { } stunArt)
-            {
-                var cycleTicks = (int)Math.Ceiling(stunArt.FramesPerGroup * 20.0 / Math.Max(stunArt.RawFramesPerSecond, 1));
-                Require(stunFramesDrawn.Count > 1 && stunTicks >= cycleTicks, $"the stun played {stunFramesDrawn.Count} frames over {stunTicks} ticks (one cycle is {cycleTicks})");
-                Require(stunPlays <= 1 || stunTicks >= cycleTicks * (stunPlays - 1), $"the stun lasted its {stunPlays} plays: {stunTicks} ticks of {cycleTicks}");
-            }
-            Frame();
-            Require(HeroRunsHost()?.StunRun is null && session.QueryHeroLife()!.Status.IsActive && _worldActor.DownPose is null,
-                $"the stun ended: the goal is gone, the bit is clear and the hero stands again (run {HeroRunsHost()?.StunRun is not null}, active {session.QueryHeroLife()!.Status.IsActive}, pose {_worldActor.DownPose})");
-            GD.Print($"ARC-COMBAT-1741 hero stun lasted ticks={stunTicks} frames={stunFramesDrawn.Count} plays={stunPlays} art={(profile.Stunned is null ? "none" : $"{profile.Stunned.FramesPerGroup}f@{profile.Stunned.RawFramesPerSecond}")}");
+            await HeroStunPlays(profile, "");
             // ARC-COMBAT-1741: an NPC's stun likewise lasts its animation (23) where its art has one: the AI host shows the stunned art frame by frame, the viewer draws the pose, the stun ends and the NPC acts again; an
             // NPC whose art has no stun ART is a typed fallback (its stun ends at once, as before).
             var npcCandidate = _combatHost is null ? default : session.QueryMapInventory(new SessionMapId(CurrentAreaMap))?.Holders
@@ -217,56 +222,88 @@ public partial class TerrainViewerApp
             Require(crumpled && stood && HeroRunsHost()?.DownRun is null && !_heroKnockdown.Lying, $"the conscious hero fell and got up: fell {crumpled} rose {stood} stage {_heroKnockdown.Stage}");
             // ARC-COMBAT-1793: a hero a blow kills plays the dying animation its dying goal (31) names (the killing blow's choice: head 17, torso 18, leg 19, a plain kill 7; the Violence Filter forces 7) where its
             // body has the ART, else the fall; goal 31 lasts while it plays and the hero lies on its last frame. The death flow is off in an automated run, so the smoke raises the hero again after each.
-            if (profile.FallDown is not null)
+            async Task HeroDeaths(ActorDiagnosticProfile bodyProfile, string label)
             {
-                var dyingReport = new List<string>();
-                foreach (var (blow, location, expected, shown) in new (string, HitLocation?, DeathAnimation, ActorDiagnosticAction)[] {
-                    ("head", HitLocation.Head, DeathAnimation.Head, ActorDiagnosticAction.Decapitation), ("torso", HitLocation.Torso, DeathAnimation.Body, ActorDiagnosticAction.BlownOutChunk),
-                    ("leg", HitLocation.Leg, DeathAnimation.Leg, ActorDiagnosticAction.SeveredLeg), ("kill", null, DeathAnimation.Plain, ActorDiagnosticAction.FallDown) })
+                if (bodyProfile.FallDown is not null)
                 {
-                    Require(!_heroKnockdown.Lying && session.QueryHeroLife()!.Status.IsActive && HeroRunsHost()?.DownRun is null, $"the hero stands before the {blow}");
-                    var slain = location is { } where ? session.ApplyDamage(session.Version, SessionLifeTarget.Hero, new LifeDamage { HitPoints = 1000, Location = where })
-                        : session.Kill(session.Version, SessionLifeTarget.Hero);
-                    Require(slain.Outcome is { } slainOutcome && slainOutcome.Events.HasFlag(LifeEvents.Died) && slainOutcome.Death == expected, $"the {blow} killed the hero with {expected}: {slain.Disposition} {slain.Failure}");
-                    var named = Arcanum.Simulation.Ai.AiExecutorRules.DyingAnimationOf(expected);
-                    Require(HeroRunsHost()?.DownRun?.Bottom is { Goal: Arcanum.Simulation.Goals.GoalType.Dying } dying && dying.Animation == named, $"goal 31 names animation {named} after the {blow}: {HeroRunsHost()?.DownRun?.Bottom}");
-                    var wantedAnimation = DyingAnimationRules.Chosen(named, _gameSettings.ViolenceFilter);
-                    var wantedArt = profile.DyingArt(wantedAnimation)!.Value;
-                    var dyingFrames = new HashSet<int>(); var dyingTicks = 0; var dyingDrawn = false; var wrongDrawn = "";
-                    for (var i = 0; i < 900 && (HeroRunsHost()?.DownRun is not null || i < 3); i++, dyingTicks++)
+                    var dyingReport = new List<string>();
+                    foreach (var (blow, location, expected, shown) in new (string, HitLocation?, DeathAnimation, ActorDiagnosticAction)[] {
+                        ("head", HitLocation.Head, DeathAnimation.Head, ActorDiagnosticAction.Decapitation), ("torso", HitLocation.Torso, DeathAnimation.Body, ActorDiagnosticAction.BlownOutChunk),
+                        ("leg", HitLocation.Leg, DeathAnimation.Leg, ActorDiagnosticAction.SeveredLeg), ("kill", null, DeathAnimation.Plain, ActorDiagnosticAction.FallDown) })
                     {
-                        Frame(); _areaAmbient!.AdvanceMilliseconds(50, AmbientSector());
-                        if (_readyActor is { Action: var drawnAction } dyingActor && drawnAction is ActorDiagnosticAction.FallDown or ActorDiagnosticAction.Decapitation or ActorDiagnosticAction.BlownOutChunk or ActorDiagnosticAction.SeveredLeg)
+                        Require(!_heroKnockdown.Lying && session.QueryHeroLife()!.Status.IsActive && HeroRunsHost()?.DownRun is null, $"the hero stands before the {blow}");
+                        var slain = location is { } where ? session.ApplyDamage(session.Version, SessionLifeTarget.Hero, new LifeDamage { HitPoints = 1000, Location = where })
+                            : session.Kill(session.Version, SessionLifeTarget.Hero);
+                        Require(slain.Outcome is { } slainOutcome && slainOutcome.Events.HasFlag(LifeEvents.Died) && slainOutcome.Death == expected, $"the {blow} killed the hero with {expected}: {slain.Disposition} {slain.Failure}");
+                        var named = Arcanum.Simulation.Ai.AiExecutorRules.DyingAnimationOf(expected);
+                        Require(HeroRunsHost()?.DownRun?.Bottom is { Goal: Arcanum.Simulation.Goals.GoalType.Dying } dying && dying.Animation == named, $"goal 31 names animation {named} after the {blow}: {HeroRunsHost()?.DownRun?.Bottom}");
+                        var wantedAnimation = DyingAnimationRules.Chosen(named, _gameSettings.ViolenceFilter);
+                        var wantedArt = bodyProfile.DyingArt(wantedAnimation)!.Value;
+                        var dyingFrames = new HashSet<int>(); var dyingTicks = 0; var dyingDrawn = false; var wrongDrawn = "";
+                        for (var i = 0; i < 900 && (HeroRunsHost()?.DownRun is not null || i < 3); i++, dyingTicks++)
                         {
-                            if (drawnAction == wantedArt.Action) { dyingDrawn = true; dyingFrames.Add(dyingActor.Frame); } else wrongDrawn = drawnAction.ToString();
+                            Frame(); _areaAmbient!.AdvanceMilliseconds(50, AmbientSector());
+                            if (_readyActor is { Action: var drawnAction } dyingActor && drawnAction is ActorDiagnosticAction.FallDown or ActorDiagnosticAction.Decapitation or ActorDiagnosticAction.BlownOutChunk or ActorDiagnosticAction.SeveredLeg)
+                            {
+                                if (drawnAction == wantedArt.Action) { dyingDrawn = true; dyingFrames.Add(dyingActor.Frame); } else wrongDrawn = drawnAction.ToString();
+                            }
+                            if (i == 12) await Capture($"{label}dying-{blow}-mid");
                         }
-                        if (i == 12) await Capture($"dying-{blow}-mid");
+                        Require(dyingDrawn && wrongDrawn.Length == 0 && dyingFrames.Count > 1, $"the {blow} drew {wantedArt.Action} over {dyingTicks} ticks, {dyingFrames.Count} frames (another action drawn: '{wrongDrawn}')");
+                        Frame();
+                        Require(HeroRunsHost()?.DownRun is null && _worldActor.DownPose is { } held && held.Action == wantedArt.Action && held.Frame == wantedArt.Resource.FramesPerGroup - 1,
+                            $"goal 31 ended and the hero lies on the last frame of {wantedArt.Action}: {_worldActor.DownPose}");
+                        await Capture($"{label}dying-{blow}-end");
+                        dyingReport.Add($"{blow}:{wantedArt.Action}:{wantedArt.Resource.FramesPerGroup}f@{wantedArt.Resource.RawFramesPerSecond}:{dyingTicks}ticks");
+                        session.Heal(session.Version, SessionLifeTarget.Hero, new LifeHeal { Full = true, Fatigue = 1000, Resurrect = true });
+                        for (var i = 0; i < 600 && !(_heroKnockdown.Stage == AreaKnockdownStage.Standing && HeroRunsHost()?.DownRun is null); i++) { Frame(); _areaAmbient!.AdvanceMilliseconds(50, AmbientSector()); }
+                        Require(!_heroKnockdown.Lying && session.QueryHeroLife()!.Status is { IsDead: false, IsActive: true }, $"the hero was raised and stands: {_heroKnockdown.Stage}");
                     }
-                    Require(dyingDrawn && wrongDrawn.Length == 0 && dyingFrames.Count > 1, $"the {blow} drew {wantedArt.Action} over {dyingTicks} ticks, {dyingFrames.Count} frames (another action drawn: '{wrongDrawn}')");
-                    Frame();
-                    Require(HeroRunsHost()?.DownRun is null && _worldActor.DownPose is { } held && held.Action == wantedArt.Action && held.Frame == wantedArt.Resource.FramesPerGroup - 1,
-                        $"goal 31 ended and the hero lies on the last frame of {wantedArt.Action}: {_worldActor.DownPose}");
-                    await Capture($"dying-{blow}-end");
-                    dyingReport.Add($"{blow}:{wantedArt.Action}:{wantedArt.Resource.FramesPerGroup}f@{wantedArt.Resource.RawFramesPerSecond}:{dyingTicks}ticks");
-                    session.Heal(session.Version, SessionLifeTarget.Hero, new LifeHeal { Full = true, Fatigue = 1000, Resurrect = true });
-                    for (var i = 0; i < 600 && !(_heroKnockdown.Stage == AreaKnockdownStage.Standing && HeroRunsHost()?.DownRun is null); i++) { Frame(); _areaAmbient!.AdvanceMilliseconds(50, AmbientSector()); }
-                    Require(!_heroKnockdown.Lying && session.QueryHeroLife()!.Status is { IsDead: false, IsActive: true }, $"the hero was raised and stands: {_heroKnockdown.Stage}");
+                    // A hero already knocked out lies in its fall and keeps it when killed (0x45D730): no bloody animation, the goal ends at once.
+                    {
+                        var koHit = session.ApplyDamage(session.Version, SessionLifeTarget.Hero, new LifeDamage { Fatigue = 1000 });
+                        Require(session.QueryHeroLife()!.Status.IsUnconscious, $"the knock-out landed: {koHit.Disposition} {koHit.Failure}");
+                        for (var i = 0; i < 400 && _heroKnockdown.Stage != AreaKnockdownStage.Down; i++) { Frame(); _areaAmbient!.AdvanceMilliseconds(50, AmbientSector()); }
+                        Require(_heroKnockdown.Stage == AreaKnockdownStage.Down, $"the knocked-out hero lies: {_heroKnockdown.Stage}");
+                        Require(session.Kill(session.Version, SessionLifeTarget.Hero).Disposition == GameSessionDisposition.Changed, "kill the lying hero");
+                        for (var i = 0; i < 60; i++) { Frame(); _areaAmbient!.AdvanceMilliseconds(50, AmbientSector()); if (HeroRunsHost()?.DownRun is null && i > 2) break; }
+                        Require(HeroRunsHost()?.DownRun is null && _worldActor.DownPose is { Action: ActorDiagnosticAction.FallDown } && _heroKnockdown.Stage == AreaKnockdownStage.Down,
+                            $"the lying hero keeps its fall when killed: {_worldActor.DownPose} {_heroKnockdown.Stage}");
+                        session.Heal(session.Version, SessionLifeTarget.Hero, new LifeHeal { Full = true, Fatigue = 1000, Resurrect = true });
+                        for (var i = 0; i < 600 && !(_heroKnockdown.Stage == AreaKnockdownStage.Standing && HeroRunsHost()?.DownRun is null); i++) { Frame(); _areaAmbient!.AdvanceMilliseconds(50, AmbientSector()); }
+                        Require(!_heroKnockdown.Lying && session.QueryHeroLife()!.Status is { IsDead: false, IsActive: true }, $"the hero was raised again: {_heroKnockdown.Stage} forced={_heroForcedDown} status={session.QueryHeroLife()!.Status} run={HeroRunsHost()?.DownRun?.Bottom?.Goal}");
+                    }
+                    GD.Print("ARC-COMBAT-1793 hero dying " + string.Join(" ", dyingReport) + $" body={label} art={(bodyProfile.Decapitation is null ? "-" : "17")}{(bodyProfile.BlownOutChunk is null ? "-" : "18")}{(bodyProfile.SeveredLeg is null ? "-" : "19")} filter={_gameSettings.ViolenceFilter}");
                 }
-                // A hero already knocked out lies in its fall and keeps it when killed (0x45D730): no bloody animation, the goal ends at once.
+            }
+            await HeroDeaths(profile, "");
+            // ARC-COMBAT-1865: the same stun and deaths for a hero in a monster body (a Trait component's body: species of the first of a few candidates whose installed ARTs include the stunned one): the body reads
+            // its optional stunned ART (23) and bloody dying ARTs (17 to 19) where the species has them, plays the stun and the dying animation its goal names, else falls back (a dying animation to the fall).
+            {
+                var monsterReport = "none";
+                foreach (var species in new[] { 4, 1, 3, 20, 25, 26 })
                 {
-                    var koHit = session.ApplyDamage(session.Version, SessionLifeTarget.Hero, new LifeDamage { Fatigue = 1000 });
-                    Require(session.QueryHeroLife()!.Status.IsUnconscious, $"the knock-out landed: {koHit.Disposition} {koHit.Failure}");
-                    for (var i = 0; i < 400 && _heroKnockdown.Stage != AreaKnockdownStage.Down; i++) { Frame(); _areaAmbient!.AdvanceMilliseconds(50, AmbientSector()); }
-                    Require(_heroKnockdown.Stage == AreaKnockdownStage.Down, $"the knocked-out hero lies: {_heroKnockdown.Stage}");
-                    Require(session.Kill(session.Version, SessionLifeTarget.Hero).Disposition == GameSessionDisposition.Changed, "kill the lying hero");
-                    for (var i = 0; i < 60; i++) { Frame(); _areaAmbient!.AdvanceMilliseconds(50, AmbientSector()); if (HeroRunsHost()?.DownRun is null && i > 2) break; }
-                    Require(HeroRunsHost()?.DownRun is null && _worldActor.DownPose is { Action: ActorDiagnosticAction.FallDown } && _heroKnockdown.Stage == AreaKnockdownStage.Down,
-                        $"the lying hero keeps its fall when killed: {_worldActor.DownPose} {_heroKnockdown.Stage}");
-                    session.Heal(session.Version, SessionLifeTarget.Hero, new LifeHeal { Full = true, Fatigue = 1000, Resurrect = true });
-                    for (var i = 0; i < 600 && !(_heroKnockdown.Stage == AreaKnockdownStage.Standing && HeroRunsHost()?.DownRun is null); i++) { Frame(); _areaAmbient!.AdvanceMilliseconds(50, AmbientSector()); }
-                    Require(!_heroKnockdown.Lying && session.QueryHeroLife()!.Status is { IsDead: false, IsActive: true }, $"the hero was raised again: {_heroKnockdown.Stage} forced={_heroForcedDown} status={session.QueryHeroLife()!.Status} run={HeroRunsHost()?.DownRun?.Bottom?.Goal}");
+                    var wrote = session.WriteTraitArt(session.Version, SessionSpellCaster.Hero, new SessionTraitArt(species, 0));
+                    Require(wrote.Disposition == GameSessionDisposition.Changed, $"the monster body of species {species} was put on the hero: {wrote.Disposition} {wrote.Failure}");
+                    for (var i = 0; i < 900 && !(WantedHeroBody().IsMonster && _heroBodies.TryGetValue(WantedHeroBody(), out var load) && ReferenceEquals(load.Profile, _worldActor.Profile)); i++)
+                    { Frame(); await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame); SyncHeroBody(); }
+                    var monster = _worldActor.Profile;
+                    Require(WantedHeroBody() is { IsMonster: true } && monster.Idle.Selector >> 28 == 12, $"the hero is drawn with a monster profile for species {species}: {_heroBodyStatus}");
+                    if (monster.Stunned is null || monster.FallDown is null) { GD.Print($"ARC-COMBAT-1865 hero monster species={species} SKIP (no stunned or fall ART: stunned {monster.Stunned is not null})"); continue; }
+                    for (var i = 0; i < 10; i++) Frame();
+                    await Capture($"monster{species}-idle");
+                    await HeroStunPlays(monster, $"monster{species}-");
+                    await HeroDeaths(monster, $"monster{species}-");
+                    monsterReport = $"species={species} stunned={monster.Stunned.FramesPerGroup}f dying={(monster.Decapitation is null ? "-" : "17")}{(monster.BlownOutChunk is null ? "-" : "18")}{(monster.SeveredLeg is null ? "-" : "19")}";
+                    break;
                 }
-                GD.Print("ARC-COMBAT-1793 hero dying " + string.Join(" ", dyingReport) + $" art={(profile.Decapitation is null ? "none" : "17+18+19")} filter={_gameSettings.ViolenceFilter}");
+                var restored = session.WriteTraitArt(session.Version, SessionSpellCaster.Hero, null);
+                Require(restored.Disposition == GameSessionDisposition.Changed, $"the monster body came off the hero: {restored.Disposition} {restored.Failure}");
+                for (var i = 0; i < 900 && !(!WantedHeroBody().IsMonster && ReferenceEquals(_worldActor.Profile, profile)); i++)
+                { Frame(); await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame); SyncHeroBody(); }
+                Require(!WantedHeroBody().IsMonster, "the hero has its own body again");
+                Require(monsterReport != "none", "a monster body with the stunned ART was found among the candidates");
+                GD.Print("ARC-COMBAT-1865 hero monster body " + monsterReport);
             }
             HeroRunsHost()?.Interrupt(Arcanum.Simulation.Goals.GoalInterruptRules.OrdinaryActions, "SMOKE_DONE"); StopWorldRoute("SMOKE_DONE");
             GD.Print("ARC-COMBAT-021 native-smoke knockdown PASS " + System.Text.Json.JsonSerializer.Serialize(new {

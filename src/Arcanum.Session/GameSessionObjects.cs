@@ -182,10 +182,10 @@ public enum SessionObjectHostSteps
     DestroySound = 1 << 3,
     /// <summary>The container's spill eye candy (1203) on the first container or item at its cell.</summary>
     SpillEyeCandy = 1 << 4,
-    /// <summary>The witnesses of the hero's attack on an object it left whole (0x4AEE50 with 1: NPCs near that guard the object's
+    /// <summary>The witnesses of an attack (the hero's or, since ARC-AI-2112, a spell caster's damage with an attacker) on an object it left whole (0x4AEE50 with 1: NPCs near that guard the object's
     /// faction lower their reaction by 20, then may turn hostile).</summary>
     WitnessesHearAttack = 1 << 5,
-    /// <summary>The witnesses of the hero breaking the object (0x4AEE50 with 0: possible hostility).</summary>
+    /// <summary>The witnesses of the object's break by such an attacker (0x4AEE50 with 0: possible hostility).</summary>
     WitnessesHearBreak = 1 << 6,
 }
 
@@ -321,15 +321,15 @@ public sealed partial class GameSessionOwner
     /// reaches a portal, container, scenery or trap: <paramref name="amount"/> is the hit-point total the damage step left after its
     /// resistance and the material reduction (<see cref="QueryObjectCombat"/>), added to the object's hit-point damage as the hero's
     /// hit does (<see cref="ObjectDamageRules.Hit"/>); at current hit points 0 or less the object breaks (<see cref="ObjectDamageRules.Break"/>).
-    /// An amount of 0 or less changes nothing while the object has hit points left (the original clamps a negative amount to 0 before it writes); at 0 hit points or less the break check still runs, as for the hero's attack.
+    /// An amount of 0 or less changes nothing while the object has hit points left (the original clamps a negative amount to 0 before it writes; ARC-AI-2123: the result then has no hit, and its <see cref="SessionObjectDamageResult.Host"/> still names <see cref="SessionObjectHostSteps.WitnessesHearAttack"/> when <paramref name="attacked"/>); at 0 hit points or less the break check still runs, as for the hero's attack.
     /// The state is the same map changes as an attack's (<c>object.damage</c>, <c>object.condition</c>), so the snapshot needs no schema step.
     /// Refused with <see cref="GameSessionFailure.InvalidObject"/> for an invalid target, <see cref="GameSessionFailure.ObjectUnavailable"/>
     /// for a destroyed or switched-off object, and the version, revision and (for a respawning scenery) event budget failures; a container's break also refuses whole with <see cref="GameSessionFailure.BudgetExceeded"/> or <see cref="GameSessionFailure.DropTileUnfit"/> when the items sold into it cannot all lie on the ground (ARC-WORLD-1306).
     /// <see cref="SessionObjectDamageResult.Host"/> names the trap, the bust script, the sounds and the spill eye candy the host owns; the
     /// trap fires before the break in the original (OD4), which is why <see cref="SessionObjectHostSteps.TrapFires"/> is set together with the
-    /// break. Not modelled: the witnesses (the hit has no attacker) and the object's script at point 0x17.
+    /// break. The guard witnesses are in <see cref="SessionObjectHostSteps.WitnessesHearAttack"/> / <see cref="SessionObjectHostSteps.WitnessesHearBreak"/> only when <paramref name="attacked"/> says the damage record carries an attacker (ARC-AI-2112: a spell's caster; script, burn and trap damage never do). Not modelled: the object's script at point 0x17.
     /// </summary>
-    public SessionObjectDamageResult DamageObject(GameSessionVersion expected, SessionObjectTarget target, int amount)
+    public SessionObjectDamageResult DamageObject(GameSessionVersion expected, SessionObjectTarget target, int amount, bool attacked = false)
     {
         ThrowIfDisposed();
         if (target is null || !ValidObject(target)) return RejectDamage(GameSessionFailure.InvalidObject);
@@ -338,14 +338,17 @@ public sealed partial class GameSessionOwner
         if (!IsCurrent(expected)) return RejectDamage(GameSessionFailure.StaleVersion);
         // A negative amount counts as 0 (the original clamps it before it writes). A hit for 0 on an object with hit points left changes nothing; on one already
         // at 0 or less (a busted window keeps its damage, ODA3) the 0-hit-point check still runs, as the hero's swing for 0 does.
-        if (amount <= 0 && state.HitPoints > 0) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, null, SessionObjectHostSteps.None, Version);
+        // ARC-AI-2123 (GW1, GW8): the damage end calls the guard witnesses (mode 1) also for a hit of 0 that leaves the object whole, so a record with an attacker still carries that step, with no hit and no change.
+        if (amount <= 0 && state.HitPoints > 0)
+            return new(GameSessionDisposition.NoChange, GameSessionFailure.None, null, attacked ? SessionObjectHostSteps.WitnessesHearAttack : SessionObjectHostSteps.None, Version);
         amount = Math.Max(0, amount);
         if (_revision >= long.MaxValue) return RejectDamage(GameSessionFailure.RevisionExhausted);
         if (target.Baseline is { Kind: DamageableObjectKind.Scenery, Respawning: true } && !RespawnFits()) return RejectDamage(GameSessionFailure.EventBudgetExceeded);
         var hit = ObjectDamageRules.Hit(Facts(target.Baseline, state.Condition), state.Damage, Math.Min(amount, ItemDurabilityLimits.MaxDamageStep));
         var write = ObjectWrite(target, hit);
         if (write.Disposition == GameSessionDisposition.Rejected) return RejectDamage(write.Failure);
-        var host = HostSteps(target.Baseline, hit) & ~(SessionObjectHostSteps.WitnessesHearAttack | SessionObjectHostSteps.WitnessesHearBreak);
+        var host = HostSteps(target.Baseline, hit);
+        if (!attacked) host &= ~(SessionObjectHostSteps.WitnessesHearAttack | SessionObjectHostSteps.WitnessesHearBreak);
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, hit, host, Version);
     }
 
