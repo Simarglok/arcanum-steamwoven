@@ -293,8 +293,7 @@ public partial class TerrainViewerApp
         var speaker = host.Speakers.FirstOrDefault(candidate => AreaConversationState.EntityId(candidate.Row) == entity);
         if (speaker is null || !SpeakerPresent(speaker)) return null;
         var (critter, spell) = FollowerFlagWords(session, entity);
-        var head = CanSpeakRules.Head(new CanSpeakFacts(StunnedParalysedOrMute: (critter & 0x2060) != 0, Asleep: (critter & 0x1000) != 0, Stoned: (spell & 0x10000) != 0,
-            Dead: SpeakerDead(speaker), SpokenWithDead: (spell & unchecked((uint)SessionSpellCaster.SpokenWithDeadSpellFlag)) != 0));
+        var head = CanSpeakRules.Head(SpeakerCanSpeakFacts(session, speaker, entity));
         return head is { } answer && answer != CanSpeakRules.Free || (critter & 0x20000008) != 0 || (spell & 0x4000) != 0 ? null : speaker;
     }
 
