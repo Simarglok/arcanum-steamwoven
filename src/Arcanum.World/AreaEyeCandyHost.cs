@@ -11,12 +11,15 @@ namespace Arcanum.World;
 /// <summary>One eye candy a run shows now: its owner, the run's handle, the goal's entry and frames, and the parts the entry places.</summary>
 public sealed record ShownOverlay(string Owner, GoalHandle Handle, GoalEyeCandy Eye, EyeCandyParts Parts, GoalType Goal);
 
+/// <summary>ARC-SCRIPT-1829: what <see cref="AreaEyeCandyHost.PlayScriptSounded"/> did: whether a run started (and its handle), the entry's sound (−1 none) and whether that sound loops until the run ends.</summary>
+public readonly record struct ScriptEyeCandyPlay(bool Started, GoalHandle? Run, int Sound, bool Loops);
+
 /// <summary>
 /// ARC-DEV-143 (MIG13 S9b, docs/architecture/goal-table.md §3.5, the S9b read GT83–GT93): the host of the shown map's overlay runs: the eye candy of any object (goals 45–48, 58, 59, 75, 76) and the hover of the objects the floating spell raises (goal 44). An eye
 /// candy is a run beside the owner's main run (priority 5, no interrupt, carried): the cast host's EyeCandy components start it through <see cref="Play"/> (the add 0x4CCF70: the goal is chosen by the play flags, the duplicate test, the places in the owner's
 /// overlay lists, the queue under the previous run) and take it off through <see cref="Remove"/> (0x4243E0: a level-6 interrupt of the goal-45 runs of the same entry and tag). The run steps on the animation clock inside the frame step (<see cref="IGoalStepHost"/>),
 /// so the parts stop with the Esc pause; the frame lives on the goal, and the viewer draws <see cref="Shown"/>. The host answers the overlay ports (<see cref="IAiOverlayWorld"/>) from the ART facts the viewer reads.
-/// The live light of a lit entry (Illuminate, ARC-MAGIC-1229) is <see cref="Lights"/>. <b>Not ready:</b> the sound and the tinting of an eye candy, the light's follow of the object's own offsets and its light art number other than the frames the viewer has loaded, the destroy flag (goal 32 queued under the run), the source's bonus and hostility (S9c burns the critters and, since ARC-COMBAT-025, the loose items of the tile, <see cref="AreaFireBurner"/>), the sites that are not an EyeCandy component (struck critters, weapons, scripts, traps) and the draw of the hover's raised body.
+/// The live light of a lit entry (Illuminate, ARC-MAGIC-1229) is <see cref="Lights"/>. <b>Not ready:</b> the sound of a spell's eye candy and the tinting of an eye candy (ARC-SCRIPT-1829 plays a script's, <see cref="PlayScriptSounded"/>), the light's follow of the object's own offsets and its light art number other than the frames the viewer has loaded, the destroy flag (goal 32 queued under the run), the source's bonus and hostility (S9c burns the critters and, since ARC-COMBAT-025, the loose items of the tile, <see cref="AreaFireBurner"/>), the sites that are not an EyeCandy component (struck critters, weapons, scripts, traps) and the draw of the hover's raised body.
 /// </summary>
 public sealed class AreaEyeCandyHost : IAiOverlayWorld, IGoalStepHost
 {
@@ -165,7 +168,7 @@ public sealed class AreaEyeCandyHost : IAiOverlayWorld, IGoalStepHost
     /// no-interrupt starter, or (play flag 0x2) inserted under the previous eye candy run so that it plays after it. <paramref name="limit"/> is the request's limit (−1: none, the default of 0x4CCD20): see the foreground count below.
     /// Returns whether a run holds the eye candy now.
     /// </summary>
-    public bool Play(string owner, int entryIndex, uint play, int tag, string? source = null, int limit = -1)
+    public bool Play(string owner, int entryIndex, uint play, int tag, string? source = null, int limit = -1, int artModifier = 0)
     {
         if (_entry(entryIndex) is not { Art: { } art } entry || PartsOf(entryIndex) is not { } parts) return false;
         if (!SpellEyeCandyRules.Plays((entry.Flags & SpellEyeCandyFlags.Animates) != 0, parts)) return false;
@@ -177,8 +180,9 @@ public sealed class AreaEyeCandyHost : IAiOverlayWorld, IGoalStepHost
         // ARC-MAGIC-1229 (IW2): a lit entry needs a free overlay light slot on the owner; with all four in use the add refuses like a full part list, so no run is built and nothing plays.
         if (entry.Light is not null && !LightSlotFree(owner)) { Skipped++; return false; }
         if ((play & AiExecutorRules.PlayCheckAlready) != 0
-            && _session.QueryGoals().RunsOf(owner).Any(r => !r.Done && r.Bottom.Goal == GoalType.EyeCandy && r.Top.EyeCandy is { } e && e.Tag == tag && e.Art == art)) { Skipped++; return false; }
-        var frame = AiExecutorRules.EyeCandyFrame(play, art, entryIndex, tag, (entry.Flags & SpellEyeCandyFlags.Forever) != 0, source);
+            && _session.QueryGoals().RunsOf(owner).Any(r => !r.Done && r.Bottom.Goal == GoalType.EyeCandy && r.Top.EyeCandy is { } e && e.Tag == tag && e.Art == EyeCandyArt.TurnTo(art, artModifier))) { Skipped++; return false; }
+        // ARC-SCRIPT-1829 (0x44C7A0): a script's play hands the add the object's art rotation (the art modifier 0x502880); the add turns the entry's art to it (0x502930) before it builds the frame.
+        var frame = AiExecutorRules.EyeCandyFrame(play, EyeCandyArt.TurnTo(art, artModifier), entryIndex, tag, (entry.Flags & SpellEyeCandyFlags.Forever) != 0, source);
         // Play flag 0x2: the frame goes under the previous eye-candy run (0x44DBE0, the bottom insert), which then plays it after its own.
         if ((play & AiExecutorRules.PlayStack) != 0 && _last is { } previous && _session.QueryGoals().TryGet(previous, out var held) && !held.Done && AiExecutorRules.IsEyeCandyGoal(held.Bottom.Goal)
             && held.Frames.Length < GoalRun.MaxFrames && _session.ReplaceGoalFrames(previous, held.Frames.Insert(0, frame)) == SessionGoalFailure.None)
@@ -195,12 +199,24 @@ public sealed class AreaEyeCandyHost : IAiOverlayWorld, IGoalStepHost
 
     /// <summary>
     /// ARC-SCRIPT-1592 (WE4, WE5): the script action's play (0x44C7A0): entry <paramref name="number"/> of the script eye-candy list on the owner, as the add 0x4CCF70 with the play flags 0 (no stack, no duplicate test, the tag −1, no limit) and an
-    /// animating run (the +0x1C word 1). Refused (false) for a number past the list or outside the entry range, an entry that plays no run (a static overlay, a part-less entry, one without art), no free place on the owner, or a full table; the
-    /// object's own facing, which the original turns the entry's art to (the art modifier 0x502880 into 0x502930), the sound and the tinting are not modelled (as for every entry of this host).
+    /// animating run (the +0x1C word 1). Refused (false) for a number past the list or outside the entry range, an entry that plays no run (a static entry installs nothing: with +0x1C set the add writes no overlay and no light, GT70), a part-less entry,
+    /// one without art, no free place on the owner, or a full table. ARC-SCRIPT-1829: <paramref name="artModifier"/> is the object's art rotation the entry's art is turned to (the art modifier, ledger WE4).
     /// </summary>
     [OriginalFunction(0x44C7A0, OriginalFunctionScope.Partial)]
-    public bool PlayScript(string owner, int number) =>
-        EyeCandyEntryRef.Make(EyeCandyList.Script, number) is { } entry && Play(owner, entry, 0, -1);
+    public bool PlayScript(string owner, int number, int artModifier = 0) =>
+        EyeCandyEntryRef.Make(EyeCandyList.Script, number) is { } entry && Play(owner, entry, 0, -1, artModifier: artModifier);
+
+    /// <summary>
+    /// ARC-SCRIPT-1829: a script's play as <see cref="PlayScript"/> and what the original's add does with the entry's sound (ledger WE4): an entry that starts a run sounds at the run's begin (looping, <see cref="ScriptEyeCandyPlay.Loops"/>,
+    /// for an <c>anim_forever</c> entry, held until the run ends); an entry that starts none (a static or part-less entry, or no free place) sounds once at once. A number past the list, or an entry without art, sounds nothing here.
+    /// </summary>
+    public ScriptEyeCandyPlay PlayScriptSounded(string owner, int number, int artModifier = 0)
+    {
+        if (EyeCandyEntryRef.Make(EyeCandyList.Script, number) is not { } index || _entry(index) is not { Art: not null } entry) return new(false, null, -1, false);
+        var started = Play(owner, index, 0, -1, artModifier: artModifier);
+        var run = started ? _last : null;
+        return new(started, run, entry.Sound, started && (entry.Flags & SpellEyeCandyFlags.Forever) != 0);
+    }
 
     /// <summary>The remove 0x4CD940 / 0x4243E0: the owner's runs whose bottom goal is exactly 45 and whose current frame has this entry's art and (unless <paramref name="anyTag"/>) this tag end at level 6. Returns how many. A looping entry played as 47, 58 or 75 (or queued under another run) cannot be removed this way (GT71, GT85).</summary>
     [OriginalFunction(0x4243E0, OriginalFunctionScope.Partial)]

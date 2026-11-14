@@ -307,6 +307,17 @@ public partial class TerrainViewerApp
         if (obj == SessionSpellCaster.Hero) return HeroWorldCell();
         // ARC-DEV-352: a summoned object (the flash) at its cell.
         if (CreatedCell(owner, obj) is { } created) return created;
-        return _spellCastMap?.Row(obj) is { } row ? LiveCell(owner, row) : null;
+        // ARC-SCRIPT-1829: a created critter (where its mover stands, else its created cell) and an item lying on the shown map (made, created or dropped: the placed item's cell); an item nobody has put on the ground has no place to draw.
+        if (CreatedCritterCell(owner, obj) is { } critter) return critter;
+        if (_spellCastMap?.Row(obj) is { } row) return LiveCell(owner, row);
+        return owner.QueryPlacedItems().FirstOrDefault(i => i.Entity == obj && i.Map == new SessionMapId(CurrentAreaMap)) is { } item ? item.Cell : null;
+    }
+
+    /// <summary>ARC-SCRIPT-1829: the cell of a critter the session created on the shown map (a summoned or generated one), where the AI has moved it, else where it was made; null for another kind, another map or one that is gone.</summary>
+    private CellCoord? CreatedCritterCell(GameSessionOwner owner, string entity)
+    {
+        if (SessionCreatedObject.KindOf(entity) is not SessionCreatedKind.Critter || owner.QueryCreatedObject(entity) is not { } made || made.Map != new SessionMapId(CurrentAreaMap)) return null;
+        if (AreaAiHostNow() is { } ai && ReferenceEquals(ai.Session, owner) && ai.Movers.Of(entity) is { } mover) return new(checked((int)mover.Cell.X), checked((int)mover.Cell.Y));
+        return made.Cell;
     }
 }
