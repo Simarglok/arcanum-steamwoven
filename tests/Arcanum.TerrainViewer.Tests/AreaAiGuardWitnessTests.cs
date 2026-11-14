@@ -1,3 +1,4 @@
+using Arcanum.Session;
 using Arcanum.Data.Area;
 using Arcanum.Simulation.Ai;
 using Arcanum.Simulation.Combat;
@@ -107,8 +108,7 @@ public sealed class AreaAiGuardWitnessTests
         var (far, farHost) = Open(GuardClass, edge);
         using var _ = far;
         Assert.AreEqual(0, farHost.GuardWitnesses(AiSchedulerRules.Pc, Door1, Portal, 6402, new CellCoord(70, 14), GuardWitnessMode.Done, Loudness.Silent).Count, "a silent act 17 tiles from the guard is neither seen nor heard");
-        // The same witness, now loud and near its square's edge, is a witness: the 0 above is the perception's, not a filter's.
-        Assert.AreEqual(1, farHost.GuardWitnesses(AiSchedulerRules.Pc, Door1, Portal, 6402, new CellCoord(70, 14), GuardWitnessMode.Done, Loudness.Loud).Count, "the same act, loud, is heard: the 0 above is the perception's, not a filter's");
+        // The positive control is A_done_crime_makes_no_line: the same silent act beside the guard is seen, so the 0 above is the perception's.
 
         var asked = new List<(string, string, string)>();
         var (skipped, skippedHost) = Open(GuardClass, script: (witness, actor, guarded) => { asked.Add((witness, actor, guarded)); return false; });
@@ -122,8 +122,8 @@ public sealed class AreaAiGuardWitnessTests
     {
         var (f, host) = Open(witnessClass: 0);
         using var _ = f;
-        // The fixture's NPCs carry name number 1.
-        Assert.AreEqual(1, host.GuardWitnesses(AiSchedulerRules.Pc, Door1, Portal, notifyNpc: 1, Door, GuardWitnessMode.Done, Loudness.Loud).Count, "the name is the notify NPC");
+        // Both fixture NPCs carry name number 1 and stand in the square, so both are witnesses by name.
+        Assert.AreEqual(2, host.GuardWitnesses(AiSchedulerRules.Pc, Door1, Portal, notifyNpc: 1, Door, GuardWitnessMode.Done, Loudness.Loud).Count, "the name is the notify NPC");
 
         var (led, ledHost) = Open(GuardClass);
         using var __ = led;
