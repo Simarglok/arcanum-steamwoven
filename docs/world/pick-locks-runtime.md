@@ -80,8 +80,9 @@ Armed lockpicks (the item cursor of the lockpicks, interface mode 16) on a conta
 ## Boundaries (NOT READY)
 
 - **Witnesses** (PL6): the session reports whether the original calls them; since ARC-AI-2084 the viewer acts on it
-  (`AreaAiHost.GuardWitnesses`, ledger [GW1-GW8](../research/ledger/npc-ai.md#guard-witnesses-built-arc-ai-2084)): the hero's pick of a
+  (`AreaAiHost.GuardWitnesses`, ledger [GW1-GW10](../research/ledger/npc-ai.md#guard-witnesses-built-arc-ai-2084)): the hero's pick of a
   portal or container and a follower's pick-locks goal call the guards near the lock (silent; mode 0 after an unlock, mode 1 after a failure).
+  A spell's damage on an object calls them with the caster as the actor (ARC-AI-2112, GW10: loud, mode 0 when it broke the object, else mode 1).
 - **Best follower (ARC-COMBAT-1777, PL5):** `QueryPickLockScore(user, target, lockpick?)` is a user's score for the pick (`SkillCheckRules.Score`, the same lock and lockpick terms as `PickLockStep`, `WithLockFacts`; the hero's with its local-PC term); the viewer's lockpick press hands the pick to the follower with the strictly best score (the hero first, ties keep the earlier) as its own skill goal with its own lockpicks if it has any, and the hand-over line floats over it ([viewer](../rendering/terrain-viewer.md#follower-skills-arc-combat-1777)).
 - **Not modelled:** the hand-over line of an NPC's pick, the multiplayer packets, keys (the session holds none, ARC-WORLD-050). The NPC's pick itself is built since
   ARC-COMBAT-1776 ([above](#an-npc-as-the-user-arc-combat-1776)); the timed pick-lock goal's animation loops are the AI host's (ARC-AI-1524).
