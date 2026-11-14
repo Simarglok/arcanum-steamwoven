@@ -247,6 +247,8 @@ public partial class AreaFollowerPortraits : CanvasLayer
         _followers = followers.ToArray();
         _offset = AreaFollowerPanelRules.ClampOffset(_offset, _followers.Count);
         var shown = AreaFollowerPanelRules.VisibleIndexes(_panelShown, _offset, _followers.Count).Select(i => _followers[i]).ToArray();
+        // ARC-UI-1855: shown before the rebuild raises EdgeChanged, whose listener reads RightEdge (0 while hidden): the diagnostic HUD would not move right of the frames.
+        Visible = _followers.Count > 0;
         var signature = $"{_panelShown}|{_offset}|{_followers.Count}|" + string.Join("\n", shown.Select(f => f.Entity + "\t" + f.Label + "\t" + f.Portrait?.GetRid().Id));
         if (signature != _signature)
         {
@@ -264,7 +266,6 @@ public partial class AreaFollowerPortraits : CanvasLayer
             Place();
             EdgeChanged?.Invoke();
         }
-        Visible = _followers.Count > 0;
         foreach (var (entity, _, life, _) in shown)
         {
             var entry = _entries[entity];
