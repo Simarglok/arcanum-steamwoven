@@ -767,10 +767,15 @@ public partial class TerrainViewerApp
     /// exports): the release of O opens the options window directly, in play, over any window and over the dialog (the dialog's handler
     /// lets the release through, SA43), at the Game page, without the pause Escape raises (kind 4 skips the pause counter). The only guard
     /// is a focused text field and a menu already up; the hero's state and another participant's turn do not refuse it. The press only arms the route.
+    /// ARC-UI-2066 (OP9, OP7): the branch reads the scan code 0x18 of a type 5 message (the keyboard poll 0x52B380), not the typed character, so the
+    /// physical O key acts on every layout (as the options window's own O does) and a typed O on another key does nothing; while Ctrl or Alt is held
+    /// the poll queues no scan code for a non-modifier key, so Ctrl+O and Alt+O do nothing (Shift+O works).
     /// </summary>
-    private bool RouteOptionsKey(WorldKeyDecision decision)
+    private bool RouteOptionsKey(InputEventKey key, WorldKeyDecision decision)
     {
-        if (!QuickKeysActive || decision.Key != WorldKey.O) return false;
+        if (!QuickKeysActive) return false;
+        if (key.PhysicalKeycode != Key.O) return decision.Key == WorldKey.O; // a typed O elsewhere on the layout is no key of the original (swallowed, nothing happens)
+        if (key.CtrlPressed || key.AltPressed || key.MetaPressed) return true;
         if (decision.Echo) return true;
         if (decision.Pressed) { _optionsKeyArmed = _mainMenu is null; return true; }
         if (!_optionsKeyArmed) return true;

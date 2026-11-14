@@ -147,6 +147,11 @@ public partial class TerrainViewerApp
             Require(!InventoryOpen && MainMenuOpen && _mainMenu!.Window == AreaMenuWindow.InPlay && WindowPanelsMatchStack, "Escape opened the menu, which closed the window");
             InventoryKey(Key.Escape);
             Require(!MainMenuOpen && !InventoryOpen, "Escape continued play");
+            // ARC-UI-2066 (OP9): the release of O opens the options window over the inventory, which closes under it as under Escape; O closes the window again.
+            OpenHoverGate(steps); InventoryKey(Key.I); InventoryKey(Key.O);
+            Require(!InventoryOpen && MainMenuOpen && _mainMenu!.Window == AreaMenuWindow.Options && !WorldMenuPause && WindowPanelsMatchStack, "O opened the options window, which closed the inventory");
+            InventoryKey(Key.O);
+            Require(!MainMenuOpen && !InventoryOpen, "O closed the options window");
 
             // The dead NPC opens to loot; its item goes to the PC through the window's take button.
             near = ApproachCell(session = (AreaGridSession)_worldActor.Session!, body.WorldX!.Value, body.WorldY!.Value, AreaInventoryHost.Reach)
