@@ -620,6 +620,18 @@ public partial class TerrainViewerApp
         string doll;
         try { doll = await BarterDollForSmokeAsync(panel, area); }
         catch (Exception failure) { GD.Print("ARC-UI-1917 native-smoke barter-doll FAIL " + failure.Message); throw; }
+        // ARC-UI-1750: with ARC_AREA_WINDOW_ART the hero's doll cover 341 (drawn over the pack with the hero's toggle set) is checked in the generated interface too, and captured.
+        if (WindowArtSmokeRequested)
+        {
+            Require(area.HeroTogglesShown, "the hero's doll toggle is shown (the cover and the buttons' art read), so the cover 341 can be checked");
+            area.SetHeroDoll(true);
+            try
+            {
+                await WindowArtSmokeAsync("barter-hero-doll", area, [AreaHeroDollToggle.CoverArt]);
+                Require(area.HeroDoll, "the hero's doll toggle survives the window art check");
+            }
+            finally { area.SetHeroDoll(false); }
+        }
         // ARC-UI-1751: the follower's window (825 on the follower background) also draws the two cycle buttons (757, 758): with ARC_AREA_WINDOW_ART they are checked in the generated interface too.
         if (WindowArtSmokeRequested)
         {
@@ -645,7 +657,7 @@ public partial class TerrainViewerApp
     /// <summary>
     /// ARC-UI-1917 native observation (stage `barter`, on the live window with the game's art): the doll and bag buttons are made at (8, 123) and (46, 123), the doll button shows the
     /// merchant's doll view (337 <c>Barter_PD</c> at (0, 157)) with its nine slots (a worn item's art or the slot's cover) and hides the grid, and the bag button shows the grid again; the
-    /// toggle starts clear. With ARC_AREA_WINDOW_ART legacy or hd the doll's frame is checked in that mode and captured (the generated interface has no recipe for 337 yet: issue #1750);
+    /// toggle starts clear. With ARC_AREA_WINDOW_ART legacy, hd or generated the doll's frame is checked in that mode and captured (ARC-UI-1750: generated chrome in the generated run);
     /// ARC_AREA_WINDOW_CAPTURE=PREFIX saves it as PREFIX-barter-doll-MODE.png. Prints counts only; a window without the buttons (the doll arts did not read) says so.
     /// </summary>
     private async Task<string> BarterDollForSmokeAsync(AreaBarterPanel panel, AreaInventoryGridArea area)
@@ -669,8 +681,9 @@ public partial class TerrainViewerApp
         Require(body.Where(slot => slot.Entity is not null).All(slot => look.ItemArt(slot.Entity!) is not null), "every worn item has its art");
         Require(body.Where(slot => slot.Entity is null).All(slot => look.Art.ContainsKey(AreaInventoryArtLayout.Covers[slot.Slot])), "every empty slot has its cover art");
         Require(area.BarterHit(new(AreaBarterArtLayout.GridX + 5, AreaBarterArtLayout.GridY + 5)) == AreaBarterHit.None, "the grid is hidden in the doll view");
-        if (System.Environment.GetEnvironmentVariable("ARC_AREA_WINDOW_ART") is { Length: > 0 } mode && mode != "generated")
-            await WindowArtSmokeAsync("barter-doll", area, [AreaBarterArtLayout.DollViewArt]);
+        // ARC-UI-1750: the doll 337 has a generated recipe, so the doll view is checked in the generated run too (every frame generated at the window's own device scale).
+        await WindowArtSmokeAsync("barter-doll", area, [AreaBarterArtLayout.DollViewArt]);
+        Require(area.BodyDoll, "the doll view survives the window art check");
         area.PressAt(bagPoint); area.ReleaseAt(bagPoint);
         Require(!area.BodyDoll, "the bag button shows the grid again");
         return $"doll {body.Count} slots ({worn} worn)";

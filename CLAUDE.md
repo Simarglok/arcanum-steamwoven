@@ -30,6 +30,14 @@ and its link holds the detail.
   never a scratch smoke script. Any PR that changes click or walk handling always
   runs `./arcanum smoke pr --stages map` and `./arcanum smoke self-test`, even
   when no other stage covers it ([smoke runner](docs/workflow/toolchain.md#smoke-runner-arc-dev-061)).
+- **Token rules** ([token rules](docs/workflow/tasks.md#token-rules), owner
+  decision 2026-11-14): Sonnet by default, Opus only for reading the exe, exe audits
+  and big reviews; one thread = one issue, stop right after merge, anything found
+  on the way = new issue + new thread; audit slices at most 15-20 functions;
+  recon and exe reading through a subagent so only the conclusion enters the
+  context; wait for the Mac queue with one blocking command, never sleep/poll
+  loops, and batch checks into one queue run; no interim status posts, only
+  results, questions and failures; no long-lived multi-task threads.
 - **Naming** ([task naming](docs/workflow/task-naming.md)): `ARC-TYPE-NNN`
   first in threads, branches, PRs and commits, a Russian result in thread
   titles. Types: `RES`, `DATA`, `RENDER`, `WORLD`, `INPUT`, `GPAD`, `UI`,

@@ -158,8 +158,8 @@ public partial class TerrainViewerApp
     /// <summary>
     /// ARC-DEV-280 (B33): the left button's release over a follower's portrait is a click on that follower, as the original's portrait button
     /// handler (0x56A9D0, button event 1) passes the follower to the world click dispatcher 0x54EA80 like a press on its body: out of combat
-    /// mode a talk (goal 21, 0x54ED30), in combat mode nothing without Alt. The click is taken under the world click's guards; an armed cursor
-    /// or a pending order (the targets this click is not read for) leaves it unused.
+    /// mode a talk (goal 21, 0x54ED30), in combat mode nothing without Alt. The click is taken under the world click's guards; the target modes aim
+    /// (FP6); ARC-UI-1787: a pending walk or attack order (mode 18, which the dispatcher does not list) leaves it the ordinary click, a talk.
     /// </summary>
     private void FollowerPortraitClick(string entity)
     {
@@ -171,15 +171,17 @@ public partial class TerrainViewerApp
             return;
         }
         // ARC-UI-1736 (FP6, the portrait dispatcher 0x54EA80): in the spell target mode (1), the skill target mode (2) and the item mode (16) the portrait is a
-        // second way to aim at the follower (a heal, a buff, a repair); the target's own valid-target test decides.
+        // second way to aim at the follower (a heal, a buff, a repair); the target's own valid-target test decides. ARC-UI-1787: armed lockpicks are mode 16 too
+        // (the lockpick path of 0x571CB0), and the follower order's target mode (18) is no mode of the dispatcher's three: the click is the ordinary one below.
         if (_gameCursorItem is null && _spellGoal is null && _pendingOrder is null)
         {
             if (_spellTargeting is not null) { FollowerAimSpell(entity); return; }
             if (_itemAiming is not null) { FollowerAimItem(entity); return; }
+            if (_lockpickArmed is not null) { FollowerAimLockpick(); return; }
             if (PickPocketArmed) { FollowerAimPickPocket(entity); return; }
             if (DisarmArmed) { CancelDisarm("a follower is no trap"); _companionNotice = "disarm traps: a follower is no trap"; RefreshReadyStatus(); return; }
         }
-        if (_gameCursorItem is not null || _spellTargeting is not null || _spellGoal is not null || ItemTargetOpen || PickPocketArmed || DisarmArmed || _pendingOrder is not null)
+        if (_gameCursorItem is not null || _spellTargeting is not null || _spellGoal is not null || ItemTargetOpen || PickPocketArmed || DisarmArmed)
         {
             _companionNotice = "follower click ignored: a window, a cursor or another's turn owns the input";
             RefreshReadyStatus();
@@ -225,6 +227,18 @@ public partial class TerrainViewerApp
         GD.Print($"ARC-UI-1736 portrait-aim item={aim.Item} follower={entity} passes={pick.Test.Passes}");
         if (!pick.Test.Passes) { ItemAimRefused(pick); return; }
         ApplyItemAim(aim, pick.Object?.Id, pick.Tile, false, false);
+    }
+
+    /// <summary>ARC-UI-1787 (FP6, mode 16 with the lockpicks, the item handler 0x571CB0 after the target test 0x4F2680, whose mask for an item with no spell is any object, then the use 0x462CC0, whose lockpick branch tests the target's type with 0x441CF0): the
+    /// armed lockpicks take the follower as the target object, as a press on a body that is no door, window or container does (<see cref="TryAreaPortalUse"/>): a critter is
+    /// no lock (the type test 0x441CF0 answers no, PL2), so the pick ends and the item mode pops (SA51). Like the original's use it touches no goal of the hero (the world press also drops a walk to talk or use, a limit of that press).</summary>
+    private void FollowerAimLockpick()
+    {
+        CancelAreaAttack("armed lockpicks took the portrait click");
+        DisarmLockpicks();
+        _portalNotice = "pick a lock cancelled: not a door, window or container";
+        GD.Print("ARC-UI-1787 portrait-aim lockpicks follower target is no lock, mode popped");
+        RefreshAreaStatus();
     }
 
     /// <summary>ARC-UI-1736 (FP6, the skill handler 0x57A1F0): the armed pick pocket takes the follower as its victim (the skill's own rules decide).</summary>
