@@ -40,6 +40,20 @@ public partial class AreaArtParagraph : AreaArtTextBlock
         }
     }
 
+    /// <summary>ARC-UI-2022: the height of the rectangle the text is placed in; a line that does not fit it whole is not placed (a band row: 16 px).</summary>
+    public int Room
+    {
+        get => _room;
+        set
+        {
+            value = Math.Max(1, value);
+            if (value == _room) return;
+            _room = value;
+            Place();
+        }
+    }
+    private int _room = FarTooTall;
+
     public void SetFonts(AreaTextFonts? fonts)
     {
         if (ReferenceEquals(fonts, _fonts)) return;
@@ -58,7 +72,7 @@ public partial class AreaArtParagraph : AreaArtTextBlock
     private void Place()
     {
         if (_fonts is not { } fonts || _text.Length == 0) { Set([]); return; }
-        var placed = AreaTextFontLayout.Place(fonts.Text.Font, fonts.TextLineHeight, (0, 0, _wrapWidth, FarTooTall), _text);
+        var placed = AreaTextFontLayout.Place(fonts.Text.Font, fonts.TextLineHeight, (0, 0, _wrapWidth, _room), _text);
         Set([new(fonts.Text, fonts.TextLineHeight, placed.Lines, 0, 0, _colour)]);
     }
 }

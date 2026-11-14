@@ -48,11 +48,20 @@ public sealed record InterfaceRuleProfile
     /// </summary>
     public bool DialogDiagnosticChromeHidden { get; init; }
 
+    /// <summary>
+    /// ARC-UI-2024, ledger DB1-DB3: opening the dialog (0x553320, mode 3) changes only the mode: the top strip and the bottom bar with its
+    /// buttons, clock, hotkey slots and health bars stay drawn, the reply band lies in the game view above the bar, and the speaker's
+    /// description of the dialog start (0x567460 to 0x553BE0) is drawn in the bar's description area. The bar's buttons and clock
+    /// are consumed without effect while the dialog's modal hook is set. Steamwoven hides the bars under the dialog's panel (the viewer's
+    /// own layout, a Steamwoven choice); Original keeps them.
+    /// </summary>
+    public bool DialogBarStays { get; init; }
+
     /// <summary>The original with every recorded fix and addition; the default setting.</summary>
     public static readonly InterfaceRuleProfile Steamwoven = new() { Name = "steamwoven" };
 
     /// <summary>The retail 1.0.7.4 behaviour.</summary>
-    public static readonly InterfaceRuleProfile Original = new() { Name = "original", CalledShotCursorsSwapped = true, TurnOrderListHidden = true, DialogRepliesUnnumbered = true, DialogReplyRowsDrift = true, DialogDiagnosticChromeHidden = true };
+    public static readonly InterfaceRuleProfile Original = new() { Name = "original", CalledShotCursorsSwapped = true, TurnOrderListHidden = true, DialogRepliesUnnumbered = true, DialogReplyRowsDrift = true, DialogDiagnosticChromeHidden = true, DialogBarStays = true };
 
     /// <summary>Both settings, default first.</summary>
     public static IReadOnlyList<InterfaceRuleProfile> All { get; } = new[] { Steamwoven, Original };

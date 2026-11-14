@@ -276,8 +276,7 @@ the row is y / 20 (so a press in a gap picks a row and the fifth row's first pix
 nothing; the hover lights a row as the original's move records do (DH5). Under the Steamwoven setting each button is its own hit area. The self-test (`TerrainViewerConversationTest`) covers the press mode and the band's refusals.
 
 ARC-UI-2022 (ledger DH8–DH11): under the Original setting the reply stack sits in `AreaConversationPanel`'s band over the game view, not in the framed panel: a 100 px tall strip, 400 px wide
-(a row's text plus 13 px that is wider widens it by that and re-centres it; the press x-bound is the band's width), centred, its top at 299 in a 400 px view else the view height minus 181 (the viewer
-hides the interface bars during a dialog, so the view is the whole window). The strip darkens what is under it by a subtract blend of (18, 18, 18), as the original's fill (a saturating subtract, not an alpha mix). Rows
+(a row's text plus 13 px that is wider widens it by that and re-centres it; the press x-bound is the band's width), centred, its top at 299 in a 400 px view else the view height minus 181, the view being the part the bars leave free (the original's iso window), so the band lies above the bottom bar. The strip darkens what is under it by a subtract blend of (18, 18, 18), as the original's fill (a saturating subtract, not an alpha mix). Rows
 are white, the hovered row yellow (the original's two fonts of art 229), each with a drop shadow one pixel right and down in (10, 10, 10); the text is broken at the box width minus 12 and only the first line fits the
 16 px row; a word wider than the row draws nothing. The diagnostic chrome (header, outcome, effects, hint, Leave) is hidden under the Original setting by ARC-UI-2023; the framed panel then holds nothing and is not drawn, so the band alone is on screen (with the chrome shown, as in Steamwoven or for a message-only panel, the panel stands above the band). The self-test covers the rectangle,
 the shade, the colours, the shadow and the press bound.
@@ -2424,7 +2423,7 @@ project's, except as below.
   default and no other setting changes. Each change is saved at
   once (the original writes `arcanum.cfg` when the game exits). Space's toggle also saves the turn-based setting now. An
   automated run (self-test, native smoke) reads and writes no file; `GAME_SETTINGS_TEST_PATH` names a settings file for a test.
-- **Opening by O (ARC-UI-2026, OP9).** The release of the O key opens this window at its Game page in play, over any window and over the dialog (the press only arms it; Escape's route is the same). It raises no pause (the Esc menu does) and refuses only while a text entry or a menu is open; the inventory family closes under it as under Escape. The dialog stays and goes on after Done.
+- **Opening by O (ARC-UI-2026, OP9).** The release of the O key opens this window at its Game page in play, over any window and over the dialog (the press only arms it; Escape's route is the same). It raises no pause (the Esc menu does) and refuses only while a text entry or a menu is open; the inventory family closes under it as under Escape. The dialog stays and goes on after Done. The key is the physical O key (the scan code, as in the options window's own O), whatever the layout types on it; Ctrl+O and Alt+O do nothing. A hero's death behind the open window closes it, and the death screen comes 0.3 s later (ARC-UI-2066).
 - **Closing.** Done goes back to the main menu, or from play closes the menu and play goes on; from play the O key
   does the same. Escape does nothing in this window, as in the original's key table.
 
@@ -2708,7 +2707,10 @@ button writes its name from `mes\intgame.mes` (1000–1009) where the original's
 on the bars. The main menu's, in-play menu's and options window's buttons play 3026 when the pointer enters one and 3027 on
 the press (GB7). The bars are drawn over the windows they open, and those windows (character sheet, inventory, logbook,
 schematics) lay themselves out in the part the bars leave free; while a conversation, barter, reading, the save list,
-the palette, the menu or the world map is open the bars are hidden, and they come back with no button lit or held. The
+the palette, the menu or the world map is open the bars are hidden, and they come back with no button lit or held (a conversation hides them under
+Steamwoven only: since ARC-UI-2024 the Original setting `DialogBarStays` keeps them drawn under the dialog, as the original does, lays the conversation panel in the part
+they leave free and shows the speaker's description of the dialog start in the description area; the bar's buttons stay without effect while the dialog is open, and
+a click on a hotkey slot does nothing, [ledger DB1-DB4](../research/ledger/ui-audio.md#the-bars-under-the-dialog-arc-ui-2024)). The
 diagnostic HUD moves below the top strip and the follower portraits and spell pane above the bottom strip. Since ARC-UI-020 the health and fatigue vials show the PC's
 [gauges](#health-and-fatigue-bars-arc-ui-020), and since ARC-UI-023 the bottom strip's message window is the
 [message log](#message-log-arc-ui-023), where the button names appear. Since ARC-UI-027 the hot-key slots, the recent-action buttons and

@@ -3,6 +3,7 @@ using Arcanum.Data;
 using Arcanum.Data.Area;
 using Arcanum.Presentation.Hud;
 using Arcanum.Scripting.Dialog;
+using Arcanum.Session;
 using Arcanum.TerrainViewer.Core;
 using Arcanum.TerrainViewer.Tests;
 using Arcanum.World;
@@ -114,6 +115,7 @@ public static partial class TerrainViewerSelfTest
             await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
             Require(conversation.Turn == before && conversation.Phase == DialogConversationPhase.AwaitingSelection, "the blocked reply and the empty slot choose nothing");
             panel.OriginalReplyRows = false;
+            Require(!panel.BandShownForSelfTest && !panel.StackInBandForSelfTest, "Steamwoven: the stack is back in the panel and the band is gone");
             Require(panel.ChooseByDigit(1), "a digit chooses the numbered reply");
             Require(conversation.CurrentNode.Value == 10 && panel.NpcLineForSelfTest.StartsWith("A bridge fell.") && panel.ButtonsForSelfTest.Count == 1, "Direct reply continues");
             Require(picks == 1 && lines.Count == 3 && lines[1] == "removed" && lines[2].StartsWith("P:A bridge fell."), $"a processed reply removes the bubble, then the answer is a new persistent one: {string.Join("|", lines)}");
@@ -165,6 +167,8 @@ public static partial class TerrainViewerSelfTest
             await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
             Require(picks == 2 && lines.Count == 4 && lines[3] == "removed", $"the ending reply removes the bubble and shows no new persistent one: {string.Join("|", lines)}");
             Require(conversation.Phase == DialogConversationPhase.Ended && panel.OutcomeForSelfTest.Contains("SCR line 5") && panel.ButtonsForSelfTest.Count == 0, "Exit returns to the caller's next SCR line");
+            await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+            Require(!panel.BandShownForSelfTest, "a finished dialog has no reply, so no band is drawn");
             panel.OriginalReplyRows = false;
             Require(state.LocalFlag(0, 2) && session.QueryQuest(1003)?.State == Arcanum.Session.SessionQuestState.Mentioned && session.QueryRumor(1001) is not null,
                 "typed effects reached the session");
@@ -424,6 +428,46 @@ public partial class TerrainViewerApp
             TerrainViewerSelfTest.Require(!PaletteOpen && ConversationOpen, "the palette cannot open over the conversation");
             _conversationPanel!.LeaveForSelfTest.EmitSignal(BaseButton.SignalName.Pressed);
             TerrainViewerSelfTest.Require(!ConversationOpen && !WorldModal, "Close ends the modal surface");
+            // ARC-UI-2024 (DB1, DB3): Original leaves the bars drawn under the dialog and lays the panel above them; Steamwoven hides them under it.
+            {
+                var session = _areaSession!;
+                var priorRules = session.Rules.Mode; var priorBars = _gameBarForSelfTest;
+                _gameBarForSelfTest = true;
+                try
+                {
+                    foreach (var rules in new[] { RuleMode.Original, RuleMode.Steamwoven })
+                    {
+                        TerrainViewerSelfTest.Require(session.SelectRules(rules) != GameSessionDisposition.Rejected, $"{rules} selected");
+                        var stays = rules == RuleMode.Original;
+                        SyncGameBar();
+                        TerrainViewerSelfTest.Require(_gameBarPanel is { Visible: true } && AreaGameBarPanel.BottomInset > 0, $"{rules}: the bars show before the dialog");
+                        using var barSession = ConversationSessionFixture.Create();
+                        var barState = new AreaConversationState(barSession, new(1), ["oid:synthetic-0"], 50);
+                        var barDialog = DialogConversation.Start(DlgReader.Read(System.Text.Encoding.Latin1.GetBytes(TerrainViewerSelfTest.DigitDialog)),
+                            new DialogConversationRequest(new DialogNodeId(1),
+                                new DialogParticipants(new DialogId(5), AreaConversationState.PcParticipant, AreaConversationState.Npc(0)),
+                                new DialogScriptLine(4), AreaConversationProfile.Diagnostic.Pc, AreaConversationProfile.Diagnostic.Names),
+                            new DialogConversationPorts(barState, barState, barSession.Flags, barState));
+                        ShowConversationPanel("Bars test", barDialog, null);
+                        SyncGameBar();
+                        TerrainViewerSelfTest.Require(ConversationOpen && (_gameBarPanel is { Visible: true } && AreaGameBarPanel.BottomInset > 0) == stays,
+                            $"{rules}: the bars {(stays ? "stay" : "hide")} under the open dialog (bars={_gameBarPanel?.Visible} inset={AreaGameBarPanel.BottomInset})");
+                        // A 100 px tall panel lies above the bottom bar when the bars show and 24 px above the view's bottom when not.
+                        var view = GetViewport().GetVisibleRect().Size;
+                        var at = AreaConversationPanel.PanelPosition(view, 752, 100);
+                        TerrainViewerSelfTest.Require(stays ? at.Y + 100 <= view.Y - AreaGameBarPanel.BottomInset && at.Y >= AreaGameBarPanel.TopInset : Math.Abs(at.Y - (view.Y - 124)) < 1f,
+                            $"{rules}: the dialog panel lies in the part the bars leave free (y {at.Y} view {view.Y} insets {AreaGameBarPanel.TopInset}/{AreaGameBarPanel.BottomInset})");
+                        // DB2: the clock and the pane buttons are consumed without effect while the dialog is open.
+                        var presses = _skillBarPressesForSelfTest + _spellBarPressesForSelfTest;
+                        ClockButton(); SkillBarReleased(0, true); SpellBarSpellReleased(0, true);
+                        TerrainViewerSelfTest.Require(ClockLineForSelfTest is null && _skillBarPressesForSelfTest + _spellBarPressesForSelfTest == presses, $"{rules}: the clock and the pane buttons do nothing under the dialog");
+                        CloseWindowMode(InterfaceMode.Dialog);
+                        TerrainViewerSelfTest.Require(!ConversationOpen, $"{rules}: the dialog closed");
+                        SyncGameBar();
+                    }
+                }
+                finally { session.SelectRules(priorRules); _gameBarForSelfTest = priorBars; SyncGameBar(); }
+            }
             // ARC-UI-2019: with a numbered conversation open the digit keys choose a reply (an unknown number and Enter do nothing).
             {
                 using var digitSession = ConversationSessionFixture.Create();

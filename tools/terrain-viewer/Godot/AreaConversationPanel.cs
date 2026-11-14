@@ -125,6 +125,8 @@ public partial class AreaConversationPanel : CanvasLayer
     /// <summary>ARC-UI-2022: whether the framed diagnostic panel draws (under Original with the chrome hidden it holds nothing and does not).</summary>
     internal bool PanelShownForSelfTest => _panel.Visible;
     internal bool BandShownForSelfTest => _band.Visible && _originalRows && IsOpen;
+    /// <summary>ARC-UI-2022: whether the reply stack lives in the band (Original) rather than in the panel.</summary>
+    internal bool StackInBandForSelfTest => _options.GetParent() == _band;
     internal string BandShadeForSelfTest => $"{_bandShade.Color.R8},{_bandShade.Color.G8},{_bandShade.Color.B8}|{(_bandShade.Material as CanvasItemMaterial)?.BlendMode}";
     /// <summary>ARC-UI-2022: the text colour of reply row i (the main paragraph's, or the button's font colour without the original's fonts).</summary>
     internal (byte R, byte G, byte B)? RowColourForSelfTest(int row) => row < 0 || row >= _buttons.Count ? null
@@ -392,20 +394,19 @@ public partial class AreaConversationPanel : CanvasLayer
     }
 
     /// <summary>
-    /// ARC-UI-2022 (ledger DH7, DH10): a band row's text is broken at the box width minus 12; only the first line fits the 16 px row (the
-    /// button clips the rest); a word wider than the row draws nothing; the drawn width plus 1 and 12 widens the box (and re-centres it) when larger.
+    /// ARC-UI-2022 (ledger DH7, DH10): a band row's text is broken at the box width minus 12; only a line that fits the 16 px row whole is placed
+    /// (<see cref="AreaArtParagraph.Room"/>); a word wider than the row draws nothing; the drawn width plus 1 and 12 widens the box (and re-centres it) when larger.
     /// </summary>
     private void LayoutBandRow(Button button, AreaArtParagraph art)
     {
         button.CustomMinimumSize = new(0, DialogReplyBand.RowHeight);
         var wrap = _bandWidth - DialogReplyBand.Margins;
         art.WrapWidth = wrap;
+        art.Room = DialogReplyBand.RowHeight;
         var shadow = button.GetNodeOrNull<AreaArtParagraph>(ShadowName);
-        if (shadow is not null) shadow.WrapWidth = wrap;
-        var fits = (int)art.GetMinimumSize().X <= wrap;
-        art.Visible = fits;
-        if (shadow is not null) shadow.Visible = fits;
-        if (fits) _bandWidth = DialogReplyBand.Widened(_bandWidth, art.FirstLineWidth);
+        if (shadow is not null) { shadow.WrapWidth = wrap; shadow.Room = DialogReplyBand.RowHeight; }
+        // A word wider than the row leaves no line (0x535C40 fails), so nothing is drawn and nothing widens the box.
+        _bandWidth = DialogReplyBand.Widened(_bandWidth, art.FirstLineWidth);
     }
 
     private const string LitMeta = "rowLit";
@@ -423,7 +424,7 @@ public partial class AreaConversationPanel : CanvasLayer
             home.AddChild(_options);
             if (!_originalRows) _contents.MoveChild(_options, _headerArt.GetIndex() + 1);
         }
-        _band.Visible = _originalRows;
+        _band.Visible = _originalRows && _buttons.Count > 0;
         // The empty first child makes the stack's 3 px separation the 3 px between the band's top and the first row.
         _bandTop.Visible = _originalRows;
         _options.MouseFilter = _originalRows ? Control.MouseFilterEnum.Ignore : Control.MouseFilterEnum.Pass;
@@ -497,34 +498,47 @@ public partial class AreaConversationPanel : CanvasLayer
     {
         if (_panel is null) return;
         // ARC-UI-2022: under Original with the chrome gone (ARC-UI-2023) the framed panel has nothing to hold (the band carries the replies): it is not drawn.
+        // The band shows only while there is a reply in it (a message-only panel or a finished dialog has none).
+        _band.Visible = _originalRows && _buttons.Count > 0;
         _panel.Visible = !_originalRows || new Control[] { _header, _headerArt, _outcome, _outcomeArt, _effects, _effectsArt, _hint, _hintArt, _leave }.Any(control => control.Visible);
         var size = GetViewport().GetVisibleRect().Size;
         var width = Math.Max(1, Math.Min(960, size.X - 48));
         var content = Math.Max(1, (int)width - 2 * ContentMargin);
         if (content != _contentWidth || _artDirty) { _contentWidth = content; _artDirty = false; LayoutArt(); }
         _panel.Size = new(width, 0);
-        var height = Math.Min(_panel.GetCombinedMinimumSize().Y, Math.Max(1, size.Y - 48));
+        // ARC-UI-2024 (DB3): the panel lies in the part the bars leave free (the original's band is in the game view above the bottom bar).
+        var (_, free) = AreaGameBarPanel.FreeArea(size);
+        var height = Math.Min(_panel.GetCombinedMinimumSize().Y, Math.Max(1, free.Y - 48));
         _panel.Size = new(width, height);
-        // Whole pixels: the art text's glyphs are drawn pixel for pixel (MW31).
-        _panel.Position = new(Mathf.Round((size.X - width) / 2), Mathf.Round(Math.Max(24, size.Y - height - 24)));
+        _panel.Position = PanelPosition(size, width, height);
         if (_originalRows) PlaceBand(size, height);
     }
 
     /// <summary>
-    /// ARC-UI-2022 (ledger DH4, DH8): the band over the game view: 100 px tall, as wide as the rows made it (at least 400), centred, its top at 299 in a
-    /// 400 px view else the view height minus 181; the stack inside it 6 px in on both sides. The remaining diagnostic panel (#2023) sits above the band.
+    /// ARC-UI-2022 (ledger DH4, DH8, DB3): the band over the game view: 100 px tall, as wide as the rows made it (at least 400), centred, its top at 299 in a
+    /// 400 px view else the view height minus 181; the view is the part the bars leave free (the original's iso window, 0x557810: (0, 41, 800, 400) with the
+    /// interface on), so the band lies above the bottom bar. The stack inside it is 6 px in on both sides. A diagnostic panel that is still drawn sits above the band.
     /// </summary>
-    private void PlaceBand(Vector2 view, float panelHeight)
+    private void PlaceBand(Vector2 window, float panelHeight)
     {
-        var left = DialogReplyBand.BoxLeft((int)view.X, _bandWidth);
-        var top = DialogReplyBand.BoxTop((int)view.Y);
+        var (freeTop, free) = AreaGameBarPanel.FreeArea(window);
+        var left = DialogReplyBand.BoxLeft((int)free.X, _bandWidth);
+        var top = freeTop + DialogReplyBand.BoxTop((int)free.Y);
         _band.Position = new(left, top);
         _band.Size = new(_bandWidth, DialogReplyBand.Height);
         _bandShade.Position = Vector2.Zero;
         _bandShade.Size = _band.Size;
         _options.Position = new(DialogReplyBand.TextX, 0);
         _options.Size = new(_bandWidth - DialogReplyBand.Margins, DialogReplyBand.Height);
-        _panel.Position = new(_panel.Position.X, Mathf.Round(Math.Max(0, top - panelHeight - 8)));
+        _panel.Position = new(_panel.Position.X, Mathf.Round(Math.Max(freeTop, top - panelHeight - 8)));
+    }
+
+    /// <summary>ARC-UI-2024: the panel's top left corner: centred, its bottom 24 px above the bottom bar (the view's bottom without the bars), and not above
+    /// the top strip's 24 px. Whole pixels: the art text's glyphs are drawn pixel for pixel (MW31).</summary>
+    internal static Vector2 PanelPosition(Vector2 viewSize, float width, float height)
+    {
+        var (freeTop, free) = AreaGameBarPanel.FreeArea(viewSize);
+        return new(Mathf.Round((viewSize.X - width) / 2), Mathf.Round(freeTop + Math.Max(24, free.Y - height - 24)));
     }
 
     public override void _Process(double delta)
