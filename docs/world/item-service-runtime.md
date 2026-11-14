@@ -2,8 +2,7 @@
 
 Status: **Implemented bounded component**, ARC-UI-1731 (2026-11-13): the two windows the dialog replies `ii` and `ri` open, so a townsperson
 identifies or repairs the hero's items for money. A Player reply with `ii` ends the talk and opens the **item identify window** (the original's
-inventory window in mode 5); `ri` opens the **item repair window** (mode 6). The viewer shows a diagnostic list (the hero's items, one quote per
-line); the original look (the inventory window's grid, wear slots and the NPC's image) is [issue #1765](https://github.com/Simarglok/arcanum-steamwoven/issues/1765)'s.
+inventory window in mode 5); `ri` opens the **item repair window** (mode 6). With the game's art the viewer draws the original look (ARC-UI-1765, ledger IS8–IS11: the hero's own window with the NPC's image and its generated quote line); without it, or behind the switch, a diagnostic list (the hero's items, one quote per line).
 
 - **Rules:** `ItemServiceRules` (the price 100, the identified test of 0x464370, the line ranges, the kept price), `TradeRules.UncheckedSalePrice` (0x461F80
   with the sale check off) and `ItemDurabilityRules.RepairQuote` (0x578760) in [`Arcanum.Simulation.Items`](../../src/Arcanum.Simulation/Items/ItemServiceRules.cs).
@@ -37,8 +36,7 @@ line); the original look (the inventory window's grid, wear slots and the NPC's 
 
 ## Not modelled
 
-- The original look of the windows and the generated NPC lines' text: the window shows PROJECT texts and the line range (5700..5799 identified, 5800..5899 identify quote, 5900..5999 repair
-  refusal, 6000..6099 nothing to repair, 6100..6199 repair quote, the class line of group 2000 for no money) is in the quote and the log.
+- The NPC's portrait rule of the image (IW27), the hover event of IS3 (the viewer's press is a substitute), the NPC's name (IS8: not drawn by the original in these modes either).
 - The network branches (a client sends a request), the item refresh and the round view.
 - The repairer's own injuries (blindness, crippled arms): the effectiveness is read before the difficulty and the run is forced, so only the level and training count (RP5).
 - A payment the session refuses after the service ran (a full record store) leaves the service done, as the original leaves a moved item whose payment failed.
