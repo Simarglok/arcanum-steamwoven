@@ -31,7 +31,7 @@ key 5, payload digest bound into the profile; `AreaAmbientDriver.ClockProfile`).
 frame `AreaAmbientDriver.Tick` admits host time through
 [`GameTimeFlow`](../world/game-clock-runtime.md#host-time-flow-arc-world-010) (8× the
 admitted interval, so one game hour per 7.5 real minutes) and holds a `Menu` pause
-while the diagnostic palette or a dialog is open, releasing only a Menu pause it holds
+while the Esc menu is open (the diagnostic palette and a dialog do not pause it, ARC-DEV-126), releasing only a Menu pause it holds
 (a Menu pause already on the session when the driver binds, as after a restore, counts
 as held; User or TurnBased pauses are left alone); resume has no catch-up. Time keeps
 flowing while the window is unfocused or minimised: only the Esc menu (and a save or load list) pauses it; no other window does (ARC-DEV-126, MIG12 S7). **Game time +1 hour** is an explicit wait (`ExplicitWait`) that also
@@ -213,7 +213,7 @@ and writes the slot back as no light when the run ends ([IW2–IW5](../research/
 - **Wisp glow (ARC-RENDER-2064, FR-LIGHT-013).** The glowing-orb creature (art species 24, `wowuwxaa.art`, a 40x40 glow disc with a white core) exists in four palettes, prototypes 28471 (violet, "Love Lights"),
   28472 (amber, "Will-o-the-Wisp"), 28473 (cyan, "Volar's Wisp") and 28474 (red, "Death Lantern"); none holds a light (the original lights nothing round a wisp). `AreaWispGlows.Table` keys a presentation glow by
   the prototype (the disc's own saturated tone, radius 130 px, strength 0.9, lift 20 px), so every wisp on every map has it. It is **not** part of the Legacy carried lattice and not a saved light: only the relit look
-  (`AreaRelight`, HD graphics with the HD lighting setting) gets it, as extra lights appended to the carried lights of the relit upload (`TerrainViewerApp.WispRelitLights`, `TerrainCanvas.SetAreaRelitExtra`), in the same
+  (`AreaRelight`, which is on exactly when HD graphics is on, ARC-RENDER-2076) gets it, as extra lights appended to the carried lights of the relit upload (`TerrainViewerApp.WispRelitLights`, `TerrainCanvas.SetAreaRelitExtra`), in the same
   32-light list with the view-culling rule. A wisp's light stands at its row's T0 cell and offsets, and at the pose of the AI host's mover or the companion group once it moved (`AreaWispGlows.Place` over
   `AreaCritterLights.Stand`, LT10); a dead or gone critter (read from the AI host; with no host built the row stays as the map has it) and a companion on another map have none; only core-scope rows count, as for the critters' lights. Legacy (HD off) is pixel-identical (smoke check: Legacy with the glow on and off differs by 0 pixels).
   `ARC_RELIGHT_WISPS=off` and `ARC_RELIGHT_WISP_STRENGTH` (a factor, default 1) are tuning switches. Not ready: a wisp made at run time has no map row and no glow.
@@ -257,7 +257,7 @@ live in the diagnostic palette (Ctrl+Shift+F9 / gamepad Start), never on origina
 game keys. In `area` the palette has **Game time +1 hour** (a one-hour wait) and
 **Ambient lighting on/off** (off shows unlit source pixels) plus a lighting status
 line. The HUD shows the game time, DAY/NIGHT (`[06:00,18:00)`), whether time flows
-(`time flows 8x`) or is paused (`PAUSED (dialog/palette/inventory open)`), the scheme id and
+(`time flows 8x`) or is paused (`PAUSED (the menu is open)`), the scheme id and
 whether it came from the map default. Without loaded lighting (other WORLD modes)
 both actions report "unavailable". No launch argument or key binding was added.
 
@@ -389,12 +389,12 @@ shown view, the 32 nearest the view's centre are uploaded; `AreaRelight.SetView`
 
 ## Relit look (ARC-RENDER-2060)
 
-The best variant of the experiment is a player setting: the launcher's **HD lighting** line, Off or On, saved as the `relit look` line of `arcanum.cfg`
-([HD lines](terrain-viewer.md)). It is **default off** and in force only while the visual profile is HD (`SyncRelitLook` follows the setting and the profile every frame: HD graphics
-Off, by the H key too, puts the look out of force and the draw is Legacy byte for byte). In force it is the night-weighted mode (`NightAdd`) at the strength **1.6**
+The best variant of the experiment is a part of the **HD graphics** option (ARC-RENDER-2076 folded the separate HD lighting row, the `relit look` line of ARC-RENDER-2060, into it; an old `relit look`
+line of `arcanum.cfg` is ignored and left alone). It is in force exactly while the visual profile is HD (`SyncRelitLook` follows the profile every frame: HD graphics
+Off, by the H key too, puts the look out of force and the draw is Legacy byte for byte; [HD lines](terrain-viewer.md)). In force it is the night-weighted mode (`NightAdd`) at the strength **1.6**
 (`AreaRelight.LookStrength`, the experiment's pick; `ARC_RELIGHT_LOOK_STRENGTH` changes it for tuning by eye): terrain, scenery, bodies and the hero take a normal derived per pixel from the sprite's
 luminance and the dynamic point-light term, weighted by how dark the item's own ambient is, so daylight stays Legacy and a dark scene takes the full term. The hero's carried light and the map's
-lights are one list with the view-culling rule above (32 nearest the view's centre). The environment's `ARC_RELIGHT` modes stay as a developer override (when set they win over the setting and use
+lights are one list with the view-culling rule above (32 nearest the view's centre). The environment's `ARC_RELIGHT` modes stay as a developer override (when set they win over the look and use
 `ARC_RELIGHT_STRENGTH`). No gameplay luminance, clock or RNG is read or changed (FR-LIGHT-009 and FR-LIGHT-011 untouched).
 
 *HD frames.* An N-times HD frame has N times the texels over the same drawn size, so its luminance steps are 1/N as big: the relit program gets the item's scale (`relight_scale`, the item's `HdScale`)

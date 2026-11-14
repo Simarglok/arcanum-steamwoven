@@ -3,6 +3,7 @@ using Arcanum.Simulation.Ai;
 using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Goals;
 using Arcanum.Simulation.Movement;
+using Arcanum.Simulation.Party;
 using Arcanum.TerrainViewer.Core;
 using Arcanum.World;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -64,6 +65,55 @@ public sealed class AreaAiReactionTailTests
 
         Assert.AreEqual(AttackReactionStep.Weigh.ToString(), host.TraceOf(f.B)?.Reaction?.Split(' ')[0], "it surrendered to the attacker: weigh: " + host.TraceOf(f.B)?.Reaction);
         Assert.IsFalse(Flees(host, f.B), "the reaction weighed (the setter's): no flee run from the reaction");
+    }
+
+    // ARC-UI-2079 (ledger TB28): the fleeing line (0x413EA0) of the surrendered NPC that runs from a new attacker goes to the speech display with the attacker as its listener.
+    [TestMethod]
+    public void A_surrendered_npc_that_runs_from_a_new_attacker_barks_its_fleeing_line_to_that_attacker()
+    {
+        var (f, host) = Open();
+        using var _ = f;
+        var barks = new List<(string Speaker, LoyaltyLines Lines, string? Listener)>();
+        host.AiBarks = (speaker, lines, listener) => barks.Add((speaker, lines, listener));
+        Surrender(f, f.B, SessionCombatant.Hero);
+
+        host.SpellAttacked(f.A, f.B);
+
+        Assert.AreEqual(1, barks.Count, "one bark: " + string.Join(";", barks));
+        Assert.AreEqual((f.B, new LoyaltyLines(3000, 3099), f.A), barks[0], "the NPC speaks its 3000-3099 line to the attacker");
+    }
+
+    [TestMethod]
+    public void A_surrendered_npc_that_weighs_again_barks_nothing_it_was_already_in_the_state()
+    {
+        var (f, host) = Open();
+        using var _ = f;
+        var barks = new List<string>();
+        host.AiBarks = (speaker, _, _) => barks.Add(speaker);
+        Surrender(f, f.B, SessionCombatant.Critter(f.A));
+
+        host.SpellAttacked(f.A, f.B);
+
+        Assert.AreEqual(0, barks.Count, "the setter's line is for entering a fleeing or surrendered state only");
+    }
+
+    // The setter's entry line: an NPC that takes the fleeing state barks to the one it flees from; a host with no bark hook says nothing.
+    [TestMethod]
+    public void An_npc_that_enters_the_fleeing_state_barks_to_the_one_it_flees_from_and_a_host_without_the_hook_is_silent()
+    {
+        var (f, host) = Open();
+        using var _ = f;
+        var barks = new List<(string Speaker, LoyaltyLines Lines, string? Listener)>();
+        host.AiBarks = (speaker, lines, listener) => barks.Add((speaker, lines, listener));
+
+        Assert.IsTrue(host.SpellFlee(f.B, f.A), "the flee was set: " + host.TraceOf(f.B)?.Setter);
+
+        Assert.AreEqual(1, barks.Count, "one bark: " + string.Join(";", barks));
+        Assert.AreEqual((f.B, AreaAiHost.FleeBarkLines, f.A), barks[0]);
+
+        var (g, quiet) = Open();
+        using var __ = g;
+        Assert.IsTrue(quiet.SpellFlee(g.B, g.A), "the flee was set without a hook: " + quiet.TraceOf(g.B)?.Setter);
     }
 
     [TestMethod]

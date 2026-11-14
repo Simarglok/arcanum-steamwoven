@@ -140,9 +140,11 @@ public sealed class AreaInventoryMap
             .ToDictionary(holder => Id(holder.Key), holder => new AreaRestockSeed(holder.InventorySource, holder.ContainerFlags ?? 0), StringComparer.Ordinal);
         var persistent = inventory.Items.Where(item => RestockRules.Keeps(item.ItemFlags)).Select(item => Id(item.Key));
         var detached = inventory.Detached.Select(item => Id(item.Key)).ToArray();
+        var staleGold = inventory.Holders.Count(holder => holder.StaleGoldHandle is not null);
         return new(AreaInventoryMapStatus.Ready, new(snapshot.RuntimeMap, seed, rows, dead.Count, unknown, substitutes, restock, persistent) { Detached = detached },
             $"{inventory.Items.Count} items, {inventory.Holders.Count} holders, {dead.Count} dead NPCs, {unknown} without life evidence" +
-            (detached.Length > 0 ? $", {detached.Length} held but unlisted (detached)" : ""));
+            (detached.Length > 0 ? $", {detached.Length} held but unlisted (detached)" : "") +
+            (staleGold > 0 ? $", {staleGold} gold handles outside their holder's list (stale)" : ""));
     }
 
     /// <summary>Life from the step rules: the NPC's own evidence as the destination of a step into its cell. True for

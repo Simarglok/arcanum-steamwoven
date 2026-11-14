@@ -2,6 +2,7 @@ using Arcanum.Input;
 using Arcanum.Session;
 using Arcanum.Simulation.Equipment;
 using Arcanum.Simulation.Hotkeys;
+using Arcanum.Simulation.Magic;
 using Arcanum.World;
 using Godot;
 
@@ -94,6 +95,22 @@ public partial class TerrainViewerApp
         if (result.Disposition == GameSessionDisposition.Rejected) GD.Print($"ARC-UI-022 recent-refused {Describe(action)} failure={result.Failure}");
     }
 
+    /// <summary>ARC-UI-2068 (DB2, 0x54FCF0, 0x551A80(0)): a hotkey that acts while the dialog is open ends it first, through the dialog's leave case
+    /// (0x5678D0: no script runs, nothing resumes), as a window opener's pop does (ARC-UI-1467). The original's bars stay under the dialog (Original
+    /// interface setting); Steamwoven hides them, so under Steamwoven no click reaches here. No-op without an open dialog (the pop outside a dialog re-enters the current mode).</summary>
+    private void EndDialogForHotkey()
+    {
+        if (!ConversationOpen) return;
+        GD.Print("ARC-UI-2068 hotkey ends the dialog before it acts");
+        EndConversation();
+    }
+
+    /// <summary>ARC-UI-2068, ARC-UI-2086 (0x57BC70, 0x57C080): the spell activation pops the dialog after its own refusal tests (a valid spell). A BEGIN area with the
+    /// inventory bit 0x2000000 skips that pop in 0x57BC70 only because the inventory opener 0x572240 → 0x572510 pops first (0x551A80(0), the mode 3 leave
+    /// ends the dialog) and then pushes mode 8: the dialog ends before the window opens, never stays below it (ARC-UI-2086, F1). The pop comes before the
+    /// action-point test (ARC-RES-2087), which is the viewer's order.</summary>
+    private bool SpellEndsDialog(int spell) => SpellCasterNow() is not null && _spellRecords is { } records && spell >= 0 && spell < records.Length && records[spell].Data.Enabled;
+
     /// <summary>The activation (0x54FCF0): the PC's test, then the entry's type.</summary>
     private void ActivateHotkey(HotkeyEntry entry, string key)
     {
@@ -105,6 +122,7 @@ public partial class TerrainViewerApp
         else switch (entry.Kind)
         {
             case HotkeyKind.Spell:
+                if (SpellEndsDialog(entry.Index)) EndDialogForHotkey();
                 ActivateSpell(entry.Index);
                 outcome = "spell " + entry.Index;
                 break;
@@ -112,6 +130,9 @@ public partial class TerrainViewerApp
                 outcome = ActivateItemSpellHotkey(session, entry.Item!, entry.Index);
                 break;
             case HotkeyKind.Skill:
+                // 0x579FA0: the opener pops the dialog unless the skill row keeps the pop for later (row 3, the repair button, mask bit 0x2000000): its inventory
+                // opener 0x572240 → 0x572510 pops it (the mode 3 leave) just before it pushes the inventory window, so the dialog ends before the window opens (ARC-UI-2086).
+                EndDialogForHotkey();
                 outcome = ActivateSkillButton(session, (SkillBarButton)entry.Index);
                 break;
             case HotkeyKind.Item:
@@ -138,6 +159,7 @@ public partial class TerrainViewerApp
         if (plan == HotkeyItemSpellAction.Nothing) return "the hero no longer holds the item";
         if (plan == HotkeyItemSpellAction.WieldThenActivate && WearFromHotkey(session, item, EquipmentSlot.Weapon) is { } refused) return refused;
         if (SpellCasterNow() is not { } caster || !HotkeyRules.SpellActivates(spell, caster.ItemTriggered)) return $"spell {spell} does not activate";
+        if (SpellEndsDialog(spell)) EndDialogForHotkey();
         ActivateSpell(spell, item);
         return $"spell {spell} of {item}";
     }
@@ -145,6 +167,8 @@ public partial class TerrainViewerApp
     // The type-1 branch: its plan, carried out where the viewer has the step.
     private string ActivateItemHotkey(GameSessionOwner session, string item)
     {
+        // 0x54FCF0: the item branch pops the dialog first, before it even tests that the hero still holds the item.
+        EndDialogForHotkey();
         if (SpellCasterNow() is not { } caster || caster.Item(item) is not { } facts) return "the item's facts do not read here";
         int Wear(string entity) => _inventoryHost?.Wearable(session, entity, _areaKitWear) is { } wearable && EquipmentRules.WearSlot(wearable.Item) is { } at ? (int)at : -1;
         HotkeyItemFacts Facts(string entity, SessionItemSpells spells) => new(entity, spells.Type, spells.Flags, Wear(entity));

@@ -19,10 +19,8 @@ public partial class TerrainViewerApp
     {
         _gameSettingsStore ??= new GameSettingsStore(AutomatedVisualRun);
         _visualStore ??= new VisualProfileSettingsStore(AutomatedVisualRun);
-        _relitLookStore ??= new RelitLookSettingsStore(AutomatedVisualRun);
         if (_gameSettingsStore.Persistent) _gameSettings = _gameSettingsStore.Load();
         if (_visualStore.Persistent) _launcherHdProfile = _visualStore.Load();
-        if (_relitLookStore.Persistent) _relitLook = _relitLookStore.Load();
         _launcherHdPackNote = HdPackSourceText();
         if (!string.IsNullOrWhiteSpace(System.Environment.GetEnvironmentVariable("ARC_VISUAL_PROFILE")) && !AutomatedVisualRun)
             _launcherHdPackNote += " (this run's ARC_VISUAL_PROFILE overrides HD graphics)";
@@ -35,7 +33,7 @@ public partial class TerrainViewerApp
         if (_launcherPanel is null) return;
         _launcherPanel.Hd = new LauncherHdLines(_launcherHdProfile == VisualProfile.Hd,
             _gameSettings.HdInterface ? (_gameSettings.GeneratedInterface ? 2 : 1) : 0, _gameSettings.HdPackSource,
-            _launcherHdProblem.Length == 0 ? _launcherHdPackNote : _launcherHdPackNote + " | " + _launcherHdProblem, _relitLook);
+            _launcherHdProblem.Length == 0 ? _launcherHdPackNote : _launcherHdPackNote + " | " + _launcherHdProblem);
     }
 
     private void LauncherHdGraphics(bool on)
@@ -45,15 +43,6 @@ public partial class TerrainViewerApp
         var saved = store is { Persistent: true } && store.Save(_launcherHdProfile);
         GD.Print($"ARC-UI-143 launcher HD graphics={(on ? "On" : "Off")} saved={saved}");
         LauncherHdProblem(store is { Persistent: true } && !saved ? "the HD graphics setting could not be saved" : "");
-    }
-
-    private void LauncherHdLighting(bool on)
-    {
-        _relitLook = on;
-        var store = _relitLookStore;
-        var saved = store is { Persistent: true } && store.Save(on);
-        GD.Print($"ARC-RENDER-2060 launcher HD lighting={(on ? "On" : "Off")} saved={saved}");
-        LauncherHdProblem(store is { Persistent: true } && !saved ? "the HD lighting setting could not be saved" : "");
     }
 
     private void LauncherHdInterface(int value)

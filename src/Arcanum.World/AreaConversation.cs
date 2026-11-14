@@ -514,12 +514,13 @@ public sealed class AreaConversationHost
     /// ARC-AI-1527 (FR-DIALOG-003, VB4-1, VB4-2, VB4-4): a follower's comment line (the combat taunt 0x413F50, the upset line 0x414370, the near-death line 0x414490): a random line of <paramref name="lines"/> of the plain NPC files,
     /// the speaker's own override line first (<see cref="DialogFollowerComment.Say"/>), floated over the speaker as a script's float line (<see cref="AreaScriptHost.TakeFloats"/>, the original's callback 0x5F8488). The
     /// text is read from the player's generated files and never stored. Returns the line said, or null when nothing was said (a speaker this host does not hold, texts that did not load, a range without an entry, a refused roll).
-    /// No voice is played. The can-speak test is the caller's.
+    /// No voice is played. The can-speak test is the caller's. ARC-UI-2079 (ledger TB28): <paramref name="listener"/> is the object the speech display turns the speaker to (an entity code; the PC by default, as for a follower's comment;
+    /// null: none).
     /// </summary>
-    public string? SayFollowerLine(AreaSpeaker speaker, LoyaltyLines lines)
+    public string? SayFollowerLine(AreaSpeaker speaker, LoyaltyLines lines, string? listener = AreaScriptHost.PcCode)
     {
         var text = PickLine(speaker, lines);
-        if (text is not null) Scripts.Float(Scripts.Object(speaker), text);
+        if (text is not null) Scripts.Float(Scripts.Object(speaker), text, listener is null ? null : Scripts.Entity(listener));
         return text;
     }
 

@@ -19,7 +19,7 @@ namespace Arcanum.TerrainViewer.Core;
 /// <c>pad scheme</c> (<c>off</c>, <c>direct</c>, <c>pointer</c>), <c>touch scheme</c> (<c>off</c>, <c>touchpad</c>) and <c>prompt style</c> (<c>auto</c>, <c>xbox</c>,
 /// <c>playstation</c>, <c>nintendo</c>, <c>steamdeck</c>; ARC-GPAD-1374, the controller scheme choice of <see cref="ControlSchemeSettings"/>),
 /// <c>hd interface</c> and <c>generated interface</c> (0 or 1), <c>hd pack</c> (<c>auto</c>, <c>game</c>, <c>custom</c>), <c>hd pack path</c>,
-/// <c>visual profile</c> (<c>legacy</c> or <c>hd</c>), <c>relit look</c> (0 or 1, ARC-RENDER-2060: the HD lighting line) and <c>launcher</c> (the launcher object, <see cref="LauncherSettingsFile"/>). A line that is
+/// <c>visual profile</c> (<c>legacy</c> or <c>hd</c>), and <c>launcher</c> (the launcher object, <see cref="LauncherSettingsFile"/>). A line that is
 /// absent or has a value outside its range reads as that setting's default and no other setting changes (the old files lost a whole group
 /// to one bad value). A group is saved at once; a save writes only its own lines.
 /// </summary>
@@ -45,8 +45,6 @@ public static class ViewerSettingsConfig
     public const string HdPack = "hd pack";
     public const string HdPackPath = "hd pack path";
     public const string VisualProfileLine = "visual profile";
-    /// <summary>ARC-RENDER-2060: the HD lighting setting (0 or 1; the relit look of the HD graphics, default 0).</summary>
-    public const string RelitLookLine = "relit look";
     public const string PadSchemeLine = "pad scheme";
     public const string TouchSchemeLine = "touch scheme";
     public const string PromptStyleLine = "prompt style";
@@ -146,17 +144,6 @@ public static class ViewerSettingsConfig
     }
 
     public static IReadOnlyList<ArcanumConfigChange> AlwaysRunChanges(bool value) => [new(AlwaysRun, Flag(value))];
-
-    public static bool HasRelitLook(ArcanumConfigRead read) => read.Has(RelitLookLine);
-
-    /// <summary>ARC-RENDER-2060: the HD lighting setting; an absent line or a value other than 0 or 1 reads as off.</summary>
-    public static bool ReadRelitLook(ArcanumConfigRead read)
-    {
-        ArgumentNullException.ThrowIfNull(read);
-        return Flag(read, RelitLookLine) ?? false;
-    }
-
-    public static IReadOnlyList<ArcanumConfigChange> RelitLookChanges(bool value) => [new(RelitLookLine, Flag(value))];
 
     public static VisualProfile ReadVisualProfile(ArcanumConfigRead read)
     {

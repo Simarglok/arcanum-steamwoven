@@ -111,7 +111,7 @@ public sealed class AreaScriptNewspaperTests
             CollectionAssert.AreEqual(new[] { -1, -1, -1, -1, 5000, 7, 5030, 5030 }, queue.Entries.Take(8).ToArray());
             Assert.AreEqual(8, queue.Count);
             // A headline that does not end in a stop gets one and then a space; the float goes through the host's list, once.
-            CollectionAssert.AreEqual(new[] { new AreaScriptFloat(f.Npc, "Big news at the harbour. ") }, f.Host.TakeFloats().ToArray());
+            CollectionAssert.AreEqual(new[] { new AreaScriptFloat(f.Npc, "Big news at the harbour. ", f.Host.Pc) }, f.Host.TakeFloats().ToArray());
             Assert.AreEqual(0, f.Host.TakeFloats().Count);
         });
     }
@@ -123,7 +123,7 @@ public sealed class AreaScriptNewspaperTests
         {
             using var f = Create(content);
             Assert.IsTrue(f.Host.Apply(Run(f).Effects));
-            CollectionAssert.AreEqual(new[] { new AreaScriptFloat(f.Npc, "Fire? ") }, f.Host.TakeFloats().ToArray());
+            CollectionAssert.AreEqual(new[] { new AreaScriptFloat(f.Npc, "Fire? ", f.Host.Pc) }, f.Host.TakeFloats().ToArray());
         });
     }
 
