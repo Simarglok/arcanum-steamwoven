@@ -128,11 +128,13 @@ public partial class TerrainViewerApp
                     if (shotSpots.All(x => Centre(x.Lamp).DistanceTo(Centre(candidate)) >= 700f)) shotSpots.Add(((shotSpots.Count + 1).ToString(), candidate));
                 }
                 Require(shotSpots.Count > 0, "the window has a spot with at least four lit lights within reach");
-                var hours = (OS.GetEnvironment("ARC_RELIGHT_HOURS") is { Length: > 0 } list ? list : "20,23,3").Split(',').Select(h => int.Parse(h.Trim())).ToArray();
+                var hours = (OS.GetEnvironment("ARC_RELIGHT_HOURS") is { Length: > 0 } list ? list : "20,23,3").Split(',').Select(h => int.TryParse(h.Trim(), out var value) && value is >= 0 and <= 23 ? value : -1).ToArray();
+                Require(hours.Length > 0 && hours.All(h => h >= 0), "ARC_RELIGHT_HOURS is a comma-separated list of hours 0..23");
                 var shotLog = new List<object>();
                 foreach (var hour in hours)
                 {
                     for (var h = 0; h < 24 && driver.Clock.Hour != hour; h++) { driver.AdvanceHours(1, AmbientSector()); LogAreaEvents(driver); }
+                    Require(driver.Clock.Hour == hour, $"the clock reached hour {hour}");
                     foreach (var (spotName, lamp) in shotSpots)
                     {
                         Look(Stand(lamp)); PushAreaAmbient(); await Frames();

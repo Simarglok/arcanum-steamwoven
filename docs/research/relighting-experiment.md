@@ -204,7 +204,7 @@ The night cities (ARC-RES-2007; PNGs named by `ARC_RELIGHT_CITY`):
 
 Full-frame night shots for the owner (ARC-RES-2050): add `--env ARC_RELIGHT_SHOTS=1` (and optionally `--env ARC_RELIGHT_HOURS=20,23,3`) to the city commands. The stage then skips the walk and
 the timing and captures up to three spots at least 700 px apart (each with at least four lit lights within 350 px) at every hour, in Legacy, night 1.0 and night 1.6
-(`<city>-shot-<spot>-h<hour>-<variant>.png`, 1280×800). The ambient colour changes only slightly between the night hours 20 and 3, so the hours differ less than the spots.
+(`<city>-shot-<spot>-h<hour>-<variant>.png`, 1280×800). In the first runs the ambient colour changed only slightly between the night hours 20, 23 and 3, so the hours differ less than the spots.
 
 The PNGs under `ARC_RELIGHT_CAPTURE` are derived from the player's art: keep them outside git. The lab:
 `experiments/relight-lab/README.md`.
