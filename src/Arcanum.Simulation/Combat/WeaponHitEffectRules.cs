@@ -21,6 +21,7 @@ public static class WeaponHitEffectRules
     public static int? Index(int prototypeNumber, int kind)
     {
         var basic = prototypeNumber - PrototypeFileOffset;
-        return kind is < Begin or > Unused || basic < FirstPrototype ? null : checked((basic - FirstPrototype) * PerWeapon + kind);
+        // A number far above any prototype file (a corrupt record) names no entry rather than overflowing.
+        return kind is < Begin or > Unused || basic < FirstPrototype || basic - FirstPrototype > (int.MaxValue - Unused) / PerWeapon ? null : (basic - FirstPrototype) * PerWeapon + kind;
     }
 }

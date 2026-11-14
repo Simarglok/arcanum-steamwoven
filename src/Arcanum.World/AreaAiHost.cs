@@ -2484,6 +2484,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
             // ARC-AI-1516 (EX14, VBG5): a missile that met an object other than its target raises the event with the accidental bit.
             if (struck != aimed) AttackEvent(shooter, struck, AttackEventFlags.Accidental);
             // ARC-DEV-292: the strike is the damage step (or the miss path) of the shot: the struck NPC's immediate pass, after its attack event.
+            // ARC-RENDER-1990: the weapon asked is the shooter's wielded one as it stands at the strike (the original reads the projectile's field 0x50 set at the shot; an NPC's thrown item is not told apart here, issue 2013).
             HitEffect(struck, result, WieldedPrototype(shooter));
             if (VictimReached(result)) Struck(struck);
         }
