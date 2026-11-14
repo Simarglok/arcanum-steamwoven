@@ -550,6 +550,7 @@ public partial class TerrainViewerApp
             Require(_followerPortraits!.PanelForSelfTest is { Shown: true, Count: 1, ToggleArt: 501, UpArt: null, DownArt: null }, "the panel is shown with the hide button and no arrows: " + _followerPortraits.PanelForSelfTest);
             // ARC-UI-1785 (FP1, SZ11): the three buttons stand at the bars-drawn places (y 428; the arrows 415) while the bars show and at y 587 (arrows 574) with the bars hidden; the layout
             // follows the bars at once and the frame is where it was.
+            Require(_gameBarPanel is not null, "the interface bars exist for the hidden-interface layout step");
             if (_gameBarPanel is { } barPanel)
             {
                 var wasVisible = barPanel.Visible;
@@ -560,7 +561,7 @@ public partial class TerrainViewerApp
                     var toggleRect = _followerPortraits.ButtonRectForSelfTest("toggle");
                     var wanted = AreaFollowerPanelRules.ToggleRectFor(barsOn);
                     Require(AreaGameBarPanel.BottomInset > 0 == barsOn, $"the bars' inset follows their visibility ({barsOn})");
-                    Require(toggleRect is { } rect && (int)rect.Position.Y == (barsOn ? 428 : 587) && (int)rect.Position.X == wanted.X, $"the show/hide button stands at y {(barsOn ? 428 : 587)} with the bars {(barsOn ? "drawn" : "hidden")}: {toggleRect}");
+                    Require(toggleRect is { } rect && (int)rect.Position.Y == wanted.Y && wanted.Y == (barsOn ? 428 : 587) && (int)rect.Position.X == wanted.X, $"the show/hide button stands at y {(barsOn ? 428 : 587)} with the bars {(barsOn ? "drawn" : "hidden")}: {toggleRect}");
                     Require(_followerPortraits.FrameForSelfTest(companion.Entity)!.Value.Rect.Position == frameAt, "the portrait frame does not move with the layout");
                 }
                 barPanel.Visible = wasVisible;
