@@ -157,6 +157,8 @@ public partial class TerrainViewerApp
         var shownFollowers = followers.Select(c => (c.Entity, CompanionName(c), CompanionLife(c), FollowerPortrait(c))).ToArray();
         if (shownFollowers.Any(f => f.Item3 is null)) _portraitLifeRetry = Engine.GetProcessFrames() + PortraitLifeRetryFrames;
         _followerPortraits.Show(shownFollowers);
+        // The pointer rested on the portrait when the dialog opened (a click talks): the hover is forgotten with no exit, which would wipe the dialog start's description (DB3).
+        if (held && !_followerPortraits.Inert) { _portraitHoverKey = null; _portraitAllows = null; _hoverStamp = null; }
         _followerPortraits.Inert = held;
     }
 

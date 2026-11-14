@@ -178,7 +178,7 @@ public partial class AreaFollowerPortraits : CanvasLayer
 
     /// <summary>
     /// ARC-UI-2069 (ledger DB1, DB2): the panel stays drawn (frames, portraits, bars) but takes no input: the original's follower handler 0x56A9D0 returns at once while
-    /// the PC's dialog flag is set (0x567400), and its draw routine 0x56B290 does not test the dialog. Turning it on closes the menu, ends the hover and drops the tooltips;
+    /// the PC's dialog flag is set (0x567400), and its draw routine 0x56B290 does not test the dialog. Turning it on closes the menu, forgets the hover without a hover-exit (the original fires none, and the dialog start's description in the description area must stay) and drops the tooltips;
     /// the buttons still consume the pointer (the dialog's hook consumes every record, 0x5517A0).
     /// </summary>
     public bool Inert
@@ -188,7 +188,7 @@ public partial class AreaFollowerPortraits : CanvasLayer
         {
             if (_inert == value) return;
             _inert = value;
-            if (value) { CloseMenu(); if (_hovered is not null) { _hovered = null; PortraitHoverLeft?.Invoke(); } }
+            if (value) { CloseMenu(); _hovered = null; }
             foreach (var (entity, entry) in _entries) entry.Button.TooltipText = value ? "" : LabelOf(entity);
         }
     }

@@ -93,7 +93,7 @@ public partial class TerrainViewerApp
             async Task DialogPortraitFacts(string rules)
             {
                 var stays = DialogBarStays;
-                await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                for (var frame = 0; frame < 3; frame++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
                 var drawn = portraits.Visible && portraits.EntitiesForSelfTest.Contains(follower) && portraits.FrameForSelfTest(follower) is { Frame: true };
                 Fact(rules + "the portrait panel " + (stays ? "stays drawn" : "is hidden") + " under the dialog", drawn == stays, drawn ? "drawn" : "hidden");
                 await Capture("dialog-" + (stays ? "original" : "steamwoven"));
@@ -102,8 +102,14 @@ public partial class TerrainViewerApp
                     var bars = portraits.BarsForSelfTest(follower);
                     Fact(rules + "the portrait's bars stay drawn under the dialog", bars is { Health: > 0 }, bars?.ToString() ?? "none");
                     var at = portraits.PortraitCentreForSelfTest(follower)!.Value;
+                    // Off the portrait and on again: the entry must not hover under the dialog (the pointer rested on it when the click opened the talk).
+                    var away = new Vector2(at.X + 400, at.Y + 300);
+                    GetViewport().PushInput(new InputEventMouseMotion { Position = away, GlobalPosition = away });
+                    for (var frame = 0; frame < 3; frame++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                    var hoversEntry = PortraitHoversForSelfTest;
                     GetViewport().PushInput(new InputEventMouseMotion { Position = at, GlobalPosition = at });
-                    await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                    for (var frame = 0; frame < 3; frame++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                    Fact(rules + "entering the portrait runs no hover under the dialog", PortraitHoversForSelfTest == hoversEntry && PortraitHoverKeyForSelfTest is null, $"{PortraitHoversForSelfTest - hoversEntry} run(s)");
                     Fact(rules + "the pointer over the portrait is no hover under the dialog", portraits.HoveredForSelfTest is null, portraits.HoveredForSelfTest ?? "none");
                     await ClickPortraitAsync(MouseButton.Right);
                     Fact(rules + "a right release on the portrait opens no menu under the dialog", !portraits.MenuShown, portraits.MenuShown ? "menu" : "none");
@@ -176,7 +182,7 @@ public partial class TerrainViewerApp
                     session.SelectRules(priorRules);
                     portraits.CloseMenu();
                 }
-                await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                for (var frame = 0; frame < 3; frame++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
                 Fact("Original: the panel takes input again once the dialog is closed", portraits.Visible && !portraits.Inert, portraits.Inert ? "inert" : "live");
             }
             Settle();
