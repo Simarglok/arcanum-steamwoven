@@ -90,6 +90,8 @@ public partial class TerrainViewerApp
             var bag = Centre(AreaLootArtLayout.BagButton, AreaLootArtLayout.BagButtonArt);
             grid.PressAt(bag); grid.ReleaseAt(bag);
             Require(!grid.BodyDoll, "the bag button shows the grid again");
+            // ARC-UI-1918 (IW26, IW30): the hero's own doll toggle of the same window (mode 2): its two buttons, the doll view with the hero's slots and no grid, and the bag button back.
+            GD.Print($"ARC-UI-1918 loot-worn {await HeroDollWindowStepAsync(grid, panel.ViewForSelfTest!, "loot")} heroWorn={heroWorn.Length}");
         }
         else GD.Print($"ARC-DEV-202 loot-worn: no original-look window (open={InventoryOpen}); the doll view is not driven (named, the interface art does not read)");
         if (InventoryOpen) EndInventory();

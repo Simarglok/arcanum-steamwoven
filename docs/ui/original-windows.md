@@ -52,8 +52,7 @@ Left for the next inventory slices (each its own task):
 - **Paper-doll art** of worn weapons and armour (fields 0x71, 0x97, art place 2 of 0x4EC290, F0).
 - **Fonts**: the original's art fonts (0x682C74, 0x68345C; font arts 226–230) for the lines and counts.
 - **Other modes**: loot (done by ARC-UI-052 without the doll views, below), barter (done by ARC-UI-064 without the doll views and the
-  gamble, below), steal (done by ARC-UI-065, below); the doll toggle buttons (338, 339 at 0x5738A9/0x5738F9; toggle 0x68150C draws
-  341 `PD_Cover4Inven` at (361, 0) and moves the doll's rectangles 348 pixels to the right (table 0x5CACE8), F0).
+  gamble, below), steal (done by ARC-UI-065, below); the hero's own doll toggle of modes 1 to 4 is done by ARC-UI-1918 (below, [IW45](../research/ledger/ui-audio.md#heros-own-doll-toggle-arc-ui-1918)).
 - The doll art's empty box at its top-left (about 18, 14 to 160, 157): the mode-0 redraw draws nothing there (only
   modes 1–6 draw a critter image, 0x553D10, at their own places); whether another path fills it is not read (F0).
 - The two numbers at (80, 358) and (261, 358) of the hero's own window (0x464630, 0x464700; read by ARC-UI-1121 for the body's doll and by ARC-UI-1267 for the hero's own window, [IW41](../research/ledger/ui-audio.md#doll-values-and-weapon-overlay-arc-ui-1121)) and the selected-item fill
@@ -68,7 +67,7 @@ container); the frame is the inventory window's.
 
 | Part | Art | Place in the window | Notes |
 | --- | --- | --- | --- |
-| Loot background | 234 `Loot` 358 × 400 | (0, 0) | the hero's doll and weight lines are not drawn (doll toggle clear at every open) |
+| Loot background | 234 `Loot` 358 × 400 | (0, 0) | the hero's doll and weight lines are drawn only with the hero's doll toggle set (clear at every open, below) |
 | Pack background, hero's grid, counts, boxes | as in the inventory window | as there | the boxes show 348 / 347 (refused) under the body's own item |
 | Body's image | race icons 375–382, 634; 383–385, 434 by critter flags; containers 832–839, 435 | (183, 33) | 0x553D10; a follower's portrait is not built |
 | Body's grid | item inventory art | 10 × 8 cells of 32 from (8, 136), scrolled by rows | worn items (1000..1008) only in the doll view; scroll maximum 4 (critter) or 88 (container) |
@@ -82,9 +81,16 @@ body's grid (PROJECT: the original's scroll bar at (330, 136) is not drawn); the
 window with its Take buttons. PROJECT: a taken item goes to the hero's first free cells, not the cell it was released on.
 
 ARC-UI-072 built the body's doll view and its toggles (the loot and steal windows of a critter: the worn items on 349 `Loot_PD` at (0, 134), toggles 338 / 339 at
-(23, 108), (74, 108); IW29, IW30). ARC-UI-1121 added the doll's two values and the weapon slot's fill ([IW41–IW43](../research/ledger/ui-audio.md#doll-values-and-weapon-overlay-arc-ui-1121)). ARC-UI-1267 added the same two values and the weapon fill to the hero's own window. Left for the next loot slices (each its own task): the hero's doll toggle at (713, 37), (751, 37), the scroll bar's art, the move of a hero's
-item into the body, the button 340 at (763, 197) and the hot spots of IW30, a follower's portrait as the image, the right release's
+(23, 108), (74, 108); IW29, IW30). ARC-UI-1121 added the doll's two values and the weapon slot's fill ([IW41–IW43](../research/ledger/ui-audio.md#doll-values-and-weapon-overlay-arc-ui-1121)). ARC-UI-1267 added the same two values and the weapon fill to the hero's own window. ARC-UI-1918 built the hero's own doll toggle (see below). Left for the next loot slices (each its own task): the scroll bar's art, the move of a hero's
+item into the body, the hot spots of IW30 and IW46 ([issue #1924](https://github.com/Simarglok/arcanum-steamwoven/issues/1924)), a follower's portrait as the image, the right release's
 move of a hero's item into the body (IW36), a move within the body's grid.
+
+**The hero's own doll toggle (done: ARC-UI-1918, [IW45](../research/ledger/ui-audio.md#heros-own-doll-toggle-arc-ui-1918)).** The windows of modes 1 to 4 (barter, loot, steal and See Contents) make two buttons on the pack's
+side, 338 `PD_lil_butt` at (713, 37) and 339 `Inven_lil_butt` at (751, 37), and clear the toggle at every open. The doll button sets it, the bag button clears it. Set, the pack shows 341 `PD_Cover4Inven` at (361, 0) in place of
+its grid, the hero's worn items and the covers of its empty slots in the nine rectangles of the own window's doll moved 348 pixels right (499, 107 for the helmet), the weight, encumbrance and speed lines at (431, 32), (431, 47), (431, 62)
+and the damage and armour numbers at (425, 358) and (609, 358); the weapon's slot is filled dark red when the weapon is too heavy (IW43). A press on a worn item lifts it (not in the See Contents window), released on another hero slot it is
+worn there, released on its own slot it goes back. The buttons draw their first frame and play the press and release sounds. Not built: the cross-holder moves of the slots ([issue #1925](https://github.com/Simarglok/arcanum-steamwoven/issues/1925)), the stat-line popups over the numbers (#1924).
+The cover 341 is drawn from the game's art; its generated recipe is [#1750](https://github.com/Simarglok/arcanum-steamwoven/issues/1750).
 
 The steal window (done: ARC-UI-065, rows [IW35–IW36](../research/ledger/ui-audio.md#steal-window-arc-ui-065)): mode 3 draws the loot
 window's frame, image and grids without the Take all button (made in mode 2 alone, IW30). In the original look of the viewer the
@@ -113,7 +119,7 @@ interface mode 1 (a `b:` reply, BT7); the frame is the inventory window's.
 | Part | Art | Place in the window | Notes |
 | --- | --- | --- | --- |
 | Barter background | 235 `Barter` 358 × 400; 825 `Barter_Follower` | (0, 0) | 825 while the follower's cycle buttons exist: a follower's window when the PC leads another follower (BW1) |
-| Pack background, hero's grid, counts, drop and use boxes | as in the inventory window | as there | the hero's doll and weight lines are not drawn (doll toggle clear at every open) |
+| Pack background, hero's grid, counts, drop and use boxes | as in the inventory window | as there | the hero's doll and weight lines are drawn only with the hero's doll toggle set (ARC-UI-1918, above) |
 | Merchant's image | as the loot window's (0x553D10) | (183, 33) | the merchant's, not its substitute container's; a follower's portrait is not built |
 | Merchant's name | font 0x682418 | centred on x 215, line (y 102, 200 × 20) | 0x441B60 at the open (BW2) |
 | Quote line | font 0x682C74 | (89, 128), 253 × 30 | the hover quote 0x578330 and the trade messages; a follower's window prints the follower's weight lines there (BW2, BW5) |

@@ -319,6 +319,9 @@ public partial class TerrainViewerApp
             Require(resale > 0 && owner.QueryGold() == gold + resale && panel.ArtView!.LootGrid.Any(item => item.Entity == "kit:1") && _barterSounds.Count == sounds + 3,
                 $"the right release sold the sword for {resale}: {area.BarterFrame!.Quote}");
 
+            // ARC-UI-1918 (IW26, IW30): the hero's own doll toggle of the window (mode 1): the cover and the hero's slots with the doll button, the grid again with the bag button.
+            var heroToggle = HeroDollToggleForSelfTest(area, panel.ArtView!, "barter");
+
             panel.LookToggleForSelfTest.EmitSignal(BaseButton.SignalName.Pressed);
             await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
             Require(!panel.ArtMode && panel.BuyButtonsForSelfTest.Count > 0 && panel.BuyButtonsForSelfTest[0].IsVisibleInTree(), "the switch shows the diagnostic window");
@@ -330,7 +333,7 @@ public partial class TerrainViewerApp
             area.ReleaseAt(new(holeX + 10, holeY + 10));
             await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
             Require(!BarterOpen, "a release on the round view closed the window");
-            return $"original look: quote, sell {paid} and buy {price} by drag, right-release sale {resale}, switch, round-view close";
+            return $"original look: quote, sell {paid} and buy {price} by drag, right-release sale {resale}, {heroToggle}, switch, round-view close";
         }
         finally
         {
@@ -729,5 +732,64 @@ public partial class TerrainViewerApp
             if (ItemServiceOpen) EndItemService();
             _worldFocusSimulationForSelfTest = simulatedFocus; _worldFocused = focused;
         }
+    }
+
+    /// <summary>
+    /// ARC-UI-1918 (IW26, IW30, IW45): the hero's own doll toggle of a window of modes 1 to 4 over the synthetic art set. Both buttons are shown at (713, 37) and (751, 37) with the toggle
+    /// clear; a press and release on the doll button sets it, so no cell of the hero's grid is hit and the slot of its worn item is, which lifts the item with its slot; a release on the same slot puts it back
+    /// and the bag button clears the toggle, the grid being hit again. A press on a button alone does nothing until its release over it. <paramref name="picks"/> false is the See Contents window (mode 4), which
+    /// lifts nothing (the left press skips mode 4, XR16) while its toggle buttons, the button system's, work. Returns a line for the log.
+    /// </summary>
+    private static string HeroDollToggleForSelfTest(AreaInventoryGridArea area, AreaInventoryView view, string window, bool picks = true)
+    {
+        void Require(bool value, string why) { if (!value) throw new InvalidOperationException($"ARC-UI-1918 hero doll toggle ({window}): " + why); }
+        Require(area.HeroTogglesShown && !area.HeroDoll, "both buttons are shown with the toggle clear");
+        // The doll button's top-left corner and the bag button's right end: the synthetic buttons (80 pixels wide) overlap, and the point on the bag button's free part is right of the doll button's.
+        var dollPoint = new Vector2(AreaHeroDollToggle.DollButton.X + 2, AreaHeroDollToggle.DollButton.Y + 2);
+        var bagPoint = new Vector2(AreaHeroDollToggle.BagButton.X + area.Look!.Art[AreaLootArtLayout.BagButtonArt].GetWidth() - 2, AreaHeroDollToggle.BagButton.Y + 2);
+        Require(area.HeroToggleAt(dollPoint) == true && area.HeroToggleAt(bagPoint) == false && area.HeroToggleAt(new(100, 100)) is null, "the buttons are hit at their places");
+        var sounds = new List<int>();
+        void Heard(int sound) => sounds.Add(sound);
+        area.SoundRequested += Heard;
+        try
+        {
+            area.PressAt(dollPoint);
+            Require(!area.HeroDoll, "a press alone does not set the toggle");
+            area.ReleaseAt(new(100, 100));
+            Require(!area.HeroDoll, "a release away from the button does not either");
+            area.PressAt(dollPoint); area.ReleaseAt(dollPoint);
+            Require(area.HeroDoll && area.Held is null, "the doll button sets the toggle");
+            Require(sounds.Count == 3, "each press on a button and a release over it is a sound request (two presses, one release over it): " + sounds.Count);
+            // With the toggle set no cell of the hero's grid is hit.
+            if (view.Grid.Count > 0)
+            {
+                area.PressAt(AreaInventoryGridArea.CellCentre(view.Grid[0].Slot));
+                Require(area.Held is null, "no grid cell exists with the toggle set");
+            }
+            var worn = view.Doll.FirstOrDefault(slot => slot.Entity is not null);
+            if (worn is not null)
+            {
+                var rect = AreaHeroDollToggle.SlotRects[worn.Slot];
+                var centre = new Vector2(rect.X + rect.Width / 2, rect.Y + rect.Height / 2);
+                area.PressAt(centre);
+                if (picks) Require(area.Held is { Partner: false } held && held.Entity == worn.Entity && held.Worn == worn.Slot, "a press on the slot of a worn item lifts it with its slot");
+                else Require(area.Held is null, "a press on the slot of a worn item lifts nothing in the See Contents window");
+                area.ReleaseAt(centre);
+                Require(area.Held is null, "a release on its own slot puts it back");
+            }
+            area.PressAt(bagPoint); area.ReleaseAt(bagPoint);
+            Require(!area.HeroDoll, "the bag button clears the toggle");
+            if (view.Grid.Count > 0 && picks)
+            {
+                area.PressAt(AreaInventoryGridArea.CellCentre(view.Grid[0].Slot));
+                Require(area.Held is not null, "the grid is hit again with the toggle clear");
+                area.ReleaseAt(AreaInventoryGridArea.CellCentre(view.Grid[0].Slot));
+            }
+            area.SetHeroDoll(true);
+            area.ResetLoot();
+            Require(!area.HeroDoll, "the open clears the toggle");
+            return $"hero doll toggle shown, set, slot {(worn is null ? "-" : worn.Slot.ToString())}, cleared";
+        }
+        finally { area.SoundRequested -= Heard; }
     }
 }
