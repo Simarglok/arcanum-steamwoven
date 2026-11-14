@@ -301,6 +301,28 @@ public partial class TerrainViewerApp
         return (cell.X, cell.Y, ranks.First, ranks.Second);
     }
 
+    // The weapon eye-candy entries whose sound the add played, for the self-test (entry, owner).
+    private readonly List<(int Entry, string Owner)> _weaponEyeCandySoundsForSelfTest = [];
+
+    /// <summary>
+    /// ARC-RENDER-1990, ARC-RENDER-2011 (the weapon effect's add): an entry of the weapon list added to <paramref name="owner"/> (the victim of a hit, the attacker of a begin or a swing), its art turned to <paramref name="rotation"/> (the attacker's
+    /// facing). The entry's sound plays on the owner's tile when the add took (the run started: the goal's begin plays it once) and also for an entry with no art (the add plays it before it answers 0); a refused add (no place, a duplicate past the limit)
+    /// plays none. A looping entry's sound loops in the original; here it plays once. True when a run holds the eye candy now.
+    /// </summary>
+    private bool WeaponEyeCandyAddNow(string owner, int entry, int limit, int rotation)
+    {
+        if (EyeCandyHostNow() is not { } host) return false;
+        var played = host.Play(owner, entry, 0, -1, null, limit, rotation);
+        if (_spellData?.WeaponEyeCandy?.At(EyeCandyEntryRef.IndexOf(entry)) is { Sound: >= 0 } shape && (played || shape.Art is null)
+            && _areaSession is { } session && EyeCandyCell(session, owner) is { } cell)
+        {
+            _weaponEyeCandySoundsForSelfTest.Add((entry, owner));
+            if (_weaponEyeCandySoundsForSelfTest.Count > 64) _weaponEyeCandySoundsForSelfTest.RemoveAt(0);
+            PlayCueAt(new Arcanum.Simulation.Sound.SoundCue(shape.Sound), cell.X, cell.Y, Arcanum.Presentation.Audio.PositionalSize.Large, "weapon eye candy");
+        }
+        return played;
+    }
+
     /// <summary>Where an eye candy's object stands: the hero at its committed cell, an NPC or companion at its live cell.</summary>
     private CellCoord? EyeCandyCell(GameSessionOwner owner, string obj)
     {

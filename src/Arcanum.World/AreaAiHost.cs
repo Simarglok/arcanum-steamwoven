@@ -811,6 +811,16 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         caster.AttackEnd(victim, end.Damage, end.Critical, weapon);
     }
 
+    /// <summary>
+    /// ARC-RENDER-2011 (ledger RH9): the NPC's weapon's own effect of <paramref name="kind"/> (<see cref="WeaponHitEffectRules.Begin"/> at the attack's start, <see cref="WeaponHitEffectRules.Swing"/> in the strike) on the NPC itself, turned to its facing now. An NPC with no weapon
+    /// or without a cast host plays none. The cast host is asked only for an armed attacker, since its factory rebuilds a stale host.
+    /// </summary>
+    private void WeaponAttackEffect(string id, int kind)
+    {
+        if (WieldedPrototype(id) is not { } weapon || _scene.Spells?.Invoke() is not { } caster) return;
+        caster.WeaponAttackEffect(id, kind, weapon, GridActorMath.Octant(Movers.FacingOf(id, NeighborDirection.XPlus)));
+    }
+
     /// <summary>ARC-RENDER-1990: the prototype number (<see cref="CombatObjectFields.Prototype"/>) of the weapon an NPC wields now, null when it wields none or its worn items are unknown.</summary>
     private int? WieldedPrototype(string id) =>
         _scene.Combat.Worn(_session, id)?.FirstOrDefault(item => item.Slot == EquipmentSlot.Weapon && item.Entity is not null) is { Entity: not null } weapon ? weapon.Fields.Object.Prototype : null;
@@ -2327,6 +2337,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         // ARC-RENDER-1126 (0x432700): every attacking PC or NPC rolls 1..4 at the attack's start and barks on 1; the roll comes from the session's generator here, so a headless host draws it as the viewer's does.
         var bark = _session.Roll("combat.AttackSound", 1, RealTimeCombatRules.AttackSoundSides).Roll?.Value == 1;
         _notices.Add(new(AreaAiNoticeKind.Swing, id, target) { Swing = swing, Play = play, AttackBark = bark });
+        // ARC-RENDER-2011 (0x432700, the last step of the begin node): the weapon's begin effect (kind 0) on the attacker.
+        WeaponAttackEffect(id, WeaponHitEffectRules.Begin);
         return swing;
     }
 
@@ -2421,6 +2433,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
             // (its arrival's time is the accepted deviation A), a shot decided a miss raises none (PF5, PF6: it never strikes its aimed target; a stray it meets is alerted by LandShot). An attack that does not fly raises it,
             // hit or miss, with the weapon's loudness (0x4B2810).
             if (result.Shots.Count == 0 || result.Resolution.Outcome is AttackOutcome.Hit or AttackOutcome.CriticalHit) AttackEvent(id, target, loudness: noise);
+            // ARC-RENDER-2011 (0x4B3170): the weapon's swing effect (kind 1) on the attacker for every attack that was not refused, hit or miss, after the roll and the strike and before the hit effect.
+            WeaponAttackEffect(id, WeaponHitEffectRules.Swing);
             // ARC-DEV-292: a hit or a miss on an NPC that did not fly (a shot's damage is LandShot's) gives the victim its immediate pass (0x4B52FC, 0x4B3948, the ranged miss 0x4B30F5).
             HitEffect(target, result, WieldedPrototype(id));
             if (VictimReached(result)) Struck(target);

@@ -155,10 +155,11 @@ public sealed partial class SessionSpellCaster
     }
 
     /// <summary>
-    /// ARC-RENDER-1990: the host's add of an eye candy of the weapon list (0x5DE610) on a critter for the weapon's own hit effect (0x4377C0 → the add 0x4CCF70): the victim, the entry (<see cref="EyeCandyEntryRef"/> of the weapon list) and the add's limit
-    /// (<see cref="WeaponHitEffectRules.AddLimit"/>); true when an eye candy of the entry holds on the victim now (the host played it). The host plays at once, since the answer vetoes what follows in the attack end; null (no host) plays nothing, so no weapon has an effect.
+    /// ARC-RENDER-1990, ARC-RENDER-2011: the host's add of an eye candy of the weapon list (0x5DE610) on a critter for the weapon's own effect (0x4377C0 → the add 0x4CCF70): the owner the effect goes on (the victim of a hit, the attacker of a begin or a swing),
+    /// the entry (<see cref="EyeCandyEntryRef"/> of the weapon list), the add's limit (<see cref="WeaponHitEffectRules.AddLimit"/>) and the art rotation (the request's art modifier: the attacker's facing for a begin or a swing, 0 for a hit); true when an eye
+    /// candy of the entry holds on the owner now (the host played it). The host plays at once, since the answer of a hit vetoes what follows in the attack end; null (no host) plays nothing, so no weapon has an effect.
     /// </summary>
-    public Func<string, int, int, bool>? WeaponEyeCandyAdd { get; set; }
+    public Func<string, int, int, int, bool>? WeaponEyeCandyAdd { get; set; }
 
     /// <summary>
     /// ARC-RENDER-1794 (ledger ER5, TT14), ARC-RENDER-1990: the attack end (0x4B6930) of a weapon's hit on the PC or NPC <paramref name="victim"/> that dealt <paramref name="damage"/> (the resolution's damage step, null when it has none).
@@ -176,15 +177,29 @@ public sealed partial class SessionSpellCaster
     }
 
     /// <summary>
-    /// ARC-RENDER-1990 (0x4377C0, kind 3): the weapon's own hit effect on the victim: the entry <see cref="WeaponHitEffectRules.Index"/> names in the weapon list is added to the victim (<see cref="WeaponEyeCandyAdd"/>, limit
+    /// ARC-RENDER-1990 (kind 3 of the weapon effect, <see cref="WeaponEffect"/>): the weapon's own hit effect on the victim: the entry <see cref="WeaponHitEffectRules.Index"/> names in the weapon list is added to the victim (<see cref="WeaponEyeCandyAdd"/>, limit
     /// <see cref="WeaponHitEffectRules.AddLimit"/>), which the add refuses for a destroyed victim (object flag 0x1), an entry without art, no free place and a duplicate past the limit. True when it played (the attack end's veto).
     /// </summary>
-    [OriginalFunction(0x4377C0, OriginalFunctionScope.Partial)]
-    private bool WeaponHitEffect(string victim, int prototype)
+    private bool WeaponHitEffect(string victim, int prototype) => WeaponEffect(victim, prototype, WeaponHitEffectRules.Hit, 0);
+
+    /// <summary>
+    /// ARC-RENDER-2011 (ledger RH9: the weapon effect's kinds 0 and 1): the weapon's own effect on the attacking critter <paramref name="attacker"/> for <paramref name="weapon"/>, the prototype number of its weapon (its prototype file's number; null: unarmed, or a weapon
+    /// the host does not name, which has none): kind <see cref="WeaponHitEffectRules.Begin"/> at the start of the attack animation, <see cref="WeaponHitEffectRules.Swing"/> in the strike at the action frame (every attack, hit or miss, its answer
+    /// ignored). The entry goes on the attacker with the add's limit 2 and the art rotated to <paramref name="facing"/>, the attacker's facing as the object rotation 0..7 (the add's art modifier of the attacker). True when it played. The caller makes the gates that
+    /// come before the call (a refused action, a stoned or paralysed attacker, an attack out of ammunition).
+    /// </summary>
+    public bool WeaponAttackEffect(string attacker, int kind, int? weapon, int facing)
     {
-        if (WeaponEyeCandyAdd is not { } add || WeaponHitEffectRules.Index(prototype, WeaponHitEffectRules.Hit) is not { } index || EyeCandyEntryRef.Make(EyeCandyList.Weapon, index) is not { } entry) return false;
-        if ((CurrentFlags(victim, SessionObjectFlagField.Object) & SpellTargetObject.Destroyed) != 0) return false;
-        return add(victim, entry, WeaponHitEffectRules.AddLimit);
+        ArgumentNullException.ThrowIfNull(attacker);
+        return kind is WeaponHitEffectRules.Begin or WeaponHitEffectRules.Swing && weapon is { } prototype && WeaponEffect(attacker, prototype, kind, facing);
+    }
+
+    [OriginalFunction(0x4377C0, OriginalFunctionScope.Partial)]
+    private bool WeaponEffect(string owner, int prototype, int kind, int rotation)
+    {
+        if (WeaponEyeCandyAdd is not { } add || WeaponHitEffectRules.Index(prototype, kind) is not { } index || EyeCandyEntryRef.Make(EyeCandyList.Weapon, index) is not { } entry) return false;
+        if ((CurrentFlags(owner, SessionObjectFlagField.Object) & SpellTargetObject.Destroyed) != 0) return false;
+        return add(owner, entry, WeaponHitEffectRules.AddLimit, rotation);
     }
 
     /// <summary>

@@ -275,6 +275,7 @@ public partial class TerrainViewerApp
         });
         goal.Attacks++;
         goal.Stop = result.Disposition == GameSessionDisposition.Rejected || result.Resolution?.Refusal is { } refusal && refusal != AttackRefusal.None;
+        HeroSwingEffect(goal, result.Disposition, result.Resolution?.Refusal);
         if (result.Shot is { } shot)
         {
             // ARC-COMBAT-018: a bow at expert shoots two projectiles on the same line.
@@ -648,7 +649,7 @@ public partial class TerrainViewerApp
         goal.Player = new AreaAttackPlayer(clip, WorldMilliseconds());
         goal.Animation = animation; goal.Action = action;
         _worldActor.AttackPose = (action, goal.Octant, 0);
-        if (!replay) PlayAttackStartSounds(sound.Roll?.Value);
+        if (!replay) { PlayAttackStartSounds(sound.Roll?.Value); HeroWeaponEffect(WeaponHitEffectRules.Begin, goal.Octant); }
         GD.Print($"ARC-COMBAT-005 attack-start target={goal.Entity} weapon={weapon} animation={animation} drawn={action} art=0x{art.Selector:x8} frames={clip.Frames} action={clip.ActionFrame} pause={clip.PauseMs} rate={rate}"
             + $" sound={sound.Roll?.Value.ToString() ?? (replay ? "replay" : sound.Failure.ToString())} aim={goal.Aim?.ToString() ?? "none"}");
         PublishWorldSelection();
@@ -826,6 +827,7 @@ public partial class TerrainViewerApp
         });
         goal.Attacks++;
         goal.Stop = result.Disposition == GameSessionDisposition.Rejected || result.Resolution?.Refusal is { } refusal && refusal != AttackRefusal.None;
+        HeroSwingEffect(goal, result.Disposition, result.Resolution?.Refusal);
         // ARC-COMBAT-1738: a wall takes the same re-wields (a worn-out weapon, no ammunition) as any struck object.
         HeroWeaponWornOut(result.Wear, wall, false);
         HeroOutOfAmmunition(result.Resolution?.Refusal, wall, false);
@@ -866,6 +868,7 @@ public partial class TerrainViewerApp
             && (result.Shot is null || result.Resolution.Outcome is AttackOutcome.Hit or AttackOutcome.CriticalHit)) _aiHost?.HeroAttacked(struck.Entity, noise);
         // A refused attack, or one the resolver refused, ends the goal: repeating it would refuse again.
         goal.Stop = result.Disposition == GameSessionDisposition.Rejected || result.Resolution?.Refusal is { } refusal && refusal != AttackRefusal.None;
+        HeroSwingEffect(goal, result.Disposition, result.Resolution?.Refusal);
         if (result.Shot is { } shot)
         {
             // ARC-COMBAT-018: a bow at expert shoots two projectiles on the same line; a missed throw flies to its scattered tile.
@@ -877,6 +880,22 @@ public partial class TerrainViewerApp
         }
         // ARC-AI-1639: the attack's end calls the taunt (0x4B6B90) only for an attack without a flight: a shot or a throw has record bit 0x200 and 0x4B3170 skips the call (a default-throw weapon has weapon type 3).
         FinishCritterHit(struck, result, selfHitReachesTaunt: result.Shot is null);
+    }
+
+    /// <summary>
+    /// ARC-RENDER-2011 (ledger RH9): the weapon's own effect of <paramref name="kind"/> (<see cref="WeaponHitEffectRules.Begin"/> at the attack animation's start; <see cref="WeaponHitEffectRules.Swing"/> in the strike) on the hero, with
+    /// the art turned to its facing <paramref name="octant"/>. No weapon wielded, or no cast host on the map: none.
+    /// </summary>
+    private void HeroWeaponEffect(int kind, int octant)
+    {
+        if (_areaSession is not { } owner || SpellCasterNow() is not { } caster) return;
+        caster.WeaponAttackEffect(SessionSpellCaster.Hero, kind, HeroWeaponPrototype(owner, null), octant);
+    }
+
+    /// <summary>ARC-RENDER-2011 (the strike): the swing effect of an attack the session took (not rejected, no refusal such as out of ammunition), on a creature, an object or a wall alike, hit or miss.</summary>
+    private void HeroSwingEffect(AttackGoal goal, GameSessionDisposition disposition, AttackRefusal? refusal)
+    {
+        if (disposition != GameSessionDisposition.Rejected && refusal is null or AttackRefusal.None) HeroWeaponEffect(WeaponHitEffectRules.Swing, goal.Octant);
     }
 
     /// <summary>ARC-COMBAT-005: the hero's attack on <paramref name="struck"/> as the session sees it now (its worn items, cell and the

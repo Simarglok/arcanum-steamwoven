@@ -3,6 +3,7 @@ using Arcanum.Session;
 using Arcanum.Simulation;
 using Arcanum.Simulation.Ai;
 using Arcanum.Simulation.Clock;
+using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Goals;
 using Arcanum.Simulation.Magic;
 
@@ -163,9 +164,10 @@ public sealed class AreaEyeCandyHost : IAiOverlayWorld, IGoalStepHost
     /// <summary>
     /// The add 0x4CCF70 for an entry that animates with a foreground or underlay part: refused when the owner has no free place in a list the parts go to, or (play flag 0x80) when a goal-45 run of the owner has the same art and tag; started through the
     /// no-interrupt starter, or (play flag 0x2) inserted under the previous eye candy run so that it plays after it. <paramref name="limit"/> is the request's limit (−1: none, the default of 0x4CCD20): see the foreground count below.
-    /// Returns whether a run holds the eye candy now.
+    /// Returns whether a run holds the eye candy now. ARC-RENDER-2011 (0x4CCF70): a <paramref name="rotation"/> above 0 (the request's art modifier 0x502880 of the object the effect is for, an attacker's facing) is written into the
+    /// entry's art id (<see cref="ProjectileRules.FacedArt"/>, bits 9..11 of an eye-candy art), so the run draws that rotation block of the art; 0 leaves the entry's own art.
     /// </summary>
-    public bool Play(string owner, int entryIndex, uint play, int tag, string? source = null, int limit = -1)
+    public bool Play(string owner, int entryIndex, uint play, int tag, string? source = null, int limit = -1, int rotation = 0)
     {
         if (_entry(entryIndex) is not { Art: { } art } entry || PartsOf(entryIndex) is not { } parts) return false;
         if (!SpellEyeCandyRules.Plays((entry.Flags & SpellEyeCandyFlags.Animates) != 0, parts)) return false;
@@ -178,7 +180,7 @@ public sealed class AreaEyeCandyHost : IAiOverlayWorld, IGoalStepHost
         if (entry.Light is not null && !LightSlotFree(owner)) { Skipped++; return false; }
         if ((play & AiExecutorRules.PlayCheckAlready) != 0
             && _session.QueryGoals().RunsOf(owner).Any(r => !r.Done && r.Bottom.Goal == GoalType.EyeCandy && r.Top.EyeCandy is { } e && e.Tag == tag && e.Art == art)) { Skipped++; return false; }
-        var frame = AiExecutorRules.EyeCandyFrame(play, art, entryIndex, tag, (entry.Flags & SpellEyeCandyFlags.Forever) != 0, source);
+        var frame = AiExecutorRules.EyeCandyFrame(play, rotation is > 0 and < 8 ? ProjectileRules.FacedArt(art, rotation) ?? art : art, entryIndex, tag, (entry.Flags & SpellEyeCandyFlags.Forever) != 0, source);
         // Play flag 0x2: the frame goes under the previous eye-candy run (0x44DBE0, the bottom insert), which then plays it after its own.
         if ((play & AiExecutorRules.PlayStack) != 0 && _last is { } previous && _session.QueryGoals().TryGet(previous, out var held) && !held.Done && AiExecutorRules.IsEyeCandyGoal(held.Bottom.Goal)
             && held.Frames.Length < GoalRun.MaxFrames && _session.ReplaceGoalFrames(previous, held.Frames.Insert(0, frame)) == SessionGoalFailure.None)
