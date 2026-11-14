@@ -63,8 +63,26 @@ public static partial class TerrainViewerSelfTest
             Require(panel.ChooseByDigit(1), "a digit chooses the numbered reply");
             Require(conversation.CurrentNode.Value == 10 && panel.NpcLineForSelfTest.StartsWith("A bridge fell.") && panel.ButtonsForSelfTest.Count == 1, "Direct reply continues");
             await ScreenshotAsync(host, "synthetic");
-            panel.Choose(1);
+            // ARC-UI-2025: a reply is chosen on the press, in both settings (Steamwoven: the button; Original: the band, y / 20, empty slots refused).
+            Require(panel.ButtonsForSelfTest.All(button => button.ActionMode == BaseButton.ActionModeEnum.Press) && panel.LeaveForSelfTest.ActionMode == BaseButton.ActionModeEnum.Press,
+                "the reply buttons act on the press");
+            panel.OriginalReplyRows = true;
+            await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+            await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+            var button0 = panel.ButtonsForSelfTest[0];
+            Require(panel.BandWidthForSelfTest > 0 && Math.Abs(button0.Position.Y - 3) < .5f && Math.Abs(button0.Size.Y - 16) < .5f, $"Original: the first row is 16 px tall 3 px down ({button0.Position.Y}, {button0.Size.Y})");
+            var node = conversation.CurrentNode.Value;
+            Require(!panel.BandInputForSelfTest(Press(new(-3, 5))) && !panel.BandInputForSelfTest(Press(new(10, 100))), "a press outside the band is not taken");
+            Require(panel.BandInputForSelfTest(Press(new(10, 25))) && conversation.CurrentNode.Value == node, "an empty slot is refused");
+            Require(!panel.BandInputForSelfTest(Release(new(10, 2))) && conversation.CurrentNode.Value == node, "the release chooses nothing");
+            panel.BandInputForSelfTest(new InputEventMouseMotion { Position = new(10, 5) });
+            Require(panel.RowLitForSelfTest(0), "the pointer on the first row's drawn pixels lights it");
+            panel.BandInputForSelfTest(new InputEventMouseMotion { Position = new(10, 20) });
+            Require(!panel.RowLitForSelfTest(0), "moving off the row (into the gap below) unlights it");
+            Require(panel.BandInputForSelfTest(Press(new(10, 2))), "a press above the first row's drawn top is still in its click band");
+            await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
             Require(conversation.Phase == DialogConversationPhase.Ended && panel.OutcomeForSelfTest.Contains("SCR line 5") && panel.ButtonsForSelfTest.Count == 0, "Exit returns to the caller's next SCR line");
+            panel.OriginalReplyRows = false;
             Require(state.LocalFlag(0, 2) && session.QueryQuest(1003)?.State == Arcanum.Session.SessionQuestState.Mentioned && session.QueryRumor(1001) is not null,
                 "typed effects reached the session");
             panel.Choose(1);
@@ -75,6 +93,9 @@ public static partial class TerrainViewerSelfTest
         }
         finally { panel.QueueFree(); }
     }
+
+    private static InputEventMouseButton Press(Vector2 at) => new() { ButtonIndex = MouseButton.Left, Pressed = true, Position = at };
+    private static InputEventMouseButton Release(Vector2 at) => new() { ButtonIndex = MouseButton.Left, Pressed = false, Position = at };
 
     /// <summary>ARC-UI-071 (B29): the synthetic flow with the original's text fonts (synthetic glyphs): every text, the replies' and Leave's too,
     /// is drawn as art text broken at the panel's content width, the buttons take their art text's height, a reply still works, and taking
