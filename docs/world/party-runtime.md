@@ -134,12 +134,13 @@ while an NPC leads it.
 - A waiting follower of an NPC (ARC-WORLD-2116, 0x4AA7A0, NLD3–NLD6): the wait keeps the leader and takes the follower out of the leader's
   array. The session writes it as the follower's NPC link kept with the wait flag on its free record (no schema step; saved as such, the
   timer with it): `QueryLeader` and `QueryPcLeader` still answer the leader and the chain, `QueryFollowers` leaves it out, the AI host's tell
-  followers and catch-up gate (the waiting NPC stays put) read it so. The timer reads the wait facts as the leader's charisma and Persuasion
-  (the caller's, not the hero's; an NPC leader's own charisma is #2117) and runs out as the hero's does, but the reaction change is written
+  followers and catch-up gate (the waiting NPC stays put) read it so. The timer is the one of the wait index alone, as a leaderless NPC's (the original reads the leader's charisma and
+  Persuasion; every caller's wait facts are the hero's, and an NPC leader's own stats are #2117) and runs out as the hero's does, but the reaction change is written
   only toward a player character: the follower is freed, jilted and leaderless, no reaction change. A forced unwait (the death's) joins the
   leader again, appended at the end of its array, forced, the leader's Tempus Fugit flag copied; an unforced unwait needs the leader's stats
   and changes nothing. A join under an NPC leader of a free NPC that carries the wait flag clears the flag (the original keeps it, in the
-  array; the flag is this encoding's wait). The dialog's wait on such an NPC still passes the hero's facts.
+  array; the flag is this encoding's wait), and the hero's join of a follower waiting under an NPC clears it (the join's leave runs the forced unwait). A save written before ARC-WORLD-2116 that
+  holds an NPC link on a record with the wait flag (such a join kept the flag) now reads as a wait under that leader: the follower is out of the array and its leaderless timer jilts it and frees it.
 - The AI host tells followers of any leader (0x4A9B80, ARC-WORLD-2116, NLD7): the leader's array the host runs, each through the follower
   rule; an NPC leader's follower complains in words alone (the −5 reaction is written only toward a player character).
 

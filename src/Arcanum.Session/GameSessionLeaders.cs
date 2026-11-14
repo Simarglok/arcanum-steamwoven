@@ -138,6 +138,8 @@ public sealed partial class GameSessionOwner
 
     private PartyMutationResult UnwaitUnderNpcLeader(string entity)
     {
+        // The join's Tempus Fugit copy needs room in the written-flags bound: a full bound refuses before anything changes, as every join does (the death's forced unwait alone leaves the copy out).
+        if (JoinCopiesTempusFugit(entity, _party.NpcLed[entity].Leader) && !_objectFlags.ContainsKey(entity) && _objectFlags.Count >= MaxObjectFlagCritters) return RejectParty(GameSessionFailure.BudgetExceeded);
         if (_revision == long.MaxValue) return RejectParty(GameSessionFailure.RevisionExhausted);
         RejoinNpcLeader(entity);
         Revise();

@@ -990,7 +990,7 @@ public sealed partial class GameSessionOwner : IDisposable
         var npcLed = current.Standing == CompanionStanding.Free && _party.NpcLed.ContainsKey(entity);
         var leaderless = current.Standing == CompanionStanding.Free && !npcLed;
         var charisma = 0;
-        var delay = leaderless ? LeaderlessWaitDelay(timer) : npcLed ? NpcLeaderWaitDelay(timer, out charisma) : WaitDelay(timer, out charisma);
+        var delay = leaderless ? LeaderlessWaitDelay(timer) : npcLed ? NpcLeaderWaitDelay(timer) : WaitDelay(timer, out charisma);
         if (delay is { } d && !WaitTimerFits(d, entity)) return Reject(GameSessionFailure.EventBudgetExceeded);
         // A free NPC without a record needs room for the new one.
         if ((leaderless || npcLed) && !_party.Records.ContainsKey(entity) && _party.Records.Count >= _limits.MaxCompanions) return Reject(GameSessionFailure.BudgetExceeded);
@@ -1999,8 +1999,8 @@ public sealed partial class GameSessionOwner : IDisposable
     private PartyMutationResult Append(SessionCompanion current, bool forced, FollowConsent? consent, bool clearWait = false)
     {
         // ARC-SCRIPT-1136 (CF9): the join (0x45DE90) neither tests nor clears the WAIT bit itself, so a free NPC that carries the flag joins with it. An NPC that already has the PC as leader is left first
-        // (0x45DFC0 runs the forced unwait 0x4AA8C0), which clears the bit: a follower or waiting NPC joining again loses it.
-        var next = current with { Standing = CompanionStanding.Following, Forced = forced, Jilted = false, WaitFlag = !clearWait && current.Standing == CompanionStanding.Free && current.WaitFlag };
+        // (0x45DFC0 runs the forced unwait 0x4AA8C0), which clears the bit: a follower or waiting NPC joining again loses it, and so does a follower of an NPC (ARC-WORLD-2116: its flag is a wait under that leader).
+        var next = current with { Standing = CompanionStanding.Following, Forced = forced, Jilted = false, WaitFlag = !clearWait && current.Standing == CompanionStanding.Free && current.WaitFlag && !_party.NpcLed.ContainsKey(current.Entity) };
         var order = _party.Order;
         if (next == current && order.Count > 0 && order[^1] == current.Entity)
             return new(GameSessionDisposition.NoChange, GameSessionFailure.None, consent, new(_identity, _revision));

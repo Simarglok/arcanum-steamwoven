@@ -177,12 +177,9 @@ public sealed partial class GameSessionOwner
 
     // ARC-SCRIPT-1136 (CF8): the wait of an NPC with no leader reads no leader: its index alone picks the timer (the leader's stat test and Persuasion training read a null handle's slot, inferred 0 both), the mind-control test stands.
     // ARC-WORLD-2116 (0x4AA7A0): the wait of a follower of an NPC leader reads that leader's charisma and Persuasion training (0x4B0EE0, 0x4C60C0 take a player character or an NPC alike). The session
-    // holds no NPC's stats, so the caller's facts stand for the leader and the hero's are not put in their place (an NPC's charisma is #2117).
-    private static long? NpcLeaderWaitDelay(PartyWaitFacts? timer, out int charisma)
-    {
-        charisma = timer?.LeaderCharisma ?? 0;
-        return timer is null ? null : CompanionLoyaltyRules.WaitTimerMs(timer.WaitIndex, timer.LeaderPersuasion, timer.LeaderCharisma, timer.MindControlled);
-    }
+    // holds no NPC's stats and every caller's wait facts are built from the hero's side, so until an NPC's own stats exist (#2117) the timer is the one of the wait index alone, as a leaderless NPC's (no
+    // Persuasion step, no charisma test; the mind-control test stands).
+    private static long? NpcLeaderWaitDelay(PartyWaitFacts? timer) => LeaderlessWaitDelay(timer);
 
     private static long? LeaderlessWaitDelay(PartyWaitFacts? timer) =>
         timer is null ? null : CompanionLoyaltyRules.WaitTimerMs(timer.WaitIndex, PersuasionTraining.None, 0, timer.MindControlled);

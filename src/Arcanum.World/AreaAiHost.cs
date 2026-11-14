@@ -1449,7 +1449,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         if (_scene.Followers is { } followers && _followers.ContainsKey(npc) && Tile(Pc) is { } pc && followers.Jump(npc, pc))
             _notices.Add(new(AreaAiNoticeKind.Entered, npc, null) { Cell = pc });
         // ARC-WORLD-2116 (0x4AD4D0 → 0x43E770): an NPC of the map whose chain of leaders reaches the hero through another leader is moved onto the hero's cell as well (the move is the chain's PC, not the immediate
-        // leader); it is the mover's placement, the cell's script told through Place's notice.
+        // leader); it is the mover's placement, the cell's script told through Place's notice. The hero's own cell is no refusal here (PlaceHeld's is for a placement that must not land on the hero): the original stacks
+        // the follower on the PC (as a companion's jump does), and the shared-cell rules (ARC-AI-1315) step it apart.
         else if (_npcs.TryGetValue(npc, out var row) && Tile(Pc) is { } hero && Tile(npc) != hero) Place(npc, row, hero);
     }
     public bool MapClearing => false;

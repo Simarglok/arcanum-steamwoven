@@ -224,7 +224,7 @@ public sealed class NpcLeaderStateTests
         Changed(owner.ForceJoinLeader(owner.Version, Summon, Mage));
         Changed(owner.ForceJoinLeader(owner.Version, Imp, Mage));
         Changed(owner.ForceJoinParty(owner.Version, Mage));
-        Assert.AreEqual(GameSessionDisposition.Changed, owner.WaitParty(owner.Version, Summon, new PartyWaitFacts(2, PersuasionTraining.None, 10, false)).Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.WaitParty(owner.Version, Summon, new PartyWaitFacts(2, PersuasionTraining.None, 25, false)).Disposition);
         Assert.IsTrue(owner.QueryCompanion(Summon).WaitFlag);
         Assert.IsTrue(owner.QueryCompanion(Summon).WaitBit);
         Assert.AreEqual(Mage, owner.QueryLeader(Summon), "the wait keeps the leader");
@@ -265,6 +265,28 @@ public sealed class NpcLeaderStateTests
         Assert.IsNull(owner.QueryLeader(Summon), "the NPC lost its leader");
         Assert.IsTrue(owner.QueryCompanion(Summon) is { WaitFlag: false, Jilted: true, Standing: CompanionStanding.Free });
         Assert.AreEqual(0, owner.QueryFollowers(Mage).Count);
+    }
+
+    // Review finding: the hero's join of a follower waiting under an NPC leaves that leader first (the forced unwait inside the leave), so no flag and no timer are left on the new follower; the death's forced unwait joins the leader again.
+    [TestMethod]
+    public void The_hero_taking_a_waiting_npc_follower_clears_its_wait_and_the_death_rejoins_its_leader()
+    {
+        using var owner = Create();
+        Changed(owner.ForceJoinLeader(owner.Version, Summon, Mage));
+        Changed(owner.ForceJoinLeader(owner.Version, Imp, Mage));
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.WaitParty(owner.Version, Summon, new PartyWaitFacts(2, PersuasionTraining.None, 10, false)).Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.WaitParty(owner.Version, Imp, new PartyWaitFacts(2, PersuasionTraining.None, 10, false)).Disposition);
+        Changed(owner.ForceJoinParty(owner.Version, Summon));
+        Assert.IsTrue(owner.QueryCompanion(Summon) is { Standing: CompanionStanding.Following, WaitFlag: false });
+        Assert.IsNull(owner.QueryWaitTimer(Summon));
+        Assert.IsNull(owner.QueryLeader(Mage), "the mage leads no one else's chain");
+        Assert.AreEqual(Hero, owner.QueryLeader(Summon));
+        // The death of the other waiter (the kill notification's forced unwait) puts it back in its NPC leader's array.
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.Kill(owner.Version, SessionLifeTarget.Critter(Imp, new LifeFacts(), LifeState.Unharmed)).Disposition);
+        Assert.IsTrue(owner.QueryCompanion(Imp) is { WaitFlag: false });
+        Assert.IsNull(owner.QueryWaitTimer(Imp));
+        Assert.AreEqual(Mage, owner.QueryLeader(Imp));
+        CollectionAssert.AreEqual(new[] { Imp }, owner.QueryFollowers(Mage).ToArray());
     }
 
     [TestMethod]
