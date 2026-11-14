@@ -38,6 +38,14 @@ public static partial class TerrainViewerSelfTest
                 host.GetTree().Quit(0);
                 return;
             }
+            // ARC-UI-1765: the item identify and repair windows' stage alone (opt-in, as the probes: the full self-test runs it after the stages before it).
+            if (System.Environment.GetEnvironmentVariable("ARC_AREA_ITEM_SERVICE_PROBE") == "1")
+            {
+                Stage("AreaItemService");
+                await AssertAreaItemServiceAsync(host);
+                host.GetTree().Quit(0);
+                return;
+            }
             if (System.Environment.GetEnvironmentVariable("ARC_AREA_OWNER_SEAM_PROBE") == "1")
             {
                 if (DisplayServer.GetName() == "headless") throw new InvalidOperationException("AREA_SEAM_NATIVE_REQUIRED");
