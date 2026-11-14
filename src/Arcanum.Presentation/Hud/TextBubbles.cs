@@ -225,3 +225,33 @@ public sealed class TextBubbleField<TKey> where TKey : notnull
     [OriginalFunction(0x4D6320, OriginalFunctionScope.Partial)]
     public void Clear() => Array.Clear(_entries);
 }
+
+/// <summary>
+/// ARC-UI-2034 (ledger TB16): which bubbles an object's end takes with it. The original removes an object's bubble at the moment the object is torn down (destroyed) or its
+/// off flag turns on while the text flag is set; an object that is already gone when a bubble is made for it keeps the bubble (only the change removes it), and death removes
+/// nothing. The viewer cannot hook the change itself, so it reads each bubble owner's state (destroyed or off: gone) now and then; this holds the last state read and
+/// hands back the owners whose object has gone since.
+/// </summary>
+public sealed class TextBubbleGoneWatch<TKey> where TKey : notnull
+{
+    private readonly Dictionary<TKey, bool> _last = [];
+
+    /// <summary>Records the state an owner's object has now (when its bubble is made, so a bubble over a gone object stays until the state changes again).</summary>
+    public void Note(TKey owner, bool gone) => _last[owner] = gone;
+
+    /// <summary>Reads each bubble owner's state: those whose object went from standing to gone since the last read, in the order given (their bubbles are removed). An owner not met
+    /// before is only recorded; an owner without a bubble any more is forgotten.</summary>
+    public IReadOnlyList<TKey> Step(IReadOnlyCollection<TKey> owners, Func<TKey, bool> gone)
+    {
+        ArgumentNullException.ThrowIfNull(owners); ArgumentNullException.ThrowIfNull(gone);
+        foreach (var stale in _last.Keys.Where(key => !owners.Contains(key)).ToArray()) _last.Remove(stale);
+        var went = new List<TKey>();
+        foreach (var owner in owners)
+        {
+            var now = gone(owner);
+            if (_last.TryGetValue(owner, out var before) && !before && now) went.Add(owner);
+            _last[owner] = now;
+        }
+        return went;
+    }
+}

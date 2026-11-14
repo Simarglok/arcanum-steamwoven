@@ -1103,12 +1103,13 @@ floating lines, so above the objects and below the numbers) in the original's fo
   drawn and kept (the region constants of the original's 800 × 600 view are taken from the view's centre here, so a larger window
   behaves as the original does at its centre). The table holds eight bubbles; a ninth takes the oldest non-persistent one. A new scene
   drops every bubble. The text keeps the screen's pixels at any zoom (the original has no zoom either).
+- **Removal by the object's end** (ARC-UI-2034, ledger TB16, TB27). A script's fade (action 103) empties the table (every fade run, whatever its operands, as the original's clear-all runs first); an object the session destroyed or switched off (off flag 0x2), or a created critter the session no longer holds, loses its bubble (`TextBubbleGoneWatch` reads the state each frame; a bubble made over an object that is already gone stays, as the original removes only at the change). Death, moves and the hero's own bubble are untouched. Limits (TB27): a created critter's off flag is not read, a companion carried from another map is never read as gone, and the state is polled once a frame.
 - **Not done.** The final-line close of a dialog (#2028), the speaker's turn toward the listener
   and the speech voice, the objects' draw offsets, the exact word-break rules (TB22).
 
 Checks: `TextBubblesTests` (colours, life, wrap, slots and slot choice, the table's reuse and eviction, life rules, the setting change) and
 the `map` stage's talk smoke (the NPC line of every started conversation is a persistent bubble, replaced on each reply, not persistent after the end; no `npc` text in the panel); `ARC_AREA_TALK_CAPTURE=PATH` saves the first open dialog as `PATH.png` and the `floaters` smoke stage's bubble part (a PC's and an NPC's bubble over their objects, green and white, wrapped within 200 px,
-alive at 6000 ms and gone after it, a Text Duration change to 2 shortening a live bubble at once; `ARC-UI-1997 bubbles over objects PASS`;
+alive at 6000 ms and gone after it, a Text Duration change to 2 shortening a live bubble at once; `ARC-UI-1997 bubbles over objects PASS`; then the off flag written on the NPC and the NPC destroyed by a script each remove its bubble and not the hero's, a bubble made over an object that is off stays, `ARC-UI-2034 bubbles removed by off flag and teardown PASS` (the fade's clear-all: `AreaScriptHostTests` and `AreaUseScriptHostTests` count the fade runs, `TextBubblesTests` the gone watch);
 `ARC_AREA_FLOATERS_CAPTURE` saves `bubble-before` (the old white rising line) and `bubble-after`) and the `spirit-talk` stage (the greeting over the corpse is a bubble). Original visual parity NOT VERIFIED.
 
 ### Inventory window, pickup and loot (ARC-UI-004)
