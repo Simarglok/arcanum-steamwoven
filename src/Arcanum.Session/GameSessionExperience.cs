@@ -287,7 +287,7 @@ public sealed partial class GameSessionOwner
         // ARC-DEV-312: a death the dying script stopped pays no kill award (the kill function ends before it).
         if (outcome.Events.HasFlag(LifeEvents.Died) && !deathStopped)
         {
-            var kill = RecordNpcKill(Version, victim.Experience, creditsHero: source.IsHero || _party.Get(source.Entity!).LedByPc);
+            var kill = RecordNpcKill(Version, victim.Experience, creditsHero: source.IsHero || PcLeads(source.Entity!));
             killAward = kill.Award;
             if (kill.Disposition == GameSessionDisposition.Rejected) return new(hitAward, killAward, kill.Failure);
         }

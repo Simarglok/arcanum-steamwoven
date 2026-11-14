@@ -960,6 +960,8 @@ public partial class TerrainViewerApp
     {
         NoteWorldPointer(input);
         TraceMousePress(input, MousePressTrace.Stage.Input);
+        // ARC-UI-2071 (DH10): the release of the click that chose a dialog reply reaches the window the reply opened (Original).
+        if (TrackReplyRelease(input)) { GetViewport().SetInputAsHandled(); return; }
         if (_worldInputTraceForSelfTest is not null) TraceWorldInput($"Callback:entry type={input.GetClass()}" + (input is InputEventKey tracedKey ? $" key={tracedKey.Keycode} pressed={tracedKey.Pressed} echo={tracedKey.Echo}" : ""));
         // ARC-DEV-051: the bug report comes first (Ctrl+B over any window, the death screen included; the open report owns every event).
         if (RouteBugReportInput(input)) return;

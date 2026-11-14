@@ -132,6 +132,13 @@ public partial class AreaCharacterSheetArtView : Control
         (_hovered, _pressed, _region, _view, _portrait) = (null, null, null, null, null);
     }
 
+    /// <summary>ARC-UI-2071 (ledger DH10, 0x55A5C0): the lone left release after the reply that opened the sheet (screen point): a release inside the close rectangle closes it
+    /// (0x55AD8B), the buttons act only on a release they saw pressed.</summary>
+    internal void LoneRelease(Vector2 screen) => _GuiInput(new InputEventMouseButton
+    {
+        ButtonIndex = MouseButton.Left, Pressed = false, Position = GetGlobalTransformWithCanvas().AffineInverse() * screen, GlobalPosition = screen,
+    });
+
     /// <summary>The window between the strips (ARC-UI-132): the whole free height at the HD art's exact scale, centred; the original's bitmaps
     /// at the largest whole scale standing on the bottom strip (ARC-UI-127; the original's 800 × 600 gives 1 and the sheet under the top strip).</summary>
     public void Place()

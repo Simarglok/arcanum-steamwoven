@@ -225,6 +225,7 @@ public sealed partial class SessionSpellCaster
         public IReadOnlyList<SpellAcidItem> WornItems(string entity) => map.WornItems(entity);
         public (Combatant Combatant, AttackTargetKind Kind)? ObjectCombat(string id) => SessionCreatedObject.KindOf(id) is null ? map.ObjectCombat(id) : null;
         public bool DamageObject(string id, AttackDamage damage) => SessionCreatedObject.KindOf(id) is null && map.DamageObject(id, damage);
+        public bool DamageObject(string id, AttackDamage damage, string? attacker) => SessionCreatedObject.KindOf(id) is null && map.DamageObject(id, damage, attacker);
         public SpellOpenable? Openable(string id) => SessionCreatedObject.KindOf(id) is null ? map.Openable(id) : null;
         public int ObjectMagicResistance(string id) => SessionCreatedObject.KindOf(id) is null ? map.ObjectMagicResistance(id) : 0;
         public IReadOnlyDictionary<EquipmentSlot, SessionWearItem>? WornBySlot(string entity) => map.WornBySlot(entity);

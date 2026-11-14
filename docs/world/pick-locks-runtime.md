@@ -10,7 +10,7 @@ then a press on a door or window in map mode ([doors and windows](../rendering/a
 No snapshot schema change: the lock state is map changes, the Lock event is the existing kind.
 Requirements: [FR-NAV-007](../requirements/world-travel-runtime.md#fr-nav-007) (lock picking and the access state), [FR-ITEM-004](../requirements/items-economy.md#fr-item-004) (locks), [FR-CHAR-019](../requirements/characters-skills.md#fr-char-019)
 (a skill used). [FR-AI-003](../requirements/story-social-ai.md#fr-ai-003) (NPCs and doors), which the plan lists for S9, is
-not covered: NPC pickers and the witnesses' reaction are not modelled.
+covered since for NPC pickers (ARC-COMBAT-1776) and the witnesses' reaction (ARC-AI-2084).
 
 ## Evidence
 
@@ -79,11 +79,12 @@ Armed lockpicks (the item cursor of the lockpicks, interface mode 16) on a conta
 
 ## Boundaries (NOT READY)
 
-- **Witnesses** (PL6): the session reports whether the original calls them; nobody acts on it (no NPC sight, hearing, reaction or
-  attack is wired to it, the AI hostility slice does not exist yet).
+- **Witnesses** (PL6): the session reports whether the original calls them; since ARC-AI-2084 the viewer acts on it
+  (`AreaAiHost.GuardWitnesses`, ledger [GW1-GW10](../research/ledger/npc-ai.md#guard-witnesses-built-arc-ai-2084)): the hero's pick of a
+  portal or container and a follower's pick-locks goal call the guards near the lock (silent; mode 0 after an unlock, mode 1 after a failure).
+  A spell's damage on an object calls them with the caster as the actor (ARC-AI-2112, GW10: loud, mode 0 when it broke the object, else mode 1; ARC-AI-2123: also for a hit of 0 that leaves the object whole).
 - **Best follower (ARC-COMBAT-1777, PL5):** `QueryPickLockScore(user, target, lockpick?)` is a user's score for the pick (`SkillCheckRules.Score`, the same lock and lockpick terms as `PickLockStep`, `WithLockFacts`; the hero's with its local-PC term); the viewer's lockpick press hands the pick to the follower with the strictly best score (the hero first, ties keep the earlier) as its own skill goal with its own lockpicks if it has any, and the hand-over line floats over it ([viewer](../rendering/terrain-viewer.md#follower-skills-arc-combat-1777)).
-- **Not modelled:** the witnesses and the floating
-  text of an NPC's pick, the multiplayer packets, keys (the session holds none, ARC-WORLD-050). The NPC's pick itself is built since
+- **Not modelled:** the hand-over line of an NPC's pick, the multiplayer packets, keys (the session holds none, ARC-WORLD-050). The NPC's pick itself is built since
   ARC-COMBAT-1776 ([above](#an-npc-as-the-user-arc-combat-1776)); the timed pick-lock goal's animation loops are the AI host's (ARC-AI-1524).
 
 ## Real-data census

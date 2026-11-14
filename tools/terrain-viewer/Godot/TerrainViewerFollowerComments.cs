@@ -24,28 +24,37 @@ public partial class TerrainViewerApp
     /// line when their can-speak test fails and the callback is called all the same, so the speaker still turns to its listener then (<see cref="FaceListenerOf"/>, which has its own gates); the turn is not made when the speaker is not
     /// a speaker of the map or the host has no line texts (a diagnostic run). <paramref name="refusesFightOrFlee"/>: the can-speak test with flag 0 (the order refusals and farewells), which also refuses an NPC in combat focus or fleeing.
     /// </summary>
-    private void SayLine(string entity, LoyaltyLines lines, string? listener, bool refusesFightOrFlee)
+    private void SayLine(string entity, LoyaltyLines lines, string? listener, bool refusesFightOrFlee) =>
+        SayFrom(entity, $"lines={lines.First}-{lines.Last}", listener, refusesFightOrFlee, (talk, speaker) => talk.SayFollowerLine(speaker, lines, listener));
+
+    /// <summary>ARC-UI-2085: the speaker's race line of <paramref name="group"/> (the curse order's insult is group 1000) to <paramref name="listener"/>, with the same tests and turn as <see cref="SayLine"/>.</summary>
+    private void SayRaceLine(string entity, int group, string? listener, bool refusesFightOrFlee) =>
+        SayFrom(entity, $"race={group}", listener, refusesFightOrFlee, (talk, speaker) => talk.SayRaceLine(speaker, group, listener));
+
+    private void SayFrom(string entity, string what, string? listener, bool refusesFightOrFlee, Func<AreaConversationHost, AreaSpeaker, string?> say)
     {
         if (_conversationHost is not { } talk || _areaSession is not { } session)
         {
-            GD.Print($"ARC-AI-1527 follower-line speaker={entity} lines={lines.First}-{lines.Last} nothing said (no conversation host)");
+            GD.Print($"ARC-AI-1527 follower-line speaker={entity} {what} nothing said (no conversation host)");
             return;
         }
         var speaker = talk.Speakers.FirstOrDefault(candidate => AreaConversationState.EntityId(candidate.Row) == entity);
         if (speaker is null)
         {
-            GD.Print($"ARC-AI-1527 follower-line speaker={entity} lines={lines.First}-{lines.Last} nothing said (not a speaker of the map)");
+            GD.Print($"ARC-AI-1527 follower-line speaker={entity} {what} nothing said (not a speaker of the map)");
             return;
         }
-        if (!FollowerCanSpeak(session, speaker, entity) || refusesFightOrFlee && _aiHost?.ReadDanger(entity) is Arcanum.Simulation.Ai.DangerState.CombatFocus or Arcanum.Simulation.Ai.DangerState.Flee)
+        // ARC-UI-2085 (0x4AD800 with flag 0): the whole test, whose refusals are a fight or flight (2) and a refused level-2 interrupt (3) and which interrupts the speaker's runs; flag 1 is the head and the fatigue.
+        var canSpeak = refusesFightOrFlee ? DialogStartCanSpeak(speaker) == CanSpeakRules.Free : FollowerCanSpeak(session, speaker, entity);
+        if (!canSpeak)
         {
-            GD.Print($"ARC-AI-1527 follower-line speaker={entity} lines={lines.First}-{lines.Last} nothing said (cannot speak)");
+            GD.Print($"ARC-AI-1527 follower-line speaker={entity} {what} nothing said (cannot speak)");
             if (listener is not null) FaceListenerOf(entity, listener);
             return;
         }
-        var text = talk.SayFollowerLine(speaker, lines, listener);
+        var text = say(talk, speaker);
         _followerLinesSaid += text is null ? 0 : 1;
-        GD.Print($"ARC-AI-1527 follower-line speaker={entity} lines={lines.First}-{lines.Last} listener={listener ?? "-"} said={(text is null ? "nothing" : text)}");
+        GD.Print($"ARC-AI-1527 follower-line speaker={entity} {what} listener={listener ?? "-"} said={(text is null ? "nothing" : text)}");
         // The line pick found nothing (a range without an entry, a refused roll): the original's display still turns the speaker to its listener.
         if (text is null && listener is not null) FaceListenerOf(entity, listener);
     }

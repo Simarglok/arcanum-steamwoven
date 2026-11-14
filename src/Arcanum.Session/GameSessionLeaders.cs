@@ -101,6 +101,17 @@ public sealed partial class GameSessionOwner
         return null;
     }
 
+    // ARC-WORLD-1864: whether the chain of leaders of `critter` reaches the hero (0x45DDA0 not null), the test of the original's "PC leader" sites; LedByPc is the direct test (0x45DE00 names the hero).
+    private bool PcLeads(string critter) => PcLeaderOf(critter) is not null;
+
+    // The follower tree of `leader` as 0x441260 builds it: its direct followers in array order, then each follower's own tree (recursively, in the same order) after them.
+    private List<string> FollowerTreeOf(string leader)
+    {
+        var tree = FollowersOf(leader).ToList();
+        foreach (var follower in tree.ToArray()) tree.AddRange(FollowerTreeOf(follower));
+        return tree;
+    }
+
     private IReadOnlyList<string> FollowersOf(string leader) =>
         leader == SessionEventKinds.PlayerEntity ? _party.Order.ToArray()
         : _party.NpcArrays.TryGetValue(leader, out var array) ? array.ToArray() : [];

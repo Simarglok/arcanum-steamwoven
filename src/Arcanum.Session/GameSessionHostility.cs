@@ -243,7 +243,7 @@ public sealed partial class GameSessionOwner
     {
         var step = new SessionPeaceStep(npc);
         var self = SessionCombatant.Critter(npc);
-        var head = other.IsHero || LedByPc(other.Entity!) ? SessionCombatant.Hero : other;
+        var head = other.IsHero || PcLeads(other.Entity!) ? SessionCombatant.Hero : other;
         plan.Update(npc, record => record with { Focus = null, HitBy = null, Enemies = DangerRules.RemoveEnemy(record.Enemies, head) });
         ReactionAdjustment? reaction = null;
         if (head.IsHero)
@@ -259,7 +259,7 @@ public sealed partial class GameSessionOwner
         if (calm.Failure != GameSessionFailure.None) return calm.Failure;
         return plan.Then(plan.HookCount > queued, rest =>
         {
-            var followers = head.IsHero ? _party.Order.ToArray() : [];
+            var followers = FollowerTreeOf(head.IsHero ? SessionEventKinds.PlayerEntity : head.Entity!).ToArray();
             foreach (var follower in followers)
             {
                 rest.Update(follower, record => record with

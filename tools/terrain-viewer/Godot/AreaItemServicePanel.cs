@@ -149,6 +149,15 @@ public partial class AreaItemServicePanel : CanvasLayer
         _panel.AddThemeStyleboxOverride("panel", art ? _originalStyle : _diagnosticStyle);
     }
 
+    /// <summary>ARC-UI-2071 (ledger DH10): the lone left release after the reply that opened the window (screen point); only the original look takes it.
+    /// True when the window took it into account.</summary>
+    public bool LoneRelease(Vector2 screen)
+    {
+        if (!IsOpen || !ArtMode) return false;
+        _area.LoneRelease(screen);
+        return true;
+    }
+
     private void UpdateRoundView() => _roundView.Update(_area, IsOpen && ArtMode ? HolderView?.Invoke() : null);
 
     private Button Add(AreaItemServiceLine line, AreaItemServiceView view)

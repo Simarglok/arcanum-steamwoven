@@ -83,6 +83,15 @@ public partial class AreaCharacterSheetPanel : CanvasLayer
     internal bool SpellsReadyForSelfTest => _spellsReady;
     internal bool SchemesReadyForSelfTest => _schemesReady;
     public bool ArtMode => _artView?.ArtSet == true;
+
+    /// <summary>ARC-UI-2071 (ledger DH10): the lone left release after the reply that opened the sheet (screen point); only the original look takes it (a release in its close
+    /// rectangle closes the sheet). True when the sheet took it into account.</summary>
+    public bool LoneRelease(Vector2 screen)
+    {
+        if (!IsOpen || !ArtMode || _artView is null) return false;
+        _artView.LoneRelease(screen);
+        return true;
+    }
     internal AreaCharacterSheetArtView? ArtViewForSelfTest => _artView;
     /// <summary>ARC-UI-147: the diagnostic panel is drawn (the editor's art look hides it).</summary>
     internal bool PanelVisibleForSelfTest => _panel.Visible;

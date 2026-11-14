@@ -392,11 +392,11 @@ public sealed class AreaAiFollowerTests
 
     // The viewer's order to every follower in reach, with the host's combat facts of the companion (AreaCompanionOrders.Facts).
     private static SessionCompanionOrderResult Order(Scene scene, CompanionOrderType type, SessionCombatant? target = null, bool withHost = true,
-        Action<CompanionOrderOutcome>? goals = null)
+        Action<CompanionOrderOutcome>? goals = null, Action<CompanionOrderOutcome, AreaOrderSpeech>? speak = null)
     {
         var consent = new PartyConsentFacts(false, PersuasionTraining.None, 8, 0, 3, null, 50, new(-20, 300, 200, 5), 0, 3, 5);
         var facts = new CompanionOrderFacts(scene.Companion, "companion", 1, false, consent, Combat: scene.Host.OrderFacts(scene.Companion));
-        return AreaCompanionOrders.Send(scene.Session, new(type, CompanionOrderAddressing.All, [facts]) { Target = target }, withHost ? scene.Host : null, goals);
+        return AreaCompanionOrders.Send(scene.Session, new(type, CompanionOrderAddressing.All, [facts]) { Target = target }, withHost ? scene.Host : null, goals, speak);
     }
 
     [TestMethod]
@@ -846,6 +846,60 @@ public sealed class AreaAiFollowerTests
         var bare = Order(other, CompanionOrderType.Curse, withHost: false).Outcomes.Single();
         Assert.AreEqual((CompanionOrderEffect.Cursed, (SessionAiResult?)null), (bare.Effect, bare.Pass));
         Assert.AreEqual(DangerState.None, other.Session.QueryDanger(other.Companion).State);
+    }
+
+    // ARC-UI-2085 (0x4C31A0 case 7): the curse's race line is said after the leave and before the attack event, once, through both paths of the order.
+    [TestMethod]
+    public void The_curse_says_its_race_line_after_the_leave_and_before_the_attack_event()
+    {
+        var scene = Open();
+        var (session, host, _, _, companion) = scene;
+        var said = new List<string>();
+        Order(scene, CompanionOrderType.Curse, speak: (outcome, speech) =>
+        {
+            said.Add($"{speech} {outcome.Entity} led={session.QueryCompanion(companion).LedByPc} danger={session.QueryDanger(companion).State}");
+        });
+        CollectionAssert.AreEqual(new[] { $"CurseRace {companion} led=False danger=None" }, said, "after the leave, before the hero's attack event reached it");
+        Assert.AreNotEqual(DangerState.None, session.QueryDanger(companion).State, "the attack event followed");
+
+        // Without the host the line is said all the same (no event follows).
+        var bare = Open();
+        var bareSaid = new List<AreaOrderSpeech>();
+        Order(bare, CompanionOrderType.Curse, withHost: false, speak: (_, speech) => bareSaid.Add(speech));
+        CollectionAssert.AreEqual(new[] { AreaOrderSpeech.CurseRace }, bareSaid);
+
+        // A refused leave (no outcome with the insult) says nothing: other orders never name the race line.
+        var other = Open();
+        var none = new List<AreaOrderSpeech>();
+        Order(other, CompanionOrderType.Wait, speak: (_, speech) => none.Add(speech));
+        Assert.AreEqual(0, none.Count);
+    }
+
+    // ARC-UI-2085 (0x4C31A0 case 4): the move order says the acknowledgement when its please-move goal started, the refusal when it did not (a busy follower).
+    [TestMethod]
+    public void The_move_order_says_its_acknowledgement_or_refusal_by_whether_goal_68_started()
+    {
+        var scene = Open();
+        var (_, host, _, enemy, companion) = scene;
+        var said = new List<(AreaOrderSpeech Speech, GoalType? Goal)>();
+        Order(scene, CompanionOrderType.Move, speak: (_, speech) => said.Add((speech, host.RunOf(companion)?.Bottom.Goal)));
+        CollectionAssert.AreEqual(new[] { (AreaOrderSpeech.MoveAcknowledge, (GoalType?)GoalType.PleaseMove) }, said, "an idle follower steps aside");
+
+        // A follower with a main run is busy: the starter refuses, the refusal line is said and the run stays.
+        var busy = Open();
+        busy.Host.HeroAttacked(enemy);
+        busy.Host.Perform(busy.Companion);
+        Assert.IsNotNull(busy.Host.RunOf(busy.Companion));
+        var refused = new List<(AreaOrderSpeech Speech, GoalType? Goal)>();
+        Order(busy, CompanionOrderType.Move, speak: (_, speech) => refused.Add((speech, busy.Host.RunOf(busy.Companion)?.Bottom.Goal)));
+        Assert.AreEqual(AreaOrderSpeech.MoveRefusal, refused.Single().Speech);
+        Assert.AreNotEqual(GoalType.PleaseMove, refused.Single().Goal);
+
+        // Without the host nothing is asked and nothing is said.
+        var bare = Open();
+        var none = new List<AreaOrderSpeech>();
+        Order(bare, CompanionOrderType.Move, withHost: false, speak: (_, speech) => none.Add(speech));
+        Assert.AreEqual(0, none.Count);
     }
 
     [TestMethod]

@@ -6,6 +6,9 @@ using Arcanum.Simulation.Party;
 
 namespace Arcanum.World;
 
+/// <summary>ARC-UI-2085: the lines an order says inside its handler that the session's outcome cannot name: the curse's race line (0x413D40, group 1000) and the move order's acknowledgement (0x413BE0) or refusal (0x413C90).</summary>
+public enum AreaOrderSpeech { CurseRace, MoveAcknowledge, MoveRefusal }
+
 /// <summary>
 /// ARC-WORLD-046: the AREA viewer's side of the follower orders. <see cref="Issue"/> gathers the facts of the companions of the shown
 /// map (following and waiting ones), sends the order through the session (<see cref="GameSessionOwner.IssueCompanionOrder"/>) and runs
@@ -66,9 +69,10 @@ public static class AreaCompanionOrders
     /// and the companions whose goal did not start (its cell is off the map's steps); the group's standings are read again. With
     /// <paramref name="ai"/> the order goes through <see cref="Send"/>; the goals start right after each follower's order, before its AI
     /// pass (ARC-WORLD-117: the original sets them inside 0x4C31A0, before call 0x4C389D).
+    /// ARC-UI-2085: <paramref name="speak"/> is called inside the order for the curse's race line (after the leave, before the attack event) and the move order's acknowledgement or refusal.
     /// </summary>
     public static (SessionCompanionOrderResult Result, IReadOnlyList<string> GoalsNotStarted) Issue(GameSessionOwner session, AreaCompanionGroup group,
-        CompanionOrderRequest request, CellCoord pc, SimulationTime at, AreaAiHost? ai = null)
+        CompanionOrderRequest request, CellCoord pc, SimulationTime at, AreaAiHost? ai = null, Action<CompanionOrderOutcome, AreaOrderSpeech>? speak = null)
     {
         ArgumentNullException.ThrowIfNull(session); ArgumentNullException.ThrowIfNull(group); ArgumentNullException.ThrowIfNull(request);
         var notStarted = new List<string>();
@@ -80,7 +84,7 @@ public static class AreaCompanionOrders
                 : true;
             if (!started) notStarted.Add(outcome.Entity);
         }
-        var result = Send(session, request, ai, StartGoal);
+        var result = Send(session, request, ai, StartGoal, speak);
         group.Refresh(session);
         return (result, notStarted);
     }
@@ -95,10 +99,19 @@ public static class AreaCompanionOrders
     /// after lifting the stop), no curse attack event and no pass.
     /// </summary>
     public static SessionCompanionOrderResult Send(GameSessionOwner session, CompanionOrderRequest request, AreaAiHost? ai,
-        Action<CompanionOrderOutcome>? goals = null)
+        Action<CompanionOrderOutcome>? goals = null, Action<CompanionOrderOutcome, AreaOrderSpeech>? speak = null)
     {
         ArgumentNullException.ThrowIfNull(session); ArgumentNullException.ThrowIfNull(request);
-        if (ai is null) return session.IssueCompanionOrder(session.Version, goals is null ? request : request with { Ordered = goals });
+        if (ai is null)
+        {
+            // Without the host no goal starts and no attack event runs; the curse's race line is still said (the original says it before its attack event).
+            Action<CompanionOrderOutcome>? bare = goals is null && speak is null ? null : outcome =>
+            {
+                goals?.Invoke(outcome);
+                if (outcome.Insult) speak?.Invoke(outcome, AreaOrderSpeech.CurseRace);
+            };
+            return session.IssueCompanionOrder(session.Version, bare is null ? request : request with { Ordered = bare });
+        }
         return session.IssueCompanionOrder(session.Version, request with
         {
             World = ai, Ai = ai,
@@ -107,6 +120,13 @@ public static class AreaCompanionOrders
                 if (outcome.Stop is { } stop) ai.ApplyStop(stop);
                 ai.ObserveLeaves();
                 goals?.Invoke(outcome);
+                // ARC-UI-2085 (0x4C31A0): the curse says its race line after the leave and before its attack event; the move order says its acknowledgement or its refusal by whether goal 68 started.
+                if (outcome.Insult) speak?.Invoke(outcome, AreaOrderSpeech.CurseRace);
+                else if (outcome.Effect == CompanionOrderEffect.MoveRequested)
+                {
+                    var started = ai.AskToMove(outcome.Entity);
+                    speak?.Invoke(outcome, started ? AreaOrderSpeech.MoveAcknowledge : AreaOrderSpeech.MoveRefusal);
+                }
                 if (outcome.CurseAttack is { } attack) ai.OrderAttack(attack);
             },
         });

@@ -45,9 +45,10 @@ public partial class TerrainViewerApp
         var aiBefore = _aiForSmoke; var encounterHostBefore = _encounterHost; var simulatedFocus = _worldFocusSimulationForSelfTest; var focused = _worldFocused;
         // As the world-map stage has it: an automated run has no window focus, so the keys of the windows would be ignored.
         _aiForSmoke = true; _worldFocusSimulationForSelfTest = true; _worldFocused = true; _encountersForSmoke = true;
+        // ARC-DEV-1919: the frame's view touch (ProcessAreaAi) may ask the chart over the loaded sectors for more; the pass waits for that read, as every smoke frame does (ARC-DEV-1748), so a route into a sector outside the window never depends on machine load.
         async Task Pass(int frames = 1)
         {
-            for (var i = 0; i < frames; i++) { await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame); TickAreaClock((long)Time.GetTicksMsec()); ProcessAreaAi(); SyncAreaInventory(); }
+            for (var i = 0; i < frames; i++) { await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame); TickAreaClock((long)Time.GetTicksMsec()); ProcessAreaAi(); Require(SettleSectorChartForSmoke(), "the sector chart's background read did not finish: " + SectorChartState()); SyncAreaInventory(); }
         }
         long Now() => session.QueryClockSnapshot().GameTimestampMs;
         // The next Random Encounters deadline; the clock is jumped to it less `lead` (the event comes due in the frame pass that follows).
