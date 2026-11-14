@@ -49,10 +49,7 @@ public sealed class AreaHeroSightScriptRealDataTests
         return ScriptContent.Over(opened.Stack!);
     }
 
-    private static string Show(string label, AreaScriptedUse ran) =>
-        $"{label}: {ran.Outcome} stop {ran.Run?.StopLine} trace " + string.Join(" ", ran.Run?.Trace.Select(t => $"{t.Line}:c{t.Condition}{(t.Held ? "T" : "F")}>{t.Next?.ToString() ?? "-"}") ?? []) + " " + (ran.Run?.Refusal?.Code.ToString() ?? "");
-
-    private static string Path(AreaScriptedUse ran) => string.Join(" ", ran.Run!.Trace.Select(t => $"{t.Line}:c{t.Condition}{(t.Held ? "T" : "F")}"));
+    private static string TraceOf(IEnumerable<ScrTraceStep> trace) => string.Join(" ", trace.Select(t => $"{t.Line}:c{t.Condition}{(t.Held ? "T" : "F")}"));
 
     // Script 2602 (an NPC's heartbeat, admitted whole by the heartbeat set): line 0 asks obj can see (28) of the attachee toward the PC; false goes to line 4 (return run default), true goes on to line 1 (within range, 34).
     [TestMethod, TestCategory("RealData")]
@@ -67,9 +64,9 @@ public sealed class AreaHeroSightScriptRealDataTests
             var world = new AreaScriptWorld(() => null, _ => false, _ => null, () => null, CanSee: (observer, target) => { asked.Add((observer, target)); return sees; });
             var host = new AreaUseScriptHost(session, 1, [row], [], content, world);
             var ran = host.RunHeartbeat(row, ScrPoint.Heartbeat, session.Rules.Scripts);
-            Console.WriteLine($"HERO-SIGHT-RUN|2602|sees {sees}|{ran.Outcome}|{Path(ran)}");
+            Console.WriteLine($"HERO-SIGHT-RUN|2602|sees {sees}|{ran.Outcome}|{TraceOf(ran.Run!.Trace)}");
             Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, ran.Outcome, ran.Detail);
-            Assert.AreEqual(expected, Path(ran), $"sees {sees}");
+            Assert.AreEqual(expected, TraceOf(ran.Run!.Trace), $"sees {sees}");
             CollectionAssert.AreEqual(new[] { (AreaUseScriptHost.EntityId(row), host.Pc.Code!) }, asked, "the check asks the attachee toward the PC, once");
         }
     }
@@ -87,9 +84,14 @@ public sealed class AreaHeroSightScriptRealDataTests
             var other = Npc(2, 0);
             if (open) session.BeginReactionConversation(session.Version, AreaUseScriptHost.EntityId(other), new ReactionNpcFacts(50, CharacterRace.Human, false, false));
             var host = new AreaUseScriptHost(session, 1, [row, other], [], content, new AreaScriptWorld(() => null, _ => false, _ => null, () => null));
+            // The heartbeat itself ends at line 0 (return run default) whatever the dialog state.
+            var beat = host.RunHeartbeat(row, ScrPoint.Heartbeat, session.Rules.Scripts);
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, beat.Outcome, beat.Detail);
+            Assert.AreEqual("0:c0T", TraceOf(beat.Run!.Trace), "the heartbeat stops at line 0");
+            // The conversation is opened with another NPC: the PC's slot word the condition reads is the session's open slot, whoever holds it.
             var run = ScrDispatcher.RunCall(new ScrCallEvent(1130, 19, host.Pc, new ScrObjectRef(1, AreaUseScriptHost.EntityId(row))), host,
                 new() { Rules = session.Rules.Scripts, Admission = AreaUseScriptHost.HeartbeatAdmission });
-            var path = string.Join(" ", run.Trace.Select(t => $"{t.Line}:c{t.Condition}{(t.Held ? "T" : "F")}"));
+            var path = TraceOf(run.Trace);
             Console.WriteLine($"HERO-SIGHT-RUN|1130|dialog open {open}|{run.Outcome}|{path}");
             Assert.AreEqual(ScrOutcome.RunDefault, run.Outcome, run.Refusal?.Code.ToString());
             Assert.AreEqual(expectedStop, run.StopLine);

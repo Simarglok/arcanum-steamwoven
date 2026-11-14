@@ -33,11 +33,9 @@ public sealed class ScrHeroSightCensusRealDataTests
         Console.WriteLine($"HERO-SIGHT-CENSUS|clauses {rows.Count}|scripts {rows.Select(r => r.Script).Distinct().Count()}");
         foreach (var type in new[] { ScrCatalogue.Condition.IsInDialog, ScrCatalogue.Condition.CanSeeObject, ScrCatalogue.Condition.CanHearObject })
             Console.WriteLine($"HERO-SIGHT-CENSUS|condition {type}|clauses {rows.Count(r => r.Type == type)}|scripts {rows.Where(r => r.Type == type).Select(r => r.Script).Distinct().Count()}");
-        // Only the first operand's kind is asked: the PC itself (Player) is named by the dialog condition alone (1130 line 19 and 3073 line 5); no sight or hearing clause names the PC as the observer.
+        // The PC (Player) is the first operand of the dialog condition only (1130 line 19, 3073 line 5); every sight and hearing clause has the attachee or a looped object as observer, never the Player or the Triggerer (the PC in use and dialog runs).
         Console.WriteLine($"HERO-SIGHT-CENSUS|PC as first operand|{string.Join(", ", rows.Where(r => r.FirstKind == (byte)ScrFocusKind.Player).Select(r => $"{r.Script} line {r.Line} condition {r.Type}"))}");
-        // 21 clauses in 16 scripts ask in dialog, 18 in 17 ask can see, 5 in 5 ask can hear.
-        CollectionAssert.AreEqual(new[] { (21, 16), (18, 17), (5, 5) }, new[] { ScrCatalogue.Condition.IsInDialog, ScrCatalogue.Condition.CanSeeObject, ScrCatalogue.Condition.CanHearObject }
-            .Select(type => (rows.Count(r => r.Type == type), rows.Where(r => r.Type == type).Select(r => r.Script).Distinct().Count())).ToArray());
-        Assert.AreEqual(0, rows.Count(r => r.Type != ScrCatalogue.Condition.IsInDialog && r.FirstKind == (byte)ScrFocusKind.Player));
+        CollectionAssert.AreEqual(new[] { ("01130gorgothheartbeat", 19), ("03073druella_hb3", 5) }, rows.Where(r => r.Type == ScrCatalogue.Condition.IsInDialog && r.FirstKind == (byte)ScrFocusKind.Player).Select(r => (r.Script, r.Line)).ToArray());
+        CollectionAssert.AreEquivalent(new[] { (byte)ScrFocusKind.Attachee, (byte)ScrFocusKind.CurrentLoopedObject }, rows.Where(r => r.Type != ScrCatalogue.Condition.IsInDialog).Select(r => r.FirstKind).Distinct().ToArray());
     }
 }
