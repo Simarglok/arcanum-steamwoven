@@ -146,6 +146,32 @@ public partial class TerrainViewerApp
             TickHeroDeath(AreaHeroDeath.FadeTime); TickHeroDeath(AreaHeroDeath.FadeTime);
             Require(_heroDeath.Stage == AreaDeathStage.Watching && MainMenuOpen && _mainMenu!.Reopened && _sceneLoadsForSelfTest == loads + 2, "the second reset");
 
+            // ARC-UI-2066 (F1; PD3, OP9): the options window the O key opened raises no pause, so the hero can die behind it. The death event comes through the open
+            // menu (the nested loop pings the real-time clock), closes the whole menu and comes again 0.3 s later; the cover never stands over a menu.
+            var loadsBefore = _sceneLoadsForSelfTest;
+            game = NewGame();
+            Kill(game);
+            TickHeroDeath(16);
+            Key(Godot.Key.O);
+            Require(_mainMenu?.Window == AreaMenuWindow.Options && !WorldMenuPause && _heroDeath.Stage == AreaDeathStage.Waiting && !HeroDeathCovering,
+                "the O key opened the options window with no pause while the death waits");
+            TickHeroDeath(AreaHeroDeath.DeathDelay - 16);
+            Require(MainMenuOpen && _heroDeath.Stage == AreaDeathStage.Waiting, "the options window stays until the death comes");
+            TickHeroDeath(16);
+            Require(!MainMenuOpen && _mainMenu is null && _heroDeath.Stage == AreaDeathStage.Waiting && _heroDeath.Remaining == AreaHeroDeath.MenuRetryDelay,
+                "the death closed the options window and comes again 0.3 s later");
+            TickHeroDeath(AreaHeroDeath.MenuRetryDelay);
+            Require(_heroDeath.Stage == AreaDeathStage.FadeOut && HeroDeathCovering && !MainMenuOpen && _heroDeathPanel!.IsOpen, "the screen fades to black with no menu under it");
+            Key(Godot.Key.O);
+            Require(!MainMenuOpen && _mainMenu is null && _heroDeath.Stage == AreaDeathStage.FadeOut, "the O key opens no window over the death screen");
+            TickHeroDeath(AreaHeroDeath.FadeTime); TickHeroDeath(AreaHeroDeath.FadeTime);
+            Require(_heroDeath.Stage == AreaDeathStage.Slide, "the slide shows");
+            Key(Godot.Key.A, 'a');
+            TickHeroDeath(AreaHeroDeath.FadeTime);
+            Require(_sceneLoadsForSelfTest == loadsBefore + 1 && MainMenuOpen && _mainMenu!.Window == AreaMenuWindow.Main && _mainMenu.Reopened, "the game reset to the reopened main menu");
+            TickHeroDeath(AreaHeroDeath.FadeTime);
+            Require(_heroDeath.Stage == AreaDeathStage.Watching && !_heroDeathPanel.IsOpen, "the menu faded in and the screen closed");
+
             // A start scene that does not publish: the black screen gives way to the game as it is.
             game = NewGame();
             var published = _sceneLoadForSelfTest;
@@ -155,7 +181,7 @@ public partial class TerrainViewerApp
             TickHeroDeath(AreaHeroDeath.DeathDelay); TickHeroDeath(AreaHeroDeath.FadeTime); TickHeroDeath(AreaHeroDeath.FadeTime);
             voicePlaying = false;
             TickHeroDeath(16); TickHeroDeath(AreaHeroDeath.FadeTime);
-            Require(_heroDeath.Stage == AreaDeathStage.MenuFadeIn && _sceneLoadsForSelfTest == loads + 3 && ReferenceEquals(game, _areaSession) && !MainMenuOpen,
+            Require(_heroDeath.Stage == AreaDeathStage.MenuFadeIn && _sceneLoadsForSelfTest == loadsBefore + 2 && ReferenceEquals(game, _areaSession) && !MainMenuOpen,
                 "an unpublished start scene fades in over the game as it is: " + _heroDeath.Stage);
             TickHeroDeath(AreaHeroDeath.FadeTime);
             Require(!HeroDeathCovering && !_heroDeathPanel.IsOpen && !WorldModal, "the screen cleared");

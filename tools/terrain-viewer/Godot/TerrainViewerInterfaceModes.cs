@@ -246,7 +246,7 @@ public partial class TerrainViewerApp
             return true;
         }
         // ARC-UI-2026 (SA43, main loop 0x401560): the dialog's handler lets the release of O through like Escape's; the options window opens over any window.
-        if (routed == Key.O && !key.CtrlPressed && !key.AltPressed && !key.MetaPressed && _inventoryPanel?.Asking != true && RouteOptionsKey(decision)) return true;
+        if ((routed == Key.O || key.PhysicalKeycode == Key.O) && _inventoryPanel?.Asking != true && RouteOptionsKey(key, decision)) return true;
         // ARC-DEV-323 (SL12; main loop 0x401834): no window takes F7 (the inventory handler answers 0 to a key), so the quick save goes on over the steal window.
         if (routed == Key.F7 && !ConversationOpen && InventoryOpen && InterfaceModes.QuickSaveClosesWindow(_interfaceWindows.Stack.Current))
         {
