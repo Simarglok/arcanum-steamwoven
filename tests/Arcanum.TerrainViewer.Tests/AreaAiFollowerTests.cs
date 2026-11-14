@@ -115,7 +115,7 @@ public sealed class AreaAiFollowerTests
 
     private static Scene Open(bool companionWaits = false, bool followers = true, CellCoord? companionAt = null, CellCoord? corner = null,
         CellCoord? companionHome = null, bool healer = false, uint enemyFlags = 0, bool free = false, bool visitor = false, bool onDemand = false, bool homeless = false, string? dialogPartner = null, Action<string>? dialogEnded = null, Func<string, int?>? alertedSound = null,
-        PartyConsentFacts? joinFacts = null, Func<string, PartyConsentFacts?>? followFacts = null, AiParameterTable? table = null, CellCoord? enemyAt = null, bool enemyLed = false, int companionAlignment = 0)
+        PartyConsentFacts? joinFacts = null, Func<string, PartyConsentFacts?>? followFacts = null, AiParameterTable? table = null, CellCoord? enemyAt = null, bool enemyLed = false, int companionAlignment = 0, bool spells = false)
     {
         var identity = new GlobalFlagIdentity(new WorldId(Guid.NewGuid()), new ModuleId(Guid.NewGuid()));
         var hero = new SessionHeroDefinition(16089, CharacterRace.Human, CharacterGender.Male, [8, 8, 8, 8, 8, 8, 8, 8, 0, 0], 1, 5, 0, null, null, 0, []);
@@ -168,6 +168,15 @@ public sealed class AreaAiFollowerTests
         var steps = new AreaStepSnapshot(new(AreaStepInputKind.Structural, "arc-data-019-whole-map-original-rules-v1", [], "d"), 1, [(0, 0)], terrain,
             objects, new Dictionary<AreaStepCell, AreaStepWallEdge[]>());
         var walks = new Walks(new(Entity(1), Npc(1, start, healer ? 5 : 0, alignment: companionAlignment), start));
+        // ARC-SCRIPT-1996: a cast host over the same rows (the healer talk's spell of a companion), as the viewer builds it: an invented healing spell, the host forward-referenced for the movers.
+        AreaAiHost? built = null;
+        SessionSpellCaster? caster = null;
+        if (spells)
+        {
+            var spellMap = new AreaSpellCastMap(session, 1, steps, [rows[0], rows[1]], combat, () => HeroCell, () => null,
+                placed: () => { var all = built?.Movers.All.ToDictionary(m => m.Key, m => ((long X, long Y)?)(m.Cell.X, m.Cell.Y)) ?? []; all[Key(1)] = (walks.Cells[Entity(1)].X, walks.Cells[Entity(1)].Y); return all; });
+            caster = new SessionSpellCaster(session, n => n == AreaHealerCastTests.Spell ? AreaHealerCastTests.Record() : null, spellMap, new AreaEventWorld(() => combat, () => null, ai: () => built));
+        }
         var scene = new AreaAiScene
         {
             RuntimeMap = 1, Chart = new AreaChart(0, 0, new(0, 0), "TEST"), Steps = steps, Npcs = [new(Entity(0), Npc(0, enemy, critterFlags: enemyFlags), enemy)], Combat = combat,
@@ -177,8 +186,10 @@ public sealed class AreaAiFollowerTests
             ConversationPartner = dialogPartner is null ? null : () => dialogPartner, ConversationEnded = dialogEnded,
             NpcSheet = entity => combat.Fields(entity) is { } fields ? AreaAdvancement.Npc(entity, fields, _ => null) : null,
             AlertedSound = alertedSound, FollowFacts = followFacts, Parameters = table,
+            Spells = caster is null ? null : () => caster,
         };
         var host = new AreaAiHost(session, scene, new AreaEventWorld(() => combat, () => null), new AreaCombatWorld(1, () => [], _ => null));
+        built = host;
         return new(session, host, walks, Entity(0), Entity(1)) { Combat = combat };
     }
 
@@ -1651,5 +1662,40 @@ public sealed class AreaAiFollowerTests
         Assert.IsTrue(running.StartPickLocks(runner, "door:1", null), $"goal 33 with skill 14 starts: {running.TraceOf(runner)?.Perform}");
         var run = running.RunOf(runner);
         Assert.AreEqual((Arcanum.Simulation.Goals.GoalType.UseSkill, "door:1", AiExecutorRules.PickLocksSkill), (run!.Bottom.Goal, run.Bottom.Target, run.Bottom.Skill));
+    }
+
+    // ARC-SCRIPT-1996 (ledger HLR7, HLR8, HLR10, HLR11): the healer talk's host answers for a companion, which the host runs through its follower list and not its NPC list.
+    [TestMethod]
+    public void The_healer_talk_answers_for_a_companion_the_hero_leads_and_starts_its_service_and_spell()
+    {
+        var (session, host, _, _, companion) = Open(healer: true, spells: true);
+        var facts = host.HealerFacts(companion) ?? throw new AssertFailedException("a companion the host runs has healer facts");
+        Assert.IsTrue(facts.LedByPc && !facts.NoPcLeader, "the hero leads the companion: the dialog serves at once and asks no price and no free flag (0x45DE00 is the PC)");
+        Assert.IsTrue(facts.SkillAllowed, "the companion holds a healing item the skill test accepts");
+        Assert.IsNull(host.HealerFacts(Pc), "the hero is no healer here");
+        Assert.IsNull(host.HealerFacts(Entity(9)), "an object the host does not run stays null");
+
+        // The skill service: goal 33 on the hero with the companion's item.
+        Assert.IsTrue(host.HealerService(companion), "the skill service starts for a companion");
+        var run = host.RunOf(companion) ?? throw new AssertFailedException("no run: " + host.TraceOf(companion)?.Perform);
+        Assert.AreEqual((GoalType.UseSkill, Pc), (run.Bottom.Goal, run.Bottom.Target), "goal 33 on the hero");
+
+        // The spell (a fresh map, as the talk offers one of the two): the cast host's invocation with the companion as the caster, at the normal cost (no free flag, the hero leads it).
+        (session, host, _, _, companion) = Open(healer: true, spells: true);
+        Assert.IsTrue(host.HealerCast(companion, AreaHealerCastTests.Spell, free: facts.NoPcLeader), "the cast starts for a companion");
+        var cast = host.RunOf(companion)?.Bottom ?? throw new AssertFailedException("no cast run: " + host.TraceOf(companion)?.Cast);
+        var magic = session.QuerySpellRuns()[cast.SpellRun ?? -1] ?? throw new AssertFailedException("no magic run");
+        Assert.AreEqual((AreaHealerCastTests.Spell, Pc), (magic.Spell, magic.Target?.Id), "the healing spell aimed at the hero");
+        Assert.AreEqual((Arcanum.Simulation.Magic.SpellRunFlags)0, magic.Flags & Arcanum.Simulation.Magic.SpellRunFlags.Free, "no free flag for a companion the hero leads");
+    }
+
+    [TestMethod]
+    public void The_healer_talk_asks_the_price_of_a_free_companion()
+    {
+        var (_, host, _, _, companion) = Open(healer: true, free: true, spells: true);
+        var facts = host.HealerFacts(companion) ?? throw new AssertFailedException("a free companion the host runs has healer facts");
+        Assert.IsTrue(facts.NoPcLeader && !facts.LedByPc, "no PC leads a released companion: the dialog asks the price and the free flag");
+        Assert.IsTrue(host.HealerCast(companion, AreaHealerCastTests.Spell, free: true));
+        Assert.IsNotNull(host.RunOf(companion), "the free cast starts too");
     }
 }
