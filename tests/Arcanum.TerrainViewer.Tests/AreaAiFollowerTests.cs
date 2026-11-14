@@ -287,7 +287,7 @@ public sealed class AreaAiFollowerTests
         Assert.AreEqual(Pc, host.Leader(companion));
         CollectionAssert.AreEqual(new[] { enemy }, host.Followers(companion).ToArray());
         Assert.IsTrue(host.FactionSame(enemy, companion) && host.FactionSame(companion, enemy) && host.FactionSame(Pc, enemy), "the leader, its follower and the hero at the top");
-        Assert.IsFalse(host.CatchUp(enemy).HasPcLeader, "the host cannot move an NPC of the map onto the hero, so it does not catch up (the original's chain catch-up is a named tail)");
+        Assert.IsTrue(host.CatchUp(enemy).HasPcLeader, "the chain query (0x45DDA0) reaches the hero through the companion: ARC-WORLD-2116");
         // Its tick's perform starts the follow goal toward its own leader, not the hero.
         Fire(scene, enemy);
         var run = session.QueryGoals().RunsOf(enemy).Single();
@@ -298,6 +298,46 @@ public sealed class AreaAiFollowerTests
         Assert.IsNull(host.PcLeader(enemy));
         CollectionAssert.AreEqual(new[] { enemy }, host.ObserveLeaves().ToArray());
         Assert.AreEqual(0, session.QueryGoals().RunsOf(enemy).Length);
+    }
+
+    // ARC-WORLD-2116 (0x4AD4D0 → 0x43E770): an NPC of the map led through the hero's companion, more than thirty tiles from the hero, is moved onto the hero's cell (the chain's PC, not its immediate leader), and a
+    // waiting leader does not hold it back; a waiting NPC-led follower (the flag) stays where it waits.
+    [TestMethod]
+    public void An_npc_led_through_a_companion_far_from_the_hero_catches_up_onto_the_hero()
+    {
+        var far = Open(enemyAt: new(60, 20), companionWaits: true);
+        var (session, host, enemy, companion) = (far.Session, far.Host, far.Enemy, far.Companion);
+        Assert.IsFalse(host.CatchUp(enemy).HasPcLeader, "no leader yet");
+        Assert.AreEqual(GameSessionDisposition.Changed, session.ForceJoinLeader(session.Version, enemy, companion).Disposition);
+        var facts = host.CatchUp(enemy);
+        Assert.IsTrue(facts.HasPcLeader && facts.Active && !facts.Waiting && facts.LeaderDistance > AiSchedulerRules.ActivityRange, $"{facts}: the leader waits, the follower is tested alone");
+        var tick = Fire(far, enemy);
+        Assert.IsTrue(tick.Steps.HasFlag(AiTickSteps.CaughtUp), $"{tick.Steps}");
+        Assert.AreEqual(HeroCell, host.Tile(enemy), "it stands on the hero's cell, not the leader's");
+        Assert.AreEqual(0, host.DistanceToPc(enemy));
+        Assert.AreEqual(0, far.Walks.Jumps, "the follower source did not move it: the NPC mover did");
+        var landed = host.DrainNotices().Where(n => n.Kind == AreaAiNoticeKind.Entered && n.Npc == enemy).ToArray();
+        Assert.AreEqual(HeroCell, landed.Single().Cell!.Value, "the landing tile's script is told");
+
+        // A follower of the NPC that waits under it (the wait keeps the leader, so the chain still reaches the hero) stays where it waits.
+        var waiting = Open(enemyAt: new(60, 20));
+        Assert.AreEqual(GameSessionDisposition.Changed, waiting.Session.ForceJoinLeader(waiting.Session.Version, waiting.Enemy, waiting.Companion).Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, waiting.Session.WaitParty(waiting.Session.Version, waiting.Enemy).Disposition);
+        Assert.IsTrue(waiting.Host.CatchUp(waiting.Enemy).Waiting);
+        Assert.IsFalse(Fire(waiting, waiting.Enemy).Steps.HasFlag(AiTickSteps.CaughtUp));
+        Assert.AreEqual(new CellCoord(60, 20), waiting.Host.Tile(waiting.Enemy));
+    }
+
+    // ARC-WORLD-2116 (0x4A9B80): the attack event tells the followers of any leader; here the attacker is an NPC that leads the companion, so the companion, a follower of that NPC, is told about the hero.
+    [TestMethod]
+    public void An_npc_attacker_tells_its_own_npc_led_followers()
+    {
+        var (session, host, _, enemy, companion) = Open();
+        Assert.AreEqual(GameSessionDisposition.Changed, session.ForceJoinLeader(session.Version, companion, enemy).Disposition);
+        CollectionAssert.AreEqual(new[] { companion }, host.Followers(enemy).ToArray());
+        host.PerformAttack(enemy, Pc);
+        Run(host, enemy);
+        StringAssert.StartsWith(host.TraceOf(companion)!.Event, "told Attacker", host.TraceOf(companion)?.Event);
     }
 
     // The NPC's tick, fired through the session's event pass with the host as its world: an immediate tick due 1 ms ahead, the clock moved 10 ms.

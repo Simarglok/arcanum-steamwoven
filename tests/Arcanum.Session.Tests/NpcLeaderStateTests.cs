@@ -1,4 +1,8 @@
+using Arcanum.Simulation.Character;
+using Arcanum.Simulation.Clock;
+using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Party;
+using Arcanum.Simulation.Reaction;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using static Arcanum.Session.Tests.SessionFixtures;
 
@@ -209,6 +213,77 @@ public sealed class NpcLeaderStateTests
         // An unforced leave under an extraordinary-charisma leader is refused.
         Changed(owner.ForceJoinLeader(owner.Version, Summon, Mage));
         Assert.AreEqual(GameSessionFailure.LeaveRefused, owner.LeaveParty(owner.Version, Summon, new PartyLeave(Force: false, LeaderCharisma: 20)).Failure);
+    }
+
+    // ARC-WORLD-2116 (0x4AA7A0): the wait keeps the leader. The follower leaves the NPC leader's array, keeps the leader handle (so the chain still reaches the hero), carries the wait flag and, with the wait facts,
+    // holds the timer of the leader's stats; a forced unwait (the death's) joins it again at the end of the array; the timer's expiry frees it, jilted, with no reaction change.
+    [TestMethod]
+    public void A_follower_of_an_npc_waits_outside_its_leaders_array_and_keeps_the_leader()
+    {
+        using var owner = Create();
+        Changed(owner.ForceJoinLeader(owner.Version, Summon, Mage));
+        Changed(owner.ForceJoinLeader(owner.Version, Imp, Mage));
+        Changed(owner.ForceJoinParty(owner.Version, Mage));
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.WaitParty(owner.Version, Summon, new PartyWaitFacts(2, PersuasionTraining.None, 10, false)).Disposition);
+        Assert.IsTrue(owner.QueryCompanion(Summon).WaitFlag);
+        Assert.IsTrue(owner.QueryCompanion(Summon).WaitBit);
+        Assert.AreEqual(Mage, owner.QueryLeader(Summon), "the wait keeps the leader");
+        Assert.AreEqual(Hero, owner.QueryPcLeader(Summon), "and the chain still reaches the hero");
+        CollectionAssert.AreEqual(new[] { Imp }, owner.QueryFollowers(Mage).ToArray(), "it left the leader's array");
+        Assert.IsNotNull(owner.QueryWaitTimer(Summon), "the timer of the wait index 2 (2 h)");
+        Assert.AreEqual(GameSessionDisposition.NoChange, owner.WaitParty(owner.Version, Summon).Disposition, "already waiting");
+        // The save keeps it waiting under the leader, with its timer.
+        var text = GameSessionSnapshotCodec.Encode(owner.Capture());
+        var decoded = GameSessionSnapshotCodec.TryDecode(text);
+        Assert.AreEqual(SnapshotDecodeFailure.None, decoded.Failure, decoded.Path);
+        using var restored = Restore(decoded.Snapshot!);
+        Assert.AreEqual(text, GameSessionSnapshotCodec.Encode(restored.Capture()));
+        Assert.AreEqual(Mage, restored.QueryLeader(Summon));
+        CollectionAssert.AreEqual(new[] { Imp }, restored.QueryFollowers(Mage).ToArray());
+        Assert.IsNotNull(restored.QueryWaitTimer(Summon));
+        // An unforced unwait needs the leader's stats (NOT READY, #2117) and changes nothing; the forced one joins the leader again at the end of the array, forced, the flag and the timer gone.
+        Assert.AreEqual(GameSessionDisposition.NoChange, owner.UnwaitParty(owner.Version, Summon, PartyStateTests.Facts(), force: false).Disposition);
+        Assert.IsTrue(owner.QueryCompanion(Summon).WaitFlag);
+        Changed(owner.UnwaitParty(owner.Version, Summon, PartyStateTests.Facts(), force: true));
+        Assert.IsFalse(owner.QueryCompanion(Summon).WaitFlag);
+        Assert.IsNull(owner.QueryWaitTimer(Summon));
+        CollectionAssert.AreEqual(new[] { Imp, Summon }, owner.QueryFollowers(Mage).ToArray());
+        Assert.AreEqual(Mage, owner.QueryLeader(Summon));
+    }
+
+    [TestMethod]
+    public void The_timer_of_a_follower_waiting_under_an_npc_frees_it_jilted_with_no_reaction_change()
+    {
+        using var owner = Create();
+        Changed(owner.ForceJoinLeader(owner.Version, Summon, Mage));
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.WaitParty(owner.Version, Summon, new PartyWaitFacts(0, PersuasionTraining.None, 10, false)).Disposition);
+        Assert.AreEqual(ClockMutationDisposition.Changed, owner.AdvanceGameTime(owner.QueryClockSnapshot().Token, 2, ClockAdvanceReason.OrdinaryAdvance).Disposition);
+        var pass = owner.ProcessEvents(new PartyWorld());
+        Assert.AreEqual(GameSessionFailure.None, pass.Failure);
+        Assert.AreEqual(1, pass.Waits.Count);
+        Assert.IsNull(pass.Waits[0].Reaction, "the reaction change is written only toward a player character");
+        Assert.IsNull(owner.QueryLeader(Summon), "the NPC lost its leader");
+        Assert.IsTrue(owner.QueryCompanion(Summon) is { WaitFlag: false, Jilted: true, Standing: CompanionStanding.Free });
+        Assert.AreEqual(0, owner.QueryFollowers(Mage).Count);
+    }
+
+    [TestMethod]
+    public void A_join_under_an_npc_leader_clears_the_wait_flag_a_free_npc_carried()
+    {
+        using var owner = Create();
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.WaitParty(owner.Version, Summon).Disposition);
+        Assert.IsTrue(owner.QueryCompanion(Summon).WaitFlag, "a leaderless wait keeps the flag");
+        Changed(owner.ForceJoinLeader(owner.Version, Summon, Mage));
+        Assert.IsFalse(owner.QueryCompanion(Summon).WaitFlag, "under an NPC leader the flag means a wait outside the array");
+        CollectionAssert.AreEqual(new[] { Summon }, owner.QueryFollowers(Mage).ToArray());
+    }
+
+    // A host that answers life facts only and no reaction facts: a wait timeout under an NPC reads none.
+    private sealed class PartyWorld : ISessionPartyEventWorld
+    {
+        public LifeFacts? CritterFacts(SessionMapId map, string entity) => new();
+        public ReactionNpcFacts? ReactionNpcFacts(SessionMapId map, string entity) => null;
+        public ReactionPcFacts? ReactionPcFacts() => null;
     }
 
     private static SessionPartyState Party(params SessionNpcFollower[] led) => new([], [], led);

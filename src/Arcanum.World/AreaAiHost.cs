@@ -1206,17 +1206,19 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
 
     /// <summary>
     /// ARC-WORLD-115 (I9 host part): tell followers (0x4A9B80, <see cref="FollowerRules.TellFollowers"/>) of <paramref name="leader"/>
-    /// about <paramref name="other"/>: the leader's direct followers in its follower array's order (only the hero leads here: the
-    /// party's followers that follow it, not the waiting ones, that stand on this map), each through the follower rule (never ordered,
+    /// about <paramref name="other"/>: the leader's direct followers in its follower array's order (0x4411C0, the array of any leader: ARC-WORLD-2116; the waiting ones are out of it), the ones that stand on this map
+    /// (the hero's followers that follow it, or an NPC leader's followers this host runs), each through the follower rule (never ordered,
     /// never accidental here: the host's attacks are deliberate). A lock or focus and a complaint's −5 toward the hero go through the
-    /// session (<see cref="GameSessionOwner.ApplyFollowerRule"/>); the reaction to an attack by the other (case 5) is
+    /// session (<see cref="GameSessionOwner.ApplyFollowerRule"/>; the −5 is written only toward a player character, so an NPC leader's follower complains in words alone); the reaction to an attack by the other (case 5) is
     /// <see cref="MoraleRules.ReactToAttack"/> through the setter, as a victim's. The complaint's upset line is said through <see cref="FollowerSpeaks"/> (ARC-AI-1527).
     /// </summary>
     private void TellFollowers(string leader, string other, FollowerSide side)
     {
-        if (leader != Pc || Find(other) is null) return;
-        var followers = _session.QueryParty().Followers.Where(f => f.Standing == CompanionStanding.Following && _followers.ContainsKey(f.Entity))
-            .Select(f => f.Entity).Where(f => !Unresolved(f)).ToArray();
+        if (Find(other) is null) return;
+        var followers = (leader == Pc
+                ? _session.QueryParty().Followers.Where(f => f.Standing == CompanionStanding.Following && _followers.ContainsKey(f.Entity)).Select(f => f.Entity)
+                : _session.QueryFollowers(leader).Where(Walks))
+            .Where(f => !Unresolved(f)).ToArray();
         if (followers.Length == 0) return;
         foreach (var outcome in FollowerRules.TellFollowers(this, leader, other, followers, side, accidental: false, _session.Rules.Combat))
         {
@@ -1231,12 +1233,13 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
                     // ARC-AI-1527 (0x414370): the complaint's upset line is the follower's, said whether or not the reaction step below can run.
                     if (outcome.Line is { } upset) Speak(follower, upset);
                     var facts = ReactionFacts(follower);
-                    if (outcome.Step == FollowerRuleStep.Complain && facts is null) break;
+                    if (outcome.Step == FollowerRuleStep.Complain && leader == Pc && facts is null) break;
                     var result = _session.ApplyFollowerRule(_session.Version, new SessionFollowerRuleRequest
                     {
-                        // The leader is the hero, so the other side never is (the rule says nothing then): no reaction facts.
-                        Outcome = outcome, Leader = SessionCombatant.Hero, Target = Combatant(other)!, Setter = SetterFacts(follower),
-                        Complaint = facts is { } f ? new SessionPeaceReaction(f.Npc, f.Pc) : null,
+                        // The hero as leader never is the other side (the rule says nothing then): no reaction facts. A fight on the hero under an NPC leader carries them as the setter's rule 8 asks.
+                        Outcome = outcome, Leader = Combatant(leader)!, Target = Combatant(other)!, Setter = SetterFacts(follower),
+                        Complaint = leader == Pc && facts is { } f ? new SessionPeaceReaction(f.Npc, f.Pc) : null,
+                        Reaction = other == Pc && outcome.Step != FollowerRuleStep.Complain && facts is { } hero ? new SessionDangerReaction(hero.Npc, hero.Pc, Row(follower)?.HostileReaction ?? 0) : null,
                     });
                     Trace(follower).Setter = $"follower rule {outcome.Step} {other} {result.Disposition} {result.Failure}";
                     break;
@@ -1431,10 +1434,10 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     public bool SectorLoaded(string npc) =>
         Tile(npc) is not { } at || _session.QuerySectorLoaded(new(_scene.RuntimeMap), ResidentSector.Of(at)) != false;
     /// <summary>ARC-DEV-105 (MIG9 S5, 0x4AD4D0): the follower catch-up's tests as the original reads them: a PC leader, its distance, the NPC flag
-    /// WAITING_HERE (field 0x118, 0x8; ours also a waiting standing), the critter flag paralysed (field 0xDA, 0x40) and active (0x45D790).</summary>
-    /// ARC-WORLD-1840: the original reads the chain's player character (0x45DDA0), so a follower of a companion catches up too; the host moves only the hero's companions (the follower
-    /// source's jump), so an NPC of the map whose chain reaches the hero through another leader answers no PC leader here (#1322's catch-up tail) instead of losing its run each far tick.
-    public AiCatchUpFacts CatchUp(string npc) => new(Leader(npc) == Pc || _followers.ContainsKey(npc) && PcLeader(npc) == Pc, DistanceToPc(npc),
+    /// WAITING_HERE (field 0x118, 0x8; ours also a waiting standing), the critter flag paralysed (field 0xDA, 0x40) and active (0x45D790).
+    /// ARC-WORLD-1840, ARC-WORLD-2116: the original reads the chain's player character (0x45DDA0), so a follower of a companion (or of any NPC the hero's chain reaches) catches up too, and its distance is the one to that PC.
+    /// A waiting leader does not hold it back: the waiting leader keeps its leader handle and the catch-up tests nothing of the immediate leader.</summary>
+    public AiCatchUpFacts CatchUp(string npc) => new(PcLeader(npc) == Pc, DistanceToPc(npc),
         (Fields(npc)?.Npc is { } fields && (fields.Flags & WaitingHereNpc) != 0) || Waiting(npc),
         Paralysed(npc), Active(npc));
     /// <summary>ARC-DEV-105 (MIG9 S5, 0x4AD4D0 then 0x43E770): the follower's goal run ends (the original's interrupt at priority 4), then it
@@ -1445,6 +1448,9 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         // ARC-DEV-328 (B25, GR12): the move 0x43E770 ends in the notification 0x444270, so the leader's tile's script runs for the follower that landed on it (TG2, TG9).
         if (_scene.Followers is { } followers && _followers.ContainsKey(npc) && Tile(Pc) is { } pc && followers.Jump(npc, pc))
             _notices.Add(new(AreaAiNoticeKind.Entered, npc, null) { Cell = pc });
+        // ARC-WORLD-2116 (0x4AD4D0 → 0x43E770): an NPC of the map whose chain of leaders reaches the hero through another leader is moved onto the hero's cell as well (the move is the chain's PC, not the immediate
+        // leader); it is the mover's placement, the cell's script told through Place's notice.
+        else if (_npcs.TryGetValue(npc, out var row) && Tile(Pc) is { } hero && Tile(npc) != hero) Place(npc, row, hero);
     }
     public bool MapClearing => false;
     // ARC-WORLD-1162: the critter flag 0x1000 as the session left it (an NPC seated in a bed is written there) over the data's.

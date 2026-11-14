@@ -108,8 +108,9 @@ while an NPC leads it.
   original's function reads (the trap alarm 0x4AA0D0, peace 0x4AA300 and its interrupt 0x44E050, the trap
   avoidance of a drop 0x4BBFE0 and the trap observer read 0x45DDA0; the routine, the follow goal and the healer's free services read
   0x45DE00), and a leave of an NPC leader (also the first half of a join under another leader) ends the follower's run as the hero's
-  leave does (`ObserveLeaves`). The catch-up (0x4AD4D0) reads the chain too, but the host can jump only the hero's companions onto the
-  hero, so an NPC of the map led through another leader does not catch up (NOT READY below, #2116).
+  leave does (`ObserveLeaves`). The catch-up (0x4AD4D0) reads the chain too (ARC-WORLD-2116): an NPC of the map led through another
+  leader, more than 30 tiles from the hero, is moved onto the hero's cell (the chain's PC, never its immediate leader, which is not
+  tested) by the host's mover placement, as a companion is by the follower source ([NLD1, NLD2](../research/ledger/npc-ai.md#npc-leaders-in-the-ai-host-built-arc-world-2116)).
 - A follower of an NPC is never concealed: 0x45EE30 gives the joiner its leader's concealment, but the session's concealment is the
   hero party's (toggle, end on an attack, save), so a companion's summon does not sneak with it.
 - The leave of an NPC leader clears the follower's WAIT bit and removes its timer (the forced unwait 0x4AA8C0 inside 0x45DFC0).
@@ -130,13 +131,23 @@ while an NPC leads it.
   follower tree forgets the NPC, a PC or NPC head alike), the turn-based order's PC block 0x4B7EB0, and the kill award 0x45DA20 and the kill log 0x4F5330 that follows it (the credited PC is the killer or its chain's PC). The hit-damage award in 0x4B4390
   pays only a PC attacker (no leader read), as before. `GameSessionOwner.PcLeads` is the chain test, `LedByPc` the direct one.
 
-**NOT READY:** a waiting standing under an NPC leader (the original's wait 0x4AA7A0 keeps any leader; here the wait of an NPC-led
-follower sets the flag as for a leaderless NPC and the leave clears it); the catch-up of an NPC of the map whose chain reaches the hero
-through another leader; the concealment of NPC-led followers; an NPC leader's own charisma
+- A waiting follower of an NPC (ARC-WORLD-2116, 0x4AA7A0, NLD3–NLD6): the wait keeps the leader and takes the follower out of the leader's
+  array. The session writes it as the follower's NPC link kept with the wait flag on its free record (no schema step; saved as such, the
+  timer with it): `QueryLeader` and `QueryPcLeader` still answer the leader and the chain, `QueryFollowers` leaves it out, the AI host's tell
+  followers and catch-up gate (the waiting NPC stays put) read it so. The timer reads the wait facts as the leader's charisma and Persuasion
+  (the caller's, not the hero's; an NPC leader's own charisma is #2117) and runs out as the hero's does, but the reaction change is written
+  only toward a player character: the follower is freed, jilted and leaderless, no reaction change. A forced unwait (the death's) joins the
+  leader again, appended at the end of its array, forced, the leader's Tempus Fugit flag copied; an unforced unwait needs the leader's stats
+  and changes nothing. A join under an NPC leader of a free NPC that carries the wait flag clears the flag (the original keeps it, in the
+  array; the flag is this encoding's wait). The dialog's wait on such an NPC still passes the hero's facts.
+- The AI host tells followers of any leader (0x4A9B80, ARC-WORLD-2116, NLD7): the leader's array the host runs, each through the follower
+  rule; an NPC leader's follower complains in words alone (the −5 reaction is written only toward a player character).
+
+**NOT READY:** the concealment of NPC-led followers; an NPC leader's own charisma
 for the danger setter's extraordinary-charisma test (0x4AABE0 reads the leader's; the host reads only the hero's) and for its
 followers' unforced leave; the followers of a hero's companion travelling with the hero (the move list's followers of followers, GR14:
 the viewer carries only the hero's companions); the dying follower's leave (0x45DA20 leaves the leader and keeps the handle; the
-session keeps the hero's dead followers in the array as before, and an NPC's too). Tails: #2116 (AI host: catch-up, wait, TellFollowers), #2117 (charisma), #2118 (travel, concealment), #2119 (join check, barter, the remaining direct sites).
+session keeps the hero's dead followers in the array as before, and an NPC's too). An unforced unwait of a follower waiting under an NPC leader, and the dialog's wait facts for one (the leader's stats). Tails: #2117 (charisma), #2118 (travel, concealment), #2119 (join check, barter, the remaining direct sites).
 
 ## Wait timer and loyalty (ARC-WORLD-045)
 
