@@ -165,6 +165,29 @@ public static class InterfaceChromeRecipes
         yield return new ChromeRecipe("FateBut.ART", ChromeKind.Button, ChromeMaterial.Face, ChromeSides.None, []);
     }
 
+    /// <summary>ARC-UI-1821: the HUD contents' frames (Legacy pixels of each art). The combat lamp panel (<c>ap_bar</c> 294, 356 × 30, <see cref="AreaCombatLampLayout"/>) is
+    /// <see cref="ChromeMaterial.Slate"/> with a rim on every side: a sunk channel for each of the four groups of five lamps with an unlit bead (a brass disc) at each lamp's place
+    /// (a lit lamp's picture, the arts 295, 296 and 315, covers it, so an unlit lamp still shows), a sunk seat for the end-turn button and a rivet pair before the first channel and one before the seat; the original's
+    /// brass rail between the lamps and its crosses are not drawn. The end-turn button (297, 31 × 15) is the generic button. The hotkey slot (<c>HKSlt1</c> 173, 32 × 32, the one slot art the bar draws)
+    /// is the strip's dark wood. Stay pictures: the lamps (state), the clock's sky, moon and needle (a picture that scrolls), the vials and the bars' gauge fills (values), the light button
+    /// (a state glyph), the recent-action buttons' and the slots' icons, and the combat panel's bullseye and icons over a hovered critter.</summary>
+    private static IEnumerable<ChromeRecipe> HudRecipes()
+    {
+        List<ChromePart> panel = [];
+        for (var group = 0; group < ActionPointRules.LampCount / ActionPointRules.GroupSize; group++)
+        {
+            var first = AreaCombatLampLayout.LampX[group * ActionPointRules.GroupSize];
+            var end = AreaCombatLampLayout.LampX[group * ActionPointRules.GroupSize + ActionPointRules.GroupSize - 1] + AreaCombatLampLayout.LampWidth;
+            panel.Add(new ChromeSunk(first - 3, 7, end - first + 6, 18, ChromeMaterial.Pit));
+        }
+        panel.Add(new ChromeSunk(AreaCombatLampLayout.EndTurnX - 2, 6, AreaCombatLampLayout.EndTurnWidth + 4, 20, ChromeMaterial.Pit));
+        foreach (var x in AreaCombatLampLayout.LampX) panel.Add(new ChromeRivet(x + AreaCombatLampLayout.LampWidth / 2.0, AreaCombatLampLayout.LampY + AreaCombatLampLayout.LampHeight / 2.0, 4.5));
+        panel.AddRange([new ChromeRivet(10.5, 7.5, 2.5), new ChromeRivet(10.5, 22.5, 2.5), new ChromeRivet(309.5, 7.5, 2.5), new ChromeRivet(309.5, 22.5, 2.5)]);
+        yield return new ChromeRecipe("ap_bar.art", ChromeKind.Panel, ChromeMaterial.Slate, ChromeSides.All, panel, Holes: ChromeHoles.None);
+        yield return new ChromeRecipe("EndTurn_But.art", ChromeKind.Button, ChromeMaterial.Face, ChromeSides.None, []);
+        yield return new ChromeRecipe("HKSlt1.ART", ChromeKind.Panel, ChromeMaterial.WoodDark, ChromeSides.None, [], Holes: ChromeHoles.None);
+    }
+
     // ARC-UI-1199: the schematic window's frames (Legacy pixels of each art; the layout of AreaSchematicWindowLayout). The base (365, 800 x 400) is wood with a blueprint page (a ruled sheet of paper
     // 201..706 across, 13..379 down, ruled every 32 units from x 227 and y 22), the round view's square hole (the lens art 231 draws its ring over it), the record's picture hole (a brass rim), the two component
     // slots' boxes (sunk, filled with paper under the found or missing tint), the channel of the assemble button with the sockets of its two lamps, the two list buttons' sockets, and eight tab slots
@@ -307,7 +330,7 @@ public static class InterfaceChromeRecipes
             "Anatomical_But.ART", "Chemistry_But.ART", "Electrical_But.ART", "Explosives_But.ART", "GunSmithy_But.ART", "Mechanical_But.ART", "Smithy_But.ART", "Therapeutics_But.ART",
             // ARC-UI-1199: the schematic window's two list buttons (art 6) and its assemble button (357).
             "bgrn_but.art", "CombineButt.ART"];
-        return [top, bottom, inventory, doll, loot, barter, follower, lootDoll, .. lenses, .. SheetPanels(), .. MapPanels(), .. LogbookRecipes(), .. PaneRecipes(), .. SchematicRecipes(), .. DialogRecipes(), .. buttons.Select(file => new ChromeRecipe(file, ChromeKind.Button, ChromeMaterial.Face, ChromeSides.None, [])),
+        return [top, bottom, inventory, doll, loot, barter, follower, lootDoll, .. lenses, .. SheetPanels(), .. MapPanels(), .. LogbookRecipes(), .. PaneRecipes(), .. SchematicRecipes(), .. HudRecipes(), .. DialogRecipes(), .. buttons.Select(file => new ChromeRecipe(file, ChromeKind.Button, ChromeMaterial.Face, ChromeSides.None, [])),
             // ARC-UI-1784: the spells page's sixteen college tabs (24 x 24 balls, three frames): a generated rim around the ball's own picture.
             .. CollegeTabFiles.Select(file => new ChromeRecipe(file, ChromeKind.Button, ChromeMaterial.Face, ChromeSides.None, [], KeepFace: true))];
     }

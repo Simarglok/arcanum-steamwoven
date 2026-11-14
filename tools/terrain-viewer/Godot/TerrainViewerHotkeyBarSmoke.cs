@@ -65,6 +65,13 @@ public partial class TerrainViewerApp
             // The bars exist only from here in an automated run (they show because this smoke asks).
             var log = _gameBarPanel!.MessageLog;
             Require(Enumerable.Range(0, HotkeyBarRules.Entries).All(i => view.SlotArtForSelfTest(i) == Art(HotkeyBarRules.SlotArt)![0]), "every slot draws HKSlt1");
+            // ARC-UI-1821: the opt-in generated-chrome part (ARC_AREA_WINDOW_ART): the slot art draws as the mode under test says (the strip's own device scale, again in a 1600 x 1200 window).
+            if (WindowArtSmokeRequested)
+            {
+                await WindowArtSmokeAsync("hotkey-slot", () => Art(HotkeyBarRules.SlotArt)?[0] is HdInterfaceTexture slot ? [slot] : [], [HotkeyBarRules.SlotArt], BarDeviceScale,
+                    () => Art(HotkeyBarRules.SlotArt) is not null, new Vector2I(1600, 1200));
+                await Frames(3);
+            }
 
             // ARC-UI-053: the spell pane in the bottom strip (bar mode 1): its background, the colleges the hero has a rank in, the press of
             // the spell's college shows that college's known spells as icons, entering a button names it in the mode's text area, and the
