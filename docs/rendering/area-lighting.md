@@ -371,6 +371,14 @@ applied, terrain near lights and a lit body and a lit wall read back as
 beyond the plain ambient, at two hours, with the lattice unchanged between them
 (`ARC-RENDER-012 native-smoke cave lighting PASS`).
 
+## Relit look (experiment, ARC-RES-1978)
+
+A switchable, off-by-default presentation experiment: with `ARC_RELIGHT` set (`add`, `night`, `delight`) the area item shaders add a
+normal-mapped diffuse term for the map's stationary lights and the carried lights, with the normal derived per sprite pixel from its
+luminance. With it off nothing in this document changes (the `relight` smoke stage compares Legacy captures byte for byte). It reads
+the same light sources as the lattice above, changes no luminance a check reads and adds no input or launch argument. Findings, numbers
+and the recommendation: [relighting experiment](../research/relighting-experiment.md).
+
 ## Open reads (F0)
 
 Not read in the executable yet (from the lights-on-all-maps research, ARC-RES-069, now ledger LT1-LT15): the lighter and darker buffers and their arithmetic (0x4DE900, which stay as the [time and lighting contract](../world/time-lighting-contract.md) reads them); what `OF_DONTLIGHT` (object flag 0x100000, carried by 3,152 sector objects) does in the object renderer; the shadow builder (0x4D9B20) and `art\light\shadowmap.bmp` (0x4DE5D0), read by the slice that draws shadows; whether a light listed twice (A2) is drawn twice; the light ART loading time.

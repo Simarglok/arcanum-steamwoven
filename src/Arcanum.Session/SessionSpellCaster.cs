@@ -1052,6 +1052,8 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
         var pass = _owner.ProcessEvents(world, budget);
         // ARC-MAGIC-024: the pass's life steps call for theirs too (the encumbrance drain, a poison death fires nothing without a killer).
         foreach (var firing in pass.Life) _itemEvents.AddRange(firing.Life.ItemEvents);
+        // ARC-RENDER-1991 (ledger RH2, RH7): the poison tick's damage effect (0x4B1170 calls 0x433020 after its damage step) follows each tick that hurt its victim.
+        foreach (var firing in pass.Life) PoisonTickHit(firing);
         foreach (var firing in pass.SpellRuns.Where(f => f.Ran)) Apply(firing.Notes, id => _owner.QuerySpellRuns()[id] ?? before[id]);
         RunTrapDevices(pass);
         FirePendingItems();
