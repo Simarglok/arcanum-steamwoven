@@ -204,15 +204,28 @@ public sealed class AreaEyeCandyHost : IAiOverlayWorld, IGoalStepHost
 
     /// <summary>The remove 0x4CD940 / 0x4243E0: the owner's runs whose bottom goal is exactly 45 and whose current frame has this entry's art and (unless <paramref name="anyTag"/>) this tag end at level 6. Returns how many. A looping entry played as 47, 58 or 75 (or queued under another run) cannot be removed this way (GT71, GT85).</summary>
     [OriginalFunction(0x4243E0, OriginalFunctionScope.Partial)]
-    public int Remove(string owner, int entryIndex, int tag, bool anyTag)
+    public int Remove(string owner, int entryIndex, int tag, bool anyTag) => RemoveRuns(owner, entryIndex, tag, anyTag, firstOnly: false);
+
+    private int RemoveRuns(string owner, int entryIndex, int tag, bool anyTag, bool firstOnly)
     {
         var removed = 0;
         foreach (var run in _session.QueryGoals().RunsOf(owner).Where(r => !r.Done && r.Bottom.Goal == GoalType.EyeCandy && r.Top.EyeCandy is { } e && e.Entry == entryIndex && (anyTag || e.Tag == tag)).ToArray())
         {
-            if (_session.InterruptGoal(run.Handle, GoalInterruptRules.MaxLevel).Succeeded) removed++;
+            if (!_session.InterruptGoal(run.Handle, GoalInterruptRules.MaxLevel).Succeeded) continue;
+            removed++;
+            if (firstOnly) break;
         }
         return removed;
     }
+
+    /// <summary>
+    /// ARC-SCRIPT-1828 (WE12): the script action's stop (0x44C800 → the remove 0x4CD940 on the script list with the run id −1): entry <paramref name="number"/> of the script eye-candy list off the owner. The walk 0x4243E0 makes ends the first
+    /// matching goal-45 run only (the run whose current frame has the entry's art and the tag −1 the script's play gave it) and returns, so a number played twice on one object needs two stops. Returns how many ended (0 or 1); a number outside the list or
+    /// the entry range, an entry that plays no run (a static one: the original's layer-list branch 0x4CD9C0 is not modelled, no installed entry is static) and an owner without such a run end nothing, as the original's warnings do.
+    /// </summary>
+    [OriginalFunction(0x44C800, OriginalFunctionScope.Partial)]
+    public int StopScript(string owner, int number) =>
+        EyeCandyEntryRef.Make(EyeCandyList.Script, number) is { } entry ? RemoveRuns(owner, entry, -1, anyTag: false, firstOnly: true) : 0;
 
     /// <summary>Every eye-candy run with this tag ends at level 6 (the cast host freed the spell run the eye candy belongs to). Returns how many.</summary>
     public int EndTagged(int tag)

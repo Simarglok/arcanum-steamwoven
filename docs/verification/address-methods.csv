@@ -952,6 +952,7 @@ tools/terrain-viewer/Godot/TerrainViewerProjectiles.cs,RunShotEndScripts,exempt,
 tools/terrain-viewer/Godot/TerrainViewerProjectiles.cs,Strike,pending,
 tools/terrain-viewer/Godot/TerrainViewerProjectiles.cs,TurnBack,pending,
 tools/terrain-viewer/Godot/TerrainViewerSceneryAnimation.cs,AddOccupiedBeds,exempt,host
+tools/terrain-viewer/Godot/TerrainViewerScriptEyeCandy.cs,StopScriptEyeCandy,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerSkillBar.cs,RouteSkillKey,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerSkillBar.cs,SkillBarDrag,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerSkillBar.cs,SkillBarEntered,exempt,host

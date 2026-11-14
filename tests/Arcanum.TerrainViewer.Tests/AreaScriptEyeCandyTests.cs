@@ -20,9 +20,9 @@ namespace Arcanum.TerrainViewer.Tests;
 [TestClass]
 public sealed class AreaScriptEyeCandyTests
 {
-    private const string Hero = SessionSpellCaster.Hero;
+    private const string Hero = SessionSpellCaster.Hero, Npc = "oid:npc";
     private const byte Attachee = 1, Number = 3, Extra = 12;
-    private const int PlayScript = 820, RefusedScript = 821;
+    private const int PlayScript = 820, RefusedScript = 821, StopScript = 822;
 
     private static AreaObjectKey Key(int index) => new(new string('a', 64), 1, AreaSourceKind.Mobile, 1, index, index * 100L, new string((char)('a' + index), 64), 100);
     private static AreaObjectRecord Row(int index, int type, int script) => new(Key(index), 0, type, 0, "p", "p", "r", "s", AreaScope.Core, null, 10 + index, 20, Arcanum.Data.Area.AreaDisposition.BodyEligibleConditionally, [],
@@ -70,6 +70,15 @@ public sealed class AreaScriptEyeCandyTests
             Write("scr/00821refused.scr", Program(
                 Do(new(ScrCatalogue.Action.PlayScriptEyeCandy, N(7), (Attachee, -1))),
                 Do(new(ScrCatalogue.Action.Destroy, (Extra, -1))),
+                Do(new(ScrCatalogue.Action.ReturnRunDefault))));
+            // 822 (ARC-SCRIPT-1828): play entry 7 on the attachee, stop entry 7 on it, play 9 on the extra object, stop 9 on it, stop 4 on the attachee, play 7 again; the run goes on after each.
+            Write("scr/00822stop.scr", Program(
+                Do(new(ScrCatalogue.Action.PlayScriptEyeCandy, N(7), (Attachee, -1))),
+                Do(new(ScrCatalogue.Action.StopScriptEyeCandy, N(7), (Attachee, -1))),
+                Do(new(ScrCatalogue.Action.PlayScriptEyeCandy, N(9), (Extra, -1))),
+                Do(new(ScrCatalogue.Action.StopScriptEyeCandy, N(9), (Extra, -1))),
+                Do(new(ScrCatalogue.Action.StopScriptEyeCandy, N(4), (Attachee, -1))),
+                Do(new(ScrCatalogue.Action.PlayScriptEyeCandy, N(7), (Attachee, -1))),
                 Do(new(ScrCatalogue.Action.ReturnRunDefault))));
             using var content = ScriptContent.Open(ContentMountPlan.Discover(root.FullName, "Syn").Plan!).Content!;
             test(content);
@@ -175,17 +184,119 @@ public sealed class AreaScriptEyeCandyTests
         Assert.IsFalse(Enum.IsDefined(EyeCandyEntryRef.ListOf(0x06000005)), "a value outside the lists is not read as the spell list");
     }
 
-    // ARC-MAGIC-1830: the requests the session hands over for an NPC's rewield or wield scripts are turned into plays in order, and only a play of the script list is one (play spell names the spell list, stop script takes an entry off).
+    // ARC-MAGIC-1830, ARC-SCRIPT-1828: the requests the session hands over for an NPC's rewield or wield scripts are turned into script-list requests in order: the plays (120) and the stops (124); play spell names the spell list and is neither.
     [TestMethod]
-    public void Only_the_script_list_plays_of_a_hosts_requests_are_played_in_order()
+    public void Only_the_script_list_plays_and_stops_of_a_hosts_requests_are_kept_in_order()
     {
         var map = 1;
         var npc = new ScrObjectRef(map, "oid:npc");
-        var plays = AreaScriptEyeCandy.Of(
+        var requests = AreaScriptEyeCandy.Of(
         [
             new ScrEyeCandy(7, npc), new ScrEyeCandy(23, npc, ScrEyeCandyKind.PlaySpell), new ScrEyeCandy(9, new(map, "ring")), new ScrEyeCandy(30, npc, ScrEyeCandyKind.StopScript),
         ]).ToArray();
-        CollectionAssert.AreEqual(new[] { new AreaScriptEyeCandy(npc, 7), new AreaScriptEyeCandy(new(map, "ring"), 9) }, plays);
+        CollectionAssert.AreEqual(new[] { new AreaScriptEyeCandy(npc, 7), new AreaScriptEyeCandy(new(map, "ring"), 9), new AreaScriptEyeCandy(npc, 30, Stop: true) }, requests);
         Assert.AreEqual(0, AreaScriptEyeCandy.Of(Array.Empty<ScrEyeCandy>()).Count());
+    }
+
+    [TestMethod]
+    public void A_use_script_hands_its_stop_requests_with_its_plays_in_action_order()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.CreateWithHero();
+            var scenery = Row(4, 2, StopScript);
+            var host = Host(session, content, scenery);
+            var pc = host.Pc;
+            var ran = host.RunUseScript(AreaUseScriptHost.EntityId(scenery), pc, pc, session.Rules.Scripts);
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, ran.Outcome, ran.Detail);
+            var attachee = new ScrObjectRef(1, AreaUseScriptHost.EntityId(scenery));
+            CollectionAssert.AreEqual(new[] { new AreaScriptEyeCandy(attachee, 7), new AreaScriptEyeCandy(attachee, 7, Stop: true), new AreaScriptEyeCandy(pc, 9), new AreaScriptEyeCandy(pc, 9, Stop: true),
+                new AreaScriptEyeCandy(attachee, 4, Stop: true), new AreaScriptEyeCandy(attachee, 7) }, host.TakeEyeCandies().ToArray());
+            Assert.AreEqual(0, host.TakeEyeCandies().Count, "taken once");
+        });
+    }
+
+    [TestMethod]
+    public void The_dialog_and_use_sets_admit_stop_script_eye_candy_beside_play()
+    {
+        foreach (var set in new[] { AreaScriptHost.Admission, AreaUseScriptHost.Admission, AreaUseScriptHost.HeartbeatAdmission, AreaUseScriptHost.DyingAdmission })
+            Assert.IsTrue(set.Actions.Contains(ScrCatalogue.Action.StopScriptEyeCandy), set.Id);
+        Assert.IsTrue(AreaUseScriptHost.Admission.Actions.Contains(ScrCatalogue.Action.PlayScriptEyeCandy), "the use set holds the play too");
+    }
+
+    [TestMethod]
+    public void A_stop_takes_the_first_script_entry_run_off_and_leaves_the_spell_entry_and_other_numbers()
+    {
+        using var f = new Fixture();
+        var script = EyeCandyEntryRef.Make(EyeCandyList.Script, 3)!.Value;
+        f.Entries[3] = Entry(0x3000);
+        f.Entries[script] = Entry(0x4000);
+        f.Entries[EyeCandyEntryRef.Make(EyeCandyList.Script, 4)!.Value] = Entry(0x5000);
+        Assert.AreEqual(0, f.Host.StopScript(Hero, 3), "nothing runs yet");
+        Assert.IsTrue(f.Host.PlayScript(Hero, 3));
+        Assert.IsTrue(f.Host.PlayScript(Hero, 3), "the script's play has no duplicate test");
+        Assert.IsTrue(f.Host.PlayScript(Hero, 4));
+        Assert.IsTrue(f.Host.Play(Hero, 3, 0, 5), "the spell list's entry of the same index");
+        Assert.AreEqual(4, f.Session.QueryGoals().RunsOf(Hero).Count(r => !r.Done));
+        Assert.AreEqual(1, f.Host.StopScript(Hero, 3), "the first run of the entry only (0x4243E0 returns after the first interrupt)");
+        Assert.AreEqual(3, f.Session.QueryGoals().RunsOf(Hero).Count(r => !r.Done));
+        Assert.AreEqual(1, f.Host.StopScript(Hero, 3), "a second stop takes the second");
+        Assert.AreEqual(0, f.Host.StopScript(Hero, 3), "none left; the spell entry (tag 5) is not the script list's");
+        Assert.AreEqual(2, f.Session.QueryGoals().RunsOf(Hero).Count(r => !r.Done));
+        Assert.AreEqual(0, f.Host.StopScript(Npc, 4), "another owner has none");
+        Assert.AreEqual(1, f.Host.StopScript(Hero, 4));
+        Assert.AreEqual(1, f.Session.QueryGoals().RunsOf(Hero).Count(r => !r.Done), "the spell run stays");
+        Assert.AreEqual(0, f.Host.StopScript(Hero, -1) + f.Host.StopScript(Hero, EyeCandyEntryRef.MaxIndex + 1), "a number outside the entry range ends nothing");
+    }
+
+    [TestMethod]
+    public void A_stop_leaves_a_run_another_tag_holds_and_a_looping_entry_played_as_a_stack_run()
+    {
+        using var f = new Fixture();
+        var script = EyeCandyEntryRef.Make(EyeCandyList.Script, 3)!.Value;
+        f.Entries[script] = Entry(0x4000);
+        // A run of the same entry that carries a tag (a spell's or a goal's add) is not the script's (run id −1).
+        Assert.IsTrue(f.Host.Play(Hero, script, 0, 9));
+        Assert.AreEqual(0, f.Host.StopScript(Hero, 3));
+        Assert.IsTrue(f.Host.PlayScript(Hero, 3));
+        Assert.AreEqual(1, f.Host.StopScript(Hero, 3));
+        Assert.AreEqual(1, f.Session.QueryGoals().RunsOf(Hero).Count(r => !r.Done), "the tagged run stays");
+    }
+
+    // ARC-SCRIPT-1828 (WE12): the 22 installed scripts that stop a script eye candy (the ground rune tile scripts 2210 to 2230 and the heartbeat 2231 of the main map) are admitted whole where their other commands are: the use, placed and dying sets admit 18 of them; the other
+    // four (2213, 2217, 2221, 2225) are refused at line 15 for the focus kind of their loop for (action 18), every portal in the vicinity (19), which another slice holds (the dialog set, which no installed stop script is attached to, admits none of them).
+    [TestMethod, TestCategory("RealData")]
+    public void The_installed_scripts_that_stop_script_eye_candy_are_admitted_whole_where_their_other_commands_are()
+    {
+        var root = Environment.GetEnvironmentVariable("DAT_ROOT");
+        if (string.IsNullOrWhiteSpace(root)) Assert.Fail("DAT_ROOT is required for the opt-in stop eye-candy check; this is not a synthetic pass.");
+        var discovery = ContentMountPlan.Discover(root);
+        Assert.AreEqual(ContentMountStatus.Ready, discovery.Status, discovery.Detail);
+        var opened = ContentStack.Open(discovery.Plan!);
+        Assert.AreEqual(ContentStackStatus.Ready, opened.Status, opened.Detail);
+        using var content = ScriptContent.Over(opened.Stack!);
+        var sets = new (string Name, ScrAdmissionSet Set)[] { ("dialog", AreaScriptHost.Admission), ("use", AreaUseScriptHost.Admission), ("placed", AreaUseScriptHost.PlacedAdmission),
+            ("heartbeat", AreaUseScriptHost.HeartbeatAdmission), ("dying", AreaUseScriptHost.DyingAdmission) };
+        var counts = sets.ToDictionary(s => s.Name, _ => 0);
+        var withStop = new List<int>();
+        var refusedByUse = new List<string>();
+        var heartbeat = new List<int>();
+        foreach (var number in Enumerable.Range(0, ScrCatalogue.MaxScriptNumber + 1))
+        {
+            if (content.Script(number) is not { Status: ScriptContentStatus.Read, Program: { } program }) continue;
+            if (!program.Lines.Any(l => l.OnTrue.Type == ScrCatalogue.Action.StopScriptEyeCandy || l.OnFalse.Type == ScrCatalogue.Action.StopScriptEyeCandy)) continue;
+            withStop.Add(number);
+            foreach (var (name, set) in sets)
+            {
+                var result = ScrAdmission.Admit(program, set);
+                if (result.IsAdmitted) { counts[name]++; if (name == "heartbeat") heartbeat.Add(number); }
+                else if (name == "use") refusedByUse.Add($"{number}:{result.Refusal!.Code}@{result.Refusal.Line}/{result.Refusal.Type}/{result.Refusal.Kind}");
+            }
+        }
+        Console.WriteLine($"STOP-EYE-CANDY-ADMISSION|scripts {withStop.Count}|admitted whole: " + string.Join(", ", counts.Select(c => $"{c.Key} {c.Value}")) + "|use refused: " + string.Join(" ", refusedByUse));
+        Assert.AreEqual(22, withStop.Count);
+        Assert.AreEqual((0, 18, 18, 18), (counts["dialog"], counts["use"], counts["placed"], counts["dying"]));
+        CollectionAssert.AreEqual(new[] { 2231 }, heartbeat);
+        CollectionAssert.AreEqual(new[] { "2213:FocusKindNotAdmitted@15/18", "2217:FocusKindNotAdmitted@15/18", "2221:FocusKindNotAdmitted@15/18", "2225:FocusKindNotAdmitted@15/18" }, refusedByUse.Select(r => string.Join('/', r.Split('/').Take(2))).ToArray());
     }
 }
