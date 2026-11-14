@@ -49,6 +49,7 @@ public sealed class AreaStopSpellScriptAdmissionTests
         Assert.AreEqual(0, counts["S40"], "S40 refuses every one of them by construction");
         // Four installed scripts carry the action (1054, 2789, 2792, 3022; the census reaches one of them by a live run); S42 admits 3 whole (the fourth holds a command of another slice), the placed set 2 and the dying set 4 (the shared sets widened in ARC-SCRIPT-1481 and again in S53 to S56), the heartbeat set none and the use set none.
         CollectionAssert.AreEqual(new[] { 1054, 2789, 2792, 3022 }, carriers);
-        Assert.AreEqual((0, 3, 0, 2, 0, 4), (counts["S40"], counts["S42"], counts["use"], counts["placed"], counts["heartbeat"], counts["dying"]));
+        // ARC-SCRIPT-1815: the heartbeat set gained the scenery and object-variable focus kinds, assign object and float line (heartbeats 3, from 0: all three S42 admits).
+        Assert.AreEqual((0, 3, 0, 2, 3, 4), (counts["S40"], counts["S42"], counts["use"], counts["placed"], counts["heartbeat"], counts["dying"]));
     }
 }

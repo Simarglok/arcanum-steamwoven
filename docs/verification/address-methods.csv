@@ -45,6 +45,7 @@ src/Arcanum.Scripting/Dialog/DialogConversationNewspaper.cs,PunctuatedHeadline,e
 src/Arcanum.Scripting/Dialog/DialogConversationServiceReply.cs,OpenService,exempt,host
 src/Arcanum.Scripting/Dialog/DialogConversationServiceReply.cs,ServiceOffered,exempt,host
 src/Arcanum.Scripting/Dialog/DialogConversationServiceReply.cs,ServiceText,exempt,host
+src/Arcanum.Scripting/Dialog/DialogFollowerComment.cs,SayClass,exempt,host
 src/Arcanum.Scripting/Dialog/DialogGreeting.cs,Comment,exempt,host
 src/Arcanum.Scripting/Dialog/DialogGreeting.cs,MissingLine,pending,
 src/Arcanum.Scripting/Dialog/DialogGreeting.cs,ParseSlots,pending,
@@ -558,6 +559,7 @@ src/Arcanum.World/AreaCombatRound.cs,Step,pending,
 src/Arcanum.World/AreaCompanionOrders.cs,Issue,pending,
 src/Arcanum.World/AreaCompanions.cs,JumpTo,pending,
 src/Arcanum.World/AreaContainerLoot.cs,Close,pending,
+src/Arcanum.World/AreaConversation.cs,PickClassLine,exempt,host
 src/Arcanum.World/AreaConversation.cs,PickLine,exempt,host
 src/Arcanum.World/AreaConversation.cs,SayFollowerLine,exempt,host
 src/Arcanum.World/AreaDoorHost.cs,Open,pending,
@@ -644,6 +646,7 @@ src/Arcanum.World/AreaTraps.cs,Use,pending,
 src/Arcanum.World/AreaTraps.cs,UseNpc,exempt,host
 src/Arcanum.World/AreaTraps.cs,WalkCheck,pending,
 src/Arcanum.World/AreaTraps.cs,WalkCheckNpc,exempt,host
+src/Arcanum.World/AreaUseScripts.cs,ApplyMakeFollow,exempt,reference
 src/Arcanum.World/AreaUseScripts.cs,ApplyScriptAttack,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,AreaOf,pending,
 src/Arcanum.World/AreaUseScripts.cs,AttackRefusal,exempt,host
@@ -659,7 +662,9 @@ src/Arcanum.World/AreaUseScripts.cs,IsMonsterOfType,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,IsProwling,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,IsSurrendered,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,IsTrap,pending,
+src/Arcanum.World/AreaUseScripts.cs,Leader,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,MagickCancelPercent,exempt,host
+src/Arcanum.World/AreaUseScripts.cs,MakeFollowRefusal,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,MetPcBefore,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,OriginOf,exempt,host
 src/Arcanum.World/AreaUseScripts.cs,RaiseRefuses,exempt,reference
@@ -761,6 +766,16 @@ tools/terrain-viewer/Core/AreaPremadeBrowserArt.cs,Break,pending,
 tools/terrain-viewer/Core/AreaPremadeBrowserArt.cs,Button,pending,
 tools/terrain-viewer/Core/AreaPremadeBrowserArt.cs,Centred,pending,
 tools/terrain-viewer/Core/AreaPremadeBrowserArt.cs,Wrap,pending,
+tools/terrain-viewer/Core/AreaReadingArt.cs,BookPages,exempt,reference
+tools/terrain-viewer/Core/AreaReadingArt.cs,Break,exempt,reference
+tools/terrain-viewer/Core/AreaReadingArt.cs,Draw,exempt,reference
+tools/terrain-viewer/Core/AreaReadingArt.cs,FitText,exempt,reference
+tools/terrain-viewer/Core/AreaReadingArt.cs,HeaderLine,exempt,reference
+tools/terrain-viewer/Core/AreaReadingArt.cs,Height,exempt,reference
+tools/terrain-viewer/Core/AreaReadingArt.cs,LensContains,exempt,reference
+tools/terrain-viewer/Core/AreaReadingArt.cs,Newspaper,exempt,reference
+tools/terrain-viewer/Core/AreaReadingArt.cs,Page,exempt,reference
+tools/terrain-viewer/Core/AreaReadingArt.cs,Telegram,exempt,reference
 tools/terrain-viewer/Core/AreaSaveListArt.cs,Button,pending,
 tools/terrain-viewer/Core/AreaSaveListArt.cs,Centred,pending,
 tools/terrain-viewer/Core/AreaSaveListArt.cs,Date,pending,
@@ -794,6 +809,7 @@ tools/terrain-viewer/Godot/AreaCharacterSheetSpellsView.cs,Greyed,pending,
 tools/terrain-viewer/Godot/AreaFollowerPortraits.cs,ResetPanel,exempt,reference
 tools/terrain-viewer/Godot/AreaLogbookArtView.cs,Turn,pending,
 tools/terrain-viewer/Godot/AreaMessageLogView.cs,ApplyArt,pending,
+tools/terrain-viewer/Godot/AreaReadingPanel.cs,UpdateRoundView,exempt,reference
 tools/terrain-viewer/Godot/AreaSaveListArtView.cs,Render,pending,
 tools/terrain-viewer/Godot/AreaSchematicsPanel.cs,UpdateRoundView,pending,
 tools/terrain-viewer/Godot/AreaWorldMapArtView.cs,AcceptNoteEdit,pending,

@@ -970,7 +970,7 @@ companion, a shopkeeper and a guard in any town where a quest script touches the
 
 Known differences (documented, not bugs):
 
-- Change art number (ARC-SCRIPT-1735) changes the picture of a **scenery** from a script (kept in the save, drawn in the viewer; a new scenery art of several frames animates since ARC-RENDER-1781, one of a single frame stops the old loop) and, since ARC-SCRIPT-1779, the **ground and flight art of an item** (the item as an object on the ground; its inventory art and paper doll stay, as in the original, ledger AN11); a door, container, trap, unique NPC or hero starting-kit item target is not built: a script run that reaches one is refused, so that step does nothing in Steamwoven (a made or script-created item and an item carried from another map take it since ARC-SCRIPT-1826, ledger AN18). A critter (the hero, an NPC of a critter or monster body) is never changed (the original builds the art id 0 for them and writes it only if a file of that id exists; not read, F0).
+- Change art number (ARC-SCRIPT-1735) changes the picture of a **scenery** from a script (kept in the save, drawn in the viewer; a new scenery art of several frames animates since ARC-RENDER-1781, one of a single frame stops the old loop) and, since ARC-SCRIPT-1779, the **ground and flight art of an item** (the item as an object on the ground; its inventory art and paper doll stay, as in the original, ledger AN11); since ARC-SCRIPT-1778 a **door or window** and a **container** take it too (it ends closed with its lock as it was); a trap, unique NPC or hero starting-kit item target is not built: a script run that reaches one is refused, so that step does nothing in Steamwoven (a made or script-created item and an item carried from another map take it since ARC-SCRIPT-1826, ledger AD1). A critter (the hero, an NPC of a critter or monster body) is never changed (the original builds the art id 0 for them and writes it only if a file of that id exists; not read, F0).
 - A script in a dialog (a talk) that uses one of these actions is still refused; only use, tile, sector, heartbeat and dying scripts run them.
 - A reaction or standpoint change acts for NPCs of the map on screen only.
 
@@ -1298,6 +1298,26 @@ Known differences (documented, not bugs):
 - The tabs and arrows follow the Legacy outlines and marks; the assemble face (the two lamps), the found and missing tints and the record's picture stay pictures.
 - The ring of the round view (art 231) is the barter window's recipe and sits on a patch of wood whose grain differs a little from the window's.
 
+## ARC-UI-1877 — The reading window in the original's look (2026-11-14)
+
+The rules are in [reading window runtime](../world/reading-window-runtime.md#viewer-area-area-exterior-cave-and---area-map) and the ledger rows [WR17–WR23](../research/ledger/ui-audio.md#reading-window-arc-ui-049).
+Open a written item from the inventory with the **Read** button (or the right button on it), and a plaque or picture through a script that shows one. Compare with the original game on the
+same text. The look is the original's whether the HD interface is on or off; the Generated mode follows in issue #1201.
+
+| # | Step | Expected (from the original executable) | Status |
+| --- | --- | --- | --- |
+| 1 | Read a book (for example the one in the Crash Site's items). | The wood frame on the left with the round view of your hero in a ring (the ring closes the window when you release the left button in it), the book open on the right; two pages, the text in the book's own fonts, a next button on the right page's top and, from the second spread, a previous button on the left. | open |
+| 2 | Turn the pages with the buttons and compare where a page ends with the original. | A page ends where the next line no longer fits its 290 pixels; the next page continues with the same word. A message that is cut starts the next page mid-text. | open |
+| 3 | Read a note. | The note's paper with its text in one block, no page buttons. | open |
+| 4 | Read a telegram. | The form's printed lines (names, date, address) in their places and the message below, each line ending with STOP. | open |
+| 5 | Read a newspaper. | The masthead (three headings at the top, the dateline below), a headline, and the news and the fillers in four columns; a long item continues at the top of the next column. | open |
+| 6 | Read a plaque (a script shows it). | The plaque's background with white text. | open |
+
+Known differences (documented, not bugs):
+
+- Where the executable leaves a detail unread, the viewer takes a plain reading and says so in the ledger: the lens ring is art 231, the text is black (the plaque's white), and a font of unequal glyph heights steps by its space glyph (WR17, WR21, WR22).
+- The mouse wheel, Left/Right and Page Up/Down also turn a book's pages (the original has the two buttons only).
+
 ## ARC-UI-1200 — Generated interface: message window, spell and skill panes, Fate and Sleep (S9, 2026-11-14)
 
 The rules are in [viewer slice S9](../rendering/hd-interface-density.md#viewer-slice-s9-arc-ui-1200). Set the HD interface line on the launcher screen to **Generated (experimental)**, start a game and compare with **HD** and **Legacy**.
@@ -1314,6 +1334,7 @@ Known differences (documented, not bugs):
 
 - The slate is plainer than the original's marbled iron and the wells and bars are black where the original's are barely darker than their surroundings.
 - The common dialog box (the exit question, the load question after death) is [S10](../rendering/hd-interface-density.md#viewer-slice-s10-arc-ui-1819).
+- The follower panel and the follower order menu are [S12](../rendering/hd-interface-density.md#viewer-slice-s12-arc-ui-1817).
 - The first rows of the spell pane's top edge are transparent in the Legacy frame, so the rim does not run along them.
 
 ## ARC-UI-1819 — Generated interface: the common dialog box (S10, 2026-11-14)
@@ -1332,3 +1353,38 @@ Known differences (documented, not bugs):
 
 - The curled brass corners of the original's text field are not drawn; the stone is plainer than the original's.
 - The quit question of the main menu screen is the same box, so it is generated too while the main menu's own art is the HD or Legacy one.
+
+## ARC-UI-1817 — Generated interface: the follower panel and the order menu (S12, 2026-11-14)
+
+The rules are in [viewer slice S12](../rendering/hd-interface-density.md#viewer-slice-s12-arc-ui-1817). Set the HD interface line on the launcher screen to **Generated (experimental)**, start a game with at least one follower (and, for step 3, seven or more),
+and look at the panel on the screen's left edge. Compare with **HD** and **Legacy**.
+
+| # | Step | Expected | Status |
+| --- | --- | --- | --- |
+| 1 | Look at a follower's frame and the strip under the frames in a 1280 × 800 window. | The frame is an iron plate round the portrait, black channels under the health and fatigue bars; the strip is an iron plate with a rivet at each end and a red arrow; all at the same places and sizes as before. | open |
+| 2 | Click the strip (hide, then show). | The frames go and come back; the strip's arrow turns green and red; clicks land as before. | open |
+| 3 | With seven or more followers, scroll with the two arrows to both ends. | The arrows are iron plates with a green arrow, dark green at the end of the list. | open |
+| 4 | Right-click a portrait. | The order menu is a dark slate slab with darker bands under Attack, Spread Out, Wait and Character Sheet; the words are readable and the hover colour still shows. | open |
+| 5 | Resize the window (or go full screen) with the panel and the menu open. | Both are sharp at the new size, with no seam. | open |
+
+Known differences (documented, not bugs):
+
+- The iron is plainer and bluer than the original's marbling; the portrait frame's border is thinner; the menu's bands are darker and flat.
+- The pressed frames of the scroll arrows are not drawn by the panel (as before).
+
+## ARC-UI-1818 — Generated interface: the quantity pane (S13, 2026-11-14)
+
+The rules are in [viewer slice S13](../rendering/hd-interface-density.md#viewer-slice-s13-arc-ui-1818). Set the HD interface line on the launcher screen to **Generated (experimental)**, start a game with gold or ammunition in the pack, and drag
+the stack onto another window or the ground so the pane asks how many. Compare with **HD** and **Legacy**.
+
+| # | Step | Expected | Status |
+| --- | --- | --- | --- |
+| 1 | Open the quantity pane in a 1280 × 800 window. | The bottom strip's pane is a slate plate with a black recess under the kind icon and a counter strip at the original's place; the All, Accept and Cancel buttons are generated; all at the same places and sizes as in Legacy. | open |
+| 2 | Click up and down, then All. | The count changes as before; the digits are black (inferred from the original's colour channel, not seen in the original) and sit in the counter strip. | open |
+| 3 | Accept and Cancel. | The stack moves or stays as before; the pane goes away. | open |
+| 4 | Resize the window (or go full screen) with the pane open. | The pane is sharp at the new size, with no seam. | open |
+
+Known differences (documented, not bugs):
+
+- The up and down buttons (805, 804) stay the original's pictures: the generic button recipe would lose their + and − marks at 13 × 10 units.
+- The slate is plainer than the original's marbling; the kind icon and the count keep the original's pixels and font.

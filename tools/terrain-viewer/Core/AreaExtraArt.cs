@@ -69,8 +69,8 @@ public sealed class AreaExtraArt : IDisposable
     }
 
     /// <summary>
-    /// ARC-SCRIPT-1735 (ledger NS5, the original's ART file test): whether the art id names an ART file of the content stack: the id resolves to a path (a scenery, container, item or eye-candy class with a numbered entry) and a file of that path is found.
-    /// The file is not read; an id of another class (tile, wall, critter, monster, portal) names none in this project's reading.
+    /// ARC-SCRIPT-1735 (ledger NS5, the original's ART file test): whether the art id names an ART file of the content stack: the id resolves to a path (a portal, scenery, container, item or eye-candy class with a numbered entry) and a file of that path is found.
+    /// The file is not read; an id of another class (tile, wall, critter, monster) names none in this project's reading (ARC-SCRIPT-1778: a door or window's id, class 3, names its portal ART).
     /// </summary>
     public bool Exists(uint aid)
     {
@@ -103,7 +103,7 @@ public sealed class AreaExtraArt : IDisposable
             var payload = Digest(bytes.AsSpan(0, view)); var pixels = Digest(rgba);
             var entry = new AreaEntryIdentity(new(AreaSourceRole.Loose, -1), 0, 0, 0, 0, 0, Digest(System.Text.Encoding.ASCII.GetBytes(found.Key)));
             var visual = new AreaVisualRecord(VisualKey(aid), aid, selection.Lookup, entry, payload, view, selection.Nominal, selection.Group, group, selection.Frame,
-                selection.Palette, decoded.EffectivePaletteSlot, false, decoded.Width, decoded.Height, decoded.Frame.HotX, decoded.Frame.HotY,
+                selection.Palette, decoded.EffectivePaletteSlot, aid >> 28 == 3 && (aid & 1) != 0, decoded.Width, decoded.Height, decoded.Frame.HotX, decoded.Frame.HotY,
                 decoded.Frame.OffsetX, decoded.Frame.OffsetY, 0, 0, 100, decoded.Frame.EncodedPayloadLength, rgba.Length, pixels, Policy);
             return new(AreaExtraArtStatus.Ready, new(visual, AreaFrameKey.From(visual), new(decoded.Width, decoded.Height, rgba))
                 { FramesPerGroup = metadata.Header.FramesPerGroup, FramesPerSecond = metadata.Header.FramesPerSecond, ActionFrame = metadata.Header.ActionFrame },

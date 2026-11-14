@@ -106,7 +106,7 @@ public sealed class ScriptTriggerCensusTests
         // ARC-SCRIPT-049: five of them run (1717, 2602, 1490 and 1015 stop on commands of later slices).
         CollectionAssert.IsSubsetOf(new[] { "1100", "2700", "1130", "3081", "2106" }, openingAdmitted, string.Join(", ", openingAdmitted));
         Assert.AreEqual((141, 32, 23, 21), (rows[ScrPoint.Heartbeat], old[ScrPoint.Heartbeat], rows[ScrPoint.FirstHeartbeat], old[ScrPoint.FirstHeartbeat]));
-        Assert.IsTrue(admitted[ScrPoint.Heartbeat] >= 81 && admitted[ScrPoint.FirstHeartbeat] >= 23, $"{admitted[ScrPoint.Heartbeat]}, {admitted[ScrPoint.FirstHeartbeat]}");
+        Assert.IsTrue(admitted[ScrPoint.Heartbeat] >= 98 && admitted[ScrPoint.FirstHeartbeat] >= 23, $"{admitted[ScrPoint.Heartbeat]}, {admitted[ScrPoint.FirstHeartbeat]}");
         // ARC-SCRIPT-050: the talk set admits 115 of the 180 dialog rows (52 before float line, get area, random, the guard conditions and obj is dead).
         Assert.AreEqual(180, rows[ScrPoint.Dialog]);
         Assert.IsTrue(admitted[ScrPoint.Dialog] >= 115, admitted[ScrPoint.Dialog].ToString());
