@@ -98,14 +98,17 @@ public static class HeroClickRules
     // The combat-mode table (0x54FCA0): wall, portal, scenery and container use unless Alt attacks; items are picked up; a living critter is attacked (Shift: the attempt); a dead one is looted with Alt only.
     private static HeroClickGoal InCombat(HeroClickFacts f) => f.Kind switch
     {
-        HeroClickTarget.Wall or HeroClickTarget.Portal or HeroClickTarget.Scenery => f.Alt ? HeroClickGoal.Attack : HeroClickGoal.UseObject,
-        HeroClickTarget.Container => f.Alt ? HeroClickGoal.Attack : HeroClickGoal.UseContainer,
+        HeroClickTarget.Wall or HeroClickTarget.Portal or HeroClickTarget.Scenery => f.Alt ? AttackOf(f) : HeroClickGoal.UseObject,
+        HeroClickTarget.Container => f.Alt ? AttackOf(f) : HeroClickGoal.UseContainer,
         HeroClickTarget.Item => HeroClickGoal.Pickup,
-        HeroClickTarget.Critter when !f.TargetDead => f.Shift ? HeroClickGoal.AttemptAttack : HeroClickGoal.Attack,
+        HeroClickTarget.Critter when !f.TargetDead => AttackOf(f),
         HeroClickTarget.Critter => f.Alt ? HeroClickGoal.UseContainer : HeroClickGoal.None,
         HeroClickTarget.Trap => HeroClickGoal.WalkToTrap,
         _ => HeroClickGoal.None,
     };
+
+    // ARC-COMBAT-1941 (VC62): the Shift test that picks goal 19 over 18 runs for every attack the table builds, the Alt attacks of a wall, portal, scenery and container as for a living critter.
+    private static HeroClickGoal AttackOf(HeroClickFacts f) => f.Shift ? HeroClickGoal.AttemptAttack : HeroClickGoal.Attack;
 
     // The table out of combat mode (0x54FCD0): portal and scenery use, a container is opened, an item is picked up (Alt: the immediate action), a living NPC is talked to (another player character: nothing),
     // a dead critter is looted (Alt: the immediate action) unless it carries spell flag 0x2000000, which is talked to.

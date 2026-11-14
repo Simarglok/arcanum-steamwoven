@@ -59,6 +59,19 @@ public sealed class HeroClickRulesTests
         Assert.AreEqual(HeroClickGoal.Pickup, HeroClickRules.Decide(Facts(HeroClickTarget.Item, combat: true, alt: true)).Goal);
     }
 
+    // ARC-COMBAT-1941 (VC62, 0x54ED30): the Shift test that picks 19 over 18 runs for the Alt attacks of a wall, portal, scenery and container as for a living critter; without Alt the click still uses the object.
+    [TestMethod]
+    public void InCombatModeShiftWithAltOnAWallPortalSceneryOrContainerIsTheAttemptAttack()
+    {
+        foreach (var kind in new[] { HeroClickTarget.Wall, HeroClickTarget.Portal, HeroClickTarget.Scenery, HeroClickTarget.Container })
+        {
+            Assert.AreEqual(HeroClickGoal.Attack, HeroClickRules.Decide(Facts(kind, combat: true, alt: true)).Goal, $"{kind}: Alt attacks");
+            Assert.AreEqual(HeroClickGoal.AttemptAttack, HeroClickRules.Decide(Facts(kind, combat: true, alt: true, shift: true)).Goal, $"{kind}: Shift+Alt is the attempt");
+            var use = kind == HeroClickTarget.Container ? HeroClickGoal.UseContainer : HeroClickGoal.UseObject;
+            Assert.AreEqual(use, HeroClickRules.Decide(Facts(kind, combat: true, shift: true)).Goal, $"{kind}: Shift alone still uses it");
+        }
+    }
+
     [TestMethod]
     public void ATargetThatAttacksTheHeroPutsItIntoCombatModeAndIsAttacked()
     {
