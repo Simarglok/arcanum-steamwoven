@@ -329,4 +329,46 @@ public sealed class NpcAttackStateTests
             [KeyValuePair.Create(EquipmentSlot.Weapon, stored), KeyValuePair.Create(EquipmentSlot.Weapon, stored)]).Failure, "two in one slot");
         Assert.AreEqual(SessionCritterCombatFailure.None, SessionCritterCombat.FromWorn(Rat, Npc(), []).Failure, "nothing worn");
     }
+
+    // ARC-COMBAT-1929 (0x45F9D0): the host's facing and awareness facts decide a backstab; it adds the backstab level to the normal damage
+    // (five times it unseen and unheard). A weapon of fixed damage 4 shows the term in the rolled damage of a hit (before the critical multiplier).
+    [TestMethod]
+    public void AMeleeStrikeFromBehindAddsTheBackstabLevelAndFiveTimesItWhenUnseenAndUnheard()
+    {
+        var skills = new int[12];
+        skills[(int)BasicCombatSkill.Backstab] = 3 | 1 << 6;
+        var fixedDagger = Worn(5, EquipmentSlot.Weapon, new CombatWeaponFields(0, CombatWeaponSkill.Melee, 0, 0,
+            [new(4, 4), new(0, 0), new(0, 0), new(0, 0), new(0, 0)], [0, 0, 0, 0, 0], 10, 0, 1, 0, 0, 0, 10000, 0, 0, 0, 0, 0, 0, 0));
+        var build = SessionCritterCombat.From(NpcShotFlightStateTests.Archer, Npc(critterFlags: 0, skills: skills), [fixedDagger]);
+        Assert.AreEqual(SessionCritterCombatFailure.None, build.Failure);
+        var assassin = build.Combat!;
+        var level = assassin.AttackValues(Healthy, LifeState.Unharmed, CombatAnomalyProfile.Steamwoven).Combatant.BackstabLevel;
+        Assert.IsTrue(level > 0, "the setup gives the NPC backstab points");
+        // The worn weapon is the seeded item of the shot tests' archer; its art subtype is item data the host passes.
+        IReadOnlyDictionary<EquipmentSlot, SessionWearItem> Dagger(int subtype) =>
+            NpcShotFlightStateTests.Worn().ToDictionary(pair => pair.Key, pair => pair.Value with { ArtSubtype = subtype, MissileArt = null });
+
+        int RolledNormal(SessionBackstabFacts? facts, int subtype = 2)
+        {
+            using var owner = NpcShotFlightStateTests.Owner();
+            for (var attempt = 0; attempt < 400; attempt++)
+            {
+                var result = owner.AttackByNpc(owner.Version, new(assassin) { AttackerWorn = Dagger(subtype), Backstab = facts });
+                Assert.AreEqual(GameSessionFailure.None, result.Failure);
+                if (result.Resolution is { Refusal: AttackRefusal.None, Outcome: AttackOutcome.Hit or AttackOutcome.CriticalHit, Damage.Recipient: DamageRecipient.Target } resolution)
+                    return resolution.Damage.Rolled.Normal;
+            }
+            Assert.Fail("no hit within the bounded run");
+            return 0;
+        }
+
+        var plain = RolledNormal(null);
+        var asked = new List<string>();
+        SessionBackstabFacts Behind(bool perceives) => new(() => { asked.Add("faces"); return false; }, () => { asked.Add("perceives"); return perceives; });
+        Assert.AreEqual(plain + level, RolledNormal(Behind(true)), "seen or heard from behind: the level");
+        Assert.AreEqual(plain + 5 * level, RolledNormal(Behind(false)), "unseen and unheard: five times the level");
+        CollectionAssert.Contains(asked, "perceives");
+        Assert.AreEqual(plain, RolledNormal(new(() => true, () => false)), "a target facing the attacker is no backstab");
+        Assert.AreEqual(plain, RolledNormal(Behind(false), subtype: 5), "a weapon whose art subtype is not a backstab weapon");
+    }
 }

@@ -467,8 +467,7 @@ S4 draws the loot, barter and steal windows (planned as ARC-UI-149, issue #1194)
   the lens 233.
 - **Kept.** The scroll bar's chain, the barter window's medallion and the follower buttons' plates stay pictures. The drop, use and gamble boxes (344 to 348) stay art as in
   the inventory (the glow and the corners are the state). The curved flourishes of the boxes are not drawn (as in S3).
-- **Not generated yet.** The barter doll 337 (`Barter_PD`) is drawn since ARC-UI-1917 (the merchant's doll view, IW29) but still as the Legacy or HD picture; the doll cover 341 (`PD_Cover4Inven`, the toggle 0x68150C
-  is not built, F0) is not drawn. Their recipes are issue #1750. The buttons of the windows (the Take all button 808, the toggles 338 and 339, the cycle
+- **Not generated yet.** The barter doll 337 (`Barter_PD`) is drawn since ARC-UI-1917 (the merchant's doll view, IW29) but still as the Legacy or HD picture; the doll cover 341 (`PD_Cover4Inven`) is drawn since ARC-UI-1918 with the hero's doll toggle (IW45) but still as the Legacy or HD picture. Their recipes are issue #1750. The buttons of the windows (the Take all button 808, the toggles 338 and 339, the cycle
   buttons 757 and 758) are [S16](#viewer-slice-s16-arc-ui-1751).
 - **Redraw.** A window draws its textures in its own `_Draw`, so it did not hear a worker's finished frame: a window nothing else redrew (the barter window at rest)
   kept the Legacy pixels until the pointer moved. `AreaInventoryGridArea` now redraws when a texture it claimed changes.

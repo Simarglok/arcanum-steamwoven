@@ -274,6 +274,7 @@ public sealed class CombatItemTriggerStateTests
         var ends = owner.QueryShotEndScripts(flying)!.Value;
         Assert.AreEqual((Hero, Blade, false), (ends.Attacker, ends.Weapon, ends.Thrown), "the hero shoots with the worn bow, which stays in the hand");
         Assert.AreEqual(shot.Resolution!.Outcome is AttackOutcome.CriticalHit or AttackOutcome.CriticalMiss, ends.Critical, "the critical flag is the decided check's");
+        Assert.IsTrue(ends.IsWeapon, "ARC-COMBAT-1766: the wielded bow is a weapon (the critical points ask it)");
         foreach (var each in shot.Shots) owner.EndShot(each);
         Assert.IsNull(owner.QueryShotEndScripts(flying), "a shot no longer in flight runs nothing");
     }

@@ -37,6 +37,8 @@ public sealed record SessionNpcAttack(SessionCritterCombat Attacker)
     public bool TargetWasInBed { get; init; }
     /// <summary>ARC-MAGIC-1188: the trigger host the damage step's item events fire through (as <see cref="SessionAttack.ItemTriggers"/>, ARC-MAGIC-023): the attacker's worn items fire "damages opponent", "target hit" and the knockdown events, the victim's (an NPC's, or the hero's from the session) "parent hit" and the others (0x4B4390 for any attacker, IC2); a host of this session. Null: they fire nothing, as before ARC-MAGIC-1188.</summary>
     public Arcanum.Session.ISessionItemTriggers? ItemTriggers { get; init; }
+    /// <summary>ARC-COMBAT-1929 (0x45F9D0): the target's facing and awareness of the attacker, for a backstab of a melee attack with a wielded weapon (the wielded weapon's art subtype comes with <see cref="AttackerWorn"/>). Null: the host knows none, and the attack is no backstab.</summary>
+    public SessionBackstabFacts? Backstab { get; init; }
 }
 
 /// <summary>
@@ -426,6 +428,8 @@ public sealed partial class GameSessionOwner
             Difficulty = _difficulty,
             DeferHit = flies,
             AmmunitionShort = unsupplied,
+            // ARC-COMBAT-1929: a melee strike (not a shot's landing or a throw) may be a backstab.
+            Backstab = arrow is null && throwing is null ? BackstabOf(values.Combatant, values.Skill, weapon, attack.Backstab) : BackstabKind.None,
             TargetWasInBed = attack.TargetWasInBed,
         };
         var rolls = new TrialCombatRolls(new SeededRandom(_random.Seed, _random.Draws));

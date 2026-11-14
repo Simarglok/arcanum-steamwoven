@@ -34,9 +34,6 @@ public enum WeaponKind { Unarmed, Weapon, ThrownItem }
 /// </summary>
 public enum BackstabKind { None, Backstab, TrueBackstab }
 
-/// <summary>Weapon classes the backstab rule distinguishes.</summary>
-public enum BackstabWeaponClass { Dagger, Sword, Axe, TwoHandedSword, Other }
-
 /// <summary>The light a critter itself emits; it shrinks the darkness penalty of its attacks.</summary>
 public enum LightEmission { None, Small, Medium, Large, ExtraLarge }
 

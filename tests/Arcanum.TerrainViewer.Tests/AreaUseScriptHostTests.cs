@@ -135,6 +135,11 @@ public sealed class AreaUseScriptHostTests
             Write("dlg/00775float.dlg", Encoding.Latin1.GetBytes("{1}{Help me.}{}{}{}{}{}"));
             // 776 (ARC-SCRIPT-1241): a use script that fades for 12 seconds into movie 3 (track 0, the screen back at once) and sets a flag, as the Vendigroth underground's 2862 plays its movies.
             Write("scr/00776fade.scr", Program(Do(new(ScrCatalogue.Action.Fade, N(12), N(0), N(3), N(0))), Do(new(ScrCatalogue.Action.SetGlobalFlag, N(49))), Do(Skip)));
+            // 782 (ARC-SCRIPT-1764, NP9, NP10): a tile script that queues issue 5030 behind the head, queues issue 7 at the front, queues 7 again (found, no change) and floats the head issue's headline over the PC
+            // (slot 0 is a number the action never reads). The newspaper file holds issue 5000 only (5030 has no message).
+            Write("scr/00782news.scr", Program(Do(new(ScrCatalogue.Action.QueueNewspaper, N(5030), N(0))), Do(new(ScrCatalogue.Action.QueueNewspaper, N(7), N(1))), Do(new(ScrCatalogue.Action.QueueNewspaper, N(7), N(0))),
+                Do(new(ScrCatalogue.Action.FloatNewspaperHeadline, N(0), (Triggerer, 0))), Do(new(ScrCatalogue.Action.SetGlobalFlag, N(70))), Do(Skip)));
+            Write("mes/gamenewspaper.mes", Encoding.Latin1.GetBytes("{5000}{30c Big news at the harbour}"));
             // 721, 722 (ARC-SCRIPT-020): an item's use script that sets a flag and runs default, and one that skips default.
             Write("scr/00721use.scr", Program(Do(new(ScrCatalogue.Action.SetGlobalFlag, N(31))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
             Write("scr/00722stop.scr", Program(Do(new(ScrCatalogue.Action.SetGlobalFlag, N(32))), Do(Skip)));
@@ -820,6 +825,33 @@ public sealed class AreaUseScriptHostTests
             Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, ran.Outcome, ran.Detail);
             Assert.IsTrue(host.GlobalFlag(48), "the lines after the float ran");
             CollectionAssert.AreEqual(new[] { new AreaScriptFloat(host.Pc, "Help me.") }, host.TakeFloats().ToArray());
+            Assert.AreEqual(0, host.TakeFloats().Count);
+        });
+    }
+
+    // ARC-SCRIPT-1764 (NP9, NP10): queue newspaper (85) and float newspaper headline (86) are in the use, tile, heartbeat, dying and combat-point sets; a tile script queues by the rule of the original's queue
+    // (the head stays, an issue below 5000 already queued changes nothing) and floats the head issue's headline, punctuated, over the PC; the host hands the float out once.
+    [TestMethod]
+    public void A_tile_script_queues_newspaper_issues_and_floats_the_head_issues_headline()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var tile = new Arcanum.Data.Maps.MapPlacedScript(Arcanum.Data.Maps.MapTransitionTrigger.TileEntry, new(3, 4), 72, new(198, 257), 0, 0, 782);
+            foreach (var set in new[] { AreaUseScriptHost.Admission, AreaUseScriptHost.PlacedAdmission, AreaUseScriptHost.HeartbeatAdmission, AreaUseScriptHost.DyingAdmission, AreaUseScriptHost.CombatPointAdmission })
+            {
+                Assert.IsTrue(set.Actions.Contains(ScrCatalogue.Action.QueueNewspaper) && set.Actions.Contains(ScrCatalogue.Action.FloatNewspaperHeadline), set.Id);
+                Assert.IsTrue(set.IsSubsetOfBesidesStores(ScrAdmissionSet.S59), set.Id);
+            }
+            Assert.AreEqual(SessionNewspaperState.NewGame, session.QueryNewspaper());
+            var host = new AreaUseScriptHost(session, 1, [Gate(0)], [Inventory()], content, new AreaScriptWorld(() => new(12, 20), _ => false, _ => null, () => null));
+            var ran = host.RunPlaced(tile, session.Rules.Scripts);
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, ran.Outcome, ran.Detail);
+            Assert.IsTrue(host.GlobalFlag(70), "the lines after the newspaper actions ran");
+            var queue = session.QueryNewspaper();
+            Assert.AreEqual(7, queue.Count);
+            CollectionAssert.AreEqual(new[] { -1, -1, -1, -1, 5000, 7, 5030 }, queue.Entries.Take(7).ToArray(), "the head stays, 7 went in behind it at the front, 5030 queued after the count");
+            CollectionAssert.AreEqual(new[] { new AreaScriptFloat(host.Pc, "Big news at the harbour. ") }, host.TakeFloats().ToArray());
             Assert.AreEqual(0, host.TakeFloats().Count);
         });
     }

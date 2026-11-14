@@ -110,7 +110,7 @@ Known differences (documented, not bugs):
 | # | Step | Expected (from the original executable) | Status |
 | --- | --- | --- | --- |
 | 1 | Cast a knockback spell (a spell with a push component) from an inventory item such as a scroll or wand at a creature that is not in line with you and the item. | The creature is pushed away from the spell's parent object (here the holder of the item), else from the run origin. Ours pushes away from the run's source object, which differs when source and parent differ (0x4514E0). | open |
-| 2 | With a hero who has the backstab skill trained but no points in it, attack a creature from behind. | The original needs the skill level to be non-zero; ours needs the training to be above none, so the two differ for training without points (0x45F9D0). | open |
+| 2 | With a hero who has the backstab skill trained but no points in it, attack a creature from behind. | The original needs the skill level to be non-zero: no backstab (ours too since ARC-COMBAT-1929, see its section below). | open |
 | 3 | Put the party into a fight and then end it with peace (the peace spell or dialog end of combat) while companions are mid-attack. | The attack goals of the peace head and of its followers are interrupted at level 5 (0x44E050, 0x44E0E0); ours leaves those runs going. | open |
 | 4 | Stand in a place where a script or spell looks for the critters "near" the hero (a vicinity-based script condition or action), once at the edge of the screen and once close. | The vicinity is the game window rectangle centred on the location, converted to tiles; ours uses a fixed square of 10 tiles on both axes (0x440FF0). | open |
 | 5 | Walk a path across a tile with burning scenery (fire from a spell or trap) with a mover that avoids obstacles (a companion following you). | A tile with a running fire goal costs 80 more when the mover carries walk flag 0x400; ours has no such flag, so a path never avoids burning scenery (0x444500). | open |
@@ -1239,6 +1239,17 @@ The rules are in the [ledger OH3](../research/ledger/ui-audio.md#hidden-options-
 | 1 | Open Options (main menu and in play), Game page. | Auto Switch Weapons is the fifth line, after Auto Attack, Off at the first start. | open |
 | 2 | Turn Auto Switch Weapons On, wield a bow with no arrows (or a gun with no bullets) and attack. | The attack does not shoot, and the hero wields the best other weapon at once; with the option Off nothing changes. | open |
 | 3 | With it On, let an enemy with a critical hit (drop weapon or destroy weapon) strike the hero. | The hero's lost weapon is replaced by the best weapon left; with the option Off the hand stays empty. | open |
+
+## ARC-COMBAT-1929 — Backstab from behind (2026-11-14)
+
+Rules in [ledger VC27](../research/ledger/combat.md#partial-rows-by-risk-combat-slice-2-arc-res-1104) and [hero attack](../world/hero-attack-runtime.md). Use a hero with points in the backstab skill and a dagger wielded; a sword, axe or two-handed sword needs the skill above apprentice.
+
+| # | Step | Expected (from the original executable) | Status |
+| --- | --- | --- | --- |
+| 1 | In combat mode, attack a creature that stands with its back to you (it faces away, not yet turned to you) with the dagger. | The hit adds your backstab level to the normal damage; a hit on a creature that faces you does not. | open |
+| 2 | Do it again from behind a creature that has not noticed you (sneak up quietly; it neither sees nor hears you). | A true backstab: five times the backstab level is added to the damage and the creature's armour does not count for a trained hero. | open |
+| 3 | Try the same with bare hands, a bow, a club or a mace, and with a sword while the skill is at apprentice. | No backstab bonus (only the dagger at any training, and the sword, axe and two-handed sword above apprentice). | open |
+| 4 | Let a creature with the backstab skill and a dagger (a thief or assassin) hit you or a companion from behind. | The same bonus applies to its hit. | open |
 
 ## ARC-SCRIPT-1732 — The healer menu behind `h:` (2026-11-13)
 

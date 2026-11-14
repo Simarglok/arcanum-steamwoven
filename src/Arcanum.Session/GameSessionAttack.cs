@@ -589,6 +589,14 @@ public sealed record SessionHeroAttack(Combatant Combatant, CombatWeapon Weapon,
 public readonly record struct SessionLineOfFire(int Cost, bool Blocked);
 
 /// <summary>
+/// ARC-COMBAT-1929 (0x45F9D0, 0x4B2210): what a host knows of the struck critter that decides whether a melee attack is a backstab
+/// (<see cref="AttackRules.Backstab"/>): whether the target faces the attacker (0x45EFF0, the direction from the target to the attacker
+/// against its art rotation) and whether it sees (0x4AF260) or hears (0x4AF470, silent) the attacker. Both are asked only when the
+/// attacker's level, training and wielded weapon allow a backstab, in the original's order, so a host may trace lines in them.
+/// </summary>
+public sealed record SessionBackstabFacts(Func<bool> TargetFacesAttacker, Func<bool> TargetPerceivesAttacker);
+
+/// <summary>
 /// One attack of the hero on an NPC (<see cref="GameSessionOwner.AttackCritter"/>). <see cref="Aim"/> is the aimed location (null:
 /// not aimed, rolled); <see cref="Distance"/> the tile distance to the target (the larger coordinate difference, 0x4B96F0): a melee
 /// weapon's must be within its reach, a bow's or firearm's may lie beyond its range, which the check makes impossible (SC8).
@@ -631,6 +639,8 @@ public sealed record SessionAttack(SessionCritterCombat Target)
     public Func<DamageRecipient, bool>? TakingDamage { get; init; }
     /// <summary>ARC-SCRIPT-1483 (CP1–CP3): the host's combat-point scripts (hit 7, critter hits 26, critical hit 34) of a resolved hit, asked before the damage steps (0x4B3770); a shot that flies asks at its landing, not at the shot. Null: none run.</summary>
     public Action<SessionHitScriptEvent>? HitScripts { get; init; }
+    /// <summary>ARC-COMBAT-1929 (0x45F9D0): the target's facing and awareness of the hero, for a backstab of a melee attack with a wielded weapon (the wielded weapon's art subtype comes with <see cref="HeroWorn"/>). Null: the host knows none, and the attack is no backstab.</summary>
+    public SessionBackstabFacts? Backstab { get; init; }
 }
 
 /// <summary>
@@ -825,6 +835,15 @@ public sealed partial class GameSessionOwner
     /// </summary>
     public SessionAttackResult LandShot(GameSessionVersion expected, SessionShot shot, SessionAttack attack) => CritterAttack(expected, attack, shot);
 
+    /// <summary>
+    /// ARC-COMBAT-1929 (0x45F9D0 from the context builder 0x4B2210): whether a melee strike of a critter on a critter is a backstab,
+    /// from the attacker's backstab level and training, the wielded weapon's art subtype and what the host knows of the target
+    /// (<see cref="AttackRules.Backstab"/>). Other skills (bow, throwing) never are (the resolver refuses them); no host facts, no backstab.
+    /// </summary>
+    private static BackstabKind BackstabOf(Combatant attacker, CombatSkill skill, CombatWeapon weapon, SessionBackstabFacts? facts) =>
+        facts is null || skill != CombatSkill.Melee ? BackstabKind.None
+        : AttackRules.Backstab(attacker.BackstabLevel, attacker.BackstabTraining, weapon.Kind, weapon.ArtSubtype, facts.TargetFacesAttacker, facts.TargetPerceivesAttacker);
+
     private SessionAttackResult CritterAttack(GameSessionVersion expected, SessionAttack attack, SessionShot? landing, PackThrow? pack = null)
     {
         ThrowIfDisposed();
@@ -894,6 +913,8 @@ public sealed partial class GameSessionOwner
             // ARC-COMBAT-023: a thrown pack item takes no ammunition of the wielded weapon.
             AmmunitionShort = pending is null && pack is null && ShotAmmunition() is { Short: true },
             DeferHit = pending is null && attack.Flight,
+            // ARC-COMBAT-1929: a melee strike (not a shot's landing or a throw) may be a backstab.
+            Backstab = pending is null && thrown is null ? BackstabOf(hero.Combatant, hero.Skill, hero.Weapon, attack.Backstab) : BackstabKind.None,
         };
         var rolls = new TrialCombatRolls(new SeededRandom(_random.Seed, _random.Draws));
         AttackResolution resolution;

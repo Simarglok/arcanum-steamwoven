@@ -380,7 +380,10 @@ public partial class TerrainViewerApp
             return;
         }
         // ARC-UI-1125: an open window does not hold it any more (the dialog opener replaces it); the panels outside the stack and a dialog still do.
-        if (ConversationOpen || ProgrammaticOpenBlocked || !LeaveCombatModeForDialog()) return;
+        if (ConversationOpen || ProgrammaticOpenBlocked) return;
+        // ARC-COMBAT-1935: a hero held in combat mode by the exit gate keeps the talk pending quietly (no log line and no notice on every frame pump); the talk opens once the gate lets go.
+        if (HeroInCombatMode && !_areaSession!.QueryCanExitCombatMode(CombatExitFacts())) return;
+        if (!LeaveCombatModeForDialog()) return;
         _heartbeatDialog = null;
         BeginScriptedConversation(talk);
     }
