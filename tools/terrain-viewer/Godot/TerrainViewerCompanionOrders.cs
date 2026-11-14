@@ -98,6 +98,7 @@ public partial class TerrainViewerApp
             pc.State.CommittedCell, WorldTime, ai);
         GD.Print(AreaCompanionOrders.Log(source, request.Type, result) + (noGoal.Count == 0 ? "" : " | goal not started: " + string.Join(", ", noGoal))
             + (request.Type == CompanionOrderType.Attack ? $" | target={request.Target?.Entity ?? "none"} ai={ai is not null}" : ""));
+        SayOrderAcknowledgements(result);
         _companionNotice = result.Failure != GameSessionFailure.None ? $"{source}: order refused ({result.Failure})"
             : result.Outcomes.Count == 0 ? $"{source}: {request.Type} reached no follower within {CompanionOrderRules.Reach} tiles"
             : $"{source}: " + string.Join("; ", result.Outcomes.Select(AreaCompanionOrders.Describe))
@@ -105,6 +106,21 @@ public partial class TerrainViewerApp
         RefreshFollowerPortraits();
         RefreshReadyStatus();
         return result;
+    }
+
+    /// <summary>
+    /// ARC-UI-2079 (ledger TB28, the order handler's broadcast callback): each reached follower says the acknowledgement line its order gives (2100-2199, the refusal 2200-2299, the farewells 1900-2099) to the broadcaster, the hero, who is the
+    /// listener its speech display turns it to. The follower's can-speak test is the line builder's (flag 1 for an acknowledgement; flag 0 for a refusal or a farewell, which also refuses a follower in combat focus or fleeing). No active
+    /// test stands before them, unlike the AI sites. Not modelled: the curse's race line, and the move order's lines (the viewer sends no move order).
+    /// </summary>
+    private void SayOrderAcknowledgements(SessionCompanionOrderResult result)
+    {
+        foreach (var outcome in result.Outcomes)
+        {
+            if (outcome.Lines is not { } lines) continue;
+            var flagZero = outcome.Line is CompanionOrderLine.Cannot or CompanionOrderLine.FriendlyFarewell or CompanionOrderLine.HostileFarewell;
+            SayLine(outcome.Entity, lines, Arcanum.Simulation.Ai.AiSchedulerRules.Pc, refusesFightOrFlee: flagZero);
+        }
     }
 
     /// <summary>The name the PC knows a companion by: its hover name on the shown map, else its dialog script.</summary>
