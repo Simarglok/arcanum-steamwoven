@@ -431,14 +431,18 @@ public sealed class AreaSpellCastMap : ISpellCastMap
         return element is { Words: [var word] } && word is >= 0 and <= uint.MaxValue ? unchecked((int)(uint)word) : 0;
     }
 
-    public bool DamageObject(string id, AttackDamage damage)
+    public bool DamageObject(string id, AttackDamage damage) => DamageObject(id, damage, null);
+
+    /// <summary>ARC-AI-2112 (GW10): as above, with the attacker of the damage record (a spell's caster): the hit keeps it as <see cref="AreaObjectHit.Actor"/> and carries the witness steps (<see cref="SessionObjectHostSteps.WitnessesHearBreak"/> or
+    /// <see cref="SessionObjectHostSteps.WitnessesHearAttack"/>), which the host's guard witness call reads after the break.</summary>
+    public bool DamageObject(string id, AttackDamage damage, string? attacker)
     {
         ArgumentNullException.ThrowIfNull(damage);
         if (ObjectTarget(id) is { } target)
         {
-            var result = _session.DamageObject(_session.Version, target, damage.HitPointDamage);
+            var result = _session.DamageObject(_session.Version, target, damage.HitPointDamage, attacker is not null);
             if (result.Hit is not { } hit) return false;
-            _objectHits.Add(new(id, hit, result.Host) { Source = DamageSource is { } named && named.Target == id ? named.Source : null });
+            _objectHits.Add(new(id, hit, result.Host) { Source = DamageSource is { } named && named.Target == id ? named.Source : null, Actor = attacker });
             return result.Disposition == GameSessionDisposition.Changed;
         }
         // ARC-COMBAT-025 (OD1–OD4, OD12): an item takes the same damage through its durability.
@@ -553,6 +557,9 @@ public sealed record AreaObjectHit(string Id, ObjectHitOutcome Hit, SessionObjec
 {
     /// <summary>ARC-TECHNOLOGY-1760: the cast id of the attacker of the hit when it was no one the hit-point step names (a trap's shot: the shooter object), the breaker of the BUST script; null: no attacker.</summary>
     public string? Source { get; init; }
+
+    /// <summary>ARC-AI-2112 (GW10): the attacker of the damage record (a spell's caster, its other object first) the damage end's guard witnesses read; null: a record with no attacker (script, burn, trap damage).</summary>
+    public string? Actor { get; init; }
 }
 
 /// <summary>ARC-COMBAT-025: one hit that reached an item (lying on the ground or worn): its cast id, the durability result and the host's steps.</summary>

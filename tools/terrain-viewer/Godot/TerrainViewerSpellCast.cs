@@ -932,7 +932,12 @@ public partial class TerrainViewerApp
                 FloatObjectDamage(hit.Id, _spellCastMap?.Row(hit.Id), AreaCombatFloaters.Of(hit));
                 // ARC-TECHNOLOGY-1760 (OD15): the attacker of a trap's shot is the BUST breaker.
                 var breaker = hit.Source is { } source && _spellCastMap?.Row(source) is { } shooterRow ? AreaUseScriptHost.EntityId(shooterRow) : null;
-                if (_spellCastMap?.Row(hit.Id) is { } row) RunObjectBreakSteps(row, hit.Host, false, false, breaker);
+                if (_spellCastMap?.Row(hit.Id) is { } row)
+                {
+                    RunObjectBreakSteps(row, hit.Host, false, false, breaker);
+                    // ARC-AI-2112 (GW10, 0x4B4390 → 0x4AEE50): after the break, the guards see or hear the caster's spell damage on a portal, container or scenery (the host's gate admits the hero and a player character's follower).
+                    if (hit.Actor is { } caster) WitnessesOfObjectHit(hit.Id, row, hit.Host, caster == SessionSpellCaster.Hero ? Arcanum.Simulation.Ai.AiSchedulerRules.Pc : caster);
+                }
             }
         }
         if (!any) return;
