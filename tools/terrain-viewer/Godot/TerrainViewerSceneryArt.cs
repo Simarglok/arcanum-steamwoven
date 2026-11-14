@@ -16,7 +16,14 @@ public partial class TerrainViewerApp
     private sealed record SceneryArt(uint Art, AreaObjectRecord Row, IReadOnlyList<AreaVisualRecord> Frames);
 
     private Dictionary<string, SceneryArt> _sceneryArt = [];
-    private (AreaLoadResult?, GameSessionOwner?, long) _sceneryArtStamp;
+    // ARC-DEV-1961: the stamp names the map and session the last scan read by weak references: a strong field held the retired map's AreaLoadResult
+    // until the next scan of the new map (the resources smoke stage's RETIRED_GENERATION_ALIVE after a map stage), and a stamp must never keep a generation alive.
+    private (WeakReference? Area, WeakReference? Session, long Revision) _sceneryArtStamp;
+    private bool SceneryArtStampIs(AreaLoadResult area, GameSessionOwner session, long revision)
+        => _sceneryArtStamp.Area is { } a && ReferenceEquals(a.Target, area) && _sceneryArtStamp.Session is { } s && ReferenceEquals(s.Target, session) && _sceneryArtStamp.Revision == revision;
+    private void SceneryArtStampSet(AreaLoadResult area, GameSessionOwner session, long revision) => _sceneryArtStamp = (new WeakReference(area), new WeakReference(session), revision);
+    /// <summary>A cleared scene forgets the scenery arts drawn for its map and the stamp of its last scan.</summary>
+    private void RetireSceneryArt() { _sceneryArt = []; _sceneryArtStamp = default; _sceneryArtScanDue = true; }
     private readonly HashSet<string> _sceneryArtReported = [];
     // The scan of the session's art fields copies and sorts the map's changes: at most one per this many wall milliseconds (a change shows within it), and at once when a stage asks (ScanSceneryArtNow).
     private const long SceneryArtScanMs = 150;
@@ -36,16 +43,16 @@ public partial class TerrainViewerApp
     private bool SyncSceneryArt(AreaSceneryHost host, bool newHost)
     {
         if (_readyArea is not { } area || _areaSession is not { } session) return false;
-        var stamp = (area, session, session.Version.Revision);
+        var revision = session.Version.Revision;
         if (newHost) _sceneryArt = [];
-        else if (_sceneryArtStamp.Equals(stamp) || !_sceneryArtScanDue && System.Environment.TickCount64 - _sceneryArtScanAt < SceneryArtScanMs) return false;
+        else if (SceneryArtStampIs(area, session, revision) || !_sceneryArtScanDue && System.Environment.TickCount64 - _sceneryArtScanAt < SceneryArtScanMs) return false;
         _sceneryArtScanAt = System.Environment.TickCount64; _sceneryArtScanDue = false;
         var map = new SessionMapId(area.Snapshot.RuntimeMap);
         var wanted = session.QueryObjectArts(map);
-        if (wanted.Count == 0 && _sceneryArt.Count == 0) { _sceneryArtStamp = stamp; return false; }
+        if (wanted.Count == 0 && _sceneryArt.Count == 0) { SceneryArtStampSet(area, session, revision); return false; }
         // Without the module's content the art cannot be read: tried again on the next frame.
         if (ExtraArt() is not { } art) return false;
-        _sceneryArtStamp = stamp;
+        SceneryArtStampSet(area, session, revision);
         AreaFrames();
         var overlay = _areaOverlay ?? throw new InvalidOperationException("AREA_OVERLAY_REQUIRED");
         var changed = false;
