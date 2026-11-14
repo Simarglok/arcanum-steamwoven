@@ -59,6 +59,7 @@ public partial class TerrainViewerApp
             _editorPanel.TechRefundRequested += discipline => PressEditor(e => EditorPress(AreaTechPage.Press(e.PressTech(discipline, spend: false), false), AreaSheetPage.Tech, false), $"tech refund discipline={discipline}");
             _editorPanel.SpellLearnRequested += college => PressEditor(e => EditorPress(e.PressSpell(college, learn: true, _spellData?.Data), AreaSheetPage.Spell, true), $"spell learn college={college}");
             _editorPanel.SpellUnlearnRequested += college => PressEditor(e => EditorPress(e.PressSpell(college, learn: false, _spellData?.Data), AreaSheetPage.Spell, false), $"spell unlearn college={college}");
+            _editorPanel.SchemeChosen += scheme => PressEditor(e => EditorSchemePress(e.PressScheme(scheme), scheme), $"scheme choose scheme={scheme}");
             _editorPanel.CollegeSelected += college =>
             {
                 if (college is < 0 or >= AreaSpellsPage.Colleges) return;
@@ -70,8 +71,10 @@ public partial class TerrainViewerApp
         _editorPanel.SetPortrait(_editorPanel.ArtMode && editor.Draft.QueryHero() is { Portrait: > 0 } hero ? EditorPortrait(hero.Portrait) : null);
         var skills = editor.Skills(_skillTexts?.Texts, AreaHoverIndex.TextProfile);
         var spells = editor.Spells(_spellData?.Data, _editorCollege);
-        if (!_editorPanel.IsOpen) _editorPanel.Open(view, skills, spells, editor.Stats(), AreaTechPage.Build(editor.Draft));
-        else _editorPanel.Render(view, skills, spells, editor.Stats(), AreaTechPage.Build(editor.Draft));
+        // ARC-UI-1792: the scheme page (the original look only: it needs the name files and the page art).
+        var schemes = _sheetArtContent is { ArtReady: true } content ? editor.Schemes(content.Texts) : null;
+        if (!_editorPanel.IsOpen) _editorPanel.Open(view, skills, spells, editor.Stats(), AreaTechPage.Build(editor.Draft), schemes);
+        else _editorPanel.Render(view, skills, spells, editor.Stats(), AreaTechPage.Build(editor.Draft), schemes);
         if (menu.Notice is { } notice) _editorPanel.ShowSkillMessage(notice);
         // The controller's rows (Accept, Cancel) as the menu's other windows highlight theirs.
         _editorPanel.ShowCreationFocus(menu.Focus);
@@ -94,6 +97,10 @@ public partial class TerrainViewerApp
     private (string, string?) EditorPress(AreaSkillPress p, AreaSheetPage page, bool spend) => EditorPress(p.Message, p.Result, page, spend);
     private (string, string?) EditorPress(AreaSpellPress p, AreaSheetPage page, bool spend) => EditorPress(p.Message, p.Result, page, spend);
     private (string, string?) EditorPress(AreaTechPress p, AreaSheetPage page, bool spend) => EditorPress(p.Message, p.Result, page, spend);
+
+    /// <summary>ARC-UI-1792: a scheme press: no cost and no text (ALP5), so no refusal line; a refused one (the draft's own limit) is the project's word.</summary>
+    private static (string, string?) EditorSchemePress(SessionSchemeResult result, int scheme) =>
+        ($"scheme {scheme}: {(result.Disposition == GameSessionDisposition.Rejected ? "refused (" + result.Failure + ")" : result.Disposition.ToString())}", null);
 
     /// <summary>The draft hero's portrait for the sheet's slot (the stored portrait's small image), or null when it did not read.</summary>
     private Texture2D? EditorPortrait(int portrait)
@@ -119,7 +126,7 @@ public partial class TerrainViewerApp
     /// strips with the shop's Accept and Back buttons, the draft's portrait and numbers) at the menu screen's (0, 41); a + and a − pressed by the
     /// pointer on the art act on the draft (the − at the start is refused with the original's text in the menu's note line), a release in the close
     /// rectangle does not close it (CM3), and a tab shows the spells page. ARC_AREA_EDITOR_CAPTURE=PATH.png saves readbacks of the skills page
-    /// (PATH-skills.png) and the spells page (PATH-spells.png). The + of willpower (row 7) is the pointer's, as the stage's next lines expect.</summary>
+    /// (PATH-skills.png), the spells page (PATH-spells.png) and the schemes page (PATH-schemes.png). The + of willpower (row 7) is the pointer's, as the stage's next lines expect.</summary>
     private async Task CharacterEditorArtForSmoke(Action<bool, string> require)
     {
         async Task Frames(int count)
@@ -182,6 +189,32 @@ public partial class TerrainViewerApp
         await Click(art.PointForSelfTest(px + 5, py + 5));
         require(_mainMenu.Creation.Presses.Count == presses + 1 && editor.StatsForSelfTest is { UnspentPoints: 4 } && editor.StatsForSelfTest.Rows[7].Value == 9,
             $"a + on willpower by the pointer: presses={_mainMenu.Creation.Presses.Count} {editor.StatsForSelfTest?.UnspentPoints}");
+        // ARC-UI-1792: the schemes tab shows the scheme page in the editor too; a release on a row stores the scheme in the draft and in the character
+        // (the start replays it), and the smoke puts the first scheme back for the stages after it.
+        var schemesTab = AreaCharacterSheetArtLayout.Tab(AreaSheetTab.Schemes);
+        await Click(art.PointForSelfTest(schemesTab.X + 5, schemesTab.Y + 5));
+        await Frames(2);
+        var schemes = art.Schemes;
+        require(art.Tab == AreaSheetTab.Schemes && editor.SchemesReadyForSelfTest && schemes.Visible && schemes.ViewForSelfTest is { Entries.Count: > 0 },
+            $"the schemes tab shows the scheme page in the editor: {art.Tab} ready={editor.SchemesReadyForSelfTest} visible={schemes.Visible}");
+        if (System.Environment.GetEnvironmentVariable("ARC_AREA_EDITOR_CAPTURE") is { Length: > 0 } capture3)
+        {
+            using var image = GetViewport().GetTexture().GetImage();
+            require(image.SavePng(System.IO.Path.ChangeExtension(capture3, null) + "-schemes.png") == Error.Ok, "the schemes page capture saved");
+        }
+        var startScheme = _mainMenu.Editor!.Draft.QueryHero()!.Advancement.AutoLevelScheme;
+        var pressedRow = schemes.ViewForSelfTest!.Entries[0].Number == startScheme ? 1 : 0;
+        var chosen = AreaCharacterSheetSchemesLayout.EntryAt(schemes.ViewForSelfTest, schemes.ScrollForSelfTest, pressedRow)!;
+        var (sx, sy, _, _) = AreaCharacterSheetSchemesLayout.Row(pressedRow);
+        var beforeSchemePresses = _mainMenu.Creation.Presses.Count;
+        await Click(schemes.PointForSelfTest(sx + 5, sy + 5));
+        require(_mainMenu.Creation.Scheme == chosen.Number && _mainMenu.Editor.Draft.QueryHero()!.Advancement.AutoLevelScheme == chosen.Number
+            && _mainMenu.Creation.Presses.Count == beforeSchemePresses, $"a release on a row stores its scheme in the draft and the character: {_mainMenu.Creation.Scheme} vs {chosen.Number}");
+        require(schemes.ViewForSelfTest?.Scheme == chosen.Number && schemes.ViewForSelfTest.SchemeName == chosen.Name, "the page names the chosen scheme at the top");
+        _mainMenu.Editor.PressScheme(startScheme);
+        RenderMainMenu();
+        var backTab = AreaCharacterSheetArtLayout.Tab(AreaSheetTab.Skills);
+        await Click(art.PointForSelfTest(backTab.X + 5, backTab.Y + 5));
         GD.Print("ARC-UI-147 native-smoke character editor art PASS " + System.Text.Json.JsonSerializer.Serialize(new { _sheetArtContent!.Detail, Presses = _mainMenu.Creation.Presses.Count }));
     }
 }
