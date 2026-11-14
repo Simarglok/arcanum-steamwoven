@@ -46,11 +46,11 @@ public sealed class AreaScriptMakeFollowAdmissionTests
         }
         Console.WriteLine($"installed scripts with a make follow {carriers.Count} [{string.Join(",", carriers)}]; admitted whole: " + string.Join("; ", counts.Select(c => $"{c.Key} [{string.Join(",", c.Value)}]")));
         // 20 installed scripts carry the action. The thrown item set admits the four creature item scripts (1022, 1343, 30008, 30300, ledger TI6); the heartbeat set the five NPC-leader scripts (2201 at the first heartbeat, 30117, 30119,
-        // 30124 and 30126 at the heartbeat, which make the attachee follow a looped NPC picked by name: #1322's census); the dying set those and seven more (the
+        // 30124 and 30126 at the heartbeat, which make the attachee follow a looped NPC picked by name: #1322's census) and, with ARC-SCRIPT-1815's float line and object variable, 1058 and 1673; the dying set those and seven more (the
         // dying set is the union of the placed and heartbeat sets; where the seven are attached is not read here); the use, placed and talk sets none (they hold no make follow).
         CollectionAssert.AreEqual(new[] { 1022, 1046, 1058, 1116, 1196, 1280, 1343, 1605, 1647, 1673, 1680, 1825, 2201, 2632, 30008, 30117, 30119, 30124, 30126, 30300 }, carriers);
         CollectionAssert.AreEqual(new[] { 1022, 1343, 30008, 30300 }, counts["thrown"]);
-        CollectionAssert.AreEqual(new[] { 2201, 30117, 30119, 30124, 30126 }, counts["heartbeat"]);
+        CollectionAssert.AreEqual(new[] { 1058, 1673, 2201, 30117, 30119, 30124, 30126 }, counts["heartbeat"]);
         CollectionAssert.AreEqual(new[] { 1046, 1058, 1196, 1280, 1673, 1825, 2201, 2632, 30117, 30119, 30124, 30126 }, counts["dying"]);
         Assert.AreEqual(0, counts["use"].Count + counts["placed"].Count + counts["talk"].Count);
         // The dying scripts 30118 and 30127 (a free Create Undead, spell 58, by the looped leader at the dying attachee) carry no follow and run whole under the dying set.
