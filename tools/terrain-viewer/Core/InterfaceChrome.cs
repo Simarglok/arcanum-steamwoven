@@ -416,6 +416,24 @@ public static class InterfaceChromeRecipes
             new ChromeKeep(62, 174, 82, 70),
             new ChromeKeep(212, 174, 80, 70),
         ]);
+        // ARC-UI-1750: the barter doll 337 (358 x 243) is the loot doll's frame cut 23 pixels shorter at the top (bottom aligned, the same columns), so the same pit and grid 23 pixels higher, and the
+        // two slot pits (the weapon's red one with the dagger, the armour's blue one with the shield) stay the original's picture. The doll cover 341 (341 x 400, over the hero's pack at (361, 0)) is the
+        // inventory doll 223's pit, grid and two bottom pits moved 13 pixels left, under a name box of its own (there is no portrait ring).
+        var barterDoll = new ChromeRecipe("barter_pd.art", ChromeKind.Panel, ChromeMaterial.Wood, ChromeSides.None,
+        [
+            new ChromeSunk(70, 23, 215, 194, ChromeMaterial.Pit),
+            new ChromeGrid(73, 26, 10, 9, 21),
+            new ChromeKeep(62, 151, 82, 70),
+            new ChromeKeep(212, 151, 80, 70),
+        ]);
+        var dollCover = new ChromeRecipe("pd_cover4inven.art", ChromeKind.Panel, ChromeMaterial.Wood, ChromeSides.None,
+        [
+            new ChromeSunk(54, 28, 221, 55, ChromeMaterial.Pit),
+            new ChromeSunk(5, 100, 330, 310, ChromeMaterial.Pit), // runs off the frame's bottom, as the inventory doll's
+            new ChromeGrid(10, 107, 10, 9, 32),
+            new ChromeKeep(0, 303, 109, 97),
+            new ChromeKeep(231, 303, 110, 97),
+        ], Holes: ChromeHoles.None); // the cover's four clear columns at the right edge (x 337 to 340) show the pack under it: not a hole, so no brass rim runs down them
         // The three lenses (231 barter, 232 loot, 233 own window) are the round view's ring around the live game view's circle.
         var lenses = new[] { "lns_bart.art", "lns_loot.art", "lns_papr.art" }.Select(file => new ChromeRecipe(file, ChromeKind.Panel, ChromeMaterial.Wood, ChromeSides.None, [new ChromeRoundView(44.5, 44.5, 44.5)]));
         string[] buttons = ["char_but.art", "log_but.art", "invn_but.art", "tmap_but.art", "lilgrnbut.art",
@@ -427,7 +445,7 @@ public static class InterfaceChromeRecipes
             "Anatomical_But.ART", "Chemistry_But.ART", "Electrical_But.ART", "Explosives_But.ART", "GunSmithy_But.ART", "Mechanical_But.ART", "Smithy_But.ART", "Therapeutics_But.ART",
             // ARC-UI-1199: the schematic window's two list buttons (art 6) and its assemble button (357).
             "bgrn_but.art", "CombineButt.ART"];
-        return [top, bottom, inventory, doll, loot, barter, follower, lootDoll, .. lenses, .. SheetPanels(), .. MapPanels(), .. LogbookRecipes(), .. PaneRecipes(), .. ReadingRecipes(), .. SchematicRecipes(), .. HudRecipes(), .. FollowerRecipes(), .. DialogRecipes(), .. QuantityRecipes(), .. buttons.Select(file => new ChromeRecipe(file, ChromeKind.Button, ChromeMaterial.Face, ChromeSides.None, [])),
+        return [top, bottom, inventory, doll, loot, barter, follower, lootDoll, barterDoll, dollCover, .. lenses, .. SheetPanels(), .. MapPanels(), .. LogbookRecipes(), .. PaneRecipes(), .. ReadingRecipes(), .. SchematicRecipes(), .. HudRecipes(), .. FollowerRecipes(), .. DialogRecipes(), .. QuantityRecipes(), .. buttons.Select(file => new ChromeRecipe(file, ChromeKind.Button, ChromeMaterial.Face, ChromeSides.None, [])),
             // ARC-UI-1784: the spells page's sixteen college tabs (24 x 24 balls, three frames): a generated rim around the ball's own picture.
             .. CollegeTabFiles.Select(file => new ChromeRecipe(file, ChromeKind.Button, ChromeMaterial.Face, ChromeSides.None, [], KeepFace: true)),
             // ARC-UI-1820: the arrange button every inventory, loot, barter and item service window makes (art 340 `tiny_butt`, 28 x 27, two frames; the windows draw the first): a dark glass ball in a brass ring
