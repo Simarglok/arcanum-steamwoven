@@ -194,7 +194,10 @@ public partial class TerrainViewerApp
             catch (InvalidOperationException) { skipped.Add($"wall:{wall.Key.SourceIndex}:no standable cell"); continue; }
             var world = map.Chart.ToWorld(standable);
             if (!InAttackReach(wall, new(checked((int)world.X), checked((int)world.Y)), heroAttack)) { skipped.Add($"wall:{wall.Key.SourceIndex}:no clear shot"); continue; }
+            // The placement builds the session at the smoke clock in whole units; the leg's own frames count twentieths (as the stage's legs above scale it).
+            _areaSmokeTime = (_areaSmokeTime + 19) / 20;
             AreaSmokePlace(map, standable);
+            _areaSmokeTime *= 20; _worldTestTime = SimulationTime.At(_areaSmokeTime, 20);
             PublishWorldSelection();
             if (await HoverPointAsync(this, commands[wall.Key]) is not { } point) { skipped.Add($"wall:{wall.Key.SourceIndex}:not under the pointer"); continue; }
             HoverAtForSelfTest(point);
@@ -217,7 +220,9 @@ public partial class TerrainViewerApp
             GD.Print($"ARC-COMBAT-1941 wall attack PASS wall={wall.Key.SourceIndex} attacks={attacks} frames={frames} notice={_attackNotice}");
             return;
         }
-        GD.Print($"ARC-COMBAT-1941 wall attack NONE map={_readyMapName} walls={walls.Length} (every candidate skipped: {string.Join("; ", skipped)})");
+        var all = area.Snapshot.Objects.Where(row => row.Type == 0).ToArray();
+        GD.Print($"ARC-COMBAT-1941 wall attack NONE map={_readyMapName} walls={walls.Length} (type 0 rows {all.Length}, core {all.Count(r => r.Scope == AreaScope.Core)}, drawn {all.Count(r => commands.ContainsKey(r.Key))},"
+            + $" pickable {all.Count(r => pickable.Contains(r.Key))}; every candidate skipped: {string.Join("; ", skipped)})");
     }
 
     // ARC-WORLD-065: the steps onto an object's tile that its T0 record alone blocks (no terrain, wall, other object or gap).
