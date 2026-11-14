@@ -3,6 +3,7 @@ using Arcanum.Simulation.Ai;
 using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Goals;
 using Arcanum.Simulation.Movement;
+using Arcanum.Simulation.Party;
 using Arcanum.TerrainViewer.Core;
 using Arcanum.World;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -64,6 +65,40 @@ public sealed class AreaAiReactionTailTests
 
         Assert.AreEqual(AttackReactionStep.Weigh.ToString(), host.TraceOf(f.B)?.Reaction?.Split(' ')[0], "it surrendered to the attacker: weigh: " + host.TraceOf(f.B)?.Reaction);
         Assert.IsFalse(Flees(host, f.B), "the reaction weighed (the setter's): no flee run from the reaction");
+    }
+
+    // ARC-UI-2079 (ledger TB28): the fleeing line (0x413EA0) of the surrendered NPC that runs from a new attacker goes to the speech display with the attacker as its listener.
+    [TestMethod]
+    public void A_surrendered_npc_that_runs_from_a_new_attacker_barks_its_fleeing_line_to_that_attacker()
+    {
+        var (f, host) = Open();
+        using var _ = f;
+        var barks = new List<(string Speaker, LoyaltyLines Lines, string? Listener)>();
+        host.AiBarks = (speaker, lines, listener) => barks.Add((speaker, lines, listener));
+        Surrender(f, f.B, SessionCombatant.Hero);
+
+        host.SpellAttacked(f.A, f.B);
+
+        Assert.AreEqual(1, barks.Count, "one bark: " + string.Join(";", barks));
+        Assert.AreEqual((f.B, AreaAiHost.FleeBarkLines, f.A), barks[0], "the NPC speaks to the attacker");
+        Assert.AreEqual(new LoyaltyLines(3000, 3099), barks[0].Lines);
+    }
+
+    [TestMethod]
+    public void A_surrendered_npc_that_weighs_again_barks_nothing_it_was_already_in_the_state_and_a_host_without_barks_is_silent()
+    {
+        var (f, host) = Open();
+        using var _ = f;
+        var barks = new List<string>();
+        host.AiBarks = (speaker, _, _) => barks.Add(speaker);
+        Surrender(f, f.B, SessionCombatant.Critter(f.A));
+
+        host.SpellAttacked(f.A, f.B);
+        Assert.AreEqual(0, barks.Count, "the setter's line is for entering a fleeing or surrendered state only");
+
+        host.AiBarks = null;
+        Surrender(f, f.B, SessionCombatant.Hero);
+        host.SpellAttacked(f.A, f.B);
     }
 
     [TestMethod]

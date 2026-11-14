@@ -310,6 +310,9 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
 
     public ScrObjectRef Pc { get; }
 
+    /// <summary>ARC-UI-2079: the object an entity code names on this host's map (the PC's code names the PC); the listener of a bark.</summary>
+    public ScrObjectRef Entity(string code) => code == PcCode ? Pc : new(_map.RuntimeMap, code);
+
     public ScrObjectRef Object(AreaSpeaker speaker) => new(_map.RuntimeMap, AreaConversationState.EntityId(speaker.Row));
 
     /// <summary>The slot the area loaded for a speaker: flags, counters and script of its effective dialog element, or
