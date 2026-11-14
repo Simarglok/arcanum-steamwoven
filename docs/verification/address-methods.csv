@@ -111,6 +111,7 @@ src/Arcanum.Session/GameSessionHeroGrid.cs,ArrangeHeroGrid,pending,
 src/Arcanum.Session/GameSessionHeroGrid.cs,AttachItemArtSizes,pending,
 src/Arcanum.Session/GameSessionHeroGrid.cs,MoveHeroGold,pending,
 src/Arcanum.Session/GameSessionHeroGrid.cs,SettleHeroGrid,pending,
+src/Arcanum.Session/GameSessionHeroInnate.cs,QueryHeroEffectiveAge,exempt,host
 src/Arcanum.Session/GameSessionHeroName.cs,SetHeroPlayerName,pending,
 src/Arcanum.Session/GameSessionHeroThrow.cs,SplitAmmoForThrow,pending,
 src/Arcanum.Session/GameSessionHeroThrow.cs,SplitAmmoRefusal,pending,

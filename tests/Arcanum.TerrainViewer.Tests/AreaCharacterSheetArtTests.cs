@@ -183,4 +183,18 @@ public sealed class AreaCharacterSheetArtTests
         Assert.IsFalse(new AreaCharacterSheetArtContent(noGauge, AreaCharacterSheetTexts.Project("t"), "t").ArtReady);
         Assert.IsFalse(AreaCharacterSheetArtContent.Empty("self-test").ArtReady);
     }
+    /// <summary>ARC-UI-1791 (ledger CHW25): a PC's sheet adds the Age line (charedit.mes 6, `": %d "`) at (337, 72) in the label font, white; none without an age.</summary>
+    [TestMethod]
+    public void The_age_line_stands_under_race_and_gender_for_a_pc_only()
+    {
+        var texts = AreaCharacterSheetTexts.Create(Mes("{4}{Race}{5}{Gender}{6}{Age}"), null, null);
+        var with = AreaCharacterSheetArtLayout.Texts(View() with { Age = 31 }, texts, Measure);
+        var without = AreaCharacterSheetArtLayout.Texts(View(), texts, Measure);
+        Assert.AreEqual(without.Count + 1, with.Count);
+        Assert.AreEqual(new AreaSheetText(AreaSheetFont.Label, 337, 72, "Age: 31", AreaSheetColour.White, false), with.Single(text => text.Text.StartsWith("Age", StringComparison.Ordinal)));
+        Assert.AreEqual(53, with.Single(text => text.Text.StartsWith("Gender", StringComparison.Ordinal)).Y);
+        Assert.IsFalse(without.Any(text => text.Text.StartsWith("Age", StringComparison.Ordinal)));
+        Assert.IsTrue(AreaCharacterSheetArtLayout.AllArtNumbers.Intersect(AreaCharacterSheetIcon.ArtNumbers).Count() == AreaCharacterSheetIcon.ArtNumbers.Distinct().Count(), "the sheet reads the icons' arts");
+        CollectionAssert.DoesNotContain(AreaCharacterSheetArtLayout.ArtNumbers.ToArray(), 375, "the icons are optional: the sheet's look does not wait for them");
+    }
 }

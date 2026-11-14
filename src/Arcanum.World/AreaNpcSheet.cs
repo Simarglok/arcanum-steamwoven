@@ -31,7 +31,7 @@ public sealed record AreaNpcSheetPages(string Entity, AreaCharacterSheetView Vie
 public static class AreaNpcSheet
 {
     // The original's stat numbers of the stored base stats (obj_f_critter_stat_base_idx).
-    private const int ExperienceStat = 18, AlignmentStat = 19, GenderStat = 26;
+    private const int ExperienceStat = 18, AlignmentStat = 19, GenderStat = 26, RaceStat = 27;
 
     /// <summary>The sheet of an NPC, or null when its fields give no admissible sheet.</summary>
     /// <param name="loaded">The NPC's sheet and effects as its map data loads them (<see cref="AreaAdvancement.Npc"/>); the session's saved record replaces the sheet.</param>
@@ -81,7 +81,13 @@ public static class AreaNpcSheet
         var view = new AreaCharacterSheetView(name, sheet.Race, Stored(GenderStat) == 0 ? CharacterGender.Female : CharacterGender.Male, sheet.Level, experience,
             table is null ? null : ExperienceRules.ToNextLevel(table, Math.Clamp(sheet.Level, 1, ExperienceRules.MaxLevel), experience), sheet.UnspentPoints,
             Stored(AlignmentStat) / 10, Math.Max(0, aptitude), Math.Max(0, -aptitude), life?.Health ?? 0, life?.MaxHealth ?? 0, life?.Fatigue ?? 0, life?.MaxFatigue ?? 0,
-            primary, secondary, resistances) { ShowRaceGender = !sheet.Monstrous };
+            primary, secondary, resistances)
+        {
+            ShowRaceGender = !sheet.Monstrous,
+            // ARC-UI-1791 (ledger CHW25): the NPC has no age line; its slot shows its portrait when the local PC leads it, else the icon of 0x553D10 by its flags, then its race stat.
+            LedByHero = session.QueryPcLeader(entity) is not null,
+            IconArt = AreaCharacterSheetIcon.NpcArt(critter.Flags, Stored(RaceStat)),
+        };
         var skills = AreaSkillsPage.BuildFor(session.QueryNpcSkills(new SessionNpcAdvancement(entity, sheet, loaded.Loaded.AutoLevelScheme), modifiers), skillTexts, profile,
             sheet.UnspentPoints, null);
         var rows = new AreaStatRow[AreaStatsPage.Rows];

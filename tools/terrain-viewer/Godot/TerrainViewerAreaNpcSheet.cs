@@ -146,8 +146,14 @@ public partial class TerrainViewerApp
         AdoptSkillTexts();
         var name = AreaHoverIndex.Text(row, _hoverNames?.Catalog) ?? entity;
         var life = _combatHost is { } combat ? AreaLife.Of(session, combat, entity) : null;
-        return AreaNpcSheet.Build(session, name, fields, loaded, life, _skillTexts?.Texts, AreaHoverIndex.TextProfile) ?? Refuse("the speaker is not a critter");
+        var pages = AreaNpcSheet.Build(session, name, fields, loaded, life, _skillTexts?.Texts, AreaHoverIndex.TextProfile) ?? Refuse("the speaker is not a critter");
+        // ARC-UI-1791 (ledger CHW25, 0x553D10): an NPC the local PC leads that stores a portrait shows it (a file that does not read leaves the slot empty); any other NPC shows its icon.
+        _sheetNpcPortrait = pages is { View.LedByHero: true } ? AreaPortraits.Stored(row) : null;
+        return _sheetNpcPortrait is null || pages is null ? pages : pages with { View = pages.View with { IconArt = null } };
     }
+
+    // ARC-UI-1791: the stored portrait the NPC sheet just built shows in its slot (null: the icon or nothing).
+    private int? _sheetNpcPortrait;
 
     private AreaSpellsPageView? NpcSpells() => _sheetNpc?.Spells(_spellData?.Data, _sheetCollege, _areaSession!.AutoLevel?.SpellWillpower ?? AutoLevelRules.DefaultSpellWillpower);
 
@@ -163,7 +169,8 @@ public partial class TerrainViewerApp
         if (build() is not { } npc) { RefreshAreaStatus(); return; }
         EnsureSheetPanel();
         AttachSheetArt(_sheetPanel!);
-        _sheetPanel!.SetPortrait(null);
+        if (_sheetNpcPortrait is { } portrait) LoadPortraits([portrait]);
+        _sheetPanel!.SetPortrait(_sheetNpcPortrait is { } shown ? PortraitTexture(shown) : null);
         QuarantineWorld(); _quickKeys.Reset();
         _sheetNpc = npc; _sheetPanel.ReadOnly = true;
         if (!OpenWindowMode(InterfaceMode.Character, () => _sheetPanel!.Open(npc.View, npc.Skills, NpcSpells(), npc.Stats, npc.Tech, NpcSchemes()), () => { _sheetPanel!.CloseView(); ResetNpcSheet(); }))

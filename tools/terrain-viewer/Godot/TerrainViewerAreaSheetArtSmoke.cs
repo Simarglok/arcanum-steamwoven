@@ -66,6 +66,9 @@ public partial class TerrainViewerApp
                 "the name in gold");
             Require(texts.Count(text => text.Font == AreaSheetFont.Label && text.Centred) >= 10 && texts.Count(text => text.Font == AreaSheetFont.Flare) == 13
                 && texts.Count(text => text.Font == AreaSheetFont.Cloister) == 3, "the stat, derived, resistance and gauge texts");
+            // ARC-UI-1791 (ledger CHW25): the hero's sheet prints its age at (337, 72) when the session stores one, and its portrait slot never holds an icon.
+            Require(view.Age is not { } heroAge || texts.Any(text => text.X == 337 && text.Y == 72 && text.Text.EndsWith(heroAge.ToString(), StringComparison.Ordinal)), "the hero's age line: " + view.Age);
+            Require(!art.IconForSelfTest, "the hero's portrait slot holds no icon");
             // The pointer over the first stat's + button: its text in the message window.
             var (px, py) = AreaCharacterSheetArtLayout.Plus(2);
             GetViewport().PushInput(new InputEventMouseMotion { Position = art.PointForSelfTest(px + 3, py + 3), GlobalPosition = art.PointForSelfTest(px + 3, py + 3) });
@@ -252,6 +255,9 @@ public partial class TerrainViewerApp
                     var npcTexts = art.TextsForSelfTest;
                     Require(npcTexts.Any(text => text.Colour == AreaSheetColour.Gold && text.Text.StartsWith(npc.View.Name[..Math.Min(npc.View.Name.Length, 3)], StringComparison.Ordinal)),
                         "the NPC's name in gold: " + npc.View.Name);
+                    // ARC-UI-1791 (ledger CHW25): an NPC's sheet has no age line; its slot shows the icon of 0x553D10 (the race's or its flag's) unless it shows the portrait of a follower.
+                    Require(!npcTexts.Any(text => text.X == 337 && text.Y == 72), "no age line on the NPC's sheet");
+                    Require(npc.View.IconArt is null || art.IconForSelfTest, "the NPC's slot icon, art " + npc.View.IconArt + " (the arts read: " + _sheetArtContent?.Detail + ")");
                     var shownBefore = _messageLog.Shown; var revisionNpc = session.Version.Revision;
                     await Click(art.PointForSelfTest(px + 3, py + 3));
                     Require(session.Version.Revision == revisionNpc && ReferenceEquals(_messageLog.Shown, shownBefore), "a click where the + stands presses nothing");
