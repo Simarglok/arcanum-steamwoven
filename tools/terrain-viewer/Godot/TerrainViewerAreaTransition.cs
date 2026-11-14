@@ -429,7 +429,9 @@ public partial class TerrainViewerApp
 
     private void AreaSmokeClick(Vector2 point)
     {
-        _worldTestTime = SimulationTime.At(_areaSmokeTime);
+        // ARC-DEV-2005: the frame count is in the stage's own unit (a scaled stage counts twentieths of a second, At(count) would read it as seconds and
+        // stamp the click a long way ahead of the stage's frames): a stage that has a test time keeps it, the last frame's.
+        _worldTestTime ??= SimulationTime.At(_areaSmokeTime);
         _UnhandledInput(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = true, Position = point, GlobalPosition = point });
     }
 
