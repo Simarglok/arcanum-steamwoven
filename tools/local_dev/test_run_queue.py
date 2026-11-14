@@ -9,6 +9,7 @@ import signal
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import unittest
 from unittest.mock import patch
@@ -1108,8 +1109,9 @@ class QueueRunTests(unittest.TestCase):
         self.assertEqual(again.returncode, 3, out)
 
     def test_wait_for_a_passing_run_prints_pass_and_exits_zero(self) -> None:
-        run = self.wrapper("quick", "passes", [sys.executable, "-c", "import time; time.sleep(0.5)"])
+        run = self.held("quick", "passes")
         seq = self.runs()[0]["seq"]
+        threading.Timer(1.0, self.release).start()
         done = subprocess.run([sys.executable, "-B", str(ARCANUM), "queue", "--wait", str(seq)], capture_output=True, text=True,
                               cwd=REPO, timeout=60)
         run.wait(30)
@@ -1166,18 +1168,17 @@ class QueueRunTests(unittest.TestCase):
         self.assertEqual(run("--all", "--wait", "5").returncode, 2)
         self.assertFalse(run_queue.pause_file().exists())
 
-    def test_a_waiter_spawns_no_process_and_never_waits_for_its_own_run(self) -> None:
+    def test_a_waiter_spawns_no_process_and_is_refused_inside_a_run(self) -> None:
         self.held("window", "watched")
         seq = self.runs()[0]["seq"]
         with patch.object(subprocess, "run", side_effect=AssertionError("spawned")), \
                 patch.object(subprocess, "Popen", side_effect=AssertionError("spawned")), \
                 patch("builtins.print"):
             self.assertEqual(run_queue.wait(seq, 0.0001, sleep=lambda _: None), run_queue.WAIT_TIMEOUT_EXIT)
-        with patch.dict(os.environ, {run_queue.TICKET_ENV: str(seq)}):
-            with self.assertRaises(ValueError):
-                run_queue.wait(seq)
-            with patch("builtins.print"):  # --all inside the run: that run is the only one, so the queue is empty for it
-                self.assertEqual(run_queue.wait(None), 0)
+        with patch.dict(os.environ, {run_queue.TICKET_ENV: str(seq)}):  # inside a queued run: refused, any target
+            for target in (seq, None, seq + 1):
+                with self.assertRaises(ValueError):
+                    run_queue.wait(target)
 
 
 if __name__ == "__main__":

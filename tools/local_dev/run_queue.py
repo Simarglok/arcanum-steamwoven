@@ -1142,7 +1142,7 @@ def status(history: int = 0) -> list[str]:
 
 WAIT_POLL_SECONDS = 1.0  # a waiter only reads the ticket files (libproc, no process spawned: ARC-DEV-1401), so a second is cheap
 WAIT_TIMEOUT_EXIT = 123  # ./arcanum queue --wait gave up waiting: the run is not stopped
-WAIT_UNKNOWN_EXIT = 122  # ./arcanum queue --wait RUN_ID: no such run (not live, not in the history)
+WAIT_UNKNOWN_EXIT = 122  # ./arcanum queue --wait RUN_ID: no such run (not live, not in the history); a run's own 122/123 looks the same
 
 
 def history_entry(seq: int) -> dict[str, Any] | None:
@@ -1182,17 +1182,18 @@ def wait(seq: int | None = None, minutes: float = 0.0, *, sleep: Callable[[float
     """ARC-DEV-1983: block until run `seq` (the ticket number `./arcanum queue` and the `ARCANUM_QUEUE log ticket=N`
     line show) has ended and return its exit code, printing its quiet-style result; seq None: until no run holds a place
     or waits (the pause is not a run). `minutes` > 0 limits the waiting: WAIT_TIMEOUT_EXIT, the run keeps going.
-    WAIT_UNKNOWN_EXIT when the run is neither live nor in the history. The waiter holds no place and spawns nothing."""
-    own = os.environ.get(TICKET_ENV, "")
-    if seq is not None and own == str(seq):
-        raise ValueError(f"ticket {seq} is the run this command is part of; waiting for it would never end")
+    WAIT_UNKNOWN_EXIT when the run is neither live nor in the history. The waiter holds no place, starts or stops no run of its own and spawns nothing; like every reader of the
+    queue it drops dead tickets. Refused inside a queued run (a deadlock with the runs behind it)."""
+    if os.environ.get(TICKET_ENV, "").isdigit():  # a run holds its place while it waits, so the runs behind it would wait for it
+        raise ValueError("this command runs inside a queued run's place: waiting for the queue from there can deadlock "
+                         "(the runs behind it wait for it); wait from outside the run")
     started = clock()
     last: Any = None
     while True:
         with _QueueLock():
             live = [item for _, item in tickets() if not item.get("paused")]
         if seq is None:
-            others = [item for item in live if str(item["seq"]) != own]  # never wait for the run this command is part of
+            others = live
             if not others:
                 print("queue empty", flush=True)
                 return 0

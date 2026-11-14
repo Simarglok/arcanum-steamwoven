@@ -506,7 +506,7 @@ def parser() -> argparse.ArgumentParser:
                          help="block until run RUN_ID (the ticket number of ./arcanum queue or of the ARCANUM_QUEUE log/start "
                               "line) has ended; print its PASS/FAIL result, log path and first error, and exit with its exit "
                               "code; without RUN_ID: until the queue is empty (ARC-DEV-1983). A waiter holds no place, spawns "
-                              "no process and stops nothing; Ctrl-C only ends the wait")
+                              "no process and starts or stops no run; Ctrl-C only ends the wait")
     command.add_argument("--all", action="store_true", help="same as --wait without a RUN_ID: until the queue is empty")
     command.add_argument("--timeout", type=positive_minutes, metavar="MIN",
                          help="with --wait: give up after MIN minutes with exit code " + str(run_queue.WAIT_TIMEOUT_EXIT)

@@ -445,10 +445,12 @@ before it. It replaces the earlier
   lists and the `ARCANUM_QUEUE log|start ticket=N` line shows) has ended, prints the same quiet result as the run itself (`PASS`/`FAIL`
   with `ticket=N`, the exit code, the log path and the first error) and exits with the run's exit code; a run that ended earlier answers
   at once from `history.jsonl`. `./arcanum queue --wait` (or `--all`) blocks until no run holds a place or waits (the pause is not a
-  run; a waiter started inside a queued run does not wait for that run). `--timeout MIN` gives up after MIN minutes with exit **123**
-  and `TIMEOUT` on stdout without stopping anything (a run's own limit exits 124, a run that is neither queued nor in the history
+  run). Inside a queued run's command the wait is refused (exit 1): that run holds its place, so the runs behind it would wait for it
+  while it waits for them. `--timeout MIN` gives up after MIN minutes with exit **123**
+  and `TIMEOUT` on stdout without stopping anything (a run's own limit exits 124; a command that itself exits 122 or 123 cannot be
+  told from these two, read the `PASS`/`FAIL`/`TIMEOUT`/`unknown` word, a run that is neither queued nor in the history
   exits 122, bad arguments 2, Ctrl-C 130). A waiter takes no place and changes no lane or ordering rule; it only reads the ticket
-  files once a second and spawns no process (libproc, ARC-DEV-1401). Use it when a run was started in the background (`./arcanum run
+  files once a second (like every reader it drops dead tickets) and spawns no process (libproc, ARC-DEV-1401). Use it when a run was started in the background (`./arcanum run
   ... &`, or a Bash `run_in_background`) or the thread must wait for other threads' runs; never a `sleep` or polling loop. A thread
   waiting for its own foreground `./arcanum run` needs nothing: that call already blocks.
 - **Limits.** A run that exceeds its limit has its whole process group stopped (SIGTERM, then SIGKILL after 10 s) and
