@@ -20,7 +20,7 @@ public partial class TerrainViewerApp
     // cursor); any non-modifier key, a modal window, focus loss, another menu choice or a rebuilt group drops it.
     private (string Entity, CompanionOrderType Type)? _pendingOrder;
     // The portraits' last state (session, revision, group, modal), so a frame with nothing new does not rebuild them.
-    private (Arcanum.Session.GameSessionOwner? Session, long Revision, AreaCompanionGroup? Group, bool Modal, object? Names, object? Combat)? _portraitStamp;
+    private (Arcanum.Session.GameSessionOwner? Session, long Revision, AreaCompanionGroup? Group, bool Modal, bool Held, object? Names, object? Combat)? _portraitStamp;
     // ARC-DEV-337 (B52): the process frame from which a shown follower without life values is asked again (null: none is missing). The stamp holds no
     // value of the bars, so a portrait built before the follower's record resolved (a map change, a window of the main map read later) would stay empty
     // at full health; a follower the host never has values for is asked twice a second, not every frame.
@@ -135,13 +135,15 @@ public partial class TerrainViewerApp
     {
         RefreshHeroGauges();
         // ARC-UI-020: the combat host gives the portraits' bars their values.
-        var stamp = (_areaSession, _areaSession?.Version.Revision ?? -1, _areaCompanions, WorldModal, (object?)_hoverIndex, (object?)_combatHost);
+        // ARC-UI-2069 (DB1, DB2): under Original the dialog leaves the panel drawn and inert; every other modal window hides it.
+        var held = WorldModal && PortraitsHeldUnderDialog;
+        var stamp = (_areaSession, _areaSession?.Version.Revision ?? -1, _areaCompanions, WorldModal, held, (object?)_hoverIndex, (object?)_combatHost);
         if (_portraitStamp == stamp && (_portraitLifeRetry is not { } retry || Engine.GetProcessFrames() < retry)) return;
         // ARC-UI-1736 (FP1, the module's reset 0x56A880): a new session (a new game, a load) shows the panel again from the first follower.
         if (_portraitStamp is { } previous && !ReferenceEquals(previous.Session, _areaSession) && _areaSession is not null) _followerPortraits?.ResetPanel();
         _portraitStamp = stamp;
         _portraitLifeRetry = null;
-        if (_areaSession is not { } session || _areaCompanions is not { } group || _conversationHost is not { PartyWired: true } || WorldModal)
+        if (_areaSession is not { } session || _areaCompanions is not { } group || _conversationHost is not { PartyWired: true } || WorldModal && !held)
         {
             // A modal window only covers the strip (ARC-UI-1736: the scroll offset stays); no session, group or party shows none.
             if (WorldModal && _areaSession is not null && _areaCompanions is not null && _conversationHost is { PartyWired: true }) _followerPortraits?.Suspend();
@@ -150,6 +152,8 @@ public partial class TerrainViewerApp
             if (TargetsDroppedByModal) { CancelPendingOrder("a window opened"); _orderKeyArmed = null; }
             return;
         }
+        // The dialog's hook consumes the panel's records (0x56A9D0 returns at once): a pending walk order is dropped as under any window.
+        if (held && TargetsDroppedByModal) { CancelPendingOrder("a window opened"); _orderKeyArmed = null; }
         if (_followerPortraits is null)
         {
             _followerPortraits = new AreaFollowerPortraits(); AddChild(_followerPortraits);
@@ -169,7 +173,14 @@ public partial class TerrainViewerApp
         var shownFollowers = followers.Select(c => (c.Entity, CompanionName(c), CompanionLife(c), FollowerPortrait(c))).ToArray();
         if (shownFollowers.Any(f => f.Item3 is null)) _portraitLifeRetry = Engine.GetProcessFrames() + PortraitLifeRetryFrames;
         _followerPortraits.Show(shownFollowers);
+        // The pointer rested on the portrait when the dialog opened (a click talks): the hover is forgotten with no exit, which would wipe the dialog start's description (DB3).
+        if (held && !_followerPortraits.Inert) { _portraitHoverKey = null; _portraitAllows = null; _hoverStamp = null; }
+        _followerPortraits.Inert = held;
     }
+
+    /// <summary>ARC-UI-2069 (ledger DB1, DB2): the portraits stay drawn and inert under the open dialog (Original) while nothing else covers the screen.</summary>
+    private bool PortraitsHeldUnderDialog => AreaFollowerPanelRules.HeldUnderDialog(DialogBarStays, _interfaceWindows.Stack.Current == InterfaceMode.Dialog,
+        PaletteOpen || SaveListOpen || MainMenuOpen || HeroDeathCovering || MovieCovering || BugReportOpen);
 
     /// <summary>
     /// ARC-DEV-280 (B33): the left button's release over a follower's portrait is a click on that follower, as the original's portrait button

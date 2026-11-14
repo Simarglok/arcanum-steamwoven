@@ -1,7 +1,10 @@
+using Arcanum.Data;
 using Arcanum.Presentation.Hud;
+using Arcanum.Scripting.Dialog;
 using Arcanum.Session;
 using Arcanum.Simulation.Hotkeys;
 using Arcanum.TerrainViewer.Core;
+using Arcanum.TerrainViewer.Tests;
 using Arcanum.World;
 using Godot;
 
@@ -145,6 +148,82 @@ public partial class TerrainViewerApp
             await Click(view.SlotCentreForSelfTest(2));
             Require(_spellTargeting?.Spell == spell && _hotkeyActivations == activations + 1, "a click on slot 2 opened the spell's cursor: " + _hotkeyNotice);
             CancelSpellTargeting(null);
+
+            // ARC-UI-2068 (DB2, 0x54FCF0): the bars stay under the dialog (Original) and the slots are not blocked: a click on an entry ends the dialog and then acts
+            // (the spell's cursor opens only with no window open, so it shows the order), a click on an empty entry leaves the dialog, the A key does the same as a click.
+            {
+                var priorRules = session.Rules.Mode;
+                Require(session.SelectRules(RuleMode.Original) != GameSessionDisposition.Rejected, "Original rules selected for the dialog step");
+                try
+                {
+                    IDisposable OpenBarDialog()
+                    {
+                        var dialogSession = ConversationSessionFixture.Create();
+                        var state = new AreaConversationState(dialogSession, new(1), ["oid:synthetic-0"], 50);
+                        var dialog = DialogConversation.Start(DlgReader.Read(System.Text.Encoding.Latin1.GetBytes(TerrainViewerSelfTest.DigitDialog)),
+                            new DialogConversationRequest(new DialogNodeId(1),
+                                new DialogParticipants(new DialogId(5), AreaConversationState.PcParticipant, AreaConversationState.Npc(0)),
+                                new DialogScriptLine(4), AreaConversationProfile.Diagnostic.Pc, AreaConversationProfile.Diagnostic.Names),
+                            new DialogConversationPorts(state, state, dialogSession.Flags, state));
+                        ShowConversationPanel("Hotkey dialog", dialog, null);
+                        return dialogSession;
+                    }
+                    var emptySlot = Enumerable.Range(0, 10).First(i => session.QueryHotkeys().Entries[i].IsEmpty);
+                    using (OpenBarDialog())
+                    {
+                        await Frames(2);
+                        Require(ConversationOpen && _gameBarPanel is { Visible: true }, "the dialog is open and the bars stay");
+                        var before = _hotkeyActivations;
+                        await Click(view.SlotCentreForSelfTest(emptySlot));
+                        Require(ConversationOpen && _hotkeyActivations == before, "a click on an empty entry leaves the dialog open: " + _hotkeyNotice);
+                        await Click(view.SlotCentreForSelfTest(2));
+                        Require(!ConversationOpen && _spellTargeting?.Spell == spell && _hotkeyActivations == before + 1, "a click on slot 2 ended the dialog, then opened the spell's cursor: " + _hotkeyNotice);
+                        CancelSpellTargeting(null);
+                    }
+                    using (OpenBarDialog())
+                    {
+                        await Frames(2);
+                        var before = _hotkeyActivations;
+                        HotkeyKey(Key.A);
+                        Require(!ConversationOpen && _spellTargeting?.Spell == session.QueryHotkeys().Recent[0].Index && _hotkeyActivations == before + 1, "the A key ended the dialog, then opened the latest action's cursor: " + _hotkeyNotice);
+                        CancelSpellTargeting(null);
+                    }
+                    // The latest recent action's button ends the dialog too.
+                    using (OpenBarDialog())
+                    {
+                        await Frames(2);
+                        var before = _hotkeyActivations;
+                        await Click(view.RecentCentreForSelfTest(0));
+                        Require(!ConversationOpen && _spellTargeting is not null && _hotkeyActivations == before + 1, "the recent-action button ended the dialog, then opened its cursor: " + _hotkeyNotice);
+                        CancelSpellTargeting(null);
+                    }
+                    // Steamwoven hides the bars under the dialog: the A key leaves it open.
+                    Require(session.SelectRules(RuleMode.Steamwoven) != GameSessionDisposition.Rejected, "Steamwoven rules selected for the dialog step");
+                    using (OpenBarDialog())
+                    {
+                        await Frames(2);
+                        var before = _hotkeyActivations;
+                        HotkeyKey(Key.A);
+                        Require(ConversationOpen && _hotkeyActivations == before && _spellTargeting is null, "Steamwoven: the A key leaves the dialog open: " + _hotkeyNotice);
+                        CloseWindowMode(InterfaceMode.Dialog);
+                    }
+                    Require(session.SelectRules(RuleMode.Original) != GameSessionDisposition.Rejected, "Original rules selected again");
+                    // A skill entry: the prowling button toggles after the dialog ended (0x579FA0 pops it first); a second click puts it back.
+                    Require(session.AssignHotkey(session.Version, emptySlot, HotkeyEntry.ForSkill(SkillBarButton.Prowling)).Disposition == GameSessionDisposition.Changed, "prowling goes on an entry");
+                    await Frames(2);
+                    using (OpenBarDialog())
+                    {
+                        await Frames(2);
+                        var concealed = HeroConcealed;
+                        await Click(view.SlotCentreForSelfTest(emptySlot));
+                        Require(!ConversationOpen && HeroConcealed != concealed, "a click on the prowling entry ended the dialog and toggled prowling: " + _hotkeyNotice);
+                    }
+                    await Click(view.SlotCentreForSelfTest(emptySlot));
+                    session.ClearHotkey(session.Version, emptySlot);
+                    GD.Print("ARC-UI-2068 native-smoke hotkey-dialog PASS");
+                }
+                finally { session.SelectRules(priorRules); }
+            }
 
             // A right drag between slots moves the entry; one off the bar empties it.
             await Drag(view.SlotCentreForSelfTest(2), view.SlotCentreForSelfTest(6));

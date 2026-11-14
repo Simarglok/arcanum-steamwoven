@@ -132,8 +132,29 @@ public static partial class TerrainViewerSelfTest
             Require(!panel.BandInputForSelfTest(Release(new(10, 2))) && conversation.CurrentNode.Value == node, "the band takes no release (the reply buttons act on the press, not the release)");
             panel.BandInputForSelfTest(new InputEventMouseMotion { Position = new(10, 5) });
             Require(panel.RowLitForSelfTest(0), "the pointer on the first row's drawn pixels lights it");
+            // ARC-UI-2052: the rows are rebuilt (here by the numbering) under a stationary pointer: the new row is lit against the live cursor, no motion needed.
+            panel.NumberedReplies = false;
+            await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+            await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+            Require(panel.RowLitForSelfTest(0) && panel.ButtonsForSelfTest[0].HasMeta("rowLit") && panel.ButtonsForSelfTest[0].GetMeta("rowLit").AsBool(),
+                "after a re-render the row under the stationary pointer is lit again, with no new motion");
             panel.BandInputForSelfTest(new InputEventMouseMotion { Position = new(10, 20) });
             Require(!panel.RowLitForSelfTest(0), "moving off the row (into the gap below) unlights it");
+            panel.NumberedReplies = true;
+            await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+            await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+            Require(!panel.RowLitForSelfTest(0), "after a re-render with the pointer in the gap no row is lit");
+            panel.BandInputForSelfTest(new InputEventMouseMotion { Position = new(10, 5) });
+            Require(panel.RowLitForSelfTest(0), "the pointer back on the row lights it");
+            panel.NumberedReplies = false;
+            await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+            await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+            panel.NumberedReplies = true;
+            await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+            Require(panel.RowLitForSelfTest(0), "the row stays lit across two re-renders under the stationary pointer");
+            panel.BandInputForSelfTest(new InputEventMouseMotion { Position = new(-5, 5) });
+            await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+            Require(!panel.RowLitForSelfTest(0), "a pointer outside the band lights nothing");
             Require(panel.BandInputForSelfTest(Press(new(10, 2))), "a press above the first row's drawn top is still in its click band");
             await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
             Require(picks == 2 && lines.Count == 4 && lines[3] == "removed", $"the ending reply removes the bubble and shows no new persistent one: {string.Join("|", lines)}");
@@ -397,6 +418,16 @@ public partial class TerrainViewerApp
             TerrainViewerSelfTest.Require(!PaletteOpen && ConversationOpen, "the palette cannot open over the conversation");
             _conversationPanel!.LeaveForSelfTest.EmitSignal(BaseButton.SignalName.Pressed);
             TerrainViewerSelfTest.Require(!ConversationOpen && !WorldModal, "Close ends the modal surface");
+            // ARC-UI-2052: Close and the replies act on the press, so the panel is gone when the matching left release arrives: that lone release
+            // (through the world's input callback and the unhandled path) sets no route, picks nothing, opens nothing.
+            {
+                var clickBefore = _worldRouteClick; var routeBefore = _worldRouteDiagnostic;
+                var releaseAt = GetViewport().GetVisibleRect().Size / 2;
+                var lone = new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = false, Position = releaseAt, GlobalPosition = releaseAt };
+                InputWorld(lone); _UnhandledInput(lone);
+                TerrainViewerSelfTest.Require(_worldRouteClick == clickBefore && _worldRouteDiagnostic == routeBefore && !ConversationOpen && !WorldModal,
+                    $"the lone left release after the closing press acts on nothing (click '{clickBefore}' -> '{_worldRouteClick}')");
+            }
             // ARC-UI-2024 (DB1, DB3): Original leaves the bars drawn under the dialog and lays the panel above them; Steamwoven hides them under it.
             {
                 var session = _areaSession!;

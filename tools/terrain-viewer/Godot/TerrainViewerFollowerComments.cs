@@ -53,16 +53,39 @@ public partial class TerrainViewerApp
     private int _followerLinesSaid;
 
     /// <summary>The can-speak test (0x4AD800 with flag 1) as far as it is modelled: its head (<see cref="CanSpeakRules.Head"/>: destroyed or off, stunned, paralysed or mute, asleep, stoned, dead) and the spent fatigue (0x45D800).</summary>
-    private bool FollowerCanSpeak(GameSessionOwner session, AreaSpeaker speaker, string entity)
+    private bool FollowerCanSpeak(GameSessionOwner session, AreaSpeaker speaker, string entity) =>
+        CanSpeakRules.Test(SpeakerCanSpeakFacts(session, speaker, entity), skipsActivityTests: true, () => false, () => false, otherPartner: false) == CanSpeakRules.Free;
+
+    /// <summary>
+    /// ARC-UI-2030 (0x4AD800 head): what the can-speak test asks about a speaker now, from the session's writes over the stored fields: destroyed or off (object flags 0x3), stunned, paralysed or mute (critter flags 0x2060),
+    /// asleep (0x1000), spell 58 in effect, stoned (spell flag 0x10000), dead (with the spoken-with-dead flag), and the spent fatigue (0x45D800). One reader for the talk start, the follower lines and the barter cycle.
+    /// </summary>
+    private CanSpeakFacts SpeakerCanSpeakFacts(GameSessionOwner session, AreaSpeaker speaker, string entity)
     {
         var fields = _combatHost?.Fields(entity);
         var written = session.QueryObjectFlags(entity);
         var critter = unchecked((uint)written.Critter(unchecked((int)(fields?.Critter?.Flags ?? 0))));
         var spell = unchecked((uint)written.Spell(unchecked((int)(fields?.Object.SpellFlags ?? 0))));
+        var objectFlags = unchecked((uint)written.Object(unchecked((int)(fields?.Object.Flags ?? 0))));
         var unconscious = _combatHost?.Build(session, CurrentAreaMap, entity).Combat is { } combat && session.QueryLife(combat.Target).View is { } view && view.Status.IsUnconscious;
-        var head = CanSpeakRules.Head(new CanSpeakFacts(StunnedParalysedOrMute: (critter & 0x2060) != 0, Asleep: (critter & 0x1000) != 0, Stoned: (spell & 0x10000) != 0,
-            Dead: SpeakerDead(speaker), SpokenWithDead: (spell & unchecked((uint)SessionSpellCaster.SpokenWithDeadSpellFlag)) != 0, Unconscious: unconscious));
-        return head is null or CanSpeakRules.Free;
+        return new CanSpeakFacts(Destroyed: (objectFlags & 0x3) != 0, StunnedParalysedOrMute: (critter & 0x2060) != 0, Asleep: (critter & 0x1000) != 0,
+            Spell58: AreaAiHostNow()?.UnderInfluence(entity, CanSpeakRules.MuteSpell) == true, Stoned: (spell & 0x10000) != 0,
+            Dead: SpeakerDead(speaker), SpokenWithDead: (spell & unchecked((uint)SessionSpellCaster.SpokenWithDeadSpellFlag)) != 0, Unconscious: unconscious);
+    }
+
+    /// <summary>
+    /// ARC-UI-2030 (0x4AD800 whole at flag 0, as the dialog start 0x567460 asks it): the answer for the NPC <paramref name="speaker"/> toward the hero; 0 can speak. After the head the combat focus or flight of the NPC (danger
+    /// state 1 or 2, 0x4AAB00) refuses with 2 (surrender does not), else the NPC's runs are interrupted at level 2 (0x424070, once, its end nodes as the AI host ends a run; the NPC's follow goal is a companion's run, so it is dropped with it)
+    /// and a refused interrupt answers 3. The interrupt stays when a later refusal comes. The other-partner test (4) cannot fire with one player character: the NPC's slot holds the hero, the asker.
+    /// </summary>
+    private int DialogStartCanSpeak(AreaSpeaker speaker)
+    {
+        if (_areaSession is not { } session) return CanSpeakRules.Free;
+        var entity = AreaConversationState.EntityId(speaker.Row);
+        var ai = AreaAiHostNow();
+        return CanSpeakRules.Test(SpeakerCanSpeakFacts(session, speaker, entity), skipsActivityTests: false,
+            () => ai?.ReadDanger(entity) is Arcanum.Simulation.Ai.DangerState.CombatFocus or Arcanum.Simulation.Ai.DangerState.Flee,
+            () => { _areaCompanions?.InterruptGoals(speaker.Row.Key); return ai?.InterruptForTalk(entity) == false; }, otherPartner: false);
     }
 
     /// <summary>

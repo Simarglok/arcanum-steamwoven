@@ -72,6 +72,22 @@ public static class CanSpeakRules
         return facts.OtherPartner ? OtherConversation : Free;
     }
 
+    /// <summary>The spell whose influence refuses the can-speak test (spell 58, the head's "unable").</summary>
+    public const int MuteSpell = 58;
+
+    /// <summary>
+    /// ARC-UI-2030 (0x4AD800 whole, as the dialog start 0x567460, 0x412FD0 and the generic greeting 0x4132A0 ask it, flag 0): the <see cref="Head"/>, then the tail with its two activity tests in the executable's order. The
+    /// tail's facts are asked lazily because the interrupt (<paramref name="goalRefusesInterrupt"/>, 0x424070 at level 2 on the NPC) is a side effect the original makes only for a living, able NPC that is neither in combat
+    /// focus nor fleeing, and nothing undoes it when a later refusal comes. With <paramref name="skipsActivityTests"/> (flag 1, the follower lines) neither is asked. 0 is "can speak"; any other answer refuses the talk.
+    /// </summary>
+    public static int Test(in CanSpeakFacts facts, bool skipsActivityTests, Func<bool> inCombatFocusOrFlee, Func<bool> goalRefusesInterrupt, bool otherPartner)
+    {
+        if (Head(facts) is { } answer) return answer;
+        var fighting = !skipsActivityTests && inCombatFocusOrFlee();
+        var busy = !skipsActivityTests && !fighting && goalRefusesInterrupt();
+        return Tail(new(fighting, busy, otherPartner), skipsActivityTests);
+    }
+
     /// <summary>Whether a dead NPC can be talked to: the flag spell 56 sets and removes. A living NPC is not asked here (null: the test goes on).</summary>
     public static bool DeadMayTalk(bool spokenWithDead) => Head(new CanSpeakFacts(Dead: true, SpokenWithDead: spokenWithDead)) == Free;
 }
