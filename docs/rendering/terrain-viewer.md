@@ -2415,6 +2415,7 @@ project's, except as below.
   default and no other setting changes. Each change is saved at
   once (the original writes `arcanum.cfg` when the game exits). Space's toggle also saves the turn-based setting now. An
   automated run (self-test, native smoke) reads and writes no file; `GAME_SETTINGS_TEST_PATH` names a settings file for a test.
+- **Opening by O (ARC-UI-2026, OP9).** The release of the O key opens this window at its Game page in play, over any window and over the dialog (the press only arms it; Escape's route is the same). It raises no pause (the Esc menu does) and refuses only while a text entry or a menu is open; the inventory family closes under it as under Escape. The dialog stays and goes on after Done.
 - **Closing.** Done goes back to the main menu, or from play closes the menu and play goes on; from play the O key
   does the same. Escape does nothing in this window, as in the original's key table.
 
