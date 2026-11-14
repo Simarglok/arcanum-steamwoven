@@ -38,6 +38,14 @@ public sealed partial class GameSessionOwner
         return PcLeaderOf(critter);
     }
 
+    /// <summary>ARC-WORLD-2130: the NPC-leader link of <paramref name="critter"/> (its leader and the forced bit, field 0x118 bit 0x400), or null when no NPC leads it (the hero's followers are in <see cref="QueryParty"/>). An invalid id throws.</summary>
+    public SessionNpcFollower? QueryNpcLink(string critter)
+    {
+        ThrowIfDisposed();
+        if (!SessionValidation.Entity(critter)) throw new ArgumentException("Invalid entity id.", nameof(critter));
+        return _party.NpcLed.TryGetValue(critter, out var link) ? link : null;
+    }
+
     /// <summary>The follower array of <paramref name="leader"/> in order (field 0xF1): the hero's party array for the hero, the NPC followers of an NPC leader; empty for a critter that leads no one. An invalid id throws.</summary>
     public IReadOnlyList<string> QueryFollowers(string leader)
     {
@@ -162,7 +170,10 @@ public sealed partial class GameSessionOwner
         if (!_party.NpcLed.ContainsKey(entity)) return NoChange();
         if (!leave.Force && !FollowConsentRules.MayLeaveUnforced(leave.LeaderCharisma, leave.MindControlled)) return Reject(GameSessionFailure.LeaveRefused);
         if (_revision == long.MaxValue) return Reject(GameSessionFailure.RevisionExhausted);
+        // ARC-WORLD-2130 (0x4AC380 after a leave that went through): the JILTED bit goes with the record the leave leaves behind.
+        if (leave.Jilt && !_party.Records.ContainsKey(entity) && _party.Records.Count >= _limits.MaxCompanions) return Reject(GameSessionFailure.BudgetExceeded);
         LeaveNpcLeader(entity);
+        if (leave.Jilt) _party.Put(_party.Get(entity) with { Jilted = true }, false);
         return Changed();
     }
 

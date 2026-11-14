@@ -551,6 +551,9 @@ src/Arcanum.World/AreaAiHostGround.cs,LooseItems,exempt,host
 src/Arcanum.World/AreaAiHostGround.cs,StartPickup,exempt,host
 src/Arcanum.World/AreaAiHostHealer.cs,HealerCast,exempt,host
 src/Arcanum.World/AreaAiHostHealer.cs,HealerService,exempt,host
+src/Arcanum.World/AreaAiHostLoyalty.cs,LoyaltyCheck,exempt,host
+src/Arcanum.World/AreaAiHostLoyalty.cs,NpcLedConsent,exempt,host
+src/Arcanum.World/AreaAiHostLoyalty.cs,NpcLoyaltyStep,exempt,host
 src/Arcanum.World/AreaAiHostRedirect.cs,SpellRedirect,exempt,host
 src/Arcanum.World/AreaAiHostRedirect.cs,Vicinity,exempt,host
 src/Arcanum.World/AreaAiHostRoutes.cs,RelocateAlongPath,pending,

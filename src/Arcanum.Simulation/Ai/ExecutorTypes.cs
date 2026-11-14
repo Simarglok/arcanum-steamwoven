@@ -610,8 +610,8 @@ public interface IAiPerformWorld : IAiGoalWorld
     string? Leader(string npc);
     /// <summary>NPC flag "wait here".</summary>
     bool Waiting(string npc);
-    /// <summary>The loyalty check after the follow request (companion C13).</summary>
-    void LoyaltyCheck(string npc);
+    /// <summary>The loyalty check after the follow request (companion C13). <paramref name="followStarted"/>: the follow request just started the follow goal (a running goal of the action class: the step does not run, OL18).</summary>
+    void LoyaltyCheck(string npc, bool followStarted);
     /// <summary>The routine of an NPC without a leader (S22).</summary>
     void RunRoutine(string npc);
     /// <summary>Combat perform's back-off start (<see cref="MoraleRules.StartsBackOff"/> and the session's <c>StartBackOff</c>):

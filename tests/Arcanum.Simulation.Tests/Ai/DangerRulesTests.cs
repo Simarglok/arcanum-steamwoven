@@ -154,4 +154,31 @@ public sealed class DangerRulesTests
         Assert.IsTrue(DangerRules.SkipsEnemy([], "a", true));
         Assert.IsFalse(DangerRules.SkipsEnemy(["b"], "a", false));
     }
+
+    // ARC-WORLD-2130 (0x4AABE0): the leader's charisma is read only where the original reads it: for a FLEE that NO_FLEE did not already turn into COMBAT_FOCUS and for a SURRENDER, after the invulnerable test.
+    [TestMethod]
+    public void The_leader_charisma_is_read_only_for_a_flee_or_surrender_that_reaches_the_leader_test()
+    {
+        var reads = 0;
+        DangerSetterFacts Facts(bool invulnerable = false, bool noFlee = false) => new(invulnerable, noFlee, ReadLeaderCharisma: () => { reads++; return true; });
+        foreach (var (state, facts, expectedReads, expected) in new (DangerState, DangerSetterFacts, int, DangerState)[]
+        {
+            (DangerState.None, Facts(), 0, DangerState.None),
+            (DangerState.CombatFocus, Facts(), 0, DangerState.CombatFocus),
+            (DangerState.Flee, Facts(noFlee: true), 0, DangerState.CombatFocus),
+            (DangerState.Flee, Facts(invulnerable: true), 0, DangerState.None),
+            (DangerState.Surrender, Facts(invulnerable: true), 0, DangerState.None),
+            (DangerState.Flee, Facts(), 1, DangerState.CombatFocus),
+            (DangerState.Surrender, Facts(), 1, DangerState.CombatFocus),
+            (DangerState.Surrender, Facts(noFlee: true), 1, DangerState.CombatFocus),
+        })
+        {
+            reads = 0;
+            var step = Set(DangerFlags.None, state, facts);
+            Assert.AreEqual((expectedReads, expected), (reads, step.Applied), $"{state} {facts.Invulnerable} {facts.NoFlee}");
+        }
+        reads = 0;
+        var stays = Set(DangerFlags.None, DangerState.Flee, new(ReadLeaderCharisma: () => { reads++; return false; }));
+        Assert.AreEqual((1, DangerState.Flee), (reads, stays.Applied), "a leader under 20 reads once and the flight stands");
+    }
 }

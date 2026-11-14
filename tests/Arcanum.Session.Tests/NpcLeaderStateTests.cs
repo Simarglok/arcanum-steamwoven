@@ -212,4 +212,38 @@ public sealed class NpcLeaderStateTests
     }
 
     private static SessionPartyState Party(params SessionNpcFollower[] led) => new([], [], led);
+
+    // ARC-WORLD-2130 (0x4AC380 after 0x45DFC0): an NPC-led follower that leaves through the loyalty step is free and jilted; a leave without the jilt flag leaves no mark, as before.
+    [TestMethod]
+    public void A_jilting_leave_of_an_npc_led_follower_marks_it_jilted_and_a_refused_one_changes_nothing()
+    {
+        using var owner = Create();
+        Changed(owner.ForceJoinLeader(owner.Version, Summon, Mage));
+        var refused = owner.Version;
+        Assert.AreEqual(GameSessionFailure.LeaveRefused, owner.LeaveParty(owner.Version, Summon, new PartyLeave(Force: false, LeaderCharisma: 20, Jilt: true)).Failure);
+        Assert.AreEqual(refused, owner.Version);
+        Assert.AreEqual(Mage, owner.QueryLeader(Summon));
+        Assert.IsFalse(owner.QueryCompanion(Summon).Jilted);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.LeaveParty(owner.Version, Summon, new PartyLeave(Force: false, LeaderCharisma: 19, Jilt: true)).Disposition);
+        Assert.IsNull(owner.QueryLeader(Summon));
+        Assert.IsTrue(owner.QueryCompanion(Summon).Jilted);
+        Changed(owner.ForceJoinLeader(owner.Version, Imp, Mage));
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.LeaveParty(owner.Version, Imp, new PartyLeave(Force: true)).Disposition);
+        Assert.IsFalse(owner.QueryCompanion(Imp).Jilted, "no jilt without the flag");
+        Changed(owner.ForceJoinLeader(owner.Version, Summon, Mage));
+        Assert.IsFalse(owner.QueryCompanion(Summon).Jilted, "a join clears the mark");
+    }
+
+    // ARC-WORLD-2130: the link query answers the leader and the forced bit of an NPC-led follower, and null for a critter no NPC leads (the hero's follower included).
+    [TestMethod]
+    public void The_npc_link_query_answers_the_leader_and_the_forced_bit()
+    {
+        using var owner = Create();
+        Assert.IsNull(owner.QueryNpcLink(Summon));
+        Changed(owner.ForceJoinLeader(owner.Version, Summon, Mage));
+        Assert.AreEqual(new SessionNpcFollower(Summon, Mage, true), owner.QueryNpcLink(Summon));
+        Changed(owner.ForceJoinParty(owner.Version, Virgil));
+        Assert.IsNull(owner.QueryNpcLink(Virgil), "the hero's follower has no NPC link");
+        Assert.ThrowsException<ArgumentException>(() => owner.QueryNpcLink(""));
+    }
 }
