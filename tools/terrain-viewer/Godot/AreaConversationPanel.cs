@@ -516,8 +516,8 @@ public partial class AreaConversationPanel : CanvasLayer
 
     /// <summary>
     /// ARC-UI-2022 (ledger DH4, DH8, DB3): the band over the game view: 100 px tall, as wide as the rows made it (at least 400), centred, its top at 299 in a
-    /// 400 px view else the view height minus 181; the view is the part the bars leave free (the original's iso window, 0x557810: (0, 41, 800, 400) with the
-    /// interface on), so the band lies above the bottom bar. The stack inside it is 6 px in on both sides. A diagnostic panel that is still drawn sits above the band.
+    /// 400 px view else the view height minus 181; the view is the part the bars leave free (the original's iso window, (0, 41, 800, 400) with the
+    /// interface on, ledger DB3), so the band lies above the bottom bar. The stack inside it is 6 px in on both sides. A diagnostic panel that is still drawn sits above the band.
     /// </summary>
     private void PlaceBand(Vector2 window, float panelHeight)
     {
