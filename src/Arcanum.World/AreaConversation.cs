@@ -767,7 +767,7 @@ public sealed class AreaConversationHost
         public DialogHealerFacts Facts(DialogHealerQuery query)
         {
             if (query.PlayerCharacter != AreaConversationState.PcParticipant || query.Npc != npc) throw new ArgumentException("Not the talk's speaker.", nameof(query));
-            var facts = ai.HealerFacts(entity, query.Skill) ?? throw new InvalidOperationException("The speaker is no NPC of the AI host.");
+            var facts = ai.HealerFacts(entity, query.Skill) ?? throw new InvalidOperationException("The speaker is neither an NPC nor a companion of the AI host.");
             return new(facts.Rank, facts.SkillAllowed, facts.SkillLevel, facts.SkillTraining, facts.LedByPc, facts.NoPcLeader);
         }
 
