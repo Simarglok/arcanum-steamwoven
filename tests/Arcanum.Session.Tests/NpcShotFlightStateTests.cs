@@ -64,6 +64,23 @@ public sealed class NpcShotFlightStateTests
         throw new InvalidOperationException();
     }
 
+    // ARC-COMBAT-1766 (0x4B2870, PF9, PS5): an archer's arrow at the end of its flight names the archer as the shooter, the bow as the parent item and the hero (the marker target mapped to the player) or the aimed critter
+    // as the extra object, for the weapon's scripts.
+    [TestMethod]
+    public void AnArrowsEndNamesTheArcherTheBowAndTheTargetForTheWeaponScripts()
+    {
+        using var owner = Owner();
+        var archer = Combat(Archer, BowFields());
+        var (atHero, _) = Next(owner, Shoot(archer), hit: false);
+        var ends = owner.QueryShotEndScripts(atHero.Shot!.Value)!.Value;
+        Assert.AreEqual((Archer, Bow, false, SessionEventKinds.PlayerEntity, true), (ends.Attacker, ends.Weapon, ends.Thrown, ends.Target, ends.IsWeapon), "the hero's marker target is the player");
+        Assert.AreEqual(atHero.Resolution!.Outcome is AttackOutcome.CriticalHit or AttackOutcome.CriticalMiss, ends.Critical, "the critical flag is the decided check's");
+        Assert.IsTrue(owner.EndShot(atHero.Shot.Value));
+        Assert.IsNull(owner.QueryShotEndScripts(atHero.Shot.Value), "a shot no longer in flight runs nothing");
+        var (atOther, _) = Next(owner, Shoot(archer, target: Combat(Other)), hit: false);
+        Assert.AreEqual(Other, owner.QueryShotEndScripts(atOther.Shot!.Value)!.Value.Target, "a critter target is named by its entity");
+    }
+
     [TestMethod]
     public void ABowWithAProjectileArtFliesAndItsDamageWaitsForTheStrike()
     {
