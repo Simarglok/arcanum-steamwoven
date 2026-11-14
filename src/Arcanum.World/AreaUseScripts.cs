@@ -206,7 +206,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     /// <summary>ARC-SCRIPT-1772 (CQ1–CQ5): the critter getters (38, 39, 89; <see cref="ScrAdmissionSet.CritterFieldActions"/>), toggle invulnerability (57) and rename (92) of <see cref="ScrAdmissionSet.S56"/>, which the use set and so the placed, combat-point, dying and
     /// heartbeat sets admit: the getters are answered here (<see cref="IScrCritterFieldQueries"/>), the two writes go through the session for the PC and an NPC (<see cref="ObjectStateRefusal"/> refuses the rest).</summary>
     private static int[] CritterFieldWriteActions => [.. ScrAdmissionSet.CritterFieldActions, ScrCatalogue.Action.ToggleInvulnerability, ScrCatalogue.Action.Rename];
-    /// <summary>ARC-SCRIPT-1734 (WE11, WE12): play spell eye candy (104) and stop script eye candy (124) of <see cref="ScrAdmissionSet.S55"/>, which the use set admits beside play script eye candy (120): the run's result hands them on as eye candy requests and no host shows them yet (#1592).</summary>
+    /// <summary>ARC-SCRIPT-1734 (WE11, WE12): play spell eye candy (104) and stop script eye candy (124) of <see cref="ScrAdmissionSet.S55"/>, which the use set admits beside play script eye candy (120): the run's result hands them on as eye candy requests; the viewer shows the stop since ARC-SCRIPT-1828 (the spell play, 104, is not shown yet).</summary>
     private static int[] EyeCandyActions => [ScrCatalogue.Action.PlaySpellEyeCandy, ScrCatalogue.Action.StopScriptEyeCandy];
 
     /// <summary>ARC-DEV-243 (S14g): damage (60), apply unresistable damage (138) and heal hit points (75), which the placed and heartbeat sets admit.</summary>

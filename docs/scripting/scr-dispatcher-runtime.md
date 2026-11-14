@@ -468,6 +468,7 @@ or 91 implements `IScrItemQueries` (`ScrRunOptions.Validate` refuses one that do
 - **Play script eye candy** hands `ScrEyeCandy(number, object)` to the host (`ScrEffects.EyeCandies`); an absent object shows
   nothing. ARC-SCRIPT-1592: the dialog host and the use host keep the requests of the runs they applied (`TakeEyeCandies`, in action order,
   taken once) and the viewer plays them on the shown map every frame as overlay runs of the script list (`AreaEyeCandyHost.PlayScript`, ledger [VT9](../research/ledger/scripts.md)).
+  ARC-SCRIPT-1828: **stop script eye candy** (124) hands `ScrEyeCandy(number, object, StopScript)` on, which the hosts keep in the same list in action order (`AreaScriptEyeCandy.Stop`) and the viewer takes off through `AreaEyeCandyHost.StopScript`: the first run of the entry on the object only, as the original's walk 0x4243E0 does (ledger [WE12a](../research/ledger/scripts.md)).
 - **Identified** counts `IScrItemQueries.IsIdentified` over operand 0's objects (one at most in the set): true when it is identified,
   false for none or an absent object; an object the host does not know stops the run. **Items being rewielded** is
   `IScrItemQueries.ItemsBeingRewielded`.
