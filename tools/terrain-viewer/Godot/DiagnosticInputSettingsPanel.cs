@@ -98,7 +98,7 @@ public partial class DiagnosticInputSettingsPanel : CanvasLayer
         AddAction("Reload current source", () => ReloadRequested?.Invoke());
         // ARC-RENDER-010 / ARC-WORLD-010: game time flows by itself and stops while this palette or a dialog is
         // open; this action is an explicit wait of one hour that also works during that pause.
-        _rows.AddChild(new Label { Text = "Day/night: game time flows by itself and is paused while this palette or a dialog is open.\n+1 hour waits one game hour.", AutowrapMode = TextServer.AutowrapMode.WordSmart });
+        _rows.AddChild(new Label { Text = "Day/night: game time flows by itself, also while this palette or a dialog is open (only the Esc menu pauses it).\n+1 hour waits one game hour.", AutowrapMode = TextServer.AutowrapMode.WordSmart });
         AddAction("Game time +1 hour", () => GameHourRequested?.Invoke());
         AddAction("Ambient lighting on/off", () => LightingToggleRequested?.Invoke());
         _lighting = new Label { Name = "PaletteLighting", AutowrapMode = TextServer.AutowrapMode.WordSmart }; _rows.AddChild(_lighting);
