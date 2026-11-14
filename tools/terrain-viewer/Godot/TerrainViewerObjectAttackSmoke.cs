@@ -123,6 +123,9 @@ public partial class TerrainViewerApp
                 Require(!AttackApproaching && shiftSession.State.CommittedCell == stood, "the Shift+Alt-click walks no approach: the hero stays where it stood");
                 GD.Print($"ARC-COMBAT-1941 shift-alt object attack PASS target={target.Entity} notice={_attackNotice}");
                 CancelAreaAttack(null);
+                // The settle frames may have moved the view: the object's point under the pointer is found again.
+                if (await HoverPointAsync(this, commands[key]) is not { } again) Require(false, "the object is still under the pointer after the Shift+Alt leg");
+                else { point = again; HoverAtForSelfTest(point); }
             }
             else GD.Print("ARC-COMBAT-1941 shift-alt object attack SKIP (the start is within reach)");
             _UnhandledInput(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = true, Position = point, GlobalPosition = point, AltPressed = true });
