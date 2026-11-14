@@ -139,7 +139,7 @@ public partial class TerrainViewerApp
         var shown = texts.Where(text => text.Visible).ToArray();
         Require(shown.Length >= 3, $"the panel shows at least its header, hint and Leave in art text: {string.Join("; ", shown.Select(text => text.Name))}");
         Require(shown.All(text => text.Lines > 0 && text.Text.Length > 0), "every shown art text has lines: " + string.Join("; ", texts.Select(text => $"{text.Name}={text.Lines}")));
-        Require(panel.NpcLineForSelfTest.Length == 0 || shown.Any(text => text.Name == "npc" && text.Text == panel.NpcLineForSelfTest), "the NPC's line is drawn in art text");
+        Require(shown.All(text => text.Name != "npc"), "the NPC's line is not drawn in the panel (ARC-UI-2027: a bubble over the NPC)");
         GD.Print("ARC-UI-071 conversation panel art text " + string.Join(", ", shown.Select(text => $"{text.Name}:{text.Lines}@{text.Wrap}")));
     }
 }

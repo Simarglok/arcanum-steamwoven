@@ -82,7 +82,9 @@ public partial class TerrainViewerApp
         else _conversationHost = null;
         if (_conversationPanel is null)
         {
-            _conversationPanel = new AreaConversationPanel(); AddChild(_conversationPanel);
+            _conversationPanel = new AreaConversationPanel { NumberedSource = () => DialogRepliesNumbered }; AddChild(_conversationPanel);
+            _conversationPanel.NpcLineShown += ShowDialogLineBubble;
+            _conversationPanel.ReplyPicking += RemoveDialogLineBubble;
             _conversationPanel.Picked += () => { if (_audio is not null) ExecuteVoice(DialogVoicePlayer.Picked()); };
             // Only the player's close resumes the dialog script; teardown, reset and map changes just close.
             _conversationPanel.CloseRequested += () => EndConversation(resume: true);
@@ -410,6 +412,7 @@ public partial class TerrainViewerApp
         {
             // ARC-UI-071 (B29): the panel's texts in the original's font art (null without a game folder: the viewer's font).
             _conversationPanel!.SetFonts(TextFonts());
+            _conversationPanel.NumberedReplies = DialogRepliesNumbered;
             _conversationPanel.Open(title, conversation, note);
         }, () => _conversationPanel!.CloseView());
 
@@ -440,6 +443,8 @@ public partial class TerrainViewerApp
         // ARC-SCRIPT-009: a "return to script" end resumes the speaker's dialog script through the dispatcher; a new
         // dialog action opens the next conversation, anything else is a notice.
         var speaker = _conversationSpeaker; _conversationSpeaker = null;
+        // ARC-UI-2027 (0x5678D0 → 0x4D6160 −1): the NPC's line bubble stops being persistent.
+        ExpireDialogLineBubble(speaker);
         var talkHost = _conversationHost;
         var scripted = _conversationScripted; _conversationScripted = false;
         // ARC-TECHNOLOGY-006: SU ended the talk; the window opens with the NPC as crafter and the talk does not resume (NC2).
@@ -475,7 +480,28 @@ public partial class TerrainViewerApp
     }
 
     /// <summary>While the panel is open it owns every key: none is redirected to a dialog or original action.</summary>
-    private static bool HandleConversationKey(InputEventKey key) => true;
+    /// <summary>
+    /// The open dialog owns every key event. ARC-UI-2019: under the Steamwoven setting a plain digit key 1-5 (row or keypad) chooses the reply
+    /// with that number; the original's dialog reads no key (F0), so Original and every other key do nothing.
+    /// </summary>
+    private bool HandleConversationKey(InputEventKey key)
+    {
+        if (!key.Pressed || key.Echo || key.CtrlPressed || key.AltPressed || key.ShiftPressed || key.MetaPressed || _conversationPanel is null) return true;
+        // The live setting, not the one at open: a rule-mode switch over the open dialog (Esc, Options) changes the digits at once.
+        _conversationPanel.NumberedReplies = DialogRepliesNumbered;
+        var code = key.Keycode != Key.None ? key.Keycode : key.PhysicalKeycode;
+        var digit = code switch
+        {
+            >= Key.Key1 and <= Key.Key5 => (int)(code - Key.Key0),
+            >= Key.Kp1 and <= Key.Kp5 => (int)(code - Key.Kp0),
+            _ => 0,
+        };
+        if (digit != 0) _conversationPanel.ChooseByDigit(digit);
+        return true;
+    }
+
+    /// <summary>ARC-UI-2019: replies are numbered, and a digit chooses one, except under the Original interface setting (no session: Steamwoven).</summary>
+    private bool DialogRepliesNumbered => _areaSession?.Rules.Interface.DialogRepliesUnnumbered != true;
 
     private void HandleConversationPulse(IntentFrame intent)
     {
@@ -487,7 +513,7 @@ public partial class TerrainViewerApp
     private string ConversationStatus()
     {
         if (_conversationHost is null) return string.Empty;
-        if (ConversationOpen) return " | conversation open: click a reply";
+        if (ConversationOpen) return DialogRepliesNumbered ? " | conversation open: click a reply or press its number" : " | conversation open: click a reply";
         return ConversationPrompt() + StoryStatus();
     }
 

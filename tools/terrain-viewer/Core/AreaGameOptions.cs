@@ -221,7 +221,7 @@ public sealed record AreaGameSettings
     private readonly int _brightness;
     private readonly int _textDuration = AreaOptionTable.TextDurationDefault;
 
-    /// <summary>ARC-UI-1797: the "text duration" setting (the original's, default 6, whole values 0 to <see cref="AreaOptionTable.TextDurationMax"/>; its text bubbles live this many seconds, 0x4D5EB0). The options line shows it and the settings file keeps it; no text bubble reads it yet (the bubbles are not built).</summary>
+    /// <summary>ARC-UI-1797: the "text duration" setting (the original's, default 6, whole values 0 to <see cref="AreaOptionTable.TextDurationMax"/>; its text bubbles live this many seconds, 0x4D5EB0). The options line shows it and the settings file keeps it; the text bubbles over objects read it (ARC-UI-1997).</summary>
     public int TextDuration
     {
         get => _textDuration;

@@ -61,6 +61,22 @@ public sealed class AreaEyeCandyHostTests
     }
 
     [TestMethod]
+    public void An_add_with_a_rotation_writes_it_into_the_runs_art_and_a_rotation_of_0_leaves_the_entrys_art()
+    {
+        // ARC-RENDER-2011 (0x4CCF70 → 0x502930): the request's art modifier, an attacker's facing, turns the eye candy's art; 0 leaves it.
+        using var f = new Fixture();
+        var art = EyeCandyArt.Make(5, 0, 0, false, 0, 0, 0)!.Value;
+        f.Entries[16] = new(art, Fore, -1, null, (0, 0, 0), 0);
+        Assert.IsTrue(f.Host.Play(Hero, 16, 0, 1, null, 2, 5));
+        f.Run(40);
+                Assert.AreEqual(5, EyeCandyArt.Rotation(f.Host.Shown().Single().Eye.Art));
+        Assert.IsTrue(f.Host.Play(Hero, 16, 0, 1, null, 2, 0));
+        f.Run(40);
+        Assert.AreEqual(art, f.Host.Shown().Single(s => s.Eye.Art == art).Eye.Art, "rotation 0 keeps the entry's own art");
+        Assert.AreEqual(2, f.Host.Shown().Count(), "both stand (the limit 2 counts the art number, not the rotation)");
+    }
+
+    [TestMethod]
     public void An_entry_that_does_not_animate_or_has_no_foreground_or_underlay_plays_nothing()
     {
         using var f = new Fixture();

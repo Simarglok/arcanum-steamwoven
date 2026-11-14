@@ -6,8 +6,9 @@ using Godot;
 namespace Arcanum.TerrainViewer;
 
 /// <summary>
-/// ARC-SCRIPT-005 diagnostic conversation surface: the NPC line, up to five replies (mouse or controller menu), the
-/// outcome and the recent typed effects. It renders a <see cref="DialogConversation"/>; it owns no dialog rules. ARC-UI-071 (B29): with the
+/// ARC-SCRIPT-005 diagnostic conversation surface: up to five replies (mouse or controller menu), the
+/// outcome and the recent typed effects. ARC-UI-2027: the NPC's line is not drawn here: the original shows it as a persistent text bubble over the NPC (0x5684C0
+/// → 0x568540) and its window lists only the PC's options; the panel hands the line to its owner through <see cref="NpcLineShown"/> and tells it when a reply is picked (<see cref="ReplyPicking"/>). It renders a <see cref="DialogConversation"/>; it owns no dialog rules. ARC-UI-071 (B29): with the
 /// original's text fonts (<see cref="SetFonts"/>) every text of the panel, the replies' too, is drawn in font art 229 with the original's
 /// blend (<see cref="AreaArtParagraph"/>), the font of the original's dialog box (DB1); without them (no game folder) the labels and buttons
 /// draw in the viewer's font. PROJECT: the font of the original's talk window itself is not read.
@@ -18,10 +19,9 @@ public partial class AreaConversationPanel : CanvasLayer
     // ARC-UI-071: the panel's content margin on each side, and a reply button's padding around its art text.
     private const int ContentMargin = 16, ButtonPadX = 8, ButtonPadY = 4;
     private static readonly (byte, byte, byte) HeaderColour = (179, 191, 204), OutcomeColour = (255, 217, 140), EffectsColour = (153, 204, 166),
-        HintColour = (140, 153, 166), LineColour = (255, 255, 255), ReplyColour = (223, 223, 223), BlockedColour = (111, 111, 111);
+        HintColour = (140, 153, 166), ReplyColour = (223, 223, 223), BlockedColour = (111, 111, 111);
     private PanelContainer _panel = null!;
     private Label _header = null!;
-    private Label _npcLine = null!;
     private VBoxContainer _options = null!;
     private Label _outcome = null!;
     private Label _effects = null!;
@@ -33,16 +33,35 @@ public partial class AreaConversationPanel : CanvasLayer
     private string? _message;
     // ARC-UI-071: the original's text fonts (null: the viewer's font) and the paragraphs that draw with them beside each label.
     private AreaTextFonts? _fonts;
-    private AreaArtParagraph _headerArt = null!, _npcLineArt = null!, _outcomeArt = null!, _effectsArt = null!, _hintArt = null!, _leaveArt = null!;
+    private AreaArtParagraph _headerArt = null!, _outcomeArt = null!, _effectsArt = null!, _hintArt = null!, _leaveArt = null!;
     private int _contentWidth = 640;
     private bool _artDirty;
     public event Action? CloseRequested;
     /// <summary>ARC-UI-043: a reply the PC picked was processed (whatever it did to the dialog).</summary>
     public event Action? Picked;
+    /// <summary>ARC-UI-2027 (0x5684C0): the conversation's NPC line was shown (opened, or a reply continued the dialog): the owner makes it a bubble over the NPC: persistent while the dialog awaits a reply (0x5684C0, life −2), else the final line with the default life (0x567E30 result 4).</summary>
+    public event Action<string, bool>? NpcLineShown;
+    /// <summary>ARC-UI-2027 (0x567E30): the PC picked a reply that the dialog will process: the owner removes the NPC's bubble first.</summary>
+    public event Action? ReplyPicking;
     public bool IsOpen => Visible;
+    /// <summary>ARC-UI-2019: whether each reply shows its number and a digit key chooses it (Steamwoven); Original draws and reads neither. Set before <see cref="Open"/>.</summary>
+    public bool NumberedReplies
+    {
+        get => _numberedReplies;
+        set
+        {
+            if (_numberedReplies == value) return;
+            _numberedReplies = value;
+            if (IsNodeReady() && IsOpen) Render(_message);
+        }
+    }
+    private bool _numberedReplies = true;
+    /// <summary>ARC-UI-2019: where an open panel reads the setting from every frame, so a rule-mode switch made over the dialog (Esc, Options) draws and reads at once.</summary>
+    public Func<bool>? NumberedSource { get; set; }
     public DialogConversation? Conversation => _conversation;
     internal IReadOnlyList<Button> ButtonsForSelfTest => _buttons;
-    internal string NpcLineForSelfTest => _npcLine.Text;
+    /// <summary>The conversation's current NPC line (held, not drawn here: it is a bubble over the NPC).</summary>
+    internal string NpcLineForSelfTest => _conversation?.NpcLine?.Text ?? string.Empty;
     internal string OutcomeForSelfTest => _outcome.Text;
     internal Button LeaveForSelfTest => _leave;
     /// <summary>Whether the original's font art draws the panel's texts (false: the viewer's font).</summary>
@@ -53,7 +72,7 @@ public partial class AreaConversationPanel : CanvasLayer
     internal IReadOnlyList<(string Name, string Text, int Lines, int Wrap, bool Visible)> ArtTextsForSelfTest()
     {
         var found = new List<(string, string, int, int, bool)>();
-        foreach (var (name, art) in new[] { ("header", _headerArt), ("npc", _npcLineArt), ("outcome", _outcomeArt), ("effects", _effectsArt), ("hint", _hintArt), ("leave", _leaveArt) })
+        foreach (var (name, art) in new[] { ("header", _headerArt), ("outcome", _outcomeArt), ("effects", _effectsArt), ("hint", _hintArt), ("leave", _leaveArt) })
             found.Add((name, art.Text, art.LineCount, art.WrapWidth, art.Visible));
         foreach (var button in _buttons)
             if (button.GetNodeOrNull<AreaArtParagraph>(ArtName) is { } reply) found.Add((button.Name, reply.Text, reply.LineCount, reply.WrapWidth, reply.Visible));
@@ -73,17 +92,16 @@ public partial class AreaConversationPanel : CanvasLayer
         AddChild(_panel);
         var contents = new VBoxContainer(); _panel.AddChild(contents);
         _header = new Label { Modulate = new Color(.7f, .75f, .8f), AutowrapMode = TextServer.AutowrapMode.WordSmart };
-        _npcLine = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart };
         _options = new VBoxContainer();
         _outcome = new Label { Modulate = new Color(1f, .85f, .55f), AutowrapMode = TextServer.AutowrapMode.WordSmart };
         _effects = new Label { Modulate = new Color(.6f, .8f, .65f), AutowrapMode = TextServer.AutowrapMode.WordSmart };
         _hint = new Label { Modulate = new Color(.55f, .6f, .65f), AutowrapMode = TextServer.AutowrapMode.WordSmart };
         _leave = new Button { Name = "Leave", Alignment = HorizontalAlignment.Left, FocusMode = Control.FocusModeEnum.All };
         _leave.Pressed += Leave;
-        _headerArt = Paragraph("HeaderArt"); _npcLineArt = Paragraph("NpcLineArt"); _outcomeArt = Paragraph("OutcomeArt");
+        _headerArt = Paragraph("HeaderArt"); _outcomeArt = Paragraph("OutcomeArt");
         _effectsArt = Paragraph("EffectsArt"); _hintArt = Paragraph("HintArt");
         _leaveArt = Paragraph(ArtName); _leave.AddChild(_leaveArt);
-        foreach (var control in new Control[] { _header, _headerArt, _npcLine, _npcLineArt, _options, _outcome, _outcomeArt, _effects, _effectsArt, _leave, _hint, _hintArt })
+        foreach (var control in new Control[] { _header, _headerArt, _options, _outcome, _outcomeArt, _effects, _effectsArt, _leave, _hint, _hintArt })
             contents.AddChild(control);
         GetViewport().SizeChanged += ResizePanel;
         ResizePanel(); Hide();
@@ -96,7 +114,7 @@ public partial class AreaConversationPanel : CanvasLayer
     {
         if (ReferenceEquals(fonts, _fonts)) return;
         _fonts = fonts;
-        foreach (var art in new[] { _headerArt, _npcLineArt, _outcomeArt, _effectsArt, _hintArt, _leaveArt }) art.SetFonts(fonts);
+        foreach (var art in new[] { _headerArt, _outcomeArt, _effectsArt, _hintArt, _leaveArt }) art.SetFonts(fonts);
         if (IsNodeReady() && IsOpen) Render(_message);
     }
 
@@ -105,7 +123,21 @@ public partial class AreaConversationPanel : CanvasLayer
     {
         _title = title; _conversation = conversation; _message = message;
         Show(); Render(message);
+        ShowNpcLine();
     }
+
+    /// <summary>ARC-UI-2027 (ledger TB23): hands the conversation's current NPC line to the owner (nothing for an empty one, nor for one a window-opening reply
+    /// leaves unchanged: the barter, sheet, schematic and other windows open with no new line). A dialog that no longer awaits a reply shows its last line with the default life.</summary>
+    private void ShowNpcLine(DialogNpcLine? previous = null)
+    {
+        if (_conversation?.NpcLine is not { Text.Length: > 0 } current) return;
+        var awaiting = _conversation.Phase == DialogConversationPhase.AwaitingSelection;
+        if (!awaiting && (ReferenceEquals(current, previous) || IsWindowEnd(_conversation.End?.Kind))) return;
+        NpcLineShown?.Invoke(current.Text, awaiting);
+    }
+
+    private static bool IsWindowEnd(DialogEndKind? kind) => kind is DialogEndKind.SchematicWindow or DialogEndKind.BarterWindow or DialogEndKind.NpcSheetWindow
+        or DialogEndKind.WorldMapWindow or DialogEndKind.ItemIdentifyWindow or DialogEndKind.ItemRepairWindow;
 
     public void CloseView()
     {
@@ -121,20 +153,38 @@ public partial class AreaConversationPanel : CanvasLayer
         if (option is not null) ChooseToken(option.Token);
     }
 
+    /// <summary>
+    /// ARC-UI-2019: the digit key of the reply with this number; true when it chose a reply. Only while a numbered panel awaits a choice and the
+    /// reply is offered and not blocked: any other key press leaves the dialog as it is (it never closes a finished one, as a click does).
+    /// </summary>
+    public bool ChooseByDigit(int number)
+    {
+        if (!NumberedReplies || _conversation is not { Phase: DialogConversationPhase.AwaitingSelection } conversation) return false;
+        var option = conversation.Options.FirstOrDefault(candidate => candidate.Number == number);
+        if (option is null || option.Block is not null) return false;
+        ChooseToken(option.Token);
+        return true;
+    }
+
     /// <summary>Selects exactly the reply the button showed: a token from older offers is NotOffered.</summary>
     private void ChooseToken(DialogOptionToken token)
     {
         if (_conversation is not { Phase: DialogConversationPhase.AwaitingSelection } conversation) return;
+        var before = conversation.NpcLine;
         var result = conversation.Select(token);
         if (result.Status == DialogConversationSelectStatus.NotOffered) return;
+        // Only a reply that ran (the dialog went on or ended) is processed; one the dialog refused or left at the frontier ran nothing and keeps the bubble.
+        var processed = result.Status is DialogConversationSelectStatus.Continued or DialogConversationSelectStatus.Ended;
         if (result.Status is not (DialogConversationSelectStatus.UnsupportedTransition or DialogConversationSelectStatus.StaleSelection
             or DialogConversationSelectStatus.WrongPhase)) Picked?.Invoke();
+        if (processed) ReplyPicking?.Invoke();
         Render(result.Status is DialogConversationSelectStatus.UnsupportedTransition or DialogConversationSelectStatus.StaleSelection
             ? $"[{result.Status}: the reply was not executed]" : null);
+        // ARC-UI-2027: the reply's answer line (the next node's) becomes the new bubble; a reply that was not processed keeps the old bubble.
+        if (processed) ShowNpcLine(before);
         // ARC-TECHNOLOGY-006: SU ends the dialog at once for the schematic window, with no further NPC line (ledger NC1–NC2); ARC-UI-050:
         // b: for the barter window (BT7); ARC-UI-088: c-e for the NPC's sheet (WN2).
-        if (conversation.End?.Kind is DialogEndKind.SchematicWindow or DialogEndKind.BarterWindow or DialogEndKind.NpcSheetWindow or DialogEndKind.WorldMapWindow
-            or DialogEndKind.ItemIdentifyWindow or DialogEndKind.ItemRepairWindow) CloseRequested?.Invoke();
+        if (IsWindowEnd(conversation.End?.Kind)) CloseRequested?.Invoke();
     }
 
     /// <summary>Diagnostic leave: closes an awaiting dialog without a reply effect, or dismisses a finished one.</summary>
@@ -167,7 +217,6 @@ public partial class AreaConversationPanel : CanvasLayer
         var conversation = _conversation;
         var header = conversation is null ? _title : $"{_title} | turn {conversation.Turn} | DLG node {conversation.CurrentNode.Value}";
         Show(_header, _headerArt, header, HeaderColour);
-        Show(_npcLine, _npcLineArt, conversation?.NpcLine?.Text ?? string.Empty, LineColour);
         if (conversation is not null)
         {
             foreach (var option in conversation.Options)
@@ -178,7 +227,7 @@ public partial class AreaConversationPanel : CanvasLayer
                     Name = $"Reply{option.Number}", Alignment = HorizontalAlignment.Left,
                     AutowrapMode = TextServer.AutowrapMode.WordSmart, Disabled = option.Block is not null, FocusMode = Control.FocusModeEnum.All,
                 };
-                var text = AreaConversationText.Option(option);
+                var text = AreaConversationText.OptionText(option, NumberedReplies);
                 button.SetMeta(ReplyTextMeta, text);
                 if (_fonts is null) button.Text = text;
                 else
@@ -204,7 +253,7 @@ public partial class AreaConversationPanel : CanvasLayer
         _leaveArt.Visible = _fonts is not null;
         _leaveArt.Position = new(ButtonPadX, ButtonPadY);
         _leaveArt.SetText(leave, ReplyColour);
-        Show(_hint, _hintArt, "Click a reply (controller: D-pad, confirm, cancel) | PROJECT diagnostic PC/state profile; original runtime parity NOT_VERIFIED", HintColour);
+        Show(_hint, _hintArt, (NumberedReplies ? "Click a reply or press its number (controller: D-pad, confirm, cancel)" : "Click a reply (controller: D-pad, confirm, cancel)") + " | PROJECT diagnostic PC/state profile; original runtime parity NOT_VERIFIED", HintColour);
         (_buttons.FirstOrDefault(button => !button.Disabled) ?? _leave).GrabFocus();
         ResizePanel();
     }
@@ -223,7 +272,7 @@ public partial class AreaConversationPanel : CanvasLayer
     private void LayoutArt()
     {
         if (_fonts is null) return;
-        foreach (var art in new[] { _headerArt, _npcLineArt, _outcomeArt, _effectsArt, _hintArt }) art.WrapWidth = _contentWidth;
+        foreach (var art in new[] { _headerArt, _outcomeArt, _effectsArt, _hintArt }) art.WrapWidth = _contentWidth;
         foreach (var button in _buttons.Append(_leave))
         {
             if (button.GetNodeOrNull<AreaArtParagraph>(ArtName) is not { } art) continue;
@@ -246,6 +295,11 @@ public partial class AreaConversationPanel : CanvasLayer
         _panel.Position = new(Mathf.Round((size.X - width) / 2), Mathf.Round(Math.Max(24, size.Y - height - 24)));
     }
 
-    public override void _Process(double delta) { if (IsOpen) ResizePanel(); }
+    public override void _Process(double delta)
+    {
+        if (!IsOpen) return;
+        if (NumberedSource is { } source) NumberedReplies = source();
+        ResizePanel();
+    }
     public override void _ExitTree() => GetViewport().SizeChanged -= ResizePanel;
 }

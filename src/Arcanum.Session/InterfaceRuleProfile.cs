@@ -25,11 +25,18 @@ public sealed record InterfaceRuleProfile
     /// </summary>
     public bool TurnOrderListHidden { get; init; }
 
+    /// <summary>
+    /// ARC-UI-2019: the original's dialog reads only mouse messages (dialog-conversation-runtime, F0): it shows no digit before a reply
+    /// and a digit key chooses nothing. Steamwoven adds the number of each reply (as the diagnostic panel always drew it) and the choice of
+    /// a reply by its digit key (a Steamwoven addition, owner request 2026-11-14); Original keeps neither.
+    /// </summary>
+    public bool DialogRepliesUnnumbered { get; init; }
+
     /// <summary>The original with every recorded fix and addition; the default setting.</summary>
     public static readonly InterfaceRuleProfile Steamwoven = new() { Name = "steamwoven" };
 
     /// <summary>The retail 1.0.7.4 behaviour.</summary>
-    public static readonly InterfaceRuleProfile Original = new() { Name = "original", CalledShotCursorsSwapped = true, TurnOrderListHidden = true };
+    public static readonly InterfaceRuleProfile Original = new() { Name = "original", CalledShotCursorsSwapped = true, TurnOrderListHidden = true, DialogRepliesUnnumbered = true };
 
     /// <summary>Both settings, default first.</summary>
     public static IReadOnlyList<InterfaceRuleProfile> All { get; } = new[] { Steamwoven, Original };
