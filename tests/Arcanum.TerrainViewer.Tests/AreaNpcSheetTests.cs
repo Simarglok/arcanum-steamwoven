@@ -200,4 +200,54 @@ public sealed class AreaNpcSheetTests
         Assert.AreEqual(AreaCharacterSheetSpellsLayout.Part.Plus, AreaCharacterSheetSpellsLayout.HitAt(x + 5, y + 5, spells, Size)!.Value.Part);
         Assert.AreEqual(AreaCharacterSheetSpellsLayout.Part.Row, AreaCharacterSheetSpellsLayout.HitAt(x + 5, y + 5, spells, Size, readOnly: true)!.Value.Part, "no + over the icon");
     }
+
+    /// <summary>ARC-UI-1791 (ledger CHW25, 0x553D10): the NPC's slot icon is the first of the critter flags 0x4, 0x8000, 0x8, 0x20000000 (arts 384, 383, 385, 434), else the race table's by stat 27; no age line.</summary>
+    [TestMethod]
+    public void The_npcs_slot_icon_follows_the_flag_order_then_the_race_table_and_it_has_no_age()
+    {
+        using var session = Session();
+        var expectedByRace = new[] { 375, 378, 376, 377, 379, 380, 381, 382, 376, 382, 381 };
+        for (var race = 0; race < 11; race++)
+        {
+            var fields = Npc();
+            var stats = fields.Critter!.BaseStats.ToArray(); stats[27] = race;
+            var shown = Build(session, fields with { Critter = fields.Critter with { BaseStats = stats } }).View;
+            Assert.AreEqual(expectedByRace[race], shown.IconArt, "race " + race);
+            Assert.IsNull(shown.Age, "an NPC's sheet has no age");
+            Assert.IsFalse(shown.LedByHero, "nobody leads this NPC");
+        }
+        Assert.AreEqual(384, AreaCharacterSheetIcon.NpcArt(0x4 | 0x8000 | 0x8 | 0x20000000, 3));
+        Assert.AreEqual(383, AreaCharacterSheetIcon.NpcArt(0x8000 | 0x8 | 0x20000000, 3));
+        Assert.AreEqual(385, AreaCharacterSheetIcon.NpcArt(0x8 | 0x20000000, 3));
+        Assert.AreEqual(434, AreaCharacterSheetIcon.NpcArt(0x20000000, 3));
+        Assert.AreEqual(377, AreaCharacterSheetIcon.NpcArt(0x10, 3), "an unrelated flag keeps the race icon");
+        Assert.AreEqual(634, AreaCharacterSheetIcon.NpcArt(0, 11), "race stat 11, which the setter allows, reads the table's twelfth word");
+        Assert.IsNull(AreaCharacterSheetIcon.NpcArt(0, 12), "past the table");
+        Assert.IsNull(AreaCharacterSheetIcon.NpcArt(0, -1));
+        Assert.AreEqual(384, Build(session, Npc(flags: 0x4)).View.IconArt, "a flagged critter shows its flag's icon whatever its race");
+    }
+
+    /// <summary>ARC-UI-1791 (ledger CHW25, 0x553D10): an NPC the hero leads, directly or through another leader, shows its stored portrait instead of the icon; an unled NPC with a stored portrait keeps the icon.</summary>
+    [TestMethod]
+    public void A_led_npc_with_a_stored_portrait_shows_it_instead_of_the_icon()
+    {
+        using var session = Session();
+        const string entity = "oid:virgil";
+        var fields = Npc();
+        var loaded = AreaAdvancement.Npc(entity, fields, Effect)!.Value;
+        AreaNpcSheetPages Pages(int? portrait) => AreaNpcSheet.Build(session, "Virgil", fields, loaded, null, null, AreaHoverIndex.TextProfile, portrait)!;
+        var unled = Pages(77).View;
+        Assert.IsFalse(unled.LedByHero);
+        Assert.IsNull(unled.PortraitId, "an unled NPC shows no portrait");
+        Assert.AreEqual(375, unled.IconArt);
+        Assert.AreEqual(GameSessionDisposition.Changed, session.ForceJoinParty(session.Version, entity).Disposition);
+        var led = Pages(77).View;
+        Assert.IsTrue(led.LedByHero);
+        Assert.AreEqual(77, led.PortraitId);
+        Assert.IsNull(led.IconArt, "the portrait takes the slot");
+        var ledWithout = Pages(null).View;
+        Assert.IsTrue(ledWithout.LedByHero);
+        Assert.IsNull(ledWithout.PortraitId);
+        Assert.AreEqual(375, ledWithout.IconArt, "a led NPC with no portrait shows the icon");
+    }
 }

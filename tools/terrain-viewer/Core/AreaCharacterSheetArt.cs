@@ -64,7 +64,7 @@ public static class AreaCharacterSheetArtLayout
 
     public static IReadOnlyList<int> AllArtNumbers { get; } =
         [.. ArtNumbers.Concat([SchemesTabArt]).Concat(AreaCharacterSheetPagesLayout.ArtNumbers).Concat(AreaCharacterSheetSpellsLayout.ArtNumbers)
-            .Concat(AreaCharacterSheetSchemesLayout.ArtNumbers).Distinct()];
+            .Concat(AreaCharacterSheetSchemesLayout.ArtNumbers).Concat(AreaCharacterSheetIcon.ArtNumbers).Distinct()];
 
     /// <summary>The colour of a font colour (the init indexes the channel tables with these 0..255 values).</summary>
     public static (byte R, byte G, byte B) Rgb(AreaSheetColour colour) => colour switch
@@ -179,7 +179,7 @@ public static class AreaCharacterSheetArtLayout
 
     /// <summary>
     /// Every text of the main page for <paramref name="view"/>: the name (gold), level, points and experience to the next level, race and
-    /// gender (the age is not a session value yet, ledger CHW2), maximum hit points and fatigue, the eight primary stats (green when raised,
+    /// gender and, for the hero, the age (ledger CHW2, CHW25), maximum hit points and fatigue, the eight primary stats (green when raised,
     /// red when lowered by effects), the eight derived stats and five resistances with their labels, the two headers, the alignment number
     /// and the two aptitude numbers. <paramref name="measure"/> gives a text's width in a font.
     /// </summary>
@@ -203,6 +203,8 @@ public static class AreaCharacterSheetArtLayout
             list.Add(Line(texts.Line(4), 337, 34, texts.RaceName(view.Race)));
             list.Add(Line(texts.Line(5), 337, 53, texts.GenderName(view.Gender)));
         }
+        // ARC-UI-1791 (ledger CHW25): a PC's sheet adds the age, `": %d "` of the Age label (charedit.mes 6) at (337, 72), in the same font and white.
+        if (view.Age is { } age) list.Add(Line(texts.Line(6), 337, 72, age.ToString()));
         list.Add(new(AreaSheetFont.Label, 178, 282, texts.Line(7), AreaSheetColour.White, true));
         list.Add(new(AreaSheetFont.Label, 383, 282, texts.Line(8), AreaSheetColour.White, true));
         list.Add(new(AreaSheetFont.Label, 447, 143, $" {view.MaxHitPoints} ", AreaSheetColour.White, true));
