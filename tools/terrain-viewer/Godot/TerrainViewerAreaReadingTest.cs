@@ -237,6 +237,13 @@ public partial class TerrainViewerApp
                 .Where(p => session.QueryWrittenDocument(p.Value, data.Texts) is { Readable: true }).ToArray();
             var views = readable.Count(p => AreaReading.View(session.QueryWrittenDocument(p.Value, data.Texts), data.Texts, 0, AreaHoverIndex.TextProfile, session.Rules.Written) is not null);
             Require(readable.Length > 0 && views == readable.Length, $"readable {readable.Length}, views {views}");
+            // ARC-UI-1877: the window's art and fonts read, and every readable prototype's document composes in the original's look: its text lines stay inside the window and the book's
+            // pages inside the bound (counts only, no text of the original data).
+            for (var i = 0; i < 1800 && AdoptReadingArt() is null; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            var artContent = AdoptReadingArt();
+            Require(artContent is { Ready: true }, "the window's art and fonts read: " + artContent?.Detail);
+            var composition = ReadingCompositionCheck(session, data, readable.Select(p => p.Value).ToArray(), artContent!);
+            Require(composition.Outside == 0 && composition.Composed == readable.Length, $"the documents compose inside the window: {composition}");
             // A use script or the item-spell path is refused here (not run): the first readable item without either, a book when there is one.
             var plain = readable.Where(p => !p.Value.UseScript && !p.Value.ItemSpell).ToArray();
             Require(plain.Length > 0, "no readable written prototype without a use script");
@@ -265,21 +272,113 @@ public partial class TerrainViewerApp
             OpenReading(used.Document!, "smoke");
             var view = _readingPanel?.ViewForSelfTest;
             Require(ReadingOpen && WorldModal && WindowPanelsMatchStack && view is not null && _readingSounds.Last() == BookOpenSound, "the window opened (3008)");
-            if (view!.HasNext) { InventoryKey(Key.Right); Require(_readingPanel!.ViewForSelfTest!.Spread == 1 && _readingSounds.Last() == BookPageSound, "Right turned a spread (3010)"); }
+            // ARC-UI-1877: with its art read the window opens in the original's look; the book turns its own spreads (by pixel height).
+            Require(_readingPanel!.ArtMode && _readingPanel.ArtViewForSelfTest.Visible && _readingPanel.ArtViewForSelfTest.LinesForSelfTest.Count > 0 == (used.Document!.Body.Count > 0),
+                "the window opens in the original's look");
+            var shownLook = _readingPanel.ArtViewForSelfTest;
+            var artSpreads = shownLook.Spreads;
+            if (shownLook.HasNext) { InventoryKey(Key.Right); Require(shownLook.SpreadIndex == 1 && _readingSounds.Last() == BookPageSound, "Right turned a spread (3010)"); InventoryKey(Key.Left); Require(shownLook.SpreadIndex == 0, "Left turned back"); }
+            else Require(view!.Subtype != WrittenSubtype.Book || artSpreads == 1, "a book with no next button has one spread");
             InventoryKey(Key.Escape);
             Require(ReadingOpen, "Escape does not close the reading window");
             Require(MainMenuOpen, "Escape opened the menu"); InventoryKey(Key.Escape); Require(ReadingOpen && !MainMenuOpen, "Escape continued play: the window is still open");
             CloseReadingByPlayer();
             Require(!ReadingOpen && _readingSounds.Last() == BookCloseSound, "the player's close closed it (3009)");
             Require(session.Version.Revision == revision, "the live session is untouched");
+            // ARC-UI-1877: the opt-in captures open and close their own windows, so they run after the checks above.
+            await ReadingLookCaptureAsync(session, data, readable.Select(p => p.Value).ToArray());
             GD.Print("ARC-UI-049 native-smoke reading PASS " + System.Text.Json.JsonSerializer.Serialize(new {
-                Data = _readingData.Detail, Readable = readable.Length, Views = views, WithUseScript = scripted, Item = chosen.Key, Subtype = view.Subtype.ToString(),
-                Spreads = view.Spreads, Body = used.Document!.Body.Count, Schematic = schematic.Key, Registered = registered.Schematic }));
+                Data = _readingData.Detail, Readable = readable.Length, Views = views, WithUseScript = scripted, Item = chosen.Key, Subtype = view!.Subtype.ToString(),
+                Spreads = view.Spreads, ArtSpreads = artSpreads, Look = _readingPanel!.ArtMode ? "original" : "diagnostic", Composed = composition.Composed, Lines = composition.Lines, Pages = composition.Pages,
+                Body = used.Document!.Body.Count, Schematic = schematic.Key, Registered = registered.Schematic }));
         }
         finally
         {
             if (ReadingOpen) EndReading();
             _worldFocusSimulationForSelfTest = simulatedFocus; _worldFocused = focused;
         }
+    }
+    /// <summary>ARC-UI-1877: the counts of the original look's composition of every readable written prototype of the game (documents composed, text lines and book pages) and how many
+    /// lines or pages fell outside the window or its bounds.</summary>
+    private readonly record struct ReadingComposition(int Composed, int Lines, int Pages, int Outside);
+
+    private ReadingComposition ReadingCompositionCheck(Arcanum.Session.GameSessionOwner session, AreaReadingData data, IReadOnlyList<Arcanum.Session.SessionWrittenFacts> facts, AreaReadingArtContent content)
+    {
+        var fonts = content.Fonts.Values.Where(load => load.Status == AreaInterfaceArtStatus.Ready && load.Frames.Count > 0).ToDictionary(load => load.Number, load => new AreaArtFont(load.Frames));
+        AreaArtFont FontOf(int number) => fonts.TryGetValue(number, out var font) ? font : fonts[AreaReadingArtLayout.NoteFont];
+        int composed = 0, lines = 0, pages = 0, outside = 0;
+        foreach (var fact in facts)
+        {
+            var document = session.QueryWrittenDocument(fact, data.Texts);
+            if (AreaReading.View(document, data.Texts, 0, AreaHoverIndex.TextProfile, session.Rules.Written) is not { Art: { } art }) continue;
+            IReadOnlyList<AreaReadingLine> placed;
+            if (art.Subtype == WrittenSubtype.Book)
+            {
+                var book = AreaReadingFlow.BookPages(art.Body, FontOf);
+                pages += book.Count;
+                placed = book.SelectMany(page => page.Lines).ToArray();
+            }
+            else placed = AreaReadingFlow.Single(art, FontOf);
+            composed++; lines += placed.Count;
+            // A document with text and no line drawn would be a wrong flow (a font without height, a rectangle too small): counted with the lines outside the window.
+            var hasText = art.Subtype != WrittenSubtype.Picture && (art.Body.Any(message => message.Text.Length > 0) || art.Joined.Length > 0);
+            if (hasText && placed.Count == 0) outside++;
+            foreach (var line in placed)
+            {
+                var font = FontOf(line.Font);
+                var right = line.X + (line.Glyphs.Count == 0 ? 0 : line.Glyphs[^1].X + line.Glyphs[^1].Glyph.Width);
+                var window = AreaReadingArtLayout.Window;
+                if (line.X < 0 || line.Y < 0 || line.Y + font.LineHeight > window.Height || right > window.Width) outside++;
+            }
+        }
+        return new(composed, lines, pages, outside);
+    }
+
+    /// <summary>ARC-UI-1877: with ARC_AREA_READING_CAPTURE=PREFIX the viewport after a drawn frame is saved as PREFIX-KIND-original.png and PREFIX-KIND-diagnostic.png for one document of
+    /// every kind (book, note, newspaper, telegram, plaque; local, never in git); the open window is put back at the end.</summary>
+    private async Task ReadingLookCaptureAsync(Arcanum.Session.GameSessionOwner session, AreaReadingData data, IReadOnlyList<Arcanum.Session.SessionWrittenFacts> facts)
+    {
+        if (System.Environment.GetEnvironmentVariable("ARC_AREA_READING_CAPTURE") is not { Length: > 0 } capture) return;
+        async Task Shot(string name)
+        {
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame); await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+            var path = System.IO.Path.GetFullPath(capture) + "-" + name + ".png";
+            System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(path)!);
+            using var image = GetViewport().GetTexture().GetImage();
+            if (image is null || image.SavePng(path) != Error.Ok) throw new InvalidOperationException("ARC-UI-1877 reading capture not saved: " + path);
+            GD.Print($"ARC-UI-1877 reading capture {name} {image.GetWidth()}x{image.GetHeight()}");
+        }
+        if (ReadingOpen) CloseReadingByPlayer();
+        var kinds = new[] { WrittenSubtype.Book, WrittenSubtype.Note, WrittenSubtype.Newspaper, WrittenSubtype.Telegram, WrittenSubtype.Plaque };
+        foreach (var kind in kinds)
+        {
+            // A prototype with text first; the plaque has none (a script opens it): the first message number that reads.
+            var fact = facts.Where(candidate => candidate.Subtype == (int)kind)
+                .FirstOrDefault(candidate => session.QueryWrittenDocument(candidate, data.Texts) is { Readable: true, Body.Count: > 0 });
+            if (fact.Subtype != (int)kind)
+                for (var number = 0; number < 4000 && fact.Subtype != (int)kind; number++)
+                    if (kind == WrittenSubtype.Plaque && session.QueryWrittenDocument(new((int)kind, number), data.Texts) is { Readable: true, Body.Count: > 0 }) fact = new((int)kind, number);
+            if (fact.Subtype != (int)kind) { GD.Print($"ARC-UI-1877 reading capture {kind}: no document"); continue; }
+            if (kind == WrittenSubtype.Newspaper
+                && AreaReading.View(session.QueryWrittenDocument(fact, data.Texts), data.Texts, 0, AreaHoverIndex.TextProfile, session.Rules.Written) is { Art: { } paper })
+            {
+                var fonts = _readingArt!.Fonts.Values.Where(load => load.Status == AreaInterfaceArtStatus.Ready && load.Frames.Count > 0).ToDictionary(load => load.Number, load => new AreaArtFont(load.Frames));
+                AreaArtFont FontOf(int number) => fonts.TryGetValue(number, out var font) ? font : fonts[AreaReadingArtLayout.NoteFont];
+                GD.Print($"ARC-UI-1877 newspaper capture start={fact.TextStartLine} body={paper.Body.Count} fillers={paper.Fillers.Count}: "
+                    + string.Join(" | ", paper.Body.Select((m, i) => $"#{i} font={m.Font} len={m.Text.Length} h={AreaReadingFlow.Height(FontOf(m.Font), m.Text, 100)}")));
+                foreach (var line in AreaReadingFlow.Newspaper(paper, FontOf))
+                    GD.Print($"ARC-UI-1877 newspaper line font={line.Font} x={line.X} y={line.Y} glyphs={line.Glyphs.Count}");
+            }
+            foreach (var look in new[] { "original", "diagnostic" })
+            {
+                if (ReadingOpen) CloseReadingByPlayer();
+                _readingPanel!.DiagnosticLook = look == "diagnostic";
+                OpenReading(session.QueryWrittenDocument(fact, data.Texts), "capture", replaceWindows: true);
+                await Shot($"{kind.ToString().ToLowerInvariant()}-{look}");
+            }
+        }
+        if (ReadingOpen) CloseReadingByPlayer();
+        _readingPanel!.DiagnosticLook = false;
     }
 }
