@@ -399,7 +399,7 @@ back while the visitor stands there; since ARC-DEV-075 Virgil, resolved by ident
 square and strikes it (`Resolved=true`, `VisitorHit` in the marker; an unresolved visitor keeps the ARC-DEV-065 checks): marker `ARC-DEV-065 native-smoke visitor-fight PASS` (without a hero it prints `NONE`);
 `opening` on `Arcanum1-024-fixed` with `--hero` (ARC-SCRIPT-047): the AI runs with the hero where the new game puts it, without any
 input; Virgil's heartbeat 1100 opens his talk (DLG 1324, a talk at the dialog point), removes itself, and after the talk is closed
-no second talk opens; marker `ARC-SCRIPT-047 native-smoke opening PASS`.
+no second talk opens; since ARC-SCRIPT-1987 it also requires that the talk reaches its first replies (node 1's `in -2804` takes the item Virgil wears off him: no `CommandRejected`), the item is in the hero's pack and Virgil no longer wears it; marker `ARC-SCRIPT-047 native-smoke opening PASS`.
 
 ## Grenade step (ARC-DEV-364)
 

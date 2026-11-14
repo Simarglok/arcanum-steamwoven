@@ -16,8 +16,12 @@ public partial class TerrainViewerApp
 
     /// <summary>Reads the frame art and the portraits <paramref name="followers"/> need that are not read yet (one content stack
     /// opening for both), and binds the art.</summary>
-    private void LoadFollowerPortraits(IReadOnlyList<AreaCompanion> followers) =>
+    private void LoadFollowerPortraits(IReadOnlyList<AreaCompanion> followers)
+    {
         LoadPortraits(followers.Select(c => AreaPortraits.Stored(c.Speaker.Row)).OfType<int>().Distinct().ToArray());
+        // ARC-UI-1786: the order menu's words come from the same load (mes\follower_ui.mes).
+        if (_followerPortraits is { } panel) panel.MenuTexts = _portraitContent?.Menu;
+    }
 
     /// <summary>Reads the frame art (on the first use) and the portraits of <paramref name="ids"/> not read yet.</summary>
     private void LoadPortraits(IReadOnlyList<int> ids)

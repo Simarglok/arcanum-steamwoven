@@ -880,6 +880,7 @@ tools/terrain-viewer/Godot/TerrainViewerBodyStyles.cs,SyncAreaBodyStyles,exempt,
 tools/terrain-viewer/Godot/TerrainViewerBodyStylesSmoke.cs,RunAreaBodyStylesStageAsync,exempt,reference
 tools/terrain-viewer/Godot/TerrainViewerCombatMode.cs,WorldRightRelease,pending,
 tools/terrain-viewer/Godot/TerrainViewerCompanionOrders.cs,FollowerAimItem,exempt,reference
+tools/terrain-viewer/Godot/TerrainViewerCompanionOrders.cs,FollowerAimLockpick,exempt,reference
 tools/terrain-viewer/Godot/TerrainViewerCompanionOrders.cs,FollowerAimPickPocket,exempt,reference
 tools/terrain-viewer/Godot/TerrainViewerCompanionOrders.cs,FollowerAimSpell,exempt,reference
 tools/terrain-viewer/Godot/TerrainViewerCompanionOrders.cs,FollowerPortraitClick,pending,

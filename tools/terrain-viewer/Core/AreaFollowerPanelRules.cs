@@ -22,6 +22,19 @@ public static class AreaFollowerPanelRules
     /// (0, 415), down 34 × 13 at (33, 415).</summary>
     public static readonly (int X, int Y, int Width, int Height) ToggleRect = (0, 428, 67, 13), UpRect = (0, 415, 33, 13), DownRect = (33, 415, 34, 13);
 
+    /// <summary>ARC-UI-1785 (FP1, SZ11: the table 0x5CA420 is chosen while the interface is hidden, 0x5578C0): the same three rectangles in the hidden-interface layout, the
+    /// y of show/hide 587 and of the arrows 574; x and sizes stay, and the portraits do not move.</summary>
+    public static readonly (int X, int Y, int Width, int Height) HiddenToggleRect = (0, 587, 67, 13), HiddenUpRect = (0, 574, 33, 13), HiddenDownRect = (33, 574, 34, 13);
+
+    /// <summary>The show/hide button's rectangle for the layout: the bars-drawn one (<see cref="ToggleRect"/>) or the hidden-interface one.</summary>
+    public static (int X, int Y, int Width, int Height) ToggleRectFor(bool barsDrawn) => barsDrawn ? ToggleRect : HiddenToggleRect;
+
+    /// <summary>The scroll-up arrow's rectangle for the layout.</summary>
+    public static (int X, int Y, int Width, int Height) UpRectFor(bool barsDrawn) => barsDrawn ? UpRect : HiddenUpRect;
+
+    /// <summary>The scroll-down arrow's rectangle for the layout.</summary>
+    public static (int X, int Y, int Width, int Height) DownRectFor(bool barsDrawn) => barsDrawn ? DownRect : HiddenDownRect;
+
     /// <summary>The arts the panel draws beside the frames (the viewer loads them with <see cref="AreaFollowerFrameLayout.ArtNumbers"/>).</summary>
     public static IReadOnlyList<int> ArtNumbers { get; } = [ShownArt, HiddenArt, UpArt, UpEndArt, DownArt, DownEndArt, MenuArt];
 
@@ -80,20 +93,6 @@ public static class AreaFollowerPanelRules
         FollowerMenuItem.Wait when mindControlled => FollowerMenuRowState.Greyed,
         FollowerMenuItem.Inventory when !canOpenInventory => FollowerMenuRowState.Greyed,
         _ => FollowerMenuRowState.Normal,
-    };
-
-    /// <summary>The words the menu draws (the original reads them from <c>mes\follower_ui.mes</c> 0–7, FP8; the viewer has no message reader here, so these are the English texts of the retail file as the ledger lists them).</summary>
-    public static string MenuText(FollowerMenuItem item) => item switch
-    {
-        FollowerMenuItem.Walk => "Walk",
-        FollowerMenuItem.Attack => "Attack",
-        FollowerMenuItem.StayClose => "Stay Close",
-        FollowerMenuItem.SpreadOut => "Spread Out",
-        FollowerMenuItem.BackOff => "Back Off",
-        FollowerMenuItem.Wait => "Wait",
-        FollowerMenuItem.Inventory => "Inventory",
-        FollowerMenuItem.CharacterSheet => "Character Sheet",
-        _ => throw new ArgumentOutOfRangeException(nameof(item)),
     };
 
     /// <summary>The spell flag that marks a mind-controlled follower (FP8).</summary>

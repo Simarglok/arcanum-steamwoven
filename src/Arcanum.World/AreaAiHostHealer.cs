@@ -33,16 +33,19 @@ public sealed partial class AreaAiHost
 
     /// <summary>
     /// The skill service (0x419CB0 → 0x4350F0 with skill 10 on the PC and the NPC's healing item): the skill starter's goal 33 starts on the NPC as the script's steal starts its own;
-    /// a starter that refuses changes nothing and the talk goes on, as in the original (the answer of 0x4350F0 is not read). False only for an object that is no NPC of this host.
+    /// a starter that refuses changes nothing and the talk goes on, as in the original (the answer of 0x4350F0 is not read). <paramref name="noPcLeader"/> is the extra start flag 0x2000 the original
+    /// passes when no PC leads the NPC (0x45DDA0 is 0): the starter takes it, and none of the goals the starter queues reads it (ARC-SCRIPT-1789, ledger HLR10), so the run is the same either way.
+    /// False only for an object that is no NPC of this host.
     /// </summary>
-    public bool HealerService(string npc, int skillNumber = AiPassChoice.HealSkill)
+    public bool HealerService(string npc, int skillNumber = AiPassChoice.HealSkill, bool noPcLeader = false)
     {
         if (npc == Pc || !_npcs.ContainsKey(npc)) return false;
         // ARC-SCRIPT-1798 (ledger DSV5): the starter takes any skill number the reply names; the tool is the heal item for skill 10 and none for the others (0x4C91F0). A number outside the 16 skills
         // is passed on by the original's starter and is a no-op here (no goal is started for it); the goal's attempt of a skill other than heal and pick pocket is not built (AttemptSkill).
         if (skillNumber < 0 || !Enum.IsDefined((Skill)skillNumber)) return true;
         var current = RunOf(npc);
-        var result = AiExecutorRules.StartUseSkill(this, npc, Pc, skillNumber, skillNumber == AiPassChoice.HealSkill ? HealingItem(npc) : null, current);
+        var result = AiExecutorRules.StartUseSkill(this, npc, Pc, skillNumber, skillNumber == AiPassChoice.HealSkill ? HealingItem(npc) : null, current,
+            noPcLeader ? AiExecutorRules.NoPcLeaderRequestFlag : 0);
         Started(npc, current, result);
         return true;
     }

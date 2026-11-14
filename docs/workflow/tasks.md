@@ -209,6 +209,44 @@ Owner decision 2026-10-29 (ARC-DEV-057, token audit of 2026-10-29, item 4):
 Why: in the token audit of 2026-10-29, reviews were 8 percent of the week's
 cache-read tokens (146 review subagents), all of them on Opus.
 
+### Token rules
+
+Owner decision 2026-11-14 (ARC-DEV-1982): cost is the context size times the
+number of steps, so a thread keeps both small. This section gathers the rules
+not stated elsewhere; the others are
+[small search and read output](#small-search-and-read-output),
+[fewer steps](#fewer-steps), [lean orientation](#lean-orientation) and
+[review model](#review-model).
+
+- **Model.** Sonnet by default. Opus only for reading the original executable,
+  executable audits and big reviews (thresholds in the
+  [review model](#review-model)).
+- **One thread, one issue.** The thread ends as
+  [one task per thread](#one-task-per-thread) says (merge, owner review or
+  cancel), at once and without further work. Anything found on the way is a new
+  issue, filed at once ([backlog](#backlog-in-github-issues)); its work goes
+  through the coordinator to a new thread, never "while I'm here".
+- **Audit slices** of the original executable hold at most 15 to 20 functions
+  each.
+- **Recon and executable reading in a subagent.** A wide code search follows
+  [lean orientation](#lean-orientation) (cheaper model, at most 40 lines back);
+  reading the exports or the executable runs in an Opus subagent. Either way
+  only the conclusion enters the thread.
+- **Waiting.** Wait for the Mac launch queue with one blocking command (a quiet
+  `./arcanum run`, or for a run already started elsewhere
+  `./arcanum queue --wait RUN_ID|--all [--timeout MIN]`,
+  [waiting for a run](toolchain.md#launch-queue-arc-dev-033)), never a `sleep` or polling loop. Batch every check of the
+  task into one queue run instead of one run per check.
+- **Reports.** No interim status posts ("reading X"): post only a result, a
+  question or a failure. The checklist carries progress, updated only when a
+  step changes ([fewer steps](#fewer-steps)).
+- **No long-lived multi-task threads** that accumulate context; a new task
+  starts a new thread from a short handoff.
+
+Why: the token audits of 2026-10-21 and 2026-10-29 (see the sections linked
+above) found the cost in long sessions, re-read search and reading output, and
+reviews all on Opus.
+
 ### Smoke scope
 
 Owner decisions 2026-10-29 (ARC-DEV-057, token audit of 2026-10-29, item 5;
