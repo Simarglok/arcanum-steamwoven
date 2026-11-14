@@ -106,6 +106,9 @@ public sealed record ChromeRecipe(string File, ChromeKind Kind, ChromeMaterial B
 /// pixels of each frame (layout facts of the original windows, as in the ledgers); everything drawn is ours.</summary>
 public static class InterfaceChromeRecipes
 {
+    /// <summary>ARC-UI-1820: the name of the arrange button's art (340, `tiny_butt`).</summary>
+    public const string ArrangeButtonFile = "tiny_butt.art";
+
     /// <summary>ARC-UI-1784: the file names of the sixteen college tab arts of the sheet's spells page (<c>interface.mes</c> numbers 11, 44, 38, 92, 50, 86, 56, 98, 62, 68, 74, 104, 110, 80, 116, 122,
     /// the order of <see cref="AreaCharacterSheetSpellsLayout.CollegeArt"/>).</summary>
     public static readonly IReadOnlyList<string> CollegeTabFiles =
@@ -367,7 +370,10 @@ public static class InterfaceChromeRecipes
             "bgrn_but.art", "CombineButt.ART"];
         return [top, bottom, inventory, doll, loot, barter, follower, lootDoll, .. lenses, .. SheetPanels(), .. MapPanels(), .. LogbookRecipes(), .. PaneRecipes(), .. SchematicRecipes(), .. HudRecipes(), .. FollowerRecipes(), .. DialogRecipes(), .. buttons.Select(file => new ChromeRecipe(file, ChromeKind.Button, ChromeMaterial.Face, ChromeSides.None, [])),
             // ARC-UI-1784: the spells page's sixteen college tabs (24 x 24 balls, three frames): a generated rim around the ball's own picture.
-            .. CollegeTabFiles.Select(file => new ChromeRecipe(file, ChromeKind.Button, ChromeMaterial.Face, ChromeSides.None, [], KeepFace: true))];
+            .. CollegeTabFiles.Select(file => new ChromeRecipe(file, ChromeKind.Button, ChromeMaterial.Face, ChromeSides.None, [], KeepFace: true)),
+            // ARC-UI-1820: the arrange button every inventory, loot, barter and item service window makes (art 340 `tiny_butt`, 28 x 27, two frames; the windows draw the first): a dark glass ball in a brass ring
+            // with no glyph, so like a college tab the ball's own picture stays inside a generated rim.
+            new ChromeRecipe(ArrangeButtonFile, ChromeKind.Button, ChromeMaterial.Face, ChromeSides.None, [], KeepFace: true)];
     }
 
     // ARC-UI-1197: the world map and town map window (138 `mapmain`, 800 x 400, wood). The map view's hole gets the brass rim every hole gets; the two readout boxes (680, 157 and

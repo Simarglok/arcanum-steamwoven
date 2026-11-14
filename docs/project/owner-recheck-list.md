@@ -1371,3 +1371,20 @@ Known differences (documented, not bugs):
 
 - The iron is plainer and bluer than the original's marbling; the portrait frame's border is thinner; the menu's bands are darker and flat.
 - The pressed frames of the scroll arrows are not drawn by the panel (as before).
+
+## ARC-UI-1820 — Generated interface: the item identify and repair windows (S13, 2026-11-14)
+
+The rules are in [viewer slice S13](../rendering/hd-interface-density.md#viewer-slice-s13-arc-ui-1820). Set the HD interface line on the launcher screen to **Generated (experimental)**,
+start a game and talk to an NPC who identifies or repairs items (a dialog with the `ii` or `ri` reply). Compare with **HD** and **Legacy**.
+
+| # | Step | Expected | Status |
+| --- | --- | --- | --- |
+| 1 | Choose the identify or repair reply in a 1280 × 800 window. | The paper doll's frame (name plate, the doll grid, the two curved pits) and the pack's frame (grid pit with its cell lines, the count bars) are drawn by code in the same places as in the inventory; the round view's ring too; the NPC's picture sits at the left of the black name plate and its quote text in it. | open |
+| 2 | Click an item of yours. | The item's cells are filled dark red, the NPC says the quote in the name plate; a long quote may run below the plate onto the wood, as in the original. | open |
+| 3 | Look at the small round button right of the arrangement icons (the arrange button) here and in the inventory, a chest and the barter window. | A dark ball in a brass ring in all four; clicking it still arranges your items (outside the service windows too). | open |
+| 4 | Make the window bigger and smaller while the window is open. | The frames redraw at the new size (the previous picture stays until it is ready); lines stay one unit wide. | open |
+
+Known differences (documented, not bugs):
+
+- The curved flourishes at the corners of the original's boxes are not drawn; the name plate is a plain rectangle with a brass rim.
+- The arrange button's ring is the project's brass ring around the original's dark ball.

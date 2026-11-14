@@ -26,6 +26,20 @@ public static class AreaServiceArtLayout
     /// <summary>The quote line's rectangle (x, y, width, height; table 0x5CAFB0).</summary>
     public static readonly (int X, int Y, int Width, int Height) QuoteLine = (180, 29, 155, 65);
 
+    /// <summary>ARC-UI-1820: the sunk name plate of the `PDoll` frame the NPC's image and quote line lie on, in frame pixels (x, y, width, height): the generated interface's recipe of that frame
+    /// (<c>InterfaceChromeRecipes</c>, "pdoll.art") paints exactly this plate. The image (half size) lies inside it; the quote line's first lines do, and a line that wraps past its
+    /// bottom (the rectangle is 10 pixels taller than the plate) falls on the frame's wood as in the original.</summary>
+    public static readonly (int X, int Y, int Width, int Height) NamePlate = (124, 25, 223, 55);
+
+    /// <summary>ARC-UI-1820: whether the image of an art of <paramref name="width"/> × <paramref name="height"/> pixels, at half size and at its corner, lies inside <see cref="NamePlate"/> with a
+    /// two unit margin (the plate's bevel and ink line), so no picture cuts into the generated plate's edge.</summary>
+    public static bool ImageFitsNamePlate(int width, int height)
+    {
+        var (x, y, w, h) = ImageRect(width, height);
+        var (px, py, pw, ph) = NamePlate;
+        return x >= px + 2 && y >= py + 2 && x + w <= px + pw - 2 && y + h <= py + ph - 2;
+    }
+
     /// <summary>The colour (red, green, blue) the remembered item's cells are filled with: the red channel at table index 0x40 of 0xFF, the other two at their first entry, as the too heavy weapon's fill
     /// (<see cref="AreaLootArtLayout.TooHeavyFill"/>, IW43; the redraw builds both from the same expression).</summary>
     public static readonly (int Red, int Green, int Blue) SelectedFill = AreaLootArtLayout.TooHeavyFill;
