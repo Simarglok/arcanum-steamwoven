@@ -54,6 +54,18 @@ public partial class TerrainViewerApp
                 _worldMapTownGateOffForSmoke = true;
             }
             else GD.Print($"ARC-UI-084 native-smoke worldmap-town SKIP (debugMode={DebugMode}, art {(artLook is null ? "not read" : "read")}, town map {PcTownMapNumber()})");
+            // ARC-UI-1940 (WM3, VC60): a hero in combat mode that the exit gate lets go (no NPC fights it here) opens the map and is out of combat mode; the refusal under attack is the "ai" stage's combat-exit step.
+            if (session.QueryHero() is not null)
+            {
+                if (!HeroInCombatMode) ToggleCombatMode();
+                Require(HeroInCombatMode, "the hero enters combat mode: " + _combatModeNotice);
+                InventoryKey(Key.W);
+                Require(WorldMapOpen && !HeroInCombatMode, $"W in combat mode opens the map and leaves combat mode: open={WorldMapOpen} combat={HeroInCombatMode} status={_worldMapStatus}");
+                CloseWorldMapByPlayer();
+                Require(!WorldMapOpen, "the map closed again");
+                GD.Print("ARC-UI-1940 native-smoke worldmap-combat-exit PASS (W in combat mode opened the map and left combat mode)");
+            }
+            else GD.Print("ARC-UI-1940 native-smoke worldmap-combat-exit SKIP (no hero)");
             InventoryKey(Key.W);
             Require(WorldMapOpen && WorldModal && _worldMap is not null, "W opened the world map: " + _worldMapStatus);
             // ARC-DEV-050: the area list and Teleport exist only in debug mode.
