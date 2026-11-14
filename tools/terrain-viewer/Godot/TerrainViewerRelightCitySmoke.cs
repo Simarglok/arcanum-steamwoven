@@ -122,12 +122,15 @@ public partial class TerrainViewerApp
             if (OS.GetEnvironment("ARC_RELIGHT_SHOTS") == "1")
             {
                 var shotSpots = new List<(string Name, (StationaryLight Light, TerrainRect Rect) Lamp)>();
+                // ARC-RES-2061: ARC_RELIGHT_AT="x,y;x,y" names world tiles to stand at instead of the densest light clusters (the spot names are at1, at2 ...).
+                var atTiles = (OS.GetEnvironment("ARC_RELIGHT_AT") ?? "").Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                    .Select(t => t.Split(',')).Select(p => (X: long.Parse(p[0]), Y: long.Parse(p[1]))).ToArray();
                 foreach (var candidate in lit.OrderByDescending(Density))
                 {
-                    if (shotSpots.Count == 3 || Density(candidate) < 4) break;
+                    if (atTiles.Length > 0 || shotSpots.Count == 3 || Density(candidate) < 4) break;
                     if (shotSpots.All(x => Centre(x.Lamp).DistanceTo(Centre(candidate)) >= 700f)) shotSpots.Add(((shotSpots.Count + 1).ToString(), candidate));
                 }
-                Require(shotSpots.Count > 0, "the window has a spot with at least four lit lights within reach");
+                Require(atTiles.Length > 0 || shotSpots.Count > 0, "the window has a spot with at least four lit lights within reach");
                 var hours = (OS.GetEnvironment("ARC_RELIGHT_HOURS") is { Length: > 0 } list ? list : "20,23,3").Split(',').Select(h => int.TryParse(h.Trim(), out var value) && value is >= 0 and <= 23 ? value : -1).ToArray();
                 Require(hours.Length > 0 && hours.All(h => h >= 0), "ARC_RELIGHT_HOURS is a comma-separated list of hours 0..23");
                 var shotLog = new List<object>();
@@ -135,19 +138,29 @@ public partial class TerrainViewerApp
                 {
                     for (var h = 0; h < 24 && driver.Clock.Hour != hour; h++) { driver.AdvanceHours(1, AmbientSector()); LogAreaEvents(driver); }
                     Require(driver.Clock.Hour == hour, $"the clock reached hour {hour}");
-                    foreach (var (spotName, lamp) in shotSpots)
+                    var places = shotSpots.Select(x => (x.Name, Cell: (CellCoord?)null, x.Lamp)).Concat(atTiles.Select((t, i) => ($"at{i + 1}", (CellCoord?)map.Chart.ToChart(new(t.X, t.Y)), default((StationaryLight Light, TerrainRect Rect))))).ToArray();
+                    foreach (var (spotName, tileCell, lamp) in places)
                     {
-                        Look(Stand(lamp)); PushAreaAmbient(); await Frames();
+                        if (tileCell is { } tile)
+                        {
+                            CellCoord stand = home; var found = false;
+                            foreach (var radius in new[] { 2, 5, 9 })
+                                try { stand = AreaSmokeStandable(map, tile, radius); found = true; break; } catch (InvalidOperationException) { }
+                            if (!found) GD.Print($"ARC-RES-2061 relight-city tile {spotName}: no standable cell near it; standing at the window's start");
+                            Look(stand);
+                        }
+                        else Look(Stand(lamp));
+                        PushAreaAmbient(); await Frames();
                         foreach (var (variant, mode, strength) in new[] { ("1-legacy", AreaRelight.Mode.Off, wasStrength), ("2-night-10", AreaRelight.Mode.NightAdd, 1.0f), ("3-night-16", AreaRelight.Mode.NightAdd, 1.6f) })
                         {
                             AreaRelight.SetMode(mode); AreaRelight.Strength = strength; PushAreaAmbient();
                             await Capture($"shot-{spotName}-h{hour:00}-{variant}");
-                            if (mode == AreaRelight.Mode.NightAdd && strength > 1.5f) shotLog.Add(new { Spot = spotName, Hour = hour, Density = Density(lamp), InView = AreaRelight.InViewCount });
+                            if (mode == AreaRelight.Mode.NightAdd && strength > 1.5f) shotLog.Add(new { Spot = spotName, Hour = hour, Density = tileCell is null ? Density(lamp) : -1, InView = AreaRelight.InViewCount });
                         }
                         AreaRelight.SetMode(AreaRelight.Mode.Off); AreaRelight.Strength = wasStrength; PushAreaAmbient();
                     }
                 }
-                GD.Print("ARC-RES-2050 relight-city shots " + System.Text.Json.JsonSerializer.Serialize(new { City = city, Spots = shotSpots.Count, Hours = hours, Scenes = shotLog }));
+                GD.Print("ARC-RES-2050 relight-city shots " + System.Text.Json.JsonSerializer.Serialize(new { City = city, Spots = shotSpots.Count + atTiles.Length, Hours = hours, Scenes = shotLog }));
                 GD.Print("ARC-RES-1978 native-smoke relight PASS ARC-RES-2050 shots " + city);
                 return;
             }
