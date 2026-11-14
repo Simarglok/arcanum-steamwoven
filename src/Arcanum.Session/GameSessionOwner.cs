@@ -1233,12 +1233,16 @@ public sealed partial class GameSessionOwner : IDisposable
     /// with no effect.
     /// ARC-DEV-087 (MIG6e): the NPC may stand on another attached map's seed (a companion carried here); the item then keeps that map as its origin
     /// (<see cref="NpcHolderSeed"/>), and an item or holder of that map with a script to run is refused (the script host answers for the shown map).
+    /// ARC-SCRIPT-1987: a worn item of the NPC is taken off its slot by the move (as <see cref="LootItem"/>'s: the insert check sees it unwielded, wield-off 25 and remove-item 28 run with the NPC as the triggerer when
+    /// <paramref name="npcWearer"/> gives its context, the NPC's wear record drops it and the NPC is marked to re-wield, flag 0x40) and goes to the hero's list or, when the move is refused, to the hero's tile.
     /// ARC-MAGIC-022: with <paramref name="triggers"/> the pickup executor (0x4CBAA0) runs after the move.
     /// </summary>
     public InventoryMutationResult GiveItemToPc(GameSessionVersion expected, string npc, int name, SessionInsertCheck insertCheck,
-        ISessionItemScriptHost? scripts = null, ISessionItemTriggers? triggers = null) => PickedUp(GiveToPc(expected, npc, name, insertCheck, scripts), triggers);
+        ISessionItemScriptHost? scripts = null, ISessionItemTriggers? triggers = null, SessionNpcWieldScripts? npcWearer = null) =>
+        PickedUp(GiveToPc(expected, npc, name, insertCheck, scripts, npcWearer), triggers);
 
-    private InventoryMutationResult GiveToPc(GameSessionVersion expected, string npc, int name, SessionInsertCheck insertCheck, ISessionItemScriptHost? scripts)
+    private InventoryMutationResult GiveToPc(GameSessionVersion expected, string npc, int name, SessionInsertCheck insertCheck, ISessionItemScriptHost? scripts,
+        SessionNpcWieldScripts? npcWearer = null)
     {
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(insertCheck);
@@ -1250,7 +1254,9 @@ public sealed partial class GameSessionOwner : IDisposable
             return row.HasSubstituteInventory ? RejectItem(GameSessionFailure.SubstituteInventoryUnsupported)
                 : new(GameSessionDisposition.NoChange, GameSessionFailure.None, null, null, new(_identity, _revision));
         // ARC-WORLD-1131: the dialog's IN runs the room test like every take; an item the insert check refuses (room, weight, Technophobia) is laid on the PC's tile (0x415BA0).
-        return Take(seed, found, npc, insertCheck, scripts, map, toFeet: true);
+        // ARC-SCRIPT-1987 (WL3): the transfer tests no worn state of its source (0x461CA0), and the removal it runs (0x466E00 → 0x467860) takes a worn item off its slot (wield-off 25, then remove-item 28), so a
+        // worn item of the NPC goes as the loot of a body does (`unwield`), over the NPC's own wield context when the host gives it.
+        return Take(seed, found, npc, insertCheck, scripts, map, unwield: true, toFeet: true, npcWearer: npcWearer);
     }
 
     /// <summary>
@@ -2204,7 +2210,7 @@ public sealed partial class GameSessionOwner : IDisposable
         if (folds && (facts.KeyId is not { } keyNumber || !SessionStoryLimits.IsKey(keyNumber))) return RejectItem(GameSessionFailure.InvalidItem);
         if (folds && _story.HeroKeys.Count >= SessionStoryLimits.MaxKeys) return RejectItem(GameSessionFailure.KeyRingFull);
         // ARC-DEV-202 (B03): the removal 0x466E00 → 0x467860 of a looted body's item takes a worn one off its slot (wield-off event 25, then
-        // remove-item 28; PI2, NT3); the transfer 0x461CA0 and Take all (0x579770) test no worn state. Only the loot (`unwield`) takes worn
+        // remove-item 28; PI2, NT3); the transfer 0x461CA0 and Take all (0x579770) test no worn state. The loot and the dialog's negative IN (ARC-SCRIPT-1987, `unwield`) take worn
         // items; the other paths of a parented move keep refusing them.
         var worn = parented && facts.Worn;
         if (worn && !unwield) return RejectItem(GameSessionFailure.WornItemUnsupported);

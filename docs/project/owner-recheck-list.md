@@ -3,6 +3,8 @@
 Places where the behaviour was built from the original executable and the data, but the owner has not yet compared it with the original game. On 2026-11-11 the owner asked that
 slices no longer wait for his in-game comparison: they merge on their checks and add their comparison steps here. The owner works through this list in game later.
 
+The owner's working checklist of 2026-11-14, with the thread checks and the open steps of this list in one place, is [owner-test-checklist-2026-11-14.md](owner-test-checklist-2026-11-14.md); a step's status is still set here.
+
 Rules for this file:
 
 - One section per slice (task code, PR, date), newest last. Steps are short, in game terms, and say what the original is expected to do and on which map or spell.

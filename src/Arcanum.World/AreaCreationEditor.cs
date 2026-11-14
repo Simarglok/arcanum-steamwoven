@@ -58,6 +58,21 @@ public sealed class AreaCreationEditor : IDisposable
 
     public AreaSpellsPageView? Spells(SpellData? data, int college) => AreaSpellsPage.Build(Draft, data, college);
 
+    /// <summary>ARC-UI-1792: the draft hero's scheme page (the sheet's own, <see cref="AreaSchemesPage"/>), or null without the name files.</summary>
+    public AreaSchemesPageView? Schemes(AreaCharacterSheetTexts texts) => AreaSchemesPage.BuildForHero(Draft, texts);
+
+    /// <summary>
+    /// ARC-UI-1792: a release on a row of the scheme page (ledger ALP8): the draft hero's scheme becomes <paramref name="scheme"/> (no cost, nothing
+    /// bought now) and the choice is recorded in <see cref="AreaNewCharacter.Scheme"/>, which the start writes into the real session
+    /// (<see cref="AreaNewCharacter.ApplyChoices"/>). A scheme the draft already holds changes nothing and records nothing.
+    /// </summary>
+    public SessionSchemeResult PressScheme(int scheme)
+    {
+        var result = AreaSchemesPage.Choose(Draft, scheme);
+        if (result.Disposition == GameSessionDisposition.Changed) Creation.RecordScheme(scheme);
+        return result;
+    }
+
     /// <summary>+ (<paramref name="spend"/>) or − on a stats row (<see cref="AreaStatsPage"/>).</summary>
     public AreaStatPress PressStat(int row, bool spend)
     {
