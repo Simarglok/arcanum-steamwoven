@@ -416,6 +416,7 @@ those of the player's `interface.mes` (the viewer's window ledgers carry them; e
 | ARC-UI-1817 (issue #1817, [S12](#viewer-slice-s12-arc-ui-1817)) | follower panel and order menu | 501 `FollowerArrow_DWN` and 502 `FollowerArrow_UP` (67 × 13), 503 `FollowerFrame` (40 × 49), 506–509 `Follow_Scroll_up`, `Follow_Scroll_up_OFF`, `Follow_Scroll_dwn`, `Follow_Scroll_dwn_OFF` (33 or 34 × 13), 826 `FollwerComandMenu` (136 × 148) | the bars 504 `FollowerFrame_FT`, 505 `FollowerFrame_HP` and 616 `FollowerFrame_PO` (34 × 3) and the follower portraits stay pictures |
 | ARC-UI-1820 (issue #1820, [S13](#viewer-slice-s13-arc-ui-1820)) | item identify and repair windows | 223 `PDoll` and 221 `Inventor` (the own window's), the lens 233, the arrange button 340 `tiny_butt` (28 × 27, shared by every inventory window); the NPC's image, the item arts, the empty slot covers 241–249 stay pictures | the windows had no original look to replace: ARC-UI-1765 draws it first (Legacy and HD, [ledger IS8–IS11](../research/ledger/items.md#item-identify-and-repair-windows-arc-ui-1731)); this slice adds the Generated drawing |
 | ARC-UI-155 (issue #1201, ARC-UI-1201, [S14](#viewer-slice-s14-arc-ui-1201)) | reading windows | 494 `WritenSideBar` (132 × 400), the backgrounds 477 `BookBackground`, 489 `NoteBackground`, 487 `NewsBackground`, 491 `TeleBackground`, 633 `Stone_Plaque` and 817 `vendnewsback` (668 × 400), the book's page buttons 495 `WrtnBookLArro` and 496 `WrtnBookRArro` (18 × 22, three frames); the lens 231 is the barter window's recipe ([S4](#viewer-slice-s4-arc-ui-1194)) | The reading window had no original look to replace: ARC-UI-1877 drew it first (Legacy and HD, [ledger WR17–WR23](../research/ledger/ui-audio.md#reading-window-arc-ui-049)); S14 adds the Generated recipes. The remaining small panels of the old plan are their own issues (#1751, #1750, #1810, #1817–#1821, #1870) |
+| ARC-UI-1751 (issue #1751, [S16](#viewer-slice-s16-arc-ui-1751)) | buttons of the loot, barter and steal windows | 808 `TakeAllButt` (51 × 50, three frames), the doll and bag toggles 338 `PD_lil_butt` and 339 `Inven_lil_butt` (28 × 27, two frames), the barter window's follower cycle buttons 757 `MPCycleLeftButton` and 758 `MPCycleRightButton` (23 × 23, three frames); the drop, use and gamble boxes stay art | the same ball recipe as the college tabs and the arrange button; found by [S4](#viewer-slice-s4-arc-ui-1194) |
 | ARC-UI-1818 (issue #1818, [S15](#viewer-slice-s15-arc-ui-1818)) | quantity pane (gold and ammunition stacks, bar mode 9) | 298 `MultiMove_Base` (416 × 112), the buttons 299 `Sm_RightArrow` (All), 33 `Done_Big` (Accept) and 32 `Cncl_Big` (Cancel); 805 `OldChar_Plus` and 804 `OldChar_Minus` (13 × 10), the kind icon and the roller-font count stay pictures | needs the original art pane of ARC-UI-1884 (its own PR, merged first) |
 
 A slice is done when its frames draw generated chrome at the window's own device scale in the native smoke (Generated and HD runs), the unit
@@ -468,7 +469,7 @@ S4 draws the loot, barter and steal windows (planned as ARC-UI-149, issue #1194)
   the inventory (the glow and the corners are the state). The curved flourishes of the boxes are not drawn (as in S3).
 - **Not generated yet.** The barter doll 337 (`Barter_PD`) is drawn since ARC-UI-1917 (the merchant's doll view, IW29) but still as the Legacy or HD picture; the doll cover 341 (`PD_Cover4Inven`, the toggle 0x68150C
   is not built, F0) is not drawn. Their recipes are issue #1750. The buttons of the windows (the Take all button 808, the toggles 338 and 339, the cycle
-  buttons 757 and 758) are not in this slice (issue #1751).
+  buttons 757 and 758) are [S16](#viewer-slice-s16-arc-ui-1751).
 - **Redraw.** A window draws its textures in its own `_Draw`, so it did not hear a worker's finished frame: a window nothing else redrew (the barter window at rest)
   kept the Legacy pixels until the pointer moved. `AreaInventoryGridArea` now redraws when a texture it claimed changes.
 - **Checks.** `InterfaceChromeTests` (the recipes exist and the state boxes have none, the frames paint in bounds and deterministically at whole and fractional scales, the
@@ -706,7 +707,7 @@ and 509 `Follow_Scroll_dwn_OFF`, and the menu 826 `FollwerComandMenu` (136 × 14
   has no 826 redraw, so in HD mode the menu stays the Legacy art and in Generated it is generated.
 - **Device scale.** `AreaFollowerPortraits` claims its own device scale for the panel's and the menu's textures (`DeviceScale`: the panel root's scale times the canvas transform's and the viewport's stretch, the pattern of the other windows) and draws the frames again
   when that scale changes with the window.
-- **Not generated.** The bars 504, 505 and 616 (the fill art, cropped to the follower's percent), the follower portraits and the red tint stay pictures. The pressed frames of the scroll arrows (506 and 508, frame 1) have the recipe but are not drawn by the panel. The follower cycle buttons of the loot window (`followercycleleft` and `followercycleright`) are issue #1751.
+- **Not generated.** The bars 504, 505 and 616 (the fill art, cropped to the follower's percent), the follower portraits and the red tint stay pictures. The pressed frames of the scroll arrows (506 and 508, frame 1) have the recipe but are not drawn by the panel. The follower cycle buttons of the barter window (757 and 758) are [S16](#viewer-slice-s16-arc-ui-1751).
 - **Checks.** `InterfaceChromeTests` (the recipes exist, the bars have none, every part lies inside its frame and the marks lie inside their plate; the pit holds both bars and no iron plate cuts into them; the ring round the portrait hole is one unit wide and clear of the bars; every frame paints
   in bounds and deterministically at whole and fractional scales with the portrait hole clear and no rim round it; a button keeps the coloured arrow and not the grey grain, the strip's rivets are generated; the menu's odd rows sit in dark bands). The native smoke: the Crash Site smoke
   (`./arcanum smoke crash-site`, its follower step) with `ARC_AREA_WINDOW_ART=legacy|hd|generated` (with `ARC_HD_PACK` for the last two) checks the portrait frame (503), the hide button (501) and the menu art (826, painted whether or not the menu is open): in `generated` they are generated chrome at
@@ -801,6 +802,29 @@ ones (D9); only the drawing changes. The strip pane is a texture of the bars and
   window; in the HD run all four frames are the pack's and in the Legacy run none is. (The Generated and HD runs each failed once at the cave transition, before the pane, and passed when repeated: issue #1900.) The composite
   (before = the HD pack art that Generated drew until now, after, Legacy) is in the task thread, not in git. Seen there: the generated slate is plainer than the original's marbled iron, and the counter strip and the kind icon keep the original's pixels.
   The in-game check of the pane with a real gold stack (black digits are inferred from the colour channel, QW3a) stays on the owner's recheck list.
+
+## Viewer slice S16 (ARC-UI-1751)
+
+S16 draws the buttons the loot, barter and steal windows make themselves in the generated interface (issue #1751, found by [S4](#viewer-slice-s4-arc-ui-1194)): Take all of the loot window, the doll and bag toggles of a body's window and the follower cycle buttons of the
+barter window. Positions, sizes, alpha tests and hit areas are the Legacy ones (D9); only the drawing changes.
+
+| Art | Name | Size, frames | Use | Result |
+| --- | --- | --- | --- | --- |
+| 808 | `TakeAllButt` | 51 × 50, 3 | the loot window's Take all at (301, 47), loot mode only | button: recipe |
+| 338 | `PD_lil_butt` | 28 × 27, 2 | the body window's doll toggle at (23, 108) | button: recipe |
+| 339 | `Inven_lil_butt` | 28 × 27, 2 | the body window's bag toggle at (74, 108) | button: recipe |
+| 757, 758 | `MPCycleLeftButton`, `MPCycleRightButton` | 23 × 23, 3 | the follower barter window's cycle buttons | button: recipe |
+| 344–348, 224, 225 | the drop, use and gamble boxes | | oval boxes with a coloured corner | art: kept (state glow) |
+
+- **Recipe.** All five arts are dark glass balls in a brass ring with a mark (an arrow, the doll, the bag), so they get the round ball recipe of the college tabs ([S5b](#viewer-slice-s5b-arc-ui-1784)), the arrange button ([S13](#viewer-slice-s13-arc-ui-1820)) and the quantity buttons ([S15](#viewer-slice-s15-arc-ui-1818)):
+  `ChromeKind.Button` with `KeepFace`, the art's own picture inside a generated rim that follows the round silhouette, sunk on the down frame and lit on the hover frame. A first render with the glyph-only button recipe of [S1](#viewer-slice-s1-arc-ui-140) (a generated face with only the mark kept) was compared with it on the five arts and dropped: it replaced the dark glass with a flat olive face, so the doll and the bag lost their
+  shading and the arrows their ground, and it left a notch where the art's brass arc leaves the circle (as in S15). The Take all art has a wooden bezel round its ring: it lies inside the generated rim (the art's silhouette is the button's), so the button is a ball on a plain edge where the original's wood showed round it.
+- **Frames.** The windows draw the first frame of every art, as they do for the arrange button; the down and hover frames are painted by the same recipe and covered by the unit tests only.
+- **Shared arts.** 757 and 758 are also the new character window's cycle buttons (race, background, gender), which draw the same arts; they are generated wherever the Generated interface draws them. The arts' names are the keys of the recipes.
+- **Checks.** `InterfaceChromeTests` (the five recipes are found by name and are `KeepFace` buttons; synthetic balls with the arts' sizes and frame counts paint in bounds, deterministically and with the art's silhouette at whole and fractional scales, keep their mark and
+  dark glass in a generated rim, and differ on every frame and from the plain recipe). The native smoke is the shared `ARC_AREA_WINDOW_ART=legacy|hd|generated` part (with `ARC_HD_PACK`, `ARC_AREA_WINDOW_CAPTURE=PREFIX`): stage `container` adds Take all to the loot window's frames,
+  stage `loot-room` adds Take all and the two toggles to the body window's doll view, stage `barter` runs the follower background (825) once more with the two cycle buttons added. In `generated` every listed frame is generated chrome at `round(size × paint scale)` pixels of the
+  window's own device scale, again in a bigger window and back; in `hd` and `legacy` none is.
 
 ## Synthetic comparison
 

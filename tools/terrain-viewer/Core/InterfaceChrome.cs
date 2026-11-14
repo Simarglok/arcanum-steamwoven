@@ -109,6 +109,13 @@ public static class InterfaceChromeRecipes
     /// <summary>ARC-UI-1820: the name of the arrange button's art (340, `tiny_butt`).</summary>
     public const string ArrangeButtonFile = "tiny_butt.art";
 
+    /// <summary>ARC-UI-1751: the file names of the loot, barter and steal windows' own buttons: 808 <c>TakeAllButt</c> (51 × 50, three frames; the loot window's Take all), 338 <c>PD_lil_butt</c> (the doll toggle) and 339
+    /// <c>Inven_lil_butt</c> (the bag toggle; 28 × 27, two frames) of a body's window, and the barter window's follower cycle buttons 757 <c>MPCycleLeftButton</c> and 758 <c>MPCycleRightButton</c> (23 × 23, three frames).
+    /// Each is a dark glass ball in a brass ring with a mark (an arrow, the doll, the bag), so like the arrange button the ball's own picture stays inside a generated rim (<see cref="ChromeRecipe.KeepFace"/>): the mark is the
+    /// button's meaning. The windows draw the first frame (as for the arrange button); the down and hover frames are painted too. The cycle arts are shared with the new character window's cycle buttons, which draw them through the same interface.</summary>
+    public static readonly IReadOnlyList<string> WindowBallButtonFiles =
+        ["TakeAllButt.ART", "PD_lil_butt.ART", "Inven_lil_butt.ART", "MPCycleLeftButton.ART", "MPCycleRightButton.ART"];
+
     /// <summary>ARC-UI-1784: the file names of the sixteen college tab arts of the sheet's spells page (<c>interface.mes</c> numbers 11, 44, 38, 92, 50, 86, 56, 98, 62, 68, 74, 104, 110, 80, 116, 122,
     /// the order of <see cref="AreaCharacterSheetSpellsLayout.CollegeArt"/>).</summary>
     public static readonly IReadOnlyList<string> CollegeTabFiles =
@@ -425,7 +432,9 @@ public static class InterfaceChromeRecipes
             .. CollegeTabFiles.Select(file => new ChromeRecipe(file, ChromeKind.Button, ChromeMaterial.Face, ChromeSides.None, [], KeepFace: true)),
             // ARC-UI-1820: the arrange button every inventory, loot, barter and item service window makes (art 340 `tiny_butt`, 28 x 27, two frames; the windows draw the first): a dark glass ball in a brass ring
             // with no glyph, so like a college tab the ball's own picture stays inside a generated rim.
-            new ChromeRecipe(ArrangeButtonFile, ChromeKind.Button, ChromeMaterial.Face, ChromeSides.None, [], KeepFace: true)];
+            new ChromeRecipe(ArrangeButtonFile, ChromeKind.Button, ChromeMaterial.Face, ChromeSides.None, [], KeepFace: true),
+            // ARC-UI-1751: the loot window's Take all, the body window's doll and bag toggles and the barter window's follower cycle buttons: the same ball in a generated rim.
+            .. WindowBallButtonFiles.Select(file => new ChromeRecipe(file, ChromeKind.Button, ChromeMaterial.Face, ChromeSides.None, [], KeepFace: true))];
     }
 
     // ARC-UI-1197: the world map and town map window (138 `mapmain`, 800 x 400, wood). The map view's hole gets the brass rim every hole gets; the two readout boxes (680, 157 and

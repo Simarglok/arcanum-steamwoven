@@ -617,6 +617,15 @@ public partial class TerrainViewerApp
         string doll;
         try { doll = await BarterDollForSmokeAsync(panel, area); }
         catch (Exception failure) { GD.Print("ARC-UI-1917 native-smoke barter-doll FAIL " + failure.Message); throw; }
+        // ARC-UI-1751: the follower's window (825 on the follower background) also draws the two cycle buttons (757, 758): with ARC_AREA_WINDOW_ART they are checked in the generated interface too.
+        if (WindowArtSmokeRequested)
+        {
+            var merchantFrame = area.BarterFrame!;
+            area.SetBarter(merchantFrame with { Background = AreaBarterArtLayout.FollowerArt });
+            Require(area.CycleShown, "the follower background shows the cycle buttons for the window art run");
+            await WindowArtSmokeAsync("barter-follower", area, [AreaBarterArtLayout.FollowerArt, AreaInventoryHole.BarterArt, AreaInventoryArtLayout.PackArt, AreaInventoryArtLayout.ArrangeArt, AreaBarterArtLayout.CycleLeftArt, AreaBarterArtLayout.CycleRightArt]);
+            area.SetBarter(merchantFrame);
+        }
         if (System.Environment.GetEnvironmentVariable("ARC_AREA_BARTER_CAPTURE") is { Length: > 0 } capture)
         {
             await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);

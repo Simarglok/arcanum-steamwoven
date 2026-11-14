@@ -124,8 +124,7 @@ public partial class TerrainViewerApp
                 _areaSmokeTime++;
                 SpellSmokeTick();
                 WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .05, true, SimulationTime.At(_areaSmokeTime, 20));
-                // ARC-DEV-1692: the frame's view touch may have asked the chart for more sectors; the next frame's AI step plans over them only when their read is done, which wall time (load) decides: wait for it.
-                Require(SettleSectorChartForSmoke(), "the sector chart's background read did not finish: " + SectorChartState());
+                // ARC-DEV-1692/1748: WorldFrameForSelfTest waits for the chart's background read at the end of every frame.
             }
             CellCoord? lastTile = null;
             CellCoord TileOf()
