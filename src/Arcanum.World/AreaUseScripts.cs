@@ -302,15 +302,6 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
 
     private readonly List<ScrReadingRequest> _readings = [];
     private readonly List<AreaScriptFloat> _floats = [];
-    private Arcanum.Data.Written.WrittenTexts? _newspaperTexts;
-    private bool _newspaperTextsRead;
-
-    // ARC-SCRIPT-1764: the module's newspaper headlines, opened the first time a float newspaper headline needs them.
-    private Arcanum.Data.Written.WrittenTexts? NewspaperTexts()
-    {
-        if (!_newspaperTextsRead) { _newspaperTexts = AreaScriptNewspaper.OpenTexts(_content); _newspaperTextsRead = true; }
-        return _newspaperTexts;
-    }
     private readonly List<AreaScriptFade> _fades = [];
     private readonly List<AreaScriptEyeCandy> _eyeCandies = [];
 
@@ -324,6 +315,8 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     }
 
     private bool _endGame;
+    private AreaScriptNewspaper.TextsCache? _newspaperTextsField;
+    private AreaScriptNewspaper.TextsCache _newspaperTexts => _newspaperTextsField ??= new(() => _content);
 
     /// <summary>ARC-RENDER-1171 (SS4): whether a run applied since the last call asked for the end of the game (132); see <see cref="AreaScriptHost.TakeEndGame"/>.</summary>
     public bool TakeEndGame()
@@ -1671,7 +1664,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
             floats.Add(new(line.Speaker, printed.Text));
         }
         // ARC-SCRIPT-1764 (NP10): the float newspaper headline requests, read before anything applies.
-        floats.AddRange(AreaScriptNewspaper.Floats(_session, effects, NewspaperTexts));
+        floats.AddRange(AreaScriptNewspaper.Floats(_session, effects, _newspaperTexts.Get));
         // ARC-WORLD-081: a create object the viewer cannot apply (no world, a prototype that is no item, an object without a place on the shown
         // map) leaves the whole run unapplied.
         if (Creatable(effects) is { } refusedCreation)

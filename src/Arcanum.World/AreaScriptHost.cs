@@ -196,15 +196,6 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
     private readonly List<AreaSchematicScriptOpen> _schematics = [];
     private readonly List<ScrReadingRequest> _readings = [];
     private readonly List<AreaScriptFloat> _floats = [];
-    private Arcanum.Data.Written.WrittenTexts? _newspaperTexts;
-    private bool _newspaperTextsRead;
-
-    // ARC-SCRIPT-1764: the module's newspaper headlines, opened the first time a float newspaper headline needs them.
-    private Arcanum.Data.Written.WrittenTexts? NewspaperTexts()
-    {
-        if (!_newspaperTextsRead) { _newspaperTexts = AreaScriptNewspaper.OpenTexts(_content); _newspaperTextsRead = true; }
-        return _newspaperTexts;
-    }
     private readonly List<AreaScriptFade> _fades = [];
     private readonly List<AreaScriptEyeCandy> _eyeCandies = [];
 
@@ -216,6 +207,8 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
         return eyeCandies;
     }
     private bool _endGame;
+    private AreaScriptNewspaper.TextsCache? _newspaperTextsField;
+    private AreaScriptNewspaper.TextsCache _newspaperTexts => _newspaperTextsField ??= new(() => _content);
 
     /// <summary>ARC-DEV-324: queues a line for the viewer to float over <paramref name="speaker"/> as a script's float line does (the generic greeting, which is a
     /// floating line and no window).</summary>
@@ -467,7 +460,7 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
             floats.Add(new(line.Speaker, printed.Text));
         }
         // ARC-SCRIPT-1764 (NP10): the float newspaper headline requests, read before anything applies.
-        floats.AddRange(AreaScriptNewspaper.Floats(_session, effects, NewspaperTexts));
+        floats.AddRange(AreaScriptNewspaper.Floats(_session, effects, _newspaperTexts.Get));
         _floats.AddRange(floats);
         // The effect rule of every blessing or curse the run adds is known before anything applies (a missing rule refuses the run whole).
         if (!AreaScriptStory.BlessingRulesResolve(_session, effects, IsPc, BlessingEffects)) return false;

@@ -26,6 +26,15 @@ internal static class AreaScriptNewspaper
         return WrittenTexts.Open(stack);
     }
 
+    /// <summary>The headlines of a host, opened the first time a float newspaper headline needs them; a failed open is tried again on the next need, so a transient mount failure does not silence the host for good.</summary>
+    public sealed class TextsCache(Func<ScriptContent?> content)
+    {
+        private WrittenTexts? _texts;
+
+        /// <summary>The module's newspaper headlines, or null when they could not be opened.</summary>
+        public WrittenTexts? Get() => _texts ??= OpenTexts(content());
+    }
+
     /// <summary>
     /// NP10: the float of each float newspaper headline request of <paramref name="effects"/>, read before anything applies. The headline is the head issue's (the queue's word 4, which a queue request never changes), so the text does
     /// not depend on the order of the run's requests. An empty headline (no newspaper file, or an issue without a message) floats nothing: the original's display is handed the empty text and draws none (the display is F0).

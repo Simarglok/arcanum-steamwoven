@@ -136,10 +136,10 @@ public sealed class AreaUseScriptHostTests
             // 776 (ARC-SCRIPT-1241): a use script that fades for 12 seconds into movie 3 (track 0, the screen back at once) and sets a flag, as the Vendigroth underground's 2862 plays its movies.
             Write("scr/00776fade.scr", Program(Do(new(ScrCatalogue.Action.Fade, N(12), N(0), N(3), N(0))), Do(new(ScrCatalogue.Action.SetGlobalFlag, N(49))), Do(Skip)));
             // 782 (ARC-SCRIPT-1764, NP9, NP10): a tile script that queues issue 5030 behind the head, queues issue 7 at the front, queues 7 again (found, no change) and floats the head issue's headline over the PC
-            // (slot 0 is a number the action never reads) The newspaper file holds issue 5000 only (5030 has no message).
+            // (slot 0 is a number the action never reads). The newspaper file holds issue 5000 only (5030 has no message).
             Write("scr/00782news.scr", Program(Do(new(ScrCatalogue.Action.QueueNewspaper, N(5030), N(0))), Do(new(ScrCatalogue.Action.QueueNewspaper, N(7), N(1))), Do(new(ScrCatalogue.Action.QueueNewspaper, N(7), N(0))),
                 Do(new(ScrCatalogue.Action.FloatNewspaperHeadline, N(0), (Triggerer, 0))), Do(new(ScrCatalogue.Action.SetGlobalFlag, N(70))), Do(Skip)));
-            Write("mes/gamenewspaper.mes", Encoding.Latin1.GetBytes("{5000}{30c Big news at the harbour}{5010}{30c Fire!}"));
+            Write("mes/gamenewspaper.mes", Encoding.Latin1.GetBytes("{5000}{30c Big news at the harbour}"));
             // 721, 722 (ARC-SCRIPT-020): an item's use script that sets a flag and runs default, and one that skips default.
             Write("scr/00721use.scr", Program(Do(new(ScrCatalogue.Action.SetGlobalFlag, N(31))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
             Write("scr/00722stop.scr", Program(Do(new(ScrCatalogue.Action.SetGlobalFlag, N(32))), Do(Skip)));
