@@ -204,6 +204,75 @@ public partial class TerrainViewerApp
             Letter('d');
             Require(!MainMenuOpen && _mainMenu is null, "Done closed the menu the O key opened");
 
+            // ARC-UI-2066 (F3; OP9 guards: a text field with focus, a menu already up; the clock-side guard of a load): each refused release opens nothing.
+            void OKey(bool pressed, bool echo = false) => InputWorld(new InputEventKey { Keycode = Key.O, PhysicalKeycode = Key.O, Pressed = pressed, Echo = echo });
+            // A key by its typed code and its physical code (scan code) apart, as a non-QWERTY layout gives them.
+            void LayoutKey(Key typed, Key physical, bool ctrl = false, bool shift = false)
+            {
+                InputWorld(new InputEventKey { Keycode = typed, PhysicalKeycode = physical, CtrlPressed = ctrl, ShiftPressed = shift, Pressed = true });
+                InputWorld(new InputEventKey { Keycode = typed, PhysicalKeycode = physical, CtrlPressed = ctrl, ShiftPressed = shift, Pressed = false });
+            }
+            static InputEventKey OEvent(bool pressed) => new() { Keycode = Key.O, PhysicalKeycode = Key.O, Pressed = pressed };
+            // An echo is no press: it arms nothing, so the release after it opens nothing.
+            OKey(true, echo: true); OKey(false);
+            Require(!MainMenuOpen && _mainMenu is null && !_optionsKeyArmed, "an auto-repeat echo opens nothing");
+            // A menu already up takes the key as its own: the route neither arms nor opens another window over the menu.
+            InventoryKey(Key.Escape);
+            var upMenu = _mainMenu;
+            Require(upMenu?.Window == AreaMenuWindow.InPlay, "the in-play menu is up");
+            Require(RouteOptionsKey(OEvent(true), new(WorldKey.O, true, false, WorldKeyRole.OriginalReserved, false, false, null)) && !_optionsKeyArmed,
+                "the press with a menu up arms nothing");
+            Require(RouteOptionsKey(OEvent(false), new(WorldKey.O, false, false, WorldKeyRole.OriginalReserved, false, false, null)) && ReferenceEquals(_mainMenu, upMenu) && upMenu!.Window == AreaMenuWindow.InPlay,
+                "the release with a menu up opens nothing");
+            InventoryKey(Key.Escape);
+            Require(!MainMenuOpen && _mainMenu is null, "Escape continued play");
+            // A control with UI focus owns the keyboard: the release opens nothing and says why.
+            var focusOwner = new Button { FocusMode = Control.FocusModeEnum.All };
+            AddChild(focusOwner); focusOwner.GrabFocus();
+            try
+            {
+                Require(WorldUiFocus, "the test control holds the focus");
+                OKey(true); OKey(false);
+                Require(!MainMenuOpen && _mainMenu is null && _mainMenuStatus?.StartsWith("O ignored", StringComparison.Ordinal) == true, "UI focus refuses the release: " + _mainMenuStatus);
+            }
+            finally { focusOwner.ReleaseFocus(); RemoveChild(focusOwner); focusOwner.Free(); }
+            // A reset or reload under way refuses it too.
+            _worldResetPending = true;
+            try
+            {
+                OKey(true); OKey(false);
+                Require(!MainMenuOpen && _mainMenu is null && _mainMenuStatus == "O ignored: a load is in progress", "a load refuses the release: " + _mainMenuStatus);
+            }
+            finally { _worldResetPending = false; }
+            OKey(true); OKey(false);
+            Require(_mainMenu?.Window == AreaMenuWindow.Options && !WorldMenuPause, "with the guards gone the release opens the window again");
+            Letter('d');
+            Require(!MainMenuOpen && _mainMenu is null, "Done closed it");
+
+            // ARC-UI-2066 (F2; OP7, OP9): the original reads the scan code 0x18 of the released key in both places, not the typed letter. A layout that types
+            // another letter on the physical O key still opens and closes the window; the letter O typed on another key does nothing; Ctrl+O does nothing, Shift+O acts.
+            LayoutKey(Key.S, Key.O);
+            Require(_mainMenu?.Window == AreaMenuWindow.Options && !WorldMenuPause, "the physical O key opens the window whatever it types");
+            LayoutKey(Key.S, Key.O);
+            Require(!MainMenuOpen && _mainMenu is null, "the physical O key closes it again whatever it types (the same scan code)");
+            LayoutKey(Key.O, Key.R);
+            Require(!MainMenuOpen && _mainMenu is null && !_optionsKeyArmed, "the letter O typed on another key opens nothing");
+            LayoutKey(Key.O, Key.O, ctrl: true);
+            Require(!MainMenuOpen && _mainMenu is null, "Ctrl+O opens nothing (the poll queues no scan code with Ctrl held)");
+            LayoutKey(Key.O, Key.O, shift: true);
+            Require(_mainMenu?.Window == AreaMenuWindow.Options, "Shift+O opens the window");
+            LayoutKey(Key.O, Key.R);
+            Require(_mainMenu?.Window == AreaMenuWindow.Options, "the letter O on another key does not close the window");
+            LayoutKey(Key.S, Key.O);
+            Require(!MainMenuOpen && _mainMenu is null, "the physical O key closed it");
+            // A letter typed on the physical O key (Dvorak: R) is a separate character message in the original: its own route goes on (not consumed), the options window still opens.
+            static InputEventKey RKey(bool pressed) => new() { Keycode = Key.R, PhysicalKeycode = Key.O, Pressed = pressed };
+            Require(!RouteOptionsKey(RKey(true), new(WorldKey.R, true, false, WorldKeyRole.OriginalReserved, false, false, null)) && _optionsKeyArmed, "the typed letter's route goes on and the press arms the options key");
+            Require(!RouteOptionsKey(RKey(false), new(WorldKey.R, false, false, WorldKeyRole.OriginalReserved, false, false, null)) && _mainMenu?.Window == AreaMenuWindow.Options,
+                "the release opens the options window and still leaves the typed letter to its route");
+            LayoutKey(Key.S, Key.O);
+            Require(!MainMenuOpen && _mainMenu is null, "closed again");
+
             // From the main menu: Options, then Done goes back to it.
             OpenMainMenu(MainMenuTexts(arguments));
             Letter('o');
