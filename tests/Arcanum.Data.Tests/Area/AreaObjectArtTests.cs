@@ -11,6 +11,8 @@ public sealed class AreaObjectArtTests
     {
         (AreaMappingRole.Scenery, 2005) => "rubble.art",
         (AreaMappingRole.Container, 1003) => "chest.art",
+        (AreaMappingRole.Portal, 7) => "Door7U1.art extra words",
+        (AreaMappingRole.Portal, 1008) => "Wind8U1.art",
         (AreaMappingRole.ItemGround, 1043) => "plate.art",
         (AreaMappingRole.ItemGround, 3) => "bad/name.art",
         (AreaMappingRole.ItemInventory, 1043) => "plate_inv.art",
@@ -31,6 +33,19 @@ public sealed class AreaObjectArtTests
         var item = AreaObjectArt.Resolve(0x60000000u | 1u | (2u << 6) | (3u << 17) | (2u << 4), Name);
         Assert.AreEqual(("art/item/plate.art", 0, 0, 2, 0x60000000u | 1u | (2u << 6) | (3u << 17)),
             (item.Path!.Path, item.Path.Frame, item.Path.Group, item.Path.Palette, item.Path.Lookup));
+    }
+
+    [TestMethod]
+    public void ADoorOrWindowNamesItsPortalFileByTheBuildersRule()
+    {
+        // ARC-SCRIPT-1778: number bits 19..27 (a window adds 1001), the first name token, rotation bits 11..13, frame bits 14..18, one group; the busted bit 9 turns the sixth-from-last letter into D.
+        var door = AreaObjectArt.Resolve((3u << 28) | (7u << 19) | (1u << 10) | (3u << 14) | (2u << 11) | (1u << 4), Name);
+        Assert.AreEqual(new AreaObjectArtPath("art/portal/Door7U1.art", (3u << 28) | (7u << 19) | (1u << 10) | (3u << 14) | (2u << 11) | (1u << 4), 2, 0, 3, 1), door.Path);
+        Assert.AreEqual("art/portal/Wind8U1.art", AreaObjectArt.Resolve((3u << 28) | (7u << 19), Name).Path!.Path, "a window (bit 10 clear) names the entry number + 1001");
+        var busted = AreaObjectArt.Resolve((3u << 28) | (7u << 19) | (1u << 10) | 0x200u, Name);
+        Assert.AreEqual("art/portal/Door7D1.art", busted.Path?.Path, "the busted bit turns the U of Door7U1.art into D");
+        Assert.AreEqual(AreaObjectArtStatus.Unsupported, AreaObjectArt.Resolve((3u << 28) | (7u << 19) | (1u << 10) | (1u << 6), Name).Status, "bits 6..8 are not admitted");
+        Assert.AreEqual(AreaObjectArtStatus.UnnamedNumber, AreaObjectArt.Resolve((3u << 28) | (9u << 19) | (1u << 10), Name).Status);
     }
 
     [TestMethod]

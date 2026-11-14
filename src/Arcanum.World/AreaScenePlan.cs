@@ -211,6 +211,19 @@ public sealed class AreaScenePlan
     }
 
     /// <summary>
+    /// ARC-SCRIPT-1778 (ledger AD1): <paramref name="command"/> (the T0 body of the portal <paramref name="body"/>, drawn from <paramref name="visual"/>) with a frame of another door or window ART a script's change art
+    /// number gave it, <paramref name="frame"/> (an extra-art frame, which belongs to no object): placed from the frame's size and drawn hotspot about the anchor the T0 body was placed from, as <see cref="PortalFrame"/> does.
+    /// </summary>
+    public static AreaDrawCommand PortalArtFrame(AreaDrawCommand command, AreaObjectRecord body, AreaVisualRecord visual, AreaVisualRecord frame)
+    {
+        ArgumentNullException.ThrowIfNull(command); ArgumentNullException.ThrowIfNull(body); ArgumentNullException.ThrowIfNull(visual);
+        ArgumentNullException.ThrowIfNull(frame);
+        if (command.Identity != body.Key || command.Visual != visual.Key || visual.RawArt >> 28 != 3 || frame.RawArt >> 28 != 3)
+            throw new ArgumentException("AREA_PORTAL_FRAME_BODY");
+        return OtherFrame(command, body, visual, frame, 0, 0);
+    }
+
+    /// <summary>
     /// ARC-RENDER-035: <paramref name="command"/> (the T0 body of the scenery <paramref name="body"/>, drawn from
     /// <paramref name="visual"/>) on another frame of its animation loop, <paramref name="frame"/>, with the object offset the
     /// loop's frame deltas moved it by (<paramref name="offsetX"/>, <paramref name="offsetY"/>, ledger AS6): placed as
