@@ -76,7 +76,13 @@ public sealed class AreaItemScriptHost : ISessionItemScriptHost
     public bool IsTrapObject(ScrObjectRef attachee) => false;
     public ScrObjectRef? Player() => new ScrObjectRef(_session.QueryActor().Map.RuntimeMap, AreaScriptHost.PcCode);
     public bool IsPc(ScrObjectRef critter) => critter.Code == AreaScriptHost.PcCode;
-    public ScrObjectRef? Leader(ScrObjectRef critter) => !IsPc(critter) && _session.QueryCompanion(critter.Code).LedByPc ? Player() : null;
+    // ARC-SCRIPT-1842 (0x45DE00): the session's leader, the PC or an NPC leader named on the critter's map.
+    public ScrObjectRef? Leader(ScrObjectRef critter) => IsPc(critter) ? null : _session.QueryLeader(critter.Code) switch
+    {
+        null => null,
+        AreaScriptHost.PcCode => Player(),
+        var leader => new ScrObjectRef(critter.Map, leader),
+    };
     public bool IsJilted(ScrObjectRef critter) => !IsPc(critter) && _session.QueryCompanion(critter.Code).Jilted;
 
     public SessionPrintedLine PrintedLine(int script, int line) => ReadLine(script, line, npcTriggerer: false);

@@ -1,3 +1,4 @@
+using Arcanum.TerrainViewer.Core;
 using Arcanum.Data.Combat;
 using Arcanum.Input;
 using Arcanum.Scripting.Dialog;
@@ -12,8 +13,9 @@ namespace Arcanum.TerrainViewer;
 // ARC-UI-1731: the item identify window (the dialog reply `ii`) and the item repair window (`ri`) of the session's hero in the area (exterior,
 // cave and map mode; contract docs/world/item-service-runtime.md, ledger IS1–IS6). The reply ends the talk (the original's interface-mode change,
 // ledger WN1, WN2) and the window opens with the speaker as the service's NPC once nothing else owns input, as the barter window does. The
-// windows are the inventory window's modes 5 and 6 on the interface mode stack (InventoryKind5, InventoryKind6); the viewer shows a diagnostic
-// list (PROJECT: the original look is a follow-up). Clicks run through the model (AreaItemService); Escape, a controller cancel or the button
+// windows are the inventory window's modes 5 and 6 on the interface mode stack (InventoryKind5, InventoryKind6). ARC-UI-1765: with the game's art
+// they draw the original look (the hero's own window with the NPC's image and its generated quote line, IS2), a diagnostic list stays behind the
+// switch and when the art does not read. Clicks run through the model (AreaItemService); Escape, a controller cancel or the button
 // closes it, and the talk does not resume.
 public partial class TerrainViewerApp
 {
@@ -58,7 +60,10 @@ public partial class TerrainViewerApp
         // The NPC's Repair skill: its levelled sheet from the stored fields, as the NPC sheet reads it (ARC-MAGIC-1475).
         Func<(Arcanum.Session.SessionNpcAdvancement, Arcanum.Simulation.Character.AdvancementModifiers)?> npc = () =>
             _areaEffectRules is { } effects && CombatFieldReader.Read(row).Fields is { } fields && AreaAdvancement.Npc(session, entity, fields, effects) is { } loaded ? loaded : null;
-        OpenItemServiceWindow(new AreaItemService(barter, kind, npc));
+        // ARC-UI-1765 (0x5786C0, 0x578760, 0x413910): the quote lines are the speaker's generated lines of the quote's range (the price in a quote's %d) and the "no money" class line.
+        var talker = host.Speakers[speaker];
+        OpenItemServiceWindow(new AreaItemService(barter, kind, npc, (first, last, price) => host.PickLine(talker, new(first, last), price),
+            group => host.PickClassLine(talker, group)));
     }
 
     /// <summary>Shows the window over the area session for <paramref name="service"/> (the dialog path above, or a self-test's model); another window
@@ -71,8 +76,18 @@ public partial class TerrainViewerApp
         QuarantineWorld(); _quickKeys.Reset();
         var session = _areaSession!;
         _itemService = service; _serviceSession = session; _serviceMode = mode; _serviceStatus = null;
+        // ARC-DEV-339: the arrange button's layout flag is cleared at every open (ledger IW37).
+        _arrangeLayout = InventoryArrangeLayout.Horizontal;
+        // ARC-UI-1765: the window shows the original look when the game's art read; the open centres the game view on the PC (0x5732D5 → 0x4B8CE0, IW33) at the current zoom, as the inventory window's.
+        _servicePanel.SetArtLook(InventoryArtLook());
+        if (_camera is not null)
+        {
+            var zoom = _worldFitView ? _worldPreferredZoom : _camera.State.Zoom;
+            _worldFitView = false; _camera.ResetWorld(WorldAnchor, WorldViewport, zoom);
+        }
         var view = service.View();
-        if (!OpenWindowMode(mode, () => _servicePanel!.Open(view), () => _servicePanel!.CloseView()))
+        var art = ServiceArt(view);
+        if (!OpenWindowMode(mode, () => _servicePanel!.Open(view, art), () => _servicePanel!.CloseView()))
         {
             _itemService = null; _serviceSession = null; _serviceMode = null;
             return;
@@ -87,7 +102,26 @@ public partial class TerrainViewerApp
         var panel = new AreaItemServicePanel(); AddChild(panel);
         panel.CloseRequested += EndItemService;
         panel.ItemClicked += ClickServiceItem;
+        panel.ArrangeRequested += ServiceArrange;
+        panel.SoundRequested += id => PlayInterfaceSound(id, "item service arrange button");
+        panel.HolderView = InventoryHolderView;
         return panel;
+    }
+
+    /// <summary>ARC-UI-1765: the original look's view of the window: the hero's own inventory view (grid, doll, counts), the NPC's image (the image rules of IW27 with the NPC as the other party), the window's last
+    /// quote line and the item it remembers. Null without the inventory host or when the session is not the window's.</summary>
+    private (AreaInventoryView Inventory, AreaServiceFrame Frame)? ServiceArt(AreaItemServiceView view)
+    {
+        if (_inventoryHost is null || _areaSession is not { } session || !ReferenceEquals(_serviceSession, session) || _itemService is null) return null;
+        return (InventoryView(null), new AreaServiceFrame(_inventoryHost.HolderImage(CurrentAreaMap, _itemService.Merchant.Entity), view.Message, view.Selected));
+    }
+
+    /// <summary>ARC-UI-1765 (IW37, IW40): the arrange button of the window lays the hero's items out as the own window's does.</summary>
+    private void ServiceArrange()
+    {
+        if (!ItemServiceOpen || _itemService is null || !ItemServiceActive || _serviceSession is null) return;
+        ArrangeHero(_serviceSession);
+        SyncAreaItemService(force: true);
     }
 
     private void ClickServiceItem(string entity)
@@ -116,7 +150,8 @@ public partial class TerrainViewerApp
         var revision = _serviceSession!.Version.Revision;
         if (!force && revision == _serviceRevision) return;
         _serviceRevision = revision;
-        _servicePanel!.Render(_itemService!.View());
+        var view = _itemService!.View();
+        _servicePanel!.Render(view, ServiceArt(view));
     }
 
     /// <summary>While the window is open it owns every key (ARC-DEV-111: Escape opens the menu, which closes the window; the window has no key of its own).</summary>

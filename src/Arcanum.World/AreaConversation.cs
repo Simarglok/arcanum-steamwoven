@@ -527,9 +527,20 @@ public sealed class AreaConversationHost
     /// ARC-UI-1740 (0x418780 behind the phrase generators 0x414020 and its twins): a random line of <paramref name="lines"/> of the plain NPC files for the
     /// speaker, its own override line first, as <see cref="SayFollowerLine"/> reads it but not floated: the barter window prints it on its quote line. The
     /// text is read from the player's generated files and never stored. Returns null when nothing can be said (a speaker this host does not hold, texts that
-    /// did not load, a range without an entry, a refused roll). The line pick draws one random number of the session generator.
+    /// did not load, a range without an entry, a refused roll). The line pick draws one random number of the session generator. ARC-UI-1765: <paramref name="price"/> fills the line's first <c>%d</c>.
     /// </summary>
-    public string? PickLine(AreaSpeaker speaker, LoyaltyLines lines)
+    public string? PickLine(AreaSpeaker speaker, LoyaltyLines lines, int? price = null) =>
+        SayLine(speaker, (greeting, query) => DialogFollowerComment.Say(greeting, query, lines.First, lines.Last, Profile.Names, DialogTextEncoding.Windows1252,
+            DialogConversationOptions.HardMaxTextBytes, price));
+
+    /// <summary>
+    /// ARC-UI-1765 (0x413910 → 0x418480): the speaker's class line of <paramref name="group"/> (the item identify and repair windows' "no money" line is group 2000), its own override line first
+    /// (<see cref="DialogFollowerComment.SayClass"/>), not floated; same rules and failures as <see cref="PickLine"/>.
+    /// </summary>
+    public string? PickClassLine(AreaSpeaker speaker, int group) =>
+        SayLine(speaker, (greeting, query) => DialogFollowerComment.SayClass(greeting, query, group, Profile.Names, DialogTextEncoding.Windows1252, DialogConversationOptions.HardMaxTextBytes));
+
+    private string? SayLine(AreaSpeaker speaker, Func<AreaGreeting, DialogReactionQuery, DialogGenericGreetingResult> say)
     {
         ArgumentNullException.ThrowIfNull(speaker);
         if (!Speakers.Contains(speaker)) return null;
@@ -538,8 +549,7 @@ public sealed class AreaConversationHost
         {
             var greeting = Greeting(speaker);
             if (greeting is null) return null;
-            said = DialogFollowerComment.Say(greeting, new DialogReactionQuery(AreaConversationState.Npc(speaker.Index), AreaConversationState.PcParticipant), lines.First, lines.Last, Profile.Names,
-                DialogTextEncoding.Windows1252, DialogConversationOptions.HardMaxTextBytes);
+            said = say(greeting, new DialogReactionQuery(AreaConversationState.Npc(speaker.Index), AreaConversationState.PcParticipant));
         }
         // A comment is a courtesy of the fight, not its gate: a texts, facts or session failure says nothing and never escapes the host (typed failure at the boundary).
         catch (Exception exception) when (exception is not OperationCanceledException)

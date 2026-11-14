@@ -63,6 +63,11 @@ public sealed record ChromeRuling(int X, int Y, int Width, int Height, int Step,
 /// the centre of this rectangle is the one.</summary>
 public sealed record ChromeBare(int X, int Y, int Width, int Height) : ChromePart;
 
+/// <summary>ARC-UI-1817: the coloured marks of a picture on the generated ground under it (the follower panel's arrow buttons: a red or green triangle on an iron plate). In the
+/// rectangle every Legacy pixel whose colour is far from grey (the spread of its three channels is at least 24) keeps its own colour, so the marks keep their shape and their dither, and the grey
+/// grain of the Legacy plate does not carry over. A pixel is kept whole (no one-unit halo): a picture with anti-aliased edges would need one.</summary>
+public sealed record ChromeMarks(int X, int Y, int Width, int Height) : ChromePart;
+
 /// <summary>ARC-UI-1196: what is drawn around the holes of a panel's Legacy frame (the transparent regions the live view or the page shows through).</summary>
 public enum ChromeHoles
 {
@@ -204,6 +209,29 @@ public static class InterfaceChromeRecipes
         yield return new ChromeRecipe("FateBut.ART", ChromeKind.Button, ChromeMaterial.Face, ChromeSides.None, []);
     }
 
+    /// <summary>ARC-UI-1821: the HUD contents' frames (Legacy pixels of each art). The combat lamp panel (<c>ap_bar</c> 294, 356 × 30, <see cref="AreaCombatLampLayout"/>) is
+    /// <see cref="ChromeMaterial.Slate"/> with a rim on every side: a sunk channel for each of the four groups of five lamps with an unlit bead (a brass disc) at each lamp's place
+    /// (a lit lamp's picture, the arts 295, 296 and 315, covers it, so an unlit lamp still shows), a sunk seat for the end-turn button and a rivet pair before the first channel and one before the seat; the original's
+    /// brass rail between the lamps and its crosses are not drawn. The end-turn button (297, 31 × 15) is the generic button. The hotkey slot (<c>HKSlt1</c> 173, 32 × 32, the one slot art the bar draws)
+    /// is the strip's dark wood. Stay pictures: the lamps (state), the clock's sky, moon and needle (a picture that scrolls), the vials and the bars' gauge fills (values), the light button
+    /// (a state glyph), the recent-action buttons' and the slots' icons, and the combat panel's bullseye and icons over a hovered critter.</summary>
+    private static IEnumerable<ChromeRecipe> HudRecipes()
+    {
+        List<ChromePart> panel = [];
+        for (var group = 0; group < ActionPointRules.LampCount / ActionPointRules.GroupSize; group++)
+        {
+            var first = AreaCombatLampLayout.LampX[group * ActionPointRules.GroupSize];
+            var end = AreaCombatLampLayout.LampX[group * ActionPointRules.GroupSize + ActionPointRules.GroupSize - 1] + AreaCombatLampLayout.LampWidth;
+            panel.Add(new ChromeSunk(first - 3, 7, end - first + 6, 18, ChromeMaterial.Pit));
+        }
+        panel.Add(new ChromeSunk(AreaCombatLampLayout.EndTurnX - 2, 6, AreaCombatLampLayout.EndTurnWidth + 4, 20, ChromeMaterial.Pit));
+        foreach (var x in AreaCombatLampLayout.LampX) panel.Add(new ChromeRivet(x + AreaCombatLampLayout.LampWidth / 2.0, AreaCombatLampLayout.LampY + AreaCombatLampLayout.LampHeight / 2.0, 4.5));
+        panel.AddRange([new ChromeRivet(10.5, 7.5, 2.5), new ChromeRivet(10.5, 22.5, 2.5), new ChromeRivet(309.5, 7.5, 2.5), new ChromeRivet(309.5, 22.5, 2.5)]);
+        yield return new ChromeRecipe("ap_bar.art", ChromeKind.Panel, ChromeMaterial.Slate, ChromeSides.All, panel, Holes: ChromeHoles.None);
+        yield return new ChromeRecipe("EndTurn_But.art", ChromeKind.Button, ChromeMaterial.Face, ChromeSides.None, []);
+        yield return new ChromeRecipe("HKSlt1.ART", ChromeKind.Panel, ChromeMaterial.WoodDark, ChromeSides.None, [], Holes: ChromeHoles.None);
+    }
+
     // ARC-UI-1199: the schematic window's frames (Legacy pixels of each art; the layout of AreaSchematicWindowLayout). The base (365, 800 x 400) is wood with a blueprint page (a ruled sheet of paper
     // 201..706 across, 13..379 down, ruled every 32 units from x 227 and y 22), the round view's square hole (the lens art 231 draws its ring over it), the record's picture hole (a brass rim), the two component
     // slots' boxes (sunk, filled with paper under the found or missing tint), the channel of the assemble button with the sockets of its two lamps, the two list buttons' sockets, and eight tab slots
@@ -243,6 +271,36 @@ public static class InterfaceChromeRecipes
         yield return new ChromeRecipe("Schm_LArrow.ART", ChromeKind.Panel, ChromeMaterial.Paper, ChromeSides.None, [PageRuling(px, py, 18, 22), new ChromeGlyph(0, 0, 18, 22)], Holes: ChromeHoles.None, OriginX: px, OriginY: py);
         yield return new ChromeRecipe("Schm_RArrow.ART", ChromeKind.Panel, ChromeMaterial.Paper, ChromeSides.None, [PageRuling(nx, ny, 18, 22), new ChromeGlyph(0, 0, 18, 22)], Holes: ChromeHoles.None, OriginX: nx, OriginY: ny);
     }
+
+    /// <summary>ARC-UI-1817: the follower panel's frames (arts 501–503, 506–509, 826; Legacy pixels of each art; the layout of <see cref="AreaFollowerFrameLayout"/> and
+    /// <see cref="AreaFollowerPanelRules"/>). The portrait frame (503, 40 × 49) is an iron plate whose 32 × 32 hole at (4, 4) is the portrait (no rim: the original's frame has none) and whose lower part
+    /// holds the two bar channels (a black pit with an iron divider; the bars 504, 505 and 616 are drawn over it and stay pictures). The show/hide strip (501 and 502, 67 × 13) is an iron plate with a rivet at each end and
+    /// the Legacy arrow kept (<see cref="ChromeMarks"/>); the scroll buttons (506 to 509, 33 × 13 and 34 × 13, their end looks too) are iron plates with the Legacy arrow kept. The order menu (826, 136 × 148) is a slate slab with the four dark
+    /// bands under its odd rows (the rows' words are drawn over it).</summary>
+    private static IEnumerable<ChromeRecipe> FollowerRecipes()
+    {
+        yield return new ChromeRecipe("FollowerFrame.ART", ChromeKind.Panel, ChromeMaterial.Iron, ChromeSides.None,
+        [
+            new ChromePlate(0, 0, AreaFollowerFrameLayout.Width, AreaFollowerFrameLayout.Height, ChromeMaterial.Iron),
+            new ChromePlate(3, 3, 34, 34, ChromeMaterial.Pit, Bevel: false), // the one-unit black line around the portrait hole (the hole itself stays clear)
+            new ChromePlate(2, 38, 36, 10, ChromeMaterial.Pit, Bevel: false),
+            new ChromePlate(3, 42, 34, 2, ChromeMaterial.Iron, Bevel: false),
+        ], Holes: ChromeHoles.None);
+        foreach (var file in new[] { "FollowerArrow_DWN.ART", "FollowerArrow_UP.ART" })
+            yield return new ChromeRecipe(file, ChromeKind.Panel, ChromeMaterial.Iron, ChromeSides.None,
+                [new ChromePlate(0, 0, AreaFollowerPanelRules.ToggleRect.Width, AreaFollowerPanelRules.ToggleRect.Height, ChromeMaterial.Iron),
+                    new ChromeRivet(5.5, 6.5, 2.7), new ChromeRivet(59.5, 6.5, 2.7), new ChromeMarks(24, 2, 19, 10)], Holes: ChromeHoles.None);
+        foreach (var (file, width) in new[] { ("Follow_Scroll_up.ART", AreaFollowerPanelRules.UpRect.Width), ("Follow_Scroll_up_OFF.ART", AreaFollowerPanelRules.UpRect.Width),
+            ("Follow_Scroll_dwn.ART", AreaFollowerPanelRules.DownRect.Width), ("Follow_Scroll_dwn_OFF.ART", AreaFollowerPanelRules.DownRect.Width) })
+            yield return new ChromeRecipe(file, ChromeKind.Panel, ChromeMaterial.Iron, ChromeSides.None,
+                [new ChromePlate(0, 0, width, AreaFollowerPanelRules.UpRect.Height, ChromeMaterial.Iron), new ChromeMarks(4, 2, width - 8, 9)], Holes: ChromeHoles.None);
+        var menu = new List<ChromePart> { new ChromePlate(0, 0, MenuWidth, MenuHeight, ChromeMaterial.Slate) };
+        for (var k = 0; k < 4; k++) menu.Add(new ChromePlate(6, 20 + 36 * k, 124, 16, ChromeMaterial.Dark, Bevel: false));
+        yield return new ChromeRecipe("FollwerComandMenu.ART", ChromeKind.Panel, ChromeMaterial.Slate, ChromeSides.None, menu, Holes: ChromeHoles.None);
+    }
+
+    /// <summary>ARC-UI-1817: the order menu's art size (826, 136 × 148 Legacy pixels).</summary>
+    public const int MenuWidth = 136, MenuHeight = 148;
 
     // ARC-UI-1819: the common dialog box (822 `DialogueBox`, 325 x 136, opaque stone) and its two round buttons (823 `Lil_Accept`, 824 `Lil_Cancel`, 28 x 29, three frames: idle, down, lit). The box is a
     // `Slate` panel with a rim on all sides, like the sheet's pages: a sunk black pit for the text (the original's brass line with curled corners round its black field, measured at 12..312 across and
@@ -346,7 +404,7 @@ public static class InterfaceChromeRecipes
             "Anatomical_But.ART", "Chemistry_But.ART", "Electrical_But.ART", "Explosives_But.ART", "GunSmithy_But.ART", "Mechanical_But.ART", "Smithy_But.ART", "Therapeutics_But.ART",
             // ARC-UI-1199: the schematic window's two list buttons (art 6) and its assemble button (357).
             "bgrn_but.art", "CombineButt.ART"];
-        return [top, bottom, inventory, doll, loot, barter, follower, lootDoll, .. lenses, .. SheetPanels(), .. MapPanels(), .. LogbookRecipes(), .. PaneRecipes(), .. ReadingRecipes(), .. SchematicRecipes(), .. DialogRecipes(), .. buttons.Select(file => new ChromeRecipe(file, ChromeKind.Button, ChromeMaterial.Face, ChromeSides.None, [])),
+        return [top, bottom, inventory, doll, loot, barter, follower, lootDoll, .. lenses, .. SheetPanels(), .. MapPanels(), .. LogbookRecipes(), .. PaneRecipes(), .. ReadingRecipes(), .. SchematicRecipes(), .. HudRecipes(), .. FollowerRecipes(), .. DialogRecipes(), .. buttons.Select(file => new ChromeRecipe(file, ChromeKind.Button, ChromeMaterial.Face, ChromeSides.None, [])),
             // ARC-UI-1784: the spells page's sixteen college tabs (24 x 24 balls, three frames): a generated rim around the ball's own picture.
             .. CollegeTabFiles.Select(file => new ChromeRecipe(file, ChromeKind.Button, ChromeMaterial.Face, ChromeSides.None, [], KeepFace: true))];
     }
@@ -620,6 +678,7 @@ public static class InterfaceChromeRenderer
                 case ChromeRivet rivet: Rivet(c, rivet); break;
                 case ChromeKeep keep: Keep(c, c.Edge(keep.X), c.Edge(keep.Y), c.Edge(keep.X + keep.Width) - c.Edge(keep.X), c.Edge(keep.Y + keep.Height) - c.Edge(keep.Y), keep.Round); break;
                 case ChromeGlyph glyph: Glyph(c, glyph); break;
+                case ChromeMarks marks: Marks(c, marks); break;
             }
         }
         Rim(c, recipe.Rim);
@@ -725,6 +784,25 @@ public static class InterfaceChromeRenderer
         {
             var dy = c.Edge(ruling.Y + gy);
             Line(x0, dy, x1, dy + c.S);
+        }
+    }
+
+    // ARC-UI-1817: see ChromeMarks. A device pixel takes the picture's colour when the Legacy cell it lies in is opaque and its channels spread by at least ChromaThreshold.
+    private const int ChromaThreshold = 24;
+
+    private static void Marks(Canvas c, ChromeMarks marks)
+    {
+        int x0 = c.Edge(Math.Max(0, marks.X)), y0 = c.Edge(Math.Max(0, marks.Y)), x1 = c.Edge(Math.Min(c.LegacyW, marks.X + marks.Width)), y1 = c.Edge(Math.Min(c.LegacyH, marks.Y + marks.Height));
+        for (var y = Math.Max(0, y0); y < Math.Min(c.H, y1); y++)
+        for (var x = Math.Max(0, x0); x < Math.Min(c.W, x1); x++)
+        {
+            var i = y * c.W + x;
+            if (c.Alpha[i] <= 0) continue;
+            int cx = c.Cell(x), cy = c.Cell(y);
+            if (!c.LegacyOpaque(cx, cy)) continue;
+            var j = (cy * c.LegacyW + cx) * 4;
+            int r = c.Legacy[j], g = c.Legacy[j + 1], b = c.Legacy[j + 2];
+            if (Math.Max(r, Math.Max(g, b)) - Math.Min(r, Math.Min(g, b)) >= ChromaThreshold) c.Color[i] = c.PictureAt(x, y);
         }
     }
 

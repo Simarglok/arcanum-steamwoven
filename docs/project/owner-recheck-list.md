@@ -970,7 +970,7 @@ companion, a shopkeeper and a guard in any town where a quest script touches the
 
 Known differences (documented, not bugs):
 
-- Change art number (ARC-SCRIPT-1735) changes the picture of a **scenery** from a script (kept in the save, drawn in the viewer; a new scenery art of several frames animates since ARC-RENDER-1781, one of a single frame stops the old loop) and, since ARC-SCRIPT-1779, the **ground and flight art of an item** (the item as an object on the ground; its inventory art and paper doll stay, as in the original, ledger AN11); a door, container, trap, unique NPC or hero starting-kit item target is not built: a script run that reaches one is refused, so that step does nothing in Steamwoven (a made or script-created item and an item carried from another map take it since ARC-SCRIPT-1826, ledger AN18). A critter (the hero, an NPC of a critter or monster body) is never changed (the original builds the art id 0 for them and writes it only if a file of that id exists; not read, F0).
+- Change art number (ARC-SCRIPT-1735) changes the picture of a **scenery** from a script (kept in the save, drawn in the viewer; a new scenery art of several frames animates since ARC-RENDER-1781, one of a single frame stops the old loop) and, since ARC-SCRIPT-1779, the **ground and flight art of an item** (the item as an object on the ground; its inventory art and paper doll stay, as in the original, ledger AN11); since ARC-SCRIPT-1778 a **door or window** and a **container** take it too (it ends closed with its lock as it was); a trap, unique NPC or hero starting-kit item target is not built: a script run that reaches one is refused, so that step does nothing in Steamwoven (a made or script-created item and an item carried from another map take it since ARC-SCRIPT-1826, ledger AD1). A critter (the hero, an NPC of a critter or monster body) is never changed (the original builds the art id 0 for them and writes it only if a file of that id exists; not read, F0).
 - A script in a dialog (a talk) that uses one of these actions is still refused; only use, tile, sector, heartbeat and dying scripts run them.
 - A reaction or standpoint change acts for NPCs of the map on screen only.
 
@@ -1302,7 +1302,7 @@ Known differences (documented, not bugs):
 
 The rules are in [reading window runtime](../world/reading-window-runtime.md#viewer-area-area-exterior-cave-and---area-map) and the ledger rows [WR17–WR23](../research/ledger/ui-audio.md#reading-window-arc-ui-049).
 Open a written item from the inventory with the **Read** button (or the right button on it), and a plaque or picture through a script that shows one. Compare with the original game on the
-same text. The look is the original's whether the HD interface is on or off; the Generated mode is [ARC-UI-1201](#arc-ui-1201--generated-interface-the-reading-windows-s11-2026-11-14).
+same text. The look is the original's whether the HD interface is on or off; the Generated mode is [ARC-UI-1201](#arc-ui-1201--generated-interface-the-reading-windows-s13-2026-11-14).
 
 | # | Step | Expected (from the original executable) | Status |
 | --- | --- | --- | --- |
@@ -1334,6 +1334,7 @@ Known differences (documented, not bugs):
 
 - The slate is plainer than the original's marbled iron and the wells and bars are black where the original's are barely darker than their surroundings.
 - The common dialog box (the exit question, the load question after death) is [S10](../rendering/hd-interface-density.md#viewer-slice-s10-arc-ui-1819).
+- The follower panel and the follower order menu are [S12](../rendering/hd-interface-density.md#viewer-slice-s12-arc-ui-1817).
 - The first rows of the spell pane's top edge are transparent in the Legacy frame, so the rim does not run along them.
 
 ## ARC-UI-1819 — Generated interface: the common dialog box (S10, 2026-11-14)
@@ -1353,9 +1354,27 @@ Known differences (documented, not bugs):
 - The curled brass corners of the original's text field are not drawn; the stone is plainer than the original's.
 - The quit question of the main menu screen is the same box, so it is generated too while the main menu's own art is the HD or Legacy one.
 
-## ARC-UI-1201 — Generated interface: the reading windows (S11, 2026-11-14)
+## ARC-UI-1817 — Generated interface: the follower panel and the order menu (S12, 2026-11-14)
 
-The plan is [hd-interface-density](../rendering/hd-interface-density.md#viewer-slice-s11-arc-ui-1201). Turn on the HD interface and the generated one in the game settings, open a written item (a book, a note, a newspaper, a telegram; a plaque or picture through a script).
+The rules are in [viewer slice S12](../rendering/hd-interface-density.md#viewer-slice-s12-arc-ui-1817). Set the HD interface line on the launcher screen to **Generated (experimental)**, start a game with at least one follower (and, for step 3, seven or more),
+and look at the panel on the screen's left edge. Compare with **HD** and **Legacy**.
+
+| # | Step | Expected | Status |
+| --- | --- | --- | --- |
+| 1 | Look at a follower's frame and the strip under the frames in a 1280 × 800 window. | The frame is an iron plate round the portrait, black channels under the health and fatigue bars; the strip is an iron plate with a rivet at each end and a red arrow; all at the same places and sizes as before. | open |
+| 2 | Click the strip (hide, then show). | The frames go and come back; the strip's arrow turns green and red; clicks land as before. | open |
+| 3 | With seven or more followers, scroll with the two arrows to both ends. | The arrows are iron plates with a green arrow, dark green at the end of the list. | open |
+| 4 | Right-click a portrait. | The order menu is a dark slate slab with darker bands under Attack, Spread Out, Wait and Character Sheet; the words are readable and the hover colour still shows. | open |
+| 5 | Resize the window (or go full screen) with the panel and the menu open. | Both are sharp at the new size, with no seam. | open |
+
+Known differences (documented, not bugs):
+
+- The iron is plainer and bluer than the original's marbling; the portrait frame's border is thinner; the menu's bands are darker and flat.
+- The pressed frames of the scroll arrows are not drawn by the panel (as before).
+
+## ARC-UI-1201 — Generated interface: the reading windows (S13, 2026-11-14)
+
+The plan is [hd-interface-density](../rendering/hd-interface-density.md#viewer-slice-s13-arc-ui-1201). Turn on the HD interface and the generated one in the game settings, open a written item (a book, a note, a newspaper, a telegram; a plaque or picture through a script).
 Compare with **HD** (generated off) and **Legacy**.
 
 | # | Step | Expected | Status |
