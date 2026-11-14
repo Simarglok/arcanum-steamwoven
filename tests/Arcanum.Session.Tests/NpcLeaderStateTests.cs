@@ -200,7 +200,7 @@ public sealed class NpcLeaderStateTests
     }
 
     [TestMethod]
-    public void A_follower_of_an_npc_is_never_concealed_and_its_leave_clears_the_wait_bit()
+    public void A_follower_of_a_leader_outside_the_hero_chain_is_not_concealed_and_its_leave_clears_the_wait_bit()
     {
         using var owner = Create();
         Changed(owner.ForceJoinLeader(owner.Version, Summon, Mage));
@@ -224,7 +224,7 @@ public sealed class NpcLeaderStateTests
         Changed(owner.ForceJoinLeader(owner.Version, Summon, Mage));
         Changed(owner.ForceJoinLeader(owner.Version, Imp, Mage));
         Changed(owner.ForceJoinParty(owner.Version, Mage));
-        Assert.AreEqual(GameSessionDisposition.Changed, owner.WaitParty(owner.Version, Summon, new PartyWaitFacts(2, PersuasionTraining.None, 25, false)).Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.WaitParty(owner.Version, Summon, new PartyWaitFacts(2, PersuasionTraining.None, 10, false)).Disposition);
         Assert.IsTrue(owner.QueryCompanion(Summon).WaitFlag);
         Assert.IsTrue(owner.QueryCompanion(Summon).WaitBit);
         Assert.AreEqual(Mage, owner.QueryLeader(Summon), "the wait keeps the leader");
@@ -241,7 +241,7 @@ public sealed class NpcLeaderStateTests
         Assert.AreEqual(Mage, restored.QueryLeader(Summon));
         CollectionAssert.AreEqual(new[] { Imp }, restored.QueryFollowers(Mage).ToArray());
         Assert.IsNotNull(restored.QueryWaitTimer(Summon));
-        // An unforced unwait needs the leader's stats (NOT READY, #2117) and changes nothing; the forced one joins the leader again at the end of the array, forced, the flag and the timer gone.
+        // An unforced unwait with the hero-side facts changes nothing (the leader's own facts: UnwaitNpcLed); the forced one joins the leader again at the end of the array, forced, the flag and the timer gone.
         Assert.AreEqual(GameSessionDisposition.NoChange, owner.UnwaitParty(owner.Version, Summon, PartyStateTests.Facts(), force: false).Disposition);
         Assert.IsTrue(owner.QueryCompanion(Summon).WaitFlag);
         Changed(owner.UnwaitParty(owner.Version, Summon, PartyStateTests.Facts(), force: true));
@@ -249,6 +249,114 @@ public sealed class NpcLeaderStateTests
         Assert.IsNull(owner.QueryWaitTimer(Summon));
         CollectionAssert.AreEqual(new[] { Imp, Summon }, owner.QueryFollowers(Mage).ToArray());
         Assert.AreEqual(Mage, owner.QueryLeader(Summon));
+    }
+
+    // ARC-WORLD-2127 (0x4AA7A0): the wait timer reads the DIRECT leader's Persuasion and charisma as given, never the hero's side: an extraordinary-charisma NPC leader schedules none, Persuasion training moves the index.
+    [TestMethod]
+    public void The_wait_timer_of_a_follower_of_an_npc_reads_the_leaders_facts_as_given()
+    {
+        using var owner = Create();
+        Changed(owner.ForceJoinLeader(owner.Version, Summon, Mage));
+        Changed(owner.ForceJoinLeader(owner.Version, Imp, Mage));
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.WaitParty(owner.Version, Summon, new PartyWaitFacts(2, PersuasionTraining.None, 20, false)).Disposition);
+        Assert.IsNull(owner.QueryWaitTimer(Summon), "charisma 20 is extraordinary: no timer");
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.WaitParty(owner.Version, Imp, new PartyWaitFacts(5, PersuasionTraining.Apprentice, 10, false)).Disposition);
+        Assert.IsNull(owner.QueryWaitTimer(Imp), "wait index 5 plus one for any Persuasion training is 6: no timer");
+    }
+
+    private static NpcLeaderUnwaitFacts Leader(int level = 5, int alignment = 0, int maxFollowers = 2, PersuasionTraining persuasion = PersuasionTraining.None, bool mind = false, bool mindAfter = false,
+        int followerAlignment = 0, int followerLevel = 1, FollowThresholds? thresholds = null) =>
+        new(persuasion, alignment, level, maxFollowers, thresholds ?? new(-1000, 2001, 2001, 30), followerAlignment, followerLevel, mind, mindAfter);
+
+    private static GameSessionOwner WaitingUnder(string leader, params string[] others)
+    {
+        var owner = Create();
+        Changed(owner.ForceJoinLeader(owner.Version, Summon, leader));
+        foreach (var other in others) Changed(owner.ForceJoinLeader(owner.Version, other, leader));
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.WaitParty(owner.Version, Summon, new PartyWaitFacts(2, PersuasionTraining.None, 10, false)).Disposition);
+        return owner;
+    }
+
+    // ARC-WORLD-2127 (0x4AA8C0, 0x4AD950): the unforced unwait joins the leader again at the end of its array, not forced, jilted cleared, the flag and the timer gone, one revision.
+    [TestMethod]
+    public void An_unforced_unwait_under_an_npc_leader_passes_the_follow_check_and_joins_again_not_forced()
+    {
+        using var owner = WaitingUnder(Mage, Imp);
+        var before = owner.Version.Revision;
+        var result = owner.UnwaitNpcLed(owner.Version, Summon, Leader());
+        Changed(result);
+        Assert.AreEqual(FollowConsent.Accepted, result.Consent);
+        Assert.AreEqual(before + 1, owner.Version.Revision);
+        Assert.IsTrue(owner.QueryCompanion(Summon) is { WaitFlag: false, Jilted: false });
+        Assert.IsNull(owner.QueryWaitTimer(Summon));
+        CollectionAssert.AreEqual(new[] { Imp, Summon }, owner.QueryFollowers(Mage).ToArray());
+        Assert.AreEqual(Mage, owner.QueryLeader(Summon));
+        // Not forced now: it counts against the leader's limit, as the forced Imp does not.
+        Assert.AreEqual(GameSessionFailure.NotWaiting, owner.UnwaitNpcLed(owner.Version, Summon, Leader()).Failure, "no longer waiting");
+    }
+
+    [TestMethod]
+    public void A_refused_follow_check_of_the_unforced_unwait_changes_nothing()
+    {
+        // Each refusal reads the leader's side: level (the follower's level at or above the leader's plus the gate), the alignment gap, the limit.
+        foreach (var (facts, expected) in new[]
+        {
+            (Leader(level: 1, followerLevel: 5, thresholds: new(-1000, 2001, 2001, 0)), FollowConsent.LowLevel),
+            (Leader(alignment: 500, followerAlignment: 0, thresholds: new(-1000, 100, 2001, 30)), FollowConsent.TooGood),
+            (Leader(alignment: 0, followerAlignment: 500, thresholds: new(-1000, 2001, 100, 30)), FollowConsent.TooBad),
+            (Leader(maxFollowers: 0), FollowConsent.NotAllowed),
+        })
+        {
+            using var owner = WaitingUnder(Mage);
+            var version = owner.Version;
+            var result = owner.UnwaitNpcLed(version, Summon, facts);
+            Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.ConsentRefused, expected), (result.Disposition, result.Failure, result.Consent));
+            Assert.AreEqual(version, owner.Version, "nothing changed");
+            Assert.IsTrue(owner.QueryCompanion(Summon).WaitFlag);
+            Assert.IsNotNull(owner.QueryWaitTimer(Summon));
+            Assert.AreEqual(Mage, owner.QueryLeader(Summon));
+        }
+    }
+
+    [TestMethod]
+    public void The_unforced_unwait_counts_the_leaders_non_forced_followers_and_reads_a_master_persuaders_limit_only()
+    {
+        using var owner = WaitingUnder(Mage, Imp);
+        Changed(owner.UnwaitNpcLed(owner.Version, Summon, Leader(maxFollowers: 1)));
+        // Summon is now a non-forced follower; a second waiting follower finds the limit of 1 reached.
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.WaitParty(owner.Version, Imp, new PartyWaitFacts(2, PersuasionTraining.None, 10, false)).Disposition);
+        var refused = owner.UnwaitNpcLed(owner.Version, Imp, Leader(maxFollowers: 1));
+        Assert.AreEqual((GameSessionFailure.ConsentRefused, FollowConsent.LimitReached), (refused.Failure, refused.Consent));
+        var none = owner.UnwaitNpcLed(owner.Version, Imp, Leader(maxFollowers: 0));
+        Assert.AreEqual((GameSessionFailure.ConsentRefused, FollowConsent.NotAllowed), (none.Failure, none.Consent));
+        // A Master persuader skips the middle steps (level here) but never the limits.
+        Assert.AreEqual(FollowConsent.LowLevel, owner.UnwaitNpcLed(owner.Version, Imp, Leader(level: 1, followerLevel: 5, maxFollowers: 3, thresholds: new(-1000, 2001, 2001, 0))).Consent);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.UnwaitNpcLed(owner.Version, Imp, Leader(level: 1, followerLevel: 5, maxFollowers: 3, persuasion: PersuasionTraining.Master, thresholds: new(-1000, 2001, 2001, 0))).Disposition);
+    }
+
+    // The join's second check runs with the handle cleared: a mind-controlled follower accepted through the chain of the first check is refused there when nothing else lets it pass, and ends with no
+    // leader, not waiting, not jilted, its timer gone.
+    [TestMethod]
+    public void A_refusal_of_the_join_after_the_unwait_leaves_the_follower_free_and_not_waiting()
+    {
+        using var owner = WaitingUnder(Mage);
+        var result = owner.UnwaitNpcLed(owner.Version, Summon, Leader(level: 1, followerLevel: 5, mind: true, mindAfter: false, thresholds: new(-1000, 2001, 2001, 0)));
+        Assert.AreEqual((GameSessionDisposition.Changed, FollowConsent.LowLevel), (result.Disposition, result.Consent));
+        Assert.IsNull(owner.QueryLeader(Summon));
+        Assert.IsTrue(owner.QueryCompanion(Summon) is { WaitFlag: false, Jilted: false });
+        Assert.IsNull(owner.QueryWaitTimer(Summon));
+        Assert.AreEqual(0, owner.QueryFollowers(Mage).Count);
+    }
+
+    [TestMethod]
+    public void The_unforced_unwait_refuses_a_follower_not_waiting_under_an_npc_and_bad_input()
+    {
+        using var owner = Create();
+        Assert.AreEqual(GameSessionFailure.NotWaiting, owner.UnwaitNpcLed(owner.Version, Summon, Leader()).Failure);
+        Changed(owner.ForceJoinLeader(owner.Version, Summon, Mage));
+        Assert.AreEqual(GameSessionFailure.NotWaiting, owner.UnwaitNpcLed(owner.Version, Summon, Leader()).Failure, "following, not waiting");
+        Assert.AreEqual(GameSessionFailure.InvalidConsentFacts, owner.UnwaitNpcLed(owner.Version, Summon, Leader(persuasion: (PersuasionTraining)9)).Failure);
+        Assert.AreEqual(GameSessionFailure.StaleVersion, owner.UnwaitNpcLed(new(owner.Version.Owner, owner.Version.Revision + 5), Summon, Leader()).Failure);
     }
 
     [TestMethod]

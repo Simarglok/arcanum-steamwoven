@@ -960,8 +960,8 @@ public sealed partial class GameSessionOwner : IDisposable
         if (!ValidFacts(facts)) return RejectParty(GameSessionFailure.InvalidConsentFacts);
         if (!IsCurrent(expected)) return RejectParty(GameSessionFailure.StaleVersion);
         var current = _party.Get(entity);
-        // ARC-WORLD-2116: a follower waiting under an NPC leader is unwaited by its leader's side: forced it joins that leader again; the follow check against an NPC leader needs the leader's stats
-        // (NOT READY, #2117), so an unforced unwait of it changes nothing and it keeps waiting.
+        // ARC-WORLD-2116: a follower waiting under an NPC leader is unwaited by its leader's side: forced it joins that leader again. The unforced unwait is the follow check against that leader
+        // (ARC-WORLD-2127, UnwaitNpcLed, with the leader's own facts); these hero-side facts say nothing of it, so here it changes nothing.
         if (WaitsUnderNpcLeader(entity)) return force ? UnwaitUnderNpcLeader(entity) : new(GameSessionDisposition.NoChange, GameSessionFailure.None, null, new(_identity, _revision));
         // ARC-SCRIPT-1136 (CF9): the unwait (0x4AA8C0) returns at once for an NPC with no leader, whatever its flag: nothing changes, and the flag stays.
         if (current.Standing == CompanionStanding.Free && current.WaitFlag) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, null, new(_identity, _revision));
@@ -996,7 +996,7 @@ public sealed partial class GameSessionOwner : IDisposable
         // ARC-WORLD-2116 (0x4AA7A0): a follower of an NPC leader waits too, and the wait keeps that leader (the forced leave 0x45DFC0, then the handle restored): it leaves the leader's array and keeps the flag.
         var npcLed = current.Standing == CompanionStanding.Free && _party.NpcLed.ContainsKey(entity);
         var leaderless = current.Standing == CompanionStanding.Free && !npcLed;
-        var charisma = 0;
+        var charisma = npcLed ? timer?.LeaderCharisma ?? 0 : 0;
         var delay = leaderless ? LeaderlessWaitDelay(timer) : npcLed ? NpcLeaderWaitDelay(timer) : WaitDelay(timer, out charisma);
         if (delay is { } d && !WaitTimerFits(d, entity)) return Reject(GameSessionFailure.EventBudgetExceeded);
         // A free NPC without a record needs room for the new one.
@@ -1048,7 +1048,7 @@ public sealed partial class GameSessionOwner : IDisposable
         // The NPC already has a record, so a flagged free record needs no new budget.
         _party.Put(current with { Standing = CompanionStanding.Free, Forced = false, Jilted = leave.Jilt, WaitFlag = false }, false);
         // ARC-SKILLS-008 (ST2): a follower that leaves is no longer concealed.
-        _combat.Concealed.Remove(entity);
+        DropConcealmentOfSubtree(entity);
         ClearNoAttackOnLeave(entity);
         ClearTempusFugitOnLeave(entity);
         if (current.WaitBit) CancelWaitTimers(entity);
@@ -2026,8 +2026,8 @@ public sealed partial class GameSessionOwner : IDisposable
         if (copyTempus) WriteTempusFugitOnJoin(current.Entity);
         // Not modelled (ARC-SCRIPT-1136): the original keeps the timer of a free NPC that joins with the flag, and its expiry would jilt the follower in the array; here the join removes it.
         if (current.WaitBit) CancelWaitTimers(current.Entity);
-        // ARC-SKILLS-008 (ST2): a new follower takes its leader's concealment.
-        if (_combat.HeroConcealed) _combat.Concealed.Add(current.Entity); else _combat.Concealed.Remove(current.Entity);
+        // ARC-SKILLS-008 (ST2): a new follower takes its leader's concealment (0x45EE30 reaches its own followers too, ARC-WORLD-2118).
+        TakeLeaderConcealment(current.Entity, SessionEventKinds.PlayerEntity);
         Revise();
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, consent, new(_identity, _revision));
     }
@@ -2049,7 +2049,7 @@ public sealed partial class GameSessionOwner : IDisposable
         // A waiting NPC lost the flag at the wait (0x4AA7A0), so the leave half of the join has nothing to clear; the clear keeps the join's order all the same.
         ClearTempusFugitOnLeave(entity);
         if (JoinCopiesTempusFugit(entity) && (_objectFlags.ContainsKey(entity) || _objectFlags.Count < MaxObjectFlagCritters)) WriteTempusFugitOnJoin(entity);
-        if (_combat.HeroConcealed) _combat.Concealed.Add(entity); else _combat.Concealed.Remove(entity);
+        TakeLeaderConcealment(entity, SessionEventKinds.PlayerEntity);
     }
 
     private PartyMutationResult RejectParty(GameSessionFailure failure, FollowConsent? consent = null) =>

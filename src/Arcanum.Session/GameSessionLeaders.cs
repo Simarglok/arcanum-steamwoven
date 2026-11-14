@@ -85,9 +85,8 @@ public sealed partial class GameSessionOwner
         if (hero.WaitBit) CancelWaitTimers(entity);
         _party.PutNpcLed(new(entity, leader, true));
         if (copyTempus) WriteTempusFugitOnJoin(entity);
-        // 0x45EE30 gives the joiner its leader's concealment; the session's concealment is the hero's party's (its toggle, its end on an attack and its save cover the hero's followers),
-        // so a follower of an NPC is never concealed here (named: a companion's summon does not sneak with it).
-        _combat.Concealed.Remove(entity);
+        // 0x45EE30 gives the joiner (and its own followers) its leader's concealment (ARC-WORLD-2118): a companion's summon sneaks with the hero, and a leader outside the hero's chain conceals no one.
+        TakeLeaderConcealment(entity, leader);
         Revise();
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, null, new(_identity, _revision));
     }
@@ -131,14 +130,14 @@ public sealed partial class GameSessionOwner
 
     // The forced unwait of a follower waiting under an NPC leader (0x4AA8C0 with force 1, then the join 0x45DE90 with force 1): the flag and the timers go, the leader is joined again, appended at the end of
     // its array, forced, jilted cleared, the leader's Tempus Fugit flag copied. The caller has checked the wait and has the revision room.
-    private void RejoinNpcLeader(string entity)
+    private void RejoinNpcLeader(string entity, bool forced = true)
     {
         var led = _party.NpcLed[entity];
         var record = _party.Get(entity);
         _party.Put(record with { WaitFlag = false, Jilted = false }, false);
         CancelWaitTimers(entity);
         _party.RemoveNpcLed(entity);
-        _party.PutNpcLed(new(entity, led.Leader, true));
+        _party.PutNpcLed(new(entity, led.Leader, forced));
         ClearTempusFugitOnLeave(entity);
         if (JoinCopiesTempusFugit(entity, led.Leader) && (_objectFlags.ContainsKey(entity) || _objectFlags.Count < MaxObjectFlagCritters)) WriteTempusFugitOnJoin(entity);
         _combat.Concealed.Remove(entity);
@@ -153,6 +152,54 @@ public sealed partial class GameSessionOwner
         Revise();
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, null, new(_identity, _revision));
     }
+
+    /// <summary>
+    /// ARC-WORLD-2127: the unforced unwait of a follower waiting under an NPC leader L (see the ledger rows NLD5 and AP3): the follow check with L as the player runs first, a refusal changes nothing (no line,
+    /// no reaction change: it keeps waiting); an acceptance clears the WAIT bit, the handle and the timers and the unforced join runs the check again with the handle cleared: a refusal there
+    /// leaves the follower with no leader, not waiting and not jilted (<see cref="PartyMutationResult.Consent"/> then carries that refusal, the disposition stays Changed), else it is appended at the end of
+    /// L's array, not forced, jilted cleared, L's Tempus Fugit flag copied. L's side comes from the caller (<see cref="NpcLeaderUnwaitFacts"/>: the session holds no NPC's stats); the session owns the reaction
+    /// (0 when L is on the follower's enemy list, else the fixed 50 of a leader that is no player character), the forced flag (cleared by the wait's leave), the charisma limit (never ignored) and the
+    /// count of L's array without forced entries (the waiting follower is out of the array in both checks). Refused, in order: the entity, the training, the version, a follower not waiting under an NPC leader
+    /// (<see cref="GameSessionFailure.NotWaiting"/>), the first check (<see cref="GameSessionFailure.ConsentRefused"/>), the written-flags bound for the Tempus Fugit copy, the revision.
+    /// </summary>
+    public PartyMutationResult UnwaitNpcLed(GameSessionVersion expected, string entity, NpcLeaderUnwaitFacts facts)
+    {
+        ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(facts);
+        if (!SessionValidation.Entity(entity)) return RejectParty(GameSessionFailure.InvalidCompanion);
+        if (!Enum.IsDefined(facts.LeaderPersuasion)) return RejectParty(GameSessionFailure.InvalidConsentFacts);
+        if (!IsCurrent(expected)) return RejectParty(GameSessionFailure.StaleVersion);
+        if (!WaitsUnderNpcLeader(entity)) return RejectParty(GameSessionFailure.NotWaiting);
+        var leader = _party.NpcLed[entity].Leader;
+        var first = NpcLeaderConsent(entity, leader, facts, facts.MindControlAccepted);
+        if (first != FollowConsent.Accepted) return RejectParty(GameSessionFailure.ConsentRefused, first);
+        var second = NpcLeaderConsent(entity, leader, facts, facts.MindControlAcceptedAfterUnlink);
+        if (second == FollowConsent.Accepted && JoinCopiesTempusFugit(entity, leader) && !_objectFlags.ContainsKey(entity) && _objectFlags.Count >= MaxObjectFlagCritters)
+            return RejectParty(GameSessionFailure.BudgetExceeded);
+        if (_revision == long.MaxValue) return RejectParty(GameSessionFailure.RevisionExhausted);
+        if (second == FollowConsent.Accepted) RejoinNpcLeader(entity, false);
+        else
+        {
+            _party.Put(_party.Get(entity) with { WaitFlag = false }, false);
+            CancelWaitTimers(entity);
+            _party.RemoveNpcLed(entity);
+        }
+        Revise();
+        return new(GameSessionDisposition.Changed, GameSessionFailure.None, second, new(_identity, _revision));
+    }
+
+    // One follow check of the unwait or its join with an NPC leader as the player (the step "another leader" is skipped: the follower's leader is L itself, or none).
+    private FollowConsent NpcLeaderConsent(string entity, string leader, NpcLeaderUnwaitFacts facts, bool mindControlAccepted)
+    {
+        var onEnemyList = _danger.Get(entity).Enemies.Contains(SessionCombatant.Critter(leader));
+        var nonForced = _party.NpcArrays.TryGetValue(leader, out var array)
+            ? array.Count(member => !_party.NpcLed[member].Forced && !_party.Get(member).WaitFlag) : 0;
+        return FollowConsentRules.Evaluate(new(mindControlAccepted, facts.LeaderPersuasion, 0, facts.LeaderAlignment, facts.LeaderLevel, null, false,
+            onEnemyList ? 0 : NpcLeaderFixedReaction, facts.Thresholds, facts.NpcAlignment, facts.NpcLevel, facts.MaxFollowers, nonForced, false));
+    }
+
+    /// <summary>ARC-WORLD-2127 (0x4C0D00): the reaction toward a leader that is no player character, when it is not on the follower's enemy list.</summary>
+    private const int NpcLeaderFixedReaction = 50;
 
     // Whether `critter`'s chain of leaders reaches `ancestor` (a join of `ancestor` under `critter` would close a cycle).
     private bool LeadsUpTo(string critter, string ancestor)
@@ -172,7 +219,7 @@ public sealed partial class GameSessionOwner
     private void LeaveHero(SessionCompanion current)
     {
         _party.Put(current with { Standing = CompanionStanding.Free, Forced = false, WaitFlag = false }, false);
-        _combat.Concealed.Remove(current.Entity);
+        DropConcealmentOfSubtree(current.Entity);
         ClearNoAttackOnLeave(current.Entity);
         ClearTempusFugitOnLeave(current.Entity);
         if (current.WaitBit) CancelWaitTimers(current.Entity);
@@ -188,9 +235,9 @@ public sealed partial class GameSessionOwner
             _party.Put(record with { WaitFlag = false }, false);
             CancelWaitTimers(entity);
         }
+        DropConcealmentOfSubtree(entity);
         _party.RemoveNpcLed(entity);
         ClearTempusFugitOnLeave(entity);
-        _combat.Concealed.Remove(entity);
     }
 
     // The forced leave of a follower of an NPC (LeaveParty for a critter the hero does not lead): NoChange without an NPC leader; an unforced leave is refused under an extraordinary-charisma leader
@@ -210,6 +257,10 @@ public sealed partial class GameSessionOwner
     {
         if (_party.NpcLed.ContainsKey(entity)) LeaveNpcLeader(entity);
         if (!_party.NpcArrays.TryGetValue(entity, out var array)) return;
-        foreach (var follower in array.ToArray()) _party.RemoveNpcLed(follower);
+        foreach (var follower in array.ToArray())
+        {
+            DropConcealmentOfSubtree(follower);
+            _party.RemoveNpcLed(follower);
+        }
     }
 }
