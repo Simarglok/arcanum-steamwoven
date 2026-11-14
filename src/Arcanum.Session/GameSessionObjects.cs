@@ -182,10 +182,10 @@ public enum SessionObjectHostSteps
     DestroySound = 1 << 3,
     /// <summary>The container's spill eye candy (1203) on the first container or item at its cell.</summary>
     SpillEyeCandy = 1 << 4,
-    /// <summary>The witnesses of the hero's attack on an object it left whole (0x4AEE50 with 1: NPCs near that guard the object's
+    /// <summary>The witnesses of an attack (the hero's or, since ARC-AI-2112, a spell caster's damage with an attacker) on an object it left whole (0x4AEE50 with 1: NPCs near that guard the object's
     /// faction lower their reaction by 20, then may turn hostile).</summary>
     WitnessesHearAttack = 1 << 5,
-    /// <summary>The witnesses of the hero breaking the object (0x4AEE50 with 0: possible hostility).</summary>
+    /// <summary>The witnesses of the object's break by such an attacker (0x4AEE50 with 0: possible hostility).</summary>
     WitnessesHearBreak = 1 << 6,
 }
 

@@ -915,7 +915,7 @@ public partial class TerrainViewerApp
 
     /// <summary>ARC-DEV-255 (GT195): the hits damage that is no hero attack (a spell, a script, a burn, a trap) dealt to a door, window, container,
     /// scenery or trap since the last call, logged; since ARC-DEV-260 the object's trap and its BUST script run for a hit that broke it (no attacker: no
-    /// triggerer, no breaker). A trap's or a script's own damage queues hits in turn, which the next round takes (bounded). The redraw of what a hit destroyed
+    /// triggerer, no breaker); since ARC-AI-2112 a hit with an actor (a spell's caster) then calls the guard witnesses. A trap's or a script's own damage queues hits in turn, which the next round takes (bounded). The redraw of what a hit destroyed
     /// or busted follows from the session's version (the per-frame inventory sync).</summary>
     private void LogObjectHits()
     {
