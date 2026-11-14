@@ -90,14 +90,14 @@ public sealed class AreaWindowTests
     public void A_window_admits_the_items_its_holder_lists_wherever_they_lie_and_no_other_outside_record()
     {
         // ARC-WORLD-2036: a held item keeps the location it had when it was made or picked up. The holder (an NPC at tile 70,80, core sector 1,1) lists two items located
-        // in sector 10,1; they enter as context rows, so the inventory view finds every list element. An outside item of a holder the window does not hold, and one
-        // with no parent, stay out.
-        const int Holder = 41, Held = 42, HeldToo = 43, Stranger = 44, Loose = 45;
+        // in sector 10,1; they enter as context rows, so the inventory view finds every list element. An outside item of a holder the window does not hold, one
+        // with no parent and one with a parent but no inventory flag (a ground item), stay out.
+        const int Holder = 41, Held = 42, HeldToo = 43, Stranger = 44, Loose = 45, Ground = 46;
         var window = new AreaWindow([new(new(1, 1), AreaScope.Core, null)]);
         byte[][] aggregate =
         [
             Critter(Holder, 70L | (80L << 32)), Item(Held, 700L | (80L << 32), Holder), Item(HeldToo, 705L | (81L << 32), Holder),
-            Item(Stranger, 710L | (80L << 32), 999), Item(Loose, 720L | (80L << 32), null),
+            Item(Stranger, 710L | (80L << 32), 999), Item(Loose, 720L | (80L << 32), null), Item(Ground, 730L | (80L << 32), Holder, flagged: false),
         ];
         using var f = new Fixture([(Own, [])], aggregate, selection: AreaSectorSelection.Window, window: window, resourceEntries: Resources(),
             prototype: TypedPrototype(7001, 16), extraPrototype: TypedPrototype(7002, 5));
@@ -109,8 +109,8 @@ public sealed class AreaWindowTests
         CollectionAssert.AreEqual(new[] { AreaScope.Core, AreaScope.Context, AreaScope.Context }, mobiles.Select(o => o.Scope).ToArray());
         Assert.IsTrue(mobiles.Skip(1).All(o => o.Disposition == AreaDisposition.ContextOnly && o.WorldX >= 700), "the item keeps its own location and has no body");
         Assert.AreEqual(0, snapshot.Visuals.Count(v => v.Key.Object is { } key && key.SourceIndex > 0), "no body for the held items");
-        // The reconciliation still counts by serialized location: the four items lie outside.
-        Assert.AreEqual((5, 1, 0, 4, 0), (snapshot.Reconciliation.Aggregate, snapshot.Reconciliation.CoreMobiles, snapshot.Reconciliation.ContextMobiles, snapshot.Reconciliation.OutsideMobiles, snapshot.Reconciliation.UnknownMobiles));
+        // The reconciliation still counts by serialized location: the five items lie outside.
+        Assert.AreEqual((6, 1, 0, 5, 0), (snapshot.Reconciliation.Aggregate, snapshot.Reconciliation.CoreMobiles, snapshot.Reconciliation.ContextMobiles, snapshot.Reconciliation.OutsideMobiles, snapshot.Reconciliation.UnknownMobiles));
     }
 
     /// <summary>A prototype of <paramref name="type"/> whose every integer field is 0 (the art id: none, so no body is drawn) and every other field null.</summary>
@@ -134,12 +134,12 @@ public sealed class AreaWindowTests
         s.WriteByte(1); I64(s, location); return s.ToArray();
     }
 
-    /// <summary>An item (type 5) with a location and, when <paramref name="holder"/> is given, a parent handle (slot 37) naming that object.</summary>
-    private static byte[] Item(int own, long location, int? holder)
+    /// <summary>An item (type 5) with a location, the inventory object flag when <paramref name="flagged"/> and, when <paramref name="holder"/> is given, a parent handle (slot 37) naming that object.</summary>
+    private static byte[] Item(int own, long location, int? holder, bool flagged = true)
     {
         using var s = new MemoryStream(); I32(s, 119); s.Write(Id(1, 7002)); s.Write(Id(1, own)); I32(s, 5);
-        s.Write(new byte[] { 2, 0 }); I32(s, 2); I32(s, 0); I32(s, 2); I32(s, 0);
-        s.WriteByte(1); I64(s, location);
+        s.Write(new byte[] { 3, 0 }); I32(s, 0x40002); I32(s, 0); I32(s, 2); I32(s, 0);
+        s.WriteByte(1); I64(s, location); I32(s, flagged ? 0x1000 : 0);
         if (holder is { } parent) { s.WriteByte(1); s.Write(Id(1, parent)); } else s.WriteByte(0);
         return s.ToArray();
     }

@@ -216,7 +216,8 @@ public sealed partial class AreaDataOwner
                 else if (scope == AreaScope.Unknown) issues.Add(new(AreaErrorCode.UnknownLocation, AreaStage.Aggregate, offset, index));
                 // ARC-WORLD-2036: a held item (types 5..14, parent field 37 names its holder) keeps the location it had when it was made or picked up, not its
                 // holder's, so in a window it can lie outside while its holder is admitted; its record is looked at again once every holder is known.
-                else if (_plan.Window is not null && record.Type is >= 5 and <= 14 && record.Fields.TryGetValue(ItemParentSlot, out var parentField) && parentField.Fingerprint is { } parentId)
+                else if (_plan.Window is not null && record.Type is >= 5 and <= 14 && record.Fields.TryGetValue(ItemParentSlot, out var parentField) && parentField.Fingerprint is { } parentId &&
+                         record.Fields.TryGetValue(ObjectFlagsSlot, out var flagsField) && flagsField.Number is { } flagsValue && (flagsValue & InventoryObjectFlag) != 0)
                     (heldOutside ??= []).Add((offset, index, parentId));
                 offset = checked(offset + record.Length); index++;
             }
@@ -470,7 +471,9 @@ public sealed partial class AreaDataOwner
     /// <summary>The first type-specific slot: a scenery's scenery flags.</summary>
     private const int SceneryFlagsSlot = 36;
     /// <summary>ARC-WORLD-2036: <c>OBJ_F_ITEM_PARENT</c>, the first-group slot of an item that names its holder (the inventory view reads the same slot).</summary>
-    internal const int ItemParentSlot = 37;
+    internal const int ItemParentSlot = 37, ObjectFlagsSlot = 18;
+    /// <summary>OF_INVENTORY: an item a holder carries; only such an item travels with its holder into a window (an unflagged one with a parent is a ground item and stays where it lies).</summary>
+    internal const long InventoryObjectFlag = 0x1000;
     private static long Optional(IReadOnlyDictionary<int, ObjectWireValue> fields, int slot) =>
         fields.TryGetValue(slot, out var value) && value.Presence == ObjectWirePresence.Value && value.Number is { } number ? number : 0;
     private static long Number(IReadOnlyDictionary<int, ObjectWireValue> fields, int slot) => fields.TryGetValue(slot, out var value) && value.Presence == ObjectWirePresence.Value && value.Number.HasValue ? value.Number.Value : throw Fail(AreaErrorCode.UnsupportedVersionOrSchema, AreaStage.Appearance);

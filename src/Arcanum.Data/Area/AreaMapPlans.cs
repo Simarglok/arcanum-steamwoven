@@ -198,7 +198,8 @@ public static class AreaMapPlans
             foreach (var item in mobiles.Objects)
             {
                 if (item.Location is { } location && windowSectors.Contains(WorldSectorCoordinate.Containing(location))) continue;
-                if (item.Location is null || item.Type is < 5 or > 14 || !item.Fields.TryGetValue(AreaDataOwner.ItemParentSlot, out var parent) || parent.Fingerprint is not { } parentId || !standing.Contains(parentId)) continue;
+                if (item.Location is null || item.Type is < 5 or > 14 || !item.Fields.TryGetValue(AreaDataOwner.ItemParentSlot, out var parent) || parent.Fingerprint is not { } parentId || !standing.Contains(parentId) ||
+                    !item.Fields.TryGetValue(AreaDataOwner.ObjectFlagsSlot, out var flags) || flags.Number is not { } flagsValue || (flagsValue & AreaDataOwner.InventoryObjectFlag) == 0) continue;
                 objects++;
                 if (item.PrototypeNumber is { } number) prototypes.Add(number);
             }
