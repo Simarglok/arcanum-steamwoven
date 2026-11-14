@@ -606,6 +606,8 @@ public sealed class AreaUseScriptHostTests
             Assert.AreEqual(before + 12_000, session.QueryClockSnapshot().GameTimestampMs);
             CollectionAssert.AreEqual(new[] { new AreaScriptFade(12_000, 3, 0, 0, 0) }, host.TakeFades().ToArray());
             Assert.AreEqual(0, host.TakeFades().Count, "taken once");
+            Assert.AreEqual(1, host.TakeFadeClears(), "ARC-UI-2034 (TB16): the fade empties the speech bubbles");
+            Assert.AreEqual(0, host.TakeFadeClears(), "taken once");
             Assert.IsTrue(host.GlobalFlag(49), "the run's other effects apply");
         });
     }
@@ -824,7 +826,7 @@ public sealed class AreaUseScriptHostTests
             var ran = host.RunPlaced(tile, session.Rules.Scripts);
             Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, ran.Outcome, ran.Detail);
             Assert.IsTrue(host.GlobalFlag(48), "the lines after the float ran");
-            CollectionAssert.AreEqual(new[] { new AreaScriptFloat(host.Pc, "Help me.") }, host.TakeFloats().ToArray());
+            CollectionAssert.AreEqual(new[] { new AreaScriptFloat(host.Pc, "Help me.", host.Pc) }, host.TakeFloats().ToArray());
             Assert.AreEqual(0, host.TakeFloats().Count);
         });
     }
@@ -851,7 +853,7 @@ public sealed class AreaUseScriptHostTests
             var queue = session.QueryNewspaper();
             Assert.AreEqual(7, queue.Count);
             CollectionAssert.AreEqual(new[] { -1, -1, -1, -1, 5000, 7, 5030 }, queue.Entries.Take(7).ToArray(), "the head stays, 7 went in behind it at the front, 5030 queued after the count");
-            CollectionAssert.AreEqual(new[] { new AreaScriptFloat(host.Pc, "Big news at the harbour. ") }, host.TakeFloats().ToArray());
+            CollectionAssert.AreEqual(new[] { new AreaScriptFloat(host.Pc, "Big news at the harbour. ", host.Pc) }, host.TakeFloats().ToArray());
             Assert.AreEqual(0, host.TakeFloats().Count);
         });
     }

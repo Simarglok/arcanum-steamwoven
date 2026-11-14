@@ -141,6 +141,20 @@ public sealed class AreaTalkQueryTests
     }
 
     [TestMethod]
+    public void A_queued_line_carries_its_listener_for_the_speech_turn_and_a_line_without_one_turns_nothing()
+    {
+        // ARC-UI-2055 (TB26): a follower's bark and a float line reach the viewer with the object the speaker turns to; the generic greeting passes none (its turn is made at the dialog start).
+        WithContent(content =>
+        {
+            using var talk = Create(content, 790, (7, false));
+            var speaker = talk.Host.Object(talk.Speaker);
+            talk.Host.Float(speaker, "Careful.", talk.Host.Pc);
+            talk.Host.Float(speaker, "Hello.");
+            CollectionAssert.AreEqual(new[] { new AreaScriptFloat(speaker, "Careful.", talk.Host.Pc), new AreaScriptFloat(speaker, "Hello.", null) }, talk.Host.TakeFloats().ToArray());
+        });
+    }
+
+    [TestMethod]
     public void A_float_line_floats_the_speakers_line_and_get_area_reads_the_shown_maps_area()
     {
         WithContent(content =>
@@ -153,7 +167,7 @@ public sealed class AreaTalkQueryTests
             Assert.IsTrue(talk.Host.Apply(run.Effects));
             Assert.IsTrue(talk.Flag, "get area read 7");
             // The diagnostic profile: a male PC named [PC]; the separators-only action field runs nothing.
-            CollectionAssert.AreEqual(new[] { new AreaScriptFloat(talk.Host.Object(talk.Speaker), "Not now, [PC].") }, talk.Host.TakeFloats().ToArray());
+            CollectionAssert.AreEqual(new[] { new AreaScriptFloat(talk.Host.Object(talk.Speaker), "Not now, [PC].", talk.Host.Pc) }, talk.Host.TakeFloats().ToArray());
             Assert.AreEqual(0, talk.Host.TakeFloats().Count);
         });
     }

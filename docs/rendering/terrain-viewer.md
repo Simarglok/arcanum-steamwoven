@@ -109,8 +109,10 @@ reason the start opens the stored folder at once. `--launcher` with other viewer
   after alpha); three HD lines (ARC-UI-143, below); "Show this screen at every start"; "Debug mode" (ARC-DEV-050, off by default:
   [debug mode](area-map-mode.md#debug-mode-arc-dev-050)); Play, Reset settings and Quit. The project's own look, not a
   window of the original's menu.
-- **HD lines (ARC-UI-143).** After the rules the screen has three HD lines (the Game page of the options window had them until ARC-UI-146), one row of choices each: **HD graphics**
-  Off/On (the visual profile, the `visual profile` line of `arcanum.cfg`), **HD interface** Off/On/Generated (experimental) and **HD pack** Auto/Game/Custom
+- **HD lines (ARC-UI-143, ARC-RENDER-2060).** After the rules the screen has four HD lines (the Game page of the options window had them until ARC-UI-146), one row of choices each: **HD graphics**
+  Off/On (the visual profile, the `visual profile` line of `arcanum.cfg`), **HD lighting** Off/On (ARC-RENDER-2060: the relit look, the `relit look` line, 0 or 1, default off;
+  it draws only while HD graphics is On, so HD graphics Off, the H key included, is Legacy byte for byte whatever the line says; its own `RELIT_LOOK_TEST_PATH` isolates tests and the smoke runner gives each run its own file;
+  what the look is: [relit look](area-lighting.md#relit-look-arc-render-2060)), **HD interface** Off/On/Generated (experimental) and **HD pack** Auto/Game/Custom
   (the `hd interface`, `generated interface`, `hd pack` and `hd pack path` lines of `arcanum.cfg`, [HD pack source](../workflow/hd-pack.md#hd-pack-source-arc-dev-350)).
   They are the only saved-settings screen for them (the options window has no HD line since ARC-UI-146; the `H` key and the palette still
   switch the visual profile in play, HD interface and HD pack change only here, with Shift held at the start): a choice is saved at once in the settings file (not at Play) and the game that Play
@@ -247,8 +249,8 @@ sticky limitations, wrapped/scrollable detail and content at 480x320, 640x360,
 800x500, and 1280x800; resizing affects HUD layout only, not world state.
 
 In `area` mode, the original left click on an NPC whose effective SAP_DIALOG
-attachment names a script talks to it (ARC-SCRIPT-005): within 3 tiles at once (project
-diagnostic reach), otherwise after the click-to-move route walks within reach. The modal
+attachment names a script talks to it (ARC-SCRIPT-005): since ARC-DEV-169 the click orders the hero's goal 21 (`ag_talk`), which
+talks from less than 5 cells at once and otherwise walks the hero next to the NPC first (the original's range, 0x42AE10; no project reach). The modal
 conversation panel closes the actor gate; replies are clicked (controller menu navigates and
 confirms), keyboard keys stay reserved and are not redirected, and a diagnostic Leave button
 closes the dialog. Since ARC-SCRIPT-009 the talk request and the script's continuation after a
@@ -260,8 +262,8 @@ self-test covers a synthetic panel, an off-NPC click, keyboard events and polled
 palette guard in AREA mode (the positive NPC hit test is an opt-in original-data test). ARC-UI-071 (B29): the panel's texts (header, NPC
 line, replies, outcome, effects, hint, Leave) are drawn in the original's font art 229 with the MW31 blend (`AreaArtParagraph`, broken at the
 panel's content width by `AreaTextFontLayout.Place`) once the viewer has read the text fonts (ARC-DEV-156), and in the viewer's font
-without them; the self-test also covers the art-text mode on synthetic glyphs and the `wreck` smoke checks it on the installed fonts. PROJECT:
-the font of the original's own talk window is not read; 229 is the dialog box's and the message window's text font.
+without them; the self-test also covers the art-text mode on synthetic glyphs and the `wreck` smoke checks it on the installed fonts. The reply band of the original's own talk window is built with font art 229 too
+(0x4C9280, F1), the one font of the dialog box and the message window; the diagnostic panel is not the band and keeps its own look.
 ARC-UI-2019 (a Steamwoven addition, owner request; switch `InterfaceRuleProfile.DialogRepliesUnnumbered`, [rule modes](../world/rule-modes.md)): under the Steamwoven
 setting each reply line carries its number (`1. …`, up to 5) and the digit keys 1–5 (row or keypad, no modifier) choose the reply with that number while the
 panel awaits a choice; a blocked or absent number, a finished dialog and every other key do nothing. Under the Original setting the reply is drawn as its text
@@ -277,7 +279,7 @@ ARC-UI-2022 (ledger DH8–DH11): under the Original setting the reply stack sits
 (a row's text plus 13 px that is wider widens it by that and re-centres it; the press x-bound is the band's width), centred, its top at 299 in a 400 px view else the view height minus 181 (the viewer
 hides the interface bars during a dialog, so the view is the whole window). The strip darkens what is under it by a subtract blend of (18, 18, 18), as the original's fill (a saturating subtract, not an alpha mix). Rows
 are white, the hovered row yellow (the original's two fonts of art 229), each with a drop shadow one pixel right and down in (10, 10, 10); the text is broken at the box width minus 12 and only the first line fits the
-16 px row; a word wider than the row draws nothing. The diagnostic chrome (header, outcome, effects, hint, Leave) still draws in the framed panel, which stands above the band (#2023 removes it). The self-test covers the rectangle,
+16 px row; a word wider than the row draws nothing. The diagnostic chrome (header, outcome, effects, hint, Leave) is hidden under the Original setting by ARC-UI-2023; the framed panel then holds nothing and is not drawn, so the band alone is on screen (with the chrome shown, as in Steamwoven or for a message-only panel, the panel stands above the band). The self-test covers the rectangle,
 the shade, the colours, the shadow and the press bound.
 
 ## Integrated world diagnostic policy
@@ -569,7 +571,7 @@ ground click cancels that walk-to-use, clicks again and lets the route walk ther
 before the use, then in the cave accepts a use and resets before the next frame,
 checking that the reset drops the transfer; it prints `ARC-WORLD-009 native-smoke transition PASS`.
 A clock phase follows (ARC-WORLD-010, [area lighting](area-lighting.md#verification)): the session clock flows to the
-next hour at literal host times, holds while the palette and a dialog are open, waits +1 hour during the pause
+next hour at literal host times, keeps flowing while the palette and a dialog are open (only the Esc menu pauses it), waits +1 hour on top of the flow
 and round-trips through a snapshot; it prints `ARC-WORLD-010 native-smoke clock PASS`.
 `ARC_AREA_TRANSITION_CAPTURE` saves views of both maps. The real-data Core test
 `AreaTransitionOriginalTests` walks to each trigger over the step evidence and
@@ -754,7 +756,7 @@ left click would do there (FR-UI-005). Nothing is clicked or changed by hovering
   ([below](#original-cursor-art-arc-ui-056)) and these system shapes only while that art is not read (the self-test, an
   unreadable game folder); the action is still decided, named in the tooltip's second line and the status line.
   The decision follows `WorldRouteClick` in its order and guards without running it:
-  a dialog NPC is *talk* within the 3-tile reach, else *walk to talk*; the cave
+  a dialog NPC is *talk* within the talk range (less than 5 cells, goal 21 node 4; ARC-DEV-169), else *walk to talk*; the cave
   entrance or exit is *use* within use range 2, else *walk to use*; anything else is a
   ground goal: *no route* when the route planner refuses it without a search (the cell or
   the actor outside the area, or no neighbour step entering the cell), else *walk here*;
@@ -1109,12 +1111,13 @@ floating lines, so above the objects and below the numbers) in the original's fo
   drawn and kept (the region constants of the original's 800 × 600 view are taken from the view's centre here, so a larger window
   behaves as the original does at its centre). The table holds eight bubbles; a ninth takes the oldest non-persistent one. A new scene
   drops every bubble. The text keeps the screen's pixels at any zoom (the original has no zoom either).
+- **Removal by the object's end** (ARC-UI-2034, ledger TB16, TB27). A script's fade (action 103) empties the table (every fade run, whatever its operands, as the original's clear-all runs first); an object the session destroyed or switched off (off flag 0x2), or a created critter the session no longer holds, loses its bubble (`TextBubbleGoneWatch` reads the state each frame; a bubble made over an object that is already gone stays, as the original removes only at the change). Death, moves and the hero's own bubble are untouched. Limits (TB27): a created critter's off flag is not read, a companion carried from another map is never read as gone, and the state is polled once a frame.
 - **Not done.** The final-line close of a dialog (#2028), the speaker's turn toward the listener
   and the speech voice, the objects' draw offsets, the exact word-break rules (TB22).
 
 Checks: `TextBubblesTests` (colours, life, wrap, slots and slot choice, the table's reuse and eviction, life rules, the setting change) and
 the `map` stage's talk smoke (the NPC line of every started conversation is a persistent bubble, replaced on each reply, not persistent after the end; no `npc` text in the panel); `ARC_AREA_TALK_CAPTURE=PATH` saves the first open dialog as `PATH.png` and the `floaters` smoke stage's bubble part (a PC's and an NPC's bubble over their objects, green and white, wrapped within 200 px,
-alive at 6000 ms and gone after it, a Text Duration change to 2 shortening a live bubble at once; `ARC-UI-1997 bubbles over objects PASS`;
+alive at 6000 ms and gone after it, a Text Duration change to 2 shortening a live bubble at once; `ARC-UI-1997 bubbles over objects PASS`; then the off flag written on the NPC and the NPC destroyed by a script each remove its bubble and not the hero's, a bubble made over an object that is off stays, `ARC-UI-2034 bubbles removed by off flag and teardown PASS` (the fade's clear-all: `AreaScriptHostTests` and `AreaUseScriptHostTests` count the fade runs, `TextBubblesTests` the gone watch);
 `ARC_AREA_FLOATERS_CAPTURE` saves `bubble-before` (the old white rising line) and `bubble-after`) and the `spirit-talk` stage (the greeting over the corpse is a bubble). Original visual parity NOT VERIFIED.
 
 ### Inventory window, pickup and loot (ARC-UI-004)
@@ -1165,7 +1168,7 @@ inventory and loot lines show a stack's units (`×N`; [ammunition](../world/inve
   sweep of the native smoke counts those bodies as taken.
 - **Window.** `I` (the original Inventory key, logical key down) toggles it while the area
   inventory exists; I, Escape, the Close button or a controller cancel close it. It is
-  modal like the dialog panel (actor gate closed, clock paused, palette chord refused,
+  modal like the dialog panel (actor gate closed, the clock keeps flowing, ARC-DEV-126, palette chord refused,
   every key owned by the window). Left: the PC's list in the order items entered it, each
   with its display name (the hover rule: the examine function's (0x441B60) order from the description
   tables, type fallback without them), type and weight. When looting, right: the dead NPC's
@@ -2421,6 +2424,7 @@ project's, except as below.
   default and no other setting changes. Each change is saved at
   once (the original writes `arcanum.cfg` when the game exits). Space's toggle also saves the turn-based setting now. An
   automated run (self-test, native smoke) reads and writes no file; `GAME_SETTINGS_TEST_PATH` names a settings file for a test.
+- **Opening by O (ARC-UI-2026, OP9).** The release of the O key opens this window at its Game page in play, over any window and over the dialog (the press only arms it; Escape's route is the same). It raises no pause (the Esc menu does) and refuses only while a text entry or a menu is open; the inventory family closes under it as under Escape. The dialog stays and goes on after Done.
 - **Closing.** Done goes back to the main menu, or from play closes the menu and play goes on; from play the O key
   does the same. Escape does nothing in this window, as in the original's key table.
 
@@ -3382,7 +3386,7 @@ The first ordinary start after this change moves the settings of the files the v
 `audio_volumes_v1.json`, `always_run_v1.json`, `visual_profile_v1.json`, `launcher_v1.json`, in `user://`) into `arcanum.cfg`, once, only
 when `arcanum.cfg` does not exist yet (`ViewerSettingsFile.UserFile`, `ViewerSettingsMigration`): each old file is read by its own old codec,
 an invalid one is skipped, and the old files stay where they are, unread and unchanged (the player may delete them). The test variables
-`GAME_SETTINGS_TEST_PATH`, `AUDIO_VOLUMES_TEST_PATH`, `ALWAYS_RUN_TEST_PATH`, `VISUAL_PROFILE_TEST_PATH` and `LAUNCHER_SETTINGS_TEST_PATH`
+`GAME_SETTINGS_TEST_PATH`, `AUDIO_VOLUMES_TEST_PATH`, `ALWAYS_RUN_TEST_PATH`, `VISUAL_PROFILE_TEST_PATH`, `RELIT_LOOK_TEST_PATH` (ARC-RENDER-2060, the `relit look` line) and `LAUNCHER_SETTINGS_TEST_PATH`
 keep their names and each now names a settings file; an automated run without one has no file. **Not in the file** (own files, own
 owners): the WORLD diagnostic's input and zoom preferences (`world_diagnostic_*_v1.json`, development diagnostics with their own validation),
 the HD device budget (`hd_budget_v1.json`, a measurement, not a setting) and the labs' files. Checks: `ArcanumConfigTests`,

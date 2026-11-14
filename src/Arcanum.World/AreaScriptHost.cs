@@ -198,6 +198,7 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
     private readonly List<ScrReadingRequest> _readings = [];
     private readonly List<AreaScriptFloat> _floats = [];
     private readonly List<AreaScriptFade> _fades = [];
+    private int _fadeClears;
     private readonly List<AreaScriptEyeCandy> _eyeCandies = [];
 
     /// <summary>ARC-SCRIPT-1592: the script eye candy (action 120) of the runs applied since the last call, in order, for the viewer to play on its objects (<see cref="AreaEyeCandyHost.PlayScript"/>).</summary>
@@ -213,7 +214,7 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
 
     /// <summary>ARC-DEV-324: queues a line for the viewer to float over <paramref name="speaker"/> as a script's float line does (the generic greeting, which is a
     /// floating line and no window).</summary>
-    internal void Float(ScrObjectRef speaker, string text) => _floats.Add(new(speaker, text));
+    internal void Float(ScrObjectRef speaker, string text, ScrObjectRef? listener = null) => _floats.Add(new(speaker, text, listener));
 
     /// <summary>ARC-SCRIPT-050: the float lines of the runs applied since the last call, in order, each with its text, for the viewer to
     /// float over its speaker.</summary>
@@ -258,6 +259,15 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
         var fades = _fades.ToArray();
         _fades.Clear();
         return fades;
+    }
+
+    /// <summary>ARC-UI-2034 (ledger TB16): how many fade actions (103) the runs applied since the last call, whether or not they ask for a movie or a sound. Each one empties the speech
+    /// bubble table first (the original's case for it clears the table before it reads an operand, in single player, ledger TB16), so the viewer clears its bubbles for each.</summary>
+    public int TakeFadeClears()
+    {
+        var count = _fadeClears;
+        _fadeClears = 0;
+        return count;
     }
 
     /// <summary>ARC-RENDER-1171 (SS4): whether a run applied since the last call asked for the end of the game (132); the viewer starts the end-game show once the movies of the same run have played.</summary>
@@ -458,7 +468,7 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
             if (_content?.Dialog(line.Script, _session.Rules.Data) is not { Status: ScriptContentStatus.Read, Document: { } document }) continue;
             var printed = ScrPrintedLine.Read(document, line.Line, _profile.Pc.Gender != Arcanum.Scripting.Dialog.DialogPcGender.Male, _profile.Names);
             if (printed.Status != ScrPrintedLineStatus.Shown) return false;
-            floats.Add(new(line.Speaker, printed.Text));
+            floats.Add(new(line.Speaker, printed.Text, line.Pc));
         }
         // ARC-SCRIPT-1764 (NP10): the float newspaper headline requests, read before anything applies.
         floats.AddRange(AreaScriptNewspaper.Floats(_session, effects, _newspaperTexts.Get));
@@ -539,6 +549,7 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
             if (IsPc(request.Viewer)) _readings.Add(request);
         // ARC-SCRIPT-1241 (MV5): each fade's clock jump, then its movie for the viewer, or (no movie) its sound as an effect sound; the later steps stop when the clock refuses.
         var asked = new List<AreaScriptFade>();
+        _fadeClears += effects.Fades.Count;
         var fadesApplied = AreaScriptFades.Apply(_session, effects, asked);
         foreach (var fade in asked)   // the fades before a refused jump keep their movie or sound, as their clock jumps stay
             if (fade.Movie != 0) _fades.Add(fade); else _sounds.Add(new(ScrSoundKind.Effect, fade.Sound));
@@ -595,8 +606,8 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
     public static SessionScriptRole? Role(ScrObjectRef? obj) => obj is { } o ? new SessionScriptRole(new SessionMapId(o.Map), o.Code) : null;
 }
 
-/// <summary>ARC-SCRIPT-050: one float line a run applied: the object it floats over and its text.</summary>
-public readonly record struct AreaScriptFloat(ScrObjectRef Speaker, string Text);
+/// <summary>ARC-SCRIPT-050: one float line a run applied: the object it floats over and its text. ARC-UI-2055 (TB26): <see cref="Listener"/> is the object the speech display turns an idle living speaker to (the script float line's nearby PC, the headline's triggerer, a follower's leader), or null for no turn.</summary>
+public readonly record struct AreaScriptFloat(ScrObjectRef Speaker, string Text, ScrObjectRef? Listener = null);
 
 /// <summary>ARC-TECHNOLOGY-005: how a start schematic UI request resolved.</summary>
 public enum AreaSchematicScriptStatus

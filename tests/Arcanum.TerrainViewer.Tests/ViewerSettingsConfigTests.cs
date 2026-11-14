@@ -134,6 +134,15 @@ public sealed class ViewerSettingsConfigTests
         Assert.IsTrue(ViewerSettingsConfig.HasVisualProfile(Lines("visual profile=legacy\n")));
         Assert.AreEqual("hd", ViewerSettingsConfig.VisualProfileChanges(VisualProfile.Hd).Single().Value);
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => ViewerSettingsConfig.VisualProfileChanges((VisualProfile)9));
+
+        // ARC-RENDER-2060: the HD lighting line (the relit look) is 0 or 1, off when absent or odd, and saved as its own line.
+        Assert.IsTrue(ViewerSettingsConfig.ReadRelitLook(Lines("relit look=1\n")));
+        Assert.IsFalse(ViewerSettingsConfig.ReadRelitLook(Lines("relit look=0\n")));
+        Assert.IsFalse(ViewerSettingsConfig.ReadRelitLook(Lines("relit look=on\n")), "0 and 1 only");
+        Assert.IsFalse(ViewerSettingsConfig.ReadRelitLook(Lines("")), "default off");
+        Assert.IsTrue(ViewerSettingsConfig.HasRelitLook(Lines("relit look=0\n")));
+        Assert.IsFalse(ViewerSettingsConfig.HasRelitLook(Lines("visual profile=hd\n")));
+        Assert.AreEqual(("relit look", "1"), (ViewerSettingsConfig.RelitLookChanges(true).Single().Name, ViewerSettingsConfig.RelitLookChanges(true).Single().Value));
     }
 
     [TestMethod]

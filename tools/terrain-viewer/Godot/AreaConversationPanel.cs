@@ -12,7 +12,7 @@ namespace Arcanum.TerrainViewer;
 /// → 0x568540) and its window lists only the PC's options; the panel hands the line to its owner through <see cref="NpcLineShown"/> and tells it when a reply is picked (<see cref="ReplyPicking"/>). It renders a <see cref="DialogConversation"/>; it owns no dialog rules. ARC-UI-071 (B29): with the
 /// original's text fonts (<see cref="SetFonts"/>) every text of the panel, the replies' too, is drawn in font art 229 with the original's
 /// blend (<see cref="AreaArtParagraph"/>), the font of the original's dialog box (DB1); without them (no game folder) the labels and buttons
-/// draw in the viewer's font. PROJECT: the font of the original's talk window itself is not read.
+/// draw in the viewer's font. The original's own reply band is built with the same font art 229 (0x4C9280); this panel is not that band.
 /// </summary>
 public partial class AreaConversationPanel : CanvasLayer
 {
@@ -86,6 +86,32 @@ public partial class AreaConversationPanel : CanvasLayer
     private bool _originalRows;
     /// <summary>ARC-UI-2025: where an open panel reads <see cref="OriginalReplyRows"/> from every frame (a rule-mode switch made over the dialog).</summary>
     public Func<bool>? OriginalRowsSource { get; set; }
+    /// <summary>
+    /// ARC-UI-2023: the Original interface setting. The original's dialog window shows only the PC's reply rows (ways out: a DLG reply, or a window or
+    /// event that pops mode 3, 0x5678D0), so the header, the outcome line, the effects ledger, the hint and the Leave button are hidden and the
+    /// controller cancel does not leave an awaiting dialog that has an enabled reply; false (Steamwoven): the diagnostic chrome stays. A message-only panel (no conversation
+    /// could start) keeps its message and a finished dialog keeps its Close button: nothing else could close them. Set before <see cref="Open"/>.
+    /// </summary>
+    public bool DiagnosticChromeHidden
+    {
+        get => _chromeHidden;
+        set
+        {
+            if (_chromeHidden == value) return;
+            _chromeHidden = value;
+            if (IsNodeReady() && IsOpen) Render(_message);
+        }
+    }
+    private bool _chromeHidden;
+    /// <summary>ARC-UI-2023: where an open panel reads <see cref="DiagnosticChromeHidden"/> from every frame (a rule-mode switch made over the dialog).</summary>
+    public Func<bool>? ChromeHiddenSource { get; set; }
+    private bool Awaiting => _conversation is { Phase: DialogConversationPhase.AwaitingSelection };
+    /// <summary>Whether the Leave button is offered: hidden under Original while a reply can be chosen (the original has no way out but a reply); with no enabled reply (none offered, all blocked, a refused reply) it stays so that the modal panel cannot lock.</summary>
+    private bool LeaveOffered => !(_chromeHidden && Awaiting && _buttons.Any(button => !button.Disabled));
+    internal bool LeaveOfferedForSelfTest => LeaveOffered;
+    /// <summary>ARC-UI-2023: which diagnostic parts draw now (a label or an art paragraph is visible): header, outcome, effects, hint, Leave.</summary>
+    internal (bool Header, bool Outcome, bool Effects, bool Hint, bool Leave) ChromeShownForSelfTest =>
+        (_header.Visible || _headerArt.Visible, _outcome.Visible || _outcomeArt.Visible, _effects.Visible || _effectsArt.Visible, _hint.Visible || _hintArt.Visible, _leave.Visible);
     public DialogConversation? Conversation => _conversation;
     internal IReadOnlyList<Button> ButtonsForSelfTest => _buttons;
     /// <summary>The conversation's current NPC line (held, not drawn here: it is a bubble over the NPC).</summary>
@@ -96,6 +122,8 @@ public partial class AreaConversationPanel : CanvasLayer
     internal int BandWidthForSelfTest => (int)_band.Size.X;
     /// <summary>ARC-UI-2022: the band's place in the view ((left, top, width, height)), whether it is shown and the shade's blend mode name.</summary>
     internal (int X, int Y, int W, int H) BandRectForSelfTest => ((int)_band.Position.X, (int)_band.Position.Y, (int)_band.Size.X, (int)_band.Size.Y);
+    /// <summary>ARC-UI-2022: whether the framed diagnostic panel draws (under Original with the chrome hidden it holds nothing and does not).</summary>
+    internal bool PanelShownForSelfTest => _panel.Visible;
     internal bool BandShownForSelfTest => _band.Visible && _originalRows && IsOpen;
     internal string BandShadeForSelfTest => $"{_bandShade.Color.R8},{_bandShade.Color.G8},{_bandShade.Color.B8}|{(_bandShade.Material as CanvasItemMaterial)?.BlendMode}";
     /// <summary>ARC-UI-2022: the text colour of reply row i (the main paragraph's, or the button's font colour without the original's fonts).</summary>
@@ -253,10 +281,17 @@ public partial class AreaConversationPanel : CanvasLayer
         CloseRequested?.Invoke();
     }
 
+    /// <summary>The controller cancel: leaves like <see cref="Leave"/>, except under Original while a reply is awaited (ARC-UI-2023: the original has no such way out).</summary>
+    public void Cancel()
+    {
+        if (LeaveOffered) Leave();
+    }
+
     public void Navigate(int direction)
     {
         _focusLit = true;
-        var enabled = _buttons.Where(button => !button.Disabled).Append(_leave).ToList();
+        var enabled = _buttons.Where(button => !button.Disabled).ToList();
+        if (LeaveOffered) enabled.Add(_leave);
         if (enabled.Count == 0) return;
         var focus = enabled.FindIndex(button => button.HasFocus());
         enabled[Math.Clamp(focus < 0 ? 0 : focus + direction, 0, enabled.Count - 1)].GrabFocus();
@@ -264,7 +299,7 @@ public partial class AreaConversationPanel : CanvasLayer
 
     public void Confirm()
     {
-        var focused = _buttons.Append(_leave).FirstOrDefault(button => button.HasFocus() && !button.Disabled);
+        var focused = _buttons.Append(_leave).FirstOrDefault(button => button.HasFocus() && !button.Disabled && (button != _leave || LeaveOffered));
         if (focused is not null) focused.EmitSignal(BaseButton.SignalName.Pressed);
         else if (_conversation is not { Phase: DialogConversationPhase.AwaitingSelection }) CloseRequested?.Invoke();
     }
@@ -278,7 +313,8 @@ public partial class AreaConversationPanel : CanvasLayer
         _buttons.Clear();
         var conversation = _conversation;
         var header = conversation is null ? _title : $"{_title} | turn {conversation.Turn} | DLG node {conversation.CurrentNode.Value}";
-        Show(_header, _headerArt, header, HeaderColour);
+        var chromeHidden = _chromeHidden && conversation is not null;
+        Show(_header, _headerArt, chromeHidden ? string.Empty : header, HeaderColour, chromeHidden);
         ApplyRowGeometry();
         if (conversation is not null)
         {
@@ -314,27 +350,29 @@ public partial class AreaConversationPanel : CanvasLayer
             }
         }
         var outcome = conversation is null ? string.Empty : AreaConversationText.Outcome(conversation);
-        Show(_outcome, _outcomeArt, string.Join("\n", new[] { message, outcome }.Where(text => !string.IsNullOrEmpty(text))), OutcomeColour);
-        Show(_effects, _effectsArt, conversation is null || conversation.Effects.Count == 0 ? string.Empty
-            : "Effects (diagnostic ledger, newest last):\n" + string.Join("\n", conversation.Effects.TakeLast(MaxShownEffects).Select(AreaConversationText.Effect)), EffectsColour);
+        Show(_outcome, _outcomeArt, chromeHidden ? string.Empty : string.Join("\n", new[] { message, outcome }.Where(text => !string.IsNullOrEmpty(text))), OutcomeColour, chromeHidden);
+        Show(_effects, _effectsArt, chromeHidden || conversation is null || conversation.Effects.Count == 0 ? string.Empty
+            : "Effects (diagnostic ledger, newest last):\n" + string.Join("\n", conversation.Effects.TakeLast(MaxShownEffects).Select(AreaConversationText.Effect)), EffectsColour, chromeHidden);
         var awaiting = conversation is { Phase: DialogConversationPhase.AwaitingSelection };
+        var leaveOffered = LeaveOffered;
         var leave = awaiting ? "Leave without answering (diagnostic)" : "Close";
         _leave.SetMeta(ReplyTextMeta, leave);
+        _leave.Visible = leaveOffered;
         _leave.Text = _fonts is null ? leave : string.Empty;
-        _leaveArt.Visible = _fonts is not null;
+        _leaveArt.Visible = _fonts is not null && leaveOffered;
         _leaveArt.Position = new(ButtonPadX, ButtonPadY);
         _leaveArt.SetText(leave, ReplyColour);
-        Show(_hint, _hintArt, (NumberedReplies ? "Click a reply or press its number (controller: D-pad, confirm, cancel)" : "Click a reply (controller: D-pad, confirm, cancel)") + " | PROJECT diagnostic PC/state profile; original runtime parity NOT_VERIFIED", HintColour);
-        (_buttons.FirstOrDefault(button => !button.Disabled) ?? _leave).GrabFocus();
+        Show(_hint, _hintArt, chromeHidden ? string.Empty : (NumberedReplies ? "Click a reply or press its number (controller: D-pad, confirm, cancel)" : "Click a reply (controller: D-pad, confirm, cancel)") + " | PROJECT diagnostic PC/state profile; original runtime parity NOT_VERIFIED", HintColour, chromeHidden);
+        (_buttons.FirstOrDefault(button => !button.Disabled) ?? (leaveOffered ? _leave : null))?.GrabFocus();
         ResizePanel();
     }
 
     /// <summary>Sets a text in the label (the viewer's font, in the colour as a modulate) or, with the original's fonts, in its paragraph (hidden when empty).</summary>
-    private void Show(Label label, AreaArtParagraph art, string text, (byte R, byte G, byte B) colour)
+    private void Show(Label label, AreaArtParagraph art, string text, (byte R, byte G, byte B) colour, bool hidden = false)
     {
         label.Text = text;
         label.Modulate = new Color(colour.R / 255f, colour.G / 255f, colour.B / 255f);
-        label.Visible = _fonts is null;
+        label.Visible = _fonts is null && !hidden;
         art.Visible = _fonts is not null && text.Length > 0;
         art.SetText(text, colour);
     }
@@ -458,6 +496,8 @@ public partial class AreaConversationPanel : CanvasLayer
     private void ResizePanel()
     {
         if (_panel is null) return;
+        // ARC-UI-2022: under Original with the chrome gone (ARC-UI-2023) the framed panel has nothing to hold (the band carries the replies): it is not drawn.
+        _panel.Visible = !_originalRows || new Control[] { _header, _headerArt, _outcome, _outcomeArt, _effects, _effectsArt, _hint, _hintArt, _leave }.Any(control => control.Visible);
         var size = GetViewport().GetVisibleRect().Size;
         var width = Math.Max(1, Math.Min(960, size.X - 48));
         var content = Math.Max(1, (int)width - 2 * ContentMargin);
@@ -492,6 +532,7 @@ public partial class AreaConversationPanel : CanvasLayer
         if (!IsOpen) return;
         if (NumberedSource is { } source) NumberedReplies = source();
         if (OriginalRowsSource is { } rows) OriginalReplyRows = rows();
+        if (ChromeHiddenSource is { } chrome) DiagnosticChromeHidden = chrome();
         if (_originalRows) LightRows();
         ResizePanel();
     }

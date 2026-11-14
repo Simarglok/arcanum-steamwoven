@@ -51,7 +51,7 @@ FULL_CHAIN: tuple[tuple[str, str, str, str | None], ...] = (
 )
 # The viewer's settings files an automated run may be pointed at (ViewerStoragePaths and the stores that read them).
 SETTINGS = ("ALWAYS_RUN", "AUDIO_VOLUMES", "GAME_SETTINGS", "LAUNCHER_SETTINGS", "VISUAL_PROFILE",
-            "WORLD_DIAGNOSTIC_SETTINGS", "WORLD_DIAGNOSTIC_ZOOM")
+            "RELIT_LOOK", "WORLD_DIAGNOSTIC_SETTINGS", "WORLD_DIAGNOSTIC_ZOOM")
 STAGES_ENV = "ARC_AREA_MAP_SMOKE_ONLY"
 
 
@@ -66,7 +66,7 @@ SAMPLED_STAGES = frozenset({"container-click", "walk"})
 ALL_ENV = "ARC_SMOKE_ALL"
 # The owner's opt-in data, smoke and settings variables never reach a smoke (as in the player package); the queue's stay.
 DROPPED_PREFIXES = ("ARC_", "ARCANUM_", "DAT_ROOT", "LAUNCHER_SETTINGS_", "WORLD_DIAGNOSTIC_", "ALWAYS_RUN_",
-                    "AUDIO_VOLUMES_", "GAME_SETTINGS_", "VISUAL_PROFILE_")
+                    "AUDIO_VOLUMES_", "GAME_SETTINGS_", "VISUAL_PROFILE_", "RELIT_LOOK_")
 KEPT_VARIABLES = frozenset({run_queue.TICKET_ENV, run_queue.KIND_ENV})
 STOPPED = 128  # an exit at or above it is a stopped run (128+N), which ends the chain
 NAME = re.compile(r"^[A-Z][A-Z0-9_]*$")

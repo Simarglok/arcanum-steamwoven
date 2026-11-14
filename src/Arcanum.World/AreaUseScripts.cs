@@ -309,6 +309,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     private readonly List<ScrReadingRequest> _readings = [];
     private readonly List<AreaScriptFloat> _floats = [];
     private readonly List<AreaScriptFade> _fades = [];
+    private int _fadeClears;
     private readonly List<AreaScriptEyeCandy> _eyeCandies = [];
 
     /// <summary>ARC-SCRIPT-1592: the script eye candy (action 120) of the runs applied since the last call, in order, for the viewer to play on its objects (<see cref="AreaEyeCandyHost.PlayScript"/>); the talk host's
@@ -339,6 +340,14 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         var fades = _fades.ToArray();
         _fades.Clear();
         return fades;
+    }
+
+    /// <summary>ARC-UI-2034 (ledger TB16): how many fade actions (103) the runs applied since the last call, whether or not they ask for a movie; each empties the speech bubble table first (see <see cref="AreaScriptHost.TakeFadeClears"/>).</summary>
+    public int TakeFadeClears()
+    {
+        var count = _fadeClears;
+        _fadeClears = 0;
+        return count;
     }
 
     /// <summary>ARC-DEV-298: the float lines (23) of the runs applied since the last call, in order, each with its text, for the viewer to float over its speaker
@@ -1684,7 +1693,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
             if (_content.Dialog(line.Script, _session.Rules.Data) is not { Status: ScriptContentStatus.Read, Document: { } document }) continue;
             var printed = ScrPrintedLine.Read(document, line.Line, false, AreaConversationProfile.Diagnostic.Names);
             if (printed.Status != ScrPrintedLineStatus.Shown) return new(AreaScriptedUseOutcome.EffectsRejected, null, lines, run, $"script {run.Script}: float line {line.Line} of script {line.Script} is not a plain line");
-            floats.Add(new(line.Speaker, printed.Text));
+            floats.Add(new(line.Speaker, printed.Text, line.Pc));
         }
         // ARC-SCRIPT-1764 (NP10): the float newspaper headline requests, read before anything applies.
         floats.AddRange(AreaScriptNewspaper.Floats(_session, effects, _newspaperTexts.Get));
@@ -1758,6 +1767,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
             if (IsPc(request.Viewer)) _readings.Add(request);
         // ARC-SCRIPT-1241 (MV5): each fade's clock jump, then its movie for the viewer; the later steps stop when the clock refuses.
         var asked = new List<AreaScriptFade>();
+        _fadeClears += effects.Fades.Count;
         var fadesApplied = AreaScriptFades.Apply(_session, effects, asked);
         _fades.AddRange(asked.Where(fade => fade.Movie != 0));   // the fades before a refused jump keep their movie, as their clock jumps stay
         if (effects.Slides.Any(request => request.Kind == ScrSlideKind.EndGame)) _endGame = true;
