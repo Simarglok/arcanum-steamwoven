@@ -49,7 +49,7 @@ public sealed class AreaScriptAttackAdmissionTests
         // 79 installed scripts carry the action (111 clauses, the census of ScrAttackActionCensusRealDataTests); its sets admit whole: S33 31 (the thrown item's 29017 among them), the use click 2, tile and sector scripts 38, heartbeats 11 (ARC-SCRIPT-1772: the critter getters, toggle invulnerability and rename moved placed 37 to 38, heartbeat 10 to 11 and dying 53 to 55),
         // dying scripts 55 (the union of the placed and heartbeat sets), the talk sets 11 (the others hold a command of another slice; ARC-SCRIPT-1168: the cast actions moved the talk sets from 10 to 11, the placed and dying counts
         // had moved with the sets of ARC-SCRIPT-1733 and later).
-        // ARC-SCRIPT-1815: the heartbeat set gained the scenery and object-variable focus kinds, assign object and float line (heartbeats 32, from 11; the placed and dying counts are those of the shared sets).
-        Assert.AreEqual((79, 31, 2, 38, 32, 55, 11, 11), (carriers.Count, counts["S33"], counts["use"], counts["placed"], counts["heartbeat"], counts["dying"], counts["talk"], counts["skill talk"]));
+        // ARC-SCRIPT-1815: the heartbeat set gained the scenery and object-variable focus kinds, assign object and float line (heartbeats 32, from 11; the placed and dying counts are those of the shared sets). ARC-SCRIPT-1842's make follow moved the dying count from 55 to 58.
+        Assert.AreEqual((79, 31, 2, 38, 32, 58, 11, 11), (carriers.Count, counts["S33"], counts["use"], counts["placed"], counts["heartbeat"], counts["dying"], counts["talk"], counts["skill talk"]));
     }
 }

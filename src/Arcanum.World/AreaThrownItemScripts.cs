@@ -38,7 +38,7 @@ public sealed record AreaThrownItemRun(AreaThrownItemOutcome Outcome, int Point,
 /// <para>The set is <see cref="Admission"/> (<see cref="ScrAdmissionSet.S1"/> and the three actions, the single-object focus kinds and the vicinity kinds): a script outside it is refused whole. The host applies only what the run's object
 /// requests ask for (<see cref="ScrObjectStateChange.Transform"/>, <see cref="ScrObjectStateChange.MakeFollow"/>, <see cref="ScrObjectStateChange.Attack"/>) and refuses a run that wrote anything else (a global flag, the story state), so nothing
 /// half-applies before the first request is applied (what can still fail after it: the session refuses the transform or the follow, for example when its party records are full; the run then stops with <see cref="AreaThrownItemOutcome.Stopped"/> and what was applied stays). The attachment's own local flags and counters are not written back (the six installed scripts change none, and a transformed item is gone). The run applies in action order and reads the attachee as the critter once a
-/// transform made one (the original makes the new object the run's attachee); a follow or an attack before a transform, a follow of anyone but the PC, and an attacker that is not the attachee are not modelled and refuse the run.</para>
+/// transform made one (the original makes the new object the run's attachee); a follow or an attack before a transform, a follow of anyone but the PC or a critter near the landing tile (ARC-SCRIPT-1842), and an attacker that is not the attachee are not modelled and refuse the run.</para>
 /// <para>Limits of the first slice: the old art's rotation and the hit-point share are not carried (<see cref="GameSessionOwner.TransformPlacedItem"/>); only a critter prototype is made (the original makes any basic prototype); only
 /// the hero's throw lands here; the created critter's own scripts (points 9, 19 and 26) are not run; a follower made this way has no companion body: it is in the party (led by the PC) but the AI host does not walk it after the hero. Caller-serialized; no Godot.</para>
 /// </summary>
@@ -102,10 +102,10 @@ public sealed class AreaThrownItemScripts
         if (effects.GlobalFlags.Count > 0 || effects.StoryState is not null || effects.DestroyTrapObject is not null)
             return new(AreaThrownItemOutcome.Refused, point, item, run, $"script {run.Script} wrote global state, which a thrown item's run does not keep");
         if (effects.ObjectStates.Count == 0) return new(AreaThrownItemOutcome.Applied, point, item, run, $"script {run.Script} {run.Outcome}: no request");
-        return Apply(point, item, itemRef, run);
+        return Apply(point, item, itemRef, run, tile);
     }
 
-    private AreaThrownItemRun Apply(int point, string item, ScrObjectRef itemRef, ScrRunResult run)
+    private AreaThrownItemRun Apply(int point, string item, ScrObjectRef itemRef, ScrRunResult run, CellCoord tile)
     {
         AreaThrownItemRun Refused(string why) => new(AreaThrownItemOutcome.Refused, point, item, run, $"script {run.Script}: {why}");
         var requests = run.Effects.ObjectStates;
@@ -122,7 +122,10 @@ public sealed class AreaThrownItemScripts
                     break;
                 case ScrObjectStateChange.MakeFollow:
                     if (!transformed || request.Object != itemRef) return Refused("a follow of anything but the transformed attachee is not modelled");
-                    if (request.Other is not { Code: AreaScriptHost.PcCode }) return Refused("a follow of anyone but the PC is not modelled");
+                    // ARC-SCRIPT-1842 (#1322): the leader is the PC or a critter the world names around the landing tile (the original's join 0x45DE90 does not test the leader; an object that is no critter would be a leader no host
+                    // describes, as in the use host's make follow).
+                    if (request.Other is not { } leader || leader.Code != AreaScriptHost.PcCode && (leader.Map != _shownMap || _world.CrittersNear?.Invoke(tile, ScrWorld.VicinityReach).Contains(leader.Code) != true))
+                        return Refused("a follow of anyone but the PC or a critter near the landing tile is not modelled");
                     break;
                 case ScrObjectStateChange.Attack:
                     if (!transformed || request.Other != itemRef) return Refused("an attack by anything but the transformed attachee is not modelled");
@@ -147,7 +150,7 @@ public sealed class AreaThrownItemScripts
                 }
                 case ScrObjectStateChange.MakeFollow:
                 {
-                    var joined = _session.ForceJoinParty(_session.Version, made!);
+                    var joined = _session.ForceJoinLeader(_session.Version, made!, request.Other!.Value.Code);
                     if (joined.Disposition == GameSessionDisposition.Rejected)
                         return new(AreaThrownItemOutcome.Stopped, point, item, run, $"script {run.Script}: the follow was refused ({joined.Failure})") { Critter = made, Attacks = attacks };
                     followed = true;
@@ -179,7 +182,13 @@ public sealed class AreaThrownItemScripts
         public bool IsTrapObject(ScrObjectRef attachee) => false;
         public ScrObjectRef? Player() => new ScrObjectRef(owner._shownMap, AreaScriptHost.PcCode);
         public bool IsPc(ScrObjectRef critter) => critter.Code == AreaScriptHost.PcCode;
-        public ScrObjectRef? Leader(ScrObjectRef critter) => !IsPc(critter) && owner._session.QueryCompanion(critter.Code).LedByPc ? Player() : null;
+        // ARC-SCRIPT-1842 (0x45DE00): the session's leader, the PC or an NPC leader named on the critter's map.
+        public ScrObjectRef? Leader(ScrObjectRef critter) => IsPc(critter) ? null : owner._session.QueryLeader(critter.Code) switch
+        {
+            null => null,
+            AreaScriptHost.PcCode => Player(),
+            var leader => new ScrObjectRef(critter.Map, leader),
+        };
         public bool IsJilted(ScrObjectRef critter) => !IsPc(critter) && owner._session.QueryCompanion(critter.Code).Jilted;
 
         public IReadOnlyList<ScrObjectRef> SceneryInVicinity(ScrObjectRef centre) => [];
