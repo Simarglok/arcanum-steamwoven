@@ -33,6 +33,9 @@ public partial class TerrainViewerApp
         {
             _readingArt = task.IsCompletedSuccessfully ? task.Result : AreaReadingArtContent.Empty("load threw " + (task.Exception?.GetBaseException().GetType().Name ?? "cancelled"));
             GD.Print($"ARC-UI-1877 reading window art ready={_readingArt.Ready} {_readingArt.Detail}");
+            // ARC-UI-1201: the arts' files and sizes (the Generated recipes are keyed by file name and laid out in the frames' own pixels).
+            GD.Print("ARC-UI-1201 reading art files " + string.Join(", ", _readingArt.Art.Values.Select(load =>
+                $"{load.Number}={load.Name} {load.Frames.Count}x({(load.Frames.Count > 0 ? load.Frames[0].Width + "x" + load.Frames[0].Height : "-")})")));
         }
         return _readingArt;
     }

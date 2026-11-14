@@ -1370,6 +1370,113 @@ public sealed class InterfaceChromeTests
         Assert.IsTrue(Lum(Pixel(menu, width, 60 * Scale, (attackY + attackH / 2) * Scale)) < Lum(Pixel(menu, width, 60 * Scale, (walkY + walkH / 2) * Scale)), "the odd rows sit in a dark band");
     }
 
+    // ARC-UI-1201: the reading window. The file names are those the original's interface.mes gives the arts 494, 477, 489, 487, 491, 633, 817, 495 and 496 (read from the game at run time).
+    private static readonly string[] ReadingBackgrounds = ["BookBackground.ART", "NoteBackground.ART", "NewsBackground.ART", "TeleBackground.ART", "Stone_Plaque.ART", "vendnewsback.ART"];
+    private const int ReadingBackgroundWidth = 668, ReadingBackgroundHeight = 400, ReadingSideWidth = 132, ReadingSideHeight = 400, ReadingArrowWidth = 18, ReadingArrowHeight = 22;
+
+    private static int Luma((int R, int G, int B, int A) pixel) => pixel.R + pixel.G + pixel.B;
+
+    [TestMethod]
+    public void The_reading_window_frames_have_recipes_laid_out_by_the_window_layout_and_the_lens_is_the_barter_windows()
+    {
+        var names = InterfaceChromeRecipes.All.Select(r => r.File).ToArray();
+        CollectionAssert.AllItemsAreUnique(names);
+        CollectionAssert.IsSubsetOf(ReadingBackgrounds.Concat(["WritenSideBar.ART", "WrtnBookLArro.ART", "WrtnBookRArro.ART"]).ToArray(), names);
+        Assert.AreEqual(AreaReadingArtLayout.BackgroundArts.Count, ReadingBackgrounds.Length, "one recipe per background art of the window");
+        Assert.AreEqual(ChromeHoles.None, Recipe("WritenSideBar.ART").Holes, "the side bar's lens is the live view");
+        Assert.AreEqual(0, Recipe("WritenSideBar.ART").OriginX);
+        foreach (var file in ReadingBackgrounds)
+        {
+            var recipe = Recipe(file);
+            Assert.AreEqual(ChromeKind.Panel, recipe.Kind, file);
+            Assert.AreEqual(ChromeMaterial.Wood, recipe.Base, $"{file}: the table");
+            Assert.AreEqual((AreaReadingArtLayout.BackgroundCorner.X, AreaReadingArtLayout.BackgroundCorner.Y), (recipe.OriginX, recipe.OriginY), $"{file} lies where the redraw puts the backgrounds, so the wood continues the side bar's");
+        }
+        Assert.AreEqual(AreaReadingArtLayout.PreviousCorner.X - AreaReadingArtLayout.BackgroundCorner.X, Recipe("WrtnBookLArro.ART").OriginX);
+        Assert.AreEqual(AreaReadingArtLayout.PreviousCorner.Y - AreaReadingArtLayout.BackgroundCorner.Y, Recipe("WrtnBookLArro.ART").OriginY);
+        Assert.AreEqual(AreaReadingArtLayout.NextCorner.X - AreaReadingArtLayout.BackgroundCorner.X, Recipe("WrtnBookRArro.ART").OriginX);
+        CollectionAssert.Contains(names, "lns_bart.art", "the lens 231 is the barter window's recipe");
+        // The names resolve through the HD key as the viewer asks for them (case does not matter); the text fonts are pictures and have no recipe.
+        Assert.IsNotNull(InterfaceChromeRecipes.For(HdInterfaceKey.Query(HdInterfaceKey.Identity("BOOKBACKGROUND.ART", new byte[] { 1 }), 0, 1, 1, new byte[4])));
+        Assert.IsNull(InterfaceChromeRecipes.For(HdInterfaceKey.Query(HdInterfaceKey.Identity("Flare12Font.ART", new byte[] { 1 }), 0, 1, 1, new byte[4])));
+    }
+
+    [TestMethod]
+    public void Every_part_of_a_reading_recipe_lies_inside_its_frame_and_the_window_keeps_no_picture()
+    {
+        foreach (var file in ReadingBackgrounds)
+        {
+            Assert.IsFalse(Recipe(file).Parts.Any(part => part is ChromeKeep), $"{file}: no kept picture");
+            foreach (var plate in Recipe(file).Parts.OfType<ChromePlate>())
+                Assert.IsTrue(plate.X >= 0 && plate.Y >= 0 && plate.X + plate.Width <= ReadingBackgroundWidth && plate.Y + plate.Height <= ReadingBackgroundHeight, $"{file}: {plate} lies inside 668 x 400");
+        }
+        // The book's two pages meet at the fold and the clasps stand on it; the newspaper's three column rules fall between the layout's four columns.
+        var book = Recipe("BookBackground.ART").Parts.OfType<ChromePlate>().ToArray();
+        Assert.AreEqual(book.Single(p => p.X == 77).X + book.Single(p => p.X == 77).Width, book.Single(p => p.X == 320).X, "the pages meet at the fold");
+        var rules = Recipe("NewsBackground.ART").Parts.OfType<ChromePlate>().Where(p => p.Width == 1 && p.Height > 100).Select(p => p.X + AreaReadingArtLayout.BackgroundCorner.X).ToArray();
+        Assert.AreEqual(AreaReadingArtLayout.Columns.Count - 1, rules.Length);
+        for (var i = 0; i < rules.Length; i++)
+            Assert.IsTrue(rules[i] > AreaReadingArtLayout.Columns[i].X + AreaReadingArtLayout.Columns[i].Width - 12 && rules[i] < AreaReadingArtLayout.Columns[i + 1].X, $"rule {i} lies between column {i} and {i + 1}");
+        Assert.AreEqual(rules.Length, Recipe("vendnewsback.ART").Parts.OfType<ChromePlate>().Count(p => p.Width == 1 && p.Height > 100), "the alternate newspaper is ruled the same way");
+        // No column rule runs through the headline's rectangle or the plaque's text lies inside its inner panel.
+        var headline = AreaReadingArtLayout.Headline;
+        foreach (var file in new[] { "NewsBackground.ART", "vendnewsback.ART" })
+            foreach (var rule in Recipe(file).Parts.OfType<ChromePlate>().Where(p => p.Width == 1 && p.Height > 100))
+            {
+                var x = rule.X + AreaReadingArtLayout.BackgroundCorner.X;
+                Assert.IsFalse(x >= headline.X && x < headline.X + headline.Width && rule.Y < headline.Y + headline.Height && rule.Y + rule.Height > headline.Y, $"{file}: the rule at {x} runs through the headline");
+            }
+        var inner = Recipe("Stone_Plaque.ART").Parts.OfType<ChromePlate>().Last();
+        var text = AreaReadingArtLayout.PlaqueText;
+        Assert.IsTrue(text.X - AreaReadingArtLayout.BackgroundCorner.X >= inner.X && text.X - AreaReadingArtLayout.BackgroundCorner.X + text.Width <= inner.X + inner.Width
+            && text.Y >= inner.Y && text.Y + text.Height <= inner.Y + inner.Height, "the plaque's text rectangle lies inside its inner panel");
+    }
+
+    [TestMethod]
+    public void The_reading_frames_paint_in_bounds_deterministically_opaque_at_whole_and_fractional_scales()
+    {
+        var frames = ReadingBackgrounds.Select(file => (file, ReadingBackgroundWidth, ReadingBackgroundHeight))
+            .Concat([("WritenSideBar.ART", ReadingSideWidth, ReadingSideHeight), ("WrtnBookLArro.ART", ReadingArrowWidth, ReadingArrowHeight), ("WrtnBookRArro.ART", ReadingArrowWidth, ReadingArrowHeight)]);
+        foreach (var (file, w, h) in frames)
+        {
+            var legacy = Flat(w, h, (150, 120, 90));
+            var recipe = Recipe(file);
+            foreach (var scale in new[] { 1.0, 1.345, 2.0 })
+            {
+                var a = InterfaceChromeRenderer.Render(recipe, w, h, legacy, [], 0, scale);
+                var (pw, ph) = InterfaceChromeRenderer.PixelSize(w, h, scale);
+                Assert.AreEqual(pw * ph * 4, a.Length, $"{file} at {scale}");
+                CollectionAssert.AreEqual(a, InterfaceChromeRenderer.Render(recipe, w, h, legacy, [], 0, scale), $"{file} deterministic at {scale}");
+                for (var i = 3; i < a.Length; i += 4) Assert.AreEqual(255, a[i], $"{file} is opaque like its Legacy frame at {scale}");
+            }
+        }
+    }
+
+    [TestMethod]
+    public void The_reading_tables_hold_their_objects_the_pages_are_paper_the_rules_are_ink_and_the_plaque_is_stone()
+    {
+        foreach (var scale in new[] { 1.0, 2.0 })
+        {
+            (byte[] Pixels, int Width) Paint(string file)
+            {
+                var a = InterfaceChromeRenderer.Render(Recipe(file), ReadingBackgroundWidth, ReadingBackgroundHeight, Flat(ReadingBackgroundWidth, ReadingBackgroundHeight, (150, 120, 90)), [], 0, scale);
+                return (a, InterfaceChromeRenderer.PixelSize(ReadingBackgroundWidth, ReadingBackgroundHeight, scale).Item1);
+            }
+            int At((byte[] Pixels, int Width) paint, int x, int y) => Luma(Pixel(paint.Pixels, paint.Width, (int)(x * scale), (int)(y * scale)));
+            var note = Paint("NoteBackground.ART");
+            Assert.IsTrue(At(note, 320, 200) > At(note, 20, 200) + 60, $"the note's sheet is lighter than the table at {scale}");
+            var plaque = Paint("Stone_Plaque.ART");
+            Assert.IsTrue(At(plaque, 340, 200) < At(note, 320, 200) - 100, $"the plaque's stone is darker than a sheet of paper at {scale}");
+            Assert.IsTrue(At(plaque, 340, 200) > 0, "the stone is not black");
+            var book = Paint("BookBackground.ART");
+            Assert.IsTrue(At(book, 200, 200) > At(book, 45, 200) + 60, $"a page is lighter than the cover at {scale}");
+            var paper = Paint("NewsBackground.ART");
+            Assert.IsTrue(At(paper, 189, 250) < At(paper, 194, 250) - 80, $"a column rule is ink on the paper at {scale}");
+            Assert.IsTrue(At(paper, 300, 83) < At(paper, 300, 70) - 80, $"the masthead's rule is ink on the paper at {scale}");
+            var telegram = Paint("TeleBackground.ART");
+            Assert.IsTrue(At(telegram, 186, 60) < At(telegram, 195, 60) - 80, $"the form box's edge is ink on the paper at {scale}");
+        }
+    }
 
     // ARC-UI-1818: the quantity pane (298 `MultiMove_Base`, 416 x 112) and its five buttons (299 `Sm_RightArrow` 23 x 23, 805 `OldChar_Plus` and 804 `OldChar_Minus` 13 x 10, 33 `Done_Big` and 32 `Cncl_Big` 38 x 37; the 13 x 10 pair stay pictures);
     // synthetic stand-ins, no game art. The places are the pane's (`QuantityPaneRules`, screen coordinates less the background's (196, 492)).

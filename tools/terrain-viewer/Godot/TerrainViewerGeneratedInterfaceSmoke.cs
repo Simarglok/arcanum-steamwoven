@@ -146,8 +146,9 @@ public partial class TerrainViewerApp
         double Device() => deviceScale();
         async Task Painted(string at)
         {
-            // Each draw asks for the frame at the window's current scale; wait for the worker and the swap (at most ~20 s).
-            for (var wait = 0; wait < 1200 && (textures.Any(texture => !texture.IsGenerated || texture.GeneratedPixelSize != Wanted(texture)) || InterfaceHd.GeneratedPending > 0); wait++) await frames(1);
+            // Each draw asks for the frame at the window's current scale; wait for the worker and the swap, at most 60 s (a frame took 6 s on a loaded Mac, longer than the 1200 frames this loop once counted).
+            var clock = System.Diagnostics.Stopwatch.StartNew();
+            while (clock.Elapsed.TotalSeconds < 60 && (textures.Any(texture => !texture.IsGenerated || texture.GeneratedPixelSize != Wanted(texture)) || InterfaceHd.GeneratedPending > 0)) await frames(1);
             await frames(2);
             foreach (var (texture, number) in textures.Zip(arts))
                 Require(texture.IsGenerated && texture.GeneratedPixelSize == Wanted(texture), $"{at}: frame {number} is generated at {Wanted(texture)} (got {texture.GeneratedPixelSize}, device scale {Device():F3})");

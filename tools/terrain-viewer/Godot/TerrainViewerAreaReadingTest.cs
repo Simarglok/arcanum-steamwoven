@@ -287,6 +287,7 @@ public partial class TerrainViewerApp
             Require(session.Version.Revision == revision, "the live session is untouched");
             // ARC-UI-1877: the opt-in captures open and close their own windows, so they run after the checks above.
             await ReadingLookCaptureAsync(session, data, readable.Select(p => p.Value).ToArray());
+            await ReadingWindowArtSmokeAsync(session, data, readable.Select(p => p.Value).ToArray());
             GD.Print("ARC-UI-049 native-smoke reading PASS " + System.Text.Json.JsonSerializer.Serialize(new {
                 Data = _readingData.Detail, Readable = readable.Length, Views = views, WithUseScript = scripted, Item = chosen.Key, Subtype = view!.Subtype.ToString(),
                 Spreads = view.Spreads, ArtSpreads = artSpreads, Look = _readingPanel!.ArtMode ? "original" : "diagnostic", Composed = composition.Composed, Lines = composition.Lines, Pages = composition.Pages,
@@ -350,16 +351,9 @@ public partial class TerrainViewerApp
             GD.Print($"ARC-UI-1877 reading capture {name} {image.GetWidth()}x{image.GetHeight()}");
         }
         if (ReadingOpen) CloseReadingByPlayer();
-        var kinds = new[] { WrittenSubtype.Book, WrittenSubtype.Note, WrittenSubtype.Newspaper, WrittenSubtype.Telegram, WrittenSubtype.Plaque };
-        foreach (var kind in kinds)
+        foreach (var kind in ReadingKinds)
         {
-            // A prototype with text first; the plaque has none (a script opens it): the first message number that reads.
-            var fact = facts.Where(candidate => candidate.Subtype == (int)kind)
-                .FirstOrDefault(candidate => session.QueryWrittenDocument(candidate, data.Texts) is { Readable: true, Body.Count: > 0 });
-            if (fact.Subtype != (int)kind)
-                for (var number = 0; number < 4000 && fact.Subtype != (int)kind; number++)
-                    if (kind == WrittenSubtype.Plaque && session.QueryWrittenDocument(new((int)kind, number), data.Texts) is { Readable: true, Body.Count: > 0 }) fact = new((int)kind, number);
-            if (fact.Subtype != (int)kind) { GD.Print($"ARC-UI-1877 reading capture {kind}: no document"); continue; }
+            if (ReadingFactFor(session, data, facts, kind) is not { } fact) { GD.Print($"ARC-UI-1877 reading capture {kind}: no document"); continue; }
             if (kind == WrittenSubtype.Newspaper
                 && AreaReading.View(session.QueryWrittenDocument(fact, data.Texts), data.Texts, 0, AreaHoverIndex.TextProfile, session.Rules.Written) is { Art: { } paper })
             {
@@ -380,5 +374,46 @@ public partial class TerrainViewerApp
         }
         if (ReadingOpen) CloseReadingByPlayer();
         _readingPanel!.DiagnosticLook = false;
+    }
+
+    private static readonly WrittenSubtype[] ReadingKinds = [WrittenSubtype.Book, WrittenSubtype.Note, WrittenSubtype.Newspaper, WrittenSubtype.Telegram, WrittenSubtype.Plaque];
+
+    /// <summary>ARC-UI-1877: a prototype's document of this kind that has text first; the plaque has none (a script opens it), so the first message number that reads; null when there is none.</summary>
+    private static Arcanum.Session.SessionWrittenFacts? ReadingFactFor(Arcanum.Session.GameSessionOwner session, AreaReadingData data, IReadOnlyList<Arcanum.Session.SessionWrittenFacts> facts, WrittenSubtype kind)
+    {
+        var found = facts.Where(candidate => candidate.Subtype == (int)kind && session.QueryWrittenDocument(candidate, data.Texts) is { Readable: true, Body.Count: > 0 })
+            .Cast<Arcanum.Session.SessionWrittenFacts?>().FirstOrDefault();
+        if (found is null && kind == WrittenSubtype.Plaque)
+            for (var number = 0; number < 4000 && found is null; number++)
+                if (session.QueryWrittenDocument(new((int)kind, number), data.Texts) is { Readable: true, Body.Count: > 0 }) found = new((int)kind, number);
+        return found;
+    }
+
+    // ARC-UI-1201: the reading window's drawn frames in the generated interface (ARC_AREA_WINDOW_ART=legacy|hd|generated, with ARC_HD_PACK for the last two), once for every kind of document: the side
+    // bar (494), the lens (231), the kind's background (477, 489, 487, 491 or 633; 817 for the alternate newspaper) and a book's shown page button (495, 496). In `generated` every one is generated chrome at
+    // round(size x paint scale) pixels of the window's own device scale, again after a bigger window (1600 x 1200) and back; in `hd` and `legacy` none is. The text, the picture arts and the fonts stay
+    // pictures. ARC_AREA_WINDOW_CAPTURE=PREFIX saves the viewport as PREFIX-reading-KIND-MODE[-big|-back].png (local, never in git).
+    private async Task ReadingWindowArtSmokeAsync(Arcanum.Session.GameSessionOwner session, AreaReadingData data, IReadOnlyList<Arcanum.Session.SessionWrittenFacts> facts)
+    {
+        if (!WindowArtSmokeRequested) return;
+        if (_readingArtLook is not { } look) throw new InvalidOperationException("ARC-UI-1201 reading window art smoke: the window's art is not read");
+        foreach (var kind in ReadingKinds)
+        {
+            if (ReadingFactFor(session, data, facts, kind) is not { } fact) { GD.Print($"ARC-UI-1201 reading window art smoke {kind}: no document"); continue; }
+            if (ReadingOpen) CloseReadingByPlayer();
+            var document = session.QueryWrittenDocument(fact, data.Texts);
+            OpenReading(document, "window-art", replaceWindows: true);
+            var panel = _readingPanel!;
+            var shown = panel.ArtViewForSelfTest;
+            var arts = new List<int> { AreaReadingArtLayout.FrameArt, AreaReadingArtLayout.LensArt, document.BackgroundArt };
+            if (kind == WrittenSubtype.Book && shown.HasNext) arts.Add(AreaReadingArtLayout.NextArt);
+            if (kind == WrittenSubtype.Book && shown.SpreadIndex > 0) arts.Add(AreaReadingArtLayout.PreviousArt);
+            if (!panel.ArtMode || !shown.Visible) throw new InvalidOperationException($"ARC-UI-1201 reading window art smoke {kind}: the window is not in the original's look");
+            if (arts.Any(art => !look.Frames.ContainsKey(art))) throw new InvalidOperationException($"ARC-UI-1201 reading window art smoke {kind}: arts {string.Join(",", arts.Where(art => !look.Frames.ContainsKey(art)))} were not read");
+            await WindowArtSmokeAsync("reading-" + kind.ToString().ToLowerInvariant(), () => arts.Select(art => look.Frames[art][0] as HdInterfaceTexture
+                ?? throw new InvalidOperationException($"ARC-UI-1201 reading window art smoke: art {art} is no interface texture")).ToArray(),
+                arts, shown.DeviceScale, () => panel.ArtMode && shown.Visible, new Vector2I(1600, 1200));
+        }
+        if (ReadingOpen) CloseReadingByPlayer();
     }
 }

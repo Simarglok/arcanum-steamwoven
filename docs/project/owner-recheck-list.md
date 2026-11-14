@@ -1302,7 +1302,7 @@ Known differences (documented, not bugs):
 
 The rules are in [reading window runtime](../world/reading-window-runtime.md#viewer-area-area-exterior-cave-and---area-map) and the ledger rows [WR17–WR23](../research/ledger/ui-audio.md#reading-window-arc-ui-049).
 Open a written item from the inventory with the **Read** button (or the right button on it), and a plaque or picture through a script that shows one. Compare with the original game on the
-same text. The look is the original's whether the HD interface is on or off; the Generated mode follows in issue #1201.
+same text. The look is the original's whether the HD interface is on or off; the Generated mode is [ARC-UI-1201](#arc-ui-1201--generated-interface-the-reading-windows-s14-2026-11-14).
 
 | # | Step | Expected (from the original executable) | Status |
 | --- | --- | --- | --- |
@@ -1372,9 +1372,44 @@ Known differences (documented, not bugs):
 - The iron is plainer and bluer than the original's marbling; the portrait frame's border is thinner; the menu's bands are darker and flat.
 - The pressed frames of the scroll arrows are not drawn by the panel (as before).
 
-## ARC-UI-1818 — Generated interface: the quantity pane (S13, 2026-11-14)
+## ARC-UI-1820 — Generated interface: the item identify and repair windows (S13, 2026-11-14)
 
-The rules are in [viewer slice S13](../rendering/hd-interface-density.md#viewer-slice-s13-arc-ui-1818). Set the HD interface line on the launcher screen to **Generated (experimental)**, start a game with gold or ammunition in the pack, and drag
+The rules are in [viewer slice S13](../rendering/hd-interface-density.md#viewer-slice-s13-arc-ui-1820). Set the HD interface line on the launcher screen to **Generated (experimental)**,
+start a game and talk to an NPC who identifies or repairs items (a dialog with the `ii` or `ri` reply). Compare with **HD** and **Legacy**.
+
+| # | Step | Expected | Status |
+| --- | --- | --- | --- |
+| 1 | Choose the identify or repair reply in a 1280 × 800 window. | The paper doll's frame (name plate, the doll grid, the two curved pits) and the pack's frame (grid pit with its cell lines, the count bars) are drawn by code in the same places as in the inventory; the round view's ring too; the NPC's picture sits at the left of the black name plate and its quote text in it. | open |
+| 2 | Click an item of yours. | The item's cells are filled dark red, the NPC says the quote in the name plate; a long quote may run below the plate onto the wood, as in the original. | open |
+| 3 | Look at the small round button right of the arrangement icons (the arrange button) here and in the inventory, a chest and the barter window. | A dark ball in a brass ring in all four; clicking it still arranges your items (outside the service windows too). | open |
+| 4 | Make the window bigger and smaller while the window is open. | The frames redraw at the new size (the previous picture stays until it is ready); lines stay one unit wide. | open |
+
+Known differences (documented, not bugs):
+
+- The curved flourishes at the corners of the original's boxes are not drawn; the name plate is a plain rectangle with a brass rim.
+- The arrange button's ring is the project's brass ring around the original's dark ball.
+
+## ARC-UI-1201 — Generated interface: the reading windows (S14, 2026-11-14)
+
+The plan is [hd-interface-density](../rendering/hd-interface-density.md#viewer-slice-s14-arc-ui-1201). Turn on the HD interface and the generated one in the game settings, open a written item (a book, a note, a newspaper, a telegram; a plaque or picture through a script).
+Compare with **HD** (generated off) and **Legacy**.
+
+| # | Step | Expected | Status |
+| --- | --- | --- | --- |
+| 1 | Read a book in a 1280 × 800 window. | The table is wood with the side bar's grain continuing under the book; the book is a cloth cover with two parchment pages, the page-edge stacks and the clasps at the fold; the text is as before. | open |
+| 2 | Turn the pages with the next and previous buttons. | The buttons are the parchment under them with the original's arrow (no box of another colour); the pages turn as before. | open |
+| 3 | Read a note, a telegram and a newspaper (an Extra edition if you have one). | A parchment sheet on the table; the telegram has its two form boxes and the double rule under the title, the newspaper the EXTRA boxes, the rules under the masthead and between the four columns; the text sits inside them as in the original. | open |
+| 4 | Read a plaque (through a script that shows one). | A dark slate slab with a second panel inside it; the white text sits on it. | open |
+| 5 | Make the window bigger and smaller while one is open. | The frames redraw at the new size; the rules stay one unit wide. | open |
+
+Known differences (documented, not bugs):
+
+- The sheets are plain where the original's are crumpled with ragged edges and stains; the masthead's griffins and flourishes, the book's binding detail and the plaque's carved border and cracks are not drawn.
+- The ring of the round view (art 231) is the barter window's recipe.
+
+## ARC-UI-1818 — Generated interface: the quantity pane (S15, 2026-11-14)
+
+The rules are in [viewer slice S15](../rendering/hd-interface-density.md#viewer-slice-s15-arc-ui-1818). Set the HD interface line on the launcher screen to **Generated (experimental)**, start a game with gold or ammunition in the pack, and drag
 the stack onto another window or the ground so the pane asks how many. Compare with **HD** and **Legacy**.
 
 | # | Step | Expected | Status |

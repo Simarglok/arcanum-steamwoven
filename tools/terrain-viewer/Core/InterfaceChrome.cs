@@ -106,6 +106,9 @@ public sealed record ChromeRecipe(string File, ChromeKind Kind, ChromeMaterial B
 /// pixels of each frame (layout facts of the original windows, as in the ledgers); everything drawn is ours.</summary>
 public static class InterfaceChromeRecipes
 {
+    /// <summary>ARC-UI-1820: the name of the arrange button's art (340, `tiny_butt`).</summary>
+    public const string ArrangeButtonFile = "tiny_butt.art";
+
     /// <summary>ARC-UI-1784: the file names of the sixteen college tab arts of the sheet's spells page (<c>interface.mes</c> numbers 11, 44, 38, 92, 50, 86, 56, 98, 62, 68, 74, 104, 110, 80, 116, 122,
     /// the order of <see cref="AreaCharacterSheetSpellsLayout.CollegeArt"/>).</summary>
     public static readonly IReadOnlyList<string> CollegeTabFiles =
@@ -140,6 +143,45 @@ public static class InterfaceChromeRecipes
             OriginX: AreaLogbookArtLayout.PreviousCorner.X - AreaLogbookArtLayout.BookCorner.X, OriginY: AreaLogbookArtLayout.PreviousCorner.Y - AreaLogbookArtLayout.BookCorner.Y);
         yield return new ChromeRecipe("pageturn_r.art", ChromeKind.Panel, ChromeMaterial.Parchment, ChromeSides.None, [new ChromeGlyph(0, 0, 18, 22)], Holes: ChromeHoles.None,
             OriginX: AreaLogbookArtLayout.NextCorner.X - AreaLogbookArtLayout.BookCorner.X, OriginY: AreaLogbookArtLayout.NextCorner.Y - AreaLogbookArtLayout.BookCorner.Y);
+    }
+
+    /// <summary>ARC-UI-1201: the reading window's frames (the layout of <see cref="AreaReadingArtLayout"/>; the backgrounds are 668 x 400 and lie at (132, 0) of the window, so their materials
+    /// are sampled at that origin and the wood continues the side bar's). The side bar (494, 132 x 400) is plain wood: the lens art 231 is the barter window's recipe. Every background is the table
+    /// with what lies on it: the book (477) is a cloth cover, the stacks of page edges, the two parchment pages and the clasps of the fold (the logbook's book); the note (489) and the telegram (491) are a sheet of
+    /// parchment, the telegram with the two boxes of its form and a double rule under its title; the newspaper (487, and the alternate prototype's 817) is a sheet with the boxes of its two EXTRA marks, the double rule
+    /// under the masthead and the rules between its four columns (the first starts under the headline's rectangle, where the first two columns begin); the plaque (633) is a slate slab with an inner panel. A page button (495, 496) is the page under it and the Legacy arrow. The griffins, the
+    /// ragged paper edges, stains and the plaque's carved border are pictures the generated interface does not draw.</summary>
+    private static IEnumerable<ChromeRecipe> ReadingRecipes()
+    {
+        var (ox, oy) = AreaReadingArtLayout.BackgroundCorner;
+        yield return new ChromeRecipe("WritenSideBar.ART", ChromeKind.Panel, ChromeMaterial.Wood, ChromeSides.None, [], Holes: ChromeHoles.None);
+        ChromeRecipe Table(string file, params ChromePart[] parts) => new(file, ChromeKind.Panel, ChromeMaterial.Wood, ChromeSides.None, parts, Holes: ChromeHoles.None, OriginX: ox, OriginY: oy);
+        static IEnumerable<ChromePart> Outline(int x, int y, int width, int height) =>
+        [
+            new ChromePlate(x, y, width, 1, ChromeMaterial.Dark, Bevel: false), new ChromePlate(x, y + height - 1, width, 1, ChromeMaterial.Dark, Bevel: false),
+            new ChromePlate(x, y, 1, height, ChromeMaterial.Dark, Bevel: false), new ChromePlate(x + width - 1, y, 1, height, ChromeMaterial.Dark, Bevel: false),
+        ];
+        yield return Table("BookBackground.ART",
+            new ChromePlate(40, 23, 556, 352, ChromeMaterial.Cloth),
+            new ChromePlate(50, 30, 27, 337, ChromeMaterial.PageEdge, Bevel: false),
+            new ChromePlate(564, 30, 29, 337, ChromeMaterial.PageEdge, Bevel: false),
+            new ChromePlate(77, 30, 243, 337, ChromeMaterial.Parchment, Bevel: false),
+            new ChromePlate(320, 30, 244, 337, ChromeMaterial.Parchment, Bevel: false),
+            new ChromePlate(289, 21, 62, 9, ChromeMaterial.Iron), new ChromePlate(289, 371, 62, 9, ChromeMaterial.Iron));
+        yield return Table("NoteBackground.ART", new ChromePlate(188, 25, 278, 352, ChromeMaterial.Parchment));
+        yield return Table("TeleBackground.ART", [new ChromePlate(178, 25, 283, 352, ChromeMaterial.Parchment),
+            .. Outline(186, 34, 49, 49), .. Outline(405, 34, 49, 49),
+            new ChromePlate(199, 109, 241, 1, ChromeMaterial.Dark, Bevel: false), new ChromePlate(199, 112, 241, 1, ChromeMaterial.Dark, Bevel: false)]);
+        foreach (var file in new[] { "NewsBackground.ART", "vendnewsback.ART" })
+            yield return Table(file, [new ChromePlate(41, 24, 567, 353, ChromeMaterial.Parchment),
+                .. Outline(61, 44, 49, 24), .. Outline(533, 44, 49, 24),
+                new ChromePlate(61, 83, 520, 1, ChromeMaterial.Dark, Bevel: false), new ChromePlate(61, 86, 520, 1, ChromeMaterial.Dark, Bevel: false),
+                new ChromePlate(189, 190, 1, 179, ChromeMaterial.Dark, Bevel: false), new ChromePlate(320, 101, 1, 268, ChromeMaterial.Dark, Bevel: false), new ChromePlate(452, 101, 1, 268, ChromeMaterial.Dark, Bevel: false)]);
+        yield return Table("Stone_Plaque.ART", new ChromePlate(85, 19, 535, 367, ChromeMaterial.Slate), new ChromePlate(109, 34, 487, 338, ChromeMaterial.Slate));
+        yield return new ChromeRecipe("WrtnBookLArro.ART", ChromeKind.Panel, ChromeMaterial.Parchment, ChromeSides.None, [new ChromeGlyph(0, 0, 18, 22)], Holes: ChromeHoles.None,
+            OriginX: AreaReadingArtLayout.PreviousCorner.X - ox, OriginY: AreaReadingArtLayout.PreviousCorner.Y - oy);
+        yield return new ChromeRecipe("WrtnBookRArro.ART", ChromeKind.Panel, ChromeMaterial.Parchment, ChromeSides.None, [new ChromeGlyph(0, 0, 18, 22)], Holes: ChromeHoles.None,
+            OriginX: AreaReadingArtLayout.NextCorner.X - ox, OriginY: AreaReadingArtLayout.NextCorner.Y - oy);
     }
 
     /// <summary>ARC-UI-1200: the frames of the message window and its two other panes and of the Fate and Sleep windows (Legacy pixels of each art; the layouts are those of
@@ -378,9 +420,12 @@ public static class InterfaceChromeRecipes
             "Anatomical_But.ART", "Chemistry_But.ART", "Electrical_But.ART", "Explosives_But.ART", "GunSmithy_But.ART", "Mechanical_But.ART", "Smithy_But.ART", "Therapeutics_But.ART",
             // ARC-UI-1199: the schematic window's two list buttons (art 6) and its assemble button (357).
             "bgrn_but.art", "CombineButt.ART"];
-        return [top, bottom, inventory, doll, loot, barter, follower, lootDoll, .. lenses, .. SheetPanels(), .. MapPanels(), .. LogbookRecipes(), .. PaneRecipes(), .. SchematicRecipes(), .. HudRecipes(), .. FollowerRecipes(), .. DialogRecipes(), .. QuantityRecipes(), .. buttons.Select(file => new ChromeRecipe(file, ChromeKind.Button, ChromeMaterial.Face, ChromeSides.None, [])),
+        return [top, bottom, inventory, doll, loot, barter, follower, lootDoll, .. lenses, .. SheetPanels(), .. MapPanels(), .. LogbookRecipes(), .. PaneRecipes(), .. ReadingRecipes(), .. SchematicRecipes(), .. HudRecipes(), .. FollowerRecipes(), .. DialogRecipes(), .. QuantityRecipes(), .. buttons.Select(file => new ChromeRecipe(file, ChromeKind.Button, ChromeMaterial.Face, ChromeSides.None, [])),
             // ARC-UI-1784: the spells page's sixteen college tabs (24 x 24 balls, three frames): a generated rim around the ball's own picture.
-            .. CollegeTabFiles.Select(file => new ChromeRecipe(file, ChromeKind.Button, ChromeMaterial.Face, ChromeSides.None, [], KeepFace: true))];
+            .. CollegeTabFiles.Select(file => new ChromeRecipe(file, ChromeKind.Button, ChromeMaterial.Face, ChromeSides.None, [], KeepFace: true)),
+            // ARC-UI-1820: the arrange button every inventory, loot, barter and item service window makes (art 340 `tiny_butt`, 28 x 27, two frames; the windows draw the first): a dark glass ball in a brass ring
+            // with no glyph, so like a college tab the ball's own picture stays inside a generated rim.
+            new ChromeRecipe(ArrangeButtonFile, ChromeKind.Button, ChromeMaterial.Face, ChromeSides.None, [], KeepFace: true)];
     }
 
     // ARC-UI-1197: the world map and town map window (138 `mapmain`, 800 x 400, wood). The map view's hole gets the brass rim every hole gets; the two readout boxes (680, 157 and
