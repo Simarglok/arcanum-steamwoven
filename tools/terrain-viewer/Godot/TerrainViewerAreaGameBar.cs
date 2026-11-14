@@ -128,10 +128,12 @@ public partial class TerrainViewerApp
     }
 
     /// <summary>ARC-UI-1111 (GB11): the click on the clock writes its time and date as a hover entry of the message log: "Time: hh:mm:ss",
-    /// three spaces, "Date: d/m/y" in the system's date order. The original runs this whatever the bar mode, so the bars' own hiding
-    /// under the dialog and the other windows is the only guard here.</summary>
+    /// three spaces, "Date: d/m/y" in the system's date order. The original runs this whatever the bar mode; the bars' own hiding
+    /// under the other windows and the dialog's hook (ARC-UI-2024) are the only guards here.</summary>
     private void ClockButton()
     {
+        // ARC-UI-2024 (DB2): the dialog's hook consumes the clock press too (Original keeps the bars under the dialog).
+        if (ConversationOpen) return;
         if (_areaSession is not { } session || _gameBarContent is not { } content) return;
         var snapshot = session.QueryClockSnapshot();
         var line = AreaClockText.Line(content.Texts.Text(AreaClockLayout.TimeMessage), content.Texts.Text(AreaClockLayout.DateMessage),
@@ -180,6 +182,14 @@ public partial class TerrainViewerApp
                 if (!BarSpells() && effect.LetGo is { } other) _gameBar.SetOn(other, true);
                 break;
             case AreaBarButton.Skills:
+                // ARC-UI-2024 (DB2): consumed without effect while the dialog's hook is set; the pair is given back as it was.
+                if (ConversationOpen)
+                {
+                    _gameBarNotice = "skills: ignored while another window owns input";
+                    _gameBar.SetOn(AreaBarButton.Skills, !_gameBar.IsOn(AreaBarButton.Skills));
+                    if (effect.LetGo is { } letGo) _gameBar.SetOn(letGo, true);
+                    break;
+                }
                 // The original's skills mode shows the skill buttons in the message window (ARC-UI-1113, TerrainViewerSkillBar.cs); the
                 // pair's other toggle, Spells, went up with this one coming down.
                 if (_gameBar.IsOn(AreaBarButton.Skills)) TakeWindowFromSpells();

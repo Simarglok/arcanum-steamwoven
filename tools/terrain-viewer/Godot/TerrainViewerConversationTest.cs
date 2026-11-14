@@ -1,8 +1,8 @@
-using Arcanum.Session;
 using System.Text;
 using Arcanum.Data;
 using Arcanum.Data.Area;
 using Arcanum.Scripting.Dialog;
+using Arcanum.Session;
 using Arcanum.TerrainViewer.Core;
 using Arcanum.TerrainViewer.Tests;
 using Arcanum.World;
@@ -421,10 +421,15 @@ public partial class TerrainViewerApp
                         SyncGameBar();
                         TerrainViewerSelfTest.Require(ConversationOpen && (_gameBarPanel is { Visible: true } && AreaGameBarPanel.BottomInset > 0) == stays,
                             $"{rules}: the bars {(stays ? "stay" : "hide")} under the open dialog (bars={_gameBarPanel?.Visible} inset={AreaGameBarPanel.BottomInset})");
-                        // A 100 px tall panel in an 800 x 600 view lies above the bottom bar when the bars show and at the old place (24 px above the view's bottom) when not.
-                        var at = AreaConversationPanel.PanelPosition(new(800, 600), 752, 100);
-                        TerrainViewerSelfTest.Require(stays ? at.Y + 100 <= 600 - AreaGameBarPanel.BottomInset && at.Y >= AreaGameBarPanel.TopInset : Math.Abs(at.Y - 476) < .5f,
-                            $"{rules}: the dialog panel lies in the part the bars leave free (y {at.Y} insets {AreaGameBarPanel.TopInset}/{AreaGameBarPanel.BottomInset})");
+                        // A 100 px tall panel lies above the bottom bar when the bars show and 24 px above the view's bottom when not.
+                        var view = GetViewport().GetVisibleRect().Size;
+                        var at = AreaConversationPanel.PanelPosition(view, 752, 100);
+                        TerrainViewerSelfTest.Require(stays ? at.Y + 100 <= view.Y - AreaGameBarPanel.BottomInset && at.Y >= AreaGameBarPanel.TopInset : Math.Abs(at.Y - (view.Y - 124)) < 1f,
+                            $"{rules}: the dialog panel lies in the part the bars leave free (y {at.Y} view {view.Y} insets {AreaGameBarPanel.TopInset}/{AreaGameBarPanel.BottomInset})");
+                        // DB2: the clock and the pane buttons are consumed without effect while the dialog is open.
+                        var presses = _skillBarPressesForSelfTest + _spellBarPressesForSelfTest;
+                        ClockButton(); SkillBarReleased(0, true); SpellBarSpellReleased(0, true);
+                        TerrainViewerSelfTest.Require(ClockLineForSelfTest is null && _skillBarPressesForSelfTest + _spellBarPressesForSelfTest == presses, $"{rules}: the clock and the pane buttons do nothing under the dialog");
                         CloseWindowMode(InterfaceMode.Dialog);
                         TerrainViewerSelfTest.Require(!ConversationOpen, $"{rules}: the dialog closed");
                         SyncGameBar();
