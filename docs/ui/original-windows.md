@@ -132,8 +132,12 @@ IW34; [menu windows plan](#menu-windows-plan-arc-ui-058) item 5).
 
 The follower's cycle buttons 757 / 758 at (155, 55), (253, 55) are built (ARC-UI-1120, BW6). Left for the next barter slices (each its own task): the gamble (check 0x579840, gamble 0x579B60, the box's on and refused arts), the
 generated quote phrases (0x413490 and its neighbours, `gd_*` lines), the count dialog for stacks, the hero's grid moves and drop and use
-boxes inside the barter window, the follower's weight lines, the merchant's doll view
-(337 `Barter_PD` at (0, 157), toggles at (8, 123), (46, 123); IW29, IW30; the barter window's toggles are not built), the scroll bar's art.
+boxes inside the barter window, the follower's weight lines, the scroll bar's art.
+
+ARC-UI-1917 built the merchant's doll view and its two toggles in the barter window (IW29, IW30): the buttons 338 and 339 at (8, 123) and (46, 123), the toggle clear at every open;
+with it set the window draws 337 `Barter_PD` at (0, 157) with the merchant's worn items in the nine rectangles of table 0x5CAD78 (the same rectangles as the loot windows' doll),
+a cover on each empty slot, the doll's two values and the weapon slot's fill, and hides the shown grid. Left for the next barter slices (each its own task): buying a worn item
+by dragging it from the doll (issue #1926), the two hot spots of IW30, the generated look of 337 and the doll cover 341 ([#1750](https://github.com/Simarglok/arcanum-steamwoven/issues/1750)).
 
 ## Character sheet
 
