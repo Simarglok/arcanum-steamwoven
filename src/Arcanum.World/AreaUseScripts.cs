@@ -45,6 +45,8 @@ namespace Arcanum.World;
 /// ARC-SCRIPT-1562 (WE2, CP7, CP8): <see cref="Aptitude"/> answers an NPC of the shown map's effective magick-tech aptitude (the hero's is the session's) for the magick-tech adjustments (91, 80) of a combat-point script; without it those runs stop at an NPC.
 /// ARC-SCRIPT-1733 (CS5, CS6): <see cref="CanSee"/> and <see cref="CanHear"/> (observer, target; the PC as the scheduler's id) answer the sight (0x4AF260) and hearing (0x4AF470, normal loudness) checks of an NPC through the AI host, null for an observer or target it
 /// holds no facts of (the PC included since ARC-SCRIPT-1773); without them obj can see obj and obj can hear obj stop the run.
+/// ARC-WORLD-1837 (ledger TT20): <see cref="NpcTeleportRefusal"/> names why a script's teleport (44, 102) of an NPC of the shown map to a cell of the shown map cannot be requested (the AI host does not hold it, it is a follower, the cell is not held), or null,
+/// and <see cref="RequestNpcTeleport"/> records the request in the session's one slot (the original's 0x4D3380; the object moves at the next ping), called only after the run applied; without them a run that teleports an object other than the hero is left unapplied.
 /// </summary>
 public sealed record AreaScriptWorld(Func<CellCoord?> PcCell, Func<AreaObjectRecord, bool> Gone, Func<int, AreaPrototypeItem?> Item, Func<IDropMap?> DropMap,
     Func<ScrObjectRef, bool>? Kill = null, Func<ScrObjectRef, bool>? CanKill = null, Func<ScrObjectRef, CellCoord?>? CritterCell = null,
@@ -56,7 +58,7 @@ public sealed record AreaScriptWorld(Func<CellCoord?> PcCell, Func<AreaObjectRec
     Action<string>? CritterMade = null, Func<string, int, bool, string>? ScriptReaction = null, Func<ScrObjectRef, AreaScriptOpenable?>? Openable = null,
     Func<string, int, string>? ScriptStopSpell = null, Func<string, AreaScriptVitals?>? Vitals = null, Func<string, int, int, string>? ScriptHealLife = null,
     Func<string, string, string>? ScriptAttack = null, Func<string, int?>? Aptitude = null, Func<string, string, bool?>? CanSee = null, Func<string, string, bool?>? CanHear = null,
-    Func<uint, bool>? ArtExists = null);
+    Func<uint, bool>? ArtExists = null, Func<ScrTeleport, string?>? NpcTeleportRefusal = null, Action<ScrTeleport>? RequestNpcTeleport = null);
 
 /// <summary>ARC-SCRIPT-1481 (VT1–VT3): the vitals of an NPC of the shown map for get hit points (107), get fatigue points (108) and get stat of the poison level (24): the current and maximum hit points and fatigue and the poison level,
 /// as the session's life status gives them (<see cref="AreaScriptWorld.Vitals"/>).</summary>
@@ -115,6 +117,10 @@ public sealed record AreaScriptedUse(AreaScriptedUseOutcome Outcome, ScrTeleport
     /// text); only for a run that applied (<see cref="AreaScriptedUseOutcome.Teleport"/> or <see cref="AreaScriptedUseOutcome.NoTeleport"/>),
     /// and empty otherwise. <see cref="Lines"/> holds the same texts without the type.</summary>
     public IReadOnlyList<AreaPrintedLine> Printed { get; init; } = [];
+
+    /// <summary>ARC-WORLD-1837 (ledger TT20): the teleports of NPCs the applied run recorded as requests (<see cref="AreaScriptWorld.RequestNpcTeleport"/>), in action order; the run's outcome stays
+    /// <see cref="AreaScriptedUseOutcome.NoTeleport"/> (that outcome is the hero's change of place, which no such run asks for).</summary>
+    public IReadOnlyList<ScrTeleport> NpcTeleports { get; init; } = [];
 }
 
 /// <summary>ARC-DEV-309: one printed line of a run with the entry type of the message window the script named (the print line's second
@@ -1638,10 +1644,27 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
             return new(AreaScriptedUseOutcome.Refused, null, [], run, $"script {run.Script}: {run.Stop}");
         if (_content!.Changed) return new(AreaScriptedUseOutcome.ContentUnavailable, null, [], run, $"script {run.Script}: a script file changed since it was first read");
         var effects = run.Effects;
-        if (effects.Teleports.FirstOrDefault(t => !IsPc(t.Object)) is { } other)
-            return new(AreaScriptedUseOutcome.EffectsRejected, null, [], run, $"script {run.Script}: a teleport of {other.Object.Code} is not modelled");
+        // ARC-WORLD-1837 (TT20): a teleport of an NPC of the shown map to a cell of the shown map is only a request the script records (0x447220 case 0x2C → 0x4D3380), which the AI host's relocation carries out at the next ping.
+        // The original's slot holds one request whoever makes it, so a run that asks for the hero's and another object's teleport is not told apart here (not modelled), nor is a teleport to another map or of an object that is no NPC of the shown map.
+        var npcTeleports = new List<ScrTeleport>();
+        if (effects.Teleports.Any(t => !IsPc(t.Object)))
+        {
+            if (effects.Teleports.FirstOrDefault(t => IsPc(t.Object)) is { } mixed)
+                return new(AreaScriptedUseOutcome.EffectsRejected, null, [], run, $"script {run.Script}: a run that teleports {mixed.Object.Code} and another object is not modelled");
+            foreach (var other in effects.Teleports)
+            {
+                if (_world?.NpcTeleportRefusal is not { } npcRefusal || _world.RequestNpcTeleport is null)
+                    return new(AreaScriptedUseOutcome.EffectsRejected, null, [], run, $"script {run.Script}: a teleport of {other.Object.Code} is not modelled");
+                if (other.Object.Map != _shownMap || Row(other.Object) is not { Type: NpcType })
+                    return new(AreaScriptedUseOutcome.EffectsRejected, null, [], run, $"script {run.Script}: a teleport of {other.Object.Code}, which is no NPC of the shown map, is not modelled");
+                if (other.RuntimeMap != -1 && other.RuntimeMap != _shownMap)
+                    return new(AreaScriptedUseOutcome.EffectsRejected, null, [], run, $"script {run.Script}: a teleport of {other.Object.Code} to another map (catalogue {other.CatalogueMap}) is not modelled");
+                if (npcRefusal(other) is { } npcWhy) return new(AreaScriptedUseOutcome.EffectsRejected, null, [], run, $"script {run.Script}: {npcWhy}");
+                npcTeleports.Add(other);
+            }
+        }
         // A teleport the caller cannot take (a map the mode cannot open, an arrival not admitted) leaves the use undone.
-        if (effects.Teleports.FirstOrDefault() is { } asked && teleportRefusal?.Invoke(asked) is { } refusal)
+        else if (effects.Teleports.FirstOrDefault() is { } asked && teleportRefusal?.Invoke(asked) is { } refusal)
             return new(AreaScriptedUseOutcome.TeleportRefused, asked, [], run, refusal);
         var lines = new List<string>();
         var printedLines = new List<AreaPrintedLine>();
@@ -1690,12 +1713,15 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         if (!Apply(effects, write)) return new(AreaScriptedUseOutcome.EffectsRejected, null, lines, run, $"script {run.Script} {run.Stop}: the session refused its effects");
         _floats.AddRange(floats);
         _eyeCandies.AddRange(AreaScriptEyeCandy.Of(effects));
-        var teleport = effects.Teleports.FirstOrDefault();
+        // ARC-WORLD-1837: the requests are recorded after the run applied, in action order (the script goes on; the object moves at the next ping).
+        foreach (var requested in npcTeleports) _world!.RequestNpcTeleport!(requested);
+        var teleport = npcTeleports.Count > 0 ? null : effects.Teleports.FirstOrDefault();
         if (effects.Dialog is { } talk)
             return new(AreaScriptedUseOutcome.NoTeleport, null, lines, run, $"script {run.Script} {run.Stop} at SCR line {run.StopLine}: conversation of script {talk.Script} node {talk.Node}")
             { Dialog = talk, Printed = printedLines };
         return teleport is null
-            ? new(AreaScriptedUseOutcome.NoTeleport, null, lines, run, $"script {run.Script} {run.Stop} at SCR line {run.StopLine}: no teleport") { Printed = printedLines }
+            ? new(AreaScriptedUseOutcome.NoTeleport, null, lines, run, $"script {run.Script} {run.Stop} at SCR line {run.StopLine}: " + (npcTeleports.Count > 0 ? $"{npcTeleports.Count} teleport request(s) of NPCs" : "no teleport"))
+                { Printed = printedLines, NpcTeleports = npcTeleports }
             : new(AreaScriptedUseOutcome.Teleport, teleport, lines, run, $"script {run.Script}: teleport to {teleport.CatalogueMap} ({teleport.X},{teleport.Y})") { Printed = printedLines };
     }
 

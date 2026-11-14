@@ -309,11 +309,11 @@ public sealed partial class AreaAiHost
         return "queued";
     }
 
-    private (string Text, bool Accepted) Submit(string npc, int map, CellCoord cell)
+    private (string Text, bool Accepted) Submit(string npc, int map, CellCoord cell, ChangeOfPlaceCaller caller = ChangeOfPlaceCaller.NpcWaypoint, ChangeOfPlaceFlags flags = ChangeOfPlaceFlags.None, int seconds = 0)
     {
         try
         {
-            var submitted = _session.RequestChangeOfPlace(npc, ChangeOfPlaceCaller.NpcWaypoint, map, cell, ChangeOfPlaceFlags.None, 0, _scene.MapListed ?? (m => m == _scene.RuntimeMap));
+            var submitted = _session.RequestChangeOfPlace(npc, caller, map, cell, flags, seconds, _scene.MapListed ?? (m => m == _scene.RuntimeMap));
             return (submitted.Status + (submitted.Replaced is { } lost ? $" (lost {lost.Entity})" : ""), submitted.Accepted);
         }
         catch (ArgumentException)
@@ -329,12 +329,70 @@ public sealed partial class AreaAiHost
     /// </summary>
     public bool FlushHomecomings()
     {
-        if (Homecomings.Count == 0 || _session.QueryChangeOfPlace() is not null || _session.ChangeOfPlaceInProgress) return false;
+        if ((Homecomings.Count == 0 && _scriptTeleports.Count == 0) || _session.QueryChangeOfPlace() is not null || _session.ChangeOfPlaceInProgress) return false;
+        // ARC-WORLD-1837: a script's teleport and a homecoming take the slot in turn (one request is made per frame), so neither starves the other.
+        var scriptsFirst = _scriptTeleports.Count > 0 && (Homecomings.Count == 0 || _scriptTurn);
+        _scriptTurn = !scriptsFirst;
+        if (scriptsFirst)
+        {
+            var (scripted, scriptedMap, scriptedCell, flags, seconds) = _scriptTeleports[0];
+            _scriptTeleports.RemoveAt(0);
+            var (scriptedText, scriptedAccepted) = Submit(scripted, scriptedMap, scriptedCell, ChangeOfPlaceCaller.Script, flags, seconds);
+            Trace(scripted).Route += $" -> script teleport {scriptedText}";
+            return scriptedAccepted;
+        }
         var (npc, map, cell) = Homecomings[0];
         Homecomings.RemoveAt(0);
         var (text, accepted) = Submit(npc, map, cell);
         Trace(npc).Route += $" -> {text}";
         return accepted;
+    }
+
+    // ---- ARC-WORLD-1837 (ledger TT20): a script's teleport of an NPC alone ----
+
+    // The requests of scripts' teleports the session's one slot could not take yet (Steamwoven; the Original setting makes each at once and the slot keeps the last), the NPC's own earlier one replaced.
+    private List<(string Npc, int Map, CellCoord Cell, ChangeOfPlaceFlags Flags, int Seconds)> _scriptTeleports => _scene.ScriptTeleports ?? _ownScriptTeleports;
+    private readonly List<(string Npc, int Map, CellCoord Cell, ChangeOfPlaceFlags Flags, int Seconds)> _ownScriptTeleports = [];
+    private bool _scriptTurn;
+
+    /// <summary>The script teleports waiting to ask for their change of place (<see cref="FlushHomecomings"/> makes one per frame).</summary>
+    public IReadOnlyList<string> PendingScriptTeleports => [.. _scriptTeleports.Select(t => t.Npc)];
+
+    /// <summary>
+    /// ARC-WORLD-1837 (ledger TT20, FM1): why a script's teleport of <paramref name="npc"/> to <paramref name="cell"/> of the shown map cannot be requested, or null. The NPC must be one this host runs on its own: the hero's followers go with the party's transfer
+    /// (the session refuses a party member as a mover, GR15), so they are not modelled here; the shown map must hold the cell (as a route's relocation requires, <see cref="Relocate"/>).
+    /// </summary>
+    public string? ScriptTeleportRefusal(string npc, CellCoord cell)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(npc);
+        if (!_npcs.ContainsKey(npc)) return _followers.ContainsKey(npc) ? $"{npc} follows the hero: a follower's teleport by a script is not modelled" : $"{npc} is not an NPC the AI host runs here";
+        if (PcLeader(npc) is not null) return $"{npc} follows the hero: a follower's teleport by a script is not modelled";
+        if (cell.X < 0 || cell.Y < 0) return $"target {cell.X},{cell.Y} outside the cell range";
+        return PlaceHeld(cell) ? null : $"target {cell.X},{cell.Y} not held by the shown map";
+    }
+
+    /// <summary>
+    /// ARC-WORLD-1837 (ledger TT20): records a script's teleport of an NPC to a cell of the shown map as a request for the session's one change-of-place slot (the original's teleport action only records it, ledger TT20: the script goes on, the object moves at the next ping,
+    /// <see cref="GameSessionOwner.ProcessChangeOfPlace"/>, whose payload the viewer completes with <see cref="PlaceTeleported"/>). Original: made at once, the slot keeps the last request; Steamwoven: queued, one request per frame (the homecomings' rule, VA18).
+    /// Returns what became of it, for the NPC's trace.
+    /// </summary>
+    public string RequestScriptTeleport(string npc, CellCoord cell, ChangeOfPlaceFlags flags, int seconds)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(npc);
+        if (_session.Rules.Lifecycle.NonPlayerRequestsOverwriteEachOther) return Submit(npc, _scene.RuntimeMap, cell, ChangeOfPlaceCaller.Script, flags, seconds).Text;
+        _scriptTeleports.RemoveAll(t => t.Npc == npc);
+        _scriptTeleports.Add((npc, _scene.RuntimeMap, cell, flags, seconds));
+        return "queued";
+    }
+
+    /// <summary>ARC-WORLD-1837: the placement a processed script teleport leaves to the host (the session's payload wrote nothing for the NPC's body): the NPC's run ends and it stands on the cell, as a route's relocation does (<see cref="Relocate"/>).</summary>
+    public string PlaceTeleported(string npc, CellCoord cell)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(npc);
+        if (!_npcs.TryGetValue(npc, out var row)) return $"{npc} is not an NPC the AI host runs here";
+        // The NPC may have died or been removed between the request and the ping: a body is not stood up, and no tile's script is told for it.
+        if (Gone(npc) || DeadCritter(npc)) return $"{npc} is gone or dead";
+        return PlaceAt(npc, row, cell);
     }
 
     // A companion of the shown map is a route NPC: its row is its home map's, its teleport map the session's. Its relocation is its walk's jump.
@@ -388,11 +446,25 @@ public sealed partial class AreaAiHost
         var cell = new CellCoord((int)target.X, (int)target.Y);
         if (Tile(npc) == cell) return $"already on {cell.X},{cell.Y}";
         if (!PlaceHeld(cell)) return $"target {cell.X},{cell.Y} not held by the shown map";
-        var row = _npcs[npc];
+        Place(npc, _npcs[npc], cell);
+        return $"{facts.Location.X},{facts.Location.Y} -> {cell.X},{cell.Y}";
+    }
+
+    private string PlaceAt(string npc, AreaAiNpc row, CellCoord cell)
+    {
+        InterruptRuns(npc, FarPathLevel);
+        if (Tile(npc) is not { } from) return "no tile";
+        if (from == cell) return $"already on {cell.X},{cell.Y}";
+        if (!PlaceHeld(cell)) return $"target {cell.X},{cell.Y} not held by the shown map";
+        Place(npc, row, cell);
+        return $"{from.X},{from.Y} -> {cell.X},{cell.Y}";
+    }
+
+    private void Place(string npc, AreaAiNpc row, CellCoord cell)
+    {
         Movers.Restore(npc, row.Row.Key, row.Origin, cell, Movers.FacingOf(npc, NeighborDirection.XPlus));
         RecordPlace(npc);
         NoteEntered(npc, cell);
-        return $"{facts.Location.X},{facts.Location.Y} -> {cell.X},{cell.Y}";
     }
 
     /// <summary>ARC-MAGIC-038 (ledger TP5): the viewer's runner of the tile scripts of the tiles an immediate path relocation (<see cref="RelocateAlongPath"/>) walks. The original runs them (0x4C0980) before it

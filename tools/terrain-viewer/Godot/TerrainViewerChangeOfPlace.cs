@@ -110,6 +110,13 @@ public partial class TerrainViewerApp
             GD.Print($"ARC-DEV-116 homecoming of {request.Entity} not done: {run.Status} {run.Failure} at {run.StoppedAt}");
             return;
         }
+        // ARC-WORLD-1837 (TT20): a script's teleport of an NPC alone to a cell of the shown map: the session's payload wrote nothing for the body, so the AI host stands it on the cell now (the object moves at the ping).
+        if (request.Caller == ChangeOfPlaceCaller.Script)
+        {
+            GD.Print($"ARC-WORLD-1837 script-teleport-done npc={request.Entity} cell={request.Destination.X},{request.Destination.Y} placed={host.PlaceTeleported(request.Entity, request.Destination)}");
+            RefreshAreaStatus();
+            return;
+        }
         GD.Print($"ARC-DEV-116 homecoming of {request.Entity} to map {request.DestinationMap} cell {request.Destination.X},{request.Destination.Y}");
         BindAreaCompanions();
         RefreshAreaStatus();
@@ -131,6 +138,8 @@ public partial class TerrainViewerApp
 
         public ChangeOfPlaceArrival Arrive(ChangeOfPlaceRequest request, SessionMapId destination, SessionMoveList moveList)
         {
+            // ARC-WORLD-1837: a script's teleport of a free NPC to a cell of the shown map has no body edits for the session (the AI host places it once the change ran).
+            if (request.Caller == ChangeOfPlaceCaller.Script) return new(request.Destination, NeighborDirection.XPlus, []);
             var companion = app._areaCompanions?.Companions.FirstOrDefault(c => c.Entity == request.Entity);
             // A mover the shown group does not hold has no body edits to write: the change stops (no placement is guessed).
             if (companion is null) return new(request.Destination, NeighborDirection.XPlus, null!);
