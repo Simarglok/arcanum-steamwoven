@@ -205,6 +205,21 @@ public partial class TerrainViewerApp
                 Fact("Wait and Character Sheet are normal rows", portraits.MenuRowStateForSelfTest(FollowerMenuItem.Wait) == FollowerMenuRowState.Normal
                     && portraits.MenuRowStateForSelfTest(FollowerMenuItem.CharacterSheet) == FollowerMenuRowState.Normal, "row states");
             }
+            // ARC-UI-1786 (FP8): the rows' words are the ones read from mes\follower_ui.mes (the project's English only without a game folder), and a row whose message is missing is not drawn.
+            {
+                var read = portraits.MenuTexts;
+                Fact("the rows' words are the follower_ui.mes texts", read is not null && Enum.GetValues<FollowerMenuItem>().All(item => portraits.MenuRowTextForSelfTest(item) == read.Text(item)),
+                    $"{read?.Detail}: {string.Join("|", Enum.GetValues<FollowerMenuItem>().Select(item => portraits.MenuRowTextForSelfTest(item)))}");
+                portraits.CloseMenu();
+                portraits.MenuTexts = AreaFollowerMenuTexts.From(number => number == (int)FollowerMenuItem.StayClose ? null : $"row {number}", "smoke: message 2 missing");
+                await ClickPortraitAsync(MouseButton.Right);
+                Fact("a row without a message is skipped, the others keep their places and words",
+                    portraits.MenuForSelfTest is { Rows: 7 } && portraits.MenuItemCentreForSelfTest(FollowerMenuItem.StayClose) is null
+                    && portraits.MenuRowTextForSelfTest(FollowerMenuItem.SpreadOut) == "row 3", $"{portraits.MenuForSelfTest?.Rows} rows");
+                portraits.CloseMenu();
+                portraits.MenuTexts = read;
+                await ClickPortraitAsync(MouseButton.Right);
+            }
             var inventoryState = portraits.MenuRowStateForSelfTest(FollowerMenuItem.Inventory);
             // 10. ARC-UI-1736 (FP12): Character Sheet opens his NPC sheet over him (read-only, no plus and minus buttons).
             await ReleaseAtAsync(portraits.MenuItemCentreForSelfTest(FollowerMenuItem.CharacterSheet), MouseButton.Left);
@@ -256,6 +271,33 @@ public partial class TerrainViewerApp
                     CancelSpellCast("the smoke ended");
                     Settle();
                 }
+            }
+
+            // 12b. ARC-UI-1787 (FP6, 0x54EA80): armed lockpicks are interface mode 16, so the portrait takes the follower as the lockpicks' target object, which is no lock: the pick ends,
+            // the mode pops and no talk starts. The follower order's target mode (18) is no mode of the dispatcher's three, so there the click is the ordinary one, a talk.
+            {
+                portraits.CloseMenu();
+                Require(OpenTargetMode(InterfaceMode.ItemTarget, _ => _lockpickArmed = null), "the item target mode opened for the lockpicks");
+                _lockpickArmed = "smoke:lockpicks";
+                await ClickPortraitAsync(MouseButton.Left);
+                for (var frame = 0; frame < 20; frame++) AreaSmokeTalkFrame();
+                Fact("armed lockpicks take his portrait as a target that is no lock: the pick ends, no talk",
+                    _lockpickArmed is null && !TargetModeOpen(InterfaceMode.ItemTarget) && !ConversationOpen && TargetsMatchStack && _portalNotice.Contains("not a door, window or container"),
+                    $"armed {_lockpickArmed is not null} mode16 {TargetModeOpen(InterfaceMode.ItemTarget)} talk {ConversationOpen} notice {_portalNotice}");
+                if (ConversationOpen) CloseConversation();
+                Settle();
+
+                Require(OpenOverlayMode(InterfaceMode.FollowerOrder, _ => _pendingOrder = null), "the follower order mode opened");
+                _pendingOrder = (follower, CompanionOrderType.WalkHere);
+                await ClickPortraitAsync(MouseButton.Left);
+                for (var frame = 0; frame < 600 && !ConversationOpen; frame++) AreaSmokeTalkFrame();
+                var orderTalk = ConversationOpen && _conversationSpeaker?.Row.Key == companion.Key;
+                Fact("a pending order's mode leaves his portrait click the ordinary one: a talk, the order mode popped by the dialog",
+                    orderTalk && _pendingOrder is null && !TargetModeOpen(InterfaceMode.FollowerOrder) && TargetsMatchStack,
+                    $"talk {orderTalk} order {_pendingOrder is not null} mode18 {TargetModeOpen(InterfaceMode.FollowerOrder)} {_conversationNotice}");
+                if (ConversationOpen) CloseConversation();
+                if (_pendingOrder is not null) CancelPendingOrder("the smoke ended");
+                Settle();
             }
 
             // 12. ARC-UI-1736 (FP3, FP5): eight followers scroll by their arrows, six frames from the offset, and clamp at both ends (a panel of its own with synthetic followers).

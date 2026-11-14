@@ -18,6 +18,9 @@ public sealed record AreaSpellDataLoad(AreaSpellDataStatus Status, SpellData? Da
     /// <summary>ARC-SCRIPT-1592: the script eye-candy list (<c>rules\ScriptEyeCandy.mes</c>, the script module's init 0x4446E0), the table the script action 120 plays from; null when it does not read (the action then plays nothing, <see cref="ScriptEyeCandyDetail"/>).</summary>
     public SpellEyeCandyTable? ScriptEyeCandy { get; init; }
     public string? ScriptEyeCandyDetail { get; init; }
+    /// <summary>ARC-RENDER-1794: the animation eye-candy list (<c>rules\AnimEyeCandy.mes</c>, the animation module's init 0x421B00), the table of a hit's blood (0x433020); null when the file does not read.</summary>
+    public SpellEyeCandyTable? AnimEyeCandy { get; init; }
+    public string? AnimEyeCandyDetail { get; init; }
 }
 
 /// <summary>How a rank of the shown college looks: known (full colour), the next to learn, or above it (greyed).</summary>
@@ -90,11 +93,15 @@ public static class AreaSpellsPage
         var eyeCandy = SpellEyeCandyTable.Open(stack);
         // ARC-SCRIPT-1592: and rules\ScriptEyeCandy.mes, the list of the script action 120 (the same module reads it).
         var scriptEyeCandy = SpellEyeCandyTable.OpenScript(stack);
+        // ARC-RENDER-1794: and rules\AnimEyeCandy.mes, the list of a hit's blood (the animation module reads it).
+        var animEyeCandy = SpellEyeCandyTable.OpenAnim(stack);
         return new(AreaSpellDataStatus.Ready, loaded.Data, "spell data loaded")
         {
             EyeCandy = eyeCandy.Table,
             EyeCandyDetail = eyeCandy.Table is { } table ? $"eye candy {table.Entries.Count} entries" : $"eye candy {eyeCandy.Status} {eyeCandy.Refusal}",
             ScriptEyeCandy = scriptEyeCandy.Table,
+            AnimEyeCandy = animEyeCandy.Table,
+            AnimEyeCandyDetail = animEyeCandy.Table is { } anim ? $"anim eye candy {anim.Entries.Count} entries" : $"anim eye candy {animEyeCandy.Status} {animEyeCandy.Refusal}",
             ScriptEyeCandyDetail = scriptEyeCandy.Table is { } script ? $"script eye candy {script.Entries.Count} entries" : $"script eye candy {scriptEyeCandy.Status} {scriptEyeCandy.Refusal}",
         };
     }

@@ -347,11 +347,11 @@ public partial class AreaCharacterSheetPanel : CanvasLayer
         if (pages) _artView.Pages.SetArt(art, fonts, texts);
         // ARC-UI-077: the spells page in the original's look when its arts read too.
         if (spells) _artView.Spells.SetArt(art, fonts, texts);
-        // ARC-UI-1742: the scheme page in the original's look when its arts read too; the creation editor does not choose a scheme yet.
+        // ARC-UI-1742: the scheme page in the original's look when its arts read too (the creation editor shows it as well, ARC-UI-1792).
         if (schemes) _artView.Schemes.SetArt(art, fonts);
         _pagesReady = pages;
         _spellsReady = pages && spells;
-        _schemesReady = pages && schemes && !_creation && texts.HasSchemeNames;
+        _schemesReady = pages && schemes && texts.HasSchemeNames;
         // The diagnostic pages stay in the host for a game folder whose pages art does not read.
         if (_pages.GetParent() != _host) { _pages.Reparent(_host!); _pages.SetTabHidden(0, true); _pages.CurrentTab = 1; _pages.TabsVisible = false; _pages.CustomMinimumSize = new(300, 0); }
         ApplyTab(_artView.Tab);
@@ -367,7 +367,7 @@ public partial class AreaCharacterSheetPanel : CanvasLayer
         var (px, py, pw, ph) = AreaCharacterSheetArtLayout.Panel;
         _host = new ScrollContainer { Name = "RightPanel", Position = new(px, py), Size = new(pw, ph), CustomMinimumSize = new(pw, ph) };
         _notBuilt = new Label { Name = "NotBuilt", Position = new(px, py), Size = new(pw, ph), AutowrapMode = TextServer.AutowrapMode.WordSmart, Visible = false,
-            Text = "NOT READY: this page is built by ARC-UI-076 (tech); the auto-level scheme page is built by ARC-UI-1742 (not in the creation editor yet)." };
+            Text = "NOT READY: this page is built by ARC-UI-076 (tech); the auto-level scheme page is built by ARC-UI-1742 and ARC-UI-1792 (only in the original look, when its art reads)." };
         _artView.AddChild(_host); _artView.AddChild(_notBuilt);
         _artView.StatPressed += (row, plus) => { if (plus) StatSpendRequested?.Invoke(row); else StatRefundRequested?.Invoke(row); };
         _artView.CloseRequested += () => CloseRequested?.Invoke();

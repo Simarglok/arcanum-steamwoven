@@ -141,6 +141,32 @@ public sealed class AreaEyeCandyHostTests
     }
 
     [TestMethod]
+    public void An_add_with_a_limit_is_refused_once_more_than_that_many_foreground_eye_candies_stand_on_the_owner()
+    {
+        // ARC-RENDER-1794 (0x4CCF70, the damage effect's limit 3): the loop over the owner's foreground list gives up at the first eye candy that goes past the limit, so a fourth one plays and a fifth does not.
+        using var f = new Fixture();
+        for (var i = 0; i < 4; i++)
+        {
+            Assert.IsTrue(f.Host.Play(Hero, 11, 0, -1, null, 3), $"copy {i}: {i} stand on the owner");
+            f.Run(60);
+        }
+        Assert.AreEqual(4, f.Host.Shown().Count());
+        var skipped = f.Host.Skipped;
+        Assert.IsFalse(f.Host.Play(Hero, 11, 0, -1, null, 3), "four stand: past the limit");
+        Assert.AreEqual(skipped + 1, f.Host.Skipped);
+        Assert.IsTrue(f.Host.Play(Hero, 11, 0, -1), "no limit: a copy is allowed up to the seven places");
+        Assert.IsTrue(f.Host.Play("sector:1:1", 11, 0, -1, null, 3), "another object's list is its own");
+        f.Run(60);
+        Assert.IsTrue(f.Host.Play(Hero, 14, 0, -1, null, 3), "an entry with no foreground part is not counted against the limit");
+        // The count is of the same art number (0x502710): four eye candies of another art do not stop an entry of a new one (the foreground list holds 7).
+        using var g = new Fixture();
+        g.Entries[15] = new(0x1500 | 0x80000, Fore, -1, null, (0, 0, 0), 0);
+        for (var i = 0; i < 4; i++) Assert.IsTrue(g.Host.Play(Hero, 11, 0, -1), $"other art {i}");
+        g.Run(60);
+        for (var i = 0; i < 3; i++) { Assert.IsTrue(g.Host.Play(Hero, 15, 0, -1, null, 3), $"own art {i}"); g.Run(60); }
+    }
+
+    [TestMethod]
     public void A_duplicate_is_refused_with_check_already_and_a_full_list_places_nothing()
     {
         using var f = new Fixture();
