@@ -22,8 +22,9 @@ public sealed record AreaBarterFrame(int Background, string Name, string Quote);
 /// merchant's image at (183, 33) as the loot window's (<see cref="AreaLootArtLayout.HolderImage"/>), its name centred on x 215 at y 102,
 /// the quote line in (89, 128, 253 × 30); the shown object's grid (the merchant's substitute container when it has one) of 10 columns by
 /// 7 shown rows of 32 pixels from (8, 168), scrolled by whole rows; the hero's grid, counts, drop and use boxes as in mode 0 and the gamble
-/// box 345 at (703, 236). The hero's doll, its weight lines and the merchant's doll view (337 <c>Barter_PD</c> at (0, 157)) are not drawn:
-/// the open clears both doll toggles (IW26, IW29). Godot-free.
+/// box 345 at (703, 236). The hero's doll and its weight lines are not drawn (the open clears the toggle 0x68150C, IW26); the merchant's doll view
+/// (337 <c>Barter_PD</c> at (0, 157), ARC-UI-1917) is drawn while its toggle 0x681514, cleared at every open, is set by the doll button
+/// (<see cref="DollButton"/>); the bag button clears it (IW29, IW30). Godot-free.
 /// </summary>
 public static class AreaBarterArtLayout
 {
@@ -46,6 +47,37 @@ public static class AreaBarterArtLayout
     /// switches the window to the previous (left) or next (right) follower (<see cref="AreaBarterCycle"/>).</summary>
     public static readonly (int X, int Y) CycleLeft = (155, 55), CycleRight = (253, 55);
     public const int CycleLeftArt = 757, CycleRightArt = 758;
+
+    /// <summary>ARC-UI-1917 (IW29, IW30): the merchant's doll view. The redraw 0x576520 draws art 337 <c>Barter_PD</c> (358 × 243) at (0, 157) when the doll toggle
+    /// 0x681514 is set (the loot windows' 349 at (0, 134); both end on the frame's bottom edge), and the open 0x5727B0 makes the two toggle buttons <c>PD_lil_butt</c> (338,
+    /// the doll) at (8, 123) and <c>Inven_lil_butt</c> (339, the bag) at (46, 123) whenever the merchant is not a container (the loot windows' are at (23, 108) and (74, 108)).
+    /// The toggle starts clear at every open, so the grid shows first.</summary>
+    public const int DollViewArt = 337, DollButtonArt = AreaLootArtLayout.DollButtonArt, BagButtonArt = AreaLootArtLayout.BagButtonArt;
+    public static readonly (int X, int Y) DollView = (0, 157), DollButton = (8, 123), BagButton = (46, 123);
+
+    /// <summary>The doll view's arts. Like the loot window's (<see cref="AreaLootArtLayout.DollArtNumbers"/>) they are not part of <see cref="ArtNumbers"/>: a window whose
+    /// doll arts do not read keeps the grid view and shows no toggles, instead of the diagnostic window.</summary>
+    public static IReadOnlyList<int> DollArtNumbers { get; } = [DollViewArt, DollButtonArt, BagButtonArt];
+
+    /// <summary>ARC-UI-1917 (IW29): the nine slot rectangles of the merchant's doll, table 0x5CAD78 of the redraw and the hit test (mode 1). Its 36 dwords are the same
+    /// rectangles as the loot windows' table 0x5CAE08 (the doll art is bottom aligned in both frames), so the rectangles and the covers of the empty slots
+    /// (table 0x5CAF58, the same in every mode) are <see cref="AreaLootArtLayout.BodySlotRects"/> and the hero doll's covers.</summary>
+    public static IReadOnlyDictionary<Arcanum.Simulation.Equipment.EquipmentSlot, (int X, int Y, int Width, int Height)> BodySlotRects => AreaLootArtLayout.BodySlotRects;
+
+    /// <summary>ARC-UI-1917 (0x572B03..0x572CC9, IW30): the open makes the doll and bag buttons whenever the merchant itself (not the shown object, which a substitute container
+    /// replaces after the test) is not a container, so in every barter window that shows a merchant or a follower.</summary>
+    public static bool TogglesShown(AreaInventoryView view)
+    {
+        ArgumentNullException.ThrowIfNull(view);
+        return view.Holder is not null;
+    }
+
+    /// <summary>The toggle button under the point (sized by its art): true the doll button, false the bag button, null none.</summary>
+    public static bool? ToggleHit(float x, float y, (int Width, int Height) doll, (int Width, int Height) bag)
+    {
+        if (Inside(x, y, DollButton, doll)) return true;
+        return Inside(x, y, BagButton, bag) ? false : null;
+    }
 
     /// <summary>Whether the cycle buttons exist: they are made exactly when the window draws the follower background (BW1).</summary>
     public static bool CycleShown(int background) => background == FollowerArt;
@@ -86,18 +118,21 @@ public static class AreaBarterArtLayout
 
     /// <summary>The point's place: the shown object's grid (x − 8, y − 168 in 32-pixel cells, 10 × 7, plus the scroll's rows: location =
     /// (row + scroll) × 10 + column, 0x575D56), the gamble box (its art's size, 0x681110, 0x681114), else the hero's grid and boxes as in mode 0
-    /// (no doll: no slot).</summary>
-    public static AreaBarterHit HitTest(float x, float y, int scroll, (int Width, int Height) gamble, bool heroDoll = false)
+    /// (no doll: no slot). With <paramref name="doll"/> (the merchant's doll view) the grid is not there and the doll's side hits nothing. ARC-UI-1918: with <paramref name="heroDoll"/>
+    /// (the hero's own doll toggle) the hero's side hits its doll's slots and no grid cell.</summary>
+    public static AreaBarterHit HitTest(float x, float y, int scroll, (int Width, int Height) gamble, bool doll = false, bool heroDoll = false)
     {
-        if (x >= GridX && y >= GridY && x < GridX + Columns * CellPixels && y < GridY + ShownRows * CellPixels)
+        // ARC-UI-1917 (0x575CB0 with 0x681514 set): the merchant's doll view replaces the shown grid, and its slots pick the merchant's worn items. NOT READY: that pick (a worn item bought by
+        // dragging it onto the hero's grid, the buy handler 0x575200 on a location of 1000 and up): the doll's side hits nothing, so a release there puts the item back.
+        if (!doll && x >= GridX && y >= GridY && x < GridX + Columns * CellPixels && y < GridY + ShownRows * CellPixels)
             return new(null, null, ((int)((y - GridY) / CellPixels) + scroll) * Columns + (int)((x - GridX) / CellPixels), false);
         if (x >= GambleBox.X && x < GambleBox.X + gamble.Width && y >= GambleBox.Y && y < GambleBox.Y + gamble.Height) return new(null, null, null, true);
         if (x < AreaInventoryArtLayout.PackX) return AreaBarterHit.None;
         // ARC-UI-1918 (0x575CB0): with the hero's toggle set its doll's slots are hit and no grid cell.
         if (heroDoll)
         {
-            var doll = AreaHeroDollToggle.HitTest(x, y);
-            return doll.Slot is not null || doll.Icon is not null ? new(null, doll.Icon, null, false, doll.Slot) : AreaBarterHit.None;
+            var ownDoll = AreaHeroDollToggle.HitTest(x, y);
+            return ownDoll.Slot is not null || ownDoll.Icon is not null ? new(null, ownDoll.Icon, null, false, ownDoll.Slot) : AreaBarterHit.None;
         }
         var own = AreaInventoryDrag.HitTest(x, y);
         return own.Slot is not null ? AreaBarterHit.None : new(own.Cell, own.Icon, null, false);

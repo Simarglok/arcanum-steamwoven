@@ -51,8 +51,7 @@ Left for the next inventory slices (each its own task):
   [hero grid](../world/inventory-runtime.md#hero-inventory-grid-arc-ui-019)).
 - **Paper-doll art** of worn weapons and armour (fields 0x71, 0x97, art place 2 of 0x4EC290, F0).
 - **Fonts**: the original's art fonts (0x682C74, 0x68345C; font arts 226–230) for the lines and counts.
-- **Other modes**: loot (done by ARC-UI-052 without the doll views, below), barter (done by ARC-UI-064 without the doll views and the
-  gamble, below), steal (done by ARC-UI-065, below); the hero's own doll toggle of modes 1 to 4 is done by ARC-UI-1918 (below, [IW45](../research/ledger/ui-audio.md#heros-own-doll-toggle-arc-ui-1918)).
+- **Other modes**: loot (done by ARC-UI-052 without the doll views, below), barter (done by ARC-UI-064, its merchant's doll view added by ARC-UI-1917; without the gamble, below), steal (done by ARC-UI-065, below); the hero's own doll toggle of modes 1 to 4 is done by ARC-UI-1918 (below, [IW45](../research/ledger/ui-audio.md#heros-own-doll-toggle-arc-ui-1918)).
 - The doll art's empty box at its top-left (about 18, 14 to 160, 157): the mode-0 redraw draws nothing there (only
   modes 1–6 draw a critter image, 0x553D10, at their own places); whether another path fills it is not read (F0).
 - The two numbers at (80, 358) and (261, 358) of the hero's own window (0x464630, 0x464700; read by ARC-UI-1121 for the body's doll and by ARC-UI-1267 for the hero's own window, [IW41](../research/ledger/ui-audio.md#doll-values-and-weapon-overlay-arc-ui-1121)) and the selected-item fill
@@ -138,8 +137,12 @@ IW34; [menu windows plan](#menu-windows-plan-arc-ui-058) item 5).
 
 The follower's cycle buttons 757 / 758 at (155, 55), (253, 55) are built (ARC-UI-1120, BW6). Left for the next barter slices (each its own task): the gamble (check 0x579840, gamble 0x579B60, the box's on and refused arts), the
 generated quote phrases (0x413490 and its neighbours, `gd_*` lines), the count dialog for stacks, the hero's grid moves and drop and use
-boxes inside the barter window, the follower's weight lines, the merchant's doll view
-(337 `Barter_PD` at (0, 157), toggles at (8, 123), (46, 123); IW29, IW30; the barter window's toggles are not built), the scroll bar's art.
+boxes inside the barter window, the follower's weight lines, the scroll bar's art.
+
+ARC-UI-1917 built the merchant's doll view and its two toggles in the barter window (IW29, IW30): the buttons 338 and 339 at (8, 123) and (46, 123), the toggle clear at every open;
+with it set the window draws 337 `Barter_PD` at (0, 157) with the merchant's worn items in the nine rectangles of table 0x5CAD78 (the same rectangles as the loot windows' doll),
+a cover on each empty slot, the doll's two values and the weapon slot's fill (where the combat host covers the map; a body the session's lists do not show shows covers only), and hides the shown grid. Left for the next barter slices (each its own task): buying a worn item
+by dragging it from the doll (issue #1926), the two hot spots of IW30, the generated look of 337 and the doll cover 341 ([#1750](https://github.com/Simarglok/arcanum-steamwoven/issues/1750)).
 
 ## Character sheet
 

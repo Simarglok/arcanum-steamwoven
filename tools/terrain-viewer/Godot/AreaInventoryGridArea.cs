@@ -85,9 +85,13 @@ public partial class AreaInventoryGridArea : Control
     /// <summary>ARC-UI-052: the frame is the loot window's original look (the art set and a holder shown, outside the barter panel).</summary>
     public bool LootLook => _barter is null && Look is { LootReady: true } && _view is { Holder: not null };
 
-    /// <summary>ARC-UI-072: the frame shows the body's doll toggles (the doll arts read, and the shown object is not a container).</summary>
-    internal bool TogglesShown => LootLook && Look!.Art.ContainsKey(AreaLootArtLayout.DollViewArt) && Look.Art.ContainsKey(AreaLootArtLayout.DollButtonArt) &&
-        Look.Art.ContainsKey(AreaLootArtLayout.BagButtonArt) && AreaLootArtLayout.TogglesShown(Mode, _view!);
+    /// <summary>ARC-UI-072: the frame shows the other party's doll toggles (the doll arts read, and the shown object is not a container); ARC-UI-1917: the barter window's too
+    /// (its doll art is 337, its buttons are the same arts at (8, 123) and (46, 123)).</summary>
+    internal bool TogglesShown => (LootLook || BarterLook) && Look!.Art.ContainsKey(DollArt) && Look.Art.ContainsKey(AreaLootArtLayout.DollButtonArt) &&
+        Look.Art.ContainsKey(AreaLootArtLayout.BagButtonArt) && (BarterLook ? AreaBarterArtLayout.TogglesShown(_view!) : AreaLootArtLayout.TogglesShown(Mode, _view!));
+
+    /// <summary>The art of the other party's doll view in this window: the barter window's 337, the loot windows' 349.</summary>
+    private int DollArt => _barter is not null ? AreaBarterArtLayout.DollViewArt : AreaLootArtLayout.DollViewArt;
 
     /// <summary>ARC-UI-072: the body's doll view is on (the toggles shown and the doll button chosen).</summary>
     internal bool BodyDoll => _bodyDoll && TogglesShown;
@@ -334,7 +338,8 @@ public partial class AreaInventoryGridArea : Control
     {
         if (!TogglesShown) return null;
         var (doll, bag) = (Look!.Art[AreaLootArtLayout.DollButtonArt], Look.Art[AreaLootArtLayout.BagButtonArt]);
-        return AreaLootArtLayout.ToggleHit(frame.X, frame.Y, (doll.GetWidth(), doll.GetHeight()), (bag.GetWidth(), bag.GetHeight()));
+        return BarterLook ? AreaBarterArtLayout.ToggleHit(frame.X, frame.Y, (doll.GetWidth(), doll.GetHeight()), (bag.GetWidth(), bag.GetHeight()))
+            : AreaLootArtLayout.ToggleHit(frame.X, frame.Y, (doll.GetWidth(), doll.GetHeight()), (bag.GetWidth(), bag.GetHeight()));
     }
 
     /// <summary>ARC-UI-1918: the hero's doll or bag button was pressed and released over it (the button handler sets the toggle on the doll button and clears it on the bag button, ledger IW45).</summary>
@@ -392,7 +397,12 @@ public partial class AreaInventoryGridArea : Control
             if (AreaServiceArtLayout.ItemAt(_view, frame.X, frame.Y) is { } entity) Callable.From(() => ServiceItemPressed?.Invoke(entity)).CallDeferred();
             return;
         }
-        if (BarterLook) Held = AreaBarterArtLayout.Press(_view, BarterHit(frame));
+        if (BarterLook)
+        {
+            // ARC-UI-1917: the doll and bag buttons take the press before the window's items, as the loot window's do.
+            _toggleDown = ToggleAt(frame);
+            Held = _toggleDown is null ? AreaBarterArtLayout.Press(_view, BarterHit(frame)) : null;
+        }
         else if (LootLook)
         {
             var hit = LootHit(frame);
@@ -413,16 +423,16 @@ public partial class AreaInventoryGridArea : Control
     }
 
     /// <summary>ARC-UI-064: the barter window's point under <paramref name="frame"/> with the current scroll.</summary>
-    private AreaBarterHit BarterHit(Vector2 frame)
+    internal AreaBarterHit BarterHit(Vector2 frame)
     {
         var box = Look?.Art.GetValueOrDefault(AreaBarterArtLayout.GambleArt);
-        return AreaBarterArtLayout.HitTest(frame.X, frame.Y, _lootScroll, box is null ? (0, 0) : (box.GetWidth(), box.GetHeight()), HeroDoll);
+        return AreaBarterArtLayout.HitTest(frame.X, frame.Y, _lootScroll, box is null ? (0, 0) : (box.GetWidth(), box.GetHeight()), BodyDoll, HeroDoll);
     }
 
     /// <summary>ARC-UI-052: scrolls the holder's grid by <paramref name="rows"/> within 0..the holder's maximum.</summary>
     internal void ScrollLoot(int rows)
     {
-        if (_view is null || _bodyDoll) return; // the grid is hidden in the doll view: its scroll stays
+        if (_view is null || BodyDoll) return; // the grid is hidden in the doll view: its scroll stays
         var scroll = Math.Clamp(_lootScroll + rows, 0, ScrollMax(_view));
         if (scroll == _lootScroll) return;
         _lootScroll = scroll; QueueRedraw();
@@ -492,8 +502,9 @@ public partial class AreaInventoryGridArea : Control
             }
             return;
         }
-        if (!LootLook) { _toggleDown = null; _takeAllDown = false; }
-        if (LootLook && _toggleDown is { } toggle)
+        if (!LootLook && !BarterLook) _toggleDown = null;
+        if (!LootLook) _takeAllDown = false;
+        if ((LootLook || BarterLook) && _toggleDown is { } toggle)
         {
             // ARC-UI-072: a toggle button acts on its release over it.
             _toggleDown = null;
@@ -878,10 +889,12 @@ public partial class AreaInventoryGridArea : Control
         // its inventory art, as the hero's doll draws it; the original draws the paper-doll art at two thirds of its size), and a cover stretched to
         // the rectangle of every empty slot or of the slot whose item is on the cursor. ARC-UI-1121 (IW29, IW41, IW43): the weapon's slot is filled
         // dark red first when the weapon is too heavy for the body (0x465E90), and the body's two ratings (0x464630, 0x464700) are printed under the doll.
-        var doll = BodyDoll && barter is null;
+        // ARC-UI-1917 (IW29): the barter window's doll view is the same with art 337 at (0, 157), the same nine rectangles (0x5CAD78) and covers.
+        var doll = BodyDoll;
         if (doll)
         {
-            Art(AreaLootArtLayout.DollViewArt, AreaLootArtLayout.DollView.X, AreaLootArtLayout.DollView.Y);
+            var (dollX, dollY) = barter is not null ? AreaBarterArtLayout.DollView : AreaLootArtLayout.DollView;
+            Art(DollArt, dollX, dollY);
             foreach (var (slot, rect) in AreaLootArtLayout.BodySlotRects)
             {
                 var entry = view.BodyDoll.FirstOrDefault(entry => entry.Slot == slot);
@@ -926,10 +939,11 @@ public partial class AreaInventoryGridArea : Control
         }
         if (barter is null && AreaLootArtLayout.TakeAllShown(Mode)) Art(AreaLootArtLayout.TakeAllArt, AreaLootArtLayout.TakeAll.X, AreaLootArtLayout.TakeAll.Y);
         // ARC-UI-072: the doll and bag buttons (IW30), drawn with their first frame; the chosen view is the one on show.
-        if (barter is null && TogglesShown)
+        if (TogglesShown)
         {
-            Art(AreaLootArtLayout.DollButtonArt, AreaLootArtLayout.DollButton.X, AreaLootArtLayout.DollButton.Y);
-            Art(AreaLootArtLayout.BagButtonArt, AreaLootArtLayout.BagButton.X, AreaLootArtLayout.BagButton.Y);
+            var (dollButton, bagButton) = barter is not null ? (AreaBarterArtLayout.DollButton, AreaBarterArtLayout.BagButton) : (AreaLootArtLayout.DollButton, AreaLootArtLayout.BagButton);
+            Art(AreaLootArtLayout.DollButtonArt, dollButton.X, dollButton.Y);
+            Art(AreaLootArtLayout.BagButtonArt, bagButton.X, bagButton.Y);
         }
         // ARC-UI-1918 (IW30): the hero's own doll and bag buttons at (713, 37) and (751, 37), the same arts, in the windows of modes 1 to 4.
         if (HeroTogglesShown)

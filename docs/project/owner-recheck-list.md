@@ -1186,7 +1186,7 @@ start a game and open a container, a body (the toggles under the picture switch 
 Known differences (documented, not bugs):
 
 - The curved flourishes at the corners of the original's boxes are not drawn; the ring around the round view is three units wide, narrower than the original's.
-- The follower's plates keep a little of the old wood at their inner ends; the barter doll and the doll cover are not built yet.
+- The follower's plates keep a little of the old wood at their inner ends; the barter doll is built (ARC-UI-1917) and the doll cover is not.
 
 
 ## ARC-UI-1195 — Generated interface: the character sheet (S5, 2026-11-13)
@@ -1424,3 +1424,21 @@ Known differences (documented, not bugs):
 
 - The up and down buttons (805, 804) stay the original's pictures: the generic button recipe would lose their + and − marks at 13 × 10 units.
 - The slate is plainer than the original's marbling; the kind icon and the count keep the original's pixels and font.
+
+## ARC-UI-1751 — Generated interface: the buttons of the loot, barter and steal windows (S16, 2026-11-14)
+
+The rules are in [viewer slice S16](../rendering/hd-interface-density.md#viewer-slice-s16-arc-ui-1751). Set the HD interface line on the launcher screen to **Generated (experimental)**, start a game and open a container, a dead body and a follower's barter window. Compare with **HD** and **Legacy**.
+
+| # | Step | Expected | Status |
+| --- | --- | --- | --- |
+| 1 | Open a container (loot window). | The Take all button (the big arrow ball) is the original's dark glass ball with its red arrow inside a generated brass rim; same place and size; a click takes all as before. | open |
+| 2 | Open a dead body's window. | The doll and bag toggles under the portrait are the original's balls inside a generated rim; each switches the view as before. | open |
+| 3 | Open the barter window of a follower while you lead two or more followers. | The two small arrow balls (previous and next follower) are generated balls; they cycle the follower as before. | open |
+| 4 | Resize the window (or go full screen) with each window open. | The buttons are sharp at the new size, with no seam. | open |
+| 5 | Start a new character and look at the race, background and gender arrows (the same arts as the follower cycle buttons, 757 and 758). | They are the same generated balls; clicks work as before. | open |
+
+Known differences (documented, not bugs):
+
+- The windows draw the buttons' first frame only, as before; the pressed and lit frames are painted by the recipe but no window shows them.
+- The Take all art's wooden bezel is not drawn: the ball has a plain generated rim.
+- The drop, use and gamble boxes stay the original's art (their corner glow is the state).

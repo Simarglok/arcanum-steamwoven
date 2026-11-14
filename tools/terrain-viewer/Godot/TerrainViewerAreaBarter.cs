@@ -256,10 +256,16 @@ public partial class TerrainViewerApp
         if (_barterInShop) return ShopBarterArt(view);
         if (_inventoryHost is null || _areaSession is not { } session || !ReferenceEquals(_barterSession, session)) return null;
         var merchant = view.Merchant;
-        var inventory = InventoryView(merchant.Container ?? merchant.Entity) with { HolderImage = _inventoryHost.HolderImage(CurrentAreaMap, merchant.Entity) };
+        var inventory = WithMerchantDoll(InventoryView(merchant.Container ?? merchant.Entity) with { HolderImage = _inventoryHost.HolderImage(CurrentAreaMap, merchant.Entity) },
+            merchant.Container is null ? null : InventoryView(merchant.Entity));
         var frame = new AreaBarterFrame(AreaBarterArtLayout.Background(merchant.Follower, session.QueryParty().Followers.Count), merchant.Name, _barterMessage ?? string.Empty);
         return (inventory, frame);
     }
+
+    /// <summary>ARC-UI-1917 (IW29): the barter window's doll view shows the merchant's worn items and ratings (the window's redraw reads the merchant with the doll toggle set), even when the shown
+    /// grid is its substitute container's: then the merchant's own view (<paramref name="merchantBody"/>) gives them; without one the shown view is the merchant's.</summary>
+    internal static AreaInventoryView WithMerchantDoll(AreaInventoryView shown, AreaInventoryView? merchantBody) =>
+        merchantBody is null ? shown : shown with { BodyDoll = merchantBody.BodyDoll, BodyRatings = merchantBody.BodyRatings };
 
     /// <summary>
     /// ARC-UI-1120 (BW6, 0x574FD0): a cycle button of a follower's window was released: the window switches to the previous (<paramref name="direction"/> 0)

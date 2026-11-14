@@ -86,7 +86,8 @@ public partial class TerrainViewerApp
                 Require(_inventoryPanel is { ArtMode: true } && _inventoryPanel.GridAreaForSelfTest is { TogglesShown: true }, "the body window shows the original's look with its doll toggles");
                 var bodyArea = _inventoryPanel!.GridAreaForSelfTest;
                 bodyArea.SetBodyDoll(true);
-                await WindowArtSmokeAsync("loot-doll", bodyArea, [AreaLootArtLayout.LootArt, AreaLootArtLayout.DollViewArt, AreaInventoryHole.LootArt]);
+                // ARC-UI-1751: the body window's own buttons are drawn in both views: Take all and the doll and bag toggles.
+                await WindowArtSmokeAsync("loot-doll", bodyArea, [AreaLootArtLayout.LootArt, AreaLootArtLayout.DollViewArt, AreaInventoryHole.LootArt, AreaLootArtLayout.TakeAllArt, AreaLootArtLayout.DollButtonArt, AreaLootArtLayout.BagButtonArt]);
                 bodyArea.SetBodyDoll(false);
             }
             var before = session.QueryPcInventory().Count;

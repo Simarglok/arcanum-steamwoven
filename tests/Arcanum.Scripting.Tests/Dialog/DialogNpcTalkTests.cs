@@ -205,9 +205,97 @@ public sealed class DialogNpcTalkTests
         var ownMissing = new Rig().Start(Nodes("m:$100,30", response: "99"));
         Assert.AreEqual(DialogConversationFailureKind.MissingTarget, ownMissing.Failure!.Kind, "so must the node's own response");
 
-        var chained = new Rig().Start(Nodes("m:$100,30").Replace("{30}{Yes node.}", "{30}{m:$1,20}"));
-        Assert.AreEqual((DialogConversationPhase.AtFrontier, DialogFrontierKind.UnsupportedGeneratedText), (chained.Phase, chained.Frontier!.Kind),
-            "a follow that is itself a generated line stays a frontier (the follows are planned one level deep)");
+        // A follow that is itself an m: or r: line the ports cannot run is a frontier as the node is (ARC-SCRIPT-1746).
+        var unrunnable = new Rig().Start(Nodes("m:$100,30").Replace("{30}{Yes node.}", "{30}{m:100,20}"));
+        Assert.AreEqual((DialogConversationPhase.AtFrontier, DialogFrontierKind.UnsupportedGeneratedText), (unrunnable.Phase, unrunnable.Frontier!.Kind));
+    }
+
+    // ARC-SCRIPT-1746: a follow that is itself an m: or r: node (node 30 is the yes node, node 20 the node's own response) is planned when the way is taken.
+    private static string Chained(string text, string yes, string own = "{20}{Own node.}")
+    {
+        var plain = Nodes(text);
+        var chained = plain.Replace("{30}{Yes node.}", yes).Replace("{20}{Own node.}", own);
+        Assert.AreNotEqual(plain, chained, "the fixture fragments the replacement looks for are still there");
+        return chained;
+    }
+
+    [TestMethod]
+    public void A_yes_follow_that_is_an_m_node_runs_as_an_ordinary_entry_and_pays_again()
+    {
+        var rig = new Rig();
+        var conversation = rig.Start(Chained("m:$100,30", "{30}{m:$10,20}"));
+        Pick(conversation, 1);
+        Assert.AreEqual((new DialogNodeId(30), "1000 cls_m2m costs 10"), (conversation.CurrentNode, conversation.NpcLine!.Text));
+        Pick(conversation, 1);
+        Assert.AreEqual((new DialogNodeId(20), "Own node."), (conversation.CurrentNode, conversation.NpcLine!.Text));
+        CollectionAssert.AreEqual(new[] { (800L, 900L, -100), (800L, 900L, -10) }, rig.Pay.Moved);
+    }
+
+    [TestMethod]
+    public void An_own_response_that_is_an_r_or_m_node_runs_too()
+    {
+        var rumor = new Rig();
+        var told = rumor.Start(Chained("m:$100,30", "{30}{Yes node.}", "{20}{r:$0,1000}"));
+        Pick(told, 2);
+        Assert.AreEqual((new DialogNodeId(20), "Tale of 1000, Ada."), (told.CurrentNode, told.NpcLine!.Text));
+        Assert.AreEqual(DialogConversationSelectStatus.Ended, told.Select(told.Options[0].Token).Status, "the rumor's only answer follows that node's own response, here 0: the end");
+
+        var rumorFirst = new Rig();
+        var viaRumor = rumorFirst.Start(Chained("r:$0,1000", "{30}{Yes node.}", "{20}{m:$5,30}"));
+        Pick(viaRumor, 1);
+        Assert.AreEqual((new DialogNodeId(20), "1000 cls_m2m costs 5"), (viaRumor.CurrentNode, viaRumor.NpcLine!.Text), "the way on after a rumor leads to an m: node");
+        Pick(viaRumor, 1);
+        Assert.AreEqual("Yes node.", viaRumor.NpcLine!.Text);
+    }
+
+    [TestMethod]
+    public void A_follow_that_is_a_greeting_node_runs_as_an_entry()
+    {
+        var rig = new Rig();
+        var conversation = rig.Start(Nodes("m:$100,30").Replace("{30}{Yes node.}{}{}{}{}{}", "{30}{g:9 0}{}{}{}{}{}{31}{go on}{}{1}{}{0}{}"));
+        Pick(conversation, 1);
+        Assert.AreEqual(new DialogNodeId(30), conversation.CurrentNode);
+        Assert.AreEqual("1000 cls_m2m costs 100", conversation.NpcLine!.Text, "slot 9 off keeps the line said before");
+        CollectionAssert.AreEqual(new[] { "go on", "A reply." }, conversation.Options.Select(o => o.Text).ToArray(), "the greeting node's own replies are built, as for an entered node");
+    }
+
+    [TestMethod]
+    public void A_cycle_of_follows_is_bounded_by_the_turn_limit()
+    {
+        var rig = new Rig();
+        // Node 10 pays 5 and follows node 10 again.
+        var conversation = rig.Start(Nodes("m:$5,10"), options: new DialogConversationOptions { MaxTurns = 4 });
+        for (var guard = 0; guard < 10 && conversation.Phase == DialogConversationPhase.AwaitingSelection; guard++)
+        {
+            conversation.Select(conversation.Options[0].Token);
+        }
+        Assert.AreEqual((DialogConversationPhase.AtFrontier, DialogFrontierKind.TurnLimit), (conversation.Phase, conversation.Frontier!.Kind));
+        Assert.AreEqual(3, rig.Pay.Moved.Count, "the turn budget is checked before each payment");
+    }
+
+    [TestMethod]
+    public void A_chained_node_that_cannot_run_stops_the_pick_before_the_payment()
+    {
+        var missing = new Rig();
+        var failed = missing.Start(Chained("m:$100,30", "{30}{m:$1,99}"));
+        failed.Select(failed.Options[0].Token);
+        Assert.AreEqual(DialogConversationFailureKind.MissingTarget, failed.Failure!.Kind);
+        Assert.AreEqual(0, missing.Pay.Moved.Count, "the plan of the chained node is made before the price is paid");
+
+        var own = new Rig();
+        var ownFailed = own.Start(Chained("m:$100,30", "{30}{Yes node.}", "{20}{m:$1,99}"));
+        ownFailed.Select(ownFailed.Options[1].Token);
+        Assert.AreEqual((DialogConversationPhase.Failed, DialogConversationFailureKind.MissingTarget, 0), (ownFailed.Phase, ownFailed.Failure!.Kind, ownFailed.Options.Count));
+        Assert.AreEqual(0, own.Pay.Moved.Count);
+
+        // The first node's action ran at its entry; the stop comes on the pick (ARC-SCRIPT-1746).
+        var acted = new Rig();
+        var late = acted.Start(Chained("m:$100,30", "{30}{m:$1,99}"), options: null);
+        Assert.AreEqual(DialogConversationPhase.AwaitingSelection, late.Phase);
+        var viaRumor = new Rig();
+        var rumorLate = viaRumor.Start(Chained("r:$0,1000", "{30}{Yes node.}", "{20}{m:$1,99}"));
+        rumorLate.Select(rumorLate.Options[0].Token);
+        Assert.AreEqual(DialogConversationFailureKind.MissingTarget, rumorLate.Failure!.Kind, "the way on after a rumor plans its m: node when taken");
     }
 
     [TestMethod]
