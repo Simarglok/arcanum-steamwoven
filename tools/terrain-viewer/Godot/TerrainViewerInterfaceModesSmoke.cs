@@ -109,6 +109,13 @@ public partial class TerrainViewerApp
                 }
                 capturePanel.GridAreaForSelfTest.Render(read);
             }
+            // ARC-UI-1924 (IW46): the hot spots over the damage and armour numbers show the weapon and armour stat lines in the message window.
+            if (_inventoryPanel is { ArtMode: true } statPanel && statPanel.GridAreaForSelfTest is { Look: not null } statGrid && statPanel.ViewForSelfTest is { } statView)
+            {
+                var statLine = await StatHotSpotsStepAsync(statGrid, statView, "inventory");
+                GD.Print("ARC-UI-1924 inv-ui " + statLine);
+                steps.Add(statLine);
+            }
             await Press(Key.Escape);
             Require(MainMenuOpen && !InventoryOpen && StackText() == "Game" && WindowPanelsMatchStack, "Escape opened the menu, which closed the inventory: " + State());
             await Press(Key.Escape);

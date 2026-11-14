@@ -40,6 +40,8 @@ public partial class AreaBarterPanel : CanvasLayer
     public event Action<string?>? PointerStill;
     /// <summary>ARC-DEV-339 (B54): the arrange button (art 340, IW30) of the original look was pressed and released.</summary>
     public event Action? ArrangeRequested;
+    /// <summary>ARC-UI-1924 (IW46): a stat hot spot of the original look was released over or entered (its stat lines).</summary>
+    public event Action<AreaStatRequest>? StatRequested;
     /// <summary>ARC-DEV-339: the arrange button's press (3000) and release (3001) sounds.</summary>
     public event Action<int>? SoundRequested;
     /// <summary>ARC-UI-1120 (BW6): a cycle button of the follower background was released: 0 previous follower, 1 next.</summary>
@@ -125,6 +127,7 @@ public partial class AreaBarterPanel : CanvasLayer
         _area.PointerStill += item => PointerStill?.Invoke(item);
         _area.GambleEntered += held => GambleEntered?.Invoke(held);
         _area.ArrangeRequested += () => ArrangeRequested?.Invoke();
+        _area.StatRequested += request => StatRequested?.Invoke(request);
         _area.SoundRequested += id => SoundRequested?.Invoke(id);
         _area.CycleRequested += direction => CycleRequested?.Invoke(direction);
         _area.HoleReleased += () => CloseRequested?.Invoke();

@@ -103,6 +103,7 @@ public partial class TerrainViewerApp
         panel.CloseRequested += EndItemService;
         panel.ItemClicked += ClickServiceItem;
         panel.ArrangeRequested += ServiceArrange;
+        panel.StatRequested += ShowStatLines;
         panel.SoundRequested += id => PlayInterfaceSound(id, "item service arrange button");
         panel.HolderView = InventoryHolderView;
         return panel;

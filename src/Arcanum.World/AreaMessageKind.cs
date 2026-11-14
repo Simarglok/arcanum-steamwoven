@@ -8,7 +8,7 @@ namespace Arcanum.World;
 /// poison absorbed notice (the title and <c>intgame.mes</c> 13 with the number, stored, sound 3006), 2 a curse and 3 a blessing (the title
 /// and an empty body, stored, sounds 3003 and 3002), 12 a hover text without the second layout (never stored).
 /// <see cref="Item"/> is not an entry type: it is the item window the original draws straight into the message window (0x554F10,
-/// HK22), never stored and drawn whatever the time since the last entry. The other types (1–3 and 9–13) are listed in the ledger
+/// HK22), never stored and drawn whatever the time since the last entry. ARC-UI-1924: <see cref="StatLines"/> is the weapon or armour stat lines of the inventory windows' hot spots (0x556220, 0x5566B0, ledger IW46), drawn the same way. The other types (1–3 and 9–13) are listed in the ledger
 /// and not posted by the viewer, except those just named.
 /// </summary>
-public enum AreaMessageKind { LevelUp = 0, PoisonAbsorbed = 1, Curse = 2, Blessing = 3, Message = 4, Plain = 5, Hover = 6, SkillHint = 7, SpellHint = 8, ScriptHover = 12, Item = 100, Object = 101 }
+public enum AreaMessageKind { LevelUp = 0, PoisonAbsorbed = 1, Curse = 2, Blessing = 3, Message = 4, Plain = 5, Hover = 6, SkillHint = 7, SpellHint = 8, ScriptHover = 12, Item = 100, Object = 101, StatLines = 102 }

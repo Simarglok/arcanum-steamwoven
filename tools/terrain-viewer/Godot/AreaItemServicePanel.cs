@@ -29,6 +29,8 @@ public partial class AreaItemServicePanel : CanvasLayer
     public event Action<string>? ItemClicked;
     /// <summary>ARC-UI-1765: the arrange button of the original look was pressed and released (ledger IW37: every mode of the window makes it).</summary>
     public event Action? ArrangeRequested;
+    /// <summary>ARC-UI-1924 (IW46): a stat hot spot of the original look was released over or entered (its stat lines).</summary>
+    public event Action<AreaStatRequest>? StatRequested;
     /// <summary>ARC-UI-1765: the arrange button's press (3000) and release (3001) sounds.</summary>
     public event Action<int>? SoundRequested;
     /// <summary>ARC-UI-1765: the window's holder (the hero) on the screen for the round view: its foot point in canvas units and the game view's zoom; null when it is not drawn.</summary>
@@ -87,6 +89,7 @@ public partial class AreaItemServicePanel : CanvasLayer
         _area = new AreaInventoryGridArea { Name = "ServiceFrame", Visible = false };
         _area.ServiceItemPressed += entity => ItemClicked?.Invoke(entity);
         _area.ArrangeRequested += () => ArrangeRequested?.Invoke();
+        _area.StatRequested += request => StatRequested?.Invoke(request);
         _area.SoundRequested += id => SoundRequested?.Invoke(id);
         _area.HoleReleased += () => CloseRequested?.Invoke();
         _lookToggle = new Button { Name = "LookToggle", Flat = true, FocusMode = Control.FocusModeEnum.All, Alignment = HorizontalAlignment.Left, Visible = false };

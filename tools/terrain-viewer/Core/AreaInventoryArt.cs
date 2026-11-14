@@ -83,10 +83,10 @@ public sealed record AreaInventoryArtContent(IReadOnlyDictionary<int, AreaInterf
     private bool Ready(int number) => Art.TryGetValue(number, out var load) && load.Status == AreaInterfaceArtStatus.Ready;
 
     /// <summary>Every art number the window reads: the inventory window's, the loot window's, (ARC-UI-064) the barter window's, the holders'
-    /// images and (ARC-UI-054) the arts over the round view and (ARC-DEV-339) the arrange button's (ARC-UI-1917) the barter window's doll view and, with the loot window's, the toggle buttons, and (ARC-UI-1120) the barter window's cycle buttons, which are drawn when they read and are no reason for the diagnostic window.</summary>
+    /// images and (ARC-UI-054) the arts over the round view and (ARC-DEV-339) the arrange button's (ARC-UI-1917) the barter window's doll view and, with the loot window's, the toggle buttons, and (ARC-UI-1120) the barter window's cycle buttons and (ARC-UI-1924) the stat hot spots' arts 676 and 677, which are drawn when they read and are no reason for the diagnostic window.</summary>
     public static IReadOnlyList<int> Numbers { get; } =
         AreaInventoryArtLayout.ArtNumbers.Concat(AreaLootArtLayout.ArtNumbers).Concat(AreaLootArtLayout.DollArtNumbers).Concat(AreaHeroDollToggle.ArtNumbers).Concat(AreaBarterArtLayout.DollArtNumbers).Concat(AreaBarterArtLayout.ArtNumbers).Concat(AreaLootArtLayout.ImageNumbers)
-            .Concat([AreaInventoryHole.InventoryArt, AreaInventoryHole.BarterArt, AreaInventoryHole.LootArt, AreaInventoryArtLayout.ArrangeArt, AreaBarterArtLayout.CycleLeftArt, AreaBarterArtLayout.CycleRightArt]).Distinct().ToArray();
+            .Concat([AreaInventoryHole.InventoryArt, AreaInventoryHole.BarterArt, AreaInventoryHole.LootArt, AreaInventoryArtLayout.ArrangeArt, AreaBarterArtLayout.CycleLeftArt, AreaBarterArtLayout.CycleRightArt]).Concat(AreaStatHotSpots.ArtNumbers).Distinct().ToArray();
 
     public static AreaInventoryArtContent Empty(string reason) => new(new Dictionary<int, AreaInterfaceArtLoad>(), AreaInventoryTexts.Project(reason), reason);
 
