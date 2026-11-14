@@ -233,7 +233,9 @@ not stated elsewhere; the others are
   reading the exports or the executable runs in an Opus subagent. Either way
   only the conclusion enters the thread.
 - **Waiting.** Wait for the Mac launch queue with one blocking command (a quiet
-  `./arcanum run`), never a `sleep` or polling loop. Batch every check of the
+  `./arcanum run`, or for a run already started elsewhere
+  `./arcanum queue --wait RUN_ID|--all [--timeout MIN]`,
+  [waiting for a run](toolchain.md#launch-queue-arc-dev-033)), never a `sleep` or polling loop. Batch every check of the
   task into one queue run instead of one run per check.
 - **Reports.** No interim status posts ("reading X"): post only a result, a
   question or a failure. The checklist carries progress, updated only when a
