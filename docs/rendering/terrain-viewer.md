@@ -1100,7 +1100,7 @@ floating lines, so above the objects and below the numbers) in the original's fo
   and the speech voice, the objects' draw offsets, the exact word-break rules (TB22).
 
 Checks: `TextBubblesTests` (colours, life, wrap, slots and slot choice, the table's reuse and eviction, life rules, the setting change) and
-the `map` stage's talk smoke (the NPC line of every started conversation is a persistent bubble, replaced on each reply, not persistent after the end; no `npc` text in the panel) and the `floaters` smoke stage's bubble part (a PC's and an NPC's bubble over their objects, green and white, wrapped within 200 px,
+the `map` stage's talk smoke (the NPC line of every started conversation is a persistent bubble, replaced on each reply, not persistent after the end; no `npc` text in the panel); `ARC_AREA_TALK_CAPTURE=PATH` saves the first open dialog as `PATH.png` and the `floaters` smoke stage's bubble part (a PC's and an NPC's bubble over their objects, green and white, wrapped within 200 px,
 alive at 6000 ms and gone after it, a Text Duration change to 2 shortening a live bubble at once; `ARC-UI-1997 bubbles over objects PASS`;
 `ARC_AREA_FLOATERS_CAPTURE` saves `bubble-before` (the old white rising line) and `bubble-after`) and the `spirit-talk` stage (the greeting over the corpse is a bubble). Original visual parity NOT VERIFIED.
 

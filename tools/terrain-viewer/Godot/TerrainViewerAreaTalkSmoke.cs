@@ -95,6 +95,16 @@ public partial class TerrainViewerApp
                 // ARC-UI-043: the first NPC line's voice plays on the voice channel when the module has its file.
                 var played = _voicesPlayed;
                 TickDialogVoice();
+                if (System.Environment.GetEnvironmentVariable("ARC_AREA_TALK_CAPTURE") is { Length: > 0 } talkCapture && conversation is { Phase: DialogConversationPhase.AwaitingSelection, NpcLine.Text.Length: > 0 }
+                    && !System.IO.File.Exists($"{talkCapture}.png"))
+                {
+                    await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                    await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                    await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+                    using var talkImage = GetViewport().GetTexture().GetImage();
+                    talkImage.SavePng($"{talkCapture}.png");
+                    GD.Print($"ARC-UI-2027 capture saved {talkCapture}.png");
+                }
                 var identity = _voiceStart?.VoiceIdentity(conversation?.NpcLine) ?? -1;
                 var gender = host.Profile.Pc.Gender == DialogPcGender.Female ? Arcanum.Data.Audio.SpeechGender.Female : Arcanum.Data.Audio.SpeechGender.Male;
                 var speech = identity == -1 || AreaSoundCatalog() is not { } voices ? null : voices.ResolveSpeech(identity, gender);
