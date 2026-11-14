@@ -97,7 +97,7 @@ public partial class TerrainViewerApp
 
     /// <summary>ARC-UI-2068 (DB2, 0x54FCF0, 0x551A80(0)): a hotkey that acts while the dialog is open ends it first, through the dialog's leave case
     /// (0x5678D0: no script runs, nothing resumes), as a window opener's pop does (ARC-UI-1467). The original's bars stay under the dialog (Original
-    /// interface setting); Steamwoven hides them, so this only runs there. No-op without an open dialog (the pop outside a dialog re-enters the current mode).</summary>
+    /// interface setting); Steamwoven hides them, so under Steamwoven no click reaches here. No-op without an open dialog (the pop outside a dialog re-enters the current mode).</summary>
     private void EndDialogForHotkey()
     {
         if (!ConversationOpen) return;
@@ -106,8 +106,9 @@ public partial class TerrainViewerApp
     }
 
     /// <summary>ARC-UI-2068 (0x57BC70, 0x57C080): the spell activation pops the dialog after its own refusal tests (a valid spell) unless the BEGIN
-    /// area carries the inventory bit 0x2000000, whose window opens over the dialog (SU3).</summary>
-    private bool SpellEndsDialog(int spell) => _spellRecords is { } records && spell >= 0 && spell < records.Length && records[spell].Data.Enabled
+    /// area carries the inventory bit 0x2000000, whose window opens over the dialog in the original (SU3; the viewer's opener refuses while a window is open, so
+    /// the dialog stays and nothing opens). The place of the action-point test against the pop is not read (issue #2087).</summary>
+    private bool SpellEndsDialog(int spell) => SpellCasterNow() is not null && _spellRecords is { } records && spell >= 0 && spell < records.Length && records[spell].Data.Enabled
         && !SpellUiRules.TargetsInventory(records[spell].Areas.Length > 0 ? records[spell].Areas[0].Targets : 0);
 
     /// <summary>The activation (0x54FCF0): the PC's test, then the entry's type.</summary>

@@ -188,6 +188,26 @@ public partial class TerrainViewerApp
                         Require(!ConversationOpen && _spellTargeting?.Spell == session.QueryHotkeys().Recent[0].Index && _hotkeyActivations == before + 1, "the A key ended the dialog, then opened the latest action's cursor: " + _hotkeyNotice);
                         CancelSpellTargeting(null);
                     }
+                    // The latest recent action's button ends the dialog too.
+                    using (OpenBarDialog())
+                    {
+                        await Frames(2);
+                        var before = _hotkeyActivations;
+                        await Click(view.RecentCentreForSelfTest(0));
+                        Require(!ConversationOpen && _spellTargeting is not null && _hotkeyActivations == before + 1, "the recent-action button ended the dialog, then opened its cursor: " + _hotkeyNotice);
+                        CancelSpellTargeting(null);
+                    }
+                    // Steamwoven hides the bars under the dialog: the A key leaves it open.
+                    Require(session.SelectRules(RuleMode.Steamwoven) != GameSessionDisposition.Rejected, "Steamwoven rules selected for the dialog step");
+                    using (OpenBarDialog())
+                    {
+                        await Frames(2);
+                        var before = _hotkeyActivations;
+                        HotkeyKey(Key.A);
+                        Require(ConversationOpen && _hotkeyActivations == before && _spellTargeting is null, "Steamwoven: the A key leaves the dialog open: " + _hotkeyNotice);
+                        CloseWindowMode(InterfaceMode.Dialog);
+                    }
+                    Require(session.SelectRules(RuleMode.Original) != GameSessionDisposition.Rejected, "Original rules selected again");
                     // A skill entry: the prowling button toggles after the dialog ended (0x579FA0 pops it first); a second click puts it back.
                     Require(session.AssignHotkey(session.Version, emptySlot, HotkeyEntry.ForSkill(SkillBarButton.Prowling)).Disposition == GameSessionDisposition.Changed, "prowling goes on an entry");
                     await Frames(2);
