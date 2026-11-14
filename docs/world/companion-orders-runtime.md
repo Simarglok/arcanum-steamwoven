@@ -134,7 +134,7 @@ follower module; its Godot-free rules are `AreaFollowerPanelRules` (tools/terrai
   layout for the strip yet, so the buttons stand at the bars-drawn places; this stays open with the hidden-interface layout itself.
 - **Menu (FP7–FP9)**: art 826 at the slot's right edge (x 51, the slot's y), not clamped to the screen, with eight rows (Walk, Attack, Stay Close, Spread Out, Back Off,
   Wait, Inventory, Character Sheet; the words are `mes\follower_ui.mes` messages 0–7 read through `AreaFollowerMenuTexts` with the shown content, ARC-UI-1786: a row whose
-  message is missing is not drawn and the others keep their places; without a readable file the project's English words stand in) at (10, 3 + 18 × row), 118 × 15: white, mid grey when greyed, bright (0, 0xD2, 0xFF) under the pointer. Wait is greyed for a
+  message is missing is not drawn and the others keep their places, the draw loop 0x56B970 stepping y by 18 for every index; without a readable file the project's English words stand in) at (10, 3 + 18 × row), 118 × 15: white, mid grey when greyed, bright (0, 0xD2, 0xFF) under the pointer. Wait is greyed for a
   mind-controlled follower (spell flag 0x8000000), Inventory when the can-open test (0x575080, `BarterCycleSpeaker`) fails. With the menu open every release is the menu's:
   a row runs after the menu closes, any other left or right release closes it, and the portraits, the button and the arrows are not handled.
 - **Rows 6 and 7 (FP11, FP12)**: Inventory opens the follower's barter window in its follower form (the pending open the dialog's `b:` reply uses); Character Sheet

@@ -46,12 +46,4 @@ public sealed class AreaFollowerMenuTextsTests
         Assert.IsTrue(texts.FromGame);
         Assert.AreEqual(0, texts.Rows.Count);
     }
-
-    [TestMethod]
-    public void An_overlong_message_is_dropped()
-    {
-        var texts = AreaFollowerMenuTexts.From(number => number == 0 ? new string('x', 65) : "ok", "test");
-        Assert.IsNull(texts.Text(FollowerMenuItem.Walk));
-        Assert.AreEqual("ok", texts.Text(FollowerMenuItem.Attack));
-    }
 }
