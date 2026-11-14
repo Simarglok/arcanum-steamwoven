@@ -1,3 +1,4 @@
+using Arcanum.Presentation.Hud;
 using Arcanum.Session;
 using Arcanum.Simulation.Movement;
 using Arcanum.Simulation.Party;
@@ -141,5 +142,52 @@ public partial class TerrainViewerApp
         Require(shown.All(text => text.Lines > 0 && text.Text.Length > 0), "every shown art text has lines: " + string.Join("; ", texts.Select(text => $"{text.Name}={text.Lines}")));
         Require(shown.All(text => text.Name != "npc"), "the NPC's line is not drawn in the panel (ARC-UI-2027: a bubble over the NPC)");
         GD.Print("ARC-UI-071 conversation panel art text " + string.Join(", ", shown.Select(text => $"{text.Name}:{text.Lines}@{text.Wrap}")));
+        // ARC-UI-2083 (ledger DH15): the reply stack never holds more than the band's five slots (the source builder keeps five, DQR5; the trainer list refuses more, DTR3).
+        Require(panel.ButtonsForSelfTest.Count <= DialogReplyBand.Slots, $"the reply stack holds at most {DialogReplyBand.Slots} replies ({panel.ButtonsForSelfTest.Count})");
+        RequireReplyBandWidening(Require);
+    }
+
+    /// <summary>
+    /// ARC-UI-2083 (ledger DH13): with the original's font art a reply whose drawn text is 388 px or wider (388 + the shadow pixel + the 12 px margins exceeds the box's 400)
+    /// widens the band and re-centres it, the box does not shrink for a later short reply of the same set, and the next reply set starts at 400 again. The text is a single
+    /// word searched on the installed font so that its width lands on the threshold (the original breaks a line at width 388, so a longer line cannot exist).
+    /// </summary>
+    private void RequireReplyBandWidening(Action<bool, string> Require)
+    {
+        var panel = _conversationPanel!;
+        var wrap = DialogReplyBand.MinWidth - DialogReplyBand.Margins;
+        string? wide = null; var drawn = 0;
+        const string Letters = "abcdefghijklmnopqrstuvwxyz";
+        for (var run = 1; run <= 120 && wide is null; run++)
+            foreach (var body in Letters)
+            {
+                foreach (var last in Letters)
+                {
+                    var word = new string(body, run) + last;
+                    var width = panel.FirstLineWidthForSelfTest(word, wrap);
+                    if (DialogReplyBand.Widened(DialogReplyBand.MinWidth, width) > DialogReplyBand.MinWidth) { wide = word; drawn = width; break; }
+                }
+                if (wide is not null) break;
+            }
+        Require(wide is not null, $"a word that draws {wrap} px or wider at the wrap width {wrap} exists in the installed font");
+        // The box left is an integer division: in a view of odd free width a box one pixel wider keeps the same left edge, so the re-centring cannot be told apart there.
+        var view = GetViewport().GetVisibleRect().Size;
+        var freeWidth = (int)AreaGameBarPanel.FreeArea(view).Size.X;
+        var widened = DialogReplyBand.Widened(DialogReplyBand.MinWidth, drawn);
+        var recentres = DialogReplyBand.BoxLeft(freeWidth, widened) != DialogReplyBand.BoxLeft(freeWidth, DialogReplyBand.MinWidth);
+        if (!recentres) GD.Print($"ARC-UI-2083 re-centring not distinguishable in a free width of {freeWidth}: the left edge is checked for equality only");
+        void Check((int X, int Y, int W, int H)? rect, int width, string what)
+        {
+            Require(rect is { } r && r.W == width && r.X == DialogReplyBand.BoxLeft(freeWidth, width) && r.H == DialogReplyBand.Height, $"{what}: the band is {width} wide, centred at {DialogReplyBand.BoxLeft(freeWidth, width)} ({rect})");
+        }
+        try
+        {
+            Check(panel.ShowReplySetForSelfTest(["Short", wide!]), widened, $"a {drawn} px reply after a short one");
+            Require(widened > DialogReplyBand.MinWidth, $"the reply of {drawn} px widens the band past {DialogReplyBand.MinWidth} ({widened})");
+            Check(panel.ShowReplySetForSelfTest([wide!, "Short", "Short"]), widened, "the short replies after the wide one do not shrink the band");
+            Check(panel.ShowReplySetForSelfTest(["Short"]), DialogReplyBand.MinWidth, "the next reply set starts at 400 again");
+            GD.Print($"ARC-UI-2083 reply band widening: {drawn} px reply -> {widened} wide, reset to {DialogReplyBand.MinWidth}");
+        }
+        finally { panel.RestoreRepliesForSelfTest(); }
     }
 }

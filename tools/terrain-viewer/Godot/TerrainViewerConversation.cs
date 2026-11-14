@@ -353,14 +353,20 @@ public partial class TerrainViewerApp
             GD.Print($"ARC-WORLD-118 scripted conversation held by the smoke script={dialog.Script} node={dialog.Node} speaker={speaker.ScriptId}");
             return;
         }
-        // ARC-UI-1125: an open window does not stop it (the opener replaces it); a conversation or a panel outside the stack still does.
-        if (_conversationHost is null || _conversationPanel is null || ConversationOpen || ProgrammaticOpenBlocked)
+        // ARC-UI-1125: an open window does not stop it (the opener replaces it); a panel outside the stack still does (the original knows none of them, so this guard is the viewer's own).
+        if (_conversationHost is null || _conversationPanel is null || ProgrammaticOpenBlocked)
         {
-            GD.Print($"ARC-SCRIPT-046 scripted conversation not opened script={dialog.Script} node={dialog.Node}: a conversation or a panel is open");
+            GD.Print($"ARC-SCRIPT-046 scripted conversation not opened script={dialog.Script} node={dialog.Node}: a panel is open");
             return;
         }
         if (HostOf(speaker) is not { } host) { _conversationNotice = $"dialog NPC script {speaker.ScriptId} has no host here"; RefreshReadyStatus(); return; }
+        // ARC-DEV-2074 (0x567460): the refusals in the original's order as for a click's talk (BeginConversation): the hero down, the can-speak test (its level-2 interrupt of the NPC stays), then a second dialog (mode 3), then the combat-mode leave.
         if (DialogStartRefused(speaker)) { RefreshReadyStatus(); return; }
+        if (ConversationOpen)
+        {
+            GD.Print($"ARC-SCRIPT-046 scripted conversation not opened script={dialog.Script} node={dialog.Node}: a conversation is open");
+            return;
+        }
         if (!LeaveCombatModeForDialog()) { RefreshReadyStatus(); return; }
         QuarantineWorld();
         _conversationNotice = null; _talkOpenPending = null; _conversationEndPending = null;

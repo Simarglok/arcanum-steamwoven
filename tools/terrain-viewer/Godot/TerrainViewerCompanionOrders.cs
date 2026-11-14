@@ -95,7 +95,7 @@ public partial class TerrainViewerApp
         Func<string, SessionPeaceFacts>? combat = ai is not null && request.Type is CompanionOrderType.Attack or CompanionOrderType.BackOff ? ai.OrderFacts : null;
         var facts = AreaCompanionOrders.Facts(session, group, pc.State.CommittedCell, host.State, CompanionName, combat);
         var (result, noGoal) = AreaCompanionOrders.Issue(session, group, request with { Followers = facts, Target = ai is null ? null : request.Target },
-            pc.State.CommittedCell, WorldTime, ai);
+            pc.State.CommittedCell, WorldTime, ai, SayOrderSpeech);
         GD.Print(AreaCompanionOrders.Log(source, request.Type, result) + (noGoal.Count == 0 ? "" : " | goal not started: " + string.Join(", ", noGoal))
             + (request.Type == CompanionOrderType.Attack ? $" | target={request.Target?.Entity ?? "none"} ai={ai is not null}" : ""));
         SayOrderAcknowledgements(result);
@@ -111,7 +111,7 @@ public partial class TerrainViewerApp
     /// <summary>
     /// ARC-UI-2079 (ledger TB28, the order handler's broadcast callback): each reached follower says the acknowledgement line its order gives (2100-2199, the refusal 2200-2299, the farewells 1900-2099) to the broadcaster, the hero, who is the
     /// listener its speech display turns it to. The follower's can-speak test is the line builder's (flag 1 for an acknowledgement; flag 0 for a refusal or a farewell, which also refuses a follower in combat focus or fleeing). No active
-    /// test stands before them, unlike the AI sites. Not modelled: the curse's race line, and the move order's lines (the viewer sends no move order).
+    /// test stands before them, unlike the AI sites. The curse's race line and the move order's lines are said inside the order (<see cref="SayOrderSpeech"/>), not here.
     /// </summary>
     private void SayOrderAcknowledgements(SessionCompanionOrderResult result)
     {
@@ -120,6 +120,20 @@ public partial class TerrainViewerApp
             if (outcome.Lines is not { } lines) continue;
             var flagZero = outcome.Line is CompanionOrderLine.Cannot or CompanionOrderLine.FriendlyFarewell or CompanionOrderLine.HostileFarewell;
             SayLine(outcome.Entity, lines, Arcanum.Simulation.Ai.AiSchedulerRules.Pc, refusesFightOrFlee: flagZero);
+        }
+    }
+
+    /// <summary>
+    /// ARC-UI-2085 (ledger TB28): the lines an order says inside its handler. The curse, after the unforced leave and before the attack event, makes the follower say a race line (group 1000,
+    /// can-speak test with flag 0) to the hero; the move order says the acknowledgement when its please-move goal started and the refusal (flag 0) otherwise.
+    /// </summary>
+    private void SayOrderSpeech(CompanionOrderOutcome outcome, AreaOrderSpeech speech)
+    {
+        switch (speech)
+        {
+            case AreaOrderSpeech.CurseRace: SayRaceLine(outcome.Entity, 1000, Arcanum.Simulation.Ai.AiSchedulerRules.Pc, refusesFightOrFlee: true); break;
+            case AreaOrderSpeech.MoveAcknowledge: SayLine(outcome.Entity, CompanionOrderRules.Lines(CompanionOrderLine.Acknowledge), Arcanum.Simulation.Ai.AiSchedulerRules.Pc, refusesFightOrFlee: false); break;
+            default: SayLine(outcome.Entity, CompanionOrderRules.Lines(CompanionOrderLine.Cannot), Arcanum.Simulation.Ai.AiSchedulerRules.Pc, refusesFightOrFlee: true); break;
         }
     }
 

@@ -1734,19 +1734,21 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     // ARC-DEV-135 (MIG13 S5): an interrupt of every run of the NPC at a level (0x424070, GS17; the first refusal stops the walk) with the end nodes of each run it ended. True: it
     // freed a run (or marked the stepped one done); Succeeded is the original's answer (no run, a no-interrupt goal left running and a run that ended all succeed; a refusal, or the
     // spell-run rules holding the table, do not).
-    private (bool Freed, bool Succeeded) InterruptOwner(string npc, int level)
+    // ARC-DEV-2074: Refused is a run's own refusal (the session asked the table and the table said no); a session failure (an entity that is none, a table the spell-run rules hold) is no run's refusal.
+    private (bool Freed, bool Succeeded, bool Refused) InterruptOwner(string npc, int level)
     {
         var change = _session.InterruptGoals(npc, level);
         EndNodes(change.Steps);
         var succeeded = change.Failure == SessionGoalFailure.None && change.Succeeded;
         if (!succeeded) Trace(npc).Step = $"interrupt {level} refused: {change.Failure} {string.Join(",", change.Steps.Select(s => s.Outcome))}";
-        return (change.Steps.Any(s => s.Outcome is GoalInterruptOutcome.Ended or GoalInterruptOutcome.MarkedDone), succeeded);
+        return (change.Steps.Any(s => s.Outcome is GoalInterruptOutcome.Ended or GoalInterruptOutcome.MarkedDone), succeeded, change.Failure == SessionGoalFailure.None && !change.Succeeded);
     }
 
     private bool InterruptRuns(string npc, int level) => InterruptOwner(npc, level).Freed;
 
-    /// <summary>ARC-UI-2030: the interrupt the can-speak test 0x4AD800 makes at flag 0 on a talk start (0x424070, level 2, the NPC's runs, the first refusal stops the walk). False when a run refused it (the test answers 3).</summary>
-    public bool InterruptForTalk(string npc) => InterruptOwner(npc, TalkInterruptLevel).Succeeded;
+    /// <summary>ARC-UI-2030: the interrupt the can-speak test 0x4AD800 makes at flag 0 on a talk start (0x424070, level 2, the NPC's runs, the first refusal stops the walk). False only when a run refused it (the test answers 3).
+    /// ARC-DEV-2074: a session failure of the call (an invalid entity, a table the spell-run rules hold) is the session's own wait, no run's refusal, so it answers true and the talk goes on without the interrupt.</summary>
+    public bool InterruptForTalk(string npc) => !InterruptOwner(npc, TalkInterruptLevel).Refused;
 
     /// <summary>The level of the can-speak test's interrupt (0x4AD800: <c>0x424070(NPC, 2, 0, 0)</c>).</summary>
     public const int TalkInterruptLevel = 2;
@@ -3602,6 +3604,20 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     {
         var run = new GoalRun(mover, default, new GoalFrame(GoalType.PleaseMove, awayFrom));
         return Started(mover, RunOf(mover), new AiPerformResult(AiPerformKind.PleaseMove, run) { Started = true });
+    }
+
+    /// <summary>
+    /// ARC-UI-2085 (the order handler's move order): the please-move starter asked with the hero first and the follower <paramref name="follower"/> second
+    /// (<see cref="AiTileSharerRules.PleaseMove"/>: the follower, not a player character, moves away from the hero when the start gate with cost 0 passes and it is not busy). True when
+    /// goal 68 started, which decides the order's line (the acknowledgement; else the refusal). False for a follower this host does not run.
+    /// </summary>
+    public bool AskToMove(string follower)
+    {
+        ArgumentNullException.ThrowIfNull(follower);
+        if (!_followers.ContainsKey(follower) || follower == Pc) return false;
+        var goals = _session.QueryGoals();
+        return AiTileSharerRules.PleaseMove(this, new AiTileCritter(Pc, true, !DeadCritter(Pc), goals.BusyRun(Pc) is not null, 0),
+            new AiTileCritter(follower, false, !DeadCritter(follower), goals.BusyRun(follower) is not null, 1));
     }
 
     /// <summary>

@@ -364,6 +364,25 @@ public sealed class DialogGreetingTests
         Assert.AreEqual(DialogGenericGreetingStatus.Failed, Comment(refused, 2400, 2499).Status, "a refused roll");
     }
 
+    // ARC-UI-2085: the curse order's race line is the race generator's group 1000: the PC's race selects the block, the speaker's own override line 11000 comes first, a dumb speaker reads the dumb file.
+    private static DialogGenericGreetingResult RaceLine(FakeGreeter greeter) =>
+        DialogFollowerComment.SayRace(greeter, new DialogReactionQuery(new DialogParticipantId(900), new DialogParticipantId(800)), 1000, new DialogSpeakerNames("Ada", "Bram"),
+            DialogTextEncoding.Windows1252, 4096);
+
+    [TestMethod]
+    public void The_curse_race_line_is_group_1000_of_the_race_generator_by_the_pcs_race_with_the_override_first()
+    {
+        var files = Files((GeneratedDialogFile.RaceMaleToMale, "{1000}{same race @pcname@}{1200}{other race}"), (GeneratedDialogFile.RaceDumbMaleToMale, "{1000}{dumb}"));
+        var same = RaceLine(Greeter(Facts() with { NpcRace = 3, PcRace = 3 }, files, rolls: [ 0 ]));
+        Assert.AreEqual((DialogGenericGreetingStatus.Said, "same race Ada"), (same.Status, same.Text));
+        Assert.AreEqual(new DialogLineOrigin(DialogLineOriginKind.Generated, 1000, GeneratedDialogFile.RaceMaleToMale), same.Origin);
+        Assert.AreEqual("other race", RaceLine(Greeter(Facts() with { NpcRace = 1, PcRace = 3 }, files, rolls: [ 0 ])).Text, "another race: 1000 + 50 x (PC race + 1)");
+        Assert.AreEqual("dumb", RaceLine(Greeter(Facts() with { NpcDumb = true, NpcRace = 1, PcRace = 3 }, files, rolls: [ 0 ])).Text);
+        var own = RaceLine(Greeter(Facts(), files, overrides: Read(Record("11000", "own insult"))));
+        Assert.AreEqual(("own insult", DialogLineOriginKind.Override, 11000), (own.Text, own.Origin!.Kind, own.Origin.Number));
+        Assert.AreEqual(DialogGenericGreetingStatus.FactsUnknown, RaceLine(Greeter(null)).Status);
+    }
+
     internal static DialogGreetingFacts Facts() => new(true, true, false, 0, 0, 0, DialogReactionCategory.Neutral, false);
 
     private static DialogConversation Start(string greeting, IDialogGreetingPort? port, string extra = "", Ports? ports = null, string action = "",

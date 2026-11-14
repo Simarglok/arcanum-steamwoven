@@ -35,7 +35,8 @@ public partial class TerrainViewerApp
         }
         Require(count == 13, "13 bounded frames resolved");
         var strip = panel.StripRectForSelfTest(AreaBarStrip.Top);
-        var outside = strip.Position + new Vector2(720, 20) * panel.Factor;
+        // ARC-DEV-1759: a spot on the strip that no button covers (the clock window, 648..776, filled the old spot at x 720).
+        var outside = strip.Position + new Vector2(400, 20) * panel.Factor;
         var capture = System.Environment.GetEnvironmentVariable("ARC_AREA_BAR_CAPTURE");
         var geometry = new List<object>();
         foreach (var spec in AreaGameBarLayout.Buttons.Where(s => numbers.Contains(s.Art)))
