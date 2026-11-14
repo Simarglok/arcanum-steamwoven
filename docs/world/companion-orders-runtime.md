@@ -140,10 +140,12 @@ follower module; its Godot-free rules are `AreaFollowerPanelRules` (tools/terrai
 - **Portrait aiming (FP6)**: with the spell cursor open (`FollowerAimSpell`: the cast host's pick with the follower as the object and no tile), the item cursor
   (`FollowerAimItem`: `ItemAimPickAt`) or the pick pocket cursor (`FollowerAimPickPocket`: `PickPocketOn`), a left release on a portrait aims at that follower, as a press on
   his body would, and the area test decides; the disarm cursor is cancelled (a follower is no trap). In any other mode the click is the ordinary one (a talk, B33). A visiting
-  follower has no cast id on the shown map and refuses a spell or item target. The lockpick cursor and the follower order's own target mode (walk, attack) leave the click as it
-  was (ignored).
+  follower has no cast id on the shown map and refuses a spell or item target. ARC-UI-1787: armed lockpicks are mode 16 as well (the lockpick path of 0x571CB0, `FollowerAimLockpick`): the follower is
+  the target object, a critter is no lock (PL2), so the pick ends and the mode pops as a press on a body that is no door, window or container does (the 4 action points of a non-lockable target, PL3, and the better follower's hand-over line are
+  not charged or floated there either, as for the world press). The follower order's own target mode (18, walk and attack) is not one of the dispatcher's three modes (0x54EA80), so the portrait
+  click is the ordinary one: a talk, which the dialog's opener turns into the mode's pop (the order is dropped), and nothing in combat mode without Alt.
 - **Tests**: `AreaFollowerPanelRulesTests`; the `companion-click` stage's facts (the hide and show buttons, the menu's rows and place, the margin release, the sheet and
-  the barter window, eight synthetic followers scrolled by their arrows). `ARC_AREA_FOLLOWER_PANEL_CAPTURE` saves readbacks of the stage to a caller's ignored path.
+  the barter window, eight synthetic followers scrolled by their arrows, ARC-UI-1787: the portrait click with armed lockpicks and with a pending order). `ARC_AREA_FOLLOWER_PANEL_CAPTURE` saves readbacks of the stage to a caller's ignored path.
 
 ## Tests
 
