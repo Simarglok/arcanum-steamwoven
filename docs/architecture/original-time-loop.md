@@ -147,7 +147,7 @@ Per-frame gates (TL8). "Passes when" is the test against the last run; none catc
 | Mouse idle record; button repeat | more than 35 ms without motion; more than 250 ms held | 0x4FF5A0 | F2 |
 | Cursor art animation | 1000 / the art's frame rate, only for an art with more than one frame | 0x4FF5A0 | F2 |
 | Object art animations | 1000 / the art's frame rate (integer division), one frame step per frame | 0x43A6D0 | F2 |
-| Text bubble life | "text duration" setting × 1000 ms (n s when created with n; −2 permanent) | 0x4D5EB0 | F2 |
+| Text bubble life | "text duration" setting × 1000 ms (n s when created with n; −2 permanent), real clock ([TB5–TB8](../research/ledger/ui-audio.md#text-bubbles-arc-ui-1997)) | 0x4D5EB0 | F1 |
 | Floating text step | at least 50 ms | 0x4D5190 | F2 |
 | Ambient sound schemes | more than 250 ms (absolute signed difference) | 0x41B2A0 | F2 |
 | Miles sound service | nominally every 100 ms, one step per frame, resynchronised when more than 1,000 ms off | 0x532DE0 | F2 |

@@ -1067,8 +1067,36 @@ smoke's clock raises them 3 px a step and the drawn opacity is the fade's; the N
 lands (red lines over the hero) or is dodged (a white dodge); at level 1 the numbers go, at level 0 nothing is drawn;
 it prints `ARC-UI-021 native-smoke floaters PASS`. Since ARC-COMBAT-1138 the stage also checks a script's damage on a map object (a door, container or scenery with hit points to spare): `HT N` in white over it, N what the
 object lost after its material (`ARC-COMBAT-1138 floaters object-damage`; its capture hides the diagnostic HUD). Not done: spell blinding, the draw offsets of the boxes' objects (the hero's while walking), the
-original's font art 229, text
-bubbles (Text Duration). Original visual parity NOT VERIFIED. ARC-AI-1527: the PC's followers' comment lines (the combat taunt at the end of the hero's hit, the near-death line of a hurt follower, the complaint's upset line) float as white lines over the follower through the script float queue, with a random line of the player's generated NPC files (no text is stored).
+original's font art 229. Original visual parity NOT VERIFIED. The text bubbles over objects (Text Duration) are [below](#text-bubbles-arc-ui-1997). ARC-AI-1527: the PC's followers' comment lines (the combat taunt at the end of the hero's hit, the near-death line of a hurt follower, the complaint's upset line) float as white lines over the follower through the script float queue, with a random line of the player's generated NPC files (no text is stored).
+
+### Text bubbles (ARC-UI-1997)
+
+The original's text bubbles ("TB" module, [ledger TB1–TB22](../research/ledger/ui-audio.md#text-bubbles-arc-ui-1997)): `TextBubbleRules` and
+`TextBubbleField` in `Arcanum.Presentation.Hud` (the rules and the table of eight), drawn by `AreaFloaterLayer` (a surface under the
+floating lines, so above the objects and below the numbers) in the original's font art 229 with its drop shadow (the shadow's
+(10, 10, 10) copy first at +1,+1; the viewer's font with an outline without a game folder).
+
+- **What makes a bubble.** The lines the viewer already queued as floats: a dialog script's float line (action 23), a tile script's, the
+  followers' comment lines (ARC-AI-1527) and a greeting that opens no window (ARC-DEV-324): white for anyone, green for a PC speaker
+  (path 0x568430). They no longer rise as floating lines. A new line over the same object replaces its bubble. The NPC's line in an
+  open dialog is still drawn by the conversation panel, not as a persistent bubble (issue #2027).
+- **Life.** The Text Duration line of the Video page (0–10, default 6) × 1000 ms on the **real** clock: pause, the Esc menu, turn-based mode
+  and a dialog do not freeze a bubble. A bubble goes when its age is above its life (0: after the next frame). Changing the line sets
+  the live bubbles' life at once (from their own start; the original's 1,000,000 factor in that callback is a unit slip, fixed in both rule
+  modes, TB17). The "text floaters" level does not hide a bubble (only Text Duration is read).
+- **Layout.** The text wraps at 200 px (at most 200 px of lines, the rest cut), each line centred in the tight box; the line height is the
+  font's text height. The anchor is the owner's tile centre + (40, 20) on the screen (no draw offset yet); the box takes one of eight
+  slots around it (above, then clockwise): the first of the anchor's region order whose box lies in the view, chosen once when first
+  drawn and kept (the region constants of the original's 800 × 600 view are taken from the view's centre here, so a larger window
+  behaves as the original does at its centre). The table holds eight bubbles; a ninth takes the oldest non-persistent one. A new scene
+  drops every bubble. The text keeps the screen's pixels at any zoom (the original has no zoom either).
+- **Not done.** The persistent NPC-line bubble and the final-line close of a dialog (#2027, #2028), the speaker's turn toward the listener
+  and the speech voice, the objects' draw offsets, the exact word-break rules (TB22).
+
+Checks: `TextBubblesTests` (colours, life, wrap, slots and slot choice, the table's reuse and eviction, life rules, the setting change) and
+the `floaters` smoke stage's bubble part (a PC's and an NPC's bubble over their objects, green and white, wrapped within 200 px,
+alive at 6000 ms and gone after it, a Text Duration change to 2 shortening a live bubble at once; `ARC-UI-1997 bubbles over objects PASS`;
+`ARC_AREA_FLOATERS_CAPTURE` saves `bubble-before` (the old white rising line) and `bubble-after`) and the `spirit-talk` stage (the greeting over the corpse is a bubble). Original visual parity NOT VERIFIED.
 
 ### Inventory window, pickup and loot (ARC-UI-004)
 
