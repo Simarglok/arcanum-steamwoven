@@ -12,7 +12,7 @@ namespace Arcanum.TerrainViewer;
 
 public partial class TerrainViewerApp
 {
-    // ARC-AI-1757: the strikes an NPC landed on an object through the AI host (shooter, struck object's entity, damage), for the npc-object stage.
+    // ARC-AI-1757: the strikes an NPC landed on an object through the AI host (shooter, struck object's entity, damage this strike dealt), for the npc-object stage.
     private readonly List<(string Shooter, string? Struck, int? Damage)> _npcObjectStrikesForSelfTest = [];
 
     // ARC-AI-1757 (the viewer leg of ARC-AI-1636, VB2-2 gap d) native observation (stage "npc-object", only when named, map mode with --hero, AI on, the town): a free NPC of the map is put into COMBAT_FOCUS on a scenery or container of the
@@ -74,8 +74,7 @@ public partial class TerrainViewerApp
             var npc = pairs[found].Npc; var obj = pairs[found].Object;
             _camera!.ResetWorld(WorldAnchor, WorldViewport, 1);
             PublishWorldSelection();
-            var host = AreaAiHostNow();
-            Require(host is not null, "the AI host is built");
+            var host = AreaAiHostNow() ?? throw new InvalidOperationException("AREA_NPC_OBJECT_SMOKE_FAILED: no AI host");
             RequestSectorChart(); // the placement moved the hero through the session's cache without asking the chart
             Require(SettleSectorChartForSmoke(), "the sector chart's background read did not finish: " + SectorChartState());
             Require(session.QueryAiTick(npc.Entity) is not null, "the NPC has its AI tick");
@@ -84,6 +83,7 @@ public partial class TerrainViewerApp
             Require(session.QueryDanger(npc.Entity).State == DangerState.None, "the NPC starts calm: " + session.QueryDanger(npc.Entity).State);
             var objectTarget = obj.Target.Object!;
             var before = session.QueryObject(objectTarget);
+            var heroHp = session.QueryHeroLife()!.Status.HitPoints;
 
             _areaSmokeTime *= 20; scaled = true; _worldTestTime = SimulationTime.At(_areaSmokeTime, 20);
             var hostMs = 30_000_000L;
@@ -98,7 +98,7 @@ public partial class TerrainViewerApp
             bool InFocus() => session.QueryDanger(npc.Entity) is { State: DangerState.CombatFocus, Focus.Entity: { } focus } && focus == obj.Cast;
 
             // The attack event of the object (what a trap's shooter or a scripted object attack runs): the NPC takes COMBAT_FOCUS on it.
-            host!.SpellAttacked(obj.Cast, npc.Entity);
+            host.SpellAttacked(obj.Cast, npc.Entity);
             Require(InFocus(), $"the attack event of the object {obj.Cast} gave the NPC {npc.Entity} COMBAT_FOCUS on it: {session.QueryDanger(npc.Entity).State}/{session.QueryDanger(npc.Entity).Focus} {Trace()}");
             Require(!host.Gone(obj.Cast) && !host.DeadCritter(obj.Cast), "the host reads the object as standing, never as a dead critter");
 
@@ -111,7 +111,6 @@ public partial class TerrainViewerApp
             var firstHitTrace = Trace();
             Require(Struck(), $"the NPC fought the object and the session's object attack damaged it within {frames} frames ({before.Damage}/{before.HitPoints}->{first.Damage}/{first.HitPoints}): {firstHitTrace} danger={session.QueryDanger(npc.Entity).State}");
             var strikeDamage = _npcObjectStrikesForSelfTest.First(s => s.Shooter == npc.Entity && s.Struck == obj.Target.Entity && s.Damage is > 0).Damage!.Value;
-            var heroHp = session.QueryHeroLife()!.Status.HitPoints;
             GD.Print($"ARC-AI-1757 npc-object fight npc={npc.Entity} object={obj.Cast} kind={obj.Target.Kind} cells {npc.Cell.X},{npc.Cell.Y}->{obj.Cell.X},{obj.Cell.Y} first strike after {frames} frames damage {strikeDamage} on {before.HitPoints} hit points {firstHitTrace}");
 
             // The fight goes on until the object is busted (the busted test the host reads); the NPC's hits may not break a sturdy container within the budget, then a script's damage deals the rest and the stage says so.
@@ -133,7 +132,7 @@ public partial class TerrainViewerApp
             var dropFrames = 0;
             for (; dropFrames < 400 && InFocus(); dropFrames++) Frame();
             var danger = session.QueryDanger(npc.Entity);
-            var goalOnObject = host.RunOf(npc.Entity) is { } run && run.Bottom.Target == obj.Cast;
+            var goalOnObject = host.RunsOf(npc.Entity).Any(run => run.Frames.Any(frame => frame.Target == obj.Cast));
             GD.Print($"ARC-AI-1757 npc-object busted forced={forced} bustFrames={bustFrames} dropFrames={dropFrames} danger={danger.State}/{danger.Focus} goalOnObject={goalOnObject} {Trace()}");
             Require(!InFocus(), $"the NPC dropped the focus on the busted object within {dropFrames} frames: {danger.State}/{danger.Focus} {Trace()}");
             Require(!goalOnObject, "the NPC is no longer on an attack goal on the busted object");
@@ -145,6 +144,7 @@ public partial class TerrainViewerApp
         }
         finally
         {
+            _npcObjectStrikesForSelfTest.Clear();
             RestoreHeroForSmoke(session, heroBefore);
             CalmNpcsForSmoke(session, npcs.Select(n => n.Entity));
             _aiForSmoke = false; RetireAiHost(); _aiHostStamp = null;
