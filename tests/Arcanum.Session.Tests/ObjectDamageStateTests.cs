@@ -63,6 +63,37 @@ public sealed class ObjectDamageStateTests
     }
 
     [TestMethod]
+    public void ADamageRecordWithAnAttackerKeepsTheWitnessStepsAndOneWithoutDropsThem()
+    {
+        // ARC-AI-2112 (GW10): the damage end calls the guard witnesses only when the record has an attacker (a spell's caster); the loud call is mode 1 for a hit that leaves the door whole, mode 0 for one that breaks it.
+        using var owner = Owner();
+        var door = Target("sector:1:7", DamageableObjectKind.Portal);
+        var whole = owner.DamageObject(owner.Version, door, 2, attacked: true);
+        Assert.AreEqual(SessionObjectHostSteps.WitnessesHearAttack, whole.Host);
+        var broke = owner.DamageObject(owner.Version, door, 6, attacked: true);
+        Assert.AreEqual(SessionObjectHostSteps.WitnessesHearBreak, broke.Host);
+        using var plain = Owner();
+        Assert.AreEqual(SessionObjectHostSteps.None, plain.DamageObject(plain.Version, door, 2, attacked: false).Host);
+    }
+
+    [TestMethod]
+    public void AZeroHitWithAnAttackerOnAWholeDoorChangesNothingButKeepsTheWitnessStep()
+    {
+        // ARC-AI-2123 (GW1): the damage end calls the witnesses (mode 1) for a hit of 0 that leaves the object whole, so an attacked record keeps the step; an unattacked one has none.
+        using var owner = Owner();
+        var door = Target("sector:1:7", DamageableObjectKind.Portal);
+        var version = owner.Version;
+        var zero = owner.DamageObject(version, door, 0, attacked: true);
+        Assert.AreEqual((GameSessionDisposition.NoChange, null, SessionObjectHostSteps.WitnessesHearAttack), (zero.Disposition, zero.Hit, zero.Host));
+        var negative = owner.DamageObject(version, door, -4, attacked: true);
+        Assert.AreEqual((GameSessionDisposition.NoChange, SessionObjectHostSteps.WitnessesHearAttack), (negative.Disposition, negative.Host));
+        Assert.AreEqual(0, owner.QueryObject(door).Damage, "nothing was written");
+        Assert.AreEqual(version, owner.Version);
+        var plain = owner.DamageObject(version, door, 0, attacked: false);
+        Assert.AreEqual((GameSessionDisposition.NoChange, SessionObjectHostSteps.None), (plain.Disposition, plain.Host));
+    }
+
+    [TestMethod]
     public void ADoorAtZeroHitPointsIsDestroyedAndThenUnavailable()
     {
         using var owner = Owner();

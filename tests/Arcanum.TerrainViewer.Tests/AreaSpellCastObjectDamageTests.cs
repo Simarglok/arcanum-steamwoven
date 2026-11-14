@@ -1,4 +1,5 @@
 using Arcanum.Data.Area;
+using Arcanum.Data.Combat;
 using Arcanum.Data.Traversal;
 using Arcanum.Session;
 using Arcanum.Simulation.Combat;
@@ -99,6 +100,41 @@ public sealed class AreaSpellCastObjectDamageTests
         Assert.IsNull(f.Targets.Target(f.Session, f.Rows[0].Key), "a destroyed door is no target any more");
         Assert.IsTrue(f.Targets.Gone(f.Session).Contains(f.Rows[0].Key), "and the view stops drawing it");
         Assert.IsFalse(f.Caster.ApplyScriptDamage(id, 5, 0, unresistable: true).Applied, "a destroyed object takes nothing");
+    }
+
+    [TestMethod]
+    public void ADamageRecordsAttackerStaysOnTheHitWithTheWitnessStepsAndAScriptsHitHasNone()
+    {
+        // ARC-AI-2112 (GW10): a spell's damage record names its caster, so the hit carries the actor and the guard witness step (mode 1 whole, mode 0 broken); a script's record has no attacker.
+        var f = Create();
+        var id = f.Map.Id(f.Rows[0]);
+        var step = AttackResolver.DamageStep(new() { Attacker = new Combatant(), Target = new Combatant(), TargetKind = AttackTargetKind.OtherObject, Damage = DamageByType.Zero.With(DamageType.Normal, 4) });
+        Assert.IsTrue(f.Map.DamageObject(id, step, SessionSpellCaster.Hero));
+        var whole = f.Map.TakeObjectHits().Single();
+        Assert.AreEqual((SessionSpellCaster.Hero, SessionObjectHostSteps.WitnessesHearAttack), (whole.Actor, whole.Host));
+        var big = AttackResolver.DamageStep(new() { Attacker = new Combatant(), Target = new Combatant(), TargetKind = AttackTargetKind.OtherObject, Damage = DamageByType.Zero.With(DamageType.Normal, 40) });
+        Assert.IsTrue(f.Map.DamageObject(id, big, "oid:guard"));
+        var broke = f.Map.TakeObjectHits().Single();
+        Assert.AreEqual(("oid:guard", true, SessionObjectHostSteps.WitnessesHearBreak), (broke.Actor, broke.Hit.Broken, broke.Host));
+        var other = f.Map.Id(f.Rows[1]);
+        Assert.IsTrue(f.Caster.ApplyScriptDamage(other, 12, 0, unresistable: true).Applied);
+        var script = f.Map.TakeObjectHits().Single();
+        Assert.AreEqual((null, SessionObjectHostSteps.None), (script.Actor, script.Host), "script damage has no attacker, so no witnesses");
+    }
+
+    [TestMethod]
+    public void AZeroHitOfACasterOnAWholeObjectQueuesAWitnessOnlyHitAndAScriptsDoesNot()
+    {
+        // ARC-AI-2123 (GW1, GW8): a spell's damage of 0 on a whole object changes nothing and is no shown hit, but the damage end still calls the witnesses (mode 1): the map queues a hit only they read, with the caster as actor.
+        var f = Create();
+        var id = f.Map.Id(f.Rows[0]);
+        var zero = AttackResolver.DamageStep(new() { Attacker = new Combatant(), Target = new Combatant(), TargetKind = AttackTargetKind.OtherObject, Damage = DamageByType.Zero });
+        Assert.AreEqual(0, zero.HitPointDamage);
+        Assert.IsFalse(f.Map.DamageObject(id, zero, SessionSpellCaster.Hero), "nothing changed");
+        var witnessed = f.Map.TakeObjectHits().Single();
+        Assert.AreEqual((id, SessionSpellCaster.Hero, true, SessionObjectHostSteps.WitnessesHearAttack), (witnessed.Id, witnessed.Actor, witnessed.WitnessOnly, witnessed.Host));
+        Assert.IsFalse(f.Map.DamageObject(id, zero), "no attacker: the original skips the call");
+        Assert.AreEqual(0, f.Map.TakeObjectHits().Count);
     }
 
     [TestMethod]

@@ -6,9 +6,9 @@ using Godot;
 
 namespace Arcanum.TerrainViewer;
 
-// ARC-AI-2084 (FR-AI, ledger TB28 and GW1-GW8): the guard witnesses (0x4AEE50) of an act on a portal, container or scenery in the shown map. The AI host owns the rule (AreaAiHost.GuardWitnesses: the square of
+// ARC-AI-2084 (FR-AI, ledger TB28 and GW1-GW10): the guard witnesses (0x4AEE50) of an act on a portal, container or scenery in the shown map. The AI host owns the rule (AreaAiHost.GuardWitnesses: the square of
 // 10 tiles around the object, name or guard class, sight or hearing, the catching-thief script, the reaction, the attack event and the line to the actor); this partial asks it from the callers the original has:
-// the damage step of an attack (loud), the pick-locks skill (silent) and a spell that clears a lock (loud). The object's guard field is its notify NPC (portal slot 39, container slot 42).
+// the damage step of an attack and of a spell's damage on the object (loud; the caster is the actor), the pick-locks skill (silent) and a spell that clears a lock (loud). The object's guard field is its notify NPC (portal slot 39, container slot 42).
 public partial class TerrainViewerApp
 {
     private const int NotifyNpcPortalSlot = 39, NotifyNpcContainerSlot = 42;
