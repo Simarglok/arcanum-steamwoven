@@ -271,8 +271,8 @@ The viewer hosts the core (`tools/terrain-viewer/Godot/TerrainViewerControllers.
 ## Evidence log (ARC-GPAD-1376, merged)
 
 The metrics source of the human test (§0.8, §5). Off at every start and never saved; the owner turns it on for a test session
-in the game's Options window (Video page, **Evidence Log** line) and sets the **Test Task** line (None, Task 1 to 8 of §5) before each
-task, so the log carries the task's start and end. While on, the viewer writes one file per session, `evidence-yyyyMMdd-HHmmss.jsonl`
+in the game's Options window (Video page, **Evidence Log** line: Off, On, then Task 1 to 8 of §5, ARC-UI-1797 merged the log and its task marker into this
+one line) and steps it to the task before each task, so the log carries the task's start and end. While on, the viewer writes one file per session, `evidence-yyyyMMdd-HHmmss.jsonl`
 (UTC in the name only), under `user://evidence/` of the device (the isolated folder in an automated run, `EVIDENCE_LOG_TEST_DIR` for
 tests). Nothing is sent anywhere; the owner copies the file by hand (on the ROG Xbox Ally X and the Mac the folder is the game's
 data folder, shown at start as `user=` in the run log).

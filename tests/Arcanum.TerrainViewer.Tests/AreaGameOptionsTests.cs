@@ -30,12 +30,18 @@ public sealed class AreaGameOptionsTests
     {
         Assert.AreEqual(16, AreaOptionTable.All.Count(c => !c.Project), "the original's 16 controls");
         CollectionAssert.AreEqual(new int?[] { 100, 101, 102, 103, 104, 105, 106, 107, null }, AreaOptionTable.Page(AreaOptionsPage.Game).Select(c => c.LabelMessage).ToArray(), "OP2, then the rule mode (the HD lines are the launcher screen's since ARC-UI-146)");
-        CollectionAssert.AreEqual(new int?[] { 200, 201, 202, 203, 204, null, null, null, null }, AreaOptionTable.Page(AreaOptionsPage.Video).Select(c => c.LabelMessage).ToArray());
+        CollectionAssert.AreEqual(new int?[] { 200, 201, 202, 203, 204, null, null, null }, AreaOptionTable.Page(AreaOptionsPage.Video).Select(c => c.LabelMessage).ToArray());
         CollectionAssert.AreEqual(new int?[] { 300, 301, 302 }, AreaOptionTable.Page(AreaOptionsPage.Sound).Select(c => c.LabelMessage).ToArray());
-        CollectionAssert.AreEqual(new[] { AreaOption.Rules, AreaOption.ControlScheme, AreaOption.PromptStyle, AreaOption.EvidenceLog, AreaOption.TestTask }, AreaOptionTable.All.Where(c => c.Project).Select(c => c.Option).ToArray(), "the project controls");
+        CollectionAssert.AreEqual(new[] { AreaOption.Rules, AreaOption.ControlScheme, AreaOption.PromptStyle, AreaOption.EvidenceLog }, AreaOptionTable.All.Where(c => c.Project).Select(c => c.Option).ToArray(), "the project controls");
         Assert.AreEqual(0, AreaOptionTable.Of(AreaOption.EvidenceLog).Default, "ARC-GPAD-1376: the evidence log is off by default");
-        Assert.AreEqual(0, AreaOptionTable.Of(AreaOption.TestTask).Default);
-        Assert.AreEqual(AreaOptionTable.TestTaskCount, AreaOptionTable.Of(AreaOption.TestTask).Limit);
+        Assert.AreEqual(1 + AreaOptionTable.TestTaskCount, AreaOptionTable.Of(AreaOption.EvidenceLog).Limit, "ARC-UI-1797: Off, On, Task 1 to 8 in one line");
+        Assert.AreEqual(AreaOptionTable.TextDurationDefault, AreaOptionTable.Of(AreaOption.TextDuration).Default, "ARC-UI-1797: the original's text duration default");
+        Assert.AreEqual(10, AreaOptionTable.Of(AreaOption.TextDuration).Max);
+        Assert.AreEqual(AreaOptionTable.TextDurationDefault, Values.Value(AreaOption.TextDuration));
+        Assert.AreEqual(5, new AreaGameOptions(1, 0, true, false, 5, 5, 5, TextDuration: 5).Value(AreaOption.TextDuration));
+        Assert.AreEqual(1, new AreaGameOptions(1, 0, true, false, 5, 5, 5, EvidenceLog: true).Value(AreaOption.EvidenceLog), "the log on, no task");
+        Assert.AreEqual(4, new AreaGameOptions(1, 0, true, false, 5, 5, 5, EvidenceLog: true, TestTask: 3).Value(AreaOption.EvidenceLog), "the log on in task 3");
+        Assert.AreEqual(0, new AreaGameOptions(1, 0, true, false, 5, 5, 5, EvidenceLog: false, TestTask: 3).Value(AreaOption.EvidenceLog), "a task runs only while the log is on");
         Assert.IsFalse(Values.Value(AreaOption.EvidenceLog) == 1);
         for (var i = 0; i < AreaOptionTable.All.Count; i++) Assert.AreEqual((AreaOption)i, AreaOptionTable.All[i].Option, "the table is indexed by the option");
         var defaults = AreaOptionTable.All.ToDictionary(c => c.Setting, c => c.Default);
@@ -53,8 +59,8 @@ public sealed class AreaGameOptionsTests
         Assert.AreEqual((int)RuleMode.Steamwoven, defaults["rules"], "Steamwoven is the default mode");
         CollectionAssert.AreEqual(new[]
             {
-                AreaOption.Difficulty, AreaOption.ViolenceFilter, AreaOption.DefaultCombatMode, AreaOption.AutoAttack, AreaOption.AutoSwitchWeapons, AreaOption.AlwaysRun, AreaOption.FollowerSkills, AreaOption.Brightness, AreaOption.Floats, AreaOption.FloatSpeed, AreaOption.CombatTaunts,
-                AreaOption.Effects, AreaOption.Voice, AreaOption.Music, AreaOption.Rules, AreaOption.ControlScheme, AreaOption.PromptStyle, AreaOption.EvidenceLog, AreaOption.TestTask,
+                AreaOption.Difficulty, AreaOption.ViolenceFilter, AreaOption.DefaultCombatMode, AreaOption.AutoAttack, AreaOption.AutoSwitchWeapons, AreaOption.AlwaysRun, AreaOption.FollowerSkills, AreaOption.Brightness, AreaOption.TextDuration, AreaOption.Floats, AreaOption.FloatSpeed, AreaOption.CombatTaunts,
+                AreaOption.Effects, AreaOption.Voice, AreaOption.Music, AreaOption.Rules, AreaOption.ControlScheme, AreaOption.PromptStyle, AreaOption.EvidenceLog,
             },
             AreaOptionTable.All.Where(c => c.Shown).Select(c => c.Option).ToArray(), "only the controls with a function are shown");
         Assert.IsTrue(AreaOptionTable.Offered(AreaOptionsPage.Video), "ARC-UI-021: the floating text's two controls");
@@ -110,20 +116,20 @@ public sealed class AreaGameOptionsTests
         var menu = Options();
         menu.Type('v');
         Assert.AreEqual(AreaOptionsPage.Video, menu.Page, "ARC-UI-021: the Video page");
-        CollectionAssert.AreEqual(new[] { AreaOption.Brightness, AreaOption.Floats, AreaOption.FloatSpeed, AreaOption.CombatTaunts, AreaOption.ControlScheme, AreaOption.PromptStyle, AreaOption.EvidenceLog, AreaOption.TestTask }, menu.Controls.Select(c => c.Option).ToArray());
-        CollectionAssert.AreEqual(new[]
-        {
-            "Text Duration: " + AreaOptionTable.NoTextDuration,
-        }, menu.HiddenNotes.ToArray());
+        CollectionAssert.AreEqual(new[] { AreaOption.Brightness, AreaOption.TextDuration, AreaOption.Floats, AreaOption.FloatSpeed, AreaOption.CombatTaunts, AreaOption.ControlScheme, AreaOption.PromptStyle, AreaOption.EvidenceLog }, menu.Controls.Select(c => c.Option).ToArray());
+        Assert.AreEqual(0, menu.HiddenNotes.Count, "ARC-UI-1797: Text Duration is shown, so no control of the Video page is hidden");
+        Assert.AreEqual(8, menu.Controls.Count, "the Video page art holds eight lines");
+        Assert.AreEqual(new AreaMenuCommand(AreaMenuCommandKind.ChangeOption, Option: AreaOption.TextDuration, Value: 7), menu.Change(1, 1), "Text Duration's first step from the default 6");
+        Assert.AreEqual("6/10", menu.OptionsTexts.Value(AreaOptionTable.Of(AreaOption.TextDuration), 6));
         Assert.AreEqual(new AreaMenuCommand(AreaMenuCommandKind.ChangeOption, Option: AreaOption.Brightness, Value: 1), menu.Change(0, 1), "ARC-UI-1737: the slider's first step");
         Assert.AreEqual(AreaMenuCommand.Nothing, menu.Change(0, -1), "a slider stops at 0");
         menu.SetOptions(Values with { Brightness = 9 });
         Assert.AreEqual(AreaMenuCommand.Nothing, menu.Change(0, 1), "and at its top, 9: the factor 2.0 is the original's refusal");
         Assert.AreEqual("0/9", menu.OptionsTexts.Value(AreaOptionTable.Of(AreaOption.Brightness), 0));
-        Assert.AreEqual(new AreaMenuCommand(AreaMenuCommandKind.ChangeOption, Option: AreaOption.Floats, Value: 2), menu.Change(1, 1), "Minimal to Verbose");
+        Assert.AreEqual(new AreaMenuCommand(AreaMenuCommandKind.ChangeOption, Option: AreaOption.Floats, Value: 2), menu.Change(2, 1), "Minimal to Verbose");
         menu.SetOptions(Values with { Floats = 2 });
-        Assert.AreEqual(new AreaMenuCommand(AreaMenuCommandKind.ChangeOption, Option: AreaOption.Floats, Value: 0), menu.Change(1, 1), "a list wraps to Never");
-        Assert.AreEqual(new AreaMenuCommand(AreaMenuCommandKind.ChangeOption, Option: AreaOption.FloatSpeed, Value: 3), menu.Change(2, 1));
+        Assert.AreEqual(new AreaMenuCommand(AreaMenuCommandKind.ChangeOption, Option: AreaOption.Floats, Value: 0), menu.Change(2, 1), "a list wraps to Never");
+        Assert.AreEqual(new AreaMenuCommand(AreaMenuCommandKind.ChangeOption, Option: AreaOption.FloatSpeed, Value: 3), menu.Change(3, 1));
         Assert.AreEqual("Verbose", menu.OptionsTexts.Value(AreaOptionTable.Of(AreaOption.Floats), 2));
         menu.Type('s');
         Assert.AreEqual(AreaOptionsPage.Sound, menu.Page);
@@ -220,8 +226,8 @@ public sealed class AreaGameOptionsTests
         menu.Type('v'); // ARC-UI-1737: the Controls line moved to the Video page, beside the prompt style
         var scheme = AreaOptionTable.Of(AreaOption.ControlScheme);
         var prompts = AreaOptionTable.Of(AreaOption.PromptStyle);
-        Assert.AreEqual(4, menu.Controls.ToList().IndexOf(scheme), "the Video page's line before the prompt style");
-        Assert.AreEqual(5, menu.Controls.ToList().IndexOf(AreaOptionTable.Of(AreaOption.PromptStyle)));
+        Assert.AreEqual(5, menu.Controls.ToList().IndexOf(scheme), "the Video page's line before the prompt style");
+        Assert.AreEqual(6, menu.Controls.ToList().IndexOf(AreaOptionTable.Of(AreaOption.PromptStyle)));
         foreach (var control in new[] { scheme, prompts })
         {
             Assert.IsTrue(control.Project && control.Shown && control.Kind == AreaOptionKind.List && control.LabelMessage is null, control.Option + " is a shown project list");
@@ -243,10 +249,10 @@ public sealed class AreaGameOptionsTests
         Assert.AreEqual((2, 4), (chosenValue.Value(AreaOption.ControlScheme), chosenValue.Value(AreaOption.PromptStyle)));
         Assert.AreEqual(3, (Values with { Controls = new ControlSchemeSettings(Pad: PadScheme.Direct, Touch: TouchScheme.TouchPad) }).Value(AreaOption.ControlScheme));
         // A value change is a command and the list wraps (ARC-UI-013 OP3).
-        Assert.AreEqual(new AreaMenuCommand(AreaMenuCommandKind.ChangeOption, Option: AreaOption.ControlScheme, Value: 1), menu.Change(4, 1));
-        Assert.AreEqual(new AreaMenuCommand(AreaMenuCommandKind.ChangeOption, Option: AreaOption.ControlScheme, Value: 3), menu.Change(4, -1), "the list wraps back to its last value");
-        Assert.AreEqual(new AreaMenuCommand(AreaMenuCommandKind.ChangeOption, Option: AreaOption.CombatTaunts, Value: 0), menu.Change(3, 1), "ARC-AI-1527: the combat taunts line is on by default; On wraps to Off");
-        Assert.AreEqual(new AreaMenuCommand(AreaMenuCommandKind.ChangeOption, Option: AreaOption.PromptStyle, Value: 1), menu.Change(5, 1));
+        Assert.AreEqual(new AreaMenuCommand(AreaMenuCommandKind.ChangeOption, Option: AreaOption.ControlScheme, Value: 1), menu.Change(5, 1));
+        Assert.AreEqual(new AreaMenuCommand(AreaMenuCommandKind.ChangeOption, Option: AreaOption.ControlScheme, Value: 3), menu.Change(5, -1), "the list wraps back to its last value");
+        Assert.AreEqual(new AreaMenuCommand(AreaMenuCommandKind.ChangeOption, Option: AreaOption.CombatTaunts, Value: 0), menu.Change(4, 1), "ARC-AI-1527: the combat taunts line is on by default; On wraps to Off");
+        Assert.AreEqual(new AreaMenuCommand(AreaMenuCommandKind.ChangeOption, Option: AreaOption.PromptStyle, Value: 1), menu.Change(6, 1));
     }
 
     [TestMethod]
@@ -284,23 +290,20 @@ public sealed class AreaGameOptionsTests
     }
 
     [TestMethod]
-    public void The_evidence_log_lines_are_off_and_none_by_default_and_use_the_projects_texts()
+    public void The_evidence_log_line_is_off_by_default_and_uses_the_projects_texts()
     {
         var menu = Options(AreaMenuWindow.InPlay);
         menu.Type('v'); // ARC-UI-1737: the two test lines are the Video page's (the Game page needed the room for the Violence Filter)
         var log = AreaOptionTable.Of(AreaOption.EvidenceLog);
-        var task = AreaOptionTable.Of(AreaOption.TestTask);
-        Assert.AreEqual(6, menu.Controls.ToList().IndexOf(log));
-        Assert.AreEqual(7, menu.Controls.ToList().IndexOf(task));
-        Assert.AreEqual(new AreaMenuCommand(AreaMenuCommandKind.ChangeOption, Option: AreaOption.EvidenceLog, Value: 1), menu.Change(6, 1), "On is one step from the default Off");
+        Assert.AreEqual(7, menu.Controls.ToList().IndexOf(log), "ARC-UI-1797: the log and its task marker are the page's last line");
+        Assert.AreEqual(new AreaMenuCommand(AreaMenuCommandKind.ChangeOption, Option: AreaOption.EvidenceLog, Value: 1), menu.Change(7, 1), "On is one step from the default Off");
         var game = AreaOptionsTexts.From((_, _) => "game text", "test");
         Assert.AreEqual("Evidence Log", game.Label(log));
         Assert.AreEqual("Off", game.Value(log, 0));
         Assert.AreEqual("On", game.Value(log, 1));
-        Assert.AreEqual("Test Task", game.Label(task));
-        Assert.AreEqual("None", game.Value(task, 0));
-        Assert.AreEqual("Task 8", game.Value(task, AreaOptionTable.TestTaskCount));
-        Assert.AreEqual("[9]", game.Value(task, AreaOptionTable.TestTaskCount + 1));
+        Assert.AreEqual("Task 1", game.Value(log, 2));
+        Assert.AreEqual("Task 8", game.Value(log, 1 + AreaOptionTable.TestTaskCount));
+        Assert.AreEqual("[10]", game.Value(log, 2 + AreaOptionTable.TestTaskCount));
     }
 
     [TestMethod]
