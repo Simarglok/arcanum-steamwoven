@@ -379,6 +379,37 @@ public partial class TerrainViewerApp
             Require(resale > 0 && owner.QueryGold() == gold + resale && panel.ArtView!.LootGrid.Any(item => item.Entity == "kit:1") && _barterSounds.Count == sounds + 3,
                 $"the right release sold the sword for {resale}: {area.BarterFrame!.Quote}");
 
+            // ARC-UI-1925 (IW35, IW36, IW45): the hero's worn item right-released on the doll is sold (the executor unwears it); the merchant's item released on the emptied slot is bought and worn at once.
+            string wearMoves;
+            var wornEntry = panel.ArtView!.Doll.FirstOrDefault(entry => entry.Entity is not null);
+            if (wornEntry is null || !area.HeroTogglesShown) wearMoves = "worn sale and buy-wear not driven (no worn item or no toggle art)";
+            else
+            {
+                var (wornItem, wornSlot) = (wornEntry.Entity!, wornEntry.Slot);
+                var slotPoint = new Vector2(AreaHeroDollToggle.SlotRects[wornSlot].X + AreaHeroDollToggle.SlotRects[wornSlot].Width / 2, AreaHeroDollToggle.SlotRects[wornSlot].Y + AreaHeroDollToggle.SlotRects[wornSlot].Height / 2);
+                area.SetHeroDoll(true);
+                area.RightReleaseAt(slotPoint);
+                await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                if (owner.QueryEquipment().Worn.Any(entry => entry.Entity == wornItem)) wearMoves = $"worn {wornSlot} sale refused ({_barterMessage})";
+                else
+                {
+                    Require(panel.ArtView!.LootGrid.Any(item => item.Entity == wornItem), "the sold worn item is among the merchant's wares");
+                    gold = owner.QueryGold();
+                    var quote = panel.View!.Wares.FirstOrDefault(line => line.Entity == wornItem)?.Quote.Price ?? int.MaxValue;
+                    if (quote > gold) wearMoves = $"worn {wornSlot} sold, buy-wear not driven ({quote} of {gold})";
+                    else
+                    {
+                        var shown = panel.ArtView!.LootGrid.Single(item => item.Entity == wornItem);
+                        area.PressAt(Ware(shown.Location)); area.ReleaseAt(slotPoint);
+                        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                        Require(owner.QueryEquipment().Worn.Any(entry => entry.Slot == wornSlot && entry.Entity == wornItem) && owner.QueryGold() == gold - quote,
+                            $"the merchant's item released on the empty {wornSlot} slot was bought and worn: {area.BarterFrame!.Quote}");
+                        wearMoves = $"worn {wornSlot} sold by right release and bought back worn";
+                    }
+                }
+                area.SetHeroDoll(false);
+            }
+
             // ARC-UI-1918 (IW26, IW30): the hero's own doll toggle of the window (mode 1): the cover and the hero's slots with the doll button, the grid again with the bag button.
             var heroToggle = HeroDollToggleForSelfTest(area, panel.ArtView!, "barter");
 
@@ -393,7 +424,7 @@ public partial class TerrainViewerApp
             area.ReleaseAt(new(holeX + 10, holeY + 10));
             await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
             Require(!BarterOpen, "a release on the round view closed the window");
-            return $"original look: quote, sell {paid} and buy {price} by drag, right-release sale {resale}, {heroToggle}, switch, round-view close";
+            return $"original look: quote, sell {paid} and buy {price} by drag, right-release sale {resale}, {wearMoves}, {heroToggle}, switch, round-view close";
         }
         finally
         {
@@ -804,7 +835,6 @@ public partial class TerrainViewerApp
             revision = session.Version.Revision;
             CloseBarterByPlayer();
             Require(!BarterOpen && session.Version.Revision == revision, "the player's close closed it; nothing changed");
-
             var saved = session.Capture();
             var options = new GameSessionRestoreOptions(new(saved.Identity.World, session.Flags.Binding.Identity.Module),
                 session.QueryClockSnapshot().ProfileBinding, new(Guid.NewGuid()), session.Limits, session.Rules.Mode, session.Experience, session.Difficulty,
@@ -847,6 +877,11 @@ public partial class TerrainViewerApp
             // ARC-UI-1765: the same speaker's item identify and repair windows in the original look (the quote only: nothing is paid on the live session).
             var service = await ItemServiceArtForSmokeAsync(talk, chosen.Entity, chosen.Index);
             await RunAreaRestockSmokeAsync(talk, chosen.Entity, chosen.Index, live);
+            // ARC-UI-1925 (IW35, IW36, IW45): last, because it changes the live session (the hero's gold and slots): the window again, for the wear moves of the hero's doll.
+            QueueDialogBarter(talk, (chosen.Entity, chosen.Index));
+            TakeDialogBarter();
+            GD.Print($"ARC-UI-1925 barter {(BarterOpen ? await BarterHeroDollMovesStepAsync(session) : "not driven (the window did not reopen)")}");
+            if (BarterOpen) CloseBarterByPlayer();
         }
         finally
         {

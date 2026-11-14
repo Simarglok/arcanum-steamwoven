@@ -274,6 +274,25 @@ public sealed partial class GameSessionOwner
         return result with { ItemSpells = [triggers.Remove(item, SessionSpellCaster.Hero)], Version = Version };
     }
 
+    /// <summary>
+    /// ARC-UI-1925 (the loot window's move into the holder, mode 2; ledger IW35): the hero's item, worn or in its pack, goes into the shown container's list under
+    /// <see cref="GiveItemToNpc"/>'s rules with the container as holder (the barter window's sale into a substitute container makes the same
+    /// move). A container that is not shown (a spilled one, another map's) is <see cref="GameSessionFailure.UnknownHolder"/>. One revision.
+    /// </summary>
+    public InventoryMutationResult GiveItemToContainer(GameSessionVersion expected, string container, string item, SessionInsertCheck insertCheck,
+        ISessionItemTriggers? triggers = null, ISessionItemScriptHost? scripts = null)
+    {
+        ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(insertCheck);
+        if (!SessionValidation.Entity(container) || container.StartsWith(SessionMadeItem.Prefix, StringComparison.Ordinal) || !SessionValidation.Entity(item))
+            return RejectItem(GameSessionFailure.InvalidItem);
+        if (!IsCurrent(expected)) return RejectItem(GameSessionFailure.StaleVersion);
+        if (!ShownContainer(container)) return RejectItem(GameSessionFailure.UnknownHolder);
+        var result = GiveItemTo(container, SessionHolderKind.Container, item, insertCheck, identify: false, triggers, scripts);
+        if (triggers is null || result.Disposition != GameSessionDisposition.Changed) return result;
+        return result with { ItemSpells = [triggers.Remove(item, SessionSpellCaster.Hero)], Version = Version };
+    }
+
     private InventoryMutationResult GiveToNpc(GameSessionVersion expected, string npc, string item, SessionInsertCheck insertCheck, ISessionItemTriggers? triggers,
         ISessionItemScriptHost? scripts)
     {

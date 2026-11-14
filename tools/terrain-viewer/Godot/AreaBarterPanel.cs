@@ -59,6 +59,8 @@ public partial class AreaBarterPanel : CanvasLayer
     private StyleBoxFlat _diagnosticStyle = null!;
     private readonly StyleBoxEmpty _originalStyle = new();
     private (AreaInventoryView Inventory, AreaBarterFrame Frame)? _art;
+    /// <summary>ARC-UI-1925: puts an item on the cursor (the occupant of a slot a wear move took out, as the own window's swap does).</summary>
+    public void Hold(AreaInventoryHeld? held) => _area.Hold(held);
     public bool IsOpen => Visible;
     /// <summary>ARC-UI-038: the room the opening shop's window keeps below a docked window.</summary>
     public const float DockReserve = 230;

@@ -200,9 +200,9 @@ public partial class TerrainViewerApp
 
     private void BuyFromMerchant(string entity) => Trade(entity, sell: false);
 
-    private void Trade(string entity, bool sell)
+    private bool Trade(string entity, bool sell)
     {
-        if (!BarterOpen || _barter is null || !BarterActive) return;
+        if (!BarterOpen || _barter is null || !BarterActive) return false;
         var trade = sell ? _barter.Sell(entity) : _barter.Buy(entity);
         _barterMessage = trade.Text;
         GD.Print($"ARC-UI-050 barter {(sell ? "sell" : "buy")} item={entity} moved={trade.Moved} count={trade.Count} total={trade.Total} reaction={trade.ReactionChange} failure={trade.Result.Failure} text={trade.Text}");
@@ -213,6 +213,7 @@ public partial class TerrainViewerApp
             PlayInterfaceSound(BarterTradeSound, "barter trade");
         }
         SyncAreaBarter(force: true);
+        return trade.Moved;
     }
 
     // The player closed it (Escape, Cancel, the button); a teardown closes it the same way, silently (the original plays nothing).
@@ -346,6 +347,8 @@ public partial class TerrainViewerApp
         if (drop.Kind == AreaInventoryDropKind.Buy) Trade(drop.Held.Entity, sell: false);
         else if (drop.Kind == AreaInventoryDropKind.Sell) Trade(drop.Held.Entity, sell: true);
         else if (drop.Kind == AreaInventoryDropKind.Gamble) Gamble(drop.Held.Entity);
+        // ARC-UI-1925: the wear moves on the hero's doll (a ring to the other slot, the merchant's item bought and worn).
+        else if (drop.Kind is AreaInventoryDropKind.Wear or AreaInventoryDropKind.BuyWear) BarterWearDrop(drop);
         else SyncAreaBarter(force: true);
     }
 
