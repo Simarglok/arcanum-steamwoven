@@ -132,4 +132,43 @@ public sealed class DiagnosticGridActorTests
         Assert.AreEqual(new SimulationTime(next.Value + SelfTestFrameClock.Step), SelfTestFrameClock.Next(next, queue.Newest));
         Assert.AreEqual(new SimulationTime(ExactScalar.Create(1, 10)), SelfTestFrameClock.Next(SimulationTime.At(0), null));
     }
+
+    [TestMethod]
+    public void SelfTestLiteralFrameIsLiftedToWhatWasObservedButNotAcrossAWrongClock()
+    {
+        // ARC-DEV-2005: a click between a stage's frames observed at a test time a little ahead of the stage's next literal frame.
+        using var fixture = new GridWireFixture();
+        var session = new DiagnosticGridSession(fixture.Snapshot, SimulationTime.At(0), StepDuration.Of(8));
+        var queue = new GridInputQueue();
+        var ahead = new SimulationTime(ExactScalar.Create(1347, 20));
+        var literal = new SimulationTime(ExactScalar.Create(1341, 20));
+        queue.Observe(session, ahead, ActorIntent.Neutral);
+        Assert.AreEqual("GRID_OBSERVATION_NONMONOTONIC", Assert.Throws<InvalidOperationException>(() => queue.Observe(session, literal, ActorIntent.Neutral)).Message);
+        var lifted = SelfTestFrameClock.Frame(literal, queue.Newest, session.State.Time);
+        Assert.AreEqual(ahead, lifted);
+        queue.Observe(session, lifted, ActorIntent.Neutral);
+        // A literal frame that is not behind keeps its time; so does one with nothing observed yet.
+        var later = new SimulationTime(ExactScalar.Create(1350, 20));
+        Assert.AreEqual(later, SelfTestFrameClock.Frame(later, queue.Newest, session.State.Time));
+        Assert.AreEqual(literal, SelfTestFrameClock.Frame(literal, null, null));
+        // The session's time lifts it too (the late refusal).
+        var sessionAhead = new SimulationTime(ExactScalar.Create(3, 1));
+        Assert.AreEqual(sessionAhead, SelfTestFrameClock.Frame(SimulationTime.At(2), null, sessionAhead));
+        // Both floors in one call: the later of the queue's newest and the session's time.
+        Assert.AreEqual(sessionAhead, SelfTestFrameClock.Frame(SimulationTime.At(2), SimulationTime.At(1), sessionAhead));
+        Assert.AreEqual(new SimulationTime(ExactScalar.Create(7, 2)), SelfTestFrameClock.Frame(SimulationTime.At(3), new SimulationTime(ExactScalar.Create(7, 2)), sessionAhead));
+        // An invalid literal is handed on as it is (the queue refuses it by name), never an exception of the clock.
+        Assert.AreEqual(default(SimulationTime), SelfTestFrameClock.Frame(default, queue.Newest, session.State.Time));
+        // An observation at the frame count read as seconds (1347 s while the stage is at 67 s) is a wrong clock, not slack: it stays refused.
+        var wrongScale = SimulationTime.At(1347);
+        var stageFrame = new SimulationTime(ExactScalar.Create(1341, 20));
+        Assert.AreEqual(stageFrame, SelfTestFrameClock.Frame(stageFrame, wrongScale, null));
+        var wrongQueue = new GridInputQueue(); wrongQueue.Observe(session, wrongScale, ActorIntent.Neutral);
+        Assert.AreEqual("GRID_OBSERVATION_NONMONOTONIC", Assert.Throws<InvalidOperationException>(() => wrongQueue.Observe(session, stageFrame, ActorIntent.Neutral)).Message);
+        // The edge: exactly the limit is lifted, a tick over is not.
+        var edge = new SimulationTime(stageFrame.Value + SelfTestFrameClock.MaxLift);
+        Assert.AreEqual(edge, SelfTestFrameClock.Frame(stageFrame, edge, null));
+        var over = new SimulationTime(edge.Value + ExactScalar.Create(1, 20));
+        Assert.AreEqual(stageFrame, SelfTestFrameClock.Frame(stageFrame, over, null));
+    }
 }
