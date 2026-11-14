@@ -405,7 +405,7 @@ those of the player's `interface.mes` (the viewer's window ledgers carry them; e
 | Slice | Window family | Frames (art numbers) | Notes |
 | --- | --- | --- | --- |
 | ARC-UI-148 | foundation and inventory | 221 pack, 223 paper doll | a window's own fractional scale, grid rule, grid lines; the drop, use and gamble boxes (224, 225, 342–348) are oval buttons with a coloured allowed or refused corner, kept as art |
-| ARC-UI-149 (issue #1194, ARC-UI-1194, [S4](#viewer-slice-s4-arc-ui-1194)) | loot, barter, steal | 234 loot, 235 barter and 825 follower barter, 349 loot doll, the three lenses 231–233; 337 barter doll and 341 doll cover are not built; the gamble boxes stay art | the same frame family as 148 with their own boxes |
+| ARC-UI-149 (issue #1194, ARC-UI-1194, [S4](#viewer-slice-s4-arc-ui-1194)) | loot, barter, steal | 234 loot, 235 barter and 825 follower barter, 349 loot doll, the three lenses 231–233; 337 barter doll is built (ARC-UI-1917) and 341 doll cover is not; neither has a recipe yet (#1750); the gamble boxes stay art | the same frame family as 148 with their own boxes |
 | ARC-UI-150 (issue #1195, ARC-UI-1195, [S5](#viewer-slice-s5-arc-ui-1195)) | character sheet | 22 main, 29 skills, 30 disciplines, 31 spells, tabs 34–36 and 568, the + and − buttons (23/24, 624/625, 647/648; 257/258 are `SP_Minus`/`SP_Plus`, which the sheet does not draw), the group and discipline buttons 302–313 | stat labels baked in the art stay pictures (kept rectangles); the schemes page 567 and the sixteen college tabs follow in [S5b](#viewer-slice-s5b-arc-ui-1784); the spell icons stay pictures |
 | ARC-UI-151 (issue #1196, ARC-UI-1196, [S7](#viewer-slice-s7-arc-ui-1196)) | logbook | 264 side, 260 book, 261 page art, the seven tabs 265–271, the page buttons 272 and 273; 263, 259 and 262 are not drawn by the logbook | a parchment page material; the lens 198 is shared and stays art |
 | ARC-UI-152 (issue #1197, ARC-UI-1197, [S6](#viewer-slice-s6-arc-ui-1197)) | world and town map | 138 main (the one frame the two windows draw); 140 and 199 (`wp_main`, `WP_Cover`, 130 × 152) and 219 and 220 (`Tmp_Day`, `Tmp_Nght`, two 501 × 365 landscape pictures) are drawn by no window of the viewer, so they are not built (issue #1811) | the map picture itself stays art; the buttons 811–813, the compass button 139, the lens 198 and the cover 217 are issue #1810 |
@@ -467,8 +467,8 @@ S4 draws the loot, barter and steal windows (planned as ARC-UI-149, issue #1194)
   the lens 233.
 - **Kept.** The scroll bar's chain, the barter window's medallion and the follower buttons' plates stay pictures. The drop, use and gamble boxes (344 to 348) stay art as in
   the inventory (the glow and the corners are the state). The curved flourishes of the boxes are not drawn (as in S3).
-- **Not built, so not generated.** The barter doll 337 (`Barter_PD`, the barter window does not draw it, IW26) and the doll cover 341 (`PD_Cover4Inven`, the toggle 0x68150C
-  is not built, F0); their recipes come with the code that draws them (issue #1750). The buttons of the windows (the Take all button 808, the toggles 338 and 339, the cycle
+- **Not generated yet.** The barter doll 337 (`Barter_PD`) is drawn since ARC-UI-1917 (the merchant's doll view, IW29) but still as the Legacy or HD picture; the doll cover 341 (`PD_Cover4Inven`, the toggle 0x68150C
+  is not built, F0) is not drawn. Their recipes are issue #1750. The buttons of the windows (the Take all button 808, the toggles 338 and 339, the cycle
   buttons 757 and 758) are [S16](#viewer-slice-s16-arc-ui-1751).
 - **Redraw.** A window draws its textures in its own `_Draw`, so it did not hear a worker's finished frame: a window nothing else redrew (the barter window at rest)
   kept the Legacy pixels until the pointer moved. `AreaInventoryGridArea` now redraws when a texture it claimed changes.

@@ -15,51 +15,51 @@ address,name,score,writes,reach,smoke,slice,row
 0x4B7150,turn-based event handler,6,2,2,0,1,VC14
 0x4B7CD0,action point charge,6,2,2,0,1,VC15
 0x4B81B0,set blinded and float its text,6,2,1,1,1,VC16
-0x42FED0,dying goal pool node,5,2,1,0,next,
-0x432D90,pool of blood creation,5,2,1,0,next,
-0x45D900,critter kill,5,2,1,0,next,
-0x45E910,rest heal,5,2,1,0,next,
-0x45EA00,resting event,5,2,1,0,next,
-0x45EAB0,resting schedule,5,2,1,0,next,
-0x45F9D0,backstab eligibility,5,1,2,1,next,
-0x4B2690,projectile end,5,2,1,0,next,
-0x4B5F40,critical-hit procedure,5,2,1,0,next,
-0x4B6410,critical-miss procedure,5,2,1,0,next,
-0x54DE50,game view mouse input,5,1,2,1,next,
-0x429960,attack goal reach test,4,1,2,0,next,
-0x42B9C0,attack animation node,4,1,2,0,next,
-0x42BD40,action animation art node,4,1,2,0,next,
-0x42F6A0,projectile flight tick,4,1,2,0,next,
-0x42FD70,knockback block test,4,1,2,0,next,
-0x43D6D0,critter resistance,4,1,2,0,next,
-0x43D880,armour class,4,1,2,0,next,
-0x43FE00,step cost,4,1,2,0,next,
-0x45F060,stat roll check,4,1,1,1,next,
-0x461620,magick cancel chance,4,1,1,1,next,
-0x461700,technology failure chance,4,1,1,1,next,
-0x465D80,weapon skill of an item,4,1,2,0,next,
-0x4ADE00,line of fire,4,1,2,0,next,
-0x4B65A0,hit location roll,4,1,2,0,next,
-0x4B7080,round animations callback,4,1,2,0,next,
-0x4B7790,action point check,4,1,2,0,next,
-0x4B7C30,attack cost,4,1,2,0,next,
-0x54EBF0,combat mode toggle key,4,1,1,1,next,
-0x54ED30,hero object click action decision,4,1,2,0,next,
-0x4268F0,knockback line node,3,1,1,0,next,
-0x435A00,boomerang turn,3,1,0,1,next,
-0x4622A0,thrown range,3,1,1,0,next,
-0x4B3D90,combat mode exit gate,3,1,1,0,next,
-0x4B90D0,location walk,3,1,1,0,next,
-0x45D730,critter lies in its fall,2,0,2,0,next,
-0x45D800,unconscious test,2,0,2,0,next,
-0x45D8D0,dead test,2,0,2,0,next,
-0x45F730,monstrous test,2,0,1,1,next,
-0x4B8730,screen point tile,2,0,2,0,next,
-0x4B6B10,projectile facing art,1,0,1,0,next,
-0x4B7300,round scan radius,1,0,1,0,next,
-0x4B78D0,attack cost preview,1,0,1,0,next,
-0x4B79A0,use object cost preview,1,0,1,0,next,
-0x4B7A20,pick up cost preview,1,0,1,0,next,
-0x4B7BA0,move cost estimate,1,0,1,0,next,
-0x557370,action point cost preview,1,0,1,0,next,
-0x56F430,combat action point lamps,1,0,1,0,next,
+0x42FED0,dying goal pool node,5,2,1,0,2,VC17
+0x432D90,pool of blood creation,5,2,1,0,2,VC18
+0x45D900,critter kill,5,2,1,0,2,VC19
+0x45E910,rest heal,5,2,1,0,2,VC20
+0x45EA00,resting event,5,2,1,0,2,VC21
+0x45EAB0,resting schedule,5,2,1,0,2,VC22
+0x45F9D0,backstab eligibility,5,1,2,1,2,VC27
+0x4B2690,projectile end,5,2,1,0,2,VC28
+0x4B5F40,critical-hit procedure,5,2,1,0,2,VC29
+0x4B6410,critical-miss procedure,5,2,1,0,2,VC30
+0x54DE50,game view mouse input,5,1,2,1,2,VC58
+0x429960,attack goal reach test,4,1,2,0,2,VC37
+0x42B9C0,attack animation node,4,1,2,0,2,VC38
+0x42BD40,action animation art node,4,1,2,0,2,VC39
+0x42F6A0,projectile flight tick,4,1,2,0,2,VC40
+0x42FD70,knockback block test,4,1,2,0,2,VC41
+0x43D6D0,critter resistance,4,1,2,0,2,VC35
+0x43D880,armour class,4,1,2,0,2,VC36
+0x43FE00,step cost,4,1,2,0,2,VC55
+0x45F060,stat roll check,4,1,1,1,2,VC32
+0x461620,magick cancel chance,4,1,1,1,2,VC33
+0x461700,technology failure chance,4,1,1,1,2,VC34
+0x465D80,weapon skill of an item,4,1,2,0,2,VC61
+0x4ADE00,line of fire,4,1,2,0,2,VC56
+0x4B65A0,hit location roll,4,1,2,0,2,VC31
+0x4B7080,round animations callback,4,1,2,0,2,VC47
+0x4B7790,action point check,4,1,2,0,2,VC48
+0x4B7C30,attack cost,4,1,2,0,2,VC49
+0x54EBF0,combat mode toggle key,4,1,1,1,2,VC59
+0x54ED30,hero object click action decision,4,1,2,0,2,VC62
+0x4268F0,knockback line node,3,1,1,0,2,VC42
+0x435A00,boomerang turn,3,1,0,1,2,VC43
+0x4622A0,thrown range,3,1,1,0,2,VC44
+0x4B3D90,combat mode exit gate,3,1,1,0,2,VC60
+0x4B90D0,location walk,3,1,1,0,2,VC46
+0x45D730,critter lies in its fall,2,0,2,0,2,VC23
+0x45D800,unconscious test,2,0,2,0,2,VC24
+0x45D8D0,dead test,2,0,2,0,2,VC25
+0x45F730,monstrous test,2,0,1,1,2,VC26
+0x4B8730,screen point tile,2,0,2,0,2,VC57
+0x4B6B10,projectile facing art,1,0,1,0,2,VC45
+0x4B7300,round scan radius,1,0,1,0,2,VC50
+0x4B78D0,attack cost preview,1,0,1,0,2,VC51
+0x4B79A0,use object cost preview,1,0,1,0,2,VC52
+0x4B7A20,pick up cost preview,1,0,1,0,2,VC53
+0x4B7BA0,move cost estimate,1,0,1,0,2,VC54
+0x557370,action point cost preview,1,0,1,0,2,VC63
+0x56F430,combat action point lamps,1,0,1,0,2,VC64
