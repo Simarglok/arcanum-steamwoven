@@ -111,7 +111,7 @@ public sealed partial class GameSessionOwner
         var projectiles = flies ? ProjectileRules.Projectiles(values.Skill, values.Training) : 0;
         if (flies && ShotsInFlight > MaxShotsInFlight - projectiles) { flies = false; projectiles = 0; }
         // ARC-DEV-283 (RA3, AM4, 0x4B65D0): a companion's shot spends the weapon's ammunition from its own stack before the other rolls, all or nothing; once per attack, at the shot.
-        var ammunition = arrow is null && weapon.Kind == WeaponKind.Weapon && weapon.AmmoType is { } ammoType && weapon.AmmoConsumption > 0 && LedByPc(attacker.Entity!)
+        var ammunition = arrow is null && weapon.Kind == WeaponKind.Weapon && weapon.AmmoType is { } ammoType && weapon.AmmoConsumption > 0 && PcLeads(attacker.Entity!)
             ? (Holder: new SessionAmmoHolder(attacker.Entity), Type: ammoType, Count: weapon.AmmoConsumption) : ((SessionAmmoHolder Holder, int Type, int Count)?)null;
         var unsupplied = ammunition is { } need && (need.Type is < 0 or >= SessionAmmoRecord.AmmoTypes || (NpcStackOfType(attacker.Entity!, need.Type)?.Units ?? 0) < need.Count);
 

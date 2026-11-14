@@ -105,6 +105,44 @@ public partial class TerrainViewerApp
         HotkeyKey(Key.K);
         await frames(3);
         Require(_gameBar.IsOn(AreaBarButton.Skills) && view.Visible, "K brought the skill pane back");
+        // ARC-UI-1924 (IW46): an inventory window's stat hot spot in a pane mode: entering it (subtype 2) writes only the title into the pane's text area; a release over it brings the bar to the
+        // message mode (0x5506C0 with 0: Skills goes up, the pane away) and shows the stat lines; then K brings the pane back for the steps below.
+        if (_combatHost?.HeroDollRatings(session) is { Detail: not null } statRatings)
+        {
+            ShowStatLines(new(AreaStatTarget.HeroArmour, statRatings, Release: false));
+            await frames(2);
+            Require(_messageLog.PaneMode && log.PaneNameForSelfTest == AreaStatLines.Title(texts.Text(AreaStatLines.ArmourTitleMessage), statRatings.Armour),
+                $"in a pane mode the pointer over the armour number writes only its title: '{log.PaneNameForSelfTest}'");
+            ShowStatLines(new(AreaStatTarget.HeroWeapon, statRatings, Release: true));
+            await frames(3);
+            Require(!_messageLog.PaneMode && !_gameBar.IsOn(AreaBarButton.Skills) && !view.Visible && _messageLog.Shown is { Kind: AreaMessageKind.StatLines },
+                "a release over the weapon number brought the message mode back and showed the stat lines");
+            // ARC_AREA_STAT_CAPTURE=PREFIX saves the bottom strip as PREFIX-strip-before.png (the stat lines gone), -strip-weapon.png and -strip-armour.png for the graphics report; never committed.
+            if (System.Environment.GetEnvironmentVariable("ARC_AREA_STAT_CAPTURE") is { Length: > 0 } statCapture)
+            {
+                var strip = _gameBarPanel!.StripRectForSelfTest(AreaBarStrip.Bottom);
+                async Task Save(string name)
+                {
+                    await frames(3);
+                    await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+                    var path = System.IO.Path.GetFullPath(statCapture) + $"-strip-{name}.png";
+                    System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(path)!);
+                    using var image = GetViewport().GetTexture().GetImage();
+                    using var region = image?.GetRegion(new Rect2I((int)strip.Position.X, (int)strip.Position.Y, (int)strip.Size.X, (int)strip.Size.Y));
+                    if (region is null || region.SavePng(path) != Error.Ok) throw new InvalidOperationException("ARC_AREA_STAT_CAPTURE not saved: " + path);
+                }
+                await Save("weapon");
+                ShowStatLines(new(AreaStatTarget.HeroArmour, statRatings, Release: false));
+                await Save("armour");
+                _messageLog.ClearHover();
+                _gameBarPanel.MessageLog.Render();
+                await Save("before");
+            }
+            HotkeyKey(Key.K);
+            await frames(3);
+            Require(_gameBar.IsOn(AreaBarButton.Skills) && view.Visible, "K brought the skill pane back after the stat lines");
+            outcomes.Add("stat hot spots in a pane mode");
+        }
         // The pointer above the strip gives the window to the log; the toggle stays down (ML8).
         await hover(new Vector2(40, 120), null);
         Require(!_messageLog.PaneMode && !view.Visible && _gameBar.IsOn(AreaBarButton.Skills), "the pointer above the strip gave the window to the log; Skills stays down");

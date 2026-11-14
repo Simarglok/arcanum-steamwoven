@@ -410,7 +410,7 @@ public sealed partial class GameSessionOwner
         if (throwFlies) { flies = true; projectiles = 1; }
         // ARC-DEV-283 (RA3, AM4, 0x4B65D0): a shot of an NPC led by a PC (a companion) spends its weapon's ammunition from the NPC's own stack, right after the location roll and before every
         // other roll, all or nothing; too few units refuse the attack (the resolver's out-of-ammunition refusal). An NPC with no PC leader spends nothing. Spent at the shot, not at the strike.
-        var ammunition = arrow is null && throwing is null && weapon.Kind == WeaponKind.Weapon && weapon.AmmoType is { } ammoType && weapon.AmmoConsumption > 0 && LedByPc(attacker.Entity!)
+        var ammunition = arrow is null && throwing is null && weapon.Kind == WeaponKind.Weapon && weapon.AmmoType is { } ammoType && weapon.AmmoConsumption > 0 && PcLeads(attacker.Entity!)
             ? (Holder: new SessionAmmoHolder(attacker.Entity), Type: ammoType, Count: weapon.AmmoConsumption) : ((SessionAmmoHolder Holder, int Type, int Count)?)null;
         var unsupplied = ammunition is { } need && (need.Type is < 0 or >= SessionAmmoRecord.AmmoTypes || (NpcStackOfType(attacker.Entity!, need.Type)?.Units ?? 0) < need.Count);
         var striker = values.Combatant;
