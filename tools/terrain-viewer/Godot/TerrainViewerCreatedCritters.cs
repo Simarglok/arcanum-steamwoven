@@ -298,6 +298,7 @@ public partial class TerrainViewerApp
         // ARC-DEV-394: a stage run earlier in the process can leave the world's test time set (RestoreWorldTestTime keeps it at the session's time), and then ProcessWorld does not run in a
         // native smoke, so the frame never reaches ProcessAreaAi, which hands the session's created critters to the AI host (SyncCreatedCritters). The frames of this stage ask for the host
         // themselves, which is that same sync, so the stage does not depend on what ran before it.
+        // ARC-DEV-1919: these frames only ask for the host (the creation sync); no frame here touches the view or plans a route, so the sector chart is never asked for more and there is nothing to wait for.
         async Task Settle(int frames = 3)
         {
             for (var i = 0; i < frames; i++) { await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame); AreaAiHostNow(); SyncAreaInventory(); }
@@ -417,7 +418,7 @@ public partial class TerrainViewerApp
         // themselves, so the stage does not depend on what ran before it.
         async Task Settle(int frames = 3)
         {
-            for (var i = 0; i < frames; i++) { await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame); ProcessAreaAi(); SyncAreaInventory(); }
+            for (var i = 0; i < frames; i++) { await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame); ProcessAreaAi(); Require(SettleSectorChartForSmoke(), "the sector chart's background read did not finish: " + SectorChartState()); SyncAreaInventory(); }
         }
         var before = session.QueryCreatedObjects(map).Select(o => o.Entity).ToHashSet(StringComparer.Ordinal);
         try
