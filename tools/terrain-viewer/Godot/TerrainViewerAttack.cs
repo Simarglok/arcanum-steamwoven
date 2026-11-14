@@ -310,6 +310,8 @@ public partial class TerrainViewerApp
         if (byHero && result.Life is { } self && self.Events.HasFlag(LifeEvents.Stunned)) HeroStunned(owner);
         // ARC-DEV-260: the object's trap and its BUST script (the hero is the breaker; a ranged attack sets the trap off with no triggerer), then the hits their effects dealt.
         RunObjectBreakSteps(target.Row, result.Host, byHero, ranged);
+        // ARC-AI-2084 (0x4B4390 → 0x4AEE50): after the break, the guards near a portal, container or scenery see or hear the hero's or a player character's follower's attack on it.
+        if ((byHero ? Arcanum.Simulation.Ai.AiSchedulerRules.Pc : attacker) is { } witnessed) WitnessesOfObjectHit(target.Entity, target.Row, result.Host, witnessed);
         LogObjectHits();
         LogItemHits();
         SyncAreaInventory();

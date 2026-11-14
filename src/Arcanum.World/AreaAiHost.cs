@@ -141,6 +141,8 @@ public sealed record AreaAiScene
     public Func<string, SessionPickLockTarget?>? PickLockTarget { get; init; }
     /// <summary>ARC-DEV-246 (MIG13 S14l, GT208): the victim's catching-thief script (point 11) after a noticed pick pocket, with the NPC thief as the triggerer; true when the consequences go on ("run default", or no script); false when the script's answer, or a run the viewer cannot finish, stops them; null: no script runs.</summary>
     public Func<string, string, bool>? CatchingThief { get; init; }
+    /// <summary>ARC-AI-2084 (ledger GW5): a guard witness's catching-thief script (point 11, 0x4AEE50) after it saw or heard the actor at an act on a portal, container or scenery: the witness (the attachee), the actor (the triggerer; the hero is "pc") and the guarded object (the script's extra object); true when the witness goes on ("run default", or no script that runs), false when the script skipped the default and the witness is left out. Null: no script runs.</summary>
+    public Func<string, string, string, bool>? GuardCatchingThief { get; init; }
     /// <summary>ARC-DEV-258 (MIG13 S14n, GT63): launches the projectile of a generic item (a grenade) an NPC threw: the thrower, its shot, the thrower's tile and the throw's location; true when the
     /// flight began (the viewer then lands the item where it ends and fires its event). Null or false: the item lands on the location at once, with no event (a flight the projectile host refused to start has ended the shot, and the item stays on the thrower's cell).
     /// ARC-COMBAT-1717: the same for a thrown weapon, whose destination is the struck critter's tile (a decided hit, the viewer strikes through <see cref="AreaAiHost.LandShot"/> and lands the item) or the scatter tile (a miss); a host that can fly it
@@ -2781,6 +2783,42 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         return result.Failure == GameSessionFailure.None;
     }
 
+    /// <summary>What one guard witness did (<see cref="AreaAiHost.GuardWitnesses"/>): who, whether its reaction was lowered and whether the attack event ran on it.</summary>
+    public sealed record GuardWitnessReport(string Witness, bool ReactionLowered, bool Attacked, bool Shouted);
+
+    /// <summary>
+    /// ARC-AI-2084 (ledger GW1-GW8, the guard witness rule): the NPCs near an object that guard it or are guards see or hear an act of the hero (or of an NPC a player character leads) on it. The callers are the damage step of an attack
+    /// on a portal, container or scenery (loud; <see cref="GuardWitnessMode.Done"/> when it broke, else <see cref="GuardWitnessMode.Attempt"/>), the pick-locks skill (silent; done when it opened the lock, attempt when it failed; only for a locked
+    /// object) and a spell that clears a lock flag (loud, done). <paramref name="guarded"/> is the object's entity id (the script's extra object), <paramref name="objectType"/> its type (1 portal, 2 container, 3 scenery, any other returns), <paramref name="notifyNpc"/>
+    /// the portal's or container's notify NPC (0 returns) and <paramref name="at"/> its tile. Each NPC in the square of half-size 10 around it, in scan order, qualifies when its name number equals the notify NPC (-1 for scenery) or it is a guard,
+    /// and it is neither dead nor mind-controlled; it must see the actor, else hear it at <paramref name="loudness"/>; its catching-thief script (<see cref="AreaAiScene.GuardCatchingThief"/>) must run the default. The effects are
+    /// <see cref="GuardWitnessRules.Plan"/>'s: the attack event of the actor on the witness, or (an awake witness of an attempt) its reaction -20 toward the hero, the attack event when its effective reaction is then at most AI parameter 10, and
+    /// its line 4000-4099 (the active test, a callback) with the <b>actor</b> as listener. No hero-only gate. NOT READY: the viewer picks the line's gender pair from the hero's, not the actor's; the reaction's clamp is the session's.
+    /// </summary>
+    /// <remarks>The rule is 0x4AEE50 (<see cref="GuardWitnessRules"/> holds its marked, map-free part).</remarks>
+    public IReadOnlyList<GuardWitnessReport> GuardWitnesses(string actor, string guarded, int objectType, int notifyNpc, CellCoord at, GuardWitnessMode mode, Loudness loudness)
+    {
+        ArgumentNullException.ThrowIfNull(actor); ArgumentNullException.ThrowIfNull(guarded);
+        if (GuardWitnessRules.Key(objectType, notifyNpc) is not { } key || actor != Pc && PcLeader(actor) is null) return [];
+        var reports = new List<GuardWitnessReport>();
+        foreach (var witness in SquareAt(at, GuardWitnessRules.Radius).Distinct())
+        {
+            if (witness == Pc || !TryNpc(witness, out var npc) || Find(witness) is not { } facts
+                || !GuardWitnessRules.Qualifies(key, AreaUseScriptHost.NameOf(_session, npc.Row), facts.Guard, facts.Dead, facts.MindControlled)) continue;
+            if (!(See(witness, actor).Perceived || Hear(witness, actor, loudness).Perceived)) continue;
+            if (!(_scene.GuardCatchingThief?.Invoke(witness, actor, guarded) ?? true)) continue;
+            var plan = GuardWitnessRules.Plan(mode, facts.Asleep);
+            var lowered = plan.ReactionDelta != 0 && SpellReaction(witness, plan.ReactionDelta);
+            var attacks = plan.AttackEvent
+                || plan.ChecksReaction && StandardReaction(witness) is { } reaction && Row(witness) is { } row && reaction <= row.HostileReaction;
+            if (attacks) AttackEvent(actor, witness, loudness: loudness);
+            if (plan.Shouts) Bark(witness, GuardWitnessRules.ShoutLines, actor);
+            Trace(witness).Setter = $"guard witness of {guarded} mode={mode} lowered={lowered} attacked={attacks}";
+            reports.Add(new(witness, lowered, attacks, plan.Shouts));
+        }
+        return reports;
+    }
+
     /// <summary>
     /// ARC-SCRIPT-1163 (E5-a, ledger NS2): a script's set reaction (30, <paramref name="set"/>: the delta from the NPC's standard reaction to <paramref name="value"/>) or adjust reaction (31, the delta <paramref name="value"/>) of an NPC this host runs toward the hero, through the
     /// reaction change (0x4C0DE0, <see cref="GameSessionOwner.AdjustReaction"/> / <see cref="GameSessionOwner.SetReaction"/>) with the NPC's and the hero's facts. Answers what happened for the viewer's trace.
@@ -4137,9 +4175,11 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     public string? MindController(string npc) => null;
 
     /// <summary>The critters of the square of half-size <paramref name="halfSize"/> around the object, in the map's scan order.</summary>
-    public IReadOnlyList<string> Square(string npc, int halfSize)
+    public IReadOnlyList<string> Square(string npc, int halfSize) => Tile(npc) is { } center ? SquareAt(center, halfSize) : [];
+
+    /// <summary>The critters of the square of half-size <paramref name="halfSize"/> around a tile, in the map's scan order (the hero included).</summary>
+    public IReadOnlyList<string> SquareAt(CellCoord center, int halfSize)
     {
-        if (Tile(npc) is not { } center) return [];
         bool Inside(CellCoord cell) => Math.Abs((long)cell.X - center.X) <= halfSize && Math.Abs((long)cell.Y - center.Y) <= halfSize;
         var critters = new List<AreaScanCritter>();
         if (Tile(Pc) is { } hero && Inside(hero)) critters.Add(new(SessionCombatant.Hero, hero, 0, null));

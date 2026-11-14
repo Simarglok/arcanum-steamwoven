@@ -277,7 +277,7 @@ public partial class TerrainViewerApp
     }
 
     /// <summary>ARC-SKILLS-006: the hero picks the portal's lock with the chosen lockpicks (the session's answer on the HUD). The
-    /// original plays no sound; its witnesses (guards nearby who see or hear the picker) are not modelled.</summary>
+    /// original plays no sound; its witnesses (guards nearby who see or hear the picker) are ARC-AI-2084's (<see cref="WitnessesOfLockPick"/>).</summary>
     private void PickPortal(AreaPortal portal, string item)
     {
         var session = _areaSession!;
@@ -294,6 +294,9 @@ public partial class TerrainViewerApp
             }}{(result.FateUsed ? " (fate point)" : "")}";
         GD.Print($"ARC-SKILLS-006 pick entity={portal.Entity} disposition={result.Disposition} failure={result.Failure} success={result.Check?.Success} " +
             $"critical={result.Check?.Critical} result={result.Outcome?.Result} witnesses={result.Outcome?.WitnessesCalled} locked={result.State?.Locked}");
+        // ARC-AI-2084 (0x4C7160 → 0x4AEE50): the guards near the portal see or hear the hero's pick, silent (mode 0: the lock opened, mode 1: it failed).
+        if (result.Disposition != Arcanum.Session.GameSessionDisposition.Rejected && ObjectRowByEntity(portal.Entity) is { } portalRow)
+            WitnessesOfLockPick(portal.Entity, portalRow, Arcanum.Simulation.Ai.AiSchedulerRules.Pc, result.Outcome);
         RefreshAreaStatus();
     }
 

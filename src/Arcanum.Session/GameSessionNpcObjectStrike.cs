@@ -40,7 +40,7 @@ public sealed partial class GameSessionOwner
     /// lands at once. The damage step then is the hero's object damage with the NPC as the attacker: the object's stored resistance and a portal's or container's material reduction, the break at 0 hit points
     /// (<see cref="SessionObjectAttackResult.Host"/> names the trap, BUST script, sounds and spill the host owns), the shooter's weapon wear while the object stays whole, a critical self-hit on the shooter.
     /// Refused before any roll as <see cref="AttackObject"/> is and with <see cref="GameSessionFailure.AttackUnsupported"/> for a weapon this session cannot run.
-    /// <b>Not modelled:</b> the witnesses (0x4AEE50 hears only a PC or a PC-led NPC's damage; the host steps drop them here), the trap's and the BUST script's NPC triggerer and breaker (they run with none, as for damage with no
+    /// <b>Not modelled:</b> the trap's and the BUST script's NPC triggerer and breaker (they run with none, as for damage with no
     /// attacker), the weapon's item event at the struck tile (PF10), the experience of an object, the attack event on the critter the shot was aimed at.
     /// </summary>
     public SessionObjectAttackResult AttackObjectByNpc(GameSessionVersion expected, SessionNpcObjectAttack attack) => NpcObjectAttack(expected, attack, null);
@@ -204,8 +204,8 @@ public sealed partial class GameSessionOwner
         var write = ObjectWrite(struck, hit);
         if (write.Disposition == GameSessionDisposition.Rejected)
             return new(Disposition(changed), GameSessionFailure.None, resolution, hit, null, null, null, SessionObjectHostSteps.None, write.Failure, Version) { Ammunition = spentAmmo, Shots = flying };
-        // No witnesses: 0x4AEE50 hears only a PC or a PC-led NPC's damage (not modelled).
-        var host = HostSteps(struck.Baseline, hit) & ~(SessionObjectHostSteps.WitnessesHearAttack | SessionObjectHostSteps.WitnessesHearBreak);
+        // ARC-AI-2084: the witness steps stay: 0x4AEE50 hears only a PC or a PC-led NPC's damage, which the host's rule decides (the AI host's GuardWitnesses leaves any other attacker out).
+        var host = HostSteps(struck.Baseline, hit);
         var wear = resolution.Wear is { Any: true }
             ? WearSteps(new SessionAttackWear { Resolution = resolution, Attacker = attackerSide, Target = objectSide, TargetBroken = hit.Broken })
             : null;
