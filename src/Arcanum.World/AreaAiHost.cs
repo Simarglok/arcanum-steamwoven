@@ -794,21 +794,26 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     /// ARC-DEV-303 (RS10): the hit effect (0x4B6930 → 0x459A30) of an attack that hit a PC or NPC: the victim's entangle asks its save again through the cast host
     /// (<see cref="SessionSpellCaster.CritterHit"/>). Only a hit that reached the victim counts (<see cref="HitReached"/>); a miss, a refused attack or a shot still in flight does nothing.
     /// </summary>
-    public void HitEffect(string victim, SessionAttackResult? result)
+    public void HitEffect(string victim, SessionAttackResult? result, int? weapon = null)
     {
         // The cast host is asked only for a hit that reached the victim: its factory rebuilds a stale host (and clears the eye candy), which a miss must not do.
-        if (AttackEndOf(result) is not null) AttackEnd(_scene.Spells?.Invoke(), victim == Pc ? SessionSpellCaster.Hero : victim, result);
+        if (AttackEndOf(result) is not null) AttackEnd(_scene.Spells?.Invoke(), victim == Pc ? SessionSpellCaster.Hero : victim, result, weapon);
     }
 
     /// <summary>
     /// ARC-RENDER-1794 (ledger ER5): the attack end of a weapon's attack on the PC or NPC <paramref name="victim"/> (the cast host's id, <see cref="SessionSpellCaster.Hero"/> for the hero): a hit that reached the victim
     /// (<see cref="HitReached"/>) runs the damage effect with the blood of the hit, or the hit effect when no slot is positive or the hit was critical (<see cref="SessionSpellCaster.AttackEnd"/>); a miss and a refused attack do nothing.
+    /// ARC-RENDER-1990: <paramref name="weapon"/> is the prototype number of the attack's weapon (null: none or unnamed), whose own hit effect, when it plays, ends the attack end before either.
     /// </summary>
-    public static void AttackEnd(SessionSpellCaster? caster, string victim, SessionAttackResult? result)
+    public static void AttackEnd(SessionSpellCaster? caster, string victim, SessionAttackResult? result, int? weapon = null)
     {
         if (caster is null || AttackEndOf(result) is not { } end) return;
-        caster.AttackEnd(victim, end.Damage, end.Critical);
+        caster.AttackEnd(victim, end.Damage, end.Critical, weapon);
     }
+
+    /// <summary>ARC-RENDER-1990: the prototype number (<see cref="CombatObjectFields.Prototype"/>) of the weapon an NPC wields now, null when it wields none or its worn items are unknown.</summary>
+    private int? WieldedPrototype(string id) =>
+        _scene.Combat.Worn(_session, id)?.FirstOrDefault(item => item.Slot == EquipmentSlot.Weapon && item.Entity is not null) is { Entity: not null } weapon ? weapon.Fields.Object.Prototype : null;
 
     /// <summary>ARC-RENDER-1794: what the attack end reads of an attack result: the damage step the victim took (null when the hit had none or the damage fell on the attacker) and the packet's critical flag; null when the attack
     /// is no hit that reached its victim (<see cref="HitReached"/>).</summary>
@@ -2417,7 +2422,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
             // hit or miss, with the weapon's loudness (0x4B2810).
             if (result.Shots.Count == 0 || result.Resolution.Outcome is AttackOutcome.Hit or AttackOutcome.CriticalHit) AttackEvent(id, target, loudness: noise);
             // ARC-DEV-292: a hit or a miss on an NPC that did not fly (a shot's damage is LandShot's) gives the victim its immediate pass (0x4B52FC, 0x4B3948, the ranged miss 0x4B30F5).
-            HitEffect(target, result);
+            HitEffect(target, result, WieldedPrototype(id));
             if (VictimReached(result)) Struck(target);
         }
         // ARC-DEV-282: the arrows leave the shooter's tile for the target's; one the viewer cannot fly strikes at once (a hit lands, a miss ends).
@@ -2479,7 +2484,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
             // ARC-AI-1516 (EX14, VBG5): a missile that met an object other than its target raises the event with the accidental bit.
             if (struck != aimed) AttackEvent(shooter, struck, AttackEventFlags.Accidental);
             // ARC-DEV-292: the strike is the damage step (or the miss path) of the shot: the struck NPC's immediate pass, after its attack event.
-            HitEffect(struck, result);
+            // ARC-RENDER-1990: the weapon asked is the shooter's wielded one as it stands at the strike (the original reads the projectile's field 0x50 set at the shot; an NPC's thrown item is not told apart here, issue 2013).
+            HitEffect(struck, result, WieldedPrototype(shooter));
             if (VictimReached(result)) Struck(struck);
         }
         return result;
@@ -3142,7 +3148,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
             if (result.Shots.Count == 0 || attack!.Resolution!.Outcome is AttackOutcome.Hit or AttackOutcome.CriticalHit)
                 AttackEvent(id, victim, loudness: AwarenessRules.WeaponLoudness(fields.Weapon is { } thrownWeapon ? (uint)thrownWeapon.Flags : null));
             // ARC-DEV-292: the thrown item's hit on the struck critter is a damage step on it (the session applied it above).
-            HitEffect(victim, attack);
+            // ARC-RENDER-1990: the context's weapon is the thrown item (0x4B2210).
+            HitEffect(victim, attack, fields.Object.Prototype);
             if (VictimReached(attack)) Struck(victim);
         }
         // ARC-DEV-258: a thrown generic item (a grenade) flies as a projectile; without a viewer to fly it, it lands on the location at once.
