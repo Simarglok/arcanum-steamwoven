@@ -253,6 +253,8 @@ public partial class TerrainViewerApp : Node
                                 if (only?.Contains("movement") == true) await RunAreaMovementSmokeAsync(result);
                                 // ARC-DEV-335 (V7d, B50): only when named, a light worn by the hero lights the area around it (with --hero, a lit map).
                                 if (only?.Contains("worn-light") == true) await RunAreaWornLightSmokeAsync(result);
+                                // ARC-RES-1978 (FR-LIGHT-013 experiment): only when named, the relit look against Legacy on a lit map (with --hero; PNGs only with ARC_RELIGHT_CAPTURE).
+                                if (only?.Contains("relight") == true) await RunAreaRelightSmokeAsync(result);
                                 // ARC-MAGIC-1229 (FR-LIGHT-011, IW6): only when named, Illuminate keeps a live light on the hero and on an NPC while the spell holds, the darkness sampler sees it and the END takes it off (--hero, a lit map with a living NPC).
                                 if (only?.Contains("eye-light") == true) await RunAreaEyeLightSmokeAsync(result);
                                 // ARC-SCRIPT-1592 (FR-SCRIPT-002): only when named, the installed void exit tile script 2549 plays script eye candy (action 120) on the hero: the use host keeps the request, the viewer starts the entry of the script list as an overlay run and draws it (--hero, the main map).
