@@ -134,12 +134,11 @@ public partial class TerrainViewerApp
     /// <summary>ARC-COMBAT-1930 (VCG9): the loudness of an attack event of the hero's wielded weapon (loud for weapon flag 0x1, silent for 0x2, else normal; bare hands and a non-weapon are normal). Asked before the attack,
     /// as a thrown weapon leaves the hand at it.</summary>
     private Arcanum.Simulation.Ai.Loudness HeroWeaponNoise(GameSessionOwner owner) =>
-        AreaCombatHost.HeroWorn(owner, _areaKitDurability)?.GetValueOrDefault(Arcanum.Simulation.Equipment.EquipmentSlot.Weapon)?.Noise ?? Arcanum.Simulation.Ai.Loudness.Normal;
+        owner.QueryEquipment().Worn.FirstOrDefault(w => w.Slot == Arcanum.Simulation.Equipment.EquipmentSlot.Weapon) is { Entity: { } wielded } ? KitItemNoise(wielded) : Arcanum.Simulation.Ai.Loudness.Normal;
 
-    /// <summary>ARC-COMBAT-1930: the loudness of the hero's kit item <paramref name="entity"/> (<c>kit:N</c>) as the weapon of an attack event (<see cref="HeroWeaponNoise"/>); normal for anything else.</summary>
+    /// <summary>ARC-COMBAT-1930: the loudness of the hero's item <paramref name="entity"/> (a kit item, one the hero took or one the session made) as the weapon of an attack event (<see cref="HeroWeaponNoise"/>); normal when it cannot be read.</summary>
     private Arcanum.Simulation.Ai.Loudness KitItemNoise(string entity) =>
-        entity.StartsWith("kit:", StringComparison.Ordinal) && int.TryParse(entity.AsSpan(4), System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var number)
-        && _areaKitDurability is { } kit && number >= 1 && number <= kit.Count && kit[number - 1] is { } item ? item.Noise : Arcanum.Simulation.Ai.Loudness.Normal;
+        _areaSession is { } owner && _inventoryHost?.WeaponNoise(owner, entity, _areaKitDurability) is { } noise ? noise : Arcanum.Simulation.Ai.Loudness.Normal;
 
     // The goal target's tile (its map data's cell; NPCs do not move here).
     private static CellCoord GoalTile(AttackGoal goal) => new(checked((int)goal.Row.WorldX!.Value), checked((int)goal.Row.WorldY!.Value));

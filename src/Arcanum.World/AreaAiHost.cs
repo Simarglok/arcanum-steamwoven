@@ -2389,6 +2389,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         // ARC-AI-1636: the focus is an object that is no critter (a door, container, scenery or trap) and nothing stops the line to it: the attack is the session's object attack.
         if (target == aimed && target != Pc && _scene.ObjectFacts?.Invoke(target) is not null) { HitObjectFocus(id, target); return; }
         if (NpcAttackOf(id, target, flight: _scene.LaunchShot is not null, inBed) is not { } attack) return;
+        // ARC-COMBAT-1930 (0x4B2810): the loudness is the context weapon's, read before the roll (a critical may drop or break the weapon).
+        var noise = AwarenessRules.WeaponLoudness(Wielded(id).Flags);
         var result = _session.AttackByNpc(_session.Version, attack);
         Trace(id).Hit = $"{result.Disposition} {result.Failure} {result.Resolution?.Outcome} {result.Life?.HitPointDamage}" + (target == aimed ? "" : $" (the line of fire struck {target} instead of {aimed})");
         _notices.Add(new(AreaAiNoticeKind.Hit, id, target) { Result = result });
@@ -2398,7 +2400,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
             // ARC-COMBAT-1930 (0x4B3170, PF1, VC28, VCG9): a shot that flies sends no attack event at the shot; the projectile's end alerts only the object it strikes. A shot decided a hit raises its event here for the aimed target
             // (its arrival's time is the accepted deviation A), a shot decided a miss raises none (PF5, PF6: it never strikes its aimed target; a stray it meets is alerted by LandShot). An attack that does not fly raises it,
             // hit or miss, with the weapon's loudness (0x4B2810).
-            if (result.Shots.Count == 0 || result.Resolution.Outcome is AttackOutcome.Hit or AttackOutcome.CriticalHit) AttackEvent(id, target, loudness: AwarenessRules.WeaponLoudness(Wielded(id).Flags));
+            if (result.Shots.Count == 0 || result.Resolution.Outcome is AttackOutcome.Hit or AttackOutcome.CriticalHit) AttackEvent(id, target, loudness: noise);
             // ARC-DEV-292: a hit or a miss on an NPC that did not fly (a shot's damage is LandShot's) gives the victim its immediate pass (0x4B52FC, 0x4B3948, the ranged miss 0x4B30F5).
             HitEffect(target, result);
             if (VictimReached(result)) Struck(target);
