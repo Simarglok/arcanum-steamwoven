@@ -305,6 +305,7 @@ public partial class TerrainViewerApp
             RefreshReadyStatus();
             return;
         }
+        if (EndsAtStart(speaker, start, scripted: false)) { RefreshReadyStatus(); return; }
         if (replaceWindows && !ClearWindowsForProgrammaticOpen(InterfaceMode.Dialog, "talk goal dialog")) return;
         OpenConversation(speaker, start);
         GD.Print($"ARC-SCRIPT-005 conversation status={start.Status} detail={start.Detail} phase={start.Conversation?.Phase}");
@@ -348,6 +349,7 @@ public partial class TerrainViewerApp
         {
             start = new(AreaConversationStartStatus.EntryError, null, speaker, exception.GetType().Name);
         }
+        if (EndsAtStart(speaker, start, scripted: dialog.Point != Arcanum.Scripting.Scr.ScrPoint.Dialog)) { RefreshReadyStatus(); return; }
         if (!ClearWindowsForProgrammaticOpen(InterfaceMode.Dialog, "scripted dialog")) return;
         OpenConversation(speaker, start);
         // ARC-SCRIPT-047: a start at the dialog point (a heartbeat's call-ex) resumes the speaker's dialog slot on "return to script".
@@ -373,6 +375,38 @@ public partial class TerrainViewerApp
 
     // ARC-WORLD-118: set by a native smoke stage that observes scripted conversations (the wreck and opening stages); the others hold them.
     private bool _smokeTakesScriptedConversations;
+
+    /// <summary>
+    /// ARC-UI-2028 (ledger DF1, DF2): the NPC's last line is spoken as the dialog ends: its voice plays on (the voice of the node before stops first), and a dialog that ended at its start also floats the line as a bubble
+    /// (<paramref name="bubble"/>; a reply's answer line is floated by the panel, ARC-UI-2027, before the window closes). The dialog's own bubble owner is the speaker (<see cref="_conversationSpeaker"/>).
+    /// </summary>
+    private void SpeakFinalLine(DialogConversation conversation, bool bubble)
+    {
+        if (conversation.NpcLine is not { Text.Length: > 0 } line) return;
+        if (bubble) ShowDialogLineBubble(line.Text, persistent: false);
+        if (_audio is not null && _voiceStart is { } start && ReferenceEquals(start.Conversation, conversation))
+            foreach (var command in _dialogVoice.Update(conversation, conversation.Turn, start.VoiceIdentity(conversation.NpcLine))) ExecuteVoice(command);
+    }
+
+    /// <summary>
+    /// ARC-UI-2028: a dialog that starts on the NPC's last line (a refusal to talk, a script's start at a final node) opens no window (ledger DF2): the line is
+    /// said and the dialog is over at once, its consequences applied as any end applies them. True when it did; the caller opens nothing then.
+    /// </summary>
+    private int _finalLineStartsForSelfTest;
+
+    private bool EndsAtStart(AreaSpeaker speaker, AreaConversationStart start, bool scripted)
+    {
+        if (start.Conversation is not { } conversation || !AreaConversationText.EndsWithNpcLine(conversation)) return false;
+        _finalLineStartsForSelfTest++;
+        _conversationScripted = scripted;
+        _conversationParty = start.Party;
+        _conversationSpeaker = speaker;
+        _voiceStart = start;
+        SpeakFinalLine(conversation, bubble: true);
+        GD.Print($"ARC-UI-2028 dialog ended at its start end={conversation.End?.Kind} turns={conversation.Turn} effects={conversation.Effects.Count}");
+        FinishConversation(conversation, resume: true);
+        return true;
+    }
 
     private void OpenConversation(AreaSpeaker speaker, AreaConversationStart start)
     {
@@ -428,6 +462,14 @@ public partial class TerrainViewerApp
         var conversation = _conversationPanel.Conversation;
         GD.Print($"ARC-SCRIPT-005 conversation closed phase={conversation?.Phase} end={conversation?.End?.Kind} turns={conversation?.Turn} effects={conversation?.Effects.Count}");
         CloseWindowMode(InterfaceMode.Dialog);
+        // ARC-UI-2028: an end with the NPC's last line speaks its voice in the close itself (the panel floated the line, ledger DF1).
+        if (conversation is not null && AreaConversationText.EndsWithNpcLine(conversation)) SpeakFinalLine(conversation, bubble: false);
+        FinishConversation(conversation, resume);
+    }
+
+    /// <summary>The end of a conversation after its window is gone (or never opened): the reaction closes, the speaker's consequences are applied, a follow-up window or script opens.</summary>
+    private void FinishConversation(DialogConversation? conversation, bool resume)
+    {
         // ARC-WORLD-043: every exit closes the NPC's reaction conversation (the original's dialog end), before a resumed
         // script may start the next one; the NPC now remembers the PC.
         if (_conversationHost is { } talk && !talk.EndReaction() && talk.ReactionFailure != Arcanum.Session.GameSessionFailure.None)
@@ -474,7 +516,8 @@ public partial class TerrainViewerApp
                 resumed = new(AreaConversationStartStatus.EntryError, null, speaker, exception.GetType().Name);
             }
             GD.Print($"ARC-SCRIPT-009 script resumed line={line.Value} status={resumed.Status} detail={resumed.Detail}");
-            if (resumed.Status == AreaConversationStartStatus.Started) { OpenConversation(speaker, resumed); RefreshReadyStatus(); return; }
+            // ARC-UI-2028: a resumed script that lands on the NPC's last line ends at its start as well (no window).
+            if (resumed.Status == AreaConversationStartStatus.Started) { if (!EndsAtStart(speaker, resumed, scripted: false)) OpenConversation(speaker, resumed); RefreshReadyStatus(); return; }
             _conversationNotice = $"script continued: {resumed.Status}: {resumed.Detail}";
         }
         QuarantineWorld(); RefreshReadyStatus();

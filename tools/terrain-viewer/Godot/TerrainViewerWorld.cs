@@ -63,7 +63,7 @@ public partial class TerrainViewerApp
     {
         if (_worldObservationTime.HasValue) { action(); return; }
         _worldObservationTime = WorldTime;
-        try { action(); }
+        try { if (SelfTestBootstrap || _nativeSmoke) NoteObservation(action); action(); }
         catch (Exception error) when (error is InvalidOperationException or GridReplayCapacityException or OverflowException or TerrainViewerException or ArgumentException)
         {
             // Fault disposal is distinct from motion settlement. Do not retry
@@ -77,10 +77,48 @@ public partial class TerrainViewerApp
                 GD.Print("ARC-WORLD-003 observation-failure=" + error.Message);
             // ARC-DEV-065: the exception's type and its methods (no message, no file paths) name the failing code in a player's log.
             GD.Print("ARC-DEV-065 observation-fault " + ObservationFaultTrace(error));
+            GD.Print("ARC-DEV-2005 clock-state " + WorldClockState());
             PublishFailure(_arguments?.Mode ?? _readyMode, new(TerrainViewerErrorCode.ActorPlan, Stage: TerrainViewerFailureStage.ActorPlan));
             if (SelfTestBootstrap || _nativeSmoke) throw;
         }
         finally { _worldObservationTime = null; }
+    }
+    // ARC-DEV-2005: a lifted literal frame is told in the log (the first few), so a run that went on past a stalled clock shows it.
+    private int _frameLifts;
+    private SimulationTime LiftedFrameTime(SimulationTime literal)
+    {
+        var lifted = SelfTestFrameClock.Frame(literal, _worldGridInput.Newest, _worldActor.Session?.State.Time);
+        if (lifted != literal && ++_frameLifts <= 5) GD.Print($"ARC-DEV-2005 frame-lifted literal={ClockSeconds(literal)} to={ClockSeconds(lifted)} (lift {_frameLifts})");
+        return lifted;
+    }
+    // ARC-DEV-2005: the last observations of a smoke (who stamped which time), kept for the clock-state line of a refused one.
+    private readonly Queue<string> _recentObservations = new();
+    private static string ClockSeconds(SimulationTime? t) => t is { } v && v.Value.IsValid
+        ? ((double)v.Value.Numerator / (double)v.Value.Denominator).ToString("0.###", System.Globalization.CultureInfo.InvariantCulture) : "-";
+    private void NoteObservation(Action action)
+    {
+        if (_recentObservations.Count >= 8) _recentObservations.Dequeue();
+        _recentObservations.Enqueue($"{action.Method.Name}@{ClockSeconds(_worldObservationTime)}");
+    }
+    // ARC-DEV-2005: the numbers that explain a refused observation (the times only, in seconds; no paths, no ids).
+    private string WorldClockState()
+    {
+        try
+        {
+            static string Sec(SimulationTime? t) => ClockSeconds(t);
+            return $"stamp={Sec(_worldObservationTime)} test={Sec(_worldTestTime)} session={Sec(_worldActor.Session?.State.Time)} newest={Sec(_worldGridInput.Newest)} "
+                + $"smoke={_areaSmokeTime} live={(_worldTimeline.Last is { } last ? (last / 1e6).ToString("0.###", System.Globalization.CultureInfo.InvariantCulture) : "-")} followsFrames={_worldTimeline.FollowsFrames} recent={string.Join(" < ", _recentObservations.Reverse())}";
+        }
+        catch (Exception) { return "unavailable"; }
+    }
+    // ARC-DEV-2005: the message of a smoke's fault when it is a plain code or sentence of letters, digits and a few marks (no path separators), and the methods it came through.
+    internal static string SmokeFaultDetail(Exception error)
+    {
+        var message = error.Message.Length <= 160
+            && (error.Message.StartsWith("AREA_", StringComparison.Ordinal) || error.Message.StartsWith("GRID_", StringComparison.Ordinal))
+            && error.Message.All(c => char.IsAsciiLetterOrDigit(c) || c is '_' or ' ' or '=' or ',' or '-')
+            ? error.Message : "(withheld)";
+        return $"message={message} {ObservationFaultTrace(error)}";
     }
     internal static string ObservationFaultTrace(Exception error)
     {
@@ -1136,7 +1174,9 @@ public partial class TerrainViewerApp
         // The script clock is independent of camera delta, including zero,
         // invalid and huge zoom deltas. Exact motion tests supply literal times.
         // ARC-DEV-1251: never earlier than what the queue has observed (a quarantine at the wall clock before the first frame).
-        _worldTestTime = observationTime ?? SelfTestFrameClock.Next(_worldTestTime ?? _worldActor.Session?.State.Time ?? WorldTime, _worldGridInput.Newest);
+        // ARC-DEV-2005: a literal time is lifted to what the queue or the session has seen when it lags a little (SelfTestFrameClock.Frame).
+        _worldTestTime = observationTime is { } literal ? LiftedFrameTime(literal)
+            : SelfTestFrameClock.Next(_worldTestTime ?? _worldActor.Session?.State.Time ?? WorldTime, _worldGridInput.Newest);
         WorldObservation(() => ApplyWorldObservedFrame(delta, complete, keyboard, controllers, "SIMULATION complete-level frame (not physical evidence)"));
         // ARC-DEV-1748: every smoke frame (AreaSmokeFrame, the cast/talk smokes' own frames, the AI stages') ends here, and the frame's view touch may have asked the chart over the loaded sectors for more;
         // the next frame's AI step plans a route into such a sector only once the background read is done, which wall time (machine load) would otherwise decide. Nothing to wait for without a chart.

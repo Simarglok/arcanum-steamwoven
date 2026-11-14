@@ -217,7 +217,8 @@ public partial class AreaConversationPanel : CanvasLayer
         if (processed) ShowNpcLine(before);
         // ARC-TECHNOLOGY-006: SU ends the dialog at once for the schematic window, with no further NPC line (ledger NC1–NC2); ARC-UI-050:
         // b: for the barter window (BT7); ARC-UI-088: c-e for the NPC's sheet (WN2).
-        if (IsWindowEnd(conversation.End?.Kind)) CloseRequested?.Invoke();
+        // ARC-UI-2028: a reply that leads to the NPC's last line closes the window in the same call; the host floats the line (ledger DF1).
+        if (IsWindowEnd(conversation.End?.Kind) || AreaConversationText.EndsWithNpcLine(conversation)) CloseRequested?.Invoke();
     }
 
     /// <summary>Diagnostic leave: closes an awaiting dialog without a reply effect, or dismisses a finished one.</summary>

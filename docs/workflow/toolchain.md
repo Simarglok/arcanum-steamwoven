@@ -173,6 +173,23 @@ history held about 500 runs of such copies of one template).
   is now `SelfTestFrameClock.Next`: a step after the test time, or after `GridInputQueue.Newest` when that is later. `OpenHoverGate`
   waits 150 ms in a self-test so the order shows on every run, not only under load. A new self-test stage that observes before its first
   synthetic frame needs nothing more.
+- **Literal frame time under load (ARC-DEV-2005).** The Crash Site smoke failed now and then, only while other builds and smokes ran, with
+  `GRID_OBSERVATION_NONMONOTONIC` (`ARC-DEV-065 observation-fault ... WorldFrameForSelfTest`, then `viewer failure stage=ActorPlan`, and the
+  `ARC-RENDER-007 frontier=InvalidOperationException` / `native-smoke failure stage=Upload` pair every smoke fault ends with). It was an ordering
+  bug that the machine's load only exposed, not a wall-clock stall: `AreaSmokeClick` stamped the click with `SimulationTime.At(_areaSmokeTime)`,
+  and a scaled stage (`_areaSmokeTime *= 20`) counts twentieths of a second, so the attack stage's click read 1347 as 1347 seconds while its
+  frames were at 67. Whether that stamp reached the grid queue depended on the input safety gate and the UI focus at that moment (a quarantine
+  or a callback observation), which the machine's timing decides; when it did, every later literal frame was older than the queue's newest
+  observation. The fixes: a click keeps the stage's own test time (`_worldTestTime ??= ...`); and a literal frame time is lifted to what the queue
+  or the session has already seen when it lags by at most 5 s (`SelfTestFrameClock.Frame`), so a wait loop that moved the test time on or any
+  other small skew between a helper and a stage's frames no longer fails a run (each lift prints `ARC-DEV-2005 frame-lifted`, the first five); a lag over 5 s (a wrong scale) stays refused. A smoke fault now
+  prints `ARC-DEV-2005 clock-state` (the stamp, test, session and newest times and the last eight observations) and
+  `ARC-DEV-2005 frontier-fault` (the message when it is an `AREA_`/`GRID_` code of letters, digits and a few marks, and the methods; smoke launches only), so the next failure names itself. A failed Crash Site smoke whose
+  log holds neither line and no GRID_ code is a different failure: read its first `FAIL` line, do not rerun it blind.
+  The same Crash Site run failed a second way under load, in the wall-fade check after the change of place into the cave
+  (`AREA_WALL_FADE_NOT_OBSERVED ... unstable=7200 unstable-box=490,770-789,793`): the 300x24 block was the controller prompt strip, an
+  overlay on its own canvas layer that follows the device in hand after a hysteresis on the host's clock, so it appeared or went away between
+  the check's three captures when frames ran slow. The check now hides that layer (as it hides the HUD) and reports the box of unstable pixels.
 - **Stage boundary reset (ARC-DEV-408, ARC-DEV-1187).** A stage that passes alone and fails after others had a second cause besides the test
   time: what the earlier stages left in the shared session. `TerrainViewerSmokeStageSet` calls `SmokeStageBoundary`
   (`TerrainViewerSmokeStageReset.cs`) at every change of stage in the viewer. The first call with a hero and a session saves a baseline into a
