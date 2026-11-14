@@ -1147,9 +1147,20 @@ public partial class TerrainViewerApp
             // leaves (its run ends, FO20), the hero's attack event on it runs in full and asks its reaction, then its pass runs; the
             // host is kept and runs it on as a free NPC.
             var leftRun = host.RunOf(follower) is not null;
+            // ARC-UI-2085 (TB28): the curse's race line (group 1000, can-speak flag 0 to the hero) is said once, unless the follower is in combat focus or flight, which the flag-0 test refuses.
+            // A back-off first, so the follower is out of combat focus (the order's own acknowledgement is counted before the curse's line).
+            if (session.QueryDanger(follower).State is DangerState.CombatFocus or DangerState.Flee)
+                IssueAreaOrder("smoke", new(CompanionOrderType.BackOff, CompanionOrderAddressing.All, []));
+            var curseLinesBefore = _followerLinesSaid;
+            var curseDangerBefore = session.QueryDanger(follower).State;
             var cursed = IssueAreaOrder("smoke", new(CompanionOrderType.Curse, CompanionOrderAddressing.All, []))?.Outcomes.SingleOrDefault(o => o.Entity == follower);
             Require(cursed is { Effect: CompanionOrderEffect.Cursed, CurseAttack: not null, Pass.Failure: GameSessionFailure.None }
                 && !session.QueryCompanion(follower).LedByPc, $"the curse freed the follower and its pass ran: {(cursed is null ? "none" : AreaCompanionOrders.Describe(cursed))}");
+            var curseSaid = _followerLinesSaid - curseLinesBefore;
+            var curseTexts = _conversationHost?.GreetingTexts?.Status == AreaGreetingTextsStatus.Ready;
+            var curseRefused = curseDangerBefore is DangerState.CombatFocus or DangerState.Flee;
+            if (curseTexts) Require(curseSaid == (curseRefused ? 0 : 1), $"the curse's race line was said once unless refused (danger {curseDangerBefore}): {curseSaid}");
+            GD.Print(curseTexts ? $"ARC-UI-2085 native-smoke ai-curse-race PASS said={curseSaid} danger={curseDangerBefore}" : "ARC-UI-2085 native-smoke ai-curse-race SKIP textsReady=False");
             joined = false;
             Require(ReferenceEquals(AreaAiHostNow(), host) && host.RunCompanions.Contains(follower), "the leave kept the host, which runs the free companion");
             // The trace is live: its lines are kept as they stand after the order.
