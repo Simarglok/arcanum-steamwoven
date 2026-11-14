@@ -22,6 +22,9 @@ public static partial class TerrainViewerSelfTest
         "{10}{A bridge fell. Take care on the way north.}{}{}{}{}{RU 1001}" +
         "{11}{Thank you.}{}{1}{}{0}{LF 2 1}";
 
+    // ARC-UI-2019: one reply to a closing line, for the digit-key check of the app routing.
+    internal const string DigitDialog = "{1}{Hello.}{Hello.}{}{}{}{}{2}{Go on.}{}{1}{}{10}{}{10}{Fine.}{}{}{}{}{}";
+
     /// <summary>Synthetic panel flow: open, answer by number, end, dismiss. Headless and native.</summary>
     private static async Task AssertConversationPanelAsync(Node host)
     {
@@ -49,7 +52,20 @@ public static partial class TerrainViewerSelfTest
             panel.Choose(3);
             Require(conversation.Turn == 1 && panel.OutcomeForSelfTest.Contains("UnsupportedTransition"), "blocked reply runs nothing");
             Require(picks == 0 && lines.Count == 1, "a reply that was not processed keeps the bubble");
-            panel.Choose(1);
+            // ARC-UI-2019: Steamwoven numbers the replies and a digit key chooses an offered, unblocked one; Original draws no number and reads no digit.
+            var turn = conversation.Turn;
+            Require(!panel.ChooseByDigit(3) && !panel.ChooseByDigit(9) && !panel.ChooseByDigit(0) && conversation.Turn == turn, "a blocked or absent number chooses nothing");
+            // The setting switched while the panel is open (an Options change over the dialog) redraws it at once and moves the digits with it.
+            panel.NumberedReplies = false;
+            Require(panel.ButtonsForSelfTest[0].Text == "Why is it closed?" && !panel.ButtonsForSelfTest[2].Text.StartsWith("3.") && !panel.ChooseByDigit(1) && conversation.Turn == turn,
+                "Original draws no number and a digit chooses nothing");
+            await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+            await ScreenshotAsync(host, "original-unnumbered");
+            panel.NumberedReplies = true;
+            await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+            await ScreenshotAsync(host, "steamwoven-numbered");
+            Require(panel.ButtonsForSelfTest[0].Text == "1. Why is it closed?", "Steamwoven draws the number again");
+            Require(panel.ChooseByDigit(1), "a digit chooses the numbered reply");
             Require(conversation.CurrentNode.Value == 10 && panel.NpcLineForSelfTest.StartsWith("A bridge fell.") && panel.ButtonsForSelfTest.Count == 1, "Direct reply continues");
             Require(picks == 1 && lines.Count == 3 && lines[1] == "removed" && lines[2].StartsWith("P:A bridge fell."), $"a processed reply removes the bubble, then the answer is a new persistent one: {string.Join("|", lines)}");
             await ScreenshotAsync(host, "synthetic");
@@ -259,6 +275,24 @@ public partial class TerrainViewerApp
             TerrainViewerSelfTest.Require(!PaletteOpen && ConversationOpen, "the palette cannot open over the conversation");
             _conversationPanel!.LeaveForSelfTest.EmitSignal(BaseButton.SignalName.Pressed);
             TerrainViewerSelfTest.Require(!ConversationOpen && !WorldModal, "Close ends the modal surface");
+            // ARC-UI-2019: with a numbered conversation open the digit keys choose a reply (an unknown number and Enter do nothing).
+            {
+                using var digitSession = ConversationSessionFixture.Create();
+                var state = new AreaConversationState(digitSession, new(1), ["oid:synthetic-0"], 50);
+                var digitDialog = DialogConversation.Start(DlgReader.Read(System.Text.Encoding.Latin1.GetBytes(TerrainViewerSelfTest.DigitDialog)),
+                    new DialogConversationRequest(new DialogNodeId(1),
+                        new DialogParticipants(new DialogId(5), AreaConversationState.PcParticipant, AreaConversationState.Npc(0)),
+                        new DialogScriptLine(4), AreaConversationProfile.Diagnostic.Pc, AreaConversationProfile.Diagnostic.Names),
+                    new DialogConversationPorts(state, state, digitSession.Flags, state));
+                ShowConversationPanel("Digit test", digitDialog, null);
+                TerrainViewerSelfTest.Require(ConversationOpen && DialogRepliesNumbered && _conversationPanel!.Conversation == digitDialog
+                    && AreaConversationPanel.ReplyTextForSelfTest(_conversationPanel.ButtonsForSelfTest[0]).StartsWith("1. "), "the Steamwoven panel numbers its replies");
+                Press(Key.Key9); Press(Key.Enter);
+                TerrainViewerSelfTest.Require(digitDialog.CurrentNode.Value == 1, "an unknown digit and Enter choose nothing");
+                Press(Key.Key1);
+                TerrainViewerSelfTest.Require(digitDialog.CurrentNode.Value == 10, "the digit key 1 chose the first reply");
+                CloseWindowMode(InterfaceMode.Dialog);
+            }
         }
         finally { _worldFocusSimulationForSelfTest = simulatedFocus; _selfTestStandInSpeaker = null; }
     }

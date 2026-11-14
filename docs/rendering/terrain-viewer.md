@@ -262,6 +262,10 @@ line, replies, outcome, effects, hint, Leave) are drawn in the original's font a
 panel's content width by `AreaTextFontLayout.Place`) once the viewer has read the text fonts (ARC-DEV-156), and in the viewer's font
 without them; the self-test also covers the art-text mode on synthetic glyphs and the `wreck` smoke checks it on the installed fonts. PROJECT:
 the font of the original's own talk window is not read; 229 is the dialog box's and the message window's text font.
+ARC-UI-2019 (a Steamwoven addition, owner request; switch `InterfaceRuleProfile.DialogRepliesUnnumbered`, [rule modes](../world/rule-modes.md)): under the Steamwoven
+setting each reply line carries its number (`1. …`, up to 5) and the digit keys 1–5 (row or keypad, no modifier) choose the reply with that number while the
+panel awaits a choice; a blocked or absent number, a finished dialog and every other key do nothing. Under the Original setting the reply is drawn as its text
+alone (the original shows no number) and no digit chooses anything. The self-test covers both settings on the panel and the digit routing in the app.
 
 ## Integrated world diagnostic policy
 

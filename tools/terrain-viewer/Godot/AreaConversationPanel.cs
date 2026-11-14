@@ -44,6 +44,20 @@ public partial class AreaConversationPanel : CanvasLayer
     /// <summary>ARC-UI-2027 (0x567E30): the PC picked a reply that the dialog will process: the owner removes the NPC's bubble first.</summary>
     public event Action? ReplyPicking;
     public bool IsOpen => Visible;
+    /// <summary>ARC-UI-2019: whether each reply shows its number and a digit key chooses it (Steamwoven); Original draws and reads neither. Set before <see cref="Open"/>.</summary>
+    public bool NumberedReplies
+    {
+        get => _numberedReplies;
+        set
+        {
+            if (_numberedReplies == value) return;
+            _numberedReplies = value;
+            if (IsNodeReady() && IsOpen) Render(_message);
+        }
+    }
+    private bool _numberedReplies = true;
+    /// <summary>ARC-UI-2019: where an open panel reads the setting from every frame, so a rule-mode switch made over the dialog (Esc, Options) draws and reads at once.</summary>
+    public Func<bool>? NumberedSource { get; set; }
     public DialogConversation? Conversation => _conversation;
     internal IReadOnlyList<Button> ButtonsForSelfTest => _buttons;
     /// <summary>The conversation's current NPC line (held, not drawn here: it is a bubble over the NPC).</summary>
@@ -139,6 +153,19 @@ public partial class AreaConversationPanel : CanvasLayer
         if (option is not null) ChooseToken(option.Token);
     }
 
+    /// <summary>
+    /// ARC-UI-2019: the digit key of the reply with this number; true when it chose a reply. Only while a numbered panel awaits a choice and the
+    /// reply is offered and not blocked: any other key press leaves the dialog as it is (it never closes a finished one, as a click does).
+    /// </summary>
+    public bool ChooseByDigit(int number)
+    {
+        if (!NumberedReplies || _conversation is not { Phase: DialogConversationPhase.AwaitingSelection } conversation) return false;
+        var option = conversation.Options.FirstOrDefault(candidate => candidate.Number == number);
+        if (option is null || option.Block is not null) return false;
+        ChooseToken(option.Token);
+        return true;
+    }
+
     /// <summary>Selects exactly the reply the button showed: a token from older offers is NotOffered.</summary>
     private void ChooseToken(DialogOptionToken token)
     {
@@ -198,7 +225,7 @@ public partial class AreaConversationPanel : CanvasLayer
                     Name = $"Reply{option.Number}", Alignment = HorizontalAlignment.Left,
                     AutowrapMode = TextServer.AutowrapMode.WordSmart, Disabled = option.Block is not null, FocusMode = Control.FocusModeEnum.All,
                 };
-                var text = AreaConversationText.Option(option);
+                var text = AreaConversationText.OptionText(option, NumberedReplies);
                 button.SetMeta(ReplyTextMeta, text);
                 if (_fonts is null) button.Text = text;
                 else
@@ -224,7 +251,7 @@ public partial class AreaConversationPanel : CanvasLayer
         _leaveArt.Visible = _fonts is not null;
         _leaveArt.Position = new(ButtonPadX, ButtonPadY);
         _leaveArt.SetText(leave, ReplyColour);
-        Show(_hint, _hintArt, "Click a reply (controller: D-pad, confirm, cancel) | PROJECT diagnostic PC/state profile; original runtime parity NOT_VERIFIED", HintColour);
+        Show(_hint, _hintArt, (NumberedReplies ? "Click a reply or press its number (controller: D-pad, confirm, cancel)" : "Click a reply (controller: D-pad, confirm, cancel)") + " | PROJECT diagnostic PC/state profile; original runtime parity NOT_VERIFIED", HintColour);
         (_buttons.FirstOrDefault(button => !button.Disabled) ?? _leave).GrabFocus();
         ResizePanel();
     }
@@ -266,6 +293,11 @@ public partial class AreaConversationPanel : CanvasLayer
         _panel.Position = new(Mathf.Round((size.X - width) / 2), Mathf.Round(Math.Max(24, size.Y - height - 24)));
     }
 
-    public override void _Process(double delta) { if (IsOpen) ResizePanel(); }
+    public override void _Process(double delta)
+    {
+        if (!IsOpen) return;
+        if (NumberedSource is { } source) NumberedReplies = source();
+        ResizePanel();
+    }
     public override void _ExitTree() => GetViewport().SizeChanged -= ResizePanel;
 }
