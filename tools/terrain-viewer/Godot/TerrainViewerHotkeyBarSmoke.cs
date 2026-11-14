@@ -2,7 +2,9 @@ using Arcanum.Data;
 using Arcanum.Presentation.Hud;
 using Arcanum.Scripting.Dialog;
 using Arcanum.Session;
+using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Hotkeys;
+using Arcanum.Simulation.Magic;
 using Arcanum.TerrainViewer.Core;
 using Arcanum.TerrainViewer.Tests;
 using Arcanum.World;
@@ -220,6 +222,41 @@ public partial class TerrainViewerApp
                     }
                     await Click(view.SlotCentreForSelfTest(emptySlot));
                     session.ClearHotkey(session.Version, emptySlot);
+                    // ARC-UI-2086 (0x579FA0 row 3, 0x57BC70 with the inventory bit): the two entries that open the inventory window skip the pop of their own opener, but the inventory
+                    // opener 0x572240 → 0x572510 pops the dialog just before it pushes mode 8, so the dialog ends and the window opens in its place (never stays below it).
+                    Require(session.AssignHotkey(session.Version, emptySlot, HotkeyEntry.ForSkill(SkillBarButton.Repair)).Disposition == GameSessionDisposition.Changed, "repair goes on an entry");
+                    await Frames(2);
+                    using (OpenBarDialog())
+                    {
+                        await Frames(2);
+                        var before = _hotkeyActivations;
+                        await Click(view.SlotCentreForSelfTest(emptySlot));
+                        Require(!ConversationOpen && _interfaceWindows.Stack.Current == InterfaceMode.Inventory && _hotkeyActivations == before + 1,
+                            $"a click on the repair entry ended the dialog and opened the inventory window (stack {StackText()}): " + _hotkeyNotice);
+                        EndInventory();
+                        Require(!AnyWindowOpen, "the inventory window closed again");
+                    }
+                    session.ClearHotkey(session.Version, emptySlot);
+                    var inventorySpell = _spellRecords?.FirstOrDefault(r => r.Data.Enabled && r.Areas.Length > 0 && SpellUiRules.TargetsInventory(r.Areas[0].Targets));
+                    if (inventorySpell is null) GD.Print("ARC-UI-2086 native-smoke hotkey-dialog inventory-spell SKIP (no spell with the inventory bit in the spell data)");
+                    else
+                    {
+                        Require(session.AssignHotkey(session.Version, emptySlot, HotkeyEntry.ForSpell(inventorySpell.Data.Number)).Disposition == GameSessionDisposition.Changed, "the inventory spell goes on an entry");
+                        await Frames(2);
+                        session.Heal(session.Version, SessionLifeTarget.Hero, new LifeHeal { Fatigue = 1000 });
+                        using (OpenBarDialog())
+                        {
+                            await Frames(2);
+                            var before = _hotkeyActivations;
+                            await Click(view.SlotCentreForSelfTest(emptySlot));
+                            Require(!ConversationOpen && WindowOpen(InterfaceMode.Inventory) && _hotkeyActivations == before + 1,
+                                $"a click on the inventory spell's entry ended the dialog and opened the inventory window (stack {StackText()}): " + _hotkeyNotice);
+                            CancelSpellTargeting(null);
+                            if (AnyWindowOpen) CloseOtherInterfaceWindows();
+                            Require(!AnyWindowOpen, "no window is left: " + StackText());
+                        }
+                        session.ClearHotkey(session.Version, emptySlot);
+                    }
                     GD.Print("ARC-UI-2068 native-smoke hotkey-dialog PASS");
                 }
                 finally { session.SelectRules(priorRules); }
