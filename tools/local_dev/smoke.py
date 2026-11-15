@@ -17,6 +17,7 @@ from __future__ import annotations
 import argparse
 import dataclasses
 from dataclasses import dataclass
+import functools
 import json
 import os
 from pathlib import Path
@@ -26,7 +27,7 @@ import sys
 import tempfile
 from typing import Callable, Mapping, Sequence
 
-from . import config, focus_guard, launch, run_queue, smoke_history, smoke_zones, start_check
+from . import config, focus_guard, launch, red_flag, run_queue, smoke_history, smoke_zones, start_check
 
 ROOT = Path(__file__).resolve().parents[2]
 VIEWER = Path("tools/terrain-viewer/Godot")
@@ -815,7 +816,25 @@ def focus_guard_library(steps: Sequence[Step], target: Path | None,
     return library
 
 
+def red_on_main_note(args: argparse.Namespace) -> str | None:
+    """ARC-DEV-2226: the flag of ./arcanum main-smoke, printed by a PR run (`smoke pr`) while main's rolling smoke is red."""
+    if getattr(args, "target", None) != "pr":
+        return None
+    flag = red_flag.read()
+    return red_flag.text(flag) if flag else None
+
+
 def run(args: argparse.Namespace) -> int:
+    note = red_on_main_note(args)
+    if note:
+        print(note, flush=True)
+    code = run_smoke(args)
+    if note and code != 0:
+        print(note, flush=True)  # again after a failure, where the summary is read
+    return code
+
+
+def run_smoke(args: argparse.Namespace) -> int:
     environ = dict(os.environ)
     if environ.get(run_queue.TICKET_ENV):
         raise ValueError("run ./arcanum smoke on its own, not inside ./arcanum run: each smoke takes its own place in "
@@ -847,7 +866,8 @@ def run(args: argparse.Namespace) -> int:
             if step.settings:
                 (prefs_root / step.settings).mkdir()
         print(f"SMOKE settings folder {prefs_root}", flush=True)
-        code = execute(steps)
+        code = execute(steps, runner=functools.partial(run_queue.run, priority=run_queue.LOW)
+                       if getattr(args, "low_priority", False) else run_queue.run)
         if zones:
             print(f"SMOKE zones: {', '.join(zones)}", flush=True)  # the PR report names them
         keep = args.keep_settings or code != 0
@@ -872,6 +892,8 @@ def configure(command: argparse.ArgumentParser) -> None:
                             "does not pass in (STAGE_NEEDS); the stages are still grouped by configuration")
         parser.add_argument("--take-focus", action="store_true", help="let the smoke windows take the focus as before "
                             "(by default they are background-only on macOS, never active; ARC-DEV-403)")
+        parser.add_argument("--low-priority", action="store_true", help="queue every step behind the ordinary runs "
+                            "(./arcanum main-smoke uses it, ARC-DEV-2226; a PR run never needs it)")
 
     def map_options(parser: argparse.ArgumentParser) -> None:
         parser.add_argument("--hero", choices=launch.PREMADE_HEROES, help="start as this pre-made hero")
