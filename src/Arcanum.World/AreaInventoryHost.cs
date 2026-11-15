@@ -364,7 +364,7 @@ public sealed class AreaInventoryHost
     /// <summary>ARC-DEV-199: the dialog's non-negative <c>IN</c> action through the session (<see cref="SessionDialogItemTakePort"/>): the hero's item goes to the speaker under the diagnostic NPC insert check
     /// (every item fits, as the barter's sales do); a follower carried from another map has its home map's seed attached before its list is read.</summary>
     public SessionDialogItemTakePort TakeItemDialogPort(GameSessionOwner session, Func<DialogParticipantId, string?> entityOf) =>
-        new(session, AreaConversationState.PcParticipant, entityOf, DiagnosticInsertCheck, entity => AttachHolderMap(session, entity), NpcCell);
+        new(session, AreaConversationState.PcParticipant, entityOf, DiagnosticInsertCheck, entity => AttachHolderMap(session, entity), NpcCell, ItemScripts(session));
 
     // ARC-DEV-238: the cell of an NPC on the shown maps (its map row's, as the substitute container's range reads it), for the item a refused hand-over lays down.
     private CellCoord? NpcCell(string npc)

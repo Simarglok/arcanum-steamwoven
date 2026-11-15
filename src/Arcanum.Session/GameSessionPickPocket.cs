@@ -195,7 +195,7 @@ public sealed partial class GameSessionOwner
                     (PickPocketDirection.Steal, PickPocketItemKind.Ammunition) => TakeAmmoFromNpc(Version, npc, item, amount, newStackKind, insertCheck),
                     (PickPocketDirection.Steal, _) => TakeItemFromNpc(Version, npc, item, insertCheck, scripts, triggers),
                     (_, PickPocketItemKind.Ammunition) => GiveAmmoToNpc(Version, npc, item, amount, newStackKind, insertCheck),
-                    _ => GiveItemToNpc(Version, npc, item, insertCheck, triggers),
+                    _ => GiveItemToNpc(Version, npc, item, insertCheck, triggers, scripts),
                 };
             }
             catch { PutBack(); throw; }

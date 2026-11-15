@@ -85,6 +85,12 @@ public sealed class AreaTalkQueryTests
                 Do(new(ScrCatalogue.Action.HealHitPoints, (Attachee, -1), N(5))),
                 Do(new(ScrCatalogue.Action.ReturnSkipDefault))));
             Write("dlg/00793damage.dlg", Encoding.Latin1.GetBytes("{1}{Hello.}{}{}{}{}{}\n"));
+            // 796 (ARC-SCRIPT-1598): damages the PC for 40, sets local flag 3 (the slot write), skip default; a run whose write must be placed before the damage applies.
+            Write("scr/00796write.scr", Program(
+                Do(new(ScrCatalogue.Action.Damage, (Triggerer, -1), N(40), N(1))),
+                Do(new(ScrCatalogue.Action.SetLocalFlag, N(3))),
+                Do(new(ScrCatalogue.Action.ReturnSkipDefault))));
+            Write("dlg/00796write.dlg", Encoding.Latin1.GetBytes("{1}{Hello.}{}{}{}{}{}\n"));
             // 794 (ARC-SCRIPT-1620, TI6): sets global flag 100, has the PC attack its attachee (the shape of the installed 1000's lines) and then the attachee attack the PC, skip default.
             Write("scr/00794attack.scr", Program(
                 Do(new(ScrCatalogue.Action.SetGlobalFlag, N(AreaFlag))),
@@ -277,6 +283,28 @@ public sealed class AreaTalkQueryTests
             Assert.IsTrue(talk.Flag, "the run's other effects apply");
             Assert.AreEqual("damaged", talk.Host.LastDamage);
             Assert.AreEqual("healed", talk.Host.LastHeal);
+        });
+    }
+
+    /// <summary>ARC-SCRIPT-1598: the speaker's slot write is placed before the damage applies: a run whose write is another object's (none of this host's speakers) is refused whole, the damage not applied.</summary>
+    [TestMethod]
+    public void A_talks_damage_is_not_applied_when_the_slot_write_cannot_be_placed()
+    {
+        WithContent(content =>
+        {
+            var calls = new List<string>();
+            using var talk = Create(content, 796, (7, false), damage: (victim, amount, type, unresistable) => { calls.Add($"damage {victim}"); return "damaged"; }, heal: (_, _) => "healed");
+            var own = talk.Run();
+            Assert.IsNotNull(own.Effects.Writeback);
+            Assert.AreEqual(1, own.Effects.ObjectStates.Count);
+            Assert.IsTrue(talk.Host.Apply(own.Effects), "the speaker's own write is placed");
+            Assert.AreEqual(1, calls.Count);
+            // The same run applied by a host that holds no speaker for the attachee: the write cannot be placed, so the run is refused before the damage.
+            var state = new AreaConversationState(talk.Session, new SessionMapId(Map), [AreaConversationState.EntityId(talk.Speaker.Row)], 50);
+            var bare = new AreaScriptHost(talk.Session, new SessionMapId(Map), [], state, content) { QueryHost = talk.Host.QueryHost };
+            calls.Clear();
+            Assert.IsFalse(bare.Apply(own.Effects));
+            Assert.AreEqual(0, calls.Count, "no damage was applied");
         });
     }
 
