@@ -34,8 +34,9 @@ public sealed partial class GameSessionOwner
 
     /// <summary>
     /// ARC-UI-1740 (0x4C5BD0 draws the first roll when the skill module starts): throws the roll the next bet will use, so that it is saved
-    /// before anyone can bet. The original draws it at the module's start; the session draws it at the first barter window (<c>AreaBarter.Open</c>),
-    /// which leaves every other session's draw count as it was. One draw <c>random(1, 100)</c> of the session generator, one revision. A roll
+    /// before anyone can bet. The original draws it at the module's start, the first draw after the clock seed; the viewer's own session starts draw it first
+    /// (ARC-UI-1807, <c>AreaTransitionCoordinator.CreateSession</c>), and a session that holds none (tests, smokes, a save of schema 100 or lower)
+    /// draws it at the first barter window (<c>AreaBarter.Open</c>). One draw <c>random(1, 100)</c> of the session generator, one revision. A roll
     /// already thrown is no change.
     /// </summary>
     [Arcanum.Simulation.OriginalFunction(0x4C5BD0, Arcanum.Simulation.OriginalFunctionScope.Partial)]
