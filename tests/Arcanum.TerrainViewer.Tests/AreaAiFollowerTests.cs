@@ -393,6 +393,28 @@ public sealed class AreaAiFollowerTests
         }
     }
 
+    // ARC-WORLD-2148 (0x4B0490 for stat 0x13): the alignment the follow check reads is the stat getter's: the stored base, then the changes of stat 19 in the effect list the session holds, clamped. The leader's facts carry
+    // its charisma for the dialog's outer check.
+    [TestMethod]
+    public void The_follow_check_reads_an_npcs_alignment_with_the_effects_on_it_and_the_leaders_charisma()
+    {
+        var scene = Open(enemyAt: new(4, 20), companionCharisma: 12, companionAlignment: 40, table: ParameterAt(8, 5));
+        var (session, host, enemy, companion) = (scene.Session, scene.Host, scene.Enemy, scene.Companion);
+        Assert.AreEqual((40, 0), (host.AlignmentOf(companion), host.AlignmentOf(enemy)), "the stored bases");
+        Assert.IsNull(host.AlignmentOf("oid:critter:elsewhere"));
+        var leaderTarget = scene.Combat.Build(session, companion).Combat?.Target ?? throw new AssertFailedException("the companion has no combat build");
+        var followerTarget = scene.Combat.Build(session, enemy).Combat?.Target ?? throw new AssertFailedException("the enemy has no combat build");
+        EffectChange Align(EffectChangeOperator op, int value) => new(EffectAttributeKind.Stat, AreaCompanionData.AlignmentStat, op, value);
+        Assert.AreEqual(GameSessionFailure.None, session.AddNpcEffect(session.Version, leaderTarget, new SessionEffectDefinition(150, [Align(EffectChangeOperator.Add, 100)]), EffectCause.Spell).Failure);
+        Assert.AreEqual(GameSessionFailure.None, session.AddNpcEffect(session.Version, followerTarget, new SessionEffectDefinition(151, [Align(EffectChangeOperator.Add, -3000)]), EffectCause.Spell).Failure);
+        Assert.AreEqual((140, -1000), (host.AlignmentOf(companion), host.AlignmentOf(enemy)), "base plus the effect, clamped to the stat's range");
+        Assert.AreEqual(GameSessionDisposition.Changed, session.ForceJoinLeader(session.Version, enemy, companion).Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, session.WaitParty(session.Version, enemy, host.LeaderWaitFacts(enemy)).Disposition);
+        var facts = host.LeaderUnwaitFacts(enemy);
+        Assert.IsNotNull(facts);
+        Assert.AreEqual((140, -1000, 12), (facts.LeaderAlignment, facts.NpcAlignment, facts.LeaderCharisma));
+    }
+
     // ARC-WORLD-1840 (#1322): an NPC leads followers as in the original: the host answers the direct leader (0x45DE00), the chain's player character (0x45DDA0) and the followers of any
     // critter, one faction holds a leader and its followers, and a leave of an NPC leader ends the follower's run as the hero's leave does.
     [TestMethod]

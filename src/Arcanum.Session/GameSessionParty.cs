@@ -84,7 +84,7 @@ public sealed record PartyConsentFacts(
 /// ARC-WORLD-2127: the facts of the unforced unwait of a follower waiting under an NPC leader L (<see cref="GameSessionOwner.UnwaitNpcLed"/>), read by the caller where the NPCs' stats are: L's Persuasion
 /// training, alignment, level and max followers (stat 15 under L's effects), the follower's alignment, level and the thresholds of its AI row, and whether a mind-controlled follower is accepted by the
 /// first check (its controller is L, or no controller is found and the chain of leaders from the follower reaches a player character) and by the join's second check (the handle is then cleared, so only
-/// a controller equal to L accepts). Both are false for a follower that is not mind controlled.
+/// a controller equal to L accepts). Both are false for a follower that is not mind controlled. <paramref name="LeaderCharisma"/> is L's effective charisma: the dialog's outer check (ARC-WORLD-2148) compares it with the hero's.
 /// </summary>
 public sealed record NpcLeaderUnwaitFacts(
     PersuasionTraining LeaderPersuasion,
@@ -95,7 +95,8 @@ public sealed record NpcLeaderUnwaitFacts(
     int NpcAlignment,
     int NpcLevel,
     bool MindControlAccepted,
-    bool MindControlAcceptedAfterUnlink);
+    bool MindControlAcceptedAfterUnlink,
+    int LeaderCharisma);
 
 /// <summary>
 /// An unforced leave is refused while <paramref name="LeaderCharisma"/> is extraordinary or the NPC is mind

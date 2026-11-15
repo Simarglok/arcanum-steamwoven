@@ -143,6 +143,7 @@ src/Arcanum.Session/GameSessionJunkPiles.cs,DissolveJunkPile,pending,
 src/Arcanum.Session/GameSessionKillLog.cs,RecordHeroInjuries,pending,
 src/Arcanum.Session/GameSessionKillLog.cs,RecordKillLog,pending,
 src/Arcanum.Session/GameSessionLeaders.cs,ForceJoinLeader,exempt,reference
+src/Arcanum.Session/GameSessionLeaders.cs,UnwaitNpcLed,exempt,host
 src/Arcanum.Session/GameSessionLocks.cs,WriteOpenableFlag,pending,
 src/Arcanum.Session/GameSessionLoyalty.cs,CheckFollowerAfterHit,exempt,host
 src/Arcanum.Session/GameSessionMissiles.cs,CreateMissile,pending,
@@ -555,6 +556,7 @@ src/Arcanum.World/AreaAiHostGround.cs,LooseItems,exempt,host
 src/Arcanum.World/AreaAiHostGround.cs,StartPickup,exempt,host
 src/Arcanum.World/AreaAiHostHealer.cs,HealerCast,exempt,host
 src/Arcanum.World/AreaAiHostHealer.cs,HealerService,exempt,host
+src/Arcanum.World/AreaAiHostLoyalty.cs,AlignmentOf,exempt,host
 src/Arcanum.World/AreaAiHostLoyalty.cs,LoyaltyCheck,exempt,host
 src/Arcanum.World/AreaAiHostLoyalty.cs,NpcLedConsent,exempt,host
 src/Arcanum.World/AreaAiHostLoyalty.cs,NpcLoyaltyStep,exempt,host
