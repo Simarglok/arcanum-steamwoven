@@ -120,6 +120,8 @@ public partial class TerrainViewerApp : Node
         _arguments = _launchArguments = arguments;
         // ARC-DEV-059: the mode this start resolved, the start line `./arcanum run` waits for.
         GD.Print($"ARC-DEV-059 viewer start mode={ModeName(arguments.Mode)} map={arguments.AreaMapName ?? "-"} main-menu={arguments.MainMenu} smoke={_nativeSmoke}");
+        // ARC-DEV-2279: the soak run's counters (ARC_SOAK_LOG), when asked for.
+        StartSoak();
         // ARC-DEV-372: the viewer's readers share one index of the game folder per run (a self-test has no game folder and reads none).
         Arcanum.Data.Content.ContentStack.EnableSharing(!SelfTestBootstrap);
         // ARC-DEV-350: the game settings come first, the HD pack source is one of them.
