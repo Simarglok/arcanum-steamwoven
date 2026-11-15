@@ -645,7 +645,7 @@ build); the first build for this comparison is any build from `main` that contai
 | 4 | Press Last Save with no save at all. | The window stays and the menu says there is no save to continue from, with no wait and no map load (the original goes back to the window without a message; the wording is the project's). | open |
 | 5 | Press New Game, then the pre-made browser at once (before the map is ready) and browse; press Start. | The browser works at once. Start says the world is still loading and the game starts by itself when the map is ready (the one visible difference from the original). Escape takes it back. | open |
 | 6 | Press New Game, then Back out to Single Player and choose Last Save while the start map is still loading. | The save's own map loads instead and the game starts on it; the start map's load is given up. The result is the same as step 2. | open |
-| 7 | Press New Game, press New Character and go through the window, the editor and the shop. | The wait note first (the new character's window needs the map's start); then the windows work as before. | open |
+| 7 | Press New Game, press New Character and go through the window, the editor and the shop. | The New Character window opens at once with no wait note (ARC-UI-2282: it needs no scene); its Accept says the world is still loading if the start map is not ready yet and opens the editor by itself when it is; then the editor and the shop work as before. | open |
 | 8 | Choose a save whose file is damaged or from another game (copy one and break it). | The menu comes back with the reason; nothing else changes. | open |
 
 Known differences (documented, not bugs):
