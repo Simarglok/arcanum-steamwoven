@@ -442,8 +442,8 @@ public partial class TerrainViewerApp
     private async Task WorldMapWindowArtAsync(string window, AreaWorldMapArtView view)
     {
         if (!WindowArtSmokeRequested) return;
-        // ARC-UI-1810: the frame, the Zoom, Whole map, Travel and compass buttons and the lens 198 (the cover 217 stays art).
-        var found = view.TexturesForSelfTest([AreaWorldMapArtLayout.BackgroundArt, AreaWorldMapArtLayout.ZoomArt, AreaWorldMapArtLayout.WholeArt, AreaWorldMapArtLayout.TravelArt, AreaWorldMapArtLayout.CompassArt, AreaWorldMapArtLayout.LensArt]);
+        // ARC-UI-1810: the frame, the Zoom, Whole map, Travel and compass buttons, the lens 198 and (ARC-UI-2194) the bottom cover 217.
+        var found = view.TexturesForSelfTest([AreaWorldMapArtLayout.BackgroundArt, AreaWorldMapArtLayout.ZoomArt, AreaWorldMapArtLayout.WholeArt, AreaWorldMapArtLayout.TravelArt, AreaWorldMapArtLayout.CompassArt, AreaWorldMapArtLayout.LensArt, AreaWorldMapArtLayout.CoverArt]);
         await WindowArtSmokeAsync(window, () => found.Select(pair => pair.Texture).ToArray(), found.Select(pair => pair.Art).ToArray(), view.DeviceScale, () => view.HasLook);
     }
 
