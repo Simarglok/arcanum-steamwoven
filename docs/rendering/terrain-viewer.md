@@ -1119,7 +1119,7 @@ floating lines, so above the objects and below the numbers) in the original's fo
 Checks: `TextBubblesTests` (colours, life, wrap, slots and slot choice, the table's reuse and eviction, life rules, the setting change) and
 the `map` stage's talk smoke (the NPC line of every started conversation is a persistent bubble, replaced on each reply, not persistent after the end; no `npc` text in the panel); `ARC_AREA_TALK_CAPTURE=PATH` saves the first open dialog as `PATH.png` and the `floaters` smoke stage's bubble part (a PC's and an NPC's bubble over their objects, green and white, wrapped within 200 px,
 alive at 6000 ms and gone after it, a Text Duration change to 2 shortening a live bubble at once; `ARC-UI-1997 bubbles over objects PASS`; then the off flag written on the NPC and the NPC destroyed by a script each remove its bubble and not the hero's, a bubble made over an object that is off stays, `ARC-UI-2034 bubbles removed by off flag and teardown PASS`; then (ARC-UI-2048, ledger TB29, TB30) a dialog speaker with no cell keeps an undrawn bubble that never expires while persistent and ages by time after the end, a final line restarted at the close lives one life from the close, and a new scene drops old bubbles, `ARC-UI-2048 dialog line bubble off the shown map and final-line life PASS` (the fade's clear-all: `AreaScriptHostTests` and `AreaUseScriptHostTests` count the fade runs, `TextBubblesTests` the gone watch);
-`ARC_AREA_FLOATERS_CAPTURE` saves `bubble-before` (the old white rising line) and `bubble-after`) and the `spirit-talk` stage (the greeting over the corpse is a bubble). Original visual parity NOT VERIFIED.
+`ARC_AREA_FLOATERS_CAPTURE` saves `bubble-before` (the old white rising line), `bubble-after`, and (ARC-UI-2278, ledger TB31: a bubble is laid out in the original's pixels and drawn at the screen's whole factor like the bars and the dialog band; the stage checks factor 2 gives twice the size on the 2 px grid) `bubble-factor1` and `bubble-factor-screen` at a 2560 × 1440 window) and the `spirit-talk` stage (the greeting over the corpse is a bubble). Original visual parity NOT VERIFIED.
 
 ### Inventory window, pickup and loot (ARC-UI-004)
 
@@ -2732,7 +2732,9 @@ in play, the shop keeps its diagnostic window and the docked barter window above
 
 Native smoke (`menu` stage, original data): the first shop shows the art with the barter window's original look docked at the
 screen's (0, 41), its merchant's wares in the grid and no round view; the pointer over Back lights it and a click on it returns to
-the editor; the ware bought in the second shop stands on the hero's side of the original look; `ARC-UI-069 native-smoke shop art
+the editor; the ware bought in the second shop stands on the hero's side of the original look; no two wares overlap in the merchant's grid
+(ARC-UI-2283: the session knows the items' art sizes before the shop's container regenerates, so the created wares are laid out by their
+art and not as 1 × 1 cells); `ARC-UI-069 native-smoke shop art
 PASS` (`ARC_AREA_SHOP_CAPTURE` saves a readback of the window to the caller's ignored path). Checks: `AreaShopArtTests`.
 
 ### Interface bars (ARC-UI-018)
