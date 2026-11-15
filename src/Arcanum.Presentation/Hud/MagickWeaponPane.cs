@@ -42,5 +42,6 @@ public static class MagickWeaponPaneRules
 
     /// <summary>The bar mode after the weapon button's release (0x556EA0 → 0x5506C0 with 8): mode 8, or the message mode 0 when the bar
     /// already shows mode 8 (a second release closes the pane).</summary>
+    [OriginalFunction(0x5506C0, OriginalFunctionScope.Partial)]
     public static int ModeAfterButton(int mode) => mode == BarMode ? 0 : BarMode;
 }
