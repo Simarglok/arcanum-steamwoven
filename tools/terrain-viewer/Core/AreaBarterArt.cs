@@ -1,3 +1,4 @@
+using Arcanum.Simulation.Equipment;
 using Arcanum.World;
 
 namespace Arcanum.TerrainViewer.Core;
@@ -177,8 +178,9 @@ public static class AreaBarterArtLayout
             return hit.Cell is { } target ? new(AreaInventoryDropKind.Buy, held, GridSlot: target) : new(AreaInventoryDropKind.PutBack, held);
         }
         if (hit.Slot is { } slot && slot != held.Worn) return new(AreaInventoryDropKind.Wear, held, Slot: slot);
-        // ARC-UI-1926: a slot of the merchant's doll (1000 and up) is not a place of its grid: the original asks the wear test 0x464D20 and sells onto the slot (0x575360 with 1000 + slot, the merchant
-        // wears it); NOT READY (issue filed): the item goes back.
+        // ARC-UI-2138 (0x574BC1..0x574BF7, IW35): a slot of the merchant's doll (1000 and up) is not a place of its grid: the hero's item there is sold onto the slot, where the merchant wears it
+        // (the wear test 0x464D20 and the empty slot are asked by the window; either refusal puts it back).
+        if (hit.Location is >= 1000 and <= 1008 and var merchantSlot) return new(AreaInventoryDropKind.SellWear, held, Slot: (EquipmentSlot)merchantSlot);
         return hit.Location is { } location and < 1000 ? new(AreaInventoryDropKind.Sell, held, GridSlot: location) : new(AreaInventoryDropKind.PutBack, held);
     }
 

@@ -67,6 +67,7 @@ src/Arcanum.Session/GameSessionAttack.cs,WithEffects,pending,
 src/Arcanum.Session/GameSessionBackground.cs,RefusesCarry,pending,
 src/Arcanum.Session/GameSessionBarter.cs,BarterBuy,pending,
 src/Arcanum.Session/GameSessionBarter.cs,BarterSell,pending,
+src/Arcanum.Session/GameSessionBarter.cs,BarterSellWorn,exempt,host
 src/Arcanum.Session/GameSessionBarter.cs,QueryHeroHaggle,pending,
 src/Arcanum.Session/GameSessionBloodPools.cs,LeaveBloodPool,pending,
 src/Arcanum.Session/GameSessionCarry.cs,HeroFits,pending,
@@ -570,7 +571,9 @@ src/Arcanum.World/AreaBarter.cs,CheckGamble,exempt,host
 src/Arcanum.World/AreaBarter.cs,Deals,pending,
 src/Arcanum.World/AreaBarter.cs,Gamble,exempt,host
 src/Arcanum.World/AreaBarter.cs,HeroCanTrade,pending,
+src/Arcanum.World/AreaBarter.cs,MerchantWearRefusal,exempt,host
 src/Arcanum.World/AreaBarter.cs,Open,pending,
+src/Arcanum.World/AreaBarter.cs,SellOnSlot,exempt,host
 src/Arcanum.World/AreaBeds.cs,IsBedArt,exempt,reference
 src/Arcanum.World/AreaBeds.cs,OccupiedFrame,exempt,host
 src/Arcanum.World/AreaCharacterSheetIcon.cs,NpcArt,exempt,host

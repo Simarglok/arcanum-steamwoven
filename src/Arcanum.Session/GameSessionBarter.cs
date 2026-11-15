@@ -1,5 +1,6 @@
 using Arcanum.Simulation.Skills;
 using Arcanum.Simulation;
+using Arcanum.Simulation.Equipment;
 
 namespace Arcanum.Session;
 
@@ -213,6 +214,51 @@ public sealed partial class GameSessionOwner
         var paid = TakeGoldFromNpc(Version, npc, (int)total);
         return paid.Disposition == GameSessionDisposition.Changed ? moved with { Version = Version }
             : paid with { Item = moved.Item, Version = Version, Scripts = moved.Scripts, InsertScript = moved.InsertScript, Messages = moved.Messages };
+    }
+
+    /// <summary>
+    /// ARC-UI-2138 (0x575360 → 0x5788C0 → 0x578EA0 with the location 1000 + slot, executor 0x461810 → 0x461CA0 → 0x466640, ledger IW35, BW5): the hero's item, worn or in its pack, is sold onto a slot of the merchant's doll and the merchant
+    /// wears it. <see cref="BarterSell"/>'s sale of one whole item into the NPC itself (never the substitute container: the executor puts a slot location on the merchant, 0x57934B), then the NPC's worn record names the item in <paramref name="slot"/>
+    /// (the record a dressed NPC keeps, ARC-WORLD-103; for an NPC the session never dressed it starts from what its map data has worn), in the sale's one revision. The wear test (0x464D20) is the caller's, as <see cref="QueryWearRefusal"/>'s is for the hero. Refused
+    /// before any effect: a slot that is not a wear slot or that the NPC's list shows filled (the original puts the item back, no swap for an NPC), a first worn record past the saved budget, and an item the session cannot wear for the NPC: one with item event
+    /// scripts on the move (<see cref="GameSessionFailure.ItemScriptUnsupported"/>) or item spells (<see cref="GameSessionFailure.ItemEffectUnsupported"/>); NOT READY (the original runs the wield scripts, art and light of the NPC's wear). PROJECT: the room test the executor
+    /// runs for the NPC (0x466510, its carry weight) is <paramref name="npcInsert"/>. A sale refused in the sale rules leaves the NPC's record as it was; a payment refused after the move leaves the item on the NPC's slot, as the original leaves a moved item.
+    /// </summary>
+    public InventoryMutationResult BarterSellWorn(GameSessionVersion expected, string npc, string item, EquipmentSlot slot, SessionWearableItem wearable, int unitPrice,
+        SessionItemKind newStackKind, SessionInsertCheck npcInsert, bool identify = false, ISessionItemScriptHost? scripts = null)
+    {
+        ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(wearable);
+        ArgumentNullException.ThrowIfNull(npcInsert);
+        if (!SessionValidation.Entity(npc) || !SessionValidation.Entity(item) || !Enum.IsDefined(slot)) return RejectItem(GameSessionFailure.InvalidItem);
+        if (!IsCurrent(expected)) return RejectItem(GameSessionFailure.StaleVersion);
+        if (!KnownNpc(npc)) return RejectItem(GameSessionFailure.UnknownHolder);
+        if (EquipmentRules.WearSlot(wearable.Item) is not { } own || own != slot && !(own is EquipmentSlot.Ring1 && slot is EquipmentSlot.Ring2)) return RejectItem(GameSessionFailure.InvalidEquipment);
+        if (EquipmentDomain.MovePoints(wearable.ScriptPoints).Count > 0) return RejectItem(GameSessionFailure.ItemScriptUnsupported);
+        if (wearable.HasItemSpells) return RejectItem(GameSessionFailure.ItemEffectUnsupported);
+        if (QueryHolderItems(npc) is not { } listed) return RejectItem(GameSessionFailure.UnknownHolder);
+        var record = new SortedDictionary<EquipmentSlot, string>();
+        foreach (var held in listed)
+            if (held.Facts.Worn && held.Facts.InventoryLocation is >= (int)EquipmentSlot.Helmet and <= (int)EquipmentSlot.Boots) record[(EquipmentSlot)held.Facts.InventoryLocation] = held.Entity;
+        if (record.ContainsKey(slot)) return RejectItem(GameSessionFailure.InvalidEquipment);
+        var had = _inventory.NpcWorn.TryGetValue(npc, out var before);
+        if (!had && _inventory.NpcWorn.Count >= SessionInventoryState.MaxNpcWorn) return RejectItem(GameSessionFailure.BudgetExceeded);
+        record[slot] = item;
+        _inventory.NpcWorn[npc] = record;
+        InventoryMutationResult result;
+        try { result = BarterSell(expected, npc, item, 1, unitPrice, newStackKind, npcInsert, null, identify, scripts); }
+        catch
+        {
+            // A host callback that throws leaves the item with the hero: the record is as it was.
+            if (had) _inventory.NpcWorn[npc] = before!; else _inventory.NpcWorn.Remove(npc);
+            throw;
+        }
+        // The item reached the NPC's list (a sale, or a payment that failed after the move): it stays on the slot; else the record is as it was.
+        if (_inventory.NpcOf(item) != npc)
+        {
+            if (had) _inventory.NpcWorn[npc] = before!; else _inventory.NpcWorn.Remove(npc);
+        }
+        return result;
     }
 
     private static bool ValidContainer(string? container, string npc) => container is null ||

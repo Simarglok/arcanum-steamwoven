@@ -22,7 +22,7 @@ public sealed record AreaInventoryHeld(string Entity, EquipmentSlot? Worn, int O
     public bool Partner { get; init; }
 }
 
-public enum AreaInventoryDropKind { PutBack, GridMove, TakeOffTo, Wear, DropToGround, UseIcon, Take, Plant, Buy, Sell, Gamble, Give, TakeWear, BuyWear }
+public enum AreaInventoryDropKind { PutBack, GridMove, TakeOffTo, Wear, DropToGround, UseIcon, Take, Plant, Buy, Sell, Gamble, Give, TakeWear, BuyWear, SellWear }
 
 /// <summary>ARC-UI-019: what a release does with the held item: put it back, move it in the grid, take it off into a grid slot, or put it
 /// into a wear slot; ARC-UI-025: drop it on the hero's tile (the drop icon) or use it (the use icon); ARC-UI-052: take the looted holder's
@@ -31,7 +31,7 @@ public enum AreaInventoryDropKind { PutBack, GridMove, TakeOffTo, Wear, DropToGr
 /// hero's (released on the merchant's grid); ARC-UI-1740: bet the merchant's item (released on the bet box); ARC-UI-1925: give the hero's item
 /// into the looted holder (<see cref="AreaInventoryDropKind.Give"/>, 0x575360), take the holder's item and wear it in the released hero slot
 /// (<see cref="AreaInventoryDropKind.TakeWear"/>, the loot window's 0x575200 on a slot; in the steal window a steal attempt) or buy the merchant's item and wear it
-/// (<see cref="AreaInventoryDropKind.BuyWear"/>).</summary>
+/// (<see cref="AreaInventoryDropKind.BuyWear"/>); ARC-UI-2138: sell the hero's item onto a slot of the merchant's doll, which the merchant wears (<see cref="AreaInventoryDropKind.SellWear"/>, 0x575360 with 1000 + slot).</summary>
 public sealed record AreaInventoryDrop(AreaInventoryDropKind Kind, AreaInventoryHeld Held, int? GridSlot = null, EquipmentSlot? Slot = null);
 
 /// <summary>

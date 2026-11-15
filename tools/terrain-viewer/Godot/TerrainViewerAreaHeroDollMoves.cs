@@ -121,6 +121,18 @@ public partial class TerrainViewerApp
             if (bought is { Disposition: GameSessionDisposition.Changed, Displaced: { } displaced }) _barterPanel!.Hold(new(displaced, null, 0));
             return;
         }
+        if (drop.Kind == AreaInventoryDropKind.SellWear)
+        {
+            // ARC-UI-2138 (IW35, BW5): the hero's item sold onto a slot of the merchant's doll, which the merchant wears. The wear test and a filled slot put it back silently.
+            var sellable = _inventoryHost.Wearable(session, item, _areaKitWear);
+            if (sellable is null) { GD.Print($"ARC-UI-2138 barter sell-wear item={item} slot={slot} put back (no wear facts)"); _barterMessage = ""; SyncAreaBarter(force: true); return; }
+            var trade = _barter.SellOnSlot(item, slot, sellable);
+            GD.Print($"ARC-UI-2138 barter sell-wear item={item} slot={slot} moved={trade.Moved} total={trade.Total} failure={trade.Result.Failure} text={trade.Text}");
+            _barterMessage = trade.Text;
+            if (trade.Moved) PlayBarterTradeSound();
+            SyncAreaBarter(force: true);
+            return;
+        }
         var (result, message) = WearHeroItem(session, item, slot, name);
         _barterMessage = message;
         SyncAreaBarter(force: true);

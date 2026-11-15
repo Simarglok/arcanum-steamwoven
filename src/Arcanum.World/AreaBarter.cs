@@ -4,6 +4,7 @@ using Arcanum.Data.Content;
 using Arcanum.Data.Messages;
 using Arcanum.Session;
 using Arcanum.Simulation.Combat;
+using Arcanum.Simulation.Equipment;
 using Arcanum.Simulation.Items;
 using Arcanum.Simulation.Movement;
 using Arcanum.Simulation.Reaction;
@@ -307,6 +308,47 @@ public sealed class AreaBarter
         var result = _session.BarterSell(_session.Version, Merchant.Entity, entity, line.Count, price, line.Kind, AreaInventoryHost.DiagnosticInsertCheck,
             // The sale's identify step is not read separately from the window's follower flag here: it keeps the follower test (the open's chain read, 0x572640, is the only one read).
             Merchant.Container, identify: !Merchant.Follower, scripts: _inventory.ItemScripts(_session));
+        return Settle(TradeDirection.PcSells, line with { Quote = line.Quote with { Price = price } }, result);
+    }
+
+    /// <summary>
+    /// ARC-UI-2138 (the release on a slot of the merchant's doll, 0x574BC1..0x574BF7, ledger IW35): the wear test 0x464D20 for the merchant as the wearer over what it wears now, <c>WrongType</c> for a slot the item cannot take (its own wear slot, a ring in
+    /// either ring slot), <c>null</c> for a merchant the host cannot describe (NOT READY, the item goes back with a text); a refusal of the test, or a slot the merchant already fills, puts the item back silently (0x4673F0 prints only for the player, and an NPC's slot is never swapped).
+    /// </summary>
+    public EquipmentRefusal? MerchantWearRefusal(SessionWearableItem wearable, EquipmentSlot slot)
+    {
+        ArgumentNullException.ThrowIfNull(wearable);
+        if (!AreaInventoryHost.WearSlots(wearable).Contains(slot)) return EquipmentRefusal.WrongType;
+        if (_inventory.NpcWearerFacts?.Invoke(_session.QueryActor().Map, Merchant.Entity) is not { } wearer) return null;
+        var worn = new Dictionary<EquipmentSlot, EquipmentItem>();
+        var holder = _session.QueryMapInventory(_session.QueryActor().Map)?.Holders.FirstOrDefault(h => h.Entity == Merchant.Entity);
+        foreach (var listed in (holder?.Items ?? []).Where(item => item.Facts.Worn && item.Facts.Kind.Type != SessionItemType.Gold))
+        {
+            if (_inventory.HolderItemWearable(_session, listed.Entity, listed.Facts.Kind) is not { } facts) return null;
+            worn[(EquipmentSlot)listed.Facts.InventoryLocation] = facts.Item;
+        }
+        return EquipmentRules.CheckWear(wearable.Item, slot, wearer, worn);
+    }
+
+    /// <summary>
+    /// ARC-UI-2138 (0x575360 with the location 1000 + slot, executor 0x578EA0 → 0x461CA0 → 0x466640; ledger IW35, BW5): the hero sells one of its items, worn or in its pack, onto a slot of the merchant's doll and the merchant wears it: the sale rules of
+    /// <see cref="Sell"/> (price 0 puts it back outside a follower's window, the price is capped at the merchant's coins; the quote and its refusal phrase are the hover's), then <see cref="GameSessionOwner.BarterSellWorn"/>. The wear test comes first
+    /// (<see cref="MerchantWearRefusal"/>): a refusal is silent (empty text, nothing changes). The item goes to the merchant itself even when a substitute container is the shown object.
+    /// </summary>
+    public AreaBarterTrade SellOnSlot(string entity, EquipmentSlot slot, SessionWearableItem wearable)
+    {
+        var line = View().Hero.FirstOrDefault(item => item.Entity == entity);
+        if (line is null) return Refused("not one of the hero's items");
+        var test = MerchantWearRefusal(wearable, slot);
+        // NOT READY: a merchant the host cannot describe (no wearer, a worn item without wear facts) takes nothing, and says so (the original's wear test refusal alone is silent).
+        if (test is null) return Refused("the merchant's wear values are not known here");
+        if (test != EquipmentRefusal.None) return Refused("");
+        if (line.Quote.Price == 0 && !Merchant.Follower) return Refused($"won't buy ({line.Quote.Refusal})");
+        var price = Merchant.Follower ? 0 : TradeRules.SalePayment(line.Quote.Price, _session.QueryNpcGold(Merchant.Entity) ?? 0);
+        var result = _session.BarterSellWorn(_session.Version, Merchant.Entity, entity, slot, wearable, price, line.Kind, AreaInventoryHost.DiagnosticInsertCheck,
+            identify: !Merchant.Follower, scripts: _inventory.ItemScripts(_session));
+        // A slot the merchant's list shows filled goes back silently (the original never swaps an NPC's slot); the other refusals print as a grid sale's do.
+        if (result.Disposition != GameSessionDisposition.Changed && result.Item is null && result.Failure == GameSessionFailure.InvalidEquipment) return Refused("");
         return Settle(TradeDirection.PcSells, line with { Quote = line.Quote with { Price = price } }, result);
     }
 
