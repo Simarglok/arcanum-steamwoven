@@ -3,7 +3,7 @@ using Arcanum.Scripting.Scr;
 
 namespace Arcanum.CrashSiteProbe;
 
-// ARC-RES-2262 research only: the focus kinds the set under test (run with `--set S60`, S61 or S62) still refuses, counted as ARC-RES-1101 counts types.
+// ARC-RES-2262 research only: the focus kinds the set under test (run with `--set S60`, S61, S62 or S63) still refuses, counted as ARC-RES-1101 counts types.
 // Per root (an attached script run from line 0, calls followed) it names the first refusal the production admission gives, the focus
 // kinds the reached lines name that the set does not admit, and whether admitting a kind group frees the root. Only numbers and map
 // names leave the probe.

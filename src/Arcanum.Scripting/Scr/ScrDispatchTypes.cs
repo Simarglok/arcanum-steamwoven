@@ -343,6 +343,20 @@ public interface IScrGroupQueries
 }
 
 /// <summary>
+/// ARC-SCRIPT-2322 (ledger CV1–CV5): the containers in the vicinity of an object, for the focus kinds every container in the vicinity (17) and any container in the vicinity (18; one list, as the portals' 19 and 20). A
+/// host whose set admits either kind implements it besides <see cref="IScrWorldQueries"/>.
+/// </summary>
+public interface IScrContainerQueries
+{
+    /// <summary>
+    /// The containers in the vicinity of <paramref name="centre"/> (type mask bit 2 of the same scan as the portals, ledger CV1, CV2): every container object of the centre's map whose tile is within
+    /// <see cref="ScrWorld.VicinityReach"/> tiles of the centre's tile on both axes and that is not destroyed or switched off, in the host's list order; empty when the host does not know the centre or its place.
+    /// The interpreter keeps the first <see cref="ScrWorld.VicinityListCap"/> under <see cref="ScrRuleProfile.VicinityListCapped"/>.
+    /// </summary>
+    IReadOnlyList<ScrObjectRef> ContainersInVicinity(ScrObjectRef centre);
+}
+
+/// <summary>
 /// ARC-WORLD-081: what a host that runs <see cref="ScrAdmissionSet.S15"/> answers about the world around a run (ledger PG3, PG5). The
 /// interpreter asks only while a clause needs it.
 /// </summary>
@@ -1062,7 +1076,7 @@ public sealed class ScrRunResult
 }
 
 /// <summary>How a dispatch runs: the rule mode's script switches, the admitted set (default <see cref="ScrAdmissionSet.S5"/>,
-/// at most <see cref="ScrAdmissionSet.S62"/>, admitted for the lines reachable from the event's line), the executed-line
+/// at most <see cref="ScrAdmissionSet.S63"/>, admitted for the lines reachable from the event's line), the executed-line
 /// budget and the call depth.</summary>
 public sealed record ScrRunOptions
 {
@@ -1083,7 +1097,7 @@ public sealed record ScrRunOptions
         ArgumentNullException.ThrowIfNull(Admission);
         if (MaxExecutedLines is <= 0 or > OriginalLineBudget) throw new ArgumentOutOfRangeException(nameof(MaxExecutedLines), "The line budget is 1..1000.");
         if (MaxCallDepth is < 1 or > 64) throw new ArgumentOutOfRangeException(nameof(MaxCallDepth), "The call depth is 1..64.");
-        if (!Admission.IsSubsetOf(ScrAdmissionSet.S62)) throw new ArgumentException("The interpreter runs only the commands of ScrAdmissionSet.S62.", nameof(Admission));
+        if (!Admission.IsSubsetOf(ScrAdmissionSet.S63)) throw new ArgumentException("The interpreter runs only the commands of ScrAdmissionSet.S63.", nameof(Admission));
     }
 
     // A set with a guard condition needs a host that answers it, checked before any event runs.
@@ -1118,6 +1132,8 @@ public sealed record ScrRunOptions
             throw new ArgumentException("A set with the focus kinds every one or anyone in the group needs a host that implements IScrGroupQueries.", nameof(Admission));
         if (host is not IScrPortalQueries && Admission.FocusKinds.Contains(ScrFocusKind.EveryPortalInVicinity))
             throw new ArgumentException("A set with the focus kind every portal in the vicinity needs a host that implements IScrPortalQueries.", nameof(Admission));
+        if (host is not IScrContainerQueries && (Admission.FocusKinds.Contains(ScrFocusKind.EveryContainerInVicinity) || Admission.FocusKinds.Contains(ScrFocusKind.AnyContainerInVicinity)))
+            throw new ArgumentException("A set with a container vicinity focus kind needs a host that implements IScrContainerQueries.", nameof(Admission));
         if (host is not IScrObjectStateQueries && Admission.Conditions.Any(ScrAdmissionSet.ObjectStateQueryConditions.Contains))
             throw new ArgumentException("A set with the dead or switched-off condition needs a host that implements IScrObjectStateQueries.", nameof(Admission));
         if (host is not IScrSpellQueries && Admission.Conditions.Any(ScrAdmissionSet.SpellQueryConditions.Contains))

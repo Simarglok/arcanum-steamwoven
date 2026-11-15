@@ -228,8 +228,8 @@ public sealed class ScrCritterFieldTests
         Assert.AreEqual((ScrStop.MissingObject, 0), (absent.Stop, absent.StopLine));
         var literal = ScrAdmission.Admit(Program(Do(C(ScrCatalogue.Action.GetArmor, (Attachee, 0), N(5)))), ArmorSet);
         Assert.AreEqual((ScrRefusalCode.WriteToNumber, 1), (literal.Refusal!.Code, literal.Refusal.Slot));
-        Assert.IsFalse(ScrAdmission.Admit(Program(Do(C(ScrCatalogue.Action.GetArmor, (Attachee, 0), (Counter, 0)))), Set).IsAdmitted, "the set before S62 refuses it");
-        Assert.IsTrue(ScrAdmissionSet.S61.IsSubsetOf(ScrAdmissionSet.S62) && !ScrAdmissionSet.S62.IsSubsetOf(ScrAdmissionSet.S61));
+        Assert.IsFalse(ScrAdmission.Admit(Program(Do(C(ScrCatalogue.Action.GetArmor, (Attachee, 0), (Counter, 0)))), Set).IsAdmitted, "the set before S63 refuses it");
+        Assert.IsTrue(ScrAdmissionSet.S62.IsSubsetOf(ScrAdmissionSet.S63) && !ScrAdmissionSet.S63.IsSubsetOf(ScrAdmissionSet.S62));
     }
 
     [TestMethod]

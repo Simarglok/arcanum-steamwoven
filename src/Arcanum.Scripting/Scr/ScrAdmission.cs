@@ -498,25 +498,19 @@ public sealed class ScrAdmissionSet
 
     /// <summary>
     /// The group set (ARC-SCRIPT-2319, ledger GF1–GF7): <see cref="S60"/> plus the focus kinds every one in the group (13) and anyone in the group (14), which the interpreter resolves to the triggerer's direct followers and then the
-    /// triggerer itself, the followers answered by the host through <see cref="IScrGroupQueries"/> (the group scripts of the installed hit, miss, dialog, taking-damage and critical-hit points). The interpreter runs at most S61.
+    /// triggerer itself, the followers answered by the host through <see cref="IScrGroupQueries"/> (the group scripts of the installed hit, miss, dialog, taking-damage and critical-hit points). The interpreter ran at most S61 until ARC-SCRIPT-2322.
     /// </summary>
     public static ScrAdmissionSet S61 { get; } = new("S61", S60.Conditions, S60.Actions, S60.ValueKinds, S60.FocusKinds.Concat([ScrFocusKind.EveryoneInGroup, ScrFocusKind.AnyoneInGroup]), counterIndexWraps: true);
 
     /// <summary>The five guard conditions (PC quest state 6, has item named 17, is named 20, wields an item named 21, has a reputation 33; ledger SG1–SG6) whose object list the interpreter tests object by object.</summary>
     public static IReadOnlySet<int> GuardConditions { get; } = new HashSet<int> { ScrCatalogue.Condition.PcQuestState, ScrCatalogue.Condition.HasItemNamed, ScrCatalogue.Condition.IsNamed, ScrCatalogue.Condition.IsWieldingItem, ScrCatalogue.Condition.HasReputation };
 
-    /// <summary>The actions of <see cref="S62"/> a host answers through <see cref="IScrCritterFieldQueries"/>: get armor (32, ARC-SCRIPT-2326).</summary>
+    /// <summary>The actions of <see cref="S63"/> a host answers through <see cref="IScrCritterFieldQueries"/>: get armor (32, ARC-SCRIPT-2326).</summary>
     public static IReadOnlyList<int> CritterArtActions { get; } = [ScrCatalogue.Action.GetArmor];
 
     /// <summary>
-    /// The armour set (ARC-SCRIPT-2326, ledger AR1–AR6): <see cref="S61"/> plus get armor (action 32), which stores the armour part of the first object's current art id (<see cref="CritterArtActions"/>, answered through <see cref="IScrCritterFieldQueries.ArmorOf"/>),
-    /// and the group focus kinds in slot 0 of every list condition (<see cref="ListConditions"/>: the exe's condition cases share one list tail, GF9 read again). The interpreter runs at most S62.
-    /// </summary>
-    public static ScrAdmissionSet S62 { get; } = new("S62", S61.Conditions, S61.Actions.Concat(CritterArtActions), S61.ValueKinds, S61.FocusKinds, counterIndexWraps: true);
-
-    /// <summary>
     /// The conditions the interpreter tests over the object list of operand 0 by the list rule of SG6 (the exe's list tail at 0x4455BD, shared by every list condition, ARC-SCRIPT-2326): the group focus kinds are admitted in their slot 0 besides
-    /// the five <see cref="GuardConditions"/>. Conditions that read the first object only (10, 18, 28, 29, 34, 36, 40) are not in it.
+    /// the five <see cref="GuardConditions"/>. Conditions that read the first object only (10, 18, 28, 29, 34, 36, 40, and 24, 32, 44 outside this catalogue) are not in it, and neither are the ones the interpreter reads as one object or counts differently (such as is identified, 47).
     /// </summary>
     public static IReadOnlySet<int> ListConditions { get; } = new HashSet<int>
     {
@@ -528,6 +522,18 @@ public sealed class ScrAdmissionSet
 
     /// <summary>The focus kinds of <see cref="S61"/> a host answers through <see cref="IScrGroupQueries"/>.</summary>
     public static IReadOnlySet<ScrFocusKind> GroupFocusKinds { get; } = new HashSet<ScrFocusKind> { ScrFocusKind.EveryoneInGroup, ScrFocusKind.AnyoneInGroup };
+
+    /// <summary>
+    /// The container vicinity set (ARC-SCRIPT-2322, ledger CV1–CV7): <see cref="S61"/> plus the focus kinds every container in the vicinity (17) and any container in the vicinity (18, one list with 17), which the host answers
+    /// through <see cref="IScrContainerQueries"/> (8 installed roots on 10 sites). The interpreter ran at most S62 until ARC-SCRIPT-2326.
+    /// </summary>
+    public static ScrAdmissionSet S62 { get; } = new("S62", S61.Conditions, S61.Actions, S61.ValueKinds, S61.FocusKinds.Concat([ScrFocusKind.EveryContainerInVicinity, ScrFocusKind.AnyContainerInVicinity]), counterIndexWraps: true);
+
+    /// <summary>
+    /// The armour set (ARC-SCRIPT-2326, ledger AR1–AR7): <see cref="S62"/> plus get armor (action 32), which stores the armour part of the first object's current art id (<see cref="CritterArtActions"/>, answered through <see cref="IScrCritterFieldQueries.ArmorOf"/>),
+    /// and the group focus kinds in slot 0 of every list condition (<see cref="ListConditions"/>: the exe's condition cases share one list tail, GF9 read again). The interpreter runs at most S63.
+    /// </summary>
+    public static ScrAdmissionSet S63 { get; } = new("S63", S62.Conditions, S62.Actions.Concat(CritterArtActions), S62.ValueKinds, S62.FocusKinds, counterIndexWraps: true);
 
     /// <summary>
     /// The set the engine runs the slide scripts with (ARC-RENDER-1171, ledger SS2): true, equal, less or equal, local and global flag and PC quest state conditions; the control and arithmetic actions, call script

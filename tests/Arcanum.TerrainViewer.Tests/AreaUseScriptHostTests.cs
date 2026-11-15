@@ -843,7 +843,7 @@ public sealed class AreaUseScriptHostTests
             foreach (var set in new[] { AreaUseScriptHost.Admission, AreaUseScriptHost.PlacedAdmission, AreaUseScriptHost.HeartbeatAdmission, AreaUseScriptHost.DyingAdmission, AreaUseScriptHost.CombatPointAdmission })
             {
                 Assert.IsTrue(set.Actions.Contains(ScrCatalogue.Action.QueueNewspaper) && set.Actions.Contains(ScrCatalogue.Action.FloatNewspaperHeadline), set.Id);
-                Assert.IsTrue(set.IsSubsetOfBesidesStores(ScrAdmissionSet.S62), set.Id);
+                Assert.IsTrue(set.IsSubsetOfBesidesStores(ScrAdmissionSet.S63), set.Id);
             }
             Assert.AreEqual(SessionNewspaperState.NewGame, session.QueryNewspaper());
             var host = new AreaUseScriptHost(session, 1, [Gate(0)], [Inventory()], content, new AreaScriptWorld(() => new(12, 20), _ => false, _ => null, () => null));
