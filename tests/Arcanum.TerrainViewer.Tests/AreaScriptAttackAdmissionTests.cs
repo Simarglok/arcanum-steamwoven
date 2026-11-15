@@ -17,7 +17,7 @@ public sealed class AreaScriptAttackAdmissionTests
             AreaScriptHost.TalkAdmission, AreaScriptHost.SkillTalkAdmission })
         {
             Assert.IsTrue(set.Actions.Contains(ScrCatalogue.Action.Attack), set.Id);
-            Assert.IsTrue(set.IsSubsetOfBesidesStores(ScrAdmissionSet.S63), set.Id);
+            Assert.IsTrue(set.IsSubsetOfBesidesStores(ScrAdmissionSet.S64), set.Id);
         }
         // A talk with no use host of its map has no AI path to raise the event through: the plain dialog sets do not hold it.
         foreach (var set in new[] { AreaScriptHost.Admission, AreaScriptHost.SkillAdmission })
@@ -50,6 +50,7 @@ public sealed class AreaScriptAttackAdmissionTests
         // dying scripts 55 (the union of the placed and heartbeat sets), the talk sets 11 (the others hold a command of another slice; ARC-SCRIPT-1168: the cast actions moved the talk sets from 10 to 11, the placed and dying counts
         // had moved with the sets of ARC-SCRIPT-1733 and later).
         // ARC-SCRIPT-1815: the heartbeat set gained the scenery and object-variable focus kinds, assign object and float line (heartbeats 32, from 11; the placed and dying counts are those of the shared sets). ARC-SCRIPT-1842's make follow moved the dying count from 55 to 58.
-        Assert.AreEqual((79, 31, 2, 38, 32, 58, 11, 11), (carriers.Count, counts["S33"], counts["use"], counts["placed"], counts["heartbeat"], counts["dying"], counts["talk"], counts["skill talk"]));
+        // Re-measured 2026-11-16 (ARC-SCRIPT-2321, set S64): the any-scenery focus kind (16) moves none of these; the counts moved with the sets merged since the line above (group and container kinds S61 and S62, toggle state, portal kind; issue #1846).
+        Assert.AreEqual((79, 31, 3, 44, 33, 61, 14, 14), (carriers.Count, counts["S33"], counts["use"], counts["placed"], counts["heartbeat"], counts["dying"], counts["talk"], counts["skill talk"]));
     }
 }

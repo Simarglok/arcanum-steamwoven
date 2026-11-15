@@ -109,7 +109,7 @@ public sealed class AreaHeartbeatSceneryLoopTests
         Assert.IsTrue(set.FocusKinds.Contains(ScrFocusKind.EverySceneryInVicinity) && set.FocusKinds.Contains(ScrFocusKind.LocalObject));
         Assert.IsTrue(set.Actions.Contains(ScrCatalogue.Action.AssignObject) && set.Actions.Contains(ScrCatalogue.Action.FloatLine));
         Assert.IsFalse(set.Actions.Contains(ScrCatalogue.Action.GetReaction), "the host has no reaction answer");
-        Assert.IsTrue(set.IsSubsetOfBesidesStores(ScrAdmissionSet.S63));
+        Assert.IsTrue(set.IsSubsetOfBesidesStores(ScrAdmissionSet.S64));
         // The dying set is built on it and the placed set already held all three; the use click's set is unchanged.
         Assert.IsTrue(AreaUseScriptHost.DyingAdmission.FocusKinds.Contains(ScrFocusKind.EverySceneryInVicinity));
         Assert.IsFalse(AreaUseScriptHost.Admission.Actions.Contains(ScrCatalogue.Action.FloatLine));
@@ -176,6 +176,18 @@ public sealed class AreaHeartbeatSceneryLoopTests
         });
     }
 
+    // ARC-SCRIPT-2321 (AS3): the focus kind any scenery in the vicinity (16), the list of kind 15 read as "one is enough", for the tile script 2561 and the bust script 1734.
+    [TestMethod]
+    public void Every_script_host_set_that_admits_the_scenery_focus_admits_the_any_scenery_focus_too()
+    {
+        foreach (var set in new[] { AreaUseScriptHost.Admission, AreaUseScriptHost.PlacedAdmission, AreaUseScriptHost.HeartbeatAdmission, AreaUseScriptHost.DyingAdmission, AreaUseScriptHost.CombatPointAdmission })
+        {
+            Assert.IsTrue(set.FocusKinds.Contains(ScrFocusKind.EverySceneryInVicinity), set.Id);
+            Assert.IsTrue(set.FocusKinds.Contains(ScrFocusKind.AnySceneryInVicinity), set.Id);
+            Assert.IsTrue(set.IsSubsetOfBesidesStores(ScrAdmissionSet.S64), set.Id);
+        }
+    }
+
     // ARC-SCRIPT-2041 (PV1–PV4): the focus kind every portal in the vicinity (19) of the four ground rune tile scripts.
     [TestMethod]
     public void The_use_placed_dying_and_combat_point_sets_admit_the_portal_focus_and_the_heartbeat_set_does_not()
@@ -184,7 +196,7 @@ public sealed class AreaHeartbeatSceneryLoopTests
         {
             Assert.IsTrue(set.FocusKinds.Contains(ScrFocusKind.EveryPortalInVicinity), set.Id);
             Assert.IsFalse(set.FocusKinds.Contains(ScrFocusKind.AnyPortalInVicinity), set.Id);
-            Assert.IsTrue(set.IsSubsetOfBesidesStores(ScrAdmissionSet.S63), set.Id);
+            Assert.IsTrue(set.IsSubsetOfBesidesStores(ScrAdmissionSet.S64), set.Id);
         }
         Assert.IsFalse(AreaUseScriptHost.HeartbeatAdmission.FocusKinds.Contains(ScrFocusKind.EveryPortalInVicinity));
     }
@@ -216,7 +228,7 @@ public sealed class AreaHeartbeatSceneryLoopTests
         {
             Assert.IsTrue(set.FocusKinds.Contains(ScrFocusKind.EveryContainerInVicinity), set.Id);
             Assert.IsTrue(set.FocusKinds.Contains(ScrFocusKind.AnyContainerInVicinity), set.Id);
-            Assert.IsTrue(set.IsSubsetOfBesidesStores(ScrAdmissionSet.S63), set.Id);
+            Assert.IsTrue(set.IsSubsetOfBesidesStores(ScrAdmissionSet.S64), set.Id);
         }
     }
 
@@ -246,7 +258,7 @@ public sealed class AreaHeartbeatSceneryLoopTests
         foreach (var set in new[] { AreaUseScriptHost.Admission, AreaUseScriptHost.PlacedAdmission, AreaUseScriptHost.DyingAdmission, AreaUseScriptHost.CombatPointAdmission, AreaUseScriptHost.HeartbeatAdmission })
             Assert.IsTrue(set.Actions.Contains(ScrCatalogue.Action.ToggleState), set.Id);
         foreach (var set in new[] { AreaUseScriptHost.Admission, AreaUseScriptHost.PlacedAdmission, AreaUseScriptHost.CombatPointAdmission })
-            Assert.IsTrue(set.IsSubsetOfBesidesStores(ScrAdmissionSet.S63), set.Id);
+            Assert.IsTrue(set.IsSubsetOfBesidesStores(ScrAdmissionSet.S64), set.Id);
         Assert.IsFalse(AreaUseScriptHost.Admission.Actions.Contains(ScrCatalogue.Action.Kill), "kill stays with the heartbeat and dying sets");
         Assert.IsTrue(ScrAdmission.Admit(ProgramOf(ToggleScript), AreaUseScriptHost.Admission).IsAdmitted);
         Assert.IsTrue(ScrAdmission.Admit(ProgramOf(PortalToggleScript), AreaUseScriptHost.PlacedAdmission).IsAdmitted);
