@@ -37,7 +37,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--jobs", type=int, default=min(DEFAULT_JOBS, os.cpu_count() or 1))
     parser.add_argument("names", nargs="*", help="test modules (default: every tools/local_dev/test_*.py)")
     args = parser.parse_args(argv)
-    names = [n if n.startswith("tools.") else f"tools.local_dev.{n}" for n in args.names] or modules()
+    names = [Path(n).stem if n.endswith(".py") else n for n in args.names]
+    names = [n if n.startswith("tools.") else f"tools.local_dev.{n}" for n in names] or modules()
     started = time.monotonic()
     failed: list[str] = []
     # Longest first would need history; the pool keeps all workers busy anyway, and the slowest modules start with the first jobs.

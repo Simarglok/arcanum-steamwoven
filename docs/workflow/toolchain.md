@@ -924,6 +924,8 @@ Run from repository root:
 "$DOTNET" test Arcanum.Steamwoven.sln --no-build --filter "TestCategory!=RealData"
 python3 -B tools/research/dat_probe.py --self-test
 python3 -B tools/original-oracle/oracle.py --self-test
+python3 -B tools/local_dev/run_tests.py
+./arcanum smoke self-test --headless
 python3 -B tools/docs_check.py
 ```
 
