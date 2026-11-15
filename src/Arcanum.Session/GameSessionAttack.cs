@@ -666,6 +666,8 @@ public sealed record SessionAttack(SessionCritterCombat Target)
     public Action<SessionHitScriptEvent>? HitScripts { get; init; }
     /// <summary>ARC-COMBAT-1929 (0x45F9D0): the target's facing and awareness of the hero, for a backstab of a melee attack with a wielded weapon (the wielded weapon's art subtype comes with <see cref="HeroWorn"/>). Null: the host knows none, and the attack is no backstab.</summary>
     public SessionBackstabFacts? Backstab { get; init; }
+    /// <summary>ARC-COMBAT-1942 (0x4B3170, SC16): the target is the occupant the blow pulled out of a bed it struck (the record's target replaced), so the check carries -30 (<see cref="AttackRequest.TargetWasInBed"/>).</summary>
+    public bool TargetWasInBed { get; init; }
 }
 
 /// <summary>
@@ -940,6 +942,7 @@ public sealed partial class GameSessionOwner
             DeferHit = pending is null && attack.Flight,
             // ARC-COMBAT-1929: a melee strike (not a shot's landing or a throw) may be a backstab.
             Backstab = pending is null && thrown is null ? BackstabOf(hero.Combatant, hero.Skill, hero.Weapon, attack.Backstab) : BackstabKind.None,
+            TargetWasInBed = attack.TargetWasInBed,
         };
         var rolls = new TrialCombatRolls(new SeededRandom(_random.Seed, _random.Draws));
         AttackResolution resolution;

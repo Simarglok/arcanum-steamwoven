@@ -261,6 +261,22 @@ public partial class TerrainViewerApp
         var owner = _areaSession!;
         // ARC-COMBAT-011: the object as it is now, its use script's trap included (a use may have changed the script).
         if (ObjectTargets()?.Target(owner, target.Row.Key, AreaTrapped) is { Refusal: null } now) target = now;
+        // ARC-COMBAT-1942 (0x4B3170, SC16): the attack record's first step turns a scenery with an occupant (a bed) into the occupant, who leaves the bed through the unseat 0x45F3A0; the blow is then the attack on the
+        // occupant, its check carrying -30 (TargetWasInBed). The goal keeps the bed as its target, so the next blow strikes the empty bed. An occupant the combat host has no values for stays pulled out and the bed takes the blow.
+        if (target.Row.Type == 3 && _aiHost?.HeroBlowOccupant(target.Entity) is { } occupant)
+        {
+            if (_combatHost!.Target(owner, occupant) is { Dead: false, Build.Combat: { } combat } npc)
+            {
+                GD.Print($"ARC-COMBAT-1942 bed-blow bed={target.Entity} occupant={occupant}");
+                var occupantGoal = new AttackGoal(npc, combat, goal.Aim);
+                // The shared check reads the line to the struck occupant as it reads one to any NPC (SC8), by the ranged path only.
+                var line = RangedPath(owner.QueryHeroAttack()) && _worldActor.Session is AreaGridSession grid && grid.Chart.ToWorld(grid.State.CommittedCell) is var at
+                    ? ShotLine(TraceLineOfFire(new(checked((int)at.X), checked((int)at.Y)), npc.Row), npc.Row) : null;
+                HitCritter(goal, occupantGoal, distance, line, inBed: true);
+                return;
+            }
+            GD.Print($"ARC-COMBAT-1942 bed-blow bed={target.Entity} occupant={occupant} has no combat values: the bed takes the blow");
+        }
         // ARC-COMBAT-016: with a projectile art the shot flies and strikes on arrival (ledger PF1).
         var flight = ShotFlight(owner.QueryHeroAttack());
         var struckEntity = target.Entity;
@@ -853,7 +869,7 @@ public partial class TerrainViewerApp
 
     /// <summary>The hit on an NPC through the session: <paramref name="struck"/> is the NPC hit (the goal's own target, or the one the
     /// line of fire struck instead), <paramref name="goal"/> the goal whose count and end it sets.</summary>
-    private void HitCritter(AttackGoal goal, AttackGoal struck, int distance, SessionLineOfFire? line)
+    private void HitCritter(AttackGoal goal, AttackGoal struck, int distance, SessionLineOfFire? line, bool inBed = false)
     {
         var owner = _areaSession!;
         // ARC-COMBAT-016: with a projectile art the shot flies and strikes on arrival (ledger PF1).
@@ -863,7 +879,7 @@ public partial class TerrainViewerApp
         var weaponBefore = HeroWeaponPrototype(owner, null); // the context's weapon, read before the strike (a thrown or broken weapon leaves the hand)
         var result = owner.AttackCritter(owner.Version, CritterAttack(struck, distance, line) with
         {
-            Flight = flight is not null, Throw = flight is null ? null : HeroThrow(goal),
+            Flight = flight is not null, Throw = flight is null ? null : HeroThrow(goal), TargetWasInBed = inBed,
         });
         goal.Attacks++;
         // ARC-WORLD-092: the attack event of a resolved attack: the victim (and the witnesses of the noise) react.

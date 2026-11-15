@@ -369,6 +369,21 @@ public sealed class AttackStateTests
     // ARC-COMBAT-1929 (0x45F9D0): the hero's melee strike with a wielded weapon of art subtype 2 on an NPC facing away adds its backstab
     // level to the normal damage (five times it unseen and unheard); the host's facts decide, and none means no backstab.
     [TestMethod]
+    public void TheHeroStrikesAnOccupantPulledOutOfABedWithMinus30()
+    {
+        // ARC-COMBAT-1942 (0x4B3170, SC16): the hero's own record replaces a bed by its occupant and the check carries the invocation modifier -30.
+        using var owner = Owner();
+        var rat = Combat();
+
+        var inBed = owner.AttackCritter(owner.Version, new(rat) { TargetWasInBed = true });
+        var plain = owner.AttackCritter(owner.Version, new(rat));
+
+        Assert.AreEqual(GameSessionFailure.None, inBed.Failure);
+        Assert.AreEqual(-30, inBed.Resolution?.Difficulty?.Invocation, "the bed's modifier");
+        Assert.AreEqual(0, plain.Resolution?.Difficulty?.Invocation ?? 0, "an ordinary blow carries none");
+    }
+
+    [TestMethod]
     public void TheHeroStrikesFromBehindWithADaggerAndAddsItsBackstabLevel()
     {
         var basic = new int[12];
