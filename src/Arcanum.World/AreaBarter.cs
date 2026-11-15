@@ -380,6 +380,10 @@ public sealed class AreaBarter
         // still 1000..1008, so the gate's Worn fact is true and its price is the buy quote of a worn item (0 below Master haggle, 0x462230).
         var worn = view.WornWares.FirstOrDefault(item => item.Entity == entity);
         var line = worn ?? view.Wares.FirstOrDefault(item => item.Entity == entity);
+        // ARC-UI-1808 (0x579840, 0x579B60 → 0x461F80): the 0-price rule of a follower's window lives in the hover quote (0x578330) alone; the gate and a lost bet price the item
+        // with the ordinary buy quote, as for any merchant, so a follower's item is staked at its real price.
+        if (line is not null && Merchant.Follower)
+            line = Line(entity, line.Kind, TradeDirection.PcBuys, Parties(view.Haggle, view.Training, view.Reaction), worn is not null, line.Count, ignoreFollower: true);
         var hero = _session.QueryHeroSkills() is { } skills ? skills[Skill.Gambling] : default;
         var price = line?.Quote.Price ?? 0;
         var facts = new GambleFacts(MerchantsItem: line is not null, _merchantGambling?.Invoke()?.Points ?? 0, price, hero.Level, hero.Training, view.HeroGold,
@@ -465,13 +469,13 @@ public sealed class AreaBarter
     private TradeParties Parties(int haggle, SkillTraining training, int reaction) => new(Merchant.Multiplier, haggle, training, reaction,
         BuyScriptAccepts: !Merchant.BuyScript, Fence: Merchant.Fence);
 
-    private AreaBarterLine Line(string entity, SessionItemKind kind, TradeDirection direction, TradeParties parties, bool worn, int count)
+    private AreaBarterLine Line(string entity, SessionItemKind kind, TradeDirection direction, TradeParties parties, bool worn, int count, bool ignoreFollower = false)
     {
         var facts = ItemFacts(entity, kind);
         var (identified, stored, worth, condition) = (facts.Identified, facts.Stored, facts.Worth, facts.Condition);
         var item = facts.Item;
         var trade = new TradeItem(worth, stored, item?.Flags ?? 0, condition, worn, kind.Type == SessionItemType.Gold);
-        var quote = Merchant.Follower ? new TradeQuote(0, TradeRefusal.None)
+        var quote = Merchant.Follower && !ignoreFollower ? new TradeQuote(0, TradeRefusal.None)
             : TradeRules.Price(direction, trade, parties with { Deals = Merchant.Deals(kind.Prototype - 20) });
         var text = _name(entity, kind) + (count > 1 ? $" ×{count}" : "") + (worn ? " (worn)" : "");
         return new(entity, text, count, quote, worth, kind) { ItemFlags = item?.Flags ?? 0 };
