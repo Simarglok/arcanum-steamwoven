@@ -1619,3 +1619,13 @@ Moved here from the owner test checklist of 2026-11-14 (item B7). The other bart
 | # | Step | Expected | Status |
 | --- | --- | --- | --- |
 | 1 | Set the HD interface line to **Generated (experimental)** and open a barter window with the hero's doll toggle on and off. Compare with HD and Legacy. | The merchant's doll (art 337) and the hero's doll cover (art 341) fit their pits and grids; the cover shows no brass rim and its right columns show the pack. | open |
+
+## ARC-DEV-2190 — In-game owner checks overlay (Ctrl+Q, 2026-11-15)
+
+Tooling, no original behaviour to compare: the steps check that the overlay and the page work together. Turn the overlay on first with `./arcanum qa overlay on`, keep `./arcanum qa` running, and start a Steamwoven package build.
+
+| # | Step | Expected | Status |
+| --- | --- | --- | --- |
+| 1 | In a game press Ctrl+Q, pick a step in the list and press **Same**, then close with Escape and look at the page. | The overlay lists the steps with the current one first; the page shows that step as `same` within a moment; a plate with the current step stays at the top left of the game and takes no click. | open |
+| 2 | Press Ctrl+Q, pick another step, write a note, press **Send report**, then **Differs**. | A report folder appears in `artifacts/packages/macos/reports/` whose `report.md` has the line `Check: <step id>`; within about 20 seconds a GitHub issue for that step is created exactly once, and the page lists the report under the step. | open |
+| 3 | Stop the page and start the game without `./arcanum qa overlay on` (or after `./arcanum qa overlay off`), then press Ctrl+Q. | Nothing opens and nothing is drawn: a normal build is unchanged. | open |

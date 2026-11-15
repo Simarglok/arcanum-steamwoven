@@ -1,0 +1,188 @@
+using System.Text.Json;
+using Arcanum.TerrainViewer.Core;
+using Microsoft.VisualStudio.TestTools.UnitTesting;
+
+namespace Arcanum.TerrainViewer.Tests;
+
+/// <summary>ARC-DEV-2190: the files and the model behind the in-game owner-checks overlay (synthetic folders only).</summary>
+[TestClass]
+public sealed class OwnerQaTests
+{
+    private static readonly DateTime Now = new(2026, 11, 15, 12, 0, 0, DateTimeKind.Utc);
+    private string _folder = null!;
+
+    [TestInitialize]
+    public void CreateFolder() => _folder = Directory.CreateTempSubdirectory("arc-owner-qa-").FullName;
+
+    [TestCleanup]
+    public void DeleteFolder()
+    {
+        if (Directory.Exists(_folder)) Directory.Delete(_folder, recursive: true);
+    }
+
+    private void WriteChecks(string commit = "abc1234")
+    {
+        var steps = new[]
+        {
+            new { id = "ARC-DEV-100#1", section = "ARC-DEV-100 - First", step = "Cast the spell.", expected = "A flash.", status = "open" },
+            new { id = "ARC-DEV-100#2", section = "ARC-DEV-100 - First", step = "Walk.", expected = "No block.", status = "same" },
+            new { id = "ARC-UI-200#1", section = "ARC-UI-200 - Second", step = "Open the window.", expected = "It opens.", status = "open" },
+            new { id = "not-an-id", section = "x", step = "x", expected = "x", status = "open" },
+        };
+        File.WriteAllText(Path.Combine(_folder, OwnerQaFiles.ChecksFile), JsonSerializer.Serialize(new { version = 1, commit, steps }));
+    }
+
+    private string[] ResultLines() => File.ReadAllLines(Path.Combine(_folder, OwnerQaFiles.ResultsFile));
+
+    [TestMethod]
+    public void The_checks_snapshot_is_read_and_a_bad_id_is_skipped()
+    {
+        WriteChecks("def5678");
+        var (steps, commit, problem) = OwnerQaFiles.ReadChecks(_folder);
+        Assert.IsNull(problem);
+        Assert.AreEqual("def5678", commit);
+        CollectionAssert.AreEqual(new[] { "ARC-DEV-100#1", "ARC-DEV-100#2", "ARC-UI-200#1" }, steps.Select(step => step.Id).ToArray());
+        Assert.AreEqual("It opens.", steps[2].Expected);
+    }
+
+    [TestMethod]
+    public void A_missing_or_broken_snapshot_is_a_message_not_an_exception()
+    {
+        Assert.IsNotNull(OwnerQaFiles.ReadChecks(_folder).Problem);
+        File.WriteAllText(Path.Combine(_folder, OwnerQaFiles.ChecksFile), "{ not json");
+        var (steps, _, problem) = OwnerQaFiles.ReadChecks(_folder);
+        Assert.AreEqual(0, steps.Count);
+        StringAssert.Contains(problem, "cannot be read");
+    }
+
+    [TestMethod]
+    public void A_result_is_one_line_in_the_page_format_with_the_build_and_the_latest_event_wins()
+    {
+        Assert.IsNull(OwnerQaFiles.AppendResult(_folder, "ARC-DEV-100#1", "same", "fine", null, "abc1234567", Now));
+        Assert.IsNull(OwnerQaFiles.AppendResult(_folder, "ARC-DEV-100#1", "differs", "no flash \"here\"\nline two", "2026-11-15_10-00-00", "abc1234567", Now));
+        Assert.AreEqual(2, ResultLines().Length);
+        using var line = JsonDocument.Parse(ResultLines()[1]);
+        var root = line.RootElement;
+        Assert.AreEqual("result", root.GetProperty("kind").GetString());
+        Assert.AreEqual("2026-11-15T12:00:00Z", root.GetProperty("ts").GetString());
+        Assert.AreEqual("abc1234567", root.GetProperty("build").GetString());
+        Assert.AreEqual("game", root.GetProperty("src").GetString());
+        var results = OwnerQaFiles.ReadResults(_folder);
+        Assert.AreEqual(new OwnerQaResult("differs", "no flash \"here\"\nline two", "2026-11-15_10-00-00"), results["ARC-DEV-100#1"]);
+    }
+
+    [TestMethod]
+    public void A_cut_last_line_is_closed_before_the_next_and_bad_lines_are_skipped()
+    {
+        File.WriteAllText(Path.Combine(_folder, OwnerQaFiles.ResultsFile), "{\"kind\":\"result\",\"step\":\"ARC-DEV-100#2\",\"status\":\"same\"}\n{\"kind\":\"res");
+        Assert.IsNull(OwnerQaFiles.AppendResult(_folder, "ARC-UI-200#1", "cannot-test", "no room", null, "b", Now));
+        var results = OwnerQaFiles.ReadResults(_folder);
+        Assert.AreEqual("same", results["ARC-DEV-100#2"].Status);
+        Assert.AreEqual("cannot-test", results["ARC-UI-200#1"].Status);
+        Assert.AreEqual(2, results.Count);
+    }
+
+    [TestMethod]
+    public void Invalid_input_writes_nothing()
+    {
+        Assert.IsNotNull(OwnerQaFiles.AppendResult(_folder, "ARC-DEV-100", "same", "", null, "b", Now));
+        Assert.IsNotNull(OwnerQaFiles.AppendResult(_folder, "ARC-DEV-100#1", "broken", "", null, "b", Now));
+        Assert.IsNotNull(OwnerQaFiles.AppendResult(_folder, "ARC-DEV-100#1", "same", new string('x', OwnerQaFiles.MaxNote + 1), null, "b", Now));
+        Assert.IsFalse(File.Exists(Path.Combine(_folder, OwnerQaFiles.ResultsFile)));
+    }
+
+    [TestMethod]
+    public void The_active_step_is_one_whole_line_and_null_clears_it()
+    {
+        Assert.IsNull(OwnerQaFiles.WriteActive(_folder, "ARC-UI-200#1"));
+        var path = Path.Combine(_folder, BugReportCheck.FileName);
+        Assert.AreEqual("ARC-UI-200#1", BugReportCheck.ReadActive(path, DateTime.UtcNow));
+        Assert.IsNotNull(OwnerQaFiles.WriteActive(_folder, "nonsense"));
+        Assert.AreEqual("ARC-UI-200#1", BugReportCheck.ReadActive(path, DateTime.UtcNow));
+        Assert.IsNull(OwnerQaFiles.WriteActive(_folder, null));
+        Assert.IsFalse(File.Exists(path));
+        Assert.AreEqual(0, Directory.GetFiles(_folder, ".active-*").Length);
+    }
+
+    [TestMethod]
+    public void The_overlay_is_on_only_with_the_flag_or_the_marker_and_never_beside_an_automated_run()
+    {
+        var root = Directory.CreateTempSubdirectory("arc-owner-qa-root-").FullName;
+        try
+        {
+            var qa = Path.Combine(root, "local", "qa");
+            Directory.CreateDirectory(qa);
+            var start = Path.Combine(root, "artifacts", "packages", "macos");
+            Directory.CreateDirectory(start);
+            string?[] starts = [start];
+            Assert.IsNull(OwnerQaFiles.FindFolder(starts, false, null, null), "no flag, no marker: a normal build");
+            Assert.IsNull(OwnerQaFiles.FindFolder(starts, false, null, "0"));
+            Assert.AreEqual(qa, OwnerQaFiles.FindFolder(starts, false, null, "1"));
+            File.WriteAllText(Path.Combine(qa, OwnerQaFiles.MarkerFile), "on");
+            Assert.AreEqual(qa, OwnerQaFiles.FindFolder(starts, false, null, null));
+            Assert.IsNull(OwnerQaFiles.FindFolder(starts, true, null, "1"), "an automated run never looks beside the game");
+            Assert.AreEqual(qa, OwnerQaFiles.FindFolder(starts, true, qa, null), "an automated run takes only the folder it is given");
+            Assert.IsNull(OwnerQaFiles.FindFolder(starts, true, Path.Combine(root, "missing"), null));
+            Assert.IsNull(OwnerQaFiles.FindFolder([null, ""], false, null, "1"));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [TestMethod]
+    public void The_current_step_is_first_and_the_filters_choose_the_rest()
+    {
+        WriteChecks();
+        OwnerQaFiles.AppendResult(_folder, "ARC-DEV-100#1", "same", "", null, "b", Now);
+        var session = new OwnerQaSession(_folder, "b");
+        Assert.AreEqual("ARC-UI-200#1", session.CurrentId, "the first open step: the first is marked, the second is `same` in the list");
+        Assert.AreEqual("ARC-UI-200#1", session.Rows().Single().Id);
+        session.Filter = OwnerQaFilter.All;
+        CollectionAssert.AreEqual(new[] { "ARC-UI-200#1", "ARC-DEV-100#1", "ARC-DEV-100#2" }, session.Rows().Select(step => step.Id).ToArray());
+        Assert.IsNull(session.SetCurrent("ARC-DEV-100#2"));
+        session.Filter = OwnerQaFilter.Section;
+        CollectionAssert.AreEqual(new[] { "ARC-DEV-100#2", "ARC-DEV-100#1" }, session.Rows().Select(step => step.Id).ToArray());
+        Assert.AreEqual("ARC-DEV-100#2", BugReportCheck.ReadActive(Path.Combine(_folder, BugReportCheck.FileName), DateTime.UtcNow));
+        Assert.IsNotNull(session.SetCurrent("ARC-NOPE-1#1"));
+    }
+
+    [TestMethod]
+    public void A_mark_keeps_the_report_of_the_step_and_a_report_keeps_its_status()
+    {
+        WriteChecks();
+        var session = new OwnerQaSession(_folder, "abc1234567");
+        Assert.IsNull(session.RecordReport("2026-11-15_10-00-00", "note", Now));
+        Assert.AreEqual("open", session.ResultOf("ARC-DEV-100#1")!.Status);
+        Assert.IsNull(session.Mark("differs", "no flash", Now));
+        var result = session.ResultOf("ARC-DEV-100#1")!;
+        Assert.AreEqual(new OwnerQaResult("differs", "no flash", "2026-11-15_10-00-00"), result);
+        Assert.IsNull(session.RecordReport("2026-11-15_10-05-00", "", Now));
+        Assert.AreEqual(new OwnerQaResult("differs", "no flash", "2026-11-15_10-05-00"), session.ResultOf("ARC-DEV-100#1"));
+        Assert.IsNotNull(session.Mark("open", "", Now));
+        Assert.IsTrue(ResultLines().All(line => line.Contains("\"build\":\"abc1234567\"", StringComparison.Ordinal)));
+    }
+
+    [TestMethod]
+    public void Next_open_wraps_and_the_session_follows_the_page()
+    {
+        WriteChecks();
+        var session = new OwnerQaSession(_folder, "b");
+        Assert.AreEqual("ARC-DEV-100#1", session.CurrentId);
+        Assert.IsTrue(session.AdvanceToNextOpen(out var problem));
+        Assert.IsNull(problem);
+        Assert.AreEqual("ARC-UI-200#1", session.CurrentId, "ARC-DEV-100#2 is `same` in the list");
+        Assert.IsTrue(session.AdvanceToNextOpen(out _));
+        Assert.AreEqual("ARC-DEV-100#1", session.CurrentId, "wraps around");
+        Assert.IsNull(session.Mark("same", "", Now));
+        OwnerQaFiles.AppendResult(_folder, "ARC-UI-200#1", "same", "", null, "b", Now);
+        session.Reload();
+        Assert.IsFalse(session.AdvanceToNextOpen(out _), "nothing open is left");
+        // the page opens another step: the file changes the current one
+        OwnerQaFiles.WriteActive(_folder, "ARC-DEV-100#2");
+        Assert.IsTrue(session.FollowActive());
+        Assert.AreEqual("ARC-DEV-100#2", session.CurrentId);
+        Assert.IsFalse(session.FollowActive());
+    }
+}
