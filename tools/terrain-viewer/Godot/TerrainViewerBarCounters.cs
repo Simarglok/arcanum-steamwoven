@@ -58,7 +58,7 @@ public partial class TerrainViewerApp
         var ammoType = weapon?.Item.Weapon?.AmmoType;
         var ammo = ammoType is { } type ? session.QueryHeroAmmo().Where(stack => stack.AmmoType == type).Select(stack => stack.Units).FirstOrDefault() : 0;
         var manaStore = ammoType is null && weapon is not null && HeroWeaponPrototype(session, null) is { } prototype ? CombatPrototype(prototype)?.Item?.ManaStore ?? 0 : 0;
-        var counter3 = BarCounterRules.Counter3(true, ammoType, ammo, manaStore, session.QueryGold());
+        var counter3 = BarCounterRules.Counter3(session.QueryHero() is not null, ammoType, ammo, manaStore, session.QueryGold());
         string? counter4 = null;
         if (modeItem is not null && SpellCasterNow()?.ItemPane(modeItem) is { } pane)
             counter4 = BarCounterRules.Text(BarCounterRules.Counter4(pane.Gauge.Kind != ItemSpellGaugeKind.Unknown,
