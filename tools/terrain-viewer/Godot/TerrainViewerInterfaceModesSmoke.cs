@@ -318,11 +318,11 @@ public partial class TerrainViewerApp
                 Require(LogbookOpen && StackText() == "Game>Logbook", "a Ctrl+right press on the bar pops nothing: " + State());
                 await Press(Key.L);
                 Require(!AnyWindowOpen, "L closed the logbook: " + State());
-                // The world map hides the bars here, but the original tests the strips' coordinates: a press there pops it all the same.
+                // The world map lies between the strips with the bars up (ARC-UI-2306): a right press on the strip pops it, as the original tests the strips' coordinates.
                 if (WorldMapActive)
                 {
                     await Press(Key.W);
-                    Require(WorldMapOpen && StackText() == "Game>WorldMap" && AreaGameBarPanel.BottomInset == 0, "W opened the world map, which hides the bars: " + State());
+                    Require(WorldMapOpen && StackText() == "Game>WorldMap", "W opened the world map: " + State());
                     var factor = AreaGameBarPanel.ScreenFactor(size);
                     await Right(new Vector2(size.X / 2, size.Y - AreaGameBarLayout.BottomHeight * factor / 2));
                     Require(!WorldMapOpen && StackText() == "Game", "a right press on the bottom strip popped the world map: " + State());
