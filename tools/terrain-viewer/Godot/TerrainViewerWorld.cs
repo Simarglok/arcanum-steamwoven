@@ -799,7 +799,10 @@ public partial class TerrainViewerApp
     private void StopWorldRoute(string reason)
     {
         // ARC-DEV-189: not while the hero's knock-down or get-up plays: a level-3 interrupt would end that run (priority 3), and the hero lying takes no ordinary action that replaces it.
-        if (!_exiting && !_quarantineKeepsRuns && ShownHeroRunsHost?.DownRun is not { Bottom.Goal: Arcanum.Simulation.Goals.GoalType.KnockDown or Arcanum.Simulation.Goals.GoalType.GetUp }) HeroRunsHost()?.Interrupt(Arcanum.Simulation.Goals.GoalInterruptRules.OrdinaryActions, reason);
+        // ARC-COMBAT-2172: nor while its stun (goal 57, priority 1) plays: the stop that follows a blow on the stunned hero (HERO_DOWN) is not an action of its own, so it must not cut the stun short (the stunned hero takes
+        // no ordinary action either, and its walk was interrupted by the stun's own start).
+        if (!_exiting && !_quarantineKeepsRuns && ShownHeroRunsHost is not { StunRun: not null }
+            && ShownHeroRunsHost?.DownRun is not { Bottom.Goal: Arcanum.Simulation.Goals.GoalType.KnockDown or Arcanum.Simulation.Goals.GoalType.GetUp }) HeroRunsHost()?.Interrupt(Arcanum.Simulation.Goals.GoalInterruptRules.OrdinaryActions, reason);
         StopWorldRouteOnly(reason);
     }
 
