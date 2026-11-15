@@ -606,7 +606,7 @@ queue is the worst order for such a mix, and a project import waited for a windo
   Site smoke 110 s, `walk` 540 s, `container-click` 700 s, `census` 900 s as an assumption). The estimate only orders
   the queue; it is not a limit (`--timeout` is) and a wrong one costs its run a different place, nothing else.
 - **Order.** The key of a waiting run is its arrival time plus 3 times its estimate (`ORDER_WEIGHT`); the lowest key goes
-  first, equal keys by number, and the owner's own viewer launches stay first of all. A 20 s run that arrives within
+  first, equal keys by number, and the owner's own viewer launches stay first of all; `./arcanum main-smoke` queues its steps after every other run (`LOW`, [rolling smoke](#rolling-smoke-on-main-arc-dev-2226)). A 20 s run that arrives within
   about 30 minutes of a 10 minute run therefore starts before it, runs with equal estimates keep the arrival order, and
   no run is passed by a run that arrives more than 3 of its estimates after it, so none starves. The key is fixed when
   the run is queued, so every waiter computes the same order. `./arcanum queue` lists the waiters in this order.
@@ -820,6 +820,58 @@ every time; with it the cast stage passed 6 of 6 and the bar stage 4 of 4).
 
 Not covered: the system pointer crossing the window's edge during a step still reaches the window as a window event
 (mouse enter or exit), which drops the GUI's hover; Windows and Linux were not run.
+
+### Rolling smoke on main (ARC-DEV-2226)
+
+Owner decision 2026-11-15 (smoke stability measure 2, [baseline](smoke-stability.md)): a red `main` was found by other
+threads' PR runs (57 of 61 cases) or by the daily 12 to 24 hours later, with a hundred commits in the suspect range. The
+rolling smoke finds it within about two hours and says which merges to look at.
+
+    ./arcanum main-smoke               # fetch; if main moved since the last green or red run: core smoke on a fresh worktree of it
+    ./arcanum main-smoke --dry-run     # fetch, say whether it would run and print the command; run nothing else
+    ./arcanum main-smoke --force       # run although main has not moved; --no-issue leaves GitHub alone; --zones Z changes the set
+    ./arcanum main-smoke --print-launchd   # the launchd agent (every 2 hours), for the owner to load
+
+It is `tools/local_dev/main_smoke.py` (the flag: `red_flag.py`; tests `tools.local_dev.test_main_smoke`).
+
+- **What runs.** A fresh detached worktree of `origin/main` in an `arcanum-main-smoke-*` folder of the temporary folder
+  (never the owner's checkout; leftovers of a killed run are removed under the command's lock, one run at a time per
+  repository), and in it `./arcanum smoke pr --zones core,crash-site --retry --low-priority` with a limit of 180
+  minutes for the whole command: the `core` zone (every cheap stage, [smoke zones](#smoke-runner-arc-dev-061)) and the
+  Crash Site smoke; the heavy zones (`walk`, `container-click`, `census`) and the complete run stay with the daily.
+  `--retry` runs the stages of a failed process alone, so the log knows which fail alone too. The run skips (exit 0)
+  when the last run of this command on that commit was green or red; an inconclusive one is tried again.
+- **Low priority.** `--low-priority` of `./arcanum smoke` gives every step of the run `run_queue.LOW`, behind every
+  ordinary run and the owner's launches ([queue order](#queue-order-arc-dev-390)); each step is its own ticket, so a
+  PR run waits for at most the step that is running. A queue busy all day delays the rolling run, nothing else.
+- **Result.** Green: the commit becomes the last green one and the flag is cleared (and the open issue gets a comment).
+  Red (a summary that names a failed step; a failed viewer build or import counts): the state keeps the first red commit
+  of the streak, the one open issue (state, else an open one titled `Red on main (rolling smoke)`) is rewritten or
+  created, with labels `bug`, `type:dev`, `status:ready` and an `area:*` by the first failing stage (`AREAS` in
+  `main_smoke.py`, `area:scene` when none fits), the failing stages (a stage that failed alone too is named, not its
+  process), the first red commit, the last green commit and the first-parent merge range between them (newest first,
+  at most 60 lines and a compare link), and the first errors; the flag is written. A failed step whose own exit is a queue timeout (124) or a viewer that did not start (125) is not
+  counted (logged as `transient`), and a run with no other failed step is inconclusive. Inconclusive (stopped, ran out of the
+  180 minutes, no summary, a worktree that could not be made): recorded, flag and issue untouched. If `gh` fails the
+  flag is still written, without an issue number, and the next run files it (for the same commit without running the smoke again). Exit codes: 0 green or skip, 1 red,
+  2 inconclusive or a refusal.
+- **The flag.** `red-on-main.json` in the `main-smoke` folder of the launcher home (`~/Library/Application Support/Arcanum
+  Steamwoven/main-smoke`, beside `run-queue`; `ARCANUM_LOCAL_HOME` moves both), so every checkout and worktree of the
+  Mac reads the same one. `./arcanum smoke pr` (any of its forms, `--auto` included) prints `SMOKE red on main since SHA,
+  #N (...)` before it runs and again after a failed run: a failure of those stages that also fails on a clean `origin/main`
+  is that issue's, so a thread cites it instead of running the smoke on main again. The next green run deletes it.
+- **Flake log.** Each run appends to `flake-log.jsonl` (same folder) one line per stage that failed or passed alone after
+  failing in its process: `outcome` `passes-alone`, `fails-alone` or `failed` (no alone re-run exists, as for the Crash Site
+  smoke). It is the input of the later flake register (measure 4), not a decision on its own.
+- **Files.** `state.json` (last run, last green, the red streak and its issue number), `red-on-main.json`,
+  `flake-log.jsonl`, `logs/` (the last run's `report.txt` and `smoke.log`, replaced by the next run), all in that folder.
+- **Schedule.** Not started by the repository: the daily's agent is `~/Library/LaunchAgents/com.arcanum.steamwoven.daily.plist`
+  (03:00), and this one is its sibling `com.arcanum.steamwoven.main-smoke.plist`: `./arcanum main-smoke --print-launchd >
+  ~/Library/LaunchAgents/com.arcanum.steamwoven.main-smoke.plist`, then `launchctl bootstrap gui/$(id -u)
+  ~/Library/LaunchAgents/com.arcanum.steamwoven.main-smoke.plist` (stop it with `launchctl bootout gui/$(id -u)/com.arcanum.steamwoven.main-smoke`).
+  It runs every 2 hours (`StartInterval` 7200), from a fresh worktree of `origin/main` under `caffeinate` as the daily's
+  does, logs to `~/Library/Logs/arcanum-main-smoke.log`, and a run that finds the lock taken or main unchanged ends at once.
+  The owner starts it (human gate of the issue).
 
 ### Quiet output (ARC-DEV-037)
 

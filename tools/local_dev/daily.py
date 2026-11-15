@@ -261,18 +261,18 @@ class Daily:
         return code, text
 
 
-def remove_stale(root: Path, temporary: Path) -> list[Path]:
+def remove_stale(root: Path, temporary: Path, prefix: str = TEMP_PREFIX) -> list[Path]:
     """The temporary folders an earlier daily run left (killed, or --keep-work), with their worktree registrations; only
     called under the lock, so no running day owns them."""
     removed = []
     listed = package.git(root, "worktree", "list", "--porcelain").splitlines()
     for path in (Path(line[len("worktree "):]) for line in listed if line.startswith("worktree ")):
-        if path.parent.name.startswith(TEMP_PREFIX) and path.parent.parent == temporary:
+        if path.parent.name.startswith(prefix) and path.parent.parent == temporary:
             try:
                 package.git(root, "worktree", "remove", "--force", str(path))
             except package.PackageError as error:  # a locked one: its folder still goes below, git prunes the rest later
                 say(f"note: {error}")
-    for folder in sorted(temporary.glob(TEMP_PREFIX + "*")):
+    for folder in sorted(temporary.glob(prefix + "*")):
         if folder.is_dir() and not folder.is_symlink():
             shutil.rmtree(folder, ignore_errors=True)
             removed.append(folder)
