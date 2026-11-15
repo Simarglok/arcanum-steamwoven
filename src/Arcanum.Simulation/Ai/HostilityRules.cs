@@ -437,6 +437,19 @@ public static class HostilityRules
     }
 
     /// <summary>
+    /// ARC-COMBAT-2164 (EX15, 0x4B3170): who receives the attack event of an attack that does not fly when the line of fire struck <paramref name="blocker"/> in place of <paramref name="aimed"/>. In the original the dispatcher sends the
+    /// event to the aimed target before the roll (the event's accidental test, struck against aimed, is never true there), and the ranged branch's redirect (0x4ADE00 at 0x4B33E9) then replaces only the struck object, so the aimed target is
+    /// alerted, deliberately, and the blocker is not (<see cref="CombatAnomalyProfile.RangedBlockerHitNotifiesAimedTarget"/>, the Original setting). Steamwoven alerts the blocker with the accidental bit, as a stray missile's strike does (EX14).
+    /// <paramref name="aimed"/> null (the aimed target is no critter the event can name) leaves the Original setting no victim. A shot that flies is not asked here: its event comes at the strike.
+    /// </summary>
+    /// <returns>The victim and the event's flags; a null victim raises no event.</returns>
+    public static (string? Victim, AttackEventFlags Flags) RangedBlockerNotice(CombatAnomalyProfile profile, string? aimed, string blocker)
+    {
+        ArgumentNullException.ThrowIfNull(profile); ArgumentNullException.ThrowIfNull(blocker);
+        return profile.RangedBlockerHitNotifiesAimedTarget ? (aimed, AttackEventFlags.None) : (blocker, AttackEventFlags.Accidental);
+    }
+
+    /// <summary>
     /// The attack event (0x4A9650) of <paramref name="attacker"/> on <paramref name="victim"/> as data. Stops: a missing side; a
     /// nigh-invulnerable or dead critter victim (a sleeping one is woken first); a victim off, not drawn or invulnerable, the decoy
     /// or a wall; an attack on itself. A non-critter attacker makes an NPC victim fight it. An ordered attack runs only the
