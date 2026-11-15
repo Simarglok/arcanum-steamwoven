@@ -18,6 +18,32 @@ from tools.local_dev.test_smoke import ENVIRON, parse
 REPO = Path(__file__).resolve().parents[2]
 
 
+class PrFloorSelectionTests(unittest.TestCase):
+    """ARC-DEV-2223: the unmapped paths, the PR form of `complete` and the click or walk files of a selection."""
+
+    def test_a_path_no_row_names_selects_complete_and_is_named(self) -> None:
+        selection = smoke_zones.select_zones(["unknown/thing.bin", "docs/a.md"])
+        self.assertTrue(selection.complete)
+        self.assertEqual(selection.unmapped, ("unknown/thing.bin",))
+        said = "\n".join(smoke_zones.describe(selection, "abcdef0123", "origin/main"))
+        self.assertIn("no zone row names, so `complete` is selected (fail closed): unknown/thing.bin", said)
+        self.assertEqual(smoke_zones.select_zones(["src/Arcanum.Simulation/X.cs"]).unmapped, ())
+
+    def test_a_pr_takes_complete_as_core_and_the_crash_site_smoke(self) -> None:
+        wide = smoke_zones.select_zones(["src/Arcanum.Data/X.cs"])
+        self.assertEqual(wide.zones, (COMPLETE,))
+        self.assertEqual(wide.pr_zones, (CORE, CRASH_SITE))
+        self.assertTrue(any("rolling main smoke" in line for line in smoke_zones.describe(wide, "abc", "origin/main")))
+        narrow = smoke_zones.select_zones(["src/Arcanum.Simulation/Navigation/X.cs"])
+        self.assertEqual(narrow.pr_zones, narrow.zones)
+
+    def test_click_and_walk_files_are_named_in_the_selection(self) -> None:
+        selection = smoke_zones.select_zones(["src/Arcanum.World/AreaCellPicking.cs", "src/Arcanum.Simulation/Navigation/X.cs",
+                                              "src/Arcanum.Session/GameSessionHeal.cs"])
+        self.assertEqual(selection.click_walk, ("src/Arcanum.Simulation/Navigation/X.cs", "src/Arcanum.World/AreaCellPicking.cs"))
+        self.assertEqual(smoke_zones.select_zones(["src/Arcanum.Session/GameSessionHeal.cs"]).click_walk, ())
+
+
 class ZoneTableTests(unittest.TestCase):
     def test_every_stage_is_in_exactly_one_zone_and_the_heavy_ones_exist(self) -> None:
         known = smoke.map_stages()
@@ -243,9 +269,23 @@ class ZonePlanTests(unittest.TestCase):
         self.assertEqual([step.name for step in run(("docs/a.md",), "--crash-site")], ["crash-site"])
         steps = run(("tools/terrain-viewer/Godot/TerrainViewerAreaMapWalkSmoke.cs",))
         self.assertEqual(steps[-1].requires, ("walk",))
-        self.assertEqual(len(run(("src/Arcanum.Data/X.cs",))), len(self.plan("complete", "--no-build")))  # the shared code
+        # ARC-DEV-2223: the shared code selects `complete`, which a PR runs as core + the Crash Site smoke (the floor); the heavy
+        # zones and the batteries are the rolling main smoke's and the daily build's; `--zones complete` still runs it all
+        steps = run(("src/Arcanum.Data/X.cs",))
+        self.assertEqual(steps[0].name, "crash-site")
+        self.assertEqual(sorted(self.stages(steps[1:])), sorted(smoke_zones.zone_stages(CORE, smoke.map_stages())))
+        self.assertTrue(any("a PR runs core + crash-site for `complete`" in line for line in self.said))
+        self.assertEqual(len(run(("src/Arcanum.Data/X.cs",), "--zones", "complete")), len(self.plan("complete", "--no-build")))
         steps = run(("src/Arcanum.Session/GameSessionHeal.cs",), "--stages", "walk")
         self.assertEqual(sorted(self.stages(steps)), sorted([*smoke_zones.zone_stages(CORE, smoke.map_stages()), "walk"]))
+
+    def test_click_or_walk_handling_adds_the_map_stage_to_an_auto_run(self) -> None:
+        with mock.patch.object(smoke_zones, "changed_files", return_value=("abcdef0123", ("src/Arcanum.World/AreaCellPicking.cs",))), \
+                mock.patch.object(smoke_zones, "changed_lines", return_value=[]):
+            steps = self.plan("pr", "--auto", "--no-build")
+        self.assertIn("map", self.stages(steps))
+        self.assertIn("container-click", self.stages(steps))
+        self.assertTrue(any("`smoke self-test` are mandatory" in line for line in self.said))
 
     def test_a_run_with_no_zone_to_run_passes_and_builds_nothing(self) -> None:
         output = io.StringIO()

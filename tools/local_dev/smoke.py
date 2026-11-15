@@ -582,7 +582,11 @@ def plan(args: argparse.Namespace, conf: dict, prefs_root: Path, environ: Mappin
             selection = smoke_zones.select_zones(files, lambda path: smoke_zones.changed_lines(mark, path))
             for line in smoke_zones.describe(selection, mark, base):
                 say(line)
-            zones = tuple(dict.fromkeys((*zones, *selection.zones)))
+            # ARC-DEV-2223: a PR takes `complete` as core + Crash Site (the floor smoke_verify checks); `--zones complete` by hand
+            # still runs it all
+            zones = tuple(dict.fromkeys((*zones, *selection.pr_zones)))
+            if selection.click_walk:  # the mandatory click and walk rule: the `map` stage here, `self-test` its own command
+                stages = tuple(dict.fromkeys((*stages, "map")))
             if not zones and not stages and not args.crash_site:
                 return []  # no smoke covers the diff: nothing to run, not even the build
         pinned = args.map is not None or args.hero or args.sector or args.main_menu or extra
@@ -816,6 +820,9 @@ def focus_guard_library(steps: Sequence[Step], target: Path | None,
 
 
 def run(args: argparse.Namespace) -> int:
+    if args.target == "verify-pr":  # ARC-DEV-2223: reads git and the journal; no smoke, no queue place
+        from . import smoke_verify
+        return smoke_verify.run(args)
     environ = dict(os.environ)
     if environ.get(run_queue.TICKET_ENV):
         raise ValueError("run ./arcanum smoke on its own, not inside ./arcanum run: each smoke takes its own place in "
@@ -918,6 +925,10 @@ def configure(command: argparse.ArgumentParser) -> None:
     crash.add_argument("--hero", choices=launch.PREMADE_HEROES, help=f"the pre-made hero (default {CRASH_SITE_HERO})")
     crash.add_argument("--env", action="append", metavar="NAME=VALUE", help="one more variable for the viewer; repeatable")
     common(crash)
+    verify = targets.add_parser("verify-pr", help="the pre-merge check (ARC-DEV-2223): every smoke stage `pr --auto` selects for "
+                                "the diff against --base (and the self-test and the map stage for click or walk changes) has a "
+                                "passing run of this checkout on the files as they are; runs no smoke, exit 1 when one is missing")
+    verify.add_argument("--base", help="the ref the diff is taken against (default origin/main; fetch it first)")
     test = targets.add_parser("self-test", help="the viewer's synthetic --self-test (no game data)")
     test.add_argument("--headless", action="store_true", help="Godot --headless (default: with a window)")
     test.add_argument("--env", action="append", metavar="NAME=VALUE", help="one more variable for the viewer; repeatable")

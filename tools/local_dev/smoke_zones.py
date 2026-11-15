@@ -47,6 +47,10 @@ ZONES: dict[str, Zone] = {zone.name: zone for zone in (
 )}
 HEAVY = tuple(name for name in ZONES if name != CORE)
 CHOICES = (*ZONES, COMPLETE)
+# ARC-DEV-2223: what a PR must run when `--auto` selects `complete` (a wide diff, or a file no row names): the Crash Site
+# smoke and `core`. The heavy zones and the map batteries of the complete run are the rolling main smoke's and the daily
+# build's (`--zones complete` still runs all of it by hand).
+PR_COMPLETE = (CORE, CRASH_SITE)
 # The batteries of the full chain already vouch for these two stages, so the complete run does not list them again.
 IN_BATTERIES = frozenset({"map", "resources"})
 
@@ -186,10 +190,17 @@ class Selection:
     because: dict[str, tuple[str, ...]]
     uncovered: tuple[str, ...]
     files: int
+    unmapped: tuple[str, ...] = ()  # ARC-DEV-2223: the files no row names (each selects `complete`, a safe miss)
+    click_walk: tuple[str, ...] = ()  # ARC-DEV-2223: the files of click and walk handling (the `walk` and `container-click` rows)
 
     @property
     def complete(self) -> bool:
         return COMPLETE in self.zones
+
+    @property
+    def pr_zones(self) -> tuple[str, ...]:
+        """The zones a PR must run (the floor of `--auto`): the chosen ones, with `complete` taken as PR_COMPLETE."""
+        return PR_COMPLETE if self.complete else self.zones
 
 
 def select_zones(paths: Iterable[str], lines: Callable[[str], Sequence[str]] | None = None) -> Selection:
@@ -198,12 +209,14 @@ def select_zones(paths: Iterable[str], lines: Callable[[str], Sequence[str]] | N
     changed lines of a file (REGISTRATIONS); without it such a file selects its extra zones as well."""
     paths = sorted(set(path.strip().replace("\\", "/") for path in paths if path.strip()))
     because: dict[str, list[str]] = {}
-    uncovered = []
+    uncovered, unmapped = [], []
     for path in paths:
         rows = [(pattern, zones) for pattern, zones, _ in TRIGGERS if pattern_matches(pattern, path)]
         vetoed = any(not zones for _, zones in rows)  # a `none` row beats the generic rows (`*.csproj`, ...)
         hit = [zones for pattern, zones in rows if not (vetoed and pattern.startswith("*"))]
         chosen = {zone for zones in hit for zone in zones} if rows else {COMPLETE}
+        if not rows:
+            unmapped.append(path)
         if path in REGISTRATIONS:
             plain, extra = REGISTRATIONS[path]
             changed = lines(path) if lines is not None else None
@@ -213,10 +226,13 @@ def select_zones(paths: Iterable[str], lines: Callable[[str], Sequence[str]] | N
             uncovered.append(path)
         for zone in chosen:
             because.setdefault(zone, []).append(path)
+    click_walk = tuple(sorted(set(because.get(WALK, ())) | set(because.get(CONTAINER_CLICK, ()))))
     if COMPLETE in because:
-        return Selection((COMPLETE,), {zone: tuple(files) for zone, files in because.items()}, tuple(uncovered), len(paths))
+        return Selection((COMPLETE,), {zone: tuple(files) for zone, files in because.items()}, tuple(uncovered), len(paths),
+                         tuple(unmapped), click_walk)
     zones = tuple(name for name in ZONES if name in because)
-    return Selection(zones, {name: tuple(because[name]) for name in zones}, tuple(uncovered), len(paths))
+    return Selection(zones, {name: tuple(because[name]) for name in zones}, tuple(uncovered), len(paths), tuple(unmapped),
+                     click_walk)
 
 
 def git_output(*args: str) -> str:
@@ -251,6 +267,17 @@ def describe(selection: Selection, mark: str, base: str) -> list[str]:
         files = selection.because.get(name, ())
         lines.append(f"SMOKE auto: zone {name}" + (f" because of {', '.join(files[:3])}"
                      + (f" and {len(files) - 3} more" if len(files) > 3 else "") if files else ""))
+    if selection.unmapped:
+        lines.append(f"SMOKE auto: {len(selection.unmapped)} file(s) no zone row names, so `complete` is selected (fail closed): "
+                     + ", ".join(selection.unmapped[:5]) + (f" and {len(selection.unmapped) - 5} more" if len(selection.unmapped) > 5 else "")
+                     + "; add a row to TRIGGERS in tools/local_dev/smoke_zones.py")
+    if selection.complete:
+        lines.append(f"SMOKE auto: a PR runs {' + '.join(PR_COMPLETE)} for `complete` (the Crash Site smoke and every cheap stage); "
+                     "the rest of the complete run is the rolling main smoke's and the daily build's")
+    if selection.click_walk:
+        lines.append(f"SMOKE auto: click or walk handling changed ({', '.join(selection.click_walk[:3])}"
+                     + (f" and {len(selection.click_walk) - 3} more" if len(selection.click_walk) > 3 else "")
+                     + "): `smoke pr --stages map` and `smoke self-test` are mandatory too")
     if selection.uncovered and selection.zones:
         lines.append(f"SMOKE auto: not covered by any zone: {len(selection.uncovered)} files (documents, tests, tools)")
     return lines

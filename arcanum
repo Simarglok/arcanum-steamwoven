@@ -464,7 +464,8 @@ def parser() -> argparse.ArgumentParser:
     command = commands.add_parser("smoke", help="run the viewer's smokes from this checkout through the launch queue, each "
                                   "with its own settings folder and start check: pr (touched stages or zones, --auto from the diff), "
                                   "full (the full map smoke chain), complete (the nightly run: every stage), map NAME, "
-                                  "crash-site, self-test (ARC-DEV-061, ARC-DEV-396)")
+                                  "crash-site, self-test (ARC-DEV-061, ARC-DEV-396); verify-pr checks before a merge that the "
+                                  "stages --auto selects have a passing run on these files (ARC-DEV-2223)")
     smoke.configure(command)
     command.set_defaults(func=smoke.run)
     command = commands.add_parser("package", help="build the packaged alpha for a player from a fresh commit of origin/main "

@@ -264,14 +264,36 @@ narrowed the same day in ARC-DEV-061):
   plans, the hero walk goal, pathing the click reaches) always runs
   `./arcanum smoke pr --stages map` and `./arcanum smoke self-test`, whatever
   else it touches, and its report names both results. This overrides the
-  "no smoke stage covers it" exception above.
+  "no smoke stage covers it" exception above. Since ARC-DEV-2223 the files of
+  the `walk` and `container-click` zone rows count as such a change:
+  `smoke pr --auto` adds the `map` stage itself and `smoke verify-pr` requires
+  the `map` stage and the self-test.
 - The complete smoke run (the Crash Site smoke, the map batteries, then every
   stage: `./arcanum smoke complete`) runs as part of the daily package build
   (`./arcanum daily`, [daily package build](packaging.md#daily-package-build-arc-dev-062)),
-  and only when main changed since the last package; not per PR, unless the
-  change is wide: `./arcanum smoke pr --auto` picks `complete` itself for the
-  shared data, save schema, render and shared UI code and for a file no zone
-  table row names.
+  and only when main changed since the last package; not per PR. For a wide
+  change `./arcanum smoke pr --auto` selects `complete` itself (the shared data,
+  save schema, render and shared UI code, and a file no zone table row names);
+  at a PR that means **core + the Crash Site smoke** (the PR floor below), the
+  rest of the complete run (the heavy zones and the map batteries) being the
+  daily build's.
+- **PR floor** (owner decision 2026-11-15, ARC-DEV-2223, smoke stability
+  measure 1, [baseline](smoke-stability.md)): the stage set that
+  `./arcanum smoke pr --auto` selects for the diff against `origin/main` is a
+  lower bound, not a suggestion. A hand-picked `--stages` list may add to it,
+  never replace it. Before the merge run `./arcanum smoke verify-pr` (after
+  `git fetch origin main`); it reads the queue journal
+  (`smoke-stages.jsonl`) and fails when a required stage, the Crash Site smoke
+  or the self-test has no passing run of this checkout on the files as they
+  are now (a run counts until a file of the diff changes; merging main or
+  editing a document does not void it). The PR report names its `SMOKE
+  verify-pr PASS` line. The check also holds the click and walk rule below
+  (the `map` stage and `smoke self-test` for a change in the `walk` or
+  `container-click` rows), and a path no zone row names selects `complete`
+  (fail closed): the output names it, and the fix is a row in `TRIGGERS`
+  (`tools/local_dev/smoke_zones.py`), not a narrower run. A diff no zone covers
+  (documents, tests, research tools) requires nothing and the check passes. A
+  docs-only PR needs no smoke and no check.
 - Zones (owner decision 2026-11-11, ARC-DEV-396): `./arcanum smoke pr --auto`
   reads the diff against `origin/main` and runs the zones it selects (`core`,
   the heavy `walk`, `container-click`, `crash-site`, `census`, or `complete`);
@@ -289,7 +311,8 @@ narrowed the same day in ARC-DEV-061):
   ([known failures](toolchain.md#smoke-runner-arc-dev-061)); a failure that is
   not listed but also fails on clean main is named in the PR the same way.
 - Run them with the shared runner ([smoke runner](toolchain.md#smoke-runner-arc-dev-061)):
-  `./arcanum smoke pr --auto` (or `--stages S,... [--crash-site]`) per PR and
+  `./arcanum smoke pr --auto` (or `--stages S,... [--crash-site]`, on top of
+  the floor) per PR, `./arcanum smoke verify-pr` before the merge and
   `./arcanum smoke complete` for the nightly run; no scratch smoke scripts.
 - `SMOKE PASS` means every requested stage ran and printed its `PASS` line
   (ARC-DEV-063): a skipped stage fails the smoke, a stage that needs a hero
@@ -463,6 +486,11 @@ committed files. Do not copy the game or the full vault into each worktree.
   independent review still applies: it confirms that the diff is docs-only (no
   changed file name appears in `tests/` or `tools/`). Such a PR can run in a cloud checkout
   without .NET or Godot.
+- Before the merge of a code change, after updating the branch from a fresh
+  `origin/main`, run `./arcanum smoke verify-pr`: it must print `SMOKE verify-pr
+  PASS` (the smoke the diff requires, [PR floor](#smoke-scope)); on a FAIL run the
+  named smoke, never a narrower one, and run the check again. A docs-only PR is
+  exempt.
 - An agent merge uses a merge commit for the exact reviewed head, for example
   `gh pr merge <url> --merge --match-head-commit <reviewed-sha>`, after checking
   that `gh api user --jq .login` returns `Simarglok`. Never use `--admin`,
