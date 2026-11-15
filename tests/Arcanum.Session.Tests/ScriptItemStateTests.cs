@@ -119,6 +119,8 @@ public sealed class ScriptItemStateTests
         Refused(owner.TransferNamedItem(owner.Version, "virgil", "corpse", 2804, Accept), GameSessionFailure.HolderPairUnsupported);
         Refused(owner.TransferNamedItem(owner.Version, "virgil", null, 2800, Accept), GameSessionFailure.WornItemUnsupported);
         Refused(owner.TransferNamedItem(owner.Version, "corpse", null, 2807, Accept), GameSessionFailure.ItemScriptUnsupported);
+        // ARC-MAGIC-1823: a script host runs the hero's give only; the take from a holder stays refused for the item's scripts.
+        Assert.AreEqual(GameSessionFailure.ItemScriptUnsupported, owner.QueryNamedItemTransfer("corpse", null, 2807, itemScripts: true).Failure);
         Refused(owner.TransferNamedItem(new(owner.Identity, 7), "virgil", null, 2804, Accept), GameSessionFailure.StaleVersion);
         Refused(owner.TransferNamedItem(owner.Version, "virgil", null, 2804, _ => SessionInsertVerdict.NoRoom), GameSessionFailure.InsertRefused);
         Refused(owner.TransferNamedItem(owner.Version, null, "nobody", owner.QueryHeroKit()[0].Kind.Name, Accept), GameSessionFailure.UnknownHolder);

@@ -46,7 +46,7 @@ automatic leak guard, and measure 7 were not chosen yet).
 
 | Measure | Issue |
 |---|---|
-| 1. `--auto` selection is a lower bound checked before merge | #2223 |
+| 1. `--auto` selection is a lower bound checked before merge | #2223 (done: `./arcanum smoke verify-pr`, [PR floor](tasks.md#smoke-scope)) |
 | 6. The daily runs smoke even when the dotnet checks fail or time out | #2224 (done: `./arcanum daily` runs the smoke after red or timed-out root checks, reports both and still blocks the package) |
 | 3. `tools/local_dev` unit tests and the smoke self-test in the root checks | #2225 (done: `tools/local_dev/run_tests.py`, about 90 s, and `smoke self-test --headless`, about 15 s, in CLAUDE.md section 2; #2199 and #2209 fixed) |
 | 2. Rolling smoke on `origin/main` with an automatic issue and a red-on-main flag | #2226 (done: `./arcanum main-smoke`, [rolling smoke](toolchain.md#rolling-smoke-on-main-arc-dev-2226); the owner loads its launchd agent) |

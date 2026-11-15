@@ -491,6 +491,12 @@ public sealed class ScrAdmissionSet
     public static ScrAdmissionSet S59 { get; } = new("S59", S58.Conditions, S58.Actions.Concat([ScrCatalogue.Action.QueueNewspaper, ScrCatalogue.Action.FloatNewspaperHeadline]), S58.ValueKinds, S58.FocusKinds, counterIndexWraps: true);
 
     /// <summary>
+    /// The portal vicinity set (ARC-SCRIPT-2041, ledger PV1–PV4): <see cref="S59"/> plus the focus kind every portal in the vicinity (19), which the host answers through <see cref="IScrPortalQueries"/> (the loop for of the four ground
+    /// rune tile scripts). The interpreter runs at most S60.
+    /// </summary>
+    public static ScrAdmissionSet S60 { get; } = new("S60", S59.Conditions, S59.Actions, S59.ValueKinds, S59.FocusKinds.Append(ScrFocusKind.EveryPortalInVicinity), counterIndexWraps: true);
+
+    /// <summary>
     /// The set the engine runs the slide scripts with (ARC-RENDER-1171, ledger SS2): true, equal, less or equal, local and global flag and PC quest state conditions; the control and arithmetic actions, call script
     /// (997 calls the ending scripts, which call each other) and queue slide; no object but the player, the triggerer and the attachee (a call's own operands, which are absent here), the extra object and the run's object variables.
     /// </summary>

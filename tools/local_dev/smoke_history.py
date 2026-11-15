@@ -18,8 +18,10 @@ import json
 import os
 from pathlib import Path
 import re
+import subprocess
 import sys
-from typing import Any, Mapping, Sequence
+import tempfile
+from typing import Any, Callable, Mapping, Sequence
 
 from . import run_queue
 
@@ -29,6 +31,36 @@ STAGE_TIME = re.compile(r"^ARC-DEV-399 stage-time (?P<stage>[a-z][a-z0-9-]*) ms=
 LOG_NAME = re.compile(r"^run-(?P<seq>\d+)-[a-z]+\.log$")
 LOOKBACK_LINES = 400  # the newest history lines searched for the step's ticket
 FILE_BYTES, FILE_KEEP = 2_000_000, 5000
+
+
+ROOT = Path(__file__).resolve().parents[2]
+
+
+def git_text(*args: str, root: Path = ROOT, env: Mapping[str, str] | None = None, stdin: str | None = None) -> str:
+    done = subprocess.run(("git", "-C", str(root), *args), capture_output=True, text=True, check=False, input=stdin,
+                          env=None if env is None else {**os.environ, **env})
+    if done.returncode != 0:
+        raise ValueError(f"git {' '.join(args)} failed: {done.stderr.strip() or done.stdout.strip()}")
+    return done.stdout
+
+
+def work_tree(root: Path = ROOT, git: Callable[..., str] = git_text) -> str | None:
+    """ARC-DEV-2223: the git tree hash of the checkout's working files as they are now (HEAD plus every changed, staged,
+    deleted and untracked non-ignored file), made in a private temporary index so the real index and the files are not
+    touched. A smoke step records it, so `./arcanum smoke verify-pr` can tell a run of these files from a run of older
+    ones. None when git cannot say (a note, never a failed smoke)."""
+    try:
+        names = [name for name in (git("diff", "--name-only", "-z", "--no-renames", "HEAD", root=root).split("\0")
+                                   + git("ls-files", "--others", "--exclude-standard", "-z", root=root).split("\0")) if name]
+        with tempfile.TemporaryDirectory(prefix="arcanum-smoke-index-") as folder:
+            env = {"GIT_INDEX_FILE": str(Path(folder) / "index"), "GIT_LITERAL_PATHSPECS": "1"}
+            git("read-tree", "HEAD", root=root, env=env)
+            if names:
+                git("add", "-A", "--pathspec-from-file=-", "--pathspec-file-nul", root=root, env=env,
+                    stdin="\0".join(sorted(set(names))) + "\0")
+            return git("write-tree", root=root, env=env).strip() or None
+    except (ValueError, OSError):
+        return None
 
 
 def ticket_of(log: Path | None) -> int | None:
@@ -70,7 +102,7 @@ def queue_line(seq: int, directory: Path | None = None) -> dict[str, Any] | None
 
 
 def entry_of(name: str, kind: str, requested: Sequence[str], exit_code: int, log: Path | None,
-             directory: Path | None = None) -> dict[str, Any] | None:
+             directory: Path | None = None, tree: Callable[[], str | None] = work_tree) -> dict[str, Any] | None:
     """The record of one finished step, or None when its log is not a queue log (a nested run, a test's runner)."""
     seq = ticket_of(log)
     if seq is None:
@@ -81,7 +113,9 @@ def entry_of(name: str, kind: str, requested: Sequence[str], exit_code: int, log
     waited = round(started - enqueued, 1) if started is not None and enqueued is not None else None
     ran = round(ended - started, 1) if started is not None and ended is not None else None
     return {"schema": SCHEMA, "seq": seq, "step": name, "kind": kind, "checkout": Path(queued.get("cwd", "?")).name,
-            "stages": list(requested) or list(times), "stageMs": times, "waitSeconds": waited, "ranSeconds": ran,
+            "stages": list(requested) or list(times), "stageMs": times,
+            # ARC-DEV-2223: what the step was asked to prove, and the files it ran on (smoke_verify reads both)
+            "asked": list(requested), "tree": tree(), "waitSeconds": waited, "ranSeconds": ran,
             # the part of the run no stage clock covers: the process start, the map load, the exit
             "outsideStagesSeconds": None if ran is None else round(max(0.0, ran - sum(times.values()) / 1000), 1),
             "exit": exit_code, "enqueuedAt": enqueued, "startedAt": started, "endedAt": ended}

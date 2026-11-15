@@ -62,9 +62,7 @@ public partial class TerrainViewerApp
             // ARC-SCRIPT-1358: an l: reply ends the talk and opens the world map; only in map mode, where the bar's Map button has one.
             _conversationHost.WorldMapAvailable = () => WorldMapActive;
             // ARC-SCRIPT-1533, ARC-SCRIPT-1601: a d: or x: reply measures from where the speaker stands now (a companion's live cell, else the cell the shown map's AI host has the NPC on, else its T0 cell).
-            _conversationHost.SpeakerCell = AreaSpeakerCells.Live(
-                speaker => _areaCompanions is { } group && group.Of(speaker) is not null ? group.WorldCell(speaker) : null,
-                entity => AreaAiHostNow()?.NpcCell(entity));
+            _conversationHost.SpeakerCell = SpeakerCell; // ARC-WORLD-2238: the same rule measures the talk reach and the hover
             _conversationHost.HeroAttack = entity => AreaAiHostNow() is { } ai && ai.OrderAttack(new Arcanum.Session.CompanionOrderAttack(Arcanum.Session.SessionCombatant.Hero, Arcanum.Session.SessionCombatant.Critter(entity), Arcanum.Simulation.Ai.Loudness.Normal, Arcanum.Simulation.Ai.AttackEventFlags.None));
             // ARC-SCRIPT-1135: an so action that newly sets the spread-out flag starts goal 69 on the shown map's AI host (CF4).
             _conversationHost.SpreadOutStart = entity => AreaAiHostNow() is { } spreadAi && spreadAi.StartSpreadOut(entity);
@@ -80,6 +78,14 @@ public partial class TerrainViewerApp
             // ARC-SCRIPT-1165 (E5-c): a dialog script's add blessing and add curse take their effect from the module's tables, as a use script's do.
             _conversationHost.Scripts.BlessingEffects = BlessingEffectOf;
             _conversationHost.Scripts.QueryHost = () => ReferenceEquals(_readyArea?.Snapshot, snapshot) ? UseScriptHost(snapshot) : null;
+            // ARC-WORLD-2038 (TT20): the hero's teleport a dialog script or a deferred call asks for is the same request a door's script makes, queued as the map transfer the viewer takes at its next safe point (the original's ping).
+            _conversationHost.Scripts.HeroTeleportRefusal = teleport => ReferenceEquals(_readyArea?.Snapshot, snapshot) && _mapTransfers is { } transfers ? transfers.ScriptTeleportRefusal(teleport) : "no map transfers for this map";
+            _conversationHost.Scripts.RequestHeroTeleport = teleport =>
+            {
+                if (!ReferenceEquals(_readyArea?.Snapshot, snapshot) || _mapTransfers is not { } transfers) return;
+                var queued = transfers.QueueScriptTeleport(teleport);
+                GD.Print($"ARC-WORLD-2038 script-teleport hero outcome={queued.Outcome} to={queued.Site?.DestinationCatalogue} arrival={queued.Site?.Arrival} reason={queued.Reason}");
+            };
         }
         else _conversationHost = null;
         if (_conversationPanel is null)

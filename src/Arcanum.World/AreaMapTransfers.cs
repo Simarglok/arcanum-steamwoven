@@ -144,6 +144,32 @@ public sealed class AreaMapTransfers
         return Pending is not null ? null : Refusal(Teleported(DoorSite(door, 0), teleport));
     }
 
+    /// <summary>
+    /// ARC-WORLD-2038 (ledger TT20): the hero's teleport a dialog script or a deferred call asked for (the original only records a request: the run goes on, the hero changes place at the next ping) is queued as the transfer, as a door's is
+    /// (<see cref="QueueDoorTeleport"/>) but with no door: the site is the hero's own request, named by no object and no script. A transfer already pending drops it (TR4), the script's other effects stay.
+    /// </summary>
+    public AreaMapUseResult QueueScriptTeleport(ScrTeleport teleport)
+    {
+        ArgumentNullException.ThrowIfNull(teleport);
+        LastScripted = null;
+        var site = ScriptSite();
+        if (Pending is not null) return new(AreaUseOutcome.TransitionPending, Teleported(site, teleport), 0, "TRANSITION_PENDING");
+        return Queue(Teleported(site, teleport), null, 0, teleport.Fade);
+    }
+
+    /// <summary>Why the teleport of a dialog script or a deferred call cannot be queued (<see cref="Refusal"/> of its resolved site), or null; a pending transfer drops it instead (<see cref="QueueScriptTeleport"/>), so it is no refusal.</summary>
+    public string? ScriptTeleportRefusal(ScrTeleport teleport)
+    {
+        ArgumentNullException.ThrowIfNull(teleport);
+        return Pending is not null ? null : Refusal(Teleported(ScriptSite(), teleport));
+    }
+
+    private MapTransitionSite ScriptSite()
+    {
+        var here = new WorldLocation(0, 0);
+        return new(MapTransitionTrigger.Use, here, null, 0, [], 0, false, false, Map.Snapshot.CatalogueMap, Map.RuntimeMap, here, MapTransitionGuard.None);
+    }
+
     private MapTransitionSite DoorSite(AreaObjectRecord door, int script)
     {
         var here = new WorldLocation(door.WorldX ?? 0, door.WorldY ?? 0);

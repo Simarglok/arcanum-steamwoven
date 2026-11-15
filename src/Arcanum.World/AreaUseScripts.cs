@@ -138,7 +138,7 @@ public readonly record struct AreaPrintedLine(int Type, string Text);
 /// The PC's reputations are the session's (ARC-WORLD-044); no other object has one. Everything else the viewer does not model
 /// answers "no", as for the dialog and item hosts.
 /// </summary>
-public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrObjectQueries, IScrWorldQueries, IScrObjectStateQueries, IScrAreaQueries, IScrStoreQueries, IScrStatQueries, IScrSpellQueries, IScrStoryQueries, IScrVitalQueries, IScrItemQueries, IScrMagickTechQueries, IScrCritterQueries, IScrCritterStateQueries, IScrCritterFieldQueries, IScrStatAdjustQueries
+public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrObjectQueries, IScrWorldQueries, IScrObjectStateQueries, IScrAreaQueries, IScrStoreQueries, IScrStatQueries, IScrSpellQueries, IScrStoryQueries, IScrVitalQueries, IScrItemQueries, IScrMagickTechQueries, IScrCritterQueries, IScrCritterStateQueries, IScrCritterFieldQueries, IScrStatAdjustQueries, IScrPortalQueries
 {
     /// <summary>Map-change keys of an object's use slot.</summary>
     public const string LocalFlagsProperty = "use.lf", CountersProperty = "use.counters", ScriptProperty = "use.script";
@@ -201,7 +201,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
                 ScrCatalogue.Action.Random, ScrCatalogue.Action.LoopFor, ScrCatalogue.Action.LoopEnd, ScrCatalogue.Action.LoopBreak, ScrCatalogue.Action.CreateObject, ScrCatalogue.Action.GetStat,
                 ScrCatalogue.Action.UnfogTownMap, ScrCatalogue.Action.GiveSpellMastery, ScrCatalogue.Action.Attack, .. CritterFieldWriteActions, .. ItemUseVitalActions, .. EyeCandyActions, .. ScrAdmissionSet.StoryActions, ScrCatalogue.Action.Fade, ScrCatalogue.Action.EndGame, ScrCatalogue.Action.QueueNewspaper, ScrCatalogue.Action.FloatNewspaperHeadline, .. ScrAdmissionSet.NpcStateHostActions, .. ScrAdmissionSet.WorldObjectHostActions]),
         ScrAdmissionSet.S4.ValueKinds.Concat(ScrAdmissionSet.StoreValueKinds),
-        ScrAdmissionSet.S4.FocusKinds.Concat([ScrFocusKind.LocalObject, ScrFocusKind.CurrentLoopedObject, ScrFocusKind.EverySceneryInVicinity]),
+        ScrAdmissionSet.S4.FocusKinds.Concat([ScrFocusKind.LocalObject, ScrFocusKind.CurrentLoopedObject, ScrFocusKind.EverySceneryInVicinity, ScrFocusKind.EveryPortalInVicinity]),
         counterIndexWraps: true);
 
     /// <summary>ARC-SCRIPT-1481 (VT1–VT6): what the food use script 30282 needs besides the use set's own: get hit points (107), get fatigue points (108), heal poison (128), heal hit points (75), heal fatigue (76), the magick-tech adjustment (91; the item's power
@@ -268,7 +268,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         ScrAdmissionSet.S2.Actions.Concat([ScrCatalogue.Action.ToggleState, ScrCatalogue.Action.Kill, ScrCatalogue.Action.LoopFor, ScrCatalogue.Action.LoopEnd, ScrCatalogue.Action.LoopBreak,
             ScrCatalogue.Action.GetObjectType, ScrCatalogue.Action.CallScriptEx, ScrCatalogue.Action.Dialog, ScrCatalogue.Action.CallScriptIn,
             ScrCatalogue.Action.DistanceBetween, ScrCatalogue.Action.GetLocation, ScrCatalogue.Action.SetFaction, ScrCatalogue.Action.WalkTo, ScrCatalogue.Action.RunTo,
-            ScrCatalogue.Action.HealFatigue, ScrCatalogue.Action.PerformAnimation, ScrCatalogue.Action.StealCoins, ScrCatalogue.Action.BecomeProne, ScrCatalogue.Action.GiveSpellMastery, ScrCatalogue.Action.Attack, ScrCatalogue.Action.MakeFollow, ScrCatalogue.Action.AssignObject, ScrCatalogue.Action.FloatLine, ScrCatalogue.Action.QueueNewspaper, ScrCatalogue.Action.FloatNewspaperHeadline, .. CritterFieldWriteActions, .. ScrAdmissionSet.StoryActions, .. ScrAdmissionSet.NpcStateHostActions, .. ScrAdmissionSet.WorldObjectHostActions, .. CastActions, .. StopSpellActions, .. DamageActions, .. EyeCandyActions]),
+            ScrCatalogue.Action.HealFatigue, ScrCatalogue.Action.PerformAnimation, ScrCatalogue.Action.StealCoins, ScrCatalogue.Action.BecomeProne, ScrCatalogue.Action.GiveSpellMastery, ScrCatalogue.Action.Attack, ScrCatalogue.Action.MakeFollow, ScrCatalogue.Action.AssignObject, ScrCatalogue.Action.FloatLine, ScrCatalogue.Action.QueueNewspaper, ScrCatalogue.Action.FloatNewspaperHeadline, ScrCatalogue.Action.Teleport, ScrCatalogue.Action.FadeAndTeleport, .. CritterFieldWriteActions, .. ScrAdmissionSet.StoryActions, .. ScrAdmissionSet.NpcStateHostActions, .. ScrAdmissionSet.WorldObjectHostActions, .. CastActions, .. StopSpellActions, .. DamageActions, .. EyeCandyActions]),
         ScrAdmissionSet.S2.ValueKinds.Concat(ScrAdmissionSet.StoreValueKinds),
         ScrAdmissionSet.S3.FocusKinds.Concat([ScrFocusKind.CurrentLoopedObject, ScrFocusKind.EveryoneInVicinity, ScrFocusKind.AnyoneInVicinity, ScrFocusKind.EverySceneryInVicinity, ScrFocusKind.LocalObject]));
 
@@ -395,7 +395,8 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     }
     private readonly Dictionary<string, AreaObjectRecord> _shown = new(StringComparer.Ordinal);
     // ARC-WORLD-081: the shown map's scenery in snapshot order, for the vicinity; ARC-SCRIPT-047: its NPCs likewise.
-    private readonly List<(string Entity, AreaObjectRecord Row)> _scenery = [], _npcs = [];
+    // ARC-SCRIPT-2041: its portals likewise (focus kind 19).
+    private readonly List<(string Entity, AreaObjectRecord Row)> _scenery = [], _npcs = [], _portals = [];
     private readonly AreaScriptWorld? _world;
     private readonly List<AreaScriptCreation> _created = [];
     private (string Entity, AreaObjectRecord Row)? _clicked;
@@ -428,6 +429,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         {
             _shown.TryAdd(EntityId(row), row);
             if (row.Type == SceneryType && row.WorldX is not null && row.WorldY is not null) _scenery.Add((EntityId(row), row));
+            if (row.Type == PortalObjectType && row.WorldX is not null && row.WorldY is not null) _portals.Add((EntityId(row), row));
             if (row.Type == NpcType && row.WorldX is not null && row.WorldY is not null && _shown[EntityId(row)] == row) _npcs.Add((EntityId(row), row));
         }
     }
@@ -455,6 +457,18 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     {
         if (centre.Map != _shownMap || Place(centre) is not { } at) return [];
         return _scenery.Where(s => Math.Abs(s.Row.WorldX!.Value - at.X) <= ScrWorld.VicinityReach && Math.Abs(s.Row.WorldY!.Value - at.Y) <= ScrWorld.VicinityReach
+                && _world?.Gone(s.Row) != true)
+            .Select(s => new ScrObjectRef(_shownMap, s.Entity)).ToArray();
+    }
+
+    /// <summary>
+    /// ARC-SCRIPT-2041 (PV1–PV3): the shown map's portals within <see cref="ScrWorld.VicinityReach"/> tiles of the centre on both axes, not destroyed or switched off, open, closed or locked alike, in snapshot order
+    /// (the scenery's rule with the portal type, ledger PV1–PV3). Empty for a centre of another map or without a place.
+    /// </summary>
+    public IReadOnlyList<ScrObjectRef> PortalsInVicinity(ScrObjectRef centre)
+    {
+        if (centre.Map != _shownMap || Place(centre) is not { } at) return [];
+        return _portals.Where(s => Math.Abs(s.Row.WorldX!.Value - at.X) <= ScrWorld.VicinityReach && Math.Abs(s.Row.WorldY!.Value - at.Y) <= ScrWorld.VicinityReach
                 && _world?.Gone(s.Row) != true)
             .Select(s => new ScrObjectRef(_shownMap, s.Entity)).ToArray();
     }
@@ -1642,6 +1656,22 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         return Finish(run, teleportRefusal, writeback => WritePlacedSlot(writeback, placed, source));
     }
 
+    /// <summary>
+    /// ARC-WORLD-2038 (ledger TT20): why a script's teleport of an object other than the hero cannot be recorded as the NPC request (<see cref="AreaScriptWorld.RequestNpcTeleport"/>), or null: no world seam, an object that is no NPC of the shown map,
+    /// a destination on another map (FM1: only its record would move, not built) or the AI host's own refusal (a follower, a cell it does not hold). The use host's finish and the talk and call host's apply (<see cref="AreaScriptHost.Apply"/>) both ask it before anything applies.
+    /// </summary>
+    public string? NpcTeleportRefusedBecause(ScrTeleport other)
+    {
+        ArgumentNullException.ThrowIfNull(other);
+        if (_world?.NpcTeleportRefusal is not { } npcRefusal || _world.RequestNpcTeleport is null) return $"a teleport of {other.Object.Code} is not modelled";
+        if (other.Object.Map != _shownMap || Row(other.Object) is not { Type: NpcType }) return $"a teleport of {other.Object.Code}, which is no NPC of the shown map, is not modelled";
+        if (other.RuntimeMap != -1 && other.RuntimeMap != _shownMap) return $"a teleport of {other.Object.Code} to another map (catalogue {other.CatalogueMap}) is not modelled";
+        return npcRefusal(other);
+    }
+
+    /// <summary>ARC-WORLD-2038 (TT20): records a script's teleport of an NPC in the session's one change-of-place slot (the object moves at the next ping), after <see cref="NpcTeleportRefusedBecause"/> answered null and the run applied.</summary>
+    public void RequestNpcTeleport(ScrTeleport teleport) => _world!.RequestNpcTeleport!(teleport);
+
     private AreaScriptedUse Finish(ScrRunResult run, Func<ScrTeleport, string?>? teleportRefusal, Func<ScrWriteback, bool> write)
     {
         if (run.Outcome == ScrOutcome.Refused)
@@ -1662,13 +1692,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
                 return new(AreaScriptedUseOutcome.EffectsRejected, null, [], run, $"script {run.Script}: a run that teleports {mixed.Object.Code} and another object is not modelled");
             foreach (var other in effects.Teleports)
             {
-                if (_world?.NpcTeleportRefusal is not { } npcRefusal || _world.RequestNpcTeleport is null)
-                    return new(AreaScriptedUseOutcome.EffectsRejected, null, [], run, $"script {run.Script}: a teleport of {other.Object.Code} is not modelled");
-                if (other.Object.Map != _shownMap || Row(other.Object) is not { Type: NpcType })
-                    return new(AreaScriptedUseOutcome.EffectsRejected, null, [], run, $"script {run.Script}: a teleport of {other.Object.Code}, which is no NPC of the shown map, is not modelled");
-                if (other.RuntimeMap != -1 && other.RuntimeMap != _shownMap)
-                    return new(AreaScriptedUseOutcome.EffectsRejected, null, [], run, $"script {run.Script}: a teleport of {other.Object.Code} to another map (catalogue {other.CatalogueMap}) is not modelled");
-                if (npcRefusal(other) is { } npcWhy) return new(AreaScriptedUseOutcome.EffectsRejected, null, [], run, $"script {run.Script}: {npcWhy}");
+                if (NpcTeleportRefusedBecause(other) is { } npcWhy) return new(AreaScriptedUseOutcome.EffectsRejected, null, [], run, $"script {run.Script}: {npcWhy}");
                 npcTeleports.Add(other);
             }
         }
@@ -1723,7 +1747,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         _floats.AddRange(floats);
         _eyeCandies.AddRange(AreaScriptEyeCandy.Of(effects));
         // ARC-WORLD-1837: the requests are recorded after the run applied, in action order (the script goes on; the object moves at the next ping).
-        foreach (var requested in npcTeleports) _world!.RequestNpcTeleport!(requested);
+        foreach (var requested in npcTeleports) RequestNpcTeleport(requested);
         var teleport = npcTeleports.Count > 0 ? null : effects.Teleports.FirstOrDefault();
         if (effects.Dialog is { } talk)
             return new(AreaScriptedUseOutcome.NoTeleport, null, lines, run, $"script {run.Script} {run.Stop} at SCR line {run.StopLine}: conversation of script {talk.Script} node {talk.Node}")
@@ -1990,6 +2014,10 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     /// <summary>ARC-SCRIPT-1164 (WO1): the insert check the created item's holder answers (the viewer's inventory host's); null: every item is taken.</summary>
     public SessionInsertCheck? InsertCheck { get; init; }
 
+    /// <summary>ARC-MAGIC-1823 (ledger IE3, IE4, IE6): the shown map's item script host; with it a script's transfer item from the hero to an NPC or container runs the item's wield-off, remove-item and insert-item scripts as the hero's give does
+    /// (<see cref="GameSessionOwner.TransferNamedItem"/>); null: such an item is refused when the run is planned.</summary>
+    public ISessionItemScriptHost? ItemScripts { get; init; }
+
     // ARC-SCRIPT-1164 (E5-b): set lock state (53, 0x441DD0), toggle open or closed (88, 0x4EEF80 and the container's 0x4EEF20, 0x4EEEC0) and create item (66) on what ObjectStateRefusal admitted. False when the session refuses.
     private bool ApplyWorldObject(ScrObjectStateRequest request)
     {
@@ -2051,7 +2079,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
             }
             case ScrObjectStateChange.TransferItem:
             {
-                var moved = _session.TransferNamedItem(_session.Version, HolderOf(request.Object), HolderOf(request.Other!.Value), request.Value, InsertCheck ?? AreaInventoryHost.DiagnosticInsertCheck);
+                var moved = _session.TransferNamedItem(_session.Version, HolderOf(request.Object), HolderOf(request.Other!.Value), request.Value, InsertCheck ?? AreaInventoryHost.DiagnosticInsertCheck, ItemScripts);
                 LastNamedItem = moved;
                 // A holder's insert check that says no, or a full list, leaves the item where it was and the run goes on (0x461810 returns without moving it). The session's own budgets (its NPC item total, ammunition and durability records, a 32-bit sum) answer the same way: the item stays and the run goes on (ledger WO17).
                 return moved.Disposition != GameSessionDisposition.Rejected || moved.Failure is GameSessionFailure.BudgetExceeded or GameSessionFailure.InsertRefused;
@@ -2530,7 +2558,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
                 if (holders.Any(holder => touched.Contains((holder, request.Value)))) return $"{request.Change} of the item named {request.Value} meets an earlier item action of the run on the same holder and name, which is not modelled";
                 foreach (var holder in holders) touched.Add((holder, request.Value));
                 var plan = request.Change == ScrObjectStateChange.TransferItem
-                    ? _session.QueryNamedItemTransfer(HolderOf(request.Object), HolderOf(request.Other!.Value), request.Value) : _session.QueryNamedItemDestroy(HolderOf(request.Object), request.Value);
+                    ? _session.QueryNamedItemTransfer(HolderOf(request.Object), HolderOf(request.Other!.Value), request.Value, ItemScripts is not null) : _session.QueryNamedItemDestroy(HolderOf(request.Object), request.Value);
                 if (plan.Refusal is { } why) return why;
                 continue;
             }
