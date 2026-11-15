@@ -95,6 +95,8 @@ public sealed class AreaHeartbeatSceneryLoopTests
     private static AreaObjectRecord Npc(int script) => AreaHeartbeatScriptTests.Row(1, 16, script);
     private static AreaObjectRecord Scenery(int index, long? worldX = null) => AreaHeartbeatScriptTests.Row(index, 3, 0) with { WorldX = worldX ?? 10 + index };
 
+    private static AreaObjectRecord Container(int index, long? worldX = null) => AreaHeartbeatScriptTests.Row(index, 2, 0) with { WorldX = worldX ?? 10 + index };
+
     private static AreaObjectRecord Portal(int index, long? worldX = null) => AreaHeartbeatScriptTests.Row(index, 1, 0) with { WorldX = worldX ?? 10 + index };
 
     private static AreaUseScriptHost Host(GameSessionOwner session, ScriptContent content, Func<AreaObjectRecord, bool> gone, params AreaObjectRecord[] shown) =>
@@ -107,7 +109,7 @@ public sealed class AreaHeartbeatSceneryLoopTests
         Assert.IsTrue(set.FocusKinds.Contains(ScrFocusKind.EverySceneryInVicinity) && set.FocusKinds.Contains(ScrFocusKind.LocalObject));
         Assert.IsTrue(set.Actions.Contains(ScrCatalogue.Action.AssignObject) && set.Actions.Contains(ScrCatalogue.Action.FloatLine));
         Assert.IsFalse(set.Actions.Contains(ScrCatalogue.Action.GetReaction), "the host has no reaction answer");
-        Assert.IsTrue(set.IsSubsetOfBesidesStores(ScrAdmissionSet.S61));
+        Assert.IsTrue(set.IsSubsetOfBesidesStores(ScrAdmissionSet.S62));
         // The dying set is built on it and the placed set already held all three; the use click's set is unchanged.
         Assert.IsTrue(AreaUseScriptHost.DyingAdmission.FocusKinds.Contains(ScrFocusKind.EverySceneryInVicinity));
         Assert.IsFalse(AreaUseScriptHost.Admission.Actions.Contains(ScrCatalogue.Action.FloatLine));
@@ -182,7 +184,7 @@ public sealed class AreaHeartbeatSceneryLoopTests
         {
             Assert.IsTrue(set.FocusKinds.Contains(ScrFocusKind.EveryPortalInVicinity), set.Id);
             Assert.IsFalse(set.FocusKinds.Contains(ScrFocusKind.AnyPortalInVicinity), set.Id);
-            Assert.IsTrue(set.IsSubsetOfBesidesStores(ScrAdmissionSet.S61), set.Id);
+            Assert.IsTrue(set.IsSubsetOfBesidesStores(ScrAdmissionSet.S62), set.Id);
         }
         Assert.IsFalse(AreaUseScriptHost.HeartbeatAdmission.FocusKinds.Contains(ScrFocusKind.EveryPortalInVicinity));
     }
@@ -206,6 +208,37 @@ public sealed class AreaHeartbeatSceneryLoopTests
         });
     }
 
+    // ARC-SCRIPT-2322 (ledger CV1–CV5): the focus kinds every container (17) and any container (18) in the vicinity, in the use, placed, dying, combat-point and heartbeat sets.
+    [TestMethod]
+    public void Every_set_that_runs_a_script_on_an_object_admits_the_container_focus_kinds()
+    {
+        foreach (var set in new[] { AreaUseScriptHost.Admission, AreaUseScriptHost.PlacedAdmission, AreaUseScriptHost.DyingAdmission, AreaUseScriptHost.CombatPointAdmission, AreaUseScriptHost.HeartbeatAdmission })
+        {
+            Assert.IsTrue(set.FocusKinds.Contains(ScrFocusKind.EveryContainerInVicinity), set.Id);
+            Assert.IsTrue(set.FocusKinds.Contains(ScrFocusKind.AnyContainerInVicinity), set.Id);
+            Assert.IsTrue(set.IsSubsetOfBesidesStores(ScrAdmissionSet.S62), set.Id);
+        }
+    }
+
+    [TestMethod]
+    public void The_containers_around_an_object_are_the_near_containers_that_are_not_gone()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var npc = Npc(LoopScript);
+            var near = Container(2);
+            var nearToo = Container(3, 14);
+            var gone = Container(4);
+            var far = Container(5, 60);
+            var portal = Portal(6);
+            var host = Host(session, content, row => row.Key == gone.Key, npc, near, nearToo, gone, far, portal);
+            var around = host.ContainersInVicinity(new(1, AreaUseScriptHost.EntityId(npc)));
+            CollectionAssert.AreEqual(new[] { AreaUseScriptHost.EntityId(near), AreaUseScriptHost.EntityId(nearToo) }, around.Select(o => o.Code).ToArray(), "snapshot order; no portal, NPC, gone or far container");
+            Assert.AreEqual(0, host.ContainersInVicinity(new(2, AreaUseScriptHost.EntityId(npc))).Count, "an object of another map has no place here");
+        });
+    }
+
     // ARC-SCRIPT-2248 (ledger OT1–OT5): toggle state (56), which only the heartbeat set held, is in the use set and so in the placed, dying and combat-point sets built on it.
     [TestMethod]
     public void Every_set_that_runs_a_script_on_an_object_admits_toggle_state()
@@ -213,7 +246,7 @@ public sealed class AreaHeartbeatSceneryLoopTests
         foreach (var set in new[] { AreaUseScriptHost.Admission, AreaUseScriptHost.PlacedAdmission, AreaUseScriptHost.DyingAdmission, AreaUseScriptHost.CombatPointAdmission, AreaUseScriptHost.HeartbeatAdmission })
             Assert.IsTrue(set.Actions.Contains(ScrCatalogue.Action.ToggleState), set.Id);
         foreach (var set in new[] { AreaUseScriptHost.Admission, AreaUseScriptHost.PlacedAdmission, AreaUseScriptHost.CombatPointAdmission })
-            Assert.IsTrue(set.IsSubsetOfBesidesStores(ScrAdmissionSet.S61), set.Id);
+            Assert.IsTrue(set.IsSubsetOfBesidesStores(ScrAdmissionSet.S62), set.Id);
         Assert.IsFalse(AreaUseScriptHost.Admission.Actions.Contains(ScrCatalogue.Action.Kill), "kill stays with the heartbeat and dying sets");
         Assert.IsTrue(ScrAdmission.Admit(ProgramOf(ToggleScript), AreaUseScriptHost.Admission).IsAdmitted);
         Assert.IsTrue(ScrAdmission.Admit(ProgramOf(PortalToggleScript), AreaUseScriptHost.PlacedAdmission).IsAdmitted);
