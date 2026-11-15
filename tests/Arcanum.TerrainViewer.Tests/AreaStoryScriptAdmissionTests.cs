@@ -19,7 +19,7 @@ public sealed class AreaStoryScriptAdmissionTests
         {
             foreach (var condition in ScrAdmissionSet.StoryConditions) Assert.IsTrue(set.Conditions.Contains(condition), $"{set.Id}: condition {condition}");
             foreach (var action in ScrAdmissionSet.StoryActions) Assert.IsTrue(set.Actions.Contains(action), $"{set.Id}: action {action}");
-            Assert.IsTrue(set.IsSubsetOfBesidesStores(ScrAdmissionSet.S62), set.Id); // ARC-SCRIPT-1241: S35 is S34 plus the fade, which the use and dialog sets hold; ARC-SCRIPT-1163: S36 adds the NPC state actions the use and heartbeat sets hold
+            Assert.IsTrue(set.IsSubsetOfBesidesStores(ScrAdmissionSet.S63), set.Id); // ARC-SCRIPT-1241: S35 is S34 plus the fade, which the use and dialog sets hold; ARC-SCRIPT-1163: S36 adds the NPC state actions the use and heartbeat sets hold
         }
     }
 

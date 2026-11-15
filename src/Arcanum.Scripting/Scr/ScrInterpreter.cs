@@ -1404,6 +1404,7 @@ internal sealed class ScrInterpreter
         ScrFocusKind.EveryFollower or ScrFocusKind.AnyFollower => Followers() is { Count: > 0 } followers ? followers[0] : null,
         // A group's first object (0x44B960), none for an empty one.
         ScrFocusKind.EverySceneryInVicinity or ScrFocusKind.EveryoneInVicinity or ScrFocusKind.AnyoneInVicinity or ScrFocusKind.EveryPortalInVicinity
+            or ScrFocusKind.EveryContainerInVicinity or ScrFocusKind.AnyContainerInVicinity
             => Vicinity(kind) is { Count: > 0 } list ? list[0] : null,
         // GF1, GF4: the group's first object, the triggerer's first follower, or the triggerer when it has none.
         ScrFocusKind.EveryoneInGroup or ScrFocusKind.AnyoneInGroup => Group() is { Count: > 0 } group ? group[0] : null,
@@ -1416,7 +1417,8 @@ internal sealed class ScrInterpreter
     private IReadOnlyList<ScrObjectRef> Objects(ScrClause c, int slot) => (ScrFocusKind)c.Kind(slot) switch
     {
         ScrFocusKind.EveryFollower or ScrFocusKind.AnyFollower => Followers(),
-        ScrFocusKind.EverySceneryInVicinity or ScrFocusKind.EveryoneInVicinity or ScrFocusKind.AnyoneInVicinity or ScrFocusKind.EveryPortalInVicinity => Vicinity((ScrFocusKind)c.Kind(slot)),
+        ScrFocusKind.EverySceneryInVicinity or ScrFocusKind.EveryoneInVicinity or ScrFocusKind.AnyoneInVicinity or ScrFocusKind.EveryPortalInVicinity
+            or ScrFocusKind.EveryContainerInVicinity or ScrFocusKind.AnyContainerInVicinity => Vicinity((ScrFocusKind)c.Kind(slot)),
         ScrFocusKind.EveryoneInGroup or ScrFocusKind.AnyoneInGroup => Group(),
         _ => OptionalObject(c, slot) is { } obj ? [obj] : [],
     };
@@ -1442,7 +1444,7 @@ internal sealed class ScrInterpreter
     private IReadOnlyList<ScrObjectRef> Vicinity(ScrFocusKind kind)
     {
         if (_roles.Attachee is not { } centre) return [];
-        var list = (kind == ScrFocusKind.EverySceneryInVicinity ? World.SceneryInVicinity(centre) : kind == ScrFocusKind.EveryPortalInVicinity ? Portals.PortalsInVicinity(centre) : World.CrittersInVicinity(centre))
+        var list = (kind == ScrFocusKind.EverySceneryInVicinity ? World.SceneryInVicinity(centre) : kind == ScrFocusKind.EveryPortalInVicinity ? Portals.PortalsInVicinity(centre) : kind is ScrFocusKind.EveryContainerInVicinity or ScrFocusKind.AnyContainerInVicinity ? Containers.ContainersInVicinity(centre) : World.CrittersInVicinity(centre))
             ?? throw new InvalidOperationException("SCR_WORLD_VICINITY_NULL");
         return _options.Rules.VicinityListCapped && list.Count > ScrWorld.VicinityListCap ? list.Take(ScrWorld.VicinityListCap).ToArray() : list;
     }
@@ -1458,6 +1460,9 @@ internal sealed class ScrInterpreter
 
     private IScrPortalQueries Portals => _host as IScrPortalQueries
         ?? throw new InvalidOperationException("SCR_PORTAL_QUERIES_REQUIRED: the admission set holds the portal vicinity focus kind and the host cannot answer it.");
+
+    private IScrContainerQueries Containers => _host as IScrContainerQueries
+        ?? throw new InvalidOperationException("SCR_CONTAINER_QUERIES_REQUIRED: the admission set holds a container vicinity focus kind and the host cannot answer it.");
 
     private IScrAreaQueries Areas => _host as IScrAreaQueries
         ?? throw new InvalidOperationException("SCR_AREA_QUERIES_REQUIRED: the admission set holds get area and the host cannot answer it.");

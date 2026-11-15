@@ -176,10 +176,10 @@ public sealed class ScrFollowerFocusTests
     public void Only_the_follower_set_admits_the_kinds_and_its_host_must_answer_them()
     {
         var program = Program(Do(C(ScrCatalogue.Action.SetAutoLevelScheme, (EveryFollower, 0), N(1))), Do(C(ScrCatalogue.Action.ReturnSkipDefault)));
-        Assert.IsFalse(ScrAdmission.Admit(program, ScrAdmissionSet.S61).IsAdmitted);
-        Assert.IsTrue(ScrAdmissionSet.S61.IsSubsetOf(ScrAdmissionSet.S62));
-        Assert.IsFalse(ScrAdmissionSet.S62.IsSubsetOf(ScrAdmissionSet.S61));
-        Assert.IsTrue(ScrAdmissionSet.S62.FocusKinds.IsSupersetOf([ScrFocusKind.EveryFollower, ScrFocusKind.AnyFollower]));
+        Assert.IsFalse(ScrAdmission.Admit(program, ScrAdmissionSet.S62).IsAdmitted);
+        Assert.IsTrue(ScrAdmissionSet.S62.IsSubsetOf(ScrAdmissionSet.S63));
+        Assert.IsFalse(ScrAdmissionSet.S63.IsSubsetOf(ScrAdmissionSet.S62));
+        Assert.IsTrue(ScrAdmissionSet.S63.FocusKinds.IsSupersetOf([ScrFocusKind.EveryFollower, ScrFocusKind.AnyFollower]));
         Assert.IsTrue(ScrAdmission.Admit(program, Set).IsAdmitted);
         var followersOnly = new ScrAdmissionSet("follower-focus-only", ScrAdmissionSet.S7.Conditions, ScrAdmissionSet.S7.Actions.Append(ScrCatalogue.Action.SetAutoLevelScheme), ScrAdmissionSet.S7.ValueKinds,
             ScrAdmissionSet.S7.FocusKinds.Append(ScrFocusKind.EveryFollower));
