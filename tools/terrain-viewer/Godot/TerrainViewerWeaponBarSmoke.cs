@@ -16,6 +16,11 @@ public partial class TerrainViewerApp
     // ARC-UI-2311: hides the strip's counters, for the "before" capture only.
     private bool _barCountersOffForSelfTest;
 
+    /// <summary>ARC-UI-2311: the label's rectangle is the slot's width and centred on the slot (a label is at least its line high and grows around the middle).</summary>
+    private static bool InSlot(Rect2? shown, (int X, int Y, int Width, int Height) slot) =>
+        shown is { } rect && rect.Position.X == slot.X && rect.Size.X == slot.Width && rect.Size.Y >= slot.Height
+        && Math.Abs(rect.GetCenter().Y - (slot.Y - AreaGameBarLayout.BottomTop + slot.Height / 2f)) < 0.01f;
+
     /// <summary>ARC-UI-2311: counter 3 as the ledger's rule gives it for the wielded weapon <paramref name="worn"/>, worked from the session (the weapon's ammunition type,
     /// the hero's first stack of it, the prototype's mana store, the gold).</summary>
     private BarCounter3 ExpectedCounter3(GameSessionOwner session, SessionWornItem worn)
@@ -99,8 +104,7 @@ public partial class TerrainViewerApp
             var expected3 = ExpectedCounter3(session, worn);
             Require(counters!.Counter3ForSelfTest == BarCounterRules.Text(expected3.Value, BarCounterRules.Counter3Digits),
                 $"counter 3 shows {expected3.Value}: '{counters.Counter3ForSelfTest}'");
-            Require(counters.Counter3RectForSelfTest == new Rect2(BarCounterRules.Counter3Rect.X, BarCounterRules.Counter3Rect.Y - AreaGameBarLayout.BottomTop,
-                BarCounterRules.Counter3Rect.Width, BarCounterRules.Counter3Rect.Height), $"counter 3 stands in its rectangle: {counters.Counter3RectForSelfTest}");
+            Require(InSlot(counters.Counter3RectForSelfTest, BarCounterRules.Counter3Rect), $"counter 3 stands in its rectangle: {counters.Counter3RectForSelfTest}");
             if (expected3.Icon is { } icon3 && Art(icon3) is { } icon3Frames)
                 Require(counters.IconForSelfTest is { } shown3 && icon3Frames.Contains(shown3)
                     && counters.IconPositionForSelfTest == new Vector2(BarCounterRules.IconX, BarCounterRules.IconY - AreaGameBarLayout.BottomTop), $"counter 3's icon {icon3} stands at (61, 509)");
@@ -127,8 +131,7 @@ public partial class TerrainViewerApp
             // ARC-UI-2311: counter 4 in mode 8 is the item's charges (−1 unlimited, −2 unidentified).
             var gauge = SpellCasterNow()!.ItemPane(wielded.Entity)!.Gauge;
             var expected4 = BarCounterRules.Counter4(gauge.Kind != ItemSpellGaugeKind.Unknown, gauge.Kind == ItemSpellGaugeKind.Unlimited ? -1 : gauge.Charges);
-            Require(counters.Counter4ForSelfTest == BarCounterRules.Text(expected4, BarCounterRules.Counter4Digits) && counters.Counter4RectForSelfTest
-                == new Rect2(BarCounterRules.Counter4Rect.X, BarCounterRules.Counter4Rect.Y - AreaGameBarLayout.BottomTop, BarCounterRules.Counter4Rect.Width, BarCounterRules.Counter4Rect.Height),
+            Require(counters.Counter4ForSelfTest == BarCounterRules.Text(expected4, BarCounterRules.Counter4Digits) && InSlot(counters.Counter4RectForSelfTest, BarCounterRules.Counter4Rect),
                 $"counter 4 shows {expected4} in its rectangle: '{counters.Counter4ForSelfTest}'");
 
             var at = view.SlotCentreForSelfTest(slot)!.Value;

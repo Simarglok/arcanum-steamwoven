@@ -53,6 +53,14 @@ public partial class AreaBarCounterView : Control
         return label;
     }
 
+    // A label is at least its line high: it grows around the middle of the original's slot, as the vials' numbers (ARC-UI-020).
+    private static void Fit(Label label, (int X, int Y, int Width, int Height) slot)
+    {
+        var height = Math.Max(slot.Height, label.GetCombinedMinimumSize().Y);
+        label.Position = Local(slot.X, slot.Y) + new Vector2(0, (slot.Height - height) / 2);
+        label.Size = new Vector2(slot.Width, height);
+    }
+
     public void Bind(AreaBarCounterLook look)
     {
         ArgumentNullException.ThrowIfNull(look);
@@ -60,7 +68,9 @@ public partial class AreaBarCounterView : Control
         _icon.Visible = _icon.Texture is not null;
         _counter3.Text = look.Counter3;
         _counter3.Visible = true;
+        Fit(_counter3, BarCounterRules.Counter3Rect);
         _counter4.Text = look.Counter4 ?? "";
         _counter4.Visible = look.Counter4 is not null;
+        Fit(_counter4, BarCounterRules.Counter4Rect);
     }
 }
