@@ -17,7 +17,7 @@ public sealed class AreaLoopBreakScriptAdmissionTests
         {
             Assert.IsTrue(set.Actions.Contains(ScrCatalogue.Action.LoopBreak), set.Id);
             Assert.IsTrue(set.Actions.Contains(ScrCatalogue.Action.LoopFor) && set.Actions.Contains(ScrCatalogue.Action.LoopEnd), set.Id);
-            Assert.IsTrue(set.IsSubsetOfBesidesStores(ScrAdmissionSet.S62), set.Id);
+            Assert.IsTrue(set.IsSubsetOfBesidesStores(ScrAdmissionSet.S63), set.Id);
         }
         // The dialog host runs no loops: its sets stay without the break.
         foreach (var set in new[] { AreaScriptHost.Admission, AreaScriptHost.SkillAdmission, AreaScriptHost.TalkAdmission, AreaScriptHost.SkillTalkAdmission })
@@ -49,7 +49,7 @@ public sealed class AreaLoopBreakScriptAdmissionTests
         Assert.AreEqual(0, counts["S38"], "S38 refuses every one of them by construction");
         // 22 installed scripts carry a loop break; S40 admits 12 whole (the rest hold a command of another slice), the use set none (its scripts hold other refused commands), the placed and dying sets 7 each and the heartbeat set 1.
         // ARC-SCRIPT-1815: the heartbeat set gained the scenery and object-variable focus kinds, assign object and float line (heartbeats 8, from 5).
-        // Re-measured 2026-11-16 (ARC-SCRIPT-2321, set S62): the any-scenery focus kind (16) moves none of these; the counts moved with the sets merged since the line above (group kinds S61, toggle state, portal kind; issue #1846).
+        // Re-measured 2026-11-16 (ARC-SCRIPT-2321, set S63): the any-scenery focus kind (16) moves none of these; the counts moved with the sets merged since the line above (group kinds S61, toggle state, portal kind; issue #1846).
         Assert.AreEqual((22, 12, 1, 10, 8, 19), (withBreak, counts["S40"], counts["use"], counts["placed"], counts["heartbeat"], counts["dying"]));
     }
 }

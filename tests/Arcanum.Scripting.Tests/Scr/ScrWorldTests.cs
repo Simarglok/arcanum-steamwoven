@@ -353,7 +353,7 @@ public sealed class ScrWorldTests
     }
 
     [TestMethod]
-    public void The_any_scenery_kind_16_loops_the_same_list_as_kind_15_and_only_S62_admits_it()
+    public void The_any_scenery_kind_16_loops_the_same_list_as_kind_15_and_only_S63_admits_it()
     {
         // ARC-SCRIPT-2321 (AS1, AS2): the original builds one list for 15 and 16 (0x44B4E0), so a loop creates next to every object and the first-object read is the list's first.
         const byte AnyScenery = 16;
@@ -364,9 +364,9 @@ public sealed class ScrWorldTests
             Do(C(ScrCatalogue.Action.LoopEnd)),
             Do(C(ScrCatalogue.Action.CreateObject, N(2), (AnyScenery, 0))),
             Do(C(ScrCatalogue.Action.ReturnRunDefault)));
-        Assert.AreEqual(ScrRefusalCode.FocusKindNotAdmitted, ScrAdmission.Admit(program, ScrAdmissionSet.S61).Refusal!.Code, "S61 refuses kind 16");
-        Assert.IsTrue(ScrAdmission.Admit(program, ScrAdmissionSet.S62).IsAdmitted);
-        Assert.IsTrue(ScrAdmissionSet.S61.IsSubsetOf(ScrAdmissionSet.S62) && !ScrAdmissionSet.S62.IsSubsetOf(ScrAdmissionSet.S61));
+        Assert.AreEqual(ScrRefusalCode.FocusKindNotAdmitted, ScrAdmission.Admit(program, ScrAdmissionSet.S62).Refusal!.Code, "S62 refuses kind 16");
+        Assert.IsTrue(ScrAdmission.Admit(program, ScrAdmissionSet.S63).IsAdmitted);
+        Assert.IsTrue(ScrAdmissionSet.S62.IsSubsetOf(ScrAdmissionSet.S63) && !ScrAdmissionSet.S63.IsSubsetOf(ScrAdmissionSet.S62));
         // The run uses S15 plus the kind (the full set needs every query interface of the host).
         var set = new ScrAdmissionSet("s15+16", ScrAdmissionSet.S15.Conditions, ScrAdmissionSet.S15.Actions, ScrAdmissionSet.S15.ValueKinds, ScrAdmissionSet.S15.FocusKinds.Append(ScrFocusKind.AnySceneryInVicinity), counterIndexWraps: true);
         var host = Host();
