@@ -10,7 +10,7 @@ namespace Arcanum.World;
 /// </summary>
 public static class AreaLedMapNpcs
 {
-    /// <summary>The critters the hero's follower tree holds now, its direct followers first and each follower's own followers after them (the walk 0x441260 builds, the move list's): the hero's followers and
+    /// <summary>The critters the hero's follower tree holds now, its direct followers first and each follower's own followers after them (the original's follower-list walk, the move list's): the hero's followers and
     /// the followers of followers. A follower waiting under an NPC leader has left that leader's array and is not in it.</summary>
     public static IReadOnlyList<string> HeroTree(GameSessionOwner session)
     {

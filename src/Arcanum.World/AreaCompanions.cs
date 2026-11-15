@@ -518,7 +518,7 @@ public sealed class AreaCompanionGroup
 
     /// <summary>
     /// The follow decision of one companion the host does not hold. The hero's follower follows the PC; ARC-WORLD-2132: a map NPC that another critter of the group leads (the session's NPC-led link,
-    /// its leader a companion of this group) follows that leader's committed cell, as the original's follow goal walks to any leader (0x4AC380 has no leader-type test); one whose leader this group does not hold,
+    /// its leader a companion of this group) follows that leader's committed cell, as the original's non-combat perform makes no leader-type test (docs/world/party-runtime.md); one whose leader this group does not hold,
     /// or that waits, holds.
     /// </summary>
     private CompanionFollowUpdate FollowDecision(GameSessionOwner session, AreaCompanion companion, SessionCompanion record, CellCoord pc, SimulationTime frontier)
