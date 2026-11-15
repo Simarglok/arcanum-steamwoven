@@ -338,7 +338,7 @@ public partial class TerrainViewerApp
             await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
             Require(owner.QueryGold() == wornGold && owner.Version.Revision == wornRevision && panel.ArtView!.BodyDoll.Any(slot => slot.Entity == "vest"), "a right release on the worn vest buys nothing either");
             area.PressAt(AreaInventoryGridArea.CellCentre(axe.Slot)); area.ReleaseAt(vestPoint);
-            Require(area.Held is null && owner.Version.Revision == wornRevision, "the hero's item released on a slot of the merchant's doll goes back (NOT READY: the wear test and the sale onto the slot)");
+            Require(area.Held is null && owner.Version.Revision == wornRevision, "the hero's axe released on the merchant's filled armour slot goes back (an occupied slot is never swapped, IW35)");
             area.ScrollLoot(1);
             Require(area.LootScroll == 0, "the wheel leaves the hidden grid's scroll alone");
             area.PressAt(bagPoint); area.ReleaseAt(bagPoint);
@@ -410,6 +410,40 @@ public partial class TerrainViewerApp
                 area.SetHeroDoll(false);
             }
 
+            // ARC-UI-2138 (IW35, BW5): the hero's sword (bought back first) released on the merchant's empty weapon slot is sold and worn by the merchant; when the host gives no wearer for the merchant (the wear test cannot run) it goes back and
+            // nothing changes.
+            string slotSale;
+            gold = owner.QueryGold();
+            var again = panel.View!.Wares.FirstOrDefault(line => line.Entity == "kit:1");
+            if (again is null || again.Quote.Price > gold || !panel.ArtView!.LootGrid.Any(item => item.Entity == "kit:1")) slotSale = "sale onto the merchant's slot not driven (the sword cannot be bought back)";
+            else
+            {
+                area.PressAt(Ware(panel.ArtView!.LootGrid.Single(item => item.Entity == "kit:1").Location)); area.ReleaseAt(AreaInventoryGridArea.CellCentre(119));
+                await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                Require(panel.ArtView!.Grid.Any(item => item.Entity == "kit:1"), "the sword is the hero's again");
+                area.PressAt(dollPoint); area.ReleaseAt(dollPoint);
+                var weapon = AreaBarterArtLayout.BodySlotRects[Arcanum.Simulation.Equipment.EquipmentSlot.Weapon];
+                var weaponPoint = new Vector2(weapon.X + weapon.Width / 2f, weapon.Y + weapon.Height / 2f);
+                Require(area.BarterHit(weaponPoint).Location == (int)Arcanum.Simulation.Equipment.EquipmentSlot.Weapon, "the weapon slot's rectangle is hit");
+                (gold, merchantGold, revision) = (owner.QueryGold(), owner.QueryNpcGold("merchant") ?? 0, owner.Version.Revision);
+                var swordPrice = Math.Min(panel.View!.Hero.Single(line => line.Entity == "kit:1").Quote.Price, merchantGold);
+                area.PressAt(AreaInventoryGridArea.CellCentre(panel.ArtView!.Grid.Single(item => item.Entity == "kit:1").Slot)); area.ReleaseAt(weaponPoint);
+                await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                var wornByMerchant = owner.QueryNpcWorn("merchant")?.Worn.Any(entry => entry.Slot == Arcanum.Simulation.Equipment.EquipmentSlot.Weapon && entry.Item == "kit:1") == true;
+                if (wornByMerchant)
+                {
+                    Require(owner.QueryGold() == gold + swordPrice && panel.ArtView!.BodyDoll.Any(entry => entry.Slot == Arcanum.Simulation.Equipment.EquipmentSlot.Weapon && entry.Entity == "kit:1") && area.Held is null,
+                        $"the sword sold onto the merchant's weapon slot is paid ({swordPrice}) and drawn on its doll: {area.BarterFrame!.Quote}");
+                    slotSale = $"sword sold onto the merchant's weapon slot for {swordPrice} and worn";
+                }
+                else
+                {
+                    Require(owner.QueryGold() == gold && owner.Version.Revision == revision && area.Held is null, "a refused sale onto the slot changes nothing");
+                    slotSale = "sword put back from the merchant's weapon slot (the wear test refused or the host gives no wearer)";
+                }
+                area.PressAt(bagPoint); area.ReleaseAt(bagPoint);
+            }
+
             // ARC-UI-1918 (IW26, IW30): the hero's own doll toggle of the window (mode 1): the cover and the hero's slots with the doll button, the grid again with the bag button.
             var heroToggle = HeroDollToggleForSelfTest(area, panel.ArtView!, "barter");
 
@@ -424,7 +458,7 @@ public partial class TerrainViewerApp
             area.ReleaseAt(new(holeX + 10, holeY + 10));
             await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
             Require(!BarterOpen, "a release on the round view closed the window");
-            return $"original look: quote, sell {paid} and buy {price} by drag, right-release sale {resale}, {wearMoves}, {heroToggle}, switch, round-view close";
+            return $"original look: quote, sell {paid} and buy {price} by drag, right-release sale {resale}, {wearMoves}, {slotSale}, {heroToggle}, switch, round-view close";
         }
         finally
         {
@@ -742,12 +776,31 @@ public partial class TerrainViewerApp
         Require(body.Where(slot => slot.Entity is not null).All(slot => look.ItemArt(slot.Entity!) is not null), "every worn item has its art");
         Require(body.Where(slot => slot.Entity is null).All(slot => look.Art.ContainsKey(AreaInventoryArtLayout.Covers[slot.Slot])), "every empty slot has its cover art");
         Require(area.BarterHit(new(AreaBarterArtLayout.GridX + 5, AreaBarterArtLayout.GridY + 5)) == AreaBarterHit.None, "the grid is hidden in the doll view");
+        // ARC-UI-2138 (IW35): the hero's first grid item released on a slot of the merchant's doll it cannot be worn on goes back silently (the merchant's wear test, 0x464D20), nothing changes; the sale onto a fitting slot would change
+        // the live session, so the unit tests and the synthetic self-test drive it.
+        var slotRelease = "no hero item";
+        if (panel.ArtView!.Grid.FirstOrDefault() is { } heroItem && _areaSession is { } liveSession)
+        {
+            var fits = _inventoryHost!.Wearable(liveSession, heroItem.Entity, _areaKitWear) is { } wearable ? AreaInventoryHost.WearSlots(wearable) : [];
+            if (AreaBarterArtLayout.BodySlotRects.Keys.FirstOrDefault(slot => !fits.Contains(slot), (Arcanum.Simulation.Equipment.EquipmentSlot)0) is var misfit && misfit != 0)
+            {
+                var rect = AreaBarterArtLayout.BodySlotRects[misfit];
+                var revisionBefore = liveSession.Version.Revision;
+                area.PressAt(AreaInventoryGridArea.CellCentre(heroItem.Slot));
+                Require(area.Held is { Partner: false }, "the hero's item is on the cursor");
+                area.ReleaseAt(new(rect.X + rect.Width / 2f, rect.Y + rect.Height / 2f));
+                await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                Require(area.Held is null && liveSession.Version.Revision == revisionBefore && panel.ArtView!.Grid.Any(item => item.Entity == heroItem.Entity), $"the hero's item released on the merchant's {misfit} slot went back and changed nothing");
+                slotRelease = $"hero item put back from the merchant's {misfit} slot";
+            }
+            else slotRelease = "the hero's item fits every slot";
+        }
         // ARC-UI-1750: the doll 337 has a generated recipe, so the doll view is checked in the generated run too (every frame generated at the window's own device scale).
         await WindowArtSmokeAsync("barter-doll", area, [AreaBarterArtLayout.DollViewArt]);
         Require(area.BodyDoll, "the doll view survives the window art check");
         area.PressAt(bagPoint); area.ReleaseAt(bagPoint);
         Require(!area.BodyDoll, "the bag button shows the grid again");
-        return $"doll {body.Count} slots ({worn} worn)";
+        return $"doll {body.Count} slots ({worn} worn), {slotRelease}";
     }
 
     /// <summary>

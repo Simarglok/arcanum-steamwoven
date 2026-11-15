@@ -241,9 +241,10 @@ public sealed class AreaBarterArtTests
         Assert.AreEqual(AreaInventoryDropKind.Buy, AreaBarterArtLayout.Release(held, AreaBarterArtLayout.HitTest(368, 8, 0, (80, 43), doll: true)).Kind);
         Assert.AreEqual(AreaInventoryDropKind.PutBack, AreaBarterArtLayout.Release(held, hit).Kind, "on its own doll it goes back");
         Assert.AreEqual(AreaInventoryDropKind.Buy, AreaBarterArtLayout.RightRelease(view, hit)?.Kind);
-        // The hero's item released on a slot of the merchant's doll goes back (NOT READY: the wear test 0x464D20 and the sale onto the slot).
+        // ARC-UI-2138: the hero's item released on a slot of the merchant's doll is sold onto that slot (the window asks the wear test and the slot).
         var own = new AreaInventoryHeld("own:1", null, 0);
-        Assert.AreEqual(AreaInventoryDropKind.PutBack, AreaBarterArtLayout.Release(own, hit).Kind);
+        var sale = AreaBarterArtLayout.Release(own, hit);
+        Assert.AreEqual((AreaInventoryDropKind.SellWear, (Arcanum.Simulation.Equipment.EquipmentSlot?)Arcanum.Simulation.Equipment.EquipmentSlot.Helmet), (sale.Kind, sale.Slot));
     }
 
     [TestMethod]

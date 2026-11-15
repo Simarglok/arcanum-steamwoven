@@ -6,6 +6,7 @@ using Arcanum.Data.Maps;
 using Arcanum.Data.Messages;
 using Arcanum.Session;
 using Arcanum.Simulation.Character;
+using Arcanum.Simulation.Equipment;
 using Arcanum.Simulation.Items;
 using Arcanum.TerrainViewer.Core;
 using Arcanum.World;
@@ -40,7 +41,7 @@ public sealed class AreaBarterTests
         return new([.. basic], [.. new int[4]], [.. new int[16]], [.. new int[8]], 0, 0, 0);
     }
 
-    private static GameSessionOwner Session(bool masterHaggle = false, bool chest = false)
+    private static GameSessionOwner Session(bool masterHaggle = false, bool chest = false, bool vest = true)
     {
         var hero = new SessionHeroDefinition(16089, CharacterRace.HalfElf, CharacterGender.Male, [8, 8, 8, 8, 8, 8, 8, 8, 0, 0], 1, 5, 0,
             null, null, 1000, [new SessionHeroKitItem(new(SessionItemType.Weapon, KitSword, 4100, 34100))],
@@ -50,9 +51,10 @@ public sealed class AreaBarterTests
             AreaGridSession.Cell(AreaGridSession.Spawn), 1, load).Owner!;
         SessionItemFacts Facts(SessionItemType type, int prototype, int location = 0, int? quantity = null) =>
             new(new(type, prototype, 4200, 34200), 10, 0, location, quantity, []);
-        List<SessionSeedHolder> holders = [new("merchant", SessionHolderKind.Npc, false, false, [], ["axe", "vest", "coins"])];
+        List<SessionSeedHolder> holders = [new("merchant", SessionHolderKind.Npc, false, false, [], vest ? ["axe", "vest", "coins"] : ["axe", "coins"])];
         List<SessionSeedItem> items = [new("axe", Facts(SessionItemType.Weapon, Axe), null), new("vest", Facts(SessionItemType.Weapon, Axe, location: 1006), null),
              new("coins", Facts(SessionItemType.Gold, AreaBarterData.GoldPrototype, quantity: 100), null)];
+        if (!vest) items.RemoveAll(item => item.Entity == "vest");
         if (chest)
         {
             holders.Add(new("chest", SessionHolderKind.Container, false, false, [], ["chest-axe"]));
@@ -64,8 +66,8 @@ public sealed class AreaBarterTests
     }
 
     private static AreaBarter Barter(GameSessionOwner session, AreaBarterData data, List<int> changes, int reaction = 50, bool follower = false,
-        int set = 1) =>
-        new(session, new AreaInventoryHost([]), data, new AreaBarterMerchant("merchant", "Smith", 100, false, false, data.BuyList(set), follower),
+        int set = 1, bool wearer = false) =>
+        new(session, new AreaInventoryHost([]) { NpcWearerFacts = wearer ? (_, _) => new EquipmentWearer() : null }, data, new AreaBarterMerchant("merchant", "Smith", 100, false, false, data.BuyList(set), follower),
             () => reaction, change => { changes.Add(change); return true; }, (entity, _) => entity);
 
     [TestMethod]
@@ -155,6 +157,68 @@ public sealed class AreaBarterTests
         Assert.AreEqual((1000, 100), (session.QueryGold(), session.QueryNpcGold("merchant")), "no coins change hands");
         Assert.AreEqual(0, barter.View().WornWares.Count, "it left the slot");
         CollectionAssert.Contains(barter.View().Hero.Select(line => line.Entity).ToArray(), "vest");
+    }
+
+    private static readonly SessionWearableItem Sword = new(new(SessionItemType.Weapon, KitSword, 4100, 34100), [], false, new EquipmentItem
+    {
+        Kind = EquipmentItemKind.Weapon, HitPoints = 20, MaxHitPoints = 20,
+        Weapon = new EquipmentWeapon { Skill = Arcanum.Simulation.Combat.CombatSkill.Melee, SpeedFactor = 15 },
+    });
+
+    // ARC-UI-2138 (0x574BC1..0x574BF7, 0x575360 with 1000 + slot): the hero's item released on an empty fitting slot of the merchant's doll is sold and worn by the merchant.
+    [TestMethod]
+    public void A_hero_item_sold_onto_an_empty_slot_of_the_merchants_doll_is_paid_for_and_worn_by_the_merchant()
+    {
+        using var session = Session(vest: false);
+        var barter = Barter(session, Data(), [], wearer: true);
+        var sold = barter.SellOnSlot("kit:1", EquipmentSlot.Weapon, Sword);
+        Assert.IsTrue(sold.Moved, sold.Text);
+        Assert.AreEqual((1055, 45, 55), (session.QueryGold(), session.QueryNpcGold("merchant"), sold.Total), "the sale price 55 is paid");
+        CollectionAssert.AreEqual(new[] { (EquipmentSlot.Weapon, "kit:1") }, session.QueryNpcWorn("merchant")!.Worn.Select(worn => (worn.Slot, worn.Item)).ToArray());
+        var view = barter.View();
+        Assert.AreEqual("kit:1", view.WornWares.Single().Entity, "the doll view shows it on the merchant");
+        CollectionAssert.DoesNotContain(view.Hero.Select(line => line.Entity).ToArray(), "kit:1");
+    }
+
+    [TestMethod]
+    public void A_wear_test_refusal_or_a_filled_slot_puts_the_item_back_silently()
+    {
+        using var session = Session(vest: false);
+        var barter = Barter(session, Data(), [], wearer: true);
+        var version = session.Version;
+        var wrong = barter.SellOnSlot("kit:1", EquipmentSlot.Shield, Sword);
+        Assert.AreEqual((false, "", 1000, 100), (wrong.Moved, wrong.Text, session.QueryGold(), session.QueryNpcGold("merchant")), "a sword does not fit the shield slot");
+        var crippled = new AreaInventoryHost([]) { NpcWearerFacts = (_, _) => new EquipmentWearer { CrippledArmsBoth = true } };
+        var cannot = new AreaBarter(session, crippled, Data(), new AreaBarterMerchant("merchant", "Smith", 100, false, false, Data().BuyList(1), false), () => 50, _ => true, (entity, _) => entity)
+            .SellOnSlot("kit:1", EquipmentSlot.Weapon, Sword);
+        Assert.AreEqual((false, ""), (cannot.Moved, cannot.Text), "a merchant with both arms crippled cannot wield it");
+        Assert.AreEqual(version, session.Version, "nothing changed");
+        Assert.IsNull(session.QueryNpcWorn("merchant"));
+        Assert.IsFalse(Barter(session, Data(), []).SellOnSlot("kit:1", EquipmentSlot.Weapon, Sword).Moved, "a merchant the host cannot describe takes nothing");
+        // A slot the merchant's list shows filled: the session refuses before any effect (the original never swaps an NPC's slot).
+        var armor = new SessionWearableItem(Sword.Kind, [], false, new EquipmentItem { Kind = EquipmentItemKind.Armor, Armor = new EquipmentArmor { Coverage = ArmorCoverage.Torso } });
+        using var dressed = Session();
+        var filled = dressed.BarterSellWorn(dressed.Version, "merchant", "kit:1", EquipmentSlot.Armor, armor, 55, default, AreaInventoryHost.DiagnosticInsertCheck);
+        Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.InvalidEquipment), (filled.Disposition, filled.Failure));
+        var scripted = session.BarterSellWorn(session.Version, "merchant", "kit:1", EquipmentSlot.Weapon, Sword with { ScriptPoints = [SessionScriptPoint.WieldOn] }, 55, default, AreaInventoryHost.DiagnosticInsertCheck);
+        Assert.AreEqual(GameSessionFailure.ItemScriptUnsupported, scripted.Failure, "NOT READY: the wield scripts of the merchant's wear");
+        var spelled = session.BarterSellWorn(session.Version, "merchant", "kit:1", EquipmentSlot.Weapon, Sword with { HasItemSpells = true }, 55, default, AreaInventoryHost.DiagnosticInsertCheck);
+        Assert.AreEqual(GameSessionFailure.ItemEffectUnsupported, spelled.Failure);
+        Assert.AreEqual(version, session.Version, "still nothing changed");
+    }
+
+    [TestMethod]
+    public void A_sale_onto_a_slot_in_a_followers_window_is_free_and_a_refused_sale_leaves_no_worn_record()
+    {
+        using var session = Session(vest: false);
+        var free = Barter(session, Data(), [], follower: true, wearer: true).SellOnSlot("kit:1", EquipmentSlot.Weapon, Sword);
+        Assert.IsTrue(free.Moved, free.Text);
+        Assert.AreEqual((1000, 100), (session.QueryGold(), session.QueryNpcGold("merchant")), "no coins change hands");
+        Assert.AreEqual(EquipmentSlot.Weapon, session.QueryNpcWorn("merchant")!.Worn.Single().Slot);
+        using var refused = Session(vest: false);
+        var notDealt = Barter(refused, Data("{1}{4020}"), [], wearer: true).SellOnSlot("kit:1", EquipmentSlot.Weapon, Sword);
+        Assert.AreEqual((false, "won't buy (NotDealt)"), (notDealt.Moved, notDealt.Text), "price 0 puts it back");
+        Assert.IsNull(refused.QueryNpcWorn("merchant"));
     }
 
     [TestMethod]
