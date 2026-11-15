@@ -318,7 +318,7 @@ are F0 and are read by the slice.
    buttons and the list's text; (b) the save's thumbnail. Done by ARC-UI-062 (a), ledger MW11–MW16: the strips and the background,
    Save / Load and Previous Screen on the bottom strip at the screen's (675, 496) and (69, 496) (table flag 1: y from the strip's
    top), Delete at (115, 396), with their frames and sounds (`AreaSaveListArtView`); the list's eleven rows at (42, 161 + 20 × k),
-   141 wide, in art 27 `morph15font`, near-white and the selected row gold, a wide description ending in "...", the new-save row "New"
+   141 wide, in art 229 `Flare12Font` (ARC-UI-2267; it was art 27 by a ledger misreading), near-white and the selected row gold, a wide description ending in "...", the new-save row "New"
    (5055) or the typed description, the scroll top following Up/Down. PROJECT: the stored preview is drawn into the preview hole
    (281, 96, 468 × 300), the details, notices and the Yes/No question stand in the bottom strip's middle box, and the wheel scrolls
    the list. Slice (b) done by ARC-UI-067, ledger MW22–MW25: the save's picture under the cover 748 `SaveShotCover`, the info texts and
@@ -330,12 +330,12 @@ are F0 and are read by the slice.
    (244, 118) (previous, next). The hero's portrait, name and stats are drawn by the window's own callbacks (descriptor +0x54, +0x58);
    the slice reads them and draws the browsed hero with the character sheet's parts where they match. Done by ARC-UI-066, ledger
    MW17–MW21, MW26 (`AreaPremadeBrowserArtView`): the strips, the background and the four art buttons with their frames and sounds; the
-   hero's large portrait at (95, 69) (128 × 128); its player name in `Cloister18Font` red at (46, 224, 228 × 19); its gender, race and
-   background name in `morph15font` red, centred in their fields at y 284, 334 and 384; its story (`gameback.mes` 1039..1050, the
+   hero's large portrait at (95, 69) (128 × 128); its player name in `morph15font` red at (46, 224, 228 × 19); its gender, race and
+   background name in `Flare12Font` red, centred in their fields at y 284, 334 and 384; its story (`gameback.mes` 1039..1050, the
    background description field 0x102) in the field (350, 196, 395 × 212); "Initial Stats" and fifteen stats "ST: 8" (`stat.mes`
    500 + stat, the start's effective values) in four columns from (346, 87); each field filled black first. The story's lines are
-   the original's (MW26): every installed story is longer than its field (14–18 lines) and, as in the original, its first 11 show
-   (an anomaly for the owner: a "Steamwoven" setting could show the rest). PROJECT: the hints are not shown. A hero that does not
+   the original's (MW26): the body font is art 229 `Flare12Font`, "Initial Stats" and the race title are in art 27 (ARC-UI-2267; the
+   earlier 11-line cut of every story came from drawing the body in the 19-row art 27 and is withdrawn). PROJECT: the hints are not shown. A hero that does not
    read keeps the diagnostic window, and a portrait that does not read leaves its field black. The window is done but for these
    points.
 4. **New character** (window 12): background 765 `CreateCharacterBase` (800 × 400) at (0, 41) with the strips; buttons 321 / 323 as in
