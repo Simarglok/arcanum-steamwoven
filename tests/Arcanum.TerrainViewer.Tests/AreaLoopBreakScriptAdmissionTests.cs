@@ -49,6 +49,6 @@ public sealed class AreaLoopBreakScriptAdmissionTests
         Assert.AreEqual(0, counts["S38"], "S38 refuses every one of them by construction");
         // 22 installed scripts carry a loop break; S40 admits 12 whole (the rest hold a command of another slice), the use set none (its scripts hold other refused commands), the placed and dying sets 7 each and the heartbeat set 1.
         // ARC-SCRIPT-1815: the heartbeat set gained the scenery and object-variable focus kinds, assign object and float line (heartbeats 8, from 5).
-        Assert.AreEqual((22, 12, 1, 9, 8, 19), (withBreak, counts["S40"], counts["use"], counts["placed"], counts["heartbeat"], counts["dying"]));
+        Assert.AreEqual((22, 12, 1, 10, 8, 20), (withBreak, counts["S40"], counts["use"], counts["placed"], counts["heartbeat"], counts["dying"]));
     }
 }
