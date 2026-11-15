@@ -430,15 +430,19 @@ public static class SessionItemScripts
     /// sound (82; the eye candy and the sound stay in the runs' effects for the host to show and play); ARC-DEV-152 adds the value kinds of the
     /// script stores (<see cref="ScrAdmissionSet.StoreValueKinds"/>: global variables, the hero's variables and flags, read and written as the
     /// move's global flags are); ARC-DEV-366 adds get stat (33, ledger GS1), which the session answers for the hero from the effect list the
-    /// move's earlier runs left (the tech books' insert script reads the holder's intelligence, XA9). A script outside it refuses the move.
+    /// move's earlier runs left (the tech books' insert script reads the holder's intelligence, XA9); ARC-SCRIPT-2335 (ledger IV1–IV8) adds the loop for, loop end and loop break
+    /// (18 to 20), the looped-object and container vicinity focus kinds (10, 17, 18), the name condition (20) and change art number (59), which the display-case scripts of the temple
+    /// items use, answered by <see cref="ISessionItemWorldHost"/>. A script outside it refuses the move.
     /// </summary>
     public static ScrAdmissionSet Admission { get; } = new("S14-item",
-        ScrAdmissionSet.S6.Conditions.Concat([ScrCatalogue.Condition.Identified, ScrCatalogue.Condition.ItemsBeingRewielded]),
+        ScrAdmissionSet.S6.Conditions.Concat([ScrCatalogue.Condition.Identified, ScrCatalogue.Condition.ItemsBeingRewielded, ScrCatalogue.Condition.IsNamed]),
         ScrAdmissionSet.S6.Actions.Where(action => action is not (ScrCatalogue.Action.Dialog or ScrCatalogue.Action.GetStoryState
             or ScrCatalogue.Action.SetStoryState))
             .Concat([ScrCatalogue.Action.AddEffect, ScrCatalogue.Action.RemoveEffect, ScrCatalogue.Action.CallScriptEx,
-                ScrCatalogue.Action.MagickTechAdjustment, ScrCatalogue.Action.PlayScriptEyeCandy, ScrCatalogue.Action.PlaySound, ScrCatalogue.Action.GetStat]),
-        ScrAdmissionSet.S6.ValueKinds.Concat(ScrAdmissionSet.StoreValueKinds), ScrAdmissionSet.S6.FocusKinds);
+                ScrCatalogue.Action.MagickTechAdjustment, ScrCatalogue.Action.PlayScriptEyeCandy, ScrCatalogue.Action.PlaySound, ScrCatalogue.Action.GetStat,
+                ScrCatalogue.Action.LoopFor, ScrCatalogue.Action.LoopEnd, ScrCatalogue.Action.LoopBreak, ScrCatalogue.Action.ChangeArtNumber]),
+        ScrAdmissionSet.S6.ValueKinds.Concat(ScrAdmissionSet.StoreValueKinds),
+        ScrAdmissionSet.S6.FocusKinds.Concat([ScrFocusKind.CurrentLoopedObject, ScrFocusKind.EveryContainerInVicinity, ScrFocusKind.AnyContainerInVicinity]));
 
     /// <summary>ARC-SCRIPT-042: how many item script slots a session keeps (<see cref="GameSessionLimits.PolicyMaxPcItems"/> items with
     /// all eight item event points each).</summary>

@@ -1,0 +1,196 @@
+using System.Buffers.Binary;
+using Arcanum.Data.Scripts;
+using Arcanum.Scripting.Dialog;
+using Arcanum.Scripting.Scr;
+using Arcanum.Simulation.Locks;
+using Microsoft.VisualStudio.TestTools.UnitTesting;
+using static Arcanum.Session.Tests.HeroStateTests;
+using static Arcanum.Session.Tests.SessionFixtures;
+
+namespace Arcanum.Session.Tests;
+
+// ARC-SCRIPT-2335 (ledger IV1-IV8): the display-case shape of the temple items' insert-item scripts (a loop for over the containers of the vicinity, a name test on the looped object, change art number on it) under the
+// session's item set, with the host's world part answering the vicinity of the item, the names and the art plan. Script numbers, names and art ids are invented.
+[TestClass]
+public sealed class ItemWorldScriptTests
+{
+    private const byte Triggerer = 0, Number = 3, Looped = 10, EveryContainer = 17, AnyContainer = 18;
+    private const int Every = 810, Any = 811, Twice = 812, CaseName = 1205, NewArt = 4, BaselineArt = 100;
+    private static readonly SessionInsertCheck Accept = _ => SessionInsertVerdict.Accepted;
+
+    private sealed record Clause(int Type, (byte Kind, int Value)[] Operands);
+    private static Clause C(int type, params (byte, int)[] operands) => new(type, operands);
+    private static (Clause, Clause, Clause) Do(Clause action) => (C(0), action, C(0));
+    private static (Clause, Clause, Clause) If(Clause condition, Clause action) => (condition, action, C(0));
+    private static (byte, int) N(int value) => (Number, value);
+
+    private static ScrProgram Program(params (Clause Condition, Clause OnTrue, Clause OnFalse)[] lines)
+    {
+        var bytes = new byte[64 + lines.Length * 132];
+        BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(52), lines.Length);
+        BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(56), lines.Length);
+        for (var line = 0; line < lines.Length; line++)
+            foreach (var (offset, clause) in new[] { (0, lines[line].Condition), (44, lines[line].OnTrue), (88, lines[line].OnFalse) })
+            {
+                var slot = bytes.AsSpan(64 + line * 132 + offset, 44);
+                BinaryPrimitives.WriteInt32LittleEndian(slot, clause.Type);
+                for (var i = 0; i < clause.Operands.Length; i++) { slot[4 + i] = clause.Operands[i].Kind; BinaryPrimitives.WriteInt32LittleEndian(slot[(12 + 4 * i)..], clause.Operands[i].Value); }
+            }
+        return ScrProgram.Read(bytes).Program!;
+    }
+
+    private static ScrProgram Loop(byte listKind, byte testKind, int times = 1)
+    {
+        var lines = new List<(Clause, Clause, Clause)> { Do(C(ScrCatalogue.Action.LoopFor, (listKind, 0))) };
+        for (var i = 0; i < times; i++) lines.Add(If(C(ScrCatalogue.Condition.IsNamed, (testKind, 0), N(CaseName)), C(ScrCatalogue.Action.ChangeArtNumber, (Looped, 0), N(NewArt))));
+        lines.Add(Do(C(ScrCatalogue.Action.LoopEnd)));
+        lines.Add(Do(C(ScrCatalogue.Action.ReturnRunDefault)));
+        return Program([.. lines]);
+    }
+
+    private sealed class Host(int script) : ISessionItemScriptHost, ISessionItemWorldHost
+    {
+        public Dictionary<int, ScrProgram> Programs { get; } = new() { [Every] = Loop(EveryContainer, Looped), [Any] = Loop(EveryContainer, AnyContainer), [Twice] = Loop(EveryContainer, Looped, 2) };
+        public Dictionary<string, int> Names { get; set; } = new() { ["case"] = CaseName, ["other"] = 3000 };
+        public string[]? Vicinity { get; set; } = ["case", "other"];
+        public bool Plans { get; set; } = true;
+        public bool PlanBaseline { get; set; }
+        public SessionOpenableBaseline? Openable { get; set; }
+        public List<ScrObjectRef> Centres { get; } = [];
+
+        public ScrSlot? Slot(ScrObjectRef attachee, int point) => attachee.Code == "tome" && point == SessionScriptPoint.InsertItem ? new ScrSlot(script, 0, 0) : null;
+        public ScrScriptLookup Script(int number) => Programs.TryGetValue(number, out var program) ? ScrScriptLookup.Of(program) : ScrScriptLookup.Missing;
+        public bool GlobalFlag(int index) => throw new InvalidOperationException("the session reads flags itself");
+        public int StoryState() => throw new InvalidOperationException("not admitted");
+        public bool IsMonsterGenerator(ScrObjectRef attachee) => false;
+        public ScrDialogState DialogState(ScrObjectRef attachee) => ScrDialogState.Normal;
+        public ScrTrapCheck CheckTrapBeforeUse(ScrObjectRef triggerer, ScrObjectRef attachee) => ScrTrapCheck.NoTrap;
+        public bool IsTrapObject(ScrObjectRef attachee) => false;
+        public ScrObjectRef? Player() => new ScrObjectRef(Exterior.RuntimeMap, SessionEventKinds.PlayerEntity);
+        public ScrObjectRef? Leader(ScrObjectRef critter) => null;
+        public bool IsJilted(ScrObjectRef critter) => false;
+        public bool IsPc(ScrObjectRef critter) => critter.Code == SessionEventKinds.PlayerEntity;
+        public SessionPrintedLine PrintedLine(int script, int line) => new(SessionPrintedLineStatus.Shown, $"line {line}", "test");
+        public SessionEffectDefinition? EffectDefinition(int number) => null;
+
+        public IReadOnlyList<ScrObjectRef>? ContainersInVicinity(ScrObjectRef item)
+        {
+            Centres.Add(item);
+            return Vicinity?.Select(code => new ScrObjectRef(item.Map, code)).ToArray();
+        }
+
+        public int? NameOf(ScrObjectRef obj) => Names.TryGetValue(obj.Code, out var name) ? name : null;
+        public bool? IsMindControlled(ScrObjectRef obj) => Names.ContainsKey(obj.Code) ? false : null;
+
+        public SessionObjectArtPlan? ArtPlan(ScrObjectRef obj, int number) => !Plans ? null
+            : new(new SessionMapId(obj.Map), obj.Code, PlanBaseline ? BaselineArt : (uint)number, BaselineArt, Openable is null ? null : new SessionOpenable(new SessionMapId(obj.Map), obj.Code), Openable);
+    }
+
+    private static GameSessionOwner Owner()
+    {
+        var owner = CreateWith(HalfElf([8, 8, 8, 8, 14, 8, 8, 8, 0, 0]));
+        var seed = InventoryStateTests.Seed();
+        var tome = new SessionSeedItem("tome", InventoryStateTests.Facts(SessionItemType.Generic, 5700, 0, 0, null, SessionScriptPoint.InsertItem), new Arcanum.Simulation.Movement.CellCoord(300, 200));
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.AttachMapInventory(Exterior, seed with { Items = [.. seed.Items, tome] }).Disposition);
+        return owner;
+    }
+
+    private static uint? Art(GameSessionOwner owner, string entity) => owner.QueryObjectArt(Exterior, entity);
+
+    [TestMethod]
+    public void The_pickup_changes_the_art_of_the_named_container_around_the_item_and_leaves_the_others()
+    {
+        using var owner = Owner();
+        var host = new Host(Every);
+        var picked = owner.PickUpItem(owner.Version, "tome", Accept, host);
+        Assert.AreEqual((GameSessionDisposition.Changed, GameSessionFailure.None), (picked.Disposition, picked.Failure));
+        Assert.AreEqual(new ScrObjectRef(Exterior.RuntimeMap, "tome"), host.Centres.Single(), "the vicinity is asked of the item, the attachee");
+        Assert.AreEqual(NewArt, (int?)Art(owner, "case"));
+        Assert.IsNull(Art(owner, "other"), "a container with another name keeps its art");
+        using var restored = Restore(Decode(GameSessionSnapshotCodec.Encode(owner.Capture())));
+        Assert.AreEqual(NewArt, (int?)Art(restored, "case"), "the written art survives a save");
+    }
+
+    [TestMethod]
+    public void An_any_container_condition_is_true_when_one_container_in_the_vicinity_passes()
+    {
+        using var owner = Owner();
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, "tome", Accept, new Host(Any)).Disposition);
+        // The list condition (kind 18, "any") is true because "case" is named, so every looped container changes, "other" too.
+        Assert.AreEqual((NewArt, NewArt), ((int?)Art(owner, "case"), (int?)Art(owner, "other")));
+    }
+
+    [TestMethod]
+    public void A_container_plan_resets_the_closed_frame_with_the_new_art()
+    {
+        using var owner = Owner();
+        var baseline = new SessionOpenableBaseline(OpenableKind.Container, 0, 0, 3);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, "tome", Accept, new Host(Every) { Openable = baseline }).Disposition);
+        Assert.AreEqual(0, owner.QueryOpenable(new SessionOpenable(Exterior, "case"), baseline).Frame, "the action closes the container");
+    }
+
+    [TestMethod]
+    public void A_move_the_host_cannot_answer_is_refused_and_changes_nothing()
+    {
+        foreach (var host in new Host[] { new(Every) { Vicinity = null }, new(Every) { Plans = false }, new(Every) { Names = [] }, new(Twice) })
+        {
+            using var owner = Owner();
+            var before = owner.Version;
+            var refused = owner.PickUpItem(before, "tome", Accept, host);
+            Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.ItemScriptUnsupported), (refused.Disposition, refused.Failure));
+            Assert.AreEqual(before, owner.Version);
+            Assert.IsNull(Art(owner, "case"));
+        }
+    }
+
+    [TestMethod]
+    public void A_host_without_a_world_part_refuses_the_script()
+    {
+        using var owner = Owner();
+        var before = owner.Version;
+        var refused = owner.PickUpItem(before, "tome", Accept, new WorldlessHost(new Host(Every)));
+        Assert.AreEqual((GameSessionFailure.ItemScriptUnsupported, before), (refused.Failure, owner.Version));
+        Assert.IsNull(Art(owner, "case"));
+    }
+
+    [TestMethod]
+    public void A_plan_that_returns_the_art_its_map_data_gives_writes_no_record()
+    {
+        using var owner = Owner();
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, "tome", Accept, new Host(Every) { PlanBaseline = true }).Disposition);
+        Assert.IsNull(Art(owner, "case"), "the baseline id clears the record, as SetObjectArt does");
+    }
+
+    // The stubs of the run's host adapter throw for what the item set must never ask; a widening of the set has to answer them first.
+    [TestMethod]
+    public void The_item_set_keeps_to_the_questions_the_session_answers()
+    {
+        var set = SessionItemScripts.Admission;
+        foreach (var action in new[] { ScrCatalogue.Action.Random, ScrCatalogue.Action.DistanceBetween, ScrCatalogue.Action.GetLocation, ScrCatalogue.Action.FloatLine, ScrCatalogue.Action.GetObjectType })
+            Assert.IsFalse(set.Actions.Contains(action), $"action {action}");
+        foreach (var condition in new[] { ScrCatalogue.Condition.PcQuestState, ScrCatalogue.Condition.HasItemNamed, ScrCatalogue.Condition.WithinRange })
+            Assert.IsFalse(set.Conditions.Contains(condition), $"condition {condition}");
+        foreach (var kind in new[] { ScrFocusKind.EverySceneryInVicinity, ScrFocusKind.AnySceneryInVicinity, ScrFocusKind.EveryoneInVicinity, ScrFocusKind.AnyoneInVicinity })
+            Assert.IsFalse(set.FocusKinds.Contains(kind), $"focus {kind}");
+        Assert.IsTrue(set.IsSubsetOf(ScrAdmissionSet.S62));
+    }
+
+    // The same host with the world part hidden: the question is not answerable.
+    private sealed class WorldlessHost(Host inner) : ISessionItemScriptHost
+    {
+        public ScrSlot? Slot(ScrObjectRef attachee, int point) => inner.Slot(attachee, point);
+        public ScrScriptLookup Script(int number) => inner.Script(number);
+        public bool GlobalFlag(int index) => inner.GlobalFlag(index);
+        public int StoryState() => inner.StoryState();
+        public bool IsMonsterGenerator(ScrObjectRef attachee) => false;
+        public ScrDialogState DialogState(ScrObjectRef attachee) => ScrDialogState.Normal;
+        public ScrTrapCheck CheckTrapBeforeUse(ScrObjectRef triggerer, ScrObjectRef attachee) => ScrTrapCheck.NoTrap;
+        public bool IsTrapObject(ScrObjectRef attachee) => false;
+        public ScrObjectRef? Player() => inner.Player();
+        public ScrObjectRef? Leader(ScrObjectRef critter) => null;
+        public bool IsJilted(ScrObjectRef critter) => false;
+        public bool IsPc(ScrObjectRef critter) => inner.IsPc(critter);
+        public SessionPrintedLine PrintedLine(int script, int line) => inner.PrintedLine(script, line);
+        public SessionEffectDefinition? EffectDefinition(int number) => null;
+    }
+}

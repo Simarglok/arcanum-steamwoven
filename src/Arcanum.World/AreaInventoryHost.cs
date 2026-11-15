@@ -168,7 +168,13 @@ public sealed class AreaInventoryHost
     public Func<int, EffectRule?>? EffectRules { get; set; }
 
     /// <summary>The item script host over <paramref name="session"/>, or null without script content.</summary>
-    public AreaItemScriptHost? ItemScripts(GameSessionOwner session) => _scripts is null ? null : new(session, _maps.Values, _scripts, number => EffectRules?.Invoke(number));
+    public AreaItemScriptHost? ItemScripts(GameSessionOwner session) => _scripts is null ? null : new(session, _maps.Values, _scripts, number => EffectRules?.Invoke(number), ShownScripts);
+
+    /// <summary>
+    /// ARC-SCRIPT-2335: the use-script host of the shown map (the viewer sets it), which answers the world commands of an insert-item script: the containers around the item, an object's name and a change art number. Read on each use;
+    /// null (or one that returns null): such a script's move is refused, as before.
+    /// </summary>
+    public Func<AreaUseScriptHost?>? ShownScripts { get; set; }
 
     public IReadOnlyCollection<AreaInventoryMap> Maps => _maps.Values;
     public SessionInsertCheck InsertCheck { get; }
