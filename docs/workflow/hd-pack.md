@@ -7,6 +7,12 @@ where each thing lives, which command may touch what, and how to change the inst
 work of the other agent. The tool is [`tools/hd_pack/hd_pack.py`](../../tools/hd_pack/hd_pack.py) (standard
 library only, tests `python3 -B -m unittest tools.hd_pack.test_hd_pack`).
 
+## What the pack holds in the product (owner decision 2026-11-15, #2173)
+
+The HD option is the HD interface (art and fonts, this pack) plus the relit lighting. The pack holds interface art
+and fonts only: HD sprites of characters, objects and terrain are not made and are out of the plan until the owner
+reopens it, and the build/import tooling ARC-DEV-003 stays deferred ([decision](../architecture/decisions.md)).
+
 ## Hard rules
 
 1. **No original or derived art in git**: no ART pixels, redraws, frames, sheets, screenshots, real manifests, plans
