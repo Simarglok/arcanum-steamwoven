@@ -20,7 +20,20 @@ public sealed class GamblingStateTests
     private static readonly SessionItemKind GoldPile = new(SessionItemType.Gold, 9056, 3200, 33200);
     private static readonly SessionItemKind Bullets = new(SessionItemType.Ammo, 7059, 3301, 33301);
 
-    private static GameSessionOwner Gambler(int points, ulong seed = 0)
+    // ARC-UI-2234: the seed of InventoryStateTests with a shown chest that lists a gem and a stack of 12 pellets (ammunition type 1).
+    private static SessionMapInventorySeed ChestSeed()
+    {
+        var seed = Seed();
+        var gem = Facts(SessionItemType.Generic, 5700);
+        var pellets = Facts(SessionItemType.Ammo, 7060, quantity: 12) with { AmmoType = 1 };
+        return seed with
+        {
+            Holders = [.. seed.Holders.Select(h => h.Entity == "chest" ? h with { Items = ["gem", "pellets"] } : h)],
+            Items = [.. seed.Items, new SessionSeedItem("gem", gem, null), new SessionSeedItem("pellets", pellets, null)],
+        };
+    }
+
+    private static GameSessionOwner Gambler(int points, ulong seed = 0, SessionMapInventorySeed? inventory = null)
     {
         var stats = points == 0 ? Defaults() : [20, 20, 20, 20, 20, 20, 20, 20, 0, 0];
         int[] basic = new int[12];
@@ -29,7 +42,7 @@ public sealed class GamblingStateTests
         var created = GameSessionOwner.Create(Descriptor() with { Hero = hero, RandomSeed = seed });
         Assert.AreEqual(GameSessionFailure.None, created.Failure);
         var owner = created.Owner!;
-        Assert.AreEqual(GameSessionFailure.None, owner.AttachMapInventory(Exterior, Seed()).Failure);
+        Assert.AreEqual(GameSessionFailure.None, owner.AttachMapInventory(Exterior, inventory ?? Seed()).Failure);
         return owner;
     }
 
@@ -105,6 +118,68 @@ public sealed class GamblingStateTests
         CollectionAssert.AreEqual(list, List(owner, "virgil").Take(list.Length).ToArray(), "the sword and the rest stay in the merchant's list (a coin pile joins its end)");
         Assert.AreEqual((265, 120), (owner.QueryGold(), owner.QueryNpcGold("virgil")));
         Assert.AreEqual((revision + 1, draws + 2), (owner.Version.Revision, owner.QueryRandom().Draws), "the check's two draws and the payment: one revision");
+    }
+
+    // ARC-UI-2234 (FR-ITEM-019): a lost bet on an ammunition stack stake pays price x count, the stack stays with the merchant, and a count above its units is
+    // refused before anything is rolled (the roll, the generator and the coins as they were).
+    [TestMethod]
+    public void A_loss_on_an_ammo_stack_pays_price_times_count_and_leaves_the_stack_with_the_merchant()
+    {
+        using var owner = Gambler(0);
+        var stack = owner.AddItemToNpc(owner.Version, "virgil", Bullets, Accept, (1, 30)).Item!;
+        owner.EnsureGamblingRoll(owner.Version);
+        var before = (owner.Version, owner.QueryGamblingRoll(), owner.QueryRandom().Draws, owner.QueryGold(), owner.QueryNpcGold("virgil"));
+        var tooMany = Wager(owner, Bet(stack, level: 20, price: 3) with { Count = 31 });
+        Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.AmmoShort), (tooMany.Disposition, tooMany.Failure));
+        Assert.AreEqual(before, (owner.Version, owner.QueryGamblingRoll(), owner.QueryRandom().Draws, owner.QueryGold(), owner.QueryNpcGold("virgil")), "no reroll, no coins");
+
+        var revision = owner.Version.Revision;
+        var result = Wager(owner, Bet(stack, level: 20, price: 3) with { Count = 20 }, NoRoom);
+        Assert.AreEqual((GameSessionDisposition.Changed, false, 60), (result.Disposition, result.Won, result.Paid));
+        Assert.AreEqual((325, 60), (owner.QueryGold(), owner.QueryNpcGold("virgil")), "price x count, 3 x 20");
+        Assert.AreEqual(30, owner.QueryAmmo(stack)!.Value.Units, "the stack keeps all its units");
+        Assert.IsTrue(List(owner, "virgil").Contains(stack));
+        Assert.AreEqual(0, owner.QueryHeroAmmo().Count, "nothing reached the hero");
+        Assert.AreEqual(revision + 1, owner.Version.Revision, "the check's draws and the payment: one revision");
+        // Exactly the units staked is allowed too.
+        var whole = Wager(owner, Bet(stack, level: 20, price: 3) with { Count = 30 });
+        Assert.AreEqual((GameSessionDisposition.Changed, 90, 150), (whole.Disposition, whole.Paid, owner.QueryNpcGold("virgil")));
+        Assert.AreEqual(30, owner.QueryAmmo(stack)!.Value.Units);
+    }
+
+    // ARC-UI-2234: the same loss with the shown container as the stake's holder: the item or the stack stays in the container, a stake the container does not list is refused.
+    [TestMethod]
+    public void A_loss_on_a_container_stake_pays_and_leaves_the_item_in_the_container()
+    {
+        using var owner = Gambler(0, inventory: ChestSeed());
+        owner.EnsureGamblingRoll(owner.Version);
+        string[] Chest() => owner.QueryHolderItems("chest")!.Select(item => item.Entity).ToArray();
+        var listed = Chest();
+        CollectionAssert.AreEqual(new[] { "gem", "pellets" }, listed);
+        var gem = Wager(owner, Bet("gem", level: 20, price: 50) with { Container = "chest" }, NoRoom);
+        Assert.AreEqual((GameSessionDisposition.Changed, false, 50), (gem.Disposition, gem.Won, gem.Paid));
+        Assert.AreEqual((335, 50), (owner.QueryGold(), owner.QueryNpcGold("virgil")));
+        CollectionAssert.AreEqual(listed, Chest(), "the gem stays in the chest");
+        Assert.IsFalse(owner.QueryPcInventory().Any(item => item.Entity == "gem"));
+        // A stack of the container: price x count, all its units stay.
+        var pellets = Wager(owner, Bet("pellets", level: 20, price: 4) with { Container = "chest", Count = 5 });
+        Assert.AreEqual((GameSessionDisposition.Changed, false, 20), (pellets.Disposition, pellets.Won, pellets.Paid));
+        Assert.AreEqual((315, 70), (owner.QueryGold(), owner.QueryNpcGold("virgil")));
+        CollectionAssert.AreEqual(listed, Chest());
+        Assert.AreEqual(12, owner.QueryAmmo("pellets")!.Value.Units);
+        // Refused before the roll: units above the stack, an item the chest does not list (the merchant's ring), an unknown container.
+        var guard = (owner.Version, owner.QueryGamblingRoll(), owner.QueryRandom().Draws, owner.QueryGold());
+        foreach (var (bet, failure) in new[]
+        {
+            (Bet("pellets", level: 20, price: 4) with { Container = "chest", Count = 13 }, GameSessionFailure.AmmoShort),
+            (Bet("ring", level: 20) with { Container = "chest" }, GameSessionFailure.ItemNotAvailable),
+            (Bet("gem", level: 20) with { Container = "nowhere" }, GameSessionFailure.UnknownHolder),
+        })
+        {
+            var refused = Wager(owner, bet);
+            Assert.AreEqual((GameSessionDisposition.Rejected, failure), (refused.Disposition, refused.Failure));
+            Assert.AreEqual(guard, (owner.Version, owner.QueryGamblingRoll(), owner.QueryRandom().Draws, owner.QueryGold()), "no reroll, no coins");
+        }
     }
 
     [TestMethod]
