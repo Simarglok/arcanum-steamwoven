@@ -13,7 +13,7 @@ namespace Arcanum.TerrainViewer;
 // a spell is activated on the release over its button (0x54BAF5: the latest recent action first, then 0x57BC70); a right press on a spell
 // starts the hotkey drag (ARC-UI-027); the pointer entering a button writes its college's or spell's name in the mode's text area (0x550860,
 // 0x5507E0). The selection starts on college 0 and lasts the run (the original keeps it in the save, not done). Without the bars or the
-// pane's art the diagnostic pane lists the spells as before; the weapon's pane stays diagnostic.
+// pane's art the diagnostic pane lists the spells as before; the weapon's pane is the strip's mode 8 since ARC-UI-2304 (TerrainViewerWeaponBar.cs).
 public partial class TerrainViewerApp
 {
     private AreaSpellBarView? _spellBarView;

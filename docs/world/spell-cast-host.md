@@ -282,7 +282,14 @@ line's steps and arrives, and the run's BEGIN pays its cost.
 
 The original's interface bar has a weapon button and a mode 8 that shows the wielded weapon's spells (ledger
 [IP rows](../research/ledger/spell-runs.md#item-spell-pane-arc-ui-016)). The rules are Godot-free (`ItemSpellPaneRules`), the
-item facts come from the cast host (`SessionSpellCaster.ItemPane`), the viewer draws them in its spell pane:
+item facts come from the cast host (`SessionSpellCaster.ItemPane`). Since ARC-UI-2304 the viewer draws them in the bottom strip
+whenever the bars show with their arts (ledger [BM6](../research/ledger/ui-audio.md) and IP10; `MagickWeaponPaneRules`,
+`AreaWeaponBarView`): the button `MagickWeapon_Butt` (563) at (161, 443) shows on the strip in any mode while the weapon qualifies;
+its release (3000 and 3001) toggles bar mode 8, which replaces the spells or skills mode (their toggles come up, #2312) and takes the
+message window; mode 8 draws `MagickWeapon_Rot` (564) with an icon button per shown slot at slot i's place (353, 402, 451, 501, 550;
+y 542; icon 0x4B1570); entering a slot writes its spell's name in mode 8's text area; the release over it activates the slot (point
+4); a right press starts the hotkey drag (IP9); M or the Spells or Skills button replaces mode 8 with their mode. The bar's counters
+(the charges, IP4) are #2311. The cast stage's hotkey-bar part checks the strip's button and mode 8 (`RunWeaponPaneStripSmokeAsync`). Without the bars the viewer keeps the diagnostic spell pane's header button and text pane below:
 
 1. **The items.** Since ARC-UI-016 the viewer's cast host knows the hero's items (its item lookup: a kit item's prototype fields
    from the hero load, a taken item's from its object row, listed or worn; made items are not covered yet), so an item can be the

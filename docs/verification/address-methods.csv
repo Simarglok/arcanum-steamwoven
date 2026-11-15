@@ -21,6 +21,7 @@ src/Arcanum.Presentation/Audio/SceneryLoopSound.cs,RangeTiles,exempt,reference
 src/Arcanum.Presentation/Hud/Floaters.cs,LineHeight,pending,
 src/Arcanum.Presentation/Hud/Floaters.cs,Rgb,pending,
 src/Arcanum.Presentation/Hud/HotkeyBar.cs,ItemShowsInventoryArt,pending,
+src/Arcanum.Presentation/Hud/HotkeyBar.cs,SpellIcon,exempt,reference
 src/Arcanum.Presentation/Hud/QuantityBar.cs,Ask,pending,
 src/Arcanum.Presentation/Hud/QuantityPane.cs,Cells,exempt,reference
 src/Arcanum.Presentation/Hud/QuantityPane.cs,IconArtId,exempt,reference

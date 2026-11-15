@@ -6,11 +6,11 @@ namespace Arcanum.TerrainViewer.Core;
 
 /// <summary>ARC-UI-027: the hotkey bar's interface art from the game folder (<see cref="HotkeyBarRules.ArtNumbers"/>: the slot art, the
 /// light button, the skill-bar arts and the spell icons); ARC-UI-053: with the spell pane's (<see cref="SpellPaneRules.ArtNumbers"/>: its
-/// background and the college buttons; the spell icons are the bar's); ARC-UI-1113: and the skill pane's background (<see cref="SkillPaneRules.ArtNumbers"/>; its buttons are the bar's skill arts); ARC-UI-1884: and the quantity pane's background and buttons (<see cref="QuantityPaneRules.ArtNumbers"/>). Godot-free.</summary>
+/// background and the college buttons; the spell icons are the bar's); ARC-UI-1113: and the skill pane's background (<see cref="SkillPaneRules.ArtNumbers"/>; its buttons are the bar's skill arts); ARC-UI-1884: and the quantity pane's background and buttons (<see cref="QuantityPaneRules.ArtNumbers"/>); ARC-UI-2304: and the magick weapon pane's background, button and generic spell icon (<see cref="MagickWeaponPaneRules.ArtNumbers"/>). Godot-free.</summary>
 public sealed record AreaHotkeyBarContent(IReadOnlyDictionary<int, AreaInterfaceArtLoad> Art, string Detail)
 {
     /// <summary>The numbers read: the hotkey bar's and the spell pane's arts.</summary>
-    public static IReadOnlyList<int> ArtNumbers { get; } = [.. HotkeyBarRules.ArtNumbers.Concat(SpellPaneRules.ArtNumbers).Concat(SkillPaneRules.ArtNumbers).Concat(QuantityPaneRules.ArtNumbers).Distinct()];
+    public static IReadOnlyList<int> ArtNumbers { get; } = [.. HotkeyBarRules.ArtNumbers.Concat(SpellPaneRules.ArtNumbers).Concat(SkillPaneRules.ArtNumbers).Concat(QuantityPaneRules.ArtNumbers).Concat(MagickWeaponPaneRules.ArtNumbers).Distinct()];
 
     /// <summary>The numbers that read, of <see cref="ArtNumbers"/>.</summary>
     public int ReadyCount => Art.Values.Count(load => load.Status == AreaInterfaceArtStatus.Ready);

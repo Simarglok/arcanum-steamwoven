@@ -58,6 +58,7 @@ public partial class TerrainViewerApp
             }
             HideHotkeyBar();
             HideSpellBar();
+            HideWeaponBar();
             HideSkillBar();
             HideQuantityPane();
             return;
@@ -89,8 +90,8 @@ public partial class TerrainViewerApp
             if (spells) _gameBar.SetOn(AreaBarButton.Skills, false);
             _gameBarPanel.Render();
         }
-        // ARC-UI-023: a pane taking the message window (its button down) or giving it back (ML8).
-        var pane = spells || _gameBar.IsOn(AreaBarButton.Skills);
+        // ARC-UI-023: a pane taking the message window (its button down) or giving it back (ML8); ARC-UI-2304: bar mode 8 holds it too.
+        var pane = spells || _gameBar.IsOn(AreaBarButton.Skills) || _itemPaneItem is not null;
         var paneMode = pane ? MessagePaneMode : 0;
         if (pane && _messagePaneShown && paneMode != _messagePaneMode) ClearMessagePaneName();
         _messagePaneMode = paneMode;
@@ -108,6 +109,7 @@ public partial class TerrainViewerApp
         SyncHotkeyBar();
         SyncMaintainBar();
         SyncSpellBar();
+        SyncWeaponBar();
         SyncSkillBar();
         SyncQuantityPane();
     }
@@ -244,7 +246,8 @@ public partial class TerrainViewerApp
     private bool BarSpells()
     {
         var on = _gameBar.IsOn(AreaBarButton.Spells);
-        if (!on) { _spellPane?.HidePane(); _spellNotice = null; return true; }
+        // ARC-UI-2304: the spells mode's end leaves no weapon pane behind (the diagnostic pane opens it only inside the spell pane).
+        if (!on) { _spellPane?.HidePane(); _spellNotice = null; _itemPaneItem = null; _weaponPaneCache = null; return true; }
         if (!SpellMapActive || _areaSession?.QueryHero() is null) _gameBarNotice = "spells: needs a hero on a map";
         else if (WorldModal) _gameBarNotice = "spells: ignored while a window is open";
         else { ShowSpellPane(); return true; }

@@ -14,7 +14,8 @@ namespace Arcanum.TerrainViewer;
 /// shows a button per spell slot (0x551660) and the charges gauge; a slot whose spell has item triggers shows disabled (its press
 /// does nothing in the original, 0x57C040).
 /// ARC-UI-053: while the interface bars show the original's spell pane in the bottom strip (<see cref="ListInStrip"/>, AreaSpellBarView),
-/// this pane lists no spells: it shows only while the weapon button or the weapon's pane has something to show (both stay diagnostic).
+/// this pane lists no spells: it shows only while the weapon button or the weapon's pane has something to show; ARC-UI-2304: and while the
+/// strip draws the magick weapon button and pane too (AreaWeaponBarView), the app gives this pane no weapon, so it shows nothing.
 /// </summary>
 public partial class AreaSpellPane : CanvasLayer
 {
