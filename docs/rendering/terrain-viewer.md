@@ -1348,8 +1348,9 @@ throw is ARC-COMBAT-023's `ThrowHeroItem` ([hero attack runtime](../world/hero-a
   Native smoke: `ARC-UI-090 native-smoke gold-pile PASS` and `ARC-UI-091 native-smoke gold-drop PASS` (the Crash Site smoke's inventory part).
 - **Lift.** In the own window's original look, a held item released in the round view, or on the use icon when its use is a throw
   (`OIF_USE_IS_THROW`), is the map drop with flag 4: `AreaHeldThrow.Lift` refuses a no-drop item (the original's remove check: the
-  item stays and the window says why) and, NOT READY, an item with a
-  throw or remove-item script (worn: a wield-off script); anything else goes on the game cursor and the window closes. Steamwoven keeps
+  item stays and the window says why) and, NOT READY, an item with a throw script together with an insert-item script or a stack with a throw script;
+  anything else goes on the game cursor and the window closes (ARC-COMBAT-1955: the item's removal and throw scripts run at the throw through the shown map's script host, their lines go to the message window and their eye candy plays; a throw script that
+  keeps the item posts "its throw script kept it" and the item stays in the pack). Steamwoven keeps
   the item in the hero's pack or slot until the throw (the original removes it at the lift), so a put back only empties the cursor.
 - **Cursor.** While an item is on the game cursor, the cursor's image is the item's inventory art with its top-left corner 2 pixels
   up and left of the pointer and the cursor art over it on its own hot point (`AreaHeldCursor.Compose`, CU7; the original sets the

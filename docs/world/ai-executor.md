@@ -89,7 +89,11 @@ follow the original in both settings.
   [slice I8b](ai-action-goals.md) (the decisions are [AI support](ai-support.md), slice I8); the PC's attack goal and its
   auto-attack repeat stay the hero attack's ([hero attack](hero-attack-runtime.md)).
 - **EX15.** The notification of a ranged hit on a line-of-fire blocker is the attack resolution's, inside the world's hit step;
-  its switch `RangedBlockerHitNotifiesAimedTarget` lands with the ranged-combat slice (FR-COMBAT-007).
+  its switch `RangedBlockerHitNotifiesAimedTarget` is implemented (ARC-COMBAT-2164): an attack that does not fly and met a blocker
+  alerts the aimed target, deliberately, in the Original setting and the blocker, with the accidental bit, in Steamwoven
+  (`HostilityRules.RangedBlockerNotice`; the NPC's `AreaAiHost.Hit`, the hero's `HeroBlockerAttacked`). A shot that flies is not this
+  switch's (its event comes at the strike). Open edge: the blocker's immediate AI pass after the hit stays the struck object's in
+  both settings.
 - **Run details.** The end nodes' animation clean-up, the priority interrupt test after a run and the subturn hook that follows a
   run's end in a round are the host's. The NO_FLEE in the critter's data is still the caller's fact for the hostility and morale
   rules; the host ORs the session bit into it.

@@ -15,20 +15,21 @@ public sealed class AreaHeldThrowTests
     [TestMethod]
     public void AnOrdinaryItemIsLifted()
     {
-        Assert.AreEqual(GameSessionFailure.None, AreaHeldThrow.Lift(Facts(SessionItemType.Generic), worn: false));
-        Assert.AreEqual(GameSessionFailure.None, AreaHeldThrow.Lift(Facts(SessionItemType.Weapon, false, SessionScriptPoint.Use), worn: true));
+        Assert.AreEqual(GameSessionFailure.None, AreaHeldThrow.Lift(Facts(SessionItemType.Generic)));
+        Assert.AreEqual(GameSessionFailure.None, AreaHeldThrow.Lift(Facts(SessionItemType.Weapon, false, SessionScriptPoint.Use)));
         // A wield-off script matters only for a worn item (the session's own rule).
-        Assert.AreEqual(GameSessionFailure.None, AreaHeldThrow.Lift(Facts(SessionItemType.Weapon, false, SessionScriptPoint.WieldOff), worn: false));
+        Assert.AreEqual(GameSessionFailure.None, AreaHeldThrow.Lift(Facts(SessionItemType.Weapon, false, SessionScriptPoint.WieldOff)));
     }
 
     [TestMethod]
-    public void TheLiftRefusesInTheSessionsOrder()
+    public void TheLiftRefusesOnlyTheNoDropFlagAndTheScriptMixesTheThrowCannotRun()
     {
-        // The scripts first, then the no-drop flag (the remove check).
-        Assert.AreEqual(GameSessionFailure.ItemScriptUnsupported, AreaHeldThrow.Lift(Facts(SessionItemType.Generic, true, SessionScriptPoint.Throw), false));
-        Assert.AreEqual(GameSessionFailure.ItemScriptUnsupported, AreaHeldThrow.Lift(Facts(SessionItemType.Generic, false, SessionScriptPoint.RemoveItem), false));
-        Assert.AreEqual(GameSessionFailure.ItemScriptUnsupported, AreaHeldThrow.Lift(Facts(SessionItemType.Armor, false, SessionScriptPoint.WieldOff), true));
-        Assert.AreEqual(GameSessionFailure.ItemNotDroppable, AreaHeldThrow.Lift(Facts(SessionItemType.Generic, true), false));
+        // ARC-COMBAT-1955: the removal's and the throw script run at the throw through the session's host, so the lift lets them through; a throw script with an insert-item script stays NOT READY, then the no-drop flag (the remove check).
+        Assert.AreEqual(GameSessionFailure.None, AreaHeldThrow.Lift(Facts(SessionItemType.Generic, false, SessionScriptPoint.Throw)));
+        Assert.AreEqual(GameSessionFailure.None, AreaHeldThrow.Lift(Facts(SessionItemType.Generic, false, SessionScriptPoint.RemoveItem)));
+        Assert.AreEqual(GameSessionFailure.None, AreaHeldThrow.Lift(Facts(SessionItemType.Armor, false, SessionScriptPoint.WieldOff)));
+        Assert.AreEqual(GameSessionFailure.ItemScriptUnsupported, AreaHeldThrow.Lift(Facts(SessionItemType.Generic, true, SessionScriptPoint.Throw, SessionScriptPoint.InsertItem)));
+        Assert.AreEqual(GameSessionFailure.ItemNotDroppable, AreaHeldThrow.Lift(Facts(SessionItemType.Generic, true)));
         StringAssert.Contains(AreaHeldThrow.Refusal(GameSessionFailure.ItemNotDroppable, "Ring"), "Ring cannot be dropped");
         StringAssert.Contains(AreaHeldThrow.Refusal(GameSessionFailure.AttackUnsupported, "Coins"), "needs a count");
     }
@@ -37,18 +38,18 @@ public sealed class AreaHeldThrowTests
     public void AnAmmunitionStackTakesTheStackPathOfTheLift()
     {
         // ARC-UI-086 (QW5): the stack path runs no remove check and no remove-item event, so only the throw script refuses a stack.
-        Assert.AreEqual(GameSessionFailure.None, AreaHeldThrow.Lift(Facts(SessionItemType.Ammo), false));
-        Assert.AreEqual(GameSessionFailure.None, AreaHeldThrow.Lift(Facts(SessionItemType.Ammo, true, SessionScriptPoint.RemoveItem), false), "no-drop and remove-item do not apply");
-        Assert.AreEqual(GameSessionFailure.ItemScriptUnsupported, AreaHeldThrow.Lift(Facts(SessionItemType.Ammo, false, SessionScriptPoint.Throw), false));
+        Assert.AreEqual(GameSessionFailure.None, AreaHeldThrow.Lift(Facts(SessionItemType.Ammo)));
+        Assert.AreEqual(GameSessionFailure.None, AreaHeldThrow.Lift(Facts(SessionItemType.Ammo, true, SessionScriptPoint.RemoveItem)), "no-drop and remove-item do not apply");
+        Assert.AreEqual(GameSessionFailure.ItemScriptUnsupported, AreaHeldThrow.Lift(Facts(SessionItemType.Ammo, false, SessionScriptPoint.Throw)));
     }
 
     [TestMethod]
     public void TheGoldPileTakesTheStackPathToo()
     {
         // ARC-UI-094 (HG1, QW5): the hero's gold pile is lifted by its coins; no remove check applies.
-        Assert.AreEqual(GameSessionFailure.None, AreaHeldThrow.Lift(Facts(SessionItemType.Gold), false));
-        Assert.AreEqual(GameSessionFailure.None, AreaHeldThrow.Lift(Facts(SessionItemType.Gold, true, SessionScriptPoint.RemoveItem), false));
-        Assert.AreEqual(GameSessionFailure.ItemScriptUnsupported, AreaHeldThrow.Lift(Facts(SessionItemType.Gold, false, SessionScriptPoint.Throw), false));
+        Assert.AreEqual(GameSessionFailure.None, AreaHeldThrow.Lift(Facts(SessionItemType.Gold)));
+        Assert.AreEqual(GameSessionFailure.None, AreaHeldThrow.Lift(Facts(SessionItemType.Gold, true, SessionScriptPoint.RemoveItem)));
+        Assert.AreEqual(GameSessionFailure.ItemScriptUnsupported, AreaHeldThrow.Lift(Facts(SessionItemType.Gold, false, SessionScriptPoint.Throw)));
     }
 
     private static byte[] Solid(int width, int height, byte r, byte a = 255) =>
