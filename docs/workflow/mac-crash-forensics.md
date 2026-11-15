@@ -49,13 +49,42 @@ kills of unrelated daemons.
 A 10-minute idle run of the packaged build at its main menu (launched with
 `open -g -n`, sampled every 30 s with `ps` and `footprint`; the planned 20
 minutes ended when the game process disappeared without a crash report or a
-quit message, cause not found) was flat after the
+quit message; see "A game that vanished without a crash report" below) was flat after the
 first two minutes: physical footprint 366 MB, IOAccelerator 13 MB, IOSurface
 16 MB, threads 33 to 34. A read-only code review of the creation editor and art
 path found no unbounded cache and no per-frame texture allocation (the font,
 chunk and mapping caches are capped or weak-keyed). Not covered: a soak inside
 the character-creation window itself (no launch flag opens it; it needs a click
 path) and runs longer than 10 minutes.
+
+## A game that vanished without a crash report (ARC-DEV-2280)
+
+In the 2274 idle run the game (pid 8604, opened with `open -g -n` at 18:14:44, outside every queue
+process group) disappeared at 18:25:34 on 2026-11-15. The unified log shows it was **not killed**:
+
+- `runningboardd`: `termination reported by launchd (0, 0, 0)` and `Firing exit handlers ... <RBSProcessExitContext | voluntary>`:
+  exit status 0 and no signal; a SIGKILL, a Jetsam kill or a crash reads differently (a signal, a Jetsam reason or an `.ips` report).
+- `launchservicesd`: `SETFRONT: pid=8604 ... foreground=1 oldFrontPid=758` (758 was `SystemUIServer`, the "nothing in front" process)
+  at 18:25:32.93, then `QUITTING: pid=8604` at 18:25:34.60, 1.7 s later, and Music became the front app at once.
+  The same `SETFRONT` from 758 is the first line of the run's start, so the window was brought to the front by hand at 18:25:32.
+- No `osascript`, `pkill`, `killall`, quit or kill line in the log between 18:25:30 and the exit, and the game's render loop was
+  running normally 0.6 s before it.
+
+Reading: a normal quit with status 0 shortly after the window was activated, i.e. a close by hand (Cmd+Q, the close button or
+Dock Quit) or an in-game Exit; the log cannot tell those apart. Our tools cannot have done it: the queue signals only
+`killpg` of a command it started with `start_new_session`; a game opened with `open` belongs to launchd and shares no group.
+[`test_foreign_kill_guard.py`](../../tools/local_dev/test_foreign_kill_guard.py) keeps it so (no kill by name, no `osascript`,
+signals only through `_signal_group`, which now refuses a pid that does not lead its own group or the queue's own group).
+The viewer logs `ARC-DEV-2280 window close request at HH:MM:SS` for Cmd+Q, the close button and Dock Quit, and the main menu Exit
+logs `ARC-UI-011 main menu exit`, so the next time the game's own log (`~/Library/Application Support/Godot/app_userdata/Arcanum Terrain Viewer/logs/godot.log`)
+names the path. Copy that log before the next smoke run: every smoke viewer starts a new log in the same folder and only the
+last five are kept.
+
+Recipe for any vanished process (replace the pid; `YYYY-MM-DD HH:MM:SS` is a few seconds either side of the exit):
+
+```sh
+/usr/bin/log show --start 'YYYY-MM-DD HH:MM:SS' --end 'YYYY-MM-DD HH:MM:SS' --info --debug --predicate 'eventMessage CONTAINS "PID" AND (process == "runningboardd" OR process == "launchservicesd" OR process == "launchd")'
+```
 
 ## How to read the next incident
 

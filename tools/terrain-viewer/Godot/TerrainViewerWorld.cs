@@ -388,6 +388,9 @@ public partial class TerrainViewerApp
     }
     public override void _Notification(int what)
     {
+        // ARC-DEV-2280: the OS asked the game to close (Cmd+Q, the close button, Quit in the Dock): the exit that left no trace when
+        // the packaged game "vanished" in the ARC-DEV-2274 soak (exit status 0, no crash report). The main menu Exit logs its own line.
+        if (what == NotificationWMCloseRequest) GD.Print($"ARC-DEV-2280 window close request at {DateTime.Now:HH:mm:ss.fff} (Cmd+Q, close button or Dock Quit): the game exits");
         // ARC-UI-005: the pointer leaving the window hides the hover tooltip and action cursor.
         // An automated run's pointer is the one its test places (HoverAtForSelfTest, WorldPointerForSelfTest): the real pointer entering or
         // leaving the window must not flip it (the border scroll of the inv-ui smoke failed whenever the real pointer was outside the window).
