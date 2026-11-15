@@ -102,7 +102,7 @@ summary are `ViewerSoakTests`; a one-minute trial with `ARC_SOAK_INTERVAL=5 ARC_
 
 ### Soak results
 
-**2026-11-15, 15 minutes (stopped by hand to free the queue for another run; the 30-minute run follows).** Viewer from the
+**2026-11-15, 15 minutes (stopped by hand to free the queue for another run).** Viewer from the
 checkout's source (Debug, Godot 4.7.2 .NET) on the Crash Site start map, `ARC_SOAK_WINDOW=editor`, 30 s rows, sound on (this run
 predates the mute). The editor was open from the first minute to the 15th. After the first two minutes every counter was flat:
 render textures 40.0 MiB, video memory 56.3 MiB, objects 3,781, nodes 378, resources 22, orphan nodes 0, Godot static memory 44 MiB,
@@ -110,7 +110,20 @@ threads 34 to 36, live .NET heap 283 MiB (the full-collection survivors, 296.7 M
 full collections. The .NET heap including garbage saw-toothed between 298 and 304 MiB with 8 to 9 gen0 collections a minute: an
 idle editor allocates short-lived garbage, not retained memory. The working set came down from 848 MiB (minute 2) to 530 MiB
 (minute 8) as the OS reclaimed pages, and stayed there. The 1-minute trial earlier showed the same plateau within 12 s of the
-window opening (texture 40 MiB, nodes 378). Not a leak in this window for 15 minutes; the 30-minute result is below when it is in.
+window opening (texture 40 MiB, nodes 378). Not a leak in this window for 15 minutes.
+
+**2026-11-16, 30 minutes (the documented command, sound muted).** Same setup, 61 rows over 1,827 s, the editor open from the first
+minute to the last. Render textures 40.0 MiB, Godot static memory 44.4 MiB, objects 3,800, resources 23, nodes 387 and orphan nodes 0
+did not move at all after the first three minutes; threads 35 to 36. Two things moved, both as one step and not as a climb:
+video memory rose from 58.3 to 76.6 MiB (+18.3 MiB) between 587 s and 620 s and stayed there to the end, and the live .NET heap
+(survivors of the last full collection) rose from 265.5 to 285.5 MiB in the same window (278.4 MB at 188 s, 299.4 MB from 741 s,
+unchanged to the megabyte for the last 18 minutes). The working set fell from 495 to 442 MiB over the run (the OS reclaimed pages; it
+ranged 247 to 518 MiB). The frame rate was about 30 instead of 60 because other threads' smoke runs shared the machine. Reading:
+**no leak in the creation editor over 30 minutes**: a counter that leaks climbs steadily, and here the last 18 minutes were flat
+in every counter. The single step at about 10 minutes was not traced to its cause (one late first-use allocation, not a per-frame
+one; it did not repeat in 20 minutes). A run longer than 30 minutes, the New Character window alone and the Crash Site in play are
+not covered. The viewer's exit prints three Godot `Texture with GL ID ...: leaked` lines at shutdown, as in the 1-minute trial: not a
+runtime counter, and the soak does not look into them.
 
 ## A game that vanished without a crash report (ARC-DEV-2280)
 
