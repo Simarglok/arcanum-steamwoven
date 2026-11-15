@@ -362,7 +362,7 @@ public sealed class AreaScriptSpellTests
         Console.WriteLine($"installed scripts with a spell command {withSpell}; admitted whole: " + string.Join(", ", counts.Select(c => $"{c.Key} {c.Value}")));
         Console.WriteLine("first refusal under the talk set: " + string.Join(", ", blockers.Select(b => $"{b.Key} x{b.Value}")));
         // Ledger SC9: 46 installed scripts use one of the five commands; the sets admit few of them whole. ARC-SCRIPT-1481: the placed set admits one more (the use set gained the heal, destroy and vitals commands).
-        Assert.AreEqual((46, 1, 4, 1, 1), (withSpell, counts["use"], counts["placed"], counts["heartbeat"], counts["talk"]));
+        Assert.AreEqual((46, 1, 4, 2, 3), (withSpell, counts["use"], counts["placed"], counts["heartbeat"], counts["talk"]));
     }
 
     [TestMethod, TestCategory("RealData")]
@@ -392,7 +392,7 @@ public sealed class AreaScriptSpellTests
         Console.WriteLine($"installed scripts with a spell-state command {withState}; admitted whole: " + string.Join(", ", counts.Select(c => $"{c.Key} {c.Value}")));
         // 60 installed scripts use one of the five commands. ARC-SCRIPT-1815: the heartbeat set admits 7 whole (1 before the scenery and object-variable focus kinds, assign object and float line); script 2231, which the main map's 21 heartbeats of point 19 carry,
         // loops over the scenery around its NPC and stops a script eye candy, and its one missing command was the scenery focus. The scripts 2210 to 2230 (play script eye candy 120, play sound 82, conditions 21) and the get reaction scripts (dialogs) are no heartbeats.
-        Assert.AreEqual((60, 21, 28, 7, 30, 0, 28), (withState, counts["use"], counts["placed"], counts["heartbeat"], counts["dying"], counts["talk"], counts["combat"]));
+        Assert.AreEqual((60, 28, 36, 10, 38, 1, 36), (withState, counts["use"], counts["placed"], counts["heartbeat"], counts["dying"], counts["talk"], counts["combat"]));
         Assert.IsTrue(content.Script(2231) is { Status: ScriptContentStatus.Read, Program: { } script2231 } && ScrAdmission.Admit(script2231, AreaUseScriptHost.HeartbeatAdmission).IsAdmitted, "the main map's heartbeat 2231 (21 sites) is admitted whole");
     }
 }

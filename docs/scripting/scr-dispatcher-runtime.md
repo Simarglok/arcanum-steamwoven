@@ -840,7 +840,7 @@ on 6,856 placed sites (S38: 1,558 on 6,113). Not built: an NPC that eats. Script
 
 ## Newspaper commands (ARC-SCRIPT-1764, set S59)
 
-`ScrAdmissionSet.S59` is S58 plus queue newspaper (85) and float newspaper headline (86); the interpreter runs at most S59 (S60 since ARC-SCRIPT-2041). Both hand `ScrNewspaperRequest` effects (`ScrEffects.Newspapers`, in action order) to the host and the run goes on.
+`ScrAdmissionSet.S59` is S58 plus queue newspaper (85) and float newspaper headline (86); the interpreter runs at most S59 (S60 since ARC-SCRIPT-2041, S61 since ARC-SCRIPT-2320: plus the focus kinds every follower and any follower, answered through `IScrFollowerQueries`). Both hand `ScrNewspaperRequest` effects (`ScrEffects.Newspapers`, in action order) to the host and the run goes on.
 Queue newspaper reads its two operands as numbers (the issue, and the front flag by its value, 0 or not) and the host writes the session's queue by the rule of `GameSessionOwner.QueueNewspaper` (the original's 0x4BF140, the same rule the dialog code `np` uses).
 Float newspaper headline takes its object from operand slot **1** (census anomaly X9: the editor's signature puts it in slot 0, the interpreter reads slot 1 and never reads slot 0): the admission checks slot 1 as an object and leaves slot 0 alone, the interpreter requests the headline float over the object
 (`OptionalObject`, a group's first), and nothing for an absent object. The host reads the head issue's headline (`WrittenTexts.Headline`, 0x56CCA0), punctuates it as the vendor's headline line does (`WrittenTexts.PunctuatedHeadline`: a stop unless it ends in `.`, `?` or `!`, then a space)

@@ -60,6 +60,6 @@ public sealed class AreaNpcStateScriptAdmissionTests
         // ARC-SCRIPT-1735 (change art number got its host, ledger NS5, NS9): the use set admits 85 (29 more), the placed set 163 (40 more), the heartbeat set 97 (3 more) and the dying set 205 (51 more), and with the set the later condition sets (S53 to S55) the placed set 168, the heartbeat set 98 and the dying set 214; whether a run applies is the host's, which refuses a
         // target it cannot draw with another art before anything applies.
         // ARC-SCRIPT-1815: the heartbeat set gained the scenery and object-variable focus kinds, assign object and float line (heartbeats 160, from 98).
-        Assert.AreEqual((270, 208, 85, 168, 160, 214), (withState, counts["S36"], counts["use"], counts["placed"], counts["heartbeat"], counts["dying"]));
+        Assert.AreEqual((270, 208, 87, 173, 172, 221), (withState, counts["S36"], counts["use"], counts["placed"], counts["heartbeat"], counts["dying"]));
     }
 }
