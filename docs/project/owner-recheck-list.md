@@ -3,7 +3,7 @@
 Places where the behaviour was built from the original executable and the data, but the owner has not yet compared it with the original game. On 2026-11-11 the owner asked that
 slices no longer wait for his in-game comparison: they merge on their checks and add their comparison steps here. The owner works through this list in game later.
 
-The owner's working checklist of 2026-11-14, with the thread checks and the open steps of this list in one place, is [owner-test-checklist-2026-11-14.md](owner-test-checklist-2026-11-14.md); a step's status is still set here.
+This list is the single source of the owner's manual checks: every check lives here once, and its status is set here. The working checklist of 2026-11-14 ([owner-test-checklist-2026-11-14.md](owner-test-checklist-2026-11-14.md)) is only a pointer now; its thread checks (items A1..A10) and the visible effects of the fixes of that day (items B1..B7) moved into the sections below, and its 419 open steps were already here. Build from fresh `origin/main` (for example `./arcanum package mac`, or the viewer from `main`) and write what you saw in the note of a step's status.
 
 Rules for this file:
 
@@ -13,6 +13,34 @@ Rules for this file:
 - Known differences that are already documented go under the section's own heading, so they are not re-reported as bugs.
 - When a step differs, the coordinator turns it into a task. The step stays here with its link until that task merges.
 - Repository text only: no screenshots, frames or other game content.
+
+## Reference: PRs behind the checks of 2026-11-14
+
+All 23 PRs below were read with `gh pr view` on 2026-11-14 and are **merged** into `main`; none is missing. Where a check of the owner's thread list was already a step of this list, it was not added twice: item A1 is the section ARC-INPUT-1400 and item A7 is step 5 of ARC-WORLD-1469.
+
+- #917 (2026-11-10): ARC-DEV-343 main-menu PNG named in the log
+- #936 (2026-11-10): ARC-DEV-339 inventory arrange button, two layouts
+- #937 (2026-11-10): ARC-DEV-338 cast log each frame, ghost of Brego
+- #1404 (2026-11-12): ARC-UI-1113 skill pane, key K
+- #1422 (2026-11-12): ARC-INPUT-1356 moving-creature pick, diagnostics
+- #1438 (2026-11-12): ARC-INPUT-1400 log of every mouse press
+- #1580 (2026-11-13): ARC-SCRIPT-1483 combat-point scripts from every hit
+- #1645 (2026-11-13): ARC-UI-1574 pending load callback on a thrown load
+- #1675 (2026-11-13): ARC-WORLD-1582 companion follow walk ends on a trap tile
+- #1964 (2026-11-14): ARC-SCRIPT-1764 newspaper script actions a85, a86
+- #1967 (2026-11-14): ARC-COMBAT-1929 backstab from behind
+- #1969 (2026-11-14): ARC-COMBAT-1935 combat-mode exit gate for R, right release, dialog start
+- #1970 (2026-11-14): ARC-COMBAT-1766 projectile end scripts
+- #1972 (2026-11-14): ARC-COMBAT-1941 Shift+Alt on objects, Alt on a wall
+- #1974 (2026-11-14): ARC-COMBAT-1930 missed shot alerts nobody, weapon loudness
+- #1976 (2026-11-14): ARC-UI-1940 world map opener asks the exit gate
+- #1977 (2026-11-14): ARC-COMBAT-1968 a throw or a shot is never a backstab
+- #1979 (2026-11-14): ARC-UI-1786 follower menu texts from `follower_ui.mes`
+- #1980 (2026-11-14): ARC-UI-1785 follower panel buttons with hidden interface
+- #1981 (2026-11-14): ARC-SCRIPT-1789 healer service flag 0x2000
+- #1984 (2026-11-14): ARC-UI-1787 portrait click with lockpicks or a pending order
+- #1985 (2026-11-14): ARC-UI-1750 recipes for barter doll 337 and hero doll cover 341
+- #1986 (2026-11-14): ARC-DEV-1982 token-saving rules (docs only)
 
 ## ARC-DEV-352 — Fireflash and Wall of Fire (PR #941, 2026-11-11)
 
@@ -1224,13 +1252,13 @@ start a game and press `W` (the town map opens in the Crash Site; on the open gr
 | # | Step | Expected | Status |
 | --- | --- | --- | --- |
 | 1 | Press `W` in a 1280 × 800 window. | The window's wood, the brass rim around the map view, the readout boxes, the compass rose, the route sketch and the Travel button's ring sit where they did in HD; the map picture is as before. | open |
-| 2 | Press `Z` or the Zoom and Whole-map buttons to change the view. | The frame does not change; the buttons (still art) answer to hover and press. | open |
+| 2 | Press `Z` or the Zoom and Whole-map buttons to change the view. | The frame does not change; the buttons answer to hover and press. | open |
 | 3 | Move the pointer over the map. | The two readout boxes show their numbers in the same places. | open |
 | 4 | Resize the window (or go full screen) and open the map again. | The frame is sharp at the new size, no seam between the wood and the kept pictures. | open |
 
 Known differences (documented, not bugs):
 
-- The buttons, the lens cover and the bottom cover are still art ([issue #1810](https://github.com/Simarglok/arcanum-steamwoven/issues/1810)); the zoom and whole-map buttons get a brass frame from the holes of the frame.
+- The buttons (Zoom, Whole map, Travel, the compass) and the lens cover are generated since ARC-UI-1810 (the map pictures beside the lamps are kept art); the bottom cover is still art ([issue #2194](https://github.com/Simarglok/arcanum-steamwoven/issues/2194)).
 - The compass, the route sketch and the Travel ring are the original's pictures; their small patches of old wood differ a little from the generated wood.
 
 ## ARC-COMBAT-1738 — Auto Switch Weapons option and its re-wield cases (2026-11-13)
@@ -1457,3 +1485,137 @@ Known differences (documented, not bugs):
 - The windows draw the buttons' first frame only, as before; the pressed and lit frames are painted by the recipe but no window shows them.
 - The Take all art's wooden bezel is not drawn: the ball has a plain generated rim.
 - The drop, use and gamble boxes stay the original's art (their corner glow is the state).
+
+## ARC-UI-1113 — Skill pane, key K (PR #1404, 2026-11-12)
+
+Moved here from the owner test checklist of 2026-11-14 (item A2), asked for by the thread of the skill pane.
+
+| # | Step | Expected | Status |
+| --- | --- | --- | --- |
+| 1 | Open the skill pane with the **Skills** button of the game bar or the **K** key. | Four buttons (sneak, pick pocket, disarm traps, repair) and each works. | open |
+
+## ARC-INPUT-1356 — Misses on moving targets, diagnostics only (PR #1422, 2026-11-12)
+
+Moved here from the owner test checklist of 2026-11-14 (item A3). The change adds a log of the pointer's surroundings and changes no rule.
+
+| # | Step | Expected | Status |
+| --- | --- | --- | --- |
+| 1 | Cast at running wolves; right after a miss press **Ctrl+B**. Optionally attach the save and say which wolf. | The report carries the pointer's surroundings of the refused spell press, so the cause of the miss can be read. The hover ring should also follow a moving body. | open |
+
+## ARC-UI-1202 — The nine Codex HD interface fonts (follow-up of ARC-UI-145, 2026-11-15)
+
+Moved here from the owner test checklist of 2026-11-14 (item A4). The scope was **stage A** items 27 / 229 / 171 / 327 and **stage B** items 28 / 230 / 301 / 371 / 483; items 300 / 370 / 48 are not touched. The apply is recorded in the [pack workflow](../workflow/hd-pack.md) (ARC-UI-1202, 2026-11-15); the owner's eye on the result is this step. To undo an apply: `python3 -B tools/hd_pack/hd_pack.py rollback <backup>` (the `ARC-UI-1202-*` backups, newest first; run it with `--dry-run` first).
+
+| # | Step | Expected | Status |
+| --- | --- | --- | --- |
+| 1 | With the HD interface on, look at the glyphs **W, 3, 2, S** on the world map at 2560×1440. | The glyphs have no ragged edges. | open |
+
+## ARC-DEV-343 — Main menu backdrop and the HD mirror (PR #917, 2026-11-10)
+
+Moved here from the owner test checklist of 2026-11-14 (item A5). The docs now name the **iCloud** copy as the default destination of `mirror` (it replaced the Google Drive copy, which stays untouched); say which one your terminal reads. Question for the owner: do you want a separate `hd_pack.py` command that installs the pack on another device (today the iCloud copy is carried over by hand)?
+
+| # | Step | Expected | Status |
+| --- | --- | --- | --- |
+| 1 | In a terminal that can read the pack folders run `python3 -B tools/hd_pack/hd_pack.py mirror --dry-run`. | It shows what it would copy and nothing is changed. | open |
+| 2 | Start the game with "HD interface" on. | The game log has one line `ARC-DEV-343 main menu backdrop file=main-menu-16x9.png status=Used ...`. | open |
+
+## ARC-UI-1574 — Reload after death (optional, PR #1645, 2026-11-13)
+
+Moved here from the owner test checklist of 2026-11-14 (item A6). Optional check.
+
+| # | Step | Expected | Status |
+| --- | --- | --- | --- |
+| 1 | Die, and reload from the death screen; then press **F8** twice in a row. | The reload after death works; the second F8 press in a row is refused. | open |
+
+## ARC-SCRIPT-1483 — Combat-point scripts from every hit; poisoned weapon (optional, PR #1580, 2026-11-13)
+
+Moved here from the owner test checklist of 2026-11-14 (item A8). Optional check.
+
+| # | Step | Expected | Status |
+| --- | --- | --- | --- |
+| 1 | Hit with a poisoned weapon. | Known limit: **a poisoned weapon does not poison yet**; the combat-point scripts (hit, critter hits, critical hit) do run from every hit. Nothing to fix from this check; note anything else you see. | open |
+
+## ARC-DEV-338 — Cast log each frame: the ghost of Brego (optional, PR #937, 2026-11-10)
+
+Moved here from the owner test checklist of 2026-11-14 (item A9). Optional check.
+
+| # | Step | Expected | Status |
+| --- | --- | --- | --- |
+| 1 | Go to the cave where the ghost of Brego appears. | The ghost is visible (drawn from the cast log each frame). | open |
+
+## ARC-DEV-339 — Inventory arrange button, two layouts (optional, PR #936, 2026-11-10)
+
+Moved here from the owner test checklist of 2026-11-14 (item A10). Optional check.
+
+| # | Step | Expected | Status |
+| --- | --- | --- | --- |
+| 1 | Press the arrange button at (763, 197) of the inventory window. | It switches between the two layouts, rows and columns. | open |
+
+## ARC-COMBAT-1935 — Combat-mode exit gate for R, right release and dialog start (PR #1969, 2026-11-14)
+
+Moved here from the owner test checklist of 2026-11-14 (item B1, with the world map half in ARC-UI-1940). The backstab fixes #1967 and #1977 are in ARC-COMBAT-1929. No visible effect, nothing to check: #1964 (newspaper script actions run only from scripts; no map reaches one yet), #1970 (projectile end-script coverage), #1981 (healer flag, accepted and never stored), #1986 (docs).
+
+| # | Step | Expected | Status |
+| --- | --- | --- | --- |
+| 1 | In combat mode with an NPC that fights you (or a companion) close by, press **R** and release the right button. | While the fight lasts you stay in combat mode with the message 24 text. | open |
+| 2 | In the same fight start a dialog, also the NPC's own talk. | The dialog does not start (message 24 text, you stay in combat mode). | open |
+| 3 | Let things calm down and repeat steps 1 and 2. | When calm, R and the right release leave combat mode, and a dialog starts. | open |
+
+## ARC-UI-1940 — The world map opener asks the exit gate (PR #1976, 2026-11-14)
+
+Moved here from the owner test checklist of 2026-11-14 (item B1, the **W** half; the other half is ARC-COMBAT-1935).
+
+| # | Step | Expected | Status |
+| --- | --- | --- | --- |
+| 1 | In combat mode with an NPC that fights you (or a companion) close by, press **W**. | While the fight lasts **W** shows message 600 and opens no map. | open |
+| 2 | Let things calm down and press **W** again. | **W** leaves combat mode and opens the map. | open |
+
+## ARC-COMBAT-1941 — Shift+Alt on objects and Alt on a wall in combat mode (PR #1972, 2026-11-14)
+
+Moved here from the owner test checklist of 2026-11-14 (item B2).
+
+| # | Step | Expected | Status |
+| --- | --- | --- | --- |
+| 1 | In combat mode press Shift+Alt on a door, window, container or scenery. | Shift+Alt is the attempt attack without a walk or a run. | open |
+| 2 | In combat mode press Alt on a wall (the Crash Site cave has walls). | The hero walks up and swings at the wall (it used to walk to the ground tile). The wall takes no damage. | open |
+
+## ARC-COMBAT-1930 — A missed shot alerts nobody, the weapon's loudness (PR #1974, 2026-11-14)
+
+Moved here from the owner test checklist of 2026-11-14 (item B3).
+
+| # | Step | Expected | Status |
+| --- | --- | --- | --- |
+| 1 | Fire a bow or throw a weapon at an NPC and miss; compare loud and silent weapons. | A shot or throw that missed does not alert its aimed target; a hit does. The alarm of an attack follows the weapon's loudness (loud, normal, silent). | open |
+
+## ARC-UI-1786 — Follower order menu words (PR #1979, 2026-11-14)
+
+Moved here from the owner test checklist of 2026-11-14 (item B4).
+
+| # | Step | Expected | Status |
+| --- | --- | --- | --- |
+| 1 | Right-click a follower's portrait. | The eight rows show the words of the game's own `follower_ui.mes` (a row whose message is missing is not drawn). | open |
+
+## ARC-UI-1785 — Follower panel buttons with the interface hidden (PR #1980, 2026-11-14)
+
+Moved here from the owner test checklist of 2026-11-14 (item B5).
+
+| # | Step | Expected | Status |
+| --- | --- | --- | --- |
+| 1 | Lead a follower, hide the interface bars and then show them again. | With the bars hidden the show/hide button of the panel stands at y 587 and the scroll arrows at y 574; with the bars drawn they are at 428 and 415. The portraits never move. | open |
+
+## ARC-UI-1787 — Clicking a follower's portrait with lockpicks or an order pending (PR #1984, 2026-11-14)
+
+Moved here from the owner test checklist of 2026-11-14 (item B6).
+
+| # | Step | Expected | Status |
+| --- | --- | --- | --- |
+| 1 | Arm the lockpicks and click a follower's portrait. | The pick ends at once because a critter is no lock. | open |
+| 2 | Choose Walk or Attack in the order menu and click a portrait instead of the target. | With the order waiting, the click is an ordinary talk with that follower. | open |
+
+## ARC-UI-1750 — Barter doll 337 and hero doll cover 341 in the generated interface (PR #1985, 2026-11-14)
+
+Moved here from the owner test checklist of 2026-11-14 (item B7). The other barter window steps are in section ARC-UI-1194.
+
+| # | Step | Expected | Status |
+| --- | --- | --- | --- |
+| 1 | Set the HD interface line to **Generated (experimental)** and open a barter window with the hero's doll toggle on and off. Compare with HD and Legacy. | The merchant's doll (art 337) and the hero's doll cover (art 341) fit their pits and grids; the cover shows no brass rim and its right columns show the pack. | open |

@@ -7,6 +7,12 @@ where each thing lives, which command may touch what, and how to change the inst
 work of the other agent. The tool is [`tools/hd_pack/hd_pack.py`](../../tools/hd_pack/hd_pack.py) (standard
 library only, tests `python3 -B -m unittest tools.hd_pack.test_hd_pack`).
 
+## What the pack holds in the product (owner decision 2026-11-15, #2173)
+
+The HD option is the HD interface (art and fonts, this pack) plus the relit lighting. The pack holds interface art
+and fonts only: HD sprites of characters, objects and terrain are not made and are out of the plan until the owner
+reopens it, and the build/import tooling ARC-DEV-003 stays deferred ([decision](../architecture/decisions.md)).
+
 ## Hard rules
 
 1. **No original or derived art in git**: no ART pixels, redraws, frames, sheets, screenshots, real manifests, plans
@@ -403,6 +409,14 @@ not a font change, stop and look. The real `apply` (then `verify --deep`, then `
 - **Replacing the installed fonts (ARC-UI-145).** A new trace of the same fonts (other `hd_font` parameters) changes the *bytes* of keys that are already installed, so
   the update is not `--add-new`: run `plan --staged <staging> --base INSTALLED` without `--add-new`; it must say `1106 interface entries differ` (the five fonts: 1113 entries, 7 of them
   byte-identical under the new trace; a local dry run of 2026-11-11, `staged-only entries: 0`) and no CONFLICT, then `apply` the same way. The viewer draws the glyphs bilinear without mipmaps since ARC-UI-145 (the interface frames stay trilinear).
+- **The nine Codex fonts (ARC-UI-1202, 2026-11-15, owner-run Codex delivery; the pack and its receipts stay local).** Each font arrives as its own staging pack with a
+  base manifest (the `staged-manifest.json` of the ARC-UI-145 backup), so the updates are independent and run one after another, each with its own
+  `apply --dry-run` against the *current* installed pack and the same base. Stage A replaced existing keys (27, 229, 171, 327: 181, 184, 177, 185 entries
+  differ, no CONFLICT); stage B added new keys with `--add-new --map layout-additions.tsv` (28, 230, 301, 371, 483: 223 entries each, 0 replaced). The
+  installed manifest went from 024dec70aa9a to 175a19a0fed1 (2255 to 3370 entries, `interface/fonts` 1113 to 2228); every step ended with `verify --deep` PASS.
+  The viewer needs no per-font support: a font ART read through `AreaInterfaceArt.Load` carries its HD key and `AreaArtFontFace` asks the pack for each glyph, so any
+  font ART in the pack is drawn. A generated font keeps the original's frame sizes and advances; where the generator was unsure (all of Garmond9's extended frames 161..255
+  and about 40 other frames per font) the frame is the earlier trace, named per frame in the delivery's `origins.json`. Rollback is the `ARC-UI-1202-*` backups, newest first.
 
 ## Producing and repairing art (who does what)
 

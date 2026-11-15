@@ -68,6 +68,11 @@ public sealed record ChromeBare(int X, int Y, int Width, int Height) : ChromePar
 /// grain of the Legacy plate does not carry over. A pixel is kept whole (no one-unit halo): a picture with anti-aliased edges would need one.</summary>
 public sealed record ChromeMarks(int X, int Y, int Width, int Height) : ChromePart;
 
+/// <summary>ARC-UI-1810: a round lamp button inside a larger art (the world map window's Zoom and Whole map buttons: a lamp with a picture of a map beside it). A generated ball of
+/// <paramref name="Radius"/> at (<paramref name="CenterX"/>, <paramref name="CenterY"/>) in Legacy pixels: the button's brass rim (lit on the upper left, on the lower right in the down frame), a dark glass face,
+/// and the art's own pixels inside <paramref name="KeepRadius"/> (the lamp itself, dim or lit by the frame). The circle's edge gets an anti-aliased alpha instead of the Legacy stairs.</summary>
+public sealed record ChromeBall(double CenterX, double CenterY, double Radius, double KeepRadius) : ChromePart;
+
 /// <summary>ARC-UI-1196: what is drawn around the holes of a panel's Legacy frame (the transparent regions the live view or the page shows through).</summary>
 public enum ChromeHoles
 {
@@ -434,8 +439,8 @@ public static class InterfaceChromeRecipes
             new ChromeKeep(0, 303, 109, 97),
             new ChromeKeep(231, 303, 110, 97),
         ], Holes: ChromeHoles.None); // the cover's four clear columns at the right edge (x 337 to 340) show the pack under it: not a hole, so no brass rim runs down them
-        // The three lenses (231 barter, 232 loot, 233 own window) are the round view's ring around the live game view's circle.
-        var lenses = new[] { "lns_bart.art", "lns_loot.art", "lns_papr.art" }.Select(file => new ChromeRecipe(file, ChromeKind.Panel, ChromeMaterial.Wood, ChromeSides.None, [new ChromeRoundView(44.5, 44.5, 44.5)]));
+        // The lenses (231 barter, 232 loot, 233 own window; ARC-UI-1810: 198 `PCWinCvr`, the character sheet's, the logbook's and the map window's) are the round view's ring around the live game view's circle.
+        var lenses = new[] { "lns_bart.art", "lns_loot.art", "lns_papr.art", "PCWinCvr.ART" }.Select(file => new ChromeRecipe(file, ChromeKind.Panel, ChromeMaterial.Wood, ChromeSides.None, [new ChromeRoundView(44.5, 44.5, 44.5)]));
         string[] buttons = ["char_but.art", "log_but.art", "invn_but.art", "tmap_but.art", "lilgrnbut.art",
             "combat_button.art", "skills_button.art", "spells_button.art", "schematics_button.art",
             // ARC-UI-1195: the character sheet's buttons (the + and − of the stats, skills, technology and spells pages, the page tabs, the skill group and discipline buttons).
@@ -456,7 +461,7 @@ public static class InterfaceChromeRecipes
     }
 
     // ARC-UI-1197: the world map and town map window (138 `mapmain`, 800 x 400, wood). The map view's hole gets the brass rim every hole gets; the two readout boxes (680, 157 and
-    // 680, 189) are sunk black pits the window writes its numbers in. Kept pictures: the portrait's brass ring (the lens art 198 is drawn over its hole), the compass rose,
+    // 680, 189) are sunk black pits the window writes its numbers in. The portrait's ring is the round view's generated one (ARC-UI-1810: the lens art 198 carries the same ring in its corners). Kept pictures: the compass rose,
     // the red route sketch and the Travel button's brass ring, and the brass pill under the view's bottom edge (the cover 217 and the compass button 139 are drawn on it). The holes of
     // the zoom and whole-map buttons are covered by those buttons. The map picture itself, the pieces the windows do not draw (140, 199, 219, 220) are not part of it.
     private static ChromeRecipe[] MapPanels()
@@ -465,7 +470,6 @@ public static class InterfaceChromeRecipes
         [
             new ChromeSunk(680, 157, 94, 22, ChromeMaterial.Pit), new ChromeSunk(680, 189, 94, 22, ChromeMaterial.Pit),
             new ChromeRoundView(69.5, 68.5, 44.5),
-            new ChromeKeep(19, 19, 100, 100, true),
             new ChromeKeep(704, 51, 47, 47, true),
             new ChromeKeep(716, 26, 23, 23, true), new ChromeKeep(683, 63, 23, 23, true), new ChromeKeep(749, 63, 23, 23, true), new ChromeKeep(717, 97, 23, 23, true),
             new ChromeKeep(725, 13, 5, 15), new ChromeKeep(725, 119, 5, 33), new ChromeKeep(666, 72, 19, 5), new ChromeKeep(771, 72, 20, 5),
@@ -473,7 +477,17 @@ public static class InterfaceChromeRecipes
             new ChromeKeep(691, 307, 70, 69, true),
             new ChromeKeep(295, 341, 206, 51),
         ];
-        return [new ChromeRecipe("mapmain.art", ChromeKind.Panel, ChromeMaterial.Wood, ChromeSides.None, window)];
+        // ARC-UI-1810: the buttons over the frame. Zoom (811, 111 x 56) and Whole map (812, 106 x 56) are a lamp and a picture of a map side by side, two frames each (the lamp lit in the second): a generated
+        // lamp ball (rim, dark glass, the lamp's own light kept) and the map picture kept. Travel (813, 57 x 57) and the compass button (139, 45 x 45) are balls on their own: the generic button recipe for
+        // the blank Travel ball, and the compass ball's own picture inside a generated rim, as the other ball buttons.
+        return
+        [
+            new ChromeRecipe("mapmain.art", ChromeKind.Panel, ChromeMaterial.Wood, ChromeSides.None, window),
+            new ChromeRecipe("MapZoomBut.ART", ChromeKind.Panel, ChromeMaterial.Dark, ChromeSides.None, [new ChromeBall(21.5, 29, 21, 8), new ChromeKeep(45, 0, 66, 56)], Holes: ChromeHoles.None),
+            new ChromeRecipe("MapWholeBut.ART", ChromeKind.Panel, ChromeMaterial.Dark, ChromeSides.None, [new ChromeBall(21.5, 28.5, 21, 8), new ChromeKeep(53, 0, 53, 56)], Holes: ChromeHoles.None),
+            new ChromeRecipe("MapTravelBut.ART", ChromeKind.Button, ChromeMaterial.Face, ChromeSides.None, []),
+            new ChromeRecipe("navbutton.art", ChromeKind.Button, ChromeMaterial.Face, ChromeSides.None, [], KeepFace: true),
+        ];
     }
 
     // ARC-UI-1195: the character sheet's frames (Legacy pixels of each art). Its window (22) is wood with the sunk name box, the info box and the page pit; the stat ovals are
@@ -488,7 +502,7 @@ public static class InterfaceChromeRecipes
             new ChromeSunk(497, 59, 244, 332, ChromeMaterial.Pit),
             new ChromeSunk(24, 278, 452, 113, ChromeMaterial.Pit),
             new ChromeKeep(308, 294, 3, 84),
-            new ChromeKeep(8, 6, 97, 97, true),
+            new ChromeKeep(12, 10, 89, 89, true), new ChromeRoundView(56.5, 54.5, 44.5, false), // the medallion inside the lens 198 (kept) and the ring the lens carries in its corners
             new ChromeKeep(6, 131, 100, 100, true),
             new ChromeKeep(411, 127, 76, 56, true), new ChromeKeep(411, 197, 76, 56, true),
             new ChromeKeep(747, 60, 46, 330),
@@ -565,6 +579,8 @@ public static class InterfaceChromeRenderer
         public Rgb WoodLow = InterfaceChromeRenderer.WoodLowDefault, WoodHigh = InterfaceChromeRenderer.WoodHighDefault;
         /// <summary>ARC-UI-1196: where the art's corner lies in the window's larger picture (<see cref="ChromeRecipe.OriginX"/>): the materials are sampled at that offset.</summary>
         public double OriginX, OriginY;
+        /// <summary>ARC-UI-1810: the frame being painted is the recipe's down frame (a <see cref="ChromeBall"/> turns its light to the other side).</summary>
+        public bool Down;
 
         public Canvas(int legacyW, int legacyH, byte[] legacy, byte[]? picture, double scale)
         {
@@ -624,7 +640,7 @@ public static class InterfaceChromeRenderer
         if (!picture.IsEmpty && picture.Length != pixelWidth * pixelHeight * 4) throw new ArgumentException("picture RGBA size", nameof(picture));
         if (frameIndex < 0) throw new ArgumentOutOfRangeException(nameof(frameIndex));
 
-        var canvas = new Canvas(width, height, legacy.ToArray(), picture.IsEmpty ? null : picture.ToArray(), scale) { OriginX = recipe.OriginX, OriginY = recipe.OriginY };
+        var canvas = new Canvas(width, height, legacy.ToArray(), picture.IsEmpty ? null : picture.ToArray(), scale) { OriginX = recipe.OriginX, OriginY = recipe.OriginY, Down = frameIndex == recipe.DownFrame };
         if (recipe.Kind == ChromeKind.Button) PaintButton(canvas, frameIndex == recipe.DownFrame, frameIndex == recipe.HoverFrame && recipe.HoverFrame != recipe.DownFrame, recipe.KeepFace);
         else if (recipe.Kind == ChromeKind.Tab) PaintTab(canvas, recipe);
         else PaintPanel(canvas, recipe);
@@ -721,6 +737,7 @@ public static class InterfaceChromeRenderer
             switch (part)
             {
                 case ChromeRoundView view: RoundView(c, view); break;
+                case ChromeBall ball: Ball(c, ball); break;
                 case ChromeRivet rivet: Rivet(c, rivet); break;
                 case ChromeKeep keep: Keep(c, c.Edge(keep.X), c.Edge(keep.Y), c.Edge(keep.X + keep.Width) - c.Edge(keep.X), c.Edge(keep.Y + keep.Height) - c.Edge(keep.Y), keep.Round); break;
                 case ChromeGlyph glyph: Glyph(c, glyph); break;
@@ -1255,6 +1272,30 @@ public static class InterfaceChromeRenderer
             var brass = Rgb.Lerp(BrassDark, BrassLight, Math.Clamp(0.5f + 0.5f * (t < 0.5f ? -facing : facing), 0, 1));
             var colour = t < 0.18f ? Rgb.Lerp(Ink, brass, t / 0.18f) : t > 0.85f ? Rgb.Lerp(brass, Ink, (t - 0.85f) / 0.15f) : brass;
             c.Blend(x, y, colour, Math.Clamp(r + ring + 0.5f - d, 0, 1));
+        }
+    }
+
+    // ARC-UI-1810: a lamp button inside a larger art: the generated button rim and dark glass face of PaintButton, the lamp's own pixels kept in the middle.
+    private static void Ball(Canvas c, ChromeBall ball)
+    {
+        float cx = (float)(ball.CenterX * c.Scale), cy = (float)(ball.CenterY * c.Scale), radius = (float)(ball.Radius * c.Scale), keep = (float)(ball.KeepRadius * c.Scale);
+        var reach = (int)(radius + 2 * c.S + 1);
+        for (var y = Math.Max(0, (int)(cy - reach)); y < Math.Min(c.H, (int)(cy + reach + 1)); y++)
+        for (var x = Math.Max(0, (int)(cx - reach)); x < Math.Min(c.W, (int)(cx + reach + 1)); x++)
+        {
+            var i = y * c.W + x;
+            if (c.Alpha[i] <= 0) continue;
+            float dx = x + 0.5f - cx, dy = y + 0.5f - cy, d = MathF.Sqrt(dx * dx + dy * dy), inset = radius - d;
+            // Only the circle's own edge and the Legacy stairs around it are shaped; beyond that the pixels are the next part's (the map picture starts a unit or two from the lamp).
+            if (d > radius + 1.5f * c.S) continue;
+            c.Alpha[i] = MathF.Min(c.Alpha[i], Math.Clamp(inset + 0.5f, 0, 1));
+            if (c.Alpha[i] <= 0) continue;
+            var lit = (dx + dy < 0) != c.Down;
+            var rim = lit ? BrassLight : BrassDark;
+            var face = Rgb.Lerp(FaceLow, DarkFill, Math.Clamp(d / MathF.Max(1, radius), 0, 1));
+            Rgb colour = inset < c.S ? Ink : inset < 3 * c.S ? rim : inset < 3.6f * c.S ? Ink : face;
+            if (inset >= 3.6f * c.S && d < keep + 0.5f) colour = Rgb.Lerp(colour, c.PictureAt(x, y), Math.Clamp(keep - d + 0.5f, 0, 1));
+            c.Color[i] = colour;
         }
     }
 

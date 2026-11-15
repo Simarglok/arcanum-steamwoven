@@ -376,11 +376,14 @@ public sealed class AreaBarter
 
     private (GambleGate Gate, AreaBarterLine? Line, int Price) BetGate(AreaBarterView view, string entity)
     {
-        var line = view.Wares.FirstOrDefault(item => item.Entity == entity);
+        // ARC-UI-2139 (0x579840): an item lifted from the merchant's doll is still the merchant's (the gate reads the source holder, not the location) and its location is
+        // still 1000..1008, so the gate's Worn fact is true and its price is the buy quote of a worn item (0 below Master haggle, 0x462230).
+        var worn = view.WornWares.FirstOrDefault(item => item.Entity == entity);
+        var line = worn ?? view.Wares.FirstOrDefault(item => item.Entity == entity);
         var hero = _session.QueryHeroSkills() is { } skills ? skills[Skill.Gambling] : default;
         var price = line?.Quote.Price ?? 0;
         var facts = new GambleFacts(MerchantsItem: line is not null, _merchantGambling?.Invoke()?.Points ?? 0, price, hero.Level, hero.Training, view.HeroGold,
-            Worn: false, WontSell: line is not null && (line.ItemFlags & TradeRules.WontSellFlag) != 0);
+            Worn: worn is not null, WontSell: line is not null && (line.ItemFlags & TradeRules.WontSellFlag) != 0);
         return (GamblingRules.Gate(facts), line, price);
     }
 
@@ -410,7 +413,10 @@ public sealed class AreaBarter
         var view = View();
         var (gate, line, price) = BetGate(view, entity);
         if (!gate.Allowed || line is null) return new(gate, null, false, 0, 0, "");
-        var bet = new SessionGambleBet(Merchant.Entity, _merchantGambling?.Invoke()?.Level ?? 0, entity, line.Count, price, line.Kind, GoldKind(), Merchant.Container);
+        // ARC-UI-2139: a worn item is taken off the merchant's slot (0x461CA0 → 0x467860 → 0x467CB0), from the merchant itself, never from a substitute container.
+        var worn = view.WornWares.Any(item => item.Entity == entity);
+        var bet = new SessionGambleBet(Merchant.Entity, _merchantGambling?.Invoke()?.Level ?? 0, entity, line.Count, price, line.Kind, GoldKind(), worn ? null : Merchant.Container,
+            WornItem: worn, NpcWearer: worn ? _inventory.NpcWearer?.Invoke(_session.QueryActor().Map, Merchant.Entity) : null);
         var result = _session.Gamble(_session.Version, bet, _inventory.InsertCheck, AreaInventoryHost.DiagnosticInsertCheck, _inventory.ItemScripts(_session));
         if (!result.Settled)
         {
