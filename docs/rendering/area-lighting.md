@@ -385,7 +385,7 @@ normal-mapped diffuse term for the map's stationary lights and the carried light
 luminance. With it off nothing in this document changes (the `relight` smoke stage compares Legacy captures byte for byte). It reads
 the same light sources as the lattice above, changes no luminance a check reads and adds no input or launch argument. Findings, numbers
 and the recommendation: [relighting experiment](../research/relighting-experiment.md). ARC-RES-2007 added the culling rule of the relit light list (of the carried and map lights the ones whose disk meets the
-shown view, the 32 nearest the view's centre are uploaded; `AreaRelight.SetView`) and the night-city captures of Tarant and Ashbury (stage `relight` with `ARC_RELIGHT_SCENE=city`).
+shown view, the 32 nearest the view's centre are uploaded; `AreaRelight.SetView`) and the night-city captures of Tarant and Ashbury (stage `relight` with `ARC_RELIGHT_SCENE=city`). ARC-RES-2000 added the walk-cycle flicker check, frame times at 1, 5 and 20 lights over three window sizes (a stand-in for the Steam Deck) and the comparison with Godot's own `PointLight2D` (stage `relight` with `ARC_RELIGHT_SCENE=cycle`; `AreaRelight.OnlyExtra` lights exactly the smoke's own lights during it and is false everywhere else).
 
 ## Relit look (ARC-RENDER-2060)
 
