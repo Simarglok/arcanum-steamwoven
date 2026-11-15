@@ -236,7 +236,8 @@ public sealed class AreaUseScriptsOriginalTests
         // run to their teleport (136 teleports and 1,077 refused) and the last refused sector script runs (20 without a teleport, none refused).
         // Since ARC-SCRIPT-1772 (the critter getters, toggle invulnerability and rename of set S56) 44 more tile scripts run without a teleport and 44 fewer are refused (1,665 and 1,033); the teleports, the rejected effects and the sector counts do not move.
         // Re-measured on 2026-11-14 on main after ARC-SCRIPT-1772 (commit 77723e2ea): 91 more tile scripts run than the 1,665 just above (1,756 without a teleport, 942 refused; 135 more than the 1,621 of ARC-SCRIPT-1294, the 44 of S56 included); the teleports (136), the rejected effects (178) and the sector counts (20) did not move.
-        // Re-measured on 2026-11-15 on main with ARC-SCRIPT-2320 (set S63, the follower focus kinds) after ARC-SCRIPT-2041 (portal vicinity) and ARC-SCRIPT-2248 (toggle state): 1,789 tile scripts run without a teleport and 909 are refused (33 more run than the 1,756 above); the teleports (136), the rejected effects (178) and the sector counts (20) did not move. The pinned counts of the other opt-in admission checks (loop break, NPC state, attack, spell, spell state, story and time, world object) moved with these sets the same way.
+        // Re-measured on 2026-11-16 (ARC-SCRIPT-2321, set S64): 1,768 without a teleport and 930 refused before the focus kind any scenery in the vicinity (16); its 20 tile sites of script 2561 on the k'na tha map run now (1,788 and 910), and the group kinds
+        // (ARC-SCRIPT-2319, S61) and toggle state in the use set (ARC-SCRIPT-2248) 5 more (1,793 and 905), the container kinds (ARC-SCRIPT-2322, S62) 3 more (1,796 and 902); the 12 more runs than the 1,756 above came with the portal focus kind 19 of ARC-SCRIPT-2041. The teleports (136), the rejected effects (178) and the sector counts (20) did not move.
         var tile = Arcanum.Data.Maps.MapTransitionTrigger.TileEntry; var sector = Arcanum.Data.Maps.MapTransitionTrigger.SectorEntry;
         // Since ARC-SCRIPT-1165 (set S34: the story and time commands) the 62 exit tiles of script 2698 on the Tulla battle interiors run to their teleport too.
         static bool IsTullaExit(string t) => t.StartsWith("tulla interior - battle - ", StringComparison.Ordinal) && t.EndsWith(":2698", StringComparison.Ordinal);
@@ -246,7 +247,7 @@ public sealed class AreaUseScriptsOriginalTests
         CollectionAssert.AreEquivalent(Enumerable.Repeat("iron clan hq:2203", 5).Append("void-kerghans castle:3070").ToArray(), teleports.Where(t => !IsTullaExit(t) && !IsVoidExit(t)).ToArray(), string.Join(", ", teleports));
         CollectionAssert.AreEquivalent(new[]
         {
-            ((tile, AreaScriptedUseOutcome.Teleport), 136), ((tile, AreaScriptedUseOutcome.NoTeleport), 1789), ((tile, AreaScriptedUseOutcome.Refused), 909),
+            ((tile, AreaScriptedUseOutcome.Teleport), 136), ((tile, AreaScriptedUseOutcome.NoTeleport), 1796), ((tile, AreaScriptedUseOutcome.Refused), 902),
             ((tile, AreaScriptedUseOutcome.EffectsRejected), 178), ((sector, AreaScriptedUseOutcome.NoTeleport), 20),
         }, placedOutcomes.Select(p => (p.Key, p.Value)).ToArray(), string.Join(", ", placedOutcomes.Select(p => $"{p.Key}={p.Value}")));
     }

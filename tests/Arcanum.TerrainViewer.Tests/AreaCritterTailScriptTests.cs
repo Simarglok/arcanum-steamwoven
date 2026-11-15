@@ -106,7 +106,7 @@ public sealed class AreaCritterTailScriptTests
         foreach (var set in new[] { AreaUseScriptHost.Admission, AreaUseScriptHost.PlacedAdmission, AreaUseScriptHost.HeartbeatAdmission, AreaUseScriptHost.CombatPointAdmission, AreaUseScriptHost.DyingAdmission })
         {
             Assert.IsTrue(set.FocusKinds.Contains(ScrFocusKind.EveryFollower) && set.FocusKinds.Contains(ScrFocusKind.AnyFollower), set.Id);
-            Assert.IsTrue(set.IsSubsetOfBesidesStores(ScrAdmissionSet.S64), set.Id);
+            Assert.IsTrue(set.IsSubsetOfBesidesStores(ScrAdmissionSet.S65), set.Id);
         }
     }
 

@@ -520,7 +520,7 @@ public sealed class ScrAdmissionSet
         ScrCatalogue.Condition.KnowsSpell, ScrCatalogue.Condition.MasteredSpellCollege, ScrCatalogue.Condition.IsProwling,
     };
 
-    /// <summary>The focus kinds of <see cref="S61"/> and <see cref="S64"/> a host answers through <see cref="IScrGroupQueries"/>: the group kinds, and since ARC-SCRIPT-2320 the follower kinds (the same direct follower list).</summary>
+    /// <summary>The focus kinds of <see cref="S61"/> and <see cref="S65"/> a host answers through <see cref="IScrGroupQueries"/>: the group kinds, and since ARC-SCRIPT-2320 the follower kinds (the same direct follower list).</summary>
     public static IReadOnlySet<ScrFocusKind> GroupFocusKinds { get; } = new HashSet<ScrFocusKind>
         { ScrFocusKind.EveryoneInGroup, ScrFocusKind.AnyoneInGroup, ScrFocusKind.EveryFollower, ScrFocusKind.AnyFollower };
 
@@ -532,15 +532,19 @@ public sealed class ScrAdmissionSet
 
     /// <summary>
     /// The armour set (ARC-SCRIPT-2326, ledger AR1–AR7): <see cref="S62"/> plus get armor (action 32), which stores the armour part of the first object's current art id (<see cref="CritterArtActions"/>, answered through <see cref="IScrCritterFieldQueries.ArmorOf"/>),
-    /// and the group focus kinds in slot 0 of every list condition (<see cref="ListConditions"/>: the exe's condition cases share one list tail, GF9 read again). The interpreter runs at most S63.
+    /// and the group focus kinds in slot 0 of every list condition (<see cref="ListConditions"/>: the exe's condition cases share one list tail, GF9 read again). The interpreter ran at most S63 until ARC-SCRIPT-2321.
     /// </summary>
     public static ScrAdmissionSet S63 { get; } = new("S63", S62.Conditions, S62.Actions.Concat(CritterArtActions), S62.ValueKinds, S62.FocusKinds, counterIndexWraps: true);
 
     /// <summary>
-    /// The follower set (ARC-SCRIPT-2320, ledger FK1–FK7): <see cref="S63"/> plus the focus kinds every follower (2) and any follower (3), the direct followers of the run's triggerer (the group kinds' list without the triggerer), which the host answers
-    /// through <see cref="IScrGroupQueries"/> as for the group kinds. The interpreter runs at most S64.
+    /// The any-scenery set (ARC-SCRIPT-2321, ledger AS1–AS6): <see cref="S63"/> plus the focus kind any scenery in the vicinity (16), the same list as kind 15 that a condition reads as "one is enough" (SG6). The interpreter runs at most S64.
     /// </summary>
-    public static ScrAdmissionSet S64 { get; } = new("S64", S63.Conditions, S63.Actions, S63.ValueKinds, S63.FocusKinds.Concat([ScrFocusKind.EveryFollower, ScrFocusKind.AnyFollower]), counterIndexWraps: true);
+    public static ScrAdmissionSet S64 { get; } = new("S64", S63.Conditions, S63.Actions, S63.ValueKinds, S63.FocusKinds.Append(ScrFocusKind.AnySceneryInVicinity), counterIndexWraps: true);
+
+    /// The follower set (ARC-SCRIPT-2320, ledger FK1–FK7): <see cref="S64"/> plus the focus kinds every follower (2) and any follower (3), the direct followers of the run's triggerer (the group kinds' list without the triggerer), which the host answers
+    /// through <see cref="IScrGroupQueries"/> as for the group kinds. The interpreter runs at most S65.
+    /// </summary>
+    public static ScrAdmissionSet S65 { get; } = new("S65", S64.Conditions, S64.Actions, S64.ValueKinds, S64.FocusKinds.Concat([ScrFocusKind.EveryFollower, ScrFocusKind.AnyFollower]), counterIndexWraps: true);
 
     /// <summary>
     /// The set the engine runs the slide scripts with (ARC-RENDER-1171, ledger SS2): true, equal, less or equal, local and global flag and PC quest state conditions; the control and arithmetic actions, call script
@@ -582,7 +586,7 @@ public sealed class ScrAdmissionSet
 
     /// <summary>The focus kinds of <see cref="S15"/> a host answers through <see cref="IScrWorldQueries"/>.</summary>
     public static IReadOnlySet<ScrFocusKind> WorldQueryFocusKinds { get; } = new HashSet<ScrFocusKind>
-        { ScrFocusKind.EverySceneryInVicinity, ScrFocusKind.EveryoneInVicinity, ScrFocusKind.AnyoneInVicinity };
+        { ScrFocusKind.EverySceneryInVicinity, ScrFocusKind.AnySceneryInVicinity, ScrFocusKind.EveryoneInVicinity, ScrFocusKind.AnyoneInVicinity };
 
     /// <summary>The conditions of <see cref="S14"/> a host answers through <see cref="IScrItemQueries"/>.</summary>
     public static IReadOnlySet<int> ItemQueryConditions { get; } = new HashSet<int> { ScrCatalogue.Condition.Identified, ScrCatalogue.Condition.ItemsBeingRewielded };
