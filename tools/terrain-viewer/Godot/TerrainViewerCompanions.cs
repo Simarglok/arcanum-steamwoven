@@ -605,7 +605,8 @@ public partial class TerrainViewerApp
                     var toggleRect = _followerPortraits.ButtonRectForSelfTest("toggle");
                     var wanted = AreaFollowerPanelRules.ToggleRectFor(barsOn);
                     Require(AreaGameBarPanel.BottomInset > 0 == barsOn, $"the bars' inset follows their visibility ({barsOn})");
-                    Require(toggleRect is { } rect && (int)rect.Position.Y == wanted.Y && wanted.Y == (barsOn ? 428 : 587) && (int)rect.Position.X == wanted.X, $"the show/hide button stands at y {(barsOn ? 428 : 587)} with the bars {(barsOn ? "drawn" : "hidden")}: {toggleRect}");
+                    var heightUnits = GetViewport().GetVisibleRect().Size.Y / _followerPortraits.ScaleForSelfTest;
+                    Require(toggleRect is { } rect && Math.Abs(rect.Position.Y - AreaFollowerPanelRules.AnchoredY(wanted.Y, heightUnits)) < 0.01f && wanted.Y == (barsOn ? 428 : 587) && (int)rect.Position.X == wanted.X, $"the show/hide button stands {(barsOn ? 172 : 13)} units above the bottom with the bars {(barsOn ? "drawn" : "hidden")}: {toggleRect}");
                     Require(_followerPortraits.FrameForSelfTest(companion.Entity)!.Value.Rect.Position == frameAt, "the portrait frame does not move with the layout");
                 }
                 barPanel.Visible = wasVisible;
