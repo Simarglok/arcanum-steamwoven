@@ -172,8 +172,18 @@ public partial class TerrainViewerApp
     /// <summary>ARC-UI-2027 (ledger TB25): the dialog's end gives the speaker's bubble its default life from now (it was persistent).</summary>
     private void ExpireDialogLineBubble(AreaSpeaker? speaker)
     {
-        if (speaker is null || _floaters is not { } layer) return;
-        layer.Bubbles.SetLife(AreaConversationState.EntityId(speaker.Row), TextBubbleRules.DefaultLife, BubbleNowMs());
+        if (speaker is not null) ExpireDialogLineBubbleOf(AreaConversationState.EntityId(speaker.Row));
+    }
+
+    /// <summary>
+    /// ARC-UI-2048 (ledger TB29, TB30): the end callback's life −1 on whatever bubble the speaker owns now (a speaker owns at most one): its start becomes now and its life the default. The original's
+    /// final line sets the same value in the same call and frame, so that restart changes nothing and the final line's bubble lives one default life from the dialog's end;
+    /// a bubble that is not the dialog line (a float line made while the dialog waited) is restarted by the close too. A speaker with no cell on the shown map keeps its bubble (created, not drawn).
+    /// </summary>
+    private void ExpireDialogLineBubbleOf(string owner)
+    {
+        if (_floaters is not { } layer) return;
+        layer.Bubbles.SetLife(owner, TextBubbleRules.DefaultLife, BubbleNowMs());
     }
 
     // ARC-UI-2034 (ledger TB16): the last destroyed-or-off state read for each bubble owner.
