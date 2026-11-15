@@ -170,7 +170,7 @@ public sealed partial class GameSessionOwner
     /// count of L's array without forced entries (the waiting follower is out of the array in both checks). Refused, in order: the entity, the training, the version, a follower not waiting under an NPC leader
     /// (<see cref="GameSessionFailure.NotWaiting"/>), the outer check, the first check (<see cref="GameSessionFailure.ConsentRefused"/>), the written-flags bound for the Tempus Fugit copy, the revision.
     /// ARC-WORLD-2148: <paramref name="outer"/> is the dialog UW's own check (0x415BA0 case 0x15 calls 0x4AD950(NPC, dialog PC, argument) before 0x4AA8C0): the follow check with the HERO as the player, run
-    /// unchanged for a speaker an NPC leads. Its facts are the hero-side ones of the dialog host; the session fills in the hero's own values as for every hero check, and sets the other leader to L (the direct
+    /// unchanged for a speaker an NPC leads. Its facts are the hero-side ones of the dialog host; the session fills in the hero's own values as for every hero check, and sets the other leader to L, whatever the facts name (the dialog host names the same charisma since ARC-WORLD-2135; the direct
     /// leader 0x45DE00 is L, whose charisma <see cref="NpcLeaderUnwaitFacts.LeaderCharisma"/> compares with the hero's: not greater, and the speaker is refused as already in a group, unless the check
     /// exits earlier through the charm step or the hero's Persuasion Master). The speaker is not forced (the wait's leave cleared the bit), the hero's follower limit applies (the UW argument, the ignore flag,
     /// is not parsed yet: 0). A refusal changes nothing and is the same <see cref="GameSessionFailure.ConsentRefused"/> (the dialog says the refusal line and does not unwait). Null: no outer check (a caller that is
@@ -187,7 +187,7 @@ public sealed partial class GameSessionOwner
         var leader = _party.NpcLed[entity].Leader;
         if (outer is not null)
         {
-            if (!ValidFacts(outer) || outer.OtherLeaderCharisma is not null) return RejectParty(GameSessionFailure.InvalidConsentFacts);
+            if (!ValidFacts(outer)) return RejectParty(GameSessionFailure.InvalidConsentFacts);
             var hero = Consent(outer with { OtherLeaderCharisma = facts.LeaderCharisma }, false, false);
             if (hero != FollowConsent.Accepted) return RejectParty(GameSessionFailure.ConsentRefused, hero);
         }

@@ -364,10 +364,9 @@ public sealed class NpcLeaderStateTests
         var refused = owner.UnwaitNpcLed(version, Summon, Leader(charisma: 1), dislike);
         Assert.AreEqual((GameSessionFailure.ConsentRefused, FollowConsent.Dislike), (refused.Failure, refused.Consent));
         Assert.AreEqual(version, owner.Version);
-        // A facts record that names another leader contradicts the session (the leader is L's, supplied by the leader's facts).
-        Assert.AreEqual(GameSessionFailure.InvalidConsentFacts, owner.UnwaitNpcLed(owner.Version, Summon, Leader(charisma: 1), PartyStateTests.Facts() with { OtherLeaderCharisma = 3 }).Failure);
-        // No outer check without the dialog's facts.
-        Changed(owner.UnwaitNpcLed(owner.Version, Summon, Leader(charisma: 100)));
+        // Facts that name the other leader's charisma (the dialog host does, ARC-WORLD-2135) are overridden by the leader's own facts: the named 100 would refuse (the hero's is 8), the leader's own 1 does not.
+        Changed(owner.UnwaitNpcLed(owner.Version, Summon, Leader(charisma: 1), PartyStateTests.Facts() with { OtherLeaderCharisma = 100 }));
+        Assert.IsFalse(owner.QueryCompanion(Summon).WaitFlag);
     }
 
     // The join's second check runs with the handle cleared: a mind-controlled follower accepted through the chain of the first check is refused there when nothing else lets it pass, and ends with no
