@@ -23,7 +23,7 @@ public static partial class TerrainViewerSelfTest
         var synthetic = SyntheticActorFixture.Create(human: true);
         cache.UploadActor(synthetic.Result.ActorTextures);
         var viewport = new SubViewport { Size = new(480, 400), TransparentBg = true, RenderTargetUpdateMode = SubViewport.UpdateMode.Always };
-        var canvas = new TerrainCanvas(); viewport.AddChild(canvas); host.AddChild(viewport);
+        var canvas = new TerrainCanvas { WorldSpritesFromPack = true }; viewport.AddChild(canvas); host.AddChild(viewport);
         var sources = new List<HdFrameSource>();
         var compared = 0L;
         async Task Settle()
@@ -93,6 +93,19 @@ public static partial class TerrainViewerSelfTest
             await Settle();
             var legacy = await Capture();
             var candidates = bodyCount + 1;
+
+            // ARC-RENDER-2175: with the gate closed (the default of a real run) even a tinted pack draws the Legacy raster: every candidate
+            // is a WorldDormant Legacy draw, nothing is decoded or made resident, and the view never fails.
+            canvas.WorldSpritesFromPack = false;
+            var dormant = Source("dormant-tint", bodyFrames.Concat(actorFrames), tint: 1);
+            canvas.SetVisualProfile(VisualProfile.Hd, dormant, HdDeviceBudget.Ceiling(4));
+            await Drain("dormant");
+            var gated = await Capture();
+            Counts("dormant", 0, HdFallbackReason.WorldDormant, candidates);
+            if (canvas.HdResidentCount != 0 || dormant.CompletedCount != 0 || dormant.PendingCount != 0) throw new InvalidOperationException("HD_SELFTEST_DORMANT_WORK:" + canvas.HdResidentCount);
+            Same(legacy, gated, "dormant");
+            canvas.WorldSpritesFromPack = true; // the developer override: the rest checks the dormant path
+            canvas.SetVisualProfile(VisualProfile.Legacy, null, null);
 
             // Identity: the nearest 4× pack draws the Legacy raster at every transform.
             var nearest = Source("nearest", bodyFrames.Concat(actorFrames));
@@ -169,7 +182,7 @@ public static partial class TerrainViewerSelfTest
             foreach (var source in sources) source.Dispose();
             System.IO.Directory.Delete(root, true);
         }
-        GD.Print($"ARC-RENDER-014 self-test AREA HD PASS nearest-4x identity (a wall included, ARC-RENDER-016), wall fade, tint bound at magnification 2 with Legacy alpha, fallbacks FrameMissing/NoPack/PackRejected/FrameRejected/HdBudget/Invalid"
+        GD.Print($"ARC-RENDER-014 self-test AREA HD PASS gate closed = Legacy raster, WorldDormant (ARC-RENDER-2175), nearest-4x identity (a wall included, ARC-RENDER-016), wall fade, tint bound at magnification 2 with Legacy alpha, fallbacks FrameMissing/NoPack/PackRejected/FrameRejected/HdBudget/Invalid"
             + (native ? $" pixels={compared}" : "; pixels NOT_VERIFIED headless"));
     }
 
@@ -185,7 +198,7 @@ public static partial class TerrainViewerSelfTest
         using var cache = new TerrainTextureCache();
         cache.Upload(fixture.Result.Textures); cache.UploadStatic(fixture.Result.StaticTextures); cache.UploadActor(fixture.Result.ActorTextures);
         var viewport = new SubViewport { Size = new(480, 400), TransparentBg = true, RenderTargetUpdateMode = SubViewport.UpdateMode.Always };
-        var canvas = new TerrainCanvas(); viewport.AddChild(canvas); host.AddChild(viewport);
+        var canvas = new TerrainCanvas { WorldSpritesFromPack = true }; viewport.AddChild(canvas); host.AddChild(viewport);
         HdFrameSource? source = null;
         async Task Settle()
         {
@@ -215,6 +228,16 @@ public static partial class TerrainViewerSelfTest
                 .Concat(fixture.Result.ActorTextures.Values.Select(t => new HdNearestPack.Frame(t.HdQuery!, t.Rgba)));
             var open = HdPack.Open(HdNearestPack.Write(System.IO.Path.Combine(root, "world"), "world", 4, frames));
             source = new HdFrameSource(open.Pack ?? throw new InvalidOperationException("HD_WORLD_PACK:" + open.Status));
+            // ARC-RENDER-2175: gate closed, the six statics and actor draw Legacy as WorldDormant with nothing decoded.
+            canvas.WorldSpritesFromPack = false;
+            canvas.SetVisualProfile(VisualProfile.Hd, source, HdDeviceBudget.Ceiling(4));
+            await Settle(); await Settle();
+            if (canvas.WorldHdStats.Hd != 0 || canvas.WorldHdStats[HdFallbackReason.WorldDormant] != 6 || canvas.WorldHdStats.Fallback != 6 || source.CompletedCount != 0 || canvas.HdResidentCount != 0)
+                throw new InvalidOperationException("HD_WORLD_DORMANT:" + canvas.WorldHdStats.Format());
+            var dormantShots = await Capture();
+            for (var t = 0; t < legacy.Length; t++)
+                if (!legacy[t].AsSpan().SequenceEqual(dormantShots[t])) throw new InvalidOperationException("HD_WORLD_DORMANT_RASTER:" + t);
+            canvas.WorldSpritesFromPack = true;
             canvas.SetVisualProfile(VisualProfile.Hd, source, HdDeviceBudget.Ceiling(4));
             for (var wait = 0; source.PendingCount > 0 || canvas.WorldHdStats.Hd != 6; wait++)
             {
@@ -266,7 +289,7 @@ public static partial class TerrainViewerSelfTest
             canvas.ClearScene(); viewport.QueueFree(); source?.Dispose();
             System.IO.Directory.Delete(root, true);
         }
-        GD.Print("ARC-RENDER-014 self-test WORLD HD PASS statics+actor 6 HD, nearest-4x identity and per-parent recoloured oracle at zoom 1/2/3, republish keeps HD" + (native ? "" : "; pixels NOT_VERIFIED headless"));
+        GD.Print("ARC-RENDER-014 self-test WORLD HD PASS gate closed = 6 WorldDormant, statics+actor 6 HD, nearest-4x identity and per-parent recoloured oracle at zoom 1/2/3, republish keeps HD" + (native ? "" : "; pixels NOT_VERIFIED headless"));
     }
 
     // The synthetic AREA scene of the HD self-tests: five bodies over one cell (a wall, sizes, a

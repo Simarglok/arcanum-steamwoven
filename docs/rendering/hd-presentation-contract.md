@@ -419,6 +419,16 @@ and the [viewer](terrain-viewer.md#hd-render-path-arc-render-014) have the detai
    ambient channel), wall fade, picking, routes, the wall check and Session read Legacy
    data only; Legacy chunk textures stay resident under both profiles.
 
+## Amendment ARC-RENDER-2175 (2026-11-15): the world sprite path is dormant
+
+Owner decision 2026-11-15: HD graphics is fonts, interface and light only; no HD character or world sprites (ARC-DEV-003 deferred). The binding above
+stays in the code, but the canvas gate `TerrainCanvas.WorldSpritesFromPack` (default off) turns every character, object, wall and level-0 terrain-chunk
+candidate into a Legacy draw with the typed reason `WorldDormant` before any question is asked of the frame source: nothing is decoded or made resident,
+the switch commits at once, the plan, light, picking and Session are untouched, and the relit look (a function of the profile) still runs on the 1x frames.
+Interface frames and fonts bind through `InterfaceHd` and are not affected. The developer variable `ARC_HD_WORLD_SPRITES=1` (read when the canvas is made; not
+a setting) reopens the gate: the identity and toggle self-tests and smokes use it on their synthetic or temporary sprite packs. The stage `hd` without the
+variable checks the gate itself (HD 0, Legacy = `WorldDormant`, raster equal to Legacy, no decode) and then runs the identity oracle with the gate opened.
+
 ## Not ready / out of scope
 
 - The runtime HD path for characters and objects (ARC-RENDER-014) and the setting, its

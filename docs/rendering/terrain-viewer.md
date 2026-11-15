@@ -1493,7 +1493,7 @@ also checks that F8 brings back the PC's items. Not verified: original inventory
   on-the-fly toggle ([below](#visual-profile-setting-and-toggle-arc-ui-006)). A diagnostic run may
   still override it for that run with environment variables: `ARC_HD_PACK=DIR` (one pack directory
   outside the repository; implies profile Hd), `ARC_VISUAL_PROFILE=hd|legacy` (`hd` without a pack
-  draws everything Legacy as `NoPack`) and `ARC_HD_BUDGET_PATH=FILE` (default
+  draws everything Legacy as `NoPack`; with a pack the world draws Legacy as `WorldDormant` unless `ARC_HD_WORLD_SPRITES=1`, ARC-RENDER-2175) and `ARC_HD_BUDGET_PATH=FILE` (default
   `user://hd_budget_v1.json`, which an automated run does not read (ARC-DEV-032); missing or invalid means the
   ceilings). The start line
   `ARC-RENDER-014 visual profile=…` names the pack id, scale and open status, never a path.
@@ -1537,7 +1537,7 @@ it is not part of a snapshot or quick save.
 
 **Interface art (ARC-UI-089, ARC-UI-095).** The HD redraws of the interface (the pack's `interface` slice, ARC-DEV-242) have their own
 switch: the launcher screen has three project lines after Rules (ARC-UI-143; until ARC-UI-146 they were the options window's Game page lines, which no longer has them, the page ends with Rules). **HD graphics: Off/On** requests the Legacy or HD
-profile exactly as the key does (saved, the same toggle protocol) and switches the sprites and terrain of an HD pack only.
+profile exactly as the key does (saved, the same toggle protocol); since ARC-RENDER-2175 (owner decision 2026-11-15) world sprites and terrain always draw Legacy under it (the pack's sprite path is dormant behind the developer variable `ARC_HD_WORLD_SPRITES=1`), so it switches the relit look and the pack's interface and font frames only.
 **HD interface: Off/On/Generated (experimental)** (ARC-UI-095, default Off) is a separate saved setting (the `hd interface` line of `arcanum.cfg`; a missing line reads it as Off); it draws the interface art alone and does not touch the visual profile, so the two can be
 combined freely (sprites HD with a Legacy interface, or the reverse). The third value (ARC-UI-140, `generatedInterface`, file version 5;
 version 1–4 files read it as off) is the experimental [generated interface](hd-interface-density.md#viewer-slice-s1-arc-ui-140): it keeps the

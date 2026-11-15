@@ -69,6 +69,9 @@ public partial class TerrainViewerApp
         if (DisplayServer.GetName() == "headless") throw new InvalidOperationException("HD_SMOKE_NATIVE_REQUIRED");
         var canvas = _canvas!; var hud = _hud!;
         var (profile, previous, budget) = (canvas.VisualProfile, canvas.HdSource, canvas.HdBudget);
+        // ARC-RENDER-2175: the sprite path is dormant. Without the developer override (ARC_HD_WORLD_SPRITES=1) this stage checks the gate
+        // (every candidate draws Legacy as WorldDormant, nothing decoded); the identity oracle then runs on the path with the gate opened.
+        var gateByEnvironment = canvas.WorldSpritesFromPack;
         var root = System.IO.Directory.CreateTempSubdirectory("arc-hd-smoke-").FullName;
         var hudVisible = hud.Visible;
         HdFrameSource? source = null;
@@ -84,7 +87,7 @@ public partial class TerrainViewerApp
             source = new HdFrameSource(open.Pack);
             var ceiling = HdDeviceBudget.Ceiling(4);
             hud.Visible = false;
-            var lines = new List<string>(); var pixels = 0L; long firstBindMs = -1;
+            var lines = new List<string>(); var gateChecks = new List<string>(); var pixels = 0L; long firstBindMs = -1;
             // ARC-RENDER-029: the views hold the camera, as the blend samples do (ARC-RENDER-023).
             await WithAreaSmokeCameraHeld(async () =>
             {
@@ -96,6 +99,21 @@ public partial class TerrainViewerApp
                     await NextFrameAsync(); await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
                     using var legacyImage = GetViewport().GetTexture().GetImage();
                     var legacy = legacyImage.GetData();
+                    if (!gateByEnvironment)
+                    {
+                        canvas.WorldSpritesFromPack = false;
+                        canvas.SetVisualProfile(VisualProfile.Hd, source, ceiling);
+                        await NextFrameAsync(); await NextFrameAsync();
+                        await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+                        var gated = stats();
+                        if (gated.Hd != 0 || gated.Fallback == 0 || gated[HdFallbackReason.WorldDormant] != gated.Fallback || source.PendingCount != 0)
+                            throw new InvalidOperationException($"HD_SMOKE_GATE:{name}:{gated.Format()}");
+                        using var gatedImage = GetViewport().GetTexture().GetImage();
+                        if (!legacy.AsSpan().SequenceEqual(gatedImage.GetData())) throw new InvalidOperationException($"HD_SMOKE_GATE_RASTER:{name}");
+                        gateChecks.Add($"{name} {gated.Format()}");
+                        canvas.SetVisualProfile(VisualProfile.Legacy, source, ceiling);
+                    }
+                    canvas.WorldSpritesFromPack = true;
                     var bind = Stopwatch.StartNew();
                     canvas.SetVisualProfile(VisualProfile.Hd, source, ceiling);
                     await NextFrameAsync();
@@ -121,8 +139,34 @@ public partial class TerrainViewerApp
                     pixels += legacy.Length / 4;
                     lines.Add($"{name} {current.Format()} bind={bind.ElapsedMilliseconds}ms");
                 }
+                // ARC-RENDER-2175: ARC_HD_GATE_CAPTURE=DIR (an absolute folder outside the repository) with ARC_HD_PACK keeps three PNGs of the first view for the
+                // before/after comparison: Legacy, the dormant sprite path of the startup pack, and the gated HD look (relit look on). Local files, never committed.
+                if (domain == "AREA" && OS.GetEnvironment("ARC_HD_GATE_CAPTURE") is { Length: > 0 } captureDir && previous?.Pack is not null)
+                {
+                    var (_, center0, zoom0) = views[0];
+                    _camera!.ResetWorld(center0, WorldViewport, zoom0);
+                    System.IO.Directory.CreateDirectory(captureDir);
+                    async Task Shot(string file, VisualProfile shotProfile, bool sprites)
+                    {
+                        canvas.WorldSpritesFromPack = sprites;
+                        canvas.SetVisualProfile(shotProfile, previous, budget ?? ceiling);
+                        SyncRelitLook(); PushAreaAmbient();
+                        await NextFrameAsync();
+                        for (var wait = 0; (previous.PendingCount > 0 || stats()[HdFallbackReason.Pending] > 0) && wait < 3600; wait++) await NextFrameAsync();
+                        await NextFrameAsync(); await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+                        using var image = GetViewport().GetTexture().GetImage();
+                        image.SavePng(System.IO.Path.Combine(captureDir, file));
+                        GD.Print($"ARC-RENDER-2175 capture {file} profile={shotProfile} sprites-from-pack={sprites} {stats().Format()}");
+                    }
+                    _relitLookHeld = false;
+                    await Shot("legacy.png", VisualProfile.Legacy, false);
+                    await Shot("before-hd-sprites.png", VisualProfile.Hd, true);
+                    await Shot("after-gated.png", VisualProfile.Hd, false);
+                    _relitLookHeld = true; SyncRelitLook(); PushAreaAmbient();
+                }
                 return lines.Count;
             });
+            if (gateChecks.Count > 0) GD.Print($"ARC-RENDER-2175 native-smoke {domain} HD world gate PASS (world art Legacy, nothing decoded) | " + string.Join(" | ", gateChecks));
             GD.Print($"ARC-RENDER-014 native-smoke {domain} HD identity PASS views={views.Count} pixels={pixels} pack frames={frames.Length} ({census}) "
                 + $"png={packBytes} bytes write={write.ElapsedMilliseconds}ms first-bind={firstBindMs}ms HD textures={canvas.HdResidentCount}/{canvas.HdResidentBytes} bytes "
                 + $"(terrain chunks {canvas.HdTerrainResidentCount}/{canvas.HdTerrainResidentBytes} bytes) "
@@ -131,6 +175,7 @@ public partial class TerrainViewerApp
         finally
         {
             hud.Visible = hudVisible;
+            canvas.WorldSpritesFromPack = gateByEnvironment;
             canvas.SetVisualProfile(profile, previous, budget);
             _relitLookHeld = false;
             source?.Dispose();
