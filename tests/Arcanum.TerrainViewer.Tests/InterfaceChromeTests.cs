@@ -774,6 +774,9 @@ public sealed class InterfaceChromeTests
     {
         var recipe = InterfaceChromeRecipes.All.Single(r => r.File == "mapmain.art");
         Assert.AreEqual(ChromeKind.Panel, recipe.Kind);
+        // ARC-UI-1810: the portrait's ring is the generated round view (the lens 198's corners carry the same ring), not a kept picture.
+        Assert.AreEqual(1, recipe.Parts.OfType<ChromeRoundView>().Count());
+        Assert.IsFalse(recipe.Parts.OfType<ChromeKeep>().Any(keep => keep.X < 119 && keep.Y < 119 && keep.X + keep.Width > 19 && keep.Y + keep.Height > 19), "no kept picture over the portrait's ring");
         // 140 and 199 (the waypoint panel's pieces) and 219 and 220 (the two landscape pictures) are drawn by no window of the viewer; the picture stays art.
         foreach (var file in new[] { "wp_main.art", "WP_Cover.ART", "Tmp_Day.ART", "Tmp_Nght.ART" })
             Assert.IsNull(InterfaceChromeRecipes.For(HdInterfaceKey.Query(HdInterfaceKey.Identity(file, new byte[] { 1 }), 0, 1, 1, new byte[4])), file);
@@ -827,6 +830,127 @@ public sealed class InterfaceChromeTests
         Assert.IsTrue(Pixel(one, 800, 727, 168).R < 12 && Pixel(one, 800, 727, 200).R < 12, "the two readout plates are black");
     }
 
+    // ARC-UI-1810: the world map window's buttons (811 Zoom, 812 Whole map, 813 Travel, 139 compass) and the lens 198.
+    [TestMethod]
+    public void The_map_window_buttons_have_recipes_a_lamp_ball_and_a_kept_map_picture_for_zoom_and_whole_map()
+    {
+        foreach (var (file, ballY, keepX) in new[] { ("MapZoomBut.ART", 29.0, 45), ("MapWholeBut.ART", 28.5, 53) })
+        {
+            var recipe = Recipe(file);
+            Assert.AreEqual(ChromeKind.Panel, recipe.Kind, file);
+            var ball = recipe.Parts.OfType<ChromeBall>().Single();
+            Assert.AreEqual((21.5, ballY), (ball.CenterX, ball.CenterY), file);
+            var keep = recipe.Parts.OfType<ChromeKeep>().Single();
+            Assert.AreEqual(keepX, keep.X, file);
+            // The lamp's circle and the kept map picture do not touch.
+            Assert.IsTrue(ball.CenterX + ball.Radius + 2 <= keep.X, file);
+        }
+        Assert.AreEqual(ChromeKind.Button, Recipe("MapTravelBut.ART").Kind);
+        Assert.IsFalse(Recipe("MapTravelBut.ART").KeepFace);
+        Assert.AreEqual(ChromeKind.Button, Recipe("navbutton.art").Kind);
+        Assert.IsTrue(Recipe("navbutton.art").KeepFace, "the compass ball's own picture stays inside the generated rim");
+    }
+
+    // A synthetic Zoom or Whole map button of the real size: a lamp circle (radius 21.5, a dim green dot in the middle) and a cream map picture box on the right; the frame index picks a lit dot.
+    private static byte[] LampButton(int width, double lampY, int mapX, bool lit)
+    {
+        const int h = 56;
+        var rgba = new byte[width * h * 4];
+        void Put(int x, int y, byte r, byte g, byte b) { var i = (y * width + x) * 4; (rgba[i], rgba[i + 1], rgba[i + 2], rgba[i + 3]) = (r, g, b, 255); }
+        for (var y = 0; y < h; y++)
+        for (var x = 0; x < width; x++)
+        {
+            double dx = x + 0.5 - 21.5, dy = y + 0.5 - lampY;
+            var d = Math.Sqrt(dx * dx + dy * dy);
+            if (d < 21.5) { if (d < 7) Put(x, y, 20, lit ? (byte)230 : (byte)110, 20); else Put(x, y, 30, 28, 14); }
+            else if (x >= mapX) Put(x, y, 220, 200, 150);
+        }
+        return rgba;
+    }
+
+    [TestMethod]
+    public void The_lamp_buttons_paint_a_generated_lamp_ball_keep_the_lamp_and_the_map_picture_and_light_the_other_side_when_down()
+    {
+        foreach (var (file, width, lampY, mapX) in new[] { ("MapZoomBut.ART", 111, 29.0, 45), ("MapWholeBut.ART", 106, 28.5, 53) })
+        {
+            var recipe = Recipe(file);
+            foreach (var scale in new[] { 1.0, 1.5, 2.0, 4.0 })
+            {
+                var idle = InterfaceChromeRenderer.Render(recipe, width, 56, LampButton(width, lampY, mapX, false), [], 0, scale);
+                var down = InterfaceChromeRenderer.Render(recipe, width, 56, LampButton(width, lampY, mapX, true), [], 1, scale);
+                var (pw, ph) = InterfaceChromeRenderer.PixelSize(width, 56, scale);
+                Assert.AreEqual(pw * ph * 4, idle.Length, $"{file} at {scale}");
+                CollectionAssert.AreEqual(idle, InterfaceChromeRenderer.Render(recipe, width, 56, LampButton(width, lampY, mapX, false), [], 0, scale), $"{file} deterministic at {scale}");
+                int At(double v) => (int)(v * scale);
+                // The silhouette is the Legacy one: the lamp's middle and the map picture are opaque, the gap between them and the corner outside the circle are clear.
+                Assert.AreEqual(255, Pixel(idle, pw, At(21.5), At(lampY)).A, $"{file} lamp at {scale}");
+                Assert.AreEqual(255, Pixel(idle, pw, At(mapX + 10), At(28)).A, $"{file} map at {scale}");
+                // The map picture's first column is the art's own (the lamp's reach must stop short of it), at every scale.
+                var first = Pixel(idle, pw, (int)Math.Ceiling(mapX * scale), At(2));
+                Assert.AreEqual((255, 220, 200, 150), (first.A, first.R, first.G, first.B), $"{file} the map's first column at {scale}");
+                Assert.AreEqual(0, Pixel(idle, pw, At(mapX - 1), At(28)).A, $"{file} gap at {scale}");
+                Assert.AreEqual(0, Pixel(idle, pw, At(1), At(lampY - 20)).A, $"{file} outside the lamp's circle at {scale}");
+                // The lamp's dot and the map picture are the art's own pixels (the frame's dim or lit green, the cream).
+                var dot = Pixel(idle, pw, At(21.5), At(lampY)); var lit = Pixel(down, pw, At(21.5), At(lampY));
+                Assert.IsTrue(dot.G == 110 && lit.G == 230, $"{file} the lamp's own light is kept ({dot}, {lit}) at {scale}");
+                Assert.AreEqual((220, 200, 150), (Pixel(idle, pw, At(mapX + 10), At(28)).R, Pixel(idle, pw, At(mapX + 10), At(28)).G, Pixel(idle, pw, At(mapX + 10), At(28)).B), $"{file} map picture at {scale}");
+                // The face between the rim and the dot is the generated dark glass, not the Legacy pixel (30, 28, 14).
+                var face = Pixel(idle, pw, At(21.5 + 13), At(lampY));
+                Assert.IsTrue(face.R != 30 || face.G != 28 || face.B != 14, $"{file} generated face at {scale}");
+                // The rim's light is on the other side in the down frame: the upper left is lit when idle, the lower right when down.
+                int Sum(byte[] a, int x, int y) { var p = Pixel(a, pw, x, y); return p.R + p.G + p.B; }
+                var (ux, uy, lx, ly) = (At(21.5 - 13), At(lampY - 13), At(21.5 + 13), At(lampY + 13));
+                Assert.IsTrue(Sum(idle, ux, uy) > Sum(idle, lx, ly), $"{file} idle is lit on the upper left at {scale}");
+                Assert.IsTrue(Sum(down, ux, uy) < Sum(down, lx, ly), $"{file} down is lit on the lower right at {scale}");
+            }
+        }
+    }
+
+    [TestMethod]
+    public void The_travel_and_compass_balls_and_the_lens_follow_their_silhouette_at_fractional_scales()
+    {
+        // A round 57 x 57 Travel ball and a 45 x 45 compass ball: the silhouette stays, the down frame differs from idle; the compass keeps the art's whole picture inside the rim.
+        foreach (var (file, size) in new[] { ("MapTravelBut.ART", 57), ("navbutton.art", 45) })
+        {
+            var legacy = new byte[size * size * 4];
+            for (var y = 0; y < size; y++)
+            for (var x = 0; x < size; x++)
+            {
+                double dx = x + 0.5 - size / 2.0, dy = y + 0.5 - size / 2.0;
+                var i = (y * size + x) * 4;
+                (legacy[i], legacy[i + 1], legacy[i + 2], legacy[i + 3]) = dx * dx + dy * dy < size * size / 4.0 ? ((byte)120, (byte)30, (byte)20, (byte)255) : ((byte)0, (byte)0, (byte)0, (byte)0);
+            }
+            var recipe = Recipe(file);
+            foreach (var scale in new[] { 1.0, 1.5, 2.0, 2.4 })
+            {
+                var idle = InterfaceChromeRenderer.Render(recipe, size, size, legacy, [], 0, scale);
+                var down = InterfaceChromeRenderer.Render(recipe, size, size, legacy, [], 1, scale);
+                var (pw, ph) = InterfaceChromeRenderer.PixelSize(size, size, scale);
+                Assert.AreEqual(255, Pixel(idle, pw, pw / 2, ph / 2).A, $"{file} middle at {scale}");
+                Assert.AreEqual(0, Pixel(idle, pw, 0, 0).A, $"{file} corner at {scale}");
+                CollectionAssert.AreNotEqual(idle, down, $"{file} down differs at {scale}");
+                var middle = Pixel(idle, pw, pw / 2, ph / 2);
+                Assert.AreEqual(recipe.KeepFace, middle.R == 120 && middle.G == 30 && middle.B == 20, $"{file} keeps the art's picture only with KeepFace at {scale}");
+            }
+        }
+        // The lens 198: a transparent circle (radius 44.5) in an 89 x 89 frame is clear in the middle and gets the ring in its corners at every scale.
+        var lens = new byte[89 * 89 * 4];
+        for (var y = 0; y < 89; y++)
+        for (var x = 0; x < 89; x++)
+        {
+            double dx = x + 0.5 - 44.5, dy = y + 0.5 - 44.5;
+            var i = (y * 89 + x) * 4;
+            (lens[i], lens[i + 1], lens[i + 2], lens[i + 3]) = dx * dx + dy * dy < 44.5 * 44.5 ? ((byte)0, (byte)0, (byte)0, (byte)0) : ((byte)90, (byte)60, (byte)30, (byte)255);
+        }
+        foreach (var scale in new[] { 1.0, 1.5, 2.0, 2.4 })
+        {
+            var a = InterfaceChromeRenderer.Render(Recipe("PCWinCvr.ART"), 89, 89, lens, [], 0, scale);
+            var (pw, _) = InterfaceChromeRenderer.PixelSize(89, 89, scale);
+            Assert.AreEqual(0, Pixel(a, pw, pw / 2, pw / 2).A, $"the lens is clear in the middle at {scale}");
+            Assert.AreEqual(255, Pixel(a, pw, 1, 1).A, $"and opaque in the corner at {scale}");
+        }
+    }
+
     // ARC-UI-1196: the logbook's frames (synthetic stand-ins of the frames' sizes and holes; no game art).
     private static readonly string[] LogbookFrames =
         ["logbooks_side.art", "book_main.art", "book_quests.art", "tab_note.art", "tab_quest.art", "tab_rep.art", "tab_blesscurse.art", "tab_egoinjure.art", "tab_backgrnd.art", "tab_keys.art", "pageturn_l.art", "pageturn_r.art"];
@@ -848,15 +972,16 @@ public sealed class InterfaceChromeTests
     }
 
     [TestMethod]
-    public void The_logbook_frames_have_recipes_laid_out_by_the_logbook_layout_and_the_shared_lens_has_none()
+    public void The_logbook_frames_have_recipes_laid_out_by_the_logbook_layout_and_the_shared_lens_is_the_round_views_ring()
     {
         var names = InterfaceChromeRecipes.All.Select(r => r.File).ToArray();
         CollectionAssert.IsSubsetOf(LogbookFrames, names);
         CollectionAssert.AllItemsAreUnique(names);
         Assert.AreEqual(ChromeHoles.None, Recipe("logbooks_side.art").Holes, "the side's square hole is the live view");
         Assert.AreEqual(ChromeHoles.Cloth, Recipe("book_quests.art").Holes);
-        // The lens art (pcwincvr, 198) is shared with the character sheet and the world map: no recipe here.
-        CollectionAssert.DoesNotContain(names, "pcwincvr.art");
+        // ARC-UI-1810: the lens art (pcwincvr, 198) is shared with the character sheet and the world map; its recipe is the round view's ring (the lenses 231 to 233's), found by the lowercase name.
+        Assert.IsNotNull(InterfaceChromeRecipes.For(HdInterfaceKey.Query(HdInterfaceKey.Identity("PCWinCvr.ART", new byte[] { 1 }), 0, 1, 1, new byte[4])));
+        CollectionAssert.AreEqual(new ChromePart[] { new ChromeRoundView(44.5, 44.5, 44.5) }, Recipe("PCWinCvr.ART").Parts.ToArray());
         var tabs = new[] { "tab_note.art", "tab_quest.art", "tab_rep.art", "tab_blesscurse.art", "tab_egoinjure.art", "tab_backgrnd.art", "tab_keys.art" };
         for (var i = 0; i < tabs.Length; i++)
         {

@@ -408,7 +408,7 @@ those of the player's `interface.mes` (the viewer's window ledgers carry them; e
 | ARC-UI-149 (issue #1194, ARC-UI-1194, [S4](#viewer-slice-s4-arc-ui-1194)) | loot, barter, steal | 234 loot, 235 barter and 825 follower barter, 349 loot doll, the three lenses 231–233; 337 barter doll and 341 hero doll cover (ARC-UI-1750, [S4](#viewer-slice-s4-arc-ui-1194)); the gamble boxes stay art | the same frame family as 148 with their own boxes |
 | ARC-UI-150 (issue #1195, ARC-UI-1195, [S5](#viewer-slice-s5-arc-ui-1195)) | character sheet | 22 main, 29 skills, 30 disciplines, 31 spells, tabs 34–36 and 568, the + and − buttons (23/24, 624/625, 647/648; 257/258 are `SP_Minus`/`SP_Plus`, which the sheet does not draw), the group and discipline buttons 302–313 | stat labels baked in the art stay pictures (kept rectangles); the schemes page 567 and the sixteen college tabs follow in [S5b](#viewer-slice-s5b-arc-ui-1784); the spell icons stay pictures |
 | ARC-UI-151 (issue #1196, ARC-UI-1196, [S7](#viewer-slice-s7-arc-ui-1196)) | logbook | 264 side, 260 book, 261 page art, the seven tabs 265–271, the page buttons 272 and 273; 263, 259 and 262 are not drawn by the logbook | a parchment page material; the lens 198 is shared and stays art |
-| ARC-UI-152 (issue #1197, ARC-UI-1197, [S6](#viewer-slice-s6-arc-ui-1197)) | world and town map | 138 main (the one frame the two windows draw); 140 and 199 (`wp_main`, `WP_Cover`, 130 × 152) and 219 and 220 (`Tmp_Day`, `Tmp_Nght`, two 501 × 365 landscape pictures) are drawn by no window of the viewer, so they are not built (issue #1811) | the map picture itself stays art; the buttons 811–813, the compass button 139, the lens 198 and the cover 217 are issue #1810 |
+| ARC-UI-152 (issue #1197, ARC-UI-1197, [S6](#viewer-slice-s6-arc-ui-1197)) | world and town map | 138 main (the one frame the two windows draw); 140 and 199 (`wp_main`, `WP_Cover`, 130 × 152) and 219 and 220 (`Tmp_Day`, `Tmp_Nght`, two 501 × 365 landscape pictures) are drawn by no window of the viewer, so they are not built (issue #1811) | the map picture itself stays art; the buttons 811–813, the compass button 139 and the lens 198 are ARC-UI-1810 ([S6b](#viewer-slice-s6b-arc-ui-1810)); the cover 217 and the pill under it are issue #2194 |
 | ARC-UI-153 (issue #1199, ARC-UI-1199, [S8](#viewer-slice-s8-arc-ui-1199)) | schematic window | 365 base, the eight discipline tabs 355, 356, 361–364, 368, 369, the two list buttons 6, the assemble button 357, the page buttons 372 and 373; the lens 231 is the barter window's recipe | the assemble face 358–360, the found and missing tints 830 and 831 and the record's own art stay art; the two gears with a mortarboard and a scroll (the list buttons' labels, painted in the base) stay pictures |
 | ARC-UI-154 (issue #1200, ARC-UI-1200, [S9](#viewer-slice-s9-arc-ui-1200)) | message window, spell and skill panes, Fate, Sleep | 354 message window, 8 spell pane, 274 skill pane (410 × 107), 292 Fate, 565 Sleep and the button 293; 7, 128, 200, 288, 290, 291 (the other modes' 410 × 107 rows), 218 is drawn by no window and is not built (issue #1870); 298 is the quantity pane, [S15](#viewer-slice-s15-arc-ui-1818); the dialog box 822–824 is issue #1819 | the Sleep window's art is 565 (ARC-UI-1363), not the 218 the plan named |
 | ARC-UI-1819 (issue #1819, [S10](#viewer-slice-s10-arc-ui-1819)) | common dialog box | 822 `DialogueBox` (325 × 136), the buttons 823 `Lil_Accept` and 824 `Lil_Cancel` (28 × 29, three frames) | the quit question and the death load question; the font 229 and the check and cross marks stay pictures |
@@ -493,7 +493,7 @@ ones (D9); only the drawing changes. The frames are the player's `interface.mes`
 
 - **Window.** `char_maint.art` (22, 800 × 400, wood): sunk pits for the name box, the info box (its divider line kept), the page area, the schemes tab's square and the eight stat boxes (a sunk
   box with a rivet at each end, in place of the original's brass ovals; the curled corners of the name and info boxes are not drawn, as in S3). Kept pictures: the stat labels (ST, CN, ..)
-  baked into the art, the close ring (the portrait's cover), the alignment gauge, the health and fatigue discs, the three lamp sockets and the experience ruler.
+  baked into the art, the close ring (the portrait's cover; its ring is generated since [S6b](#viewer-slice-s6b-arc-ui-1810), the medallion inside stays a kept picture), the alignment gauge, the health and fatigue discs, the three lamp sockets and the experience ruler.
 - **Pages.** `Skills_Window.ART` (29), `Disciplines_Window.ART` (30) and `char_spells.art` (31, 235 × 325) are a new `ChromeMaterial.Slate` (darker than the iron of the bars; the original's stone is
   nearly black) with a rim on all sides. Kept: the four skill rows with their gauge machinery, the four group sockets, the discipline header bar and its degree column, the sixteen college sockets;
   the spell icon squares are sunk pits.
@@ -536,12 +536,12 @@ Positions, sizes, alpha tests and hit areas are the Legacy ones (D9); only the d
 the recipe holds only rectangles and colours of our own. The world map and the town map are one window (`AreaWorldMapArtView`) that draws the one frame behind the 501 × 365 view, so one recipe covers both.
 
 - **Frame.** `mapmain.art` (138, 800 × 400, wood): the map view's hole gets the brass rim every hole gets; the two readout boxes (680, 157 and 680, 189, 94 × 22) are sunk black pits the window writes its
-  numbers in; the portrait's square hole is a round view (`ChromeRoundView`, centre 69.5, 68.5, radius 44.5), so the square gets no rim, and the ring around it is kept as a round picture, since the lens art 198
-  that is drawn over the hole carries the same ring in its corners and the two must meet. Kept pictures: the compass rose (the star, the four medallions and the four needles, each as small as it can be so
+  numbers in; the portrait's square hole is a round view (`ChromeRoundView`, centre 69.5, 68.5, radius 44.5), so the square gets no rim, and the ring around it was kept as a round picture, since the lens art 198
+  that is drawn over the hole carries the same ring in its corners and the two must meet (since [S6b](#viewer-slice-s6b-arc-ui-1810) the lens and the frame carry the same generated ring instead). Kept pictures: the compass rose (the star, the four medallions and the four needles, each as small as it can be so
   that little old wood comes with them), the route sketch (a kept rectangle inside a sunk plate, which hides the old wood's different grain), the Travel button's brass ring and the brass pill under the view's
-  bottom edge (the cover 217 and the compass button 139 are drawn on it). The holes of the zoom and whole-map buttons are covered by those buttons, which stay art.
-- **Not built.** The buttons Zoom 811, Whole map 812, Travel 813 and the compass button 139, the lens art 198 (shared with the character sheet and the logbook) and the bottom cover 217 stay art (issue
-  #1810). The plan listed 140 and 199 (`wp_main`, `WP_Cover`, 130 × 152) and 219 and 220 (`Tmp_Day`, `Tmp_Nght`, two 501 × 365 landscape pictures); no window of the viewer draws any of them and the exe's
+  bottom edge (the cover 217 and the compass button 139 are drawn on it). The holes of the zoom and whole-map buttons are covered by those buttons (art here, generated since S6b).
+- **Not built.** The buttons Zoom 811, Whole map 812, Travel 813 and the compass button 139, the lens art 198 (shared with the character sheet and the logbook) and the bottom cover 217 stayed art here
+  ([S6b](#viewer-slice-s6b-arc-ui-1810) drew all but the cover). The plan listed 140 and 199 (`wp_main`, `WP_Cover`, 130 × 152) and 219 and 220 (`Tmp_Day`, `Tmp_Nght`, two 501 × 365 landscape pictures); no window of the viewer draws any of them and the exe's
   world map window code names no art number, so they have no recipe (issue #1811 asks the exe). The map tiles, the continent picture and the town tiles stay pictures.
 - **Scale.** `AreaWorldMapArtView` claims every texture's scale source of its look at its draw (the window's own device scale: the frame scale times the canvas and viewport stretch; the window stands at the
   largest whole factor of the free area, 1 in a 1280 × 800 window and 2 in 1920 × 1080) and redraws, with its canvases, when a texture it claimed swaps in a painted frame or the device scale changes. The textures of
@@ -555,6 +555,26 @@ the recipe holds only rectangles and colours of our own. The world map and the t
   here and 2 in the 1920 × 1080 window, where the frame paints again. The composite (Legacy, HD pack art, Generated, for the world map and the town map) is in the task thread, not in git. Seen there: the
   generated wood is plainer than the painted one; the kept compass, sketch and ring show the old wood's grain a little (the sketch sits in a sunk plate on purpose); the zoom and whole-map buttons, still art,
   get a brass frame from the frame's holes around their lamp and picture.
+
+## Viewer slice S6b (ARC-UI-1810)
+
+S6b draws what S6 left out of the world map and town map window, except the bottom cover 217 (split to issue #2194), at the window's own device scale ([S3](#viewer-slice-s3-arc-ui-148)). Positions, sizes, alpha tests
+and hit areas stay the Legacy ones (D9). The art names are those of the player's `interface.mes` (read from the installed game for this slice; the recipes hold only rectangles and colours of our own).
+
+- **Zoom and Whole map** (811 `MapZoomBut`, 111 × 56; 812 `MapWholeBut`, 106 × 56; two frames each, the lamp lit in the second): each is a lamp (a circle of 43 × 42 pixels at the left) and a picture of a map beside it
+  (Zoom's carries a magnifier whose handle reaches left). A button recipe takes the whole art's rectangle as its silhouette, so these are panel recipes with two parts: `ChromeBall` (new: a generated button rim lit on the upper left, on
+  the lower right in the down frame, a dark glass face, the art's own pixels kept inside a radius of 8 so the lamp's dim or lit green stays the frame's own, and an anti-aliased circle for the alpha) and a kept rectangle for the
+  map picture (an illustration, like the portraits and spell icons).
+- **Travel** (813, 57 × 57) is the generic button recipe (the art is a blank dark glass ball, so there is no glyph); **the compass button** (139, 45 × 45, a red four-way arrow on a copper ball) is the ball recipe with `KeepFace`, like
+  the college tabs and the loot window's buttons (S16): the art's own ball inside a generated rim.
+- **Lens 198** (`PCWinCvr`, 89 × 89) is the round view's ring of the lenses 231 to 233 (`ChromeRoundView`, centre 44.5, 44.5, radius 44.5). It is drawn over the portrait by the character sheet, the logbook and this window,
+  so the frames that carry the same ring change with it: the map frame's portrait ring is no longer a kept picture (the round view's own ring is all that is left), and the character sheet's `char_maint` keeps the engraved medallion
+  inside the lens circle (a round keep of 89 × 89 at (12, 10)) and gets the generated ring around it in place of the kept old one (the sheet's close ring).
+- **Not built here.** The cover 217 (`Nav_Cvr`) and the brass pill under it in the frame (issue #2194); the markers, the map picture and the readout boxes' text.
+- **Checks.** `InterfaceChromeTests` (the recipes exist; the lamp ball keeps the lamp's light and the map picture, clears the corner and the gap, differs from the Legacy face, and its rim is lit on the other side in the down frame, at whole and
+  fractional scales; Travel and compass follow their silhouette and only the compass keeps the art's picture; the lens is clear in the middle and has the ring in its corners; the map frame has no kept picture over the portrait's ring). The native
+  `worldmap` stage's `ARC_AREA_WINDOW_ART` part (S6) now also asks the frame, the four buttons and the lens for their generated frames at `round(size × paint scale)` pixels, at the first size, at 1920 × 1080 and back, for both windows.
+- **Local observation.** See the owner recheck list for ARC-UI-1197 (updated: the buttons and the lens are generated); the composite (Legacy, HD pack art, Generated) is in the task thread, not in git.
 
 ## Viewer slice S7 (ARC-UI-1196)
 
@@ -576,7 +596,7 @@ by the logbook, so they have no recipe.
   it without a seam; the origins come from `AreaLogbookArtLayout`).
 - **Device scale.** `AreaLogbookArtView` claims the window's own device scale for its textures (the control's scale times the canvas transform's and the viewport's stretch; the bars' whole factor at the window's size) and redraws
   when a worker's finished frame replaces the one it drew, as the inventory area does ([S4](#viewer-slice-s4-arc-ui-1194)).
-- **Not generated.** The lens art 198 (`PCWinCvr`, the ring over the live view) is shared with the character sheet and the world map and has no recipe here; in the generated interface it stays the pack's frame (or Legacy). The
+- **Not generated.** The lens art 198 (`PCWinCvr`, the ring over the live view) is shared with the character sheet and the world map and had no recipe here ([S6b](#viewer-slice-s6b-arc-ui-1810) gave it the round view's ring, so the logbook's lens is generated now). The
   curly details of the original's cover, the clasp's real shape and the page grain are not drawn. A previous-page or next-page button is drawn only when there is such a page (the first spread has no previous one), so the
   native smoke covers the seven tabs and the three frames; the renderer's own tests cover the buttons, and they were not looked at in a native run (owner recheck step 3).
 - **Checks.** `InterfaceChromeTests` (the recipes and their origins from the layout; in-bounds, deterministic and opaque paint at whole and fractional scales; the side's hole stays plain and the cover's hole has a cloth edge;

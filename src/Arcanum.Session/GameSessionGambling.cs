@@ -8,10 +8,11 @@ namespace Arcanum.Session;
 /// <summary>
 /// A bet's inputs (ARC-UI-1740): the merchant's NPC, its Gambling level (the opposed value of the check), the merchant's item, the units that
 /// move (a stack's all) and the unit price the hero pays for it on a loss (the barter quote), the kinds a new stack and a new coin pile take, and
-/// the merchant's substitute container when the shown list is its.
+/// the merchant's substitute container when the shown list is its. ARC-UI-2139: with <paramref name="WornItem"/> the item is one the merchant wears (the doll view's
+/// lifted item): the move takes it off its slot (<see cref="GameSessionOwner.BarterBuy"/>'s worn move, over <paramref name="NpcWearer"/>), no container.
 /// </summary>
 public sealed record SessionGambleBet(string Npc, int MerchantLevel, string Item, int Count, int UnitPrice, SessionItemKind NewStackKind,
-    SessionItemKind PileKind, string? Container = null);
+    SessionItemKind PileKind, string? Container = null, bool WornItem = false, SessionNpcWieldScripts? NpcWearer = null);
 
 /// <summary>
 /// One bet's outcome: the disposition and failure, the skill check (null when refused before it ran), whether the hero won, the item's move (the
@@ -103,7 +104,8 @@ public sealed partial class GameSessionOwner
         InventoryMutationResult move;
         try
         {
-            move = BarterBuy(Version, bet.Npc, bet.Item, bet.Count, won ? 0 : bet.UnitPrice, bet.NewStackKind, bet.PileKind, heroInsert, npcInsert, scripts, bet.Container);
+            move = BarterBuy(Version, bet.Npc, bet.Item, bet.Count, won ? 0 : bet.UnitPrice, bet.NewStackKind, bet.PileKind, heroInsert, npcInsert, scripts, bet.Container,
+                wornItem: bet.WornItem, npcWearer: bet.NpcWearer);
         }
         catch { PutBack(); throw; }
         if (move.Disposition != GameSessionDisposition.Changed)

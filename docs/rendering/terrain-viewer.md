@@ -1467,7 +1467,7 @@ also checks that F8 brings back the PC's items. Not verified: original inventory
 - **Per-frame fallback.** Every outcome other than a valid HD frame draws Legacy with its
   reason: `NoPack`, `PackRejected`, `FrameMissing`, `SourceMismatch`, `FrameRejected`,
   `Invalid` (the pack reader's checks, including the mask check against this device's Legacy
-  alpha), `HdAxisLimit` (`N·(c + m) > 65534`), `HdBudget` and `Pending`. Nothing fails the
+  alpha), `HdAxisLimit` (`N·(c + m) > 65534`), `HdBudget`, `Pending` and, since ARC-RENDER-2175, `WorldDormant` (the gate that keeps the world Legacy under HD). Nothing fails the
   view, the map load or the session. The Legacy visible set stays resident under both
   profiles, so any fallback is immediate.
 - **Decoding and uploads.** Frames are resolved off the main thread (half the processors);
@@ -1496,7 +1496,7 @@ also checks that F8 brings back the PC's items. Not verified: original inventory
   on-the-fly toggle ([below](#visual-profile-setting-and-toggle-arc-ui-006)). A diagnostic run may
   still override it for that run with environment variables: `ARC_HD_PACK=DIR` (one pack directory
   outside the repository; implies profile Hd), `ARC_VISUAL_PROFILE=hd|legacy` (`hd` without a pack
-  draws everything Legacy as `NoPack`) and `ARC_HD_BUDGET_PATH=FILE` (default
+  draws everything Legacy as `NoPack`; with a pack the world draws Legacy as `WorldDormant` unless `ARC_HD_WORLD_SPRITES=1`, ARC-RENDER-2175) and `ARC_HD_BUDGET_PATH=FILE` (default
   `user://hd_budget_v1.json`, which an automated run does not read (ARC-DEV-032); missing or invalid means the
   ceilings). The start line
   `ARC-RENDER-014 visual profile=…` names the pack id, scale and open status, never a path.
@@ -1539,7 +1539,7 @@ plans, picking, routes, the wall check, light, animation, the clock and the Sess
 it is not part of a snapshot or quick save.
 
 **Interface art (ARC-UI-089, ARC-UI-095).** The HD redraws of the interface (the pack's `interface` slice, ARC-DEV-242) have their own
-switch (until ARC-UI-2174 its own setting): the launcher screen has three project rows after Rules (ARC-UI-143; until ARC-UI-146 they were the options window's Game page lines, which no longer has them, the page ends with Rules). **HD: Off/On** is one value (the `hd` line of `arcanum.cfg`; a missing line reads the older `hd interface` line, else Off): On draws the interface art and fonts from the pack and turns on the relit look, and requests the HD profile exactly as the key does (the same toggle protocol; what the profile draws of the world is the pack's sprite and terrain frames, which the world-art gate issue #2175 takes out of the HD option). Until then the owner's interface pack holds no sprite entries, so On changes no world sprite.
+switch (until ARC-UI-2174 its own setting): the launcher screen has three project rows after Rules (ARC-UI-143; until ARC-UI-146 they were the options window's Game page lines, which no longer has them, the page ends with Rules). **HD: Off/On** is one value (the `hd` line of `arcanum.cfg`; a missing line reads the older `hd interface` line, else Off): On draws the interface art and fonts from the pack and turns on the relit look, and requests the HD profile exactly as the key does (the same toggle protocol; what the profile draws of the world is the pack's sprite and terrain frames, which since ARC-RENDER-2175 (owner decision 2026-11-15) always draw Legacy under it: the pack's sprite path is dormant behind the developer variable `ARC_HD_WORLD_SPRITES=1`, so HD On switches the relit look and the interface and fonts only).
 The experimental row (ARC-UI-140, `generatedInterface`, file version 5;
 version 1–4 files read it as off, ARC-UI-2174: honoured only while HD is On) is the experimental [generated interface](hd-interface-density.md#viewer-slice-s1-arc-ui-140): it keeps the
 HD interface on and draws the chrome of the two HUD strips and the bar buttons by code, with the pictures from the HD redraw (else from the

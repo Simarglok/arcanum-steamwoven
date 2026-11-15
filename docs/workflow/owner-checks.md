@@ -43,6 +43,7 @@ language (the C# overlay) takes the `--json` output, or the same format: the ste
 `^(ARC-([A-Z]+)-(\d+))#([1-9]\d*)$` and the status words are fixed above. The exit code is 1 when a row cannot be read.
 
 Reading from a ref or a file never changes a checkout; a writer of statuses (`./arcanum qa apply`) is a later slice and
-works through a docs PR.
+works through a docs PR. The local page that lists the steps and records the owner's results is `./arcanum qa`
+([owner QA page](toolchain.md#owner-qa-page-arc-dev-2187), ARC-DEV-2187).
 
 Tests: `python3 -B -m unittest tools.local_dev.test_owner_checks` (synthetic lists only).
