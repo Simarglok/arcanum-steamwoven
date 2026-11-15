@@ -132,8 +132,6 @@ public partial class TerrainViewerApp
     private Task<AreaPortraitContent>? _warmPortraitTask;
     private (string Module, int Id, AreaPortraitContent? Known) _warmPortraitKey;
     private int _warmPortraitDoneId;
-    // True when the warm-up adopted the portrait content (with the follower frame art) before the follower panel existed.
-    private bool _portraitArtUnbound;
 
     private void TickPortraitWarmSafely(string module)
     {
@@ -174,10 +172,9 @@ public partial class TerrainViewerApp
         if (current is null)
         {
             _portraitModule = module; _portraitTextures.Clear();
+            // The follower frames' panel may not exist yet; LoadFollowerPortraits binds the art when it first meets the panel (BindPanelArt).
             _portraitContent = warmed;
-            // The follower frames' panel may not exist yet; LoadPortraits binds the art when it first meets the panel (_portraitArtUnbound).
-            if (_followerPortraits is { } panel) panel.Bind(InterfaceTextures(warmed.Art));
-            else _portraitArtUnbound = true;
+            BindPanelArt();
         }
         else _portraitContent = warmed;
         _warmPortraitDoneId = id;

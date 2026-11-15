@@ -52,6 +52,66 @@ class AdmissionRuleTests(unittest.TestCase):
         self.assertIsNone(run_queue.blocker(live[1], live[1:]))
         self.assertEqual(run_queue.blocker(live[2], live[1:])["seq"], 2)
 
+    # ARC-DEV-2272: the owner-is-playing mode
+    def playing_ticket(self, until: float | None = None) -> dict:
+        return {**ticket(0, "window", started=True, priority=run_queue.FRONT, lane=run_queue.SINGLE), "playing": True,
+                "since": time.time(), "until": until}
+
+    def test_playing_holds_ordinary_window_runs_only(self) -> None:
+        playing = self.playing_ticket()
+        window, headless, export = ticket(5, "window"), ticket(6, "headless"), ticket(7, "export")
+        for item in (ticket(8, "dotnet"), ticket(9, "quick")):
+            self.assertIsNone(run_queue.blocker(item, [playing, item]), item["kind"])
+        self.assertIs(run_queue.blocker(window, [playing, window]), playing)
+        self.assertIsNone(run_queue.blocker(headless, [playing, headless]))  # a run with no window goes on
+        self.assertIsNone(run_queue.blocker(export, [playing, export]))
+        self.assertIsNone(run_queue.blocker(window, [window]))  # no mode: unchanged
+        owner = ticket(4, "window", priority=run_queue.FRONT)  # ./arcanum area|world|map and package
+        self.assertIsNone(run_queue.blocker(owner, [playing, owner]))
+        low = ticket(3, "window", priority=run_queue.LOW)  # main-smoke
+        self.assertIs(run_queue.blocker(low, [playing, low]), playing)
+
+    def test_a_window_run_the_mode_holds_does_not_block_the_runs_behind_it(self) -> None:
+        playing = self.playing_ticket()
+        live = [playing, ticket(5, "window", at=1.0), ticket(6, "headless", at=2.0), ticket(7, "window", at=3.0)]
+        self.assertIsNone(run_queue.blocker(live[2], live))  # the held window ahead of it fills no Godot place
+        self.assertIs(run_queue.blocker(live[3], live), playing)
+
+    def test_the_mode_does_not_count_as_a_running_godot_run(self) -> None:
+        playing = self.playing_ticket()
+        self.assertEqual(run_queue._peers([playing, ticket(5, "window")], 5), 0)  # no peer for the lane accounting or the load guard
+        self.assertIn("owner playing", run_queue._describe(playing))
+        self.assertIn("--not-playing", run_queue._describe(playing))
+
+    def test_an_expired_mode_holds_nothing(self) -> None:
+        window = ticket(5, "window")
+        gone = self.playing_ticket(until=time.time() - 1)  # its holder takes a few seconds more to end
+        self.assertIsNone(run_queue.blocker(window, [gone, window]))
+        self.assertIsNotNone(run_queue.blocker(window, [self.playing_ticket(until=time.time() + 3600), window]))
+
+    def test_the_playing_ticket_reads_as_a_running_exclusive_godot_run_to_a_wrapper_of_before_the_mode(self) -> None:
+        # the contract that binds the wrappers of other checkouts: a readable ticket of this schema, started, a Godot kind,
+        # in the exclusive single lane; those wrappers do not know the flag, so every Godot run waits behind it
+        playing = self.playing_ticket()
+        self.assertIn(playing["kind"], run_queue.GODOT_KINDS)
+        self.assertEqual(run_queue.lane_of(playing), run_queue.SINGLE)
+        self.assertIn(run_queue.SINGLE, run_queue.EXCLUSIVE_LANES)
+        self.assertTrue(playing["startedAt"])
+
+    def test_the_mode_still_holds_the_windows_ahead_of_an_export_when_dotnet_runs_check_the_drain(self) -> None:
+        playing = self.playing_ticket()
+        base = [ticket(1, "dotnet", started=True), ticket(3, "export", at=2.0), ticket(4, "dotnet", at=3.0)]
+        without = [item for item in base]
+        self.assertEqual(run_queue.blocker(base[2], without)["seq"], 3)  # the export is draining: the dotnet run waits for it
+        held = [playing, *base, ticket(2, "window", at=1.0)]  # a window the mode holds, ahead of the export
+        self.assertEqual(run_queue.blocker(held[3], held)["seq"], 3)  # it does not hide the drain
+        self.assertEqual(run_queue.blocker(held[-1], held)["seq"], 0)
+
+    def test_playing_text_names_the_time_and_the_end(self) -> None:
+        now = 1_000_000.0
+        self.assertEqual(run_queue.playing_text({"since": now - 90, "until": now + 7500}, now), "for 1m30s, ends in 2h05m")
+        self.assertEqual(run_queue.playing_text({"since": now - 5, "until": None}, now), "for 0m05s, no time limit")
+
     def test_dotnet_runs_alongside_godot_and_each_other(self) -> None:
         live = [ticket(1, "window", started=True), ticket(2, "dotnet", started=True), ticket(3, "dotnet")]
         self.assertIsNone(run_queue.blocker(live[2], live))
@@ -749,8 +809,8 @@ class QueueRunTests(unittest.TestCase):
             return [item for _, item in run_queue.tickets(prune=False)]
 
     def runs(self) -> list[dict]:
-        """The live tickets of runs: the pause (a ticket the queue counts as a running export) is not one."""
-        return [item for item in self.live() if not item.get("paused")]
+        """The live tickets of runs: the pause (a ticket the queue counts as a running export) and the playing mode are not."""
+        return [item for item in self.live() if not item.get("paused") and not item.get("playing")]
 
     def wrapper(self, kind: str, name: str, command: list[str], *, timeout: str | None = None,
                 environment: dict | None = None, estimate: float | None = None, cwd: Path | None = None) -> subprocess.Popen:
@@ -1108,6 +1168,125 @@ class QueueRunTests(unittest.TestCase):
             self.assertEqual(process.wait(30), 0)  # a run holding a place keeps working: its nested run is not queued
         finally:
             run_queue.set_paused(False)
+
+    # ARC-DEV-2272: the owner-is-playing mode with real wrappers
+    def test_playing_holds_window_runs_while_headless_quick_and_dotnet_runs_go_on(self) -> None:
+        self.assertTrue(run_queue.set_playing(True, 60.0, "test"))
+        try:
+            self.assertEqual(run_queue.playing_state()["by"], "test")
+            window = self.queued("window", "w", 0.1)
+            self.until(lambda: len(self.runs()) == 1)
+            for kind in ("headless", "quick", "dotnet"):
+                self.queued(kind, kind[0], 0.1)
+            self.started("h", "q", "d")  # the runs without a window start and run, with the window run queued first
+            time.sleep(1.5)  # several polls: the window run neither starts nor leaves
+            self.assertNotIn("start w ", self.log.read_text())
+            self.assertIsNone(window.poll())
+            lines = run_queue.status()
+            self.assertTrue(lines[0].startswith("PLAYING") and "--not-playing" in lines[0], lines)
+            self.assertTrue(any(line.startswith("waiting #") and line.endswith("(owner playing)") for line in lines), lines)
+        finally:
+            self.assertTrue(run_queue.set_playing(False))
+        self.finish()
+        self.assertIn("end w", self.events())
+        self.assertFalse(run_queue.playing_file().exists())
+        self.assertFalse(any(line.startswith("PLAYING") for line in run_queue.status()))
+
+    def test_a_waiting_window_run_says_the_owner_is_playing_and_starts_when_the_mode_ends(self) -> None:
+        run_queue.set_playing(True, 60.0, "test")
+        code = f"open({str(self.log)!r}, 'a').write('start w 0\\n')"
+        process = subprocess.Popen([sys.executable, "-B", str(ARCANUM), "run", "--kind", "window", "--start-within", "0", "--",
+                                    sys.executable, "-c", code], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        self.processes.append(process)
+        self.until(lambda: len(self.runs()) == 1)
+        time.sleep(1.0)
+        self.assertIsNone(process.poll())
+        run_queue.set_playing(False)
+        _, stderr = process.communicate(timeout=60)
+        self.assertEqual(process.returncode, 0, stderr)
+        self.assertIn("waiting-for=owner playing", stderr)
+        self.assertIn("./arcanum queue --not-playing", stderr)
+        self.assertIn("start w", self.log.read_text())
+
+    def test_the_mode_ends_by_itself_at_its_limit(self) -> None:
+        run_queue.set_playing(True, 0.04, "test")  # 2.4 s
+        state = run_queue.playing_state()
+        process = self.queued("window", "w", 0.1)
+        self.finish()  # starts once the limit has passed, nobody ended the mode
+        self.assertEqual(process.returncode, 0)
+        self.assertIn("end w", self.events())
+        self.assertGreaterEqual(self.events()["start w"], state["until"] - 1.0)  # not before the limit
+        self.assertIsNone(run_queue.playing_state())
+
+    def test_a_window_run_already_holding_its_place_finishes_when_the_mode_starts(self) -> None:
+        running = self.held("window", "a")
+        self.started("a")
+        run_queue.set_playing(True, 60.0, "test")
+        try:
+            self.release()
+            self.assertEqual(running.wait(30), 0)
+        finally:
+            run_queue.set_playing(False)
+
+    def test_playing_again_renews_the_limit_and_ending_it_twice_is_harmless(self) -> None:
+        run_queue.set_playing(True, 10.0, "test")
+        first = run_queue.playing_state()["until"]
+        self.assertTrue(run_queue.set_playing(True, 0, "test"))  # no limit
+        try:
+            state = run_queue.playing_state()
+            self.assertIsNone(state["until"])
+            self.assertGreater(first, state["since"])
+            self.assertIn("no time limit", run_queue.playing_text(state))
+        finally:
+            self.assertTrue(run_queue.set_playing(False))
+        self.assertFalse(run_queue.set_playing(False))
+        with self.assertRaises(ValueError):
+            run_queue.set_playing(True, -1)
+
+    def test_a_playing_file_nobody_holds_is_stale(self) -> None:
+        run_queue._open_folder()
+        run_queue.playing_file().write_text(json.dumps({"schema": run_queue.SCHEMA, "seq": 0, "kind": "window", "playing": True}))
+        self.assertIsNone(run_queue.playing_state())
+        with run_queue._QueueLock():
+            self.assertEqual(run_queue.tickets(prune=True), [])
+        self.assertFalse(run_queue.playing_file().exists())
+
+    def test_the_command_turns_the_mode_on_and_off_and_refuses_bad_combinations(self) -> None:
+        def run(*args: str) -> subprocess.CompletedProcess:
+            return subprocess.run([sys.executable, "-B", str(ARCANUM), "queue", *args], capture_output=True, text=True,
+                                  cwd=REPO, timeout=60)
+        try:
+            on = run("--playing", "--for", "30m")
+            self.assertEqual(on.returncode, 0, on.stderr)
+            self.assertIn("no window run starts", on.stdout)
+            self.assertRegex(on.stdout, r"ends in (30m00|29m5\d)s")
+            self.assertIn("PLAYING", on.stdout)  # the queue listing follows
+            state = run_queue.playing_state()
+            self.assertAlmostEqual(state["until"] - state["since"], 1800, delta=2)
+        finally:
+            off = run("--not-playing")
+        self.assertEqual(off.returncode, 0, off.stderr)
+        self.assertIn("window runs start again", off.stdout)
+        self.assertIsNone(run_queue.playing_state())
+        self.assertIn("was not playing", run("--not-playing").stdout)
+        self.assertEqual(run("--for", "1h").returncode, 2)  # --for goes with --playing
+        self.assertEqual(run("--not-playing", "--for", "1h").returncode, 2)
+        self.assertEqual(run("--pause", "--for", "5").returncode, 2)
+        self.assertFalse(run_queue.pause_file().exists())  # refused before the pause was set
+        self.assertEqual(run("--wait", "--playing").returncode, 2)
+        self.assertNotEqual(run("--playing", "--pause").returncode, 0)  # one of the two
+        self.assertNotEqual(run("--playing", "--for", "soon").returncode, 0)
+        self.assertIsNone(run_queue.playing_state())
+        self.assertFalse(run_queue.pause_file().exists())
+
+    def test_wait_ignores_the_playing_mode(self) -> None:
+        run_queue.set_playing(True, 60.0, "test")
+        try:
+            done = subprocess.run([sys.executable, "-B", str(ARCANUM), "queue", "--wait"], capture_output=True, text=True,
+                                  cwd=REPO, timeout=60)
+            self.assertEqual((done.returncode, done.stdout.strip()), (0, "queue empty"))
+        finally:
+            run_queue.set_playing(False)
 
     def waiter(self, *args: str) -> subprocess.Popen:
         return subprocess.Popen([sys.executable, "-B", str(ARCANUM), "queue", *args], stdout=subprocess.PIPE,

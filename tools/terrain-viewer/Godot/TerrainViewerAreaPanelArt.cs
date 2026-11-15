@@ -19,6 +19,8 @@ public partial class TerrainViewerApp
     private void LoadFollowerPortraits(IReadOnlyList<AreaCompanion> followers)
     {
         LoadPortraits(followers.Select(c => AreaPortraits.Stored(c.Speaker.Row)).OfType<int>().Distinct().ToArray());
+        // ARC-UI-2284: content read before the panel existed (a save window's portraits, a warm-up) has the panel bound the first time the panel meets it.
+        BindPanelArt();
         // ARC-UI-1786: the order menu's words come from the same load (mes\follower_ui.mes).
         if (_followerPortraits is { } panel) panel.MenuTexts = _portraitContent?.Menu;
     }
@@ -29,19 +31,28 @@ public partial class TerrainViewerApp
         var module = _arguments?.ModulePath;
         if (_portraitContent is null || module != _portraitModule)
         {
-            _portraitModule = module; _portraitTextures.Clear(); _portraitArtUnbound = false;
+            _portraitModule = module; _portraitTextures.Clear();
             _portraitContent = SelfTestBootstrap || module is null ? AreaPortraitContent.Empty("self-test: no game folder") : AreaPortraitContent.Load(module, ids);
-            _followerPortraits?.Bind(InterfaceTextures(_portraitContent.Art));
+            BindPanelArt();
             GD.Print($"ARC-UI-024 follower frames art ready={_portraitContent.ArtReady} {_portraitContent.Detail}");
             return;
         }
         if (SelfTestBootstrap || module is null) return;
-        // ARC-DEV-369: content a warm-up adopted before the follower panel existed gets its frame art bound now.
-        if (_portraitArtUnbound && _followerPortraits is { } panel) { panel.Bind(InterfaceTextures(_portraitContent.Art)); _portraitArtUnbound = false; }
         var wanted = ids.Where(id => !_portraitContent.Portraits.ContainsKey(id)).ToArray();
         if (wanted.Length == 0) return;
         _portraitContent = AreaPortraitContent.Load(module, wanted, _portraitContent);
         GD.Print($"ARC-UI-024 portraits {string.Join(",", wanted)}: {string.Join("; ", wanted.Select(id => _portraitContent.Portraits.TryGetValue(id, out var file) ? file.Status + " " + file.Detail : "not read"))}");
+    }
+
+    private IReadOnlyDictionary<int, AreaInterfaceArtLoad>? _panelArtBound;
+
+    /// <summary>ARC-UI-2284 (ARC-DEV-369 before it): gives the follower panel the frame and button art of the content read, once per content, whenever both exist (the content may be read
+    /// first by a save window's portraits or a warm-up, before any follower made the panel; a panel that missed it drew the dark fallback plates with their words).</summary>
+    private void BindPanelArt()
+    {
+        if (_followerPortraits is not { } panel || _portraitContent is not { } content || ReferenceEquals(_panelArtBound, content.Art)) return;
+        panel.Bind(InterfaceTextures(content.Art));
+        _panelArtBound = content.Art;
     }
 
     /// <summary>A follower's portrait texture (its stored portrait's small image), or null when it has none or it did not read.</summary>

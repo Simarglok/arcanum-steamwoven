@@ -2176,8 +2176,9 @@ and layout (below), the other windows the project's.
   (`ARC-DEV-381 early main menu open`; the probe's `start-to-menu` in the packaged build went from the whole map's publication to about
   1.6 s on a loaded Mac, see the diagnosis). The menu is the same one: its windows, texts, art, keys and back moves are unchanged. No scene
   exists yet, so what opens a window the menu itself draws works at once (Single Player, New Game, the pre-made browser, Options, Exit
-  Game), and a choice that needs the scene is **held**: Start in the browser and New Character (Load Game and Last Save were held too until
-  ARC-DEV-387, below). A held choice shows
+  Game, the New Character window: ARC-UI-2282), and a choice that needs the scene is **held**: Start in the browser and the New Character
+  window's Accept, which opens the character editor on the scene's draft (Load Game and Last Save were held too until ARC-DEV-387, below; the
+  New Character window itself was held until ARC-UI-2282: it needs only the generic hero read from the module and starts the shop map's own load). A held choice shows
   a note, the menu takes no other input, Escape (or the browser's Back arrow) takes the choice back, and the scene's publication attaches the menu to
   it (`ARC-DEV-381 early main menu attached to the scene`): the menu takes the scene's answer for a new game (`NewGameRefusal`), plays the
   shop map's pair and runs the held choice as if it were pressed then. A start scene that fails to load closes the menu and shows the
