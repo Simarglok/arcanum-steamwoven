@@ -1,0 +1,127 @@
+using System.Buffers.Binary;
+using Arcanum.Data.Area;
+using Arcanum.Data.Scripts;
+using Arcanum.Scripting.Scr;
+using Arcanum.Session;
+using Arcanum.TerrainViewer.Core;
+using Arcanum.World;
+using Microsoft.VisualStudio.TestTools.UnitTesting;
+
+namespace Arcanum.TerrainViewer.Tests;
+
+/// <summary>
+/// ARC-WORLD-2038 (ledger TT20): a teleport (44) or fade-and-teleport (102) in a script of the talk and deferred-call host (<see cref="AreaScriptHost.Apply"/>, reached by <see cref="AreaConversationHost.RunCall"/> and by a dialog line's run): the hero's is a request
+/// the viewer queues as the map transfer after the run applied, an NPC's goes to the shown map's use host as the #1837 request, a run that moves both or one the hosts cannot take is left unapplied whole. Scripts, entities and numbers are invented.
+/// </summary>
+[TestClass]
+public sealed class AreaScriptTeleportCallTests
+{
+    private const int HeroTeleport = 920, HeroFade = 921, NpcTeleport = 922, Both = 923;
+
+    private static byte[] Program(params (int Action, (byte Kind, int Value)[] Operands)[] lines)
+    {
+        var bytes = new byte[64 + lines.Length * 132];
+        BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(52), lines.Length);
+        BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(56), lines.Length);
+        for (var line = 0; line < lines.Length; line++)
+        {
+            var clause = bytes.AsSpan(64 + line * 132 + 44, 44);
+            BinaryPrimitives.WriteInt32LittleEndian(clause, lines[line].Action);
+            for (var i = 0; i < lines[line].Operands.Length; i++)
+            {
+                clause[4 + i] = lines[line].Operands[i].Kind;
+                BinaryPrimitives.WriteInt32LittleEndian(clause[(12 + 4 * i)..], lines[line].Operands[i].Value);
+            }
+        }
+        Assert.AreEqual(ScrReadStatus.Read, ScrProgram.Read(bytes).Status);
+        return bytes;
+    }
+
+    private const byte Triggerer = 0, Attachee = 1, Number = 3;
+
+    private static void With(Action<AreaConversationHost, GameSessionOwner, Arcanum.Data.Area.AreaSnapshot, ScriptContent, SessionScriptRole> test)
+    {
+        var root = Directory.CreateTempSubdirectory("arc-world-2038-");
+        try
+        {
+            File.WriteAllBytes(Path.Combine(root.FullName, "tig.dat"), AreaOwnerFixture.Dat());
+            Directory.CreateDirectory(Path.Combine(root.FullName, "modules"));
+            File.WriteAllBytes(Path.Combine(root.FullName, "modules", "Syn.dat"), AreaOwnerFixture.Dat());
+            Directory.CreateDirectory(Path.Combine(root.FullName, "scr"));
+            using var source = new AreaOwnerFixture(motionBodies: true);
+            var snapshot = source.Owner.LoadStrict();
+            // 920: the triggerer to map 5000 (30, 40) (script 2375's shape with the hero); 921: a fade of 2 s and the teleport (script 1061's); 922: the attachee (script 3072's); 923: both.
+            File.WriteAllBytes(Path.Combine(root.FullName, "scr", "00920hero.scr"), Program((ScrCatalogue.Action.Teleport, [(Triggerer, 0), (Number, 4999 + snapshot.RuntimeMap), (Number, 30), (Number, 40)]), (ScrCatalogue.Action.ReturnRunDefault, [])));
+            File.WriteAllBytes(Path.Combine(root.FullName, "scr", "00921fade.scr"), Program((ScrCatalogue.Action.FadeAndTeleport, [(Number, 2), (Number, 0), (Number, 0), (Triggerer, 0), (Number, 4999 + snapshot.RuntimeMap), (Number, 31), (Number, 41)]), (ScrCatalogue.Action.ReturnRunDefault, [])));
+            File.WriteAllBytes(Path.Combine(root.FullName, "scr", "00922npc.scr"), Program((ScrCatalogue.Action.Teleport, [(Attachee, 0), (Number, 4999 + snapshot.RuntimeMap), (Number, 32), (Number, 42)]), (ScrCatalogue.Action.ReturnRunDefault, [])));
+            File.WriteAllBytes(Path.Combine(root.FullName, "scr", "00923both.scr"), Program((ScrCatalogue.Action.Teleport, [(Attachee, 0), (Number, 4999 + snapshot.RuntimeMap), (Number, 32), (Number, 42)]), (ScrCatalogue.Action.Teleport, [(Triggerer, 0), (Number, 4999 + snapshot.RuntimeMap), (Number, 30), (Number, 40)]), (ScrCatalogue.Action.ReturnRunDefault, [])));
+            using var content = AreaContentRoot.OpenScripts(Path.Combine(root.FullName, "modules", "Syn.dat")).Content!;
+            using var session = ConversationSessionFixture.CreateWithHero(snapshot.RuntimeMap);
+            var host = new AreaConversationHost(snapshot, content, session);
+            test(host, session, snapshot, content, new(new(snapshot.RuntimeMap), SessionEventKinds.PlayerEntity));
+        }
+        finally { root.Delete(true); }
+    }
+
+    [TestMethod]
+    public void A_deferred_calls_teleport_of_the_hero_is_queued_after_the_run_applied_and_a_fade_travels_with_it()
+    {
+        With((host, session, snapshot, content, pc) =>
+        {
+            var log = new List<string>();
+            host.Scripts.HeroTeleportRefusal = t => { log.Add($"check {t.CatalogueMap} {t.X},{t.Y}"); return null; };
+            host.Scripts.RequestHeroTeleport = t => log.Add($"request {t.CatalogueMap} {t.X},{t.Y} fade={(t.Fade is null ? "-" : "yes")}");
+            Assert.IsTrue(host.RunCall(new(HeroTeleport, 0, pc, pc), out var detail), detail);
+            Assert.IsTrue(host.RunCall(new(HeroFade, 0, pc, pc), out detail), detail);
+            var map = 4999 + snapshot.RuntimeMap;
+            CollectionAssert.AreEqual(new[] { $"check {map} 30,40", $"request {map} 30,40 fade=-", $"check {map} 31,41", $"request {map} 31,41 fade=yes" }, log, "asked before the run applies, recorded after it");
+            Assert.AreEqual(1, host.Scripts.LastTeleportRequests.Count);
+        });
+    }
+
+    [TestMethod]
+    public void A_teleport_the_host_cannot_take_leaves_the_call_unapplied_and_records_nothing()
+    {
+        With((host, session, snapshot, content, pc) =>
+        {
+            // No seam: not modelled, as before.
+            Assert.IsFalse(host.RunCall(new(HeroTeleport, 0, pc, pc), out _));
+            var requested = 0;
+            host.Scripts.HeroTeleportRefusal = _ => "no map";
+            host.Scripts.RequestHeroTeleport = _ => requested++;
+            Assert.IsFalse(host.RunCall(new(HeroTeleport, 0, pc, pc), out _));
+            Assert.AreEqual(0, requested);
+            // An NPC's teleport without the shown map's use host, and a run that moves both, are not applied either.
+            host.Scripts.HeroTeleportRefusal = _ => null;
+            Assert.IsFalse(host.RunCall(new(NpcTeleport, 0, pc, new(new(snapshot.RuntimeMap), "oid:npc")), out _));
+            Assert.IsFalse(host.RunCall(new(Both, 0, pc, new(new(snapshot.RuntimeMap), "oid:npc")), out _));
+            Assert.AreEqual(0, requested);
+        });
+    }
+
+    [TestMethod]
+    public void A_deferred_calls_teleport_of_an_npc_goes_to_the_shown_maps_use_host_as_the_request_of_ticket_1837()
+    {
+        With((host, session, snapshot, content, pc) =>
+        {
+            var key = new AreaObjectKey(new string('a', 64), snapshot.RuntimeMap, AreaSourceKind.Mobile, 1, 1, 100L, new string('b', 64), 100);
+            var npc = new AreaObjectRecord(key, 0, 16, 0, "p", "p", "r", "s", AreaScope.Core, null, 11, 20, Arcanum.Data.Area.AreaDisposition.BodyEligibleConditionally, [], [], true, true, true);
+            var log = new List<string>();
+            var world = new AreaScriptWorld(() => null, _ => false, _ => null, () => null,
+                NpcTeleportRefusal: t => { log.Add($"check {t.Object.Code}"); return null; },
+                RequestNpcTeleport: t => log.Add($"request {t.Object.Code} {t.X},{t.Y}"));
+            var use = new AreaUseScriptHost(session, snapshot.RuntimeMap, [npc], [], content, world);
+            host.Scripts.QueryHost = () => use;
+            var entity = AreaUseScriptHost.EntityId(npc);
+            var attachee = new SessionScriptRole(new(snapshot.RuntimeMap), entity);
+            Assert.IsTrue(host.RunCall(new(NpcTeleport, 0, pc, attachee), out var detail), detail);
+            CollectionAssert.AreEqual(new[] { $"check {entity}", $"request {entity} 32,42" }, log, "asked before the run applies, recorded after it");
+            // The same run for an object that is no NPC of the shown map is not applied, and a run that moves the hero too is not told apart (one slot).
+            log.Clear();
+            Assert.IsFalse(host.RunCall(new(NpcTeleport, 0, pc, new(new(snapshot.RuntimeMap), "oid:stranger")), out _));
+            host.Scripts.HeroTeleportRefusal = _ => null; host.Scripts.RequestHeroTeleport = _ => log.Add("hero");
+            Assert.IsFalse(host.RunCall(new(Both, 0, pc, attachee), out _));
+            CollectionAssert.AreEqual(Array.Empty<string>(), log);
+        });
+    }
+}

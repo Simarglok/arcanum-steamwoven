@@ -268,7 +268,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         ScrAdmissionSet.S2.Actions.Concat([ScrCatalogue.Action.ToggleState, ScrCatalogue.Action.Kill, ScrCatalogue.Action.LoopFor, ScrCatalogue.Action.LoopEnd, ScrCatalogue.Action.LoopBreak,
             ScrCatalogue.Action.GetObjectType, ScrCatalogue.Action.CallScriptEx, ScrCatalogue.Action.Dialog, ScrCatalogue.Action.CallScriptIn,
             ScrCatalogue.Action.DistanceBetween, ScrCatalogue.Action.GetLocation, ScrCatalogue.Action.SetFaction, ScrCatalogue.Action.WalkTo, ScrCatalogue.Action.RunTo,
-            ScrCatalogue.Action.HealFatigue, ScrCatalogue.Action.PerformAnimation, ScrCatalogue.Action.StealCoins, ScrCatalogue.Action.BecomeProne, ScrCatalogue.Action.GiveSpellMastery, ScrCatalogue.Action.Attack, ScrCatalogue.Action.MakeFollow, ScrCatalogue.Action.AssignObject, ScrCatalogue.Action.FloatLine, ScrCatalogue.Action.QueueNewspaper, ScrCatalogue.Action.FloatNewspaperHeadline, .. CritterFieldWriteActions, .. ScrAdmissionSet.StoryActions, .. ScrAdmissionSet.NpcStateHostActions, .. ScrAdmissionSet.WorldObjectHostActions, .. CastActions, .. StopSpellActions, .. DamageActions, .. EyeCandyActions]),
+            ScrCatalogue.Action.HealFatigue, ScrCatalogue.Action.PerformAnimation, ScrCatalogue.Action.StealCoins, ScrCatalogue.Action.BecomeProne, ScrCatalogue.Action.GiveSpellMastery, ScrCatalogue.Action.Attack, ScrCatalogue.Action.MakeFollow, ScrCatalogue.Action.AssignObject, ScrCatalogue.Action.FloatLine, ScrCatalogue.Action.QueueNewspaper, ScrCatalogue.Action.FloatNewspaperHeadline, ScrCatalogue.Action.Teleport, ScrCatalogue.Action.FadeAndTeleport, .. CritterFieldWriteActions, .. ScrAdmissionSet.StoryActions, .. ScrAdmissionSet.NpcStateHostActions, .. ScrAdmissionSet.WorldObjectHostActions, .. CastActions, .. StopSpellActions, .. DamageActions, .. EyeCandyActions]),
         ScrAdmissionSet.S2.ValueKinds.Concat(ScrAdmissionSet.StoreValueKinds),
         ScrAdmissionSet.S3.FocusKinds.Concat([ScrFocusKind.CurrentLoopedObject, ScrFocusKind.EveryoneInVicinity, ScrFocusKind.AnyoneInVicinity, ScrFocusKind.EverySceneryInVicinity, ScrFocusKind.LocalObject]));
 
@@ -1656,6 +1656,22 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         return Finish(run, teleportRefusal, writeback => WritePlacedSlot(writeback, placed, source));
     }
 
+    /// <summary>
+    /// ARC-WORLD-2038 (ledger TT20): why a script's teleport of an object other than the hero cannot be recorded as the NPC request (<see cref="AreaScriptWorld.RequestNpcTeleport"/>), or null: no world seam, an object that is no NPC of the shown map,
+    /// a destination on another map (FM1: only its record would move, not built) or the AI host's own refusal (a follower, a cell it does not hold). The use host's finish and the talk and call host's apply (<see cref="AreaScriptHost.Apply"/>) both ask it before anything applies.
+    /// </summary>
+    public string? NpcTeleportRefusedBecause(ScrTeleport other)
+    {
+        ArgumentNullException.ThrowIfNull(other);
+        if (_world?.NpcTeleportRefusal is not { } npcRefusal || _world.RequestNpcTeleport is null) return $"a teleport of {other.Object.Code} is not modelled";
+        if (other.Object.Map != _shownMap || Row(other.Object) is not { Type: NpcType }) return $"a teleport of {other.Object.Code}, which is no NPC of the shown map, is not modelled";
+        if (other.RuntimeMap != -1 && other.RuntimeMap != _shownMap) return $"a teleport of {other.Object.Code} to another map (catalogue {other.CatalogueMap}) is not modelled";
+        return npcRefusal(other);
+    }
+
+    /// <summary>ARC-WORLD-2038 (TT20): records a script's teleport of an NPC in the session's one change-of-place slot (the object moves at the next ping), after <see cref="NpcTeleportRefusedBecause"/> answered null and the run applied.</summary>
+    public void RequestNpcTeleport(ScrTeleport teleport) => _world!.RequestNpcTeleport!(teleport);
+
     private AreaScriptedUse Finish(ScrRunResult run, Func<ScrTeleport, string?>? teleportRefusal, Func<ScrWriteback, bool> write)
     {
         if (run.Outcome == ScrOutcome.Refused)
@@ -1676,13 +1692,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
                 return new(AreaScriptedUseOutcome.EffectsRejected, null, [], run, $"script {run.Script}: a run that teleports {mixed.Object.Code} and another object is not modelled");
             foreach (var other in effects.Teleports)
             {
-                if (_world?.NpcTeleportRefusal is not { } npcRefusal || _world.RequestNpcTeleport is null)
-                    return new(AreaScriptedUseOutcome.EffectsRejected, null, [], run, $"script {run.Script}: a teleport of {other.Object.Code} is not modelled");
-                if (other.Object.Map != _shownMap || Row(other.Object) is not { Type: NpcType })
-                    return new(AreaScriptedUseOutcome.EffectsRejected, null, [], run, $"script {run.Script}: a teleport of {other.Object.Code}, which is no NPC of the shown map, is not modelled");
-                if (other.RuntimeMap != -1 && other.RuntimeMap != _shownMap)
-                    return new(AreaScriptedUseOutcome.EffectsRejected, null, [], run, $"script {run.Script}: a teleport of {other.Object.Code} to another map (catalogue {other.CatalogueMap}) is not modelled");
-                if (npcRefusal(other) is { } npcWhy) return new(AreaScriptedUseOutcome.EffectsRejected, null, [], run, $"script {run.Script}: {npcWhy}");
+                if (NpcTeleportRefusedBecause(other) is { } npcWhy) return new(AreaScriptedUseOutcome.EffectsRejected, null, [], run, $"script {run.Script}: {npcWhy}");
                 npcTeleports.Add(other);
             }
         }
@@ -1737,7 +1747,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         _floats.AddRange(floats);
         _eyeCandies.AddRange(AreaScriptEyeCandy.Of(effects));
         // ARC-WORLD-1837: the requests are recorded after the run applied, in action order (the script goes on; the object moves at the next ping).
-        foreach (var requested in npcTeleports) _world!.RequestNpcTeleport!(requested);
+        foreach (var requested in npcTeleports) RequestNpcTeleport(requested);
         var teleport = npcTeleports.Count > 0 ? null : effects.Teleports.FirstOrDefault();
         if (effects.Dialog is { } talk)
             return new(AreaScriptedUseOutcome.NoTeleport, null, lines, run, $"script {run.Script} {run.Stop} at SCR line {run.StopLine}: conversation of script {talk.Script} node {talk.Node}")

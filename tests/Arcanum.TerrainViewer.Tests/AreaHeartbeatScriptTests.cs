@@ -132,6 +132,10 @@ public sealed class AreaHeartbeatScriptTests
             Write("scr/00799heal.scr", Program(Do(new(ScrCatalogue.Action.HealHitPoints, (Attachee, -1), N(6))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
             // ARC-DEV-244: 800 has the player cast spell 9 (48) at its attachee.
             Write("scr/00800pccast.scr", Program(Do(new(ScrCatalogue.Action.CastSpell, (Player, 0), N(9), (Attachee, -1))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
+            // ARC-WORLD-2038 (ledger TT20): 910 teleports its attachee to a literal tile of map 5000 (script 1385's shape), 911 the player, 912 the attachee and the player (one slot).
+            Write("scr/00910tele.scr", Program(Do(new(ScrCatalogue.Action.Teleport, (Attachee, -1), N(5000), N(30), N(40))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
+            Write("scr/00911telepc.scr", Program(Do(new(ScrCatalogue.Action.Teleport, (Player, 0), N(5000), N(31), N(41))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
+            Write("scr/00912telemix.scr", Program(Do(new(ScrCatalogue.Action.Teleport, (Attachee, -1), N(5000), N(30), N(40))), Do(new(ScrCatalogue.Action.Teleport, (Player, 0), N(5000), N(31), N(41))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
             Write("scr/00797caston.scr", Program(Do(new(ScrCatalogue.Action.CastUnresistableSpellOn, N(8), (Player, 0))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
             // ARC-SCRIPT-1294 (RM6): 807 stops spell 11 on its attachee; 808 stops spell 12 on the player.
             Write("scr/00807stopspell.scr", Program(Do(new(ScrCatalogue.Action.StopSpellOnObject, N(11), (Attachee, -1))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
@@ -193,6 +197,50 @@ public sealed class AreaHeartbeatScriptTests
         var flags = session.Flags;
         Assert.AreEqual(GlobalFlagWriteDisposition.Applied,
             flags.Write(new GlobalFlagWriteRequest(new GlobalFlagRequestId(Guid.NewGuid()), flags.Version, new FlagId(flag), true)).Disposition);
+    }
+
+    // ARC-WORLD-2038 (ledger TT20): a heartbeat's teleport of its attachee (script 1385's shape) is a request the script records after the run applied; the hero's is not modelled (no heartbeat script asks for it), nor is one that moves the hero and the NPC together.
+    [TestMethod]
+    public void A_heartbeat_teleport_of_its_attachee_is_a_request_recorded_after_the_run_applied()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var npc = Row(1, 16, 910);
+            var log = new List<string>();
+            string? refusal = null;
+            var world = new AreaScriptWorld(() => null, _ => false, _ => null, () => null,
+                NpcTeleportRefusal: t => { log.Add($"check {t.Object.Code}"); return refusal; },
+                RequestNpcTeleport: t => log.Add($"request {t.Object.Code} {t.X},{t.Y}"));
+            var host = new AreaUseScriptHost(session, 1, [npc], [], content, world);
+            var ran = host.RunHeartbeat(npc, ScrPoint.Heartbeat, session.Rules.Scripts);
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, ran.Outcome, ran.Detail);
+            Assert.AreEqual(Ref(1), ran.NpcTeleports.Single().Object);
+            CollectionAssert.AreEqual(new[] { $"check {Entity(1)}", $"request {Entity(1)} 30,40" }, log, "asked first, recorded after the run applied");
+
+            // The host's refusal (a follower, a cell it does not hold) leaves the run unapplied, nothing recorded.
+            log.Clear(); refusal = "target not held";
+            Assert.AreEqual(AreaScriptedUseOutcome.EffectsRejected, host.RunHeartbeat(npc, ScrPoint.Heartbeat, session.Rules.Scripts).Outcome);
+            CollectionAssert.AreEqual(new[] { $"check {Entity(1)}" }, log);
+
+            // The hero's teleport, and one that moves both, are not applied.
+            var hero = Row(2, 16, 911); var both = Row(3, 16, 912);
+            var more = new AreaUseScriptHost(session, 1, [hero, both], [], content, world);
+            log.Clear(); refusal = null;
+            Assert.AreEqual(AreaScriptedUseOutcome.TeleportRefused, more.RunHeartbeat(hero, ScrPoint.Heartbeat, session.Rules.Scripts).Outcome);
+            Assert.AreEqual(AreaScriptedUseOutcome.EffectsRejected, more.RunHeartbeat(both, ScrPoint.Heartbeat, session.Rules.Scripts).Outcome);
+            Assert.AreEqual(0, log.Count, "nothing recorded for either");
+        });
+    }
+
+    [TestMethod]
+    public void The_heartbeat_and_talk_sets_admit_teleport_and_fade_and_teleport()
+    {
+        foreach (var set in new[] { AreaUseScriptHost.HeartbeatAdmission, AreaScriptHost.Admission, AreaScriptHost.TalkAdmission, AreaScriptHost.SkillAdmission })
+        {
+            Assert.IsTrue(set.Actions.Contains(ScrCatalogue.Action.Teleport), set.Id);
+            Assert.IsTrue(set.Actions.Contains(ScrCatalogue.Action.FadeAndTeleport), set.Id);
+        }
     }
 
     [TestMethod]

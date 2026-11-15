@@ -43,7 +43,7 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
             .Concat([ScrCatalogue.Action.SetPcQuestState, ScrCatalogue.Action.MarkMapLocation, ScrCatalogue.Action.SetRumor,
                 ScrCatalogue.Action.AddReputation, ScrCatalogue.Action.RemoveReputation, ScrCatalogue.Action.PlaySound, ScrCatalogue.Action.PlaySoundOn, ScrCatalogue.Action.PlaySoundScheme,
                 ScrCatalogue.Action.CallScriptIn, ScrCatalogue.Action.RemoveScriptCall, ScrCatalogue.Action.SetAutoLevelScheme,
-                ScrCatalogue.Action.StartSchematicUi, ScrCatalogue.Action.ShowBook, ScrCatalogue.Action.ShowPicture, ScrCatalogue.Action.ShowPlaque, .. ScrAdmissionSet.StoryActions, ScrCatalogue.Action.Fade, ScrCatalogue.Action.EndGame, ScrCatalogue.Action.QueueNewspaper, ScrCatalogue.Action.FloatNewspaperHeadline, ScrCatalogue.Action.StopScriptEyeCandy]),
+                ScrCatalogue.Action.StartSchematicUi, ScrCatalogue.Action.ShowBook, ScrCatalogue.Action.ShowPicture, ScrCatalogue.Action.ShowPlaque, .. ScrAdmissionSet.StoryActions, ScrCatalogue.Action.Fade, ScrCatalogue.Action.EndGame, ScrCatalogue.Action.QueueNewspaper, ScrCatalogue.Action.FloatNewspaperHeadline, ScrCatalogue.Action.StopScriptEyeCandy, ScrCatalogue.Action.Teleport, ScrCatalogue.Action.FadeAndTeleport]),
         ScrAdmissionSet.S3.ValueKinds.Concat(ScrAdmissionSet.StoreValueKinds), ScrAdmissionSet.S3.FocusKinds);
 
     /// <summary>ARC-SKILLS-009: <see cref="Admission"/> plus get skill (47) of <see cref="ScrAdmissionSet.S11"/>, the set a run uses while
@@ -444,6 +444,37 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
         return obj.Map == _map.RuntimeMap && _npcSheet?.Invoke(obj.Code) is { } npc ? _session.QueryNpcSkills(npc.Loaded, npc.Modifiers)[(Skill)skill].Level : 0;
     }
 
+    /// <summary>ARC-WORLD-2038 (ledger TT20): why the hero's teleport a dialog script or a deferred call asked for cannot be queued as the map transfer (<see cref="AreaMapTransfers.ScriptTeleportRefusal"/>), or null; null too while a transfer is
+    /// pending (the request is dropped, TR4). Without it, or without <see cref="RequestHeroTeleport"/>, a run that teleports the hero is left unapplied.</summary>
+    public Func<ScrTeleport, string?>? HeroTeleportRefusal { get; set; }
+
+    /// <summary>ARC-WORLD-2038 (TT20): queues the hero's teleport as the map transfer (<see cref="AreaMapTransfers.QueueScriptTeleport"/>), called after the run applied; the viewer takes it at its next safe point, the original's ping.</summary>
+    public Action<ScrTeleport>? RequestHeroTeleport { get; set; }
+
+    /// <summary>ARC-WORLD-2038: the last teleport requests a run of this host recorded, in action order (test and smoke seam; empty before any).</summary>
+    public IReadOnlyList<ScrTeleport> LastTeleportRequests { get; private set; } = [];
+
+    /// <summary>
+    /// ARC-WORLD-2038 (TT20): why a run's teleports cannot be recorded, or null. The original's slot holds one request whoever makes it, so a run that teleports the hero and another object is not told apart (not modelled);
+    /// the hero's goes through <see cref="HeroTeleportRefusal"/>, an NPC's through the shown map's use host (<see cref="AreaUseScriptHost.NpcTeleportRefusedBecause"/>), which is only there while it answers this map.
+    /// </summary>
+    private string? TeleportRefusal(ScrEffects effects)
+    {
+        if (effects.Teleports.Count == 0) return null;
+        var heroAsked = effects.Teleports.Any(t => IsPc(t.Object));
+        // A conversation the same run starts is not modelled together with the hero's change of place (the use host and the tile scripts refuse it too): the dialog window would open over a pending map transfer.
+        if (heroAsked && effects.Dialog is not null) return "a run that teleports the hero and starts a conversation is not modelled";
+        if (heroAsked && effects.Teleports.Any(t => !IsPc(t.Object))) return "a run that teleports the hero and another object is not modelled";
+        foreach (var teleport in effects.Teleports)
+        {
+            var why = heroAsked
+                ? HeroTeleportRefusal is null || RequestHeroTeleport is null ? "a teleport of the hero is not modelled here" : HeroTeleportRefusal(teleport)
+                : Queries is null ? "a teleport of an NPC needs the shown map's use host" : Queries.NpcTeleportRefusedBecause(teleport);
+            if (why is not null) return why;
+        }
+        return null;
+    }
+
     /// <summary>
     /// Applies a run's effects: the global flags, the sound requests, the deferred calls, the scheme changes (ARC-SCRIPT-016), the schematic window requests (ARC-TECHNOLOGY-005), then
     /// the speaker's slot as map changes (a value equal to the loaded one clears its key). The session has no transaction across its flag owner and its map changes; a rejected step
@@ -454,6 +485,8 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
         ArgumentNullException.ThrowIfNull(effects);
         // The viewer's set admits no use item with skill; a trap object is not modelled.
         if (effects.DestroyTrapObject is not null || effects.SkillUses.Count > 0) return false;
+        // ARC-WORLD-2038 (TT20): a teleport the hosts cannot record leaves the run unapplied whole, checked before anything applies.
+        if (TeleportRefusal(effects) is not null) return false;
         // ARC-SCRIPT-1598: the speaker's slot write is resolved before anything applies (a pure lookup of the run's own object): a run whose write cannot be placed is refused whole, so a damage line is never left applied with the dialog unopened.
         (ScrSlot Loaded, ScrObjectRef Attachee)? slotWrite = null;
         if (effects.Writeback is { } slotRequest)
@@ -567,6 +600,12 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
         // The original runs action 132 inline, before anything later in the run refuses; a refused clock jump does not take the request back.
         if (effects.Slides.Any(request => request.Kind == ScrSlideKind.EndGame)) _endGame = true;
         if (!fadesApplied) return false;
+        // ARC-WORLD-2038 (TT20): the requests are recorded after the run applied, in action order (the script goes on; the object moves at the next ping).
+        LastTeleportRequests = [.. effects.Teleports];
+        var teleportHost = Queries;
+        foreach (var teleport in effects.Teleports)
+            if (IsPc(teleport.Object)) RequestHeroTeleport!(teleport);
+            else teleportHost?.RequestNpcTeleport(teleport);
         if (effects.Writeback is not { } writeback || slotWrite is not { } placed) return true;
         var (loaded, attachee) = placed;
         var stateMap = _state.MapOfEntity(attachee.Code);
