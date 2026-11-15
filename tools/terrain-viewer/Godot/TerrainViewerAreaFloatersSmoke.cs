@@ -114,6 +114,17 @@ public partial class TerrainViewerApp
                 && floaters1.Zip(floaters2).All(pair => pair.First.Text == pair.Second.Text && pair.First.Alpha == pair.Second.Alpha
                     && (int)pair.Second.Position.Y - (int)floaters2[0].Position.Y == ((int)pair.First.Position.Y - (int)floaters1[0].Position.Y) * 2),
                 "at factor 2 the lines keep their text and fade, stand on the 2 px grid, twice as far apart: " + string.Join(",", floaters1.Select(d => d.Position)) + " -> " + string.Join(",", floaters2.Select(d => d.Position)));
+            // The box stands on the owner's tile centre: its first drawn line is (90 + 5 line heights - its offset) original pixels above the anchor, times the factor.
+            if (layer.Anchor(entity) is { } tile)
+            {
+                var firstVisible = visible[0];
+                foreach (var (factor, set) in new[] { (1, floaters1), (2, floaters2) })
+                {
+                    var expectedY = (int)Math.Round(tile.Y / factor) - FloaterRules.BoxRise - FloaterRules.BoxLines * h + firstVisible.Offset;
+                    Require(Math.Abs((int)set[0].Position.Y - expectedY * factor) <= 1,
+                        $"factor {factor}: the first line stands {FloaterRules.BoxRise} original px (+ the box) above the tile centre: y={set[0].Position.Y} expected={expectedY * factor}");
+                }
+            }
             GD.Print("ARC-UI-2289 floaters drawn at the screen's whole factor PASS");
             var view = GetViewport().GetVisibleRect();
             Require(drawn.All(d => view.HasPoint(d.Position)), "the NPC's lines are on screen: " + string.Join(",", drawn.Select(d => d.Position)));
