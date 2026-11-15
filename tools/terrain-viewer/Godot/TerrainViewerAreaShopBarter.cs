@@ -113,7 +113,7 @@ public partial class TerrainViewerApp
         if (_newGameRecipe is not { } recipe) { why = "this scene has no new-game start to make the session from"; return null; }
         var hero = kit.Hero;
         var created = AreaTransitionCoordinator.CreateSession(recipe.Clock, Guid.NewGuid(), recipe.Module, new AreaStepCell(map.Start.X, map.Start.Y), map.RuntimeMap,
-            hero, recipe.Reputations, NewSessionSeed());
+            hero, recipe.Reputations, NewSessionSeed(), NewSessionThrowsGamblingRoll());
         if (created.Owner is not { } owner) { why = $"the session was not created ({created.Failure})"; return null; }
         if (creation.Apply(owner, hero.Effects ?? (_ => null)) is { } applied) { owner.Dispose(); why = applied; return null; }
         var catalog = _hoverNames?.Catalog;

@@ -102,8 +102,8 @@ public partial class DiagnosticInputSettingsPanel : CanvasLayer
         AddAction("Game time +1 hour", () => GameHourRequested?.Invoke());
         AddAction("Ambient lighting on/off", () => LightingToggleRequested?.Invoke());
         _lighting = new Label { Name = "PaletteLighting", AutowrapMode = TextServer.AutowrapMode.WordSmart }; _rows.AddChild(_lighting);
-        // ARC-UI-006: the visual profile setting (also the H key); the switch commits once the visible frames are ready.
-        AddAction("Visual Legacy/HD (H)", () => VisualToggleRequested?.Invoke());
+        // ARC-UI-006: the one HD setting, Off/On (also the H key; ARC-UI-2174); the switch commits once the visible frames are ready.
+        AddAction("HD Off/On (H)", () => VisualToggleRequested?.Invoke());
         _visual = new Label { Name = "PaletteVisual", AutowrapMode = TextServer.AutowrapMode.WordSmart }; _rows.AddChild(_visual);
         // ARC-WORLD-020: the original's Always Run option (Num Lock and Ctrl act on top of it).
         AddAction("Always Run on/off", () => AlwaysRunToggleRequested?.Invoke());
