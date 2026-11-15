@@ -395,11 +395,13 @@ public partial class TerrainViewerApp
             var events = ShotEndEvents(projectile);
             var scripts = projectile.Owner.QueryShotEndScripts(projectile.Shot);
             Ended(projectile, crossed.Strike, null, "turned back");
-            var turned = TurnBack(projectile);
+            var turn = TurnBack(projectile, crossing.Entered);
             // ARC-COMBAT-1719: the boomerang's first end turns it back (0x4B2690), then the weapon's hit (7) or miss (8) script runs, then the item event.
             RunShotEndScripts(projectile, scripts, crossed.Strike == ProjectileStrikeKind.DestinationEnd);
             FireShotEnd(projectile, events);
-            return turned ? ProjectileCrossResult.Turned : ProjectileCrossResult.Ended;
+            // ARC-COMBAT-1971 (PF9): a turn on the hero's own tile ends the flight at once, after the first end's scripts and event.
+            FinishTurnedAtOnce(projectile, turn);
+            return turn == BoomerangTurnEnd.Flies ? ProjectileCrossResult.Turned : ProjectileCrossResult.Ended;
         }
         if (crossed.Strike == ProjectileStrikeKind.RangeEnd) { EndProjectile(projectile, crossed.Strike, null, "beyond its range", land: true, fireEnd: true); return ProjectileCrossResult.Ended; }
         // ARC-COMBAT-018: a shot without a target ends on leaving its destination (a missed throw lands on its scattered tile).
@@ -410,31 +412,45 @@ public partial class TerrainViewerApp
     /// <summary>
     /// ARC-COMBAT-019 (0x4B2690 with attack flag 0x1000, 0x435A00): the boomerang's projectile turns back at its first end, from the
     /// tile it is on (the one being left) to the hero's tile now, and flies back striking nothing (flag 0x2000); its facing stays. The
-    /// session's shot turns with it (a strike turned it already). On the hero's own tile it is back at once. ARC-DEV-140: the goal takes the
-    /// hero's tile as its destination and builds its line anew (BR4: the tick returns <see cref="ProjectileTickResult.Turned"/>). True: it flies on.
+    /// session's shot turns with it (a strike turned it already). ARC-DEV-140: the goal takes the hero's tile as its destination and builds
+    /// its line anew (BR4: the tick returns <see cref="ProjectileTickResult.Turned"/>). ARC-COMBAT-1971 (PF9): the hero's own tile ends it at
+    /// once (<see cref="ProjectileRules.TurnEndAt"/>); the caller ends the shot after the first end's scripts and event
+    /// (<see cref="FinishTurnedAtOnce"/>). <paramref name="entered"/> is the tile the crossing enters, null when the strike's end does not know it.
     /// </summary>
-    private bool TurnBack(AreaProjectile projectile)
+    private BoomerangTurnEnd TurnBack(AreaProjectile projectile, CellCoord? entered = null)
     {
         var owner = projectile.Owner;
         owner.ReturnShot(projectile.Shot);
-        if (_worldActor.Session is not AreaGridSession session) { EndProjectile(projectile, ProjectileStrikeKind.None, null, "no actor to return to"); return false; }
+        if (_worldActor.Session is not AreaGridSession session) { EndProjectile(projectile, ProjectileStrikeKind.None, null, "no actor to return to"); return BoomerangTurnEnd.Ended; }
         var hero = HeroCellNow(session);
         var from = projectile.Flight.Tile;
         var (flight, shot) = ProjectileRules.TurnBack(projectile.Flight, projectile.State, hero);
         projectile.State = shot;
         _boomerangTurnsForSelfTest.Add((projectile.Shot, from, hero));
-        GD.Print($"ARC-COMBAT-019 boomerang-turn shot={projectile.Shot.Id} from={from.X},{from.Y} to={hero.X},{hero.Y} line={flight is not null}");
+        var end = ProjectileRules.TurnEndAt(from, entered, hero);
+        GD.Print($"ARC-COMBAT-019 boomerang-turn shot={projectile.Shot.Id} from={from.X},{from.Y} to={hero.X},{hero.Y} line={flight is not null} end={end}");
+        if (end != BoomerangTurnEnd.Flies) return end;
         if (flight is null)
         {
-            // ARC-COMBAT-1766 (ledger PF9, limit): the original's turn back (0x435A00) cannot fail on the hero's own tile; its flight tick (0x42F6A0) calls the crossing (0x4B2870, the second end's scripts) only on a tile change, which the
-            // exports do not show here, so the second end's scripts are not run (no second end is read for a flight of no length).
-            EndProjectile(projectile, ProjectileStrikeKind.DestinationEnd, null, "turned on the hero's tile: back at once");
-            BoomerangReturned(projectile);
-            return false;
+            // No line is built (a hero beyond the line's reach): back at once, no second end read.
+            return BoomerangTurnEnd.EndsBare;
         }
         projectile.Flight = flight;
         projectile.Destination = hero;
-        return true;
+        return BoomerangTurnEnd.Flies;
+    }
+
+    /// <summary>
+    /// ARC-COMBAT-1971 (ledger PF9, read 2026-11-15; 0x435A00, 0x42F6A0, 0x424D90, 0x42CAC0, 0x4B2690, 0x4B2870): a boomerang turned back with the hero on the tile it left ends at the
+    /// hero's tile as a normal return does, with the weapon's hit script and the item event (<see cref="BoomerangTurnEnd.EndsWithScripts"/>); with the hero on the tile it entered the flight goal ends
+    /// without context (no script, no item event, <see cref="BoomerangTurnEnd.EndsBare"/>). The boomerang is back in the hand either way.
+    /// </summary>
+    private void FinishTurnedAtOnce(AreaProjectile projectile, BoomerangTurnEnd end)
+    {
+        if (end is BoomerangTurnEnd.Flies or BoomerangTurnEnd.Ended) return;
+        EndProjectile(projectile, ProjectileStrikeKind.DestinationEnd, null, end == BoomerangTurnEnd.EndsWithScripts ? "turned on the hero's tile: back at once, second end run" : "turned on the hero's tile: back at once",
+            fireEnd: end == BoomerangTurnEnd.EndsWithScripts);
+        BoomerangReturned(projectile);
     }
 
     /// <summary>
@@ -629,7 +645,13 @@ public partial class TerrainViewerApp
     /// projectile ends on its tile.</summary>
     private ProjectileCrossResult StruckEnd(AreaProjectile projectile, bool hit = false, string? target = null)
     {
-        if (projectile.Returns && !projectile.State.Returning) return TurnBack(projectile) ? ProjectileCrossResult.Turned : ProjectileCrossResult.Ended;
+        if (projectile.Returns && !projectile.State.Returning)
+        {
+            var turn = TurnBack(projectile);
+            // A strike's tile left holds the struck target, never the hero, so the second end with scripts is not reached here; kept bare so it never runs before the strike's own event and hit handling.
+            FinishTurnedAtOnce(projectile, turn == BoomerangTurnEnd.EndsWithScripts ? BoomerangTurnEnd.EndsBare : turn);
+            return turn == BoomerangTurnEnd.Flies ? ProjectileCrossResult.Turned : ProjectileCrossResult.Ended;
+        }
         EndOnTile(projectile, hit ? Arcanum.Scripting.Scr.ScrPoint.Hit : Arcanum.Scripting.Scr.ScrPoint.Miss, target, afterStrike: true);
         return ProjectileCrossResult.Ended;
     }

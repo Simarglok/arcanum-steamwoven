@@ -332,6 +332,63 @@ public sealed class AreaAiShotTests
         Assert.AreEqual(npc, session.QueryDanger(Entity(3)).HitBy?.Entity, "another faction: the event writes the shooter");
     }
 
+    // ARC-COMBAT-2164 (EX15, 0x4B3170): an attack that does not fly (no LaunchShot) whose line of fire a bystander stops. Steamwoven (the default) alerts the struck bystander with the accidental bit (a stranger still records the
+    // attacker) and not the aimed hero; the Original setting alerts the aimed hero, deliberately, and not the bystander.
+    [TestMethod]
+    public void A_redirected_attack_that_does_not_fly_alerts_the_struck_blocker_in_Steamwoven()
+    {
+        var (session, host, npc, _) = Open(null, bystander: true, faction: 0);
+        Assert.AreEqual(RuleMode.Steamwoven, session.Rules.Mode);
+        host.Hit(npc, AiSchedulerRules.Pc);
+        Assert.IsTrue(host.TraceOf(npc)?.Hit?.Contains("the line of fire struck"), host.TraceOf(npc)?.Hit);
+        Assert.IsNotNull(host.TraceOf(Entity(3))?.Event, "the blocker's event ran");
+        Assert.AreEqual(npc, session.QueryDanger(Entity(3)).HitBy?.Entity, "accidental between strangers still records the attacker");
+        Assert.IsNull(host.TraceOf(AiSchedulerRules.Pc)?.Event, "the aimed hero got no event");
+    }
+
+    [TestMethod]
+    public void A_redirected_attack_that_does_not_fly_alerts_the_aimed_target_in_Original()
+    {
+        var (session, host, npc, _) = Open(null, bystander: true, faction: 0);
+        Assert.AreEqual(GameSessionDisposition.Changed, session.SelectRules(RuleMode.Original));
+        host.Hit(npc, AiSchedulerRules.Pc);
+        Assert.IsTrue(host.TraceOf(npc)?.Hit?.Contains("the line of fire struck"), host.TraceOf(npc)?.Hit);
+        Assert.IsNotNull(host.TraceOf(AiSchedulerRules.Pc)?.Event, "the aimed hero's event ran");
+        Assert.IsNull(host.TraceOf(Entity(3))?.Event, "the blocker that took the hit got no event");
+        Assert.IsNull(session.QueryDanger(Entity(3)).HitBy, "and records nobody");
+    }
+
+    // The hero's attack that does not fly: the viewer's StrikeBlocker asks the host for the notice (the aimed NPC 0 here, the blocker NPC 3).
+    [TestMethod]
+    public void The_hero_s_redirected_attack_alerts_the_blocker_in_Steamwoven_and_the_aimed_target_in_Original()
+    {
+        var (session, host, _, _) = Open(null, bystander: true, faction: 0);
+        host.HeroBlockerAttacked(Entity(0), Entity(3));
+        Assert.IsNotNull(host.TraceOf(Entity(3))?.Event, "Steamwoven: the blocker");
+        Assert.IsNull(host.TraceOf(Entity(0))?.Event, "Steamwoven: not the aimed one");
+        Assert.IsNotNull(session.QueryDanger(Entity(3)).HitBy);
+
+        var (original, originalHost, _, _) = Open(null, bystander: true, faction: 0);
+        original.SelectRules(RuleMode.Original);
+        originalHost.HeroBlockerAttacked(Entity(0), Entity(3));
+        Assert.IsNotNull(originalHost.TraceOf(Entity(0))?.Event, "Original: the aimed target");
+        Assert.IsNull(originalHost.TraceOf(Entity(3))?.Event, "Original: not the blocker");
+        Assert.IsNull(original.QueryDanger(Entity(3)).HitBy);
+
+        var (none, noneHost, _, _) = Open(null, bystander: true, faction: 0);
+        none.SelectRules(RuleMode.Original);
+        noneHost.HeroBlockerAttacked(null, Entity(3));
+        Assert.IsNull(noneHost.TraceOf(Entity(3))?.Event, "Original with no critter aimed: no event");
+    }
+
+    [TestMethod]
+    public void The_blocker_notice_rule_names_the_victim_by_setting()
+    {
+        Assert.AreEqual(("b", AttackEventFlags.Accidental), HostilityRules.RangedBlockerNotice(CombatAnomalyProfile.Steamwoven, "a", "b"));
+        Assert.AreEqual(("a", AttackEventFlags.None), HostilityRules.RangedBlockerNotice(CombatAnomalyProfile.Original, "a", "b"));
+        Assert.AreEqual((null, AttackEventFlags.None), HostilityRules.RangedBlockerNotice(CombatAnomalyProfile.Original, null, "b"));
+    }
+
     // Opens a fresh scene and shoots once at the line's blocker (the bystander is the shot's target) until the shot is decided as asked; the first shot of its scene, so the bystander has no earlier event.
     private static (GameSessionOwner Session, AreaAiHost Host, string Npc, SessionShot Shot) FirstShotOnBystander(bool hit, long faction)
     {
