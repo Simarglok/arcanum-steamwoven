@@ -68,6 +68,7 @@ src/Arcanum.Session/GameSessionBackground.cs,RefusesCarry,pending,
 src/Arcanum.Session/GameSessionBarter.cs,BarterBuy,pending,
 src/Arcanum.Session/GameSessionBarter.cs,BarterSell,pending,
 src/Arcanum.Session/GameSessionBarter.cs,BarterSellWorn,exempt,host
+src/Arcanum.Session/GameSessionBarter.cs,PayForStakedItem,exempt,host
 src/Arcanum.Session/GameSessionBarter.cs,QueryHeroHaggle,pending,
 src/Arcanum.Session/GameSessionBloodPools.cs,LeaveBloodPool,pending,
 src/Arcanum.Session/GameSessionCarry.cs,HeroFits,pending,

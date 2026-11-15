@@ -413,8 +413,8 @@ public sealed class AreaBarter
     /// <summary>
     /// ARC-UI-1740 (0x579B60, ledger BT6): the hero bets <paramref name="entity"/>, a merchant's item. The gate runs again with its text off, so a refused bet
     /// is silent (the text the hover showed stays). Then the session's bet (<see cref="GameSessionOwner.Gamble"/>): a win moves the item for nothing and costs the
-    /// merchant reaction (<see cref="GamblingRules.WonReaction"/>), a loss moves it for its price like a buy (and a generous price lifts the reaction of a
-    /// merchant in love, as a buy does). A stack goes whole (the window's rule). The roll for the next bet is thrown in the same step.
+    /// merchant reaction (<see cref="GamblingRules.WonReaction"/>), a loss only charges its price × count (ARC-UI-2215: the move block of 0x578EA0 is skipped, the item stays in the merchant's list; the surplus
+    /// gift of a generous price still lifts the reaction of a merchant in love, as a buy's does). A stack goes whole (the window's rule). The roll for the next bet is thrown in the same step.
     /// </summary>
     public AreaBarterGambleResult Gamble(string entity)
     {
