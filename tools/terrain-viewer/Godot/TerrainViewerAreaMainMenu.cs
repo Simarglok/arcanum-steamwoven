@@ -519,7 +519,7 @@ public partial class TerrainViewerApp
         else
         {
             var created = AreaTransitionCoordinator.CreateSession(recipe.Clock, Guid.NewGuid(), recipe.Module, recipe.Spawn, recipe.RuntimeMap, hero, recipe.Reputations,
-                NewSessionSeed());
+                NewSessionSeed(), NewSessionThrowsGamblingRoll());
             if (created.Owner is not { } made) return $"new game refused: the session was not created ({created.Failure})";
             owner = made;
             // ARC-UI-030: the background the window set, with its effect, as the original's background buttons set it on the PC.
