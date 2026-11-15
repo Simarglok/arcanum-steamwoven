@@ -367,6 +367,10 @@ public sealed class AreaBarter
         [1] = "You lose and pay %d coins.",
     };
 
+    /// <summary>ARC-UI-1806: whether <paramref name="text"/> is one of the window's own fallback lines (no generated NPC line was read), with or without a price filled in.</summary>
+    public static bool IsBetFallback(string text) => BetFallbacks.Values.Any(fallback => text == fallback
+        || fallback.Contains("%d", StringComparison.Ordinal) && System.Text.RegularExpressions.Regex.IsMatch(text, "^" + System.Text.RegularExpressions.Regex.Escape(fallback).Replace("%d", @"-?\d+") + "$"));
+
     private string BetLine(int category, int? price = null)
     {
         var text = _npcLine?.Invoke(category);

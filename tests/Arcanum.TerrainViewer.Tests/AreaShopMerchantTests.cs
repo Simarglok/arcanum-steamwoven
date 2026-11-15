@@ -5,6 +5,7 @@ using Arcanum.Data.Content;
 using Arcanum.Data.Maps;
 using Arcanum.Data.Messages;
 using Arcanum.Session;
+using Arcanum.Simulation.Items;
 using Arcanum.Simulation.Character;
 using Arcanum.TerrainViewer.Core;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -44,12 +45,14 @@ public sealed class AreaShopMerchantTests
         substitutes: new Dictionary<string, AreaSubstituteContainer> { [Entity(0)] = new(Entity(1), 5, new(33, 25)) },
         restock: new Dictionary<string, AreaRestockSeed> { [Entity(1)] = new(5, 0x1) }, persistent: [Entity(3)]);
 
-    private static CombatFields Npc(uint flags = 0)
+    private static CombatFields Npc(uint flags = 0, int gambling = 0)
     {
         var stats = new int[28];
         for (var i = 0; i < 8; i++) stats[i] = 8;
+        var basic = new int[12];
+        basic[(int)Arcanum.Simulation.Skills.Skill.Gambling] = gambling;
         return new(CombatFieldOrigin.AreaObject, new CombatObjectFields(16, 17102, flags, 0, 0, 0, 0, 1, 2, 0, 4, [0, 0, 0, 0, 0], 0),
-            null, null, null, null, null, new CombatCritterFields(0, 0, stats, new int[12], new int[4], new int[25], 0, 0, 0, 1, 0, 0),
+            null, null, null, null, null, new CombatCritterFields(0, 0, stats, basic, new int[4], new int[25], 0, 0, 0, 1, 0, 0),
             new CombatNpcFields(0, 0, 0, 0, 0, 0, 0, [new(0, 0), new(0, 0), new(0, 0), new(0, 0), new(0, 0)], RetailPriceMultiplier: 100));
     }
 
@@ -137,6 +140,53 @@ public sealed class AreaShopMerchantTests
         shop.Dispose();
         Assert.AreEqual(1000 - axe.Quote.Price, owner.QueryGold(), "a taken session outlives the shop");
         owner.Dispose();
+    }
+
+    // ARC-UI-1806: a gambler hero (intelligence 20, 5 Gambling points: level 20) on the shop map's start.
+    private static GameSessionOwner GamblerSession(AreaShopMap map)
+    {
+        var basic = new int[12];
+        basic[(int)Arcanum.Simulation.Skills.Skill.Gambling] = 5;
+        var hero = new SessionHeroDefinition(16086, CharacterRace.Human, CharacterGender.Male, [20, 20, 20, 20, 20, 20, 20, 20, 0, 0], 1, 5, 0,
+            null, null, 1000, [new SessionHeroKitItem(new(SessionItemType.Weapon, KitSword, 4100, 34100))],
+            Advancement: SessionHeroAdvancement.None with { BasicSkills = [.. basic] });
+        var load = new AreaHeroLoad(AreaHeroStatus.Ready, AreaStartingHero.Find("half-elf-male")!, hero, 2352, 0, null, "synthetic");
+        return AreaTransitionCoordinator.CreateSession(ConversationSessionFixture.Clock, Guid.NewGuid(), Guid.NewGuid(),
+            new(map.Start.X, map.Start.Y), map.RuntimeMap, load).Owner!;
+    }
+
+    [TestMethod]
+    public void The_shop_merchant_takes_bets_from_its_stored_gambling_skill_and_needs_the_hero_tables_for_it()
+    {
+        var entry = new MapListEntry(5013, "ShopMap", new(31, 29)) { Type = MapListType.Shopping };
+        var map = AreaShopMap.From(entry, Map(), row => row.Key.SourceIndex == 0 ? Npc(gambling: 3) : Read(row)).Map!;
+        // Without the hero tables the merchant has no sheet: no points, so the gate refuses it as the dialog's window does without a sheet (category 9).
+        using (var bare = GamblerSession(map))
+        {
+            using var shop = AreaShopSession.Open(bare, map, Data(), (entity, _) => entity, "Smith", out var refused) ?? throw new AssertFailedException(refused ?? "refused");
+            var axe = shop.Barter.View().Wares.Single(line => line.Kind.Prototype == Axe);
+            Assert.AreEqual(GambleRefusal.NoGambler, shop.Barter.CheckGamble(axe.Entity).Gate.Refusal);
+        }
+        using var owner = GamblerSession(map);
+        using var opened = AreaShopSession.Open(owner, map, Data(), (entity, _) => entity, "Smith", out var why, effects: _ => null) ?? throw new AssertFailedException(why ?? "refused");
+        var ware = opened.Barter.View().Wares.Single(line => line.Kind.Prototype == Axe);
+        var gate = opened.Barter.CheckGamble(ware.Entity);
+        Assert.IsTrue(gate.Allowed, "the merchant's ware passes the gate: " + gate.Gate.Refusal);
+        Assert.AreEqual(ware.Quote.Price, gate.Price);
+        var gold = owner.QueryGold();
+        var bet = opened.Barter.Gamble(ware.Entity);
+        Assert.IsNotNull(bet.Bet, "the bet runs on the shop's session");
+        Assert.IsTrue(bet.Settled, "the bet settled: " + bet.Bet!.Failure);
+        Assert.AreEqual(bet.Won ? gold : gold - bet.Paid, owner.QueryGold(), "a win is free, a loss pays the price");
+    }
+
+    [TestMethod]
+    public void The_window_recognises_its_own_fallback_bet_lines_with_and_without_a_price()
+    {
+        Assert.IsTrue(AreaBarter.IsBetFallback("The merchant does not gamble."));
+        Assert.IsTrue(AreaBarter.IsBetFallback("Stake it? A loss costs 720 coins."));
+        Assert.IsFalse(AreaBarter.IsBetFallback("I am not a gambling man."));
+        Assert.IsFalse(AreaBarter.IsBetFallback(""));
     }
 
     [TestMethod]
