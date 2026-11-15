@@ -13,7 +13,7 @@ passing run of this checkout on the files as they are now:
   self-test` (owner decision 2026-11-07, ARC-DEV-239).
 
 A path no zone row names selects `complete` (fail closed) and is named in the output. A run counts when its recorded
-working-tree hash equals the current one, or when no file of the diff differs between the two (a later merge of main, a
+working-tree hash (taken when the step started) equals the current one, or when no file that chose a zone differs between the two (a later merge of main, a
 rebase, or an edit of a document does not void a smoke; a change to a file of the diff does). It never starts a smoke and
 needs no Godot: it reads git and one file.
 
@@ -63,13 +63,21 @@ def needs(selection: smoke_zones.Selection, known: Sequence[str]) -> list[Need]:
 
 
 def ran(need: Need, entry: Mapping[str, object]) -> bool:
-    """Whether a journal entry is a passing run of the unit (the step's exit 0 means every stage it asked for printed its PASS)."""
-    if entry.get("exit") != 0:
+    """Whether a journal entry is a passing run of the unit: the step's exit 0 means every stage it asked for printed its PASS; a
+    step that failed only with failures listed in smoke_known_failures.json (`knownOnly`, named in the PR as not its failure)
+    counts too, and a pinned run (`custom`) never does. A battery step asks for `map` and `resources`."""
+    if entry.get("custom"):
+        return False  # a pinned run (--map, --hero, ...) is not the stage on its own configuration
+    if entry.get("exit") != 0 and not (entry.get("knownOnly") is True and isinstance(entry.get("exit"), int)):
         return False
     if need.kind == STAGE:
         asked = entry.get("asked")
         return isinstance(asked, list) and need.name in asked
     return entry.get("step") == need.name
+
+
+def known_note(entry: Mapping[str, object]) -> str:
+    return " (failed only with a known failure on main: name it in the PR)" if entry.get("exit") != 0 else ""
 
 
 @dataclass(frozen=True)
@@ -88,12 +96,13 @@ class Report:
         return all(result.status == "ok" for result in self.results)
 
 
-def verify(selection: smoke_zones.Selection, files: Sequence[str], known: Sequence[str], entries: Sequence[Mapping[str, object]],
+def verify(selection: smoke_zones.Selection, known: Sequence[str], entries: Sequence[Mapping[str, object]],
            checkout: str, tree: str | None, differing: Callable[[str, str], set[str] | None]) -> Report:
-    """Each required unit against the journal. `files` is the diff; `tree` the working-tree hash now; `differing(a, b)` the
-    files that differ between two recorded trees (None when git cannot tell: the run is then not counted)."""
+    """Each required unit against the journal. `tree` is the working-tree hash now; `differing(a, b)` the files that differ
+    between two recorded trees (None when git cannot tell: the run is then not counted). Only the files that chose a zone
+    void a run when they change; a document or a test of the diff does not."""
     mine = [entry for entry in entries if entry.get("checkout") == checkout]
-    touched = set(files)
+    touched = {path for paths in selection.because.values() for path in paths}
     results = []
     for need in needs(selection, known):
         passed = [entry for entry in mine if ran(need, entry)]
@@ -106,14 +115,14 @@ def verify(selection: smoke_zones.Selection, files: Sequence[str], known: Sequen
             if not isinstance(seen, str) or tree is None:
                 why = why or f"run #{entry.get('seq')} has no recorded files to compare"
             elif seen == tree:
-                results.append(Result(need, "ok", f"run #{entry.get('seq')} on these files"))
+                results.append(Result(need, "ok", f"run #{entry.get('seq')} on these files{known_note(entry)}"))
                 break
             else:
                 moved = differing(seen, tree)
                 if moved is None:
                     why = why or f"run #{entry.get('seq')}: its files cannot be compared (git object gone)"
                 elif not moved & touched:
-                    results.append(Result(need, "ok", f"run #{entry.get('seq')}, no file of the diff changed since"))
+                    results.append(Result(need, "ok", f"run #{entry.get('seq')}, no file of the diff changed since{known_note(entry)}"))
                     break
                 else:
                     shown = sorted(moved & touched)
@@ -164,7 +173,7 @@ def run(args: argparse.Namespace, say: Callable[[str], None] = lambda line: prin
     if not needs(selection, known):
         say("SMOKE verify-pr PASS: no smoke zone covers this diff, nothing is required")
         return 0
-    report = verify(selection, files, known, smoke_history.recent(smoke_history.FILE_KEEP), smoke.ROOT.name,
+    report = verify(selection, known, smoke_history.recent(smoke_history.FILE_KEEP), smoke.ROOT.name,
                     smoke_history.work_tree(), tree_differences)
     for line in lines(report):
         say(line)

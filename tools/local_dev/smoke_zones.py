@@ -9,6 +9,8 @@ Site smoke; they run only when a changed file names them. `complete` is the nigh
 so no stage goes unprotected.
 
 `./arcanum smoke pr --auto` reads the diff against the merge base with `origin/main` and picks the zones through TRIGGERS.
+At a PR a `complete` selection runs `core` + the Crash Site smoke (PR_COMPLETE, ARC-DEV-2223); `./arcanum smoke verify-pr` checks before a merge
+that the selection has a passing run.
 The table is a safe miss when it lacks a row: a changed file that no rule names selects `complete`, and so does a file of
 the shared data, save schema, render or shared UI code. A file that no smoke can cover (documents, unit tests, research and
 packaging tools) selects nothing, and a diff of such files runs no smoke and says so.

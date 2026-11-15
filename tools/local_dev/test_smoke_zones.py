@@ -287,6 +287,14 @@ class ZonePlanTests(unittest.TestCase):
         self.assertIn("container-click", self.stages(steps))
         self.assertTrue(any("`smoke self-test` are mandatory" in line for line in self.said))
 
+    def test_a_pinned_run_marks_its_steps_custom_and_a_default_run_does_not(self) -> None:  # ARC-DEV-2223
+        self.assertFalse(any(step.custom for step in self.plan("pr", "--stages", "cast", "--no-build")))
+        self.assertTrue(all(step.custom for step in self.plan("pr", "--stages", "cast", "--hero", "elf-male", "--no-build")))
+        self.assertTrue(all(step.custom for step in self.plan("pr", "--stages", "cast", "--env", "A=1", "--no-build")))
+        self.assertTrue(all(step.custom for step in self.plan("pr", "--stages", "cast", "--map", "elven ruins", "--no-build")))
+        self.assertTrue(all(step.custom for step in self.plan("map", "elven ruins", "--no-build")))
+        self.assertFalse(any(step.custom for step in self.plan("complete", "--no-build")))
+
     def test_a_run_with_no_zone_to_run_passes_and_builds_nothing(self) -> None:
         output = io.StringIO()
         args = parse("pr", "--auto", "--dry-run")

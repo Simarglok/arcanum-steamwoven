@@ -24,7 +24,7 @@ def entry(seq: int, *asked: str, step: str = "stages-main", exit: int = 0, tree:
 def verify(files: list[str], entries: list[dict], tree: str | None = "T1", moved: dict | None = None, known=KNOWN):
     selection = smoke_zones.select_zones(files)
     moved = moved or {}
-    return smoke_verify.verify(selection, files, known, entries, CHECKOUT, tree, lambda a, b: moved.get((a, b)))
+    return smoke_verify.verify(selection, known, entries, CHECKOUT, tree, lambda a, b: moved.get((a, b)))
 
 
 def statuses(report: smoke_verify.Report) -> dict[str, str]:
@@ -84,6 +84,23 @@ class VerifyTests(unittest.TestCase):
         old = [entry(1, "map", "resources", "cast", "ai", tree="T0")]
         report = verify(self.FILES, old, moved={("T0", "T1"): {"OTHER.md", "src/Arcanum.World/FromMain.cs"}})
         self.assertTrue(report.ok)  # main merged in, a document edited: the diff's files are as the run saw them
+
+    def test_an_edited_document_or_test_of_the_diff_does_not_void_a_run(self) -> None:
+        files = [*self.FILES, "NOTES.md", "tests/X.cs"]
+        old = [entry(1, "map", "resources", "cast", "ai", tree="T0")]
+        moved = {("T0", "T1"): {"NOTES.md", "tests/X.cs"}}
+        self.assertTrue(verify(files, old, moved=moved).ok)  # a review-fix commit to a document: the smoke still stands
+        moved[("T0", "T1")].add("src/Arcanum.Simulation/X.cs")
+        self.assertFalse(verify(files, old, moved=moved).ok)
+
+    def test_a_step_that_failed_only_with_known_failures_counts_with_a_note_and_a_pinned_run_never_does(self) -> None:
+        known = dict(entry(1, "map", "resources", "cast", "ai", exit=1), knownOnly=True)
+        report = verify(self.FILES, [known])
+        self.assertTrue(report.ok)
+        self.assertIn("known failure on main", report.results[0].detail)
+        self.assertFalse(verify(self.FILES, [dict(entry(1, "map", "resources", "cast", "ai", exit=1), knownOnly=False)]).ok)
+        self.assertFalse(verify(self.FILES, [dict(self.ALL[0], custom=True)]).ok)  # --map, --hero, --env, ... run another configuration
+        self.assertTrue(verify(self.FILES, [dict(self.ALL[0], custom=False)]).ok)
 
     def test_the_newest_passing_run_on_the_right_files_wins_over_an_older_stale_one(self) -> None:
         entries = [entry(1, "map", "resources", "cast", "ai", tree="T0"), entry(2, "map", "resources", "cast", "ai", tree="T1")]

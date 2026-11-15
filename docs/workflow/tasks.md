@@ -296,7 +296,8 @@ narrowed the same day in ARC-DEV-061):
   docs-only PR needs no smoke and no check.
 - Zones (owner decision 2026-11-11, ARC-DEV-396): `./arcanum smoke pr --auto`
   reads the diff against `origin/main` and runs the zones it selects (`core`,
-  the heavy `walk`, `container-click`, `crash-site`, `census`, or `complete`);
+  the heavy `walk`, `container-click`, `crash-site`, `census`, or `complete`,
+  which at a PR is core + `crash-site`, see the PR floor above);
   it prints each zone and why, and the PR report names them (`SMOKE zones: ...`).
   A diff no zone covers (documents, tests, research tools) runs no smoke and the
   run says so. `--zones` names zones by hand, `--stages` still adds stages

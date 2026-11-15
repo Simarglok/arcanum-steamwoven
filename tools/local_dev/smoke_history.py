@@ -53,7 +53,7 @@ def work_tree(root: Path = ROOT, git: Callable[..., str] = git_text) -> str | No
         names = [name for name in (git("diff", "--name-only", "-z", "--no-renames", "HEAD", root=root).split("\0")
                                    + git("ls-files", "--others", "--exclude-standard", "-z", root=root).split("\0")) if name]
         with tempfile.TemporaryDirectory(prefix="arcanum-smoke-index-") as folder:
-            env = {"GIT_INDEX_FILE": str(Path(folder) / "index")}
+            env = {"GIT_INDEX_FILE": str(Path(folder) / "index"), "GIT_LITERAL_PATHSPECS": "1"}
             git("read-tree", "HEAD", root=root, env=env)
             if names:
                 git("add", "-A", "--pathspec-from-file=-", "--pathspec-file-nul", root=root, env=env,

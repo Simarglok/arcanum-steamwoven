@@ -284,6 +284,7 @@ class Step:
     requires: tuple[str, ...] = ()  # the map smoke stages whose PASS line the log must hold (ARC-DEV-063)
     again: Callable[[str], "Step"] | None = None  # ARC-DEV-396: one stage of this step as a step of its own (--retry)
     estimate: float | None = None  # ARC-DEV-390: the seconds the step is expected to take (None: its kind's default)
+    custom: bool = False  # ARC-DEV-2223: the run was pinned (--map, --hero, --sector, --main-menu, --env, --no-config-check): it does not count for the PR floor
 
 
 def map_stages() -> tuple[str, ...]:
@@ -512,8 +513,23 @@ def map_runs(base: str, stages: Sequence[str], pins: Pins, hero: str | None, say
     return runs
 
 
+def pinned_run(args: argparse.Namespace) -> bool:
+    """ARC-DEV-2223: whether the request fixes what the default run chooses (a map, hero, sector, main menu, extra variables,
+    no configuration check, or a `map NAME` / crash-site run): such a run is not the run of the stage the floor asks for."""
+    return bool(getattr(args, "map", None) or getattr(args, "hero", None) or getattr(args, "sector", None)
+                or getattr(args, "main_menu", False) or getattr(args, "env", None) or getattr(args, "no_config_check", False)
+                or getattr(args, "name", None))
+
+
 def plan(args: argparse.Namespace, conf: dict, prefs_root: Path, environ: Mapping[str, str], imported: bool,
          say: Callable[[str], None] = lambda line: print(line, flush=True), focus_lib: Path | None = None) -> list[Step]:
+    """Every step of this smoke run, in order (each marked `custom` when the request pinned it, see pinned_run)."""
+    steps = plan_steps(args, conf, prefs_root, environ, imported, say, focus_lib)
+    return [dataclasses.replace(step, custom=True) for step in steps] if pinned_run(args) else steps
+
+
+def plan_steps(args: argparse.Namespace, conf: dict, prefs_root: Path, environ: Mapping[str, str], imported: bool,
+               say: Callable[[str], None], focus_lib: Path | None) -> list[Step]:
     """Every step of this smoke run, in order. `focus_lib` is the built focus guard the window steps load (ARC-DEV-403)."""
     environ = focus_guard.carry(dict(environ), focus_lib)
     godot = environ.get("GODOT") or DEFAULT_GODOT
@@ -712,6 +728,7 @@ def execute(steps: Sequence[Step], runner: Callable[..., int] = run_queue.run,
 
     def run_step(step: Step) -> tuple[int, Path | None]:
         say(f"SMOKE step {step.name} kind={step.kind}")
+        before = smoke_history.work_tree()  # ARC-DEV-2223: the files the step starts on (an edit while it waits or runs is not covered)
         check = start_check.for_run(step.kind, step.expect, None, step.command)
         logs: list[Path] = []
         code = runner(step.kind, list(step.command), label=f"smoke {step.name}", timeout=step.timeout, quiet=True,
@@ -724,6 +741,7 @@ def execute(steps: Sequence[Step], runner: Callable[..., int] = run_queue.run,
                 for reason in reasons:
                     say(f"  viewer: {reason}")
                 code = STAGE_NOT_RUN
+        known_only = False
         if known and 0 != code < STOPPED and not step.gate:
             hits, others = known_on_main(known, step, logs[-1] if logs else None)
             if hits:
@@ -733,9 +751,14 @@ def execute(steps: Sequence[Step], runner: Callable[..., int] = run_queue.run,
                     say(f"  not run for another reason: {', '.join(others)}")
                 else:
                     only_known.append(step.name)
+                    known_only = True
         try:  # ARC-DEV-399: what the step ran and each stage's time, into the queue folder; never changes the result
-            record = smoke_history.entry_of(step.name, step.kind, step.requires, code, logs[-1] if logs else None)
+            record = smoke_history.entry_of(step.name, step.kind, step.requires, code, logs[-1] if logs else None,
+                                            tree=lambda: before)
             if record is not None:
+                record["custom"] = step.custom  # ARC-DEV-2223: what smoke_verify needs to tell the default run from a pinned one
+                record["knownOnly"] = known_only
+
                 smoke_history.append(record)
                 timed.append(record)
         except Exception as error:  # noqa: BLE001 - a record must never fail the smoke, whatever a history line held
