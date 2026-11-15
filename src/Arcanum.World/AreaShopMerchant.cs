@@ -1,8 +1,12 @@
 using Arcanum.Data.Area;
 using Arcanum.Data.Combat;
+using Arcanum.Data.Characters;
 using Arcanum.Data.Content;
 using Arcanum.Data.Maps;
+using Arcanum.Data.Scripts;
+using Arcanum.Scripting.Dialog;
 using Arcanum.Session;
+using Arcanum.Simulation.Items;
 using Arcanum.Simulation.Movement;
 
 namespace Arcanum.World;
@@ -156,8 +160,12 @@ public sealed class AreaShopSession : IDisposable
     /// </summary>
     /// <param name="name">An item's name for the window (its entity and kind).</param>
     /// <param name="merchantName">The merchant's name.</param>
+    /// <param name="effects">ARC-UI-1806: the effect rules of the new character's hero tables, for the merchant's sheet (its Gambling skill opens the bet and opposes the
+    /// hero's check, as in the dialog's barter window); null: the merchant has no sheet and the bet gate refuses.</param>
+    /// <param name="scriptContent">ARC-UI-1806: the script content (the generated dialog texts and the merchant's override dialog) the merchant's bet lines are read from, borrowed
+    /// and asked at each line; null or no content: no line is said (the gate's refusals then print nothing, as the dialog's window does without texts).</param>
     public static AreaShopSession? Open(GameSessionOwner owner, AreaShopMap map, AreaBarterData data, Func<string, SessionItemKind, string> name,
-        string merchantName, out string? refused)
+        string merchantName, out string? refused, Func<int, EffectRule?>? effects = null, Func<ScriptContent?>? scriptContent = null)
     {
         ArgumentNullException.ThrowIfNull(owner);
         ArgumentNullException.ThrowIfNull(map);
@@ -195,8 +203,13 @@ public sealed class AreaShopSession : IDisposable
             }
         }
         var state = new AreaConversationState(owner, shopMap, [map.Merchant], AreaConversationProfile.Diagnostic.InitialReaction, scopes: [AreaConversationHost.Scope(row, owner)]);
+        // ARC-UI-1806: the bet in this window as in the dialog's: the merchant's Gambling skill from its stored sheet and its generated lines.
+        var lines = new AreaShopLines(owner, row, state, scriptContent);
         var barter = new AreaBarter(owner, inventory, data, merchant, () => state.Reaction(0),
-            delta => owner.AdjustReaction(owner.Version, map.Merchant, state.NpcFacts(), state.PcFactsFor(0), delta).Disposition == GameSessionDisposition.Changed, name);
+            delta => owner.AdjustReaction(owner.Version, map.Merchant, state.NpcFacts(), state.PcFactsFor(0), delta).Disposition == GameSessionDisposition.Changed, name,
+            merchantGambling: () => effects is not null && AreaAdvancement.Npc(map.Merchant, map.MerchantFields, effects) is { } sheet
+                ? owner.QueryNpcSkills(sheet.Loaded, sheet.Modifiers)[Arcanum.Simulation.Skills.Skill.Gambling] : null,
+            npcLine: category => lines.Pick(GamblingRules.LineRange(category)));
         var opened = barter.Open();
         // ARC-WORLD-090: a substitute container that is gone leaves the merchant trading from its own list.
         if (opened is { Disposition: GameSessionDisposition.Rejected, Failure: GameSessionFailure.UnknownHolder } && barter.Merchant.Container is not null)
@@ -265,5 +278,36 @@ public sealed class AreaShopSession : IDisposable
         public AreaPixelRect? GameWindow => null;
         public (double Width, double Height) WindowSize => (0, 0);
         public AreaPixelRect? BodyRect(AreaObjectKey key) => null;
+    }
+}
+
+/// <summary>
+/// ARC-UI-1806: the opening shop's merchant lines for the bet (<see cref="AreaConversationHost.PickLine"/> without a conversation host: the shop map has no dialog
+/// speakers): a random line of a range of the plain NPC files for the merchant, its own override line first, read from the player's generated files at each pick
+/// and never stored. Null when nothing can be said (no content, texts that did not load, a range without an entry, a refused roll); the greeting texts are loaded once.
+/// </summary>
+internal sealed class AreaShopLines(GameSessionOwner owner, AreaObjectRecord row, AreaConversationState state, Func<ScriptContent?>? scriptContent)
+{
+    private AreaGreetingTexts? _texts;
+
+    public string? Pick((int First, int Last) range)
+    {
+        try
+        {
+            if (scriptContent?.Invoke() is not { } content) return null;
+            _texts ??= AreaGreetingTexts.Load(content.Plan);
+            if (_texts.Status != AreaGreetingTextsStatus.Ready) return null;
+            var speaker = new AreaSpeaker(0, row, 0, 0, 0);
+            var overrides = AreaGreeting.OverrideScript(speaker) is { } script && content.Dialog(script, owner.Rules.Data) is { Status: ScriptContentStatus.Read } read ? read.Document : null;
+            var pc = owner.QueryHeroDialogFacts() ?? AreaConversationProfile.Diagnostic.Pc;
+            var said = DialogFollowerComment.Say(new AreaGreeting(owner, speaker, state, pc, _texts, overrides), new DialogReactionQuery(AreaConversationState.Npc(0), AreaConversationState.PcParticipant),
+                range.First, range.Last, AreaConversationProfile.Diagnostic.Names, DialogTextEncoding.Windows1252, DialogConversationOptions.HardMaxTextBytes, null);
+            return said.Status == DialogGenericGreetingStatus.Said ? said.Text : null;
+        }
+        // As the host's line pick: a courtesy of the window, not its gate; a texts, facts or session failure says nothing (typed failure at the boundary).
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            return null;
+        }
     }
 }

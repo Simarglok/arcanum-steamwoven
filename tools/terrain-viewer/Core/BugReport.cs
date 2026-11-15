@@ -116,10 +116,11 @@ public sealed record BugReportSave(GameSessionSnapshot Snapshot, GameSaveSummary
 /// <summary>
 /// Everything one report writes. <see cref="Screenshot"/> (PNG) and <see cref="Save"/> are null when they could not be taken, with
 /// the reason in <see cref="ScreenshotMissing"/> and <see cref="SaveMissing"/>; <see cref="Log"/> is the buffer's last window when
-/// the key was pressed. <see cref="TakenUtc"/> and <see cref="TakenLocal"/> are that moment.
+/// the key was pressed. <see cref="TakenUtc"/> and <see cref="TakenLocal"/> are that moment. <see cref="Check"/> (ARC-DEV-2189) is the
+/// owner check the report belongs to, <c>ARC-TYPE-NNN#k</c> (<see cref="BugReportCheck"/>); null for an ordinary report.
 /// </summary>
 public sealed record BugReportContent(string Text, BugReportFacts Facts, IReadOnlyList<BugReportLine> Log, long LogDropped, DateTime TakenUtc,
-    DateTime TakenLocal, byte[]? Screenshot, string? ScreenshotMissing, BugReportSave? Save, string? SaveMissing);
+    DateTime TakenLocal, byte[]? Screenshot, string? ScreenshotMissing, BugReportSave? Save, string? SaveMissing, string? Check = null);
 
 /// <summary>Where a report may go: <see cref="Primary"/> (the <c>reports</c> folder beside the launched game) unless
 /// <see cref="PrimaryRefusal"/> says why it cannot be used, then <see cref="Fallback"/> (the user folder's <c>reports</c>). A run that
@@ -302,7 +303,10 @@ public static class BugReportWriter
         ArgumentNullException.ThrowIfNull(content);
         var builder = new StringBuilder();
         var local = content.TakenLocal.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture);
-        builder.Append(CultureInfo.InvariantCulture, $"# Bug report {local}\n\n## What the player wrote\n\n");
+        builder.Append(CultureInfo.InvariantCulture, $"# Bug report {local}\n\n");
+        // ARC-DEV-2189: one machine-readable line before the first heading; only a well-formed step id is written.
+        if (BugReportCheck.Normalize(content.Check) is { } check) builder.Append(BugReportCheck.LinePrefix).Append(check).Append("\n\n");
+        builder.Append("## What the player wrote\n\n");
         var text = content.Text.Replace("\r\n", "\n", StringComparison.Ordinal).Trim();
         if (text.Length == 0) builder.Append("(no text)\n");
         else foreach (var line in text.Split('\n')) builder.Append("> ").Append(line).Append('\n');
