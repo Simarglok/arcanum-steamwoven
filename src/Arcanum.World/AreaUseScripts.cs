@@ -47,6 +47,7 @@ namespace Arcanum.World;
 /// holds no facts of (the PC included since ARC-SCRIPT-1773); without them obj can see obj and obj can hear obj stop the run.
 /// ARC-WORLD-1837 (ledger TT20): <see cref="NpcTeleportRefusal"/> names why a script's teleport (44, 102) of an NPC of the shown map to a cell of the shown map cannot be requested (the AI host does not hold it, it is a follower, the cell is not held), or null,
 /// and <see cref="RequestNpcTeleport"/> records the request in the session's one slot (the original's 0x4D3380; the object moves at the next ping), called only after the run applied; without them a run that teleports an object other than the hero is left unapplied.
+/// ARC-SCRIPT-2326 (AR2): <see cref="BodyArmorUseArt"/> answers the use art of the body armour the hero wears (item field 0x5F, the one the hero's drawn body takes its armour part from), null when it is not read; without it get armor of the hero stops the run while armour is worn.
 /// </summary>
 public sealed record AreaScriptWorld(Func<CellCoord?> PcCell, Func<AreaObjectRecord, bool> Gone, Func<int, AreaPrototypeItem?> Item, Func<IDropMap?> DropMap,
     Func<ScrObjectRef, bool>? Kill = null, Func<ScrObjectRef, bool>? CanKill = null, Func<ScrObjectRef, CellCoord?>? CritterCell = null,
@@ -58,7 +59,8 @@ public sealed record AreaScriptWorld(Func<CellCoord?> PcCell, Func<AreaObjectRec
     Action<string>? CritterMade = null, Func<string, int, bool, string>? ScriptReaction = null, Func<ScrObjectRef, AreaScriptOpenable?>? Openable = null,
     Func<string, int, string>? ScriptStopSpell = null, Func<string, AreaScriptVitals?>? Vitals = null, Func<string, int, int, string>? ScriptHealLife = null,
     Func<string, string, string>? ScriptAttack = null, Func<string, int?>? Aptitude = null, Func<string, string, bool?>? CanSee = null, Func<string, string, bool?>? CanHear = null,
-    Func<uint, bool>? ArtExists = null, Func<ScrTeleport, string?>? NpcTeleportRefusal = null, Action<ScrTeleport>? RequestNpcTeleport = null);
+    Func<uint, bool>? ArtExists = null, Func<ScrTeleport, string?>? NpcTeleportRefusal = null, Action<ScrTeleport>? RequestNpcTeleport = null,
+    Func<uint?>? BodyArmorUseArt = null);
 
 /// <summary>ARC-SCRIPT-1481 (VT1–VT3): the vitals of an NPC of the shown map for get hit points (107), get fatigue points (108) and get stat of the poison level (24): the current and maximum hit points and fatigue and the poison level,
 /// as the session's life status gives them (<see cref="AreaScriptWorld.Vitals"/>).</summary>
@@ -212,7 +214,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
 
     /// <summary>ARC-SCRIPT-1772 (CQ1–CQ5): the critter getters (38, 39, 89; <see cref="ScrAdmissionSet.CritterFieldActions"/>), toggle invulnerability (57) and rename (92) of <see cref="ScrAdmissionSet.S56"/>, which the use set and so the placed, combat-point, dying and
     /// heartbeat sets admit: the getters are answered here (<see cref="IScrCritterFieldQueries"/>), the two writes go through the session for the PC and an NPC (<see cref="ObjectStateRefusal"/> refuses the rest).</summary>
-    private static int[] CritterFieldWriteActions => [.. ScrAdmissionSet.CritterFieldActions, ScrCatalogue.Action.ToggleInvulnerability, ScrCatalogue.Action.Rename];
+    private static int[] CritterFieldWriteActions => [.. ScrAdmissionSet.CritterFieldActions, .. ScrAdmissionSet.CritterArtActions, ScrCatalogue.Action.ToggleInvulnerability, ScrCatalogue.Action.Rename];
     /// <summary>ARC-SCRIPT-1734 (WE11, WE12): play spell eye candy (104) and stop script eye candy (124) of <see cref="ScrAdmissionSet.S55"/>, which the use set admits beside play script eye candy (120): the run's result hands them on as eye candy requests; the viewer shows the stop since ARC-SCRIPT-1828 (the spell play, 104, is not shown yet).</summary>
     private static int[] EyeCandyActions => [ScrCatalogue.Action.PlaySpellEyeCandy, ScrCatalogue.Action.StopScriptEyeCandy];
 
@@ -704,6 +706,29 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     /// <summary>ARC-SCRIPT-1772 (CQ3, case 0x59, 0x45D080): an NPC's faction (field 0x124) as it is now, a script's set faction over the map data's (<see cref="Faction"/>), 0 for the PC and any other object type; null for an object this host has no row for.</summary>
     public int? FactionOf(ScrObjectRef obj) => NpcField(obj, row => AreaConversationHost.Scope(row, _session).Faction);
 
+    /// <summary>
+    /// ARC-SCRIPT-2326 (ledger AR1–AR3, exe read 2026-11-16): get armor (32), the armour part of the object's current art id. The PC's is the armour part of the use art of the body armour (slot 1006) the session has it wear,
+    /// 0 bare (<see cref="Arcanum.Simulation.Equipment.BodyArmorArtRules.WornArt"/> sets the part the same way); an NPC's or any other row's is read from its stored current art (field 1, slot 0), 0 for an art that is no critter's or monster's (items, scenery, unique NPCs);
+    /// null for an object this host has no row for or one whose row holds no current art. Not modelled: a session-dressed NPC's armour changing its art, a polymorph's art.
+    /// </summary>
+    public int? ArmorOf(ScrObjectRef obj)
+    {
+        if (IsPc(obj))
+        {
+            if (_session.QueryHero() is null) return null;
+            // Bare: underwear (part 0). Worn: the use art's armour part, which the world's hero body reads; not read there: not modelled.
+            var part = 0;
+            if (_session.QueryEquipment().Worn.Any(item => item.Slot == Arcanum.Simulation.Equipment.EquipmentSlot.Armor))
+            {
+                if (_world?.BodyArmorUseArt?.Invoke() is not { } use) return null;
+                part = Arcanum.Simulation.Equipment.BodyArmorArtRules.ItemArmor(use);
+            }
+            return Arcanum.Simulation.Sound.SoundCueRules.CritterArtArmor(Arcanum.Simulation.Equipment.BodyArmorArtRules.WithArmor(Arcanum.Simulation.Equipment.BodyArmorArtRules.CritterArt << 28, part));
+        }
+        if (Row(obj) is not { } row || Number(row, CurrentArtSlot) is not { } art) return null;
+        return Arcanum.Simulation.Sound.SoundCueRules.CritterArtArmor(unchecked((uint)art));
+    }
+
     // The three getters read a field only of an object whose type is NPC (0x10) and answer 0 for any other type, the PC included.
     private int? NpcField(ScrObjectRef obj, Func<AreaObjectRecord, int> read)
     {
@@ -1119,7 +1144,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         return row.Type == NpcType && session.QueryMapChange(new SessionMapId(row.Key.RuntimeMap), SessionNpcName.Key(EntityId(row))) is { } renamed ? unchecked((int)renamed) : NameOf(row);
     }
 
-    private const int SpellFlagsSlot = 19, NameSlot = 21, SocialClassSlot = 85;
+    private const int SpellFlagsSlot = 19, NameSlot = 21, SocialClassSlot = 85, CurrentArtSlot = 0;
 
     private static long? Number(AreaObjectRecord row, int slot) =>
         row.EffectiveFields.FirstOrDefault(field => field.Slot == slot) is { Presence: AreaPresence.Value, Number: { } n } && n is >= int.MinValue and <= uint.MaxValue ? n : null;

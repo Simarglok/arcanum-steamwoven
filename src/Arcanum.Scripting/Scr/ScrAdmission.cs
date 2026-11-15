@@ -505,34 +505,42 @@ public sealed class ScrAdmissionSet
     /// <summary>The five guard conditions (PC quest state 6, has item named 17, is named 20, wields an item named 21, has a reputation 33; ledger SG1–SG6) whose object list the interpreter tests object by object.</summary>
     public static IReadOnlySet<int> GuardConditions { get; } = new HashSet<int> { ScrCatalogue.Condition.PcQuestState, ScrCatalogue.Condition.HasItemNamed, ScrCatalogue.Condition.IsNamed, ScrCatalogue.Condition.IsWieldingItem, ScrCatalogue.Condition.HasReputation };
 
-    /// <summary>The focus kinds of <see cref="S61"/> and <see cref="S63"/> a host answers through <see cref="IScrGroupQueries"/>: the group kinds, and since ARC-SCRIPT-2320 the follower kinds (the same direct follower list).</summary>
+    /// <summary>The actions of <see cref="S63"/> a host answers through <see cref="IScrCritterFieldQueries"/>: get armor (32, ARC-SCRIPT-2326).</summary>
+    public static IReadOnlyList<int> CritterArtActions { get; } = [ScrCatalogue.Action.GetArmor];
+
+    /// <summary>
+    /// The conditions the interpreter tests over the object list of operand 0 by the list rule of SG6 (the exe's list tail at 0x4455BD, shared by every list condition, ARC-SCRIPT-2326): the group focus kinds are admitted in their slot 0 besides
+    /// the five <see cref="GuardConditions"/>. Conditions that read the first object only (10, 18, 28, 29, 34, 36, 40, and 24, 32, 44 outside this catalogue) are not in it, and neither are the ones the interpreter reads as one object or counts differently (such as is identified, 47).
+    /// </summary>
+    public static IReadOnlySet<int> ListConditions { get; } = new HashSet<int>
+    {
+        ScrCatalogue.Condition.HasBlessing, ScrCatalogue.Condition.HasCurse, ScrCatalogue.Condition.BadAssociates, ScrCatalogue.Condition.IsPolymorphed, ScrCatalogue.Condition.IsShrunk, ScrCatalogue.Condition.HasBodySpell,
+        ScrCatalogue.Condition.IsInvisible, ScrCatalogue.Condition.HasMirrorImage, ScrCatalogue.Condition.MonsterOfType, ScrCatalogue.Condition.IsDead, ScrCatalogue.Condition.IsSurrendered, ScrCatalogue.Condition.IsInDialog,
+        ScrCatalogue.Condition.IsSwitchedOff, ScrCatalogue.Condition.IsInvulnerable, ScrCatalogue.Condition.IsInCombat, ScrCatalogue.Condition.InfluencedBySpell, ScrCatalogue.Condition.IsAnimal, ScrCatalogue.Condition.IsUndead,
+        ScrCatalogue.Condition.KnowsSpell, ScrCatalogue.Condition.MasteredSpellCollege, ScrCatalogue.Condition.IsProwling,
+    };
+
+    /// <summary>The focus kinds of <see cref="S61"/> and <see cref="S64"/> a host answers through <see cref="IScrGroupQueries"/>: the group kinds, and since ARC-SCRIPT-2320 the follower kinds (the same direct follower list).</summary>
     public static IReadOnlySet<ScrFocusKind> GroupFocusKinds { get; } = new HashSet<ScrFocusKind>
         { ScrFocusKind.EveryoneInGroup, ScrFocusKind.AnyoneInGroup, ScrFocusKind.EveryFollower, ScrFocusKind.AnyFollower };
 
-    /// <summary>The conditions whose object operand the interpreter walks as a list by the rule of SG6 (every object, or one of the "any" kinds; an empty list is false): the only ones that admit a list focus kind of the follower kinds (ARC-SCRIPT-2320).</summary>
-    public static IReadOnlySet<int> ListRuleConditions { get; } = new HashSet<int>
-    {
-        ScrCatalogue.Condition.IsAnimal, ScrCatalogue.Condition.IsInCombat, ScrCatalogue.Condition.IsInvisible, ScrCatalogue.Condition.IsSurrendered, ScrCatalogue.Condition.IsInDialog,
-        ScrCatalogue.Condition.IsInvulnerable, ScrCatalogue.Condition.IsUndead, ScrCatalogue.Condition.IsProwling, ScrCatalogue.Condition.BadAssociates, ScrCatalogue.Condition.MonsterOfType,
-        ScrCatalogue.Condition.Identified, ScrCatalogue.Condition.IsDead, ScrCatalogue.Condition.IsSwitchedOff, ScrCatalogue.Condition.HasBodySpell, ScrCatalogue.Condition.IsPolymorphed,
-        ScrCatalogue.Condition.IsShrunk, ScrCatalogue.Condition.HasMirrorImage, ScrCatalogue.Condition.InfluencedBySpell, ScrCatalogue.Condition.KnowsSpell, ScrCatalogue.Condition.MasteredSpellCollege,
-        ScrCatalogue.Condition.HasBlessing, ScrCatalogue.Condition.HasCurse,
-        // The five guards (SG6: "the same, after each of the five") walk the follower list too (ScrInterpreter.GuardHolds).
-        ScrCatalogue.Condition.PcQuestState, ScrCatalogue.Condition.HasItemNamed, ScrCatalogue.Condition.IsNamed, ScrCatalogue.Condition.IsWieldingItem, ScrCatalogue.Condition.HasReputation,
-    };
-
-
     /// <summary>
     /// The container vicinity set (ARC-SCRIPT-2322, ledger CV1–CV7): <see cref="S61"/> plus the focus kinds every container in the vicinity (17) and any container in the vicinity (18, one list with 17), which the host answers
-    /// through <see cref="IScrContainerQueries"/> (8 installed roots on 10 sites). The interpreter runs at most S62.
+    /// through <see cref="IScrContainerQueries"/> (8 installed roots on 10 sites). The interpreter ran at most S62 until ARC-SCRIPT-2326.
     /// </summary>
     public static ScrAdmissionSet S62 { get; } = new("S62", S61.Conditions, S61.Actions, S61.ValueKinds, S61.FocusKinds.Concat([ScrFocusKind.EveryContainerInVicinity, ScrFocusKind.AnyContainerInVicinity]), counterIndexWraps: true);
 
     /// <summary>
-    /// The follower set (ARC-SCRIPT-2320, ledger FK1–FK7): <see cref="S62"/> plus the focus kinds every follower (2) and any follower (3), the direct followers of the run's triggerer (the group kinds' list without the triggerer), which the host answers
-    /// through <see cref="IScrGroupQueries"/> as for the group kinds. The interpreter runs at most S63.
+    /// The armour set (ARC-SCRIPT-2326, ledger AR1–AR7): <see cref="S62"/> plus get armor (action 32), which stores the armour part of the first object's current art id (<see cref="CritterArtActions"/>, answered through <see cref="IScrCritterFieldQueries.ArmorOf"/>),
+    /// and the group focus kinds in slot 0 of every list condition (<see cref="ListConditions"/>: the exe's condition cases share one list tail, GF9 read again). The interpreter runs at most S63.
     /// </summary>
-    public static ScrAdmissionSet S63 { get; } = new("S63", S62.Conditions, S62.Actions, S62.ValueKinds, S62.FocusKinds.Concat([ScrFocusKind.EveryFollower, ScrFocusKind.AnyFollower]), counterIndexWraps: true);
+    public static ScrAdmissionSet S63 { get; } = new("S63", S62.Conditions, S62.Actions.Concat(CritterArtActions), S62.ValueKinds, S62.FocusKinds, counterIndexWraps: true);
+
+    /// <summary>
+    /// The follower set (ARC-SCRIPT-2320, ledger FK1–FK7): <see cref="S63"/> plus the focus kinds every follower (2) and any follower (3), the direct followers of the run's triggerer (the group kinds' list without the triggerer), which the host answers
+    /// through <see cref="IScrGroupQueries"/> as for the group kinds. The interpreter runs at most S64.
+    /// </summary>
+    public static ScrAdmissionSet S64 { get; } = new("S64", S63.Conditions, S63.Actions, S63.ValueKinds, S63.FocusKinds.Concat([ScrFocusKind.EveryFollower, ScrFocusKind.AnyFollower]), counterIndexWraps: true);
 
     /// <summary>
     /// The set the engine runs the slide scripts with (ARC-RENDER-1171, ledger SS2): true, equal, less or equal, local and global flag and PC quest state conditions; the control and arithmetic actions, call script
@@ -761,11 +769,8 @@ public static class ScrAdmission
                     // interpreter reads a condition's object operand as one object, so the critter vicinity kinds are admitted in
                     // actions only (an action's single object is the list's first, 0x44B960; loop for takes the list); ARC-SCRIPT-2319: the group kinds (13, 14) likewise (GF9).
                     if (condition && (ScrFocusKind)kind is ScrFocusKind.EveryoneInVicinity or ScrFocusKind.AnyoneInVicinity) return Refuse(ScrRefusalCode.FocusKindNotAdmitted);
-                    // ARC-SCRIPT-2319 (GF9): the group kinds are admitted in a condition only as the list of one of the five guard conditions (SG1–SG6, read as lists in the exe, kind 14 the "any" form); the other conditions read one object here.
-                    if (condition && (ScrFocusKind)kind is ScrFocusKind.EveryoneInGroup or ScrFocusKind.AnyoneInGroup && !(slot == 0 && ScrAdmissionSet.GuardConditions.Contains(type))) return Refuse(ScrRefusalCode.FocusKindNotAdmitted);
-                    // ARC-SCRIPT-2320 (review): the follower kinds name a list too; a condition that reads one object (following, jilted, the guards, met before, can see) takes the first follower here where the original applies
-                    // the list rule, so only the conditions that walk the whole list (SG6) admit them.
-                    if (condition && (ScrFocusKind)kind is ScrFocusKind.EveryFollower or ScrFocusKind.AnyFollower && !ScrAdmissionSet.ListRuleConditions.Contains(type)) return Refuse(ScrRefusalCode.FocusKindNotAdmitted);
+                    // ARC-SCRIPT-2319 (GF9), ARC-SCRIPT-2320 (FK5): the group and follower kinds are admitted in a condition only as the list of a guard condition (SG1–SG6) or of a list condition (ARC-SCRIPT-2326, AR5: kind 14 the "any" form); the conditions that read the first object only (10, 18, 28, 29, 34, 36, 40) and the ones the interpreter reads as one object stay out.
+                    if (condition && (ScrFocusKind)kind is ScrFocusKind.EveryoneInGroup or ScrFocusKind.AnyoneInGroup or ScrFocusKind.EveryFollower or ScrFocusKind.AnyFollower && !(slot == 0 && (ScrAdmissionSet.GuardConditions.Contains(type) || ScrAdmissionSet.ListConditions.Contains(type)))) return Refuse(ScrRefusalCode.FocusKindNotAdmitted);
                     break;
             }
             // Get skill stores into its third operand (SX1).
@@ -790,6 +795,8 @@ public static class ScrAdmission
             if (!condition && type is ScrCatalogue.Action.GetHitPoints or ScrCatalogue.Action.GetFatiguePoints && slot is 1 or 2 && (ScrValueKind)kind == ScrValueKind.Number) return Refuse(ScrRefusalCode.WriteToNumber);
             // Get social class, get origin and get faction store into their number operand 1 (ARC-SCRIPT-1772, CQ1–CQ3).
             if (!condition && type is ScrCatalogue.Action.GetSocialClass or ScrCatalogue.Action.GetOrigin or ScrCatalogue.Action.GetFaction && slot == 1 && (ScrValueKind)kind == ScrValueKind.Number) return Refuse(ScrRefusalCode.WriteToNumber);
+            // Get armor stores into its number operand 1 (ARC-SCRIPT-2326, AR1).
+            if (!condition && type == ScrCatalogue.Action.GetArmor && slot == 1 && (ScrValueKind)kind == ScrValueKind.Number) return Refuse(ScrRefusalCode.WriteToNumber);
             // Get area stores into its number operand 1 (ARC-SCRIPT-050, GA1).
             if (!condition && type == ScrCatalogue.Action.GetArea && slot == 1 && (ScrValueKind)kind == ScrValueKind.Number) return Refuse(ScrRefusalCode.WriteToNumber);
             // Slot 0 of these types is itself an index, a store or a jump target.

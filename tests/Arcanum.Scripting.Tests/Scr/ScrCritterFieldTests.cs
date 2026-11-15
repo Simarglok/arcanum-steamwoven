@@ -16,12 +16,15 @@ public sealed class ScrCritterFieldTests
     private static readonly ScrObjectRef Sword = new(1, "kit:3"), Victim = new(1, "kit:4");
     private static readonly int[] Getters = [ScrCatalogue.Action.GetSocialClass, ScrCatalogue.Action.GetOrigin, ScrCatalogue.Action.GetFaction];
 
-    private sealed class Host(FakeHost inner) : IScrHost, IScrCritterFieldQueries, IScrCritterStateQueries, IScrObjectQueries
+    private sealed class Host(FakeHost inner) : IScrHost, IScrCritterFieldQueries, IScrCritterStateQueries, IScrObjectQueries, IScrGroupQueries
     {
         /// <summary>What the host answers per action type and object; a missing entry is a null answer (an object it does not know).</summary>
         public Dictionary<(int Type, ScrObjectRef Object), int> Fields { get; } = new();
         public Dictionary<ScrObjectRef, bool> Invulnerable { get; } = new();
         public Dictionary<ScrObjectRef, int> Names { get; } = new();
+        public Dictionary<ScrObjectRef, int> Armor { get; } = new();
+        public Dictionary<ScrObjectRef, bool> Undead { get; } = new();
+        public List<ScrObjectRef> Followers { get; } = [];
         public List<(int Type, ScrObjectRef Object)> Asked { get; } = [];
 
         private int? Field(int type, ScrObjectRef obj)
@@ -40,7 +43,9 @@ public sealed class ScrCritterFieldTests
         public bool? IsInDialog(ScrObjectRef obj) => null;
         public bool? CanSee(ScrObjectRef observer, ScrObjectRef target) => null;
         public bool? CanHear(ScrObjectRef listener, ScrObjectRef source) => null;
-        public bool? IsUndead(ScrObjectRef obj) => null;
+        public bool? IsUndead(ScrObjectRef obj) => Undead.TryGetValue(obj, out var value) ? value : null;
+        public int? ArmorOf(ScrObjectRef obj) { Asked.Add((ScrCatalogue.Action.GetArmor, obj)); return Armor.TryGetValue(obj, out var value) ? value : null; }
+        public IReadOnlyList<ScrObjectRef> FollowersOf(ScrObjectRef leader) => Followers.ToArray();
         public bool? IsProwling(ScrObjectRef obj) => null;
         public bool? HasBadAssociates(ScrObjectRef obj) => null;
         public bool? IsMonsterOfType(ScrObjectRef obj, int type) => null;
@@ -70,6 +75,10 @@ public sealed class ScrCritterFieldTests
         ScrAdmissionSet.S5.Conditions.Concat([ScrCatalogue.Condition.IsInvulnerable, ScrCatalogue.Condition.IsNamed]),
         ScrAdmissionSet.S5.Actions.Concat(ScrAdmissionSet.CritterFieldActions).Concat([ScrCatalogue.Action.ToggleInvulnerability, ScrCatalogue.Action.Rename, ScrCatalogue.Action.SetFaction]),
         ScrAdmissionSet.S5.ValueKinds, ScrAdmissionSet.S5.FocusKinds);
+
+    // ARC-SCRIPT-2326: get armor (32) and the group kinds in the list condition is undead (38).
+    private static readonly ScrAdmissionSet ArmorSet = new("critter-armor", Set.Conditions.Append(ScrCatalogue.Condition.IsUndead), Set.Actions.Concat(ScrAdmissionSet.CritterArtActions), Set.ValueKinds,
+        Set.FocusKinds.Concat(ScrAdmissionSet.GroupFocusKinds), counterIndexWraps: true);
 
     private static Host With(ScrProgram program)
     {
@@ -201,5 +210,60 @@ public sealed class ScrCritterFieldTests
         Assert.IsTrue(ScrAdmissionSet.S55.IsSubsetOf(ScrAdmissionSet.S56));
         Assert.IsTrue(ScrAdmissionSet.S56.IsSubsetOf(ScrAdmissionSet.S56));
         Assert.IsNotNull(new ScrRunOptions { Admission = ScrAdmissionSet.S56 });
+    }
+
+    [TestMethod]
+    public void Get_armor_stores_the_armour_part_of_the_first_object_and_stops_like_the_other_getters()
+    {
+        var host = With(Store(ScrCatalogue.Action.GetArmor, Extra));
+        host.Armor[Victim] = 4;
+        var run = ScrDispatcher.RunObject(new(7, Sword, Pc, Victim), host, new() { Admission = ArmorSet });
+        Assert.AreEqual(ScrOutcome.RunDefault, run.Outcome);
+        Assert.AreEqual(4u, run.Effects.Writeback!.Slot.Counters & 0xFF);
+        CollectionAssert.AreEqual(new[] { (ScrCatalogue.Action.GetArmor, Victim) }, host.Asked);
+
+        var unknown = ScrDispatcher.RunObject(new(7, Sword, Pc, Victim), With(Store(ScrCatalogue.Action.GetArmor, Extra)), new() { Admission = ArmorSet });
+        Assert.AreEqual(ScrStop.NotModelled, unknown.Stop);
+        var absent = ScrDispatcher.RunObject(new(7, Sword, Pc, null), With(Store(ScrCatalogue.Action.GetArmor, Extra)), new() { Admission = ArmorSet });
+        Assert.AreEqual((ScrStop.MissingObject, 0), (absent.Stop, absent.StopLine));
+        var literal = ScrAdmission.Admit(Program(Do(C(ScrCatalogue.Action.GetArmor, (Attachee, 0), N(5)))), ArmorSet);
+        Assert.AreEqual((ScrRefusalCode.WriteToNumber, 1), (literal.Refusal!.Code, literal.Refusal.Slot));
+        Assert.IsFalse(ScrAdmission.Admit(Program(Do(C(ScrCatalogue.Action.GetArmor, (Attachee, 0), (Counter, 0)))), Set).IsAdmitted, "the set before S63 refuses it");
+        Assert.IsTrue(ScrAdmissionSet.S62.IsSubsetOf(ScrAdmissionSet.S63) && !ScrAdmissionSet.S63.IsSubsetOf(ScrAdmissionSet.S62));
+    }
+
+    [TestMethod]
+    public void Get_armor_of_a_group_kind_reads_the_first_follower_or_the_triggerer()
+    {
+        var follower = new ScrObjectRef(1, "follower:0");
+        var host = With(Store(ScrCatalogue.Action.GetArmor, 14));
+        host.Followers.Add(follower);
+        host.Armor[follower] = 6; host.Armor[Pc] = 3;
+        Assert.AreEqual(6u, ScrDispatcher.RunObject(new(7, Sword, Pc, Victim), host, new() { Admission = ArmorSet }).Effects.Writeback!.Slot.Counters & 0xFF, "the first follower");
+        var alone = With(Store(ScrCatalogue.Action.GetArmor, 13));
+        alone.Armor[Pc] = 3;
+        Assert.AreEqual(3u, ScrDispatcher.RunObject(new(7, Sword, Pc, Victim), alone, new() { Admission = ArmorSet }).Effects.Writeback!.Slot.Counters & 0xFF, "no followers: the triggerer");
+    }
+
+    [TestMethod]
+    public void A_list_condition_takes_a_group_kind_by_the_list_rule_with_the_triggerer_last()
+    {
+        var follower = new ScrObjectRef(1, "follower:0");
+        ScrRunResult Run(byte kind, bool followerUndead, bool triggererUndead, bool noFollower = false)
+        {
+            var host = With(Flag(C(0), ScrCatalogue.Condition.IsUndead, (kind, 0)));
+            if (!noFollower) { host.Followers.Add(follower); host.Undead[follower] = followerUndead; }
+            host.Undead[Pc] = triggererUndead;
+            return ScrDispatcher.RunObject(new(7, Sword, Pc, Victim), host, new() { Admission = ArmorSet });
+        }
+        Assert.AreEqual(1, Run(14, true, false).Effects.GlobalFlags.Count, "kind 14: one undead follower is enough");
+        Assert.AreEqual(0, Run(14, false, false).Effects.GlobalFlags.Count, "kind 14: none");
+        Assert.AreEqual(1, Run(14, false, true).Effects.GlobalFlags.Count, "kind 14: the triggerer is in the list");
+        Assert.AreEqual(0, Run(13, true, false).Effects.GlobalFlags.Count, "kind 13: the triggerer is not undead");
+        Assert.AreEqual(1, Run(13, true, true).Effects.GlobalFlags.Count, "kind 13: all of them");
+        Assert.AreEqual(1, Run(13, false, true, noFollower: true).Effects.GlobalFlags.Count, "kind 13: the triggerer alone");
+        var oneObject = ScrAdmission.Admit(Program(L(C(ScrCatalogue.Condition.MetPcBefore, (14, 0), (Triggerer, 0)), C(ScrCatalogue.Action.ReturnSkipDefault), C(ScrCatalogue.Action.ReturnRunDefault))),
+            new("group-first-object", ScrAdmissionSet.S5.Conditions.Append(ScrCatalogue.Condition.MetPcBefore), ScrAdmissionSet.S5.Actions, ScrAdmissionSet.S5.ValueKinds, ScrAdmissionSet.S5.FocusKinds.Concat(ScrAdmissionSet.GroupFocusKinds)));
+        Assert.AreEqual(ScrRefusalCode.FocusKindNotAdmitted, oneObject.Refusal!.Code, "a first-object condition keeps the group kinds out");
     }
 }

@@ -690,6 +690,14 @@ internal sealed class ScrInterpreter
                 Set(a, 1, value, line);
                 return (Step.Next, 0);
             }
+            case ScrCatalogue.Action.GetArmor:
+            {
+                // AR1–AR3 (0x447220 case 0x20): the first object of operand 0 (0x44B960, one object: a group kind gives the first follower or the triggerer) and the store of operand 1 (0x44BB50); the value is the armour part of the object's current art
+                // id (field 1, 0x504030), 0 for an art that is no critter's or monster's. An absent object stops the run; a host that cannot answer ends the whole dispatch with nothing applied.
+                var value = CritterFields.ArmorOf(Object(a, 0, line)) ?? throw new CallRefusedStop(null, _number, ScrStop.NotModelled);
+                Set(a, 1, value, line);
+                return (Step.Next, 0);
+            }
             case ScrCatalogue.Action.ToggleInvulnerability:
             {
                 // CQ4 (case 0x39): each object of operand 0 in list order (0x44B4E0); the flag 0x400000 is flipped at once in the original, so a later invulnerable test of the run reads the flipped state through the parity set. An empty list does nothing.
