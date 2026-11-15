@@ -535,6 +535,7 @@ public partial class TerrainViewerApp : Node
         _canvas!.ClearScene();
         RetireHoverRing();
         RetireSceneryArt();
+        RetireTraitBodies();
         _cache.Clear();
     }
 
