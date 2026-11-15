@@ -27,8 +27,10 @@ from pathlib import Path
 import re
 import secrets
 import socketserver
+import signal
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import urllib.error
@@ -94,6 +96,7 @@ class Store:
         self.state_path = self.directory / "state.json"
         self.lock_path = self.directory / ".lock"
         self.active_path = self.directory / ACTIVE_FILE
+        self._active_lock = threading.Lock()          # the server answers on several threads
 
     @contextmanager
     def locked(self):
@@ -163,18 +166,28 @@ class Store:
 
     def write_active(self, step_id: str) -> None:
         """The step the owner has open, one line, replaced whole (the viewer may read it at any moment)."""
-        self.directory.mkdir(parents=True, exist_ok=True)
-        temporary = self.active_path.with_suffix(".tmp")
-        temporary.write_text(step_id + "\n", encoding="utf-8")
-        os.replace(temporary, self.active_path)
+        with self._active_lock:
+            self.directory.mkdir(parents=True, exist_ok=True)
+            handle, name = tempfile.mkstemp(prefix=".active-", suffix=".tmp", dir=self.directory)
+            try:
+                with os.fdopen(handle, "w", encoding="utf-8") as stream:
+                    stream.write(step_id + "\n")
+                os.replace(name, self.active_path)
+            except OSError:
+                try:
+                    os.unlink(name)
+                except OSError:
+                    pass
+                raise
 
     def clear_active(self) -> None:
-        try:
-            self.active_path.unlink()
-        except FileNotFoundError:
-            pass
-        except OSError as error:                      # a file that cannot be removed must not stop the page or its exit
-            print(f"qa: could not remove {self.active_path}: {error}", file=sys.stderr)
+        with self._active_lock:
+            try:
+                self.active_path.unlink()
+            except FileNotFoundError:
+                pass
+            except OSError as error:                  # a file that cannot be removed must not stop the page or its exit
+                print(f"qa: could not remove {self.active_path}: {error}", file=sys.stderr)
 
     def seen(self) -> set[str] | None:
         """The step ids of the last visit; None when there was none."""
@@ -648,6 +661,7 @@ def run(args: argparse.Namespace) -> int:
     if not args.check:
         app.mark_visit()          # a --check start must not use up the "new since the last visit" set
         app.store.clear_active()  # no step is open on a fresh page: a check left by an earlier page must not tag a report
+        signal.signal(signal.SIGTERM, lambda *_: (_ for _ in ()).throw(KeyboardInterrupt()))   # a kill stops the page like Ctrl-C
     if args.check:
         server.shutdown()
         print("qa: check passed (the page answered through its socket)")

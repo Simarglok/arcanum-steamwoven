@@ -168,6 +168,27 @@ class ActiveCheckTests(unittest.TestCase):
             self.assertIsNone(app.set_active(""))                          # clearing twice is fine
             app.store.clear_active()
 
+    def test_concurrent_writes_leave_one_whole_line_and_no_temporary_files(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            app = make_app(Path(tmp))
+            ids = ["ARC-DEV-100#1", "ARC-DEV-100#2", "ARC-UI-200#1", "ARC-BUG-300#1"]
+            errors: list[BaseException] = []
+
+            def work(step: str) -> None:
+                try:
+                    for _ in range(30):
+                        app.set_active(step)
+                except BaseException as error:           # noqa: BLE001 - collected for the assertion
+                    errors.append(error)
+            threads = [threading.Thread(target=work, args=(step,)) for step in ids]
+            for thread in threads:
+                thread.start()
+            for thread in threads:
+                thread.join()
+            self.assertEqual([], errors)
+            self.assertIn(app.store.active_path.read_text(), [step + "\n" for step in ids])
+            self.assertEqual([qa.ACTIVE_FILE], sorted(item.name for item in app.store.directory.iterdir() if item.name != ".lock"))
+
     def test_only_a_step_of_the_list_can_be_active(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             app = make_app(Path(tmp))

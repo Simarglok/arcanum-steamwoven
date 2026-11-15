@@ -70,6 +70,7 @@ a { color:var(--accent); }
 "use strict";
 const TOKEN = "__QA_TOKEN__";
 const STATUS_LABEL = { "open": "open", "same": "same", "differs": "differs", "cannot-test": "cannot test" };
+let activeSend = Promise.resolve();
 let data = null, filter = "all", section = "", selected = null;
 const opened = new Map();          // step id -> epoch seconds when the step was first opened on this page
 const drafts = new Map();          // step id -> { note, report } edited, not yet saved
@@ -190,7 +191,7 @@ function choose(id, scroll) {
   if (selected === id) return;
   selected = id;
   if (!opened.has(id)) { opened.set(id, Math.floor(Date.now() / 1000)); const step = find(id); if (step) refreshReports(step); }
-  api("/api/active", { step: id }).catch(() => {});      // ARC-DEV-2189: the viewer's Ctrl+B tags its report with the open step
+  activeSend = activeSend.then(() => api("/api/active", { step: id })).catch(() => {});      // one at a time, in order: the last open step wins      // ARC-DEV-2189: the viewer's Ctrl+B tags its report with the open step
   document.querySelectorAll(".step").forEach(n => n.classList.toggle("sel", n.dataset.id === id));
   if (scroll) { const n = document.querySelector('.step[data-id="' + CSS.escape(id) + '"]'); if (n) { n.scrollIntoView({ block: "center" }); n.focus({ preventScroll: true }); } }
 }
