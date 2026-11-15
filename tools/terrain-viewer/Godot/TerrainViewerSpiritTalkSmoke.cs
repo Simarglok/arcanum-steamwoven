@@ -16,7 +16,7 @@ public partial class TerrainViewerApp
     // 0x54ED30 sends a dead critter that carries it to the talk (goal 21) instead of the loot; the can-speak test 0x4AD800 answers 0 for it, so the dialog starts as for a living NPC (the greeting is the
     // NPC's dead line group); with the flag gone it is a corpse to loot again. The stage kills the first dialog NPC it can talk to, shows the click looting it, casts the spell on it, shows the click
     // talking to it (the conversation opens with the corpse), ends the spell and shows the loot again. The NPC and the hero are restored for the later stages.
-    // ARC-AI-2247 (step 0): before that, the hero starts seven cells from the living NPC, goal 21 walks, the NPC is killed on the way, and the hero ends next to the body with the dialog point run once and no window.
+    // ARC-AI-2247 (step 0): before that, the hero starts six or more cells from the living NPC, goal 21 walks, the NPC is killed on the way, and the hero ends next to the body with the dialog point run once and no window.
     private async Task RunAreaSpiritTalkSmokeAsync(TerrainLoadResult? mapMode = null)
     {
         if (_areaSession is not { } session || session.QueryHero() is null || _combatHost is null || _conversationHost is not { } host || _readyArea is not { } area || !InventoryActive)
