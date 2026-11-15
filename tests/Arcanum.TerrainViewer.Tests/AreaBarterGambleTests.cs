@@ -33,10 +33,11 @@ public sealed class AreaBarterGambleTests
     private static AreaBarterData Data() => AreaBarterData.Create(Mes("{1}{Smith: 1,1}{2}{End: 1,1}"), Mes("{1}{4010 4020}"),
         new Dictionary<int, CombatFields> { [KitSword] = Weapon(KitSword, 100), [Axe] = Weapon(Axe, 400), [AreaBarterData.GoldPrototype] = Gold() });
 
-    private static GameSessionOwner Session(int points, int gold = 1000, ulong seed = 0)
+    private static GameSessionOwner Session(int points, int gold = 1000, ulong seed = 0, SkillTraining training = SkillTraining.None, bool masterHaggle = false)
     {
         int[] basic = new int[12];
-        basic[(int)Skill.Gambling] = points;
+        basic[(int)Skill.Gambling] = points | (int)training << 6;
+        if (masterHaggle) basic[(int)Skill.Haggle] = 20 | (int)SkillTraining.Master << 6;
         var hero = new SessionHeroDefinition(16089, CharacterRace.HalfElf, CharacterGender.Male, [20, 20, 20, 20, 20, 20, 20, 20, 0, 0], 1, 5, 0,
             null, null, gold, [new SessionHeroKitItem(new(SessionItemType.Weapon, KitSword, 4100, 34100))],
             Advancement: SessionHeroAdvancement.None with { BasicSkills = [.. basic] });
@@ -124,6 +125,72 @@ public sealed class AreaBarterGambleTests
                 CollectionAssert.AreEqual(Array.Empty<int>(), changes, "a neutral merchant's reaction does not move on a paid loss");
             }
             Assert.AreEqual(result.Bet.Check.NextGamblingRoll, session.QueryGamblingRoll(), "a new roll was thrown for the next bet");
+        }
+        Assert.IsTrue(won && lost, "both outcomes were seen");
+    }
+
+    // ARC-UI-2139 (0x579840, 0x579B60, 0x461CA0; ledger BW3, GB1): a worn item of the merchant lifted from its doll is the merchant's item, still worn (location 1000..1008), and its buy
+    // quote is 0 below Master haggle (0x462230), so the gate passes the price tests and asks the worn tier (Expert gambling) alone.
+    [TestMethod]
+    public void A_worn_merchant_item_meets_the_worn_tier_of_the_gate_and_costs_nothing_below_master_haggle()
+    {
+        using var novice = Session(5);
+        var barter = Barter(novice, [], MerchantSkill(3, 0));
+        var refused = barter.CheckGamble("vest");
+        Assert.AreEqual((GambleRefusal.NeedsExpert, 0, "line5"), (refused.Gate.Refusal, refused.Price, refused.Text));
+        var silent = barter.Gamble("vest");
+        Assert.AreEqual((GambleRefusal.NeedsExpert, (SessionGambleResult?)null, ""), (silent.Gate.Refusal, silent.Bet, silent.Text));
+        Assert.AreEqual("vest", barter.View().WornWares.Single().Entity, "it stays on the slot");
+
+        using var expert = Session(5, training: SkillTraining.Expert);
+        var allowed = Barter(expert, [], MerchantSkill(3, 0)).CheckGamble("vest");
+        Assert.AreEqual((true, true, 0, "line7 line8 0"), (allowed.Allowed, allowed.Gate.Warned, allowed.Price, allowed.Text));
+        Assert.AreEqual(720, Barter(expert, [], MerchantSkill(3, 0)).CheckGamble("axe").Price, "an unworn ware keeps its price");
+    }
+
+    [TestMethod]
+    public void A_master_of_haggle_stakes_a_worn_merchant_item_at_its_buy_price()
+    {
+        using var session = Session(5, training: SkillTraining.Expert, masterHaggle: true);
+        var barter = Barter(session, [], MerchantSkill(3, 0));
+        var vest = barter.View().WornWares.Single();
+        Assert.IsTrue(vest.Quote.Price > 0);
+        var check = barter.CheckGamble("vest");
+        Assert.AreEqual((true, vest.Quote.Price, $"line7 line8 {vest.Quote.Price}"), (check.Allowed, check.Price, check.Text));
+    }
+
+    [TestMethod]
+    public void A_bet_on_a_worn_merchant_item_takes_it_off_the_slot_to_the_hero_for_nothing_won_or_lost()
+    {
+        var (won, lost) = (false, false);
+        for (ulong seed = 0; seed < 600 && !(won && lost); seed++)
+        {
+            using var session = Session(5, seed: seed, training: SkillTraining.Expert);
+            var changes = new List<int>();
+            var barter = Barter(session, changes, MerchantSkill(3, 0));
+            barter.Open();
+            var roll = session.QueryGamblingRoll()!.Value;
+            if (roll is > 90 and < 96 || roll <= 90 && won || roll >= 96 && lost) continue;
+            var worth = barter.View().WornWares.Single().Worth;
+            var result = barter.Gamble("vest");
+            Assert.IsTrue(result.Settled, result.Text);
+            Assert.AreEqual(roll, result.Bet!.Check!.Check.Roll, "the saved roll decides");
+            Assert.IsTrue(session.QueryPcInventory().Any(item => item.Entity == "vest"), "it went to the hero's pack");
+            Assert.AreEqual(0, barter.View().WornWares.Count, "it left the merchant's slot");
+            Assert.AreEqual((1000, 100, 0), (session.QueryGold(), session.QueryNpcGold("merchant"), result.Paid), "no coin moves: the quote is 0");
+            if (roll <= 90)
+            {
+                won = true;
+                var expected = GamblingRules.WonReaction(worth, 1, ReactionRules.Category(50));
+                Assert.AreEqual((true, "line0", expected), (result.Won, result.Text, result.ReactionChange), "the reaction takes the base worth, not the quote");
+                CollectionAssert.AreEqual(new[] { expected }, changes);
+            }
+            else
+            {
+                lost = true;
+                Assert.AreEqual((false, "line1 0"), (result.Won, result.Text));
+                CollectionAssert.AreEqual(Array.Empty<int>(), changes);
+            }
         }
         Assert.IsTrue(won && lost, "both outcomes were seen");
     }
