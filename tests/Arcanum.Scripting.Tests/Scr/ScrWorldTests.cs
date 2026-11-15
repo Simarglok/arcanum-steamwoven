@@ -366,12 +366,15 @@ public sealed class ScrWorldTests
             Do(C(ScrCatalogue.Action.ReturnRunDefault)));
         Assert.IsFalse(ScrAdmission.Admit(program, ScrAdmissionSet.S61).IsAdmitted, "S61 refuses kind 16");
         Assert.IsTrue(ScrAdmission.Admit(program, ScrAdmissionSet.S62).IsAdmitted);
+        Assert.IsTrue(ScrAdmissionSet.S61.IsSubsetOf(ScrAdmissionSet.S62) && !ScrAdmissionSet.S62.IsSubsetOf(ScrAdmissionSet.S61));
+        // The run uses S15 plus the kind (the full set needs every query interface of the host).
+        var set = new ScrAdmissionSet("s15+16", ScrAdmissionSet.S15.Conditions, ScrAdmissionSet.S15.Actions, ScrAdmissionSet.S15.ValueKinds, ScrAdmissionSet.S15.FocusKinds.Append(ScrFocusKind.AnySceneryInVicinity), counterIndexWraps: true);
         var host = Host();
         host.Inner.Scripts[9] = ScrScriptLookup.Of(program);
-        var run = ScrDispatcher.RunSector(new(new(9, 0, 0), Pc), host, new() { Admission = ScrAdmissionSet.S62 });
+        var run = ScrDispatcher.RunSector(new(new(9, 0, 0), Pc), host, new() { Admission = set });
         CollectionAssert.AreEqual(new[] { Tree, Mark, Rock, Tree }, run.Effects.Creations.Select(c => c.Near).ToArray(), "three looped, then the first object of the list");
         CollectionAssert.AreEqual(new[] { Pc }, host.Centres.Take(1).ToArray(), "the list is centred on the assigned attachee");
-        var original = ScrDispatcher.RunSector(new(new(9, 0, 0), Pc), host, new() { Admission = ScrAdmissionSet.S62, Rules = ScrRuleProfile.Original });
+        var original = ScrDispatcher.RunSector(new(new(9, 0, 0), Pc), host, new() { Admission = set, Rules = ScrRuleProfile.Original });
         Assert.AreEqual(4, original.Effects.Creations.Count);
     }
 }
