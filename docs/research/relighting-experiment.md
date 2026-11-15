@@ -214,12 +214,12 @@ Across three runs of the final code and the three windows (nine cases each) the 
 is about half a millisecond, as before. The cost does not grow with the window size in these numbers (it stays at about a millisecond for 20 lights from 1.0 to 3.4 Mpx): on this GPU the shader loop is small against the frame's CPU side,
 so the Mac cannot resolve the pixel-proportional cost the Deck will have.
 
-*Estimate for the Deck, not a measurement.* The Deck's GPU (RDNA 2, about 1.6 TFLOPS) is roughly five to six times weaker than this Mac's (about 9 TFLOPS) and its memory bandwidth about a third. If the whole millisecond for 20 lights
+*Estimate for the Deck, not a measurement.* The Deck's GPU (RDNA 2, about 1.6 TFLOPS; a TFLOPS ratio between an Apple tile-based GPU and RDNA 2 is only indicative) is roughly five to six times weaker than this Mac's (about 9 TFLOPS) and its memory bandwidth about a third. If the whole millisecond for 20 lights
 were GPU time, a Deck would take about 6 ms for it at 1280×800 (up to about 10 ms at the worst case seen), 2 to 3 ms for 5 lights and next to nothing for 1. The night cities hold 6 to 18 lights in view (the section above),
 so a dense city could cost a Deck most of a 16.7 ms frame's spare time. That is a reason to run the scene on the device, not a result: the run is the human gate left open as issue [#2297](https://github.com/Simarglok/arcanum-steamwoven/issues/2297).
 
 **3. Godot's own lights, same frames and lights (AC3).** The smoke builds a small Godot-native scene beside the viewer's draw (the viewer's canvas hidden while it is timed): the Legacy day frame of the viewer as one full-window
-`CanvasTexture` (diffuse: the capture, normal: the lab generator's map of it, `ground` preset) under a `CanvasModulate` of the night/day ratio of a dark patch, twelve of the visible sprite frames as `CanvasTexture`s with their own
+`CanvasTexture` (diffuse: the capture, normal: the lab generator's map of it, `ground` preset) under a `CanvasModulate` of the night/day ratio of a dark patch, up to 24 of the visible sprite frames (twelve in the runs) as `CanvasTexture`s with their own
 generated normals (`object` and `critter` presets), and `PointLight2D` nodes at the very lights the shader loop used (same centre, radius, colour; a quadratic falloff texture like the shader's; light height 48; no shadows). Timed with 0, 1, 5 and 20 lights at the same windows.
 Median rounds as above; added to the native scene's own frame:
 

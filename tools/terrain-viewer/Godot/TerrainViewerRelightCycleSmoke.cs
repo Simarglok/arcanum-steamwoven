@@ -370,12 +370,14 @@ public partial class TerrainViewerApp
         }
         finally
         {
-            if (probeLayer is not null && probeLayer.GetParent() is not null) RemoveChild(probeLayer);
+            if (probeLayer is not null) { if (probeLayer.GetParent() is not null) RemoveChild(probeLayer); probeLayer.QueueFree(); }
             _canvas.Visible = true;
             _worldActor.AttackPose = null;
-            AreaRelight.Extra.Clear(); AreaRelight.SetMode(wasMode); AreaRelight.Strength = wasStrength;
+            AreaRelight.OnlyExtra = false; AreaRelight.Extra.Clear(); AreaRelight.SetMode(wasMode); AreaRelight.Strength = wasStrength;
+            RenderingServer.ViewportSetMeasureRenderTime(viewport.GetViewportRid(), false);
             DisplayServer.WindowSetVsyncMode(wasVsync);
             DisplayServer.WindowSetSize(wasWindow);
+            for (var i = 0; i < 8; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame); // the window settles before the camera is framed again
             _canvas.SetVisualProfile(wasProfile, wasSource, wasBudget); SyncRelitLook();
             if (worn) Wear(wielded.Item);
             driver.Enabled = wasEnabled; PushAreaAmbient();

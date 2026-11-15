@@ -44,12 +44,15 @@ public sealed class WalkCycleShimmerTests
     }
 
     [TestMethod]
-    public void A_change_in_one_corner_moves_the_normals_there_and_not_elsewhere()
+    public void A_change_in_one_corner_gives_a_small_finite_whole_frame_shimmer()
     {
         var a = Frame(24, 24, (x, y) => (byte)(80 + (x + y) % 3));
         var b = Frame(24, 24, (x, y) => x < 4 && y < 4 ? (byte)200 : (byte)(80 + (x + y) % 3));
         var result = WalkCycleShimmer.Measure([a, b], Options);
         Assert.IsTrue(result.RatioMean > 0 && result.RatioMean < 5, $"a finite, non-zero ratio ({result.RatioMean})");
         Assert.IsTrue(result.MeanNormalChangeDegrees > 0 && result.MeanNormalChangeDegrees < 10, $"the mean over the whole frame is small, the corner's change is diluted ({result.MeanNormalChangeDegrees})");
+        // Away from the corner the neighbourhoods are unchanged, so the same measure over a frame cut from that region is exactly still.
+        var farA = Frame(10, 10, (x, y) => (byte)(80 + (x + y) % 3)); 
+        Assert.AreEqual(0, WalkCycleShimmer.Measure([farA, farA], Options).MeanNormalChangeDegrees, 1e-4);
     }
 }
