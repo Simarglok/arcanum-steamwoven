@@ -61,6 +61,7 @@ public partial class TerrainViewerApp
             HideWeaponBar();
             HideSkillBar();
             HideQuantityPane();
+            HideOrderLine();
             return;
         }
         if (_gameBarPanel is null)
@@ -113,6 +114,7 @@ public partial class TerrainViewerApp
         SyncWeaponBar();
         SyncSkillBar();
         SyncQuantityPane();
+        SyncOrderLine();
     }
 
     private static int ClockArtWidth(AreaGameBarContent content, int art, int fallback) =>

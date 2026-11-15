@@ -390,6 +390,9 @@ public partial class TerrainViewerApp
                 finally { strip.QueueFree(); portraits.Visible = true; }
             }
 
+            // 13. ARC-UI-2305 (BM5): the typed order line, with the joined companion this stage has.
+            await OrderLineSmokePartAsync(follower, CompanionName(companion), Fact);
+
             var summary = string.Join("; ", facts);
             GD.Print("ARC-DEV-263 companion-click " + summary);
             if (failures.Count > 0)

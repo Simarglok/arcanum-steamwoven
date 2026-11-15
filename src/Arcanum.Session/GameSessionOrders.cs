@@ -17,8 +17,9 @@ namespace Arcanum.Session;
 public sealed record CompanionOrderFacts(string Entity, string KnownName, long Distance, bool MindControlled, PartyConsentFacts Consent,
     PartyWaitFacts? Wait = null, SessionPeaceFacts? Combat = null);
 
-/// <summary>How an order is addressed: to every follower in reach (a preset or <c>#</c> text), or from a follower's portrait menu.</summary>
-public enum CompanionOrderAddressing { All, Portrait }
+/// <summary>How an order is addressed: to every follower in reach (a preset), from a follower's portrait menu, or as typed text
+/// (ARC-UI-2305: <see cref="CompanionOrderRequest.Text"/> is read for its <c>#</c> or name prefix and its order word, <see cref="CompanionOrderRules.TypedReceivers"/>; the request's <see cref="CompanionOrderRequest.Type"/> is then ignored).</summary>
+public enum CompanionOrderAddressing { All, Portrait, Text }
 
 /// <summary>
 /// One order (ARC-WORLD-046). <see cref="Followers"/> are the host's facts of the followers it knows (array members and, for the
@@ -29,6 +30,12 @@ public enum CompanionOrderAddressing { All, Portrait }
 public sealed record CompanionOrderRequest(CompanionOrderType Type, CompanionOrderAddressing Addressing, IReadOnlyList<CompanionOrderFacts> Followers,
     string? Clicked = null, string Label = "", CellCoord? Tile = null)
 {
+    /// <summary>ARC-UI-2305: the typed text of <see cref="CompanionOrderAddressing.Text"/> (the line as typed) and the order words it is
+    /// read against (the host's tables).</summary>
+    public string? Text { get; init; }
+
+    public BroadcastKeywords? Keywords { get; init; }
+
     /// <summary>The attack order's target: the object the interface highlights or the menu's cursor picked (0x43C570); none: the order
     /// does nothing (ARC-WORLD-091).</summary>
     public SessionCombatant? Target { get; init; }
@@ -190,7 +197,12 @@ public sealed partial class GameSessionOwner
         var array = _party.Order.Where(facts.ContainsKey).Select(Candidate).ToArray();
 
         List<(string Entity, CompanionOrderType Type)> receivers;
-        if (request.Addressing == CompanionOrderAddressing.Portrait)
+        if (request.Addressing == CompanionOrderAddressing.Text)
+        {
+            if (request.Text is not { } text || request.Keywords is not { } keywords) return RejectOrder(GameSessionFailure.InvalidCompanion);
+            receivers = CompanionOrderRules.TypedReceivers(array, text, keywords).ToList();
+        }
+        else if (request.Addressing == CompanionOrderAddressing.Portrait)
         {
             if (request.Clicked is not { } clicked || !SessionValidation.Entity(clicked)) return RejectOrder(GameSessionFailure.InvalidCompanion);
             if (_party.Get(clicked).Standing != CompanionStanding.Following) return RejectOrder(GameSessionFailure.NotInParty);

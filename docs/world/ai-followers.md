@@ -67,7 +67,7 @@ FO7, FO8 and FO14, the stage's switches, are read where the leave, the danger up
   a leave ends the leaver's run (the removal's interrupt at priority 5), and the curse's attack event runs through the host right
   after the order, before the former follower's pass. The host's world knows critters only (an order on a container or a ground
   item is ignored at its attack event; a door or scenery has no session entity, so no target). The viewer sends no curse: the
-  typed order text (the Enter chat and `broadcast.mes`) is not read, so only tests reach it.
+  typed order text (Enter, the order line of ARC-UI-2305, with the words of `broadcast.mes`) reaches it from the viewer.
 - **The attack event in full.** The AI host's attack events run the fan-out (ARC-WORLD-115) and, since ARC-WORLD-119, the curse's;
   its race insult is not floated. The comment lines (ARC-AI-1527) are asked by the host: `AreaAiHost.AttackEnded` (the taunt kind
   and draw, 0x4B6B90 → 0x4AE9E0) at the end of the hero's hit, `AreaAiHost.Hurt` (the near-death line, 0x4AEAB0) after each critter

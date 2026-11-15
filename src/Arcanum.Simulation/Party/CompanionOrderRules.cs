@@ -111,6 +111,29 @@ public static class CompanionOrderRules
     }
 
     /// <summary>
+    /// Who a typed order text reaches, and with which type (ARC-UI-2305, OL2 and OL3, the walk of the broadcast order handler): the candidates are the
+    /// followers in the array's order and in reach. A text starting with <c>#</c> reaches every one of them, the order word being the
+    /// text after the <c>#</c>. Any other text reaches the first follower whose known name is a case-insensitive prefix of the text
+    /// (leading spaces before the name do not match) and only that one; the order word is the text after the name, leading spaces
+    /// skipped. The word is looked up whole in <paramref name="keywords"/> (<see cref="BroadcastKeywords.Lookup"/>); a word that is no
+    /// keyword gives type none, which the follower still takes (its one AI pass runs). Empty when nobody matches.
+    /// </summary>
+    public static IReadOnlyList<(string Entity, CompanionOrderType Type)> TypedReceivers(IReadOnlyList<CompanionOrderCandidate> followers, string text,
+        BroadcastKeywords keywords)
+    {
+        ArgumentNullException.ThrowIfNull(followers); ArgumentNullException.ThrowIfNull(text); ArgumentNullException.ThrowIfNull(keywords);
+        var result = new List<(string, CompanionOrderType)>();
+        foreach (var follower in followers.Where(InReach))
+        {
+            if (text.StartsWith('#')) { result.Add((follower.Entity, keywords.Lookup(text[1..]))); continue; }
+            if (follower.KnownName.Length == 0 || !text.StartsWith(follower.KnownName, StringComparison.OrdinalIgnoreCase)) continue;
+            result.Add((follower.Entity, keywords.Lookup(text[follower.KnownName.Length..])));
+            break;
+        }
+        return result;
+    }
+
+    /// <summary>
     /// The leave order's farewell (OL13): the original takes the range labelled friendly for a reaction level of suspicious or worse
     /// (40 or less) and the hostile one above; Steamwoven (D3) the other way round. A follower that cannot speak says nothing (the
     /// host's test).
