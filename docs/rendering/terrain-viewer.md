@@ -2051,7 +2051,7 @@ window's frame, buttons and list are the original's with the game's art (below),
 - **Original look (ARC-UI-062,** [ledger MW11–MW16](../research/ledger/ui-audio.md#menu-window-art-arc-ui-058)): with the
   game's art both windows draw over the 800 × 600 screen (the bars' whole factor) the strips 336 and 335 and the background 745
   between them; Save or Load (321) and Previous Screen (323) on the bottom strip, Delete (32) under the list, each idle, lit under
-  the pointer and down while held, acting on a release over it with 3000 / 3001; the list's eleven rows in the art font 27 from the
+  the pointer and down while held, acting on a release over it with 3000 / 3001; the list's eleven rows in the art font 229 from the
   scroll top (Up/Down keep the selected row shown, the wheel over the list scrolls, a press on a row selects it; no double press),
   each the save's description, "..." when too wide, the selected one gold; the save window's first row "New" (MainMenu.mes 5055) or
   the description being typed into it (only spaces: "New"; a description wider than the row shows its start and "...", and
@@ -2066,7 +2066,7 @@ window's frame, buttons and list are the original's with the game's art (below),
   save's picture in the preview (281, 96, 468 × 300; PROJECT: centred, as the stored picture keeps the screen's shape); over it, while the info display is on, the hero's name, the
   small portrait at (484, 139), "Level N" (MainMenu.mes 5051), the description (the auto-save's "Auto-Save"), the place (5050 when
   it has no name), the date ("%d/%d/%d" in the locale's order) and time ("%02d:%02d:%02d") ending at x 448, and the story state's
-  text from `mes/storystate.mes` broken at spaces over four narrowing lines, all in art 27 near-white at the exe's places; then the
+  text from `mes/storystate.mes` broken at spaces over four narrowing lines, all in art 229 near-white at the exe's places; then the
   cover 748 over the preview, whatever it shows. No save selected (or the save window's new-save row): black. A save without
   readable details: black with 5005 in red. The toggle 747 at the screen's (499, 82) is a toggle button: a press turns it on (down,
   3000) and hides the info, the next turns it off (3001) and shows it; the display's state outlives the window while the button opens
@@ -2250,13 +2250,12 @@ and layout (below), the other windows the project's.
   random-encounter schedule are not modelled.
 - **Browser's original look (ARC-UI-066,** [ledger MW17–MW21, MW26](../research/ledger/ui-audio.md#menu-window-art-arc-ui-058)): with the
   game's art the browser is window 13's screen (`AreaPremadeBrowserArtView`): the strips, the background 766 and the browsed hero
-  as the original draws it: the large portrait at (95, 69), the player name (`Cloister18Font`, red), the gender, race and
-  background names (`morph15font`, red) centred in their fields, the hero's story from `gameback.mes` (its background description,
+  as the original draws it: the large portrait at (95, 69), the player name (`morph15font`, red), the gender, race and
+  background names (`Flare12Font`, red) centred in their fields, the hero's story from `gameback.mes` (its background description,
   field 0x102: 1039..1050), "Initial Stats" and fifteen stats "ST: 8" of the start's effective values (the stored stats under the
   race and gender effects), each field filled black first. Start and Back stand in the bottom strip, Previous and Next beside the
   portrait; they light under the pointer, play 3000 on the press and 3001 on the release and act on a release over themselves.
-  The story breaks into lines as the original's text draw does (MW26) and shows its first 11, as the original's: every installed
-  story is longer (14–18 lines). PROJECT: the hints are not shown; a portrait that does not read leaves its field black. A hero that does not read, and every self-test
+  The story breaks into lines as the original's text draw does (MW26) in the body font, art 229 `Flare12Font` (ARC-UI-2267: the earlier 11-line cut came from the wrong font, art 27). PROJECT: the hints are not shown; a portrait that does not read leaves its field black. A hero that does not read, and every self-test
   without a game folder, keeps the diagnostic window. The menu stage checks it after opening the browser
   (`ARC-UI-066 native-smoke browser art PASS`: the art read, the first hero's texts, its portrait, Next lit under the pointer, a
   click on Next showing the second hero and on Previous the first again, Back to the new-game window, each story's line count
@@ -2549,7 +2548,7 @@ until ARC-UI-068 (the original look, below).
   race, gender and chosen background's effects, as the original's object carries them), and the description field: the
   background's story when its description number is above 1000, else "Race" and the race's text. The pointer over the gender's
   band (the gender row) shows the gender's text there instead, over the race's band the race's text (MW28). The name field
-  (`Cloister18Font`, red) shows the typed name with a closing "|" while it is typed, centred, or its end when it is too wide
+  (`morph15font`, red) shows the typed name with a closing "|" while it is typed, centred, or its end when it is too wide
   (MW29). Accept and Cancel stand in the bottom strip, the portrait's arrows beside the portrait and the gender's, race's and
   background's arrows (757 / 758) beside their fields; they light under the pointer, play 3000 and 3001 and act on a release
   over themselves; the name field is an art-less button (3026 entering it, 3027 on its press, a release over it starts the
@@ -2757,9 +2756,8 @@ over it, and acts on that release; a toggle plays 3000 turning on and 3001 turni
 button writes its name from `mes\intgame.mes` (1000–1009) where the original's message window is; there is no hover sound
 on the bars. The main menu's, in-play menu's and options window's buttons play 3026 when the pointer enters one and 3027 on
 the press (GB7). The bars are drawn over the windows they open, and those windows (character sheet, inventory, logbook,
-schematics) lay themselves out in the part the bars leave free; while a conversation, barter, reading, the save list,
-the palette, the menu or the world map is open the bars are hidden, and they come back with no button lit or held (a conversation hides them under
-Steamwoven only: since ARC-UI-2024 the Original setting `DialogBarStays` keeps them drawn under the dialog, as the original does, lays the conversation panel in the part
+schematics) lay themselves out in the part the bars leave free; while barter, reading, the save list,
+the palette, the menu or the world map is open the bars are hidden, and they come back with no button lit or held (a conversation leaves them drawn, as the original does, since ARC-UI-2024 (Original) and ARC-UI-2269 (both settings): the viewer lays the conversation panel in the part
 they leave free and shows the speaker's description of the dialog start in the description area; the bar's buttons stay without effect while the dialog is open, and
 a click on a hotkey slot or a recent-action button, and the A key, end the dialog (an item, skill or spell entry that acts, ARC-UI-2068; the repair button and a spell with the inventory bit too, their window then opens in its place, ARC-UI-2086) and then act as without one, an empty entry or a hero who cannot act leaves it open, the follower portraits and their gauges stay drawn and take no input (ARC-UI-2069, DB5), [ledger DB1-DB5](../research/ledger/ui-audio.md#the-bars-under-the-dialog-arc-ui-2024)). The
 diagnostic HUD moves below the top strip and the follower portraits and spell pane above the bottom strip. Since ARC-UI-020 the health and fatigue vials show the PC's

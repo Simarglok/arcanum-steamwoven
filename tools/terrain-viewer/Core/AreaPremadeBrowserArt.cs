@@ -17,15 +17,16 @@ public enum AreaPremadeBrowserButton { Start, Back, Previous, Next }
 /// MW17–MW21, MW26). The background 766 `PreGenCharacterBase` (800 × 400) is the window at (0, 41) between the strips 336 and 335 (MW1).
 /// Four art buttons: Start 321 `NextBut` and Back 323 `BackBut` in the bottom strip, Previous 283 `Big_Grn_L` and Next 284
 /// `Big_Grn_R` beside the portrait. The browsed hero shows its large portrait, its player name, gender, race and background name
-/// centred in their fields, its background's story (or its race's text) and fifteen stats "ST: 8" in the art fonts 27 `morph15font`
-/// and 171 `Cloister18Font`; each field is filled black before its text. Coordinates here are the 800 × 600 screen's. Godot-free.
+/// centred in their fields, its background's story (or its race's text) and fifteen stats "ST: 8" in the art fonts 229 `Flare12Font`
+/// (body) and 27 `morph15font` (titles, player name); each field is filled black before its text. Coordinates here are the 800 × 600 screen's. Godot-free.
 /// </summary>
 public static class AreaPremadeBrowserArtLayout
 {
     public const int ScreenWidth = 800, ScreenHeight = 600;
     public const int BackgroundArt = 766, TopStripArt = 336, BottomStripArt = 335, StartArt = 321, BackArt = 323, PreviousArt = 283, NextArt = 284;
-    /// <summary>The art fonts (MW14): fonts 0x64C210 and 0x64C218 are art 27, 0x64C214 and 0x64C21C art 171.</summary>
-    public const int TextFontArt = 27, NameFontArt = 171;
+    /// <summary>The art fonts (MW14, table 0x5C4030 = 229, 27): fonts 0x64C210 (white), 0x64C218 (red) and 0x64C240 (gold) are art 229 `Flare12Font`, 0x64C214 (white)
+    /// and 0x64C21C (red) art 27 `morph15font` (ARC-UI-2267: the ledger had them as 27 and 171 `Cloister18Font`, so the body text drew in the title face).</summary>
+    public const int TextFontArt = 229, NameFontArt = 27;
     public const int WindowTop = AreaSaveListArtLayout.WindowTop, BottomStripTop = AreaSaveListArtLayout.BottomStripTop;
     /// <summary>The portrait's draw (0x4CE640: the large image, PO3).</summary>
     public const int PortraitSize = PortraitCatalogue.LargeSize;

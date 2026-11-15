@@ -96,8 +96,8 @@ public partial class TerrainViewerApp
     }
 
     /// <summary>ARC-UI-2068 (DB2, 0x54FCF0, 0x551A80(0)): a hotkey that acts while the dialog is open ends it first, through the dialog's leave case
-    /// (0x5678D0: no script runs, nothing resumes), as a window opener's pop does (ARC-UI-1467). The original's bars stay under the dialog (Original
-    /// interface setting); Steamwoven hides them, so under Steamwoven no click reaches here. No-op without an open dialog (the pop outside a dialog re-enters the current mode).</summary>
+    /// (0x5678D0: no script runs, nothing resumes), as a window opener's pop does (ARC-UI-1467). The original's bars stay under the dialog (both
+    /// settings since ARC-UI-2269). No-op without an open dialog (the pop outside a dialog re-enters the current mode).</summary>
     private void EndDialogForHotkey()
     {
         if (!ConversationOpen) return;

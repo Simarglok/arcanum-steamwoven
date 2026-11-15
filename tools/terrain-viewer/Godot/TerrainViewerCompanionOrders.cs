@@ -149,7 +149,7 @@ public partial class TerrainViewerApp
     {
         RefreshHeroGauges();
         // ARC-UI-020: the combat host gives the portraits' bars their values.
-        // ARC-UI-2069 (DB1, DB2): under Original the dialog leaves the panel drawn and inert; every other modal window hides it.
+        // ARC-UI-2069 (DB1, DB2): the dialog leaves the panel drawn and inert; every other modal window hides it.
         var held = WorldModal && PortraitsHeldUnderDialog;
         var stamp = (_areaSession, _areaSession?.Version.Revision ?? -1, _areaCompanions, WorldModal, held, (object?)_hoverIndex, (object?)_combatHost);
         if (_portraitStamp == stamp && (_portraitLifeRetry is not { } retry || Engine.GetProcessFrames() < retry)) return;
@@ -192,8 +192,8 @@ public partial class TerrainViewerApp
         _followerPortraits.Inert = held;
     }
 
-    /// <summary>ARC-UI-2069 (ledger DB1, DB2): the portraits stay drawn and inert under the open dialog (Original) while nothing else covers the screen.</summary>
-    private bool PortraitsHeldUnderDialog => AreaFollowerPanelRules.HeldUnderDialog(DialogBarStays, _interfaceWindows.Stack.Current == InterfaceMode.Dialog,
+    /// <summary>ARC-UI-2069 (ledger DB1, DB2): the portraits stay drawn and inert under the open dialog while nothing else covers the screen.</summary>
+    private bool PortraitsHeldUnderDialog => AreaFollowerPanelRules.HeldUnderDialog(_interfaceWindows.Stack.Current == InterfaceMode.Dialog,
         PaletteOpen || SaveListOpen || MainMenuOpen || HeroDeathCovering || MovieCovering || ReportModalOpen);
 
     /// <summary>

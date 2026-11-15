@@ -92,9 +92,16 @@ public partial class AreaConversationPanel : CanvasLayer
     /// <summary>ARC-UI-2025: where an open panel reads <see cref="OriginalReplyRows"/> from every frame (a rule-mode switch made over the dialog).</summary>
     public Func<bool>? OriginalRowsSource { get; set; }
     /// <summary>
-    /// ARC-UI-2023: the Original interface setting. The original's dialog window shows only the PC's reply rows (ways out: a DLG reply, or a window or
+    /// ARC-UI-2268 (ledger DH3): whether a press on the band is resolved by the original's click bands (y / 20, an empty slot refused: Original) or by the drawn row
+    /// (Steamwoven). The band itself is the layout of both settings. Defaults to the original's bands, as the self-tests drive it.
+    /// </summary>
+    public bool ClickBandsDrift { get; set; } = true;
+    /// <summary>ARC-UI-2268: where an open panel reads <see cref="ClickBandsDrift"/> from every frame.</summary>
+    public Func<bool>? ClickBandsDriftSource { get; set; }
+    /// <summary>
+    /// ARC-UI-2023, ARC-UI-2268: the viewer sets it in normal play (both settings; false only in the diagnostic mode). The original's dialog window shows only the PC's reply rows (ways out: a DLG reply, or a window or
     /// event that pops mode 3, 0x5678D0), so the header, the outcome line, the effects ledger, the hint and the Leave button are hidden and the
-    /// controller cancel does not leave an awaiting dialog that has an enabled reply; false (Steamwoven): the diagnostic chrome stays. A message-only panel (no conversation
+    /// controller cancel does not leave an awaiting dialog that has an enabled reply; false: the diagnostic chrome stays. A message-only panel (no conversation
     /// could start) keeps its message and a finished dialog keeps its Close button: nothing else could close them. Set before <see cref="Open"/>.
     /// </summary>
     public bool DiagnosticChromeHidden
@@ -111,7 +118,7 @@ public partial class AreaConversationPanel : CanvasLayer
     /// <summary>ARC-UI-2023: where an open panel reads <see cref="DiagnosticChromeHidden"/> from every frame (a rule-mode switch made over the dialog).</summary>
     public Func<bool>? ChromeHiddenSource { get; set; }
     private bool Awaiting => _conversation is { Phase: DialogConversationPhase.AwaitingSelection };
-    /// <summary>Whether the Leave button is offered: hidden under Original while a reply can be chosen (the original has no way out but a reply); with no enabled reply (none offered, all blocked, a refused reply) it stays so that the modal panel cannot lock.</summary>
+    /// <summary>Whether the Leave button is offered: hidden with the chrome hidden while a reply can be chosen (the original has no way out but a reply); with no enabled reply (none offered, all blocked, a refused reply) it stays so that the modal panel cannot lock.</summary>
     private bool LeaveOffered => !(_chromeHidden && Awaiting && _buttons.Any(button => !button.Disabled));
     internal bool LeaveOfferedForSelfTest => LeaveOffered;
     /// <summary>ARC-UI-2023: which diagnostic parts draw now (a label or an art paragraph is visible): header, outcome, effects, hint, Leave.</summary>
@@ -127,7 +134,7 @@ public partial class AreaConversationPanel : CanvasLayer
     internal int BandWidthForSelfTest => (int)_band.Size.X;
     /// <summary>ARC-UI-2022: the band's place in the view ((left, top, width, height)), whether it is shown and the shade's blend mode name.</summary>
     internal (int X, int Y, int W, int H) BandRectForSelfTest => ((int)_band.Position.X, (int)_band.Position.Y, (int)_band.Size.X, (int)_band.Size.Y);
-    /// <summary>ARC-UI-2022: whether the framed diagnostic panel draws (under Original with the chrome hidden it holds nothing and does not).</summary>
+    /// <summary>ARC-UI-2022: whether the framed diagnostic panel draws (with the chrome hidden it holds nothing and does not).</summary>
     internal bool PanelShownForSelfTest => _panel.Visible;
     internal bool BandShownForSelfTest => _band.Visible && _originalRows && IsOpen;
     /// <summary>ARC-UI-2022: whether the reply stack lives in the band (Original) rather than in the panel.</summary>
@@ -321,7 +328,7 @@ public partial class AreaConversationPanel : CanvasLayer
         CloseRequested?.Invoke();
     }
 
-    /// <summary>The controller cancel: leaves like <see cref="Leave"/>, except under Original while a reply is awaited (ARC-UI-2023: the original has no such way out).</summary>
+    /// <summary>The controller cancel: leaves like <see cref="Leave"/>, except with the chrome hidden while a reply is awaited (ARC-UI-2023: the original has no such way out).</summary>
     public void Cancel()
     {
         if (LeaveOffered) Leave();
@@ -344,7 +351,7 @@ public partial class AreaConversationPanel : CanvasLayer
         else if (_conversation is not { Phase: DialogConversationPhase.AwaitingSelection }) CloseRequested?.Invoke();
     }
 
-    /// <summary>One reply row (a button, in the band's geometry under Original), added to the stack; <paramref name="chosen"/> runs after the pressing signal returns.</summary>
+    /// <summary>One reply row (a button, in the band's geometry), added to the stack; <paramref name="chosen"/> runs after the pressing signal returns.</summary>
     private void AddReplyRow(string name, string text, bool blocked, Action chosen)
     {
         var button = new Button
@@ -546,7 +553,7 @@ public partial class AreaConversationPanel : CanvasLayer
                 return false;
             case InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: true } press:
                 _pointer = _band.GetGlobalTransformWithCanvas() * press.Position;
-                var hit = DialogReplyBand.Press((int)press.Position.X, (int)press.Position.Y, width, _buttons.Count, clickBandsDrift: true);
+                var hit = DialogReplyBand.Press((int)press.Position.X, (int)press.Position.Y, width, _buttons.Count, clickBandsDrift: ClickBandsDrift);
                 if (hit.Kind == DialogReplyHitKind.Outside) { _hover?.Leave(); return false; }
                 if (hit.Kind == DialogReplyHitKind.Row && !_buttons[hit.Row].Disabled) _buttons[hit.Row].EmitSignal(BaseButton.SignalName.Pressed);
                 return true;
@@ -558,7 +565,7 @@ public partial class AreaConversationPanel : CanvasLayer
     private void ResizePanel()
     {
         if (_panel is null) return;
-        // ARC-UI-2022: under Original with the chrome gone (ARC-UI-2023) the framed panel has nothing to hold (the band carries the replies): it is not drawn.
+        // ARC-UI-2022: with the chrome gone (ARC-UI-2023) the framed panel has nothing to hold (the band carries the replies): it is not drawn.
         // The band shows only while there is a reply in it (a message-only panel or a finished dialog has none).
         _band.Visible = _originalRows && _buttons.Count > 0;
         _panel.Visible = !_originalRows || new Control[] { _header, _headerArt, _outcome, _outcomeArt, _effects, _effectsArt, _hint, _hintArt, _leave }.Any(control => control.Visible);
@@ -583,8 +590,11 @@ public partial class AreaConversationPanel : CanvasLayer
     private void PlaceBand(Vector2 window, float panelHeight)
     {
         var (freeTop, free) = AreaGameBarPanel.FreeArea(window);
-        var left = DialogReplyBand.BoxLeft((int)free.X, _bandWidth);
-        var top = freeTop + DialogReplyBand.BoxTop((int)free.Y);
+        // ARC-UI-2268: the band is drawn at the screen's whole factor, as the bars are; its geometry (and the view it sits in) is counted in the original's pixels.
+        var factor = AreaGameBarPanel.ScreenFactor(window);
+        var left = DialogReplyBand.BoxLeft((int)(free.X / factor), _bandWidth) * factor;
+        var top = freeTop + DialogReplyBand.BoxTop((int)(free.Y / factor)) * factor;
+        _band.Scale = new(factor, factor);
         _band.Position = new(left, top);
         _band.Size = new(_bandWidth, DialogReplyBand.Height);
         _bandShade.Position = Vector2.Zero;
@@ -607,6 +617,7 @@ public partial class AreaConversationPanel : CanvasLayer
         if (!IsOpen) return;
         if (NumberedSource is { } source) NumberedReplies = source();
         if (OriginalRowsSource is { } rows) OriginalReplyRows = rows();
+        if (ClickBandsDriftSource is { } drift) ClickBandsDrift = drift();
         if (ChromeHiddenSource is { } chrome) DiagnosticChromeHidden = chrome();
         if (_originalRows) { if (_hoverStale || _pointer is not null) RefreshHover(); LightRows(); }
         ResizePanel();

@@ -37,11 +37,8 @@ public partial class TerrainViewerApp
     /// them. The dialog start's description is made only then (0x567460); the viewer asks the same of the barter window's still pointer (PROJECT).</summary>
     private bool InterfaceBarsOn => _areaSession is not null && _readyMode == TerrainViewerMode.Area && (!ViewerAutomatedStorage.Automated || _gameBarForSelfTest);
 
-    /// <summary>ARC-UI-2024 (DB1): the dialog leaves the bars drawn (Original); Steamwoven hides them under the dialog's panel.</summary>
-    private bool DialogBarStays => _areaSession?.Rules.Interface.DialogBarStays == true;
-
     private bool GameBarActive => InterfaceBarsOn
-        && !MainMenuOpen && (!ConversationOpen || DialogBarStays) && !BarterOpen && !ItemServiceOpen && !SaveListOpen && !ReadingOpen && !PaletteOpen && !WorldMapOpen;
+        && !MainMenuOpen && !BarterOpen && !ItemServiceOpen && !SaveListOpen && !ReadingOpen && !PaletteOpen && !WorldMapOpen;
 
     /// <summary>Per frame: shows the bars while an area session plays (reading their art once a run) and follows the spell pane.</summary>
     private void SyncGameBar()
@@ -132,7 +129,7 @@ public partial class TerrainViewerApp
     /// under the other windows and the dialog's hook (ARC-UI-2024) are the only guards here.</summary>
     private void ClockButton()
     {
-        // ARC-UI-2024 (DB2): the dialog's hook consumes the clock press too (Original keeps the bars under the dialog).
+        // ARC-UI-2024 (DB2): the dialog's hook consumes the clock press too (the bars stay under the dialog).
         if (ConversationOpen) return;
         if (_areaSession is not { } session || _gameBarContent is not { } content) return;
         var snapshot = session.QueryClockSnapshot();

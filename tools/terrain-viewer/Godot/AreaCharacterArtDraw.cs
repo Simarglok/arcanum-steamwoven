@@ -82,7 +82,7 @@ internal static class AreaCharacterArtDraw
         {
             var stat = AreaPremadeBrowserArtLayout.StatFields[slot];
             Fill(canvas, stat);
-            // 0x5418A0 from the field's corner; a stat's line is taller than its 15-row field, so it is not clipped to it.
+            // 0x5418A0 from the field's corner; the line is not clipped to the 15-row field.
             AreaArtTextDraw.Text(canvas, fonts.Text, view.Stats[slot], stat.X, stat.Y, white);
         }
     }
