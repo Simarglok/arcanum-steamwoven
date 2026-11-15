@@ -264,6 +264,7 @@ public partial class TerrainViewerApp
             TickFloaters();
             Require(!BubbleOwnerGone(entity), "the NPC stands again: neither off nor destroyed");
             layer.Bubbles.Clear();
+            GD.Print($"ARC-UI-2034 bubbles removed by off flag and teardown PASS npc={entity}");
             // ARC-UI-2048 (TB29, TB30): a dialog speaker with no cell on the shown map still gets its bubble (the original checks no location), which draws nothing, never expires while it is persistent,
             // ages by time after the end, and goes with the scene; a final line shown with the default life and restarted by the close lives one life from the close.
             {
@@ -291,7 +292,6 @@ public partial class TerrainViewerApp
                 layer.Bubbles.Clear(); _gameSettings = _gameSettings with { TextDuration = 2 };
                 GD.Print($"ARC-UI-2048 dialog line bubble off the shown map and final-line life PASS npc={entity}");
             }
-            GD.Print($"ARC-UI-2034 bubbles removed by off flag and teardown PASS npc={entity}");
             GD.Print($"ARC-UI-1997 bubbles over objects PASS heroSlot={heroBubble.Slot} lines={heroBubble.Lines.Count} rect={heroBubble.Rect}");
             GD.Print($"ARC-UI-021 native-smoke floaters PASS map={_readyMapName} npc={entity} h={h} npcLines={lines.Length} heroLines={heroLines}"
                 + $" hero={landed.Resolution!.Outcome} texts={texts.Detail} first='{lines[0].Text}' Parity=NOT_VERIFIED");
