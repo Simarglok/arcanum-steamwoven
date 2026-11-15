@@ -18,6 +18,20 @@ public sealed class AreaFollowerPanelRulesTests
     }
 
     [TestMethod]
+    public void The_buttons_hang_off_the_windows_bottom_so_their_y_follows_the_height_ARC_UI_2284()
+    {
+        // At the original's 600 the anchored y is the table's own.
+        foreach (var rect in new[] { AreaFollowerPanelRules.ToggleRect, AreaFollowerPanelRules.UpRect, AreaFollowerPanelRules.HiddenToggleRect, AreaFollowerPanelRules.HiddenUpRect })
+            Assert.AreEqual(rect.Y, AreaFollowerPanelRules.AnchoredY(rect.Y, 600), 0.001f, "800 x 600 keeps the table's y");
+        // 1440 pixels at factor 2 is 720 units: the bars-drawn toggle ends where the bottom strip (159 units) begins, the hidden one at the bottom.
+        var toggle = AreaFollowerPanelRules.ToggleRect;
+        Assert.AreEqual(720 - AreaGameBarLayout.BottomHeight, AreaFollowerPanelRules.AnchoredY(toggle.Y, 720) + toggle.Height, 0.001f, "the toggle ends on the strip's top edge");
+        Assert.AreEqual(720, AreaFollowerPanelRules.AnchoredY(AreaFollowerPanelRules.HiddenToggleRect.Y, 720) + AreaFollowerPanelRules.HiddenToggleRect.Height, 0.001f, "the hidden toggle ends at the bottom");
+        // The arrows stand one button's height above the toggle in both layouts and any height.
+        Assert.AreEqual(AreaFollowerPanelRules.AnchoredY(toggle.Y, 1080) - toggle.Height, AreaFollowerPanelRules.AnchoredY(AreaFollowerPanelRules.UpRect.Y, 1080), 0.001f);
+    }
+
+    [TestMethod]
     public void The_arrows_exist_only_with_the_panel_shown_and_seven_followers_and_the_ends_have_their_own_look()
     {
         Assert.IsFalse(AreaFollowerPanelRules.ArrowsShown(true, 6), "FP5");
