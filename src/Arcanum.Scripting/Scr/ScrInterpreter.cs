@@ -1393,6 +1393,8 @@ internal sealed class ScrInterpreter
         ScrFocusKind.LocalObject => _objects[value],
         // PG7: the current looped object, none before the run's first loop.
         ScrFocusKind.CurrentLoopedObject => _looped,
+        // FK3: a leader's first direct follower (0x44B960), none without one.
+        ScrFocusKind.EveryFollower or ScrFocusKind.AnyFollower => Followers() is { Count: > 0 } followers ? followers[0] : null,
         // A group's first object (0x44B960), none for an empty one.
         ScrFocusKind.EverySceneryInVicinity or ScrFocusKind.EveryoneInVicinity or ScrFocusKind.AnyoneInVicinity or ScrFocusKind.EveryPortalInVicinity
             => Vicinity(kind) is { Count: > 0 } list ? list[0] : null,
@@ -1404,6 +1406,7 @@ internal sealed class ScrInterpreter
     [OriginalFunction(0x44B4E0, OriginalFunctionScope.Partial)]
     private IReadOnlyList<ScrObjectRef> Objects(ScrClause c, int slot) => (ScrFocusKind)c.Kind(slot) switch
     {
+        ScrFocusKind.EveryFollower or ScrFocusKind.AnyFollower => Followers(),
         ScrFocusKind.EverySceneryInVicinity or ScrFocusKind.EveryoneInVicinity or ScrFocusKind.AnyoneInVicinity or ScrFocusKind.EveryPortalInVicinity => Vicinity((ScrFocusKind)c.Kind(slot)),
         _ => OptionalObject(c, slot) is { } obj ? [obj] : [],
     };
@@ -1417,6 +1420,17 @@ internal sealed class ScrInterpreter
             ?? throw new InvalidOperationException("SCR_WORLD_VICINITY_NULL");
         return _options.Rules.VicinityListCapped && list.Count > ScrWorld.VicinityListCap ? list.Take(ScrWorld.VicinityListCap).ToArray() : list;
     }
+
+    // FK1, FK2 (0x44B4E0 cases 2 and 3 over 0x4411C0): the direct followers of the run's triggerer (field +8, not the attachee), none without a triggerer (the original has no null test; what it does then is not read), the first 100 under the original's rule.
+    private IReadOnlyList<ScrObjectRef> Followers()
+    {
+        if (_roles.Triggerer is not { } leader) return [];
+        var list = FollowerAnswers.FollowersOf(leader) ?? throw new InvalidOperationException("SCR_FOLLOWERS_NULL");
+        return _options.Rules.VicinityListCapped && list.Count > ScrWorld.VicinityListCap ? list.Take(ScrWorld.VicinityListCap).ToArray() : list;
+    }
+
+    private IScrFollowerQueries FollowerAnswers => _host as IScrFollowerQueries
+        ?? throw new InvalidOperationException("SCR_FOLLOWER_QUERIES_REQUIRED: the admission set holds a follower focus kind and the host cannot answer it.");
 
     private IScrWorldQueries World => _host as IScrWorldQueries
         ?? throw new InvalidOperationException("SCR_WORLD_QUERIES_REQUIRED: the admission set holds random, loop for or a vicinity focus kind and the host cannot answer it.");

@@ -328,6 +328,18 @@ public interface IScrPortalQueries
 }
 
 /// <summary>
+/// ARC-SCRIPT-2320 (ledger FK1–FK4): the followers of an object, for the focus kinds every follower (2) and any follower (3). A host whose set admits them implements it.
+/// </summary>
+public interface IScrFollowerQueries
+{
+    /// <summary>
+    /// The direct followers of <paramref name="leader"/> (0x4411C0 over the leader's follower array, object field 241, ledger FK2): in join order, with no flag filter and not the followers of followers; empty for an object that is not a PC or an NPC
+    /// and for a leader without followers. The interpreter keeps the first <see cref="ScrWorld.VicinityListCap"/> under <see cref="ScrRuleProfile.VicinityListCapped"/>.
+    /// </summary>
+    IReadOnlyList<ScrObjectRef> FollowersOf(ScrObjectRef leader);
+}
+
+/// <summary>
 /// ARC-WORLD-081: what a host that runs <see cref="ScrAdmissionSet.S15"/> answers about the world around a run (ledger PG3, PG5). The
 /// interpreter asks only while a clause needs it.
 /// </summary>
@@ -1047,7 +1059,7 @@ public sealed class ScrRunResult
 }
 
 /// <summary>How a dispatch runs: the rule mode's script switches, the admitted set (default <see cref="ScrAdmissionSet.S5"/>,
-/// at most <see cref="ScrAdmissionSet.S60"/>, admitted for the lines reachable from the event's line), the executed-line
+/// at most <see cref="ScrAdmissionSet.S61"/>, admitted for the lines reachable from the event's line), the executed-line
 /// budget and the call depth.</summary>
 public sealed record ScrRunOptions
 {
@@ -1068,7 +1080,7 @@ public sealed record ScrRunOptions
         ArgumentNullException.ThrowIfNull(Admission);
         if (MaxExecutedLines is <= 0 or > OriginalLineBudget) throw new ArgumentOutOfRangeException(nameof(MaxExecutedLines), "The line budget is 1..1000.");
         if (MaxCallDepth is < 1 or > 64) throw new ArgumentOutOfRangeException(nameof(MaxCallDepth), "The call depth is 1..64.");
-        if (!Admission.IsSubsetOf(ScrAdmissionSet.S60)) throw new ArgumentException("The interpreter runs only the commands of ScrAdmissionSet.S60.", nameof(Admission));
+        if (!Admission.IsSubsetOf(ScrAdmissionSet.S61)) throw new ArgumentException("The interpreter runs only the commands of ScrAdmissionSet.S61.", nameof(Admission));
     }
 
     // A set with a guard condition needs a host that answers it, checked before any event runs.
@@ -1101,6 +1113,8 @@ public sealed record ScrRunOptions
             throw new ArgumentException("A set with random, loop for, distance between, get location, float line, obj is within range or the vicinity focus kinds needs a host that implements IScrWorldQueries.", nameof(Admission));
         if (host is not IScrPortalQueries && Admission.FocusKinds.Contains(ScrFocusKind.EveryPortalInVicinity))
             throw new ArgumentException("A set with the focus kind every portal in the vicinity needs a host that implements IScrPortalQueries.", nameof(Admission));
+        if (host is not IScrFollowerQueries && Admission.FocusKinds.Any(ScrAdmissionSet.FollowerQueryFocusKinds.Contains))
+            throw new ArgumentException("A set with the focus kinds every follower or any follower needs a host that implements IScrFollowerQueries.", nameof(Admission));
         if (host is not IScrObjectStateQueries && Admission.Conditions.Any(ScrAdmissionSet.ObjectStateQueryConditions.Contains))
             throw new ArgumentException("A set with the dead or switched-off condition needs a host that implements IScrObjectStateQueries.", nameof(Admission));
         if (host is not IScrSpellQueries && Admission.Conditions.Any(ScrAdmissionSet.SpellQueryConditions.Contains))
