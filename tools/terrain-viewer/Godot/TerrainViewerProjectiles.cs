@@ -648,7 +648,8 @@ public partial class TerrainViewerApp
         if (projectile.Returns && !projectile.State.Returning)
         {
             var turn = TurnBack(projectile);
-            FinishTurnedAtOnce(projectile, turn);
+            // A strike's tile left holds the struck target, never the hero, so the second end with scripts is not reached here; kept bare so it never runs before the strike's own event and hit handling.
+            FinishTurnedAtOnce(projectile, turn == BoomerangTurnEnd.EndsWithScripts ? BoomerangTurnEnd.EndsBare : turn);
             return turn == BoomerangTurnEnd.Flies ? ProjectileCrossResult.Turned : ProjectileCrossResult.Ended;
         }
         EndOnTile(projectile, hit ? Arcanum.Scripting.Scr.ScrPoint.Hit : Arcanum.Scripting.Scr.ScrPoint.Miss, target, afterStrike: true);
