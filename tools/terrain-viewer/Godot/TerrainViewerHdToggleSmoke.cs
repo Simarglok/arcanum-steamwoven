@@ -99,10 +99,12 @@ public partial class TerrainViewerApp
         static void Require(bool value, string why) { if (!value) throw new InvalidOperationException("ARC-UI-006 invariance: " + why); }
         var canvas = _canvas!;
         var (profile, previousSource, budget) = (canvas.VisualProfile, canvas.HdSource, canvas.HdBudget);
+        var previousGate = canvas.WorldSpritesFromPack;
         var directory = System.IO.Directory.CreateTempSubdirectory("arc-ui-006-save-").FullName;
         _saveLibraryForSelfTest = new(directory);
         try
         {
+            canvas.WorldSpritesFromPack = true; // ARC-RENDER-2175: the toggle protocol is checked on the dormant sprite path (developer override)
             canvas.SetVisualProfile(VisualProfile.Legacy, source, HdDeviceBudget.Ceiling(source.Scale > 1 ? source.Scale : 4));
             QuickKey(Key.F7);
             Require(_quickSaveStatus?.StartsWith("F7 quick saved", StringComparison.Ordinal) == true, "F7 saved the start: " + _quickSaveStatus);
@@ -128,6 +130,7 @@ public partial class TerrainViewerApp
         finally
         {
             _saveLibraryForSelfTest = null; _quickKeys.Reset();
+            canvas.WorldSpritesFromPack = previousGate;
             canvas.SetVisualProfile(profile, previousSource, budget);
             System.IO.Directory.Delete(directory, recursive: true);
         }
@@ -223,9 +226,11 @@ public partial class TerrainViewerApp
         _worldFocusSimulationForSelfTest = true; _worldFocused = true; SelectSimulatedPadForSelfTest();
         var root = System.IO.Directory.CreateTempSubdirectory("arc-ui-006-app-").FullName;
         var previousPath = OS.GetEnvironment(VisualProfileSettingsStore.TestVariable);
+        var previousGate = _canvas.WorldSpritesFromPack;
         HdFrameSource? source = null;
         try
         {
+            _canvas.WorldSpritesFromPack = true; // ARC-RENDER-2175: dormant sprite path, developer override
             var path = System.IO.Path.Combine(root, "visual.cfg");
             OS.SetEnvironment(VisualProfileSettingsStore.TestVariable, path);
             _visualStore = new VisualProfileSettingsStore(automated: true);
@@ -238,7 +243,7 @@ public partial class TerrainViewerApp
             var generation = _canvas.VisualGeneration;
             QuickKey(Key.H);
             Require(_canvas.VisualGeneration == generation + 1 && (_canvas.PendingVisualProfile == VisualProfile.Hd || _canvas.VisualProfile == VisualProfile.Hd), "H requested HD");
-            Require(System.IO.File.ReadAllText(path) == "visual profile=hd\n", "the request was saved at once");
+            Require(System.IO.File.ReadAllText(path) == "hd=1\n", "the request was saved at once");
             await SettleVisualAsync(); RefreshReadyStatus();
             Require(_canvas.VisualProfile == VisualProfile.Hd && _canvas.AreaHdStats.Hd > 0, "HD committed: " + _canvas.HdStatusText());
             Require(GetSelfTestSnapshot().Hud.Contains("H visual Legacy/HD: HD; pack ui006-nearest-4x 4x", StringComparison.Ordinal), "HUD names the profile and pack");
@@ -252,9 +257,9 @@ public partial class TerrainViewerApp
             Require(_canvas.VisualGeneration == generation + 1 && _visualKeyNotice?.StartsWith("H ignored", StringComparison.Ordinal) == true
                 && ((Label)_worldPanel!.FindChild("PaletteVisual", true, false)!).Text.Contains("H ignored", StringComparison.Ordinal), "H under the palette was not ignored");
             var visual = (Label)_worldPanel!.FindChild("PaletteVisual", true, false)!;
-            var action = _worldPanel.FindChildren("*", "Button", true, false).OfType<Button>().Single(b => b.Text == "Visual Legacy/HD (H)");
+            var action = _worldPanel.FindChildren("*", "Button", true, false).OfType<Button>().Single(b => b.Text == "HD Off/On (H)");
             action.EmitSignal(BaseButton.SignalName.Pressed);
-            Require(_canvas.VisualProfile == VisualProfile.Legacy && System.IO.File.ReadAllText(path) == "visual profile=legacy\n",
+            Require(_canvas.VisualProfile == VisualProfile.Legacy && System.IO.File.ReadAllText(path) == "hd=0\n",
                 "the palette action switched to Legacy and saved it");
             Require(visual.Text.StartsWith("Visual: Legacy; pack ui006-nearest-4x 4x", StringComparison.Ordinal), "palette line: " + visual.Text);
             ToggleWorldSettings();
@@ -292,6 +297,7 @@ public partial class TerrainViewerApp
             if (string.IsNullOrEmpty(previousPath)) OS.UnsetEnvironment(VisualProfileSettingsStore.TestVariable);
             else OS.SetEnvironment(VisualProfileSettingsStore.TestVariable, previousPath);
             _visualStore = null;
+            _canvas.WorldSpritesFromPack = previousGate;
             _canvas.SetVisualProfile(VisualProfile.Legacy, null, null);
             source?.Dispose();
             System.IO.Directory.Delete(root, true);

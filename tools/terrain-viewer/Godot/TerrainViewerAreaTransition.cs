@@ -25,6 +25,10 @@ public partial class TerrainViewerApp
     /// <summary>ARC-DEV-080 (GI6): the gameplay generator's seed for a session the player starts, taken from the clock as the original
     /// does at its start-up (<see cref="AreaRandomSeed"/>); an explicit test or smoke launch keeps seed 0, which its checks rely on.</summary>
     private ulong NewSessionSeed() => AreaRandomSeed.ForNewSession(SelfTestBootstrap || _nativeSmoke, DateTimeOffset.UtcNow);
+
+    /// <summary>ARC-UI-1807: a session the player starts throws the first gambling roll as its first draw (the original's skill module init
+    /// right after the clock seed); an explicit test or smoke launch keeps its generator untouched, as with the seed.</summary>
+    private bool NewSessionThrowsGamblingRoll() => !(SelfTestBootstrap || _nativeSmoke);
     private AreaLoadResult? _exteriorArea;
     private AreaCaveLoad? _caveLoad;
     private Arcanum.Data.Traversal.AreaStepSnapshot? _exteriorSteps;
@@ -103,7 +107,7 @@ public partial class TerrainViewerApp
             lap.Step("session");
             GD.Print($"ARC-WORLD-044 reputations status={reputations.Status} detail={reputations.Detail}");
             var created = AreaTransitionCoordinator.CreateSession(clock!.Value, Guid.NewGuid(), new Guid(header), area.Plan.Chart.ToWorld(area.Plan.Chart.Spawn), area.Snapshot.RuntimeMap,
-                result.Hero, reputations.Catalog, NewSessionSeed());
+                result.Hero, reputations.Catalog, NewSessionSeed(), NewSessionThrowsGamblingRoll());
             _areaSession = created.Owner ?? throw new InvalidOperationException("AREA_SESSION_" + created.Failure);
             AttachAreaEncumbranceEffect();
             AttachAreaDyingScript(); AttachAreaHeroGround();

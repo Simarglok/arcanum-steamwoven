@@ -96,7 +96,7 @@ source index on one axis.
 4. **Nearest-replicated HD is invisible.** If every HD texel equals its parent Legacy
    texel (a nearest `N×` upscale), the HD raster equals the Legacy raster pixel for
    pixel. This is the identity oracle for fallback and toggle tests. (The relit night look of
-   [area lighting](area-lighting.md#relit-look-arc-render-2060), which HD graphics turns on since
+   [area lighting](area-lighting.md#relit-look-arc-render-2060), which HD (the one HD setting, ARC-UI-2174) turns on since
    ARC-RENDER-2076, is the one intended difference: the identity smoke holds it off.)
 
 Literal oracle values for `N = 2` (independent of GPU output and of the production
@@ -188,6 +188,7 @@ the pack report (ARC-DEV-003) lists such groups.
 | `Invalid` | File missing, unreadable or a link, size or hash differs, not the pack PNG profile, not exactly `N·w × N·h`, too large, or the alpha-mask check failed (ARC-DATA-014 reasons) |
 | `HdAxisLimit` | `N·(c + m) > 65534` on an axis |
 | `HdBudget` | The frame does not fit the HD budget for this submission |
+| `WorldDormant` | ARC-RENDER-2175: the world sprite and terrain path of a pack is dormant (owner decision 2026-11-15); every candidate draws Legacy under Hd without asking the frame source (amendment below) |
 | `Pending` | Not yet decoded/uploaded (preload in progress) |
 
 `Legacy` profile never consults the pack. An `unreviewed` pack is used and the HUD
@@ -232,9 +233,9 @@ light or clock change, during dialog, before or after a map change.
    no-op. A request during a pending switch cancels it (the newer generation wins);
    its partial work is dropped or kept as retained cache within budget.
 2. **Persist.** The requested profile is saved at request time to
-   the `visual profile` line (`legacy` or `hd`) of `user://arcanum.cfg` (ARC-UI-1130; it was `user://visual_profile_v1.json`): a
+   the `hd` line (`0` or `1`, ARC-UI-2174) of `user://arcanum.cfg` (ARC-UI-1130; it was the `visual profile` line, now ignored, and before that `user://visual_profile_v1.json`): a
    missing or unknown value loads as
-   `Legacy`; a test path override isolates tests. A save failure is reported in the
+   `Legacy` (an older file without `hd` reads its `hd interface` line); a test path override isolates tests. A save failure is reported in the
    HUD and does not block the switch.
 3. **Preload.** Off the main thread, decode and validate the frames of `P` for the
    current visible set (the frame keys of the latest submission); keys that become
@@ -263,7 +264,7 @@ profile loads in either profile.
 settle what they leave open, without changing a rule:
 
 - The diagnostic key is `H` without modifiers while the world owns input; the setting is the
-  palette action "Visual Legacy/HD (H)". Both request the other profile than the pending one,
+  palette action "HD Off/On (H)". Both request the other profile than the pending one,
   else the active one, so a second press during a pending switch is the cancel of step 1.
 - A request equal to the profile already pending is a no-op, like one equal to the active
   profile with nothing pending: no new generation, the wait is not restarted.
@@ -418,6 +419,16 @@ and the [viewer](terrain-viewer.md#hd-render-path-arc-render-014) have the detai
 5. **Unchanged.** Plans, destinations, chunk composition, light (a chunk keeps its single
    ambient channel), wall fade, picking, routes, the wall check and Session read Legacy
    data only; Legacy chunk textures stay resident under both profiles.
+
+## Amendment ARC-RENDER-2175 (2026-11-15): the world sprite path is dormant
+
+Owner decision 2026-11-15: HD graphics is fonts, interface and light only; no HD character or world sprites (ARC-DEV-003 deferred). The binding above
+stays in the code, but the canvas gate `TerrainCanvas.WorldSpritesFromPack` (default off) turns every character, object, wall and level-0 terrain-chunk
+candidate into a Legacy draw with the typed reason `WorldDormant` before any question is asked of the frame source: nothing is decoded or made resident,
+the switch commits at once, the plan, light, picking and Session are untouched, and the relit look (a function of the profile) still runs on the 1x frames.
+Interface frames and fonts bind through `InterfaceHd` (its own setting, independent of the profile) and are not affected. The developer variable `ARC_HD_WORLD_SPRITES=1` (read when the canvas is made; not
+a setting) reopens the gate: the identity and toggle self-tests and smokes use it on their synthetic or temporary sprite packs. The stage `hd` without the
+variable checks the gate itself (HD 0, Legacy = `WorldDormant`, raster equal to Legacy, no decode) and then runs the identity oracle with the gate opened.
 
 ## Not ready / out of scope
 

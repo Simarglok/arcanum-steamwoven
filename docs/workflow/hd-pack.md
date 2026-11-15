@@ -107,7 +107,7 @@ The PNGs stay the pack's only content: you edit a PNG, `refresh` it into the man
 
 - **What an entry is:** the decoded 4× RGBA8 frame with its whole mip chain (Godot's own `Image.GenerateMipmaps`, so the texture is the one the draw
   built itself before), about 4/3 of the raw frame (about 2 GB for the whole interface pack). Lossless: no VRAM compression in this version.
-- **When it is made:** a few seconds after an HD pack is attached with the *HD interface* setting on, a background worker (two threads, below normal
+- **When it is made:** a few seconds after an HD pack is attached with the *HD* setting on, a background worker (two threads, below normal
   priority) converts every interface PNG of the pack that has no entry yet; it logs one line `ARC-DEV-376 hd cache pack=... entries=... present=...
   converted=... failed=... removed=... size=...MiB ms=...`. Entries are named by the PNG's hash, so an edited PNG (after `refresh`) has no entry and is
   converted again, and after every finished pass the entries no PNG of the pack names any more are removed (a PNG that fails to convert does not stop that).
@@ -276,8 +276,8 @@ The menu picture is the file `main-menu-16x9.png` at the **root of the one activ
 elsewhere is a menu picture. Read in the code (`AreaMenuArtView.WidescreenBackground`, `HdPack.ReadMainMenuBackdropReport`,
 `TerrainViewerApp.ConfigureVisualProfile`), checked on the owner's Mac on 2026-11-10:
 
-1. **It is used only when all of these hold:** the window is the main menu, the *HD interface* game setting is on
-   (the `hd interface` line of `arcanum.cfg`, independent of the Legacy/HD world profile), an HD pack is active and not
+1. **It is used only when all of these hold:** the window is the main menu, the *HD* game setting is on
+   (the `hd` line of `arcanum.cfg`, ARC-UI-2174: the one HD setting, launcher row HD Off/On; an older file without it reads `hd interface`), an HD pack is active and not
    `rejected`, and the file is an opaque 16:9 PNG of at most 3840 x 2160. Anything else leaves the original menu art from
    the game data, without a message. An automated run (smoke, self-test) looks for no pack folder and opens one only when `ARC_HD_PACK` names it, so a smoke shows the HD menu only with that variable.
 2. **The active pack** is `ARC_HD_PACK` when set; otherwise the one the **HD pack** setting of the launcher screen chooses
@@ -287,12 +287,12 @@ elsewhere is a menu picture. Read in the code (`AreaMenuArtView.WidescreenBackgr
    Before ARC-DEV-350 the game's own folder won over the iCloud copy and the packaged game never read the iCloud folder.
 3. **`user://` is not the same folder for the packaged game and for the source viewer.** The packaged game (feature
    `steamwoven_package`) uses `~/Library/Application Support/Arcanum Steamwoven Game/`: there `hd-packs/interface-redraw-4x/`
-   (the pack this page maintains) holds the menu PNG, and `arcanum.cfg` says `hd interface=1` (`game_settings_v1.json` says `hdInterface: true` before ARC-UI-1130). The viewer that
+   (the pack this page maintains) holds the menu PNG, and `arcanum.cfg` says `hd=1` (older: `hd interface=1`; `game_settings_v1.json` says `hdInterface: true` before ARC-UI-1130). The viewer that
    `./arcanum area` and `map` start (an export that is "not a packaged build") uses
    `~/Library/Application Support/Godot/app_userdata/Arcanum Terrain Viewer/`: on 2026-11-10 its `hd-packs/` held only the old
    sprite pack `crash-site-full-4x` (no menu file) and `hd-packs-alt/` two older packs, and it has no `game_settings_v1.json`,
-   so *HD interface* is off there and the original menu art shows even though the installed pack has a new PNG. To see the
-   installed PNG in that viewer, start it with `ARC_HD_PACK` set to the installed pack and turn the *HD interface* option on.
+   so *HD* is off there and the original menu art shows even though the installed pack has a new PNG. To see the
+   installed PNG in that viewer, start it with `ARC_HD_PACK` set to the installed pack and turn the *HD* option on.
    Do not delete or edit those old folders to "fix" it; the owner decides. The two real runs of the packaged game on
    2026-11-09/10 (`logs/godot*.log` in the game folder) logged `pack=interface-redraw-4x ... pack-source=1 of 1 found` and
    `interface HD enabled=True`, so that is where the menu PNG came from, but the log of those builds did not name the file.
@@ -310,7 +310,7 @@ elsewhere is a menu picture. Read in the code (`AreaMenuArtView.WidescreenBackgr
 
 ### HD pack source (ARC-DEV-350)
 
-The game chooses its HD pack at startup from the **HD pack** line of the launcher screen (after *HD interface*; ARC-UI-143 moved it there from the options window's Game page, ARC-UI-146), saved as the `hd pack` (`auto`, `game`, `custom`) and `hd pack path` lines of `arcanum.cfg` (a missing line reads as Auto). A change
+The game chooses its HD pack at startup from the **HD pack** line of the launcher screen (after *HD*; ARC-UI-143 moved it there from the options window's Game page, ARC-UI-146), saved as the `hd pack` (`auto`, `game`, `custom`) and `hd pack path` lines of `arcanum.cfg` (a missing line reads as Auto). A change
 applies at the **next start**, and the launcher screen's note says at once what that start will read:
 
 | Setting | Chain (first pack that opens, is not `rejected` and is whole wins) |
@@ -334,7 +334,7 @@ The startup logs one line with no path: `ARC-DEV-350 hd pack source mode=auto ch
 wrong-size=0 skipped=[...]`, and the HUD's pack line says the source (`iCloud copy, interface-redraw-4x`) and any fallback. An automated run (smoke,
 self-test) still searches no pack folder; `ARC_HD_PACK` still overrides everything.
 
-**Fallback to Legacy graphics and the problem box.** When the player asked for HD (the HD graphics profile or the *HD interface* setting is on)
+**Fallback to Legacy graphics and the problem box.** When the player asked for HD (the *HD* setting is on, or a developer override asks for the HD profile)
 and the pack cannot be used, the run draws the original (Legacy) graphics: no pack found or none whole (every candidate's reason is listed), the
 pack named by `ARC_HD_PACK` did not open, or the pack is marked rejected. The settings are not changed, so a repaired pack brings HD back at the
 next start. The reason goes to the log (`ARC-DEV-350 hd pack problem: ...`, no path) and to a box over the menu with **Continue** (goes on with
@@ -363,7 +363,7 @@ What the iCloud copy does on another device:
   it is whole (see [HD pack source](#hd-pack-source-arc-dev-350)); otherwise its own `Arcanum Steamwoven Game/hd-packs/`. On Windows or without the
   iCloud folder it reads only its own folder, or the folder a Custom setting names.
 - An **editor-binary run** there (`Godot --path`, rare) reads the checkout's `local/hd-packs/` (the iCloud symlink) in place, menu PNG
-  included, but only when its own `user://hd-packs/` has no usable pack (item 2 above) and *HD interface* is on.
+  included, but only when its own `user://hd-packs/` has no usable pack (item 2 above) and *HD* is on.
 - **There is no command that installs the iCloud copy as a pack.** `HdPackImport` (the format page) is a library function used by
   tests only; it copies the manifest, one recipe and the listed entries and **drops every unlisted file, so it never brings
   `main-menu-16x9.png`**. `hd_pack.py mirror` refuses a destination inside the game's folder. The ways left are a hand copy of the
@@ -400,7 +400,7 @@ not a font change, stop and look. The real `apply` (then `verify --deep`, then `
 - `fonts-plan` takes only grey frames with traced ink: the control-character placeholders, a glyph whose trace vanished and the coloured frame 0
   of a font are left out and draw their Legacy frame. A frame whose PNG no longer matches the SHA-256 in `font.json` stops the command (trace the font again).
   The plan is a local file under `local/` (it names original ART files), never in git.
-- The staging pack holds only the fonts (id `interface-fonts`). `ARC_HD_PACK=<that folder>` with the *HD interface* option on shows the HD text with every other
+- The staging pack holds only the fonts (id `interface-fonts`). `ARC_HD_PACK=<that folder>` with the *HD* option on shows the HD text with every other
   frame Legacy, which is the way to look at the fonts without touching the installed pack.
 - The importer checks each frame against the `masked` rule (no ink farther than one Legacy texel from the Legacy glyph) and refuses the whole build (nothing is
   written) when one frame fails. On 2026-11-11 the five fonts of the first trace (arts 27, 171, 229, 327, 840) built as 1113 entries in one run (a local observation).

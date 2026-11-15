@@ -64,7 +64,8 @@ public partial class TerrainViewerApp
         }
         else
         {
-            profile = _visualStore.Load();
+            // ARC-UI-2174: the one HD setting is the profile (the interface and the relit look follow it); the game settings hold it, like any start.
+            profile = _gameSettings.HdInterface ? VisualProfile.Hd : VisualProfile.Legacy;
             _visualOrigin = !_visualStore.Persistent ? "default (automated run)" : _visualStore.HasSaved ? "saved setting" : "default (nothing saved yet)";
         }
         HdPack? pack = null; var open = "none"; var found = 0;
@@ -160,15 +161,21 @@ public partial class TerrainViewerApp
     /// reports it. The canvas commits it once the visible frames are ready, or after the bounded wait.</summary>
     private VisualRequestOutcome RequestVisualToggle(string via) => _canvas is null ? VisualRequestOutcome.NoOp : RequestVisualProfile(_canvas.ToggledVisualProfile, via);
 
-    /// <summary>ARC-UI-089: requests <paramref name="target"/> (the launcher's HD graphics line asks for a profile, not a toggle).</summary>
+    /// <summary>ARC-UI-089: requests <paramref name="target"/> (an HD request names its target; the toggle asks for the other one).</summary>
     private VisualRequestOutcome RequestVisualProfile(VisualProfile target, string via)
     {
         if (_canvas is null) return VisualRequestOutcome.NoOp;
         var outcome = _canvas.RequestVisualProfile(target);
         // Persisted at request time; a failure is reported and never blocks the switch.
         _visualKeyNotice = null;
-        if (outcome != VisualRequestOutcome.NoOp && _visualStore is { } store)
-            _visualNotice = !store.Persistent ? "not saved (automated run)" : store.Save(target) ? null : "save FAILED, this run only";
+        if (outcome != VisualRequestOutcome.NoOp)
+        {
+            // ARC-UI-2174: the one HD value; the interface follows at once (the experimental generated interface is honoured only while HD is On, so Off clears it).
+            var on = target == VisualProfile.Hd;
+            SaveGameSettings(_gameSettings with { HdInterface = on, GeneratedInterface = _gameSettings.GeneratedInterface && on });
+            if (_visualStore is { } store)
+                _visualNotice = !store.Persistent ? "not saved (automated run)" : store.Save(target) ? null : "save FAILED, this run only";
+        }
         GD.Print($"ARC-UI-006 visual request via={via} target={target} outcome={outcome} generation={_canvas.VisualGeneration} active={_canvas.VisualProfile} saved={_visualNotice ?? "yes"}");
         BindVisualPalette();
         RefreshReadyStatus();
@@ -202,8 +209,8 @@ public partial class TerrainViewerApp
         if (InterfaceHd.Configure(_canvas?.HdSource?.Pack, _gameSettings.HdInterface, _gameSettings.GeneratedInterface)) InterfaceHd.RedrawAll(GetTree().Root);
     }
 
-    /// <summary>ARC-RENDER-2060, ARC-RENDER-2076: the relit look is a component of HD graphics, not a setting of its own: it is on exactly while the active
-    /// visual profile is HD (launcher line, H key, ARC_VISUAL_PROFILE). An old <c>relit look</c> line of the settings file is not read.</summary>
+    /// <summary>ARC-RENDER-2060, ARC-RENDER-2076, ARC-UI-2174: the relit look is a component of HD, not a setting of its own: it is on exactly while the active
+    /// visual profile is HD (launcher HD row, H key, ARC_VISUAL_PROFILE). An old <c>relit look</c> line of the settings file is not read.</summary>
     internal static bool RelitLookWanted(VisualProfile? profile) => profile == VisualProfile.Hd;
 
     // Set only by the HD identity smoke (HD equals Legacy pixel for pixel), which needs the look out of the way.
@@ -241,8 +248,9 @@ public partial class TerrainViewerApp
     private string VisualHudStatus() => $"H visual Legacy/HD: {VisualSummary()}";
 }
 
-/// <summary>The visual profile preference (ARC-UI-006): the <c>visual profile</c> line (<c>legacy</c> or <c>hd</c>) of the one settings file
-/// (ARC-UI-1130, <see cref="ViewerSettingsConfig"/>, once <c>user://visual_profile_v1.json</c>); a missing or unknown value loads as Legacy.
+/// <summary>The visual profile preference (ARC-UI-006): since ARC-UI-2174 the one <c>hd</c> line (0 or 1) of the one settings file
+/// (ARC-UI-1130, <see cref="ViewerSettingsConfig"/>), HD On meaning profile Hd; a missing or unknown value loads as Legacy (an old file without an <c>hd</c> line
+/// reads its <c>hd interface</c> line; the old <c>visual profile</c> line is ignored).
 /// <c>VISUAL_PROFILE_TEST_PATH</c> names a settings file for tests; an automated run without it has no file at all
 /// (Legacy, nothing saved), so it never reads or changes the owner's setting.</summary>
 public sealed class VisualProfileSettingsStore
@@ -255,10 +263,10 @@ public sealed class VisualProfileSettingsStore
     /// <summary>False for an automated run without a test path: nothing is read or written.</summary>
     public bool Persistent => _path is not null;
     /// <summary>A saved line exists (startup reports "saved setting" only then).</summary>
-    public bool HasSaved => _path is not null && ViewerSettingsConfig.HasVisualProfile(ArcanumConfig.Read(_path));
+    public bool HasSaved => _path is not null && ViewerSettingsConfig.HasHd(ArcanumConfig.Read(_path));
 
-    public VisualProfile Load() => _path is null ? VisualProfile.Legacy : ViewerSettingsConfig.ReadVisualProfile(ArcanumConfig.Read(_path));
+    public VisualProfile Load() => _path is null || !ViewerSettingsConfig.ReadHd(ArcanumConfig.Read(_path)) ? VisualProfile.Legacy : VisualProfile.Hd;
 
     /// <summary>Writes the profile; false when it could not be saved (the caller reports it).</summary>
-    public bool Save(VisualProfile profile) => _path is not null && ArcanumConfig.Save(_path, ViewerSettingsConfig.VisualProfileChanges(profile)) == ArcanumConfigSaveStatus.Saved;
+    public bool Save(VisualProfile profile) => _path is not null && ArcanumConfig.Save(_path, ViewerSettingsConfig.HdChanges(profile == VisualProfile.Hd)) == ArcanumConfigSaveStatus.Saved;
 }
