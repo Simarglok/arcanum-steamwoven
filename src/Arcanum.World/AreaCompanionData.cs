@@ -88,7 +88,7 @@ public sealed class AreaCompanionData
             Math.Clamp(EffectModifiers.Apply(critter.BaseStats[AlignmentStat], alignment), MinAlignment, MaxAlignment), npc.Wait);
     }
 
-    private static StatModifierOperator Operator(EffectChangeOperator op) => op switch
+    internal static StatModifierOperator Operator(EffectChangeOperator op) => op switch
     {
         EffectChangeOperator.Add => StatModifierOperator.Add, EffectChangeOperator.Percent => StatModifierOperator.Percent,
         EffectChangeOperator.Minimum => StatModifierOperator.Minimum, EffectChangeOperator.Maximum => StatModifierOperator.Maximum,

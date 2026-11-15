@@ -50,7 +50,9 @@ public sealed class SessionDialogPartyPort(
             && _session.QueryLeader(waiting) is { } leader && leader != SessionEventKinds.PlayerEntity && npcLeaderFactsOf?.Invoke(command.Npc) is { } leaderFacts)
         {
             LastRefusal = null;
-            return Result(_session.UnwaitNpcLed(_session.Version, waiting, leaderFacts));
+            // ARC-WORLD-2148 (0x415BA0 case 0x15): the dialog's own check with the hero as the player runs first; without the host's facts of the speaker nothing is unwaited.
+            if (_factsOf(command.Npc) is not { } heroFacts) return DialogJoinResult.Rejected;
+            return Result(_session.UnwaitNpcLed(_session.Version, waiting, leaderFacts, heroFacts));
         }
         return Run(command.Npc, command.PlayerCharacter, (entity, facts) => _session.UnwaitParty(_session.Version, entity, facts, false));
     }

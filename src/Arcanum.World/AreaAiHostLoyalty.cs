@@ -63,10 +63,32 @@ public sealed partial class AreaAiHost
             && (controller is null ? PcLeader(npc) is not null : controller == leader);
         var persuasion = (PersuasionTraining)(int)(NpcSkill(leader, Skill.Persuasion)?.Training ?? SkillTraining.None);
         var reaction = _session.QueryDanger(npc).Enemies.Contains(SessionCombatant.Critter(leader)) ? 0 : NpcLeaderReaction;
-        return FollowConsentRules.Evaluate(new(mindControlled, persuasion, charisma, Alignment(leaderCritter), AreaAdvancement.Level(_session, leader, leaderBuild.Level), OtherLeaderCharisma: null,
-            forced, reaction, new(row.FollowReaction, row.FollowAlignmentAbove, row.FollowAlignmentBelow, row.JoinLevelGap), Alignment(critter), AreaAdvancement.Level(_session, npc, build.Level),
+        return FollowConsentRules.Evaluate(new(mindControlled, persuasion, charisma, AlignmentOf(leader) ?? 0, AreaAdvancement.Level(_session, leader, leaderBuild.Level), OtherLeaderCharisma: null,
+            forced, reaction, new(row.FollowReaction, row.FollowAlignmentAbove, row.FollowAlignmentBelow, row.JoinLevelGap), AlignmentOf(npc) ?? 0, AreaAdvancement.Level(_session, npc, build.Level),
             MaxFollowers: 0, NonForcedFollowers: 0, IgnoreCharismaLimit: true));
     }
 
-    private static int Alignment(CombatCritterFields critter) => critter.BaseStats.Count > AreaCompanionData.AlignmentStat ? critter.BaseStats[AreaCompanionData.AlignmentStat] : 0;
+    /// <summary>
+    /// ARC-WORLD-2148 (0x4B0490 for stat 0x13, read in the executable): the NPC's alignment as the follow check reads it, through the stat getter: the stored base (the value a TraitIdx spell wrote lies over it,
+    /// <see cref="AreaCombatHost.Fields(string)"/>), then every change of stat 19 in the effect list the session holds for it (or the loaded one), as the getter aggregates them (0x4EA6C0), clamped to the
+    /// stat's range. Null when the NPC's fields do not read here.
+    /// </summary>
+    internal int? AlignmentOf(string npc)
+    {
+        if (Fields(npc)?.Critter is not { } critter) return null;
+        var stored = critter.BaseStats.Count > AreaCompanionData.AlignmentStat ? critter.BaseStats[AreaCompanionData.AlignmentStat] : 0;
+        var changes = new List<EffectModifier>();
+        if (RawBuild(npc) is { } build && _session.QueryNpcEffects(build.Target) is { } view)
+        {
+            var rules = view.Definitions.ToDictionary(definition => definition.Number);
+            foreach (var entry in view.Entries)
+            {
+                if (!rules.TryGetValue(entry.Number, out var rule)) continue;
+                foreach (var change in rule.Changes)
+                    if (change.Kind == EffectAttributeKind.Stat && change.Attribute == AreaCompanionData.AlignmentStat)
+                        changes.Add(new(AreaCompanionData.Operator(change.Operator), change.Value));
+            }
+        }
+        return Math.Clamp(EffectModifiers.Apply(stored, changes), AreaCompanionData.MinAlignment, AreaCompanionData.MaxAlignment);
+    }
 }
