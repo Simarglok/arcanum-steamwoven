@@ -602,7 +602,7 @@ library only). It lists the steps of [the owner re-check list](owner-checks.md) 
   `same` and back, or a second click never creates another issue. A failure (no `gh`, no network) keeps the result, shows the error
   with a Retry button, and `./arcanum qa sync` (`--dry-run` first) creates the issues of the `differs` steps that have none.
 - **List snapshot and overlay (ARC-DEV-2190).** The page writes `local/qa/checks.json` (text only: id, section title, step, expected,
-  list status, the list's commit) whenever it reads the list (start, Reload, `qa sync`, `qa overlay`; not with `--dry-run`), so the
+  list status, the list's commit) whenever the serving page reads the list (start, Reload; ARC-DEV-2236: `qa sync`, `--check` and `overlay off` never replace it, `overlay on` writes one only when none exists; `qa sync` names a differs step that left the list), so the
   in-game overlay lists the steps without Python. `./arcanum qa overlay on|off` writes or removes the marker `local/qa/owner-qa.on`
   (the environment variable `ARC_OWNER_QA=1` also turns the overlay on); a build without the marker or the variable, such as a
   player's, is unchanged. The game appends its results to the same `results.jsonl` in the same format plus `build` (the build's

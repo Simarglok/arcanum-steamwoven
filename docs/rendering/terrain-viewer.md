@@ -2136,14 +2136,17 @@ A PROJECT window (the original has no such window; no original art; all text Eng
 - **On only for the owner.** The overlay needs the QA folder `local/qa` (found above the launch folder or the project folder, as the
   Ctrl+B tag finds its file) and the flag `ARC_OWNER_QA=1` or the marker `local/qa/owner-qa.on` (`./arcanum qa overlay on`).
   `ARC_OWNER_QA_DIR` names the folder directly (the smoke; the only way an automated run uses it). Without it Ctrl+Q is not taken and
-  nothing is drawn, so a normal player build is unchanged.
+  nothing is drawn, so a normal player build is unchanged. The folder is the nearest `local/qa` with the marker, else (flag on) the
+  nearest with a `checks.json`, else the nearest (ARC-DEV-2236: a nearer folder that is not the owner's is passed over). The flag and the
+  marker are read again every two seconds and at each Ctrl+Q, so `qa overlay off` hides the plate and `on` shows it without a restart.
 - **List.** The steps of `local/qa/checks.json`, the current step first (the step of `active-check.txt`, else the first open one;
   picking a row makes it current and writes the file, so Ctrl+B and the page follow, and the plate follows the page within two
   seconds), the others by filter: Open, This section, All. A recorded status wins over the list's own.
 - **Result.** Same / Differs / Cannot test append one event to `local/qa/results.jsonl` (the page's format, plus `build` = the build's
   commit and `src: game`) with the note and the step's last report folder; the page shows it at once and `./arcanum qa sync` or the
   running page creates the issue of a `differs` exactly once. Next open moves to the next open step.
-- **Send report.** The overlay keeps the key's moment as Ctrl+B does (screen, last 120 s of the log, a save) and Send writes the same
+- **Send report.** The overlay keeps the key's moment as Ctrl+B does (screen, last 120 s of the log, the facts); the save and the companion
+  record are taken at Send, not at opening (ARC-DEV-2236: an overlay opened and closed leaves the session alone). Send writes the same
   report folder (the same writer and places) tagged with the step (`Check:` line, ARC-DEV-2189); the folder name is recorded in the
   step's result (status kept, `open` when none). One send per opening; the note is the player's text.
 - **Plate.** While a step is current a read-only plate at the top left (`Check ARC-TYPE-NNN#k: step`) stays on screen; it takes no click and
@@ -2152,8 +2155,11 @@ A PROJECT window (the original has no such window; no original art; all text Eng
   a synthetic folder of three steps through `ARC_OWNER_QA_DIR`; the key does nothing before it is set; the window fits the screen with the
   first open step current; picking writes the file and moves the plate; Send writes a report whose `report.md` carries the `Check:` line
   and records its folder name; Differs and Same append lines with the build; Escape closes, the plate hides and shows on Ctrl+Shift+Q;
-  Ctrl+Q over the logbook closes only the overlay. `ARC_OWNER_QA_CAPTURE` (via `--env`) saves pictures of the window.
-- **Tests.** `OwnerQaTests` (files, model, filters, flag rules); `tools/local_dev/test_qa.py` (snapshot, game results, auto sync, marker).
+  Ctrl+Q over the logbook closes only the overlay. ARC-DEV-2236: opening changes nothing in the session, Ctrl+B over the overlay opens the
+  report above it and Escape closes only that, Send takes the save, closing gives the keyboard back, and the flag removed and set again
+  hides and shows the plate. `ARC_OWNER_QA_CAPTURE` (via `--env`) saves pictures of the window.
+- **Tests.** `OwnerQaTests` (files, model, filters, flag rules, and the key routing of `OwnerQaInputRouter`: the chords, the open overlay owning
+  every event, the swallowed release of the closing key); `tools/local_dev/test_qa.py` (snapshot, game results, auto sync, marker).
 
 ### Main menu (ARC-UI-011)
 

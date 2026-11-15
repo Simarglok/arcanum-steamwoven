@@ -36,13 +36,14 @@ public static class OwnerQaFiles
     public static readonly string[] Marks = ["same", "differs", "cannot-test"];
 
     /// <summary>The QA folder when the overlay is on, else null. <paramref name="folderVariable"/> names it directly (any run);
-    /// otherwise not an <paramref name="automated"/> run, with the flag or the marker, finds the first <c>local/qa</c> above one of the
-    /// start folders.</summary>
+    /// otherwise not an <paramref name="automated"/> run, with the flag or the marker, finds a <c>local/qa</c> above one of the
+    /// start folders: the nearest one with the marker, else (flag on) the nearest with a <c>checks.json</c>, else (flag on) the nearest.</summary>
     public static string? FindFolder(IEnumerable<string?> startFolders, bool automated, string? folderVariable, string? enabledVariable)
     {
         ArgumentNullException.ThrowIfNull(startFolders);
         if (!string.IsNullOrEmpty(folderVariable)) return Directory.Exists(folderVariable) ? folderVariable : null;
         if (automated) return null;
+        string? firstBare = null;
         foreach (var start in startFolders)
         {
             if (string.IsNullOrEmpty(start)) continue;
@@ -53,7 +54,12 @@ public static class OwnerQaFiles
                 {
                     var candidate = Path.Combine(folder, "local", "qa");
                     if (!Directory.Exists(candidate)) continue;
-                    return enabledVariable == "1" || File.Exists(Path.Combine(candidate, MarkerFile)) ? candidate : null;
+                    // ARC-DEV-2236: a nearer `local/qa` that is not the owner's (no marker, no list) is passed over, not taken: the folder is the
+                    // first one with the marker, else (flag on) the first one with a list, else (flag on) the first one found.
+                    if (File.Exists(Path.Combine(candidate, MarkerFile))) return candidate;
+                    if (enabledVariable != "1") continue;
+                    if (File.Exists(Path.Combine(candidate, ChecksFile))) return candidate;
+                    firstBare ??= candidate;
                 }
             }
             catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
@@ -61,7 +67,7 @@ public static class OwnerQaFiles
                 // an unusable start folder is skipped
             }
         }
-        return null;
+        return firstBare;
     }
 
     /// <summary>The steps of <c>checks.json</c> and the commit of the list; an empty list and a message when it cannot be read.</summary>
@@ -302,4 +308,71 @@ public sealed class OwnerQaSession
         if (problem is null) Reload();
         return problem;
     }
+}
+
+/// <summary>One input event as the overlay's router needs it (the viewer maps a Godot event to it; a non-key event is null).</summary>
+public sealed record OwnerQaKey(int Code, bool IsQ, bool IsEscape, bool Pressed, bool Echo, bool Ctrl, bool Shift, bool Alt, bool Meta);
+
+/// <summary>What the router decided for one event.</summary>
+public enum OwnerQaRoute
+{
+    /// <summary>Not the overlay's: the event goes on to the game (and to Ctrl+B and the windows).</summary>
+    PassThrough,
+    /// <summary>The overlay's: the viewer marks the event handled and does nothing else.</summary>
+    Consumed,
+    /// <summary>Ctrl+Q with the overlay available: the viewer marks the event handled and opens the overlay.</summary>
+    Open,
+    /// <summary>Ctrl+Shift+Q with the overlay available: the viewer marks the event handled and hides or shows the plate.</summary>
+    TogglePlate,
+    /// <summary>Escape or Ctrl+Q over the open overlay: the viewer marks the event handled and closes it; the key's release is swallowed.</summary>
+    Close,
+}
+
+/// <summary>
+/// ARC-DEV-2236: the routing of the overlay's keys, without Godot (it was in the viewer and only the <c>report</c> smoke stage saw it).
+/// An open overlay owns every event (a Ctrl+B or a game key does nothing); the release of the key that closed it is swallowed (Escape
+/// acts on release in the windows below); a press of any other key forgets that key; Ctrl+Q and Ctrl+Shift+Q (no Alt, no Meta, no echo)
+/// act only when the overlay is available, asked only when the chord was pressed.
+/// </summary>
+public sealed class OwnerQaInputRouter
+{
+    private int? _closingCode;
+
+    /// <summary>The key whose release is still to be swallowed, if any.</summary>
+    public int? ClosingCode => _closingCode;
+
+    /// <summary>The chord for <paramref name="shift"/> false = Ctrl+Q, true = Ctrl+Shift+Q.</summary>
+    public static bool IsChord(OwnerQaKey key, bool shift)
+    {
+        ArgumentNullException.ThrowIfNull(key);
+        return key is { Pressed: true, Echo: false, Ctrl: true, Alt: false, Meta: false, IsQ: true } && key.Shift == shift;
+    }
+
+    /// <summary>Decides one event. <paramref name="available"/> is asked only for a Ctrl+Q or Ctrl+Shift+Q press with the overlay closed.</summary>
+    public OwnerQaRoute Route(OwnerQaKey? key, bool overlayOpen, Func<bool> available)
+    {
+        ArgumentNullException.ThrowIfNull(available);
+        if (overlayOpen)
+        {
+            if (key is { Pressed: true, Echo: false } && (key.IsEscape || IsChord(key, shift: false)))
+            {
+                _closingCode = key.Code;
+                return OwnerQaRoute.Close;
+            }
+            return OwnerQaRoute.Consumed;
+        }
+        if (_closingCode is { } closing && key is { Pressed: false } release && release.Code == closing)
+        {
+            _closingCode = null;
+            return OwnerQaRoute.Consumed;
+        }
+        if (key is null) return OwnerQaRoute.PassThrough;
+        if (key.Pressed) _closingCode = null;
+        var open = IsChord(key, shift: false);
+        if ((!open && !IsChord(key, shift: true)) || !available()) return OwnerQaRoute.PassThrough;
+        return open ? OwnerQaRoute.Open : OwnerQaRoute.TogglePlate;
+    }
+
+    /// <summary>Forgets a pending release (the viewer's overlay closed some other way).</summary>
+    public void Reset() => _closingCode = null;
 }

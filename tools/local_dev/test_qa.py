@@ -550,6 +550,35 @@ class OverlayTests(unittest.TestCase):
             self.assertEqual(2, CommandTests.run_qa(self, "overlay", data=data, reports=reports).returncode)
 
 
+    def test_sync_and_check_and_overlay_off_keep_the_running_pages_snapshot(self) -> None:
+        # ARC-DEV-2236: only a page that serves owns checks.json; another command with another --ref must not replace it.
+        with tempfile.TemporaryDirectory() as tmp:
+            data, reports = Path(tmp) / "data", Path(tmp) / "reports"
+            data.mkdir()
+            sentinel = '{"version":1,"commit":"page","steps":[]}'
+            (data / qa.CHECKS_FILE).write_text(sentinel, encoding="utf-8")
+            for arguments in (("sync",), ("--check", "--no-open"), ("overlay", "off"), ("overlay", "on")):
+                done = CommandTests.run_qa(self, *arguments, data=data, reports=reports)
+                self.assertEqual(0, done.returncode, done.stderr)
+                self.assertEqual(sentinel, (data / qa.CHECKS_FILE).read_text(encoding="utf-8"), arguments)
+            fresh = Path(tmp) / "fresh"
+            self.assertEqual(0, CommandTests.run_qa(self, "sync", data=fresh, reports=reports).returncode)
+            self.assertFalse((fresh / qa.CHECKS_FILE).exists())         # sync alone writes no snapshot either
+
+    def test_a_differs_step_that_left_the_list_is_named_not_silently_skipped(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            gh = FakeGh()
+            app = make_app(Path(tmp), gh)
+            self.game_result(app, "ARC-DEV-100#1", "differs")
+            self.game_result(app, "ARC-DEV-999#7", "differs")        # not in the list
+            done, failed = app.sync()
+            self.assertEqual((["ARC-DEV-100#1"], []), (done, failed))
+            self.assertEqual(["ARC-DEV-999#7"], app.skipped)
+            self.assertEqual(1, len(gh.creates()))
+            self.assertEqual(([], []), app.sync())                     # the created one is done; the skipped is named again
+            self.assertEqual(["ARC-DEV-999#7"], app.skipped)
+
+
 class CommandTests(unittest.TestCase):
     def run_qa(self, *arguments: str, data: Path, reports: Path) -> subprocess.CompletedProcess:
         return subprocess.run([sys.executable, "-B", str(REPO / "arcanum"), "qa", *arguments, "--no-fetch", "--ref", "HEAD",

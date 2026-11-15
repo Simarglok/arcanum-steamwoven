@@ -1,3 +1,4 @@
+using Arcanum.Session;
 using Arcanum.TerrainViewer.Core;
 using Godot;
 
@@ -22,13 +23,9 @@ public partial class TerrainViewerApp
     private bool _ownerQaPlateOn = true;
     private bool _ownerQaChecked;
     private ulong _ownerQaPollMs;
-    private Key? _ownerQaClosingKey;
+    private readonly OwnerQaInputRouter _ownerQaRouter = new();
     private Control? _ownerQaFocus;
     private bool OwnerQaOpen => _ownerQaPanel?.IsOpen == true;
-
-    private static bool IsOwnerQaChord(InputEventKey key, bool shift) =>
-        key is { Pressed: true, Echo: false, CtrlPressed: true, AltPressed: false, MetaPressed: false }
-        && key.ShiftPressed == shift && (key.Keycode == Key.Q || key.PhysicalKeycode == Key.Q);
 
     /// <summary>The QA folder when the overlay is on for this run, else null (a normal player build: always null).</summary>
     private static string? OwnerQaFolderNow()
@@ -45,11 +42,16 @@ public partial class TerrainViewerApp
         }
     }
 
-    /// <summary>The session over the QA folder (made once per folder); false when the overlay is off.</summary>
+    /// <summary>The session over the QA folder (made once per folder); false when the overlay is off. ARC-DEV-2236: the flag and the marker
+    /// are read every time, so turning the overlay off drops the session and hides the plate, and turning it on shows the plate.</summary>
     private bool EnsureOwnerQa()
     {
         var folder = OwnerQaFolderNow();
-        if (folder is null) return false;
+        if (folder is null)
+        {
+            if (_ownerQa is not null && !OwnerQaOpen) { _ownerQa = null; _ownerQaPlate?.Set(null, false); }
+            return false;
+        }
         if (_ownerQa is null || _ownerQa.Folder != folder)
         {
             var build = ViewerBuild.Current;
@@ -62,61 +64,48 @@ public partial class TerrainViewerApp
 
     private void UpdateOwnerQaPlate() => _ownerQaPlate?.Set(_ownerQa?.Current, _ownerQaPlateOn);
 
-    /// <summary>Per frame in a game: the plate follows the step of the QA page (a check of the file every two seconds).</summary>
+    /// <summary>Per frame in a game: every two seconds the flag, the marker and the folder are read again (a marker added or removed while
+    /// the game runs shows or hides the plate), and the plate follows the step of the QA page.</summary>
     private void SyncOwnerQa()
     {
-        if (!_ownerQaChecked) { _ownerQaChecked = true; EnsureOwnerQa(); return; }
-        if (_ownerQa is null || OwnerQaOpen) return;
+        if (OwnerQaOpen) return;
         var now = Time.GetTicksMsec();
-        if (now < _ownerQaPollMs) return;
+        if (_ownerQaChecked && now < _ownerQaPollMs) return;
+        _ownerQaChecked = true;
         _ownerQaPollMs = now + 2000;
-        if (_ownerQa.FollowActive()) UpdateOwnerQaPlate();
+        if (!EnsureOwnerQa()) return;
+        if (_ownerQa!.FollowActive()) UpdateOwnerQaPlate();
     }
 
     /// <summary>After the bug report in the WORLD input route: Ctrl+Q opens the overlay (only when it is on), the open overlay owns every
     /// event, Ctrl+Shift+Q hides or shows the plate. True when the event is the overlay's.</summary>
     private bool RouteOwnerQaInput(InputEvent input)
     {
-        if (OwnerQaOpen)
+        var key = input is InputEventKey code
+            ? new OwnerQaKey((int)(code.Keycode != Key.None ? code.Keycode : code.PhysicalKeycode), code.Keycode == Key.Q || code.PhysicalKeycode == Key.Q,
+                (code.Keycode != Key.None ? code.Keycode : code.PhysicalKeycode) == Key.Escape, code.Pressed, code.Echo, code.CtrlPressed, code.ShiftPressed,
+                code.AltPressed, code.MetaPressed)
+            : null;
+        var wasOpen = OwnerQaOpen;
+        switch (_ownerQaRouter.Route(key, wasOpen, EnsureOwnerQa))
         {
-            if (input is InputEventKey key) HandleOwnerQaKey(key);
-            return true;
+            case OwnerQaRoute.PassThrough: return false;
+            // Open: the overlay owns the event (its text field may take it). Closed: the release of the key that closed it, swallowed.
+            case OwnerQaRoute.Consumed: if (!wasOpen) GetViewport().SetInputAsHandled(); break;
+            case OwnerQaRoute.Open: GetViewport().SetInputAsHandled(); OpenOwnerQa(); break;
+            case OwnerQaRoute.TogglePlate: GetViewport().SetInputAsHandled(); _ownerQaPlateOn = !_ownerQaPlateOn; UpdateOwnerQaPlate(); break;
+            case OwnerQaRoute.Close: GetViewport().SetInputAsHandled(); EndOwnerQa(); break;
         }
-        if (_ownerQaClosingKey is { } closing && input is InputEventKey { Pressed: false } release
-            && (release.Keycode != Key.None ? release.Keycode : release.PhysicalKeycode) == closing)
-        {
-            _ownerQaClosingKey = null;
-            GetViewport().SetInputAsHandled();
-            return true;
-        }
-        if (input is InputEventKey { Pressed: true }) _ownerQaClosingKey = null;
-        if (input is not InputEventKey press) return false;
-        var open = IsOwnerQaChord(press, shift: false);
-        if ((!open && !IsOwnerQaChord(press, shift: true)) || !EnsureOwnerQa()) return false;
-        GetViewport().SetInputAsHandled();
-        if (open) OpenOwnerQa();
-        else { _ownerQaPlateOn = !_ownerQaPlateOn; UpdateOwnerQaPlate(); }
         return true;
-    }
-
-    private void HandleOwnerQaKey(InputEventKey key)
-    {
-        var routed = key.Keycode != Key.None ? key.Keycode : key.PhysicalKeycode;
-        if (!key.Pressed || key.Echo) return;
-        if (routed == Key.Escape || IsOwnerQaChord(key, shift: false))
-        {
-            GetViewport().SetInputAsHandled();
-            EndOwnerQa();
-            _ownerQaClosingKey = routed;
-        }
     }
 
     private void OpenOwnerQa()
     {
         if (OwnerQaOpen || _exiting || _ownerQa is null) return;
         _ownerQa.Reload(); _ownerQa.TouchActive();
-        // The key's moment, as Ctrl+B keeps it: the screen as drawn (the plate included), the log of the last 120 s, the facts and a save.
-        var moment = CaptureBugReportMoment();
+        // The key's moment, as Ctrl+B keeps it: the screen as drawn (the plate included), the log of the last 120 s and the facts. The save
+        // and the companion record wait for Send (ARC-DEV-2236): an overlay opened for a step and closed again changes nothing in the game.
+        var moment = CaptureBugReportMoment(withSave: false);
         _ownerQaMoment = moment;
         if (_ownerQaPanel is null)
         {
@@ -136,8 +125,7 @@ public partial class TerrainViewerApp
         _ownerQaFocus = GetViewport().GuiGetFocusOwner();
         QuarantineWorld(); _quickKeys.Reset();
         StopWorldRoute("OWNER_QA");
-        _ownerQaPanel.Open(_ownerQa, string.Join(" ", new[] { moment.ScreenshotMissing is null ? null : "No screenshot: " + moment.ScreenshotMissing + ".",
-            moment.SaveMissing is null ? null : "No save: " + moment.SaveMissing + "." }.Where(part => part is not null)));
+        _ownerQaPanel.Open(_ownerQa, moment.ScreenshotMissing is null ? "" : "No screenshot: " + moment.ScreenshotMissing + ".");
         GD.Print($"ARC-DEV-2190 owner checks open steps={_ownerQa.Steps.Count} current={_ownerQa.CurrentId ?? "none"} problem={_ownerQa.Problem ?? "none"}");
         RefreshReadyStatus();
     }
@@ -163,7 +151,9 @@ public partial class TerrainViewerApp
         if (_ownerQa?.CurrentId is not { } id) { _ownerQaPanel!.ShowNotice("Pick a step first: a report is tagged with it."); return; }
         if (_ownerQaMoment is not { } moment) { _ownerQaPanel!.ShowNotice("This moment is already sent: close the window and open it again for a new report."); return; }
         var note = _ownerQaPanel!.Note;
-        var result = WriteBugReportMoment(moment, note, id);
+        // The save at Send: the world is paused and quarantined under the overlay, so it is the game as at the key.
+        var (save, saveMissing) = CaptureBugReportSave(moment.Thumbnail, moment.TakenLocal);
+        var result = WriteBugReportMoment(moment with { Save = save, SaveMissing = saveMissing }, note, id);
         _hud?.SetNotice(result.Status);
         if (result.Folder is null) { _ownerQaPanel.ShowNotice("The report could not be written (press Send report to try again): " + string.Join("; ", result.Failed)); return; }
         _ownerQaMoment = null;
@@ -197,6 +187,7 @@ public partial class TerrainViewerApp
         var simulatedFocus = _worldFocusSimulationForSelfTest; var focused = _worldFocused;
         _worldFocusSimulationForSelfTest = true;
         var folder = System.IO.Path.Combine(ViewerAutomatedStorage.Folder(), "owner-qa-smoke");
+        Button? focusProbe = null;
         try
         {
             _worldFocused = true;
@@ -246,6 +237,10 @@ public partial class TerrainViewerApp
             await Frames(1);
             Require(!OwnerQaOpen && !WorldModal, "Ctrl+Q does nothing while the owner-QA flag is off");
             System.Environment.SetEnvironmentVariable(OwnerQaFiles.FolderVariable, folder);
+            // ARC-DEV-2236: a control that has the keyboard under the overlay gets it back when the overlay closes.
+            focusProbe = new Button { FocusMode = Control.FocusModeEnum.All, Position = new(-100, -100), Size = new(1, 1) };
+            AddChild(focusProbe); focusProbe.GrabFocus();
+            var revisionBefore = _areaSession.Version.Revision;
             Press(Key.Q, ctrl: true);
             await Frames(2);
             Require(OwnerQaOpen && WorldModal && !_worldGate.IsOpen, "Ctrl+Q opened the modal overlay and closed the actor gate");
@@ -253,6 +248,16 @@ public partial class TerrainViewerApp
             Require(GetViewport().GetVisibleRect().Encloses(panel.PanelRectForSelfTest), $"the overlay fits the screen: {panel.PanelRectForSelfTest}");
             Require(_ownerQa!.CurrentId == "ARC-DEV-9001#1" && panel.RowCountForSelfTest == 2, $"the first open step is current, open rows only: {_ownerQa.CurrentId} rows={panel.RowCountForSelfTest}");
             Require(panel.RowTextForSelfTest(0).StartsWith("> ARC-DEV-9001#1", StringComparison.Ordinal) && panel.DetailForSelfTest.Contains("Expected: It opens", StringComparison.Ordinal), "the current step is listed first with its text");
+            // ARC-DEV-2236: opening records nothing in the game (no save, no companion record, no placement): the revision is the same.
+            Require(_areaSession.Version.Revision == revisionBefore && _ownerQaMoment is { Save: null, SaveMissing: null }, $"opening the overlay left the session alone: {revisionBefore} -> {_areaSession.Version.Revision}");
+            // Ctrl+B over the open overlay opens the bug report above it (it comes first in the route); Escape closes only the report, the
+            // overlay stays open and takes the next Escape.
+            Press(Key.B, ctrl: true);
+            await Frames(1);
+            Require(OwnerQaOpen && BugReportOpen, "Ctrl+B over the overlay opened the bug report above it");
+            Press(Key.Escape);
+            await Frames(1);
+            Require(OwnerQaOpen && !BugReportOpen, "Escape closed the bug report and kept the overlay");
             Require(_ownerQaPlate!.IsShown && _ownerQaPlate.TextForSelfTest.Contains("ARC-DEV-9001#1", StringComparison.Ordinal), "the plate shows the current step");
             Require(_ownerQaPlate.MouseFilterForSelfTest == Control.MouseFilterEnum.Ignore, "the plate takes no click");
             await Shot("overlay");
@@ -268,6 +273,8 @@ public partial class TerrainViewerApp
             await Frames(1);
             Require(_bugReportResult is { Saved: true, Fallback: false } && _bugReportResult.Folder!.StartsWith(reports, StringComparison.Ordinal), "Send wrote the report into the isolated reports folder: " + _bugReportResult?.Status);
             var sent = _bugReportResult!.Folder!;
+            // ARC-DEV-2236: the save is taken at Send: the report holds a save the ordinary save list lists.
+            Require(new GameSaveLibrary(System.IO.Path.Combine(sent, BugReportWriter.SaveFolder)).List().Entries.SingleOrDefault() is { Details: GameSaveDetails.Present }, "Send took the save: the report's save folder lists one save");
             var report = System.IO.File.ReadAllText(System.IO.Path.Combine(sent, BugReportWriter.ReportFile));
             Require(BugReportCheck.ReadReportLine(report) == "ARC-DEV-9001#2" && report.Contains("> Smoke: the door stays open", StringComparison.Ordinal), "report.md carries the Check line and the note");
             var recorded = ResultLines().LastOrDefault() ?? "";
@@ -289,6 +296,8 @@ public partial class TerrainViewerApp
             Press(Key.Escape);
             await Frames(1);
             Require(!OwnerQaOpen && !WorldModal, "Escape closed the overlay");
+            Require(GetViewport().GuiGetFocusOwner() == focusProbe, "closing the overlay gave the keyboard back to the control that had it: " + GetViewport().GuiGetFocusOwner());
+            focusProbe.ReleaseFocus();   // a focused control would make the logbook key below "UI focus owns input"
             Require(_ownerQaPlate.IsShown, "the plate stays after the overlay closes");
             await Shot("plate");
             Press(Key.Q, ctrl: true, shift: true);
@@ -308,12 +317,30 @@ public partial class TerrainViewerApp
             Press(Key.L);
             await Frames(1);
             Require(!LogbookOpen && !WorldModal, "L then closed the logbook");
+            // ARC-DEV-2236: the flag is read while the game runs. Off: the plate goes at the next check and the key is free; on again: the plate returns.
+            var revisionAfter = _areaSession.Version.Revision;
+            System.Environment.SetEnvironmentVariable(OwnerQaFiles.FolderVariable, null);
+            _ownerQaPollMs = 0; SyncOwnerQa();
+            Require(_ownerQa is null && !_ownerQaPlate.IsShown, "with the flag off the plate is hidden and the session dropped");
+            Press(Key.Q, ctrl: true);
+            await Frames(1);
+            Require(!OwnerQaOpen && !WorldModal, "Ctrl+Q does nothing once the flag is off");
+            System.Environment.SetEnvironmentVariable(OwnerQaFiles.FolderVariable, folder);
+            _ownerQaPollMs = 0; SyncOwnerQa();
+            Require(_ownerQa is not null && _ownerQaPlate.IsShown, "with the flag on again the plate returns");
+            Press(Key.Q, ctrl: true);
+            await Frames(1);
+            Require(OwnerQaOpen && _areaSession.Version.Revision == revisionAfter, "the overlay opens again and still records nothing");
+            Press(Key.Escape);
+            await Frames(1);
+            Require(!OwnerQaOpen && !WorldModal, "Escape closed the overlay again");
             Require(System.IO.Directory.GetDirectories(reports).Length == before + 1, "one report folder for the one Send");
             GD.Print("ARC-DEV-2190 native-smoke owner-qa PASS " + System.Text.Json.JsonSerializer.Serialize(new { Map = CurrentAreaMap, Results = all.Length }));
         }
         finally
         {
             if (OwnerQaOpen) EndOwnerQa();
+            focusProbe?.QueueFree();
             System.Environment.SetEnvironmentVariable(OwnerQaFiles.FolderVariable, null);
             _ownerQa = null; _ownerQaPlate?.Set(null, false);
             try { if (System.IO.Directory.Exists(folder)) System.IO.Directory.Delete(folder, recursive: true); } catch (System.IO.IOException) { }

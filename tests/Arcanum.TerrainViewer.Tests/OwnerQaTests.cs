@@ -227,4 +227,87 @@ public sealed class OwnerQaTests
         }
         Assert.IsNull(OwnerQaFiles.AppendResult(_folder, "ARC-DEV-100#1", "same", "", null, "b", Now));
     }
+
+    [TestMethod]
+    public void A_nearer_qa_folder_that_is_not_the_owners_is_passed_over_not_taken()
+    {
+        // ARC-DEV-2236: the first `local/qa` going up used to win even when it had neither marker nor list.
+        var root = Directory.CreateTempSubdirectory("arc-owner-qa-root-").FullName;
+        try
+        {
+            var outer = Path.Combine(root, "local", "qa");
+            var start = Path.Combine(root, "worktree", "artifacts");
+            var inner = Path.Combine(root, "worktree", "local", "qa");
+            Directory.CreateDirectory(outer); Directory.CreateDirectory(inner); Directory.CreateDirectory(start);
+            string?[] starts = [start];
+            Assert.IsNull(OwnerQaFiles.FindFolder(starts, false, null, null), "no marker anywhere: off");
+            Assert.AreEqual(inner, OwnerQaFiles.FindFolder(starts, false, null, "1"), "flag on, no list anywhere: the nearest");
+            File.WriteAllText(Path.Combine(outer, OwnerQaFiles.ChecksFile), "{}");
+            Assert.AreEqual(outer, OwnerQaFiles.FindFolder(starts, false, null, "1"), "flag on: the one with the list beats a bare nearer one");
+            File.WriteAllText(Path.Combine(outer, OwnerQaFiles.MarkerFile), "on");
+            Assert.AreEqual(outer, OwnerQaFiles.FindFolder(starts, false, null, null), "the marker of the outer folder turns the overlay on, the bare inner folder is skipped");
+            File.Delete(Path.Combine(outer, OwnerQaFiles.MarkerFile));
+            Assert.IsNull(OwnerQaFiles.FindFolder(starts, false, null, null), "the marker removed: off again at the next read");
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    private static OwnerQaKey Key(char name, bool pressed = true, bool ctrl = false, bool shift = false, bool echo = false, bool alt = false, bool meta = false) =>
+        new(name, name == 'Q', name == 'E', pressed, echo, ctrl, shift, alt, meta);   // 'E' stands for Escape
+
+    private static readonly Func<bool> On = () => true;
+    private static readonly Func<bool> Off = () => false;
+
+    [TestMethod]
+    public void Ctrl_Q_opens_and_Ctrl_Shift_Q_toggles_only_for_the_exact_chord_and_only_when_available()
+    {
+        var router = new OwnerQaInputRouter();
+        Assert.AreEqual(OwnerQaRoute.Open, router.Route(Key('Q', ctrl: true), false, On));
+        Assert.AreEqual(OwnerQaRoute.TogglePlate, router.Route(Key('Q', ctrl: true, shift: true), false, On));
+        Assert.AreEqual(OwnerQaRoute.PassThrough, router.Route(Key('Q', ctrl: true), false, Off), "the overlay is off: the key stays the game's");
+        Assert.AreEqual(OwnerQaRoute.PassThrough, router.Route(Key('Q'), false, On), "Q alone");
+        Assert.AreEqual(OwnerQaRoute.PassThrough, router.Route(Key('Q', ctrl: true, echo: true), false, On), "a held key repeats nothing");
+        Assert.AreEqual(OwnerQaRoute.PassThrough, router.Route(Key('Q', ctrl: true, alt: true), false, On));
+        Assert.AreEqual(OwnerQaRoute.PassThrough, router.Route(Key('Q', ctrl: true, meta: true), false, On));
+        Assert.AreEqual(OwnerQaRoute.PassThrough, router.Route(Key('Q', pressed: false, ctrl: true), false, On), "a release opens nothing");
+        Assert.AreEqual(OwnerQaRoute.PassThrough, router.Route(null, false, On), "a mouse or other event");
+        var asked = 0;
+        router.Route(Key('W', ctrl: true), false, () => { asked++; return true; });
+        Assert.AreEqual(0, asked, "availability (a folder search) is asked only for the chord");
+    }
+
+    [TestMethod]
+    public void An_open_overlay_owns_every_event_and_Escape_or_Ctrl_Q_closes_it()
+    {
+        var router = new OwnerQaInputRouter();
+        Assert.AreEqual(OwnerQaRoute.Consumed, router.Route(Key('B', ctrl: true), true, On), "Ctrl+B over the overlay is not the game's");
+        Assert.AreEqual(OwnerQaRoute.Consumed, router.Route(Key('W'), true, On));
+        Assert.AreEqual(OwnerQaRoute.Consumed, router.Route(null, true, On), "a mouse event");
+        Assert.AreEqual(OwnerQaRoute.Consumed, router.Route(Key('Q', ctrl: true, shift: true), true, On), "Ctrl+Shift+Q does not close it");
+        Assert.AreEqual(OwnerQaRoute.Consumed, router.Route(Key('E', echo: true), true, On), "a held Escape closes nothing");
+        Assert.AreEqual(OwnerQaRoute.Consumed, router.Route(Key('E', pressed: false), true, On), "a release closes nothing");
+        Assert.AreEqual(OwnerQaRoute.Close, router.Route(Key('E'), true, On));
+        router.Reset();
+        Assert.AreEqual(OwnerQaRoute.Close, router.Route(Key('Q', ctrl: true), true, Off), "Ctrl+Q closes it even when the flag went off meanwhile");
+    }
+
+    [TestMethod]
+    public void The_release_of_the_closing_key_is_swallowed_once_and_any_other_press_forgets_it()
+    {
+        var router = new OwnerQaInputRouter();
+        Assert.AreEqual(OwnerQaRoute.Close, router.Route(Key('E'), true, On));
+        Assert.AreEqual((int)'E', router.ClosingCode);
+        Assert.AreEqual(OwnerQaRoute.PassThrough, router.Route(null, false, On), "a mouse event does not forget it");
+        Assert.AreEqual(OwnerQaRoute.PassThrough, router.Route(Key('W', pressed: false), false, On), "the release of another key passes");
+        Assert.AreEqual(OwnerQaRoute.Consumed, router.Route(Key('E', pressed: false), false, On), "the closing key's release is the overlay's");
+        Assert.IsNull(router.ClosingCode);
+        Assert.AreEqual(OwnerQaRoute.PassThrough, router.Route(Key('E', pressed: false), false, On), "only once");
+        router.Route(Key('Q', ctrl: true), true, On);                       // closes with Ctrl+Q: its code is Q
+        Assert.AreEqual(OwnerQaRoute.PassThrough, router.Route(Key('W'), false, Off), "a new press forgets the pending release ...");
+        Assert.IsNull(router.ClosingCode);
+        Assert.AreEqual(OwnerQaRoute.PassThrough, router.Route(Key('Q', pressed: false), false, On), "... so the old key's release is no longer swallowed");
+    }
 }
