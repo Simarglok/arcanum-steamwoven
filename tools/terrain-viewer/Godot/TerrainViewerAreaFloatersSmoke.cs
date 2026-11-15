@@ -226,7 +226,7 @@ public partial class TerrainViewerApp
             var bubbles = layer.LayOutBubbles();
             Require(bubbles.Count == 2 && bubbles.Any(b => b.Owner == HeroFloater), $"both bubbles draw ({bubbles.Count} bubbles)");
             var heroBubble = bubbles.First(b => b.Owner == HeroFloater);
-            Require(heroBubble.Lines.Count > 1 && heroBubble.Rect.Size.X <= TextBubbleRules.BoxSize + 1, $"the long line wrapped to {heroBubble.Lines.Count} lines within 200 px");
+            Require(heroBubble.Lines.Count > 1 && heroBubble.Rect.Size.X / layer.BubbleFactor <= TextBubbleRules.BoxSize + 1, $"the long line wrapped to {heroBubble.Lines.Count} lines within 200 px");
             if (!string.IsNullOrWhiteSpace(capture)) { layer.Redraw(); await Capture("bubble-after"); }
             // ARC-UI-2278: a bubble is laid out in the original's pixels and drawn at the screen's whole factor (as the bars and the dialog band): the same text, box and
             // lines at factor 2 are twice the size and stand on the 2 px grid; the layer's own factor is the screen's.
@@ -235,7 +235,7 @@ public partial class TerrainViewerApp
             layer.BubbleFactorOverride = 2; var twoX = layer.LayOutBubbles().First(b => b.Owner == HeroFloater);
             layer.BubbleFactorOverride = null;
             Require(twoX.Lines.Count == oneX.Lines.Count && twoX.Rect.Size == oneX.Rect.Size * 2
-                && twoX.Lines.All(l => l.Position.X % 2 == 0 && l.Position.Y % 2 == 0 && twoX.Rect.Grow(0).Encloses(new Rect2(l.Position, new Vector2(1, 1)))),
+                && twoX.Lines.All(l => l.Position.X % 2 == 0 && l.Position.Y % 2 == 0 && twoX.Rect.Encloses(new Rect2(l.Position, new Vector2(1, 1)))),
                 $"at factor 2 the bubble is twice the size on the 2 px grid: {oneX.Rect} -> {twoX.Rect}");
             if (!string.IsNullOrWhiteSpace(capture))
             {
