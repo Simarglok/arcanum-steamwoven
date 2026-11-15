@@ -1023,6 +1023,12 @@ public partial class TerrainViewerApp
             if (HandleWorldMapKey(entryKey)) GetViewport().SetInputAsHandled();
             return;
         }
+        // ARC-UI-2305: the open order line (bar mode 7) owns every key but Escape (the entry's, 0x54C8E0 skips the hotkeys).
+        if (input is InputEventKey orderLineKey && HandleOrderLineKey(orderLineKey))
+        {
+            GetViewport().SetInputAsHandled();
+            return;
+        }
         // ARC-DEV-111 (SA45, SA40, SA44): Escape, the other windows' keys and the number row are global keys of the original's main loop and
         // bar handler, which no open window handles itself.
         if (input is InputEventKey interfaceKey && HandleGlobalKeyOverInterface(interfaceKey))
@@ -1122,7 +1128,7 @@ public partial class TerrainViewerApp
             // ARC-INPUT-004: Ctrl, Alt or Command with a character letter (A C F I L R S T W) is no key in the original:
             // no window opens and nothing is reported as reserved.
             // ARC-WORLD-011: F7/F8 are quick save/load while an AREA game session exists.
-            if (!OriginalWorldKeyboard.CharacterKeySilenced(decision.Key, modifiers) && !RouteQuickKey(decision) && !RouteGameMenuKey(decision) && !RouteOptionsKey(chordKey, decision) && !RouteOrderKey(decision, modifiers) && !RouteHomeKey(decision) && !RouteInventoryKey(decision) && !RouteSheetKey(decision) && !RouteLogbookKey(decision) && !RouteSpellKey(decision) && !RouteSkillKey(decision) && !RouteHotkeyKey(decision, modifiers) && !RouteSchematicsKey(decision) && !RouteSleepKey(decision) && !RouteFateKey(decision) && !RouteWorldMapKey(decision) && !RouteVisualKey(decision, modifiers) && !RouteNumLockKey(decision) && !RouteTurnBasedKey(decision) && !RouteCombatModeKey(decision) && decision.Role == WorldKeyRole.OriginalReserved && decision.Pressed && !decision.Echo && !WorldModal && !WorldUiFocus)
+            if (!OriginalWorldKeyboard.CharacterKeySilenced(decision.Key, modifiers) && !RouteQuickKey(decision) && !RouteGameMenuKey(decision) && !RouteOptionsKey(chordKey, decision) && !RouteOrderKey(decision, modifiers) && !RouteOrderLineKey(decision, modifiers) && !RouteHomeKey(decision) && !RouteInventoryKey(decision) && !RouteSheetKey(decision) && !RouteLogbookKey(decision) && !RouteSpellKey(decision) && !RouteSkillKey(decision) && !RouteHotkeyKey(decision, modifiers) && !RouteSchematicsKey(decision) && !RouteSleepKey(decision) && !RouteFateKey(decision) && !RouteWorldMapKey(decision) && !RouteVisualKey(decision, modifiers) && !RouteNumLockKey(decision) && !RouteTurnBasedKey(decision) && !RouteCombatModeKey(decision) && decision.Role == WorldKeyRole.OriginalReserved && decision.Pressed && !decision.Echo && !WorldModal && !WorldUiFocus)
             {
                 _worldLastReserved = $"{routedKey} = {decision.OriginalAction} (original; NOT IMPLEMENTED)";
                 _hud?.SetNotice($"Reserved: {routedKey} = {decision.OriginalAction} (NOT IMPLEMENTED)");

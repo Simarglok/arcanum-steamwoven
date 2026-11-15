@@ -2750,7 +2750,7 @@ under the bars. Buttons:
 | Button | Strip | Does in the viewer |
 | --- | --- | --- |
 | Character, Logbook, Inventory, Schematics | top, top, top, bottom | Opens its window as `C`, `L`, `I`, `T` do, or closes it when open. Over another of these windows it closes that one first and opens its own (the original's interface mode change). |
-| Map | top | The world map window (`W`, map mode on the start map), which does not fit between the strips, so the bars hide while it is open (`W` or Escape closes it); the town map is not built. |
+| Map | top | The world map window (`W`, map mode on the start map), which lies between the strips (800 × 400 at (0, 41)); the bars stay up under it (ARC-UI-2306; the note quill's entry runs on the bottom strip), the Skills and Sleep buttons refuse while it is open, and `W` or Escape closes it; the town map is not built. |
 | Combat | bottom | Toggles the hero's combat mode (`R`). |
 | Spells | bottom | A toggle: on shows the spell pane (`M`), off hides it; `M` moves the button with the pane. |
 | Skills | bottom | A toggle (Spells goes up when it goes down; `K` does the same without the sound): shows the [skill pane](../world/spell-cast-host.md#the-skill-pane-in-the-bottom-strip-arc-ui-1113) (bar mode 2: the pane's art and the four skill-bar buttons) in the message window. |
@@ -2781,7 +2781,7 @@ installed art and texts read). Native smoke on the original data, map mode on th
 3027, a new game as the first pre-made hero, the bars with all 11 arts and 10 texts from the game, Character's hover
 name and lit frame, its down frame with 3000, the release with 3001 opening the sheet, Inventory switching from the sheet,
 Logbook and Schematics opening and closing their windows, the logbook lying between the strips and taking a press inside
-it, Map opening the world map with the bars hidden and back with no hover, Combat in and out of combat mode, Spells showing and hiding
+it, Map opening the world map with the bars up and closing it again, Combat in and out of combat mode, Spells showing and hiding
 the pane, Fate Points opening and closing its window (and, in the same smoke, the [Fate Point window](#fate-point-window-arc-ui-1112)'s own checks), a press on the strip's clock not reaching the world, every sound started, and the
 [clock](#clock-and-date-arc-ui-1111)). Not done: the
 hot-key bar (later slices; the vials since ARC-UI-020, the message log since ARC-UI-023, the vials' art, the follower frames

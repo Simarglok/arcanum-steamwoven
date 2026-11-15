@@ -38,7 +38,7 @@ public partial class TerrainViewerApp
     private bool InterfaceBarsOn => _areaSession is not null && _readyMode == TerrainViewerMode.Area && (!ViewerAutomatedStorage.Automated || _gameBarForSelfTest);
 
     private bool GameBarActive => InterfaceBarsOn
-        && !MainMenuOpen && !BarterOpen && !ItemServiceOpen && !SaveListOpen && !ReadingOpen && !PaletteOpen && !WorldMapOpen;
+        && !MainMenuOpen && !BarterOpen && !ItemServiceOpen && !SaveListOpen && !ReadingOpen && !PaletteOpen;
 
     /// <summary>Per frame: shows the bars while an area session plays (reading their art once a run) and follows the spell pane.</summary>
     private void SyncGameBar()
@@ -58,8 +58,11 @@ public partial class TerrainViewerApp
             }
             HideHotkeyBar();
             HideSpellBar();
+            HideWeaponBar();
             HideSkillBar();
             HideQuantityPane();
+            HideOrderLine();
+            HideMapNoteEntry();
             return;
         }
         if (_gameBarPanel is null)
@@ -89,8 +92,9 @@ public partial class TerrainViewerApp
             if (spells) _gameBar.SetOn(AreaBarButton.Skills, false);
             _gameBarPanel.Render();
         }
-        // ARC-UI-023: a pane taking the message window (its button down) or giving it back (ML8).
-        var pane = spells || _gameBar.IsOn(AreaBarButton.Skills);
+        // ARC-UI-023: a pane taking the message window (its button down) or giving it back (ML8); ARC-UI-2304: bar mode 8 holds it too.
+        // The diagnostic pane's weapon mode (no strip art) holds the window only while the spell pane is open, as before.
+        var pane = spells || _gameBar.IsOn(AreaBarButton.Skills) || (_itemPaneItem is not null && WeaponPaneInStrip);
         var paneMode = pane ? MessagePaneMode : 0;
         if (pane && _messagePaneShown && paneMode != _messagePaneMode) ClearMessagePaneName();
         _messagePaneMode = paneMode;
@@ -108,8 +112,11 @@ public partial class TerrainViewerApp
         SyncHotkeyBar();
         SyncMaintainBar();
         SyncSpellBar();
+        SyncWeaponBar();
         SyncSkillBar();
         SyncQuantityPane();
+        SyncOrderLine();
+        SyncMapNoteEntry();
     }
 
     private static int ClockArtWidth(AreaGameBarContent content, int art, int fallback) =>
@@ -180,7 +187,7 @@ public partial class TerrainViewerApp
                 break;
             case AreaBarButton.Skills:
                 // ARC-UI-2024 (DB2): consumed without effect while the dialog's hook is set; the pair is given back as it was.
-                if (ConversationOpen)
+                if (ConversationOpen || WorldMapOpen)
                 {
                     _gameBarNotice = "skills: ignored while another window owns input";
                     _gameBar.SetOn(AreaBarButton.Skills, !_gameBar.IsOn(AreaBarButton.Skills));
@@ -203,7 +210,7 @@ public partial class TerrainViewerApp
                 // ARC-WORLD-1160: the bar button runs the same opener as the key S (its own decision answers a dead or unconscious hero).
                 if (!SleepActive) _gameBarNotice = "sleep: not available here";
                 else if (SleepOpen) OpenSleep(); // the same decision as the key: a dead hero gets nothing, even the close
-                else if (PaletteOpen || ConversationOpen || SaveListOpen || MainMenuOpen) _gameBarNotice = "sleep: ignored while another window owns input";
+                else if (PaletteOpen || ConversationOpen || SaveListOpen || MainMenuOpen || WorldMapOpen) _gameBarNotice = "sleep: ignored while another window owns input";
                 else OpenSleep();
                 break;
         }
@@ -244,7 +251,8 @@ public partial class TerrainViewerApp
     private bool BarSpells()
     {
         var on = _gameBar.IsOn(AreaBarButton.Spells);
-        if (!on) { _spellPane?.HidePane(); _spellNotice = null; return true; }
+        // ARC-UI-2304: the spells mode's end leaves no weapon pane behind (the diagnostic pane opens it only inside the spell pane).
+        if (!on) { _spellPane?.HidePane(); _spellNotice = null; _itemPaneItem = null; _weaponPaneCache = null; return true; }
         if (!SpellMapActive || _areaSession?.QueryHero() is null) _gameBarNotice = "spells: needs a hero on a map";
         else if (WorldModal) _gameBarNotice = "spells: ignored while a window is open";
         else { ShowSpellPane(); return true; }

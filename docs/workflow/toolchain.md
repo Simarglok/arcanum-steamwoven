@@ -190,6 +190,13 @@ history held about 500 runs of such copies of one template).
   (`AREA_WALL_FADE_NOT_OBSERVED ... unstable=7200 unstable-box=490,770-789,793`): the 300x24 block was the controller prompt strip, an
   overlay on its own canvas layer that follows the device in hand after a hysteresis on the host's clock, so it appeared or went away between
   the check's three captures when frames ran slow. The check now hides that layer (as it hides the HUD) and reports the box of unstable pixels.
+  A third way (ARC-DEV-2294, from 2026-11-15, after the relit look of ARC-RES-2000 and the HD profile in the stage) failed on every run with the same numbers
+  (`unstable=92006 unstable-box=17,313-601,799`: 92006 pixels of lit terrain, inside a 584x486 box, a few levels apart, `outside` 0 or 90480 with the third capture
+  differing from the first only there): the stage runs the check right after the switch to HD, while the HD frames of the terrain chunks were still
+  decoding, so the first capture drew the Legacy chunks and the third the HD ones; a Legacy run, or an HD run whose decodes had ended, passed (so it looked like a
+  time of day). Each capture of the check now waits for the visual switch and every HD decode to end (the wait of the HD smokes, printed as
+  `ARC-DEV-2294 wall capture waited N frames for HD decodes`; `AREA_WALL_HD_NOT_SETTLED` after 1800 frames) and is taken once two consecutive captures are
+  identical; a failing fade compare (`AREA_WALL_FADE_NOT_OBSERVED`) with `ARC_AREA_TRANSITION_CAPTURE` set saves the three captures as `-walls-fail-faded|opaque|again.png`.
 - **Stage boundary reset (ARC-DEV-408, ARC-DEV-1187).** A stage that passes alone and fails after others had a second cause besides the test
   time: what the earlier stages left in the shared session. `TerrainViewerSmokeStageSet` calls `SmokeStageBoundary`
   (`TerrainViewerSmokeStageReset.cs`) at every change of stage in the viewer. The first call with a hero and a session saves a baseline into a
@@ -210,6 +217,11 @@ history held about 500 runs of such copies of one template).
   change to one stage. `placement-census` also leaves out an NPC that follows the hero (a companion body is not an NPC the host places).
   `ARC_SMOKE_STAGE_RESET=0` (as `--env`) switches the reset off, to tell a leak from a stage's own failure; `=narrow` selects the narrow
   reset only. A process stops at its first failing stage, so a leak fixed here can show the next one that was hidden behind it.
+  **The test clock (ARC-DEV-2259).** The reset does not clear the test clock (`_worldTestTime`): a stage that runs frames itself (`life` and others) leaves it set, and
+  while it is set a native smoke's `ProcessWorld` returns at once, so no per-frame step runs between a stage's own frames (the scenery step, which builds the
+  loaded session's host and reads the art fields, among them). `object-art` failed only in the `stages-main-alone` chain for that reason (`the view draws
+  the new art where the T0 body stood`); the stage now calls `ProcessAreaSceneryAnimation` itself in its settle, as the scenery smokes and `barter`
+  do (ARC-DEV-2042). A stage that reads the result of a per-frame viewer step must drive that step itself, never rely on `ProcessWorld` running.
 - **A stage waits for a state, not for a time (ARC-DEV-1193).** `bar` failed by chance (`feedback settles to Hover with combat
   still on`) because it waited a fixed 0.15 s after a quick click and then read the button: the panel keeps Down for 80 ms
   counted from the first frame actually drawn, and on a loaded machine that draw comes late (the failing run showed 24 ms since

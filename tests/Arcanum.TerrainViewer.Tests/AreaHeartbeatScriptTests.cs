@@ -679,6 +679,30 @@ public sealed class AreaHeartbeatScriptTests
     }
 
     [TestMethod]
+    public void The_group_focus_kinds_list_the_followers_the_session_holds_of_the_triggerer()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            // ARC-SCRIPT-2319 (GF2, GF5): the follower array of an NPC leader, of the PC, and nothing for a follower, a free NPC or a non-NPC row.
+            var follower = Row(1, 16, 812);
+            var host = HostAt(session, content, null, new CellCoord(12, 20), follower, Row(2, 16, 0), Row(3, 16, 0));
+            host.RunHeartbeat(follower, ScrPoint.Heartbeat, session.Rules.Scripts);
+            CollectionAssert.AreEqual(new[] { Ref(1) }, host.FollowersOf(Ref(3)).ToArray(), "the NPC leader's array");
+            Assert.AreEqual(0, host.FollowersOf(Ref(1)).Count, "a follower that leads no one");
+            Assert.AreEqual(0, host.FollowersOf(Ref(2)).Count, "left with the second join");
+            Assert.AreEqual(0, host.FollowersOf(new ScrObjectRef(1, "ffffffff")).Count, "an object the host holds no row of");
+            Assert.AreEqual(0, host.FollowersOf(new ScrObjectRef(1, AreaScriptHost.PcCode)).Count, "the hero has no party follower yet");
+            // 813: the attachee follows the PC: the party array holds it, the NPC leader's no longer.
+            var toPc = Row(1, 16, 813);
+            var pcHost = HostAt(session, content, null, new CellCoord(12, 20), toPc, Row(2, 16, 0), Row(3, 16, 0));
+            pcHost.RunHeartbeat(toPc, ScrPoint.Heartbeat, session.Rules.Scripts);
+            CollectionAssert.AreEqual(new[] { Ref(1) }, pcHost.FollowersOf(new ScrObjectRef(1, AreaScriptHost.PcCode)).ToArray());
+            Assert.AreEqual(0, pcHost.FollowersOf(Ref(3)).Count);
+        });
+    }
+
+    [TestMethod]
     public void A_dying_script_s_following_condition_finds_the_npc_leader_and_its_free_cast_goes_to_the_ai_host_with_that_caster()
     {
         WithContent(content =>
