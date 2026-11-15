@@ -2616,8 +2616,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     /// <summary>
     /// ARC-AI-1756 (VB2-2 gap d; 0x4B3170, SC16): the attack record's first step. A target of type 3 (scenery) whose occupant field 0x46 is set is replaced by that occupant, in both target slots, and the occupant leaves
     /// the object through the unseat 0x45F3A0 (the sleeper's flags, its latch and the bed's occupied frame, <see cref="Unseat"/>); the attack is then the attack on the occupant, its check carrying the invocation modifier -30
-    /// (<see cref="AttackRequest.TargetWasInBed"/>) and its event naming the occupant. Only a bed holds an occupant. Returns the occupant, or null for any other target. NOT READY: a bed the hero rests in (its occupant is the hero,
-    /// who is woken by the rest window, not by an NPC's blow here) is struck as a scenery.
+    /// (<see cref="AttackRequest.TargetWasInBed"/>) and its event naming the occupant. Only a bed holds an occupant. Returns the occupant, or null for any other target. ARC-AI-1939: a bed the hero rests in gives the hero
+    /// (the occupancy's seat is taken out, the rest window stays open as in the original).
     /// </summary>
     private string? OccupantInPlaceOf(string attacker, string target)
     {
@@ -2625,7 +2625,18 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
             || _scene.ObjectAttackTarget?.Invoke(target) is not { } info) return null;
         // The host's first bed question syncs the shared occupancy with the NPCs' saved sleeping state (a load), so the occupant is read after it.
         ReconcileBeds(beds);
-        if (beds.Occupancy.Occupant(info.Row.Key) is not { } occupant || !TryNpc(occupant, out _)) return null;
+        if (beds.Occupancy.Occupant(info.Row.Key) is not { } occupant) return null;
+        // ARC-AI-1939 (0x45F3A0 takes a PC out too; only its NPC flag-0x200 write is NPC-only): the hero's seat is the occupancy's own (the rest window put it there); nothing else of the hero is written here (the window gives
+        // him neither the sleeping flag nor the don't-draw flag, sleep-window-runtime.md). The window stays open: nothing in it or its step reads the seat or a blow (SWB13), and its close's own unseat of the empty bed only
+        // logs an error in the original and refuses here (SWB12).
+        if (occupant == Pc)
+        {
+            if (!beds.Occupancy.Unseat(info.Row.Key, Pc)) return null;
+            var heroTrace = Trace(attacker);
+            heroTrace.Item = (heroTrace.Item is { Length: > 0 } before ? before + "; " : "") + $"attack on bed {target}: the hero pulled out of the bed, the rest window stays open";
+            return Pc;
+        }
+        if (!TryNpc(occupant, out _)) return null;
         var text = Unseat(occupant, beds, info.Row.Key);
         if (text == "unseat refused") return null;
         var trace = Trace(attacker);
@@ -4280,6 +4291,12 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     /// </summary>
     internal int? LeaderCharisma(string npc) => Leader(npc) is { } leader ? CharismaOf(leader) : null;
 
+    /// <summary>
+    /// ARC-WORLD-2135 (0x4AD950, step "another leader"): the effective charisma (0x4B0490) of the DIRECT leader (0x45DE00) of <paramref name="npc"/> when that leader is another critter than the hero, the value the follow check of a join under the hero compares with the
+    /// hero's charisma. Null for an NPC the hero leads or that has no leader (no other leader), and when the leading NPC's stats are not readable here (a leader of another map): the session then refuses the join's facts that name none (<see cref="GameSessionFailure.InvalidConsentFacts"/>).
+    /// </summary>
+    internal int? OtherLeaderCharisma(string npc) => Leader(npc) is { } leader && leader != Pc ? CharismaOf(leader) : null;
+
     // The effective charisma of a critter this host can read: the hero's, or an NPC's under its effects in its life state (any life status: the getters 0x4B0490 → 0x4B0740 test the object type and the stat only).
     private int? CharismaOf(string critter)
     {
@@ -4296,12 +4313,12 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         _session.LeaveParty(_session.Version, npc, new PartyLeave(Force: false, LeaderCharisma: LeaderCharisma(npc) ?? 0, MindControlled: mindControlled, Jilt: jilt));
 
     // ARC-WORLD-2127: an NPC's stat-side values as the party rules read them, for the NPC leading a follower: its Persuasion training (0x4C60C0, the NPC's sheet skill), effective charisma, level, alignment
-    // (the stored base value: the effects on that stat are not applied here) and max followers (stat 15 under its effects). Null when the NPC's stats are not readable here (another map's, no sheet).
+    // (the stat getter's value, AlignmentOf: the effects on that stat are applied) and max followers (stat 15 under its effects). Null when the NPC's stats are not readable here (another map's, no sheet).
     private (PersuasionTraining Persuasion, int Charisma, int Level, int Alignment, int MaxFollowers)? NpcLeaderSide(string leader)
     {
-        if (Build(leader) is not { } build || LifeState(leader) is not { } state || Find(leader) is not { } critter || NpcSkill(leader, Skill.Persuasion) is not { } persuasion) return null;
+        if (Build(leader) is not { } build || LifeState(leader) is not { } state || AlignmentOf(leader) is not { } alignment || NpcSkill(leader, Skill.Persuasion) is not { } persuasion) return null;
         var training = (PersuasionTraining)(int)persuasion.Training;
-        return (training, build.EffectiveStat(CharacterStat.Charisma, state), build.Level, critter.Alignment, build.MaxFollowers(state, training));
+        return (training, build.EffectiveStat(CharacterStat.Charisma, state), build.Level, alignment, build.MaxFollowers(state, training));
     }
 
     /// <summary>
@@ -4321,10 +4338,10 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     /// </summary>
     internal NpcLeaderUnwaitFacts? LeaderUnwaitFacts(string npc)
     {
-        if (Leader(npc) is not { } leader || leader == Pc || NpcLeaderSide(leader) is not { } side || Fields(npc) is not { Critter: { } critter } fields || Row(npc) is not { } row || Build(npc) is not { } build) return null;
+        if (Leader(npc) is not { } leader || leader == Pc || NpcLeaderSide(leader) is not { } side || Fields(npc) is not { } fields || AlignmentOf(npc) is not { } alignment || Row(npc) is not { } row || Build(npc) is not { } build) return null;
         var mind = (SpellFlagsOf(npc, fields.Object.SpellFlags) & MindControlledSpell) != 0;
         return new(side.Persuasion, side.Alignment, side.Level, side.MaxFollowers, new(row.FollowReaction, row.FollowAlignmentAbove, row.FollowAlignmentBelow, row.JoinLevelGap),
-            critter.BaseStats.Count > AreaCompanionData.AlignmentStat ? critter.BaseStats[AreaCompanionData.AlignmentStat] : 0, build.Level, mind && PcLeader(npc) is not null, false);
+            alignment, build.Level, mind && PcLeader(npc) is not null, false, side.Charisma);
     }
 
     /// <summary>The unforced unwait of a follower waiting under an NPC leader with the facts read here (<see cref="LeaderUnwaitFacts"/>); null when they cannot be read.</summary>

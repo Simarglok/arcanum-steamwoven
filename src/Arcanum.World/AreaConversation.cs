@@ -752,6 +752,10 @@ public sealed class AreaConversationHost
         return HealerHost?.Invoke()?.LeaderWaitFacts(entity) is { } read ? read with { WaitIndex = facts.WaitIndex } : new(facts.WaitIndex, PersuasionTraining.None, 0, false);
     }
 
+    // ARC-WORLD-2135 (0x4AD950): a speaker another NPC leads has that leader's effective charisma in the join's facts (the "another leader" step); the AI host reads it. None for any other speaker, and when the host or the leader's stats are not at hand
+    // (the session then refuses the facts of an NPC-led speaker, as before).
+    private int? OtherLeaderCharismaOf(string entity) => HealerHost?.Invoke()?.OtherLeaderCharisma(entity);
+
     /// <summary>The session party port for a roster speaker when the party is wired; facts are read at each call.</summary>
     private SessionDialogPartyPort? PartyPort(AreaSpeaker speaker)
     {
@@ -761,7 +765,7 @@ public sealed class AreaConversationHost
         return new SessionDialogPartyPort(_session, AreaConversationState.PcParticipant,
             participant => participant == npc ? entity : null,
             participant => participant == npc ? AreaCompanionRoster.Facts(facts, State.Alignment, State.Reaction(speaker.Index),
-                AreaAdvancement.Level(_session, entity, facts.Level), _session.QueryHeroPartySide()) : null,
+                AreaAdvancement.Level(_session, entity, facts.Level), _session.QueryHeroPartySide(), OtherLeaderCharismaOf(entity)) : null,
             // ARC-WORLD-2127: a speaker waiting under an NPC leader is unwaited against that leader's side, read by the AI host.
             participant => participant == npc ? HealerHost?.Invoke()?.LeaderUnwaitFacts(entity) : null);
     }

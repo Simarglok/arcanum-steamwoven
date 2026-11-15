@@ -33,10 +33,11 @@ public static class AreaCompanionRoster
     /// <see cref="GameSessionOwner.QueryHeroPartySide"/>: Persuasion training, effective charisma, level, alignment, max followers)
     /// when <paramref name="hero"/> is given, else the diagnostic PC (charisma 8, level 1, no Persuasion) with
     /// <paramref name="pcAlignment"/>, the conversation host's alignment. <paramref name="level"/> is the NPC's level now when the
-    /// session levelled it (ARC-WORLD-036, <see cref="AreaAdvancement.Level"/>), else its T0 level.</summary>
-    public static PartyConsentFacts Facts(AreaCompanionFacts npc, int pcAlignment, int reaction, int? level = null, SessionPartySide? hero = null) => new(
+    /// session levelled it (ARC-WORLD-036, <see cref="AreaAdvancement.Level"/>), else its T0 level. <paramref name="otherLeaderCharisma"/> (ARC-WORLD-2135) is the effective charisma of the NPC's direct leader when
+    /// another NPC leads it (the check's "another leader" step, 0x4AD950), else null; <see cref="GameSessionOwner.JoinParty"/> refuses facts that name none for an NPC-led NPC.</summary>
+    public static PartyConsentFacts Facts(AreaCompanionFacts npc, int pcAlignment, int reaction, int? level = null, SessionPartySide? hero = null, int? otherLeaderCharisma = null) => new(
         MindControlledByPc: false, PcPersuasion: hero?.Persuasion ?? PersuasionTraining.None, PcCharisma: hero?.Charisma ?? DiagnosticPcCharisma,
-        PcAlignment: hero?.Alignment ?? pcAlignment, PcLevel: hero?.Level ?? DiagnosticPcLevel, OtherLeaderCharisma: null, Reaction: reaction,
+        PcAlignment: hero?.Alignment ?? pcAlignment, PcLevel: hero?.Level ?? DiagnosticPcLevel, OtherLeaderCharisma: otherLeaderCharisma, Reaction: reaction,
         Thresholds: npc.Thresholds, NpcAlignment: npc.Alignment, NpcLevel: level ?? npc.Level,
         MaxFollowers: hero?.MaxFollowers ?? FollowConsentRules.MaxFollowers(DiagnosticPcCharisma, PersuasionTraining.None));
 
