@@ -92,6 +92,13 @@ public partial class AreaConversationPanel : CanvasLayer
     /// <summary>ARC-UI-2025: where an open panel reads <see cref="OriginalReplyRows"/> from every frame (a rule-mode switch made over the dialog).</summary>
     public Func<bool>? OriginalRowsSource { get; set; }
     /// <summary>
+    /// ARC-UI-2268 (ledger DH3): whether a press on the band is resolved by the original's click bands (y / 20, an empty slot refused: Original) or by the drawn row
+    /// (Steamwoven). The band itself is the layout of both settings. Defaults to the original's bands, as the self-tests drive it.
+    /// </summary>
+    public bool ClickBandsDrift { get; set; } = true;
+    /// <summary>ARC-UI-2268: where an open panel reads <see cref="ClickBandsDrift"/> from every frame.</summary>
+    public Func<bool>? ClickBandsDriftSource { get; set; }
+    /// <summary>
     /// ARC-UI-2023: the Original interface setting. The original's dialog window shows only the PC's reply rows (ways out: a DLG reply, or a window or
     /// event that pops mode 3, 0x5678D0), so the header, the outcome line, the effects ledger, the hint and the Leave button are hidden and the
     /// controller cancel does not leave an awaiting dialog that has an enabled reply; false (Steamwoven): the diagnostic chrome stays. A message-only panel (no conversation
@@ -546,7 +553,7 @@ public partial class AreaConversationPanel : CanvasLayer
                 return false;
             case InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: true } press:
                 _pointer = _band.GetGlobalTransformWithCanvas() * press.Position;
-                var hit = DialogReplyBand.Press((int)press.Position.X, (int)press.Position.Y, width, _buttons.Count, clickBandsDrift: true);
+                var hit = DialogReplyBand.Press((int)press.Position.X, (int)press.Position.Y, width, _buttons.Count, clickBandsDrift: ClickBandsDrift);
                 if (hit.Kind == DialogReplyHitKind.Outside) { _hover?.Leave(); return false; }
                 if (hit.Kind == DialogReplyHitKind.Row && !_buttons[hit.Row].Disabled) _buttons[hit.Row].EmitSignal(BaseButton.SignalName.Pressed);
                 return true;
@@ -583,8 +590,11 @@ public partial class AreaConversationPanel : CanvasLayer
     private void PlaceBand(Vector2 window, float panelHeight)
     {
         var (freeTop, free) = AreaGameBarPanel.FreeArea(window);
-        var left = DialogReplyBand.BoxLeft((int)free.X, _bandWidth);
-        var top = freeTop + DialogReplyBand.BoxTop((int)free.Y);
+        // ARC-UI-2268: the band is drawn at the screen's whole factor, as the bars are; its geometry (and the view it sits in) is counted in the original's pixels.
+        var factor = AreaGameBarPanel.ScreenFactor(window);
+        var left = DialogReplyBand.BoxLeft((int)(free.X / factor), _bandWidth) * factor;
+        var top = freeTop + DialogReplyBand.BoxTop((int)(free.Y / factor)) * factor;
+        _band.Scale = new(factor, factor);
         _band.Position = new(left, top);
         _band.Size = new(_bandWidth, DialogReplyBand.Height);
         _bandShade.Position = Vector2.Zero;
@@ -607,6 +617,7 @@ public partial class AreaConversationPanel : CanvasLayer
         if (!IsOpen) return;
         if (NumberedSource is { } source) NumberedReplies = source();
         if (OriginalRowsSource is { } rows) OriginalReplyRows = rows();
+        if (ClickBandsDriftSource is { } drift) ClickBandsDrift = drift();
         if (ChromeHiddenSource is { } chrome) DiagnosticChromeHidden = chrome();
         if (_originalRows) { if (_hoverStale || _pointer is not null) RefreshHover(); LightRows(); }
         ResizePanel();

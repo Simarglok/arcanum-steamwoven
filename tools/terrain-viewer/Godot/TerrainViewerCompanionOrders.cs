@@ -192,8 +192,8 @@ public partial class TerrainViewerApp
         _followerPortraits.Inert = held;
     }
 
-    /// <summary>ARC-UI-2069 (ledger DB1, DB2): the portraits stay drawn and inert under the open dialog (Original) while nothing else covers the screen.</summary>
-    private bool PortraitsHeldUnderDialog => AreaFollowerPanelRules.HeldUnderDialog(DialogBarStays, _interfaceWindows.Stack.Current == InterfaceMode.Dialog,
+    /// <summary>ARC-UI-2069 (ledger DB1, DB2): the portraits stay drawn and inert under the open dialog while nothing else covers the screen.</summary>
+    private bool PortraitsHeldUnderDialog => AreaFollowerPanelRules.HeldUnderDialog(_interfaceWindows.Stack.Current == InterfaceMode.Dialog,
         PaletteOpen || SaveListOpen || MainMenuOpen || HeroDeathCovering || MovieCovering || ReportModalOpen);
 
     /// <summary>

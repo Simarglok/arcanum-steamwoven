@@ -89,15 +89,13 @@ public partial class TerrainViewerApp
                 return ConversationOpen && _conversationSpeaker?.Row.Key == companion.Key;
             }
 
-            // ARC-UI-2069 (DB1, DB2): with the dialog open, Original leaves the panel and its bars drawn and its handler (0x56A9D0) takes no record; Steamwoven hides the panel.
+            // ARC-UI-2069 (DB1, DB2), ARC-UI-2268: with the dialog open the panel and its bars stay drawn in both settings and its handler (0x56A9D0) takes no record.
             async Task DialogPortraitFacts(string rules)
             {
-                var stays = DialogBarStays;
                 for (var frame = 0; frame < 3; frame++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
                 var drawn = portraits.Visible && portraits.EntitiesForSelfTest.Contains(follower) && portraits.FrameForSelfTest(follower) is { Frame: true };
-                Fact(rules + "the portrait panel " + (stays ? "stays drawn" : "is hidden") + " under the dialog", drawn == stays, drawn ? "drawn" : "hidden");
-                await Capture("dialog-" + (stays ? "original" : "steamwoven"));
-                if (stays)
+                Fact(rules + "the portrait panel stays drawn under the dialog", drawn, drawn ? "drawn" : "hidden");
+                await Capture("dialog");
                 {
                     var bars = portraits.BarsForSelfTest(follower);
                     Fact(rules + "the portrait's bars stay drawn under the dialog", bars is { Health: > 0 }, bars?.ToString() ?? "none");
@@ -161,30 +159,6 @@ public partial class TerrainViewerApp
             }
             if (ConversationOpen) CloseConversation();
             portraits.CloseMenu();
-            Settle();
-
-            // 3b. ARC-UI-2069: the same talk under the Original rules: the panel stays drawn and inert under the dialog.
-            {
-                var priorRules = session.Rules.Mode;
-                Require(session.SelectRules(RuleMode.Original) != GameSessionDisposition.Rejected, "Original selected");
-                try
-                {
-                    portraitTalk = false;
-                    await ClickPortraitAsync(MouseButton.Left);
-                    for (var frame = 0; frame < 600 && !ConversationOpen; frame++) AreaSmokeTalkFrame();
-                    portraitTalk = ConversationOpen && _conversationSpeaker?.Row.Key == companion.Key;
-                    Fact("Original: left click on his portrait talks to him", portraitTalk, portraitTalk ? "talk" : $"none ({_conversationNotice})");
-                    if (portraitTalk) await DialogPortraitFacts("Original: ");
-                }
-                finally
-                {
-                    if (ConversationOpen) CloseConversation();
-                    session.SelectRules(priorRules);
-                    portraits.CloseMenu();
-                }
-                for (var frame = 0; frame < 3; frame++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
-                Fact("Original: the panel takes input again once the dialog is closed", portraits.Visible && !portraits.Inert, portraits.Inert ? "inert" : "live");
-            }
             Settle();
 
             // 4. The body: a left press talks (as the portrait's left click does), a right click opens no menu and starts no talk.

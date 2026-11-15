@@ -138,7 +138,9 @@ public partial class TerrainViewerApp
         if (fonts is null) { GD.Print("ARC-UI-071 conversation panel in the viewer's font (no game fonts)"); return; }
         var texts = panel.ArtTextsForSelfTest();
         var shown = texts.Where(text => text.Visible).ToArray();
-        Require(shown.Length >= 3, $"the panel shows at least its header, hint and Leave in art text: {string.Join("; ", shown.Select(text => text.Name))}");
+        // ARC-UI-2268: normal play draws only the reply rows (the band); the diagnostic header, hint and Leave draw only with ARC_DIALOG_DIAGNOSTICS=1.
+        var chrome = shown.Where(text => text.Name is "header" or "outcome" or "effects" or "hint" or "leave").Select(text => text.Name).ToArray();
+        Require(DialogDiagnostics ? shown.Length >= 3 : chrome.Length == 0 && shown.Length >= 1, $"the panel shows {(DialogDiagnostics ? "its header, hint and Leave" : "only reply rows")} in art text: {string.Join("; ", shown.Select(text => text.Name))}");
         Require(shown.All(text => text.Lines > 0 && text.Text.Length > 0), "every shown art text has lines: " + string.Join("; ", texts.Select(text => $"{text.Name}={text.Lines}")));
         Require(shown.All(text => text.Name != "npc"), "the NPC's line is not drawn in the panel (ARC-UI-2027: a bubble over the NPC)");
         GD.Print("ARC-UI-071 conversation panel art text " + string.Join(", ", shown.Select(text => $"{text.Name}:{text.Lines}@{text.Wrap}")));

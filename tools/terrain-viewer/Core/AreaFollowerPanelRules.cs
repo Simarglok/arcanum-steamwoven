@@ -16,10 +16,10 @@ public static class AreaFollowerPanelRules
     /// <summary>The scroll-up art (506), its top end look (507), the scroll-down art (508) and its bottom end look (509), FP5.</summary>
     public const int UpArt = 506, UpEndArt = 507, DownArt = 508, DownEndArt = 509;
     /// <summary>
-    /// ARC-UI-2069 (ledger DB1, DB2): whether the panel stays drawn but takes no input: the dialog is the top interface mode, the rule setting keeps the bars under it
-    /// (Original: <c>DialogBarStays</c>) and nothing else covers the screen (a menu, the save list, the palette, a death or movie cover). Otherwise a modal window hides it.
+    /// ARC-UI-2069 (ledger DB1, DB2): whether the panel stays drawn but takes no input: the dialog is the top interface mode and nothing else covers the screen (a menu, the
+    /// save list, the palette, a death or movie cover); ARC-UI-2268: in both settings. Otherwise a modal window hides it.
     /// </summary>
-    public static bool HeldUnderDialog(bool dialogBarStays, bool dialogOnTop, bool otherCover) => dialogBarStays && dialogOnTop && !otherCover;
+    public static bool HeldUnderDialog(bool dialogOnTop, bool otherCover) => dialogOnTop && !otherCover;
 
     /// <summary>The order menu's background art (FP8).</summary>
     public const int MenuArt = 826;

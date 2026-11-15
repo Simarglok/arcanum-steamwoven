@@ -414,6 +414,7 @@ a budget or a regression gate. Other optimisations are shown with it: run before
   The load worker's read prints `load.worker.read.{strict,scene,copy}` spans and `ARC-DEV-375 visuals ...` / `ARC-DEV-375 frames resident-hits=H read=R ...` lines
   (hits against frames actually read, the store's size). `ARC_AREA_RESIDENT=0` in the environment (`--env ARC_AREA_RESIDENT=0` on a smoke) turns both stores off
   for a before/after comparison; nothing else depends on it. The editor `.mob` facts (ARC-DEV-388) have their own store, off with `ARC_AREA_RESIDENT_EDITOR=0` or `ARC_AREA_RESIDENT=0`, and the worker prints `ARC-DEV-388 editor-records served=B ms=T ...`.
+- **Dialog diagnostics (ARC-UI-2268).** A normal viewer shows the dialog as the original's reply band only (no header, outcome, effects ledger, hint or Leave). `ARC_DIALOG_DIAGNOSTICS=1` in the environment (`--env ARC_DIALOG_DIAGNOSTICS=1` on a smoke) draws the diagnostic panel with the plain reply stack and all of them again; nothing else depends on it.
 - **Map transitions kept on the device (ARC-DEV-392).** The map's transitions and the map list's destinations are written to `map-cache/` in the device's
   Steamwoven folder (`~/Library/Application Support/Arcanum Steamwoven Game/map-cache/` on a Mac; not `user://`, which every smoke replaces with a temporary
   folder), so the next process, above all the next smoke run, skips the 1.8 s read ([design](../world/area-loader.md#map-transitions-kept-on-the-device-arc-dev-392)).

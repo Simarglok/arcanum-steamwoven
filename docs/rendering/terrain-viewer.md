@@ -2757,9 +2757,8 @@ over it, and acts on that release; a toggle plays 3000 turning on and 3001 turni
 button writes its name from `mes\intgame.mes` (1000–1009) where the original's message window is; there is no hover sound
 on the bars. The main menu's, in-play menu's and options window's buttons play 3026 when the pointer enters one and 3027 on
 the press (GB7). The bars are drawn over the windows they open, and those windows (character sheet, inventory, logbook,
-schematics) lay themselves out in the part the bars leave free; while a conversation, barter, reading, the save list,
-the palette, the menu or the world map is open the bars are hidden, and they come back with no button lit or held (a conversation hides them under
-Steamwoven only: since ARC-UI-2024 the Original setting `DialogBarStays` keeps them drawn under the dialog, as the original does, lays the conversation panel in the part
+schematics) lay themselves out in the part the bars leave free; while barter, reading, the save list,
+the palette, the menu or the world map is open the bars are hidden, and they come back with no button lit or held (a conversation leaves them drawn, as the original does, since ARC-UI-2024 (Original) and ARC-UI-2269 (both settings): the viewer lays the conversation panel in the part
 they leave free and shows the speaker's description of the dialog start in the description area; the bar's buttons stay without effect while the dialog is open, and
 a click on a hotkey slot or a recent-action button, and the A key, end the dialog (an item, skill or spell entry that acts, ARC-UI-2068; the repair button and a spell with the inventory bit too, their window then opens in its place, ARC-UI-2086) and then act as without one, an empty entry or a hero who cannot act leaves it open, the follower portraits and their gauges stay drawn and take no input (ARC-UI-2069, DB5), [ledger DB1-DB5](../research/ledger/ui-audio.md#the-bars-under-the-dialog-arc-ui-2024)). The
 diagnostic HUD moves below the top strip and the follower portraits and spell pane above the bottom strip. Since ARC-UI-020 the health and fatigue vials show the PC's
