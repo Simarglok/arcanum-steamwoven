@@ -53,9 +53,77 @@ quit message; see "A game that vanished without a crash report" below) was flat 
 first two minutes: physical footprint 366 MB, IOAccelerator 13 MB, IOSurface
 16 MB, threads 33 to 34. A read-only code review of the creation editor and art
 path found no unbounded cache and no per-frame texture allocation (the font,
-chunk and mapping caches are capped or weak-keyed). Not covered: a soak inside
-the character-creation window itself (no launch flag opens it; it needs a click
-path) and runs longer than 10 minutes.
+chunk and mapping caches are capped or weak-keyed). Not covered by that run: a soak inside
+the character-creation window itself and runs longer than 10 minutes; see "Soak in the
+creation window" below ([#2279](https://github.com/Simarglok/arcanum-steamwoven/issues/2279)).
+
+## Soak in the creation window (ARC-DEV-2279)
+
+The viewer has a development soak, switched on by environment variables (no argument, so the launchers and the
+player's build do not change):
+
+| Variable | Meaning |
+|---|---|
+| `ARC_SOAK_LOG` | Turns the soak on: a CSV file (rewritten at the start) that gets one row of counters at the start and every interval. |
+| `ARC_SOAK_WINDOW` | `new-character` (menu window 12) or `editor` (window 14, the character editor in creation mode). The viewer takes the player's route over the main menu (Single Player, New Game, New Character, and for the editor its Accept, held until the start map is loaded) and leaves the window idle. Without it the counters run wherever the viewer stands. |
+| `ARC_SOAK_INTERVAL` | Seconds between rows, 1 to 3600, default 30. |
+| `ARC_SOAK_MINUTES` | Optional: the viewer ends itself after that many minutes (exit 0), after a last `# ARC-DEV-2279 soak summary` row in the log; without it the run goes on until the window is closed. |
+
+Columns: `elapsed_s`, `window` (the menu window at the reading, `none` while no menu stands), `fps`; Godot's
+`texture_bytes`, `video_bytes`, `buffer_bytes` (`RenderTextureMemUsed`, `RenderVideoMemUsed`, `RenderBufferMemUsed`),
+`objects`, `resources`, `nodes`, `orphan_nodes` (`ObjectCount`, `ObjectResourceCount`, `ObjectNodeCount`,
+`ObjectOrphanNodeCount`) and `godot_static_bytes` (`MemoryStatic`); the .NET side's `gc_heap_bytes` (includes garbage not yet
+collected, so it saw-tooths), `gc_live_bytes` (what survived the last full collection: the leak signal), `gc0`, `gc1`, `gc2`
+(collection counts); the process's `working_set_bytes` and `threads`. A leak is a counter that only climbs after the first
+two minutes (the summary leaves those out); `gc_heap_bytes` rising between two `gc2` steps is not one.
+
+The documented command runs the viewer from the checkout's source through the launch queue (one `window` run; the build step comes
+first; the game folder is the one `./arcanum setup` recorded, `/Applications/Arcanum` here; the `*_TEST_PATH` variables keep the
+run's settings away from the owner's files, as a smoke does). The `./arcanum area` build is not used because it needs a fresh
+ARC-DEV-015 export of the same commit.
+
+```sh
+./arcanum run --kind dotnet -- sh -c 'dotnet restore tools/terrain-viewer/Godot/Arcanum.TerrainViewer.sln --locked-mode -v q && dotnet build tools/terrain-viewer/Godot/Arcanum.TerrainViewer.sln --no-restore -v q --nologo'
+```
+
+```sh
+G=/Applications/Arcanum; D=$(mktemp -d); ./arcanum run --kind window --estimate 2200 --timeout 40 --expect '^ARC-DEV-059 viewer start mode=area' --start-within 120 -- env __GODOT_SHELL_ENV_SET=1 DOTNET_ROOT=$HOME/.local/share/dotnet PATH=$HOME/.local/share/dotnet:/usr/bin:/bin:/usr/sbin:/sbin ARC_SOAK_LOG=$D/soak.csv ARC_SOAK_WINDOW=editor ARC_SOAK_MINUTES=30 GAME_SETTINGS_TEST_PATH=$D/game_settings.cfg AUDIO_VOLUMES_TEST_PATH=$D/audio.cfg ALWAYS_RUN_TEST_PATH=$D/always.cfg LAUNCHER_SETTINGS_TEST_PATH=$D/launcher.cfg VISUAL_PROFILE_TEST_PATH=$D/visual.cfg /Applications/Godot_mono.app/Contents/MacOS/Godot --path tools/terrain-viewer/Godot -- --mode area --module $G/modules/Arcanum.dat --resource $G/arcanum2.dat --source-id local-original --actor-resource $G/arcanum1.dat --game-root $G --area-map Arcanum1-024-fixed --main-menu true
+```
+
+The soak is an automated run: the Master audio bus is muted as in a smoke (ARC-DEV-403; the sounds still play into the muted bus, so the audio memory is still measured), and `ARC_SMOKE_SOUND=1` lets it be heard.
+
+Limits: the end check runs at the interval's ticks, so the viewer ends up to one interval after `ARC_SOAK_MINUTES` (keep the queue
+`--timeout` at least ten minutes above it). The counters `godot_static_bytes` and `orphan_nodes` read 0 in a release template
+(the command above uses the editor binary). The window opens only on the start map the New Game route accepts (the Crash Site start
+map of the command); when the route is refused or the menu is busy the viewer logs `ARC-DEV-2279 soak: ...` or the log's `window`
+column stays `Main`, and the run is no soak of the creation window. (The first line of the run log says `ARC-DEV-2279 soak start pid=...`; `footprint <pid>` beside it gives the physical footprint and
+the IOAccelerator size the 2274 idle run quoted, which the in-process counters cannot read.) The unit tests of the settings and the
+summary are `ViewerSoakTests`; a one-minute trial with `ARC_SOAK_INTERVAL=5 ARC_SOAK_MINUTES=1` shows the window opening within seconds.
+
+### Soak results
+
+**2026-11-15, 15 minutes (stopped by hand to free the queue for another run).** Viewer from the
+checkout's source (Debug, Godot 4.7.2 .NET) on the Crash Site start map, `ARC_SOAK_WINDOW=editor`, 30 s rows, sound on (this run
+predates the mute). The editor was open from the first minute to the 15th. After the first two minutes every counter was flat:
+render textures 40.0 MiB, video memory 56.3 MiB, objects 3,781, nodes 378, resources 22, orphan nodes 0, Godot static memory 44 MiB,
+threads 34 to 36, live .NET heap 283 MiB (the full-collection survivors, 296.7 MB, unchanged to the byte from minute 2 to minute 15), 17 to 19
+full collections. The .NET heap including garbage saw-toothed between 298 and 304 MiB with 8 to 9 gen0 collections a minute: an
+idle editor allocates short-lived garbage, not retained memory. The working set came down from 848 MiB (minute 2) to 530 MiB
+(minute 8) as the OS reclaimed pages, and stayed there. The 1-minute trial earlier showed the same plateau within 12 s of the
+window opening (texture 40 MiB, nodes 378). Not a leak in this window for 15 minutes.
+
+**2026-11-16, 30 minutes (the documented command, sound muted).** Same setup, 61 rows over 1,827 s, the editor open from the first
+minute to the last. Render textures 40.0 MiB, Godot static memory 44.4 MiB, objects 3,800, resources 23, nodes 387 and orphan nodes 0
+did not move at all after the first three minutes; threads 35 to 36. Two things moved, both as one step and not as a climb:
+video memory rose from 58.3 to 76.6 MiB (+18.3 MiB) between 587 s and 620 s and stayed there to the end, and the live .NET heap
+(survivors of the last full collection) rose from 265.5 to 285.5 MiB in the same window (278.4 MB at 188 s, 299.4 MB from 741 s,
+unchanged to the megabyte for the last 18 minutes). The working set fell from 495 to 442 MiB over the run (the OS reclaimed pages; it
+ranged 247 to 518 MiB). The frame rate was about 30 instead of 60 because other threads' smoke runs shared the machine. Reading:
+**no leak in the creation editor over 30 minutes**: a counter that leaks climbs steadily, and here the last 18 minutes were flat
+in every counter. The single step at about 10 minutes was not traced to its cause (one late first-use allocation, not a per-frame
+one; it did not repeat in 20 minutes). A run longer than 30 minutes, the New Character window alone and the Crash Site in play are
+not covered. The viewer's exit prints three Godot `Texture with GL ID ...: leaked` lines at shutdown, as in the 1-minute trial: not a
+runtime counter, and the soak does not look into them.
 
 ## A game that vanished without a crash report (ARC-DEV-2280)
 
