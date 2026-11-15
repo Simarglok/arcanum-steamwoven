@@ -29,7 +29,7 @@ to 2026-11-15 13:50. `main` takes about 140 to 170 merges a day (170, 151 and
 |---|---|
 | Found by another thread's PR run vs by the daily build | 57 vs 4 |
 | Time to fix, 46 closed issues | median 2.6 h, p75 6.8 h, max 24.8 h |
-| Issues still open | 16 |
+| Issues still open (as of 2026-11-15, all matching issues, not only the sample) | 16 |
 | Re-runs on a clean main checkout in 3 days (queue steps in `mainwt`, `base-main`, `main-check`, `mainclean`, `before*`) | about 120 |
 | Complete smoke wall time | 54 min (83 steps, 11-13), 74 min (85 steps, 11-14) |
 | PR smoke session (232 sessions of at least 5 steps) | median 11.8 min, p90 39.7 min |
@@ -40,6 +40,9 @@ rates are not main-only; the causes of #2172, #1855, #1911 and the open flakes
 come from issue text only.
 
 ## Measures (owner decision 2026-11-15)
+
+Rows are in launch order; the numbers are those of the audit (measure 5, the
+automatic leak guard, and measure 7 were not chosen yet).
 
 | Measure | Issue |
 |---|---|
