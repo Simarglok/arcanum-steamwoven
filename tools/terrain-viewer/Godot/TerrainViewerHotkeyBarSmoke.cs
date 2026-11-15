@@ -82,6 +82,8 @@ public partial class TerrainViewerApp
             // the spell's college shows that college's known spells as icons, entering a button names it in the mode's text area, and the
             // release over the spell's icon activates it (the bar's button sounds).
             await RunSpellPaneStripSmokeAsync(session, spell, Frames, Click, Hover);
+            // ARC-UI-2304: the magick weapon button and pane (bar mode 8) in the bottom strip.
+            await RunWeaponPaneStripSmokeAsync(session, Frames, Click, Hover);
 
             // A right drag from the spell pane onto slot 2 (the spell's college selected).
             _spellCollege = spell / SpellPaneRules.Ranks;

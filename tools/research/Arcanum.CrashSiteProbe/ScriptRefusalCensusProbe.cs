@@ -132,13 +132,13 @@ internal static partial class Program
     private static int ProbeScriptRefusalCensus(string[] args)
     {
         var setName = "S33";
-        if (args.Length is not (2 or 4 or 6) || args[0] != "--game-root") throw new ArgumentException("SCRIPT_REFUSAL_CENSUS_USAGE --script-refusal-census --game-root PATH [--module NAME] [--set S30|S31|S32|S33|S38|S43|S52|S53|S54|S55|S56|S58|S59]");
+        if (args.Length is not (2 or 4 or 6) || args[0] != "--game-root") throw new ArgumentException("SCRIPT_REFUSAL_CENSUS_USAGE --script-refusal-census --game-root PATH [--module NAME] [--set S30|S31|S32|S33|S38|S43|S52|S53|S54|S55|S56|S58|S59|S60]");
         var module = ContentMountPlan.DefaultModule;
         for (var i = 2; i < args.Length; i += 2)
         {
             if (args[i] == "--module") module = args[i + 1];
             else if (args[i] == "--set") setName = args[i + 1];
-            else throw new ArgumentException("SCRIPT_REFUSAL_CENSUS_USAGE --script-refusal-census --game-root PATH [--module NAME] [--set S30|S31|S32|S33|S38|S43|S52|S53|S54|S55|S56|S58|S59]");
+            else throw new ArgumentException("SCRIPT_REFUSAL_CENSUS_USAGE --script-refusal-census --game-root PATH [--module NAME] [--set S30|S31|S32|S33|S38|S43|S52|S53|S54|S55|S56|S58|S59|S60]");
         }
         var set = RcNamedSet(setName) ?? throw new ArgumentException("SCRIPT_REFUSAL_CENSUS_SET");
         var discovery = ContentMountPlan.Discover(args[1], module);
@@ -322,7 +322,7 @@ internal static partial class Program
                 reached_scripts_in_live = live.Reach.Count, live_lines = live.Reach.Values.Sum(r => r.True.Zip(r.False).Count(p => p.First || p.Second)),
             },
             refused_types = new { conditions = rows.Count(r => r.side == "condition"), actions = rows.Count(r => r.side == "action"), rows, never_live = neverLive },
-            free_order = order, groups, group_order = groupOrder, ungrouped_types = ungrouped, top_blocked_roots = topRoots, by_point = byPoint, by_map = byMap, by_quest = questTotals, refusals = refusals.Snapshot(),
+            free_order = order, groups, group_order = groupOrder, ungrouped_types = ungrouped, top_blocked_roots = topRoots, by_point = byPoint, by_map = byMap, by_quest = questTotals, focus_kinds = RcFocusReport(placed, roots, programs, scripts, set), refusals = refusals.Snapshot(),
         };
         Console.WriteLine(JsonSerializer.Serialize(report, new JsonSerializerOptions { WriteIndented = true }));
         return 0;
@@ -397,6 +397,16 @@ internal static partial class Program
         Check(duplicate is null, "every type is in at most one group");
         Check(RcKey(new(true, 24)) == "c24" && RcKey(new(false, 85)) == "a85" && RcGroups.SelectMany(g => g.Types).All(t => t[0] is 'a' or 'c' && int.TryParse(t[1..], out var n) && n >= 0 && n < (t[0] == 'c' ? CsConditionTypes : CsActionTypes)), "group keys name catalogued types");
         Check(RcNamedSet("S33") == ScrAdmissionSet.S33 && RcNamedSet("S99") is null && RcTypesOpen(set).Actions.Count == CsActionTypes && RcTypesOpen(set).Conditions.Count == CsConditionTypes && RcTypesOpen(set).FocusKinds.SetEquals(set.FocusKinds), "named sets and the everything set");
-        Console.WriteLine("script-refusal-census self-test: PASS (refused types by reach and calls, quests, other refusals apart, greedy order, sets)");
+        // Focus kind census (ARC-RES-2262): the float line with focus kind 3 (any follower) names the kind, refuses first for it, is freed by admitting it and by no empty list; a type refusal labels as its type.
+        var liveFocus = CsLiveSet(worlds, [8]);
+        Check(RcFocusNeedsOf(programs, liveFocus, set).Kinds.SequenceEqual([3]) && !RcFocusNeedsOf(programs, liveFocus, set).ConditionVicinity, "a reached object operand of an unadmitted focus kind is named");
+        Check(RcFocusNeedsOf(programs, CsLiveSet(worlds, [1]), set).Kinds.Count == 0, "an admitted root names no focus kind");
+        Check(RcFirstRefusal(programs, liveFocus, 8, set) is { Code: ScrRefusalCode.FocusKindNotAdmitted, Kind: 3 } f1 && RcRefusalLabel(f1) == "FocusKindNotAdmitted:3", "the first refusal of the focus root is its kind");
+        Check(RcRefusalLabel(RcFirstRefusal(programs, CsLiveSet(worlds, [2]), 2, set)!) == "ActionNotAdmitted:a85", "the first refusal of a type refusal is labelled by its type");
+        Check(RcFirstRefusal(programs, CsLiveSet(worlds, [1]), 1, set) is null, "an admitted root has no first refusal");
+        Check(RcAdmittedWithKinds(programs, liveFocus, set, [3]) && !RcAdmittedWithKinds(programs, liveFocus, set, []) && !RcAdmittedWithKinds(programs, liveFocus, set, [4]), "a root is freed by its own kind only");
+        Check(RcKindGroup(17) == "CONTAINER" && RcKindGroup(18) == "CONTAINER" && RcKindGroup(20) == "PORTAL" && RcKindGroup(22) == "ITEM" && RcKindGroup(3) == "FOLLOWER" && RcKindGroup(5) == "PARTY" && RcKindGroup(7) == "TEAM" && RcKindGroup(14) == "GROUP" && RcKindGroup(16) == "SCENERY", "the issue's kind groups");
+        Check(Enumerable.Range(0, CsFocusKinds).Select(RcKindGroup).Distinct().Count() <= CsFocusKinds, "every kind has a group id");
+        Console.WriteLine("script-refusal-census self-test: PASS (refused types by reach and calls, quests, other refusals apart, greedy order, sets, focus kinds)");
     }
 }

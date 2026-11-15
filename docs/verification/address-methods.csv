@@ -21,6 +21,7 @@ src/Arcanum.Presentation/Audio/SceneryLoopSound.cs,RangeTiles,exempt,reference
 src/Arcanum.Presentation/Hud/Floaters.cs,LineHeight,pending,
 src/Arcanum.Presentation/Hud/Floaters.cs,Rgb,pending,
 src/Arcanum.Presentation/Hud/HotkeyBar.cs,ItemShowsInventoryArt,pending,
+src/Arcanum.Presentation/Hud/HotkeyBar.cs,SpellIcon,exempt,reference
 src/Arcanum.Presentation/Hud/QuantityBar.cs,Ask,pending,
 src/Arcanum.Presentation/Hud/QuantityPane.cs,Cells,exempt,reference
 src/Arcanum.Presentation/Hud/QuantityPane.cs,IconArtId,exempt,reference
@@ -980,6 +981,9 @@ tools/terrain-viewer/Godot/TerrainViewerItemAiming.cs,OpenItemAiming,pending,
 tools/terrain-viewer/Godot/TerrainViewerMaintainBar.cs,MaintainSlotEntered,pending,
 tools/terrain-viewer/Godot/TerrainViewerMaintainBar.cs,StopMaintainSlot,pending,
 tools/terrain-viewer/Godot/TerrainViewerMaintainBar.cs,SyncMaintainClosing,pending,
+tools/terrain-viewer/Godot/TerrainViewerOrderLine.cs,AcceptOrderLine,exempt,host
+tools/terrain-viewer/Godot/TerrainViewerOrderLine.cs,HandleOrderLineKey,exempt,host
+tools/terrain-viewer/Godot/TerrainViewerOrderLine.cs,RouteOrderLineKey,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerPortraitHover.cs,FollowerPortraitHoverLeft,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerProjectiles.cs,BoomerangReturned,pending,
 tools/terrain-viewer/Godot/TerrainViewerProjectiles.cs,CrossTile,pending,
@@ -1042,4 +1046,8 @@ tools/terrain-viewer/Godot/TerrainViewerTrapDevices.cs,PlaceTrapDeviceUse,pendin
 tools/terrain-viewer/Godot/TerrainViewerTraps.cs,HeroStepGate,pending,
 tools/terrain-viewer/Godot/TerrainViewerTurnBased.cs,ProcessTurnBasedRound,pending,
 tools/terrain-viewer/Godot/TerrainViewerWeaponArtSmoke.cs,RunAreaWeaponArtStageAsync,exempt,reference
+tools/terrain-viewer/Godot/TerrainViewerWeaponBar.cs,ToggleWeaponPaneInStrip,exempt,host
+tools/terrain-viewer/Godot/TerrainViewerWeaponBar.cs,WeaponBarButtonReleased,exempt,host
+tools/terrain-viewer/Godot/TerrainViewerWeaponBar.cs,WeaponBarSlotEntered,exempt,host
+tools/terrain-viewer/Godot/TerrainViewerWeaponBar.cs,WeaponBarSlotReleased,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerWeaponHitSmoke.cs,RunAreaWeaponHitStageAsync,exempt,reference

@@ -80,7 +80,7 @@ beyond S33 is not counted.
 ```sh
 "$DOTNET" run --project tools/research/Arcanum.CrashSiteProbe --no-build -- --script-refusal-census-self-test
 "$DOTNET" run --project tools/research/Arcanum.CrashSiteProbe --no-build -- --script-refusal-census \
-  --game-root "$GAME" [--set S30|S31|S32|S33|S38|S43|S52|S53|S54|S55|S56|S58|S59] > "$PRIVATE/refusal-census.json"
+  --game-root "$GAME" [--set S30|S31|S32|S33|S38|S43|S52|S53|S54|S55|S56|S58|S59|S60] > "$PRIVATE/refusal-census.json"
 ```
 
 The run takes about five seconds and is deterministic: two runs on the owner's installation
@@ -525,3 +525,51 @@ The probe takes `--set S58` and `--set S59` too: **S58** is S56 plus queue slide
 The runs are on the owner's installation (module `Arcanum`, the same 1,809 roots and 7,766 placed sites as before). Under **S58** 1,723 attached scripts on 7,342 placed sites are admitted whole and 32 roots (177 sites) are refused for a type; under **S59** 1,732 scripts on 7,360
 sites are admitted (+9 scripts, +18 sites) and 23 roots (159 sites) are refused for a type. The two types are gone from the refused table (S58 had six): **a85** blocked 8 roots on 14 sites on 2 maps (the main map 13 sites, Caladon's sewers 1; attachment points 9, 12 and 19, and 9 tile or sector sites), each root alone, and **a86**
 blocked 1 root on 4 sites on one map at the first-heartbeat point 10, alone. What is left refused for a type under S59 is a32 (7 roots, 110 sites), a90 (14 roots, 47 sites), a70 and a111 (1 root each).
+
+## The refused focus kinds (ARC-RES-2262, 2026-11-15)
+
+Issue #2262, requirement [FR-SCRIPT-002](../requirements/story-social-ai.md#fr-script-002), no coverage row changes. The probe takes `--set S60` (S59 plus the focus kind every portal in the vicinity, 19; [ledger PV5](ledger/scripts.md#the-portal-vicinity-focus-kind-arc-script-2041-the-loop-of-the-ground-rune-tile-scripts)) and its report has a new section `focus_kinds` (file `ScriptRefusalFocusKinds.cs`). The run is on the owner's installation (module `Arcanum`, the same 1,809 roots on 7,766 placed sites; two runs have SHA-256 `e91c3bfba868a52bad5e6fe53ae15e118949c08290540ec1db5c4e2216392569`).
+
+**Method.** For each root (an attached script run from line 0, calls followed) the probe records (a) its *first refusal* under S60, as the production `ScrAdmission.AdmitFrom` reports it: the root script's own entry first, then the other reached scripts by number and entry, each entry's lowest refused line; (b) every focus kind the reached lines name that S60 does not admit, read from the object operands and from the kind packed into the high 16 bits of a PC variable or PC flag operand (an "every" and an "any" kind are separate numbers, the two critter vicinity kinds 8 and 9 in a condition are never admitted whatever the set holds); (c) whether admitting a kind (group) frees the root: every reached entry admitted with every condition and action type open and the set's focus kinds plus the group. A kind *frees alone* when the root has no refused type and admits whole with that group only. Sites are counted as above (placed object, tile or sector; prototype defaults are not sites).
+
+**Result (D).** Under S60 1,740 attached scripts on 7,416 placed sites are admitted whole (+8 scripts, +56 sites against S59: the eight roots of kind 19, as the issue #2041 expected) and 69 roots are refused. For 36 of them (126 sites, 10 maps) the first refusal is a focus kind; 37 roots on 127 sites name a refused kind somewhere on a reached line, and 32 of those (116 sites) have no refused type, so a kind alone frees them. The other 5 (11 sites) are also blocked by action 32 (kind 13 one root, kind 14 four roots). Admitting all 14 refused kinds with every type open frees every one of the 37 roots: no installed root needs a kind the admission can never take (no root names kinds 8 or 9 in a condition).
+
+The first refusals of all 69 roots, with the attachment points of their placed sites (tile or sector sites in the last column):
+
+| First refusal | Roots | Sites | Maps | Points (sites) | Tile or sector |
+| --- | ---: | ---: | ---: | --- | ---: |
+| action 32 (a32) | 3 | 100 | 3 | 9 (1), 19 (1) | 98 |
+| computed goto | 12 | 71 | 3 | 1 (31), 9 (17) | 23 |
+| focus kind 13 every one in the group | 11 | 61 | 5 | 7 (19), 8 (1), 9 (21), 23 (15), 34 (5) | 0 |
+| action 90 (a90) | 14 | 47 | 2 | 19 (47) | 0 |
+| focus kind 16 any scenery in the vicinity | 2 | 22 | 2 | 2 (1), 30 (1) | 20 |
+| focus kind 2 every follower | 9 | 22 | 5 | 1 (2), 9 (2), 12 (1), 13 (1), 19 (2), 21 (1) | 13 |
+| focus kind 14 anyone in the group | 4 | 10 | 1 | 9 (10) | 0 |
+| focus kind 17 every container in the vicinity | 8 | 10 | 3 | 19 (2), 21 (5) | 3 |
+| goto beyond the end | 2 | 2 | 1 | 9 (2) | 0 |
+| action 111 (a111) | 1 | 1 | 1 | 32 (1) | 0 |
+| action 70 (a70) | 1 | 1 | 1 | 26 (1) | 0 |
+| focus kind 3 any follower | 1 | 1 | 1 | 9 (1) | 0 |
+| focus kind 22 every item in the vicinity | 1 | 0 | 0 | prototype default only | 0 |
+
+The table's sites sum to 348: the other 2 of the 350 sites S60 refuses belong to the two attached script numbers that have no file (`missing_roots`), which no admission can run.
+
+The refused kinds by use (roots naming the kind on a reached line; the root counts of the first-refusal and freed-alone columns are the roots, then their sites; "all scripts" counts every clause and script of the 2,399 decoded scripts, attached, reached or not):
+
+| Kind | Group | Roots | Sites | Maps | First refusal (roots) | Frees alone (roots / sites) | All scripts (clauses / scripts) | Points (sites) | Leading scripts (sites) |
+| ---: | --- | ---: | ---: | ---: | ---: | --- | --- | --- | --- |
+| 13 every one in the group | GROUP | 12 | 62 | 5 | 11 | 11 / 61 | 30 / 22 | 7 (19), 8 (1), 9 (21), 19 (1), 23 (15), 34 (5) | 1160 (15), 2350 (12), 2506 (11), 2507 (11), 1749 (4) |
+| 2 every follower | FOLLOWER | 9 | 22 | 5 | 9 | 9 / 22 | 12 / 10 | 1 (2), 9 (2), 12 (1), 13 (1), 19 (2), 21 (1), 13 tile or sector | 2341 (7), 2346 (6), 1355 (3), 1116, 1165 |
+| 16 any scenery in the vicinity | SCENERY | 2 | 22 | 2 | 2 | 2 / 22 | 2 / 2 | 2 (1), 30 (1), 20 tile or sector (k'na tha) | 2561 (20), 1734 (2) |
+| 17 every container in the vicinity | CONTAINER | 8 | 10 | 3 | 8 | 8 / 10 | 15 / 12 | 19 (2), 21 (5), 3 tile or sector | 1596 (3), 1191, 1434, 2782, 2947 |
+| 14 anyone in the group | GROUP | 4 | 10 | 1 | 4 | 0 / 0 (all four also a32) | 6 / 3 | 9 (10) | 2232 (3), 2234 (3), 2239 (3), 1750 (1) |
+| 3 any follower | FOLLOWER | 1 | 1 | 1 | 1 | 1 / 1 | 1 / 1 | 9 (1) | 1056 |
+| 22 every item in the vicinity | ITEM | 1 | 0 | 0 | 1 | 1 / 0 | 1 / 1 | none (prototype default) | 29019 |
+| 4, 5 party; 7 anyone in the team; 18 any container; 20 any portal; 23 any item | | 0 | 0 | 0 | 0 | none | 0 / 0 | none | none |
+| 6 every one in the team | TEAM | 0 | 0 | 0 | 0 | none | 1 / 1 | none (the one script is attached nowhere or not reached) | none |
+
+Where the kinds sit: the main map (`arcanum1-024-fixed`) carries 83 of the 127 sites, Kna Tha 20 (one tile script, kind 16), Bates mansion levels 2 and 1 7 and 5, the Caladon Panarrii temple 6, Arronax's interior 2.
+
+**What it means.** The kinds that no installed script needs at all are the party kinds (4, 5), any one in the team (7), any container (18), any portal (20) and any item (23): the issue's expectation that container 18 and item 23 come with their pair is right (one list, [PV1](ledger/scripts.md#the-portal-vicinity-focus-kind-arc-script-2041-the-loop-of-the-ground-rune-tile-scripts)), but no script waits on them. Kind 6 occurs in one unreached script. The order that frees the most placed sites among the 32 roots without a refused type (greedy, sites): **group (13, 14)** 11 roots, 61 sites; **follower (2, 3)** 10 roots, 23 sites; **any scenery (16)** 2 roots, 22 sites (20 of them one tile script on one map); **container (17, 18)** 8 roots, 10 sites; **item (22, 23)** 1 root, 0 placed sites, cumulative 116. The four kind-14 roots (10 sites) wait on action 32 as well.
+
+**Follow-up issues (AC2).** One for each group that frees at least one installed script: [#2319](https://github.com/Simarglok/arcanum-steamwoven/issues/2319) group 13 and 14, [#2320](https://github.com/Simarglok/arcanum-steamwoven/issues/2320) follower 2 and 3, [#2321](https://github.com/Simarglok/arcanum-steamwoven/issues/2321) any scenery 16, [#2322](https://github.com/Simarglok/arcanum-steamwoven/issues/2322) container 17 (and 18), [#2323](https://github.com/Simarglok/arcanum-steamwoven/issues/2323) item 22 (and 23; no placed site, low priority). The party, team and portal 20 kinds free nothing and get no issue. The census counts what a set admits whole; each host admits its own subset, so a host may need further types for a root the set frees (the same limit as the sections above).

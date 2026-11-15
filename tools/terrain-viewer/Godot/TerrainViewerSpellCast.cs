@@ -276,8 +276,10 @@ public partial class TerrainViewerApp
             _spellPane.ItemDragStarted += HotkeyWeaponPaneDrag;
         }
         AdoptSpellData();
+        // ARC-UI-2304: the spells mode replaces bar mode 8 (0x5506C0 with 1).
+        _itemPaneItem = null; _weaponPaneCache = null;
         _spellPane.ListInStrip = SpellListInStrip;
-        _spellPane.Show(AreaSpellCasting.Known(_areaSession!, _spellData?.Data), WeaponPaneNow());
+        _spellPane.Show(AreaSpellCasting.Known(_areaSession!, _spellData?.Data), DiagnosticWeaponPane());
         _spellNotice = _spellData?.Data is null ? "spell data loading" : null;
     }
 
@@ -301,7 +303,7 @@ public partial class TerrainViewerApp
         if (_spellPane?.Shown == true)
         {
             if (!SpellMapActive || _areaSession?.QueryHero() is null) _spellPane.HidePane();
-            else _spellPane.Show(AreaSpellCasting.Known(_areaSession, _spellData?.Data), WeaponPaneNow());
+            else _spellPane.Show(AreaSpellCasting.Known(_areaSession, _spellData?.Data), DiagnosticWeaponPane());
         }
         if (_spellTargeting is not null && (!SpellMapActive || TargetsDroppedByModal || ConversationOpen)) CancelSpellTargeting("a window opened or the map changed");
         // Another map, actor or session rebuilds the host, which ends the goal through its own host first; no host ends it too.
@@ -577,14 +579,17 @@ public partial class TerrainViewerApp
         return pane;
     }
 
-    /// <summary>The weapon button (0x556EA0 with no object: the wielded weapon; 0x5506C0: a second press returns to mode 0).</summary>
+    /// <summary>ARC-UI-2304: the diagnostic pane's weapon button and pane only while the bottom strip does not draw them.</summary>
+    private AreaWeaponSpellPane? DiagnosticWeaponPane() => WeaponPaneInStrip ? null : WeaponPaneNow();
+
+    /// <summary>The diagnostic pane's weapon button (0x556EA0 with no object: the wielded weapon; 0x5506C0: a second press returns to mode 0).</summary>
     private void ToggleWeaponPane()
     {
         if (_itemPaneItem is not null) _itemPaneItem = null;
         else if (WeaponPaneNow() is { ButtonShown: true } pane) _itemPaneItem = pane.Item;
         ClearMessagePaneName();
         GD.Print($"ARC-UI-016 item-pane open={_itemPaneItem ?? "no"}");
-        if (_spellPane?.Shown == true && _areaSession is { } owner) _spellPane.Show(AreaSpellCasting.Known(owner, _spellData?.Data), WeaponPaneNow());
+        if (_spellPane?.Shown == true && _areaSession is { } owner) _spellPane.Show(AreaSpellCasting.Known(owner, _spellData?.Data), DiagnosticWeaponPane());
         RefreshAreaStatus();
     }
 
