@@ -436,13 +436,14 @@ public partial class TerrainViewerApp
         }
     }
 
-    // ARC-UI-1197: with ARC_AREA_WINDOW_ART (the shared opt-in part of the window smokes) the open window's frame (art 138, the one the world map and the town map draw) is checked in
+    // ARC-UI-1197: with ARC_AREA_WINDOW_ART (the shared opt-in part of the window smokes) the open window's frame (art 138, the one the world map and the town map draw) and, since ARC-UI-1810, its buttons and the lens are checked in
     // the generated interface at the window's own device scale (the whole factor of the free area: 1 in a 1280 x 800 window, 2 in a 1920 x 1080 one), checked again after a resize and
     // captured as PREFIX-worldmap|townmap-MODE[-STAGE].png (ARC_AREA_WINDOW_CAPTURE, local).
     private async Task WorldMapWindowArtAsync(string window, AreaWorldMapArtView view)
     {
         if (!WindowArtSmokeRequested) return;
-        var found = view.TexturesForSelfTest([AreaWorldMapArtLayout.BackgroundArt]);
+        // ARC-UI-1810: the frame, the Zoom, Whole map, Travel and compass buttons and the lens 198 (the cover 217 stays art).
+        var found = view.TexturesForSelfTest([AreaWorldMapArtLayout.BackgroundArt, AreaWorldMapArtLayout.ZoomArt, AreaWorldMapArtLayout.WholeArt, AreaWorldMapArtLayout.TravelArt, AreaWorldMapArtLayout.CompassArt, AreaWorldMapArtLayout.LensArt]);
         await WindowArtSmokeAsync(window, () => found.Select(pair => pair.Texture).ToArray(), found.Select(pair => pair.Art).ToArray(), view.DeviceScale, () => view.HasLook);
     }
 
