@@ -18,6 +18,24 @@ public partial class TerrainViewerApp
     private AreaInventoryHost? _shopInventoryHost;
     private GameSessionOwner? _shopInventorySession;
 
+    // ARC-UI-1806: the script content the shop merchant's bet lines are read from (the generated dialog texts and its override dialog), opened at the first line and
+    // owned by the shop (the game's conversation content is another, which the shop never releases); released when the shop's window ends.
+    private AreaScriptContentLoad? _shopContent;
+
+    private Arcanum.Data.Scripts.ScriptContent? ShopScriptContent()
+    {
+        // Only while the shop's window is open: a line asked after its end opens nothing.
+        if (!_barterInShop || (_launchArguments ?? _arguments)?.ModulePath is not { } module) return null;
+        if (_shopContent is null)
+        {
+            _shopContent = AreaContentRoot.OpenScripts(module);
+            GD.Print($"ARC-UI-1806 shop script content status={_shopContent.Status} detail={_shopContent.Detail}");
+        }
+        return _shopContent.Content;
+    }
+
+    private void ReleaseShopContent() { _shopContent?.Content?.Dispose(); _shopContent = null; }
+
     private Task<AreaShopMapLoad>? _shopMapTask;
     private string? _shopMapModule;
     private AreaShopMapLoad? _shopMap;
@@ -102,7 +120,7 @@ public partial class TerrainViewerApp
         var names = new AreaInventoryHost([map.Inventory]);
         var shop = AreaShopSession.Open(owner, map, data,
             (item, kind) => map.Inventory.TryGetRow(item, out _) ? names.Name(item, catalog) : AreaInventoryHost.KindName(kind, catalog),
-            AreaHoverIndex.Text(map.MerchantRow, catalog) ?? "merchant", out why);
+            AreaHoverIndex.Text(map.MerchantRow, catalog) ?? "merchant", out why, hero.Effects, ShopScriptContent);
         if (shop is null) { owner.Dispose(); return null; }
         (_shopInventoryHost, _shopInventorySession) = (names, owner);
         // ARC-UI-069: the hero's grid lays its items out by their inventory art, as the game's session does (ARC-UI-055).
@@ -165,6 +183,13 @@ public partial class TerrainViewerApp
             require(image.SavePng(capture) == Error.Ok, "the capture saved to " + capture);
         }
         var (wares, hero) = (_barterPanel.ArtView!.LootGrid.Count, _barterPanel.ArtView.Grid.Count);
+        // ARC-UI-1806: the bet box of the docked window (the same hover as the dialog's window): a ware carried over it asks the gate (art 344 or 346 with its line), nothing is bet.
+        var bet = await BarterGambleHoverSmokeAsync();
+        require(bet.StartsWith("art ", StringComparison.Ordinal), "the docked window's bet box answers a carried ware: " + bet);
+        // The line is the merchant's own, read from the generated NPC files through the shop's script content, not the window's fallback text.
+        var betLine = bet.Contains("line '", StringComparison.Ordinal) ? bet[(bet.IndexOf("line '", StringComparison.Ordinal) + 6)..^1] : "";
+        require(betLine.Length > 0 && !AreaBarter.IsBetFallback(betLine), $"the shop merchant's bet line is a generated NPC line: '{betLine}'");
+        var gate = _barterPanel.ArtView!.LootGrid.FirstOrDefault() is { } first ? _barter!.CheckGamble(first.Entity).Gate.Refusal.ToString() : "no ware";
         var (_, bx, by) = AreaShopArtLayout.Button(AreaShopArtButton.Back);
         var over = art.ScreenPointForSelfTest(bx + 15, by + 15);
         GetViewport().PushInput(new InputEventMouseMotion { Position = over, GlobalPosition = over });
@@ -181,6 +206,6 @@ public partial class TerrainViewerApp
                 await Frames(1);
             }
         GD.Print("ARC-UI-069 native-smoke shop art PASS " + System.Text.Json.JsonSerializer.Serialize(new {
-            Corner = $"{corner.X},{corner.Y}", Wares = wares, Hero = hero, Back = back }));
+            Corner = $"{corner.X},{corner.Y}", Wares = wares, Hero = hero, Bet = bet, Gate = gate, Back = back }));
     }
 }

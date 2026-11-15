@@ -232,6 +232,7 @@ public partial class TerrainViewerApp
             // ARC-UI-069: a session the start took is the game's now; its items' rows come from the game's maps (the art and sizes
             // read from the shop map's rows are read again).
             (_shopInventoryHost, _shopInventorySession) = (null, null);
+            ReleaseShopContent();
             _inventoryItemArtCache.Clear(); _inventoryItemSizeCache.Clear();
         }
         QuarantineWorld(); RefreshReadyStatus();

@@ -162,7 +162,7 @@ public partial class TerrainViewerApp
                 if (bodyProfile.Stunned is { } stunArt)
                 {
                     var cycleTicks = (int)Math.Ceiling(stunArt.FramesPerGroup * 20.0 / Math.Max(stunArt.RawFramesPerSecond, 1));
-                    Require(stunFramesDrawn.Count > 1 && stunTicks >= cycleTicks, $"the stun played {stunFramesDrawn.Count} frames over {stunTicks} ticks (one cycle is {cycleTicks})");
+                    Require(stunFramesDrawn.Count > 1 && stunTicks >= cycleTicks, $"the {label}stun played {stunFramesDrawn.Count} frames over {stunTicks} ticks (one cycle is {cycleTicks}; {stunPlays} plays, art {stunArt.FramesPerGroup}f@{stunArt.RawFramesPerSecond}, frames [{string.Join(",", stunFramesDrawn.Order())}])");
                     Require(stunPlays <= 1 || stunTicks >= cycleTicks * (stunPlays - 1), $"the stun lasted its {stunPlays} plays: {stunTicks} ticks of {cycleTicks}");
                 }
                 Frame();
