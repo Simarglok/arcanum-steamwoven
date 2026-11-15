@@ -33,7 +33,7 @@ public partial class TerrainViewerApp
 
     /// <summary>
     /// The map drop with flag 4 of a held item of the own window (IW18; the use icon's for <c>OIF_USE_IS_THROW</c>, IW6): the lift's
-    /// checks (<see cref="AreaHeldThrow.Lift"/>: the original's remove check refuses a no-drop item, the rest is NOT READY) leave a refused
+    /// checks (<see cref="AreaHeldThrow.Lift"/>: the original's remove check refuses a no-drop item, a few script mixes are NOT READY) leave a refused
     /// item where it was with the reason in the window; otherwise the window closes and the item is on the game cursor.
     /// </summary>
     private void LiftToGameCursor(string item, string source)
@@ -45,7 +45,7 @@ public partial class TerrainViewerApp
         string message;
         if (session.QueryHero() is null) message = "not thrown: needs a hero (start with --hero)";
         else if (_inventoryHost.GridMoveItem(session, item, _areaKitGridMove) is not { } facts) message = $"not thrown: {name}'s facts do not read here";
-        else if (AreaHeldThrow.Lift(facts, worn) is var refused && refused != GameSessionFailure.None) message = AreaHeldThrow.Refusal(refused, name);
+        else if (AreaHeldThrow.Lift(facts) is var refused && refused != GameSessionFailure.None) message = AreaHeldThrow.Refusal(refused, name);
         else if (item == SessionHeroGrid.GoldEntity)
         {
             // ARC-UI-094 (QW1): the gold pile's coins are lifted like a stack: one coin lifts at once, more ask how many.
@@ -98,7 +98,7 @@ public partial class TerrainViewerApp
         var name = _inventoryHost.ItemName(session, item, _hoverNames?.Catalog);
         if (_inventoryHost.GridMoveItem(session, item, _areaKitGridMove) is not { } facts) return $"not thrown: {name}'s facts do not read here";
         var worn = session.QueryEquipment().Worn.Any(entry => entry.Entity == item);
-        if (AreaHeldThrow.Lift(facts, worn) is var refused && refused != GameSessionFailure.None) return AreaHeldThrow.Refusal(refused, name);
+        if (AreaHeldThrow.Lift(facts) is var refused && refused != GameSessionFailure.None) return AreaHeldThrow.Refusal(refused, name);
         int? count = null;
         if (facts.Kind.Type == SessionItemType.Ammo && (count = session.QueryAmmo(item)?.Units) is not > 0) return $"not thrown: {name} has no units";
         if (item == SessionHeroGrid.GoldEntity && (count = session.QueryGold()) is not > 0) return "not thrown: the hero holds no coin"; // ARC-UI-094: the whole pile
@@ -386,6 +386,8 @@ public partial class TerrainViewerApp
             Count = held.Count, SplitKind = held.StackKind,
             Combat = wearable?.Item, Throwable = wearable?.Throwable == true,
             HeroWorn = AreaCombatHost.HeroWorn(owner, _areaKitDurability), DropMap = AreaDropMapNow(), ItemTriggers = ItemTriggersNow(),
+            // ARC-COMBAT-1955: the removal's and the throw script (point 6) of the item run through the shown map's item script host.
+            Scripts = _inventoryHost.ItemScripts(owner),
         };
         var aimed = struck?.Goal;
         if (aimed is not null)
@@ -404,15 +406,30 @@ public partial class TerrainViewerApp
             aimed = null;
             result = owner.ThrowHeroItem(owner.Version, request with { Struck = null, StruckCell = null, StruckWorn = null, LineOfFire = null });
         }
+        // ARC-COMBAT-1955: the scripts ran, the session threw at the location itself because the struck critter refused: no struck critter is left.
+        if (aimed is not null && result.Attack?.Resolution is null && result.Shots.Count > 0) aimed = null;
         _lastHeldThrowForSelfTest = result;
         GD.Print($"ARC-UI-063 throw item={held.Item} tile={tile.X},{tile.Y} struck={aimed?.Entity ?? "none"} disposition={result.Disposition}"
             + $" failure={result.Failure} outcome={result.Attack?.Resolution?.Outcome.ToString() ?? "-"} shots={result.Shots.Count}"
-            + $" destination={(result.Destination is { } d ? $"{d.X},{d.Y}" : "-")} cost={owner.QueryHeroThrowCost()}");
-        if (result.Disposition == GameSessionDisposition.Rejected)
+            + $" destination={(result.Destination is { } d ? $"{d.X},{d.Y}" : "-")} cost={owner.QueryHeroThrowCost()}"
+            + (result.ScriptDeclined ? " script-declined" : "") + (result.Scripts.Count > 0 ? $" scripts={result.Scripts.Count}" : "") + (result.Messages.Count > 0 ? $" lines={result.Messages.Count}" : ""));
+        // ARC-COMBAT-1955: a line the item's removal or throw script printed goes to the message window, and the eye candy they made plays (a refused throw whose scripts changed nothing shows none).
+        PostScriptLines(result.Messages);
+        QueueScriptEyeCandies(result.EyeCandies);
+        if (result.Disposition == GameSessionDisposition.Rejected || result.Failure != GameSessionFailure.None)
         {
+            // A refusal after the scripts took effect is a changed session with the failure named: the item did not leave.
             SetHeldThrowNotice(AreaHeldThrow.Refusal(result.Failure, held.Name) + " (it stays in the pack)");
+            if (result.Disposition != GameSessionDisposition.Rejected) SyncAreaInventory();
             RefreshAreaStatus();
-            return null;
+            // A refusal after the scripts took effect keeps its own notice: the throw goal's end must not replace it with "stopped".
+            return result.Disposition == GameSessionDisposition.Rejected ? null : result;
+        }
+        if (result.ScriptDeclined)
+        {
+            SetHeldThrowNotice($"{held.Name} stays: its throw script kept it (it is back in the pack)");
+            SyncAreaInventory(); RefreshAreaStatus();
+            return result;
         }
         if (result.Disposition == GameSessionDisposition.NoChange) { SetHeldThrowNotice("the hero cannot act (the item stays in the pack)"); RefreshAreaStatus(); return null; }
         var (art, unfaced) = HeldThrowArt(held.Item, wearable);

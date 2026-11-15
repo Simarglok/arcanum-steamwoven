@@ -6,7 +6,7 @@ is its CPU counterpart (same Sobel, bevel sign and gains; the shader has no blur
 
 - Height is the luminance (the original sprites have their light baked in, so there is no height map). The normal is the 3×3 Sobel of
   the height (optionally box-blurred first), alpha aware: an empty neighbour takes the centre's height, and the silhouette adds an
-  outward bevel. Presets `ground` (flat), `object` (walls, scenery), `critter` (blur 1 to calm palette dither between animation frames).
+  outward bevel. Presets `ground` (flat), `object` (walls, scenery), `critter` (blur 1 to calm palette dither between animation frames). `--bevel-stride S` (ARC-RENDER-2063) reads the bevel's alpha taps S texels away, as the viewer's shader does for an S-times frame (`relight_scale`); the product's world art stays 1x under the HD option (owner decision 2026-11-15), so S>1 is dormant support covered by the twin test only.
 - Green is OpenGL style by default (Y+ up, what Godot's `CanvasTexture` expects); `--convention image` keeps image space (Y down, the
   viewer's shader).
 - Deterministic: the same pixels and options give the same bytes.

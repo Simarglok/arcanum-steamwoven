@@ -691,6 +691,50 @@ public sealed class AreaCompanionTests
         Assert.AreEqual(home.RuntimeMap, session.QueryTeleportMap(entity), "the move prepared it as any traveller (FM6)");
     }
 
+    // ARC-WORLD-2161 (tail of #2132; 0x4D3760 carries the whole follower tree as objects): a follower of a companion that the shown group holds no body for (its body is not drawn, its follow facts do not
+    // read) is still in the move list and arrives on the destination by the session's placement edits alone, with its leader link kept and its home recorded, so it is a visitor there.
+    [TestMethod]
+    public void A_follower_the_group_holds_no_body_for_travels_by_its_placement_edits()
+    {
+        var f = Load();
+        const string Leader = "oid:companion-leader", Led = "oid:led-without-body", Ghost = "oid:led-ghost";
+        SessionMapId home = new(1), cave = new(2);
+        CellCoord At(int x) => new(checked((int)f.Speaker.WorldX + x), checked((int)f.Speaker.WorldY));
+        var stored = At(7);
+        using var session = ConversationSessionFixture.Create();
+        Assert.AreEqual(GameSessionDisposition.Changed, session.ForceJoinParty(session.Version, Leader).Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, session.ForceJoinLeader(session.Version, Led, Leader).Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, session.ForceJoinLeader(session.Version, Ghost, Leader).Disposition);
+        var unresolved = new List<string>();
+        var bodyless = AreaLedMapNpcs.Bodyless(session, home, AreaLedMapNpcs.HeroTree(session), e => e == Leader, e => e == Led ? stored : null, unresolved);
+        Assert.AreEqual(new AreaBodylessFollower(Led, home, stored), bodyless.Single(), "the one with a stored cell on the shown map");
+        CollectionAssert.AreEqual(new[] { Ghost }, unresolved, "one the map lists no row for stays behind and is named");
+        Assert.AreEqual(0, AreaLedMapNpcs.Bodyless(session, home, [Leader, Led], e => true, _ => stored).Count, "a follower the group holds is carried by its own edits");
+
+        // The move list names it before its leader, as the original's walk does.
+        var list = session.QueryTransferMoveList(new() { FollowersOf = leader => session.QueryFollowers(leader).Where(follower => follower != Ghost).ToArray() });
+        CollectionAssert.AreEqual(new[] { Led, Leader }, list.Travelling.ToArray());
+        var arrive = AreaCompanionGroup.Arrive(bodyless[0], home, cave, At(2), NeighborDirection.YPlus);
+        Assert.AreEqual(GameSessionDisposition.Changed, session.ApplyChanges(session.Version, new ActorPlacement(cave, At(2), NeighborDirection.XPlus), arrive, list).Disposition);
+        Assert.AreEqual(new AreaCompanionWhere(cave, (At(2), NeighborDirection.YPlus), null), AreaCompanionPlacement.Where(session, home, Led), "it stands on the destination");
+        Assert.AreEqual(stored, AreaCompanionPlacement.HomeCell(session, home, Led), "its home map keeps the stored cell");
+        Assert.AreEqual(home.RuntimeMap, EntityHomes.HomeOf(session, Led), "its away change names its home");
+        Assert.AreEqual(Leader, session.QueryLeader(Led), "its leader link is kept");
+        Assert.AreEqual(home.RuntimeMap, session.QueryTeleportMap(Led), "the move prepared it as any traveller (FM6)");
+        CollectionAssert.AreEqual(new[] { Led }, AreaVisitors.Here(session, cave, [], null).Select(v => v.Entity).ToArray(), "it is a visitor of the destination");
+
+        // On the destination it resolves by its away change, and a return goes home and clears the record.
+        var back = AreaLedMapNpcs.Bodyless(session, cave, [Led], _ => false, _ => null).Single();
+        Assert.AreEqual(new AreaBodylessFollower(Led, home, stored), back);
+        Assert.AreEqual(0, AreaLedMapNpcs.Bodyless(session, home, [Led], _ => false, _ => stored).Count, "seen from its home map while away it has no placement to carry from there");
+        Assert.AreEqual(0, AreaLedMapNpcs.Bodyless(session, new(3), [Led], _ => false, _ => null).Count, "a visitor standing on another map is not carried from a third one");
+        var returning = AreaCompanionGroup.Arrive(back, cave, home, stored, NeighborDirection.XPlus);
+        Assert.AreEqual(GameSessionDisposition.Changed, session.ApplyChanges(session.Version, null, returning).Disposition);
+        Assert.IsNull(EntityHomes.HomeOf(session, Led), "home again");
+        Assert.IsNull(session.QueryMapChange(cave, AreaCompanionPlacement.Key(Led)), "the cave forgets it");
+        Assert.IsNull(session.QueryMapChange(home, AreaCompanionPlacement.Key(Led)), "on its stored cell facing the default the home map keeps no placement");
+    }
+
     // ARC-WORLD-2132: the group drives a map NPC that a companion leads toward that leader's cell (the follow goal walks to any leader), not toward the hero, and holds one that waits under its leader.
     [TestMethod]
     public void A_map_npc_led_by_a_companion_follows_its_leader_in_the_group()
