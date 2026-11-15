@@ -135,6 +135,16 @@ public partial class TerrainViewerApp
                 && _readingPanel.HeaderSizesForSelfTest.SequenceEqual([AreaReadingText.HeaderLinePx(485, readingFactor), AreaReadingText.HeaderLinePx(482, readingFactor), AreaReadingText.HeaderLinePx(999, readingFactor)])
                 && (readingFactor != 1 || _readingPanel.HeaderSizesForSelfTest.SequenceEqual([20, 16, 16])), "masthead sizes: " + string.Join(",", _readingPanel.HeaderSizesForSelfTest));
 
+            // ARC-UI-2314: the window in the original's look is at the nearest whole number of the original's screen fit, and with the HD interface pack at the fractional scale that fits the display (the original's 800 × 600 screen fitted).
+            if (_readingPanel.ArtMode && _readingPanel.ArtViewForSelfTest is { Visible: true } artView)
+            {
+                var viewSize = _readingPanel.GetViewport().GetVisibleRect().Size;
+                var hd = InterfaceHd.Enabled && InterfaceHd.Pack is not null;
+                var expected = AreaReadingArtView.ReadingScale(viewSize, hd).Scale;
+                Require(MathF.Abs(artView.Scale.X - expected) < 0.0005f && (hd || artView.Scale.X == MathF.Floor(artView.Scale.X)),
+                    $"ARC-UI-2314 reading window scale {artView.Scale.X} (expected {expected}, HD {hd})");
+            }
+
             // Script action 114 (a plaque, PC viewer) waits while the palette owns input, then opens; a controller cancel closes it.
             var pc = new ScrObjectRef(actor.Map.RuntimeMap, AreaScriptHost.PcCode);
             ToggleWorldSettings();
@@ -389,6 +399,22 @@ public partial class TerrainViewerApp
         return found;
     }
 
+    /// <summary>ARC-UI-2314: the window's scale is the nearest whole number of the original's screen fit (2 on 1920 × 1080), and with the HD interface pack that fit itself, fractional.</summary>
+    private static bool ReadingScaleFits(AreaReadingArtView view)
+    {
+        var size = view.GetViewportRect().Size;
+        var hd = InterfaceHd.Enabled && InterfaceHd.Pack is not null;
+        var expected = AreaReadingArtView.ReadingScale(size, hd).Scale;
+        // The fit is pinned where the issue measured it: on 1920 x 1080 HD is 1.8 (the window at the screen's (0, 41) of the centred 1440 x 1080 screen), Legacy 2 (ARC-UI-2314).
+        if (size == new Vector2(1920, 1080) && (hd ? (MathF.Abs(view.Scale.X - 1.8f) > 0.0005f || view.Position != new Vector2(240, 74)) : (view.Scale.X != 2 || view.Position != new Vector2(160, 82)))) return false;
+        return MathF.Abs(view.Scale.X - expected) < 0.0005f;
+    }
+
+    /// <summary>ARC-UI-2314: the size the reading window-art smoke runs at: 1920 x 1080, or ARC_AREA_READING_SIZE=WIDTHxHEIGHT (a capture at another display, local only).</summary>
+    private static Vector2I ReadingSmokeSize() =>
+        System.Environment.GetEnvironmentVariable("ARC_AREA_READING_SIZE")?.Split('x') is [var w, var h] && int.TryParse(w, out var width) && int.TryParse(h, out var height) && width >= 800 && height >= 600
+            ? new Vector2I(width, height) : new Vector2I(1920, 1080);
+
     // ARC-UI-1201: the reading window's drawn frames in the generated interface (ARC_AREA_WINDOW_ART=legacy|hd|generated, with ARC_HD_PACK for the last two), once for every kind of document: the side
     // bar (494), the lens (231), the kind's background (477, 489, 487, 491 or 633; 817 for the alternate newspaper) and a book's shown page button (495, 496). In `generated` every one is generated chrome at
     // round(size x paint scale) pixels of the window's own device scale, again after a bigger window (1600 x 1200) and back; in `hd` and `legacy` none is. The text, the picture arts and the fonts stay
@@ -397,23 +423,32 @@ public partial class TerrainViewerApp
     {
         if (!WindowArtSmokeRequested) return;
         if (_readingArtLook is not { } look) throw new InvalidOperationException("ARC-UI-1201 reading window art smoke: the window's art is not read");
-        foreach (var kind in ReadingKinds)
+        // ARC-UI-2314: the display the issue is about (1920 x 1080, ReadingSmokeSize); the window is put back at the end.
+        var before = DisplayServer.WindowGetSize();
+        var wanted = ReadingSmokeSize();
+        await SetSmokeWindowSizeAsync(wanted);
+        GD.Print($"ARC-UI-2314 reading window smoke display {GetViewport().GetVisibleRect().Size} (asked {wanted})");
+        try
         {
-            if (ReadingFactFor(session, data, facts, kind) is not { } fact) { GD.Print($"ARC-UI-1201 reading window art smoke {kind}: no document"); continue; }
-            if (ReadingOpen) CloseReadingByPlayer();
-            var document = session.QueryWrittenDocument(fact, data.Texts);
-            OpenReading(document, "window-art", replaceWindows: true);
-            var panel = _readingPanel!;
-            var shown = panel.ArtViewForSelfTest;
-            var arts = new List<int> { AreaReadingArtLayout.FrameArt, AreaReadingArtLayout.LensArt, document.BackgroundArt };
-            if (kind == WrittenSubtype.Book && shown.HasNext) arts.Add(AreaReadingArtLayout.NextArt);
-            if (kind == WrittenSubtype.Book && shown.SpreadIndex > 0) arts.Add(AreaReadingArtLayout.PreviousArt);
-            if (!panel.ArtMode || !shown.Visible) throw new InvalidOperationException($"ARC-UI-1201 reading window art smoke {kind}: the window is not in the original's look");
-            if (arts.Any(art => !look.Frames.ContainsKey(art))) throw new InvalidOperationException($"ARC-UI-1201 reading window art smoke {kind}: arts {string.Join(",", arts.Where(art => !look.Frames.ContainsKey(art)))} were not read");
-            await WindowArtSmokeAsync("reading-" + kind.ToString().ToLowerInvariant(), () => arts.Select(art => look.Frames[art][0] as HdInterfaceTexture
-                ?? throw new InvalidOperationException($"ARC-UI-1201 reading window art smoke: art {art} is no interface texture")).ToArray(),
-                arts, shown.DeviceScale, () => panel.ArtMode && shown.Visible, new Vector2I(1600, 1200));
+            foreach (var kind in ReadingKinds)
+            {
+                if (ReadingFactFor(session, data, facts, kind) is not { } fact) { GD.Print($"ARC-UI-1201 reading window art smoke {kind}: no document"); continue; }
+                if (ReadingOpen) CloseReadingByPlayer();
+                var document = session.QueryWrittenDocument(fact, data.Texts);
+                OpenReading(document, "window-art", replaceWindows: true);
+                var panel = _readingPanel!;
+                var shown = panel.ArtViewForSelfTest;
+                var arts = new List<int> { AreaReadingArtLayout.FrameArt, AreaReadingArtLayout.LensArt, document.BackgroundArt };
+                if (kind == WrittenSubtype.Book && shown.HasNext) arts.Add(AreaReadingArtLayout.NextArt);
+                if (kind == WrittenSubtype.Book && shown.SpreadIndex > 0) arts.Add(AreaReadingArtLayout.PreviousArt);
+                if (!panel.ArtMode || !shown.Visible) throw new InvalidOperationException($"ARC-UI-1201 reading window art smoke {kind}: the window is not in the original's look");
+                if (arts.Any(art => !look.Frames.ContainsKey(art))) throw new InvalidOperationException($"ARC-UI-1201 reading window art smoke {kind}: arts {string.Join(",", arts.Where(art => !look.Frames.ContainsKey(art)))} were not read");
+                await WindowArtSmokeAsync("reading-" + kind.ToString().ToLowerInvariant(), () => arts.Select(art => look.Frames[art][0] as HdInterfaceTexture
+                    ?? throw new InvalidOperationException($"ARC-UI-1201 reading window art smoke: art {art} is no interface texture")).ToArray(),
+                    arts, shown.DeviceScale, () => panel.ArtMode && shown.Visible && ReadingScaleFits(shown), new Vector2I(1600, 1200));
+            }
         }
+        finally { await SetSmokeWindowSizeAsync(before); }
         if (ReadingOpen) CloseReadingByPlayer();
     }
 }
