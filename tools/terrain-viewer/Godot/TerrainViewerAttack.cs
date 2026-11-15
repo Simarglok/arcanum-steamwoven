@@ -256,27 +256,11 @@ public partial class TerrainViewerApp
 
     /// <summary>ARC-COMBAT-008: the hit on an object at the action frame, through the session; the view then redraws what the hit
     /// destroyed, busted or switched off.</summary>
-    private void RunObjectAttackHit(AttackGoal goal, AreaObjectAttackTarget target, int distance, bool aimed = true)
+    private void RunObjectAttackHit(AttackGoal goal, AreaObjectAttackTarget target, int distance)
     {
         var owner = _areaSession!;
         // ARC-COMBAT-011: the object as it is now, its use script's trap included (a use may have changed the script).
         if (ObjectTargets()?.Target(owner, target.Row.Key, AreaTrapped) is { Refusal: null } now) target = now;
-        // ARC-COMBAT-1942 (0x4B3170, SC16): the attack record's first step turns a scenery with an occupant (a bed) into the occupant, who leaves the bed through the unseat 0x45F3A0; the blow is then the attack on the
-        // occupant, its check carrying -30 (TargetWasInBed). The goal keeps the bed as its target, so the next blow strikes the empty bed. An occupant the combat host has no values for stays pulled out and the bed takes the blow. Only the aimed target is swapped (as the NPC's record does, AreaAiHost.Hit): a bed the line of fire stops at is struck as an object (aimed false).
-        if (aimed && target.Row.Type == 3 && _aiHost?.HeroBlowOccupant(target.Entity) is { } occupant)
-        {
-            if (_combatHost!.Target(owner, occupant) is { Dead: false, Build.Combat: { } combat } npc)
-            {
-                GD.Print($"ARC-COMBAT-1942 bed-blow bed={target.Entity} occupant={occupant}");
-                var occupantGoal = new AttackGoal(npc, combat, goal.Aim);
-                // The shared check reads the line to the struck occupant as it reads one to any NPC (SC8), by the ranged path only.
-                var line = RangedPath(owner.QueryHeroAttack()) && _worldActor.Session is AreaGridSession grid && grid.Chart.ToWorld(grid.State.CommittedCell) is var at
-                    ? ShotLine(TraceLineOfFire(new(checked((int)at.X), checked((int)at.Y)), npc.Row), npc.Row) : null;
-                HitCritter(goal, occupantGoal, distance, line, inBed: true);
-                return;
-            }
-            GD.Print($"ARC-COMBAT-1942 bed-blow bed={target.Entity} occupant={occupant} has no combat values: the bed takes the blow");
-        }
         // ARC-COMBAT-016: with a projectile art the shot flies and strikes on arrival (ledger PF1).
         var flight = ShotFlight(owner.QueryHeroAttack());
         var struckEntity = target.Entity;
@@ -719,11 +703,33 @@ public partial class TerrainViewerApp
             return;
         }
         // ARC-COMBAT-012: a reach above 1 takes the original's ranged path, whose line of fire may strike something else first.
+        // ARC-COMBAT-2168 (0x4B3170, SC16): the record's first step turns an occupied bed into its occupant, and only then does the ranged path trace the line (RA4), so the sleeper is out of the bed before
+        // a blocker is looked for. The trace still ends at the bed's tile (0x4B2210 set the record's location from the click), where the last step skips every object but walls and portals: the bed never blocks
+        // or covers. A blocker strikes in place of the occupant, who keeps the -30 of being pulled out.
+        var occupantGoal = BedOccupantGoal(goal);
         var trace = RangedPath(owner.QueryHeroAttack()) ? LoggedLineOfFire(session, goal.Row) : null;
-        if (trace?.Blocker is { } blocker && blocker.Key != goal.Row.Key) { StrikeBlocker(goal, blocker, session); return; }
+        if (trace?.Blocker is { } blocker && blocker.Key != goal.Row.Key) { StrikeBlocker(goal, blocker, session, occupantGoal is not null); return; }
+        if (occupantGoal is not null) { HitCritter(goal, occupantGoal, (int)distance, ShotLine(trace, goal.Row), inBed: true); return; }
         if (goal.Object is { } struck) { RunObjectAttackHit(goal, struck, (int)distance); return; }
         if (goal.Wall) { StrikeWall(goal, goal.Row, (int)distance, false); return; }
         HitCritter(goal, goal, (int)distance, ShotLine(trace, goal.Row));
+    }
+
+    /// <summary>
+    /// ARC-COMBAT-1942 (0x4B3170, SC16): the hero's blow on the scenery <paramref name="goal"/> targets, when it is a bed with an occupant: the occupant leaves the bed through the unseat 0x45F3A0 and is returned as the target of the
+    /// blow, whose check carries -30 (TargetWasInBed). The goal keeps the bed, so the next blow strikes the empty bed. Null for any other target, and for an occupant the combat host has no values for, who stays pulled out
+    /// while the bed takes the blow.
+    /// </summary>
+    private AttackGoal? BedOccupantGoal(AttackGoal goal)
+    {
+        if (goal.Object is not { Row.Type: 3 } bed || _aiHost?.HeroBlowOccupant(bed.Entity) is not { } occupant) return null;
+        if (_combatHost!.Target(_areaSession!, occupant) is { Dead: false, Build.Combat: { } combat } npc)
+        {
+            GD.Print($"ARC-COMBAT-1942 bed-blow bed={bed.Entity} occupant={occupant}");
+            return new AttackGoal(npc, combat, goal.Aim);
+        }
+        GD.Print($"ARC-COMBAT-1942 bed-blow bed={bed.Entity} occupant={occupant} has no combat values: the bed takes the blow");
+        return null;
     }
 
     /// <summary>ARC-COMBAT-012/015: the attack takes the original's ranged path (RA1: the throwing skill or a reach above 1).</summary>
@@ -800,7 +806,7 @@ public partial class TerrainViewerApp
     /// rolls), a door, window, container, scenery or trap through the object attack, and since ARC-COMBAT-015 a wall, which takes the
     /// shot and nothing else (ledger RH5); striking a companion or an NPC without combat values is not ready, and the goal ends without
     /// a hit. The goal's reach test (RH1) admits only a clear line, so a blocker shows up here only when the line changed after it.</summary>
-    private void StrikeBlocker(AttackGoal goal, AreaObjectRecord blocker, AreaGridSession session)
+    private void StrikeBlocker(AttackGoal goal, AreaObjectRecord blocker, AreaGridSession session, bool inBed = false)
     {
         var owner = _areaSession!;
         var cell = session.Chart.ToWorld(session.State.CommittedCell);
@@ -810,7 +816,7 @@ public partial class TerrainViewerApp
             GD.Print($"ARC-COMBAT-012 line-of-fire strikes npc={npc.Entity} instead of {goal.Entity}");
             _lineOfFireStruck = npc.Entity;
             // ARC-COMBAT-015: the shared check traces its own line, to the struck NPC (SC8).
-            HitCritter(goal, new AttackGoal(npc, combat, goal.Aim), distance, ShotLine(LoggedLineOfFire(session, blocker), blocker));
+            HitCritter(goal, new AttackGoal(npc, combat, goal.Aim), distance, ShotLine(LoggedLineOfFire(session, blocker), blocker), inBed);
             return;
         }
         if (ObjectTargets()?.Target(owner, blocker.Key, AreaTrapped) is { Refusal: null } struck
@@ -818,7 +824,7 @@ public partial class TerrainViewerApp
         {
             GD.Print($"ARC-COMBAT-012 line-of-fire strikes object={struck.Entity} instead of {goal.Entity}");
             _lineOfFireStruck = struck.Entity;
-            RunObjectAttackHit(goal, struck, distance, aimed: false);
+            RunObjectAttackHit(goal, struck, distance);
             return;
         }
         if (blocker.Type == 0) { StrikeWall(goal, blocker, distance, true); return; }
@@ -886,7 +892,12 @@ public partial class TerrainViewerApp
         // ARC-COMBAT-1930 (0x4B3170, PF1, PF5, VCG9): a shot that flies sends no event at the shot; the projectile's end alerts only what it strikes. A shot decided a hit raises it here for the aimed critter (the arrival's time is the
         // accepted deviation A), one decided a miss never strikes its aimed target and raises none (a stray it meets is alerted at the strike). An attack that does not fly raises it, hit or miss. The weapon's loudness rides on it (0x4B2810).
         if (result.Disposition != GameSessionDisposition.Rejected && result.Resolution?.Refusal == AttackRefusal.None
-            && (result.Shot is null || result.Resolution.Outcome is AttackOutcome.Hit or AttackOutcome.CriticalHit)) _aiHost?.HeroAttacked(struck.Entity, noise);
+            && (result.Shot is null || result.Resolution.Outcome is AttackOutcome.Hit or AttackOutcome.CriticalHit))
+        {
+            // ARC-COMBAT-2164 (EX15, 0x4B3170): an attack that does not fly and struck a line-of-fire blocker notifies the aimed critter in the Original setting, the blocker (accidental) in Steamwoven.
+            if (result.Shot is null && !ReferenceEquals(struck, goal)) _aiHost?.HeroBlockerAttacked(goal.Combat is null ? null : goal.Entity, struck.Entity, noise);
+            else _aiHost?.HeroAttacked(struck.Entity, noise);
+        }
         // A refused attack, or one the resolver refused, ends the goal: repeating it would refuse again.
         goal.Stop = result.Disposition == GameSessionDisposition.Rejected || result.Resolution?.Refusal is { } refusal && refusal != AttackRefusal.None;
         HeroSwingEffect(goal, result.Disposition, result.Resolution?.Refusal, weaponBefore);

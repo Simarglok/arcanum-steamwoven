@@ -1348,8 +1348,9 @@ throw is ARC-COMBAT-023's `ThrowHeroItem` ([hero attack runtime](../world/hero-a
   Native smoke: `ARC-UI-090 native-smoke gold-pile PASS` and `ARC-UI-091 native-smoke gold-drop PASS` (the Crash Site smoke's inventory part).
 - **Lift.** In the own window's original look, a held item released in the round view, or on the use icon when its use is a throw
   (`OIF_USE_IS_THROW`), is the map drop with flag 4: `AreaHeldThrow.Lift` refuses a no-drop item (the original's remove check: the
-  item stays and the window says why) and, NOT READY, an item with a
-  throw or remove-item script (worn: a wield-off script); anything else goes on the game cursor and the window closes. Steamwoven keeps
+  item stays and the window says why) and, NOT READY, an item with a throw script together with an insert-item script or a stack with a throw script;
+  anything else goes on the game cursor and the window closes (ARC-COMBAT-1955: the item's removal and throw scripts run at the throw through the shown map's script host, their lines go to the message window and their eye candy plays; a throw script that
+  keeps the item posts "its throw script kept it" and the item stays in the pack). Steamwoven keeps
   the item in the hero's pack or slot until the throw (the original removes it at the lift), so a put back only empties the cursor.
 - **Cursor.** While an item is on the game cursor, the cursor's image is the item's inventory art with its top-left corner 2 pixels
   up and left of the pointer and the cursor art over it on its own hot point (`AreaHeldCursor.Compose`, CU7; the original sets the
@@ -2369,7 +2370,12 @@ actions (131) give the slide numbers (up to 100), which the table `rules\slide.m
   installed game) and fades back in over the menu, whose own song stops for the show and plays again after it. A key or a mouse button's release ends a slide, Escape the show.
 - **End game:** the script action end game and play slides (132; Kerghan's dialog script 1105 and the movie scripts 2862, 2863 and 3061 run it) asks the viewer, which waits for the movies of the same run and any other
   show, then starts the show 50 ms later (a main-menu window open closes and retries 300 ms later): script 997 and the ending scripts it calls queue the slides by flags and quest states; no default slide; then the
-  game resets to the main menu as after a death (no load box).
+  game resets to the main menu as after a death (no load box). The smoke stage `slides` (ARC-RENDER-1879; start map, `--main-menu true`, ffmpeg for the movies, wall clock) walks the whole ending on
+  the installed data: after a new game the installed dying script of Kerghan (2863: movies 2 and 5, then 132) runs through the use-script host on a creature row standing for Kerghan on the shown map
+  (the dying run the kill makes, 0x45DA57); both movies play from the installed table through the real decoder (800 × 400) with the session clocks standing still and no slide beginning under them; then the
+  show starts and shows script 997's queue for the game's flags (46, 20, 33, 39 and 44 for a new game), each installed 800 × 600 picture fading in over about 2 s with the slides' music and its voice, a key
+  release ending it and a 2 s fade-out; then the start map loads again with a fresh session without a hero and the main menu fades in. Without ffmpeg the movies are passed over (said in the log) and
+  the rest runs. `ARC_AREA_SLIDES_CAPTURE=FOLDER` saves a frame of each movie, each slide and the reopened menu as PNG for a graphics report (never committed).
 
 ### Options window (ARC-UI-013)
 

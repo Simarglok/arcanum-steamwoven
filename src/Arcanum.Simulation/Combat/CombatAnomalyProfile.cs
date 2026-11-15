@@ -190,6 +190,14 @@ public sealed record CombatAnomalyProfile
     public bool PcThrowCostsNothing { get; init; }
 
     /// <summary>
+    /// EX15 (owner decision 2026-10-21; ARC-COMBAT-2164; original bug under the bug rule of PR #454): an attack that does not fly (melee, or a ranged weapon without missile art) whose line of fire a blocker stopped sends its attack
+    /// event (0x4A9650) to the aimed target, before the ranged branch replaces the struck object (0x4B3170 at 0x4B33E9), so the aimed target is alerted, deliberately, and the blocker that took the hit gets none.
+    /// Steamwoven notifies the blocker with the accidental bit (as a missile that meets something other than its target does, EX14) and not the aimed target. A shot that flies is not this switch's: its event comes at the strike.
+    /// Read by <see cref="Ai.HostilityRules.RangedBlockerNotice"/>.
+    /// </summary>
+    public bool RangedBlockerHitNotifiesAimedTarget { get; init; }
+
+    /// <summary>
     /// GR19 (ARC-DEV-078, owner's answer "GR19 A" of 2026-11-04): a load restarts a saved turn-based round: round 1 again, the order
     /// rebuilt from the critters around the hero, the saved actor's subturn with its saved action points (PS13, TL35; read by the
     /// session's <c>GameSessionOwner.ResumeLoadedCombatRound</c>). Steamwoven resumes the saved round exactly. Not a bug of the
@@ -234,6 +242,7 @@ public sealed record CombatAnomalyProfile
         RedirectTestsTargetIntelligence = true,
         PcThrowCostsNothing = true,
         RoundRebuiltOnLoad = true,
+        RangedBlockerHitNotifiesAimedTarget = true,
     };
 
     /// <summary>Both settings, default first.</summary>

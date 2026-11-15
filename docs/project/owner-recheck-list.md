@@ -8,7 +8,8 @@ The owner's working checklist of 2026-11-14, with the thread checks and the open
 Rules for this file:
 
 - One section per slice (task code, PR, date), newest last. Steps are short, in game terms, and say what the original is expected to do and on which map or spell.
-- Each step has a status: **open** (not compared yet), **same** (the owner saw the original do the same), or **differs** (with a link to the bug report or task that follows it).
+- Each step has a status: **open** (not compared yet), **same** (the owner saw the original do the same), **differs** (with a link to the bug report or task that follows it) or **cannot-test** (the owner cannot run the step; the note says why). A note may follow in `(...)` or `[...]`.
+- A step id is `ARC-TYPE-NNN#k`: the section's task code, `#` and the number in the `#` column. Numbers are never reused, so an id names one check for good. The exact format, the parser and its command are in [owner checks](../workflow/owner-checks.md); `python3 -B tools/docs_check.py` fails on a row with a bad id, a missing column or an unknown status.
 - Known differences that are already documented go under the section's own heading, so they are not re-reported as bugs.
 - When a step differs, the coordinator turns it into a task. The step stays here with its link until that task merges.
 - Repository text only: no screenshots, frames or other game content.
