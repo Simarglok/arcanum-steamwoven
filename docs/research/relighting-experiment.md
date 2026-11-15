@@ -186,7 +186,7 @@ If the owner says go, full coverage is these pieces, none large:
 2. **Light sources**: the map's stationary lights and the carried lights are done; object lights of the main map's scenery
    (ARC-RENDER-030), lit eye candy (ARC-MAGIC-1229) and animated lights would feed the same list, the radius cap (32 lights) and a
    culling by view need a decision.
-3. **HD frames**: the same shader runs on N× frames; the Sobel gain must scale with N; HD frames may carry their own normals later.
+3. **HD frames**: the same shader runs on N× frames; the Sobel gain must scale with N; HD frames may carry their own normals later. Update 2026-11-15 (owner decision, #2063): HD sprites of the world are not made, so world frames stay 1x under the HD option; the N× path is dormant, built (gain and bevel stride) and covered by the lab twin only.
 4. **Optional stored normals**: only if per-pixel derivation proves too noisy or too slow on the Deck; the lab generator is the batch
    tool, about 168 ms per megapixel in Debug.
 5. **Profile and settings**: FR-LIGHT-013 asks for a separate Remastered profile: a setting, not an environment variable.
