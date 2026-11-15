@@ -76,6 +76,7 @@ public partial class TerrainViewerApp
         _mainMenuShown = true;
         if (!QuickKeysActive) { _mainMenuStatus = "not opened: the first scene has no game session"; GD.Print("ARC-UI-011 main menu not opened: no game session"); return; }
         OpenMainMenu(MainMenuTexts(arguments));
+        Callable.From(SoakOpenWindow).CallDeferred();
     }
 
     /// <summary>The menu's texts, read once a run (the game's MainMenu.mes, or the project's with the reason).</summary>
