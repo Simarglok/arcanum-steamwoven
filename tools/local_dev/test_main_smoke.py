@@ -156,7 +156,9 @@ class QueueTests(unittest.TestCase):
             return 0
         with mock.patch.object(smoke, "execute", fake_execute), mock.patch.object(smoke, "plan", return_value=steps), \
                 mock.patch.object(smoke, "focus_guard_target", return_value=None), mock.patch.object(smoke.config, "load_config", return_value={}), \
-                mock.patch.object(smoke.os, "access", return_value=True), mock.patch.object(smoke.os, "chdir"), mock.patch("builtins.print"):
+                mock.patch.object(smoke.os, "access", return_value=True), mock.patch.object(smoke.os, "chdir"), mock.patch("builtins.print"), \
+                mock.patch.dict(os.environ, clear=False):
+            os.environ.pop(run_queue.TICKET_ENV, None)  # the root checks run this inside ./arcanum run
             args = argparse.Namespace(target="pr", low_priority=True, no_build=True, keep_settings=False, dry_run=False)
             smoke.run_smoke(args)
             args.low_priority = False
