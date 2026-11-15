@@ -32,7 +32,7 @@ public partial class TerrainViewerApp
     private Control? _bugReportFocus;
     private bool BugReportOpen => _bugReportPanel?.IsOpen == true;
     /// <summary>A modal report window is open: the bug report or (ARC-DEV-2190) the owner-checks overlay; the world is paused under both.</summary>
-    private bool ReportModalOpen => BugReportOpen || OwnerQaOpen;
+    private bool ReportModalOpen => BugReportOpen || OwnerQaOpen || QuitAsking;
 
     private static bool IsBugReportChord(InputEventKey key) =>
         key is { Pressed: true, Echo: false, CtrlPressed: true, AltPressed: false, MetaPressed: false, ShiftPressed: false }

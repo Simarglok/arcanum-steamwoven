@@ -139,6 +139,13 @@ copy the new app over the old one; on Windows delete the old `Arcanum Steamwoven
 the old build may stay). Settings and saves stay in the folder above. A newer build loads the saves of older builds (from the first packaged
 build on); an older build refuses a save made by a newer one.
 
+## 6a. Closing the game (Cmd+Q, Alt+F4)
+
+Closing the window, Cmd+Q on macOS or Alt+F4 first asks the original's question ("Quit the current game?", Yes or No; Y, N, Return and
+Escape answer too), so a stray key does not end a session. **Holding** Cmd+Q (about two seconds, as in a browser) quits at once without the
+question; the launcher screen's "Hold Cmd+Q (Alt+F4) to quit without the question" box turns that off (it is on by default). The game stands
+still while the question is up.
+
 ## 7. Debug mode
 
 The debug mode is a testing aid for the alpha, **not part of the game**. It is off unless you turn it on. While it is on,
