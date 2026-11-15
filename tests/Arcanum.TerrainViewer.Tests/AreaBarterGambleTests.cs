@@ -59,8 +59,8 @@ public sealed class AreaBarterGambleTests
 
     private static SessionSkill MerchantSkill(int points, int level) => new(Skill.Gambling, points, points, level, SkillTraining.None);
 
-    private static AreaBarter Barter(GameSessionOwner session, List<int> changes, SessionSkill? merchant, bool lines = true, int reaction = 50) =>
-        new(session, new AreaInventoryHost([]), Data(), new AreaBarterMerchant("merchant", "Smith", 100, false, false, Data().BuyList(1), false),
+    private static AreaBarter Barter(GameSessionOwner session, List<int> changes, SessionSkill? merchant, bool lines = true, int reaction = 50, bool follower = false) =>
+        new(session, new AreaInventoryHost([]), Data(), new AreaBarterMerchant("merchant", "Smith", 100, false, false, Data().BuyList(1), follower),
             () => reaction, change => { changes.Add(change); return true; }, (entity, _) => entity, () => merchant, lines ? Line : null);
 
     [TestMethod]
@@ -125,6 +125,59 @@ public sealed class AreaBarterGambleTests
                 CollectionAssert.AreEqual(Array.Empty<int>(), changes, "a neutral merchant's reaction does not move on a paid loss");
             }
             Assert.AreEqual(result.Bet.Check.NextGamblingRoll, session.QueryGamblingRoll(), "a new roll was thrown for the next bet");
+        }
+        Assert.IsTrue(won && lost, "both outcomes were seen");
+    }
+
+    // ARC-UI-1808 (0x578330, 0x579840, 0x579B60 → 0x461F80, 0x578EA0; ledger BT6, GB1, GB3): the follower window's price 0 lives in the hover quote alone, so the bet gate and a
+    // lost bet price a follower's item with the ordinary buy quote, and a won bet takes the item's worth from the follower's reaction as it does from a merchant's.
+    [TestMethod]
+    public void A_follower_window_prices_the_bet_at_the_real_buy_quote_while_its_wares_quote_nothing()
+    {
+        using var session = Session(5);
+        var barter = Barter(session, [], MerchantSkill(3, 0), follower: true);
+        barter.Open();
+        Assert.AreEqual(0, barter.View().Wares.Single().Quote.Price, "the follower window shows no price");
+        var check = barter.CheckGamble("axe");
+        Assert.AreEqual((true, 720, "line8 720"), (check.Allowed, check.Price, check.Text), "the same price as a merchant's");
+        using var poor = Session(5, gold: 700);
+        var short1 = Barter(poor, [], MerchantSkill(3, 0), follower: true).CheckGamble("axe");
+        Assert.AreEqual((GambleRefusal.TooPoor, "line4 720"), (short1.Gate.Refusal, short1.Text), "the coin test reads the real price");
+        using var untrained = Session(0);
+        Assert.AreEqual(GambleRefusal.TooValuable, Barter(untrained, [], MerchantSkill(3, 0), follower: true).CheckGamble("axe").Gate.Refusal, "so does the limit");
+    }
+
+    // The reaction change is checked at the window's delegate (the session's 0x4C0DE0 rules, with the charisma 20 exemption, are the reaction tests').
+    [TestMethod]
+    public void A_follower_bet_wins_for_nothing_and_asks_the_reaction_change_or_loses_and_the_hero_pays_the_real_price()
+    {
+        var (won, lost) = (false, false);
+        for (ulong seed = 0; seed < 600 && !(won && lost); seed++)
+        {
+            using var session = Session(5, seed: seed);
+            var changes = new List<int>();
+            var barter = Barter(session, changes, MerchantSkill(3, 0), follower: true);
+            barter.Open();
+            var roll = session.QueryGamblingRoll()!.Value;
+            if (roll is > 90 and < 96 || roll <= 90 && won || roll >= 96 && lost) continue;
+            var worth = barter.View().Wares.Single().Worth;
+            var result = barter.Gamble("axe");
+            Assert.IsTrue(result.Settled, result.Text);
+            if (roll <= 90)
+            {
+                won = true;
+                Assert.IsTrue(session.QueryPcInventory().Any(item => item.Entity == "axe"));
+                Assert.AreEqual((true, 0, 1000, 100, "line0"), (result.Won, result.Paid, session.QueryGold(), session.QueryNpcGold("merchant"), result.Text));
+                var expected = GamblingRules.WonReaction(worth, 1, ReactionRules.Category(50));
+                Assert.AreEqual((expected, expected < 0), (result.ReactionChange, true));
+                CollectionAssert.AreEqual(new[] { expected }, changes, "the follower's reaction pays the item's worth");
+            }
+            else
+            {
+                lost = true;
+                Assert.AreEqual((false, 720, 280, 820, "line1 720"), (result.Won, result.Paid, session.QueryGold(), session.QueryNpcGold("merchant"), result.Text), "a lost bet charges the real quote");
+                CollectionAssert.AreEqual(Array.Empty<int>(), changes);
+            }
         }
         Assert.IsTrue(won && lost, "both outcomes were seen");
     }

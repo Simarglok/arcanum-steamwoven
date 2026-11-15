@@ -133,18 +133,18 @@ public partial class TerrainViewerApp
             Require(counts["day-3-night"] <= counts["day-2-add"] && counts["night-3-night"] <= counts["night-2-add"], "the night-weighted mode changes no more pixels than add");
 
 
-            // ARC-RENDER-2060, ARC-RENDER-2076: the player's relit look is a part of HD graphics, at the night hour the loop above left. With HD graphics Off it is Legacy,
+            // ARC-RENDER-2060, ARC-RENDER-2076: the player's relit look is a part of HD, at the night hour the loop above left. With HD Off it is Legacy,
             // byte for byte; with it On the look is the night-weighted mode at the look's strength (the same pixels as the developer mode set to that), and Off again gives Legacy back.
             var settingReport = new Dictionary<string, object>();
             var wasProfile = _canvas.VisualProfile; var wasSource = _canvas.HdSource; var wasBudget = _canvas.HdBudget;
             try
             {
                 _canvas.SetVisualProfile(VisualProfile.Legacy, wasSource, wasBudget); SyncRelitLook(); PushAreaAmbient();
-                Require(!RelitLookWanted(VisualProfile.Legacy) && RelitLookWanted(VisualProfile.Hd) && !RelitLookWanted(null), "the relit look is wanted exactly with HD graphics");
-                Require(!AreaRelight.Look && !AreaRelight.Active, "HD graphics Off puts the look out of force");
+                Require(!RelitLookWanted(VisualProfile.Legacy) && RelitLookWanted(VisualProfile.Hd) && !RelitLookWanted(null), "the relit look is wanted exactly with HD");
+                Require(!AreaRelight.Look && !AreaRelight.Active, "HD Off puts the look out of force");
                 var nightLegacy = await Capture("setting-1-legacy");
                 _canvas.SetVisualProfile(VisualProfile.Hd, wasSource, wasBudget); SyncRelitLook(); PushAreaAmbient();
-                Require(AreaRelight.Look && AreaRelight.Current == AreaRelight.Mode.NightAdd, "HD graphics On is the night-weighted look");
+                Require(AreaRelight.Look && AreaRelight.Current == AreaRelight.Mode.NightAdd, "HD On is the night-weighted look");
                 var lookImage = await Capture("setting-2-on-hd");
                 var lookDiff = Differing(nightLegacy, lookImage, near);
                 Require(lookDiff > 0, "the relit look differs from Legacy near the hero's light at night");
@@ -155,9 +155,9 @@ public partial class TerrainViewerApp
                 var lookVsDeveloper = Differing(lookImage, developerImage);
                 Require(lookVsDeveloper == 0, $"the look is the night-weighted mode at the look's strength ({lookVsDeveloper} pixels differ)");
                 PushAreaAmbient();
-                Require(!AreaRelight.Look, "HD graphics Off puts the look out of force");
+                Require(!AreaRelight.Look, "HD Off puts the look out of force");
                 var settingOff = Differing(nightLegacy, await Capture("setting-4-off-again"));
-                Require(settingOff == 0, $"HD graphics Off again is byte-identical to Legacy ({settingOff} pixels differ)");
+                Require(settingOff == 0, $"HD Off again is byte-identical to Legacy ({settingOff} pixels differ)");
                 settingReport["Strength"] = AreaRelight.LookStrength; settingReport["NearDiffering"] = lookDiff; settingReport["Lights"] = AreaRelight.UploadedCount;
             }
             finally

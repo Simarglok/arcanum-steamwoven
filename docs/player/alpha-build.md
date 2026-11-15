@@ -116,9 +116,9 @@ On the first start the **launcher** screen opens before the main menu:
    with another executable the screen says so. Your game folder is only read.
 
 To open the launcher again, **hold Shift** while the game starts. **Reset settings** on the launcher forgets the stored
-folder and rules. The launcher also has the **HD graphics**, **HD interface** and **HD pack** lines for an HD pack you
-have built or copied yourself (they are not in the Options window); each choice is saved at once, and the pack source
-applies from the next start.
+folder and rules. The launcher also has the **HD** (Off/On: the HD interface art and fonts and the relit night lighting), **HD pack**
+and experimental **Generated interface** rows for an HD pack you have built or copied yourself (they are not in the
+Options window); each choice is saved at once, and the pack source applies from the next start.
 
 ## 5. Where your settings and saves live
 

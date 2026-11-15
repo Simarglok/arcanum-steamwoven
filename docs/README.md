@@ -21,6 +21,7 @@ Pages are grouped below by kind: project (status, plans, decisions), development
 - [Private local diagnostic launch and build retention](workflow/local-development.md); [which builds may be deleted](workflow/build-retention.md)
 - [Packaged builds: prerequisites, commands, daily build](workflow/packaging.md)
 - [Task workflow](workflow/tasks.md) and [task naming](workflow/task-naming.md)
+- [Smoke stability baseline](workflow/smoke-stability.md)
 - [Original executable check](research/original-executable-check.md): how original behaviour and bugs of the original game are classified, and the function oracle (emulating single functions of the executable)
 - [Original oracle and reconstruction removal (ARC-RES-051)](research/original-oracle-research.md): trial results, tools and plan for checking Steamwoven against the executable and removing the source reconstruction
 - [Prototype extraction (ARC-RES-085)](research/prototype-extraction.md): how the original builds its prototype files at its first start, and how Steamwoven builds them from the player's own executable on an installation the original never ran

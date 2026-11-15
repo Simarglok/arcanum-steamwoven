@@ -142,8 +142,8 @@ public partial class TerrainViewerApp
             _launcherPanel.ShowAtStartRequested += show => LauncherChange(launcher => launcher.SetShowAtStart(show));
             _launcherPanel.DebugModeRequested += on => LauncherChange(launcher => launcher.SetDebugMode(on));
             // ARC-UI-143: the HD lines, saved at once in the settings files.
-            _launcherPanel.HdGraphicsRequested += LauncherHdGraphics;
-            _launcherPanel.HdInterfaceRequested += LauncherHdInterface;
+            _launcherPanel.HdRequested += LauncherHd;
+            _launcherPanel.HdGeneratedRequested += LauncherHdGenerated;
             _launcherPanel.HdPackRequested += LauncherHdPack;
             _launcherPanel.InstallRequested += LauncherInstallRequested;
             _launcherPanel.InstallChosen += (installer, target) => _ = LauncherInstallAsync(installer, target);

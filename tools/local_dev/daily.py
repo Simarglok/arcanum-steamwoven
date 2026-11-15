@@ -5,9 +5,11 @@ BUILD.txt), unless --force. Otherwise it checks the commit out into a fresh deta
 the owner's checkout or working tree), and from there runs the commit's own commands: the root checks (CLAUDE.md §2: the
 solution's restore, build and tests through the launch queue, the dat probe and oracle self-tests), the complete map smoke
 run (`./arcanum smoke complete`), then `./arcanum package mac` and `win` of that same commit, each told the chain's result
-for its BUILD.txt. Owner decision 2026-10-29: any failure blocks the packages; a failed check or smoke stops the day
-before packaging and the report names each failed step with its run log and first error, so a fix thread can start; the
-package is built by the first day after the fix. The report and each step's whole output go to
+for its BUILD.txt. Owner decision 2026-10-29: any failure blocks the packages; a failed check or smoke ends the day
+with no package and the report names each failed step with its run log and first error, so a fix thread can start; the
+package is built by the first day after the fix. ARC-DEV-2224 (owner 2026-11-15): the smoke runs even when the root checks
+failed or timed out (a red or slow check hid a day of smoke); both results are reported, the timeout of a step with its
+cause (queue wait or run time), and either one still blocks the packages. The report and each step's whole output go to
 artifacts/packages/logs/daily/ in the main checkout;
 nothing else under artifacts/packages is written here (the packages' bug reports are never touched). The rule:
 docs/workflow/packaging.md#daily-package-build-arc-dev-062.
@@ -176,6 +178,30 @@ def failure_lines(lines: Sequence[str]) -> list[str]:
     return shown
 
 
+QUEUE_START = re.compile(r"^ARCANUM_QUEUE start ticket=(\d+) kind=\S+ waited=(\d+)s", re.MULTILINE)
+QUEUE_TIMEOUT = re.compile(r"^ARCANUM_QUEUE timeout ticket=(\d+) after (\S+) min", re.MULTILINE)
+OWN_TIMEOUT = re.compile(r"^daily: stopped after (\S+) minutes", re.MULTILINE)
+
+
+def timeout_reason(text: str) -> str:
+    """ARC-DEV-2224: which limit a step's timeout exit was, from its own log: the launch queue's `timeout ... after N min`
+    line with the `start ... waited=` line of the same ticket (the run time ran out after the queue wait was over; the
+    smoke chain's log holds many runs, so the last timeout and its own ticket are taken), or the daily's own limit of an
+    unqueued step. A timeout exit with no queue line says only that: the cause is not in the log."""
+    own = OWN_TIMEOUT.search(text)
+    if own:
+        return f"TIMEOUT: run time, the daily's own limit of {own.group(1)} minutes for this step"
+    limits = QUEUE_TIMEOUT.findall(text)
+    starts = {ticket: waited for ticket, waited in QUEUE_START.findall(text)}
+    if limits:
+        ticket, minutes = limits[-1]
+        waited = f" (it waited {starts[ticket]} s in the queue first)" if ticket in starts else ""
+        return f"TIMEOUT: run time, the queue's limit of {minutes} minutes for ticket {ticket} after it started{waited}"
+    if starts:
+        return "TIMEOUT: the queue run started (waited " + ", ".join(f"{w} s" for w in starts.values()) + "); its limit is not in the log"
+    return "TIMEOUT: cause unknown, the log has no queue start or timeout line (queue wait cannot be told from run time)"
+
+
 def check_steps(python: str) -> list[Step]:
     """The root checks (CLAUDE.md §2), run in the fresh checkout; dotnet through the launch queue."""
     return [
@@ -227,6 +253,8 @@ class Daily:
         code = self.runner(step.command, self.checkout, environment, log, step.minutes)
         text = log.read_text(encoding="utf-8", errors="replace") if log.is_file() else ""
         self.note(f"{step.name} {'PASS' if code == 0 else 'FAIL'} exit={code} log={log}")
+        if code == run_queue.TIMEOUT_EXIT:
+            self.note(f"  {timeout_reason(text)}")
         if code != 0 and step.name != "smoke":  # the smoke chain's failures are shown per smoke
             for line in failure_lines([line for line in text.splitlines() if not line.startswith("ARCANUM_QUEUE ")]):
                 self.note(f"  {line}")
@@ -303,11 +331,12 @@ def daily(*, root: Path, output: Path, fetch: bool, force: bool, keep_work: bool
         day.note(f"checkout {checkout}")
         codes = {step.name: day.run(step)[0] for step in check_steps(python)}
         failed = [name for name, value in codes.items() if value != 0]
-        if failed:
-            if any(value < smoke.STOPPED for value in codes.values() if value != 0):
-                day.note(f"{FAILED_COMMIT}{commit}")
-            day.note(f"RESULT FAIL root checks failed ({', '.join(failed)}): no smoke, no package")
+        if any(value >= smoke.STOPPED for value in codes.values()):
+            # A check that was stopped (a signal, not a red or slow check) says the day was cut short: no smoke is started.
+            day.note(f"RESULT FAIL root checks failed ({', '.join(failed)}): a check was stopped, so no smoke and no package")
             return code
+        # ARC-DEV-2224: red or timed-out root checks do not hide the smoke; it runs, both results are reported, and either
+        # one blocks the package.
         smoke_code, text = day.run(smoke_step())
         result = parse_smoke(text, smoke_code)
         day.note("smoke summary: passed " + (", ".join(result.passed) or "none") + "; failed " + (", ".join(result.failed) or "none")
@@ -322,9 +351,12 @@ def daily(*, root: Path, output: Path, fetch: bool, force: bool, keep_work: bool
                 day.note(f"failed smoke {name}:")
                 for detail in failure_lines(result.details.get(name, [])):
                     day.note(f"  {detail}")
-            if smoke_code < smoke.STOPPED and result.failed:  # not a stopped or cut-off chain
-                day.note(f"{FAILED_COMMIT}{commit}")
-            day.note(f"RESULT FAIL {failure}: no package (the packages stay at their last commit)")
+        if failed or (failure and smoke_code < smoke.STOPPED and result.failed):
+            day.note(f"{FAILED_COMMIT}{commit}")  # a failing commit (not a stopped or cut-off chain), once
+        if failed or failure:
+            parts = ([f"root checks failed ({', '.join(failed)})"] if failed else []) + ([failure] if failure else [])
+            outcome = " and ".join(parts) + ("" if failure else "; smoke passed")
+            day.note(f"RESULT FAIL {outcome}: no package (only green checks and a green smoke package; the packages stay at their last commit)")
             return code
         line = result.line()
         day.note(f"map-smoke {line}")

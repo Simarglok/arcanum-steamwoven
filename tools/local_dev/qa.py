@@ -8,7 +8,11 @@ at once with the local ``gh``: text only, never a screenshot, save or log; the i
 never creates a second one. ``./arcanum qa sync`` sends the ones that failed. The rule is docs/workflow/toolchain.md#owner-qa-page-arc-dev-2187.
 
 Nothing here writes the main checkout's tracked files, and nothing reads a report except the first line of the player's
-text in ``report.md``.
+text and the ``Check: ARC-TYPE-NNN#k`` line in the head of ``report.md``.
+
+ARC-DEV-2189 (slice 4 of the epic): when the owner opens a step, the page writes its id as one line into ``local/qa/active-check.txt``
+(git-ignored); Ctrl+B of the viewer reads it, shows it in the report window and writes ``Check: ARC-TYPE-NNN#k`` into the report, which
+the page reads back to preselect and list a step's reports. The file is removed when the page stops and when it starts.
 """
 from __future__ import annotations
 
@@ -23,8 +27,10 @@ from pathlib import Path
 import re
 import secrets
 import socketserver
+import signal
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import urllib.error
@@ -48,6 +54,8 @@ GH_TIMEOUT = 60
 START_WITHIN_SECONDS = 60
 TOKEN_HEADER = "X-QA-Token"
 PLAYER_TEXT_LIMIT = 120
+ACTIVE_FILE = "active-check.txt"     # the one line the viewer's Ctrl+B reads (BugReportCheck.cs); keep the name in step with it
+CHECK_PREFIX = "Check: "              # the report.md line of BugReportCheck.LinePrefix
 
 
 def main_checkout(root: Path = ROOT) -> Path:
@@ -87,6 +95,8 @@ class Store:
         self.results_path = self.directory / "results.jsonl"
         self.state_path = self.directory / "state.json"
         self.lock_path = self.directory / ".lock"
+        self.active_path = self.directory / ACTIVE_FILE
+        self._active_lock = threading.Lock()          # the server answers on several threads
 
     @contextmanager
     def locked(self):
@@ -154,6 +164,31 @@ class Store:
             handle.flush()
             os.fsync(handle.fileno())
 
+    def write_active(self, step_id: str) -> None:
+        """The step the owner has open, one line, replaced whole (the viewer may read it at any moment)."""
+        with self._active_lock:
+            self.directory.mkdir(parents=True, exist_ok=True)
+            handle, name = tempfile.mkstemp(prefix=".active-", suffix=".tmp", dir=self.directory)
+            try:
+                with os.fdopen(handle, "w", encoding="utf-8") as stream:
+                    stream.write(step_id + "\n")
+                os.replace(name, self.active_path)
+            except OSError:
+                try:
+                    os.unlink(name)
+                except OSError:
+                    pass
+                raise
+
+    def clear_active(self) -> None:
+        with self._active_lock:
+            try:
+                self.active_path.unlink()
+            except FileNotFoundError:
+                pass
+            except OSError as error:                  # a file that cannot be removed must not stop the page or its exit
+                print(f"qa: could not remove {self.active_path}: {error}", file=sys.stderr)
+
     def seen(self) -> set[str] | None:
         """The step ids of the last visit; None when there was none."""
         try:
@@ -173,26 +208,41 @@ class Store:
 # ---------------------------------------------------------------------------------------------------------------- reports
 
 
-def player_text(report_md: Path) -> str:
-    """The first line of the player's text in a report's ``report.md`` ('' when there is none); only its head is read."""
+def report_head(report_md: Path) -> tuple[str, str]:
+    """(the first line of the player's text, the step id of the ``Check:`` line) of a report's ``report.md``, '' for each that is
+    absent; only its head is read. The check line counts only before the first ``##`` heading, so the player's own text (quoted
+    with ``>``, below that heading) cannot set it."""
     try:
         with open(report_md, "rb") as handle:
             head = handle.read(8192).decode("utf-8", errors="replace")
     except OSError:
-        return ""
-    inside = False
+        return "", ""
+    text, check = "", ""
+    inside, headed = False, False
     for line in head.split("\n"):
         if line.startswith("## "):
+            headed = True
             if inside:
                 break
             inside = line.strip() == "## What the player wrote"
-        elif inside and line.startswith(">"):
-            return line[1:].strip()[:PLAYER_TEXT_LIMIT]
-    return ""
+        elif not headed and not check and line.startswith(CHECK_PREFIX):
+            candidate = line[len(CHECK_PREFIX):].strip()
+            check = candidate if owner_checks.STEP_ID.match(candidate) else ""
+        elif inside and not text and line.startswith(">"):
+            text = line[1:].strip()[:PLAYER_TEXT_LIMIT]
+            if check:
+                break
+    return text, check
+
+
+def player_text(report_md: Path) -> str:
+    """The first line of the player's text in a report's ``report.md`` ('' when there is none); only its head is read."""
+    return report_head(report_md)[0]
 
 
 def list_reports(directory: Path) -> list[dict]:
-    """The report folders (name, local time, epoch seconds, first line of the player's text), newest first."""
+    """The report folders (name, local time, epoch seconds, first line of the player's text, the step id its ``Check:`` line names
+    or None), newest first."""
     found = []
     try:
         entries = list(os.scandir(directory))
@@ -205,8 +255,9 @@ def list_reports(directory: Path) -> list[dict]:
             moment = datetime.datetime.strptime(entry.name[:19], "%Y-%m-%d_%H-%M-%S")
         except ValueError:
             continue
+        text, check = report_head(Path(entry.path) / "report.md")
         found.append({"name": entry.name, "epoch": int(moment.timestamp()), "time": moment.strftime("%Y-%m-%d %H:%M:%S"),
-                      "text": player_text(Path(entry.path) / "report.md")})
+                      "text": text, "check": check or None})
     found.sort(key=lambda item: (item["epoch"], item["name"]), reverse=True)
     return found
 
@@ -337,6 +388,20 @@ class QaApp:
             sections.append({"code": section.code, "title": section.title, "steps": steps})
         return {"sections": sections, "commit": commit, "ref": self.ref, "warning": warning, "badLines": bad,
                 "problems": [problem.format() for problem in parsed.problems], "reports": list_reports(self.reports_dir)}
+
+    # active check -----------------------------------------------------------------------------------------------------
+
+    def set_active(self, step_id: object) -> str | None:
+        """The owner opened a step: write it as the active check for Ctrl+B; None (or '') clears it. Returns the step id or None."""
+        if step_id is None or step_id == "":
+            self.store.clear_active()
+            return None
+        with self._guard:
+            known = any(step.id == step_id for step in self.parsed.steps) if isinstance(step_id, str) else False
+        if not known:
+            raise ValueError("step is not a step of the list")
+        self.store.write_active(step_id)
+        return step_id
 
     # results ----------------------------------------------------------------------------------------------------------
 
@@ -490,6 +555,11 @@ def make_handler(app: QaApp, token: str, port_of):
                     self._json(200, app.save(payload))
                 except ValueError as error:
                     self._json(400, {"error": str(error)})
+            elif parts.path == "/api/active":
+                try:
+                    self._json(200, {"active": app.set_active(payload.get("step"))})
+                except (ValueError, OSError) as error:
+                    self._json(400, {"error": str(error)})
             elif parts.path == "/api/reload":
                 try:
                     app.reload(True)
@@ -590,6 +660,8 @@ def run(args: argparse.Namespace) -> int:
     print(f"qa: started: {url}")
     if not args.check:
         app.mark_visit()          # a --check start must not use up the "new since the last visit" set
+        app.store.clear_active()  # no step is open on a fresh page: a check left by an earlier page must not tag a report
+        signal.signal(signal.SIGTERM, lambda *_: (_ for _ in ()).throw(KeyboardInterrupt()))   # a kill stops the page like Ctrl-C
     if args.check:
         server.shutdown()
         print("qa: check passed (the page answered through its socket)")
@@ -602,4 +674,5 @@ def run(args: argparse.Namespace) -> int:
             time.sleep(3600)
     except KeyboardInterrupt:
         server.shutdown()
+        app.store.clear_active()
         return 0
