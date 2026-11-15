@@ -210,10 +210,10 @@ public sealed class AreaTransitionCoordinator
         var created = GameSessionOwner.Create(new(clock, flags, new(new(runtimeMap), new(checked((int)actor.X), checked((int)actor.Y)), NeighborDirection.XPlus),
             Hero: hero?.Definition, Experience: hero?.Experience, AutoLevel: hero?.AutoLevel, Reputations: reputations, RandomSeed: randomSeed));
         // ARC-UI-1807: the first draw of the generator is the gambling roll, before anything else can draw.
-        if (throwGamblingRoll && created.Owner is { } thrower && thrower.EnsureGamblingRoll(thrower.Version).Disposition == GameSessionDisposition.Rejected)
+        if (throwGamblingRoll && created.Owner is { } thrower && thrower.EnsureGamblingRoll(thrower.Version) is { Disposition: GameSessionDisposition.Rejected } unthrown)
         {
             thrower.Dispose();
-            return new(null, GameSessionFailure.RandomExhausted, ClockFailure.None, GlobalFlagReason.None);
+            return new(null, unthrown.Failure, ClockFailure.None, GlobalFlagReason.None);
         }
         // ARC-WORLD-101: a pre-made hero keeps its prototype's player name (field 0x10E; the new character's is typed on its screen).
         if (created.Owner is { } named && hero is { Hero.BasicPrototype: not AreaStartingHero.GenericPrototype, Read.Hero.PlayerName: { Count: > 0 } name }

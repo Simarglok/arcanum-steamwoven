@@ -126,8 +126,9 @@ public sealed class AreaRandomSeedTests
                 Assert.IsTrue(AreaQuickSave.Save(saver, Outside, slot).Saved);
             }
             using var placeholder = Starter(99, throwRoll: true);
+            Assert.AreNotEqual(roll, placeholder.QueryGamblingRoll(), "the two sessions' own rolls differ, so the load's source is told apart");
             using var loaded = AreaQuickSave.Load(slot, placeholder, _ => null).Owner ?? throw new AssertFailedException("load");
-            Assert.AreEqual(roll, loaded.QueryGamblingRoll(), "a load replaces the stored roll with the save's and draws nothing");
+            Assert.AreEqual(roll, loaded.QueryGamblingRoll(), "a load replaces the stored roll with the save's");
         }
         finally { Directory.Delete(directory, recursive: true); }
     }
