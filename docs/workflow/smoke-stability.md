@@ -4,7 +4,8 @@ Owner request 2026-11-15: smoke tests on `main` break often. A read-only audit
 classified the cases; this page keeps its numbers as the **baseline** so the
 owner can compare the statistics about a week later (around 2026-11-22). The
 scope rules themselves stay in [smoke scope](tasks.md#smoke-scope) and the
-[smoke runner](toolchain.md#smoke-runner-arc-dev-061).
+[smoke runner](toolchain.md#smoke-runner-arc-dev-061). Mac crashes while
+the game is open are read in [Mac crashes during play](mac-crash-forensics.md).
 
 ## Baseline of 2026-11-15
 
