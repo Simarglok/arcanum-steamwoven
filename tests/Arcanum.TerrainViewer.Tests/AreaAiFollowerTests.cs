@@ -329,6 +329,37 @@ public sealed class AreaAiFollowerTests
         Assert.AreEqual((12, PersuasionTraining.None, false), (facts.LeaderCharisma, facts.LeaderPersuasion, facts.MindControlled), "the companion's charisma, not the hero's");
     }
 
+    // ARC-WORLD-2135 (0x4AD950, "another leader"): the dialog join of an NPC another NPC leads carries that leader's effective charisma; the check refuses it at the hero's charisma (8 here) or more and the join under
+    // the hero goes through below it. Without an NPC leader (none, or the hero) the host names none.
+    [TestMethod]
+    public void The_dialog_join_facts_of_a_follower_of_an_npc_carry_the_npc_leaders_charisma()
+    {
+        foreach (var (charisma, accepted) in new[] { (8, false), (7, true) })
+        {
+            var scene = Open(enemyAt: new(4, 20), companionCharisma: charisma);
+            var (session, host, enemy, companion) = (scene.Session, scene.Host, scene.Enemy, scene.Companion);
+            Assert.IsNull(host.OtherLeaderCharisma(enemy), "no leader");
+            Assert.IsNull(host.OtherLeaderCharisma(companion), "the hero leads the companion: no other leader");
+            Assert.AreEqual(GameSessionDisposition.Changed, session.ForceJoinLeader(session.Version, enemy, companion).Disposition);
+            Assert.AreEqual(charisma, host.OtherLeaderCharisma(enemy));
+            // The roster's facts (the dialog host's, AreaConversation.PartyPort) carry the value, and none when it names no other leader (the session then refuses facts of an NPC-led NPC that name none).
+            var npcFacts = new AreaCompanionFacts(1, 1, new(-1000, 2001, 2001, 30), 1, 0, 6);
+            Assert.AreEqual(charisma, AreaCompanionRoster.Facts(npcFacts, 0, 100, otherLeaderCharisma: host.OtherLeaderCharisma(enemy)).OtherLeaderCharisma);
+            Assert.IsNull(AreaCompanionRoster.Facts(npcFacts, 0, 100).OtherLeaderCharisma);
+            var rejected = session.JoinParty(session.Version, enemy, AreaCompanionRoster.Facts(npcFacts, 0, 100), false);
+            Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.InvalidConsentFacts), (rejected.Disposition, rejected.Failure), "facts naming no other leader for an NPC-led NPC");
+            var facts = Consent(100) with { OtherLeaderCharisma = host.OtherLeaderCharisma(enemy), NpcLevel = 1 };
+            var result = session.JoinParty(session.Version, enemy, facts with { Thresholds = new(-1000, 2001, 2001, 30) }, false);
+            if (accepted)
+            {
+                Assert.AreEqual(GameSessionDisposition.Changed, result.Disposition);
+                Assert.IsNull(host.OtherLeaderCharisma(enemy), "the hero leads it now");
+            }
+            else
+                Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.ConsentRefused, (FollowConsent?)FollowConsent.AlreadyInGroup), (result.Disposition, result.Failure, result.Consent));
+        }
+    }
+
     // ARC-WORLD-2127 (0x4AA8C0 → 0x4AD950): the host reads the NPC leader's side and the follower's AI row and the unforced unwait runs the follow check against the leader. Both critters are level 1, alignment 0:
     // with the level gate (AI field 8) 0 the follower's level reaches the leader's plus the gate and the check refuses it (nothing changes); with a gate of 5 it passes, twice, and the follower joins again, not forced.
     [TestMethod]

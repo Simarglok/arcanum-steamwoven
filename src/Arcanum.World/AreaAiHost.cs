@@ -4280,6 +4280,12 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     /// </summary>
     internal int? LeaderCharisma(string npc) => Leader(npc) is { } leader ? CharismaOf(leader) : null;
 
+    /// <summary>
+    /// ARC-WORLD-2135 (0x4AD950, step "another leader"): the effective charisma (0x4B0490) of the DIRECT leader (0x45DE00) of <paramref name="npc"/> when that leader is another critter than the hero, the value the follow check of a join under the hero compares with the
+    /// hero's charisma. Null for an NPC the hero leads or that has no leader (no other leader), and when the leading NPC's stats are not readable here (a leader of another map): the session then refuses the join's facts that name none (<see cref="GameSessionFailure.InvalidConsentFacts"/>).
+    /// </summary>
+    internal int? OtherLeaderCharisma(string npc) => Leader(npc) is { } leader && leader != Pc ? CharismaOf(leader) : null;
+
     // The effective charisma of a critter this host can read: the hero's, or an NPC's under its effects in its life state (any life status: the getters 0x4B0490 → 0x4B0740 test the object type and the stat only).
     private int? CharismaOf(string critter)
     {
