@@ -48,8 +48,8 @@ public static class BarCounterRules
     /// as −1, unlimited), −2 (nothing known) for an unidentified one.</summary>
     public static int Counter4(bool identified, int charges) => !identified ? -2 : charges < 0 ? -1 : charges;
 
-    /// <summary>The text 0x54AD00 writes into slot 3 or 4: −1 as one '-' per digit, any other negative value as one '?' per digit, otherwise
-    /// the value zero-padded to <paramref name="digits"/> places (C's <c>%0Nd</c>: a longer number is not cut). The other slots' number is <c>LifeBarRules.GaugeNumber</c> (also 0x54AD00).</summary>
+    /// <summary>The text the original's digit writer puts into slot 3 or 4 (ledger BC5): −1 as one '-' per digit, any other negative value as one '?' per digit, otherwise
+    /// the value zero-padded to <paramref name="digits"/> places (C's <c>%0Nd</c>: a longer number is not cut). The other slots' number is <c>LifeBarRules.GaugeNumber</c>.</summary>
     public static string Text(int value, int digits)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(digits);

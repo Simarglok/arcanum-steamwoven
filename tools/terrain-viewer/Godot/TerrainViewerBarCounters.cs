@@ -50,7 +50,7 @@ public partial class TerrainViewerApp
         _barCountersView.Visible = true;
     }
 
-    /// <summary>What 0x54B3C0 would write now (ledger BC1–BC5): counter 3 from the hero's wielded weapon, gold and ammunition, counter 4 from
+    /// <summary>What the original's counter refresh would write now (ledger BC1–BC5): counter 3 from the hero's wielded weapon, gold and ammunition, counter 4 from
     /// the mode-8 item's charges.</summary>
     private AreaBarCounterLook BarCountersLook(GameSessionOwner session, string? modeItem)
     {
