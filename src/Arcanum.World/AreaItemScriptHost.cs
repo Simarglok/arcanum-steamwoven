@@ -16,20 +16,24 @@ namespace Arcanum.World;
 /// male PC without a hero) and the diagnostic PC name; a line naming <c>@npcname@</c> is unsupported (whose name it is
 /// on an item run is not read), so the session refuses that transfer. Everything else the viewer does not model answers "no". It only reads.
 /// </summary>
-public sealed class AreaItemScriptHost : ISessionItemScriptHost
+public sealed class AreaItemScriptHost : ISessionItemScriptHost, ISessionItemWorldHost
 {
     private readonly GameSessionOwner _session;
     private readonly IReadOnlyCollection<AreaInventoryMap> _maps;
     private readonly ScriptContent? _content;
     private readonly Func<int, EffectRule?>? _effectRules;
+    private readonly Func<AreaUseScriptHost?>? _shown;
 
     /// <param name="content">The game's scripts; null when they could not be loaded, and then every script is missing and
     /// no line is printed. The host borrows it.</param>
     /// <param name="effectRules">ARC-DEV-366: the effect rule of a number (the hero's effect tables, <c>rules/effect.mes</c> and the module's
     /// <c>gameeffect.mes</c>), which an add-effect action of an item script names; null: no number has a rule, and the session refuses such a
     /// script, as before.</param>
-    public AreaItemScriptHost(GameSessionOwner session, IReadOnlyCollection<AreaInventoryMap> maps, ScriptContent? content, Func<int, EffectRule?>? effectRules = null)
+    /// <param name="shownScripts">ARC-SCRIPT-2335: the use-script host of the shown map (its rows, art files and container lock identities), which answers the world commands of an insert-item script (<see cref="ISessionItemWorldHost"/>); null,
+    /// or one that returns null: those commands cannot be answered and the session refuses such a move.</param>
+    public AreaItemScriptHost(GameSessionOwner session, IReadOnlyCollection<AreaInventoryMap> maps, ScriptContent? content, Func<int, EffectRule?>? effectRules = null, Func<AreaUseScriptHost?>? shownScripts = null)
     {
+        _shown = shownScripts;
         _session = session ?? throw new ArgumentNullException(nameof(session));
         _maps = maps ?? throw new ArgumentNullException(nameof(maps));
         _content = content;
@@ -55,6 +59,21 @@ public sealed class AreaItemScriptHost : ISessionItemScriptHost
             || element.Words[1] is < 0 or > uint.MaxValue) return null;
         return new((int)element.Words[2], (uint)element.Words[0], (uint)element.Words[1]);
     }
+
+    /// <summary>ARC-SCRIPT-2335 (IV2): the containers around the item's own tile, from the shown map's rows.</summary>
+    public IReadOnlyList<ScrObjectRef>? ContainersInVicinity(ScrObjectRef item) => _shown?.Invoke()?.ContainersNearItem(item);
+
+    /// <summary>ARC-SCRIPT-2335 (IV3): an object's name number from the shown map's rows (the hero reads 0, as in the use host).</summary>
+    public int? NameOf(ScrObjectRef obj) => _shown?.Invoke() is { } host && Known(host, obj) ? host.NameOf(obj) : null;
+
+    /// <summary>ARC-SCRIPT-2335 (IV3): whether the object is mind-controlled by its row's spell flags.</summary>
+    public bool? IsMindControlled(ScrObjectRef obj) => _shown?.Invoke() is { } host && Known(host, obj) ? host.IsMindControlled(obj) : null;
+
+    // The hero has no row (its name is not modelled and reads 0, as in the use host), any other object needs the row the use host reads.
+    private bool Known(AreaUseScriptHost host, ScrObjectRef obj) => host.IsPc(obj) || host.KnowsObject(obj);
+
+    /// <summary>ARC-SCRIPT-2335 (IV5): the use host's plan of a change art number.</summary>
+    public SessionObjectArtPlan? ArtPlan(ScrObjectRef obj, int number) => _shown?.Invoke()?.PlanObjectArt(obj, number);
 
     /// <summary>ARC-MAGIC-042: whether the host has the game's scripts (without them every script is missing).</summary>
     public bool HasContent => _content is not null;

@@ -251,6 +251,27 @@ public sealed class AreaHeartbeatSceneryLoopTests
         });
     }
 
+    // ARC-SCRIPT-2335 (ledger IV2, IV5): an insert-item script's vicinity is the scan around the item's own tile (a held item keeps the tile its map data gave it), not around its holder; an item without a row, or of
+    // another map, has no known tile (the session then refuses the move), and a change art number of an object the host holds no row for is refused (no plan), the hero's is an empty plan.
+    [TestMethod]
+    public void The_containers_around_an_item_are_the_near_containers_of_its_own_tile_and_a_made_item_has_none()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var item = AreaHeartbeatScriptTests.Row(9, 11, 0) with { WorldX = 12 };
+            var near = Container(2);
+            var far = Container(5, 60);
+            var host = Host(session, content, _ => false, item, near, far);
+            CollectionAssert.AreEqual(new[] { AreaUseScriptHost.EntityId(near) }, host.ContainersNearItem(new(1, AreaUseScriptHost.EntityId(item)))!.Select(o => o.Code).ToArray());
+            Assert.IsNull(host.ContainersNearItem(new(1, "made:3")), "a made item has no row and so no known tile");
+            Assert.IsNull(host.ContainersNearItem(new(2, AreaUseScriptHost.EntityId(item))), "another map");
+            Assert.IsNull(host.PlanObjectArt(new(1, "made:3"), 4), "no row, no plan");
+            Assert.IsNull(host.PlanObjectArt(host.Pc, 4)!.Art, "the hero's art is a critter class: a plan that changes nothing is still a plan");
+            Assert.IsNull(host.PlanObjectArt(new(1, AreaUseScriptHost.EntityId(far)), 4), "no art index in this host: the plan is refused");
+        });
+    }
+
     // ARC-SCRIPT-2248 (ledger OT1–OT5): toggle state (56), which only the heartbeat set held, is in the use set and so in the placed, dying and combat-point sets built on it.
     [TestMethod]
     public void Every_set_that_runs_a_script_on_an_object_admits_toggle_state()

@@ -115,6 +115,8 @@ public partial class TerrainViewerApp
         // ARC-DEV-366: an item script's add-effect action (the tech books' effects 168 to 175) takes its rule from the hero's effect tables; the
         // field is read at each use, so the tables the character start loads later still answer.
         host.EffectRules = number => _areaEffectRules?.Invoke(number);
+        // ARC-SCRIPT-2335: an insert-item script's container vicinity, name test and change art number read the shown map's use-script host.
+        host.ShownScripts = () => _readyArea is { } shownArea ? UseScriptHost(shownArea.Snapshot) : null;
         host.NpcWearer = (map, npc) => AreaEvents.NpcWieldScripts(map, npc);
         host.NpcWearerFacts = (map, npc) => AreaEvents.RestockWielder(map, npc)?.Wearer;
         _inventoryHost = host;

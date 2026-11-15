@@ -172,6 +172,10 @@ public sealed partial class GameSessionOwner
         // list in order, as they apply.
         private readonly NpcWearer? _npc;
         private readonly List<NpcEffectOp> _npcOps = [];
+        // ARC-SCRIPT-2335 (IV5): the map changes of the runs' change art number actions (the art ids and the closed frames of containers), planned by the host while the runs are made and written by the commit; the objects they
+        // name (one change of an object a move, a second is not modelled and refuses the move).
+        private readonly List<MapChangeEdit> _artEdits = [];
+        private readonly HashSet<string> _artEntities = new(StringComparer.Ordinal);
 
         internal ItemScriptRuns(GameSessionOwner owner, ISessionItemScriptHost host, int map, IReadOnlyDictionary<string, int> items, NpcWearer? npc = null)
         {
@@ -230,7 +234,7 @@ public sealed partial class GameSessionOwner
         internal IReadOnlyList<ScrEyeCandy> EyeCandies => _runs.Where(run => run.Run.Outcome != ScrOutcome.Refused).SelectMany(run => run.Run.Effects.EyeCandies).ToArray();
         /// <summary>Whether committing changes the session: a flag write, a script store cell that differs from the session's (ARC-DEV-152),
         /// a slot or an effect change, a deferred call to schedule or one to remove that is pending (ARC-MAGIC-041).</summary>
-        internal bool Changes => _writes.Count > 0 || _slots.Count > 0 || _steps.Count > 0 || _npcOps.Count > 0 || _owner.ScriptCallsChange(_calls) || _reads.StoreChanges;
+        internal bool Changes => _writes.Count > 0 || _slots.Count > 0 || _steps.Count > 0 || _npcOps.Count > 0 || _owner.EffectiveChanges(_artEdits).Length > 0 || _owner.ScriptCallsChange(_calls) || _reads.StoreChanges;
 
         internal ScrRunResult? Run(int point, string attachee, string triggerer, string? extra)
         {
@@ -256,6 +260,16 @@ public sealed partial class GameSessionOwner
             foreach (var write in slots)
                 if (write.Source != ScrSource.Object || write.Attachee is not { } item || item.Map != _map || !_items.ContainsKey(item.Code))
                     return GameSessionFailure.ItemScriptUnsupported;
+            // ARC-SCRIPT-2335 (IV5): a change art number is planned by the host (the art files, the container's lock identity); every other object state the admission keeps out.
+            foreach (var state in effects.ObjectStates)
+            {
+                if (state.Change != ScrObjectStateChange.ChangeArtNumber || _host is not ISessionItemWorldHost world || world.ArtPlan(state.Object, state.Value) is not { } plan) return GameSessionFailure.ItemScriptUnsupported;
+                // The plan is the request's own object, whatever the host plans (the commit writes unchecked keys otherwise).
+                if (plan.Map != new SessionMapId(state.Object.Map) || plan.Entity != state.Object.Code) return GameSessionFailure.ItemScriptUnsupported;
+                if (_owner.ArtEdits(plan) is not { } edits) return GameSessionFailure.ItemScriptUnsupported;
+                if (edits.Count > 0 && !_artEntities.Add(plan.Entity)) return GameSessionFailure.ItemScriptUnsupported;
+                _artEdits.AddRange(edits);
+            }
             var aptitude = HazardOf(run, _reads.RatioReads, Arcanum.Data.Scripts.ScrCatalogue.Action.MagickTechAdjustment) ? Aptitude() : (int?)null;
             // ARC-DEV-366: the same for get stat, which reads the hero's stat; the stats it read are asked again after the run's changes.
             var statReads = HazardOf(run, _reads.StatReads.Count, Arcanum.Data.Scripts.ScrCatalogue.Action.GetStat) ? _reads.StatReads.ToArray() : [];
@@ -433,6 +447,7 @@ public sealed partial class GameSessionOwner
             if (Failure == GameSessionFailure.None && _npc is { } npc && _npcOps.Count > 0)
                 Failure = _owner.ChangeNpcOps(_owner.Version, npc.Target, _npcOps, dryRun: true, revise: false).Failure;
             if (Failure == GameSessionFailure.None && _calls.Count > 0) Failure = _owner.CheckScriptCalls(_calls);
+            if (Failure == GameSessionFailure.None && _artEdits.Count > 0 && !_owner.ChangesFit(_owner.EffectiveChanges(_artEdits))) Failure = GameSessionFailure.BudgetExceeded;
         }
 
         /// <summary>Applies the prepared changes, without a revision: the flags, the script stores (ARC-DEV-152), the kept slots and the
@@ -453,6 +468,11 @@ public sealed partial class GameSessionOwner
             if (_npc is { } npc && _npcOps.Count > 0 && _owner.ChangeNpcOps(_owner.Version, npc.Target, _npcOps, dryRun: false, revise: false).Failure != GameSessionFailure.None)
                 throw new InvalidOperationException("ITEM_SCRIPT_NPC_EFFECTS_COMMIT");
             if (_calls.Count > 0) _owner.ApplyScriptCalls(_calls);
+            foreach (var change in _owner.EffectiveChanges(_artEdits))
+            {
+                if (change.Value is { } value) _owner._maps.Set(change.Map, change.Key, value);
+                else _owner._maps.Remove(change.Map, change.Key);
+            }
         }
     }
 
@@ -567,8 +587,45 @@ public sealed partial class GameSessionOwner
     /// from the host; the identified test is the host's, the power ratio the session's, and the items are being rewielded only
     /// in the runs of an NPC's rewield (ARC-MAGIC-1644).
     /// </summary>
-    private sealed class SessionFlagReads(GameSessionOwner session, ISessionItemScriptHost host, ItemScriptRuns runs) : IScrHost, IScrItemQueries, IScrStoreQueries, IScrStatQueries
+    private sealed class SessionFlagReads(GameSessionOwner session, ISessionItemScriptHost host, ItemScriptRuns runs) : IScrHost, IScrItemQueries, IScrStoreQueries, IScrStatQueries, IScrWorldQueries, IScrContainerQueries, IScrObjectQueries
     {
+        // ARC-SCRIPT-2335 (IV1–IV4): the world questions of the loop for, the container vicinity kinds and the name condition go to the host's world part. A host without it, an object or a centre it does not know makes the run unanswerable
+        // (UnknownObject: the session refuses the move). The set admits no scenery, critter, random, location, quest, held-item, wielded-item, reputation or object-type question, so none is asked.
+        // Implementing these interfaces also switches off the dispatcher's guard that a set's commands have a host answer: a later widening of the admission (random, within range, the guard conditions, get object type, the scenery
+        // and critter vicinity kinds) must answer here first (ItemWorldScriptTests pins what the stubs below assume).
+        private ISessionItemWorldHost? World => host as ISessionItemWorldHost;
+
+        public IReadOnlyList<ScrObjectRef> ContainersInVicinity(ScrObjectRef centre)
+        {
+            if (World?.ContainersInVicinity(centre) is { } list) return list;
+            UnknownObject = true;
+            return [];
+        }
+
+        public int NameOf(ScrObjectRef obj)
+        {
+            if (World?.NameOf(obj) is { } name) return name;
+            UnknownObject = true;
+            return 0;
+        }
+
+        public bool IsMindControlled(ScrObjectRef obj)
+        {
+            if (World?.IsMindControlled(obj) is { } controlled) return controlled;
+            UnknownObject = true;
+            return false;
+        }
+
+        public IReadOnlyList<ScrObjectRef> SceneryInVicinity(ScrObjectRef centre) => throw new InvalidOperationException("ITEM_SCRIPT_SCENERY_VICINITY_NOT_ADMITTED");
+        public IReadOnlyList<ScrObjectRef> CrittersInVicinity(ScrObjectRef centre) => throw new InvalidOperationException("ITEM_SCRIPT_CRITTER_VICINITY_NOT_ADMITTED");
+        public int Random(int low, int high) => throw new InvalidOperationException("ITEM_SCRIPT_RANDOM_NOT_ADMITTED");
+        public (long X, long Y)? Location(ScrObjectRef obj) => throw new InvalidOperationException("ITEM_SCRIPT_LOCATION_NOT_ADMITTED");
+        public int QuestState(ScrObjectRef obj, int quest) => throw new InvalidOperationException("ITEM_SCRIPT_QUEST_NOT_ADMITTED");
+        public bool HoldsItemNamed(ScrObjectRef obj, int name) => throw new InvalidOperationException("ITEM_SCRIPT_HOLDS_NOT_ADMITTED");
+        public int? WieldedItemName(ScrObjectRef obj, int location) => throw new InvalidOperationException("ITEM_SCRIPT_WIELDED_NOT_ADMITTED");
+        public bool HasReputation(ScrObjectRef obj, int reputation) => throw new InvalidOperationException("ITEM_SCRIPT_REPUTATION_NOT_ADMITTED");
+        public int? ObjectType(ScrObjectRef obj) => throw new InvalidOperationException("ITEM_SCRIPT_OBJECT_TYPE_NOT_ADMITTED");
+
         internal bool UnknownFlag { get; private set; }
         /// <summary>An item question about an object the session and the host do not know.</summary>
         internal bool UnknownObject { get; private set; }
