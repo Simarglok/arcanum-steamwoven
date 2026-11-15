@@ -221,6 +221,37 @@ public partial class TerrainViewerApp
             Fact("the show button brings his frame back with art 501", portraits.PanelForSelfTest is { Shown: true, ToggleArt: 501 } && portraits.EntitiesForSelfTest.Contains(follower),
                 portraits.PanelForSelfTest.ToString());
 
+            // ARC-UI-2284: the three buttons hang off the bottom strip, which is anchored to the window's bottom: in taller windows (factor 1 at 1920 x 1080, factor 2 at 1600 x 1200) the show/hide button
+            // ends on the strip's top edge with the bars drawn and on the window's bottom edge with them hidden. A panel that missed the art (made after the content was read, as after a save window's
+            // portraits) is given it at the next refresh, and the button then draws its art, not the dark fallback plate. ARC_AREA_FOLLOWER_PANEL_CAPTURE saves the window at each size (never committed).
+            {
+                var barsForSelfTest = _gameBarForSelfTest; var paletteWasOpen = PaletteOpen; var windowBefore = DisplayServer.WindowGetSize();
+                // The diagnostic palette hides the bars, and automated runs keep them off unless a smoke asks: this step shows the player's view.
+                if (paletteWasOpen) ToggleWorldSettings();
+                portraits.UnbindArtForSelfTest();
+                _panelArtBound = null; _portraitStamp = null; // the refresh is gated by the session's stamp: forget it so the panel is rebuilt
+                foreach (var size in new Vector2I[] { new(1920, 1080), new(1600, 1200) })
+                {
+                    await SetSmokeWindowSizeAsync(size);
+                    foreach (var barsOn in new[] { true, false })
+                    {
+                        _gameBarForSelfTest = barsOn;
+                        for (var frame = 0; frame < 10; frame++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                        var viewportSize = GetViewport().GetVisibleRect().Size;
+                        var stripTop = barsOn ? _gameBarPanel?.StripRectForSelfTest(AreaBarStrip.Bottom).Position.Y : viewportSize.Y;
+                        var toggleOnScreen = portraits.ButtonScreenRectForSelfTest("toggle");
+                        Fact($"{size.X}x{size.Y}, bars {(barsOn ? "drawn" : "hidden")}: the show/hide button ends on the {(barsOn ? "bottom strip's top" : "window's bottom")} edge",
+                            toggleOnScreen is { } onScreen && stripTop is { } edge && Math.Abs(onScreen.End.Y - edge) < 0.5f && (!barsOn || AreaGameBarPanel.BottomInset > 0), $"{toggleOnScreen} edge {stripTop}");
+                        if (barsOn) await Capture($"toggle-{size.X}x{size.Y}");
+                    }
+                    Fact($"{size.X}x{size.Y}: the show/hide button draws its art after the panel was given it again", portraits.ButtonArtForSelfTest("toggle") == true, portraits.ButtonArtForSelfTest("toggle")?.ToString() ?? "none");
+                }
+                _gameBarForSelfTest = barsForSelfTest;
+                DisplayServer.WindowSetSize(windowBefore);
+                if (paletteWasOpen && !PaletteOpen) ToggleWorldSettings();
+                for (var frame = 0; frame < 5; frame++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            }
+
             // 9. ARC-UI-1736 (FP7, FP8): the menu stands at the frame's right edge and top with the original's eight rows 18 pixels apart; Wait is normal for a follower in his mind.
             await ClickPortraitAsync(MouseButton.Right);
             {

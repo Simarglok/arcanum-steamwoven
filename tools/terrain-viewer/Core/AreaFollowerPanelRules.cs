@@ -35,6 +35,11 @@ public static class AreaFollowerPanelRules
     /// <summary>The show/hide button's rectangle for the layout: the bars-drawn one (<see cref="ToggleRect"/>) or the hidden-interface one.</summary>
     public static (int X, int Y, int Width, int Height) ToggleRectFor(bool barsDrawn) => barsDrawn ? ToggleRect : HiddenToggleRect;
 
+    /// <summary>ARC-UI-2284: the window y (in the original's pixels) of a button whose rectangle stands at <paramref name="rectY"/> on the 800 × 600 screen, for a window
+    /// <paramref name="screenHeightUnits"/> original pixels high. The three buttons hang off the screen's bottom edge (FP1: their table is the bars-drawn one 13 pixels above the bottom
+    /// strip, or the hidden-interface one at the very bottom), and the bottom strip is anchored to the window's bottom, so the y moves with the window's height; at 600 it is the table's own y.</summary>
+    public static float AnchoredY(int rectY, float screenHeightUnits) => screenHeightUnits - (AreaGameBarLayout.ScreenHeight - rectY);
+
     /// <summary>The scroll-up arrow's rectangle for the layout.</summary>
     public static (int X, int Y, int Width, int Height) UpRectFor(bool barsDrawn) => barsDrawn ? UpRect : HiddenUpRect;
 

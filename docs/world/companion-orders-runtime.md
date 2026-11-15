@@ -148,7 +148,7 @@ follower module; its Godot-free rules are `AreaFollowerPanelRules` (tools/terrai
   not charged or floated there either, as for the world press). The follower order's own target mode (18, walk and attack) is not one of the dispatcher's three modes (0x54EA80), so the portrait
   click is the ordinary one: a talk, which the dialog's opener turns into the mode's pop (the order is dropped), and nothing in combat mode without Alt.
 - **Tests**: `AreaFollowerPanelRulesTests`, `AreaFollowerMenuTextsTests`; the `companion-click` stage's facts (the hide and show buttons, the menu's rows and place, the margin release, the sheet and
-  the barter window, the rows' words and the skipped row, eight synthetic followers scrolled by their arrows, ARC-UI-1787: the portrait click with armed lockpicks and with a pending order). `ARC_AREA_FOLLOWER_PANEL_CAPTURE` saves readbacks of the stage to a caller's ignored path.
+  the barter window, the rows' words and the skipped row, eight synthetic followers scrolled by their arrows, ARC-UI-1787: the portrait click with armed lockpicks and with a pending order). `ARC_AREA_FOLLOWER_PANEL_CAPTURE` saves readbacks of the stage to a caller's ignored path. Issue #2284: the stage also checks the show/hide button's place at 1920 × 1080 and 1600 × 1200 (on the bottom strip's top edge, or the window's bottom without bars) and that a panel given no art gets it again (the art is drawn, not the fallback plate); `AreaFollowerPanelRulesTests` covers `AnchoredY`.
 
 ## Tests
 
