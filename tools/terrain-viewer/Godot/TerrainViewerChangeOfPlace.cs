@@ -81,7 +81,7 @@ public partial class TerrainViewerApp
         if (run.Status == ChangeOfPlaceRunStatus.AwaitingDestination) return;
         if (run.Status != ChangeOfPlaceRunStatus.Completed) { RefuseLanding($"{run.Status} {run.Failure} at {run.StoppedAt}"); return; }
         // The start map is the map shown: the session wrote the landing; the window loads around it (the viewer's stand-up, CD8).
-        BeginLandingLoad(grid, origin, next, target, host.Leaving, changeOfPlace: false);
+        BeginLandingLoad(grid, origin, next, target, host.Leaving, changeOfPlace: false, bodyless: host.Bodyless);
     }
 
     /// <summary>
@@ -161,11 +161,11 @@ public partial class TerrainViewerApp
     // The load of the start map around the landing. With changeOfPlace the session's change waits for it (the arrival resumes it,
     // ResumeMapChange); without, the change already ran on this map and the load stands the actor on the cell the window admits.
     private void BeginLandingLoad(AreaGridSession grid, TerrainViewerArguments origin, TerrainViewerArguments next, string target,
-        IReadOnlyList<(AreaCompanionTemplate Template, NeighborDirection Facing)>? companions, bool changeOfPlace)
+        IReadOnlyList<(AreaCompanionTemplate Template, NeighborDirection Facing)>? companions, bool changeOfPlace, IReadOnlyList<AreaBodylessFollower>? bodyless = null)
     {
         BeginTransitionLoad();
         _mapHandoff = new(_areaSession, CurrentAreaMap, target, grid.State.Facing, origin, grid.Chart.ToWorld(grid.State.CommittedCell), target,
-            Companions: companions, MoveList: null, ChangeOfPlace: changeOfPlace);
+            Companions: companions, MoveList: null, ChangeOfPlace: changeOfPlace, Bodyless: bodyless);
         _lastLoad = LoadTransferAsync(next);
     }
 
@@ -213,11 +213,15 @@ public partial class TerrainViewerApp
     {
         // ARC-WORLD-037: the companions that follow the PC arrive on the same cell in the same session step.
         var companions = handoff.Fallback || handoff.Companions is not { } leaving ? []
-            : leaving.SelectMany(c => AreaCompanionGroup.Arrive(c.Template, new(handoff.FromMap), here, cell, c.Facing)).ToArray();
+            : leaving.SelectMany(c => AreaCompanionGroup.Arrive(c.Template, new(handoff.FromMap), here, cell, c.Facing)).Concat(BodylessArrivals(handoff, here, cell)).ToArray();
         // ARC-DEV-073: the move list taken at the request (wait orders, FM6, the travellers' events) goes with the placement.
         return session.ApplyChanges(session.Version, new ActorPlacement(here, cell, handoff.ArrivalFacing), companions,
             handoff.Fallback || handoff.Companions is null ? null : handoff.MoveList);
     }
+
+    // ARC-WORLD-2161: the followers the shown group held no body for stand on the arrival by placement edits (the move list carries them whole).
+    private static IEnumerable<MapChangeEdit> BodylessArrivals(MapTransferHandoff handoff, SessionMapId here, CellCoord cell) =>
+        handoff.Fallback || handoff.Bodyless is not { } bodyless ? [] : bodyless.SelectMany(f => AreaCompanionGroup.Arrive(f, new(handoff.FromMap), here, cell, NeighborDirection.XPlus));
 
     /// <summary>The companions that leave this map in the session's move list, with their facing, their placement recorded first.</summary>
     private IReadOnlyList<(AreaCompanionTemplate Template, NeighborDirection Facing)> LeavingCompanions(SessionMoveList moveList)
@@ -244,7 +248,8 @@ public partial class TerrainViewerApp
         public ChangeOfPlaceArrival Arrive(ChangeOfPlaceRequest request, SessionMapId destination, SessionMoveList moveList)
         {
             // ARC-WORLD-037: the companions that follow the PC are moved to the arrival with it.
-            var companions = app.LeavingCompanions(moveList).SelectMany(c => AreaCompanionGroup.Arrive(c.Template, destination, destination, request.Destination, c.Facing));
+            var companions = app.LeavingCompanions(moveList).SelectMany(c => AreaCompanionGroup.Arrive(c.Template, destination, destination, request.Destination, c.Facing))
+                .Concat(app.BodylessFollowers(moveList).SelectMany(f => AreaCompanionGroup.Arrive(f, destination, destination, request.Destination, NeighborDirection.XPlus)));
             return new(request.Destination, grid.State.Facing, companions.ToArray());
         }
 
@@ -261,6 +266,7 @@ public partial class TerrainViewerApp
         : IChangeOfPlaceHost
     {
         public IReadOnlyList<(AreaCompanionTemplate Template, NeighborDirection Facing)>? Leaving { get; private set; }
+        public IReadOnlyList<AreaBodylessFollower>? Bodyless { get; private set; }
 
         public bool DestinationListed(int map) => map == startRuntime;
 
@@ -269,7 +275,7 @@ public partial class TerrainViewerApp
         public ChangeOfPlaceReadiness ReadyDestination(ChangeOfPlaceRequest request, SessionMapId destination, SessionMoveList moveList)
         {
             app.LeaveFollowersCombatMode(moveList);
-            app.BeginLandingLoad(grid, origin, next, target, app.LeavingCompanions(moveList), changeOfPlace: true);
+            app.BeginLandingLoad(grid, origin, next, target, app.LeavingCompanions(moveList), changeOfPlace: true, bodyless: app.BodylessFollowers(moveList));
             return ChangeOfPlaceReadiness.Pending;
         }
 
@@ -278,6 +284,7 @@ public partial class TerrainViewerApp
         public ChangeOfPlaceArrival Arrive(ChangeOfPlaceRequest request, SessionMapId destination, SessionMoveList moveList)
         {
             Leaving = app.LeavingCompanions(moveList);
+            Bodyless = app.BodylessFollowers(moveList);
             return new(request.Destination, grid.State.Facing, []);
         }
 
@@ -300,7 +307,7 @@ public partial class TerrainViewerApp
         public ChangeOfPlaceArrival Arrive(ChangeOfPlaceRequest request, SessionMapId destination, SessionMoveList moveList)
         {
             var companions = handoff.Companions is not { } leaving ? []
-                : leaving.SelectMany(c => AreaCompanionGroup.Arrive(c.Template, new(handoff.FromMap), here, cell, c.Facing)).ToArray();
+                : leaving.SelectMany(c => AreaCompanionGroup.Arrive(c.Template, new(handoff.FromMap), here, cell, c.Facing)).Concat(BodylessArrivals(handoff, here, cell)).ToArray();
             return new(cell, handoff.ArrivalFacing, companions);
         }
 
@@ -327,7 +334,7 @@ public partial class TerrainViewerApp
             if (app._areaCompanions is not { } group) return new(request.Destination, grid.State.Facing, []);
             var carry = group.Carry(destination, request.Destination, moveList);
             Carried = carry.Carried;
-            return new(request.Destination, grid.State.Facing, carry.Changes);
+            return new(request.Destination, grid.State.Facing, [.. carry.Changes, .. app.BodylessFollowers(moveList).SelectMany(f => AreaCompanionGroup.Arrive(f, group.Map, destination, request.Destination, NeighborDirection.XPlus))]);
         }
 
         // The open is the coordinator's map switch; the scene swap follows once the run returns (ProcessAreaTransition). No step fails, so
