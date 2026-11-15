@@ -83,7 +83,7 @@ public sealed class OrderLine
         return text;
     }
 
-    /// <summary>A typed character (0x566F00 type 4): Backspace removes the one before the caret; characters below 0x20 do nothing; others are
+    /// <summary>A typed character (the entry's character event): Backspace removes the one before the caret; characters below 0x20 do nothing; others are
     /// inserted or overwritten under the length rule. Characters above 0xFF are not in the original's one-byte text and are refused.
     /// Returns whether the text changed.</summary>
     public bool Type(char c)
@@ -107,7 +107,7 @@ public sealed class OrderLine
         return true;
     }
 
-    /// <summary>An edit key (0x566F00 type 5). Returns whether anything changed.</summary>
+    /// <summary>An edit key (the entry's key event). Returns whether anything changed.</summary>
     public bool Press(OrderLineKey key)
     {
         if (!IsOpen) return false;
