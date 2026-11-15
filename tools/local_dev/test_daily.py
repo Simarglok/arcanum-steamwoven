@@ -168,6 +168,15 @@ class DailyTests(unittest.TestCase):
         self.assertEqual(self.calls, [])
         self.assertFalse((self.output / "logs" / "daily").exists())
 
+    def test_the_owner_playing_skips_the_day_even_with_force_and_records_nothing(self) -> None:  # ARC-DEV-2272
+        with mock.patch.object(daily.run_queue, "playing_state", return_value={"since": 1.0, "until": None}):
+            self.assertEqual(self.run_daily(force=True), daily.PASS)
+            self.assertEqual(self.calls, [])
+            self.assertFalse((self.output / "logs" / "daily").exists())  # no report: a skip is not a result
+            self.assertEqual(self.run_daily(dry_run=True), daily.PASS)  # a dry run only lists the steps
+        self.assertEqual(self.run_daily(), daily.PASS)  # the mode over: the day runs
+        self.assertEqual(len(self.names()), 7)
+
     def test_one_platform_behind_a_package_made_by_hand_or_force_builds_again(self) -> None:
         self.write_build("macos", self.commit)
         self.write_build("windows", "0" * 40)
