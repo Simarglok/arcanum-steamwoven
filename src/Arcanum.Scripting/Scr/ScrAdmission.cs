@@ -492,9 +492,15 @@ public sealed class ScrAdmissionSet
 
     /// <summary>
     /// The portal vicinity set (ARC-SCRIPT-2041, ledger PV1–PV4): <see cref="S59"/> plus the focus kind every portal in the vicinity (19), which the host answers through <see cref="IScrPortalQueries"/> (the loop for of the four ground
-    /// rune tile scripts). The interpreter runs at most S60.
+    /// rune tile scripts). The interpreter runs at most <see cref="S61"/>.
     /// </summary>
     public static ScrAdmissionSet S60 { get; } = new("S60", S59.Conditions, S59.Actions, S59.ValueKinds, S59.FocusKinds.Append(ScrFocusKind.EveryPortalInVicinity), counterIndexWraps: true);
+
+    /// <summary>
+    /// The container vicinity set (ARC-SCRIPT-2322, ledger CV1–CV5): <see cref="S60"/> plus the focus kinds every container in the vicinity (17) and any container in the vicinity (18, one list with 17), which the host answers
+    /// through <see cref="IScrContainerQueries"/> (8 installed roots on 10 sites). The interpreter runs at most S61.
+    /// </summary>
+    public static ScrAdmissionSet S61 { get; } = new("S61", S60.Conditions, S60.Actions, S60.ValueKinds, S60.FocusKinds.Concat([ScrFocusKind.EveryContainerInVicinity, ScrFocusKind.AnyContainerInVicinity]), counterIndexWraps: true);
 
     /// <summary>
     /// The set the engine runs the slide scripts with (ARC-RENDER-1171, ledger SS2): true, equal, less or equal, local and global flag and PC quest state conditions; the control and arithmetic actions, call script

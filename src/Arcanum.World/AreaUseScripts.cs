@@ -138,7 +138,7 @@ public readonly record struct AreaPrintedLine(int Type, string Text);
 /// The PC's reputations are the session's (ARC-WORLD-044); no other object has one. Everything else the viewer does not model
 /// answers "no", as for the dialog and item hosts.
 /// </summary>
-public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrObjectQueries, IScrWorldQueries, IScrObjectStateQueries, IScrAreaQueries, IScrStoreQueries, IScrStatQueries, IScrSpellQueries, IScrStoryQueries, IScrVitalQueries, IScrItemQueries, IScrMagickTechQueries, IScrCritterQueries, IScrCritterStateQueries, IScrCritterFieldQueries, IScrStatAdjustQueries, IScrPortalQueries
+public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrObjectQueries, IScrWorldQueries, IScrObjectStateQueries, IScrContainerQueries, IScrAreaQueries, IScrStoreQueries, IScrStatQueries, IScrSpellQueries, IScrStoryQueries, IScrVitalQueries, IScrItemQueries, IScrMagickTechQueries, IScrCritterQueries, IScrCritterStateQueries, IScrCritterFieldQueries, IScrStatAdjustQueries, IScrPortalQueries
 {
     /// <summary>Map-change keys of an object's use slot.</summary>
     public const string LocalFlagsProperty = "use.lf", CountersProperty = "use.counters", ScriptProperty = "use.script";
@@ -202,7 +202,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
                 ScrCatalogue.Action.Random, ScrCatalogue.Action.LoopFor, ScrCatalogue.Action.LoopEnd, ScrCatalogue.Action.LoopBreak, ScrCatalogue.Action.CreateObject, ScrCatalogue.Action.GetStat,
                 ScrCatalogue.Action.UnfogTownMap, ScrCatalogue.Action.GiveSpellMastery, ScrCatalogue.Action.Attack, ScrCatalogue.Action.ToggleState, .. CritterFieldWriteActions, .. ItemUseVitalActions, .. EyeCandyActions, .. ScrAdmissionSet.StoryActions, ScrCatalogue.Action.Fade, ScrCatalogue.Action.EndGame, ScrCatalogue.Action.QueueNewspaper, ScrCatalogue.Action.FloatNewspaperHeadline, .. ScrAdmissionSet.NpcStateHostActions, .. ScrAdmissionSet.WorldObjectHostActions]),
         ScrAdmissionSet.S4.ValueKinds.Concat(ScrAdmissionSet.StoreValueKinds),
-        ScrAdmissionSet.S4.FocusKinds.Concat([ScrFocusKind.LocalObject, ScrFocusKind.CurrentLoopedObject, ScrFocusKind.EverySceneryInVicinity, ScrFocusKind.EveryPortalInVicinity]),
+        ScrAdmissionSet.S4.FocusKinds.Concat([ScrFocusKind.LocalObject, ScrFocusKind.CurrentLoopedObject, ScrFocusKind.EverySceneryInVicinity, ScrFocusKind.EveryPortalInVicinity, ScrFocusKind.EveryContainerInVicinity, ScrFocusKind.AnyContainerInVicinity]),
         counterIndexWraps: true);
 
     /// <summary>ARC-SCRIPT-1481 (VT1–VT6): what the food use script 30282 needs besides the use set's own: get hit points (107), get fatigue points (108), heal poison (128), heal hit points (75), heal fatigue (76), the magick-tech adjustment (91; the item's power
@@ -271,7 +271,8 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
             ScrCatalogue.Action.DistanceBetween, ScrCatalogue.Action.GetLocation, ScrCatalogue.Action.SetFaction, ScrCatalogue.Action.WalkTo, ScrCatalogue.Action.RunTo,
             ScrCatalogue.Action.HealFatigue, ScrCatalogue.Action.PerformAnimation, ScrCatalogue.Action.StealCoins, ScrCatalogue.Action.BecomeProne, ScrCatalogue.Action.GiveSpellMastery, ScrCatalogue.Action.Attack, ScrCatalogue.Action.MakeFollow, ScrCatalogue.Action.AssignObject, ScrCatalogue.Action.FloatLine, ScrCatalogue.Action.QueueNewspaper, ScrCatalogue.Action.FloatNewspaperHeadline, ScrCatalogue.Action.Teleport, ScrCatalogue.Action.FadeAndTeleport, .. CritterFieldWriteActions, .. ScrAdmissionSet.StoryActions, .. ScrAdmissionSet.NpcStateHostActions, .. ScrAdmissionSet.WorldObjectHostActions, .. CastActions, .. StopSpellActions, .. DamageActions, .. EyeCandyActions]),
         ScrAdmissionSet.S2.ValueKinds.Concat(ScrAdmissionSet.StoreValueKinds),
-        ScrAdmissionSet.S3.FocusKinds.Concat([ScrFocusKind.CurrentLoopedObject, ScrFocusKind.EveryoneInVicinity, ScrFocusKind.AnyoneInVicinity, ScrFocusKind.EverySceneryInVicinity, ScrFocusKind.LocalObject]));
+        ScrAdmissionSet.S3.FocusKinds.Concat([ScrFocusKind.CurrentLoopedObject, ScrFocusKind.EveryoneInVicinity, ScrFocusKind.AnyoneInVicinity, ScrFocusKind.EverySceneryInVicinity, ScrFocusKind.LocalObject,
+            ScrFocusKind.EveryContainerInVicinity, ScrFocusKind.AnyContainerInVicinity]));
 
     /// <summary>ARC-WORLD-114: whether a script switched the NPC <paramref name="entity"/> of map <paramref name="map"/> off
     /// (<see cref="OffProperty"/>).</summary>
@@ -396,8 +397,8 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     }
     private readonly Dictionary<string, AreaObjectRecord> _shown = new(StringComparer.Ordinal);
     // ARC-WORLD-081: the shown map's scenery in snapshot order, for the vicinity; ARC-SCRIPT-047: its NPCs likewise.
-    // ARC-SCRIPT-2041: its portals likewise (focus kind 19).
-    private readonly List<(string Entity, AreaObjectRecord Row)> _scenery = [], _npcs = [], _portals = [];
+    // ARC-SCRIPT-2041: its portals likewise (focus kind 19); ARC-SCRIPT-2322: its containers (focus kinds 17 and 18).
+    private readonly List<(string Entity, AreaObjectRecord Row)> _scenery = [], _npcs = [], _portals = [], _containers = [];
     private readonly AreaScriptWorld? _world;
     private readonly List<AreaScriptCreation> _created = [];
     private (string Entity, AreaObjectRecord Row)? _clicked;
@@ -431,6 +432,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
             _shown.TryAdd(EntityId(row), row);
             if (row.Type == SceneryType && row.WorldX is not null && row.WorldY is not null) _scenery.Add((EntityId(row), row));
             if (row.Type == PortalObjectType && row.WorldX is not null && row.WorldY is not null) _portals.Add((EntityId(row), row));
+            if (row.Type == ContainerObjectType && row.WorldX is not null && row.WorldY is not null) _containers.Add((EntityId(row), row));
             if (row.Type == NpcType && row.WorldX is not null && row.WorldY is not null && _shown[EntityId(row)] == row) _npcs.Add((EntityId(row), row));
         }
     }
@@ -470,6 +472,18 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     {
         if (centre.Map != _shownMap || Place(centre) is not { } at) return [];
         return _portals.Where(s => Math.Abs(s.Row.WorldX!.Value - at.X) <= ScrWorld.VicinityReach && Math.Abs(s.Row.WorldY!.Value - at.Y) <= ScrWorld.VicinityReach
+                && _world?.Gone(s.Row) != true)
+            .Select(s => new ScrObjectRef(_shownMap, s.Entity)).ToArray();
+    }
+
+    /// <summary>
+    /// ARC-SCRIPT-2322 (CV1–CV3): the shown map's containers within <see cref="ScrWorld.VicinityReach"/> tiles of the centre on both axes, not destroyed or switched off, in snapshot order (the portals' rule with the
+    /// container type). Empty for a centre of another map or without a place.
+    /// </summary>
+    public IReadOnlyList<ScrObjectRef> ContainersInVicinity(ScrObjectRef centre)
+    {
+        if (centre.Map != _shownMap || Place(centre) is not { } at) return [];
+        return _containers.Where(s => Math.Abs(s.Row.WorldX!.Value - at.X) <= ScrWorld.VicinityReach && Math.Abs(s.Row.WorldY!.Value - at.Y) <= ScrWorld.VicinityReach
                 && _world?.Gone(s.Row) != true)
             .Select(s => new ScrObjectRef(_shownMap, s.Entity)).ToArray();
     }
