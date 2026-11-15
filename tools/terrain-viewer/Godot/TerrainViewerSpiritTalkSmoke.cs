@@ -90,6 +90,17 @@ public partial class TerrainViewerApp
             for (var i = 0; i < 5; i++) AreaSmokeFrame();
             Require(!TryAreaTalk(speaker), "the talk click on the corpse without the flag does not talk");
 
+            // 1b. ARC-AI-1320 (GT122): goal 21 itself (a target that died during the approach reaches it) does not refuse the body: the hero stands within reach, node 5 asks the dialog and the body's point 9 runs with no window.
+            // The click table sends a corpse to the loot, so the goal is started directly.
+            var deadTalksBefore = _deadTalkStarts;
+            _voiceStart = null;
+            Require(ShownHeroRunsHost?.Talk(TalkTargetOf(speaker), run: true) == true, "the talk goal 21 started on the corpse");
+            for (var i = 0; i < 600 && _deadTalkStarts == deadTalksBefore; i++) AreaSmokeTalkFrame();
+            Require(_deadTalkStarts == deadTalksBefore + 1, $"the talk goal reached the body and ran its dialog point once ({_conversationNotice})");
+            Require(!ConversationOpen, "no dialog window opens for a dead NPC without the spoken-with flag");
+            for (var i = 0; i < 5; i++) AreaSmokeTalkFrame();
+            Require(ShownHeroRunsHost?.TalkRun is null, "the talk run ended at the body");
+
             // 2. The spirit: a script's free cast of spell 56 at the corpse with no caster (the cast the hero's own willpower and fatigue checks would refuse, RN5, does not apply to a run with no PC or NPC parent):
             // the run's BEGIN is an event of the session's queue, which the next frames fire.
             var attempt = caster!.CastByScript(null, 56, entity, free: true, unresistable: true);

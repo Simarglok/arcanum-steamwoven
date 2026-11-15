@@ -358,7 +358,7 @@ public partial class TerrainViewerApp
     // ARC-DEV-081: a companion carried here (listed by the one host after the map's own) is present only while the companion group holds it:
     // its template's cell is its home map's, so a speaker the group dropped must not stand at it on this map.
     // ARC-DEV-304 (B24, GT216): a dead speaker with the spoken-with-dead spell flag is present (the can-speak test 0x4AD800 answers 0 for it); the flag taken off, it is a corpse to loot again.
-    private bool SpeakerPresent(AreaSpeaker speaker) => (!SpeakerDead(speaker) || SpeakerSpokenWith(speaker)) && (_areaCompanions is { } group
+    private bool SpeakerPresent(AreaSpeaker speaker, bool includeDead = false) => (includeDead || !SpeakerDead(speaker) || SpeakerSpokenWith(speaker)) && (_areaCompanions is { } group
         ? group.Of(speaker) is not null || (!InCave && !group.Absent.Contains(speaker.Row.Key) && _conversationHost?.IsCarried(speaker) != true)
         : !InCave && _conversationHost?.IsCarried(speaker) != true);
 
