@@ -376,6 +376,8 @@ public sealed partial class GameSessionOwner
             runs.Prepare();
             if (runs.Failure != GameSessionFailure.None) return RejectItem(runs.Failure, verdict) with { InsertScript = insertRun, Scripts = runs.Runs };
         }
+        // ARC-MAGIC-2252: a dry run (QueryNamedItemTransfer) ends where the move would apply: every run is made and prepared, nothing is applied.
+        if (_transferDryRun) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, item, verdict, Version);
         if (into is { } target)
         {
             var units = _inventory.Ammo[item].Units;
