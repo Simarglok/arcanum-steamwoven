@@ -245,7 +245,14 @@ public sealed partial class GameSessionOwner
         if (!had && _inventory.NpcWorn.Count >= SessionInventoryState.MaxNpcWorn) return RejectItem(GameSessionFailure.BudgetExceeded);
         record[slot] = item;
         _inventory.NpcWorn[npc] = record;
-        var result = BarterSell(expected, npc, item, 1, unitPrice, newStackKind, npcInsert, null, identify, scripts);
+        InventoryMutationResult result;
+        try { result = BarterSell(expected, npc, item, 1, unitPrice, newStackKind, npcInsert, null, identify, scripts); }
+        catch
+        {
+            // A host callback that throws leaves the item with the hero: the record is as it was.
+            if (had) _inventory.NpcWorn[npc] = before!; else _inventory.NpcWorn.Remove(npc);
+            throw;
+        }
         // The item reached the NPC's list (a sale, or a payment that failed after the move): it stays on the slot; else the record is as it was.
         if (_inventory.NpcOf(item) != npc)
         {

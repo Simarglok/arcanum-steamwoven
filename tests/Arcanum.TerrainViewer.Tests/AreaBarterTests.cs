@@ -200,6 +200,14 @@ public sealed class AreaBarterTests
         using var dressed = Session();
         var filled = dressed.BarterSellWorn(dressed.Version, "merchant", "kit:1", EquipmentSlot.Armor, armor, 55, default, AreaInventoryHost.DiagnosticInsertCheck);
         Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.InvalidEquipment), (filled.Disposition, filled.Failure));
+        // The merchant that already wears map data items keeps them: the new record has the vest and the sword; a refused sale leaves the record as it was.
+        var tooDear = dressed.BarterSellWorn(dressed.Version, "merchant", "kit:1", EquipmentSlot.Weapon, Sword, 500, default, AreaInventoryHost.DiagnosticInsertCheck);
+        Assert.AreEqual(GameSessionFailure.GoldShort, tooDear.Failure, "500 coins more than the merchant has");
+        Assert.IsNull(dressed.QueryNpcWorn("merchant"), "no record made by the refused sale");
+        var added = dressed.BarterSellWorn(dressed.Version, "merchant", "kit:1", EquipmentSlot.Weapon, Sword, 55, default, AreaInventoryHost.DiagnosticInsertCheck);
+        Assert.AreEqual(GameSessionDisposition.Changed, added.Disposition, added.Failure.ToString());
+        CollectionAssert.AreEqual(new[] { (EquipmentSlot.Weapon, "kit:1"), (EquipmentSlot.Armor, "vest") },
+            dressed.QueryNpcWorn("merchant")!.Worn.Select(worn => (worn.Slot, worn.Item)).ToArray());
         var scripted = session.BarterSellWorn(session.Version, "merchant", "kit:1", EquipmentSlot.Weapon, Sword with { ScriptPoints = [SessionScriptPoint.WieldOn] }, 55, default, AreaInventoryHost.DiagnosticInsertCheck);
         Assert.AreEqual(GameSessionFailure.ItemScriptUnsupported, scripted.Failure, "NOT READY: the wield scripts of the merchant's wear");
         var spelled = session.BarterSellWorn(session.Version, "merchant", "kit:1", EquipmentSlot.Weapon, Sword with { HasItemSpells = true }, 55, default, AreaInventoryHost.DiagnosticInsertCheck);
