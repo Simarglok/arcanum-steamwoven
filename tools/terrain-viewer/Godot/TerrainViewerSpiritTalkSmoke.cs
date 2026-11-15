@@ -98,6 +98,7 @@ public partial class TerrainViewerApp
             for (var i = 0; i < 600 && _deadTalkStarts == deadTalksBefore; i++) AreaSmokeTalkFrame();
             Require(_deadTalkStarts == deadTalksBefore + 1, $"the talk goal reached the body and ran its dialog point once ({_conversationNotice})");
             Require(!ConversationOpen, "no dialog window opens for a dead NPC without the spoken-with flag");
+            Require(_deadTalkStatus is AreaConversationStartStatus.GenericGreeting or AreaConversationStartStatus.DialogRefused, $"the body's dialog point ran with no conversation: {_deadTalkStatus}");
             for (var i = 0; i < 5; i++) AreaSmokeTalkFrame();
             Require(ShownHeroRunsHost?.TalkRun is null, "the talk run ended at the body");
 

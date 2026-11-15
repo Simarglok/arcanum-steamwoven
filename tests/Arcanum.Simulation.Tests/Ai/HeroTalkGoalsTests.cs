@@ -118,7 +118,8 @@ public sealed class HeroTalkGoalsTests
         Assert.IsTrue(step.Run.Frames.Any(f => f.Goal == GoalType.MoveNear && f.Range == AiExecutorRules.HeroTalkApproachRange && f.Target == Npc));
     }
 
-    // ARC-AI-1320 (GT122): goal 21 does not refuse a dead target; the world keeps reporting the body (Dead only records that it died), so a target that dies during the approach stays the goal's target.
+    // ARC-AI-1320 (GT122): goal 21 itself holds no death test (node 1 refuses only what ObjectTarget reports as Refused or gone). These tests pin that contract of the executor: a world that keeps reporting the body (Dead only records
+    // that it died) sees the walk go on and the dialog asked. The viewer port that stopped reporting a dead speaker is covered by the spirit-talk smoke (step 1b).
     [TestMethod]
     public void ATargetThatDiesDuringTheApproachStaysTheTargetAndTheDialogAsksAtTheBody()
     {

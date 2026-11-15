@@ -309,13 +309,14 @@ public partial class TerrainViewerApp
             start = new(AreaConversationStartStatus.EntryError, null, speaker, exception.GetType().Name);
         }
         if (start.Status == AreaConversationStartStatus.GenericGreeting && _floaters is { } layer && layer.Bubbles.Remove(AreaConversationState.EntityId(speaker.Row))) layer.Redraw();
-        _deadTalkStarts++;
+        _deadTalkStarts++; _deadTalkStatus = start.Status;
         GD.Print($"ARC-AI-1320 dead target talk status={start.Status} detail={start.Detail} script={speaker.ScriptId}");
         RefreshReadyStatus();
     }
 
     /// <summary>ARC-AI-1320: how many talk goals ended at a dead NPC's script (the smoke counts it).</summary>
     private int _deadTalkStarts;
+    private AreaConversationStartStatus? _deadTalkStatus;
 
     /// <param name="replaceWindows">ARC-UI-1125: a talk the hero's goal 21 asked for (not a click, which the game view's guard keeps out of every window):
     /// an open window other than a dialog leaves first, as the original's dialog opener pops the top mode and pushes mode 3 (0x553320), after the
