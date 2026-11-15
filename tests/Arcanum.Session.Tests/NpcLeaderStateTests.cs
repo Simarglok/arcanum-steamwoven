@@ -265,8 +265,8 @@ public sealed class NpcLeaderStateTests
     }
 
     private static NpcLeaderUnwaitFacts Leader(int level = 5, int alignment = 0, int maxFollowers = 2, PersuasionTraining persuasion = PersuasionTraining.None, bool mind = false, bool mindAfter = false,
-        int followerAlignment = 0, int followerLevel = 1, FollowThresholds? thresholds = null) =>
-        new(persuasion, alignment, level, maxFollowers, thresholds ?? new(-1000, 2001, 2001, 30), followerAlignment, followerLevel, mind, mindAfter);
+        int followerAlignment = 0, int followerLevel = 1, FollowThresholds? thresholds = null, int charisma = 5) =>
+        new(persuasion, alignment, level, maxFollowers, thresholds ?? new(-1000, 2001, 2001, 30), followerAlignment, followerLevel, mind, mindAfter, charisma);
 
     private static GameSessionOwner WaitingUnder(string leader, params string[] others)
     {
@@ -332,6 +332,41 @@ public sealed class NpcLeaderStateTests
         // A Master persuader skips the middle steps (level here) but never the limits.
         Assert.AreEqual(FollowConsent.LowLevel, owner.UnwaitNpcLed(owner.Version, Imp, Leader(level: 1, followerLevel: 5, maxFollowers: 3, thresholds: new(-1000, 2001, 2001, 0))).Consent);
         Assert.AreEqual(GameSessionDisposition.Changed, owner.UnwaitNpcLed(owner.Version, Imp, Leader(level: 1, followerLevel: 5, maxFollowers: 3, persuasion: PersuasionTraining.Master, thresholds: new(-1000, 2001, 2001, 0))).Disposition);
+    }
+
+    // ARC-WORLD-2148 (0x415BA0 case 0x15): the dialog UW's own check 0x4AD950(NPC, hero, argument) runs first for a speaker an NPC leads, with the hero as the player and L as the other leader: L's charisma
+    // not below the hero's refuses it (already in a group) and nothing changes; then the reaction, alignment gap, level and the hero's follower limit are the hero's; Persuasion Master skips the middle steps.
+    [TestMethod]
+    public void The_dialog_outer_check_of_a_speaker_an_npc_leads_compares_the_leaders_charisma_with_the_heros()
+    {
+        using var owner = WaitingUnder(Mage);
+        var version = owner.Version;
+        var heroCharisma = owner.QueryHeroPartySide()?.Charisma ?? PartyStateTests.Facts().PcCharisma;
+        var refused = owner.UnwaitNpcLed(version, Summon, Leader(charisma: heroCharisma), PartyStateTests.Facts());
+        Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.ConsentRefused, FollowConsent.AlreadyInGroup), (refused.Disposition, refused.Failure, refused.Consent));
+        Assert.AreEqual(version, owner.Version, "a refused outer check changes nothing");
+        Assert.IsTrue(owner.QueryCompanion(Summon).WaitFlag);
+        Assert.AreEqual(Mage, owner.QueryLeader(Summon));
+        // A leader of lower charisma lets the outer check go on; then the leader's own check unwaits it as before.
+        var accepted = owner.UnwaitNpcLed(owner.Version, Summon, Leader(charisma: heroCharisma - 1), PartyStateTests.Facts());
+        Changed(accepted);
+        Assert.IsFalse(owner.QueryCompanion(Summon).WaitFlag);
+        Assert.AreEqual(Mage, owner.QueryLeader(Summon));
+    }
+
+    [TestMethod]
+    public void The_dialog_outer_check_reads_the_heros_side_after_the_leader_step()
+    {
+        // The hero-side thresholds refuse before the leader's own check would: reaction at or below the dislike value.
+        using var owner = WaitingUnder(Mage);
+        var version = owner.Version;
+        var dislike = PartyStateTests.Facts() with { Reaction = -20 };
+        var refused = owner.UnwaitNpcLed(version, Summon, Leader(charisma: 1), dislike);
+        Assert.AreEqual((GameSessionFailure.ConsentRefused, FollowConsent.Dislike), (refused.Failure, refused.Consent));
+        Assert.AreEqual(version, owner.Version);
+        // Facts that name the other leader's charisma (the dialog host does, ARC-WORLD-2135) are overridden by the leader's own facts: the named 100 would refuse (the hero's is 8), the leader's own 1 does not.
+        Changed(owner.UnwaitNpcLed(owner.Version, Summon, Leader(charisma: 1), PartyStateTests.Facts() with { OtherLeaderCharisma = 100 }));
+        Assert.IsFalse(owner.QueryCompanion(Summon).WaitFlag);
     }
 
     // The join's second check runs with the handle cleared: a mind-controlled follower accepted through the chain of the first check is refused there when nothing else lets it pass, and ends with no

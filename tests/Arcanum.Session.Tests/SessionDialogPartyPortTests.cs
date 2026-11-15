@@ -73,6 +73,31 @@ public sealed class SessionDialogPartyPortTests
         Assert.AreEqual(0L, owner.Version.Revision);
     }
 
+    // ARC-WORLD-2148 (0x415BA0 case 0x15): UW of a speaker an NPC leads runs the dialog's own check with the hero as the player first (the leader's charisma against the hero's), then the leader's check.
+    [TestMethod]
+    public void UnwaitOfASpeakerAnNpcLeadsRunsTheOuterCheckWithTheHeroFirst()
+    {
+        using var owner = Create();
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.ForceJoinLeader(owner.Version, "virgil", "oid:mage").Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.WaitParty(owner.Version, "virgil", new PartyWaitFacts(2, PersuasionTraining.None, 10, false)).Disposition);
+        NpcLeaderUnwaitFacts Leader(int charisma) => new(PersuasionTraining.None, 0, 5, 3, new(-1000, 2001, 2001, 30), 0, 1, false, false, charisma);
+        var heroCharisma = PartyStateTests.Facts().PcCharisma;
+        SessionDialogPartyPort PortWith(int charisma) => new(owner, Pc, npc => npc == Virgil ? "virgil" : null, npc => npc == Virgil ? PartyStateTests.Facts() : null,
+            npc => npc == Virgil ? Leader(charisma) : null);
+        var version = owner.Version;
+        var refused = PortWith(heroCharisma);
+        Assert.AreEqual(DialogJoinResult.Refused, refused.Execute(new UnwaitCommand(Virgil, Pc)));
+        Assert.AreEqual(FollowConsent.AlreadyInGroup, refused.LastRefusal);
+        Assert.AreEqual(version, owner.Version, "a refusal changes nothing");
+        Assert.IsTrue(owner.QueryCompanion("virgil").WaitFlag);
+        var accepted = PortWith(heroCharisma - 1);
+        Assert.AreEqual(DialogJoinResult.Accepted, accepted.Execute(new UnwaitCommand(Virgil, Pc)));
+        Assert.IsFalse(owner.QueryCompanion("virgil").WaitFlag);
+        Assert.AreEqual("oid:mage", owner.QueryLeader("virgil"));
+        // Without the dialog's facts of the speaker nothing is unwaited.
+        Assert.AreEqual(DialogJoinResult.Rejected, new SessionDialogPartyPort(owner, Pc, npc => npc == Virgil ? "virgil" : null, _ => null, _ => Leader(1)).Execute(new UnwaitCommand(Virgil, Pc)));
+    }
+
     private static SessionDialogPartyPort Port(GameSessionOwner owner, int maxFollowers) => new(owner, Pc,
         npc => npc == Virgil ? "virgil" : null,
         npc => npc == Virgil ? PartyStateTests.Facts(maxFollowers) : null);

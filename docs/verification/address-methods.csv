@@ -143,6 +143,7 @@ src/Arcanum.Session/GameSessionJunkPiles.cs,DissolveJunkPile,pending,
 src/Arcanum.Session/GameSessionKillLog.cs,RecordHeroInjuries,pending,
 src/Arcanum.Session/GameSessionKillLog.cs,RecordKillLog,pending,
 src/Arcanum.Session/GameSessionLeaders.cs,ForceJoinLeader,exempt,reference
+src/Arcanum.Session/GameSessionLeaders.cs,UnwaitNpcLed,exempt,host
 src/Arcanum.Session/GameSessionLocks.cs,WriteOpenableFlag,pending,
 src/Arcanum.Session/GameSessionLoyalty.cs,CheckFollowerAfterHit,exempt,host
 src/Arcanum.Session/GameSessionMissiles.cs,CreateMissile,pending,
@@ -501,6 +502,7 @@ src/Arcanum.World/AreaAiHost.cs,NoticeKill,exempt,host
 src/Arcanum.World/AreaAiHost.cs,ObserveLeaves,pending,
 src/Arcanum.World/AreaAiHost.cs,ObserveRound,pending,
 src/Arcanum.World/AreaAiHost.cs,OccupantInPlaceOf,exempt,reference
+src/Arcanum.World/AreaAiHost.cs,OtherLeaderCharisma,exempt,host
 src/Arcanum.World/AreaAiHost.cs,PcLeader,exempt,host
 src/Arcanum.World/AreaAiHost.cs,Perform,pending,
 src/Arcanum.World/AreaAiHost.cs,PerformAttack,pending,
@@ -554,6 +556,7 @@ src/Arcanum.World/AreaAiHostGround.cs,LooseItems,exempt,host
 src/Arcanum.World/AreaAiHostGround.cs,StartPickup,exempt,host
 src/Arcanum.World/AreaAiHostHealer.cs,HealerCast,exempt,host
 src/Arcanum.World/AreaAiHostHealer.cs,HealerService,exempt,host
+src/Arcanum.World/AreaAiHostLoyalty.cs,AlignmentOf,exempt,host
 src/Arcanum.World/AreaAiHostLoyalty.cs,LoyaltyCheck,exempt,host
 src/Arcanum.World/AreaAiHostLoyalty.cs,NpcLedConsent,exempt,host
 src/Arcanum.World/AreaAiHostLoyalty.cs,NpcLoyaltyStep,exempt,host
@@ -576,6 +579,7 @@ src/Arcanum.World/AreaCharacterSheetTexts.cs,SchemeNumbers,exempt,host
 src/Arcanum.World/AreaCombat.cs,NpcHolder,pending,
 src/Arcanum.World/AreaCombatRound.cs,Step,pending,
 src/Arcanum.World/AreaCompanionOrders.cs,Issue,pending,
+src/Arcanum.World/AreaCompanionRoster.cs,Facts,exempt,host
 src/Arcanum.World/AreaCompanions.cs,JumpTo,pending,
 src/Arcanum.World/AreaContainerLoot.cs,Close,pending,
 src/Arcanum.World/AreaConversation.cs,PickClassLine,exempt,host
