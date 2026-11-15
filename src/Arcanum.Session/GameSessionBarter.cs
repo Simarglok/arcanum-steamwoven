@@ -171,6 +171,32 @@ public sealed partial class GameSessionOwner
     }
 
     /// <summary>
+    /// ARC-UI-2215 (a lost bet, flags 0x11 of 0x579B60 → 0x578EA0, ledger GB3, GB6): the hero pays <c>count × unitPrice</c> to the NPC for a staked item
+    /// and the item stays where it is. The move block of 0x578EA0 is skipped under bit 0x10; the payment through 0x464830 (<see cref="GiveGoldToNpc"/>)
+    /// still runs. <see cref="BarterBuy"/>'s input checks apply, plus a stake the holder (the NPC, or the shown container) really lists
+    /// (<see cref="GameSessionFailure.ItemNotAvailable"/>) and, for an ammunition stack, units enough (<see cref="GameSessionFailure.AmmoShort"/>); no room test for the hero, no item scripts. A total of 0 pays nothing and still counts
+    /// as one change (the caller's roll, draws and fate stand in this revision); a payment's refusals leave everything as it was.
+    /// </summary>
+    private InventoryMutationResult PayForStakedItem(string npc, string item, int count, int unitPrice, SessionItemKind pileKind, SessionInsertCheck npcInsert, string? container)
+    {
+        if (!SessionValidation.Entity(npc) || npc.StartsWith(SessionMadeItem.Prefix, StringComparison.Ordinal) || !SessionValidation.Entity(item) ||
+            unitPrice < 0 || count < 1 || pileKind.Type != SessionItemType.Gold || !ValidContainer(container, npc)) return RejectItem(GameSessionFailure.InvalidItem);
+        if (!KnownNpc(npc)) return RejectItem(GameSessionFailure.UnknownHolder);
+        if (container is not null && !ShownContainer(container)) return RejectItem(GameSessionFailure.UnknownHolder);
+        var source = (container is null ? NpcStacks(npc) : ContainerStacks(container)).Select(pair => pair.Stack).Cast<SessionAmmoRecord?>().FirstOrDefault(pair => pair!.Value.Entity == item);
+        var stack = source is not null;
+        if (!stack && count != 1) return RejectItem(GameSessionFailure.InvalidItem);
+        if (source is { } units && units.Units < count) return RejectItem(GameSessionFailure.AmmoShort);
+        if (!stack && QueryHolderItems(container ?? npc)?.Any(listed => listed.Entity == item) != true) return RejectItem(GameSessionFailure.ItemNotAvailable);
+        var total = (long)unitPrice * count;
+        if (total > int.MaxValue) return RejectItem(GameSessionFailure.BudgetExceeded);
+        if (total > 0) return GiveGoldToNpc(Version, npc, (int)total, pileKind, npcInsert);
+        if (_revision == long.MaxValue) return RejectItem(GameSessionFailure.RevisionExhausted);
+        Revise();
+        return new(GameSessionDisposition.Changed, GameSessionFailure.None, null, null, Version);
+    }
+
+    /// <summary>
     /// The hero sells <paramref name="count"/> of its item to an NPC for <paramref name="unitPrice"/> each (the caller's quote, already
     /// limited to the NPC's coins, 0x575360): a whole item (count 1) through <see cref="GiveItemToNpc"/>, or units of an ammunition stack
     /// through <see cref="GiveAmmoToNpc"/> (a new NPC stack of <paramref name="newStackKind"/>); then the NPC pays <c>count × unitPrice</c>
