@@ -33,6 +33,8 @@ public partial class TerrainViewerApp
         }
         foreach (var follower in session.QueryParty().Followers.Select(f => f.Entity))
             if (session.QueryCompanion(follower).Standing != CompanionStanding.Free) ever.Entities.Add(follower);
+        // ARC-WORLD-2132: a map NPC that a companion of the hero leads is in the follower tree the change of place's move list walks (0x4D3760): it has a body of the group too, so it travels with the hero.
+        foreach (var follower in AreaLedMapNpcs.HeroTree(session)) ever.Entities.Add(follower);
         return ever.Entities.Where(entity => !own.Contains(entity) && SessionCreatedObject.KindOf(entity) != SessionCreatedKind.Critter && map.TryGetRow(entity, out var row) && row.Type == 16)
             .ToHashSet(StringComparer.Ordinal);
     }

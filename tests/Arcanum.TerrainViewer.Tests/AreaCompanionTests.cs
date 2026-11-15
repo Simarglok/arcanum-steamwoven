@@ -654,6 +654,71 @@ public sealed class AreaCompanionTests
         Assert.AreEqual(GameSessionFailure.None, AreaCompanionPlacement.SeedFromNpcPlace(session, template, new(2)), "another map: nothing seeded");
     }
 
+    // ARC-WORLD-2132 (GR14 tail of ARC-WORLD-2118; 0x4D3760 walks the whole follower tree): a map NPC that a companion of the hero leads is in the hero's follower tree, so the group holds a body for it,
+    // the move list names it and it arrives on the destination with a placement edit, as a map NPC the hero leads does.
+    [TestMethod]
+    public void A_map_npc_led_by_a_companion_travels_with_the_hero_through_its_placement_edit()
+    {
+        var f = Load();
+        var plan = AreaScenePlan.Create(f.Area);
+        var row = f.Speaker.Row with { Type = 16, Scope = AreaScope.Core };
+        var entity = AreaConversationState.EntityId(row);
+        const string Companion = "oid:companion-leader";
+        using var session = ConversationSessionFixture.Create();
+        Assert.AreEqual(0, AreaLedMapNpcs.HeroTree(session).Count);
+        Assert.AreEqual(GameSessionDisposition.Changed, session.ForceJoinParty(session.Version, Companion).Disposition);
+        CollectionAssert.AreEqual(new[] { Companion }, AreaLedMapNpcs.HeroTree(session).ToArray());
+        Assert.AreEqual(GameSessionDisposition.Changed, session.ForceJoinLeader(session.Version, entity, Companion).Disposition);
+        CollectionAssert.AreEqual(new[] { Companion, entity }, AreaLedMapNpcs.HeroTree(session).ToArray(), "the follower of the companion is in the tree, after its leader");
+        Assert.IsFalse(session.QueryCompanion(entity).LedByPc, "the hero does not lead it directly");
+
+        var facts = new Func<AreaSpeaker, AreaCompanionFacts?>(_ => AreaCompanionRoster.Virgil with { ScriptId = 0 });
+        var template = AreaCompanionTemplate.ForLedMapNpcs([row], f.Area.Visuals, AreaLedMapNpcs.HeroTree(session).ToHashSet(StringComparer.Ordinal), plan, AreaChart.Exterior, new(1), facts).Single();
+        Assert.AreEqual(entity, template.Entity);
+        var group = AreaCompanionGroup.Create([template], f.Steps, AreaChart.Exterior, session, new(1), SimulationTime.At(0));
+        Assert.AreEqual(1, group.Companions.Count, "the group holds a body for the led NPC");
+        Assert.AreNotEqual(CompanionStanding.Following, group.Companions[0].Standing, "it follows its own leader, not the hero");
+
+        // The viewer names it (it is a companion of the group) as a follower of the follower; the move list carries it before its leader.
+        var list = session.QueryTransferMoveList(new() { FollowersOf = leader => session.QueryFollowers(leader).Where(follower => group.Companions.Any(c => c.Entity == follower)).ToArray() });
+        CollectionAssert.AreEqual(new[] { entity, Companion }, list.Travelling.ToArray());
+        SessionMapId home = new(1), cave = new(2);
+        CellCoord At(int x) => new(checked((int)f.Speaker.WorldX + x), checked((int)f.Speaker.WorldY));
+        var arrive = AreaCompanionGroup.Arrive(template, home, cave, At(2), NeighborDirection.YPlus);
+        Assert.AreEqual(GameSessionDisposition.Changed, session.ApplyChanges(session.Version, new ActorPlacement(cave, At(2), NeighborDirection.XPlus), arrive, list).Disposition);
+        Assert.AreEqual(new AreaCompanionWhere(cave, (At(2), NeighborDirection.YPlus), null), AreaCompanionPlacement.Where(session, home, entity), "the led NPC stands on the destination");
+        Assert.AreEqual(Companion, session.QueryLeader(entity), "its leader is kept");
+        Assert.AreEqual(home.RuntimeMap, session.QueryTeleportMap(entity), "the move prepared it as any traveller (FM6)");
+    }
+
+    // ARC-WORLD-2132: the group drives a map NPC that a companion leads toward that leader's cell (the follow goal walks to any leader), not toward the hero, and holds one that waits under its leader.
+    [TestMethod]
+    public void A_map_npc_led_by_a_companion_follows_its_leader_in_the_group()
+    {
+        var f = Load();
+        var leaderTemplate = Templates(f).Single();
+        // A second body: the leader's own command and visual under a row of another key standing six cells east (a created critter's template, which the group drives like any other).
+        var key2 = f.Scenery with { ObjectIdSha256 = "second" };
+        var ledRow = f.Speaker.Row with { Key = key2, WorldX = f.Speaker.WorldX + 6 };
+        var command = leaderTemplate.Commands[0] with { Identity = key2 };
+        var ledTemplate = AreaCompanionTemplate.ForCreated(8, ledRow, _ => AreaCompanionRoster.Virgil with { ScriptId = 0 }, new(1), AreaChart.Exterior, command, leaderTemplate.Visuals.Values.Single())!;
+        var led = ledTemplate.Entity;
+        using var session = ConversationSessionFixture.Create();
+        Assert.AreEqual(GameSessionDisposition.Changed, session.ForceJoinParty(session.Version, leaderTemplate.Entity).Disposition);
+        var joined = session.ForceJoinLeader(session.Version, led, leaderTemplate.Entity);
+        Assert.AreEqual(GameSessionDisposition.Changed, joined.Disposition, joined.Failure.ToString());
+        var group = AreaCompanionGroup.Create([leaderTemplate, ledTemplate], f.Steps, AreaChart.Exterior, session, new(1), SimulationTime.At(0));
+        var follower = group.Companions.Single(c => c.Entity == led);
+        var leader = group.Companions.Single(c => c.Entity == leaderTemplate.Entity);
+        var pc = new AreaGridSession(f.Steps, SimulationTime.At(0), Step) { Occupancy = group.OccupancyForPc };
+        var frontier = SimulationTime.At(1, 4);
+        pc.Advance(frontier, []);
+        var apart = FollowDistanceRules.Distance(follower.Grid.State.CommittedCell, leader.Grid.State.CommittedCell);
+        group.Drive(session, pc.State, frontier);
+        Assert.IsTrue(apart > 2, $"the fixture rows stand apart ({apart})");
+        Assert.AreNotEqual(FollowAction.Hold, follower.LastUpdate.Action, "the led NPC goes after its NPC leader");
+    }
+
     [TestMethod]
     public void A_created_critters_template_moves_whole_with_the_pc_and_writes_no_away_map()
     {

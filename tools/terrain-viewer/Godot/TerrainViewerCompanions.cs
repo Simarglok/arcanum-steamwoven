@@ -181,7 +181,7 @@ public partial class TerrainViewerApp
     /// ARC-DEV-073 (MIG10): what the session's move list asks the viewer for. A follower that is unconscious (0x45D800: no fatigue left,
     /// not undead) is ordered to wait and stays behind, with its wait timer from the roster facts. ARC-WORLD-2118 (GR14): the followers of a follower
     /// travel too (the move list's walk 0x4D3760 reads each follower's array), those this viewer can move: a created critter (the session moves the whole object) and a critter the shown group
-    /// holds (it arrives with the group's placement edits). An NPC of the map that the AI host holds, led by a companion, has no body edit here and stays (NOT READY, party-runtime.md).
+    /// holds (it arrives with the group's placement edits). ARC-WORLD-2132: a map NPC a companion leads is a companion of the group too (LedMapNpcEntities takes the hero's whole follower tree), so it travels the same way.
     /// </summary>
     private SessionTransferFacts TransferFacts()
     {
@@ -256,7 +256,7 @@ public partial class TerrainViewerApp
         }
         foreach (var companion in group.Companions.Where(c => c.LastUpdate.Action == FollowAction.Jump && c.Grid.State.Time == frontier))
         {
-            GD.Print($"ARC-WORLD-016 companion script={companion.Speaker.ScriptId} jumped onto the PC cell {pc.State.CommittedCell}");
+            GD.Print($"ARC-WORLD-016 companion script={companion.Speaker.ScriptId} jumped onto its leader's cell (the PC stands on {pc.State.CommittedCell})");
             // ARC-DEV-328 (B25): the follow jump ends in the relocation 0x43E770, whose notification runs the landing tile's script for the NPC (ledger TG2, TG9).
             if (_mapTransfers is { } landed && jumpsBefore.GetValueOrDefault(companion) < companion.Jumps) entered.Add((companion, landed.Map.Chart.ToWorld(companion.Grid.State.CommittedCell)));
         }
