@@ -1875,6 +1875,9 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         yield return to;
     }
 
+    /// <summary>ARC-SCRIPT-1601: where an NPC of this host's map stands now (the cell its walker moved it to, else its own origin); null for an entity that is no NPC of this host.</summary>
+    public CellCoord? NpcCell(string entity) => _npcs.TryGetValue(entity, out var npc) ? Movers.CellOf(entity, npc.Origin) : null;
+
     public CellCoord? Tile(string id)
     {
         if (id == Pc) return _scene.HeroCell();
