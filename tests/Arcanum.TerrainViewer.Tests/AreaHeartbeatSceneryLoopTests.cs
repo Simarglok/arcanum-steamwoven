@@ -19,8 +19,8 @@ namespace Arcanum.TerrainViewer.Tests;
 [TestClass]
 public sealed class AreaHeartbeatSceneryLoopTests
 {
-    private const byte Attachee = 1, Number = 3, Looped = 10, LocalObject = 11, EveryScenery = 15;
-    private const int LoopScript = 830, AssignScript = 831, ReactionScript = 832, LoopFlag = 2360, AssignFlag = 2361;
+    private const byte Attachee = 1, Number = 3, Looped = 10, LocalObject = 11, EveryScenery = 15, EveryPortal = 19;
+    private const int LoopScript = 830, AssignScript = 831, ReactionScript = 832, ToggleScript = 835, PortalToggleScript = 836, MixedToggleScript = 837, LoopFlag = 2360, AssignFlag = 2361;
 
     private readonly record struct Clause(int Type, params (byte Kind, int Value)[] Operands);
     private static (byte, int) N(int value) => (Number, value);
@@ -72,6 +72,20 @@ public sealed class AreaHeartbeatSceneryLoopTests
             Write("scr/00832reaction.scr", Program(
                 Do(new(ScrCatalogue.Action.GetReaction, (Attachee, -1), (Attachee, -1), (4, 0))),
                 Do(new(ScrCatalogue.Action.ReturnRunDefault))));
+            // ARC-SCRIPT-2248: 835 toggles its attachee (a use click's object); 836 has the shape of the ground rune tile script 2221 at line 15 to 20: for every portal in the vicinity, toggle the looped portal.
+            Write("scr/00835toggle.scr", Program(Do(new(ScrCatalogue.Action.ToggleState, (Attachee, -1))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
+            Write("scr/00836portals.scr", Program(
+                Do(new(ScrCatalogue.Action.LoopFor, (EveryPortal, -1))),
+                Do(new(ScrCatalogue.Action.ToggleState, (Looped, -1))),
+                Do(new(ScrCatalogue.Action.LoopEnd)),
+                Do(new(ScrCatalogue.Action.ReturnRunDefault))));
+            // 837: toggle the attachee, then every portal around it: a run whose first toggle the host could apply and whose second it cannot.
+            Write("scr/00837mixed.scr", Program(
+                Do(new(ScrCatalogue.Action.ToggleState, (Attachee, -1))),
+                Do(new(ScrCatalogue.Action.LoopFor, (EveryPortal, -1))),
+                Do(new(ScrCatalogue.Action.ToggleState, (Looped, -1))),
+                Do(new(ScrCatalogue.Action.LoopEnd)),
+                Do(new(ScrCatalogue.Action.ReturnRunDefault))));
             using var content = ScriptContent.Open(ContentMountPlan.Discover(root.FullName, "Syn").Plan!).Content!;
             test(content);
         }
@@ -93,7 +107,7 @@ public sealed class AreaHeartbeatSceneryLoopTests
         Assert.IsTrue(set.FocusKinds.Contains(ScrFocusKind.EverySceneryInVicinity) && set.FocusKinds.Contains(ScrFocusKind.LocalObject));
         Assert.IsTrue(set.Actions.Contains(ScrCatalogue.Action.AssignObject) && set.Actions.Contains(ScrCatalogue.Action.FloatLine));
         Assert.IsFalse(set.Actions.Contains(ScrCatalogue.Action.GetReaction), "the host has no reaction answer");
-        Assert.IsTrue(set.IsSubsetOfBesidesStores(ScrAdmissionSet.S61));
+        Assert.IsTrue(set.IsSubsetOfBesidesStores(ScrAdmissionSet.S62));
         // The dying set is built on it and the placed set already held all three; the use click's set is unchanged.
         Assert.IsTrue(AreaUseScriptHost.DyingAdmission.FocusKinds.Contains(ScrFocusKind.EverySceneryInVicinity));
         Assert.IsFalse(AreaUseScriptHost.Admission.Actions.Contains(ScrCatalogue.Action.FloatLine));
@@ -168,7 +182,7 @@ public sealed class AreaHeartbeatSceneryLoopTests
         {
             Assert.IsTrue(set.FocusKinds.Contains(ScrFocusKind.EverySceneryInVicinity), set.Id);
             Assert.IsTrue(set.FocusKinds.Contains(ScrFocusKind.AnySceneryInVicinity), set.Id);
-            Assert.IsTrue(set.IsSubsetOfBesidesStores(ScrAdmissionSet.S61), set.Id);
+            Assert.IsTrue(set.IsSubsetOfBesidesStores(ScrAdmissionSet.S62), set.Id);
         }
     }
 
@@ -180,7 +194,7 @@ public sealed class AreaHeartbeatSceneryLoopTests
         {
             Assert.IsTrue(set.FocusKinds.Contains(ScrFocusKind.EveryPortalInVicinity), set.Id);
             Assert.IsFalse(set.FocusKinds.Contains(ScrFocusKind.AnyPortalInVicinity), set.Id);
-            Assert.IsTrue(set.IsSubsetOfBesidesStores(ScrAdmissionSet.S61), set.Id);
+            Assert.IsTrue(set.IsSubsetOfBesidesStores(ScrAdmissionSet.S62), set.Id);
         }
         Assert.IsFalse(AreaUseScriptHost.HeartbeatAdmission.FocusKinds.Contains(ScrFocusKind.EveryPortalInVicinity));
     }
@@ -201,6 +215,99 @@ public sealed class AreaHeartbeatSceneryLoopTests
             var around = host.PortalsInVicinity(new(1, AreaUseScriptHost.EntityId(npc)));
             CollectionAssert.AreEqual(new[] { AreaUseScriptHost.EntityId(near), AreaUseScriptHost.EntityId(nearToo) }, around.Select(o => o.Code).ToArray(), "snapshot order; no scenery, NPC, gone or far portal");
             Assert.AreEqual(0, host.PortalsInVicinity(new(2, AreaUseScriptHost.EntityId(npc))).Count, "an object of another map has no place here");
+        });
+    }
+
+    // ARC-SCRIPT-2248 (ledger OT1–OT5): toggle state (56), which only the heartbeat set held, is in the use set and so in the placed, dying and combat-point sets built on it.
+    [TestMethod]
+    public void Every_set_that_runs_a_script_on_an_object_admits_toggle_state()
+    {
+        foreach (var set in new[] { AreaUseScriptHost.Admission, AreaUseScriptHost.PlacedAdmission, AreaUseScriptHost.DyingAdmission, AreaUseScriptHost.CombatPointAdmission, AreaUseScriptHost.HeartbeatAdmission })
+            Assert.IsTrue(set.Actions.Contains(ScrCatalogue.Action.ToggleState), set.Id);
+        foreach (var set in new[] { AreaUseScriptHost.Admission, AreaUseScriptHost.PlacedAdmission, AreaUseScriptHost.CombatPointAdmission })
+            Assert.IsTrue(set.IsSubsetOfBesidesStores(ScrAdmissionSet.S62), set.Id);
+        Assert.IsFalse(AreaUseScriptHost.Admission.Actions.Contains(ScrCatalogue.Action.Kill), "kill stays with the heartbeat and dying sets");
+        Assert.IsTrue(ScrAdmission.Admit(ProgramOf(ToggleScript), AreaUseScriptHost.Admission).IsAdmitted);
+        Assert.IsTrue(ScrAdmission.Admit(ProgramOf(PortalToggleScript), AreaUseScriptHost.PlacedAdmission).IsAdmitted);
+    }
+
+    private static ScrProgram ProgramOf(int number)
+    {
+        ScrProgram? read = null;
+        WithContent(content => read = content.Script(number).Program);
+        return read!;
+    }
+
+    // The use click's script toggles its object: an NPC of the shown map switches off, a second run switches it back on (the heartbeat host's answer, shared).
+    [TestMethod]
+    public void A_use_script_toggles_an_NPC_of_the_shown_map_off_and_back_on()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var npc = AreaHeartbeatScriptTests.Row(1, 16, ToggleScript, point: ScrPoint.Use);
+            var host = Host(session, content, _ => false, npc);
+            var entity = AreaUseScriptHost.EntityId(npc);
+            Assert.IsFalse(AreaUseScriptHost.SwitchedOff(session, 1, entity));
+            var first = host.Run(npc, session.Rules.Scripts);
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, first.Outcome, first.Detail);
+            Assert.IsTrue(AreaUseScriptHost.SwitchedOff(session, 1, entity), "switched off by the toggle");
+            var second = host.Run(npc, session.Rules.Scripts);
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, second.Outcome, second.Detail);
+            Assert.IsFalse(AreaUseScriptHost.SwitchedOff(session, 1, entity), "and on again");
+        });
+    }
+
+    // The shape of 2221: a loop over the portals around the attachee. With none around nothing is toggled; with one the run is refused whole (a portal's off flag is not modelled), so nothing applies.
+    [TestMethod]
+    public void A_use_script_that_toggles_the_portals_around_it_runs_over_none_and_is_refused_over_one()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var npc = AreaHeartbeatScriptTests.Row(1, 16, PortalToggleScript, point: ScrPoint.Use);
+            var alone = Host(session, content, _ => false, npc);
+            var none = alone.Run(npc, session.Rules.Scripts);
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, none.Outcome, none.Detail);
+            var portal = Portal(2);
+            var host = Host(session, content, _ => false, npc, portal);
+            var refused = host.Run(npc, session.Rules.Scripts);
+            Assert.AreEqual(AreaScriptedUseOutcome.EffectsRejected, refused.Outcome, refused.Detail);
+            StringAssert.Contains(refused.Detail, "toggle state of " + AreaUseScriptHost.EntityId(portal) + " is not modelled");
+            Assert.IsFalse(AreaUseScriptHost.SwitchedOff(session, 1, AreaUseScriptHost.EntityId(portal)));
+        });
+    }
+
+    // The refusal is whole: an NPC toggle that comes before a portal toggle in the same run is not applied either.
+    [TestMethod]
+    public void A_run_that_toggles_an_NPC_and_then_a_portal_is_refused_whole_and_the_NPC_stays_on()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var npc = AreaHeartbeatScriptTests.Row(1, 16, MixedToggleScript, point: ScrPoint.Use);
+            var host = Host(session, content, _ => false, npc, Portal(2));
+            var run = host.Run(npc, session.Rules.Scripts);
+            Assert.AreEqual(AreaScriptedUseOutcome.EffectsRejected, run.Outcome, run.Detail);
+            Assert.IsFalse(AreaUseScriptHost.SwitchedOff(session, 1, AreaUseScriptHost.EntityId(npc)), "nothing applied");
+        });
+    }
+
+    // An NPC the map data stores off (object flag 0x2) is switched on by a use script's toggle, through the session's flag change, and off again by a second one.
+    [TestMethod]
+    public void A_use_script_switches_on_an_NPC_the_map_data_stores_off()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var npc = AreaHeartbeatScriptTests.Row(1, 16, ToggleScript, objectFlags: AreaUseScriptHost.OffObjectFlagBit, point: ScrPoint.Use);
+            var host = Host(session, content, _ => false, npc);
+            var entity = AreaUseScriptHost.EntityId(npc);
+            Assert.IsTrue(AreaUseScriptHost.NpcOff(session, 1, entity, AreaUseScriptHost.OffObjectFlagBit), "off in the data");
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, host.Run(npc, session.Rules.Scripts).Outcome);
+            Assert.IsFalse(AreaUseScriptHost.NpcOff(session, 1, entity, AreaUseScriptHost.OffObjectFlagBit), "switched on");
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, host.Run(npc, session.Rules.Scripts).Outcome);
+            Assert.IsTrue(AreaUseScriptHost.NpcOff(session, 1, entity, AreaUseScriptHost.OffObjectFlagBit), "and off again");
         });
     }
 }

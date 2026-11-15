@@ -353,7 +353,7 @@ public sealed class ScrWorldTests
     }
 
     [TestMethod]
-    public void The_any_scenery_kind_16_loops_the_same_list_as_kind_15_and_only_S61_admits_it()
+    public void The_any_scenery_kind_16_loops_the_same_list_as_kind_15_and_only_S62_admits_it()
     {
         // ARC-SCRIPT-2321 (AS1, AS2): the original builds one list for 15 and 16 (0x44B4E0), so a loop creates next to every object and the first-object read is the list's first.
         const byte AnyScenery = 16;
@@ -364,14 +364,14 @@ public sealed class ScrWorldTests
             Do(C(ScrCatalogue.Action.LoopEnd)),
             Do(C(ScrCatalogue.Action.CreateObject, N(2), (AnyScenery, 0))),
             Do(C(ScrCatalogue.Action.ReturnRunDefault)));
-        Assert.IsFalse(ScrAdmission.Admit(program, ScrAdmissionSet.S60).IsAdmitted, "S60 refuses kind 16");
-        Assert.IsTrue(ScrAdmission.Admit(program, ScrAdmissionSet.S61).IsAdmitted);
+        Assert.IsFalse(ScrAdmission.Admit(program, ScrAdmissionSet.S61).IsAdmitted, "S61 refuses kind 16");
+        Assert.IsTrue(ScrAdmission.Admit(program, ScrAdmissionSet.S62).IsAdmitted);
         var host = Host();
         host.Inner.Scripts[9] = ScrScriptLookup.Of(program);
-        var run = ScrDispatcher.RunSector(new(new(9, 0, 0), Pc), host, new() { Admission = ScrAdmissionSet.S61 });
+        var run = ScrDispatcher.RunSector(new(new(9, 0, 0), Pc), host, new() { Admission = ScrAdmissionSet.S62 });
         CollectionAssert.AreEqual(new[] { Tree, Mark, Rock, Tree }, run.Effects.Creations.Select(c => c.Near).ToArray(), "three looped, then the first object of the list");
         CollectionAssert.AreEqual(new[] { Pc }, host.Centres.Take(1).ToArray(), "the list is centred on the assigned attachee");
-        var original = ScrDispatcher.RunSector(new(new(9, 0, 0), Pc), host, new() { Admission = ScrAdmissionSet.S61, Rules = ScrRuleProfile.Original });
+        var original = ScrDispatcher.RunSector(new(new(9, 0, 0), Pc), host, new() { Admission = ScrAdmissionSet.S62, Rules = ScrRuleProfile.Original });
         Assert.AreEqual(4, original.Effects.Creations.Count);
     }
 }
