@@ -13,6 +13,8 @@ public partial class AreaBugReportPanel : CanvasLayer
     private Label _header = null!;
     private Label _hint = null!;
     private TextEdit _text = null!;
+    private HBoxContainer _checkRow = null!;
+    private LineEdit _check = null!;
     private Label _notice = null!;
     private Button _send = null!;
     private Button _cancel = null!;
@@ -24,6 +26,10 @@ public partial class AreaBugReportPanel : CanvasLayer
     /// <summary>True after a send: the window shows the outcome and only closes.</summary>
     public bool Finished { get; private set; }
     public string Text => _text.Text;
+    /// <summary>ARC-DEV-2189: the owner check the report is tagged with, as typed (trimmed; empty when none, or when the row is hidden).</summary>
+    public string CheckText => _checkRow.Visible ? _check.Text.Trim() : "";
+    internal bool CheckRowVisibleForSelfTest => _checkRow.Visible;
+    internal void SetCheckForSelfTest(string text) => _check.Text = text;
     internal string NoticeForSelfTest => _notice.Text;
     internal void SetTextForSelfTest(string text) => _text.Text = text;
     internal void PressSendForSelfTest() => _send.EmitSignal(BaseButton.SignalName.Pressed);
@@ -56,6 +62,14 @@ public partial class AreaBugReportPanel : CanvasLayer
             Name = "BugReportText", PlaceholderText = "describe what you did and what happened", WrapMode = TextEdit.LineWrappingMode.Boundary,
             CustomMinimumSize = new Vector2(480, 150), SizeFlagsVertical = Control.SizeFlags.ExpandFill, FocusMode = Control.FocusModeEnum.All,
         };
+        // ARC-DEV-2189: shown only while an owner check is active (the QA page): the step the report belongs to, editable, empty = none.
+        _checkRow = new HBoxContainer { Name = "BugReportCheckRow", Visible = false };
+        _check = new LineEdit
+        {
+            Name = "BugReportCheck", PlaceholderText = "ARC-TYPE-NNN#k, or empty for none", CustomMinimumSize = new Vector2(240, 0), FocusMode = Control.FocusModeEnum.All,
+        };
+        _checkRow.AddChild(new Label { Text = "Owner check: ", Modulate = new Color(.3f, .3f, .3f) });
+        _checkRow.AddChild(_check);
         _notice = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart, Modulate = new Color(.45f, .1f, .05f) };
         var buttons = new HBoxContainer();
         _send = new Button { Name = "Send", Text = "Send", FocusMode = Control.FocusModeEnum.None };
@@ -65,7 +79,7 @@ public partial class AreaBugReportPanel : CanvasLayer
         _close = new Button { Name = "Close", Text = "Close", FocusMode = Control.FocusModeEnum.None };
         _close.Pressed += () => CloseRequested?.Invoke();
         foreach (var button in new[] { _send, _cancel, _close }) buttons.AddChild(button);
-        foreach (var control in new Control[] { _header, _hint, _text, _notice, buttons }) contents.AddChild(control);
+        foreach (var control in new Control[] { _header, _hint, _text, _checkRow, _notice, buttons }) contents.AddChild(control);
         GetViewport().SizeChanged += ResizePanel;
         // ARC-DEV-064: a word-wrapped label measures its height at the width it has, and it gets the panel's width only when the
         // container lays it out (after the first ResizePanel), so the first open measured one word per line and the panel kept that
@@ -74,10 +88,12 @@ public partial class AreaBugReportPanel : CanvasLayer
         ResizePanel(); Hide();
     }
 
-    /// <summary>An empty field with the keyboard; <paramref name="notice"/> says what the report could not take (a save, a screenshot).</summary>
-    public void Open(string notice)
+    /// <summary>An empty field with the keyboard; <paramref name="notice"/> says what the report could not take (a save, a screenshot).
+    /// <paramref name="check"/> (ARC-DEV-2189) is the active owner check, shown in its own editable row; null hides the row.</summary>
+    public void Open(string notice, string? check = null)
     {
         Finished = false;
+        _checkRow.Visible = check is not null; _check.Text = check ?? "";
         _text.Text = ""; _text.Editable = true; _text.Visible = true; _hint.Visible = true;
         _notice.Text = notice;
         _send.Visible = true; _cancel.Visible = true; _close.Visible = false;
@@ -86,12 +102,15 @@ public partial class AreaBugReportPanel : CanvasLayer
         _text.GrabFocus();
     }
 
+    /// <summary>A message under the fields while the window stays open (a refused send).</summary>
+    public void ShowNotice(string notice) { _notice.Text = notice; ResizePanel(); }
+
     /// <summary>The outcome of the send: where the report went (or why it failed); only Close stays.</summary>
     public void ShowOutcome(string outcome)
     {
         Finished = true;
         _header.Text = "Bug report";
-        _text.Editable = false; _text.Visible = false; _hint.Visible = false;
+        _text.Editable = false; _text.Visible = false; _hint.Visible = false; _checkRow.Visible = false;
         _notice.Text = outcome;
         _send.Visible = false; _cancel.Visible = false; _close.Visible = true;
         if (_text.HasFocus()) _text.ReleaseFocus();
