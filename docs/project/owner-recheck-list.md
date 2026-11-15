@@ -1258,7 +1258,7 @@ start a game and press `W` (the town map opens in the Crash Site; on the open gr
 
 Known differences (documented, not bugs):
 
-- The buttons (Zoom, Whole map, Travel, the compass) and the lens cover are generated since ARC-UI-1810 (the map pictures beside the lamps are kept art); the bottom cover is still art ([issue #2194](https://github.com/Simarglok/arcanum-steamwoven/issues/2194)).
+- The buttons (Zoom, Whole map, Travel, the compass) and the lens cover are generated since ARC-UI-1810 (the map pictures beside the lamps are kept art); the bottom cover and the brass pill under it (the two oval plates, the ring round the compass button, the screws) are generated since ARC-UI-2194 (the plates are flat brushed brass, without the original's painted grain and screw slots).
 - The compass, the route sketch and the Travel ring are the original's pictures; their small patches of old wood differ a little from the generated wood.
 
 ## ARC-COMBAT-1738 — Auto Switch Weapons option and its re-wield cases (2026-11-13)
