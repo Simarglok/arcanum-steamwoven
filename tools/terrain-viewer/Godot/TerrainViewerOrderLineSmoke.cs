@@ -12,17 +12,34 @@ public partial class TerrainViewerApp
     // Escape opens the menu, which closes the line. Every fact is added to the stage's list.
     private async Task OrderLineSmokePartAsync(string follower, string name, Action<string, bool, string> fact)
     {
+        if (ConversationOpen || WorldModal) { fact("the order line smoke part ran", false, $"a window is up (talk {ConversationOpen}, modal {WorldModal})"); return; }
+        // The bars show in a smoke only when asked for (the viewer's automated storage hides them).
+        var simulatedBars = _gameBarForSelfTest; _gameBarForSelfTest = true;
+        try { await OrderLineSmokeStepsAsync(follower, name, fact); }
+        finally { _gameBarForSelfTest = simulatedBars; await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame); }
+    }
+
+    private async Task OrderLineSmokeStepsAsync(string follower, string name, Action<string, bool, string> fact)
+    {
         async Task Frames(int n = 3) { for (var f = 0; f < n; f++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame); }
         async Task Press(Key key, char text = '\0')
         {
-            var down = new InputEventKey { Keycode = key, PhysicalKeycode = key, Pressed = true, Unicode = text };
-            InputWorld(down);
+            InputWorld(new InputEventKey { Keycode = key, PhysicalKeycode = key, Pressed = true, Unicode = text });
             InputWorld(new InputEventKey { Keycode = key, PhysicalKeycode = key, Pressed = false });
             await Frames(1);
         }
         async Task Type(string text) { foreach (var c in text) await Press(c == ' ' ? Key.Space : Key.A, c); }
-        if (ConversationOpen || WorldModal) { fact("the order line smoke part ran", false, $"a window is up (talk {ConversationOpen}, modal {WorldModal})"); return; }
+        // ARC_AREA_FOLLOWER_PANEL_CAPTURE saves in-app readbacks (the strip before and with the line open) to the caller's ignored path, never committed.
+        var capture = System.Environment.GetEnvironmentVariable("ARC_AREA_FOLLOWER_PANEL_CAPTURE");
+        async Task Shot(string label)
+        {
+            if (string.IsNullOrWhiteSpace(capture)) return;
+            await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+            using var image = GetViewport().GetTexture().GetImage();
+            if (image.SavePng($"{capture}-order-line-{label}.png") != Error.Ok) GD.Print("ARC-UI-2305 capture not saved: " + label);
+        }
         await Frames();
+        await Shot("before");
         fact("the order line is closed at first", !_orderLine.IsOpen && OrderLineViewForSelfTest is null, $"open {_orderLine.IsOpen}");
 
         await Press(Key.Enter);
@@ -30,7 +47,7 @@ public partial class TerrainViewerApp
         var art = OrderLineViewForSelfTest?.BackgroundForSelfTest;
         fact("Enter opens bar mode 7: the line over the strip with art 291 and an empty text (one space), caret at 0",
             _orderLine.IsOpen && OrderLineViewForSelfTest is { } && OrderLineViewForSelfTest.TextForSelfTest == " " && _orderLine.Caret == 0 && (art is not null || _gameBarContent?.Art.ContainsKey(OrderLine.BackgroundArt) != true),
-            $"open {_orderLine.IsOpen} view {OrderLineViewForSelfTest is not null} text '{OrderLineViewForSelfTest?.TextForSelfTest}' art {art is not null}");
+            $"open {_orderLine.IsOpen} view {OrderLineViewForSelfTest is not null} text '{OrderLineViewForSelfTest?.TextForSelfTest}' art {art is not null} (input open {OrderInputOpen}, bars {_gameBarPanel?.Visible}, fonts {TextFonts() is not null}, focused {_worldFocused}, ui focus {WorldUiFocus}, panel {PanelOutsideStackOpen})");
 
         await Type(name + " waitx");
         await Press(Key.Backspace);
@@ -39,6 +56,7 @@ public partial class TerrainViewerApp
         fact("typed characters and Backspace edit the text the strip draws", _orderLine.Text == expected && OrderLineViewForSelfTest?.TextForSelfTest == expected,
             $"text '{_orderLine.Text}' drawn '{OrderLineViewForSelfTest?.TextForSelfTest}'");
 
+        await Shot("after");
         var before = _areaSession!.QueryCompanion(follower).Standing;
         await Press(Key.Enter);
         await Frames();
