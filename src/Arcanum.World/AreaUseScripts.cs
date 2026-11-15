@@ -2004,6 +2004,10 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     /// <summary>ARC-SCRIPT-1164 (WO1): the insert check the created item's holder answers (the viewer's inventory host's); null: every item is taken.</summary>
     public SessionInsertCheck? InsertCheck { get; init; }
 
+    /// <summary>ARC-MAGIC-1823 (ledger IE3, IE4, IE6): the shown map's item script host; with it a script's transfer item from the hero to an NPC or container runs the item's wield-off, remove-item and insert-item scripts as the hero's give does
+    /// (<see cref="GameSessionOwner.TransferNamedItem"/>); null: such an item is refused when the run is planned.</summary>
+    public ISessionItemScriptHost? ItemScripts { get; init; }
+
     // ARC-SCRIPT-1164 (E5-b): set lock state (53, 0x441DD0), toggle open or closed (88, 0x4EEF80 and the container's 0x4EEF20, 0x4EEEC0) and create item (66) on what ObjectStateRefusal admitted. False when the session refuses.
     private bool ApplyWorldObject(ScrObjectStateRequest request)
     {
@@ -2065,7 +2069,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
             }
             case ScrObjectStateChange.TransferItem:
             {
-                var moved = _session.TransferNamedItem(_session.Version, HolderOf(request.Object), HolderOf(request.Other!.Value), request.Value, InsertCheck ?? AreaInventoryHost.DiagnosticInsertCheck);
+                var moved = _session.TransferNamedItem(_session.Version, HolderOf(request.Object), HolderOf(request.Other!.Value), request.Value, InsertCheck ?? AreaInventoryHost.DiagnosticInsertCheck, ItemScripts);
                 LastNamedItem = moved;
                 // A holder's insert check that says no, or a full list, leaves the item where it was and the run goes on (0x461810 returns without moving it). The session's own budgets (its NPC item total, ammunition and durability records, a 32-bit sum) answer the same way: the item stays and the run goes on (ledger WO17).
                 return moved.Disposition != GameSessionDisposition.Rejected || moved.Failure is GameSessionFailure.BudgetExceeded or GameSessionFailure.InsertRefused;
@@ -2544,7 +2548,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
                 if (holders.Any(holder => touched.Contains((holder, request.Value)))) return $"{request.Change} of the item named {request.Value} meets an earlier item action of the run on the same holder and name, which is not modelled";
                 foreach (var holder in holders) touched.Add((holder, request.Value));
                 var plan = request.Change == ScrObjectStateChange.TransferItem
-                    ? _session.QueryNamedItemTransfer(HolderOf(request.Object), HolderOf(request.Other!.Value), request.Value) : _session.QueryNamedItemDestroy(HolderOf(request.Object), request.Value);
+                    ? _session.QueryNamedItemTransfer(HolderOf(request.Object), HolderOf(request.Other!.Value), request.Value, ItemScripts is not null) : _session.QueryNamedItemDestroy(HolderOf(request.Object), request.Value);
                 if (plan.Refusal is { } why) return why;
                 continue;
             }

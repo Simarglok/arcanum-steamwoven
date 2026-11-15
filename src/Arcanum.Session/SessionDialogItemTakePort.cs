@@ -18,6 +18,7 @@ namespace Arcanum.Session;
 /// <param name="entityOf">The session entity of a dialog NPC, or null for one the host does not map.</param>
 /// <param name="insertCheck">The host's insert check for the NPC.</param>
 /// <param name="locationOf">The cell of a dialog NPC on the shown map, or null for one the host cannot place; needed only for a refused hand-over to an NPC the PC leads.</param>
+/// <param name="scripts">ARC-MAGIC-1823 (ledger IE3, IE4, IE6): the shown map's item script host; with it a hero's item with a wield-off (25), remove-item (28) or insert-item (21) script runs them as the move does (<see cref="GameSessionOwner.GiveItemToNpc"/>); without one such an item is refused (<see cref="GameSessionFailure.ItemScriptUnsupported"/>, Rejected).</param>
 /// <param name="prepare">Called with an entity before its list is read or moved into, for a host that attaches the seed of the map listing it first (a companion carried here from its home map).</param>
 public sealed class SessionDialogItemTakePort(
     GameSessionOwner session,
@@ -25,7 +26,8 @@ public sealed class SessionDialogItemTakePort(
     Func<DialogParticipantId, string?> entityOf,
     SessionInsertCheck insertCheck,
     Action<string>? prepare = null,
-    Func<string, CellCoord?>? locationOf = null) : IDialogItemTakePort
+    Func<string, CellCoord?>? locationOf = null,
+    ISessionItemScriptHost? scripts = null) : IDialogItemTakePort
 {
     private readonly GameSessionOwner _session = session ?? throw new ArgumentNullException(nameof(session));
     private readonly Func<DialogParticipantId, string?> _entityOf = entityOf ?? throw new ArgumentNullException(nameof(entityOf));
@@ -60,7 +62,7 @@ public sealed class SessionDialogItemTakePort(
             .FirstOrDefault(item => item.Kind.Name == command.ItemName);
         if (held.Entity is not null)
         {
-            var result = _session.GiveItemToNpc(_session.Version, npc, held.Entity, _insertCheck);
+            var result = _session.GiveItemToNpc(_session.Version, npc, held.Entity, _insertCheck, scripts: scripts);
             LastResult = result;
             // ARC-WORLD-1283: the item's remove check (the no-drop flag) fails the transfer too, before the insert check; the original's fallback is the same (0x416091).
             if (result.Disposition == GameSessionDisposition.Rejected && result.Failure is GameSessionFailure.InsertRefused or GameSessionFailure.ItemNotDroppable) return Settle(npc, held.Entity);
