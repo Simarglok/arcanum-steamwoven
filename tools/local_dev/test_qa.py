@@ -455,6 +455,101 @@ class ServerTests(unittest.TestCase):
         self.assertEqual(1, len(self.gh.creates()))
 
 
+class OverlayTests(unittest.TestCase):
+    """ARC-DEV-2190: the files the in-game overlay shares with the page (snapshot, game results, marker) and the page's auto sync."""
+
+    def test_the_snapshot_is_text_only_and_replaced_whole(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            app = make_app(Path(tmp))
+            app.store.write_checks("abc1234", "origin/main", list(app.parsed.steps))
+            app.store.write_checks("def5678", "origin/main", list(app.parsed.steps))
+            data = json.loads((app.store.directory / qa.CHECKS_FILE).read_text(encoding="utf-8"))
+            self.assertEqual("def5678", data["commit"])
+            self.assertEqual(4, len(data["steps"]))
+            self.assertEqual({"id": "ARC-DEV-100#2", "section": "ARC-DEV-100 - First slice (PR #1)", "step": "Walk through it.",
+                              "expected": "No block.", "status": "same"}, data["steps"][1])
+            self.assertEqual([qa.CHECKS_FILE], [item.name for item in app.store.directory.iterdir()])   # no temporary file is left
+
+    def test_reload_writes_the_snapshot_unless_turned_off(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            for snapshot in (True, False):
+                data = Path(tmp) / str(snapshot)
+                app = qa.QaApp(qa.Store(data), Path(tmp) / "reports", repo=REPO, ref="HEAD", fetch=False, snapshot=snapshot)
+                app.reload()
+                self.assertEqual(snapshot, (data / qa.CHECKS_FILE).exists())
+
+    def test_the_names_match_the_viewers(self) -> None:
+        source = (REPO / "tools" / "terrain-viewer" / "Core" / "OwnerQa.cs").read_text(encoding="utf-8")
+        for name in (qa.CHECKS_FILE, qa.OVERLAY_MARKER, "results.jsonl"):
+            self.assertIn(f'"{name}"', source)
+
+    def game_result(self, app: qa.QaApp, step: str, status: str, report: str | None = None) -> None:
+        """One line as the game appends it (OwnerQa.cs: the page's format plus build and src)."""
+        with app.store.locked():
+            app.store.append({"kind": "result", "ts": qa.now_iso(), "step": step, "status": status, "note": "from the game",
+                              "report": report, "build": "abc1234567", "src": "game"})
+
+    def test_a_game_result_is_read_and_its_differs_becomes_one_issue(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            gh = FakeGh()
+            app = make_app(Path(tmp), gh)
+            self.game_result(app, "ARC-DEV-100#1", "differs", "2026-11-15_10-00-00")
+            self.game_result(app, "ARC-UI-200#1", "same")
+            state = {step["id"]: step for section in app.state()["sections"] for step in section["steps"]}
+            self.assertEqual(("differs", "from the game", "2026-11-15_10-00-00"), (state["ARC-DEV-100#1"]["status"], state["ARC-DEV-100#1"]["note"], state["ARC-DEV-100#1"]["report"]))
+            for _ in range(3):
+                done, failed = app.sync()
+            self.assertEqual(1, len(gh.creates()))
+            self.assertIn("2026-11-15_10-00-00", gh.creates()[0][1])
+            self.assertIn("from the game", gh.creates()[0][1])
+            self.assertEqual(4001, app.store.read()[0]["ARC-DEV-100#1"]["issue"])
+
+    def test_the_running_page_creates_the_issue_once_and_leaves_a_failure_to_sync(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            gh = FakeGh()
+            app = make_app(Path(tmp), gh)
+            self.game_result(app, "ARC-DEV-100#1", "differs")
+            with contextlib.redirect_stdout(io.StringIO()):
+                qa.auto_sync(app, seconds=0, rounds=3, settle=0)
+            self.assertEqual(1, len(gh.creates()))
+            failing = FakeGh(fail=True)
+            other = make_app(Path(tmp) / "other", failing)
+            self.game_result(other, "ARC-UI-200#1", "differs")
+            with contextlib.redirect_stderr(io.StringIO()), contextlib.redirect_stdout(io.StringIO()):
+                qa.auto_sync(other, seconds=0, rounds=3, settle=0)
+            self.assertEqual(1, len(failing.creates()))                   # one attempt, no hammering of gh every round
+            failing.fail = False
+            done, failed = other.sync()                                    # `qa sync` retries it
+            self.assertEqual((["ARC-UI-200#1"], []), (done, failed))
+
+    def test_a_fresh_differs_waits_for_its_note_and_report(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            gh = FakeGh()
+            app = make_app(Path(tmp), gh)
+            self.game_result(app, "ARC-DEV-100#1", "differs")
+            self.assertEqual(([], []), app.sync(settle=60))         # younger than the settle time: not yet
+            self.assertEqual(0, len(gh.creates()))
+            self.game_result(app, "ARC-DEV-100#1", "differs", "2026-11-15_10-00-00")   # the report arrives meanwhile
+            self.assertEqual(0, len(gh.creates()))
+            self.assertEqual((["ARC-DEV-100#1"], []), app.sync(settle=0))
+            self.assertIn("2026-11-15_10-00-00", gh.creates()[0][1])
+
+    def test_overlay_on_and_off_write_and_remove_the_marker(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            data, reports = Path(tmp) / "data", Path(tmp) / "reports"
+            marker = data / qa.OVERLAY_MARKER
+            on = CommandTests.run_qa(self, "overlay", "on", data=data, reports=reports)
+            self.assertEqual(0, on.returncode, on.stderr)
+            self.assertTrue(marker.exists() and (data / qa.CHECKS_FILE).exists())
+            off = CommandTests.run_qa(self, "overlay", "off", data=data, reports=reports)
+            self.assertEqual(0, off.returncode, off.stderr)
+            self.assertFalse(marker.exists())
+            dry = CommandTests.run_qa(self, "overlay", "on", "--dry-run", data=Path(tmp) / "dry", reports=reports)
+            self.assertEqual(0, dry.returncode, dry.stderr)
+            self.assertFalse((Path(tmp) / "dry").exists())
+            self.assertEqual(2, CommandTests.run_qa(self, "overlay", data=data, reports=reports).returncode)
+
+
 class CommandTests(unittest.TestCase):
     def run_qa(self, *arguments: str, data: Path, reports: Path) -> subprocess.CompletedProcess:
         return subprocess.run([sys.executable, "-B", str(REPO / "arcanum"), "qa", *arguments, "--no-fetch", "--ref", "HEAD",

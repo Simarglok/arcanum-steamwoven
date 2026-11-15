@@ -178,7 +178,7 @@ public partial class TerrainViewerApp
     // ARC-DEV-109 (MIG16 S2): the windows that are modes (conversation, inventory, sheet, logbook, schematics, barter, reading, world map)
     // are read from the interface mode stack; the panels outside the stack keep their own flags.
     // This is the hero's INPUT gate and the cursor's, not the clock's: since ARC-DEV-126 (MIG12 S7, GQ3 A) a window, the palette or the bug report no longer stops the world.
-    private bool WorldModal => PaletteOpen || AnyWindowOpen || SaveListOpen || MainMenuOpen || HeroDeathCovering || MovieCovering || BugReportOpen;
+    private bool WorldModal => PaletteOpen || AnyWindowOpen || SaveListOpen || MainMenuOpen || HeroDeathCovering || MovieCovering || ReportModalOpen;
     // ARC-DEV-126: the one raiser of the pause is the Esc menu and a save or load list (TL23); the options screen the menu leads to is under it. `_mainMenu` covers the frames in which the menu's panel is hidden while it waits for the save list to open.
     private bool WorldMenuPause => (MainMenuOpen || SaveListOpen || _mainMenu is not null) && _mainMenu is not { OpenedByOptionsKey: true }; // ARC-UI-2026: the O key's options window does not pause (0x541180 kind 4)
     // ARC-DEV-126: the death cover and its slide show are frames in which the original does not ping (TL25): no stamp is observed and no clock moves.
@@ -799,7 +799,10 @@ public partial class TerrainViewerApp
     private void StopWorldRoute(string reason)
     {
         // ARC-DEV-189: not while the hero's knock-down or get-up plays: a level-3 interrupt would end that run (priority 3), and the hero lying takes no ordinary action that replaces it.
-        if (!_exiting && !_quarantineKeepsRuns && ShownHeroRunsHost?.DownRun is not { Bottom.Goal: Arcanum.Simulation.Goals.GoalType.KnockDown or Arcanum.Simulation.Goals.GoalType.GetUp }) HeroRunsHost()?.Interrupt(Arcanum.Simulation.Goals.GoalInterruptRules.OrdinaryActions, reason);
+        // ARC-COMBAT-2172: nor for the hero-down stop (HERO_DOWN, after a blow on the hero) while its stun (goal 57, priority 1) plays: that stop is not an action of its own, so it must not cut the stun short (the stunned hero takes
+        // no ordinary action either, and its walk was interrupted by the stun's own start). Other reasons (a quick load, a map change) still end it.
+        if (!_exiting && !_quarantineKeepsRuns && !(reason == "HERO_DOWN" && ShownHeroRunsHost is { StunRun: not null })
+            && ShownHeroRunsHost?.DownRun is not { Bottom.Goal: Arcanum.Simulation.Goals.GoalType.KnockDown or Arcanum.Simulation.Goals.GoalType.GetUp }) HeroRunsHost()?.Interrupt(Arcanum.Simulation.Goals.GoalInterruptRules.OrdinaryActions, reason);
         StopWorldRouteOnly(reason);
     }
 
@@ -818,7 +821,7 @@ public partial class TerrainViewerApp
     /// GUI (HUD, palette) handles its own clicks first; a left release has no meaning, a right release is ARC-COMBAT-022's.</summary>
     public override void _UnhandledInput(InputEvent @event)
     {
-        if (!IsWorld || !_worldInitialized || _exiting || BugReportOpen) return;
+        if (!IsWorld || !_worldInitialized || _exiting || ReportModalOpen) return;
         TraceMousePress(@event, MousePressTrace.Stage.Unhandled);
         if (@event is InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: true } click)
             WorldObservation(() => WorldRouteClick(click.Position, click.CtrlPressed, click.AltPressed, click.ShiftPressed));
@@ -965,6 +968,8 @@ public partial class TerrainViewerApp
         if (_worldInputTraceForSelfTest is not null) TraceWorldInput($"Callback:entry type={input.GetClass()}" + (input is InputEventKey tracedKey ? $" key={tracedKey.Keycode} pressed={tracedKey.Pressed} echo={tracedKey.Echo}" : ""));
         // ARC-DEV-051: the bug report comes first (Ctrl+B over any window, the death screen included; the open report owns every event).
         if (RouteBugReportInput(input)) return;
+        // ARC-DEV-2190: the owner-checks overlay (only when the owner-QA flag is on) comes right after it.
+        if (RouteOwnerQaInput(input)) return;
         // ARC-RENDER-1170: a movie owns every event while it plays; a key press ends it.
         if (HandleMovieInput(input)) { GetViewport().SetInputAsHandled(); return; }
         // ARC-UI-026: the death screen owns every key and mouse button while it covers the game.

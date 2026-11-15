@@ -13,6 +13,11 @@ text and the ``Check: ARC-TYPE-NNN#k`` line in the head of ``report.md``.
 ARC-DEV-2189 (slice 4 of the epic): when the owner opens a step, the page writes its id as one line into ``local/qa/active-check.txt``
 (git-ignored); Ctrl+B of the viewer reads it, shows it in the report window and writes ``Check: ARC-TYPE-NNN#k`` into the report, which
 the page reads back to preselect and list a step's reports. The file is removed when the page stops and when it starts.
+
+ARC-DEV-2190 (slice 5): the page also writes ``local/qa/checks.json`` (the list snapshot) so the in-game overlay (Ctrl+Q) lists the steps
+without Python; the game appends its results to the same ``results.jsonl`` (``src: game``, ``build``), and the running page creates the
+issue of a new ``differs`` result every ``AUTO_SYNC_SECONDS`` (``qa sync`` does the same on demand, exactly once per step). The overlay is
+off in a normal build; ``./arcanum qa overlay on|off`` writes or removes the marker ``local/qa/owner-qa.on`` (``ARC_OWNER_QA=1`` also turns it on).
 """
 from __future__ import annotations
 
@@ -55,6 +60,10 @@ START_WITHIN_SECONDS = 60
 TOKEN_HEADER = "X-QA-Token"
 PLAYER_TEXT_LIMIT = 120
 ACTIVE_FILE = "active-check.txt"     # the one line the viewer's Ctrl+B reads (BugReportCheck.cs); keep the name in step with it
+CHECKS_FILE = "checks.json"          # the list snapshot the in-game overlay reads (OwnerQa.cs, ARC-DEV-2190)
+OVERLAY_MARKER = "owner-qa.on"       # its presence turns the overlay on in a build started from this checkout (OwnerQa.cs)
+AUTO_SYNC_SECONDS = 20               # the running page creates the issues of differs steps recorded by the game this often ...
+SETTLE_SECONDS = 20                  # ... once the step's latest result is this old (a note or a report may still follow the mark)
 CHECK_PREFIX = "Check: "              # the report.md line of BugReportCheck.LinePrefix
 
 
@@ -74,6 +83,15 @@ def default_data_dir(root: Path = ROOT) -> Path:
 
 def default_reports_dir(root: Path = ROOT) -> Path:
     return main_checkout(root) / "artifacts" / "packages" / "macos" / "reports"
+
+
+def _age_seconds(ts: object) -> float:
+    """Seconds since an ISO ``...Z`` time (a time that cannot be read counts as old, so such a step is not held back)."""
+    try:
+        moment = datetime.datetime.strptime(str(ts), "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=datetime.timezone.utc)
+    except ValueError:
+        return float("inf")
+    return (datetime.datetime.now(datetime.timezone.utc) - moment).total_seconds()
 
 
 def now_iso() -> str:
@@ -179,6 +197,24 @@ class Store:
                 except OSError:
                     pass
                 raise
+
+    def write_checks(self, commit: str, ref: str, steps: list[owner_checks.Step]) -> None:
+        """The list snapshot for the in-game overlay, replaced whole (text only: id, section title, step, expected, list status)."""
+        data = {"version": 1, "commit": commit, "ref": ref, "ts": now_iso(),
+                "steps": [{"id": step.id, "section": step.section_title, "step": step.step, "expected": step.expected, "status": step.status}
+                          for step in steps]}
+        self.directory.mkdir(parents=True, exist_ok=True)
+        handle, name = tempfile.mkstemp(prefix=".checks-", suffix=".tmp", dir=self.directory)
+        try:
+            with os.fdopen(handle, "w", encoding="utf-8") as stream:
+                json.dump(data, stream, ensure_ascii=False, separators=(",", ":"))
+            os.replace(name, self.directory / CHECKS_FILE)
+        except OSError:
+            try:
+                os.unlink(name)
+            except OSError:
+                pass
+            raise
 
     def clear_active(self) -> None:
         with self._active_lock:
@@ -320,8 +356,10 @@ ISSUE_URL = re.compile(r"/issues/(\d+)\s*$")
 class QaApp:
     """The list snapshot, the store and the issue creation; the HTTP handler and ``qa sync`` both work through it."""
 
-    def __init__(self, store: Store, reports_dir: Path, repo: Path = ROOT, ref: str = "origin/main", gh=run_gh, fetch: bool = True) -> None:
+    def __init__(self, store: Store, reports_dir: Path, repo: Path = ROOT, ref: str = "origin/main", gh=run_gh, fetch: bool = True,
+                 snapshot: bool = True) -> None:
         self.store = store
+        self.snapshot = snapshot
         self.reports_dir = Path(reports_dir)
         self.repo = Path(repo)
         self.ref = ref
@@ -352,6 +390,11 @@ class QaApp:
         commit = subprocess.run(["git", "-C", str(self.repo), "rev-parse", "--short", self.ref], capture_output=True, text=True).stdout.strip()
         with self._guard:
             self.parsed, self.commit, self.warning = parsed, commit, warning
+        if self.snapshot:
+            try:
+                self.store.write_checks(commit, self.ref, list(parsed.steps))
+            except OSError as error:        # the overlay keeps the earlier snapshot; the page itself is not affected
+                self.warning = (self.warning + "; " if self.warning else "") + f"could not write {CHECKS_FILE}: {error}"
 
     def set_text(self, text: str, commit: str = "test") -> None:
         """Take the list from text (tests)."""
@@ -462,8 +505,11 @@ class QaApp:
             message = (err.strip() or out.strip() or f"gh exited with {code}")[:500]
             self.store.append({"kind": "issue", "ts": now_iso(), "step": step.id, "error": message})
 
-    def sync(self, dry_run: bool = False) -> tuple[list[str], list[str]]:
-        """Create the issues of the ``differs`` steps that have none (a failed earlier attempt); returns (created or would be, failed)."""
+    def sync(self, dry_run: bool = False, retry_failed: bool = True, settle: float = 0) -> tuple[list[str], list[str]]:
+        """Create the issues of the ``differs`` steps that have none (recorded by the game, or a failed earlier attempt); returns
+        (created or would be, failed). ``retry_failed=False`` (the running page's timer) leaves a step whose earlier attempt failed to
+        the next ``qa sync`` instead of calling gh again every few seconds. ``settle`` (seconds): a step whose latest result is younger
+        waits (the issue body is fixed when it is created, so a note or report that follows the mark should be in it)."""
         done, failed = [], []
         with self.store.locked():
             results, _ = self.store.read()
@@ -471,6 +517,10 @@ class QaApp:
             for step_id, result in results.items():
                 step = by_id.get(step_id)
                 if step is None or result["status"] != "differs" or result["issue"] is not None:
+                    continue
+                if not retry_failed and result["issueError"]:
+                    continue
+                if settle and _age_seconds(result.get("ts")) < settle:
                     continue
                 if dry_run:
                     done.append(step_id)
@@ -609,8 +659,10 @@ def start_server(app: QaApp, port: int = 0) -> tuple[LocalServer, str, str]:
 
 
 def configure(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("action", nargs="?", choices=("serve", "sync"), default="serve",
-                        help="serve (default): the local check page; sync: create the issues of the differs steps that have none")
+    parser.add_argument("action", nargs="?", choices=("serve", "sync", "overlay"), default="serve",
+                        help="serve (default): the local check page; sync: create the issues of the differs steps that have none; "
+                        "overlay on|off: turn the in-game owner-checks overlay (Ctrl+Q) on or off for builds started from this checkout (ARC-DEV-2190)")
+    parser.add_argument("state", nargs="?", choices=("on", "off"), help="with overlay: on or off")
     parser.add_argument("--ref", default="origin/main", help="the ref the list is read from with git show (default origin/main)")
     parser.add_argument("--no-fetch", action="store_true", help="do not fetch the ref's branch first")
     parser.add_argument("--no-open", action="store_true", help="do not open the page in the browser (the URL is printed)")
@@ -622,6 +674,24 @@ def configure(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--reports-dir", type=Path, help="the bug report folders (default: artifacts/packages/macos/reports of the main checkout)")
 
 
+def auto_sync(app: QaApp, seconds: float = AUTO_SYNC_SECONDS, rounds: int | None = None, settle: float = SETTLE_SECONDS) -> None:
+    """ARC-DEV-2190: while the page runs, create the issue of every ``differs`` result the game recorded (once per step: the issue
+    number is stored) once the step's latest result is ``settle`` seconds old. A failed attempt waits for ``qa sync``. ``rounds`` (tests) stops the loop."""
+    count = 0
+    while rounds is None or count < rounds:
+        time.sleep(seconds)
+        count += 1
+        try:
+            done, failed = app.sync(retry_failed=False, settle=settle)
+        except (OSError, ValueError) as error:
+            print(f"qa: auto sync failed: {error}", file=sys.stderr)
+            continue
+        for step_id in done:
+            print(f"qa: created the issue of {step_id} (recorded in the game)")
+        for step_id in failed:
+            print(f"qa: FAILED to create the issue of {step_id}; ./arcanum qa sync retries", file=sys.stderr)
+
+
 def run(args: argparse.Namespace) -> int:
     try:
         data_dir = args.data_dir or default_data_dir()
@@ -629,7 +699,7 @@ def run(args: argparse.Namespace) -> int:
     except ValueError as error:
         print(f"arcanum qa: {error}", file=sys.stderr)
         return 2
-    app = QaApp(Store(data_dir), reports_dir, ROOT, args.ref, fetch=not args.no_fetch and not args.dry_run)
+    app = QaApp(Store(data_dir), reports_dir, ROOT, args.ref, fetch=not args.no_fetch and not args.dry_run, snapshot=not args.dry_run)
     try:
         app.reload()
     except (RuntimeError, OSError) as error:
@@ -638,6 +708,24 @@ def run(args: argparse.Namespace) -> int:
     print(f"qa: the list from {args.ref} ({app.commit}): {owner_checks.summary(app.parsed)}")
     if app.warning:
         print(f"qa: warning: {app.warning}", file=sys.stderr)
+    if args.action == "overlay":
+        marker = app.store.directory / OVERLAY_MARKER
+        if args.state is None:
+            print("arcanum qa: overlay needs on or off", file=sys.stderr)
+            return 2
+        if args.dry_run:
+            print(f"qa: would turn the overlay {args.state}: {marker}")
+            return 0
+        try:
+            if args.state == "on":
+                marker.write_text("owner-qa overlay on (ARC-DEV-2190); remove with ./arcanum qa overlay off\n", encoding="utf-8")
+            elif marker.exists():
+                marker.unlink()
+        except OSError as error:
+            print(f"arcanum qa: cannot change {marker}: {error}", file=sys.stderr)
+            return 1
+        print(f"qa: the in-game overlay (Ctrl+Q) is {args.state}: {marker} (the list snapshot is {app.store.directory / CHECKS_FILE})")
+        return 0
     if args.action == "sync":
         done, failed = app.sync(args.dry_run)
         for step_id in done:
@@ -668,6 +756,7 @@ def run(args: argparse.Namespace) -> int:
         return 0
     if not args.no_open:
         webbrowser.open(url)
+    threading.Thread(target=auto_sync, args=(app,), daemon=True).start()
     print("qa: Ctrl-C stops the page")
     try:
         while True:

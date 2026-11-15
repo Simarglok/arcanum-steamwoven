@@ -93,15 +93,56 @@ public sealed class GamblingStateTests
     }
 
     [TestMethod]
-    public void A_loss_moves_the_item_and_the_hero_pays_its_price_like_a_buy()
+    public void A_loss_charges_the_price_and_moves_no_item()
     {
         using var owner = Gambler(0);
         owner.EnsureGamblingRoll(owner.Version);
-        var result = Wager(owner, Bet(level: 20));
+        var (revision, draws, list) = (owner.Version.Revision, owner.QueryRandom().Draws, List(owner, "virgil"));
+        var result = Wager(owner, Bet(level: 20), NoRoom);
         Assert.AreEqual((GameSessionDisposition.Changed, false, 120), (result.Disposition, result.Won, result.Paid));
         Assert.AreEqual(0, result.Check!.Check.Effectiveness);
-        Assert.IsTrue(owner.QueryPcInventory().Any(item => item.Entity == "sword"));
+        Assert.IsFalse(owner.QueryPcInventory().Any(item => item.Entity == "sword"), "ARC-UI-2215: the move block is skipped, so no room test either");
+        CollectionAssert.AreEqual(list, List(owner, "virgil").Take(list.Length).ToArray(), "the sword and the rest stay in the merchant's list (a coin pile joins its end)");
         Assert.AreEqual((265, 120), (owner.QueryGold(), owner.QueryNpcGold("virgil")));
+        Assert.AreEqual((revision + 1, draws + 2), (owner.Version.Revision, owner.QueryRandom().Draws), "the check's two draws and the payment: one revision");
+    }
+
+    [TestMethod]
+    public void A_loss_at_price_0_changes_the_roll_in_one_revision_and_moves_nothing()
+    {
+        using var owner = Gambler(0);
+        owner.EnsureGamblingRoll(owner.Version);
+        var (revision, draws, list) = (owner.Version.Revision, owner.QueryRandom().Draws, List(owner, "virgil"));
+        var result = Wager(owner, Bet(level: 20, price: 0));
+        Assert.AreEqual((GameSessionDisposition.Changed, false, 0), (result.Disposition, result.Won, result.Paid));
+        Assert.AreEqual((revision + 1, draws + 2), (owner.Version.Revision, owner.QueryRandom().Draws));
+        Assert.AreEqual(result.Check!.NextGamblingRoll, owner.QueryGamblingRoll());
+        CollectionAssert.AreEqual(list, List(owner, "virgil"));
+        Assert.IsFalse(owner.QueryPcInventory().Any(item => item.Entity == "sword"));
+        Assert.AreEqual((385, 0), (owner.QueryGold(), owner.QueryNpcGold("virgil")));
+    }
+
+    [TestMethod]
+    public void A_loss_whose_new_coin_pile_the_merchant_refuses_puts_the_roll_back_and_moves_nothing()
+    {
+        using var owner = Gambler(0);
+        owner.EnsureGamblingRoll(owner.Version);
+        var before = (owner.Version, owner.QueryGamblingRoll(), owner.QueryRandom().Draws, owner.QueryGold());
+        var result = owner.Gamble(owner.Version, Bet(level: 20), Accept, NoRoom);
+        Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.InsertRefused), (result.Disposition, result.Failure));
+        Assert.AreEqual(before, (owner.Version, owner.QueryGamblingRoll(), owner.QueryRandom().Draws, owner.QueryGold()), "no reroll, no coins");
+        Assert.IsFalse(owner.QueryPcInventory().Any(item => item.Entity == "sword"));
+    }
+
+    [TestMethod]
+    public void A_loss_on_an_item_the_merchant_does_not_list_is_refused_before_the_roll()
+    {
+        using var owner = Gambler(0);
+        owner.EnsureGamblingRoll(owner.Version);
+        var before = (owner.Version, owner.QueryGamblingRoll(), owner.QueryRandom().Draws, owner.QueryGold());
+        var result = Wager(owner, Bet("no-such-item", level: 20));
+        Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.ItemNotAvailable), (result.Disposition, result.Failure));
+        Assert.AreEqual(before, (owner.Version, owner.QueryGamblingRoll(), owner.QueryRandom().Draws, owner.QueryGold()), "no reroll");
     }
 
     [TestMethod]
