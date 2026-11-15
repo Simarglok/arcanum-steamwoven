@@ -118,6 +118,20 @@ public sealed class LineOfFireRulesTests
     }
 
     [TestMethod]
+    public void ABedOnTheOccupantsTileNeverBlocksOrCoversButABedBetweenDoes()
+    {
+        // ARC-COMBAT-2168 (0x4B3170, 0x43FE00): a blow on an occupied bed traces to the bed's own tile, the occupant's; the last step skips every object there but walls and portals, whatever the bed's flags.
+        var onTile = Trace(new Map().With(8, 2, "bed", Opaque).With(8, 2, "sleeper", Opaque), (2, 2), (8, 2));
+        Assert.IsNull(onTile.Blocker);
+        Assert.AreEqual(0, onTile.Cost);
+        // A bed on a tile between is any object: not shoot-through it stops the line, shoot-through only it costs 50.
+        Assert.AreEqual("bed", Trace(new Map().With(5, 2, "bed", Opaque), (2, 2), (8, 2)).Blocker);
+        var between = Trace(new Map().With(5, 2, "bed", ShootThrough), (2, 2), (8, 2));
+        Assert.IsNull(between.Blocker);
+        Assert.AreEqual(LineOfFireRules.OpaqueCover, between.Cost);
+    }
+
+    [TestMethod]
     public void WallsAndPortalsOnTheCrossedEdgesDecideByKind()
     {
         // Leaving (4,2) toward x+ crosses its edge 5; entering (5,2) crosses that tile's edge 1.
