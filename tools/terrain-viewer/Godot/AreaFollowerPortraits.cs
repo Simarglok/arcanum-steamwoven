@@ -153,6 +153,11 @@ public partial class AreaFollowerPortraits : CanvasLayer
     /// <summary>ARC-UI-1785: the window rectangle (the original's pixels) of the show/hide button, the up arrow or the down arrow (null when it is not there).</summary>
     internal Rect2? ButtonRectForSelfTest(string which) =>
         (which switch { "toggle" => _toggle, "up" => _up, "down" => _down, _ => null }) is { } button ? new Rect2(button.Position, button.Size) : null;
+    /// <summary>ARC-UI-2284: the window rectangle (device pixels, under the panel's scale) of the show/hide button, the up arrow or the down arrow (null when it is not there).</summary>
+    internal Rect2? ButtonScreenRectForSelfTest(string which) =>
+        (which switch { "toggle" => _toggle, "up" => _up, "down" => _down, _ => null }) is { } button ? RectOf(button) : null;
+    /// <summary>ARC-UI-2284: gives the panel no art, as a panel that was made after the art was read and missed it (for the smoke).</summary>
+    internal void UnbindArtForSelfTest() => Bind(new Dictionary<int, Texture2D>());
     /// <summary>ARC-UI-1736: whether a button's art was drawn (the art read), by "toggle", "up", "down".</summary>
     internal bool? ButtonArtForSelfTest(string which) =>
         which switch { "toggle" => _toggle is null ? null : _toggleArt?.Texture is not null, "up" => _up is null ? null : _upArt?.Texture is not null,
@@ -374,8 +379,11 @@ public partial class AreaFollowerPortraits : CanvasLayer
     private void PlaceChrome()
     {
         var barsDrawn = BarsDrawn;
+        if (_root is null) return;
+        // ARC-UI-2284: the strip's bottom is the window's bottom, so the buttons stand a table's distance above it, not at the table's y from the top.
+        var heightUnits = GetViewport().GetVisibleRect().Size.Y / _root.Scale.Y;
         foreach (var (button, rect) in new[] { (_toggle, AreaFollowerPanelRules.ToggleRectFor(barsDrawn)), (_up, AreaFollowerPanelRules.UpRectFor(barsDrawn)), (_down, AreaFollowerPanelRules.DownRectFor(barsDrawn)) })
-            if (button is not null) button.Position = new Vector2(rect.X, rect.Y);
+            if (button is not null) button.Position = new Vector2(rect.X, AreaFollowerPanelRules.AnchoredY(rect.Y, heightUnits));
     }
 
     private (Button, TextureRect) ChromeButton((int X, int Y, int Width, int Height) rect, int art, string fallback, Action pressed)
@@ -492,6 +500,7 @@ public partial class AreaFollowerPortraits : CanvasLayer
         var factor = AreaGameBarPanel.ScreenFactor(size);
         _root.Position = new(AreaGameBarPanel.ScreenLeft(size, factor), 0);
         _root.Scale = new(factor, factor);
+        PlaceChrome();
         PlaceMenu();
     }
 
