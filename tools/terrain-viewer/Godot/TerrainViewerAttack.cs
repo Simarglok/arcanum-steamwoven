@@ -870,7 +870,12 @@ public partial class TerrainViewerApp
         // ARC-COMBAT-1930 (0x4B3170, PF1, PF5, VCG9): a shot that flies sends no event at the shot; the projectile's end alerts only what it strikes. A shot decided a hit raises it here for the aimed critter (the arrival's time is the
         // accepted deviation A), one decided a miss never strikes its aimed target and raises none (a stray it meets is alerted at the strike). An attack that does not fly raises it, hit or miss. The weapon's loudness rides on it (0x4B2810).
         if (result.Disposition != GameSessionDisposition.Rejected && result.Resolution?.Refusal == AttackRefusal.None
-            && (result.Shot is null || result.Resolution.Outcome is AttackOutcome.Hit or AttackOutcome.CriticalHit)) _aiHost?.HeroAttacked(struck.Entity, noise);
+            && (result.Shot is null || result.Resolution.Outcome is AttackOutcome.Hit or AttackOutcome.CriticalHit))
+        {
+            // ARC-COMBAT-2164 (EX15, 0x4B3170): an attack that does not fly and struck a line-of-fire blocker notifies the aimed critter in the Original setting, the blocker (accidental) in Steamwoven.
+            if (result.Shot is null && !ReferenceEquals(struck, goal)) _aiHost?.HeroBlockerAttacked(goal.Combat is null ? null : goal.Entity, struck.Entity, noise);
+            else _aiHost?.HeroAttacked(struck.Entity, noise);
+        }
         // A refused attack, or one the resolver refused, ends the goal: repeating it would refuse again.
         goal.Stop = result.Disposition == GameSessionDisposition.Rejected || result.Resolution?.Refusal is { } refusal && refusal != AttackRefusal.None;
         HeroSwingEffect(goal, result.Disposition, result.Resolution?.Refusal, weaponBefore);

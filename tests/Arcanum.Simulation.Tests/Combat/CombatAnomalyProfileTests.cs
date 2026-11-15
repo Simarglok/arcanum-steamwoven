@@ -23,6 +23,8 @@ public sealed class CombatAnomalyProfileTests
         Assert.AreEqual((false, true), (steamwoven.PcThrowCostsNothing, original.PcThrowCostsNothing));
         // ARC-COMBAT-015: EX9's switch.
         Assert.AreEqual((false, true), (steamwoven.RangedApproachSkipsClearShot, original.RangedApproachSkipsClearShot));
+        // ARC-COMBAT-2164: EX15's switch.
+        Assert.AreEqual((false, true), (steamwoven.RangedBlockerHitNotifiesAimedTarget, original.RangedBlockerHitNotifiesAimedTarget));
         CollectionAssert.AreEqual(new[] { steamwoven, original }, CombatAnomalyProfile.All.ToArray());
         Assert.AreSame(original, CombatAnomalyProfile.FromName("original"));
         Assert.AreSame(steamwoven, CombatAnomalyProfile.FromName("steamwoven"));
