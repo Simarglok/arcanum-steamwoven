@@ -43,7 +43,7 @@ Requirements: [FR-ITEM-013](../requirements/items-economy.md#fr-item-013) (trade
 | Buy list (BT8) | The merchant's inventory source (NPC field 0xEF) names its line of `rules\InvenSourceBuy.mes` (message number = set number): a first token `ALL` in any case buys everything; otherwise up to 300 space-separated basic prototype numbers (read with `atoi`, each in the original's ranges with a prototype). A failing line, or a failing loot line of the set, empties the set; a set without a line buys nothing. | `InventorySourceBuyRules`, `InventorySourceBuyList.Deals` |
 | Trade (BT5) | A quote of 0 cancels the trade (outside a follower's window). A buy needs the hero's gold for the unit price ("not enough money"); a sale pays at most the merchant's own coins (a merchant without coins takes the item for nothing). The item moves first, the coins only after the move succeeded, the whole stack at the unit price × units. | `AreaBarter.Buy`/`Sell`, `TradeRules.SalePayment`, `BarterBuy`/`BarterSell` |
 | Reaction (BT6) | After a paid trade the merchant's surplus (the price above the worth on a buy, the worth above the price on a sale) gives a merchant who loves the PC (reaction above 100) `surplus / 40` below 200, `5 + (surplus − 200) / 100` below 1000, else 15, when the surplus is above 50; a price of 0 changes nothing. | `TradeRules.GiftAmount`, `TradeRules.GiftReaction`, `AdjustReaction` |
-| Follower (BT6) | A follower's window (the NPC's leader is the PC) has no prices: items move both ways for nothing, with no reaction change. The bet is the exception (ARC-UI-1808, GB6): its gate and a lost bet read the ordinary buy quote, and a won bet costs the follower reaction as it does a merchant's. | `AreaBarterMerchant.Follower` |
+| Follower (BT6) | A follower's window (the NPC's leader is the PC) has no prices: items move both ways for nothing, with no reaction change. The bet is the exception (ARC-UI-1808, GB6): its gate and a lost bet read the ordinary buy quote (the loss takes no item, as everywhere), and a won bet costs the follower reaction as it does a merchant's. | `AreaBarterMerchant.Follower` |
 | Substitute container (BT4, BT11) | An NPC with no leader whose field 0x126 names a container within 20 tiles (Chebyshev) shows and fills that container instead of its own list; a follower or a leader-led NPC has none. | `AreaInventoryMap.Substitute`, `AreaBarterMerchant.WithSubstitute` |
 | Open stock (BT11) | At every open the container's gold piles move onto the merchant in list order (each destroyed, the merchant's first pile grows; a merchant without one gets a new pile), then, without a PC leader, every entry of the merchant's and the container's lists gets the identified flag 0x1 (worn and gold included). | `GameSessionOwner.OpenBarter`, `AreaBarter.Open` |
 | Container trades (BT5) | A bought item comes out of the container, a sold item goes into it (ammunition joins its first stack of the type, which Original never finds: a new stack, AMA5); the coins are paid to and by the merchant, never the container. A sale of a whole item outside a follower's window marks it identified (units of ammunition are not marked: no complexity, no effect). | `BarterBuy`/`BarterSell` with `container`, `identify` |
@@ -332,7 +332,7 @@ dialog start), [BW6](../research/ledger/ui-audio.md#barter-window-art-arc-ui-064
 - **Buy-object script** (point 17): not run; a merchant that has one refuses every sale below Expert haggle. The original runs it at
   every sale quote (twice below Expert), so its side effects repeat on hover.
 - **Count dialog** for stacks: a stack trades whole. **Quote and refusal lines** (`gd_npc_*` 800–1499 and 4600, "not enough money" from
-  `gd_cls_*`): the window prints its own text. **Gambling** (FR-ITEM-019): see [Gambling](#gambling-arc-ui-1740); the opening shop's docked window has no bet box yet.
+  `gd_cls_*`): the window prints its own text. **Gambling** (FR-ITEM-019): see [Gambling](#gambling-arc-ui-1740); the opening shop's docked window has the bet box too ([ARC-UI-1806](#gambling-in-the-opening-shop-arc-ui-1806)).
 - **Paperdoll**: the merchant's worn items are not offered (the original reaches them only through its paperdoll); the follower menu and
   follower cycling open nothing.
 - The uninitialised "buys everything" flag of a set without a buy line and of an out-of-range source (BT8): read as 0 (buys nothing).
@@ -347,7 +347,17 @@ print the merchant's line of its category; a passing ware prints the training wa
 The lines come from the player's generated NPC files (one draw each); without them the window prints a plain text.
 
 A release on the box bets (`AreaBarter.Gamble`, the session's `GameSessionOwner.Gamble`): the Gambling check of the hero against the merchant's level
-on the saved d100; a win moves the item for nothing and costs the merchant the item's worth in reaction (`GamblingRules.WonReaction`), a loss moves it
-for the unit price like a buy. A stack goes whole. The saved roll is thrown at the first barter window (`GameSessionOwner.EnsureGamblingRoll`), the
-check's own draw replaces it for the next bet, and the roll is part of the snapshot (schema 101). A refused move (no room, a script, too few coins for
+on the saved d100; a win moves the item for nothing and costs the merchant the item's worth in reaction (`GamblingRules.WonReaction`), a loss only charges the
+unit price × count (the exe skips the move block under flag 0x10, ARC-UI-2215: the item stays with the merchant, also a worn one on its slot). A stack goes whole. The saved roll is thrown at the first barter window (`GameSessionOwner.EnsureGamblingRoll`), the
+check's own draw replaces it for the next bet, and the roll is part of the snapshot (schema 101). A refused move or payment (no room for the won item, a script, too few coins for
 a lost stack) leaves the roll, the generator and the fate as they were.
+
+### Gambling in the opening shop (ARC-UI-1806)
+
+The opening shop's docked window (ARC-UI-069) runs the same bet box in the same inventory window mode, so the box, the hover gate, the release rule, the
+lines and the trade sound are the dialog window's, over the shop's session. `AreaShopSession.Open` gives the shop's `AreaBarter` the two things the dialog
+path reads from the world: the merchant's Gambling skill (its stored sheet through `AreaAdvancement.Npc` with the new character's hero tables, as the dialog path's
+follower sheet) and its generated NPC lines (`AreaShopLines`, the plain NPC files and the merchant's override dialog, read from the shop's own script content
+that the viewer opens at the first line and releases when the shop's window ends; the shop map has no conversation host). Without the hero tables the merchant has no
+points and the gate refuses it (category 9); without the content no line is said. The shop's session is the game's session once the start takes it, so a bet made
+there (a won or lost ware, the saved roll) goes on into the game.

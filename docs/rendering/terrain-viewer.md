@@ -1113,8 +1113,8 @@ floating lines, so above the objects and below the numbers) in the original's fo
   behaves as the original does at its centre). The table holds eight bubbles; a ninth takes the oldest non-persistent one. A new scene
   drops every bubble. The text keeps the screen's pixels at any zoom (the original has no zoom either).
 - **Removal by the object's end** (ARC-UI-2034, ledger TB16, TB27). A script's fade (action 103) empties the table (every fade run, whatever its operands, as the original's clear-all runs first); an object the session destroyed or switched off (off flag 0x2), or a created critter the session no longer holds, loses its bubble (`TextBubbleGoneWatch` reads the state each frame; a bubble made over an object that is already gone stays, as the original removes only at the change). Death, moves and the hero's own bubble are untouched. Limits (TB27): a created critter's off flag is not read, a companion carried from another map is never read as gone, and the state is polled once a frame.
-- **Not done.** The final-line close of a dialog (#2028), the speaker's turn toward the listener
-  and the speech voice, the objects' draw offsets, the exact word-break rules (TB22).
+- **Speaker's turn** (ARC-UI-2029, ARC-UI-2055, ARC-UI-2049, ledger TB26): every speech display with a listener turns an idle living NPC speaker to it (`AreaAiHost.FaceListener`): the dialog's NPC lines (the line hook, and `SpeakFinalLine` for a dialog that ends at its start), the generic greeting, float lines and barks; the talk smoke requires the ask for each started or ended-at-once dialog.
+- **Not done.** The objects' draw offsets, the exact word-break rules (TB22).
 
 Checks: `TextBubblesTests` (colours, life, wrap, slots and slot choice, the table's reuse and eviction, life rules, the setting change) and
 the `map` stage's talk smoke (the NPC line of every started conversation is a persistent bubble, replaced on each reply, not persistent after the end; no `npc` text in the panel); `ARC_AREA_TALK_CAPTURE=PATH` saves the first open dialog as `PATH.png` and the `floaters` smoke stage's bubble part (a PC's and an NPC's bubble over their objects, green and white, wrapped within 200 px,
@@ -2110,11 +2110,50 @@ keeps going under it too.
   the folder it was launched from (the folder of the `.app`, or of the exe); a translocated app, or a folder that cannot
   take a written file, falls back to the user folder's `reports` with the reason. A source run uses its user folder;
   an automated run its isolated folder. No upload.
+- **Owner check tag (ARC-DEV-2189).** While the owner has a step open on the QA page (`./arcanum qa`, [toolchain](../workflow/toolchain.md#owner-qa-page-arc-dev-2187)),
+  Ctrl+B reads its id `ARC-TYPE-NNN#k` from the one-line file `local/qa/active-check.txt` (git-ignored; found above the launch
+  folder of a packaged game or above the project folder of a checkout or its worktree; `ARC_QA_ACTIVE_CHECK` names the file
+  directly, and an automated run reads only that variable). The window then shows an "Owner check" row, editable, empty for none; a
+  text that is not a step id keeps the window open and sends nothing. `report.md` gets one machine-readable line
+  `Check: ARC-TYPE-NNN#k` before its first heading (`BugReportCheck.cs`, `BugReportWriter.Markdown`), absent when no check is
+  active. A missing, unreadable, malformed, oversized or older-than-12-hours file is "no check" and never blocks a report; the row is
+  hidden without a check, so a player's window is unchanged.
 - **Smoke.** Stage `report` (last in the map battery, or `ARC_AREA_MAP_SMOKE_ONLY=report`): Ctrl+B opens the modal
   report, the moment holds a save, the log line before the key and a screenshot; Send writes the folder whose
   `report.md` names the build, rules, map, hero and combat, whose log holds the line and whose save loads; Escape
-  closes it; Ctrl+B over the logbook and Escape close only the report; a cancelled report writes nothing. Marker
+  closes it; Ctrl+B over the logbook and Escape close only the report; a cancelled report writes nothing; with the active-check
+  file set (a synthetic step id through `ARC_QA_ACTIVE_CHECK`) the window shows the step and `report.md` carries its `Check:` line. Marker
   `ARC-DEV-051 native-smoke bug report PASS`. Player instruction: [alpha build](../player/alpha-build.md#9-reporting-a-bug-ctrlb).
+
+#### Owner checks overlay (ARC-DEV-2190)
+
+In-game side of the owner QA layer (epic #2185; the page is `./arcanum qa`, [toolchain](../workflow/toolchain.md#owner-qa-page-arc-dev-2187)).
+A PROJECT window (the original has no such window; no original art; all text English), `AreaOwnerQaPanel`/`TerrainViewerOwnerQa.cs`.
+
+- **Key.** Ctrl+Q opens it (no key of the original: Q has no binding in the world and a Ctrl letter is silenced, ARC-INPUT-004), in play,
+  in the main menu and over any window; Ctrl+Q or Escape closes it. It is routed right after the bug report, so Ctrl+B still opens
+  the report over it. Ctrl+Shift+Q hides or shows the plate. The overlay is modal like the report (the game clock pauses).
+- **On only for the owner.** The overlay needs the QA folder `local/qa` (found above the launch folder or the project folder, as the
+  Ctrl+B tag finds its file) and the flag `ARC_OWNER_QA=1` or the marker `local/qa/owner-qa.on` (`./arcanum qa overlay on`).
+  `ARC_OWNER_QA_DIR` names the folder directly (the smoke; the only way an automated run uses it). Without it Ctrl+Q is not taken and
+  nothing is drawn, so a normal player build is unchanged.
+- **List.** The steps of `local/qa/checks.json`, the current step first (the step of `active-check.txt`, else the first open one;
+  picking a row makes it current and writes the file, so Ctrl+B and the page follow, and the plate follows the page within two
+  seconds), the others by filter: Open, This section, All. A recorded status wins over the list's own.
+- **Result.** Same / Differs / Cannot test append one event to `local/qa/results.jsonl` (the page's format, plus `build` = the build's
+  commit and `src: game`) with the note and the step's last report folder; the page shows it at once and `./arcanum qa sync` or the
+  running page creates the issue of a `differs` exactly once. Next open moves to the next open step.
+- **Send report.** The overlay keeps the key's moment as Ctrl+B does (screen, last 120 s of the log, a save) and Send writes the same
+  report folder (the same writer and places) tagged with the step (`Check:` line, ARC-DEV-2189); the folder name is recorded in the
+  step's result (status kept, `open` when none). One send per opening; the note is the player's text.
+- **Plate.** While a step is current a read-only plate at the top left (`Check ARC-TYPE-NNN#k: step`) stays on screen; it takes no click and
+  no key and draws no original art.
+- **Smoke.** Stage `report` also runs the overlay (marker `ARC-DEV-2190 native-smoke owner-qa PASS`, required beside the report's own):
+  a synthetic folder of three steps through `ARC_OWNER_QA_DIR`; the key does nothing before it is set; the window fits the screen with the
+  first open step current; picking writes the file and moves the plate; Send writes a report whose `report.md` carries the `Check:` line
+  and records its folder name; Differs and Same append lines with the build; Escape closes, the plate hides and shows on Ctrl+Shift+Q;
+  Ctrl+Q over the logbook closes only the overlay. `ARC_OWNER_QA_CAPTURE` (via `--env`) saves pictures of the window.
+- **Tests.** `OwnerQaTests` (files, model, filters, flag rules); `tools/local_dev/test_qa.py` (snapshot, game results, auto sync, marker).
 
 ### Main menu (ARC-UI-011)
 
@@ -3073,7 +3112,7 @@ a right release on an item moves it to the other side the same way (IW36); anyth
 original's hover rewrites its line. A left release in the round view closes the window. ARC-UI-1120 (HK25, BW6): a pointer resting on an item first runs the item's examine script for the hero and draws its window while the bars show (the quote follows either way), and the cycle buttons 757 / 758 of the follower background switch the window to the previous or next follower ([barter runtime](../world/barter-runtime.md#follower-cycle-and-examine-arc-ui-1120)). The `Diagnostic view` switch below the frame
 shows the diagnostic window and back (the choice holds until it is switched again, as in the inventory window); a controller reaches
 only that switch in the original look (PROJECT: trades without a mouse go through the diagnostic window's buttons); since ARC-UI-069 the opening shop's docked window shows
-the original look too ([its section](#opening-shop-in-the-originals-look-arc-ui-069)). Since ARC-UI-1740 the gamble box works ([barter](../world/barter-runtime.md#gambling-arc-ui-1740)): the art follows the pointer (345 rest, 344 when the gate 0x579840 passes for a held ware, 346 when it refuses), the merchant's line shows in the quote line, a release on it bets. NOT READY: the hero's grid moves and its drop and use boxes inside the barter window (the item goes back), the count dialog, the
+the original look too ([its section](#opening-shop-in-the-originals-look-arc-ui-069)). Since ARC-UI-1740 the gamble box works ([barter](../world/barter-runtime.md#gambling-arc-ui-1740)): the art follows the pointer (345 rest, 344 when the gate 0x579840 passes for a held ware, 346 when it refuses), the merchant's line shows in the quote line, a release on it bets (the opening shop's docked window too, ARC-UI-1806). NOT READY: the hero's grid moves and its drop and use boxes inside the barter window (the item goes back), the count dialog, the
 generated quote phrases, the follower's weight lines, the hero's item released on a slot of the merchant's doll (issue #2138), staking a worn item (issue #2139), the scroll bar's art, a follower's portrait as the image, the original fonts.
 **Merchant's doll view (ARC-UI-1917,** [ledger IW29, IW30](../research/ledger/ui-audio.md#loot-window-art-arc-ui-052)**):** the doll and bag buttons 338 and 339 at (8, 123) and (46, 123) are drawn whenever the window shows a merchant or a follower (the shown grid may be a substitute container's); the doll button shows art 337 `Barter_PD` at (0, 157) with the merchant's worn items by inventory art in the nine rectangles of table 0x5CAD78 (the loot windows' rectangles), the covers of the empty slots, the doll's two values and the weapon slot's fill (only where the combat host covers the map: no values in the opening shop, and a body the session's lists do not show as an NPC, such as a follower held elsewhere, draws covers only), and hides the grid; the bag button shows the grid again. The toggle starts clear at every open. ARC-UI-1926 (ledger IW29, IW36): a slot's rectangle hits the location 1000 + slot, a press lifts the merchant's worn item, the resting pointer quotes it (`Buy NAME (worn): no price (Worn)`), and a release on the hero's grid or a right release buys it through `AreaBarter.Buy` (the model's `WornWares`, taken from the merchant itself): below Master haggle the price is 0 and the buy is refused, a follower's window gives it away. NOT READY: a hero's item released on a slot of the merchant's doll goes back (issue #2138). The native smoke stage `barter` checks the buttons, the doll view, the worn vest's lift, quote and refused buy, and its frame in the Legacy, HD and (ARC-UI-1750, recipe `barter_pd.art`) Generated runs (`ARC_AREA_WINDOW_ART`).
 
@@ -3088,7 +3127,7 @@ released on its own grid changing nothing, the switch and back, a release on the
 `ARC_AREA_MAP_SMOKE_ONLY`, `--area-map` with `--hero`: a speaker opened through the path a `b:` reply takes, a merchant buying through
 its substitute container when no speaker buys itself, its quotes, the open is at most two revisions (the coins and identification, the
 restock schedule), `Escape` closes with nothing changed; one sale and one buy on a detached copy, through the container when there is
-one); with it `ARC-UI-064 native-smoke barter-art PASS` on the live window (mode 1, the background by the follower rule, the merchant's
+one; ARC-UI-1809: `ARC-UI-1740 native-smoke barter-gamble PASS` bets the first single (non-stack) ware the gate lets through on two detached gambler sessions (a synthetic hero with Gambling points, the real merchant's wares and prices, a session seed chosen for a saved roll of at most 90 against a merchant of Gambling level 0 and for one of 96 or more against level 20) and checks that the first wins and the second loses, each bet using exactly its saved roll, wins or loses by `roll + difficulty <= effectiveness`, costs nothing on a win and the quote on a loss, and saves the check's own draw as the next roll; a merchant with no Gambling points refuses its first ware; a merchant with no single non-stack ware the gate lets through is logged `NOT BET` and the bet is skipped); with it `ARC-UI-064 native-smoke barter-art PASS` on the live window (mode 1, the background by the follower rule, the merchant's
 image and every shown item's art read, the round view shown, the first ware's quote, that ware released on its own grid going back;
 `ARC_AREA_BARTER_CAPTURE=PATH.png` saves the window); then `ARC-WORLD-096 native-smoke restock PASS` on the live session: a jump to the container's restock event with the container on
 screen schedules it again, with the camera panned until it is off screen the next event regenerates it through its merchant, and the

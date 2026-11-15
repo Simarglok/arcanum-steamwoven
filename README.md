@@ -96,8 +96,13 @@ toolchain document. The root checks:
 dotnet restore Arcanum.Steamwoven.sln --locked-mode && dotnet build --no-restore && dotnet test --no-build --filter "TestCategory!=RealData"
 python3 -B tools/research/dat_probe.py --self-test
 python3 -B tools/original-oracle/oracle.py --self-test
+python3 -B tools/local_dev/run_tests.py
+./arcanum smoke self-test --headless
 python3 -B tools/docs_check.py
 ```
+
+The `run_tests.py` line runs the `tools/local_dev` unit tests (modules in parallel, about 1.5 min) inside the batched
+`./arcanum run --kind dotnet` step; `smoke self-test --headless` queues itself (about 15 s, never inside `./arcanum run`).
 
 Tests on the player's own data are opt-in through environment variables and test categories ([opt-in original data](docs/workflow/toolchain.md#opt-in-original-data)).
 A documentation-only change runs only `python3 -B tools/docs_check.py`. Every Godot run and every `dotnet` build or test of a

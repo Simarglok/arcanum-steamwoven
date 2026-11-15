@@ -70,6 +70,7 @@ a { color:var(--accent); }
 "use strict";
 const TOKEN = "__QA_TOKEN__";
 const STATUS_LABEL = { "open": "open", "same": "same", "differs": "differs", "cannot-test": "cannot test" };
+let activeSend = Promise.resolve();
 let data = null, filter = "all", section = "", selected = null;
 const opened = new Map();          // step id -> epoch seconds when the step was first opened on this page
 const drafts = new Map();          // step id -> { note, report } edited, not yet saved
@@ -109,8 +110,10 @@ function draftOf(step) {
 function preselect(step) {
   const draft = draftOf(step);
   if (step.recorded || chosen.has(step.id) || draft.report || step.report) return;      // a saved step keeps what the owner saved
+  const tagged = data.reports.find(r => r.check === step.id);      // ARC-DEV-2189: a report that names this step (newest first)
+  if (tagged) { draft.report = tagged.name; return; }
   const since = opened.get(step.id) || 0;
-  const newest = data.reports.find(r => r.epoch >= since);      // reports are newest first
+  const newest = data.reports.find(r => r.epoch >= since && !r.check);      // one tagged for another step is not this step's
   if (newest) draft.report = newest.name;
 }
 function render() {
@@ -139,17 +142,20 @@ function render() {
   }
   list.replaceChildren(...(out.length ? out : [h("div", { class: "empty" }, "No steps match this filter.")]));
 }
-function reportOptions(draft) {
+function reportOptions(draft, step) {
   const names = new Set(data.reports.map(r => r.name));
   const options = [h("option", { value: "" }, "no report attached")];
   if (draft.report && !names.has(draft.report)) options.push(h("option", { value: draft.report }, draft.report + " (folder not found)"));
-  for (const r of data.reports) options.push(h("option", { value: r.name }, r.name + " · " + (r.text || "(no text)")));
+  const label = r => r.name + (r.check ? " [" + r.check + "]" : "") + " · " + (r.text || "(no text)");
+  const mine = data.reports.filter(r => r.check === step.id);      // the reports tagged with this step come first
+  for (const r of mine) options.push(h("option", { value: r.name }, "★ " + label(r)));
+  for (const r of data.reports) if (r.check !== step.id) options.push(h("option", { value: r.name }, label(r)));
   return options;
 }
 function stepNode(step) {
   const draft = draftOf(step);
   if (opened.has(step.id)) preselect(step);
-  const options = reportOptions(draft);
+  const options = reportOptions(draft, step);
   const report = h("select", { "aria-label": "Bug report folder", on: { focus: () => refreshReports(step), change: e => { chosen.add(step.id); draft.report = e.target.value || null; if (step.recorded || step.status !== "open") save(step, step.status); } } }, options);
   report.value = draft.report || "";
   const note = h("textarea", { placeholder: "Note (what you saw)", "aria-label": "Note", on: {
@@ -175,7 +181,7 @@ async function refreshReports(step) {
   if (!sel) return;
   if (before !== data.reports.map(r => r.name).join("|")) {     // new folders: the dropdown needs them; only this step's list is rebuilt, so no focus is lost
     const keep = sel.value;
-    sel.replaceChildren(...reportOptions(draftOf(step)));
+    sel.replaceChildren(...reportOptions(draftOf(step), step));
     sel.value = draftOf(step).report || keep;
     return;
   }
@@ -185,6 +191,7 @@ function choose(id, scroll) {
   if (selected === id) return;
   selected = id;
   if (!opened.has(id)) { opened.set(id, Math.floor(Date.now() / 1000)); const step = find(id); if (step) refreshReports(step); }
+  activeSend = activeSend.then(() => api("/api/active", { step: id })).catch(() => {});      // one at a time, in order: the last open step wins      // ARC-DEV-2189: the viewer's Ctrl+B tags its report with the open step
   document.querySelectorAll(".step").forEach(n => n.classList.toggle("sel", n.dataset.id === id));
   if (scroll) { const n = document.querySelector('.step[data-id="' + CSS.escape(id) + '"]'); if (n) { n.scrollIntoView({ block: "center" }); n.focus({ preventScroll: true }); } }
 }

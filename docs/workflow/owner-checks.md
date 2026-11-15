@@ -22,6 +22,18 @@ read is a failure of `python3 -B tools/docs_check.py`, so a malformed row never 
   A note may follow in `(…)` or `[…]`, for example `same (5 pieces, owner 2026-11-12)` or `differs ([#1234](…))`. Only the
   first word decides the status.
 
+## Ctrl+B tag (ARC-DEV-2189)
+
+The page writes the step the owner has open to `local/qa/active-check.txt`; the viewer's Ctrl+B report then carries the line
+`Check: ARC-TYPE-NNN#k` (before its first heading), which the page reads to list a step's reports. The format of the id is the
+one above; see [the toolchain](toolchain.md#owner-qa-page-arc-dev-2187) and [the viewer](../rendering/terrain-viewer.md).
+
+## In-game overlay (ARC-DEV-2190)
+
+`./arcanum qa` also writes the list as `local/qa/checks.json` for the overlay of the viewer (Ctrl+Q, on only with
+`./arcanum qa overlay on` or `ARC_OWNER_QA=1`), which records `same` / `differs` / `cannot-test` with a note into
+`local/qa/results.jsonl` and sends a Ctrl+B report tagged with the step. See [the viewer](../rendering/terrain-viewer.md#owner-checks-overlay-arc-dev-2190).
+
 Known variant of 2026-11-15: a stray second row 4 of ARC-UI-1364 sits after the section's bullets; the parser reads it as
 the next free number of that section (`KNOWN_REPEATS` in the parser) until issue #2193 renumbers it.
 

@@ -1,6 +1,8 @@
 """ARC-DEV-2187: tests of ./arcanum qa with synthetic fixtures (a fake ``gh``, no network, no real list or report)."""
 from __future__ import annotations
 
+import contextlib
+import io
 import json
 from pathlib import Path
 import subprocess
@@ -73,10 +75,10 @@ def make_app(root: Path, gh=None, reports: Path | None = None) -> qa.QaApp:
     return app
 
 
-def make_report(reports: Path, name: str, text: str | None = "the door stays shut") -> None:
+def make_report(reports: Path, name: str, text: str | None = "the door stays shut", check: str | None = None) -> None:
     folder = reports / name
     folder.mkdir(parents=True)
-    body = "# Bug report\n\n## What the player wrote\n\n" + (f"> {text}\n> second line\n" if text else "(no text)\n") + "\n## Game state\n\n> not this\n"
+    body = "# Bug report\n\n" + (f"Check: {check}\n\n" if check else "") + "## What the player wrote\n\n" + (f"> {text}\n> second line\n" if text else "(no text)\n") + "\n## Game state\n\n> not this\n"
     (folder / "report.md").write_text(body, encoding="utf-8")
     (folder / "log.txt").write_text("SECRET LOG", encoding="utf-8")
 
@@ -142,6 +144,87 @@ class ReportTests(unittest.TestCase):
             saved = app.save({"step": "ARC-UI-200#1", "status": "same", "report": "2026-11-15_10-00-00"})
             self.assertEqual("2026-11-15_10-00-00", saved["report"])
             self.assertNotIn("SECRET", app.store.results_path.read_text())      # the folder name only
+
+
+class ActiveCheckTests(unittest.TestCase):
+    """ARC-DEV-2189: the active-check file the viewer's Ctrl+B reads and the Check line it writes into report.md."""
+
+    def test_the_names_match_the_viewers(self) -> None:
+        source = (REPO / "tools" / "terrain-viewer" / "Core" / "BugReportCheck.cs").read_text(encoding="utf-8")
+        self.assertIn(f'FileName = "{qa.ACTIVE_FILE}"', source)
+        self.assertIn(f'LinePrefix = "{qa.CHECK_PREFIX}"', source)
+        self.assertTrue(subprocess.run(["git", "-C", str(REPO), "check-ignore", "-q", "local/qa/" + qa.ACTIVE_FILE]).returncode == 0)
+
+    def test_opening_a_step_writes_one_line_and_clearing_removes_it(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            app = make_app(Path(tmp))
+            path = app.store.active_path
+            self.assertEqual("ARC-UI-200#1", app.set_active("ARC-UI-200#1"))
+            self.assertEqual("ARC-UI-200#1\n", path.read_text())
+            self.assertEqual("ARC-DEV-100#2", app.set_active("ARC-DEV-100#2"))
+            self.assertEqual("ARC-DEV-100#2\n", path.read_text())          # replaced whole
+            self.assertIsNone(app.set_active(None))
+            self.assertFalse(path.exists())
+            self.assertIsNone(app.set_active(""))                          # clearing twice is fine
+            app.store.clear_active()
+
+    def test_concurrent_writes_leave_one_whole_line_and_no_temporary_files(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            app = make_app(Path(tmp))
+            ids = ["ARC-DEV-100#1", "ARC-DEV-100#2", "ARC-UI-200#1", "ARC-BUG-300#1"]
+            errors: list[BaseException] = []
+
+            def work(step: str) -> None:
+                try:
+                    for _ in range(30):
+                        app.set_active(step)
+                except BaseException as error:           # noqa: BLE001 - collected for the assertion
+                    errors.append(error)
+            threads = [threading.Thread(target=work, args=(step,)) for step in ids]
+            for thread in threads:
+                thread.start()
+            for thread in threads:
+                thread.join()
+            self.assertEqual([], errors)
+            self.assertIn(app.store.active_path.read_text(), [step + "\n" for step in ids])
+            self.assertEqual([qa.ACTIVE_FILE], sorted(item.name for item in app.store.directory.iterdir() if item.name != ".lock"))
+
+    def test_only_a_step_of_the_list_can_be_active(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            app = make_app(Path(tmp))
+            for bad in ("ARC-DEV-100#9", "../x", "ARC-DEV-100", 5, ["ARC-DEV-100#1"]):
+                with self.assertRaises(ValueError, msg=str(bad)):
+                    app.set_active(bad)
+            self.assertFalse(app.store.active_path.exists())
+
+    def test_a_clear_that_fails_does_not_stop_the_page(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            store = qa.Store(Path(tmp))
+            store.active_path.mkdir(parents=True)          # a directory cannot be unlinked as a file
+            with contextlib.redirect_stderr(io.StringIO()) as quiet:
+                store.clear_active()                       # reports on stderr, raises nothing
+            self.assertIn("could not remove", quiet.getvalue())
+
+    def test_reports_carry_their_check_and_only_from_the_head(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            reports = Path(tmp)
+            make_report(reports, "2026-11-15_09-00-00", check="ARC-DEV-100#2")
+            make_report(reports, "2026-11-15_10-00-00", "Check: ARC-UI-200#1")           # the player's own line, quoted below a heading
+            make_report(reports, "2026-11-15_11-00-00", check="not a step")
+            make_report(reports, "2026-11-15_12-00-00")
+            found = {item["name"]: item for item in qa.list_reports(reports)}
+            self.assertEqual("ARC-DEV-100#2", found["2026-11-15_09-00-00"]["check"])
+            self.assertEqual("the door stays shut", found["2026-11-15_09-00-00"]["text"])
+            self.assertEqual([None, None, None], [found[name]["check"] for name in ("2026-11-15_10-00-00", "2026-11-15_11-00-00", "2026-11-15_12-00-00")])
+            (reports / "2026-11-15_13-00-00").mkdir()                                     # no report.md: no check, no failure
+            self.assertIsNone({item["name"]: item for item in qa.list_reports(reports)}["2026-11-15_13-00-00"]["check"])
+
+    def test_a_forged_check_in_the_players_text_is_not_a_check(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            make_report(Path(tmp), "2026-11-15_09-00-00", "Check: ARC-UI-200#1", check=None)
+            body = "# Bug report\n\n## What the player wrote\n\nCheck: ARC-UI-200#1\n"      # even unquoted, below the first heading
+            (Path(tmp) / "2026-11-15_09-00-00" / "report.md").write_text(body)
+            self.assertEqual("", qa.report_head(Path(tmp) / "2026-11-15_09-00-00" / "report.md")[1])
 
 
 class IssueTests(unittest.TestCase):
@@ -335,6 +418,20 @@ class ServerTests(unittest.TestCase):
         self.assertEqual(200, self.call("/api/reports")[0])
         self.assertEqual(404, self.call("/api/none")[0])
 
+    def test_api_active_writes_and_clears_the_file(self) -> None:
+        self.assertEqual((200, {"active": "ARC-UI-200#1"}), self.call("/api/active", {"step": "ARC-UI-200#1"}))
+        self.assertEqual("ARC-UI-200#1\n", self.app.store.active_path.read_text())
+        self.assertEqual(400, self.call("/api/active", {"step": "ARC-NOPE-1#1"})[0])
+        self.assertEqual("ARC-UI-200#1\n", self.app.store.active_path.read_text())      # a refused one keeps the previous
+        self.assertEqual((200, {"active": None}), self.call("/api/active", {"step": None}))
+        self.assertFalse(self.app.store.active_path.exists())
+        request = urllib.request.Request(f"http://127.0.0.1:{self.port}/api/active", data=b'{"step":"ARC-UI-200#1"}', method="POST")
+        with self.assertRaises(urllib.error.HTTPError) as caught:
+            self.opener.open(request, timeout=10)
+        caught.exception.close()
+        self.assertEqual(403, caught.exception.code)                                   # no token header, no write
+        self.assertFalse(self.app.store.active_path.exists())
+
     def test_a_post_needs_the_header_and_is_size_limited(self) -> None:
         request = urllib.request.Request(f"http://127.0.0.1:{self.port}/api/result?t={self.token}", data=b"{}", method="POST")
         with self.assertRaises(urllib.error.HTTPError) as caught:
@@ -356,6 +453,101 @@ class ServerTests(unittest.TestCase):
             thread.join()
         self.assertEqual(1, len(set(results)))
         self.assertEqual(1, len(self.gh.creates()))
+
+
+class OverlayTests(unittest.TestCase):
+    """ARC-DEV-2190: the files the in-game overlay shares with the page (snapshot, game results, marker) and the page's auto sync."""
+
+    def test_the_snapshot_is_text_only_and_replaced_whole(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            app = make_app(Path(tmp))
+            app.store.write_checks("abc1234", "origin/main", list(app.parsed.steps))
+            app.store.write_checks("def5678", "origin/main", list(app.parsed.steps))
+            data = json.loads((app.store.directory / qa.CHECKS_FILE).read_text(encoding="utf-8"))
+            self.assertEqual("def5678", data["commit"])
+            self.assertEqual(4, len(data["steps"]))
+            self.assertEqual({"id": "ARC-DEV-100#2", "section": "ARC-DEV-100 - First slice (PR #1)", "step": "Walk through it.",
+                              "expected": "No block.", "status": "same"}, data["steps"][1])
+            self.assertEqual([qa.CHECKS_FILE], [item.name for item in app.store.directory.iterdir()])   # no temporary file is left
+
+    def test_reload_writes_the_snapshot_unless_turned_off(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            for snapshot in (True, False):
+                data = Path(tmp) / str(snapshot)
+                app = qa.QaApp(qa.Store(data), Path(tmp) / "reports", repo=REPO, ref="HEAD", fetch=False, snapshot=snapshot)
+                app.reload()
+                self.assertEqual(snapshot, (data / qa.CHECKS_FILE).exists())
+
+    def test_the_names_match_the_viewers(self) -> None:
+        source = (REPO / "tools" / "terrain-viewer" / "Core" / "OwnerQa.cs").read_text(encoding="utf-8")
+        for name in (qa.CHECKS_FILE, qa.OVERLAY_MARKER, "results.jsonl"):
+            self.assertIn(f'"{name}"', source)
+
+    def game_result(self, app: qa.QaApp, step: str, status: str, report: str | None = None) -> None:
+        """One line as the game appends it (OwnerQa.cs: the page's format plus build and src)."""
+        with app.store.locked():
+            app.store.append({"kind": "result", "ts": qa.now_iso(), "step": step, "status": status, "note": "from the game",
+                              "report": report, "build": "abc1234567", "src": "game"})
+
+    def test_a_game_result_is_read_and_its_differs_becomes_one_issue(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            gh = FakeGh()
+            app = make_app(Path(tmp), gh)
+            self.game_result(app, "ARC-DEV-100#1", "differs", "2026-11-15_10-00-00")
+            self.game_result(app, "ARC-UI-200#1", "same")
+            state = {step["id"]: step for section in app.state()["sections"] for step in section["steps"]}
+            self.assertEqual(("differs", "from the game", "2026-11-15_10-00-00"), (state["ARC-DEV-100#1"]["status"], state["ARC-DEV-100#1"]["note"], state["ARC-DEV-100#1"]["report"]))
+            for _ in range(3):
+                done, failed = app.sync()
+            self.assertEqual(1, len(gh.creates()))
+            self.assertIn("2026-11-15_10-00-00", gh.creates()[0][1])
+            self.assertIn("from the game", gh.creates()[0][1])
+            self.assertEqual(4001, app.store.read()[0]["ARC-DEV-100#1"]["issue"])
+
+    def test_the_running_page_creates_the_issue_once_and_leaves_a_failure_to_sync(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            gh = FakeGh()
+            app = make_app(Path(tmp), gh)
+            self.game_result(app, "ARC-DEV-100#1", "differs")
+            with contextlib.redirect_stdout(io.StringIO()):
+                qa.auto_sync(app, seconds=0, rounds=3, settle=0)
+            self.assertEqual(1, len(gh.creates()))
+            failing = FakeGh(fail=True)
+            other = make_app(Path(tmp) / "other", failing)
+            self.game_result(other, "ARC-UI-200#1", "differs")
+            with contextlib.redirect_stderr(io.StringIO()), contextlib.redirect_stdout(io.StringIO()):
+                qa.auto_sync(other, seconds=0, rounds=3, settle=0)
+            self.assertEqual(1, len(failing.creates()))                   # one attempt, no hammering of gh every round
+            failing.fail = False
+            done, failed = other.sync()                                    # `qa sync` retries it
+            self.assertEqual((["ARC-UI-200#1"], []), (done, failed))
+
+    def test_a_fresh_differs_waits_for_its_note_and_report(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            gh = FakeGh()
+            app = make_app(Path(tmp), gh)
+            self.game_result(app, "ARC-DEV-100#1", "differs")
+            self.assertEqual(([], []), app.sync(settle=60))         # younger than the settle time: not yet
+            self.assertEqual(0, len(gh.creates()))
+            self.game_result(app, "ARC-DEV-100#1", "differs", "2026-11-15_10-00-00")   # the report arrives meanwhile
+            self.assertEqual(0, len(gh.creates()))
+            self.assertEqual((["ARC-DEV-100#1"], []), app.sync(settle=0))
+            self.assertIn("2026-11-15_10-00-00", gh.creates()[0][1])
+
+    def test_overlay_on_and_off_write_and_remove_the_marker(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            data, reports = Path(tmp) / "data", Path(tmp) / "reports"
+            marker = data / qa.OVERLAY_MARKER
+            on = CommandTests.run_qa(self, "overlay", "on", data=data, reports=reports)
+            self.assertEqual(0, on.returncode, on.stderr)
+            self.assertTrue(marker.exists() and (data / qa.CHECKS_FILE).exists())
+            off = CommandTests.run_qa(self, "overlay", "off", data=data, reports=reports)
+            self.assertEqual(0, off.returncode, off.stderr)
+            self.assertFalse(marker.exists())
+            dry = CommandTests.run_qa(self, "overlay", "on", "--dry-run", data=Path(tmp) / "dry", reports=reports)
+            self.assertEqual(0, dry.returncode, dry.stderr)
+            self.assertFalse((Path(tmp) / "dry").exists())
+            self.assertEqual(2, CommandTests.run_qa(self, "overlay", data=data, reports=reports).returncode)
 
 
 class CommandTests(unittest.TestCase):
