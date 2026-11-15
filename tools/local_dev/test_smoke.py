@@ -15,7 +15,7 @@ import tempfile
 import unittest
 from unittest import mock
 
-from tools.local_dev import launch, run_queue, smoke, start_check
+from tools.local_dev import launch, run_queue, smoke, smoke_history, start_check
 
 REPO = Path(__file__).resolve().parents[2]
 ENVIRON = {"HOME": "/Users/x", "PATH": "/usr/bin", "DOTNET_ROOT": "/sdk", "DAT_ROOT": "/game", "ARC_HD_PACK": "/hd",
@@ -427,6 +427,19 @@ class ExecuteTests(unittest.TestCase):
             return codes.get(name, 0)
 
         return smoke.execute(steps, runner, lines.append), calls, lines
+
+    def test_a_failed_step_journals_the_stages_it_passed_before_it_stopped(self) -> None:  # ARC-DEV-2223
+        log = Path(self.temp.name) / "run-000000000042-window.log"
+        log.write_text(smoke.STAGE_PASS["cast"] + "\n", encoding="utf-8")  # cast passed, ai never did
+        recorded: list[dict] = []
+        step = smoke.Step("stages-main", "window", ("g",), "^A$", requires=("cast", "ai"))
+        with mock.patch.object(smoke_history, "append", recorded.append), \
+                mock.patch.object(smoke_history, "work_tree", return_value="T9"), \
+                mock.patch.object(smoke_history, "queue_line", return_value=None):
+            smoke.execute([step], lambda *a, log_sink, **k: (log_sink(log), 1)[1], lambda line: None, [])
+        self.assertEqual(len(recorded), 1)
+        self.assertEqual((recorded[0]["passed"], recorded[0]["tree"], recorded[0]["custom"], recorded[0]["knownOnly"]),
+                         (["cast"], "T9", False, False))
 
     def test_every_smoke_runs_quiet_and_start_checked_and_a_failure_does_not_stop_the_chain(self) -> None:
         steps = [smoke.Step("build", "dotnet", ("sh",), gate=True), smoke.Step("crash-site", "window", ("g",), "^A$"),
