@@ -17,11 +17,11 @@ namespace Arcanum.CrashSiteProbe;
 // Only numbers and map names leave the probe (no script text, no object names, no payload).
 internal static partial class Program
 {
-    private static readonly string[] RcSetNames = ["S30", "S31", "S32", "S33", "S38", "S43", "S52", "S53", "S54", "S55", "S56", "S58", "S59"];
+    private static readonly string[] RcSetNames = ["S30", "S31", "S32", "S33", "S38", "S43", "S52", "S53", "S54", "S55", "S56", "S58", "S59", "S60"];
 
     private static ScrAdmissionSet? RcNamedSet(string name) => name switch
     {
-        "S30" => ScrAdmissionSet.S30, "S31" => ScrAdmissionSet.S31, "S32" => ScrAdmissionSet.S32, "S33" => ScrAdmissionSet.S33, "S38" => ScrAdmissionSet.S38, "S43" => ScrAdmissionSet.S43, "S52" => ScrAdmissionSet.S52, "S53" => ScrAdmissionSet.S53, "S54" => ScrAdmissionSet.S54, "S55" => ScrAdmissionSet.S55, "S56" => ScrAdmissionSet.S56, "S58" => ScrAdmissionSet.S58, "S59" => ScrAdmissionSet.S59, _ => null,
+        "S30" => ScrAdmissionSet.S30, "S31" => ScrAdmissionSet.S31, "S32" => ScrAdmissionSet.S32, "S33" => ScrAdmissionSet.S33, "S38" => ScrAdmissionSet.S38, "S43" => ScrAdmissionSet.S43, "S52" => ScrAdmissionSet.S52, "S53" => ScrAdmissionSet.S53, "S54" => ScrAdmissionSet.S54, "S55" => ScrAdmissionSet.S55, "S56" => ScrAdmissionSet.S56, "S58" => ScrAdmissionSet.S58, "S59" => ScrAdmissionSet.S59, "S60" => ScrAdmissionSet.S60, _ => null,
     };
 
     /// <summary>The set under test with every catalogued condition and action type admitted, and its own value kinds, focus kinds and counter rule kept, so what the production

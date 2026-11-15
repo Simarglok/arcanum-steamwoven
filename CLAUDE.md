@@ -26,8 +26,10 @@ and its link holds the detail.
   the daily package build (`./arcanum daily`), when main changed since the last
   package ([smoke scope](docs/workflow/tasks.md#smoke-scope)). Run them with
   `./arcanum smoke pr --auto` (the zones the diff selects, printed with the
-  reason; or `--stages S,... [--crash-site]`) and `./arcanum smoke complete`,
-  never a scratch smoke script. Any PR that changes click or walk handling always
+  reason; `complete` at a PR is core + the Crash Site smoke; or `--stages S,...
+  [--crash-site]` on top) and `./arcanum smoke complete`, never a scratch smoke
+  script. The `--auto` set is a **floor** (ARC-DEV-2223): before every code merge
+  `./arcanum smoke verify-pr` must print `SMOKE verify-pr PASS` ([PR floor](docs/workflow/tasks.md#smoke-scope)). Any PR that changes click or walk handling always
   runs `./arcanum smoke pr --stages map` and `./arcanum smoke self-test`, even
   when no other stage covers it ([smoke runner](docs/workflow/toolchain.md#smoke-runner-arc-dev-061)).
 - **Token rules** ([token rules](docs/workflow/tasks.md#token-rules), owner

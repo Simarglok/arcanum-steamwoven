@@ -206,10 +206,11 @@ public partial class TerrainViewerApp
             require(((AreaGridSession)_worldActor.Session!).State.CommittedCell == shiftStart && HeroRunsHost()?.TalkRun is null && Talking() is null && !HeroWalking, "the Shift talk walked nowhere, ended its run and opened no dialog");
             GD.Print($"ARC-AI-1137 native-smoke shift-talk PASS speaker={farSpeaker.ScriptId}");
         }
+        // ARC-WORLD-2238: the distance is from where the speaker stands now (the AI host has moved the fixture's one near speaker 23 cells off), so the far bound is wider than the T0 one was.
         GoalRun? talk = null;
         AreaSpeaker? chosen = null;
         foreach (var speaker in _conversationHost!.Speakers.Where(SpeakerPresent)
-            .Select(sp => (Speaker: sp, Distance: AreaConversationHost.Distance(sp, here.X, here.Y, SpeakerCell))).Where(c => c.Distance is >= 4 and <= 12).OrderBy(c => c.Distance).Select(c => c.Speaker).Take(8))
+            .Select(sp => (Speaker: sp, Distance: AreaConversationHost.Distance(sp, here.X, here.Y, SpeakerCell))).Where(c => c.Distance is >= 4 and <= 30).OrderBy(c => c.Distance).Select(c => c.Speaker).Take(8))
         {
             var start = grid.State.CommittedCell;
             if (!TryAreaTalk(speaker)) continue;
@@ -220,7 +221,7 @@ public partial class TerrainViewerApp
             if (Talking() is not null) EndConversation();
             for (var i = 0; i < 10; i++) { tick(); AreaSmokeFrame(); }
         }
-        require(talk is not null, "the hero's talk walked toward a speaker four to twelve cells off");
+        require(talk is not null, "the hero's talk walked toward a speaker four to thirty cells off");
         QuickKey(Key.F7);
         require(_quickSaveStatus?.StartsWith("F7 quick saved", StringComparison.Ordinal) == true, "F7 saved the hero walking to talk: " + _quickSaveStatus);
         var running = _areaSession!;

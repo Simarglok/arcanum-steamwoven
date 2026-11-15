@@ -305,8 +305,8 @@ public sealed class AreaScriptEyeCandyTests
         Assert.AreEqual(1, f.Session.QueryGoals().RunsOf(Hero).Count(r => !r.Done), "the tagged run stays");
     }
 
-    // ARC-SCRIPT-1828 (WE12): the 22 installed scripts that stop a script eye candy (the ground rune tile scripts 2210 to 2230 and the heartbeat 2231 of the main map) are admitted whole where their other commands are: the use, placed and dying sets admit 18 of them; the other
-    // four (2213, 2217, 2221, 2225) are refused at line 15 for the focus kind of their loop for (action 18), every portal in the vicinity (19), which another slice holds (the dialog set, which no installed stop script is attached to, admits none of them).
+    // ARC-SCRIPT-1828 (WE12): the 22 installed scripts that stop a script eye candy (the ground rune tile scripts 2210 to 2230 and the heartbeat 2231 of the main map) are admitted whole where their other commands are: the use and placed sets admit 18 of them (ARC-SCRIPT-2041: 21, with the focus kind of the loop for of 2213, 2217 and 2225, every portal in the vicinity, 19) and the dying set all 22; the use and placed sets
+    // still refuse 2221 at line 18 for toggle state (56), which the heartbeat and dying sets hold (the dialog set, which no installed stop script is attached to, admits none of them).
     [TestMethod, TestCategory("RealData")]
     public void The_installed_scripts_that_stop_script_eye_candy_are_admitted_whole_where_their_other_commands_are()
     {
@@ -337,8 +337,8 @@ public sealed class AreaScriptEyeCandyTests
         }
         Console.WriteLine($"STOP-EYE-CANDY-ADMISSION|scripts {withStop.Count}|admitted whole: " + string.Join(", ", counts.Select(c => $"{c.Key} {c.Value}")) + "|use refused: " + string.Join(" ", refusedByUse));
         Assert.AreEqual(22, withStop.Count);
-        Assert.AreEqual((0, 18, 18, 18), (counts["dialog"], counts["use"], counts["placed"], counts["dying"]));
+        Assert.AreEqual((0, 21, 21, 22), (counts["dialog"], counts["use"], counts["placed"], counts["dying"]));
         CollectionAssert.AreEqual(new[] { 2231 }, heartbeat);
-        CollectionAssert.AreEqual(new[] { "2213:FocusKindNotAdmitted@15/18", "2217:FocusKindNotAdmitted@15/18", "2221:FocusKindNotAdmitted@15/18", "2225:FocusKindNotAdmitted@15/18" }, refusedByUse.Select(r => string.Join('/', r.Split('/').Take(2))).ToArray());
+        CollectionAssert.AreEqual(new[] { "2221:ActionNotAdmitted@18/56" }, refusedByUse.Select(r => string.Join('/', r.Split('/').Take(2))).ToArray());
     }
 }
