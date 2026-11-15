@@ -345,6 +345,7 @@ src/Arcanum.Simulation/Ai/ExecutorTypes.cs,TileCritters,exempt,host
 src/Arcanum.Simulation/Ai/ExecutorTypes.cs,Unconscious,pending,
 src/Arcanum.Simulation/Ai/FollowerRules.cs,HeroAttackTauntFacts,exempt,reference
 src/Arcanum.Simulation/Ai/FollowerRules.cs,NearDeathOfHit,pending,
+src/Arcanum.Simulation/Ai/HostilityRules.cs,RangedBlockerNotice,exempt,reference
 src/Arcanum.Simulation/Ai/MoraleRules.cs,StartsFleeGoal,pending,
 src/Arcanum.Simulation/Ai/NpcRouteRules.cs,UnforcedStandpoint,pending,
 src/Arcanum.Simulation/Ai/NpcRouteRules.cs,UnforcedWaypoints,pending,
@@ -377,6 +378,7 @@ src/Arcanum.Simulation/Combat/ObjectDamageRules.cs,Break,pending,
 src/Arcanum.Simulation/Combat/ProjectileRules.cs,Distance,pending,
 src/Arcanum.Simulation/Combat/ProjectileRules.cs,Launch,pending,
 src/Arcanum.Simulation/Combat/ProjectileRules.cs,ThrownScale,pending,
+src/Arcanum.Simulation/Combat/ProjectileRules.cs,TurnEndAt,exempt,reference
 src/Arcanum.Simulation/Combat/ThrowRules.cs,ItemDamage,pending,
 src/Arcanum.Simulation/Combat/ThrowRules.cs,ScatterTiles,pending,
 src/Arcanum.Simulation/Combat/ThrowRules.cs,ThrownWeapon,pending,
@@ -478,6 +480,7 @@ src/Arcanum.World/AreaAiHost.cs,HealSkillAccepts,pending,
 src/Arcanum.World/AreaAiHost.cs,HealSkillUsable,pending,
 src/Arcanum.World/AreaAiHost.cs,HealingItem,pending,
 src/Arcanum.World/AreaAiHost.cs,HeroAttacked,pending,
+src/Arcanum.World/AreaAiHost.cs,HeroBlockerAttacked,exempt,host
 src/Arcanum.World/AreaAiHost.cs,HeroBlowOccupant,exempt,host
 src/Arcanum.World/AreaAiHost.cs,HitEffect,pending,
 src/Arcanum.World/AreaAiHost.cs,HitObjectFocus,exempt,reference
@@ -900,6 +903,7 @@ tools/terrain-viewer/Godot/TerrainViewerAreaWorldMap.cs,AppendTownRoute,pending,
 tools/terrain-viewer/Godot/TerrainViewerAreaWorldMap.cs,MarkTownMapByScenery,pending,
 tools/terrain-viewer/Godot/TerrainViewerAreaWorldMap.cs,WorldMapTravelCheck,pending,
 tools/terrain-viewer/Godot/TerrainViewerAttack.cs,AttackApproachCell,pending,
+tools/terrain-viewer/Godot/TerrainViewerAttack.cs,BedOccupantGoal,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAttack.cs,HeroAttackRepeats,pending,
 tools/terrain-viewer/Godot/TerrainViewerAttack.cs,HeroWeaponPrototype,exempt,reference
 tools/terrain-viewer/Godot/TerrainViewerAttack.cs,InAttackReach,pending,
@@ -979,6 +983,7 @@ tools/terrain-viewer/Godot/TerrainViewerProjectiles.cs,BoomerangReturned,pending
 tools/terrain-viewer/Godot/TerrainViewerProjectiles.cs,CrossTile,pending,
 tools/terrain-viewer/Godot/TerrainViewerProjectiles.cs,EndOnTile,pending,
 tools/terrain-viewer/Godot/TerrainViewerProjectiles.cs,EndProjectile,pending,
+tools/terrain-viewer/Godot/TerrainViewerProjectiles.cs,FinishTurnedAtOnce,exempt,reference
 tools/terrain-viewer/Godot/TerrainViewerProjectiles.cs,FireShotEnd,pending,
 tools/terrain-viewer/Godot/TerrainViewerProjectiles.cs,LaunchProjectile,pending,
 tools/terrain-viewer/Godot/TerrainViewerProjectiles.cs,ProjectileGoalEnded,pending,

@@ -764,6 +764,18 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     public void HeroStrayAttacked(string victim) => AttackEvent(Pc, victim, AttackEventFlags.Accidental);
 
     /// <summary>
+    /// ARC-COMBAT-2164 (EX15, 0x4B3170): the attack event of the hero's attack that does not fly when the line of fire struck <paramref name="blocker"/> in place of the aimed <paramref name="aimed"/> (null: the aimed target is no critter): the
+    /// aimed target's, deliberate, in the Original setting, the blocker's with the accidental bit in Steamwoven (<see cref="HostilityRules.RangedBlockerNotice"/>).
+    /// </summary>
+    public void HeroBlockerAttacked(string? aimed, string blocker, Loudness loudness = Loudness.Normal) => BlockerAttackEvent(Pc, aimed, blocker, loudness);
+
+    private void BlockerAttackEvent(string attacker, string? aimed, string blocker, Loudness loudness)
+    {
+        var (victim, flags) = HostilityRules.RangedBlockerNotice(_session.Rules.Combat, aimed, blocker);
+        if (victim is not null) AttackEvent(attacker, victim, flags, loudness);
+    }
+
+    /// <summary>
     /// ARC-DEV-281 (B08, TA16): the AI notice of an aggressive spell (0x453EE0, 0x453F20): the attack event (0x4A9650, loudness 1, no
     /// flags) of <paramref name="attacker"/> (the hero as <c>pc</c>, an NPC by its entity) on <paramref name="victim"/>, whatever the
     /// distance between them (the chain tests none for the victim's own reaction; read in the executable on 2026-11-08). A caster or a
@@ -2489,7 +2501,9 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
             // ARC-COMBAT-1930 (0x4B3170, PF1, VC28, VCG9): a shot that flies sends no attack event at the shot; the projectile's end alerts only the object it strikes. A shot decided a hit raises its event here for the aimed target
             // (its arrival's time is the accepted deviation A), a shot decided a miss raises none (PF5, PF6: it never strikes its aimed target; a stray it meets is alerted by LandShot). An attack that does not fly raises it,
             // hit or miss, with the weapon's loudness (0x4B2810).
-            if (result.Shots.Count == 0 || result.Resolution.Outcome is AttackOutcome.Hit or AttackOutcome.CriticalHit) AttackEvent(id, target, loudness: noise);
+            // ARC-COMBAT-2164 (EX15, 0x4B3170): an attack that does not fly and met a line-of-fire blocker notifies the aimed target in the Original setting and the blocker (accidental) in Steamwoven (HostilityRules.RangedBlockerNotice); an aimed object that is no critter has no event to take.
+            if (result.Shots.Count == 0 && target != aimed) BlockerAttackEvent(id, aimed != Pc && _scene.ObjectFacts?.Invoke(aimed) is not null ? null : aimed, target, noise);
+            else if (result.Shots.Count == 0 || result.Resolution.Outcome is AttackOutcome.Hit or AttackOutcome.CriticalHit) AttackEvent(id, target, loudness: noise);
             // ARC-RENDER-2011 (0x4B3170): the weapon's swing effect (kind 1) on the attacker for every attack that was not refused, hit or miss, after the roll and the strike and before the hit effect.
             WeaponAttackEffect(id, WeaponHitEffectRules.Swing, weapon, Tile(target));
             // ARC-DEV-292: a hit or a miss on an NPC that did not fly (a shot's damage is LandShot's) gives the victim its immediate pass (0x4B52FC, 0x4B3948, the ranged miss 0x4B30F5).

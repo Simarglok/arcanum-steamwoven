@@ -222,6 +222,8 @@ public partial class TerrainViewerApp : Node
                                 if (Stage("floaters")) await RunAreaFloatersSmokeAsync();
                                 // ARC-UI-026: the hero's death to the reopened main menu (start map, with --main-menu true; wall clock).
                                 if (Stage("death")) await RunAreaHeroDeathSmokeAsync();
+                                // ARC-RENDER-1879: the ending path on the installed data: Kerghan's dying script, its two movies, the end-game show and the reset to the menu (start map, with --main-menu true; wall clock; ffmpeg).
+                                if (Stage("slides")) await RunAreaSlidesSmokeAsync();
                                 // ARC-WORLD-081: only when named, the plant generator of a generated sector on a main-map window.
                                 if (only?.Contains("plants") == true) await RunAreaTemplatePlantsSmokeAsync();
                                 // ARC-SCRIPT-047: only when named, Virgil's heartbeat opens his talk with the PC at the start (AI on, start map, --hero);

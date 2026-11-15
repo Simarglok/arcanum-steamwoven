@@ -212,6 +212,23 @@ public partial class TerrainViewerApp
             Require(price > 0 && price <= owner.QueryGold(), $"the axe is affordable ({price} of {owner.QueryGold()})");
             Require(area.GambleArtNow == AreaBarterArtLayout.GambleArt, "the box rests on 345");
 
+            // ARC-UI-2139 (0x579840, BW3): the merchant's worn vest lifted from its doll is still the merchant's item and worn: over the box the gate asks the worn tier (Expert gambling; the hero
+            // has none, category 5) after the price tests (the quote is 0 below Master haggle), so the box shows 346, and a release there puts the vest back on its slot with no bet.
+            var (dollButton, bagButton) = (new Vector2(AreaBarterArtLayout.DollButton.X + 5, AreaBarterArtLayout.DollButton.Y + 5), new Vector2(AreaBarterArtLayout.BagButton.X + 5, AreaBarterArtLayout.BagButton.Y + 5));
+            area.PressAt(dollButton); area.ReleaseAt(dollButton);
+            Require(area.BodyDoll, "the doll view is shown");
+            area.PressAt(new Vector2(150, 240));
+            Require(area.Held is { Entity: "vest", Partner: true }, "a press on the merchant's armour slot lifts the worn vest");
+            var (wornRoll, wornRevision, wornGold) = (owner.QueryGamblingRoll(), owner.Version.Revision, owner.QueryGold());
+            area.TrackGambleAt(box);
+            Require(area.GambleArtNow == AreaBarterArtLayout.GambleRefusedArt && area.BarterFrame!.Quote == "line5", "the worn vest asks the worn tier (346, category 5): " + area.BarterFrame!.Quote);
+            area.ReleaseAt(box);
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            Require(area.Held is null && owner.QueryGamblingRoll() == wornRoll && owner.Version.Revision == wornRevision && owner.QueryGold() == wornGold && panel.ArtView!.BodyDoll.Any(slot => slot.Entity == "vest"),
+                "released on the box the vest stayed worn, no bet");
+            area.PressAt(bagButton); area.ReleaseAt(bagButton);
+            Require(!area.BodyDoll, "the bag button shows the grid again");
+
             // The hero's own item over the box: the gate refuses it (art 346) and a release only puts it back.
             area.PressAt(AreaInventoryGridArea.CellCentre(panel.ArtView!.Grid.Single(item => item.Entity == "kit:1").Slot));
             area.TrackGambleAt(box);
