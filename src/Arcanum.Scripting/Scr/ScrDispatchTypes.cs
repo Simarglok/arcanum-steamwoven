@@ -328,6 +328,17 @@ public interface IScrPortalQueries
 }
 
 /// <summary>
+/// ARC-SCRIPT-2319 (ledger GF1–GF7): the group of an object, for the focus kinds every one in the group (13) and anyone in the group (14), which the object-list builder (0x44B4E0) answers as the triggerer's direct followers
+/// (object field 0xF1 through 0x4411C0, in array order) with the triggerer itself appended last. A host whose set admits the kinds implements this interface; the interpreter adds the triggerer and applies the list's cap.
+/// </summary>
+public interface IScrGroupQueries
+{
+    /// <summary>The direct followers of <paramref name="leader"/> in the order the original's follower array holds them (a waiting NPC is outside it, ledger OL16; a forced or charmed follower stays in): the hero's followers for the PC,
+    /// an NPC's own followers for an NPC, none for any other object or one the host does not know.</summary>
+    IReadOnlyList<ScrObjectRef> FollowersOf(ScrObjectRef leader);
+}
+
+/// <summary>
 /// ARC-SCRIPT-2322 (ledger CV1–CV5): the containers in the vicinity of an object, for the focus kinds every container in the vicinity (17) and any container in the vicinity (18; one list, as the portals' 19 and 20). A
 /// host whose set admits either kind implements it besides <see cref="IScrWorldQueries"/>.
 /// </summary>
@@ -1061,7 +1072,7 @@ public sealed class ScrRunResult
 }
 
 /// <summary>How a dispatch runs: the rule mode's script switches, the admitted set (default <see cref="ScrAdmissionSet.S5"/>,
-/// at most <see cref="ScrAdmissionSet.S61"/>, admitted for the lines reachable from the event's line), the executed-line
+/// at most <see cref="ScrAdmissionSet.S62"/>, admitted for the lines reachable from the event's line), the executed-line
 /// budget and the call depth.</summary>
 public sealed record ScrRunOptions
 {
@@ -1082,7 +1093,7 @@ public sealed record ScrRunOptions
         ArgumentNullException.ThrowIfNull(Admission);
         if (MaxExecutedLines is <= 0 or > OriginalLineBudget) throw new ArgumentOutOfRangeException(nameof(MaxExecutedLines), "The line budget is 1..1000.");
         if (MaxCallDepth is < 1 or > 64) throw new ArgumentOutOfRangeException(nameof(MaxCallDepth), "The call depth is 1..64.");
-        if (!Admission.IsSubsetOf(ScrAdmissionSet.S61)) throw new ArgumentException("The interpreter runs only the commands of ScrAdmissionSet.S61.", nameof(Admission));
+        if (!Admission.IsSubsetOf(ScrAdmissionSet.S62)) throw new ArgumentException("The interpreter runs only the commands of ScrAdmissionSet.S62.", nameof(Admission));
     }
 
     // A set with a guard condition needs a host that answers it, checked before any event runs.
@@ -1113,6 +1124,8 @@ public sealed record ScrRunOptions
             throw new ArgumentException("A set with get hit points or get fatigue points needs a host that implements IScrVitalQueries.", nameof(Admission));
         if (host is not IScrWorldQueries && (Admission.Actions.Any(ScrAdmissionSet.WorldQueryActions.Contains) || Admission.FocusKinds.Any(ScrAdmissionSet.WorldQueryFocusKinds.Contains) || Admission.Conditions.Contains(ScrCatalogue.Condition.WithinRange)))
             throw new ArgumentException("A set with random, loop for, distance between, get location, float line, obj is within range or the vicinity focus kinds needs a host that implements IScrWorldQueries.", nameof(Admission));
+        if (host is not IScrGroupQueries && Admission.FocusKinds.Any(ScrAdmissionSet.GroupFocusKinds.Contains))
+            throw new ArgumentException("A set with the focus kinds every one or anyone in the group needs a host that implements IScrGroupQueries.", nameof(Admission));
         if (host is not IScrPortalQueries && Admission.FocusKinds.Contains(ScrFocusKind.EveryPortalInVicinity))
             throw new ArgumentException("A set with the focus kind every portal in the vicinity needs a host that implements IScrPortalQueries.", nameof(Admission));
         if (host is not IScrContainerQueries && (Admission.FocusKinds.Contains(ScrFocusKind.EveryContainerInVicinity) || Admission.FocusKinds.Contains(ScrFocusKind.AnyContainerInVicinity)))

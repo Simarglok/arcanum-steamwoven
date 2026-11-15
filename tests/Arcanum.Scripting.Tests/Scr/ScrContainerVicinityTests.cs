@@ -144,12 +144,12 @@ public sealed class ScrContainerVicinityTests
     public void Only_the_container_set_admits_the_focus_kinds_and_its_host_must_answer_them()
     {
         var program = Counter3();
-        Assert.IsFalse(ScrAdmission.Admit(program, ScrAdmissionSet.S60).IsAdmitted);
-        Assert.IsTrue(ScrAdmission.Admit(program, ScrAdmissionSet.S61).IsAdmitted);
-        Assert.IsTrue(ScrAdmissionSet.S60.IsSubsetOf(ScrAdmissionSet.S61));
-        Assert.IsFalse(ScrAdmissionSet.S61.IsSubsetOf(ScrAdmissionSet.S60));
-        Assert.IsTrue(ScrAdmissionSet.S61.FocusKinds.Contains(ScrFocusKind.EveryContainerInVicinity));
-        Assert.IsTrue(ScrAdmissionSet.S61.FocusKinds.Contains(ScrFocusKind.AnyContainerInVicinity));
+        Assert.IsFalse(ScrAdmission.Admit(program, ScrAdmissionSet.S61).IsAdmitted);
+        Assert.IsTrue(ScrAdmission.Admit(program, ScrAdmissionSet.S62).IsAdmitted);
+        Assert.IsTrue(ScrAdmissionSet.S61.IsSubsetOf(ScrAdmissionSet.S62));
+        Assert.IsFalse(ScrAdmissionSet.S62.IsSubsetOf(ScrAdmissionSet.S61));
+        Assert.IsTrue(ScrAdmissionSet.S62.FocusKinds.Contains(ScrFocusKind.EveryContainerInVicinity));
+        Assert.IsTrue(ScrAdmissionSet.S62.FocusKinds.Contains(ScrFocusKind.AnyContainerInVicinity));
         // A set holding the focus kind (and no loop for) needs a host that answers it.
         var focusOnly = new ScrAdmissionSet("container-focus-only", ScrAdmissionSet.S3.Conditions, ScrAdmissionSet.S3.Actions, ScrAdmissionSet.S3.ValueKinds,
             ScrAdmissionSet.S3.FocusKinds.Append(ScrFocusKind.EveryContainerInVicinity));
