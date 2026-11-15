@@ -1224,13 +1224,13 @@ start a game and press `W` (the town map opens in the Crash Site; on the open gr
 | # | Step | Expected | Status |
 | --- | --- | --- | --- |
 | 1 | Press `W` in a 1280 × 800 window. | The window's wood, the brass rim around the map view, the readout boxes, the compass rose, the route sketch and the Travel button's ring sit where they did in HD; the map picture is as before. | open |
-| 2 | Press `Z` or the Zoom and Whole-map buttons to change the view. | The frame does not change; the buttons (still art) answer to hover and press. | open |
+| 2 | Press `Z` or the Zoom and Whole-map buttons to change the view. | The frame does not change; the buttons answer to hover and press. | open |
 | 3 | Move the pointer over the map. | The two readout boxes show their numbers in the same places. | open |
 | 4 | Resize the window (or go full screen) and open the map again. | The frame is sharp at the new size, no seam between the wood and the kept pictures. | open |
 
 Known differences (documented, not bugs):
 
-- The buttons, the lens cover and the bottom cover are still art ([issue #1810](https://github.com/Simarglok/arcanum-steamwoven/issues/1810)); the zoom and whole-map buttons get a brass frame from the holes of the frame.
+- The buttons (Zoom, Whole map, Travel, the compass) and the lens cover are generated since ARC-UI-1810 (the map pictures beside the lamps are kept art); the bottom cover is still art ([issue #2194](https://github.com/Simarglok/arcanum-steamwoven/issues/2194)).
 - The compass, the route sketch and the Travel ring are the original's pictures; their small patches of old wood differ a little from the generated wood.
 
 ## ARC-COMBAT-1738 — Auto Switch Weapons option and its re-wield cases (2026-11-13)
