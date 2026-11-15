@@ -253,6 +253,8 @@ public sealed class AreaConversationHost
             _contentDetail, _companions, _npcAdvancement, _npcSheet).KeepingGreetingTexts(_greetingTexts);
         // ARC-SCRIPT-050: the shown map's use host still answers the talk's queries (it follows the viewer's session).
         host.Scripts.QueryHost = Scripts.QueryHost;
+        host.Scripts.HeroTeleportRefusal = Scripts.HeroTeleportRefusal;
+        host.Scripts.RequestHeroTeleport = Scripts.RequestHeroTeleport;
         host.GoldKindSource = GoldKindSource;
         host.HeroAttack = HeroAttack;
         host.SpreadOutStart = SpreadOutStart;

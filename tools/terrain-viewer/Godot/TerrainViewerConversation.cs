@@ -78,6 +78,14 @@ public partial class TerrainViewerApp
             // ARC-SCRIPT-1165 (E5-c): a dialog script's add blessing and add curse take their effect from the module's tables, as a use script's do.
             _conversationHost.Scripts.BlessingEffects = BlessingEffectOf;
             _conversationHost.Scripts.QueryHost = () => ReferenceEquals(_readyArea?.Snapshot, snapshot) ? UseScriptHost(snapshot) : null;
+            // ARC-WORLD-2038 (TT20): the hero's teleport a dialog script or a deferred call asks for is the same request a door's script makes, queued as the map transfer the viewer takes at its next safe point (the original's ping).
+            _conversationHost.Scripts.HeroTeleportRefusal = teleport => _mapTransfers?.ScriptTeleportRefusal(teleport) ?? "no map transfers";
+            _conversationHost.Scripts.RequestHeroTeleport = teleport =>
+            {
+                if (_mapTransfers is not { } transfers) return;
+                var queued = transfers.QueueScriptTeleport(teleport);
+                GD.Print($"ARC-WORLD-2038 script-teleport hero outcome={queued.Outcome} to={queued.Site?.DestinationCatalogue} arrival={queued.Site?.Arrival} reason={queued.Reason}");
+            };
         }
         else _conversationHost = null;
         if (_conversationPanel is null)
