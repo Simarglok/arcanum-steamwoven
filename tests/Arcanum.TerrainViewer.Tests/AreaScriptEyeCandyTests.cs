@@ -343,7 +343,7 @@ public sealed class AreaScriptEyeCandyTests
     }
 
     // ARC-SCRIPT-2321 (AS3, issue #2321 census of #2262): the two installed roots that wait on the focus kind any scenery in the vicinity (16): the tile script 2561 (20 tile sites on the k'na tha map) is admitted whole by the
-    // placed set; the script 1734 (the destroy point 2 and the bust point 30 of the main map) is admitted whole by the heartbeat and dying sets' own focus kinds with the commands of S63, and the heartbeat set
+    // placed set; the script 1734 (the destroy point 2 and the bust point 30 of the main map) is admitted whole by the heartbeat and dying sets' own focus kinds with the commands of S64, and the heartbeat set
     // still refuses it for a command (set PC quest state, 16) that the bust host does not hold.
     [TestMethod, TestCategory("RealData")]
     public void The_installed_scripts_that_loop_over_any_scenery_are_freed_by_the_focus_kind_in_the_hosts_that_run_them()
@@ -355,8 +355,8 @@ public sealed class AreaScriptEyeCandyTests
         var opened = ContentStack.Open(discovery.Plan!);
         Assert.AreEqual(ContentStackStatus.Ready, opened.Status, opened.Detail);
         using var content = ScriptContent.Over(opened.Stack!);
-        static ScrAdmissionSet WithS63Types(ScrAdmissionSet host) => new(host.Id + "+S63-types", ScrAdmissionSet.S63.Conditions, ScrAdmissionSet.S63.Actions, host.ValueKinds, host.FocusKinds, counterIndexWraps: true);
-        foreach (var (number, name, set) in new (int, string, ScrAdmissionSet)[] { (2561, "placed", AreaUseScriptHost.PlacedAdmission), (1734, "heartbeat", WithS63Types(AreaUseScriptHost.HeartbeatAdmission)), (1734, "dying", WithS63Types(AreaUseScriptHost.DyingAdmission)) })
+        static ScrAdmissionSet WithS64Types(ScrAdmissionSet host) => new(host.Id + "+S64-types", ScrAdmissionSet.S64.Conditions, ScrAdmissionSet.S64.Actions, host.ValueKinds, host.FocusKinds, counterIndexWraps: true);
+        foreach (var (number, name, set) in new (int, string, ScrAdmissionSet)[] { (2561, "placed", AreaUseScriptHost.PlacedAdmission), (1734, "heartbeat", WithS64Types(AreaUseScriptHost.HeartbeatAdmission)), (1734, "dying", WithS64Types(AreaUseScriptHost.DyingAdmission)) })
         {
             Assert.IsTrue(content.Script(number) is { Status: ScriptContentStatus.Read, Program: { } }, $"script {number} is installed");
             var program = content.Script(number).Program!;
