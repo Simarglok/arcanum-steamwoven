@@ -867,8 +867,8 @@ def run_smoke(args: argparse.Namespace) -> int:
             if step.settings:
                 (prefs_root / step.settings).mkdir()
         print(f"SMOKE settings folder {prefs_root}", flush=True)
-        code = execute(steps, runner=functools.partial(run_queue.run, priority=run_queue.LOW)
-                       if getattr(args, "low_priority", False) else run_queue.run)
+        code = (execute(steps, runner=functools.partial(run_queue.run, priority=run_queue.LOW))
+                if getattr(args, "low_priority", False) else execute(steps))
         if zones:
             print(f"SMOKE zones: {', '.join(zones)}", flush=True)  # the PR report names them
         keep = args.keep_settings or code != 0

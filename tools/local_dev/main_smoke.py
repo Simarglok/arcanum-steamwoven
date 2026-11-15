@@ -31,7 +31,7 @@ import sys
 import tempfile
 from typing import Any, Callable, Sequence
 
-from . import daily, package, red_flag, run_queue, smoke
+from . import daily, package, red_flag, run_queue, smoke, start_check
 
 ZONES = "core,crash-site"
 SMOKE_MINUTES = 180.0  # the whole smoke command, queue waits included: a run past it proves nothing
@@ -47,7 +47,7 @@ DEFAULT_AREA = "area:scene"
 # The first failing stage's area label: the first row whose word is in the stage name wins.
 AREAS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("area:combat-magic-tech", ("cast", "spell", "turn-based", "knockdown", "ranged", "grenade", "tech", "shot", "burn", "magic", "combat")),
-    ("area:items-economy", ("barter", "loot", "inv-", "container", "junk", "pickpocket", "item", "disarm", "bed")),
+    ("area:items-economy", ("barter", "loot", "inv", "container", "junk", "pickpocket", "item", "disarm", "bed")),
     ("area:story-social-ai", ("ai", "npc", "premade", "opening", "follower", "companion", "dialog", "healer", "talk", "life")),
     ("area:world-travel-runtime", ("transfer", "worldmap", "travel", "roundtrip", "stream", "resident", "teleport", "saved-runs",
                                    "save-resume", "census", "walk", "door", "wild")),
@@ -92,6 +92,18 @@ def classify(result: daily.SmokeResult, code: int) -> tuple[str, str]:
     return INCONCLUSIVE_RESULT, failure
 
 
+TRANSIENT_STEP = re.compile(r"^\s+(\S+)\s+FAIL exit=(\d+)$", re.MULTILINE)
+TRANSIENT_EXITS = frozenset({run_queue.TIMEOUT_EXIT, start_check.FAILED_START_EXIT})
+
+
+def drop_transient(result: daily.SmokeResult, text: str) -> list[str]:
+    """Take the failed steps whose own exit is a queue timeout or a viewer that did not start out of `result.failed` and
+    return them: a loaded Mac proves nothing about main. A run left with no other failed step is inconclusive."""
+    transient = [name for name, code in TRANSIENT_STEP.findall(text) if int(code) in TRANSIENT_EXITS and name in result.failed]
+    result.failed = [name for name in result.failed if name not in transient]
+    return transient
+
+
 def failing_stages(result: daily.SmokeResult) -> list[str]:
     """The failing stages: a `GROUP-retry-STAGE` step that failed is that stage (it failed alone too), and the group that
     owns such a retry is not listed again; any other failed step (a build, the Crash Site smoke, a one-stage process) is
@@ -126,8 +138,9 @@ def flake_records(result: daily.SmokeResult, sha: str, at: str) -> list[dict[str
 
 def area_label(stages: Sequence[str]) -> str:
     name = (stages[0] if stages else "").lower()
-    for label, words in AREAS:
-        if any(word in name for word in words):
+    tokens = set(re.split(r"[^a-z0-9]+", name))
+    for label, words in AREAS:  # a word is a whole token of the name ("ai" is not in "main"); a hyphenated word is a part of it
+        if any(word in tokens or ("-" in word and word in name) for word in words):
             return label
     return DEFAULT_AREA
 
@@ -266,6 +279,11 @@ def main_smoke(*, root: Path, folder: Path, fetch: bool, force: bool, keep_work:
     say(f"origin/main {sha} ({date}); last green {(green or 'none')[:10]}; last run "
         f"{(last.get('sha') or 'none')[:10]} {last.get('result', '')}".rstrip())
     if not force and last.get("sha") == sha and last.get("result") in (GREEN_RESULT, RED_RESULT):
+        red = state.get("red") or {}
+        if last["result"] == RED_RESULT and issues and red and not red.get("issue"):
+            # the smoke is not run again for the same commit, only the issue that gh could not file before
+            say(f"red {sha[:10]} has no issue yet: filing it without running the smoke again")
+            return publish_red(root=root, folder=folder, state=state, red=red, issues=issues, gh=gh, note=say)
         say(f"SKIP main has not moved since the last {last['result']} run ({sha[:10]}); --force runs it again")
         return PASS
     command = smoke_command(zones)
@@ -305,11 +323,14 @@ def main_smoke(*, root: Path, folder: Path, fetch: bool, force: bool, keep_work:
         text = log.read_text(encoding="utf-8", errors="replace") if log.is_file() else ""
         note(f"smoke exit={code} log={log}")
         result = daily.parse_smoke(text, code)
+        transient = drop_transient(result, text)
+        if transient:
+            note(f"not counted as red (a step timed out or did not start): {', '.join(transient)}")
         verdict, why = classify(result, code)
         at = stamp(now())
         note(f"RESULT {verdict.upper()} {why}")
         outcome = record(root=root, folder=folder, state=state, verdict=verdict, sha=sha, at=at, zones=zones, result=result,
-                         issues=issues, gh=gh, note=note)
+                         issues=issues, gh=gh, note=note, transient=transient)
         return outcome
     except package.PackageError as error:
         note(f"RESULT {'STOPPED' if str(error).startswith('stopped by signal') else 'FAIL'} {error}; recorded as inconclusive")
@@ -336,13 +357,14 @@ def main_smoke(*, root: Path, folder: Path, fetch: bool, force: bool, keep_work:
 
 
 def record(*, root: Path, folder: Path, state: dict[str, Any], verdict: str, sha: str, at: str, zones: str,
-           result: daily.SmokeResult, issues: bool, gh: Gh, note: Callable[[str], None]) -> int:
+           result: daily.SmokeResult, issues: bool, gh: Gh, note: Callable[[str], None], transient: Sequence[str] = ()) -> int:
     """Write the run into the state, the flag, the flake log and the issue; the command's exit code."""
     state["lastRun"] = {"sha": sha, "at": at, "result": verdict}
     previous = state.get("red") or {}
     green = (state.get("lastGreen") or {})
     try:
-        append_flakes(folder, flake_records(result, sha, at))
+        append_flakes(folder, [*flake_records(result, sha, at),
+                               *({"at": at, "sha": sha, "stage": name, "outcome": "transient"} for name in transient)])
     except OSError as error:
         note(f"note: the flake log was not written: {error}")
     if verdict == INCONCLUSIVE_RESULT:
@@ -352,8 +374,8 @@ def record(*, root: Path, folder: Path, state: dict[str, Any], verdict: str, sha
     if verdict == GREEN_RESULT:
         state["lastGreen"] = {"sha": sha, "at": at}
         state["red"] = None
+        cleared = red_flag.clear(folder)  # the flag first: a failure between the two leaves a state that repairs itself
         write_state(folder, state)
-        cleared = red_flag.clear(folder)
         number = previous.get("issue")
         if issues and number:
             try:
@@ -368,21 +390,30 @@ def record(*, root: Path, folder: Path, state: dict[str, Any], verdict: str, sha
     red = {"firstRed": previous.get("firstRed") or sha, "firstRedAt": previous.get("firstRedAt") or at, "checked": sha,
            "checkedAt": at, "lastGreen": green.get("sha"), "lastGreenAt": green.get("at"), "stages": stages, "zones": zones,
            "issue": previous.get("issue")}
-    range_lines, range_note = merge_range(root, green.get("sha"), sha)
     details: list[str] = []
     for name in (result.failed or [])[:6]:
         details.append(f"{name}:")
         details.extend(f"  {line}" for line in daily.failure_lines(result.details.get(name, [])))
+    red["details"] = details
+    return publish_red(root=root, folder=folder, state=state, red=red, issues=issues, gh=gh, note=note)
+
+
+def publish_red(*, root: Path, folder: Path, state: dict[str, Any], red: dict[str, Any], issues: bool, gh: Gh,
+                note: Callable[[str], None]) -> int:
+    """File or update the issue of a red state, then write the flag, then the state (the flag first, so a failure between
+    them never leaves a state that says red for a commit whose flag is missing)."""
+    range_lines, range_note = merge_range(root, red.get("lastGreen"), red["checked"])
     if issues:
         try:
-            red["issue"] = file_issue(gh, red, issue_body(red, range_lines, range_note, compare_url(root, green.get("sha"), sha), details),
-                                      previous.get("issue"))
+            body = issue_body(red, range_lines, range_note, compare_url(root, red.get("lastGreen"), red["checked"]),
+                              red.get("details") or [])
+            red["issue"] = file_issue(gh, red, body, red.get("issue"))
             note(f"issue #{red['issue']} filed or updated")
         except (GhError, ValueError) as error:
-            note(f"note: the issue was not filed or updated (the next red run tries again): {error}")
+            note(f"note: the issue was not filed or updated (the next run of this commit or a later one tries again): {error}")
+    red_flag.write({key: red.get(key) for key in ("firstRed", "firstRedAt", "checked", "checkedAt", "lastGreen", "stages", "issue")}, folder)
     state["red"] = red
     write_state(folder, state)
-    red_flag.write({key: red[key] for key in ("firstRed", "firstRedAt", "checked", "checkedAt", "lastGreen", "stages", "issue")}, folder)
     note(f"flag written: {red_flag.text(red).splitlines()[0]}")
     return RED
 

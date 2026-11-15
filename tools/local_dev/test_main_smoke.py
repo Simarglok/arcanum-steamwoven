@@ -78,6 +78,18 @@ class PureTests(unittest.TestCase):
         self.assertEqual(main_smoke.area_label(["barter", "walk"]), "area:items-economy")
         self.assertEqual(main_smoke.area_label(["something-new"]), main_smoke.DEFAULT_AREA)
         self.assertEqual(main_smoke.area_label([]), main_smoke.DEFAULT_AREA)
+        self.assertEqual(main_smoke.area_label(["stages-main"]), main_smoke.DEFAULT_AREA)  # "ai" is not in "main"
+        self.assertEqual(main_smoke.area_label(["route-barrel"]), main_smoke.DEFAULT_AREA)  # "bar" is not in "barrel"
+
+    def test_a_step_that_timed_out_or_did_not_start_is_not_red(self) -> None:
+        text = "SMOKE summary\n  build  PASS exit=0\n  town  FAIL exit=124\n  ruins  FAIL exit=125\n"
+        result = daily.parse_smoke(text, 1)
+        self.assertEqual(main_smoke.drop_transient(result, text), ["town", "ruins"])
+        self.assertEqual(main_smoke.classify(result, 1)[0], "inconclusive")
+        text = "SMOKE summary\n  town  FAIL exit=124\n  ruins  FAIL exit=1\n"
+        result = daily.parse_smoke(text, 1)
+        self.assertEqual(main_smoke.drop_transient(result, text), ["town"])
+        self.assertEqual((main_smoke.classify(result, 1)[0], result.failed), ("red", ["ruins"]))
 
 
 class FlagTests(unittest.TestCase):
@@ -134,23 +146,24 @@ class QueueTests(unittest.TestCase):
         self.assertEqual([t["seq"] for t in sorted([low, normal, front], key=run_queue._key)], [3, 2, 1])
 
     def test_the_low_priority_option_passes_the_priority_to_the_queue(self) -> None:
+        import argparse
+        import functools
         seen = []
-
-        def fake(kind, command, **options):
-            seen.append(options.get("priority"))
-            return 0
         steps = [smoke.Step("one", "quick", ("true",))]
-        with mock.patch.object(run_queue, "run", fake), mock.patch.object(smoke, "load_known_failures", return_value=()), \
-                mock.patch.object(smoke.smoke_history, "append"):
-            import argparse
+
+        def fake_execute(given, **options):
+            seen.append(options.get("runner"))
+            return 0
+        with mock.patch.object(smoke, "execute", fake_execute), mock.patch.object(smoke, "plan", return_value=steps), \
+                mock.patch.object(smoke, "focus_guard_target", return_value=None), mock.patch.object(smoke.config, "load_config", return_value={}), \
+                mock.patch.object(smoke.os, "access", return_value=True), mock.patch.object(smoke.os, "chdir"), mock.patch("builtins.print"):
             args = argparse.Namespace(target="pr", low_priority=True, no_build=True, keep_settings=False, dry_run=False)
-            with mock.patch.object(smoke, "plan", return_value=steps), mock.patch.object(smoke, "focus_guard_target", return_value=None), \
-                    mock.patch.object(smoke.config, "load_config", return_value={}), mock.patch.object(smoke.os, "access", return_value=True), \
-                    mock.patch.object(smoke.os, "chdir"), mock.patch("builtins.print"):
-                smoke.run_smoke(args)
-                args.low_priority = False
-                smoke.run_smoke(args)
-        self.assertEqual(seen, [run_queue.LOW, None])
+            smoke.run_smoke(args)
+            args.low_priority = False
+            smoke.run_smoke(args)
+        self.assertIsInstance(seen[0], functools.partial)
+        self.assertEqual((seen[0].func, seen[0].keywords), (run_queue.run, {"priority": run_queue.LOW}))
+        self.assertIsNone(seen[1])
 
 
 class RunTests(unittest.TestCase):
@@ -318,9 +331,20 @@ class RunTests(unittest.TestCase):
         self.assertEqual(self.run_it(), main_smoke.RED)
         self.assertIsNone(red_flag.read(self.folder)["issue"])
         self.gh_fails = False
-        self.commits.append(self.commit("two"))
-        self.run_it()
+        self.assertEqual(self.run_it(), main_smoke.RED, "the same commit: only the issue is filed, the smoke is not run again")
+        self.assertEqual(len(self.calls), 1)
         self.assertEqual(red_flag.read(self.folder)["issue"], 900)
+        self.assertEqual(self.state()["red"]["issue"], 900)
+        self.assertIn("walk", self.commands("create")[0][1])
+        self.assertEqual(self.run_it(), main_smoke.PASS, "with the issue filed it skips as before")
+
+    def test_a_timed_out_step_alone_leaves_the_flag_and_files_nothing(self) -> None:
+        self.text, self.code = "SMOKE summary\n  build  PASS exit=0\n  town  FAIL exit=124\n", 1
+        self.assertEqual(self.run_it(), main_smoke.INCONCLUSIVE)
+        self.assertEqual(self.gh_calls, [])
+        self.assertIsNone(red_flag.read(self.folder))
+        flakes = [json.loads(line) for line in (self.folder / main_smoke.FLAKES).read_text().splitlines()]
+        self.assertEqual([(f["stage"], f["outcome"]) for f in flakes], [("town", "transient")])
 
     def test_no_issue_never_calls_gh(self) -> None:
         self.text, self.code = SMOKE_RED, 1

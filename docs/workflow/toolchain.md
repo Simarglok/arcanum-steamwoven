@@ -837,7 +837,7 @@ It is `tools/local_dev/main_smoke.py` (the flag: `red_flag.py`; tests `tools.loc
 - **What runs.** A fresh detached worktree of `origin/main` in an `arcanum-main-smoke-*` folder of the temporary folder
   (never the owner's checkout; leftovers of a killed run are removed under the command's lock, one run at a time per
   repository), and in it `./arcanum smoke pr --zones core,crash-site --retry --low-priority` with a limit of 180
-  minutes for the whole command: the `core` zone (every cheap stage, [smoke zones](#smoke-zones-arc-dev-396)) and the
+  minutes for the whole command: the `core` zone (every cheap stage, [smoke zones](#smoke-runner-arc-dev-061)) and the
   Crash Site smoke; the heavy zones (`walk`, `container-click`, `census`) and the complete run stay with the daily.
   `--retry` runs the stages of a failed process alone, so the log knows which fail alone too. The run skips (exit 0)
   when the last run of this command on that commit was green or red; an inconclusive one is tried again.
@@ -850,9 +850,10 @@ It is `tools/local_dev/main_smoke.py` (the flag: `red_flag.py`; tests `tools.loc
   created, with labels `bug`, `type:dev`, `status:ready` and an `area:*` by the first failing stage (`AREAS` in
   `main_smoke.py`, `area:scene` when none fits), the failing stages (a stage that failed alone too is named, not its
   process), the first red commit, the last green commit and the first-parent merge range between them (newest first,
-  at most 60 lines and a compare link), and the first errors; the flag is written. Inconclusive (stopped, ran out of the
+  at most 60 lines and a compare link), and the first errors; the flag is written. A failed step whose own exit is a queue timeout (124) or a viewer that did not start (125) is not
+  counted (logged as `transient`), and a run with no other failed step is inconclusive. Inconclusive (stopped, ran out of the
   180 minutes, no summary, a worktree that could not be made): recorded, flag and issue untouched. If `gh` fails the
-  flag is still written, without an issue number, and the next red run files it. Exit codes: 0 green or skip, 1 red,
+  flag is still written, without an issue number, and the next run files it (for the same commit without running the smoke again). Exit codes: 0 green or skip, 1 red,
   2 inconclusive or a refusal.
 - **The flag.** `red-on-main.json` in the `main-smoke` folder of the launcher home (`~/Library/Application Support/Arcanum
   Steamwoven/main-smoke`, beside `run-queue`; `ARCANUM_LOCAL_HOME` moves both), so every checkout and worktree of the
