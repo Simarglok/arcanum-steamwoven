@@ -271,7 +271,8 @@ WR17–WR23). The window is 800 × 399 at the screen's (0, 41): the frame art 49
 buttons (arts 495 and 496 at (213, 77) and (675, 77)) and the text in the original's fonts: a book's two pages of 200 × 290 at (227, 57) and (476, 57) paged by pixel height, a note in
 (349, 49, 215 × 300), a telegram's eleven form lines and body, a newspaper's masthead, headline and four columns, a plaque (white text) in (269, 40, 428 × 327). The viewer
 ([layout and text flow](../../tools/terrain-viewer/Core/AreaReadingArt.cs), [view](../../tools/terrain-viewer/Godot/AreaReadingArtView.cs)) draws it when the arts and fonts read and keeps the
-diagnostic panel as the fallback; every action, sound and key of the diagnostic window is unchanged.
+diagnostic panel as the fallback; every action, sound and key of the diagnostic window is unchanged. The original stretches its 800 × 600 screen to the display, so with the HD interface pack
+the window is drawn at the scale that fits that screen to the display (fractional, 1.8 on 1920 × 1080; ARC-UI-2314); Legacy takes the nearest whole number of that fit (2 on 1920 × 1080).
 
 ## Main menu (done: ARC-UI-058)
 
