@@ -154,9 +154,8 @@ public static class HotkeyBarRules
 
     private static int? Table(long index) => index >= 0 && index < TypeIconTables.Length ? TypeIconTables[index] : null;
 
-    /// <summary>A spell's icon (0x4B1570): the table's art for spells 0..79. Any other spell's icon depends on a spell-record flag
-    /// (art 35 or 36) that was not read: null.</summary>
-    [OriginalFunction(0x4B1570, OriginalFunctionScope.Partial)]
+    /// <summary>A spell's icon (0x4B1570): the table's art for spells 0..79; null for any other spell, whose icon depends on the
+    /// spell record's technological flag (<see cref="MagickWeaponPaneRules.SpellIcon"/>, ARC-UI-2304).</summary>
     public static int? SpellIcon(int spell) => spell is >= 0 and < 80 ? SpellArts[spell] : null;
 
     /// <summary>A skill-bar button's icon (0x579F70); a button outside 0..3 shows prowling's.</summary>
