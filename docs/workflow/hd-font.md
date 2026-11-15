@@ -86,10 +86,10 @@ at cap 0.5) and a larger round-trip error (0.079 against 0.059 mean), a local ob
 - **Reading-window fonts (ARC-UI-2309, 2026-11-15).** The reading windows draw twelve fonts that the pack lacked: 480 Courier10, 481 Garmond6, 482 Garmond8, 497 Pepper20, 490 Swiss921, 492 Zurich16, 485 Zurich20,
   484 Georgia30, 815 Euph30, 478 BookmanOldBold18, 479 ClarendonBLK18 and 37 Casablanca16. One local trace of all twelve took about 1 min 45 s (`--art 480,481,482,497,490,492,485,484,815,478,479,37`).
   The nine larger ones trace well with the defaults (mean round-trip error 0.04 to 0.10 against 0.12 for the small ones). **Courier10** needs `--level-cap 0.5 --alpha-max 1.0`: at the default cap 0.42 its
-  strokes come out bolder than the original's. **Garmond6 and Garmond8** stay blobby at either setting (strokes of one pixel), so they are left to a Codex delivery ([#2329](https://github.com/Simarglok/arcanum-steamwoven/issues/2329))
-  and the pack update leaves them out. The pack side: [hd-pack.md](hd-pack.md#traced-fonts-in-the-pack-arc-dev-361).
+  strokes come out bolder than the original's. **Garmond6 and Garmond8** stay blobby at either setting (strokes of one pixel), so they were left to a Codex delivery ([#2329](https://github.com/Simarglok/arcanum-steamwoven/issues/2329)),
+  installed in ARC-UI-2329 as generated frames. The pack side: [hd-pack.md](hd-pack.md#traced-fonts-in-the-pack-arc-dev-361).
 - **Owner check (slice 3):** compare the traced text with the 1x text at UI scales 1, 1.5, 2, 3 and 4 on the main menu (327), options (27, 229), the
   character sheet (27, 229, 171), the dialog box and floaters (229), the world map (840), save/load (27) and the pre-made browser (27, 171). The 6 to
   9 px fonts (Garamond 6/8/9, Courier 10, Pork 12) stay bitmap or get the stroke-aware step first; the reading windows use some of them (ledger WR6-WR8:
   480 Courier 10 for the telegram, 482 Garamond 8 in the newspaper masthead, 497 Pepper 20 for the note). Update (ARC-UI-2309): Courier 10 and Pepper 20 are now in the pack (traced, see the bullet above);
-  only Garamond 6 and 8 (ART names `Garmond6Font`, `Garmond8Font`) are still pending ([#2329](https://github.com/Simarglok/arcanum-steamwoven/issues/2329)).
+  Garamond 6 and 8 (ART names `Garmond6Font`, `Garmond8Font`) followed in ARC-UI-2329 (generated frames, installed).
