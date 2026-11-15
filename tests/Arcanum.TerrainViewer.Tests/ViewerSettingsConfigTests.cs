@@ -52,7 +52,7 @@ public sealed class ViewerSettingsConfigTests
     public void The_game_settings_round_trip_as_lines_and_a_missing_file_reads_the_defaults()
     {
         var text = ArcanumConfig.Format(ViewerSettingsConfig.GameChanges(Chosen).Select(change => new ArcanumConfigEntry(change.Name, change.Value!)));
-        Assert.AreEqual("difficulty=2\nturn-based=1\nauto attack=0\ntext floaters=0\nfloat speed=9\ncombat taunts=0\nauto switch=1\nfollower skills=0\nviolence filter=1\nbrightness=5\ntext duration=3\nhd interface=1\ngenerated interface=1\nhd pack=custom\nhd pack path=/Volumes/Packs/HD pack\npad scheme=pointer\ntouch scheme=off\nprompt style=steamdeck\n", text);
+        Assert.AreEqual("difficulty=2\nturn-based=1\nauto attack=0\ntext floaters=0\nfloat speed=9\ncombat taunts=0\nauto switch=1\nfollower skills=0\nviolence filter=1\nbrightness=5\ntext duration=3\nhd=1\ngenerated interface=1\nhd pack=custom\nhd pack path=/Volumes/Packs/HD pack\npad scheme=pointer\ntouch scheme=off\nprompt style=steamdeck\n", text);
         var read = Lines(text);
         Assert.AreEqual(Chosen, ViewerSettingsConfig.ReadGame(read));
         Assert.IsTrue(ViewerSettingsConfig.HasGame(read));
@@ -128,18 +128,41 @@ public sealed class ViewerSettingsConfigTests
         Assert.IsFalse(ViewerSettingsConfig.ReadAlwaysRun(Lines("always run=on\n")), "the original's 0 and 1 only");
         Assert.AreEqual("1", ViewerSettingsConfig.AlwaysRunChanges(true).Single().Value);
 
-        Assert.AreEqual(VisualProfile.Hd, ViewerSettingsConfig.ReadVisualProfile(Lines("visual profile=hd\n")));
-        Assert.AreEqual(VisualProfile.Legacy, ViewerSettingsConfig.ReadVisualProfile(Lines("visual profile=sepia\n")));
-        Assert.AreEqual(VisualProfile.Legacy, ViewerSettingsConfig.ReadVisualProfile(Lines("")));
-        Assert.IsTrue(ViewerSettingsConfig.HasVisualProfile(Lines("visual profile=legacy\n")));
-        Assert.AreEqual("hd", ViewerSettingsConfig.VisualProfileChanges(VisualProfile.Hd).Single().Value);
-        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => ViewerSettingsConfig.VisualProfileChanges((VisualProfile)9));
+        // ARC-UI-2174: one HD value, the `hd` line (0 or 1); an unknown value reads Off.
+        Assert.IsTrue(ViewerSettingsConfig.ReadHd(Lines("hd=1\n")));
+        Assert.IsFalse(ViewerSettingsConfig.ReadHd(Lines("hd=0\n")));
+        Assert.IsFalse(ViewerSettingsConfig.ReadHd(Lines("hd=sepia\n")));
+        Assert.IsFalse(ViewerSettingsConfig.ReadHd(Lines("")));
+        Assert.IsTrue(ViewerSettingsConfig.HasHd(Lines("hd=0\n")));
+        Assert.IsFalse(ViewerSettingsConfig.HasHd(Lines("visual profile=hd\n")));
+        Assert.AreEqual("1", ViewerSettingsConfig.HdChanges(true).Single().Value);
+        Assert.AreEqual("hd", ViewerSettingsConfig.HdChanges(false).Single().Name);
 
-        // ARC-RENDER-2076: the relit look is a part of HD graphics, not a setting; the `relit look` line of an older file is ignored (the profile and the other groups read as before).
+        // The migration of an older file: with no `hd` line the earlier `hd interface` line is the value (On only when it was 1); `visual profile` is ignored, so HD graphics alone never turns HD on;
+        // an `hd` line wins over the earlier ones; the old lines are neither read nor changed.
+        Assert.IsTrue(ViewerSettingsConfig.ReadHd(Lines("hd interface=1\n")));
+        Assert.IsTrue(ViewerSettingsConfig.ReadHd(Lines("hd interface=1\nvisual profile=legacy\n")));
+        Assert.IsFalse(ViewerSettingsConfig.ReadHd(Lines("hd interface=0\nvisual profile=hd\n")));
+        Assert.IsFalse(ViewerSettingsConfig.ReadHd(Lines("visual profile=hd\n")));
+        Assert.IsFalse(ViewerSettingsConfig.ReadHd(Lines("hd=0\nhd interface=1\nvisual profile=hd\n")), "the hd line wins");
+        Assert.IsTrue(ViewerSettingsConfig.ReadHd(Lines("hd=1\nhd interface=0\n")));
+        Assert.IsTrue(ViewerSettingsConfig.HasHd(Lines("hd interface=0\n")), "an old file with only hd interface holds a saved value");
+        Assert.IsTrue(ViewerSettingsConfig.ReadGame(Lines("hd interface=1\ngenerated interface=1\n")) is { HdInterface: true, GeneratedInterface: true });
+        Assert.IsTrue(ViewerSettingsConfig.ReadGame(Lines("visual profile=hd\ngenerated interface=1\n")) is { HdInterface: false, GeneratedInterface: false }, "generated is honoured only while HD is On");
+        Assert.IsFalse(ViewerSettingsConfig.GameChanges(Chosen).Any(change => change.Name == ViewerSettingsConfig.HdInterface), "the old line is never written again");
+        var oldPath = Path.Combine(_root, "old", ArcanumConfig.FileName);
+        Directory.CreateDirectory(Path.GetDirectoryName(oldPath)!);
+        File.WriteAllText(oldPath, "visual profile=hd\nhd interface=1\nrelit look=1\n");
+        Assert.AreEqual(ArcanumConfigSaveStatus.Saved, ArcanumConfig.Save(oldPath, ViewerSettingsConfig.GameChanges(ViewerSettingsConfig.ReadGame(ArcanumConfig.Read(oldPath)))));
+        var migrated = File.ReadAllText(oldPath);
+        Assert.IsTrue(migrated.Contains("hd=1", StringComparison.Ordinal) && migrated.Contains("visual profile=hd", StringComparison.Ordinal) && migrated.Contains("hd interface=1", StringComparison.Ordinal)
+            && migrated.Contains("relit look=1", StringComparison.Ordinal), "the first save writes hd and leaves the old lines in place: " + migrated);
+
+        // ARC-RENDER-2076: the relit look is a part of HD, not a setting; the `relit look` line of an older file is ignored.
         var old = Lines("relit look=1\nvisual profile=legacy\ndifficulty=2\n");
-        Assert.AreEqual(VisualProfile.Legacy, ViewerSettingsConfig.ReadVisualProfile(old));
+        Assert.IsFalse(ViewerSettingsConfig.ReadHd(old));
         Assert.AreEqual(ViewerSettingsConfig.ReadGame(Lines("difficulty=2\n")).Difficulty, ViewerSettingsConfig.ReadGame(old).Difficulty);
-        Assert.AreEqual(VisualProfile.Legacy, ViewerSettingsConfig.ReadVisualProfile(Lines("relit look=1\n")), "the old line alone never turns HD graphics on");
+        Assert.IsFalse(ViewerSettingsConfig.ReadHd(Lines("relit look=1\n")), "the old line alone never turns HD on");
     }
 
     [TestMethod]
@@ -150,27 +173,27 @@ public sealed class ViewerSettingsConfigTests
         Assert.AreEqual(ArcanumConfigSaveStatus.Saved, ArcanumConfig.Save(path, ViewerSettingsConfig.GameChanges(Chosen)));
         Assert.AreEqual(ArcanumConfigSaveStatus.Saved, ArcanumConfig.Save(path, ViewerSettingsConfig.AudioChanges(new AudioVolumes(1, 2, 3))));
         Assert.AreEqual(ArcanumConfigSaveStatus.Saved, ArcanumConfig.Save(path, ViewerSettingsConfig.AlwaysRunChanges(true)));
-        Assert.AreEqual(ArcanumConfigSaveStatus.Saved, ArcanumConfig.Save(path, ViewerSettingsConfig.VisualProfileChanges(VisualProfile.Hd)));
+        Assert.AreEqual(ArcanumConfigSaveStatus.Saved, ArcanumConfig.Save(path, ViewerSettingsConfig.HdChanges(true)));
         Assert.AreEqual(LauncherSettingsSaveStatus.Saved, LauncherSettingsFile.Save(path, launcher));
         CollectionAssert.AreEqual(new[] { ArcanumConfig.FileName }, Directory.EnumerateFiles(Path.GetDirectoryName(path)!).Select(Path.GetFileName).ToArray(), "one file, no other");
 
-        void Check(AreaGameSettings game, AudioVolumes audio, bool run, VisualProfile profile, LauncherSettings stored)
+        void Check(AreaGameSettings game, AudioVolumes audio, bool run, bool hd, LauncherSettings stored)
         {
             var read = ArcanumConfig.Read(path);
             Assert.AreEqual(game, ViewerSettingsConfig.ReadGame(read));
             Assert.AreEqual(audio, ViewerSettingsConfig.ReadAudio(read));
             Assert.AreEqual(run, ViewerSettingsConfig.ReadAlwaysRun(read));
-            Assert.AreEqual(profile, ViewerSettingsConfig.ReadVisualProfile(read));
+            Assert.AreEqual(hd, ViewerSettingsConfig.ReadHd(read));
             Assert.AreEqual((stored.ShowAtStart, stored.Rules), (LauncherSettingsFile.Load(path).Settings.ShowAtStart, LauncherSettingsFile.Load(path).Settings.Rules));
         }
-        Check(Chosen, new AudioVolumes(1, 2, 3), true, VisualProfile.Hd, launcher);
+        Check(Chosen, new AudioVolumes(1, 2, 3), true, true, launcher);
 
         Assert.AreEqual(ArcanumConfigSaveStatus.Saved, ArcanumConfig.Save(path, ViewerSettingsConfig.AudioChanges(new AudioVolumes(9, 9, 9))));
-        Check(Chosen, new AudioVolumes(9, 9, 9), true, VisualProfile.Hd, launcher);
+        Check(Chosen, new AudioVolumes(9, 9, 9), true, true, launcher);
         Assert.AreEqual(ArcanumConfigSaveStatus.Saved, ArcanumConfig.Save(path, ViewerSettingsConfig.GameChanges(AreaGameSettings.Defaults)));
-        Check(AreaGameSettings.Defaults, new AudioVolumes(9, 9, 9), true, VisualProfile.Hd, launcher);
+        Check(AreaGameSettings.Defaults, new AudioVolumes(9, 9, 9), true, false, launcher);
         Assert.AreEqual(LauncherSettingsSaveStatus.Saved, LauncherSettingsFile.Reset(path));
-        Check(AreaGameSettings.Defaults, new AudioVolumes(9, 9, 9), true, VisualProfile.Hd, LauncherSettings.Defaults);
+        Check(AreaGameSettings.Defaults, new AudioVolumes(9, 9, 9), true, false, LauncherSettings.Defaults);
         Assert.IsFalse(File.ReadAllText(path).Contains("hd pack path", StringComparison.Ordinal), "a group with no folder holds no folder line");
     }
 
@@ -187,7 +210,7 @@ public sealed class ViewerSettingsConfigTests
         Assert.AreEqual(Chosen with { Pad = PadScheme.Off, Touch = TouchScheme.Off, Prompts = PromptStyle.Auto, CombatTaunts = true, ViolenceFilter = false, Brightness = 0, TextDuration = 6, AutoSwitchWeapons = false, FollowerSkills = true }, ViewerSettingsConfig.ReadGame(read));
         Assert.AreEqual(new AudioVolumes(4, 0, 10), ViewerSettingsConfig.ReadAudio(read));
         Assert.IsTrue(ViewerSettingsConfig.ReadAlwaysRun(read));
-        Assert.AreEqual(VisualProfile.Hd, ViewerSettingsConfig.ReadVisualProfile(read));
+        Assert.IsTrue(ViewerSettingsConfig.ReadHd(read), "the game file hdInterface is the HD value");
         var stored = LauncherSettingsFile.Load(path);
         Assert.AreEqual((LauncherSettingsReadStatus.Read, true, RuleMode.Original, true), (stored.Status, stored.Settings.ShowAtStart, stored.Settings.Rules, stored.Settings.DebugMode));
     }
@@ -200,6 +223,7 @@ public sealed class ViewerSettingsConfigTests
         var broken = new LegacySettingsTexts("{}", "not json", "maybe", "{\"schema\":1,\"profile\":\"Ultra\"}", "garbage");
         Assert.IsTrue(broken.Any);
         Assert.AreEqual(0, ViewerSettingsMigration.Import(broken).Count, "an invalid file keeps its settings at their defaults");
+        Assert.AreEqual(0, ViewerSettingsMigration.Import(new LegacySettingsTexts(null, null, null, VisualProfileCodec.Serialize(VisualProfile.Hd), null)).Count, "ARC-UI-2174: the old visual profile file is not imported");
 
         const string newer = "{\n  \"schema\": 2,\n  \"gameRoot\": \"/x\"\n}";
         var kept = ViewerSettingsMigration.Import(new LegacySettingsTexts(null, null, null, null, newer)).Single();

@@ -9,7 +9,7 @@ namespace Arcanum.TerrainViewer;
 
 /// <summary>
 /// ARC-UI-089: the HD interface art switch of the viewer. The active pack and the HD interface setting (ARC-UI-095, saved with the
-/// game settings, independent of the Legacy/HD visual profile) decide whether the interface textures draw their HD redraws; <see cref="HdInterfaceTexture"/> keeps its Legacy size and Legacy
+/// game settings; since ARC-UI-2174 the same one HD value that switches the visual profile and the relit look) decide whether the interface textures draw their HD redraws; <see cref="HdInterfaceTexture"/> keeps its Legacy size and Legacy
 /// pixels for everything that reads them, so a window's layout, hit tests and sizes never change. Off, or without a pack entry for a frame,
 /// every texture draws exactly the Legacy pixels it drew before.
 /// </summary>
