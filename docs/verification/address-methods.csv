@@ -924,8 +924,8 @@ tools/terrain-viewer/Godot/TerrainViewerCompanionOrders.cs,FollowerPortraitClick
 tools/terrain-viewer/Godot/TerrainViewerCompanionOrders.cs,OpenFollowerSheet,exempt,reference
 tools/terrain-viewer/Godot/TerrainViewerCompanions.cs,LeaveFollowersCombatMode,pending,
 tools/terrain-viewer/Godot/TerrainViewerCompanions.cs,TransferFacts,pending,
-tools/terrain-viewer/Godot/TerrainViewerConversation.cs,DialogStartRefused,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerConversation.cs,BeginDeadTalk,exempt,host
+tools/terrain-viewer/Godot/TerrainViewerConversation.cs,DialogStartRefused,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerConversation.cs,ProcessConversationEnd,pending,
 tools/terrain-viewer/Godot/TerrainViewerConversation.cs,RequestTalkDialog,pending,
 tools/terrain-viewer/Godot/TerrainViewerConversation.cs,TryAreaTalk,pending,
