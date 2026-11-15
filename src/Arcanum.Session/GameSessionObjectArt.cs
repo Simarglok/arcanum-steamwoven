@@ -46,4 +46,25 @@ public sealed partial class GameSessionOwner
         if (art == baseline) return ClearMapChange(expected, QueryObjectRecordMap(key) ?? map, key);
         return SetMapChange(expected, map, key, art);
     }
+
+    /// <summary>
+    /// ARC-SCRIPT-2335 (IV5): the map changes of an art plan as <see cref="SetObjectArt"/> and <see cref="SetOpenableFrame"/> (frame 0) make them, without a revision, for a move that applies them in its own one; null when the plan names
+    /// an openable the session refuses.
+    /// </summary>
+    internal IReadOnlyList<MapChangeEdit>? ArtEdits(SessionObjectArtPlan plan)
+    {
+        var edits = new List<MapChangeEdit>();
+        if (plan.Art is not { } art) return edits;
+        if (!SessionValidation.Map(plan.Map) || !SessionValidation.Entity(plan.Entity)) return null;
+        var key = SessionObjectArt.Key(plan.Entity);
+        if (art == plan.Baseline) edits.Add(new(QueryObjectRecordMap(key) ?? plan.Map, key, null));
+        else edits.Add(new(plan.Map, key, art));
+        if (plan.Openable is { } openable && plan.OpenableBaseline is { } baseline)
+        {
+            if (!ValidOpenable(openable, baseline)) return null;
+            var (flags, current) = Current(openable, baseline);
+            if (current != 0) edits.AddRange(Edits(openable, baseline.Kind, flags, 0));
+        }
+        return edits;
+    }
 }

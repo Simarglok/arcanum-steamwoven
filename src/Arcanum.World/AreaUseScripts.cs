@@ -497,6 +497,23 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     public IReadOnlyList<ScrObjectRef> ContainersInVicinity(ScrObjectRef centre)
     {
         if (centre.Map != _shownMap || Place(centre) is not { } at) return [];
+        return ContainersAround(at);
+    }
+
+    /// <summary>
+    /// ARC-SCRIPT-2335 (IV2): the containers in the vicinity of an item, the attachee of its insert-item script: the scan is centred on the item's own location field, which an insertion does not write, so it is the tile its map data
+    /// gives (a held item keeps the tile it had where the map placed it, also on another map than its own: the original scans the current map around the stale coordinates, so an item taken to another map reads the row of its origin map) or, for an item the session put on the ground, the tile it lies on; null for an item of another map, one without a row (made at run time) or without a tile.
+    /// </summary>
+    public IReadOnlyList<ScrObjectRef>? ContainersNearItem(ScrObjectRef item)
+    {
+        if (item.Map != _shownMap) return null;
+        var placed = _session.QueryPlacedItems().FirstOrDefault(p => p.Entity == item.Code && p.Map.RuntimeMap == item.Map);
+        CellCoord? at = placed is not null ? placed.Cell : (Row(item) ?? CarriedItemRow(item)) is { WorldX: { } x, WorldY: { } y } && x is >= int.MinValue and <= int.MaxValue && y is >= int.MinValue and <= int.MaxValue ? new CellCoord((int)x, (int)y) : null;
+        return at is { } cell ? ContainersAround(cell) : null;
+    }
+
+    private IReadOnlyList<ScrObjectRef> ContainersAround(CellCoord at)
+    {
         return _containers.Where(s => Math.Abs(s.Row.WorldX!.Value - at.X) <= ScrWorld.VicinityReach && Math.Abs(s.Row.WorldY!.Value - at.Y) <= ScrWorld.VicinityReach
                 && _world?.Gone(s.Row) != true)
             .Select(s => new ScrObjectRef(_shownMap, s.Entity)).ToArray();
@@ -892,6 +909,9 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
 
     /// <summary>ARC-SCRIPT-050: the shown map's runtime number (the dialog host borrows this host's answers only for its own map).</summary>
     public int ShownMap => _shownMap;
+
+    /// <summary>ARC-SCRIPT-2335: whether the host reads a row for the object (the shown map's, a loaded map's or a created critter's).</summary>
+    public bool KnowsObject(ScrObjectRef obj) => Row(obj) is not null;
 
     private AreaObjectRecord? Row(ScrObjectRef obj)
     {
@@ -2335,6 +2355,16 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     }
 
     private ArtChange ArtPlan(ScrObjectStateRequest request) => ArtPlan(request.Object, request.Value);
+
+    /// <summary>
+    /// ARC-SCRIPT-2335 (IV5): the plan of a change art number as <see cref="ArtPlan(ScrObjectRef, int)"/> makes it, for the session's item set, which applies it in its own revision; null for an object the plan refuses (a run the host cannot apply),
+    /// an empty plan (no change) for the objects the action leaves as they are.
+    /// </summary>
+    public SessionObjectArtPlan? PlanObjectArt(ScrObjectRef obj, int number)
+    {
+        var plan = ArtPlan(obj, number);
+        return plan.Refusal is not null ? null : new(new SessionMapId(obj.Map), obj.Code, plan.Art, plan.Baseline, plan.Openable?.Openable, plan.Openable?.Baseline);
+    }
 
     // ARC-SCRIPT-1826 (AN18): the map the session names as the origin of an item it moved (the hero's taken item, an item of the hero lying on the ground, an item the hero gave away), or null.
     private SessionMapId? ItemOrigin(string entity)
