@@ -399,8 +399,9 @@ lights are one list with the view-culling rule above (32 nearest the view's cent
 
 *HD frames.* An N-times HD frame has N times the texels over the same drawn size, so its luminance steps are 1/N as big: the relit program gets the item's scale (`relight_scale`, the item's `HdScale`)
 and multiplies the Sobel gain by it, and the silhouette bevel reads its alpha N texels away, so the look matches the 1x look (the Godot-free twin check: `experiments/relight-lab` test
-`An_n_times_smooth_redraw_with_the_gain_times_n_bends_the_normal_like_the_original`). No HD pack of the world's sprites exists on the owner's Mac yet (the installed pack is the interface redraw),
-so a capture on real HD world frames is still open ([#2060](https://github.com/Simarglok/arcanum-steamwoven/issues/2060) tail).
+`An_n_times_smooth_redraw_with_the_gain_times_n_bends_the_normal_like_the_original`; the bevel's N-texel alpha taps: the twin's `BevelStride`, ARC-RENDER-2063, test
+`An_n_times_copy_with_the_bevel_stride_n_bends_the_silhouette_like_the_original_and_stride_one_does_not`). By the owner decision of 2026-11-15 the HD option covers the interface (art and fonts) and this lighting only, so no HD pack of world
+frames is made and the world is drawn from 1x art: the N>1 path is dormant support that only the twin tests, not a product path, and there is no capture on real HD world frames to wait for.
 
 *Cost, Mac (1280x800, vsync off, 90 frames).* Crash Site cave with 6 lights: 3.4 ms Legacy, 4.7 ms with the look; Tarant at night with 14 lights: 5.9 ms and 8.7 ms; Ashbury with 12 lights: 5.6 ms and 7.8 ms (about 1.3 to 2.8 ms more).
 The Steam Deck is not measured ([#2000](https://github.com/Simarglok/arcanum-steamwoven/issues/2000)); the line is off by default and the light list is bounded at 32, so a slow device simply leaves it off.
