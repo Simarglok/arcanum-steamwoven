@@ -74,13 +74,24 @@ public sealed record ChromeMarks(int X, int Y, int Width, int Height) : ChromePa
 public sealed record ChromeBall(double CenterX, double CenterY, double Radius, double KeepRadius) : ChromePart;
 
 /// <summary>ARC-UI-2194: a capsule (stadium) plate of <see cref="ChromeMaterial.Brass"/> in Legacy pixels: a raised rim of <paramref name="Rim"/> units with a lit upper left and a shaded lower right, and a
-/// recessed face inside it (the same brass, darker, with the bevel the other way round, as a sunk panel has). Drawn over the opaque pixels of the art, its edge anti-aliased, its brass sampled in the window's
+/// recessed face inside it (the same brass, darker, with the bevel the other way round, as a sunk panel has). Drawn with its own colours over the whole shape (the art's alpha decides what shows), its edge anti-aliased, its brass sampled in the window's
 /// coordinates (<see cref="ChromeRecipe.OriginX"/>), so two arts of one window that carry the same plate meet without a seam. The shape is horizontal (the width is at least the height).</summary>
 public sealed record ChromeCapsule(double X, double Y, double Width, double Height, double Rim = 3) : ChromePart;
 
 /// <summary>ARC-UI-2194: a convex polygon plate (points clockwise on the screen, Legacy pixels) of a material with a one-unit bevel: lit on the edges that face the upper left, shaded on the others
 /// (the brass housing behind the world map window's two plates). Edge anti-aliased; the alpha is the art's.</summary>
-public sealed record ChromePolygon(IReadOnlyList<(double X, double Y)> Points, ChromeMaterial Material) : ChromePart;
+public sealed record ChromePolygon(IReadOnlyList<(double X, double Y)> Points, ChromeMaterial Material) : ChromePart
+{
+    /// <summary>The polygon's box in whole Legacy pixels (x, y, width, height), found once.</summary>
+    public (int X, int Y, int Width, int Height) Box { get; } = Bounds(Points);
+
+    private static (int, int, int, int) Bounds(IReadOnlyList<(double X, double Y)> points)
+    {
+        double x0 = double.MaxValue, y0 = double.MaxValue, x1 = double.MinValue, y1 = double.MinValue;
+        foreach (var (x, y) in points) { x0 = Math.Min(x0, x); y0 = Math.Min(y0, y); x1 = Math.Max(x1, x); y1 = Math.Max(y1, y); }
+        return ((int)Math.Floor(x0), (int)Math.Floor(y0), (int)Math.Ceiling(x1 - x0) + 1, (int)Math.Ceiling(y1 - y0) + 1);
+    }
+}
 
 /// <summary>ARC-UI-2194: the housing ring around a round opening of an art (the world map window's compass opening): a brass ring of <paramref name="Width"/> units outside the circle at
 /// (<paramref name="CenterX"/>, <paramref name="CenterY"/>) of <paramref name="InnerRadius"/>, painted on the art's opaque pixels only (the opening's alpha, and so its hit area, stays the Legacy one;
@@ -781,7 +792,7 @@ public static class InterfaceChromeRenderer
                 case ChromeBall ball: Ball(c, ball); break;
                 case ChromePolygon polygon: Polygon(c, polygon); break;
                 case ChromeCapsule capsule: Capsule(c, capsule); break;
-                case ChromeSocket socket: RingBand(c, socket.CenterX * c.Scale, socket.CenterY * c.Scale, socket.InnerRadius * c.Scale, socket.Width); break;
+                case ChromeSocket socket: RingBand(c, socket.CenterX * c.Scale, socket.CenterY * c.Scale, socket.InnerRadius * c.Scale, socket.Width * c.Scale / c.S); break; // the width in exact device pixels (RingBand multiplies by the rounded scale)
                 case ChromeRivet rivet: Rivet(c, rivet); break;
                 case ChromeKeep keep: Keep(c, c.Edge(keep.X), c.Edge(keep.Y), c.Edge(keep.X + keep.Width) - c.Edge(keep.X), c.Edge(keep.Y + keep.Height) - c.Edge(keep.Y), keep.Round); break;
                 case ChromeGlyph glyph: Glyph(c, glyph); break;
@@ -985,7 +996,7 @@ public static class InterfaceChromeRenderer
                 ChromeGrid p => (p.X, p.Y, p.Columns * p.Cell, p.Rows * p.Cell),
                 // ARC-UI-2194: the brass pill's parts (the housing and the plates; the ring lies inside the housing's box).
                 ChromeCapsule p => ((int)Math.Floor(p.X), (int)Math.Floor(p.Y), (int)Math.Ceiling(p.Width) + 1, (int)Math.Ceiling(p.Height) + 1),
-                ChromePolygon p => ((int)Math.Floor(p.Points.Min(q => q.X)), (int)Math.Floor(p.Points.Min(q => q.Y)), (int)Math.Ceiling(p.Points.Max(q => q.X) - p.Points.Min(q => q.X)) + 1, (int)Math.Ceiling(p.Points.Max(q => q.Y) - p.Points.Min(q => q.Y)) + 1),
+                ChromePolygon p => (p.Box.X, p.Box.Y, p.Box.Width, p.Box.Height + 2), // two rows more: the pill's last rows lie under the housing's lower edge
                 ChromeSocket p => ((int)Math.Floor(p.CenterX - p.InnerRadius - p.Width), (int)Math.Floor(p.CenterY - p.InnerRadius - p.Width), (int)Math.Ceiling(2 * (p.InnerRadius + p.Width)) + 1, (int)Math.Ceiling(2 * (p.InnerRadius + p.Width)) + 1),
                 _ => (0, 0, 0, 0),
             };

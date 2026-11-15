@@ -1032,7 +1032,7 @@ public sealed class InterfaceChromeTests
             }
             Assert.AreEqual(0, Pixel(a, pw, At(PillCentre.X), At(PillCentre.Y)).A, $"the compass opening is clear at {scale}");
             // The plate: a bright rim, a darker recessed face, both brass (red over green over blue); the housing between the plate and the ring is darker than the plate's rim.
-            var rim = Pixel(a, pw, At(30), At(19.5)); var face = Pixel(a, pw, At(30), At(30)); var housing = Pixel(a, pw, At(73.5), At(30));
+            var rim = Pixel(a, pw, At(30), At(21.5)); var face = Pixel(a, pw, At(30), At(30)); var housing = Pixel(a, pw, At(73.5), At(30));
             foreach (var p in new[] { rim, face, housing }) Assert.IsTrue(p.R > p.G && p.G > p.B && p.A == 255, $"brass at {scale}");
             Assert.IsTrue(rim.R + rim.G + rim.B > face.R + face.G + face.B, $"the rim is brighter than the face at {scale}");
             Assert.IsTrue(face.R + face.G + face.B > housing.R + housing.G + housing.B, $"the face is brighter than the housing at {scale}");
@@ -1055,6 +1055,23 @@ public sealed class InterfaceChromeTests
             }
             // The frame's opening is clear (the compass button's own hit area) and wood is left outside the pill.
             Assert.AreEqual(0, Pixel(f, fw, At(294 + PillCentre.X), At(341 + PillCentre.Y)).A);
+        }
+    }
+
+    [TestMethod]
+    public void The_cover_at_fractional_scales_keeps_its_size_and_the_ring_reaches_its_outer_edge()
+    {
+        var legacy = SyntheticCover();
+        foreach (var scale in new[] { 1.5, 2.4 })
+        {
+            var a = InterfaceChromeRenderer.Render(Recipe("Nav_Cvr.ART"), 207, 35, legacy, [], 0, scale);
+            var (pw, ph) = InterfaceChromeRenderer.PixelSize(207, 35, scale);
+            Assert.AreEqual(pw * ph * 4, a.Length);
+            Assert.AreEqual(0, Pixel(a, pw, (int)(PillCentre.X * scale), (int)(PillCentre.Y * scale)).A, $"the opening is clear at {scale}");
+            // Just inside the ring's outer radius (the art is opaque out to 26 units) the ring's own brass is drawn, not the cover's flat base: the ring's lit and shaded sides differ.
+            (int R, int G, int B, int A) At(double dx, double dy) => Pixel(a, pw, (int)((PillCentre.X + dx) * scale), (int)((PillCentre.Y + dy) * scale));
+            var (left, right) = (At(-24.5, 0), At(24.5, 0));
+            Assert.IsTrue(left.R + left.G + left.B > right.R + right.G + right.B, $"the ring's upper-left is lit at {scale}: {left} / {right}");
         }
     }
 
