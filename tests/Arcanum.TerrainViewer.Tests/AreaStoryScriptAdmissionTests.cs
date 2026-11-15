@@ -56,7 +56,7 @@ public sealed class AreaStoryScriptAdmissionTests
         // ARC-SCRIPT-1168 (the talk sets hold the six cast actions): the talk set admits one more, 31 (30 before). The placed, heartbeat and dying counts had moved with later slices (the critter-state conditions of
         // ARC-SCRIPT-1733, 1771 and others: 52, 29 and 72, the talk set 30) without this assertion following; it is brought to the measured counts here.
         // ARC-SCRIPT-1815: the heartbeat set gained the scenery and object-variable focus kinds, assign object and float line (heartbeats 41, from 29).
-        // Re-measured 2026-11-16 (ARC-SCRIPT-2321, set S63): the any-scenery focus kind (16) moves none of these; the counts moved with the sets merged since the line above (group kinds S61, toggle state, portal kind; issue #1846).
-        Assert.AreEqual((96, 52, 37, 58, 45, 79, 33), (withStory, counts["S34"], counts["use"], counts["placed"], counts["heartbeat"], counts["dying"], counts["talk"]));
+        // Re-measured 2026-11-16 (ARC-SCRIPT-2321, set S63): the any-scenery focus kind (16) moves none of these; the counts moved with the sets merged since the line above (group and container kinds S61 and S62, toggle state, portal kind; issue #1846).
+        Assert.AreEqual((96, 52, 38, 60, 46, 81, 33), (withStory, counts["S34"], counts["use"], counts["placed"], counts["heartbeat"], counts["dying"], counts["talk"]));
     }
 }
