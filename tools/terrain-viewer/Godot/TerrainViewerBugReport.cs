@@ -22,7 +22,7 @@ public partial class TerrainViewerApp
     private AreaBugReportPanel? _bugReportPanel;
     // The key's moment while the window is open (the PNG lives in a holder only then: ARC-RENDER-003's ready app keeps no byte arrays).
     private sealed record BugReportMoment(BugReportFacts Facts, IReadOnlyList<BugReportLine> Log, long Dropped, DateTime TakenUtc, DateTime TakenLocal,
-        SavePicture? Screenshot, string? ScreenshotMissing, BugReportSave? Save, string? SaveMissing);
+        SavePicture? Screenshot, string? ScreenshotMissing, BugReportSave? Save, string? SaveMissing, byte[]? Thumbnail = null);
     private BugReportMoment? _bugReport;
     private BugReportResult? _bugReportResult;
     private object? _bugReportEventStamp;
@@ -99,16 +99,17 @@ public partial class TerrainViewerApp
     }
 
     /// <summary>The key's moment: the screen as drawn, the last 120 s of the log, the facts and (in a game) a save (ARC-DEV-2190: the
-    /// owner-checks overlay takes the same moment when it opens).</summary>
-    private BugReportMoment CaptureBugReportMoment()
+    /// owner-checks overlay takes the same moment when it opens, but without the save: <paramref name="withSave"/> false keeps the save list's
+    /// preview of the screen instead, and the save is taken at Send, ARC-DEV-2236).</summary>
+    private BugReportMoment CaptureBugReportMoment(bool withSave = true)
     {
         var takenUtc = DateTime.UtcNow;
         var log = BugReportLog.Process.Recent();
         var (screenshot, thumbnail, screenshotMissing) = CaptureBugReportScreen();
         var facts = BugReportFactsNow();
-        var (save, saveMissing) = CaptureBugReportSave(thumbnail, takenUtc.ToLocalTime());
+        var (save, saveMissing) = withSave ? CaptureBugReportSave(thumbnail, takenUtc.ToLocalTime()) : (null, null);
         return new(facts, log, BugReportLog.Process.Dropped, takenUtc, takenUtc.ToLocalTime(), screenshot is null ? null : new(screenshot), screenshotMissing,
-            save, saveMissing);
+            save, saveMissing, withSave ? null : thumbnail);
     }
 
     /// <summary>The frame on screen as a PNG and the save list's 468×300 preview of it; a headless run draws no frame.</summary>

@@ -18,6 +18,9 @@ ARC-DEV-2190 (slice 5): the page also writes ``local/qa/checks.json`` (the list 
 without Python; the game appends its results to the same ``results.jsonl`` (``src: game``, ``build``), and the running page creates the
 issue of a new ``differs`` result every ``AUTO_SYNC_SECONDS`` (``qa sync`` does the same on demand, exactly once per step). The overlay is
 off in a normal build; ``./arcanum qa overlay on|off`` writes or removes the marker ``local/qa/owner-qa.on`` (``ARC_OWNER_QA=1`` also turns it on).
+ARC-DEV-2236: the snapshot is the list of the running page (written when it starts and on Reload, with its own ``--ref``); ``qa sync``,
+``--check`` and ``overlay off`` never replace it, ``overlay on`` writes one only when none exists, and ``qa sync`` names a differs step
+that is not in the list any more instead of skipping it silently.
 """
 from __future__ import annotations
 
@@ -369,6 +372,7 @@ class QaApp:
         self.commit = ""
         self.warning = ""
         self.new_ids: set[str] = set()
+        self.skipped: list[str] = []         # the differs steps the last sync left out because they are not in the list any more
         self._guard = threading.Lock()
 
     # list -------------------------------------------------------------------------------------------------------------
@@ -511,12 +515,16 @@ class QaApp:
         the next ``qa sync`` instead of calling gh again every few seconds. ``settle`` (seconds): a step whose latest result is younger
         waits (the issue body is fixed when it is created, so a note or report that follows the mark should be in it)."""
         done, failed = [], []
+        self.skipped = []
         with self.store.locked():
             results, _ = self.store.read()
             by_id = self.parsed.by_id()
             for step_id, result in results.items():
                 step = by_id.get(step_id)
-                if step is None or result["status"] != "differs" or result["issue"] is not None:
+                if result["status"] != "differs" or result["issue"] is not None:
+                    continue
+                if step is None:            # ARC-DEV-2236: a step that left the list gets no issue, and the caller says so
+                    self.skipped.append(step_id)
                     continue
                 if not retry_failed and result["issueError"]:
                     continue
@@ -699,7 +707,11 @@ def run(args: argparse.Namespace) -> int:
     except ValueError as error:
         print(f"arcanum qa: {error}", file=sys.stderr)
         return 2
-    app = QaApp(Store(data_dir), reports_dir, ROOT, args.ref, fetch=not args.no_fetch and not args.dry_run, snapshot=not args.dry_run)
+    # ARC-DEV-2236: the snapshot mirrors the list of the running page, so only a page that serves (not --check, not sync) replaces it;
+    # `overlay on` writes one only when there is none yet (the overlay needs something to list).
+    has_snapshot = (Path(data_dir) / CHECKS_FILE).exists()
+    snapshot = not args.dry_run and ((args.action == "serve" and not args.check) or (args.action == "overlay" and args.state == "on" and not has_snapshot))
+    app = QaApp(Store(data_dir), reports_dir, ROOT, args.ref, fetch=not args.no_fetch and not args.dry_run, snapshot=snapshot)
     try:
         app.reload()
     except (RuntimeError, OSError) as error:
@@ -732,7 +744,9 @@ def run(args: argparse.Namespace) -> int:
             print(f"qa: {'would create' if args.dry_run else 'created'} the issue of {step_id}")
         for step_id in failed:
             print(f"qa: FAILED to create the issue of {step_id}: {app.store.read()[0][step_id]['issueError']}", file=sys.stderr)
-        print(f"qa: sync: {len(done)} {'to create' if args.dry_run else 'created'}, {len(failed)} failed")
+        for step_id in app.skipped:
+            print(f"qa: skipped {step_id}: marked differs, but the step is not in the list of {args.ref} any more (no issue created)", file=sys.stderr)
+        print(f"qa: sync: {len(done)} {'to create' if args.dry_run else 'created'}, {len(failed)} failed, {len(app.skipped)} skipped")
         return 1 if failed else 0
     if args.dry_run:
         results, bad = app.store.read()
