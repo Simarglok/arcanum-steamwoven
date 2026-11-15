@@ -15,6 +15,8 @@ Findings (each is an error, the exit code is 1 when there is one):
               exist (a path with a placeholder such as ``<area>`` or ``*`` is skipped).
 * ``orphan``  a page under ``docs/`` that no other page links to and no code file names (a path in backticks does not
               count as a link).
+* ``owner``   a row of the owner re-check list (``docs/project/owner-recheck-list.md``) with a bad step id, a missing
+              column or an unknown status (the parser is ``tools/local_dev/owner_checks.py``, ARC-DEV-2186).
 * ``stale``   an entry of ``KNOWN_ORPHANS`` that no longer exists or is no longer an orphan.
 
 Links inside fenced code blocks and inline code are examples, not links.
@@ -22,6 +24,7 @@ Links inside fenced code blocks and inline code are examples, not links.
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import os
 from pathlib import Path
 import re
@@ -43,6 +46,22 @@ SKIP_PATH_PREFIXES = ("docs/verification/receipts/",)
 KNOWN_ORPHANS: tuple[str, ...] = ()
 # files whose docs/ paths are synthetic test data, not references
 SYNTHETIC_PATH_FILES = ("tools/local_dev/test_smoke_zones.py", "tools/docs_check.py")
+
+
+OWNER_LIST = "docs/project/owner-recheck-list.md"
+OWNER_PARSER = Path(__file__).resolve().parent / "local_dev" / "owner_checks.py"
+
+
+def owner_list_problems(page: str, text: str) -> list[str]:
+    """The rows of the owner re-check list that the shared parser cannot read, as ``page:line: owner: message``."""
+    spec = importlib.util.spec_from_file_location("owner_checks_for_docs_check", OWNER_PARSER)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module      # the parser's dataclasses look their module up here
+    try:
+        spec.loader.exec_module(module)
+    finally:
+        sys.modules.pop(spec.name, None)
+    return [f"{page}:{problem.line}: owner: {problem.message}" for problem in module.parse(text).problems]
 
 
 def repository_files(root: Path) -> list[str]:
@@ -143,6 +162,9 @@ def check(root: Path, files: list[str], known_orphans: tuple[str, ...] | None = 
         if path not in anchor_cache:
             anchor_cache[path] = anchors_of(texts.get(path, ""))
         return anchor_cache[path]
+
+    if OWNER_LIST in present and OWNER_LIST in texts:
+        problems.extend(owner_list_problems(OWNER_LIST, texts[OWNER_LIST]))
 
     for page in pages:
         body = strip_code(texts.get(page, ""))
@@ -253,6 +275,22 @@ def self_test() -> int:
         if "docs/orphan.md: orphan" in text or "docs/gone-entry.md: stale" not in text or "docs/b.md: stale" not in text:
             print("self-test: KNOWN_ORPHANS handling is wrong:")
             print(text)
+            return 1
+    good_list = ("## ARC-DEV-1 — x\n\n| # | Step | Expected | Status |\n| --- | --- | --- | --- |\n"
+                 "| 1 | A. | B. | open |\n| 2 | C. | D. | same (note) |\n")
+    if owner_list_problems(OWNER_LIST, good_list):
+        print("self-test: a clean owner list reported problems")
+        return 1
+    bad_list = good_list + "| x | A. | B. | open |\n| 3 | A. |  | open |\n| 4 | A. | B. | done |\n"
+    found = owner_list_problems(OWNER_LIST, bad_list)
+    if [line.split(": owner:")[0] for line in found] != [f"{OWNER_LIST}:{n}" for n in (7, 8, 9)]:
+        print("self-test: owner list findings are wrong:", found)
+        return 1
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        _write(root, {OWNER_LIST: bad_list, "docs/README.md": "# Index\n\n[l](project/owner-recheck-list.md)\n"})
+        if sum(": owner:" in line for line in check(root, walk_files(root), ())) != 3:
+            print("self-test: check() does not report the owner list")
             return 1
     if slug("A `title` with [code](x.md) and link, 1") != "a-title-with-code-and-link-1":
         print("self-test: slug")

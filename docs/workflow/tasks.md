@@ -58,6 +58,9 @@ code ([naming](task-naming.md#codes-from-2026-11-12-the-issue-number)).
   `function-audit-plan`, the coverage rows) keep the research, evidence and
   status; when one lists pending work that has an issue, it links `#N` and does
   not repeat the plan. New unstarted work is an issue, not a new list row.
+  An owner check is a row of `owner-recheck-list.md` with the id `ARC-TYPE-NNN#k`
+  ([format](owner-checks.md)); a PR that changes owner-visible behaviour adds its
+  rows in the same PR.
 - **Mandatory: file the issue when a need is found** (owner rule 2026-11-12).
   Whenever a need for work comes up (a leftover part of the task, a gap or bug
   found on the way, a follow-up, a review finding that is not fixed in the PR),
