@@ -364,7 +364,7 @@ public sealed class ScrWorldTests
             Do(C(ScrCatalogue.Action.LoopEnd)),
             Do(C(ScrCatalogue.Action.CreateObject, N(2), (AnyScenery, 0))),
             Do(C(ScrCatalogue.Action.ReturnRunDefault)));
-        Assert.IsFalse(ScrAdmission.Admit(program, ScrAdmissionSet.S61).IsAdmitted, "S61 refuses kind 16");
+        Assert.AreEqual(ScrRefusalCode.FocusKindNotAdmitted, ScrAdmission.Admit(program, ScrAdmissionSet.S61).Refusal!.Code, "S61 refuses kind 16");
         Assert.IsTrue(ScrAdmission.Admit(program, ScrAdmissionSet.S62).IsAdmitted);
         Assert.IsTrue(ScrAdmissionSet.S61.IsSubsetOf(ScrAdmissionSet.S62) && !ScrAdmissionSet.S62.IsSubsetOf(ScrAdmissionSet.S61));
         // The run uses S15 plus the kind (the full set needs every query interface of the host).

@@ -498,7 +498,7 @@ public sealed class ScrAdmissionSet
 
     /// <summary>
     /// The group set (ARC-SCRIPT-2319, ledger GF1–GF7): <see cref="S60"/> plus the focus kinds every one in the group (13) and anyone in the group (14), which the interpreter resolves to the triggerer's direct followers and then the
-    /// triggerer itself, the followers answered by the host through <see cref="IScrGroupQueries"/> (the group scripts of the installed hit, miss, dialog, taking-damage and critical-hit points). The interpreter runs at most S61.
+    /// triggerer itself, the followers answered by the host through <see cref="IScrGroupQueries"/> (the group scripts of the installed hit, miss, dialog, taking-damage and critical-hit points). The interpreter ran at most S61 until ARC-SCRIPT-2321.
     /// </summary>
     public static ScrAdmissionSet S61 { get; } = new("S61", S60.Conditions, S60.Actions, S60.ValueKinds, S60.FocusKinds.Concat([ScrFocusKind.EveryoneInGroup, ScrFocusKind.AnyoneInGroup]), counterIndexWraps: true);
 
