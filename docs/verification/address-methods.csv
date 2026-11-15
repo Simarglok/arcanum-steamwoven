@@ -377,6 +377,7 @@ src/Arcanum.Simulation/Combat/ObjectDamageRules.cs,Break,pending,
 src/Arcanum.Simulation/Combat/ProjectileRules.cs,Distance,pending,
 src/Arcanum.Simulation/Combat/ProjectileRules.cs,Launch,pending,
 src/Arcanum.Simulation/Combat/ProjectileRules.cs,ThrownScale,pending,
+src/Arcanum.Simulation/Combat/ProjectileRules.cs,TurnEndAt,exempt,reference
 src/Arcanum.Simulation/Combat/ThrowRules.cs,ItemDamage,pending,
 src/Arcanum.Simulation/Combat/ThrowRules.cs,ScatterTiles,pending,
 src/Arcanum.Simulation/Combat/ThrowRules.cs,ThrownWeapon,pending,
@@ -980,6 +981,7 @@ tools/terrain-viewer/Godot/TerrainViewerProjectiles.cs,BoomerangReturned,pending
 tools/terrain-viewer/Godot/TerrainViewerProjectiles.cs,CrossTile,pending,
 tools/terrain-viewer/Godot/TerrainViewerProjectiles.cs,EndOnTile,pending,
 tools/terrain-viewer/Godot/TerrainViewerProjectiles.cs,EndProjectile,pending,
+tools/terrain-viewer/Godot/TerrainViewerProjectiles.cs,FinishTurnedAtOnce,exempt,reference
 tools/terrain-viewer/Godot/TerrainViewerProjectiles.cs,FireShotEnd,pending,
 tools/terrain-viewer/Godot/TerrainViewerProjectiles.cs,LaunchProjectile,pending,
 tools/terrain-viewer/Godot/TerrainViewerProjectiles.cs,ProjectileGoalEnded,pending,

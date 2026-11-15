@@ -255,6 +255,20 @@ public sealed class ProjectileRulesTests
         Assert.AreEqual(((ProjectileFlight?)null, true), (none, still.Returning), "on the thrower's own tile there is no line: back at once");
     }
 
+    // ARC-COMBAT-1971 (PF9, 0x424D90, 0x42CAC0, 0x4B2690): a boomerang turned with the hero on the tile it left returns through the one tile it entered and ends with the second end's script and event; with the hero on the tile it
+    // entered the flight goal ends without context; any other hero tile flies back.
+    [TestMethod]
+    public void ABoomerangTurnedOnTheHeroTileEndsAtOnceWithOrWithoutItsSecondEnd()
+    {
+        var left = new CellCoord(13, 13);
+        var entered = new CellCoord(14, 14);
+        Assert.AreEqual(BoomerangTurnEnd.EndsWithScripts, ProjectileRules.TurnEndAt(left, entered, left), "the hero on the tile left: the one-tile return, its end runs");
+        Assert.AreEqual(BoomerangTurnEnd.EndsBare, ProjectileRules.TurnEndAt(left, entered, entered), "the hero on the tile entered: node 3 pops, the goal's own end has no context");
+        Assert.AreEqual(BoomerangTurnEnd.Flies, ProjectileRules.TurnEndAt(left, entered, new(10, 10)));
+        Assert.AreEqual(BoomerangTurnEnd.EndsWithScripts, ProjectileRules.TurnEndAt(left, null, left), "a strike's end does not know the tile entered");
+        Assert.AreEqual(BoomerangTurnEnd.Flies, ProjectileRules.TurnEndAt(left, null, entered));
+    }
+
     // ARC-COMBAT-019 (0x4B2870, flag 0x2000): a returning boomerang strikes nothing, meets no obstruction, has no range and ends when it
     // leaves the tile it flies back to.
     [TestMethod]
