@@ -1003,7 +1003,14 @@ def wait_unlocked(path: Path) -> None:
 
 
 def _signal_group(pid: int, number: int) -> None:
+    """ARC-DEV-2280: signal only a process group that `pid` itself leads (every queue command starts with
+    `start_new_session`, so its group id is its pid). A pid that is not a leader (a reused pid, or anything started
+    outside the queue such as the game opened by `open`) or the queue's own group is never signalled."""
+    if not isinstance(pid, int) or pid <= 1:
+        return
     try:
+        if os.getpgid(pid) != pid or pid == os.getpgrp():
+            return
         os.killpg(pid, number)
     except (ProcessLookupError, PermissionError):
         pass
