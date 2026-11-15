@@ -118,13 +118,14 @@ public partial class TerrainViewerApp
         if (creation.Apply(owner, hero.Effects ?? (_ => null)) is { } applied) { owner.Dispose(); why = applied; return null; }
         var catalog = _hoverNames?.Catalog;
         var names = new AreaInventoryHost([map.Inventory]);
+        // ARC-UI-2283: the session knows its items' art sizes before the shop opens, so the merchant container's regeneration (0x463E20) lays the
+        // created wares out by their inventory art (0x461780) and not as 1 x 1 cells drawn over each other; the shop's host rows name their art.
+        (_shopInventoryHost, _shopInventorySession) = (names, owner);
+        owner.AttachItemArtSizes((item, kind) => InventoryItemArtSize(owner, item, kind));
         var shop = AreaShopSession.Open(owner, map, data,
             (item, kind) => map.Inventory.TryGetRow(item, out _) ? names.Name(item, catalog) : AreaInventoryHost.KindName(kind, catalog),
             AreaHoverIndex.Text(map.MerchantRow, catalog) ?? "merchant", out why, hero.Effects, ShopScriptContent);
-        if (shop is null) { owner.Dispose(); return null; }
-        (_shopInventoryHost, _shopInventorySession) = (names, owner);
-        // ARC-UI-069: the hero's grid lays its items out by their inventory art, as the game's session does (ARC-UI-055).
-        owner.AttachItemArtSizes((item, kind) => InventoryItemArtSize(owner, item, kind));
+        if (shop is null) { owner.Dispose(); (_shopInventoryHost, _shopInventorySession) = (null, null); return null; }
         return shop;
     }
 
@@ -183,6 +184,12 @@ public partial class TerrainViewerApp
             require(image.SavePng(capture) == Error.Ok, "the capture saved to " + capture);
         }
         var (wares, hero) = (_barterPanel.ArtView!.LootGrid.Count, _barterPanel.ArtView.Grid.Count);
+        // ARC-UI-2283: no two wares of the merchant's grid cover the same cell (the created wares were laid out as 1 x 1 cells and drew over each other).
+        var cells = new HashSet<(int X, int Y)>();
+        var overlapping = _barterPanel.ArtView.LootGrid.Where(item => AreaLootArtLayout.GridLocation(item.Location))
+            .Count(item => !Enumerable.Range(0, item.Width * item.Height).Select(i => (item.Location % AreaLootArtLayout.Columns + i % item.Width, item.Location / AreaLootArtLayout.Columns + i / item.Width))
+                .Select(cell => cells.Add(cell)).ToArray().All(added => added));
+        require(overlapping == 0, $"the shop's wares do not overlap in the grid: {overlapping} of {wares} overlap");
         // ARC-UI-1806: the bet box of the docked window (the same hover as the dialog's window): a ware carried over it asks the gate (art 344 or 346 with its line), nothing is bet.
         var bet = await BarterGambleHoverSmokeAsync();
         require(bet.StartsWith("art ", StringComparison.Ordinal), "the docked window's bet box answers a carried ware: " + bet);

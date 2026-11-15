@@ -2729,7 +2729,9 @@ in play, the shop keeps its diagnostic window and the docked barter window above
 
 Native smoke (`menu` stage, original data): the first shop shows the art with the barter window's original look docked at the
 screen's (0, 41), its merchant's wares in the grid and no round view; the pointer over Back lights it and a click on it returns to
-the editor; the ware bought in the second shop stands on the hero's side of the original look; `ARC-UI-069 native-smoke shop art
+the editor; the ware bought in the second shop stands on the hero's side of the original look; no two wares overlap in the merchant's grid
+(ARC-UI-2283: the session knows the items' art sizes before the shop's container regenerates, so the created wares are laid out by their
+art and not as 1 × 1 cells); `ARC-UI-069 native-smoke shop art
 PASS` (`ARC_AREA_SHOP_CAPTURE` saves a readback of the window to the caller's ignored path). Checks: `AreaShopArtTests`.
 
 ### Interface bars (ARC-UI-018)
