@@ -417,6 +417,12 @@ not a font change, stop and look. The real `apply` (then `verify --deep`, then `
   The viewer needs no per-font support: a font ART read through `AreaInterfaceArt.Load` carries its HD key and `AreaArtFontFace` asks the pack for each glyph, so any
   font ART in the pack is drawn. A generated font keeps the original's frame sizes and advances; where the generator was unsure (all of Garmond9's extended frames 161..255
   and about 40 other frames per font) the frame is the earlier trace, named per frame in the delivery's `origins.json`. Rollback is the `ARC-UI-1202-*` backups, newest first.
+- **Ten reading-window fonts (ARC-UI-2309, 2026-11-15, traced locally, no Codex).** Fonts 480 (Courier10, trace at cap 0.5), 497, 490, 492, 485, 484, 815, 478, 479 and 37 were traced by [`tools/hd_font`](hd-font.md#method-and-limits)
+  into one folder (it needs the tool's `receipt.json`; copy it from the trace run), `fonts-plan` made 2229 frames in 10 fonts, `stage` built `local/res095/pack-out/interface-fonts-reading-2309`, and the new keys went in with
+  `apply --add-new --map layout-additions.tsv` (one row per ART: `<name>font<TAB>fonts<TAB>fonts<TAB>1`, e.g. `courier10font`). The plan said `0 interface entries differ`, `staged-only entries: 2229`. A **candidate pack**
+  (a `cp -R` of the installed pack, `apply --installed <copy> --backup-root <outside the copy>`, `verify --deep` PASS) lets the viewer draw the result before the real update:
+  `./arcanum smoke pr --stages map --env ARC_AREA_WINDOW_ART=hd --env ARC_HD_PACK=<pack> --env ARC_AREA_WINDOW_CAPTURE=<prefix> --env ARC_AREA_READING_SIZE=2560x1440` (about 65 s, a capture of each reading window; `ARC_AREA_WINDOW_ART=legacy`
+  without a pack gives the original-look reference) saves the windows for a labelled before/after composite (local, never in git). Applied on 2026-11-15 with the owner's go: manifest 175a19a0fed1 to a39a9dfef966 (3370 to 5599 entries, `interface/fonts` 2228 to 4457), `verify --deep` PASS, `mirror` 2233 files; the backup is `ARC-UI-2309-175a19a0fed1`, so the next base is its `staged-manifest.json`. Garmond6 and Garmond8 are not in the update ([#2329](https://github.com/Simarglok/arcanum-steamwoven/issues/2329)).
 
 ## Producing and repairing art (who does what)
 
