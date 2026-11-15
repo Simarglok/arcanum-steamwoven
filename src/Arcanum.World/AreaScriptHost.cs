@@ -487,6 +487,14 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
         if (effects.DestroyTrapObject is not null || effects.SkillUses.Count > 0) return false;
         // ARC-WORLD-2038 (TT20): a teleport the hosts cannot record leaves the run unapplied whole, checked before anything applies.
         if (TeleportRefusal(effects) is not null) return false;
+        // ARC-SCRIPT-1598: the speaker's slot write is resolved before anything applies (a pure lookup of the run's own object): a run whose write cannot be placed is refused whole, so a damage line is never left applied with the dialog unopened.
+        (ScrSlot Loaded, ScrObjectRef Attachee)? slotWrite = null;
+        if (effects.Writeback is { } slotRequest)
+        {
+            if (slotRequest.Source != ScrSource.Object || slotRequest.Point != ScrPoint.Dialog || slotRequest.Attachee is not { } slotAttachee
+                || Speaker(slotAttachee) is not { } slotSpeaker || LoadedSlot(slotSpeaker) is not { } slotLoaded) return false;
+            slotWrite = (slotLoaded, slotAttachee);
+        }
         // ARC-SCRIPT-1563: a script's damage and heal go through the shown map's use host (the talk set holds them only while it answers); one it cannot apply refuses the run whole, before anything applies.
         foreach (var request in effects.ObjectStates)
             if (request.Change is ScrObjectStateChange.Damage or ScrObjectStateChange.DamageUnresistable && Queries is not { CanApplyScriptDamage: true }
@@ -598,9 +606,8 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
         foreach (var teleport in effects.Teleports)
             if (IsPc(teleport.Object)) RequestHeroTeleport!(teleport);
             else teleportHost?.RequestNpcTeleport(teleport);
-        if (effects.Writeback is not { } writeback) return true;
-        if (writeback.Source != ScrSource.Object || writeback.Point != ScrPoint.Dialog || writeback.Attachee is not { } attachee
-            || Speaker(attachee) is not { } speaker || LoadedSlot(speaker) is not { } loaded) return false;
+        if (effects.Writeback is not { } writeback || slotWrite is not { } placed) return true;
+        var (loaded, attachee) = placed;
         var stateMap = _state.MapOfEntity(attachee.Code);
         // ARC-DEV-096: a part back at its loaded value is cleared where the object's record sits, which may be another map than the speaker's state map.
         MapChangeEdit Edit(string property, long value, long baseline)

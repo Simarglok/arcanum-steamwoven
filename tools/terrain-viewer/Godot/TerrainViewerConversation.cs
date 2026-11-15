@@ -61,8 +61,10 @@ public partial class TerrainViewerApp
             _conversationHost.HeroAttackAvailable = () => AreaAiHostNow() is not null;
             // ARC-SCRIPT-1358: an l: reply ends the talk and opens the world map; only in map mode, where the bar's Map button has one.
             _conversationHost.WorldMapAvailable = () => WorldMapActive;
-            // ARC-SCRIPT-1533: a d: or x: reply measures from where the speaker stands now (a companion's live cell, else its T0 cell).
-            _conversationHost.SpeakerCell = speaker => SpeakerCell?.Invoke(speaker) ?? (speaker.WorldX, speaker.WorldY);
+            // ARC-SCRIPT-1533, ARC-SCRIPT-1601: a d: or x: reply measures from where the speaker stands now (a companion's live cell, else the cell the shown map's AI host has the NPC on, else its T0 cell).
+            _conversationHost.SpeakerCell = AreaSpeakerCells.Live(
+                speaker => _areaCompanions is { } group && group.Of(speaker) is not null ? group.WorldCell(speaker) : null,
+                entity => AreaAiHostNow()?.NpcCell(entity));
             _conversationHost.HeroAttack = entity => AreaAiHostNow() is { } ai && ai.OrderAttack(new Arcanum.Session.CompanionOrderAttack(Arcanum.Session.SessionCombatant.Hero, Arcanum.Session.SessionCombatant.Critter(entity), Arcanum.Simulation.Ai.Loudness.Normal, Arcanum.Simulation.Ai.AttackEventFlags.None));
             // ARC-SCRIPT-1135: an so action that newly sets the spread-out flag starts goal 69 on the shown map's AI host (CF4).
             _conversationHost.SpreadOutStart = entity => AreaAiHostNow() is { } spreadAi && spreadAi.StartSpreadOut(entity);
@@ -277,7 +279,7 @@ public partial class TerrainViewerApp
         _talkOpenPending = null;
         if (_worldLifecycleSession is not null || _worldResetPending || _worldReloadPending) _conversationNotice = "walk to talk cancelled: reset/reload";
         // ARC-UI-1125: an open window does not drop the dialog (the opener replaces it, 0x567460 with 0x553320); the panels outside the stack and a dialog still do.
-        else if (!_worldFocused || ProgrammaticOpenBlocked || ConversationOpen || WorldUiFocus || !TalkMapActive || !SpeakerPresent(speaker)) _conversationNotice = "walk to talk dropped: input quarantined/modal";
+        else if (!_worldFocused || ProgrammaticOpenBlocked || ConversationOpen || WorldUiFocus || !TalkMapActive || !SpeakerPresent(speaker, includeDead: true)) _conversationNotice = "walk to talk dropped: input quarantined/modal";
         else { BeginConversation(speaker, replaceWindows: true); return; }
         RefreshReadyStatus();
     }
@@ -301,6 +303,31 @@ public partial class TerrainViewerApp
         return true;
     }
 
+    /// <summary>
+    /// ARC-AI-1320 (GT122, 0x57CC70 for a body without spell flag 0x2000000): the talk goal reached its last node with the dead NPC: its dialog script (point 9) runs with the hero as the triggerer and its effects apply (0x441980 has no death test).
+    /// A dialog action ends at the start callback 0x567460, which refuses silently (no window, no reaction conversation); a script that runs default makes the generic greeting, which for a body is the empty line: the old bubble of
+    /// the body is replaced by nothing, no sound plays and the body is neither turned nor interrupted. The hero is not turned either.
+    /// </summary>
+    private void BeginDeadTalk(AreaSpeaker speaker)
+    {
+        _conversationNotice = null;
+        if (HostOf(speaker) is not { } host) { _conversationNotice = $"dialog NPC script {speaker.ScriptId} has no host here"; RefreshReadyStatus(); return; }
+        AreaConversationStart start;
+        try { start = host.Begin(speaker, deadTarget: true); }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or DatException)
+        {
+            start = new(AreaConversationStartStatus.EntryError, null, speaker, exception.GetType().Name);
+        }
+        if (start.Status == AreaConversationStartStatus.GenericGreeting && _floaters is { } layer && layer.Bubbles.Remove(AreaConversationState.EntityId(speaker.Row))) layer.Redraw();
+        _deadTalkStarts++; _deadTalkStatus = start.Status;
+        GD.Print($"ARC-AI-1320 dead target talk status={start.Status} detail={start.Detail} script={speaker.ScriptId}");
+        RefreshReadyStatus();
+    }
+
+    /// <summary>ARC-AI-1320: how many talk goals ended at a dead NPC's script (the smoke counts it).</summary>
+    private int _deadTalkStarts;
+    private AreaConversationStartStatus? _deadTalkStatus;
+
     /// <param name="replaceWindows">ARC-UI-1125: a talk the hero's goal 21 asked for (not a click, which the game view's guard keeps out of every window):
     /// an open window other than a dialog leaves first, as the original's dialog opener pops the top mode and pushes mode 3 (0x553320), after the
     /// combat tests (0x567460 returns before it pops).</param>
@@ -308,6 +335,8 @@ public partial class TerrainViewerApp
     {
         if (_conversationHost is null || _conversationPanel is null) return;
         if (!replaceWindows && !WindowCanOpen(InterfaceMode.Dialog)) return;
+        // ARC-AI-1320 (GT122): the talk goal's call (0x57CC70) runs the speaker's script point 9 before the dialog start's refusals, and a dead NPC without the spoken-with flag opens no window.
+        if (replaceWindows && SpeakerDead(speaker) && !SpeakerSpokenWith(speaker)) { BeginDeadTalk(speaker); return; }
         // ARC-UI-2030 (0x567460): the refusals in the original's order, all silent: the hero dead or unconscious, the NPC that cannot speak (0x4AD800), a second dialog (mode 3), then the combat-mode leave
         // (ARC-COMBAT-004: a dialog leaves combat mode first and does not start while the hero is under attack). The opener returns before it pops, so an open window stays.
         if (DialogStartRefused(speaker)) { RefreshReadyStatus(); return; }
@@ -319,11 +348,13 @@ public partial class TerrainViewerApp
         _areaCompanions?.InterruptGoals(speaker.Row.Key);
         AreaConversationStart start;
         if (HostOf(speaker) is not { } host) { _conversationNotice = $"dialog NPC script {speaker.ScriptId} has no host here"; RefreshReadyStatus(); return; }
-        try { start = host.Begin(speaker); }
+        // ARC-SCRIPT-1598: the start callback is asked again after the run's effects (a lethal damage of the same run ends the talk silently, as the original's dialog action calls 0x567460 after its earlier actions).
+        try { start = host.Begin(speaker, startRefused: DialogStartRefused); }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or DatException)
         {
             start = new(AreaConversationStartStatus.EntryError, null, speaker, exception.GetType().Name);
         }
+        if (start.Status == AreaConversationStartStatus.DialogStartRefused) { RefreshReadyStatus(); return; }
         // ARC-DEV-324 (B24, GT219): a talk whose dialog point ran default shows the generic greeting as a floating line over the NPC (the host queued it on
         // AreaScriptHost.TakeFloats) and opens no window (0x57CC70 calls 0x5681C0 for the text and 0x568540 for the floater).
         if (start.Status == AreaConversationStartStatus.GenericGreeting)
@@ -579,7 +610,7 @@ public partial class TerrainViewerApp
         else if (resume && conversation?.End is { Kind: DialogEndKind.ReturnToScript, ScriptLine: { } line } && speaker is not null && talkHost is not null)
         {
             AreaConversationStart resumed;
-            try { resumed = talkHost.Resume(speaker, line); }
+            try { resumed = talkHost.Resume(speaker, line, startRefused: DialogStartRefused); }
             catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or DatException)
             {
                 resumed = new(AreaConversationStartStatus.EntryError, null, speaker, exception.GetType().Name);
