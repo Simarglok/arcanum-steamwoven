@@ -266,6 +266,22 @@ def positive_minutes(text: str) -> float:
     return value
 
 
+def playing_limit(text: str) -> float:
+    """MIN for --for: minutes (90), hours (4h) or minutes with m (30m); 0 or 'off' is no limit (ARC-DEV-2272)."""
+    lowered = text.strip().lower()
+    if lowered == "off":
+        return 0.0
+    scale = 60.0 if lowered.endswith("h") else 1.0
+    number = lowered[:-1] if lowered.endswith(("h", "m")) else lowered
+    try:
+        value = float(number) * scale
+    except ValueError:
+        value = float("nan")
+    if not (0 <= value < float("inf")) or "_" in number:
+        raise argparse.ArgumentTypeError("MIN must be minutes (90, 30m), hours (4h), 0 or 'off' (no limit)")
+    return value
+
+
 def lane_count(text: str) -> str:
     if text != "default" and not (text.isascii() and text.isdigit() and int(text) <= run_queue.MAX_SHORT_LANES):
         raise argparse.ArgumentTypeError(f"N must be 'default' or a whole number from 0 to {run_queue.MAX_SHORT_LANES}")
@@ -287,8 +303,8 @@ def queue(args: argparse.Namespace) -> int:
         print("arcanum queue: --timeout goes with --wait", file=sys.stderr)
         return 2
     if args.wait is not None or args.all:  # ARC-DEV-1983: block until a run (or the whole queue) has finished
-        if args.pause or args.resume or args.app or args.lanes or args.history or args.set_lanes is not None \
-                or args.set_max_load is not None:
+        if args.pause or args.resume or args.playing or args.not_playing or args.app or args.lanes or args.history \
+                or args.set_lanes is not None or args.set_max_load is not None:
             print("arcanum queue: --wait cannot be combined with another queue option", file=sys.stderr)
             return 2
         if args.all and args.wait not in (None, "all"):
@@ -301,6 +317,9 @@ def queue(args: argparse.Namespace) -> int:
         except (OSError, ValueError) as error:
             print(f"arcanum queue: {error}", file=sys.stderr)
             return 1
+    if args.for_minutes is not None and not args.playing:  # ARC-DEV-2272: refused before any state changes
+        print("arcanum queue: --for goes with --playing", file=sys.stderr)
+        return 2
     if args.pause or args.resume:  # ARC-DEV-1344: the same flag the menu-bar app sets
         try:
             changed = run_queue.set_paused(args.pause)
@@ -308,6 +327,20 @@ def queue(args: argparse.Namespace) -> int:
             print(f"arcanum queue: {error}", file=sys.stderr)
             return 1
         print(("paused" if args.pause else "resumed") if changed else ("already paused" if args.pause else "was not paused"))
+    if args.playing or args.not_playing:  # ARC-DEV-2272: no window run starts while the owner plays
+        try:
+            changed = run_queue.set_playing(args.playing, run_queue.DEFAULT_PLAYING_MINUTES if args.for_minutes is None
+                                            else args.for_minutes)
+        except (OSError, ValueError) as error:
+            print(f"arcanum queue: {error}", file=sys.stderr)
+            return 1
+        state = run_queue.playing_state()
+        if args.playing:
+            print("playing: no window run starts (" + (run_queue.playing_text(state) if state else "?")
+                  + "); headless, quick and dotnet runs go on; the owner's own launches are not held; "
+                  "./arcanum queue --not-playing ends it")
+        else:
+            print("not playing: window runs start again" if changed else "was not playing")
     if args.app:  # ARC-DEV-1344: start the menu-bar app now (builds it first when needed), (the build is foreground)
         target, why = menubar.build()
         if target is None:
@@ -505,6 +538,13 @@ def parser() -> argparse.ArgumentParser:
     group = command.add_mutually_exclusive_group()
     group.add_argument("--pause", action="store_true", help="stop new runs from starting (running runs finish) until --resume (ARC-DEV-1344)")
     group.add_argument("--resume", action="store_true", help="clear the pause: the waiting runs start in their order")
+    group.add_argument("--playing", action="store_true", help="the owner is playing (ARC-DEV-2272): no window run (smoke, lab, `run --kind "
+                       "window`) starts until --not-playing or the limit (default " + f"{run_queue.DEFAULT_PLAYING_MINUTES / 60:g}"
+                       + " h, --for MIN); headless, quick and dotnet runs go on; runs that already hold a window finish; the owner's own launches are not held")
+    group.add_argument("--not-playing", action="store_true", help="end the playing mode: the waiting window runs start in their order")
+    command.add_argument("--for", dest="for_minutes", type=playing_limit, metavar="MIN",
+                         help="with --playing: end the mode after MIN minutes (90, 30m, 4h; 0 or 'off' for no limit; default "
+                              + f"{run_queue.DEFAULT_PLAYING_MINUTES / 60:g} h)")
     command.add_argument("--app", action="store_true", help="start the menu-bar app now (ARC-DEV-1344; a queued run starts it by itself)")
     command.add_argument("--open-menu", action="store_true", help=argparse.SUPPRESS)
     command.add_argument("--set-lanes", metavar="N", type=lane_count,
