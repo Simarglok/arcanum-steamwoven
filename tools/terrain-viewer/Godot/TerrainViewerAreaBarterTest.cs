@@ -1062,8 +1062,8 @@ public partial class TerrainViewerApp
                     (item, kind) => inventory.Maps.Any(map => map.TryGetRow(item, out _)) ? inventory.Name(item, _hoverNames?.Catalog) : AreaInventoryHost.KindName(kind, _hoverNames?.Catalog),
                     merchantGambling: () => new(Arcanum.Simulation.Skills.Skill.Gambling, 3, 3, merchantLevel, Arcanum.Simulation.Combat.SkillTraining.None));
                 var wares = gambler.View().Wares;
-                if (wares.FirstOrDefault(line => gambler.CheckGamble(line.Entity).Allowed) is not { } stake)
-                    return $"{label}: no ware passed the gate ({(wares.Count == 0 ? "no wares" : gambler.CheckGamble(wares[0].Entity).Gate.Refusal.ToString())})";
+                if (wares.FirstOrDefault(line => !line.Stack && gambler.CheckGamble(line.Entity).Allowed) is not { } stake)
+                    return $"{label}: NOT BET, no single ware passed the gate ({(wares.Count == 0 ? "no wares" : gambler.CheckGamble(wares[0].Entity).Gate.Refusal.ToString())})";
                 var (goldBefore, rollBefore, revisionBefore) = (gamblerSession.QueryGold(), gamblerSession.QueryGamblingRoll(), gamblerSession.Version.Revision);
                 var price = stake.Quote.Price;
                 var bet = gambler.Gamble(stake.Entity);
