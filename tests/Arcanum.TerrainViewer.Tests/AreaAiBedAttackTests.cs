@@ -129,6 +129,35 @@ public sealed class AreaAiBedAttackTests
     }
 
     [TestMethod]
+    public void The_heros_blow_on_an_occupied_bed_takes_the_npc_out_and_names_it_as_the_target()
+    {
+        // ARC-COMBAT-1942 (0x4B3170 is the hero's attack record too): the viewer asks the host, which unseats the occupant (0x45F3A0) and answers it; the viewer then strikes it with the check's modifier -30.
+        var (f, host, occupancy, struck) = Open(_ => "A");
+        using var _ = f;
+
+        Assert.AreEqual(f.A, host.HeroBlowOccupant(Bed));
+
+        Assert.IsNull(occupancy.Occupant(BedRow.Key), "the bed is empty: " + host.TraceOf(f.A)?.Item);
+        Assert.AreEqual(0, struck.Count, "the host strikes nothing: the hero's blow is the viewer's");
+        Assert.IsNull(host.TraceOf(Arcanum.World.AreaScriptHost.PcCode), "the hero is no NPC: no trace of his own");
+        Assert.IsNull(host.HeroBlowOccupant(Bed), "the next blow finds the bed empty");
+    }
+
+    [TestMethod]
+    public void The_heros_blow_on_an_empty_bed_or_a_bed_he_rests_in_takes_nobody_out()
+    {
+        var (f, host, _, _) = Open(_ => null);
+        using var f1 = f;
+        Assert.IsNull(host.HeroBlowOccupant(Bed), "an empty bed");
+        Assert.IsNull(host.HeroBlowOccupant("oid:nothing"), "no such object");
+
+        var (g, hero, restOccupancy, _) = Open(_ => AreaScriptHost.PcCode, heroAt: HeroBeside);
+        using var f2 = g;
+        Assert.IsNull(hero.HeroBlowOccupant(Bed), "his own blow does not pull him out of his own bed");
+        Assert.AreEqual(AreaScriptHost.PcCode, restOccupancy.Occupant(BedRow.Key));
+    }
+
+    [TestMethod]
     public void The_attack_animation_reads_the_objects_flag_0x80_and_art()
     {
         var plain = Open(_ => null);

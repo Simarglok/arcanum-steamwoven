@@ -2631,7 +2631,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         // logs an error in the original and refuses here (SWB12).
         if (occupant == Pc)
         {
-            if (!beds.Occupancy.Unseat(info.Row.Key, Pc)) return null;
+            if (attacker == Pc || !beds.Occupancy.Unseat(info.Row.Key, Pc)) return null;
             var heroTrace = Trace(attacker);
             heroTrace.Item = (heroTrace.Item is { Length: > 0 } before ? before + "; " : "") + $"attack on bed {target}: the hero pulled out of the bed, the rest window stays open";
             return Pc;
@@ -2639,10 +2639,21 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         if (!TryNpc(occupant, out _)) return null;
         var text = Unseat(occupant, beds, info.Row.Key);
         if (text == "unseat refused") return null;
-        var trace = Trace(attacker);
-        trace.Item = (trace.Item is { Length: > 0 } earlier ? earlier + "; " : "") + $"attack on bed {target}: {occupant} pulled out, {text}";
+        // The hero is no AI host entity: his blow leaves no NPC trace.
+        if (attacker != Pc)
+        {
+            var trace = Trace(attacker);
+            trace.Item = (trace.Item is { Length: > 0 } earlier ? earlier + "; " : "") + $"attack on bed {target}: {occupant} pulled out, {text}";
+        }
         return occupant;
     }
+
+    /// <summary>
+    /// ARC-COMBAT-1942 (0x4B3170 is the hero's attack record too, SC16): the hero's blow on the scenery <paramref name="bedEntity"/> takes the NPC lying in it out (the unseat 0x45F3A0, as an NPC's blow does,
+    /// <see cref="OccupantInPlaceOf"/>) and returns that occupant, whom the blow then strikes with the check's modifier -30 (<see cref="AttackRequest.TargetWasInBed"/>); null for any other target, an empty bed or a
+    /// bed the hero lies in himself (his own blow does not take him out of the bed he rests in).
+    /// </summary>
+    public string? HeroBlowOccupant(string bedEntity) => OccupantInPlaceOf(Pc, bedEntity);
 
     /// <summary>
     /// ARC-AI-1636 (VB2-2 gap d; the attack goal's hit step 0x4B3170 on a target that is no critter, exe read in the ledger): an NPC's attack on the object it holds as its COMBAT_FOCUS (a trap's shooter object a trap shot put there,
@@ -2711,7 +2722,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
             // ARC-DEV-273 (RA4): a bow or firearms attack reads the line to the target (a melee one ignores it).
             LineOfFire = Distance(id, target) > 1 && Tile(id) is { } from && Tile(target) is { } to && _scene.LineOfFire?.Invoke() is { } map ? LineTo(from, to, Key(target), map) : null,
             Flight = flight,
-            Backstab = BackstabFacts(id, target),
+            // ARC-COMBAT-1942 (0x4B2210): the backstab bit is built for the clicked target (a bed is no PC or NPC) before 0x4B3170 retargets, so an occupant pulled out of a bed is no backstab.
+            Backstab = inBed ? null : BackstabFacts(id, target),
             TargetWasInBed = inBed,
         };
     }
