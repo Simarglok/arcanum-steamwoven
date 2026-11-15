@@ -33,6 +33,7 @@ public partial class TerrainCanvas
     /// decision 2026-11-15 (HD means fonts, interface and light only): world frames draw Legacy with
     /// <see cref="HdFallbackReason.WorldDormant"/>. The sprite path below stays in place; the developer override
     /// <see cref="HdWorldSpriteGate.EnvironmentName"/>=1 (read once per canvas) or a self-test turns it on.</summary>
+    /// <remarks>Not reactive: follow a change with <see cref="SetVisualProfile"/> (which resubmits) so the bindings are rebuilt.</remarks>
     internal bool WorldSpritesFromPack { get; set; } = HdWorldSpriteGate.FromEnvironment();
 
     public VisualProfile VisualProfile => _visualSwitch.Active;
@@ -289,7 +290,7 @@ public partial class TerrainCanvas
         var source = ActiveHdSource;
         var pack = source.Pack is { } p ? $"pack {p.Id} {p.Scale}x {p.Review.ToString().ToLowerInvariant()}" : "no pack";
         var stats = _area is not null ? AreaHdStats : WorldHdStats;
-        if (!WorldSpritesFromPack) return $"visual HD (interface, fonts and light; world art Legacy): {stats.Format()}" + switching;
+        if (!WorldSpritesFromPack) return $"visual HD (relit look on; world art Legacy): {stats.Format()}" + switching;
         return $"visual HD {pack}: {stats.Format()}, HD textures {HdResidentCount}/{HdResidentBytes} bytes, decoding {source.PendingCount}{(_area is not null && AreaChunkLevel != 0 ? "; terrain Legacy below zoom 1" : "")}" + switching;
     }
 }

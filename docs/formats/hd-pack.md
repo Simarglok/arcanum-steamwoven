@@ -122,7 +122,7 @@ caches keyed by it reload. A copy (import) keeps the identity.
 
 ### Sprite entries: the portable frame key
 
-**Dormant (ARC-RENDER-2175, owner decision 2026-11-15).** HD graphics means fonts, interface and light only: the viewer does not bind a pack's `sprite` or terrain-chunk entries under the HD option (every world frame draws Legacy as `WorldDormant`), and the pack builder for them (ARC-DEV-003) is deferred. The format, the reader, the identity oracle and this section stay in place for a later decision; the developer variable `ARC_HD_WORLD_SPRITES=1` runs the old path (for the `hd` identity and toggle smokes on a sprite pack).
+**Dormant (ARC-RENDER-2175, owner decision 2026-11-15).** HD graphics means fonts, interface and light only: the viewer does not bind a pack's `sprite` or terrain-chunk entries under the HD option (every world frame draws Legacy as `WorldDormant`), and the pack builder for them (ARC-DEV-003) is deferred. The format, the reader, the identity oracle and this section stay in place for a later decision; the developer variable `ARC_HD_WORLD_SPRITES=1` runs the old path for a manual run on a sprite pack and makes the `hd` smoke skip its gate check (the toggle smokes and self-tests open the gate in code).
 
 An HD frame is bound to the **install-independent part** of the ARC-RENDER-013 frame key
 (`HdSpriteKey`):

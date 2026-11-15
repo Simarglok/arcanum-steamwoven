@@ -102,6 +102,7 @@ public static partial class TerrainViewerSelfTest
             await Drain("dormant");
             var gated = await Capture();
             Counts("dormant", 0, HdFallbackReason.WorldDormant, candidates);
+            if (canvas.PendingVisualProfile is not null || canvas.VisualProfile != VisualProfile.Hd) throw new InvalidOperationException("HD_SELFTEST_DORMANT_COMMIT");
             if (canvas.HdResidentCount != 0 || dormant.CompletedCount != 0 || dormant.PendingCount != 0) throw new InvalidOperationException("HD_SELFTEST_DORMANT_WORK:" + canvas.HdResidentCount);
             Same(legacy, gated, "dormant");
             canvas.WorldSpritesFromPack = true; // the developer override: the rest checks the dormant path
@@ -232,6 +233,7 @@ public static partial class TerrainViewerSelfTest
             canvas.WorldSpritesFromPack = false;
             canvas.SetVisualProfile(VisualProfile.Hd, source, HdDeviceBudget.Ceiling(4));
             await Settle(); await Settle();
+            if (canvas.PendingVisualProfile is not null || canvas.VisualProfile != VisualProfile.Hd) throw new InvalidOperationException("HD_WORLD_DORMANT_COMMIT");
             if (canvas.WorldHdStats.Hd != 0 || canvas.WorldHdStats[HdFallbackReason.WorldDormant] != 6 || canvas.WorldHdStats.Fallback != 6 || source.CompletedCount != 0 || canvas.HdResidentCount != 0)
                 throw new InvalidOperationException("HD_WORLD_DORMANT:" + canvas.WorldHdStats.Format());
             var dormantShots = await Capture();

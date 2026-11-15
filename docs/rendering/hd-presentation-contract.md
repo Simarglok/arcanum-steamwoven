@@ -188,6 +188,7 @@ the pack report (ARC-DEV-003) lists such groups.
 | `Invalid` | File missing, unreadable or a link, size or hash differs, not the pack PNG profile, not exactly `N·w × N·h`, too large, or the alpha-mask check failed (ARC-DATA-014 reasons) |
 | `HdAxisLimit` | `N·(c + m) > 65534` on an axis |
 | `HdBudget` | The frame does not fit the HD budget for this submission |
+| `WorldDormant` | ARC-RENDER-2175: the world sprite and terrain path of a pack is dormant (owner decision 2026-11-15); every candidate draws Legacy under Hd without asking the frame source (amendment below) |
 | `Pending` | Not yet decoded/uploaded (preload in progress) |
 
 `Legacy` profile never consults the pack. An `unreviewed` pack is used and the HUD
@@ -425,7 +426,7 @@ Owner decision 2026-11-15: HD graphics is fonts, interface and light only; no HD
 stays in the code, but the canvas gate `TerrainCanvas.WorldSpritesFromPack` (default off) turns every character, object, wall and level-0 terrain-chunk
 candidate into a Legacy draw with the typed reason `WorldDormant` before any question is asked of the frame source: nothing is decoded or made resident,
 the switch commits at once, the plan, light, picking and Session are untouched, and the relit look (a function of the profile) still runs on the 1x frames.
-Interface frames and fonts bind through `InterfaceHd` and are not affected. The developer variable `ARC_HD_WORLD_SPRITES=1` (read when the canvas is made; not
+Interface frames and fonts bind through `InterfaceHd` (its own setting, independent of the profile) and are not affected. The developer variable `ARC_HD_WORLD_SPRITES=1` (read when the canvas is made; not
 a setting) reopens the gate: the identity and toggle self-tests and smokes use it on their synthetic or temporary sprite packs. The stage `hd` without the
 variable checks the gate itself (HD 0, Legacy = `WorldDormant`, raster equal to Legacy, no decode) and then runs the identity oracle with the gate opened.
 

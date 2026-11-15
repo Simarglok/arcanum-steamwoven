@@ -101,12 +101,12 @@ public partial class TerrainViewerApp
                     var legacy = legacyImage.GetData();
                     if (!gateByEnvironment)
                     {
-                        canvas.WorldSpritesFromPack = false;
+                        canvas.WorldSpritesFromPack = false; var completedBefore = source.CompletedCount; // an earlier view's decodes stay counted
                         canvas.SetVisualProfile(VisualProfile.Hd, source, ceiling);
                         await NextFrameAsync(); await NextFrameAsync();
                         await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
                         var gated = stats();
-                        if (gated.Hd != 0 || gated.Fallback == 0 || gated[HdFallbackReason.WorldDormant] != gated.Fallback || source.PendingCount != 0)
+                        if (gated.Hd != 0 || gated.Fallback == 0 || gated[HdFallbackReason.WorldDormant] != gated.Fallback || source.PendingCount != 0 || source.CompletedCount != completedBefore)
                             throw new InvalidOperationException($"HD_SMOKE_GATE:{name}:{gated.Format()}");
                         using var gatedImage = GetViewport().GetTexture().GetImage();
                         if (!legacy.AsSpan().SequenceEqual(gatedImage.GetData())) throw new InvalidOperationException($"HD_SMOKE_GATE_RASTER:{name}");
@@ -141,7 +141,7 @@ public partial class TerrainViewerApp
                 }
                 // ARC-RENDER-2175: ARC_HD_GATE_CAPTURE=DIR (an absolute folder outside the repository) with ARC_HD_PACK keeps three PNGs of the first view for the
                 // before/after comparison: Legacy, the dormant sprite path of the startup pack, and the gated HD look (relit look on). Local files, never committed.
-                if (domain == "AREA" && OS.GetEnvironment("ARC_HD_GATE_CAPTURE") is { Length: > 0 } captureDir && previous?.Pack is not null)
+                if (domain == "AREA" && OS.GetEnvironment("ARC_HD_GATE_CAPTURE") is { Length: > 0 } captureDir && System.IO.Path.IsPathRooted(captureDir) && previous?.Pack is not null)
                 {
                     var (_, center0, zoom0) = views[0];
                     _camera!.ResetWorld(center0, WorldViewport, zoom0);

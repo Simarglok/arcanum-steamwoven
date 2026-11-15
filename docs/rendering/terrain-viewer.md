@@ -1464,7 +1464,7 @@ also checks that F8 brings back the PC's items. Not verified: original inventory
 - **Per-frame fallback.** Every outcome other than a valid HD frame draws Legacy with its
   reason: `NoPack`, `PackRejected`, `FrameMissing`, `SourceMismatch`, `FrameRejected`,
   `Invalid` (the pack reader's checks, including the mask check against this device's Legacy
-  alpha), `HdAxisLimit` (`N·(c + m) > 65534`), `HdBudget` and `Pending`. Nothing fails the
+  alpha), `HdAxisLimit` (`N·(c + m) > 65534`), `HdBudget`, `Pending` and, since ARC-RENDER-2175, `WorldDormant` (the gate that keeps the world Legacy under HD). Nothing fails the
   view, the map load or the session. The Legacy visible set stays resident under both
   profiles, so any fallback is immediate.
 - **Decoding and uploads.** Frames are resolved off the main thread (half the processors);
@@ -1537,7 +1537,7 @@ it is not part of a snapshot or quick save.
 
 **Interface art (ARC-UI-089, ARC-UI-095).** The HD redraws of the interface (the pack's `interface` slice, ARC-DEV-242) have their own
 switch: the launcher screen has three project lines after Rules (ARC-UI-143; until ARC-UI-146 they were the options window's Game page lines, which no longer has them, the page ends with Rules). **HD graphics: Off/On** requests the Legacy or HD
-profile exactly as the key does (saved, the same toggle protocol); since ARC-RENDER-2175 (owner decision 2026-11-15) world sprites and terrain always draw Legacy under it (the pack's sprite path is dormant behind the developer variable `ARC_HD_WORLD_SPRITES=1`), so it switches the relit look and the pack's interface and font frames only.
+profile exactly as the key does (saved, the same toggle protocol); since ARC-RENDER-2175 (owner decision 2026-11-15) world sprites and terrain always draw Legacy under it (the pack's sprite path is dormant behind the developer variable `ARC_HD_WORLD_SPRITES=1`), so it switches the relit look only; the pack's interface and font frames follow the separate HD interface setting below.
 **HD interface: Off/On/Generated (experimental)** (ARC-UI-095, default Off) is a separate saved setting (the `hd interface` line of `arcanum.cfg`; a missing line reads it as Off); it draws the interface art alone and does not touch the visual profile, so the two can be
 combined freely (sprites HD with a Legacy interface, or the reverse). The third value (ARC-UI-140, `generatedInterface`, file version 5;
 version 1–4 files read it as off) is the experimental [generated interface](hd-interface-density.md#viewer-slice-s1-arc-ui-140): it keeps the
