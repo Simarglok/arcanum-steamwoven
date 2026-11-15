@@ -55,6 +55,7 @@ class Window:
     source: str                  # the file whose constants name them (checked to mention every number)
     text_factor: bool = False    # a font under the minimum may take the text-only whole factor (ARC-UI-1428, the reading windows' fallback panel)
     substitute: int = 0          # a font under the minimum is drawn with this font art instead (ARC-UI-1462, Garmond9 483 in the reading windows' original look)
+    exempt: tuple[int, ...] = () # fonts kept at their own size on purpose (ARC-UI-1462, owner decision: Garmond6 481, the telegram's printed legend)
 
 
 WINDOWS = (
@@ -76,7 +77,7 @@ WINDOWS = (
     # original-look window (ARC-UI-1462) draws such a line with Garmond9 (483, `AreaReadingText.ShownFont`).
     Window("reading windows (telegram, newspaper, note, book, plaque)",
            (480, 481, 482, 483, 484, 485, 815, 492, 497, 490, 478, 479, 28, 37, 171, 229),
-           "tools/terrain-viewer/Core/AreaReadingText.cs", text_factor=True, substitute=483),
+           "tools/terrain-viewer/Core/AreaReadingText.cs", text_factor=True, substitute=483, exempt=(481,)),
 )
 
 # A line carrying this marker is not text a player reads (the save list's transparent keyboard field keeps size 1).
@@ -188,7 +189,10 @@ def report(sizes, facts: dict[int, FontFact], labels, minimum: int = MINIMUM_PX,
                 shown = size * factor
                 text = text_only_factor(size, factor) if window.text_factor and fact.nominal is not None and shown < minimum else 1
                 # ARC-UI-1462: the original-look window draws a font under the minimum with the substitute font (`AreaReadingText.ShownFont`).
-                swap = facts[window.substitute] if window.substitute and fact.nominal is not None and shown < minimum else None
+                swap = facts[window.substitute] if window.substitute and fact.nominal is not None and shown < minimum and number not in window.exempt else None
+                if number in window.exempt and shown < minimum:
+                    lines.append(f"   {window.name[:42]:<42} {number:>3} {fact.file:<30} {shown:>4} {fact.line * factor:>4} {fact.capital * factor:>4}  pass (exempt: printed legend)")
+                    continue
                 swap_shown = (swap.nominal if swap.nominal is not None else swap.line) * factor if swap else 0
                 ok = swap_shown >= minimum if swap else shown * text >= minimum
                 if swap:
@@ -247,7 +251,7 @@ def self_test() -> int:
     reading[482] = FontFact(482, "Garmond8Font.ART", 8, 10, 7)
     reading[481] = FontFact(481, "Garmond6Font.ART", 6, 7, 5)
     lines, failures = report([(1280, 800), (1920, 1080)], reading, [])
-    assert not failures and sum("substitute Synthetic" in line for line in lines) >= 2, failures
+    assert not failures and sum("substitute Synthetic" in line for line in lines) >= 1 and any("exempt: printed legend" in line for line in lines), failures
     # without the substitute font the same lines would take the text-only factor of the fallback panel, and without both they fail
     assert any(window.substitute for window in WINDOWS)
     # a window without the text factor still fails on the same font

@@ -276,9 +276,9 @@ public partial class TerrainViewerApp
             Require(_readingPanel!.ArtMode && _readingPanel.ArtViewForSelfTest.Visible && _readingPanel.ArtViewForSelfTest.LinesForSelfTest.Count > 0 == (used.Document!.Body.Count > 0),
                 "the window opens in the original's look");
             var shownLook = _readingPanel.ArtViewForSelfTest;
-            // ARC-UI-1462: the masthead's Garmond8 and the telegram form's Garmond6 are drawn with Garmond9 at screen factor 1 (under 9 px), and untouched at 2 and up.
+            // ARC-UI-1462: the masthead's Garmond8 is drawn with Garmond9 at screen factor 1 (under 9 px) and untouched at 2 and up; the telegram's printed legend (Garmond6) always keeps its own glyphs.
             var textFactor = AreaGameBarPanel.ScreenFactor(_readingPanel.GetViewport().GetVisibleRect().Size);
-            Require(shownLook.ShownFontNumber(482) == (textFactor == 1 ? AreaReadingText.SubstituteFont : 482) && shownLook.ShownFontNumber(481) == (textFactor == 1 ? AreaReadingText.SubstituteFont : 481)
+            Require(shownLook.ShownFontNumber(482) == (textFactor == 1 ? AreaReadingText.SubstituteFont : 482) && shownLook.ShownFontNumber(481) == 481
                 && shownLook.ShownFontNumber(483) == 483 && shownLook.ShownFontNumber(480) == 480 && shownLook.ShownFontNumber(485) == 485, $"the small fonts at screen factor {textFactor}: {shownLook.ShownFontNumber(482)}");
             var artSpreads = shownLook.Spreads;
             if (shownLook.HasNext) { InventoryKey(Key.Right); Require(shownLook.SpreadIndex == 1 && _readingSounds.Last() == BookPageSound, "Right turned a spread (3010)"); InventoryKey(Key.Left); Require(shownLook.SpreadIndex == 0, "Left turned back"); }

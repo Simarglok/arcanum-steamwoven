@@ -48,13 +48,13 @@ public sealed class AreaReadingTextTests
     public void The_original_look_draws_a_font_under_the_minimum_with_garmond9()
     {
         Assert.AreEqual(AreaReadingText.SubstituteFont, AreaReadingText.ShownFont(482, 1), "Garmond8 (masthead)");
-        Assert.AreEqual(AreaReadingText.SubstituteFont, AreaReadingText.ShownFont(481, 1), "Garmond6 (telegram form)");
+        Assert.AreEqual(481, AreaReadingText.ShownFont(481, 1), "Garmond6 is the telegram's printed legend: it keeps its glyphs (owner decision)");
         Assert.AreEqual(482, AreaReadingText.ShownFont(482, 2), "8 × 2 = 16 px is not under the minimum");
         Assert.AreEqual(481, AreaReadingText.ShownFont(481, 2));
         foreach (var font in new[] { 483, 480, 485, 484, 497, 815, 478, 999, 0, 744 }) Assert.AreEqual(font, AreaReadingText.ShownFont(font, 1), "font " + font);
         Assert.AreEqual(9, AreaReadingText.FontPx[AreaReadingText.SubstituteFont], "the substitute is not itself under the minimum");
         for (var screen = 1; screen <= 4; screen++)
-            foreach (var font in AreaReadingText.FontPx.Keys.Where(f => AreaReadingText.FontPx[f] > 0))
+            foreach (var font in AreaReadingText.FontPx.Keys.Where(f => AreaReadingText.FontPx[f] > 0 && f != AreaReadingText.PrintedLegendFont))
                 Assert.IsTrue(AreaReadingText.FontPx[AreaReadingText.ShownFont(font, screen)] * screen >= AreaUiScale.MinimumTextPx, $"font {font} at {screen}");
     }
 }
