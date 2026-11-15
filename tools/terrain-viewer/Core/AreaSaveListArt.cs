@@ -15,7 +15,7 @@ public enum AreaSaveListArtButton { Confirm, Back, Delete }
 /// (800 × 400) is the window at (0, 41) between the strips 336 and 335 (MW1). Three art buttons: Save / Load 321 `NextBut` and
 /// Previous Screen 323 `BackBut` in the bottom strip, Delete Save Game 32 `cncl_big` in the window. The list stands in the window's
 /// rectangle (42, 120, 145, 213): a row every 20 pixels from its top, eleven rows shown from the scroll top, each the save's
-/// description in the 19-row art font 27 `morph15font`, near-white, the selected row gold; a description too wide for the row's 141
+/// description in the art font 229 `Flare12Font`, near-white, the selected row gold; a description too wide for the row's 141
 /// pixels ends in "...". Coordinates here are the 800 × 600 screen's. Godot-free.
 /// ARC-UI-067 (ledger MW22–MW25): the preview rectangle shows the selected save's picture at its own size from the corner, its info
 /// texts over it while the info display is on (the toggle button 747 `TextToggle`), and the cover 748 `SaveShotCover` over all; the
@@ -24,7 +24,7 @@ public enum AreaSaveListArtButton { Confirm, Back, Delete }
 public static class AreaSaveListArtLayout
 {
     public const int ScreenWidth = 800, ScreenHeight = 600;
-    public const int BackgroundArt = 745, TopStripArt = 336, BottomStripArt = 335, ConfirmArt = 321, BackArt = 323, DeleteArt = 32, FontArt = 27;
+    public const int BackgroundArt = 745, TopStripArt = 336, BottomStripArt = 335, ConfirmArt = 321, BackArt = 323, DeleteArt = 32, FontArt = 229;
     /// <summary>ARC-UI-067: the lens, the info toggle (two frames) and the preview's cover (MW23, MW25).</summary>
     public const int LensArt = 746, ToggleArt = 747, CoverArt = 748;
     /// <summary>The window's top (a background not 600 rows high, MW1) and the bottom strip's (the art buttons' y origin, MW12).</summary>
@@ -56,7 +56,7 @@ public static class AreaSaveListArtLayout
     public static (byte R, byte G, byte B) RowColour { get; } = (250, 250, 250);
     public static (byte R, byte G, byte B) SelectedColour { get; } = (255, 210, 0);
 
-    /// <summary>The info texts' colour: the error text's font 0x64C218 is art 27 in (255, 50, 50) (MW14, MW23); the others take the
+    /// <summary>The info texts' colour: the error text's font 0x64C218 is art 229 in (255, 50, 50) (MW14, MW23); the others take the
     /// rows' (250, 250, 250).</summary>
     public static (byte R, byte G, byte B) WarningColour { get; } = (255, 50, 50);
 

@@ -28,7 +28,8 @@ public sealed class AreaPremadeBrowserArtTests
     [TestMethod]
     public void The_window_reads_the_originals_art_and_fields()
     {
-        CollectionAssert.AreEqual(new[] { 766, 336, 335, 321, 323, 283, 284, 27, 171 }, AreaPremadeBrowserArtLayout.ArtNumbers.ToArray());
+        CollectionAssert.AreEqual(new[] { 766, 336, 335, 321, 323, 283, 284, 229, 27 }, AreaPremadeBrowserArtLayout.ArtNumbers.ToArray());
+        // ARC-UI-2267: the exe's font table 0x5C4030 is (229, 27): the list above ends with the body font Flare12 and the titles' Morph15 (never Cloister18).
         Assert.AreEqual((95, 69), AreaPremadeBrowserArtLayout.Portrait, "MW18: the window's (95, 28) below the top strip");
         Assert.AreEqual((46, 224, 228, 19), AreaPremadeBrowserArtLayout.Name);
         Assert.AreEqual((66, 284, 186, 19), AreaPremadeBrowserArtLayout.Gender);

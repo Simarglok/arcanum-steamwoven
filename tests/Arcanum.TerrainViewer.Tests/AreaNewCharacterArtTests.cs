@@ -31,8 +31,8 @@ public sealed class AreaNewCharacterArtTests
     [TestMethod]
     public void The_window_reads_its_art_and_its_buttons_places()
     {
-        CollectionAssert.AreEqual(new[] { 765, 336, 335, 321, 323, 283, 284, 757, 758, 27, 171 }, AreaNewCharacterArtLayout.ArtNumbers.ToArray());
-        CollectionAssert.AreEquivalent(new[] { 766, 765, 336, 335, 321, 323, 283, 284, 757, 758, 27, 171 }, AreaPremadeBrowserArtContent.AllArtNumbers.ToArray(),
+        CollectionAssert.AreEqual(new[] { 765, 336, 335, 321, 323, 283, 284, 757, 758, 229, 27 }, AreaNewCharacterArtLayout.ArtNumbers.ToArray());
+        CollectionAssert.AreEquivalent(new[] { 766, 765, 336, 335, 321, 323, 283, 284, 757, 758, 229, 27 }, AreaPremadeBrowserArtContent.AllArtNumbers.ToArray(),
             "one read serves both character windows");
         Assert.AreEqual((321, 675, 496), AreaNewCharacterArtLayout.Button(AreaNewCharacterArtButton.Accept), "MW27: the bottom strip's (675, 55)");
         Assert.AreEqual((323, 69, 496), AreaNewCharacterArtLayout.Button(AreaNewCharacterArtButton.Cancel));

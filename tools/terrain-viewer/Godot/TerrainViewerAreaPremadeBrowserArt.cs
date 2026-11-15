@@ -103,21 +103,20 @@ public partial class TerrainViewerApp
         require(first.Stats.Count == AreaPremadeBrowserArtLayout.StatOrder.Count && first.Stats[0].StartsWith("ST: ", StringComparison.Ordinal),
             "fifteen stats with their short labels: " + string.Join(", ", first.Stats));
         require(art.PortraitForSelfTest, "the hero's large portrait read: " + first.Portrait);
-        // The story's lines as the original breaks them (MW26); the field shows as many as fit, the original's draw stops there: the
-        // smoke reports each hero's line count (the installed stories are longer than the field).
+        // The story's lines as the original breaks them (MW26) in the body font (art 229, ARC-UI-2267); the field shows as many as fit.
+        // The smoke reports each hero's line count and how many of them the field holds (a story starts with an empty line).
         var content = _premadeArtContent!;
         var font = content.TextFont!;
         var height = font.Measure("A").Height;
-        var fits = Enumerable.Range(0, AreaStartingHero.Premade.Count).Select(index =>
+        var counts = Enumerable.Range(0, AreaStartingHero.Premade.Count).Select(index =>
         {
             var view = content.View(index, MainMenuHero(index));
             var field = view?.DescriptionTitle is null ? AreaPremadeBrowserArtLayout.Description : AreaPremadeBrowserArtLayout.RaceText;
             var lines = view is null ? [] : AreaPremadeBrowserArtLayout.Wrap(font, view.Description, field.Width);
-            // The measurement the docs state: each story is longer than its field and starts with an empty line.
-            return lines.Count > field.Height / height && lines[0].Count == 0 ? lines.Count : -lines.Count;
+            return lines.Count > 0 && lines[0].Count == 0 ? $"{lines.Count}/{(height > 0 ? field.Height / height : 0)}" : "none";
         }).ToArray();
-        require(height > 0 && fits.All(lines => lines > 0), "every hero's story is longer than its field and starts empty (lines; negative: not): "
-            + string.Join(",", fits));
+        require(height > 0 && counts.All(count => count != "none"), "every hero's story breaks into lines and starts empty (lines/rows that fit): "
+            + string.Join(",", counts));
         await Frames(2);
         if (System.Environment.GetEnvironmentVariable("ARC_AREA_PREMADE_CAPTURE") is { Length: > 0 } capture)
         {
@@ -146,7 +145,7 @@ public partial class TerrainViewerApp
         await Frames(1);
         GD.Print("ARC-UI-066 native-smoke browser art PASS " + System.Text.Json.JsonSerializer.Serialize(new {
             _premadeArtContent!.Detail, first.Name, first.Gender, first.Race, first.BackgroundName, Stats = first.Stats, first.Portrait, Second = second!.Name,
-            StoryLines = fits, ShownLines = AreaPremadeBrowserArtLayout.Description.Height / height }));
+            StoryLines = counts, ShownLines = AreaPremadeBrowserArtLayout.Description.Height / height }));
     }
 
     /// <summary>A click (press and release) on a browser button of the art, as the pointer gives it.</summary>
