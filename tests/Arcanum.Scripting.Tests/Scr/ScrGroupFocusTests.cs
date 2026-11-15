@@ -40,10 +40,10 @@ public sealed class ScrGroupFocusTests
         ScrAdmissionSet.S2.Actions.Concat([ScrCatalogue.Action.LoopFor, ScrCatalogue.Action.LoopEnd]), ScrAdmissionSet.S2.ValueKinds,
         ScrAdmissionSet.S3.FocusKinds.Concat([ScrFocusKind.CurrentLoopedObject, ScrFocusKind.EveryoneInGroup, ScrFocusKind.AnyoneInGroup]), counterIndexWraps: true);
 
-    private static ScrRunResult Run(GroupHost host, ScrProgram program)
+    private static ScrRunResult Run(GroupHost host, ScrProgram program, ScrRuleProfile? rules = null)
     {
         host.Inner.Scripts[Script] = ScrScriptLookup.Of(program);
-        return ScrDispatcher.RunTile(new(new ScrSlot(Script, 0, 0), Npc), host, new ScrRunOptions { Admission = Set });
+        return ScrDispatcher.RunTile(new(new ScrSlot(Script, 0, 0), Npc), host, new ScrRunOptions { Admission = Set, Rules = rules ?? ScrRuleProfile.Steamwoven });
     }
 
     private static GroupHost Host(int followers)
@@ -92,8 +92,20 @@ public sealed class ScrGroupFocusTests
     }
 
     [TestMethod]
-    public void The_followers_are_cut_at_a_hundred_before_the_triggerer_is_appended()
+    public void The_original_profile_cuts_the_followers_at_a_hundred_before_the_triggerer_and_the_steamwoven_one_does_not()
     {
-        Assert.AreEqual(ScrStop.ReturnSkipDefault, Run(Host(150), CountGroup(EveryGroup, ScrWorld.VicinityListCap + 1)).Stop);
+        Assert.AreEqual(ScrStop.ReturnSkipDefault, Run(Host(150), CountGroup(EveryGroup, ScrWorld.VicinityListCap + 1), ScrRuleProfile.Original).Stop);
+        Assert.AreEqual(ScrStop.ReturnSkipDefault, Run(Host(150), CountGroup(EveryGroup, 151), ScrRuleProfile.Steamwoven).Stop);
+    }
+
+    [TestMethod]
+    public void Only_the_five_guard_conditions_take_a_group_kind_and_test_each_object_of_the_list()
+    {
+        var withConditions = new ScrAdmissionSet("group-conditions", ScrAdmissionSet.S4.Conditions.Append(ScrCatalogue.Condition.FollowingPc), ScrAdmissionSet.S4.Actions, ScrAdmissionSet.S4.ValueKinds, ScrAdmissionSet.S4.FocusKinds.Concat([ScrFocusKind.EveryoneInGroup, ScrFocusKind.AnyoneInGroup]));
+        ScrProgram One(int condition) => Program(L(C(condition, (EveryGroup, 0), N(1000), N(1)), C(ScrCatalogue.Action.ReturnSkipDefault), C(ScrCatalogue.Action.ReturnRunDefault)));
+        Assert.IsTrue(ScrAdmission.Admit(One(ScrCatalogue.Condition.PcQuestState), withConditions).IsAdmitted);
+        var refused = ScrAdmission.Admit(One(ScrCatalogue.Condition.FollowingPc), withConditions);
+        Assert.IsFalse(refused.IsAdmitted);
+        Assert.AreEqual(ScrRefusalCode.FocusKindNotAdmitted, refused.Refusal!.Code);
     }
 }

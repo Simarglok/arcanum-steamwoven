@@ -227,6 +227,9 @@ internal sealed class ScrInterpreter
         // Following: the first object's leader is the second object (both single objects in the set).
         ScrCatalogue.Condition.FollowingPc => (_shared.Disbanded.Contains(Object(c, 0, line)) ? null : _host.Leader(Object(c, 0, line))) == Object(c, 1, line),
         ScrCatalogue.Condition.Jilted => _host.IsJilted(Object(c, 0, line)),
+        // GF9 (SG1–SG6): a guard condition on a group focus kind tests each object of the list by the list rule (kind 13 every one, kind 14 one is enough).
+        ScrCatalogue.Condition.PcQuestState or ScrCatalogue.Condition.HasItemNamed or ScrCatalogue.Condition.IsNamed or ScrCatalogue.Condition.IsWieldingItem or ScrCatalogue.Condition.HasReputation
+            when (ScrFocusKind)c.Kind(0) is ScrFocusKind.EveryoneInGroup or ScrFocusKind.AnyoneInGroup => ListHolds(c, obj => GuardHolds(c, obj)),
         // SG1: the guard conditions, one object each; the quest state's second value is its third operand.
         ScrCatalogue.Condition.PcQuestState => ScrGuards.Holds(c.Type, Object(c, 0, line), Get(c, 1), Get(c, 2), Queries),
         // ARC-SCRIPT-1772 (CQ5): an object the run renamed answers its new name number (the guard's mind-control test stays the host's).
@@ -1365,6 +1368,10 @@ internal sealed class ScrInterpreter
         return globals.Length + variables.Length + flags.Length == 0 ? null : new ScrStoreWrites(globals, variables, flags);
     }
 
+    // One object of a guard condition's list (the single-object arms above, with the run's renames for is named).
+    private bool GuardHolds(ScrClause c, ScrObjectRef obj) => c.Type == ScrCatalogue.Condition.IsNamed && _shared.Names.TryGetValue(obj, out var renamed) ? !Queries.IsMindControlled(obj) && renamed == Get(c, 1)
+        : ScrGuards.Holds(c.Type, obj, Get(c, 1), c.Type == ScrCatalogue.Condition.PcQuestState ? Get(c, 2) : 0, Queries);
+
     private ScrObjectRef Object(ScrClause c, int slot, int line) => OptionalObject(c, slot) ?? throw new MissingObjectStop(line);
 
     // The original turns the seconds into a 32-bit millisecond count, raises 0 to 1 (sub_45A950) and multiplies by 8, so
@@ -1411,13 +1418,13 @@ internal sealed class ScrInterpreter
         _ => OptionalObject(c, slot) is { } obj ? [obj] : [],
     };
 
-    // GF1–GF3: the triggerer's direct followers in array order (the host's answer, the first ScrWorld.VicinityListCap as the builder's copy loop stops there), then the triggerer itself; no filter. The original reads no
+    // GF1–GF3: the triggerer's direct followers in array order (the host's answer, the first ScrWorld.VicinityListCap under the Original profile, where the builder's copy loop stops there), then the triggerer itself; no filter. The original reads no
     // triggerer-less case (the object accessor has no null guard in the export), so the project's list is empty then.
     private IReadOnlyList<ScrObjectRef> Group()
     {
         if (_roles.Triggerer is not { } leader) return [];
         var followers = Groups.FollowersOf(leader) ?? throw new InvalidOperationException("SCR_GROUP_FOLLOWERS_NULL");
-        return [.. followers.Take(ScrWorld.VicinityListCap), leader];
+        return [.. _options.Rules.VicinityListCapped ? followers.Take(ScrWorld.VicinityListCap) : followers, leader];
     }
 
     // PG3, TG4: the scenery (type mask 0x8) or the PCs and NPCs (0x18000) around the run's attachee (none without one), the first 100

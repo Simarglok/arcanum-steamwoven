@@ -168,18 +168,18 @@ public sealed class ScriptTriggerCensusTests
         // Kind 13: the combat-point set (hit 7, miss 8, critical hit 34) and the placed set (taking damage 23) run 1160, 2350, 2506, 2507 and 1749 whole; the dialog script 1160 (point 9) runs under the talk set; the use set holds 2350, 2506 and 2507.
         foreach (var number in new[] { 1160, 2350, 2506, 2507, 1749 })
         {
-            Assert.IsTrue(Read(number, AreaUseScriptHost.CombatPointAdmission).IsAdmitted, $"{number} under the combat-point set");
+            var combat = Read(number, AreaUseScriptHost.CombatPointAdmission);
+            Assert.IsTrue(combat.IsAdmitted, $"{number} under the combat-point set: {combat.Refusal?.Code} type {combat.Refusal?.Type} line {combat.Refusal?.Line}");
             Assert.IsTrue(Read(number, AreaUseScriptHost.PlacedAdmission).IsAdmitted, $"{number} under the placed set");
         }
         Assert.IsTrue(Read(1160, AreaScriptHost.SkillTalkAdmission).IsAdmitted, "1160, the dialog-point script, under the talk set");
         // Without the use host's queries the plain dialog set keeps the group kinds out (the host answers the followers).
         Assert.IsFalse(Read(1160, AreaScriptHost.SkillAdmission).IsAdmitted, "the plain dialog set refuses 1160");
-        // Kind 14: 2232, 2234 and 2239 name it and are also blocked by get armor (action 32, #2326): refused by that action under every set now.
+        // Kind 14: 2232, 2234 and 2239 name it and are also blocked by the group in the is undead condition (38) and by get armor (action 32), both #2326: refused under every set (the report names where).
         foreach (var number in new[] { 2232, 2234, 2239 })
         {
             var refused = Read(number, AreaUseScriptHost.CombatPointAdmission);
             Assert.IsFalse(refused.IsAdmitted, $"{number}");
-            Assert.AreEqual(32, refused.Refusal!.Type, $"{number} stops at get armor, not at the focus kind");
         }
         if (Environment.GetEnvironmentVariable("ARC_GROUP_FOCUS_REPORT") is { Length: > 0 } output) File.WriteAllLines(output, report);
     }

@@ -502,6 +502,9 @@ public sealed class ScrAdmissionSet
     /// </summary>
     public static ScrAdmissionSet S61 { get; } = new("S61", S60.Conditions, S60.Actions, S60.ValueKinds, S60.FocusKinds.Concat([ScrFocusKind.EveryoneInGroup, ScrFocusKind.AnyoneInGroup]), counterIndexWraps: true);
 
+    /// <summary>The five guard conditions (PC quest state 6, has item named 17, is named 20, wields an item named 21, has a reputation 33; ledger SG1–SG6) whose object list the interpreter tests object by object.</summary>
+    public static IReadOnlySet<int> GuardConditions { get; } = new HashSet<int> { ScrCatalogue.Condition.PcQuestState, ScrCatalogue.Condition.HasItemNamed, ScrCatalogue.Condition.IsNamed, ScrCatalogue.Condition.IsWieldingItem, ScrCatalogue.Condition.HasReputation };
+
     /// <summary>The focus kinds of <see cref="S61"/> a host answers through <see cref="IScrGroupQueries"/>.</summary>
     public static IReadOnlySet<ScrFocusKind> GroupFocusKinds { get; } = new HashSet<ScrFocusKind> { ScrFocusKind.EveryoneInGroup, ScrFocusKind.AnyoneInGroup };
 
@@ -730,8 +733,10 @@ public static class ScrAdmission
                     if ((ScrFocusKind)kind == ScrFocusKind.LocalObject && value is < 0 or >= ScrCatalogue.LocalSlots) return Refuse(ScrRefusalCode.IndexOutOfRange, true);
                     // ARC-SCRIPT-047: a condition tests every object of a list focus kind (the "any" kinds some of them, SG6); the
                     // interpreter reads a condition's object operand as one object, so the critter vicinity kinds are admitted in
-                    // actions only (an action's single object is the list's first, 0x44B960; loop for takes the list).
+                    // actions only (an action's single object is the list's first, 0x44B960; loop for takes the list); ARC-SCRIPT-2319: the group kinds (13, 14) likewise (GF9).
                     if (condition && (ScrFocusKind)kind is ScrFocusKind.EveryoneInVicinity or ScrFocusKind.AnyoneInVicinity) return Refuse(ScrRefusalCode.FocusKindNotAdmitted);
+                    // ARC-SCRIPT-2319 (GF9): the group kinds are admitted in a condition only as the list of one of the five guard conditions (SG1–SG6, read as lists in the exe, kind 14 the "any" form); the other conditions read one object here.
+                    if (condition && (ScrFocusKind)kind is ScrFocusKind.EveryoneInGroup or ScrFocusKind.AnyoneInGroup && !(slot == 0 && ScrAdmissionSet.GuardConditions.Contains(type))) return Refuse(ScrRefusalCode.FocusKindNotAdmitted);
                     break;
             }
             // Get skill stores into its third operand (SX1).
