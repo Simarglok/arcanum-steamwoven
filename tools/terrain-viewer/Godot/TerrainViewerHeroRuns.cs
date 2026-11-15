@@ -225,7 +225,8 @@ public partial class TerrainViewerApp
             if (app.PickPocketRowOf(target) is { } victim) { var (vx, vy) = app.LiveWorldCell(victim); return new(new(checked((int)vx), checked((int)vy))); }
             // ARC-DEV-365: an object the item cursor picked is named by the cast host's id; goal 39 reads its cell here.
             if (app.SpeakerOfTarget(target) is not { } speaker) return app.ItemAimObjectCell(target) is { } aimed ? new(aimed) : null;
-            if (!app.SpeakerPresent(speaker)) return null;
+            // ARC-AI-1320 (GT122): goal 21 does not refuse a dead target (node 1 tests only that the target is there): a body stays the talk's target.
+            if (!app.SpeakerPresent(speaker, includeDead: true)) return null;
             var (x, y) = app.SpeakerCell?.Invoke(speaker) ?? (speaker.WorldX, speaker.WorldY);
             return new(new(checked((int)x), checked((int)y)));
         }
