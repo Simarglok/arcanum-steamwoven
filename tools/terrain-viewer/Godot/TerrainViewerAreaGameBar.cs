@@ -91,7 +91,8 @@ public partial class TerrainViewerApp
             _gameBarPanel.Render();
         }
         // ARC-UI-023: a pane taking the message window (its button down) or giving it back (ML8); ARC-UI-2304: bar mode 8 holds it too.
-        var pane = spells || _gameBar.IsOn(AreaBarButton.Skills) || _itemPaneItem is not null;
+        // The diagnostic pane's weapon mode (no strip art) holds the window only while the spell pane is open, as before.
+        var pane = spells || _gameBar.IsOn(AreaBarButton.Skills) || (_itemPaneItem is not null && WeaponPaneInStrip);
         var paneMode = pane ? MessagePaneMode : 0;
         if (pane && _messagePaneShown && paneMode != _messagePaneMode) ClearMessagePaneName();
         _messagePaneMode = paneMode;

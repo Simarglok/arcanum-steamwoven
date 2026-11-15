@@ -39,7 +39,13 @@ public partial class TerrainViewerApp
             _weaponBarView.SlotRightPressed += HotkeyWeaponPaneDrag;
             _weaponBarView.SlotEntered += WeaponBarSlotEntered;
         }
-        if (_areaSession is not { } session || !WeaponPaneInStrip || !SpellMapActive) { HideWeaponBar(); return; }
+        if (_areaSession is not { } session || !WeaponPaneInStrip || !SpellMapActive)
+        {
+            // Mode 8 does not outlive the strip's weapon parts on a map without casting (the diagnostic pane keeps its own weapon mode).
+            if (WeaponPaneInStrip && _itemPaneItem is not null) { _itemPaneItem = null; _weaponPaneCache = null; ClearMessagePaneName(); }
+            HideWeaponBar();
+            return;
+        }
         if (!_weaponBarView.Visible) _weaponBarView.Visible = true;
         var pane = WeaponPaneNow();
         var button = pane is { ButtonShown: true };
@@ -72,6 +78,8 @@ public partial class TerrainViewerApp
         // ARC-UI-2024 (DB2): consumed without effect while the dialog's hook is set.
         if (!over || ConversationOpen) return;
         PlayBarSound(AreaGameBarLayout.ReleaseSound, "magick weapon button");
+        // As the Spells toggle (BarSpells): a window open keeps the mode as it is.
+        if (WorldModal) { _gameBarNotice = "magick weapon: ignored while a window is open"; RefreshAreaStatus(); return; }
         _weaponBarReleasesForSelfTest++;
         ToggleWeaponPaneInStrip();
     }

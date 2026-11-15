@@ -113,7 +113,7 @@ public partial class TerrainViewerApp
             await click(view.ButtonCentreForSelfTest!.Value);
             await frames(1);
             Require(_itemPaneItem == wielded.Entity, "the pane opened again");
-            ShowSpellPane();
+            InventoryKey(Key.M);
             await frames(2);
             Require(_itemPaneItem is null && MessagePaneMode == SpellPaneRules.BarMode && view.BackgroundForSelfTest is null && _spellBarView is { Visible: true },
                 "M replaced mode 8 with the spells mode");
