@@ -65,6 +65,14 @@ class StageHistoryTests(unittest.TestCase):
         self.assertEqual((entry["waitSeconds"], entry["ranSeconds"]), (22.0, 8.5))
         self.assertEqual(entry["outsideStagesSeconds"], 4.2)  # 8.5 s of the run less 4.25 s in the stages
 
+    def test_an_entry_records_what_it_was_asked_and_the_files_it_ran_on(self) -> None:  # ARC-DEV-2223
+        entry = smoke_history.entry_of("main-cast", "window", ("cast", "ai"), 0, self.log(7), tree=lambda: "abc123")
+        assert entry is not None
+        self.assertEqual((entry["asked"], entry["tree"]), (["cast", "ai"], "abc123"))
+        entry = smoke_history.entry_of("main", "window", (), 0, self.log(9), tree=lambda: None)
+        assert entry is not None
+        self.assertEqual((entry["asked"], entry["stages"], entry["tree"]), ([], ["cast", "ai"], None))  # a battery asks for no list
+
     def test_a_run_without_requested_stages_lists_the_stages_the_viewer_timed_and_a_missing_history_line_leaves_times_unknown(self) -> None:
         entry = smoke_history.entry_of("main", "window", (), 0, self.log(9))
         assert entry is not None
