@@ -72,6 +72,9 @@ public sealed class LauncherScreenTests
         screen.SetShowAtStart(true);
         Assert.IsFalse(screen.Settings.DebugMode, "ARC-DEV-050: the debug mode is off by default");
         screen.SetDebugMode(true);
+        Assert.IsTrue(screen.Settings.HoldToQuit, "ARC-DEV-2270: holding the quit key quits at once by default");
+        screen.SetHoldToQuit(false);
+        Assert.IsFalse(screen.Play()!.HoldToQuit, "Play stores the hold-to-quit choice");
         var played = screen.Play()!;
         Assert.AreEqual((detected, RuleMode.Original, true, GameSource.Other, true), (played.GameRoot, played.Rules, played.ShowAtStart, played.GameSource, played.DebugMode));
         Assert.IsTrue(played.GameIdentity!.SameAs(startup.Folder!.Identity), "Play stores the identity, so a later change is noticed");

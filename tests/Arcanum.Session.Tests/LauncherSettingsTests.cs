@@ -61,6 +61,11 @@ public sealed class LauncherSettingsTests
         Assert.AreEqual("fullscreen", (string)root["display"]!["window"]!);
         Assert.IsTrue((bool)root["debugMode"]!, "ARC-DEV-050: the debug mode is stored");
         Assert.IsFalse((bool)JsonNode.Parse(LauncherSettingsCodec.Serialize(LauncherSettings.Defaults))!["debugMode"]!, "and off by default");
+        Assert.IsTrue((bool)JsonNode.Parse(LauncherSettingsCodec.Serialize(LauncherSettings.Defaults))!["holdToQuit"]!, "ARC-DEV-2270: holding the quit key quits at once by default");
+        var noHold = LauncherSettings.Defaults with { HoldToQuit = false };
+        Assert.AreEqual(noHold, Read(LauncherSettingsCodec.Serialize(noHold)), "the hold-to-quit choice round-trips");
+        Assert.IsTrue(Read("""{"schema":1}""").HoldToQuit, "an older file without the key reads as on");
+        Assert.IsTrue(LauncherSettingsCodec.Deserialize("""{"schema":1,"holdToQuit":"no"}""").Defaulted.Contains("holdToQuit"), "a bad value is defaulted and named");
 
         Assert.AreEqual(LauncherSettings.Defaults, Read(LauncherSettingsCodec.Serialize(LauncherSettings.Defaults)));
         Assert.AreEqual(LauncherSettings.Defaults, Read("""{"schema":1}"""), "missing keys take their defaults");

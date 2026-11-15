@@ -26,6 +26,7 @@ public partial class LauncherPanel : CanvasLayer
     private HBoxContainer _rules = null!;
     private CheckBox _showAtStart = null!;
     private CheckBox _debugMode = null!;
+    private CheckBox _holdToQuit = null!;
     private HBoxContainer _hd1 = null!;
     private HBoxContainer _hdGenerated = null!;
     private HBoxContainer _hdPack = null!;
@@ -48,6 +49,7 @@ public partial class LauncherPanel : CanvasLayer
     public event Action<RuleMode>? RulesRequested;
     public event Action<bool>? ShowAtStartRequested;
     public event Action<bool>? DebugModeRequested;
+    public event Action<bool>? HoldToQuitRequested;
     /// <summary>ARC-UI-143, ARC-UI-2174: the HD line asked for Off or On (true), the generated interface line for Off or On, the HD pack line for a source.</summary>
     public event Action<bool>? HdRequested;
     public event Action<bool>? HdGeneratedRequested;
@@ -126,6 +128,9 @@ public partial class LauncherPanel : CanvasLayer
         }
         _showAtStart = new CheckBox { Name = "ShowAtStart", Text = "Show this screen at every start", FocusMode = Control.FocusModeEnum.None, Modulate = dark };
         _showAtStart.Toggled += on => { if (!_rendering) ShowAtStartRequested?.Invoke(on); };
+        // ARC-DEV-2270: a close request (Cmd+Q, Alt+F4, the window's close button) asks the original's quit question; holding the key quits at once.
+        _holdToQuit = new CheckBox { Name = "HoldToQuit", Text = "Hold Cmd+Q (Alt+F4) to quit without the question", FocusMode = Control.FocusModeEnum.None, Modulate = dark };
+        _holdToQuit.Toggled += on => { if (!_rendering) HoldToQuitRequested?.Invoke(on); };
         // ARC-DEV-050: a development aid, never gameplay; stored, so it stays on until it is turned off here.
         _debugMode = new CheckBox
         {
@@ -151,7 +156,7 @@ public partial class LauncherPanel : CanvasLayer
                     + "The game folder is only read, never written. An installation that the original game never started has no prototype files; "
                     + "the first Play prepares them from your own Arcanum.exe (about half a minute) and keeps them in Steamwoven's settings folder. "
                     + "Without Windows, \"Install from GOG installer…\" unpacks the GOG offline installer (setup_arcanum_….exe) with the free innoextract tool into a new folder you pick, and chooses it.";
-        foreach (var control in new Control[] { _reason, _file, _folder, _candidates, chooseRow, _rules, _hd1, _hdPack, _hdGenerated, _hdNote, _showAtStart, _debugMode, actions, _notice, hint }) contents.AddChild(control);
+        foreach (var control in new Control[] { _reason, _file, _folder, _candidates, chooseRow, _rules, _hd1, _hdPack, _hdGenerated, _hdNote, _showAtStart, _holdToQuit, _debugMode, actions, _notice, hint }) contents.AddChild(control);
         _dialog = new FileDialog
         {
             Name = "ChooseGameFolder", FileMode = FileDialog.FileModeEnum.OpenDir, Access = FileDialog.AccessEnum.Filesystem, UseNativeDialog = true,
@@ -255,6 +260,7 @@ public partial class LauncherPanel : CanvasLayer
             }
             foreach (var button in _rules.GetChildren().OfType<Button>()) button.ButtonPressed = button.Name == screen.Settings.Rules.ToString();
             _showAtStart.ButtonPressed = screen.Settings.ShowAtStart;
+            _holdToQuit.ButtonPressed = screen.Settings.HoldToQuit;
             _debugMode.ButtonPressed = screen.Settings.DebugMode;
             _busy = screen.Busy;
             _play.Disabled = !screen.CanPlay;
