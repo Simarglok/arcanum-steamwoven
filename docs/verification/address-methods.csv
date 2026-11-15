@@ -501,6 +501,7 @@ src/Arcanum.World/AreaAiHost.cs,NoticeKill,exempt,host
 src/Arcanum.World/AreaAiHost.cs,ObserveLeaves,pending,
 src/Arcanum.World/AreaAiHost.cs,ObserveRound,pending,
 src/Arcanum.World/AreaAiHost.cs,OccupantInPlaceOf,exempt,reference
+src/Arcanum.World/AreaAiHost.cs,OtherLeaderCharisma,exempt,host
 src/Arcanum.World/AreaAiHost.cs,PcLeader,exempt,host
 src/Arcanum.World/AreaAiHost.cs,Perform,pending,
 src/Arcanum.World/AreaAiHost.cs,PerformAttack,pending,
@@ -576,6 +577,7 @@ src/Arcanum.World/AreaCharacterSheetTexts.cs,SchemeNumbers,exempt,host
 src/Arcanum.World/AreaCombat.cs,NpcHolder,pending,
 src/Arcanum.World/AreaCombatRound.cs,Step,pending,
 src/Arcanum.World/AreaCompanionOrders.cs,Issue,pending,
+src/Arcanum.World/AreaCompanionRoster.cs,Facts,exempt,host
 src/Arcanum.World/AreaCompanions.cs,JumpTo,pending,
 src/Arcanum.World/AreaContainerLoot.cs,Close,pending,
 src/Arcanum.World/AreaConversation.cs,PickClassLine,exempt,host
