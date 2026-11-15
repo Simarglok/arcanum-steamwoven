@@ -394,7 +394,7 @@ public sealed class AreaScriptSpellTests
         // 60 installed scripts use one of the five commands. ARC-SCRIPT-1815: the heartbeat set admits 7 whole (1 before the scenery and object-variable focus kinds, assign object and float line); script 2231, which the main map's 21 heartbeats of point 19 carry,
         // loops over the scenery around its NPC and stops a script eye candy, and its one missing command was the scenery focus. The scripts 2210 to 2230 (play script eye candy 120, play sound 82, conditions 21) and the get reaction scripts (dialogs) are no heartbeats.
         // Re-measured 2026-11-16 (ARC-SCRIPT-2321, set S64) on main with the group focus kinds (S61), toggle state in the use set and the portal kind: the moves since the numbers above are those of the sets merged since (issue #1846); the any-scenery focus kind (16) is one of them and was not measured apart.
-        Assert.AreEqual((60, 25, 32, 8, 34, 1, 32), (withState, counts["use"], counts["placed"], counts["heartbeat"], counts["dying"], counts["talk"], counts["combat"]));
+        Assert.AreEqual((60, 28, 36, 10, 38, 1, 36), (withState, counts["use"], counts["placed"], counts["heartbeat"], counts["dying"], counts["talk"], counts["combat"]));
         Assert.IsTrue(content.Script(2231) is { Status: ScriptContentStatus.Read, Program: { } script2231 } && ScrAdmission.Admit(script2231, AreaUseScriptHost.HeartbeatAdmission).IsAdmitted, "the main map's heartbeat 2231 (21 sites) is admitted whole");
     }
 }
