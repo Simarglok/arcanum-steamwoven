@@ -64,4 +64,21 @@ public sealed class AreaHostileConversationTests
         Assert.IsTrue(f.Host.EndReaction());
         Assert.AreSame(sink, f.Host.Rebind(f.Session).NpcHostile);
     }
+
+    /// <summary>ARC-SCRIPT-1598 (0x567460 after the dialog action's earlier actions): a dialog start the callback refuses opens no conversation and starts no reaction record; a callback that accepts changes nothing.</summary>
+    [TestMethod]
+    public void A_dialog_start_the_callback_refuses_opens_no_conversation()
+    {
+        using var f = AreaReactionConversationTests.Fixture.Create(Dialog);
+        var asked = new List<string>();
+        var refused = f.Host.Begin(f.Speaker, startRefused: speaker => { asked.Add(AreaConversationState.EntityId(speaker.Row)); return true; });
+        Assert.AreEqual(AreaConversationStartStatus.DialogStartRefused, refused.Status, refused.Detail);
+        Assert.IsNull(refused.Conversation);
+        CollectionAssert.AreEqual(new[] { f.Entity }, asked, "asked once, for the speaker");
+        Assert.IsFalse(f.Host.EndReaction(), "no reaction conversation was opened");
+        var accepted = f.Host.Begin(f.Speaker, startRefused: _ => false);
+        Assert.AreEqual(AreaConversationStartStatus.Started, accepted.Status, accepted.Detail);
+        Assert.IsNotNull(accepted.Conversation);
+        Assert.IsTrue(f.Host.EndReaction());
+    }
 }

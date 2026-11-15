@@ -1,11 +1,13 @@
 using System.Buffers.Binary;
 using Arcanum.Data.Characters;
 using Arcanum.Data.Scripts;
+using Arcanum.Scripting.Dialog;
 using Arcanum.Scripting.Scr;
 using Arcanum.Simulation.Character;
 using Arcanum.Simulation.Clock;
 using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Equipment;
+using Arcanum.Simulation.Skills;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using static Arcanum.Session.Tests.HeroStateTests;
 using static Arcanum.Session.Tests.SessionFixtures;
@@ -349,6 +351,89 @@ public sealed class WieldEventScriptTests
         var sold = owner.BarterSell(owner.Version, "virgil", "kit:3", 1, 0, kind, Accept, scripts: host);
         Assert.AreEqual((GameSessionDisposition.Changed, 0, 0), (sold.Disposition, Charms(owner), owner.QueryEquipment().Worn.Count));
         CollectionAssert.AreEqual(new[] { (25, "kit:3"), (21, "kit:3") }, sold.Scripts.Select(run => (run.Point, run.Attachee)).ToArray());
+    }
+
+    // ARC-MAGIC-1823 (IE3, IE4, IE6): the hero's worn scripted ring 2851 (kit:3) with the three scripts, ready to give; the seed attached.
+    private static (GameSessionOwner Owner, Host Host) WornScriptedRing(SessionHeroDefinition? hero = null, ulong seed = 0)
+    {
+        int[] all = [SessionScriptPoint.InsertItem, SessionScriptPoint.WieldOn, SessionScriptPoint.WieldOff, SessionScriptPoint.RemoveItem];
+        var created = GameSessionOwner.Create(Descriptor() with { Hero = hero ?? HalfElf(), RandomSeed = seed });
+        Assert.AreEqual(GameSessionFailure.None, created.Failure);
+        var owner = created.Owner!;
+        var host = new Host(owner);
+        host.Slots[("kit:3", SessionScriptPoint.WieldOn)] = WieldOn;
+        host.Slots[("kit:3", SessionScriptPoint.WieldOff)] = WieldOff;
+        host.Slots[("kit:3", SessionScriptPoint.RemoveItem)] = Record;
+        host.Slots[("kit:3", SessionScriptPoint.InsertItem)] = Record;
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.Equip(owner.Version, "kit:3", EquipmentSlot.Ring1, Wearable(3, Ring(1), all), Drawn, Accept, host).Disposition);
+        Assert.AreEqual(GameSessionFailure.None, owner.AttachMapInventory(Exterior, InventoryStateTests.Seed()).Failure);
+        return (owner, host);
+    }
+
+    private static readonly (int, string)[] GiveRuns = [(25, "kit:3"), (28, "kit:3"), (21, "kit:3")];
+
+    // The dialog's non-negative IN hands the hero's first item of that name over: without a host a scripted item is Rejected, with one its removal and insertion scripts run.
+    [TestMethod]
+    public void The_dialog_IN_runs_the_item_scripts_of_the_hero_item_it_hands_over()
+    {
+        var (owner, host) = WornScriptedRing();
+        using var _ = owner;
+        DialogParticipantId pc = new(1), npc = new(2);
+        string? Entity(DialogParticipantId who) => who == npc ? "virgil" : null;
+        var revision = owner.Version.Revision;
+        var bare = new SessionDialogItemTakePort(owner, pc, Entity, Accept);
+        Assert.AreEqual(DialogCommandResult.Rejected, bare.Execute(new TakeItemCommand(npc, pc, 2851)));
+        Assert.AreEqual((GameSessionFailure.ItemScriptUnsupported, revision), (bare.LastResult!.Value.Failure, owner.Version.Revision));
+        Assert.AreEqual(10, Charms(owner));
+
+        var port = new SessionDialogItemTakePort(owner, pc, Entity, Accept, scripts: host);
+        Assert.AreEqual(DialogCommandResult.Applied, port.Execute(new TakeItemCommand(npc, pc, 2851)));
+        var given = port.LastResult!.Value;
+        CollectionAssert.AreEqual(GiveRuns, given.Scripts.Select(run => (run.Point, run.Attachee)).ToArray());
+        Assert.IsNotNull(given.InsertScript);
+        Assert.AreEqual((0, 0), (Charms(owner), owner.QueryEquipment().Worn.Count), "wield off took the charms away and the ring left its slot");
+        Assert.IsTrue(owner.QueryMapInventory(Exterior)!.Holders.Single(holder => holder.Entity == "virgil").Items.Any(listed => listed.Entity == "kit:3"));
+    }
+
+    // A plant is the hero's give: a master thief's plant of the scripted ring runs the same scripts, and without a host the attempt is refused with nothing rolled.
+    [TestMethod]
+    public void A_pick_pocket_plant_runs_the_item_scripts_of_the_planted_item()
+    {
+        var stats = Defaults(); stats[2] = 20;
+        int[] basic = new int[12];
+        basic[(int)Skill.PickPocket] = 20 | (int)SkillTraining.Master << 6;
+        var hero = HalfElf(stats) with { Advancement = SessionHeroAdvancement.None with { BasicSkills = [.. basic] } };
+        var (owner, host) = WornScriptedRing(hero);
+        using var _ = owner;
+        var victim = new SessionPickPocketVictim("virgil");
+        var (revision, draws) = (owner.Version.Revision, owner.QueryRandom().Draws);
+        var bare = owner.PickPocket(owner.Version, victim, PickPocketDirection.Plant, "kit:3", default, Accept);
+        Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.ItemScriptUnsupported, revision, draws), (bare.Disposition, bare.Failure, owner.Version.Revision, owner.QueryRandom().Draws));
+
+        var planted = owner.PickPocket(owner.Version, victim, PickPocketDirection.Plant, "kit:3", default, Accept, scripts: host);
+        Assert.AreEqual((GameSessionDisposition.Changed, 1, false), (planted.Disposition, planted.Moved, planted.Noticed));
+        CollectionAssert.AreEqual(GiveRuns, planted.Move!.Value.Scripts.Select(run => (run.Point, run.Attachee)).ToArray());
+        Assert.AreEqual((0, 0), (Charms(owner), owner.QueryEquipment().Worn.Count));
+        Assert.IsTrue(owner.QueryMapInventory(Exterior)!.Holders.Single(holder => holder.Entity == "virgil").Items.Any(listed => listed.Entity == "kit:3"));
+    }
+
+    // The script command's transfer item from the hero: the plan and the move run the scripts through the caller's host; a pair that is not the hero's give stays refused.
+    [TestMethod]
+    public void A_script_transfer_of_the_hero_item_to_an_NPC_runs_its_item_scripts()
+    {
+        var (owner, host) = WornScriptedRing();
+        using var _ = owner;
+        var revision = owner.Version.Revision;
+        Assert.AreEqual(GameSessionFailure.ItemScriptUnsupported, owner.QueryNamedItemTransfer(null, "virgil", 2851).Failure);
+        Assert.IsNull(owner.QueryNamedItemTransfer(null, "virgil", 2851, itemScripts: true).Refusal);
+        var bare = owner.TransferNamedItem(owner.Version, null, "virgil", 2851, Accept);
+        Assert.AreEqual((GameSessionFailure.ItemScriptUnsupported, revision), (bare.Failure, owner.Version.Revision));
+
+        var moved = owner.TransferNamedItem(owner.Version, null, "virgil", 2851, Accept, host);
+        Assert.AreEqual((GameSessionDisposition.Changed, GameSessionFailure.None), (moved.Disposition, moved.Failure));
+        CollectionAssert.AreEqual(GiveRuns, moved.Scripts.Select(run => (run.Point, run.Attachee)).ToArray());
+        Assert.AreEqual((0, 0), (Charms(owner), owner.QueryEquipment().Worn.Count));
+        Assert.IsTrue(owner.QueryMapInventory(Exterior)!.Holders.Single(holder => holder.Entity == "virgil").Items.Any(listed => listed.Entity == "kit:3"));
     }
 
     [TestMethod]
