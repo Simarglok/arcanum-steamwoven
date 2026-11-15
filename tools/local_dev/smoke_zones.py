@@ -50,7 +50,7 @@ ZONES: dict[str, Zone] = {zone.name: zone for zone in (
 HEAVY = tuple(name for name in ZONES if name != CORE)
 CHOICES = (*ZONES, COMPLETE)
 # ARC-DEV-2223: what a PR must run when `--auto` selects `complete` (a wide diff, or a file no row names): the Crash Site
-# smoke and `core`. The heavy zones and the map batteries of the complete run are the rolling main smoke's and the daily
+# smoke and `core`. The heavy zones and the map batteries of the complete run are the daily
 # build's (`--zones complete` still runs all of it by hand).
 PR_COMPLETE = (CORE, CRASH_SITE)
 # The batteries of the full chain already vouch for these two stages, so the complete run does not list them again.
@@ -275,7 +275,7 @@ def describe(selection: Selection, mark: str, base: str) -> list[str]:
                      + "; add a row to TRIGGERS in tools/local_dev/smoke_zones.py")
     if selection.complete:
         lines.append(f"SMOKE auto: a PR runs {' + '.join(PR_COMPLETE)} for `complete` (the Crash Site smoke and every cheap stage); "
-                     "the rest of the complete run is the rolling main smoke's and the daily build's")
+                     "the heavy zones and batteries are the daily build's, core on main is the rolling main smoke's")
     if selection.click_walk:
         lines.append(f"SMOKE auto: click or walk handling changed ({', '.join(selection.click_walk[:3])}"
                      + (f" and {len(selection.click_walk) - 3} more" if len(selection.click_walk) > 3 else "")

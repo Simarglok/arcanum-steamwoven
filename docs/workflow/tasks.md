@@ -259,6 +259,9 @@ narrowed the same day in ARC-DEV-061):
   to; the Crash Site smoke only when the change is related to it (the pinned
   exterior, the cave, their inputs). A PR whose change no smoke stage covers
   runs none and says so.
+- While the rolling smoke on `origin/main` is red (ARC-DEV-2226), `./arcanum smoke pr` prints
+  `SMOKE red on main since SHA, #N` with the failing stages: a PR run that fails only those stages cites that issue
+  instead of re-running the smoke on a clean main ([rolling smoke](toolchain.md#rolling-smoke-on-main-arc-dev-2226)).
 - Mandatory (owner decision 2026-11-07, ARC-DEV-239): a PR that changes click or
   walk handling (the viewer's click-to-walk, held walk, walk requests and their
   plans, the hero walk goal, pathing the click reaches) always runs

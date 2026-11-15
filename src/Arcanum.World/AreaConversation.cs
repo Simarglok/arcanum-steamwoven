@@ -53,6 +53,8 @@ public enum AreaConversationStartStatus
     /// <summary>ARC-WORLD-043: the session refused to open the NPC's reaction conversation (its record budget); the dialog
     /// script's effects are applied, the conversation did not start.</summary>
     ReactionRejected,
+    /// <summary>ARC-AI-1320 (GT122): the dialog point's script of a dead talk target asked for a dialog; the start callback (0x567460) refuses it silently, so no window opens and nothing is loaded (the script's other effects are applied).</summary>
+    DialogRefused,
 }
 
 /// <param name="Party">ARC-WORLD-016: the session party port of a roster companion's conversation (its
@@ -346,11 +348,11 @@ public sealed class AreaConversationHost
         .OrderBy(item => item.distance).ThenBy(item => item.speaker.Index)
         .Select(item => item.speaker).FirstOrDefault();
 
-    public AreaConversationStart Begin(AreaSpeaker? speaker, CancellationToken token = default)
+    public AreaConversationStart Begin(AreaSpeaker? speaker, CancellationToken token = default, bool deadTarget = false)
     {
         SchematicCrafter = null;
         if (speaker is null) return new(AreaConversationStartStatus.NoSpeaker, null, null, "no dialog NPC within reach");
-        return Run(speaker, 0, token);
+        return Run(speaker, 0, token, deadTarget);
     }
 
     /// <summary>
@@ -439,7 +441,7 @@ public sealed class AreaConversationHost
 
     // Talk request and resumption run SAP_DIALOG through the SCR dispatcher (ARC-SCRIPT-009): run default is the
     // original's generic greeting (not modelled here), a dialog action starts the DLG of the run's script.
-    private AreaConversationStart Run(AreaSpeaker speaker, int line, CancellationToken token)
+    private AreaConversationStart Run(AreaSpeaker speaker, int line, CancellationToken token, bool deadTarget = false)
     {
         token.ThrowIfCancellationRequested();
         // ARC-WORLD-043: a talk whose end the caller missed is ended before any script runs, as the original ends a dialog
@@ -464,6 +466,14 @@ public sealed class AreaConversationHost
         // The DLG is read before any effect is applied, so a changed dialog file applies nothing; a DLG that is missing or
         // unreadable leaves the script's effects applied, as they were before ARC-SCRIPT-011.
         (AreaConversationStartStatus Status, DlgDocument? Document, string Detail) loaded = (AreaConversationStartStatus.DialogResourceMismatch, null, "no dialog action");
+        // ARC-AI-1320 (GT122): a dead talk target never starts the dialog (0x567460 refuses silently): the script's effects apply, the dialog is not read and not opened.
+        if (deadTarget && result.Effects.Dialog is not null)
+        {
+            token.ThrowIfCancellationRequested();
+            return Scripts.Apply(result.Effects)
+                ? new(AreaConversationStartStatus.DialogRefused, null, speaker, $"script {result.Script} {result.Stop}: the dialog of a dead target is refused")
+                : new(AreaConversationStartStatus.ScriptEffectsRejected, null, speaker, $"script {result.Script} {result.Stop}: the session refused its effects");
+        }
         if (result.Effects.Dialog is { } requested)
         {
             // ARC-DATA-022: the session's current rules choose the data fixes, read at this decision.
@@ -477,7 +487,7 @@ public sealed class AreaConversationHost
             return line != 0 && result.Stop == ScrStop.NoScript
                 ? new(AreaConversationStartStatus.ScriptRemoved, null, speaker, "the dialog slot holds no script: nothing to resume")
                 : result.Outcome == ScrOutcome.RunDefault
-                ? GenericGreeting(speaker, line, result)
+                ? (deadTarget ? new(AreaConversationStartStatus.GenericGreeting, null, speaker, $"script {result.Script?.ToString() ?? "none"} {result.Stop}: run default (a dead target: the empty line)") : GenericGreeting(speaker, line, result))
                 : new(AreaConversationStartStatus.ScriptEnded, null, speaker, $"script {result.Script} {result.Stop} at SCR line {result.StopLine}: skip default");
         if (loaded.Status != AreaConversationStartStatus.Started) return new(loaded.Status, null, speaker, loaded.Detail);
         return Open(speaker, dialog, loaded.Document!);

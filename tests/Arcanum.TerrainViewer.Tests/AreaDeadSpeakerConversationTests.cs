@@ -60,4 +60,29 @@ public sealed class AreaDeadSpeakerConversationTests
         var begin = f.Host.Begin(f.Speaker);
         Assert.AreEqual(AreaConversationStartStatus.Started, begin.Status, begin.Detail);
     }
+
+    // ARC-AI-1320 (GT122): the hero's talk goal reaches a dead target: point 9 of its script runs (0x441980 has no death test) but the dialog start callback refuses silently and the generic greeting is the empty line.
+    [TestMethod]
+    public void A_dead_talk_target_whose_script_asks_for_a_dialog_gets_no_conversation()
+    {
+        using var f = AreaReactionConversationTests.Fixture.Create(npc: true, deathSpeech: true);
+        Kill(f);
+        var begin = f.Host.Begin(f.Speaker, deadTarget: true);
+        Assert.AreEqual(AreaConversationStartStatus.DialogRefused, begin.Status, begin.Detail);
+        Assert.IsNull(begin.Conversation);
+        Assert.IsNull(begin.Document, "the dialog file is not even read");
+        Assert.AreEqual(0, f.Host.Scripts.TakeFloats().Count);
+    }
+
+    [TestMethod]
+    public void A_dead_talk_target_that_runs_default_says_nothing_and_floats_nothing()
+    {
+        using var f = AreaReactionConversationTests.Fixture.Create(npc: true);
+        Kill(f);
+        var begin = f.Host.Begin(f.Speaker, deadTarget: true);
+        Assert.AreEqual(AreaConversationStartStatus.GenericGreeting, begin.Status, begin.Detail);
+        Assert.IsNull(begin.GreetingLine);
+        Assert.AreEqual(0, f.Host.Scripts.TakeFloats().Count);
+        StringAssert.Contains(begin.Detail, "the empty line");
+    }
 }

@@ -7,7 +7,7 @@ journal of finished smoke steps (`smoke-stages.jsonl`, smoke_history.py), and fa
 passing run of this checkout on the files as they are now:
 
 - each stage of each selected zone (`core` is every cheap stage; `complete` is taken as `core` + the Crash Site smoke at a
-  PR, the heavy zones and the map batteries being the rolling main smoke's and the daily build's);
+  PR, the heavy zones and the map batteries being the daily build's and `core` on main the rolling main smoke's);
 - the Crash Site smoke when `crash-site` is selected;
 - for a change of click or walk handling (the `walk` and `container-click` rows), also the `map` stage and `smoke
   self-test` (owner decision 2026-11-07, ARC-DEV-239).
