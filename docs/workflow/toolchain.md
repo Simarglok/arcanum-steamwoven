@@ -299,7 +299,7 @@ history held about 500 runs of such copies of one template).
   container loot: `container-click`; the Crash Site profile, transitions, portals and area start: `crash-site`; the census stage
   and the map row readers: `census`), a file of the shared data readers, the presentation, the save schema (`GameSaveLibrary`,
   `GameSessionSnapshot*`), the render and shared UI files or a project, package or build file selects `complete`, and so does a
-  file no row names (a missing row is a safe miss, never a silent skip). A file no smoke can cover (documents, unit tests, research,
+  file no row names (a missing row is a safe miss, never a silent skip; at a PR `complete` runs as core + the Crash Site smoke, see the PR floor below). A file no smoke can cover (documents, unit tests, research,
   HD, oracle and inspect tools, the launcher tooling but the runner itself, the HD review viewer) selects nothing; a diff of
   such files prints `no smoke zone covers this diff` and the run passes without building anything. The viewer's start and stage
   dispatch file and its stage list file also hold shared logic, so for them a change to a line that is more than a stage's
@@ -355,10 +355,29 @@ history held about 500 runs of such copies of one template).
 
 Measured speed of the smoke runner, the queue and each stage, and the options for faster runs and per-task zones: the smoke speed diagnosis (ARC-DEV-384, deleted); its results are the sections above.
 
+- **PR floor check (ARC-DEV-2223, owner decision 2026-11-15).** `./arcanum smoke verify-pr [--base REF]` (`tools/local_dev/smoke_verify.py`)
+  starts no smoke and needs no Godot or queue place: it takes the diff against the merge base with `origin/main` (fetch first), selects the
+  zones as `pr --auto` does and lists the units a PR must have run: each stage of each zone (`core` is every cheap stage), the Crash Site
+  smoke when `crash-site` is selected, and for click or walk files (the `walk` and `container-click` rows) the `map` stage and `smoke
+  self-test`. `complete` is taken as **core + the Crash Site smoke** at a PR (also in `pr --auto` itself: it runs those two, while `--zones
+  complete` by hand still runs everything); the heavy zones and the map batteries are the daily build's (the [rolling main smoke](#rolling-smoke-on-main-arc-dev-2226)
+  runs `core` on `origin/main` every couple of hours). It reads `smoke-stages.jsonl` of the queue folder. Each step's line there now holds `asked` (the stages the step
+  was asked for; a battery asks for none) and `tree`, the git tree hash of the checkout's working files when the step ended (HEAD plus every
+  changed and untracked file, made in a private temporary index, the real index untouched). A unit has a passing run when a step of this
+  checkout ended with exit 0 and asked for the stage (or is the step `crash-site` or `self-test`) and its `tree` (taken when the step started)
+  equals the current one, or no file that chose a zone differs between the two trees (a merge of main or an edited document or test does not
+  void a run; a change to a file that selected a zone does). A step that failed only with failures of `smoke_known_failures.json`
+  (`knownOnly` in the line) counts, with a note to name it in the PR; the stages a failed process still passed before it stopped (`passed`) count, so a failure in the middle of a group voids only the failing stage and the ones after it (run `pr --auto --retry` to run those one to a process; a stage that fails only after others, as `object-art` in #2015, then shows as `order-dependent` and passes alone); a pinned run (`custom`: `--map`, `--hero`, `--sector`, `--main-menu`,
+  `--env`, `--no-config-check`, `smoke map NAME`) never counts, since it is not the stage on its own configuration. A battery step (`full`,
+  `complete`) asked for `map` and `resources`, so it counts for those two. A step of the journal without `tree` (older lines) does not count. A path no `TRIGGERS` row names selects `complete` (fail closed) and
+  is named in the output of both `pr --auto` and `verify-pr`. Exit 0 prints `SMOKE verify-pr PASS`; exit 1 lists the missing or stale units
+  (first twelve) and what to run; exit 2 is a git or stage-list error. Threads run it before every code merge ([PR floor](tasks.md#smoke-scope)).
+
 Tests: `python3 -B -m unittest tools.local_dev.test_smoke` (the stage names from the viewer, the per-PR and full plans,
 the settings folders and dropped variables, the start lines, the chain going on after a failure and ending on a failed
 build or a stopped run, the stage table, the grouping and the early error, the known failures file, the launcher command) and
-`tools.local_dev.test_smoke_zones` (the zone table, the trigger rows, the selection from a diff, the zone and complete plans).
+`tools.local_dev.test_smoke_zones` (the zone table, the trigger rows, the selection from a diff, the zone and complete plans) and
+`tools.local_dev.test_smoke_verify` (the floor check: a missing stage, a run on older files, an unmapped path, the complete selection, the self-test rule, the working-tree hash in a real temporary repository).
 
 ## Timing probe and the `perf` stages (ARC-DEV-367)
 
