@@ -326,7 +326,7 @@ public partial class TerrainViewerApp
     }
 
     /// <summary>The screen point 90 px (at the view's zoom) above an owner's tile centre, the floater box's bottom centre.</summary>
-    private Vector2? FloaterAnchor(string owner) => ObjectScreenPoint(owner, FloaterRules.BoxRise);
+    private Vector2? FloaterAnchor(string owner) => ObjectScreenPoint(owner, 0);
 
     /// <summary>ARC-UI-1997: a bubble's anchor, the owner's tile centre on the screen with the original's (40, 20), without the draw offset.</summary>
     private Vector2? BubbleAnchorOf(string owner) => ObjectScreenPoint(owner, 0);
