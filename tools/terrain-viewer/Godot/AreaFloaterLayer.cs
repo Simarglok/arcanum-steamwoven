@@ -41,6 +41,11 @@ public partial class AreaFloaterLayer : CanvasLayer
     public Func<string, Vector2?> BubbleAnchor { get; set; } = _ => null;
     /// <summary>The view's rectangle the bubbles are placed in; the whole layer when null.</summary>
     public Func<Rect2>? BubbleView { get; set; }
+    /// <summary>ARC-UI-2278: the whole factor the screen's pixels are drawn at, as the bars and the dialog band (<see cref="AreaGameBarPanel.ScreenFactor"/>);
+    /// a test may fix it. A bubble is laid out in the original's pixels (its 200 px box, the 8 slots, the (1, 1) shadow) and drawn at this factor.</summary>
+    public int? BubbleFactorOverride { get; set; }
+    public int BubbleFactor => BubbleFactorOverride is { } fixedFactor ? Math.Max(1, fixedFactor)
+        : IsInsideTree() ? AreaGameBarPanel.ScreenFactor(GetViewport().GetVisibleRect().Size) : 1;
 
     /// <summary>Whether the original's font art draws the lines.</summary>
     internal bool ArtFontForSelfTest => _face is not null;
@@ -57,7 +62,8 @@ public partial class AreaFloaterLayer : CanvasLayer
         Name = "AreaFloaters";
         Layer = 1;
         // Added first, so the bubbles draw under the floating lines (the original draws them first, 0x4D5F10 then 0x4D5310).
-        _bubbleSurface = new Control { Name = "BubbleSurface", MouseFilter = Control.MouseFilterEnum.Ignore };
+        // Nearest: a Legacy glyph is whole pixels at the factor; an HD glyph keeps its own bilinear texture (ARC-UI-145).
+        _bubbleSurface = new Control { Name = "BubbleSurface", MouseFilter = Control.MouseFilterEnum.Ignore, TextureFilter = CanvasItem.TextureFilterEnum.Nearest };
         _bubbleSurface.SetAnchorsPreset(Control.LayoutPreset.FullRect);
         _bubbleSurface.Draw += DrawBubbles;
         if (_face is not null) AreaArtTextDraw.Prepare(_bubbleSurface);
@@ -84,21 +90,23 @@ public partial class AreaFloaterLayer : CanvasLayer
     }
 
     /// <summary>What a bubble draw shows now: per bubble with an anchor, its lines (text, screen position), colour and placement slot. A bubble's slot is
-    /// chosen the first time it is laid out with an anchor and kept. The draw and the smokes both read it.</summary>
+    /// chosen the first time it is laid out with an anchor and kept. The draw and the smokes both read it. ARC-UI-2278: the layout is counted in the original's
+    /// pixels (the anchor and the view divided by <see cref="BubbleFactor"/>, as at 800 × 600) and the result is in screen pixels, each distance times the factor.</summary>
     internal IReadOnlyList<(string Owner, BubbleColor Color, int Slot, Rect2 Rect, IReadOnlyList<(string Text, Vector2 Position)> Lines)> LayOutBubbles()
     {
         var drawn = new List<(string, BubbleColor, int, Rect2, IReadOnlyList<(string, Vector2)>)>();
         var view = BubbleView?.Invoke() ?? _bubbleSurface.GetRect();
+        var factor = BubbleFactor;
         foreach (var bubble in Bubbles.Bubbles.ToArray())
         {
             if (BubbleAnchor(bubble.Owner) is not { } anchor) continue;
-            var ax = (int)Math.Round(anchor.X); var ay = (int)Math.Round(anchor.Y);
+            var ax = (int)Math.Round(anchor.X / factor); var ay = (int)Math.Round(anchor.Y / factor);
             var slot = bubble.Slot ?? TextBubbleRules.ChooseSlot(ax, ay, bubble.Layout.Width, bubble.Layout.Height,
-                (int)view.Position.X, (int)view.Position.Y, (int)view.Size.X, (int)view.Size.Y);
+                (int)(view.Position.X / factor), (int)(view.Position.Y / factor), (int)(view.Size.X / factor), (int)(view.Size.Y / factor));
             if (bubble.Slot is null) Bubbles.SetSlot(bubble.Owner, slot);
             var (left, top) = TextBubbleRules.SlotPosition(slot, ax, ay, bubble.Layout.Width, bubble.Layout.Height);
-            var lines = bubble.Layout.Lines.Select((l, i) => (l.Text, new Vector2(left + l.Left, top + i * BubbleLineHeight))).ToArray();
-            drawn.Add((bubble.Owner, bubble.Color, slot, new Rect2(left, top, bubble.Layout.Width, bubble.Layout.Height), lines));
+            var lines = bubble.Layout.Lines.Select((l, i) => (l.Text, new Vector2(left + l.Left, top + i * BubbleLineHeight) * factor)).ToArray();
+            drawn.Add((bubble.Owner, bubble.Color, slot, new Rect2(left * factor, top * factor, bubble.Layout.Width * factor, bubble.Layout.Height * factor), lines));
         }
         return drawn;
     }
@@ -106,8 +114,12 @@ public partial class AreaFloaterLayer : CanvasLayer
     private void DrawBubbles()
     {
         var ascent = _font.GetAscent(FontSize);
-        foreach (var (_, color, _, _, lines) in LayOutBubbles())
+        // ARC-UI-2278: drawn in the original's pixels at the screen's whole factor; the layout returned screen pixels, so each position goes back by the factor.
+        var factor = BubbleFactor;
+        _bubbleSurface.DrawSetTransform(Vector2.Zero, 0, new Vector2(factor, factor));
+        foreach (var (_, color, _, _, scaled) in LayOutBubbles())
         {
+            var lines = scaled.Select(l => (l.Text, l.Position / factor)).ToArray();
             var (r, g, b) = TextBubbleRules.Rgb(color);
             var (sr, sg, sb) = TextBubbleRules.ShadowRgb;
             foreach (var (text, position) in lines)

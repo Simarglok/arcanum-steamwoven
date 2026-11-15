@@ -456,6 +456,8 @@ before it. It replaces the earlier
     ./arcanum queue --history N     # the last N finished runs: waited, ran, exit
     ./arcanum queue --pause         # no waiting run starts (running ones finish), for every checkout, until --resume (ARC-DEV-1344)
     ./arcanum queue --resume
+    ./arcanum queue --playing [--for MIN]   # the owner is playing: no window run starts until --not-playing or the limit (default 4 h; ARC-DEV-2272)
+    ./arcanum queue --not-playing
     ./arcanum queue --app           # start the menu-bar view of the queue now (a queued run starts it by itself)
     ./arcanum queue --wait [RUN_ID | --all] [--timeout MIN]   # block until that run (or the whole queue) has ended (ARC-DEV-1983)
 
@@ -518,6 +520,43 @@ before it. It replaces the earlier
 Tests: `python3 -B -m unittest tools.local_dev.test_run_queue` (arrival and length order, lanes and their accounting, quick runs, gaps, export
 quiet, crashed and killed runs, limits, lockf, nesting, locales); they use their own `ARCANUM_LOCAL_HOME` and lock file.
 
+### Owner is playing mode (ARC-DEV-2272)
+
+Godot needs the keyboard focus, and a smoke window of an agent thread takes it from the packaged game the owner is playing
+(owner report 2026-11-15, character creation). Headless, off-screen and background windows were tried and failed, so the answer
+is that **no window run starts while the owner plays**; the pause stops everything, this mode stops only the runs that open a window.
+
+    ./arcanum queue --playing              # on; ends by itself after 4 h
+    ./arcanum queue --playing --for 90     # on for 90 minutes (also 30m, 2h; 0 or off: no limit)
+    ./arcanum queue --not-playing          # off at once: the waiting window runs start in their order
+
+The menu-bar app has the same switch (`Owner is playing`, icon `gamecontroller` while on). The command prints the state and the time
+left and `./arcanum queue` then starts with a `PLAYING` line; the switch takes effect at the next poll (a quarter of a second) of every waiter.
+
+- **Held:** every ordinary `window` run: smoke stages (`./arcanum smoke`, `smoke pr`, `smoke complete`), labs, an ad-hoc
+  `./arcanum run --kind window`, and the rolling `main-smoke` steps. A waiter says
+  `waiting-for=owner playing (for ..., ends in ...; no window run starts, headless/quick/dotnet go on; ./arcanum queue --not-playing)`,
+  `./arcanum queue` shows `waiting ... (owner playing)`, and a smoke prints `SMOKE waiting: owner is playing (...)` before the step.
+- **Not held:** `headless`, `quick`, `dotnet` and `export` runs (so builds, tests, imports and the headless self-test of every thread go
+  on), the owner's own launches (`./arcanum area|world|map`, `package`: the front of the queue) and a run that already holds its
+  window or a nested run inside it (it finishes; the mode does not stop a window that is open; a nested window inside a `headless` run is not held either). A held window run is not counted as
+  waiting for a Godot place, so the runs queued behind it are not held by it.
+- **`daily` and `main-smoke`** do not wait for hours: they print `SKIP owner is playing`, exit 0 and **record nothing** (no package, no
+  green or red, `--force` does not override it), so the commit is picked up by the next run after the mode ended and no skipped run
+  can be read as a green one.
+- **Limit.** The manual mode expires after 4 h (`--for` sets it, `0`/`off` removes it): the holder process ends by itself at the
+  deadline, nothing has to enforce it, and a crash of the holder or a reboot ends the mode too. `--playing` again renews the limit.
+- **Old wrappers.** The mode is one valid ticket `t-playing.json` (seq 0, kind `window`, lane `single`, already started, flag
+  `playing`) held by a `/usr/bin/lockf` process like the pause. A wrapper of this version holds back only the window runs behind it.
+  A wrapper of another checkout from **before this change** does not know the flag and reads it as a running exclusive Godot run, so
+  it holds back every Godot kind (`window`, `headless`, `export`) of that checkout, but not `dotnet` or `quick` runs, and also the
+  owner's own launches from that checkout, until that checkout has merged main. Nothing else is needed for the mode to hold there.
+- **Not built:** detecting the packaged game by its process and turning the mode on and off by itself (the manual switch and its limit
+  are the rule; the automatic variant is filed as a follow-up).
+
+Tests: `python3 -B -m unittest tools.local_dev.test_run_queue` (`playing` tests: admission rule, real wrappers, the command, the
+limit), `test_smoke`, `test_daily`, `test_main_smoke`; the app: `ArcanumQueue --set-playing` / `--clear-playing` do what its menu item does.
+
 ### Queue menu-bar app (ARC-DEV-1344)
 
 A small macOS menu-bar item shows the queue and pauses it. It is `tools/menubar/ArcanumQueue.swift`: one AppKit file, no
@@ -565,7 +604,7 @@ display and reads the queue's own files, so it works from whichever checkout sta
   own home) does not, unless `ARCANUM_QUEUE_MENUBAR=1`; other systems than macOS do not.
 
 Tests: `python3 -B -m unittest tools.local_dev.test_menubar tools.local_dev.test_run_queue` (the pause tests are in the latter); the app itself is checked
-by running it (`./arcanum queue --app`, then a queued run and a screenshot of the menu); `ArcanumQueue --set-pause` / `--clear-pause` / `--set-lanes` / `--set-max-load` do what its menu items do and exit, to check that the flag it writes is the one the queue reads.
+by running it (`./arcanum queue --app`, then a queued run and a screenshot of the menu); `ArcanumQueue --set-pause` / `--clear-pause` / `--set-playing` / `--clear-playing` / `--set-lanes` / `--set-max-load` do what its menu items do and exit, to check that the flag it writes is the one the queue reads.
 
 ### Owner QA page (ARC-DEV-2187)
 

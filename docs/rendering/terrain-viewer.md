@@ -1119,7 +1119,7 @@ floating lines, so above the objects and below the numbers) in the original's fo
 Checks: `TextBubblesTests` (colours, life, wrap, slots and slot choice, the table's reuse and eviction, life rules, the setting change) and
 the `map` stage's talk smoke (the NPC line of every started conversation is a persistent bubble, replaced on each reply, not persistent after the end; no `npc` text in the panel); `ARC_AREA_TALK_CAPTURE=PATH` saves the first open dialog as `PATH.png` and the `floaters` smoke stage's bubble part (a PC's and an NPC's bubble over their objects, green and white, wrapped within 200 px,
 alive at 6000 ms and gone after it, a Text Duration change to 2 shortening a live bubble at once; `ARC-UI-1997 bubbles over objects PASS`; then the off flag written on the NPC and the NPC destroyed by a script each remove its bubble and not the hero's, a bubble made over an object that is off stays, `ARC-UI-2034 bubbles removed by off flag and teardown PASS`; then (ARC-UI-2048, ledger TB29, TB30) a dialog speaker with no cell keeps an undrawn bubble that never expires while persistent and ages by time after the end, a final line restarted at the close lives one life from the close, and a new scene drops old bubbles, `ARC-UI-2048 dialog line bubble off the shown map and final-line life PASS` (the fade's clear-all: `AreaScriptHostTests` and `AreaUseScriptHostTests` count the fade runs, `TextBubblesTests` the gone watch);
-`ARC_AREA_FLOATERS_CAPTURE` saves `bubble-before` (the old white rising line) and `bubble-after`) and the `spirit-talk` stage (the greeting over the corpse is a bubble). Original visual parity NOT VERIFIED.
+`ARC_AREA_FLOATERS_CAPTURE` saves `bubble-before` (the old white rising line), `bubble-after`, and (ARC-UI-2278, ledger TB31: a bubble is laid out in the original's pixels and drawn at the screen's whole factor like the bars and the dialog band; the stage checks factor 2 gives twice the size on the 2 px grid) `bubble-factor1` and `bubble-factor-screen` at a 2560 × 1440 window) and the `spirit-talk` stage (the greeting over the corpse is a bubble). Original visual parity NOT VERIFIED.
 
 ### Inventory window, pickup and loot (ARC-UI-004)
 
@@ -2176,8 +2176,9 @@ and layout (below), the other windows the project's.
   (`ARC-DEV-381 early main menu open`; the probe's `start-to-menu` in the packaged build went from the whole map's publication to about
   1.6 s on a loaded Mac, see the diagnosis). The menu is the same one: its windows, texts, art, keys and back moves are unchanged. No scene
   exists yet, so what opens a window the menu itself draws works at once (Single Player, New Game, the pre-made browser, Options, Exit
-  Game), and a choice that needs the scene is **held**: Start in the browser and New Character (Load Game and Last Save were held too until
-  ARC-DEV-387, below). A held choice shows
+  Game, the New Character window: ARC-UI-2282), and a choice that needs the scene is **held**: Start in the browser and the New Character
+  window's Accept, which opens the character editor on the scene's draft (Load Game and Last Save were held too until ARC-DEV-387, below; the
+  New Character window itself was held until ARC-UI-2282: it needs only the generic hero read from the module and starts the shop map's own load). A held choice shows
   a note, the menu takes no other input, Escape (or the browser's Back arrow) takes the choice back, and the scene's publication attaches the menu to
   it (`ARC-DEV-381 early main menu attached to the scene`): the menu takes the scene's answer for a new game (`NewGameRefusal`), plays the
   shop map's pair and runs the held choice as if it were pressed then. A start scene that fails to load closes the menu and shows the
@@ -2556,7 +2557,10 @@ until ARC-UI-068 (the original look, below).
   are not shown; Accept's refusal (506) is the line at the top. Without the art (the self-tests) the window keeps the project's
   panel. The menu stage checks it after opening the window (`ARC-UI-068 native-smoke new character art PASS`: the art read, the
   generic human man's texts and portrait, the gender's and race's bands, a click on the race's right and left arrows, the name
-  field's click and a press beside it); `ARC_AREA_NEWCHAR_CAPTURE=PATH` saves the window's picture to an ignored path.
+  field's click and a press beside it); `ARC_AREA_NEWCHAR_CAPTURE=PATH` saves the window's picture to an ignored path. ARC-DEV-2271: `ARC_HD_PACK` alone makes the profile HD but leaves the
+  interface switch (the saved HD setting, which an automated run does not read) Off, so that capture was Legacy art; `ARC_AREA_NEWCHAR_HD_VERIFY=1` (with `ARC_HD_PACK`) switches the HD interface on for the
+  capture only (it acts only together with `ARC_AREA_NEWCHAR_CAPTURE`) (the same switch as the bar and sheet smokes) and restores it, because the rest of the menu smoke compares Legacy pixels. Run:
+  `./arcanum smoke pr --stages menu --main-menu --env ARC_HD_PACK=<pack> --env ARC_AREA_NEWCHAR_HD_VERIFY=1 --env ARC_AREA_NEWCHAR_CAPTURE=<local png>`.
 
 Since ARC-UI-034 Accept opens the [character editor](#character-editor-in-creation-mode-arc-ui-034) instead of starting the
 game, and since ARC-UI-036 the editor's Accept opens the [opening shop](#opening-shop-arc-ui-036), whose kit (the background's
@@ -2729,7 +2733,9 @@ in play, the shop keeps its diagnostic window and the docked barter window above
 
 Native smoke (`menu` stage, original data): the first shop shows the art with the barter window's original look docked at the
 screen's (0, 41), its merchant's wares in the grid and no round view; the pointer over Back lights it and a click on it returns to
-the editor; the ware bought in the second shop stands on the hero's side of the original look; `ARC-UI-069 native-smoke shop art
+the editor; the ware bought in the second shop stands on the hero's side of the original look; no two wares overlap in the merchant's grid
+(ARC-UI-2283: the session knows the items' art sizes before the shop's container regenerates, so the created wares are laid out by their
+art and not as 1 × 1 cells); `ARC-UI-069 native-smoke shop art
 PASS` (`ARC_AREA_SHOP_CAPTURE` saves a readback of the window to the caller's ignored path). Checks: `AreaShopArtTests`.
 
 ### Interface bars (ARC-UI-018)
