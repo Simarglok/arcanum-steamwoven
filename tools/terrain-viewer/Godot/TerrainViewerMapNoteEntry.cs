@@ -20,6 +20,13 @@ public partial class TerrainViewerApp
     internal AreaMapNoteEntryView? MapNoteViewForSelfTest => _mapNoteView is { Visible: true } ? _mapNoteView : null;
     internal int MapNoteReleasesForSelfTest => _mapNoteReleasesForSelfTest;
 
+    /// <summary>The window's questions to the host (set once with the panel): whether the strip can run the entry now, and the radio group's marker.</summary>
+    private void BindMapNoteEntry(AreaWorldMapPanel panel)
+    {
+        panel.NoteEntryAvailable = () => WorldMapOpen && _gameBarPanel is { Visible: true } && MapNoteReady();
+        panel.NoteMarkerType = () => _mapNote.Marker;
+    }
+
     // The entry can run when the strip's art and the marker font read (the bars themselves are up while the map is open).
     private bool MapNoteReady() => _worldMapArtLook?.Font is not null && Art(MapNoteEntry.BackgroundArt) is { Length: > 0 };
 
@@ -39,11 +46,6 @@ public partial class TerrainViewerApp
         }
         var panel = _worldMapPanel;
         var ready = MapNoteReady();
-        if (panel is not null)
-        {
-            panel.NoteEntryAvailable = ready && WorldMapOpen;
-            panel.NoteMarkerType = _mapNote.Marker;
-        }
         var wanted = WorldMapOpen && panel is { EditingNote: true };
         if (wanted && !ready) { panel!.CancelNoteEdit(); wanted = false; }
         if (wanted && !_mapNote.IsOpen) OpenMapNote();
@@ -88,7 +90,6 @@ public partial class TerrainViewerApp
         if (_worldMapPanel is { EditingNote: true }) _worldMapPanel.CancelNoteEdit();
         if (_mapNote.Close()) GD.Print("ARC-UI-2306 note entry closed: the bars went away");
         if (_mapNoteView is not null) _mapNoteView.Visible = false;
-        if (_worldMapPanel is not null) _worldMapPanel.NoteEntryAvailable = false;
     }
 
     /// <summary>A key while the window's note entry is open: Enter accepts (0x5640C0), Escape leaves, the rest is the entry's (0x566F00). The entry owns every key; true always.</summary>

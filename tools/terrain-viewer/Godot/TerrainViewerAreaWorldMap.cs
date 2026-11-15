@@ -211,6 +211,7 @@ public partial class TerrainViewerApp
             _worldMapPanel.RemoveRequested += WorldMapRemoveWaypoint;
             _worldMapPanel.TownWaypointRefused += refusal => GD.Print($"ARC-UI-092 town waypoint refused {refusal} waypoints={_townWaypoints.Count}");
             _worldMapPanel.TownTravelRequested += StartTownTravel;
+            BindMapNoteEntry(_worldMapPanel);
             _worldMapPanel.TownNotesChanged += (town, notes) => { if (_areaSession is { } owner) RecordTownNotes(owner, town, notes); };
             _worldMapPanel.WorldNotesChanged += (kind, notes) => { if (_areaSession is { } owner) RecordMapNotes(owner, kind, notes); };
             _worldMapPanel.CloseRequested += CloseWorldMapByPlayer;

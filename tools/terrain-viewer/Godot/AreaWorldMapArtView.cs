@@ -131,10 +131,10 @@ public partial class AreaWorldMapArtView : Control
     public string NoteEntryOpenedText => _editSaved;
     /// <summary>ARC-UI-2306: the host mirrors the entry's text here, so that leaving by the map closing or the Quill ending keeps what was typed (0x564070 leaves live edits).</summary>
     public void SetNoteText(string text) { if (_noteEntry) _editText = text; }
-    /// <summary>ARC-UI-2306 (0x66D89C): the radio group's marker type, taken by a note made from now on.</summary>
-    public int NoteMarkerType { get; set; }
-    /// <summary>ARC-UI-2306: whether the bottom strip can show the entry (the bars, art 200 and the font read). Without it a press starts no note, and says so.</summary>
-    public bool NoteEntryAvailable { get; set; }
+    /// <summary>ARC-UI-2306 (0x66D89C): the radio group's marker type (a function of the host), taken by a note made from now on.</summary>
+    public Func<int>? NoteMarkerType { get; set; }
+    /// <summary>ARC-UI-2306: whether the bottom strip can show the entry (the bars, art 200 and the font read; a function of the host). Without it a press starts no note, and says so.</summary>
+    public Func<bool>? NoteEntryAvailable { get; set; }
     internal string NoteEditTextForSelfTest { get => _editText; set => _editText = value; }
     internal int NoteEditIndexForSelfTest => _editIndex;
     internal int NoteEditTypeForSelfTest => _editType;
@@ -726,12 +726,12 @@ public partial class AreaWorldMapArtView : Control
         // 0x564360: a note with flag 2 (the ones a scenery marked) is not edited.
         if (hit >= 0 && !notes.IsEditable(hit)) { _message = "This note cannot be edited."; Redraw(); return; }
         if (hit < 0 && notes.IsFull) { _message = "No more notes fit on this map."; Redraw(); return; }
-        if (!NoteEntryAvailable) { _message = "The note entry needs the bottom strip (art 200)."; Redraw(); return; }
+        if (NoteEntryAvailable?.Invoke() != true) { _message = "The note entry needs the bottom strip (art 200)."; Redraw(); return; }
         _message = "";
         _editIndex = hit;
         _editPixel = ((int)pixel.X, (int)pixel.Y);
         // 0x563F90: a new note takes the radio group's marker now; an edit keeps its own type (the accept never writes it).
-        _editType = hit < 0 ? NoteMarkerType : notes.Items[hit].Type;
+        _editType = hit < 0 ? NoteMarkerType?.Invoke() ?? AreaTownNotes.QuestionType : notes.Items[hit].Type;
         _editSaved = _editText = hit < 0 ? "" : notes.Items[hit].Text;
         _noteEntry = true;
         Redraw();
