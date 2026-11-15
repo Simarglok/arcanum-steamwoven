@@ -2557,7 +2557,10 @@ until ARC-UI-068 (the original look, below).
   are not shown; Accept's refusal (506) is the line at the top. Without the art (the self-tests) the window keeps the project's
   panel. The menu stage checks it after opening the window (`ARC-UI-068 native-smoke new character art PASS`: the art read, the
   generic human man's texts and portrait, the gender's and race's bands, a click on the race's right and left arrows, the name
-  field's click and a press beside it); `ARC_AREA_NEWCHAR_CAPTURE=PATH` saves the window's picture to an ignored path.
+  field's click and a press beside it); `ARC_AREA_NEWCHAR_CAPTURE=PATH` saves the window's picture to an ignored path. ARC-DEV-2271: `ARC_HD_PACK` alone makes the profile HD but leaves the
+  interface switch (the saved HD setting, which an automated run does not read) Off, so that capture was Legacy art; `ARC_AREA_NEWCHAR_HD_VERIFY=1` (with `ARC_HD_PACK`) switches the HD interface on for the
+  capture only (it acts only together with `ARC_AREA_NEWCHAR_CAPTURE`) (the same switch as the bar and sheet smokes) and restores it, because the rest of the menu smoke compares Legacy pixels. Run:
+  `./arcanum smoke pr --stages menu --main-menu --env ARC_HD_PACK=<pack> --env ARC_AREA_NEWCHAR_HD_VERIFY=1 --env ARC_AREA_NEWCHAR_CAPTURE=<local png>`.
 
 Since ARC-UI-034 Accept opens the [character editor](#character-editor-in-creation-mode-arc-ui-034) instead of starting the
 game, and since ARC-UI-036 the editor's Accept opens the [opening shop](#opening-shop-arc-ui-036), whose kit (the background's

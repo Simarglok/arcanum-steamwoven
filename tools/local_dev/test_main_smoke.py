@@ -242,6 +242,15 @@ class RunTests(unittest.TestCase):
         self.assertEqual(self.gh_calls, [])
         self.assertIn("RESULT GREEN", (self.folder / "logs" / "report.txt").read_text())
 
+    def test_the_owner_playing_skips_the_run_even_with_force_and_records_neither_green_nor_red(self) -> None:  # ARC-DEV-2272
+        with mock.patch.object(main_smoke.run_queue, "playing_state", return_value={"since": 1.0, "until": None}):
+            self.assertEqual(self.run_it(force=True), main_smoke.PASS)
+        self.assertEqual(self.calls, [])
+        self.assertEqual(self.state(), {})  # the commit stays unchecked: it runs when the mode is over
+        self.assertEqual(self.gh_calls, [])
+        self.assertEqual(self.run_it(), main_smoke.PASS)
+        self.assertEqual(len(self.calls), 1)
+
     def test_no_change_since_the_last_run_is_skipped_and_force_runs_it_again(self) -> None:
         self.run_it()
         self.assertEqual(self.run_it(), main_smoke.PASS)
