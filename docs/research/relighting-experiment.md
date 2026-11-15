@@ -170,27 +170,29 @@ lights enter and leave the list as the view pans (a hard cut at the 32nd). Neith
 whatever `ARC_RELIGHT_STRENGTH` says.
 
 **Updated recommendation.** Unchanged in kind (conditional go for a bounded night-and-indoor option, no-go for daylight and for de-light as built), with two additions: the night weighted
-mode at about 1.2 to 1.6 is the one to tune, and the cost in a city is about 2 ms (to be checked on the Deck), so the option should be a switchable profile, not a default. Open: whether
+mode at about 1.2 to 1.6 is the one to tune, and the cost in a city is about 2 ms (to be checked on the Deck), so the option should be a switchable profile, not a default (settled differently: see the Verdict, it is a part of the HD option). Open: whether
 the wisps' glow (done, ARC-RENDER-2064), and the AI-host-less city windows ([#2036](https://github.com/Simarglok/arcanum-steamwoven/issues/2036)).
 
 ## Verdict
+
+**Owner decision 2026-11-15 ([#2001](https://github.com/Simarglok/arcanum-steamwoven/issues/2001), recorded in [decisions](../architecture/decisions.md), #2173): go for the night-weighted look under the HD option (HD = interface + fonts + relit lighting; no HD world sprites); no-go for daylight and for de-light.** The recommendation below is kept as the experiment's own wording.
 
 **Conditional go, for a bounded "night and indoor" relit option; no-go for daylight and for de-light as built.** The experiment
 shows the idea works on the real data and the real draw path with a small, switchable hook, Legacy untouched, and a cost within the noise to about a millisecond with the real lights on a desktop-class Mac. It does not show that the result is clearly better to the eye: that is the owner's call
 from the composites, and a stronger statement would need the Steam Deck frame times and a real walk-cycle flicker check, both open.
 
-If the owner says go, full coverage is these pieces, none large:
+The owner said go (night-weighted, under the HD option). Full coverage is these pieces, none large:
 
-1. **Category tuning** (the real work): ground, wall, scenery, item, critter and roof gains and blur, per light type (torch, lantern,
+1. **Category tuning** (open, optional polish: [#2208](https://github.com/Simarglok/arcanum-steamwoven/issues/2208)): ground, wall, scenery, item, critter and roof gains and blur, per light type (torch, lantern,
    spell); tuning rounds with the owner's eye. The shader already knows the kind of each item.
-2. **Light sources**: the map's stationary lights and the carried lights are done; object lights of the main map's scenery
+2. **Light sources** (open: [#2207](https://github.com/Simarglok/arcanum-steamwoven/issues/2207)): the map's stationary lights and the carried lights are done; object lights of the main map's scenery
    (ARC-RENDER-030), lit eye candy (ARC-MAGIC-1229) and animated lights would feed the same list, the radius cap (32 lights) and a
    culling by view need a decision.
-3. **HD frames**: the same shader runs on N× frames; the Sobel gain must scale with N; HD frames may carry their own normals later. Update 2026-11-15 (owner decision, #2063): HD sprites of the world are not made, so world frames stay 1x under the HD option; the N× path is dormant, built (gain and bevel stride) and covered by the lab twin only.
-4. **Optional stored normals**: only if per-pixel derivation proves too noisy or too slow on the Deck; the lab generator is the batch
+3. **HD frames**: **dropped** (owner decision 2026-11-15, #2063, #2173): HD sprites of the world are not made and are out of the plan until the owner reopens it, so world frames stay 1x under the HD option; the N× path is dormant, built (gain and bevel stride) and covered by the lab twin only.
+4. **Optional stored normals**: **deferred** (it needs HD world frames, which are out of the plan; owner decision 2026-11-15): only if per-pixel derivation proves too noisy or too slow on the Deck; the lab generator is the batch
    tool, about 168 ms per megapixel in Debug.
-5. **Profile and settings**: FR-LIGHT-013 asks for a separate Remastered profile: a setting, not an environment variable.
-6. **Deck run and flicker run** (open now): frame times at 1280×800 on Steam Deck-class hardware with 1, 5 and 20 lights, and a
+5. **Profile and settings**: done in another form: no separate profile; the relit look is a part of the HD option with no setting of its own (ARC-RENDER-2060, ARC-RENDER-2076, [#2174](https://github.com/Simarglok/arcanum-steamwoven/issues/2174) for the single launcher option).
+6. **Deck run and flicker run** (open: [#2000](https://github.com/Simarglok/arcanum-steamwoven/issues/2000)): frame times at 1280×800 on Steam Deck-class hardware with 1, 5 and 20 lights, and a
    real animated critter walk cycle.
 
 What this experiment did **not** do: use Godot `PointLight2D` / `CanvasTexture` (departure 1 above: the engine's own light pass was
@@ -198,7 +200,7 @@ not measured, so the shader loop is not compared with it), test shadows from occ
 hook lives only in the world item shader), or compare with Laigter (the free generator was not needed: the one-line Sobel in the
 shader was good enough to judge the idea).
 
-The owner's go / no-go is [#2001](https://github.com/Simarglok/arcanum-steamwoven/issues/2001).
+The owner's go / no-go ([#2001](https://github.com/Simarglok/arcanum-steamwoven/issues/2001)) is settled (2026-11-15): see the owner-decision paragraph at the top of the Verdict.
 
 ## Taken into the game (ARC-RENDER-2060)
 
