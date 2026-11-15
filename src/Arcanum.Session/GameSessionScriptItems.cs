@@ -116,7 +116,7 @@ public sealed partial class GameSessionOwner
     /// item leaving an NPC or container or carrying item spells, an item that is the source of a running spell, a new holder with a transfer script (point 32), a container off the actor's map or spilled, a holder no attached
     /// map lists, and for a move to the hero a gold pile or a key the key ring cannot take. The item's insert check and the room and weight tests are answered when the move applies.
     /// </summary>
-    public SessionNamedItemPlan QueryNamedItemTransfer(string? from, string? to, int name)
+    public SessionNamedItemPlan QueryNamedItemTransfer(string? from, string? to, int name, bool itemScripts = false)
     {
         ThrowIfDisposed();
         if (from is not null && !SessionValidation.Entity(from) || to is not null && !SessionValidation.Entity(to)) throw new ArgumentException("Invalid entity id.");
@@ -130,7 +130,8 @@ public sealed partial class GameSessionOwner
             return new(item, $"transfer item: the container {other} is not on the actor's map or has spilled its items", GameSessionFailure.HolderNotLootable);
         if (item.Worn && from is not null) return new(item, $"transfer item of {item.Entity}, worn by {from}, is not modelled", GameSessionFailure.WornItemUnsupported);
         // The move runs none of the item's scripts: a hero's worn item with any, or any item with an insert-item, remove-item or wield-off point, is refused.
-        if (item.ScriptPoints.Any(point => point is SessionScriptPoint.InsertItem or SessionScriptPoint.RemoveItem or SessionScriptPoint.WieldOff) || item.Worn && item.ScriptPoints.Count > 0)
+        // ARC-MAGIC-1823 (IE3, IE4, IE6): with itemScripts the hero's give (to an NPC or container) runs them through the caller's script host (GiveItemTo), which refuses the runs it cannot apply when the move applies.
+        if ((!itemScripts || from is not null) && (item.ScriptPoints.Any(point => point is SessionScriptPoint.InsertItem or SessionScriptPoint.RemoveItem or SessionScriptPoint.WieldOff) || item.Worn && item.ScriptPoints.Count > 0))
             return new(item, $"transfer item of {item.Entity}, which has an insert-item, remove-item or wield-off script, is not modelled", GameSessionFailure.ItemScriptUnsupported);
         if (item.Worn && item.ItemSpells) return new(item, $"transfer item of {item.Entity}, worn with item spells, is not modelled", GameSessionFailure.ItemEffectUnsupported);
         if (to is not null)
@@ -171,25 +172,25 @@ public sealed partial class GameSessionOwner
     /// <see cref="QueryNamedItemTransfer"/> refuses (<see cref="GameSessionFailure.HolderPairUnsupported"/>, <see cref="GameSessionFailure.ItemScriptUnsupported"/>, <see cref="GameSessionFailure.WornItemUnsupported"/>,
     /// <see cref="GameSessionFailure.UnknownHolder"/>), then each move's own refusals (the host's insert check as <see cref="GameSessionFailure.InsertRefused"/>, the lists' budgets, the revision). One revision.
     /// </summary>
-    public InventoryMutationResult TransferNamedItem(GameSessionVersion expected, string? from, string? to, int name, SessionInsertCheck insertCheck)
+    public InventoryMutationResult TransferNamedItem(GameSessionVersion expected, string? from, string? to, int name, SessionInsertCheck insertCheck, ISessionItemScriptHost? scripts = null)
     {
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(insertCheck);
         if (from is not null && !SessionValidation.Entity(from) || to is not null && !SessionValidation.Entity(to)) return RejectItem(GameSessionFailure.InvalidItem);
         if (!IsCurrent(expected)) return RejectItem(GameSessionFailure.StaleVersion);
-        var plan = QueryNamedItemTransfer(from, to, name);
+        var plan = QueryNamedItemTransfer(from, to, name, scripts is not null);
         if (plan.Item is not { } item) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, null, null, Version);
         if (plan.Refusal is not null) return RejectItem(plan.Failure);
         if (from is null)
         {
-            return ListedHolderKind(to!) == SessionHolderKind.Container ? GiveToContainer(to!, item.Entity, insertCheck) : GiveItemToNpc(expected, to!, item.Entity, insertCheck);
+            return ListedHolderKind(to!) == SessionHolderKind.Container ? GiveToContainer(to!, item.Entity, insertCheck, scripts) : GiveItemToNpc(expected, to!, item.Entity, insertCheck, scripts: scripts);
         }
         return ListedHolderKind(from) == SessionHolderKind.Container ? LootItem(expected, from, item.Entity, insertCheck) : TakeItemFromNpc(expected, from, item.Entity, insertCheck);
     }
 
     // The hero's item into a container's list (the move GiveItemToNpc makes into an NPC's), after the container checks the barter window's sale makes.
-    private InventoryMutationResult GiveToContainer(string container, string item, SessionInsertCheck insertCheck) =>
-        GiveItemTo(container, SessionHolderKind.Container, item, insertCheck, identify: false);
+    private InventoryMutationResult GiveToContainer(string container, string item, SessionInsertCheck insertCheck, ISessionItemScriptHost? scripts) =>
+        GiveItemTo(container, SessionHolderKind.Container, item, insertCheck, identify: false, scripts: scripts);
 
     // ---- Item fields (WO6, WO8) ----
 
