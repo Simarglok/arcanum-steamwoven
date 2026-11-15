@@ -2722,7 +2722,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
             // ARC-DEV-273 (RA4): a bow or firearms attack reads the line to the target (a melee one ignores it).
             LineOfFire = Distance(id, target) > 1 && Tile(id) is { } from && Tile(target) is { } to && _scene.LineOfFire?.Invoke() is { } map ? LineTo(from, to, Key(target), map) : null,
             Flight = flight,
-            Backstab = BackstabFacts(id, target),
+            // ARC-COMBAT-1942 (0x4B2210): the backstab bit is built for the clicked target (a bed is no PC or NPC) before 0x4B3170 retargets, so an occupant pulled out of a bed is no backstab.
+            Backstab = inBed ? null : BackstabFacts(id, target),
             TargetWasInBed = inBed,
         };
     }

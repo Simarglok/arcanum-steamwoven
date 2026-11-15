@@ -366,8 +366,6 @@ public sealed class AttackStateTests
         Assert.IsNull(owner.QueryNpcExperience(Rat));
     }
 
-    // ARC-COMBAT-1929 (0x45F9D0): the hero's melee strike with a wielded weapon of art subtype 2 on an NPC facing away adds its backstab
-    // level to the normal damage (five times it unseen and unheard); the host's facts decide, and none means no backstab.
     [TestMethod]
     public void TheHeroStrikesAnOccupantPulledOutOfABedWithMinus30()
     {
@@ -379,10 +377,14 @@ public sealed class AttackStateTests
         var plain = owner.AttackCritter(owner.Version, new(rat));
 
         Assert.AreEqual(GameSessionFailure.None, inBed.Failure);
+        Assert.AreEqual(GameSessionFailure.None, plain.Failure);
+        Assert.IsNotNull(plain.Resolution);
         Assert.AreEqual(-30, inBed.Resolution?.Difficulty?.Invocation, "the bed's modifier");
-        Assert.AreEqual(0, plain.Resolution?.Difficulty?.Invocation ?? 0, "an ordinary blow carries none");
+        Assert.AreEqual(0, plain.Resolution!.Difficulty?.Invocation ?? 0, "an ordinary blow carries none");
     }
 
+    // ARC-COMBAT-1929 (0x45F9D0): the hero's melee strike with a wielded weapon of art subtype 2 on an NPC facing away adds its backstab
+    // level to the normal damage (five times it unseen and unheard); the host's facts decide, and none means no backstab.
     [TestMethod]
     public void TheHeroStrikesFromBehindWithADaggerAndAddsItsBackstabLevel()
     {
