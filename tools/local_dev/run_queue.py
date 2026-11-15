@@ -456,7 +456,7 @@ def tickets(prune: bool = True) -> list[tuple[Path, dict[str, Any]]]:
         for path in base.glob(".new-*"):
             if not _locked(path):
                 _unlink(path)
-        for pattern in (".counter-*", ".history-*", ".settings-*"):  # left by a process interrupted mid-replace
+        for pattern in (".counter-*", ".history-*", ".settings-*", ".playing-*"):  # left by a process interrupted mid-replace (a killed --playing leaves its holder looping on its file: removing it ends the holder)
             for path in base.glob(pattern):
                 try:
                     if now - path.stat().st_mtime > 60:
@@ -678,7 +678,7 @@ def blocker(mine: dict[str, Any], live: Sequence[dict[str, Any]]) -> dict[str, A
             return ticket
     for ticket in others:
         if ticket["kind"] == "export" and not ticket.get("startedAt"):
-            waits_for = blocker(ticket, live)
+            waits_for = blocker(ticket, [*live, *([playing] if playing is not None else [])])  # the mode still holds the windows ahead of it
             # draining: the export waits for nothing, or only for a side run that is already running (a quick run of its
             # own checkout that is still queued is not that: it would wait for the export in turn)
             if waits_for is None or (waits_for["kind"] in SIDE_KINDS and waits_for.get("startedAt")):

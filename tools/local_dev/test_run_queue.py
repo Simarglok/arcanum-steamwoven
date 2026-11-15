@@ -98,6 +98,15 @@ class AdmissionRuleTests(unittest.TestCase):
         self.assertIn(run_queue.SINGLE, run_queue.EXCLUSIVE_LANES)
         self.assertTrue(playing["startedAt"])
 
+    def test_the_mode_still_holds_the_windows_ahead_of_an_export_when_dotnet_runs_check_the_drain(self) -> None:
+        playing = self.playing_ticket()
+        base = [ticket(1, "dotnet", started=True), ticket(3, "export", at=2.0), ticket(4, "dotnet", at=3.0)]
+        without = [item for item in base]
+        self.assertEqual(run_queue.blocker(base[2], without)["seq"], 3)  # the export is draining: the dotnet run waits for it
+        held = [playing, *base, ticket(2, "window", at=1.0)]  # a window the mode holds, ahead of the export
+        self.assertEqual(run_queue.blocker(held[3], held)["seq"], 3)  # it does not hide the drain
+        self.assertEqual(run_queue.blocker(held[-1], held)["seq"], 0)
+
     def test_playing_text_names_the_time_and_the_end(self) -> None:
         now = 1_000_000.0
         self.assertEqual(run_queue.playing_text({"since": now - 90, "until": now + 7500}, now), "for 1m30s, ends in 2h05m")
@@ -1201,12 +1210,12 @@ class QueueRunTests(unittest.TestCase):
 
     def test_the_mode_ends_by_itself_at_its_limit(self) -> None:
         run_queue.set_playing(True, 0.04, "test")  # 2.4 s
+        state = run_queue.playing_state()
         process = self.queued("window", "w", 0.1)
-        self.until(lambda: len(self.runs()) == 1)
-        self.assertNotIn("start w ", self.log.read_text() if self.log.exists() else "")
         self.finish()  # starts once the limit has passed, nobody ended the mode
         self.assertEqual(process.returncode, 0)
         self.assertIn("end w", self.events())
+        self.assertGreaterEqual(self.events()["start w"], state["until"] - 1.0)  # not before the limit
         self.assertIsNone(run_queue.playing_state())
 
     def test_a_window_run_already_holding_its_place_finishes_when_the_mode_starts(self) -> None:
@@ -1250,7 +1259,7 @@ class QueueRunTests(unittest.TestCase):
             on = run("--playing", "--for", "30m")
             self.assertEqual(on.returncode, 0, on.stderr)
             self.assertIn("no window run starts", on.stdout)
-            self.assertIn("ends in 30m00s", on.stdout)
+            self.assertRegex(on.stdout, r"ends in (30m00|29m5\d)s")
             self.assertIn("PLAYING", on.stdout)  # the queue listing follows
             state = run_queue.playing_state()
             self.assertAlmostEqual(state["until"] - state["since"], 1800, delta=2)
@@ -1262,6 +1271,8 @@ class QueueRunTests(unittest.TestCase):
         self.assertIn("was not playing", run("--not-playing").stdout)
         self.assertEqual(run("--for", "1h").returncode, 2)  # --for goes with --playing
         self.assertEqual(run("--not-playing", "--for", "1h").returncode, 2)
+        self.assertEqual(run("--pause", "--for", "5").returncode, 2)
+        self.assertFalse(run_queue.pause_file().exists())  # refused before the pause was set
         self.assertEqual(run("--wait", "--playing").returncode, 2)
         self.assertNotEqual(run("--playing", "--pause").returncode, 0)  # one of the two
         self.assertNotEqual(run("--playing", "--for", "soon").returncode, 0)

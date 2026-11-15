@@ -317,6 +317,9 @@ def queue(args: argparse.Namespace) -> int:
         except (OSError, ValueError) as error:
             print(f"arcanum queue: {error}", file=sys.stderr)
             return 1
+    if args.for_minutes is not None and not args.playing:  # ARC-DEV-2272: refused before any state changes
+        print("arcanum queue: --for goes with --playing", file=sys.stderr)
+        return 2
     if args.pause or args.resume:  # ARC-DEV-1344: the same flag the menu-bar app sets
         try:
             changed = run_queue.set_paused(args.pause)
@@ -325,9 +328,6 @@ def queue(args: argparse.Namespace) -> int:
             return 1
         print(("paused" if args.pause else "resumed") if changed else ("already paused" if args.pause else "was not paused"))
     if args.playing or args.not_playing:  # ARC-DEV-2272: no window run starts while the owner plays
-        if args.for_minutes is not None and not args.playing:
-            print("arcanum queue: --for goes with --playing", file=sys.stderr)
-            return 2
         try:
             changed = run_queue.set_playing(args.playing, run_queue.DEFAULT_PLAYING_MINUTES if args.for_minutes is None
                                             else args.for_minutes)
@@ -341,9 +341,6 @@ def queue(args: argparse.Namespace) -> int:
                   "./arcanum queue --not-playing ends it")
         else:
             print("not playing: window runs start again" if changed else "was not playing")
-    elif args.for_minutes is not None:
-        print("arcanum queue: --for goes with --playing", file=sys.stderr)
-        return 2
     if args.app:  # ARC-DEV-1344: start the menu-bar app now (builds it first when needed), (the build is foreground)
         target, why = menubar.build()
         if target is None:

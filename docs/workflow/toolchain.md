@@ -531,7 +531,7 @@ is that **no window run starts while the owner plays**; the pause stops everythi
     ./arcanum queue --not-playing          # off at once: the waiting window runs start in their order
 
 The menu-bar app has the same switch (`Owner is playing`, icon `gamecontroller` while on). The command prints the state and the time
-left and `./arcanum queue` then starts with a `PLAYING` line; the switch takes effect at once, the next poll (a second) of every waiter.
+left and `./arcanum queue` then starts with a `PLAYING` line; the switch takes effect at the next poll (a quarter of a second) of every waiter.
 
 - **Held:** every ordinary `window` run: smoke stages (`./arcanum smoke`, `smoke pr`, `smoke complete`), labs, an ad-hoc
   `./arcanum run --kind window`, and the rolling `main-smoke` steps. A waiter says
@@ -539,7 +539,7 @@ left and `./arcanum queue` then starts with a `PLAYING` line; the switch takes e
   `./arcanum queue` shows `waiting ... (owner playing)`, and a smoke prints `SMOKE waiting: owner is playing (...)` before the step.
 - **Not held:** `headless`, `quick`, `dotnet` and `export` runs (so builds, tests, imports and the headless self-test of every thread go
   on), the owner's own launches (`./arcanum area|world|map`, `package`: the front of the queue) and a run that already holds its
-  window or a nested run inside it (it finishes; the mode does not stop a window that is open). A held window run is not counted as
+  window or a nested run inside it (it finishes; the mode does not stop a window that is open; a nested window inside a `headless` run is not held either). A held window run is not counted as
   waiting for a Godot place, so the runs queued behind it are not held by it.
 - **`daily` and `main-smoke`** do not wait for hours: they print `SKIP owner is playing`, exit 0 and **record nothing** (no package, no
   green or red, `--force` does not override it), so the commit is picked up by the next run after the mode ended and no skipped run
