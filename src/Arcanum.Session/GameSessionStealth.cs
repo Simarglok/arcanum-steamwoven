@@ -150,13 +150,19 @@ public sealed partial class GameSessionOwner
         return new(StealthRules.Margin(effectiveness, difficulty.Total), effectiveness, difficulty);
     }
 
-    // A dialog's start (0x567460, ST4): the hero and the NPC it talks to are no longer concealed; true when that changed anything.
+    // A dialog's start (0x567460 at 0x567784..0x5677BC, ST4): each side is gated by its own flag (0x45EDE0) and then runs 0x45EE30 with 0 on the object and its recursive follower list
+    // (0x441260, followers of followers included, no filter): a concealed hero stands up with its whole follower tree, a concealed talk partner with its own; the sides are independent
+    // (a partner outside the party counts), and a hero that is not concealed leaves its concealed followers alone (ARC-SKILLS-2142). True when that changed anything.
     [OriginalFunction(0x567460, OriginalFunctionScope.Partial)]
     private bool EndConcealmentForDialog(string entity)
     {
         var changed = _combat.HeroConcealed || _combat.Concealed.Contains(entity);
-        _combat.HeroConcealed = false;
-        // 0x45EE30 with 0 on the talk partner reaches its own followers too (ARC-WORLD-2118).
+        if (_combat.HeroConcealed)
+        {
+            _combat.HeroConcealed = false;
+            foreach (var follower in FollowerTreeOf(SessionEventKinds.PlayerEntity)) _combat.Concealed.Remove(follower);
+        }
+        // The partner's own flag is tested after the hero's clear (0x5677AF): a partner in the hero's tree is already up.
         if (_combat.Concealed.Contains(entity)) SetConcealment(entity, false);
         return changed;
     }
