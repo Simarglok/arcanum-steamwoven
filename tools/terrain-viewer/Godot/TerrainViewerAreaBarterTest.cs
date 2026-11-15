@@ -189,7 +189,7 @@ public partial class TerrainViewerApp
     /// <summary>
     /// ARC-UI-1740 over the synthetic art set: a gambler hero (intelligence 20, 5 Gambling points) against a merchant of level 0 that gambles. A ware carried
     /// over the bet box asks the gate once (art 344, the confirm line with the price), moving out sets 345, and a ware released on the box is bet: the item
-    /// moves to the hero's grid, a win for nothing and a loss for the price (the capped effectiveness is 95, so either can come), with the trade sound and the
+    /// moves to the hero's grid on a win (for nothing) and stays with the merchant on a loss (the price is paid) (the capped effectiveness is 95, so either can come), with the trade sound and the
     /// won or lost line; the hero's own item carried over the box shows the refused art and goes back.
     /// </summary>
     private async Task<string> AreaBarterGambleForSelfTestAsync(GameSessionOwner owner, Func<GameSessionOwner, AreaBarter> model)
@@ -248,8 +248,10 @@ public partial class TerrainViewerApp
             var (gold, sounds) = (owner.QueryGold(), _barterSounds.Count);
             area.ReleaseAt(box);
             await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
-            Require(area.Held is null && panel.ArtView!.Grid.Any(item => item.Entity == "axe") && !panel.ArtView.LootGrid.Any(item => item.Entity == "axe"), "the bet moved the axe to the hero's grid");
             var won = owner.QueryGold() == gold;
+            // ARC-UI-2215: a win moves the axe to the hero's grid; a loss pays and leaves it with the merchant (0x578EA0 skips the move block under flag 0x10).
+            Require(area.Held is null && won == panel.ArtView!.Grid.Any(item => item.Entity == "axe") && won != panel.ArtView.LootGrid.Any(item => item.Entity == "axe"),
+                won ? "the won bet moved the axe to the hero's grid" : "the lost bet left the axe in the merchant's grid");
             Require(won || owner.QueryGold() == gold - price, $"a win costs nothing and a loss {price}: {gold} to {owner.QueryGold()}");
             Require(_barterSounds.Count == sounds + 1 && owner.QueryGamblingRoll() is >= 1 and <= 100, "the trade sound was asked and the next roll is thrown");
             Require(area.BarterFrame!.Quote == (won ? "line0" : $"line1 {price}"), "the won or lost line is on the quote line: " + area.BarterFrame.Quote);
@@ -1034,14 +1036,14 @@ public partial class TerrainViewerApp
             Require(sold.Moved && copy.QueryGold() == gold + sold.Total, "the sale moved the item and paid at most the merchant's coins: " + sold.Text);
             var ware = model.View().Wares.FirstOrDefault(line => line.Quote.Price > 0 && (long)line.Quote.Price * line.Count <= copy.QueryGold());
             var bought = ware is null ? "none affordable" : model.Buy(ware.Entity) is var trade && trade.Moved ? trade.Text : "refused: " + trade.Text;
-            // ARC-UI-1740: a bet on the copy when its gate lets one ware through (the hero's Gambling decides): the item moves in one revision, a win for
-            // nothing and a loss for the quote, and the next roll was thrown.
+            // ARC-UI-1740: a bet on the copy when its gate lets one ware through (the hero's Gambling decides): a win moves the item for nothing, a loss only pays
+            // the quote (ARC-UI-2215), in one revision, and the next roll was thrown.
             var betText = "no ware passed the gate";
             if (model.View().Wares.FirstOrDefault(line => model.CheckGamble(line.Entity).Allowed) is { } stake)
             {
                 var price = stake.Quote.Price; var goldBefore = copy.QueryGold(); var rollBefore = copy.QueryGamblingRoll();
                 var bet = model.Gamble(stake.Entity);
-                Require(bet.Settled && copy.QueryPcInventory().Any(item => item.Entity == stake.Entity), "the bet moved the ware to the hero: " + bet.Text);
+                Require(bet.Settled && copy.QueryPcInventory().Any(item => item.Entity == stake.Entity) == bet.Won, "a win moved the ware to the hero, a loss left it with the merchant (ARC-UI-2215): " + bet.Text);
                 Require(copy.QueryGold() == goldBefore - bet.Paid && bet.Paid == (bet.Won ? 0 : price * stake.Count), "a win costs nothing and a loss the quote");
                 Require(copy.QueryGamblingRoll() == bet.Bet!.Check!.NextGamblingRoll && rollBefore is not null, "the check's draw is the next saved roll");
                 betText = $"{(bet.Won ? "won" : "lost")} {stake.Text} (roll {bet.Bet.Check.Check.Roll} against {bet.Bet.Check.Check.Effectiveness}, paid {bet.Paid}, reaction {bet.ReactionChange})";

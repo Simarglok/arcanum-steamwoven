@@ -93,7 +93,7 @@ public sealed class AreaBarterGambleTests
     }
 
     [TestMethod]
-    public void A_bet_wins_for_nothing_and_the_merchant_loses_reaction_or_loses_and_the_hero_pays()
+    public void A_bet_wins_for_nothing_and_the_merchant_loses_reaction_or_loses_and_the_hero_pays_without_the_item()
     {
         // A seed whose first roll is at most 90 wins against the capped 95; one of 96 or more loses.
         var (won, lost) = (false, false);
@@ -109,10 +109,10 @@ public sealed class AreaBarterGambleTests
             var result = barter.Gamble("axe");
             Assert.IsTrue(result.Settled, result.Text);
             Assert.AreEqual(roll, result.Bet!.Check!.Check.Roll, "the saved roll decides");
-            Assert.IsTrue(session.QueryPcInventory().Any(item => item.Entity == "axe"));
             if (roll <= 90)
             {
                 won = true;
+                Assert.IsTrue(session.QueryPcInventory().Any(item => item.Entity == "axe"));
                 Assert.AreEqual((true, 0, 1000, 100, "line0"), (result.Won, result.Paid, session.QueryGold(), session.QueryNpcGold("merchant"), result.Text));
                 var expected = GamblingRules.WonReaction(worth, 1, ReactionRules.Category(50));
                 Assert.AreEqual((expected, expected < 0), (result.ReactionChange, true));
@@ -122,6 +122,10 @@ public sealed class AreaBarterGambleTests
             {
                 lost = true;
                 Assert.AreEqual((false, 720, 280, 820, "line1 720"), (result.Won, result.Paid, session.QueryGold(), session.QueryNpcGold("merchant"), result.Text));
+                // ARC-UI-2215 (0x578EA0 skips the move block under flag 0x10): the loss pays and the axe stays with the merchant.
+                Assert.IsFalse(session.QueryPcInventory().Any(item => item.Entity == "axe"), "a lost bet takes no item");
+                CollectionAssert.AreEqual(new[] { "axe" }, barter.View().Wares.Select(ware => ware.Entity).ToArray(), "the axe is still the merchant's ware");
+                CollectionAssert.Contains(session.QueryHolderItems("merchant")!.Select(item => item.Entity).ToArray(), "axe");
                 CollectionAssert.AreEqual(Array.Empty<int>(), changes, "a neutral merchant's reaction does not move on a paid loss");
             }
             Assert.AreEqual(result.Bet.Check.NextGamblingRoll, session.QueryGamblingRoll(), "a new roll was thrown for the next bet");
@@ -176,6 +180,7 @@ public sealed class AreaBarterGambleTests
             {
                 lost = true;
                 Assert.AreEqual((false, 720, 280, 820, "line1 720"), (result.Won, result.Paid, session.QueryGold(), session.QueryNpcGold("merchant"), result.Text), "a lost bet charges the real quote");
+                Assert.IsFalse(session.QueryPcInventory().Any(item => item.Entity == "axe"), "and takes no item (ARC-UI-2215)");
                 CollectionAssert.AreEqual(Array.Empty<int>(), changes);
             }
         }
@@ -213,7 +218,7 @@ public sealed class AreaBarterGambleTests
     }
 
     [TestMethod]
-    public void A_bet_on_a_worn_merchant_item_takes_it_off_the_slot_to_the_hero_for_nothing_won_or_lost()
+    public void A_won_bet_on_a_worn_merchant_item_takes_it_off_the_slot_and_a_lost_one_leaves_it()
     {
         var (won, lost) = (false, false);
         for (ulong seed = 0; seed < 600 && !(won && lost); seed++)
@@ -228,12 +233,12 @@ public sealed class AreaBarterGambleTests
             var result = barter.Gamble("vest");
             Assert.IsTrue(result.Settled, result.Text);
             Assert.AreEqual(roll, result.Bet!.Check!.Check.Roll, "the saved roll decides");
-            Assert.IsTrue(session.QueryPcInventory().Any(item => item.Entity == "vest"), "it went to the hero's pack");
-            Assert.AreEqual(0, barter.View().WornWares.Count, "it left the merchant's slot");
             Assert.AreEqual((1000, 100, 0), (session.QueryGold(), session.QueryNpcGold("merchant"), result.Paid), "no coin moves: the quote is 0");
             if (roll <= 90)
             {
                 won = true;
+                Assert.IsTrue(session.QueryPcInventory().Any(item => item.Entity == "vest"), "it went to the hero's pack");
+                Assert.AreEqual(0, barter.View().WornWares.Count, "it left the merchant's slot");
                 var expected = GamblingRules.WonReaction(worth, 1, ReactionRules.Category(50));
                 Assert.AreEqual((true, "line0", expected), (result.Won, result.Text, result.ReactionChange), "the reaction takes the base worth, not the quote");
                 CollectionAssert.AreEqual(new[] { expected }, changes);
@@ -242,6 +247,8 @@ public sealed class AreaBarterGambleTests
             {
                 lost = true;
                 Assert.AreEqual((false, "line1 0"), (result.Won, result.Text));
+                Assert.IsFalse(session.QueryPcInventory().Any(item => item.Entity == "vest"), "a lost bet takes no item (ARC-UI-2215)");
+                Assert.AreEqual(1, barter.View().WornWares.Count, "the vest stays on the merchant's slot");
                 CollectionAssert.AreEqual(Array.Empty<int>(), changes);
             }
         }
@@ -249,7 +256,7 @@ public sealed class AreaBarterGambleTests
     }
 
     [TestMethod]
-    public void A_lost_bet_on_a_worn_item_costs_a_master_of_haggle_its_buy_price()
+    public void A_lost_bet_on_a_worn_item_costs_a_master_of_haggle_its_buy_price_and_leaves_it_worn()
     {
         for (ulong seed = 0; seed < 600; seed++)
         {
@@ -262,9 +269,9 @@ public sealed class AreaBarterGambleTests
             var result = barter.Gamble("vest");
             Assert.IsTrue(result.Settled, result.Text);
             Assert.AreEqual((false, price, 1000 - price, 100 + price, $"line1 {price}"), (result.Won, result.Paid, session.QueryGold(), session.QueryNpcGold("merchant"), result.Text));
-            Assert.IsTrue(session.QueryPcInventory().Any(item => item.Entity == "vest"));
-            Assert.AreEqual(0, barter.View().WornWares.Count);
-            Assert.IsFalse(session.QueryNpcWorn("merchant")?.Worn.Any(item => item.Item == "vest") ?? false, "the merchant's worn record let it go");
+            Assert.IsFalse(session.QueryPcInventory().Any(item => item.Entity == "vest"), "the loss takes no item (ARC-UI-2215)");
+            Assert.AreEqual(1, barter.View().WornWares.Count);
+            Assert.IsTrue(session.QueryNpcWorn("merchant")?.Worn.Any(item => item.Item == "vest") ?? false, "the merchant's worn record keeps it");
             return;
         }
         Assert.Fail("no losing seed found");

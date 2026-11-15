@@ -7,16 +7,16 @@ namespace Arcanum.Session;
 
 /// <summary>
 /// A bet's inputs (ARC-UI-1740): the merchant's NPC, its Gambling level (the opposed value of the check), the merchant's item, the units that
-/// move (a stack's all) and the unit price the hero pays for it on a loss (the barter quote), the kinds a new stack and a new coin pile take, and
+/// move on a win (a stack's all; a loss moves none) and the unit price the hero pays on a loss (the barter quote), the kinds a new stack and a new coin pile take, and
 /// the merchant's substitute container when the shown list is its. ARC-UI-2139: with <paramref name="WornItem"/> the item is one the merchant wears (the doll view's
-/// lifted item): the move takes it off its slot (<see cref="GameSessionOwner.BarterBuy"/>'s worn move, over <paramref name="NpcWearer"/>), no container.
+/// lifted item): a win's move takes it off its slot (<see cref="GameSessionOwner.BarterBuy"/>'s worn move, over <paramref name="NpcWearer"/>), no container.
 /// </summary>
 public sealed record SessionGambleBet(string Npc, int MerchantLevel, string Item, int Count, int UnitPrice, SessionItemKind NewStackKind,
     SessionItemKind PileKind, string? Container = null, bool WornItem = false, SessionNpcWieldScripts? NpcWearer = null);
 
 /// <summary>
-/// One bet's outcome: the disposition and failure, the skill check (null when refused before it ran), whether the hero won, the item's move (the
-/// barter buy at price 0 on a win, at the price on a loss), the coins the hero paid in all (0 on a win), whether the hero's gambling fate point was
+/// One bet's outcome: the disposition and failure, the skill check (null when refused before it ran), whether the hero won, the move
+/// (the barter buy at price 0 on a win; on a loss only the payment, the item stays with the merchant, ARC-UI-2215), the coins the hero paid in all (0 on a win), whether the hero's gambling fate point was
 /// used, and the version after the call.
 /// </summary>
 public sealed record SessionGambleResult(GameSessionDisposition Disposition, GameSessionFailure Failure, SkillCheckResult? Check, bool Won,
@@ -58,14 +58,14 @@ public sealed partial class GameSessionOwner
     /// ARC-UI-1740 (0x579B60, ledger BT6): the hero bets the merchant's item. In order: the Gambling check of the hero against the merchant's
     /// Gambling level on the saved roll (<see cref="SkillCheckRules.Run"/>: the roll the check uses is the one saved, the check's own draw replaces
     /// it for the next bet, its critical draw is spent as for any check, an armed gambling fate point makes the check a success and is used); a win
-    /// moves the item to the hero for nothing (the original's flags 9: the barter buy at price 0), a loss for the unit price (flags 0x11: the hero
-    /// pays as for a buy). The reaction of the merchant is the caller's (a win costs it the item's worth, <see cref="GamblingRules.WonReaction"/>;
+    /// moves the item to the hero for nothing (the original's flags 9: the barter buy at price 0), a loss only charges the unit price × count (flags 0x11:
+    /// the move block of 0x578EA0 is skipped, the item stays with the merchant, ARC-UI-2215). The reaction of the merchant is the caller's (a win costs it the item's worth, <see cref="GamblingRules.WonReaction"/>;
     /// a loss is an ordinary buy's, <see cref="Arcanum.Simulation.Items.TradeRules.GiftAmount"/>). The gate (<see cref="GamblingRules.Gate"/>) is the
     /// caller's too. A saved roll that does not exist yet is thrown first (<see cref="EnsureGamblingRoll"/>'s draw, in this call's revision).
-    /// <para>The roll, the draws, the fate and the move are one revision: a move that is refused without changing anything (no room for the item, a script, a budget, the hero's
+    /// <para>The roll, the draws, the fate and the move are one revision: a move or payment that is refused without changing anything (no room for the won item, a script, a budget, the hero's
     /// coins for a lost stack) leaves the saved roll, the generator and the fate as they were, so a refused bet never rerolls. Refused before any
     /// effect: no living hero (<see cref="GameSessionFailure.GamblingUnavailable"/>), a merchant level outside 0..20, the version, and
-    /// <see cref="BarterBuy"/>'s own refusals.</para>
+    /// <see cref="BarterBuy"/>'s own refusals on a win and the payment's on a loss (<c>PayForStakedItem</c>: an item the merchant does not list, too few units, too few coins).</para>
     /// </summary>
     [Arcanum.Simulation.OriginalFunction(0x579B60, Arcanum.Simulation.OriginalFunctionScope.Partial)]
     public SessionGambleResult Gamble(GameSessionVersion expected, SessionGambleBet bet, SessionInsertCheck heroInsert, SessionInsertCheck npcInsert,
@@ -104,8 +104,10 @@ public sealed partial class GameSessionOwner
         InventoryMutationResult move;
         try
         {
-            move = BarterBuy(Version, bet.Npc, bet.Item, bet.Count, won ? 0 : bet.UnitPrice, bet.NewStackKind, bet.PileKind, heroInsert, npcInsert, scripts, bet.Container,
-                wornItem: bet.WornItem, npcWearer: bet.NpcWearer);
+            // ARC-UI-2215: a lost bet (flags 0x11) skips the move block of 0x578EA0 and only pays; the item stays with the merchant.
+            move = won ? BarterBuy(Version, bet.Npc, bet.Item, bet.Count, 0, bet.NewStackKind, bet.PileKind, heroInsert, npcInsert, scripts, bet.Container,
+                wornItem: bet.WornItem, npcWearer: bet.NpcWearer)
+                : PayForStakedItem(bet.Npc, bet.Item, bet.Count, bet.UnitPrice, bet.PileKind, npcInsert, bet.Container);
         }
         catch { PutBack(); throw; }
         if (move.Disposition != GameSessionDisposition.Changed)
