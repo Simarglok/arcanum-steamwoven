@@ -15,22 +15,24 @@ namespace Arcanum.TerrainViewer.Tests;
 [TestClass]
 public sealed class AreaAiBedAttackTests
 {
-    private static readonly CellCoord BedCell = new(61, 14), Attacker = new(61, 13), Sleeper = new(62, 14);
+    private static readonly CellCoord BedCell = new(61, 14), Attacker = new(61, 13), Sleeper = new(62, 14), HeroBeside = new(60, 13);
     private const string Bed = "oid:bed";
 
     private static readonly AreaObjectRecord BedRow = new(new(new string('a', 64), 1, AreaSourceKind.Mobile, 1, 5, 500L, new string('f', 64), 100), 0, 3, 9999, "p", "p", "r", "s", AreaScope.Core, null,
         BedCell.X, BedCell.Y, Arcanum.Data.Area.AreaDisposition.BodyEligibleConditionally, [], [], true, true, true);
 
-    private static (AreaAiHostRebindTests.Fixture F, AreaAiHost Host, AreaBedOccupancy Occupancy, List<string> Struck) Open(Func<AreaBedOccupancy, string?> sleeper, AreaAiObjectFacts? facts = null, bool asleep = true)
+    private static (AreaAiHostRebindTests.Fixture F, AreaAiHost Host, AreaBedOccupancy Occupancy, List<string> Struck) Open(Func<AreaBedOccupancy, string?> sleeper, AreaAiObjectFacts? facts = null, bool asleep = true, CellCoord? heroAt = null)
     {
         var f = AreaAiHostRebindTests.Open();
         var occupancy = new AreaBedOccupancy();
         var struck = new List<string>();
         var target = new AreaObjectAttackTarget(Bed, BedRow, DamageableObjectKind.Scenery,
             new SessionObjectTarget(new SessionMapId(1), Bed, new SessionObjectBaseline { Kind = DamageableObjectKind.Scenery, Points = 6, Material = ObjectMaterial.Cloth, Cell = BedCell }), null, null, null);
-        var scene = f.Scene(0, AreaAiHostRebindTests.Sector(0, 0), [new(f.A, f.RowA, Sleeper), new(f.B, f.RowB, Attacker)])
+        var plain = f.Scene(0, AreaAiHostRebindTests.Sector(0, 0), [new(f.A, f.RowA, Sleeper), new(f.B, f.RowB, Attacker)]);
+        var scene = plain
             with
             {
+                HeroCell = heroAt is { } near ? () => near : plain.HeroCell,
                 ObjectFacts = id => id == Bed ? facts ?? new AreaAiObjectFacts(3, BedCell) : null,
                 ObjectAttackTarget = id => id == Bed ? target : null,
                 ObjectStruck = (_, _, hit, _) => struck.Add(hit!.Entity),
@@ -92,15 +94,38 @@ public sealed class AreaAiBedAttackTests
     }
 
     [TestMethod]
-    public void A_bed_the_hero_rests_in_is_not_redirected_and_is_struck_as_a_scenery()
+    public void A_blow_on_a_bed_the_hero_rests_in_pulls_the_hero_out_and_strikes_him_with_minus_30()
     {
-        var (f, host, occupancy, struck) = Open(_ => AreaScriptHost.PcCode);
+        // ARC-AI-1939 (0x4B3170, 0x45F3A0): the unseat takes a PC out too; the record's target becomes the hero, the check carries -30 and the event names the hero.
+        var (f, host, occupancy, struck) = Open(_ => AreaScriptHost.PcCode, heroAt: HeroBeside);
         using var _ = f;
 
         host.Hit(f.B, Bed);
 
-        CollectionAssert.AreEqual(new[] { Bed }, struck, "NOT READY: the hero's rest window is not an NPC's blow target: " + host.TraceOf(f.B)?.Hit);
-        Assert.AreEqual(AreaScriptHost.PcCode, occupancy.Occupant(BedRow.Key), "the hero's seat is left to the rest window");
+        Assert.IsNull(occupancy.Occupant(BedRow.Key), "the hero's seat is taken out: " + host.TraceOf(f.B)?.Item);
+        Assert.AreEqual(0, struck.Count, "the bed itself took nothing: the record's target is the hero");
+        var notice = host.DrainNotices().FirstOrDefault(n => n.Kind == AreaAiNoticeKind.Hit) ?? throw new AssertFailedException("no hit notice: " + host.TraceOf(f.B)?.Hit);
+        Assert.AreEqual((f.B, AreaScriptHost.PcCode), (notice.Npc, notice.Target), "the hero is the target of the notice");
+        Assert.AreEqual(-30, notice.Result?.Resolution?.Difficulty?.Invocation, "SC16: the check's invocation modifier is -30: " + host.TraceOf(f.B)?.Hit);
+        StringAssert.Contains(host.TraceOf(f.B)?.Item, "hero pulled out");
+    }
+
+    [TestMethod]
+    public void The_next_blow_after_the_hero_was_pulled_out_strikes_the_empty_bed_and_the_windows_close_unseat_changes_nothing()
+    {
+        var (f, host, occupancy, struck) = Open(_ => AreaScriptHost.PcCode, heroAt: HeroBeside);
+        using var _ = f;
+        host.Hit(f.B, Bed);
+        host.DrainNotices();
+
+        host.Hit(f.B, Bed);
+
+        CollectionAssert.AreEqual(new[] { Bed }, struck, "an empty bed is struck as a scenery");
+        // SWB12: the rest window's close unseats the hero from the bed it stored; the bed no longer holds him (the original logs an error and changes nothing).
+        Assert.IsFalse(occupancy.Unseat(BedRow.Key, AreaScriptHost.PcCode));
+        Assert.IsTrue(occupancy.Seat(BedRow.Key, f.A), "a sleeper that took the emptied bed");
+        Assert.IsFalse(occupancy.Unseat(BedRow.Key, AreaScriptHost.PcCode), "the hero's close leaves the new occupant in");
+        Assert.AreEqual(f.A, occupancy.Occupant(BedRow.Key));
     }
 
     [TestMethod]
