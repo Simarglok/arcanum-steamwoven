@@ -110,9 +110,23 @@ public static class AreaCompanionPlacement
     public static MapChangeEdit Edit(AreaCompanionTemplate template, SessionMapId map, CellCoord world, NeighborDirection facing)
     {
         ArgumentNullException.ThrowIfNull(template);
-        return map == template.Home && world == template.HomeWorld && facing == NeighborDirection.XPlus
-            ? new(map, Key(template.Entity), null)
-            : new(map, Key(template.Entity), Encode(world, facing));
+        return Edit(template.Entity, template.Home, template.HomeWorld, map, world, facing);
+    }
+
+    /// <summary>ARC-WORLD-2161: <see cref="Edit(AreaCompanionTemplate, SessionMapId, CellCoord, NeighborDirection)"/> for an NPC known by its entity, its home map and its stored cell there (no body template).</summary>
+    public static MapChangeEdit Edit(string entity, SessionMapId home, CellCoord homeWorld, SessionMapId map, CellCoord world, NeighborDirection facing)
+    {
+        ArgumentNullException.ThrowIfNull(entity);
+        return map == home && world == homeWorld && facing == NeighborDirection.XPlus
+            ? new(map, Key(entity), null)
+            : new(map, Key(entity), Encode(world, facing));
+    }
+
+    /// <summary>ARC-WORLD-2161: <see cref="Edits(AreaCompanionTemplate, SessionMapId, CellCoord, NeighborDirection)"/> for an NPC known by its entity, its home map and its stored cell there.</summary>
+    public static IReadOnlyList<MapChangeEdit> Edits(string entity, SessionMapId home, CellCoord homeWorld, SessionMapId map, CellCoord world, NeighborDirection facing)
+    {
+        var edit = Edit(entity, home, homeWorld, map, world, facing);
+        return [edit, new(home, HomeKey(entity), edit.Value is null ? null : Encode(homeWorld, NeighborDirection.XPlus))];
     }
 }
 
@@ -611,14 +625,28 @@ public sealed class AreaCompanionGroup
                 new(destination, AreaCompanionPlacement.Key(template.Entity), AreaCompanionPlacement.Encode(arrival, facing)),
                 new(destination, SessionTeleportedMark.Key(template.Entity), SessionNpcPlacement.Fits(arrival, facing) ? SessionNpcPlacement.Encode(arrival, facing) : null),
             ];
-        return
-        [
-            new(from, AreaCompanionPlacement.Key(template.Entity), null),
-            .. AreaCompanionPlacement.Edits(template, destination, arrival, facing),
-            new(template.Home, AreaCompanionPlacement.MapKey(template.Entity), destination == template.Home ? null : destination.RuntimeMap),
-            new(destination, SessionTeleportedMark.Key(template.Entity), SessionNpcPlacement.Fits(arrival, facing) ? SessionNpcPlacement.Encode(arrival, facing) : null),
-        ];
+        return Arrive(template.Entity, template.Home, template.HomeWorld, from, destination, arrival, facing);
     }
+
+    /// <summary>
+    /// ARC-WORLD-2161: <see cref="Arrive(AreaCompanionTemplate, SessionMapId, SessionMapId, CellCoord, NeighborDirection)"/> for a follower with no body here (one the scene does not draw, or whose follow facts do not read): the original's
+    /// move list carries the whole object, so the session's placement edits stand it on the destination all the same; the body is read from its home map when that map shows it (a visitor).
+    /// </summary>
+    public static IReadOnlyList<MapChangeEdit> Arrive(AreaBodylessFollower follower, SessionMapId from, SessionMapId destination, CellCoord arrival, NeighborDirection facing)
+    {
+        ArgumentNullException.ThrowIfNull(follower);
+        return from == destination
+            ? AreaCompanionPlacement.Edits(follower.Entity, follower.Home, follower.HomeWorld, destination, arrival, facing)
+            : Arrive(follower.Entity, follower.Home, follower.HomeWorld, from, destination, arrival, facing);
+    }
+
+    private static IReadOnlyList<MapChangeEdit> Arrive(string entity, SessionMapId home, CellCoord homeWorld, SessionMapId from, SessionMapId destination, CellCoord arrival, NeighborDirection facing) =>
+    [
+        new(from, AreaCompanionPlacement.Key(entity), null),
+        .. AreaCompanionPlacement.Edits(entity, home, homeWorld, destination, arrival, facing),
+        new(home, AreaCompanionPlacement.MapKey(entity), destination == home ? null : destination.RuntimeMap),
+        new(destination, SessionTeleportedMark.Key(entity), SessionNpcPlacement.Fits(arrival, facing) ? SessionNpcPlacement.Encode(arrival, facing) : null),
+    ];
 
     /// <summary>The companions the session party says follow the PC, with the facing each stands with now.</summary>
     public IReadOnlyList<(AreaCompanionTemplate Template, NeighborDirection Facing)> Following(GameSessionOwner session)
