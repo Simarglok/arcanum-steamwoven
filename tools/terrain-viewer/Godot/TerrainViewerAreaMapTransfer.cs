@@ -326,6 +326,8 @@ public partial class TerrainViewerApp
             BlessingEffects = BlessingEffectOf,
             // ARC-SCRIPT-1164 (E5-b): a script's create item enters the holder's list under the inventory host's insert check.
             InsertCheck = inventory?.InsertCheck,
+            // ARC-MAGIC-1823: a script's transfer item from the hero runs the item's wield-off, remove-item and insert-item scripts (the hero's give does).
+            ItemScripts = inventory?.ItemScripts(owner),
         };
         // ARC-WORLD-110: a use meets the object's trap first; the walk and the steps meet the same host's traps.
         _areaTraps = new AreaTraps(owner, host, snapshot.Objects, world.Gone, AreaTrapEffectsNow, AreaRowLightLevel);
