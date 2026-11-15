@@ -2616,8 +2616,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     /// <summary>
     /// ARC-AI-1756 (VB2-2 gap d; 0x4B3170, SC16): the attack record's first step. A target of type 3 (scenery) whose occupant field 0x46 is set is replaced by that occupant, in both target slots, and the occupant leaves
     /// the object through the unseat 0x45F3A0 (the sleeper's flags, its latch and the bed's occupied frame, <see cref="Unseat"/>); the attack is then the attack on the occupant, its check carrying the invocation modifier -30
-    /// (<see cref="AttackRequest.TargetWasInBed"/>) and its event naming the occupant. Only a bed holds an occupant. Returns the occupant, or null for any other target. NOT READY: a bed the hero rests in (its occupant is the hero,
-    /// who is woken by the rest window, not by an NPC's blow here) is struck as a scenery.
+    /// (<see cref="AttackRequest.TargetWasInBed"/>) and its event naming the occupant. Only a bed holds an occupant. Returns the occupant, or null for any other target. ARC-AI-1939: a bed the hero rests in gives the hero
+    /// (the occupancy's seat is taken out, the rest window stays open as in the original).
     /// </summary>
     private string? OccupantInPlaceOf(string attacker, string target)
     {
@@ -2625,7 +2625,18 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
             || _scene.ObjectAttackTarget?.Invoke(target) is not { } info) return null;
         // The host's first bed question syncs the shared occupancy with the NPCs' saved sleeping state (a load), so the occupant is read after it.
         ReconcileBeds(beds);
-        if (beds.Occupancy.Occupant(info.Row.Key) is not { } occupant || !TryNpc(occupant, out _)) return null;
+        if (beds.Occupancy.Occupant(info.Row.Key) is not { } occupant) return null;
+        // ARC-AI-1939 (0x45F3A0 takes a PC out too; only its NPC flag-0x200 write is NPC-only): the hero's seat is the occupancy's own (the rest window put it there); nothing else of the hero is written here (the window gives
+        // him neither the sleeping flag nor the don't-draw flag, sleep-window-runtime.md). The window stays open: nothing in it or its step reads the seat or a blow (SWB13), and its close's own unseat of the empty bed only
+        // logs an error in the original and refuses here (SWB12).
+        if (occupant == Pc)
+        {
+            if (!beds.Occupancy.Unseat(info.Row.Key, Pc)) return null;
+            var heroTrace = Trace(attacker);
+            heroTrace.Item = (heroTrace.Item is { Length: > 0 } before ? before + "; " : "") + $"attack on bed {target}: the hero pulled out of the bed, the rest window stays open";
+            return Pc;
+        }
+        if (!TryNpc(occupant, out _)) return null;
         var text = Unseat(occupant, beds, info.Row.Key);
         if (text == "unseat refused") return null;
         var trace = Trace(attacker);
