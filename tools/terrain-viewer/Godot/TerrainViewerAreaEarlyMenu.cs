@@ -10,7 +10,7 @@ namespace Arcanum.TerrainViewer;
 // differs is that no scene exists yet, so
 //  - a button that opens a window the menu itself draws works at once (the single player and new game windows, the pre-made hero
 //    browser, the options window, Exit);
-//  - a choice that needs the scene (Start in the browser, New Character) is held: the menu shows that it
+//  - a choice that needs the scene (Start in the browser, Accept in the New Character window) is held: the menu shows that it
 //    waits, takes no other input except Escape or Back, which take the choice back, and runs the choice when the scene is published;
 //  - when the scene is published the menu attaches to it as the one that opened over a ready scene does (the new game answer from
 //    the scene, the menu's soundtrack), and a held choice runs.
@@ -49,11 +49,13 @@ public partial class TerrainViewerApp
         public string? Refusal { get; set; }
     }
 
-    /// <summary>The choices that need the scene: the start of a new game (as a hero or as the new character), the new character
-    /// window (its draft session and the shop map need the scene's recipe) and the two loads of a save.</summary>
-    /// <remarks>ARC-DEV-387: in the lazy start the two loads of a save are not among them (they need no start map).</remarks>
+    /// <summary>The choices that need the scene: the start of a new game (as a hero or as the new character), the character editor
+    /// (its draft session needs the scene's new-game recipe) and the two loads of a save.</summary>
+    /// <remarks>ARC-DEV-387: in the lazy start the two loads of a save are not among them (they need no start map).
+    /// ARC-UI-2282: the New Character window itself is not among them: it needs only the generic hero read from the module (and starts the
+    /// shop map's own load), so it opens at once, as in the original; its Accept (the editor) is the first step that waits for the scene.</remarks>
     private bool DefersUntilScene(AreaMenuCommandKind kind)
-        => kind is AreaMenuCommandKind.StartNewGame or AreaMenuCommandKind.OpenNewCharacter
+        => kind is AreaMenuCommandKind.StartNewGame or AreaMenuCommandKind.OpenCharacterEditor
             || (!_startLoadLazy && kind is AreaMenuCommandKind.LoadGame or AreaMenuCommandKind.LastSave);
 
     /// <summary>ARC-DEV-387: whether this start leaves the start map unloaded until the player needs it: the menu in map mode, in a
@@ -138,8 +140,10 @@ public partial class TerrainViewerApp
         var refusal = NewGameRefusal();
         menu.NewGameRefusal = refusal;
         // A scene that is not a start scene a new game can use: the browser the player sits in cannot start, so the window goes back.
-        if (refusal is not null) while (menu.Window == AreaMenuWindow.PickCharacter && menu.Back()) { }
-        var needsNewGame = held?.Kind is AreaMenuCommandKind.StartNewGame or AreaMenuCommandKind.OpenNewCharacter;
+        // ARC-UI-2282: the New Character window can be open at the attach too (it needs no scene): it goes back as the browser does.
+        var creating = menu.Window == AreaMenuWindow.NewCharacter;
+        if (refusal is not null) while (menu.Window is AreaMenuWindow.PickCharacter or AreaMenuWindow.NewCharacter && menu.Back()) { }
+        var needsNewGame = creating || held?.Kind is AreaMenuCommandKind.StartNewGame or AreaMenuCommandKind.OpenCharacterEditor;
         // Only the hold's own note (or a refusal) is replaced: a note an option change left (the HD pack source's) stays.
         if (refusal is not null && needsNewGame) menu.Notice = "new game refused: " + refusal;
         else if (held is not null) menu.Notice = null;
@@ -151,7 +155,9 @@ public partial class TerrainViewerApp
         // ARC-DEV-387: the load window may be open over the hidden menu (the start map loaded while a save was being chosen): the menu comes back with it.
         if (!SaveListOpen) RenderMainMenu();
         RefreshReadyStatus();
-        if (held is { } command && !(needsNewGame && refusal is not null)) MainMenuCommand(() => command);
+        // A held Accept runs only while its window still stands (the editor opens from the New Character window alone).
+        if (held is { } command && !(needsNewGame && refusal is not null)
+            && !(command.Kind == AreaMenuCommandKind.OpenCharacterEditor && (menu.Window != AreaMenuWindow.NewCharacter || menu.Creation is null))) MainMenuCommand(() => command);
     }
 
     /// <summary>ARC-DEV-387: a save chosen in the menu (Last Save, a row of the load window) while no scene stands: the save is read for
@@ -250,7 +256,8 @@ public partial class TerrainViewerApp
     /// before the scene was published, the load began on the smoke's own press of the New Game window (ARC-DEV-387) and the menu attached to the
     /// scene; then the waiting is played again on the published scene, as it was while the scene loaded: Last Save with no save needs no scene
     /// (it is not held), a choice that needs the scene is held and the menu takes no other input, Escape takes it back, and the scene's attach
-    /// runs a held choice (here New Character, which only opens its window).</summary>
+    /// runs a held choice (here the New Character window's Accept, which opens the character editor on the scene's draft). ARC-UI-2282: the New
+    /// Character window itself opens at once, with no scene.</summary>
     private void EarlyMenuForSmoke(Action<bool, string> require, Action<int> choose)
     {
         require(_earlyMenuRecord is { Attached: true } record && record.OpenedMsec < record.AttachedMsec && !_menuAwaitsScene && record.Held is null,
@@ -263,15 +270,19 @@ public partial class TerrainViewerApp
         choose(10); choose(52);
         require(_menuDeferred is null && !_menuLoadingSave && _sceneFlow is null && menu.Window == AreaMenuWindow.SinglePlayer && menu.Notice == "no save to continue from",
             $"Last Save with no save is not held (a save's load needs no start map): {_menuDeferred} {menu.Notice}");
-        // A held new character: its window needs the scene's recipe.
+        // ARC-UI-2282: New Character opens its window at once (it needs only the generic hero of the module); its Accept, which opens the editor on the scene's draft, is held.
         choose(50); choose(421);
-        require(_menuDeferred is { Kind: AreaMenuCommandKind.OpenNewCharacter } && menu.Window == AreaMenuWindow.NewGame && menu.Notice?.Contains("still loading", StringComparison.Ordinal) == true,
-            $"New Character pressed while the scene loads is held, with a note: {_menuDeferred} {menu.Notice}");
+        require(_menuDeferred is null && menu.Window == AreaMenuWindow.NewCharacter && menu.Creation is not null && string.IsNullOrEmpty(menu.Notice),
+            $"New Character pressed while the scene loads opens its window at once: {_menuDeferred} {menu.Window} {menu.Notice}");
+        MainMenuCommand(() => new(AreaMenuCommandKind.OpenCharacterEditor));
+        require(_menuDeferred is { Kind: AreaMenuCommandKind.OpenCharacterEditor } && menu.Window == AreaMenuWindow.NewCharacter && menu.Notice?.Contains("still loading", StringComparison.Ordinal) == true,
+            $"Accept pressed while the scene loads is held, with a note: {_menuDeferred} {menu.Notice}");
         MainMenuCommand(() => { menu.Back(); return AreaMenuCommand.Nothing; });
-        choose(420);
-        require(menu.Window == AreaMenuWindow.NewGame && _menuDeferred is not null, "a held choice takes no other input (Back is ignored, the browser is not opened)");
+        require(menu.Window == AreaMenuWindow.NewCharacter && _menuDeferred is not null, "a held choice takes no other input (Back is ignored)");
         HandleMainMenuKey(new InputEventKey { Keycode = Key.Escape, PhysicalKeycode = Key.Escape, Pressed = true });
-        require(_menuDeferred is null && menu.Window == AreaMenuWindow.NewGame && menu.Notice is null, $"Escape took the held choice back: {_menuDeferred} {menu.Notice}");
+        require(_menuDeferred is null && menu.Window == AreaMenuWindow.NewCharacter && menu.Notice is null, $"Escape took the held choice back: {_menuDeferred} {menu.Notice}");
+        MainMenuCommand(() => { menu.Back(); return AreaMenuCommand.Nothing; });
+        require(menu.Window == AreaMenuWindow.NewGame, "Back left the New Character window");
         // A held start of a new game: the browser works while the scene loads, its Start waits.
         choose(420);
         require(menu.Window == AreaMenuWindow.PickCharacter, "the pre-made browser opens while the scene loads");
@@ -282,13 +293,14 @@ public partial class TerrainViewerApp
         require(_menuDeferred is null && menu.Window == AreaMenuWindow.PickCharacter, "Escape took the held start back and stayed in the browser");
         for (var back = 0; back < 3; back++) MainMenuCommand(() => { menu.Back(); return AreaMenuCommand.Nothing; });
         require(menu.Window == AreaMenuWindow.Main, "back at the main window");
-        // The scene's attach runs a held choice: New Character only opens its window (its draft and the shop map load as the later stage's window does).
+        // The scene's attach runs a held choice: the New Character window's Accept opens the character editor on the scene's draft.
         choose(10); choose(50); choose(421);
-        require(_menuDeferred is { Kind: AreaMenuCommandKind.OpenNewCharacter }, "New Character is held again");
+        MainMenuCommand(() => new(AreaMenuCommandKind.OpenCharacterEditor));
+        require(_menuDeferred is { Kind: AreaMenuCommandKind.OpenCharacterEditor } && menu.Window == AreaMenuWindow.NewCharacter, "Accept is held again");
         AttachEarlyMenuToScene();
-        require(!_menuAwaitsScene && _menuDeferred is null && MainMenuOpen && ReferenceEquals(placeholder, _areaSession) && menu.Window == AreaMenuWindow.NewCharacter,
-            $"the attach ran the held New Character: {menu.Window} {menu.Notice}");
-        for (var back = 0; back < 3; back++) MainMenuCommand(() => { menu.Back(); return AreaMenuCommand.Nothing; });
+        require(!_menuAwaitsScene && _menuDeferred is null && MainMenuOpen && ReferenceEquals(placeholder, _areaSession) && menu.Window == AreaMenuWindow.CharacterEditor,
+            $"the attach ran the held Accept: {menu.Window} {menu.Notice}");
+        for (var back = 0; back < 4; back++) MainMenuCommand(() => { menu.Back(); return AreaMenuCommand.Nothing; });
         require(menu.Window == AreaMenuWindow.Main, "back at the main window for the rest of the stage");
         GD.Print("ARC-DEV-381 native-smoke early-menu PASS " + System.Text.Json.JsonSerializer.Serialize(new {
             OpenedMsec = _earlyMenuRecord!.OpenedMsec, AttachedMsec = _earlyMenuRecord.AttachedMsec }));
