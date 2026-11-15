@@ -311,11 +311,13 @@ public partial class TerrainViewerApp
         _areaCompanions?.InterruptGoals(speaker.Row.Key);
         AreaConversationStart start;
         if (HostOf(speaker) is not { } host) { _conversationNotice = $"dialog NPC script {speaker.ScriptId} has no host here"; RefreshReadyStatus(); return; }
-        try { start = host.Begin(speaker); }
+        // ARC-SCRIPT-1598: the start callback is asked again after the run's effects (a lethal damage of the same run ends the talk silently, as the original's dialog action calls 0x567460 after its earlier actions).
+        try { start = host.Begin(speaker, startRefused: DialogStartRefused); }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or DatException)
         {
             start = new(AreaConversationStartStatus.EntryError, null, speaker, exception.GetType().Name);
         }
+        if (start.Status == AreaConversationStartStatus.DialogStartRefused) { RefreshReadyStatus(); return; }
         // ARC-DEV-324 (B24, GT219): a talk whose dialog point ran default shows the generic greeting as a floating line over the NPC (the host queued it on
         // AreaScriptHost.TakeFloats) and opens no window (0x57CC70 calls 0x5681C0 for the text and 0x568540 for the floater).
         if (start.Status == AreaConversationStartStatus.GenericGreeting)
@@ -571,7 +573,7 @@ public partial class TerrainViewerApp
         else if (resume && conversation?.End is { Kind: DialogEndKind.ReturnToScript, ScriptLine: { } line } && speaker is not null && talkHost is not null)
         {
             AreaConversationStart resumed;
-            try { resumed = talkHost.Resume(speaker, line); }
+            try { resumed = talkHost.Resume(speaker, line, startRefused: DialogStartRefused); }
             catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or DatException)
             {
                 resumed = new(AreaConversationStartStatus.EntryError, null, speaker, exception.GetType().Name);
