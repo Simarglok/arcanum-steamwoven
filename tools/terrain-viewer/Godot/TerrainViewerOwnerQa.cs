@@ -297,6 +297,7 @@ public partial class TerrainViewerApp
             await Frames(1);
             Require(!OwnerQaOpen && !WorldModal, "Escape closed the overlay");
             Require(GetViewport().GuiGetFocusOwner() == focusProbe, "closing the overlay gave the keyboard back to the control that had it: " + GetViewport().GuiGetFocusOwner());
+            focusProbe.ReleaseFocus();   // a focused control would make the logbook key below "UI focus owns input"
             Require(_ownerQaPlate.IsShown, "the plate stays after the overlay closes");
             await Shot("plate");
             Press(Key.Q, ctrl: true, shift: true);
