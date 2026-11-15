@@ -226,4 +226,19 @@ public sealed class ScrHeartbeatWorldTests
             Assert.AreEqual(held ? ScrOutcome.SkipDefault : ScrOutcome.RunDefault, run.Outcome, string.Join(",", offs));
         }
     }
+
+    [TestMethod]
+    public void A_condition_over_the_any_scenery_list_holds_when_one_object_does()
+    {
+        // ARC-SCRIPT-2321 (AS1, SG6): kind 16 builds the same list as 15 and its condition tail is an "any" kind: some switched off is true, none or an empty list false.
+        var set = new ScrAdmissionSet("test-any-scenery", Set.Conditions, Set.Actions, Set.ValueKinds, Set.FocusKinds.Append(ScrFocusKind.AnySceneryInVicinity));
+        ScrObjectRef tree = new(1, "sector:7:1"), rock = new(1, "sector:7:2");
+        foreach (var (offs, held) in new[] { (new[] { true, true }, true), (new[] { true, false }, true), (new[] { false, false }, false), (Array.Empty<bool>(), false) })
+        {
+            var host = Host(Test(ScrCatalogue.Condition.IsSwitchedOff, (byte)ScrFocusKind.AnySceneryInVicinity));
+            foreach (var (obj, off) in new[] { tree, rock }.Zip(offs)) { host.Scenery.Add(obj); host.Off[obj] = off; }
+            var run = ScrDispatcher.RunObject(new(ScrPoint.Heartbeat, Npc, Npc, null), host, new() { Admission = set });
+            Assert.AreEqual(held ? ScrOutcome.SkipDefault : ScrOutcome.RunDefault, run.Outcome, string.Join(",", offs));
+        }
+    }
 }

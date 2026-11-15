@@ -1409,7 +1409,7 @@ internal sealed class ScrInterpreter
         // PG7: the current looped object, none before the run's first loop.
         ScrFocusKind.CurrentLoopedObject => _looped,
         // A group's first object (0x44B960), none for an empty one.
-        ScrFocusKind.EverySceneryInVicinity or ScrFocusKind.EveryoneInVicinity or ScrFocusKind.AnyoneInVicinity or ScrFocusKind.EveryPortalInVicinity
+        ScrFocusKind.EverySceneryInVicinity or ScrFocusKind.AnySceneryInVicinity or ScrFocusKind.EveryoneInVicinity or ScrFocusKind.AnyoneInVicinity or ScrFocusKind.EveryPortalInVicinity
             or ScrFocusKind.EveryContainerInVicinity or ScrFocusKind.AnyContainerInVicinity
             => Vicinity(kind) is { Count: > 0 } list ? list[0] : null,
         // GF1, GF4: the group's first object, the triggerer's first follower, or the triggerer when it has none.
@@ -1418,11 +1418,11 @@ internal sealed class ScrInterpreter
     };
 
     // The objects an object operand names, as the original's list (0x44B4E0): one for a single-object focus kind, none for an absent
-    // one; ARC-WORLD-081: the vicinity's scenery for focus kind 15; ARC-SCRIPT-047: its PCs and NPCs for focus kinds 8 and 9.
+    // one; ARC-WORLD-081: the vicinity's scenery for focus kinds 15 and 16 (ARC-SCRIPT-2321: one case in the original, the condition tail tells them apart); ARC-SCRIPT-047: its PCs and NPCs for focus kinds 8 and 9.
     [OriginalFunction(0x44B4E0, OriginalFunctionScope.Partial)]
     private IReadOnlyList<ScrObjectRef> Objects(ScrClause c, int slot) => (ScrFocusKind)c.Kind(slot) switch
     {
-        ScrFocusKind.EverySceneryInVicinity or ScrFocusKind.EveryoneInVicinity or ScrFocusKind.AnyoneInVicinity or ScrFocusKind.EveryPortalInVicinity
+        ScrFocusKind.EverySceneryInVicinity or ScrFocusKind.AnySceneryInVicinity or ScrFocusKind.EveryoneInVicinity or ScrFocusKind.AnyoneInVicinity or ScrFocusKind.EveryPortalInVicinity
             or ScrFocusKind.EveryContainerInVicinity or ScrFocusKind.AnyContainerInVicinity => Vicinity((ScrFocusKind)c.Kind(slot)),
         ScrFocusKind.EveryoneInGroup or ScrFocusKind.AnyoneInGroup => Group(),
         _ => OptionalObject(c, slot) is { } obj ? [obj] : [],
@@ -1442,7 +1442,7 @@ internal sealed class ScrInterpreter
     private IReadOnlyList<ScrObjectRef> Vicinity(ScrFocusKind kind)
     {
         if (_roles.Attachee is not { } centre) return [];
-        var list = (kind == ScrFocusKind.EverySceneryInVicinity ? World.SceneryInVicinity(centre) : kind == ScrFocusKind.EveryPortalInVicinity ? Portals.PortalsInVicinity(centre) : kind is ScrFocusKind.EveryContainerInVicinity or ScrFocusKind.AnyContainerInVicinity ? Containers.ContainersInVicinity(centre) : World.CrittersInVicinity(centre))
+        var list = (kind is ScrFocusKind.EverySceneryInVicinity or ScrFocusKind.AnySceneryInVicinity ? World.SceneryInVicinity(centre) : kind == ScrFocusKind.EveryPortalInVicinity ? Portals.PortalsInVicinity(centre) : kind is ScrFocusKind.EveryContainerInVicinity or ScrFocusKind.AnyContainerInVicinity ? Containers.ContainersInVicinity(centre) : World.CrittersInVicinity(centre))
             ?? throw new InvalidOperationException("SCR_WORLD_VICINITY_NULL");
         return _options.Rules.VicinityListCapped && list.Count > ScrWorld.VicinityListCap ? list.Take(ScrWorld.VicinityListCap).ToArray() : list;
     }
