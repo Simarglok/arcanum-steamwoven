@@ -900,6 +900,7 @@ tools/terrain-viewer/Godot/TerrainViewerAreaWorldMap.cs,AppendTownRoute,pending,
 tools/terrain-viewer/Godot/TerrainViewerAreaWorldMap.cs,MarkTownMapByScenery,pending,
 tools/terrain-viewer/Godot/TerrainViewerAreaWorldMap.cs,WorldMapTravelCheck,pending,
 tools/terrain-viewer/Godot/TerrainViewerAttack.cs,AttackApproachCell,pending,
+tools/terrain-viewer/Godot/TerrainViewerAttack.cs,BedOccupantGoal,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAttack.cs,HeroAttackRepeats,pending,
 tools/terrain-viewer/Godot/TerrainViewerAttack.cs,HeroWeaponPrototype,exempt,reference
 tools/terrain-viewer/Godot/TerrainViewerAttack.cs,InAttackReach,pending,
