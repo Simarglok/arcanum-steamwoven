@@ -342,6 +342,12 @@ public sealed class AreaAiFollowerTests
             Assert.IsNull(host.OtherLeaderCharisma(companion), "the hero leads the companion: no other leader");
             Assert.AreEqual(GameSessionDisposition.Changed, session.ForceJoinLeader(session.Version, enemy, companion).Disposition);
             Assert.AreEqual(charisma, host.OtherLeaderCharisma(enemy));
+            // The roster's facts (the dialog host's, AreaConversation.PartyPort) carry the value, and none when it names no other leader (the session then refuses facts of an NPC-led NPC that name none).
+            var npcFacts = new AreaCompanionFacts(1, 1, new(-1000, 2001, 2001, 30), 1, 0, 6);
+            Assert.AreEqual(charisma, AreaCompanionRoster.Facts(npcFacts, 0, 100, otherLeaderCharisma: host.OtherLeaderCharisma(enemy)).OtherLeaderCharisma);
+            Assert.IsNull(AreaCompanionRoster.Facts(npcFacts, 0, 100).OtherLeaderCharisma);
+            var rejected = session.JoinParty(session.Version, enemy, AreaCompanionRoster.Facts(npcFacts, 0, 100), false);
+            Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.InvalidConsentFacts), (rejected.Disposition, rejected.Failure), "facts naming no other leader for an NPC-led NPC");
             var facts = Consent(100) with { OtherLeaderCharisma = host.OtherLeaderCharisma(enemy), NpcLevel = 1 };
             var result = session.JoinParty(session.Version, enemy, facts with { Thresholds = new(-1000, 2001, 2001, 30) }, false);
             if (accepted)
