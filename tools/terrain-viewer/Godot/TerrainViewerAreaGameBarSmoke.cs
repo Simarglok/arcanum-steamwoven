@@ -435,13 +435,13 @@ public partial class TerrainViewerApp
             await Button(lensPoint, false);
             Require(!LogbookOpen && !WorldModal && !_logbookPanel.RoundViewShown, "a release in the lens closed the window");
             CloseLogbookByPlayer();
-            // The world map does not fit between the strips: the bars hide while it is open, and come back with the pointer state reset.
+            // ARC-UI-2306: the world map window lies between the strips (800 × 400 at (0, 41)), so the bars stay up while it is open (its note entry runs on the bottom strip).
             await Click(AreaBarButton.Map);
             await Frames(1);
-            Require(WorldMapOpen && !_gameBarPanel!.Visible, "Map opened the world map and the bars hid: " + _gameBarNotice);
+            Require(WorldMapOpen && _gameBarPanel!.Visible, "Map opened the world map and the bars stayed up: " + _gameBarNotice);
             CloseWorldMapByPlayer();
             await Frames(1);
-            Require(!WorldMapOpen && _gameBarPanel!.Visible && _gameBar.Hovered is null && panel.HoverTextForSelfTest == "", "the bars came back with no hover");
+            Require(!WorldMapOpen && _gameBarPanel!.Visible, "the bars are up after the map closed");
             // ARC-UI-120: route a same-frame click through the GUI, then compare its rendered pixels to a held press.
             var combatControl = panel.GetNode<TextureRect>("BottomStrip/Combat");
             var combatRect = combatControl.GetGlobalRect();
