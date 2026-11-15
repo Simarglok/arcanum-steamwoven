@@ -228,6 +228,26 @@ public partial class TerrainViewerApp
             var heroBubble = bubbles.First(b => b.Owner == HeroFloater);
             Require(heroBubble.Lines.Count > 1 && heroBubble.Rect.Size.X <= TextBubbleRules.BoxSize + 1, $"the long line wrapped to {heroBubble.Lines.Count} lines within 200 px");
             if (!string.IsNullOrWhiteSpace(capture)) { layer.Redraw(); await Capture("bubble-after"); }
+            // ARC-UI-2278: a bubble is laid out in the original's pixels and drawn at the screen's whole factor (as the bars and the dialog band): the same text, box and
+            // lines at factor 2 are twice the size and stand on the 2 px grid; the layer's own factor is the screen's.
+            Require(layer.BubbleFactor == AreaGameBarPanel.ScreenFactor(GetViewport().GetVisibleRect().Size), $"the bubble factor {layer.BubbleFactor} is the screen's whole factor");
+            layer.BubbleFactorOverride = 1; var oneX = layer.LayOutBubbles().First(b => b.Owner == HeroFloater);
+            layer.BubbleFactorOverride = 2; var twoX = layer.LayOutBubbles().First(b => b.Owner == HeroFloater);
+            layer.BubbleFactorOverride = null;
+            Require(twoX.Lines.Count == oneX.Lines.Count && twoX.Rect.Size == oneX.Rect.Size * 2
+                && twoX.Lines.All(l => l.Position.X % 2 == 0 && l.Position.Y % 2 == 0 && twoX.Rect.Grow(0).Encloses(new Rect2(l.Position, new Vector2(1, 1)))),
+                $"at factor 2 the bubble is twice the size on the 2 px grid: {oneX.Rect} -> {twoX.Rect}");
+            if (!string.IsNullOrWhiteSpace(capture))
+            {
+                // The capture at the owner's 2560 x 1440: the old look (factor 1) and the new one (the screen's whole factor, 2 there).
+                var windowBefore = DisplayServer.WindowGetSize();
+                await SetSmokeWindowSizeAsync(new Vector2I(2560, 1440));
+                await NextFrameAsync();
+                GD.Print($"ARC-UI-2278 capture window={GetViewport().GetVisibleRect().Size} factor={layer.BubbleFactor}");
+                layer.BubbleFactorOverride = 1; layer.Redraw(); await Capture("bubble-factor1");
+                layer.BubbleFactorOverride = null; layer.Redraw(); await Capture("bubble-factor-screen");
+                await SetSmokeWindowSizeAsync(windowBefore);
+            }
             BubbleClockForSelfTest = 1000 + 6000; TickFloaters();
             Require(layer.Bubbles.Count == 2, "a bubble lives its whole life (age 6000 ms is not above 6000)");
             BubbleClockForSelfTest = 1000 + 6001; TickFloaters();
