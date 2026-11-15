@@ -103,10 +103,12 @@ public sealed class ScrPortalVicinityTests
         Assert.IsTrue(admitted.IsAdmitted, admitted.Refusal?.ToString());
         // The focus kind of "any portal" (20) is not admitted: the original builds one list for both kinds (PV1), no installed script asks the any form.
         Assert.IsFalse(ScrAdmissionSet.S60.FocusKinds.Contains(ScrFocusKind.AnyPortalInVicinity));
-        var host = Host(1);
-        Assert.IsNotNull(host);
+        // A set holding the focus kind (and no loop for, so no world queries are asked for) needs a host that answers it.
+        var focusOnly = new ScrAdmissionSet("portal-focus-only", ScrAdmissionSet.S3.Conditions, ScrAdmissionSet.S3.Actions, ScrAdmissionSet.S3.ValueKinds,
+            ScrAdmissionSet.S3.FocusKinds.Append(ScrFocusKind.EveryPortalInVicinity));
         var bare = new FakeHost();
-        bare.Scripts[Script] = ScrScriptLookup.Of(program);
-        Assert.ThrowsExactly<ArgumentException>(() => ScrDispatcher.RunTile(new(new ScrSlot(Script, 0, 0), Npc), bare, new ScrRunOptions { Admission = Set }));
+        bare.Scripts[Script] = ScrScriptLookup.Of(Program(Do(C(ScrCatalogue.Action.ReturnRunDefault))));
+        var thrown = Assert.ThrowsExactly<ArgumentException>(() => ScrDispatcher.RunTile(new(new ScrSlot(Script, 0, 0), Npc), bare, new ScrRunOptions { Admission = focusOnly }));
+        StringAssert.Contains(thrown.Message, "IScrPortalQueries");
     }
 }

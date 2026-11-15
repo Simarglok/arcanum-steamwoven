@@ -463,7 +463,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
 
     /// <summary>
     /// ARC-SCRIPT-2041 (PV1–PV3): the shown map's portals within <see cref="ScrWorld.VicinityReach"/> tiles of the centre on both axes, not destroyed or switched off, open, closed or locked alike, in snapshot order
-    /// (the scenery's rule with the portal type, 0x44B4E0 case for focus kinds 19 and 20). Empty for a centre of another map or without a place.
+    /// (the scenery's rule with the portal type, ledger PV1–PV3). Empty for a centre of another map or without a place.
     /// </summary>
     public IReadOnlyList<ScrObjectRef> PortalsInVicinity(ScrObjectRef centre)
     {
