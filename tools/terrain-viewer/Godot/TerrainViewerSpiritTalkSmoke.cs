@@ -1,6 +1,7 @@
 using Arcanum.Session;
 using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Goals;
+using Arcanum.Simulation.Magic;
 using Arcanum.Simulation.Movement;
 using Arcanum.TerrainViewer.Core;
 using Arcanum.World;
@@ -15,6 +16,7 @@ public partial class TerrainViewerApp
     // 0x54ED30 sends a dead critter that carries it to the talk (goal 21) instead of the loot; the can-speak test 0x4AD800 answers 0 for it, so the dialog starts as for a living NPC (the greeting is the
     // NPC's dead line group); with the flag gone it is a corpse to loot again. The stage kills the first dialog NPC it can talk to, shows the click looting it, casts the spell on it, shows the click
     // talking to it (the conversation opens with the corpse), ends the spell and shows the loot again. The NPC and the hero are restored for the later stages.
+    // ARC-AI-2247 (step 0): before that, the hero starts seven cells from the living NPC, goal 21 walks, the NPC is killed on the way, and the hero ends next to the body with the dialog point run once and no window.
     private async Task RunAreaSpiritTalkSmokeAsync(TerrainLoadResult? mapMode = null)
     {
         if (_areaSession is not { } session || session.QueryHero() is null || _combatHost is null || _conversationHost is not { } host || _readyArea is not { } area || !InventoryActive)
@@ -50,7 +52,7 @@ public partial class TerrainViewerApp
             Require(caster is not null, "the map's cast host is built (spell data " + _spellData?.Status + ")");
             Require(_spellRecords?.Any(r => r is not null && r.Data.Number == 56) == true, "the data holds spell 56");
             // A dialog NPC with a standable cell 2..3 cells from it, so the click talks without a long walk.
-            CellCoord? place = null;
+            CellCoord? place = null, farPlace = null;
             foreach (var candidate in candidates)
             {
                 var at = map.Chart.ToChart(new(candidate.Speaker.Row.WorldX!.Value, candidate.Speaker.Row.WorldY!.Value));
@@ -63,9 +65,21 @@ public partial class TerrainViewerApp
                     var distance = Math.Max(Math.Abs(cell.X - at.X), Math.Abs(cell.Y - at.Y));
                     if (distance is >= 2 and <= 4) { place = cell; used = candidate; break; }
                 }
-                if (place is not null) break;
+                if (place is null) continue;
+                // ARC-AI-2247: and a cell six or more cells from it, where the hero starts the approach that the kill interrupts.
+                var farOrigin = map.Chart.ToChart(new(candidate.Speaker.Row.WorldX!.Value, candidate.Speaker.Row.WorldY!.Value));
+                foreach (var (dx, dy) in new[] { (8, 0), (-8, 0), (0, 8), (0, -8), (6, 6), (-6, -6), (6, -6), (-6, 6), (7, 0), (-7, 0), (0, 7), (0, -7) })
+                {
+                    var far = new CellCoord(farOrigin.X + dx, farOrigin.Y + dy);
+                    if (!map.Chart.Contains(far)) continue;
+                    CellCoord cell;
+                    try { cell = AreaSmokeStandable(map, far, 1); } catch (InvalidOperationException) { continue; }
+                    if (Math.Max(Math.Abs(cell.X - farOrigin.X), Math.Abs(cell.Y - farOrigin.Y)) >= 6) { farPlace = cell; break; }
+                }
+                if (farPlace is not null) break;
+                place = null; used = null;
             }
-            Require(place is not null && used is not null, "a dialog NPC with a standable cell two to four cells from it");
+            Require(place is not null && used is not null && farPlace is not null, "a dialog NPC with a standable cell two to four cells from it and one six or more cells from it");
             var (speaker, entity) = used!.Value;
             life = _combatHost.Build(session, map.RuntimeMap, entity).Combat!.Target;
             AreaSmokePlace(map, place!.Value);
@@ -78,9 +92,40 @@ public partial class TerrainViewerApp
             if (HeroInCombatMode) session.SetCombatMode(session.Version, SessionCombatant.Hero, false, SessionCombatModeContext.RealTime);
             Require(!HeroInCombatMode, "the hero is out of combat mode");
 
-            // 1. The corpse: not a speaker any more; the click sends the hero to loot it (goal 81), not to talk (GT115).
+            // 0. ARC-AI-2247 (GT122): the target dies during the approach. The hero starts six or more cells away, goal 21 walks (goal 8) towards the living NPC, the NPC is killed on the way, and the goal
+            // keeps the body as its target: the hero ends next to it, the dialog point runs once (no window opens), and the run ends. The kill is the one step 1 shows the corpse's clicks after.
+            CellCoord? HeroCellNow() => caster!.Facts(SessionSpellCaster.Hero)?.Location is { } at && at != SpellLocation.None ? map.Chart.ToChart(new(at.X, at.Y)) : null;
+            var corpseAt = map.Chart.ToChart(new(speaker.Row.WorldX!.Value, speaker.Row.WorldY!.Value));
+            int ReachFromBody() => HeroCellNow() is { } h ? Math.Max(Math.Abs(h.X - corpseAt.X), Math.Abs(h.Y - corpseAt.Y)) : int.MaxValue;
+            AreaSmokePlace(map, farPlace!.Value);
+            for (var i = 0; i < 10; i++) AreaSmokeFrame();
+            var startReach = ReachFromBody();
+            Require(startReach >= 6, $"the hero starts six or more cells from the NPC: {startReach}");
+            Require(SpeakerPresent(speaker) && !SpeakerDead(speaker), "the NPC is still a living speaker at the far cell");
+            var approachTalksBefore = _deadTalkStarts;
+            Require(ShownHeroRunsHost?.Talk(TalkTargetOf(speaker), run: true) == true, "the talk goal 21 started on the living NPC at the far cell");
+            var approached = 0;
+            for (; approached < 100 && ReachFromBody() > startReach - 2; approached++) AreaSmokeTalkFrame();
+            var reachAtKill = ReachFromBody();
+            Require(reachAtKill < startReach && reachAtKill > 2, $"the hero is walking and still not at the NPC when it is killed: {startReach} -> {reachAtKill} after {approached} frames");
+            Require(ShownHeroRunsHost?.TalkRun is not null && _deadTalkStarts == approachTalksBefore && !ConversationOpen, "the talk run is on the table with no dialog started");
             var kill = session.ApplyDamage(session.Version, life!, new LifeDamage { HitPoints = 1_000_000 });
             Require(kill.Outcome is { } killed && killed.Events.HasFlag(LifeEvents.Died), $"the lethal packet killed the NPC: {kill.Disposition} {kill.Failure}");
+            for (var i = 0; i < 600 && _deadTalkStarts == approachTalksBefore; i++) AreaSmokeTalkFrame();
+            Require(_deadTalkStarts == approachTalksBefore + 1, $"the walking talk goal reached the body and ran its dialog point once ({_conversationNotice})");
+            var endReach = ReachFromBody();
+            Require(endReach <= 1, $"the hero ended next to the body: {endReach} cells (started at {startReach})");
+            Require(!ConversationOpen, "no dialog window opens for the body of a target that died on the way");
+            Require(_deadTalkStatus is AreaConversationStartStatus.GenericGreeting or AreaConversationStartStatus.DialogRefused, $"the body's dialog point ran with no conversation: {_deadTalkStatus}");
+            for (var i = 0; i < 5; i++) AreaSmokeTalkFrame();
+            Require(ShownHeroRunsHost?.TalkRun is null && _deadTalkStarts == approachTalksBefore + 1, "the talk run ended at the body and the dead talk was counted once");
+            GD.Print($"ARC-AI-2247 approach kill: hero {startReach} cells away, killed at {reachAtKill} after {approached} frames, ended {endReach} cells from the body, status {_deadTalkStatus}");
+            AreaSmokePlace(map, place!.Value);
+            _camera!.ResetWorld(WorldAnchor, WorldViewport, 1);
+            PublishWorldSelection();
+            for (var i = 0; i < 10; i++) AreaSmokeFrame();
+
+            // 1. The corpse: not a speaker any more; the click sends the hero to loot it (goal 81), not to talk (GT115).
             for (var i = 0; i < 5; i++) AreaSmokeFrame();
             SyncAreaInventory();
             Require(SpeakerDead(speaker) && !SpeakerPresent(speaker), "the dead NPC is not a present speaker without the flag");
