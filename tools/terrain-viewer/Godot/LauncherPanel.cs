@@ -4,10 +4,10 @@ using Godot;
 
 namespace Arcanum.TerrainViewer;
 
-/// <summary>ARC-UI-143: the three HD lines of the launcher screen: HD graphics (the visual profile, off or on), HD interface (0 off, 1 on,
-/// 2 generated, experimental) and the HD pack source, with the note saying what the next start reads. The same settings as the options
-/// window's lines; the host keeps them, the screen only shows and asks.</summary>
-public readonly record struct LauncherHdLines(bool Graphics, int Interface, HdPackSourceMode Pack, string Note);
+/// <summary>ARC-UI-143, ARC-UI-2174: the HD lines of the launcher screen: HD (Off or On: the HD interface art and fonts and the relit lighting together),
+/// the HD pack source (where the interface pack is read from) and the experimental generated interface (honoured only while HD is On), with the note
+/// saying what the next start reads. The host keeps the settings, the screen only shows and asks.</summary>
+public readonly record struct LauncherHdLines(bool Hd, bool Generated, HdPackSourceMode Pack, string Note);
 
 /// <summary>
 /// ARC-UI-014: the launcher screen before the original main menu (research ARC-RES-074 task 2): why it shows, the settings file's
@@ -26,11 +26,11 @@ public partial class LauncherPanel : CanvasLayer
     private HBoxContainer _rules = null!;
     private CheckBox _showAtStart = null!;
     private CheckBox _debugMode = null!;
-    private HBoxContainer _hdGraphics = null!;
-    private HBoxContainer _hdInterface = null!;
+    private HBoxContainer _hd1 = null!;
+    private HBoxContainer _hdGenerated = null!;
     private HBoxContainer _hdPack = null!;
     private Label _hdNote = null!;
-    private LauncherHdLines _hd = new(false, 0, HdPackSourceMode.Auto, "");
+    private LauncherHdLines _hd = new(false, false, HdPackSourceMode.Auto, "");
     private Button _play = null!;
     private Button _choose = null!;
     private Button _install = null!;
@@ -48,9 +48,9 @@ public partial class LauncherPanel : CanvasLayer
     public event Action<RuleMode>? RulesRequested;
     public event Action<bool>? ShowAtStartRequested;
     public event Action<bool>? DebugModeRequested;
-    /// <summary>ARC-UI-143: the HD graphics line asked for a profile (true: HD), the HD interface line for 0, 1 or 2, the HD pack line for a source.</summary>
-    public event Action<bool>? HdGraphicsRequested;
-    public event Action<int>? HdInterfaceRequested;
+    /// <summary>ARC-UI-143, ARC-UI-2174: the HD line asked for Off or On (true), the generated interface line for Off or On, the HD pack line for a source.</summary>
+    public event Action<bool>? HdRequested;
+    public event Action<bool>? HdGeneratedRequested;
     public event Action<HdPackSourceMode>? HdPackRequested;
     /// <summary>ARC-DEV-074: "Install from GOG installer…" pressed; the host checks the tool, then calls <see cref="PickInstaller"/>.</summary>
     public event Action? InstallRequested;
@@ -69,12 +69,13 @@ public partial class LauncherPanel : CanvasLayer
         "Show at every start: " + (_showAtStart.ButtonPressed ? "on" : "off"), _notice.Text, "Debug mode: " + (_debugMode.ButtonPressed ? "on" : "off"),
         "Installer: " + (_busy ? "unpacking" : "idle") + (_install.Disabled ? ", install off" : ", install on") + (_cancelInstall.Visible ? ", cancel shown" : ""),
         // ARC-UI-143: appended after the lines above, so their numbers stay.
-        "HD graphics: " + Chosen(_hdGraphics), "HD interface: " + Chosen(_hdInterface), "HD pack: " + Chosen(_hdPack), _hdNote.Text,
+        "HD: " + Chosen(_hd1), "HD pack: " + Chosen(_hdPack), "Generated interface: " + Chosen(_hdGenerated), _hdNote.Text,
     ];
     private static string Chosen(HBoxContainer row) => row.GetChildren().OfType<Button>().FirstOrDefault(button => button.ButtonPressed)?.Text ?? "none";
-    internal bool HdEnabledForSelfTest => !_hdGraphics.GetChildren().OfType<Button>().First().Disabled;
-    internal void HdGraphicsForSelfTest(bool on) => HdGraphicsRequested?.Invoke(on);
-    internal void HdInterfaceForSelfTest(int value) => HdInterfaceRequested?.Invoke(value);
+    internal bool HdEnabledForSelfTest => !_hd1.GetChildren().OfType<Button>().First().Disabled;
+    internal bool HdGeneratedEnabledForSelfTest => !_hdGenerated.GetChildren().OfType<Button>().First().Disabled;
+    internal void HdForSelfTest(bool on) => HdRequested?.Invoke(on);
+    internal void HdGeneratedForSelfTest(bool on) => HdGeneratedRequested?.Invoke(on);
     internal void HdPackForSelfTest(HdPackSourceMode mode) => HdPackRequested?.Invoke(mode);
     internal bool PlayEnabledForSelfTest => !_play.Disabled;
     internal string CancelTextForSelfTest => _cancelInstall.Text;
@@ -132,10 +133,10 @@ public partial class LauncherPanel : CanvasLayer
             Modulate = new Color(.45f, .1f, .05f),
         };
         _debugMode.Toggled += on => { if (!_rendering) DebugModeRequested?.Invoke(on); };
-        // ARC-UI-143: the HD lines (HD graphics, HD interface, HD pack: the saved settings, no longer in the options window since ARC-UI-146), before the game starts.
-        _hdGraphics = MakeChoiceRow("HdGraphics", "HD graphics:", dark, ["Off", "On"], index => HdGraphicsRequested?.Invoke(index == 1));
-        _hdInterface = MakeChoiceRow("HdInterface", "HD interface:", dark, ["Off", "On", "Generated (experimental)"], index => HdInterfaceRequested?.Invoke(index));
+        // ARC-UI-143, ARC-UI-2174: the HD lines (HD, HD pack, generated interface: the saved settings, no longer in the options window since ARC-UI-146), before the game starts.
+        _hd1 = MakeChoiceRow("Hd", "HD:", dark, ["Off", "On"], index => HdRequested?.Invoke(index == 1));
         _hdPack = MakeChoiceRow("HdPack", "HD pack:", dark, ["Auto", "Game", "Custom"], index => HdPackRequested?.Invoke((HdPackSourceMode)index));
+        _hdGenerated = MakeChoiceRow("HdGenerated", "Generated interface (experimental):", dark, ["Off", "On"], index => HdGeneratedRequested?.Invoke(index == 1));
         _hdNote = Line(new Color(.3f, .3f, .3f));
         var actions = new HBoxContainer();
         _play = MakeButton("Play", "Play", () => PlayRequested?.Invoke());
@@ -146,11 +147,11 @@ public partial class LauncherPanel : CanvasLayer
         _notice = Line(new Color(.45f, .1f, .05f));
         var hint = Line(new Color(.3f, .3f, .3f));
         hint.Text = "Steamwoven is the original game with the recorded fixes; Original keeps the retail 1.0.7.4 rules, bugs included. "
-                    + "The rules can also be switched in play in Options. The HD lines (graphics, interface, pack; HD graphics On also turns on the relit night lighting) are saved at once and apply from this start on (the pack source from the next one); they are set here only, so hold Shift at the start to change them; Reset settings leaves them alone. Hold Shift while the game starts, or start it with --launcher, to open this screen again. "
+                    + "The rules can also be switched in play in Options. The HD lines (HD: the HD interface art and fonts and the relit night lighting together; HD pack: where the interface pack is read from; the experimental generated interface, only while HD is On) are saved at once and apply from this start on (the pack source from the next one); they are set here only, so hold Shift at the start to change them; Reset settings leaves them alone. Hold Shift while the game starts, or start it with --launcher, to open this screen again. "
                     + "The game folder is only read, never written. An installation that the original game never started has no prototype files; "
                     + "the first Play prepares them from your own Arcanum.exe (about half a minute) and keeps them in Steamwoven's settings folder. "
                     + "Without Windows, \"Install from GOG installer…\" unpacks the GOG offline installer (setup_arcanum_….exe) with the free innoextract tool into a new folder you pick, and chooses it.";
-        foreach (var control in new Control[] { _reason, _file, _folder, _candidates, chooseRow, _rules, _hdGraphics, _hdInterface, _hdPack, _hdNote, _showAtStart, _debugMode, actions, _notice, hint }) contents.AddChild(control);
+        foreach (var control in new Control[] { _reason, _file, _folder, _candidates, chooseRow, _rules, _hd1, _hdPack, _hdGenerated, _hdNote, _showAtStart, _debugMode, actions, _notice, hint }) contents.AddChild(control);
         _dialog = new FileDialog
         {
             Name = "ChooseGameFolder", FileMode = FileDialog.FileModeEnum.OpenDir, Access = FileDialog.AccessEnum.Filesystem, UseNativeDialog = true,
@@ -208,14 +209,16 @@ public partial class LauncherPanel : CanvasLayer
 
     private void RenderHd()
     {
-        if (_hdGraphics is null) return;
+        if (_hd1 is null) return;
         var was = _rendering; _rendering = true;
         try
         {
             void Mark(HBoxContainer row, int chosen) { var i = 0; foreach (var button in row.GetChildren().OfType<Button>()) { button.ButtonPressed = i++ == chosen; button.Disabled = _busy; } }
-            Mark(_hdGraphics, _hd.Graphics ? 1 : 0);
-            Mark(_hdInterface, Math.Clamp(_hd.Interface, 0, 2));
+            Mark(_hd1, _hd.Hd ? 1 : 0);
             Mark(_hdPack, (int)_hd.Pack);
+            Mark(_hdGenerated, _hd.Generated && _hd.Hd ? 1 : 0);
+            // The experimental interface is honoured only while HD is On, so its row is off while HD is Off.
+            foreach (var button in _hdGenerated.GetChildren().OfType<Button>()) button.Disabled |= !_hd.Hd;
             _hdNote.Text = _hd.Note;
             _hdNote.Visible = _hd.Note.Length > 0;
         }

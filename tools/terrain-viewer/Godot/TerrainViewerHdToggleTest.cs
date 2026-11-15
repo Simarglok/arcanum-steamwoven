@@ -26,7 +26,7 @@ public static partial class TerrainViewerSelfTest
         var synthetic = SyntheticActorFixture.Create(human: true);
         cache.UploadActor(synthetic.Result.ActorTextures);
         var viewport = new SubViewport { Size = new(480, 400), TransparentBg = true, RenderTargetUpdateMode = SubViewport.UpdateMode.Always };
-        var canvas = new TerrainCanvas(); viewport.AddChild(canvas); host.AddChild(viewport);
+        var canvas = new TerrainCanvas { WorldSpritesFromPack = true }; viewport.AddChild(canvas); host.AddChild(viewport);
         var sources = new List<HdFrameSource>();
         var clock = 0L; canvas.VisualClock = () => clock;
         var frames = 0; var preparingFrames = 0;
@@ -191,7 +191,7 @@ public static partial class TerrainViewerSelfTest
         using var cache = new TerrainTextureCache();
         cache.Upload(fixture.Result.Textures); cache.UploadStatic(fixture.Result.StaticTextures); cache.UploadActor(fixture.Result.ActorTextures);
         var viewport = new SubViewport { Size = new(480, 400), TransparentBg = true, RenderTargetUpdateMode = SubViewport.UpdateMode.Always };
-        var canvas = new TerrainCanvas(); viewport.AddChild(canvas); host.AddChild(viewport);
+        var canvas = new TerrainCanvas { WorldSpritesFromPack = true }; viewport.AddChild(canvas); host.AddChild(viewport);
         var sources = new List<HdFrameSource>();
         var clock = 0L; canvas.VisualClock = () => clock;
         static void Require(bool value, string why) { if (!value) throw new InvalidOperationException("ARC-UI-006 WORLD toggle self-test: " + why); }
@@ -336,9 +336,9 @@ public static partial class TerrainViewerSelfTest
             OS.SetEnvironment(VisualProfileSettingsStore.TestVariable, path);
             var store = new VisualProfileSettingsStore(automated: true);
             Require(store.Persistent && store.Load() == VisualProfile.Legacy, "missing file loads Legacy");
-            Require(store.Save(VisualProfile.Hd) && System.IO.File.ReadAllText(path) == "visual profile=hd\n", "Hd saved as its line");
+            Require(store.Save(VisualProfile.Hd) && System.IO.File.ReadAllText(path) == "hd=1\n", "Hd saved as its hd line");
             Require(new VisualProfileSettingsStore(automated: false).Load() == VisualProfile.Hd, "a new store reads Hd back");
-            System.IO.File.WriteAllText(path, "visual profile=ultra\n");
+            System.IO.File.WriteAllText(path, "hd=ultra\n");
             Require(store.Load() == VisualProfile.Legacy, "an unknown value loads Legacy");
             System.IO.File.WriteAllBytes(path, [0xFF, 0xFE, 0x00]);
             Require(store.Load() == VisualProfile.Legacy, "unreadable text loads Legacy");

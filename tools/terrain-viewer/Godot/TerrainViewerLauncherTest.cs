@@ -241,48 +241,50 @@ public partial class TerrainViewerApp
         Require(LauncherSettingsFile.Load(settingsPath) is { Status: LauncherSettingsReadStatus.Read } reset && reset.Settings == LauncherSettings.Defaults
                 && Lines()[5] == "Settings reset to the defaults.", "Reset wrote the defaults over it: " + Lines()[5]);
 
-        // ARC-UI-143: the HD lines on the launcher: defaults off/off/Auto, each choice saved at once in the settings file the
-        // start reads, shown again by the next launcher, Custom's folder, and Reset leaving them alone.
+        // ARC-UI-143, ARC-UI-2174: the HD lines on the launcher: defaults Off / Auto / Off, each choice saved at once in the settings file the
+        // start reads (the one hd line), shown again by the next launcher, Custom's folder, and Reset leaving them alone. HD Off/On is one value.
         var hdFolder = System.IO.Directory.CreateDirectory(System.IO.Path.Combine(directory, "hd")).FullName;
         var gameSettingsPath = System.IO.Path.Combine(hdFolder, "game.cfg");
-        var visualPath = System.IO.Path.Combine(hdFolder, "visual.cfg");
         OS.SetEnvironment(GameSettingsStore.TestVariable, gameSettingsPath);
-        OS.SetEnvironment(VisualProfileSettingsStore.TestVariable, visualPath);
-        // ARC-RENDER-2076: a settings file of the time of the HD lighting row still has its `relit look` line; it is not read, so it changes nothing (HD graphics is Off).
-        System.IO.File.WriteAllText(visualPath, "relit look=1\n");
-        (_gameSettingsStore, _visualStore, _gameSettings, _launcherHdProfile) = (null, null, AreaGameSettings.Defaults, VisualProfile.Legacy);
+        OS.SetEnvironment(VisualProfileSettingsStore.TestVariable, gameSettingsPath); // one settings file, as in a real run
+        // An older file: its visual profile and relit look lines are not read and stay untouched; with no hd line, hd interface decides.
+        System.IO.File.WriteAllText(gameSettingsPath, "visual profile=hd\nrelit look=1\n");
+        (_gameSettingsStore, _visualStore, _gameSettings) = (null, null, AreaGameSettings.Defaults);
         try
         {
             string[] HdLines() => [.. Lines()[8..11]];
             await Start(true);
-            Require(HdLines().SequenceEqual(["HD graphics: Off", "HD interface: Off", "HD pack: Auto"]) && _launcherPanel.HdEnabledForSelfTest, "the HD lines default to Off, Off, Auto: " + string.Join(" | ", HdLines()));
-            // ARC-RENDER-2076: there is no HD lighting line any more (the screen ends with the pack note), and an old relit look line is ignored.
-            Require(Lines().Length == 12 && !Lines().Any(line => line.StartsWith("HD lighting", StringComparison.Ordinal)), "the launcher has no HD lighting line: " + Lines().Length);
-            _launcherPanel.HdGraphicsForSelfTest(true);
-            _launcherPanel.HdInterfaceForSelfTest(1);
+            Require(HdLines().SequenceEqual(["HD: Off", "HD pack: Auto", "Generated interface: Off"]) && _launcherPanel.HdEnabledForSelfTest && !_launcherPanel.HdGeneratedEnabledForSelfTest,
+                "the HD lines default to Off, Auto, Off (an old visual profile line alone does not turn HD on; generated is off while HD is Off): " + string.Join(" | ", HdLines()));
+            Require(Lines().Length == 12 && !Lines().Any(line => line.StartsWith("HD graphics", StringComparison.Ordinal) || line.StartsWith("HD interface", StringComparison.Ordinal) || line.StartsWith("HD lighting", StringComparison.Ordinal)),
+                "the launcher has one HD row, no HD graphics, HD interface or HD lighting line: " + Lines().Length);
+            _launcherPanel.HdForSelfTest(true);
             _launcherPanel.HdPackForSelfTest(HdPackSourceMode.GameFolder);
-            Require(HdLines().SequenceEqual(["HD graphics: On", "HD interface: On", "HD pack: Game"]), "the choices show: " + string.Join(" | ", HdLines()));
+            Require(HdLines().SequenceEqual(["HD: On", "HD pack: Game", "Generated interface: Off"]) && _launcherPanel.HdGeneratedEnabledForSelfTest, "the choices show: " + string.Join(" | ", HdLines()));
             Require(new VisualProfileSettingsStore(false).Load() == VisualProfile.Hd
-                    && new GameSettingsStore(false).Load() is { HdInterface: true, GeneratedInterface: false, HdPackSource: HdPackSourceMode.GameFolder }, "each choice was saved at once in the options window's files");
-            _launcherPanel.HdInterfaceForSelfTest(2);
-            Require(Lines()[9] == "HD interface: Generated (experimental)" && new GameSettingsStore(false).Load() is { HdInterface: true, GeneratedInterface: true }, "the generated interface is the third choice");
+                    && new GameSettingsStore(false).Load() is { HdInterface: true, GeneratedInterface: false, HdPackSource: HdPackSourceMode.GameFolder }, "each choice was saved at once in the one settings file");
+            Require(System.IO.File.ReadAllText(gameSettingsPath).Contains("hd=1", StringComparison.Ordinal) && System.IO.File.ReadAllText(gameSettingsPath).Contains("visual profile=hd", StringComparison.Ordinal),
+                "the hd line is written and the old lines stay in place");
+            _launcherPanel.HdGeneratedForSelfTest(true);
+            Require(Lines()[10] == "Generated interface: On" && new GameSettingsStore(false).Load() is { HdInterface: true, GeneratedInterface: true }, "the generated interface is a separate experimental row");
             // The next launcher shows what was saved, and the start's own reading finds the same values.
-            (_gameSettings, _launcherHdProfile) = (AreaGameSettings.Defaults, VisualProfile.Legacy);
+            _gameSettings = AreaGameSettings.Defaults;
             await Start(true);
-            Require(HdLines().SequenceEqual(["HD graphics: On", "HD interface: Generated (experimental)", "HD pack: Game"]), "the next launcher shows the saved choices: " + string.Join(" | ", HdLines()));
+            Require(HdLines().SequenceEqual(["HD: On", "HD pack: Game", "Generated interface: On"]), "the next launcher shows the saved choices: " + string.Join(" | ", HdLines()));
             ConfigureGameSettings();
             Require(_gameSettings is { HdInterface: true, GeneratedInterface: true, HdPackSource: HdPackSourceMode.GameFolder } && new VisualProfileSettingsStore(false).Load() == VisualProfile.Hd, "the start reads the launcher's choices");
             // Custom asks for a folder: with no dialog (an automated run) the note names the setting; the chosen folder is saved with the source.
             _launcherPanel.HdPackForSelfTest(HdPackSourceMode.Custom);
             Require(Lines()[11].Contains("no folder dialog here", StringComparison.Ordinal), "Custom without a dialog names the setting: " + Lines()[11]);
             LauncherHdPackFolderForSelfTest(hdFolder);
-            Require(new GameSettingsStore(false).Load() is { HdPackSource: HdPackSourceMode.Custom, HdPackPath: { } custom } && custom == hdFolder && Lines()[10] == "HD pack: Custom", "the chosen folder is saved with Custom");
+            Require(new GameSettingsStore(false).Load() is { HdPackSource: HdPackSourceMode.Custom, HdPackPath: { } custom } && custom == hdFolder && Lines()[9] == "HD pack: Custom", "the chosen folder is saved with Custom");
             LauncherHdPackFolderForSelfTest(System.IO.Path.Combine(hdFolder, "missing"));
             Require(Lines()[11].EndsWith("| that folder cannot be used", StringComparison.Ordinal) && new GameSettingsStore(false).Load().HdPackPath == hdFolder, "a missing folder is refused and the saved one stays");
-            _launcherPanel.HdGraphicsForSelfTest(false);
-            Require(new VisualProfileSettingsStore(false).Load() == VisualProfile.Legacy && Lines()[8] == "HD graphics: Off", "HD graphics Off is saved");
-            // The relit look is a part of HD graphics: wanted exactly with the HD profile, and the old line stays untouched in the file (ignored, not rewritten into anything).
-            Require(!RelitLookWanted(VisualProfile.Legacy) && RelitLookWanted(VisualProfile.Hd) && System.IO.File.ReadAllText(visualPath).Contains("relit look=1", StringComparison.Ordinal), "the relit look follows HD graphics only; an old relit look line is ignored");
+            _launcherPanel.HdForSelfTest(false);
+            Require(new VisualProfileSettingsStore(false).Load() == VisualProfile.Legacy && Lines()[8] == "HD: Off" && Lines()[10] == "Generated interface: Off" && !_launcherPanel.HdGeneratedEnabledForSelfTest
+                    && new GameSettingsStore(false).Load() is { HdInterface: false, GeneratedInterface: false }, "HD Off is saved and turns the generated interface off");
+            // The relit look is a part of HD: wanted exactly with the HD profile; the old lines stay untouched in the file (ignored, not rewritten into anything).
+            Require(!RelitLookWanted(VisualProfile.Legacy) && RelitLookWanted(VisualProfile.Hd) && System.IO.File.ReadAllText(gameSettingsPath).Contains("relit look=1", StringComparison.Ordinal), "the relit look follows HD only; an old relit look line is ignored");
             // Reset settings leaves the HD lines alone.
             var before = HdLines();
             _launcherPanel.ResetForSelfTest();
@@ -291,7 +293,7 @@ public partial class TerrainViewerApp
         finally
         {
             OS.UnsetEnvironment(GameSettingsStore.TestVariable); OS.UnsetEnvironment(VisualProfileSettingsStore.TestVariable);
-            (_gameSettingsStore, _visualStore, _gameSettings, _launcherHdProfile) = (null, null, AreaGameSettings.Defaults, VisualProfile.Legacy);
+            (_gameSettingsStore, _visualStore, _gameSettings) = (null, null, AreaGameSettings.Defaults);
             AreaRelight.SetLook(false);
         }
         _launcher = null; _launcherPanel.CloseView();
@@ -326,10 +328,10 @@ public partial class TerrainViewerApp
             panel.ShowAtStartForSelfTest(false);
             var lines = panel.LinesForSelfTest.ToArray();
             Require(panel.PlayEnabledForSelfTest && lines[3] == "Rules: Steamwoven [Original]" && lines[4] == "Show at every start: off", "choices: " + string.Join(" | ", lines));
-            // ARC-UI-143: the HD lines are on the screen (their saved values are not touched in an automated run).
+            // ARC-UI-143, ARC-UI-2174: the HD lines are on the screen (their saved values are not touched in an automated run).
             var hdLines = panel.LinesForSelfTest.Skip(8).Take(3).ToArray();
-            Require(hdLines.Length == 3 && hdLines[0].StartsWith("HD graphics: ", StringComparison.Ordinal) && hdLines[1].StartsWith("HD interface: ", StringComparison.Ordinal)
-                    && hdLines[2].StartsWith("HD pack: ", StringComparison.Ordinal) && panel.LinesForSelfTest.Count == 12, "the HD lines: " + string.Join(" | ", hdLines));
+            Require(hdLines.Length == 3 && hdLines[0].StartsWith("HD: ", StringComparison.Ordinal) && hdLines[1].StartsWith("HD pack: ", StringComparison.Ordinal)
+                    && hdLines[2].StartsWith("Generated interface: ", StringComparison.Ordinal) && panel.LinesForSelfTest.Count == 12, "the HD lines: " + string.Join(" | ", hdLines));
             // The screenshot of the launcher itself, when the run asks for one (the end of the smoke has its own).
             if (_nativeSmokeScreenshot is { } shot)
             {

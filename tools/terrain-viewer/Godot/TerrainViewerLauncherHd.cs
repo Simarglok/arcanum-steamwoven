@@ -4,12 +4,12 @@ using Godot;
 
 namespace Arcanum.TerrainViewer;
 
-// ARC-UI-143: the HD lines (HD graphics, HD interface, HD pack) on the launcher screen, before the game starts (ARC-UI-146 removed them from the options window). They are
-// the same settings in the same settings file (arcanum.cfg, ARC-UI-1130; the visual profile and the game settings lines): a change is saved at once, and the game that Play
-// starts reads them like any start (the profile and the interface at once, the pack source from the next start).
+// ARC-UI-143, ARC-UI-2174: the HD lines (HD Off/On, HD pack, generated interface) on the launcher screen, before the game starts (ARC-UI-146 removed them from the options
+// window). HD is the one saved value (the hd line of arcanum.cfg, ARC-UI-1130; the game settings group): On means the HD interface art and fonts and the relit lighting
+// together, Off is Legacy; a change is saved at once, and the game that Play starts reads it like any start (the pack source from the next start). HD pack only says where
+// the interface pack is read from; the generated interface is experimental and honoured only while HD is On.
 public partial class TerrainViewerApp
 {
-    private VisualProfile _launcherHdProfile = VisualProfile.Legacy;
     // What the next start reads for the pack (and the environment overrides of this run), and why a choice was not saved; the screen shows both.
     private string _launcherHdPackNote = "";
     private string _launcherHdProblem = "";
@@ -20,10 +20,9 @@ public partial class TerrainViewerApp
         _gameSettingsStore ??= new GameSettingsStore(AutomatedVisualRun);
         _visualStore ??= new VisualProfileSettingsStore(AutomatedVisualRun);
         if (_gameSettingsStore.Persistent) _gameSettings = _gameSettingsStore.Load();
-        if (_visualStore.Persistent) _launcherHdProfile = _visualStore.Load();
         _launcherHdPackNote = HdPackSourceText();
         if (!string.IsNullOrWhiteSpace(System.Environment.GetEnvironmentVariable("ARC_VISUAL_PROFILE")) && !AutomatedVisualRun)
-            _launcherHdPackNote += " (this run's ARC_VISUAL_PROFILE overrides HD graphics)";
+            _launcherHdPackNote += " (this run's ARC_VISUAL_PROFILE overrides HD)";
         _launcherHdProblem = "";
         LauncherHdShow();
     }
@@ -31,25 +30,23 @@ public partial class TerrainViewerApp
     private void LauncherHdShow()
     {
         if (_launcherPanel is null) return;
-        _launcherPanel.Hd = new LauncherHdLines(_launcherHdProfile == VisualProfile.Hd,
-            _gameSettings.HdInterface ? (_gameSettings.GeneratedInterface ? 2 : 1) : 0, _gameSettings.HdPackSource,
+        _launcherPanel.Hd = new LauncherHdLines(_gameSettings.HdInterface, _gameSettings.GeneratedInterface && _gameSettings.HdInterface, _gameSettings.HdPackSource,
             _launcherHdProblem.Length == 0 ? _launcherHdPackNote : _launcherHdPackNote + " | " + _launcherHdProblem);
     }
 
-    private void LauncherHdGraphics(bool on)
+    private void LauncherHd(bool on)
     {
-        _launcherHdProfile = on ? VisualProfile.Hd : VisualProfile.Legacy;
-        var store = _visualStore;
-        var saved = store is { Persistent: true } && store.Save(_launcherHdProfile);
-        GD.Print($"ARC-UI-143 launcher HD graphics={(on ? "On" : "Off")} saved={saved}");
-        LauncherHdProblem(store is { Persistent: true } && !saved ? "the HD graphics setting could not be saved" : "");
+        // The generated interface is honoured only while HD is On, so Off clears it (the settings group never holds it without HD).
+        SaveGameSettings(_gameSettings with { HdInterface = on, GeneratedInterface = _gameSettings.GeneratedInterface && on });
+        GD.Print($"ARC-UI-2174 launcher HD={(on ? "On" : "Off")}");
+        LauncherHdProblem(GameSettingsProblem());
     }
 
-    private void LauncherHdInterface(int value)
+    private void LauncherHdGenerated(bool on)
     {
-        if (value is < 0 or > 2) return;
-        SaveGameSettings(_gameSettings with { HdInterface = value >= 1, GeneratedInterface = value == 2 });
-        GD.Print($"ARC-UI-143 launcher HD interface={value}");
+        if (on && !_gameSettings.HdInterface) return; // the row is off while HD is Off
+        SaveGameSettings(_gameSettings with { GeneratedInterface = on });
+        GD.Print($"ARC-UI-2174 launcher generated interface={(on ? "On" : "Off")}");
         LauncherHdProblem(GameSettingsProblem());
     }
 
