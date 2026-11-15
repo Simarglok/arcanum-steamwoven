@@ -21,6 +21,11 @@ From the repository root, through the [launch queue](../../docs/workflow/toolcha
     ./arcanum run --kind dotnet -- $HOME/.local/share/dotnet/dotnet $L/bin/Debug/net8.0/Arcanum.Experiments.RelightLab.dll bench DIR --kind object
     ./arcanum run --kind dotnet -- $HOME/.local/share/dotnet/dotnet $L/bin/Debug/net8.0/Arcanum.Experiments.RelightLab.dll shimmer DIR --kind critter
 
+`shimmer` also takes a directory of directories (one animation per subdirectory, a total over all their pairs) and `--loop` (the last frame is paired with the first, as a walk cycle repeats; ARC-RES-2000). The smoke stage's cycle scene writes
+such a tree: the hero's ten Walk frames of each of the eight facings, `$ARC_RELIGHT_CAPTURE/cycle-frames/f0 .. f7` (frames of the player's art: outside git):
+
+    ./arcanum run --kind dotnet -- $HOME/.local/share/dotnet/dotnet $L/bin/Debug/net8.0/Arcanum.Experiments.RelightLab.dll shimmer /absolute/dir/cycle-frames --kind critter --loop
+
 Inputs are 8-bit RGBA PNGs (`magick in.png PNG32:out.png` converts a Godot capture). `normals` writes a normal map, `bench` prints
 milliseconds and bytes per frame, `shimmer` runs a fixed-light Lambert comparison over consecutive same-size frames of one animation.
 Frames cut from the player's art are derived from it: keep them and the output outside git (`ARC_RELIGHT_CAPTURE` of the smoke stage

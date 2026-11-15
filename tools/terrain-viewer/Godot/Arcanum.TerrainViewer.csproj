@@ -7,6 +7,8 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="../../../src/Arcanum.Input.Godot/GodotInputAdapter.cs" Link="GodotInputAdapter.cs" />
+    <!-- ARC-RES-2000: the relight lab's CPU normal generator, for the smoke stage's Godot-native comparison (normal maps of the same frames); one source, no copy. -->
+    <Compile Include="../../../experiments/relight-lab/Core/NormalMapGenerator.cs" Link="RelightNormalMapGenerator.cs" />
     <Compile Include="../../../tests/Arcanum.TerrainViewer.Tests/GridWireFixture.cs" Link="GridWireFixture.cs" />
     <Compile Include="../../../tests/Arcanum.TerrainViewer.Tests/AreaCompositionFixture.cs" Link="AreaCompositionFixture.cs" />
     <Compile Include="../../../tests/Arcanum.TerrainViewer.Tests/AreaOwnerFixture.cs" Link="AreaOwnerFixture.cs" />

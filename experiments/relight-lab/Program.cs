@@ -20,7 +20,7 @@ internal static class Program
             if (args.Length >= 2 && args[0] == "shimmer") return Shimmer(args);
             Console.Error.WriteLine("usage: normals IN.png OUT.png [--kind ground|object|critter] [--convention opengl|image] [--gain G --blur N --bevel B --bevel-stride S]\n"
                 + "       bench DIR [--kind ground|object|critter]   (every *.png of DIR: milliseconds and bytes per frame, and a total)\n"
-                + "       shimmer DIR [--kind ...]   (consecutive same-size frames of one animation, in name order: normal shimmer under a fixed light)");
+                + "       shimmer DIR [--kind ...] [--loop]   (consecutive same-size frames of one animation, in name order, or one animation per subdirectory plus a total: normal shimmer under a fixed light; --loop also pairs the last frame with the first)");
             return 2;
         }
         catch (Exception exception) when (exception is IOException or ArgumentException or InvalidOperationException)
@@ -62,24 +62,25 @@ internal static class Program
     private static int Shimmer(string[] args)
     {
         var kind = Kind(args);
-        var files = Directory.GetFiles(args[1], "*.png").OrderBy(f => f, StringComparer.Ordinal).ToArray();
         var options = Options(args, kind);
-        var ratios = new List<double>(); var angles = new List<double>(); var skipped = 0;
-        (int W, int H, byte[] Rgba, NormalMap Map)? previous = null;
-        foreach (var file in files)
+        var loop = args.Contains("--loop");
+        // A directory of PNGs is one animation; a directory of directories is one animation per directory (a walk cycle per facing) and a total over all their pairs.
+        var directories = Directory.GetFiles(args[1], "*.png").Length > 0 ? new[] { args[1] }
+            : Directory.GetDirectories(args[1]).OrderBy(d => d, StringComparer.Ordinal).Where(d => Directory.GetFiles(d, "*.png").Length > 0).ToArray();
+        if (directories.Length == 0) throw new InvalidOperationException($"{args[1]}: no PNG frames and no directory of them");
+        var ratios = new List<double>(); var angles = new List<double>(); var pairsTotal = 0; var framesTotal = 0; var skippedTotal = 0; var max = 0d;
+        foreach (var directory in directories)
         {
-            var (w, h, rgba) = Read(file);
-            var current = (W: w, H: h, Rgba: rgba, Map: NormalMapGenerator.Generate(rgba, w, h, options));
-            if (previous is { } p && p.W == w && p.H == h)
-            {
-                ratios.Add(NormalMapGenerator.ShimmerRatio(p.Rgba, p.Map, rgba, current.Map, (-1, -1, 1)));
-                angles.Add(NormalMapGenerator.MeanAngleDegrees(p.Map, current.Map));
-            }
-            else if (previous is not null) skipped++;
-            previous = current;
+            var frames = Directory.GetFiles(directory, "*.png").OrderBy(f => f, StringComparer.Ordinal).Select(f => { var (w, h, rgba) = Read(f); return new CycleFrame(w, h, rgba); }).ToArray();
+            var result = WalkCycleShimmer.Measure(frames, options, loop);
+            Console.WriteLine($"shimmer {(directories.Length == 1 ? "frames" : Path.GetFileName(directory) + " frames")}={frames.Length} pairs={result.Pairs} skipped-different-size={result.Skipped}"
+                + (result.Pairs == 0 ? "" : $" ratio mean={result.RatioMean:0.000} max={result.RatioMax:0.000} mean-normal-change={result.MeanNormalChangeDegrees:0.0} deg"));
+            for (var i = 0; i < result.Pairs; i++) { ratios.Add(result.RatioMean); angles.Add(result.MeanNormalChangeDegrees); }
+            pairsTotal += result.Pairs; framesTotal += frames.Length; skippedTotal += result.Skipped; max = Math.Max(max, result.RatioMax);
         }
-        Console.WriteLine($"shimmer frames={files.Length} pairs={ratios.Count} skipped-different-size={skipped}"
-            + (ratios.Count == 0 ? "" : $" ratio mean={ratios.Average():0.000} max={ratios.Max():0.000} mean-normal-change={angles.Average():0.0} deg"));
+        if (directories.Length > 1)
+            Console.WriteLine($"shimmer total animations={directories.Length} frames={framesTotal} pairs={pairsTotal} skipped-different-size={skippedTotal}"
+                + (pairsTotal == 0 ? "" : $" ratio mean={ratios.Average():0.000} max={max:0.000} mean-normal-change={angles.Average():0.0} deg"));
         return 0;
     }
 

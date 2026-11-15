@@ -69,8 +69,12 @@ internal static class AreaRelight
     internal static (float Ground, float Object, float Critter) NormalGain { get; set; } = (FloatFromEnvironment("ARC_RELIGHT_GROUND", 0.15f), FloatFromEnvironment("ARC_RELIGHT_OBJECT", 0.5f), FloatFromEnvironment("ARC_RELIGHT_CRITTER", 0.5f));
     /// <summary>Extra synthetic lights (the performance run's 5 or 20): placed by the caller, appended after the real ones.</summary>
     internal static List<Light> Extra { get; } = [];
+    /// <summary>ARC-RES-2000: the smoke's frame-time run lights exactly the <see cref="Extra"/> lights (1, 5, 20), with no carried or map light; never set outside a smoke.</summary>
+    internal static bool OnlyExtra { get; set; }
     /// <summary>The lights of the last upload (for the smoke's report).</summary>
     internal static int UploadedCount { get; private set; }
+    /// <summary>ARC-RES-2000: the lights of the last upload themselves (world pixels), for the Godot-native comparison of the smoke stage (the same lights drawn as <c>PointLight2D</c>).</summary>
+    internal static IReadOnlyList<Light> UploadedLights { get; private set; } = [];
     /// <summary>ARC-RES-2007: how many lights reached the view at the last upload before the 32 cap (the cap's overflow is this minus <see cref="UploadedCount"/>), and how many of those were carried.</summary>
     internal static int InViewCount { get; private set; }
     internal static int CarriedInViewCount { get; private set; }
@@ -134,7 +138,7 @@ internal static class AreaRelight
     {
         if (!Active) return;
         EnsureRegistered();
-        IEnumerable<Light> candidates = CarriedLights.Concat(MapLights).Concat(Extra);
+        IEnumerable<Light> candidates = OnlyExtra ? Extra : CarriedLights.Concat(MapLights).Concat(Extra);
         var reach = candidates.ToArray();
         var centre = new Vector2(0, 0);
         if (_view is { } view)
@@ -157,7 +161,7 @@ internal static class AreaRelight
             }
             _lightTexture!.Update(_lightImage);
         }
-        UploadedCount = all.Length;
+        UploadedCount = all.Length; UploadedLights = all;
         RenderingServer.GlobalShaderParameterSet("relight_params", new Vector4((float)Current, EffectiveStrength, Delight, Height));
         RenderingServer.GlobalShaderParameterSet("relight_kinds", new Vector4(NormalGain.Ground, NormalGain.Object, NormalGain.Critter, all.Length));
     }
