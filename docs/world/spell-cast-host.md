@@ -285,7 +285,7 @@ The original's interface bar has a weapon button and a mode 8 that shows the wie
 item facts come from the cast host (`SessionSpellCaster.ItemPane`). Since ARC-UI-2304 the viewer draws them in the bottom strip
 whenever the bars show with their arts (ledger [BM6](../research/ledger/ui-audio.md) and IP10; `MagickWeaponPaneRules`,
 `AreaWeaponBarView`): the button `MagickWeapon_Butt` (563) at (161, 443) shows on the strip in any mode while the weapon qualifies;
-its release (3000 and 3001) toggles bar mode 8, which replaces the spells or skills mode (their toggles come up, #2312) and takes the
+its release (3000 and 3001) toggles bar mode 8, which replaces the spells or skills mode (their toggles come up in both rule modes: an exe drawing bug, owner decision #2312) and takes the
 message window; mode 8 draws `MagickWeapon_Rot` (564) with an icon button per shown slot at slot i's place (353, 402, 451, 501, 550;
 y 542; icon 0x4B1570); entering a slot writes its spell's name in mode 8's text area; the release over it activates the slot (point
 4); a right press starts the hotkey drag (IP9); M or the Spells or Skills button replaces mode 8 with their mode. The bar's counters
