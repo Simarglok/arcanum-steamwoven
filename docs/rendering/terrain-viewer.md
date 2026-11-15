@@ -3531,6 +3531,25 @@ labels the caller-selected anchor/render policy and **Original placement parity:
 NOT VERIFIED**. This authorized presentation subset does not revise the
 historical NOT READY conclusion for original-runtime parity.
 
+## Quit question (ARC-DEV-2270)
+
+A close request of the window (Cmd+Q on macOS, Alt+F4, the close button) asks the original's quit question before the game ends: the yes/no
+dialog box with message 5100 of `mes\MainMenu.mes` (`AreaQuitPanel`, ledger DB5: the original's window procedure turns WM_CLOSE into this
+question, and yes ends the whole program, unlike the in-play menu's Quit, whose yes goes back to the main menu). It is asked over the launcher,
+the main menu, the game and every window; Y or Return quits, N or Escape goes on, other keys are swallowed. While it is up the game is modal
+and the clocks stand still (`WorldMenuPause`, as the original's box loop runs no ping). Without the game's dialog art (the launcher before a game
+folder) the box is the diagnostic parchment box with the same text. Only an interactive window takes the close requests over (Godot's
+`AutoAcceptQuit` is off then): a headless run, the self-test and the native smokes keep Godot's default and the quit smoke drives
+`HandleCloseRequest` itself.
+
+**Hold to quit** (PROJECT, owner request 2026-11-15, as a browser does): the key's repeat reaches the game as a stream of close requests
+(`QuitRequestGate`, Godot-free): a stream that keeps up (gaps of at most 300 ms) for 1.5 s from its first repeat quits at once, answered or not.
+The launcher's "Hold Cmd+Q (Alt+F4) to quit without the question" box (`holdToQuit` in the `launcher` line, on by default; Reset settings turns it
+on) turns it off, and a held key then only asks. A short press, the close button and slow presses one after the other never add up to a hold.
+Not done: the original drops a close request during a movie or a slide show unasked and loses a second request while the box is up; the viewer asks
+over a movie or a death show too (PROJECT). The owner's QA overlay key is Ctrl+Q ([issue #2270](https://github.com/Simarglok/arcanum-steamwoven/issues/2270):
+the first play-test "crash" was a Cmd+Q closing the game). The `report` smoke stage drives the question (ask, no, yes, held key, setting off).
+
 ## Follower Skills (ARC-COMBAT-1777)
 
 Follower Skills slice 2 (ledger PL5, SP3, OH4; the chooser 0x4C9050, its setting getter 0x4C8FA0). The Game page's seventh row (`AreaOption.FollowerSkills`, settings-file line `follower skills`, default on, `AreaGameSettings.FollowerSkills`) switches it. With it on and no Ctrl key held
