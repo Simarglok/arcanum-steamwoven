@@ -45,7 +45,7 @@ public sealed class StealthStateTests
     }
 
     [TestMethod]
-    public void ADialogEndsTheConcealmentOfTheHeroAndOfThatNpcOnly()
+    public void ADialogEndsTheConcealmentOfTheHeroAndItsWholeFollowerTree()
     {
         using var owner = Owner();
         Assert.AreEqual(GameSessionDisposition.Changed, owner.ForceJoinParty(owner.Version, Stranger).Disposition);
@@ -53,9 +53,23 @@ public sealed class StealthStateTests
         var revision = owner.Version.Revision;
         var talk = owner.BeginReactionConversation(owner.Version, Pal, new ReactionNpcFacts(50, Arcanum.Simulation.Character.CharacterRace.Human, false, false));
         Assert.AreEqual(GameSessionDisposition.Changed, talk.Disposition);
-        Assert.AreEqual((false, false, true), (owner.IsConcealed(SessionCombatant.Hero), owner.IsConcealed(SessionCombatant.Critter(Pal)),
-            owner.IsConcealed(SessionCombatant.Critter(Stranger))), "the other follower stays concealed");
+        // 0x567460 runs 0x45EE30 on the concealed hero, which reaches its recursive follower list (0x441260): the other follower stands up too (ARC-SKILLS-2142).
+        Assert.AreEqual((false, false, false), (owner.IsConcealed(SessionCombatant.Hero), owner.IsConcealed(SessionCombatant.Critter(Pal)),
+            owner.IsConcealed(SessionCombatant.Critter(Stranger))), "the hero's whole follower list stands up");
         Assert.AreEqual(revision + 1, owner.Version.Revision);
+    }
+
+    [TestMethod]
+    public void ADialogWithAStrangerStandsUpTheHerosFollowersOfFollowersToo()
+    {
+        using var owner = Owner();
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.ForceJoinLeader(owner.Version, Summon, Pal).Disposition);
+        owner.ToggleHeroConcealment(owner.Version);
+        Assert.IsTrue(owner.IsConcealed(SessionCombatant.Critter(Summon)));
+        var talk = owner.BeginReactionConversation(owner.Version, Stranger, new ReactionNpcFacts(50, Arcanum.Simulation.Character.CharacterRace.Human, false, false));
+        Assert.AreEqual(GameSessionDisposition.Changed, talk.Disposition);
+        Assert.AreEqual((false, false, false), (owner.IsConcealed(SessionCombatant.Hero), owner.IsConcealed(SessionCombatant.Critter(Pal)),
+            owner.IsConcealed(SessionCombatant.Critter(Summon))), "the partner is no follower: the hero's own tree stands up, depth included");
     }
 
     [TestMethod]
