@@ -20,7 +20,7 @@ namespace Arcanum.TerrainViewer.Tests;
 public sealed class AreaHeartbeatSceneryLoopTests
 {
     private const byte Attachee = 1, Number = 3, Looped = 10, LocalObject = 11, EveryScenery = 15, EveryPortal = 19;
-    private const int LoopScript = 830, AssignScript = 831, ReactionScript = 832, ToggleScript = 835, PortalToggleScript = 836, LoopFlag = 2360, AssignFlag = 2361;
+    private const int LoopScript = 830, AssignScript = 831, ReactionScript = 832, ToggleScript = 835, PortalToggleScript = 836, MixedToggleScript = 837, LoopFlag = 2360, AssignFlag = 2361;
 
     private readonly record struct Clause(int Type, params (byte Kind, int Value)[] Operands);
     private static (byte, int) N(int value) => (Number, value);
@@ -75,6 +75,13 @@ public sealed class AreaHeartbeatSceneryLoopTests
             // ARC-SCRIPT-2248: 835 toggles its attachee (a use click's object); 836 has the shape of the ground rune tile script 2221 at line 15 to 20: for every portal in the vicinity, toggle the looped portal.
             Write("scr/00835toggle.scr", Program(Do(new(ScrCatalogue.Action.ToggleState, (Attachee, -1))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
             Write("scr/00836portals.scr", Program(
+                Do(new(ScrCatalogue.Action.LoopFor, (EveryPortal, -1))),
+                Do(new(ScrCatalogue.Action.ToggleState, (Looped, -1))),
+                Do(new(ScrCatalogue.Action.LoopEnd)),
+                Do(new(ScrCatalogue.Action.ReturnRunDefault))));
+            // 837: toggle the attachee, then every portal around it: a run whose first toggle the host could apply and whose second it cannot.
+            Write("scr/00837mixed.scr", Program(
+                Do(new(ScrCatalogue.Action.ToggleState, (Attachee, -1))),
                 Do(new(ScrCatalogue.Action.LoopFor, (EveryPortal, -1))),
                 Do(new(ScrCatalogue.Action.ToggleState, (Looped, -1))),
                 Do(new(ScrCatalogue.Action.LoopEnd)),
@@ -199,7 +206,7 @@ public sealed class AreaHeartbeatSceneryLoopTests
         });
     }
 
-    // ARC-SCRIPT-2248 (ledger TS1–TS5): toggle state (56), which only the heartbeat set held, is in the use set and so in the placed, dying and combat-point sets built on it.
+    // ARC-SCRIPT-2248 (ledger OT1–OT5): toggle state (56), which only the heartbeat set held, is in the use set and so in the placed, dying and combat-point sets built on it.
     [TestMethod]
     public void Every_set_that_runs_a_script_on_an_object_admits_toggle_state()
     {
@@ -256,6 +263,39 @@ public sealed class AreaHeartbeatSceneryLoopTests
             Assert.AreEqual(AreaScriptedUseOutcome.EffectsRejected, refused.Outcome, refused.Detail);
             StringAssert.Contains(refused.Detail, "toggle state of " + AreaUseScriptHost.EntityId(portal) + " is not modelled");
             Assert.IsFalse(AreaUseScriptHost.SwitchedOff(session, 1, AreaUseScriptHost.EntityId(portal)));
+        });
+    }
+
+    // The refusal is whole: an NPC toggle that comes before a portal toggle in the same run is not applied either.
+    [TestMethod]
+    public void A_run_that_toggles_an_NPC_and_then_a_portal_is_refused_whole_and_the_NPC_stays_on()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var npc = AreaHeartbeatScriptTests.Row(1, 16, MixedToggleScript, point: ScrPoint.Use);
+            var host = Host(session, content, _ => false, npc, Portal(2));
+            var run = host.Run(npc, session.Rules.Scripts);
+            Assert.AreEqual(AreaScriptedUseOutcome.EffectsRejected, run.Outcome, run.Detail);
+            Assert.IsFalse(AreaUseScriptHost.SwitchedOff(session, 1, AreaUseScriptHost.EntityId(npc)), "nothing applied");
+        });
+    }
+
+    // An NPC the map data stores off (object flag 0x2) is switched on by a use script's toggle, through the session's flag change, and off again by a second one.
+    [TestMethod]
+    public void A_use_script_switches_on_an_NPC_the_map_data_stores_off()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var npc = AreaHeartbeatScriptTests.Row(1, 16, ToggleScript, objectFlags: AreaUseScriptHost.OffObjectFlagBit, point: ScrPoint.Use);
+            var host = Host(session, content, _ => false, npc);
+            var entity = AreaUseScriptHost.EntityId(npc);
+            Assert.IsTrue(AreaUseScriptHost.NpcOff(session, 1, entity, AreaUseScriptHost.OffObjectFlagBit), "off in the data");
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, host.Run(npc, session.Rules.Scripts).Outcome);
+            Assert.IsFalse(AreaUseScriptHost.NpcOff(session, 1, entity, AreaUseScriptHost.OffObjectFlagBit), "switched on");
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, host.Run(npc, session.Rules.Scripts).Outcome);
+            Assert.IsTrue(AreaUseScriptHost.NpcOff(session, 1, entity, AreaUseScriptHost.OffObjectFlagBit), "and off again");
         });
     }
 }
