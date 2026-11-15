@@ -264,6 +264,33 @@ public partial class TerrainViewerApp
             TickFloaters();
             Require(!BubbleOwnerGone(entity), "the NPC stands again: neither off nor destroyed");
             layer.Bubbles.Clear();
+            // ARC-UI-2048 (TB29, TB30): a dialog speaker with no cell on the shown map still gets its bubble (the original checks no location), which draws nothing, never expires while it is persistent,
+            // ages by time after the end, and goes with the scene; a final line shown with the default life and restarted by the close lives one life from the close.
+            {
+                const string ghost = "oid:no-cell-speaker";
+                BubbleClockForSelfTest = 30_000; layer.Bubbles.Clear();
+                Require(FloaterCell(ghost) is null && Bubble(ghost, "From elsewhere", dialogLine: true, persistent: true), "a speaker with no cell gets its dialog bubble");
+                Require(layer.Bubbles.Of(ghost) is { Persistent: true } && layer.LayOutBubbles().All(b => b.Owner != ghost), "it is created and draws nothing");
+                BubbleClockForSelfTest = 30_000 + 60_000; TickFloaters();
+                Require(layer.Bubbles.Of(ghost) is not null, "a persistent bubble over no cell never expires");
+                ExpireDialogLineBubbleOf(ghost);
+                Require(layer.Bubbles.Of(ghost) is { Persistent: false, LifeMs: 2000 }, "the end gives it the default life from now");
+                BubbleClockForSelfTest += 2000; TickFloaters();
+                Require(layer.Bubbles.Of(ghost) is not null, "still alive at the end of its life");
+                BubbleClockForSelfTest += 1; TickFloaters();
+                Require(layer.Bubbles.Of(ghost) is null, "and gone just after it, undrawn the whole time");
+                _gameSettings = _gameSettings with { TextDuration = 6 };
+                BubbleClockForSelfTest = 100_000; Require(Bubble(entity, "Last words", dialogLine: true), "a final line shown with the default life");
+                BubbleClockForSelfTest = 104_000; ExpireDialogLineBubbleOf(entity);
+                BubbleClockForSelfTest = 104_000 + 6000; TickFloaters();
+                Require(layer.Bubbles.Of(entity) is not null, "the final line's bubble lives one life from the close (past one life from the show)");
+                BubbleClockForSelfTest += 1; TickFloaters();
+                Require(layer.Bubbles.Of(entity) is null, "and goes one life after the close");
+                Require(Bubble(ghost, "Scene change", dialogLine: true, persistent: true), "a bubble before the scene changes");
+                _floaterScene = null; Require(Bubble(entity, "New scene", dialogLine: true) && layer.Bubbles.Of(ghost) is null, "a new scene drops every old bubble (the map-close clear-all)");
+                layer.Bubbles.Clear(); _gameSettings = _gameSettings with { TextDuration = 2 };
+                GD.Print($"ARC-UI-2048 dialog line bubble off the shown map and final-line life PASS npc={entity}");
+            }
             GD.Print($"ARC-UI-2034 bubbles removed by off flag and teardown PASS npc={entity}");
             GD.Print($"ARC-UI-1997 bubbles over objects PASS heroSlot={heroBubble.Slot} lines={heroBubble.Lines.Count} rect={heroBubble.Rect}");
             GD.Print($"ARC-UI-021 native-smoke floaters PASS map={_readyMapName} npc={entity} h={h} npcLines={lines.Length} heroLines={heroLines}"
