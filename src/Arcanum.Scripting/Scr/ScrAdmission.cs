@@ -502,6 +502,16 @@ public sealed class ScrAdmissionSet
     /// </summary>
     public static ScrAdmissionSet S61 { get; } = new("S61", S60.Conditions, S60.Actions, S60.ValueKinds, S60.FocusKinds.Concat([ScrFocusKind.EveryFollower, ScrFocusKind.AnyFollower]), counterIndexWraps: true);
 
+    /// <summary>The conditions whose object operand the interpreter walks as a list by the rule of SG6 (every object, or one of the "any" kinds; an empty list is false): the only ones that admit a list focus kind of the follower kinds (ARC-SCRIPT-2320).</summary>
+    public static IReadOnlySet<int> ListRuleConditions { get; } = new HashSet<int>
+    {
+        ScrCatalogue.Condition.IsAnimal, ScrCatalogue.Condition.IsInCombat, ScrCatalogue.Condition.IsInvisible, ScrCatalogue.Condition.IsSurrendered, ScrCatalogue.Condition.IsInDialog,
+        ScrCatalogue.Condition.IsInvulnerable, ScrCatalogue.Condition.IsUndead, ScrCatalogue.Condition.IsProwling, ScrCatalogue.Condition.BadAssociates, ScrCatalogue.Condition.MonsterOfType,
+        ScrCatalogue.Condition.Identified, ScrCatalogue.Condition.IsDead, ScrCatalogue.Condition.IsSwitchedOff, ScrCatalogue.Condition.HasBodySpell, ScrCatalogue.Condition.IsPolymorphed,
+        ScrCatalogue.Condition.IsShrunk, ScrCatalogue.Condition.HasMirrorImage, ScrCatalogue.Condition.InfluencedBySpell, ScrCatalogue.Condition.KnowsSpell, ScrCatalogue.Condition.MasteredSpellCollege,
+        ScrCatalogue.Condition.HasBlessing, ScrCatalogue.Condition.HasCurse,
+    };
+
     /// <summary>The focus kinds of <see cref="S61"/> a host answers through <see cref="IScrFollowerQueries"/>.</summary>
     public static IReadOnlySet<ScrFocusKind> FollowerQueryFocusKinds { get; } = new HashSet<ScrFocusKind> { ScrFocusKind.EveryFollower, ScrFocusKind.AnyFollower };
 
@@ -732,6 +742,9 @@ public static class ScrAdmission
                     // interpreter reads a condition's object operand as one object, so the critter vicinity kinds are admitted in
                     // actions only (an action's single object is the list's first, 0x44B960; loop for takes the list).
                     if (condition && (ScrFocusKind)kind is ScrFocusKind.EveryoneInVicinity or ScrFocusKind.AnyoneInVicinity) return Refuse(ScrRefusalCode.FocusKindNotAdmitted);
+                    // ARC-SCRIPT-2320 (review): the follower kinds name a list too; a condition that reads one object (following, jilted, the guards, met before, can see) takes the first follower here where the original applies
+                    // the list rule, so only the conditions that walk the whole list (SG6) admit them.
+                    if (condition && (ScrFocusKind)kind is ScrFocusKind.EveryFollower or ScrFocusKind.AnyFollower && !ListRuleConditions.Contains(type)) return Refuse(ScrRefusalCode.FocusKindNotAdmitted);
                     break;
             }
             // Get skill stores into its third operand (SX1).

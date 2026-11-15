@@ -1426,6 +1426,8 @@ internal sealed class ScrInterpreter
     {
         if (_roles.Triggerer is not { } leader) return [];
         var list = FollowerAnswers.FollowersOf(leader) ?? throw new InvalidOperationException("SCR_FOLLOWERS_NULL");
+        // The run's own disbands (held until applied) already took the follower off the leader's array in the original.
+        if (_shared.Disbanded.Count > 0) list = list.Where(follower => !_shared.Disbanded.Contains(follower)).ToArray();
         return _options.Rules.VicinityListCapped && list.Count > ScrWorld.VicinityListCap ? list.Take(ScrWorld.VicinityListCap).ToArray() : list;
     }
 
