@@ -744,7 +744,7 @@ public static class ScrAdmission
                     if (condition && (ScrFocusKind)kind is ScrFocusKind.EveryoneInVicinity or ScrFocusKind.AnyoneInVicinity) return Refuse(ScrRefusalCode.FocusKindNotAdmitted);
                     // ARC-SCRIPT-2320 (review): the follower kinds name a list too; a condition that reads one object (following, jilted, the guards, met before, can see) takes the first follower here where the original applies
                     // the list rule, so only the conditions that walk the whole list (SG6) admit them.
-                    if (condition && (ScrFocusKind)kind is ScrFocusKind.EveryFollower or ScrFocusKind.AnyFollower && !ListRuleConditions.Contains(type)) return Refuse(ScrRefusalCode.FocusKindNotAdmitted);
+                    if (condition && (ScrFocusKind)kind is ScrFocusKind.EveryFollower or ScrFocusKind.AnyFollower && !ScrAdmissionSet.ListRuleConditions.Contains(type)) return Refuse(ScrRefusalCode.FocusKindNotAdmitted);
                     break;
             }
             // Get skill stores into its third operand (SX1).
