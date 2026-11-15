@@ -103,9 +103,13 @@ It is `tools/local_dev/daily.py` (tests `tools/local_dev/test_daily.py`). It is 
 steps takes its own place in the [launch queue](toolchain.md#launch-queue-arc-dev-033), so it refuses to run inside
 `./arcanum run`, and one `daily` runs at a time per repository (a lock in the git folder; `--dry-run` takes none).
 
-**Any failure blocks the packages** (owner decision 2026-10-29): a failed check or smoke ends the day before packaging,
+**Any failure blocks the packages** (owner decision 2026-10-29): a failed check or smoke ends the day with no package,
 the packages stay at their last commit, and the report names each failed step with its run log and first error, so a
-thread to find and fix it starts from the report; the first day after the fix packages.
+thread to find and fix it starts from the report; the first day after the fix packages. **The smoke runs even when
+the root checks failed or timed out** (owner decision 2026-11-15, ARC-DEV-2224: the daily of 11-15 ran no smoke after a
+dotnet timeout of 2700 s, which hid a day of smoke regressions): the checks and then the smoke always run, the report
+shows both results, and a red check or a red smoke alone blocks the package (no green checks, no package). Only a
+check that was *stopped* (a signal, exit 128 and above) ends the day without a smoke.
 
 1. `git fetch origin main` in the main checkout (`--no-fetch` skips it). `SKIP` (exit 0, nothing written) when the
    `BUILD.txt` of both `artifacts/packages/macos` and `artifacts/packages/windows` holds that commit with a
@@ -123,9 +127,14 @@ thread to find and fix it starts from the report; the first day after the fix pa
    variables (`DAT_ROOT`, `ARC_*`, `ARCANUM_*` but the launcher's home), so no real-data test turns on. The oracle
    self-test uses the main checkout's `local/original-oracle/venv` (or `ARCANUM_ORACLE_VENV`), its cache of the locked
    Unicorn, rather than installing it into the fresh worktree each day; one that cannot load Unicorn is a failed check.
+   A failed or timed-out check does not stop the day: the remaining checks and the smoke (step 4) still run. A step that
+   ends with the timeout exit (124) gets a report line that names the cause from its own log: the run time hit the
+   queue's limit (the dotnet step's 45 minutes, counted from the start of the run, with the seconds it waited for its
+   place first; in the smoke chain's log the last timeout and its own ticket), the daily's own limit of an unqueued step
+   (30 minutes), or, with no queue line in the log, "cause unknown" (queue wait cannot be told from run time).
 4. `./arcanum smoke complete` ([smoke runner](toolchain.md#smoke-runner-arc-dev-061), ARC-DEV-396): its viewer build and
    import, the Crash Site smoke, the map batteries and then every stage the viewer accepts (about twenty processes; about 35
-   minutes of slot with the two long stages). A failed, not run or stopped step ends the day with no package; a group of stages that fails only after other stages of its process
+   minutes of slot with the two long stages). A failed, not run or stopped step means no package (it runs also after red root checks, which block the package too); a group of stages that fails only after other stages of its process
    and whose every stage passes alone in the retry (order-dependent, ARC-DEV-396) is reported but does not end the day.
 5. `./arcanum package mac`, then `win`, of that same commit (`--ref COMMIT --no-fetch`), each told the chain's result as
    `--map-smoke`, which `BUILD.txt` keeps as its `map-smoke` line (`PASS (crash-site, main, town, wild, ruins, stages-main, ...)`: the steps that ran); a
@@ -137,7 +146,7 @@ of context and last error, and a `RESULT` line, to
 `artifacts/packages/logs/daily/report.txt` (the next run replaces the folder); stdout shows the same `DAILY` lines.
 Nothing else under `artifacts/packages` is written by `daily` itself, so the bug reports beside a package
 (`artifacts/packages/macos/reports/`) are never touched. Exit codes: 0 `RESULT PASS` or `SKIP` of a packaged commit;
-1 `RESULT FAIL` (a check, the smoke chain or a package failed; a package that passed is still installed and named),
+1 `RESULT FAIL` (a check, the smoke chain or a package failed; the line names the failed checks and the smoke result together; a package that passed is still installed and named),
 `RESULT STOPPED` (a stop signal; the worktree is still removed) or `SKIP` of a commit that already failed.
 
 ## What makes the package different from a developer build
