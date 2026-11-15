@@ -21,8 +21,10 @@ public partial class TerrainViewerApp
     private int _orderLineShownRevision = -1;
     // The strip's mode when the line opened: a different one later is a bar mode change (0x5506C0 runs the closer).
     private (int PaneMode, bool Quantity)? _orderLineBarMode;
-    private (string Module, BroadcastKeywords? Keywords, string Detail)? _broadcastKeywords;
+    private (string Module, AreaBroadcastKeywordsStatus Status, BroadcastKeywords? Keywords, string Detail)? _broadcastKeywords;
     private string? _orderLineLastSent;
+    // The keys whose press the line took: their release is the line's too, so no release-acting hotkey (M, K, E, ...) sees the typing.
+    private readonly HashSet<Key> _orderLineTaken = [];
 
     internal OrderLine OrderLineForSelfTest => _orderLine;
     internal AreaOrderLineView? OrderLineViewForSelfTest => _orderLineView is { Visible: true } ? _orderLineView : null;
@@ -39,9 +41,9 @@ public partial class TerrainViewerApp
         if (decision.Echo || !decision.Pressed) return true;
         _orderLine.Open();
         _orderLineBarMode = OrderLineBarMode();
-        var (status, keywords, detail) = OrderKeywords();
+        _orderLineTaken.Add(Key.Enter);
+        var (status, _, detail) = OrderKeywords();
         GD.Print($"ARC-UI-2305 order line opened keywords={status} {detail}");
-        _ = keywords;
         SyncOrderLine();
         return true;
     }
@@ -53,23 +55,25 @@ public partial class TerrainViewerApp
         if (_broadcastKeywords is not { } cached || cached.Module != module)
         {
             var (status, keywords, detail) = AreaBroadcastKeywords.Load(module);
-            _broadcastKeywords = (module, keywords, $"{status}: {detail}");
+            _broadcastKeywords = (module, status, keywords, detail);
             GD.Print($"ARC-UI-2305 order words {status} {detail}");
         }
         var known = _broadcastKeywords!.Value;
-        return (known.Keywords is null ? AreaBroadcastKeywordsStatus.FileMissing : AreaBroadcastKeywordsStatus.Ready, known.Keywords, known.Detail);
+        return (known.Status, known.Keywords, known.Detail);
     }
 
     /// <summary>While the line is open every key but Escape is its own (0x54C8E0 sends the character and key events to the entry and skips every hotkey):
-    /// Enter accepts, Backspace, Delete, Home, the arrows and Insert edit, Tab does nothing, a printable character is typed. Escape and releases are not taken (the menu
-    /// opens and closes the line). True when the event is consumed.</summary>
+    /// Enter accepts, Backspace, Delete, Home, the arrows and Insert edit, Tab does nothing, a printable character is typed. Escape is not taken (the menu opens and closes the line); the release of a key the line took is its own too, so no
+    /// release-acting hotkey (M, K, E) sees the typing. True when the event is consumed.</summary>
     private bool HandleOrderLineKey(InputEventKey key)
     {
-        if (!_orderLine.IsOpen || !key.Pressed) return false;
         var code = key.Keycode != Key.None ? key.Keycode : key.PhysicalKeycode;
+        if (!key.Pressed) return _orderLineTaken.Remove(code);
+        if (!_orderLine.IsOpen) return false;
+        if (code == Key.Escape) return false;
+        _orderLineTaken.Add(code);
         switch (code)
         {
-            case Key.Escape: return false;
             case Key.Enter or Key.KpEnter: if (!key.Echo) AcceptOrderLine(); return true;
             case Key.Backspace: _orderLine.Type('\b'); return true;
             case Key.Delete: _orderLine.Press(OrderLineKey.Delete); return true;
@@ -81,7 +85,7 @@ public partial class TerrainViewerApp
             case Key.Insert: if (!key.Echo) _orderLine.Press(OrderLineKey.Insert); return true;
             case Key.Tab: return true;
         }
-        if (key.Unicode >= ' ' && !key.CtrlPressed && !key.AltPressed && !key.MetaPressed) _orderLine.Type((char)key.Unicode);
+        if (key.Unicode >= ' ' && key.Unicode <= 0xFF && !key.CtrlPressed && !key.AltPressed && !key.MetaPressed) _orderLine.Type((char)key.Unicode);
         return true;
     }
 
@@ -89,6 +93,7 @@ public partial class TerrainViewerApp
     /// under the pointer, then the line closes.</summary>
     private void AcceptOrderLine()
     {
+        if (!OrderInputOpen) { CloseOrderLine("the world no longer owns input"); return; }
         var text = _orderLine.Accept();
         _orderLineBarMode = null;
         if (text is null) { GD.Print("ARC-UI-2305 order line closed empty"); return; }
@@ -117,6 +122,8 @@ public partial class TerrainViewerApp
             _gameBarPanel.AddPart(AreaBarStrip.Bottom, _orderLineView);
         }
         if (_orderLine.IsOpen && _orderLineBarMode is { } opened && opened != OrderLineBarMode()) CloseOrderLine("the bar mode changed");
+        // A window (a dialog or the inventory opened by the mouse), a turn that is not the hero's, a pending map change or a lost focus: the world no longer owns the input.
+        if (_orderLine.IsOpen && (!OrderInputOpen || WorldModal)) CloseOrderLine("the world no longer owns input");
         var font = TextFonts()?.Text;
         var shown = _orderLine.IsOpen && font is not null;
         if (_orderLineView.Visible != shown) _orderLineView.Visible = shown;

@@ -28,7 +28,7 @@ public partial class TerrainViewerApp
             InputWorld(new InputEventKey { Keycode = key, PhysicalKeycode = key, Pressed = false });
             await Frames(1);
         }
-        async Task Type(string text) { foreach (var c in text) await Press(c == ' ' ? Key.Space : Key.A, c); }
+        async Task Type(string text) { foreach (var c in text) await Press(c == ' ' ? Key.Space : (Key)char.ToUpperInvariant(c), c); }
         // ARC_AREA_FOLLOWER_PANEL_CAPTURE saves in-app readbacks (the strip before and with the line open) to the caller's ignored path, never committed.
         var capture = System.Environment.GetEnvironmentVariable("ARC_AREA_FOLLOWER_PANEL_CAPTURE");
         async Task Shot(string label)
@@ -51,6 +51,9 @@ public partial class TerrainViewerApp
 
         await Type(name + " waitx");
         await Press(Key.Backspace);
+        // Letters whose release acts as a hotkey (M the spell pane, K the skill pane, E the end of the hero's subturn) are typed text while the line is open: no pane opens, the line stays.
+        await Type("mke");
+        for (var back = 0; back < 3; back++) await Press(Key.Backspace);
         await Frames();
         var expected = name + " wait";
         fact("typed characters and Backspace edit the text the strip draws", _orderLine.Text == expected && OrderLineViewForSelfTest?.TextForSelfTest == expected,
