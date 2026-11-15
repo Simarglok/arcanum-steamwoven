@@ -308,6 +308,8 @@ public partial class TerrainViewerApp
             CanHear: (listener, source) => AreaAiHostNow()?.ScriptCanHear(listener, source),
             // ARC-SCRIPT-1735 (E5-a tail, NS5): a script's change art number writes the new art id only when an ART file of the module's content names it.
             ArtExists: aid => ExtraArt()?.Exists(aid) == true,
+            // ARC-SCRIPT-2326: get armor of the hero reads the armour part of the use art of its worn body armour (the viewer's hero body reads it, null when not read: NOT READY).
+            BodyArmorUseArt: () => _areaSession is { } armorSession ? WornBodyArmorUseArt(armorSession) : null,
             // ARC-WORLD-1837 (TT20): a script's teleport of an NPC alone to a cell of the shown map is a request in the session's one slot; the AI host's relocation carries it out at the next ping (PingNpcChangeOfPlace).
             NpcTeleportRefusal: teleport => AreaAiHostNow() is { } ai ? ai.ScriptTeleportRefusal(teleport.Object.Code, new(teleport.X, teleport.Y)) : "no AI host",
             RequestNpcTeleport: teleport =>

@@ -117,7 +117,7 @@ public static class ScrCatalogue
             CritterDisband = 22, SetReaction = 30, AdjustReaction = 31, SetDayStandpoint = 45, SetNightStandpoint = 46, ChangeArtNumber = 59, ChangeScript = 99, SetDayStandpointEx = 140, SetNightStandpointEx = 141,
             TransferItem = 41, SetLockState = 53, CreateItem = 66, ToggleOpenClosed = 88, SetWrittenStart = 94, ToggleSectorBlocked = 106, ToggleMonsterGenerator = 110, TouchArt = 123,
             DestroyItemNamed = 126, ToggleItemInventoryDisplay = 127, QueueSlide = 131, EndGame = 132, QueueNewspaper = 85, FloatNewspaperHeadline = 86, GetLocation = 95, StopSpellOnObject = 130, PlaySpellEyeCandy = 104, StopScriptEyeCandy = 124, GetHitPoints = 107, GetFatiguePoints = 108, HealPoison = 128, AdjustStat = 137,
-            GetSocialClass = 38, GetOrigin = 39, ToggleInvulnerability = 57, GetFaction = 89, Rename = 92;
+            GetSocialClass = 38, GetOrigin = 39, ToggleInvulnerability = 57, GetFaction = 89, Rename = 92, GetArmor = 32;
     }
 
     /// <summary>Script file flags.</summary>

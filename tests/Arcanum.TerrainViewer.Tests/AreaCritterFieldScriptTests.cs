@@ -248,9 +248,26 @@ public sealed class AreaCritterFieldScriptTests
         foreach (var set in new[] { AreaUseScriptHost.Admission, AreaUseScriptHost.PlacedAdmission, AreaUseScriptHost.HeartbeatAdmission, AreaUseScriptHost.DyingAdmission, AreaUseScriptHost.CombatPointAdmission })
         {
             Assert.IsTrue(new[] { 38, 39, 57, 89, 92 }.All(set.Actions.Contains), set.Id);
-            Assert.IsTrue(set.IsSubsetOfBesidesStores(ScrAdmissionSet.S61), set.Id);
+            Assert.IsTrue(set.IsSubsetOfBesidesStores(ScrAdmissionSet.S62), set.Id);
         }
         Assert.IsTrue(new[] { 38, 39, 89 }.All(AreaScriptHost.TalkAdmission.Actions.Contains));
         Assert.IsFalse(AreaScriptHost.TalkAdmission.Actions.Contains(ScrCatalogue.Action.ToggleInvulnerability) || AreaScriptHost.TalkAdmission.Actions.Contains(ScrCatalogue.Action.Rename));
+    }
+
+    [TestMethod]
+    public void Get_armor_reads_the_armour_part_of_the_stored_current_art_and_the_bare_hero_has_none()
+    {
+        using var session = ConversationSessionFixture.CreateWithHero(1);
+        AreaObjectRecord WithArt(int index, uint art) { var row = Npc(index); return row with { EffectiveFields = [.. row.EffectiveFields.Select(f => f.Slot == 0 ? f with { Number = art } : f)] }; }
+        var chain = WithArt(1, (2u << 28) | (3u << 20));
+        var plate = WithArt(2, (2u << 28) | (6u << 20) | 0x30);
+        var monster = WithArt(3, (12u << 28) | (5u << 20) | (0xFu << 23));
+        var unique = WithArt(4, (13u << 28) | (7u << 20));
+        var host = new AreaUseScriptHost(session, 1, [chain, plate, monster, unique], [], null, null);
+        // ARC-SCRIPT-2326 (AR1–AR3): bits 20..23 of a critter art id, bits 20..22 of a monster's, 0 for any other art type; the bare hero shows underwear (0).
+        Assert.AreEqual((3, 6, 5, 0), (host.ArmorOf(Ref(chain)), host.ArmorOf(Ref(plate)), host.ArmorOf(Ref(monster)), host.ArmorOf(Ref(unique))));
+        Assert.AreEqual(0, host.ArmorOf(host.Pc));
+        Assert.IsNull(host.ArmorOf(new ScrObjectRef(1, "oid:nobody")), "an object the host has no row for is not known");
+        Assert.IsTrue(AreaUseScriptHost.Admission.Actions.Contains(ScrCatalogue.Action.GetArmor) && AreaScriptHost.TalkAdmission.Actions.Contains(ScrCatalogue.Action.GetArmor));
     }
 }
