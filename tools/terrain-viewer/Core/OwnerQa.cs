@@ -139,6 +139,8 @@ public static class OwnerQaFiles
         try
         {
             Directory.CreateDirectory(folder);
+            using var guard = TakeLock(folder);
+            if (guard is null) return "results.jsonl is busy (the QA page holds its lock), try again";
             var path = Path.Combine(folder, ResultsFile);
             var prefix = "";
             if (File.Exists(path))
@@ -156,6 +158,19 @@ public static class OwnerQaFiles
         {
             return error.Message;
         }
+    }
+
+    /// <summary>The page's write lock (<c>.lock</c> in the QA folder, an flock of the Python page): a .NET open with FileShare.None takes
+    /// the same advisory lock on Unix, so an append of the game and one of the page never overlap (the game writes at its own offset, not
+    /// with O_APPEND). Null when it stays held for about two seconds.</summary>
+    private static FileStream? TakeLock(string folder)
+    {
+        for (var attempt = 0; attempt < 40; attempt++)
+        {
+            try { return new FileStream(Path.Combine(folder, ".lock"), FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None); }
+            catch (IOException) { Thread.Sleep(50); }
+        }
+        return null;
     }
 
     /// <summary>The step the owner has open (<c>active-check.txt</c>, replaced whole), so Ctrl+B tags its report; null clears it.</summary>
@@ -199,15 +214,20 @@ public sealed class OwnerQaSession
     /// <summary>Reads the list and the results again; the current step stays when it is still in the list.</summary>
     public void Reload()
     {
-        (_steps, var commit, Problem) = OwnerQaFiles.ReadChecks(Folder);
-        ListCommit = commit;
+        var (steps, commit, problem) = OwnerQaFiles.ReadChecks(Folder);
+        Problem = problem;
+        if (problem is null || _steps.Count == 0) { _steps = steps; ListCommit = commit; }   // a transient read problem keeps the list in hand
         _results = OwnerQaFiles.ReadResults(Folder);
         if (CurrentId is null || _steps.All(step => step.Id != CurrentId))
         {
             var active = BugReportCheck.ReadActive(Path.Combine(Folder, BugReportCheck.FileName), DateTime.UtcNow);
             CurrentId = active is not null && _steps.Any(step => step.Id == active) ? active : _steps.FirstOrDefault(step => EffectiveStatus(step) == "open")?.Id;
+            if (CurrentId is not null && CurrentId != active) OwnerQaFiles.WriteActive(Folder, CurrentId);   // the plate's step is the one Ctrl+B tags
         }
     }
+
+    /// <summary>Writes the current step again (a fresh file time: Ctrl+B ignores a file older than 12 hours, and the page clears it at its start).</summary>
+    public void TouchActive() { if (CurrentId is not null) OwnerQaFiles.WriteActive(Folder, CurrentId); }
 
     public OwnerQaStep? Current => _steps.FirstOrDefault(step => step.Id == CurrentId);
     public OwnerQaResult? ResultOf(string id) => _results.GetValueOrDefault(id);
@@ -265,17 +285,20 @@ public sealed class OwnerQaSession
     public string? Mark(string status, string note, DateTime utcNow)
     {
         if (CurrentId is null || status is not ("same" or "differs" or "cannot-test")) return "no current step or a wrong mark";
+        _results = OwnerQaFiles.ReadResults(Folder);   // the page may have changed the step since the window opened
         var problem = OwnerQaFiles.AppendResult(Folder, CurrentId, status, note, ResultOf(CurrentId)?.Report, Build, utcNow);
         if (problem is null) Reload();
         return problem;
     }
 
-    /// <summary>Records the folder name of a report sent for the current step, keeping its status (open when none is recorded).</summary>
+    /// <summary>Records the folder name of a report sent for the current step, keeping the status the step shows (recorded, else the list's, else open).</summary>
     public string? RecordReport(string folderName, string note, DateTime utcNow)
     {
-        if (CurrentId is null) return "no current step";
-        var status = _results.TryGetValue(CurrentId, out var result) ? result.Status : "open";
-        var problem = OwnerQaFiles.AppendResult(Folder, CurrentId, status, note.Length > 0 ? note : result?.Note ?? "", folderName, Build, utcNow);
+        if (Current is not { } step) return "no current step";
+        _results = OwnerQaFiles.ReadResults(Folder);
+        var status = EffectiveStatus(step);
+        var result = ResultOf(step.Id);
+        var problem = OwnerQaFiles.AppendResult(Folder, step.Id, status, note.Length > 0 ? note : result?.Note ?? "", folderName, Build, utcNow);
         if (problem is null) Reload();
         return problem;
     }

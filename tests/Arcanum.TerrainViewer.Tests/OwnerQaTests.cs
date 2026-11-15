@@ -185,4 +185,46 @@ public sealed class OwnerQaTests
         Assert.AreEqual("ARC-DEV-100#2", session.CurrentId);
         Assert.IsFalse(session.FollowActive());
     }
+
+    [TestMethod]
+    public void A_report_keeps_the_status_the_step_shows_and_a_mark_sees_the_pages_change()
+    {
+        WriteChecks();
+        var session = new OwnerQaSession(_folder, "b");
+        Assert.IsNull(session.SetCurrent("ARC-DEV-100#2"));              // `same` in the list, never marked
+        Assert.IsNull(session.RecordReport("2026-11-15_10-00-00", "", Now));
+        Assert.AreEqual("same", session.ResultOf("ARC-DEV-100#2")!.Status);
+        // the page changes the note and the report of the step while the window is open: the game's mark keeps them
+        OwnerQaFiles.AppendResult(_folder, "ARC-DEV-100#2", "same", "page note", "2026-11-15_11-00-00", "page", Now);
+        Assert.IsNull(session.Mark("differs", "game note", Now));
+        Assert.AreEqual(new OwnerQaResult("differs", "game note", "2026-11-15_11-00-00"), session.ResultOf("ARC-DEV-100#2"));
+    }
+
+    [TestMethod]
+    public void A_read_problem_keeps_the_list_and_the_current_step_and_the_default_step_is_written_for_Ctrl_B()
+    {
+        WriteChecks();
+        var session = new OwnerQaSession(_folder, "b");
+        Assert.AreEqual("ARC-DEV-100#1", BugReportCheck.ReadActive(Path.Combine(_folder, BugReportCheck.FileName), DateTime.UtcNow));
+        File.WriteAllText(Path.Combine(_folder, OwnerQaFiles.ChecksFile), "");
+        session.Reload();
+        Assert.IsNotNull(session.Problem);
+        Assert.AreEqual(3, session.Steps.Count);
+        Assert.AreEqual("ARC-DEV-100#1", session.CurrentId);
+        File.Delete(Path.Combine(_folder, BugReportCheck.FileName));
+        session.TouchActive();
+        Assert.AreEqual("ARC-DEV-100#1", BugReportCheck.ReadActive(Path.Combine(_folder, BugReportCheck.FileName), DateTime.UtcNow));
+    }
+
+    [TestMethod]
+    public void An_append_waits_for_the_pages_lock_and_gives_up_with_a_message()
+    {
+        using (new FileStream(Path.Combine(_folder, ".lock"), FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None))
+        {
+            var problem = OwnerQaFiles.AppendResult(_folder, "ARC-DEV-100#1", "same", "", null, "b", Now);
+            StringAssert.Contains(problem, "busy");
+            Assert.IsFalse(File.Exists(Path.Combine(_folder, OwnerQaFiles.ResultsFile)));
+        }
+        Assert.IsNull(OwnerQaFiles.AppendResult(_folder, "ARC-DEV-100#1", "same", "", null, "b", Now));
+    }
 }

@@ -113,19 +113,23 @@ public partial class AreaOwnerQaPanel : CanvasLayer
     }
 
     /// <summary>Redraws the list and the detail from the session; <paramref name="notice"/> (when given) replaces the message.</summary>
-    public void Refresh(string? notice)
+    public void Refresh(string? notice, bool rebuild = true)
     {
         if (_session is not { } session) return;
         if (notice is not null) _notice.Text = notice;
-        _rows = session.Rows();
-        _list.Clear();
-        foreach (var row in _rows)
+        // rebuild: the rows are chosen again (the current step first); without it the order stays and only the marks and the selection move.
+        if (rebuild || _rows.Count == 0 || _rows.All(row => row.Id != session.CurrentId)) { _rows = session.Rows(); rebuild = true; }
+        if (rebuild) _list.Clear();
+        for (var i = 0; i < _rows.Count; i++)
         {
+            var row = _rows[i];
             var mark = session.EffectiveStatus(row) switch { "same" => "[same]", "differs" => "[differs]", "cannot-test" => "[cannot]", _ => "[open]" };
             var text = row.Step.Length > 70 ? row.Step[..70] + "..." : row.Step;
-            _list.AddItem((row.Id == session.CurrentId ? "> " : "  ") + row.Id + " " + mark + " " + text);
+            var line = (row.Id == session.CurrentId ? "> " : "  ") + row.Id + " " + mark + " " + text;
+            if (rebuild) _list.AddItem(line); else _list.SetItemText(i, line);
         }
-        if (_rows.Count > 0) _list.Select(0);
+        var selected = _rows.ToList().FindIndex(row => row.Id == session.CurrentId);
+        if (selected >= 0) _list.Select(selected);
         _open.ButtonPressed = session.Filter == OwnerQaFilter.Open; _section.ButtonPressed = session.Filter == OwnerQaFilter.Section; _all.ButtonPressed = session.Filter == OwnerQaFilter.All;
         _header.Text = $"Owner checks (the game is paused) - build {(session.Build.Length == 0 ? "?" : session.Build)}, list {(session.ListCommit.Length == 0 ? "?" : session.ListCommit)}";
         var current = session.Current;

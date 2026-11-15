@@ -114,7 +114,7 @@ public partial class TerrainViewerApp
     private void OpenOwnerQa()
     {
         if (OwnerQaOpen || _exiting || _ownerQa is null) return;
-        _ownerQa.Reload();
+        _ownerQa.Reload(); _ownerQa.TouchActive();
         // The key's moment, as Ctrl+B keeps it: the screen as drawn (the plate included), the log of the last 120 s, the facts and a save.
         var moment = CaptureBugReportMoment();
         _ownerQaMoment = moment;
@@ -122,8 +122,13 @@ public partial class TerrainViewerApp
         {
             _ownerQaPanel = new AreaOwnerQaPanel(); AddChild(_ownerQaPanel);
             _ownerQaPanel.MarkRequested += MarkOwnerQa;
-            _ownerQaPanel.NextRequested += () => { _ownerQa!.AdvanceToNextOpen(out var problem); AfterOwnerQaStepChange(problem); };
-            _ownerQaPanel.StepChosen += id => AfterOwnerQaStepChange(_ownerQa!.SetCurrent(id));
+            _ownerQaPanel.NextRequested += () =>
+            {
+                var before = _ownerQa!.CurrentId;
+                if (!_ownerQa.AdvanceToNextOpen(out var problem)) _ownerQaPanel!.ShowNotice("No other step is open.");
+                else if (_ownerQa.CurrentId != before) AfterOwnerQaStepChange(problem);
+            };
+            _ownerQaPanel.StepChosen += id => { if (id != _ownerQa!.CurrentId) AfterOwnerQaStepChange(_ownerQa.SetCurrent(id)); };
             _ownerQaPanel.FilterChanged += () => _ownerQaPanel!.Refresh(null);
             _ownerQaPanel.SendRequested += SendOwnerQaReport;
             _ownerQaPanel.CloseRequested += EndOwnerQa;
@@ -140,7 +145,8 @@ public partial class TerrainViewerApp
     private void AfterOwnerQaStepChange(string? problem)
     {
         _ownerQaPanel!.ClearNote();
-        _ownerQaPanel.Refresh(problem is null ? "" : "The current step could not be written for Ctrl+B: " + problem);
+        // The list keeps its order (a click or an arrow key only moves the current mark), so keyboard browsing goes on from the row.
+        _ownerQaPanel.Refresh(problem is null ? "" : "The current step could not be written for Ctrl+B: " + problem, rebuild: false);
         UpdateOwnerQaPlate();
     }
 
@@ -158,9 +164,10 @@ public partial class TerrainViewerApp
         if (_ownerQaMoment is not { } moment) { _ownerQaPanel!.ShowNotice("This moment is already sent: close the window and open it again for a new report."); return; }
         var note = _ownerQaPanel!.Note;
         var result = WriteBugReportMoment(moment, note, id);
-        _ownerQaMoment = null;
         _hud?.SetNotice(result.Status);
-        if (result.Folder is null) { _ownerQaPanel.ShowNotice("The report could not be written: " + string.Join("; ", result.Failed)); return; }
+        if (result.Folder is null) { _ownerQaPanel.ShowNotice("The report could not be written (press Send report to try again): " + string.Join("; ", result.Failed)); return; }
+        _ownerQaMoment = null;
+        _ownerQa.TouchActive();
         var name = System.IO.Path.GetFileName(result.Folder.TrimEnd('/', '\\'));
         var problem = _ownerQa.RecordReport(name, note, DateTime.UtcNow);
         _ownerQaPanel.Refresh((result.Saved ? "Report saved in " : "Report INCOMPLETE in ") + result.Folder

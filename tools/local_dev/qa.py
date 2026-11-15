@@ -62,7 +62,8 @@ PLAYER_TEXT_LIMIT = 120
 ACTIVE_FILE = "active-check.txt"     # the one line the viewer's Ctrl+B reads (BugReportCheck.cs); keep the name in step with it
 CHECKS_FILE = "checks.json"          # the list snapshot the in-game overlay reads (OwnerQa.cs, ARC-DEV-2190)
 OVERLAY_MARKER = "owner-qa.on"       # its presence turns the overlay on in a build started from this checkout (OwnerQa.cs)
-AUTO_SYNC_SECONDS = 20               # the running page creates the issues of differs steps recorded by the game this often
+AUTO_SYNC_SECONDS = 20               # the running page creates the issues of differs steps recorded by the game this often ...
+SETTLE_SECONDS = 20                  # ... once the step's latest result is this old (a note or a report may still follow the mark)
 CHECK_PREFIX = "Check: "              # the report.md line of BugReportCheck.LinePrefix
 
 
@@ -82,6 +83,15 @@ def default_data_dir(root: Path = ROOT) -> Path:
 
 def default_reports_dir(root: Path = ROOT) -> Path:
     return main_checkout(root) / "artifacts" / "packages" / "macos" / "reports"
+
+
+def _age_seconds(ts: object) -> float:
+    """Seconds since an ISO ``...Z`` time (a time that cannot be read counts as old, so such a step is not held back)."""
+    try:
+        moment = datetime.datetime.strptime(str(ts), "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=datetime.timezone.utc)
+    except ValueError:
+        return float("inf")
+    return (datetime.datetime.now(datetime.timezone.utc) - moment).total_seconds()
 
 
 def now_iso() -> str:
@@ -495,10 +505,11 @@ class QaApp:
             message = (err.strip() or out.strip() or f"gh exited with {code}")[:500]
             self.store.append({"kind": "issue", "ts": now_iso(), "step": step.id, "error": message})
 
-    def sync(self, dry_run: bool = False, retry_failed: bool = True) -> tuple[list[str], list[str]]:
+    def sync(self, dry_run: bool = False, retry_failed: bool = True, settle: float = 0) -> tuple[list[str], list[str]]:
         """Create the issues of the ``differs`` steps that have none (recorded by the game, or a failed earlier attempt); returns
         (created or would be, failed). ``retry_failed=False`` (the running page's timer) leaves a step whose earlier attempt failed to
-        the next ``qa sync`` instead of calling gh again every few seconds."""
+        the next ``qa sync`` instead of calling gh again every few seconds. ``settle`` (seconds): a step whose latest result is younger
+        waits (the issue body is fixed when it is created, so a note or report that follows the mark should be in it)."""
         done, failed = [], []
         with self.store.locked():
             results, _ = self.store.read()
@@ -508,6 +519,8 @@ class QaApp:
                 if step is None or result["status"] != "differs" or result["issue"] is not None:
                     continue
                 if not retry_failed and result["issueError"]:
+                    continue
+                if settle and _age_seconds(result.get("ts")) < settle:
                     continue
                 if dry_run:
                     done.append(step_id)
@@ -661,15 +674,15 @@ def configure(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--reports-dir", type=Path, help="the bug report folders (default: artifacts/packages/macos/reports of the main checkout)")
 
 
-def auto_sync(app: QaApp, seconds: float = AUTO_SYNC_SECONDS, rounds: int | None = None) -> None:
+def auto_sync(app: QaApp, seconds: float = AUTO_SYNC_SECONDS, rounds: int | None = None, settle: float = SETTLE_SECONDS) -> None:
     """ARC-DEV-2190: while the page runs, create the issue of every ``differs`` result the game recorded (once per step: the issue
-    number is stored). A failed attempt waits for ``qa sync``. ``rounds`` (tests) stops the loop."""
+    number is stored) once the step's latest result is ``settle`` seconds old. A failed attempt waits for ``qa sync``. ``rounds`` (tests) stops the loop."""
     count = 0
     while rounds is None or count < rounds:
         time.sleep(seconds)
         count += 1
         try:
-            done, failed = app.sync(retry_failed=False)
+            done, failed = app.sync(retry_failed=False, settle=settle)
         except (OSError, ValueError) as error:
             print(f"qa: auto sync failed: {error}", file=sys.stderr)
             continue

@@ -510,17 +510,29 @@ class OverlayTests(unittest.TestCase):
             app = make_app(Path(tmp), gh)
             self.game_result(app, "ARC-DEV-100#1", "differs")
             with contextlib.redirect_stdout(io.StringIO()):
-                qa.auto_sync(app, seconds=0, rounds=3)
+                qa.auto_sync(app, seconds=0, rounds=3, settle=0)
             self.assertEqual(1, len(gh.creates()))
             failing = FakeGh(fail=True)
             other = make_app(Path(tmp) / "other", failing)
             self.game_result(other, "ARC-UI-200#1", "differs")
             with contextlib.redirect_stderr(io.StringIO()), contextlib.redirect_stdout(io.StringIO()):
-                qa.auto_sync(other, seconds=0, rounds=3)
+                qa.auto_sync(other, seconds=0, rounds=3, settle=0)
             self.assertEqual(1, len(failing.creates()))                   # one attempt, no hammering of gh every round
             failing.fail = False
             done, failed = other.sync()                                    # `qa sync` retries it
             self.assertEqual((["ARC-UI-200#1"], []), (done, failed))
+
+    def test_a_fresh_differs_waits_for_its_note_and_report(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            gh = FakeGh()
+            app = make_app(Path(tmp), gh)
+            self.game_result(app, "ARC-DEV-100#1", "differs")
+            self.assertEqual(([], []), app.sync(settle=60))         # younger than the settle time: not yet
+            self.assertEqual(0, len(gh.creates()))
+            self.game_result(app, "ARC-DEV-100#1", "differs", "2026-11-15_10-00-00")   # the report arrives meanwhile
+            self.assertEqual(0, len(gh.creates()))
+            self.assertEqual((["ARC-DEV-100#1"], []), app.sync(settle=0))
+            self.assertIn("2026-11-15_10-00-00", gh.creates()[0][1])
 
     def test_overlay_on_and_off_write_and_remove_the_marker(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
