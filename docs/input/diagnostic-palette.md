@@ -58,7 +58,7 @@ its Close button. Contents:
   works while the open palette pauses time) or switch the ambient multiplier off/on; a
   status line shows time, DAY/NIGHT, whether time flows or is paused, and the scheme.
   Elsewhere they report "unavailable". See [area lighting](../rendering/area-lighting.md).
-- **Visual Legacy/HD (H)** (ARC-UI-006): requests the other visual profile, like `H`; the line
+- **HD Off/On (H)** (ARC-UI-006, ARC-UI-2174: the one HD setting, interface art and fonts and the relit lighting together): requests the other profile, like `H`; the line
   under it shows the active profile, a pending switch, the pack and the save outcome
   ([viewer](../rendering/terrain-viewer.md#visual-profile-setting-and-toggle-arc-ui-006)).
 - **Always Run on/off** (ARC-WORLD-020): the original's Always Run option, saved; the line under
@@ -135,7 +135,7 @@ WORLD host (`TerrainViewerWorld.cs`).
    [ARC-UI-008](../rendering/terrain-viewer.md#logbook-arc-ui-008),
    [ARC-TECHNOLOGY-005](../rendering/terrain-viewer.md#schematic-window-arc-technology-005)); in map mode W opens the
    world map on key down ([ARC-UI-048](../rendering/area-map-mode.md#world-map-arc-ui-048)).
-   `H` without modifiers (not an original key) switches the visual profile Legacy/HD on a fresh press
+   `H` without modifiers (not an original key) switches HD Off/On (the visual profile, the HD interface and the relit look together, ARC-UI-2174) on a fresh press
    while the world owns input ([ARC-UI-006](../rendering/terrain-viewer.md#visual-profile-setting-and-toggle-arc-ui-006));
    the palette holds the same action. In `area` Num Lock flips the original always-run lock and
    Ctrl+LMB on the ground runs once ([ARC-WORLD-020](../world/gait-runtime.md)); while it has a game session R

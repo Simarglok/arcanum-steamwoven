@@ -93,7 +93,7 @@ public partial class TerrainViewerApp
         var scroll = panel.FindChildren("*", "ScrollContainer", true, false).OfType<ScrollContainer>().Single();
         // Navigable palette controls: 8 input settings, zoom editor, 3 presets, Fit,
         // Reset scene, Reload, Game time +1 hour, Ambient lighting on/off (ARC-RENDER-010),
-        // Visual Legacy/HD (ARC-UI-006), Always Run on/off (ARC-WORLD-020), Prowl (stealth) on/off (ARC-SKILLS-008), Pick pocket (ARC-SKILLS-010), Save game and Load game (ARC-UI-010), Sound test (ARC-UI-040), three volumes (ARC-UI-044), the passability checkbox (ARC-RENDER-008, available with a movement authority),
+        // HD Off/On (ARC-UI-006, ARC-UI-2174), Always Run on/off (ARC-WORLD-020), Prowl (stealth) on/off (ARC-SKILLS-008), Pick pocket (ARC-SKILLS-010), Save game and Load game (ARC-UI-010), Sound test (ARC-UI-040), three volumes (ARC-UI-044), the passability checkbox (ARC-RENDER-008, available with a movement authority),
         // Reset preferences, Close.
         var overlay = scroll.GetChild(0).GetChildren().OfType<CheckButton>().Single(c => c.Name == "PassabilityOverlay");
         Require(!overlay.Disabled && overlay.FocusMode == Control.FocusModeEnum.All, "overlay checkbox available and navigable");

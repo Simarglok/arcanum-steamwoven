@@ -183,7 +183,8 @@ public sealed record AreaGameSettings
     public bool TurnBased { get; init; }
     public bool AutoAttack { get; init; }
 
-    /// <summary>ARC-UI-095: the interface art draws its HD redraws (default off); independent of the visual profile (the H key).</summary>
+    /// <summary>ARC-UI-2174: the one HD setting (default off; launcher row HD Off/On, the H key, the palette action): the interface art and fonts draw their HD
+    /// redraws and the relit lighting is on, together. The name is the earlier interface switch (ARC-UI-095); the saved line is <c>hd</c>.</summary>
     public bool HdInterface { get; init; }
 
     /// <summary>ARC-UI-140: the interface draws its generated chrome where a recipe exists (default off; the options line's third value,

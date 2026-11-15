@@ -109,18 +109,21 @@ reason the start opens the stored folder at once. `--launcher` with other viewer
   after alpha); three HD lines (ARC-UI-143, below); "Show this screen at every start"; "Debug mode" (ARC-DEV-050, off by default:
   [debug mode](area-map-mode.md#debug-mode-arc-dev-050)); Play, Reset settings and Quit. The project's own look, not a
   window of the original's menu.
-- **HD lines (ARC-UI-143, ARC-RENDER-2076).** After the rules the screen has three HD lines (the Game page of the options window had them until ARC-UI-146), one row of choices each: **HD graphics**
-  Off/On (the visual profile, the `visual profile` line of `arcanum.cfg`; ARC-RENDER-2076: the relit night look, [relit look](area-lighting.md#relit-look-arc-render-2060), is a part of it,
-  on exactly while HD graphics is On and not a line of its own, so HD graphics Off, the H key included, is Legacy byte for byte; a `relit look` line that an older file has is ignored and left where it is), **HD interface** Off/On/Generated (experimental) and **HD pack** Auto/Game/Custom
-  (the `hd interface`, `generated interface`, `hd pack` and `hd pack path` lines of `arcanum.cfg`, [HD pack source](../workflow/hd-pack.md#hd-pack-source-arc-dev-350)).
-  They are the only saved-settings screen for them (the options window has no HD line since ARC-UI-146; the `H` key and the palette still
-  switch the visual profile in play, HD interface and HD pack change only here, with Shift held at the start): a choice is saved at once in the settings file (not at Play) and the game that Play
-  starts reads them like any start. The pack source applies at the next start; the note under the rows says what that start will read (an automated run: that pack folders are not searched). Custom opens the
-  system folder dialog, with the same fallback note where there is none. The rows are off while the screen is busy; **Reset settings**
-  resets the `launcher` line only and leaves the HD lines (and every other setting) as they are. A run with no settings file (an automated run) keeps the choices
-  for the screen only: its start reads the file and finds the defaults. A choice that could not be written is named under the rows. Checked by the launcher self-test (defaults, each choice saved in the files, shown again by the next screen, read by
-  the start, Custom's folder, Reset) and by the launcher native smoke's HD lines and screenshot (`--native-smoke-screenshot PATH`
-  also writes `NAME-launcher.png` beside it, the screen before Play, where `PATH` is `NAME.png`).
+- **HD lines (ARC-UI-143, ARC-RENDER-2076, ARC-UI-2174).** After the rules the screen has three HD rows (the Game page of the options window had them until ARC-UI-146), one row of choices each:
+  **HD** Off/On (the one HD setting, the `hd` line of `arcanum.cfg`, 0 or 1: On turns on the HD interface art and fonts and the relit night look, [relit look](area-lighting.md#relit-look-arc-render-2060),
+  together and nothing else; Off is Legacy byte for byte, the H key included), **HD pack** Auto/Game/Custom (only where the interface pack is read from: the `hd pack` and `hd pack path` lines,
+  [HD pack source](../workflow/hd-pack.md#hd-pack-source-arc-dev-350); owner recommendation 2026-11-15, kept as its own row) and **Generated interface (experimental)** Off/On (the `generated interface`
+  line; honoured only while HD is On, so the row is off while HD is Off and turning HD Off turns it off; kept as its own experimental row). **Migration** (ARC-UI-2174, owner decision 2026-11-15): the
+  earlier launcher had HD graphics (the `visual profile` line) and HD interface (the `hd interface` line) as separate rows. A file with no `hd` line reads `hd` as On exactly when `hd interface` was 1
+  (the owner's usage); `visual profile` alone does not turn it on; the old `hd interface`, `visual profile` and `relit look` lines are not read once `hd` exists, never written again and left where
+  they are (the first save of the game settings group writes `hd`). The old `visual_profile_v1.json` file is not imported. The `H` key and the palette action **HD Off/On (H)** flip the same value in play.
+  The rows are the only saved-settings screen for them (the options window has no HD line since ARC-UI-146; HD pack and generated interface change only here, with Shift held at the start): a choice is saved
+  at once in the settings file (not at Play) and the game that Play starts reads them like any start. The pack source applies at the next start; the note under the rows says what that start will read (an
+  automated run: that pack folders are not searched). Custom opens the system folder dialog, with the same fallback note where there is none. The rows are off while the screen is busy; **Reset settings**
+  resets the `launcher` line only and leaves the HD lines (and every other setting) as they are. A run with no settings file (an automated run) keeps the choices for the screen only: its start reads the
+  file and finds the defaults. A choice that could not be written is named under the rows. Checked by the launcher self-test (defaults, an old file's migration, each choice saved in the one file, shown again
+  by the next screen, read by the start, Custom's folder, Reset) and by the launcher native smoke's HD lines and screenshot (`--native-smoke-screenshot PATH` also writes `NAME-launcher.png` beside it,
+  the screen before Play, where `PATH` is `NAME.png`).
 - **Install from GOG installer…** (ARC-DEV-074, [research](../workflow/packaging.md) option A) is for a player
   without Windows who has the GOG offline installer (`setup_arcanum_….exe`, Inno Setup 5.6.2, one file). It first looks for
   the free `innoextract` tool (zlib licence; `PATH`, then `/opt/homebrew/bin`, `/usr/local/bin`, `/opt/local/bin`,
@@ -1529,18 +1532,16 @@ exterior has no walls, so an HD wall is checked by the synthetic self-test only.
 
 ### Visual profile setting and toggle (ARC-UI-006)
 
-The visual profile (Legacy or HD) is a saved setting that can be switched at any moment in WORLD and
+The visual profile (Legacy or HD) is the one HD setting (ARC-UI-2174: launcher row HD Off/On, the `hd` line; On also means the HD interface and the relit look) and can be switched at any moment in WORLD and
 `area`, following the toggle protocol of the
 [HD presentation contract](hd-presentation-contract.md#toggle-protocol). It changes textures only:
 plans, picking, routes, the wall check, light, animation, the clock and the Session never read it, and
 it is not part of a snapshot or quick save.
 
 **Interface art (ARC-UI-089, ARC-UI-095).** The HD redraws of the interface (the pack's `interface` slice, ARC-DEV-242) have their own
-switch: the launcher screen has three project lines after Rules (ARC-UI-143; until ARC-UI-146 they were the options window's Game page lines, which no longer has them, the page ends with Rules). **HD graphics: Off/On** requests the Legacy or HD
-profile exactly as the key does (saved, the same toggle protocol); since ARC-RENDER-2175 (owner decision 2026-11-15) world sprites and terrain always draw Legacy under it (the pack's sprite path is dormant behind the developer variable `ARC_HD_WORLD_SPRITES=1`), so it switches the relit look only; the pack's interface and font frames follow the separate HD interface setting below.
-**HD interface: Off/On/Generated (experimental)** (ARC-UI-095, default Off) is a separate saved setting (the `hd interface` line of `arcanum.cfg`; a missing line reads it as Off); it draws the interface art alone and does not touch the visual profile, so the two can be
-combined freely (sprites HD with a Legacy interface, or the reverse). The third value (ARC-UI-140, `generatedInterface`, file version 5;
-version 1–4 files read it as off) is the experimental [generated interface](hd-interface-density.md#viewer-slice-s1-arc-ui-140): it keeps the
+switch (until ARC-UI-2174 its own setting): the launcher screen has three project rows after Rules (ARC-UI-143; until ARC-UI-146 they were the options window's Game page lines, which no longer has them, the page ends with Rules). **HD: Off/On** is one value (the `hd` line of `arcanum.cfg`; a missing line reads the older `hd interface` line, else Off): On draws the interface art and fonts from the pack and turns on the relit look, and requests the HD profile exactly as the key does (the same toggle protocol; what the profile draws of the world is the pack's sprite and terrain frames, which since ARC-RENDER-2175 (owner decision 2026-11-15) always draw Legacy under it: the pack's sprite path is dormant behind the developer variable `ARC_HD_WORLD_SPRITES=1`, so HD On switches the relit look and the interface and fonts only).
+The experimental row (ARC-UI-140, `generatedInterface`, file version 5;
+version 1–4 files read it as off, ARC-UI-2174: honoured only while HD is On) is the experimental [generated interface](hd-interface-density.md#viewer-slice-s1-arc-ui-140): it keeps the
 HD interface on and draws the chrome of the two HUD strips and the bar buttons by code, with the pictures from the HD redraw (else from the
 Legacy frame); only the drawing changes, every frame keeps its Legacy size, place, alpha test and hit area. ARC-UI-141 paints the chrome at
 the window's exact whole device scale on a worker (the first draw no longer stalls), see [S2](hd-interface-density.md#viewer-slice-s2-arc-ui-141); ARC-UI-148 adds the inventory window's two frames at that window's own (fractional) device scale, see [S3](hd-interface-density.md#viewer-slice-s3-arc-ui-148) and the [plan for the other windows](hd-interface-density.md#generated-windows-plan-arc-ui-148155); ARC-UI-1194 adds the loot, barter and steal windows and the three lenses, see [S4](hd-interface-density.md#viewer-slice-s4-arc-ui-1194); ARC-UI-1195 adds the character sheet, see [S5](hd-interface-density.md#viewer-slice-s5-arc-ui-1195); ARC-UI-1197 adds the world map and town map window's frame, see [S6](hd-interface-density.md#viewer-slice-s6-arc-ui-1197); ARC-UI-1196 adds the logbook, see [S7](hd-interface-density.md#viewer-slice-s7-arc-ui-1196); ARC-UI-1199 adds the schematic window, see [S8](hd-interface-density.md#viewer-slice-s8-arc-ui-1199). ARC-UI-1200 adds the message window, the spell and skill panes, the Fate window and the Sleep window, see [S9](hd-interface-density.md#viewer-slice-s9-arc-ui-1200); ARC-UI-1819 adds the common dialog box, see [S10](hd-interface-density.md#viewer-slice-s10-arc-ui-1819); ARC-UI-1817 adds the follower panel and the follower order menu, see [S12](hd-interface-density.md#viewer-slice-s12-arc-ui-1817). **HD pack: Auto/Game/Custom** (ARC-DEV-350, default Auto) is the
@@ -1597,9 +1598,9 @@ glyph without an entry, 254 against 199 on a black canvas at 1:1; the pixel chec
   pending switch keeps the request; it commits on the new view. With nothing published (also while a
   reload or failure has cleared the scene) a pending request commits at once, and the next view's
   frames then load like any frame that becomes visible (`Pending`, then HD one by one).
-- **Persistence.** The request is saved at once as the `visual profile` line (`legacy` or `hd`) of `user://arcanum.cfg`
-  (ARC-UI-1130; `VisualProfileCodec` still reads the old `visual_profile_v1.json` for the one-time move): a missing or unknown
-  value loads as Legacy; a failed save is shown in the HUD and does not block the switch. Startup applies
+- **Persistence.** The request is saved at once as the `hd` line (`0` or `1`, ARC-UI-2174) of `user://arcanum.cfg` together with the game settings group
+  (the old `visual profile` line is ignored and left in place; the old `visual_profile_v1.json` is no longer imported): a missing or unknown
+  value loads as Legacy (an old file without `hd` reads its `hd interface` line); a failed save is shown in the HUD and does not block the switch. Startup applies
   the saved profile before the first submission (an environment override above wins for that run and is
   not saved). `VISUAL_PROFILE_TEST_PATH` isolates tests; an automated run (self-test, native smoke)
   without it neither reads nor writes the file and starts Legacy.
@@ -2423,7 +2424,7 @@ project's, except as below.
   which the [launcher screen](#launcher-screen-arc-ui-014) writes too, and every ordinary run starts in it.
 - **Storage.** User preferences, never part of a save, as lines of the one settings file `user://arcanum.cfg`
   ([below](#the-one-settings-file-arc-ui-1130)): `difficulty` 0–2 (default 1), `turn-based` (0), `auto attack` (1), `text floaters` 0–2 (1) and `float speed` 0–10 (2)
-  with the original's names and defaults, and the project's `hd interface`, `generated interface`, `hd pack` (`auto`, `game`, `custom`) and
+  with the original's names and defaults, and the project's `hd`, `generated interface`, `hd pack` (`auto`, `game`, `custom`) and
   `hd pack path`; Always Run and the volumes are lines of the same file. A missing line or a value out of its range reads as that setting's
   default and no other setting changes. Each change is saved at
   once (the original writes `arcanum.cfg` when the game exits). Space's toggle also saves the turn-based setting now. An
@@ -3362,7 +3363,7 @@ the viewer app exits); only an ordinary run uses the `user://` file. Per setting
 | Zoom `world_diagnostic_zoom_v1.json` | `user://` | the run's folder (starts at 2.00) |
 | Quick saves `saves/`, `saves/map/` | `user://` | the run's folder (stages that test saving use their own slot as before) |
 | HD budget `hd_budget_v1.json` | `user://` | none (the contract ceilings) |
-| The one settings file `arcanum.cfg` (always run, visual profile, volumes, game settings, launcher; ARC-UI-013, ARC-UI-1130) | `user://` | none, as before (off, Legacy, defaults) |
+| The one settings file `arcanum.cfg` (always run, HD, volumes, game settings, launcher; ARC-UI-013, ARC-UI-1130) | `user://` | none, as before (off, Legacy, defaults) |
 | HD pack folders | discovered | not searched, as before |
 
 So a zoom the player saved (for example 1.70) no longer changes a self-test, and a self-test's own zoom steps no longer
@@ -3376,8 +3377,8 @@ WORLD settings validation launch still requires both explicit test paths. Checks
 The player's settings are one file, `user://arcanum.cfg`, in the original's format (ledger OP8, OP9): `name=value` lines, one line a
 setting (`ArcanumConfig`, `Arcanum.Session.Settings`, Godot-free). The settings the original registers keep its names and value shape
 (`difficulty`, `turn-based`, `auto attack`, `always run`, `text floaters`, `float speed`, `effects volume`, `voice volume`, `music volume`;
-`ViewerSettingsConfig`), the project's own have project names (`hd interface`, `generated interface`, `hd pack`, `hd pack path`,
-`visual profile`, and `launcher`, the launcher object of [the launcher screen](#launcher-screen-arc-ui-014) as compact JSON on one line).
+`ViewerSettingsConfig`), the project's own have project names (`hd`, `generated interface`, `hd pack`, `hd pack path`,
+and `launcher`, the launcher object of [the launcher screen](#launcher-screen-arc-ui-014) as compact JSON on one line).
 A save changes only the lines of its own group and keeps every other line (a newer build's included) in its place, through a temporary file
 in the same folder and a rename; a line that is not a usable pair is dropped by the next write (as the original's rewrite does); a
 missing line, or a value outside its range, reads as that setting's default and no other setting changes. Settings stay saved at once, not
