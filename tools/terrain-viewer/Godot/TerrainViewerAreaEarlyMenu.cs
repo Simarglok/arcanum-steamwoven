@@ -88,6 +88,7 @@ public partial class TerrainViewerApp
         GD.Print($"ARC-DEV-381 early main menu open, the start scene {(_startLoadPending ? "is not loaded yet (ARC-DEV-387)" : "loads behind it")} (ms since start {Time.GetTicksMsec()})");
         // A smoke runs its stages on the published scene, so it takes the player's route to the load: Single Player, New Game.
         if (_startLoadPending && _nativeSmoke) Callable.From(SmokeOpenNewGameWindow).CallDeferred();
+        Callable.From(SoakOpenWindow).CallDeferred();
     }
 
     private void SmokeOpenNewGameWindow()
