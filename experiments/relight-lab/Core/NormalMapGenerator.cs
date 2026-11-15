@@ -12,7 +12,9 @@ public enum NormalConvention { OpenGl, ImageSpace }
 /// <param name="Blur">Box blur radius of the height before the Sobel (0 none, 1 = 3x3). Blur calms palette dither and edge noise.</param>
 /// <param name="Bevel">How much the silhouette (alpha) edge bends the normal outwards; 0 leaves a silhouette flat.</param>
 /// <param name="AlphaThreshold">Alpha (0..255) below which a texel counts as empty.</param>
-public sealed record NormalMapOptions(double Gain, int Blur, double Bevel, int AlphaThreshold = 128)
+/// <param name="BevelStride">How many texels away the silhouette bevel reads the alpha (1 = the neighbouring texel). The viewer's relit shader uses the frame's scale N for an
+/// N-times HD frame (<c>relight_scale</c>) so the bevel reaches the same distance as in the 1x look (ARC-RENDER-2063); only the bevel reads it, the Sobel of the height always takes the neighbouring texel.</param>
+public sealed record NormalMapOptions(double Gain, int Blur, double Bevel, int AlphaThreshold = 128, int BevelStride = 1)
 {
     public static NormalMapOptions For(SpriteKind kind) => kind switch
     {
@@ -52,6 +54,7 @@ public static class NormalMapGenerator
         ArgumentNullException.ThrowIfNull(options);
         if (width <= 0 || height <= 0 || rgba.Length != checked(width * height * 4)) throw new ArgumentException("rgba must be width * height * 4 bytes", nameof(rgba));
         if (options.Blur < 0 || options.Blur > 4) throw new ArgumentOutOfRangeException(nameof(options), "Blur is 0..4");
+        if (options.BevelStride < 1 || options.BevelStride > 16) throw new ArgumentOutOfRangeException(nameof(options), "BevelStride is 1..16");
         var luminance = new double[width * height];
         var alpha = new byte[width * height];
         for (var i = 0; i < width * height; i++)
@@ -86,8 +89,9 @@ public static class NormalMapGenerator
                 double h(int dx, int dy) => H(x + dx, y + dy, c);
                 var gx = (h(1, -1) + 2 * h(1, 0) + h(1, 1)) - (h(-1, -1) + 2 * h(-1, 0) + h(-1, 1));
                 var gy = (h(-1, 1) + 2 * h(0, 1) + h(1, 1)) - (h(-1, -1) + 2 * h(0, -1) + h(1, -1));
-                var ex = ((A(x - 1, y - 1) + 2 * A(x - 1, y) + A(x - 1, y + 1)) - (A(x + 1, y - 1) + 2 * A(x + 1, y) + A(x + 1, y + 1))) * 0.25;
-                var ey = ((A(x - 1, y - 1) + 2 * A(x, y - 1) + A(x + 1, y - 1)) - (A(x - 1, y + 1) + 2 * A(x, y + 1) + A(x + 1, y + 1))) * 0.25;
+                var s = options.BevelStride; // the shader's relight_scale: the alpha taps reach N texels (the centre tap stays the texel itself)
+                var ex = ((A(x - s, y - s) + 2 * A(x - s, y) + A(x - s, y + s)) - (A(x + s, y - s) + 2 * A(x + s, y) + A(x + s, y + s))) * 0.25;
+                var ey = ((A(x - s, y - s) + 2 * A(x, y - s) + A(x + s, y - s)) - (A(x - s, y + s) + 2 * A(x, y + s) + A(x + s, y + s))) * 0.25;
                 var nx = -gx * options.Gain * 2 + ex * options.Bevel;
                 var ny = -gy * options.Gain * 2 + ey * options.Bevel;
                 var length = Math.Sqrt(nx * nx + ny * ny + 1);

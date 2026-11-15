@@ -42,7 +42,7 @@ public partial class TerrainViewerApp
         TerrainViewerArguments Origin, AreaStepCell OriginCell, string Loading, string? Failure = null, GameSessionOwner? Previous = null,
         MapHandoffKind Kind = MapHandoffKind.Transfer, NeighborDirection? OriginFacing = null,
         IReadOnlyList<(AreaCompanionTemplate Template, NeighborDirection Facing)>? Companions = null, SessionMoveList? MoveList = null,
-        bool ChangeOfPlace = false, AreaLoadMessageRoute LoadMessages = AreaLoadMessageRoute.None)
+        bool ChangeOfPlace = false, AreaLoadMessageRoute LoadMessages = AreaLoadMessageRoute.None, IReadOnlyList<AreaBodylessFollower>? Bodyless = null)
     {
         public bool Fallback => Failure is not null;
         /// <summary>The facing the actor arrives with on the map being loaded.</summary>
@@ -479,7 +479,7 @@ public partial class TerrainViewerApp
         var leaving = moveList is null ? LeavingCompanions() : (LeavingCompanions(moveList), MoveList: null);
         LeaveFollowersCombatMode(moveList ?? leaving.MoveList);
         _mapHandoff = new(_areaSession, transfer.FromMap, transfer.To.Name, session.State.Facing, origin, session.Chart.ToWorld(session.State.CommittedCell), transfer.To.Name,
-            Companions: leaving.Companions, MoveList: leaving.MoveList, ChangeOfPlace: moveList is not null);
+            Companions: leaving.Companions, MoveList: leaving.MoveList, ChangeOfPlace: moveList is not null, Bodyless: BodylessFollowers(moveList ?? leaving.MoveList));
         // The destination opens at the arrival: an opening sector of this map (a window move or --area-map-sector) is not its.
         var next = origin with { AreaMapName = transfer.To.Name, AreaMapArrival = new(transfer.Arrival.X, transfer.Arrival.Y), AreaMapSector = null };
         _areaUseStatus = $"loading '{transfer.To.Name}' ({transfer.To.Catalogue})";
