@@ -728,14 +728,15 @@ class QueueRunTests(unittest.TestCase):
                 f"open({str(self.log)!r}, 'a').write('end {name} %f\\n' % time.time())")
         return self.wrapper(kind, name, [sys.executable, "-c", code], timeout=timeout, estimate=estimate, cwd=cwd)
 
-    def held(self, kind: str, name: str, *, cwd: Path | None = None) -> subprocess.Popen:
+    def held(self, kind: str, name: str, *, cwd: Path | None = None, environment: dict | None = None,
+             estimate: float | None = None) -> subprocess.Popen:
         """A run that holds its place until `release()`, so a test's overlap and order do not depend on how fast the
         machine starts the next wrapper (a loaded Mac took seconds, which broke fixed run lengths)."""
         code = (f"import os, time; open({str(self.log)!r}, 'a').write('start {name} %f\\n' % time.time()); "
                 f"deadline = time.time() + 90\n"
                 f"while not os.path.exists({str(self.root / 'release')!r}) and time.time() < deadline: time.sleep(0.05)\n"
                 f"open({str(self.log)!r}, 'a').write('end {name} %f\\n' % time.time())")
-        return self.wrapper(kind, name, [sys.executable, "-c", code], cwd=cwd)
+        return self.wrapper(kind, name, [sys.executable, "-c", code], cwd=cwd, environment=environment, estimate=estimate)
 
     def release(self) -> None:
         (self.root / "release").write_text("go")
@@ -781,11 +782,12 @@ class QueueRunTests(unittest.TestCase):
             process.wait(60)
 
     def test_godot_runs_start_one_at_a_time_in_arrival_order_without_gaps(self) -> None:
-        self.queued("window", "a", 1.0)
-        self.until(lambda: self.log.exists())
+        self.held("window", "a")  # held until the others are queued: a fixed length ran out on a loaded Mac (ARC-DEV-2254)
+        self.started("a")
         names = ["b", "c", "d", "e"]
         for index, name in enumerate(names):
             self.queued("headless" if index % 2 else "window", name, 0.3)
+        self.release()
         self.finish()
         found = self.events()
         order = sorted(["a", *names], key=lambda name: found[f"start {name}"])
@@ -796,12 +798,13 @@ class QueueRunTests(unittest.TestCase):
             self.assertLess(gap, 2.5)  # the poll interval plus interpreter start, not a lock-retry back-off
 
     def test_a_short_run_that_arrived_later_starts_before_a_long_one_and_the_ticket_keeps_the_estimate(self) -> None:
-        self.queued("window", "running", 4.0)
-        self.until(lambda: self.log.exists())
+        self.held("window", "running")
+        self.started("running")
         self.queued("window", "long", 0.2, estimate=600.0)
         self.queued("window", "short", 0.2, estimate=5.0)
         self.until(lambda: len(self.live()) == 3)
         self.assertEqual(sorted(item.get("estimateSeconds") for item in self.live() if item["label"] != "running"), [5.0, 600.0])
+        self.release()
         self.finish()
         found = self.events()
         self.assertLess(found["start short"], found["start long"])
@@ -810,20 +813,23 @@ class QueueRunTests(unittest.TestCase):
     def test_a_quick_run_starts_while_a_godot_run_holds_the_slot(self) -> None:
         other = self.root / "other-checkout"  # a quick run of the same checkout waits for its Godot run (same project folder)
         other.mkdir()
-        self.queued("window", "w", 5.0)
-        self.until(lambda: self.log.exists())
+        self.held("window", "w")
+        self.started("w")
         self.queued("quick", "q", 0.2, cwd=other)
+        self.until(lambda: "end q " in self.log.read_text(), 60.0)  # q ends while w still holds the slot
+        self.release()
         self.finish()
         found = self.events()
         self.assertLess(found["end q"], found["end w"])
 
     def test_a_huge_estimate_is_capped_so_a_run_cannot_put_itself_last_for_ever(self) -> None:
-        self.queued("window", "running", 3.0)
-        self.until(lambda: self.log.exists())
+        self.held("window", "running")
+        self.started("running")
         self.queued("window", "huge", 0.1, estimate=1e12)
         self.until(lambda: len(self.live()) == 2)
         waiting = next(item for item in self.live() if item["label"] == "huge")
         self.assertEqual(waiting["estimateSeconds"], run_queue.MAX_ESTIMATE_SECONDS)
+        self.release()
         self.finish()
 
     def test_an_estimate_must_not_be_negative(self) -> None:
@@ -831,9 +837,11 @@ class QueueRunTests(unittest.TestCase):
             run_queue.run("dotnet", ["true"], estimate=-1.0)
 
     def test_dotnet_runs_alongside_a_godot_run(self) -> None:
-        self.queued("window", "w", 2.0)
-        self.until(lambda: self.log.exists())
+        self.held("window", "w")
+        self.started("w")
         self.queued("dotnet", "d", 0.2)
+        self.until(lambda: "end d " in self.log.read_text(), 60.0)  # d ends while w still holds the slot
+        self.release()
         self.finish()
         found = self.events()
         self.assertLess(found["end d"], found["end w"])
@@ -852,10 +860,11 @@ class QueueRunTests(unittest.TestCase):
         self.assertGreaterEqual(found["start c"], min(found["end a"], found["end b"]))
 
     def test_an_export_runs_quiet_after_running_dotnet_and_before_newer_dotnet(self) -> None:
-        self.queued("dotnet", "old", 1.5)
-        self.until(lambda: self.log.exists())
+        self.held("dotnet", "old")
+        self.started("old")
         self.queued("export", "x", 0.5)
         self.queued("dotnet", "new", 0.2)
+        self.release()
         self.finish()
         found = self.events()
         self.assertGreaterEqual(found["start x"], found["end old"])
@@ -898,11 +907,15 @@ class QueueRunTests(unittest.TestCase):
         legacy = os.environ["ARCANUM_QUEUE_LEGACY_LOCK"]
         holder = subprocess.Popen(["/usr/bin/lockf", legacy, sys.executable, "-c",
                                    f"import time; open({str(self.log)!r}, 'a').write('start lockf %f\\n' % time.time()); "
-                                   f"time.sleep(1.2); open({str(self.log)!r}, 'a').write('end lockf %f\\n' % time.time())"])
+                                   f"deadline = time.time() + 90\n"
+                                   f"while not __import__('os').path.exists({str(self.root / 'release')!r}) and time.time() < deadline: time.sleep(0.05)\n"
+                                   f"open({str(self.log)!r}, 'a').write('end lockf %f\\n' % time.time())"])
         self.processes.append(holder)
         self.until(lambda: self.log.exists())
-        self.queued("window", "q", 1.0)
-        self.until(lambda: "start q" in self.log.read_text())
+        self.queued("window", "q", 0.5)  # q waits for the lockf holder, which ends only on release
+        self.assertNotIn("start q ", self.log.read_text())
+        self.release()
+        self.until(lambda: "start q" in self.log.read_text(), 60.0)
         late = subprocess.Popen(["/usr/bin/lockf", legacy, sys.executable, "-c",
                                  f"import time; open({str(self.log)!r}, 'a').write('start late %f\\n' % time.time())"])
         self.processes.append(late)
@@ -923,10 +936,13 @@ class QueueRunTests(unittest.TestCase):
             self.assertEqual(process.wait(30), 2, (outer, inner_kind))  # the inner ./arcanum refuses with exit 2
 
     def test_lanes_with_another_locale_and_time_zone_see_the_same_holder(self) -> None:
-        self.wrapper("window", "ru", ["sleep", "3"], environment={"LC_ALL": "ru_RU.UTF-8", "LANG": "ru_RU.UTF-8", "TZ": "Asia/Tokyo"})
+        self.held("window", "ru", environment={"LC_ALL": "ru_RU.UTF-8", "LANG": "ru_RU.UTF-8", "TZ": "Asia/Tokyo"})
+        self.started("ru")
         with patch.dict(os.environ, {"LC_ALL": "C", "TZ": "UTC"}):
             self.assertTrue(run_queue.status()[0].startswith("running #"), run_queue.status())
         self.assertEqual(len(self.live()), 1)
+        self.release()
+        self.finish()
 
     def test_an_orphaned_godot_command_is_stopped_after_its_limit(self) -> None:
         first = self.wrapper("window", "orphan", ["sleep", "60"], timeout="0.01")
@@ -941,11 +957,12 @@ class QueueRunTests(unittest.TestCase):
         self.until(lambda: subprocess.run(["ps", "-p", str(child)], capture_output=True).returncode != 0)
 
     def test_numbering_survives_a_lost_counter(self) -> None:
-        self.queued("window", "a", 1.0)
-        self.until(lambda: self.log.exists())
+        self.held("window", "a")
+        self.started("a")
         (run_queue.folder() / "counter").write_text("")
         self.queued("window", "b", 0.1)
         self.assertEqual(sorted(item["seq"] for item in self.live()), [1, 2])
+        self.release()
         self.finish()
 
     def folder(self, name: str) -> Path:
@@ -955,11 +972,15 @@ class QueueRunTests(unittest.TestCase):
 
     def test_runs_of_different_checkouts_share_the_lanes_and_the_third_short_run_waits(self) -> None:
         # ARC-DEV-400: two short lanes and one heavy lane, side by side; the places of a lane are taken in order
-        self.queued("window", "a", 3.5, cwd=self.folder("a"))
-        self.until(lambda: self.log.exists())
-        self.queued("window", "b", 3.5, cwd=self.folder("b"))
+        self.held("window", "a", cwd=self.folder("a"))
+        self.started("a")
+        self.held("window", "b", cwd=self.folder("b"))
+        self.started("b")  # beside a, held until released
         self.queued("window", "c", 0.2, cwd=self.folder("c"))
         self.queued("window", "heavy", 0.2, cwd=self.folder("d"), estimate=500.0)
+        self.until(lambda: "end heavy " in self.log.read_text(), 60.0)  # the heavy lane runs while a and b hold both short places
+        self.assertNotIn("start c ", self.log.read_text())
+        self.release()
         self.finish()
         found = self.events()
         self.assertLess(found["start b"], found["end a"])  # beside a
@@ -973,20 +994,20 @@ class QueueRunTests(unittest.TestCase):
 
     def test_two_runs_of_one_checkout_do_not_run_at_once(self) -> None:
         folder = self.folder("same")
-        self.queued("window", "a", 1.0, cwd=folder)
-        self.until(lambda: self.log.exists())
+        self.held("window", "a", cwd=folder)
+        self.started("a")
         self.queued("window", "b", 0.2, cwd=folder, estimate=500.0)
+        self.release()
         self.finish()
         found = self.events()
         self.assertGreaterEqual(found["start b"], found["end a"])
 
     def test_the_rollback_variable_returns_to_one_godot_slot(self) -> None:
         off = {run_queue.LANES_ENV: "0"}
-        self.wrapper("window", "a", [sys.executable, "-c", f"import time; open({str(self.log)!r}, 'a').write('start a %f\\n' % time.time()); "
-                                    f"time.sleep(1.2); open({str(self.log)!r}, 'a').write('end a %f\\n' % time.time())"],
-                     environment=off, cwd=self.folder("a"))
-        self.until(lambda: self.log.exists())
+        self.held("window", "a", environment=off, cwd=self.folder("a"))
+        self.started("a")
         self.queued("window", "b", 0.2, cwd=self.folder("b"))  # a wrapper with lanes: it still waits for the single-slot run
+        self.release()
         self.finish()
         found = self.events()
         self.assertGreaterEqual(found["start b"], found["end a"])
@@ -994,21 +1015,23 @@ class QueueRunTests(unittest.TestCase):
         self.assertEqual({item["label"]: item["lane"] for item in entries}, {"a": "single", "b": "short"})
 
     def test_an_export_waits_for_the_running_lanes_and_runs_alone(self) -> None:
-        self.queued("window", "a", 1.2, cwd=self.folder("a"))
-        self.queued("window", "heavy", 1.2, cwd=self.folder("b"), estimate=500.0)
-        self.until(lambda: len(self.live()) == 2 and self.log.exists())
+        self.held("window", "a", cwd=self.folder("a"))
+        self.held("window", "heavy", cwd=self.folder("b"), estimate=500.0)
+        self.started("a", "heavy")
         self.queued("export", "export", 0.3, cwd=self.folder("c"))
+        self.release()
         self.finish()
         found = self.events()
         self.assertGreaterEqual(found["start export"], max(found["end a"], found["end heavy"]))
 
     def test_status_names_the_holder_and_the_waiters(self) -> None:
-        self.queued("window", "holder", 1.5)
-        self.until(lambda: self.log.exists())
+        self.held("window", "holder")
+        self.started("holder")
         self.queued("window", "waiter", 0.1)
         lines = run_queue.status()
         self.assertTrue(lines[0].startswith("running #") and '"holder"' in lines[0], lines)
         self.assertTrue(lines[1].startswith("waiting #") and '"waiter"' in lines[1] and "behind #" in lines[1], lines)
+        self.release()
         self.finish()
         history = run_queue.status(history=5)
         self.assertEqual(len(history), 2)
@@ -1034,11 +1057,12 @@ class QueueRunTests(unittest.TestCase):
         self.assertFalse(any(line.startswith("PAUSED") for line in run_queue.status()))
 
     def test_pause_lets_the_running_run_finish_and_holds_the_next(self) -> None:
-        self.queued("window", "a", 1.5)
-        self.until(lambda: self.log.exists())
+        self.held("window", "a")
+        self.started("a")
         run_queue.set_paused(True, "test")
         self.queued("window", "b", 0.1)
         self.until(lambda: any(item.get("startedAt") is None for item in self.runs()))
+        self.release()
         self.until(lambda: "end a" in self.log.read_text())
         time.sleep(1.5)  # a gap far over the poll: b still waits for the resume
         self.assertNotIn("start b", self.log.read_text())
@@ -1074,10 +1098,12 @@ class QueueRunTests(unittest.TestCase):
         self.assertFalse(run_queue.pause_file().exists())  # pruned like any dead ticket
 
     def test_a_nested_run_is_not_held_by_the_pause(self) -> None:
-        inner = f"sleep 1.5; {sys.executable} -B {ARCANUM} run --kind window -- {sys.executable} -c pass"
+        inner = (f"while [ ! -e {self.root / 'release'} ]; do sleep 0.05; done; "
+                 f"{sys.executable} -B {ARCANUM} run --kind window -- {sys.executable} -c pass")  # the nested run starts only on release
         process = self.wrapper("window", "outer", ["sh", "-c", inner])
         self.until(lambda: len(self.runs()) == 1 and self.runs()[0].get("startedAt"))
         run_queue.set_paused(True, "test")
+        self.release()
         try:
             self.assertEqual(process.wait(30), 0)  # a run holding a place keeps working: its nested run is not queued
         finally:

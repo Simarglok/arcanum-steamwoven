@@ -933,8 +933,9 @@ module, four at a time (`--jobs N`; module names after the options run only thos
 queue home), which is why the pool is safe; one serial `python3 -B -m unittest discover -s tools/local_dev -t . -p 'test_*.py'`
 (`-t .` names the modules `tools.local_dev.test_*`, which their imports need) runs the same tests in about 250 s, the pool in
 about 90 s (the slowest module, `test_run_queue`, is the limit). The per-module commands above stay the quick way to run one.
-The stopped-waiter and third-dotnet-place tests of `test_run_queue` hold their runs until released instead of timing them, so a
-loaded Mac cannot fail them.
+The `test_run_queue` tests that need a run to hold its place while others queue (ARC-DEV-2254, issue #2254: under load the
+fixed-length runs ended before the waiters registered) holds that run with `held()` until `release()` instead of timing it, so a
+loaded Mac cannot fail them; a new test of that kind does the same.
 
 **Root checks (owner decision 2026-11-15, ARC-DEV-2225, measure 3 of the [smoke-stability package](smoke-stability.md)):**
 `run_tests.py` and `./arcanum smoke self-test --headless` are part of the root checks of CLAUDE.md section 2, because bugs of the
