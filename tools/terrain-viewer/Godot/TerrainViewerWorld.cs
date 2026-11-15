@@ -180,7 +180,7 @@ public partial class TerrainViewerApp
     // This is the hero's INPUT gate and the cursor's, not the clock's: since ARC-DEV-126 (MIG12 S7, GQ3 A) a window, the palette or the bug report no longer stops the world.
     private bool WorldModal => PaletteOpen || AnyWindowOpen || SaveListOpen || MainMenuOpen || HeroDeathCovering || MovieCovering || ReportModalOpen;
     // ARC-DEV-126: the one raiser of the pause is the Esc menu and a save or load list (TL23); the options screen the menu leads to is under it. `_mainMenu` covers the frames in which the menu's panel is hidden while it waits for the save list to open.
-    private bool WorldMenuPause => (MainMenuOpen || SaveListOpen || _mainMenu is not null) && _mainMenu is not { OpenedByOptionsKey: true }; // ARC-UI-2026: the O key's options window does not pause (0x541180 kind 4)
+    private bool WorldMenuPause => QuitAsking || ((MainMenuOpen || SaveListOpen || _mainMenu is not null) && _mainMenu is not { OpenedByOptionsKey: true }); // ARC-DEV-2270: the quit box freezes the clocks as the original's modal loop does (exe 0x51EA60 runs no ping) // ARC-UI-2026: the O key's options window does not pause (0x541180 kind 4)
     // ARC-DEV-126: the death cover and its slide show are frames in which the original does not ping (TL25): no stamp is observed and no clock moves.
     // ARC-RENDER-1170: a movie is such a frame too (TL25).
     private bool WorldFrozenFrame => HeroDeathCovering || MovieCovering;
@@ -388,6 +388,7 @@ public partial class TerrainViewerApp
     }
     public override void _Notification(int what)
     {
+        QuitNotification(what);   // ARC-DEV-2270: a close request asks the quit question
         // ARC-UI-005: the pointer leaving the window hides the hover tooltip and action cursor.
         // An automated run's pointer is the one its test places (HoverAtForSelfTest, WorldPointerForSelfTest): the real pointer entering or
         // leaving the window must not flip it (the border scroll of the inv-ui smoke failed whenever the real pointer was outside the window).
