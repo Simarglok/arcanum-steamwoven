@@ -81,6 +81,8 @@ public sealed class AreaHeartbeatSceneryLoopTests
     private static AreaObjectRecord Npc(int script) => AreaHeartbeatScriptTests.Row(1, 16, script);
     private static AreaObjectRecord Scenery(int index, long? worldX = null) => AreaHeartbeatScriptTests.Row(index, 3, 0) with { WorldX = worldX ?? 10 + index };
 
+    private static AreaObjectRecord Portal(int index, long? worldX = null) => AreaHeartbeatScriptTests.Row(index, 1, 0) with { WorldX = worldX ?? 10 + index };
+
     private static AreaUseScriptHost Host(GameSessionOwner session, ScriptContent content, Func<AreaObjectRecord, bool> gone, params AreaObjectRecord[] shown) =>
         new(session, 1, shown, [], content, new AreaScriptWorld(() => new CellCoord(12, 21), gone, _ => null, () => null));
 
@@ -91,7 +93,7 @@ public sealed class AreaHeartbeatSceneryLoopTests
         Assert.IsTrue(set.FocusKinds.Contains(ScrFocusKind.EverySceneryInVicinity) && set.FocusKinds.Contains(ScrFocusKind.LocalObject));
         Assert.IsTrue(set.Actions.Contains(ScrCatalogue.Action.AssignObject) && set.Actions.Contains(ScrCatalogue.Action.FloatLine));
         Assert.IsFalse(set.Actions.Contains(ScrCatalogue.Action.GetReaction), "the host has no reaction answer");
-        Assert.IsTrue(set.IsSubsetOfBesidesStores(ScrAdmissionSet.S59));
+        Assert.IsTrue(set.IsSubsetOfBesidesStores(ScrAdmissionSet.S60));
         // The dying set is built on it and the placed set already held all three; the use click's set is unchanged.
         Assert.IsTrue(AreaUseScriptHost.DyingAdmission.FocusKinds.Contains(ScrFocusKind.EverySceneryInVicinity));
         Assert.IsFalse(AreaUseScriptHost.Admission.Actions.Contains(ScrCatalogue.Action.FloatLine));
@@ -155,6 +157,38 @@ public sealed class AreaHeartbeatSceneryLoopTests
             Assert.AreEqual(ScrRefusalCode.ActionNotAdmitted, ScrAdmission.Admit(host.Script(ReactionScript).Program!, AreaUseScriptHost.HeartbeatAdmission).Refusal!.Code);
             var ran = host.RunHeartbeat(npc, ScrPoint.Heartbeat, session.Rules.Scripts);
             Assert.AreEqual(AreaScriptedUseOutcome.Refused, ran.Outcome, ran.Detail);
+        });
+    }
+
+    // ARC-SCRIPT-2041 (PV1–PV4): the focus kind every portal in the vicinity (19) of the four ground rune tile scripts.
+    [TestMethod]
+    public void The_use_placed_dying_and_combat_point_sets_admit_the_portal_focus_and_the_heartbeat_set_does_not()
+    {
+        foreach (var set in new[] { AreaUseScriptHost.Admission, AreaUseScriptHost.PlacedAdmission, AreaUseScriptHost.DyingAdmission, AreaUseScriptHost.CombatPointAdmission })
+        {
+            Assert.IsTrue(set.FocusKinds.Contains(ScrFocusKind.EveryPortalInVicinity), set.Id);
+            Assert.IsFalse(set.FocusKinds.Contains(ScrFocusKind.AnyPortalInVicinity), set.Id);
+            Assert.IsTrue(set.IsSubsetOfBesidesStores(ScrAdmissionSet.S60), set.Id);
+        }
+        Assert.IsFalse(AreaUseScriptHost.HeartbeatAdmission.FocusKinds.Contains(ScrFocusKind.EveryPortalInVicinity));
+    }
+
+    [TestMethod]
+    public void The_portals_around_an_object_are_the_near_portals_that_are_not_gone_whatever_their_state()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var npc = Npc(LoopScript);
+            var near = Portal(2);
+            var nearToo = Portal(3, 14);
+            var gone = Portal(4);
+            var far = Portal(5, 60);
+            var scenery = Scenery(6);
+            var host = Host(session, content, row => row.Key == gone.Key, npc, near, nearToo, gone, far, scenery);
+            var around = host.PortalsInVicinity(new(1, AreaUseScriptHost.EntityId(npc)));
+            CollectionAssert.AreEqual(new[] { AreaUseScriptHost.EntityId(near), AreaUseScriptHost.EntityId(nearToo) }, around.Select(o => o.Code).ToArray(), "snapshot order; no scenery, NPC, gone or far portal");
+            Assert.AreEqual(0, host.PortalsInVicinity(new(2, AreaUseScriptHost.EntityId(npc))).Count, "an object of another map has no place here");
         });
     }
 }
