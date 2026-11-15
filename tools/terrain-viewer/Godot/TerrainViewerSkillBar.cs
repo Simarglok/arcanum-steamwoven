@@ -60,7 +60,8 @@ public partial class TerrainViewerApp
     private void SkillBarReleased(int button, bool over)
     {
         // ARC-UI-2024 (DB2): the bar's buttons are consumed without effect while the dialog's hook is set (the bars stay under the dialog).
-        if (!over || ConversationOpen) return;
+        // ARC-UI-2306: the world map window lies between the strips with the bars up; its owner of input takes no skill from the pane (the Skills button refuses likewise).
+        if (!over || ConversationOpen || WorldMapOpen) return;
         PlayBarSound(AreaGameBarLayout.ReleaseSound, "skill pane button");
         _skillBarPressesForSelfTest++;
         // The in-game filter passes no button event while another combatant acts in a turn-based round (GB12, CT6).
