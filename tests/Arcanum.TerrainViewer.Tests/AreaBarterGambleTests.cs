@@ -271,7 +271,7 @@ public sealed class AreaBarterGambleTests
             Assert.AreEqual((false, price, 1000 - price, 100 + price, $"line1 {price}"), (result.Won, result.Paid, session.QueryGold(), session.QueryNpcGold("merchant"), result.Text));
             Assert.IsFalse(session.QueryPcInventory().Any(item => item.Entity == "vest"), "the loss takes no item (ARC-UI-2215)");
             Assert.AreEqual(1, barter.View().WornWares.Count);
-            Assert.IsTrue(session.QueryNpcWorn("merchant")?.Worn.Any(item => item.Item == "vest") ?? false, "the merchant's worn record keeps it");
+            Assert.IsTrue(session.QueryHolderItems("merchant")!.Any(item => item.Entity == "vest" && item.Facts.Worn), "the merchant's list still shows the vest worn");
             return;
         }
         Assert.Fail("no losing seed found");
