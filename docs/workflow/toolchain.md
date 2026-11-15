@@ -874,7 +874,8 @@ python3 -B tools/docs_check.py
 
 `tools/docs_check.py` (ARC-DEV-406) needs only Python and the tracked files: it fails on a relative Markdown link whose file
 or heading does not exist, on a `docs/...` path that code, tests, tables or a page name and that does not exist, and on a page
-under `docs/` that no page links to; `--self-test` runs it on a synthetic tree. A change that moves, renames or deletes a
+under `docs/` that no page links to, and on a row of the [owner re-check list](owner-checks.md) with a bad step id, a missing column or an
+unknown status (ARC-DEV-2186); `--self-test` runs it on a synthetic tree. A change that moves, renames or deletes a
 page runs it and fixes every finding in the same PR.
 
 The `OriginalExe` tests are part of the solution run and stay inconclusive without
