@@ -9,7 +9,7 @@ namespace Arcanum.TerrainViewer.Core;
 /// <remarks>ARC-UI-1195: <see cref="Slate"/> is the character sheet's pages. ARC-UI-1196: <see cref="Cloth"/> is a book cover's maroon weave, <see cref="Parchment"/> a page (cream with soft mottling and the shade of the fold at the logbook's spine,
 /// so everything that sits on a page matches it) and <see cref="PageEdge"/> the striped edge of a stack of pages. ARC-UI-1199: <see cref="Paper"/> is the parchment of a loose sheet (the schematic window's blueprint
 /// page): the same cream and mottling with no fold.</remarks>
-public enum ChromeMaterial { Wood, WoodDark, Iron, Dark, Face, Pit, Slate, Cloth, Parchment, PageEdge, Paper }
+public enum ChromeMaterial { Wood, WoodDark, Iron, Dark, Face, Pit, Slate, Cloth, Parchment, PageEdge, Paper, Brass, BrassDark }
 
 /// <summary>The edges of a frame that get a rim (a panel's edge facing the play view).</summary>
 [Flags]
@@ -72,6 +72,20 @@ public sealed record ChromeMarks(int X, int Y, int Width, int Height) : ChromePa
 /// <paramref name="Radius"/> at (<paramref name="CenterX"/>, <paramref name="CenterY"/>) in Legacy pixels: the button's brass rim (lit on the upper left, on the lower right in the down frame), a dark glass face,
 /// and the art's own pixels inside <paramref name="KeepRadius"/> (the lamp itself, dim or lit by the frame). The circle's edge gets an anti-aliased alpha instead of the Legacy stairs.</summary>
 public sealed record ChromeBall(double CenterX, double CenterY, double Radius, double KeepRadius) : ChromePart;
+
+/// <summary>ARC-UI-2194: a capsule (stadium) plate of <see cref="ChromeMaterial.Brass"/> in Legacy pixels: a raised rim of <paramref name="Rim"/> units with a lit upper left and a shaded lower right, and a
+/// recessed face inside it (the same brass, darker, with the bevel the other way round, as a sunk panel has). Drawn over the opaque pixels of the art, its edge anti-aliased, its brass sampled in the window's
+/// coordinates (<see cref="ChromeRecipe.OriginX"/>), so two arts of one window that carry the same plate meet without a seam. The shape is horizontal (the width is at least the height).</summary>
+public sealed record ChromeCapsule(double X, double Y, double Width, double Height, double Rim = 3) : ChromePart;
+
+/// <summary>ARC-UI-2194: a convex polygon plate (points clockwise on the screen, Legacy pixels) of a material with a one-unit bevel: lit on the edges that face the upper left, shaded on the others
+/// (the brass housing behind the world map window's two plates). Edge anti-aliased; the alpha is the art's.</summary>
+public sealed record ChromePolygon(IReadOnlyList<(double X, double Y)> Points, ChromeMaterial Material) : ChromePart;
+
+/// <summary>ARC-UI-2194: the housing ring around a round opening of an art (the world map window's compass opening): a brass ring of <paramref name="Width"/> units outside the circle at
+/// (<paramref name="CenterX"/>, <paramref name="CenterY"/>) of <paramref name="InnerRadius"/>, painted on the art's opaque pixels only (the opening's alpha, and so its hit area, stays the Legacy one;
+/// the button drawn over it covers its edge).</summary>
+public sealed record ChromeSocket(double CenterX, double CenterY, double InnerRadius, double Width) : ChromePart;
 
 /// <summary>ARC-UI-1196: what is drawn around the holes of a panel's Legacy frame (the transparent regions the live view or the page shows through).</summary>
 public enum ChromeHoles
@@ -462,7 +476,7 @@ public static class InterfaceChromeRecipes
 
     // ARC-UI-1197: the world map and town map window (138 `mapmain`, 800 x 400, wood). The map view's hole gets the brass rim every hole gets; the two readout boxes (680, 157 and
     // 680, 189) are sunk black pits the window writes its numbers in. The portrait's ring is the round view's generated one (ARC-UI-1810: the lens art 198 carries the same ring in its corners). Kept pictures: the compass rose,
-    // the red route sketch and the Travel button's brass ring, and the brass pill under the view's bottom edge (the cover 217 and the compass button 139 are drawn on it). The holes of
+    // the red route sketch and the Travel button's brass ring. The brass pill under the view's bottom edge is generated (ARC-UI-2194: <see cref="NavPillParts"/>, the same parts as the cover 217's; the compass button 139 is drawn on it). The holes of
     // the zoom and whole-map buttons are covered by those buttons. The map picture itself, the pieces the windows do not draw (140, 199, 219, 220) are not part of it.
     private static ChromeRecipe[] MapPanels()
     {
@@ -475,7 +489,9 @@ public static class InterfaceChromeRecipes
             new ChromeKeep(725, 13, 5, 15), new ChromeKeep(725, 119, 5, 33), new ChromeKeep(666, 72, 19, 5), new ChromeKeep(771, 72, 20, 5),
             new ChromeSunk(673, 266, 110, 41, ChromeMaterial.WoodDark), new ChromeKeep(675, 268, 106, 38),
             new ChromeKeep(691, 307, 70, 69, true),
-            new ChromeKeep(295, 341, 206, 51),
+            // ARC-UI-2194: the brass pill under the view (its upper part is the cover 217's), the compass opening's own rim given up for the pill's ring.
+            new ChromeBare(AreaWorldMapArtLayout.CoverAt.X + 83, AreaWorldMapArtLayout.CoverAt.Y + 8, 41, 41),
+            .. NavPillParts(AreaWorldMapArtLayout.CoverAt.X, AreaWorldMapArtLayout.CoverAt.Y),
         ];
         // ARC-UI-1810: the buttons over the frame. Zoom (811, 111 x 56) and Whole map (812, 106 x 56) are a lamp and a picture of a map side by side, two frames each (the lamp lit in the second): a generated
         // lamp ball (rim, dark glass, the lamp's own light kept) and the map picture kept. Travel (813, 57 x 57) and the compass button (139, 45 x 45) are balls on their own: the generic button recipe for
@@ -487,6 +503,25 @@ public static class InterfaceChromeRecipes
             new ChromeRecipe("MapWholeBut.ART", ChromeKind.Panel, ChromeMaterial.Dark, ChromeSides.None, [new ChromeBall(21.5, 28.5, 21, 8), new ChromeKeep(53, 0, 53, 56)], Holes: ChromeHoles.None),
             new ChromeRecipe("MapTravelBut.ART", ChromeKind.Button, ChromeMaterial.Face, ChromeSides.None, []),
             new ChromeRecipe("navbutton.art", ChromeKind.Button, ChromeMaterial.Face, ChromeSides.None, [], KeepFace: true),
+            // ARC-UI-2194: the bottom cover 217 (207 x 35, the pill's upper part over the view's bottom edge): the same parts at the cover's own coordinates, its brass sampled at the window's.
+            new ChromeRecipe("Nav_Cvr.ART", ChromeKind.Panel, ChromeMaterial.Brass, ChromeSides.None, [.. NavPillParts(0, 0)], Holes: ChromeHoles.None,
+                OriginX: AreaWorldMapArtLayout.CoverAt.X, OriginY: AreaWorldMapArtLayout.CoverAt.Y),
+        ];
+    }
+
+    /// <summary>ARC-UI-2194: the world map window's brass pill under the view, as parts at (<paramref name="x"/>, <paramref name="y"/>), where the cover 217's corner lies (the window's (294, 341); 0, 0 for the cover itself).
+    /// The cover holds the pill's upper 35 rows and the frame 138 the rest, so both recipes build them from this one list and the plates meet at the cover's lower edge. A housing plate (darker brass),
+    /// the two end studs, the two capsule plates (a raised rim round a recessed face), the ring round the compass opening (centre 103.5, 28.5; the button 139 is drawn over the opening) and the two screws.</summary>
+    public static IReadOnlyList<ChromePart> NavPillParts(int x, int y)
+    {
+        (double X, double Y)[] housing = [(38, 19), (41, 15), (46, 12), (52, 10), (155, 10), (161, 12), (165, 15), (169, 19), (169, 49), (38, 49)];
+        return
+        [
+            new ChromePolygon([.. housing.Select(p => (p.X + x, p.Y + y))], ChromeMaterial.BrassDark),
+            new ChromeCapsule(x, y + 31, 8, 7, 1.5), new ChromeCapsule(x + 199, y + 32, 8, 7, 1.5),
+            new ChromeCapsule(x + 4.5, y + 19, 66, 29), new ChromeCapsule(x + 136.5, y + 19, 66, 29),
+            new ChromeSocket(x + 103.5, y + 28.5, 20.5, 5.5),
+            new ChromeRivet(x + 75, y + 44.5, 3.5), new ChromeRivet(x + 132, y + 44.5, 3.5),
         ];
     }
 
@@ -728,16 +763,25 @@ public static class InterfaceChromeRenderer
             }
         }
         if (recipe.Holes != ChromeHoles.None)
-            foreach (var hole in Holes(c))
+        {
+            var holes = Holes(c);
+            // ARC-UI-2194: a bare mark names the smallest hole whose box holds its centre (a small opening inside the box of a large hole, the compass opening in the map view's hole, has its own).
+            var bare = recipe.Parts.OfType<ChromeBare>().Select(mark => holes.Where(hole => mark.X + mark.Width * 0.5 >= hole.X0 && mark.X + mark.Width * 0.5 < hole.X1 && mark.Y + mark.Height * 0.5 >= hole.Y0 && mark.Y + mark.Height * 0.5 < hole.Y1)
+                .OrderBy(hole => (hole.X1 - hole.X0) * (hole.Y1 - hole.Y0)).Select(hole => (Hole?)hole).FirstOrDefault()).Where(hole => hole is not null).ToList();
+            foreach (var hole in holes)
                 if (!recipe.Parts.OfType<ChromeRoundView>().Any(view => view.CenterX >= hole.X0 && view.CenterX < hole.X1 && view.CenterY >= hole.Y0 && view.CenterY < hole.Y1)
-                    && !recipe.Parts.OfType<ChromeBare>().Any(bare => bare.X + bare.Width * 0.5 >= hole.X0 && bare.X + bare.Width * 0.5 < hole.X1 && bare.Y + bare.Height * 0.5 >= hole.Y0 && bare.Y + bare.Height * 0.5 < hole.Y1))
+                    && !bare.Contains(hole))
                     HoleRim(c, hole, recipe.Holes == ChromeHoles.Cloth);
+        }
         foreach (var part in recipe.Parts)
         {
             switch (part)
             {
                 case ChromeRoundView view: RoundView(c, view); break;
                 case ChromeBall ball: Ball(c, ball); break;
+                case ChromePolygon polygon: Polygon(c, polygon); break;
+                case ChromeCapsule capsule: Capsule(c, capsule); break;
+                case ChromeSocket socket: RingBand(c, socket.CenterX * c.Scale, socket.CenterY * c.Scale, socket.InnerRadius * c.Scale, socket.Width); break;
                 case ChromeRivet rivet: Rivet(c, rivet); break;
                 case ChromeKeep keep: Keep(c, c.Edge(keep.X), c.Edge(keep.Y), c.Edge(keep.X + keep.Width) - c.Edge(keep.X), c.Edge(keep.Y + keep.Height) - c.Edge(keep.Y), keep.Round); break;
                 case ChromeGlyph glyph: Glyph(c, glyph); break;
@@ -939,6 +983,10 @@ public static class InterfaceChromeRenderer
                 ChromeSunk p => (p.X, p.Y, p.Width, p.Height),
                 ChromeKeep p => (p.X, p.Y, p.Width, p.Height),
                 ChromeGrid p => (p.X, p.Y, p.Columns * p.Cell, p.Rows * p.Cell),
+                // ARC-UI-2194: the brass pill's parts (the housing and the plates; the ring lies inside the housing's box).
+                ChromeCapsule p => ((int)Math.Floor(p.X), (int)Math.Floor(p.Y), (int)Math.Ceiling(p.Width) + 1, (int)Math.Ceiling(p.Height) + 1),
+                ChromePolygon p => ((int)Math.Floor(p.Points.Min(q => q.X)), (int)Math.Floor(p.Points.Min(q => q.Y)), (int)Math.Ceiling(p.Points.Max(q => q.X) - p.Points.Min(q => q.X)) + 1, (int)Math.Ceiling(p.Points.Max(q => q.Y) - p.Points.Min(q => q.Y)) + 1),
+                ChromeSocket p => ((int)Math.Floor(p.CenterX - p.InnerRadius - p.Width), (int)Math.Floor(p.CenterY - p.InnerRadius - p.Width), (int)Math.Ceiling(2 * (p.InnerRadius + p.Width)) + 1, (int)Math.Ceiling(2 * (p.InnerRadius + p.Width)) + 1),
                 _ => (0, 0, 0, 0),
             };
             if (x >= px && x < px + pw && y >= py && y < py + ph) return true;
@@ -967,8 +1015,20 @@ public static class InterfaceChromeRenderer
         ChromeMaterial.Parchment => ParchmentAt(u, v),
         ChromeMaterial.Paper => PaperAt(u, v),
         ChromeMaterial.PageEdge => PageEdgeAt(u, v),
+        ChromeMaterial.Brass => BrassAt(u, v),
+        ChromeMaterial.BrassDark => BrassAt(u, v).Times(0.45f),
         _ => FaceHigh,
     };
+
+    // ARC-UI-2194: brushed brass for the world map window's pill: long horizontal streaks under a slow tone, in our own colours.
+    private static readonly Rgb BrassMatLow = new(112, 82, 36), BrassMatHigh = new(176, 136, 64);
+
+    private static Rgb BrassAt(float u, float v)
+    {
+        var tone = Fbm(u * 0.03f, v * 0.12f, 61);
+        var streak = Fbm(u * 0.04f, v * 0.9f, 62);
+        return Rgb.Lerp(BrassMatLow, BrassMatHigh, Math.Clamp(0.5f + 1.8f * (tone - 0.5f) + 1.1f * (streak - 0.5f), 0, 1));
+    }
 
     // ARC-UI-1196: our own cloth, parchment and page edge (colours chosen by eye).
     private static readonly Rgb ClothLow = new(56, 28, 30), ClothHigh = new(98, 50, 52);
@@ -1256,10 +1316,10 @@ public static class InterfaceChromeRenderer
 
     // The brass ring around a circle (centre and radius in device pixels), on the opaque pixels outside it: an ink edge, lit brass on the upper left,
     // shaded on the lower right, an ink edge again; three units wide. A round hole's socket and a window's round view (ChromeRoundView) share it.
-    private static void RingBand(Canvas c, double centreX, double centreY, double radius)
+    private static void RingBand(Canvas c, double centreX, double centreY, double radius, double widthUnits = 3)
     {
         float cx = (float)centreX, cy = (float)centreY, r = (float)radius;
-        var ring = 3f * c.S;
+        var ring = (float)widthUnits * c.S;
         var reach = (int)(r + ring + 2);
         for (var y = Math.Max(0, (int)(cy - reach)); y < Math.Min(c.H, (int)(cy + reach)); y++)
         for (var x = Math.Max(0, (int)(cx - reach)); x < Math.Min(c.W, (int)(cx + reach)); x++)
@@ -1272,6 +1332,61 @@ public static class InterfaceChromeRenderer
             var brass = Rgb.Lerp(BrassDark, BrassLight, Math.Clamp(0.5f + 0.5f * (t < 0.5f ? -facing : facing), 0, 1));
             var colour = t < 0.18f ? Rgb.Lerp(Ink, brass, t / 0.18f) : t > 0.85f ? Rgb.Lerp(brass, Ink, (t - 0.85f) / 0.15f) : brass;
             c.Blend(x, y, colour, Math.Clamp(r + ring + 0.5f - d, 0, 1));
+        }
+    }
+
+    // ARC-UI-2194: a capsule plate (see ChromeCapsule). The outline's distance is measured to the capsule's middle line, so the straight sides and the round ends share one edge.
+    private static void Capsule(Canvas c, ChromeCapsule cap)
+    {
+        float s = (float)c.Scale, x0 = (float)(cap.X * s), y0 = (float)(cap.Y * s), x1 = (float)((cap.X + cap.Width) * s), y1 = (float)((cap.Y + cap.Height) * s);
+        float r = MathF.Min(x1 - x0, y1 - y0) * 0.5f, cy = (y0 + y1) * 0.5f, rim = (float)cap.Rim * s;
+        for (var y = Math.Max(0, (int)y0 - 1); y < Math.Min(c.H, (int)y1 + 2); y++)
+        for (var x = Math.Max(0, (int)x0 - 1); x < Math.Min(c.W, (int)x1 + 2); x++)
+        {
+            float px = x + 0.5f, py = y + 0.5f, dx = px - Math.Clamp(px, x0 + r, x1 - r), dy = py - cy;
+            var depth = r - MathF.Sqrt(dx * dx + dy * dy);
+            if (depth < -0.5f) continue;
+            var lit = dx + dy < 0;
+            var brass = Material(c, ChromeMaterial.Brass, px / s, py / s);
+            Rgb colour;
+            if (depth < rim)
+            {
+                colour = depth < 1.5f * c.S ? (lit ? Rgb.Lerp(brass, White, 0.38f) : brass.Times(0.5f)) : Rgb.Lerp(brass, BrassLight, 0.25f);
+                if (depth < 0.6f * c.S) colour = Rgb.Lerp(colour, Ink, 0.55f);
+            }
+            else
+            {
+                var face = brass.Times(0.66f);
+                colour = depth - rim < c.S ? (lit ? face.Times(0.5f) : Rgb.Lerp(face, White, 0.2f)) : face;
+            }
+            c.Blend(x, y, colour, Math.Clamp(depth + 0.5f, 0, 1));
+        }
+    }
+
+    // ARC-UI-2194: a convex polygon plate (see ChromePolygon). The distance inside is the smallest to any edge; the lit side is where the nearest edge faces the upper left.
+    private static void Polygon(Canvas c, ChromePolygon polygon)
+    {
+        var points = polygon.Points.Select(p => ((float)(p.X * c.Scale), (float)(p.Y * c.Scale))).ToList();
+        double area = 0;
+        for (var i = 0; i < points.Count; i++) { var (a, b) = (points[i], points[(i + 1) % points.Count]); area += a.Item1 * b.Item2 - b.Item1 * a.Item2; }
+        if (area < 0) points.Reverse();
+        int xa = (int)points.Min(p => p.Item1) - 1, xb = (int)points.Max(p => p.Item1) + 2, ya = (int)points.Min(p => p.Item2) - 1, yb = (int)points.Max(p => p.Item2) + 2;
+        for (var y = Math.Max(0, ya); y < Math.Min(c.H, yb); y++)
+        for (var x = Math.Max(0, xa); x < Math.Min(c.W, xb); x++)
+        {
+            float px = x + 0.5f, py = y + 0.5f, best = float.MaxValue, nx = 0, ny = 0;
+            for (var i = 0; i < points.Count; i++)
+            {
+                var (a, b) = (points[i], points[(i + 1) % points.Count]);
+                float ex = b.Item1 - a.Item1, ey = b.Item2 - a.Item2, len = MathF.Sqrt(ex * ex + ey * ey);
+                if (len <= 0) continue;
+                var d = (ex * (py - a.Item2) - ey * (px - a.Item1)) / len;
+                if (d < best) { best = d; nx = ey / len; ny = -ex / len; }
+            }
+            if (best < -0.5f) continue;
+            var colour = Bevelled(Material(c, polygon.Material, px / (float)c.Scale, py / (float)c.Scale), best, nx + ny < 0, c.S);
+            if (best < 0.6f * c.S) colour = Rgb.Lerp(colour, Ink, 0.55f);
+            c.Blend(x, y, colour, Math.Clamp(best + 0.5f, 0, 1));
         }
     }
 
