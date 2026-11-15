@@ -11,10 +11,19 @@ namespace Arcanum.Scripting.Tests.Scr;
 public sealed class ScrFollowerFocusTests
 {
     private const int Use = 1;
-    private const byte Triggerer = 0, Attachee = 1, EveryFollower = 2, AnyFollower = 3;
+    private const byte Triggerer = 0, Attachee = 1, EveryFollower = 2, AnyFollower = 3, LocalObject = 11;
 
-    private sealed class FollowerHost(FakeHost inner) : IScrHost, IScrFollowerQueries, IScrObjectStateQueries
+    private sealed class FollowerHost(FakeHost inner) : IScrHost, IScrFollowerQueries, IScrObjectStateQueries, IScrObjectQueries
     {
+        public HashSet<ScrObjectRef> Holding { get; } = [];
+        public int QuestState(ScrObjectRef obj, int quest) => 0;
+        public bool HoldsItemNamed(ScrObjectRef obj, int name) => Holding.Contains(obj);
+        public int NameOf(ScrObjectRef obj) => 0;
+        public bool IsMindControlled(ScrObjectRef obj) => false;
+        public int? WieldedItemName(ScrObjectRef obj, int location) => null;
+        public bool HasReputation(ScrObjectRef obj, int reputation) => false;
+        public int? ObjectType(ScrObjectRef obj) => null;
+        public int? AreaOf(ScrObjectRef obj) => null;
         public HashSet<ScrObjectRef> Dead { get; } = [];
         public bool? IsDead(ScrObjectRef obj) => Dead.Contains(obj);
         public bool? IsSwitchedOff(ScrObjectRef obj) => false;
@@ -36,7 +45,7 @@ public sealed class ScrFollowerFocusTests
     }
 
     // S7 plus the scheme action and the two follower kinds; the guard conditions of S4 stay out (the fake host has no object queries).
-    private static readonly ScrAdmissionSet Set = new("follower-test", ScrAdmissionSet.S7.Conditions.Concat([ScrCatalogue.Condition.FollowingPc, ScrCatalogue.Condition.IsDead]),
+    private static readonly ScrAdmissionSet Set = new("follower-test", ScrAdmissionSet.S7.Conditions.Concat([ScrCatalogue.Condition.FollowingPc, ScrCatalogue.Condition.IsDead, ScrCatalogue.Condition.HasItemNamed]),
         ScrAdmissionSet.S7.Actions.Concat([ScrCatalogue.Action.SetAutoLevelScheme, ScrCatalogue.Action.AssignObject]), ScrAdmissionSet.S7.ValueKinds,
         ScrAdmissionSet.S7.FocusKinds.Concat([ScrFocusKind.EveryFollower, ScrFocusKind.AnyFollower, ScrFocusKind.LocalObject]));
 
@@ -90,7 +99,7 @@ public sealed class ScrFollowerFocusTests
     public void A_single_object_operand_takes_the_first_follower_and_none_for_an_empty_list()
     {
         // Assign object (0x44B960, the first object of the list): the first direct follower, then a scheme on it; an empty list assigns nothing.
-        var program = Program(Do(C(ScrCatalogue.Action.AssignObject, (Local, 0), (AnyFollower, 0))), Do(C(ScrCatalogue.Action.SetAutoLevelScheme, (Local, 0), N(5))), Do(C(ScrCatalogue.Action.ReturnSkipDefault)));
+        var program = Program(Do(C(ScrCatalogue.Action.AssignObject, (LocalObject, 0), (AnyFollower, 0))), Do(C(ScrCatalogue.Action.SetAutoLevelScheme, (LocalObject, 0), N(5))), Do(C(ScrCatalogue.Action.ReturnSkipDefault)));
         var inner = new FakeHost();
         inner.Attach(Npc, Use, 701, program);
         var host = new FollowerHost(inner);
@@ -123,6 +132,25 @@ public sealed class ScrFollowerFocusTests
     }
 
     [TestMethod]
+    public void A_guard_condition_walks_the_follower_list_by_the_same_rule()
+    {
+        // Holds an item named (SG6: the guards share the list tail): every follower for kind 2, one of them for kind 3.
+        ScrStop Stop(byte kind, params ScrObjectRef[] holding)
+        {
+            var inner = new FakeHost();
+            inner.Attach(Npc, Use, 705, Program(L(C(ScrCatalogue.Condition.HasItemNamed, (kind, 0), N(9)), C(ScrCatalogue.Action.ReturnSkipDefault), C(ScrCatalogue.Action.ReturnRunDefault))));
+            var host = new FollowerHost(inner);
+            host.Followers[Pc] = [A, B];
+            foreach (var h in holding) host.Holding.Add(h);
+            return Run(host, Pc).Stop;
+        }
+        Assert.AreEqual(ScrStop.ReturnRunDefault, Stop(EveryFollower, A));
+        Assert.AreEqual(ScrStop.ReturnSkipDefault, Stop(EveryFollower, A, B));
+        Assert.AreEqual(ScrStop.ReturnSkipDefault, Stop(AnyFollower, B));
+        Assert.AreEqual(ScrStop.ReturnRunDefault, Stop(AnyFollower));
+    }
+
+    [TestMethod]
     public void A_condition_that_reads_one_object_refuses_the_follower_kinds()
     {
         var inner = new FakeHost();
@@ -135,8 +163,8 @@ public sealed class ScrFollowerFocusTests
     public void A_follower_the_run_disbanded_is_no_longer_listed()
     {
         var inner = new FakeHost();
-        inner.Attach(Npc, Use, 704, Program(Do(C(ScrCatalogue.Action.AssignObject, (Local, 0), (EveryFollower, 0))),
-            Do(C(ScrCatalogue.Action.CritterDisband, (Local, 0))), Do(C(ScrCatalogue.Action.SetAutoLevelScheme, (EveryFollower, 0), N(2))), Do(C(ScrCatalogue.Action.ReturnSkipDefault))));
+        inner.Attach(Npc, Use, 704, Program(Do(C(ScrCatalogue.Action.AssignObject, (LocalObject, 0), (EveryFollower, 0))),
+            Do(C(ScrCatalogue.Action.CritterDisband, (LocalObject, 0))), Do(C(ScrCatalogue.Action.SetAutoLevelScheme, (EveryFollower, 0), N(2))), Do(C(ScrCatalogue.Action.ReturnSkipDefault))));
         var host = new FollowerHost(inner);
         host.Followers[Pc] = [A, B];
         var set = new ScrAdmissionSet("disband-test", Set.Conditions, Set.Actions.Append(ScrCatalogue.Action.CritterDisband), Set.ValueKinds, Set.FocusKinds);
@@ -153,9 +181,11 @@ public sealed class ScrFollowerFocusTests
         Assert.IsFalse(ScrAdmissionSet.S61.IsSubsetOf(ScrAdmissionSet.S60));
         Assert.IsTrue(ScrAdmissionSet.S61.FocusKinds.IsSupersetOf([ScrFocusKind.EveryFollower, ScrFocusKind.AnyFollower]));
         Assert.IsTrue(ScrAdmission.Admit(program, Set).IsAdmitted);
+        var followersOnly = new ScrAdmissionSet("follower-focus-only", ScrAdmissionSet.S7.Conditions, ScrAdmissionSet.S7.Actions.Append(ScrCatalogue.Action.SetAutoLevelScheme), ScrAdmissionSet.S7.ValueKinds,
+            ScrAdmissionSet.S7.FocusKinds.Append(ScrFocusKind.EveryFollower));
         var bare = new FakeHost();
         bare.Attach(Npc, Use, 702, program);
-        var thrown = Assert.ThrowsExactly<ArgumentException>(() => ScrDispatcher.RunObject(new(Use, Npc, Pc, null), bare, new ScrRunOptions { Admission = Set }));
+        var thrown = Assert.ThrowsExactly<ArgumentException>(() => ScrDispatcher.RunObject(new(Use, Npc, Pc, null), bare, new ScrRunOptions { Admission = followersOnly }));
         StringAssert.Contains(thrown.Message, "IScrFollowerQueries");
     }
 }

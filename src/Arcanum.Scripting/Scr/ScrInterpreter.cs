@@ -227,6 +227,9 @@ internal sealed class ScrInterpreter
         // Following: the first object's leader is the second object (both single objects in the set).
         ScrCatalogue.Condition.FollowingPc => (_shared.Disbanded.Contains(Object(c, 0, line)) ? null : _host.Leader(Object(c, 0, line))) == Object(c, 1, line),
         ScrCatalogue.Condition.Jilted => _host.IsJilted(Object(c, 0, line)),
+        // ARC-SCRIPT-2320 (SG6, FK5): the five guards over a follower list (focus kinds 2 and 3) hold by the list rule, the values read once before the list is walked.
+        ScrCatalogue.Condition.PcQuestState or ScrCatalogue.Condition.HasItemNamed or ScrCatalogue.Condition.IsNamed or ScrCatalogue.Condition.IsWieldingItem or ScrCatalogue.Condition.HasReputation
+            when (ScrFocusKind)c.Kind(0) is ScrFocusKind.EveryFollower or ScrFocusKind.AnyFollower => GuardListHolds(c),
         // SG1: the guard conditions, one object each; the quest state's second value is its third operand.
         ScrCatalogue.Condition.PcQuestState => ScrGuards.Holds(c.Type, Object(c, 0, line), Get(c, 1), Get(c, 2), Queries),
         // ARC-SCRIPT-1772 (CQ5): an object the run renamed answers its new name number (the guard's mind-control test stays the host's).
@@ -1494,6 +1497,13 @@ internal sealed class ScrInterpreter
 
     /// <summary>SC1: the four body-spell bits of the spell flags: body of air 0x4, earth 0x8, fire 0x10, water 0x20.</summary>
     private const int BodySpellFlags = 0x3C, PolymorphedSpellFlag = 0x20000, ShrunkSpellFlag = 0x80000, MirrorImageSpellFlag = 0x40000;
+
+    private bool GuardListHolds(ScrClause c)
+    {
+        var first = Get(c, 1); var second = c.Type == ScrCatalogue.Condition.PcQuestState ? Get(c, 2) : 0;
+        return ListHolds(c, obj => c.Type == ScrCatalogue.Condition.IsNamed && _shared.Names.TryGetValue(obj, out var renamed) ? !Queries.IsMindControlled(obj) && renamed == first
+            : ScrGuards.Holds(c.Type, obj, first, second, Queries));
+    }
 
     private bool MonsterOfTypeHolds(ScrClause c, int line)
     {

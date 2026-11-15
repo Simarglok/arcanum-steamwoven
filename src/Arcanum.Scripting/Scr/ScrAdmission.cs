@@ -510,6 +510,8 @@ public sealed class ScrAdmissionSet
         ScrCatalogue.Condition.Identified, ScrCatalogue.Condition.IsDead, ScrCatalogue.Condition.IsSwitchedOff, ScrCatalogue.Condition.HasBodySpell, ScrCatalogue.Condition.IsPolymorphed,
         ScrCatalogue.Condition.IsShrunk, ScrCatalogue.Condition.HasMirrorImage, ScrCatalogue.Condition.InfluencedBySpell, ScrCatalogue.Condition.KnowsSpell, ScrCatalogue.Condition.MasteredSpellCollege,
         ScrCatalogue.Condition.HasBlessing, ScrCatalogue.Condition.HasCurse,
+        // The five guards (SG6: "the same, after each of the five") walk the follower list too (ScrInterpreter.GuardListHolds).
+        ScrCatalogue.Condition.PcQuestState, ScrCatalogue.Condition.HasItemNamed, ScrCatalogue.Condition.IsNamed, ScrCatalogue.Condition.IsWieldingItem, ScrCatalogue.Condition.HasReputation,
     };
 
     /// <summary>The focus kinds of <see cref="S61"/> a host answers through <see cref="IScrFollowerQueries"/>.</summary>
