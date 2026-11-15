@@ -378,8 +378,12 @@ public partial class TerrainViewerApp
     private bool SpokenWithDead(string entity) =>
         _areaSession is { } session && (session.QueryObjectFlags(entity).Spell(unchecked((int)(_combatHost?.Fields(entity)?.Object.SpellFlags ?? 0))) & SessionSpellCaster.SpokenWithDeadSpellFlag) != 0;
 
-    /// <summary>Where a speaker stands now: a companion's live cell, else its T0 cell.</summary>
-    private Func<AreaSpeaker, (long X, long Y)>? SpeakerCell => _areaCompanions is { } group ? group.WorldCell : null;
+    /// <summary>Where a speaker stands now (ARC-WORLD-2238, ARC-SCRIPT-1601): a following companion's live cell, else the cell the shown map's AI host has the NPC on (where its walker moved it),
+    /// else its T0 cell. The one rule of the talk reach, the hover's Talk/WalkToTalk choice, the hero-run talk checks and the dialog's <c>d:</c>/<c>x:</c> directions.</summary>
+    private Func<AreaSpeaker, (long X, long Y)> SpeakerCell => _speakerCell ??= AreaSpeakerCells.Live(
+        speaker => _areaCompanions is { } group && group.Of(speaker) is not null ? group.WorldCell(speaker) : null,
+        entity => AreaAiHostNow()?.NpcCell(entity));
+    private Func<AreaSpeaker, (long X, long Y)>? _speakerCell;
 
     // ARC-WORLD-067: the PC side of the party rules for the HUD, read once per session revision.
     private (GameSessionOwner Session, long Revision, string Label)? _partySideLabel;

@@ -16,7 +16,7 @@ public sealed class AreaStopSpellScriptAdmissionTests
         foreach (var set in new[] { AreaUseScriptHost.PlacedAdmission, AreaUseScriptHost.HeartbeatAdmission, AreaUseScriptHost.DyingAdmission })
         {
             Assert.IsTrue(set.Actions.Contains(ScrCatalogue.Action.StopSpellOnObject), set.Id);
-            Assert.IsTrue(set.IsSubsetOfBesidesStores(ScrAdmissionSet.S59), set.Id);
+            Assert.IsTrue(set.IsSubsetOfBesidesStores(ScrAdmissionSet.S60), set.Id);
         }
         // The use click's set holds the cast actions no more than this one, and the dialog host has no spell run to stop.
         Assert.IsFalse(AreaUseScriptHost.Admission.Actions.Contains(ScrCatalogue.Action.StopSpellOnObject));
