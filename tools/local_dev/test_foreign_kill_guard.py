@@ -19,18 +19,30 @@ from tools.local_dev import run_queue
 
 REPO = Path(__file__).resolve().parents[2]
 TOOLS = REPO / "tools"
-SUFFIXES = {".py", ".sh", ".yml", ".yaml"}
-# What may never appear in a tool: killing or quitting a process by name, by a fixed pid or through an Apple event.
-FORBIDDEN = re.compile(r"\b(pkill|killall|taskkill)\b|\bkill\s+-\w|osascript|tell application|psutil|NSRunningApplication")
+SUFFIXES = {".py", ".sh", ".yml", ".yaml", ".cs"}
+SCANNED_ROOTS = (TOOLS, REPO / "src")
+# What may never appear in a tool or in the game code: killing or quitting a process by name, by a fixed pid or through an Apple
+# event (a shell `kill` with a flag, a `["kill", ...]` argument list, os.system, a C# Process.Kill, an NSRunningApplication).
+FORBIDDEN = re.compile(r"\b(pkill|killall|taskkill)\b|\bkill\s+-\w|\[\s*[\"']kill[\"']\s*,|osascript|tell application|psutil|NSRunningApplication"
+                       r"|os\.system\(|pthread_kill|Process\.Kill|Process\.GetProcess")
 SIGNAL_CALL = re.compile(r"os\.(killpg|kill)\(|\.send_signal\(|\.terminate\(\)|\.kill\(\)")
 THIS = Path(__file__).resolve()
 
 
+def has_shebang(path: Path) -> bool:
+    with path.open("rb") as handle:
+        return handle.read(2) == b"#!"
+
+
 def sources() -> list[Path]:
-    found = [path for path in TOOLS.rglob("*") if path.suffix in SUFFIXES and path.is_file()
-             and not any(part in {"node_modules", "__pycache__", ".venv"} for part in path.parts)]
+    """Every script and C# file of the tools and the game, the extensionless launchers included; tests are left out (they may
+    start and stop their own children)."""
+    skipped = {"node_modules", "__pycache__", ".venv", "obj", "bin", ".godot"}
+    found = [path for root in SCANNED_ROOTS for path in root.rglob("*") if path.is_file()
+             and (path.suffix in SUFFIXES or (not path.suffix and path.stat().st_size < 1_000_000 and has_shebang(path)))
+             and not any(part in skipped for part in path.parts)]
     found += [REPO / "arcanum"]
-    return [path for path in sorted(found) if path.resolve() != THIS and not path.name.startswith("test_")]
+    return [path for path in sorted(found) if path.resolve() != THIS and not path.name.startswith("test_") and "Tests" not in path.parts]
 
 
 class SourceScanTests(unittest.TestCase):
@@ -40,9 +52,9 @@ class SourceScanTests(unittest.TestCase):
                 if FORBIDDEN.search(line) and not line.lstrip().startswith("#")]
         self.assertEqual([], hits)
 
-    def test_signals_go_only_to_a_group_or_pid_zero_check_of_a_started_child(self) -> None:
-        # The allowed sites: the queue's _signal_group, the world validator's own child, the HD pack's liveness check
-        # (os.kill with signal 0 signals nothing), and the queue's lock holder it started itself.
+    def test_only_known_sites_send_a_signal_and_each_is_a_started_group_or_a_liveness_check(self) -> None:
+        # The allowed sites (Python only): the queue's _signal_group, the world validator's own child group, the HD pack's liveness
+        # check (os.kill with signal 0 signals nothing), and the queue's lock holder, a single process it started itself.
         allowed = {
             "tools/local_dev/run_queue.py": {"os.killpg(pid, number)", "os.kill(pid, 0)", "holder.kill()"},
             "tools/terrain-viewer/Godot/tools/world_validate.py": {"os.killpg(child.pid, signal.SIGTERM)", "os.killpg(child.pid, signal.SIGKILL)"},
@@ -50,6 +62,8 @@ class SourceScanTests(unittest.TestCase):
         }
         seen: dict[str, set[str]] = {}
         for path in sources():
+            if path.suffix == ".cs":
+                continue
             relative = path.relative_to(REPO).as_posix()
             for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
                 code = line.split("#", 1)[0]
@@ -91,10 +105,16 @@ class SignalGroupGuardTests(unittest.TestCase):
             sibling.kill()
             sibling.wait()
 
-    def test_own_group_init_and_bad_pids_are_refused(self) -> None:
+    def test_init_and_bad_pids_are_refused(self) -> None:
         with patch.object(run_queue.os, "killpg") as killpg:
-            for pid in (os.getpgrp(), 1, 0, -5, None, "7"):
+            for pid in (1, 0, -5, None, "7"):
                 run_queue._signal_group(pid, signal.SIGKILL)  # type: ignore[arg-type]
+            killpg.assert_not_called()
+
+    def test_the_queues_own_group_is_refused_even_when_its_pid_leads_it(self) -> None:
+        own = os.getpgrp()
+        with patch.object(run_queue.os, "getpgid", return_value=own), patch.object(run_queue.os, "killpg") as killpg:
+            run_queue._signal_group(own, signal.SIGKILL)
             killpg.assert_not_called()
 
 

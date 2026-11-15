@@ -64,21 +64,28 @@ process group) disappeared at 18:25:34 on 2026-11-15. The unified log shows it w
 
 - `runningboardd`: `termination reported by launchd (0, 0, 0)` and `Firing exit handlers ... <RBSProcessExitContext | voluntary>`:
   exit status 0 and no signal; a SIGKILL, a Jetsam kill or a crash reads differently (a signal, a Jetsam reason or an `.ips` report).
-- `launchservicesd`: `SETFRONT: pid=8604 ... foreground=1 oldFrontPid=758` (758 was `SystemUIServer`, the "nothing in front" process)
-  at 18:25:32.93, then `QUITTING: pid=8604` at 18:25:34.60, 1.7 s later, and Music became the front app at once.
-  The same `SETFRONT` from 758 is the first line of the run's start, so the window was brought to the front by hand at 18:25:32.
+- `launchservicesd`: `SETFRONT: pid=8604 ... foreground=1` at 18:25:32.93 (the window was activated; the previous front
+  process, 758, is `SystemUIServer`, the "nothing in front" process), then `QUITTING: pid=8604` at 18:25:34.60, 1.7 s later,
+  and Music became the front app at once. The first line of the run's start has the same shape (activation from 758).
 - No `osascript`, `pkill`, `killall`, quit or kill line in the log between 18:25:30 and the exit, and the game's render loop was
   running normally 0.6 s before it.
 
-Reading: a normal quit with status 0 shortly after the window was activated, i.e. a close by hand (Cmd+Q, the close button or
-Dock Quit) or an in-game Exit; the log cannot tell those apart. Our tools cannot have done it: the queue signals only
-`killpg` of a command it started with `start_new_session`; a game opened with `open` belongs to launchd and shares no group.
-[`test_foreign_kill_guard.py`](../../tools/local_dev/test_foreign_kill_guard.py) keeps it so (no kill by name, no `osascript`,
-signals only through `_signal_group`, which now refuses a pid that does not lead its own group or the queue's own group).
-The viewer logs `ARC-DEV-2280 window close request at HH:MM:SS` for Cmd+Q, the close button and Dock Quit, and the main menu Exit
-logs `ARC-UI-011 main menu exit`, so the next time the game's own log (`~/Library/Application Support/Godot/app_userdata/Arcanum Terrain Viewer/logs/godot.log`)
-names the path. Copy that log before the next smoke run: every smoke viewer starts a new log in the same folder and only the
-last five are kept.
+Reading: a normal exit with status 0 shortly after the window was activated, most likely a quit by hand (Cmd+Q, the close
+button, Dock Quit or the main menu Exit). The log cannot tell those apart, and it also fits a quit the code itself makes with
+status 0 (a smoke or self-test end, the HD pack problem box "close game"); those are flag-driven and not expected at an idle
+main menu, but they are not ruled out by the log. The activation shows that a window was brought to the front, not who did it.
+
+No tool in the repository can have done it: no script under `tools/` or `./arcanum` (and no C# under `tools/` or `src/`)
+kills by name or sends an Apple event, and the queue signals only the process group of a command it started with
+`start_new_session`; a game opened with `open` belongs to launchd and shares no group. (Ad-hoc commands typed by a Claude
+session or the owner are not covered by any scan.)
+[`test_foreign_kill_guard.py`](../../tools/local_dev/test_foreign_kill_guard.py) keeps it so, and `_signal_group` now refuses a
+pid that does not lead its own group and the queue's own group. The viewer logs `ARC-DEV-2280 window close request at HH:MM:SS`
+when the window gets a close request (not yet seen with a real Cmd+Q, close button or Dock Quit in a built game; the first
+time one is pressed tells which arrive), and the main menu Exit logs `ARC-UI-011 main menu exit`, so the next incident can be
+read from the game's own log (`~/Library/Application Support/Godot/app_userdata/Arcanum Terrain Viewer/logs/godot.log`). Copy
+that log before the next smoke run: every smoke viewer starts a new log in the same folder and only the last five are kept
+([#2285](https://github.com/Simarglok/arcanum-steamwoven/issues/2285) gives the game its own log).
 
 Recipe for any vanished process (replace the pid; `YYYY-MM-DD HH:MM:SS` is a few seconds either side of the exit):
 
