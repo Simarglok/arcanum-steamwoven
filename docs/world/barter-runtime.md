@@ -332,7 +332,7 @@ dialog start), [BW6](../research/ledger/ui-audio.md#barter-window-art-arc-ui-064
 - **Buy-object script** (point 17): not run; a merchant that has one refuses every sale below Expert haggle. The original runs it at
   every sale quote (twice below Expert), so its side effects repeat on hover.
 - **Count dialog** for stacks: a stack trades whole. **Quote and refusal lines** (`gd_npc_*` 800–1499 and 4600, "not enough money" from
-  `gd_cls_*`): the window prints its own text. **Gambling** (FR-ITEM-019): see [Gambling](#gambling-arc-ui-1740); the opening shop's docked window has no bet box yet.
+  `gd_cls_*`): the window prints its own text. **Gambling** (FR-ITEM-019): see [Gambling](#gambling-arc-ui-1740); the opening shop's docked window has the bet box too ([ARC-UI-1806](#gambling-in-the-opening-shop-arc-ui-1806)).
 - **Paperdoll**: the merchant's worn items are not offered (the original reaches them only through its paperdoll); the follower menu and
   follower cycling open nothing.
 - The uninitialised "buys everything" flag of a set without a buy line and of an out-of-range source (BT8): read as 0 (buys nothing).
@@ -351,3 +351,13 @@ on the saved d100; a win moves the item for nothing and costs the merchant the i
 unit price × count (the exe skips the move block under flag 0x10, ARC-UI-2215: the item stays with the merchant, also a worn one on its slot). A stack goes whole. The saved roll is thrown at the first barter window (`GameSessionOwner.EnsureGamblingRoll`), the
 check's own draw replaces it for the next bet, and the roll is part of the snapshot (schema 101). A refused move or payment (no room for the won item, a script, too few coins for
 a lost stack) leaves the roll, the generator and the fate as they were.
+
+### Gambling in the opening shop (ARC-UI-1806)
+
+The opening shop's docked window (ARC-UI-069) runs the same bet box in the same inventory window mode, so the box, the hover gate, the release rule, the
+lines and the trade sound are the dialog window's, over the shop's session. `AreaShopSession.Open` gives the shop's `AreaBarter` the two things the dialog
+path reads from the world: the merchant's Gambling skill (its stored sheet through `AreaAdvancement.Npc` with the new character's hero tables, as the dialog path's
+follower sheet) and its generated NPC lines (`AreaShopLines`, the plain NPC files and the merchant's override dialog, read from the shop's own script content
+that the viewer opens at the first line and releases when the shop's window ends; the shop map has no conversation host). Without the hero tables the merchant has no
+points and the gate refuses it (category 9); without the content no line is said. The shop's session is the game's session once the start takes it, so a bet made
+there (a won or lost ware, the saved roll) goes on into the game.

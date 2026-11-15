@@ -952,6 +952,17 @@ public partial class TerrainViewerApp
         var over = area.GambleArtNow;
         Require(over is AreaBarterArtLayout.GambleOnArt or AreaBarterArtLayout.GambleRefusedArt, $"held over the box it shows 344 or 346, not {over}");
         var line = area.BarterFrame!.Quote;
+        // ARC_AREA_BARTER_BET_CAPTURE saves an in-app readback of the window with the ware over the box to the caller's ignored path (a graphics report, never committed).
+        if (System.Environment.GetEnvironmentVariable("ARC_AREA_BARTER_BET_CAPTURE") is { Length: > 0 } capture)
+        {
+            for (var i = 0; i < 2; i++)
+            {
+                await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+            }
+            using var image = GetViewport().GetTexture().GetImage();
+            Require(image.SavePng(capture) == Error.Ok, "the capture saved to " + capture);
+        }
         area.TrackGambleAt(new(AreaBarterArtLayout.GridX + 1, AreaBarterArtLayout.GridY + 1));
         Require(area.GambleArtNow == AreaBarterArtLayout.GambleArt, "moving out sets 345 again");
         area.ReleaseAt(new(AreaBarterArtLayout.GridX + 1, AreaBarterArtLayout.GridY + 1));
