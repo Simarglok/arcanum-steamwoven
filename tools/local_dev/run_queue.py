@@ -155,6 +155,111 @@ def set_paused(on: bool, by: str = "cli") -> bool:
     return True
 
 
+# ARC-DEV-2272: the "owner is playing" mode. While it is on, no ordinary `window` run starts (smoke stages, lab runs, an ad-hoc
+# `./arcanum run --kind window`: Godot needs the focus, and a smoke window takes it from the packaged game); headless, quick and
+# dotnet runs go on. The owner's own launches (priority FRONT: area|world|map, package) are not held; runs already holding a
+# window finish. It is one valid ticket (`t-playing.json`, seq 0, kind window, lane single, already started) held by the same kind
+# of `lockf` process as the pause. A wrapper of this version holds back only the window runs behind it (blocker()); a wrapper of
+# before ARC-DEV-2272 reads it as a running exclusive Godot run, so it holds back every Godot run (window, headless, export) but not dotnet or quick
+# runs, the same way, until that checkout merges main. The holder ends by itself at the deadline (an expiry nobody has to enforce),
+# so a forgotten switch cannot hold the queue for ever; the lock goes with the holder, a crash or a reboot also ends the mode.
+PLAYING_NAME = "t-playing.json"
+DEFAULT_PLAYING_MINUTES = 240.0  # the manual mode ends by itself after this unless --for says otherwise (0: no limit)
+NO_DEADLINE = 99999999999  # seconds since the epoch: the holder's "never" (year 5138)
+PLAYING_HOLDER_SCRIPT = ('while { [ -e "$0" ] || [ -e "$1" ]; } && [ "$(date +%s)" -lt "$2" ]; do sleep 5; done')  # $2 the deadline
+
+
+def playing_file() -> Path:
+    return folder() / PLAYING_NAME
+
+
+def playing_state() -> dict[str, Any] | None:
+    """The playing ticket ({"since", "until" (epoch seconds or None), "by"}) while the mode is on, else None. A file nobody
+    holds, or one past its deadline, is stale and does not count."""
+    path = playing_file()
+    if not _locked(path):
+        return None
+    ticket = _read_json(path)
+    if ticket is None or not ticket.get("playing"):
+        return None
+    until = ticket.get("until")
+    if isinstance(until, (int, float)) and not isinstance(until, bool) and until <= time.time():
+        return None
+    return ticket
+
+
+def playing_text(ticket: dict[str, Any], now: float | None = None) -> str:
+    """How long the mode has lasted and when it ends, for the waiting lines and ./arcanum queue."""
+    now = time.time() if now is None else now
+    since, until = ticket.get("since"), ticket.get("until")
+    def span(seconds: float) -> str:
+        seconds = max(0, math.ceil(seconds))
+        return f"{seconds // 3600}h{seconds % 3600 // 60:02d}m" if seconds >= 3600 else _age(seconds)
+
+    parts = []
+    if isinstance(since, (int, float)):
+        parts.append(f"for {span(now - since)}")
+    parts.append(f"ends in {span(until - now)}" if isinstance(until, (int, float)) and not isinstance(until, bool)
+                 else "no time limit")
+    return ", ".join(parts)
+
+
+def set_playing(on: bool, minutes: float = DEFAULT_PLAYING_MINUTES, by: str = "cli") -> bool:
+    """Turn the owner-is-playing mode on or off; True when the state changed. Turning it on again replaces the limit (the
+    mode is renewed, True). `minutes` 0 is no limit. Raises OSError when the holder cannot be started."""
+    base = _open_folder()
+    path = base / PLAYING_NAME
+    if not on:
+        was = playing_state() is not None
+        path.unlink(missing_ok=True)  # also a stale file nobody holds
+        return was
+    if not math.isfinite(minutes) or minutes < 0:
+        raise ValueError("the playing limit must be 0 (no limit) or a positive number of minutes")
+    now = time.time()
+    until = now + minutes * 60 if minutes > 0 else None
+    hidden = base / f".playing-{os.getpid()}"  # visible to the queue only once it is locked and complete, like any ticket
+    hidden.write_text("{}")
+    os.chmod(hidden, 0o600)
+    deadline = str(int(until)) if until is not None else str(NO_DEADLINE)
+    holder = subprocess.Popen([LOCKF, "-k", str(hidden), "/bin/sh", "-c", PLAYING_HOLDER_SCRIPT, str(hidden), str(path), deadline],
+                              start_new_session=True, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                              stderr=subprocess.DEVNULL, close_fds=True)
+    try:
+        limit = time.monotonic() + 5.0
+        while not _locked(hidden):
+            if holder.poll() is not None or time.monotonic() > limit:
+                raise OSError("the playing mode could not be held (is /usr/bin/lockf there?)")
+            time.sleep(0.02)
+        ticket = {"schema": SCHEMA, "seq": 0, "kind": "window", "lane": SINGLE, "label": "owner is playing", "priority": FRONT,
+                  "command": "owner is playing", "cwd": os.getcwd(), "checkout": os.getcwd(), "pid": holder.pid,
+                  "pidStart": _process_start(holder.pid), "timeoutMinutes": 0, "estimateSeconds": 0, "enqueuedAt": now,
+                  "startedAt": now, "childPid": None, "childStart": None, "playing": True, "since": now, "until": until,
+                  "by": by}
+        hidden.write_text(json.dumps(ticket, sort_keys=True))
+        os.replace(hidden, path)  # a renewal replaces the earlier ticket; its holder ends when its file is gone and its deadline passed
+    except BaseException:  # never leave a holder looping on a file nobody will name (it ends when the file is gone)
+        hidden.unlink(missing_ok=True)
+        if holder.poll() is None:
+            holder.kill()
+            holder.wait()
+        raise
+    holder.returncode = 0  # it outlives this process on purpose
+    return True
+
+
+def is_playing(ticket: dict[str, Any], now: float | None = None) -> bool:
+    """True for the live playing ticket of a mode that has not reached its deadline (its holder may take a few seconds more to end)."""
+    if not ticket.get("playing"):
+        return False
+    until = ticket.get("until")
+    return not (isinstance(until, (int, float)) and not isinstance(until, bool) and until <= (time.time() if now is None else now))
+
+
+def held_by_playing(ticket: dict[str, Any]) -> bool:
+    """True for a run the mode holds back: an ordinary window run (the owner's own launches, priority FRONT, are not held)."""
+    return ticket.get("kind") == "window" and ticket.get("priority", NORMAL) != FRONT and not ticket.get("playing")
+
+
 def _open_folder() -> Path:
     path = folder()
     path.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -351,7 +456,7 @@ def tickets(prune: bool = True) -> list[tuple[Path, dict[str, Any]]]:
         for path in base.glob(".new-*"):
             if not _locked(path):
                 _unlink(path)
-        for pattern in (".counter-*", ".history-*", ".settings-*"):  # left by a process interrupted mid-replace
+        for pattern in (".counter-*", ".history-*", ".settings-*", ".playing-*"):  # left by a process interrupted mid-replace (a killed --playing leaves its holder looping on its file: removing it ends the holder)
             for path in base.glob(pattern):
                 try:
                     if now - path.stat().st_mtime > 60:
@@ -516,10 +621,17 @@ def lane_of(ticket: dict[str, Any]) -> str | None:
 
 def blocker(mine: dict[str, Any], live: Sequence[dict[str, Any]]) -> dict[str, Any] | None:
     """The ticket this one waits for, or None when it may start now (the admission rule)."""
+    now = time.time()
+    playing = next((ticket for ticket in live if is_playing(ticket, now)), None)  # ARC-DEV-2272: it holds back window runs only
+    live = [ticket for ticket in live if not ticket.get("playing")]
+    if playing is not None and held_by_playing(mine) and not mine.get("startedAt"):
+        return playing
     others = [ticket for ticket in live if ticket["seq"] != mine["seq"]]
     running = [ticket for ticket in others if ticket.get("startedAt")]
     order = order_of(live)
-    ahead = [ticket for ticket in others if not ticket.get("startedAt") and order(ticket) < order(mine)]
+    # a window run the mode holds back fills no place: the headless, quick and dotnet runs behind it go on
+    ahead = [ticket for ticket in others if not ticket.get("startedAt") and order(ticket) < order(mine)
+             and not (playing is not None and held_by_playing(ticket))]
     mine_checkout = checkout_of(mine)
     if mine["kind"] in GODOT_KINDS:
         # a quick run of the same checkout (its project folder) goes before a Godot run that is later in the order, and
@@ -566,7 +678,7 @@ def blocker(mine: dict[str, Any], live: Sequence[dict[str, Any]]) -> dict[str, A
             return ticket
     for ticket in others:
         if ticket["kind"] == "export" and not ticket.get("startedAt"):
-            waits_for = blocker(ticket, live)
+            waits_for = blocker(ticket, [*live, *([playing] if playing is not None else [])])  # the mode still holds the windows ahead of it
             # draining: the export waits for nothing, or only for a side run that is already running (a quick run of its
             # own checkout that is still queued is not that: it would wait for the export in turn)
             if waits_for is None or (waits_for["kind"] in SIDE_KINDS and waits_for.get("startedAt")):
@@ -623,6 +735,8 @@ def task_code(ticket: dict[str, Any]) -> str | None:
 def _describe(ticket: dict[str, Any]) -> str:
     if ticket.get("paused"):
         return "queue PAUSED (./arcanum queue --resume)"
+    if ticket.get("playing"):
+        return f"owner playing ({playing_text(ticket)}; no window run starts, headless/quick/dotnet go on; ./arcanum queue --not-playing)"
     lane = lane_of(ticket)
     code = task_code(ticket)
     return (f"#{ticket['seq']} {ticket['kind']}{'/' + lane if lane else ''} {Path(ticket.get('cwd', '?')).name}"
@@ -691,7 +805,7 @@ def _enqueue(kind: str, label: str, command: Sequence[str], priority: int, timeo
 def _peers(live: Sequence[dict[str, Any]], own_seq: int) -> int:
     """The other runs of Godot (any lane, quick runs too) that are running now."""
     return sum(1 for item in live if item["seq"] != own_seq and item.get("startedAt") and item["kind"] in HOLD_KINDS
-               and not item.get("paused"))
+               and not item.get("paused") and not item.get("playing"))
 
 
 def _load() -> float | None:
@@ -721,7 +835,7 @@ def _wait_turn(fd: int, ticket: dict[str, Any], sleep: Callable[[float], None]) 
             limit = None
             if waiting_for is None and ticket["kind"] in GODOT_KINDS:
                 limit = too_loaded(sum(1 for item in live if item["seq"] != ticket["seq"] and item.get("startedAt")
-                                       and item["kind"] in GODOT_KINDS))
+                                       and item["kind"] in GODOT_KINDS and not item.get("playing")))
             if waiting_for is None and limit is None:
                 ticket["startedAt"] = time.time()
                 if ticket["kind"] in HOLD_KINDS:  # ARC-DEV-400: the conditions it starts under, for the lane accounting
@@ -1127,8 +1241,13 @@ def status(history: int = 0) -> list[str]:
         live = [item for _, item in tickets()]
     now = time.time()
     pause = next((ticket for ticket in live if ticket.get("paused")), None)
-    live = [ticket for ticket in live if not ticket.get("paused")]  # the pause is a ticket for the queue, not a run to list
+    playing = next((ticket for ticket in live if is_playing(ticket, now)), None)
+    # the pause and the playing mode are tickets for the queue, not runs to list
+    live = [ticket for ticket in live if not ticket.get("paused") and not ticket.get("playing")]
     result = []
+    if playing is not None:  # ARC-DEV-2272
+        result.append(f"PLAYING: the owner is playing, no window run starts ({playing_text(playing, now)}); headless, quick and dotnet "
+                      "runs go on; ./arcanum queue --not-playing")
     if pause is not None:
         state = pause_state() or {}
         since = state.get("since")
@@ -1141,8 +1260,9 @@ def status(history: int = 0) -> list[str]:
             result.append(f"running {_describe(ticket)} for {_age(now - ticket['startedAt'])} pid={ticket.get('childPid')}")
     for ticket in live:
         if not ticket.get("startedAt"):
-            waiting_for = blocker(ticket, [*live, *([pause] if pause is not None else [])])
-            behind = "" if waiting_for is None else " (paused)" if waiting_for.get("paused") else f" behind #{waiting_for['seq']}"
+            waiting_for = blocker(ticket, [*live, *([pause] if pause is not None else []), *([playing] if playing is not None else [])])
+            behind = ("" if waiting_for is None else " (paused)" if waiting_for.get("paused")
+                      else " (owner playing)" if waiting_for.get("playing") else f" behind #{waiting_for['seq']}")
             result.append(f"waiting {_describe(ticket)} for {_age(now - ticket['enqueuedAt'])}" + (behind or " (starting)"))
     return result
 
@@ -1198,7 +1318,7 @@ def wait(seq: int | None = None, minutes: float = 0.0, *, sleep: Callable[[float
     last: Any = None
     while True:
         with _QueueLock():
-            live = [item for _, item in tickets() if not item.get("paused")]
+            live = [item for _, item in tickets() if not item.get("paused") and not item.get("playing")]
         if seq is None:
             others = live
             if not others:

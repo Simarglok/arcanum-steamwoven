@@ -455,6 +455,17 @@ class ExecuteTests(unittest.TestCase):
         code, _, lines = self.run_steps(steps, {})
         self.assertEqual((code, lines[-1]), (0, "SMOKE PASS 4 of 4 steps passed"))
 
+    def test_a_window_step_says_the_owner_is_playing_while_the_queue_holds_it(self) -> None:  # ARC-DEV-2272
+        steps = [smoke.Step("build", "dotnet", ("sh",), gate=True), smoke.Step("main", "window", ("g",), "^B$")]
+        with mock.patch.object(run_queue, "playing_state", return_value={"since": 1.0, "until": None}):
+            code, _, lines = self.run_steps(steps, {})
+        self.assertEqual(code, 0)
+        waiting = [line for line in lines if line.startswith("SMOKE waiting: owner is playing")]
+        self.assertEqual(len(waiting), 1, lines)  # the window step only, never the dotnet build
+        self.assertIn("./arcanum queue --not-playing", waiting[0])
+        _, _, lines = self.run_steps(steps, {})
+        self.assertFalse([line for line in lines if "owner is playing" in line])
+
     def test_the_unfinished_stages_of_a_failed_process_run_one_to_a_process(self) -> None:
         pass_line = lambda stage: smoke.STAGE_PASS[stage] + " {}\n"
         again = lambda stage: smoke.Step(f"stages-retry-{stage}", "window", ("g",), requires=(stage,))
