@@ -225,21 +225,89 @@ class DailyTests(unittest.TestCase):
         self.assertEqual(environments["oracle"]["ARCANUM_ORACLE_VENV"], str(self.repo / daily.ORACLE_VENV))
         self.assertEqual(environments["smoke"]["DAT_ROOT"], "/game", "the smoke runner drops them for the viewer itself")
 
-    def test_failed_root_checks_stop_before_the_smoke_and_the_packages(self) -> None:
+    def test_failed_root_checks_still_run_the_smoke_and_block_the_packages(self) -> None:
         self.codes["oracle"] = self.codes["dotnet"] = 1
         self.texts["dotnet"] = ("ARCANUM_QUEUE start ticket=9 kind=dotnet waited=0s\nFAIL exit=1 ran=30s lines=80 log=/q/run-9-dotnet.log\n"
                                 "first error at line 70 of 80 (1 error line(s)):\n  error CS1002: ; expected\n")
         self.texts["oracle"] = "oracle: installing the locked Unicorn failed (network or an unsupported platform)\n"
         self.assertEqual(self.run_daily(), daily.FAIL)
-        self.assertEqual(self.names(), ["dotnet", "dat-probe", "oracle", "docs-check"])
+        self.assertEqual(self.names(), ["dotnet", "dat-probe", "oracle", "docs-check", "smoke"])
         report = self.report()
-        self.assertIn("RESULT FAIL root checks failed (dotnet, oracle)", report)
+        self.assertIn("RESULT FAIL root checks failed (dotnet, oracle); smoke passed: no package", report)
+        self.assertIn("smoke PASS exit=0", report)
+        self.assertIn("smoke summary: passed build, crash-site, main, town", report)
         self.assertIn("  FAIL exit=1 ran=30s lines=80 log=/q/run-9-dotnet.log\n", report)
         self.assertIn("    error CS1002: ; expected\n", report)
         self.assertIn("  oracle: installing the locked Unicorn failed", report)
         self.assertNotIn("ARCANUM_QUEUE", report)
-        self.assertIn(f"failed commit {self.commit}", report)
+        self.assertEqual(report.count(f"failed commit {self.commit}"), 1)
         self.assertEqual(self.worktrees(), 1)
+
+    def test_red_checks_and_a_failed_smoke_are_both_reported_and_no_package_is_made(self) -> None:
+        self.codes["dotnet"] = 1
+        self.smoke_text, self.codes["smoke"] = SMOKE_FAIL, 1
+        self.assertEqual(self.run_daily(), daily.FAIL)
+        self.assertEqual(self.names(), ["dotnet", "dat-probe", "oracle", "docs-check", "smoke"])
+        report = self.report()
+        self.assertIn("failed smoke town:", report)
+        self.assertIn("RESULT FAIL root checks failed (dotnet) and smoke failed: town, ruins: no package", report)
+        self.assertEqual(report.count("failed commit "), 1)
+
+    def test_a_dotnet_timeout_does_not_hide_the_smoke_and_says_where_the_time_went(self) -> None:
+        self.codes["dotnet"] = run_queue.TIMEOUT_EXIT
+        self.texts["dotnet"] = ("ARCANUM_QUEUE start ticket=9 kind=dotnet waited=75s\n"
+                                "ARCANUM_QUEUE timeout ticket=9 after 45 min; stopped its process group\n"
+                                "ARCANUM_QUEUE end ticket=9 exit=124 ran=2700s\n")
+        self.assertEqual(self.run_daily(), daily.FAIL)
+        self.assertIn("smoke", self.names())
+        self.assertNotIn("package-mac", self.names())
+        report = self.report()
+        self.assertIn("dotnet FAIL exit=124", report)
+        self.assertIn("  TIMEOUT: run time, the queue's limit of 45 minutes for ticket 9 after it started (it waited 75 s in the queue first)\n", report)
+        self.assertIn("RESULT FAIL root checks failed (dotnet); smoke passed: no package", report)
+        self.assertEqual(report.count("failed commit "), 1)
+
+    def test_the_timeout_reason_tells_queue_wait_from_run_time(self) -> None:
+        self.assertIn("cause unknown", daily.timeout_reason("ARCANUM_QUEUE enqueued ticket=3\n"))
+        self.assertIn("the daily's own limit of 30 minutes", daily.timeout_reason("daily: stopped after 30 minutes\n"))
+        self.assertIn("started (waited 5 s)", daily.timeout_reason("ARCANUM_QUEUE start ticket=1 kind=dotnet waited=5s\n"))
+        # a smoke chain log holds many runs: the last timeout is paired with the start of its own ticket
+        chain = ("ARCANUM_QUEUE start ticket=1 kind=window waited=1s\nARCANUM_QUEUE start ticket=2 kind=window waited=40s\n"
+                 "ARCANUM_QUEUE timeout ticket=2 after 30 min; stopped its process group\n")
+        reason = daily.timeout_reason(chain)
+        self.assertIn("30 minutes for ticket 2", reason)
+        self.assertIn("waited 40 s", reason)
+
+    def test_red_checks_then_a_stopped_smoke_still_mark_the_commit_once(self) -> None:
+        self.codes["dotnet"] = 1
+        self.smoke_text, self.codes["smoke"] = SMOKE_FAIL.split("SMOKE step ruins")[0], 143
+        self.assertEqual(self.run_daily(), daily.FAIL)
+        report = self.report()
+        self.assertEqual(report.count(f"failed commit {self.commit}"), 1)
+        self.assertIn("RESULT FAIL root checks failed (dotnet) and the smoke chain was stopped (exit 143): no package", report)
+        self.assertNotIn("package-mac", self.names())
+
+    def test_an_unqueued_steps_own_timeout_is_explained_in_the_report(self) -> None:
+        self.codes["oracle"] = run_queue.TIMEOUT_EXIT
+        self.texts["oracle"] = "\ndaily: stopped after 30 minutes\n"
+        self.assertEqual(self.run_daily(), daily.FAIL)
+        self.assertIn("  TIMEOUT: run time, the daily's own limit of 30 minutes for this step\n", self.report())
+        self.assertEqual(self.report().count("failed commit "), 1)
+
+    def test_a_stopped_check_ends_the_day_without_a_smoke(self) -> None:
+        self.codes["dotnet"] = 143
+        self.assertEqual(self.run_daily(), daily.FAIL)
+        self.assertEqual(self.names(), ["dotnet", "dat-probe", "oracle", "docs-check"])
+        report = self.report()
+        self.assertIn("a check was stopped, so no smoke and no package", report)
+        self.assertNotIn("failed commit", report)
+
+    def test_a_dry_run_lists_the_smoke_after_the_checks(self) -> None:
+        printed = io.StringIO()
+        with redirect_stdout(printed):
+            self.run_daily(dry_run=True)
+        lines = [line.split()[0] for line in printed.getvalue().splitlines() if "environment]" in line]
+        self.assertEqual(lines, ["dotnet", "dat-probe", "oracle", "docs-check", "smoke", "package-mac", "package-win"])
 
     def test_failed_smokes_make_no_package_and_the_report_names_each_with_its_log(self) -> None:
         self.write_build("macos", "0" * 40)

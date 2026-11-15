@@ -376,7 +376,7 @@ cleared (TT2) does not arise: the session refuses before the item leaves.
   logged. Reading a pose opens that archive's index on the main thread (a few milliseconds on the installed archives).
 - The status line names a critical's injuries and drops; the log line `ARC-COMBAT-005 attack-hit` adds the table's effects and
   each critical item step (`crit=`). Since ARC-COMBAT-1741 the viewer plays stun animation 23 for the hero and the NPC (goal 57 over the stunned ART, the hero's body and the NPC's art); only a body with no such ART ends the stun at once
-  (`ClearStun`, the contract for an animation that could not start; `ARC-COMBAT-009 stun-ended`); a critical knockout is drawn in
+  (`ClearStun`, the contract for an animation that could not start; `ARC-COMBAT-009 stun-ended`); a blow on the stunned hero does not cut its stun short (ARC-COMBAT-2172: the viewer's hero-down route stop leaves the stun goal's run alone); a critical knockout is drawn in
   the fallen pose like any knockout. `TargetCell` is the NPC's map-data cell (NPCs do not move in the viewer); the drop's map is
   `AreaDropMap` over the shown map (ARC-COMBAT-010), and each hit first places the session's actor on the walking hero's committed
   cell (`PlaceActor`, as F7 does), so the hero's drops start from where it stands. The critical stage also logs
