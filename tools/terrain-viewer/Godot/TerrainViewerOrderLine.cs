@@ -72,21 +72,8 @@ public partial class TerrainViewerApp
         if (!_orderLine.IsOpen) return false;
         if (code == Key.Escape) return false;
         _orderLineTaken.Add(code);
-        switch (code)
-        {
-            case Key.Enter or Key.KpEnter: if (!key.Echo) AcceptOrderLine(); return true;
-            case Key.Backspace: _orderLine.Type('\b'); return true;
-            case Key.Delete: _orderLine.Press(OrderLineKey.Delete); return true;
-            case Key.Home: _orderLine.Press(OrderLineKey.Home); return true;
-            case Key.Left: _orderLine.Press(OrderLineKey.Left); return true;
-            case Key.Right: _orderLine.Press(OrderLineKey.Right); return true;
-            case Key.Up: _orderLine.Press(OrderLineKey.Up); return true;
-            case Key.Down: _orderLine.Press(OrderLineKey.Down); return true;
-            case Key.Insert: if (!key.Echo) _orderLine.Press(OrderLineKey.Insert); return true;
-            case Key.Tab: return true;
-        }
-        if (key.Unicode >= ' ' && key.Unicode <= 0xFF && !key.CtrlPressed && !key.AltPressed && !key.MetaPressed) _orderLine.Type((char)key.Unicode);
-        return true;
+        if (code is Key.Enter or Key.KpEnter) { if (!key.Echo) AcceptOrderLine(); return true; }
+        return AreaStripEntryKeys.Edit(key, _orderLine.Type, _orderLine.Press);
     }
 
     /// <summary>Enter in the open line (0x571950): a non-empty text is floated over the hero and sent to the followers with the highlighted object and the tile

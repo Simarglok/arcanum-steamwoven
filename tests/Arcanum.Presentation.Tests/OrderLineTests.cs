@@ -21,7 +21,7 @@ public sealed class OrderLineTests
         var line = new OrderLine();
         Assert.IsFalse(line.IsOpen);
         Assert.IsFalse(line.Type('a'));
-        Assert.IsFalse(line.Press(OrderLineKey.Home));
+        Assert.IsFalse(line.Press(StripEntryKey.Home));
         Assert.IsNull(line.Accept());
         line.Open();
         Assert.IsTrue(line.IsOpen);
@@ -33,39 +33,39 @@ public sealed class OrderLineTests
     {
         var line = Opened("hello");
         Assert.AreEqual(5, line.Caret);
-        line.Press(OrderLineKey.Left); line.Press(OrderLineKey.Left);
+        line.Press(StripEntryKey.Left); line.Press(StripEntryKey.Left);
         Assert.IsTrue(line.Type('X'));
         Assert.AreEqual(("helXlo", 4), (line.Text, line.Caret));
         Assert.IsTrue(line.Type('\b'));
         Assert.AreEqual(("hello", 3), (line.Text, line.Caret));
-        Assert.IsTrue(line.Press(OrderLineKey.Delete));
+        Assert.IsTrue(line.Press(StripEntryKey.Delete));
         Assert.AreEqual(("helo", 3), (line.Text, line.Caret));
-        line.Press(OrderLineKey.Home);
+        line.Press(StripEntryKey.Home);
         Assert.IsFalse(line.Type('\b'), "nothing before the caret");
-        Assert.IsTrue(line.Press(OrderLineKey.Delete));
+        Assert.IsTrue(line.Press(StripEntryKey.Delete));
         Assert.AreEqual("elo", line.Text);
-        line.Press(OrderLineKey.Right); line.Press(OrderLineKey.Right); line.Press(OrderLineKey.Right);
-        Assert.IsFalse(line.Press(OrderLineKey.Delete), "nothing at the end");
+        line.Press(StripEntryKey.Right); line.Press(StripEntryKey.Right); line.Press(StripEntryKey.Right);
+        Assert.IsFalse(line.Press(StripEntryKey.Delete), "nothing at the end");
     }
 
     [TestMethod]
     public void The_arrows_stay_in_the_text_up_and_down_step_by_40_and_end_is_no_key()
     {
         var line = Opened(new string('a', 90));
-        Assert.IsFalse(line.Press(OrderLineKey.Right));
-        Assert.IsTrue(line.Press(OrderLineKey.Up));
+        Assert.IsFalse(line.Press(StripEntryKey.Right));
+        Assert.IsTrue(line.Press(StripEntryKey.Up));
         Assert.AreEqual(50, line.Caret);
-        Assert.IsTrue(line.Press(OrderLineKey.Up));
+        Assert.IsTrue(line.Press(StripEntryKey.Up));
         Assert.AreEqual(10, line.Caret);
-        Assert.IsFalse(line.Press(OrderLineKey.Up), "10 - 40 would leave the text");
-        Assert.IsTrue(line.Press(OrderLineKey.Down));
+        Assert.IsFalse(line.Press(StripEntryKey.Up), "10 - 40 would leave the text");
+        Assert.IsTrue(line.Press(StripEntryKey.Down));
         Assert.AreEqual(50, line.Caret);
-        Assert.IsTrue(line.Press(OrderLineKey.Down));
+        Assert.IsTrue(line.Press(StripEntryKey.Down));
         Assert.AreEqual(90, line.Caret);
-        Assert.IsFalse(line.Press(OrderLineKey.Down));
-        Assert.IsTrue(line.Press(OrderLineKey.Home));
+        Assert.IsFalse(line.Press(StripEntryKey.Down));
+        Assert.IsTrue(line.Press(StripEntryKey.Home));
         Assert.AreEqual(0, line.Caret);
-        Assert.IsFalse(line.Press(OrderLineKey.Left));
+        Assert.IsFalse(line.Press(StripEntryKey.Left));
     }
 
     [TestMethod]
@@ -74,7 +74,7 @@ public sealed class OrderLineTests
         var line = Opened(new string('a', OrderLine.TypingLimit));
         Assert.AreEqual(124, line.Text.Length);
         Assert.IsFalse(line.Type('b'), "the caret is at 124");
-        line.Press(OrderLineKey.Home);
+        line.Press(StripEntryKey.Home);
         Assert.IsTrue(line.Type('b'), "inserted inside: 125 characters");
         Assert.AreEqual(OrderLine.MaxLength, line.Text.Length);
         Assert.IsFalse(line.Type('c'), "an insert is swallowed when the text is longer than 124");
@@ -85,14 +85,14 @@ public sealed class OrderLineTests
     public void Insert_toggles_overwrite_and_overwriting_past_the_end_appends()
     {
         var line = Opened("abc");
-        line.Press(OrderLineKey.Home);
-        Assert.IsTrue(line.Press(OrderLineKey.Insert));
+        line.Press(StripEntryKey.Home);
+        Assert.IsTrue(line.Press(StripEntryKey.Insert));
         Assert.IsTrue(line.Overwrite);
         line.Type('X'); line.Type('Y');
         Assert.AreEqual(("XYc", 2), (line.Text, line.Caret));
         line.Type('Z'); line.Type('W');
         Assert.AreEqual("XYZW", line.Text);
-        line.Press(OrderLineKey.Insert);
+        line.Press(StripEntryKey.Insert);
         Assert.IsFalse(line.Overwrite);
     }
 
@@ -134,7 +134,7 @@ public sealed class OrderLineTests
     {
         var line = Opened();
         var before = line.Revision;
-        Assert.IsFalse(line.Press(OrderLineKey.Left));
+        Assert.IsFalse(line.Press(StripEntryKey.Left));
         Assert.AreEqual(before, line.Revision);
         line.Type('a');
         Assert.AreNotEqual(before, line.Revision);

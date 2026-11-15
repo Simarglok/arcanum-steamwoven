@@ -13,7 +13,7 @@ public sealed class ScrFollowerFocusTests
     private const int Use = 1;
     private const byte Triggerer = 0, Attachee = 1, EveryFollower = 2, AnyFollower = 3, LocalObject = 11;
 
-    private sealed class FollowerHost(FakeHost inner) : IScrHost, IScrFollowerQueries, IScrObjectStateQueries, IScrObjectQueries
+    private sealed class FollowerHost(FakeHost inner) : IScrHost, IScrGroupQueries, IScrObjectStateQueries, IScrObjectQueries
     {
         public HashSet<ScrObjectRef> Holding { get; } = [];
         public int QuestState(ScrObjectRef obj, int quest) => 0;
@@ -176,16 +176,16 @@ public sealed class ScrFollowerFocusTests
     public void Only_the_follower_set_admits_the_kinds_and_its_host_must_answer_them()
     {
         var program = Program(Do(C(ScrCatalogue.Action.SetAutoLevelScheme, (EveryFollower, 0), N(1))), Do(C(ScrCatalogue.Action.ReturnSkipDefault)));
-        Assert.IsFalse(ScrAdmission.Admit(program, ScrAdmissionSet.S60).IsAdmitted);
-        Assert.IsTrue(ScrAdmissionSet.S60.IsSubsetOf(ScrAdmissionSet.S61));
-        Assert.IsFalse(ScrAdmissionSet.S61.IsSubsetOf(ScrAdmissionSet.S60));
-        Assert.IsTrue(ScrAdmissionSet.S61.FocusKinds.IsSupersetOf([ScrFocusKind.EveryFollower, ScrFocusKind.AnyFollower]));
+        Assert.IsFalse(ScrAdmission.Admit(program, ScrAdmissionSet.S61).IsAdmitted);
+        Assert.IsTrue(ScrAdmissionSet.S61.IsSubsetOf(ScrAdmissionSet.S62));
+        Assert.IsFalse(ScrAdmissionSet.S62.IsSubsetOf(ScrAdmissionSet.S61));
+        Assert.IsTrue(ScrAdmissionSet.S62.FocusKinds.IsSupersetOf([ScrFocusKind.EveryFollower, ScrFocusKind.AnyFollower]));
         Assert.IsTrue(ScrAdmission.Admit(program, Set).IsAdmitted);
         var followersOnly = new ScrAdmissionSet("follower-focus-only", ScrAdmissionSet.S7.Conditions, ScrAdmissionSet.S7.Actions.Append(ScrCatalogue.Action.SetAutoLevelScheme), ScrAdmissionSet.S7.ValueKinds,
             ScrAdmissionSet.S7.FocusKinds.Append(ScrFocusKind.EveryFollower));
         var bare = new FakeHost();
         bare.Attach(Npc, Use, 702, program);
         var thrown = Assert.ThrowsExactly<ArgumentException>(() => ScrDispatcher.RunObject(new(Use, Npc, Pc, null), bare, new ScrRunOptions { Admission = followersOnly }));
-        StringAssert.Contains(thrown.Message, "IScrFollowerQueries");
+        StringAssert.Contains(thrown.Message, "IScrGroupQueries");
     }
 }
