@@ -46,9 +46,9 @@ public partial class AreaBarCounterView : Control
             Name = name, MouseFilter = MouseFilterEnum.Ignore, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center,
             ClipText = false, Visible = false, Position = Local(slot.X, slot.Y), Size = new Vector2(slot.Width, slot.Height),
         };
-        label.AddThemeFontSizeOverride("font_size", 11);
+        label.AddThemeFontSizeOverride("font_size", 10);
         label.AddThemeColorOverride("font_outline_color", Colors.Black);
-        label.AddThemeConstantOverride("outline_size", 3);
+        label.AddThemeConstantOverride("outline_size", 2);
         AddChild(label);
         return label;
     }
