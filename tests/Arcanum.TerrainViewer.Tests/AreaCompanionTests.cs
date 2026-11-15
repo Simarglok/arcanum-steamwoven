@@ -691,6 +691,34 @@ public sealed class AreaCompanionTests
         Assert.AreEqual(home.RuntimeMap, session.QueryTeleportMap(entity), "the move prepared it as any traveller (FM6)");
     }
 
+    // ARC-WORLD-2132: the group drives a map NPC that a companion leads toward that leader's cell (the follow goal walks to any leader), not toward the hero, and holds one that waits under its leader.
+    [TestMethod]
+    public void A_map_npc_led_by_a_companion_follows_its_leader_in_the_group()
+    {
+        var f = Load();
+        var leaderTemplate = Templates(f).Single();
+        // A second body: the leader's own command and visual under a row of another key standing six cells east (a created critter's template, which the group drives like any other).
+        var key2 = f.Scenery with { ObjectIdSha256 = "second" };
+        var ledRow = f.Speaker.Row with { Key = key2, WorldX = f.Speaker.WorldX + 6 };
+        var command = leaderTemplate.Commands[0] with { Identity = key2 };
+        var ledTemplate = AreaCompanionTemplate.ForCreated(8, ledRow, _ => AreaCompanionRoster.Virgil with { ScriptId = 0 }, new(1), AreaChart.Exterior, command, leaderTemplate.Visuals.Values.Single())!;
+        var led = ledTemplate.Entity;
+        using var session = ConversationSessionFixture.Create();
+        Assert.AreEqual(GameSessionDisposition.Changed, session.ForceJoinParty(session.Version, leaderTemplate.Entity).Disposition);
+        var joined = session.ForceJoinLeader(session.Version, led, leaderTemplate.Entity);
+        Assert.AreEqual(GameSessionDisposition.Changed, joined.Disposition, joined.Failure.ToString());
+        var group = AreaCompanionGroup.Create([leaderTemplate, ledTemplate], f.Steps, AreaChart.Exterior, session, new(1), SimulationTime.At(0));
+        var follower = group.Companions.Single(c => c.Entity == led);
+        var leader = group.Companions.Single(c => c.Entity == leaderTemplate.Entity);
+        var pc = new AreaGridSession(f.Steps, SimulationTime.At(0), Step) { Occupancy = group.OccupancyForPc };
+        var frontier = SimulationTime.At(1, 4);
+        pc.Advance(frontier, []);
+        var apart = FollowDistanceRules.Distance(follower.Grid.State.CommittedCell, leader.Grid.State.CommittedCell);
+        group.Drive(session, pc.State, frontier);
+        Assert.IsTrue(apart > 2, $"the fixture rows stand apart ({apart})");
+        Assert.AreNotEqual(FollowAction.Hold, follower.LastUpdate.Action, "the led NPC goes after its NPC leader");
+    }
+
     [TestMethod]
     public void A_created_critters_template_moves_whole_with_the_pc_and_writes_no_away_map()
     {

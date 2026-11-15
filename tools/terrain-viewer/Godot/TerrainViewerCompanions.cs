@@ -256,7 +256,7 @@ public partial class TerrainViewerApp
         }
         foreach (var companion in group.Companions.Where(c => c.LastUpdate.Action == FollowAction.Jump && c.Grid.State.Time == frontier))
         {
-            GD.Print($"ARC-WORLD-016 companion script={companion.Speaker.ScriptId} jumped onto the PC cell {pc.State.CommittedCell}");
+            GD.Print($"ARC-WORLD-016 companion script={companion.Speaker.ScriptId} jumped onto its leader's cell (the PC stands on {pc.State.CommittedCell})");
             // ARC-DEV-328 (B25): the follow jump ends in the relocation 0x43E770, whose notification runs the landing tile's script for the NPC (ledger TG2, TG9).
             if (_mapTransfers is { } landed && jumpsBefore.GetValueOrDefault(companion) < companion.Jumps) entered.Add((companion, landed.Map.Chart.ToWorld(companion.Grid.State.CommittedCell)));
         }

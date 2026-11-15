@@ -488,7 +488,7 @@ public sealed class AreaCompanionGroup
             var held = HeldByAi?.Invoke(companion.Entity) == true;
             if (heldOnly && !held) continue;
             var update = held ? new CompanionFollowUpdate(companion.AiRunning ? FollowAction.Run : FollowAction.Walk, null)
-                : companion.Follow.Update(grid.State, pc.CommittedCell, record.SpreadOut, record.Standing == CompanionStanding.Following && !record.WaitFlag, frontier);
+                : FollowDecision(session, companion, record, pc.CommittedCell, frontier);
             companion.LastUpdate = update;
             // ARC-WORLD-045: an approach starts the follow goal, which then lives until something interrupts it.
             // ARC-SCRIPT-1136 (CF9): a follower that carries the wait bit is waiting for the AI (the non-combat perform returns "waiting"), so it follows nobody.
@@ -514,6 +514,23 @@ public sealed class AreaCompanionGroup
             if (!drive.Completed) throw new InvalidOperationException("GRID_COMPANION_" + drive.FailureCode);
         }
         return advances;
+    }
+
+    /// <summary>
+    /// The follow decision of one companion the host does not hold. The hero's follower follows the PC; ARC-WORLD-2132: a map NPC that another critter of the group leads (the session's NPC-led link,
+    /// its leader a companion of this group) follows that leader's committed cell, as the original's follow goal walks to any leader (0x4AC380 has no leader-type test); one whose leader this group does not hold,
+    /// or that waits, holds.
+    /// </summary>
+    private CompanionFollowUpdate FollowDecision(GameSessionOwner session, AreaCompanion companion, SessionCompanion record, CellCoord pc, SimulationTime frontier)
+    {
+        if (session.QueryNpcLink(companion.Entity) is { } link)
+        {
+            var leader = _companions.FirstOrDefault(c => c.Entity == link.Leader);
+            return leader is null || record.WaitFlag
+                ? companion.Follow.Update(companion.Grid.State, pc, record.SpreadOut, false, frontier)
+                : companion.Follow.Update(companion.Grid.State, leader.Grid.State.CommittedCell, record.SpreadOut, true, frontier);
+        }
+        return companion.Follow.Update(companion.Grid.State, pc, record.SpreadOut, record.Standing == CompanionStanding.Following && !record.WaitFlag, frontier);
     }
 
     /// <summary>

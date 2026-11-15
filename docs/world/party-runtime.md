@@ -119,7 +119,7 @@ while an NPC leads it.
 - Travel of followers of followers (ARC-WORLD-2118, GR14): the move list walk (0x4D3760) lists a follower's own followers before it; the session's `FollowersOf` fact answers them. The viewer names the followers it can move: a created
   critter (the session moves the whole object with its events) and a critter of the shown companion group (it arrives with the group's placement edits). ARC-WORLD-2132: a map NPC (no dialog) that a companion of the
   hero leads is in the hero's follower tree, so the viewer gives it a body template of its map row as a map NPC the hero leads has (`AreaLedMapNpcs.HeroTree`, `AreaCompanionTemplate.ForLedMapNpcs`) and it is a companion of
-  the shown group (a free one: the group does not follow the hero with it, the AI host runs it as it runs any companion the hero does not lead), the move list names it and it arrives with a placement edit on the destination,
+  the shown group (a free one in the hero's party, with an NPC-led link: the group drives it toward its NPC leader's cell instead of the hero's, `AreaCompanionGroup.Drive`, and holds it while it waits or when the leader is not in the group), the move list names it and it arrives with a placement edit on the destination,
   its leader link kept as the original's whole-object write keeps it. The tree walk skips a follower waiting under its NPC leader (it left that array). A map NPC whose body or AI row does not read gets no template and stays behind
   (said on the log).
 - The leave of an NPC leader clears the follower's WAIT bit and removes its timer (the forced unwait 0x4AA8C0 inside 0x45DFC0).
