@@ -19,7 +19,17 @@ public partial class TerrainViewerApp
     // The monster bodies of the shown map by NPC row, the session's records they were built from and the map and host they were built for.
     private Dictionary<AreaObjectKey, AreaDrawCommand> _traitBodies = [];
     private IReadOnlyList<SessionTraitArtRecord> _traitBodiesFrom = [];
-    private (AreaLoadResult? Area, AreaAiHost? Host, AreaAiScene? Scene) _traitBodiesFor;
+    // ARC-DEV-2150: the stamp names the map, host and scene the bodies were built for by weak references: strong fields held the retired map's AreaLoadResult (host -> scene -> area)
+    // after a map stage (the resources smoke stage's RETIRED_GENERATION_ALIVE), and a stamp must never keep a generation alive.
+    private (WeakReference? Area, WeakReference? Host, WeakReference? Scene) _traitBodiesFor;
+    private bool TraitBodiesForIs(AreaLoadResult area, AreaAiHost host, AreaAiScene scene)
+        => _traitBodiesFor.Area is { } a && ReferenceEquals(a.Target, area) && _traitBodiesFor.Host is { } h && ReferenceEquals(h.Target, host) && _traitBodiesFor.Scene is { } s && ReferenceEquals(s.Target, scene);
+    /// <summary>A cleared scene forgets the monster bodies of its map, their records and the stamp they were built for.</summary>
+    private void RetireTraitBodies()
+    {
+        foreach (var key in _traitBodies.Keys) _bodyCycles.Remove(key);
+        _traitBodies = []; _traitBodiesFrom = []; _traitBodiesFor = default; _traitArtLoads.Clear();
+    }
     private readonly Dictionary<uint, AreaCreatedCritterArtLoad> _traitArtLoads = [];
 
     /// <summary>The monster art id of an NPC whose own current art is <paramref name="old"/> (0x452B00 → 0x503CD0): class 12, the species, no armour or shield fields, frame 0, the old art's rotation (0x502880: bits 9 to 11
@@ -43,9 +53,9 @@ public partial class TerrainViewerApp
             _traitBodies = []; _traitBodiesFrom = []; return true;
         }
         var shown = _readyArea!;
-        if (_traitBodiesFor.Area == shown && _traitBodiesFor.Host == host && ReferenceEquals(_traitBodiesFor.Scene, host!.Scene) && _traitBodiesFrom.SequenceEqual(records)) return false;
-        if (_traitBodiesFor.Area != shown) _traitArtLoads.Clear();
-        _traitBodiesFor = (shown, host, host!.Scene);
+        if (TraitBodiesForIs(shown, host!, host!.Scene) && _traitBodiesFrom.SequenceEqual(records)) return false;
+        if (!ReferenceEquals(_traitBodiesFor.Area?.Target, shown)) _traitArtLoads.Clear();
+        _traitBodiesFor = (new WeakReference(shown), new WeakReference(host), new WeakReference(host.Scene));
         _traitBodiesFrom = records;
         var extra = ExtraArt()!;
         var frames = (AreaFrameOverlay)AreaFrames();
