@@ -196,6 +196,28 @@ public sealed class AreaBarterGambleTests
     }
 
     [TestMethod]
+    public void A_lost_bet_on_a_worn_item_costs_a_master_of_haggle_its_buy_price()
+    {
+        for (ulong seed = 0; seed < 600; seed++)
+        {
+            using var session = Session(5, seed: seed, training: SkillTraining.Expert, masterHaggle: true);
+            var barter = Barter(session, [], MerchantSkill(3, 0));
+            barter.Open();
+            if (session.QueryGamblingRoll()!.Value < 96) continue;
+            var price = barter.View().WornWares.Single().Quote.Price;
+            Assert.IsTrue(price > 0);
+            var result = barter.Gamble("vest");
+            Assert.IsTrue(result.Settled, result.Text);
+            Assert.AreEqual((false, price, 1000 - price, 100 + price, $"line1 {price}"), (result.Won, result.Paid, session.QueryGold(), session.QueryNpcGold("merchant"), result.Text));
+            Assert.IsTrue(session.QueryPcInventory().Any(item => item.Entity == "vest"));
+            Assert.AreEqual(0, barter.View().WornWares.Count);
+            Assert.IsFalse(session.QueryNpcWorn("merchant")?.Worn.Any(item => item.Entity == "vest") ?? false, "the merchant's worn record let it go");
+            return;
+        }
+        Assert.Fail("no losing seed found");
+    }
+
+    [TestMethod]
     public void A_refused_gate_runs_nothing_and_says_nothing()
     {
         using var session = Session(0);
