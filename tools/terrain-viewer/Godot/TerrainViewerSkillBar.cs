@@ -59,7 +59,7 @@ public partial class TerrainViewerApp
     /// nothing for a hero who is dead or unconscious).</summary>
     private void SkillBarReleased(int button, bool over)
     {
-        // ARC-UI-2024 (DB2): the bar's buttons are consumed without effect while the dialog's hook is set (Original keeps the bars under the dialog).
+        // ARC-UI-2024 (DB2): the bar's buttons are consumed without effect while the dialog's hook is set (the bars stay under the dialog).
         if (!over || ConversationOpen) return;
         PlayBarSound(AreaGameBarLayout.ReleaseSound, "skill pane button");
         _skillBarPressesForSelfTest++;

@@ -129,7 +129,7 @@ public partial class TerrainViewerApp
     /// under the other windows and the dialog's hook (ARC-UI-2024) are the only guards here.</summary>
     private void ClockButton()
     {
-        // ARC-UI-2024 (DB2): the dialog's hook consumes the clock press too (Original keeps the bars under the dialog).
+        // ARC-UI-2024 (DB2): the dialog's hook consumes the clock press too (the bars stay under the dialog).
         if (ConversationOpen) return;
         if (_areaSession is not { } session || _gameBarContent is not { } content) return;
         var snapshot = session.QueryClockSnapshot();

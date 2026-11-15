@@ -149,7 +149,7 @@ public partial class TerrainViewerApp
     {
         RefreshHeroGauges();
         // ARC-UI-020: the combat host gives the portraits' bars their values.
-        // ARC-UI-2069 (DB1, DB2): under Original the dialog leaves the panel drawn and inert; every other modal window hides it.
+        // ARC-UI-2069 (DB1, DB2): the dialog leaves the panel drawn and inert; every other modal window hides it.
         var held = WorldModal && PortraitsHeldUnderDialog;
         var stamp = (_areaSession, _areaSession?.Version.Revision ?? -1, _areaCompanions, WorldModal, held, (object?)_hoverIndex, (object?)_combatHost);
         if (_portraitStamp == stamp && (_portraitLifeRetry is not { } retry || Engine.GetProcessFrames() < retry)) return;
