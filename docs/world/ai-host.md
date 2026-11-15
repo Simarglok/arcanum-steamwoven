@@ -294,7 +294,7 @@ CL1–CL5, HS9, AW16, SP16, FO7, FO8 and the morale switches act through the rul
   and its goal's end (a map change) forgets the release; no synthetic test covers the pass record's choice under the setter's refusal (FO8).
 - **Followers in combat** (ARC-WORLD-115 runs the hero's companions and tells them of attack events; since ARC-WORLD-117 the
   viewer's orders carry the attack target and run the AI pass through the host; since ARC-WORLD-119 free companions are run as any
-  leaderless NPC and the curse's attack event runs). Not ready: a curse from the viewer (the typed order text is not read), the
+  leaderless NPC and the curse's attack event runs). Not ready: a curse from the viewer (reachable by typing the curse word since ARC-UI-2305), the
   curse's insult line, a leave outside an order seen only at the host's next pump or perform (an AI pass in between finds the old
   run; a leave and a join between two looks, as a second join's leave-first, C5, is not seen at all: the run is kept), an attack order on a non-critter object (the host's world knows critters only), the
   menu's target cursor drawn as the original's, the comment lines (taunts, near-death, the complaint's upset
