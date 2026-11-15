@@ -249,6 +249,12 @@ public partial class AreaWorldMapPanel : CanvasLayer
     public void AcceptNoteEdit() { if (ArtMode) _artView.AcceptNoteEdit(); }
     public void CancelNoteEdit() { if (ArtMode) _artView.CancelNoteEdit(); }
 
+    /// <summary>ARC-UI-2306: the note entry's side of the art window (the bottom strip runs the entry, the host reads and writes through these).</summary>
+    public string NoteEntryOpenedText => ArtMode ? _artView.NoteEntryOpenedText : "";
+    public void SetNoteText(string text) { if (ArtMode) _artView.SetNoteText(text); }
+    public int NoteMarkerType { get => _artView.NoteMarkerType; set => _artView.NoteMarkerType = value; }
+    public bool NoteEntryAvailable { get => _artView.NoteEntryAvailable; set => _artView.NoteEntryAvailable = value; }
+
     /// <summary>Z (ARC-UI-083, WM22): the art window's other view kind, not while travelling.</summary>
     public void ToggleKind() { if (ArtMode) _artView.ToggleKind(); }
 

@@ -614,15 +614,9 @@ public partial class TerrainViewerApp
     private bool HandleWorldMapKey(InputEventKey key)
     {
         var routed = key.Keycode != Key.None ? key.Keycode : key.PhysicalKeycode;
-        // ARC-UI-106: a note's text entry owns the keys but Enter (keeps the note) and Escape (cancels it, so the menu does not open over the entry); typed keys
-        // reach the field.
-        if (_worldMapPanel!.EditingNote)
-        {
-            if (key.Pressed && !key.Echo && routed is Key.Enter or Key.KpEnter) _worldMapPanel.AcceptNoteEdit();
-            else if (key.Pressed && !key.Echo && routed == Key.Escape) _worldMapPanel.CancelNoteEdit();
-            else return false;
-            return true;
-        }
+        // ARC-UI-106, ARC-UI-2306: a note's text entry (on the bottom strip, bar mode 6) owns the keys: Enter keeps the note, Escape leaves the entry (so the menu does
+        // not open over it), the rest edits.
+        if (_worldMapPanel!.EditingNote) return HandleMapNoteKey(key);
         if (!key.Pressed || key.Echo) return true;
         if (routed == Key.Q && !key.CtrlPressed && !key.AltPressed && !key.MetaPressed) _worldMapPanel!.ToggleQuill();
         else if (routed == Key.W && !CharacterKeySilenced(key, routed)) CloseWorldMapByPlayer();

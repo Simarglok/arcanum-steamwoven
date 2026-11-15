@@ -61,12 +61,14 @@ public partial class AreaWorldMapArtView : Control
     // The areas that carry a marker, in the original's order: the known ones from the last down to 1 at the open, later finds after them (WM11).
     private readonly List<int> _markers = [];
     private Control _canvas = null!, _chrome = null!, _note = null!;
-    // ARC-UI-106 (WM30, WM92; Steamwoven rules): the note quill, tool state 3 of the town map, and the one-line text entry it opens (a new note at a picture pixel,
-    // or the note at _editIndex).
-    private bool _quill;
-    private LineEdit _noteEdit = null!;
+    // ARC-UI-106 (WM30, WM92; Steamwoven rules): the note quill, tool state 3 of the town map, and the text entry it opens (a new note at a picture pixel, or the note at
+    // _editIndex). ARC-UI-2306 (BM4): the entry runs on the bottom strip (bar mode 6, the host's AreaMapNoteEntryView); this view holds what the note needs: the text the entry
+    // opened with (for the Cancel button and for leaving), the text it has now (the host mirrors it), and the marker type a new note was made with.
+    private bool _quill, _noteEntry;
     private int _editIndex = -1;
     private (int X, int Y) _editPixel;
+    private string _editSaved = "", _editText = "";
+    private int _editType = AreaTownNotes.QuestionType;
     // ARC-UI-110: the notes of the map view and of the continent view, lists owned by the host like the town's (null shows none and keeps the quill out of the view).
     private AreaTownNotes? _mapNotes, _continentNotes;
     // The note under the pointer in the map and continent views (an area marker, when one is under it, wins), -1 for none.
@@ -124,9 +126,18 @@ public partial class AreaWorldMapArtView : Control
     /// <summary>ARC-UI-106: the quill is the tool (town map only); its cursor is art 21 (WM30).</summary>
     public bool QuillActive => _quill;
     /// <summary>ARC-UI-106: the note text entry has the keyboard (typed keys go to it, not to the window's keys).</summary>
-    public bool EditingNote => _noteEdit is { Visible: true };
-    internal string NoteEditTextForSelfTest { get => _noteEdit.Text; set => _noteEdit.Text = value; }
+    public bool EditingNote => _noteEntry;
+    /// <summary>ARC-UI-2306: the text the open entry opened with (the entry's Cancel restores it).</summary>
+    public string NoteEntryOpenedText => _editSaved;
+    /// <summary>ARC-UI-2306: the host mirrors the entry's text here, so that leaving by the map closing or the Quill ending keeps what was typed (0x564070 leaves live edits).</summary>
+    public void SetNoteText(string text) { if (_noteEntry) _editText = text; }
+    /// <summary>ARC-UI-2306 (0x66D89C): the radio group's marker type, taken by a note made from now on.</summary>
+    public int NoteMarkerType { get; set; }
+    /// <summary>ARC-UI-2306: whether the bottom strip can show the entry (the bars, art 200 and the font read). Without it a press starts no note, and says so.</summary>
+    public bool NoteEntryAvailable { get; set; }
+    internal string NoteEditTextForSelfTest { get => _editText; set => _editText = value; }
     internal int NoteEditIndexForSelfTest => _editIndex;
+    internal int NoteEditTypeForSelfTest => _editType;
     internal int HoverNoteForSelfTest => _kind == AreaWorldMapKind.Town ? _hoverArea : -1;
     internal bool ArmedForSelfTest => _armed;
     internal bool DraggingForSelfTest => _dragging;
@@ -158,16 +169,6 @@ public partial class AreaWorldMapArtView : Control
         AddChild(_canvas);
         AddChild(_note);
         AddChild(_chrome);
-        // ARC-UI-106 (WM92): the note's text entry (the original runs it in the message window on a 250-byte buffer, 249 characters here).
-        _noteEdit = new LineEdit
-        {
-            Name = "NoteEdit", Visible = false, MaxLength = AreaTownNotes.MaxTextLength, FocusMode = FocusModeEnum.All,
-            PlaceholderText = "note (Enter keeps it, empty deletes it, Esc cancels)", Position = new Vector2(x + 12, y + height - 52), Size = new Vector2(width - 24, 26),
-        };
-        _noteEdit.TextSubmitted += _ => AcceptNoteEdit();
-        // Focus taken away from the field (Tab, a focus move) ends the entry as Escape does, so the window's keys never stay swallowed.
-        _noteEdit.FocusExited += CancelNoteEdit;
-        AddChild(_noteEdit);
         GetViewport().SizeChanged += Place;
         AreaGameBarPanel.InsetsChanged += Place;
         Visible = false;
@@ -722,14 +723,17 @@ public partial class AreaWorldMapArtView : Control
         var (pictureWidth, pictureHeight) = _kind == AreaWorldMapKind.Town ? (_town!.Plan.PictureWidth, _town.Plan.PictureHeight) : (_map!.Data.Width, _map.Data.Width);
         if (pixel.X < 0 || pixel.Y < 0 || pixel.X >= pictureWidth || pixel.Y >= pictureHeight) return;
         var hit = notes.Hit(pixel.X, pixel.Y, NoteHitHalf);
+        // 0x564360: a note with flag 2 (the ones a scenery marked) is not edited.
+        if (hit >= 0 && !notes.IsEditable(hit)) { _message = "This note cannot be edited."; Redraw(); return; }
         if (hit < 0 && notes.IsFull) { _message = "No more notes fit on this map."; Redraw(); return; }
+        if (!NoteEntryAvailable) { _message = "The note entry needs the bottom strip (art 200)."; Redraw(); return; }
         _message = "";
         _editIndex = hit;
         _editPixel = ((int)pixel.X, (int)pixel.Y);
-        _noteEdit.Text = hit < 0 ? "" : notes.Items[hit].Text;
-        _noteEdit.Visible = true;
-        _noteEdit.GrabFocus();
-        _noteEdit.CaretColumn = _noteEdit.Text.Length;
+        // 0x563F90: a new note takes the radio group's marker now; an edit keeps its own type (the accept never writes it).
+        _editType = hit < 0 ? NoteMarkerType : notes.Items[hit].Type;
+        _editSaved = _editText = hit < 0 ? "" : notes.Items[hit].Text;
+        _noteEntry = true;
         Redraw();
     }
 
@@ -745,12 +749,27 @@ public partial class AreaWorldMapArtView : Control
         }
     }
 
-    /// <summary>Enter in the text entry: a text with something in it adds the note or keeps the edited one, an empty text deletes the edited note (0x564210), and the entry ends.</summary>
+    /// <summary>Enter or Done in the entry (0x5640C0): a text with something in it adds the note (with the marker the radio group gave when it was made) or keeps the edited
+    /// one, an empty text deletes the edited note (0x564210) and adds none, and the entry ends (the original leaves the strip in mode 6, unbound; what closes it is not read, F0).</summary>
     public void AcceptNoteEdit()
     {
         if (!EditingNote || ActiveNotes is not { } notes) return;
-        var text = _noteEdit.Text;
-        var changed = _editIndex < 0 ? notes.AddByQuill(_editPixel.X, _editPixel.Y, text) : notes.EditByQuill(_editIndex, text);
+        var text = _editText;
+        var changed = _editIndex < 0 ? notes.AddByQuill(_editPixel.X, _editPixel.Y, text, _editType) : notes.EditByQuill(_editIndex, text);
+        FinishNoteEdit(notes, changed);
+    }
+
+    /// <summary>Leaving the entry without accepting (Escape, the quill left, the window closing; 0x564070): a new note is dropped, and an edited note keeps what was typed, as the
+    /// original's entry works on the note's own text. A text with nothing in it keeps the text the entry opened with instead (the session stores no empty note).</summary>
+    public void CancelNoteEdit()
+    {
+        if (!EditingNote || ActiveNotes is not { } notes) { _noteEntry = false; return; }
+        var changed = _editIndex >= 0 && AreaTownNotes.IsNoteText(_editText) && notes.EditByQuill(_editIndex, _editText);
+        FinishNoteEdit(notes, changed);
+    }
+
+    private void FinishNoteEdit(AreaTownNotes notes, bool changed)
+    {
         CloseNoteEdit();
         if (changed)
         {
@@ -760,20 +779,11 @@ public partial class AreaWorldMapArtView : Control
         Redraw();
     }
 
-    /// <summary>Escape in the text entry (or leaving the quill): the entry ends and nothing changes.</summary>
-    public void CancelNoteEdit()
-    {
-        if (!EditingNote) return;
-        CloseNoteEdit();
-        Redraw();
-    }
-
     private void CloseNoteEdit()
     {
-        _noteEdit.Visible = false;
-        _noteEdit.ReleaseFocus();
-        _noteEdit.Text = "";
+        _noteEntry = false;
         _editIndex = -1;
+        _editSaved = _editText = "";
     }
 
     // WM85, WM87: an armed press on a town waypoint selects it, else adds one (message 611 at 6, 610 without a path); both disarm. There is no drag in the town map.
