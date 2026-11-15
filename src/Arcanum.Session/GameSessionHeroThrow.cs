@@ -35,6 +35,9 @@ public sealed record SessionHeroThrow(string Item, SessionGridMoveItem Facts, Ce
     public int? StruckLight { get; init; }
     public Arcanum.Simulation.Items.IDropMap? DropMap { get; init; }
     public ISessionItemTriggers? ItemTriggers { get; init; }
+    /// <summary>ARC-COMBAT-1955 (0x466E00 → 0x467860, 0x4B3C00 → 0x441980): the host that runs the item's removal scripts (wield off 25 for a worn item, remove-item 28) and its throw script (point 6) before the throw; without it an
+    /// item with any of them is refused (<see cref="GameSessionFailure.ItemScriptUnsupported"/>).</summary>
+    public ISessionItemScriptHost? Scripts { get; init; }
 }
 
 /// <summary>
@@ -51,6 +54,15 @@ public sealed record SessionHeroThrowResult(GameSessionDisposition Disposition, 
     public CellCoord? Destination { get; init; }
     private readonly IReadOnlyList<SessionItemTriggerResult>? _removalSpells;
     public IReadOnlyList<SessionItemTriggerResult> RemovalSpells { get => _removalSpells ?? []; init => _removalSpells = value; }
+    /// <summary>ARC-COMBAT-1955 (0x4B3C00): the item's throw script (point 6) answered skip default, so nothing was thrown: the item is back in the hero's list unworn (the original puts it on the hero's tile and inserts it again, 0x4415C0,
+    /// 0x4617F0), the removal's and the throw script's own changes kept. The result is <see cref="GameSessionDisposition.Changed"/> with no attack and no shot.</summary>
+    public bool ScriptDeclined { get; init; }
+    /// <summary>ARC-COMBAT-1955: the lines the removal and throw scripts printed, in order, for the host to post as it posts any script's printed line.</summary>
+    public IReadOnlyList<SessionScriptMessage> Messages { get; init; } = [];
+    /// <summary>ARC-COMBAT-1955: the eye candy requests of those scripts, in order, for the host to play.</summary>
+    public IReadOnlyList<Arcanum.Scripting.Scr.ScrEyeCandy> EyeCandies { get; init; } = [];
+    /// <summary>ARC-COMBAT-1955: the script runs that were made (removal, then throw), as the dispatcher answered them.</summary>
+    public IReadOnlyList<SessionItemScriptRun> Scripts { get; init; } = [];
 }
 
 public sealed partial class GameSessionOwner
@@ -136,8 +148,10 @@ public sealed partial class GameSessionOwner
     /// (the stack path runs no remove check and no remove-item event, so the no-drop flag and the remove-item script do not refuse it), and that stack
     /// is the thrown item (its weight, range and damage are those of its units); no count refuses as before. ARC-UI-094: the hero's gold pile (<see cref="SessionHeroGrid.GoldEntity"/>) throws the same way: the coins
     /// split off into a new made gold item of <see cref="SessionHeroThrow.SplitKind"/> (a coin weighs nothing, HG1), and the item lands as the pile to
-    /// pick up (<see cref="TakePlaced"/>). NOT READY: the item's throw script (point 6) and its removal's wield-off and remove-item
-    /// scripts (an item with any of them is refused, <see cref="GameSessionFailure.ItemScriptUnsupported"/>), a non-critter blocker
+    /// pick up (<see cref="TakePlaced"/>). ARC-COMBAT-1955 (TT1, TT8, TW3): with <see cref="SessionHeroThrow.Scripts"/> the removal's wield-off script (25, a worn item) and remove-item script (28), then the item's throw script (point 6, the
+    /// hero as the triggerer, no other object) run first (<see cref="RunHeroThrowScripts"/>); a throw script that answers skip default throws nothing and puts the item back in the hero's list unworn
+    /// (<see cref="SessionHeroThrowResult.ScriptDeclined"/>). NOT READY: a stack's own throw script and a throw script together with an insert-item script (refused,
+    /// <see cref="GameSessionFailure.ItemScriptUnsupported"/>; so is any of the scripts without the host), a non-critter blocker
     /// (the host names none), the struck critter's alert and the landing's item event (PF10). Steamwoven differences: the item leaves
     /// at the throw, not at the lift, so a worn item's own values (its armour, its effects on the hero's strength) still count for the
     /// throw's range and check; a critical miss's weapon and ammunition steps read the weapon the hero still wields (as CW3; not read for
@@ -151,7 +165,7 @@ public sealed partial class GameSessionOwner
     /// kind), or gold or ammunition without a count (<see cref="GameSessionFailure.AttackUnsupported"/>), a worn ammunition stack
     /// (<see cref="GameSessionFailure.InvalidItem"/>), a bad count or split kind (<see cref="GameSessionFailure.InvalidAmmo"/>, gold: <see cref="GameSessionFailure.InvalidItem"/>), fewer units or coins
     /// (<see cref="GameSessionFailure.AmmoShort"/>, <see cref="GameSessionFailure.GoldShort"/>), the budgets of the split (<see cref="GameSessionFailure.BudgetExceeded"/>), the scripts above
-    /// (<see cref="GameSessionFailure.ItemScriptUnsupported"/>), the no-drop flag (the remove check: <see cref="GameSessionFailure.ItemNotDroppable"/>),
+    /// (<see cref="GameSessionFailure.ItemScriptUnsupported"/>, and a run the session cannot apply), the no-drop flag (the remove check: <see cref="GameSessionFailure.ItemNotDroppable"/>),
     /// an item that is the source of a spell run or a worn item with the item spells mark without triggers
     /// (<see cref="GameSessionFailure.ItemEffectUnsupported"/>), a wielded boomerang whose shot is away (<see cref="GameSessionFailure.WeaponInFlight"/>),
     /// then <see cref="AttackCritter"/>'s refusals (with a struck critter) or the hero's worn items, the flight budget, the version and the
@@ -162,7 +176,13 @@ public sealed partial class GameSessionOwner
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(request.Facts);
-        SessionHeroThrowResult Refused(GameSessionFailure failure) => new(GameSessionDisposition.Rejected, failure, null, Version);
+        // ARC-COMBAT-1955: the scripts the throw ran (null: none): a refusal after they took effect is a changed session with the failure named, a refusal before that carries the runs only.
+        ItemScriptRuns? runs = null;
+        var applied = false;
+        SessionHeroThrowResult Refused(GameSessionFailure failure) => runs is null ? new(GameSessionDisposition.Rejected, failure, null, Version)
+            : With(new(applied ? GameSessionDisposition.Changed : GameSessionDisposition.Rejected, failure, null, Version));
+        SessionHeroThrowResult With(SessionHeroThrowResult made) => runs is null ? made
+            : made with { Scripts = runs.Runs, Messages = applied || made.Disposition != GameSessionDisposition.Rejected ? runs.Messages : [], EyeCandies = applied || made.Disposition != GameSessionDisposition.Rejected ? runs.EyeCandies : [] };
         if (_hero is null) return Refused(GameSessionFailure.AttackUnavailable);
         var facts = request.Facts;
         if (!SessionValidation.Entity(request.Item) || facts.ScriptPoints is null || !Enum.IsDefined(facts.Kind.Type) ||
@@ -187,14 +207,27 @@ public sealed partial class GameSessionOwner
         if (split && (gold ? SplitGoldRefusal(request.Count!.Value, request.SplitKind) : SplitAmmoRefusal(request.Item, request.Count!.Value, request.SplitKind)) is var splitFailure
             && splitFailure != GameSessionFailure.None) return Refused(splitFailure);
         var points = worn?.ScriptPoints ?? facts.ScriptPoints;
-        // The stack path of the split runs no remove check and no remove-item event (QW5): only the throw script keeps it refused.
-        if (points.Any(point => point is SessionScriptPoint.Throw || !split && point == SessionScriptPoint.RemoveItem || worn is not null && point == SessionScriptPoint.WieldOff))
+        // ARC-COMBAT-1955: the removal's scripts (0x467860: wield off for a worn item, then remove-item; the stack path of the split runs none, QW5) and the throw script (point 6) run under the host. NOT READY (refused): a stack's own throw
+        // script (the thrown stack is made at the throw) and a throw script together with an insert-item script (the give-back of a refusing throw would run it, 0x4617F0).
+        var removal = worn is not null && points.Contains(SessionScriptPoint.WieldOff) || !split && points.Contains(SessionScriptPoint.RemoveItem);
+        // A worn item's own record keeps only the wear events' points (21, 24, 25, 28), so the throw and insert-item points are read from the host's facts too.
+        var throwScript = points.Contains(SessionScriptPoint.Throw) || facts.ScriptPoints.Contains(SessionScriptPoint.Throw);
+        if ((removal || throwScript) && request.Scripts is null || split && throwScript ||
+            throwScript && (points.Contains(SessionScriptPoint.InsertItem) || facts.ScriptPoints.Contains(SessionScriptPoint.InsertItem)))
             return Refused(GameSessionFailure.ItemScriptUnsupported);
         if (!split && (facts.NoDrop || worn?.Item.NoDrop == true)) return Refused(GameSessionFailure.ItemNotDroppable);
         var triggers = request.ItemTriggers;
         if (triggers is null && (worn?.ItemSpells == true || HasItemRuns(request.Item))) return Refused(GameSessionFailure.ItemEffectUnsupported);
         // A wielded boomerang away on its own shot is not in the hand to throw (its shot still names it).
         if (_shots.Values.Any(pending => pending.Boomerang && pending.WeaponItem == request.Item)) return Refused(GameSessionFailure.WeaponInFlight);
+
+        if (removal || throwScript)
+        {
+            var scripted = RunHeroThrowScripts(expected, request, worn, points, split, kind, throwScript);
+            if (scripted.Done is { } done) return done;
+            (runs, applied) = (scripted.Runs, scripted.Applied);
+            if (applied) expected = Version;
+        }
 
         // The hero as it throws: the throwing skill, the item's thrown range (the check's and the flight's, PF9) and, as the attack's
         // weapon range (0x465E30: a weapon's range field and magic adjustment, anything else 1), its reach.
@@ -211,7 +244,7 @@ public sealed partial class GameSessionOwner
             SkillLevel = throwing.Level, Training = throwing.Training, Range = reach, Supported = true,
         };
         var wornBefore = worn is not null;
-        SessionHeroThrowResult result;
+        SessionHeroThrowResult? result = null;
         if (struck)
         {
             // ARC-DEV-261: no TakingDamage here: the throw always flies and its hit is deferred, so the script is asked at the landing (LandShot with the host's SessionAttack).
@@ -229,16 +262,21 @@ public sealed partial class GameSessionOwner
             };
             var attacked = CritterAttack(expected, attack, null, new PackThrow(request.Item, request.Target, hero) { Split = split ? (request.Count!.Value, request.SplitKind!.Value) : null });
             if (attacked.Disposition == GameSessionDisposition.Rejected) return Refused(attacked.Failure);
-            result = new(attacked.Disposition, GameSessionFailure.None, attacked, Version) { Destination = attacked.Scatter };
-            if (attacked.Shots.Count == 0) return result;
+            // ARC-COMBAT-1955: a struck critter that is dead refuses the attack; the host would throw again without it, but the scripts ran already and must not run twice, so after them the session throws at the location itself.
+            if (attacked.Disposition == GameSessionDisposition.NoChange && runs is not null) struck = false;
+            else
+            {
+                result = new(attacked.Disposition, GameSessionFailure.None, attacked, Version) { Destination = attacked.Scatter };
+                if (attacked.Shots.Count == 0) return With(result);
+            }
         }
-        else
+        if (result is null)
         {
             // The hero's own checks, as the attack's: its worn items; an inactive hero throws nothing (the press puts it back, 0x54E021).
             if (!ValidWear(new SessionWearSide { Life = SessionLifeTarget.Hero, Worn = request.HeroWorn }, new SessionWearSide(), targetBroken: false, wear: null))
                 return Refused(GameSessionFailure.InvalidWear);
             var life = _life.Hero!.Value.State;
-            if (!LifeRules.Evaluate(life, HeroLifeFacts(life)).IsActive) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, null, Version);
+            if (!LifeRules.Evaluate(life, HeroLifeFacts(life)).IsActive) return With(new(GameSessionDisposition.NoChange, GameSessionFailure.None, null, Version));
             if (ShotsInFlight > MaxShotsInFlight - 1) return Refused(GameSessionFailure.BudgetExceeded);
             if (!IsCurrent(expected)) return Refused(GameSessionFailure.StaleVersion);
             if (_revision == long.MaxValue) return Refused(GameSessionFailure.RevisionExhausted);
@@ -251,11 +289,17 @@ public sealed partial class GameSessionOwner
                 new(GameSessionDisposition.Changed, GameSessionFailure.None, null, null, null, null, null, GameSessionFailure.None, Version) { Shots = shots },
                 Version) { Destination = request.Target };
         }
-        if (triggers is null || split) return result;
+        if (triggers is null || split) return With(result);
+        return With(result with { RemovalSpells = RemovalSpellSteps(triggers, request.Item, wornBefore), Version = Version });
+    }
+
+    // The removal's spell steps of a hero's item leaving its list or slot (ARC-COMBAT-023): a worn item's unwear executor, then the removal's.
+    private static IReadOnlyList<SessionItemTriggerResult> RemovalSpellSteps(ISessionItemTriggers triggers, string item, bool worn)
+    {
         var spells = new List<SessionItemTriggerResult>();
-        if (wornBefore) spells.Add(triggers.Withdraw(ItemSpellTriggerRules.Unwear, request.Item, SessionEventKinds.PlayerEntity));
-        spells.Add(triggers.Remove(request.Item, SessionSpellCaster.Hero));
-        return result with { RemovalSpells = spells.AsReadOnly(), Version = Version };
+        if (worn) spells.Add(triggers.Withdraw(ItemSpellTriggerRules.Unwear, item, SessionEventKinds.PlayerEntity));
+        spells.Add(triggers.Remove(item, SessionSpellCaster.Hero));
+        return spells.AsReadOnly();
     }
 
     /// <summary>ARC-COMBAT-023: the thrown range of one of the hero's items now (<see cref="ThrowRules.Range"/>: its weight with the hero as

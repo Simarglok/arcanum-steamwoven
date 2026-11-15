@@ -576,10 +576,10 @@ public partial class TerrainViewerApp
                 Require(_projectileEndsForSelfTest.Count == 2 && _projectileEndsForSelfTest[1].Strike == ProjectileStrikeKind.DestinationEnd,
                     $"its first end and its return ({string.Join(",", _projectileEndsForSelfTest.Select(e => $"{e.Strike}:{e.Struck}"))})");
                 var first = _projectileEndsForSelfTest[0];
-                // ARC-COMBAT-1766 (0x4B2870, 0x4B2690): the first end without a strike turns the boomerang back and then runs the end points; its return runs them once more, unless it turned on the hero's own tile (no flight back, ARC-COMBAT-1766 limit).
+                // ARC-COMBAT-1766 (0x4B2870, 0x4B2690): the first end without a strike turns the boomerang back and then runs the end points; its return runs them once more, also when it turned on the hero's own tile (ARC-COMBAT-1971: the original returns through the tile it entered, then ends with the hit script).
                 var turn = _boomerangTurnsForSelfTest[0];
                 var firstScripts = first.Strike is ProjectileStrikeKind.RangeEnd or ProjectileStrikeKind.DestinationEnd ? 1 : 0;
-                var returnScripts = turn.From == turn.To ? 0 : 1;
+                var returnScripts = 1;
                 // A flight that never took a step ends through the goal's own end, which asks no scripts (ARC-DEV-140, GT53): the exact count holds only for crossing ends.
                 if (unlaunchedBoomerang != _projectilesUnlaunchedForSelfTest) { returnScripts = 0; firstScripts = Math.Min(firstScripts, _shotEndScriptsForSelfTest.Count); }
                 Require(_shotEndScriptsForSelfTest.Count == firstScripts + returnScripts

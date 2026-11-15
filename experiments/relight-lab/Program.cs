@@ -18,7 +18,7 @@ internal static class Program
             if (args.Length >= 3 && args[0] == "normals") return Normals(args);
             if (args.Length >= 2 && args[0] == "bench") return Bench(args);
             if (args.Length >= 2 && args[0] == "shimmer") return Shimmer(args);
-            Console.Error.WriteLine("usage: normals IN.png OUT.png [--kind ground|object|critter] [--convention opengl|image] [--gain G --blur N --bevel B]\n"
+            Console.Error.WriteLine("usage: normals IN.png OUT.png [--kind ground|object|critter] [--convention opengl|image] [--gain G --blur N --bevel B --bevel-stride S]\n"
                 + "       bench DIR [--kind ground|object|critter]   (every *.png of DIR: milliseconds and bytes per frame, and a total)\n"
                 + "       shimmer DIR [--kind ...]   (consecutive same-size frames of one animation, in name order: normal shimmer under a fixed light)");
             return 2;
@@ -42,7 +42,7 @@ internal static class Program
         var o = NormalMapOptions.For(kind);
         double Number(string name, double fallback) => Array.IndexOf(args, name) is var i and >= 0 && i + 1 < args.Length
             ? double.Parse(args[i + 1], System.Globalization.CultureInfo.InvariantCulture) : fallback;
-        return o with { Gain = Number("--gain", o.Gain), Blur = (int)Number("--blur", o.Blur), Bevel = Number("--bevel", o.Bevel) };
+        return o with { Gain = Number("--gain", o.Gain), Blur = (int)Number("--blur", o.Blur), Bevel = Number("--bevel", o.Bevel), BevelStride = (int)Number("--bevel-stride", o.BevelStride) };
     }
 
     private static SpriteKind Kind(string[] args) => Array.IndexOf(args, "--kind") is var i and >= 0 && i + 1 < args.Length

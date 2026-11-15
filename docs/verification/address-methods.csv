@@ -118,6 +118,7 @@ src/Arcanum.Session/GameSessionHeroName.cs,SetHeroPlayerName,pending,
 src/Arcanum.Session/GameSessionHeroThrow.cs,SplitAmmoForThrow,pending,
 src/Arcanum.Session/GameSessionHeroThrow.cs,SplitAmmoRefusal,pending,
 src/Arcanum.Session/GameSessionHeroThrow.cs,ThrowHeroItem,pending,
+src/Arcanum.Session/GameSessionHeroThrowScripts.cs,RunHeroThrowScripts,exempt,host
 src/Arcanum.Session/GameSessionHeroWieldScripts.cs,PlanHeroRewield,exempt,host
 src/Arcanum.Session/GameSessionHolderGrid.cs,ArrangeHolderGrid,exempt,host
 src/Arcanum.Session/GameSessionHolderGrid.cs,QueryHolderRoom,exempt,host
@@ -377,6 +378,7 @@ src/Arcanum.Simulation/Combat/ObjectDamageRules.cs,Break,pending,
 src/Arcanum.Simulation/Combat/ProjectileRules.cs,Distance,pending,
 src/Arcanum.Simulation/Combat/ProjectileRules.cs,Launch,pending,
 src/Arcanum.Simulation/Combat/ProjectileRules.cs,ThrownScale,pending,
+src/Arcanum.Simulation/Combat/ProjectileRules.cs,TurnEndAt,exempt,reference
 src/Arcanum.Simulation/Combat/ThrowRules.cs,ItemDamage,pending,
 src/Arcanum.Simulation/Combat/ThrowRules.cs,ScatterTiles,pending,
 src/Arcanum.Simulation/Combat/ThrowRules.cs,ThrownWeapon,pending,
@@ -901,6 +903,7 @@ tools/terrain-viewer/Godot/TerrainViewerAreaWorldMap.cs,AppendTownRoute,pending,
 tools/terrain-viewer/Godot/TerrainViewerAreaWorldMap.cs,MarkTownMapByScenery,pending,
 tools/terrain-viewer/Godot/TerrainViewerAreaWorldMap.cs,WorldMapTravelCheck,pending,
 tools/terrain-viewer/Godot/TerrainViewerAttack.cs,AttackApproachCell,pending,
+tools/terrain-viewer/Godot/TerrainViewerAttack.cs,BedOccupantGoal,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAttack.cs,HeroAttackRepeats,pending,
 tools/terrain-viewer/Godot/TerrainViewerAttack.cs,HeroWeaponPrototype,exempt,reference
 tools/terrain-viewer/Godot/TerrainViewerAttack.cs,InAttackReach,pending,
@@ -980,6 +983,7 @@ tools/terrain-viewer/Godot/TerrainViewerProjectiles.cs,BoomerangReturned,pending
 tools/terrain-viewer/Godot/TerrainViewerProjectiles.cs,CrossTile,pending,
 tools/terrain-viewer/Godot/TerrainViewerProjectiles.cs,EndOnTile,pending,
 tools/terrain-viewer/Godot/TerrainViewerProjectiles.cs,EndProjectile,pending,
+tools/terrain-viewer/Godot/TerrainViewerProjectiles.cs,FinishTurnedAtOnce,exempt,reference
 tools/terrain-viewer/Godot/TerrainViewerProjectiles.cs,FireShotEnd,pending,
 tools/terrain-viewer/Godot/TerrainViewerProjectiles.cs,LaunchProjectile,pending,
 tools/terrain-viewer/Godot/TerrainViewerProjectiles.cs,ProjectileGoalEnded,pending,

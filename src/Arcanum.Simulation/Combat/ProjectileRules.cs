@@ -161,7 +161,7 @@ public static class ProjectileRules
     /// flight goal flies on from the tile it is on (<paramref name="flight"/>'s tile, the one being left) to
     /// <paramref name="thrower"/>, the thrower's tile at the turn, on a new line (PF3's), and the shot returns (flag 0x2000) with its
     /// outcome, range and facing kept. Null when the two tiles are the same or no line is built: the boomerang is back at once
-    /// (Steamwoven; the original's flight with a line of no step was not read).
+    /// (<see cref="TurnEndAt"/> says how the hero's own tile ends, ARC-COMBAT-1971).
     /// </summary>
     [OriginalFunction(0x435A00, OriginalFunctionScope.Partial)]
     public static (ProjectileFlight? Flight, ProjectileShot Shot) TurnBack(ProjectileFlight flight, ProjectileShot shot, CellCoord thrower)
@@ -169,6 +169,14 @@ public static class ProjectileRules
         ArgumentNullException.ThrowIfNull(flight);
         return (Launch(flight.Tile, thrower), shot with { Returning = true });
     }
+
+    /// <summary>
+    /// ARC-COMBAT-1971 (ledger PF9, read 2026-11-15; 0x435A00, 0x42F6A0, 0x424D90, 0x42CAC0, 0x4B2690, 0x4B2870): where a boomerang's turn back leaves the projectile in the hero's own tile case.
+    /// The original's flight tick keeps stepping after the turning crossing (the projectile enters the next tile), then the goal restarts and its node 3 compares the projectile's tile with the new destination (the
+    /// thrower's tile): equal, the goal ends without context (<see cref="EndsBare"/>); else the return line is built and the crossing that leaves the destination ends the shot with the hit script and the item event.
+    /// </summary>
+    public static BoomerangTurnEnd TurnEndAt(CellCoord left, CellCoord? entered, CellCoord thrower) =>
+        entered == thrower ? BoomerangTurnEnd.EndsBare : left == thrower ? BoomerangTurnEnd.EndsWithScripts : BoomerangTurnEnd.Flies;
 
     /// <summary>
     /// The flight from <paramref name="start"/> to <paramref name="destination"/> (0x435870 and its path node): the pixel line between
@@ -287,4 +295,14 @@ public static class ProjectileRules
 
     /// <summary>The tile distance between two tiles (0x4B96F0): the larger coordinate difference.</summary>
     public static int Distance(CellCoord a, CellCoord b) => (int)Math.Min(int.MaxValue, Math.Max(Math.Abs((long)a.X - b.X), Math.Abs((long)a.Y - b.Y)));
+}
+
+/// <summary>ARC-COMBAT-1971: how a boomerang's turn back goes on (<see cref="ProjectileRules.TurnEndAt"/>): it flies back; it ends at once with the second end's weapon script and item event (the hero stands on the tile it left, so the one-tile
+/// return the original flies is not drawn); it ends at once without them (the hero stands on the tile it entered, the goal's own end has no context); or the turn found no actor and ended the shot already.</summary>
+public enum BoomerangTurnEnd
+{
+    Flies,
+    EndsWithScripts,
+    EndsBare,
+    Ended,
 }
