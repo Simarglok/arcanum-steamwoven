@@ -1118,7 +1118,7 @@ floating lines, so above the objects and below the numbers) in the original's fo
 
 Checks: `TextBubblesTests` (colours, life, wrap, slots and slot choice, the table's reuse and eviction, life rules, the setting change) and
 the `map` stage's talk smoke (the NPC line of every started conversation is a persistent bubble, replaced on each reply, not persistent after the end; no `npc` text in the panel); `ARC_AREA_TALK_CAPTURE=PATH` saves the first open dialog as `PATH.png` and the `floaters` smoke stage's bubble part (a PC's and an NPC's bubble over their objects, green and white, wrapped within 200 px,
-alive at 6000 ms and gone after it, a Text Duration change to 2 shortening a live bubble at once; `ARC-UI-1997 bubbles over objects PASS`; then the off flag written on the NPC and the NPC destroyed by a script each remove its bubble and not the hero's, a bubble made over an object that is off stays, `ARC-UI-2034 bubbles removed by off flag and teardown PASS` (the fade's clear-all: `AreaScriptHostTests` and `AreaUseScriptHostTests` count the fade runs, `TextBubblesTests` the gone watch);
+alive at 6000 ms and gone after it, a Text Duration change to 2 shortening a live bubble at once; `ARC-UI-1997 bubbles over objects PASS`; then the off flag written on the NPC and the NPC destroyed by a script each remove its bubble and not the hero's, a bubble made over an object that is off stays, `ARC-UI-2034 bubbles removed by off flag and teardown PASS`; then (ARC-UI-2048, ledger TB29, TB30) a dialog speaker with no cell keeps an undrawn bubble that never expires while persistent and ages by time after the end, a final line restarted at the close lives one life from the close, and a new scene drops old bubbles, `ARC-UI-2048 dialog line bubble off the shown map and final-line life PASS` (the fade's clear-all: `AreaScriptHostTests` and `AreaUseScriptHostTests` count the fade runs, `TextBubblesTests` the gone watch);
 `ARC_AREA_FLOATERS_CAPTURE` saves `bubble-before` (the old white rising line) and `bubble-after`) and the `spirit-talk` stage (the greeting over the corpse is a bubble). Original visual parity NOT VERIFIED.
 
 ### Inventory window, pickup and loot (ARC-UI-004)
@@ -2124,6 +2124,36 @@ keeps going under it too.
   closes it; Ctrl+B over the logbook and Escape close only the report; a cancelled report writes nothing; with the active-check
   file set (a synthetic step id through `ARC_QA_ACTIVE_CHECK`) the window shows the step and `report.md` carries its `Check:` line. Marker
   `ARC-DEV-051 native-smoke bug report PASS`. Player instruction: [alpha build](../player/alpha-build.md#9-reporting-a-bug-ctrlb).
+
+#### Owner checks overlay (ARC-DEV-2190)
+
+In-game side of the owner QA layer (epic #2185; the page is `./arcanum qa`, [toolchain](../workflow/toolchain.md#owner-qa-page-arc-dev-2187)).
+A PROJECT window (the original has no such window; no original art; all text English), `AreaOwnerQaPanel`/`TerrainViewerOwnerQa.cs`.
+
+- **Key.** Ctrl+Q opens it (no key of the original: Q has no binding in the world and a Ctrl letter is silenced, ARC-INPUT-004), in play,
+  in the main menu and over any window; Ctrl+Q or Escape closes it. It is routed right after the bug report, so Ctrl+B still opens
+  the report over it. Ctrl+Shift+Q hides or shows the plate. The overlay is modal like the report (the game clock pauses).
+- **On only for the owner.** The overlay needs the QA folder `local/qa` (found above the launch folder or the project folder, as the
+  Ctrl+B tag finds its file) and the flag `ARC_OWNER_QA=1` or the marker `local/qa/owner-qa.on` (`./arcanum qa overlay on`).
+  `ARC_OWNER_QA_DIR` names the folder directly (the smoke; the only way an automated run uses it). Without it Ctrl+Q is not taken and
+  nothing is drawn, so a normal player build is unchanged.
+- **List.** The steps of `local/qa/checks.json`, the current step first (the step of `active-check.txt`, else the first open one;
+  picking a row makes it current and writes the file, so Ctrl+B and the page follow, and the plate follows the page within two
+  seconds), the others by filter: Open, This section, All. A recorded status wins over the list's own.
+- **Result.** Same / Differs / Cannot test append one event to `local/qa/results.jsonl` (the page's format, plus `build` = the build's
+  commit and `src: game`) with the note and the step's last report folder; the page shows it at once and `./arcanum qa sync` or the
+  running page creates the issue of a `differs` exactly once. Next open moves to the next open step.
+- **Send report.** The overlay keeps the key's moment as Ctrl+B does (screen, last 120 s of the log, a save) and Send writes the same
+  report folder (the same writer and places) tagged with the step (`Check:` line, ARC-DEV-2189); the folder name is recorded in the
+  step's result (status kept, `open` when none). One send per opening; the note is the player's text.
+- **Plate.** While a step is current a read-only plate at the top left (`Check ARC-TYPE-NNN#k: step`) stays on screen; it takes no click and
+  no key and draws no original art.
+- **Smoke.** Stage `report` also runs the overlay (marker `ARC-DEV-2190 native-smoke owner-qa PASS`, required beside the report's own):
+  a synthetic folder of three steps through `ARC_OWNER_QA_DIR`; the key does nothing before it is set; the window fits the screen with the
+  first open step current; picking writes the file and moves the plate; Send writes a report whose `report.md` carries the `Check:` line
+  and records its folder name; Differs and Same append lines with the build; Escape closes, the plate hides and shows on Ctrl+Shift+Q;
+  Ctrl+Q over the logbook closes only the overlay. `ARC_OWNER_QA_CAPTURE` (via `--env`) saves pictures of the window.
+- **Tests.** `OwnerQaTests` (files, model, filters, flag rules); `tools/local_dev/test_qa.py` (snapshot, game results, auto sync, marker).
 
 ### Main menu (ARC-UI-011)
 

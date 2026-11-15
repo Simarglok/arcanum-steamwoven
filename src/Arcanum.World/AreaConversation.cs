@@ -56,6 +56,8 @@ public enum AreaConversationStartStatus
     /// <summary>ARC-SCRIPT-1598 (0x567460): the run's effects are applied (a damage line, the slot write) and then the dialog start refused: the hero is dead or unconscious, or the NPC cannot speak (a lethal damage of the same run).
     /// Silent, as the original's start returns; no conversation started.</summary>
     DialogStartRefused,
+    /// <summary>ARC-AI-1320 (GT122): the dialog point's script of a dead talk target asked for a dialog; the start callback (0x567460) refuses it silently, so no window opens and nothing is loaded (the script's other effects are applied).</summary>
+    DialogRefused,
 }
 
 /// <param name="Party">ARC-WORLD-016: the session party port of a roster companion's conversation (its
@@ -351,11 +353,11 @@ public sealed class AreaConversationHost
 
     /// <param name="startRefused">ARC-SCRIPT-1598: the dialog-start callback's refusal test (0x567460: the hero dead or unconscious, the NPC that cannot speak), asked after the run's effects are applied and before the DLG opens, as the
     /// original's dialog action calls the start after its earlier actions; null asks nothing.</param>
-    public AreaConversationStart Begin(AreaSpeaker? speaker, CancellationToken token = default, Func<AreaSpeaker, bool>? startRefused = null)
+    public AreaConversationStart Begin(AreaSpeaker? speaker, CancellationToken token = default, bool deadTarget = false, Func<AreaSpeaker, bool>? startRefused = null)
     {
         SchematicCrafter = null;
         if (speaker is null) return new(AreaConversationStartStatus.NoSpeaker, null, null, "no dialog NPC within reach");
-        return Run(speaker, 0, token, startRefused);
+        return Run(speaker, 0, token, deadTarget, startRefused);
     }
 
     /// <summary>
@@ -368,7 +370,7 @@ public sealed class AreaConversationHost
     {
         SchematicCrafter = null;
         ArgumentNullException.ThrowIfNull(speaker);
-        return Run(speaker, line.Value, token, startRefused);
+        return Run(speaker, line.Value, token, startRefused: startRefused);
     }
 
     /// <summary>
@@ -444,7 +446,7 @@ public sealed class AreaConversationHost
 
     // Talk request and resumption run SAP_DIALOG through the SCR dispatcher (ARC-SCRIPT-009): run default is the
     // original's generic greeting (not modelled here), a dialog action starts the DLG of the run's script.
-    private AreaConversationStart Run(AreaSpeaker speaker, int line, CancellationToken token, Func<AreaSpeaker, bool>? startRefused)
+    private AreaConversationStart Run(AreaSpeaker speaker, int line, CancellationToken token, bool deadTarget = false, Func<AreaSpeaker, bool>? startRefused = null)
     {
         token.ThrowIfCancellationRequested();
         // ARC-WORLD-043: a talk whose end the caller missed is ended before any script runs, as the original ends a dialog
@@ -469,6 +471,14 @@ public sealed class AreaConversationHost
         // The DLG is read before any effect is applied, so a changed dialog file applies nothing; a DLG that is missing or
         // unreadable leaves the script's effects applied, as they were before ARC-SCRIPT-011.
         (AreaConversationStartStatus Status, DlgDocument? Document, string Detail) loaded = (AreaConversationStartStatus.DialogResourceMismatch, null, "no dialog action");
+        // ARC-AI-1320 (GT122): a dead talk target never starts the dialog (0x567460 refuses silently): the script's effects apply, the dialog is not read and not opened.
+        if (deadTarget && result.Effects.Dialog is not null)
+        {
+            token.ThrowIfCancellationRequested();
+            return Scripts.Apply(result.Effects)
+                ? new(AreaConversationStartStatus.DialogRefused, null, speaker, $"script {result.Script} {result.Stop}: the dialog of a dead target is refused")
+                : new(AreaConversationStartStatus.ScriptEffectsRejected, null, speaker, $"script {result.Script} {result.Stop}: the session refused its effects");
+        }
         if (result.Effects.Dialog is { } requested)
         {
             // ARC-DATA-022: the session's current rules choose the data fixes, read at this decision.
@@ -482,7 +492,7 @@ public sealed class AreaConversationHost
             return line != 0 && result.Stop == ScrStop.NoScript
                 ? new(AreaConversationStartStatus.ScriptRemoved, null, speaker, "the dialog slot holds no script: nothing to resume")
                 : result.Outcome == ScrOutcome.RunDefault
-                ? GenericGreeting(speaker, line, result)
+                ? (deadTarget ? new(AreaConversationStartStatus.GenericGreeting, null, speaker, $"script {result.Script?.ToString() ?? "none"} {result.Stop}: run default (a dead target: the empty line)") : GenericGreeting(speaker, line, result))
                 : new(AreaConversationStartStatus.ScriptEnded, null, speaker, $"script {result.Script} {result.Stop} at SCR line {result.StopLine}: skip default");
         // ARC-SCRIPT-1598 (X11, SU11): the dialog action stores the slot and then calls the start (0x567460), which refuses a dead or unconscious PC and an NPC that cannot speak (a damage action of the same run may have
         // killed either): silent, the run's earlier effects stay.

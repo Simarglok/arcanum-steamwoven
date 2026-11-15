@@ -194,7 +194,7 @@ public partial class TerrainViewerApp
 
     /// <summary>ARC-UI-2069 (ledger DB1, DB2): the portraits stay drawn and inert under the open dialog (Original) while nothing else covers the screen.</summary>
     private bool PortraitsHeldUnderDialog => AreaFollowerPanelRules.HeldUnderDialog(DialogBarStays, _interfaceWindows.Stack.Current == InterfaceMode.Dialog,
-        PaletteOpen || SaveListOpen || MainMenuOpen || HeroDeathCovering || MovieCovering || BugReportOpen);
+        PaletteOpen || SaveListOpen || MainMenuOpen || HeroDeathCovering || MovieCovering || ReportModalOpen);
 
     /// <summary>
     /// ARC-DEV-280 (B33): the left button's release over a follower's portrait is a click on that follower, as the original's portrait button

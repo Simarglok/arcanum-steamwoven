@@ -5,13 +5,14 @@ from __future__ import annotations
 import argparse
 from contextlib import redirect_stdout
 import io
+import os
 from pathlib import Path
 import subprocess
 import tempfile
 import unittest
 from unittest import mock
 
-from tools.local_dev import launch, smoke, smoke_zones
+from tools.local_dev import launch, run_queue, smoke, smoke_zones
 from tools.local_dev.smoke_zones import COMPLETE, CONTAINER_CLICK, CORE, CRASH_SITE, CENSUS, WALK
 from tools.local_dev.test_smoke import ENVIRON, parse
 
@@ -250,10 +251,16 @@ class ZonePlanTests(unittest.TestCase):
     def test_a_run_with_no_zone_to_run_passes_and_builds_nothing(self) -> None:
         output = io.StringIO()
         args = parse("pr", "--auto", "--dry-run")
+        env = {k: v for k, v in os.environ.items() if k != run_queue.TICKET_ENV}  # ARC-DEV-2209: also green inside ./arcanum run
         with mock.patch.object(smoke_zones, "changed_files", return_value=("abc", ("docs/a.md",))), \
-                mock.patch.object(smoke, "focus_guard_library", return_value=None), redirect_stdout(output):
+                mock.patch.object(smoke, "focus_guard_library", return_value=None), \
+                mock.patch.dict(os.environ, env, clear=True), redirect_stdout(output):
             self.assertEqual(smoke.run(args), 0)
         self.assertIn("SMOKE PASS nothing to run", output.getvalue())
+
+    def test_a_run_inside_the_queue_is_still_refused(self) -> None:
+        with mock.patch.dict(os.environ, {run_queue.TICKET_ENV: "7"}), self.assertRaisesRegex(ValueError, "not inside ./arcanum run"):
+            smoke.run(parse("pr", "--auto", "--dry-run"))
 
     def test_the_retry_of_unfinished_stages_is_on_for_complete_and_off_for_a_pr_unless_asked(self) -> None:
         def retrying(*argv: str) -> list[str]:

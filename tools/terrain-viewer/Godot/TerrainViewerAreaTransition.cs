@@ -406,7 +406,7 @@ public partial class TerrainViewerApp
     // What keeps the safety gate closed (ARC-DEV-133): a failed placement names its cause.
     private string AreaSmokeGateWhy() =>
         $"focused={_worldFocused} palette={PaletteOpen} window={AnyWindowOpen} saveList={SaveListOpen} mainMenu={MainMenuOpen} death={HeroDeathCovering} "
-        + $"bugReport={BugReportOpen} uiFocus={WorldUiFocus} lifecycle={_worldLifecycleSession is not null} dragging={_dragging} "
+        + $"bugReport={ReportModalOpen} uiFocus={WorldUiFocus} lifecycle={_worldLifecycleSession is not null} dragging={_dragging} "
         + $"activeDevice={_worldReducer.ActiveDevice?.ToString() ?? "-"} simulatedFocus={_worldFocusSimulationForSelfTest} frameClock={_frameClockForSelfTest}";
 
     // Frames the trigger, then returns an opaque pixel of its sprite outside the HUD.

@@ -15,7 +15,9 @@ public sealed class HeroTalkGoalsTests
     private sealed class World : IAiHeroWalkWorld
     {
         public CellCoord At = new(10, 10), Npc = new(12, 10);
-        public bool Down, InRound, Gone, Refused, NoApproach;
+        public bool Down, InRound, Gone, Refused, NoApproach, Dead;
+        public int DiesAfterSteps;
+        private int _steps;
         public CellCoord? Approach;
         public readonly List<string> Log = [];
 
@@ -32,7 +34,7 @@ public sealed class HeroTalkGoalsTests
         }
 
         public AiStepBlock StepBlocked(CellCoord from, CellCoord next, bool lastOfSegment) => AiStepBlock.Clear;
-        public int BeginStep(CellCoord from, CellCoord next, bool running) { Log.Add("step " + next.X + "," + next.Y); At = next; return 100; }
+        public int BeginStep(CellCoord from, CellCoord next, bool running) { Log.Add("step " + next.X + "," + next.Y); At = next; if (DiesAfterSteps > 0 && ++_steps == DiesAfterSteps) Dead = true; return 100; }
         public bool StepPending(CellCoord from, CellCoord to) => false;
         public bool FollowRoute(CellCoord destination) => false;
         public bool RouteFollowing(CellCoord destination) => false;
@@ -114,6 +116,28 @@ public sealed class HeroTalkGoalsTests
         // The first step runs nodes 1 to 6 of the talk, the plan of goal 8 and the walk's own nodes until the first wait.
         Assert.AreEqual(GoalType.Talk, step.Run!.Bottom.Goal);
         Assert.IsTrue(step.Run.Frames.Any(f => f.Goal == GoalType.MoveNear && f.Range == AiExecutorRules.HeroTalkApproachRange && f.Target == Npc));
+    }
+
+    // ARC-AI-1320 (GT122): goal 21 itself holds no death test (node 1 refuses only what ObjectTarget reports as Refused or gone). These tests pin that contract of the executor: a world that keeps reporting the body (Dead only records
+    // that it died) sees the walk go on and the dialog asked. The viewer port that stopped reporting a dead speaker is covered by the spirit-talk smoke (step 1b).
+    [TestMethod]
+    public void ATargetThatDiesDuringTheApproachStaysTheTargetAndTheDialogAsksAtTheBody()
+    {
+        var w = new World { Npc = new(15, 10), DiesAfterSteps = 2 };
+        var (last, _) = Drive(Run(), w);
+        Assert.IsTrue(w.Dead, "the target died on the way");
+        CollectionAssert.AreEqual(new[] { "step 11,10", "step 12,10", "step 13,10", "step 14,10", "dialog " + Npc }, w.Log, "no refusal at node 1: the hero walks on and asks the dialog");
+        Assert.AreEqual(new CellCoord(14, 10), w.At, "the approach still ends adjacent (goal 8, range 1)");
+        Assert.AreEqual(AiRunEnd.EndStep, last.End);
+    }
+
+    [TestMethod]
+    public void ATargetThatDiedBeforeTheStandIsTalkedToFromWithinFourCells()
+    {
+        var w = new World { Npc = new(12, 10), Dead = true };
+        var (last, _) = Drive(Run(), w);
+        CollectionAssert.AreEqual(new[] { "dialog " + Npc }, w.Log);
+        Assert.AreEqual(AiRunEnd.EndStep, last.End);
     }
 
     // ARC-AI-1137 (GT122, second read): a talk with Shift carries the no-walk flag 0x100; the walk step answers 0, so the approach never takes a step and the guard kills the run.
