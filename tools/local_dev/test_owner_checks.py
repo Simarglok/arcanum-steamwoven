@@ -121,6 +121,13 @@ class ParseTests(unittest.TestCase):
         self.assertEqual(len(parsed.steps), len(parsed.by_id()))
 
 
+    def test_a_section_code_used_twice_cannot_repeat_an_id(self) -> None:
+        parsed = oc.parse(section("ARC-DEV-1", title="a") + section("ARC-DEV-1", "| 1 | X. | Y. | open |\n| 2 | Z. | W. | open |\n", title="b"))
+        self.assertEqual(1, len(parsed.problems))
+        self.assertIn("ARC-DEV-1#1 repeats the row at line", parsed.problems[0].message)
+        self.assertEqual(["ARC-DEV-1#1", "ARC-DEV-1#2"], [s.id for s in parsed.steps])
+
+
 class IdTests(unittest.TestCase):
     def test_step_ids(self) -> None:
         self.assertEqual(("ARC-UI-1364", "UI", 1364, 4), oc.parse_step_id("ARC-UI-1364#4"))

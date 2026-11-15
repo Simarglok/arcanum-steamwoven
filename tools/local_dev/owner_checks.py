@@ -136,6 +136,7 @@ def parse(text: str) -> Parsed:
     section_line = 0
     steps: list[Step] = []
     seen: dict[int, int] = {}
+    seen_by_code: dict[str, dict[int, int]] = {}   # row numbers per task code, over the whole file
     state = "none"       # none | header | rows  (inside a section: before / after the table header)
     had_table = False    # the section already had a step table, so a row after a break continues it
     fence = ""
@@ -163,7 +164,7 @@ def parse(text: str) -> Parsed:
             section_line = index
             match = SECTION_CODE.match(title)
             code = match.group(1) if match else ""
-            seen = {}
+            seen = seen_by_code.setdefault(code, {}) if code else {}
             state = "none"
             had_table = False
             continue
@@ -232,7 +233,7 @@ def _read_row(cells: list[str], line: int, code: str, title: str, section_line: 
     if not ok:
         return None
     seen[number] = line
-    _, kind, task = STEP_ID.match(f"{code}#1").groups()[:3]  # the section code always has the ARC-TYPE-NNN shape
+    _, kind, task, _ = STEP_ID.match(f"{code}#1").groups()  # the section code always has the ARC-TYPE-NNN shape
     return Step(f"{code}#{number}", code, kind, int(task), number, step_text, expected, status_match.group(1),
                 (status_match.group(2) or "").strip(), line, title, section_line)
 
