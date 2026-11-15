@@ -82,7 +82,7 @@ session or the owner are not covered by any scan.)
 [`test_foreign_kill_guard.py`](../../tools/local_dev/test_foreign_kill_guard.py) keeps it so, and `_signal_group` now refuses a
 pid that does not lead its own group and the queue's own group. The viewer logs `ARC-DEV-2280 window close request at HH:MM:SS`
 when the window gets a close request (not yet seen with a real Cmd+Q, close button or Dock Quit in a built game; the first
-time one is pressed tells which arrive), and the main menu Exit logs `ARC-UI-011 main menu exit`, so the next incident can be
+time one is pressed tells which arrive; since ARC-DEV-2270 an interactive window asks the quit question after it, and the line ends "the quit question follows" with `ARC-DEV-2270 quit yes` or `quit held key` when the game then exits), and the main menu Exit logs `ARC-UI-011 main menu exit`, so the next incident can be
 read from the game's own log (`~/Library/Application Support/Godot/app_userdata/Arcanum Terrain Viewer/logs/godot.log`). Copy
 that log before the next smoke run: every smoke viewer starts a new log in the same folder and only the last five are kept
 ([#2285](https://github.com/Simarglok/arcanum-steamwoven/issues/2285) gives the game its own log).
