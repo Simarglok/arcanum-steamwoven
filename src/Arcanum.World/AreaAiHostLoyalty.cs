@@ -51,13 +51,13 @@ public sealed partial class AreaAiHost
     /// <summary>
     /// The follow check (0x4AD950, <see cref="FollowConsentRules.Evaluate"/>) of <paramref name="npc"/> against its NPC <paramref name="leader"/>, the limit ignored: mind control accepts when the controller is the leader
     /// or, with no controller record (the host holds none yet: <see cref="MindController"/> answers null), a PC leads the NPC up its chain (0x45DDA0); the leader's Persuasion training, alignment and level are its own; the reaction is <see cref="NpcLeaderReaction"/> (0 for a
-    /// leader in the NPC's enemy list); the follow thresholds are the NPC's AI row fields 5 to 8; the forced bit is the link's. The alignment and level are the stored ones (TraitIdx writes laid over), without the effect list's modifiers (NOT READY, as the hostility facts). Never "already in group" (the leader is the NPC's own). Null when the leader's or the NPC's stats
+    /// leader in the NPC's enemy list); the follow thresholds are the NPC's AI row fields 5 to 8; the forced bit is the link's. The alignment is the stat getter's value (<see cref="AlignmentOf"/>: the stored base with TraitIdx writes laid over it, then the effect list's changes of the stat); the level is the stored one (TraitIdx writes laid over), without the effect list's modifiers (NOT READY, as the hostility facts, #2155). Never "already in group" (the leader is the NPC's own). Null when the leader's or the NPC's stats
     /// or AI row are not readable here.
     /// </summary>
     internal FollowConsent? NpcLedConsent(string npc, string leader, bool forced)
     {
-        if (Fields(npc)?.Critter is not { } critter || Build(npc) is not { } build || Row(npc) is not { } row) return null;
-        if (CharismaOf(leader) is not { } charisma || Fields(leader)?.Critter is not { } leaderCritter || Build(leader) is not { } leaderBuild) return null;
+        if (Fields(npc)?.Critter is null || Build(npc) is not { } build || Row(npc) is not { } row) return null;
+        if (CharismaOf(leader) is not { } charisma || Fields(leader)?.Critter is null || Build(leader) is not { } leaderBuild) return null;
         var controller = MindController(npc);
         var mindControlled = (SpellFlagsOf(npc, Fields(npc)!.Object.SpellFlags) & MindControlledSpell) != 0
             && (controller is null ? PcLeader(npc) is not null : controller == leader);

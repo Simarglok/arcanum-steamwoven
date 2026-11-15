@@ -4296,7 +4296,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         _session.LeaveParty(_session.Version, npc, new PartyLeave(Force: false, LeaderCharisma: LeaderCharisma(npc) ?? 0, MindControlled: mindControlled, Jilt: jilt));
 
     // ARC-WORLD-2127: an NPC's stat-side values as the party rules read them, for the NPC leading a follower: its Persuasion training (0x4C60C0, the NPC's sheet skill), effective charisma, level, alignment
-    // (the stored base value: the effects on that stat are not applied here) and max followers (stat 15 under its effects). Null when the NPC's stats are not readable here (another map's, no sheet).
+    // (the stat getter's value, AlignmentOf: the effects on that stat are applied) and max followers (stat 15 under its effects). Null when the NPC's stats are not readable here (another map's, no sheet).
     private (PersuasionTraining Persuasion, int Charisma, int Level, int Alignment, int MaxFollowers)? NpcLeaderSide(string leader)
     {
         if (Build(leader) is not { } build || LifeState(leader) is not { } state || AlignmentOf(leader) is not { } alignment || NpcSkill(leader, Skill.Persuasion) is not { } persuasion) return null;
