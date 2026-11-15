@@ -907,11 +907,15 @@ class QueueRunTests(unittest.TestCase):
         legacy = os.environ["ARCANUM_QUEUE_LEGACY_LOCK"]
         holder = subprocess.Popen(["/usr/bin/lockf", legacy, sys.executable, "-c",
                                    f"import time; open({str(self.log)!r}, 'a').write('start lockf %f\\n' % time.time()); "
-                                   f"time.sleep(1.2); open({str(self.log)!r}, 'a').write('end lockf %f\\n' % time.time())"])
+                                   f"deadline = time.time() + 90\n"
+                                   f"while not __import__('os').path.exists({str(self.root / 'release')!r}) and time.time() < deadline: time.sleep(0.05)\n"
+                                   f"open({str(self.log)!r}, 'a').write('end lockf %f\\n' % time.time())"])
         self.processes.append(holder)
         self.until(lambda: self.log.exists())
-        self.queued("window", "q", 1.0)
-        self.until(lambda: "start q" in self.log.read_text())
+        self.queued("window", "q", 0.5)  # q waits for the lockf holder, which ends only on release
+        self.assertNotIn("start q ", self.log.read_text())
+        self.release()
+        self.until(lambda: "start q" in self.log.read_text(), 60.0)
         late = subprocess.Popen(["/usr/bin/lockf", legacy, sys.executable, "-c",
                                  f"import time; open({str(self.log)!r}, 'a').write('start late %f\\n' % time.time())"])
         self.processes.append(late)
@@ -1094,10 +1098,12 @@ class QueueRunTests(unittest.TestCase):
         self.assertFalse(run_queue.pause_file().exists())  # pruned like any dead ticket
 
     def test_a_nested_run_is_not_held_by_the_pause(self) -> None:
-        inner = f"sleep 1.5; {sys.executable} -B {ARCANUM} run --kind window -- {sys.executable} -c pass"
+        inner = (f"while [ ! -e {self.root / 'release'} ]; do sleep 0.05; done; "
+                 f"{sys.executable} -B {ARCANUM} run --kind window -- {sys.executable} -c pass")  # the nested run starts only on release
         process = self.wrapper("window", "outer", ["sh", "-c", inner])
         self.until(lambda: len(self.runs()) == 1 and self.runs()[0].get("startedAt"))
         run_queue.set_paused(True, "test")
+        self.release()
         try:
             self.assertEqual(process.wait(30), 0)  # a run holding a place keeps working: its nested run is not queued
         finally:

@@ -933,7 +933,7 @@ module, four at a time (`--jobs N`; module names after the options run only thos
 queue home), which is why the pool is safe; one serial `python3 -B -m unittest discover -s tools/local_dev -t . -p 'test_*.py'`
 (`-t .` names the modules `tools.local_dev.test_*`, which their imports need) runs the same tests in about 250 s, the pool in
 about 90 s (the slowest module, `test_run_queue`, is the limit). The per-module commands above stay the quick way to run one.
-Every `test_run_queue` test that needs a run to hold its place while others queue (ARC-DEV-2254, issue #2254: under load the
+The `test_run_queue` tests that need a run to hold its place while others queue (ARC-DEV-2254, issue #2254: under load the
 fixed-length runs ended before the waiters registered) holds that run with `held()` until `release()` instead of timing it, so a
 loaded Mac cannot fail them; a new test of that kind does the same.
 
