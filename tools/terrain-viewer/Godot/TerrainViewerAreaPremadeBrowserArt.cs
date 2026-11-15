@@ -220,16 +220,16 @@ public partial class TerrainViewerApp
             // smokes, and restores it at once: the rest of the menu smoke compares Legacy pixels (the label blend) and stays in Legacy.
             var verifyHd = System.Environment.GetEnvironmentVariable("ARC_AREA_NEWCHAR_HD_VERIFY") == "1";
             var savedInterfaceHd = _gameSettings.HdInterface;
-            if (verifyHd)
-            {
-                require(_canvas?.HdSource?.Pack is not null, "HD verification needs ARC_HD_PACK");
-                _gameSettings = _gameSettings with { HdInterface = true };
-                SyncInterfaceHd();
-                require(InterfaceHd.Enabled, "HD interface switch enabled for the capture");
-                await Frames(3);
-            }
+            if (verifyHd) require(_canvas?.HdSource?.Pack is not null, "HD verification needs ARC_HD_PACK");
             try
             {
+                if (verifyHd)
+                {
+                    _gameSettings = _gameSettings with { HdInterface = true };
+                    SyncInterfaceHd();
+                    require(InterfaceHd.Enabled, "HD interface switch enabled for the capture");
+                    await Frames(3);
+                }
                 using var image = GetViewport().GetTexture().GetImage();
                 require(image.SavePng(capture) == Error.Ok, "the capture saved to " + capture);
             }
