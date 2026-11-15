@@ -12,9 +12,12 @@ public sealed class ScrContainerVicinityTests
     private const byte Attachee = 1, Triggerer = 0, Looped = 10, Container = 17;
     private const int Script = 1596;
 
-    private sealed class ContainerHost(FakeHost inner) : IScrHost, IScrWorldQueries, IScrContainerQueries
+    private sealed class ContainerHost(FakeHost inner) : IScrHost, IScrWorldQueries, IScrContainerQueries, IScrObjectStateQueries
     {
         public FakeHost Inner => inner;
+        public HashSet<ScrObjectRef> Off { get; } = [];
+        public bool? IsDead(ScrObjectRef obj) => false;
+        public bool? IsSwitchedOff(ScrObjectRef obj) => Off.Contains(obj);
         public List<ScrObjectRef> Containers { get; } = [];
         public List<ScrObjectRef> Centres { get; } = [];
         public ScrSlot? Slot(ScrObjectRef attachee, int point) => inner.Slot(attachee, point);
@@ -36,7 +39,7 @@ public sealed class ScrContainerVicinityTests
         public (long X, long Y)? Location(ScrObjectRef obj) => null;
     }
 
-    private static readonly ScrAdmissionSet Set = new("container-test", ScrAdmissionSet.S2.Conditions,
+    private static readonly ScrAdmissionSet Set = new("container-test", ScrAdmissionSet.S2.Conditions.Append(ScrCatalogue.Condition.IsSwitchedOff),
         ScrAdmissionSet.S2.Actions.Concat([ScrCatalogue.Action.AssignObject, ScrCatalogue.Action.LoopFor, ScrCatalogue.Action.LoopEnd]), ScrAdmissionSet.S2.ValueKinds,
         ScrAdmissionSet.S3.FocusKinds.Concat([ScrFocusKind.CurrentLoopedObject, ScrFocusKind.EveryContainerInVicinity, ScrFocusKind.AnyContainerInVicinity]), counterIndexWraps: true);
 
@@ -105,6 +108,36 @@ public sealed class ScrContainerVicinityTests
             Do(C(ScrCatalogue.Action.LoopEnd)),
             L(C(ScrCatalogue.Condition.Equal, (Local, 0), N(3)), C(ScrCatalogue.Action.ReturnSkipDefault), C(ScrCatalogue.Action.ReturnRunDefault))));
         Assert.AreEqual(ScrStop.ReturnSkipDefault, Run(host).Stop, "kind 18 walks the same three containers");
+    }
+
+    [TestMethod]
+    public void A_condition_needs_every_container_to_hold_for_kind_17_and_one_for_kind_18()
+    {
+        var host = Host(3);
+        host.Off.Add(host.Containers[0]);
+        ScrScriptLookup Cond(byte kind) => ScrScriptLookup.Of(Program(
+            Do(C(ScrCatalogue.Action.AssignObject, (Attachee, -1), (Triggerer, 0))),
+            L(C(ScrCatalogue.Condition.IsSwitchedOff, (kind, 0)), C(ScrCatalogue.Action.ReturnSkipDefault), C(ScrCatalogue.Action.ReturnRunDefault))));
+        host.Inner.Scripts[Script] = Cond(17);
+        Assert.AreEqual(ScrStop.ReturnRunDefault, Run(host).Stop, "kind 17: one of three is off, not every one");
+        host.Inner.Scripts[Script] = Cond(18);
+        Assert.AreEqual(ScrStop.ReturnSkipDefault, Run(host).Stop, "kind 18: one off is enough");
+        host.Off.Clear();
+        Assert.AreEqual(ScrStop.ReturnRunDefault, Run(host).Stop, "none off holds for neither");
+    }
+
+    [TestMethod]
+    public void A_first_object_read_takes_the_first_container_of_the_list()
+    {
+        var host = Host(3);
+        host.Inner.Scripts[Script] = ScrScriptLookup.Of(Program(
+            Do(C(ScrCatalogue.Action.AssignObject, (Attachee, -1), (Triggerer, 0))),
+            Do(C(ScrCatalogue.Action.AssignObject, (Attachee, -1), (Container, 0))),
+            Do(C(ScrCatalogue.Action.LoopFor, (Container, 0))),
+            Do(C(ScrCatalogue.Action.LoopEnd)),
+            Do(C(ScrCatalogue.Action.ReturnRunDefault))));
+        Run(host);
+        CollectionAssert.AreEqual(new[] { Npc, host.Containers[0] }, host.Centres, "the list is asked again around the first container the first read took");
     }
 
     [TestMethod]
