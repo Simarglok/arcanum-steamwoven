@@ -351,4 +351,27 @@ public sealed class ScrWorldTests
         Assert.IsTrue(ScrAdmission.Admit(program, ScrAdmissionSet.S40).IsAdmitted);
         Assert.AreEqual(ScrRefusalCode.ActionNotAdmitted, ScrAdmission.Admit(program, ScrAdmissionSet.S38).Refusal!.Code);
     }
+
+    [TestMethod]
+    public void The_any_scenery_kind_16_loops_the_same_list_as_kind_15_and_only_S61_admits_it()
+    {
+        // ARC-SCRIPT-2321 (AS1, AS2): the original builds one list for 15 and 16 (0x44B4E0), so a loop creates next to every object and the first-object read is the list's first.
+        const byte AnyScenery = 16;
+        var program = Program(
+            Do(C(ScrCatalogue.Action.AssignObject, (Attachee, -1), (Triggerer, 0))),
+            Do(C(ScrCatalogue.Action.LoopFor, (AnyScenery, 0))),
+            Do(C(ScrCatalogue.Action.CreateObject, N(1), (Looped, 0))),
+            Do(C(ScrCatalogue.Action.LoopEnd)),
+            Do(C(ScrCatalogue.Action.CreateObject, N(2), (AnyScenery, 0))),
+            Do(C(ScrCatalogue.Action.ReturnRunDefault)));
+        Assert.IsFalse(ScrAdmission.Admit(program, ScrAdmissionSet.S60).IsAdmitted, "S60 refuses kind 16");
+        Assert.IsTrue(ScrAdmission.Admit(program, ScrAdmissionSet.S61).IsAdmitted);
+        var host = Host();
+        host.Inner.Scripts[9] = ScrScriptLookup.Of(program);
+        var run = ScrDispatcher.RunSector(new(new(9, 0, 0), Pc), host, new() { Admission = ScrAdmissionSet.S61 });
+        CollectionAssert.AreEqual(new[] { Tree, Mark, Rock, Tree }, run.Effects.Creations.Select(c => c.Near).ToArray(), "three looped, then the first object of the list");
+        CollectionAssert.AreEqual(new[] { Pc }, host.Centres.Take(1).ToArray(), "the list is centred on the assigned attachee");
+        var original = ScrDispatcher.RunSector(new(new(9, 0, 0), Pc), host, new() { Admission = ScrAdmissionSet.S61, Rules = ScrRuleProfile.Original });
+        Assert.AreEqual(4, original.Effects.Creations.Count);
+    }
 }

@@ -19,7 +19,7 @@ public sealed class AreaStoryScriptAdmissionTests
         {
             foreach (var condition in ScrAdmissionSet.StoryConditions) Assert.IsTrue(set.Conditions.Contains(condition), $"{set.Id}: condition {condition}");
             foreach (var action in ScrAdmissionSet.StoryActions) Assert.IsTrue(set.Actions.Contains(action), $"{set.Id}: action {action}");
-            Assert.IsTrue(set.IsSubsetOfBesidesStores(ScrAdmissionSet.S60), set.Id); // ARC-SCRIPT-1241: S35 is S34 plus the fade, which the use and dialog sets hold; ARC-SCRIPT-1163: S36 adds the NPC state actions the use and heartbeat sets hold
+            Assert.IsTrue(set.IsSubsetOfBesidesStores(ScrAdmissionSet.S61), set.Id); // ARC-SCRIPT-1241: S35 is S34 plus the fade, which the use and dialog sets hold; ARC-SCRIPT-1163: S36 adds the NPC state actions the use and heartbeat sets hold
         }
     }
 
@@ -56,6 +56,7 @@ public sealed class AreaStoryScriptAdmissionTests
         // ARC-SCRIPT-1168 (the talk sets hold the six cast actions): the talk set admits one more, 31 (30 before). The placed, heartbeat and dying counts had moved with later slices (the critter-state conditions of
         // ARC-SCRIPT-1733, 1771 and others: 52, 29 and 72, the talk set 30) without this assertion following; it is brought to the measured counts here.
         // ARC-SCRIPT-1815: the heartbeat set gained the scenery and object-variable focus kinds, assign object and float line (heartbeats 41, from 29).
-        Assert.AreEqual((96, 52, 33, 53, 41, 73, 31), (withStory, counts["S34"], counts["use"], counts["placed"], counts["heartbeat"], counts["dying"], counts["talk"]));
+        // Re-measured 2026-11-16 (ARC-SCRIPT-2321): the any-scenery focus kind (16) moves none of these; the counts moved with the sets merged since the line above (issue #1846).
+        Assert.AreEqual((96, 52, 35, 55, 45, 78, 33), (withStory, counts["S34"], counts["use"], counts["placed"], counts["heartbeat"], counts["dying"], counts["talk"]));
     }
 }

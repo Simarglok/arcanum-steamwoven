@@ -341,4 +341,32 @@ public sealed class AreaScriptEyeCandyTests
         CollectionAssert.AreEqual(new[] { 2231 }, heartbeat);
         CollectionAssert.AreEqual(new[] { "2221:ActionNotAdmitted@18/56" }, refusedByUse.Select(r => string.Join('/', r.Split('/').Take(2))).ToArray());
     }
+
+    // ARC-SCRIPT-2321 (AS3, issue #2321 census of #2262): the two installed roots that wait on the focus kind any scenery in the vicinity (16): the tile script 2561 (20 tile sites on the k'na tha map) is admitted whole by the
+    // placed set; the script 1734 (the destroy point 2 and the bust point 30 of the main map) is admitted whole by the heartbeat and dying sets' own focus kinds with the commands of S61, and the heartbeat set
+    // still refuses it for a command (set PC quest state, 16) that the bust host does not hold.
+    [TestMethod, TestCategory("RealData")]
+    public void The_installed_scripts_that_loop_over_any_scenery_are_freed_by_the_focus_kind_in_the_hosts_that_run_them()
+    {
+        var root = Environment.GetEnvironmentVariable("DAT_ROOT");
+        if (string.IsNullOrWhiteSpace(root)) Assert.Fail("DAT_ROOT is required for the opt-in any-scenery check; this is not a synthetic pass.");
+        var discovery = ContentMountPlan.Discover(root);
+        Assert.AreEqual(ContentMountStatus.Ready, discovery.Status, discovery.Detail);
+        var opened = ContentStack.Open(discovery.Plan!);
+        Assert.AreEqual(ContentStackStatus.Ready, opened.Status, opened.Detail);
+        using var content = ScriptContent.Over(opened.Stack!);
+        static ScrAdmissionSet WithS61Types(ScrAdmissionSet host) => new(host.Id + "+S61-types", ScrAdmissionSet.S61.Conditions, ScrAdmissionSet.S61.Actions, host.ValueKinds, host.FocusKinds, counterIndexWraps: true);
+        foreach (var (number, name, set) in new (int, string, ScrAdmissionSet)[] { (2561, "placed", AreaUseScriptHost.PlacedAdmission), (1734, "heartbeat", WithS61Types(AreaUseScriptHost.HeartbeatAdmission)), (1734, "dying", WithS61Types(AreaUseScriptHost.DyingAdmission)) })
+        {
+            Assert.IsTrue(content.Script(number) is { Status: ScriptContentStatus.Read, Program: { } }, $"script {number} is installed");
+            var program = content.Script(number).Program!;
+            var result = ScrAdmission.Admit(program, set);
+            Console.WriteLine($"ANY-SCENERY-ADMISSION|script {number}|{name}|admitted {result.IsAdmitted}|" + (result.Refusal is { } r ? $"{r.Code}@{r.Line}/{r.Type}/{r.Kind}" : "-"));
+            Assert.IsTrue(result.IsAdmitted, $"{number} by the {name} set: {result.Refusal?.Code}@{result.Refusal?.Line}/{result.Refusal?.Type}/{result.Refusal?.Kind}");
+            Assert.IsFalse(ScrAdmission.Admit(program, ScrAdmissionSet.S60).IsAdmitted, $"{number} is refused without kind 16");
+        }
+        var bust = ScrAdmission.Admit(content.Script(1734).Program!, AreaUseScriptHost.HeartbeatAdmission);
+        Console.WriteLine($"ANY-SCENERY-ADMISSION|script 1734|heartbeat as built|{bust.Refusal?.Code}@{bust.Refusal?.Line}/{bust.Refusal?.Type}/{bust.Refusal?.Kind}");
+        Assert.AreNotEqual(ScrRefusalCode.FocusKindNotAdmitted, bust.Refusal?.Code, "the kind is not what stops the bust script");
+    }
 }

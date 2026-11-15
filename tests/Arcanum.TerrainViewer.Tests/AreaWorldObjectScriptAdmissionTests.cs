@@ -38,6 +38,7 @@ public sealed class AreaWorldObjectScriptAdmissionTests
         // Ledger WO13, WO18: 117 installed scripts use one of the 13 commands; S37 admits 84 whole, and the hosts' sets 39 (use), 69 (tile and sector), 35 (heartbeat) and 77 (dying) since ARC-SCRIPT-1279 gave the four item commands
         // (transfer item, set written start, destroy item named, toggle item inventory display) a host (ARC-SCRIPT-1164 had left them out: 25, 43, 30, 48); the rest hold a command of another planned slice.
         // ARC-SCRIPT-1815: the heartbeat set gained the scenery and object-variable focus kinds, assign object and float line (heartbeats 45, from 35).
-        Assert.AreEqual((117, 84, 40, 72, 45, 83), (withCommand, counts["S37"], counts["use"], counts["placed"], counts["heartbeat"], counts["dying"]));
+        // Re-measured 2026-11-16 (ARC-SCRIPT-2321, set S61): the any-scenery focus kind (16) moves one script into the dying count (99 before); the use 40 to 48, placed 72 to 85 and dying 83 to 99 came with the sets merged since (issue #1846).
+        Assert.AreEqual((117, 84, 48, 85, 45, 100), (withCommand, counts["S37"], counts["use"], counts["placed"], counts["heartbeat"], counts["dying"]));
     }
 }

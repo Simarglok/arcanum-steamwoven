@@ -18,7 +18,7 @@ public sealed class AreaNpcStateScriptAdmissionTests
         {
             foreach (var action in ScrAdmissionSet.NpcStateHostActions) Assert.IsTrue(set.Actions.Contains(action), $"{set.Id}: action {action}");
             Assert.IsTrue(set.Actions.Contains(ScrCatalogue.Action.ChangeArtNumber), set.Id);
-            Assert.IsTrue(set.IsSubsetOfBesidesStores(ScrAdmissionSet.S60), set.Id);
+            Assert.IsTrue(set.IsSubsetOfBesidesStores(ScrAdmissionSet.S61), set.Id);
         }
         // The dialog host does not apply the requests yet: its sets stay without them.
         foreach (var set in new[] { AreaScriptHost.Admission, AreaScriptHost.SkillAdmission, AreaScriptHost.TalkAdmission, AreaScriptHost.SkillTalkAdmission })
@@ -60,6 +60,7 @@ public sealed class AreaNpcStateScriptAdmissionTests
         // ARC-SCRIPT-1735 (change art number got its host, ledger NS5, NS9): the use set admits 85 (29 more), the placed set 163 (40 more), the heartbeat set 97 (3 more) and the dying set 205 (51 more), and with the set the later condition sets (S53 to S55) the placed set 168, the heartbeat set 98 and the dying set 214; whether a run applies is the host's, which refuses a
         // target it cannot draw with another art before anything applies.
         // ARC-SCRIPT-1815: the heartbeat set gained the scenery and object-variable focus kinds, assign object and float line (heartbeats 160, from 98).
-        Assert.AreEqual((270, 208, 85, 168, 160, 214), (withState, counts["S36"], counts["use"], counts["placed"], counts["heartbeat"], counts["dying"]));
+        // Re-measured 2026-11-16 (ARC-SCRIPT-2321, set S61): the focus kind any scenery in the vicinity (16) moved one script into each of the use, placed, heartbeat and dying counts (85, 170, 172 and 220 before); the rest of the move from the numbers above (placed 168 to 170, heartbeat 160 to 172, dying 214 to 220) came with the sets merged since (the portal focus kind 19 and the other slices), see issue #1846.
+        Assert.AreEqual((270, 208, 86, 171, 173, 221), (withState, counts["S36"], counts["use"], counts["placed"], counts["heartbeat"], counts["dying"]));
     }
 }

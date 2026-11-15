@@ -492,9 +492,14 @@ public sealed class ScrAdmissionSet
 
     /// <summary>
     /// The portal vicinity set (ARC-SCRIPT-2041, ledger PV1–PV4): <see cref="S59"/> plus the focus kind every portal in the vicinity (19), which the host answers through <see cref="IScrPortalQueries"/> (the loop for of the four ground
-    /// rune tile scripts). The interpreter runs at most S60.
+    /// rune tile scripts). The interpreter ran at most S60 before S61.
     /// </summary>
     public static ScrAdmissionSet S60 { get; } = new("S60", S59.Conditions, S59.Actions, S59.ValueKinds, S59.FocusKinds.Append(ScrFocusKind.EveryPortalInVicinity), counterIndexWraps: true);
+
+    /// <summary>
+    /// The any-scenery set (ARC-SCRIPT-2321, ledger AS1–AS3): <see cref="S60"/> plus the focus kind any scenery in the vicinity (16), the same list as kind 15 that a condition reads as "one is enough" (SG6). The interpreter runs at most S61.
+    /// </summary>
+    public static ScrAdmissionSet S61 { get; } = new("S61", S60.Conditions, S60.Actions, S60.ValueKinds, S60.FocusKinds.Append(ScrFocusKind.AnySceneryInVicinity), counterIndexWraps: true);
 
     /// <summary>
     /// The set the engine runs the slide scripts with (ARC-RENDER-1171, ledger SS2): true, equal, less or equal, local and global flag and PC quest state conditions; the control and arithmetic actions, call script
@@ -536,7 +541,7 @@ public sealed class ScrAdmissionSet
 
     /// <summary>The focus kinds of <see cref="S15"/> a host answers through <see cref="IScrWorldQueries"/>.</summary>
     public static IReadOnlySet<ScrFocusKind> WorldQueryFocusKinds { get; } = new HashSet<ScrFocusKind>
-        { ScrFocusKind.EverySceneryInVicinity, ScrFocusKind.EveryoneInVicinity, ScrFocusKind.AnyoneInVicinity };
+        { ScrFocusKind.EverySceneryInVicinity, ScrFocusKind.AnySceneryInVicinity, ScrFocusKind.EveryoneInVicinity, ScrFocusKind.AnyoneInVicinity };
 
     /// <summary>The conditions of <see cref="S14"/> a host answers through <see cref="IScrItemQueries"/>.</summary>
     public static IReadOnlySet<int> ItemQueryConditions { get; } = new HashSet<int> { ScrCatalogue.Condition.Identified, ScrCatalogue.Condition.ItemsBeingRewielded };
