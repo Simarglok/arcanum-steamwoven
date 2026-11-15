@@ -566,7 +566,13 @@ library only). It lists the steps of [the owner re-check list](owner-checks.md) 
   list. "New since the last visit" is the step ids that were not in `local/qa/state.json` when the page started.
 - **Reports.** The dropdown lists `artifacts/packages/macos/reports/` of the main checkout (name, local time, the first line of the
   player's text from `report.md`; nothing else of a report is read); the newest report taken after the step was opened on the page
-  is preselected. A result stores the folder name only.
+  is preselected. A result stores the folder name only. A report whose `report.md` head has the line `Check: ARC-TYPE-NNN#k`
+  (ARC-DEV-2189, below) is listed under that step first, marked `★`, and the newest one is preselected for the step, whatever
+  its time; a report tagged for another step is never preselected by time.
+- **Active check (ARC-DEV-2189).** Opening a step on the page (click, `j`/`k`) writes its id as one line into
+  `local/qa/active-check.txt` of the main checkout (git-ignored; the viewer's Ctrl+B reads it and tags its report, see the
+  [bug report](../rendering/terrain-viewer.md)). The file is removed when the page starts and when it stops (Ctrl-C), and the viewer
+  ignores one older than 12 hours. `POST /api/active {"step": ID or null}` writes or clears it (only a step of the list).
 - **Results.** `local/qa/results.jsonl` of the main checkout (git-ignored with the rest of `local/`): one JSON event per line,
   appended under a file lock, the latest event of a step wins, an unreadable line is skipped and counted. A result can be changed
   later; the page and `qa sync` read the same file, so a restart loses nothing.

@@ -27,7 +27,7 @@ are this project's own.
 | W | World map; in the [debug mode](alpha-build.md#7-debug-mode) it also lists every area with **Teleport** |
 | Num Lock | Run by default on or off (the original's Num Lock lock; on a keyboard that has the key) |
 | Arrow keys | Pan the camera |
-| H | Legacy or HD graphics (needs a local [HD pack](../formats/hd-pack.md)); *Steamwoven* |
+| H | HD Off or On: the HD interface art and fonts and the relit night lighting together (needs a local [HD pack](../formats/hd-pack.md)); *Steamwoven* |
 | F11 | Fullscreen on or off; *Steamwoven* |
 
 **Combat**

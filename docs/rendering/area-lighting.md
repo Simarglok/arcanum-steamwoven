@@ -213,7 +213,7 @@ and writes the slot back as no light when the run ends ([IW2–IW5](../research/
 - **Wisp glow (ARC-RENDER-2064, FR-LIGHT-013).** The glowing-orb creature (art species 24, `wowuwxaa.art`, a 40x40 glow disc with a white core) exists in four palettes, prototypes 28471 (violet, "Love Lights"),
   28472 (amber, "Will-o-the-Wisp"), 28473 (cyan, "Volar's Wisp") and 28474 (red, "Death Lantern"); none holds a light (the original lights nothing round a wisp). `AreaWispGlows.Table` keys a presentation glow by
   the prototype (the disc's own saturated tone, radius 130 px, strength 0.9, lift 20 px), so every wisp on every map has it. It is **not** part of the Legacy carried lattice and not a saved light: only the relit look
-  (`AreaRelight`, which is on exactly when HD graphics is on, ARC-RENDER-2076) gets it, as extra lights appended to the carried lights of the relit upload (`TerrainViewerApp.WispRelitLights`, `TerrainCanvas.SetAreaRelitExtra`), in the same
+  (`AreaRelight`, which is on exactly when HD is on, ARC-RENDER-2076, ARC-UI-2174) gets it, as extra lights appended to the carried lights of the relit upload (`TerrainViewerApp.WispRelitLights`, `TerrainCanvas.SetAreaRelitExtra`), in the same
   32-light list with the view-culling rule. A wisp's light stands at its row's T0 cell and offsets, and at the pose of the AI host's mover or the companion group once it moved (`AreaWispGlows.Place` over
   `AreaCritterLights.Stand`, LT10); a dead or gone critter (read from the AI host; with no host built the row stays as the map has it) and a companion on another map have none; only core-scope rows count, as for the critters' lights. Legacy (HD off) is pixel-identical (smoke check: Legacy with the glow on and off differs by 0 pixels).
   `ARC_RELIGHT_WISPS=off` and `ARC_RELIGHT_WISP_STRENGTH` (a factor, default 1) are tuning switches. Not ready: a wisp made at run time has no map row and no glow.
@@ -389,8 +389,8 @@ shown view, the 32 nearest the view's centre are uploaded; `AreaRelight.SetView`
 
 ## Relit look (ARC-RENDER-2060)
 
-The best variant of the experiment is a part of the **HD graphics** option (ARC-RENDER-2076 folded the separate HD lighting row, the `relit look` line of ARC-RENDER-2060, into it; an old `relit look`
-line of `arcanum.cfg` is ignored and left alone). It is in force exactly while the visual profile is HD (`SyncRelitLook` follows the profile every frame: HD graphics
+The best variant of the experiment is a part of the one **HD** option (ARC-UI-2174: HD Off/On is the interface art, fonts and this lighting together; ARC-RENDER-2076 folded the separate HD lighting row, the `relit look` line of ARC-RENDER-2060, into it; an old `relit look`
+line of `arcanum.cfg` is ignored and left alone). It is in force exactly while the visual profile is HD (`SyncRelitLook` follows the profile every frame: HD
 Off, by the H key too, puts the look out of force and the draw is Legacy byte for byte; [HD lines](terrain-viewer.md)). In force it is the night-weighted mode (`NightAdd`) at the strength **1.6**
 (`AreaRelight.LookStrength`, the experiment's pick; `ARC_RELIGHT_LOOK_STRENGTH` changes it for tuning by eye): terrain, scenery, bodies and the hero take a normal derived per pixel from the sprite's
 luminance and the dynamic point-light term, weighted by how dark the item's own ambient is, so daylight stays Legacy and a dark scene takes the full term. The hero's carried light and the map's
@@ -406,7 +406,7 @@ frames is made and the world is drawn from 1x art: the N>1 path is dormant suppo
 *Cost, Mac (1280x800, vsync off, 90 frames).* Crash Site cave with 6 lights: 3.4 ms Legacy, 4.7 ms with the look; Tarant at night with 14 lights: 5.9 ms and 8.7 ms; Ashbury with 12 lights: 5.6 ms and 7.8 ms (about 1.3 to 2.8 ms more).
 The Steam Deck is not measured ([#2000](https://github.com/Simarglok/arcanum-steamwoven/issues/2000)); the line is off by default and the light list is bounded at 32, so a slow device simply leaves it off.
 
-Checks: stage `relight` (Legacy byte-identical with the setting off, also after the look was on and off; the setting On with HD graphics Off is byte-identical to Legacy; On with HD graphics On equals the night-weighted mode at the look's strength;
+Checks: stage `relight` (Legacy byte-identical with the setting off, also after the look was on and off; the setting On with HD Off is byte-identical to Legacy; On with HD On equals the night-weighted mode at the look's strength;
 the setting's saved value; frame times), the launcher self-test (the line's default, its saved line, shown again by the next launcher, Reset leaving it alone) and `ViewerSettingsConfigTests`.
 
 ## Open reads (F0)

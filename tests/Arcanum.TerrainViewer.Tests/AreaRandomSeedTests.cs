@@ -86,4 +86,50 @@ public sealed class AreaRandomSeedTests
         }
         finally { Directory.Delete(directory, recursive: true); }
     }
+
+    // ARC-UI-1807 (exe 0x4C5BD0, GB5): the skill module's init draws the first gambling roll right after the clock seed, so it is the
+    // process generator's very first draw; the viewer's own starts ask for it, a plain (test) session keeps its generator untouched.
+    private static GameSessionOwner Starter(ulong seed, bool throwRoll) => AreaTransitionCoordinator.CreateSession(Clock(), Guid.NewGuid(), Module,
+        new AreaStepCell(92928, 82560), 1, randomSeed: seed, throwGamblingRoll: throwRoll).Owner ?? throw new AssertFailedException("session");
+
+    [TestMethod]
+    public void A_player_start_throws_the_first_gambling_roll_as_its_first_draw_and_a_test_session_does_not()
+    {
+        var seed = AreaRandomSeed.FromClock(DateTimeOffset.FromUnixTimeSeconds(1_793_800_000));
+        using var plain = Starter(seed, throwRoll: false);
+        Assert.IsNull(plain.QueryGamblingRoll());
+        Assert.AreEqual(new SessionRandomState(seed, 0), plain.QueryRandom());
+        var firstDraw = plain.Roll("test.first", 1, 100).Roll!.Value;
+
+        using var started = Starter(seed, throwRoll: true);
+        Assert.AreEqual(firstDraw, started.QueryGamblingRoll(), "the roll is the generator's first draw");
+        Assert.AreEqual(new SessionRandomState(seed, 1), started.QueryRandom());
+        Assert.AreEqual(1, started.Version.Revision);
+        // The barter window finds the roll thrown and draws nothing more.
+        Assert.AreEqual(GameSessionDisposition.NoChange, started.EnsureGamblingRoll(started.Version).Disposition);
+        Assert.AreEqual(1L, started.QueryRandom().Draws);
+        // The next draw is the second of the sequence, as in the original (nothing but the roll came first).
+        Assert.AreEqual(plain.Roll("test.second", 1, 100).Roll, started.Roll("test.second", 1, 100).Roll);
+    }
+
+    [TestMethod]
+    public void A_started_sessions_roll_is_saved_and_a_quick_load_restores_it()
+    {
+        var directory = Directory.CreateTempSubdirectory("arc-gamblingroll-").FullName;
+        try
+        {
+            var slot = GameSessionSaveSlot.QuickSave(directory);
+            int roll;
+            using (var saver = Starter(7, throwRoll: true))
+            {
+                roll = saver.QueryGamblingRoll()!.Value;
+                Assert.IsTrue(AreaQuickSave.Save(saver, Outside, slot).Saved);
+            }
+            using var placeholder = Starter(99, throwRoll: true);
+            Assert.AreNotEqual(roll, placeholder.QueryGamblingRoll(), "the two sessions' own rolls differ, so the load's source is told apart");
+            using var loaded = AreaQuickSave.Load(slot, placeholder, _ => null).Owner ?? throw new AssertFailedException("load");
+            Assert.AreEqual(roll, loaded.QueryGamblingRoll(), "a load replaces the stored roll with the save's");
+        }
+        finally { Directory.Delete(directory, recursive: true); }
+    }
 }

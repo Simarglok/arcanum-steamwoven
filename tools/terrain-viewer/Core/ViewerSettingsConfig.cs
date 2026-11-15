@@ -18,10 +18,12 @@ namespace Arcanum.TerrainViewer.Core;
 /// volumes <c>effects volume</c>, <c>voice volume</c> and <c>music volume</c> 0–10. The project's own settings have project names:
 /// <c>pad scheme</c> (<c>off</c>, <c>direct</c>, <c>pointer</c>), <c>touch scheme</c> (<c>off</c>, <c>touchpad</c>) and <c>prompt style</c> (<c>auto</c>, <c>xbox</c>,
 /// <c>playstation</c>, <c>nintendo</c>, <c>steamdeck</c>; ARC-GPAD-1374, the controller scheme choice of <see cref="ControlSchemeSettings"/>),
-/// <c>hd interface</c> and <c>generated interface</c> (0 or 1), <c>hd pack</c> (<c>auto</c>, <c>game</c>, <c>custom</c>), <c>hd pack path</c>,
-/// <c>visual profile</c> (<c>legacy</c> or <c>hd</c>), and <c>launcher</c> (the launcher object, <see cref="LauncherSettingsFile"/>). A line that is
+/// <c>hd</c> (0 or 1, ARC-UI-2174: the one HD setting: the HD interface art and fonts and the relit lighting together), <c>generated interface</c> (0 or 1,
+/// experimental, honoured only while <c>hd</c> is 1), <c>hd pack</c> (<c>auto</c>, <c>game</c>, <c>custom</c>), <c>hd pack path</c>, and <c>launcher</c> (the launcher object, <see cref="LauncherSettingsFile"/>). A line that is
 /// absent or has a value outside its range reads as that setting's default and no other setting changes (the old files lost a whole group
-/// to one bad value). A group is saved at once; a save writes only its own lines.
+/// to one bad value). A group is saved at once; a save writes only its own lines. The earlier <c>hd interface</c> and <c>visual profile</c> lines
+/// are never written again and are left in place: a file with no <c>hd</c> line reads <c>hd</c> as On exactly when <c>hd interface</c> was 1
+/// (<c>visual profile</c> alone does not turn it on; <see cref="ReadHd"/>).
 /// </summary>
 public static class ViewerSettingsConfig
 {
@@ -40,16 +42,19 @@ public static class ViewerSettingsConfig
     public const string EffectsVolume = "effects volume";
     public const string VoiceVolume = "voice volume";
     public const string MusicVolume = "music volume";
+    public const string Hd = "hd";
+    /// <summary>The line the HD setting had before ARC-UI-2174; read only when <see cref="Hd"/> is absent, never written.</summary>
     public const string HdInterface = "hd interface";
     public const string GeneratedInterface = "generated interface";
     public const string HdPack = "hd pack";
     public const string HdPackPath = "hd pack path";
+    /// <summary>The line of the old HD graphics setting (ARC-UI-2174: no longer read or written; an old file keeps it).</summary>
     public const string VisualProfileLine = "visual profile";
     public const string PadSchemeLine = "pad scheme";
     public const string TouchSchemeLine = "touch scheme";
     public const string PromptStyleLine = "prompt style";
 
-    private static readonly string[] GameLines = [Difficulty, TurnBased, AutoAttack, TextFloaters, FloatSpeed, CombatTaunts, ViolenceFilter, Brightness, TextDuration, AutoSwitch, FollowerSkills, HdInterface, GeneratedInterface, HdPack, HdPackPath, PadSchemeLine, TouchSchemeLine, PromptStyleLine];
+    private static readonly string[] GameLines = [Difficulty, TurnBased, AutoAttack, TextFloaters, FloatSpeed, CombatTaunts, ViolenceFilter, Brightness, TextDuration, AutoSwitch, FollowerSkills, Hd, HdInterface, GeneratedInterface, HdPack, HdPackPath, PadSchemeLine, TouchSchemeLine, PromptStyleLine];
     private static readonly string[] AudioLines = [EffectsVolume, VoiceVolume, MusicVolume];
 
     private static int? Int(ArcanumConfigRead read, string name, int minimum, int maximum)
@@ -77,13 +82,24 @@ public static class ViewerSettingsConfig
 
     public static bool HasAudio(ArcanumConfigRead read) => AudioLines.Any(read.Has);
 
-    public static bool HasVisualProfile(ArcanumConfigRead read) => read.Has(VisualProfileLine);
+    /// <summary>A saved HD value exists: the <c>hd</c> line, or the earlier <c>hd interface</c> line it is migrated from.</summary>
+    public static bool HasHd(ArcanumConfigRead read) => read.Has(Hd) || read.Has(HdInterface);
+
+    /// <summary>ARC-UI-2174: the one HD value. The <c>hd</c> line when it holds 0 or 1; else the earlier <c>hd interface</c> line (On only if it was 1); else Off.
+    /// The earlier <c>visual profile</c> line is ignored.</summary>
+    public static bool ReadHd(ArcanumConfigRead read)
+    {
+        ArgumentNullException.ThrowIfNull(read);
+        return Flag(read, Hd) ?? Flag(read, HdInterface) ?? false;
+    }
+
+    public static IReadOnlyList<ArcanumConfigChange> HdChanges(bool on) => [new(Hd, Flag(on))];
 
     public static AreaGameSettings ReadGame(ArcanumConfigRead read)
     {
         ArgumentNullException.ThrowIfNull(read);
         var defaults = AreaGameSettings.Defaults;
-        var hdInterface = Flag(read, HdInterface) ?? false;
+        var hdInterface = ReadHd(read);
         string? folder = read.Get(HdPackPath) is { Length: > 0 and <= AreaGameSettingsCodec.MaxPath } path ? path : null;
         return new AreaGameSettings(Int(read, Difficulty, 0, AreaGameSettings.MaxDifficulty) ?? defaults.Difficulty,
             Flag(read, TurnBased) ?? defaults.TurnBased, Flag(read, AutoAttack) ?? defaults.AutoAttack)
@@ -118,7 +134,7 @@ public static class ViewerSettingsConfig
             new(Difficulty, Number(settings.Difficulty)), new(TurnBased, Flag(settings.TurnBased)), new(AutoAttack, Flag(settings.AutoAttack)),
             new(TextFloaters, Number(settings.Floats)), new(FloatSpeed, Number(settings.FloatSpeed)), new(CombatTaunts, Flag(settings.CombatTaunts)), new(AutoSwitch, Flag(settings.AutoSwitchWeapons)), new(FollowerSkills, Flag(settings.FollowerSkills)),
             new(ViolenceFilter, Flag(settings.ViolenceFilter)), new(Brightness, Number(settings.Brightness)), new(TextDuration, Number(settings.TextDuration)),
-            new(HdInterface, Flag(settings.HdInterface)), new(GeneratedInterface, Flag(settings.GeneratedInterface && settings.HdInterface)),
+            new(Hd, Flag(settings.HdInterface)), new(GeneratedInterface, Flag(settings.GeneratedInterface && settings.HdInterface)),
             new(HdPack, HdPackSourceResolver.ModeName(settings.HdPackSource)), new(HdPackPath, path),
             new(PadSchemeLine, Choice(settings.Controls.Pad)), new(TouchSchemeLine, Choice(settings.Controls.Touch)), new(PromptStyleLine, Choice(settings.Controls.Prompts)),
         ];
@@ -144,15 +160,6 @@ public static class ViewerSettingsConfig
     }
 
     public static IReadOnlyList<ArcanumConfigChange> AlwaysRunChanges(bool value) => [new(AlwaysRun, Flag(value))];
-
-    public static VisualProfile ReadVisualProfile(ArcanumConfigRead read)
-    {
-        ArgumentNullException.ThrowIfNull(read);
-        return string.Equals(read.Get(VisualProfileLine), "hd", StringComparison.OrdinalIgnoreCase) ? VisualProfile.Hd : VisualProfile.Legacy;
-    }
-
-    public static IReadOnlyList<ArcanumConfigChange> VisualProfileChanges(VisualProfile profile)
-        => [new(VisualProfileLine, profile switch { VisualProfile.Legacy => "legacy", VisualProfile.Hd => "hd", _ => throw new ArgumentOutOfRangeException(nameof(profile)) })];
 }
 
 /// <summary>ARC-UI-1130: the texts of the files the viewer kept its settings in before the one settings file (<c>null</c>: no such file).</summary>
@@ -179,10 +186,7 @@ public static class ViewerSettingsMigration
         if (legacy.Game is { } game && AreaGameSettingsCodec.Deserialize(game) is { } settings) changes.AddRange(ViewerSettingsConfig.GameChanges(settings));
         if (legacy.Audio is { } audio && AudioVolumesCodec.Deserialize(audio) is { } volumes) changes.AddRange(ViewerSettingsConfig.AudioChanges(volumes));
         if (legacy.AlwaysRun?.Trim() is ("on" or "off") and var run) changes.AddRange(ViewerSettingsConfig.AlwaysRunChanges(run == "on"));
-        // The old file's text is exactly the codec's text of one profile; anything else (an unknown value, damage) is skipped, not turned into Legacy.
-        if (legacy.VisualProfile?.Trim() is { } profile)
-            foreach (var known in new[] { VisualProfile.Legacy, VisualProfile.Hd })
-                if (VisualProfileCodec.Serialize(known) == profile) changes.AddRange(ViewerSettingsConfig.VisualProfileChanges(known));
+        // ARC-UI-2174: the old visual profile file is not imported (HD graphics is no longer a setting; the game file's hdInterface is the HD value).
         if (legacy.Launcher is { } launcher && LauncherLine(launcher) is { } line) changes.Add(new(LauncherSettingsFile.Line, line));
         return changes;
     }
