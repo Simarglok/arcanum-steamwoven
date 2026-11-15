@@ -1324,7 +1324,7 @@ public partial class TerrainViewerApp : Node
         _coordinator.Dispose();
         cancellation?.Dispose();
         _canvas?.ReleaseHd(); _hdSource?.Dispose();
-        _conversationHost = null; ReleaseConversationContent();
+        _conversationHost = null; ReleaseConversationContent(); ReleaseShopContent();
         DisposeAudio();
         // ARC-RENDER-033: the extra art's content stack.
         _extraArt?.Dispose(); _extraArt = null;

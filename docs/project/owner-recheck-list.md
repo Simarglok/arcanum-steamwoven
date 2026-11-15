@@ -1293,6 +1293,16 @@ The rules are in [barter](../world/barter-runtime.md#gambling-arc-ui-1740). Star
 | 3 | Release the ware on the box. | The merchant says a won or lost line. A win gives the ware for nothing, a loss takes its price in coins and gives the ware; the trade sound plays once; the box returns to rest. | open |
 | 4 | Open barter once, close it and save; bet and note the result; load that save, open barter and bet the same ware. | The outcome is the same win or loss as the first time (the roll is saved, reloading does not reroll). | open |
 
+### ARC-UI-1806 — the same bet in the opening shop (2026-11-15)
+
+Start a new game and reach the opening shop (the window after the character editor). The shop's merchant is the first NPC of the shop map; it may have no Gambling points, then it refuses.
+
+| # | Step | Expected | Status |
+| --- | --- | --- | --- |
+| 5 | In the opening shop, drag one of your own items onto the bet box on the right of the barter window. | The box stays in its rest art, the item goes back, nothing is printed. | open |
+| 6 | Drag one of the merchant's wares over the box without releasing. | As step 2: the lit art and the merchant's confirm line with the price, or the dark art and its refusal line (a merchant without Gambling points, a ware above your limit with no Gambling training, too little money). | open |
+| 7 | If the box lights, release the ware on it; then press Accept and start the game. | As step 3 (a won or lost line, the trade sound, the box back at rest); the won ware or the paid coins are in the game. | open |
+
 ## ARC-UI-1199 — Generated interface: the schematic window (S8, 2026-11-14)
 
 The rules are in [viewer slice S8](../rendering/hd-interface-density.md#viewer-slice-s8-arc-ui-1199). Set the HD interface line on the launcher screen to **Generated (experimental)**,
