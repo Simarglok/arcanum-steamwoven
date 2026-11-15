@@ -2110,10 +2110,19 @@ keeps going under it too.
   the folder it was launched from (the folder of the `.app`, or of the exe); a translocated app, or a folder that cannot
   take a written file, falls back to the user folder's `reports` with the reason. A source run uses its user folder;
   an automated run its isolated folder. No upload.
+- **Owner check tag (ARC-DEV-2189).** While the owner has a step open on the QA page (`./arcanum qa`, [toolchain](../workflow/toolchain.md#owner-qa-page-arc-dev-2187)),
+  Ctrl+B reads its id `ARC-TYPE-NNN#k` from the one-line file `local/qa/active-check.txt` (git-ignored; found above the launch
+  folder of a packaged game or above the project folder of a checkout or its worktree; `ARC_QA_ACTIVE_CHECK` names the file
+  directly, and an automated run reads only that variable). The window then shows an "Owner check" row, editable, empty for none; a
+  text that is not a step id keeps the window open and sends nothing. `report.md` gets one machine-readable line
+  `Check: ARC-TYPE-NNN#k` before its first heading (`BugReportCheck.cs`, `BugReportWriter.Markdown`), absent when no check is
+  active. A missing, unreadable, malformed, oversized or older-than-12-hours file is "no check" and never blocks a report; the row is
+  hidden without a check, so a player's window is unchanged.
 - **Smoke.** Stage `report` (last in the map battery, or `ARC_AREA_MAP_SMOKE_ONLY=report`): Ctrl+B opens the modal
   report, the moment holds a save, the log line before the key and a screenshot; Send writes the folder whose
   `report.md` names the build, rules, map, hero and combat, whose log holds the line and whose save loads; Escape
-  closes it; Ctrl+B over the logbook and Escape close only the report; a cancelled report writes nothing. Marker
+  closes it; Ctrl+B over the logbook and Escape close only the report; a cancelled report writes nothing; with the active-check
+  file set (a synthetic step id through `ARC_QA_ACTIVE_CHECK`) the window shows the step and `report.md` carries its `Check:` line. Marker
   `ARC-DEV-051 native-smoke bug report PASS`. Player instruction: [alpha build](../player/alpha-build.md#9-reporting-a-bug-ctrlb).
 
 ### Main menu (ARC-UI-011)

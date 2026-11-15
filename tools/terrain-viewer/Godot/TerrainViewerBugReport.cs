@@ -94,7 +94,7 @@ public partial class TerrainViewerApp
         QuarantineWorld(); _quickKeys.Reset();
         StopWorldRoute("BUG_REPORT");
         _bugReportPanel.Open(string.Join(" ", new[] { screenshotMissing is null ? null : "No screenshot: " + screenshotMissing + ".", saveMissing is null ? null : "No save: " + saveMissing + "." }
-            .Where(part => part is not null)));
+            .Where(part => part is not null)), BugReportActiveCheck());
         GD.Print($"ARC-DEV-051 bug report open screenshot={screenshot?.Length ?? 0} save={save is not null} saveMissing={saveMissing ?? "none"} lines={log.Count}");
         RefreshReadyStatus();
     }
@@ -188,6 +188,23 @@ public partial class TerrainViewerApp
             + (BugReportOpen ? " +bug report" : "") + $" rev={session?.Version.Revision.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "none"}");
     }
 
+    /// <summary>ARC-DEV-2189: the owner check the QA page has open (best effort: any problem is "none"); an automated run reads only
+    /// the ARC_QA_ACTIVE_CHECK file.</summary>
+    private static string? BugReportActiveCheck()
+    {
+        try
+        {
+            var file = BugReportCheck.FindActiveFile(
+                [BugReportLocation.LaunchFolder(OS.GetExecutablePath()), ProjectSettings.GlobalizePath("res://")],
+                ViewerAutomatedStorage.Automated, System.Environment.GetEnvironmentVariable(BugReportCheck.FileVariable));
+            return BugReportCheck.ReadActive(file, DateTime.UtcNow);
+        }
+        catch (Exception error) when (error is ArgumentException or InvalidOperationException or NotSupportedException)
+        {
+            return null;
+        }
+    }
+
     private static BugReportPlaces BugReportPlacesNow()
     {
         // An automated run never writes beside the game or into the player's folder.
@@ -200,12 +217,19 @@ public partial class TerrainViewerApp
     {
         if (!BugReportOpen || _bugReport is not { } moment || _bugReportPanel!.Finished) return;
         var text = _bugReportPanel.Text;
+        // ARC-DEV-2189: an owner check typed wrongly keeps the window open (nothing is written) instead of tagging the report with it.
+        var check = BugReportCheck.Normalize(_bugReportPanel.CheckText);
+        if (_bugReportPanel.CheckText.Length > 0 && check is null)
+        {
+            _bugReportPanel.ShowNotice("The owner check must look like ARC-DEV-123#4 (or be empty): the report was not sent.");
+            return;
+        }
         var result = BugReportWriter.Write(new(text, moment.Facts, moment.Log, moment.Dropped, moment.TakenUtc, moment.TakenLocal, moment.Screenshot?.Png,
-            moment.ScreenshotMissing, moment.Save, moment.SaveMissing), BugReportPlacesNow());
+            moment.ScreenshotMissing, moment.Save, moment.SaveMissing, check), BugReportPlacesNow());
         _bugReport = null; _bugReportResult = result;
         GD.Print("ARC-DEV-051 bug report " + System.Text.Json.JsonSerializer.Serialize(new
         {
-            result.Saved, result.Folder, result.Fallback, result.FallbackReason, result.Written, result.Failed, TextLength = text.Length, Lines = moment.Log.Count,
+            result.Saved, result.Folder, result.Fallback, result.FallbackReason, result.Written, result.Failed, TextLength = text.Length, Check = check, Lines = moment.Log.Count,
         }));
         _bugReportPanel.ShowOutcome(result.Folder is null ? "The report could not be written: " + string.Join("; ", result.Failed)
             : (result.Saved ? "The report is saved in\n" : "The report is INCOMPLETE in\n") + result.Folder
@@ -238,6 +262,7 @@ public partial class TerrainViewerApp
         if (_areaSession is null) { GD.Print("ARC-DEV-051 native-smoke bug report NONE (no game session)"); return; }
         var simulatedFocus = _worldFocusSimulationForSelfTest; var focused = _worldFocused;
         _worldFocusSimulationForSelfTest = true;
+        string? checkFile = null;
         try
         {
             _worldFocused = true;
@@ -245,6 +270,10 @@ public partial class TerrainViewerApp
             Require(!WorldModal, "no window is open before the report: " + BugReportWindows());
             var reports = BugReportPlacesNow().Fallback;
             var before = System.IO.Directory.Exists(reports) ? System.IO.Directory.GetDirectories(reports).Length : 0;
+            // ARC-DEV-2189: an active owner check (the QA page's file, here in the run's isolated folder) tags the report.
+            checkFile = System.IO.Path.Combine(System.IO.Path.GetDirectoryName(reports.TrimEnd('/', '\\'))!, "qa-active-check-smoke.txt");
+            System.IO.File.WriteAllText(checkFile, "ARC-DEV-2189#3\n");
+            System.Environment.SetEnvironmentVariable(BugReportCheck.FileVariable, checkFile);
             // Through the production keyboard route, as the other smokes press keys.
             void Press(Key key, bool ctrl = false)
             {
@@ -268,6 +297,7 @@ public partial class TerrainViewerApp
             await Frames(2);
             Require(BugReportOpen && WorldModal && !_worldGate.IsOpen, "Ctrl+B opened the modal report and closed the actor gate");
             // ARC-DEV-064: the first open of the run fits the screen (it was as tall as one word per line of the hint).
+            Require(_bugReportPanel!.CheckRowVisibleForSelfTest && _bugReportPanel.CheckText == "ARC-DEV-2189#3", "the window shows the active owner check: " + _bugReportPanel.CheckText);
             var screen = GetViewport().GetVisibleRect(); var panel = _bugReportPanel!.PanelRectForSelfTest;
             Require(screen.Encloses(panel), $"the first report window fits the screen: {panel} in {screen}");
             Require(_canvas!.ShowActorGuides == DebugMode, $"the actor frame and anchor cross only in the debug mode: guides={_canvas.ShowActorGuides} debug={DebugMode}");
@@ -282,6 +312,7 @@ public partial class TerrainViewerApp
             var folder = _bugReportResult!.Folder!;
             Require(folder.StartsWith(reports, StringComparison.Ordinal), "the automated run writes into its isolated reports folder: " + folder);
             var report = System.IO.File.ReadAllText(System.IO.Path.Combine(folder, BugReportWriter.ReportFile));
+            Require(BugReportCheck.ReadReportLine(report) == "ARC-DEV-2189#3", "report.md carries the line Check: ARC-DEV-2189#3");
             foreach (var expected in new[] { "> Smoke: the report window works", "| Build |", "| Rules | " + _areaSession!.Rules.Mode, "| Map | " + SaveLocation(),
                 "| Hero | map " + CurrentAreaMap, "| Combat | combat mode " })
                 Require(report.Contains(expected, StringComparison.Ordinal), "report.md names " + expected);
@@ -332,6 +363,8 @@ public partial class TerrainViewerApp
         finally
         {
             if (BugReportOpen) EndBugReport("closed by the smoke");
+            System.Environment.SetEnvironmentVariable(BugReportCheck.FileVariable, null);
+            if (checkFile is not null) { try { System.IO.File.Delete(checkFile); } catch (System.IO.IOException) { } }
             _worldFocusSimulationForSelfTest = simulatedFocus; _worldFocused = focused;
         }
     }
