@@ -88,8 +88,9 @@ public static class AreaReadingArtLayout
     /// <summary>The lens's rectangle test (0x551000 over the window's point): left and top edges in, right and bottom out.</summary>
     public static bool LensContains(double x, double y) => x >= Lens.X && x < Lens.X + Lens.Side && y >= Lens.Y && y < Lens.Y + Lens.Side;
 
-    /// <summary>Every font art a document names: the fixed ones the window loads at the module's open and the markup fonts of the written texts.</summary>
-    public static IReadOnlyList<int> FontArts(IEnumerable<int> markupFonts) => [.. FixedFontArts.Concat(markupFonts).Where(font => font > 0).Distinct().Order()];
+    /// <summary>Every font art a document names: the fixed ones the window loads at the module's open and the markup fonts of the written texts, and Garmond9 (<see cref="AreaReadingText.SubstituteFont"/>, optional: without it a small font keeps its own glyphs).</summary>
+    public static IReadOnlyList<int> FontArts(IEnumerable<int> markupFonts) =>
+        [.. FixedFontArts.Concat(markupFonts).Append(AreaReadingText.SubstituteFont).Where(font => font > 0).Distinct().Order()];
 }
 
 /// <summary>

@@ -276,6 +276,10 @@ public partial class TerrainViewerApp
             Require(_readingPanel!.ArtMode && _readingPanel.ArtViewForSelfTest.Visible && _readingPanel.ArtViewForSelfTest.LinesForSelfTest.Count > 0 == (used.Document!.Body.Count > 0),
                 "the window opens in the original's look");
             var shownLook = _readingPanel.ArtViewForSelfTest;
+            // ARC-UI-1462: the masthead's Garmond8 and the telegram form's Garmond6 are drawn with Garmond9 at screen factor 1 (under 9 px), and untouched at 2 and up.
+            var textFactor = AreaGameBarPanel.ScreenFactor(_readingPanel.GetViewport().GetVisibleRect().Size);
+            Require(shownLook.ShownFontNumber(482) == (textFactor == 1 ? AreaReadingText.SubstituteFont : 482) && shownLook.ShownFontNumber(481) == shownLook.ShownFontNumber(482)
+                && shownLook.ShownFontNumber(483) == 483 && shownLook.ShownFontNumber(480) == 480 && shownLook.ShownFontNumber(485) == 485, $"the small fonts at screen factor {textFactor}: {shownLook.ShownFontNumber(482)}");
             var artSpreads = shownLook.Spreads;
             if (shownLook.HasNext) { InventoryKey(Key.Right); Require(shownLook.SpreadIndex == 1 && _readingSounds.Last() == BookPageSound, "Right turned a spread (3010)"); InventoryKey(Key.Left); Require(shownLook.SpreadIndex == 0, "Left turned back"); }
             else Require(view!.Subtype != WrittenSubtype.Book || artSpreads == 1, "a book with no next button has one spread");
@@ -306,7 +310,9 @@ public partial class TerrainViewerApp
     private ReadingComposition ReadingCompositionCheck(Arcanum.Session.GameSessionOwner session, AreaReadingData data, IReadOnlyList<Arcanum.Session.SessionWrittenFacts> facts, AreaReadingArtContent content)
     {
         var fonts = content.Fonts.Values.Where(load => load.Status == AreaInterfaceArtStatus.Ready && load.Frames.Count > 0).ToDictionary(load => load.Number, load => new AreaArtFont(load.Frames));
-        AreaArtFont FontOf(int number) => fonts.TryGetValue(number, out var font) ? font : fonts[AreaReadingArtLayout.NoteFont];
+        // ARC-UI-1462: the fonts the window draws with at its screen factor (a font under 9 px is Garmond9 when that read).
+        var factor = AreaGameBarPanel.ScreenFactor(GetViewport().GetVisibleRect().Size);
+        AreaArtFont FontOf(int number) => fonts.TryGetValue(AreaReadingText.ShownFont(number, factor), out var font) ? font : fonts.TryGetValue(number, out var own) ? own : fonts[AreaReadingArtLayout.NoteFont];
         int composed = 0, lines = 0, pages = 0, outside = 0;
         foreach (var fact in facts)
         {
@@ -336,7 +342,7 @@ public partial class TerrainViewerApp
     }
 
     /// <summary>ARC-UI-1877: with ARC_AREA_READING_CAPTURE=PREFIX the viewport after a drawn frame is saved as PREFIX-KIND-original.png and PREFIX-KIND-diagnostic.png for one document of
-    /// every kind (book, note, newspaper, telegram, plaque; local, never in git); the open window is put back at the end.</summary>
+    /// every kind (book, note, newspaper, telegram, plaque; local, never in git) and, ARC-UI-1462, PREFIX-newspaper-issue-original.png for a printed issue (start line 1300); the open window is put back at the end.</summary>
     private async Task ReadingLookCaptureAsync(Arcanum.Session.GameSessionOwner session, AreaReadingData data, IReadOnlyList<Arcanum.Session.SessionWrittenFacts> facts)
     {
         if (System.Environment.GetEnvironmentVariable("ARC_AREA_READING_CAPTURE") is not { Length: > 0 } capture) return;
@@ -371,6 +377,14 @@ public partial class TerrainViewerApp
                 OpenReading(session.QueryWrittenDocument(fact, data.Texts), "capture", replaceWindows: true);
                 await Shot($"{kind.ToString().ToLowerInvariant()}-{look}");
             }
+        }
+        // ARC-UI-1462: a printed issue (the template newspaper at line 0 shows the masthead messages as its body), the one the masthead and the columns are judged on.
+        if (session.QueryWrittenDocument(new((int)WrittenSubtype.Newspaper, 1300), data.Texts) is { Readable: true, Body.Count: > 0 } issue)
+        {
+            if (ReadingOpen) CloseReadingByPlayer();
+            _readingPanel!.DiagnosticLook = false;
+            OpenReading(issue, "capture", replaceWindows: true);
+            await Shot("newspaper-issue-original");
         }
         if (ReadingOpen) CloseReadingByPlayer();
         _readingPanel!.DiagnosticLook = false;

@@ -47,28 +47,36 @@ It reads the player's fonts from the installation (nothing is copied or written)
 literal Godot-label sizes, and exits 1 on any text under 9 px or a screen that does not fit. The window table lists the fonts each window draws;
 `--self-test` checks that every cited source file still names them. A window added later (or a font changed) must be added to the table.
 
-## Reading windows: the text-only factor (ARC-UI-1428, issue #1428)
+## Reading windows: the text-only factor and Garmond9 (ARC-UI-1428, ARC-UI-1462)
 
 The original draws the reading windows with these fonts (art number, size): telegram 480 Courier10 (10), note 497 Pepper20 (20), newspaper masthead 485 Zurich20
 (20), 484 Georgia30 (30) and **482 Garmond8 (8)**, the alternate masthead 815 Euph30 (30), newspaper text 483 Garmond9 (9), 492 Zurich16 (16) and 490 Swiss921,
 book and plaque markup 478, 479, 28 (Pork12), 37 (Casablanca16), 171 and 229. Two are under the 9 px minimum at the screen factor 1 of both handhelds:
-Garmond8 (the masthead's three small lines, 8 px) and **Garmond6 (481, 6 px)**; the installed texts use no markup that names Garmond6, so it is covered
-for a mod's or another language's data. Garmond9 and Courier10 are at or above the minimum.
+Garmond8 (the masthead's three small lines, 8 px) and **Garmond6 (481, 6 px)**: the telegram's form draws nine of its eleven legend lines in Garmond6 (0x5CA538; ledger WR20)
+and any markup may name it. Garmond9 and Courier10 are at or above the minimum.
 
-**Rule (owner's whole-number policy kept):** a reading-window line whose original font is under 9 px at the screen factor is drawn with a **text-only whole
+**Rule for the fallback panel (ARC-UI-1428, owner's whole-number policy kept):** a reading-window line whose original font is under 9 px at the screen factor is drawn with a **text-only whole
 factor**, the smallest that reaches 9 px: `AreaUiScale.TextOnlyFactor` (Garmond8 × 2 = 16 px, Garmond6 × 2 = 12 px at factor 1; a font already at 9 px or
 above, or at screen factor 2 and up where 8 × 2 = 16, is not multiplied). Only the glyphs are multiplied; the window art keeps the screen factor, hit areas are
-not changed. The alternative, the viewer's fallback font at 9 px or more, is what the diagnostic panel draws now (`AreaReadingPanel`: every text has an explicit
+not changed. The diagnostic panel (`AreaReadingPanel`, the fallback when the art or a font did not read) draws with the viewer's fallback font at that size: every text has an explicit
 size, a header line's size is `AreaReadingText.HeaderLinePx(font art, screen factor)` = the original size × screen factor × text-only factor, 9 to 32 px at factor 1,
-16 px for a font whose file name carries no size; the body 16, the panel's other texts 12 to 14); a later drawing with the original fonts applies the same factor to the
-glyphs (16-px-high text in a masthead built for 8 px glyphs is a layout matter of that drawing: it must re-break the masthead's lines, NOT_VERIFIED).
-`tools/research/ui_text_scale.py` lists the reading windows (a row flagged `text_factor`) and prints `pass (text x2 = 16 px)` for such a line; the gate still
+16 px for a font whose file name carries no size; the body 16, the panel's other texts 12 to 14.
+
+**Rule for the original-look window (ARC-UI-1462, issue #1462; owner decision pending, recommended by the thread):** the window drawn with the original fonts and art
+(`AreaReadingArtView`) draws a line of Garmond8 or Garmond6 that would be under 9 px with **Garmond9** (art 483, the newspaper text's own font, one size up in the same
+family) instead of multiplying the glyphs: `AreaReadingText.ShownFont(font, screen factor)`; at screen factor 2 and up nothing changes, and when Garmond9 did not read the line keeps its own
+glyphs. The text-only factor was built and tried first on the real art at 1280 × 800 (screen factor 1): the printed masthead band between the two rules is 13 px high, so
+glyphs doubled to 16 px strike through the rules, the centre tagline (about 400 px wide) needs two rows and its second row falls on the headline and the third column; the telegram's printed boxes
+(about 46 px wide) are sized for 6 px glyphs, and at 12 px the labels fill and cross them. Garmond9 sits in the masthead band in one row between the "Price" lines (no
+re-break is needed); in the telegram's boxes the 9 px legend is legible but wider than its printed boxes (the labels "CLASS OF SERVICE" and "NR-No Response" cross the box edge), which the art
+cannot avoid at 9 px (alternative the owner may choose: keep Garmond6 there as an exception for the printed legend, not for the telegram's text, which is Courier10).
+`tools/research/ui_text_scale.py` lists the reading windows (a row flagged `text_factor` and `substitute=483`) and prints `pass (substitute Garmond9Font.ART, 9 px)` for such a line; the gate still
 fails on any other window or Godot label under 9 px.
 
 ## Not covered, and open
 
-- The **reading windows** (telegram, newspaper, notes, books, plaques) are not drawn with the original fonts yet (`AreaReadingPanel`: "fonts are not drawn"),
-  but their text rule is decided, see the next section.
+- The **reading windows** (telegram, newspaper, notes, books, plaques) draw with the original fonts and art since ARC-UI-1877; their text rule is the section above. Physical
+  readability of the 9 px Garmond9 on a 7 inch screen is NOT VERIFIED.
 - The scan covers `AddThemeFontSizeOverride` sizes, `FontSize` constants of the files that draw with `DrawString`, and the inventory and barter
   `Math.Max(floor, N * _scale)` sizes; a label left at the theme's default size or a computed `DrawString` size elsewhere is not seen (a size it cannot
   resolve fails, it is never skipped).
