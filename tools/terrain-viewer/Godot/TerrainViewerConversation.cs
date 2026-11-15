@@ -90,7 +90,7 @@ public partial class TerrainViewerApp
         else _conversationHost = null;
         if (_conversationPanel is null)
         {
-            _conversationPanel = new AreaConversationPanel { NumberedSource = () => DialogRepliesNumbered, OriginalRowsSource = () => DialogReplyRowsDrift, ChromeHiddenSource = () => DialogChromeHidden }; AddChild(_conversationPanel);
+            _conversationPanel = new AreaConversationPanel { NumberedSource = () => DialogRepliesNumbered, OriginalRowsSource = () => !DialogDiagnostics, ClickBandsDriftSource = () => DialogReplyRowsDrift, ChromeHiddenSource = () => !DialogDiagnostics }; AddChild(_conversationPanel);
             _conversationPanel.NpcLineShown += (text, persistent) => { FaceHeroFromSpeaker(); ShowDialogLineBubble(text, persistent); };
             _conversationPanel.ReplyPicking += () => { FaceHeroTowardSpeaker(); RemoveDialogLineBubble(); };
             _conversationPanel.Picked += () => { if (_audio is not null) ExecuteVoice(DialogVoicePlayer.Picked()); };
@@ -544,8 +544,9 @@ public partial class TerrainViewerApp
             // ARC-UI-071 (B29): the panel's texts in the original's font art (null without a game folder: the viewer's font).
             _conversationPanel!.SetFonts(TextFonts());
             _conversationPanel.NumberedReplies = DialogRepliesNumbered;
-            _conversationPanel.OriginalReplyRows = DialogReplyRowsDrift;
-            _conversationPanel.DiagnosticChromeHidden = DialogChromeHidden;
+            _conversationPanel.OriginalReplyRows = !DialogDiagnostics;
+            _conversationPanel.ClickBandsDrift = DialogReplyRowsDrift;
+            _conversationPanel.DiagnosticChromeHidden = !DialogDiagnostics;
             _conversationPanel.Open(title, conversation, note);
         }, () => _conversationPanel!.CloseView());
 
@@ -639,17 +640,20 @@ public partial class TerrainViewerApp
             _ => 0,
         };
         if (digit != 0) _conversationPanel.ChooseByDigit(digit);
-        // ARC-UI-2068 (DB2): the A key is a prefilter ahead of the dialog's hook (0x57DC60 → 0x54FCF0 on the latest recent action); the bars stay only in Original.
-        else if (code == Key.A && DialogBarStays && !PaletteOpen && HotkeysActive && _areaSession is { } session && session.QueryHotkeys().Recent[0] is { IsEmpty: false } latest) ActivateHotkey(latest, "A");
+        // ARC-UI-2068 (DB2): the A key is a prefilter ahead of the dialog's hook (0x57DC60 → 0x54FCF0 on the latest recent action).
+        else if (code == Key.A && !PaletteOpen && HotkeysActive && _areaSession is { } session && session.QueryHotkeys().Recent[0] is { IsEmpty: false } latest) ActivateHotkey(latest, "A");
         return true;
     }
 
     /// <summary>ARC-UI-2019: replies are numbered, and a digit chooses one, except under the Original interface setting (no session: Steamwoven).</summary>
-    /// <summary>ARC-UI-2025: the Original interface setting lays the replies out as the original's band and hits its rows with the original's click bands (no session: Steamwoven).</summary>
+    /// <summary>ARC-UI-2025: the Original interface setting hits the band's rows with the original's click bands, y / 20 (no session: Steamwoven hits the drawn row).</summary>
     private bool DialogReplyRowsDrift => _areaSession?.Rules.Interface.DialogReplyRowsDrift == true;
 
-    /// <summary>ARC-UI-2023: the Original interface setting hides the panel's diagnostic chrome (header, outcome, effects, hint, Leave and the cancel leave): the original's window shows only the reply rows (no session: Steamwoven).</summary>
-    private bool DialogChromeHidden => _areaSession?.Rules.Interface.DialogDiagnosticChromeHidden == true;
+    /// <summary>
+    /// ARC-UI-2268 (answers #2073): the dialog window is the original's reply band in both settings, with no header, outcome, effects ledger, hint, Leave or cancel leave;
+    /// the diagnostic panel (plain stack, chrome) draws only when the process is started with ARC_DIALOG_DIAGNOSTICS=1.
+    /// </summary>
+    private static readonly bool DialogDiagnostics = System.Environment.GetEnvironmentVariable("ARC_DIALOG_DIAGNOSTICS") == "1";
 
     private bool DialogRepliesNumbered => _areaSession?.Rules.Interface.DialogRepliesUnnumbered != true;
 

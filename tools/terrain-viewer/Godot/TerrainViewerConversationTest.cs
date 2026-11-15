@@ -479,7 +479,6 @@ public partial class TerrainViewerApp
                     foreach (var rules in new[] { RuleMode.Original, RuleMode.Steamwoven })
                     {
                         TerrainViewerSelfTest.Require(session.SelectRules(rules) != GameSessionDisposition.Rejected, $"{rules} selected");
-                        var stays = rules == RuleMode.Original;
                         SyncGameBar();
                         TerrainViewerSelfTest.Require(_gameBarPanel is { Visible: true } && AreaGameBarPanel.BottomInset > 0, $"{rules}: the bars show before the dialog");
                         using var barSession = ConversationSessionFixture.Create();
@@ -491,12 +490,12 @@ public partial class TerrainViewerApp
                             new DialogConversationPorts(barState, barState, barSession.Flags, barState));
                         ShowConversationPanel("Bars test", barDialog, null);
                         SyncGameBar();
-                        TerrainViewerSelfTest.Require(ConversationOpen && (_gameBarPanel is { Visible: true } && AreaGameBarPanel.BottomInset > 0) == stays,
-                            $"{rules}: the bars {(stays ? "stay" : "hide")} under the open dialog (bars={_gameBarPanel?.Visible} inset={AreaGameBarPanel.BottomInset})");
+                        TerrainViewerSelfTest.Require(ConversationOpen && _gameBarPanel is { Visible: true } && AreaGameBarPanel.BottomInset > 0,
+                            $"{rules}: the bars stay under the open dialog (ARC-UI-2269) (bars={_gameBarPanel?.Visible} inset={AreaGameBarPanel.BottomInset})");
                         // A 100 px tall panel lies above the bottom bar when the bars show and 24 px above the view's bottom when not.
                         var view = GetViewport().GetVisibleRect().Size;
                         var at = AreaConversationPanel.PanelPosition(view, 752, 100);
-                        TerrainViewerSelfTest.Require(stays ? at.Y + 100 <= view.Y - AreaGameBarPanel.BottomInset && at.Y >= AreaGameBarPanel.TopInset : Math.Abs(at.Y - (view.Y - 124)) < 1f,
+                        TerrainViewerSelfTest.Require(at.Y + 100 <= view.Y - AreaGameBarPanel.BottomInset && at.Y >= AreaGameBarPanel.TopInset,
                             $"{rules}: the dialog panel lies in the part the bars leave free (y {at.Y} view {view.Y} insets {AreaGameBarPanel.TopInset}/{AreaGameBarPanel.BottomInset})");
                         // DB2: the clock and the pane buttons are consumed without effect while the dialog is open.
                         var presses = _skillBarPressesForSelfTest + _spellBarPressesForSelfTest;
