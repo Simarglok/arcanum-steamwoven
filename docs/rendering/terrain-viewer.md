@@ -2369,7 +2369,12 @@ actions (131) give the slide numbers (up to 100), which the table `rules\slide.m
   installed game) and fades back in over the menu, whose own song stops for the show and plays again after it. A key or a mouse button's release ends a slide, Escape the show.
 - **End game:** the script action end game and play slides (132; Kerghan's dialog script 1105 and the movie scripts 2862, 2863 and 3061 run it) asks the viewer, which waits for the movies of the same run and any other
   show, then starts the show 50 ms later (a main-menu window open closes and retries 300 ms later): script 997 and the ending scripts it calls queue the slides by flags and quest states; no default slide; then the
-  game resets to the main menu as after a death (no load box).
+  game resets to the main menu as after a death (no load box). The smoke stage `slides` (ARC-RENDER-1879; start map, `--main-menu true`, ffmpeg for the movies, wall clock) walks the whole ending on
+  the installed data: after a new game the installed dying script of Kerghan (2863: movies 2 and 5, then 132) runs through the use-script host on a creature row standing for Kerghan on the shown map
+  (the dying run the kill makes, 0x45DA57); both movies play from the installed table through the real decoder (800 × 400) with the session clocks standing still and no slide beginning under them; then the
+  show starts and shows script 997's queue for the game's flags (46, 20, 33, 39 and 44 for a new game), each installed 800 × 600 picture fading in over about 2 s with the slides' music and its voice, a key
+  release ending it and a 2 s fade-out; then the start map loads again with a fresh session without a hero and the main menu fades in. Without ffmpeg the movies are passed over (said in the log) and
+  the rest runs. `ARC_AREA_SLIDES_CAPTURE=FOLDER` saves a frame of each movie, each slide and the reopened menu as PNG for a graphics report (never committed).
 
 ### Options window (ARC-UI-013)
 
