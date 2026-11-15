@@ -121,7 +121,7 @@ public sealed class GamblingStateTests
     }
 
     // ARC-UI-2234 (FR-ITEM-019): a lost bet on an ammunition stack stake pays price x count, the stack stays with the merchant, and a count above its units is
-    // refused before anything is rolled (the roll, the generator and the coins as they were).
+    // refused with nothing rerolled (the roll, the generator and the coins as they were).
     [TestMethod]
     public void A_loss_on_an_ammo_stack_pays_price_times_count_and_leaves_the_stack_with_the_merchant()
     {
@@ -144,6 +144,7 @@ public sealed class GamblingStateTests
         // Exactly the units staked is allowed too.
         var whole = Wager(owner, Bet(stack, level: 20, price: 3) with { Count = 30 });
         Assert.AreEqual((GameSessionDisposition.Changed, 90, 150), (whole.Disposition, whole.Paid, owner.QueryNpcGold("virgil")));
+        Assert.AreEqual(235, owner.QueryGold());
         Assert.AreEqual(30, owner.QueryAmmo(stack)!.Value.Units);
     }
 
@@ -167,7 +168,7 @@ public sealed class GamblingStateTests
         Assert.AreEqual((315, 70), (owner.QueryGold(), owner.QueryNpcGold("virgil")));
         CollectionAssert.AreEqual(listed, Chest());
         Assert.AreEqual(12, owner.QueryAmmo("pellets")!.Value.Units);
-        // Refused before the roll: units above the stack, an item the chest does not list (the merchant's ring), an unknown container.
+        // Refused with nothing rerolled: units above the stack, an item the chest does not list (the merchant's ring), an unknown container.
         var guard = (owner.Version, owner.QueryGamblingRoll(), owner.QueryRandom().Draws, owner.QueryGold());
         foreach (var (bet, failure) in new[]
         {
