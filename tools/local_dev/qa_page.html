@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Arcanum owner checks</title>
+<style>
+:root { --bg:#fafaf8; --panel:#fff; --text:#1d1d1b; --muted:#6b6b66; --line:#d9d8d2; --accent:#2457a6; --same:#1f7a3d; --differs:#b3261e; --cannot:#8a6100; --sel:#e8eefb; }
+@media (prefers-color-scheme: dark) { :root { --bg:#161614; --panel:#1f1f1c; --text:#ecebe6; --muted:#9a9990; --line:#34332f; --accent:#7aa2ee; --same:#5cc17f; --differs:#f1796f; --cannot:#d9ac4a; --sel:#232b3d; } }
+* { box-sizing: border-box; }
+body { margin:0; background:var(--bg); color:var(--text); font:15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+header { position:sticky; top:0; z-index:5; background:var(--panel); border-bottom:1px solid var(--line); padding:10px 16px; display:flex; flex-wrap:wrap; gap:10px 16px; align-items:center; }
+header h1 { font-size:16px; margin:0; }
+header .meta { color:var(--muted); font-size:13px; }
+.filters { display:flex; gap:6px; flex-wrap:wrap; align-items:center; }
+button, select, textarea { font:inherit; color:inherit; background:var(--panel); border:1px solid var(--line); border-radius:6px; padding:4px 10px; }
+button { cursor:pointer; }
+button:hover { border-color:var(--accent); }
+button.on { background:var(--accent); color:#fff; border-color:var(--accent); }
+button:focus-visible, select:focus-visible, textarea:focus-visible { outline:2px solid var(--accent); outline-offset:1px; }
+main { max-width:980px; margin:0 auto; padding:12px 16px 80px; }
+.banner { margin:10px 0; padding:8px 12px; border-radius:6px; border:1px solid var(--cannot); color:var(--cannot); font-size:14px; }
+.banner.bad { border-color:var(--differs); color:var(--differs); }
+section { margin:18px 0 6px; }
+section > h2 { font-size:15px; margin:0 0 4px; display:flex; justify-content:space-between; gap:12px; align-items:baseline; }
+.progress { color:var(--muted); font-size:13px; font-weight:normal; white-space:nowrap; }
+.bar { height:4px; background:var(--line); border-radius:2px; margin-bottom:8px; overflow:hidden; }
+.bar > span { display:block; height:100%; background:var(--same); }
+.step { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:10px 12px; margin:8px 0; }
+.step.sel { border-color:var(--accent); background:var(--sel); }
+.step .head { display:flex; gap:8px; align-items:baseline; flex-wrap:wrap; }
+.step .id { font:12px ui-monospace, Menlo, monospace; color:var(--muted); }
+.step .tag { font-size:11px; padding:0 6px; border-radius:8px; border:1px solid var(--line); color:var(--muted); }
+.step .tag.new { color:var(--accent); border-color:var(--accent); }
+.step .text { margin:4px 0; }
+.step .exp { color:var(--muted); font-size:14px; margin:2px 0 8px; }
+.step .exp b { color:var(--text); font-weight:600; }
+.row { display:flex; flex-wrap:wrap; gap:6px 10px; align-items:center; margin-top:6px; }
+.row .st button[data-s="same"].on { background:var(--same); border-color:var(--same); }
+.row .st button[data-s="differs"].on { background:var(--differs); border-color:var(--differs); }
+.row .st button[data-s="cannot-test"].on { background:var(--cannot); border-color:var(--cannot); }
+textarea { width:100%; min-height:44px; resize:vertical; margin-top:6px; }
+.issue { font-size:13px; }
+.issue.err { color:var(--differs); }
+.status { font-size:13px; color:var(--muted); }
+kbd { font:12px ui-monospace, Menlo, monospace; border:1px solid var(--line); border-radius:4px; padding:0 4px; }
+.help { color:var(--muted); font-size:13px; margin:8px 0; }
+a { color:var(--accent); }
+.empty { color:var(--muted); padding:24px 0; text-align:center; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Arcanum owner checks</h1>
+  <span class="meta" id="meta"></span>
+  <div class="filters" role="group" aria-label="Filters">
+    <button data-f="all" class="on">All</button>
+    <button data-f="open">Open</button>
+    <button data-f="new">New since last visit</button>
+    <select id="section" aria-label="Section"><option value="">All sections</option></select>
+    <button id="reload" title="Fetch origin/main and read the list again (r)">Reload list</button>
+  </div>
+</header>
+<main>
+  <div class="help">Keys: <kbd>j</kbd>/<kbd>k</kbd> next/previous step, <kbd>s</kbd> same, <kbd>d</kbd> differs (creates the GitHub issue at once), <kbd>c</kbd> cannot test, <kbd>o</kbd> open again, <kbd>n</kbd> note, <kbd>r</kbd> reload the list.</div>
+  <div id="banners"></div>
+  <div id="list"></div>
+</main>
+<script>
+"use strict";
+const TOKEN = "__QA_TOKEN__";
+const STATUS_LABEL = { "open": "open", "same": "same", "differs": "differs", "cannot-test": "cannot test" };
+let data = null, filter = "all", section = "", selected = null;
+const opened = new Map();          // step id -> epoch seconds when the step was first opened on this page
+const drafts = new Map();          // step id -> { note, report } edited, not yet saved
+const flash = new Map();           // step id -> short message
+
+function h(tag, props, ...kids) {
+  const el = document.createElement(tag);
+  for (const [k, v] of Object.entries(props || {})) {
+    if (k === "class") el.className = v; else if (k === "on") for (const [e, f] of Object.entries(v)) el.addEventListener(e, f);
+    else if (k === "dataset") Object.assign(el.dataset, v); else if (v !== false && v != null) el.setAttribute(k, v === true ? "" : v);
+  }
+  for (const kid of kids.flat()) if (kid != null && kid !== false) el.append(kid.nodeType ? kid : document.createTextNode(String(kid)));
+  return el;
+}
+async function api(path, body) {
+  const options = { headers: { "X-QA-Token": TOKEN } };
+  if (body !== undefined) { options.method = "POST"; options.headers["Content-Type"] = "application/json"; options.body = JSON.stringify(body); }
+  const reply = await fetch(path, options);
+  const json = await reply.json().catch(() => ({}));
+  if (!reply.ok) throw new Error(json.error || reply.statusText);
+  return json;
+}
+function allSteps() { return data.sections.flatMap(s => s.steps); }
+function find(id) { return allSteps().find(s => s.id === id); }
+function visible(step, sec) {
+  if (section && sec.code !== section) return false;
+  if (filter === "open") return step.status === "open";
+  if (filter === "new") return step.isNew;
+  return true;
+}
+function draftOf(step) {
+  if (!drafts.has(step.id)) drafts.set(step.id, { note: step.note, report: step.report });
+  return drafts.get(step.id);
+}
+function preselect(step) {
+  const draft = draftOf(step);
+  if (step.recorded || draft.report || step.report) return;      // a saved step keeps what the owner saved
+  const since = opened.get(step.id) || 0;
+  const newest = data.reports.find(r => r.epoch >= since);      // reports are newest first
+  if (newest) draft.report = newest.name;
+}
+function render() {
+  const select = document.getElementById("section");
+  if (select.options.length - 1 !== data.sections.length) {
+    select.replaceChildren(h("option", { value: "" }, "All sections"), ...data.sections.map(s => h("option", { value: s.code }, s.code + " (" + s.steps.length + ")")));
+    select.value = section;
+  }
+  document.getElementById("meta").textContent = "list from " + data.ref + " @ " + data.commit + " · " + allSteps().length + " steps · "
+    + allSteps().filter(s => s.status === "open").length + " open";
+  const banners = document.getElementById("banners");
+  banners.replaceChildren(...[
+    data.warning ? h("div", { class: "banner" }, data.warning) : null,
+    data.problems.length ? h("div", { class: "banner bad" }, "The list has " + data.problems.length + " unreadable row(s); first: " + data.problems[0]) : null,
+    data.badLines ? h("div", { class: "banner" }, data.badLines + " unreadable line(s) in results.jsonl were skipped.") : null].filter(Boolean));
+  const list = document.getElementById("list");
+  const out = [];
+  for (const sec of data.sections) {
+    const steps = sec.steps.filter(s => visible(s, sec));
+    if (!steps.length) continue;
+    const done = sec.steps.filter(s => s.status !== "open").length;
+    out.push(h("section", {},
+      h("h2", {}, h("span", {}, sec.title), h("span", { class: "progress" }, done + " / " + sec.steps.length + " checked")),
+      h("div", { class: "bar" }, h("span", { style: "width:" + Math.round(100 * done / sec.steps.length) + "%" })),
+      steps.map(stepNode)));
+  }
+  list.replaceChildren(...(out.length ? out : [h("div", { class: "empty" }, "No steps match this filter.")]));
+}
+function stepNode(step) {
+  const draft = draftOf(step);
+  if (opened.has(step.id)) preselect(step);
+  const reports = data.reports;
+  const names = new Set(reports.map(r => r.name));
+  const options = [h("option", { value: "" }, "no report attached")];
+  if (draft.report && !names.has(draft.report)) options.push(h("option", { value: draft.report }, draft.report + " (folder not found)"));
+  for (const r of reports) options.push(h("option", { value: r.name }, r.name + " · " + (r.text || "(no text)")));
+  const report = h("select", { "aria-label": "Bug report folder", on: { focus: () => refreshReports(step), change: e => { draft.report = e.target.value || null; if (step.recorded || step.status !== "open") save(step, step.status); } } }, options);
+  report.value = draft.report || "";
+  const note = h("textarea", { placeholder: "Note (what you saw)", "aria-label": "Note", on: {
+    input: e => { draft.note = e.target.value; },
+    blur: () => { if (draft.note !== step.note && (step.recorded || step.status !== "open")) save(step, step.status); } } });
+  note.value = draft.note || "";
+  const buttons = Object.keys(STATUS_LABEL).map(s => h("button", { dataset: { s }, class: step.status === s ? "on" : "", on: { click: () => save(step, s) } }, STATUS_LABEL[s]));
+  const issue = step.issue ? h("span", { class: "issue" }, "issue ", h("a", { href: step.issueUrl || "#", target: "_blank", rel: "noopener" }, "#" + step.issue))
+    : (step.status === "differs" && step.issueError ? h("span", { class: "issue err" }, "issue not created: " + step.issueError + " ", h("button", { on: { click: () => save(step, "differs") } }, "Retry")) : null);
+  return h("div", { class: "step" + (selected === step.id ? " sel" : ""), dataset: { id: step.id }, tabindex: "0", on: { focus: () => choose(step.id, false), click: () => choose(step.id, false) } },
+    h("div", { class: "head" }, h("span", { class: "id" }, step.id), step.isNew ? h("span", { class: "tag new" }, "new") : null,
+      step.recorded ? null : (step.listStatus !== "open" ? h("span", { class: "tag" }, "from the list: " + step.listStatus + (step.listNote ? " " + step.listNote : "")) : null)),
+    h("div", { class: "text" }, step.step),
+    h("div", { class: "exp" }, h("b", {}, "Expected: "), step.expected),
+    h("div", { class: "row" }, h("span", { class: "st" }, buttons), report, issue, h("span", { class: "status" }, flash.get(step.id) || "")),
+    note);
+}
+async function refreshReports(step) {
+  const before = data.reports.map(r => r.name).join("|");
+  try { data.reports = (await api("/api/reports")).reports; } catch (e) { return; }
+  if (!draftOf(step).report && !step.report) preselect(step);
+  if (before !== data.reports.map(r => r.name).join("|")) { render(); return; }     // new folders: the dropdown needs them
+  const sel = document.querySelector('.step[data-id="' + CSS.escape(step.id) + '"] select');
+  if (sel) sel.value = draftOf(step).report || "";
+}
+function choose(id, scroll) {
+  if (selected === id) return;
+  selected = id;
+  if (!opened.has(id)) { opened.set(id, Math.floor(Date.now() / 1000)); const step = find(id); if (step) refreshReports(step); }
+  document.querySelectorAll(".step").forEach(n => n.classList.toggle("sel", n.dataset.id === id));
+  if (scroll) { const n = document.querySelector('.step[data-id="' + CSS.escape(id) + '"]'); if (n) { n.scrollIntoView({ block: "center" }); n.focus({ preventScroll: true }); } }
+}
+async function save(step, status) {
+  const draft = draftOf(step);
+  flash.set(step.id, "saving...");
+  try {
+    const result = await api("/api/result", { step: step.id, status, note: draft.note || "", report: draft.report || null });
+    Object.assign(step, { status: result.status, note: result.note, report: result.report, issue: result.issue, issueUrl: result.issueUrl, issueError: result.issueError, recorded: true });
+    drafts.set(step.id, { note: result.note, report: result.report });
+    flash.set(step.id, status === "differs" ? (result.issue ? "saved, issue #" + result.issue : "saved, issue NOT created") : "saved");
+  } catch (e) { flash.set(step.id, "not saved: " + e.message); }
+  render();
+  if (selected) { const n = document.querySelector('.step[data-id="' + CSS.escape(selected) + '"]'); if (n && document.activeElement === document.body) n.focus({ preventScroll: true }); }
+}
+async function load() {
+  data = await api("/api/state");
+  render();
+}
+function move(delta) {
+  const nodes = [...document.querySelectorAll(".step")];
+  if (!nodes.length) return;
+  let at = nodes.findIndex(n => n.dataset.id === selected);
+  at = at < 0 ? (delta > 0 ? 0 : nodes.length - 1) : Math.min(nodes.length - 1, Math.max(0, at + delta));
+  selected = null; choose(nodes[at].dataset.id, true);
+}
+document.addEventListener("keydown", e => {
+  const tag = (e.target.tagName || "").toLowerCase();
+  if (tag === "textarea" || tag === "select" || tag === "input" || e.ctrlKey || e.metaKey || e.altKey) { if (tag === "textarea" && e.key === "Escape") e.target.blur(); return; }
+  const step = selected && find(selected);
+  const keys = { j: () => move(1), k: () => move(-1), r: () => document.getElementById("reload").click(),
+    s: () => step && save(step, "same"), d: () => step && save(step, "differs"), c: () => step && save(step, "cannot-test"), o: () => step && save(step, "open"),
+    n: () => { const t = document.querySelector('.step[data-id="' + CSS.escape(selected || "") + '"] textarea'); if (t) { t.focus(); e.preventDefault(); } } };
+  if (keys[e.key]) keys[e.key]();
+});
+document.querySelectorAll(".filters button[data-f]").forEach(b => b.addEventListener("click", () => {
+  filter = b.dataset.f; document.querySelectorAll(".filters button[data-f]").forEach(x => x.classList.toggle("on", x === b)); render();
+}));
+document.getElementById("section").addEventListener("change", e => { section = e.target.value; render(); });
+document.getElementById("reload").addEventListener("click", async () => {
+  const b = document.getElementById("reload"); b.disabled = true; b.textContent = "Reloading...";
+  try { await api("/api/reload", {}); await load(); } catch (e) { alert("Reload failed: " + e.message); }
+  b.disabled = false; b.textContent = "Reload list";
+});
+load().catch(e => { document.getElementById("list").textContent = "Cannot load: " + e.message; });
+</script>
+</body>
+</html>

@@ -547,6 +547,40 @@ display and reads the queue's own files, so it works from whichever checkout sta
 Tests: `python3 -B -m unittest tools.local_dev.test_menubar tools.local_dev.test_run_queue` (the pause tests are in the latter); the app itself is checked
 by running it (`./arcanum queue --app`, then a queued run and a screenshot of the menu); `ArcanumQueue --set-pause` / `--clear-pause` / `--set-lanes` / `--set-max-load` do what its menu items do and exit, to check that the flag it writes is the one the queue reads.
 
+### Owner QA page (ARC-DEV-2187)
+
+`./arcanum qa` is the owner's local check page (slice 2a of epic #2185; `tools/local_dev/qa.py` and `qa_page.html`, Python standard
+library only). It lists the steps of [the owner re-check list](owner-checks.md) and records the owner's result per step.
+
+- **Start.** `./arcanum qa` fetches `origin main`, reads the list with `git show origin/main:docs/project/owner-recheck-list.md`
+  through the parser of ARC-DEV-2186 (no checkout is written: run from any checkout, also a worktree), binds `127.0.0.1` only on a
+  free port (`--port N`), answers one ping through its own socket, prints `qa: started: URL` and opens the page (`--no-open`
+  prints the URL only). `--check` does the start and the ping and stops (the start check: it must print `qa: started` and
+  `check passed` within a minute); `--dry-run` reads the list and shows the paths, the counts and the unsent issues, starts no
+  server, writes nothing and calls no `gh`; `--no-fetch` and `--ref REF` read the list as it is; `--data-dir` and `--reports-dir`
+  replace the two folders below. A page and every `/api` call need the random token in the printed URL, the `X-QA-Token` header on a
+  POST, and a `127.0.0.1` or `localhost` Host header, so another web page or a rebound DNS name cannot post a result.
+- **Page.** Sections with the step, its expected result, progress per section, filters (all, open, new since the last visit, one
+  section) and per step `same` / `differs` / `cannot test` / `open`, a note and the report dropdown. A step the list already marks
+  (`same (...)`) shows that until the owner records a result. Keys: `j`/`k` step, `s` `d` `c` `o` status, `n` note, `r` reload the
+  list. "New since the last visit" is the step ids that were not in `local/qa/state.json` when the page started.
+- **Reports.** The dropdown lists `artifacts/packages/macos/reports/` of the main checkout (name, local time, the first line of the
+  player's text from `report.md`; nothing else of a report is read); the newest report taken after the step was opened on the page
+  is preselected. A result stores the folder name only.
+- **Results.** `local/qa/results.jsonl` of the main checkout (git-ignored with the rest of `local/`): one JSON event per line,
+  appended under a file lock, the latest event of a step wins, an unreadable line is skipped and counted. A result can be changed
+  later; the page and `qa sync` read the same file, so a restart loses nothing.
+- **Differs.** Marking `differs` runs `gh issue create` at once on the owner's Mac: the title starts with the step id, the body has
+  the section, step, expected result, the owner's note and the report folder's *name*; labels are `bug`, `type:*` from the section's
+  task code and the `area:*` label of issue `NNN` when that issue's title starts with the code. Screenshots, saves, logs and the
+  player's report text are never put into an issue. The issue number is stored for the step: a repeat, a later change to
+  `same` and back, or a second click never creates another issue. A failure (no `gh`, no network) keeps the result, shows the error
+  with a Retry button, and `./arcanum qa sync` (`--dry-run` first) creates the issues of the `differs` steps that have none.
+- **Later.** The in-game overlay (#2190) and the write-back of statuses to the list work from the same results file.
+
+Tests: `python3 -B -m unittest tools.local_dev.test_qa` (synthetic list, fake `gh`, a real localhost socket); the page itself is
+checked by opening it (`./arcanum qa`) and ticking a step.
+
 ### Queue order (ARC-DEV-390)
 
 Smoke speed diagnosis measured 3/4 of a smoke call's time as waiting
