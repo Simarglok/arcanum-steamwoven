@@ -47,7 +47,7 @@ automatic leak guard, and measure 7 were not chosen yet).
 | Measure | Issue |
 |---|---|
 | 1. `--auto` selection is a lower bound checked before merge | #2223 |
-| 6. The daily runs smoke even when the dotnet checks fail or time out | #2224 |
+| 6. The daily runs smoke even when the dotnet checks fail or time out | #2224 (done: `./arcanum daily` runs the smoke after red or timed-out root checks, reports both and still blocks the package) |
 | 3. `tools/local_dev` unit tests and the smoke self-test in the root checks | #2225 |
 | 2. Rolling smoke on `origin/main` with an automatic issue and a red-on-main flag | #2226 |
 | 4. Flake register (retry once, log FLAKY, tracked list); later, after measure 2 | not filed yet |
