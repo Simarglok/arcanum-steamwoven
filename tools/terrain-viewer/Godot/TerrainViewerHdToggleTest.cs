@@ -26,7 +26,7 @@ public static partial class TerrainViewerSelfTest
         var synthetic = SyntheticActorFixture.Create(human: true);
         cache.UploadActor(synthetic.Result.ActorTextures);
         var viewport = new SubViewport { Size = new(480, 400), TransparentBg = true, RenderTargetUpdateMode = SubViewport.UpdateMode.Always };
-        var canvas = new TerrainCanvas(); viewport.AddChild(canvas); host.AddChild(viewport);
+        var canvas = new TerrainCanvas { WorldSpritesFromPack = true }; viewport.AddChild(canvas); host.AddChild(viewport);
         var sources = new List<HdFrameSource>();
         var clock = 0L; canvas.VisualClock = () => clock;
         var frames = 0; var preparingFrames = 0;
@@ -191,7 +191,7 @@ public static partial class TerrainViewerSelfTest
         using var cache = new TerrainTextureCache();
         cache.Upload(fixture.Result.Textures); cache.UploadStatic(fixture.Result.StaticTextures); cache.UploadActor(fixture.Result.ActorTextures);
         var viewport = new SubViewport { Size = new(480, 400), TransparentBg = true, RenderTargetUpdateMode = SubViewport.UpdateMode.Always };
-        var canvas = new TerrainCanvas(); viewport.AddChild(canvas); host.AddChild(viewport);
+        var canvas = new TerrainCanvas { WorldSpritesFromPack = true }; viewport.AddChild(canvas); host.AddChild(viewport);
         var sources = new List<HdFrameSource>();
         var clock = 0L; canvas.VisualClock = () => clock;
         static void Require(bool value, string why) { if (!value) throw new InvalidOperationException("ARC-UI-006 WORLD toggle self-test: " + why); }
