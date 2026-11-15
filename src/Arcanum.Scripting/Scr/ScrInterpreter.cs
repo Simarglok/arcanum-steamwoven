@@ -227,9 +227,9 @@ internal sealed class ScrInterpreter
         // Following: the first object's leader is the second object (both single objects in the set).
         ScrCatalogue.Condition.FollowingPc => (_shared.Disbanded.Contains(Object(c, 0, line)) ? null : _host.Leader(Object(c, 0, line))) == Object(c, 1, line),
         ScrCatalogue.Condition.Jilted => _host.IsJilted(Object(c, 0, line)),
-        // GF9 (SG1–SG6): a guard condition on a group focus kind tests each object of the list by the list rule (kind 13 every one, kind 14 one is enough).
+        // GF9, FK5 (SG1–SG6): a guard condition on a group or follower focus kind tests each object of the list by the list rule (kind 13 every one, kind 14 one is enough).
         ScrCatalogue.Condition.PcQuestState or ScrCatalogue.Condition.HasItemNamed or ScrCatalogue.Condition.IsNamed or ScrCatalogue.Condition.IsWieldingItem or ScrCatalogue.Condition.HasReputation
-            when (ScrFocusKind)c.Kind(0) is ScrFocusKind.EveryoneInGroup or ScrFocusKind.AnyoneInGroup => ListHolds(c, obj => GuardHolds(c, obj)),
+            when (ScrFocusKind)c.Kind(0) is ScrFocusKind.EveryoneInGroup or ScrFocusKind.AnyoneInGroup or ScrFocusKind.EveryFollower or ScrFocusKind.AnyFollower => ListHolds(c, obj => GuardHolds(c, obj)),
         // SG1: the guard conditions, one object each; the quest state's second value is its third operand.
         ScrCatalogue.Condition.PcQuestState => ScrGuards.Holds(c.Type, Object(c, 0, line), Get(c, 1), Get(c, 2), Queries),
         // ARC-SCRIPT-1772 (CQ5): an object the run renamed answers its new name number (the guard's mind-control test stays the host's).
@@ -1408,6 +1408,8 @@ internal sealed class ScrInterpreter
         ScrFocusKind.LocalObject => _objects[value],
         // PG7: the current looped object, none before the run's first loop.
         ScrFocusKind.CurrentLoopedObject => _looped,
+        // FK3: a leader's first direct follower (0x44B960), none without one.
+        ScrFocusKind.EveryFollower or ScrFocusKind.AnyFollower => Followers() is { Count: > 0 } followers ? followers[0] : null,
         // A group's first object (0x44B960), none for an empty one.
         ScrFocusKind.EverySceneryInVicinity or ScrFocusKind.AnySceneryInVicinity or ScrFocusKind.EveryoneInVicinity or ScrFocusKind.AnyoneInVicinity or ScrFocusKind.EveryPortalInVicinity
             or ScrFocusKind.EveryContainerInVicinity or ScrFocusKind.AnyContainerInVicinity
@@ -1422,6 +1424,7 @@ internal sealed class ScrInterpreter
     [OriginalFunction(0x44B4E0, OriginalFunctionScope.Partial)]
     private IReadOnlyList<ScrObjectRef> Objects(ScrClause c, int slot) => (ScrFocusKind)c.Kind(slot) switch
     {
+        ScrFocusKind.EveryFollower or ScrFocusKind.AnyFollower => Followers(),
         ScrFocusKind.EverySceneryInVicinity or ScrFocusKind.AnySceneryInVicinity or ScrFocusKind.EveryoneInVicinity or ScrFocusKind.AnyoneInVicinity or ScrFocusKind.EveryPortalInVicinity
             or ScrFocusKind.EveryContainerInVicinity or ScrFocusKind.AnyContainerInVicinity => Vicinity((ScrFocusKind)c.Kind(slot)),
         ScrFocusKind.EveryoneInGroup or ScrFocusKind.AnyoneInGroup => Group(),
@@ -1433,8 +1436,15 @@ internal sealed class ScrInterpreter
     private IReadOnlyList<ScrObjectRef> Group()
     {
         if (_roles.Triggerer is not { } leader) return [];
+        return [.. DirectFollowers(leader), leader];
+    }
+
+    // The leader's direct followers from the host (GF2, FK2): the first ScrWorld.VicinityListCap under the Original profile; a follower the run itself disbanded (held until applied) is already off the array in the original.
+    private IEnumerable<ScrObjectRef> DirectFollowers(ScrObjectRef leader)
+    {
         var followers = Groups.FollowersOf(leader) ?? throw new InvalidOperationException("SCR_GROUP_FOLLOWERS_NULL");
-        return [.. _options.Rules.VicinityListCapped ? followers.Take(ScrWorld.VicinityListCap) : followers, leader];
+        if (_shared.Disbanded.Count > 0) followers = followers.Where(follower => !_shared.Disbanded.Contains(follower)).ToArray();
+        return _options.Rules.VicinityListCapped ? followers.Take(ScrWorld.VicinityListCap) : followers;
     }
 
     // PG3, TG4: the scenery (type mask 0x8) or the PCs and NPCs (0x18000) around the run's attachee (none without one), the first 100
@@ -1447,11 +1457,14 @@ internal sealed class ScrInterpreter
         return _options.Rules.VicinityListCapped && list.Count > ScrWorld.VicinityListCap ? list.Take(ScrWorld.VicinityListCap).ToArray() : list;
     }
 
+    // FK1, FK2 (0x44B4E0 cases 2 and 3 over 0x4411C0): the direct followers of the run's triggerer (field +8, not the attachee), none without a triggerer (the original has no null test; what it does then is not read).
+    private IReadOnlyList<ScrObjectRef> Followers() => _roles.Triggerer is { } leader ? [.. DirectFollowers(leader)] : [];
+
     private IScrWorldQueries World => _host as IScrWorldQueries
         ?? throw new InvalidOperationException("SCR_WORLD_QUERIES_REQUIRED: the admission set holds random, loop for or a vicinity focus kind and the host cannot answer it.");
 
     private IScrGroupQueries Groups => _host as IScrGroupQueries
-        ?? throw new InvalidOperationException("SCR_GROUP_QUERIES_REQUIRED: the admission set holds a group focus kind and the host cannot answer it.");
+        ?? throw new InvalidOperationException("SCR_GROUP_QUERIES_REQUIRED: the admission set holds a group or follower focus kind and the host cannot answer it.");
 
     private IScrPortalQueries Portals => _host as IScrPortalQueries
         ?? throw new InvalidOperationException("SCR_PORTAL_QUERIES_REQUIRED: the admission set holds the portal vicinity focus kind and the host cannot answer it.");

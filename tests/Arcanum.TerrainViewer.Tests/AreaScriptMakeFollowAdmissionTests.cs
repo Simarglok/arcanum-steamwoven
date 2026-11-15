@@ -16,7 +16,7 @@ public sealed class AreaScriptMakeFollowAdmissionTests
         foreach (var set in new[] { AreaUseScriptHost.HeartbeatAdmission, AreaUseScriptHost.DyingAdmission })
         {
             Assert.IsTrue(set.Actions.Contains(ScrCatalogue.Action.MakeFollow), set.Id);
-            Assert.IsTrue(set.IsSubsetOfBesidesStores(ScrAdmissionSet.S64), set.Id);
+            Assert.IsTrue(set.IsSubsetOfBesidesStores(ScrAdmissionSet.S65), set.Id);
         }
     }
 

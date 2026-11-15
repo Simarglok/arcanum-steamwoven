@@ -39,6 +39,6 @@ public sealed class AreaWorldObjectScriptAdmissionTests
         // (transfer item, set written start, destroy item named, toggle item inventory display) a host (ARC-SCRIPT-1164 had left them out: 25, 43, 30, 48); the rest hold a command of another planned slice.
         // ARC-SCRIPT-1815: the heartbeat set gained the scenery and object-variable focus kinds, assign object and float line (heartbeats 45, from 35).
         // Re-measured 2026-11-16 (ARC-SCRIPT-2321, set S64): the any-scenery focus kind (16) alone moves one script into the dying count; the other moves since the numbers above came with the sets merged since (group and container kinds S61 and S62, toggle state, portal kind; issue #1846).
-        Assert.AreEqual((117, 84, 54, 95, 47, 106), (withCommand, counts["S37"], counts["use"], counts["placed"], counts["heartbeat"], counts["dying"]));
+        Assert.AreEqual((117, 84, 55, 96, 47, 107), (withCommand, counts["S37"], counts["use"], counts["placed"], counts["heartbeat"], counts["dying"]));
     }
 }

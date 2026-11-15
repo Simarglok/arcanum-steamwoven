@@ -18,7 +18,7 @@ public sealed class AreaNpcStateScriptAdmissionTests
         {
             foreach (var action in ScrAdmissionSet.NpcStateHostActions) Assert.IsTrue(set.Actions.Contains(action), $"{set.Id}: action {action}");
             Assert.IsTrue(set.Actions.Contains(ScrCatalogue.Action.ChangeArtNumber), set.Id);
-            Assert.IsTrue(set.IsSubsetOfBesidesStores(ScrAdmissionSet.S64), set.Id);
+            Assert.IsTrue(set.IsSubsetOfBesidesStores(ScrAdmissionSet.S65), set.Id);
         }
         // The dialog host does not apply the requests yet: its sets stay without them.
         foreach (var set in new[] { AreaScriptHost.Admission, AreaScriptHost.SkillAdmission, AreaScriptHost.TalkAdmission, AreaScriptHost.SkillTalkAdmission })
@@ -61,6 +61,6 @@ public sealed class AreaNpcStateScriptAdmissionTests
         // target it cannot draw with another art before anything applies.
         // ARC-SCRIPT-1815: the heartbeat set gained the scenery and object-variable focus kinds, assign object and float line (heartbeats 160, from 98).
         // Re-measured 2026-11-16 (ARC-SCRIPT-2321, set S64) on main with the group and container focus kinds (S61, S62) and toggle state in the use set: the any-scenery focus kind (16) alone moves one script into each of the use, placed, heartbeat and dying counts; the other moves since the numbers above came with the sets merged since (issue #1846).
-        Assert.AreEqual((270, 208, 96, 186, 183, 234), (withState, counts["S36"], counts["use"], counts["placed"], counts["heartbeat"], counts["dying"]));
+        Assert.AreEqual((270, 208, 97, 187, 183, 235), (withState, counts["S36"], counts["use"], counts["placed"], counts["heartbeat"], counts["dying"]));
     }
 }

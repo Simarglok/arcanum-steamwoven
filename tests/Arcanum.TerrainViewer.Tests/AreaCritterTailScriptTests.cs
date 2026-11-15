@@ -82,6 +82,35 @@ public sealed class AreaCritterTailScriptTests
     }
 
     [TestMethod]
+    public void Followers_of_the_hero_are_the_party_followers_in_join_order_and_other_leaders_and_objects_have_none()
+    {
+        // ARC-SCRIPT-2320 (FK2): the direct followers, unfiltered (a switched-off follower stays); an NPC without followers and a non-critter name none.
+        using var session = ConversationSessionFixture.CreateWithHero(1);
+        var first = Npc(1);
+        var off = Npc(2, objectFlags: 0x2);
+        var stranger = Npc(3);
+        var scenery = Plain(4, ScenerySlotType);
+        var host = Host(session, first, off, stranger, scenery);
+        Assert.AreEqual(0, host.FollowersOf(host.Pc).Count, "no followers yet");
+        Follow(session, first); Follow(session, off);
+        CollectionAssert.AreEqual(new[] { Ref(first), Ref(off) }, host.FollowersOf(host.Pc).ToArray());
+        Assert.AreEqual(0, host.FollowersOf(Ref(stranger)).Count, "an NPC that leads nobody");
+        Assert.AreEqual(0, host.FollowersOf(Ref(scenery)).Count, "a scenery has no follower array");
+        Assert.AreEqual(0, host.FollowersOf(new(1, "oid:nobody")).Count);
+        Assert.AreEqual(0, Host(ConversationSessionFixture.Create(), first).FollowersOf(new(1, "pc")).Count, "a session without a hero has no party");
+    }
+
+    [TestMethod]
+    public void The_use_placed_heartbeat_combat_point_and_dying_sets_admit_the_follower_focus_kinds_and_stay_inside_S62()
+    {
+        foreach (var set in new[] { AreaUseScriptHost.Admission, AreaUseScriptHost.PlacedAdmission, AreaUseScriptHost.HeartbeatAdmission, AreaUseScriptHost.CombatPointAdmission, AreaUseScriptHost.DyingAdmission })
+        {
+            Assert.IsTrue(set.FocusKinds.Contains(ScrFocusKind.EveryFollower) && set.FocusKinds.Contains(ScrFocusKind.AnyFollower), set.Id);
+            Assert.IsTrue(set.IsSubsetOfBesidesStores(ScrAdmissionSet.S65), set.Id);
+        }
+    }
+
+    [TestMethod]
     public void Bad_associates_of_a_follower_reads_the_hero_s_followers_and_is_false_without_a_leader_and_for_other_objects()
     {
         using var session = ConversationSessionFixture.CreateWithHero(1);

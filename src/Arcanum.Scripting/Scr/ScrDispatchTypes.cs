@@ -1076,7 +1076,7 @@ public sealed class ScrRunResult
 }
 
 /// <summary>How a dispatch runs: the rule mode's script switches, the admitted set (default <see cref="ScrAdmissionSet.S5"/>,
-/// at most <see cref="ScrAdmissionSet.S64"/>, admitted for the lines reachable from the event's line), the executed-line
+/// at most <see cref="ScrAdmissionSet.S65"/>, admitted for the lines reachable from the event's line), the executed-line
 /// budget and the call depth.</summary>
 public sealed record ScrRunOptions
 {
@@ -1097,7 +1097,7 @@ public sealed record ScrRunOptions
         ArgumentNullException.ThrowIfNull(Admission);
         if (MaxExecutedLines is <= 0 or > OriginalLineBudget) throw new ArgumentOutOfRangeException(nameof(MaxExecutedLines), "The line budget is 1..1000.");
         if (MaxCallDepth is < 1 or > 64) throw new ArgumentOutOfRangeException(nameof(MaxCallDepth), "The call depth is 1..64.");
-        if (!Admission.IsSubsetOf(ScrAdmissionSet.S64)) throw new ArgumentException("The interpreter runs only the commands of ScrAdmissionSet.S64.", nameof(Admission));
+        if (!Admission.IsSubsetOf(ScrAdmissionSet.S65)) throw new ArgumentException("The interpreter runs only the commands of ScrAdmissionSet.S65.", nameof(Admission));
     }
 
     // A set with a guard condition needs a host that answers it, checked before any event runs.
@@ -1129,7 +1129,7 @@ public sealed record ScrRunOptions
         if (host is not IScrWorldQueries && (Admission.Actions.Any(ScrAdmissionSet.WorldQueryActions.Contains) || Admission.FocusKinds.Any(ScrAdmissionSet.WorldQueryFocusKinds.Contains) || Admission.Conditions.Contains(ScrCatalogue.Condition.WithinRange)))
             throw new ArgumentException("A set with random, loop for, distance between, get location, float line, obj is within range or the vicinity focus kinds needs a host that implements IScrWorldQueries.", nameof(Admission));
         if (host is not IScrGroupQueries && Admission.FocusKinds.Any(ScrAdmissionSet.GroupFocusKinds.Contains))
-            throw new ArgumentException("A set with the focus kinds every one or anyone in the group needs a host that implements IScrGroupQueries.", nameof(Admission));
+            throw new ArgumentException("A set with the focus kinds every one or anyone in the group, or every or any follower, needs a host that implements IScrGroupQueries.", nameof(Admission));
         if (host is not IScrPortalQueries && Admission.FocusKinds.Contains(ScrFocusKind.EveryPortalInVicinity))
             throw new ArgumentException("A set with the focus kind every portal in the vicinity needs a host that implements IScrPortalQueries.", nameof(Admission));
         if (host is not IScrContainerQueries && (Admission.FocusKinds.Contains(ScrFocusKind.EveryContainerInVicinity) || Admission.FocusKinds.Contains(ScrFocusKind.AnyContainerInVicinity)))

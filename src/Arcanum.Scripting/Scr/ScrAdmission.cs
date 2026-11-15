@@ -520,8 +520,9 @@ public sealed class ScrAdmissionSet
         ScrCatalogue.Condition.KnowsSpell, ScrCatalogue.Condition.MasteredSpellCollege, ScrCatalogue.Condition.IsProwling,
     };
 
-    /// <summary>The focus kinds of <see cref="S61"/> a host answers through <see cref="IScrGroupQueries"/>.</summary>
-    public static IReadOnlySet<ScrFocusKind> GroupFocusKinds { get; } = new HashSet<ScrFocusKind> { ScrFocusKind.EveryoneInGroup, ScrFocusKind.AnyoneInGroup };
+    /// <summary>The focus kinds of <see cref="S61"/> and <see cref="S65"/> a host answers through <see cref="IScrGroupQueries"/>: the group kinds, and since ARC-SCRIPT-2320 the follower kinds (the same direct follower list).</summary>
+    public static IReadOnlySet<ScrFocusKind> GroupFocusKinds { get; } = new HashSet<ScrFocusKind>
+        { ScrFocusKind.EveryoneInGroup, ScrFocusKind.AnyoneInGroup, ScrFocusKind.EveryFollower, ScrFocusKind.AnyFollower };
 
     /// <summary>
     /// The container vicinity set (ARC-SCRIPT-2322, ledger CV1–CV7): <see cref="S61"/> plus the focus kinds every container in the vicinity (17) and any container in the vicinity (18, one list with 17), which the host answers
@@ -539,6 +540,11 @@ public sealed class ScrAdmissionSet
     /// The any-scenery set (ARC-SCRIPT-2321, ledger AS1–AS6): <see cref="S63"/> plus the focus kind any scenery in the vicinity (16), the same list as kind 15 that a condition reads as "one is enough" (SG6). The interpreter runs at most S64.
     /// </summary>
     public static ScrAdmissionSet S64 { get; } = new("S64", S63.Conditions, S63.Actions, S63.ValueKinds, S63.FocusKinds.Append(ScrFocusKind.AnySceneryInVicinity), counterIndexWraps: true);
+
+    /// The follower set (ARC-SCRIPT-2320, ledger FK1–FK7): <see cref="S64"/> plus the focus kinds every follower (2) and any follower (3), the direct followers of the run's triggerer (the group kinds' list without the triggerer), which the host answers
+    /// through <see cref="IScrGroupQueries"/> as for the group kinds. The interpreter runs at most S65.
+    /// </summary>
+    public static ScrAdmissionSet S65 { get; } = new("S65", S64.Conditions, S64.Actions, S64.ValueKinds, S64.FocusKinds.Concat([ScrFocusKind.EveryFollower, ScrFocusKind.AnyFollower]), counterIndexWraps: true);
 
     /// <summary>
     /// The set the engine runs the slide scripts with (ARC-RENDER-1171, ledger SS2): true, equal, less or equal, local and global flag and PC quest state conditions; the control and arithmetic actions, call script
@@ -767,8 +773,8 @@ public static class ScrAdmission
                     // interpreter reads a condition's object operand as one object, so the critter vicinity kinds are admitted in
                     // actions only (an action's single object is the list's first, 0x44B960; loop for takes the list); ARC-SCRIPT-2319: the group kinds (13, 14) likewise (GF9).
                     if (condition && (ScrFocusKind)kind is ScrFocusKind.EveryoneInVicinity or ScrFocusKind.AnyoneInVicinity) return Refuse(ScrRefusalCode.FocusKindNotAdmitted);
-                    // ARC-SCRIPT-2319 (GF9): the group kinds are admitted in a condition only as the list of a guard condition (SG1–SG6) or of a list condition (ARC-SCRIPT-2326, AR5: kind 14 the "any" form); the conditions that read the first object only (10, 18, 28, 29, 34, 36, 40) and the ones the interpreter reads as one object stay out.
-                    if (condition && (ScrFocusKind)kind is ScrFocusKind.EveryoneInGroup or ScrFocusKind.AnyoneInGroup && !(slot == 0 && (ScrAdmissionSet.GuardConditions.Contains(type) || ScrAdmissionSet.ListConditions.Contains(type)))) return Refuse(ScrRefusalCode.FocusKindNotAdmitted);
+                    // ARC-SCRIPT-2319 (GF9), ARC-SCRIPT-2320 (FK5): the group and follower kinds are admitted in a condition only as the list of a guard condition (SG1–SG6) or of a list condition (ARC-SCRIPT-2326, AR5: kind 14 the "any" form); the conditions that read the first object only (10, 18, 28, 29, 34, 36, 40) and the ones the interpreter reads as one object stay out.
+                    if (condition && (ScrFocusKind)kind is ScrFocusKind.EveryoneInGroup or ScrFocusKind.AnyoneInGroup or ScrFocusKind.EveryFollower or ScrFocusKind.AnyFollower && !(slot == 0 && (ScrAdmissionSet.GuardConditions.Contains(type) || ScrAdmissionSet.ListConditions.Contains(type)))) return Refuse(ScrRefusalCode.FocusKindNotAdmitted);
                     break;
             }
             // Get skill stores into its third operand (SX1).
