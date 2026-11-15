@@ -104,12 +104,11 @@ public partial class TerrainViewerApp
         }
         finally { _hud.Visible = true; promptLayer.Visible = promptShown; _camera.ResetWorld(WorldAnchor, WorldViewport, zoom); }
     }
-    // ARC-DEV-2294: in the HD profile the check runs right after the switch, while the HD frames of the terrain chunks are still being decoded: the
-    // first capture drew the Legacy chunk in a 584x486 block of the lit terrain and the third the HD one (one to a few levels apart, at most 50), so
-    // "unstable" failed, the same way every time the decode was not done in the three frames the check waited (it was not whenever the HD
-    // pack is chosen, which is why Legacy runs and some HD runs passed). A capture now waits for the visual switch and every decode to end (the
-    // wait of the HD smokes) and is taken only once two consecutive captures are identical (at most 12 more rounds; the last is returned when it
-    // never settles, and the unstable test then still reports it).
+    // ARC-DEV-2294: in the HD profile the check runs right after the switch, while the HD frames of the terrain chunks may still be decoding: the first
+    // capture then drew the Legacy chunks and the third the HD ones, a few levels apart in one block of the lit terrain, so "unstable" failed (every run
+    // where the decode had not ended within the three frames the check waited; a Legacy run passed). A capture now waits for the visual switch and every HD
+    // decode to end (the wait of the HD smokes) and is taken only once two consecutive captures are identical (at most 12 more rounds; the last is
+    // returned when it never settles, and the unstable test then still reports it).
     private async Task<Image> SettledWallFrame()
     {
         await WallFrames(); // the submission of the new state (it asks for the HD frames it needs) before the wait looks at them

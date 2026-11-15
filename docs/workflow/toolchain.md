@@ -191,12 +191,12 @@ history held about 500 runs of such copies of one template).
   overlay on its own canvas layer that follows the device in hand after a hysteresis on the host's clock, so it appeared or went away between
   the check's three captures when frames ran slow. The check now hides that layer (as it hides the HUD) and reports the box of unstable pixels.
   A third way (ARC-DEV-2294, from 2026-11-15, after the relit look of ARC-RES-2000 and the HD profile in the stage) failed on every run with the same numbers
-  (`unstable=92006 unstable-box=17,313-601,799`, a 584x486 block of lit terrain a few levels apart, `outside` 0 or 90480 with the third capture
+  (`unstable=92006 unstable-box=17,313-601,799`: 92006 pixels of lit terrain, inside a 584x486 box, a few levels apart, `outside` 0 or 90480 with the third capture
   differing from the first only there): the stage runs the check right after the switch to HD, while the HD frames of the terrain chunks were still
   decoding, so the first capture drew the Legacy chunks and the third the HD ones; a Legacy run, or an HD run whose decodes had ended, passed (so it looked like a
   time of day). Each capture of the check now waits for the visual switch and every HD decode to end (the wait of the HD smokes, printed as
   `ARC-DEV-2294 wall capture waited N frames for HD decodes`; `AREA_WALL_HD_NOT_SETTLED` after 1800 frames) and is taken once two consecutive captures are
-  identical; a failing check with `ARC_AREA_TRANSITION_CAPTURE` set saves the three captures as `-walls-fail-faded|opaque|again.png`.
+  identical; a failing fade compare (`AREA_WALL_FADE_NOT_OBSERVED`) with `ARC_AREA_TRANSITION_CAPTURE` set saves the three captures as `-walls-fail-faded|opaque|again.png`.
 - **Stage boundary reset (ARC-DEV-408, ARC-DEV-1187).** A stage that passes alone and fails after others had a second cause besides the test
   time: what the earlier stages left in the shared session. `TerrainViewerSmokeStageSet` calls `SmokeStageBoundary`
   (`TerrainViewerSmokeStageReset.cs`) at every change of stage in the viewer. The first call with a hero and a session saves a baseline into a
