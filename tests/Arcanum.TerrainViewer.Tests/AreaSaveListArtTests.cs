@@ -18,7 +18,7 @@ public sealed class AreaSaveListArtTests
     [TestMethod]
     public void The_window_reads_the_originals_art()
     {
-        CollectionAssert.AreEqual(new[] { 745, 336, 335, 321, 323, 32, 27, 746, 747, 748 }, AreaSaveListArtLayout.ArtNumbers.ToArray());
+        CollectionAssert.AreEqual(new[] { 745, 336, 335, 321, 323, 32, 229, 746, 747, 748 }, AreaSaveListArtLayout.ArtNumbers.ToArray());
         Assert.AreEqual((42, 161, 145, 213), AreaSaveListArtLayout.List, "MW13: the window's (42, 120) below the top strip");
         Assert.AreEqual((281, 96, 468, 300), AreaSaveListArtLayout.Preview);
         Assert.AreEqual((213, 152, 12, 232), AreaSaveListArtLayout.ScrollBar);
