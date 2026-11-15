@@ -13,6 +13,18 @@ public partial class TerrainViewerApp
 {
     // ARC-UI-2304: forces the strip's weapon parts off (the diagnostic pane takes the weapon again), for the "before" capture only.
     private bool _weaponStripOffForSelfTest;
+    // ARC-UI-2311: hides the strip's counters, for the "before" capture only.
+    private bool _barCountersOffForSelfTest;
+
+    /// <summary>ARC-UI-2311: counter 3 as the ledger's rule gives it for the wielded weapon <paramref name="worn"/>, worked from the session (the weapon's ammunition type,
+    /// the hero's first stack of it, the prototype's mana store, the gold).</summary>
+    private BarCounter3 ExpectedCounter3(GameSessionOwner session, SessionWornItem worn)
+    {
+        var type = worn.Item.Weapon?.AmmoType;
+        var count = type is { } t ? session.QueryHeroAmmo().Where(a => a.AmmoType == t).Select(a => a.Units).FirstOrDefault() : 0;
+        var store = type is null && HeroWeaponPrototype(session, null) is { } prototype ? CombatPrototype(prototype)?.Item?.ManaStore ?? 0 : 0;
+        return BarCounterRules.Counter3(true, type, count, store, session.QueryGold());
+    }
 
     // ARC-UI-2304 native observation, inside the hotkey-bar smoke of the cast stage (the bars show; the hero wields a kit weapon, lent the
     // spell facts of a weapon prototype with a castable critter spell): the strip shows the button art 563 in the message mode; the release
@@ -40,6 +52,14 @@ public partial class TerrainViewerApp
             await frames(2);
             using var shot = GetViewport().GetTexture().GetImage();
             if (shot.SavePng($"{capture}-{name}.png") != Error.Ok) throw new InvalidOperationException("AREA_WEAPON_PANE_CAPTURE_FAILED");
+        }
+        // ARC-UI-2311: the same frame without the counters, for the before/after composite.
+        async Task CaptureWithoutCounters(string name)
+        {
+            if (capture is null) return;
+            _barCountersOffForSelfTest = true;
+            try { await Capture(name); }
+            finally { _barCountersOffForSelfTest = false; await frames(2); }
         }
         CancelSpellTargeting(null);
         _spellPane?.HidePane();
@@ -71,6 +91,19 @@ public partial class TerrainViewerApp
             Require(view.BackgroundForSelfTest is null && view.ShownSlotsForSelfTest.Count == 0, "no pane before the press");
             Require(_spellPane is null || !_spellPane.DrawnForSelfTest, "the diagnostic pane shows nothing");
             await Capture("button");
+            await CaptureWithoutCounters("button-before");
+            // ARC-UI-2311: counter 3 beside the weapon (its ammunition, else its mana store, else the gold), none of counter 4 outside mode 8.
+            var counters = _barCountersView;
+            Require(counters is { Visible: true } && counters.Counter4ForSelfTest is null, "counter 4 does not draw outside bar mode 8");
+            var worn = session.QueryEquipment().Worn.First(w => w.Slot == Arcanum.Simulation.Equipment.EquipmentSlot.Weapon);
+            var expected3 = ExpectedCounter3(session, worn);
+            Require(counters!.Counter3ForSelfTest == BarCounterRules.Text(expected3.Value, BarCounterRules.Counter3Digits),
+                $"counter 3 shows {expected3.Value}: '{counters.Counter3ForSelfTest}'");
+            Require(counters.Counter3RectForSelfTest == new Rect2(BarCounterRules.Counter3Rect.X, BarCounterRules.Counter3Rect.Y - AreaGameBarLayout.BottomTop,
+                BarCounterRules.Counter3Rect.Width, BarCounterRules.Counter3Rect.Height), $"counter 3 stands in its rectangle: {counters.Counter3RectForSelfTest}");
+            if (expected3.Icon is { } icon3 && Art(icon3) is { } icon3Frames)
+                Require(counters.IconForSelfTest is { } shown3 && icon3Frames.Contains(shown3)
+                    && counters.IconPositionForSelfTest == new Vector2(BarCounterRules.IconX, BarCounterRules.IconY - AreaGameBarLayout.BottomTop), $"counter 3's icon {icon3} stands at (61, 509)");
 
             _gameBarSoundsForSelfTest.Clear();
             await click(view.ButtonCentreForSelfTest!.Value);
@@ -91,11 +124,19 @@ public partial class TerrainViewerApp
                     $"slot {shown.Slot} draws spell {shown.Spell}'s icon");
             }
 
+            // ARC-UI-2311: counter 4 in mode 8 is the item's charges (−1 unlimited, −2 unidentified).
+            var gauge = SpellCasterNow()!.ItemPane(wielded.Entity)!.Gauge;
+            var expected4 = BarCounterRules.Counter4(gauge.Kind != ItemSpellGaugeKind.Unknown, gauge.Kind == ItemSpellGaugeKind.Unlimited ? -1 : gauge.Charges);
+            Require(counters.Counter4ForSelfTest == BarCounterRules.Text(expected4, BarCounterRules.Counter4Digits) && counters.Counter4RectForSelfTest
+                == new Rect2(BarCounterRules.Counter4Rect.X, BarCounterRules.Counter4Rect.Y - AreaGameBarLayout.BottomTop, BarCounterRules.Counter4Rect.Width, BarCounterRules.Counter4Rect.Height),
+                $"counter 4 shows {expected4} in its rectangle: '{counters.Counter4ForSelfTest}'");
+
             var at = view.SlotCentreForSelfTest(slot)!.Value;
             await hover(at, at + new Vector2(0, 40));
             Require(_messageLog.PaneMode && _gameBarPanel!.MessageLog.PaneNameForSelfTest == AreaSpellsPage.SpellName(_spellData?.Data, spell),
                 $"entering slot {slot} names spell {spell}: '{_gameBarPanel!.MessageLog.PaneNameForSelfTest}'");
             await Capture("pane");
+            await CaptureWithoutCounters("pane-before");
 
             _gameBarSoundsForSelfTest.Clear();
             await click(at);
@@ -128,6 +169,10 @@ public partial class TerrainViewerApp
             Require(off.Disposition == GameSessionDisposition.Changed, $"the weapon is taken off: {off.Failure} {off.Refusal}");
             await frames(3);
             Require(_itemPaneItem is null && !_messageLog.PaneMode && view.ButtonCentreForSelfTest is null, "taking the weapon off closed mode 8 and hid the button");
+            // ARC-UI-2311: with no weapon in the hand counter 3 is the hero's gold with icon 474, and counter 4 is gone.
+            Require(counters.Counter3ForSelfTest == BarCounterRules.Text(session.QueryGold(), BarCounterRules.Counter3Digits) && counters.Counter4ForSelfTest is null,
+                $"counter 3 shows the gold {session.QueryGold()} without a weapon: '{counters.Counter3ForSelfTest}'");
+            if (Art(BarCounterRules.GoldIcon) is { } goldFrames) Require(counters.IconForSelfTest is { } goldShown && goldFrames.Contains(goldShown), "the gold icon 474 draws");
             Require(session.Equip(session.Version, wielded.Entity, Arcanum.Simulation.Equipment.EquipmentSlot.Weapon, new(kit.Kind, [], false, wielded.Item),
                 (_, _) => true, _ => SessionInsertVerdict.Accepted, triggers: host).Disposition == GameSessionDisposition.Changed, "the weapon is wielded again");
             await frames(3);
@@ -138,7 +183,7 @@ public partial class TerrainViewerApp
         finally
         {
             CancelSpellTargeting(null);
-            _weaponStripOffForSelfTest = false;
+            _weaponStripOffForSelfTest = false; _barCountersOffForSelfTest = false;
             _lentItemSpellsForSelfTest = null; _itemPaneItem = null; _weaponPaneCache = null;
             await frames(2);
         }
