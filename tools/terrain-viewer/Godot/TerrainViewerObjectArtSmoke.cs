@@ -27,9 +27,13 @@ public partial class TerrainViewerApp
         }
         async Task Settle()
         {
-            for (var i = 0; i < 3; i++) { ScanSceneryArtNow(); await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame); SyncAreaInventory(); }
+            // ARC-DEV-2259: in a native smoke ProcessWorld returns before the scenery step while a test clock is set, and an earlier stage leaves it set (the
+            // chain: life ... movement), so the loaded session's host and the art fields were never read and the stage failed only after others. The stage
+            // drives that per-frame step itself, as the scenery smokes and barter do (ARC-DEV-2042).
+            for (var i = 0; i < 3; i++) { ScanSceneryArtNow(); await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame); ProcessAreaSceneryAnimation(); SyncAreaInventory(); }
         }
         await Settle();
+        Require(ShownSceneryHost is not null, "the scenery host belongs to the shown session (the stage drives the scenery step itself)");
         var runtimeMap = area.Snapshot.RuntimeMap;
         var map = new SessionMapId(runtimeMap);
         var overlay = (_areaOverlay ?? throw new InvalidOperationException("AREA_OVERLAY_REQUIRED"));
