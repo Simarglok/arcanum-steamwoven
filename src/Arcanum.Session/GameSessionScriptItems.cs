@@ -112,11 +112,14 @@ public sealed partial class GameSessionOwner
     /// <summary>
     /// ARC-SCRIPT-1279 (WO2): what transfer item would do with the first item of <paramref name="from"/>'s list named <paramref name="name"/> (the hero when null) into <paramref name="to"/>'s (0x4617F0 with no slot, the
     /// first free place). The session moves an item between the hero and an NPC or container (<see cref="GiveItemToNpc"/>, <see cref="TakeItemFromNpc"/>, <see cref="LootItem"/> and the container list), so a pair of
-    /// two holders neither of which is the hero is refused, as is an item the move would run a script for (without <paramref name="itemScripts"/> the session runs no item script here; with it the hero's give runs them, ARC-MAGIC-1823; a hero's item counts the points of the seed row it came from and of its slot), a worn
+    /// two holders neither of which is the hero is refused, as is an item the move would run a script for (without <paramref name="itemScripts"/> the session runs no item script here; with it the move runs them, ARC-MAGIC-1823, ARC-MAGIC-2252; a hero's item counts the points of the seed row it came from and of its slot, an item of another map's NPC the points of its row), a worn
     /// item leaving an NPC or container or carrying item spells, an item that is the source of a running spell, a new holder with a transfer script (point 32), a container off the actor's map or spilled, a holder no attached
     /// map lists, and for a move to the hero a gold pile or a key the key ring cannot take. The item's insert check and the room and weight tests are answered when the move applies.
+    /// ARC-MAGIC-2252: with <paramref name="itemScripts"/> the plan also makes a dry run of the move (the item scripts and the hero's transfer script it would run, read from the host and applied nowhere, the insert check taken as accepting):
+    /// a run the session could not apply is the plan's refusal, so the calling script is not left half applied by a nested run found only when the move applies. The dry run reads the session as it is before the calling script's earlier
+    /// effects apply, so a nested run that only fails after them is still found when the move applies.
     /// </summary>
-    public SessionNamedItemPlan QueryNamedItemTransfer(string? from, string? to, int name, bool itemScripts = false)
+    public SessionNamedItemPlan QueryNamedItemTransfer(string? from, string? to, int name, ISessionItemScriptHost? itemScripts = null)
     {
         ThrowIfDisposed();
         if (from is not null && !SessionValidation.Entity(from) || to is not null && !SessionValidation.Entity(to)) throw new ArgumentException("Invalid entity id.");
@@ -130,13 +133,18 @@ public sealed partial class GameSessionOwner
             return new(item, $"transfer item: the container {other} is not on the actor's map or has spilled its items", GameSessionFailure.HolderNotLootable);
         if (item.Worn && from is not null) return new(item, $"transfer item of {item.Entity}, worn by {from}, is not modelled", GameSessionFailure.WornItemUnsupported);
         // Without a script host the move runs none of the item's scripts: a hero's worn item with any, or any item with an insert-item, remove-item or wield-off point, is refused.
-        // ARC-MAGIC-1823 (IE3, IE4, IE6): with itemScripts the hero's give (to an NPC or container) runs them through the caller's script host (GiveItemTo), which refuses the runs it cannot apply when the move applies.
-        if ((!itemScripts || from is not null) && (item.ScriptPoints.Any(point => point is SessionScriptPoint.InsertItem or SessionScriptPoint.RemoveItem or SessionScriptPoint.WieldOff) || item.Worn && item.ScriptPoints.Count > 0))
+        // ARC-MAGIC-1823 (IE3, IE4, IE6): with itemScripts the hero's give (to an NPC or container) runs them through the caller's script host (GiveItemTo); ARC-MAGIC-2252: so does the take from an NPC or container (Take: the
+        // hero's transfer script, remove item 28 with the holder as the triggerer, insert item 21). The dry run below finds the runs the session cannot apply.
+        if (itemScripts is null && (item.ScriptPoints.Any(point => point is SessionScriptPoint.InsertItem or SessionScriptPoint.RemoveItem or SessionScriptPoint.WieldOff) || item.Worn && item.ScriptPoints.Count > 0))
             return new(item, $"transfer item of {item.Entity}, which has an insert-item, remove-item or wield-off script, is not modelled", GameSessionFailure.ItemScriptUnsupported);
         // ARC-MAGIC-1823: the script host answers for the shown map's rows, so an item whose row is another map's seed row is refused before anything applies, as GiveItemTo refuses it (a nested run the session cannot apply
         // is only found when the move applies: the plan cannot run it, so that refusal can leave the earlier effects of the calling run applied).
-        if (itemScripts && from is null && HeroListed(item.Entity) is { Origin: { } originMap } && originMap != _actor.Map &&
+        if (itemScripts is not null && from is null && HeroListed(item.Entity) is { Origin: { } originMap } && originMap != _actor.Map &&
             item.ScriptPoints.Any(point => point is SessionScriptPoint.InsertItem or SessionScriptPoint.RemoveItem || point == SessionScriptPoint.WieldOff && item.Worn))
+            return new(item, $"transfer item of {item.Entity}, whose item scripts belong to another map's row, is not modelled", GameSessionFailure.ItemScriptUnsupported);
+        // ARC-MAGIC-2252: a take from an NPC of another attached map (a companion carried here) of an item that map's seed lists: Take refuses its remove-item and insert-item scripts, as the script host answers for the shown map's rows alone.
+        if (itemScripts is not null && from is not null && ListedHolderKind(from) == SessionHolderKind.Npc && NpcHolderSeed(from, out var holderMap, out var holderSeed, out _) && holderMap != _actor.Map &&
+            holderSeed.Items.ContainsKey(item.Entity) && item.ScriptPoints.Any(point => point is SessionScriptPoint.InsertItem or SessionScriptPoint.RemoveItem))
             return new(item, $"transfer item of {item.Entity}, whose item scripts belong to another map's row, is not modelled", GameSessionFailure.ItemScriptUnsupported);
         if (item.Worn && item.ItemSpells) return new(item, $"transfer item of {item.Entity}, worn with item spells, is not modelled", GameSessionFailure.ItemEffectUnsupported);
         if (to is not null)
@@ -159,7 +167,33 @@ public sealed partial class GameSessionOwner
             else if (type == SessionItemType.Ammo && QueryHolderItems(from!)?.FirstOrDefault(listed => listed.Entity == item.Entity) is { } listedAmmo && AmmoOf(item.Entity, listedAmmo.Facts) is null)
                 return new(item, $"transfer item: the ammunition {item.Entity} has no type or units", GameSessionFailure.InvalidItem);
         }
+        // ARC-MAGIC-2252: the dry run of the move through the host: the failures a script run can end the move with (the insert check's and the lists' budgets are no run's: the script command goes on after them).
+        if (itemScripts is not null)
+        {
+            var dry = DryRunTransfer(from, to, item.Entity, itemScripts);
+            if (dry.Disposition == GameSessionDisposition.Rejected && dry.Failure is not (GameSessionFailure.BudgetExceeded or GameSessionFailure.InsertRefused))
+                return new(item, $"transfer item of {item.Entity}: its item scripts or the hero's transfer script cannot be applied ({dry.Failure})", dry.Failure);
+        }
         return new(item, null);
+    }
+
+    // ARC-MAGIC-2252: set while a move is only tried (QueryNamedItemTransfer): the scripts are run and prepared as the move runs them and the move returns before anything applies.
+    private bool _transferDryRun;
+
+    private InventoryMutationResult DryRunTransfer(string? from, string? to, string item, ISessionItemScriptHost scripts)
+    {
+        var before = _transferDryRun;
+        _transferDryRun = true;
+        try { return MoveListedItem(Version, from, to, item, static _ => SessionInsertVerdict.Accepted, scripts); }
+        finally { _transferDryRun = before; }
+    }
+
+    // The move TransferNamedItem makes of the item the plan found, by the move of the holder pair it is made of.
+    private InventoryMutationResult MoveListedItem(GameSessionVersion expected, string? from, string? to, string item, SessionInsertCheck insertCheck, ISessionItemScriptHost? scripts)
+    {
+        if (from is null)
+            return ListedHolderKind(to!) == SessionHolderKind.Container ? GiveToContainer(to!, item, insertCheck, scripts) : GiveItemToNpc(expected, to!, item, insertCheck, scripts: scripts);
+        return ListedHolderKind(from) == SessionHolderKind.Container ? LootItem(expected, from, item, insertCheck, scripts) : TakeItemFromNpc(expected, from, item, insertCheck, scripts);
     }
 
     // The kind of the NPC or container the first attached seed that lists the holder gives it; null for a holder none lists (the hero is no holder of a seed).
@@ -173,9 +207,9 @@ public sealed partial class GameSessionOwner
     /// <summary>
     /// ARC-SCRIPT-1279 (WO2, the script action transfer item, case 0x29 → 0x4617F0): the first item of <paramref name="from"/>'s list whose name class is <paramref name="name"/> goes to the end of <paramref name="to"/>'s
     /// list (the hero when null) under the item rules of the moves it is made of: an NPC to the hero is <see cref="TakeItemFromNpc"/>, a container to the hero <see cref="LootItem"/>, the hero to an NPC
-    /// <see cref="GiveItemToNpc"/> and the hero to a container the container list's insert. No such item changes nothing. Refused before any effect: the version, a pair, item or holder
+    /// <see cref="GiveItemToNpc"/> and the hero to a container the container list's insert; with <paramref name="scripts"/> each runs the item scripts and the hero's transfer script as the original does (ARC-MAGIC-1823, ARC-MAGIC-2252). No such item changes nothing. Refused before any effect: the version, a pair, item or holder
     /// <see cref="QueryNamedItemTransfer"/> refuses (<see cref="GameSessionFailure.HolderPairUnsupported"/>, <see cref="GameSessionFailure.ItemScriptUnsupported"/>, <see cref="GameSessionFailure.WornItemUnsupported"/>,
-    /// <see cref="GameSessionFailure.UnknownHolder"/>), then each move's own refusals (with <paramref name="scripts"/> the hero's give runs the item's wield-off, remove-item and insert-item scripts, ARC-MAGIC-1823; the host's insert check as <see cref="GameSessionFailure.InsertRefused"/>, the lists' budgets, the revision). One revision.
+    /// <see cref="GameSessionFailure.UnknownHolder"/>), then each move's own refusals (with <paramref name="scripts"/> the move runs the item's wield-off, remove-item and insert-item scripts, ARC-MAGIC-1823, ARC-MAGIC-2252; the host's insert check as <see cref="GameSessionFailure.InsertRefused"/>, the lists' budgets, the revision). One revision.
     /// </summary>
     public InventoryMutationResult TransferNamedItem(GameSessionVersion expected, string? from, string? to, int name, SessionInsertCheck insertCheck, ISessionItemScriptHost? scripts = null)
     {
@@ -183,14 +217,10 @@ public sealed partial class GameSessionOwner
         ArgumentNullException.ThrowIfNull(insertCheck);
         if (from is not null && !SessionValidation.Entity(from) || to is not null && !SessionValidation.Entity(to)) return RejectItem(GameSessionFailure.InvalidItem);
         if (!IsCurrent(expected)) return RejectItem(GameSessionFailure.StaleVersion);
-        var plan = QueryNamedItemTransfer(from, to, name, scripts is not null);
+        var plan = QueryNamedItemTransfer(from, to, name, scripts);
         if (plan.Item is not { } item) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, null, null, Version);
         if (plan.Refusal is not null) return RejectItem(plan.Failure);
-        if (from is null)
-        {
-            return ListedHolderKind(to!) == SessionHolderKind.Container ? GiveToContainer(to!, item.Entity, insertCheck, scripts) : GiveItemToNpc(expected, to!, item.Entity, insertCheck, scripts: scripts);
-        }
-        return ListedHolderKind(from) == SessionHolderKind.Container ? LootItem(expected, from, item.Entity, insertCheck) : TakeItemFromNpc(expected, from, item.Entity, insertCheck);
+        return MoveListedItem(expected, from, to, item.Entity, insertCheck, scripts);
     }
 
     // The hero's item into a container's list (the move GiveItemToNpc makes into an NPC's), after the container checks the barter window's sale makes.

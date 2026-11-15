@@ -2015,7 +2015,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     public SessionInsertCheck? InsertCheck { get; init; }
 
     /// <summary>ARC-MAGIC-1823 (ledger IE3, IE4, IE6): the shown map's item script host; with it a script's transfer item from the hero to an NPC or container runs the item's wield-off, remove-item and insert-item scripts as the hero's give does
-    /// (<see cref="GameSessionOwner.TransferNamedItem"/>); null: such an item is refused when the run is planned.</summary>
+    /// (<see cref="GameSessionOwner.TransferNamedItem"/>), and (ARC-MAGIC-2252) so does the take from an NPC or container (the hero's transfer script, remove item, insert item); the plan makes a dry run of the move through it. Null: such an item is refused when the run is planned.</summary>
     public ISessionItemScriptHost? ItemScripts { get; init; }
 
     // ARC-SCRIPT-1164 (E5-b): set lock state (53, 0x441DD0), toggle open or closed (88, 0x4EEF80 and the container's 0x4EEF20, 0x4EEEC0) and create item (66) on what ObjectStateRefusal admitted. False when the session refuses.
@@ -2558,7 +2558,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
                 if (holders.Any(holder => touched.Contains((holder, request.Value)))) return $"{request.Change} of the item named {request.Value} meets an earlier item action of the run on the same holder and name, which is not modelled";
                 foreach (var holder in holders) touched.Add((holder, request.Value));
                 var plan = request.Change == ScrObjectStateChange.TransferItem
-                    ? _session.QueryNamedItemTransfer(HolderOf(request.Object), HolderOf(request.Other!.Value), request.Value, ItemScripts is not null) : _session.QueryNamedItemDestroy(HolderOf(request.Object), request.Value);
+                    ? _session.QueryNamedItemTransfer(HolderOf(request.Object), HolderOf(request.Other!.Value), request.Value, ItemScripts) : _session.QueryNamedItemDestroy(HolderOf(request.Object), request.Value);
                 if (plan.Refusal is { } why) return why;
                 continue;
             }

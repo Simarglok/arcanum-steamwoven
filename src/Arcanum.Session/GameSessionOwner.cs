@@ -2293,7 +2293,13 @@ public sealed partial class GameSessionOwner : IDisposable
             ThrowIfDisposed();
             if (Stale()) return RejectItem(GameSessionFailure.StaleVersion) with { Scripts = runs.Runs };
             if (runs.Failure != GameSessionFailure.None) return RejectItem(runs.Failure) with { Scripts = runs.Runs };
-            if (gate?.Outcome == ScrOutcome.SkipDefault) return Declined(gatePoint, runs);
+            // ARC-MAGIC-2252: a dry run (QueryNamedItemTransfer) applies nothing, not even a declined gate's flags.
+            if (gate?.Outcome == ScrOutcome.SkipDefault)
+            {
+                if (!_transferDryRun) return Declined(gatePoint, runs);
+                runs.Prepare();
+                return runs.Failure != GameSessionFailure.None ? RejectItem(runs.Failure) with { Scripts = runs.Runs } : new(GameSessionDisposition.NoChange, GameSessionFailure.None, null, null, Version);
+            }
         }
         if (noDrop && !toFeet) return NoDropRefusal(runs?.Runs);
         // ARC-WORLD-069: the Technophobia refusal between the host's weight and room answers (0x466510).
@@ -2338,6 +2344,8 @@ public sealed partial class GameSessionOwner : IDisposable
             runs.Prepare();
             if (runs.Failure != GameSessionFailure.None) return RejectItem(runs.Failure, shown) with { InsertScript = insertRun, Scripts = runs.Runs };
         }
+        // ARC-MAGIC-2252: a dry run (QueryNamedItemTransfer) ends where the move would apply: every run is made and prepared, nothing is applied.
+        if (_transferDryRun) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, item.Entity, shown, Version);
         if (folds)
         {
             // The key number goes to the end of the ring's list and the key item is destroyed (0x466A00 → 0x466A50, ledger LB20).

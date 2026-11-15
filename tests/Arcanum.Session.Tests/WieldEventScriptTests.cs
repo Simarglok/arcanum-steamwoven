@@ -20,7 +20,7 @@ namespace Arcanum.Session.Tests;
 public sealed class WieldEventScriptTests
 {
     internal const byte Counter = 0, Triggerer = 0, Attachee = 1, Local = 2, Number = 3;
-    private const int WieldOn = 700, WieldOff = 701, Record = 702, Charm = 50;
+    private const int WieldOn = 700, WieldOff = 701, Record = 702, Unsupported = 703, Charm = 50;
     private static readonly SessionInsertCheck Accept = _ => SessionInsertVerdict.Accepted;
     private static readonly SessionWearArtCheck Drawn = (_, _) => true;
     // A charm: strength +1 (stat 0).
@@ -64,12 +64,14 @@ public sealed class WieldEventScriptTests
     internal static readonly ScrProgram CallOff = Program(Do(C(ScrCatalogue.Action.CallScriptEx, (Attachee, 0), N(24), N(6), (Triggerer, 0))),
         Do(C(ScrCatalogue.Action.ReturnRunDefault)));
     private static readonly ScrProgram Plain = Program(Do(C(ScrCatalogue.Action.ReturnRunDefault)));
+    // ARC-MAGIC-2252: a run the session cannot apply (an effect it has no definition of).
+    private static readonly ScrProgram Refusing = Program(Do(C(ScrCatalogue.Action.AddEffect, (Triggerer, 0), N(999), N(5))));
 
     /// <summary>A host with slots per (entity, point), the charm's rule and the identified answers; it reads the session's flags.</summary>
     private sealed class Host(GameSessionOwner session) : ISessionItemScriptHost
     {
         public Dictionary<(string, int), int> Slots { get; } = [];
-        public Dictionary<int, ScrProgram> Programs { get; } = new() { [WieldOn] = Scaled, [WieldOff] = CallOff, [Record] = Plain };
+        public Dictionary<int, ScrProgram> Programs { get; } = new() { [WieldOn] = Scaled, [WieldOff] = CallOff, [Record] = Plain, [Unsupported] = Refusing };
         public Dictionary<int, SessionEffectDefinition> Effects { get; } = new() { [Charm] = CharmEffect };
         public Dictionary<string, bool> Identified { get; } = [];
 
@@ -425,7 +427,7 @@ public sealed class WieldEventScriptTests
         using var _ = owner;
         var revision = owner.Version.Revision;
         Assert.AreEqual(GameSessionFailure.ItemScriptUnsupported, owner.QueryNamedItemTransfer(null, "virgil", 2851).Failure);
-        Assert.IsNull(owner.QueryNamedItemTransfer(null, "virgil", 2851, itemScripts: true).Refusal);
+        Assert.IsNull(owner.QueryNamedItemTransfer(null, "virgil", 2851, host).Refusal);
         var bare = owner.TransferNamedItem(owner.Version, null, "virgil", 2851, Accept);
         Assert.AreEqual((GameSessionFailure.ItemScriptUnsupported, revision), (bare.Failure, owner.Version.Revision));
 
@@ -434,6 +436,71 @@ public sealed class WieldEventScriptTests
         CollectionAssert.AreEqual(GiveRuns, moved.Scripts.Select(run => (run.Point, run.Attachee)).ToArray());
         Assert.AreEqual((0, 0), (Charms(owner), owner.QueryEquipment().Worn.Count));
         Assert.IsTrue(owner.QueryMapInventory(Exterior)!.Holders.Single(holder => holder.Entity == "virgil").Items.Any(listed => listed.Entity == "kit:3"));
+    }
+
+    // ARC-MAGIC-2252: the hero with the corpse and the other holders of the inventory seed attached.
+    private static (GameSessionOwner Owner, Host Host) HeroWithHolders()
+    {
+        var created = GameSessionOwner.Create(Descriptor() with { Hero = HalfElf() });
+        Assert.AreEqual(GameSessionFailure.None, created.Failure);
+        var owner = created.Owner!;
+        Assert.AreEqual(GameSessionFailure.None, owner.AttachMapInventory(Exterior, InventoryStateTests.Seed()).Failure);
+        return (owner, new Host(owner));
+    }
+
+    private static string[] Listed(GameSessionOwner owner, string holder) => owner.QueryMapInventory(Exterior)!.Holders.Single(h => h.Entity == holder).Items.Select(i => i.Entity).ToArray();
+
+    // The script command's transfer item from an NPC to the hero runs the item's remove-item and insert-item scripts and the hero's transfer script through the host, as the hero's give does.
+    [TestMethod]
+    public void A_script_transfer_from_an_NPC_to_the_hero_runs_the_item_scripts()
+    {
+        var (owner, host) = HeroWithHolders();
+        using var _ = owner;
+        host.Slots[("boots", SessionScriptPoint.InsertItem)] = Record;
+        host.Slots[("torn", SessionScriptPoint.RemoveItem)] = Record;
+        var revision = owner.Version.Revision;
+        Assert.AreEqual(GameSessionFailure.ItemScriptUnsupported, owner.QueryNamedItemTransfer("corpse", null, 2807).Failure);
+        Assert.IsNull(owner.QueryNamedItemTransfer("corpse", null, 2807, host).Refusal);
+        Assert.AreEqual(revision, owner.Version.Revision, "the plan's dry run applies nothing");
+        var bare = owner.TransferNamedItem(owner.Version, "corpse", null, 2807, Accept);
+        Assert.AreEqual((GameSessionFailure.ItemScriptUnsupported, revision), (bare.Failure, owner.Version.Revision));
+
+        var boots = owner.TransferNamedItem(owner.Version, "corpse", null, 2807, Accept, host);
+        Assert.AreEqual((GameSessionDisposition.Changed, GameSessionFailure.None, "boots"), (boots.Disposition, boots.Failure, boots.Item));
+        CollectionAssert.Contains(boots.Scripts.Select(run => (run.Point, run.Attachee)).ToArray(), (SessionScriptPoint.InsertItem, "boots"));
+        Assert.IsNotNull(boots.InsertScript);
+        Assert.IsTrue(owner.QueryPcInventory().Any(item => item.Entity == "boots"));
+        CollectionAssert.DoesNotContain(Listed(owner, "corpse"), "boots");
+
+        var torn = owner.TransferNamedItem(owner.Version, "corpse", null, 5607, Accept, host);
+        Assert.AreEqual((GameSessionDisposition.Changed, "torn"), (torn.Disposition, torn.Item));
+        CollectionAssert.Contains(torn.Scripts.Select(run => (run.Point, run.Attachee)).ToArray(), (SessionScriptPoint.RemoveItem, "torn"));
+        Assert.IsTrue(owner.QueryPcInventory().Any(item => item.Entity == "torn"));
+    }
+
+    // The plan's dry run finds the nested run the session cannot apply, so a calling script is refused before any of its effects apply; the plan itself changes nothing.
+    [TestMethod]
+    public void The_plan_of_a_script_transfer_refuses_a_nested_run_the_session_cannot_apply()
+    {
+        var (owner, host) = HeroWithHolders();
+        using var _ = owner;
+        host.Slots[("boots", SessionScriptPoint.InsertItem)] = Unsupported;
+        var revision = owner.Version.Revision;
+        var plan = owner.QueryNamedItemTransfer("corpse", null, 2807, host);
+        Assert.AreEqual((GameSessionFailure.ItemScriptUnsupported, true), (plan.Failure, plan.Refusal is not null));
+        var moved = owner.TransferNamedItem(owner.Version, "corpse", null, 2807, Accept, host);
+        Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.ItemScriptUnsupported, revision), (moved.Disposition, moved.Failure, owner.Version.Revision));
+        CollectionAssert.Contains(Listed(owner, "corpse"), "boots");
+
+        // The hero's give of the worn scripted ring: the same.
+        var (worn, wornHost) = WornScriptedRing();
+        using var __ = worn;
+        wornHost.Slots[("kit:3", SessionScriptPoint.RemoveItem)] = Unsupported;
+        var ring = worn.Version.Revision;
+        var givePlan = worn.QueryNamedItemTransfer(null, "virgil", 2851, wornHost);
+        Assert.AreEqual((GameSessionFailure.ItemScriptUnsupported, true), (givePlan.Failure, givePlan.Refusal is not null));
+        Assert.AreEqual((ring, 10, 1), (worn.Version.Revision, Charms(worn), worn.QueryEquipment().Worn.Count), "the dry run left the ring worn with its charms");
+        Assert.AreEqual(GameSessionFailure.ItemScriptUnsupported, worn.TransferNamedItem(worn.Version, null, "virgil", 2851, Accept, wornHost).Failure);
     }
 
     [TestMethod]
