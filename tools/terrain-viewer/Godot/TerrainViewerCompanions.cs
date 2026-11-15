@@ -192,10 +192,44 @@ public partial class TerrainViewerApp
             NoFatigue = entity => session is not null && host is not null && _areaCompanions?.Companions.Any(c => c.Entity == entity) == true
                 && AreaLife.Unconscious(session, host, entity) == true,
             FollowersOf = leader => session is null ? [] : session.QueryFollowers(leader)
-                .Where(follower => SessionCreatedObject.KindOf(follower) == SessionCreatedKind.Critter || _areaCompanions?.Companions.Any(c => c.Entity == follower) == true).ToArray(),
+                .Where(follower => SessionCreatedObject.KindOf(follower) == SessionCreatedKind.Critter || GroupHolds(follower) || BodylessTravels(session, follower)).ToArray(),
             WaitFacts = entity => session is not null && _areaCompanions?.Companions.FirstOrDefault(c => c.Entity == entity) is { } companion
                 ? AreaCompanionRoster.WaitFacts(companion.Facts, session.QueryHeroPartySide()) : null,
         };
+    }
+
+    private bool GroupHolds(string entity) => _areaCompanions?.Companions.Any(c => c.Entity == entity) == true;
+
+    /// <summary>
+    /// ARC-WORLD-2161 (tail of #2132): the followers of the hero's change of place that the shown group holds no body for (a map NPC a companion leads whose body the scene does not draw or whose follow facts do not read,
+    /// a visitor whose body its home map could not give). The original's move list carries every object of the follower tree whole, so each is stood on the destination by the session's placement
+    /// edits alone (<see cref="AreaCompanionGroup.Arrive(AreaBodylessFollower, SessionMapId, SessionMapId, CellCoord, NeighborDirection)"/>); one whose home the session cannot name stays behind and is said on the log.
+    /// </summary>
+    private IReadOnlyList<AreaBodylessFollower> BodylessFollowers(GameSessionOwner session, IEnumerable<string> travelling, ICollection<string>? unresolved)
+    {
+        var map = _inventoryHost?.Maps.FirstOrDefault(m => m.RuntimeMap == CurrentAreaMap);
+        return AreaLedMapNpcs.Bodyless(session, new(CurrentAreaMap), travelling, GroupHolds,
+            entity => map is not null && map.TryGetRow(entity, out var row) && row.Type == 16 && row.WorldX is { } x && row.WorldY is { } y ? new CellCoord(checked((int)x), checked((int)y)) : null, unresolved);
+    }
+
+    // A follower of the tree the group holds no body for travels when the session can place it; one it cannot is left behind and said on the log.
+    private bool BodylessTravels(GameSessionOwner session, string follower)
+    {
+        var unresolved = new List<string>();
+        if (BodylessFollowers(session, [follower], unresolved).Count == 1) return true;
+        foreach (var entity in unresolved) GD.Print($"ARC-WORLD-2161 bodyless follower entity={entity} has no readable home on this map: it stays behind");
+        return false;
+    }
+
+    /// <summary>ARC-WORLD-2161: <see cref="BodylessFollowers(GameSessionOwner, IEnumerable{string}, ICollection{string}?)"/> for a move list, named on the log (the departure's).</summary>
+    private IReadOnlyList<AreaBodylessFollower> BodylessFollowers(SessionMoveList? moveList)
+    {
+        if (moveList is null || _areaSession is not { } session) return [];
+        var unresolved = new List<string>();
+        var found = BodylessFollowers(session, moveList.Travelling, unresolved);
+        foreach (var follower in found) GD.Print($"ARC-WORLD-2161 bodyless follower entity={follower.Entity} home={follower.Home.RuntimeMap} stored={follower.HomeWorld.X},{follower.HomeWorld.Y} travels by placement edits");
+        foreach (var entity in unresolved) GD.Print($"ARC-WORLD-2161 bodyless follower entity={entity} has no readable home: it stays behind");
+        return found;
     }
 
     /// <summary>The companions that follow the PC off this map, with their facing (recorded before the PC leaves), and the session's
