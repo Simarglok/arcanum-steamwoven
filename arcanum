@@ -15,7 +15,7 @@ import sys
 
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
-from tools.local_dev import clean, config, daily, launch, manifests, menubar, run_queue, smoke, start_check  # noqa: E402
+from tools.local_dev import clean, config, daily, launch, manifests, menubar, qa, run_queue, smoke, start_check  # noqa: E402
 
 LOCAL = ROOT / "tools" / "arcanum-local"
 DEFAULT_GAME_ROOT = Path("/Applications/Arcanum")
@@ -485,6 +485,12 @@ def parser() -> argparse.ArgumentParser:
                                   "of that commit (ARC-DEV-062)")
     daily.configure(command)
     command.set_defaults(func=daily.run)
+    # ARC-DEV-2187: the owner's local check page (docs/workflow/toolchain.md#owner-qa-page-arc-dev-2187).
+    command = commands.add_parser("qa", help="the owner's local check page: the steps of docs/project/owner-recheck-list.md from origin/main "
+                                  "with same / differs / cannot test, a note and a Ctrl+B report; a differs step creates its GitHub "
+                                  "issue at once; `qa sync` sends the ones that failed (ARC-DEV-2187)")
+    qa.configure(command)
+    command.set_defaults(func=qa.run)
     command = commands.add_parser("queue", help="show the launch queue: the runs holding a place and the waiters in order; --wait blocks until a run or the queue is done")
     command.add_argument("--history", type=positive, default=0, metavar="N", help="show the last N finished runs instead")
     command.add_argument("--lanes", action="store_true", help="count the finished runs and the red ones per Godot lane, alone and "
