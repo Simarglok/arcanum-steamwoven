@@ -766,6 +766,17 @@ public sealed class InterfaceChromeTests
             for (var x = x0; x < x0 + w; x++) { var i = (y * 800 + x) * 4; (rgba[i], rgba[i + 1], rgba[i + 2], rgba[i + 3]) = (0, 0, 0, 0); }
         }
         Clear(150, 11, 501, 365); Clear(25, 24, 89, 89);
+        // ARC-UI-2194: the brass pill is an opaque island inside the view's hole (the cover's silhouette at (294, 341)), with the compass opening clear to its lower edge.
+        var cover = SyntheticCover();
+        for (var y = 0; y < 35; y++)
+        for (var x = 0; x < 207; x++)
+            if (cover[(y * 207 + x) * 4 + 3] > 0) { var i = ((341 + y) * 800 + 294 + x) * 4; (rgba[i], rgba[i + 1], rgba[i + 2], rgba[i + 3]) = (110, 80, 40, 255); }
+        for (var y = 341; y < 341 + 49; y++)
+        for (var x = 294; x < 501; x++)
+        {
+            double dx = x + 0.5 - (294 + PillCentre.X), dy = y + 0.5 - (341 + PillCentre.Y);
+            if (dx * dx + dy * dy < 20.5 * 20.5) { var i = (y * 800 + x) * 4; (rgba[i], rgba[i + 1], rgba[i + 2], rgba[i + 3]) = (0, 0, 0, 0); }
+        }
         return rgba;
     }
 
@@ -949,6 +960,141 @@ public sealed class InterfaceChromeTests
             Assert.AreEqual(0, Pixel(a, pw, pw / 2, pw / 2).A, $"the lens is clear in the middle at {scale}");
             Assert.AreEqual(255, Pixel(a, pw, 1, 1).A, $"and opaque in the corner at {scale}");
         }
+    }
+
+    // ARC-UI-2194: the world map window's bottom cover 217 (207 x 35) and the brass pill under it in the frame 138.
+    private static (double X, double Y) PillCentre => (103.5, 28.5);
+
+    // A synthetic cover of the real size: the opaque pill (a housing from x 39 to 169 from row 10, a plate band from x 4 to 203 from row 19, a ring of radius 26 round the compass opening) with the opening (radius 20.5) clear.
+    private static byte[] SyntheticCover()
+    {
+        var rgba = new byte[207 * 35 * 4];
+        for (var y = 0; y < 35; y++)
+        for (var x = 0; x < 207; x++)
+        {
+            double dx = x + 0.5 - PillCentre.X, dy = y + 0.5 - PillCentre.Y, d = Math.Sqrt(dx * dx + dy * dy);
+            var opaque = (x is >= 39 and < 169 && y >= 10 || x is >= 4 and < 203 && y >= 19 || d < 26) && d >= 20.5;
+            var i = (y * 207 + x) * 4;
+            (rgba[i], rgba[i + 1], rgba[i + 2], rgba[i + 3]) = opaque ? ((byte)200, (byte)10, (byte)10, (byte)255) : ((byte)0, (byte)0, (byte)0, (byte)0);
+        }
+        return rgba;
+    }
+
+    private static bool SamePart(ChromePart a, ChromePart b) => a is ChromePolygon p && b is ChromePolygon q ? p.Material == q.Material && p.Points.SequenceEqual(q.Points) : a.Equals(b);
+
+    [TestMethod]
+    public void The_cover_and_the_frames_pill_are_built_from_the_same_parts_with_no_kept_picture()
+    {
+        var cover = Recipe("Nav_Cvr.ART");
+        Assert.AreEqual(ChromeKind.Panel, cover.Kind);
+        Assert.AreEqual(ChromeMaterial.Brass, cover.Base);
+        Assert.AreEqual(ChromeHoles.None, cover.Holes, "the opening's edge is the pill's ring, not a hole rim");
+        Assert.AreEqual((294, 341), (cover.OriginX, cover.OriginY), "the brass is sampled at the cover's place in the window");
+        Assert.IsFalse(cover.Parts.OfType<ChromeKeep>().Any(), "no kept picture");
+        var parts = InterfaceChromeRecipes.NavPillParts(0, 0);
+        Assert.AreEqual(parts.Count, cover.Parts.Count);
+        Assert.IsTrue(parts.Zip(cover.Parts).All(pair => SamePart(pair.First, pair.Second)));
+        // The pill's parts: one housing, two studs and two plates (capsules), the ring round the opening, two screws.
+        Assert.AreEqual(1, parts.OfType<ChromePolygon>().Count());
+        Assert.AreEqual(4, parts.OfType<ChromeCapsule>().Count());
+        Assert.AreEqual(2, parts.OfType<ChromeRivet>().Count());
+        var socket = parts.OfType<ChromeSocket>().Single();
+        Assert.AreEqual((PillCentre.X, PillCentre.Y), (socket.CenterX, socket.CenterY));
+        // The frame carries the same parts shifted to the cover's place and no kept picture over the pill's rectangle (294, 341, 207 x 51); the opening takes no hole rim of its own.
+        var frame = Recipe("mapmain.art");
+        var shifted = InterfaceChromeRecipes.NavPillParts(294, 341);
+        Assert.IsTrue(shifted.All(part => frame.Parts.Any(own => SamePart(own, part))), "the frame's pill is the cover's parts at (294, 341)");
+        Assert.IsFalse(frame.Parts.OfType<ChromeKeep>().Any(keep => keep.X < 501 && keep.X + keep.Width > 294 && keep.Y < 392 && keep.Y + keep.Height > 341), "no kept picture over the pill");
+        Assert.IsTrue(frame.Parts.OfType<ChromeBare>().Any(bare => bare.X <= 294 + PillCentre.X && 294 + PillCentre.X < bare.X + bare.Width && bare.Y <= 341 + PillCentre.Y && 341 + PillCentre.Y < bare.Y + bare.Height));
+    }
+
+    [TestMethod]
+    public void The_cover_keeps_its_silhouette_paints_new_brass_and_meets_the_frames_pill_without_a_seam()
+    {
+        var legacy = SyntheticCover();
+        var cover = Recipe("Nav_Cvr.ART");
+        var frameLegacy = MapFrame();
+        foreach (var scale in new[] { 1.0, 2.0, 4.0 })
+        {
+            var a = InterfaceChromeRenderer.Render(cover, 207, 35, legacy, [], 0, scale);
+            CollectionAssert.AreEqual(a, InterfaceChromeRenderer.Render(cover, 207, 35, legacy, [], 0, scale), $"deterministic at {scale}");
+            var (pw, ph) = InterfaceChromeRenderer.PixelSize(207, 35, scale);
+            Assert.AreEqual(pw * ph * 4, a.Length);
+            int At(double v) => (int)(v * scale);
+            // The silhouette (the alpha, so the opening's hit area too) is the Legacy one at every device pixel, and none of the Legacy colour is left.
+            for (var y = 0; y < ph; y++)
+            for (var x = 0; x < pw; x++)
+            {
+                var p = Pixel(a, pw, x, y);
+                var lx = Math.Min(206, (int)(x / scale)); var ly = Math.Min(34, (int)(y / scale));
+                Assert.AreEqual(legacy[(ly * 207 + lx) * 4 + 3] > 0, p.A > 0, $"alpha at {x},{y} at {scale}");
+                Assert.IsFalse(p.A > 0 && p.R == 200 && p.G == 10 && p.B == 10, $"generated colour at {x},{y} at {scale}");
+            }
+            Assert.AreEqual(0, Pixel(a, pw, At(PillCentre.X), At(PillCentre.Y)).A, $"the compass opening is clear at {scale}");
+            // The plate: a bright rim, a darker recessed face, both brass (red over green over blue); the housing between the plate and the ring is darker than the plate's rim.
+            var rim = Pixel(a, pw, At(30), At(21.5)); var face = Pixel(a, pw, At(30), At(30)); var housing = Pixel(a, pw, At(73.5), At(30));
+            foreach (var p in new[] { rim, face, housing }) Assert.IsTrue(p.R > p.G && p.G > p.B && p.A == 255, $"brass at {scale}");
+            Assert.IsTrue(rim.R + rim.G + rim.B > face.R + face.G + face.B, $"the rim is brighter than the face at {scale}");
+            Assert.IsTrue(face.R + face.G + face.B > housing.R + housing.G + housing.B, $"the face is brighter than the housing at {scale}");
+
+            if (scale > 2) continue;
+            // The frame draws the same pill at the cover's place: where the cover is opaque the frame's pixels are the cover's (the same brass at the same window position).
+            var f = InterfaceChromeRenderer.Render(Recipe("mapmain.art"), 800, 400, frameLegacy, [], 0, scale);
+            var (fw, _) = InterfaceChromeRenderer.PixelSize(800, 400, scale);
+            foreach (var (sx, sy) in new[] { (30.0, 30.0), (30.0, 34.0), (12.0, 25.0), (60.0, 14.0), (73.5, 30.0), (80.0, 30.0), (150.0, 30.0), (190.0, 34.0), (104.0, 4.0) })
+            {
+                var c = Pixel(a, pw, At(sx), At(sy)); var w = Pixel(f, fw, At(294 + sx), At(341 + sy));
+                Assert.AreEqual(255, c.A, $"cover opaque at {sx},{sy} at {scale}");
+                Assert.AreEqual((c.R, c.G, c.B), (w.R, w.G, w.B), $"the frame's pill matches the cover at {sx},{sy} at {scale}");
+            }
+            // Across the cover's lower edge the pill goes on: the pixel under the cover's last row is close to it.
+            foreach (var sx in new[] { 30.0, 60.0, 150.0, 185.0 })
+            {
+                var above = Pixel(a, pw, At(sx), ph - 1); var below = Pixel(f, fw, At(294 + sx), At(341 + 35));
+                Assert.IsTrue(Math.Abs(above.R - below.R) + Math.Abs(above.G - below.G) + Math.Abs(above.B - below.B) < 70, $"no seam at {sx} at {scale}: {above} / {below}");
+            }
+            // The frame's opening is clear (the compass button's own hit area) and wood is left outside the pill.
+            Assert.AreEqual(0, Pixel(f, fw, At(294 + PillCentre.X), At(341 + PillCentre.Y)).A);
+        }
+    }
+
+    [TestMethod]
+    public void The_cover_at_fractional_scales_keeps_its_size_and_the_ring_reaches_its_outer_edge()
+    {
+        var legacy = SyntheticCover();
+        foreach (var scale in new[] { 1.5, 2.4 })
+        {
+            var a = InterfaceChromeRenderer.Render(Recipe("Nav_Cvr.ART"), 207, 35, legacy, [], 0, scale);
+            var (pw, ph) = InterfaceChromeRenderer.PixelSize(207, 35, scale);
+            Assert.AreEqual(pw * ph * 4, a.Length);
+            Assert.AreEqual(0, Pixel(a, pw, (int)(PillCentre.X * scale), (int)(PillCentre.Y * scale)).A, $"the opening is clear at {scale}");
+            // Just inside the ring's outer radius (the art is opaque out to 26 units) the ring's own brass is drawn, not the cover's flat base: the ring's lit and shaded sides differ.
+            (int R, int G, int B, int A) At(double dx, double dy) => Pixel(a, pw, (int)((PillCentre.X + dx) * scale), (int)((PillCentre.Y + dy) * scale));
+            var (left, right) = (At(-24.5, 0), At(24.5, 0));
+            Assert.IsTrue(left.R + left.G + left.B > right.R + right.G + right.B, $"the ring's upper-left is lit at {scale}: {left} / {right}");
+        }
+    }
+
+    [TestMethod]
+    public void A_bare_mark_exempts_the_smallest_hole_around_its_centre_and_the_larger_hole_keeps_its_rim()
+    {
+        // A 60 x 60 art: a clear rectangle (4 to 56 by 10 to 50, not round) with an opaque island (a disk of radius 10) that has a clear round opening of radius 5 at its centre: the rectangle's box holds the opening's centre too.
+        var legacy = new byte[60 * 60 * 4];
+        for (var y = 0; y < 60; y++)
+        for (var x = 0; x < 60; x++)
+        {
+            double dx = x + 0.5 - 30, dy = y + 0.5 - 30, d = Math.Sqrt(dx * dx + dy * dy);
+            var inSquare = x is >= 4 and < 56 && y is >= 10 and < 50;
+            var opaque = !inSquare || (d < 10 && d >= 5);
+            var i = (y * 60 + x) * 4;
+            (legacy[i], legacy[i + 1], legacy[i + 2], legacy[i + 3]) = opaque ? ((byte)120, (byte)80, (byte)40, (byte)255) : ((byte)0, (byte)0, (byte)0, (byte)0);
+        }
+        ChromeRecipe Make(params ChromePart[] parts) => new("Bare_Test.ART", ChromeKind.Panel, ChromeMaterial.Wood, ChromeSides.None, parts);
+        var plain = InterfaceChromeRenderer.Render(Make(), 60, 60, legacy, [], 0, 1);
+        var bare = InterfaceChromeRenderer.Render(Make(new ChromeBare(28, 28, 4, 4)), 60, 60, legacy, [], 0, 1);
+        Assert.IsTrue(Pixel(bare, 60, 3, 30).R < 30, "the large hole keeps its rim");
+        Assert.AreEqual(Pixel(plain, 60, 3, 30), Pixel(bare, 60, 3, 30));
+        CollectionAssert.AreNotEqual(plain, bare, "the opening's own rim is not drawn when it is bare");
     }
 
     // ARC-UI-1196: the logbook's frames (synthetic stand-ins of the frames' sizes and holes; no game art).
