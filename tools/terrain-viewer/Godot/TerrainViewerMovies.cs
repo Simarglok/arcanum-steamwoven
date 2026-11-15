@@ -196,7 +196,7 @@ public partial class TerrainViewerApp
     {
         if (_readyMode != TerrainViewerMode.Area) { _scriptFades.Clear(); _endGameAsked = false; return; }
         if (_conversationHost is { } talk) foreach (var fade in talk.Scripts.TakeFades()) _scriptFades.Enqueue(fade);
-        if (_useScriptHost is { } use) foreach (var fade in use.Host.TakeFades()) _scriptFades.Enqueue(fade);
+        if (_useScriptHost is { } use) AdoptScriptRun(use.Host);
         while (!_movieActive && _scriptFades.Count > 0)
         {
             var fade = _scriptFades.Dequeue();
@@ -204,8 +204,15 @@ public partial class TerrainViewerApp
         }
         // ARC-RENDER-1171 (SS4, SS5): a script's end game comes after the movies of its run (the original plays them inside the script, the event 50 ms after it) and waits for any other show.
         if (_conversationHost is { } talkEnd && talkEnd.Scripts.TakeEndGame()) _endGameAsked = true;
-        if (_useScriptHost is { } useEnd && useEnd.Host.TakeEndGame()) _endGameAsked = true;
         if (_endGameAsked && !_movieActive && _scriptFades.Count == 0 && RequestEndGame()) _endGameAsked = false;
+    }
+
+    /// <summary>ARC-RENDER-1879: what a use-script run (a placed, dying or use script of the shown map) asked of the viewer: its fades' movies go on the queue and its end game (132) is remembered
+    /// until the movies of the run have played (<see cref="SyncScriptFades"/>).</summary>
+    private void AdoptScriptRun(AreaUseScriptHost host)
+    {
+        foreach (var fade in host.TakeFades()) _scriptFades.Enqueue(fade);
+        if (host.TakeEndGame()) _endGameAsked = true;
     }
 
     /// <summary>The scene ended or the app closes: a movie in progress stops without its continuation.</summary>
