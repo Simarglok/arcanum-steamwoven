@@ -52,12 +52,11 @@ public partial class TerrainViewerApp
         try
         {
             _camera.ResetWorld(WorldAnchor, WorldViewport, 2);
-            await WallFrames();
-            using var faded = GetViewport().GetTexture().GetImage();
-            _canvas!.SetAreaWallFades(null); await WallFrames();
-            using var opaque = GetViewport().GetTexture().GetImage();
-            _canvas.SetAreaWallFades(state.Fades); await WallFrames();
-            using var again = GetViewport().GetTexture().GetImage();
+            using var faded = await SettledWallFrame();
+            _canvas!.SetAreaWallFades(null);
+            using var opaque = await SettledWallFrame();
+            _canvas.SetAreaWallFades(state.Fades);
+            using var again = await SettledWallFrame();
             var transform = AreaDrawItem.RasterTransform(GetViewport());
             var walls = _canvas.AreaVisibleCommands.Where(command => command.Identity is { } key && state.Fades.ContainsKey(key)).ToArray();
             int changed = 0, outside = 0, unstable = 0;
@@ -79,6 +78,8 @@ public partial class TerrainViewerApp
                 changed++;
                 if (!walls.Any(command => AreaAlphaAt(command, _readyArea!.Frames, transform, pixel % width, pixel / width) != 0)) outside++;
             }
+            if ((walls.Length == 0 || changed == 0 || outside != 0 || unstable != 0) && !string.IsNullOrWhiteSpace(capture))
+            { faded.SavePng(capture + "-walls-fail-faded.png"); opaque.SavePng(capture + "-walls-fail-opaque.png"); again.SavePng(capture + "-walls-fail-again.png"); }
             if (walls.Length == 0 || changed == 0 || outside != 0 || unstable != 0)
                 throw new InvalidOperationException($"AREA_WALL_FADE_NOT_OBSERVED visible={walls.Length} changed={changed} outside={outside} unstable={unstable} unstable-box={(unstable == 0 ? "-" : $"{unstableMinX},{unstableMinY}-{unstableMaxX},{unstableMaxY}")} view={width}x{faded.GetHeight()}");
             // ARC-UI-005: a faded wall is see-through for the pick (original OWAF_TRANS_LEFT/RIGHT); drawn opaque it is picked.
@@ -102,6 +103,36 @@ public partial class TerrainViewerApp
                 VisibleFaded = walls.Length, ChangedPixels = changed, state.SharedEdgeTiles, Parity = "NOT_VERIFIED" }));
         }
         finally { _hud.Visible = true; promptLayer.Visible = promptShown; _camera.ResetWorld(WorldAnchor, WorldViewport, zoom); }
+    }
+    // ARC-DEV-2294: in the HD profile the check runs right after the switch, while the HD frames of the terrain chunks are still being decoded: the
+    // first capture drew the Legacy chunk in a 584x486 block of the lit terrain and the third the HD one (one to a few levels apart, at most 50), so
+    // "unstable" failed, the same way every time the decode was not done in the three frames the check waited (it was not whenever the HD
+    // pack is chosen, which is why Legacy runs and some HD runs passed). A capture now waits for the visual switch and every decode to end (the
+    // wait of the HD smokes) and is taken only once two consecutive captures are identical (at most 12 more rounds; the last is returned when it
+    // never settles, and the unstable test then still reports it).
+    private async Task<Image> SettledWallFrame()
+    {
+        await WallFrames(); // the submission of the new state (it asks for the HD frames it needs) before the wait looks at them
+        var waited = 0;
+        while (_canvas!.PendingVisualProfile is not null || (_canvas.HdSource?.PendingCount ?? 0) > 0 || _canvas.AreaHdStats[HdFallbackReason.Pending] > 0)
+        {
+            if (++waited > 1800) throw new InvalidOperationException($"AREA_WALL_HD_NOT_SETTLED decoding={_canvas.HdSource?.PendingCount ?? 0} pending={_canvas.AreaHdStats[HdFallbackReason.Pending]}");
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        }
+        if (waited > 0) GD.Print($"ARC-DEV-2294 wall capture waited {waited} frames for HD decodes");
+        await WallFrames();
+        var last = GetViewport().GetTexture().GetImage();
+        for (var round = 1; round <= 12; round++)
+        {
+            await WallFrames();
+            var next = GetViewport().GetTexture().GetImage();
+            var same = next.GetSize() == last.GetSize() && next.GetFormat() == last.GetFormat() && next.GetData().AsSpan().SequenceEqual(last.GetData());
+            last.Dispose();
+            last = next;
+            if (same) return last;
+        }
+        GD.Print("ARC-DEV-2294 wall capture did not settle in 12 rounds");
+        return last;
     }
     private async Task WallFrames()
     {
