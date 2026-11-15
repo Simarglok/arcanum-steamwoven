@@ -1028,10 +1028,10 @@ public partial class TerrainViewerApp
             CloseBarterByPlayer();
             Require(!BarterOpen && session.Version.Revision == revision, "the player's close closed it; nothing changed");
             var saved = session.Capture();
-            var options = new GameSessionRestoreOptions(new(saved.Identity.World, session.Flags.Binding.Identity.Module),
+            GameSessionRestoreOptions CopyOptions() => new(new(saved.Identity.World, session.Flags.Binding.Identity.Module),
                 session.QueryClockSnapshot().ProfileBinding, new(Guid.NewGuid()), session.Limits, session.Rules.Mode, session.Experience, session.Difficulty,
                 LoadRandom: session.QueryRandom());
-            using var copy = GameSessionOwner.Restore(saved, options).Owner ?? throw new InvalidOperationException("copy");
+            using var copy = GameSessionOwner.Restore(saved, CopyOptions()).Owner ?? throw new InvalidOperationException("copy");
             Require(_inventoryHost?.Attach(copy) == GameSessionFailure.None, "seeds attached to the copy");
             var buysAll = live.Merchant with { BuyList = new InventorySourceBuyList(InventorySourceBuyStatus.Everything, []) };
             var inventory = _inventoryHost!;
@@ -1047,20 +1047,58 @@ public partial class TerrainViewerApp
             Require(sold.Moved && copy.QueryGold() == gold + sold.Total, "the sale moved the item and paid at most the merchant's coins: " + sold.Text);
             var ware = model.View().Wares.FirstOrDefault(line => line.Quote.Price > 0 && (long)line.Quote.Price * line.Count <= copy.QueryGold());
             var bought = ware is null ? "none affordable" : model.Buy(ware.Entity) is var trade && trade.Moved ? trade.Text : "refused: " + trade.Text;
-            // ARC-UI-1740: a bet on the copy when its gate lets one ware through (the hero's Gambling decides): a win moves the item for nothing, a loss only pays
-            // the quote (ARC-UI-2215), in one revision, and the next roll was thrown.
-            var betText = "no ware passed the gate";
-            if (model.View().Wares.FirstOrDefault(line => model.CheckGamble(line.Entity).Allowed) is { } stake)
+            // ARC-UI-1809: the bets on detached sessions that never replace the live one: the real merchant's wares (its seeds attached), the player's item prototypes and
+            // the real prices, with a gambler hero (the self-test's: 5 Gambling points, 5000 coins; the live hero seldom has Gambling points or the coins of a ware) whose
+            // saved roll is chosen by the session seed, so the roll is controlled: at most 90 against a merchant of level 0 must win (the check's effectiveness is capped at
+            // 95), 96 or more must lose whatever the merchant's level. Each bet uses exactly the saved roll, costs nothing on a win and the quote on a loss, and saves the
+            // check's own draw as the next roll.
+            string BetOnDetached(string label, int merchantLevel, Func<int, bool> rollWanted, bool expectWin)
             {
-                var price = stake.Quote.Price; var goldBefore = copy.QueryGold(); var rollBefore = copy.QueryGamblingRoll();
-                var bet = model.Gamble(stake.Entity);
-                Require(bet.Settled && copy.QueryPcInventory().Any(item => item.Entity == stake.Entity) == bet.Won, "a win moved the ware to the hero, a loss left it with the merchant (ARC-UI-2215): " + bet.Text);
-                Require(copy.QueryGold() == goldBefore - bet.Paid && bet.Paid == (bet.Won ? 0 : price * stake.Count), "a win costs nothing and a loss the quote");
-                Require(copy.QueryGamblingRoll() == bet.Bet!.Check!.NextGamblingRoll && rollBefore is not null, "the check's draw is the next saved roll");
-                betText = $"{(bet.Won ? "won" : "lost")} {stake.Text} (roll {bet.Bet.Check.Check.Roll} against {bet.Bet.Check.Check.Effectiveness}, paid {bet.Paid}, reaction {bet.ReactionChange})";
+                int[] basicPoints = new int[12];
+                basicPoints[(int)Arcanum.Simulation.Skills.Skill.Gambling] = 5;
+                var gamblerHero = new SessionHeroDefinition(16089, CharacterRace.HalfElf, CharacterGender.Male, [20, 20, 20, 20, 20, 20, 20, 20, 0, 0], 1, 5, 0,
+                    null, null, 5000, [], Advancement: SessionHeroAdvancement.None with { BasicSkills = [.. basicPoints] });
+                var actor = session.QueryActor();
+                GameSessionOwner? detached = null;
+                for (ulong randomSeed = 0; randomSeed < 400 && detached is null; randomSeed++)
+                {
+                    var made = AreaTransitionCoordinator.CreateSession(session.QueryClockSnapshot().ProfileBinding, Guid.NewGuid(), Guid.NewGuid(), new(actor.Cell.X, actor.Cell.Y),
+                        actor.Map.RuntimeMap, new AreaHeroLoad(AreaHeroStatus.Ready, AreaStartingHero.Find("half-elf-male")!, gamblerHero, 2352, 0, null, "synthetic"),
+                        randomSeed: randomSeed).Owner ?? throw new InvalidOperationException("gambler session");
+                    made.EnsureGamblingRoll(made.Version);
+                    if (made.QueryGamblingRoll() is { } thrown && rollWanted(thrown)) detached = made; else made.Dispose();
+                }
+                Require(detached is not null, $"a seed with a {label} first roll within 400 seeds");
+                using var gamblerSession = detached!;
+                Require(inventory.Attach(gamblerSession) == GameSessionFailure.None, $"the real seeds attached to the {label} gambler's session");
+                var gambler = new AreaBarter(gamblerSession, inventory, data, buysAll, () => 50, _ => true,
+                    (item, kind) => inventory.Maps.Any(map => map.TryGetRow(item, out _)) ? inventory.Name(item, _hoverNames?.Catalog) : AreaInventoryHost.KindName(kind, _hoverNames?.Catalog),
+                    merchantGambling: () => new(Arcanum.Simulation.Skills.Skill.Gambling, 3, 3, merchantLevel, Arcanum.Simulation.Combat.SkillTraining.None));
+                var wares = gambler.View().Wares;
+                if (wares.FirstOrDefault(line => !line.Stack && gambler.CheckGamble(line.Entity).Allowed) is not { } stake)
+                    return $"{label}: NOT BET, no single ware passed the gate ({(wares.Count == 0 ? "no wares" : gambler.CheckGamble(wares[0].Entity).Gate.Refusal.ToString())})";
+                var (goldBefore, rollBefore, revisionBefore) = (gamblerSession.QueryGold(), gamblerSession.QueryGamblingRoll(), gamblerSession.Version.Revision);
+                var price = stake.Quote.Price;
+                var bet = gambler.Gamble(stake.Entity);
+                Require(bet.Settled, $"the {label} bet settled: " + bet.Text);
+                var check = bet.Bet!.Check!;
+                Require(check.Check.Roll == rollBefore, $"the {label} bet used the saved roll {rollBefore}, not {check.Check.Roll}");
+                Require(check.Fated || check.Success == (check.Check.Roll + check.Check.Difficulty <= check.Check.Effectiveness), $"the {label} outcome follows roll + difficulty <= effectiveness");
+                Require(bet.Won == expectWin, $"the {label} bet {(expectWin ? "wins" : "loses")} on roll {rollBefore} (effectiveness {check.Check.Effectiveness}, difficulty {check.Check.Difficulty}): {bet.Text}");
+                Require(bet.Paid == (bet.Won ? 0 : price * stake.Count) && gamblerSession.QueryGold() == goldBefore - bet.Paid, $"a win costs nothing and a loss the quote ({label})");
+                // ARC-UI-2215: a win moves the ware to the hero, a loss only pays and the ware stays with the merchant.
+                Require(gamblerSession.QueryPcInventory().Any(item => item.Entity == stake.Entity) == bet.Won, $"a win moved the ware to the hero, a loss left it with the merchant ({label}): " + bet.Text);
+                Require(gamblerSession.QueryGamblingRoll() == check.NextGamblingRoll && check.NextGamblingRoll is >= 1 and <= 100 && gamblerSession.Version.Revision == revisionBefore + 1,
+                    $"the check's own draw is the next saved roll, the win's move or the loss's payment, one revision ({label}): next {gamblerSession.QueryGamblingRoll()} vs {check.NextGamblingRoll}, revisions {revisionBefore} -> {gamblerSession.Version.Revision}");
+                return $"{label}: {(bet.Won ? "won" : "lost")} {stake.Text} (roll {check.Check.Roll} + {check.Check.Difficulty} against {check.Check.Effectiveness}, paid {bet.Paid}, reaction {bet.ReactionChange})";
             }
+            var betText = BetOnDetached("won", 0, roll => roll <= 90, true) + "; " + BetOnDetached("lost", Arcanum.Simulation.Skills.SkillRules.MaxLevel, roll => roll >= 96, false);
+            // A merchant without Gambling points refuses every ware (category 9), as the live merchant of the first shop does.
+            var noGambler = new AreaBarter(copy, inventory, data, buysAll, () => 50, _ => true, (item, kind) => item, merchantGambling: () => new(Arcanum.Simulation.Skills.Skill.Gambling, 0, 0, 0, Arcanum.Simulation.Combat.SkillTraining.None));
+            if (noGambler.View().Wares.FirstOrDefault() is { } anyWare)
+                Require(noGambler.CheckGamble(anyWare.Entity).Gate.Refusal == Arcanum.Simulation.Items.GambleRefusal.NoGambler, "a merchant without Gambling points refuses the bet");
             Require(session.Version.Revision == revision, "the live session is untouched");
-            GD.Print("ARC-UI-1740 native-smoke barter-gamble PASS " + gamble + "; copy: " + betText);
+            GD.Print("ARC-UI-1740 native-smoke barter-gamble PASS " + gamble + "; detached gambler: " + betText);
             GD.Print("ARC-UI-050 native-smoke barter PASS " + System.Text.Json.JsonSerializer.Serialize(new {
                 Merchant = $"speaker {chosen.Index} of {talk.Speakers.Count}, multiplier {live.Merchant.Multiplier}, buys {live.Merchant.BuyList.Status}, fence {live.Merchant.Fence}, script {live.Merchant.BuyScript}",
                 Container = live.Merchant.Container is null ? "none" : $"buys {live.Merchant.ContainerBuyList?.Status}, identified {session.Capture().Inventory.Identified.Count}",
