@@ -635,7 +635,7 @@ transfer or window action in the same reply keeps it blocked (`UnsupportedIntera
 
 The way is built before the payment, so a failed line never follows a spent price; the effect budget covers the payment and the marking together. A refused or throwing port, an area the port cannot
 name, a bearing outside the eight directions fail the talk (`InvalidQueryResult`, `QueryException`). The viewer's host (`AreaDialogDirections`) names the areas from `mes\gamearea.mes` (`WorldAreaTable`,
-loaded with the greeting texts) and measures from the speaker's location (a following companion's live cell, else the cell the shown map's AI host has the NPC on now, `AreaAiHost.NpcCell` through `AreaSpeakerCells.Live` (ARC-SCRIPT-1601; exe 0x406DA0 field 2 is the object's live location), else its T0 cell; the talk range and the hover still measure an AI-moved NPC from its T0 cell, [#2238](https://github.com/Simarglok/arcanum-steamwoven/issues/2238)) with `LineOfFireRules.Rotation` and `WorldTravelGeometry.Distance`.
+loaded with the greeting texts) and measures from the speaker's location (a following companion's live cell, else the cell the shown map's AI host has the NPC on now, `AreaAiHost.NpcCell` through `AreaSpeakerCells.Live` (ARC-SCRIPT-1601; exe 0x406DA0 field 2 is the object's live location), else its T0 cell; the talk range, the hover's Talk/WalkToTalk choice and the hero-run talk checks measure from the same cell, ARC-WORLD-2238) with `LineOfFireRules.Rotation` and `WorldTravelGeometry.Distance`.
 Tests: `DialogDirectionsTests` (synthetic), `AreaDialogDirectionsTests` (the host's seam) and the opt-in `DialogDirectionsRealDataTests` (`DAT_ROOT`: the two installed `d:` replies are admitted and run
 to their way; no installed `x:`).
 
