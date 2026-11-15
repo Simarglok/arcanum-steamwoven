@@ -45,6 +45,7 @@ class FakeGh:
         self.fail = fail
         self.area = area or {}
         self.next = 4000
+        self.existing: list[dict] | None = None      # what `issue list` finds (None: the call fails)
 
     def __call__(self, arguments: list[str], stdin: str | None = None, cwd: Path | None = None) -> tuple[int, str, str]:
         self.calls.append((arguments, stdin))
@@ -53,6 +54,8 @@ class FakeGh:
             if known is None:
                 return 1, "", "not found"
             return 0, json.dumps({"title": known[0], "labels": [{"name": name} for name in known[1]]}), ""
+        if arguments[:2] == ["issue", "list"]:
+            return (0, json.dumps(self.existing), "") if self.existing is not None else (2, "", "unexpected")
         if arguments[:2] == ["issue", "create"]:
             if self.fail:
                 return 1, "", "HTTP 502"
@@ -204,6 +207,18 @@ class IssueTests(unittest.TestCase):
             self.assertEqual(2, len(gh.creates()))
             step = app.state()["sections"][0]["steps"][0]
             self.assertEqual((4001, None), (step["issue"], step["issueError"]))
+
+    def test_a_retry_reuses_an_issue_that_a_timed_out_create_had_made(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            gh = FakeGh(fail=True)
+            app = make_app(Path(tmp), gh)
+            app.save({"step": "ARC-DEV-100#1", "status": "differs"})
+            gh.fail = False
+            gh.existing = [{"number": 77, "url": "https://github.com/o/r/issues/77", "title": "ARC-DEV-100#1: differs from the original: x"},
+                           {"number": 78, "url": "u", "title": "ARC-DEV-100#10: another step"}]
+            self.assertEqual((["ARC-DEV-100#1"], []), app.sync())
+            self.assertEqual(77, app.state()["sections"][0]["steps"][0]["issue"])
+            self.assertEqual(1, len(gh.creates()))                  # only the failed first attempt
 
     def test_sync_keeps_failures_listed(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -369,6 +384,7 @@ class CommandTests(unittest.TestCase):
             self.assertEqual(0, done.returncode, done.stderr)
             self.assertIn("qa: started: http://127.0.0.1:", done.stdout)
             self.assertIn("check passed", done.stdout)
+            self.assertFalse((Path(tmp) / "data" / "state.json").exists())     # a start check does not use up "new since the last visit"
 
     def test_the_list_parser_is_the_one_of_ARC_DEV_2186(self) -> None:
         self.assertIs(qa.owner_checks, owner_checks)

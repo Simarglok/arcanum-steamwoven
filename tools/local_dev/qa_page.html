@@ -73,6 +73,8 @@ const STATUS_LABEL = { "open": "open", "same": "same", "differs": "differs", "ca
 let data = null, filter = "all", section = "", selected = null;
 const opened = new Map();          // step id -> epoch seconds when the step was first opened on this page
 const drafts = new Map();          // step id -> { note, report } edited, not yet saved
+const chosen = new Set();          // steps whose report the owner picked by hand (no preselect any more)
+const busy = new Set();            // steps with a save in flight
 const flash = new Map();           // step id -> short message
 
 function h(tag, props, ...kids) {
@@ -106,7 +108,7 @@ function draftOf(step) {
 }
 function preselect(step) {
   const draft = draftOf(step);
-  if (step.recorded || draft.report || step.report) return;      // a saved step keeps what the owner saved
+  if (step.recorded || chosen.has(step.id) || draft.report || step.report) return;      // a saved step keeps what the owner saved
   const since = opened.get(step.id) || 0;
   const newest = data.reports.find(r => r.epoch >= since);      // reports are newest first
   if (newest) draft.report = newest.name;
@@ -137,15 +139,18 @@ function render() {
   }
   list.replaceChildren(...(out.length ? out : [h("div", { class: "empty" }, "No steps match this filter.")]));
 }
+function reportOptions(draft) {
+  const names = new Set(data.reports.map(r => r.name));
+  const options = [h("option", { value: "" }, "no report attached")];
+  if (draft.report && !names.has(draft.report)) options.push(h("option", { value: draft.report }, draft.report + " (folder not found)"));
+  for (const r of data.reports) options.push(h("option", { value: r.name }, r.name + " · " + (r.text || "(no text)")));
+  return options;
+}
 function stepNode(step) {
   const draft = draftOf(step);
   if (opened.has(step.id)) preselect(step);
-  const reports = data.reports;
-  const names = new Set(reports.map(r => r.name));
-  const options = [h("option", { value: "" }, "no report attached")];
-  if (draft.report && !names.has(draft.report)) options.push(h("option", { value: draft.report }, draft.report + " (folder not found)"));
-  for (const r of reports) options.push(h("option", { value: r.name }, r.name + " · " + (r.text || "(no text)")));
-  const report = h("select", { "aria-label": "Bug report folder", on: { focus: () => refreshReports(step), change: e => { draft.report = e.target.value || null; if (step.recorded || step.status !== "open") save(step, step.status); } } }, options);
+  const options = reportOptions(draft);
+  const report = h("select", { "aria-label": "Bug report folder", on: { focus: () => refreshReports(step), change: e => { chosen.add(step.id); draft.report = e.target.value || null; if (step.recorded || step.status !== "open") save(step, step.status); } } }, options);
   report.value = draft.report || "";
   const note = h("textarea", { placeholder: "Note (what you saw)", "aria-label": "Note", on: {
     input: e => { draft.note = e.target.value; },
@@ -166,9 +171,15 @@ async function refreshReports(step) {
   const before = data.reports.map(r => r.name).join("|");
   try { data.reports = (await api("/api/reports")).reports; } catch (e) { return; }
   if (!draftOf(step).report && !step.report) preselect(step);
-  if (before !== data.reports.map(r => r.name).join("|")) { render(); return; }     // new folders: the dropdown needs them
   const sel = document.querySelector('.step[data-id="' + CSS.escape(step.id) + '"] select');
-  if (sel) sel.value = draftOf(step).report || "";
+  if (!sel) return;
+  if (before !== data.reports.map(r => r.name).join("|")) {     // new folders: the dropdown needs them; only this step's list is rebuilt, so no focus is lost
+    const keep = sel.value;
+    sel.replaceChildren(...reportOptions(draftOf(step)));
+    sel.value = draftOf(step).report || keep;
+    return;
+  }
+  sel.value = draftOf(step).report || "";
 }
 function choose(id, scroll) {
   if (selected === id) return;
@@ -178,6 +189,8 @@ function choose(id, scroll) {
   if (scroll) { const n = document.querySelector('.step[data-id="' + CSS.escape(id) + '"]'); if (n) { n.scrollIntoView({ block: "center" }); n.focus({ preventScroll: true }); } }
 }
 async function save(step, status) {
+  if (busy.has(step.id)) { flash.set(step.id, "wait: the last save is still running"); return; }
+  busy.add(step.id);
   const draft = draftOf(step);
   flash.set(step.id, "saving...");
   try {
@@ -186,6 +199,7 @@ async function save(step, status) {
     drafts.set(step.id, { note: result.note, report: result.report });
     flash.set(step.id, status === "differs" ? (result.issue ? "saved, issue #" + result.issue : "saved, issue NOT created") : "saved");
   } catch (e) { flash.set(step.id, "not saved: " + e.message); }
+  busy.delete(step.id);
   render();
   if (selected) { const n = document.querySelector('.step[data-id="' + CSS.escape(selected) + '"]'); if (n && document.activeElement === document.body) n.focus({ preventScroll: true }); }
 }

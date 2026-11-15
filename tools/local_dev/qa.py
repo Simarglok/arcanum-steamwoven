@@ -374,6 +374,18 @@ class QaApp:
                     labels += [item["name"] for item in found.get("labels", []) if str(item.get("name", "")).startswith("area:")][:1]
             except (ValueError, TypeError, KeyError, AttributeError):
                 pass
+        if current.get("issueError"):
+            # an earlier attempt failed, maybe after GitHub had created the issue (a timeout): reuse it instead of a second one
+            code, out, err = self.gh(["issue", "list", "--state", "all", "--search", f'"{step.id}" in:title', "--json", "number,url,title",
+                                      "--limit", "10"], None, self.repo)
+            if code == 0:
+                try:
+                    for found in json.loads(out):
+                        if str(found.get("title", "")).startswith(f"{step.id}: ") and isinstance(found.get("number"), int):
+                            self.store.append({"kind": "issue", "ts": now_iso(), "step": step.id, "issue": found["number"], "url": found.get("url")})
+                            return
+                except (ValueError, TypeError, AttributeError):
+                    pass
         arguments = ["issue", "create", "--title", issue_title(step), "--body-file", "-"]
         for label in labels:
             arguments += ["--label", label]
@@ -570,13 +582,14 @@ def run(args: argparse.Namespace) -> int:
         print(f"qa: reports: {app.reports_dir} ({len(list_reports(app.reports_dir))} folder(s))")
         print(f"qa: would serve 127.0.0.1:{args.port or '<free port>'}, {'without opening the browser' if args.no_open else 'then open the browser'}")
         return 0
-    app.mark_visit()
     try:
         server, url, _ = start_server(app, args.port)
     except (RuntimeError, OSError) as error:
         print(f"arcanum qa: {error}", file=sys.stderr)
         return 1
     print(f"qa: started: {url}")
+    if not args.check:
+        app.mark_visit()          # a --check start must not use up the "new since the last visit" set
     if args.check:
         server.shutdown()
         print("qa: check passed (the page answered through its socket)")
