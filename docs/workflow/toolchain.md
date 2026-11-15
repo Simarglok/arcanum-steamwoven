@@ -217,6 +217,11 @@ history held about 500 runs of such copies of one template).
   change to one stage. `placement-census` also leaves out an NPC that follows the hero (a companion body is not an NPC the host places).
   `ARC_SMOKE_STAGE_RESET=0` (as `--env`) switches the reset off, to tell a leak from a stage's own failure; `=narrow` selects the narrow
   reset only. A process stops at its first failing stage, so a leak fixed here can show the next one that was hidden behind it.
+  **The test clock (ARC-DEV-2259).** The reset does not clear the test clock (`_worldTestTime`): a stage that runs frames itself (`life` and others) leaves it set, and
+  while it is set a native smoke's `ProcessWorld` returns at once, so no per-frame step runs between a stage's own frames (the scenery step, which builds the
+  loaded session's host and reads the art fields, among them). `object-art` failed only in the `stages-main-alone` chain for that reason (`the view draws
+  the new art where the T0 body stood`); the stage now calls `ProcessAreaSceneryAnimation` itself in its settle, as the scenery smokes and `barter`
+  do (ARC-DEV-2042). A stage that reads the result of a per-frame viewer step must drive that step itself, never rely on `ProcessWorld` running.
 - **A stage waits for a state, not for a time (ARC-DEV-1193).** `bar` failed by chance (`feedback settles to Hover with combat
   still on`) because it waited a fixed 0.15 s after a quick click and then read the button: the panel keeps Down for 80 ms
   counted from the first frame actually drawn, and on a loaded machine that draw comes late (the failing run showed 24 ms since
