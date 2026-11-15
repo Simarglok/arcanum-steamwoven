@@ -189,7 +189,7 @@ public partial class TerrainViewerApp : Node
                         bool Stage(string name) => only!.Stage(name); // "!": the ?. tests below make the compiler see a captured non-null `only` as maybe null
                         if (_readyMapName is not null)
                         {
-                            if (Stage("map")) { await RunAreaMapSmokeAsync(result); await RunAreaMapZoomFloorSmokeAsync(); await RunMapObjectLightSmokeAsync(); await RunLightAnimationSmokeAsync(); await RunSceneryAnimationSmokeAsync(); await RunAreaMapVaultSmokeAsync(result); await RunAreaHeroSmokeAsync(result); await RunAreaLevelMessageSmokeAsync(); await RunAreaLogbookSmokeAsync(); await RunAreaSchematicsSmokeAsync(); await RunAreaReadingSmokeAsync(); await RunAreaNpcCrafterSmokeAsync(); await RunReservedKeyHintSmokeAsync(); await RunAreaCombatModeSmokeAsync(result); await RunAreaAttackSmokeAsync(result); await RunAreaCastSmokeAsync(result); await RunAreaTurnBasedSmokeAsync(result); await RunAreaAudioSmokeAsync(); await RunAreaHeroKnockdownSmokeAsync(result); await RunAreaRoofSmokeAsync(); await RunAreaTalkSmokeAsync(); await RunAreaPortalSmokeAsync(); RunAreaDoorCloseSmoke(); await RunAreaGroundItemsSmokeAsync(); await RunAreaObjectAttackSmokeAsync(); await RunAreaFreedCellSmokeAsync(); await RunAreaFarClickSmokeAsync(); RunAreaFrameClockSmoke(); await RunAreaCriticalSmokeAsync(); await RunAreaLineOfFireSmokeAsync(); await RunAreaRangedSmokeAsync(); await RunAreaContainerLootSmokeAsync(); await RunAreaJunkPileSmokeAsync(); await RunAreaHoverWindowSmokeAsync(); await RunAreaBugReportSmokeAsync(); }
+                            if (Stage("map")) { await RunAreaMapSmokeAsync(result); await RunAreaMapZoomFloorSmokeAsync(); await RunMapObjectLightSmokeAsync(); await RunLightAnimationSmokeAsync(); await RunSceneryAnimationSmokeAsync(); await RunAreaMapVaultSmokeAsync(result); await RunAreaHeroSmokeAsync(result); await RunAreaLevelMessageSmokeAsync(); await RunAreaLogbookSmokeAsync(); await RunAreaSchematicsSmokeAsync(); await RunAreaReadingSmokeAsync(); await RunAreaNpcCrafterSmokeAsync(); await RunReservedKeyHintSmokeAsync(); await RunAreaCombatModeSmokeAsync(result); await RunAreaAttackSmokeAsync(result); await RunAreaCastSmokeAsync(result); await RunAreaTurnBasedSmokeAsync(result); await RunAreaAudioSmokeAsync(); await RunAreaHeroKnockdownSmokeAsync(result); await RunAreaRoofSmokeAsync(); await RunAreaTalkSmokeAsync(); await RunAreaPortalSmokeAsync(); RunAreaDoorCloseSmoke(); await RunAreaGroundItemsSmokeAsync(); await RunAreaObjectAttackSmokeAsync(); await RunAreaFreedCellSmokeAsync(); await RunAreaFarClickSmokeAsync(); RunAreaFrameClockSmoke(); await RunAreaCriticalSmokeAsync(); await RunAreaLineOfFireSmokeAsync(); await RunAreaRangedSmokeAsync(); await RunAreaContainerLootSmokeAsync(); await RunAreaJunkPileSmokeAsync(); await RunAreaHoverWindowSmokeAsync(); await RunAreaBugReportSmokeAsync(); await RunAreaOwnerQaSmokeAsync(); }
                             // ARC-MAGIC-015: the cast stage alone, for a quick first-cast observation (the map battery runs it too).
                             else
                             {
@@ -352,7 +352,7 @@ public partial class TerrainViewerApp : Node
                                 // ARC-UI-057: the hovered object's highlight and message-window description alone (the map battery runs it too).
                                 if (Stage("hover")) await RunAreaHoverWindowSmokeAsync();
                                 // ARC-DEV-051: the bug report alone (the map battery runs it last).
-                                if (Stage("report")) await RunAreaBugReportSmokeAsync();
+                                if (Stage("report")) { await RunAreaBugReportSmokeAsync(); await RunAreaOwnerQaSmokeAsync(); }
                                 // ARC-DEV-209 (MIG14 S3, GT49): only when named, an NPC the AI host walks across a closed door opens it first, and it runs last of the window stages because it leaves a door open (AI on, --hero, --sector 1409,1314).
                                 if (only?.Contains("npc-door") == true) await RunAreaNpcDoorSmokeAsync();
                             }
@@ -1159,6 +1159,7 @@ public partial class TerrainViewerApp : Node
             SyncPassabilityOverlay(); SyncAreaInventory(); UpdateAreaHover(); SyncHoverRing(); ProcessGameCursorItem(); SyncCursorArt();
             // ARC-DEV-051: the session-event lines of the bug report's log.
             SyncBugReport();
+            SyncOwnerQa();
             return;
         }
         var step = (float)(CameraPolicy.PanScreenPixelsPerSecond * delta);

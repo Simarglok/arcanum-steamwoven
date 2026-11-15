@@ -103,12 +103,19 @@ public partial class TerrainViewerApp
                     _voiceStart = null;
                     _talkSmokeExaminesBefore = _dialogExaminesForSelfTest; _talkSmokeBarsOn = InterfaceBarsOn;
                     var finalLineStarts = _finalLineStartsForSelfTest;
+                    var faceCalls = _speakerFaceCallsForSelfTest;
                     AreaSmokeClick(pixel);
                     // ARC-DEV-324: a speaker whose dialog point ran default shows the generic greeting (a floating line) and opens no window; that is no dialog to check here.
                     for (frames = 0; frames < 600 && !ConversationOpen && _voiceStart is null && _finalLineStartsForSelfTest == finalLineStarts; frames++) AreaSmokeTalkFrame();
-                    if (ConversationOpen) { opened = true; walked = from is not null; break; }
+                    if (ConversationOpen)
+                    {
+                        // ARC-UI-2049 (TB26): the first NPC line of the open dialog asked its speaker to face the hero (the display turns an idle living speaker; a busy one stays, so only the ask is required).
+                        Require(_conversationPanel!.Conversation is not { NpcLine.Text.Length: > 0 } || _speakerFaceCallsForSelfTest > faceCalls, $"script {speaker.ScriptId}: the NPC's dialog line asked its speaker to face the hero");
+                        opened = true; walked = from is not null; break;
+                    }
                     // ARC-UI-2028: a dialog that starts on the NPC's last line floats it and opens no window.
-                    if (_finalLineStartsForSelfTest != finalLineStarts) { walkStopped = "the dialog starts on the NPC's last line: it floats, no window"; break; }
+                    // ARC-UI-2049 (TB26): the speech display of that line also asked the speaker to face the hero.
+                    if (_finalLineStartsForSelfTest != finalLineStarts) { Require(_speakerFaceCallsForSelfTest > faceCalls, $"script {speaker.ScriptId}: the last line at the dialog start asked its speaker to face the hero"); walkStopped = "the dialog starts on the NPC's last line: it floats, no window"; break; }
                     if (_voiceStart is { Status: AreaConversationStartStatus.GenericGreeting }) { walkStopped = "the dialog point ran default: the generic greeting floats, no window"; break; }
                     Require(from is not null, $"script {speaker.ScriptId}: a click within reach opened the conversation ({_conversationNotice})");
                     walkStopped = _conversationNotice ?? "the walk did not open it";

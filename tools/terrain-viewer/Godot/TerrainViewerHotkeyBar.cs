@@ -45,7 +45,7 @@ public partial class TerrainViewerApp
             // The light button has no function in 1.0.7.4 (HK14): its release over it only sounds.
             _hotkeyBarView.LightReleased += over => { if (over) PlayBarSound(AreaGameBarLayout.ReleaseSound, "hotkey light"); };
             _hotkeyBarView.DragReleased += HotkeyDragReleased;
-            _hotkeyBarView.ItemHeld = () => HotkeysActive && HotkeyItemHeld && !BugReportOpen;
+            _hotkeyBarView.ItemHeld = () => HotkeysActive && HotkeyItemHeld && !ReportModalOpen;
             _hotkeyBarView.ItemReleased += HotkeyItemReleased;
             _hotkeyBarView.SlotEntered += HotkeySlotEntered;
             _hotkeyBarView.RecentEntered += HotkeyRecentEntered;
@@ -175,7 +175,7 @@ public partial class TerrainViewerApp
     private void HotkeyDragReleased(MouseButton button, Vector2I point)
     {
         // ARC-DEV-051: a release over the bug report's shade drops nothing (the bar view sees the mouse before the app).
-        if (_hotkeyDrag is not { } drag || _areaSession is not { } session || BugReportOpen) return;
+        if (_hotkeyDrag is not { } drag || _areaSession is not { } session || ReportModalOpen) return;
         var target = HotkeyBarRules.EntryAt(point.X, point.Y);
         var drop = HotkeyBarRules.Drop(drag.Kind, drag.Entry, target, button == MouseButton.Left, false);
         if (drop.Kind == HotkeyDropKind.Continue) return;

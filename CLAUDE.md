@@ -118,9 +118,14 @@ yet. Current state: the component catalogue
   dotnet restore Arcanum.Steamwoven.sln --locked-mode && dotnet build --no-restore && dotnet test --no-build --filter "TestCategory!=RealData"
   python3 -B tools/research/dat_probe.py --self-test
   python3 -B tools/original-oracle/oracle.py --self-test
+  python3 -B tools/local_dev/run_tests.py
+  ./arcanum smoke self-test --headless
   python3 -B tools/docs_check.py
   ```
 
+  The `tools/local_dev` unit tests (`run_tests.py`, modules in parallel, about 1.5 min) go into the batched
+  `./arcanum run --kind dotnet` step; the headless smoke self-test queues itself (`quick`, about 15 s, never inside
+  `./arcanum run`) ([root check set](docs/workflow/toolchain.md#all-launcher-tests-in-one-command-arc-dev-1565-arc-dev-2225), ARC-DEV-2225).
   The root solution leaves out the terrain viewer and its tests,
   `Arcanum.Input`, research probes and labs (own commands in the toolchain
   doc). Real-data tests are opt-in by env vars (`DAT_ROOT`, `ARCANUM_*`,

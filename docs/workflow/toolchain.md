@@ -601,7 +601,14 @@ library only). It lists the steps of [the owner re-check list](owner-checks.md) 
   player's report text are never put into an issue. The issue number is stored for the step: a repeat, a later change to
   `same` and back, or a second click never creates another issue. A failure (no `gh`, no network) keeps the result, shows the error
   with a Retry button, and `./arcanum qa sync` (`--dry-run` first) creates the issues of the `differs` steps that have none.
-- **Later.** The in-game overlay (#2190) and the write-back of statuses to the list work from the same results file.
+- **List snapshot and overlay (ARC-DEV-2190).** The page writes `local/qa/checks.json` (text only: id, section title, step, expected,
+  list status, the list's commit) whenever it reads the list (start, Reload, `qa sync`, `qa overlay`; not with `--dry-run`), so the
+  in-game overlay lists the steps without Python. `./arcanum qa overlay on|off` writes or removes the marker `local/qa/owner-qa.on`
+  (the environment variable `ARC_OWNER_QA=1` also turns the overlay on); a build without the marker or the variable, such as a
+  player's, is unchanged. The game appends its results to the same `results.jsonl` in the same format plus `build` (the build's
+  commit) and `src: game`; the running page creates the issue of a new `differs` every 20 s (a failed attempt waits for `qa sync`),
+  and `qa sync` does it on demand, once per step either way. See the [viewer](../rendering/terrain-viewer.md#owner-checks-overlay-arc-dev-2190).
+- **Later.** The write-back of statuses to the list works from the same results file.
 
 Tests: `python3 -B -m unittest tools.local_dev.test_qa` (synthetic list, fake `gh`, a real localhost socket); the page itself is
 checked by opening it (`./arcanum qa`) and ticking a step.
@@ -865,13 +872,28 @@ on each later step, so `./arcanum run` keeps the command's output out of it by d
 Tests: `python3 -B -m unittest tools.local_dev.test_run_log` (error lines, summary, kept logs, quiet and `--verbose`
 wrapper runs).
 
-## All launcher tests in one command (ARC-DEV-1565)
+## All launcher tests in one command (ARC-DEV-1565, ARC-DEV-2225)
 
-`python3 -B -m unittest discover -s tools/local_dev -t . -p 'test_*.py'` from the repository root runs every
-`tools/local_dev` test in one process (about 3 minutes on a quiet Mac; the whole tree is not part of the root checks, run it when a
-launcher change touches several modules). `-t .` names the modules `tools.local_dev.test_*`, which the modules'
-imports need; the per-module commands above stay the quick way to run one. The stopped-waiter and third-dotnet-place tests of `test_run_queue` hold their runs until released instead of
-timing them, so a loaded Mac cannot fail them.
+`python3 -B tools/local_dev/run_tests.py` from the repository root runs every `tools/local_dev/test_*.py` module, one process per
+module, four at a time (`--jobs N`; module names after the options run only those, `test_run_queue` or
+`tools.local_dev.test_run_queue`). It is quiet: one line per module, the whole output of a failing one, the last line
+`LOCAL_DEV TESTS PASS|FAIL`, exit 1 when any module failed. The modules are independent (each makes its own temp folders and
+queue home), which is why the pool is safe; one serial `python3 -B -m unittest discover -s tools/local_dev -t . -p 'test_*.py'`
+(`-t .` names the modules `tools.local_dev.test_*`, which their imports need) runs the same tests in about 250 s, the pool in
+about 90 s (the slowest module, `test_run_queue`, is the limit). The per-module commands above stay the quick way to run one.
+The stopped-waiter and third-dotnet-place tests of `test_run_queue` hold their runs until released instead of timing them, so a
+loaded Mac cannot fail them.
+
+**Root checks (owner decision 2026-11-15, ARC-DEV-2225, measure 3 of the [smoke-stability package](smoke-stability.md)):**
+`run_tests.py` and `./arcanum smoke self-test --headless` are part of the root checks of CLAUDE.md section 2, because bugs of the
+smoke runner, the queue tests and the self-test reached `main` while no PR ran them. `run_tests.py` goes into the one batched
+`./arcanum run --kind dotnet -- sh -c '... && python3 -B tools/local_dev/run_tests.py'` step and passes inside it (a test that
+calls `smoke.run` clears the queue ticket variable, the guard itself stays). The smoke self-test cannot be nested in
+`./arcanum run` (`smoke` refuses a ticket variable; each smoke takes its own `quick` place and checks its own start), so it is a
+second command beside the batch. Added time per PR: about 90 s for the tests and about 15 s for the self-test (plus the viewer
+build when the checkout has none). A new `tools/local_dev` test that waits for fixed seconds must be made fast (hold and release
+instead of sleeping) or the PR says why it is slow. The daily build runs its own copy of the root checks and does not yet include
+these two (follow-up issue #2237).
 
 ## Root solution synthetic checks
 
@@ -928,6 +950,8 @@ Run from repository root:
 "$DOTNET" test Arcanum.Steamwoven.sln --no-build --filter "TestCategory!=RealData"
 python3 -B tools/research/dat_probe.py --self-test
 python3 -B tools/original-oracle/oracle.py --self-test
+python3 -B tools/local_dev/run_tests.py
+./arcanum smoke self-test --headless
 python3 -B tools/docs_check.py
 ```
 

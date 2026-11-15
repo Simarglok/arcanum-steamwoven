@@ -410,6 +410,8 @@ public partial class TerrainViewerApp
     /// </summary>
     private void SpeakFinalLine(DialogConversation conversation, bool bubble)
     {
+        // ARC-UI-2049 (ledger TB26): the speech display of a last line that ends the dialog at its start turns an idle living speaker to the hero before it makes the bubble (a reply's last line is shown by the panel's line hook, which turns it).
+        if (bubble && conversation.NpcLine is not null) FaceHeroFromSpeaker();
         if (conversation.NpcLine is not { Text.Length: > 0 } line) return;
         if (bubble) ShowDialogLineBubble(line.Text, persistent: false);
         if (_audio is not null && _voiceStart is { } start && ReferenceEquals(start.Conversation, conversation))
@@ -471,10 +473,16 @@ public partial class TerrainViewerApp
     /// <summary>ARC-UI-2029 (ledger TB26): the NPC's dialog line is a speech display with the hero as listener: a living NPC that runs no animation of its own turns to the hero.</summary>
     private void FaceHeroFromSpeaker()
     {
-        if (DialogBubbleOwner() is not { } owner || AreaAiHostNow() is not { } ai) return;
+        if (DialogBubbleOwner() is not { } owner) return;
+        // The ask is counted before the host is read: a smoke run keeps the AI host off unless its stage asks for it, and the ask is what the talk smoke checks.
+        _speakerFaceCallsForSelfTest++;
+        if (AreaAiHostNow() is not { } ai) return;
         var turned = ai.FaceListener(owner, Arcanum.Simulation.Ai.AiSchedulerRules.Pc);
         GD.Print($"ARC-UI-2029 dialog speaker faces the hero turned={turned}");
     }
+
+    // ARC-UI-2049: how many times the dialog's speech display asked its speaker to face the hero (every NPC line of a dialog, the last line included); read by the talk smoke.
+    private int _speakerFaceCallsForSelfTest;
 
     /// <summary>ARC-UI-1120 (HK25): the examine of the dialog's speaker at the dialog start, once; the speaker's window is described again even when
     /// the pointer already held it (the original draws it afresh), and a speaker the shown map's hover index does not list (a companion carried
