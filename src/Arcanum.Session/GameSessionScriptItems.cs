@@ -182,9 +182,10 @@ public sealed partial class GameSessionOwner
 
     private InventoryMutationResult DryRunTransfer(string? from, string? to, string item, ISessionItemScriptHost scripts)
     {
+        var before = _transferDryRun;
         _transferDryRun = true;
         try { return MoveListedItem(Version, from, to, item, static _ => SessionInsertVerdict.Accepted, scripts); }
-        finally { _transferDryRun = false; }
+        finally { _transferDryRun = before; }
     }
 
     // The move TransferNamedItem makes of the item the plan found, by the move of the holder pair it is made of.
