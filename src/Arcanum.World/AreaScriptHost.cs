@@ -462,6 +462,8 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
     {
         if (effects.Teleports.Count == 0) return null;
         var heroAsked = effects.Teleports.Any(t => IsPc(t.Object));
+        // A conversation the same run starts is not modelled together with the hero's change of place (the use host and the tile scripts refuse it too): the dialog window would open over a pending map transfer.
+        if (heroAsked && effects.Dialog is not null) return "a run that teleports the hero and starts a conversation is not modelled";
         if (heroAsked && effects.Teleports.Any(t => !IsPc(t.Object))) return "a run that teleports the hero and another object is not modelled";
         foreach (var teleport in effects.Teleports)
         {
@@ -592,9 +594,10 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
         if (!fadesApplied) return false;
         // ARC-WORLD-2038 (TT20): the requests are recorded after the run applied, in action order (the script goes on; the object moves at the next ping).
         LastTeleportRequests = [.. effects.Teleports];
+        var teleportHost = Queries;
         foreach (var teleport in effects.Teleports)
             if (IsPc(teleport.Object)) RequestHeroTeleport!(teleport);
-            else Queries!.RequestNpcTeleport(teleport);
+            else teleportHost?.RequestNpcTeleport(teleport);
         if (effects.Writeback is not { } writeback) return true;
         if (writeback.Source != ScrSource.Object || writeback.Point != ScrPoint.Dialog || writeback.Attachee is not { } attachee
             || Speaker(attachee) is not { } speaker || LoadedSlot(speaker) is not { } loaded) return false;
