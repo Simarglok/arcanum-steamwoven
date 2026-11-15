@@ -303,6 +303,11 @@ def daily(*, root: Path, output: Path, fetch: bool, force: bool, keep_work: bool
         return FAIL  # the packages are not at main and main still fails
     python = sys.executable
     environ.setdefault("ARCANUM_ORACLE_VENV", str(root / ORACLE_VENV))
+    playing = run_queue.playing_state()  # ARC-DEV-2272: its smoke and package map smoke open windows; --force does not override the owner
+    if playing is not None and not dry_run:
+        say(f"SKIP owner is playing ({run_queue.playing_text(playing)}): the day's smoke opens windows, so it was not run and "
+            "nothing is recorded; it builds when the mode has ended (./arcanum queue --not-playing)")
+        return PASS
     if dry_run:
         for step in [*check_steps(python), smoke_step(), *(package_step(key, commit, "<map smoke result>") for key in package.PLATFORMS)]:
             print(f"{step.name} [{step.environment} environment] {smoke.shown(step.command)}")

@@ -65,6 +65,7 @@ struct QueueFolder {
                 }
                 continue
             }
+            if json["playing"] as? Bool == true { continue }  // ARC-DEV-2272: the owner-is-playing ticket is a mode, not a run (playing() below)
             guard lockedByOthers(path), processAlive(json["pid"]) || processAlive(json["childPid"]) else { continue }
             let cwd = json["cwd"] as? String ?? "?"
             found.append(Job(seq: seq, kind: json["kind"] as? String ?? "?", lane: json["lane"] as? String,
@@ -127,6 +128,58 @@ struct QueueFolder {
         guard (try? data.write(to: hidden)) != nil else { return }
         chmod(hidden.path, 0o600)
         rename(hidden.path, settingsURL.path)
+    }
+
+    /// ARC-DEV-2272: the owner-is-playing mode, one valid ticket `t-playing.json` (run_queue.py explains it) held by a `lockf` process
+    /// that ends by itself at the deadline. Read as the queue reads it: held, flagged, not past its deadline.
+    var playingURL: URL { url.appendingPathComponent("t-playing.json") }
+
+    func playing() -> (since: Double, until: Double?)? {
+        guard lockedByOthers(playingURL.path), let data = FileManager.default.contents(atPath: playingURL.path),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              json["schema"] as? String == "arcanum-run-queue-v1", json["playing"] as? Bool == true else { return nil }
+        let until = (json["until"] as? NSNumber)?.doubleValue
+        if let until = until, until <= Date().timeIntervalSince1970 { return nil }
+        return ((json["since"] as? NSNumber)?.doubleValue ?? 0, until)
+    }
+
+    /// Turn the mode on (`minutes` 0: no limit) or off, the way `./arcanum queue --playing / --not-playing` does.
+    @discardableResult
+    func setPlaying(_ on: Bool, minutes: Double = 240) -> Bool {
+        if !on {
+            try? FileManager.default.removeItem(at: playingURL)  // the holder sees the file gone and ends within seconds
+            return true
+        }
+        let now = Date().timeIntervalSince1970
+        let until: Double? = minutes > 0 ? now + minutes * 60 : nil
+        let hidden = url.appendingPathComponent(".playing-menubar-\(getpid())")
+        guard (try? "{}".write(to: hidden, atomically: false, encoding: .utf8)) != nil else { return false }
+        chmod(hidden.path, 0o600)
+        let script = "while { [ -e \"$0\" ] || [ -e \"$1\" ]; } && [ \"$(date +%s)\" -lt \"$2\" ]; do sleep 5; done"
+        let deadline = until.map { String(Int($0)) } ?? "99999999999"
+        guard let pid = spawnDetached("/usr/bin/lockf", ["lockf", "-k", hidden.path, "/bin/sh", "-c", script, hidden.path, playingURL.path, deadline]) else {
+            try? FileManager.default.removeItem(at: hidden)
+            return false
+        }
+        for _ in 0..<100 where !lockedByOthers(hidden.path) { usleep(50_000) }  // up to 5 s for the holder to take the lock
+        guard lockedByOthers(hidden.path) else {
+            kill(pid, SIGTERM)
+            try? FileManager.default.removeItem(at: hidden)
+            return false
+        }
+        var ticket: [String: Any] = ["schema": "arcanum-run-queue-v1", "seq": 0, "kind": "window", "lane": "single", "label": "owner is playing",
+                                     "priority": 0, "command": "owner is playing", "cwd": FileManager.default.currentDirectoryPath,
+                                     "checkout": FileManager.default.currentDirectoryPath, "pid": Int(pid), "timeoutMinutes": 0,
+                                     "estimateSeconds": 0, "enqueuedAt": now, "startedAt": now, "playing": true, "since": now,
+                                     "by": "menubar"]
+        if let until = until { ticket["until"] = until }
+        guard let data = try? JSONSerialization.data(withJSONObject: ticket, options: [.sortedKeys]), (try? data.write(to: hidden)) != nil else {
+            kill(pid, SIGTERM)
+            try? FileManager.default.removeItem(at: hidden)
+            return false
+        }
+        rename(hidden.path, playingURL.path)
+        return true
     }
 
     @discardableResult
@@ -381,6 +434,11 @@ final class Controller: NSObject, NSApplicationDelegate, NSMenuDelegate {
         refresh()
     }
 
+    @objc func togglePlaying() {  // ARC-DEV-2272: no window run starts while the owner plays; ends by itself after 4 h
+        queue.setPlaying(queue.playing() == nil)
+        refresh(force: true)
+    }
+
     @objc func setLanes(_ sender: NSMenuItem) {
         queue.change(["shortLanes": sender.tag < 0 ? nil : sender.tag])
         refresh(force: true)
@@ -482,6 +540,7 @@ final class Controller: NSObject, NSApplicationDelegate, NSMenuDelegate {
     func refresh(force: Bool = false) {
         let jobs = queue.jobs()
         let paused = queue.isPaused
+        let playing = queue.playing()
         let lanes = queue.shortLanes
         let guardLimit = queue.maxLoad
         let now = Date().timeIntervalSince1970
@@ -493,13 +552,13 @@ final class Controller: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
 
         if let button = item.button {
-            button.image = symbol(paused ? "pause.circle.fill" : (jobs.isEmpty ? "tray" : "tray.full.fill"))
+            button.image = symbol(paused ? "pause.circle.fill" : (playing != nil ? "gamecontroller.fill" : (jobs.isEmpty ? "tray" : "tray.full.fill")))
             button.title = jobs.isEmpty ? "" : " \(running.count)·\(waiting.count)"
-            button.toolTip = "Arcanum launch queue: \(running.count) running, \(waiting.count) waiting" + (paused ? ", PAUSED" : "")
+            button.toolTip = "Arcanum launch queue: \(running.count) running, \(waiting.count) waiting" + (paused ? ", PAUSED" : "") + (playing != nil ? ", owner playing (no window run starts)" : "")
         }
 
         if !menuIsOpen && !force {  // a closed menu is built when it is opened (menuNeedsUpdate), not every second
-            if jobs.isEmpty && !paused && idleMinutes > 0 {
+            if jobs.isEmpty && !paused && playing == nil && idleMinutes > 0 {
                 if let since = emptySince, Date().timeIntervalSince(since) > idleMinutes * 60 { NSApp.terminate(nil) }
             } else {
                 emptySince = Date()
@@ -509,7 +568,7 @@ final class Controller: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // an open menu is only given new times while the same runs are in it: rebuilding it under the pointer flickers
         let positions = Dictionary(waiting.enumerated().map { ($1.seq, $0) }, uniquingKeysWith: { first, _ in first })
         let before = signature
-        signature = jobs.map { "\($0.seq):\($0.startedAt != nil)" }.joined(separator: ",") + (paused ? "|paused" : "") + "|lanes=\(lanes.map(String.init) ?? "-")|load=\(guardLimit.map { String($0) } ?? "-")"
+        signature = jobs.map { "\($0.seq):\($0.startedAt != nil)" }.joined(separator: ",") + (paused ? "|paused" : "") + (playing != nil ? "|playing" : "") + "|lanes=\(lanes.map(String.init) ?? "-")|load=\(guardLimit.map { String($0) } ?? "-")"
         if menuIsOpen && signature == before {
             for (seq, entry) in rows { entry.0.title = text(entry.1, position: positions[seq], now: now) }
             machineItem?.title = machineLine()
@@ -522,13 +581,17 @@ final class Controller: NSObject, NSApplicationDelegate, NSMenuDelegate {
         pause.target = self
         pause.state = paused ? .on : .off
         menu.addItem(pause)
+        let play = NSMenuItem(title: "Owner is playing (no window run starts)", action: #selector(togglePlaying), keyEquivalent: "g")
+        play.target = self
+        play.state = playing != nil ? .on : .off
+        menu.addItem(play)
         menu.addItem(lanesItem(lanes))
         menu.addItem(loadItem(guardLimit))
         let quit = NSMenuItem(title: "Quit (starts again with the next run)", action: #selector(quit), keyEquivalent: "q")
         quit.target = self
         menu.addItem(quit)
         menu.addItem(.separator())
-        menu.addItem(header("Launch queue: \(running.count) running, \(waiting.count) waiting" + (paused ? "  —  PAUSED" : "")))
+        menu.addItem(header("Launch queue: \(running.count) running, \(waiting.count) waiting" + (paused ? "  —  PAUSED" : "") + (playing != nil ? "  —  OWNER PLAYING" : "")))
         let machine = header(machineLine())
         machineItem = machine
         menu.addItem(machine)
@@ -542,12 +605,12 @@ final class Controller: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         if !waiting.isEmpty {
             menu.addItem(.separator())
-            menu.addItem(header(paused ? "Waiting (paused: none starts)" : "Waiting, in order"))
+            menu.addItem(header(paused ? "Waiting (paused: none starts)" : (playing != nil ? "Waiting, in order (window runs wait for the owner)" : "Waiting, in order")))
             for (index, job) in waiting.enumerated() { let entry = row(job, position: index, now: now); rows[job.seq] = (entry, job); menu.addItem(entry) }
         }
 
-        // leave by itself after a quiet while: nothing queued and not paused (the next run starts it again)
-        if jobs.isEmpty && !paused && idleMinutes > 0 {
+        // leave by itself after a quiet while: nothing queued, not paused and the owner not playing (the next run starts it again)
+        if jobs.isEmpty && !paused && playing == nil && idleMinutes > 0 {
             if let since = emptySince, Date().timeIntervalSince(since) > idleMinutes * 60 { NSApp.terminate(nil) }
         } else {
             emptySince = Date()
@@ -595,8 +658,10 @@ while let flag = arguments.first {
         exit(0)
     case "--set-pause", "--clear-pause":  // what the menu's Pause item does, for scripts and the self-check: act and exit
         exit(QueueFolder(url: queueURL).setPaused(flag == "--set-pause") ? 0 : 1)
+    case "--set-playing", "--clear-playing":  // what the menu's playing item does (4 h limit), for scripts and the self-check
+        exit(QueueFolder(url: queueURL).setPlaying(flag == "--set-playing") ? 0 : 1)
     default:
-        FileHandle.standardError.write("usage: ArcanumQueue [--queue-dir DIR] [--lock FILE] [--idle-minutes N (0: never)] [--open-menu] [--set-pause|--clear-pause] [--set-lanes N|default] [--set-max-load X|off]\n".data(using: .utf8)!)
+        FileHandle.standardError.write("usage: ArcanumQueue [--queue-dir DIR] [--lock FILE] [--idle-minutes N (0: never)] [--open-menu] [--set-pause|--clear-pause] [--set-playing|--clear-playing] [--set-lanes N|default] [--set-max-load X|off]\n".data(using: .utf8)!)
         exit(2)
     }
 }
