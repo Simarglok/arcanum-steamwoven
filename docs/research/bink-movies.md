@@ -211,9 +211,10 @@ The action is skipped in a network host game; the single-player host is never on
 | 2863 | 2 and 5 | dying point (12) of Kerghan, prototypes 27387 and 27389 | end-game slides (132), play script eye candy (120) |
 | 3061 | 2 and 5 | dying point (12) of Kerghan, prototype 27388 | end-game slides (132) |
 
-So no installed script plays its movie end to end in the viewer yet; the engine, the clock jump and the viewer's player are in place and tested on synthetic scripts and the smoke stage `movies`. The follow-ups
-that would make them play are end-game slides (132, with the ending of FR-MEDIA-002, E7-b), change script (99, E5-a), play script eye candy (120) in the use and dying hosts, and call script (7) in the dialog host
-(its callee's dialog gates, E6). An opt-in real-data test (`ScriptFadeRealDataTests`) pins the movie lines and the first refusals above.
+Since ARC-RENDER-1171 the dying set admits end-game slides (132) and play script eye candy (120), so Kerghan's two dying scripts (2863 and 3061) run whole through the dying run: both play movies 2 and 5 and
+ask for the end of the game (ARC-RENDER-1879: `AreaEndingScriptsRealDataTests`, and the smoke stage `slides`, which plays the two installed movies through the real decoder and then the whole end-game show and the
+reset to the menu). `ScriptFadeRealDataTests` still pins that the generic set S35 refuses 132; the host sets admit it. Still open: change script (99, E5-a) for Kerghan's dialog script 1105 and
+call script (7) in the dialog host (its callee's dialog gates, E6); 2862 runs from a use point and was not walked through a host. An opt-in real-data test (`ScriptFadeRealDataTests`) pins the movie lines and the first refusals above.
 
 ## 8. Open items and limits
 
