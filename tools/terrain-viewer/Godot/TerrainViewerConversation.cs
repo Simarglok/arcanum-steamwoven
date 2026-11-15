@@ -473,15 +473,16 @@ public partial class TerrainViewerApp
     /// <summary>ARC-UI-2029 (ledger TB26): the NPC's dialog line is a speech display with the hero as listener: a living NPC that runs no animation of its own turns to the hero.</summary>
     private void FaceHeroFromSpeaker()
     {
-        if (DialogBubbleOwner() is not { } owner || AreaAiHostNow() is not { } ai) return;
-        var turned = ai.FaceListener(owner, Arcanum.Simulation.Ai.AiSchedulerRules.Pc);
+        if (DialogBubbleOwner() is not { } owner) return;
+        // The ask is counted before the host is read: a smoke run keeps the AI host off unless its stage asks for it, and the ask is what the talk smoke checks.
         _speakerFaceCallsForSelfTest++;
-        if (turned) _speakerTurnsForSelfTest++;
+        if (AreaAiHostNow() is not { } ai) return;
+        var turned = ai.FaceListener(owner, Arcanum.Simulation.Ai.AiSchedulerRules.Pc);
         GD.Print($"ARC-UI-2029 dialog speaker faces the hero turned={turned}");
     }
 
-    // ARC-UI-2049: how many times the dialog's speech display asked its speaker to face the hero (every NPC line of a dialog, the last line included) and how many of them turned the NPC; read by the talk smoke.
-    private int _speakerFaceCallsForSelfTest, _speakerTurnsForSelfTest;
+    // ARC-UI-2049: how many times the dialog's speech display asked its speaker to face the hero (every NPC line of a dialog, the last line included); read by the talk smoke.
+    private int _speakerFaceCallsForSelfTest;
 
     /// <summary>ARC-UI-1120 (HK25): the examine of the dialog's speaker at the dialog start, once; the speaker's window is described again even when
     /// the pointer already held it (the original draws it afresh), and a speaker the shown map's hover index does not list (a companion carried
