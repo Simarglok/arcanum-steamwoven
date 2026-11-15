@@ -1396,6 +1396,8 @@ internal sealed class ScrInterpreter
         // A group's first object (0x44B960), none for an empty one.
         ScrFocusKind.EverySceneryInVicinity or ScrFocusKind.EveryoneInVicinity or ScrFocusKind.AnyoneInVicinity or ScrFocusKind.EveryPortalInVicinity
             => Vicinity(kind) is { Count: > 0 } list ? list[0] : null,
+        // GF1, GF4: the group's first object, the triggerer's first follower, or the triggerer when it has none.
+        ScrFocusKind.EveryoneInGroup or ScrFocusKind.AnyoneInGroup => Group() is { Count: > 0 } group ? group[0] : null,
         _ => throw new InvalidOperationException("Focus kind outside the interpreter's set."),
     };
 
@@ -1405,8 +1407,18 @@ internal sealed class ScrInterpreter
     private IReadOnlyList<ScrObjectRef> Objects(ScrClause c, int slot) => (ScrFocusKind)c.Kind(slot) switch
     {
         ScrFocusKind.EverySceneryInVicinity or ScrFocusKind.EveryoneInVicinity or ScrFocusKind.AnyoneInVicinity or ScrFocusKind.EveryPortalInVicinity => Vicinity((ScrFocusKind)c.Kind(slot)),
+        ScrFocusKind.EveryoneInGroup or ScrFocusKind.AnyoneInGroup => Group(),
         _ => OptionalObject(c, slot) is { } obj ? [obj] : [],
     };
+
+    // GF1–GF3: the triggerer's direct followers in array order (the host's answer, the first ScrWorld.VicinityListCap as the builder's copy loop stops there), then the triggerer itself; no filter. The original reads no
+    // triggerer-less case (the object accessor has no null guard in the export), so the project's list is empty then.
+    private IReadOnlyList<ScrObjectRef> Group()
+    {
+        if (_roles.Triggerer is not { } leader) return [];
+        var followers = Groups.FollowersOf(leader) ?? throw new InvalidOperationException("SCR_GROUP_FOLLOWERS_NULL");
+        return [.. followers.Take(ScrWorld.VicinityListCap), leader];
+    }
 
     // PG3, TG4: the scenery (type mask 0x8) or the PCs and NPCs (0x18000) around the run's attachee (none without one), the first 100
     // under the original's rule.
@@ -1420,6 +1432,9 @@ internal sealed class ScrInterpreter
 
     private IScrWorldQueries World => _host as IScrWorldQueries
         ?? throw new InvalidOperationException("SCR_WORLD_QUERIES_REQUIRED: the admission set holds random, loop for or a vicinity focus kind and the host cannot answer it.");
+
+    private IScrGroupQueries Groups => _host as IScrGroupQueries
+        ?? throw new InvalidOperationException("SCR_GROUP_QUERIES_REQUIRED: the admission set holds a group focus kind and the host cannot answer it.");
 
     private IScrPortalQueries Portals => _host as IScrPortalQueries
         ?? throw new InvalidOperationException("SCR_PORTAL_QUERIES_REQUIRED: the admission set holds the portal vicinity focus kind and the host cannot answer it.");

@@ -492,9 +492,18 @@ public sealed class ScrAdmissionSet
 
     /// <summary>
     /// The portal vicinity set (ARC-SCRIPT-2041, ledger PV1–PV4): <see cref="S59"/> plus the focus kind every portal in the vicinity (19), which the host answers through <see cref="IScrPortalQueries"/> (the loop for of the four ground
-    /// rune tile scripts). The interpreter runs at most S60.
+    /// rune tile scripts). The interpreter ran at most S60 until ARC-SCRIPT-2319.
     /// </summary>
     public static ScrAdmissionSet S60 { get; } = new("S60", S59.Conditions, S59.Actions, S59.ValueKinds, S59.FocusKinds.Append(ScrFocusKind.EveryPortalInVicinity), counterIndexWraps: true);
+
+    /// <summary>
+    /// The group set (ARC-SCRIPT-2319, ledger GF1–GF7): <see cref="S60"/> plus the focus kinds every one in the group (13) and anyone in the group (14), which the interpreter resolves to the triggerer's direct followers and then the
+    /// triggerer itself, the followers answered by the host through <see cref="IScrGroupQueries"/> (the group scripts of the installed hit, miss, dialog, taking-damage and critical-hit points). The interpreter runs at most S61.
+    /// </summary>
+    public static ScrAdmissionSet S61 { get; } = new("S61", S60.Conditions, S60.Actions, S60.ValueKinds, S60.FocusKinds.Concat([ScrFocusKind.EveryoneInGroup, ScrFocusKind.AnyoneInGroup]), counterIndexWraps: true);
+
+    /// <summary>The focus kinds of <see cref="S61"/> a host answers through <see cref="IScrGroupQueries"/>.</summary>
+    public static IReadOnlySet<ScrFocusKind> GroupFocusKinds { get; } = new HashSet<ScrFocusKind> { ScrFocusKind.EveryoneInGroup, ScrFocusKind.AnyoneInGroup };
 
     /// <summary>
     /// The set the engine runs the slide scripts with (ARC-RENDER-1171, ledger SS2): true, equal, less or equal, local and global flag and PC quest state conditions; the control and arithmetic actions, call script

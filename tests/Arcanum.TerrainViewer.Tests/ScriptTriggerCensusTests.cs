@@ -147,6 +147,43 @@ public sealed class ScriptTriggerCensusTests
         if (Environment.GetEnvironmentVariable("ARC_COMBAT_POINT_POISON") is { Length: > 0 } output) File.WriteAllLines(output, report);
     }
 
+    /// <summary>
+    /// ARC-SCRIPT-2319 (ledger GF8): the installed scripts that name the group focus kinds (13, 14), read against the sets of the hosts that run their points: the combat-point set (hit 7, miss 8, critical hit 34), the placed set (taking damage 23)
+    /// and the talk set (dialog 9). The census of ARC-RES-2262 found 12 roots naming kind 13 (11 free alone, on 61 sites) and 4 naming kind 14 (2232, 2234, 2239, 1750), which action 32 also blocks. Every answer is reported (the file named by
+    /// <c>ARC_GROUP_FOCUS_REPORT</c>, when set, receives it). Opt-in: <c>DAT_ROOT</c>.
+    /// </summary>
+    [TestMethod, TestCategory("RealData")]
+    public void The_installed_group_focus_scripts_are_read_against_the_sets_of_their_hosts()
+    {
+        if (Environment.GetEnvironmentVariable("DAT_ROOT") is not { Length: > 0 } root) { Assert.Inconclusive("DAT_ROOT is required for the opt-in census; this is not a synthetic pass."); return; }
+        using var content = ConversationSessionFixture.Scripts(root);
+        var report = new List<string>();
+        ScrAdmissionResult Read(int number, ScrAdmissionSet set)
+        {
+            Assert.AreEqual(ScriptContentStatus.Read, content.Script(number).Status, $"script {number}");
+            var admission = ScrAdmission.AdmitFrom(content.Script(number).Program!, set, 0);
+            report.Add($"script {number} set {set.Id} admitted={admission.IsAdmitted} refusal={admission.Refusal?.Code}:{admission.Refusal?.Type}");
+            return admission;
+        }
+        // Kind 13: the combat-point set (hit 7, miss 8, critical hit 34) and the placed set (taking damage 23) run 1160, 2350, 2506, 2507 and 1749 whole; the dialog script 1160 (point 9) runs under the talk set; the use set holds 2350, 2506 and 2507.
+        foreach (var number in new[] { 1160, 2350, 2506, 2507, 1749 })
+        {
+            Assert.IsTrue(Read(number, AreaUseScriptHost.CombatPointAdmission).IsAdmitted, $"{number} under the combat-point set");
+            Assert.IsTrue(Read(number, AreaUseScriptHost.PlacedAdmission).IsAdmitted, $"{number} under the placed set");
+        }
+        Assert.IsTrue(Read(1160, AreaScriptHost.SkillTalkAdmission).IsAdmitted, "1160, the dialog-point script, under the talk set");
+        // Without the use host's queries the plain dialog set keeps the group kinds out (the host answers the followers).
+        Assert.IsFalse(Read(1160, AreaScriptHost.SkillAdmission).IsAdmitted, "the plain dialog set refuses 1160");
+        // Kind 14: 2232, 2234 and 2239 name it and are also blocked by get armor (action 32, #2326): refused by that action under every set now.
+        foreach (var number in new[] { 2232, 2234, 2239 })
+        {
+            var refused = Read(number, AreaUseScriptHost.CombatPointAdmission);
+            Assert.IsFalse(refused.IsAdmitted, $"{number}");
+            Assert.AreEqual(32, refused.Refusal!.Type, $"{number} stops at get armor, not at the focus kind");
+        }
+        if (Environment.GetEnvironmentVariable("ARC_GROUP_FOCUS_REPORT") is { Length: > 0 } output) File.WriteAllLines(output, report);
+    }
+
     private static TerrainViewerArguments Arguments(string root, string map) => TerrainViewerArguments.Parse(["--mode", "crash-site-area",
         "--module", Path.Combine(root, "modules", "Arcanum.dat"), "--resource", Path.Combine(root, "arcanum2.dat"), "--source-id", "map-test",
         "--actor-resource", Path.Combine(root, "arcanum1.dat"), "--game-root", root, "--area-map", map]);
