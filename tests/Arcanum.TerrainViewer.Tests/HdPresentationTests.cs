@@ -411,4 +411,16 @@ public sealed class HdPresentationTests
         CollectionAssert.AreEqual(terrain.CommandsIn(chunks[0]).Select(command => command.Frame.RgbaSha256).ToArray(),
             pack.Entries.Single(entry => entry.ChunkX == chunks[0].X && entry.ChunkY == chunks[0].Y).TileRgbaSha256!.ToArray(), "tiles in plan order");
     }
+
+    // ARC-RENDER-2175: only "1" brings the dormant world sprite path back; the new reason is counted like any other Legacy draw.
+    [TestMethod]
+    public void WorldSpriteGateOpensOnlyForOne()
+    {
+        Assert.IsTrue(HdWorldSpriteGate.Parse("1")); Assert.IsTrue(HdWorldSpriteGate.Parse(" 1 "));
+        foreach (var value in new string?[] { null, "", "0", "true", "on", "11" }) Assert.IsFalse(HdWorldSpriteGate.Parse(value), value);
+        var stats = new HdSubmissionStats();
+        stats.Add(HdFallbackReason.WorldDormant); stats.Add(HdFallbackReason.WorldDormant);
+        Assert.AreEqual(0, stats.Hd); Assert.AreEqual(2, stats.Fallback);
+        Assert.AreEqual("HD 0, Legacy 2 (WorldDormant 2)", stats.Format());
+    }
 }

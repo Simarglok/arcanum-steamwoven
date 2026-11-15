@@ -11,8 +11,10 @@ public enum VisualProfile { Legacy, Hd }
 
 /// <summary>Why one frame drew Legacy under profile <see cref="VisualProfile.Hd"/>
 /// (ARC-RENDER-013, Frame binding). Every value is a per-frame Legacy draw; none fails the
-/// view, the map load or the session.</summary>
-public enum HdFallbackReason { NoPack, PackRejected, FrameMissing, SourceMismatch, FrameRejected, Invalid, HdAxisLimit, HdBudget, Pending }
+/// view, the map load or the session. <see cref="WorldDormant"/> (ARC-RENDER-2175, owner decision
+/// 2026-11-15): the world sprite and terrain path of a pack is dormant, so world frames draw Legacy
+/// under Hd; it is a gate, not a pack problem.</summary>
+public enum HdFallbackReason { NoPack, PackRejected, FrameMissing, SourceMismatch, FrameRejected, Invalid, HdAxisLimit, HdBudget, Pending, WorldDormant }
 
 /// <summary>The portable HD question for one Legacy frame: the install-independent frame key,
 /// the ART name hash and the Legacy size and RGBA hash this installation decodes.</summary>

@@ -418,6 +418,17 @@ class LauncherSyncTests(unittest.TestCase):
             (game / "proto" / "a.pro").unlink()
             self.assertIn("prototypes", launch.discover_inputs(game)[1])
 
+    def test_the_qa_command_matches_its_module_and_docs(self):
+        # ARC-DEV-2187: `./arcanum qa` is wired to tools/local_dev/qa.py and its rule is in the launcher docs.
+        project = runpy.run_path(str(REPO / "arcanum"), run_name="arcanum_module")
+        arguments = project["parser"]().parse_args(["qa", "sync", "--dry-run", "--no-fetch"])
+        self.assertEqual((arguments.func, arguments.action, arguments.dry_run), (project["qa"].run, "sync", True))
+        self.assertEqual(project["parser"]().parse_args(["qa"]).action, "serve")
+        toolchain = (REPO / "docs/workflow/toolchain.md").read_text()
+        self.assertIn("### Owner QA page (ARC-DEV-2187)", toolchain)
+        for flag in ("--check", "--dry-run", "--no-open", "--no-fetch", "--data-dir", "--reports-dir", "qa sync"):
+            self.assertIn(flag, toolchain)
+
     def test_write_inputs_fails_closed_without_the_map_roles(self):
         home = self.root / "home"; home.mkdir(); game = self.root / "empty-game"; game.mkdir()
         env = dict(os.environ, ARCANUM_LOCAL_HOME=str(home))

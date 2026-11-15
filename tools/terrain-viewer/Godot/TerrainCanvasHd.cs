@@ -29,6 +29,13 @@ public partial class TerrainCanvas
     // compose and hash per chunk); dropped with the map's HD textures.
     private readonly Dictionary<(int X, int Y), HdSpriteQuery> _hdChunkQueries = new();
 
+    /// <summary>ARC-RENDER-2175: whether character, object and terrain frames may come from the pack under Hd. Off by owner
+    /// decision 2026-11-15 (HD means fonts, interface and light only): world frames draw Legacy with
+    /// <see cref="HdFallbackReason.WorldDormant"/>. The sprite path below stays in place; the developer override
+    /// <see cref="HdWorldSpriteGate.EnvironmentName"/>=1 (read once per canvas) or a self-test turns it on.</summary>
+    /// <remarks>Not reactive: follow a change with <see cref="SetVisualProfile"/> (which resubmits) so the bindings are rebuilt.</remarks>
+    internal bool WorldSpritesFromPack { get; set; } = HdWorldSpriteGate.FromEnvironment();
+
     public VisualProfile VisualProfile => _visualSwitch.Active;
     /// <summary>The requested profile being prepared (ARC-UI-006), or null.</summary>
     public VisualProfile? PendingVisualProfile => _visualSwitch.Pending;
@@ -179,6 +186,7 @@ public partial class TerrainCanvas
         if (!HdTarget) { CommitVisual(settled: true, 0); return new HdBinding<ImageTexture>[draw.Count]; }
         var source = ActiveHdSource; var scale = source.Scale;
         _hdSeenCompletions = source.CompletedCount;
+        var dormant = !WorldSpritesFromPack ? new HdDraw(null, null, HdFallbackReason.WorldDormant) : (HdDraw?)null;
         var draws = new HdDraw[draw.Count];
         for (var index = 0; index < draw.Count; index++)
         {
@@ -187,6 +195,7 @@ public partial class TerrainCanvas
             {
                 // Decimated chunks (zoom 2^-k with an integer origin) draw Legacy and are not candidates.
                 if (AreaChunkLevel != 0) continue;
+                if (dormant is { } gated) { draws[index] = gated; continue; }
                 // Without a usable pack or without chunk entries no chunk is composed for a question.
                 var refused = source.Pack is not { } pack ? HdFallbackReason.NoPack : pack.Review == HdReviewStatus.Rejected ? HdFallbackReason.PackRejected
                     : pack.TerrainChunkCount == 0 ? HdFallbackReason.FrameMissing : (HdFallbackReason?)null;
@@ -204,6 +213,7 @@ public partial class TerrainCanvas
                 continue;
             }
             if (command.Identity is null) continue; // per-command terrain stays Legacy
+            if (dormant is { } gate) { draws[index] = gate; continue; }
             if (command.Identity == ActorSentinel)
             {
                 var key = _actorPlan!.Current.TextureKey;
@@ -238,7 +248,7 @@ public partial class TerrainCanvas
         if (!HdTarget) { CommitVisual(settled: true, 0); return new HdBinding<ImageTexture>[draws.Count]; }
         var source = ActiveHdSource;
         _hdSeenCompletions = source.CompletedCount;
-        var requests = draws.Select(draw => draw.Query is { } query
+        var requests = draws.Select(draw => !WorldSpritesFromPack ? new HdDraw(null, null, HdFallbackReason.WorldDormant) : draw.Query is { } query
             ? HdCrop.Fits(new(0, 0, query.Legacy.Width, query.Legacy.Height), source.Scale) ? new HdDraw(query, () => draw.Pixels!) : new HdDraw(null, null, HdFallbackReason.HdAxisLimit)
             : new HdDraw(null, null, HdFallbackReason.FrameMissing)).ToArray();
         var bindings = HdResidency(ref _hdWorld, HdDomainBudget.World).Submit(requests, source);
@@ -280,6 +290,7 @@ public partial class TerrainCanvas
         var source = ActiveHdSource;
         var pack = source.Pack is { } p ? $"pack {p.Id} {p.Scale}x {p.Review.ToString().ToLowerInvariant()}" : "no pack";
         var stats = _area is not null ? AreaHdStats : WorldHdStats;
+        if (!WorldSpritesFromPack) return $"visual HD (relit look on; world art Legacy): {stats.Format()}" + switching;
         return $"visual HD {pack}: {stats.Format()}, HD textures {HdResidentCount}/{HdResidentBytes} bytes, decoding {source.PendingCount}{(_area is not null && AreaChunkLevel != 0 ? "; terrain Legacy below zoom 1" : "")}" + switching;
     }
 }
