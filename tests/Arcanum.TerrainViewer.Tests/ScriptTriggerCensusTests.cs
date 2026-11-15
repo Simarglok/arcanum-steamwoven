@@ -153,7 +153,7 @@ public sealed class ScriptTriggerCensusTests
 
     /// <summary>
     /// ARC-SCRIPT-2319 (ledger GF8): the installed scripts that name the group focus kinds (13, 14), read against the sets of the hosts that run their points: the combat-point set (hit 7, miss 8, critical hit 34), the placed set (taking damage 23)
-    /// and the talk set (dialog 9). The census of ARC-RES-2262 found 12 roots naming kind 13 (11 free alone, on 61 sites) and 4 naming kind 14 (2232, 2234, 2239, 1750), which action 32 also blocks. Every answer is reported (the file named by
+    /// and the talk set (dialog 9). The census of ARC-RES-2262 found 12 roots naming kind 13 (11 free alone, on 61 sites) and 4 naming kind 14 (2232, 2234, 2239, 1750); 2232, 2234 and 2239 also need the group in is undead and get armor (ARC-SCRIPT-2326). Every answer is reported (the file named by
     /// <c>ARC_GROUP_FOCUS_REPORT</c>, when set, receives it). Opt-in: <c>DAT_ROOT</c>.
     /// </summary>
     [TestMethod, TestCategory("RealData")]
@@ -179,11 +179,12 @@ public sealed class ScriptTriggerCensusTests
         Assert.IsTrue(Read(1160, AreaScriptHost.SkillTalkAdmission).IsAdmitted, "1160, the dialog-point script, under the talk set");
         // Without the use host's queries the plain dialog set keeps the group kinds out (the host answers the followers).
         Assert.IsFalse(Read(1160, AreaScriptHost.SkillAdmission).IsAdmitted, "the plain dialog set refuses 1160");
-        // Kind 14: 2232, 2234 and 2239 name it and are also blocked by the group in the is undead condition (38) and by get armor (action 32), both #2326: refused under every set (the report names where).
+        // Kind 14 (ARC-SCRIPT-2326, ledger AR6): 2232, 2234 and 2239 ask the group in the is undead condition (38) and the armour look (action 32, S62); the dialog point 9 runs them whole under the talk set, the plain dialog set still refuses them.
         foreach (var number in new[] { 2232, 2234, 2239 })
         {
-            var refused = Read(number, AreaUseScriptHost.CombatPointAdmission);
-            Assert.IsFalse(refused.IsAdmitted, $"{number}");
+            var talk = Read(number, AreaScriptHost.SkillTalkAdmission);
+            Assert.IsTrue(talk.IsAdmitted, $"{number} under the talk set: {talk.Refusal?.Code} type {talk.Refusal?.Type} line {talk.Refusal?.Line}");
+            Assert.IsFalse(Read(number, AreaScriptHost.SkillAdmission).IsAdmitted, $"{number} under the plain dialog set");
         }
         if (Environment.GetEnvironmentVariable("ARC_GROUP_FOCUS_REPORT") is { Length: > 0 } output) File.WriteAllLines(output, report);
     }

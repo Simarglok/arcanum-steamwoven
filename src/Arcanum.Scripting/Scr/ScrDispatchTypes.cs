@@ -274,7 +274,7 @@ public interface IScrCritterStateQueries
 }
 
 /// <summary>
-/// ARC-SCRIPT-1772 (ledger CQ1–CQ3): the getters of <see cref="ScrAdmissionSet.CritterFieldActions"/>. The original answers each from the object's own field when the object is an NPC (type 0x10) and 0 for every other object type (0x45D010 social class field 0x128,
+/// ARC-SCRIPT-1772 (ledger CQ1–CQ3): the getters of <see cref="ScrAdmissionSet.CritterFieldActions"/> and, since ARC-SCRIPT-2326, get armor (<see cref="ScrAdmissionSet.CritterArtActions"/>). The original answers each from the object's own field when the object is an NPC (type 0x10) and 0 for every other object type (0x45D010 social class field 0x128,
 /// 0x45D290 origin field 0x123, 0x45D080 faction field 0x124). A host whose admission set holds one of them implements this interface. An answer is null when the host does not know the object (the dispatch ends not modelled, nothing applied).
 /// </summary>
 public interface IScrCritterFieldQueries
@@ -287,6 +287,10 @@ public interface IScrCritterFieldQueries
 
     /// <summary>Get faction (89): the NPC's faction (field 0x124) as it is now (a script's set faction over the map data's), 0 for any other object type.</summary>
     int? FactionOf(ScrObjectRef obj);
+
+    /// <summary>Get armor (action 32, ARC-SCRIPT-2326, ledger AR1–AR3): the armour part of the object's current art id (object field 1 through 0x406CA0, then 0x504030: bits 20..23 of a critter art id, bits 20..22 of a monster's, 0 for any other art type), the look of the
+    /// body armour a critter wears (3 chain, 4 and 6 plate), not an armour class; null when the host does not know the object (the dispatch ends not modelled, nothing applied).</summary>
+    int? ArmorOf(ScrObjectRef obj);
 }
 
 /// <summary>
@@ -1072,7 +1076,7 @@ public sealed class ScrRunResult
 }
 
 /// <summary>How a dispatch runs: the rule mode's script switches, the admitted set (default <see cref="ScrAdmissionSet.S5"/>,
-/// at most <see cref="ScrAdmissionSet.S62"/>, admitted for the lines reachable from the event's line), the executed-line
+/// at most <see cref="ScrAdmissionSet.S63"/>, admitted for the lines reachable from the event's line), the executed-line
 /// budget and the call depth.</summary>
 public sealed record ScrRunOptions
 {
@@ -1093,7 +1097,7 @@ public sealed record ScrRunOptions
         ArgumentNullException.ThrowIfNull(Admission);
         if (MaxExecutedLines is <= 0 or > OriginalLineBudget) throw new ArgumentOutOfRangeException(nameof(MaxExecutedLines), "The line budget is 1..1000.");
         if (MaxCallDepth is < 1 or > 64) throw new ArgumentOutOfRangeException(nameof(MaxCallDepth), "The call depth is 1..64.");
-        if (!Admission.IsSubsetOf(ScrAdmissionSet.S62)) throw new ArgumentException("The interpreter runs only the commands of ScrAdmissionSet.S62.", nameof(Admission));
+        if (!Admission.IsSubsetOf(ScrAdmissionSet.S63)) throw new ArgumentException("The interpreter runs only the commands of ScrAdmissionSet.S63.", nameof(Admission));
     }
 
     // A set with a guard condition needs a host that answers it, checked before any event runs.
@@ -1114,8 +1118,8 @@ public sealed record ScrRunOptions
             throw new ArgumentException("A set with the animal condition needs a host that implements IScrCritterQueries.", nameof(Admission));
         if (host is not IScrCritterStateQueries && Admission.Conditions.Any(c => ScrAdmissionSet.CritterStateConditions.Contains(c) || ScrAdmissionSet.CritterTailQueryConditions.Contains(c)))
             throw new ArgumentException("A set with a critter-state condition (or bad associates, monster of type) needs a host that implements IScrCritterStateQueries.", nameof(Admission));
-        if (host is not IScrCritterFieldQueries && Admission.Actions.Any(ScrAdmissionSet.CritterFieldActions.Contains))
-            throw new ArgumentException("A set with a critter getter (social class, origin, faction) needs a host that implements IScrCritterFieldQueries.", nameof(Admission));
+        if (host is not IScrCritterFieldQueries && Admission.Actions.Any(a => ScrAdmissionSet.CritterFieldActions.Contains(a) || ScrAdmissionSet.CritterArtActions.Contains(a)))
+            throw new ArgumentException("A set with a critter getter (social class, origin, faction, armor) needs a host that implements IScrCritterFieldQueries.", nameof(Admission));
         if (host is not IScrStatAdjustQueries && Admission.Actions.Contains(ScrCatalogue.Action.AdjustStat))
             throw new ArgumentException("A set with adjust stat needs a host that implements IScrStatAdjustQueries.", nameof(Admission));
         if (host is not IScrMagickTechQueries && Admission.Actions.Contains(ScrCatalogue.Action.GetMagickTechAdjustment))
