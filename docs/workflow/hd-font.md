@@ -91,4 +91,5 @@ at cap 0.5) and a larger round-trip error (0.079 against 0.059 mean), a local ob
 - **Owner check (slice 3):** compare the traced text with the 1x text at UI scales 1, 1.5, 2, 3 and 4 on the main menu (327), options (27, 229), the
   character sheet (27, 229, 171), the dialog box and floaters (229), the world map (840), save/load (27) and the pre-made browser (27, 171). The 6 to
   9 px fonts (Garamond 6/8/9, Courier 10, Pork 12) stay bitmap or get the stroke-aware step first; the reading windows use some of them (ledger WR6-WR8:
-  480 Courier 10 for the telegram, 482 Garamond 8 in the newspaper masthead, 497 Pepper 20 for the note), so that text stays at 1x until then.
+  480 Courier 10 for the telegram, 482 Garamond 8 in the newspaper masthead, 497 Pepper 20 for the note). Update (ARC-UI-2309): Courier 10 and Pepper 20 are now in the pack (traced, see the bullet above);
+  only Garamond 6 and 8 (ART names `Garmond6Font`, `Garmond8Font`) are still pending ([#2329](https://github.com/Simarglok/arcanum-steamwoven/issues/2329)).
