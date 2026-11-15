@@ -150,7 +150,10 @@ public partial class TerrainViewerApp
                 delta => { changes.Add(delta); return true; }, (entity, _) => entity,
                 merchantGambling: () => new(Arcanum.Simulation.Skills.Skill.Gambling, 3, 3, 0, SkillTraining.None),
                 npcLine: category => category is 4 or 8 or 1 ? $"line{category} %d" : $"line{category}"));
-            return "sell 55, buy 760, keys, close, " + art + ", replaced session, " + gamble;
+            // ARC-UI-2163: the hero's item sold onto a slot of the merchant's doll, with wear facts for the hero's kit and a wearer for the merchant (a seed without the unreadable vest).
+            var slotSale = await AreaBarterSlotSaleForSelfTestAsync(second, actor, new SessionMapInventorySeed([new("merchant", SessionHolderKind.Npc, false, false, [], ["axe", "coins"])],
+                [seed.Items.Single(item => item.Entity == "axe"), seed.Items.Single(item => item.Entity == "coins")]), Sword, data, merchant, Model);
+            return "sell 55, buy 760, keys, close, " + art + ", replaced session, " + gamble + ", " + slotSale;
         }
         finally
         {
@@ -236,6 +239,87 @@ public partial class TerrainViewerApp
             if (BarterOpen) EndBarter();
             _inventoryArtLookForSelfTest = null;
             _inventoryHost = host;
+        }
+    }
+
+    /// <summary>
+    /// ARC-UI-2163 (IW35, BW5; the sale of ARC-UI-2138 through real pointer calls over the synthetic art set): a hero with two kit swords that carry wear facts and a merchant the host gives a wearer (its seed holds no worn item, whose
+    /// wear facts the synthetic host cannot read). In the doll view the first sword released on the merchant's helmet slot (not its slot) goes back and changes nothing; released on the empty weapon slot it is paid for (the quote, capped at the
+    /// merchant's coins), put on the merchant (its worn record) and drawn on its doll, with the trade sound; the second sword released on the now filled weapon slot goes back and changes nothing.
+    /// </summary>
+    private async Task<string> AreaBarterSlotSaleForSelfTestAsync(GameSessionOwner previous, ActorPlacement actor, SessionMapInventorySeed seed, int swordPrototype, AreaBarterData data, AreaBarterMerchant merchant,
+        Func<GameSessionOwner, AreaBarter> model)
+    {
+        static void Require(bool value, string why) { if (!value) throw new InvalidOperationException("ARC-UI-2163 barter slot sale: " + why); }
+        static Vector2 Centre(Arcanum.Simulation.Equipment.EquipmentSlot slot) { var r = AreaBarterArtLayout.BodySlotRects[slot]; return new(r.X + r.Width / 2f, r.Y + r.Height / 2f); }
+        var weaponSlot = Arcanum.Simulation.Equipment.EquipmentSlot.Weapon;
+        var kitItem = new SessionHeroKitItem(new(SessionItemType.Weapon, swordPrototype, 4100, 34100));
+        var hero = new SessionHeroDefinition(16089, CharacterRace.HalfElf, CharacterGender.Male, [8, 8, 8, 8, 8, 8, 8, 8, 0, 0], 1, 5, 0, null, null, 1000, [kitItem, kitItem]);
+        var created = AreaTransitionCoordinator.CreateSession(previous.QueryClockSnapshot().ProfileBinding, Guid.NewGuid(), Guid.NewGuid(), new(actor.Cell.X, actor.Cell.Y), actor.Map.RuntimeMap,
+            new AreaHeroLoad(AreaHeroStatus.Ready, AreaStartingHero.Find("half-elf-male")!, hero, 2352, 0, null, "synthetic"));
+        var owner = created.Owner ?? throw new InvalidOperationException("ARC-UI-2163 barter slot sale: session " + created.Failure);
+        ReplaceAreaSession(owner, AreaRuntimes(), actor.Map.RuntimeMap, _conversationHost?.Rebind(owner));
+        Require(owner.AttachMapInventory(actor.Map, seed).Failure == GameSessionFailure.None, "the merchant's seed attached");
+        var sword = new SessionWearableItem(kitItem.Kind, [], false, new Arcanum.Simulation.Equipment.EquipmentItem
+        {
+            Kind = Arcanum.Simulation.Equipment.EquipmentItemKind.Weapon, HitPoints = 20, MaxHitPoints = 20,
+            Weapon = new Arcanum.Simulation.Equipment.EquipmentWeapon { Skill = CombatSkill.Melee, SpeedFactor = 15 },
+        });
+        var (host, kitWear) = (_inventoryHost, _areaKitWear);
+        _inventoryHost ??= new AreaInventoryHost([]);
+        var wearerFacts = _inventoryHost.NpcWearerFacts;
+        _inventoryHost.NpcWearerFacts = (_, _) => new Arcanum.Simulation.Equipment.EquipmentWearer();
+        _areaKitWear = [sword, sword];
+        _inventoryArtLookForSelfTest = SyntheticBarterLook();
+        try
+        {
+            OpenBarterWindow(model(owner));
+            var panel = _barterPanel!;
+            var area = panel.GridAreaForSelfTest;
+            Require(panel.ArtMode && area.BarterLook, "the original look opened");
+            var dollPoint = new Vector2(AreaBarterArtLayout.DollButton.X + 5, AreaBarterArtLayout.DollButton.Y + 5);
+            area.PressAt(dollPoint); area.ReleaseAt(dollPoint);
+            Require(area.BodyDoll && panel.ArtView!.BodyDoll.All(entry => entry.Entity is null), "the merchant's doll view is shown, all its slots empty");
+            Require(area.BarterHit(Centre(weaponSlot)).Location == (int)weaponSlot, "the weapon slot's rectangle is hit");
+            Require(panel.ArtView!.Grid.Count(item => item.Entity.StartsWith("kit:", StringComparison.Ordinal)) == 2, "the hero holds both swords");
+
+            // A slot the sword cannot be worn on (the wear test 0x464D20): it goes back silently, nothing changes.
+            var (gold, merchantGold, revision) = (owner.QueryGold(), owner.QueryNpcGold("merchant") ?? 0, owner.Version.Revision);
+            area.PressAt(AreaInventoryGridArea.CellCentre(panel.ArtView!.Grid.First(item => item.Entity == "kit:1").Slot));
+            Require(area.Held is { Partner: false }, "the hero's sword is on the cursor");
+            area.ReleaseAt(Centre(Arcanum.Simulation.Equipment.EquipmentSlot.Helmet));
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            Require(area.Held is null && owner.QueryGold() == gold && owner.QueryNpcGold("merchant") == merchantGold && owner.Version.Revision == revision
+                && owner.QueryNpcWorn("merchant")?.Worn.Count is null or 0 && panel.ArtView!.Grid.Any(item => item.Entity == "kit:1"), "the sword released on the merchant's helmet slot went back and changed nothing");
+
+            // The empty weapon slot: paid for, worn by the merchant, drawn on its doll.
+            var sounds = _barterSounds.Count;
+            var price = Math.Min(panel.View!.Hero.First(line => line.Entity == "kit:1").Quote.Price, merchantGold);
+            Require(price > 0, "the merchant buys the sword");
+            area.PressAt(AreaInventoryGridArea.CellCentre(panel.ArtView!.Grid.First(item => item.Entity == "kit:1").Slot)); area.ReleaseAt(Centre(weaponSlot));
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            Require(area.Held is null && owner.QueryGold() == gold + price && owner.QueryNpcGold("merchant") == merchantGold - price, $"the sale onto the empty weapon slot is paid ({price}): {area.BarterFrame!.Quote}");
+            Require(owner.QueryNpcWorn("merchant")?.Worn.Any(entry => entry.Slot == weaponSlot && entry.Item == "kit:1") == true, "the merchant wears the sword on its weapon slot");
+            Require(panel.ArtView!.BodyDoll.Any(entry => entry.Slot == weaponSlot && entry.Entity == "kit:1") && !panel.ArtView.Grid.Any(item => item.Entity == "kit:1") && panel.ArtView.Grid.Any(item => item.Entity == "kit:2"),
+                "the sword is on the merchant's doll and off the hero's grid");
+            Require(_barterSounds.Count == sounds + 1 && _barterSounds.Last() == BarterTradeSound, "the trade sound was asked");
+
+            // The filled weapon slot: the other sword goes back, nothing changes (an NPC's slot is never swapped).
+            (gold, merchantGold, revision) = (owner.QueryGold(), owner.QueryNpcGold("merchant") ?? 0, owner.Version.Revision);
+            sounds = _barterSounds.Count;
+            area.PressAt(AreaInventoryGridArea.CellCentre(panel.ArtView!.Grid.Single(item => item.Entity == "kit:2").Slot)); area.ReleaseAt(Centre(weaponSlot));
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            Require(area.Held is null && owner.QueryGold() == gold && owner.QueryNpcGold("merchant") == merchantGold && owner.Version.Revision == revision && _barterSounds.Count == sounds
+                && panel.ArtView!.Grid.Any(item => item.Entity == "kit:2") && panel.ArtView.BodyDoll.Any(entry => entry.Slot == weaponSlot && entry.Entity == "kit:1"), "the second sword released on the filled weapon slot went back and changed nothing");
+            return $"slot sale: helmet refused, weapon slot paid {price} and worn, filled slot refused";
+        }
+        finally
+        {
+            if (BarterOpen) EndBarter();
+            _inventoryArtLookForSelfTest = null;
+            _inventoryHost.NpcWearerFacts = wearerFacts;
+            _inventoryHost = host;
+            _areaKitWear = kitWear;
         }
     }
 
