@@ -80,11 +80,23 @@ public sealed class AreaTownNotesTests
     {
         var notes = new AreaTownNotes();
         Assert.IsTrue(notes.AddByQuill(40, 50, "  Home  "));
-        Assert.AreEqual(new AreaTownNote(200, 2, 40, 50, 3, "Home"), notes.Items[0]);
+        Assert.AreEqual(new AreaTownNote(200, 0, 40, 50, 3, "Home"), notes.Items[0], "a note made through the entry has flags 0 (0x564140)");
         Assert.IsFalse(notes.AddByQuill(60, 60, " \t "), "white space alone is no text");
         Assert.IsFalse(notes.AddByQuill(-1, 5, "x"));
         Assert.AreEqual(1, notes.Count);
         Assert.AreEqual(201, notes.NextId);
+    }
+
+    [TestMethod]
+    public void The_quill_takes_the_marker_type_and_refuses_to_edit_a_scenery_note()
+    {
+        var notes = new AreaTownNotes();
+        Assert.IsTrue(notes.AddByQuill(10, 10, "Skull", 1));
+        Assert.IsTrue(notes.AddForObject(Info(), 96, 96, "Inn sign"));
+        Assert.AreEqual(1, notes.Items[0].Type);
+        Assert.IsTrue(notes.IsEditable(0), "a player's note (flags 0) is edited");
+        Assert.IsFalse(notes.IsEditable(1), "a note with flag 2 is refused (0x564360)");
+        Assert.IsFalse(notes.IsEditable(2) || notes.IsEditable(-1), "no such note");
     }
 
     [TestMethod]
@@ -93,7 +105,7 @@ public sealed class AreaTownNotesTests
         var notes = new AreaTownNotes();
         notes.AddByQuill(10, 10, "A"); notes.AddByQuill(100, 100, "B");
         Assert.IsTrue(notes.EditByQuill(0, "A2"));
-        Assert.AreEqual(new AreaTownNote(200, 2, 10, 10, 3, "A2"), notes.Items[0]);
+        Assert.AreEqual(new AreaTownNote(200, 0, 10, 10, 3, "A2"), notes.Items[0]);
         Assert.IsFalse(notes.EditByQuill(0, "A2"), "the same text changes nothing");
         Assert.IsFalse(notes.EditByQuill(5, "x"), "no such note");
         Assert.IsTrue(notes.EditByQuill(0, ""));
