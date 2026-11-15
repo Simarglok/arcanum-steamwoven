@@ -758,6 +758,9 @@ def execute(steps: Sequence[Step], runner: Callable[..., int] = run_queue.run,
             if record is not None:
                 record["custom"] = step.custom  # ARC-DEV-2223: what smoke_verify needs to tell the default run from a pinned one
                 record["knownOnly"] = known_only
+                if code != 0 and step.requires:  # the stages a failed process still passed before it stopped (smoke_verify credits them)
+                    missing = stages_not_run(logs[-1] if logs else None, step.requires)[0]
+                    record["passed"] = [stage for stage in step.requires if stage not in missing]
 
                 smoke_history.append(record)
                 timed.append(record)

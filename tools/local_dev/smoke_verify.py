@@ -65,19 +65,25 @@ def needs(selection: smoke_zones.Selection, known: Sequence[str]) -> list[Need]:
 def ran(need: Need, entry: Mapping[str, object]) -> bool:
     """Whether a journal entry is a passing run of the unit: the step's exit 0 means every stage it asked for printed its PASS; a
     step that failed only with failures listed in smoke_known_failures.json (`knownOnly`, named in the PR as not its failure)
-    counts too, and a pinned run (`custom`) never does. A battery step asks for `map` and `resources`."""
+    counts too, and so does a stage a failed process still passed before it stopped (`passed`); a pinned run (`custom`) never does. A battery step asks for `map` and `resources`."""
     if entry.get("custom"):
         return False  # a pinned run (--map, --hero, ...) is not the stage on its own configuration
-    if entry.get("exit") != 0 and not (entry.get("knownOnly") is True and isinstance(entry.get("exit"), int)):
-        return False
+    exit_code = entry.get("exit")
     if need.kind == STAGE:
-        asked = entry.get("asked")
-        return isinstance(asked, list) and need.name in asked
-    return entry.get("step") == need.name
+        asked, passed = entry.get("asked"), entry.get("passed")
+        if exit_code == 0:
+            return isinstance(asked, list) and need.name in asked
+        if isinstance(passed, list) and need.name in passed:
+            return True  # a failed process still printed this stage's PASS before it stopped
+        return entry.get("knownOnly") is True and isinstance(asked, list) and need.name in asked
+    return entry.get("step") == need.name and (exit_code == 0 or entry.get("knownOnly") is True)
 
 
-def known_note(entry: Mapping[str, object]) -> str:
-    return " (failed only with a known failure on main: name it in the PR)" if entry.get("exit") != 0 else ""
+def known_note(entry: Mapping[str, object], need: Need) -> str:
+    passed = entry.get("passed")
+    if entry.get("exit") == 0 or (isinstance(passed, list) and need.name in passed):
+        return ""
+    return " (failed only with a known failure on main: name it in the PR)"
 
 
 @dataclass(frozen=True)
@@ -115,14 +121,14 @@ def verify(selection: smoke_zones.Selection, known: Sequence[str], entries: Sequ
             if not isinstance(seen, str) or tree is None:
                 why = why or f"run #{entry.get('seq')} has no recorded files to compare"
             elif seen == tree:
-                results.append(Result(need, "ok", f"run #{entry.get('seq')} on these files{known_note(entry)}"))
+                results.append(Result(need, "ok", f"run #{entry.get('seq')} on these files{known_note(entry, need)}"))
                 break
             else:
                 moved = differing(seen, tree)
                 if moved is None:
                     why = why or f"run #{entry.get('seq')}: its files cannot be compared (git object gone)"
                 elif not moved & touched:
-                    results.append(Result(need, "ok", f"run #{entry.get('seq')}, no file of the diff changed since{known_note(entry)}"))
+                    results.append(Result(need, "ok", f"run #{entry.get('seq')}, no file of the diff changed since{known_note(entry, need)}"))
                     break
                 else:
                     shown = sorted(moved & touched)

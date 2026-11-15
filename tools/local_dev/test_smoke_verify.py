@@ -102,6 +102,14 @@ class VerifyTests(unittest.TestCase):
         self.assertFalse(verify(self.FILES, [dict(self.ALL[0], custom=True)]).ok)  # --map, --hero, --env, ... run another configuration
         self.assertTrue(verify(self.FILES, [dict(self.ALL[0], custom=False)]).ok)
 
+    def test_a_stage_a_failed_process_passed_before_it_stopped_counts_and_the_failing_one_and_later_ones_do_not(self) -> None:
+        group = dict(entry(1, "map", "resources", "cast", "ai", exit=1), passed=["map", "resources"])
+        report = verify(self.FILES, [group])
+        self.assertEqual(statuses(report), {"map": "ok", "resources": "ok", "cast": "missing", "ai": "missing"})
+        self.assertEqual(report.results[0].detail.count("known failure"), 0)
+        alone = [entry(2, "cast", step="stages-main-retry-cast"), entry(3, "ai", step="stages-main-retry-ai")]
+        self.assertTrue(verify(self.FILES, [group, *alone]).ok)  # the unfinished stages run one to a process
+
     def test_the_newest_passing_run_on_the_right_files_wins_over_an_older_stale_one(self) -> None:
         entries = [entry(1, "map", "resources", "cast", "ai", tree="T0"), entry(2, "map", "resources", "cast", "ai", tree="T1")]
         self.assertTrue(verify(self.FILES, entries, moved={("T0", "T1"): set(self.FILES)}).ok)

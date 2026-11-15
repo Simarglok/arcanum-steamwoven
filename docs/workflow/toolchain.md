@@ -367,7 +367,7 @@ Measured speed of the smoke runner, the queue and each stage, and the options fo
   checkout ended with exit 0 and asked for the stage (or is the step `crash-site` or `self-test`) and its `tree` (taken when the step started)
   equals the current one, or no file that chose a zone differs between the two trees (a merge of main or an edited document or test does not
   void a run; a change to a file that selected a zone does). A step that failed only with failures of `smoke_known_failures.json`
-  (`knownOnly` in the line) counts, with a note to name it in the PR; a pinned run (`custom`: `--map`, `--hero`, `--sector`, `--main-menu`,
+  (`knownOnly` in the line) counts, with a note to name it in the PR; the stages a failed process still passed before it stopped (`passed`) count, so a failure in the middle of a group voids only the failing stage and the ones after it (run `pr --auto --retry` to run those one to a process; a stage that fails only after others, as `object-art` in #2015, then shows as `order-dependent` and passes alone); a pinned run (`custom`: `--map`, `--hero`, `--sector`, `--main-menu`,
   `--env`, `--no-config-check`, `smoke map NAME`) never counts, since it is not the stage on its own configuration. A battery step (`full`,
   `complete`) asked for `map` and `resources`, so it counts for those two. A step of the journal without `tree` (older lines) does not count. A path no `TRIGGERS` row names selects `complete` (fail closed) and
   is named in the output of both `pr --auto` and `verify-pr`. Exit 0 prints `SMOKE verify-pr PASS`; exit 1 lists the missing or stale units
