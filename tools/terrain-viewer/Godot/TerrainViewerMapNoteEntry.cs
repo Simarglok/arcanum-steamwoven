@@ -100,7 +100,7 @@ public partial class TerrainViewerApp
         if (!key.Pressed) return true;
         if (!_mapNote.IsOpen) OpenMapNote();
         if (code is Key.Enter or Key.KpEnter) { if (!key.Echo) AcceptMapNote(); return true; }
-        if (code == Key.Escape) { if (!key.Echo) { panel.SetNoteText(_mapNote.Text); panel.CancelNoteEdit(); } return true; }
+        if (code == Key.Escape) { if (!key.Echo) { panel.SetNoteText(_mapNote.Text); panel.CancelNoteEdit(); _mapNote.Close(); } return true; }
         AreaStripEntryKeys.Edit(key, _mapNote.Type, _mapNote.Press);
         panel.SetNoteText(_mapNote.Text);
         return true;
