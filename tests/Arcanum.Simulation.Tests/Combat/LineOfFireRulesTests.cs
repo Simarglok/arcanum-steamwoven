@@ -132,6 +132,25 @@ public sealed class LineOfFireRulesTests
     }
 
     [TestMethod]
+    public void ObjectFlag0x400OnAnIntermediateTileChangesNothingForTheLineOfFire()
+    {
+        // ARC-COMBAT-2170 (0x43FE00, asm 0x44044A and 0x44063F): the entered tile's object test jumps over the type branch for object flag
+        // 0x400 (no-block), but lands on the cover test, which runs with the projectile flag 0x08 (flags 0x0C): the same shoot-through,
+        // see-through and cover reads as for an object without the bit. So the bit neither lets an opaque object pass nor frees the cover cost.
+        const uint NoBlock = 0x400;
+        Assert.AreEqual("crate", Trace(new Map().With(5, 2, "crate", Opaque | NoBlock), (2, 2), (8, 2)).Blocker);
+        var shoot = Trace(new Map().With(5, 2, "crate", ShootThrough | NoBlock), (2, 2), (8, 2));
+        Assert.IsNull(shoot.Blocker);
+        Assert.AreEqual(LineOfFireRules.OpaqueCover, shoot.Cost);
+        var cover = Trace(new Map().With(5, 2, "crate", Cover | NoBlock), (2, 2), (8, 2));
+        Assert.IsNull(cover.Blocker);
+        Assert.AreEqual(LineOfFireRules.ProvidedCover, cover.Cost);
+        Assert.AreEqual(0, Trace(new Map().With(5, 2, "crate", Glass | NoBlock), (2, 2), (8, 2)).Cost);
+        // Into the target tile every object is skipped, with or without the bit.
+        Assert.IsNull(Trace(new Map().With(8, 2, "crate", Opaque | NoBlock), (2, 2), (8, 2)).Blocker);
+    }
+
+    [TestMethod]
     public void WallsAndPortalsOnTheCrossedEdgesDecideByKind()
     {
         // Leaving (4,2) toward x+ crosses its edge 5; entering (5,2) crosses that tile's edge 1.
