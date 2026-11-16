@@ -184,6 +184,8 @@ public sealed partial class GameSessionOwner
         // use), the slots the runs changed, and the hero's effect list as the runs leave it with the steps that lead there.
         private readonly IReadOnlyDictionary<string, int> _items;
         private readonly Dictionary<(string Entity, int Point), ScrSlot> _slots = [];
+        // ARC-SCRIPT-2432 (IV40): the attachment slots the runs so far changed on objects that are not items of the move (a looped critter's dialog point), planned as map changes in _artEdits; a later run of the move reads them (Slot) before the commit writes them.
+        private readonly Dictionary<(ScrObjectRef Object, int Point), ScrSlot> _objectSlots = [];
         private readonly List<SessionEffect> _entries;
         private readonly List<EffectStep> _steps = [];
         private readonly Dictionary<int, SessionEffectDefinition> _definitions;
@@ -346,10 +348,20 @@ public sealed partial class GameSessionOwner
             var effects = run.Effects;
             var slots = new List<ScrWriteback>(effects.SlotWrites);
             if (effects.Writeback is { } own) slots.Add(own);
-            // A changed attachment is kept only for an item of the move; the PC's or any other object's has no home in the session.
+            // A changed attachment is kept for an item of the move (the item slot store) and, ARC-SCRIPT-2432 (IV40), for an object the host plans a map change for (a critter's attachment, as a use run keeps it); the PC's or any other
+            // object's has no home in the session, and the move is refused.
             foreach (var write in slots)
-                if (write.Source != ScrSource.Object || write.Attachee is not { } item || item.Map != _map || !_items.ContainsKey(item.Code))
-                    return GameSessionFailure.ItemScriptUnsupported;
+            {
+                if (write.Source != ScrSource.Object || write.Attachee is not { } owner) return GameSessionFailure.ItemScriptUnsupported;
+                if (owner.Map == _map && _items.ContainsKey(owner.Code)) continue;
+                if (_host is not ISessionItemWorldHost world || !SessionValidation.Entity(owner.Code) || world.PlanObjectSlot(write) is not { } edits) return GameSessionFailure.ItemScriptUnsupported;
+                // The plan is the object's own keys, whatever the host plans (the commit writes unchecked keys otherwise).
+                if (edits.Any(edit => edit.Key.Entity != owner.Code)) return GameSessionFailure.ItemScriptUnsupported;
+                // A later write of the same slot replaces the earlier plan whole: its clears are planned against the session's records, which do not see the move's pending edits.
+                _artEdits.RemoveAll(earlier => edits.Any(edit => edit.Key == earlier.Key));
+                _artEdits.AddRange(edits);
+                _objectSlots[(owner, write.Point)] = write.Slot;
+            }
             // ARC-SCRIPT-2335 (IV5): a change art number is planned by the host (the art files, the container's lock identity); every other object state the admission keeps out.
             foreach (var state in effects.ObjectStates)
             {
@@ -423,7 +435,8 @@ public sealed partial class GameSessionOwner
             // ARC-DEV-265: the session holds the arrays of the hero alone; another PC's cells are dropped (SessionScriptLimits.IsHero).
             foreach (var write in effects.PcVariables) if (SessionScriptLimits.IsHero(write.Pc)) _reads.PendingPcVariables[write.Index] = write.Value;
             foreach (var write in effects.PcFlags) if (SessionScriptLimits.IsHero(write.Pc)) _reads.PendingPcFlags[write.Index] = write.Value;
-            foreach (var write in slots) _slots[(write.Attachee!.Value.Code, write.Point)] = write.Slot;
+            foreach (var write in slots)
+                if (write.Attachee!.Value.Map == _map && _items.ContainsKey(write.Attachee.Value.Code)) _slots[(write.Attachee.Value.Code, write.Point)] = write.Slot;
             _calls.AddRange(effects.Calls);
             return GameSessionFailure.None;
         }
@@ -650,7 +663,8 @@ public sealed partial class GameSessionOwner
 
         /// <summary>The slot a run of the move changed, or null.</summary>
         internal ScrSlot? Slot(ScrObjectRef attachee, int point) =>
-            attachee.Map == _map && _slots.TryGetValue((attachee.Code, point), out var slot) ? slot : null;
+            _objectSlots.TryGetValue((attachee, point), out var planned) ? planned
+            : attachee.Map == _map && _items.ContainsKey(attachee.Code) && _slots.TryGetValue((attachee.Code, point), out var slot) ? slot : null;
 
         /// <summary>Checks what the commit needs: the flag revisions, the room for the kept slots and the effect steps on a trial hero.</summary>
         internal void Prepare()

@@ -53,6 +53,8 @@ public sealed class AreaItemScriptHost : ISessionItemScriptHost, ISessionItemWor
     /// script element, or null when it has none (a well-formed element has three words).</summary>
     public ScrSlot? Slot(ScrObjectRef attachee, int point)
     {
+        // ARC-SCRIPT-2432 (IV40): a critter's attachment is the use host's reading (the loaded element under the session's map changes: a change script of an earlier move may have replaced a number); an item's is the loaded row's.
+        if (_shown?.Invoke() is { } shown && shown.IsCritterRow(attachee)) return shown.Slot(attachee, point);
         var map = _maps.FirstOrDefault(candidate => candidate.RuntimeMap == attachee.Map);
         if (map is null || !map.TryGetRow(attachee.Code, out var row)) return null;
         var element = row.EffectiveFields.SingleOrDefault(field => field.Slot == 31)?.Elements.SingleOrDefault(e => e.Key == point);
@@ -112,6 +114,9 @@ public sealed class AreaItemScriptHost : ISessionItemScriptHost, ISessionItemWor
 
     /// <summary>ARC-SCRIPT-2426 (IV36–IV39): the location field of an object as the shown map's use host places it (the hero's cell, a critter's live tile, a row's tile, an item's own stale tile); null for an object it has no row or place for.</summary>
     public (long X, long Y)? LocationOf(ScrObjectRef obj) => _shown?.Invoke()?.LocationOfObject(obj);
+
+    /// <summary>ARC-SCRIPT-2432 (IV40): the use host's map changes for a change script of a critter of the shown map; null for any other object.</summary>
+    public IReadOnlyList<MapChangeEdit>? PlanObjectSlot(ScrWriteback write) => _shown?.Invoke()?.PlanCritterSlot(write);
 
     /// <summary>ARC-SCRIPT-2335 (IV5): the use host's plan of a change art number.</summary>
     public SessionObjectArtPlan? ArtPlan(ScrObjectRef obj, int number) => _shown?.Invoke()?.PlanObjectArt(obj, number);
