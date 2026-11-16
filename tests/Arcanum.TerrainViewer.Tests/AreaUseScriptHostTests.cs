@@ -348,6 +348,28 @@ public sealed class AreaUseScriptHostTests
         });
     }
 
+    // ARC-SCRIPT-2408 (IV32): the held and wielded item readers follow a script's rename of an item: the item is found by its new number and no longer by the prototype's.
+    [TestMethod]
+    public void A_renamed_item_is_held_and_wielded_by_its_new_name_and_no_longer_by_the_old_one()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var inventory = new AreaInventoryHost([Inventory()]);
+            Assert.AreEqual(GameSessionFailure.None, inventory.Attach(session));
+            var host = Host(session, content, Gate(702));
+            var npc = new ScrObjectRef(1, Entity(9));
+            Assert.IsTrue(host.HoldsItemNamed(npc, 70));
+            Assert.AreEqual(70, host.WieldedItemName(npc, 1004));
+            var written = session.ApplyChanges(session.Version, null, [new(new SessionMapId(1), SessionItemName.Key(Entity(5)), 71)]);
+            Assert.AreNotEqual(GameSessionDisposition.Rejected, written.Disposition);
+            Assert.IsTrue(host.HoldsItemNamed(npc, 71), "found by the renamed number");
+            Assert.IsFalse(host.HoldsItemNamed(npc, 70), "no longer by the old one");
+            Assert.AreEqual(71, host.WieldedItemName(npc, 1004), "the worn item answers its renamed number");
+            Assert.IsTrue(host.HoldsItemNamed(npc, 71) && !host.HoldsItemNamed(npc, 50), "an unrelated number still finds nothing");
+        });
+    }
+
     [TestMethod]
     public void A_reading_action_for_the_pc_is_kept_and_one_for_another_viewer_is_not()
     {
