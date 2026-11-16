@@ -119,7 +119,7 @@ public sealed partial class GameSessionOwner
     }
 
     /// <summary>
-    /// ARC-COMBAT-2424 (ledger TW3, QW5; exe 0x464830, 0x464970, 0x4617F0, 0x466640): a declined throw of the whole gold pile. The lift destroyed the pile and made a new gold object that merges into no other pile, so the original inserts it at the first
+    /// ARC-COMBAT-2424 (ledger TW3, QW5; the exe addresses are in docs/world/hero-attack-runtime.md): a declined throw of the whole gold pile. The lift destroyed the pile and made a new gold object that merges into no other pile, so the original inserts it at the first
     /// cell it fits (the cells the destroyed pile left count free). The pile's entity stays the one fixed <see cref="SessionHeroGrid.GoldEntity"/> (the coins are the session's counter, the owner's ARC-UI-090 model: a pile carries no script slots of its
     /// own, and no installed gold carries a throw script), so only the grid cell is remade; the slots the runs wrote for the never-made object are dropped by the caller (Steamwoven difference, #2424). A part of the pile merges back into what remains and
     /// changes nothing here.
