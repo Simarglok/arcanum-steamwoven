@@ -176,7 +176,7 @@ public sealed partial class GameSessionOwner
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(request.Facts);
-        // ARC-COMBAT-1955: the scripts the throw ran (null: none): a refusal after they took effect is a changed session with the failure named, a refusal before that carries the runs only.
+        // ARC-COMBAT-1955: the scripts the throw ran (null: none): a refusal after they took effect (the location throw's own checks) is a changed session with the failure named, a refusal before that carries the runs only.
         ItemScriptRuns? runs = null;
         var applied = false;
         SessionHeroThrowResult Refused(GameSessionFailure failure) => runs is null ? new(GameSessionDisposition.Rejected, failure, null, Version)
