@@ -84,7 +84,7 @@ public static class SessionItemConditions
 }
 
 /// <summary>The durability domain of one owner: changed conditions and deleted items, by entity (together at most
-/// <see cref="GameSessionLimits.MaxDurabilityRecords"/>).</summary>
+/// <see cref="GameSessionLimits.MaxDurabilityRecords"/>; the charges and the mana stores have budgets of their own).</summary>
 internal sealed class DurabilityDomain
 {
     internal SortedDictionary<string, ItemCondition> Records { get; } = new(StringComparer.Ordinal);
@@ -93,8 +93,8 @@ internal sealed class DurabilityDomain
     internal SortedDictionary<string, int> Charges { get; } = new(StringComparer.Ordinal);
     internal SortedDictionary<string, int> ManaStores { get; } = new(StringComparer.Ordinal);
 
-    // The mana stores (ARC-MAGIC-2403) have a budget of their own (GameSessionLimits.MaxManaStores), so a full durability budget never loses a payment's store.
-    internal int Count => Records.Count + Destroyed.Count + Uses.Count + Charges.Count;
+    // The mana stores (ARC-MAGIC-2403) and the spent charges (ARC-MAGIC-2434) have budgets of their own (GameSessionLimits.MaxManaStores, MaxItemCharges), so a full durability budget never loses a payment's write.
+    internal int Count => Records.Count + Destroyed.Count + Uses.Count;
 
     internal SessionDurabilityState Capture() =>
         new([.. Records.Select(pair => new SessionItemDurability(pair.Key, pair.Value))], [.. Destroyed],
@@ -242,7 +242,7 @@ public sealed partial class GameSessionOwner
     private static GameSessionFailure ImportDurability(SessionDurabilityState saved, GameSessionLimits limits, out DurabilityDomain durability)
     {
         durability = new();
-        if (saved.Items.Count + saved.Destroyed.Count + saved.Uses.Count + saved.Charges.Count > limits.MaxDurabilityRecords || saved.ManaStores.Count > limits.MaxManaStores) return GameSessionFailure.BudgetExceeded;
+        if (saved.Items.Count + saved.Destroyed.Count + saved.Uses.Count > limits.MaxDurabilityRecords || saved.Charges.Count > limits.MaxItemCharges || saved.ManaStores.Count > limits.MaxManaStores) return GameSessionFailure.BudgetExceeded;
         foreach (var entity in saved.Destroyed)
             if (!SessionValidation.Entity(entity) || !durability.Destroyed.Add(entity)) return GameSessionFailure.InvalidDurability;
         foreach (var item in saved.Items)

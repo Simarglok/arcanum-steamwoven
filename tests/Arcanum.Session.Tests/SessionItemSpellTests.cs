@@ -167,10 +167,85 @@ public sealed class SessionItemSpellTests
         Assert.AreEqual(GameSessionFailure.InvalidItem, owner.SpendItemCharge(owner.Version, Coat, 0).Failure);
         Assert.AreEqual(GameSessionFailure.InvalidItem, owner.SpendItemCharge(owner.Version, "", 1).Failure);
         Assert.AreEqual(GameSessionFailure.StaleVersion, owner.SpendItemCharge(owner.Version with { Revision = 7 }, Coat, 1).Failure);
-        Assert.AreEqual(GameSessionFailure.ItemNotAvailable, owner.SpendItemCharge(owner.Version, "kit:99", 1).Failure);
         Assert.AreEqual(GameSessionDisposition.Changed, owner.SpendItemCharge(owner.Version, Coat, 4).Disposition);
         Assert.AreEqual(3, owner.QueryItemCharges(Coat));
         Assert.AreEqual(1, owner.Version.Revision);
+    }
+
+    // ARC-MAGIC-2434: the original's payment writes field 105 of the source it is given, so the spend needs no tracked item and no shared budget; only a deleted item is refused.
+    [TestMethod]
+    public void A_charge_is_spent_for_an_item_the_session_does_not_track_and_survives_a_restore()
+    {
+        var (owner, _, _) = Session();
+        using var _ = owner;
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.SpendItemCharge(owner.Version, "npcitem:99", 4).Disposition);
+        Assert.AreEqual(3, owner.QueryItemCharges("npcitem:99"));
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.SpendItemCharge(owner.Version, "npcitem:99", 4).Disposition, "the count goes on from the session's own");
+        Assert.AreEqual(2, owner.QueryItemCharges("npcitem:99"));
+        var text = GameSessionSnapshotCodec.Encode(owner.Capture());
+        using var restored = Restore(Decode(text));
+        Assert.AreEqual(2, restored.QueryItemCharges("npcitem:99"));
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.RechargeItemCharges(owner.Version, "npcitem:99", 4, 5, 20).Disposition, "a count the session holds is recharged tracked or not");
+        Assert.AreEqual(7, owner.QueryItemCharges("npcitem:99"));
+    }
+
+    [TestMethod]
+    public void A_deleted_items_charge_is_still_refused()
+    {
+        var (owner, _, _) = Session();
+        using var _ = owner;
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.DestroyItem(owner.Version, Coat, new(15, 5, 0, false)).Disposition);
+        Assert.AreEqual(GameSessionFailure.ItemNotAvailable, owner.SpendItemCharge(owner.Version, Coat, 4).Failure);
+        Assert.AreEqual(GameSessionFailure.ItemNotAvailable, owner.RechargeItemCharges(owner.Version, Coat, 4, 1, 20).Failure);
+    }
+
+    [TestMethod]
+    public void A_full_durability_budget_does_not_lose_a_spent_charge_and_the_charge_budget_is_its_own()
+    {
+        using var owner = CreateWith(HalfElf(), new GameSessionLimits(maxDurabilityRecords: 1, maxItemCharges: 2));
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.DamageItem(owner.Version, Ring, new(15, 5, 0, false), 1).Disposition, "one record fills the durability budget");
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.SpendItemCharge(owner.Version, Coat, 4).Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.SpendItemCharge(owner.Version, "npcitem:99", 4).Disposition);
+        Assert.AreEqual(GameSessionFailure.BudgetExceeded, owner.SpendItemCharge(owner.Version, "npcitem:98", 4).Failure, "a third count does not fit its own budget");
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.SpendItemCharge(owner.Version, Coat, 4).Disposition, "a count the session holds is written on");
+        Assert.AreEqual(2, owner.QueryItemCharges(Coat));
+        Assert.AreEqual(1, owner.QueryDurability().Items.Count + owner.QueryDurability().Destroyed.Count, "the durability budget is untouched");
+        // Deleting an item with a count frees the count and takes a durability record (the budget of 1 is full).
+        Assert.AreEqual(GameSessionFailure.BudgetExceeded, owner.DestroyItem(owner.Version, Coat, new(15, 5, 0, false)).Failure, "the deletion adds a Destroyed row that the full durability budget cannot take");
+    }
+
+    [TestMethod]
+    public void The_charge_budget_bounds_a_recharge_and_an_import_and_more_than_the_old_shared_cap_decodes()
+    {
+        using var owner = CreateWith(HalfElf(), new GameSessionLimits(maxItemCharges: 1));
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.RechargeItemCharges(owner.Version, Coat, 3, 2, 20).Disposition);
+        Assert.AreEqual(GameSessionFailure.BudgetExceeded, owner.RechargeItemCharges(owner.Version, Ring, 3, 2, 20).Failure, "a second new count does not fit");
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.RechargeItemCharges(owner.Version, Coat, 3, 2, 20).Disposition, "a count the session holds grows on");
+        var (two, _, _) = Session();
+        using var _ = two;
+        two.SpendItemCharge(two.Version, Coat, 4);
+        two.SpendItemCharge(two.Version, Ring, 4);
+        var text = GameSessionSnapshotCodec.Encode(two.Capture());
+        Assert.AreEqual(GameSessionFailure.BudgetExceeded, GameSessionOwner.Restore(Decode(text), SessionFixtures.RestoreOptions(new GameSessionLimits(maxItemCharges: 1))).Failure);
+        using var fits = Restore(Decode(text));
+        Assert.AreEqual(2, fits.QueryDurability().Charges.Count);
+        // The codec's array bound is the charge budget's, not the durability records' 8,192.
+        var many = string.Join(",", Enumerable.Range(0, GameSessionLimits.PolicyMaxDurabilityRecords + 1).Select(i => $"{{\"entity\":\"npcitem:{i:D6}\",\"charges\":1}}"));
+        var big = text.Replace("\"charges\":[{\"entity\":\"kit:2\",\"charges\":3},{\"entity\":\"kit:3\",\"charges\":3}]", $"\"charges\":[{many}]");
+        Assert.AreNotEqual(text, big, "the charges array was replaced");
+        Assert.AreEqual(SnapshotDecodeFailure.None, GameSessionSnapshotCodec.TryDecode(big).Failure);
+    }
+
+    [TestMethod]
+    public void A_wornitems_charge_payment_with_a_full_durability_budget_is_logged_as_spent()
+    {
+        var (owner, caster, triggers) = Session(charges: 3, record: Record150(technology: false, cost: 5));
+        using var _ = owner;
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.DamageItem(owner.Version, Ring, new(15, 5, 0, false), 1).Disposition);
+        var worn = owner.Equip(owner.Version, Coat, EquipmentSlot.Armor, Offer(), Drawn, Accept, triggers: triggers);
+        Assert.AreEqual(GameSessionDisposition.Changed, worn.Disposition, $"{worn.Failure}");
+        Assert.AreEqual(2, owner.QueryItemCharges(Coat));
+        Assert.IsFalse(caster.Log.Any(e => e.Kind == SpellCastEventKind.ChargeNotSaved));
     }
 
     [TestMethod]
