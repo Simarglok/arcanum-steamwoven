@@ -35,6 +35,8 @@ public sealed partial class GameSessionOwner
         var splitEntity = split ? NextObjectEntity(SessionObjectOrigin.Made) : null;
         if (split && (splitEntity is null || request.SplitKind is null)) return Stop(Refused(GameSessionFailure.BudgetExceeded));
         var attachee = splitEntity ?? item;
+        // ARC-COMBAT-2424: the lift's whole-pile test is made on the pile as it was lifted, before any run.
+        var wholeGold = split && item == SessionHeroGrid.GoldEntity && request.Count == _inventory.Gold;
         // The refusals of the throw that no script changes are made before any script runs, so a refused throw leaves nothing applied.
         if (!ValidWear(new SessionWearSide { Life = SessionLifeTarget.Hero, Worn = request.HeroWorn }, new SessionWearSide(), targetBroken: false, wear: null)) return Stop(Refused(GameSessionFailure.InvalidWear));
         var life = _life.Hero!.Value.State;
@@ -77,7 +79,11 @@ public sealed partial class GameSessionOwner
                     _equipment.Worn.Remove(worn.Slot);
                     PlaceInGrid(item, null);
                 }
-                if (split && !RemakeWholeAmmoStack(request, splitEntity!)) ForgetNeverMadeThrowItem(splitEntity!);
+                if (split && !RemakeWholeAmmoStack(request, splitEntity!))
+                {
+                    ForgetNeverMadeThrowItem(splitEntity!);
+                    RefitWholeGoldPile(wholeGold);
+                }
                 Revise();
                 var spells = request.ItemTriggers is { } triggers && !split ? RemovalSpellSteps(triggers, item, wornBefore) : [];
                 return Stop(new SessionHeroThrowResult(GameSessionDisposition.Changed, GameSessionFailure.None, null, Version)
@@ -100,7 +106,7 @@ public sealed partial class GameSessionOwner
     /// <summary>
     /// ARC-COMBAT-2413 (ledger TW3, QW5, AM2): a declined throw of a whole ammunition stack. The lift made a new object for the units and destroyed the source (exactly the count), so the insertion of the new object back finds no other stack of its
     /// prototype and keeps it: it is appended to the hero's list at the first cell it fits, keeps the slots and calls the runs left on it and the source, with its own slots, is gone. Returns false (nothing done) for a part of a stack, where the units merge
-    /// back into the stack that remains, and for the gold pile, which the session keeps as one counter and entity (NOT READY, #2424).
+    /// back into the stack that remains, and for the gold pile, which the session keeps as one counter and entity (see <see cref="RefitWholeGoldPile"/>).
     /// </summary>
     private bool RemakeWholeAmmoStack(SessionHeroThrow request, string splitEntity)
     {
@@ -110,6 +116,18 @@ public sealed partial class GameSessionOwner
         // The source left the list first, so its cells count free for the first-fit scan (and its grid record goes).
         PlaceInGrid(made, request.Item);
         return true;
+    }
+
+    /// <summary>
+    /// ARC-COMBAT-2424 (ledger TW3, QW5; the exe addresses are in docs/world/hero-attack-runtime.md): a declined throw of the whole gold pile. The lift destroyed the pile and made a new gold object that merges into no other pile, so the original inserts it at the first
+    /// cell it fits (the cells the destroyed pile left count free). The pile's entity stays the one fixed <see cref="SessionHeroGrid.GoldEntity"/> (the coins are the session's counter, the owner's ARC-UI-090 model: a pile carries no script slots of its
+    /// own, and no installed gold carries a throw script), so only the grid cell is remade; the slots the runs wrote for the never-made object are dropped by the caller (Steamwoven difference, #2424). A part of the pile merges back into what remains and
+    /// changes nothing here.
+    /// </summary>
+    private void RefitWholeGoldPile(bool wholePile)
+    {
+        if (!wholePile || !_inventory.Grid.ContainsKey(SessionHeroGrid.GoldEntity)) return;
+        PlaceInGrid(SessionHeroGrid.GoldEntity, null);
     }
 
     /// <summary>ARC-COMBAT-2182: drops what the throw script's runs left for the item of a split that is never made (a skipped throw, a later refusal): the script slots they wrote and the deferred calls they scheduled with it as the attachee, so the next
