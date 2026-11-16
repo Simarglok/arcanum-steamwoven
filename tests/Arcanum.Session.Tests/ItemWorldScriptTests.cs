@@ -14,8 +14,8 @@ namespace Arcanum.Session.Tests;
 [TestClass]
 public sealed class ItemWorldScriptTests
 {
-    private const byte Triggerer = 0, Attachee = 1, Number = 3, Looped = 10, EveryContainer = 17, AnyContainer = 18, EveryFollower = 2, AnyFollower = 3;
-    private const int Every = 810, Any = 811, Twice = 812, EveryFollowerScript = 813, AnyFollowerScript = 814, ToggleSelf = 815, ToggleSelfTwice = 816, ToggleHero = 817, CaseName = 1205, NewArt = 4, BaselineArt = 100;
+    private const byte Triggerer = 0, Attachee = 1, LocalVariable = 2, Number = 3, Looped = 10, LocalObject = 11, EveryContainer = 17, AnyContainer = 18, EveryFollower = 2, AnyFollower = 3;
+    private const int Every = 810, Any = 811, Twice = 812, EveryFollowerScript = 813, AnyFollowerScript = 814, ToggleSelf = 815, ToggleSelfTwice = 816, ToggleHero = 817, Quest = 820, Typed = 821, Assigned = 822, DeadGated = 823, GeneratorGated = 824, GeneratorSlot = 7, CaseName = 1205, NewArt = 4, BaselineArt = 100, QuestNumber = 1005, ContainerType = 2;
     private static readonly SessionInsertCheck Accept = _ => SessionInsertVerdict.Accepted;
 
     private sealed record Clause(int Type, (byte Kind, int Value)[] Operands);
@@ -48,6 +48,24 @@ public sealed class ItemWorldScriptTests
         return Program([.. lines]);
     }
 
+    // ARC-SCRIPT-2347 (IV13): the same display case, gated on the hero's quest state, on the looped object's type read into a variable and on the looped object kept in an object variable.
+    private static ScrProgram QuestGated(int state) => Program(Do(C(ScrCatalogue.Action.LoopFor, (EveryContainer, 0))),
+        If(C(ScrCatalogue.Condition.PcQuestState, (Triggerer, 0), N(QuestNumber), N(state)), C(ScrCatalogue.Action.ChangeArtNumber, (Looped, 0), N(NewArt))),
+        Do(C(ScrCatalogue.Action.LoopEnd)), Do(C(ScrCatalogue.Action.ReturnRunDefault)));
+
+    private static ScrProgram TypeGated(int type) => Program(Do(C(ScrCatalogue.Action.LoopFor, (EveryContainer, 0))),
+        Do(C(ScrCatalogue.Action.GetObjectType, (Looped, 0), (LocalVariable, 0))),
+        If(C(ScrCatalogue.Condition.Equal, (LocalVariable, 0), N(type)), C(ScrCatalogue.Action.ChangeArtNumber, (Looped, 0), N(NewArt))),
+        Do(C(ScrCatalogue.Action.LoopEnd)), Do(C(ScrCatalogue.Action.ReturnRunDefault)));
+
+    private static ScrProgram AssignGated() => Program(Do(C(ScrCatalogue.Action.LoopFor, (EveryContainer, 0))),
+        Do(C(ScrCatalogue.Action.AssignObject, (LocalObject, 0), (Looped, 0))),
+        If(C(ScrCatalogue.Condition.IsNamed, (LocalObject, 0), N(CaseName)), C(ScrCatalogue.Action.ChangeArtNumber, (LocalObject, 0), N(NewArt))),
+        Do(C(ScrCatalogue.Action.LoopEnd)), Do(C(ScrCatalogue.Action.ReturnRunDefault)));
+
+    private static ScrProgram Gated(Clause condition) => Program(Do(C(ScrCatalogue.Action.LoopFor, (EveryContainer, 0))),
+        If(condition, C(ScrCatalogue.Action.ChangeArtNumber, (Looped, 0), N(NewArt))), Do(C(ScrCatalogue.Action.LoopEnd)), Do(C(ScrCatalogue.Action.ReturnRunDefault)));
+
     // ARC-SCRIPT-2346: toggle state (56) of one object, `times` times.
     private static ScrProgram Toggle(byte kind, int times = 1)
     {
@@ -60,10 +78,16 @@ public sealed class ItemWorldScriptTests
     private sealed class Host(int script) : ISessionItemScriptHost, ISessionItemWorldHost
     {
         public Dictionary<int, ScrProgram> Programs { get; } = new() { [Every] = Loop(EveryContainer, Looped), [Any] = Loop(EveryContainer, AnyContainer), [Twice] = Loop(EveryContainer, Looped, 2),
+            [Quest] = QuestGated(2), [Typed] = TypeGated(ContainerType), [Assigned] = AssignGated(),
+            [DeadGated] = Gated(C(ScrCatalogue.Condition.IsDead, (Looped, 0))), [GeneratorGated] = Gated(C(ScrCatalogue.Condition.MonsterGenDisabled, N(GeneratorSlot))),
             [EveryFollowerScript] = Loop(EveryFollower, Looped), [AnyFollowerScript] = Loop(EveryFollower, AnyFollower),
             [ToggleSelf] = Toggle(Attachee), [ToggleSelfTwice] = Toggle(Attachee, 2), [ToggleHero] = Toggle(Triggerer) };
         public Dictionary<string, int> Names { get; set; } = new() { ["case"] = CaseName, ["other"] = 3000 };
         public string[]? Vicinity { get; set; } = ["case", "other"];
+        public bool? DeadCase { get; set; } = true;
+        public int? QuestStateOfHero { get; set; } = 2;
+        public int? TypeOfContainers { get; set; } = ContainerType;
+        public List<(ScrObjectRef Object, int Quest)> QuestReads { get; } = [];
         public bool Plans { get; set; } = true;
         public bool PlanBaseline { get; set; }
         public bool? DataOff { get; set; } = false;
@@ -101,6 +125,18 @@ public sealed class ItemWorldScriptTests
 
         public int? NameOf(ScrObjectRef obj) => Names.TryGetValue(obj.Code, out var name) ? name : null;
         public bool? IsMindControlled(ScrObjectRef obj) => Names.ContainsKey(obj.Code) ? false : null;
+
+        public int? QuestState(ScrObjectRef obj, int quest)
+        {
+            QuestReads.Add((obj, quest));
+            return QuestStateOfHero;
+        }
+
+        // "case" is the dead one (the host decides what its objects are), "other" is alive.
+        public bool? IsDead(ScrObjectRef obj) => obj.Code == "case" ? DeadCase : obj.Code == "other" ? false : null;
+
+        // The other container ("other") has a different type, which the typed script must leave alone.
+        public int? ObjectType(ScrObjectRef obj) => obj.Code == "case" ? TypeOfContainers : obj.Code == "other" ? ContainerType + 1 : null;
 
         public bool? ItemOffInData(ScrObjectRef item) => DataOff;
 
@@ -177,6 +213,63 @@ public sealed class ItemWorldScriptTests
         var baseline = new SessionOpenableBaseline(OpenableKind.Container, 0, 0, 3);
         Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, "oid:tome", Accept, new Host(Every) { Openable = baseline }).Disposition);
         Assert.AreEqual(0, owner.QueryOpenable(new SessionOpenable(Exterior, "case"), baseline).Frame, "the action closes the container");
+    }
+
+    [TestMethod]
+    public void A_quest_state_condition_reads_the_hero_through_the_host()
+    {
+        using var owner = Owner();
+        var host = new Host(Quest);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, "oid:tome", Accept, host).Disposition);
+        Assert.AreEqual((NewArt, NewArt), ((int?)Art(owner, "case"), (int?)Art(owner, "other")), "the state equals the one the script names, so every looped container changes");
+        Assert.IsTrue(host.QuestReads.All(read => read.Quest == QuestNumber && read.Object.Code == SessionEventKinds.PlayerEntity), "the hero is the triggerer of a pickup");
+
+        using var other = Owner();
+        var different = new Host(Quest) { QuestStateOfHero = 3 };
+        Assert.AreEqual(GameSessionDisposition.Changed, other.PickUpItem(other.Version, "oid:tome", Accept, different).Disposition);
+        Assert.IsNull(Art(other, "case"), "another state changes nothing");
+    }
+
+    [TestMethod]
+    public void Get_object_type_reads_the_type_of_the_looped_object_and_assign_object_keeps_it()
+    {
+        using var typed = Owner();
+        Assert.AreEqual(GameSessionDisposition.Changed, typed.PickUpItem(typed.Version, "oid:tome", Accept, new Host(Typed)).Disposition);
+        Assert.AreEqual((NewArt, (int?)null), ((int?)Art(typed, "case"), (int?)Art(typed, "other")), "only the container of the named type changes");
+
+        using var assigned = Owner();
+        Assert.AreEqual(GameSessionDisposition.Changed, assigned.PickUpItem(assigned.Version, "oid:tome", Accept, new Host(Assigned)).Disposition);
+        Assert.AreEqual((NewArt, (int?)null), ((int?)Art(assigned, "case"), (int?)Art(assigned, "other")), "the object variable holds the looped object the name test and the art change read");
+    }
+
+    [TestMethod]
+    public void The_dead_condition_reads_the_host_and_the_generator_condition_reads_the_session_table()
+    {
+        using var dead = Owner();
+        Assert.AreEqual(GameSessionDisposition.Changed, dead.PickUpItem(dead.Version, "oid:tome", Accept, new Host(DeadGated)).Disposition);
+        Assert.AreEqual((NewArt, (int?)null), ((int?)Art(dead, "case"), (int?)Art(dead, "other")), "only the container the host calls dead changes");
+
+        using var open = Owner();
+        Assert.AreEqual(GameSessionDisposition.Changed, open.PickUpItem(open.Version, "oid:tome", Accept, new Host(GeneratorGated)).Disposition);
+        Assert.IsNull(Art(open, "case"), "an unblocked generator slot does not pass the condition");
+
+        using var blocked = Owner();
+        Assert.AreEqual(GameSessionDisposition.Changed, blocked.ToggleGeneratorBlock(blocked.Version, GeneratorSlot).Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, blocked.PickUpItem(blocked.Version, "oid:tome", Accept, new Host(GeneratorGated)).Disposition);
+        Assert.AreEqual((NewArt, NewArt), ((int?)Art(blocked, "case"), (int?)Art(blocked, "other")), "a blocked slot passes it for every looped container");
+    }
+
+    [TestMethod]
+    public void A_quest_state_object_type_or_death_the_host_cannot_answer_refuses_the_move()
+    {
+        foreach (var host in new Host[] { new(Typed) { TypeOfContainers = null }, new(DeadGated) { DeadCase = null }, new(Quest) { QuestStateOfHero = null } })
+        {
+            using var owner = Owner();
+            var before = owner.Version;
+            var refused = owner.PickUpItem(before, "oid:tome", Accept, host);
+            Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.ItemScriptUnsupported, before), (refused.Disposition, refused.Failure, owner.Version));
+            Assert.IsNull(Art(owner, "case"));
+        }
     }
 
     [TestMethod]
@@ -265,13 +358,15 @@ public sealed class ItemWorldScriptTests
     public void The_item_set_keeps_to_the_questions_the_session_answers()
     {
         var set = SessionItemScripts.Admission;
-        foreach (var action in new[] { ScrCatalogue.Action.Random, ScrCatalogue.Action.DistanceBetween, ScrCatalogue.Action.GetLocation, ScrCatalogue.Action.FloatLine, ScrCatalogue.Action.GetObjectType })
+        foreach (var action in new[] { ScrCatalogue.Action.Random, ScrCatalogue.Action.DistanceBetween, ScrCatalogue.Action.GetLocation, ScrCatalogue.Action.FloatLine })
             Assert.IsFalse(set.Actions.Contains(action), $"action {action}");
-        foreach (var condition in new[] { ScrCatalogue.Condition.PcQuestState, ScrCatalogue.Condition.HasItemNamed, ScrCatalogue.Condition.WithinRange })
+        foreach (var condition in new[] { ScrCatalogue.Condition.HasItemNamed, ScrCatalogue.Condition.WithinRange })
             Assert.IsFalse(set.Conditions.Contains(condition), $"condition {condition}");
         // The adapter answers IScrGroupQueries for the follower kinds only (ARC-SCRIPT-2336): the group kinds 13 and 14 (followers plus the triggerer) stay out until a slice reads them for the item host.
         foreach (var kind in new[] { ScrFocusKind.EverySceneryInVicinity, ScrFocusKind.AnySceneryInVicinity, ScrFocusKind.EveryoneInVicinity, ScrFocusKind.AnyoneInVicinity, ScrFocusKind.EveryoneInGroup, ScrFocusKind.AnyoneInGroup })
             Assert.IsFalse(set.FocusKinds.Contains(kind), $"focus {kind}");
+        // ARC-SCRIPT-2347 (IV13): the quest state condition, assign object and get object type are answered by the host's world part now.
+        Assert.IsTrue(set.Conditions.Contains(ScrCatalogue.Condition.PcQuestState) && set.Actions.Contains(ScrCatalogue.Action.AssignObject) && set.Actions.Contains(ScrCatalogue.Action.GetObjectType));
         Assert.IsTrue(set.IsSubsetOf(ScrAdmissionSet.S65));
     }
 
