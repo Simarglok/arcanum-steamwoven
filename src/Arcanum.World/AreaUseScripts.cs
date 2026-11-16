@@ -48,6 +48,7 @@ namespace Arcanum.World;
 /// ARC-WORLD-1837 (ledger TT20): <see cref="NpcTeleportRefusal"/> names why a script's teleport (44, 102) of an NPC of the shown map to a cell of the shown map cannot be requested (the AI host does not hold it, it is a follower, the cell is not held), or null,
 /// and <see cref="RequestNpcTeleport"/> records the request in the session's one slot (the original's 0x4D3380; the object moves at the next ping), called only after the run applied; without them a run that teleports an object other than the hero is left unapplied.
 /// ARC-SCRIPT-2326 (AR2): <see cref="BodyArmorUseArt"/> answers the use art of the body armour the hero wears (item field 0x5F, the one the hero's drawn body takes its armour part from), null when it is not read; without it get armor of the hero stops the run while armour is worn.
+/// ARC-SCRIPT-2342 (AR2, AR7): <see cref="NpcBodyArmor"/> answers what an NPC the session dressed wears on its body-armour slot now (null: not read; without it get armor of such an NPC is not modelled).
 /// </summary>
 public sealed record AreaScriptWorld(Func<CellCoord?> PcCell, Func<AreaObjectRecord, bool> Gone, Func<int, AreaPrototypeItem?> Item, Func<IDropMap?> DropMap,
     Func<ScrObjectRef, bool>? Kill = null, Func<ScrObjectRef, bool>? CanKill = null, Func<ScrObjectRef, CellCoord?>? CritterCell = null,
@@ -60,7 +61,10 @@ public sealed record AreaScriptWorld(Func<CellCoord?> PcCell, Func<AreaObjectRec
     Func<string, int, string>? ScriptStopSpell = null, Func<string, AreaScriptVitals?>? Vitals = null, Func<string, int, int, string>? ScriptHealLife = null,
     Func<string, string, string>? ScriptAttack = null, Func<string, int?>? Aptitude = null, Func<string, string, bool?>? CanSee = null, Func<string, string, bool?>? CanHear = null,
     Func<uint, bool>? ArtExists = null, Func<ScrTeleport, string?>? NpcTeleportRefusal = null, Action<ScrTeleport>? RequestNpcTeleport = null,
-    Func<uint?>? BodyArmorUseArt = null);
+    Func<uint?>? BodyArmorUseArt = null, Func<string, AreaScriptWornArmor?>? NpcBodyArmor = null);
+
+/// <summary>ARC-SCRIPT-2342 (AR2): the use art (item field 0x5F) of the item an NPC wears in the body-armour slot (1006), or null when it wears none (<see cref="AreaScriptWorld.NpcBodyArmor"/>).</summary>
+public sealed record AreaScriptWornArmor(uint? UseArt);
 
 /// <summary>ARC-SCRIPT-1481 (VT1–VT3): the vitals of an NPC of the shown map for get hit points (107), get fatigue points (108) and get stat of the poison level (24): the current and maximum hit points and fatigue and the poison level,
 /// as the session's life status gives them (<see cref="AreaScriptWorld.Vitals"/>).</summary>
@@ -724,15 +728,19 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     public int? FactionOf(ScrObjectRef obj) => NpcField(obj, row => AreaConversationHost.Scope(row, _session).Faction);
 
     /// <summary>
-    /// ARC-SCRIPT-2326 (ledger AR1–AR3, exe read 2026-11-16): get armor (32), the armour part of the object's current art id. The PC's is the armour part of the use art of the body armour (slot 1006) the session has it wear,
-    /// 0 bare (<see cref="Arcanum.Simulation.Equipment.BodyArmorArtRules.WornArt"/> sets the part the same way); an NPC's or any other row's is read from its stored current art (field 1, slot 0), 0 for an art that is no critter's or monster's (items, scenery, unique NPCs);
-    /// null for an object this host has no row for or one whose row holds no current art. Not modelled: a session-dressed NPC's armour changing its art, a polymorph's art.
+    /// ARC-SCRIPT-2326 (ledger AR1–AR3, exe read 2026-11-16) and ARC-SCRIPT-2342 (AR2, AR7): get armor (32), the armour part of the object's current art id. A critter's current art is rewritten by the wield hooks when body armour (slot 1006)
+    /// goes on or off and by a Trait polymorph, so the answer follows what the session did to the critter, not the stored art alone. The PC: a polymorphed hero (monster art, armour bits 0, nothing can be worn) 0; else the armour part of the use art of the body armour
+    /// it wears (<see cref="AreaScriptWorld.BodyArmorUseArt"/>, null when not read: not modelled), 0 bare. An NPC: polymorphed (<see cref="GameSessionOwner.QueryTraitArt"/>) 0; one the session dressed (<see cref="GameSessionOwner.QueryNpcWorn"/>, a regeneration's best items,
+    /// the barter and loot windows) the part its body armour gives (<see cref="Arcanum.Simulation.Equipment.BodyArmorArtRules.WornArt"/> over its stored art: 0 bare, an item whose part the art type cannot hold is refused and the part stays 0), null when the world does not read it;
+    /// any other row from its stored current art (field 1, slot 0), 0 for an art that is no critter's or monster's (items, scenery, unique NPCs); null for an object this host has no row for or one whose row holds no current art.
     /// </summary>
     public int? ArmorOf(ScrObjectRef obj)
     {
         if (IsPc(obj))
         {
             if (_session.QueryHero() is null) return null;
+            // A polymorphed hero wears a monster body with its armour part 0 (the apply takes every worn item off; the wear check refuses a polymorphed critter): AR7.
+            if (_session.QueryTraitArt(SessionSpellCaster.Hero) is not null) return 0;
             // Bare: underwear (part 0). Worn: the use art's armour part, which the world's hero body reads; not read there: not modelled.
             var part = 0;
             if (_session.QueryEquipment().Worn.Any(item => item.Slot == Arcanum.Simulation.Equipment.EquipmentSlot.Armor))
@@ -743,7 +751,24 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
             return Arcanum.Simulation.Sound.SoundCueRules.CritterArtArmor(Arcanum.Simulation.Equipment.BodyArmorArtRules.WithArmor(Arcanum.Simulation.Equipment.BodyArmorArtRules.CritterArt << 28, part));
         }
         if (Row(obj) is not { } row || Number(row, CurrentArtSlot) is not { } art) return null;
-        return Arcanum.Simulation.Sound.SoundCueRules.CritterArtArmor(unchecked((uint)art));
+        var stored = unchecked((uint)art);
+        if (row.Type == NpcType)
+        {
+            // The apply of a Trait polymorph takes the worn items off and writes a monster art (field 1); the stored base art (0x18) stays. The monster art's armour bits start at 0 (inferred, TR-reads of AR7).
+            if (_session.QueryTraitArt(obj.Code) is not null) return 0;
+            if (_session.QueryNpcWorn(obj.Code) is { } dressed)
+            {
+                // The insert and removal of a wear slot run the hooks for an NPC as for the PC: the art took the armour part of the body armour the NPC wears now (0 when none).
+                var wearsArmor = dressed.Worn.Any(item => item.Slot == Arcanum.Simulation.Equipment.EquipmentSlot.Armor);
+                if (!wearsArmor) return Arcanum.Simulation.Sound.SoundCueRules.CritterArtArmor(Arcanum.Simulation.Equipment.BodyArmorArtRules.WornArt(stored, stored, null)!.Value);
+                // The record says armour is worn: a world that finds none (an item whose fields are not read yet, a broken one) is not modelled rather than bare.
+                if (_world?.NpcBodyArmor?.Invoke(obj.Code) is not { UseArt: { } } worn) return null;
+                var wornArt = Arcanum.Simulation.Equipment.BodyArmorArtRules.WornArt(stored, stored, worn.UseArt);
+                // A refused wield (an art type that cannot hold the part) leaves the part the clear before it wrote: 0.
+                return Arcanum.Simulation.Sound.SoundCueRules.CritterArtArmor(wornArt ?? Arcanum.Simulation.Equipment.BodyArmorArtRules.WithArmor(stored, 0));
+            }
+        }
+        return Arcanum.Simulation.Sound.SoundCueRules.CritterArtArmor(stored);
     }
 
     // The three getters read a field only of an object whose type is NPC (0x10) and answer 0 for any other type, the PC included.
