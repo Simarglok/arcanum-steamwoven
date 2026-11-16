@@ -216,6 +216,8 @@ public sealed partial class GameSessionOwner
         private int _questRequestsInRun;
         // ARC-SCRIPT-2394: a planned award raises a level, which changes the hero's level and stats (an auto-level scheme may buy): a get stat or a power ratio read after it (this run's trace, or any later run of the move) would have read the changed hero in the original; a further
         // award is not planned over it (the scheme's purchases read the hero's stats, which the plan does not carry). Whether an earlier run's award raised a level, as this run began.
+        // ARC-SCRIPT-2378 (IV32–IV35): the state each toggled monster generator slot of the move ends in (the last toggle of the slot, as the interpreter's request carries it), planned so the later runs' condition 46 sees it and written by the commit.
+        private readonly Dictionary<int, bool> _generatorBlocked = [];
         private bool _awardRaisesLevel;
         private bool _raisedBeforeRun;
 
@@ -276,7 +278,7 @@ public sealed partial class GameSessionOwner
         internal IReadOnlyList<ScrEyeCandy> EyeCandies => _runs.Where(run => run.Run.Outcome != ScrOutcome.Refused).SelectMany(run => run.Run.Effects.EyeCandies).ToArray();
         /// <summary>Whether committing changes the session: a flag write, a script store cell that differs from the session's (ARC-DEV-152),
         /// a slot or an effect change, a deferred call to schedule or one to remove that is pending (ARC-MAGIC-041).</summary>
-        internal bool Changes => _writes.Count > 0 || _slots.Count > 0 || _steps.Count > 0 || _npcOps.Count > 0 || _owner.EffectiveChanges(_artEdits).Length > 0 || _owner.ScriptCallsChange(_calls) || _reads.StoreChanges || _questRecords.Count > 0 || _questShared.Count > 0 || _questGains.Count > 0
+        internal bool Changes => _writes.Count > 0 || _slots.Count > 0 || _steps.Count > 0 || _npcOps.Count > 0 || _owner.EffectiveChanges(_artEdits).Length > 0 || _owner.ScriptCallsChange(_calls) || _reads.StoreChanges || _questRecords.Count > 0 || _questShared.Count > 0 || _questGains.Count > 0 || GeneratorChanges
             || _storyRaised is { } raised && raised > _owner._story.StoryState || _rumors.Any(rumor => !_owner._story.Rumors.ContainsKey(rumor));
 
         /// <summary>ARC-SCRIPT-2375 (IV30): the name number an earlier run of the move gave the item, or null.</summary>
@@ -284,6 +286,12 @@ public sealed partial class GameSessionOwner
 
         /// <summary>ARC-SCRIPT-2375 (IV28): the story-state number as the next run reads it: the one the move's earlier runs raised it to, else the session's.</summary>
         internal int StoryNow => _storyRaised ?? _owner._story.StoryState;
+
+        /// <summary>ARC-SCRIPT-2378 (IV33): whether a toggled generator slot ends in a state other than the session's (a second toggle of the same slot may put it back).</summary>
+        private bool GeneratorChanges => _generatorBlocked.Any(pair => (_owner.QueryGeneratorSlot(pair.Key)?.Blocked ?? false) != pair.Value);
+
+        /// <summary>ARC-SCRIPT-2378 (IV33): the blocked state a slot has after the move's earlier runs, null when none toggled it (the session's table then answers).</summary>
+        internal bool? PlannedGenerator(int slot) => _generatorBlocked.TryGetValue(slot, out var blocked) ? blocked : null;
 
         internal ScrRunResult? Run(int point, string attachee, string triggerer, string? extra)
         {
@@ -363,6 +371,12 @@ public sealed partial class GameSessionOwner
                 if (_owner.ArtEdits(plan) is not { } edits) return GameSessionFailure.ItemScriptUnsupported;
                 if (edits.Count > 0 && !_artEntities.Add(plan.Entity)) return GameSessionFailure.ItemScriptUnsupported;
                 _artEdits.AddRange(edits);
+            }
+            // ARC-SCRIPT-2378 (IV32–IV34): toggle monster generator (110) is the one world change the set admits; the request carries the state the slot ends in (the sector toggle stays out of the set).
+            foreach (var change in effects.WorldChanges)
+            {
+                if (change.Change != ScrWorldChange.GeneratorBlocked || change.A is < 0 or >= Arcanum.Simulation.Ai.GeneratorSettings.SlotCount) return GameSessionFailure.ItemScriptUnsupported;
+                _generatorBlocked[change.A] = change.Blocked;
             }
             // ARC-SCRIPT-2410 (IV19): the run's quest requests were planned as the run made them (IScrQuestWrites, as the original applies them), so its quest reads saw the earlier writes of the run, a call-ex callee's included; a refusal of one is the move's.
             if (_questFailure != GameSessionFailure.None) return _questFailure;
@@ -643,7 +657,7 @@ public sealed partial class GameSessionOwner
         {
             if (Failure != GameSessionFailure.None) return;
             if (_writes.Count > 0 && _owner._flags.Version.Revision > GlobalFlagLimits.MaxRevision - _writes.Count) { Failure = GameSessionFailure.RevisionExhausted; return; }
-            if ((_questRecords.Count > 0 || _questGains.Count > 0) && _owner._revision == long.MaxValue) { Failure = GameSessionFailure.RevisionExhausted; return; }
+            if ((_questRecords.Count > 0 || _questGains.Count > 0 || GeneratorChanges) && _owner._revision == long.MaxValue) { Failure = GameSessionFailure.RevisionExhausted; return; }
             // The slots are planned once, here: the commit applies this plan and asks the host nothing more after the first flag write.
             _planned = Writes();
             if (_planned.Keys.Count(key => !_owner._inventory.ScriptSlots.ContainsKey(key)) > SessionItemScripts.MaxStoredSlots - _owner._inventory.ScriptSlots.Count)
@@ -687,6 +701,7 @@ public sealed partial class GameSessionOwner
                 // ARC-SCRIPT-2394: what the host shows and passes on for an award (the level-up messages, the followers' level step).
                 if (questAward.Award.Followers is not null || questAward.Award.LevelUps is not null) _owner._itemScriptAwards.Add(questAward.Award);
             }
+            foreach (var (slot, blocked) in _generatorBlocked) _owner._generators.SetBlocked(slot, blocked);
             if (_prepared is not null) _owner.ApplyEffects(_prepared);
             if (_npc is { } npc && _npcOps.Count > 0 && _owner.ChangeNpcOps(_owner.Version, npc.Target, _npcOps, dryRun: false, revise: false).Failure != GameSessionFailure.None)
                 throw new InvalidOperationException("ITEM_SCRIPT_NPC_EFFECTS_COMMIT");
@@ -888,7 +903,7 @@ public sealed partial class GameSessionOwner
         }
 
         // ARC-SCRIPT-2347 (IV14, IV15): obj is dead goes to the host's world part (an object it does not know refuses the move); monster generator disabled (46) reads the session's generator table as the use host does (a slot without an entry is
-        // not blocked). The switched-off test, the open and can-open tests and the sector test are not admitted and throw if asked.
+        // not blocked), under the toggles the move's earlier runs planned (ARC-SCRIPT-2378). The switched-off test, the open and can-open tests and the sector test are not admitted and throw if asked.
         public bool? IsDead(ScrObjectRef obj)
         {
             var dead = World?.IsDead(obj);
@@ -896,7 +911,7 @@ public sealed partial class GameSessionOwner
             return dead;
         }
 
-        public bool GeneratorBlocked(int slot) => session.QueryGeneratorSlot(slot)?.Blocked ?? false;
+        public bool GeneratorBlocked(int slot) => runs.PlannedGenerator(slot) ?? session.QueryGeneratorSlot(slot)?.Blocked ?? false;
         public bool? IsSwitchedOff(ScrObjectRef obj) => throw new InvalidOperationException("ITEM_SCRIPT_SWITCHED_OFF_NOT_ADMITTED");
         public bool? IsOpen(ScrObjectRef obj) => throw new InvalidOperationException("ITEM_SCRIPT_OPEN_NOT_ADMITTED");
         public bool? CanOpen(ScrObjectRef obj) => throw new InvalidOperationException("ITEM_SCRIPT_CAN_OPEN_NOT_ADMITTED");

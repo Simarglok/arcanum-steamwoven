@@ -440,6 +440,7 @@ public static class SessionItemScripts
     /// (as the use host reads them), and monster generator disabled (46), which the session answers from its generator table (IV13–IV15); ARC-SCRIPT-2374 (IV18–IV21) adds set PC quest state (16) and give quest experience (63), which the session applies in the move's own revision
     /// (a request for a PC only; at most one experience award, which may raise a level: the host takes its level-up messages and follower step, ARC-SCRIPT-2394, and a stat or power ratio read after it refuses the move).; ARC-SCRIPT-2376 (IV25) adds the scenery and critter vicinity kinds (15, 16, 8, 9: loop for and the like, the scan around the attachee item's location, answered by the same part)
     /// with call script in (54), already kept, into a dialog script. A script outside it refuses the move.
+    /// ARC-SCRIPT-2378 (IV32–IV35) adds toggle monster generator (110), which the session applies to its generator table in the move's own revision.
     /// ARC-SCRIPT-2375 (ledger IV28–IV31) adds get story state (42), set story state (43), set rumor (50) and rename (92), which the runs plan in the move (the story number and the rumor the PC learns, the name number of an item of the move).
     /// </summary>
     public static ScrAdmissionSet Admission { get; } = new("S14-item",
@@ -449,7 +450,7 @@ public static class SessionItemScripts
             .Concat([ScrCatalogue.Action.SetRumor, ScrCatalogue.Action.Rename, ScrCatalogue.Action.AddEffect, ScrCatalogue.Action.RemoveEffect, ScrCatalogue.Action.CallScriptEx,
                 ScrCatalogue.Action.MagickTechAdjustment, ScrCatalogue.Action.PlayScriptEyeCandy, ScrCatalogue.Action.PlaySound, ScrCatalogue.Action.GetStat,
                 ScrCatalogue.Action.LoopFor, ScrCatalogue.Action.LoopEnd, ScrCatalogue.Action.LoopBreak, ScrCatalogue.Action.ChangeArtNumber, ScrCatalogue.Action.ToggleState,
-                ScrCatalogue.Action.AssignObject, ScrCatalogue.Action.GetObjectType, ScrCatalogue.Action.SetPcQuestState, ScrCatalogue.Action.GiveQuestExperience]),
+                ScrCatalogue.Action.AssignObject, ScrCatalogue.Action.GetObjectType, ScrCatalogue.Action.SetPcQuestState, ScrCatalogue.Action.GiveQuestExperience, ScrCatalogue.Action.ToggleMonsterGenerator]),
         ScrAdmissionSet.S6.ValueKinds.Concat(ScrAdmissionSet.StoreValueKinds),
         ScrAdmissionSet.S6.FocusKinds.Concat([ScrFocusKind.CurrentLoopedObject, ScrFocusKind.EveryContainerInVicinity, ScrFocusKind.AnyContainerInVicinity,
             ScrFocusKind.LocalObject, ScrFocusKind.EveryFollower, ScrFocusKind.AnyFollower,
