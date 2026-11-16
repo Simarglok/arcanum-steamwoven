@@ -184,6 +184,16 @@ public sealed class AreaItemScriptHostTests
         Assert.IsNull(new AreaItemScriptHost(session, [Map()], null, number => throw new ArgumentException("outside the tables")).EffectDefinition(5), "a number the tables refuse");
     }
 
+    // ARC-SCRIPT-2336 (FK8): the follower list of a point 21 run comes from the shown map's use host; without one the host cannot answer and the session refuses the move.
+    [TestMethod]
+    public void The_host_has_no_follower_list_without_a_shown_map()
+    {
+        using var session = ConversationSessionFixture.Create();
+        var leader = new ScrObjectRef(1, "pc");
+        Assert.IsNull(new AreaItemScriptHost(session, [Map()], null).FollowersOf(leader), "no shown map host");
+        Assert.IsNull(new AreaItemScriptHost(session, [Map()], null, null, () => null).FollowersOf(leader), "a shown map that is not there");
+    }
+
     [TestMethod]
     public void An_item_script_that_reads_a_stat_and_adds_an_effect_runs_through_the_inventory_host()
     {

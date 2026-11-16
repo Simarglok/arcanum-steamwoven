@@ -117,6 +117,9 @@ public partial class TerrainViewerApp
         host.EffectRules = number => _areaEffectRules?.Invoke(number);
         // ARC-SCRIPT-2335: an insert-item script's container vicinity, name test and change art number read the shown map's use-script host.
         host.ShownScripts = () => _readyArea is { } shownArea ? UseScriptHost(shownArea.Snapshot) : null;
+        // ARC-WORLD-2357: the substitute container reach (the dialog item hold, the restock merchant search) measures where the shown map's AI host has the NPC now.
+        // It reads the built host without building it again (the restock event reaches it mid-advance, as AreaEvents' own host reader does); a group companion not following stands on its own cell (AreaAiHost.Tile).
+        host.NpcLiveCell = npc => _aiHost is { } ai && ReferenceEquals(ai.Session, _areaSession) ? ai.Tile(npc) : null;
         host.NpcWearer = (map, npc) => AreaEvents.NpcWieldScripts(map, npc);
         host.NpcWearerFacts = (map, npc) => AreaEvents.RestockWielder(map, npc)?.Wearer;
         _inventoryHost = host;
