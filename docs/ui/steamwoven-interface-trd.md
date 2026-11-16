@@ -154,9 +154,9 @@ Part kinds:
 | --- | --- | --- | --- |
 | 1. Census | agent ([#2451](https://github.com/Simarglok/arcanum-steamwoven/issues/2451)) | census note, screenshots | note in git, screenshots in `local/steamwoven-ui/census/` |
 | 2. Kit manifest | agent ([#2454](https://github.com/Simarglok/arcanum-steamwoven/issues/2454)) | `kit.json`, validator | git |
-| 3. Context images | Codex ([#2455](https://github.com/Simarglok/arcanum-steamwoven/issues/2455)) | whole-screen redraws of key screens | local |
-| 4. Material sheet | Codex, owner approves ([#2456](https://github.com/Simarglok/arcanum-steamwoven/issues/2456)) | wood, brass, paper, … | local |
-| 5. Parts | Codex, per batch | raw generations | `local/steamwoven-ui/outbox/` |
+| 3. Context images | owner in Codex ([#2455](https://github.com/Simarglok/arcanum-steamwoven/issues/2455)) | whole-screen redraws of key screens | local |
+| 4. Material sheet | owner in Codex, owner approves ([#2456](https://github.com/Simarglok/arcanum-steamwoven/issues/2456)) | wood, brass, paper, … | local |
+| 5. Parts | owner in Codex, per batch | raw generations | `local/steamwoven-ui/outbox/` |
 | 6. Fit | agent tool ([#2459](https://github.com/Simarglok/arcanum-steamwoven/issues/2459)) | masters | `local/steamwoven-ui/masters/` |
 | 7. Look check | owner | per-batch composite | thread only |
 | 8. Bake | agent tool ([#2460](https://github.com/Simarglok/arcanum-steamwoven/issues/2460)) | four step sets | per SWI-PRV |
@@ -167,8 +167,9 @@ Part kinds:
   then generated with a crop of the context image as reference.
 - **SWI-GEN-2** The approved material sheet freezes the tones and textures; every later part is generated against it
   and colour-locked to it.
-- **SWI-GEN-3** A part's references are the context crop and the material sheet, plus an original crop only if the
-  provenance decision allows it ([#2448](https://github.com/Simarglok/arcanum-steamwoven/issues/2448)). Its prompt
+- **SWI-GEN-3** A part's references are the context crop and the material sheet, plus the original art of the part
+  (crop, frame or screenshot): original art is given to Codex as input (owner decision 2026-11-16,
+  [#2448](https://github.com/Simarglok/arcanum-steamwoven/issues/2448)). Its prompt
   comes from the prompt library `tools/steamwoven_ui/prompts/` (text only).
 - **SWI-GEN-4** A generation becomes a master only through the fit tool (size, grid, alpha clean-up, low-frequency
   colour lock, provenance record).
@@ -177,9 +178,10 @@ Part kinds:
   ([#2457](https://github.com/Simarglok/arcanum-steamwoven/issues/2457)).
 - **SWI-GEN-6** Every generated image has a provenance record: generator and version, date, prompt id and the hash of
   its text, reference ids, who ran it.
-- **SWI-GEN-7** Until [#2449](https://github.com/Simarglok/arcanum-steamwoven/issues/2449) shows that an agent can
-  run Codex image generation, the owner runs it: the agent puts prompts and references into
-  `local/steamwoven-ui/inbox/<batch>/`, the owner puts results into `local/steamwoven-ui/outbox/<batch>/`.
+- **SWI-GEN-7** The owner runs Codex image generation (owner decision 2026-11-16, [#2449](https://github.com/Simarglok/arcanum-steamwoven/issues/2449)); agents never
+  send anything to Codex. Handoff: the agent puts a batch's prompts, references and a short list of what to generate into
+  `local/steamwoven-ui/inbox/<batch>/`, asks the owner in the thread, and the owner puts the results into
+  `local/steamwoven-ui/outbox/<batch>/`; the agent then writes the provenance records (SWI-GEN-6) and runs the fit tool.
 
 ## Bake and runtime
 
@@ -196,12 +198,13 @@ Part kinds:
 
 ## Provenance and storage
 
-- **SWI-PRV-1** Until the owner decides [#2448](https://github.com/Simarglok/arcanum-steamwoven/issues/2448), every
-  generated image, master and baked set is treated as derived from the original: it stays under the ignored
+- **SWI-PRV-1** Owner decision 2026-11-16 ([#2448](https://github.com/Simarglok/arcanum-steamwoven/issues/2448)): original art is given to
+  Codex as input, so every generated image, master and baked set is derived from the original: it stays under the ignored
   `local/steamwoven-ui/`, is never committed and never packaged, and follows the
   [HD pack workflow](../workflow/hd-pack.md) for backup. In git: tools, the manifest (identifiers only), the prompt
   library (text) and notes with numbers.
-- **SWI-PRV-2** The decision of #2448 replaces SWI-PRV-1 in this section.
+- **SWI-PRV-2** The kit therefore exists only on the owner's devices (and those of a player who builds it from their own
+  installation), like the HD pack; it is not shipped with the game. Reopening this needs a new owner decision.
 - **SWI-PRV-3** Composites for the owner are posted in the thread and never committed (owner rule 2026-11-11).
 
 ## Verification
@@ -236,25 +239,25 @@ acceptance criteria. Start any issue that is `status:ready`; the order below is 
 | Phase | Issue | Result | Blocked by |
 | --- | --- | --- | --- |
 | 0. Decisions | [#2447](https://github.com/Simarglok/arcanum-steamwoven/issues/2447) | this TRD and the ADR | — |
-| 0. Decisions | [#2448](https://github.com/Simarglok/arcanum-steamwoven/issues/2448) | owner: provenance and distribution | — |
-| 0. Decisions | [#2449](https://github.com/Simarglok/arcanum-steamwoven/issues/2449) | can an agent drive Codex image generation | — |
+| 0. Decisions | [#2448](https://github.com/Simarglok/arcanum-steamwoven/issues/2448) | owner: provenance and distribution — decided: originals are Codex inputs, kit local only | — |
+| 0. Decisions | [#2449](https://github.com/Simarglok/arcanum-steamwoven/issues/2449) | Codex runner — decided: the owner runs Codex (closed, not planned) | — |
 | 1. Geometry | [#2450](https://github.com/Simarglok/arcanum-steamwoven/issues/2450) | layout model (SWI-LAY, SWI-BDR) | — |
 | 1. Geometry | [#2452](https://github.com/Simarglok/arcanum-steamwoven/issues/2452) | prototype with generated chrome | #2450 |
 | 1. Geometry | [#2453](https://github.com/Simarglok/arcanum-steamwoven/issues/2453) | owner: panel proportions | #2452 |
 | 2. Census | [#2451](https://github.com/Simarglok/arcanum-steamwoven/issues/2451) | census, families, production issues | — |
 | 2. Census | [#2454](https://github.com/Simarglok/arcanum-steamwoven/issues/2454) | kit manifest and validator | #2451 |
-| 3. Style | [#2455](https://github.com/Simarglok/arcanum-steamwoven/issues/2455) | context images, material sheet, prompts | #2448, #2449, #2451 |
+| 3. Style | [#2455](https://github.com/Simarglok/arcanum-steamwoven/issues/2455) | context images, material sheet, prompts | #2451 |
 | 3. Style | [#2456](https://github.com/Simarglok/arcanum-steamwoven/issues/2456) | owner: material sheet | #2455 |
 | 3. Style | [#2457](https://github.com/Simarglok/arcanum-steamwoven/issues/2457) | 4K surface method comparison | #2456 |
 | 3. Style | [#2458](https://github.com/Simarglok/arcanum-steamwoven/issues/2458) | owner: surface method | #2457 |
 | 4. Tools | [#2459](https://github.com/Simarglok/arcanum-steamwoven/issues/2459) | fit tool | #2454 |
-| 4. Tools | [#2460](https://github.com/Simarglok/arcanum-steamwoven/issues/2460) | bake tool and storage | #2454, #2448 |
+| 4. Tools | [#2460](https://github.com/Simarglok/arcanum-steamwoven/issues/2460) | bake tool and storage | #2454 |
 | 5. Runtime | [#2461](https://github.com/Simarglok/arcanum-steamwoven/issues/2461) | runtime composition, window integration issues | #2450, #2460 |
 | 5. Runtime | [#2462](https://github.com/Simarglok/arcanum-steamwoven/issues/2462) | fonts at the four steps | #2450, #2451 |
 | 6. Production | created by #2451 | one batch per family or part group | fit, bake, material sheet |
 | 6. Integration | created by #2461 | one issue per window | runtime, its batch |
 
-Ready now: #2448 (owner), #2449, #2450, #2451.
+Ready now: #2450, #2451.
 
 ## Open questions
 

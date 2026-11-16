@@ -177,9 +177,14 @@ public partial class TerrainViewerApp
         if (_worldActor.Session is not AreaGridSession grid || _canvas is null) return;
         if (_areaSession!.QueryHeroLife() is not { Status.IsActive: true }) { PutBackGameCursorItem("the hero cannot act"); return; }
         CellCoord tile;
+        AreaObjectKey? pressed = null;
         if (AreaObjectAtScreen(screen) is { } key && _readyArea?.Snapshot.Objects.FirstOrDefault(row => row.Key == key) is { } row
             && (row.Type is 15 or 16 && !IsAreaCompanion(row.Key) && row.WorldX is not null && row.WorldY is not null ? NpcCell(row) : LiveCell(_areaSession, row)) is { } at)
+        {
             tile = at;
+            // TT6 (ARC-COMBAT-2425): the press on an object stores the object as the throw goal's target.
+            if (row.Type is 15 or 16) pressed = key;
+        }
         else
         {
             var chart = _canvas.GetGlobalTransformWithCanvas().AffineInverse() * screen;
@@ -187,7 +192,7 @@ public partial class TerrainViewerApp
             var world = grid.Chart.ToWorld(cell);
             tile = new(checked((int)world.X), checked((int)world.Y));
         }
-        ThrowGameCursorItem(tile);
+        ThrowGameCursorItem(tile, pressed);
     }
 
     /// <summary>
@@ -195,10 +200,10 @@ public partial class TerrainViewerApp
     /// the throw goal 37 of the goal table starts through <see cref="ThrowRequest"/> (no approach: the hero throws from where it stands). The goal's nodes begin the throw (the points, the throw art, the turn), and
     /// at the action frame <see cref="HeroThrowItem"/> throws through the session (<see cref="PerformHeroThrow"/>). Without a hero-runs host (the synthetic fixtures) the throw is made at once. True when the throw started or was made.
     /// </summary>
-    internal bool ThrowGameCursorItem(CellCoord tile)
+    internal bool ThrowGameCursorItem(CellCoord tile, AreaObjectKey? pressed = null)
     {
         if (_gameCursorItem is not { } held || _areaSession is not { } owner || _worldActor.Session is not AreaGridSession grid || _combatHost is null) return false;
-        var struck = HeldThrowStruck(owner, HeroCellNow(grid), tile);
+        var struck = HeldThrowStruck(owner, HeroCellNow(grid), tile, pressed);
         if (struck is { Companion: true })
         {
             SetHeldThrowNotice("throwing at a companion is NOT READY (the item stays on the cursor)");
@@ -219,10 +224,11 @@ public partial class TerrainViewerApp
         {
             if (!ChargeHeroAction(owner.QueryHeroThrowCost(), "throw")) { SetHeldThrowNotice(_turnBasedNotice ?? "the throw was refused"); RefreshAreaStatus(); return false; }
             _gameCursorItem = null;
-            return PerformHeroThrow(held, tile) is not null;
+            return PerformHeroThrow(held, tile, pressed) is not null;
         }
+        _throwPressed = pressed;
         var result = HeroRequests.Apply(new ThrowRequest(held.Item, tile));
-        if (result.Outcome != HeroRequestOutcome.Done) { SetHeldThrowNotice("the throw was refused"); RefreshAreaStatus(); return false; }
+        if (result.Outcome != HeroRequestOutcome.Done) { _throwPressed = null; SetHeldThrowNotice("the throw was refused"); RefreshAreaStatus(); return false; }
         return true;
     }
 
@@ -233,6 +239,9 @@ public partial class TerrainViewerApp
         public bool Thrown { get; set; }
     }
     private HeroThrowSwing? _throwSwing;
+
+    // ARC-COMBAT-2425 (TT6): the critter the press named, kept for the throw goal's action frame (the original keeps the object in the goal's frame). It is not saved: a throw run a load restored throws at the location.
+    private AreaObjectKey? _throwPressed;
 
     /// <summary>The throw swing plays (the combat-mode exit gate's attempt-attack test reads it, with the attack's).</summary>
     private bool ThrowPlaying => _throwSwing?.Player is { Playing: true };
@@ -261,6 +270,7 @@ public partial class TerrainViewerApp
     {
         if (ReferenceEquals(_throwOwner, owner) || HeroRunsHost()?.ThrowRun is not { } run || run.Bottom.Item != item) return false;
         _throwOwner = owner;
+        _throwPressed = null; // a throw run a load restored holds no pressed object (TT6: not saved)
         return true;
     }
 
@@ -320,13 +330,16 @@ public partial class TerrainViewerApp
         if (_throwSwing is not { } swing || swing.Held.Item != item) return false;
         // A window that opened this frame cuts the throw before the item leaves (the guards of ProcessHeroThrow run a frame later).
         if (WorldModal || ConversationOpen) return false;
-        swing.Thrown = PerformHeroThrow(swing.Held, tile) is not null;
+        var pressed = _throwPressed;
+        _throwPressed = null;
+        swing.Thrown = PerformHeroThrow(swing.Held, tile, pressed) is not null;
         return swing.Thrown;
     }
 
     /// <summary>The throw goal ends (it threw, or refused, or was interrupted): the pose is cleared.</summary>
     internal void HeroThrowEnds(string item, Arcanum.Simulation.Ai.AiExecutorReason reason)
     {
+        _throwPressed = null;
         // A throw that never began (unpaid, no ART) has said why; one cut after the item left has nothing to say; only a swing cut before it left leaves the item in the pack.
         if (_throwSwing is { } swing && swing.Held.Item == item)
         {
@@ -358,6 +371,7 @@ public partial class TerrainViewerApp
     /// <summary>The throw run is cut (a cancel): the run ends and the pose goes.</summary>
     private void EndHeroThrow(string why)
     {
+        _throwPressed = null;
         try { _heroRunsHost?.EndThrow("ROUTE_STOPPED_BY_THROW_END"); }
         catch (ObjectDisposedException) { /* a replaced session */ }
         if (_throwSwing is not null) { _throwSwing = null; _worldActor.AttackPose = null; GD.Print("ARC-DEV-182 throw-cancel " + why); PublishWorldSelection(); }
@@ -365,13 +379,13 @@ public partial class TerrainViewerApp
 
     /// <summary>
     /// The session's throw of <paramref name="held"/> at <paramref name="tile"/> (TT2 → <see cref="GameSessionOwner.ThrowHeroItem"/>): the struck critter is the
-    /// line of fire's living NPC blocker, else the living NPC on the tile (TW4); a companion there is NOT READY (the item stays). <see cref="HeldThrowStruck"/> never names a dead critter as the struck object (the line of fire passes it and the tile fallback skips it, so the item flies to the location), as the original's line of fire never does (ARC-COMBAT-2416, TW9); the press itself still takes an object's tile with no dead filter, and the original's click-through of corpses in combat mode is not reproduced. The session rolls against a corpse only for a struck critter that died before the roll (ARC-COMBAT-2392). The living critter on the tile as the struck object is TW10's open question (#2425). On success each shot flies.
+    /// line of fire's living NPC blocker, else the critter the press named (TT6, TW11), else none: a tile press names no critter (the line of fire skips the target tile's own objects, TW10); a companion named is NOT READY (the item stays). <see cref="HeldThrowStruck"/> never names a dead critter as the struck object (the line of fire passes it and the tile fallback skips it, so the item flies to the location), as the original's line of fire never does (ARC-COMBAT-2416, TW9); the press itself still takes an object's tile with no dead filter, and the original's click-through of corpses in combat mode is not reproduced. The session rolls against a corpse only for a struck critter that died before the roll (ARC-COMBAT-2392). ARC-COMBAT-2425 (TW11): the critter standing on a pressed tile is not named; the item lands there striking nothing (the original's hit with no struck object), a hit roll with no defender and the miss's scatter strikes of such a throw are NOT READY (#2435). On success each shot flies.
     /// </summary>
-    private SessionHeroThrowResult? PerformHeroThrow(GameCursorItem held, CellCoord tile)
+    private SessionHeroThrowResult? PerformHeroThrow(GameCursorItem held, CellCoord tile, AreaObjectKey? pressed = null)
     {
         if (_areaSession is not { } owner || _worldActor.Session is not AreaGridSession grid || _combatHost is null) return null;
         var from = HeroCellNow(grid);
-        var struck = HeldThrowStruck(owner, from, tile);
+        var struck = HeldThrowStruck(owner, from, tile, pressed);
         if (struck is { Companion: true })
         {
             SetHeldThrowNotice("throwing at a companion is NOT READY (the item stays in the pack)");
@@ -447,9 +461,10 @@ public partial class TerrainViewerApp
         return result;
     }
 
-    // The struck critter of a throw at the tile (TW4; the tile fallback is NOT RECONCILED with TW10, #2425): the line of fire's blocker when it is a living NPC with combat values, else the
-    // living one on the tile; a companion is named so the throw can refuse it.
-    private (AttackGoal? Goal, bool Companion)? HeldThrowStruck(GameSessionOwner owner, CellCoord from, CellCoord tile)
+    // The struck critter of a throw at the tile (ARC-COMBAT-2425, TW4 as corrected by TW10 and TW11): the line of fire's blocker when it is a living NPC with combat values (a blocker replaces the target, RA4),
+    // else the critter the press named (TT6: the object press stores the object as the goal's target), else none: a press on a tile stores a location only, and the line of fire never names the critter on
+    // the target's own tile. A companion is named so the throw can refuse it (NOT READY).
+    private (AttackGoal? Goal, bool Companion)? HeldThrowStruck(GameSessionOwner owner, CellCoord from, CellCoord tile, AreaObjectKey? pressed)
     {
         if (_readyArea is not { } area) return null;
         (AttackGoal? Goal, bool Companion)? Critter(AreaObjectRecord row)
@@ -459,12 +474,8 @@ public partial class TerrainViewerApp
         }
         if (from != tile && AreaLineOfFireNow() is { } map && LineOfFireRules.Trace(from, 0, 0, tile, map, owner.Rules.Combat).Blocker is { } blocker)
             return blocker.Type is 15 or 16 ? Critter(blocker) : null;
-        if (_areaCompanions is { } group)
-            foreach (var companion in group.Companions)
-                if (group.WorldCell(companion.Speaker) is var (x, y) && x == tile.X && y == tile.Y) return (null, true);
-        foreach (var row in area.Snapshot.Objects)
-            if (row.Type is 15 or 16 && row.WorldX is not null && row.WorldY is not null && NpcCell(row) == tile && !AreaCritterDead(owner, CurrentAreaMap, row)
-                && Critter(row) is { } found) return found;
+        if (pressed is { } key && area.Snapshot.Objects.FirstOrDefault(row => row.Key == key) is { Type: 15 or 16 } named && !AreaCritterDead(owner, CurrentAreaMap, named))
+            return Critter(named);
         return null;
     }
 
