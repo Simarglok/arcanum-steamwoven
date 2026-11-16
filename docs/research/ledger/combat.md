@@ -383,7 +383,7 @@ and PF12. Every direct branch stays inside `.text`.
 | TW7 | data census (opt-in `ThrownWeaponCensusTests`) | Of the 150 weapon prototypes one "default throws": the throwing dagger 6072 (melee skill, range 15, weight 15, projectile art 0x41200000, a scenery art; no-drop clear, no scripts). The eight throwing-skill weapons are boomerangs (flag 0x40, prototypes 6184–6191, ranges 20 and 8, weights 20–150), ARC-COMBAT-019's. No thrown weapon carries a throw script (point 6). | Data |
 
 Anomalies: none. Implemented by ARC-COMBAT-017 for the hero: TW1 (the remove check is the no-drop flag; the session never wields a
-no-drop item), TW3's throw script (no installed weapon has one; run for the NPC by ARC-COMBAT-1761 and for the hero by ARC-COMBAT-1955), TW4 (the check with the throwing skill and the thrown
+no-drop item), TW3's throw script (no installed weapon has one; run for the NPC by ARC-COMBAT-1761 and for the hero by ARC-COMBAT-1955, for the hero's split ammunition or gold stack by ARC-COMBAT-2182), TW4 (the check with the throwing skill and the thrown
 range, the line of fire and the redirect as for any ranged shot), TW5 (the weight is the host's) and TW6. Steamwoven differences: the
 item lands after its strike in the session (the original lands it just before the hit, PF8; nothing of the hit reads it), and a
 snapshot taken while it flies keeps it on the thrower's cell, shown (the session keeps no projectile). Not ready: a throw at a tile
