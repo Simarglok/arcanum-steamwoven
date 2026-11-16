@@ -220,13 +220,13 @@ public sealed class ItemWorldScriptTests
     {
         using var owner = Owner();
         var host = new Host(Quest);
-        Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, "tome", Accept, host).Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, "oid:tome", Accept, host).Disposition);
         Assert.AreEqual((NewArt, NewArt), ((int?)Art(owner, "case"), (int?)Art(owner, "other")), "the state equals the one the script names, so every looped container changes");
         Assert.IsTrue(host.QuestReads.All(read => read.Quest == QuestNumber && read.Object.Code == SessionEventKinds.PlayerEntity), "the hero is the triggerer of a pickup");
 
         using var other = Owner();
         var different = new Host(Quest) { QuestStateOfHero = 3 };
-        Assert.AreEqual(GameSessionDisposition.Changed, other.PickUpItem(other.Version, "tome", Accept, different).Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, other.PickUpItem(other.Version, "oid:tome", Accept, different).Disposition);
         Assert.IsNull(Art(other, "case"), "another state changes nothing");
     }
 
@@ -234,11 +234,11 @@ public sealed class ItemWorldScriptTests
     public void Get_object_type_reads_the_type_of_the_looped_object_and_assign_object_keeps_it()
     {
         using var typed = Owner();
-        Assert.AreEqual(GameSessionDisposition.Changed, typed.PickUpItem(typed.Version, "tome", Accept, new Host(Typed)).Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, typed.PickUpItem(typed.Version, "oid:tome", Accept, new Host(Typed)).Disposition);
         Assert.AreEqual((NewArt, (int?)null), ((int?)Art(typed, "case"), (int?)Art(typed, "other")), "only the container of the named type changes");
 
         using var assigned = Owner();
-        Assert.AreEqual(GameSessionDisposition.Changed, assigned.PickUpItem(assigned.Version, "tome", Accept, new Host(Assigned)).Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, assigned.PickUpItem(assigned.Version, "oid:tome", Accept, new Host(Assigned)).Disposition);
         Assert.AreEqual((NewArt, (int?)null), ((int?)Art(assigned, "case"), (int?)Art(assigned, "other")), "the object variable holds the looped object the name test and the art change read");
     }
 
@@ -246,16 +246,16 @@ public sealed class ItemWorldScriptTests
     public void The_dead_condition_reads_the_host_and_the_generator_condition_reads_the_session_table()
     {
         using var dead = Owner();
-        Assert.AreEqual(GameSessionDisposition.Changed, dead.PickUpItem(dead.Version, "tome", Accept, new Host(DeadGated)).Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, dead.PickUpItem(dead.Version, "oid:tome", Accept, new Host(DeadGated)).Disposition);
         Assert.AreEqual((NewArt, (int?)null), ((int?)Art(dead, "case"), (int?)Art(dead, "other")), "only the container the host calls dead changes");
 
         using var open = Owner();
-        Assert.AreEqual(GameSessionDisposition.Changed, open.PickUpItem(open.Version, "tome", Accept, new Host(GeneratorGated)).Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, open.PickUpItem(open.Version, "oid:tome", Accept, new Host(GeneratorGated)).Disposition);
         Assert.IsNull(Art(open, "case"), "an unblocked generator slot does not pass the condition");
 
         using var blocked = Owner();
         Assert.AreEqual(GameSessionDisposition.Changed, blocked.ToggleGeneratorBlock(blocked.Version, GeneratorSlot).Disposition);
-        Assert.AreEqual(GameSessionDisposition.Changed, blocked.PickUpItem(blocked.Version, "tome", Accept, new Host(GeneratorGated)).Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, blocked.PickUpItem(blocked.Version, "oid:tome", Accept, new Host(GeneratorGated)).Disposition);
         Assert.AreEqual((NewArt, NewArt), ((int?)Art(blocked, "case"), (int?)Art(blocked, "other")), "a blocked slot passes it for every looped container");
     }
 
@@ -266,7 +266,7 @@ public sealed class ItemWorldScriptTests
         {
             using var owner = Owner();
             var before = owner.Version;
-            var refused = owner.PickUpItem(before, "tome", Accept, host);
+            var refused = owner.PickUpItem(before, "oid:tome", Accept, host);
             Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.ItemScriptUnsupported, before), (refused.Disposition, refused.Failure, owner.Version));
             Assert.IsNull(Art(owner, "case"));
         }
