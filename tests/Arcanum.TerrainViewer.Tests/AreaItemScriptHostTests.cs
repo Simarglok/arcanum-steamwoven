@@ -184,6 +184,27 @@ public sealed class AreaItemScriptHostTests
         Assert.IsNull(new AreaItemScriptHost(session, [Map()], null, number => throw new ArgumentException("outside the tables")).EffectDefinition(5), "a number the tables refuse");
     }
 
+    // ARC-SCRIPT-2375 (IV30): the name number of an item row is the map data's until a script's rename wrote the item's own field; the host's data read ignores the record, the name readers do not.
+    [TestMethod]
+    public void An_items_data_name_and_its_renamed_number_are_read_apart()
+    {
+        using var session = ConversationSessionFixture.Create();
+        var host = new AreaItemScriptHost(session, [Map()], null);
+        var item = new ScrObjectRef(1, Entity(0));
+        Assert.AreEqual(0, host.ItemNameInData(item), "the row holds no name field");
+        Assert.IsNull(host.ItemNameInData(new ScrObjectRef(1, "made:1")), "a made item has no row");
+        Assert.IsNull(host.ItemNameInData(new ScrObjectRef(1, Entity(7))), "no row at all");
+        var row = Row(0, 7, 10, 20, 500);
+        Assert.AreEqual(0, AreaUseScriptHost.NameOf(session, row));
+        var written = session.ApplyChanges(session.Version, null, [new(new SessionMapId(row.Key.RuntimeMap), SessionItemName.Key(Entity(0)), 2805)]);
+        Assert.AreNotEqual(GameSessionDisposition.Rejected, written.Disposition);
+        Assert.AreEqual(2805, AreaUseScriptHost.NameOf(session, row), "the name readers follow the rename");
+        Assert.AreEqual(0, host.ItemNameInData(item), "the data read leaves the record out");
+        // A row that is not an item keeps its own number whatever a record says.
+        var other = Row(9, 16, 14, 20, 0);
+        Assert.AreEqual(0, AreaUseScriptHost.NameOf(session, other));
+    }
+
     // ARC-SCRIPT-2336 (FK8): the follower list of a point 21 run comes from the shown map's use host; without one the host cannot answer and the session refuses the move.
     [TestMethod]
     public void The_host_has_no_follower_list_without_a_shown_map()
