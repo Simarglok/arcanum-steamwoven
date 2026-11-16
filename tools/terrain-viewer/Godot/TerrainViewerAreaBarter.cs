@@ -104,11 +104,9 @@ public partial class TerrainViewerApp
         var name = AreaHoverIndex.Text(host.Speakers[speaker].Row, _hoverNames?.Catalog, WindowRecognition(host.Speakers[speaker].Row)) ?? "merchant";
         if (AreaBarterMerchant.From(entity, name, fields, data, session) is not { } merchant) return Refuse("the speaker is not an NPC");
         var inventory = _inventoryHost ?? new AreaInventoryHost([]);
-        // ARC-WORLD-090: the substitute container of a merchant without a leader within 20 tiles of where it talked (BT4).
-        var talker = host.Speakers[speaker];
+        // ARC-WORLD-090: the substitute container of a merchant without a leader within 20 tiles of where it stands now (BT4, ARC-WORLD-2245: the live cell, as the talk reach's).
         if (substitute)
-            merchant = merchant.WithSubstitute(inventory.Maps.FirstOrDefault(map => map.TryGetRow(entity, out _))?.Substitute(entity),
-                new(checked((int)talker.WorldX), checked((int)talker.WorldY)), data);
+            merchant = merchant.WithSubstitute(inventory.Maps.FirstOrDefault(map => map.TryGetRow(entity, out _))?.Substitute(entity), host.Speakers[speaker], SpeakerCell, data);
         var state = host.State;
         return (new AreaBarter(session, inventory, data, merchant, () => state.Reaction(speaker),
             delta => session.AdjustReaction(session.Version, entity, state.NpcFacts(), state.PcFactsFor(speaker), delta).Disposition == GameSessionDisposition.Changed,
