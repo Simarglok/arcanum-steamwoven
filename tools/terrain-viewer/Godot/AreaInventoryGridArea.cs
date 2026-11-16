@@ -734,7 +734,7 @@ public partial class AreaInventoryGridArea : Control
         var service = ServiceLook ? _service : null;
         if (service is not null)
         {
-            // ARC-UI-1908 (0x576520 modes 5 and 6): a portrait is drawn by 0x4CE680 forced to 32 by 32 at the corner (the art is halved).
+            // ARC-UI-1908 (0x576520 modes 5 and 6): a portrait is drawn by 0x4CE680 forced to 32 by 32 at the corner (the art is halved); PROJECT: a portrait file that did not read leaves the halved art.
             if (service.Portrait is { } portraitId && PortraitTextures?.Invoke(portraitId) is { } portrait)
             {
                 var (ix, iy, iw, ih) = AreaServiceArtLayout.PortraitRect;

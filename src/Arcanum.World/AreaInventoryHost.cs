@@ -591,8 +591,8 @@ public sealed class AreaInventoryHost
     /// row or fields do not read.</summary>
     public int? HolderImage(int runtimeMap, string holder) => HolderLook(runtimeMap, holder ?? throw new ArgumentNullException(nameof(holder))).Image;
 
-    /// <summary>ARC-UI-1908 (IW27, chooser 0x553D10): the portrait the item windows draw for a seed holder instead of its image: the stored portrait of a
-    /// critter whose leader chain reaches the PC (<see cref="GameSessionOwner.QueryPcLeader"/>, 0x45DDA0); null for any other holder or row.</summary>
+    /// <summary>ARC-UI-1908 (IW27): the portrait the item windows draw for a seed holder instead of its image: the stored portrait of a
+    /// critter whose leader chain reaches the PC (<see cref="GameSessionOwner.QueryPcLeader"/>); null for any other holder or row.</summary>
     public int? HolderPortrait(GameSessionOwner session, int runtimeMap, string holder)
     {
         ArgumentNullException.ThrowIfNull(session);

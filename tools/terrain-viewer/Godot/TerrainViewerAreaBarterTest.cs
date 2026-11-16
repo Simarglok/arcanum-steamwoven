@@ -794,7 +794,9 @@ public partial class TerrainViewerApp
                     await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
                     using var withPortrait = GetViewport().GetTexture().GetImage();
                     if (withPortrait.SavePng($"{capture}-{name}-portrait.png") != Error.Ok) throw new InvalidOperationException("AREA_SERVICE_CAPTURE_FAILED");
-                    GD.Print($"ARC-UI-1908 service portrait stand-in {standIn} texture {(HolderPortraitTexture(standIn) is { } texture ? texture.GetWidth() + "x" + texture.GetHeight() : "not read")}");
+                    var standInTexture = HolderPortraitTexture(standIn);
+                    Require(standInTexture is not null || SelfTestBootstrap, $"the portrait {standIn} reads, so the window draws it and not the art");
+                    GD.Print($"ARC-UI-1908 service portrait stand-in {standIn} texture {(standInTexture is { } texture ? texture.GetWidth() + "x" + texture.GetHeight() : "not read")}");
                     area.SetService(plain);
                     await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
                 }

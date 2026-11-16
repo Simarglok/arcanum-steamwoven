@@ -127,9 +127,9 @@ public static class AreaLootArtLayout
     }
 
     /// <summary>
-    /// ARC-UI-1908 (IW27, ledger BW2, IS8; chooser 0x553D10): the portrait the item windows (loot, barter, identify, repair) draw instead of the
-    /// <see cref="HolderImage"/> art. A PC takes its portrait; an NPC only when the chain of its leaders reaches the observing PC (0x45DDA0, followers
-    /// of followers too) and its stored portrait is not 0. Null: the art rule decides. NOT READY: the clash rule of 0x4CEB80 (an NPC showing the
+    /// ARC-UI-1908 (IW27, ledger BW2, IS8; the image function of the original): the portrait the item windows (loot, barter, identify, repair) draw instead of the
+    /// <see cref="HolderImage"/> art. A PC takes its portrait; an NPC only when the chain of its leaders reaches the observing PC (followers
+    /// of followers too) and its stored portrait is not 0. Null: the art rule decides. NOT READY: the portrait clash rule (an NPC showing the
     /// local player's own portrait takes the next or the previous available one), and a PC without a stored portrait (the original draws list
     /// entry 1000; the observer is the PC, so a window never holds one).
     /// </summary>
