@@ -211,7 +211,7 @@ throw goal 37 at its target's tile instead of an attack ([action goals](ai-actio
 No new state: the thrown item's ground cell is a map change (`item.dropped`, as a critical's drop), which the snapshot already
 carries; the schema stays 57.
 
-Viewer smoke (ARC-DEV-1762): the stage `npc-throw` (`./arcanum smoke pr --stages npc-throw`, the town) makes a real NPC throw the dagger through the real projectile host, with the dagger's own fields lent to the NPC's wielded seed weapon (no NPC of the installed town wields the dagger, [area map mode](../rendering/area-map-mode.md)). ARC-DEV-1962: the first decided throw of the installed town is a miss, so the stage goes on to the next thrower (a thrown seed item is no longer its NPC's, and an item an NPC picks up again is one the session added, which the AI host does not throw), each lent the dagger's fields afresh with the hero restored, until the session decides a hit, and requires the hit leg too: the strike on the hero through the AI host, its damage, the landing.
+Viewer smoke (ARC-DEV-1762): the stage `npc-throw` (`./arcanum smoke pr --stages npc-throw`, the town) makes a real NPC throw the dagger through the real projectile host, with the dagger's own fields lent to the NPC's wielded seed weapon (no NPC of the installed town wields the dagger, [area map mode](../rendering/area-map-mode.md)). ARC-COMBAT-2425 (ledger TW10, TW11): the throw holds the hero's tile as a location and the line of fire never names the critter on the target tile, so the stage requires the dagger to fly unchecked to the hero's tile and land there, with nothing struck and the hero not hurt (no hit leg: that needs a critter on an earlier tile of the line, which the unit tests cover).
 
 ## Item use (ARC-WORLD-108)
 

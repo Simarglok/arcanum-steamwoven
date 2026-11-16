@@ -433,7 +433,7 @@ public partial class TerrainViewerApp
                 _projectileEndsForSelfTest.Clear(); _thrownLandingsForSelfTest.Clear(); _shotEndItemEventsForSelfTest.Clear(); _lastHeldThrowForSelfTest = null;
                 var unlaunchedBefore = _projectilesUnlaunchedForSelfTest;
                 var missLog = SpellCasterNow()!.Log.Count;
-                TechProductsRequire(ThrowGameCursorItem(aimedAt), $"the miss leg's throw started ({HeldThrowNoticeForSelfTest})");
+                TechProductsRequire(ThrowGameCursorItem(aimedAt, npc.Row.Key), $"the miss leg's throw started ({HeldThrowNoticeForSelfTest})");
                 for (var frames = 0; frames < 1500 && _lastHeldThrowForSelfTest is null && HeroRunsHost() is { ThrowRun: not null }; frames++) Frame();
                 TechProductsRequire(_lastHeldThrowForSelfTest is { Disposition: GameSessionDisposition.Changed }, $"the miss leg's grenade was thrown ({_lastHeldThrowForSelfTest?.Disposition} {_lastHeldThrowForSelfTest?.Failure})");
                 for (var frames = 0; frames < 1500 && (_projectiles.Count > 0 || HeroRunsHost() is { ThrowRun: not null }); frames++) Frame();

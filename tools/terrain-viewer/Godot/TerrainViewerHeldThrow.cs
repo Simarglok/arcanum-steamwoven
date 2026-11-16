@@ -270,6 +270,7 @@ public partial class TerrainViewerApp
     {
         if (ReferenceEquals(_throwOwner, owner) || HeroRunsHost()?.ThrowRun is not { } run || run.Bottom.Item != item) return false;
         _throwOwner = owner;
+        _throwPressed = null; // a throw run a load restored holds no pressed object (TT6: not saved)
         return true;
     }
 
@@ -338,6 +339,7 @@ public partial class TerrainViewerApp
     /// <summary>The throw goal ends (it threw, or refused, or was interrupted): the pose is cleared.</summary>
     internal void HeroThrowEnds(string item, Arcanum.Simulation.Ai.AiExecutorReason reason)
     {
+        _throwPressed = null;
         // A throw that never began (unpaid, no ART) has said why; one cut after the item left has nothing to say; only a swing cut before it left leaves the item in the pack.
         if (_throwSwing is { } swing && swing.Held.Item == item)
         {
@@ -369,6 +371,7 @@ public partial class TerrainViewerApp
     /// <summary>The throw run is cut (a cancel): the run ends and the pose goes.</summary>
     private void EndHeroThrow(string why)
     {
+        _throwPressed = null;
         try { _heroRunsHost?.EndThrow("ROUTE_STOPPED_BY_THROW_END"); }
         catch (ObjectDisposedException) { /* a replaced session */ }
         if (_throwSwing is not null) { _throwSwing = null; _worldActor.AttackPose = null; GD.Print("ARC-DEV-182 throw-cancel " + why); PublishWorldSelection(); }
