@@ -37,6 +37,14 @@ public static class AreaWorldMapArtLayout
 
     /// <summary>The art a note of this type is drawn with; a type outside the table keeps the question art.</summary>
     public static int NoteArtOf(int type) => type >= 0 && type < NoteTypeArts.Count ? NoteTypeArts[type] : NoteArt;
+
+    /// <summary>ARC-UI-2445 (WM45, WM142): the colour of a note's label, the colour slot of the type's row of the marker font table (rows 0-3: 0 note white, 1 skull red,
+    /// 2 chest yellow, 3 question green; each (r, g, b) as the display prints it, read in the colour tables of 0x524830, no channel swap).</summary>
+    public static readonly IReadOnlyList<(byte R, byte G, byte B)> NoteLabelColours = [(255, 255, 255), (255, 0, 0), (255, 255, 0), (0, 255, 0)];
+
+    /// <summary>The label colour of a note of this type; a type outside the table keeps the question row's green, as it keeps its art.</summary>
+    public static (byte R, byte G, byte B) NoteLabelColourOf(int type) => type >= 0 && type < NoteLabelColours.Count ? NoteLabelColours[type] : NoteLabelColours[NoteLabelColours.Count - 1];
+
     /// <summary>ARC-UI-083: the cover over the view's bottom edge (art 217 <c>Nav_Cvr</c>, 207 × 35, WM42) and the markers' and readouts' font
     /// (art 840 <c>NewTimes16Font</c>, WM45).</summary>
     public const int CoverArt = 217, FontArt = 840;
