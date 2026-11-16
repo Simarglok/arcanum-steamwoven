@@ -267,14 +267,15 @@ public static class SessionEventKinds
     /// <summary>
     /// The original's recharge event of a worn mana store (kind 0x17 = 23, saved, game time; ARC-MAGIC-2371, ledger BC10, PC11, 0x459590, handler 0x459680): a spell payment that drained an item's mana store (field 92)
     /// schedules it 480 game seconds on, or adds the drained amount to the item's pending one (the earlier stamp and deadline stay). It restores min(pending, 2 × max(1, elapsed game seconds / 120)) into the store, with no cap at the
-    /// prototype's value, and sets itself up again for the rest. Global (the original carries an item's event with the item or parks it on the map it stays on; the session fires it on any map), any number, one per item in use.
-    /// Entity: the item (its map is a placeholder, <see cref="RechargeMap"/>); values: the game time it was scheduled at (its stamp) and the pending amount. Added without a new registry version, as the kinds before it.
+    /// prototype's value, and sets itself up again for the rest. Scoped to a map as the original parks it (ARC-MAGIC-2400, ledger BC10, TL33): the event lives in memory, so it fires while the PC is on the map it was scheduled on;
+    /// when the PC changes map it travels with its item (an item of the PC, of a follower that goes with it or of that follower's followers, worn or carried) and any other stays parked in the old map's file and fires late on the
+    /// PC's return with the elapsed time (a larger refill). Any number, one per item per map (a payment merges only into the pending event of the map it is on, as 0x459590 finds only the events in memory).
+    /// Entity: the item, on the map the PC was on when the event was scheduled; values: the game time it was scheduled at (its stamp) and the pending amount. Added without a new registry version, as the kinds before it
+    /// (schema 104 gave the entity a real map: before it the entity named a placeholder map and the event was global).
     /// </summary>
     public const string ItemRecharge = "item.recharge";
     /// <summary>The recharge event's delay: 60,000 ms × 8 = 480 game seconds (0x459590).</summary>
     public const long ItemRechargeDelayMs = 480_000;
-    /// <summary>The runtime map number a recharge event names its item on: the event is global, so no map matters.</summary>
-    public const int RechargeMap = 1;
     /// <summary>Pending recharge events a session holds (project policy; one per drained item): a drain beyond it is not recharged.</summary>
     public const int MaxItemRecharges = 4096;
     /// <summary>
@@ -417,7 +418,7 @@ public static class SessionEventKinds
                 Validate: payload => payload.Values[0] >= 0 && payload.Values[1] is >= 1 and <= MaxRespawnDelayMs && payload.Entities[0].Code != AbsentRole),
             new(ItemDecay, GameEventDomain.Game, GameEventPersistence.Saved, GameEventUniqueness.Many, GameEventScopeRule.EntityMap, 1, 2, 0, 0,
                 new ItemDecayHandler(owner), Validate: DecayPayload),
-            new(ItemRecharge, GameEventDomain.Game, GameEventPersistence.Saved, GameEventUniqueness.Many, GameEventScopeRule.Global, 1, 2, 0, 0,
+            new(ItemRecharge, GameEventDomain.Game, GameEventPersistence.Saved, GameEventUniqueness.Many, GameEventScopeRule.EntityMap, 1, 2, 0, 0,
                 new ItemRechargeHandler(owner), Validate: payload => payload.Values[0] >= 0 && Math.Abs(payload.Values[1]) <= SessionItemUseLimits.MaxUses
                     && payload.Entities[0].Code != AbsentRole && SessionValidation.Entity(payload.Entities[0].Code), ChecksOwnEntities: true),
             new(BodyDecay, GameEventDomain.Game, GameEventPersistence.Saved, GameEventUniqueness.Replace, GameEventScopeRule.EntityMap, 1, 2, 1, 0,

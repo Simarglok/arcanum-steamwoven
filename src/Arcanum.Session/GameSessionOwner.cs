@@ -745,22 +745,10 @@ public sealed partial class GameSessionOwner : IDisposable
         if (!Enum.IsDefined(requested)) return Reject(GameSessionFailure.InvalidQuestState);
         if (!IsCurrent(expected)) return Reject(GameSessionFailure.StaleVersion);
         var current = _story.Quests.TryGetValue(quest, out var record) ? record : new SessionQuest(quest, SessionQuestState.Unknown, false, 0);
-        if (current.Effective is SessionQuestState.Completed or SessionQuestState.OtherCompleted or SessionQuestState.Botched ||
-            current.Effective >= requested) return NoChange();
-        if (_revision == long.MaxValue) return Reject(GameSessionFailure.RevisionExhausted);
-
-        var shared = _story.GlobalQuests.GetValueOrDefault(quest, SessionQuestState.Accepted);
-        var state = requested;
-        if (shared == SessionQuestState.Accepted)
-        {
-            if (state is SessionQuestState.Completed or SessionQuestState.OtherCompleted) shared = SessionQuestState.Completed;
-            else if (state == SessionQuestState.Botched) shared = SessionQuestState.Botched;
-        }
-        else state = shared == SessionQuestState.Completed ? SessionQuestState.OtherCompleted : SessionQuestState.Botched;
         var timestamp = _clock.QueryClockSnapshot().GameTimestampMs;
-        var next = state == SessionQuestState.Botched
-            ? current with { Botched = true, TimestampMs = timestamp }
-            : new SessionQuest(quest, state, false, timestamp);
+        if (QuestStep(current, _story.GlobalQuests.GetValueOrDefault(quest, SessionQuestState.Accepted), requested, timestamp) is not { } step) return NoChange();
+        var (next, shared) = step;
+        if (_revision == long.MaxValue) return Reject(GameSessionFailure.RevisionExhausted);
         // The source gives the experience for the request, before the shared state can turn it into OtherCompleted.
         var award = requested == SessionQuestState.Completed && _hero is not null && _experience.Rules is { } rules
             ? Give(rules.QuestExperience(rules.QuestLevel(quest))) : null;
@@ -774,6 +762,26 @@ public sealed partial class GameSessionOwner : IDisposable
             experience = award.Award;
         }
         return Changed();
+    }
+
+    /// <summary>
+    /// The state step of <see cref="SetQuestState(GameSessionVersion, int, SessionQuestState, out SessionExperienceAward?)"/> over one PC record and the quest's shared state, without a write: null when the request changes
+    /// nothing (an ended quest, a request not above the current state), else the PC's next record and the quest's shared state after it. ARC-SCRIPT-2374: the item set's runs plan their quest writes with it (the move commits them).
+    /// </summary>
+    internal static (SessionQuest Next, SessionQuestState Shared)? QuestStep(SessionQuest current, SessionQuestState shared, SessionQuestState requested, long timestamp)
+    {
+        if (current.Effective is SessionQuestState.Completed or SessionQuestState.OtherCompleted or SessionQuestState.Botched || current.Effective >= requested) return null;
+        var state = requested;
+        if (shared == SessionQuestState.Accepted)
+        {
+            if (state is SessionQuestState.Completed or SessionQuestState.OtherCompleted) shared = SessionQuestState.Completed;
+            else if (state == SessionQuestState.Botched) shared = SessionQuestState.Botched;
+        }
+        else state = shared == SessionQuestState.Completed ? SessionQuestState.OtherCompleted : SessionQuestState.Botched;
+        var next = state == SessionQuestState.Botched
+            ? current with { Botched = true, TimestampMs = timestamp }
+            : new SessionQuest(current.Quest, state, false, timestamp);
+        return (next, shared);
     }
 
     /// <summary>
@@ -1800,7 +1808,9 @@ public sealed partial class GameSessionOwner : IDisposable
     {
         if (to == _actor.Map) return GameSessionFailure.None;
         var followers = (travelling ?? _party.Order).ToHashSet(StringComparer.Ordinal);
-        var failure = _events.Relocate(_actor.Map.RuntimeMap, to.RuntimeMap, entity => followers.Contains(entity.Code)).Failure;
+        // ARC-MAGIC-2400 (BC10, TL33): the recharge events of the items that travel with the PC go too; the others stay parked on the map left.
+        var items = TravellingRechargeItems(followers);
+        var failure = _events.Relocate(_actor.Map.RuntimeMap, to.RuntimeMap, entity => followers.Contains(entity.Code) || items.Contains(entity.Code)).Failure;
         // ARC-SCRIPT-010: a deferred call's player and follower roles travel one by one (the original keeps their handles
         // across maps), its other roles stay where they were. Both steps refuse only during a pass, which the first one
         // already reports, so the rewrite cannot fail after the relocation moved anything.
@@ -2992,11 +3002,11 @@ public sealed partial class GameSessionOwner : IDisposable
             if (pending.Kind == SessionEventKinds.ItemRecharge)
             {
                 // A recharge event of a worn mana store (ARC-MAGIC-2371): one item, set no later than the saved clock, the fixed delay before its deadline (a merge keeps the first stamp and deadline). Whether the item
-                // still has a store copy is asked when it fires. Global: no map scope.
-                if (pending.Entities.Length != 1 || pending.Entities[0].Map != SessionEventKinds.RechargeMap ||
+                // still has a store copy is asked when it fires. Scoped to the map it was scheduled on or parked on (ARC-MAGIC-2400).
+                if (pending.Entities.Length != 1 || pending.Entities[0].Map < 1 ||
                     !RechargePayload(pending.Entities, pending.Values) || pending.Values[0] > clockMs || pending.DeadlineMs != pending.Values[0] + SessionEventKinds.ItemRechargeDelayMs)
                     return GameSessionFailure.InvalidEvents;
-                converted.Add(new(pending.Sequence, pending.Kind, kind.Domain, pending.DeadlineMs, 0, new(pending.Entities, pending.Values)));
+                converted.Add(new(pending.Sequence, pending.Kind, kind.Domain, pending.DeadlineMs, pending.Entities[0].Map, new(pending.Entities, pending.Values)));
                 continue;
             }
             if (pending.Kind == SessionEventKinds.Restock)

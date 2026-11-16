@@ -39,31 +39,58 @@ public sealed partial class GameSessionOwner
     /// <summary>
     /// ARC-MAGIC-2371: the recharge event of a drained worn store (0x459590, ledger BC10): with <paramref name="merge"/> an item's pending event takes the amount
     /// (its stamp and deadline stay, a 0 or negative amount too), otherwise (and when none is pending) a new one fires <see cref="SessionEventKinds.ItemRechargeDelayMs"/> on. A full queue schedules none (project bound).
+    /// ARC-MAGIC-2400: the event is on the map the PC is on (the original's events live in memory until the PC leaves; TL33), and a merge finds only a pending event of that map: one parked on another map is not in memory.
     /// </summary>
     [OriginalFunction(0x459590, OriginalFunctionScope.Partial)]
     internal void ScheduleManaRecharge(string entity, int amount, bool merge)
     {
         if (!SessionValidation.Entity(entity) || entity == SessionEventKinds.AbsentRole) return;
-        if (merge && _events.QueryPending(SessionEventKinds.ItemRecharge).FirstOrDefault(e => e.Payload.Entities[0].Code == entity) is { } pending)
+        var map = _actor.Map.RuntimeMap;
+        if (merge && _events.QueryPending(SessionEventKinds.ItemRecharge).FirstOrDefault(e => e.Payload.Entities[0].Code == entity && e.Payload.Entities[0].Map == map) is { } pending)
         {
             if (_events.NextSequence == long.MaxValue) return;
             var sum = (int)Math.Clamp(pending.Payload.Values[1] + amount, -SessionItemUseLimits.MaxUses, SessionItemUseLimits.MaxUses);
             _events.RemoveFirst(SessionEventKinds.ItemRecharge, e => e.Sequence == pending.Sequence);
-            _events.ScheduleAt(SessionEventKinds.ItemRecharge, GameEventPayload.Of([new(SessionEventKinds.RechargeMap, entity)], pending.Payload.Values[0], sum), pending.DeadlineMs);
+            _events.ScheduleAt(SessionEventKinds.ItemRecharge, GameEventPayload.Of([new(map, entity)], pending.Payload.Values[0], sum), pending.DeadlineMs);
             return;
         }
         var now = _clock.QueryClockSnapshot().GameTimestampMs;
         if (_events.Count >= _events.Limits.MaxPending || _events.NextSequence == long.MaxValue || now > long.MaxValue - SessionEventKinds.ItemRechargeDelayMs) return;
         if (_events.QueryPending(SessionEventKinds.ItemRecharge).Length >= SessionEventKinds.MaxItemRecharges) return;
-        _events.ScheduleAfter(SessionEventKinds.ItemRecharge, GameEventPayload.Of([new(SessionEventKinds.RechargeMap, entity)], now, amount), SessionEventKinds.ItemRechargeDelayMs, EventClocks(now));
+        _events.ScheduleAfter(SessionEventKinds.ItemRecharge, GameEventPayload.Of([new(map, entity)], now, amount), SessionEventKinds.ItemRechargeDelayMs, EventClocks(now));
     }
 
-    /// <summary>The pending recharge events of worn mana stores (ARC-MAGIC-2371): the item, the pending amount, the stamp and the deadline, in queue order.</summary>
+    /// <summary>The pending recharge events of worn mana stores (ARC-MAGIC-2371): the item, the pending amount, the stamp and the deadline, in queue order (the parked ones of other maps too).</summary>
     public IReadOnlyList<(string Entity, int Pending, long StampMs, long DeadlineMs)> QueryManaRecharges()
     {
         ThrowIfDisposed();
         return Array.AsReadOnly(_events.QueryPending(SessionEventKinds.ItemRecharge)
             .Select(e => (e.Payload.Entities[0].Code, (int)e.Payload.Values[1], e.Payload.Values[0], e.DeadlineMs)).ToArray());
+    }
+
+    /// <summary>ARC-MAGIC-2400: the maps the pending recharge events of <paramref name="entity"/> are on (parked ones included), ascending.</summary>
+    public IReadOnlyList<int> QueryManaRechargeMaps(string entity)
+    {
+        ThrowIfDisposed();
+        return Array.AsReadOnly(_events.QueryPending(SessionEventKinds.ItemRecharge).Where(e => e.Payload.Entities[0].Code == entity)
+            .Select(e => e.Payload.Entities[0].Map).Order().ToArray());
+    }
+
+    // ARC-MAGIC-2400 (ledger BC10, TL33): the PC changes map, so the pending recharge events of the items that travel go with them: the PC's own (pack and worn) and those of the travelling followers
+    // (the filter 0x45C500 counts the PC, its followers and their inventories as travellers). The other events stay on the map they are on, as the original parks them in that map's file; they fire when
+    // the PC is back, late. A destroyed item travels nowhere (its events are removed with it).
+    private HashSet<string> TravellingRechargeItems(IReadOnlySet<string> followers)
+    {
+        var items = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var pending in _events.QueryPending(SessionEventKinds.ItemRecharge))
+        {
+            var item = pending.Payload.Entities[0].Code;
+            if (Locate(item) is not { } entry) continue;
+            if (entry.Place is SessionObjectPlace.HeroPack or SessionObjectPlace.HeroWorn ||
+                (entry.Place is SessionObjectPlace.NpcList or SessionObjectPlace.SeedHolder && entry.Holder is { } holder && followers.Contains(holder)))
+                items.Add(item);
+        }
+        return items;
     }
 
     // The recharge event (kind 0x17; 0x459680): units = elapsed game seconds / 120 (at least 1), restored = min(pending, 2 × units) added to the store with no cap at the prototype's value,
