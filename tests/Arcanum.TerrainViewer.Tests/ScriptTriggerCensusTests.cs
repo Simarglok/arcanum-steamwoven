@@ -114,7 +114,9 @@ public sealed class ScriptTriggerCensusTests
         // ARC-SCRIPT-2335 (ledger IV7): the item set (S14-item) admits 6 of the 28 insert-item rows on the shown maps' windows (3 before: the loop for, the container vicinity kinds, the name test and change art number free the three temple
         // display-case scripts 2992 to 2994); the other 22 stop on toggle state (56) in 16 rows, get story state (42), is dead (22), condition 46, quest state (6), the scenery and critter vicinity kinds (15, 8), one each.
         Assert.AreEqual(28, rows[SessionScriptPoint.InsertItem]);
-        Assert.AreEqual(6, admitted[SessionScriptPoint.InsertItem]);
+        // ARC-SCRIPT-2347 (ledger IV12): with the quest state condition, assign object, get object type, obj is dead and monster generator disabled the item set admits 7 (one of the rows that stopped on conditions 22 and 46 joins); the 21 left stop on toggle state (56) in 16
+        // rows, and on toggle monster generator (110), set PC quest state (16), get story state (42) and the scenery and critter vicinity kinds (15, 8), one each.
+        Assert.AreEqual(7, admitted[SessionScriptPoint.InsertItem]);
         Assert.IsTrue(admitted[ScrPoint.Hit] >= 26 && admitted[ScrPoint.CritterHits] == 18 && admitted[ScrPoint.CriticalHit] >= 4, $"{admitted[ScrPoint.Hit]}, {admitted[ScrPoint.CritterHits]}, {admitted[ScrPoint.CriticalHit]}");
     }
 

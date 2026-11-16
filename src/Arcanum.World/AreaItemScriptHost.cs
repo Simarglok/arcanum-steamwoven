@@ -72,6 +72,15 @@ public sealed class AreaItemScriptHost : ISessionItemScriptHost, ISessionItemWor
     // The hero has no row (its name is not modelled and reads 0, as in the use host), any other object needs the row the use host reads.
     private bool Known(AreaUseScriptHost host, ScrObjectRef obj) => host.IsPc(obj) || host.KnowsObject(obj);
 
+    /// <summary>ARC-SCRIPT-2347 (IV9, SG1): the quest state the use host reads (the hero's own entry, any other object the quest's global state); it needs no row, so only a missing shown map leaves it unanswered.</summary>
+    public int? QuestState(ScrObjectRef obj, int quest) => _shown?.Invoke() is { } host ? host.QuestState(obj, quest) : null;
+
+    /// <summary>ARC-SCRIPT-2347 (IV9, OV3): an object's type field from the shown map's rows (the hero is 15).</summary>
+    public int? ObjectType(ScrObjectRef obj) => _shown?.Invoke() is { } host && Known(host, obj) ? host.ObjectType(obj) : null;
+
+    /// <summary>ARC-SCRIPT-2347 (IV10, HW1): the death of the hero or of an NPC of the shown map as the use host reads it; null for any other object.</summary>
+    public bool? IsDead(ScrObjectRef obj) => _shown?.Invoke()?.IsDead(obj);
+
     /// <summary>ARC-SCRIPT-2335 (IV5): the use host's plan of a change art number.</summary>
     public SessionObjectArtPlan? ArtPlan(ScrObjectRef obj, int number) => _shown?.Invoke()?.PlanObjectArt(obj, number);
 
