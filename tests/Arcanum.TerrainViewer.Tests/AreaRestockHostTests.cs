@@ -136,6 +136,20 @@ public sealed class AreaRestockHostTests
     }
 
     [TestMethod]
+    public void The_merchant_search_reads_the_cells_the_ai_has_the_npcs_on_now()
+    {
+        var (session, inventory, host, _) = Host();
+        using var owned = session;
+        var map = new SessionMapId(1);
+        // Clerk 0 walked 30 tiles off its chest (out of the window-sized area); clerk 6 at T0 40 tiles off walked into it.
+        var live = new Dictionary<string, CellCoord> { [Entity(0)] = new(100, 130), [Entity(6)] = new(103, 100) };
+        inventory.NpcLiveCell = npc => live.TryGetValue(npc, out var cell) ? cell : null;
+        Assert.AreEqual(Entity(6), host.Merchant(map, Entity(1)), "the walked-in clerk is found, the walked-out one is not");
+        inventory.NpcLiveCell = null;
+        Assert.AreEqual(Entity(0), host.Merchant(map, Entity(1)), "without a live cell the T0 cells decide");
+    }
+
+    [TestMethod]
     public void Sets_items_persistence_and_the_pile_come_from_the_data()
     {
         var (session, _, host, _) = Host();
