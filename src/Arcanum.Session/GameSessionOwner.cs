@@ -1279,7 +1279,7 @@ public sealed partial class GameSessionOwner : IDisposable
         if (!IsCurrent(expected)) return RejectItem(GameSessionFailure.StaleVersion);
         // ARC-DEV-087 (MIG6e): the holder is the NPC's wherever it stands: a companion carried here lists on its home map's seed.
         if (!NpcHolderSeed(npc, out var map, out var seed, out var row)) return RejectItem(UnseededHolder());
-        if (_inventory.Current(seed, row, entry => DroppedCell(map, seed, entry)).FirstOrDefault(entry => entry.Facts.Kind.Name == name) is not { } found)
+        if (_inventory.Current(seed, row, entry => DroppedCell(map, seed, entry)).FirstOrDefault(entry => QueryItemName(entry.Entity, entry.Facts.Kind.Name) == name) is not { } found)
             return row.HasSubstituteInventory ? RejectItem(GameSessionFailure.SubstituteInventoryUnsupported)
                 : new(GameSessionDisposition.NoChange, GameSessionFailure.None, null, null, new(_identity, _revision));
         // ARC-WORLD-1131: the dialog's IN runs the room test like every take; an item the insert check refuses (room, weight, Technophobia) is laid on the PC's tile (0x415BA0).

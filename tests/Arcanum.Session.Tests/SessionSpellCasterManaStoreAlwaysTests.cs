@@ -76,7 +76,7 @@ public sealed partial class SessionSpellCasterTests
         var record = SelfBolt(cost: 7);
         var (owner, caster) = StoreSession(record, limits: new GameSessionLimits(maxDurabilityRecords: 1));
         using var _ = owner;
-        Assert.AreEqual(GameSessionDisposition.Changed, owner.SpendItemCharge(owner.Version, "kit:3", 5).Disposition, "one other record fills the shared budget");
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.DamageItem(owner.Version, "kit:3", new(15, 5, 0, false), 1).Disposition, "one other record fills the shared budget");
         Cast(owner, caster, record);
         Assert.AreEqual(3, owner.QueryItemManaStore(StoreStaff), "the store has a budget of its own");
         Assert.IsFalse(caster.Log.Any(e => e.Kind == SpellCastEventKind.ManaStoreNotSaved));

@@ -13,3 +13,19 @@ public static class SessionItemName
     /// <summary>The map change key of the item's renamed name number.</summary>
     public static MapChangeKey Key(string entity) => MapChangeKey.ForEntity(entity, Property);
 }
+
+public sealed partial class GameSessionOwner
+{
+    /// <summary>
+    /// ARC-SCRIPT-2408 (ledger IV32, IV33): the name number an item answers to now: the number a script's rename (92) wrote into the item's own field (<see cref="SessionItemName.Property"/>, found by the item's
+    /// identity wherever the item is, carried, worn or lying), else <paramref name="dataName"/>, the number the item's prototype or map data gives. The readers that match an item by its name number (the item finders, the held and wielded
+    /// item conditions, the dialog's item tests and the item take) ask it per item, so a renamed item is found by its new number and no longer by the old one. A made item and a key that is not a mobile object field have no record and answer the data's.
+    /// </summary>
+    public int QueryItemName(string entity, int dataName)
+    {
+        ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(entity);
+        var key = SessionItemName.Key(entity);
+        return ObjectStateVocabulary.Mobile(key) && _maps.RecordMap(key) is { } held && _maps.Get(held, key) is { } renamed ? unchecked((int)renamed) : dataName;
+    }
+}
