@@ -16,7 +16,7 @@ namespace Arcanum.TerrainViewer.Tests;
 [TestClass]
 public sealed class AreaScriptTeleportCallTests
 {
-    private const int HeroTeleport = 920, HeroFade = 921, NpcTeleport = 922, Both = 923, HeroTeleportThenDialog = 924, DialogThenHeroTeleport = 925;
+    private const int HeroTeleport = 920, HeroFade = 921, NpcTeleport = 922, Both = 923, HeroTeleportThenDialog = 924, DialogThenHeroTeleport = 925, FlagThenDialog = 926;
 
     private static byte[] Program(params (int Action, (byte Kind, int Value)[] Operands)[] lines)
     {
@@ -58,6 +58,8 @@ public sealed class AreaScriptTeleportCallTests
             // 924: the hero's teleport, then the dialog action (the action ends the run, 0x567460); 925: the dialog action first, so the teleport after it never runs.
             File.WriteAllBytes(Path.Combine(root.FullName, "scr", "00924talk.scr"), Program((ScrCatalogue.Action.Teleport, [(Triggerer, 0), (Number, 4999 + snapshot.RuntimeMap), (Number, 33), (Number, 43)]), (ScrCatalogue.Action.Dialog, [(Number, 1)])));
             File.WriteAllBytes(Path.Combine(root.FullName, "scr", "00925late.scr"), Program((ScrCatalogue.Action.Dialog, [(Number, 1)]), (ScrCatalogue.Action.Teleport, [(Triggerer, 0), (Number, 4999 + snapshot.RuntimeMap), (Number, 34), (Number, 44)])));
+            // 926 (ARC-WORLD-2358): a local flag set before the dialog action, which the action would store into the speaker's use slot.
+            File.WriteAllBytes(Path.Combine(root.FullName, "scr", "00926flag.scr"), Program((ScrCatalogue.Action.SetLocalFlag, [(Number, 2)]), (ScrCatalogue.Action.Dialog, [(Number, 1)])));
             using var content = AreaContentRoot.OpenScripts(Path.Combine(root.FullName, "modules", "Syn.dat")).Content!;
             using var session = ConversationSessionFixture.CreateWithHero(snapshot.RuntimeMap);
             var host = new AreaConversationHost(snapshot, content, session);
@@ -134,6 +136,11 @@ public sealed class AreaScriptTeleportCallTests
             Assert.IsTrue(host.RunCall(new(DialogThenHeroTeleport, 0, pc, talker), out detail), detail);
             Assert.IsNotNull(host.LastCallDialog);
             Assert.AreEqual(0, log.Count);
+
+            // A run that changed its local flags before the dialog action would store them in the speaker's use slot, which this host does not write: unapplied whole, with the reason.
+            Assert.IsFalse(host.RunCall(new(FlagThenDialog, 0, pc, talker), out detail));
+            StringAssert.Contains(detail, "use-slot");
+            Assert.IsNull(host.LastCallDialog);
 
             // The dialog action's attachee is the hero here (the speaker is no NPC of this host): nothing applies, no conversation is offered.
             log.Clear();

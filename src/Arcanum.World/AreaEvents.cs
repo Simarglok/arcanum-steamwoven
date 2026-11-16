@@ -138,9 +138,16 @@ public sealed class AreaEventWorld : ISessionScriptWorld, ISessionPartyEventWorl
         if (_talk() is not { } host) { Refuse("no script host on this map"); return false; }
         var ran = host.RunCall(call, out var detail);
         if (!ran) Refuse(detail);
-        else if (host.LastCallDialog is { } talk) _callDialog?.Invoke(talk);
+        else if (host.LastCallDialog is { } talk)
+        {
+            if (_callDialog is null) CallDialogsDropped++;
+            else _callDialog(talk);
+        }
         return ran;
     }
+
+    /// <summary>ARC-WORLD-2358: conversations an applied call started that nobody was told of (no viewer callback, as in the headless passes); their runs stand.</summary>
+    public int CallDialogsDropped { get; private set; }
 
     private void Refuse(string detail)
     {

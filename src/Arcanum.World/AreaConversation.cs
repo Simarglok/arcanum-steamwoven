@@ -404,6 +404,9 @@ public sealed class AreaConversationHost
             if (dialog.Npc is not { } talker || !Speakers.Any(speaker => AreaConversationState.EntityId(speaker.Row) == talker.Code))
             { detail = $"script {call.Script}: a conversation of script {dialog.Script} with {dialog.Npc?.Code ?? "no NPC"}, which is no dialog NPC here, is not modelled"; return false; }
         }
+        // The dialog action stores the run's changed flags or counters into the speaker's use slot (0x447282, point 1); this host writes the dialog point's slot only, so such a run is left unapplied whole and says why (the use-slot write is not built).
+        if (result.Effects.Dialog is not null && result.Effects.Writeback is { } slotWrite && slotWrite.Point != ScrPoint.Dialog)
+        { detail = $"script {call.Script}: a conversation after the run changed the speaker's use-slot flags or counters is not modelled"; return false; }
         if (!Scripts.Apply(result.Effects)) { detail = $"script {call.Script} {result.Stop}: the session refused its effects"; return false; }
         // The speaker destroyed by this very run has no view to talk in (ARC-SCRIPT-052 for a tile run): the run stands, the conversation is not offered.
         LastCallDialog = result.Effects.Dialog is { Npc: { } speaking } start

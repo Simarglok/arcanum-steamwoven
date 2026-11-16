@@ -385,6 +385,7 @@ public partial class TerrainViewerApp
         if (_worldLifecycleSession is not null || _worldResetPending || _worldReloadPending)
         {
             CancelAreaUseApproach("reset/reload"); CancelTalkApproach("reset/reload"); CancelInventoryApproach("reset/reload");
+            _callDialogs.Clear();   // ARC-WORLD-2358: a conversation a call asked for before the reset belongs to the old session
             ClearTransition();
             if (_mapTransfers.Clear() is { } dropped) { _areaUseStatus = $"transfer to '{dropped.To.Name}' cancelled by reset/reload"; RefreshAreaStatus(); }
             // A reset puts the actor back on its spawn without entering it, as a load does.
