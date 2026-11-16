@@ -2722,6 +2722,13 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         return Row(near) is { Type: 15 or 16 } ? DropOwner.Npc : DropOwner.Object;
     }
 
+    /// <summary>ARC-WORLD-2382: whether <see cref="WriteUseSlot"/> can store the run's slot (a use slot of an object of the shown map that has the loaded element), a pure lookup the talk host asks before anything applies.</summary>
+    internal bool CanWriteUseSlot(ScrWriteback writeback) => writeback is { Source: ScrSource.Object, Point: ScrPoint.Use, Attachee: { } attachee }
+        && Row(attachee) is { } row && LoadedOrPlaced(row, attachee.Code, ScrPoint.Use) is not null;
+
+    /// <summary>ARC-WORLD-2382 (point 1, 0x447282): the use-slot write a deferred call's dialog action makes (the speaker's local flags and counters), as map changes of the shown map's object, as a tile run's writes are.</summary>
+    internal bool WriteUseSlot(ScrWriteback writeback) => CanWriteUseSlot(writeback) && WriteObjectSlot(writeback, writeback.Attachee!.Value);
+
     private bool WriteObjectSlot(ScrWriteback writeback, ScrObjectRef attachee)
     {
         if (writeback.Source != ScrSource.Object || !KeptAsMapChanges(writeback.Point) || writeback.Attachee != attachee
