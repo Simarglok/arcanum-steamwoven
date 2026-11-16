@@ -68,7 +68,8 @@ public sealed partial class GameSessionOwner
             if (answer?.Outcome == ScrOutcome.SkipDefault)
             {
                 // The throw script refused: nothing is thrown, the item is back in the hero's list, not worn (0x4617F0 inserts it, it does not wield it). A split stack's units go back to the stack they came from (the insertion merges them, 0x466640) and the
-                // item that was to carry them is never made: the slots the runs wrote for it and the calls they scheduled on it are dropped.
+                // item that was to carry them is never made: the slots the runs wrote for it and the calls they scheduled on it are dropped. ARC-COMBAT-2413: the lift of a whole ammunition stack destroyed the source (0x4658E0) and made the new object,
+                // which the insertion finds no other stack to merge into, so it stays: the new entity, with the slots and calls the runs left on it, is the list's stack and the source and its own slots are gone.
                 runs.Commit();
                 var wornBefore = worn is not null;
                 if (worn is not null)
@@ -76,7 +77,7 @@ public sealed partial class GameSessionOwner
                     _equipment.Worn.Remove(worn.Slot);
                     PlaceInGrid(item, null);
                 }
-                if (split) ForgetNeverMadeThrowItem(splitEntity!);
+                if (split && !RemakeWholeAmmoStack(request, splitEntity!)) ForgetNeverMadeThrowItem(splitEntity!);
                 Revise();
                 var spells = request.ItemTriggers is { } triggers && !split ? RemovalSpellSteps(triggers, item, wornBefore) : [];
                 return Stop(new SessionHeroThrowResult(GameSessionDisposition.Changed, GameSessionFailure.None, null, Version)
@@ -94,6 +95,21 @@ public sealed partial class GameSessionOwner
         {
             _pendingThrowMade = null;
         }
+    }
+
+    /// <summary>
+    /// ARC-COMBAT-2413 (ledger TW3, QW5, AM2): a declined throw of a whole ammunition stack. The lift made a new object for the units and destroyed the source (exactly the count), so the insertion of the new object back finds no other stack of its
+    /// prototype and keeps it: it is appended to the hero's list at the first cell it fits, keeps the slots and calls the runs left on it and the source, with its own slots, is gone. Returns false (nothing done) for a part of a stack, where the units merge
+    /// back into the stack that remains, and for the gold pile, which the session keeps as one counter and entity (NOT READY, #2424).
+    /// </summary>
+    private bool RemakeWholeAmmoStack(SessionHeroThrow request, string splitEntity)
+    {
+        if (request.Item == SessionHeroGrid.GoldEntity || request.SplitKind is not { } kind || !_inventory.Ammo.TryGetValue(request.Item, out var source) || source.Units != request.Count) return false;
+        var made = SplitAmmoForThrow(request.Item, source.Units, kind);
+        if (made != splitEntity) throw new InvalidOperationException("The planned entity of a split must be the one it makes.");
+        // The source left the list first, so its cells count free for the first-fit scan (and its grid record goes).
+        PlaceInGrid(made, request.Item);
+        return true;
     }
 
     /// <summary>ARC-COMBAT-2182: drops what the throw script's runs left for the item of a split that is never made (a skipped throw, a later refusal): the script slots they wrote and the deferred calls they scheduled with it as the attachee, so the next
