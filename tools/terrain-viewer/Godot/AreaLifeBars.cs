@@ -174,7 +174,6 @@ public partial class AreaCompactPanel : Control
 /// </summary>
 public partial class AreaHeroGauges : CanvasLayer
 {
-    // The original's number slots (0x5C63F8: 0 health, 1 fatigue, 5 poison) in its 800 × 600 screen.
     private Control _root = null!;
     private AreaVialGauge _health = null!;
     private AreaVialGauge _fatigue = null!;

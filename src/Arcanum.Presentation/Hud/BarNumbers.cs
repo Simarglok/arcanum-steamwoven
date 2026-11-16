@@ -32,7 +32,7 @@ public static class BarNumberRules
         _ => throw new ArgumentOutOfRangeException(nameof(slot)),
     };
 
-    /// <summary>Whether the slot is filled before its text is written (every slot but the poison, 0x54AD00).</summary>
+    /// <summary>Whether the slot is filled before its text is written (every slot but the poison).</summary>
     public static bool Filled(int slot) => slot != Poison;
 
     /// <summary>The fill's rectangle: the slot with one more row (the writer raises the height by one for the fill call only).</summary>

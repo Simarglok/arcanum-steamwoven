@@ -14,7 +14,9 @@ public partial class AreaBarNumber : Control
     private string _text = "";
     private AreaArtFontFace? _face;
 
-    public AreaBarNumber(bool filled = true) => Filled = filled;
+    public AreaBarNumber() : this(true) { }
+
+    public AreaBarNumber(bool filled) => Filled = filled;
 
     /// <summary>Whether the black fill is drawn (every slot but the poison's).</summary>
     public bool Filled { get; }

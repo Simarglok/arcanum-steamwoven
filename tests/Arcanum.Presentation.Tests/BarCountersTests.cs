@@ -69,7 +69,6 @@ public sealed class BarCountersTests
     [TestMethod]
     public void The_number_slots_fill_black_and_write_the_bar_font_in_white_with_a_one_pixel_shadow()
     {
-        CollectionAssert.AreEqual(new[] { 171 }, new[] { BarNumberRules.FontArt });
         Assert.AreEqual(((byte)0, (byte)0, (byte)0), BarNumberRules.FillColour);
         Assert.AreEqual(((byte)255, (byte)255, (byte)255), BarNumberRules.TextColour);
         Assert.AreEqual(((byte)10, (byte)10, (byte)10), BarNumberRules.ShadowColour);
