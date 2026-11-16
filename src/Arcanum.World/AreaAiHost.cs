@@ -3615,14 +3615,16 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
 
     /// <summary>ARC-WORLD-113: the attack starter's throw (0x434B00, TW1, AG13): the item the NPC wears in its weapon slot (the session's
     /// view) when it is a weapon with the "default throws" flag (weapon flag 0x200) that the remove check (0x466DA0: no no-drop flag)
-    /// lets go. Not ready: a weapon the session's throw refuses (one with scripts, or one the session added to the NPC, which no seed
+    /// lets go. Not ready: a weapon the session's throw refuses (one with scripts, one switched off, or one the session added to the NPC, which no seed
     /// holds) is answered as not throwable, so the NPC attacks with it instead of starting a throw that always fails.</summary>
     public string? ThrowableWeapon(string npc)
     {
         if (!Walks(npc) || _scene.Combat.Worn(_session, npc) is not { } worn) return null;
         foreach (var item in worn)
             if (item.Slot == EquipmentSlot.Weapon && item.Fields.Weapon is { } weapon && weapon.Flags.HasFlag(CombatWeaponFlags.DefaultThrows) && !item.Wear.NoDrop
-                && item.Fields.Object.ScriptPoints.Count == 0 && !_session.QueryNpcInventory(npc).Any(made => made.Entity == item.Entity))
+                && item.Fields.Object.ScriptPoints.Count == 0 && !_session.QueryNpcInventory(npc).Any(made => made.Entity == item.Entity)
+                // ARC-SCRIPT-2397 (IV21, IV22): a switched-off weapon (a toggle or the data's bit, object flag 0x2) is refused by the throw node 0x42AB90, so it is not a throw here (the original loses it, which is not copied).
+                && !_session.QueryItemOff(_session.QueryActor().Map, item.Entity, (item.Fields.Object.Flags & AreaUseScriptHost.OffObjectFlagBit) != 0))
                 return item.Entity;
         return null;
     }
