@@ -126,7 +126,8 @@ public sealed class ScriptTriggerCensusTests
         // ARC-SCRIPT-2378 (ledger IV34): toggle monster generator (110) is admitted too, but the count stays 27: the one row left (script 2103: everyone in the vicinity, condition 46, 110, call script in) stops on distance between (71) now.
         // ARC-SCRIPT-2426 (ledger IV36-IV39): distance between (71) of the looped critter and the hero is admitted too, and the count stays 27: the same row (script 2103) now stops on change script (99, line 10: the looped critter's dialog
         // point), the only command of the script outside the set (ARC-SCRIPT-2432 admits it: 28 of 28 expected).
-        Assert.AreEqual(27, admitted[SessionScriptPoint.InsertItem]);
+        // ARC-SCRIPT-2432 (ledger IV40-IV43): change script (99) is admitted too: the last row (script 2103) is admitted whole, 28 of the 28.
+        Assert.AreEqual(28, admitted[SessionScriptPoint.InsertItem]);
         Assert.IsTrue(admitted[ScrPoint.Hit] >= 26 && admitted[ScrPoint.CritterHits] == 18 && admitted[ScrPoint.CriticalHit] >= 4, $"{admitted[ScrPoint.Hit]}, {admitted[ScrPoint.CritterHits]}, {admitted[ScrPoint.CriticalHit]}");
     }
 
