@@ -149,7 +149,7 @@ public sealed class SpellCensusRealDataTests
     }
 
     /// <summary>ARC-AI-2125 (ledger GW10, UO2 and UO5): goal 43 starts only from an AGoal component (GT59) and tests no object type itself, so what can be pushed is what the component's area admits. Every installed
-    /// spell and technology record with such a component targets with the critter bit (0x40) or with the item-weight-below-5 bit (0x4000000, no critter bit): a portal, container or scenery is never pushed, so the
+    /// spell and technology record with such a component targets, with the object test running (a self, target or radius bit, low 0x15), with the critter bit (0x40) or with the item-weight-below-5 bit (0x4000000, no critter bit): a portal, container or scenery is never pushed, so the
     /// pusher-as-actor guard-witness call of a pushed non-critter (GW10) never happens in the original with the installed data. Numbers only.</summary>
     [TestMethod, TestCategory("RealData")]
     public void Every_knockback_component_targets_a_critter_or_a_light_item()
@@ -168,6 +168,8 @@ public sealed class SpellCensusRealDataTests
                 var low = (uint)component.Area.Targets;
                 var critter = (low & 0x40) != 0;
                 var lightItem = (low & 0x4000000) != 0;
+                // The object test (0x4F2D20) runs only with a self, target or radius bit (low 0x15); without one the tile test passes any object.
+                Assert.IsTrue((low & 0x15) != 0, $"record {number}: a knockback component whose area (0x{component.Area.Targets:X}) skips the object test");
                 Assert.IsTrue(critter || lightItem, $"record {number}: a knockback component whose area (0x{component.Area.Targets:X}) admits other objects than critters and items of weight below 5");
             }
         }
