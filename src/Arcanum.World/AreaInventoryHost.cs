@@ -372,7 +372,7 @@ public sealed class AreaInventoryHost
     public SessionDialogItemTakePort TakeItemDialogPort(GameSessionOwner session, Func<DialogParticipantId, string?> entityOf) =>
         new(session, AreaConversationState.PcParticipant, entityOf, DiagnosticInsertCheck, entity => AttachHolderMap(session, entity), NpcCell, ItemScripts(session));
 
-    // ARC-DEV-238: the cell of an NPC on the shown maps (its map row's, as the substitute container's range reads it), for the item a refused hand-over lays down.
+    // ARC-DEV-238: the cell of an NPC on the shown maps (its map row's), for the item a refused hand-over lays down.
     private CellCoord? NpcCell(string npc)
     {
         foreach (var map in _maps.Values.Concat(_resolver.CreatedMap(npc) is { } created ? [created] : []))
@@ -388,18 +388,29 @@ public sealed class AreaInventoryHost
 
     /// <summary>
     /// ARC-DEV-194 (BT11, 0x45F650): the substitute container of an NPC: it has none at T0 and does not follow the hero now (no leader), the area names a container of its inventory
-    /// source (field 0x126) and the container lies within <see cref="AreaBarterMerchant.SubstituteRange"/> tiles of the NPC's cell (Chebyshev). The cell is the NPC's map row, not
-    /// where the AI has walked it. Null for an NPC with none.
+    /// source (field 0x126) and the container lies within <see cref="AreaBarterMerchant.SubstituteRange"/> tiles of the NPC's cell (Chebyshev). ARC-WORLD-2357 (the original measures where the
+    /// NPC is now): the cell is <see cref="NpcLiveCell"/>'s (where the AI has walked it), else the NPC's map row. Null for an NPC with none.
     /// </summary>
     public string? SubstituteContainer(GameSessionOwner session, string npc)
     {
         foreach (var map in _maps.Values)
-            if (map.Substitute(npc) is { } substitute && map.TryGetRow(npc, out var row) && row.WorldX is { } x && row.WorldY is { } y
-                && x is >= int.MinValue and <= int.MaxValue && y is >= int.MinValue and <= int.MaxValue
+            if (map.Substitute(npc) is { } substitute && LiveCell(map, npc) is { } cell
                 && session.QueryLeader(npc) is null
-                && Arcanum.Simulation.Ai.AiExecutorRules.Distance(new((int)x, (int)y), substitute.Cell) <= AreaBarterMerchant.SubstituteRange)
+                && Arcanum.Simulation.Ai.AiExecutorRules.Distance(cell, substitute.Cell) <= AreaBarterMerchant.SubstituteRange)
                 return substitute.Entity;
         return null;
+    }
+
+    /// <summary>ARC-WORLD-2357: the cell the shown map's AI host has an NPC on now (<see cref="AreaAiHost.Tile"/>); null (the default): the host does not know it, and the NPC's map-row cell is used.</summary>
+    public Func<string, CellCoord?>? NpcLiveCell { get; set; }
+
+    /// <summary>ARC-WORLD-2357: where an NPC of <paramref name="map"/> stands now for the substitute container distance: <see cref="NpcLiveCell"/>'s, else its map row's cell; null when it has neither.</summary>
+    public CellCoord? LiveCell(AreaInventoryMap map, string npc)
+    {
+        ArgumentNullException.ThrowIfNull(map);
+        if (NpcLiveCell?.Invoke(npc) is { } live) return live;
+        return map.TryGetRow(npc, out var row) && row.WorldX is { } x && row.WorldY is { } y && x is >= int.MinValue and <= int.MaxValue && y is >= int.MinValue and <= int.MaxValue
+            ? new((int)x, (int)y) : null;
     }
 
     /// <summary>ARC-DEV-179: the dialog's <c>$$</c> condition and action through the session (<see cref="SessionDialogGoldPort"/>): a new gold
