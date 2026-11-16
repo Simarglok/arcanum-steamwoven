@@ -243,6 +243,19 @@ public sealed class AreaNpcSessionWearTests
         Assert.AreEqual(8, scripts.ArmorOf(who), "part 8 is the last a critter art holds");
         read = false;
         Assert.IsNull(scripts.ArmorOf(who), "a world that does not read the worn armour's art: not modelled");
+        uint? none = null;
+        var unreadWorld = new AreaScriptWorld(() => null, _ => false, _ => null, () => null, NpcBodyArmor: _ => new AreaScriptWornArmor(none));
+        Assert.IsNull(new AreaUseScriptHost(session, 1, [row], [], null, unreadWorld).ArmorOf(who), "the record wears armour but the world finds none: not modelled, not bare");
+
+        // The art type decides what a wield can hold: a unique NPC's art only part 0, a monster art up to 7.
+        AreaObjectRecord WithArt(uint art) => row with { EffectiveFields = [.. row.EffectiveFields.Select(f => f.Slot == 0 ? f with { Number = art } : f)] };
+        use = (6u << 28) | (4u << 6);
+        read = true;
+        Assert.AreEqual(0, new AreaUseScriptHost(session, 1, [WithArt(13u << 28)], [], null, world).ArmorOf(who), "a unique NPC's art holds no part");
+        Assert.AreEqual(4, new AreaUseScriptHost(session, 1, [WithArt((12u << 28) | (1u << 23))], [], null, world).ArmorOf(who), "a monster art holds parts up to 7");
+        use = (6u << 28) | (8u << 6);
+        Assert.AreEqual(0, new AreaUseScriptHost(session, 1, [WithArt((12u << 28) | (1u << 23))], [], null, world).ArmorOf(who), "part 8 does not stand in a monster art");
+        use = (6u << 28) | (8u << 6);
 
         // A polymorph takes the worn items off and gives a monster body with part 0 (the dressed record is then moot).
         read = true; use = (6u << 28) | (4u << 6);

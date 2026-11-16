@@ -6,7 +6,7 @@ using static Arcanum.Scripting.Tests.Scr.ScrTestPrograms;
 namespace Arcanum.Scripting.Tests.Scr;
 
 /// <summary>
-/// ARC-SCRIPT-2342 (AC3, ledger AR4): the table test of <see cref="ScrAdmissionSet.ListConditions"/>. Every member must be evaluated through the one list rule (<c>ListHolds</c>, the exe's list tail at 0x4455BD): over the group of the
+/// ARC-SCRIPT-2342 (AC3, ledger AR4 and AR8): the table test of <see cref="ScrAdmissionSet.ListConditions"/>. Every member must be evaluated through the one list rule (<c>ListHolds</c>, the exe's list tail at 0x4455BD): over the group of the
 /// triggerer's followers with the triggerer last, kind 13 (every) holds only when every object answers true and kind 14 (any) when one does. The host answers true for the objects it is told hold, false for the others, for every question the
 /// 21 conditions ask, so a condition that read only the first object, or only the triggerer, or counted differently would fail one of the four cases. Programs, objects and answers are invented.
 /// </summary>

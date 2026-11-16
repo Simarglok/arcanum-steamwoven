@@ -761,7 +761,8 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
                 // The insert and removal of a wear slot run the hooks for an NPC as for the PC: the art took the armour part of the body armour the NPC wears now (0 when none).
                 var wearsArmor = dressed.Worn.Any(item => item.Slot == Arcanum.Simulation.Equipment.EquipmentSlot.Armor);
                 if (!wearsArmor) return Arcanum.Simulation.Sound.SoundCueRules.CritterArtArmor(Arcanum.Simulation.Equipment.BodyArmorArtRules.WornArt(stored, stored, null)!.Value);
-                if (_world?.NpcBodyArmor?.Invoke(obj.Code) is not { } worn) return null;
+                // The record says armour is worn: a world that finds none (an item whose fields are not read yet, a broken one) is not modelled rather than bare.
+                if (_world?.NpcBodyArmor?.Invoke(obj.Code) is not { UseArt: { } } worn) return null;
                 var wornArt = Arcanum.Simulation.Equipment.BodyArmorArtRules.WornArt(stored, stored, worn.UseArt);
                 // A refused wield (an art type that cannot hold the part) leaves the part the clear before it wrote: 0.
                 return Arcanum.Simulation.Sound.SoundCueRules.CritterArtArmor(wornArt ?? Arcanum.Simulation.Equipment.BodyArmorArtRules.WithArmor(stored, 0));
