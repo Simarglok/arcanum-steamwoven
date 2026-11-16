@@ -443,7 +443,7 @@ public sealed class AreaBarter
         if (!result.Settled)
         {
             var text = result.Move is { } move
-                ? move.Failure == GameSessionFailure.GoldShort ? "not enough money" : $"refused: {AreaInventoryHost.Refusal(move.Failure, move.Verdict)}"
+                ? (move.Failure == GameSessionFailure.GoldShort ? "not enough money" : $"refused: {AreaInventoryHost.Refusal(move.Failure, move.Verdict)}") + AreaInventoryHost.Printed(move)
                 : $"refused: {result.Failure}";
             return new(gate, result, result.Won, 0, 0, text);
         }
@@ -461,10 +461,22 @@ public sealed class AreaBarter
             said = BetLine(GamblingRules.LostCategory, result.Paid);
         }
         if (change != 0 && !_adjustReaction(change)) change = 0;
+        // ARC-UI-1824: the lines a won item's move scripts printed follow the line.
+        if (result.Move is { } moved) said += AreaInventoryHost.Printed(moved);
         return new(gate, result, result.Won, result.Paid, change, said);
     }
 
-    private AreaBarterTrade Settle(TradeDirection direction, AreaBarterLine line, InventoryMutationResult result)
+    /// <summary>
+    /// ARC-UI-1824: the trade's text. The lines the trade's item scripts printed (insert item, remove item, wield off: the original posts them to the message window)
+    /// follow the text as the loot window's do (<see cref="AreaInventoryHost.Printed"/>), for a refused trade too (a script that ran before the refusal may have printed).
+    /// </summary>
+    internal AreaBarterTrade Settle(TradeDirection direction, AreaBarterLine line, InventoryMutationResult result)
+    {
+        var trade = SettleWithoutPrinted(direction, line, result);
+        return trade with { Text = trade.Text + AreaInventoryHost.Printed(result) };
+    }
+
+    private AreaBarterTrade SettleWithoutPrinted(TradeDirection direction, AreaBarterLine line, InventoryMutationResult result)
     {
         var total = line.Quote.Price * line.Count;
         if (result.Disposition != GameSessionDisposition.Changed)

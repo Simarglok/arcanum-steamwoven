@@ -316,6 +316,7 @@ public partial class TerrainViewerApp
             _inventoryPanel.QuantityAccepted += AcceptQuantity;
             _inventoryPanel.QuantityCancelled += CancelQuantity;
             _inventoryPanel.HolderView = InventoryHolderView;
+            _inventoryPanel.PortraitTextures = HolderPortraitTexture;
         }
         // A quick key held across the window must not act on its release afterwards (its press predates the window).
         QuarantineWorld(); _quickKeys.Reset();

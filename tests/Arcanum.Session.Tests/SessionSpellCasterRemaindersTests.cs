@@ -133,17 +133,27 @@ public sealed class SessionSpellCasterRemaindersTests
         Assert.IsTrue(caster.Log.Any(e => e.Kind == SpellCastEventKind.ComponentNotReady && e.Value == (int)SpellComponentType.Recharge));
     }
 
+    // ARC-MAGIC-2443: the original's handler writes field 105 of any item target, so an item the session does not track (no seed lists it) is recharged from the host's own field.
     [TestMethod]
-    public void Recharge_of_an_item_the_session_does_not_track_is_logged_not_saved()
+    public void Recharge_of_an_item_the_session_does_not_track_is_written()
     {
         var (owner, caster) = Session();
         using var _ = owner;
-        var version = owner.Version;
         var cast = new SessionSpellCaster(owner, n => Records.GetValueOrDefault(n), new Map(owner), new Events(), id => id == "kit:77" ? CoatSpells(id, 3) : null);
         Assert.AreEqual(SpellComponentOutcome.None, cast.Apply(Run(RechargeNumber), 0, At("kit:77", 5)));
-        Assert.AreEqual(new SpellCastEvent(SpellCastEventKind.ItemRechargeNotSaved, 1, (int)GameSessionFailure.ItemNotAvailable, "kit:77"), cast.Log.Single());
-        Assert.AreEqual(version, owner.Version);
-        Assert.AreEqual(1, cast.Log.Count, "the refusal is the only line");
+        CollectionAssert.AreEqual(new[] { new SpellCastEvent(SpellCastEventKind.ItemRecharged, 1, 8, "kit:77", 5) }, cast.Log.ToArray());
+        Assert.AreEqual(8, owner.QueryItemCharges("kit:77"), "the count went up from the host's own field");
+    }
+
+    [TestMethod]
+    public void Recharge_of_a_deleted_item_is_still_logged_not_saved()
+    {
+        var (owner, _) = Session();
+        using var _ = owner;
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.DestroyItem(owner.Version, Coat, new(15, 5, 0, false)).Disposition);
+        var cast = new SessionSpellCaster(owner, n => Records.GetValueOrDefault(n), new Map(owner), new Events(), id => id == Coat ? CoatSpells(id, 3) : null);
+        cast.Apply(Run(RechargeNumber), 0, At(Coat, 5));
+        Assert.AreEqual(new SpellCastEvent(SpellCastEventKind.ItemRechargeNotSaved, 1, (int)GameSessionFailure.ItemNotAvailable, Coat), cast.Log.Single());
     }
 
     [TestMethod]

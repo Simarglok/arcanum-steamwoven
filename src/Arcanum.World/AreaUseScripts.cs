@@ -872,6 +872,20 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     /// without one.</summary>
     public (long X, long Y)? Location(ScrObjectRef obj) => Place(obj) is { } cell ? (cell.X, cell.Y) : null;
 
+    /// <summary>
+    /// ARC-SCRIPT-2426 (IV36–IV39, HW3): the location field distance between reads on an insert-item run: an item reads its own location field (the tile a session-dropped item lies on, else the tile of its map data or the carried item's row: the same centre as
+    /// the vicinity scans of the run, <see cref="ContainersNearItem"/>, IV2), any other object its place as <see cref="Location"/> gives it. Null for an object without a place (an item of another map, one with no tile).
+    /// </summary>
+    public (long X, long Y)? LocationOfObject(ScrObjectRef obj)
+    {
+        if (IsPc(obj) || !IsItemObject(obj)) return Location(obj);
+        return ItemCentre(obj) is { } at ? (at.X, at.Y) : null;
+    }
+
+    // An item the run can name: a row of the item types (the shown map's or a carried item's) or one the session put on the ground.
+    private bool IsItemObject(ScrObjectRef obj) =>
+        (Row(obj) ?? CarriedItemRow(obj)) is { Type: >= FirstItemType and <= LastItemType } || _session.QueryPlacedItems().Any(p => p.Entity == obj.Code && p.Map.RuntimeMap == obj.Map);
+
     /// <summary>ARC-SCRIPT-049 (HW1): the PC's and an NPC's death as the session holds it (an NPC: its map data or a kill); null for any
     /// other object (an object's hit points are not read here) and for an object of no loaded row.</summary>
     public bool? IsDead(ScrObjectRef obj)
@@ -2774,26 +2788,39 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     /// <summary>ARC-WORLD-2382 (point 1, 0x447282): the use-slot write a deferred call's dialog action makes (the speaker's local flags and counters), as map changes of the shown map's object, as a tile run's writes are.</summary>
     internal bool WriteUseSlot(ScrWriteback writeback) => CanWriteUseSlot(writeback) && WriteObjectSlot(writeback, writeback.Attachee!.Value);
 
-    private bool WriteObjectSlot(ScrWriteback writeback, ScrObjectRef attachee)
+    private bool WriteObjectSlot(ScrWriteback writeback, ScrObjectRef attachee) =>
+        writeback.Attachee == attachee && ObjectSlotEdits(writeback) is { } edits && _session.ApplyChanges(_session.Version, null, edits).Disposition != GameSessionDisposition.Rejected;
+
+    // The map changes that keep a slot write of an object: the loaded element's three parts, each cleared where it is back at its loaded value (ARC-DEV-096: where the object's record sits, which may be another map than the attachee's). Null for a write the
+    // host does not keep (no row, a point outside the kept ones, no loaded element).
+    private MapChangeEdit[]? ObjectSlotEdits(ScrWriteback writeback)
     {
-        if (writeback.Source != ScrSource.Object || !KeptAsMapChanges(writeback.Point) || writeback.Attachee != attachee
-            || Row(attachee) is not { } row || LoadedOrPlaced(row, attachee.Code, writeback.Point) is not { } loaded) return false;
+        if (writeback.Source != ScrSource.Object || writeback.Attachee is not { } attachee || !KeptAsMapChanges(writeback.Point)
+            || Row(attachee) is not { } row || LoadedOrPlaced(row, attachee.Code, writeback.Point) is not { } loaded) return null;
         var map = new SessionMapId(attachee.Map);
-        // ARC-DEV-096: a part back at its loaded value is cleared where the object's record sits, which may be another map than the attachee's.
         MapChangeEdit Edit(string property, long value, long baseline)
         {
             var key = MapChangeKey.ForEntity(attachee.Code, property);
             return value == baseline ? new(_session.QueryObjectRecordMap(key) ?? map, key, null) : new(map, key, value);
         }
         var point = writeback.Point;
-        var result = _session.ApplyChanges(_session.Version, null,
+        return
         [
             Edit(SlotProperty(point, ScriptPart), writeback.Slot.Script, loaded.Script),
             Edit(SlotProperty(point, LocalFlagsPart), writeback.Slot.LocalFlags, loaded.LocalFlags),
             Edit(SlotProperty(point, CountersPart), writeback.Slot.Counters, loaded.Counters),
-        ]);
-        return result.Disposition != GameSessionDisposition.Rejected;
+        ];
     }
+
+    /// <summary>
+    /// ARC-SCRIPT-2432 (IV40): the map changes of a change script (99) of a critter of the shown map, for the session's item set, which applies them in its own revision: the same edits a use run writes (<see cref="WriteObjectSlot"/>); null for any
+    /// other object (a scenery, a container, an item, the hero) and for a critter with no loaded element at the point.
+    /// </summary>
+    public IReadOnlyList<MapChangeEdit>? PlanCritterSlot(ScrWriteback writeback) =>
+        writeback.Attachee is { } attachee && Row(attachee) is { Type: NpcType } ? ObjectSlotEdits(writeback) : null;
+
+    /// <summary>ARC-SCRIPT-2432 (IV40): whether the object is a critter the host holds a row for (its attachment slots are kept as map changes, <see cref="Slot"/>).</summary>
+    public bool IsCritterRow(ScrObjectRef obj) => Row(obj) is { Type: NpcType };
 
     private bool WritePlacedSlot(ScrWriteback writeback, MapPlacedScript placed, ScrSource source)
     {

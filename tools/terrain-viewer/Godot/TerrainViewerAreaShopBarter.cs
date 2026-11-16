@@ -138,7 +138,7 @@ public partial class TerrainViewerApp
         var merchant = view.Merchant;
         var map = shop.Map.RuntimeMap;
         var inventory = host.View(owner, _hoverNames?.Catalog, map, merchant.Container ?? merchant.Entity, hero.KitHealing, hero.KitLockpicks,
-            hero.KitDurability, hero.KitWear, hero.KitUse) with { HolderImage = host.HolderImage(map, merchant.Entity) };
+            hero.KitDurability, hero.KitWear, hero.KitUse) with { HolderImage = host.HolderImage(map, merchant.Entity), HolderPortrait = host.HolderPortrait(owner, map, merchant.Entity) };
         // ARC-UI-1917: the merchant's doll view, from the merchant's own view when a substitute container is the shown grid (the shop map has no combat host: no ratings).
         if (merchant.Container is not null)
             inventory = WithMerchantDoll(inventory, host.View(owner, _hoverNames?.Catalog, map, merchant.Entity, hero.KitHealing, hero.KitLockpicks, hero.KitDurability, hero.KitWear, hero.KitUse));

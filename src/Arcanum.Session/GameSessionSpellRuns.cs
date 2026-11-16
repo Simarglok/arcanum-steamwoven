@@ -311,9 +311,10 @@ public sealed partial class GameSessionOwner
     /// one of the item's positive charges goes, from the session's count or else <paramref name="baseline"/> (the item's own field), and
     /// the item is marked magical (0x450420, ledger DV1). Refused for an invalid entity, a baseline outside 1..1,000,000 while the session
     /// holds no count
-    /// (<see cref="GameSessionFailure.InvalidItem"/>), a stale version, an item the session does not track or deleted
-    /// (<see cref="GameSessionFailure.ItemNotAvailable"/>) and a full record budget. No charge left is NoChange (the payment refuses
-    /// that before it spends). One revision.
+    /// (<see cref="GameSessionFailure.InvalidItem"/>), a stale version, an item the session deleted
+    /// (<see cref="GameSessionFailure.ItemNotAvailable"/>), the 65,537th count (<see cref="GameSessionLimits.MaxItemCharges"/>, which no other record shares) and an exhausted revision counter.
+    /// ARC-MAGIC-2434: the original's payment always writes field 105 of the source it was given, so the spend needs no tracking: the host's item lookup names the item, whatever seed
+    /// the session has attached, and a full durability budget cannot lose it. No charge left is NoChange (the payment refuses that before it spends). One revision.
     /// </summary>
     public GameSessionMutationResult SpendItemCharge(GameSessionVersion expected, string entity, int baseline)
     {
@@ -323,10 +324,10 @@ public sealed partial class GameSessionOwner
         // The baseline matters only until the session holds a count.
         if (!recorded && baseline is < 1 or > SessionItemUseLimits.MaxUses) return new(GameSessionDisposition.Rejected, GameSessionFailure.InvalidItem, Version);
         if (!IsCurrent(expected)) return new(GameSessionDisposition.Rejected, GameSessionFailure.StaleVersion, Version);
-        if (!TracksItem(entity)) return new(GameSessionDisposition.Rejected, GameSessionFailure.ItemNotAvailable, Version);
+        if (IsItemDestroyed(entity)) return new(GameSessionDisposition.Rejected, GameSessionFailure.ItemNotAvailable, Version);
         var current = recorded ? left : baseline;
         if (current <= 0) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, Version);
-        if (!recorded && _durability.Count >= _limits.MaxDurabilityRecords) return new(GameSessionDisposition.Rejected, GameSessionFailure.BudgetExceeded, Version);
+        if (!recorded && _durability.Charges.Count >= _limits.MaxItemCharges) return new(GameSessionDisposition.Rejected, GameSessionFailure.BudgetExceeded, Version);
         if (_revision == long.MaxValue) return new(GameSessionDisposition.Rejected, GameSessionFailure.RevisionExhausted, Version);
         _durability.Charges[entity] = current - 1;
         Revise();
@@ -337,7 +338,8 @@ public sealed partial class GameSessionOwner
     /// ARC-MAGIC-1146 (the Recharge component): the item's spell charges (field 0x69) grow by <paramref name="amount"/>, not above <paramref name="maximum"/> and only while they are below it: from the session's count
     /// or else <paramref name="baseline"/> (the item's own field), as <see cref="SpendItemCharge"/> keeps it. A count that already reaches the maximum is <see cref="GameSessionDisposition.NoChange"/>, as is a sum equal to it.
     /// Refused for an invalid entity, a baseline or a resulting count outside the saved bounds 0..1,000,000 (<see cref="GameSessionFailure.InvalidItem"/>; the original's negative count, unlimited charges, is not kept by the session),
-    /// a stale version, an item the session does not track or deleted (<see cref="GameSessionFailure.ItemNotAvailable"/>) and a full record budget. One revision. Like a spent charge, a recorded count also marks the item magical
+    /// a stale version, an item the session deleted (<see cref="GameSessionFailure.ItemNotAvailable"/>), a full charge budget (<see cref="GameSessionLimits.MaxItemCharges"/>) and an exhausted revision counter. One revision.
+    /// ARC-MAGIC-2443: the original's handler always writes field 105 of an item target, so the recharge asks no tracked item: the host's item lookup names the item and its own field is the baseline, whatever map seed the session has attached (as <see cref="SpendItemCharge"/>, ARC-MAGIC-2434). Like a spent charge, a recorded count also marks the item magical
     /// when the host reads it (<see cref="QueryItemCharges"/>): the original's recharge writes the field only.
     /// </summary>
     public GameSessionMutationResult RechargeItemCharges(GameSessionVersion expected, string entity, int baseline, int amount, int maximum)
@@ -348,13 +350,13 @@ public sealed partial class GameSessionOwner
         var current = recorded ? left : baseline;
         if (current is < 0 or > SessionItemUseLimits.MaxUses) return new(GameSessionDisposition.Rejected, GameSessionFailure.InvalidItem, Version);
         if (!IsCurrent(expected)) return new(GameSessionDisposition.Rejected, GameSessionFailure.StaleVersion, Version);
-        if (!TracksItem(entity)) return new(GameSessionDisposition.Rejected, GameSessionFailure.ItemNotAvailable, Version);
+        if (IsItemDestroyed(entity)) return new(GameSessionDisposition.Rejected, GameSessionFailure.ItemNotAvailable, Version);
         // 0x454920: charges that already reach the maximum are left alone; below it the sum is clipped at the maximum.
         if (current >= maximum) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, Version);
         var sum = (int)Math.Min((long)current + amount, maximum);
         if (sum is < 0 or > SessionItemUseLimits.MaxUses) return new(GameSessionDisposition.Rejected, GameSessionFailure.InvalidItem, Version);
         if (sum == current) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, Version);
-        if (!recorded && _durability.Count >= _limits.MaxDurabilityRecords) return new(GameSessionDisposition.Rejected, GameSessionFailure.BudgetExceeded, Version);
+        if (!recorded && _durability.Charges.Count >= _limits.MaxItemCharges) return new(GameSessionDisposition.Rejected, GameSessionFailure.BudgetExceeded, Version);
         if (_revision == long.MaxValue) return new(GameSessionDisposition.Rejected, GameSessionFailure.RevisionExhausted, Version);
         _durability.Charges[entity] = sum;
         Revise();
