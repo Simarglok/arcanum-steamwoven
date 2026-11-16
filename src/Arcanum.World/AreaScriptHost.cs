@@ -495,7 +495,8 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
         (ScrSlot Loaded, ScrObjectRef Attachee)? slotWrite = null;
         // ARC-WORLD-2382 (point 1, 0x447282): a deferred call's dialog action stores the run's flags and counters in the speaker's use slot, written through the shown map's use host as a tile run's are; one that host cannot place refuses the run whole.
         var useWrite = effects.Writeback is { Source: ScrSource.Object, Point: ScrPoint.Use } useRequest ? useRequest : null;
-        if (useWrite is not null && Queries?.CanWriteUseSlot(useWrite) != true) return false;
+        var useHost = Queries;   // captured once: a victim's script or a death can move what the delegate answers before the write below
+        if (useWrite is not null && useHost?.CanWriteUseSlot(useWrite) != true) return false;
         if (effects.Writeback is { } slotRequest && useWrite is null)
         {
             if (slotRequest.Source != ScrSource.Object || slotRequest.Point != ScrPoint.Dialog || slotRequest.Attachee is not { } slotAttachee
@@ -613,7 +614,7 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
         foreach (var teleport in effects.Teleports)
             if (IsPc(teleport.Object)) RequestHeroTeleport!(teleport);
             else teleportHost?.RequestNpcTeleport(teleport);
-        if (useWrite is not null) return Queries?.WriteUseSlot(useWrite) == true;
+        if (useWrite is not null) return useHost?.WriteUseSlot(useWrite) == true;
         if (effects.Writeback is not { } writeback || slotWrite is not { } placed) return true;
         var (loaded, attachee) = placed;
         var stateMap = _state.MapOfEntity(attachee.Code);
