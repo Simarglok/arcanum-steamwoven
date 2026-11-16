@@ -46,7 +46,7 @@ LABELS = ("bug", "type:dev", "status:ready")
 DEFAULT_AREA = "area:scene"
 # The first failing stage's area label: the first row whose word is in the stage name wins.
 AREAS: tuple[tuple[str, tuple[str, ...]], ...] = (
-    ("area:combat-magic-tech", ("cast", "spell", "turn-based", "knockdown", "ranged", "grenade", "tech", "shot", "burn", "magic", "combat")),
+    ("area:combat-magic-tech", ("cast", "spell", "turn-based", "knockdown", "ranged", "grenade", "tech", "shot", "burn", "magic", "combat", "blow")),
     ("area:items-economy", ("barter", "loot", "inv", "container", "junk", "pickpocket", "item", "disarm", "bed")),
     ("area:story-social-ai", ("ai", "npc", "premade", "opening", "follower", "companion", "dialog", "healer", "talk", "life")),
     ("area:world-travel-runtime", ("transfer", "worldmap", "travel", "roundtrip", "stream", "resident", "teleport", "saved-runs",
