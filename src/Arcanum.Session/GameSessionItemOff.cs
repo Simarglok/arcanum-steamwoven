@@ -1,0 +1,26 @@
+namespace Arcanum.Session;
+
+/// <summary>
+/// ARC-SCRIPT-2346 (ledger IV9–IV11): the off flag (object flag 0x2) of an item as a script's toggle state (56) flips it, kept as the object field <c>obj.off</c> of the item's directory entry: 1 is off, 0 is on, and no record is what the item's map data says
+/// (the same field an NPC's toggle writes, and the residency reads it for the items lying on the ground). A mobile object's field has one record by the object's identity (a placed item's <c>oid:</c> entity or a made item's <c>made:n</c>), is carried
+/// with the item and saved in the snapshot's objects section (a save made before the action had none and loads as it was: no schema step).
+/// </summary>
+public static class SessionItemOff
+{
+    /// <summary>The map change key of an item's off flag.</summary>
+    public static MapChangeKey Key(string entity) => MapChangeKey.ForEntity(entity, ObjectStateVocabulary.OffProperty);
+}
+
+public sealed partial class GameSessionOwner
+{
+    /// <summary>
+    /// ARC-SCRIPT-2346 (IV9): whether the item <paramref name="entity"/> is switched off now: the record of its off flag when a script toggled it, else what its map data stores (<paramref name="dataOff"/>). A read only; the readers that
+    /// list an item (the viewer's inventory windows) ask it with the data's bit.
+    /// </summary>
+    public bool QueryItemOff(SessionMapId map, string entity, bool dataOff)
+    {
+        ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(entity);
+        return QueryObjectChange(map, SessionItemOff.Key(entity)) is { } value ? value == 1 : dataOff;
+    }
+}

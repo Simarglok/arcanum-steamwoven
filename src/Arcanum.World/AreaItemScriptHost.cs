@@ -23,6 +23,7 @@ public sealed class AreaItemScriptHost : ISessionItemScriptHost, ISessionItemWor
     private readonly ScriptContent? _content;
     private readonly Func<int, EffectRule?>? _effectRules;
     private readonly Func<AreaUseScriptHost?>? _shown;
+    private const int ObjectFlagsSlot = 18;
 
     /// <param name="content">The game's scripts; null when they could not be loaded, and then every script is missing and
     /// no line is printed. The host borrows it.</param>
@@ -71,6 +72,18 @@ public sealed class AreaItemScriptHost : ISessionItemScriptHost, ISessionItemWor
 
     // The hero has no row (its name is not modelled and reads 0, as in the use host), any other object needs the row the use host reads.
     private bool Known(AreaUseScriptHost host, ScrObjectRef obj) => host.IsPc(obj) || host.KnowsObject(obj);
+
+    /// <summary>
+    /// ARC-SCRIPT-2346 (IV9): the item's off flag (bit 0x2 of the object flags, slot 18) in the loaded maps' rows; false for an item the session made (<c>made:n</c>: the original creates it on); null for an item no loaded row names. Only
+    /// the data's bit: a script's toggle is the session's field (<see cref="GameSessionOwner.QueryItemOff"/>).
+    /// </summary>
+    public bool? ItemOffInData(ScrObjectRef item)
+    {
+        if (item.Code.StartsWith("made:", StringComparison.Ordinal)) return false;
+        var map = _maps.FirstOrDefault(candidate => candidate.RuntimeMap == item.Map);
+        if (map is null || !map.TryGetRow(item.Code, out var row)) return null;
+        return row.EffectiveFields.FirstOrDefault(field => field.Slot == ObjectFlagsSlot) is { Presence: Arcanum.Data.Area.AreaPresence.Value, Number: { } flags } ? (flags & AreaUseScriptHost.OffObjectFlagBit) != 0 : false;
+    }
 
     /// <summary>ARC-SCRIPT-2335 (IV5): the use host's plan of a change art number.</summary>
     public SessionObjectArtPlan? ArtPlan(ScrObjectRef obj, int number) => _shown?.Invoke()?.PlanObjectArt(obj, number);

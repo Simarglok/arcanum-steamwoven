@@ -423,6 +423,17 @@ public sealed class AreaInventoryHost
     /// (<see cref="Retain"/>, <see cref="ReadCarriedRows"/>); null when it knows none.</summary>
     public AreaObjectRecord? KnownRow(string entity) => RowOf(entity ?? throw new ArgumentNullException(nameof(entity)));
 
+    /// <summary>
+    /// ARC-SCRIPT-2346 (IV10): whether the item is switched off (object flag 0x2: the record of a script's toggle state, else the row's data bit). The original's inventory window leaves such an item out of what it draws and offers (ledger IV10)
+    /// while it still fills its cells and counts in the weight and the room, so the view drops it from what the window draws and offers and keeps the session's lists as they are.
+    /// </summary>
+    private bool IsOff(GameSessionOwner session, int runtimeMap, string entity)
+    {
+        var dataOff = !entity.StartsWith("made:", StringComparison.Ordinal) && RowOf(entity) is { } row
+            && row.EffectiveFields.FirstOrDefault(field => field.Slot == 18) is { Presence: Arcanum.Data.Area.AreaPresence.Value, Number: { } flags } && (flags & AreaUseScriptHost.OffObjectFlagBit) != 0;
+        return session.QueryItemOff(new(runtimeMap), entity, dataOff);
+    }
+
     /// <summary>The row of an entity among the held maps, else among the rows of items the hero carried out of a window of the same map (<see cref="Retain"/>).</summary>
     private AreaObjectRecord? RowOf(string entity)
     {
@@ -492,6 +503,8 @@ public sealed class AreaInventoryHost
             { Healing = HealingItem(session, item.Entity, kitHealing) is not null, Lockpick = Lockpick(session, item.Entity, kitLockpicks) is not null, Written = item.Kind.Type == SessionItemType.Written,
               Repairable = Repairable(session, item.Entity, kitDurability), WearSlots = Slots(item.Entity), Usable = Usable(item.Entity) }))
             .Select(line => session.QueryAmmo(line.Entity) is { } stack ? line with { StackKind = HeldKind(line.Entity), Units = stack.Units, StackAmmoType = stack.AmmoType } : line)
+            // ARC-SCRIPT-2346 (IV10): a switched-off item is not listed (see IsOff).
+            .Where(line => !IsOff(session, runtimeMap, line.Entity))
             .ToArray();
         SessionItemKind? HeldKind(string entity) => session.QueryHeroKit().Select(item => (item.Entity, item.Kind)).Concat(session.QueryPcInventory().Select(item => (item.Entity, item.Kind)))
             .Concat(session.QueryMadeItems().Select(item => (item.Entity, item.Kind))).Where(pair => pair.Entity == entity).Select(pair => (SessionItemKind?)pair.Kind).FirstOrDefault();
@@ -504,8 +517,8 @@ public sealed class AreaInventoryHost
         var carry = session.QueryHeroCarry();
         // ARC-UI-019: the grid in slot order, with the items that found no room.
         var heroGrid = session.QueryHeroGrid();
-        var grid = heroGrid.Items.Select(item => new AreaGridItem(item.Entity, item.Slot, item.Width, item.Height, ItemName(session, item.Entity, catalog))).ToArray();
-        var unplaced = heroGrid.Unplaced.Select(entity => ItemName(session, entity, catalog)).ToArray();
+        var grid = heroGrid.Items.Where(item => !IsOff(session, runtimeMap, item.Entity)).Select(item => new AreaGridItem(item.Entity, item.Slot, item.Width, item.Height, ItemName(session, item.Entity, catalog))).ToArray();
+        var unplaced = heroGrid.Unplaced.Where(entity => !IsOff(session, runtimeMap, entity)).Select(entity => ItemName(session, entity, catalog)).ToArray();
         // ARC-UI-029: the four ammunition counts follow the gold (IW9: the stack each type's critter field names, the first here).
         var heroAmmo = session.QueryHeroAmmo();
         var ammo = Enumerable.Range(0, SessionAmmoRecord.AmmoTypes).Select(type => heroAmmo.FirstOrDefault(stack => stack.AmmoType == type).Units).ToArray();
@@ -523,15 +536,16 @@ public sealed class AreaInventoryHost
         var loot = list.Select(item => new AreaInventoryLine(item.Entity, (Rowless(item.Entity) is { } label
                 ? Line(KindName(item.Facts.Kind, catalog) + label, item.Facts.Kind.Type, null) : Line(Name(item.Entity, catalog), item.Facts.Kind.Type, item.Facts.Weight))
             + (Stack(item.Facts) ? $" ×{item.Facts.Quantity}" : string.Empty) + (pile is null && item.Facts.Worn ? " (worn)" : string.Empty))
-            { StackKind = Stack(item.Facts) ? item.Facts.Kind : null, Units = Stack(item.Facts) ? item.Facts.Quantity ?? 0 : 0, StackAmmoType = Stack(item.Facts) ? item.Facts.AmmoType : null }).ToArray();
+            { StackKind = Stack(item.Facts) ? item.Facts.Kind : null, Units = Stack(item.Facts) ? item.Facts.Quantity ?? 0 : 0, StackAmmoType = Stack(item.Facts) ? item.Facts.AmmoType : null }).Where(line => !IsOff(session, runtimeMap, line.Entity)).ToArray();
         // ARC-UI-052: the loot window's grid shows the holder's items at their locations, its worn ones left out (0x577C6C).
         // A junk pile's item lies in the slot the session gave it in the pile (its facts keep the location it was dropped from). ARC-UI-055:
         // another item takes its size from the session (its inventory art's cells, 0x461780), drawn at most a container grid's size.
         var pileSlots = pile is null ? null : session.QueryJunkPiles().FirstOrDefault(p => p.Entity == holder)?.Items.ToDictionary(entry => entry.Entity, StringComparer.Ordinal);
+        // ARC-SCRIPT-2346 (IV10): a switched-off item keeps its cells in the arrangement and is not drawn.
         var lootGrid = AreaLootArtLayout.Arrange(list.Select(item => (Entry: item, Pile: pileSlots?.GetValueOrDefault(item.Entity)))
             .Select(pair => (pair.Entry, pair.Pile, Cells: pair.Pile is { } placed ? (placed.Width, placed.Height) : LootCells(session.QueryItemCells(pair.Entry.Entity))))
             .Select(row => new AreaLootGridItem(row.Entry.Entity, row.Pile?.Slot ?? row.Entry.Facts.InventoryLocation, row.Cells.Item1, row.Cells.Item2,
-                Rowless(row.Entry.Entity) is not null ? KindName(row.Entry.Facts.Kind, catalog) : Name(row.Entry.Entity, catalog), row.Entry.Facts.Kind)).ToArray());
+                Rowless(row.Entry.Entity) is not null ? KindName(row.Entry.Facts.Kind, catalog) : Name(row.Entry.Entity, catalog), row.Entry.Facts.Kind)).ToArray()).Where(item => !IsOff(session, runtimeMap, item.Entity)).ToArray();
         // ARC-UI-072: the body's worn items by slot (its record over its map data, ARC-WORLD-103: the session's lists show it).
         var bodyDoll = pile is not null || current?.Holders.FirstOrDefault(h => h.Entity == holder) is not { } wearer || wearer.Kind != SessionHolderKind.Npc
             ? Array.Empty<AreaDollSlot>()
