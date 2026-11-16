@@ -28,6 +28,7 @@ public partial class TerrainViewerApp
                     _textFontContent.NumberArtReady ? new AreaArtFontFace(_textFontContent.Art[AreaTextFontLayout.NumberArt].Frames) : null)
                 {
                     Roller = _textFontContent.RollerArtReady ? new AreaArtFontFace(_textFontContent.Art[AreaTextFontLayout.RollerArt].Frames) : null,
+                    Bar = _textFontContent.BarArtReady ? new AreaArtFontFace(_textFontContent.Art[AreaTextFontLayout.BarArt].Frames) : null,
                 };
             if (_textFonts is { } made) GD.Print($"ARC-DEV-156 text fonts line heights title={made.TitleLineHeight} text={made.TextLineHeight}");
         }

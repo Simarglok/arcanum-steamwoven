@@ -289,7 +289,7 @@ its release (3000 and 3001) toggles bar mode 8, which replaces the spells or ski
 message window; mode 8 draws `MagickWeapon_Rot` (564) with an icon button per shown slot at slot i's place (353, 402, 451, 501, 550;
 y 542; icon 0x4B1570); entering a slot writes its spell's name in mode 8's text area; the release over it activates the slot (point
 4); a right press starts the hotkey drag (IP9); M or the Spells or Skills button replaces mode 8 with their mode. The bar's counters
-(the charges, IP4) are #2311. The cast stage's hotkey-bar part checks the strip's button and mode 8 (`RunWeaponPaneStripSmokeAsync`). Without the bars the viewer keeps the diagnostic spell pane's header button and text pane below:
+(the charges, IP4) are ARC-UI-2311, drawn in the bar font by ARC-UI-2368. The cast stage's hotkey-bar part checks the strip's button and mode 8 (`RunWeaponPaneStripSmokeAsync`). Without the bars the viewer keeps the diagnostic spell pane's header button and text pane below:
 
 1. **The items.** Since ARC-UI-016 the viewer's cast host knows the hero's items (its item lookup: a kit item's prototype fields
    from the hero load, a taken item's from its object row, listed or worn; made items are not covered yet), so an item can be the
