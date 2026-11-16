@@ -16,7 +16,7 @@ namespace Arcanum.TerrainViewer.Tests;
 [TestClass]
 public sealed class AreaScriptTeleportCallTests
 {
-    private const int HeroTeleport = 920, HeroFade = 921, NpcTeleport = 922, Both = 923;
+    private const int HeroTeleport = 920, HeroFade = 921, NpcTeleport = 922, Both = 923, HeroTeleportThenDialog = 924, DialogThenHeroTeleport = 925;
 
     private static byte[] Program(params (int Action, (byte Kind, int Value)[] Operands)[] lines)
     {
@@ -55,6 +55,9 @@ public sealed class AreaScriptTeleportCallTests
             File.WriteAllBytes(Path.Combine(root.FullName, "scr", "00921fade.scr"), Program((ScrCatalogue.Action.FadeAndTeleport, [(Number, 2), (Number, 0), (Number, 0), (Triggerer, 0), (Number, 4999 + snapshot.RuntimeMap), (Number, 31), (Number, 41)]), (ScrCatalogue.Action.ReturnRunDefault, [])));
             File.WriteAllBytes(Path.Combine(root.FullName, "scr", "00922npc.scr"), Program((ScrCatalogue.Action.Teleport, [(Attachee, 0), (Number, 4999 + snapshot.RuntimeMap), (Number, 32), (Number, 42)]), (ScrCatalogue.Action.ReturnRunDefault, [])));
             File.WriteAllBytes(Path.Combine(root.FullName, "scr", "00923both.scr"), Program((ScrCatalogue.Action.Teleport, [(Attachee, 0), (Number, 4999 + snapshot.RuntimeMap), (Number, 32), (Number, 42)]), (ScrCatalogue.Action.Teleport, [(Triggerer, 0), (Number, 4999 + snapshot.RuntimeMap), (Number, 30), (Number, 40)]), (ScrCatalogue.Action.ReturnRunDefault, [])));
+            // 924: the hero's teleport, then the dialog action (the action ends the run, 0x567460); 925: the dialog action first, so the teleport after it never runs.
+            File.WriteAllBytes(Path.Combine(root.FullName, "scr", "00924talk.scr"), Program((ScrCatalogue.Action.Teleport, [(Triggerer, 0), (Number, 4999 + snapshot.RuntimeMap), (Number, 33), (Number, 43)]), (ScrCatalogue.Action.Dialog, [(Number, 1)])));
+            File.WriteAllBytes(Path.Combine(root.FullName, "scr", "00925late.scr"), Program((ScrCatalogue.Action.Dialog, [(Number, 1)]), (ScrCatalogue.Action.Teleport, [(Triggerer, 0), (Number, 4999 + snapshot.RuntimeMap), (Number, 34), (Number, 44)])));
             using var content = AreaContentRoot.OpenScripts(Path.Combine(root.FullName, "modules", "Syn.dat")).Content!;
             using var session = ConversationSessionFixture.CreateWithHero(snapshot.RuntimeMap);
             var host = new AreaConversationHost(snapshot, content, session);
@@ -76,6 +79,30 @@ public sealed class AreaScriptTeleportCallTests
             var map = 4999 + snapshot.RuntimeMap;
             CollectionAssert.AreEqual(new[] { $"check {map} 30,40", $"request {map} 30,40 fade=-", $"check {map} 31,41", $"request {map} 31,41 fade=yes" }, log, "asked before the run applies, recorded after it");
             Assert.AreEqual(1, host.Scripts.LastTeleportRequests.Count);
+        });
+    }
+
+    [TestMethod]
+    public void A_run_that_teleports_the_hero_and_then_starts_a_conversation_applies_and_records_the_teleport_but_one_after_the_dialog_action_never_runs()
+    {
+        With((host, session, snapshot, content, pc) =>
+        {
+            var log = new List<string>();
+            host.Scripts.HeroTeleportRefusal = t => null;
+            host.Scripts.RequestHeroTeleport = t => log.Add($"request {t.X},{t.Y}");
+            ScrRunResult Run(int script) => ScrDispatcher.RunCall(new(script, 0, host.Scripts.Local(pc), host.Scripts.Local(pc)), host.Scripts,
+                new() { Rules = session.Rules.Scripts, Admission = host.Scripts.CallAdmissionFor(host.Scripts.Local(pc)) });
+            var run = Run(HeroTeleportThenDialog);
+            Assert.IsNotNull(run.Effects.Dialog, "the dialog action ends the run with the conversation requested");
+            Assert.AreEqual(1, run.Effects.Teleports.Count);
+            Assert.IsTrue(host.Scripts.Apply(run.Effects), "the conversation no longer refuses the hero's teleport (ledger TT20)");
+            CollectionAssert.AreEqual(new[] { "request 33,43" }, log);
+            log.Clear();
+            var late = Run(DialogThenHeroTeleport);
+            Assert.IsNotNull(late.Effects.Dialog);
+            Assert.AreEqual(0, late.Effects.Teleports.Count, "a teleport written after the dialog action is never reached");
+            Assert.IsTrue(host.Scripts.Apply(late.Effects));
+            Assert.AreEqual(0, log.Count);
         });
     }
 
