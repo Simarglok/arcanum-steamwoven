@@ -844,6 +844,10 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     private int? WieldedPrototype(string id) =>
         _scene.Combat.Worn(_session, id)?.FirstOrDefault(item => item.Slot == EquipmentSlot.Weapon && item.Entity is not null) is { Entity: not null } weapon ? weapon.Fields.Object.Prototype : null;
 
+    /// <summary>ARC-SCRIPT-2342 (AR2): what the NPC wears on its body-armour slot now, as get armor reads it (<see cref="AreaScriptWorld.NpcBodyArmor"/>): its use art, or none when nothing is worn there; null when the combat host cannot say.</summary>
+    public AreaScriptWornArmor? WornBodyArmor(string id) =>
+        _scene.Combat.Worn(_session, id) is { } worn ? new(worn.Where(item => item.Slot == EquipmentSlot.Armor && item.Entity is not null).Select(item => item.Fields.Item?.UseArtFragment).FirstOrDefault()) : null;
+
     /// <summary>ARC-RENDER-1794: what the attack end reads of an attack result: the damage step the victim took (null when the hit had none or the damage fell on the attacker) and the packet's critical flag; null when the attack
     /// is no hit that reached its victim (<see cref="HitReached"/>).</summary>
     public static (AttackDamage? Damage, bool Critical)? AttackEndOf(SessionAttackResult? result) =>
