@@ -1,3 +1,4 @@
+using Arcanum.Data.Characters;
 using System.Buffers.Binary;
 using Arcanum.Data.Scripts;
 using Arcanum.Scripting.Dialog;
@@ -16,7 +17,7 @@ public sealed class ItemWorldScriptTests
 {
     private const byte Triggerer = 0, Attachee = 1, LocalVariable = 2, Number = 3, Looped = 10, LocalObject = 11, EveryContainer = 17, AnyContainer = 18, EveryFollower = 2, AnyFollower = 3;
     private const int Every = 810, Any = 811, Twice = 812, EveryFollowerScript = 813, AnyFollowerScript = 814, ToggleSelf = 815, ToggleSelfTwice = 816, ToggleHero = 817, Quest = 820, Typed = 821, Assigned = 822, DeadGated = 823, GeneratorGated = 824, GeneratorSlot = 7, CaseName = 1205, NewArt = 4, BaselineArt = 100, QuestNumber = 1005, ContainerType = 2,
-        SetQuest = 830, CompleteQuest = 831, GiveSmall = 832, GiveBig = 833, GiveTwice = 834, SetThenRead = 835, SetOnItem = 836, SetInvalid = 837, CompleteBig = 838, SetThenGive = 839;
+        SetQuest = 830, CompleteQuest = 831, GiveSmall = 832, GiveBig = 833, GiveTwice = 834, SetThenRead = 835, SetOnItem = 836, SetInvalid = 837, CompleteBig = 838, SetThenGive = 839, SetCallRead = 840, GiveThenXp = 841, XpThenGive = 842, XpEffect = 60;
     private static readonly SessionInsertCheck Accept = _ => SessionInsertVerdict.Accepted;
 
     private sealed record Clause(int Type, (byte Kind, int Value)[] Operands);
@@ -84,6 +85,20 @@ public sealed class ItemWorldScriptTests
         If(C(ScrCatalogue.Condition.PcQuestState, (Triggerer, 0), N(quest), N(state)), C(ScrCatalogue.Action.ChangeArtNumber, (Looped, 0), N(NewArt))),
         Do(C(ScrCatalogue.Action.LoopEnd)), Do(C(ScrCatalogue.Action.ReturnRunDefault)));
 
+    // ARC-SCRIPT-2410 (IV19): the write is a call-ex callee's (line 5 of the same script), the read is the caller's after it: the callee's write is applied as the run goes.
+    private static ScrProgram SetCallAndRead(int quest, int state) => Program(Do(C(ScrCatalogue.Action.CallScriptEx, (Attachee, 0), N(SessionScriptPoint.InsertItem), N(5), (Triggerer, 0))),
+        Do(C(ScrCatalogue.Action.LoopFor, (EveryContainer, 0))),
+        If(C(ScrCatalogue.Condition.PcQuestState, (Triggerer, 0), N(quest), N(state)), C(ScrCatalogue.Action.ChangeArtNumber, (Looped, 0), N(NewArt))),
+        Do(C(ScrCatalogue.Action.LoopEnd)), Do(C(ScrCatalogue.Action.ReturnRunDefault)),
+        Do(C(ScrCatalogue.Action.SetPcQuestState, (Triggerer, 0), N(quest), N(state))), Do(C(ScrCatalogue.Action.ReturnRunDefault)));
+
+    // ARC-SCRIPT-2410 (IV20): an award and an experience gain effect of the hero's list in one run, in either order (the award reads the list as the actions before it left it).
+    private static ScrProgram GiveThenAddXp() => Program(Do(C(ScrCatalogue.Action.GiveQuestExperience, (Triggerer, 0), N(1))),
+        Do(C(ScrCatalogue.Action.AddEffect, (Triggerer, 0), N(XpEffect), N(5))), Do(C(ScrCatalogue.Action.ReturnRunDefault)));
+
+    private static ScrProgram AddXpThenGive() => Program(Do(C(ScrCatalogue.Action.AddEffect, (Triggerer, 0), N(XpEffect), N(5))),
+        Do(C(ScrCatalogue.Action.GiveQuestExperience, (Triggerer, 0), N(1))), Do(C(ScrCatalogue.Action.ReturnRunDefault)));
+
     private static ScrProgram SetAndGive(int quest, int state, int level) => Program(Do(C(ScrCatalogue.Action.SetPcQuestState, (Triggerer, 0), N(quest), N(state))),
         Do(C(ScrCatalogue.Action.GiveQuestExperience, (Triggerer, 0), N(level))), Do(C(ScrCatalogue.Action.ReturnRunDefault)));
 
@@ -103,7 +118,7 @@ public sealed class ItemWorldScriptTests
             [DeadGated] = Gated(C(ScrCatalogue.Condition.IsDead, (Looped, 0))), [GeneratorGated] = Gated(C(ScrCatalogue.Condition.MonsterGenDisabled, N(GeneratorSlot))),
             [EveryFollowerScript] = Loop(EveryFollower, Looped), [AnyFollowerScript] = Loop(EveryFollower, AnyFollower),
             [SetQuest] = SetQuestOf(Triggerer, 1004, 2), [CompleteQuest] = SetQuestOf(Triggerer, 1004, 4), [GiveSmall] = Give(1), [GiveBig] = Give(5), [GiveTwice] = Give(1, 2),
-            [SetThenRead] = SetAndRead(1004, 2), [SetOnItem] = SetQuestOf(Attachee, 1004, 4), [SetInvalid] = SetQuestOf(Triggerer, 5, 2), [CompleteBig] = SetQuestOf(Triggerer, 1003, 4), [SetThenGive] = SetAndGive(1004, 4, 1),
+            [SetThenRead] = SetAndRead(1004, 2), [SetOnItem] = SetQuestOf(Attachee, 1004, 4), [SetInvalid] = SetQuestOf(Triggerer, 5, 2), [CompleteBig] = SetQuestOf(Triggerer, 1003, 4), [SetThenGive] = SetAndGive(1004, 4, 1), [SetCallRead] = SetCallAndRead(1004, 2), [GiveThenXp] = GiveThenAddXp(), [XpThenGive] = AddXpThenGive(),
             [ToggleSelf] = Toggle(Attachee), [ToggleSelfTwice] = Toggle(Attachee, 2), [ToggleHero] = Toggle(Triggerer) };
         public Dictionary<string, int> Names { get; set; } = new() { ["case"] = CaseName, ["other"] = 3000 };
         public string[]? Vicinity { get; set; } = ["case", "other"];
@@ -132,7 +147,7 @@ public sealed class ItemWorldScriptTests
         public bool IsJilted(ScrObjectRef critter) => false;
         public bool IsPc(ScrObjectRef critter) => critter.Code == SessionEventKinds.PlayerEntity;
         public SessionPrintedLine PrintedLine(int script, int line) => new(SessionPrintedLineStatus.Shown, $"line {line}", "test");
-        public SessionEffectDefinition? EffectDefinition(int number) => null;
+        public SessionEffectDefinition? EffectDefinition(int number) => number == XpEffect ? XpGainEffect : null;
 
         public IReadOnlyList<ScrObjectRef>? ContainersInVicinity(ScrObjectRef item)
         {
@@ -168,9 +183,9 @@ public sealed class ItemWorldScriptTests
     }
 
     // withExperience: the session holds experience tables (ExperienceStateTests.Rules: level 2 at 1010 points, quest experience level 1 gives 700 and level 5 1300, quest 1003 is level 5, every other quest level 1).
-    private static GameSessionOwner Owner(bool withExperience = false)
+    private static GameSessionOwner Owner(bool withExperience = false, SessionExperienceRules? rules = null, int experience = 0)
     {
-        var created = GameSessionOwner.Create(Descriptor() with { Hero = HalfElf([8, 8, 8, 8, 14, 8, 8, 8, 0, 0]), Experience = withExperience ? ExperienceStateTests.Rules() : null });
+        var created = GameSessionOwner.Create(Descriptor() with { Hero = HalfElf([8, 8, 8, 8, 14, 8, 8, 8, 0, 0]) with { Experience = experience }, Experience = rules ?? (withExperience ? ExperienceStateTests.Rules() : null) });
         Assert.AreEqual(GameSessionFailure.None, created.Failure);
         var owner = created.Owner!;
         var seed = InventoryStateTests.Seed();
@@ -285,6 +300,9 @@ public sealed class ItemWorldScriptTests
         Assert.AreEqual((NewArt, NewArt), ((int?)Art(blocked, "case"), (int?)Art(blocked, "other")), "a blocked slot passes it for every looped container");
     }
 
+    // The experience gain special (9) with +50: an award of 100 gives 150 under it.
+    private static readonly SessionEffectDefinition XpGainEffect = new(XpEffect, [new(EffectAttributeKind.Special, 9, EffectChangeOperator.Add, 50)]);
+
     private static int Points(GameSessionOwner owner) => owner.QueryHeroExperience()!.Experience;
 
     // ARC-SCRIPT-2374 (IV18, IV19): set PC quest state of the hero in a pickup's insert-item run changes the quest log in the move's own revision, survives a save, and a completion pays the quest's experience.
@@ -304,16 +322,19 @@ public sealed class ItemWorldScriptTests
         Assert.AreEqual((SessionQuestState.Completed, SessionQuestState.Completed, 700), (done.QueryQuest(1004)!.Value.Effective, done.QueryGlobalQuest(1004), Points(done)), "a completion completes it for everyone and pays the quest's experience");
     }
 
+    // ARC-SCRIPT-2410 (IV19): the original applies a quest write as the run goes, so a read after it in the same run (a call-ex callee's write included) answers the written state, not the one the move began with.
     [TestMethod]
-    public void A_quest_read_after_a_quest_write_of_the_same_run_refuses_the_move()
+    public void A_quest_read_after_a_quest_write_of_the_same_run_answers_the_written_state()
     {
-        // The run's reads come before its writes are applied, so a read after a write would answer what the original does not: the move is refused, nothing applied.
-        using var owner = Owner();
-        var before = owner.Version;
-        var refused = owner.PickUpItem(before, "oid:tome", Accept, new Host(SetThenRead) { QuestStateOfHero = 0 });
-        Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.ItemScriptUnsupported, before), (refused.Disposition, refused.Failure, owner.Version));
-        Assert.IsNull(owner.QueryQuest(1004));
-        Assert.IsNull(Art(owner, "case"));
+        foreach (var script in new[] { SetThenRead, SetCallRead })
+        {
+            using var owner = Owner();
+            var host = new Host(script) { QuestStateOfHero = 0 };
+            Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, "oid:tome", Accept, host).Disposition, $"script {script}");
+            Assert.AreEqual(SessionQuestState.Accepted, owner.QueryQuest(1004)!.Value.Effective);
+            Assert.AreEqual((NewArt, NewArt), ((int?)Art(owner, "case"), (int?)Art(owner, "other")), $"script {script}: the read saw the write, so the art changed");
+            Assert.AreEqual(0, host.QuestReads.Count, "the planned state answers, the host is not asked");
+        }
     }
 
     [TestMethod]
@@ -347,10 +368,54 @@ public sealed class ItemWorldScriptTests
             using var owner = Owner(withExperience: true);
             var before = owner.Version;
             var refused = owner.PickUpItem(before, "oid:tome", Accept, new Host(script));
-            Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.ItemScriptUnsupported, before, 0), (refused.Disposition, refused.Failure, owner.Version, Points(owner)), $"script {script}: a level-up, a second award or the quest's own award plus a given one refuses the move");
+            Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.ItemScriptUnsupported, before, 0), (refused.Disposition, refused.Failure, owner.Version, Points(owner)), $"script {script}: a level-up, or a second award that raises the level the first left (700 + 700 passes 1010), refuses the move");
             Assert.IsNull(owner.QueryQuest(1003));
             Assert.IsNull(owner.QueryQuest(1004));
         }
+    }
+
+    // ARC-SCRIPT-2410 (IV20): a second award is planned over the hero as the first left it, level-free awards apply in order; one that raises the level the first award left refuses the move, though each alone would not.
+    [TestMethod]
+    public void A_second_award_in_one_move_applies_in_order_and_one_that_raises_the_level_refuses_the_move()
+    {
+        var rules = ExperienceStateTests.SmallQuestRules();
+        foreach (var script in new[] { GiveTwice, SetThenGive })
+        {
+            using var owner = Owner(rules: rules);
+            var before = owner.Version.Revision;
+            Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, "oid:tome", Accept, new Host(script)).Disposition, $"script {script}");
+            Assert.AreEqual((200, 1, before + 1), (Points(owner), owner.QueryHero()!.Level, owner.Version.Revision), $"script {script}: two awards of 100, one revision");
+        }
+        using var done = Owner(rules: rules);
+        Assert.AreEqual(GameSessionDisposition.Changed, done.PickUpItem(done.Version, "oid:tome", Accept, new Host(SetThenGive)).Disposition);
+        Assert.AreEqual(SessionQuestState.Completed, done.QueryQuest(1004)!.Value.Effective);
+
+        // At 900 points the first award (to 1000) is level-free and the second (to 1100) raises the level: refused, nothing applied.
+        using var edge = Owner(rules: rules, experience: 900);
+        var version = edge.Version;
+        var refused = edge.PickUpItem(version, "oid:tome", Accept, new Host(GiveTwice));
+        Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.ItemScriptUnsupported, version, 900), (refused.Disposition, refused.Failure, edge.Version, Points(edge)));
+        using var single = Owner(rules: rules, experience: 900);
+        Assert.AreEqual(GameSessionDisposition.Changed, single.PickUpItem(single.Version, "oid:tome", Accept, new Host(GiveSmall)).Disposition);
+        Assert.AreEqual(1000, Points(single), "one award alone stays under the level");
+    }
+
+    // ARC-SCRIPT-2410 (IV20): the award reads the hero's experience gain effect as the actions before it left the list: an effect change that follows the award in the run leaves it alone, one that precedes it in the same run is refused.
+    [TestMethod]
+    public void An_award_reads_the_experience_gain_effect_in_action_order()
+    {
+        var rules = ExperienceStateTests.SmallQuestRules();
+        using var after = Owner(rules: rules);
+        Assert.AreEqual(GameSessionDisposition.Changed, after.PickUpItem(after.Version, "oid:tome", Accept, new Host(GiveThenXp)).Disposition);
+        Assert.AreEqual(100, Points(after), "the award came before the effect: no gain bonus");
+        Assert.IsTrue(after.QueryHeroEffects()!.Effects.Any(e => e.Number == XpEffect));
+
+        using var before = Owner(rules: rules);
+        var version = before.Version;
+        var refused = before.PickUpItem(version, "oid:tome", Accept, new Host(XpThenGive));
+        Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.ItemScriptUnsupported, version, 0), (refused.Disposition, refused.Failure, before.Version, Points(before)), "the effect comes before the award in the same run: the run's collected change is not known to the award");
+        Assert.IsFalse(before.QueryHeroEffects()!.Effects.Any(e => e.Number == XpEffect));
+
     }
 
     [TestMethod]

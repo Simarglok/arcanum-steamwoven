@@ -989,9 +989,9 @@ public sealed partial class SessionSpellCasterTraitIndexTests
         return HalfElf(stats ?? [8, 10, 8, 8, 8, 8, 8, 8, 0, 0]) with { Advancement = SessionHeroAdvancement.None with { BasicSkills = [.. basic], Colleges = [.. colleges], TechDegrees = [.. degrees] } };
     }
 
-    private static (GameSessionOwner Owner, SessionSpellCaster Caster) HeroSession(SessionHeroDefinition hero, bool experience = false, IReadOnlyDictionary<int, SessionSpellRecord>? records = null)
+    private static (GameSessionOwner Owner, SessionSpellCaster Caster) HeroSession(SessionHeroDefinition hero, bool experience = false, IReadOnlyDictionary<int, SessionSpellRecord>? records = null, SessionExperienceRules? rules = null)
     {
-        var made = GameSessionOwner.Create(Descriptor() with { Hero = hero, Experience = experience ? ExperienceStateTests.Rules() : null });
+        var made = GameSessionOwner.Create(Descriptor() with { Hero = hero, Experience = rules ?? (experience ? ExperienceStateTests.Rules() : null) });
         Assert.AreEqual(GameSessionFailure.None, made.Failure);
         var owner = made.Owner!;
         var spells = records ?? Records;
@@ -1456,7 +1456,7 @@ public sealed partial class SessionSpellCasterTraitIndexTests
     }
     // ARC-MAGIC-1644 (ledger RM3c, IE7, WE6, TI7; exe read 0x465530, 0x441980): an NPC's rewield runs the wield scripts of its worn items, wield off (25) and then wield on (24), the item as the attachee and the NPC as the
     // triggerer, with the condition "items are being rewielded" true. Script numbers, programs, effects and values are invented (the installed shape of the technological items, TI7).
-    private const int NpcWieldOn = 710, NpcWieldOff = 711, Gate = 712, Charm = 50;
+    private const int NpcWieldOn = 710, NpcWieldOff = 711, Gate = 712, Charm = 50, QuestOnRewield = 717, XpOnRewieldOff = 718, XpOnRewieldOn = 719, XpEffect = 61;
     private static readonly SessionEffectDefinition CharmEffect = new(Charm, [new(EffectAttributeKind.Stat, 0, EffectChangeOperator.Add, 1)]);
 
     private sealed class NpcScriptHost : ISessionItemScriptHost
@@ -1476,9 +1476,16 @@ public sealed partial class SessionSpellCasterTraitIndexTests
             // ARC-MAGIC-1830: plays eye candy 7 on the triggerer and then prints a line (a host that cannot read the line for an NPC refuses the run).
             [716] = WieldEventScriptTests.Program(WieldEventScriptTests.Do(WieldEventScriptTests.C(ScrCatalogue.Action.PlayScriptEyeCandy, WieldEventScriptTests.N(7), (WieldEventScriptTests.Triggerer, 0))),
                 WieldEventScriptTests.Do(WieldEventScriptTests.C(ScrCatalogue.Action.PrintLine, WieldEventScriptTests.N(1), WieldEventScriptTests.N(6)))),
+            // ARC-SCRIPT-2410: while rewielding only, the hero completes quest 1004 and is given the quest experience of level 1 (the rewield plans its runs, then the cast's store lands, then the commit gives the planned award).
+            [QuestOnRewield] = WieldEventScriptTests.Program(
+                WieldEventScriptTests.If(WieldEventScriptTests.C(ScrCatalogue.Condition.ItemsBeingRewielded), WieldEventScriptTests.C(ScrCatalogue.Action.SetPcQuestState, (WieldEventScriptTests.Triggerer, 0), WieldEventScriptTests.N(1004), WieldEventScriptTests.N(4))),
+                WieldEventScriptTests.If(WieldEventScriptTests.C(ScrCatalogue.Condition.ItemsBeingRewielded), WieldEventScriptTests.C(ScrCatalogue.Action.GiveQuestExperience, (WieldEventScriptTests.Triggerer, 0), WieldEventScriptTests.N(1)))),
+            // ARC-SCRIPT-2410: wield off adds an experience gain effect (+50), wield on (rewielding) gives the quest experience of level 1: the award of a later run reads the list the earlier run left.
+            [XpOnRewieldOff] = WieldEventScriptTests.Program(WieldEventScriptTests.Do(WieldEventScriptTests.C(ScrCatalogue.Action.AddEffect, (WieldEventScriptTests.Triggerer, 0), WieldEventScriptTests.N(XpEffect), WieldEventScriptTests.N(5)))),
+            [XpOnRewieldOn] = WieldEventScriptTests.Program(WieldEventScriptTests.If(WieldEventScriptTests.C(ScrCatalogue.Condition.ItemsBeingRewielded), WieldEventScriptTests.C(ScrCatalogue.Action.GiveQuestExperience, (WieldEventScriptTests.Triggerer, 0), WieldEventScriptTests.N(1)))),
             [713] = WieldEventScriptTests.Program(WieldEventScriptTests.Do(WieldEventScriptTests.C(ScrCatalogue.Action.AddEffect, (WieldEventScriptTests.Attachee, 0), WieldEventScriptTests.N(Charm), WieldEventScriptTests.N(5)))),
         };
-        public Dictionary<int, SessionEffectDefinition> Effects { get; } = new() { [Charm] = CharmEffect };
+        public Dictionary<int, SessionEffectDefinition> Effects { get; } = new() { [Charm] = CharmEffect, [XpEffect] = new SessionEffectDefinition(XpEffect, [new(EffectAttributeKind.Special, 9, EffectChangeOperator.Add, 50)]) };
 
         public ScrSlot? Slot(ScrObjectRef attachee, int point) => Slots.TryGetValue((attachee.Code, point), out var script) ? new ScrSlot(script, 0, 0) : null;
         public ScrScriptLookup Script(int number) => Programs.TryGetValue(number, out var program) ? ScrScriptLookup.Of(program) : ScrScriptLookup.Missing;
@@ -1672,9 +1679,9 @@ public sealed partial class SessionSpellCasterTraitIndexTests
 
     // ARC-MAGIC-1744 (ledger RM3c, IE7): the hero's rewield after a store of magick or tech points runs its worn items' wield scripts as an NPC's does: wield off (25) then wield on (24), the hero as the triggerer, the condition
     // "items are being rewielded" true, the reads over the new points. Spells 653 (magick +7) and 654 (tech -3) are the hero's point spells.
-    private static (GameSessionOwner Owner, SessionSpellCaster Caster, NpcScriptHost Host) WornHero(int on = NpcWieldOn, int off = NpcWieldOff, bool equip = true)
+    private static (GameSessionOwner Owner, SessionSpellCaster Caster, NpcScriptHost Host) WornHero(int on = NpcWieldOn, int off = NpcWieldOff, bool equip = true, SessionExperienceRules? rules = null)
     {
-        var (owner, caster) = HeroSession(SkilledHero([8, 10, 8, 8, 8, 8, 8, 8, 5, 2]), records: HeroRecords());
+        var (owner, caster) = HeroSession(SkilledHero([8, 10, 8, 8, 8, 8, 8, 8, 5, 2]), records: HeroRecords(), rules: rules);
         var host = new NpcScriptHost();
         host.Slots[("kit:1", SessionScriptPoint.WieldOn)] = on;
         host.Slots[("kit:1", SessionScriptPoint.WieldOff)] = off;
@@ -1714,6 +1721,35 @@ public sealed partial class SessionSpellCasterTraitIndexTests
         Assert.AreEqual(HeroExpectedCharms(owner), HeroCharms(owner));
         Assert.AreNotEqual(first, HeroCharms(owner), "the tech points moved it again");
         Assert.IsFalse(caster.Log.Any(e => e.Kind == SpellCastEventKind.ComponentNotReady));
+    }
+
+    // ARC-SCRIPT-2410 (IV20): the hero's rewield plans its runs (a quest completion and a quest experience award), the cast's store of the magick points lands, and the commit gives the planned award to the hero as it is then: the store survives, and the award is
+    // the plan's (100 for the completion, 100 for the given one, level-free).
+    [TestMethod]
+    public void A_heros_rewield_that_completes_a_quest_and_gives_experience_keeps_the_magick_points_the_cast_stored()
+    {
+        var (owner, caster, _) = WornHero(QuestOnRewield, 0, rules: ExperienceStateTests.SmallQuestRules());
+        using var o = owner;
+        Assert.AreEqual((0, 5), (owner.QueryHeroExperience()!.Experience, owner.QueryHeroStoredStat(22)), "the equip's wield on does nothing while the items are not being rewielded");
+        Assert.AreEqual(SpellComponentOutcome.None, CastOnHero(caster, HeroPointsPlus));
+        Assert.IsFalse(NotReady(caster));
+        Assert.AreEqual(12, owner.QueryHeroStoredStat(22), "the store between the plan and the commit survives the award");
+        Assert.AreEqual((200, 1), (owner.QueryHeroExperience()!.Experience, owner.QueryHero()!.Level), "100 for the completion and 100 for the given experience, in order");
+        Assert.AreEqual(SessionQuestState.Completed, owner.QueryQuest(1004)!.Value.Effective);
+    }
+
+    // ARC-SCRIPT-2410 (IV20): an award of a later run reads the experience gain effect an earlier run of the rewield left (wield off adds +50, wield on gives 100): 150.
+    [TestMethod]
+    public void A_heros_rewield_award_reads_the_experience_gain_effect_an_earlier_run_added()
+    {
+        var (owner, caster, _) = WornHero(XpOnRewieldOn, XpOnRewieldOff, rules: ExperienceStateTests.SmallQuestRules());
+        using var o = owner;
+        Assert.AreEqual(0, owner.QueryHeroExperience()!.Experience);
+        Assert.AreEqual(SpellComponentOutcome.None, CastOnHero(caster, HeroPointsPlus));
+        Assert.IsFalse(NotReady(caster));
+        Assert.AreEqual(12, owner.QueryHeroStoredStat(22));
+        Assert.AreEqual(150, owner.QueryHeroExperience()!.Experience, "the award read the list the wield off run left: 100 + 50");
+        Assert.IsTrue(owner.QueryHeroEffects()!.Effects.Any(e => e.Number == XpEffect));
     }
 
     [TestMethod]
