@@ -424,7 +424,9 @@ public sealed class AreaTalkQueryTests
                 ScrCatalogue.Action.Damage, ScrCatalogue.Action.DamageUnresistable, ScrCatalogue.Action.HealHitPoints, ScrCatalogue.Action.Attack,
                 ScrCatalogue.Action.CastSpell, ScrCatalogue.Action.CastSpellOn, ScrCatalogue.Action.CastFreeSpell, ScrCatalogue.Action.CastUnresistableSpellBy, ScrCatalogue.Action.CastFreeUnresistableSpell,
                 ScrCatalogue.Action.CastUnresistableSpellOn,
-                ScrCatalogue.Action.GetSocialClass, ScrCatalogue.Action.GetOrigin, ScrCatalogue.Action.GetFaction, ScrCatalogue.Action.GetArmor },
+                ScrCatalogue.Action.GetSocialClass, ScrCatalogue.Action.GetOrigin, ScrCatalogue.Action.GetFaction, ScrCatalogue.Action.GetArmor }
+                // ARC-SCRIPT-2198: plus the ten state actions of Kerghan's dialog script 1105.
+                .Concat(AreaScriptHost.TalkStateActions).ToArray(),
                 AreaScriptHost.TalkAdmission.Actions.Except(AreaScriptHost.Admission.Actions).ToArray());
             // ARC-SCRIPT-1733: plus obj is animal, obj is in combat and the nine critter-state conditions, which the use host answers.
             CollectionAssert.AreEquivalent(ScrAdmissionSet.ObjectQueryConditions.Concat(ScrAdmissionSet.ObjectStateQueryConditions).Concat(ScrAdmissionSet.SpellQueryConditions).Concat(ScrAdmissionSet.CritterQueryConditions).Concat(ScrAdmissionSet.CritterStateConditions).Concat(ScrAdmissionSet.CritterTailConditions).ToArray(),

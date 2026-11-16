@@ -204,17 +204,24 @@ The action is skipped in a network host game; the single-player host is never on
 
 | Script | Movies (movie, track, seconds, flag) | Attached to | Blocked by |
 | --- | --- | --- | --- |
-| 1093 | 4, track 1, 0 s, flag 0 | not attached: called by 1092 (Kanhua's dialog on the Caladon-Panarrii temple map, catalogue 5058) through call script (7), and 1093 calls 1092 back at line 11 | admitted whole by S35; the dialog host leaves call script (7) out, and 1092 itself needs attack (36) |
-| 1105 | 2, 3 (5 s each, flag 2) and 6 (10,800 s = 3 game hours, flag 2) | dialog point (9) of Kerghan, prototype 27387 and its map object on the Void, Kerghan's castle map (catalogue 5072); 107 lines | change script (99); the dialog host also refuses its loop for (18) |
-| 1109 | 4, default track, 0 s, flag 0 | not attached: called by 1108 (Nasrudin's dialog on the main map) through call script (7) | admitted whole by S35; the dialog host leaves call script (7) out |
+| 1093 | 4, track 1, 0 s, flag 0 | not attached: called by 1092 (Kanhua's dialog on the Caladon-Panarrii temple map, catalogue 5058) through call script (7), and 1093 calls 1092 back at line 11 | admitted whole by S35 and, since ARC-SCRIPT-2198, by the dialog sets (call script 7); 1092 itself needs attack (36) |
+| 1105 | 2, 3 (5 s each, flag 2) and 6 (10,800 s = 3 game hours, flag 2) | dialog point (9) of Kerghan, prototype 27387 and its map object on the Void, Kerghan's castle map (catalogue 5072); 107 lines | none since ARC-SCRIPT-2198: the dialog sets admit it whole (see below); its ending lines 88 and 91 run through the dialog host |
+| 1109 | 4, default track, 0 s, flag 0 | not attached: called by 1108 (Nasrudin's dialog on the main map) through call script (7) | admitted whole by S35 and, since ARC-SCRIPT-2198, by the dialog sets (call script 7) |
 | 2862 | 3 and 5, 0 s, flag 0 | use point (1) of a type-14 object on the Vendigroth underground map (catalogue 5032) | end-game slides (132), play script eye candy (120) |
 | 2863 | 2 and 5 | dying point (12) of Kerghan, prototypes 27387 and 27389 | end-game slides (132), play script eye candy (120) |
 | 3061 | 2 and 5 | dying point (12) of Kerghan, prototype 27388 | end-game slides (132) |
 
 Since ARC-RENDER-1171 the dying set admits end-game slides (132) and play script eye candy (120), so Kerghan's two dying scripts (2863 and 3061) run whole through the dying run: both play movies 2 and 5 and
 ask for the end of the game (ARC-RENDER-1879: `AreaEndingScriptsRealDataTests`, and the smoke stage `slides`, which plays the two installed movies through the real decoder and then the whole end-game show and the
-reset to the menu). `ScriptFadeRealDataTests` still pins that the generic set S35 refuses 132; the host sets admit it. Still open: change script (99, E5-a) for Kerghan's dialog script 1105 and
-call script (7) in the dialog host (its callee's dialog gates, E6); 2862 runs from a use point and was not walked through a host. An opt-in real-data test (`ScriptFadeRealDataTests`) pins the movie lines and the first refusals above.
+reset to the menu). `ScriptFadeRealDataTests` still pins that the generic set S35 refuses 132; the host sets admit it. 2862 runs from a use point and was not walked through a host.
+
+**Kerghan's dialog script 1105 (ARC-SCRIPT-2198).** While the shown map's use host answers, the dialog sets (`AreaScriptHost.TalkAdmission`, `SkillTalkAdmission`) admit 1105 whole: the loops over the critters in the vicinity (18, 19, 20 with focus kinds 8, 9 and 10), play script eye candy (120),
+change script (99; a slot of another object is stored through the use host as a use run's call-ex slots are, a slot with no loaded element refuses the run whole), critter disband (22) and create item (66; the use host's plan and apply), call script (7) and call-ex (81), and transform (40), which the use host's plan refuses
+whole before anything applies (no critter changes its prototype in place yet; issue #2440). Exe read of the call-script runner (0x44B030): the callee runs through the event runner 0x4449B0 at the **caller's point** (read from the caller's invocation), by script number and never through the attachee's slot, once per (triggerer, attachee)
+pair and with fresh flags and counters of its own header; so at the dialog point the callee meets the same gates as an event (a dead NPC without the callee's death-speech file flag, a surrendered one without its surrender-speech flag run nothing; a mind-controlled one runs 2188), and a dialog action in it stores its flags and counters in the attachee's slot
+of that point. The interpreter's `Call` applies the gates at the dialog point (as `CallEx` did), and the dispatcher no longer refuses a dialog-point run whose set holds call script. Not read: what the dialog callback does if a dialog is open already, and the field 0x118 bit 0x80000 check at the top of 0x4449B0 (none is modelled for
+call script or events). The opt-in test `AreaEndingScriptsRealDataTests` runs 1105 from its ending lines 88 (movie 2) and 91 (movie 3) through the dialog host: each plays its movie (5 s clock jump, flag 2) and asks for the end of the game, which reach the viewer through `TakeFades` and `TakeEndGame` (`SyncScriptFades`). Still open: the battle chain through call script 2719 (its loops need
+more focus kinds and actions, #2440), the transform, and movie 6 and the later lines through a real conversation in the viewer smoke.
 
 ## 8. Open items and limits
 

@@ -87,4 +87,19 @@ public sealed class AreaAiHostObserverStateTests
             if (!seen) Assert.AreEqual(AwarenessReason.Invisible, result.Reason);
         }
     }
+    // ARC-COMBAT-1832 (exe 0x4AB990, 0x4AB460, 0x4AABE0, 0x4A9650): the object flag 0x400000 a script's toggle wrote on the hero or an NPC is what the hostility facts read, over the map data's.
+    [TestMethod]
+    public void A_written_invulnerable_flag_reaches_the_hostility_facts_of_the_hero_and_an_NPC()
+    {
+        var (f, host) = Setup();
+        using var _ = f;
+        Assert.IsFalse(host.Find(Pc)!.Invulnerable);
+        Assert.IsFalse(host.Find(f.A)!.Invulnerable);
+        Write(f, Pc, SessionObjectFlagField.Object, 0x400000);
+        Write(f, f.A, SessionObjectFlagField.Object, 0x400000);
+        Assert.IsTrue(host.Find(Pc)!.Invulnerable);
+        Assert.IsTrue(host.Find(f.A)!.Invulnerable);
+        Assert.AreEqual(GameSessionDisposition.Changed, f.Session.WriteObjectFlag(f.Session.Version, f.A, SessionObjectFlagField.Object, 0x400000, false).Disposition);
+        Assert.IsFalse(host.Find(f.A)!.Invulnerable, "toggled back off");
+    }
 }
