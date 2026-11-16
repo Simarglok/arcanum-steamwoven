@@ -357,6 +357,8 @@ public sealed partial class GameSessionOwner
                 if (_host is not ISessionItemWorldHost world || !SessionValidation.Entity(owner.Code) || world.PlanObjectSlot(write) is not { } edits) return GameSessionFailure.ItemScriptUnsupported;
                 // The plan is the object's own keys, whatever the host plans (the commit writes unchecked keys otherwise).
                 if (edits.Any(edit => edit.Key.Entity != owner.Code)) return GameSessionFailure.ItemScriptUnsupported;
+                // A later write of the same slot replaces the earlier plan whole: its clears are planned against the session's records, which do not see the move's pending edits.
+                _artEdits.RemoveAll(earlier => edits.Any(edit => edit.Key == earlier.Key));
                 _artEdits.AddRange(edits);
                 _objectSlots[(owner, write.Point)] = write.Slot;
             }
