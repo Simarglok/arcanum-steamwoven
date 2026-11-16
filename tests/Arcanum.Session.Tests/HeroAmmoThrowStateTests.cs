@@ -71,7 +71,7 @@ public sealed class HeroAmmoThrowStateTests
     }
 
     [TestMethod]
-    public void A_throw_script_refuses_the_stack_before_any_split()
+    public void A_throw_script_without_a_script_host_refuses_the_stack_before_any_split()
     {
         using var owner = Hero();
         var request = Throw(owner, 5) with { Facts = new(Bullets, false, [SessionScriptPoint.Throw]) };
