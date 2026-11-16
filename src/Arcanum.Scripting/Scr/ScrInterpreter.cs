@@ -409,7 +409,7 @@ internal sealed class ScrInterpreter
             {
                 // SS2: the object operand 0 names, then the quest and the state; the run's attachee is the quest's giver.
                 var quest = Get(a, 1); var state = Get(a, 2);
-                foreach (var obj in Objects(a, 0)) _states.Add(new(ScrStateKind.QuestState, obj, quest, state, _roles.Attachee));
+                foreach (var obj in Objects(a, 0)) AddQuestRequest(new(ScrStateKind.QuestState, obj, quest, state, _roles.Attachee));
                 return (Step.Next, 0);
             }
             case ScrCatalogue.Action.MarkMapLocation:
@@ -1107,7 +1107,7 @@ internal sealed class ScrInterpreter
                 // does with the quest's own level), given to a PC (0x45F110). An absent object asks for nothing.
                 var who = OptionalObject(a, 0);
                 var level = Get(a, 1);
-                if (who is { } pc) _states.Add(new(ScrStateKind.QuestExperience, pc, level));
+                if (who is { } pc) AddQuestRequest(new(ScrStateKind.QuestExperience, pc, level));
                 return (Step.Next, 0);
             }
             case ScrCatalogue.Action.GrantFatePoint:
@@ -1351,6 +1351,13 @@ internal sealed class ScrInterpreter
     {
         var obj = FocusObject((ScrFocusKind)(packed >> 16), 0) ?? throw new MissingObjectStop(_line);
         return _host.IsPc(obj) ? (obj, packed & 0xFFFF) : null;
+    }
+
+    // ARC-SCRIPT-2410: a quest request is collected and, for a host that applies them as the run goes, told to it at once.
+    private void AddQuestRequest(ScrStateRequest request)
+    {
+        _states.Add(request);
+        (_host as IScrQuestWrites)?.QuestRequested(request);
     }
 
     private IScrStoreQueries Stores => _host as IScrStoreQueries
