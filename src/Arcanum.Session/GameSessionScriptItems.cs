@@ -117,9 +117,10 @@ public sealed partial class GameSessionOwner
     /// map lists, and for a move to the hero a gold pile or a key the key ring cannot take. The item's insert check and the room and weight tests are answered when the move applies.
     /// ARC-MAGIC-2252: with <paramref name="itemScripts"/> the plan also makes a dry run of the move (the item scripts and the hero's transfer script it would run, read from the host and applied nowhere):
     /// a run the session could not apply is the plan's refusal, so the calling script is not left half applied by a nested run found only when the move applies. ARC-MAGIC-2266: the dry run asks the caller's real
-    /// <paramref name="insertCheck"/> (the host's, as <see cref="TransferNamedItem"/> will; accepting everything when null), so a move that check would refuse (room, weight, Technophobia), which runs no item script, is
+    /// <paramref name="insertCheck"/> (the host's, as <see cref="TransferNamedItem"/> will; accepting everything when null), so a move that check would refuse, which runs no item script after it, is
     /// not refused for a script it would never run. The dry run reads the session as it is before the calling script's earlier
-    /// effects apply, so a nested run that only fails after them is still found when the move applies (recorded limit).
+    /// effects apply, so a nested run that only fails after them is still found when the move applies; likewise a verdict the check gives before the earlier effects (room or weight they free) can differ when the move applies,
+    /// and a refusal then passes the plan without its nested runs being tried (recorded limits).
     /// </summary>
     public SessionNamedItemPlan QueryNamedItemTransfer(string? from, string? to, int name, ISessionItemScriptHost? itemScripts = null, SessionInsertCheck? insertCheck = null)
     {

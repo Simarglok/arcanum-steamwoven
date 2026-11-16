@@ -521,6 +521,16 @@ public sealed class WieldEventScriptTests
         Assert.AreEqual(GameSessionFailure.ItemScriptUnsupported, owner.QueryNamedItemTransfer("corpse", null, 2807, host, Accept).Failure);
         Assert.AreEqual(GameSessionFailure.ItemScriptUnsupported, owner.QueryNamedItemTransfer("corpse", null, 2807, host).Failure);
         Assert.AreEqual(revision, owner.Version.Revision, "the plan changed nothing");
+
+        // The hero's give (the check is its only gate): the remove-item run the session cannot apply is never reached when the check refuses.
+        var (worn, wornHost) = WornScriptedRing();
+        using var __ = worn;
+        wornHost.Slots[("kit:3", SessionScriptPoint.RemoveItem)] = Unsupported;
+        var ring = worn.Version.Revision;
+        Assert.IsNull(worn.QueryNamedItemTransfer(null, "virgil", 2851, wornHost, noRoom).Refusal);
+        var given = worn.TransferNamedItem(worn.Version, null, "virgil", 2851, noRoom, wornHost);
+        Assert.AreEqual((GameSessionFailure.InsertRefused, ring), (given.Failure, worn.Version.Revision));
+        Assert.AreEqual(GameSessionFailure.ItemScriptUnsupported, worn.QueryNamedItemTransfer(null, "virgil", 2851, wornHost, Accept).Failure);
     }
 
     [TestMethod]
