@@ -16,7 +16,7 @@ public sealed class ItemWorldScriptTests
 {
     private const byte Counter = 0, Triggerer = 0, Attachee = 1, LocalVariable = 2, Number = 3, Looped = 10, LocalObject = 11, EveryContainer = 17, AnyContainer = 18, EveryFollower = 2, AnyFollower = 3;
     private const int Every = 810, Any = 811, Twice = 812, EveryFollowerScript = 813, AnyFollowerScript = 814, ToggleSelf = 815, ToggleSelfTwice = 816, ToggleHero = 817, Quest = 820, Typed = 821, Assigned = 822, DeadGated = 823, GeneratorGated = 824, GeneratorSlot = 7, CaseName = 1205, NewArt = 4, BaselineArt = 100, QuestNumber = 1005, ContainerType = 2,
-        SetQuest = 830, CompleteQuest = 831, GiveSmall = 832, GiveBig = 833, GiveTwice = 834, SetThenRead = 835, SetOnItem = 836, SetInvalid = 837, CompleteBig = 838, SetThenGive = 839, GiveThenStat = 840, StatThenGive = 841;
+        SetQuest = 830, CompleteQuest = 831, GiveSmall = 832, GiveBig = 833, GiveTwice = 834, SetThenRead = 835, SetOnItem = 836, SetInvalid = 837, CompleteBig = 838, SetThenGive = 839, GiveThenStat = 840, StatThenGive = 841, GiveThenRatio = 842, RatioThenGive = 843;
     private static readonly SessionInsertCheck Accept = _ => SessionInsertVerdict.Accepted;
 
     private sealed record Clause(int Type, (byte Kind, int Value)[] Operands);
@@ -95,6 +95,14 @@ public sealed class ItemWorldScriptTests
         return statFirst ? Program(read, give, Do(C(ScrCatalogue.Action.ReturnRunDefault))) : Program(give, read, Do(C(ScrCatalogue.Action.ReturnRunDefault)));
     }
 
+    // ARC-SCRIPT-2394: the power ratio (aptitude) read after / before the award: an auto-level scheme may buy the magick and tech points the aptitude derives from.
+    private static ScrProgram GiveAndRatio(int level, bool ratioFirst)
+    {
+        var give = Do(C(ScrCatalogue.Action.GiveQuestExperience, (Triggerer, 0), N(level)));
+        var read = Do(C(ScrCatalogue.Action.MagickTechAdjustment, N(10), (Attachee, 0), (Triggerer, 0), (Counter, 0)));
+        return ratioFirst ? Program(read, give, Do(C(ScrCatalogue.Action.ReturnRunDefault))) : Program(give, read, Do(C(ScrCatalogue.Action.ReturnRunDefault)));
+    }
+
     // ARC-SCRIPT-2346: toggle state (56) of one object, `times` times.
     private static ScrProgram Toggle(byte kind, int times = 1)
     {
@@ -111,7 +119,7 @@ public sealed class ItemWorldScriptTests
             [DeadGated] = Gated(C(ScrCatalogue.Condition.IsDead, (Looped, 0))), [GeneratorGated] = Gated(C(ScrCatalogue.Condition.MonsterGenDisabled, N(GeneratorSlot))),
             [EveryFollowerScript] = Loop(EveryFollower, Looped), [AnyFollowerScript] = Loop(EveryFollower, AnyFollower),
             [SetQuest] = SetQuestOf(Triggerer, 1004, 2), [CompleteQuest] = SetQuestOf(Triggerer, 1004, 4), [GiveSmall] = Give(1), [GiveBig] = Give(5), [GiveTwice] = Give(1, 2),
-            [SetThenRead] = SetAndRead(1004, 2), [SetOnItem] = SetQuestOf(Attachee, 1004, 4), [SetInvalid] = SetQuestOf(Triggerer, 5, 2), [CompleteBig] = SetQuestOf(Triggerer, 1003, 4), [SetThenGive] = SetAndGive(1004, 4, 1), [GiveThenStat] = GiveAndStat(5, false), [StatThenGive] = GiveAndStat(5, true),
+            [SetThenRead] = SetAndRead(1004, 2), [SetOnItem] = SetQuestOf(Attachee, 1004, 4), [SetInvalid] = SetQuestOf(Triggerer, 5, 2), [CompleteBig] = SetQuestOf(Triggerer, 1003, 4), [SetThenGive] = SetAndGive(1004, 4, 1), [GiveThenStat] = GiveAndStat(5, false), [StatThenGive] = GiveAndStat(5, true), [GiveThenRatio] = GiveAndRatio(5, false), [RatioThenGive] = GiveAndRatio(5, true),
             [ToggleSelf] = Toggle(Attachee), [ToggleSelfTwice] = Toggle(Attachee, 2), [ToggleHero] = Toggle(Triggerer) };
         public Dictionary<string, int> Names { get; set; } = new() { ["case"] = CaseName, ["other"] = 3000 };
         public string[]? Vicinity { get; set; } = ["case", "other"];
@@ -405,6 +413,15 @@ public sealed class ItemWorldScriptTests
         using var first = Owner(withExperience: true);
         var passed = first.PickUpItem(first.Version, "oid:tome", Accept, new Host(StatThenGive));
         Assert.AreEqual((GameSessionDisposition.Changed, GameSessionFailure.None, 2), (passed.Disposition, passed.Failure, first.QueryHeroExperience()!.Level), "a read before the award sees the level the session holds");
+
+        // The power ratio is the aptitude, which the points an auto-level scheme buys move: the same order rule.
+        using var ratio = Owner(withExperience: true);
+        var ratioBefore = ratio.Version;
+        var ratioRefused = ratio.PickUpItem(ratioBefore, "oid:tome", Accept, new Host(GiveThenRatio));
+        Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.ItemScriptUnsupported, ratioBefore), (ratioRefused.Disposition, ratioRefused.Failure, ratio.Version));
+        using var ratioFirst = Owner(withExperience: true);
+        var ratioPassed = ratioFirst.PickUpItem(ratioFirst.Version, "oid:tome", Accept, new Host(RatioThenGive));
+        Assert.AreEqual((GameSessionDisposition.Changed, GameSessionFailure.None), (ratioPassed.Disposition, ratioPassed.Failure), "a ratio read before the award is the move's order");
     }
 
     [TestMethod]

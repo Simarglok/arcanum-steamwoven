@@ -323,8 +323,8 @@ public sealed partial class GameSessionOwner
             // ARC-SCRIPT-2374 (IV19): the interpreter collects a run's state requests and the session applies them after it, so a quest state read after a quest write of the same run (or one a call-ex callee makes, whose order the trace does not show) would have
             // read the written state in the original; the run read the earlier one. Refused, as a ratio read after an effect change is.
             if (QuestReadHazard(run)) return GameSessionFailure.ItemScriptUnsupported;
-            // ARC-SCRIPT-2394 (IV20): a stat read of a run after an earlier run's level-raising award read the hero before it.
-            if (_awardRaisesLevel && _reads.StatReads.Count > 0) return GameSessionFailure.ItemScriptUnsupported;
+            // ARC-SCRIPT-2394 (IV20): a stat read or a power ratio read (the aptitude is derived from the magick and tech points an auto-level scheme may buy) of a run after an earlier run's level-raising award read the hero before it.
+            if (_awardRaisesLevel && (_reads.StatReads.Count > 0 || _reads.RatioReads > 0)) return GameSessionFailure.ItemScriptUnsupported;
             var raisedBefore = _awardRaisesLevel;
             foreach (var request in effects.States)
             {
@@ -428,13 +428,13 @@ public sealed partial class GameSessionOwner
 
         private bool AwardReadHazard(ScrRunResult run)
         {
-            if (_reads.StatReads.Count == 0) return false;
+            if (_reads.StatReads.Count == 0 && _reads.RatioReads == 0) return false;
             var trace = run.Trace;
             var lastRead = -1; var firstAward = int.MaxValue; var callEx = false;
             for (var i = 0; i < trace.Count; i++)
             {
                 var action = trace[i].Action;
-                if (action == Arcanum.Data.Scripts.ScrCatalogue.Action.GetStat) lastRead = i;
+                if (action is Arcanum.Data.Scripts.ScrCatalogue.Action.GetStat or Arcanum.Data.Scripts.ScrCatalogue.Action.MagickTechAdjustment) lastRead = i;
                 if (action is Arcanum.Data.Scripts.ScrCatalogue.Action.SetPcQuestState or Arcanum.Data.Scripts.ScrCatalogue.Action.GiveQuestExperience) firstAward = Math.Min(firstAward, i);
                 callEx |= action == Arcanum.Data.Scripts.ScrCatalogue.Action.CallScriptEx;
             }
