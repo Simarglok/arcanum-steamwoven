@@ -1,3 +1,4 @@
+using Arcanum.Data.Area;
 using Arcanum.Session;
 using Arcanum.Data.Combat;
 
@@ -109,6 +110,33 @@ public static class AreaLootArtLayout
         CombatFieldReader.PcType or CombatFieldReader.NpcType => (critterFlags & 0x4) != 0 ? 384 : (critterFlags & 0x8000) != 0 ? 383
             : (critterFlags & 0x8) != 0 ? 385 : (critterFlags & 0x20000000) != 0 ? 434 : race >= 0 && race < RaceImages.Count ? RaceImages[race] : null,
         CombatFieldReader.ContainerType => ContainerImages.GetValueOrDefault(description, ContainerImage),
+        _ => null,
+    };
+
+    /// <summary>The critter slot of the stored portrait number (field 0xE7; the pre-made heroes' reader names it the same).</summary>
+    public const int PortraitSlot = 49;
+
+    /// <summary>The stored portrait of a PC or NPC record (its effective field 0xE7); null when it is not a critter or stores none (0, no plain number
+    /// or a negative one, the original's path bug PO2).</summary>
+    public static int? StoredPortrait(AreaObjectRecord record)
+    {
+        ArgumentNullException.ThrowIfNull(record);
+        if (record.Type is not (CombatFieldReader.PcType or CombatFieldReader.NpcType)) return null;
+        var field = record.EffectiveFields.FirstOrDefault(value => value.Slot == PortraitSlot);
+        return field is { Presence: AreaPresence.Value, Number: { } number and > 0 and <= int.MaxValue } ? (int)number : null;
+    }
+
+    /// <summary>
+    /// ARC-UI-1908 (IW27, ledger BW2, IS8; chooser 0x553D10): the portrait the item windows (loot, barter, identify, repair) draw instead of the
+    /// <see cref="HolderImage"/> art. A PC takes its portrait; an NPC only when the chain of its leaders reaches the observing PC (0x45DDA0, followers
+    /// of followers too) and its stored portrait is not 0. Null: the art rule decides. NOT READY: the clash rule of 0x4CEB80 (an NPC showing the
+    /// local player's own portrait takes the next or the previous available one), and a PC without a stored portrait (the original draws list
+    /// entry 1000; the observer is the PC, so a window never holds one).
+    /// </summary>
+    public static int? HolderPortrait(int type, bool pcLeads, int? storedPortrait) => type switch
+    {
+        CombatFieldReader.PcType => storedPortrait,
+        CombatFieldReader.NpcType when pcLeads => storedPortrait,
         _ => null,
     };
 
