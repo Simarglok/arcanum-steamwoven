@@ -99,8 +99,8 @@ texture of the wood backgrounds).
   proportions prototype, a census, a kit manifest, style anchors, a surface-method comparison, fit and bake tools, the
   runtime composition, fonts, and production batches per backdrop family.
 - **Costs and risks:** many full-size backdrops (one per background family); generator output smaller than the master
-  size; style drift between generations; text baked into original art must become drawn text; provenance of
-  Codex outputs decides whether the kit can ship (below).
+  size; style drift between generations; text baked into original art must become drawn text; the kit is derived from original art, so it
+  stays local and is not shipped (decided 2026-11-16, #2448).
 
 ## Open decisions
 
