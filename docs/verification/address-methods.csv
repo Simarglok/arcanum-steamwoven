@@ -26,6 +26,8 @@ src/Arcanum.Presentation/Hud/QuantityBar.cs,Ask,pending,
 src/Arcanum.Presentation/Hud/QuantityPane.cs,Cells,exempt,reference
 src/Arcanum.Presentation/Hud/QuantityPane.cs,IconArtId,exempt,reference
 src/Arcanum.Presentation/Hud/SpellPane.cs,ShownColleges,pending,
+src/Arcanum.Presentation/Hud/StripTextEntry.cs,Bind,exempt,host
+src/Arcanum.Presentation/Hud/StripTextEntry.cs,Replace,exempt,host
 src/Arcanum.Scripting/Dialog/DialogConversation.cs,OpensWindow,pending,
 src/Arcanum.Scripting/Dialog/DialogConversation.cs,ReadCollege,pending,
 src/Arcanum.Scripting/Dialog/DialogConversation.cs,ReadCompanion,pending,
@@ -850,7 +852,10 @@ tools/terrain-viewer/Godot/AreaReadingPanel.cs,UpdateRoundView,exempt,reference
 tools/terrain-viewer/Godot/AreaSaveListArtView.cs,Render,pending,
 tools/terrain-viewer/Godot/AreaSchematicWindowView.cs,LoneRelease,exempt,reference
 tools/terrain-viewer/Godot/AreaSchematicsPanel.cs,UpdateRoundView,pending,
+tools/terrain-viewer/Godot/AreaStripEntryKeys.cs,Edit,exempt,host
 tools/terrain-viewer/Godot/AreaWorldMapArtView.cs,AcceptNoteEdit,pending,
+tools/terrain-viewer/Godot/AreaWorldMapArtView.cs,CancelNoteEdit,exempt,host
+tools/terrain-viewer/Godot/AreaWorldMapArtView.cs,SetNoteText,exempt,host
 tools/terrain-viewer/Godot/TerrainCanvasArea.cs,AreaBodyRect,pending,
 tools/terrain-viewer/Godot/TerrainViewerAi.cs,AiObjectFacts,exempt,reference
 tools/terrain-viewer/Godot/TerrainViewerAi.cs,RunHitScripts,exempt,host
@@ -981,8 +986,11 @@ tools/terrain-viewer/Godot/TerrainViewerItemAiming.cs,OpenItemAiming,pending,
 tools/terrain-viewer/Godot/TerrainViewerMaintainBar.cs,MaintainSlotEntered,pending,
 tools/terrain-viewer/Godot/TerrainViewerMaintainBar.cs,StopMaintainSlot,pending,
 tools/terrain-viewer/Godot/TerrainViewerMaintainBar.cs,SyncMaintainClosing,pending,
+tools/terrain-viewer/Godot/TerrainViewerMapNoteEntry.cs,AcceptMapNote,exempt,host
+tools/terrain-viewer/Godot/TerrainViewerMapNoteEntry.cs,HandleMapNoteKey,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerOrderLine.cs,AcceptOrderLine,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerOrderLine.cs,HandleOrderLineKey,exempt,host
+tools/terrain-viewer/Godot/TerrainViewerOrderLine.cs,HeroSpeechState,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerOrderLine.cs,RouteOrderLineKey,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerPortraitHover.cs,FollowerPortraitHoverLeft,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerProjectiles.cs,BoomerangReturned,pending,

@@ -274,7 +274,7 @@ public interface IScrCritterStateQueries
 }
 
 /// <summary>
-/// ARC-SCRIPT-1772 (ledger CQ1–CQ3): the getters of <see cref="ScrAdmissionSet.CritterFieldActions"/>. The original answers each from the object's own field when the object is an NPC (type 0x10) and 0 for every other object type (0x45D010 social class field 0x128,
+/// ARC-SCRIPT-1772 (ledger CQ1–CQ3): the getters of <see cref="ScrAdmissionSet.CritterFieldActions"/> and, since ARC-SCRIPT-2326, get armor (<see cref="ScrAdmissionSet.CritterArtActions"/>). The original answers each from the object's own field when the object is an NPC (type 0x10) and 0 for every other object type (0x45D010 social class field 0x128,
 /// 0x45D290 origin field 0x123, 0x45D080 faction field 0x124). A host whose admission set holds one of them implements this interface. An answer is null when the host does not know the object (the dispatch ends not modelled, nothing applied).
 /// </summary>
 public interface IScrCritterFieldQueries
@@ -287,6 +287,10 @@ public interface IScrCritterFieldQueries
 
     /// <summary>Get faction (89): the NPC's faction (field 0x124) as it is now (a script's set faction over the map data's), 0 for any other object type.</summary>
     int? FactionOf(ScrObjectRef obj);
+
+    /// <summary>Get armor (action 32, ARC-SCRIPT-2326, ledger AR1–AR3): the armour part of the object's current art id (object field 1 through 0x406CA0, then 0x504030: bits 20..23 of a critter art id, bits 20..22 of a monster's, 0 for any other art type), the look of the
+    /// body armour a critter wears (3 chain, 4 and 6 plate), not an armour class; null when the host does not know the object (the dispatch ends not modelled, nothing applied).</summary>
+    int? ArmorOf(ScrObjectRef obj);
 }
 
 /// <summary>
@@ -325,6 +329,31 @@ public interface IScrPortalQueries
     /// <see cref="ScrRuleProfile.VicinityListCapped"/>.
     /// </summary>
     IReadOnlyList<ScrObjectRef> PortalsInVicinity(ScrObjectRef centre);
+}
+
+/// <summary>
+/// ARC-SCRIPT-2319 (ledger GF1–GF7): the group of an object, for the focus kinds every one in the group (13) and anyone in the group (14), which the object-list builder (0x44B4E0) answers as the triggerer's direct followers
+/// (object field 0xF1 through 0x4411C0, in array order) with the triggerer itself appended last. A host whose set admits the kinds implements this interface; the interpreter adds the triggerer and applies the list's cap.
+/// </summary>
+public interface IScrGroupQueries
+{
+    /// <summary>The direct followers of <paramref name="leader"/> in the order the original's follower array holds them (a waiting NPC is outside it, ledger OL16; a forced or charmed follower stays in): the hero's followers for the PC,
+    /// an NPC's own followers for an NPC, none for any other object or one the host does not know.</summary>
+    IReadOnlyList<ScrObjectRef> FollowersOf(ScrObjectRef leader);
+}
+
+/// <summary>
+/// ARC-SCRIPT-2322 (ledger CV1–CV5): the containers in the vicinity of an object, for the focus kinds every container in the vicinity (17) and any container in the vicinity (18; one list, as the portals' 19 and 20). A
+/// host whose set admits either kind implements it besides <see cref="IScrWorldQueries"/>.
+/// </summary>
+public interface IScrContainerQueries
+{
+    /// <summary>
+    /// The containers in the vicinity of <paramref name="centre"/> (type mask bit 2 of the same scan as the portals, ledger CV1, CV2): every container object of the centre's map whose tile is within
+    /// <see cref="ScrWorld.VicinityReach"/> tiles of the centre's tile on both axes and that is not destroyed or switched off, in the host's list order; empty when the host does not know the centre or its place.
+    /// The interpreter keeps the first <see cref="ScrWorld.VicinityListCap"/> under <see cref="ScrRuleProfile.VicinityListCapped"/>.
+    /// </summary>
+    IReadOnlyList<ScrObjectRef> ContainersInVicinity(ScrObjectRef centre);
 }
 
 /// <summary>
@@ -1047,7 +1076,7 @@ public sealed class ScrRunResult
 }
 
 /// <summary>How a dispatch runs: the rule mode's script switches, the admitted set (default <see cref="ScrAdmissionSet.S5"/>,
-/// at most <see cref="ScrAdmissionSet.S60"/>, admitted for the lines reachable from the event's line), the executed-line
+/// at most <see cref="ScrAdmissionSet.S65"/>, admitted for the lines reachable from the event's line), the executed-line
 /// budget and the call depth.</summary>
 public sealed record ScrRunOptions
 {
@@ -1068,7 +1097,7 @@ public sealed record ScrRunOptions
         ArgumentNullException.ThrowIfNull(Admission);
         if (MaxExecutedLines is <= 0 or > OriginalLineBudget) throw new ArgumentOutOfRangeException(nameof(MaxExecutedLines), "The line budget is 1..1000.");
         if (MaxCallDepth is < 1 or > 64) throw new ArgumentOutOfRangeException(nameof(MaxCallDepth), "The call depth is 1..64.");
-        if (!Admission.IsSubsetOf(ScrAdmissionSet.S60)) throw new ArgumentException("The interpreter runs only the commands of ScrAdmissionSet.S60.", nameof(Admission));
+        if (!Admission.IsSubsetOf(ScrAdmissionSet.S65)) throw new ArgumentException("The interpreter runs only the commands of ScrAdmissionSet.S65.", nameof(Admission));
     }
 
     // A set with a guard condition needs a host that answers it, checked before any event runs.
@@ -1089,8 +1118,8 @@ public sealed record ScrRunOptions
             throw new ArgumentException("A set with the animal condition needs a host that implements IScrCritterQueries.", nameof(Admission));
         if (host is not IScrCritterStateQueries && Admission.Conditions.Any(c => ScrAdmissionSet.CritterStateConditions.Contains(c) || ScrAdmissionSet.CritterTailQueryConditions.Contains(c)))
             throw new ArgumentException("A set with a critter-state condition (or bad associates, monster of type) needs a host that implements IScrCritterStateQueries.", nameof(Admission));
-        if (host is not IScrCritterFieldQueries && Admission.Actions.Any(ScrAdmissionSet.CritterFieldActions.Contains))
-            throw new ArgumentException("A set with a critter getter (social class, origin, faction) needs a host that implements IScrCritterFieldQueries.", nameof(Admission));
+        if (host is not IScrCritterFieldQueries && Admission.Actions.Any(a => ScrAdmissionSet.CritterFieldActions.Contains(a) || ScrAdmissionSet.CritterArtActions.Contains(a)))
+            throw new ArgumentException("A set with a critter getter (social class, origin, faction, armor) needs a host that implements IScrCritterFieldQueries.", nameof(Admission));
         if (host is not IScrStatAdjustQueries && Admission.Actions.Contains(ScrCatalogue.Action.AdjustStat))
             throw new ArgumentException("A set with adjust stat needs a host that implements IScrStatAdjustQueries.", nameof(Admission));
         if (host is not IScrMagickTechQueries && Admission.Actions.Contains(ScrCatalogue.Action.GetMagickTechAdjustment))
@@ -1099,8 +1128,12 @@ public sealed record ScrRunOptions
             throw new ArgumentException("A set with get hit points or get fatigue points needs a host that implements IScrVitalQueries.", nameof(Admission));
         if (host is not IScrWorldQueries && (Admission.Actions.Any(ScrAdmissionSet.WorldQueryActions.Contains) || Admission.FocusKinds.Any(ScrAdmissionSet.WorldQueryFocusKinds.Contains) || Admission.Conditions.Contains(ScrCatalogue.Condition.WithinRange)))
             throw new ArgumentException("A set with random, loop for, distance between, get location, float line, obj is within range or the vicinity focus kinds needs a host that implements IScrWorldQueries.", nameof(Admission));
+        if (host is not IScrGroupQueries && Admission.FocusKinds.Any(ScrAdmissionSet.GroupFocusKinds.Contains))
+            throw new ArgumentException("A set with the focus kinds every one or anyone in the group, or every or any follower, needs a host that implements IScrGroupQueries.", nameof(Admission));
         if (host is not IScrPortalQueries && Admission.FocusKinds.Contains(ScrFocusKind.EveryPortalInVicinity))
             throw new ArgumentException("A set with the focus kind every portal in the vicinity needs a host that implements IScrPortalQueries.", nameof(Admission));
+        if (host is not IScrContainerQueries && (Admission.FocusKinds.Contains(ScrFocusKind.EveryContainerInVicinity) || Admission.FocusKinds.Contains(ScrFocusKind.AnyContainerInVicinity)))
+            throw new ArgumentException("A set with a container vicinity focus kind needs a host that implements IScrContainerQueries.", nameof(Admission));
         if (host is not IScrObjectStateQueries && Admission.Conditions.Any(ScrAdmissionSet.ObjectStateQueryConditions.Contains))
             throw new ArgumentException("A set with the dead or switched-off condition needs a host that implements IScrObjectStateQueries.", nameof(Admission));
         if (host is not IScrSpellQueries && Admission.Conditions.Any(ScrAdmissionSet.SpellQueryConditions.Contains))

@@ -38,7 +38,7 @@ public partial class TerrainViewerApp
     private bool InterfaceBarsOn => _areaSession is not null && _readyMode == TerrainViewerMode.Area && (!ViewerAutomatedStorage.Automated || _gameBarForSelfTest);
 
     private bool GameBarActive => InterfaceBarsOn
-        && !MainMenuOpen && !BarterOpen && !ItemServiceOpen && !SaveListOpen && !ReadingOpen && !PaletteOpen && !WorldMapOpen;
+        && !MainMenuOpen && !BarterOpen && !ItemServiceOpen && !SaveListOpen && !ReadingOpen && !PaletteOpen;
 
     /// <summary>Per frame: shows the bars while an area session plays (reading their art once a run) and follows the spell pane.</summary>
     private void SyncGameBar()
@@ -62,6 +62,7 @@ public partial class TerrainViewerApp
             HideSkillBar();
             HideQuantityPane();
             HideOrderLine();
+            HideMapNoteEntry();
             return;
         }
         if (_gameBarPanel is null)
@@ -116,6 +117,7 @@ public partial class TerrainViewerApp
         SyncSkillBar();
         SyncQuantityPane();
         SyncOrderLine();
+        SyncMapNoteEntry();
     }
 
     private static int ClockArtWidth(AreaGameBarContent content, int art, int fallback) =>
@@ -186,7 +188,7 @@ public partial class TerrainViewerApp
                 break;
             case AreaBarButton.Skills:
                 // ARC-UI-2024 (DB2): consumed without effect while the dialog's hook is set; the pair is given back as it was.
-                if (ConversationOpen)
+                if (ConversationOpen || WorldMapOpen)
                 {
                     _gameBarNotice = "skills: ignored while another window owns input";
                     _gameBar.SetOn(AreaBarButton.Skills, !_gameBar.IsOn(AreaBarButton.Skills));
@@ -209,7 +211,7 @@ public partial class TerrainViewerApp
                 // ARC-WORLD-1160: the bar button runs the same opener as the key S (its own decision answers a dead or unconscious hero).
                 if (!SleepActive) _gameBarNotice = "sleep: not available here";
                 else if (SleepOpen) OpenSleep(); // the same decision as the key: a dead hero gets nothing, even the close
-                else if (PaletteOpen || ConversationOpen || SaveListOpen || MainMenuOpen) _gameBarNotice = "sleep: ignored while another window owns input";
+                else if (PaletteOpen || ConversationOpen || SaveListOpen || MainMenuOpen || WorldMapOpen) _gameBarNotice = "sleep: ignored while another window owns input";
                 else OpenSleep();
                 break;
         }

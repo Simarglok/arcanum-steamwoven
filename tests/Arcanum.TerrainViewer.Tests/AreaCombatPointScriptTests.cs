@@ -298,7 +298,7 @@ public sealed class AreaCombatPointScriptTests
     {
         var set = AreaUseScriptHost.CombatPointAdmission;
         Assert.IsTrue(AreaUseScriptHost.PlacedAdmission.IsSubsetOf(set), "everything the placed set runs");
-        Assert.IsTrue(set.IsSubsetOfBesidesStores(ScrAdmissionSet.S60), "the interpreter's largest set holds it");
+        Assert.IsTrue(set.IsSubsetOfBesidesStores(ScrAdmissionSet.S65), "the interpreter's largest set holds it");
         foreach (var action in new[] { ScrCatalogue.Action.Damage, ScrCatalogue.Action.DamageUnresistable, ScrCatalogue.Action.CastSpell, ScrCatalogue.Action.CastFreeSpell,
             ScrCatalogue.Action.MagickTechAdjustment, ScrCatalogue.Action.GetMagickTechAdjustment, ScrCatalogue.Action.PlayScriptEyeCandy })
             Assert.IsTrue(set.Actions.Contains(action), "action " + action);

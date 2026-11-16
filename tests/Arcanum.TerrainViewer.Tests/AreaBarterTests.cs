@@ -8,6 +8,7 @@ using Arcanum.Session;
 using Arcanum.Simulation.Character;
 using Arcanum.Simulation.Equipment;
 using Arcanum.Simulation.Items;
+using Arcanum.Simulation.Movement;
 using Arcanum.TerrainViewer.Core;
 using Arcanum.World;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -280,6 +281,24 @@ public sealed class AreaBarterTests
              new("chest-coins", Facts(SessionItemType.Gold, AreaBarterData.GoldPrototype, quantity: 50), null)]);
         Assert.AreEqual(GameSessionFailure.None, session.AttachMapInventory(session.QueryActor().Map, seed).Failure);
         return session;
+    }
+
+    [TestMethod]
+    public void The_substitute_limit_measures_the_speaker_from_its_live_cell()
+    {
+        // ARC-WORLD-2245 (0x45F650): a merchant the AI host walked away from its T0 cell is measured where it stands now.
+        var data = StockData();
+        var own = new AreaBarterMerchant("merchant", "Smith", 100, false, false, data.BuyList(2), false);
+        var chest = new AreaSubstituteContainer("chest", 1, new(40, 40));
+        var speaker = new AreaSpeaker(2, AreaAiRouteTests.Npc(0, [], 0, (20, 25), (20, 25)), 1, 40, 40);
+        Func<AreaSpeaker, (long X, long Y)> at(CellCoord? host) => AreaSpeakerCells.Live(null, _ => host);
+
+        Assert.AreEqual("chest", own.WithSubstitute(chest, speaker, at(null), data).Container, "nobody holds it: the T0 cell, 0 tiles");
+        Assert.IsNull(own.WithSubstitute(chest, speaker, at(new(61, 40)), data).Container, "the AI host walked it 21 tiles away");
+        Assert.AreEqual("chest", own.WithSubstitute(chest, speaker, at(new(60, 20)), data).Container, "20 tiles away (Chebyshev), not the T0 cell");
+        var away = new AreaSpeaker(2, speaker.Row, 1, 100, 100);
+        Assert.AreEqual("chest", own.WithSubstitute(chest, away, at(new(41, 41)), data).Container, "far at T0, the host walked it next to the chest");
+        Assert.IsNull(own.WithSubstitute(chest, away, at(null), data).Container, "far at T0 and nobody holds it");
     }
 
     [TestMethod]

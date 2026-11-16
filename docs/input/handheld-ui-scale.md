@@ -22,7 +22,7 @@ glyph, the viewer's own "text height"; capital height = ink rows of "H", shown f
 
 | Font (art) | Windows | Size | Line | Capital |
 | --- | --- | ---: | ---: | ---: |
-| Flare12 (229) | options, character sheet, message window, hover names, floaters, dialog box, schematic | 12 | 15 | 9 |
+| Flare12 (229) | options, save and load list, character sheet, message window, hover names, floaters, dialog box, schematic | 12 | 15 | 9 |
 | Garmond9 (483) | character sheet skills and tech pages | **9** | 10 | 7 |
 | every other font a window draws | all the rest | 12 to 32 | 16 to 38 | 11 to 23 |
 

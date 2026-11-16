@@ -272,31 +272,34 @@ public partial class TerrainCanvas
     }
     // ARC-RENDER-012: terrain under a light lattice samples it per pixel; bodies take the source's object
     // colour (walls a two-end gradient), the actor its colour at the current placement.
-    private (Color Left, Color Right, AreaLatticeBinding? Lattice, AreaCarriedBinding? Carried) AreaItemLight(AreaDrawCommand command, bool isActor)
+    // ARC-RENDER-2298: Weight is the colour without the carried lights (null: the item's own colour), what the relit night weight reads; the carried lights are the relit look's own light list.
+    private (Color Left, Color Right, AreaLatticeBinding? Lattice, AreaCarriedBinding? Carried, Color? Weight) AreaItemLight(AreaDrawCommand command, bool isActor)
     {
         static Color Lit(AmbientColor color) => new(color.R / 255f, color.G / 255f, color.B / 255f);
         // ARC-WORLD-017: a moved companion body is lit where it stands, by its own visual (it may come from another map).
         if (!isActor && _areaAmbient?.Moving is { } moving && _areaMovingKeys.Contains(command.Identity) && moving(command, _areaCarriedNow) is { } lit)
-            return (Lit(lit.Left), Lit(lit.Right), null, null);
+            return (Lit(lit.Left), Lit(lit.Right), null, null, null);
         var ambient = AreaAmbientColor(command, isActor);
-        if (_areaAmbient?.Local is not { } local) return (ambient, ambient, null, null);
+        if (_areaAmbient?.Local is not { } local) return (ambient, ambient, null, null, null);
         // ARC-DEV-335 (V7d): the carried lights of the critters stand where the critters stand now, so they are added at draw time to
         // the cached view's colour, not built into it.
         var pair = _areaAmbient.Pair;
         if (isActor)
         {
-            var actor = Lit(_areaCarriedNow is { } carriedActor ? carriedActor.Actor(_areaActorPlacement!, pair) : local.Actor(_areaActorPlacement!));
-            return (actor, actor, null, null);
+            var plain = Lit(local.Actor(_areaActorPlacement!));
+            var actor = _areaCarriedNow is { } carriedActor ? Lit(carriedActor.Actor(_areaActorPlacement!, pair)) : plain;
+            return (actor, actor, null, null, plain);
         }
         if (command.Identity is not null)
         {
             if (!local.Bodies.TryGetValue(command.Visual, out var body)) throw new InvalidOperationException("AREA_LIGHT_BODY_REQUIRED");
+            var plainBody = Lit(body.Left);
             if (_areaCarriedNow is { } carried && _areaAmbient.Channels.TryGetValue(command.Visual, out var channel))
                 body = carried.AddCarried(command, command.Unlit ? AreaAmbientChannel.Unlit : channel, pair, body);
-            return (Lit(body.Left), Lit(body.Right), null, null);
+            return (Lit(body.Left), Lit(body.Right), null, null, plainBody);
         }
         // Terrain (tiles, facades, their chunks) is always on the indoor or outdoor channel.
-        return (ambient, ambient, local.Lattice is { } lattice ? AreaLattice(lattice) : null, _areaCarriedBinding);
+        return (ambient, ambient, local.Lattice is { } lattice ? AreaLattice(lattice) : null, _areaCarriedBinding, null);
     }
     // ARC-DEV-335: the critters' carried lights as the view of the current submission (null: none), made from the hero's placement by the host.
     private Func<ActorDiagnosticPlacementInput, TerrainRect, AreaLocalLighting?>? _areaCarried;
@@ -500,11 +503,11 @@ public partial class TerrainCanvas
             if (hd[index].Texture is { } hdTexture) { texture = hdTexture; item.HdScale = hdScale; } else item.HdScale = 1;
             item.FrameTexture = texture; item.Command = command; item.Actor = isActor ? _actorPlan.Current : null; item.ShowGuide = _showActorGuides;
             // A roof is tinted by the outdoor light only (RF2); a covered tile's mask is black.
-            if (mask) (item.Ambient, item.AmbientRight, item.Lattice, item.Carried) = (Colors.Black, Colors.Black, null, null);
-            else if (roof) { var outdoor = AreaRoofLight(); (item.Ambient, item.AmbientRight, item.Lattice, item.Carried) = (outdoor, outdoor, null, null); }
-            else if (index == highlightIndex) (item.Ambient, item.AmbientRight, item.Lattice, item.Carried) = (AreaHighlightColour, AreaHighlightColour, null, null);
-            else if (index == ringUnderIndex || index == ringOverIndex) (item.Ambient, item.AmbientRight, item.Lattice, item.Carried) = (ringTint, ringTint, null, null);
-            else (item.Ambient, item.AmbientRight, item.Lattice, item.Carried) = AreaItemLight(command, isActor);
+            if (mask) (item.Ambient, item.AmbientRight, item.Lattice, item.Carried, item.WeightAmbient) = (Colors.Black, Colors.Black, null, null, null);
+            else if (roof) { var outdoor = AreaRoofLight(); (item.Ambient, item.AmbientRight, item.Lattice, item.Carried, item.WeightAmbient) = (outdoor, outdoor, null, null, null); }
+            else if (index == highlightIndex) (item.Ambient, item.AmbientRight, item.Lattice, item.Carried, item.WeightAmbient) = (AreaHighlightColour, AreaHighlightColour, null, null, null);
+            else if (index == ringUnderIndex || index == ringOverIndex) (item.Ambient, item.AmbientRight, item.Lattice, item.Carried, item.WeightAmbient) = (ringTint, ringTint, null, null, null);
+            else (item.Ambient, item.AmbientRight, item.Lattice, item.Carried, item.WeightAmbient) = AreaItemLight(command, isActor);
             // ARC-RES-1978: what the relit look treats the item as (read only while it is on): masks, roofs, the hover highlight and the rings stay as they were.
             item.RelightKind = mask || roof || index == highlightIndex || index == ringUnderIndex || index == ringOverIndex ? AreaRelight.KindNone
                 : isActor || command.ArtClass is 2 or 12 or 13 or 14 ? AreaRelight.KindCritter

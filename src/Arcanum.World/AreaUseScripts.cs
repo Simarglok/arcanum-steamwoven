@@ -47,6 +47,8 @@ namespace Arcanum.World;
 /// holds no facts of (the PC included since ARC-SCRIPT-1773); without them obj can see obj and obj can hear obj stop the run.
 /// ARC-WORLD-1837 (ledger TT20): <see cref="NpcTeleportRefusal"/> names why a script's teleport (44, 102) of an NPC of the shown map to a cell of the shown map cannot be requested (the AI host does not hold it, it is a follower, the cell is not held), or null,
 /// and <see cref="RequestNpcTeleport"/> records the request in the session's one slot (the original's 0x4D3380; the object moves at the next ping), called only after the run applied; without them a run that teleports an object other than the hero is left unapplied.
+/// ARC-SCRIPT-2326 (AR2): <see cref="BodyArmorUseArt"/> answers the use art of the body armour the hero wears (item field 0x5F, the one the hero's drawn body takes its armour part from), null when it is not read; without it get armor of the hero stops the run while armour is worn.
+/// ARC-SCRIPT-2342 (AR2, AR7): <see cref="NpcBodyArmor"/> answers what an NPC the session dressed wears on its body-armour slot now (null: not read; without it get armor of such an NPC is not modelled).
 /// </summary>
 public sealed record AreaScriptWorld(Func<CellCoord?> PcCell, Func<AreaObjectRecord, bool> Gone, Func<int, AreaPrototypeItem?> Item, Func<IDropMap?> DropMap,
     Func<ScrObjectRef, bool>? Kill = null, Func<ScrObjectRef, bool>? CanKill = null, Func<ScrObjectRef, CellCoord?>? CritterCell = null,
@@ -58,7 +60,11 @@ public sealed record AreaScriptWorld(Func<CellCoord?> PcCell, Func<AreaObjectRec
     Action<string>? CritterMade = null, Func<string, int, bool, string>? ScriptReaction = null, Func<ScrObjectRef, AreaScriptOpenable?>? Openable = null,
     Func<string, int, string>? ScriptStopSpell = null, Func<string, AreaScriptVitals?>? Vitals = null, Func<string, int, int, string>? ScriptHealLife = null,
     Func<string, string, string>? ScriptAttack = null, Func<string, int?>? Aptitude = null, Func<string, string, bool?>? CanSee = null, Func<string, string, bool?>? CanHear = null,
-    Func<uint, bool>? ArtExists = null, Func<ScrTeleport, string?>? NpcTeleportRefusal = null, Action<ScrTeleport>? RequestNpcTeleport = null);
+    Func<uint, bool>? ArtExists = null, Func<ScrTeleport, string?>? NpcTeleportRefusal = null, Action<ScrTeleport>? RequestNpcTeleport = null,
+    Func<uint?>? BodyArmorUseArt = null, Func<string, AreaScriptWornArmor?>? NpcBodyArmor = null);
+
+/// <summary>ARC-SCRIPT-2342 (AR2): the use art (item field 0x5F) of the item an NPC wears in the body-armour slot (1006), or null when it wears none (<see cref="AreaScriptWorld.NpcBodyArmor"/>).</summary>
+public sealed record AreaScriptWornArmor(uint? UseArt);
 
 /// <summary>ARC-SCRIPT-1481 (VT1–VT3): the vitals of an NPC of the shown map for get hit points (107), get fatigue points (108) and get stat of the poison level (24): the current and maximum hit points and fatigue and the poison level,
 /// as the session's life status gives them (<see cref="AreaScriptWorld.Vitals"/>).</summary>
@@ -138,7 +144,7 @@ public readonly record struct AreaPrintedLine(int Type, string Text);
 /// The PC's reputations are the session's (ARC-WORLD-044); no other object has one. Everything else the viewer does not model
 /// answers "no", as for the dialog and item hosts.
 /// </summary>
-public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrObjectQueries, IScrWorldQueries, IScrObjectStateQueries, IScrAreaQueries, IScrStoreQueries, IScrStatQueries, IScrSpellQueries, IScrStoryQueries, IScrVitalQueries, IScrItemQueries, IScrMagickTechQueries, IScrCritterQueries, IScrCritterStateQueries, IScrCritterFieldQueries, IScrStatAdjustQueries, IScrPortalQueries
+public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrObjectQueries, IScrGroupQueries, IScrWorldQueries, IScrObjectStateQueries, IScrContainerQueries, IScrAreaQueries, IScrStoreQueries, IScrStatQueries, IScrSpellQueries, IScrStoryQueries, IScrVitalQueries, IScrItemQueries, IScrMagickTechQueries, IScrCritterQueries, IScrCritterStateQueries, IScrCritterFieldQueries, IScrStatAdjustQueries, IScrPortalQueries
 {
     /// <summary>Map-change keys of an object's use slot.</summary>
     public const string LocalFlagsProperty = "use.lf", CountersProperty = "use.counters", ScriptProperty = "use.script";
@@ -202,7 +208,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
                 ScrCatalogue.Action.Random, ScrCatalogue.Action.LoopFor, ScrCatalogue.Action.LoopEnd, ScrCatalogue.Action.LoopBreak, ScrCatalogue.Action.CreateObject, ScrCatalogue.Action.GetStat,
                 ScrCatalogue.Action.UnfogTownMap, ScrCatalogue.Action.GiveSpellMastery, ScrCatalogue.Action.Attack, ScrCatalogue.Action.ToggleState, .. CritterFieldWriteActions, .. ItemUseVitalActions, .. EyeCandyActions, .. ScrAdmissionSet.StoryActions, ScrCatalogue.Action.Fade, ScrCatalogue.Action.EndGame, ScrCatalogue.Action.QueueNewspaper, ScrCatalogue.Action.FloatNewspaperHeadline, .. ScrAdmissionSet.NpcStateHostActions, .. ScrAdmissionSet.WorldObjectHostActions]),
         ScrAdmissionSet.S4.ValueKinds.Concat(ScrAdmissionSet.StoreValueKinds),
-        ScrAdmissionSet.S4.FocusKinds.Concat([ScrFocusKind.LocalObject, ScrFocusKind.CurrentLoopedObject, ScrFocusKind.EverySceneryInVicinity, ScrFocusKind.EveryPortalInVicinity]),
+        ScrAdmissionSet.S4.FocusKinds.Concat([ScrFocusKind.LocalObject, ScrFocusKind.CurrentLoopedObject, ScrFocusKind.EverySceneryInVicinity, ScrFocusKind.AnySceneryInVicinity, ScrFocusKind.EveryPortalInVicinity, ScrFocusKind.EveryoneInGroup, ScrFocusKind.AnyoneInGroup, ScrFocusKind.EveryContainerInVicinity, ScrFocusKind.AnyContainerInVicinity, ScrFocusKind.EveryFollower, ScrFocusKind.AnyFollower]),
         counterIndexWraps: true);
 
     /// <summary>ARC-SCRIPT-1481 (VT1–VT6): what the food use script 30282 needs besides the use set's own: get hit points (107), get fatigue points (108), heal poison (128), heal hit points (75), heal fatigue (76), the magick-tech adjustment (91; the item's power
@@ -212,7 +218,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
 
     /// <summary>ARC-SCRIPT-1772 (CQ1–CQ5): the critter getters (38, 39, 89; <see cref="ScrAdmissionSet.CritterFieldActions"/>), toggle invulnerability (57) and rename (92) of <see cref="ScrAdmissionSet.S56"/>, which the use set and so the placed, combat-point, dying and
     /// heartbeat sets admit: the getters are answered here (<see cref="IScrCritterFieldQueries"/>), the two writes go through the session for the PC and an NPC (<see cref="ObjectStateRefusal"/> refuses the rest).</summary>
-    private static int[] CritterFieldWriteActions => [.. ScrAdmissionSet.CritterFieldActions, ScrCatalogue.Action.ToggleInvulnerability, ScrCatalogue.Action.Rename];
+    private static int[] CritterFieldWriteActions => [.. ScrAdmissionSet.CritterFieldActions, .. ScrAdmissionSet.CritterArtActions, ScrCatalogue.Action.ToggleInvulnerability, ScrCatalogue.Action.Rename];
     /// <summary>ARC-SCRIPT-1734 (WE11, WE12): play spell eye candy (104) and stop script eye candy (124) of <see cref="ScrAdmissionSet.S55"/>, which the use set admits beside play script eye candy (120): the run's result hands them on as eye candy requests; the viewer shows the stop since ARC-SCRIPT-1828 (the spell play, 104, is not shown yet).</summary>
     private static int[] EyeCandyActions => [ScrCatalogue.Action.PlaySpellEyeCandy, ScrCatalogue.Action.StopScriptEyeCandy];
 
@@ -271,7 +277,8 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
             ScrCatalogue.Action.DistanceBetween, ScrCatalogue.Action.GetLocation, ScrCatalogue.Action.SetFaction, ScrCatalogue.Action.WalkTo, ScrCatalogue.Action.RunTo,
             ScrCatalogue.Action.HealFatigue, ScrCatalogue.Action.PerformAnimation, ScrCatalogue.Action.StealCoins, ScrCatalogue.Action.BecomeProne, ScrCatalogue.Action.GiveSpellMastery, ScrCatalogue.Action.Attack, ScrCatalogue.Action.MakeFollow, ScrCatalogue.Action.AssignObject, ScrCatalogue.Action.FloatLine, ScrCatalogue.Action.QueueNewspaper, ScrCatalogue.Action.FloatNewspaperHeadline, ScrCatalogue.Action.Teleport, ScrCatalogue.Action.FadeAndTeleport, .. CritterFieldWriteActions, .. ScrAdmissionSet.StoryActions, .. ScrAdmissionSet.NpcStateHostActions, .. ScrAdmissionSet.WorldObjectHostActions, .. CastActions, .. StopSpellActions, .. DamageActions, .. EyeCandyActions]),
         ScrAdmissionSet.S2.ValueKinds.Concat(ScrAdmissionSet.StoreValueKinds),
-        ScrAdmissionSet.S3.FocusKinds.Concat([ScrFocusKind.CurrentLoopedObject, ScrFocusKind.EveryoneInVicinity, ScrFocusKind.AnyoneInVicinity, ScrFocusKind.EverySceneryInVicinity, ScrFocusKind.LocalObject]));
+        ScrAdmissionSet.S3.FocusKinds.Concat([ScrFocusKind.CurrentLoopedObject, ScrFocusKind.EveryoneInVicinity, ScrFocusKind.AnyoneInVicinity, ScrFocusKind.EverySceneryInVicinity, ScrFocusKind.AnySceneryInVicinity, ScrFocusKind.LocalObject,
+            ScrFocusKind.EveryContainerInVicinity, ScrFocusKind.AnyContainerInVicinity, ScrFocusKind.EveryFollower, ScrFocusKind.AnyFollower]));
 
     /// <summary>ARC-WORLD-114: whether a script switched the NPC <paramref name="entity"/> of map <paramref name="map"/> off
     /// (<see cref="OffProperty"/>).</summary>
@@ -396,8 +403,8 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     }
     private readonly Dictionary<string, AreaObjectRecord> _shown = new(StringComparer.Ordinal);
     // ARC-WORLD-081: the shown map's scenery in snapshot order, for the vicinity; ARC-SCRIPT-047: its NPCs likewise.
-    // ARC-SCRIPT-2041: its portals likewise (focus kind 19).
-    private readonly List<(string Entity, AreaObjectRecord Row)> _scenery = [], _npcs = [], _portals = [];
+    // ARC-SCRIPT-2041: its portals likewise (focus kind 19); ARC-SCRIPT-2322: its containers (focus kinds 17 and 18).
+    private readonly List<(string Entity, AreaObjectRecord Row)> _scenery = [], _npcs = [], _portals = [], _containers = [];
     private readonly AreaScriptWorld? _world;
     private readonly List<AreaScriptCreation> _created = [];
     private (string Entity, AreaObjectRecord Row)? _clicked;
@@ -431,6 +438,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
             _shown.TryAdd(EntityId(row), row);
             if (row.Type == SceneryType && row.WorldX is not null && row.WorldY is not null) _scenery.Add((EntityId(row), row));
             if (row.Type == PortalObjectType && row.WorldX is not null && row.WorldY is not null) _portals.Add((EntityId(row), row));
+            if (row.Type == ContainerObjectType && row.WorldX is not null && row.WorldY is not null) _containers.Add((EntityId(row), row));
             if (row.Type == NpcType && row.WorldX is not null && row.WorldY is not null && _shown[EntityId(row)] == row) _npcs.Add((EntityId(row), row));
         }
     }
@@ -470,6 +478,48 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     {
         if (centre.Map != _shownMap || Place(centre) is not { } at) return [];
         return _portals.Where(s => Math.Abs(s.Row.WorldX!.Value - at.X) <= ScrWorld.VicinityReach && Math.Abs(s.Row.WorldY!.Value - at.Y) <= ScrWorld.VicinityReach
+                && _world?.Gone(s.Row) != true)
+            .Select(s => new ScrObjectRef(_shownMap, s.Entity)).ToArray();
+    }
+
+    /// <summary>
+    /// ARC-SCRIPT-2319 (GF2, GF5): the direct followers of <paramref name="leader"/> as the session's follower array holds them (field 0xF1; <see cref="GameSessionOwner.QueryFollowers"/>): the hero's party followers for the PC, an NPC's own followers for an
+    /// NPC row of the shown map; nothing for any other object (the original reads a non-critter as having none). The followers are named on the shown map, as the leader tests of <see cref="Leader"/> and the follower walk of the critter-state
+    /// conditions name them; a follower standing on another map is the carried companion of the shown map's seed (FM1).
+    /// </summary>
+    [OriginalFunction(0x4411C0, OriginalFunctionScope.Partial)]
+    public IReadOnlyList<ScrObjectRef> FollowersOf(ScrObjectRef leader)
+    {
+        if (IsPc(leader)) return _session.QueryParty().Followers.Select(f => new ScrObjectRef(_shownMap, f.Entity)).ToArray();
+        if (Row(leader) is not { Type: NpcType }) return [];
+        return _session.QueryFollowers(leader.Code).Select(f => new ScrObjectRef(leader.Map, f)).ToArray();
+    }
+
+    /// <summary>
+    /// ARC-SCRIPT-2322 (CV1–CV3): the shown map's containers within <see cref="ScrWorld.VicinityReach"/> tiles of the centre on both axes, not destroyed or switched off, in snapshot order (the portals' rule with the
+    /// container type). Empty for a centre of another map or without a place.
+    /// </summary>
+    public IReadOnlyList<ScrObjectRef> ContainersInVicinity(ScrObjectRef centre)
+    {
+        if (centre.Map != _shownMap || Place(centre) is not { } at) return [];
+        return ContainersAround(at);
+    }
+
+    /// <summary>
+    /// ARC-SCRIPT-2335 (IV2): the containers in the vicinity of an item, the attachee of its insert-item script: the scan is centred on the item's own location field, which an insertion does not write, so it is the tile its map data
+    /// gives (a held item keeps the tile it had where the map placed it, also on another map than its own: the original scans the current map around the stale coordinates, so an item taken to another map reads the row of its origin map) or, for an item the session put on the ground, the tile it lies on; null for an item of another map, one without a row (made at run time) or without a tile.
+    /// </summary>
+    public IReadOnlyList<ScrObjectRef>? ContainersNearItem(ScrObjectRef item)
+    {
+        if (item.Map != _shownMap) return null;
+        var placed = _session.QueryPlacedItems().FirstOrDefault(p => p.Entity == item.Code && p.Map.RuntimeMap == item.Map);
+        CellCoord? at = placed is not null ? placed.Cell : (Row(item) ?? CarriedItemRow(item)) is { WorldX: { } x, WorldY: { } y } && x is >= int.MinValue and <= int.MaxValue && y is >= int.MinValue and <= int.MaxValue ? new CellCoord((int)x, (int)y) : null;
+        return at is { } cell ? ContainersAround(cell) : null;
+    }
+
+    private IReadOnlyList<ScrObjectRef> ContainersAround(CellCoord at)
+    {
+        return _containers.Where(s => Math.Abs(s.Row.WorldX!.Value - at.X) <= ScrWorld.VicinityReach && Math.Abs(s.Row.WorldY!.Value - at.Y) <= ScrWorld.VicinityReach
                 && _world?.Gone(s.Row) != true)
             .Select(s => new ScrObjectRef(_shownMap, s.Entity)).ToArray();
     }
@@ -677,6 +727,50 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     /// <summary>ARC-SCRIPT-1772 (CQ3, case 0x59, 0x45D080): an NPC's faction (field 0x124) as it is now, a script's set faction over the map data's (<see cref="Faction"/>), 0 for the PC and any other object type; null for an object this host has no row for.</summary>
     public int? FactionOf(ScrObjectRef obj) => NpcField(obj, row => AreaConversationHost.Scope(row, _session).Faction);
 
+    /// <summary>
+    /// ARC-SCRIPT-2326 (ledger AR1–AR3, exe read 2026-11-16) and ARC-SCRIPT-2342 (AR2, AR7): get armor (32), the armour part of the object's current art id. A critter's current art is rewritten by the wield hooks when body armour (slot 1006)
+    /// goes on or off and by a Trait polymorph, so the answer follows what the session did to the critter, not the stored art alone. The PC: a polymorphed hero (monster art, armour bits 0, nothing can be worn) 0; else the armour part of the use art of the body armour
+    /// it wears (<see cref="AreaScriptWorld.BodyArmorUseArt"/>, null when not read: not modelled), 0 bare. An NPC: polymorphed (<see cref="GameSessionOwner.QueryTraitArt"/>) 0; one the session dressed (<see cref="GameSessionOwner.QueryNpcWorn"/>, a regeneration's best items,
+    /// the barter and loot windows) the part its body armour gives (<see cref="Arcanum.Simulation.Equipment.BodyArmorArtRules.WornArt"/> over its stored art: 0 bare, an item whose part the art type cannot hold is refused and the part stays 0), null when the world does not read it;
+    /// any other row from its stored current art (field 1, slot 0), 0 for an art that is no critter's or monster's (items, scenery, unique NPCs); null for an object this host has no row for or one whose row holds no current art.
+    /// </summary>
+    public int? ArmorOf(ScrObjectRef obj)
+    {
+        if (IsPc(obj))
+        {
+            if (_session.QueryHero() is null) return null;
+            // A polymorphed hero wears a monster body with its armour part 0 (the apply takes every worn item off; the wear check refuses a polymorphed critter): AR7.
+            if (_session.QueryTraitArt(SessionSpellCaster.Hero) is not null) return 0;
+            // Bare: underwear (part 0). Worn: the use art's armour part, which the world's hero body reads; not read there: not modelled.
+            var part = 0;
+            if (_session.QueryEquipment().Worn.Any(item => item.Slot == Arcanum.Simulation.Equipment.EquipmentSlot.Armor))
+            {
+                if (_world?.BodyArmorUseArt?.Invoke() is not { } use) return null;
+                part = Arcanum.Simulation.Equipment.BodyArmorArtRules.ItemArmor(use);
+            }
+            return Arcanum.Simulation.Sound.SoundCueRules.CritterArtArmor(Arcanum.Simulation.Equipment.BodyArmorArtRules.WithArmor(Arcanum.Simulation.Equipment.BodyArmorArtRules.CritterArt << 28, part));
+        }
+        if (Row(obj) is not { } row || Number(row, CurrentArtSlot) is not { } art) return null;
+        var stored = unchecked((uint)art);
+        if (row.Type == NpcType)
+        {
+            // The apply of a Trait polymorph takes the worn items off and writes a monster art (field 1); the stored base art (0x18) stays. The monster art's armour bits start at 0 (inferred, TR-reads of AR7).
+            if (_session.QueryTraitArt(obj.Code) is not null) return 0;
+            if (_session.QueryNpcWorn(obj.Code) is { } dressed)
+            {
+                // The insert and removal of a wear slot run the hooks for an NPC as for the PC: the art took the armour part of the body armour the NPC wears now (0 when none).
+                var wearsArmor = dressed.Worn.Any(item => item.Slot == Arcanum.Simulation.Equipment.EquipmentSlot.Armor);
+                if (!wearsArmor) return Arcanum.Simulation.Sound.SoundCueRules.CritterArtArmor(Arcanum.Simulation.Equipment.BodyArmorArtRules.WornArt(stored, stored, null)!.Value);
+                // The record says armour is worn: a world that finds none (an item whose fields are not read yet, a broken one) is not modelled rather than bare.
+                if (_world?.NpcBodyArmor?.Invoke(obj.Code) is not { UseArt: { } } worn) return null;
+                var wornArt = Arcanum.Simulation.Equipment.BodyArmorArtRules.WornArt(stored, stored, worn.UseArt);
+                // A refused wield (an art type that cannot hold the part) leaves the part the clear before it wrote: 0.
+                return Arcanum.Simulation.Sound.SoundCueRules.CritterArtArmor(wornArt ?? Arcanum.Simulation.Equipment.BodyArmorArtRules.WithArmor(stored, 0));
+            }
+        }
+        return Arcanum.Simulation.Sound.SoundCueRules.CritterArtArmor(stored);
+    }
+
     // The three getters read a field only of an object whose type is NPC (0x10) and answer 0 for any other type, the PC included.
     private int? NpcField(ScrObjectRef obj, Func<AreaObjectRecord, int> read)
     {
@@ -841,6 +935,9 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
 
     /// <summary>ARC-SCRIPT-050: the shown map's runtime number (the dialog host borrows this host's answers only for its own map).</summary>
     public int ShownMap => _shownMap;
+
+    /// <summary>ARC-SCRIPT-2335: whether the host reads a row for the object (the shown map's, a loaded map's or a created critter's).</summary>
+    public bool KnowsObject(ScrObjectRef obj) => Row(obj) is not null;
 
     private AreaObjectRecord? Row(ScrObjectRef obj)
     {
@@ -1092,7 +1189,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         return row.Type == NpcType && session.QueryMapChange(new SessionMapId(row.Key.RuntimeMap), SessionNpcName.Key(EntityId(row))) is { } renamed ? unchecked((int)renamed) : NameOf(row);
     }
 
-    private const int SpellFlagsSlot = 19, NameSlot = 21, SocialClassSlot = 85;
+    private const int SpellFlagsSlot = 19, NameSlot = 21, SocialClassSlot = 85, CurrentArtSlot = 0;
 
     private static long? Number(AreaObjectRecord row, int slot) =>
         row.EffectiveFields.FirstOrDefault(field => field.Slot == slot) is { Presence: AreaPresence.Value, Number: { } n } && n is >= int.MinValue and <= uint.MaxValue ? n : null;
@@ -2285,6 +2382,16 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
 
     private ArtChange ArtPlan(ScrObjectStateRequest request) => ArtPlan(request.Object, request.Value);
 
+    /// <summary>
+    /// ARC-SCRIPT-2335 (IV5): the plan of a change art number as <see cref="ArtPlan(ScrObjectRef, int)"/> makes it, for the session's item set, which applies it in its own revision; null for an object the plan refuses (a run the host cannot apply),
+    /// an empty plan (no change) for the objects the action leaves as they are.
+    /// </summary>
+    public SessionObjectArtPlan? PlanObjectArt(ScrObjectRef obj, int number)
+    {
+        var plan = ArtPlan(obj, number);
+        return plan.Refusal is not null ? null : new(new SessionMapId(obj.Map), obj.Code, plan.Art, plan.Baseline, plan.Openable?.Openable, plan.Openable?.Baseline);
+    }
+
     // ARC-SCRIPT-1826 (AN18): the map the session names as the origin of an item it moved (the hero's taken item, an item of the hero lying on the ground, an item the hero gave away), or null.
     private SessionMapId? ItemOrigin(string entity)
     {
@@ -2559,7 +2666,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
                 if (holders.Any(holder => touched.Contains((holder, request.Value)))) return $"{request.Change} of the item named {request.Value} meets an earlier item action of the run on the same holder and name, which is not modelled";
                 foreach (var holder in holders) touched.Add((holder, request.Value));
                 var plan = request.Change == ScrObjectStateChange.TransferItem
-                    ? _session.QueryNamedItemTransfer(HolderOf(request.Object), HolderOf(request.Other!.Value), request.Value, ItemScripts) : _session.QueryNamedItemDestroy(HolderOf(request.Object), request.Value);
+                    ? _session.QueryNamedItemTransfer(HolderOf(request.Object), HolderOf(request.Other!.Value), request.Value, ItemScripts, InsertCheck ?? AreaInventoryHost.DiagnosticInsertCheck) : _session.QueryNamedItemDestroy(HolderOf(request.Object), request.Value);
                 if (plan.Refusal is { } why) return why;
                 continue;
             }

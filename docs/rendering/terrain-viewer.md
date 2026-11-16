@@ -1119,7 +1119,7 @@ floating lines, so above the objects and below the numbers) in the original's fo
 Checks: `TextBubblesTests` (colours, life, wrap, slots and slot choice, the table's reuse and eviction, life rules, the setting change) and
 the `map` stage's talk smoke (the NPC line of every started conversation is a persistent bubble, replaced on each reply, not persistent after the end; no `npc` text in the panel); `ARC_AREA_TALK_CAPTURE=PATH` saves the first open dialog as `PATH.png` and the `floaters` smoke stage's bubble part (a PC's and an NPC's bubble over their objects, green and white, wrapped within 200 px,
 alive at 6000 ms and gone after it, a Text Duration change to 2 shortening a live bubble at once; `ARC-UI-1997 bubbles over objects PASS`; then the off flag written on the NPC and the NPC destroyed by a script each remove its bubble and not the hero's, a bubble made over an object that is off stays, `ARC-UI-2034 bubbles removed by off flag and teardown PASS`; then (ARC-UI-2048, ledger TB29, TB30) a dialog speaker with no cell keeps an undrawn bubble that never expires while persistent and ages by time after the end, a final line restarted at the close lives one life from the close, and a new scene drops old bubbles, `ARC-UI-2048 dialog line bubble off the shown map and final-line life PASS` (the fade's clear-all: `AreaScriptHostTests` and `AreaUseScriptHostTests` count the fade runs, `TextBubblesTests` the gone watch);
-`ARC_AREA_FLOATERS_CAPTURE` saves `bubble-before` (the old white rising line), `bubble-after`, and (ARC-UI-2278, ledger TB31: a bubble is laid out in the original's pixels and drawn at the screen's whole factor like the bars and the dialog band; the stage checks factor 2 gives twice the size on the 2 px grid) `bubble-factor1` and `bubble-factor-screen` at a 2560 × 1440 window) and the `spirit-talk` stage (the greeting over the corpse is a bubble). Original visual parity NOT VERIFIED.
+`ARC_AREA_FLOATERS_CAPTURE` saves `bubble-before` (the old white rising line), `bubble-after`, and (ARC-UI-2278, ledger TB31: a bubble is laid out in the original's pixels and drawn at the screen's whole factor like the bars and the dialog band; the stage checks factor 2 gives twice the size on the 2 px grid) `bubble-factor1` and `bubble-factor-screen` at a 2560 × 1440 window; ARC-UI-2289, ledger TB32: the floating lines of the same layer follow the same rule, laid out in the original's pixels with the 200 px box and the 90 px rise and drawn at the screen's whole factor, `ARC-UI-2289 floaters drawn at the screen's whole factor PASS`, captures `floater-factor1` and `floater-factor-screen`) and the `spirit-talk` stage (the greeting over the corpse is a bubble). Original visual parity NOT VERIFIED.
 
 ### Inventory window, pickup and loot (ARC-UI-004)
 
@@ -2750,7 +2750,7 @@ under the bars. Buttons:
 | Button | Strip | Does in the viewer |
 | --- | --- | --- |
 | Character, Logbook, Inventory, Schematics | top, top, top, bottom | Opens its window as `C`, `L`, `I`, `T` do, or closes it when open. Over another of these windows it closes that one first and opens its own (the original's interface mode change). |
-| Map | top | The world map window (`W`, map mode on the start map), which does not fit between the strips, so the bars hide while it is open (`W` or Escape closes it); the town map is not built. |
+| Map | top | The world map window (`W`, map mode on the start map), which lies between the strips (800 × 400 at (0, 41)); the bars stay up under it (ARC-UI-2306; the note quill's entry runs on the bottom strip), the Skills and Sleep buttons refuse while it is open, and `W` or Escape closes it; the town map is not built. |
 | Combat | bottom | Toggles the hero's combat mode (`R`). |
 | Spells | bottom | A toggle: on shows the spell pane (`M`), off hides it; `M` moves the button with the pane. |
 | Skills | bottom | A toggle (Spells goes up when it goes down; `K` does the same without the sound): shows the [skill pane](../world/spell-cast-host.md#the-skill-pane-in-the-bottom-strip-arc-ui-1113) (bar mode 2: the pane's art and the four skill-bar buttons) in the message window. |
@@ -2781,7 +2781,7 @@ installed art and texts read). Native smoke on the original data, map mode on th
 3027, a new game as the first pre-made hero, the bars with all 11 arts and 10 texts from the game, Character's hover
 name and lit frame, its down frame with 3000, the release with 3001 opening the sheet, Inventory switching from the sheet,
 Logbook and Schematics opening and closing their windows, the logbook lying between the strips and taking a press inside
-it, Map opening the world map with the bars hidden and back with no hover, Combat in and out of combat mode, Spells showing and hiding
+it, Map opening the world map with the bars up and closing it again, Combat in and out of combat mode, Spells showing and hiding
 the pane, Fate Points opening and closing its window (and, in the same smoke, the [Fate Point window](#fate-point-window-arc-ui-1112)'s own checks), a press on the strip's clock not reaching the world, every sound started, and the
 [clock](#clock-and-date-arc-ui-1111)). Not done: the
 hot-key bar (later slices; the vials since ARC-UI-020, the message log since ARC-UI-023, the vials' art, the follower frames

@@ -10,7 +10,7 @@ namespace Arcanum.TerrainViewer.Core;
 public sealed record AreaHotkeyBarContent(IReadOnlyDictionary<int, AreaInterfaceArtLoad> Art, string Detail)
 {
     /// <summary>The numbers read: the hotkey bar's and the spell pane's arts.</summary>
-    public static IReadOnlyList<int> ArtNumbers { get; } = [.. HotkeyBarRules.ArtNumbers.Concat(SpellPaneRules.ArtNumbers).Concat(SkillPaneRules.ArtNumbers).Concat(QuantityPaneRules.ArtNumbers).Concat(OrderLine.ArtNumbers).Concat(MagickWeaponPaneRules.ArtNumbers).Concat(BarCounterRules.ArtNumbers).Distinct()];
+    public static IReadOnlyList<int> ArtNumbers { get; } = [.. HotkeyBarRules.ArtNumbers.Concat(SpellPaneRules.ArtNumbers).Concat(SkillPaneRules.ArtNumbers).Concat(QuantityPaneRules.ArtNumbers).Concat(OrderLine.ArtNumbers).Concat(MagickWeaponPaneRules.ArtNumbers).Concat(BarCounterRules.ArtNumbers).Concat(MapNoteEntry.ArtNumbers).Distinct()];
 
     /// <summary>The numbers that read, of <see cref="ArtNumbers"/>.</summary>
     public int ReadyCount => Art.Values.Count(load => load.Status == AreaInterfaceArtStatus.Ready);

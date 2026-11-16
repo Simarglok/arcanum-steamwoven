@@ -22,6 +22,7 @@ public partial class TerrainViewerApp
     // The strip's mode when the line opened: a different one later is a bar mode change (0x5506C0 runs the closer).
     private (int PaneMode, bool Quantity)? _orderLineBarMode;
     private (string Module, AreaBroadcastKeywordsStatus Status, BroadcastKeywords? Keywords, string Detail)? _broadcastKeywords;
+    private (string Module, AreaSleepFilterStatus Status, SleepSpeechFilter? Filter, string Detail)? _sleepFilter;
     private string? _orderLineLastSent;
     // The keys whose press the line took: their release is the line's too, so no release-acting hotkey (M, K, E, ...) sees the typing.
     private readonly HashSet<Key> _orderLineTaken = [];
@@ -72,21 +73,8 @@ public partial class TerrainViewerApp
         if (!_orderLine.IsOpen) return false;
         if (code == Key.Escape) return false;
         _orderLineTaken.Add(code);
-        switch (code)
-        {
-            case Key.Enter or Key.KpEnter: if (!key.Echo) AcceptOrderLine(); return true;
-            case Key.Backspace: _orderLine.Type('\b'); return true;
-            case Key.Delete: _orderLine.Press(OrderLineKey.Delete); return true;
-            case Key.Home: _orderLine.Press(OrderLineKey.Home); return true;
-            case Key.Left: _orderLine.Press(OrderLineKey.Left); return true;
-            case Key.Right: _orderLine.Press(OrderLineKey.Right); return true;
-            case Key.Up: _orderLine.Press(OrderLineKey.Up); return true;
-            case Key.Down: _orderLine.Press(OrderLineKey.Down); return true;
-            case Key.Insert: if (!key.Echo) _orderLine.Press(OrderLineKey.Insert); return true;
-            case Key.Tab: return true;
-        }
-        if (key.Unicode >= ' ' && key.Unicode <= 0xFF && !key.CtrlPressed && !key.AltPressed && !key.MetaPressed) _orderLine.Type((char)key.Unicode);
-        return true;
+        if (code is Key.Enter or Key.KpEnter) { if (!key.Echo) AcceptOrderLine(); return true; }
+        return AreaStripEntryKeys.Edit(key, _orderLine.Type, _orderLine.Press);
     }
 
     /// <summary>Enter in the open line (0x571950): a non-empty text is floated over the hero and sent to the followers with the highlighted object and the tile
@@ -104,11 +92,45 @@ public partial class TerrainViewerApp
             RefreshReadyStatus();
             return;
         }
+        // BM5f (ARC-WORLD-2310): the text goes through the speech-state table first (0x4F6840): a speaker that is unconscious or asleep says the transformed text, and the
+        // transformed text is what is floated and read for the names and the order word.
+        var (unconscious, sleeping) = HeroSpeechState();
+        if (SleepSpeechFilter.Applies(unconscious, sleeping))
+        {
+            var (filterStatus, filter, filterDetail) = SleepFilter();
+            if (filter is null)
+            {
+                _companionNotice = $"Enter: order not sent (sleep speech words {filterStatus}: {filterDetail})";
+                RefreshReadyStatus();
+                return;
+            }
+            text = filter.Speech(text, unconscious, sleeping);
+        }
         _orderLineLastSent = text;
         // OL2: the PC's own text is floated over the PC first (callback 0x5FDC88 of 0x4C31A0).
         Bubble(HeroFloater, text);
         IssueAreaOrder("Enter", new(CompanionOrderType.None, CompanionOrderAddressing.Text, [], Tile: PointerCell())
             { Text = text, Keywords = keywords, Target = OrderTarget(_hoverKey) });
+    }
+
+    /// <summary>The hero's state for the speech-state table (0x4F6B70): unconscious (0x45D800) or asleep (0x45D870, the session's overlay of the hero's critter flag 0x1000; the hero has no stored flags).</summary>
+    private (bool Unconscious, bool Sleeping) HeroSpeechState() => _areaSession is { } session
+        ? (session.QueryHeroLife()?.Status.IsUnconscious == true, (session.QueryObjectFlags(SessionSpellCaster.Hero).Critter(0) & SessionSpellCaster.SleepingCritterFlag) != 0)
+        : (false, false);
+
+    /// <summary>The sleeping filter of the player's <c>mes\text_filter_sleep.mes</c>, read at the first need and kept for the module (its filler counter is one global of the process).</summary>
+    private (AreaSleepFilterStatus Status, SleepSpeechFilter? Filter, string Detail) SleepFilter()
+    {
+        var module = _arguments?.ModulePath;
+        if (module is null) return (AreaSleepFilterStatus.ModuleOutsideGameRoot, null, "no module");
+        if (_sleepFilter is not { } cached || cached.Module != module)
+        {
+            var (status, filter, detail) = AreaSleepSpeechFilter.Load(module);
+            _sleepFilter = (module, status, filter, detail);
+            GD.Print($"ARC-WORLD-2310 sleep speech words {status} {detail}");
+        }
+        var known = _sleepFilter!.Value;
+        return (known.Status, known.Filter, known.Detail);
     }
 
     /// <summary>Per frame while the bars show (after the quantity pane): the line over the strip while it is open; a change of the strip's mode closes it

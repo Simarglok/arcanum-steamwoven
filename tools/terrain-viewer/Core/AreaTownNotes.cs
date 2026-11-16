@@ -13,6 +13,8 @@ public sealed record AreaTownNote(int Id, int Flags, int PixelX, int PixelY, int
 public sealed class AreaTownNotes
 {
     public const int Capacity = 199, FirstId = 200, QuestionType = 3, DefaultFlags = 2;
+    /// <summary>ARC-UI-2306 (BM4): the flags of a note made through the entry (0x564140 clears them) and the flag whose notes the entry refuses to edit (0x564360).</summary>
+    public const int PlayerFlags = 0, NoEditFlag = 2;
     /// <summary>The note's text buffer is 250 bytes (WM91): at most 249 characters with the terminator.</summary>
     public const int MaxTextLength = 249;
     /// <summary>The scenery flag that marks the town map (bit 0x8 of the scenery flags, WM127).</summary>
@@ -58,18 +60,21 @@ public sealed class AreaTownNotes
 
     /// <summary>
     /// ARC-UI-106 (WM92, the quill of the Steamwoven rules): text is accepted when it holds more than white space; an empty text deletes the note being edited (0x564210)
-    /// and adds none. A new note takes <see cref="QuestionType"/> and <see cref="DefaultFlags"/> (the original's "current note type" 0x66D89C is not read, F0).
+    /// and adds none. A new note takes the type the entry's radio group gives (0x66D89C: 0 note, 1 skull, 2 chest) and flags <see cref="PlayerFlags"/> (ARC-UI-2306).
     /// </summary>
     public static bool IsNoteText(string? text) => !string.IsNullOrWhiteSpace(text);
 
     /// <summary>The quill's press on empty ground, accepted with <paramref name="text"/>: a note at the picture pixel. False for an empty text, a full list or a negative pixel (the view checks the picture's size).</summary>
-    public bool AddByQuill(int pixelX, int pixelY, string text)
+    public bool AddByQuill(int pixelX, int pixelY, string text, int type = QuestionType)
     {
         ArgumentNullException.ThrowIfNull(text);
         // Characters the session refuses (control characters and surrogates, emoji included) become blanks; a text of nothing else adds no note.
         var kept = Limit(text).Trim();
-        return IsNoteText(text) && IsNoteText(kept) && pixelX >= 0 && pixelY >= 0 && Add(pixelX, pixelY, kept);
+        return IsNoteText(text) && IsNoteText(kept) && pixelX >= 0 && pixelY >= 0 && Add(pixelX, pixelY, kept, PlayerFlags, type);
     }
+
+    /// <summary>ARC-UI-2306 (BM4): the entry edits a note unless it carries <see cref="NoEditFlag"/> (the original's edit refuses it; the notes a scenery marked carry it).</summary>
+    public bool IsEditable(int index) => index >= 0 && index < _items.Count && (_items[index].Flags & NoEditFlag) == 0;
 
     /// <summary>The quill's press on a note, accepted with <paramref name="text"/>: the note keeps its place and takes the text; an empty text deletes it. False when nothing changed.</summary>
     public bool EditByQuill(int index, string text)
@@ -85,10 +90,10 @@ public sealed class AreaTownNotes
     }
 
     /// <summary>0x564160: refused at <see cref="Capacity"/>; else the note takes the next id and goes to the end of the list.</summary>
-    private bool Add(int pixelX, int pixelY, string text)
+    private bool Add(int pixelX, int pixelY, string text, int flags = DefaultFlags, int type = QuestionType)
     {
         if (_items.Count >= Capacity || NextId == int.MaxValue) return false;
-        _items.Add(new(NextId++, DefaultFlags, pixelX, pixelY, QuestionType, Limit(text)));
+        _items.Add(new(NextId++, flags, pixelX, pixelY, type, Limit(text)));
         return true;
     }
 
