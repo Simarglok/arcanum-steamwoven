@@ -1280,7 +1280,8 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
     {
         // ARC-MAGIC-022: an item source's spent charge (and with it the magical flag) is saved. The notes of an event pass are applied
         // after the pass, so two payments of one pass were both made against the count before it: one that finds no charge left
-        // spends nothing (the original refuses the second, NoCharges). A spend the session refuses (a full record budget) is logged.
+        // spends nothing (the original refuses the second, NoCharges). The spend is written for any item the host names (ARC-MAGIC-2434: no tracking, a budget of its own);
+        // it is refused (and logged) only for a deleted item, the 65,537th count or an exhausted revision counter.
         if (payment.ChargeSpent)
         {
             if (_items?.Invoke(payer) is not { } raw || raw.Entity != payer) return;

@@ -106,6 +106,9 @@ public sealed class GameSessionLimits
     /// <summary>Mana stores (field 92) of worn items the session holds (ARC-MAGIC-2403): a payment writes the store of every item a critter wears, never refused for a shared budget as the original
     /// writes it always. A critter wears at most nine items, and the installed maps hold 3,792 NPCs (34,128 slots), the hero and the companions are 65 more; the rest is room for created critters.</summary>
     public const int PolicyMaxManaStores = 65_536;
+    /// <summary>Spent spell charges (field 105) of the items a spell source can be (ARC-MAGIC-2434): a payment writes the charge of any item the host names as the source, never refused for a shared budget as the original
+    /// writes it always. One row for every item that ever paid or was recharged; the installed map holds 5,380 item rows in its largest residency, so 65,536 leaves room for every map and for made items.</summary>
+    public const int PolicyMaxItemCharges = 65_536;
 
     public GameSessionLimits(int maxMaps = PolicyMaxMaps, int maxChangesPerMap = PolicyMaxChangesPerMap,
         int maxTotalChanges = PolicyMaxTotalChanges, int maxCompanions = PolicyMaxCompanions, int maxPcItems = PolicyMaxPcItems,
@@ -113,7 +116,7 @@ public sealed class GameSessionLimits
         int maxExperienceRecords = PolicyMaxExperienceRecords, int maxAdvancementRecords = PolicyMaxAdvancementRecords,
         int maxDurabilityRecords = PolicyMaxDurabilityRecords, int maxFoundSchematics = PolicyMaxFoundSchematics, int maxNpcItems = PolicyMaxNpcItems,
         int maxAmmoRecords = PolicyMaxAmmoRecords, int maxGoldRecords = PolicyMaxGoldRecords, int maxDangerRecords = PolicyMaxDangerRecords,
-        int maxDangerEnemies = PolicyMaxDangerEnemies, int maxCreatedItems = PolicyMaxCreatedItems, int maxManaStores = PolicyMaxManaStores)
+        int maxDangerEnemies = PolicyMaxDangerEnemies, int maxCreatedItems = PolicyMaxCreatedItems, int maxManaStores = PolicyMaxManaStores, int maxItemCharges = PolicyMaxItemCharges)
     {
         if (maxMaps is < 1 or > PolicyMaxMaps) throw new ArgumentOutOfRangeException(nameof(maxMaps));
         if (maxChangesPerMap is < 1 or > PolicyMaxChangesPerMap) throw new ArgumentOutOfRangeException(nameof(maxChangesPerMap));
@@ -133,12 +136,13 @@ public sealed class GameSessionLimits
         if (maxDangerEnemies is < 1 or > PolicyMaxDangerEnemies) throw new ArgumentOutOfRangeException(nameof(maxDangerEnemies));
         if (maxCreatedItems is < 1 or > PolicyMaxCreatedItems) throw new ArgumentOutOfRangeException(nameof(maxCreatedItems));
         if (maxManaStores is < 1 or > PolicyMaxManaStores) throw new ArgumentOutOfRangeException(nameof(maxManaStores));
+        if (maxItemCharges is < 1 or > PolicyMaxItemCharges) throw new ArgumentOutOfRangeException(nameof(maxItemCharges));
         MaxMaps = maxMaps; MaxChangesPerMap = maxChangesPerMap; MaxTotalChanges = maxTotalChanges; MaxCompanions = maxCompanions;
         MaxPcItems = maxPcItems; MaxLifeRecords = maxLifeRecords;
         MaxReactionRecords = maxReactionRecords; MaxExperienceRecords = maxExperienceRecords;
         MaxAdvancementRecords = maxAdvancementRecords; MaxDurabilityRecords = maxDurabilityRecords; MaxFoundSchematics = maxFoundSchematics;
         MaxNpcItems = maxNpcItems; MaxAmmoRecords = maxAmmoRecords; MaxGoldRecords = maxGoldRecords; MaxDangerRecords = maxDangerRecords;
-        MaxDangerEnemies = maxDangerEnemies; MaxCreatedItems = maxCreatedItems; MaxManaStores = maxManaStores;
+        MaxDangerEnemies = maxDangerEnemies; MaxCreatedItems = maxCreatedItems; MaxManaStores = maxManaStores; MaxItemCharges = maxItemCharges;
     }
 
     public int MaxMaps { get; }
@@ -161,6 +165,8 @@ public sealed class GameSessionLimits
     public int MaxCreatedItems { get; }
     /// <summary>ARC-MAGIC-2403: the worn items' mana stores (<see cref="PolicyMaxManaStores"/>), apart from <see cref="MaxDurabilityRecords"/>.</summary>
     public int MaxManaStores { get; }
+    /// <summary>ARC-MAGIC-2434: the spent spell charges of items (<see cref="PolicyMaxItemCharges"/>), apart from <see cref="MaxDurabilityRecords"/>.</summary>
+    public int MaxItemCharges { get; }
 }
 
 /// <summary>

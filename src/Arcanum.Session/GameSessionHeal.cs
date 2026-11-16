@@ -241,7 +241,7 @@ public sealed partial class GameSessionOwner
     // Whether the item's change adds a durability record: a destroyed entry for an item with no condition or uses record, or a
     // first uses record.
     private bool NewDurabilityRecord(string entity, bool destroyed) => destroyed
-        ? !_durability.Records.ContainsKey(entity) && !_durability.Uses.ContainsKey(entity) && !_durability.Charges.ContainsKey(entity)
+        ? !_durability.Records.ContainsKey(entity) && !_durability.Uses.ContainsKey(entity)
         : !_durability.Uses.ContainsKey(entity);
 
     private SessionHealResult RejectHeal(GameSessionFailure failure) =>
