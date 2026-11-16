@@ -94,4 +94,30 @@ public sealed partial class SessionSpellCasterTests
         Assert.AreEqual(96, owner.QueryItemManaStore(StoreStaff));
         Assert.AreEqual((StoreStaff, 4), owner.QueryManaRecharges().Single() is var e ? (e.Entity, e.Pending) : default);
     }
+
+    private sealed class NoWorld : ISessionEventWorld
+    {
+        public Arcanum.Simulation.Combat.LifeFacts? CritterFacts(SessionMapId map, string entity) => null;
+    }
+
+    // ARC-MAGIC-2401 (BC10): a negative store is emptied to 0 and its value adds to the cost; the recharge event carries the negative amount and puts the old negative value back.
+    [TestMethod]
+    public void A_negative_store_adds_to_the_cost_is_written_as_0_and_the_recharge_puts_it_back()
+    {
+        var record = SelfBolt(cost: 4);
+        var (owner, caster) = StoreSession(record, store: -3);
+        using var _ = owner;
+        var before = Hero(owner);
+        Cast(owner, caster, record);
+        Assert.AreEqual(0, owner.QueryItemManaStore(StoreStaff), "the emptied negative store is written as 0");
+        Assert.AreEqual(before.Fatigue - 7, Hero(owner).Fatigue, "4 + 3: the negative store passes its value on to fatigue");
+        Assert.AreEqual((StoreStaff, -3), owner.QueryManaRecharges().Single() is var e ? (e.Entity, e.Pending) : default);
+        Assert.IsTrue(GameTimeResult(owner));
+        owner.ProcessEvents(new NoWorld());
+        Assert.AreEqual(-3, owner.QueryItemManaStore(StoreStaff), "the handler adds the negative pending amount back");
+        Assert.AreEqual(0, owner.QueryManaRecharges().Count);
+    }
+
+    private static bool GameTimeResult(GameSessionOwner owner) =>
+        owner.AdvanceGameTime(owner.QueryClockSnapshot().Token, 480_000, Arcanum.Simulation.Clock.ClockAdvanceReason.OrdinaryAdvance).Disposition == Arcanum.Simulation.Clock.ClockMutationDisposition.Changed;
 }

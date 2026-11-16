@@ -80,14 +80,13 @@ restores `2 × max(1, elapsed game seconds since the drain / 120)` points, at mo
 rescheduled without merging (0x459680).
 
 **Built by ARC-MAGIC-2371 (schema 103); the event's map parking by ARC-MAGIC-2400 (schema 104).** The session holds the store of each drained or recharged item (`GameSessionOwner.QueryItemManaStore`, `WriteItemManaStore`;
-the saved `durability.manaStores`, ascending by entity, 0..1,000,000 each). `SessionSpellCaster.Payer` fills `WornManaStores` from the worn items of the payer (slot 1000..1008)
+the saved `durability.manaStores`, ascending by entity, a full 32-bit value each since ARC-MAGIC-2401). `SessionSpellCaster.Payer` fills `WornManaStores` from the worn items of the payer (slot 1000..1008)
 with the session's copy over the item's own field 92 (`SessionItemSpells.ManaStore`); the payment's notes write each drain back (`DrainWornStore`: the store left, logged as `ManaStoreDrained`)
 and schedule its event (`ScheduleManaRecharge`, kind `item.recharge`, merge set; `QueryManaRecharges` lists them), also for a paid 0 of a store that stays (merging a 0). The handler (`FireItemRecharge`)
-adds the restored points to the stored value with no cap at the prototype's value and sets the rest up again; an item whose store the session never changed, or one it deleted, ends the event. The notes of an
+adds the restored points to the stored value with no cap at the prototype's value (a 32-bit add, no bound at all since ARC-MAGIC-2401) and sets the rest up again, a negative pending amount being restored whole (the signed minimum) with nothing set up again; an item whose store the session never changed, or one it deleted, ends the event. The notes of an
 event pass are applied after the pass, so a store a second payment of the pass drains is read again and drains at most what is there. The event is scoped to the map the PC was on when it was scheduled (`QueryManaRechargeMaps`): a PC's map change carries the events of the items it and its travelling followers hold to the
 destination, and the rest stay parked on the old map and fire late on the PC's return with the whole elapsed span (a larger refill), as the original's teleport break and park do (TL33; a payment merges only
-into the event of the map it is on). Differences: the interface refresh follows the session's revision, the AI list cache the original clears at an emptied store (0x4CCC40) is not modelled,
-and a store is kept within 0..1,000,000 (a negative prototype store never occurs in the installed prototypes: 0..80).
+into the event of the map it is on). **ARC-MAGIC-2401:** the store and the pending amount are plain 32-bit values as the original's fields are (a negative store is emptied to 0 by a payment, which passes its value on to the cost, and its recharge puts the negative value back; a merge's sum wraps as 0x459640's add does); the 0..1,000,000 bound is gone, and no schema step was needed (every saved store of schema 104 stays valid, the range only widens). Differences: the interface refresh follows the session's revision and the AI list cache the original clears at an emptied store (0x4CCC40) is not modelled.
 
 ## Function oracle
 

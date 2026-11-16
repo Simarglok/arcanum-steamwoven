@@ -62,6 +62,7 @@ public sealed class SpellPaymentRulesTests
         Assert.AreEqual((8, 2), SpellCostRules.Recharge(480, 10));
         Assert.AreEqual((10, 0), SpellCostRules.Recharge(100_000, 10));
         Assert.AreEqual((2, 8), SpellCostRules.Recharge(-500, 10));
+        Assert.AreEqual((-5, 0), SpellCostRules.Recharge(480, -5), "a negative pending amount is restored whole (signed min) and leaves nothing to reschedule");
     }
 
     [TestMethod]
