@@ -22,7 +22,7 @@ public sealed partial class GameSessionOwner
     /// throw before any effect. A throw script that answers skip default (the original's 0) throws nothing: the removal's and the script's own changes stay, a worn item is worn no more and lies in the hero's list again (the original puts it on the hero's tile,
     /// 0x4415C0, and inserts it back, 0x4617F0) and the result is <see cref="SessionHeroThrowResult.ScriptDeclined"/> with the removal's spell steps (a worn item's unwear, then the removal's). Otherwise the runs' changes are applied in a revision of
     /// their own and the throw goes on from the new version. Refused before any effect: the hero's worn items, an inactive hero (NoChange), the shot budget, the version, the revision, a worn item the hero's list has no room for when the throw script could
-    /// give it back, and the runs above. ARC-COMBAT-2176: with a struck critter the refusals of the attack on it (<see cref="StruckThrowPreflight"/>) are checked first too. ARC-COMBAT-2390: a refusal of the attack on the struck critter after the scripts ran that this check cannot foresee (the hero's values a script changed, the random sequence a host callback used) is made by <see cref="ThrowHeroItem"/>: the item is thrown at the location, as for a dead critter (the original's throw flies in any case, ledger TW8).
+    /// give it back, and the runs above. ARC-COMBAT-2176: with a struck critter the refusals of the attack on it (<see cref="StruckThrowPreflight"/>) are checked first too. ARC-COMBAT-2390: a refusal of the attack on the struck critter after the scripts ran that this check cannot foresee (the hero's values a script changed, the random sequence a host callback used) is made by <see cref="ThrowHeroItem"/>: the item is thrown at the location (the original's throw flies in any case, ledger TW8; a dead critter is thrown at itself, ARC-COMBAT-2392).
     /// </summary>
     private HeroThrowScripted RunHeroThrowScripts(GameSessionVersion expected, SessionHeroThrow request, SessionWornItem? worn, IReadOnlyList<int> points, bool split, SessionItemKind kind, bool throwScript, SessionHeroAttack? struckHero)
     {
@@ -107,7 +107,7 @@ public sealed partial class GameSessionOwner
     /// <summary>
     /// ARC-COMBAT-2176: the refusals <see cref="CritterAttack"/> makes of a hero's pack throw at a struck critter, in its order, judged before the item's scripts run (as <see cref="NpcThrowPreflight"/> does for an NPC): the struck critter's record and
     /// facts, the two sides' worn items, the distance, the struck cell's light, the flight budget, the revisions of the throw, the defender's combat values and the roll sequence (the resolver and a missed throw's scatter run on a copy of it, nothing is
-    /// drawn). A struck critter that is dead is no refusal here (the attack answers NoChange and the throw goes to the location). <paramref name="hero"/> is the hero as it throws now.
+    /// drawn). A struck critter that is dead is no refusal here (the throw rolls against the corpse, ARC-COMBAT-2392). <paramref name="hero"/> is the hero as it throws now.
     /// </summary>
     private GameSessionFailure StruckThrowPreflight(SessionHeroThrow request, SessionHeroAttack hero)
     {
