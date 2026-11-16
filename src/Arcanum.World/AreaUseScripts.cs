@@ -872,6 +872,20 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     /// without one.</summary>
     public (long X, long Y)? Location(ScrObjectRef obj) => Place(obj) is { } cell ? (cell.X, cell.Y) : null;
 
+    /// <summary>
+    /// ARC-SCRIPT-2426 (IV36–IV39, HW3): the location field distance between reads on an insert-item run: an item reads its own location field (the tile a session-dropped item lies on, else the tile of its map data or the carried item's row: the same centre as
+    /// the vicinity scans of the run, <see cref="ContainersNearItem"/>, IV2), any other object its place as <see cref="Location"/> gives it. Null for an object without a place (an item of another map, one with no tile).
+    /// </summary>
+    public (long X, long Y)? LocationOfObject(ScrObjectRef obj)
+    {
+        if (IsPc(obj) || !IsItemObject(obj)) return Location(obj);
+        return ItemCentre(obj) is { } at ? (at.X, at.Y) : null;
+    }
+
+    // An item the run can name: a row of the item types (the shown map's or a carried item's) or one the session put on the ground.
+    private bool IsItemObject(ScrObjectRef obj) =>
+        (Row(obj) ?? CarriedItemRow(obj)) is { Type: >= FirstItemType and <= LastItemType } || _session.QueryPlacedItems().Any(p => p.Entity == obj.Code && p.Map.RuntimeMap == obj.Map);
+
     /// <summary>ARC-SCRIPT-049 (HW1): the PC's and an NPC's death as the session holds it (an NPC: its map data or a kill); null for any
     /// other object (an object's hit points are not read here) and for an object of no loaded row.</summary>
     public bool? IsDead(ScrObjectRef obj)
@@ -1229,13 +1243,13 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         {
             var worn = _session.QueryEquipment().Worn.ToDictionary(item => item.Entity, item => (int)item.Slot, StringComparer.Ordinal);
             int? Location(string entity) => worn.TryGetValue(entity, out var slot) ? slot : null;
-            return _session.QueryHeroKit().Select(item => new HeldItem(item.Kind.Name, Location(item.Entity)))
-                .Concat(_session.QueryPcInventory().Select(item => new HeldItem(item.Kind.Name, Location(item.Entity))))
+            return _session.QueryHeroKit().Select(item => new HeldItem(_session.QueryItemName(item.Entity, item.Kind.Name), Location(item.Entity)))
+                .Concat(_session.QueryPcInventory().Select(item => new HeldItem(_session.QueryItemName(item.Entity, item.Kind.Name), Location(item.Entity))))
                 // ARC-MAGIC-051: an item the hero assembled lives in the made items, not the kit or the pack (the powered shield's timer needs its name).
-                .Concat(_session.QueryMadeItems().Select(item => new HeldItem(item.Kind.Name, Location(item.Entity)))).ToArray();
+                .Concat(_session.QueryMadeItems().Select(item => new HeldItem(_session.QueryItemName(item.Entity, item.Kind.Name), Location(item.Entity)))).ToArray();
         }
         var holder = _session.QueryMapInventory(new SessionMapId(obj.Map))?.Holders.FirstOrDefault(h => h.Entity == obj.Code);
-        return holder is null ? [] : holder.Items.Select(item => new HeldItem(item.Facts.Kind.Name, item.Facts.InventoryLocation)).ToArray();
+        return holder is null ? [] : holder.Items.Select(item => new HeldItem(_session.QueryItemName(item.Entity, item.Facts.Kind.Name), item.Facts.InventoryLocation)).ToArray();
     }
 
     /// <summary>
