@@ -1,5 +1,7 @@
 # Generated interface chrome and density-aware layout (ARC-RES-122)
 
+> **2026-11-16, superseded in part** ([Steamwoven interface ADR](../ui/steamwoven-interface-adr.md), ARC-UI-2447): the Steamwoven look uses a scale proportional to the screen with four baked steps, not the density scale of concept 1, and the generated chrome is not the final look. The generated chrome stays as the placeholder, the proportions prototype ([#2452](https://github.com/Simarglok/arcanum-steamwoven/issues/2452)) and the fallback for parts the kit lacks.
+
 Status: **concept approved by the owner on 2026-11-11 (all recommended options; Linux narrowed to SteamOS, docs and code
 only); demo lab [`experiments/hd-ui-density-lab`](../../experiments/hd-ui-density-lab/README.md) built and checked
 ([Demo](#demo)); the viewer is unchanged.**

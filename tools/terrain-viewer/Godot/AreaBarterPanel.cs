@@ -49,6 +49,8 @@ public partial class AreaBarterPanel : CanvasLayer
     /// <summary>ARC-UI-064: the window's holder (the PC) on the screen for the round view: its foot point in canvas units and the game
     /// view's zoom; null when it is not drawn.</summary>
     public Func<(Vector2 Foot, float Zoom)?>? HolderView { get; set; }
+    /// <summary>ARC-UI-1908: the stored portraits' small images the frame draws where the original's image function answers a portrait.</summary>
+    public Func<int, Texture2D?>? PortraitTextures { get => _area.PortraitTextures; set => _area.PortraitTextures = value; }
     // ARC-UI-064: the original look: the art, the owner's choice of the diagnostic view, the switch between them, the frame, the round
     // view, the panel's two backgrounds and the frame's view (the hero's side and the shown object's grid) with the window's own parts.
     private AreaInventoryArtLook? _look;

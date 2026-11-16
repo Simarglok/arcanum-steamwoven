@@ -1,3 +1,4 @@
+using Arcanum.Data.Area;
 using Arcanum.Session;
 using Arcanum.TerrainViewer.Core;
 using Arcanum.World;
@@ -171,6 +172,56 @@ public sealed class AreaLootArtTests
         Assert.AreEqual(224, AreaLootArtLayout.BoxArt(AreaInventoryIcon.Drop, partner, over: false));
         Assert.AreEqual(225, AreaLootArtLayout.BoxArt(AreaInventoryIcon.Drop, own, over: true));
         Assert.AreEqual(342, AreaLootArtLayout.BoxArt(AreaInventoryIcon.Use, null, over: true));
+    }
+
+    [TestMethod]
+    public void TheHoldersPortraitIsAPcsOrAnNpcTheObserverLeads()
+    {
+        // ARC-UI-1908 (IW27, chooser 0x553D10): a PC always takes its portrait; an NPC only when its leader chain reaches the PC and the stored number is not 0.
+        Assert.AreEqual(1050, AreaLootArtLayout.HolderPortrait(16, true, 1050), "a led NPC with a portrait");
+        Assert.IsNull(AreaLootArtLayout.HolderPortrait(16, true, null), "a led NPC without one takes the flag and race art");
+        Assert.IsNull(AreaLootArtLayout.HolderPortrait(16, false, 1050), "a free NPC takes the art");
+        Assert.AreEqual(1001, AreaLootArtLayout.HolderPortrait(15, false, 1001), "a PC");
+        Assert.IsNull(AreaLootArtLayout.HolderPortrait(2, true, 1050), "a container has none");
+        foreach (var type in new[] { 15, 16 })
+            foreach (var number in new long[] { 1050, 0, -3 })
+            {
+                var row = new AreaObjectRecord(new(new string('a', 64), 1, AreaSourceKind.Mobile, 1, 3, 300, new string('b', 64), 100), 0, type, 0, "p", "p", "r", "s", AreaScope.Core,
+                    null, 10, 20, Arcanum.Data.Area.AreaDisposition.BodyEligibleConditionally, [], [new(AreaLootArtLayout.PortraitSlot, AreaPresence.Value, AreaValueOrigin.Prototype, number, [], null)], true, true, true);
+                Assert.AreEqual(AreaPortraits.Stored(row), AreaLootArtLayout.StoredPortrait(row), $"the follower frames and the item windows read the same stored portrait (type {type}, {number})");
+            }
+        Assert.AreEqual((141, 36, 32, 32), AreaServiceArtLayout.PortraitRect, "modes 5 and 6: 0x4CE680 forces 32 by 32 at the art's corner");
+    }
+
+    [TestMethod]
+    public void TheHostGivesAFollowersPortraitToTheItemWindows()
+    {
+        using var session = ConversationSessionFixture.Create(1);
+        var led = "oid:" + new string('1', 64);
+        var free = "oid:" + new string('2', 64);
+        var container = "oid:" + new string('3', 64);
+        var chained = "oid:" + new string('4', 64);
+        var noPortrait = "oid:" + new string('5', 64);
+        var pc = "oid:" + new string('6', 64);
+        AreaObjectRecord Row(string entity, int type, long portrait) =>
+            new(new(new string(entity[^1], 64), 1, AreaSourceKind.Mobile, 1, 3, 300, new string('b', 64), 100), 0, type, 0, "p", "p", "r", "s", AreaScope.Core,
+                null, 10, 20, Arcanum.Data.Area.AreaDisposition.BodyEligibleConditionally, [], [new(AreaLootArtLayout.PortraitSlot, AreaPresence.Value, AreaValueOrigin.Prototype, portrait, [], null)], true, true, true);
+        var map = new AreaInventoryMap(1, new([new SessionSeedHolder(led, SessionHolderKind.Npc, false, false, [], []), new SessionSeedHolder(free, SessionHolderKind.Npc, false, false, [], []),
+                new SessionSeedHolder(container, SessionHolderKind.Container, false, false, [], []), new SessionSeedHolder(chained, SessionHolderKind.Npc, false, false, [], []),
+                new SessionSeedHolder(noPortrait, SessionHolderKind.Npc, false, false, [], [])], []), new Dictionary<string, AreaObjectRecord>
+            { [chained] = Row(chained, 16, 1053), [noPortrait] = Row(noPortrait, 16, 0), [led] = Row(led, 16, 1050), [free] = Row(free, 16, 1051), [container] = Row(container, 2, 1052) });
+        var host = new AreaInventoryHost([map]);
+        Assert.IsNull(host.HolderPortrait(session, 1, led), "not led yet: the art");
+        Assert.AreEqual(GameSessionDisposition.Changed, session.ForceJoinParty(session.Version, led).Disposition);
+        Assert.AreEqual(1050, host.HolderPortrait(session, 1, led), "led by the PC: its stored portrait");
+        Assert.IsNull(host.HolderPortrait(session, 1, free), "a free NPC");
+        Assert.IsNull(host.HolderPortrait(session, 1, chained), "an NPC led by no one");
+        Assert.AreEqual(GameSessionDisposition.Changed, session.ForceJoinLeader(session.Version, chained, led).Disposition);
+        Assert.AreEqual(1053, host.HolderPortrait(session, 1, chained), "led by a follower of the PC: the chain reaches the PC (0x45DDA0 climbs every leader)");
+        Assert.AreEqual(GameSessionDisposition.Changed, session.ForceJoinParty(session.Version, noPortrait).Disposition);
+        Assert.IsNull(host.HolderPortrait(session, 1, noPortrait), "a led NPC that stores portrait 0 takes the art");
+        Assert.IsNull(host.HolderPortrait(session, 1, container), "a container");
+        Assert.IsNull(host.HolderPortrait(session, 1, "oid:" + new string('9', 64)), "no row");
     }
 
     [TestMethod]

@@ -73,8 +73,8 @@ and saves the charges the spells spend. The other events are later slices (see [
   no tracked item (the host's item lookup names the item, whatever map seed the session has attached) and no shared budget: the
   counts have a budget of their own (`GameSessionLimits.MaxItemCharges`, 65,536), no longer part of the durability records, so a
   full durability budget cannot lose a spend. A spend is refused (and logged as `ChargeNotSaved`) only for a deleted item, the
-  65,537th count or an exhausted revision counter. `RechargeItemCharges` writes the same counts and the same budget (a count the
-  session already holds is recharged tracked or not).
+  65,537th count or an exhausted revision counter. `RechargeItemCharges` writes the same counts and the same budget (ARC-MAGIC-2443: the recharge
+  asks no tracked item either; it is refused only for a deleted item, the charge budget or an exhausted revision counter).
 - Both are in snapshot schema 49 ([game session](game-session-runtime.md#snapshot-schema-62)): `durability.charges` (`entity`,
   `charges` 0..1,000,000, ordinal order, within the charge budget of its own) and each worn item's `itemSpells`.
 
