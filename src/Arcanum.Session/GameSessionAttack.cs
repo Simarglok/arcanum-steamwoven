@@ -871,6 +871,42 @@ public sealed partial class GameSessionOwner
         facts is null || skill != CombatSkill.Melee ? BackstabKind.None
         : AttackRules.Backstab(attacker.BackstabLevel, attacker.BackstabTraining, weapon.Kind, weapon.ArtSubtype, facts.TargetFacesAttacker, facts.TargetPerceivesAttacker);
 
+    // The struck critter as it defends (null: its facts are invalid): a follower the session levelled defends with its saved sheet's skills and level (ARC-SKILLS-002). Shared by the attack and the hero throw's preflight (ARC-COMBAT-2176).
+    private Combatant? StrikeDefender(SessionAttack attack, SessionCritterCombat target, SessionLifeRecord record, LifeFacts facts)
+    {
+        Combatant defender;
+        try { defender = Levelled(target).Combatant(LifeRules.Evaluate(record.State, facts), record.State, _rules.Combat); }
+        catch (ArgumentException) { return null; }
+        // ARC-COMBAT-009: the items the critical-hit procedure looks at are the ones the host says the NPC wears now (an earlier
+        // critical may have dropped or destroyed some of its map data's).
+        if (attack.TargetWorn is { } targetWorn) defender = defender with { Worn = CombatantRules.WornItems(targetWorn.Keys) };
+        // ARC-WORLD-1149: the light at the target's cell, for the darkness penalty (full light without a host that knows it).
+        if (attack.TargetLight is { } targetLight) defender = defender with { LightLevel = targetLight };
+        return defender;
+    }
+
+    // The resolver's request of an attack on a critter (shared with the hero throw's preflight, ARC-COMBAT-2176).
+    private AttackRequest StrikeRequest(SessionAttack attack, SessionHeroAttack hero, Combatant defender, PendingShot? pending, PackThrow? pack, string? thrown) => new()
+    {
+        Attacker = hero.Combatant,
+        Target = defender,
+        Weapon = hero.Weapon,
+        Skill = hero.Skill,
+        SkillLevel = hero.SkillLevel,
+        Training = hero.Training,
+        AimedLocation = pending is null ? attack.Aim : null,
+        Distance = pending is null ? attack.Distance : 1,
+        CoverRating = pending is null ? attack.LineOfFire?.Cost ?? 0 : 0,
+        LineOfFireBlocked = pending is null && (attack.LineOfFire?.Blocked ?? false),
+        Difficulty = _difficulty,
+        // ARC-COMBAT-023: a thrown pack item takes no ammunition of the wielded weapon.
+        AmmunitionShort = pending is null && pack is null && ShotAmmunition() is { Short: true },
+        DeferHit = pending is null && attack.Flight,
+        // ARC-COMBAT-1929: a melee strike (not a shot's landing or a throw) may be a backstab.
+        Backstab = pending is null && thrown is null ? BackstabOf(hero.Combatant, hero.Skill, hero.Weapon, attack.Backstab) : BackstabKind.None,
+        TargetWasInBed = attack.TargetWasInBed,
+    };
+
     private SessionAttackResult CritterAttack(GameSessionVersion expected, SessionAttack attack, SessionShot? landing, PackThrow? pack = null)
     {
         ThrowIfDisposed();
@@ -914,36 +950,10 @@ public sealed partial class GameSessionOwner
         if (_revision >= long.MaxValue - (thrown is null ? 0 : 2)) return RejectAttack(GameSessionFailure.RevisionExhausted);
 
         var targetStatus = LifeRules.Evaluate(record.State, facts!);
-        // A follower the session levelled defends with its saved sheet's skills and level (ARC-SKILLS-002).
         var defending = Levelled(target);
-        Combatant defender;
-        try { defender = defending.Combatant(targetStatus, record.State, _rules.Combat); }
-        catch (ArgumentException) { return RejectAttack(GameSessionFailure.InvalidAttack); }
-        // ARC-COMBAT-009: the items the critical-hit procedure looks at are the ones the host says the NPC wears now (an earlier
-        // critical may have dropped or destroyed some of its map data's).
-        if (attack.TargetWorn is { } targetWorn) defender = defender with { Worn = CombatantRules.WornItems(targetWorn.Keys) };
-        // ARC-WORLD-1149: the light at the target's cell, for the darkness penalty (full light without a host that knows it).
-        if (attack.TargetLight is { } targetLight) defender = defender with { LightLevel = targetLight };
-        var request = new AttackRequest
-        {
-            Attacker = hero.Combatant,
-            Target = defender,
-            Weapon = hero.Weapon,
-            Skill = hero.Skill,
-            SkillLevel = hero.SkillLevel,
-            Training = hero.Training,
-            AimedLocation = pending is null ? attack.Aim : null,
-            Distance = pending is null ? attack.Distance : 1,
-            CoverRating = pending is null ? attack.LineOfFire?.Cost ?? 0 : 0,
-            LineOfFireBlocked = pending is null && (attack.LineOfFire?.Blocked ?? false),
-            Difficulty = _difficulty,
-            // ARC-COMBAT-023: a thrown pack item takes no ammunition of the wielded weapon.
-            AmmunitionShort = pending is null && pack is null && ShotAmmunition() is { Short: true },
-            DeferHit = pending is null && attack.Flight,
-            // ARC-COMBAT-1929: a melee strike (not a shot's landing or a throw) may be a backstab.
-            Backstab = pending is null && thrown is null ? BackstabOf(hero.Combatant, hero.Skill, hero.Weapon, attack.Backstab) : BackstabKind.None,
-            TargetWasInBed = attack.TargetWasInBed,
-        };
+        var defender = StrikeDefender(attack, target, record, facts!);
+        if (defender is null) return RejectAttack(GameSessionFailure.InvalidAttack);
+        var request = StrikeRequest(attack, hero, defender, pending, pack, thrown);
         var rolls = new TrialCombatRolls(new SeededRandom(_random.Seed, _random.Draws));
         AttackResolution resolution;
         int? scatterRotation = null;

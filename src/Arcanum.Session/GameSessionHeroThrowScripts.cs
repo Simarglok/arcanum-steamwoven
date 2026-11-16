@@ -2,6 +2,7 @@ using Arcanum.Scripting.Scr;
 using Arcanum.Simulation;
 using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Magic;
+using Arcanum.Simulation.Randomness;
 
 namespace Arcanum.Session;
 
@@ -21,9 +22,9 @@ public sealed partial class GameSessionOwner
     /// throw before any effect. A throw script that answers skip default (the original's 0) throws nothing: the removal's and the script's own changes stay, a worn item is worn no more and lies in the hero's list again (the original puts it on the hero's tile,
     /// 0x4415C0, and inserts it back, 0x4617F0) and the result is <see cref="SessionHeroThrowResult.ScriptDeclined"/> with the removal's spell steps (a worn item's unwear, then the removal's). Otherwise the runs' changes are applied in a revision of
     /// their own and the throw goes on from the new version. Refused before any effect: the hero's worn items, an inactive hero (NoChange), the shot budget, the version, the revision, a worn item the hero's list has no room for when the throw script could
-    /// give it back, and the runs above. NOT READY: a refusal of the throw after its scripts ran that this check cannot foresee (a struck critter's refusals: the result is then changed with the failure named, the item still where it was).
+    /// give it back, and the runs above. ARC-COMBAT-2176: with a struck critter the refusals of the attack on it (<see cref="StruckThrowPreflight"/>) are checked first too. NOT READY: a refusal of the throw after its scripts ran that this check cannot foresee (the hero's values or the struck critter changed by a script, the random sequence a script used: the result is then changed with the failure named, the item still where it was).
     /// </summary>
-    private HeroThrowScripted RunHeroThrowScripts(GameSessionVersion expected, SessionHeroThrow request, SessionWornItem? worn, IReadOnlyList<int> points, bool split, SessionItemKind kind, bool throwScript)
+    private HeroThrowScripted RunHeroThrowScripts(GameSessionVersion expected, SessionHeroThrow request, SessionWornItem? worn, IReadOnlyList<int> points, bool split, SessionItemKind kind, bool throwScript, SessionHeroAttack? struckHero)
     {
         SessionHeroThrowResult Refused(GameSessionFailure failure, ItemScriptRuns? made = null) => new(GameSessionDisposition.Rejected, failure, null, Version) { Scripts = made?.Runs ?? [] };
         HeroThrowScripted Stop(SessionHeroThrowResult done) => new(done, null, false);
@@ -37,6 +38,8 @@ public sealed partial class GameSessionOwner
         if (!IsCurrent(expected)) return Stop(Refused(GameSessionFailure.StaleVersion));
         // The runs' revision, the throw's fate, concealment and leaving the hand.
         if (_revision >= long.MaxValue - 6) return Stop(Refused(GameSessionFailure.RevisionExhausted));
+        // ARC-COMBAT-2176: the refusals of the attack on the struck critter (CritterAttack's, as the throw would meet them) come before any script runs.
+        if (struckHero is not null && StruckThrowPreflight(request, struckHero) is var struckFailure && struckFailure != GameSessionFailure.None) return Stop(Refused(struckFailure));
         // A refusing throw script gives a worn item back to the list: there must be a cell for it.
         if (throwScript && worn is not null && !HeroGridRoom(item, null)) return Stop(Refused(GameSessionFailure.BudgetExceeded));
         var (revision, map, seeds, flagVersion) = (_revision, _actor.Map, _inventory.SeedGeneration, _flags.Version);
@@ -74,5 +77,34 @@ public sealed partial class GameSessionOwner
             Revise();
         }
         return new(null, runs, applied);
+    }
+
+    /// <summary>
+    /// ARC-COMBAT-2176: the refusals <see cref="CritterAttack"/> makes of a hero's pack throw at a struck critter, in its order, judged before the item's scripts run (as <see cref="NpcThrowPreflight"/> does for an NPC): the struck critter's record and
+    /// facts, the two sides' worn items, the distance, the struck cell's light, the flight budget, the revisions of the throw, the defender's combat values and the roll sequence (the resolver and a missed throw's scatter run on a copy of it, nothing is
+    /// drawn). A struck critter that is dead is no refusal here (the attack answers NoChange and the throw goes to the location). <paramref name="hero"/> is the hero as it throws now.
+    /// </summary>
+    private GameSessionFailure StruckThrowPreflight(SessionHeroThrow request, SessionHeroAttack hero)
+    {
+        var target = request.Struck!;
+        var resolved = Resolve(target.Target, out var record, out var facts, out _);
+        if (resolved != GameSessionFailure.None) return resolved;
+        var attack = HeroThrowAttack(request, request.ItemTriggers);
+        if (!ValidWear(new SessionWearSide { Life = SessionLifeTarget.Hero, Worn = attack.HeroWorn }, new SessionWearSide { Life = target.Target, Worn = attack.TargetWorn }, targetBroken: false, wear: null)) return GameSessionFailure.InvalidWear;
+        if (!AttackDistanceFits(hero, attack.Distance) || attack.TargetLight is < 0 or > AttackRules.MaxLightLevel) return GameSessionFailure.InvalidAttack;
+        if (ShotsInFlight > MaxShotsInFlight - ShotProjectiles(hero)) return GameSessionFailure.BudgetExceeded;
+        if (_revision >= long.MaxValue - 2) return GameSessionFailure.RevisionExhausted;
+        if (StrikeDefender(attack, target, record, facts!) is not { } defender) return GameSessionFailure.InvalidAttack;
+        var pack = new PackThrow(request.Item, request.Target, hero);
+        var strike = StrikeRequest(attack, hero, defender, null, pack, request.Item);
+        var rolls = new TrialCombatRolls(new SeededRandom(_random.Seed, _random.Draws));
+        try
+        {
+            var resolution = AttackResolver.Resolve(strike, rolls, OriginalCriticalEffects.Instance, _rules.Combat);
+            if (resolution.Refusal == AttackRefusal.None && resolution.Outcome is not (AttackOutcome.Hit or AttackOutcome.CriticalHit)) rolls.Roll(CombatRollPurpose.ThrowScatter, 0, ThrowRules.ScatterDirections - 1);
+        }
+        catch (TrialCombatRolls.ExhaustedException) { return GameSessionFailure.RandomExhausted; }
+        catch (ArgumentException) { return GameSessionFailure.InvalidAttack; }
+        return GameSessionFailure.None;
     }
 }

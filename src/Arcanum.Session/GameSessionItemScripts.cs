@@ -610,11 +610,11 @@ public sealed partial class GameSessionOwner
     /// from the host; the identified test is the host's, the power ratio the session's, and the items are being rewielded only
     /// in the runs of an NPC's rewield (ARC-MAGIC-1644).
     /// </summary>
-    private sealed class SessionFlagReads(GameSessionOwner session, ISessionItemScriptHost host, ItemScriptRuns runs) : IScrHost, IScrItemQueries, IScrStoreQueries, IScrStatQueries, IScrWorldQueries, IScrContainerQueries, IScrGroupQueries, IScrObjectQueries
+    private sealed class SessionFlagReads(GameSessionOwner session, ISessionItemScriptHost host, ItemScriptRuns runs) : IScrHost, IScrItemQueries, IScrStoreQueries, IScrStatQueries, IScrWorldQueries, IScrContainerQueries, IScrGroupQueries, IScrObjectQueries, IScrObjectStateQueries, IScrWorldObjectQueries
     {
         // ARC-SCRIPT-2335 (IV1–IV4): the world questions of the loop for, the container vicinity kinds, the follower kinds (ARC-SCRIPT-2336) and the name condition go to the host's world part. A host without it, an object or a centre it does not know makes the run unanswerable
-        // (UnknownObject: the session refuses the move). The set admits no scenery, critter, random, location, quest, held-item, wielded-item, reputation or object-type question, so none is asked.
-        // Implementing these interfaces also switches off the dispatcher's guard that a set's commands have a host answer: a later widening of the admission (random, within range, the guard conditions, get object type, the scenery
+        // (UnknownObject: the session refuses the move). The set admits no scenery, critter, random, location, held-item, wielded-item or reputation question, so none is asked (ARC-SCRIPT-2347 added the quest state and object type answers).
+        // Implementing these interfaces also switches off the dispatcher's guard that a set's commands have a host answer: a later widening of the admission (random, within range, the held-item, wielded-item and reputation guard conditions, the scenery
         // and critter vicinity kinds) must answer here first (ItemWorldScriptTests pins what the stubs below assume).
         private ISessionItemWorldHost? World => host as ISessionItemWorldHost;
 
@@ -651,11 +651,39 @@ public sealed partial class GameSessionOwner
         public IReadOnlyList<ScrObjectRef> CrittersInVicinity(ScrObjectRef centre) => throw new InvalidOperationException("ITEM_SCRIPT_CRITTER_VICINITY_NOT_ADMITTED");
         public int Random(int low, int high) => throw new InvalidOperationException("ITEM_SCRIPT_RANDOM_NOT_ADMITTED");
         public (long X, long Y)? Location(ScrObjectRef obj) => throw new InvalidOperationException("ITEM_SCRIPT_LOCATION_NOT_ADMITTED");
-        public int QuestState(ScrObjectRef obj, int quest) => throw new InvalidOperationException("ITEM_SCRIPT_QUEST_NOT_ADMITTED");
+        public int QuestState(ScrObjectRef obj, int quest)
+        {
+            if (World?.QuestState(obj, quest) is { } state) return state;
+            UnknownObject = true;
+            return 0;
+        }
+
+
         public bool HoldsItemNamed(ScrObjectRef obj, int name) => throw new InvalidOperationException("ITEM_SCRIPT_HOLDS_NOT_ADMITTED");
         public int? WieldedItemName(ScrObjectRef obj, int location) => throw new InvalidOperationException("ITEM_SCRIPT_WIELDED_NOT_ADMITTED");
         public bool HasReputation(ScrObjectRef obj, int reputation) => throw new InvalidOperationException("ITEM_SCRIPT_REPUTATION_NOT_ADMITTED");
-        public int? ObjectType(ScrObjectRef obj) => throw new InvalidOperationException("ITEM_SCRIPT_OBJECT_TYPE_NOT_ADMITTED");
+        // An object the host reads no row for ends the run as an absent object would; the session refuses the move (UnknownObject).
+        public int? ObjectType(ScrObjectRef obj)
+        {
+            var type = World?.ObjectType(obj);
+            UnknownObject |= type is null;
+            return type;
+        }
+
+        // ARC-SCRIPT-2347 (IV14, IV15): obj is dead goes to the host's world part (an object it does not know refuses the move); monster generator disabled (46) reads the session's generator table as the use host does (a slot without an entry is
+        // not blocked). The switched-off test, the open and can-open tests and the sector test are not admitted and throw if asked.
+        public bool? IsDead(ScrObjectRef obj)
+        {
+            var dead = World?.IsDead(obj);
+            UnknownObject |= dead is null;
+            return dead;
+        }
+
+        public bool GeneratorBlocked(int slot) => session.QueryGeneratorSlot(slot)?.Blocked ?? false;
+        public bool? IsSwitchedOff(ScrObjectRef obj) => throw new InvalidOperationException("ITEM_SCRIPT_SWITCHED_OFF_NOT_ADMITTED");
+        public bool? IsOpen(ScrObjectRef obj) => throw new InvalidOperationException("ITEM_SCRIPT_OPEN_NOT_ADMITTED");
+        public bool? CanOpen(ScrObjectRef obj) => throw new InvalidOperationException("ITEM_SCRIPT_CAN_OPEN_NOT_ADMITTED");
+        public bool SectorBlocked(int x, int y) => throw new InvalidOperationException("ITEM_SCRIPT_SECTOR_NOT_ADMITTED");
 
         internal bool UnknownFlag { get; private set; }
         /// <summary>An item question about an object the session and the host do not know.</summary>
