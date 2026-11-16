@@ -46,6 +46,7 @@ public sealed partial class GameSessionOwner
         if (!SessionValidation.Entity(entity) || entity == SessionEventKinds.AbsentRole) return;
         if (merge && _events.QueryPending(SessionEventKinds.ItemRecharge).FirstOrDefault(e => e.Payload.Entities[0].Code == entity) is { } pending)
         {
+            if (_events.NextSequence == long.MaxValue) return;
             var sum = (int)Math.Clamp(pending.Payload.Values[1] + amount, -SessionItemUseLimits.MaxUses, SessionItemUseLimits.MaxUses);
             _events.RemoveFirst(SessionEventKinds.ItemRecharge, e => e.Sequence == pending.Sequence);
             _events.ScheduleAt(SessionEventKinds.ItemRecharge, GameEventPayload.Of([new(SessionEventKinds.RechargeMap, entity)], pending.Payload.Values[0], sum), pending.DeadlineMs);
@@ -76,7 +77,8 @@ public sealed partial class GameSessionOwner
         var elapsed = (int)Math.Min((firing.NowMs - firing.Event.Payload.Values[0]) / 1000, int.MaxValue);
         var (restored, remaining) = SpellCostRules.Recharge(elapsed, pending);
         var written = WriteItemManaStore(Version, entity, store, (int)Math.Clamp((long)store + restored, 0, SessionItemUseLimits.MaxUses));
-        if (written.Disposition == GameSessionDisposition.Rejected && written.Failure == GameSessionFailure.RevisionExhausted) return GameEventHandlerOutcome.Refused;
+        // A store the session cannot write (the item is no longer tracked, a full record budget) ends the event: the points are not held anywhere else.
+        if (written.Disposition == GameSessionDisposition.Rejected) return written.Failure == GameSessionFailure.RevisionExhausted ? GameEventHandlerOutcome.Refused : GameEventHandlerOutcome.Completed;
         if (remaining > 0) ScheduleManaRecharge(entity, remaining, merge: false);
         return GameEventHandlerOutcome.Completed;
     }

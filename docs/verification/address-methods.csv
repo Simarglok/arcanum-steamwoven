@@ -152,6 +152,7 @@ src/Arcanum.Session/GameSessionLeaders.cs,ForceJoinLeader,exempt,reference
 src/Arcanum.Session/GameSessionLeaders.cs,UnwaitNpcLed,exempt,host
 src/Arcanum.Session/GameSessionLocks.cs,WriteOpenableFlag,pending,
 src/Arcanum.Session/GameSessionLoyalty.cs,CheckFollowerAfterHit,exempt,host
+src/Arcanum.Session/GameSessionManaStores.cs,WriteItemManaStore,exempt,reference
 src/Arcanum.Session/GameSessionMissiles.cs,CreateMissile,pending,
 src/Arcanum.Session/GameSessionMissiles.cs,MoveMissile,pending,
 src/Arcanum.Session/GameSessionMorale.cs,ApplyKillNotification,pending,

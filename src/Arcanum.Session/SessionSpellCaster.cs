@@ -1304,11 +1304,14 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
     {
         var slot = WornSlotFirst + drain.Slot;
         if (WornOf(payer).FirstOrDefault(worn => worn.Slot == slot) is not { Id: { } wornId } worn || Item(wornId) is not { } item) return;
+        // A store already 0 (a second payment of the pass planned against the store before it) is skipped, as the original's loop skips it.
+        if (item.ManaStore == 0) return;
         var after = item.ManaStore < 0 || drain.Drained < 0 ? drain.StoreAfter : Math.Max(0, item.ManaStore - drain.Drained);
+        var taken = item.ManaStore < 0 || drain.Drained < 0 ? drain.Drained : item.ManaStore - after;
         var written = _owner.WriteItemManaStore(_owner.Version, wornId, item.ManaStore, after);
         if (written.Disposition == GameSessionDisposition.Rejected) { _log.Add(new(SpellCastEventKind.ManaStoreNotSaved, run, (int)written.Failure, wornId)); return; }
-        if (written.Disposition == GameSessionDisposition.Changed) _log.Add(new(SpellCastEventKind.ManaStoreDrained, run, after, wornId, drain.Drained));
-        _owner.ScheduleManaRecharge(wornId, drain.Drained, merge: true);
+        if (written.Disposition == GameSessionDisposition.Changed) _log.Add(new(SpellCastEventKind.ManaStoreDrained, run, after, wornId, taken));
+        _owner.ScheduleManaRecharge(wornId, taken, merge: true);
     }
 
     private void ApplyDamage(SpellRun run, SpellDamageComponent data, SpellRunObject target)
