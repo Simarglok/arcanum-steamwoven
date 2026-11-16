@@ -66,6 +66,9 @@ public partial class TerrainViewerApp
         return PortraitTexture(id);
     }
 
+    /// <summary>ARC-UI-1908: a holder's stored portrait for the item windows (the small image at its own size, read on first use).</summary>
+    private Texture2D? HolderPortraitTexture(int id) => SavePortrait(id);
+
     /// <summary>A read portrait's texture, made once; null when it did not read or decode.</summary>
     private Texture2D? PortraitTexture(int id)
     {

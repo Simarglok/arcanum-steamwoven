@@ -6,7 +6,7 @@ namespace Arcanum.TerrainViewer.Core;
 /// ARC-UI-1765: the parts of the item identify and repair window's original look that change from frame to frame (ledger IS2, IW20, IW26–IW27): the NPC's image art (null: none), the quote line's text
 /// and the item the window remembered (the one last quoted; the original's global 0x681458), whose grid cells are filled.
 /// </summary>
-public sealed record AreaServiceFrame(int? Image, string Quote, string? Selected);
+public sealed record AreaServiceFrame(int? Image, string Quote, string? Selected, int? Portrait = null);
 
 /// <summary>
 /// ARC-UI-1765: the layout of the item identify (interface mode 5) and item repair (mode 6) windows of the original look, read in the open 0x5727B0 and the redraw 0x576520. Both are the player's own
@@ -22,6 +22,9 @@ public static class AreaServiceArtLayout
 
     /// <summary>The NPC's image corner in the frame (0x5CAF80 holds the mode 1 and 2 corners; modes 5 and 6 pass 0x8D, 0x24 to the blit).</summary>
     public static readonly (int X, int Y) Image = (141, 36);
+
+    /// <summary>ARC-UI-1908 (0x576520 modes 5 and 6): the NPC's portrait rectangle (x, y, width, height): the same corner, drawn by 0x4CE680 forced to 32 by 32 (an art is halved instead).</summary>
+    public static readonly (int X, int Y, int Width, int Height) PortraitRect = (141, 36, 32, 32);
 
     /// <summary>The quote line's rectangle (x, y, width, height; table 0x5CAFB0).</summary>
     public static readonly (int X, int Y, int Width, int Height) QuoteLine = (180, 29, 155, 65);

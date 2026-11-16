@@ -1,5 +1,7 @@
 # HD interface art: methods for panels, frames, buttons and small art (ARC-RES-094)
 
+> **2026-11-16, superseded in part** ([Steamwoven interface ADR](../ui/steamwoven-interface-adr.md), ARC-UI-2447): for the Steamwoven look the interface is a kit authored at 3840 × 2160 on a full-width layout, not per-file redraws fitted to the original pixels. The U3 recommendation, its geometry gates and the U4 side pieces no longer apply to that look. The census, the methods and the measurements stay valid as research and for the current HD-option fallback.
+
 Status: **research only, 2026-11-07; U3 (redraw + fit) run on the owner's 12 redraws, strips and icons not usable in round 1; round 2 (refined tiles) is a candidate, not gated.** Work item ARC-RES-094, docs-only. Requirements:
 [FR-UI-007](../requirements/ui-media-lifecycle.md#fr-ui-007) (adaptive layout, status unchanged),
 [FR-UI-002](../requirements/ui-media-lifecycle.md#fr-ui-002) (HUD).

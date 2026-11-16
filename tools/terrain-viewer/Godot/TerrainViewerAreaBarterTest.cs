@@ -785,6 +785,21 @@ public partial class TerrainViewerApp
                 await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
                 using var shot = GetViewport().GetTexture().GetImage();
                 if (shot.SavePng($"{capture}-{name}.png") != Error.Ok) throw new InvalidOperationException("AREA_SERVICE_CAPTURE_FAILED");
+                // ARC-UI-1908: the same frame with a portrait in the NPC's place (0x4CE680, 32 x 32 at the image's corner), the hero's own portrait standing in for a follower's: no
+                // merchant of this map is led by the hero. ARC_AREA_SERVICE_CAPTURE saves it as PREFIX-NAME-portrait.png.
+                if (_areaSession?.QueryHero()?.Portrait is > 0 and var standIn && area.ServiceFrame is { } plain)
+                {
+                    area.SetService(plain with { Portrait = standIn });
+                    await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                    await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+                    using var withPortrait = GetViewport().GetTexture().GetImage();
+                    if (withPortrait.SavePng($"{capture}-{name}-portrait.png") != Error.Ok) throw new InvalidOperationException("AREA_SERVICE_CAPTURE_FAILED");
+                    var standInTexture = HolderPortraitTexture(standIn);
+                    Require(standInTexture is not null || SelfTestBootstrap, $"the portrait {standIn} reads, so the window draws it and not the art");
+                    GD.Print($"ARC-UI-1908 service portrait stand-in {standIn} texture {(standInTexture is { } texture ? texture.GetWidth() + "x" + texture.GetHeight() : "not read")}");
+                    area.SetService(plain);
+                    await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                }
                 // The "before" of the graphics comparison: the diagnostic list behind the switch.
                 panel.LookToggleForSelfTest.EmitSignal(BaseButton.SignalName.Pressed);
                 await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
@@ -796,7 +811,7 @@ public partial class TerrainViewerApp
                 await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
                 Require(panel.ArtMode, "the switch went back to the original look");
             }
-            parts.Add($"{name}: image {area.ServiceFrame!.Image?.ToString() ?? "none"}, items {view.Grid.Count}, quote '{quote}'");
+            parts.Add($"{name}: image {area.ServiceFrame!.Image?.ToString() ?? "none"}, portrait {area.ServiceFrame.Portrait?.ToString() ?? "none"}, items {view.Grid.Count}, quote '{quote}'");
             EndItemService();
             Require(!ItemServiceOpen, "the close closed it");
         }
