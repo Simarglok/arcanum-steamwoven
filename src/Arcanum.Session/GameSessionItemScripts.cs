@@ -181,6 +181,9 @@ public sealed partial class GameSessionOwner
         private readonly Dictionary<int, SessionQuest> _questRecords = [];
         private readonly Dictionary<int, SessionQuestState> _questShared = [];
         private HeroAward? _questAward;
+        // The amount that award gives: the commit gives it again to the hero as it is then (a hero rewield plans the runs, then writes the stat that caused it, then commits: a plan-time snapshot would revert that write). A level-free award changes
+        // experience and unspent points only, which no stat write touches.
+        private long _questAmount;
 
         internal ItemScriptRuns(GameSessionOwner owner, ISessionItemScriptHost host, int map, IReadOnlyDictionary<string, int> items, NpcWearer? npc = null)
         {
@@ -365,12 +368,14 @@ public sealed partial class GameSessionOwner
             if (request.Kind is not (ScrStateKind.QuestState or ScrStateKind.QuestExperience)) return GameSessionFailure.ItemScriptUnsupported;
             if (request.Object is not { } who || !_host.IsPc(who)) return GameSessionFailure.None;
             HeroAward? award = null;
+            long questAmount = 0;
             if (request.Kind == ScrStateKind.QuestExperience)
             {
                 if (_owner._hero is null || _owner._experience.Rules is not { } rules) return GameSessionFailure.None;
                 var amount = rules.QuestExperience(request.Number);
                 if (Math.Abs((long)amount) > SessionExperienceLimits.MaxAward) return GameSessionFailure.ItemScriptUnsupported;
                 award = _owner.Give(amount);
+                questAmount = amount;
             }
             else
             {
@@ -383,13 +388,17 @@ public sealed partial class GameSessionOwner
                 if (GameSessionOwner.QuestStep(current, shared, requested, _owner._clock.QueryClockSnapshot().GameTimestampMs) is not { } step) return GameSessionFailure.None;
                 // The source gives the experience for the request, before the shared state can turn it into OtherCompleted.
                 if (requested == SessionQuestState.Completed && _owner._hero is not null && _owner._experience.Rules is { } rules)
-                    award = _owner.Give(rules.QuestExperience(rules.QuestLevel(quest)));
+                {
+                    questAmount = rules.QuestExperience(rules.QuestLevel(quest));
+                    award = _owner.Give(questAmount);
+                }
                 _questRecords[quest] = step.Next;
                 _questShared[quest] = step.Shared;
             }
             if (award is null) return GameSessionFailure.None;
             if (_questAward is not null || award.Award.LevelsGained > 0 || award.Award.Followers is not null) return GameSessionFailure.ItemScriptUnsupported;
             _questAward = award;
+            _questAmount = questAmount;
             return GameSessionFailure.None;
         }
 
@@ -562,7 +571,7 @@ public sealed partial class GameSessionOwner
             // ARC-SCRIPT-2374 (IV18–IV21): the quest records, the shared states a completion or botch moved (a state still Accepted is the default, not stored: as SetQuestState) and the award.
             foreach (var (quest, record) in _questRecords) _owner._story.Quests[quest] = record;
             foreach (var (quest, shared) in _questShared) if (shared != SessionQuestState.Accepted) _owner._story.GlobalQuests[quest] = shared;
-            if (_questAward is { } questAward) _owner._hero!.Apply(questAward.Hero);
+            if (_questAward is not null && _owner.Give(_questAmount) is { } questAward) _owner._hero!.Apply(questAward.Hero);
             if (_prepared is not null) _owner.ApplyEffects(_prepared);
             if (_npc is { } npc && _npcOps.Count > 0 && _owner.ChangeNpcOps(_owner.Version, npc.Target, _npcOps, dryRun: false, revise: false).Failure != GameSessionFailure.None)
                 throw new InvalidOperationException("ITEM_SCRIPT_NPC_EFFECTS_COMMIT");
