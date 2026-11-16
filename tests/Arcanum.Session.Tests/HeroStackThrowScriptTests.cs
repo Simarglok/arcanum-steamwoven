@@ -148,4 +148,22 @@ public sealed class HeroStackThrowScriptTests
         Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.ItemScriptUnsupported, 0), (mixed.Disposition, mixed.Failure, mixed.Scripts.Count), "the give-back would run the insert-item script");
         Assert.AreEqual(30, owner.QueryAmmo("made:2")!.Value.Units);
     }
+
+    // A call the throw script schedules on its own item (call script in, the triggerer the hero, the attachee the item).
+    private static ScrProgram Schedule(int outcome) => Program(C(ScrCatalogue.Action.CallScriptIn, (Number, ThrowScript), (Number, 3), (0, 0), (1, 0), (Number, 15)), C(outcome));
+
+    [TestMethod]
+    public void ACallTheScriptSchedulesOnTheNeverMadeStackIsDroppedWithItAndKeptWhenTheStackFlies()
+    {
+        using var skipped = Hero();
+        var host = new Host();
+        host.Programs[ThrowScript] = Schedule(ScrCatalogue.Action.ReturnSkipDefault);
+        Assert.IsTrue(skipped.ThrowHeroItem(skipped.Version, Ammo(skipped, host, 12)).ScriptDeclined);
+        Assert.AreEqual(0, skipped.QueryScriptCalls().Count, "the item is never made, so no call is left for the next item that takes its entity");
+
+        using var thrown = Hero();
+        host.Programs[ThrowScript] = Schedule(ScrCatalogue.Action.ReturnRunDefault);
+        Assert.AreEqual(1, thrown.ThrowHeroItem(thrown.Version, Ammo(thrown, host, 12)).Shots.Count);
+        Assert.AreEqual("made:3", thrown.QueryScriptCalls().Single().Call.Attachee?.Entity, "the thrown stack keeps its call");
+    }
 }

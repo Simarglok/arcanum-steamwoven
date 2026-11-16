@@ -68,7 +68,7 @@ public sealed partial class GameSessionOwner
             if (answer?.Outcome == ScrOutcome.SkipDefault)
             {
                 // The throw script refused: nothing is thrown, the item is back in the hero's list, not worn (0x4617F0 inserts it, it does not wield it). A split stack's units go back to the stack they came from (the insertion merges them, 0x466640) and the
-                // item that was to carry them is never made: the slots the runs wrote for it are dropped.
+                // item that was to carry them is never made: the slots the runs wrote for it and the calls they scheduled on it are dropped.
                 runs.Commit();
                 var wornBefore = worn is not null;
                 if (worn is not null)
@@ -76,7 +76,7 @@ public sealed partial class GameSessionOwner
                     _equipment.Worn.Remove(worn.Slot);
                     PlaceInGrid(item, null);
                 }
-                if (split) foreach (var key in _inventory.ScriptSlots.Keys.Where(key => key.Entity == splitEntity).ToArray()) _inventory.ScriptSlots.Remove(key);
+                if (split) ForgetNeverMadeThrowItem(splitEntity!);
                 Revise();
                 var spells = request.ItemTriggers is { } triggers && !split ? RemovalSpellSteps(triggers, item, wornBefore) : [];
                 return Stop(new SessionHeroThrowResult(GameSessionDisposition.Changed, GameSessionFailure.None, null, Version)
@@ -94,6 +94,14 @@ public sealed partial class GameSessionOwner
         {
             _pendingThrowMade = null;
         }
+    }
+
+    /// <summary>ARC-COMBAT-2182: drops what the throw script's runs left for the item of a split that is never made (a skipped throw, a later refusal): the script slots they wrote and the deferred calls they scheduled with it as the attachee, so the next
+    /// made item that takes the same entity inherits nothing.</summary>
+    private void ForgetNeverMadeThrowItem(string entity)
+    {
+        foreach (var key in _inventory.ScriptSlots.Keys.Where(key => key.Entity == entity).ToArray()) _inventory.ScriptSlots.Remove(key);
+        while (_events.RemoveFirst(SessionEventKinds.ScriptCall, e => SessionEventKinds.Call(e.Payload).Attachee?.Entity == entity) is not null) { }
     }
 
     /// <summary>

@@ -182,9 +182,8 @@ public sealed partial class GameSessionOwner
         var applied = false;
         SessionHeroThrowResult Refused(GameSessionFailure failure)
         {
-            // ARC-COMBAT-2182: the slots a split stack's throw script wrote stay on an item the throw then never made (the stack still holds its units): they go.
-            if (runs is not null && applied && NextObjectEntity(SessionObjectOrigin.Made) is { } stray)
-                foreach (var key in _inventory.ScriptSlots.Keys.Where(key => key.Entity == stray).ToArray()) _inventory.ScriptSlots.Remove(key);
+            // ARC-COMBAT-2182: the slots and deferred calls a split stack's throw script left on an item the throw then never made (the stack still holds its units) go.
+            if (runs is not null && applied && NextObjectEntity(SessionObjectOrigin.Made) is { } stray) ForgetNeverMadeThrowItem(stray);
             return runs is null ? new(GameSessionDisposition.Rejected, failure, null, Version)
                 : With(new(applied ? GameSessionDisposition.Changed : GameSessionDisposition.Rejected, failure, null, Version));
         }
