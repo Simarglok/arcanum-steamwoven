@@ -333,7 +333,8 @@ public static class LineOfFireRules
     };
 
     /// <summary>The cover test (0x43FE00): not shoot-through stops the line; shoot-through and not see-through costs
-    /// <see cref="OpaqueCover"/>; see-through providing cover <see cref="ProvidedCover"/>; otherwise nothing.</summary>
+    /// <see cref="OpaqueCover"/>; see-through providing cover <see cref="ProvidedCover"/>; otherwise nothing. Object flag 0x400 (no-block) changes none of it with
+    /// the projectile flags (the original's jump over its type branch lands on this same cover test; ARC-COMBAT-2170).</summary>
     public static LineOfFireCost<TObject> Cover<TObject>(TObject item, uint objectFlags) where TObject : class =>
         (objectFlags & ShootThrough) == 0 ? new(0, item)
         : (objectFlags & SeeThrough) == 0 ? new(OpaqueCover, null)
