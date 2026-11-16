@@ -425,8 +425,10 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
     public bool IsMonsterGenerator(ScrObjectRef attachee) => false;
     // ARC-DEV-304 (SU15, E6): the dialog gates of an NPC of this map: dead as the session holds it (map data or killed), so point 9 of a dead NPC whose dialog file
     // lacks the death-speech flag 0x8 runs default; surrender and mind control are not modelled here (normal).
-    public ScrDialogState DialogState(ScrObjectRef attachee) =>
-        !IsPc(attachee) && Speaker(attachee) is not null && _session.QueryNpcDead(attachee.Code) ? ScrDialogState.Dead : ScrDialogState.Normal;
+    // ARC-SCRIPT-2198: an NPC this host holds no speaker for (a call script or call-ex callee's attachee on another NPC of the shown map) meets the gates as the use host answers them.
+    public ScrDialogState DialogState(ScrObjectRef attachee) => IsPc(attachee) ? ScrDialogState.Normal
+        : Speaker(attachee) is null ? Queries?.DialogState(attachee) ?? ScrDialogState.Normal
+        : _session.QueryNpcDead(attachee.Code) ? ScrDialogState.Dead : ScrDialogState.Normal;
     public ScrTrapCheck CheckTrapBeforeUse(ScrObjectRef triggerer, ScrObjectRef attachee) => ScrTrapCheck.NoTrap;
     public bool IsTrapObject(ScrObjectRef attachee) => false;
     public ScrObjectRef? Player() => Pc;
@@ -511,7 +513,7 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
         var useWrite = effects.Writeback is { Source: ScrSource.Object, Point: ScrPoint.Use } useRequest ? useRequest : null;
         var useHost = Queries;   // captured once: a victim's script or a death can move what the delegate answers before the write below
         if (useWrite is not null && useHost?.CanWriteUseSlot(useWrite) != true) return false;
-        // ARC-SCRIPT-2198: the slots of other objects the run wrote, a disband, a create item and a transform go through the shown map's use host; the whole run is refused before anything applies when it cannot place them (a transform always).
+        // ARC-SCRIPT-2198: the slots of other objects the run wrote, a disband, a create item and a transform go through the shown map's use host; the run is refused before anything applies when the use host cannot plan them (a transform always; a disband the session later rejects stops the later steps, as the other session steps do).
         var stateHost = useHost;
         if (stateHost is null ? effects.SlotWrites.Count > 0 || effects.ObjectStates.Any(r => r.Change is ScrObjectStateChange.Disband or ScrObjectStateChange.CreateItem or ScrObjectStateChange.Transform)
             : stateHost.TalkStateRefusal(effects) is not null) return false;

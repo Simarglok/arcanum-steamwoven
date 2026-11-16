@@ -130,6 +130,18 @@ public sealed class AreaTalkStateTests
     }
 
     [TestMethod]
+    public void A_non_speaker_npc_of_the_shown_map_meets_the_dialog_gates_through_the_use_host()
+    {
+        WithContent(content =>
+        {
+            using var talk = Create(content, 800);
+            var other = new ScrObjectRef(Map, "oid:" + new string('z', 64));
+            Assert.AreEqual(ScrDialogState.Normal, talk.Host.DialogState(other), "no row on the shown map: normal");
+            Assert.AreEqual(ScrDialogState.Normal, talk.Host.DialogState(talk.Host.Pc));
+        });
+    }
+
+    [TestMethod]
     public void A_transform_refuses_the_run_whole_before_anything_applies()
     {
         WithContent(content =>
