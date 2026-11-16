@@ -123,6 +123,10 @@ public partial class AreaWorldMapArtView : Control
     internal AreaTownNotes? TownNotesForSelfTest => _town?.Notes;
     internal AreaTownNotes? NotesForSelfTest(AreaWorldMapKind kind) => kind == AreaWorldMapKind.Map ? _mapNotes : kind == AreaWorldMapKind.Continent ? _continentNotes : _town?.Notes;
     internal int HoverWorldNoteForSelfTest => _hoverNote;
+    /// <summary>ARC-UI-2330: a smoke look at the old drawing (every note with one art): the art every note is drawn with, or null for the art of its type.</summary>
+    internal int? NoteArtOverrideForSelfTest { get; set; }
+    internal void RedrawForSelfTest() => _canvas?.QueueRedraw();
+    private int NoteArtFor(AreaTownNote note) => NoteArtOverrideForSelfTest ?? AreaWorldMapArtLayout.NoteArtOf(note.Type);
     /// <summary>ARC-UI-106: the quill is the tool (town map only); its cursor is art 21 (WM30).</summary>
     public bool QuillActive => _quill;
     /// <summary>ARC-UI-106: the note text entry has the keyboard (typed keys go to it, not to the window's keys).</summary>
@@ -738,13 +742,15 @@ public partial class AreaWorldMapArtView : Control
     }
 
     // The hit box of a note (WM58's marker box): ±9 picture pixels in the town and map views, where the art is drawn 1:1. In the continent view the picture is shrunk
-    // (365 px for the whole width) and art 143 is drawn at its full size, so the box is at least the marker's ±20 and at least the drawn art's half size in picture pixels.
+    // (365 px for the whole width) and the note arts are drawn at their full size, so the box is at least the marker's ±20 and at least the drawn art's half size in picture pixels.
     private int NoteHitHalf
     {
         get
         {
             if (_kind != AreaWorldMapKind.Continent) return AreaWorldMapArtLayout.HoverHalf;
-            var artHalf = _look?.Art.TryGetValue(AreaWorldMapArtLayout.NoteArt, out var frames) == true && frames.Length > 0 ? Math.Max(frames[0].GetWidth(), frames[0].GetHeight()) / 2 : 0;
+            var artHalf = 0;
+            foreach (var art in AreaWorldMapArtLayout.NoteTypeArts)
+                if (_look?.Art.TryGetValue(art, out var frames) == true && frames.Length > 0) artHalf = Math.Max(artHalf, Math.Max(frames[0].GetWidth(), frames[0].GetHeight()) / 2);
             return Math.Max(AreaWorldMapArtLayout.ZoomedHoverHalf, (int)(artHalf * (_map?.Data.Width ?? 0) / AreaWorldMapArtLayout.ZoomedSize));
         }
     }
@@ -893,9 +899,10 @@ public partial class AreaWorldMapArtView : Control
                 canvas.DrawPolygon([at, at + new Vector2(w, 0), at + new Vector2(w, h), at + new Vector2(0, h)],
                     [Corner(8), Corner(4), Corner(2), Corner(1)], [new(0, 0), new(1, 0), new(1, 1), new(0, 1)], texture);
             }
-        // WM79, WM82: the notes next, every one with the question art 143 centred on its pixel, whatever its type (no label: the text shows on hover, WM59).
+        // WM82: the notes next, each with the art of its type (ARC-UI-2330; the original's WM79 draws all with 143, but only type 3 notes exist there) centred on its pixel
+        // (no label: the text shows on hover, WM59).
         if (town.Notes is { } notes)
-            foreach (var note in notes.Items) MarkerAt(canvas, AreaWorldMapArtLayout.NoteArt, new Vector2(note.PixelX - _townOffset.X, note.PixelY - _townOffset.Y));
+            foreach (var note in notes.Items) MarkerAt(canvas, NoteArtFor(note), new Vector2(note.PixelX - _townOffset.X, note.PixelY - _townOffset.Y));
         // WM80, WM104: the route from the party through the waypoints' icon pixels, in the colours of the map view.
         var from = new Vector2(_townParty.X - _townOffset.X, _townParty.Y - _townOffset.Y);
         for (var i = 0; i < town.Waypoints.Count; i++)
@@ -956,9 +963,9 @@ public partial class AreaWorldMapArtView : Control
             var (x, y) = AreaWorldMapArtLayout.LabelAt(pixel.X, pixel.Y, _offset, (int)worldArea.NameOffsetX, (int)worldArea.NameOffsetY);
             Label(canvas, worldArea.Name, x, y, colour);
         }
-        // ARC-UI-110: the map view's notes, every one with the question art 143 centred on its pixel (the text shows on hover).
+        // ARC-UI-110, ARC-UI-2330: the map view's notes, each with the art of its type centred on its pixel (the text shows on hover).
         if (_mapNotes is { } mapNotes)
-            foreach (var note in mapNotes.Items) MarkerAt(canvas, AreaWorldMapArtLayout.NoteArt, new Vector2(note.PixelX - _offset.X, note.PixelY - _offset.Y));
+            foreach (var note in mapNotes.Items) MarkerAt(canvas, NoteArtFor(note), new Vector2(note.PixelX - _offset.X, note.PixelY - _offset.Y));
         if (!map.OnStartMap) return;
         // WM80, WM104: a straight line from the party through each waypoint's icon pixel in turn; the one that ends at the selected waypoint is (50, 50, 110), the
         // others (160, 50, 50); each icon is drawn after its line, so the next line overdraws it.
@@ -988,9 +995,9 @@ public partial class AreaWorldMapArtView : Control
             var dot = Dot(WorldTravelGeometry.Pixel(data.TravelAreas[area].Location, data.Width));
             canvas.DrawRect(new Rect2(dot.X, dot.Y, 2, 2), Rgb(AreaWorldMapArtLayout.ZoomedMarkerColour));
         }
-        // ARC-UI-110: the continent view's notes, art 143 centred on the note's point of the continent picture.
+        // ARC-UI-110, ARC-UI-2330: the continent view's notes, each with the art of its type centred on the note's point of the continent picture.
         if (_continentNotes is { } continentNotes)
-            foreach (var note in continentNotes.Items) { var dot = Dot(new WorldMapPixel(note.PixelX, note.PixelY)); MarkerAt(canvas, AreaWorldMapArtLayout.NoteArt, new Vector2(dot.X, dot.Y)); }
+            foreach (var note in continentNotes.Items) { var dot = Dot(new WorldMapPixel(note.PixelX, note.PixelY)); MarkerAt(canvas, NoteArtFor(note), new Vector2(dot.X, dot.Y)); }
         if (!map.OnStartMap) return;
         if (LastDiscovered(map) is { } newest)
         {

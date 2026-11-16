@@ -309,6 +309,9 @@ public partial class TerrainViewerApp
                         TypeMapNoteForSelfTest("Smoke quill note");
                         InventoryKey(Key.Enter);
                         Require(!panel.EditingNote && notes.Count == 1 && notes.Items[0].Text == "Smoke quill note" && notes.Items[0].Type == 0 && notes.Items[0].Flags == AreaTownNotes.PlayerFlags, $"{kind}: Enter keeps the new note (marker 0, flags 0)");
+                        // ARC-UI-2330: the kept note (marker 0) is drawn with the note art 142 of its type, and the type arts all read with the look.
+                        Require(AreaWorldMapArtLayout.NoteArtOf(notes.Items[0].Type) == 142 && AreaWorldMapArtLayout.NoteTypeArts.All(n => _worldMapArtLook?.Art.ContainsKey(n) == true),
+                            $"{kind}: a note of type 0 is drawn with art 142 and the four note arts are read");
                         Require(session.QueryMapNotes(sessionView) is { } kept && kept.Notes.Count == 1 && kept.Notes[0].Text == "Smoke quill note"
                             && session.QueryMapNotes(sessionView == SessionStoryLimits.MapNoteView ? SessionStoryLimits.ContinentNoteView : SessionStoryLimits.MapNoteView) is null, $"{kind}: the session keeps this view's note alone");
                         artView.LeftForSelfTest(spot, true); artView.LeftForSelfTest(spot, false);
@@ -343,6 +346,25 @@ public partial class TerrainViewerApp
                         InventoryKey(Key.Enter);
                         Require(notes.Count == 1, $"{kind}: a note is back for the reopen check");
                         Require(notes.Items[0].Type == 2, $"{kind}: a new note takes the marker the radio group holds when it is made");
+                        // ARC-UI-2330 look (ARC_WORLDMAP_SMOKE_SHOT): one note of each type next to the kept one, drawn with the arts of their types ("after") and with the old
+                        // single art 143 ("before"); original-derived, kept under the thread, never committed. The extra notes go again.
+                        if (kind == AreaWorldMapKind.Map && System.Environment.GetEnvironmentVariable("ARC_WORLDMAP_SMOKE_SHOT") is { Length: > 0 } typeShot)
+                        {
+                            var first = notes.Items[0];
+                            for (int t = 0, slot = 0; t < 4; t++) if (t != first.Type) Require(notes.AddByQuill(first.PixelX + new[] { -80, -40, 40 }[slot++], first.PixelY, "type " + t, t), "the type look note was added");
+                            for (var pass = 0; pass < 2; pass++)
+                            {
+                                artView.NoteArtOverrideForSelfTest = pass == 0 ? null : AreaWorldMapArtLayout.NoteArt;
+                                artView.RedrawForSelfTest();
+                                for (var f = 0; f < 4; f++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                                await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+                                using var typeImage = GetViewport().GetTexture().GetImage();
+                                typeImage.SavePng(System.IO.Path.ChangeExtension(typeShot, pass == 0 ? ".notes-after.png" : ".notes-before.png"));
+                            }
+                            artView.NoteArtOverrideForSelfTest = null;
+                            while (notes.Count > 1) notes.EditByQuill(notes.Count - 1, " ");
+                            Require(notes.Count == 1 && notes.Items[0].Text == "Kept", "the type look notes are gone again");
+                        }
                         _mapNote.Select(0);
                         InventoryKey(Key.Q);
                         Require(!panel.QuillActive, $"{kind}: Q left the quill");
