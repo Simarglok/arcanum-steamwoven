@@ -150,7 +150,8 @@ public sealed partial class GameSessionOwner
     /// split off into a new made gold item of <see cref="SessionHeroThrow.SplitKind"/> (a coin weighs nothing, HG1), and the item lands as the pile to
     /// pick up (<see cref="TakePlaced"/>). ARC-COMBAT-1955 (TT1, TT8, TW3): with <see cref="SessionHeroThrow.Scripts"/> the removal's wield-off script (25, a worn item) and remove-item script (28), then the item's throw script (point 6, the
     /// hero as the triggerer, no other object) run first (<see cref="RunHeroThrowScripts"/>); a throw script that answers skip default throws nothing and puts the item back in the hero's list unworn
-    /// (<see cref="SessionHeroThrowResult.ScriptDeclined"/>). NOT READY: a stack's own throw script and a throw script together with an insert-item script (refused,
+    /// (<see cref="SessionHeroThrowResult.ScriptDeclined"/>). ARC-COMBAT-2182 (TW3, QW5): a split stack's throw script runs for the stack the split would make (no removal script: the stack path runs none), before anything is split; an answer of skip default throws
+    /// nothing and the units stay in the stack, the run's flag, store and message changes kept. NOT READY: a throw script together with an insert-item script (refused,
     /// <see cref="GameSessionFailure.ItemScriptUnsupported"/>; so is any of the scripts without the host), a non-critter blocker
     /// (the host names none), the struck critter's alert and the landing's item event (PF10). Steamwoven differences: the item leaves
     /// at the throw, not at the lift, so a worn item's own values (its armour, its effects on the hero's strength) still count for the
@@ -179,8 +180,13 @@ public sealed partial class GameSessionOwner
         // ARC-COMBAT-1955: the scripts the throw ran (null: none): a refusal after they took effect (the location throw's own checks) is a changed session with the failure named, a refusal before that carries the runs only.
         ItemScriptRuns? runs = null;
         var applied = false;
-        SessionHeroThrowResult Refused(GameSessionFailure failure) => runs is null ? new(GameSessionDisposition.Rejected, failure, null, Version)
-            : With(new(applied ? GameSessionDisposition.Changed : GameSessionDisposition.Rejected, failure, null, Version));
+        SessionHeroThrowResult Refused(GameSessionFailure failure)
+        {
+            // ARC-COMBAT-2182: the slots and deferred calls a split stack's throw script left on an item the throw then never made (the stack still holds its units) go.
+            if (runs is not null && applied && NextObjectEntity(SessionObjectOrigin.Made) is { } stray) ForgetNeverMadeThrowItem(stray);
+            return runs is null ? new(GameSessionDisposition.Rejected, failure, null, Version)
+                : With(new(applied ? GameSessionDisposition.Changed : GameSessionDisposition.Rejected, failure, null, Version));
+        }
         SessionHeroThrowResult With(SessionHeroThrowResult made) => runs is null ? made
             : made with { Scripts = runs.Runs, Messages = applied || made.Disposition != GameSessionDisposition.Rejected ? runs.Messages : [], EyeCandies = applied || made.Disposition != GameSessionDisposition.Rejected ? runs.EyeCandies : [] };
         if (_hero is null) return Refused(GameSessionFailure.AttackUnavailable);
@@ -209,12 +215,12 @@ public sealed partial class GameSessionOwner
         if (split && (gold ? SplitGoldRefusal(request.Count!.Value, request.SplitKind) : SplitAmmoRefusal(request.Item, request.Count!.Value, request.SplitKind)) is var splitFailure
             && splitFailure != GameSessionFailure.None) return Refused(splitFailure);
         var points = worn?.ScriptPoints ?? facts.ScriptPoints;
-        // ARC-COMBAT-1955: the removal's scripts (0x467860: wield off for a worn item, then remove-item; the stack path of the split runs none, QW5) and the throw script (point 6) run under the host. NOT READY (refused): a stack's own throw
-        // script (the thrown stack is made at the throw) and a throw script together with an insert-item script (the give-back of a refusing throw would run it, 0x4617F0).
+        // ARC-COMBAT-1955: the removal's scripts (0x467860: wield off for a worn item, then remove-item; the stack path of the split runs none, QW5) and the throw script (point 6) run under the host. ARC-COMBAT-2182: the throw script of a split
+        // stack runs for the stack the split makes (its entity is planned before the scripts, RunHeroThrowScripts). NOT READY (refused): a throw script together with an insert-item script (the give-back of a refusing throw would run it, 0x4617F0).
         var removal = worn is not null && points.Contains(SessionScriptPoint.WieldOff) || !split && points.Contains(SessionScriptPoint.RemoveItem);
         // A worn item's own record keeps only the wear events' points (21, 24, 25, 28), so the throw and insert-item points are read from the host's facts too.
         var throwScript = points.Contains(SessionScriptPoint.Throw) || facts.ScriptPoints.Contains(SessionScriptPoint.Throw);
-        if ((removal || throwScript) && request.Scripts is null || split && throwScript ||
+        if ((removal || throwScript) && request.Scripts is null ||
             throwScript && (points.Contains(SessionScriptPoint.InsertItem) || facts.ScriptPoints.Contains(SessionScriptPoint.InsertItem)))
             return Refused(GameSessionFailure.ItemScriptUnsupported);
         if (!split && (facts.NoDrop || worn?.Item.NoDrop == true)) return Refused(GameSessionFailure.ItemNotDroppable);
