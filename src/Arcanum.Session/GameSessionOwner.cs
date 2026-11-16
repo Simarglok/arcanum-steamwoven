@@ -745,22 +745,10 @@ public sealed partial class GameSessionOwner : IDisposable
         if (!Enum.IsDefined(requested)) return Reject(GameSessionFailure.InvalidQuestState);
         if (!IsCurrent(expected)) return Reject(GameSessionFailure.StaleVersion);
         var current = _story.Quests.TryGetValue(quest, out var record) ? record : new SessionQuest(quest, SessionQuestState.Unknown, false, 0);
-        if (current.Effective is SessionQuestState.Completed or SessionQuestState.OtherCompleted or SessionQuestState.Botched ||
-            current.Effective >= requested) return NoChange();
-        if (_revision == long.MaxValue) return Reject(GameSessionFailure.RevisionExhausted);
-
-        var shared = _story.GlobalQuests.GetValueOrDefault(quest, SessionQuestState.Accepted);
-        var state = requested;
-        if (shared == SessionQuestState.Accepted)
-        {
-            if (state is SessionQuestState.Completed or SessionQuestState.OtherCompleted) shared = SessionQuestState.Completed;
-            else if (state == SessionQuestState.Botched) shared = SessionQuestState.Botched;
-        }
-        else state = shared == SessionQuestState.Completed ? SessionQuestState.OtherCompleted : SessionQuestState.Botched;
         var timestamp = _clock.QueryClockSnapshot().GameTimestampMs;
-        var next = state == SessionQuestState.Botched
-            ? current with { Botched = true, TimestampMs = timestamp }
-            : new SessionQuest(quest, state, false, timestamp);
+        if (QuestStep(current, _story.GlobalQuests.GetValueOrDefault(quest, SessionQuestState.Accepted), requested, timestamp) is not { } step) return NoChange();
+        var (next, shared) = step;
+        if (_revision == long.MaxValue) return Reject(GameSessionFailure.RevisionExhausted);
         // The source gives the experience for the request, before the shared state can turn it into OtherCompleted.
         var award = requested == SessionQuestState.Completed && _hero is not null && _experience.Rules is { } rules
             ? Give(rules.QuestExperience(rules.QuestLevel(quest))) : null;
@@ -774,6 +762,26 @@ public sealed partial class GameSessionOwner : IDisposable
             experience = award.Award;
         }
         return Changed();
+    }
+
+    /// <summary>
+    /// The state step of <see cref="SetQuestState(GameSessionVersion, int, SessionQuestState, out SessionExperienceAward?)"/> over one PC record and the quest's shared state, without a write: null when the request changes
+    /// nothing (an ended quest, a request not above the current state), else the PC's next record and the quest's shared state after it. ARC-SCRIPT-2374: the item set's runs plan their quest writes with it (the move commits them).
+    /// </summary>
+    internal static (SessionQuest Next, SessionQuestState Shared)? QuestStep(SessionQuest current, SessionQuestState shared, SessionQuestState requested, long timestamp)
+    {
+        if (current.Effective is SessionQuestState.Completed or SessionQuestState.OtherCompleted or SessionQuestState.Botched || current.Effective >= requested) return null;
+        var state = requested;
+        if (shared == SessionQuestState.Accepted)
+        {
+            if (state is SessionQuestState.Completed or SessionQuestState.OtherCompleted) shared = SessionQuestState.Completed;
+            else if (state == SessionQuestState.Botched) shared = SessionQuestState.Botched;
+        }
+        else state = shared == SessionQuestState.Completed ? SessionQuestState.OtherCompleted : SessionQuestState.Botched;
+        var next = state == SessionQuestState.Botched
+            ? current with { Botched = true, TimestampMs = timestamp }
+            : new SessionQuest(current.Quest, state, false, timestamp);
+        return (next, shared);
     }
 
     /// <summary>
