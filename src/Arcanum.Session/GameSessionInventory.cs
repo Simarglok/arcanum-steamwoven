@@ -49,6 +49,9 @@ public sealed record SessionItemFacts(SessionItemKind Kind, int Weight, int Comp
     /// <summary>ARC-WORLD-066: the ammunition type (field 0x8F) of an ammunition item; null for any other item.</summary>
     public int? AmmoType { get; init; }
 
+    /// <summary>ARC-SCRIPT-2397 (ledger IV15, IV18): the map data's own off bit of the item (object flag 0x2 of field 0x13). The original keeps the flag word through every move, so an item the data stores off that reaches the ground (an NPC's drop, a spill) lies switched off there; a script's toggle (<see cref="GameSessionOwner.QueryItemOff"/>) flips it from this value.</summary>
+    public bool OffInData { get; init; }
+
     /// <summary>ARC-WORLD-123: the key number (field 0xBA) of a key item, which the key ring lists and a lock compares; null for any other item.</summary>
     public int? KeyId { get; init; }
 

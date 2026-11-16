@@ -120,7 +120,7 @@ public sealed class AreaInventoryMap
             inventory.Items.Select(item => new SessionSeedItem(Id(item.Key),
                 new(new((SessionItemType)item.Type, item.Prototype, item.Name, item.Description), item.Weight, item.Complexity,
                     item.InventoryLocation, item.Quantity, item.Scripts.Select(script => script.Sap).ToArray())
-                    { AmmoType = item.AmmoType, NoDecay = (item.ItemFlags & Arcanum.Simulation.Items.ItemDecayRules.NoDecayFlag) != 0, NoDrop = (item.ItemFlags & NoDropItemFlag) != 0, NoDisplay = (item.ItemFlags & NoDisplayItemFlag) != 0, Summoned = (item.SpellFlags & SummonedSpellFlag) != 0, MagicWeight = item.MagicWeight,
+                    { AmmoType = item.AmmoType, NoDecay = (item.ItemFlags & Arcanum.Simulation.Items.ItemDecayRules.NoDecayFlag) != 0, NoDrop = (item.ItemFlags & NoDropItemFlag) != 0, OffInData = (item.ObjectFlags & AreaUseScriptHost.OffObjectFlagBit) != 0, NoDisplay = (item.ItemFlags & NoDisplayItemFlag) != 0, Summoned = (item.SpellFlags & SummonedSpellFlag) != 0, MagicWeight = item.MagicWeight,
                       KeyId = item.Type == AreaItemType.Key ? item.KeyId : null },
                 item.InInventory ? null : new CellCoord(checked((int)item.WorldX!.Value), checked((int)item.WorldY!.Value)))).ToArray())
         {
