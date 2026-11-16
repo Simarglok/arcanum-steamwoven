@@ -419,7 +419,7 @@ public static class SessionEventKinds
             new(ItemDecay, GameEventDomain.Game, GameEventPersistence.Saved, GameEventUniqueness.Many, GameEventScopeRule.EntityMap, 1, 2, 0, 0,
                 new ItemDecayHandler(owner), Validate: DecayPayload),
             new(ItemRecharge, GameEventDomain.Game, GameEventPersistence.Saved, GameEventUniqueness.Many, GameEventScopeRule.EntityMap, 1, 2, 0, 0,
-                new ItemRechargeHandler(owner), Validate: payload => payload.Values[0] >= 0 && Math.Abs(payload.Values[1]) <= SessionItemUseLimits.MaxUses
+                new ItemRechargeHandler(owner), Validate: payload => payload.Values[0] >= 0 && payload.Values[1] is >= int.MinValue and <= int.MaxValue
                     && payload.Entities[0].Code != AbsentRole && SessionValidation.Entity(payload.Entities[0].Code), ChecksOwnEntities: true),
             new(BodyDecay, GameEventDomain.Game, GameEventPersistence.Saved, GameEventUniqueness.Replace, GameEventScopeRule.EntityMap, 1, 2, 1, 0,
                 new BodyDecayHandler(owner), Validate: BodyDecayPayload),
