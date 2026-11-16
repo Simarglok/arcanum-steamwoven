@@ -176,6 +176,9 @@ public sealed partial class GameSessionOwner
         // name (one change of an object a move, a second is not modelled and refuses the move).
         private readonly List<MapChangeEdit> _artEdits = [];
         private readonly HashSet<string> _artEntities = new(StringComparer.Ordinal);
+        // ARC-SCRIPT-2375 (IV18, IV19): the story-state number the runs so far raised it to (the one global number, read by the later runs and raised by the commit), and the rumors the hero learns, in action order.
+        private int? _storyRaised;
+        private readonly List<int> _rumors = [];
 
         internal ItemScriptRuns(GameSessionOwner owner, ISessionItemScriptHost host, int map, IReadOnlyDictionary<string, int> items, NpcWearer? npc = null)
         {
@@ -234,7 +237,11 @@ public sealed partial class GameSessionOwner
         internal IReadOnlyList<ScrEyeCandy> EyeCandies => _runs.Where(run => run.Run.Outcome != ScrOutcome.Refused).SelectMany(run => run.Run.Effects.EyeCandies).ToArray();
         /// <summary>Whether committing changes the session: a flag write, a script store cell that differs from the session's (ARC-DEV-152),
         /// a slot or an effect change, a deferred call to schedule or one to remove that is pending (ARC-MAGIC-041).</summary>
-        internal bool Changes => _writes.Count > 0 || _slots.Count > 0 || _steps.Count > 0 || _npcOps.Count > 0 || _owner.EffectiveChanges(_artEdits).Length > 0 || _owner.ScriptCallsChange(_calls) || _reads.StoreChanges;
+        internal bool Changes => _writes.Count > 0 || _slots.Count > 0 || _steps.Count > 0 || _npcOps.Count > 0 || _owner.EffectiveChanges(_artEdits).Length > 0 || _owner.ScriptCallsChange(_calls) || _reads.StoreChanges
+            || _storyRaised is { } raised && raised > _owner._story.StoryState || _rumors.Any(rumor => !_owner._story.Rumors.ContainsKey(rumor));
+
+        /// <summary>ARC-SCRIPT-2375 (IV18): the story-state number as the next run reads it: the one the move's earlier runs raised it to, else the session's.</summary>
+        internal int StoryNow => _storyRaised ?? _owner._story.StoryState;
 
         internal ScrRunResult? Run(int point, string attachee, string triggerer, string? extra)
         {
@@ -267,6 +274,18 @@ public sealed partial class GameSessionOwner
             return true;
         }
 
+        // ARC-SCRIPT-2375 (IV20): one rename (92) of an item of the move: its name number (object field 0x16) is written with no type test (CQ5), planned as a map change of the item's own field; the record goes when the number is the data's. Only an item of the
+        // move whose own field the session can keep and whose data name the host reads (a placed or dropped item); the hero, another object and a made item refuse the move whole, nothing applied.
+        private bool PlanName(ScrObjectRef item, int number)
+        {
+            if (item.Map != _map || !_items.ContainsKey(item.Code) || _host is not ISessionItemWorldHost world || !SessionValidation.Entity(item.Code)
+                || !ObjectStateVocabulary.Mobile(item.Code, SessionItemName.Property) || world.ItemNameInData(item) is not { } dataName) return false;
+            var key = SessionItemName.Key(item.Code);
+            var map = _owner.QueryObjectRecordMap(key) ?? new SessionMapId(item.Map);
+            _artEdits.Add(new(map, key, number == dataName ? null : number));
+            return true;
+        }
+
         // The run's changes join the move's: flags, the item slots (call-ex runs' first, then the event's own), and the effect changes.
         private GameSessionFailure Accept(ScrRunResult run)
         {
@@ -286,6 +305,12 @@ public sealed partial class GameSessionOwner
                     if (!PlanOff(state.Object)) return GameSessionFailure.ItemScriptUnsupported;
                     continue;
                 }
+                // ARC-SCRIPT-2375 (IV20): rename of an item of the move.
+                if (state.Change == ScrObjectStateChange.Rename)
+                {
+                    if (!PlanName(state.Object, state.Value)) return GameSessionFailure.ItemScriptUnsupported;
+                    continue;
+                }
                 if (state.Change != ScrObjectStateChange.ChangeArtNumber || _host is not ISessionItemWorldHost world || world.ArtPlan(state.Object, state.Value) is not { } plan) return GameSessionFailure.ItemScriptUnsupported;
                 // The plan is the request's own object, whatever the host plans (the commit writes unchecked keys otherwise).
                 if (plan.Map != new SessionMapId(state.Object.Map) || plan.Entity != state.Object.Code) return GameSessionFailure.ItemScriptUnsupported;
@@ -293,6 +318,16 @@ public sealed partial class GameSessionOwner
                 if (edits.Count > 0 && !_artEntities.Add(plan.Entity)) return GameSessionFailure.ItemScriptUnsupported;
                 _artEdits.AddRange(edits);
             }
+            // ARC-SCRIPT-2375 (IV18, IV19): the story-state number only rises (0x4450A0), game-wide whoever the triggerer is; a rumor is learned by a PC only (SS3, SS4: the hero; any other object's request does nothing), a number outside the session's range
+            // refuses the move (the original stores it unchecked). Any other state request (a quest, a reputation, a blessing) is not admitted here.
+            foreach (var request in effects.States)
+            {
+                if (request.Kind != ScrStateKind.Rumor) return GameSessionFailure.ItemScriptUnsupported;
+                if (request.Object is not { } who || !_host.IsPc(who)) continue;
+                if (!SessionStoryLimits.IsRumor(request.Number)) return GameSessionFailure.ItemScriptUnsupported;
+                _rumors.Add(request.Number);
+            }
+            if (effects.StoryState is { } raised && raised > StoryNow) _storyRaised = raised;
             var aptitude = HazardOf(run, _reads.RatioReads, Arcanum.Data.Scripts.ScrCatalogue.Action.MagickTechAdjustment) ? Aptitude() : (int?)null;
             // ARC-DEV-366: the same for get stat, which reads the hero's stat; the stats it read are asked again after the run's changes.
             var statReads = HazardOf(run, _reads.StatReads.Count, Arcanum.Data.Scripts.ScrCatalogue.Action.GetStat) ? _reads.StatReads.ToArray() : [];
@@ -485,6 +520,10 @@ public sealed partial class GameSessionOwner
                 if (receipt.Disposition is not (GlobalFlagWriteDisposition.Applied or GlobalFlagWriteDisposition.NoChange))
                     throw new InvalidOperationException("ITEM_SCRIPT_FLAG_WRITE_" + receipt.Disposition);
             }
+            // ARC-SCRIPT-2375 (IV18, IV19): the story-state number and the rumors the hero learns (a known rumor keeps its first time), without a revision of their own.
+            if (_storyRaised is { } raised && raised > _owner._story.StoryState) _owner._story.StoryState = raised;
+            var learned = _owner._clock.QueryClockSnapshot().GameTimestampMs;
+            foreach (var rumor in _rumors) _owner._story.Rumors.TryAdd(rumor, learned);
             _reads.CommitStores();
             foreach (var (key, slot) in _planned ?? throw new InvalidOperationException("ITEM_SCRIPT_COMMIT_UNPREPARED")) _owner._inventory.ScriptSlots[key] = slot;
             if (_prepared is not null) _owner.ApplyEffects(_prepared);
@@ -509,7 +548,7 @@ public sealed partial class GameSessionOwner
         if (run.Outcome == ScrOutcome.Refused || run.Stop is ScrStop.UnreadableScript or ScrStop.NotModelled) return GameSessionFailure.ItemScriptUnsupported;
         var effects = run.Effects;
         // ARC-MAGIC-041: the deferred calls are the session's now (the move puts them in the event queue as it commits).
-        if (effects.DestroyTrapObject is not null || effects.Dialog is not null || effects.StoryState is not null || effects.AmmoUses.Count > 0)
+        if (effects.DestroyTrapObject is not null || effects.Dialog is not null || effects.AmmoUses.Count > 0)
             return GameSessionFailure.ItemScriptUnsupported;
         foreach (var write in effects.GlobalFlags)
         {
@@ -741,7 +780,8 @@ public sealed partial class GameSessionOwner
         public ScrSlot? Slot(ScrObjectRef attachee, int point) =>
             runs.Slot(attachee, point) ?? (session._inventory.ScriptSlots.TryGetValue((attachee.Code, point), out var kept) ? kept : session.InheritedSlot(attachee.Code, point) ?? host.Slot(attachee, point));
         public ScrScriptLookup Script(int number) => host.Script(number);
-        public int StoryState() => host.StoryState();
+        // ARC-SCRIPT-2375 (IV18): the story-state number is the session's, as the move's earlier runs raised it.
+        public int StoryState() => runs.StoryNow;
         public bool IsMonsterGenerator(ScrObjectRef attachee) => host.IsMonsterGenerator(attachee);
         public ScrDialogState DialogState(ScrObjectRef attachee) => host.DialogState(attachee);
         public ScrTrapCheck CheckTrapBeforeUse(ScrObjectRef triggerer, ScrObjectRef attachee) =>

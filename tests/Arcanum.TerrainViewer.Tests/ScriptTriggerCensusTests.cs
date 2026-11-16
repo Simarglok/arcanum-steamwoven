@@ -118,8 +118,27 @@ public sealed class ScriptTriggerCensusTests
         Assert.AreEqual(28, rows[SessionScriptPoint.InsertItem]);
         // ARC-SCRIPT-2347 (ledger IV16): with the quest state condition, assign object, get object type, obj is dead and monster generator disabled the item set admits 23 of the 28 (22 before: the row that stopped on condition 22 or 46 joins); the 5 left stop on toggle
         // monster generator (110), set PC quest state (16), get story state (42) and the scenery and critter vicinity kinds (15, 8), one each.
-        Assert.AreEqual(23, admitted[SessionScriptPoint.InsertItem]);
+        // ARC-SCRIPT-2375 (ledger IV21): get and set story state (42, 43) free the row that stopped on get story state (1094): the item set admits 24 of the 28; the 4 left stop on toggle monster generator (110), set PC quest state (16) and the scenery and critter
+        // vicinity kinds (15, 8), one row each. The set rumor and rename scripts (1103, 1566, 1573) have no placed row on these maps (they are prototype scripts); the next test reads them whole.
+        Assert.AreEqual(24, admitted[SessionScriptPoint.InsertItem]);
         Assert.IsTrue(admitted[ScrPoint.Hit] >= 26 && admitted[ScrPoint.CritterHits] == 18 && admitted[ScrPoint.CriticalHit] >= 4, $"{admitted[ScrPoint.Hit]}, {admitted[ScrPoint.CritterHits]}, {admitted[ScrPoint.CriticalHit]}");
+    }
+
+    /// <summary>
+    /// ARC-SCRIPT-2375 (ledger IV21; AC2, AC3): the four installed point 21 scripts that set the story state (1094), a rumor (1103, 1566) or an item's name number (1573) are admitted whole by the item set, which is the static half of the claim that
+    /// the item event runs them; the opt-in census above counts only the rows placed on the shown maps' windows (1094 is one of them). Opt-in: <c>DAT_ROOT</c>.
+    /// </summary>
+    [TestMethod, TestCategory("RealData")]
+    public void The_installed_story_state_rumor_and_rename_item_scripts_are_admitted_whole_by_the_item_set()
+    {
+        if (Environment.GetEnvironmentVariable("DAT_ROOT") is not { Length: > 0 } root) { Assert.Inconclusive("DAT_ROOT is required for the opt-in census; this is not a synthetic pass."); return; }
+        using var content = ConversationSessionFixture.Scripts(root);
+        foreach (var script in new[] { 1094, 1103, 1566, 1573 })
+        {
+            Assert.IsTrue(content.Script(script) is { Status: ScriptContentStatus.Read, Program: { } program }, $"script {script} is read");
+            var admission = ScrAdmission.AdmitFrom(content.Script(script).Program!, SessionItemScripts.Admission, 0);
+            Assert.IsTrue(admission.IsAdmitted, $"script {script}: {admission.Refusal}");
+        }
     }
 
     /// <summary>

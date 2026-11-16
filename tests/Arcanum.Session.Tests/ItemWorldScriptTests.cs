@@ -15,7 +15,7 @@ namespace Arcanum.Session.Tests;
 public sealed class ItemWorldScriptTests
 {
     private const byte Triggerer = 0, Attachee = 1, LocalVariable = 2, Number = 3, Looped = 10, LocalObject = 11, EveryContainer = 17, AnyContainer = 18, EveryFollower = 2, AnyFollower = 3;
-    private const int Every = 810, Any = 811, Twice = 812, EveryFollowerScript = 813, AnyFollowerScript = 814, ToggleSelf = 815, ToggleSelfTwice = 816, ToggleHero = 817, Quest = 820, Typed = 821, Assigned = 822, DeadGated = 823, GeneratorGated = 824, GeneratorSlot = 7, CaseName = 1205, NewArt = 4, BaselineArt = 100, QuestNumber = 1005, ContainerType = 2;
+    private const int Every = 810, Any = 811, Twice = 812, EveryFollowerScript = 813, AnyFollowerScript = 814, ToggleSelf = 815, ToggleSelfTwice = 816, ToggleHero = 817, Quest = 820, Typed = 821, Assigned = 822, DeadGated = 823, GeneratorGated = 824, GeneratorSlot = 7, StoryRaise = 830, StoryReadBack = 831, RumorOfHero = 832, RumorOfItem = 833, RumorOutOfRange = 834, RenameSelf = 835, RenameSelfTwice = 836, RenameHero = 837, RumorNumber = 1500, RenamedTo = 2805, DataName = 3100, CaseName = 1205, NewArt = 4, BaselineArt = 100, QuestNumber = 1005, ContainerType = 2;
     private static readonly SessionInsertCheck Accept = _ => SessionInsertVerdict.Accepted;
 
     private sealed record Clause(int Type, (byte Kind, int Value)[] Operands);
@@ -75,13 +75,32 @@ public sealed class ItemWorldScriptTests
         return Program([.. lines]);
     }
 
+    // ARC-SCRIPT-2375 (IV18-IV20): the story-state, set rumor and rename shapes of the installed point 21 scripts (1094, 1103, 1566, 1573), with invented numbers.
+    private static ScrProgram StoryRaiseProgram() => Program(Do(C(ScrCatalogue.Action.GetStoryState, (LocalVariable, 0))), Do(C(ScrCatalogue.Action.SetStoryState, N(19))), Do(C(ScrCatalogue.Action.ReturnRunDefault)));
+
+    // A raise the same run reads back, then a rumor gated on what it read (5).
+    private static ScrProgram StoryReadBackProgram() => Program(Do(C(ScrCatalogue.Action.SetStoryState, N(5))), Do(C(ScrCatalogue.Action.GetStoryState, (LocalVariable, 0))),
+        If(C(ScrCatalogue.Condition.Equal, (LocalVariable, 0), N(5)), C(ScrCatalogue.Action.SetRumor, N(RumorNumber), (Triggerer, 0))), Do(C(ScrCatalogue.Action.ReturnRunDefault)));
+
+    private static ScrProgram RumorProgram(byte who, int rumor = RumorNumber) => Program(Do(C(ScrCatalogue.Action.SetRumor, N(rumor), (who, 0))), Do(C(ScrCatalogue.Action.ReturnRunDefault)));
+
+    private static ScrProgram RenameProgram(byte who, int times = 1)
+    {
+        var lines = new List<(Clause, Clause, Clause)>();
+        for (var i = 0; i < times; i++) lines.Add(Do(C(ScrCatalogue.Action.Rename, (who, 0), N(RenamedTo + i))));
+        lines.Add(Do(C(ScrCatalogue.Action.ReturnRunDefault)));
+        return Program([.. lines]);
+    }
+
     private sealed class Host(int script) : ISessionItemScriptHost, ISessionItemWorldHost
     {
         public Dictionary<int, ScrProgram> Programs { get; } = new() { [Every] = Loop(EveryContainer, Looped), [Any] = Loop(EveryContainer, AnyContainer), [Twice] = Loop(EveryContainer, Looped, 2),
             [Quest] = QuestGated(2), [Typed] = TypeGated(ContainerType), [Assigned] = AssignGated(),
             [DeadGated] = Gated(C(ScrCatalogue.Condition.IsDead, (Looped, 0))), [GeneratorGated] = Gated(C(ScrCatalogue.Condition.MonsterGenDisabled, N(GeneratorSlot))),
             [EveryFollowerScript] = Loop(EveryFollower, Looped), [AnyFollowerScript] = Loop(EveryFollower, AnyFollower),
-            [ToggleSelf] = Toggle(Attachee), [ToggleSelfTwice] = Toggle(Attachee, 2), [ToggleHero] = Toggle(Triggerer) };
+            [ToggleSelf] = Toggle(Attachee), [ToggleSelfTwice] = Toggle(Attachee, 2), [ToggleHero] = Toggle(Triggerer),
+            [StoryRaise] = StoryRaiseProgram(), [StoryReadBack] = StoryReadBackProgram(), [RumorOfHero] = RumorProgram(Triggerer), [RumorOfItem] = RumorProgram(Attachee), [RumorOutOfRange] = RumorProgram(Triggerer, 3000),
+            [RenameSelf] = RenameProgram(Attachee), [RenameSelfTwice] = RenameProgram(Attachee, 2), [RenameHero] = RenameProgram(Triggerer) };
         public Dictionary<string, int> Names { get; set; } = new() { ["case"] = CaseName, ["other"] = 3000 };
         public string[]? Vicinity { get; set; } = ["case", "other"];
         public bool? DeadCase { get; set; } = true;
@@ -91,6 +110,7 @@ public sealed class ItemWorldScriptTests
         public bool Plans { get; set; } = true;
         public bool PlanBaseline { get; set; }
         public bool? DataOff { get; set; } = false;
+        public int? NameInData { get; set; } = DataName;
         public SessionOpenableBaseline? Openable { get; set; }
         public List<ScrObjectRef> Centres { get; } = [];
         public string[]? Followers { get; set; } = ["case", "other"];
@@ -139,6 +159,7 @@ public sealed class ItemWorldScriptTests
         public int? ObjectType(ScrObjectRef obj) => obj.Code == "case" ? TypeOfContainers : obj.Code == "other" ? ContainerType + 1 : null;
 
         public bool? ItemOffInData(ScrObjectRef item) => DataOff;
+        public int? ItemNameInData(ScrObjectRef item) => NameInData;
 
         public SessionObjectArtPlan? ArtPlan(ScrObjectRef obj, int number) => !Plans ? null
             : new(new SessionMapId(obj.Map), obj.Code, PlanBaseline ? BaselineArt : (uint)number, BaselineArt, Openable is null ? null : new SessionOpenable(new SessionMapId(obj.Map), obj.Code), Openable);
@@ -368,6 +389,121 @@ public sealed class ItemWorldScriptTests
         // ARC-SCRIPT-2347 (IV13): the quest state condition, assign object and get object type are answered by the host's world part now.
         Assert.IsTrue(set.Conditions.Contains(ScrCatalogue.Condition.PcQuestState) && set.Actions.Contains(ScrCatalogue.Action.AssignObject) && set.Actions.Contains(ScrCatalogue.Action.GetObjectType));
         Assert.IsTrue(set.IsSubsetOf(ScrAdmissionSet.S65));
+    }
+
+    // ARC-SCRIPT-2375 (IV18): get and set story state of a point 21 script.
+    [TestMethod]
+    public void A_set_story_state_raises_the_number_in_the_moves_revision_and_the_save_keeps_it()
+    {
+        using var owner = Owner();
+        var before = owner.Version;
+        var picked = owner.PickUpItem(before, "oid:tome", Accept, new Host(StoryRaise));
+        Assert.AreEqual((GameSessionDisposition.Changed, GameSessionFailure.None), (picked.Disposition, picked.Failure));
+        Assert.AreEqual(before.Revision + 1, owner.Version.Revision, "one revision for the whole move");
+        Assert.AreEqual(19, owner.QueryStoryState());
+        using var restored = Restore(Decode(GameSessionSnapshotCodec.Encode(owner.Capture())));
+        Assert.AreEqual(19, restored.QueryStoryState());
+    }
+
+    [TestMethod]
+    public void A_set_story_state_below_the_current_number_changes_nothing_and_the_number_never_falls()
+    {
+        using var owner = Owner();
+        Assert.AreNotEqual(GameSessionDisposition.Rejected, owner.RaiseStoryState(owner.Version, 25).Disposition);
+        Assert.AreEqual(GameSessionFailure.None, owner.PickUpItem(owner.Version, "oid:tome", Accept, new Host(StoryRaise)).Failure);
+        Assert.AreEqual(25, owner.QueryStoryState());
+    }
+
+    [TestMethod]
+    public void A_run_reads_the_story_state_it_raised_and_a_rumor_follows_for_the_hero()
+    {
+        using var owner = Owner();
+        Assert.AreEqual(GameSessionFailure.None, owner.PickUpItem(owner.Version, "oid:tome", Accept, new Host(StoryReadBack)).Failure);
+        Assert.AreEqual(5, owner.QueryStoryState());
+        Assert.IsNotNull(owner.QueryRumor(RumorNumber), "the condition that read 5 held");
+    }
+
+    // ARC-SCRIPT-2375 (IV19): set rumor (SS4): the hero learns it at the game time; any other object's request does nothing.
+    [TestMethod]
+    public void A_set_rumor_for_the_hero_is_learned_in_the_moves_revision_and_the_save_keeps_it()
+    {
+        using var owner = Owner();
+        var before = owner.Version;
+        Assert.IsNull(owner.QueryRumor(RumorNumber));
+        Assert.AreEqual(GameSessionFailure.None, owner.PickUpItem(before, "oid:tome", Accept, new Host(RumorOfHero)).Failure);
+        Assert.AreEqual(before.Revision + 1, owner.Version.Revision, "one revision for the whole move");
+        var learned = owner.QueryRumor(RumorNumber);
+        Assert.IsNotNull(learned);
+        using var restored = Restore(Decode(GameSessionSnapshotCodec.Encode(owner.Capture())));
+        Assert.AreEqual(learned, restored.QueryRumor(RumorNumber));
+    }
+
+    [TestMethod]
+    public void A_set_rumor_for_an_object_that_is_not_the_hero_learns_nothing_and_does_not_refuse_the_move()
+    {
+        using var owner = Owner();
+        var picked = owner.PickUpItem(owner.Version, "oid:tome", Accept, new Host(RumorOfItem));
+        Assert.AreEqual((GameSessionDisposition.Changed, GameSessionFailure.None), (picked.Disposition, picked.Failure));
+        Assert.IsNull(owner.QueryRumor(RumorNumber));
+    }
+
+    [TestMethod]
+    public void A_set_rumor_outside_the_sessions_range_refuses_the_move_and_changes_nothing()
+    {
+        using var owner = Owner();
+        var before = owner.Version;
+        var refused = owner.PickUpItem(before, "oid:tome", Accept, new Host(RumorOutOfRange));
+        Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.ItemScriptUnsupported, before), (refused.Disposition, refused.Failure, owner.Version));
+    }
+
+    // ARC-SCRIPT-2375 (IV20): rename (92, CQ5) writes the name number of an item of the move.
+    private static long? Renamed(GameSessionOwner owner) => owner.QueryObjectChange(Exterior, SessionItemName.Key("oid:tome"));
+
+    [TestMethod]
+    public void A_rename_of_the_attachee_item_writes_its_name_number_in_the_moves_revision_and_the_save_keeps_it()
+    {
+        using var owner = Owner();
+        var before = owner.Version;
+        var picked = owner.PickUpItem(before, "oid:tome", Accept, new Host(RenameSelf));
+        Assert.AreEqual((GameSessionDisposition.Changed, GameSessionFailure.None), (picked.Disposition, picked.Failure));
+        Assert.AreEqual(before.Revision + 1, owner.Version.Revision, "one revision for the whole move");
+        Assert.AreEqual(RenamedTo, (int?)Renamed(owner));
+        using var restored = Restore(Decode(GameSessionSnapshotCodec.Encode(owner.Capture())));
+        Assert.AreEqual(RenamedTo, (int?)Renamed(restored), "the name number survives a save");
+    }
+
+    [TestMethod]
+    public void A_rename_to_the_number_the_data_gives_writes_no_record_and_a_second_rename_follows_the_first()
+    {
+        using var owner = Owner();
+        Assert.AreEqual(GameSessionFailure.None, owner.PickUpItem(owner.Version, "oid:tome", Accept, new Host(RenameSelf) { NameInData = RenamedTo }).Failure);
+        Assert.IsNull(Renamed(owner), "the data's number clears the record");
+        using var twice = Owner();
+        Assert.AreEqual(GameSessionFailure.None, twice.PickUpItem(twice.Version, "oid:tome", Accept, new Host(RenameSelfTwice)).Failure);
+        Assert.AreEqual(RenamedTo + 1, (int?)Renamed(twice), "the last rename of the run stands");
+    }
+
+    [TestMethod]
+    public void A_rename_the_session_cannot_keep_is_refused_and_changes_nothing()
+    {
+        // The host reads no data name for the item (a made item has no row), or the object is the hero (its name number is not modelled).
+        foreach (var host in new Host[] { new(RenameSelf) { NameInData = null }, new(RenameHero) })
+        {
+            using var owner = Owner();
+            var before = owner.Version;
+            var refused = owner.PickUpItem(before, "oid:tome", Accept, host);
+            Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.ItemScriptUnsupported, before), (refused.Disposition, refused.Failure, owner.Version));
+            Assert.IsNull(Renamed(owner));
+        }
+    }
+
+    [TestMethod]
+    public void The_story_rumor_and_rename_commands_are_in_the_item_set_and_the_dialog_stays_out()
+    {
+        var set = SessionItemScripts.Admission;
+        foreach (var action in new[] { ScrCatalogue.Action.GetStoryState, ScrCatalogue.Action.SetStoryState, ScrCatalogue.Action.SetRumor, ScrCatalogue.Action.Rename })
+            Assert.IsTrue(set.Actions.Contains(action), $"action {action}");
+        Assert.IsFalse(set.Actions.Contains(ScrCatalogue.Action.Dialog));
     }
 
     // The same host with the world part hidden: the question is not answerable.
