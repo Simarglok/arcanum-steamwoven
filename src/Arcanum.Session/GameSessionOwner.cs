@@ -1800,7 +1800,9 @@ public sealed partial class GameSessionOwner : IDisposable
     {
         if (to == _actor.Map) return GameSessionFailure.None;
         var followers = (travelling ?? _party.Order).ToHashSet(StringComparer.Ordinal);
-        var failure = _events.Relocate(_actor.Map.RuntimeMap, to.RuntimeMap, entity => followers.Contains(entity.Code)).Failure;
+        // ARC-MAGIC-2400 (BC10, TL33): the recharge events of the items that travel with the PC go too; the others stay parked on the map left.
+        var items = TravellingRechargeItems(followers);
+        var failure = _events.Relocate(_actor.Map.RuntimeMap, to.RuntimeMap, entity => followers.Contains(entity.Code) || items.Contains(entity.Code)).Failure;
         // ARC-SCRIPT-010: a deferred call's player and follower roles travel one by one (the original keeps their handles
         // across maps), its other roles stay where they were. Both steps refuse only during a pass, which the first one
         // already reports, so the rewrite cannot fail after the relocation moved anything.
@@ -2992,11 +2994,11 @@ public sealed partial class GameSessionOwner : IDisposable
             if (pending.Kind == SessionEventKinds.ItemRecharge)
             {
                 // A recharge event of a worn mana store (ARC-MAGIC-2371): one item, set no later than the saved clock, the fixed delay before its deadline (a merge keeps the first stamp and deadline). Whether the item
-                // still has a store copy is asked when it fires. Global: no map scope.
-                if (pending.Entities.Length != 1 || pending.Entities[0].Map != SessionEventKinds.RechargeMap ||
+                // still has a store copy is asked when it fires. Scoped to the map it was scheduled on or parked on (ARC-MAGIC-2400).
+                if (pending.Entities.Length != 1 || pending.Entities[0].Map < 1 ||
                     !RechargePayload(pending.Entities, pending.Values) || pending.Values[0] > clockMs || pending.DeadlineMs != pending.Values[0] + SessionEventKinds.ItemRechargeDelayMs)
                     return GameSessionFailure.InvalidEvents;
-                converted.Add(new(pending.Sequence, pending.Kind, kind.Domain, pending.DeadlineMs, 0, new(pending.Entities, pending.Values)));
+                converted.Add(new(pending.Sequence, pending.Kind, kind.Domain, pending.DeadlineMs, pending.Entities[0].Map, new(pending.Entities, pending.Values)));
                 continue;
             }
             if (pending.Kind == SessionEventKinds.Restock)
