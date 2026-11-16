@@ -70,4 +70,18 @@ public sealed class ItemNameReadersTests
         Assert.IsTrue(port.PartyHolds(new(Npc, Pc, 2805)), "the hero's pack lists it by the new number");
         Assert.IsFalse(port.PartyHolds(new(Npc, Pc, 2804)));
     }
+
+    [TestMethod]
+    public void The_dialog_take_gives_back_a_renamed_item_of_the_hero_by_its_new_name_only()
+    {
+        using var owner = Owner();
+        Rename(owner, Ring, 2805);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.GiveItemToPc(owner.Version, "virgil", 2805, Accept).Disposition);
+        var port = new SessionDialogItemTakePort(owner, Pc, participant => participant == Npc ? "priest" : null, Accept);
+        var before = owner.Version.Revision;
+        Assert.AreEqual(DialogCommandResult.Applied, port.Execute(new TakeItemCommand(Npc, Pc, 2804)));
+        Assert.AreEqual(before, owner.Version.Revision, "the old number finds nothing to take");
+        Assert.AreEqual(DialogCommandResult.Applied, port.Execute(new TakeItemCommand(Npc, Pc, 2805)));
+        CollectionAssert.Contains(owner.QueryHolderItems("priest")!.Select(item => item.Entity).ToArray(), Ring, "the new number takes the ring to the npc");
+    }
 }
