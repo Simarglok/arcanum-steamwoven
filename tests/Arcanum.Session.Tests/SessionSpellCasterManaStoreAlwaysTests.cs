@@ -105,11 +105,39 @@ public sealed partial class SessionSpellCasterTests
         // Both payments were planned against the store before the pass: 8 of 10 each, no fatigue.
         var notes = new[] { PlannedNote(caster, run, SessionSpellCaster.Hero, 8), PlannedNote(caster, run, SessionSpellCaster.Hero, 8) };
         Assert.IsTrue(notes.All(n => n.Payments![0].FatigueDamageAdded == 0 && n.Payments![0].Drains.Single().Drained == 8));
-        caster.Apply(notes, id => owner.QuerySpellRuns()[id]);
-        Assert.AreEqual(0, owner.QueryItemManaStore(StoreStaff), "8, then the 2 left");
+        caster.ApplyPass([[notes[0]], [notes[1]]], id => owner.QuerySpellRuns()[id]);
+        Assert.AreEqual(0, owner.QueryItemManaStore(StoreStaff), "8, then the 2 left (two firings of one pass)");
         Assert.AreEqual(before.Fatigue - 6, Hero(owner).Fatigue, "the second payment's other 6 points are fatigue, as when paid at once");
         var drains = caster.Log.Where(e => e.Kind == SpellCastEventKind.ManaStoreDrained).Select(e => (e.Value, e.Detail)).ToArray();
         CollectionAssert.AreEqual(new[] { (2, 8), (0, 2) }, drains);
         Assert.AreEqual((StoreStaff, 10), owner.QueryManaRecharges().Single() is var e ? (e.Entity, e.Pending) : default, "one merged event for the 10 drained points");
+    }
+
+    // The first payment of a payer keeps the plan its step made: the original pays at the stage, before the step's components change anything.
+    [TestMethod]
+    public void The_first_payment_of_a_payer_is_written_as_planned_whatever_the_store_became_since()
+    {
+        var record = SelfBolt(cost: 8);
+        var (owner, caster) = StoreSession(record, store: 10);
+        using var _ = owner;
+        var run = Start(owner, caster, record);
+        var note = PlannedNote(caster, run, SessionSpellCaster.Hero, 8);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.WriteItemManaStore(owner.Version, StoreStaff, 10, 4).Disposition, "a component of the step lowered the store");
+        caster.Apply([note], id => owner.QuerySpellRuns()[id]);
+        Assert.AreEqual(2, owner.QueryItemManaStore(StoreStaff), "the plan's store left (10 - 8)");
+    }
+
+    // The second payment of an NPC payer in one pass, as the hero's.
+    [TestMethod]
+    public void An_npc_payers_second_payment_of_one_pass_drains_what_the_first_left()
+    {
+        var (owner, caster, run) = NpcStoreSession(store: 10);
+        using var _ = owner;
+        var before = owner.QueryLife(caster.LifeTarget(StoreNpc)!).View!.Status.Fatigue;
+        var notes = new[] { PlannedNote(caster, run, StoreNpc, 8), PlannedNote(caster, run, StoreNpc, 8) };
+        caster.ApplyPass([[notes[0]], [notes[1]]], id => owner.QuerySpellRuns()[id]);
+        Assert.AreEqual(0, owner.QueryItemManaStore(NpcStaff));
+        Assert.AreEqual(before - 6, owner.QueryLife(caster.LifeTarget(StoreNpc)!).View!.Status.Fatigue, "6 points of the second payment are fatigue");
+        Assert.IsFalse(caster.Log.Any(e => e.Kind == SpellCastEventKind.ManaStoreNotSaved));
     }
 }

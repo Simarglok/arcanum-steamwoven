@@ -19,12 +19,17 @@ public sealed partial class GameSessionOwner
     /// recharge handler (0x459680, which adds to it with no cap at the prototype's value) write it. <paramref name="baseline"/> is the item's own field,
     /// read only until the session holds a store; a store equal to the current one is <see cref="GameSessionDisposition.NoChange"/>. The store is a plain
     /// 32-bit value as in the original (ARC-MAGIC-2401): any int, a negative one included. Refused for an invalid entity (<see cref="GameSessionFailure.InvalidItem"/>),
-    /// a stale version, an item the session deleted (<see cref="GameSessionFailure.ItemNotAvailable"/>), an item it does not track (unless <paramref name="worn"/>, or the
-    /// session already holds its store) and a full store budget (<see cref="GameSessionLimits.MaxManaStores"/>, which no other record shares). One revision.
-    /// ARC-MAGIC-2403: <paramref name="worn"/> is the payment's mark that a critter wears the item (the host's map names it in one of the payer's slots), which the original needs no
-    /// other fact for: its store is written whatever seed the session has attached for the item's map. A store the session holds is written on too (the recharge event), tracked or not.
+    /// a stale version, an item the session deleted (<see cref="GameSessionFailure.ItemNotAvailable"/>), an item it does not track (unless the session already holds its store) and a full store budget (<see cref="GameSessionLimits.MaxManaStores"/>, which no other record shares). One revision.
+    /// ARC-MAGIC-2403: the payment's own write (<see cref="WriteWornManaStore"/>) needs no tracking: the original needs no other fact than that a critter wears the item, whatever seed the session has attached for its map. A store the session holds is written on too (the recharge event), tracked or not.
     /// </summary>
-    public GameSessionMutationResult WriteItemManaStore(GameSessionVersion expected, string entity, int baseline, int store, bool worn = false)
+    public GameSessionMutationResult WriteItemManaStore(GameSessionVersion expected, string entity, int baseline, int store) =>
+        WriteManaStore(expected, entity, baseline, store, worn: false);
+
+    /// <summary>ARC-MAGIC-2403: <see cref="WriteItemManaStore"/> for an item a critter wears (the payment's drain: the host's map names it in a payer's slot), written whatever seeds the session has attached.</summary>
+    internal GameSessionMutationResult WriteWornManaStore(GameSessionVersion expected, string entity, int baseline, int store) =>
+        WriteManaStore(expected, entity, baseline, store, worn: true);
+
+    private GameSessionMutationResult WriteManaStore(GameSessionVersion expected, string entity, int baseline, int store, bool worn)
     {
         ThrowIfDisposed();
         if (!SessionValidation.Entity(entity)) return new(GameSessionDisposition.Rejected, GameSessionFailure.InvalidItem, Version);

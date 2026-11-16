@@ -1075,7 +1075,7 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
         foreach (var firing in pass.Life) _itemEvents.AddRange(firing.Life.ItemEvents);
         // ARC-RENDER-1991 (ledger RH2, RH7): the poison tick's damage effect (0x4B1170 calls 0x433020 after its damage step) follows each tick that hurt its victim.
         foreach (var firing in pass.Life) PoisonTickHit(firing);
-        foreach (var firing in pass.SpellRuns.Where(f => f.Ran)) Apply(firing.Notes, id => _owner.QuerySpellRuns()[id] ?? before[id]);
+        ApplyPass(pass.SpellRuns.Where(f => f.Ran).Select(f => f.Notes), id => _owner.QuerySpellRuns()[id] ?? before[id]);
         RunTrapDevices(pass);
         FirePendingItems();
         return pass;
@@ -1251,15 +1251,17 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
     {
         ArgumentNullException.ThrowIfNull(notes);
         ArgumentNullException.ThrowIfNull(runs);
+        // ARC-MAGIC-2403: the payers this call (or this event pass) already paid a critter payment for; a later payment of the same payer is planned again (Replanned).
+        var paid = _paidThisPass ?? new HashSet<string>(StringComparer.Ordinal);
         foreach (var note in notes)
         {
             switch (note.Kind)
             {
                 case SpellRunNoteKind.Payments when runs(note.Run)?.Source is { } source:
-                    foreach (var payment in note.Payments ?? []) Pay(note.Run, source.Id, Replanned(source.Id, payment));
+                    foreach (var payment in note.Payments ?? []) Pay(note.Run, source.Id, Replanned(source.Id, payment, paid));
                     break;
                 case SpellRunNoteKind.ReflectionPayment when note.Target?.Object is { } payer:
-                    foreach (var payment in note.Payments ?? []) Pay(note.Run, payer.Id, Replanned(payer.Id, payment));
+                    foreach (var payment in note.Payments ?? []) Pay(note.Run, payer.Id, Replanned(payer.Id, payment, paid));
                     break;
                 case SpellRunNoteKind.Message: _log.Add(new(SpellCastEventKind.Message, note.Run, note.Value)); break;
                 case SpellRunNoteKind.Resisted:
@@ -1298,14 +1300,25 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
         _itemEvents.AddRange(result.ItemEvents);
     }
 
-    // ARC-MAGIC-2403 (BC10): the notes of an event pass are applied after the pass, but the original pays at once, so a second payment of the pass sees the stores and the fatigue the first left. The plan a run step made
-    // against the state before the pass is made again against the state now, with the same cost (the plan's last cost; a half cost of a limited critter is halved again by the payer's flag), and that plan is what the host writes.
-    // A plan that is no critter's (cells, a charge, a payer that is no critter now) stays as it was. The plan's status is not re-read: it already decided the run, and the writes read only the drains and the fatigue.
-    private SpellPayment Replanned(string payerId, SpellPayment planned)
+    // ARC-MAGIC-2403 (BC10): the notes of an event pass are applied after the pass, but the original pays at once, so a payment after another of the same payer (in one pass, or one step's stage and reflection payments) sees the stores and the
+    // fatigue the first left. The first critter payment of a payer keeps the plan its step made (the original pays at the stage, before the step's components); each later one is planned again against the state now with the same cost
+    // (the plan's last cost; a limited critter's half is taken again from the payer's flag), and that plan is written. A plan that is no critter's (cells, a charge, a payer that is no critter now) stays as it was. The status of a plan made
+    // again is not read (the first plan's decided the run, and the writes read only the drains and the fatigue; a fail-after-pay is not made again). The payer lookup sets the cell payer, which the plan's own cell source needs unchanged.
+    private SpellPayment Replanned(string payerId, SpellPayment planned, HashSet<string> paid)
     {
         if (planned.Cells is not null || planned.ChargeSpent || planned.MarksItemMagical || planned.LastCost is not { } cost || cost <= 0) return planned;
         if (RunObject(payerId) is not { IsCritter: true } who || Payer(who) is not { Kind: SpellPayerKind.Critter } payer) return planned;
-        return SpellPaymentRules.Pay(payer, cost, true, SpellPaymentRules.NoSpell, default, Cells);
+        return paid.Add(payerId) ? planned : SpellPaymentRules.Pay(payer, cost, true, SpellPaymentRules.NoSpell, default, Cells);
+    }
+
+    private HashSet<string>? _paidThisPass;
+
+    /// <summary>ARC-MAGIC-2403: the notes of the firings of one event pass, applied in order after it: a payer's later critter payments are planned again (<see cref="Apply"/>).</summary>
+    internal void ApplyPass(IEnumerable<IReadOnlyList<SpellRunNote>> firings, Func<int, SpellRun?> runs)
+    {
+        _paidThisPass = new(StringComparer.Ordinal);
+        try { foreach (var notes in firings) Apply(notes, runs); }
+        finally { _paidThisPass = null; }
     }
 
     // The plan names the stores it drained against the stores now (a payment is planned just before it is written, or made again by Replanned): the store left is the plan's, written whatever the session's budget or tracking of the
@@ -1314,7 +1327,7 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
     {
         var slot = WornSlotFirst + drain.Slot;
         if (WornOf(payer).FirstOrDefault(worn => worn.Slot == slot) is not { Id: { } wornId } || Item(wornId) is not { } item) return;
-        var written = _owner.WriteItemManaStore(_owner.Version, wornId, item.ManaStore, drain.StoreAfter, worn: true);
+        var written = _owner.WriteWornManaStore(_owner.Version, wornId, item.ManaStore, drain.StoreAfter);
         if (written.Disposition == GameSessionDisposition.Rejected)
         {
             _log.Add(new(SpellCastEventKind.ManaStoreNotSaved, run, (int)written.Failure, wornId));
