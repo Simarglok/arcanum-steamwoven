@@ -1,5 +1,6 @@
 using Arcanum.Data.Area;
 using Arcanum.Data.Combat;
+using Arcanum.Scripting.Scr;
 using Arcanum.Session;
 using Arcanum.Simulation.Clock;
 using Arcanum.Simulation.Combat;
@@ -206,5 +207,59 @@ public sealed class AreaNpcSessionWearTests
         Assert.AreEqual(8114, AreaMadeItems.Prototype(session, made.Item, guard));
         Assert.IsNull(AreaMadeItems.Kind(session, made.Item), "without the holder an NPC's list is not searched");
         Assert.IsNull(AreaMadeItems.Kind(session, made.Item, "not an entity id"), "an invalid holder lists nothing");
+    }
+
+    // ARC-SCRIPT-2342 (AR2, AR7): get armor of an NPC the session dressed. The wear hooks write the critter art's armour part when body armour goes on or off, so the answer follows the session's worn record, not the stored art.
+    [TestMethod]
+    public void Get_armor_of_a_dressed_npc_follows_the_body_armour_it_wears_now()
+    {
+        var armourFields = CombatFieldReader.Read(Armour(9)).Fields!;
+        var prototypes = new Dictionary<int, CombatFields> { [TorchPrototype] = CombatFieldReader.Read(Item(9, 0, spell: 171)).Fields!, [8114] = armourFields };
+        using var session = ConversationSessionFixture.CreateWithHero(1);
+        var (host, inventory) = Host(number => prototypes.GetValueOrDefault(number));
+        Assert.AreEqual(GameSessionFailure.None, inventory.Attach(session));
+        var guard = Entity(0);
+        // The guard's stored current art is a critter art with armour part 3 (chain), as its map data saved it.
+        var row = Npc(0);
+        row = row with { EffectiveFields = [.. row.EffectiveFields.Select(f => f.Slot == 0 ? f with { Number = (2u << 28) | (3u << 20) } : f)] };
+        uint? use = (6u << 28) | (4u << 6);
+        var read = true;
+        var world = new AreaScriptWorld(() => null, _ => false, _ => null, () => null, NpcBodyArmor: npc => read && npc == guard ? new AreaScriptWornArmor(use) : null);
+        var scripts = new AreaUseScriptHost(session, 1, [row], [], null, world);
+        var who = new ScrObjectRef(1, guard);
+        Assert.AreEqual(3, scripts.ArmorOf(who), "the session never dressed it: the stored art stands");
+
+        // The armour breaks and the regeneration dresses the guard with a made body armour: the hook gives the art that armour's part.
+        var wear = host.WornItems(session, 1, guard)!;
+        Assert.AreEqual(GameSessionDisposition.Changed, session.BreakItem(session.Version, Entity(3), wear[EquipmentSlot.Armor].Baseline).Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, session.ScheduleRestock(session.Version, guard, hasSource: true).Disposition);
+        Assert.AreEqual(ClockMutationDisposition.Changed, session.JumpClocks(session.QueryClockSnapshot().Token, RestockRules.MaxDelayMs).Disposition);
+        Assert.AreEqual(GameSessionFailure.None, session.ProcessEvents(new ArmourWorld()).Restocks.Single().Regenerations.Single().Wield!.Failure);
+        Assert.AreEqual(EquipmentSlot.Armor, session.QueryNpcWorn(guard)!.Worn.Single().Slot);
+        Assert.AreEqual(4, scripts.ArmorOf(who), "dressed: the part of the worn armour's use art");
+        use = (6u << 28) | (9u << 6);
+        Assert.AreEqual(0, scripts.ArmorOf(who), "a part a critter art cannot hold is refused by the wield and the part stays 0");
+        use = (6u << 28) | (8u << 6);
+        Assert.AreEqual(8, scripts.ArmorOf(who), "part 8 is the last a critter art holds");
+        read = false;
+        Assert.IsNull(scripts.ArmorOf(who), "a world that does not read the worn armour's art: not modelled");
+        uint? none = null;
+        var unreadWorld = new AreaScriptWorld(() => null, _ => false, _ => null, () => null, NpcBodyArmor: _ => new AreaScriptWornArmor(none));
+        Assert.IsNull(new AreaUseScriptHost(session, 1, [row], [], null, unreadWorld).ArmorOf(who), "the record wears armour but the world finds none: not modelled, not bare");
+
+        // The art type decides what a wield can hold: a unique NPC's art only part 0, a monster art up to 7.
+        AreaObjectRecord WithArt(uint art) => row with { EffectiveFields = [.. row.EffectiveFields.Select(f => f.Slot == 0 ? f with { Number = art } : f)] };
+        use = (6u << 28) | (4u << 6);
+        read = true;
+        Assert.AreEqual(0, new AreaUseScriptHost(session, 1, [WithArt(13u << 28)], [], null, world).ArmorOf(who), "a unique NPC's art holds no part");
+        Assert.AreEqual(4, new AreaUseScriptHost(session, 1, [WithArt((12u << 28) | (1u << 23))], [], null, world).ArmorOf(who), "a monster art holds parts up to 7");
+        use = (6u << 28) | (8u << 6);
+        Assert.AreEqual(0, new AreaUseScriptHost(session, 1, [WithArt((12u << 28) | (1u << 23))], [], null, world).ArmorOf(who), "part 8 does not stand in a monster art");
+        use = (6u << 28) | (8u << 6);
+
+        // A polymorph takes the worn items off and gives a monster body with part 0 (the dressed record is then moot).
+        read = true; use = (6u << 28) | (4u << 6);
+        Assert.AreEqual(GameSessionDisposition.Changed, session.WriteTraitArt(session.Version, guard, new(5, 0)).Disposition);
+        Assert.AreEqual(0, scripts.ArmorOf(who));
     }
 }

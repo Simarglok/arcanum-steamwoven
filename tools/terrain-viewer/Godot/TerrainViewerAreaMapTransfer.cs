@@ -310,6 +310,8 @@ public partial class TerrainViewerApp
             ArtExists: aid => ExtraArt()?.Exists(aid) == true,
             // ARC-SCRIPT-2326: get armor of the hero reads the armour part of the use art of its worn body armour (the viewer's hero body reads it, null when not read: NOT READY).
             BodyArmorUseArt: () => _areaSession is { } armorSession ? WornBodyArmorUseArt(armorSession) : null,
+            // ARC-SCRIPT-2342 (AR2, AR7): get armor of an NPC the session dressed reads the use art of the body armour it wears now from the AI host's combat reads.
+            NpcBodyArmor: npc => AreaAiHostNow()?.WornBodyArmor(npc),
             // ARC-WORLD-1837 (TT20): a script's teleport of an NPC alone to a cell of the shown map is a request in the session's one slot; the AI host's relocation carries it out at the next ping (PingNpcChangeOfPlace).
             NpcTeleportRefusal: teleport => AreaAiHostNow() is { } ai ? ai.ScriptTeleportRefusal(teleport.Object.Code, new(teleport.X, teleport.Y)) : "no AI host",
             RequestNpcTeleport: teleport =>

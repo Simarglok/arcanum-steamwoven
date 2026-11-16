@@ -27,7 +27,7 @@ public sealed partial class SessionSpellCaster
     public const int ObjectFlagsField = 19, SpellFlagsField = SpellComponentTables.SpellFlagsField, CritterFlagsField = 218;
 
     /// <summary>The hold flags (GT145): entangled and stoned among the spell flags, paralysed among the critter flags.</summary>
-    public const int EntangledSpellFlag = 0x1000000, StonedSpellFlag = 0x10000, ParalysedCritterFlag = 0x40;
+    public const int EntangledSpellFlag = 0x1000000, StonedSpellFlag = 0x10000, ParalysedCritterFlag = 0x40, SleepingCritterFlag = 0x1000;
 
     /// <summary>ARC-MAGIC-045 (SFR3): the spell flags the hit effect (0x459A30) plays an eye candy for: shielded (0x400, Shield of Protection) and magnetic inversion (0x400000).</summary>
     public const int ShieldedSpellFlag = 0x400, MagneticInversionSpellFlag = 0x400000;
