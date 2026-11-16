@@ -153,6 +153,8 @@ public sealed partial class GameSessionOwner
             return Refused(GameSessionFailure.InvalidAttack);
         // An item a critical or an earlier throw dropped, or one destroyed, is no longer the NPC's.
         if (NpcItemSeed(request.Thrower.Entity, request.Item) is not { } listed || Gone(request.Item)) return Refused(GameSessionFailure.ItemNotAvailable);
+        // ARC-SCRIPT-2397 (IV15, IV18; throw node 0x42AB90): an item whose flags & 3 is not 0 is refused: a script's toggle or the map data's own off bit (a thrown item in flight is not in a list). Nothing is removed (the grenade path's item stays in the list).
+        if (QueryItemOff(_actor.Map, request.Item, listed.Facts.OffInData)) return Refused(GameSessionFailure.ItemNotAvailable);
         // ARC-COMBAT-1761: the scripts the throw runs (the removal's wield off 25 and remove-item 28, the throw's own 6) are run below under a host; a script point the session does not model on a throw (get, drop, hit, insert-item ...) stays refused.
         if (listed.Facts.ScriptPoints.Any(point => point is not (SessionScriptPoint.Throw or SessionScriptPoint.RemoveItem or SessionScriptPoint.WieldOff))) return Refused(GameSessionFailure.ItemScriptUnsupported);
         // ARC-DEV-258 (MIG13 S14n): a generic item (a grenade) is not a wielded weapon: it flies to the location as a projectile.

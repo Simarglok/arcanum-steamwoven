@@ -131,9 +131,9 @@ public sealed class AreaObjectTargets
         }
         // An item on the ground (the seed's, not taken or deleted).
         if (_inventory is null || !_inventory.TryGetEntity(key, out var item) || !_inventory.TryGetRow(item, out var row)) return null;
-        if (session.QueryMapInventory(_map)?.Ground.Any(g => g.Item.Entity == item) != true) return null;
-        // ARC-SCRIPT-2386 (IV15, screen pick 0x43D9F0): a switched-off item (a script's toggle, a thrown item in flight) is not a target.
-        if (session.QueryItemOff(_map, item, dataOff: false)) return null;
+        if (session.QueryMapInventory(_map)?.Ground.FirstOrDefault(g => g.Item.Entity == item) is not { } lying) return null;
+        // ARC-SCRIPT-2386 (IV15, screen pick 0x43D9F0): a switched-off item (a script's toggle, a thrown item in flight) is not a target; ARC-SCRIPT-2397 (IV18): nor is one whose map data is off.
+        if (session.QueryItemOff(_map, item, lying.Item.Facts.OffInData)) return null;
         if (CombatFieldReader.Read(row).Fields is not { } itemFields) return new(item, row, DamageableObjectKind.Item, null, null, null, "item fields do not read");
         return SessionWearItem.FromCombatFields(item, itemFields) is { } wear && SessionObjectFacts.ItemFacts(itemFields, trapped?.Invoke(row) == true) is { } facts
             ? new(item, row, DamageableObjectKind.Item, null, wear, facts, null)
