@@ -14,22 +14,29 @@ public readonly record struct SessionItemUses(string Entity, int Uses);
 /// charge also sets the item's magical flag (0x4, ledger DV1), so a row means that flag is set too.</summary>
 public readonly record struct SessionItemCharges(string Entity, int Charges);
 
+/// <summary>One item whose mana store (field 92, <c>obj_f_item_mana_store</c>) the session changed (ARC-MAGIC-2371, schema 103): the store now. A spell
+/// payment drains a worn item's store and a recharge event (kind 0x17) restores it, with no cap at the prototype's value (ledger BC10).</summary>
+public readonly record struct SessionItemManaStore(string Entity, int Store);
+
 /// <summary>
 /// Saved durability (ARC-WORLD-053, schema 22): the condition of every item the session damaged, broke or repaired, by entity
 /// in ordinal order, and the items it deleted (a second break or a destroying critical), in ordinal order. An item without a
 /// record has its host's baseline. Since ARC-SKILLS-005 also the remaining uses of every item whose uses the session spent
 /// (<see cref="Uses"/>, in ordinal order; at most <see cref="SessionItemUseLimits.MaxUses"/> each), and since ARC-MAGIC-022 (schema 49)
 /// the spell charges left of every item whose charges a spell payment spent (<see cref="Charges"/>, in ordinal order; 0 up to
-/// <see cref="SessionItemUseLimits.MaxUses"/> each).
+/// <see cref="SessionItemUseLimits.MaxUses"/> each), and since ARC-MAGIC-2371 (schema 103) the mana store of every item a payment drained or a
+/// recharge restored (<see cref="ManaStores"/>, in ordinal order; 0 up to <see cref="SessionItemUseLimits.MaxUses"/> each).
 /// </summary>
 public sealed class SessionDurabilityState
 {
-    internal SessionDurabilityState(SessionItemDurability[] items, string[] destroyed, SessionItemUses[]? uses = null, SessionItemCharges[]? charges = null)
+    internal SessionDurabilityState(SessionItemDurability[] items, string[] destroyed, SessionItemUses[]? uses = null, SessionItemCharges[]? charges = null,
+        SessionItemManaStore[]? manaStores = null)
     {
         Items = Array.AsReadOnly(items);
         Destroyed = Array.AsReadOnly(destroyed);
         Uses = Array.AsReadOnly(uses ?? []);
         Charges = Array.AsReadOnly(charges ?? []);
+        ManaStores = Array.AsReadOnly(manaStores ?? []);
     }
 
     public static SessionDurabilityState Empty { get; } = new([], []);
@@ -38,6 +45,7 @@ public sealed class SessionDurabilityState
     public IReadOnlyList<string> Destroyed { get; }
     public IReadOnlyList<SessionItemUses> Uses { get; }
     public IReadOnlyList<SessionItemCharges> Charges { get; }
+    public IReadOnlyList<SessionItemManaStore> ManaStores { get; }
 }
 
 /// <summary>Bounds of an item's remaining uses (project policy; the source's field is a 32-bit count).</summary>
@@ -83,12 +91,14 @@ internal sealed class DurabilityDomain
     internal SortedSet<string> Destroyed { get; } = new(StringComparer.Ordinal);
     internal SortedDictionary<string, int> Uses { get; } = new(StringComparer.Ordinal);
     internal SortedDictionary<string, int> Charges { get; } = new(StringComparer.Ordinal);
+    internal SortedDictionary<string, int> ManaStores { get; } = new(StringComparer.Ordinal);
 
-    internal int Count => Records.Count + Destroyed.Count + Uses.Count + Charges.Count;
+    internal int Count => Records.Count + Destroyed.Count + Uses.Count + Charges.Count + ManaStores.Count;
 
     internal SessionDurabilityState Capture() =>
         new([.. Records.Select(pair => new SessionItemDurability(pair.Key, pair.Value))], [.. Destroyed],
-            [.. Uses.Select(pair => new SessionItemUses(pair.Key, pair.Value))], [.. Charges.Select(pair => new SessionItemCharges(pair.Key, pair.Value))]);
+            [.. Uses.Select(pair => new SessionItemUses(pair.Key, pair.Value))], [.. Charges.Select(pair => new SessionItemCharges(pair.Key, pair.Value))],
+            [.. ManaStores.Select(pair => new SessionItemManaStore(pair.Key, pair.Value))]);
 }
 
 /// <summary>
@@ -231,7 +241,7 @@ public sealed partial class GameSessionOwner
     private static GameSessionFailure ImportDurability(SessionDurabilityState saved, GameSessionLimits limits, out DurabilityDomain durability)
     {
         durability = new();
-        if (saved.Items.Count + saved.Destroyed.Count + saved.Uses.Count + saved.Charges.Count > limits.MaxDurabilityRecords) return GameSessionFailure.BudgetExceeded;
+        if (saved.Items.Count + saved.Destroyed.Count + saved.Uses.Count + saved.Charges.Count + saved.ManaStores.Count > limits.MaxDurabilityRecords) return GameSessionFailure.BudgetExceeded;
         foreach (var entity in saved.Destroyed)
             if (!SessionValidation.Entity(entity) || !durability.Destroyed.Add(entity)) return GameSessionFailure.InvalidDurability;
         foreach (var item in saved.Items)
@@ -245,6 +255,9 @@ public sealed partial class GameSessionOwner
         foreach (var item in saved.Charges)
             if (!SessionValidation.Entity(item.Entity) || item.Charges is < 0 or > SessionItemUseLimits.MaxUses || durability.Destroyed.Contains(item.Entity) ||
                 !durability.Charges.TryAdd(item.Entity, item.Charges)) return GameSessionFailure.InvalidDurability;
+        foreach (var item in saved.ManaStores)
+            if (!SessionValidation.Entity(item.Entity) || item.Store is < 0 or > SessionItemUseLimits.MaxUses || durability.Destroyed.Contains(item.Entity) ||
+                !durability.ManaStores.TryAdd(item.Entity, item.Store)) return GameSessionFailure.InvalidDurability;
         return GameSessionFailure.None;
     }
 

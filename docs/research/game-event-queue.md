@@ -178,7 +178,7 @@ names the slice that would own the kind (P, the
 | Light | A | no | — | animated light frame, `1000 / fps` (light (0x4D8590, 0x4D8620, 0x4D8660)) | renderer (P) |
 | Lock | G | yes | — | 1 h after an unlock of a locked object, 1 day after a jam of one not already jammed; either event locks, unjams and closes the object (lock (0x441DD0, 0x441E90, 0x441F10); [ledger LK3–LK5](ledger/world.md#doors-containers-and-locks-arc-res-065)) | lock state owner ARC-WORLD-050 |
 | NPC Respawn | G | yes | — | store restock 12..24 h random, replace pattern (respawn (0x4640C0)) | barter slice |
-| Recharge Magic-Item | G | yes | — | 60 s × 8 (read as 60 real seconds, inference), merged per item (recharge (0x459590)) | MAGIC slices |
+| Recharge Magic-Item | G | yes | — | 60 s × 8 (read as 60 real seconds, inference), merged per item (recharge (0x459590)) | Built (ARC-MAGIC-2371): `item.recharge`, global, saved |
 | Decay Dead Bodie | G | yes | — | 1 day for a critter, 2 days for another object (decay (0x45EBE0)) | life state (death) |
 | Item Decay | G | yes | — | 2 days for a dropped item; retried after 60 s while decay processing is switched off (item decay (0x467FC0, 0x468010, 0x468090, 0x468110)) | inventory owner |
 | Combat-Focus Wipe | G | yes | — | 10 min after an NPC dies; clears the dead NPC's focus (its killer) once the killer is ≥ 30 cells away, else reschedules (wipe (0x45ECE0, 0x45ED70)) | AI slice I3 |

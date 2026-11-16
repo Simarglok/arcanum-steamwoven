@@ -631,6 +631,8 @@ public static partial class GameSessionSnapshotCodec
         },
         // ARC-WORLD-1840 (schema 102): the party section gains the followers of NPC leaders. No older build made an NPC lead anyone (the hero was the one leader), so the list is empty.
         [101] = root => AddField(Section(root, "party"), "$.party", "npcLed", new JsonArray()),
+        // ARC-MAGIC-2371 (schema 103): the durability section gains the changed mana stores of worn items (field 92). No older build drained one (the stores were the prototype's), so the list is empty.
+        [102] = root => AddField(Section(root, "durability"), "$.durability", "manaStores", new JsonArray()),
     };
 
     /// <summary>The schemas with an upgrade step to the next one, ascending: every schema from

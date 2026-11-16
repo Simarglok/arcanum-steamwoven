@@ -75,9 +75,18 @@ Knocking the caster out when fatigue reaches 0 or below, and the runs that ends,
 ## Recharge of a worn mana item
 
 Each drain schedules a recharge event 60 real seconds (480 game seconds) later; drains of the same item merge into its
-pending event (0x459590, 0x459640; the event is MT11's). When it fires, `SpellCostRules.Recharge(elapsed, remaining)`
+pending event (0x459590, 0x459640), which keeps its first stamp and deadline. When it fires, `SpellCostRules.Recharge(elapsed, remaining)`
 restores `2 × max(1, elapsed game seconds since the drain / 120)` points, at most what is left, and the rest is
 rescheduled without merging (0x459680).
+
+**Built by ARC-MAGIC-2371 (schema 103).** The session holds the store of each drained or recharged item (`GameSessionOwner.QueryItemManaStore`, `WriteItemManaStore`;
+the saved `durability.manaStores`, ascending by entity, 0..1,000,000 each). `SessionSpellCaster.Payer` fills `WornManaStores` from the worn items of the payer (slot 1000..1008)
+with the session's copy over the item's own field 92 (`SessionItemSpells.ManaStore`); the payment's notes write each drain back (`DrainWornStore`: the store left, logged as `ManaStoreDrained`)
+and schedule its event (`ScheduleManaRecharge`, kind `item.recharge`, merge set; `QueryManaRecharges` lists them), also for a paid 0 of a store that stays (merging a 0). The handler (`FireItemRecharge`)
+adds the restored points to the stored value with no cap at the prototype's value and sets the rest up again; an item whose store the session never changed, or one it deleted, ends the event. The notes of an
+event pass are applied after the pass, so a store a second payment of the pass drains is read again and drains at most what is there. Differences: the event is global (it fires on any map; the original
+parks it with an item that stays behind, the refill rate is the same), the interface refresh follows the session's revision, the AI list cache the original clears at an emptied store (0x4CCC40) is not modelled,
+and a store is kept within 0..1,000,000 (a negative prototype store never occurs in the installed prototypes: 0..80).
 
 ## Function oracle
 
@@ -105,4 +114,4 @@ rule modes; this slice adds no rule-mode switch.
   `CastCost` and `MaintainCost` in its hints, as the original's text bar does. The casting UI (MT20a-2) and the AI (I8) will show
   and weigh `CastCost`.
 - The charge-cell amounts and refusals are the technology lane's (TC1), implemented by ARC-TECHNOLOGY-007 ([charge cells](charge-cell-runtime.md)); this slice defines only the port and its place.
-- The recharge event (scheduling, merging, saving) is MT11's; reflection's use of the last cost is MT10's (MG15).
+- Reflection's use of the last cost is MT10's (MG15). The recharge event is built (ARC-MAGIC-2371, above).
