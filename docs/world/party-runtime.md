@@ -166,7 +166,7 @@ while an NPC leads it.
   Rejected. The alignment of both NPCs in the follow checks of the host (`AreaAiHost.AlignmentOf`) is the stat getter's value (0x4B0490: the stored base with a spell's written value over it, then the changes of stat 19 in the effect list, clamped
   −1000..1000), not the stored base alone.
 - The AI host tells followers of any leader (0x4A9B80, ARC-WORLD-2116, NLD7): the leader's array the host runs, each through the follower
-  rule; an NPC leader's follower complains in words alone (the −5 reaction is written only toward a player character).
+  rule; an NPC leader's follower complains in words alone (the −5 reaction is written only toward a player character). The original picks that complaint line with the follower as speaker and the leader as listener whatever the leader's type (ARC-RES-2128, NLD7); the host still says it through the hero-listener path (#2367). The kind-0x11 wait timer runs on the game clock and is not scaled by Tempus Fugit (ARC-RES-2128).
 
 **The follow check, merchants and the other chain sites** (ARC-WORLD-2119, each read in the executable). The follow check 0x4AD950 tests the forced bit of the joining critter's own flags (field 0x118, 0x400), so for an NPC-led follower the NPC link's bit; its other-leader step reads the DIRECT leader (0x45DE00,
 an NPC compared like a PC) and that leader's charisma, and the limit counts the target leader's own array. `JoinParty` therefore reads the link's forced bit and refuses facts that name no other leader for an NPC-led critter unless the mind-control or the Persuasion Master exit applies (`InvalidConsentFacts`; the facts' `OtherLeaderCharisma` is the caller's, the
