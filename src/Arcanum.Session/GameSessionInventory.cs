@@ -425,7 +425,7 @@ public static class SessionItemScripts
 {
     /// <summary>
     /// The commands an item event's script may use: <see cref="ScrAdmissionSet.S6"/> without the dialog action (no
-    /// conversation starts from a transfer) and the story-state actions (the session has no story-state number); ARC-MAGIC-041 (TI8) keeps the
+    /// conversation starts from a transfer), with the story-state actions (get and set story state, 42 and 43, ARC-SCRIPT-2375: the session's story-state number, raised in the move's revision), set rumor (50) and rename (92, an item of the move); ARC-MAGIC-041 (TI8) keeps the
     /// deferred calls, call script in (54) and remove script call (125), which the move schedules and removes in the session's event queue as it
     /// commits (<c>ItemScriptRuns.Commit</c>); use ammunition units (135) stays out, since the only script that uses it runs it from a deferred call
     /// (a host of its own), never from the event; ARC-SCRIPT-042 adds the item-effect commands of <see cref="ScrAdmissionSet.S14"/>:
@@ -439,14 +439,15 @@ public static class SessionItemScripts
     /// the same world part); ARC-SCRIPT-2346 (ledger IV9–IV11) adds toggle state (56), which flips the off flag of an item of the move (the attachee in the installed scripts).; ARC-SCRIPT-2347 (IV13–IV16) adds assign object (15, with the run's object variables as the focus kind 11), get object type (34), the quest state condition (6) and obj is dead (22), which the same part answers
     /// (as the use host reads them), and monster generator disabled (46), which the session answers from its generator table (IV13–IV15); ARC-SCRIPT-2374 (IV18–IV21) adds set PC quest state (16) and give quest experience (63), which the session applies in the move's own revision
     /// (a request for a PC only; at most one experience award, which may raise a level: the host takes its level-up messages and follower step, ARC-SCRIPT-2394, and a stat or power ratio read after it refuses the move).; ARC-SCRIPT-2376 (IV25) adds the scenery and critter vicinity kinds (15, 16, 8, 9: loop for and the like, the scan around the attachee item's location, answered by the same part)
-    /// with call script in (54), already kept, into a dialog script; ARC-SCRIPT-2378 (IV26–IV29) adds toggle monster generator (110), which the session applies to its generator table in the move's own revision. A script outside it refuses the move.
+    /// with call script in (54), already kept, into a dialog script. A script outside it refuses the move.
+    /// ARC-SCRIPT-2378 (IV32–IV35) adds toggle monster generator (110), which the session applies to its generator table in the move's own revision.
+    /// ARC-SCRIPT-2375 (ledger IV28–IV31) adds get story state (42), set story state (43), set rumor (50) and rename (92), which the runs plan in the move (the story number and the rumor the PC learns, the name number of an item of the move).
     /// </summary>
     public static ScrAdmissionSet Admission { get; } = new("S14-item",
         ScrAdmissionSet.S6.Conditions.Concat([ScrCatalogue.Condition.Identified, ScrCatalogue.Condition.ItemsBeingRewielded, ScrCatalogue.Condition.IsNamed,
             ScrCatalogue.Condition.PcQuestState, ScrCatalogue.Condition.IsDead, ScrCatalogue.Condition.MonsterGenDisabled]),
-        ScrAdmissionSet.S6.Actions.Where(action => action is not (ScrCatalogue.Action.Dialog or ScrCatalogue.Action.GetStoryState
-            or ScrCatalogue.Action.SetStoryState))
-            .Concat([ScrCatalogue.Action.AddEffect, ScrCatalogue.Action.RemoveEffect, ScrCatalogue.Action.CallScriptEx,
+        ScrAdmissionSet.S6.Actions.Where(action => action is not ScrCatalogue.Action.Dialog)
+            .Concat([ScrCatalogue.Action.SetRumor, ScrCatalogue.Action.Rename, ScrCatalogue.Action.AddEffect, ScrCatalogue.Action.RemoveEffect, ScrCatalogue.Action.CallScriptEx,
                 ScrCatalogue.Action.MagickTechAdjustment, ScrCatalogue.Action.PlayScriptEyeCandy, ScrCatalogue.Action.PlaySound, ScrCatalogue.Action.GetStat,
                 ScrCatalogue.Action.LoopFor, ScrCatalogue.Action.LoopEnd, ScrCatalogue.Action.LoopBreak, ScrCatalogue.Action.ChangeArtNumber, ScrCatalogue.Action.ToggleState,
                 ScrCatalogue.Action.AssignObject, ScrCatalogue.Action.GetObjectType, ScrCatalogue.Action.SetPcQuestState, ScrCatalogue.Action.GiveQuestExperience, ScrCatalogue.Action.ToggleMonsterGenerator]),

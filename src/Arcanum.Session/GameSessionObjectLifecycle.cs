@@ -250,6 +250,8 @@ public sealed partial class GameSessionOwner
         if (QueryObjectRecordMap(SessionObjectArt.Key(entity)) is { } artMap) _maps.Remove(artMap, SessionObjectArt.Key(entity));
         // ARC-SCRIPT-2346: and the off flag a script toggled on it.
         if (QueryObjectRecordMap(SessionItemOff.Key(entity)) is { } offMap) _maps.Remove(offMap, SessionItemOff.Key(entity));
+        // ARC-SCRIPT-2375: and the name number a script's rename gave it.
+        if (QueryObjectRecordMap(SessionItemName.Key(entity)) is { } nameMap) _maps.Remove(nameMap, SessionItemName.Key(entity));
         // ARC-WORLD-062: a deleted item no longer decays.
         CancelDecay(entity);
     }
