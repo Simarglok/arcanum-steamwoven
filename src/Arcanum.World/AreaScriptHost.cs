@@ -339,6 +339,8 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
 
     public ScrSlot? Slot(ScrObjectRef attachee, int point)
     {
+        // ARC-WORLD-2382: the use slot is the shown map's use host's to answer (a deferred call's dialog action compares the run's flags with it); null without such a host.
+        if (point == ScrPoint.Use) return Queries?.Slot(attachee, point);
         if (point != ScrPoint.Dialog || Speaker(attachee) is not { } speaker || LoadedSlot(speaker) is not { } loaded) return null;
         // ARC-DEV-081: a carried companion's slot is its home map's key (AreaConversationState.MapOf).
         var stateMap = _state.MapOfEntity(attachee.Code);
@@ -491,7 +493,10 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
         if (TeleportRefusal(effects) is not null) return false;
         // ARC-SCRIPT-1598: the speaker's slot write is resolved before anything applies (a pure lookup of the run's own object): a run whose write cannot be placed is refused whole, so a damage line is never left applied with the dialog unopened.
         (ScrSlot Loaded, ScrObjectRef Attachee)? slotWrite = null;
-        if (effects.Writeback is { } slotRequest)
+        // ARC-WORLD-2382 (point 1, 0x447282): a deferred call's dialog action stores the run's flags and counters in the speaker's use slot, written through the shown map's use host as a tile run's are; one that host cannot place refuses the run whole.
+        var useWrite = effects.Writeback is { Source: ScrSource.Object, Point: ScrPoint.Use } useRequest ? useRequest : null;
+        if (useWrite is not null && Queries?.CanWriteUseSlot(useWrite) != true) return false;
+        if (effects.Writeback is { } slotRequest && useWrite is null)
         {
             if (slotRequest.Source != ScrSource.Object || slotRequest.Point != ScrPoint.Dialog || slotRequest.Attachee is not { } slotAttachee
                 || Speaker(slotAttachee) is not { } slotSpeaker || LoadedSlot(slotSpeaker) is not { } slotLoaded) return false;
@@ -608,6 +613,7 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
         foreach (var teleport in effects.Teleports)
             if (IsPc(teleport.Object)) RequestHeroTeleport!(teleport);
             else teleportHost?.RequestNpcTeleport(teleport);
+        if (useWrite is not null) return Queries?.WriteUseSlot(useWrite) == true;
         if (effects.Writeback is not { } writeback || slotWrite is not { } placed) return true;
         var (loaded, attachee) = placed;
         var stateMap = _state.MapOfEntity(attachee.Code);
