@@ -994,8 +994,7 @@ public partial class TerrainViewerApp
         // ARC-WORLD-090: else a speaker with a substitute container in reach that buys something (the installed merchants).
         if (chosen.Entity is null)
             chosen = candidates.FirstOrDefault(c => new AreaBarterMerchant(c.Entity, "", 0, false, false, InventorySourceBuyList.Nothing, session.QueryCompanion(c.Entity).LedByPc)
-                .WithSubstitute(_inventoryHost?.Maps.FirstOrDefault(map => map.TryGetRow(c.Entity, out _))?.Substitute(c.Entity),
-                    new(checked((int)talk.Speakers[c.Index].WorldX), checked((int)talk.Speakers[c.Index].WorldY)), data)
+                .WithSubstitute(_inventoryHost?.Maps.FirstOrDefault(map => map.TryGetRow(c.Entity, out _))?.Substitute(c.Entity), talk.Speakers[c.Index], SpeakerCell, data)
                 .ContainerBuyList?.Status is InventorySourceBuyStatus.Listed or InventorySourceBuyStatus.Everything);
         if (chosen.Entity is null) chosen = candidates.FirstOrDefault(c => c.Fields!.Npc!.RetailPriceMultiplier != 0);
         if (chosen.Entity is null) chosen = candidates[0];
