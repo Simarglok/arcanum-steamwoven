@@ -178,6 +178,8 @@ public partial class TerrainViewerApp
     // ARC-DEV-109 (MIG16 S2): the windows that are modes (conversation, inventory, sheet, logbook, schematics, barter, reading, world map)
     // are read from the interface mode stack; the panels outside the stack keep their own flags.
     // This is the hero's INPUT gate and the cursor's, not the clock's: since ARC-DEV-126 (MIG12 S7, GQ3 A) a window, the palette or the bug report no longer stops the world.
+    // ARC-WORLD-2261: the dialog window is the only modal (the palette, the lists, the menu, the covers and the report box are not up).
+    private bool ConversationOnlyModal => ConversationOpen && !PaletteOpen && !SaveListOpen && !MainMenuOpen && !HeroDeathCovering && !MovieCovering && !ReportModalOpen;
     private bool WorldModal => PaletteOpen || AnyWindowOpen || SaveListOpen || MainMenuOpen || HeroDeathCovering || MovieCovering || ReportModalOpen;
     // ARC-DEV-126: the one raiser of the pause is the Esc menu and a save or load list (TL23); the options screen the menu leads to is under it. `_mainMenu` covers the frames in which the menu's panel is hidden while it waits for the save list to open.
     private bool WorldMenuPause => QuitAsking || ((MainMenuOpen || SaveListOpen || _mainMenu is not null) && _mainMenu is not { OpenedByOptionsKey: true }); // ARC-DEV-2270: the quit box freezes the clocks as the original's modal loop does (exe 0x51EA60 runs no ping) // ARC-UI-2026: the O key's options window does not pause (0x541180 kind 4)

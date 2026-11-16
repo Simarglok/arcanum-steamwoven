@@ -113,6 +113,7 @@ public partial class TerrainViewerApp
         SyncMaintainBar();
         SyncSpellBar();
         SyncWeaponBar();
+        SyncBarCounters();
         SyncSkillBar();
         SyncQuantityPane();
         SyncOrderLine();
