@@ -838,7 +838,7 @@ public partial class TerrainViewerApp
         else if (@event is InputEventMouseButton { ButtonIndex: MouseButton.Right, Pressed: true, CtrlPressed: true } ctrlClick)
         {
             _rightPressTaken = true;
-            WorldObservation(() => WorldRouteClick(ctrlClick.Position, true));
+            WorldObservation(() => WorldRouteClick(ctrlClick.Position, true, ctrlClick.AltPressed, ctrlClick.ShiftPressed));
         }
         // ARC-MAGIC-015: a right press closes the spell's targeting cursor (0x57BFF0).
         else if (@event is InputEventMouseButton { ButtonIndex: MouseButton.Right, Pressed: true } && (_spellTargeting is not null || _itemAiming is not null || DisarmArmed))
@@ -904,6 +904,13 @@ public partial class TerrainViewerApp
         // ARC-MAGIC-015: the casting goal holds the hero until it ends (the original queues other goals under it, not ready here).
         if (_spellGoal is not null) { _spellNotice = "casting: the press waits for the cast to end (ignored)"; RefreshReadyStatus(); return; }
         if (TryPendingOrder(screen)) return;
+        // ARC-INPUT-1936 (GT107): a press on bare ground with a Shift key held does nothing at all: it replaces no walk, door approach, attack or throw. A press on an object is the object click's (it takes Shift below),
+        // and the open item cursor, lockpicks, pick pocket and disarm are other interface modes that take every press.
+        if (shift && _itemAiming is null && _lockpickArmed is null && !PickPocketArmed && !DisarmArmed && AreaObjectAtScreen(screen) is null)
+        {
+            _worldRouteClick = "ignored (Shift held on the ground)";
+            RefreshReadyStatus(); return;
+        }
         // ARC-WORLD-051: any click replaces a walk to a door (a press on a door sets a new one).
         CancelPortalApproach("another click replaced it", keepArmed: true);
         // ARC-DEV-365: the open item cursor takes the press (the original's interface mode 16, IA6).
