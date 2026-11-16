@@ -629,7 +629,7 @@ public sealed class AreaCompanionGroup
     }
 
     /// <summary>
-    /// ARC-WORLD-2161: <see cref="Arrive(AreaCompanionTemplate, SessionMapId, SessionMapId, CellCoord, NeighborDirection)"/> for a follower with no body here (one the scene does not draw, or whose follow facts do not read): the original's
+    /// ARC-WORLD-2161: <see cref="Arrive(AreaCompanionTemplate, SessionMapId, SessionMapId, CellCoord, NeighborDirection)"/> for a follower with no body here (one whose follow facts do not read, or whose home map could not give a body): the original's
     /// move list carries the whole object, so the session's placement edits stand it on the destination all the same; the body is read from its home map when that map shows it (a visitor).
     /// </summary>
     public static IReadOnlyList<MapChangeEdit> Arrive(AreaBodylessFollower follower, SessionMapId from, SessionMapId destination, CellCoord arrival, NeighborDirection facing)

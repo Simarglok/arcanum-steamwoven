@@ -53,7 +53,7 @@ public partial class TerrainViewerApp
             if (AreaCompanionPlacement.SeedFromNpcPlace(session, template, new(CurrentAreaMap)) is var failure && failure != GameSessionFailure.None)
                 GD.Print($"ARC-AI-1622 led-map-npc entity={template.Entity} place not seeded ({failure})");
         foreach (var missing in entities.Where(e => templates.All(t => t.Entity != e)))
-            GD.Print($"ARC-AI-1622 led-map-npc entity={missing} has no body template (the scene does not draw it, or its AI row or fields do not read)");
+            GD.Print($"ARC-AI-1622 led-map-npc entity={missing} has no body template (its AI row or fields do not read; the scene drawing nothing for it does not stop one since ARC-WORLD-2177)");
         return templates;
     }
 

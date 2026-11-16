@@ -65,7 +65,8 @@ public sealed record AreaCompanionTemplate(AreaSpeaker Speaker, AreaCompanionFac
             if (row.Type != 16 || row.Scope != AreaScope.Core || row.WorldX is not { } x || row.WorldY is not { } y || !entities.Contains(AreaConversationState.EntityId(row))) continue;
             speakers.Add(new AreaSpeaker(LedMapNpcIndexBase + index, row, 0, x, y));
         }
-        return From(speakers, plan, visuals, chart, home, facts);
+        // ARC-WORLD-2177: a led NPC the plan draws nothing for still follows (the original's follower array holds the object, drawn or not), so its template keeps no body command.
+        return From(speakers, plan, visuals, chart, home, facts, undrawn: true);
     }
 
     public string Entity => AreaConversationState.EntityId(Speaker.Row);
@@ -74,8 +75,10 @@ public sealed record AreaCompanionTemplate(AreaSpeaker Speaker, AreaCompanionFac
     /// <summary>The roster speakers of <paramref name="speakers"/> on home map <paramref name="home"/>, with their body
     /// commands from <paramref name="plan"/> and the visuals those commands draw.</summary>
     /// <param name="facts">ARC-WORLD-037: the follow facts of a speaker that can join (null skips it); by default the roster.</param>
+    /// <param name="undrawn">ARC-WORLD-2177: keep a speaker the plan draws nothing for as a template with no body command (it stands, walks and follows in the group like a drawn one and shows nothing);
+    /// false (a dialog NPC's roster) skips it, as before.</param>
     public static IReadOnlyList<AreaCompanionTemplate> From(IEnumerable<AreaSpeaker> speakers, AreaScenePlan plan,
-        IEnumerable<AreaVisualRecord> visuals, AreaChart chart, SessionMapId home, Func<AreaSpeaker, AreaCompanionFacts?>? facts = null)
+        IEnumerable<AreaVisualRecord> visuals, AreaChart chart, SessionMapId home, Func<AreaSpeaker, AreaCompanionFacts?>? facts = null, bool undrawn = false)
     {
         facts ??= AreaCompanionRoster.For;
         ArgumentNullException.ThrowIfNull(speakers); ArgumentNullException.ThrowIfNull(plan);
@@ -87,8 +90,8 @@ public sealed record AreaCompanionTemplate(AreaSpeaker Speaker, AreaCompanionFac
         {
             if (facts(speaker) is not { } known) continue;
             var commands = plan.Commands.Where(command => command.Identity == speaker.Row.Key).ToArray();
-            // A speaker the plan does not draw has no body to follow with.
-            if (commands.Length == 0) continue;
+            // A dialog speaker the plan does not draw has no body to follow with; an undrawn led NPC (ARC-WORLD-2177) follows without one.
+            if (commands.Length == 0 && !undrawn) continue;
             var drawn = new Dictionary<AreaVisualKey, AreaVisualRecord>();
             foreach (var command in commands)
                 drawn[command.Visual] = catalog.TryGetValue(command.Visual, out var visual) ? visual : throw new InvalidOperationException("AREA_COMPANION_VISUAL_REQUIRED");
