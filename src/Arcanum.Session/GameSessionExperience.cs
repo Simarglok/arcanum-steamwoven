@@ -300,7 +300,7 @@ public sealed partial class GameSessionOwner
     /// </summary>
     internal HeroAward? Give(long amount) => Gain(amount, _effects.Maximum(EffectSpecial.XpGain, HeroInnateRules())) is { } gain ? GiveGain(gain) : null;
 
-    /// <summary>ARC-SCRIPT-2410: the experience an award of <paramref name="amount"/> gives under the hero's experience gain <paramref name="modifiers"/> (the difficulty first, as 0x45F110 does), or null when the source gives nothing: a zero amount or a dead hero.</summary>
+    /// <summary>ARC-SCRIPT-2410: the experience an award of <paramref name="amount"/> gives under the hero's experience gain <paramref name="modifiers"/> (the difficulty first, as the award of <see cref="AwardHeroExperience"/> does), or null when the source gives nothing: a zero amount or a dead hero.</summary>
     internal int? Gain(long amount, IReadOnlyList<EffectModifier> modifiers)
     {
         if (amount == 0) return null;
