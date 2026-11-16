@@ -19,9 +19,11 @@ public sealed class AreaLoopBreakScriptAdmissionTests
             Assert.IsTrue(set.Actions.Contains(ScrCatalogue.Action.LoopFor) && set.Actions.Contains(ScrCatalogue.Action.LoopEnd), set.Id);
             Assert.IsTrue(set.IsSubsetOfBesidesStores(ScrAdmissionSet.S65), set.Id);
         }
-        // The dialog host runs no loops: its sets stay without the break.
-        foreach (var set in new[] { AreaScriptHost.Admission, AreaScriptHost.SkillAdmission, AreaScriptHost.TalkAdmission, AreaScriptHost.SkillTalkAdmission })
+        // The dialog host's bare sets run no loops; since ARC-SCRIPT-2198 its talk sets (a use host of the map answering) hold the loop with its break and end.
+        foreach (var set in new[] { AreaScriptHost.Admission, AreaScriptHost.SkillAdmission })
             Assert.IsFalse(set.Actions.Contains(ScrCatalogue.Action.LoopBreak), set.Id);
+        foreach (var set in new[] { AreaScriptHost.TalkAdmission, AreaScriptHost.SkillTalkAdmission })
+            Assert.IsTrue(set.Actions.Contains(ScrCatalogue.Action.LoopBreak) && set.Actions.Contains(ScrCatalogue.Action.LoopFor) && set.Actions.Contains(ScrCatalogue.Action.LoopEnd), set.Id);
     }
 
     [TestMethod, TestCategory("RealData")]

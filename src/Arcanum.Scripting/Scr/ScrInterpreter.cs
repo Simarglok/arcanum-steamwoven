@@ -1175,10 +1175,31 @@ internal sealed class ScrInterpreter
         // The runner's gates (E4, E5): a trap script and a monster generator attachee run nothing.
         if (ScrDispatcher.IsTrapScript(script, program)) return;
         if (attachee is { } generator && _host.IsMonsterGenerator(generator)) return;
+        var number = script;
+        var fresh = new ScrSlot(script, program.InitialLocalFlags, program.InitialCounters);
+        // ARC-SCRIPT-2198 (exe read, 0x44B030 -> 0x4449B0): the callee runs through the event runner at the caller's point, so at the dialog point it meets the dialog gates on its attachee (E6) as an event does: a dead NPC without
+        // the callee's death-speech file flag or a surrendered one without its surrender-speech flag runs nothing, a mind-controlled one runs 2188 in place of the callee (the callee's own flags and counters kept).
+        if (_point == ScrPoint.Dialog && attachee is { } gated)
+        {
+            var state = _host.DialogState(gated);
+            if ((state & ScrDialogState.Dead) != 0 && (program.FileFlags & ScrCatalogue.FileFlag.DeathSpeech) == 0) return;
+            if ((state & ScrDialogState.Surrendered) != 0 && (program.FileFlags & ScrCatalogue.FileFlag.SurrenderSpeech) == 0) return;
+            if ((state & ScrDialogState.MindControlled) != 0)
+            {
+                number = ScrDispatcher.MindControlScript;
+                var swapped = _host.Script(number);
+                if (ScrDispatcher.Unavailable(swapped) is { } absent)
+                {
+                    if (absent == ScrStop.MissingScript) return;
+                    throw new CallRefusedStop(null, number, ScrStop.UnreadableScript);
+                }
+                program = swapped.Program!;
+            }
+        }
         var admission = ScrAdmission.AdmitFrom(program, _options.Admission, line);
-        if (!admission.IsAdmitted) throw new CallRefusedStop(admission.Refusal, script, ScrStop.Refused);
+        if (!admission.IsAdmitted) throw new CallRefusedStop(admission.Refusal, number, ScrStop.Refused);
         // ARC-SCRIPT-046: the callee runs at the caller's point (0x44B030 copies it), where its dialog action stores its flags.
-        new ScrInterpreter(admission.Admitted!, script, new(script, program.InitialLocalFlags, program.InitialCounters), program.FileFlags,
+        new ScrInterpreter(admission.Admitted!, number, fresh with { Script = number }, program.FileFlags,
             new(triggerer, attachee, null), _host, _options, _shared, _depth + 1, _point).Run(line);
     }
 
@@ -1251,7 +1272,6 @@ internal sealed class ScrInterpreter
         }
         var admission = ScrAdmission.AdmitFrom(program, _options.Admission, line);
         if (!admission.IsAdmitted) throw new CallRefusedStop(admission.Refusal, number, ScrStop.Refused);
-        if (point == ScrPoint.Dialog) RefuseCallScriptIn(admission.Admitted!, number);
         var writes = _shared.SlotWrites.Count;
         var ran = new ScrInterpreter(admission.Admitted!, number, own, ownFlags, new(triggerer, obj, null), _host, _options, _shared, _depth + 1, point).Run(line);
         // A mind-controlled run keeps the NPC's own number whatever 2188 did to its own.
@@ -1264,19 +1284,6 @@ internal sealed class ScrInterpreter
         for (var i = _shared.SlotWrites.Count - 1; i >= writes; i--)
             if (_shared.SlotWrites[i] is { Source: ScrSource.Object, Point: var p } w && p == point && w.Attachee == obj) _shared.SlotWrites.RemoveAt(i);
         _shared.SlotWrites.Add(new(ScrSource.Object, obj, point, run.Slot));
-    }
-
-    // As RunObject refuses a dialog-point event whose set holds call script, a call-ex of the dialog point refuses a callee that
-    // reaches one: the called script would run at the dialog point without the runner's dialog gates (E6), which call script skips.
-    private static void RefuseCallScriptIn(ScrAdmittedProgram admitted, int script)
-    {
-        foreach (var at in admitted.Region)
-        {
-            var row = admitted.Program.Lines[at];
-            var side = row.OnTrue.Type == ScrCatalogue.Action.CallScript ? ScrClauseSide.OnTrue
-                : row.Condition.Type != ScrCatalogue.Condition.True && row.OnFalse.Type == ScrCatalogue.Action.CallScript ? ScrClauseSide.OnFalse : (ScrClauseSide?)null;
-            if (side is { } call) throw new CallRefusedStop(new(at, call, ScrRefusalCode.ActionNotAdmitted, ScrCatalogue.Action.CallScript), script, ScrStop.Refused);
-        }
     }
 
     [OriginalFunction(0x44BA70, OriginalFunctionScope.Partial)]

@@ -62,6 +62,18 @@ public sealed class HeroRequestsTests
     }
 
     [TestMethod]
+    public void AWalkRequestWithShiftHeldDoesNothing()
+    {
+        // ARC-INPUT-1936 (GT107, SA47): the tile press with a Shift key held returns before the walk starter and the held flag.
+        var hero = new Hero();
+        var result = new HeroRequestHost(hero).Apply(new WalkRequest(new(12, 10), Ctrl: false, Shift: true));
+        Assert.AreEqual(HeroRequestOutcome.Ignored, result.Outcome);
+        Assert.AreEqual(0, hero.Calls.Count, "no walk target, no interrupt");
+        Assert.AreEqual(HeroRequestOutcome.Ignored, new HeroRequestHost(hero).Apply(new WalkRequest(new(12, 10), Ctrl: true, Held: true, Shift: true)).Outcome, "a repeat is an ordinary press");
+        Assert.AreEqual(HeroRequestOutcome.Done, new HeroRequestHost(hero).Apply(new WalkRequest(new(12, 10), Ctrl: false)).Outcome, "without Shift the walk starts");
+    }
+
+    [TestMethod]
     public void AStopInterruptsAWalkingHeroAndTurnsItTowardThePointer()
     {
         var hero = new Hero { State = new(new CellCoord(10, 10), 5, true, 2, false, false) };
