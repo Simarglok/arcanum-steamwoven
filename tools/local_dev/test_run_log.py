@@ -88,6 +88,26 @@ class SummaryTests(unittest.TestCase):
         near = self.summary("ERROR: one\nERROR: two\n", 1)
         self.assertEqual(near[2:], ["ERROR: one", "ERROR: two"])  # the last error is already shown
 
+    def test_a_signal_after_pass_lines_and_shutdown_leaks_is_named_a_shutdown_crash(self) -> None:
+        text = ("ARC-UI-006 self-test app PASS ok\nARC-WORLD-001 self-test PASS combined\n"
+                "ERROR: Leaked unsafe reference to object: InputEventKey\n   at: finalize (csharp_script.cpp:179)\n"
+                "WARNING: 4 ObjectDB instances were leaked at exit\n")
+        lines = self.summary(text, -11)
+        self.assertEqual(lines[0], f"FAIL exit=-11 ran=3s lines=5 log={self.log}")
+        self.assertEqual(lines[1], "note: killed by SIGSEGV after the last PASS line (line 2) and Godot's shutdown leak "
+                                   "lines: a shutdown crash after the checks passed (ARC-DEV-2360); retry once, a repeat "
+                                   "is a real failure")
+        self.assertEqual(lines[2], "first error at line 3 of 5 (1 error line(s)):")  # the usual failure lines still follow
+
+    def test_a_signal_without_a_pass_line_or_with_an_ordinary_failure_gets_no_shutdown_claim(self) -> None:
+        crash = self.summary("start\nstage 1\n", -11)
+        self.assertEqual(crash[1], "note: killed by SIGSEGV and no PASS line in the log: a crash, not a shutdown crash")
+        quiet = self.summary("stage PASS\nstage 2\n", -6)
+        self.assertEqual(quiet[1], "note: killed by SIGABRT after the last PASS line (line 1) with no shutdown leak line: "
+                                   "read what follows it")
+        self.assertNotIn("note: killed", " ".join(self.summary("stage PASS\nERROR: boom\n", 1)))
+        self.assertEqual(run_log.signal_note([], 124), None)
+
     def test_a_failure_without_an_error_line_shows_the_tail(self) -> None:
         lines = self.summary("".join(f"line {number}\n" for number in range(60)), 124)
         self.assertEqual(lines[1], "no error line found; the last 40 lines:")

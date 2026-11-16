@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from pathlib import Path
 import re
+import signal
 from typing import Sequence
 
 from . import config
@@ -65,6 +66,31 @@ def first_error(lines: Sequence[str]) -> tuple[int, list[str]] | None:
     return None
 
 
+SHUTDOWN_LEAK = re.compile(r"Leaked unsafe reference|ObjectDB instances were leaked")
+PASS_LINE = re.compile(r"\bPASS\b")
+
+
+def signal_note(lines: Sequence[str], exit_code: int) -> str | None:
+    """ARC-DEV-2360: a command killed by a signal (the exit code is the negative signal number) after its PASS lines
+    and Godot's shutdown leak lines is a crash at engine shutdown, not a failed check: it was seen once in 31 headless
+    self-tests (SIGSEGV, 2026-11-16) and did not come back. The exit code stays as it is; the note tells the reader to
+    look at the last PASS line and retry once, and that a repeat is a real failure."""
+    if exit_code >= 0:
+        return None
+    try:
+        name = signal.Signals(-exit_code).name
+    except ValueError:
+        name = f"signal {-exit_code}"
+    passes = [index for index, line in enumerate(lines) if PASS_LINE.search(line)]
+    if not passes:
+        return f"note: killed by {name} and no PASS line in the log: a crash, not a shutdown crash"
+    last = passes[-1]
+    if any(SHUTDOWN_LEAK.search(line) for line in lines[last + 1:]):
+        return (f"note: killed by {name} after the last PASS line (line {last + 1}) and Godot's shutdown leak lines: "
+                "a shutdown crash after the checks passed (ARC-DEV-2360); retry once, a repeat is a real failure")
+    return f"note: killed by {name} after the last PASS line (line {last + 1}) with no shutdown leak line: read what follows it"
+
+
 def summary(log: Path, exit_code: int, ran: float | None) -> list[str]:
     """The stdout lines of a finished quiet run: PASS or FAIL, and the first error with its context (and the last error
     line when it lies beyond that context: an early harmless Godot ERROR must not hide the failure at the end).
@@ -86,6 +112,9 @@ def summary(log: Path, exit_code: int, ran: float | None) -> list[str]:
                           f"{_cut(lines[found[0]].strip())}")
         return result
     result = [f"FAIL exit={exit_code}{timing} lines={len(lines)} log={log}"]
+    note = signal_note(lines, exit_code)
+    if note is not None:
+        result.append(note)
     if found is not None:
         index, context = found
         result.append(f"first error at line {index + 1} of {len(lines)} ({errors} error line(s)):")
