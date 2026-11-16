@@ -33,8 +33,8 @@ public interface IAreaRestockScreen
 /// docs/world/barter-runtime.md). It reads the holders' T0 restock fields and persistent items from the inventory maps, death and the PC
 /// leader from the session, the screen from the viewer, the inventory sources and item prototypes from the barter data (null when they
 /// failed to load: every set is <see cref="SessionRestockSetStatus.Unsupported"/>, so a restock keeps the lists, and no item is known); the
-/// <see cref="AreaEventWorld"/> answers <see cref="ISessionRestockWorld"/> through it. NPC positions are their T0 cells (a merchant the
-/// session moved is not seen where it stands).
+/// <see cref="AreaEventWorld"/> answers <see cref="ISessionRestockWorld"/> through it. NPC positions are the cells the AI host has them on
+/// (<see cref="AreaInventoryHost.NpcLiveCell"/>, ARC-WORLD-2357), else their T0 cells.
 /// </summary>
 public sealed class AreaRestockHost
 {
@@ -108,7 +108,7 @@ public sealed class AreaRestockHost
     /// The merchant search of an off-screen container (0x463D2F..0x463D72, RK3): the NPCs of the game-window-sized area around it (0x440FC0
     /// with the NPC mask: the tile rectangle that holds the four corners of a window-sized screen rectangle centred on the container's
     /// tile, RK9), in the seed's order, the first whose substitute container (0x45F650: no leader at T0 or in the session, field 0x126,
-    /// within 20 tiles) it is; null when none is.
+    /// within 20 tiles) it is; null when none is. ARC-WORLD-2357: an NPC stands where the AI host has it now (<see cref="AreaInventoryHost.NpcLiveCell"/>), else on its T0 cell; the container on its T0 cell.
     /// </summary>
     public string? Merchant(SessionMapId map, string container)
     {
@@ -117,7 +117,7 @@ public sealed class AreaRestockHost
         var inventoryMap = found.Map;
         var (minX, minY, maxX, maxY) = Vicinity(at, _screen.WindowSize);
         foreach (var npc in inventoryMap.Seed.Holders.Where(holder => holder.Kind == SessionHolderKind.Npc))
-            if (Cell(inventoryMap, npc.Entity) is { } cell && cell.X >= minX && cell.X <= maxX && cell.Y >= minY && cell.Y <= maxY &&
+            if (_inventory.LiveCell(inventoryMap, npc.Entity) is { } cell && cell.X >= minX && cell.X <= maxX && cell.Y >= minY && cell.Y <= maxY &&
                 inventoryMap.Substitute(npc.Entity) is { } substitute && substitute.Entity == container && _session.QueryLeader(npc.Entity) is null &&
                 Arcanum.Simulation.Ai.AiExecutorRules.Distance(cell, substitute.Cell) <= AreaBarterMerchant.SubstituteRange)
                 return npc.Entity;
