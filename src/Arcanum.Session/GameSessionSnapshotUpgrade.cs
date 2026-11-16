@@ -633,6 +633,16 @@ public static partial class GameSessionSnapshotCodec
         [101] = root => AddField(Section(root, "party"), "$.party", "npcLed", new JsonArray()),
         // ARC-MAGIC-2371 (schema 103): the durability section gains the changed mana stores of worn items (field 92). No older build drained one (the stores were the prototype's), so the list is empty.
         [102] = root => AddField(Section(root, "durability"), "$.durability", "manaStores", new JsonArray()),
+        // ARC-MAGIC-2400 (schema 104): a pending recharge event names the map it lives on. A schema 103 build named a placeholder map (1) and fired it on any map, so the step puts each such event on the map the PC was
+        // on when the save was made (the actor's map), where the events of the PC's own items were: the weapons of the party were drained there, and the original would have them in memory on that map.
+        [103] = root =>
+        {
+            var map = Section(root, "actor")["map"] ?? throw new DecodeException(SnapshotDecodeFailure.MissingField, "$.actor.map");
+            if (Section(root, "events")["pending"] is not JsonArray pending) throw new DecodeException(SnapshotDecodeFailure.WrongType, "$.events.pending");
+            foreach (var node in pending)
+                if (node is JsonObject row && row["kind"]?.GetValue<string>() == SessionEventKinds.ItemRecharge && row["entities"] is JsonArray { Count: 1 } entities && entities[0] is JsonObject entity)
+                    entity["map"] = map.DeepClone();
+        },
     };
 
     /// <summary>The schemas with an upgrade step to the next one, ascending: every schema from
