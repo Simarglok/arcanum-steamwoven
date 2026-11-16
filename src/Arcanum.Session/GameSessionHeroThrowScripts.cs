@@ -98,9 +98,9 @@ public sealed partial class GameSessionOwner
     }
 
     /// <summary>
-    /// ARC-COMBAT-2413 (ledger TW3, QW5; exe read 0x578EA0, 0x4658E0, 0x465A40, 0x4617F0 → 0x466640): a declined throw of a whole ammunition stack. The lift made a new object for the units and destroyed the source (exactly the count), so the insertion of
-    /// the new object back finds no other stack of its prototype and keeps it: it is appended to the hero's list at the first cell it fits (0x4664C0 → 0x4675A0), keeps the slots and calls the runs left on it and the source, with its own slots, is gone.
-    /// Returns false (nothing done) for a part of a stack, where the units merge back into the stack that remains, and for the gold pile, which the session keeps as one counter and entity (NOT READY, #2424).
+    /// ARC-COMBAT-2413 (ledger TW3, QW5, AM2): a declined throw of a whole ammunition stack. The lift made a new object for the units and destroyed the source (exactly the count), so the insertion of the new object back finds no other stack of its
+    /// prototype and keeps it: it is appended to the hero's list at the first cell it fits, keeps the slots and calls the runs left on it and the source, with its own slots, is gone. Returns false (nothing done) for a part of a stack, where the units merge
+    /// back into the stack that remains, and for the gold pile, which the session keeps as one counter and entity (NOT READY, #2424).
     /// </summary>
     private bool RemakeWholeAmmoStack(SessionHeroThrow request, string splitEntity)
     {
