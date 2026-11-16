@@ -14,8 +14,8 @@ namespace Arcanum.Session.Tests;
 [TestClass]
 public sealed class ItemWorldScriptTests
 {
-    private const byte Triggerer = 0, Attachee = 1, LocalVariable = 2, Number = 3, Looped = 10, LocalObject = 11, EveryContainer = 17, AnyContainer = 18, EveryFollower = 2, AnyFollower = 3;
-    private const int Every = 810, Any = 811, Twice = 812, EveryFollowerScript = 813, AnyFollowerScript = 814, ToggleSelf = 815, ToggleSelfTwice = 816, ToggleHero = 817, Quest = 820, Typed = 821, Assigned = 822, DeadGated = 823, GeneratorGated = 824, GeneratorSlot = 7, CaseName = 1205, NewArt = 4, BaselineArt = 100, QuestNumber = 1005, ContainerType = 2;
+    private const byte Triggerer = 0, Attachee = 1, LocalVariable = 2, Number = 3, Looped = 10, LocalObject = 11, EveryContainer = 17, AnyContainer = 18, EveryFollower = 2, AnyFollower = 3, EveryScenery = 15, AnyScenery = 16, Everyone = 8, Anyone = 9;
+    private const int Every = 810, Any = 811, Twice = 812, EveryFollowerScript = 813, AnyFollowerScript = 814, ToggleSelf = 815, ToggleSelfTwice = 816, ToggleHero = 817, Quest = 820, Typed = 821, Assigned = 822, DeadGated = 823, GeneratorGated = 824, GeneratorSlot = 7, ScenerySweep = 830, ScenerySweepAny = 831, CritterCalls = 832, CritterCallsAny = 833, Callee = 3500, CalleeLine = 4, ScenerySwitch = 834, CaseName = 1205, NewArt = 4, BaselineArt = 100, QuestNumber = 1005, ContainerType = 2;
     private static readonly SessionInsertCheck Accept = _ => SessionInsertVerdict.Accepted;
 
     private sealed record Clause(int Type, (byte Kind, int Value)[] Operands);
@@ -38,6 +38,11 @@ public sealed class ItemWorldScriptTests
             }
         return ScrProgram.Read(bytes).Program!;
     }
+
+    // ARC-SCRIPT-2376 (IV18): the dialog loops of the installed scripts: the looped critter that carries the name is sent a deferred call into a dialog script (call script in: script, line, the hero as triggerer, the looped one as attachee, 2 seconds).
+    private static ScrProgram CallLoop(byte listKind) => Program(Do(C(ScrCatalogue.Action.LoopFor, (listKind, 0))),
+        If(C(ScrCatalogue.Condition.IsNamed, (Looped, 0), N(CaseName)), C(ScrCatalogue.Action.CallScriptIn, N(Callee), N(CalleeLine), (Triggerer, 0), (Looped, 0), N(2))),
+        Do(C(ScrCatalogue.Action.LoopEnd)), Do(C(ScrCatalogue.Action.ReturnRunDefault)));
 
     private static ScrProgram Loop(byte listKind, byte testKind, int times = 1)
     {
@@ -80,6 +85,7 @@ public sealed class ItemWorldScriptTests
         public Dictionary<int, ScrProgram> Programs { get; } = new() { [Every] = Loop(EveryContainer, Looped), [Any] = Loop(EveryContainer, AnyContainer), [Twice] = Loop(EveryContainer, Looped, 2),
             [Quest] = QuestGated(2), [Typed] = TypeGated(ContainerType), [Assigned] = AssignGated(),
             [DeadGated] = Gated(C(ScrCatalogue.Condition.IsDead, (Looped, 0))), [GeneratorGated] = Gated(C(ScrCatalogue.Condition.MonsterGenDisabled, N(GeneratorSlot))),
+            [ScenerySweep] = Loop(EveryScenery, Looped), [ScenerySwitch] = Program(Do(C(ScrCatalogue.Action.LoopFor, (EveryScenery, 0))), Do(C(ScrCatalogue.Action.ToggleState, (Looped, 0))), Do(C(ScrCatalogue.Action.LoopEnd)), Do(C(ScrCatalogue.Action.ReturnRunDefault))), [ScenerySweepAny] = Loop(EveryScenery, AnyScenery), [CritterCalls] = CallLoop(Everyone), [CritterCallsAny] = CallLoop(Anyone),
             [EveryFollowerScript] = Loop(EveryFollower, Looped), [AnyFollowerScript] = Loop(EveryFollower, AnyFollower),
             [ToggleSelf] = Toggle(Attachee), [ToggleSelfTwice] = Toggle(Attachee, 2), [ToggleHero] = Toggle(Triggerer) };
         public Dictionary<string, int> Names { get; set; } = new() { ["case"] = CaseName, ["other"] = 3000 };
@@ -94,6 +100,10 @@ public sealed class ItemWorldScriptTests
         public SessionOpenableBaseline? Openable { get; set; }
         public List<ScrObjectRef> Centres { get; } = [];
         public string[]? Followers { get; set; } = ["case", "other"];
+        public string[]? Scenery { get; set; } = ["case", "other"];
+        public string[]? Critters { get; set; } = ["case", "other"];
+        public List<ScrObjectRef> SceneryCentres { get; } = [];
+        public List<ScrObjectRef> CritterCentres { get; } = [];
         public List<ScrObjectRef> Leaders { get; } = [];
 
         public ScrSlot? Slot(ScrObjectRef attachee, int point) => attachee.Code == "oid:tome" && point == SessionScriptPoint.InsertItem ? new ScrSlot(script, 0, 0) : null;
@@ -115,6 +125,18 @@ public sealed class ItemWorldScriptTests
         {
             Centres.Add(item);
             return Vicinity?.Select(code => new ScrObjectRef(item.Map, code)).ToArray();
+        }
+
+        public IReadOnlyList<ScrObjectRef>? SceneryInVicinity(ScrObjectRef item)
+        {
+            SceneryCentres.Add(item);
+            return Scenery?.Select(code => new ScrObjectRef(item.Map, code)).ToArray();
+        }
+
+        public IReadOnlyList<ScrObjectRef>? CrittersInVicinity(ScrObjectRef item)
+        {
+            CritterCentres.Add(item);
+            return Critters?.Select(code => new ScrObjectRef(item.Map, code)).ToArray();
         }
 
         public IReadOnlyList<ScrObjectRef>? FollowersOf(ScrObjectRef leader)
@@ -176,6 +198,66 @@ public sealed class ItemWorldScriptTests
         Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, "oid:tome", Accept, new Host(Any)).Disposition);
         // The list condition (kind 18, "any") is true because "case" is named, so every looped container changes, "other" too.
         Assert.AreEqual((NewArt, NewArt), ((int?)Art(owner, "case"), (int?)Art(owner, "other")));
+    }
+
+    // ARC-SCRIPT-2376 (IV18, PG3): the scenery kinds 15 and 16 list the scenery around the item, asked of the host's world part.
+    [TestMethod]
+    public void Every_scenery_loop_changes_the_art_of_the_named_scenery_around_the_item()
+    {
+        using var owner = Owner();
+        var host = new Host(ScenerySweep);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, "oid:tome", Accept, host).Disposition);
+        Assert.AreEqual(new ScrObjectRef(Exterior.RuntimeMap, "oid:tome"), host.SceneryCentres.Single(), "the scenery is asked of the item, the attachee");
+        Assert.AreEqual(NewArt, (int?)Art(owner, "case"));
+        Assert.IsNull(Art(owner, "other"), "scenery with another name keeps its art");
+        Assert.AreEqual(0, host.CritterCentres.Count + host.Centres.Count);
+    }
+
+    [TestMethod]
+    public void An_any_scenery_condition_is_true_when_one_scenery_in_the_vicinity_passes()
+    {
+        using var owner = Owner();
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, "oid:tome", Accept, new Host(ScenerySweepAny)).Disposition);
+        Assert.AreEqual((NewArt, NewArt), ((int?)Art(owner, "case"), (int?)Art(owner, "other")));
+    }
+
+    // ARC-SCRIPT-2376 (IV18, TG4): everyone and anyone in the vicinity list the PCs and NPCs around the item; the looped critter that passes the name test gets a deferred call into a dialog script (call script in), kept in the event queue.
+    [TestMethod]
+    public void The_critter_loop_schedules_a_dialog_call_for_the_named_critter_around_the_item()
+    {
+        foreach (var script in new[] { CritterCalls, CritterCallsAny })
+        {
+            using var owner = Owner();
+            var host = new Host(script);
+            var picked = owner.PickUpItem(owner.Version, "oid:tome", Accept, host);
+            Assert.AreEqual((GameSessionDisposition.Changed, GameSessionFailure.None), (picked.Disposition, picked.Failure));
+            Assert.AreEqual(new ScrObjectRef(Exterior.RuntimeMap, "oid:tome"), host.CritterCentres.Single(), "the critters are asked of the item, the attachee");
+            var call = owner.QueryScriptCalls().Single();
+            Assert.AreEqual(new SessionScriptCall(Callee, CalleeLine, new(Exterior, SessionEventKinds.PlayerEntity), new(Exterior, "case")), call.Call, "only the named critter is called, with the hero as triggerer and itself as attachee");
+            using var restored = Restore(Decode(GameSessionSnapshotCodec.Encode(owner.Capture())));
+            Assert.AreEqual(call, restored.QueryScriptCalls().Single(), "the call survives a save");
+        }
+    }
+
+    // Script 1239 toggles the looped scenery: the item set admits the loop, but the session keeps the off flag of an item of the move only, so the move is refused whole (IV18).
+    [TestMethod]
+    public void A_toggle_of_the_looped_scenery_is_refused_and_changes_nothing()
+    {
+        using var owner = Owner();
+        var before = owner.Version;
+        var refused = owner.PickUpItem(before, "oid:tome", Accept, new Host(ScenerySwitch));
+        Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.ItemScriptUnsupported, before), (refused.Disposition, refused.Failure, owner.Version));
+    }
+
+    [TestMethod]
+    public void A_critter_loop_without_a_named_critter_schedules_nothing()
+    {
+        using var owner = Owner();
+        var picked = owner.PickUpItem(owner.Version, "oid:tome", Accept, new Host(CritterCalls) { Critters = ["other"] });
+        Assert.AreEqual((GameSessionDisposition.Changed, GameSessionFailure.None, 0), (picked.Disposition, picked.Failure, owner.QueryScriptCalls().Count));
+        using var empty = Owner();
+        Assert.AreEqual(GameSessionDisposition.Changed, empty.PickUpItem(empty.Version, "oid:tome", Accept, new Host(CritterCalls) { Critters = [] }).Disposition);
+        Assert.AreEqual(0, empty.QueryScriptCalls().Count);
     }
 
     // ARC-SCRIPT-2336 (FK8): the follower focus kinds 2 and 3 of a point 21 script list the triggerer's direct followers, asked of the host's world part.
@@ -275,7 +357,7 @@ public sealed class ItemWorldScriptTests
     [TestMethod]
     public void A_move_the_host_cannot_answer_is_refused_and_changes_nothing()
     {
-        foreach (var host in new Host[] { new(Every) { Vicinity = null }, new(EveryFollowerScript) { Followers = null }, new(Every) { Plans = false }, new(Every) { Names = [] }, new(Twice) })
+        foreach (var host in new Host[] { new(Every) { Vicinity = null }, new(ScenerySweep) { Scenery = null }, new(CritterCalls) { Critters = null }, new(EveryFollowerScript) { Followers = null }, new(Every) { Plans = false }, new(Every) { Names = [] }, new(Twice) })
         {
             using var owner = Owner();
             var before = owner.Version;
@@ -363,8 +445,12 @@ public sealed class ItemWorldScriptTests
         foreach (var condition in new[] { ScrCatalogue.Condition.HasItemNamed, ScrCatalogue.Condition.WithinRange })
             Assert.IsFalse(set.Conditions.Contains(condition), $"condition {condition}");
         // The adapter answers IScrGroupQueries for the follower kinds only (ARC-SCRIPT-2336): the group kinds 13 and 14 (followers plus the triggerer) stay out until a slice reads them for the item host.
-        foreach (var kind in new[] { ScrFocusKind.EverySceneryInVicinity, ScrFocusKind.AnySceneryInVicinity, ScrFocusKind.EveryoneInVicinity, ScrFocusKind.AnyoneInVicinity, ScrFocusKind.EveryoneInGroup, ScrFocusKind.AnyoneInGroup })
+        foreach (var kind in new[] { ScrFocusKind.EveryoneInGroup, ScrFocusKind.AnyoneInGroup })
             Assert.IsFalse(set.FocusKinds.Contains(kind), $"focus {kind}");
+        // ARC-SCRIPT-2376 (IV18): the scenery and critter vicinity kinds are answered by the host's world part now, and call script in stays admitted.
+        foreach (var kind in new[] { ScrFocusKind.EverySceneryInVicinity, ScrFocusKind.AnySceneryInVicinity, ScrFocusKind.EveryoneInVicinity, ScrFocusKind.AnyoneInVicinity })
+            Assert.IsTrue(set.FocusKinds.Contains(kind), $"focus {kind}");
+        Assert.IsTrue(set.Actions.Contains(ScrCatalogue.Action.CallScriptIn));
         // ARC-SCRIPT-2347 (IV13): the quest state condition, assign object and get object type are answered by the host's world part now.
         Assert.IsTrue(set.Conditions.Contains(ScrCatalogue.Condition.PcQuestState) && set.Actions.Contains(ScrCatalogue.Action.AssignObject) && set.Actions.Contains(ScrCatalogue.Action.GetObjectType));
         Assert.IsTrue(set.IsSubsetOf(ScrAdmissionSet.S65));

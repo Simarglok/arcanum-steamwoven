@@ -3,7 +3,7 @@ using Arcanum.Scripting.Scr;
 namespace Arcanum.Session;
 
 /// <summary>
-/// ARC-SCRIPT-2335 (ledger IV1–IV8): what a host adds for the item set's world commands, the container vicinity focus kinds (17, 18), the name test on a looped object (condition 20) and change art number
+/// ARC-SCRIPT-2335 (ledger IV1–IV8): what a host adds for the item set's world commands, the container vicinity focus kinds (17, 18), the scenery and critter vicinity kinds (ARC-SCRIPT-2376, IV18), the name test on a looped object (condition 20) and change art number
 /// (action 59) of a point 21 (insert item) script. A host that does not implement it leaves each such question unanswerable, and the session then refuses the move as for any other thing it cannot answer
 /// (<see cref="GameSessionFailure.ItemScriptUnsupported"/>). It reads only.
 /// </summary>
@@ -14,6 +14,18 @@ public interface ISessionItemWorldHost
     /// know that location (an item made at run time, one the map data does not place): the session then refuses the move.
     /// </summary>
     IReadOnlyList<ScrObjectRef>? ContainersInVicinity(ScrObjectRef item);
+
+    /// <summary>
+    /// ARC-SCRIPT-2376 (IV18, PG3): the scenery in the vicinity of <paramref name="item"/>, the attachee of the run (the focus kinds every and any scenery in the vicinity, 15 and 16): the same scan and centre as <see cref="ContainersInVicinity"/> with the scenery
+    /// type. Null when the host does not know the item's location: the session then refuses the move.
+    /// </summary>
+    IReadOnlyList<ScrObjectRef>? SceneryInVicinity(ScrObjectRef item) => null;
+
+    /// <summary>
+    /// ARC-SCRIPT-2376 (IV18, TG4): the PCs and NPCs in the vicinity of <paramref name="item"/>, the attachee of the run (the focus kinds everyone and anyone in the vicinity, 8 and 9), the hero and the dead included, around the same centre as
+    /// <see cref="ContainersInVicinity"/>. Null when the host does not know the item's location: the session then refuses the move.
+    /// </summary>
+    IReadOnlyList<ScrObjectRef>? CrittersInVicinity(ScrObjectRef item) => null;
 
     /// <summary>
     /// ARC-SCRIPT-2336 (FK8): the direct followers of <paramref name="leader"/>, the triggerer of the run (the focus kinds every follower and any follower, 0x44B4E0 over 0x4411C0): the hero's party followers for the hero, an NPC leader's session followers
