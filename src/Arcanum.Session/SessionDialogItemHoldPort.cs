@@ -29,8 +29,8 @@ public sealed class SessionDialogItemHoldPort(
     public bool PartyHolds(DialogItemQuery query)
     {
         if (query.PlayerCharacter != playerCharacter) return false;
-        if (_session.QueryHeroKit().Any(item => item.Kind.Name == query.ItemName) || _session.QueryPcInventory().Any(item => item.Kind.Name == query.ItemName)
-            || _session.QueryMadeItems().Any(item => item.Kind.Name == query.ItemName)) return true;
+        if (_session.QueryHeroKit().Any(item => _session.QueryItemName(item.Entity, item.Kind.Name) == query.ItemName) || _session.QueryPcInventory().Any(item => _session.QueryItemName(item.Entity, item.Kind.Name) == query.ItemName)
+            || _session.QueryMadeItems().Any(item => _session.QueryItemName(item.Entity, item.Kind.Name) == query.ItemName)) return true;
         foreach (var follower in _session.QueryParty().Followers)
             if (Holds(follower.Entity, query.ItemName)) return true;
         return false;
@@ -46,6 +46,6 @@ public sealed class SessionDialogItemHoldPort(
     private bool Holds(string holder, int name)
     {
         prepare?.Invoke(holder);
-        return _session.QueryHolderItems(holder)?.Any(item => item.Facts.Kind.Name == name) == true;
+        return _session.QueryHolderItems(holder)?.Any(item => _session.QueryItemName(item.Entity, item.Facts.Kind.Name) == name) == true;
     }
 }

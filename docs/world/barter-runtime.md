@@ -60,7 +60,7 @@ Requirements: [FR-ITEM-013](../requirements/items-economy.md#fr-item-013) (trade
 for an item, a total past 32 bits, a payer with fewer coins than the total (`GoldShort`: the original's "not enough money" before the
 move, and its rolled-back stack payment after it), and the payment refusals that do not depend on the move (a pile past 32 bits, a full
 record budget, a full NPC item budget or list, a transfer script or insert-item script on the pile); the buy's item move runs the
-item's insert-item script through the host, as a loot does. A payment refused after the move (the host's insert check of a new pile for
+item's insert-item script through the host, as a loot does. ARC-UI-1824: the lines the move's scripts printed (`InventoryMutationResult.Messages`) follow the window's trade text (bought, sold, a sale onto a slot, refused, and a won or refused bet's text), as the loot window's do. A payment refused after the move (the host's insert check of a new pile for
 the merchant, an exhausted made number, or coins an insert-item script spent) leaves the item moved and reports the payment's failure,
 as the original leaves a moved item whose payment failed. The NPC list and budget checks for a new pile run before the move, so a
 merchant at exactly its list limit is refused one item early. `QueryHeroHaggle()` gives the hero's haggle effectiveness and training.

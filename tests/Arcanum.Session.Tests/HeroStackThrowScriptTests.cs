@@ -158,6 +158,37 @@ public sealed class HeroStackThrowScriptTests
         Assert.IsFalse(kept.QueryHeroKit().Any(item => item.Entity == "made:3"));
     }
 
+    // ARC-COMBAT-2424 (TW3, QW5; exe 0x464830, 0x464970, 0x4617F0, 0x466640): the lift of the whole gold pile destroys it and makes a new gold object that merges into no pile, so the give-back takes the first cell it fits.
+    // The pile keeps its one counter entity (Steamwoven difference, no installed gold carries a throw script, TW7).
+    [TestMethod]
+    public void ASkippedThrowOfTheWholeGoldPileRefitsThePileAtTheFirstFreeCellAndKeepsTheCoins()
+    {
+        using var owner = Hero();
+        var host = new Host();
+        host.Programs[ThrowScript] = Program(C(ScrCatalogue.Action.SetLocalFlag, (Number, 1)), C(ScrCatalogue.Action.ReturnSkipDefault));
+        var firstFit = owner.QueryHeroGrid().Items.Single(item => item.Entity == SessionHeroGrid.GoldEntity).Slot;
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.MoveHeroItem(owner.Version, SessionHeroGrid.GoldEntity, 100, new(SessionHeroGrid.GoldKind, false, []), Accept).Disposition);
+        Assert.AreNotEqual(firstFit, owner.QueryHeroGrid().Items.Single(item => item.Entity == SessionHeroGrid.GoldEntity).Slot, "the pile lies away from the first fit");
+        var (draws, revision, coins) = (owner.QueryRandom().Draws, owner.Version.Revision, owner.QueryGold());
+        var result = owner.ThrowHeroItem(owner.Version, Gold(owner, host, coins));
+        Assert.AreEqual((GameSessionDisposition.Changed, GameSessionFailure.None, true, 0), (result.Disposition, result.Failure, result.ScriptDeclined, result.Shots.Count));
+        Assert.AreEqual(coins, owner.QueryGold(), "every coin is back");
+        Assert.AreEqual(firstFit, owner.QueryHeroGrid().Items.Single(item => item.Entity == SessionHeroGrid.GoldEntity).Slot, "the new gold object takes the first cell it fits");
+        Assert.AreEqual(0, owner.QueryItemScriptSlots().Count, "the slot written for the never-made object is dropped (the pile keeps no slots)");
+        Assert.AreEqual((draws, revision + 1), (owner.QueryRandom().Draws, owner.Version.Revision));
+    }
+
+    [TestMethod]
+    public void ASkippedThrowOfPartOfTheGoldPileLeavesThePilesCell()
+    {
+        using var owner = Hero();
+        var host = new Host();
+        host.Programs[ThrowScript] = Program(C(ScrCatalogue.Action.ReturnSkipDefault));
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.MoveHeroItem(owner.Version, SessionHeroGrid.GoldEntity, 100, new(SessionHeroGrid.GoldKind, false, []), Accept).Disposition);
+        Assert.IsTrue(owner.ThrowHeroItem(owner.Version, Gold(owner, host, owner.QueryGold() - 1)).ScriptDeclined);
+        Assert.AreEqual(100, owner.QueryHeroGrid().Items.Single(item => item.Entity == SessionHeroGrid.GoldEntity).Slot, "the units merge back into the pile that remains");
+    }
+
     [TestMethod]
     public void ARunTheSessionCannotApplyRefusesBeforeAnySplit()
     {
