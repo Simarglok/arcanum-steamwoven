@@ -148,7 +148,7 @@ public sealed class ItemWorldScriptTests
     {
         using var owner = Owner();
         var host = new Host(EveryFollowerScript);
-        Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, "tome", Accept, host).Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, "oid:tome", Accept, host).Disposition);
         Assert.AreEqual(new ScrObjectRef(Exterior.RuntimeMap, SessionEventKinds.PlayerEntity), host.Leaders.Single(), "the followers are the triggerer's, the hero's for a pickup");
         Assert.AreEqual(NewArt, (int?)Art(owner, "case"));
         Assert.IsNull(Art(owner, "other"), "a follower with another name keeps its art");
@@ -158,7 +158,7 @@ public sealed class ItemWorldScriptTests
     public void An_any_follower_condition_is_true_when_one_follower_passes()
     {
         using var owner = Owner();
-        Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, "tome", Accept, new Host(AnyFollowerScript)).Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, "oid:tome", Accept, new Host(AnyFollowerScript)).Disposition);
         Assert.AreEqual((NewArt, NewArt), ((int?)Art(owner, "case"), (int?)Art(owner, "other")), "kind 3 is true because \"case\" is named, so every looped follower changes");
     }
 
@@ -166,7 +166,7 @@ public sealed class ItemWorldScriptTests
     public void A_triggerer_without_followers_leaves_the_loop_empty()
     {
         using var owner = Owner();
-        Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, "tome", Accept, new Host(EveryFollowerScript) { Followers = [] }).Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, "oid:tome", Accept, new Host(EveryFollowerScript) { Followers = [] }).Disposition);
         Assert.IsNull(Art(owner, "case"));
     }
 
