@@ -175,14 +175,13 @@ public partial class AreaCompactPanel : Control
 public partial class AreaHeroGauges : CanvasLayer
 {
     // The original's number slots (0x5C63F8: 0 health, 1 fatigue, 5 poison) in its 800 × 600 screen.
-    private static readonly Rect2 HealthNumber = new(15, 578, 29, 12), FatigueNumber = new(755, 578, 27, 12), PoisonNumber = new(15, 500, 29, 12);
     private Control _root = null!;
     private AreaVialGauge _health = null!;
     private AreaVialGauge _fatigue = null!;
     private AreaCompactPanel _compact = null!;
-    private Label _healthNumber = null!;
-    private Label _fatigueNumber = null!;
-    private Label _poison = null!;
+    private AreaBarNumber _healthNumber = null!;
+    private AreaBarNumber _fatigueNumber = null!;
+    private AreaBarNumber _poison = null!;
     private AreaGameBarPanel? _bars;
     private AreaLife _life;
 
@@ -216,13 +215,10 @@ public partial class AreaHeroGauges : CanvasLayer
         _health = new AreaVialGauge { Name = "HealthGauge" };
         _fatigue = new AreaVialGauge { Name = "FatigueGauge" };
         _compact = new AreaCompactPanel { Name = "CompactPanel" };
-        _healthNumber = Number("HealthNumber"); _fatigueNumber = Number("FatigueNumber"); _poison = Number("Poison");
-        _poison.AddThemeColorOverride("font_color", AreaLifeBar.PoisonedHealthColor);
-        _poison.AddThemeColorOverride("font_outline_color", Colors.Black);
-        _poison.AddThemeConstantOverride("outline_size", 3);
+        // ARC-UI-2368: the digit writer's slots (ledger BC5, BC9): black fill (not the poison's), white bar font with a shadow.
+        _healthNumber = Number("HealthNumber", BarNumberRules.Health); _fatigueNumber = Number("FatigueNumber", BarNumberRules.Fatigue); _poison = Number("Poison", BarNumberRules.Poison);
         _root.AddChild(_health); _root.AddChild(_fatigue); _root.AddChild(_compact);
         _root.AddChild(_healthNumber); _root.AddChild(_fatigueNumber); _root.AddChild(_poison);
-        foreach (var label in new[] { _healthNumber, _fatigueNumber, _poison }) label.AddThemeFontSizeOverride("font_size", 9);
         GetViewport().SizeChanged += Place;
         AreaGameBarPanel.InsetsChanged += Place;
         Hide();
@@ -234,11 +230,17 @@ public partial class AreaHeroGauges : CanvasLayer
         AreaGameBarPanel.InsetsChanged -= Place;
     }
 
-    private static Label Number(string name) => new()
+    private static AreaBarNumber Number(string name, int slot)
     {
-        Name = name, MouseFilter = Control.MouseFilterEnum.Ignore, HorizontalAlignment = HorizontalAlignment.Center,
-        VerticalAlignment = VerticalAlignment.Center, ClipText = false,
-    };
+        var (x, y, width, height) = BarNumberRules.Slot(slot);
+        return new(BarNumberRules.Filled(slot)) { Name = name, MouseFilter = Control.MouseFilterEnum.Ignore, Position = new(x, y), Size = new(width, height) };
+    }
+
+    /// <summary>ARC-UI-2368: the bar font (art 171) the numbers are written in; null: the stand-in font.</summary>
+    public void SetFont(AreaArtFontFace? face) => _healthNumber.Face = _fatigueNumber.Face = _poison.Face = face;
+
+    /// <summary>The bar font now drawing the numbers (null: the stand-in).</summary>
+    internal AreaArtFontFace? FontForSelfTest => _healthNumber.Face;
 
     /// <summary>Shows the PC's values, in the vials of <paramref name="bars"/> when given (shown), else in the compact panel; or
     /// hides the gauges (null life).</summary>
@@ -286,12 +288,6 @@ public partial class AreaHeroGauges : CanvasLayer
         }
         var (hx, hy, hw, hh) = AreaGameBarLayout.HealthGauge; var (fx, fy, fw, fh) = AreaGameBarLayout.FatigueGauge;
         Put(_health, new Rect2(hx, hy, hw, hh)); Put(_fatigue, new Rect2(fx, fy, fw, fh));
-        // A label is at least its line high: each grows around the middle of the original's 12 px slot.
-        foreach (var (label, slot) in new[] { (_healthNumber, HealthNumber), (_fatigueNumber, FatigueNumber), (_poison, PoisonNumber) })
-        {
-            var height = Math.Max(slot.Size.Y, label.GetCombinedMinimumSize().Y);
-            Put(label, new Rect2(slot.Position.X, slot.Position.Y + (slot.Size.Y - height) / 2, slot.Size.X, height));
-        }
     }
 }
 
