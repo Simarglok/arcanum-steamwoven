@@ -128,6 +128,17 @@ public sealed record AreaBarterMerchant(string Entity, string Name, int Multipli
         return this with { Container = substitute.Entity, ContainerBuyList = data.BuyList(substitute.InventorySource) };
     }
 
+    /// <summary>ARC-WORLD-2245 (the original measures where the NPC is now): <see cref="WithSubstitute(AreaSubstituteContainer?, CellCoord, AreaBarterData)"/> from the cell <paramref name="speakerCell"/>
+    /// gives for <paramref name="speaker"/> (<see cref="AreaSpeakerCells.Live"/>: a following companion's committed cell, else the AI host's cell of the NPC, else its T0 cell). The container
+    /// stays at its own T0 cell: a container does not move in the session.</summary>
+    public AreaBarterMerchant WithSubstitute(AreaSubstituteContainer? substitute, AreaSpeaker speaker, Func<AreaSpeaker, (long X, long Y)> speakerCell, AreaBarterData data)
+    {
+        ArgumentNullException.ThrowIfNull(speaker);
+        ArgumentNullException.ThrowIfNull(speakerCell);
+        var (x, y) = speakerCell(speaker);
+        return WithSubstitute(substitute, new(checked((int)x), checked((int)y)), data);
+    }
+
     /// <summary>The merchant facts of an NPC's stored fields with its leaders read from the session (ARC-WORLD-2119): follower of the hero (direct leader), led by anyone, chain to the PC; null for anything that is not an NPC.</summary>
     public static AreaBarterMerchant? From(string entity, string name, CombatFields fields, AreaBarterData data, GameSessionOwner session)
     {
