@@ -642,8 +642,10 @@ public partial class TerrainViewerApp
             Require(GameCursorItemForSelfTest is null && session.QueryEquipment().Worn.Any(w => w.Slot == EquipmentSlot.Weapon && w.Entity == wielded.Entity),
                 $"a window opened puts it back ({HeldThrowNoticeForSelfTest})");
             EndInventory();
-            for (var attempt = 0; attempt < 3; attempt++)
+            for (var attempt = 0; attempt < 4; attempt++)
             {
+                // ARC-COMBAT-2425 (TT6, TW11): the first three throws press the critter itself (the object is the goal's target); the fourth presses its tile (a location only: the item lands there striking nothing).
+                var tilePress = attempt == 3;
                 Heal();
                 AreaSmokePlace(map, map.Chart.ToChart(new(pick.Hero.X, pick.Hero.Y)));
                 _areaSmokeTime *= 20; _worldTestTime = SimulationTime.At(_areaSmokeTime, 20);
@@ -652,7 +654,7 @@ public partial class TerrainViewerApp
                 await Lift();
                 _projectileEndsForSelfTest.Clear(); _thrownLandingsForSelfTest.Clear();
                 _lastHeldThrowForSelfTest = null;
-                var started = ThrowGameCursorItem(World(pick.Target.Row));
+                var started = ThrowGameCursorItem(World(pick.Target.Row), tilePress ? null : pick.Target.Row.Key);
                 // ARC-DEV-182: the throw is goal 37 of the table: its swing plays to the action frame, then the session throws.
                 for (var frames = 0; frames < 1500 && started && _lastHeldThrowForSelfTest is null && HeroRunsHost() is { ThrowRun: not null }; frames++)
                 {
@@ -675,6 +677,16 @@ public partial class TerrainViewerApp
                 var landing = _thrownLandingsForSelfTest[0];
                 Require(session.QueryPlacedItems().Single(p => p.Entity == wielded.Entity).Cell == landing.Tile && !session.QueryItemInFlight(wielded.Entity)
                     && session.QueryShotsInFlight().Count == 0, $"it lies where the flight ended ({landing.Tile})");
+                if (tilePress)
+                {
+                    Require(result!.Attack?.Resolution is null && landing.Tile == World(pick.Target.Row) && _projectileEndsForSelfTest.LastOrDefault().Struck is null,
+                        $"a press on the critter's tile names no struck critter: the item lands on the tile, striking nothing (resolved {result.Attack?.Resolution is not null}, landed {landing.Tile.X},{landing.Tile.Y})");
+                    throws.Add($"tile-press:none:{landing.Tile.X},{landing.Tile.Y}");
+                    Require(session.PickUpItem(session.Version, wielded.Entity, _ => SessionInsertVerdict.Accepted).Disposition == GameSessionDisposition.Changed
+                        && session.Equip(session.Version, wielded.Entity, EquipmentSlot.Weapon, new(kit.Kind, [], false, wielded.Item), (_, _) => true,
+                            _ => SessionInsertVerdict.Accepted, null, ItemTriggersNow()).Disposition == GameSessionDisposition.Changed, "the weapon is picked up and wielded again");
+                    continue;
+                }
                 var outcome = result!.Attack?.Resolution?.Outcome;
                 hit |= outcome is AttackOutcome.Hit or AttackOutcome.CriticalHit;
                 throws.Add($"{outcome?.ToString() ?? "unrolled"}:{_projectileEndsForSelfTest.LastOrDefault().Strike}:{landing.Tile.X},{landing.Tile.Y}");

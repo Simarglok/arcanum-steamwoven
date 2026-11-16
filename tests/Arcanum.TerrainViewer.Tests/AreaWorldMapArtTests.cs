@@ -34,6 +34,19 @@ public sealed class AreaWorldMapArtTests
     }
 
     [TestMethod]
+    public void A_note_is_drawn_with_the_art_of_its_marker_type()
+    {
+        // ARC-UI-2330 (BM4d table 0x5C9160 rows 0-2, WM79, WM132): 0 note 142, 1 skull 144, 2 chest 141, 3 question 143 (scenery notes); anything else keeps 143.
+        Assert.AreEqual(142, AreaWorldMapArtLayout.NoteArtOf(0));
+        Assert.AreEqual(144, AreaWorldMapArtLayout.NoteArtOf(1));
+        Assert.AreEqual(141, AreaWorldMapArtLayout.NoteArtOf(2));
+        Assert.AreEqual(143, AreaWorldMapArtLayout.NoteArtOf(AreaTownNotes.QuestionType));
+        Assert.AreEqual(143, AreaWorldMapArtLayout.NoteArtOf(-1));
+        Assert.AreEqual(143, AreaWorldMapArtLayout.NoteArtOf(4));
+        CollectionAssert.IsSubsetOf(AreaWorldMapArtLayout.NoteTypeArts.ToArray(), AreaWorldMapArtLayout.ArtNumbers.ToArray(), "the view reads every note art");
+    }
+
+    [TestMethod]
     public void The_lens_is_the_square_hole_of_the_background_art_and_its_test_is_half_open()
     {
         // ARC-UI-133 (WM36): the registered rectangle (25, 65, 89, 89) of the screen is (25, 24) in the window; 0x551000 keeps the left and top edges

@@ -63,7 +63,9 @@ texture of the wood backgrounds).
 7. **All art is redrawn by Codex image generation.** The style is held by: a census of the original interface
    (screenshots, element extraction, reuse); whole-screen context images first (as in the current HD pack) so Codex sees
    each part's purpose; a material sheet the owner approves; prompts per part kind; a fit tool that locks every part to
-   the approved materials.
+   the approved materials. Original art is given to Codex as input, and the owner runs Codex; agents prepare the
+   inputs and process the outputs (owner decision 2026-11-16). So the kit is derived content: it stays local like the HD
+   pack and is not shipped.
 8. **Large surfaces are a research item.** How to get 3840-wide boards and backdrops from a generator with a smaller
    output (upscale, tiled regeneration, material texture plus macro image) is decided by comparison
    ([#2457](https://github.com/Simarglok/arcanum-steamwoven/issues/2457)). Regenerating tiles separately is expected to
@@ -97,14 +99,15 @@ texture of the wood backgrounds).
   proportions prototype, a census, a kit manifest, style anchors, a surface-method comparison, fit and bake tools, the
   runtime composition, fonts, and production batches per backdrop family.
 - **Costs and risks:** many full-size backdrops (one per background family); generator output smaller than the master
-  size; style drift between generations; text baked into original art must become drawn text; provenance of
-  Codex outputs decides whether the kit can ship (below).
+  size; style drift between generations; text baked into original art must become drawn text; the kit is derived from original art, so it
+  stays local and is not shipped (decided 2026-11-16, #2448).
 
 ## Open decisions
 
 | Question | Issue |
 | --- | --- |
-| Provenance: may Codex receive original art as input (kit local only, like the HD pack) or only our own references (kit can ship)? | [#2448](https://github.com/Simarglok/arcanum-steamwoven/issues/2448) |
+| Provenance — **decided 2026-11-16**: original art is a Codex input; the kit is local only, like the HD pack | [#2448](https://github.com/Simarglok/arcanum-steamwoven/issues/2448) |
+| Who runs Codex — **decided 2026-11-16**: the owner, through the inbox/outbox handoff | [#2449](https://github.com/Simarglok/arcanum-steamwoven/issues/2449) |
 | Panel heights and proportions after the prototype | [#2453](https://github.com/Simarglok/arcanum-steamwoven/issues/2453) |
 | Approval of the material sheet | [#2456](https://github.com/Simarglok/arcanum-steamwoven/issues/2456) |
 | Method for the panel board and backdrops | [#2458](https://github.com/Simarglok/arcanum-steamwoven/issues/2458) |

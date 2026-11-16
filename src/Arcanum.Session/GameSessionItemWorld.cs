@@ -48,6 +48,13 @@ public interface ISessionItemWorldHost
     /// </summary>
     int? ItemNameInData(ScrObjectRef item) => null;
 
+    /// <summary>
+    /// ARC-SCRIPT-2432 (IV40): the map changes that keep a run's change script (99) of an object that is not an item of the move: <paramref name="write"/> is the object's attachment point with the whole slot it ends in (the number replaced, the flags and
+    /// counters as the object held them). The shown map's use host plans it as a use run keeps a critter's slot (the loaded element under the session's map changes, a part back at its loaded value clears its record); null for an object it cannot keep (no
+    /// row, not a critter, no loaded element at the point, a point it does not keep): the session then refuses the move. The keys of the edits are the object's own.
+    /// </summary>
+    IReadOnlyList<MapChangeEdit>? PlanObjectSlot(ScrWriteback write) => null;
+
     /// <summary>The plan of a change art number of the object to <paramref name="number"/> (the host's reading of the art files and of the object's lock identity); null when the host cannot plan it (the move is refused).</summary>
     SessionObjectArtPlan? ArtPlan(ScrObjectRef obj, int number);
 
