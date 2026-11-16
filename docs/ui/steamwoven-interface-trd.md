@@ -32,7 +32,8 @@ implemented yet.
 - **SWI-LAY-4** The baked step is the smallest of ×1, ×2/3, ×1/2, ×1/3 that is ≥ `f`. Above ×1 (5K screens) the ×1
   set is scaled up (a recorded limit, see [open questions](#open-questions)). Below ×1/3 the ×1/3 set is scaled down
   to `f` = 0.25; below 0.25 the Steamwoven interface is not supported and the Original look is used.
-- **SWI-LAY-5** The run-time scale is `f / step`. When it is exactly 1 the parts are drawn at whole device pixels with
+- **SWI-LAY-5** The run-time scale is `f / step`. `f`, the step choice and the test for an exact step are computed
+  exactly (integers or rationals, for example `3 · W ≥ 2 · 3840`), never with floating-point equality. When it is exactly 1 the parts are drawn at whole device pixels with
   no filtering; otherwise with linear filtering from the baked set.
 - **SWI-LAY-6** W × H are device (backing) pixels, including the macOS backing scale.
 - **SWI-LAY-7** Every master length and offset is a multiple of 6 px, so it is a whole number of pixels at every step
@@ -44,23 +45,23 @@ model's unit tests use these numbers ([#2450](https://github.com/Simarglok/arcan
 
 | Window | Frame | `f` | Step | Run-time scale | Top | Middle | Bottom | Centre | Side | Bars |
 | --- | --- | ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |
-| 3840 × 2160 | 3840 × 2160 | 1.0000 | 1 | 1.000 | 150 | 1434 | 576 | 2880 | 480 | 0 / 0 |
-| 2560 × 1440 | 2560 × 1440 | 0.6667 | 2/3 | 1.000 | 100 | 956 | 384 | 1920 | 320 | 0 / 0 |
-| 1920 × 1080 | 1920 × 1080 | 0.5000 | 1/2 | 1.000 | 75 | 717 | 288 | 1440 | 240 | 0 / 0 |
-| 1280 × 720 | 1280 × 720 | 0.3333 | 1/3 | 1.000 | 50 | 478 | 192 | 960 | 160 | 0 / 0 |
-| 3840 × 2400 | 3840 × 2400 | 1.0000 | 1 | 1.000 | 150 | 1674 | 576 | 2880 | 480 | 0 / 0 |
-| 2560 × 1600 | 2560 × 1600 | 0.6667 | 2/3 | 1.000 | 100 | 1116 | 384 | 1920 | 320 | 0 / 0 |
-| 1920 × 1200 | 1920 × 1200 | 0.5000 | 1/2 | 1.000 | 75 | 837 | 288 | 1440 | 240 | 0 / 0 |
-| 1280 × 800 | 1280 × 800 | 0.3333 | 1/3 | 1.000 | 50 | 558 | 192 | 960 | 160 | 0 / 0 |
-| 3024 × 1964 | 3024 × 1890 | 0.7875 | 1 | 0.787 | 118 | 1318 | 454 | 2268 | 378 | 0 / 37 |
-| 3456 × 2234 | 3456 × 2160 | 0.9000 | 1 | 0.900 | 135 | 1507 | 518 | 2592 | 432 | 0 / 37 |
-| 2880 × 1800 | 2880 × 1800 | 0.7500 | 1 | 0.750 | 113 | 1255 | 432 | 2160 | 360 | 0 / 0 |
-| 1366 × 768 | 1366 × 768 | 0.3556 | 1/2 | 0.711 | 53 | 510 | 205 | 1024 | 171 | 0 / 0 |
-| 1600 × 900 | 1600 × 900 | 0.4167 | 1/2 | 0.833 | 63 | 597 | 240 | 1200 | 200 | 0 / 0 |
-| 3440 × 1440 | 2560 × 1440 | 0.6667 | 2/3 | 1.000 | 100 | 956 | 384 | 1920 | 320 | 440 / 0 |
-| 5120 × 1440 | 2560 × 1440 | 0.6667 | 2/3 | 1.000 | 100 | 956 | 384 | 1920 | 320 | 1280 / 0 |
-| 1024 × 768 | 1024 × 640 | 0.2667 | 1/3 | 0.800 | 40 | 446 | 154 | 768 | 128 | 0 / 64 |
-| 5120 × 2880 | 5120 × 2880 | 1.3333 | 1 | 1.333 | 200 | 1912 | 768 | 3840 | 640 | 0 / 0 |
+| 3840 × 2160 | 3840 × 2160 | 1.0000 | 1 | 1.000 | 150 | 1440 | 570 | 2880 | 480 | 0 / 0 |
+| 2560 × 1440 | 2560 × 1440 | 0.6667 | 2/3 | 1.000 | 100 | 960 | 380 | 1920 | 320 | 0 / 0 |
+| 1920 × 1080 | 1920 × 1080 | 0.5000 | 1/2 | 1.000 | 75 | 720 | 285 | 1440 | 240 | 0 / 0 |
+| 1280 × 720 | 1280 × 720 | 0.3333 | 1/3 | 1.000 | 50 | 480 | 190 | 960 | 160 | 0 / 0 |
+| 3840 × 2400 | 3840 × 2400 | 1.0000 | 1 | 1.000 | 150 | 1680 | 570 | 2880 | 480 | 0 / 0 |
+| 2560 × 1600 | 2560 × 1600 | 0.6667 | 2/3 | 1.000 | 100 | 1120 | 380 | 1920 | 320 | 0 / 0 |
+| 1920 × 1200 | 1920 × 1200 | 0.5000 | 1/2 | 1.000 | 75 | 840 | 285 | 1440 | 240 | 0 / 0 |
+| 1280 × 800 | 1280 × 800 | 0.3333 | 1/3 | 1.000 | 50 | 560 | 190 | 960 | 160 | 0 / 0 |
+| 3024 × 1964 | 3024 × 1890 | 0.7875 | 1 | 0.787 | 118 | 1323 | 449 | 2268 | 378 | 0 / 37 |
+| 3456 × 2234 | 3456 × 2160 | 0.9000 | 1 | 0.900 | 135 | 1512 | 513 | 2592 | 432 | 0 / 37 |
+| 2880 × 1800 | 2880 × 1800 | 0.7500 | 1 | 0.750 | 113 | 1259 | 428 | 2160 | 360 | 0 / 0 |
+| 1366 × 768 | 1366 × 768 | 0.3556 | 1/2 | 0.711 | 53 | 512 | 203 | 1024 | 171 | 0 / 0 |
+| 1600 × 900 | 1600 × 900 | 0.4167 | 1/2 | 0.833 | 63 | 599 | 238 | 1200 | 200 | 0 / 0 |
+| 3440 × 1440 | 2560 × 1440 | 0.6667 | 2/3 | 1.000 | 100 | 960 | 380 | 1920 | 320 | 440 / 0 |
+| 5120 × 1440 | 2560 × 1440 | 0.6667 | 2/3 | 1.000 | 100 | 960 | 380 | 1920 | 320 | 1280 / 0 |
+| 1024 × 768 | 1024 × 640 | 0.2667 | 1/3 | 0.800 | 40 | 448 | 152 | 768 | 128 | 0 / 64 |
+| 5120 × 2880 | 5120 × 2880 | 1.3333 | 1 | 1.333 | 200 | 1920 | 760 | 3840 | 640 | 0 / 0 |
 
 The two MacBook rows (3024 × 1964, 3456 × 2234) are narrower than 16:10 and get bars of 37 px; in macOS full screen
 the area beside the camera notch is usually left out, which may make the window 16:10 already (to check on the
@@ -74,15 +75,16 @@ Why this range (Steam Hardware Survey, primary display, October 2026, read 2026-
 
 ## Play screen layout
 
-- **SWI-LAY-10** Three bands: top panel 150 px, bottom panel 576 px (master, *provisional*: the original's 41 and 159
-  units × 3.6, rounded to the grid; fixed by [#2453](https://github.com/Simarglok/arcanum-steamwoven/issues/2453)),
+- **SWI-LAY-10** Three bands: top panel 150 px, bottom panel 570 px (master, *provisional*: the original's 41 and 159
+  units × 3.6 = 147.6 and 572.4, rounded to the grid so that they still sum to 720 px, the original's 200 units, and the
+  window zone of SWI-BDR-2 fits a 16:9 middle band exactly; fixed by [#2453](https://github.com/Simarglok/arcanum-steamwoven/issues/2453)),
   and the middle band = frame height − top − bottom.
 - **SWI-LAY-11** Each panel spans the whole frame width. The centre block (2880 px) is centred; the sides take the
   rest. Controls in the centre block sit at their original offsets × 3.6, snapped to the 6 px grid (shift at most
   3 px, under one unit).
 - **SWI-LAY-12** A panel is the panel board (one continuous material for both panels) plus hardware layers (sockets,
   rings, vial housings, the message window frame, rails, buttons). The sides show the same board: same material, tone
-  and texture, no visible join at the centre block's edges. At this stage the sides have no controls and no decor.
+  and texture, no visible join at the centre block's edges (measured by SWI-VER-5). At this stage the sides have no controls and no decor.
 - **SWI-LAY-13** Hit areas are the rectangles (or circles) of the drawn parts from the layout, not the original's
   pixel masks.
 - **SWI-LAY-14** With no menu open the middle band is the world view. The out-of-sight rules follow the owner decision
@@ -97,8 +99,9 @@ Why this range (Steam Hardware Survey, primary display, October 2026, read 2026-
 - **SWI-BDR-2** The window zone, 2880 × 1440 px (the original 800 × 400 units), is centred in the middle band
   (vertical placement: [open questions](#open-questions)); window content (paper doll, grids, pages, buttons) sits in
   it at the original offsets × 3.6, snapped to the grid.
-- **SWI-BDR-3** A backdrop master is 3840 × 1674 px (the middle band of a 16:10 frame at ×1). A shorter middle band
-  shows its centred crop (16:9: 1434 px). No frame has a taller middle band (SWI-LAY-3).
+- **SWI-BDR-3** A backdrop master is 3840 × 1680 px (the middle band of a 16:10 frame at ×1). A shorter middle band
+  shows its centred crop (16:9: 1440 px). A middle band a few pixels taller than 16:10 allows (a bar under 4 px dropped by
+  SWI-LAY-3) gets the backdrop scaled uniformly to cover it, centred.
 - **SWI-BDR-4** Menus whose original backgrounds share a material share one backdrop (a family). The families are
   fixed by the census ([#2451](https://github.com/Simarglok/arcanum-steamwoven/issues/2451)).
 - **SWI-BDR-5** A two-part window (inventory, loot, barter: left 358 units, right 442 units) splits at 1290 px from the
@@ -106,9 +109,9 @@ Why this range (Steam Hardware Survey, primary display, October 2026, read 2026-
   split, the right material from the split to the frame's right edge.
 - **SWI-BDR-6** A full-screen menu (an original 800 × 600 background: main menu, options and the others the census
   finds) has a 3840 × 2400 master that covers the whole frame, panels included; a shorter frame shows the centred
-  crop. Its 800 × 600 zone is 2880 × 2160 px, centred.
+  crop, a slightly taller one (SWI-LAY-3) the master scaled to cover. Its 800 × 600 zone is 2880 × 2160 px, centred.
 - **SWI-BDR-7** Each backdrop is made from its own original background: the centre after the original, the sides
-  continued outwards from the centre's edges in the same material, with no visible join.
+  continued outwards from the centre's edges in the same material, with no visible join (measured by SWI-VER-5).
 
 ## Asset kit
 
@@ -188,7 +191,7 @@ Part kinds:
 - **SWI-RUN-3** A missing part falls back to the generated chrome
   ([ARC-RES-122](../rendering/hd-interface-density.md)), so the HD option always draws a complete interface.
 - **SWI-RUN-4** With the HD option off the output is byte-identical to today.
-- **SWI-RUN-5** Only the backdrop of the open window is resident (a ×1 backdrop is about 25.7 MB as raw RGBA); the
+- **SWI-RUN-5** Only the backdrop of the open window is resident (a ×1 backdrop is about 25.8 MB as raw RGBA); the
   board and the HUD hardware stay loaded.
 
 ## Provenance and storage
@@ -213,7 +216,8 @@ Agent-checkable (acceptance criteria of the slices):
 - **SWI-VER-4** Bake: exact sizes and identical bytes on a second run.
 - **SWI-VER-5** Surfaces: seam ratio R ≤ 1.5 at every join (the measure of
   [ARC-RES-094 U4](../rendering/hd-interface-art.md#9-slice-side-pieces-u4)); side-versus-centre colour and texture
-  statistics within the bounds that [#2457](https://github.com/Simarglok/arcanum-steamwoven/issues/2457) fixes.
+  statistics within the bounds that [#2457](https://github.com/Simarglok/arcanum-steamwoven/issues/2457) fixes; until
+  then only the seam ratio is a gate.
 - **SWI-VER-6** Smoke captures (local only) at 3840 × 2160, 2560 × 1440, 1920 × 1080, 2560 × 1600, 1920 × 1200,
   1280 × 800, 1366 × 768, 3440 × 1440 and 1024 × 768.
 - **SWI-VER-7** Byte-identical output with the HD option off (SWI-RUN-4).

@@ -28,7 +28,7 @@ Three earlier routes:
    the 800-unit strip centred, the rest of the width filled by repeating its edge columns (9-slice). The tile repeats
    and the free columns of the bottom strip are narrow ([U4](../rendering/hd-interface-art.md#9-slice-side-pieces-u4)).
 3. **Generated chrome on a density scale** ([ARC-RES-122](../rendering/hd-interface-density.md)): chrome drawn by
-   code at the screen's density, the interface keeping a physical size. The look did not work ("looks silly"), but it
+   code at the screen's density, the interface keeping a physical size. The owner found the look wrong (owner thread 2026-11-16), but it
    was useful for understanding the process, the layout and the parts.
 
 The owner's Codex redraw experiments showed promise; the open problem is keeping the style consistent (tone and
