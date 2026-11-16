@@ -116,7 +116,9 @@ public sealed class ScriptTriggerCensusTests
         // ARC-SCRIPT-2346 (ledger IV9-IV11): toggle state (56) of the attachee item frees the 16 rows that stopped on it: the item set admits 22 of the 28; the other 6 stop on get story state (42), is dead (22), condition 46, quest state (6),
         // the scenery and critter vicinity kinds (15, 8), one each.
         Assert.AreEqual(28, rows[SessionScriptPoint.InsertItem]);
-        Assert.AreEqual(22, admitted[SessionScriptPoint.InsertItem]);
+        // ARC-SCRIPT-2347 (ledger IV16): with the quest state condition, assign object, get object type, obj is dead and monster generator disabled the item set admits 23 of the 28 (22 before: the row that stopped on condition 22 or 46 joins); the 5 left stop on toggle
+        // monster generator (110), set PC quest state (16), get story state (42) and the scenery and critter vicinity kinds (15, 8), one each.
+        Assert.AreEqual(23, admitted[SessionScriptPoint.InsertItem]);
         Assert.IsTrue(admitted[ScrPoint.Hit] >= 26 && admitted[ScrPoint.CritterHits] == 18 && admitted[ScrPoint.CriticalHit] >= 4, $"{admitted[ScrPoint.Hit]}, {admitted[ScrPoint.CritterHits]}, {admitted[ScrPoint.CriticalHit]}");
     }
 
