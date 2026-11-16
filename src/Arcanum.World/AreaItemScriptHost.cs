@@ -110,6 +110,9 @@ public sealed class AreaItemScriptHost : ISessionItemScriptHost, ISessionItemWor
         return map is not null && map.TryGetRow(item.Code, out var row) ? AreaUseScriptHost.NameOf(row) : null;
     }
 
+    /// <summary>ARC-SCRIPT-2426 (IV36–IV39): the location field of an object as the shown map's use host places it (the hero's cell, a critter's live tile, a row's tile, an item's own stale tile); null for an object it has no row or place for.</summary>
+    public (long X, long Y)? LocationOf(ScrObjectRef obj) => _shown?.Invoke()?.LocationOfObject(obj);
+
     /// <summary>ARC-SCRIPT-2335 (IV5): the use host's plan of a change art number.</summary>
     public SessionObjectArtPlan? ArtPlan(ScrObjectRef obj, int number) => _shown?.Invoke()?.PlanObjectArt(obj, number);
 
