@@ -207,7 +207,7 @@ public sealed partial class GameSessionOwner
     private int HeroSpotItemModifier()
     {
         var worn = _equipment.Capture().Worn.FirstOrDefault(item => item.Slot == EquipmentSlot.Shield)?.Entity;
-        var name = worn is null ? 0 : HeroHeld().Where(item => item.Entity == worn).Select(item => item.Kind.Name).FirstOrDefault();
+        var name = worn is null ? 0 : HeroHeld().Where(item => item.Entity == worn).Select(item => QueryItemName(item.Entity, item.Kind.Name)).FirstOrDefault();
         return TrapRules.SpotItemModifier(name, HeroStackOfType(TrapRules.ChargeAmmoType)?.Units ?? 0, HeroAptitude());
     }
 
@@ -218,9 +218,9 @@ public sealed partial class GameSessionOwner
             if (seed.Holders.TryGetValue(npc, out var holder) && holder.Kind == SessionHolderKind.Npc)
                 foreach (var entity in holder.Items)
                     if (!_inventory.Taken.Contains(entity) && !Dropped(entity) && _inventory.Worn(npc, entity, seed.Items[entity].Facts).InventoryLocation == location)
-                        return seed.Items[entity].Facts.Kind.Name;
+                        return QueryItemName(entity, seed.Items[entity].Facts.Kind.Name);
         foreach (var item in _inventory.AddedTo(npc))
-            if (_inventory.Worn(npc, item.Entity, InventoryDomain.MadeFacts(item.Kind)).InventoryLocation == location) return item.Kind.Name;
+            if (_inventory.Worn(npc, item.Entity, InventoryDomain.MadeFacts(item.Kind)).InventoryLocation == location) return QueryItemName(item.Entity, item.Kind.Name);
         return 0;
     }
 
