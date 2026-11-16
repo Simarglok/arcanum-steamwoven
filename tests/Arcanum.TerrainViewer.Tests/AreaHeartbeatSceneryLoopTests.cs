@@ -272,6 +272,33 @@ public sealed class AreaHeartbeatSceneryLoopTests
         });
     }
 
+    // ARC-SCRIPT-2376 (ledger IV25, PG3, TG4): the scenery and the critters of an insert-item script's vicinity are the scans around the item's own tile as well; an item without a known tile gets no answer (the session then refuses the move).
+    [TestMethod]
+    public void The_scenery_and_the_critters_around_an_item_are_those_near_its_own_tile()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var item = AreaHeartbeatScriptTests.Row(9, 11, 0) with { WorldX = 12 };
+            var near = Scenery(2);
+            var far = Scenery(5, 60);
+            var gone = Scenery(4);
+            var container = Container(3);
+            var critter = Npc(0);
+            var farCritter = AreaHeartbeatScriptTests.Row(7, 16, 0) with { WorldX = 60 };
+            var host = Host(session, content, row => row.Key == gone.Key, item, near, far, gone, container, critter, farCritter);
+            var at = new ScrObjectRef(1, AreaUseScriptHost.EntityId(item));
+            CollectionAssert.AreEqual(new[] { AreaUseScriptHost.EntityId(near) }, host.SceneryNearItem(at)!.Select(o => o.Code).ToArray(), "no container, far or gone scenery");
+            CollectionAssert.AreEqual(new[] { AreaUseScriptHost.EntityId(critter), host.Pc.Code }, host.CrittersNearItem(at)!.Select(o => o.Code).ToArray(), "the near NPC, then the hero (the host's world puts it at (12, 21), next to the item); no far critter, no scenery");
+            foreach (var around in new Func<ScrObjectRef, IReadOnlyList<ScrObjectRef>?>[] { host.SceneryNearItem, host.CrittersNearItem, host.ContainersNearItem })
+            {
+                Assert.IsNull(around(new(1, AreaUseScriptHost.EntityId(critter))), "an NPC is no item: no centre from its map row");
+                Assert.IsNull(around(new(1, "made:3")), "a made item has no row and so no known tile");
+                Assert.IsNull(around(new(2, AreaUseScriptHost.EntityId(item))), "another map");
+            }
+        });
+    }
+
     // ARC-SCRIPT-2248 (ledger OT1–OT5): toggle state (56), which only the heartbeat set held, is in the use set and so in the placed, dying and combat-point sets built on it.
     [TestMethod]
     public void Every_set_that_runs_a_script_on_an_object_admits_toggle_state()

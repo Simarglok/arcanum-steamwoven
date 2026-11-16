@@ -462,9 +462,10 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     /// ARC-WORLD-081 (PG3): the shown map's scenery within <see cref="ScrWorld.VicinityReach"/> tiles of the centre on both axes, not
     /// destroyed or switched off, in snapshot order; the PC's place is its live cell. Empty for a centre of another map or without a place.
     /// </summary>
-    public IReadOnlyList<ScrObjectRef> SceneryInVicinity(ScrObjectRef centre)
+    public IReadOnlyList<ScrObjectRef> SceneryInVicinity(ScrObjectRef centre) => centre.Map != _shownMap || Place(centre) is not { } at ? [] : SceneryAround(at);
+
+    private IReadOnlyList<ScrObjectRef> SceneryAround(CellCoord at)
     {
-        if (centre.Map != _shownMap || Place(centre) is not { } at) return [];
         return _scenery.Where(s => Math.Abs(s.Row.WorldX!.Value - at.X) <= ScrWorld.VicinityReach && Math.Abs(s.Row.WorldY!.Value - at.Y) <= ScrWorld.VicinityReach
                 && _world?.Gone(s.Row) != true)
             .Select(s => new ScrObjectRef(_shownMap, s.Entity)).ToArray();
@@ -509,12 +510,21 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     /// ARC-SCRIPT-2335 (IV2): the containers in the vicinity of an item, the attachee of its insert-item script: the scan is centred on the item's own location field, which an insertion does not write, so it is the tile its map data
     /// gives (a held item keeps the tile it had where the map placed it, also on another map than its own: the original scans the current map around the stale coordinates, so an item taken to another map reads the row of its origin map) or, for an item the session put on the ground, the tile it lies on; null for an item of another map, one without a row (made at run time) or without a tile.
     /// </summary>
-    public IReadOnlyList<ScrObjectRef>? ContainersNearItem(ScrObjectRef item)
+    public IReadOnlyList<ScrObjectRef>? ContainersNearItem(ScrObjectRef item) => ItemCentre(item) is { } cell ? ContainersAround(cell) : null;
+
+    /// <summary>ARC-SCRIPT-2376 (IV25, PG3): the scenery in the vicinity of an item, the attachee of its insert-item script, around the same centre as <see cref="ContainersNearItem"/> (null when the item has none).</summary>
+    public IReadOnlyList<ScrObjectRef>? SceneryNearItem(ScrObjectRef item) => ItemCentre(item) is { } cell ? SceneryAround(cell) : null;
+
+    /// <summary>ARC-SCRIPT-2376 (IV25, TG4): the PCs and NPCs in the vicinity of an item, the attachee of its insert-item script, around the same centre as <see cref="ContainersNearItem"/> (null when the item has none).</summary>
+    public IReadOnlyList<ScrObjectRef>? CrittersNearItem(ScrObjectRef item) => ItemCentre(item) is { } cell ? CrittersAround(cell) : null;
+
+    // The item's own location field as the host reads it (IV2): the placed cell of a session-dropped item, else the tile of its map data or of the carried item's row; null for an item of another map, or one without a tile.
+    private CellCoord? ItemCentre(ScrObjectRef item)
     {
         if (item.Map != _shownMap) return null;
         var placed = _session.QueryPlacedItems().FirstOrDefault(p => p.Entity == item.Code && p.Map.RuntimeMap == item.Map);
-        CellCoord? at = placed is not null ? placed.Cell : (Row(item) ?? CarriedItemRow(item)) is { WorldX: { } x, WorldY: { } y } && x is >= int.MinValue and <= int.MaxValue && y is >= int.MinValue and <= int.MaxValue ? new CellCoord((int)x, (int)y) : null;
-        return at is { } cell ? ContainersAround(cell) : null;
+        // Only an item has this centre: a callee a call script ex runs for an NPC or scenery asks the use host's own scans (live cells), so such an attachee has no answer here and the session refuses the move.
+        return placed is not null ? placed.Cell : (Row(item) ?? CarriedItemRow(item)) is { Type: >= FirstItemType and <= LastItemType, WorldX: { } x, WorldY: { } y } && x is >= int.MinValue and <= int.MaxValue && y is >= int.MinValue and <= int.MaxValue ? new CellCoord((int)x, (int)y) : null;
     }
 
     private IReadOnlyList<ScrObjectRef> ContainersAround(CellCoord at)
@@ -531,9 +541,10 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     /// Empty for a centre of another map or without a place.
     /// </summary>
     [OriginalFunction(0x440FF0, OriginalFunctionScope.Partial)]
-    public IReadOnlyList<ScrObjectRef> CrittersInVicinity(ScrObjectRef centre)
+    public IReadOnlyList<ScrObjectRef> CrittersInVicinity(ScrObjectRef centre) => centre.Map != _shownMap || Place(centre) is not { } at ? [] : CrittersAround(at);
+
+    private IReadOnlyList<ScrObjectRef> CrittersAround(CellCoord at)
     {
-        if (centre.Map != _shownMap || Place(centre) is not { } at) return [];
         static bool Near(CellCoord cell, CellCoord at) => Math.Abs((long)cell.X - at.X) <= ScrWorld.VicinityReach && Math.Abs((long)cell.Y - at.Y) <= ScrWorld.VicinityReach;
         // Off in the play mask (0x5E2F88 = 3): destroyed or switched off in the map data (object flags 0x1, 0x2) or gone in the session.
         var list = _npcs.Where(n => ((Number(n.Row, ObjectFlagsSlot) ?? 0) & DestroyedObjectFlag) == 0 && !NpcOff(_session, _shownMap, n.Entity, Number(n.Row, ObjectFlagsSlot) ?? 0) && _world?.Gone(n.Row) != true && Place(new ScrObjectRef(_shownMap, n.Entity)) is { } cell && Near(cell, at))

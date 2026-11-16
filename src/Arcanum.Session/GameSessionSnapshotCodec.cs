@@ -2628,7 +2628,7 @@ public static partial class GameSessionSnapshotCodec
             var item = Fields(drained[i], path, ItemManaStoreFields);
             var entity = Entity(item["entity"], path + ".entity");
             if (i > 0 && string.CompareOrdinal(entity, manaStores[i - 1].Entity) <= 0) throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path + ".entity");
-            manaStores[i] = new(entity, Int(item["store"], path + ".store", 0, SessionItemUseLimits.MaxUses));
+            manaStores[i] = new(entity, Int(item["store"], path + ".store", int.MinValue, int.MaxValue));
         }
         return new(items, destroyed, uses, charges, manaStores);
     }

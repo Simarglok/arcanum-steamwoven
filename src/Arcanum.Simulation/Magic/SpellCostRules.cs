@@ -83,8 +83,8 @@ public static class SpellCostRules
 
     /// <summary>
     /// One recharge of a worn mana item (the recharge event, 0x459680): <c>2 × max(1, elapsed / 120)</c> points, at most
-    /// <paramref name="remaining"/>, where <paramref name="elapsedGameSeconds"/> is the game time since the drain; the rest
-    /// is rescheduled.
+    /// <paramref name="remaining"/> (a signed compare: a negative <paramref name="remaining"/> is returned whole and leaves nothing),
+    /// where <paramref name="elapsedGameSeconds"/> is the game time since the drain; the rest is rescheduled.
     /// </summary>
     [OriginalFunction(0x459680, OriginalFunctionScope.Partial)]
     public static (int Restored, int Remaining) Recharge(int elapsedGameSeconds, int remaining)

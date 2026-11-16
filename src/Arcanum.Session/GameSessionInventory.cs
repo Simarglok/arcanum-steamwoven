@@ -438,7 +438,8 @@ public static class SessionItemScripts
     /// items use, answered by <see cref="ISessionItemWorldHost"/>; ARC-SCRIPT-2336 (ledger FK8) adds the follower focus kinds every follower and any follower (2, 3: the triggerer's direct followers, answered by
     /// the same world part); ARC-SCRIPT-2346 (ledger IV9–IV11) adds toggle state (56), which flips the off flag of an item of the move (the attachee in the installed scripts).; ARC-SCRIPT-2347 (IV13–IV16) adds assign object (15, with the run's object variables as the focus kind 11), get object type (34), the quest state condition (6) and obj is dead (22), which the same part answers
     /// (as the use host reads them), and monster generator disabled (46), which the session answers from its generator table (IV13–IV15); ARC-SCRIPT-2374 (IV18–IV21) adds set PC quest state (16) and give quest experience (63), which the session applies in the move's own revision
-    /// (a request for a PC only; at most one experience award, which may raise a level: the host takes its level-up messages and follower step, ARC-SCRIPT-2394, and a stat or power ratio read after it refuses the move). A script outside it refuses the move.
+    /// (a request for a PC only; at most one experience award, which may raise a level: the host takes its level-up messages and follower step, ARC-SCRIPT-2394, and a stat or power ratio read after it refuses the move).; ARC-SCRIPT-2376 (IV25) adds the scenery and critter vicinity kinds (15, 16, 8, 9: loop for and the like, the scan around the attachee item's location, answered by the same part)
+    /// with call script in (54), already kept, into a dialog script. A script outside it refuses the move.
     /// </summary>
     public static ScrAdmissionSet Admission { get; } = new("S14-item",
         ScrAdmissionSet.S6.Conditions.Concat([ScrCatalogue.Condition.Identified, ScrCatalogue.Condition.ItemsBeingRewielded, ScrCatalogue.Condition.IsNamed,
@@ -451,7 +452,8 @@ public static class SessionItemScripts
                 ScrCatalogue.Action.AssignObject, ScrCatalogue.Action.GetObjectType, ScrCatalogue.Action.SetPcQuestState, ScrCatalogue.Action.GiveQuestExperience]),
         ScrAdmissionSet.S6.ValueKinds.Concat(ScrAdmissionSet.StoreValueKinds),
         ScrAdmissionSet.S6.FocusKinds.Concat([ScrFocusKind.CurrentLoopedObject, ScrFocusKind.EveryContainerInVicinity, ScrFocusKind.AnyContainerInVicinity,
-            ScrFocusKind.LocalObject, ScrFocusKind.EveryFollower, ScrFocusKind.AnyFollower]));
+            ScrFocusKind.LocalObject, ScrFocusKind.EveryFollower, ScrFocusKind.AnyFollower,
+            ScrFocusKind.EverySceneryInVicinity, ScrFocusKind.AnySceneryInVicinity, ScrFocusKind.EveryoneInVicinity, ScrFocusKind.AnyoneInVicinity]));
 
     /// <summary>ARC-SCRIPT-042: how many item script slots a session keeps (<see cref="GameSessionLimits.PolicyMaxPcItems"/> items with
     /// all eight item event points each).</summary>
