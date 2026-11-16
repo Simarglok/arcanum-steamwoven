@@ -223,43 +223,21 @@ public sealed partial class GameSessionOwner
 
         if (removal || throwScript)
         {
-            var scripted = RunHeroThrowScripts(expected, request, worn, points, split, kind, throwScript);
+            // ARC-COMBAT-2176: with a struck critter the scripts run only when the attack on it would not refuse the throw, judged on the hero as it is before them.
+            var scripted = RunHeroThrowScripts(expected, request, worn, points, split, kind, throwScript,
+                struck ? ThrownHero(request, ammoSplit, weapon, combat, out _) : null);
             if (scripted.Done is { } done) return done;
             (runs, applied) = (scripted.Runs, scripted.Applied);
             if (applied) expected = Version;
         }
 
-        // The hero as it throws: the throwing skill, the item's thrown range (the check's and the flight's, PF9) and, as the attack's
-        // weapon range (0x465E30: a weapon's range field and magic adjustment, anything else 1), its reach.
-        var carry = HeroCarryFacts();
-        var weight = carry is { } held ? Math.Clamp(HeroItemWeight(held, ammoSplit ? CarriedUnits(request.Item, request.Count!.Value) : Carried(request.Item, kind.Type)), 0, ThrowRules.MaxWeight) : 0;
-        var hero = QueryHeroAttack()!;
-        var throwing = HeroSkills()[Arcanum.Simulation.Skills.Skill.Throwing];
-        var range = ThrowRules.Range(hero.Combatant.Strength, throwing.Training, weight);
-        var aptitude = HeroAptitude();
-        var reach = weapon ? EquipmentRules.Weapon(new Dictionary<EquipmentSlot, EquipmentItem> { [EquipmentSlot.Weapon] = combat! }, aptitude).Range : 1;
-        hero = hero with
-        {
-            Weapon = ThrowRules.ThrownWeapon(combat, request.Throwable, weight, aptitude, range), Skill = CombatSkill.Throwing,
-            SkillLevel = throwing.Level, Training = throwing.Training, Range = reach, Supported = true,
-        };
+        var hero = ThrownHero(request, ammoSplit, weapon, combat, out var range);
         var wornBefore = worn is not null;
         SessionHeroThrowResult? result = null;
         if (struck)
         {
             // ARC-DEV-261: no TakingDamage here: the throw always flies and its hit is deferred, so the script is asked at the landing (LandShot with the host's SessionAttack).
-            var attack = new SessionAttack(request.Struck!)
-            {
-                Flight = true,
-                Distance = ProjectileRules.Distance(_actor.Cell, request.StruckCell!.Value),
-                LineOfFire = request.LineOfFire,
-                HeroWorn = request.HeroWorn,
-                TargetWorn = request.StruckWorn,
-                TargetCell = request.StruckCell,
-                TargetLight = request.StruckLight,
-                DropMap = request.DropMap,
-                ItemTriggers = triggers,
-            };
+            var attack = HeroThrowAttack(request, triggers);
             var attacked = CritterAttack(expected, attack, null, new PackThrow(request.Item, request.Target, hero) { Split = split ? (request.Count!.Value, request.SplitKind!.Value) : null });
             if (attacked.Disposition == GameSessionDisposition.Rejected) return Refused(attacked.Failure);
             // ARC-COMBAT-1955: a struck critter that is dead refuses the attack; the host would throw again without it, but the scripts ran already and must not run twice, so after them the session throws at the location itself.
@@ -292,6 +270,38 @@ public sealed partial class GameSessionOwner
         if (triggers is null || split) return With(result);
         return With(result with { RemovalSpells = RemovalSpellSteps(triggers, request.Item, wornBefore), Version = Version });
     }
+
+    // The hero as it throws: the throwing skill, the item's thrown range (the check's and the flight's, PF9) and, as the attack's weapon range (0x465E30: a weapon's range field and magic adjustment, anything else 1), its reach.
+    private SessionHeroAttack ThrownHero(SessionHeroThrow request, bool ammoSplit, bool weapon, EquipmentItem? combat, out int range)
+    {
+        var kind = request.Facts.Kind;
+        var carry = HeroCarryFacts();
+        var weight = carry is { } held ? Math.Clamp(HeroItemWeight(held, ammoSplit ? CarriedUnits(request.Item, request.Count!.Value) : Carried(request.Item, kind.Type)), 0, ThrowRules.MaxWeight) : 0;
+        var hero = QueryHeroAttack()!;
+        var throwing = HeroSkills()[Arcanum.Simulation.Skills.Skill.Throwing];
+        range = ThrowRules.Range(hero.Combatant.Strength, throwing.Training, weight);
+        var aptitude = HeroAptitude();
+        var reach = weapon ? EquipmentRules.Weapon(new Dictionary<EquipmentSlot, EquipmentItem> { [EquipmentSlot.Weapon] = combat! }, aptitude).Range : 1;
+        return hero with
+        {
+            Weapon = ThrowRules.ThrownWeapon(combat, request.Throwable, weight, aptitude, range), Skill = CombatSkill.Throwing,
+            SkillLevel = throwing.Level, Training = throwing.Training, Range = reach, Supported = true,
+        };
+    }
+
+    // The attack on the struck critter that the throw makes (ARC-DEV-261: no TakingDamage here: the throw always flies and its hit is deferred, so the script is asked at the landing, LandShot with the host's SessionAttack).
+    private SessionAttack HeroThrowAttack(SessionHeroThrow request, ISessionItemTriggers? triggers) => new(request.Struck!)
+    {
+        Flight = true,
+        Distance = ProjectileRules.Distance(_actor.Cell, request.StruckCell!.Value),
+        LineOfFire = request.LineOfFire,
+        HeroWorn = request.HeroWorn,
+        TargetWorn = request.StruckWorn,
+        TargetCell = request.StruckCell,
+        TargetLight = request.StruckLight,
+        DropMap = request.DropMap,
+        ItemTriggers = triggers,
+    };
 
     // The removal's spell steps of a hero's item leaving its list or slot (ARC-COMBAT-023): a worn item's unwear executor, then the removal's.
     private static IReadOnlyList<SessionItemTriggerResult> RemovalSpellSteps(ISessionItemTriggers triggers, string item, bool worn)
