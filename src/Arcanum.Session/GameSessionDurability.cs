@@ -25,7 +25,7 @@ public readonly record struct SessionItemManaStore(string Entity, int Store);
 /// (<see cref="Uses"/>, in ordinal order; at most <see cref="SessionItemUseLimits.MaxUses"/> each), and since ARC-MAGIC-022 (schema 49)
 /// the spell charges left of every item whose charges a spell payment spent (<see cref="Charges"/>, in ordinal order; 0 up to
 /// <see cref="SessionItemUseLimits.MaxUses"/> each), and since ARC-MAGIC-2371 (schema 103) the mana store of every item a payment drained or a
-/// recharge restored (<see cref="ManaStores"/>, in ordinal order; 0 up to <see cref="SessionItemUseLimits.MaxUses"/> each).
+/// recharge restored (<see cref="ManaStores"/>, in ordinal order; any 32-bit value each since ARC-MAGIC-2401, as the original's field holds one).
 /// </summary>
 public sealed class SessionDurabilityState
 {
@@ -256,7 +256,7 @@ public sealed partial class GameSessionOwner
             if (!SessionValidation.Entity(item.Entity) || item.Charges is < 0 or > SessionItemUseLimits.MaxUses || durability.Destroyed.Contains(item.Entity) ||
                 !durability.Charges.TryAdd(item.Entity, item.Charges)) return GameSessionFailure.InvalidDurability;
         foreach (var item in saved.ManaStores)
-            if (!SessionValidation.Entity(item.Entity) || item.Store is < 0 or > SessionItemUseLimits.MaxUses || durability.Destroyed.Contains(item.Entity) ||
+            if (!SessionValidation.Entity(item.Entity) || durability.Destroyed.Contains(item.Entity) ||
                 !durability.ManaStores.TryAdd(item.Entity, item.Store)) return GameSessionFailure.InvalidDurability;
         return GameSessionFailure.None;
     }
