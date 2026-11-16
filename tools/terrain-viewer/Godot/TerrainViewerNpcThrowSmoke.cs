@@ -127,9 +127,11 @@ public partial class TerrainViewerApp
                 // ARC-COMBAT-2425 (ledger TW10, TW11): an NPC's throw holds the hero's tile as a location and no object, and the line of fire never names the critter on the target tile, so nothing is struck: no roll,
                 // the dagger flies unchecked to the hero's tile and lands there, and the hero is not hurt.
                 var lost = heroAtThrow - session.QueryHeroLife()!.Status.HitPoints;
-                Require(!launch.Hit && end.Struck is null && strike.Struck is null && end.Strike != ProjectileStrikeKind.Target,
+                // A flight that met a scenery piece on the way ends there (an obstruction, as before): the stage judges the hero's tile only when the dagger flew to it.
+                var obstructed = end.Strike == ProjectileStrikeKind.Obstruction;
+                Require(!launch.Hit && strike.Struck is null && end.Strike != ProjectileStrikeKind.Target && (obstructed || end.Struck is null),
                     $"throw {index}: the hero on the target tile is not struck ({end.Strike} {end.Struck ?? "none"} {strike.Struck ?? "none"} hit {launch.Hit})");
-                Require(landing.Tile == launch.To && lost == 0, $"throw {index}: the dagger landed on the hero's tile and hurt nobody (landed {landing.Tile.X},{landing.Tile.Y} aimed {launch.To.X},{launch.To.Y}, lost {lost})");
+                Require((obstructed || landing.Tile == launch.To) && lost == 0, $"throw {index}: the dagger landed on the hero's tile (or met an obstruction) and hurt nobody (landed {landing.Tile.X},{landing.Tile.Y} aimed {launch.To.X},{launch.To.Y}, lost {lost})");
                 GD.Print($"ARC-DEV-1962 npc-throw tile leg throw={index} struck=none heroLost={lost} hp={heroAtThrow}->{session.QueryHeroLife()!.Status.HitPoints}"
                     + $" landed={landing.Tile.X},{landing.Tile.Y} drawn={drawn}");
                 passLine = "ARC-DEV-1762 native-smoke npc-throw PASS " + System.Text.Json.JsonSerializer.Serialize(new {

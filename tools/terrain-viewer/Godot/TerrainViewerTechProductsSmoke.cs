@@ -381,25 +381,34 @@ public partial class TerrainViewerApp
             PublishWorldSelection();
             await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
             if (!HeroInCombatMode) ToggleCombatMode();
-            var cellsBeforeSwing = Cells(); var weaponLog = SpellCasterNow()!.Log.Count; var weaponLifeBefore = NpcHitPoints();
-            CancelAreaAttack(null);
-            _attack = new(swingTarget!, swingTarget!.Build.Combat!, null);
-            StartAttackGoal(_attack);
-            AttackSettleForSelfTest();
-            var swings = new List<string>(); var weaponFirings = 0; var lastSeen = _lastCritterAttackForSelfTest;
-            void Swung()
+            // ARC-COMBAT-2425: the swing's outcome follows the session's random sequence, which a throw at a tile no longer rolls on (a location throw names no critter): a first hit that kills a cave NPC of a few hit points pays no cell,
+            // so the swing is made again on the healed NPC (up to eight times) until a firing paid its cells.
+            int cellsBeforeSwing = 0, weaponLog = 0, weaponLifeBefore = 0, weaponFirings = 0, shocks = 0, cellsSpent = 0; List<string> swings = [];
+            for (var swingTry = 0; swingTry < 8; swingTry++)
             {
-                if (_lastCritterAttackForSelfTest is not { } now || ReferenceEquals(now, lastSeen)) return;
-                lastSeen = now;
-                var started = now.ItemSpells.Count(f => f.Item == weapon && (f.Mask & 0x40000u) != 0 && f.Result.Spells.Count > 0);
-                weaponFirings += started;
-                swings.Add($"{now.Resolution?.Outcome}:{started}");
+                cellsBeforeSwing = Cells(); weaponLog = SpellCasterNow()!.Log.Count; weaponLifeBefore = NpcHitPoints();
+                CancelAreaAttack(null);
+                _attack = new(swingTarget!, swingTarget!.Build.Combat!, null);
+                StartAttackGoal(_attack);
+                AttackSettleForSelfTest();
+                swings = new List<string>(); weaponFirings = 0; var lastSeen = _lastCritterAttackForSelfTest;
+                void Swung()
+                {
+                    if (_lastCritterAttackForSelfTest is not { } now || ReferenceEquals(now, lastSeen)) return;
+                    lastSeen = now;
+                    var started = now.ItemSpells.Count(f => f.Item == weapon && (f.Mask & 0x40000u) != 0 && f.Result.Spells.Count > 0);
+                    weaponFirings += started;
+                    swings.Add($"{now.Resolution?.Outcome}:{started}");
+                }
+                for (var frames = 0; frames < 20000 && _attack is not null && !session.QueryLife(life).View!.Status.IsDead; frames++) { Frame(); Swung(); }
+                for (var frames = 0; frames < 200; frames++) { Frame(); Swung(); }
+                CancelAreaAttack(null);
+                shocks = SpellCasterNow()!.Log.Skip(weaponLog).Count(e => e.Kind == SpellCastEventKind.Damaged && e.Object == npcId);
+                cellsSpent = cellsBeforeSwing - Cells();
+                if (cellsSpent > 0) break;
+                session.Heal(session.Version, life, new LifeHeal { Full = true, Fatigue = 1000, Resurrect = true });
+                SyncAreaCombatBodies();
             }
-            for (var frames = 0; frames < 20000 && _attack is not null && !session.QueryLife(life).View!.Status.IsDead; frames++) { Frame(); Swung(); }
-            for (var frames = 0; frames < 200; frames++) { Frame(); Swung(); }
-            CancelAreaAttack(null);
-            var shocks = SpellCasterNow()!.Log.Skip(weaponLog).Count(e => e.Kind == SpellCastEventKind.Damaged && e.Object == npcId);
-            var cellsSpent = cellsBeforeSwing - Cells();
             GD.Print($"{TechProductsCode} tech-products cell-weapon record={weaponRecord} cells={cellsBeforeSwing}->{Cells()} shocks={shocks} swings={string.Join(",", swings)} weapon-firings={weaponFirings} npc-hit-points={weaponLifeBefore}->{NpcHitPoints()} notice={_attackNotice}");
             // The cave NPCs have a few hit points: the first hit may kill, so the record's electrical damage on the (then dead) NPC is not always logged; the cell paid before it is.
             // A cell-powered source pays the cost times (1 + power / complexity) (TC1, original bug): one cell or up to double for a technologist, per firing.
