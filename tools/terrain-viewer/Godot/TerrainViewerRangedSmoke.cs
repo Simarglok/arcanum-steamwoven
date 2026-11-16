@@ -679,8 +679,8 @@ public partial class TerrainViewerApp
                     && session.QueryShotsInFlight().Count == 0, $"it lies where the flight ended ({landing.Tile})");
                 if (tilePress)
                 {
-                    Require(result!.Attack is null && landing.Tile == World(pick.Target.Row) && _projectileEndsForSelfTest.LastOrDefault().Struck is null,
-                        $"a press on the critter's tile names no struck critter: the item lands on the tile, striking nothing (attack {result.Attack is not null}, landed {landing.Tile.X},{landing.Tile.Y})");
+                    Require(result!.Attack?.Resolution is null && landing.Tile == World(pick.Target.Row) && _projectileEndsForSelfTest.LastOrDefault().Struck is null,
+                        $"a press on the critter's tile names no struck critter: the item lands on the tile, striking nothing (resolved {result.Attack?.Resolution is not null}, landed {landing.Tile.X},{landing.Tile.Y})");
                     throws.Add($"tile-press:none:{landing.Tile.X},{landing.Tile.Y}");
                     Require(session.PickUpItem(session.Version, wielded.Entity, _ => SessionInsertVerdict.Accepted).Disposition == GameSessionDisposition.Changed
                         && session.Equip(session.Version, wielded.Entity, EquipmentSlot.Weapon, new(kit.Kind, [], false, wielded.Item), (_, _) => true,
