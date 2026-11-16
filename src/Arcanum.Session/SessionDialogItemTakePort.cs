@@ -59,7 +59,7 @@ public sealed class SessionDialogItemTakePort(
         var held = _session.QueryHeroKit().Select(item => (item.Entity, item.Kind))
             .Concat(_session.QueryPcInventory().Select(item => (item.Entity, item.Kind)))
             .Concat(_session.QueryMadeItems().Select(item => (item.Entity, item.Kind)))
-            .FirstOrDefault(item => item.Kind.Name == command.ItemName);
+            .FirstOrDefault(item => _session.QueryItemName(item.Entity, item.Kind.Name) == command.ItemName);
         if (held.Entity is not null)
         {
             var result = _session.GiveItemToNpc(_session.Version, npc, held.Entity, _insertCheck, scripts: scripts);
@@ -71,7 +71,7 @@ public sealed class SessionDialogItemTakePort(
         foreach (var follower in _session.QueryParty().Followers)
         {
             prepare?.Invoke(follower.Entity);
-            if (_session.QueryHolderItems(follower.Entity)?.Any(item => item.Facts.Kind.Name == command.ItemName) == true)
+            if (_session.QueryHolderItems(follower.Entity)?.Any(item => _session.QueryItemName(item.Entity, item.Facts.Kind.Name) == command.ItemName) == true)
                 return follower.Entity == npc ? DialogCommandResult.Applied : DialogCommandResult.Rejected; // the NPC itself is the first holder: the item is already with it
         }
         return DialogCommandResult.Applied;

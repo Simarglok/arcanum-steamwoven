@@ -151,9 +151,9 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
     {
         var worn = _session.QueryEquipment().Worn.FirstOrDefault(item => (int)item.Slot == location);
         if (worn is null) return null;
-        return _session.QueryHeroKit().Where(item => item.Entity == worn.Entity).Select(item => (int?)item.Kind.Name)
-            .Concat(_session.QueryPcInventory().Where(item => item.Entity == worn.Entity).Select(item => (int?)item.Kind.Name))
-            .Concat(_session.QueryMadeItems().Where(item => item.Entity == worn.Entity).Select(item => (int?)item.Kind.Name)).FirstOrDefault();
+        return _session.QueryHeroKit().Where(item => item.Entity == worn.Entity).Select(item => (int?)_session.QueryItemName(item.Entity, item.Kind.Name))
+            .Concat(_session.QueryPcInventory().Where(item => item.Entity == worn.Entity).Select(item => (int?)_session.QueryItemName(item.Entity, item.Kind.Name)))
+            .Concat(_session.QueryMadeItems().Where(item => item.Entity == worn.Entity).Select(item => (int?)_session.QueryItemName(item.Entity, item.Kind.Name))).FirstOrDefault();
     }
     public bool HasReputation(ScrObjectRef obj, int reputation) => Answering.HasReputation(obj, reputation);
     public int? ObjectType(ScrObjectRef obj) => Answering.ObjectType(obj);

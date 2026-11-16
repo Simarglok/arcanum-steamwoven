@@ -40,12 +40,12 @@ public sealed partial class GameSessionOwner
         {
             if (_hero is null) return null;
             foreach (var (entity, kind) in _inventory.Hero.PackKinds)
-                if (kind.Name == name) return HeroNamedItem(entity, kind);
+                if (QueryItemName(entity, kind.Name) == name) return HeroNamedItem(entity, kind);
             return null;
         }
         if (QueryHolderItems(holder) is not { } list) return null;
         foreach (var item in list)
-            if (item.Facts.Kind.Name == name) return new(item.Entity, item.Facts.Kind, item.Facts.Worn, KnownScriptPoints(item.Entity, item.Facts)) { KeyId = item.Facts.KeyId };
+            if (QueryItemName(item.Entity, item.Facts.Kind.Name) == name) return new(item.Entity, item.Facts.Kind, item.Facts.Worn, KnownScriptPoints(item.Entity, item.Facts)) { KeyId = item.Facts.KeyId };
         return null;
     }
 
