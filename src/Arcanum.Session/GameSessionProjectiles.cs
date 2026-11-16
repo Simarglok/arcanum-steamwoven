@@ -210,6 +210,9 @@ public sealed partial class GameSessionOwner
             || !_equipment.Worn.TryGetValue(Arcanum.Simulation.Equipment.EquipmentSlot.Weapon, out var wielded)) return GameSessionFailure.InvalidAttack;
         if (Arcanum.Simulation.Equipment.EquipmentRules.CheckRemove(wielded.Item) != Arcanum.Simulation.Equipment.EquipmentRefusal.None)
             return GameSessionFailure.None;
+        // ARC-SCRIPT-2386 (IV15, throw node 0x42AB90): an item that is switched off (object flag 0x2, a script's toggle) is not thrown: the weapon stays in the hand and attacks as without the flag.
+        // Only the session's record is read (the map data's own bit of a worn weapon is not).
+        if (QueryItemOff(_actor.Map, wielded.Entity, dataOff: false)) return GameSessionFailure.None;
         // ARC-SCRIPT-042: the throw's removal (0x466E00) would run the weapon's wield-off and remove-item scripts, which this path does not.
         if (wielded.ScriptPoints.Count > 0) return GameSessionFailure.ItemScriptUnsupported;
         // ARC-MAGIC-022: nor does it run a marked weapon's unwear (0x4CBFC0).

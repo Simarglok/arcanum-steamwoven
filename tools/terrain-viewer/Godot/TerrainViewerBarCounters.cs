@@ -51,6 +51,10 @@ public partial class TerrainViewerApp
         _barCountersView.Visible = true;
     }
 
+    /// <summary>ARC-MAGIC-2371 (BC7, BC10): the wielded weapon's mana store, field 92: the session's copy once a payment drained it or a recharge restored it, else the weapon prototype's value.</summary>
+    private int WieldedManaStore(GameSessionOwner session, SessionWornItem weapon) =>
+        session.QueryItemManaStore(weapon.Entity) ?? (HeroWeaponPrototype(session, null) is { } prototype ? CombatPrototype(prototype)?.Item?.ManaStore ?? 0 : 0);
+
     /// <summary>What the original's counter refresh would write now (ledger BC1–BC5): counter 3 from the hero's wielded weapon, gold and ammunition, counter 4 from
     /// the mode-8 item's charges.</summary>
     private AreaBarCounterLook BarCountersLook(GameSessionOwner session, string? modeItem)
@@ -58,7 +62,7 @@ public partial class TerrainViewerApp
         var weapon = session.QueryEquipment().Worn.FirstOrDefault(worn => worn.Slot == EquipmentSlot.Weapon);
         var ammoType = weapon?.Item.Weapon?.AmmoType;
         var ammo = ammoType is { } type ? session.QueryHeroAmmo().Where(stack => stack.AmmoType == type).Select(stack => stack.Units).FirstOrDefault() : 0;
-        var manaStore = ammoType is null && weapon is not null && HeroWeaponPrototype(session, null) is { } prototype ? CombatPrototype(prototype)?.Item?.ManaStore ?? 0 : 0;
+        var manaStore = ammoType is null && weapon is not null ? WieldedManaStore(session, weapon) : 0;
         var counter3 = BarCounterRules.Counter3(session.QueryHero() is not null, ammoType, ammo, manaStore, session.QueryGold());
         string? counter4 = null;
         if (modeItem is not null && SpellCasterNow()?.ItemPane(modeItem) is { } pane)

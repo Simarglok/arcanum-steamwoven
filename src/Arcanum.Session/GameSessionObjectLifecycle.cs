@@ -243,6 +243,8 @@ public sealed partial class GameSessionOwner
         _durability.Records.Remove(entity);
         _durability.Uses.Remove(entity);
         _durability.Charges.Remove(entity);
+        _durability.ManaStores.Remove(entity);
+        _events.RemoveAll(SessionEventKinds.ItemRecharge, e => e.Payload.Entities[0].Code == entity);
         _durability.Destroyed.Add(entity);
         // ARC-SCRIPT-1826: the art id a script wrote on it goes too (a made item's record would otherwise stay in the save, counted against the budget).
         if (QueryObjectRecordMap(SessionObjectArt.Key(entity)) is { } artMap) _maps.Remove(artMap, SessionObjectArt.Key(entity));

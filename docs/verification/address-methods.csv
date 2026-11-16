@@ -134,6 +134,7 @@ src/Arcanum.Session/GameSessionIdentify.cs,MarkItemIdentified,pending,
 src/Arcanum.Session/GameSessionItemDamage.cs,QueryItemCombat,pending,
 src/Arcanum.Session/GameSessionItemExamine.cs,RunItemExamine,exempt,reference
 src/Arcanum.Session/GameSessionItemMove.cs,MoveGroundItem,exempt,reference
+src/Arcanum.Session/GameSessionItemOff.cs,QueryItemOff,exempt,reference
 src/Arcanum.Session/GameSessionItemScripts.cs,PowerRatio,pending,
 src/Arcanum.Session/GameSessionItemScripts.cs,Stat,pending,
 src/Arcanum.Session/GameSessionItemTriggers.cs,FireDamageStepItems,pending,
@@ -152,6 +153,7 @@ src/Arcanum.Session/GameSessionLeaders.cs,ForceJoinLeader,exempt,reference
 src/Arcanum.Session/GameSessionLeaders.cs,UnwaitNpcLed,exempt,host
 src/Arcanum.Session/GameSessionLocks.cs,WriteOpenableFlag,pending,
 src/Arcanum.Session/GameSessionLoyalty.cs,CheckFollowerAfterHit,exempt,host
+src/Arcanum.Session/GameSessionManaStores.cs,WriteItemManaStore,exempt,reference
 src/Arcanum.Session/GameSessionMissiles.cs,CreateMissile,pending,
 src/Arcanum.Session/GameSessionMissiles.cs,MoveMissile,pending,
 src/Arcanum.Session/GameSessionMorale.cs,ApplyKillNotification,pending,
@@ -562,6 +564,7 @@ src/Arcanum.World/AreaAiHost.cs,UseItemAtOnce,pending,
 src/Arcanum.World/AreaAiHost.cs,UseItemMagic,pending,
 src/Arcanum.World/AreaAiHost.cs,UsedItem,pending,
 src/Arcanum.World/AreaAiHostGenerators.cs,Spawn,exempt,host
+src/Arcanum.World/AreaAiHostGround.cs,ItemOff,exempt,reference
 src/Arcanum.World/AreaAiHostGround.cs,LooseItems,exempt,host
 src/Arcanum.World/AreaAiHostGround.cs,StartPickup,exempt,host
 src/Arcanum.World/AreaAiHostHealer.cs,HealerCast,exempt,host

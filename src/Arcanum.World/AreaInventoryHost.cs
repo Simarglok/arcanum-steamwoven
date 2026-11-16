@@ -315,7 +315,8 @@ public sealed class AreaInventoryHost
             if (map is null || !map.TryGetEntity(key, out entity!)) return null;
         }
         if (session.QueryMapInventory(new(runtimeMap)) is not { } current) return null;
-        if (current.Ground.Any(ground => ground.Item.Entity == entity)) return new(AreaInventoryTargetKind.GroundItem, entity, map.Row(entity));
+        // ARC-SCRIPT-2386 (IV15, screen pick 0x43D9F0): a switched-off item lying on the ground (a script's toggle, a thrown one in flight) is not picked.
+        if (current.Ground.Any(ground => ground.Item.Entity == entity)) return session.QueryItemOff(new(runtimeMap), entity, dataOff: false) ? null : new(AreaInventoryTargetKind.GroundItem, entity, map.Row(entity));
         return current.Holders.FirstOrDefault(holder => holder.Entity == entity) switch
         {
             { Kind: SessionHolderKind.Npc, Dead: true } => new(AreaInventoryTargetKind.DeadNpc, entity, map.Row(entity)),
@@ -333,6 +334,9 @@ public sealed class AreaInventoryHost
         return session.QueryPcInventory().Where(item => item.Origin.RuntimeMap == runtimeMap && map.TryGetRow(item.Entity, out _))
             .Select(item => map.Row(item.Entity).Key)
             .Concat(map.Seed.Items.Where(item => session.IsItemDestroyed(item.Entity) && map.TryGetRow(item.Entity, out _)).Select(item => map.Row(item.Entity).Key))
+            // ARC-SCRIPT-2386 (IV15, hide mask 3): the seed's items lying on the ground that are switched off (a script's toggle, one thrown and in flight) are not drawn at their T0 cell either.
+            .Concat((session.QueryMapInventory(new(runtimeMap))?.Ground ?? []).Where(ground => session.QueryItemOff(new(runtimeMap), ground.Item.Entity, dataOff: false)
+                && map.TryGetRow(ground.Item.Entity, out _)).Select(ground => map.Row(ground.Item.Entity).Key))
             .ToHashSet();
     }
 
@@ -438,7 +442,7 @@ public sealed class AreaInventoryHost
     /// ARC-SCRIPT-2346 (IV10): whether the item is switched off (object flag 0x2: the record of a script's toggle state, else the row's data bit). The original's inventory window leaves such an item out of what it draws and offers (ledger IV10)
     /// while it still fills its cells and counts in the weight and the room, so the view drops it from what the window draws and offers and keeps the session's lists as they are.
     /// </summary>
-    private bool IsOff(GameSessionOwner session, int runtimeMap, string entity)
+    internal bool IsOff(GameSessionOwner session, int runtimeMap, string entity)
     {
         var dataOff = !entity.StartsWith("made:", StringComparison.Ordinal) && RowOf(entity) is { } row
             && row.EffectiveFields.FirstOrDefault(field => field.Slot == 18) is { Presence: Arcanum.Data.Area.AreaPresence.Value, Number: { } flags } && (flags & AreaUseScriptHost.OffObjectFlagBit) != 0;
@@ -523,7 +527,8 @@ public sealed class AreaInventoryHost
         // ARC-UI-015: the paper doll lists the nine wear slots in slot order (the original's locations 1000..1008).
         var wornBySlot = session.QueryEquipment().Worn.ToDictionary(item => item.Slot, item => item.Entity);
         var doll = session.QueryHero() is null ? Array.Empty<AreaDollSlot>() : Enum.GetValues<EquipmentSlot>()
-            .Select(slot => wornBySlot.TryGetValue(slot, out var entity) ? new AreaDollSlot(slot, entity, ItemName(session, entity, catalog)) : new AreaDollSlot(slot, null, null))
+            // ARC-SCRIPT-2386 (IV13, 0x576520, 0x575FA0): a switched-off item in a worn slot is neither painted nor hit: the slot shows empty (the equipment logic still counts the item).
+            .Select(slot => wornBySlot.TryGetValue(slot, out var entity) && !IsOff(session, runtimeMap, entity) ? new AreaDollSlot(slot, entity, ItemName(session, entity, catalog)) : new AreaDollSlot(slot, null, null))
             .ToArray();
         var carry = session.QueryHeroCarry();
         // ARC-UI-019: the grid in slot order, with the items that found no room.
@@ -560,7 +565,7 @@ public sealed class AreaInventoryHost
         // ARC-UI-072: the body's worn items by slot (its record over its map data, ARC-WORLD-103: the session's lists show it).
         var bodyDoll = pile is not null || current?.Holders.FirstOrDefault(h => h.Entity == holder) is not { } wearer || wearer.Kind != SessionHolderKind.Npc
             ? Array.Empty<AreaDollSlot>()
-            : Enum.GetValues<EquipmentSlot>().Select(slot => wearer.Items.FirstOrDefault(item => item.Facts.Worn && item.Facts.InventoryLocation == (int)slot) is { } worn
+            : Enum.GetValues<EquipmentSlot>().Select(slot => wearer.Items.FirstOrDefault(item => item.Facts.Worn && item.Facts.InventoryLocation == (int)slot && !IsOff(session, runtimeMap, item.Entity)) is { } worn
                 ? new AreaDollSlot(slot, worn.Entity, Rowless(worn.Entity) is not null ? KindName(worn.Facts.Kind, catalog) : Name(worn.Entity, catalog)) { Kind = worn.Facts.Kind } : new AreaDollSlot(slot, null, null)).ToArray();
         var (image, container) = pile is not null
             ? (AreaLootArtLayout.HolderImage(CombatFieldReader.ContainerType, 0, -1, ObjectDamageRules.JunkPilePrototype), true)
