@@ -691,6 +691,41 @@ public sealed class AreaCompanionTests
         Assert.AreEqual(home.RuntimeMap, session.QueryTeleportMap(entity), "the move prepared it as any traveller (FM6)");
     }
 
+    // ARC-WORLD-2177 (tail of #2161): a led map NPC the scene draws nothing for still gets a template (no body command), so it is a companion of the group, follows and arrives like a drawn one and shows nothing;
+    // a dialog speaker the plan does not draw keeps being skipped, and an NPC whose follow facts do not read has no template (the project policy of an AI row outside the table).
+    [TestMethod]
+    public void A_led_map_npc_the_scene_draws_nothing_for_follows_in_the_group_without_a_body_command()
+    {
+        var f = Load();
+        var plan = AreaScenePlan.Create(f.Area);
+        var row = f.Speaker.Row with { Type = 16, Scope = AreaScope.Core };
+        var entity = AreaConversationState.EntityId(row);
+        var facts = new Func<AreaSpeaker, AreaCompanionFacts?>(_ => AreaCompanionRoster.Virgil with { ScriptId = 0 });
+        var undrawn = AreaScenePlan.Create(f.Area.Terrain, f.Area.Objects.Where(o => o.Key != row.Key), f.Area.Visuals, null, f.Area.Roofs);
+        Assert.IsTrue(plan.Commands.Any(c => c.Identity == row.Key), "the full plan draws the row");
+        Assert.IsFalse(undrawn.Commands.Any(c => c.Identity == row.Key), "the plan draws nothing for the row");
+        var template = AreaCompanionTemplate.ForLedMapNpcs([row], f.Area.Visuals, new HashSet<string> { entity }, undrawn, AreaChart.Exterior, new(1), facts).Single();
+        Assert.AreEqual(entity, template.Entity);
+        Assert.AreEqual(0, template.Commands.Count, "no body command");
+        Assert.AreEqual(0, template.Visuals.Count);
+        Assert.AreEqual(0, AreaCompanionTemplate.From([f.Speaker], undrawn, f.Area.Visuals, AreaChart.Exterior, new(1), facts).Count, "a dialog speaker the plan does not draw has no template");
+        Assert.AreEqual(0, AreaCompanionTemplate.ForLedMapNpcs([row], f.Area.Visuals, new HashSet<string> { entity }, undrawn, AreaChart.Exterior, new(1), _ => null).Count, "no follow facts, no template");
+        using var session = ConversationSessionFixture.Create();
+        Assert.AreEqual(GameSessionDisposition.Changed, session.ForceJoinParty(session.Version, entity).Disposition);
+        var group = AreaCompanionGroup.Create([template], f.Steps, AreaChart.Exterior, session, new(1), SimulationTime.At(0));
+        Assert.AreEqual(1, group.Companions.Count, "the group holds the undrawn NPC");
+        Assert.AreEqual(CompanionStanding.Following, group.Companions[0].Standing);
+        Assert.AreEqual(0, group.Commands().Count, "it draws nothing");
+        Assert.AreEqual(1, group.Poses().Count, "it has a place all the same");
+        // It arrives on another map like a drawn companion.
+        SessionMapId home = new(1), cave = new(2);
+        var cell = new CellCoord(checked((int)f.Speaker.WorldX + 2), checked((int)f.Speaker.WorldY));
+        var arrive = AreaCompanionGroup.Arrive(template, home, cave, cell, NeighborDirection.YPlus);
+        var list = session.QueryTransferMoveList(new() { FollowersOf = _ => [] });
+        Assert.AreEqual(GameSessionDisposition.Changed, session.ApplyChanges(session.Version, new ActorPlacement(cave, cell, NeighborDirection.XPlus), arrive, list).Disposition);
+        Assert.AreEqual(new AreaCompanionWhere(cave, (cell, NeighborDirection.YPlus), null), AreaCompanionPlacement.Where(session, home, entity));
+    }
+
     // ARC-WORLD-2161 (tail of #2132; 0x4D3760 carries the whole follower tree as objects): a follower of a companion that the shown group holds no body for (its body is not drawn, its follow facts do not
     // read) is still in the move list and arrives on the destination by the session's placement edits alone, with its leader link kept and its home recorded, so it is a visitor there.
     [TestMethod]

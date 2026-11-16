@@ -137,10 +137,27 @@ public sealed class AreaScriptTeleportCallTests
             Assert.IsNotNull(host.LastCallDialog);
             Assert.AreEqual(0, log.Count);
 
-            // A run that changed its local flags before the dialog action would store them in the speaker's use slot, which this host does not write: unapplied whole, with the reason.
+            // ARC-WORLD-2382 (point 1, 0x447282): a run that changed its local flags before the dialog action stores them in the speaker's use slot, which only the shown map's use host writes: without one the run is unapplied whole, with the reason.
             Assert.IsFalse(host.RunCall(new(FlagThenDialog, 0, pc, talker), out detail));
             StringAssert.Contains(detail, "use-slot");
             Assert.IsNull(host.LastCallDialog);
+            // A use host whose row of the speaker holds no use slot cannot place the write either.
+            var world = new AreaScriptWorld(() => new(12, 20), _ => false, _ => null, () => null);
+            var bare = new AreaUseScriptHost(session, snapshot.RuntimeMap, [row], [], content, world);
+            host.Scripts.QueryHost = () => bare;
+            Assert.IsFalse(host.RunCall(new(FlagThenDialog, 0, pc, talker), out detail));
+            StringAssert.Contains(detail, "use-slot");
+            // With the use slot loaded (flags 0, counters 0x11, script 55) the run applies, stores the run's flag 2 and counters (the file header's 0 replaces the loaded 0x11; the script number keeps) into it and offers the conversation.
+            var withSlot = row with { EffectiveFields = [new AreaFieldValue(31, AreaPresence.Value, AreaValueOrigin.Instance, null, [new AreaSparseElement(ScrPoint.Use, [0L, 0x11L, 55L])], null)] };
+            var useHost = new AreaUseScriptHost(session, snapshot.RuntimeMap, [withSlot], [], content, world);
+            host.Scripts.QueryHost = () => useHost;
+            var entity = AreaConversationState.EntityId(speaker.Row);
+            Assert.AreEqual(new ScrSlot(55, 0, 0x11), host.Scripts.Slot(host.Scripts.Local(talker)!.Value, ScrPoint.Use));
+            Assert.IsTrue(host.RunCall(new(FlagThenDialog, 0, pc, talker), out detail), detail);
+            Assert.AreEqual(new ScrSlot(55, 4, 0), host.Scripts.Slot(host.Scripts.Local(talker)!.Value, ScrPoint.Use), "the use slot took the run's local flags");
+            Assert.AreEqual(4L, session.QueryObjectChange(new SessionMapId(snapshot.RuntimeMap), MapChangeKey.ForEntity(entity, AreaUseScriptHost.SlotProperty(ScrPoint.Use, "lf"))));
+            Assert.AreEqual((FlagThenDialog, 1), (host.LastCallDialog?.Script, host.LastCallDialog?.Node), detail);
+            host.Scripts.QueryHost = null;
 
             // The dialog action's attachee is the hero here (the speaker is no NPC of this host): nothing applies, no conversation is offered.
             log.Clear();
