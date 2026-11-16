@@ -30,6 +30,13 @@ public static class AreaWorldMapArtLayout
     public const int PartyArt = 204, AreaArt = 205, WaypointArt = 206, NewAreaArt = 814;
     /// <summary>ARC-UI-103: the note marker, art 143 <c>mm_ques</c> (marker slot 3, WM79): every town-map note is drawn with it.</summary>
     public const int NoteArt = 143;
+    /// <summary>ARC-UI-2330 (BM4d, WM79, WM142): the marker arts of the note types (table 0x5C9160 rows 0-2: 142 note, 144 skull, 141 chest; row 3 is the question art 143
+    /// of scenery notes). The original's map view draws a quill note with the art of its row; its town map draws every note with 143 (WM79) and its continent view a red
+    /// dot (WM142). Steamwoven rules draw the art of the type in all three views, where the quill (project-only there) makes notes of other types.</summary>
+    public static readonly IReadOnlyList<int> NoteTypeArts = [142, 144, 141, NoteArt];
+
+    /// <summary>The art a note of this type is drawn with; a type outside the table keeps the question art.</summary>
+    public static int NoteArtOf(int type) => type >= 0 && type < NoteTypeArts.Count ? NoteTypeArts[type] : NoteArt;
     /// <summary>ARC-UI-083: the cover over the view's bottom edge (art 217 <c>Nav_Cvr</c>, 207 × 35, WM42) and the markers' and readouts' font
     /// (art 840 <c>NewTimes16Font</c>, WM45).</summary>
     public const int CoverArt = 217, FontArt = 840;
@@ -50,7 +57,7 @@ public static class AreaWorldMapArtLayout
     public static bool LensContains(double x, double y) => x >= Lens.X && x < Lens.X + Lens.Side && y >= Lens.Y && y < Lens.Y + Lens.Side;
 
     /// <summary>Every interface art the look needs.</summary>
-    public static IReadOnlyList<int> ArtNumbers { get; } = [BackgroundArt, ZoomArt, WholeArt, TravelArt, CompassArt, PartyArt, AreaArt, WaypointArt, NewAreaArt, CoverArt, FontArt, NoteArt];
+    public static IReadOnlyList<int> ArtNumbers { get; } = [BackgroundArt, ZoomArt, WholeArt, TravelArt, CompassArt, PartyArt, AreaArt, WaypointArt, NewAreaArt, CoverArt, FontArt, 142, 144, 141, NoteArt];
 
     /// <summary>ARC-UI-134 (WM140, WM141): the lens's art, 198 <c>PCWinCvr</c>, drawn over the lens's square. It is no condition for the window: the lens is drawn when
     /// the art reads (the logbook's lens does the same, LB23).</summary>
