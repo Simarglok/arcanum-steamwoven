@@ -113,8 +113,10 @@ public sealed class ScriptTriggerCensusTests
         // ARC-SCRIPT-1562: the combat-point set admitted 24 of the 26 hit rows (2 before: the rest stopped at 91, 80 and condition 37), all 18 critter-hits rows and 3 of the 4 critical-hit rows. ARC-SCRIPT-1661: with obj is in combat (31) and adjust stat (137) it admits all 26, 18 and 4.
         // ARC-SCRIPT-2335 (ledger IV7): the item set (S14-item) admits 6 of the 28 insert-item rows on the shown maps' windows (3 before: the loop for, the container vicinity kinds, the name test and change art number free the three temple
         // display-case scripts 2992 to 2994); the other 22 stop on toggle state (56) in 16 rows, get story state (42), is dead (22), condition 46, quest state (6), the scenery and critter vicinity kinds (15, 8), one each.
+        // ARC-SCRIPT-2346 (ledger IV9-IV11): toggle state (56) of the attachee item frees the 16 rows that stopped on it: the item set admits 22 of the 28; the other 6 stop on get story state (42), is dead (22), condition 46, quest state (6),
+        // the scenery and critter vicinity kinds (15, 8), one each.
         Assert.AreEqual(28, rows[SessionScriptPoint.InsertItem]);
-        Assert.AreEqual(6, admitted[SessionScriptPoint.InsertItem]);
+        Assert.AreEqual(22, admitted[SessionScriptPoint.InsertItem]);
         Assert.IsTrue(admitted[ScrPoint.Hit] >= 26 && admitted[ScrPoint.CritterHits] == 18 && admitted[ScrPoint.CriticalHit] >= 4, $"{admitted[ScrPoint.Hit]}, {admitted[ScrPoint.CritterHits]}, {admitted[ScrPoint.CriticalHit]}");
     }
 

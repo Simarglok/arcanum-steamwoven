@@ -27,6 +27,9 @@ public interface ISessionItemWorldHost
     /// <summary>Whether the object is mind-controlled (condition 20 never takes such an object as named), or null for an object the host does not know.</summary>
     bool? IsMindControlled(ScrObjectRef obj);
 
+    /// <summary>ARC-SCRIPT-2346 (IV9): whether the map data of the item stores its off flag (object flag 0x2) set, or null when the host has no row for it (an item made at run time has none: the host answers false for it); the session then refuses a toggle state on it.</summary>
+    bool? ItemOffInData(ScrObjectRef item);
+
     /// <summary>The plan of a change art number of the object to <paramref name="number"/> (the host's reading of the art files and of the object's lock identity); null when the host cannot plan it (the move is refused).</summary>
     SessionObjectArtPlan? ArtPlan(ScrObjectRef obj, int number);
 }

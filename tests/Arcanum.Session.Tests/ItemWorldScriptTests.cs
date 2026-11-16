@@ -14,8 +14,8 @@ namespace Arcanum.Session.Tests;
 [TestClass]
 public sealed class ItemWorldScriptTests
 {
-    private const byte Triggerer = 0, Number = 3, Looped = 10, EveryContainer = 17, AnyContainer = 18, EveryFollower = 2, AnyFollower = 3;
-    private const int Every = 810, Any = 811, Twice = 812, EveryFollowerScript = 813, AnyFollowerScript = 814, CaseName = 1205, NewArt = 4, BaselineArt = 100;
+    private const byte Triggerer = 0, Attachee = 1, Number = 3, Looped = 10, EveryContainer = 17, AnyContainer = 18, EveryFollower = 2, AnyFollower = 3;
+    private const int Every = 810, Any = 811, Twice = 812, EveryFollowerScript = 813, AnyFollowerScript = 814, ToggleSelf = 815, ToggleSelfTwice = 816, ToggleHero = 817, CaseName = 1205, NewArt = 4, BaselineArt = 100;
     private static readonly SessionInsertCheck Accept = _ => SessionInsertVerdict.Accepted;
 
     private sealed record Clause(int Type, (byte Kind, int Value)[] Operands);
@@ -48,20 +48,31 @@ public sealed class ItemWorldScriptTests
         return Program([.. lines]);
     }
 
+    // ARC-SCRIPT-2346: toggle state (56) of one object, `times` times.
+    private static ScrProgram Toggle(byte kind, int times = 1)
+    {
+        var lines = new List<(Clause, Clause, Clause)>();
+        for (var i = 0; i < times; i++) lines.Add(Do(C(ScrCatalogue.Action.ToggleState, (kind, 0))));
+        lines.Add(Do(C(ScrCatalogue.Action.ReturnRunDefault)));
+        return Program([.. lines]);
+    }
+
     private sealed class Host(int script) : ISessionItemScriptHost, ISessionItemWorldHost
     {
         public Dictionary<int, ScrProgram> Programs { get; } = new() { [Every] = Loop(EveryContainer, Looped), [Any] = Loop(EveryContainer, AnyContainer), [Twice] = Loop(EveryContainer, Looped, 2),
-            [EveryFollowerScript] = Loop(EveryFollower, Looped), [AnyFollowerScript] = Loop(EveryFollower, AnyFollower) };
+            [EveryFollowerScript] = Loop(EveryFollower, Looped), [AnyFollowerScript] = Loop(EveryFollower, AnyFollower),
+            [ToggleSelf] = Toggle(Attachee), [ToggleSelfTwice] = Toggle(Attachee, 2), [ToggleHero] = Toggle(Triggerer) };
         public Dictionary<string, int> Names { get; set; } = new() { ["case"] = CaseName, ["other"] = 3000 };
         public string[]? Vicinity { get; set; } = ["case", "other"];
         public bool Plans { get; set; } = true;
         public bool PlanBaseline { get; set; }
+        public bool? DataOff { get; set; } = false;
         public SessionOpenableBaseline? Openable { get; set; }
         public List<ScrObjectRef> Centres { get; } = [];
         public string[]? Followers { get; set; } = ["case", "other"];
         public List<ScrObjectRef> Leaders { get; } = [];
 
-        public ScrSlot? Slot(ScrObjectRef attachee, int point) => attachee.Code == "tome" && point == SessionScriptPoint.InsertItem ? new ScrSlot(script, 0, 0) : null;
+        public ScrSlot? Slot(ScrObjectRef attachee, int point) => attachee.Code == "oid:tome" && point == SessionScriptPoint.InsertItem ? new ScrSlot(script, 0, 0) : null;
         public ScrScriptLookup Script(int number) => Programs.TryGetValue(number, out var program) ? ScrScriptLookup.Of(program) : ScrScriptLookup.Missing;
         public bool GlobalFlag(int index) => throw new InvalidOperationException("the session reads flags itself");
         public int StoryState() => throw new InvalidOperationException("not admitted");
@@ -91,6 +102,8 @@ public sealed class ItemWorldScriptTests
         public int? NameOf(ScrObjectRef obj) => Names.TryGetValue(obj.Code, out var name) ? name : null;
         public bool? IsMindControlled(ScrObjectRef obj) => Names.ContainsKey(obj.Code) ? false : null;
 
+        public bool? ItemOffInData(ScrObjectRef item) => DataOff;
+
         public SessionObjectArtPlan? ArtPlan(ScrObjectRef obj, int number) => !Plans ? null
             : new(new SessionMapId(obj.Map), obj.Code, PlanBaseline ? BaselineArt : (uint)number, BaselineArt, Openable is null ? null : new SessionOpenable(new SessionMapId(obj.Map), obj.Code), Openable);
     }
@@ -99,7 +112,7 @@ public sealed class ItemWorldScriptTests
     {
         var owner = CreateWith(HalfElf([8, 8, 8, 8, 14, 8, 8, 8, 0, 0]));
         var seed = InventoryStateTests.Seed();
-        var tome = new SessionSeedItem("tome", InventoryStateTests.Facts(SessionItemType.Generic, 5700, 0, 0, null, SessionScriptPoint.InsertItem), new Arcanum.Simulation.Movement.CellCoord(300, 200));
+        var tome = new SessionSeedItem("oid:tome", InventoryStateTests.Facts(SessionItemType.Generic, 5700, 0, 0, null, SessionScriptPoint.InsertItem), new Arcanum.Simulation.Movement.CellCoord(300, 200));
         Assert.AreEqual(GameSessionDisposition.Changed, owner.AttachMapInventory(Exterior, seed with { Items = [.. seed.Items, tome] }).Disposition);
         return owner;
     }
@@ -111,9 +124,9 @@ public sealed class ItemWorldScriptTests
     {
         using var owner = Owner();
         var host = new Host(Every);
-        var picked = owner.PickUpItem(owner.Version, "tome", Accept, host);
+        var picked = owner.PickUpItem(owner.Version, "oid:tome", Accept, host);
         Assert.AreEqual((GameSessionDisposition.Changed, GameSessionFailure.None), (picked.Disposition, picked.Failure));
-        Assert.AreEqual(new ScrObjectRef(Exterior.RuntimeMap, "tome"), host.Centres.Single(), "the vicinity is asked of the item, the attachee");
+        Assert.AreEqual(new ScrObjectRef(Exterior.RuntimeMap, "oid:tome"), host.Centres.Single(), "the vicinity is asked of the item, the attachee");
         Assert.AreEqual(NewArt, (int?)Art(owner, "case"));
         Assert.IsNull(Art(owner, "other"), "a container with another name keeps its art");
         using var restored = Restore(Decode(GameSessionSnapshotCodec.Encode(owner.Capture())));
@@ -124,7 +137,7 @@ public sealed class ItemWorldScriptTests
     public void An_any_container_condition_is_true_when_one_container_in_the_vicinity_passes()
     {
         using var owner = Owner();
-        Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, "tome", Accept, new Host(Any)).Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, "oid:tome", Accept, new Host(Any)).Disposition);
         // The list condition (kind 18, "any") is true because "case" is named, so every looped container changes, "other" too.
         Assert.AreEqual((NewArt, NewArt), ((int?)Art(owner, "case"), (int?)Art(owner, "other")));
     }
@@ -135,7 +148,7 @@ public sealed class ItemWorldScriptTests
     {
         using var owner = Owner();
         var host = new Host(EveryFollowerScript);
-        Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, "tome", Accept, host).Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, "oid:tome", Accept, host).Disposition);
         Assert.AreEqual(new ScrObjectRef(Exterior.RuntimeMap, SessionEventKinds.PlayerEntity), host.Leaders.Single(), "the followers are the triggerer's, the hero's for a pickup");
         Assert.AreEqual(NewArt, (int?)Art(owner, "case"));
         Assert.IsNull(Art(owner, "other"), "a follower with another name keeps its art");
@@ -145,7 +158,7 @@ public sealed class ItemWorldScriptTests
     public void An_any_follower_condition_is_true_when_one_follower_passes()
     {
         using var owner = Owner();
-        Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, "tome", Accept, new Host(AnyFollowerScript)).Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, "oid:tome", Accept, new Host(AnyFollowerScript)).Disposition);
         Assert.AreEqual((NewArt, NewArt), ((int?)Art(owner, "case"), (int?)Art(owner, "other")), "kind 3 is true because \"case\" is named, so every looped follower changes");
     }
 
@@ -153,7 +166,7 @@ public sealed class ItemWorldScriptTests
     public void A_triggerer_without_followers_leaves_the_loop_empty()
     {
         using var owner = Owner();
-        Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, "tome", Accept, new Host(EveryFollowerScript) { Followers = [] }).Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, "oid:tome", Accept, new Host(EveryFollowerScript) { Followers = [] }).Disposition);
         Assert.IsNull(Art(owner, "case"));
     }
 
@@ -162,7 +175,7 @@ public sealed class ItemWorldScriptTests
     {
         using var owner = Owner();
         var baseline = new SessionOpenableBaseline(OpenableKind.Container, 0, 0, 3);
-        Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, "tome", Accept, new Host(Every) { Openable = baseline }).Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, "oid:tome", Accept, new Host(Every) { Openable = baseline }).Disposition);
         Assert.AreEqual(0, owner.QueryOpenable(new SessionOpenable(Exterior, "case"), baseline).Frame, "the action closes the container");
     }
 
@@ -173,7 +186,7 @@ public sealed class ItemWorldScriptTests
         {
             using var owner = Owner();
             var before = owner.Version;
-            var refused = owner.PickUpItem(before, "tome", Accept, host);
+            var refused = owner.PickUpItem(before, "oid:tome", Accept, host);
             Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.ItemScriptUnsupported), (refused.Disposition, refused.Failure));
             Assert.AreEqual(before, owner.Version);
             Assert.IsNull(Art(owner, "case"));
@@ -185,7 +198,7 @@ public sealed class ItemWorldScriptTests
     {
         using var owner = Owner();
         var before = owner.Version;
-        var refused = owner.PickUpItem(before, "tome", Accept, new WorldlessHost(new Host(Every)));
+        var refused = owner.PickUpItem(before, "oid:tome", Accept, new WorldlessHost(new Host(Every)));
         Assert.AreEqual((GameSessionFailure.ItemScriptUnsupported, before), (refused.Failure, owner.Version));
         Assert.IsNull(Art(owner, "case"));
     }
@@ -194,8 +207,57 @@ public sealed class ItemWorldScriptTests
     public void A_plan_that_returns_the_art_its_map_data_gives_writes_no_record()
     {
         using var owner = Owner();
-        Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, "tome", Accept, new Host(Every) { PlanBaseline = true }).Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, "oid:tome", Accept, new Host(Every) { PlanBaseline = true }).Disposition);
         Assert.IsNull(Art(owner, "case"), "the baseline id clears the record, as SetObjectArt does");
+    }
+
+    private static bool Off(GameSessionOwner owner, bool dataOff = false) => owner.QueryItemOff(Exterior, "oid:tome", dataOff);
+
+    [TestMethod]
+    public void A_toggle_state_of_the_attachee_switches_the_item_off_in_the_moves_revision_and_the_save_keeps_it()
+    {
+        using var owner = Owner();
+        var before = owner.Version;
+        var picked = owner.PickUpItem(before, "oid:tome", Accept, new Host(ToggleSelf));
+        Assert.AreEqual((GameSessionDisposition.Changed, GameSessionFailure.None), (picked.Disposition, picked.Failure));
+        Assert.AreEqual(before.Revision + 1, owner.Version.Revision, "one revision for the whole move");
+        Assert.IsTrue(Off(owner));
+        Assert.AreEqual(1, owner.QueryObjectChange(Exterior, SessionItemOff.Key("oid:tome")));
+        using var restored = Restore(Decode(GameSessionSnapshotCodec.Encode(owner.Capture())));
+        Assert.IsTrue(Off(restored), "the off flag survives a save");
+    }
+
+    [TestMethod]
+    public void Two_toggles_in_one_run_leave_the_item_as_it_was_and_write_no_record()
+    {
+        using var owner = Owner();
+        Assert.AreEqual(GameSessionFailure.None, owner.PickUpItem(owner.Version, "oid:tome", Accept, new Host(ToggleSelfTwice)).Failure);
+        Assert.IsFalse(Off(owner));
+        Assert.IsNull(owner.QueryObjectChange(Exterior, SessionItemOff.Key("oid:tome")));
+    }
+
+    [TestMethod]
+    public void A_toggle_of_an_item_the_data_stores_off_switches_it_on_with_an_explicit_record()
+    {
+        using var owner = Owner();
+        Assert.IsTrue(Off(owner, dataOff: true), "no record: the data's bit");
+        Assert.AreEqual(GameSessionFailure.None, owner.PickUpItem(owner.Version, "oid:tome", Accept, new Host(ToggleSelf) { DataOff = true }).Failure);
+        Assert.IsFalse(Off(owner, dataOff: true));
+        Assert.AreEqual(0, owner.QueryObjectChange(Exterior, SessionItemOff.Key("oid:tome")));
+    }
+
+    [TestMethod]
+    public void A_toggle_the_session_cannot_keep_is_refused_and_changes_nothing()
+    {
+        // The host has no row for the item, or the object is the hero (the item set keeps no flag of a critter).
+        foreach (var host in new Host[] { new(ToggleSelf) { DataOff = null }, new(ToggleHero) })
+        {
+            using var owner = Owner();
+            var before = owner.Version;
+            var refused = owner.PickUpItem(before, "oid:tome", Accept, host);
+            Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.ItemScriptUnsupported, before), (refused.Disposition, refused.Failure, owner.Version));
+            Assert.IsFalse(Off(owner));
+        }
     }
 
     // The stubs of the run's host adapter throw for what the item set must never ask; a widening of the set has to answer them first.

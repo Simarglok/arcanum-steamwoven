@@ -246,6 +246,8 @@ public sealed partial class GameSessionOwner
         _durability.Destroyed.Add(entity);
         // ARC-SCRIPT-1826: the art id a script wrote on it goes too (a made item's record would otherwise stay in the save, counted against the budget).
         if (QueryObjectRecordMap(SessionObjectArt.Key(entity)) is { } artMap) _maps.Remove(artMap, SessionObjectArt.Key(entity));
+        // ARC-SCRIPT-2346: and the off flag a script toggled on it.
+        if (QueryObjectRecordMap(SessionItemOff.Key(entity)) is { } offMap) _maps.Remove(offMap, SessionItemOff.Key(entity));
         // ARC-WORLD-062: a deleted item no longer decays.
         CancelDecay(entity);
     }

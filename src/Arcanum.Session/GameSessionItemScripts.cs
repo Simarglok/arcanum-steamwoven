@@ -250,6 +250,23 @@ public sealed partial class GameSessionOwner
             return run;
         }
 
+        // ARC-SCRIPT-2346 (IV9–IV11): the off state each toggled item of the move ends in (an exclusive-or over the state the item has now, the earlier toggles of the move included).
+        private readonly Dictionary<string, bool> _offState = new(StringComparer.Ordinal);
+
+        // One toggle state (56) of an item of the move: the object flag "off" is flipped (OT1). Planned only for an item of the move whose own field the session can keep (a placed, dropped or made item; the data's off bit comes from the host's rows).
+        // The state the item has now is the record's, else the data's (IV9); the edit is the record that leaves it in the new state (the record goes when that is the data's).
+        private bool PlanOff(ScrObjectRef item)
+        {
+            if (item.Map != _map || !_items.ContainsKey(item.Code) || _host is not ISessionItemWorldHost world || !SessionValidation.Entity(item.Code)
+                || !ObjectStateVocabulary.Mobile(item.Code, ObjectStateVocabulary.OffProperty) || world.ItemOffInData(item) is not { } dataOff) return false;
+            var key = SessionItemOff.Key(item.Code);
+            var now = _offState.TryGetValue(item.Code, out var pending) ? pending : _owner.QueryItemOff(new SessionMapId(item.Map), item.Code, dataOff);
+            _offState[item.Code] = !now;
+            var map = _owner.QueryObjectRecordMap(key) ?? new SessionMapId(item.Map);
+            _artEdits.Add(new(map, key, !now == dataOff ? null : (!now ? 1 : 0)));
+            return true;
+        }
+
         // The run's changes join the move's: flags, the item slots (call-ex runs' first, then the event's own), and the effect changes.
         private GameSessionFailure Accept(ScrRunResult run)
         {
@@ -263,6 +280,12 @@ public sealed partial class GameSessionOwner
             // ARC-SCRIPT-2335 (IV5): a change art number is planned by the host (the art files, the container's lock identity); every other object state the admission keeps out.
             foreach (var state in effects.ObjectStates)
             {
+                // ARC-SCRIPT-2346 (IV9–IV11): toggle state of an item of the move flips its off flag, planned here as a map change of the item's own field.
+                if (state.Change == ScrObjectStateChange.ToggleOff)
+                {
+                    if (!PlanOff(state.Object)) return GameSessionFailure.ItemScriptUnsupported;
+                    continue;
+                }
                 if (state.Change != ScrObjectStateChange.ChangeArtNumber || _host is not ISessionItemWorldHost world || world.ArtPlan(state.Object, state.Value) is not { } plan) return GameSessionFailure.ItemScriptUnsupported;
                 // The plan is the request's own object, whatever the host plans (the commit writes unchecked keys otherwise).
                 if (plan.Map != new SessionMapId(state.Object.Map) || plan.Entity != state.Object.Code) return GameSessionFailure.ItemScriptUnsupported;
