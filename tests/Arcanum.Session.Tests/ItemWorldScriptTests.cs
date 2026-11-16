@@ -14,16 +14,10 @@ namespace Arcanum.Session.Tests;
 [TestClass]
 public sealed class ItemWorldScriptTests
 {
-<<<<<<< HEAD
-    private const byte Triggerer = 0, Attachee = 1, LocalVariable = 2, Number = 3, Looped = 10, LocalObject = 11, EveryContainer = 17, AnyContainer = 18, EveryFollower = 2, AnyFollower = 3;
-    private const int Every = 810, Any = 811, Twice = 812, EveryFollowerScript = 813, AnyFollowerScript = 814, ToggleSelf = 815, ToggleSelfTwice = 816, ToggleHero = 817, Quest = 820, Typed = 821, Assigned = 822, DeadGated = 823, GeneratorGated = 824, GeneratorSlot = 7, CaseName = 1205, NewArt = 4, BaselineArt = 100, QuestNumber = 1005, ContainerType = 2,
-        SetQuest = 830, CompleteQuest = 831, GiveSmall = 832, GiveBig = 833, GiveTwice = 834, SetThenRead = 835, SetOnItem = 836, SetInvalid = 837, CompleteBig = 838, SetThenGive = 839;
-    private const int StoryRaise = 840, StoryReadBack = 841, RumorOfHero = 842, RumorOfItem = 843, RumorOutOfRange = 844, RenameSelf = 845, RenameSelfTwice = 846, RenameHero = 847, RumorNumber = 1500, RenamedTo = 2805, DataName = 3100;
-=======
     private const byte Counter = 0, Triggerer = 0, Attachee = 1, LocalVariable = 2, Number = 3, Looped = 10, LocalObject = 11, EveryContainer = 17, AnyContainer = 18, EveryFollower = 2, AnyFollower = 3, EveryScenery = 15, AnyScenery = 16, Everyone = 8, Anyone = 9;
     private const int Every = 810, Any = 811, Twice = 812, EveryFollowerScript = 813, AnyFollowerScript = 814, ToggleSelf = 815, ToggleSelfTwice = 816, ToggleHero = 817, Quest = 820, Typed = 821, Assigned = 822, DeadGated = 823, GeneratorGated = 824, GeneratorSlot = 7, ScenerySweep = 850, ScenerySweepAny = 851, CritterCalls = 852, CritterCallsAny = 853, Callee = 3500, CalleeLine = 4, ScenerySwitch = 854, CaseName = 1205, NewArt = 4, BaselineArt = 100, QuestNumber = 1005, ContainerType = 2,
         SetQuest = 830, CompleteQuest = 831, GiveSmall = 832, GiveBig = 833, GiveTwice = 834, SetThenRead = 835, SetOnItem = 836, SetInvalid = 837, CompleteBig = 838, SetThenGive = 839, GiveThenStat = 840, StatThenGive = 841, GiveThenRatio = 842, RatioThenGive = 843;
->>>>>>> origin/main
+    private const int StoryRaise = 880, StoryReadBack = 881, RumorOfHero = 882, RumorOfItem = 883, RumorOutOfRange = 884, RenameSelf = 885, RenameSelfTwice = 886, RenameHero = 887, RumorNumber = 1500, RenamedTo = 2805, DataName = 3100;
     private static readonly SessionInsertCheck Accept = _ => SessionInsertVerdict.Accepted;
 
     private sealed record Clause(int Type, (byte Kind, int Value)[] Operands);
@@ -149,15 +143,10 @@ public sealed class ItemWorldScriptTests
             [ScenerySweep] = Loop(EveryScenery, Looped), [ScenerySwitch] = Program(Do(C(ScrCatalogue.Action.LoopFor, (EveryScenery, 0))), Do(C(ScrCatalogue.Action.ToggleState, (Looped, 0))), Do(C(ScrCatalogue.Action.LoopEnd)), Do(C(ScrCatalogue.Action.ReturnRunDefault))), [ScenerySweepAny] = Loop(EveryScenery, AnyScenery), [CritterCalls] = CallLoop(Everyone), [CritterCallsAny] = CallLoop(Anyone),
             [EveryFollowerScript] = Loop(EveryFollower, Looped), [AnyFollowerScript] = Loop(EveryFollower, AnyFollower),
             [SetQuest] = SetQuestOf(Triggerer, 1004, 2), [CompleteQuest] = SetQuestOf(Triggerer, 1004, 4), [GiveSmall] = Give(1), [GiveBig] = Give(5), [GiveTwice] = Give(1, 2),
-<<<<<<< HEAD
-            [SetThenRead] = SetAndRead(1004, 2), [SetOnItem] = SetQuestOf(Attachee, 1004, 4), [SetInvalid] = SetQuestOf(Triggerer, 5, 2), [CompleteBig] = SetQuestOf(Triggerer, 1003, 4), [SetThenGive] = SetAndGive(1004, 4, 1),
+            [SetThenRead] = SetAndRead(1004, 2), [SetOnItem] = SetQuestOf(Attachee, 1004, 4), [SetInvalid] = SetQuestOf(Triggerer, 5, 2), [CompleteBig] = SetQuestOf(Triggerer, 1003, 4), [SetThenGive] = SetAndGive(1004, 4, 1), [GiveThenStat] = GiveAndStat(5, false), [StatThenGive] = GiveAndStat(5, true), [GiveThenRatio] = GiveAndRatio(5, false), [RatioThenGive] = GiveAndRatio(5, true),
             [ToggleSelf] = Toggle(Attachee), [ToggleSelfTwice] = Toggle(Attachee, 2), [ToggleHero] = Toggle(Triggerer),
             [StoryRaise] = StoryRaiseProgram(), [StoryReadBack] = StoryReadBackProgram(), [RumorOfHero] = RumorProgram(Triggerer), [RumorOfItem] = RumorProgram(Attachee), [RumorOutOfRange] = RumorProgram(Triggerer, 3000),
             [RenameSelf] = RenameProgram(Attachee), [RenameSelfTwice] = RenameProgram(Attachee, 2), [RenameHero] = RenameProgram(Triggerer) };
-=======
-            [SetThenRead] = SetAndRead(1004, 2), [SetOnItem] = SetQuestOf(Attachee, 1004, 4), [SetInvalid] = SetQuestOf(Triggerer, 5, 2), [CompleteBig] = SetQuestOf(Triggerer, 1003, 4), [SetThenGive] = SetAndGive(1004, 4, 1), [GiveThenStat] = GiveAndStat(5, false), [StatThenGive] = GiveAndStat(5, true), [GiveThenRatio] = GiveAndRatio(5, false), [RatioThenGive] = GiveAndRatio(5, true),
-            [ToggleSelf] = Toggle(Attachee), [ToggleSelfTwice] = Toggle(Attachee, 2), [ToggleHero] = Toggle(Triggerer) };
->>>>>>> origin/main
         public Dictionary<string, int> Names { get; set; } = new() { ["case"] = CaseName, ["other"] = 3000 };
         public string[]? Vicinity { get; set; } = ["case", "other"];
         public bool? DeadCase { get; set; } = true;

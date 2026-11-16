@@ -359,14 +359,11 @@ public sealed partial class GameSessionOwner
             // ARC-SCRIPT-2374 (IV19): the interpreter collects a run's state requests and the session applies them after it, so a quest state read after a quest write of the same run (or one a call-ex callee makes, whose order the trace does not show) would have
             // read the written state in the original; the run read the earlier one. Refused, as a ratio read after an effect change is.
             if (QuestReadHazard(run)) return GameSessionFailure.ItemScriptUnsupported;
-<<<<<<< HEAD
-            // ARC-SCRIPT-2375 (IV28, IV29): the story-state number only rises (0x4450A0), game-wide whoever the triggerer is; a rumor is learned by a PC only (SS3, SS4: the hero; any other object's request does nothing), a number outside the session's range
-            // refuses the move (the original stores it unchecked). The quest requests are PlanQuest's (IV19); any other state request (a reputation, a blessing) is not admitted here.
-=======
             // ARC-SCRIPT-2394 (IV20): a stat read or a power ratio read (the aptitude is derived from the magick and tech points an auto-level scheme may buy) of a run after an earlier run's level-raising award read the hero before it.
             if (_awardRaisesLevel && (_reads.StatReads.Count > 0 || _reads.RatioReads > 0)) return GameSessionFailure.ItemScriptUnsupported;
             var raisedBefore = _awardRaisesLevel;
->>>>>>> origin/main
+            // ARC-SCRIPT-2375 (IV28, IV29): the story-state number only rises (0x4450A0), game-wide whoever the triggerer is; a rumor is learned by a PC only (SS3, SS4: the hero; any other object's request does nothing), a number outside the session's range
+            // refuses the move (the original stores it unchecked). The quest requests are PlanQuest's (IV19); any other state request (a reputation, a blessing) is not admitted here.
             foreach (var request in effects.States)
             {
                 if (request.Kind == ScrStateKind.Rumor)
@@ -379,12 +376,9 @@ public sealed partial class GameSessionOwner
                 var failure = PlanQuest(request);
                 if (failure != GameSessionFailure.None) return failure;
             }
-<<<<<<< HEAD
             if (effects.StoryState is { } raised && raised > StoryNow) _storyRaised = raised;
-=======
             // The same run's own award: a get stat after it in the trace (or one a call-ex callee makes, whose order the trace does not show) read the hero before it.
             if (!raisedBefore && _awardRaisesLevel && AwardReadHazard(run)) return GameSessionFailure.ItemScriptUnsupported;
->>>>>>> origin/main
             var aptitude = HazardOf(run, _reads.RatioReads, Arcanum.Data.Scripts.ScrCatalogue.Action.MagickTechAdjustment) ? Aptitude() : (int?)null;
             // ARC-DEV-366: the same for get stat, which reads the hero's stat; the stats it read are asked again after the run's changes.
             var statReads = HazardOf(run, _reads.StatReads.Count, Arcanum.Data.Scripts.ScrCatalogue.Action.GetStat) ? _reads.StatReads.ToArray() : [];
