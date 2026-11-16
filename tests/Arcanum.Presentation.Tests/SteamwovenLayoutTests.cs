@@ -198,7 +198,7 @@ public sealed class SteamwovenLayoutTests
         Assert.AreEqual(new PixelRect(0, 0, 1366, 768), Layout(1366, 768).Frame, "a bar of 0.5 px is dropped; the sides take the difference");
         Assert.AreEqual(new PixelRect(0, 0, 1287, 720), Layout(1287, 720).Frame, "7 px extra: dropped");
         Assert.AreEqual(new PixelRect(4, 0, 1280, 720), Layout(1288, 720).Frame, "8 px extra: kept");
-        // An odd difference puts the larger bar after the smaller (a half goes up).
+        // An odd difference gives the left bar the larger half (a half goes up).
         var odd = Layout(1289, 720);
         Assert.AreEqual(new PixelInsets(5, 0, 4, 0), odd.Bars);
     }
@@ -216,7 +216,7 @@ public sealed class SteamwovenLayoutTests
         Assert.AreEqual(new Ratio(1, 3), wide.Scale);
         Assert.IsTrue(wide.ExactStep);
 
-        // 1281 x 721 is f = 1281 / 3840 > 1/3: the next step up, filtered.
+        // 1281 x 722 is f = 1281 / 3840 > 1/3: the next step up, filtered.
         var above = Layout(1281, 722);
         Assert.AreEqual(SteamwovenStep.Half, above.Step);
         Assert.IsFalse(above.ExactStep);
@@ -265,9 +265,12 @@ public sealed class SteamwovenLayoutTests
             new SteamwovenLayoutOptions { TopPanelMaster = 151 },
             new SteamwovenLayoutOptions { BottomPanelMaster = 571 },
             new SteamwovenLayoutOptions { TopPanelMaster = 156 },
+            new SteamwovenLayoutOptions { TopPanelMaster = 2147483640, BottomPanelMaster = 12 },
+            new SteamwovenLayoutOptions { TopPanelMaster = 720, BottomPanelMaster = 6 },
         })
             Assert.AreEqual(SteamwovenLayoutFailure.InvalidOptions, SteamwovenLayoutBuilder.Compute(1920, 1080, bad).Failure, $"{bad.TopPanelMaster}/{bad.BottomPanelMaster}");
         Assert.IsTrue(SteamwovenLayoutOptions.Default.IsValid);
+        Assert.IsTrue(new SteamwovenLayoutOptions { TopPanelMaster = 360, BottomPanelMaster = 360 }.IsValid, "together exactly 720");
     }
 
     [TestMethod]
@@ -314,7 +317,7 @@ public sealed class SteamwovenLayoutTests
     }
 
     [TestMethod]
-    public void EveryEdgeIsRoundedFromItsOwnExactPositionHalvesUp()
+    public void PanelHeightsAreRoundedAsSizesHalvesUpAndRatiosBehave()
     {
         // 2880 x 1800: f = 3/4; the top panel 112.5 and the bottom panel 427.5 both round up (113 and 428).
         var l = Layout(2880, 1800);
@@ -344,5 +347,29 @@ public sealed class SteamwovenLayoutTests
     {
         foreach (var r in Table) Assert.AreEqual(Layout(r.W, r.H), Layout(r.W, r.H));
         Assert.AreNotEqual(Layout(1920, 1080), Layout(1920, 1200));
+    }
+
+    [TestMethod]
+    public void ALetterboxedFrameWithADroppedBarGetsTheBackdropScaledToCoverAndTheFramePositionsAreExact()
+    {
+        // 1280 x 807: 7 px over 16:10, the bar is dropped; the middle band (807 - 50 - 190 = 567) is 7 px taller than 1680 f = 560.
+        var l = Layout(1280, 807);
+        Assert.AreEqual(new PixelRect(0, 0, 1280, 807), l.Frame);
+        Assert.AreEqual(567, l.Middle.Band.Height);
+        Assert.AreEqual(new Ratio(567, 1680), l.MiddleBackdrop.Scale);
+        Assert.AreEqual(new PixelRect(0, 50, 1280, 567), l.MiddleBackdrop.Target);
+        Assert.AreEqual(new PixelRect(-8, 50, 1296, 567), l.MiddleBackdrop.Master, "3840 x 1680 at 567/1680 is 1296 x 567, centred: 8 px off each side");
+        Assert.AreEqual(new PixelRect(0, 0, 1280, 807), l.FullScreenBackdrop.Target);
+        Assert.IsTrue(l.FullScreenBackdrop.Scale > l.Scale, "a frame taller than 16:10 scales the full-screen master up");
+
+        // Frame and centre positions of the rows with bars.
+        var pillar = Layout(3440, 1440);
+        Assert.AreEqual(new PixelRect(760, 0, 1920, 100), pillar.Top.Centre, "x of the centre block: bar + side");
+        Assert.AreEqual(new PixelRect(440, 100, 2560, 960), pillar.Middle.Band);
+        Assert.AreEqual(new PixelRect(760, 100, 1920, 960), pillar.Middle.Centre);
+        Assert.AreEqual(new PixelRect(1280 + 320, 100, 1920, 960), Layout(5120, 1440).Middle.Centre);
+        Assert.AreEqual(new PixelRect(0, 37, 3024, 118), Layout(3024, 1964).Top.Band);
+        Assert.AreEqual(new PixelRect(378, 37 + 118, 2268, 1323), Layout(3024, 1964).Middle.Centre);
+        Assert.AreEqual(new PixelRect(0, 64 + 40, 1024, 448), Layout(1024, 768).Middle.Band);
     }
 }

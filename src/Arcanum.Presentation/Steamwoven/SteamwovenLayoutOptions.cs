@@ -10,11 +10,14 @@ public sealed record SteamwovenLayoutOptions
     public int TopPanelMaster { get; init; } = SteamwovenGrid.DefaultTopPanel;
     public int BottomPanelMaster { get; init; } = SteamwovenGrid.DefaultBottomPanel;
 
+    /// <summary>The most the two panels may take together: the 720 px that the original's 200 units leave beside the 1440 px window zone.</summary>
+    public const int MaxPanelsTotal = SteamwovenGrid.ReferenceHeight - SteamwovenGrid.WindowZoneHeight;
+
     public static SteamwovenLayoutOptions Default { get; } = new();
 
     /// <summary>Whether the values satisfy the grid and window-zone rules.</summary>
     public bool IsValid =>
         TopPanelMaster > 0 && BottomPanelMaster > 0
         && TopPanelMaster % SteamwovenGrid.GridPx == 0 && BottomPanelMaster % SteamwovenGrid.GridPx == 0
-        && TopPanelMaster + BottomPanelMaster <= SteamwovenGrid.ReferenceHeight - SteamwovenGrid.WindowZoneHeight;
+        && TopPanelMaster <= MaxPanelsTotal && BottomPanelMaster <= MaxPanelsTotal - TopPanelMaster;
 }
