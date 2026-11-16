@@ -392,10 +392,16 @@ public partial class TerrainViewerApp
             return false;
         }
         if (_worldActor.Session is not AreaGridSession session) return false;
+        // ARC-WORLD-2358 (TT20): a deferred call's run that started a conversation opens it now, with the speaker rules of any scripted start; a hero teleport the same run queued is taken at the next frame (the ping), with the dialog open.
+        var callTalk = OpenCallDialogs();
+        if (callTalk && _mapTransfers.Pending is not null) return false;
         // The original fires a jump point or tile script on every tile the player enters (ledger TR3), in step order; since
         // ARC-SCRIPT-017 every tile script runs through the session, then the script of a sector the step enters.
         // ARC-SCRIPT-046: a conversation a run opened holds the steps still queued for a later frame.
+        var talkOpenBefore = ConversationOpen;
         RunMapEnteredSteps();
+        // ARC-WORLD-2358 (TT20): a tile or sector script that started a conversation and asked for the hero's teleport leaves the dialog open for one frame; the ping takes the request at the next one.
+        if (!talkOpenBefore && ConversationOpen && _mapTransfers.Pending is { ByTalkScript: true }) return false;
         // ARC-DEV-204: a change that waits for its fade-out is the only one: another request met meanwhile is dropped, not queued behind it.
         if (TransitionFadePending) { _mapTransfers.Clear(); return false; }
         if (_mapTransfers.Pending is null) ProcessAreaMapStream(session);
@@ -458,6 +464,14 @@ public partial class TerrainViewerApp
             }
             if (queued) { StopWorldRoute("ROUTE_REPLACED_BY_TRANSFER"); _mapEntered.Clear(); }
         }
+    }
+
+    /// <summary>ARC-WORLD-2358: opens the conversation the deferred calls of the last frames started (<see cref="AreaEventWorld"/>'s call dialog), one at a time: the scripted start itself drops one met while a conversation is open. True when one was asked.</summary>
+    private bool OpenCallDialogs()
+    {
+        var asked = false;
+        while (_callDialogs.TryDequeue(out var dialog)) { BeginScriptedConversation(dialog); asked = true; }
+        return asked;
     }
 
     /// <summary>The actor stands on the same-map arrival of <paramref name="transfer"/> (the session, when there is one, placed it).</summary>

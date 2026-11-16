@@ -106,6 +106,44 @@ public sealed class AreaScriptTeleportCallTests
         });
     }
 
+    // ARC-WORLD-2358 (ledger TT20): a deferred call whose run starts a conversation is run: its effects apply (the hero's teleport written before the dialog action is queued) and the conversation is handed to the caller, which opens it at its next
+    // frame; a dialog with an object that is no dialog NPC here leaves the call unapplied whole.
+    [TestMethod]
+    public void A_deferred_call_that_starts_a_conversation_applies_and_hands_the_conversation_over()
+    {
+        With((host, session, snapshot, content, pc) =>
+        {
+            var key = new AreaObjectKey(new string('a', 64), snapshot.RuntimeMap, AreaSourceKind.Mobile, 1, 1, 100L, new string('b', 64), 100);
+            var row = new AreaObjectRecord(key, 0, 16, 0, "p", "p", "r", "s", AreaScope.Core, null, 11, 20, Arcanum.Data.Area.AreaDisposition.BodyEligibleConditionally, [], [], true, true, true);
+            var speaker = new AreaSpeaker(0, row, 1, 0, 0);
+            host = new AreaConversationHost(snapshot, [speaker], content, session);
+            var log = new List<string>();
+            host.Scripts.HeroTeleportRefusal = t => null;
+            host.Scripts.RequestHeroTeleport = t => log.Add($"request {t.X},{t.Y}");
+            var talker = new SessionScriptRole(new(snapshot.RuntimeMap), AreaConversationState.EntityId(speaker.Row));
+
+            Assert.IsTrue(host.RunCall(new(HeroTeleportThenDialog, 0, pc, talker), out var detail), detail);
+            CollectionAssert.AreEqual(new[] { "request 33,43" }, log, "the teleport of the run applied");
+            Assert.AreEqual((HeroTeleportThenDialog, 1, host.Scripts.Local(talker)?.Code), (host.LastCallDialog?.Script, host.LastCallDialog?.Node, host.LastCallDialog?.Npc?.Code), detail);
+            StringAssert.Contains(detail, "conversation of script " + HeroTeleportThenDialog);
+
+            // A call that starts none clears it; one with the dialog action first runs no teleport after it.
+            Assert.IsTrue(host.RunCall(new(HeroTeleport, 0, pc, pc), out detail), detail);
+            Assert.IsNull(host.LastCallDialog);
+            log.Clear();
+            Assert.IsTrue(host.RunCall(new(DialogThenHeroTeleport, 0, pc, talker), out detail), detail);
+            Assert.IsNotNull(host.LastCallDialog);
+            Assert.AreEqual(0, log.Count);
+
+            // The dialog action's attachee is the hero here (the speaker is no NPC of this host): nothing applies, no conversation is offered.
+            log.Clear();
+            Assert.IsFalse(host.RunCall(new(HeroTeleportThenDialog, 0, pc, pc), out detail));
+            StringAssert.Contains(detail, "no dialog NPC here");
+            Assert.AreEqual(0, log.Count);
+            Assert.IsNull(host.LastCallDialog);
+        });
+    }
+
     [TestMethod]
     public void A_teleport_the_host_cannot_take_leaves_the_call_unapplied_and_records_nothing()
     {

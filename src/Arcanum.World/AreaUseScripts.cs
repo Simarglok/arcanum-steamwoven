@@ -1826,11 +1826,12 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         // ARC-WORLD-114: likewise a toggle state or kill the viewer cannot apply.
         if (ObjectStateRefusal(effects) is { } refusedState)
             return new(AreaScriptedUseOutcome.EffectsRejected, null, lines, run, $"script {run.Script}: {refusedState}");
-        // ARC-SCRIPT-046: a conversation goes to an NPC of the shown map and not with a teleport (not modelled together); such a run
-        // applies nothing and counts as refused, so a tile's unconditional teleport still fires as before (ARC-WORLD-031).
-        if (effects.Dialog is { } dialog && (dialog.Npc is not { } speaker || speaker.Map != _shownMap || Row(speaker) is not { Type: NpcType } || effects.Teleports.Count > 0))
+        // ARC-SCRIPT-046: a conversation goes to an NPC of the shown map; such a run applies nothing and counts as refused, so a tile's unconditional teleport still fires as before (ARC-WORLD-031).
+        // ARC-WORLD-2358 (ledger TT20): the hero's teleport of the same run is allowed (the dialog opens inside the run and ends it, the ping takes the request at the next frame), a teleport of an NPC together with the conversation
+        // is not (the speaker may be the one that moves): that pair stays refused.
+        if (effects.Dialog is { } dialog && (dialog.Npc is not { } speaker || speaker.Map != _shownMap || Row(speaker) is not { Type: NpcType } || npcTeleports.Count > 0))
             return new(AreaScriptedUseOutcome.Refused, null, lines, run, $"script {run.Script}: a conversation of script {dialog.Script} with "
-                + (dialog.Npc?.Code ?? "no NPC") + (effects.Teleports.Count > 0 ? " and a teleport" : "") + " is not modelled");
+                + (dialog.Npc?.Code ?? "no NPC") + (npcTeleports.Count > 0 ? " and a teleport of an NPC" : "") + " is not modelled");
         // ARC-SCRIPT-052: a conversation with an NPC destroyed (before or by this run) is not modelled (the view no longer has him).
         if (effects.Dialog is { Npc: { } talker } && (AlreadyDestroyed(talker)
             || effects.ObjectStates.Any(r => r.Change == ScrObjectStateChange.Destroy && r.Object == talker)))
@@ -1848,8 +1849,12 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         foreach (var requested in npcTeleports) RequestNpcTeleport(requested);
         var teleport = npcTeleports.Count > 0 ? null : effects.Teleports.FirstOrDefault();
         if (effects.Dialog is { } talk)
-            return new(AreaScriptedUseOutcome.NoTeleport, null, lines, run, $"script {run.Script} {run.Stop} at SCR line {run.StopLine}: conversation of script {talk.Script} node {talk.Node}")
-            { Dialog = talk, Printed = printedLines };
+            return teleport is null
+                ? new(AreaScriptedUseOutcome.NoTeleport, null, lines, run, $"script {run.Script} {run.Stop} at SCR line {run.StopLine}: conversation of script {talk.Script} node {talk.Node}")
+                    { Dialog = talk, Printed = printedLines }
+                // ARC-WORLD-2358: the hero's teleport written before the dialog action, with the conversation the run opened (the caller queues the transfer for the next frame and opens the conversation).
+                : new(AreaScriptedUseOutcome.Teleport, teleport, lines, run, $"script {run.Script}: teleport to {teleport.CatalogueMap} ({teleport.X},{teleport.Y}) and conversation of script {talk.Script} node {talk.Node}")
+                    { Dialog = talk, Printed = printedLines };
         return teleport is null
             ? new(AreaScriptedUseOutcome.NoTeleport, null, lines, run, $"script {run.Script} {run.Stop} at SCR line {run.StopLine}: " + (npcTeleports.Count > 0 ? $"{npcTeleports.Count} teleport request(s) of NPCs" : "no teleport"))
                 { Printed = printedLines, NpcTeleports = npcTeleports }

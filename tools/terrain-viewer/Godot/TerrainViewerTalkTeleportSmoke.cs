@@ -26,8 +26,8 @@ public partial class TerrainViewerApp
             GD.Print("ARC-WORLD-2261 talk-teleport smoke FAIL: " + why);
             throw new InvalidOperationException("AREA_TALK_TELEPORT_SMOKE_FAILED");
         }
-        var simulatedFocus = _worldFocusSimulationForSelfTest; var focused = _worldFocused;
-        _worldFocusSimulationForSelfTest = true;
+        var simulatedFocus = _worldFocusSimulationForSelfTest; var focused = _worldFocused; var takesScripted = _smokeTakesScriptedConversations;
+        _worldFocusSimulationForSelfTest = true; _smokeTakesScriptedConversations = true;
         try
         {
             _worldFocused = true; SelectSimulatedPadForSelfTest();
@@ -35,6 +35,9 @@ public partial class TerrainViewerApp
             var template = _companionTemplates.FirstOrDefault(t => t.Home.RuntimeMap == CurrentAreaMap && !SpeakerDead(t.Speaker) && session.QueryCompanion(t.Entity).Standing == CompanionStanding.Free);
             if (template is null) { GD.Print($"ARC-WORLD-2261 native-smoke talk-teleport NO-SPEAKER map={map.RuntimeMap}"); return; }
             var from = _readyMapName;
+            // (0) ARC-WORLD-2358 (first, while the hero stands in the town with its speakers): a deferred call whose run starts a conversation opens it at the next frame (the speaker rules of a scripted start apply). The speaker's own dialog script, run from line 0 as a deferred call with the hero as the
+            // triggerer, asks for its conversation when its first line's guards hold (the town's speakers do at the first meeting); a script that starts none is logged and not failed.
+            var withCall = RunCallDialog(template);
             AreaSmokePlace(map, AreaSmokeStandable(map, template.HomeOrigin, 2));
             BeginConversation(template.Speaker);
             AreaSmokeFramesUntilConversation();
@@ -44,9 +47,9 @@ public partial class TerrainViewerApp
             // The hero is on another map now: the second move runs from its host, with no window open.
             Require(_conversationHost is { } arrivedHost && _mapTransfers is not null, "the new map has a conversation host and transfers");
             var withoutDialog = await RunTalkTeleportAsync(_conversationHost!, TalkTeleportToMain, Require);
-            GD.Print("ARC-WORLD-2261 native-smoke talk-teleport PASS " + System.Text.Json.JsonSerializer.Serialize(new { From = from, WithDialog = withDialog, WithoutDialog = withoutDialog }));
+            GD.Print("ARC-WORLD-2261 native-smoke talk-teleport PASS " + System.Text.Json.JsonSerializer.Serialize(new { From = from, WithDialog = withDialog, WithoutDialog = withoutDialog, CallDialog = withCall }));
         }
-        finally { _worldFocusSimulationForSelfTest = simulatedFocus; _worldFocused = focused; }
+        finally { _worldFocusSimulationForSelfTest = simulatedFocus; _worldFocused = focused; _smokeTakesScriptedConversations = takesScripted; }
     }
 
     /// <summary>Runs <paramref name="script"/> as a deferred call of the hero, requires the script transfer to queue, the next frames to apply it (waiting for the map load) and the hero to stand on its arrival cell.</summary>
@@ -71,5 +74,26 @@ public partial class TerrainViewerApp
         require(at == pending.Arrival, $"the hero stands on the arrival cell {pending.Arrival}: {at}");
         require(_mapTransfers is { Pending: null }, "no transfer is left pending");
         return new { Script = script, WithDialog = withDialog, From = before, To = pending.To.Name, Arrival = pending.Arrival };
+    }
+
+    /// <summary>ARC-WORLD-2358: runs the speaker's dialog script as a deferred call through the viewer's event world and requires the conversation its run starts to open at the next frame; the speaker is looked up on the shown map's host.</summary>
+    private object RunCallDialog(AreaCompanionTemplate template)
+    {
+        var map = _mapTransfers!.Map;
+        var host = _conversationHost!;
+        var speaker = host.Speakers.FirstOrDefault(s => s.ScriptId == template.Speaker.ScriptId);
+        if (speaker is null) return new { Script = template.Speaker.ScriptId, Result = "NO-SPEAKER" };
+        AreaSmokePlace(map, AreaSmokeStandable(map, template.HomeOrigin, 2));
+        AreaSmokeFrame();
+        var pc = new SessionScriptRole(new SessionMapId(map.RuntimeMap), SessionEventKinds.PlayerEntity);
+        var talker = new SessionScriptRole(new SessionMapId(map.RuntimeMap), AreaConversationState.EntityId(speaker.Row));
+        var ran = AreaEvents.RunScriptCall(new(speaker.ScriptId, 0, pc, talker));
+        var offered = host.LastCallDialog;
+        GD.Print($"ARC-WORLD-2358 call-dialog ran={ran} script={speaker.ScriptId} offered={(offered is null ? "none" : offered.Script + ":" + offered.Node)} detail={AreaEvents.LastCallRefusal}");
+        if (!ran || offered is null) return new { Script = speaker.ScriptId, Result = ran ? "NO-DIALOG" : "REFUSED" };
+        AreaSmokeFrame();
+        if (!ConversationOpen) { GD.Print("ARC-WORLD-2358 talk-teleport smoke FAIL: the deferred call's conversation did not open: " + _conversationNotice); throw new InvalidOperationException("AREA_TALK_TELEPORT_SMOKE_FAILED"); }
+        EndConversation();
+        return new { Script = speaker.ScriptId, Result = "OPENED", Node = offered.Node };
     }
 }
