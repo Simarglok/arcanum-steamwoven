@@ -198,6 +198,16 @@ public interface IScrSkillQueries
 }
 
 /// <summary>
+/// ARC-SCRIPT-2410 (ledger IV20): optional for a host that applies a run's quest requests as the run goes, as the original does (set PC quest state, 0x4C4D20, and give quest experience, 0x45F110, act at once): the interpreter
+/// tells the host each such request as the action makes it (a call-ex callee's too, in the order the actions run), so the run's later quest reads (<see cref="IScrObjectQueries.QuestState"/>) answer what the earlier writes left. The request
+/// is still collected in <see cref="ScrEffects.States"/>; a host that implements this does not apply it a second time.
+/// </summary>
+public interface IScrQuestWrites
+{
+    void QuestRequested(ScrStateRequest request);
+}
+
+/// <summary>
 /// ARC-SCRIPT-042: the item questions of set <see cref="ScrAdmissionSet.S14"/> (ledger WE rows). A host whose admission set holds the
 /// identified or rewielding condition or the magick-tech adjustment implements this interface; the interpreter asks only for the
 /// objects the clauses name.
