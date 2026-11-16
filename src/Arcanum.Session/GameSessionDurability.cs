@@ -93,7 +93,8 @@ internal sealed class DurabilityDomain
     internal SortedDictionary<string, int> Charges { get; } = new(StringComparer.Ordinal);
     internal SortedDictionary<string, int> ManaStores { get; } = new(StringComparer.Ordinal);
 
-    internal int Count => Records.Count + Destroyed.Count + Uses.Count + Charges.Count + ManaStores.Count;
+    // The mana stores (ARC-MAGIC-2403) have a budget of their own (GameSessionLimits.MaxManaStores), so a full durability budget never loses a payment's store.
+    internal int Count => Records.Count + Destroyed.Count + Uses.Count + Charges.Count;
 
     internal SessionDurabilityState Capture() =>
         new([.. Records.Select(pair => new SessionItemDurability(pair.Key, pair.Value))], [.. Destroyed],
@@ -241,7 +242,7 @@ public sealed partial class GameSessionOwner
     private static GameSessionFailure ImportDurability(SessionDurabilityState saved, GameSessionLimits limits, out DurabilityDomain durability)
     {
         durability = new();
-        if (saved.Items.Count + saved.Destroyed.Count + saved.Uses.Count + saved.Charges.Count + saved.ManaStores.Count > limits.MaxDurabilityRecords) return GameSessionFailure.BudgetExceeded;
+        if (saved.Items.Count + saved.Destroyed.Count + saved.Uses.Count + saved.Charges.Count > limits.MaxDurabilityRecords || saved.ManaStores.Count > limits.MaxManaStores) return GameSessionFailure.BudgetExceeded;
         foreach (var entity in saved.Destroyed)
             if (!SessionValidation.Entity(entity) || !durability.Destroyed.Add(entity)) return GameSessionFailure.InvalidDurability;
         foreach (var item in saved.Items)
