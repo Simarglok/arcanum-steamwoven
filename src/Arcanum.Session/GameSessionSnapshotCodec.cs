@@ -2620,7 +2620,7 @@ public static partial class GameSessionSnapshotCodec
             if (i > 0 && string.CompareOrdinal(entity, charges[i - 1].Entity) <= 0) throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path + ".entity");
             charges[i] = new(entity, Int(item["charges"], path + ".charges", 0, SessionItemUseLimits.MaxUses));
         }
-        var drained = Array(f["manaStores"], p + ".manaStores", GameSessionLimits.PolicyMaxDurabilityRecords);
+        var drained = Array(f["manaStores"], p + ".manaStores", GameSessionLimits.PolicyMaxManaStores);
         var manaStores = new SessionItemManaStore[drained.Length];
         for (var i = 0; i < drained.Length; i++)
         {

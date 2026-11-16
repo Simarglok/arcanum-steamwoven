@@ -50,6 +50,7 @@ Largest installed value against each cap; "interiors" are the 80 maps a whole-ma
 | `GameSessionLimits.PolicyMaxDangerRecords` (ARC-WORLD-079: NPC danger records) | 8,192 | 3,792 NPCs | all maps | 2.2× |
 | `GameSessionLimits.PolicyMaxDangerEnemies` (ARC-WORLD-079: enemy-list entries of all records; the original has no limit) | 65,536 | not counted: a policy cap, eight entries per record at the record cap; about 4.6 MB of snapshot at the cap | all maps | — |
 | `GameSessionLimits.PolicyMaxDurabilityRecords` (ARC-WORLD-053: changed and deleted items) | 8,192 | not counted: a policy cap as life, far above the items a playthrough damages; about 1–2 MB of snapshot at the cap | all maps | — |
+| `GameSessionLimits.PolicyMaxManaStores` (ARC-MAGIC-2403: mana stores of worn items, apart from the durability records) | 65,536 | 34,128 worn slots (3,792 NPCs × 9) | all maps | 1.9× |
 | `GameSessionSnapshotCodec.MaxEncodedCharacters` (save file, was 8 MiB) | 96 MiB | about 43 MB estimated | all maps | 2.3× |
 
 Notes on the policy caps:
