@@ -64,6 +64,22 @@ public sealed partial class GameSessionOwner
             .Select(pair => new SessionNpcWornItem(pair.Key, pair.Value)).ToArray()));
     }
 
+    /// <summary>
+    /// ARC-SCRIPT-2351 (ledger AR8): whether the body armour (slot 1006) the NPC's map data wears has been taken off since, for an NPC the session never dressed (no <see cref="QueryNpcWorn"/> record): a seed item of the NPC at
+    /// slot 1006 is no longer in its current list (a script take by name or a steal, ARC-SCRIPT-1987; the loot of its body; a second break that deletes it; a barter take writes a worn record and so answers through the dressed branch) or no longer worn there, or the session's durability record of it says broken (the first break takes a worn item off, ItemDamageOutcome.TakeOffAndRunBust). The original's removal and its wield-off hook (ledger AR2) then set the armour part of the NPC's
+    /// art to 0 (AR2), which the stored art does not show. False for a dressed NPC (its record answers), an NPC whose map data wore no body armour, or one no attached seed lists. Throws for an invalid entity id.
+    /// </summary>
+    public bool QueryNpcBodyArmorTakenOff(string npc)
+    {
+        ThrowIfDisposed();
+        if (!SessionValidation.Entity(npc)) throw new ArgumentException("Invalid entity id.", nameof(npc));
+        if (_inventory.NpcWorn.ContainsKey(npc) || !NpcHolderSeed(npc, out var map, out var seed, out var row)) return false;
+        var data = row.Items.Where(entity => seed.Items[entity].Facts.InventoryLocation == (int)EquipmentSlot.Armor).ToList();
+        if (data.Count == 0) return false;
+        var now = _inventory.Current(seed, row, entry => DroppedCell(map, seed, entry)).Where(entry => entry.Facts.InventoryLocation == (int)EquipmentSlot.Armor).Select(entry => entry.Entity).ToHashSet(StringComparer.Ordinal);
+        return data.Any(entity => !now.Contains(entity) || _durability.Records.TryGetValue(entity, out var condition) && condition.Broken);
+    }
+
     // ARC-WORLD-103: whether an item of the NPC's list is worn, as the session's lists show it (a dressed NPC's record, else the map data).
     private bool NpcWears(string npc, string item, SessionItemFacts facts) => _inventory.Worn(npc, item, facts).Worn;
 
