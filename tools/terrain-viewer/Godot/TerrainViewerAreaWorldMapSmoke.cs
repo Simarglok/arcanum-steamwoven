@@ -346,22 +346,22 @@ public partial class TerrainViewerApp
                         InventoryKey(Key.Enter);
                         Require(notes.Count == 1, $"{kind}: a note is back for the reopen check");
                         Require(notes.Items[0].Type == 2, $"{kind}: a new note takes the marker the radio group holds when it is made");
-                        // ARC-UI-2330 look (ARC_WORLDMAP_SMOKE_SHOT): one note of each type next to the kept one, drawn with the arts of their types ("after") and with the old
-                        // single art 143 ("before"); original-derived, kept under the thread, never committed. The extra notes go again.
+                        // ARC-UI-2330, ARC-UI-2445 look (ARC_WORLDMAP_SMOKE_SHOT): one note of each type next to the kept one, drawn with the arts of their types and their labels
+                        // ("after") and without the labels ("before"); original-derived, kept under the thread, never committed. The extra notes go again.
                         if (kind == AreaWorldMapKind.Map && System.Environment.GetEnvironmentVariable("ARC_WORLDMAP_SMOKE_SHOT") is { Length: > 0 } typeShot)
                         {
                             var first = notes.Items[0];
-                            for (int t = 0, slot = 0; t < 4; t++) if (t != first.Type) Require(notes.AddByQuill(Math.Max(0, first.PixelX + new[] { -80, -40, 40 }[slot++]), first.PixelY, "type " + t, t), "the type look note was added");
+                            for (int t = 0, slot = 0; t < 4; t++) if (t != first.Type) Require(notes.AddByQuill(Math.Max(0, first.PixelX + new[] { -60, 0, 60 }[slot]), Math.Max(0, first.PixelY + new[] { -45, 45, -45 }[slot++]), "type " + t, t), "the type look note was added");
                             for (var pass = 0; pass < 2; pass++)
                             {
-                                artView.NoteArtOverrideForSelfTest = pass == 0 ? null : AreaWorldMapArtLayout.NoteArt;
+                                artView.NoteLabelsOffForSelfTest = pass == 1; // ARC-UI-2445: before = art of the type, no labels (the #2330 look); after = art and label
                                 artView.RedrawForSelfTest();
                                 for (var f = 0; f < 4; f++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
                                 await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
                                 using var typeImage = GetViewport().GetTexture().GetImage();
                                 typeImage.SavePng(System.IO.Path.ChangeExtension(typeShot, pass == 0 ? ".notes-after.png" : ".notes-before.png"));
                             }
-                            artView.NoteArtOverrideForSelfTest = null;
+                            artView.NoteLabelsOffForSelfTest = false;
                             while (notes.Count > 1) notes.EditByQuill(notes.Count - 1, " ");
                             Require(notes.Count == 1 && notes.Items[0].Text == "Kept", "the type look notes are gone again");
                         }
