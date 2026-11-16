@@ -150,9 +150,18 @@ public sealed class AreaObjectBreakHostTests
             Assert.IsFalse(ScrAdmission.Admit(Read(content, 832), AreaUseScriptHost.HeartbeatAdmission).IsAdmitted, "the narrow heartbeat set stays without the quest commands");
             Assert.IsTrue(ScrAdmission.Admit(Read(content, 832), AreaUseScriptHost.BustAdmission).IsAdmitted);
             Assert.IsTrue(AreaUseScriptHost.BustAdmission.Actions.IsSupersetOf(AreaUseScriptHost.HeartbeatAdmission.Actions), "the bust set only adds");
-            // A scenery with no victim in the quest asks nothing: a bust with no attacker has no PC triggerer, so its quest request names nobody and changes nothing.
+        });
+        // A bust with no attacker has no PC triggerer, so the quest, rumor and reputation requests that name the triggerer ask for nobody (fresh session: nothing set before).
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var statue = Row(1, Scenery, 0, 832);
+            var (host, _) = Hosts(session, content, new Probe(), true, statue);
             var nobody = host.RunBust(AreaUseScriptHost.EntityId(statue), null, session.Rules.Scripts);
             Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, nobody.Outcome, nobody.Detail);
+            Assert.IsNull(session.QueryQuest(1016));
+            Assert.IsNull(session.QueryRumor(1100));
+            Assert.IsFalse(session.HeroHasReputation(1005));
         });
     }
 
@@ -172,7 +181,6 @@ public sealed class AreaObjectBreakHostTests
             Assert.AreEqual(AreaScriptedUseOutcome.EffectsRejected, ran.Outcome, ran.Detail);
             StringAssert.Contains(ran.Detail, "is not modelled (only an NPC of the shown map)");
             Assert.IsFalse(host.GlobalFlag(BustFlag), "nothing of the refused run applied");
-            Assert.IsNull(session.QueryQuest(1016), "no bust script ran either");
         });
     }
 
