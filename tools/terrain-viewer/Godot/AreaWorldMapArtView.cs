@@ -123,10 +123,10 @@ public partial class AreaWorldMapArtView : Control
     internal AreaTownNotes? TownNotesForSelfTest => _town?.Notes;
     internal AreaTownNotes? NotesForSelfTest(AreaWorldMapKind kind) => kind == AreaWorldMapKind.Map ? _mapNotes : kind == AreaWorldMapKind.Continent ? _continentNotes : _town?.Notes;
     internal int HoverWorldNoteForSelfTest => _hoverNote;
-    /// <summary>ARC-UI-2330: a smoke look at the old drawing (every note with one art): the art every note is drawn with, or null for the art of its type.</summary>
-    internal int? NoteArtOverrideForSelfTest { get; set; }
+    /// <summary>ARC-UI-2445: the before look of the composite (the map view's notes without their labels).</summary>
+    internal bool NoteLabelsOffForSelfTest { get; set; }
     internal void RedrawForSelfTest() => _canvas?.QueueRedraw();
-    private int NoteArtFor(AreaTownNote note) => NoteArtOverrideForSelfTest ?? AreaWorldMapArtLayout.NoteArtOf(note.Type);
+    private int NoteArtFor(AreaTownNote note) => AreaWorldMapArtLayout.NoteArtOf(note.Type);
     /// <summary>ARC-UI-106: the quill is the tool (town map only); its cursor is art 21 (WM30).</summary>
     public bool QuillActive => _quill;
     /// <summary>ARC-UI-106: the note text entry has the keyboard (typed keys go to it, not to the window's keys).</summary>
@@ -964,9 +964,17 @@ public partial class AreaWorldMapArtView : Control
             var (x, y) = AreaWorldMapArtLayout.LabelAt(pixel.X, pixel.Y, _offset, (int)worldArea.NameOffsetX, (int)worldArea.NameOffsetY);
             Label(canvas, worldArea.Name, x, y, colour);
         }
-        // ARC-UI-110, ARC-UI-2330: the map view's notes, each with the art of its type centred on its pixel (the text shows on hover).
+        // ARC-UI-110, ARC-UI-2330, ARC-UI-2445 (WM142, WM49): the map view's notes, each with the art of its type centred on its pixel, then its text beside it as an area
+        // marker's name is placed (no name offset: a note has none), in the colour of the type's font row. The text still shows on hover. NoteLabelsOffForSelfTest draws the
+        // earlier look (icons only) for the composite.
         if (_mapNotes is { } mapNotes)
-            foreach (var note in mapNotes.Items) MarkerAt(canvas, NoteArtFor(note), new Vector2(note.PixelX - _offset.X, note.PixelY - _offset.Y));
+            foreach (var note in mapNotes.Items)
+            {
+                MarkerAt(canvas, NoteArtFor(note), new Vector2(note.PixelX - _offset.X, note.PixelY - _offset.Y));
+                if (NoteLabelsOffForSelfTest) continue;
+                var (x, y) = AreaWorldMapArtLayout.LabelAt(note.PixelX, note.PixelY, _offset, 0, 0);
+                Label(canvas, note.Text, x, y, AreaWorldMapArtLayout.NoteLabelColourOf(note.Type));
+            }
         if (!map.OnStartMap) return;
         // WM80, WM104: a straight line from the party through each waypoint's icon pixel in turn; the one that ends at the selected waypoint is (50, 50, 110), the
         // others (160, 50, 50); each icon is drawn after its line, so the next line overdraws it.

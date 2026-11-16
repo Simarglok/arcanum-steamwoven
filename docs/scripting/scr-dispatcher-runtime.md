@@ -415,8 +415,7 @@ type (34) and the run's ten object variables as a focus kind (11), as the origin
   slot the run itself changes). An unreadable callee ends the dispatch with `UnreadableScript`, and a nesting deeper than
   `ScrRunOptions.MaxCallDepth` (default 16, the original's bound is its stack; the deepest literal call chain in the installed scripts is 8, and four scripts are on call cycles; kept at 16 by the owner's decision of 2026-10-21, [rule modes](../world/rule-modes.md)) or more than `MaxCallDepth` ×
   `MaxExecutedLines` lines in the whole dispatch end it with `CallDepth`; both apply nothing. The result's trace is the
-  top run's (empty for a refused callee, whose number the result names). The runner's dialog-point gates (E6) are not
-  applied to a callee, so a dialog-point event never runs call script. Only single objects are admitted, so a call runs once; the original runs one call per triggerer and
+  top run's (empty for a refused callee, whose number the result names). The callee runs at the caller's point (0x44B030 copies it into the invocation, then the event runner 0x4449B0), so at the dialog point its attachee meets the dialog gates (E6: dead without the callee's death-speech flag or surrendered without its surrender-speech flag runs nothing, mind-controlled runs 2188; ARC-SCRIPT-2198), and a dialog-point event may run call script. Only single objects are admitted, so a call runs once; the original runs one call per triggerer and
   attachee pair of two groups.
 - **Registry**: `ScrInterpreter.Call` marks 0x44B030 (partial); the 15 and 34 cases are in the 0x447220 row.
 - **Installed original** (opt-in `AreaUseScriptsOriginalTests`, a new game's state): map mode's tile scripts that run grow

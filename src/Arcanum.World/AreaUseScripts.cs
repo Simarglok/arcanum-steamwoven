@@ -280,6 +280,17 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         ScrAdmissionSet.S3.FocusKinds.Concat([ScrFocusKind.CurrentLoopedObject, ScrFocusKind.EveryoneInVicinity, ScrFocusKind.AnyoneInVicinity, ScrFocusKind.EverySceneryInVicinity, ScrFocusKind.AnySceneryInVicinity, ScrFocusKind.LocalObject,
             ScrFocusKind.EveryContainerInVicinity, ScrFocusKind.AnyContainerInVicinity, ScrFocusKind.EveryFollower, ScrFocusKind.AnyFollower]));
 
+    /// <summary>
+    /// ARC-SCRIPT-2338 (ledger BS1, BS2): the set a BUST script (attachment point 30) runs under (<see cref="RunBust"/>): <see cref="HeartbeatAdmission"/> plus the story actions of <see cref="ScrAdmissionSet.S13"/> (set PC quest
+    /// state 16, mark map location 49, set rumor 50, add and remove reputation 72 and 73) and play script eye candy (120). The original's script executor (0x447220) has no per-point restriction, so a bust script runs the same commands a use
+    /// script does; the heartbeat set stays narrow because it runs every few seconds for every NPC near the PC, and a break runs once. The installed bust script 1734 (main map, the scenery that stops the script eye candy
+    /// of its neighbours) sets a PC quest state and plays a script eye candy; the run applies them through the same <see cref="Apply"/> as a use click (<see cref="AreaScriptStory.Apply"/>, the eye candy requests for the viewer).
+    /// </summary>
+    public static ScrAdmissionSet BustAdmission { get; } = new("S2-area-bust-heartbeat-story-eye-candy",
+        HeartbeatAdmission.Conditions,
+        HeartbeatAdmission.Actions.Union(ScrAdmissionSet.S13.Actions.Where(a => !ScrAdmissionSet.S12.Actions.Contains(a))).Append(ScrCatalogue.Action.PlayScriptEyeCandy),
+        HeartbeatAdmission.ValueKinds, HeartbeatAdmission.FocusKinds, HeartbeatAdmission.CounterIndexWraps);
+
     /// <summary>ARC-WORLD-114: whether a script switched the NPC <paramref name="entity"/> of map <paramref name="map"/> off
     /// (<see cref="OffProperty"/>).</summary>
     public static bool SwitchedOff(GameSessionOwner session, int map, string entity) =>
@@ -1565,7 +1576,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     /// <summary>
     /// ARC-DEV-260 (ledger OD4, OD15): the BUST script (attachment point 30) of <paramref name="victim"/>, an object of the shown map, which the break
     /// (0x43F1C0) runs through the script dispatcher (0x441980) with <paramref name="breaker"/> as the triggerer (null: a break with no attacker,
-    /// the null handle), the object as the attachee and no extra object, under <see cref="HeartbeatAdmission"/>. The break ignores the answer, so
+    /// the null handle), the object as the attachee and no extra object, under <see cref="BustAdmission"/>. The break ignores the answer, so
     /// the caller reads nothing from it; its slot is kept as map changes (<see cref="SlotProperty"/>). An object that is not a row of the shown
     /// map, or has no script at the point, runs nothing.
     /// </summary>
@@ -1579,7 +1590,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         _clicked = (victim, row);
         try
         {
-            var run = ScrDispatcher.RunObject(new(ScrPoint.Bust, attachee, breaker, null), this, new() { Rules = rules, Admission = HeartbeatAdmission });
+            var run = ScrDispatcher.RunObject(new(ScrPoint.Bust, attachee, breaker, null), this, new() { Rules = rules, Admission = BustAdmission });
             return Finish(run, _ => "a teleport from a bust script is not modelled", writeback => WriteObjectSlot(writeback, attachee));
         }
         finally { _clicked = previous; }
@@ -2512,15 +2523,17 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     // ARC-WORLD-114: the first toggle state or kill of the run the viewer cannot apply, named; null when every one can be. Both act on an NPC
     // of the shown map only; a kill needs the world's kill (ARC-SCRIPT-1360: an NPC its map data has off is switched on by a toggle, see NpcOff). ARC-SCRIPT-052: destroy takes an NPC of the shown map out of the world unless it follows the PC (the party removal is not
     // read) or has a destroy-point script (the destroy event is audit slice 4); stop attacking acts on the PC or an NPC of the shown map.
-    private string? ObjectStateRefusal(ScrEffects effects)
+    private string? ObjectStateRefusal(ScrEffects effects) => ObjectStateRefusal(effects.WorldChanges, effects.ObjectStates);
+
+    private string? ObjectStateRefusal(IReadOnlyList<ScrWorldRequest> worldChanges, IReadOnlyList<ScrObjectStateRequest> objectStates)
     {
         // ARC-SCRIPT-1164 (WO5): a sector with a negative number, or an x beyond the 26 packed bits, is not kept in the session's keys.
-        foreach (var change in effects.WorldChanges)
+        foreach (var change in worldChanges)
             if (change.Change == ScrWorldChange.SectorBlocked && SessionSectorBlock.Pack(change.A, change.B) is null)
                 return $"toggle sector blocked of ({change.A},{change.B}) is not modelled (a negative sector or an x beyond 26 bits)";
         // ARC-SCRIPT-1279: the (holder, name) pairs earlier item actions of the run touched: each plan below is read against the state before the run, so an action that meets a pair an earlier one changed would be planned on a stale list.
         var touched = new HashSet<(string? Holder, int Name)>();
-        foreach (var request in effects.ObjectStates)
+        foreach (var request in objectStates)
         {
             if (request.Change == ScrObjectStateChange.StopAttacking)
             {
@@ -2748,6 +2761,36 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         if (IsPc(near) || FollowsPc(near)) return DropOwner.PcSide;
         return Row(near) is { Type: 15 or 16 } ? DropOwner.Npc : DropOwner.Object;
     }
+
+    /// <summary>ARC-SCRIPT-2198: the first reason the dialog host cannot apply the state requests of a talk run through this host, or null. A talk run holds disband (22) and create item (66) of the shown map's objects (the same plan as a use run's:
+    /// the party, the item prototype and the holder's list), and the slots of other objects its change script (99) and call-ex callees wrote (<see cref="CanWriteObjectSlot"/>); a transform of an object (40) is not modelled here (no host changes
+    /// a critter's prototype in place yet).</summary>
+    internal string? TalkStateRefusal(ScrEffects effects)
+    {
+        foreach (var request in effects.ObjectStates)
+            if (request.Change == ScrObjectStateChange.Transform) return $"transform of {request.Object.Code} into prototype {request.Value} is not modelled (no critter changes its prototype in place)";
+        foreach (var write in effects.SlotWrites)
+            if (!CanWriteObjectSlot(write)) return $"the slot of point {write.Point} of {write.Attachee?.Code} cannot be stored (no loaded element on the shown map)";
+        var planned = effects.ObjectStates.Where(request => request.Change == ScrObjectStateChange.CreateItem).ToArray();
+        return planned.Length == 0 ? null : ObjectStateRefusal([], planned);
+    }
+
+    /// <summary>ARC-SCRIPT-2198: one disband or create item request of a talk run, in action order (<see cref="TalkStateRefusal"/> planned it); false when the session refuses. Any other request is not this host's and does nothing.</summary>
+    internal bool ApplyTalkObjectState(ScrObjectStateRequest request)
+    {
+        if (request.Change == ScrObjectStateChange.CreateItem) return ApplyWorldObject(request);
+        if (request.Change != ScrObjectStateChange.Disband || IsPc(request.Object)) return true;
+        // NS1: as a use run's disband: the session's leave with the follow check skipped; one that follows no one does nothing.
+        var left = _session.LeaveParty(_session.Version, request.Object.Code, new PartyLeave(Force: true));
+        return left.Disposition != GameSessionDisposition.Rejected || left.Failure == GameSessionFailure.InvalidCompanion;
+    }
+
+    /// <summary>ARC-SCRIPT-2198: whether <see cref="WriteObjectSlot(ScrWriteback)"/> can store the slot (an object of the shown map with the loaded element at a point kept as map changes), a pure lookup.</summary>
+    internal bool CanWriteObjectSlot(ScrWriteback writeback) => writeback is { Source: ScrSource.Object, Attachee: { } attachee } && KeptAsMapChanges(writeback.Point)
+        && Row(attachee) is { } row && LoadedOrPlaced(row, attachee.Code, writeback.Point) is not null;
+
+    /// <summary>ARC-SCRIPT-2198: stores the slot of another object a talk run wrote (change script, a call-ex callee's result) as map changes, as a use run does.</summary>
+    internal bool WriteObjectSlot(ScrWriteback writeback) => CanWriteObjectSlot(writeback) && WriteObjectSlot(writeback, writeback.Attachee!.Value);
 
     /// <summary>ARC-WORLD-2382: whether <see cref="WriteUseSlot"/> can store the run's slot (a use slot of an object of the shown map that has the loaded element), a pure lookup the talk host asks before anything applies.</summary>
     internal bool CanWriteUseSlot(ScrWriteback writeback) => writeback is { Source: ScrSource.Object, Point: ScrPoint.Use, Attachee: { } attachee }
