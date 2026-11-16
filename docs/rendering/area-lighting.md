@@ -393,7 +393,9 @@ The best variant of the experiment is a part of the one **HD** option (ARC-UI-21
 line of `arcanum.cfg` is ignored and left alone). It is in force exactly while the visual profile is HD (`SyncRelitLook` follows the profile every frame: HD
 Off, by the H key too, puts the look out of force and the draw is Legacy byte for byte; [HD lines](terrain-viewer.md)). In force it is the night-weighted mode (`NightAdd`) at the strength **1.6**
 (`AreaRelight.LookStrength`, the experiment's pick; `ARC_RELIGHT_LOOK_STRENGTH` changes it for tuning by eye): terrain, scenery, bodies and the hero take a normal derived per pixel from the sprite's
-luminance and the dynamic point-light term, weighted by how dark the item's own ambient is, so daylight stays Legacy and a dark scene takes the full term. The hero's carried light and the map's
+luminance and the dynamic point-light term, weighted by how dark the item's own ambient is, so daylight stays Legacy and a dark scene takes the full term. The ambient the weight reads leaves out the carried lights (ARC-RENDER-2298: the shader
+uniform `relight_weight`, from the body's colour before `AddCarried` and the hero's colour without the carried view), because the relit term takes those lights from its own list: a light's carrier
+then counts as dark like the ground round it, not as already lit by its own torch (the weight, and so the term, was zero on the carrier before). The hero's carried light and the map's
 lights are one list with the view-culling rule above (32 nearest the view's centre). The environment's `ARC_RELIGHT` modes stay as a developer override (when set they win over the look and use
 `ARC_RELIGHT_STRENGTH`). No gameplay luminance, clock or RNG is read or changed (FR-LIGHT-009 and FR-LIGHT-011 untouched).
 

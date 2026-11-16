@@ -113,6 +113,7 @@ public partial class AreaDrawItem : Node2D
     private ShaderMaterial? _material;
     private (bool Additive, bool Multiply, int Alpha, int WadeRows)? _materialState;
     private Color? _ambientState;
+    private Color? _weightState;
     private (AreaWallFade Fade, int Width, bool Flip, int Scale, int Start)? _fadeState;
     private (int Mode, Color Right, AreaLatticeBinding? Lattice, AreaCarriedBinding? Carried, TerrainRect Rect, Vector4 Raster)? _lightState;
     private ImageTexture? _mapping;
@@ -146,6 +147,8 @@ public partial class AreaDrawItem : Node2D
     internal AreaCarriedBinding? Carried { get; set; }
     /// <summary>ARC-RES-1978: what the relit look treats this item as (<see cref="AreaRelight.KindNone"/> .. KindCritter); read only while it is on.</summary>
     internal int RelightKind { get; set; }
+    /// <summary>ARC-RENDER-2298: the ambient the relit night weight reads, the item's colour without the carried lights (null: <see cref="Ambient"/>); read only while the relit look is on.</summary>
+    internal Color? WeightAmbient { get; set; }
     private (bool Relit, int Kind, int Scale)? _relitState;
     /// <summary>Shared index rows owned by the canvas. A standalone item (tests, probes)
     /// keeps a private cache holding only its current row.</summary>
@@ -214,7 +217,7 @@ public partial class AreaDrawItem : Node2D
             _material.SetShaderParameter("wade_rows", command.WadeRows);
             _material.SetShaderParameter("wade_alpha", AreaScenePlan.WadingAlpha / 255f);
             _materialState = (command.Additive, command.Multiply, command.Alpha, command.WadeRows);
-            _ambientState = null; _lightState = null; _fadeState = null; _cornerState = null; // re-send the per-item uniforms with every shader swap
+            _ambientState = null; _weightState = null; _lightState = null; _fadeState = null; _cornerState = null; // re-send the per-item uniforms with every shader swap
         }
         if (_ambientState != Ambient)
         {
@@ -249,6 +252,12 @@ public partial class AreaDrawItem : Node2D
             // ARC-RENDER-2060: an N-times HD frame has N times the texels over the same drawn size, so its luminance steps are 1/N as big: the gradient gain scales with N.
             _material.SetShaderParameter("relight_scale", HdScale);
             _relitState = (true, RelightKind, HdScale);
+        }
+        if (relit && _weightState != (WeightAmbient ?? Ambient))
+        {
+            var weight = WeightAmbient ?? Ambient;
+            _material.SetShaderParameter("relight_weight", new Vector3(weight.R, weight.G, weight.B));
+            _weightState = weight;
         }
         var light = (mode, AmbientRight, Lattice, Carried, mode == 1 || command.WadeRows > 0 ? command.Destination : default, raster);
         if (_lightState != light)
