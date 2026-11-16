@@ -103,8 +103,9 @@ Why this range (Steam Hardware Survey, primary display, October 2026, read 2026-
   shows its centred crop (16:9: 1440 px). A middle band a few pixels taller than 16:10 allows (a bar under 4 px dropped by
   SWI-LAY-3) gets the backdrop scaled uniformly to cover it, centred.
 - **SWI-BDR-4** Menus whose original backgrounds share a material share one backdrop (a family). The families are
-  fixed by the census ([#2451](https://github.com/Simarglok/arcanum-steamwoven/issues/2451)).
-- **SWI-BDR-5** A two-part window (inventory, loot, barter: left 358 units, right 442 units) splits at 1290 px from the
+  fixed by the census ([#2451](https://github.com/Simarglok/arcanum-steamwoven/issues/2451)): eight families (BD-A to BD-H) and the
+  panel board, listed in the [census](steamwoven-interface-census.md#backdrop-families).
+- **SWI-BDR-5** A two-part window (inventory, loot, barter: left 358 units, right 442 units; the census finds two more, the logbook 165 + 635 and the reading window 132 + 668, [census](steamwoven-interface-census.md#two-part-windows-and-full-screen-menus)) splits at 1290 px from the
   centre block's left edge (358 × 3.6 = 1288.8, snapped). The left material runs from the frame's left edge to the
   split, the right material from the split to the frame's right edge.
 - **SWI-BDR-6** A full-screen menu (an original 800 × 600 background: main menu, options and the others the census
@@ -152,7 +153,7 @@ Part kinds:
 
 | Step | Who | Output | Where it lives |
 | --- | --- | --- | --- |
-| 1. Census | agent ([#2451](https://github.com/Simarglok/arcanum-steamwoven/issues/2451)) | census note, screenshots | note in git, screenshots in `local/steamwoven-ui/census/` |
+| 1. Census | agent ([#2451](https://github.com/Simarglok/arcanum-steamwoven/issues/2451)) | [census note](steamwoven-interface-census.md), screenshots | note in git, screenshots in `local/steamwoven-ui/census/` |
 | 2. Kit manifest | agent ([#2454](https://github.com/Simarglok/arcanum-steamwoven/issues/2454)) | `kit.json`, validator | git |
 | 3. Context images | owner in Codex ([#2455](https://github.com/Simarglok/arcanum-steamwoven/issues/2455)) | whole-screen redraws of key screens | local |
 | 4. Material sheet | owner in Codex, owner approves ([#2456](https://github.com/Simarglok/arcanum-steamwoven/issues/2456)) | wood, brass, paper, … | local |
@@ -254,10 +255,10 @@ acceptance criteria. Start any issue that is `status:ready`; the order below is 
 | 4. Tools | [#2460](https://github.com/Simarglok/arcanum-steamwoven/issues/2460) | bake tool and storage | #2454 |
 | 5. Runtime | [#2461](https://github.com/Simarglok/arcanum-steamwoven/issues/2461) | runtime composition, window integration issues | #2450, #2460 |
 | 5. Runtime | [#2462](https://github.com/Simarglok/arcanum-steamwoven/issues/2462) | fonts at the four steps | #2450, #2451 |
-| 6. Production | created by #2451 | one batch per family or part group | fit, bake, material sheet |
+| 6. Production | [#2472](https://github.com/Simarglok/arcanum-steamwoven/issues/2472) to [#2487](https://github.com/Simarglok/arcanum-steamwoven/issues/2487) (created by #2451, [batch table](steamwoven-interface-census.md#production-batches)) | one batch per family or part group | fit, bake, material sheet (backdrops also the surface method) |
 | 6. Integration | created by #2461 | one issue per window | runtime, its batch |
 
-Ready now: #2450, #2451.
+Ready now: #2450; the census (#2451) is done and unblocks #2454 and #2455 (#2462 still waits for #2450), and follow-ups #2489 (capture hooks) and #2490 (open facts).
 
 ## Open questions
 
