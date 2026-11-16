@@ -963,6 +963,18 @@ on each later step, so `./arcanum run` keeps the command's output out of it by d
   `dotnet` `error CS…`/`MSB…`/`NU…`/`NETSDK…`, failed tests and non-zero error counts, Python tracebacks and
   `…Error:` lines, .NET exceptions, `fatal:`/`error:` lines, `command not found`, `Segmentation fault`, `FAIL`/`FAILED`
   markers, `failure mode=`/`failure stage=` and `..._FAILED` codes; counts of zero errors are not.
+- **Killed by a signal (ARC-DEV-2360).** A command a signal ended has the exit code `-N` when the command itself died
+  on it (`-11` is SIGSEGV) and `128+N` when a shell or wrapper passes its child's status on (139). For a crash signal
+  (SIGSEGV, SIGABRT, SIGBUS, SIGILL, SIGFPE) the summary adds a `note:` line after `FAIL` with the signal's name and the
+  last `PASS` line's number, and says so when only Godot's shutdown leak lines (`Leaked unsafe reference`,
+  `ObjectDB instances were leaked`) follow it: this looks like a crash at engine shutdown. It never says the checks
+  passed (the log may hold an earlier failed stage); an error line after the last `PASS` line, no `PASS` line or no leak
+  line gets its own wording, and another signal (SIGKILL, SIGTERM, SIGINT) is "not a crash signal". The exit code stays
+  as it was and the run is still red: retry once, and a repeat is a real failure. Seen once in 31 headless
+  self-tests (2026-11-16, run #30494; the Mac was busy with other Godot runs); 12 reruns in a busy queue passed. The
+  cause is not found: that log held two leaked `InputEventKey` objects (F8, the self-test's quick-key route) reported
+  by the mono module at exit and none of the 30 other logs did, which fits a Godot shutdown crash but is a
+  hypothesis, so the issue is recorded as not reproducible.
 - **Reading the log.** Check the start in the log (`rg -n -m 20 'stage|ERROR' PATH`, `tail -n 20 PATH`), and read
   more of it only in small ranges, as [small search and read output](tasks.md#small-search-and-read-output) says.
 - **`--verbose`** streams the command's output to the terminal as before, with no log file, no summary and no
@@ -1272,6 +1284,7 @@ Original inputs remain read-only and local. Set only the inputs needed for the s
 | --- | --- | --- |
 | Executable interpreter | `ARCANUM_EXE`; the replays also the oracle files of 0x4A6980 and 0x4A68B0 (`ARCANUM_ORACLE_DIR`, default `research-private/oracle`) | Executable project, `TestCategory=OriginalExe`; [contract](../project/components/Arcanum.Executable.md#verification) |
 | Prototype builder | `ARCANUM_EXE` and `ARCANUM_GAME_ROOT` (the installed game folder; inconclusive without it); the comparison also `ARCANUM_ORIGINAL_PROTO` (a folder of the 1,423 files the original wrote); `ARCANUM_PROTO_OUT` writes the built files for a look (refused inside a git repository) | Executable project, `FullyQualifiedName~PrototypeBuilderRealData`, `TestCategory=OriginalExe`; about one minute in Release (`-c Release`: Debug is several times slower), the builds run in parallel; [contract](../project/components/Arcanum.Executable.md#the-prototype-builder) |
+| NPC art armour part census (ARC-SCRIPT-2351) | `DAT_ROOT` = the installed game folder | Terrain viewer tests, `FullyQualifiedName~AreaBodyArmorArtCensusTests&TestCategory=RealData` (about 3 min); the installed NPC rows by the armour part of their stored art against the body armour their map data lists; a failure prints the changed counts to paste into the test; [ledger AR8](../research/ledger/scripts.md#get-armor-and-the-group-in-list-conditions-arc-script-2326) |
 | Art number census (ARC-SCRIPT-1780) | `DAT_ROOT` = the installed game folder | World project, `FullyQualifiedName~ObjectArtCensusRealData&TestCategory=RealData` (about 1 min); the art classes of the NPC prototypes and placed rows (787 placed unique NPCs) and the object each use of change art number names (none an NPC); [ledger AN16–AN17](../research/ledger/scripts.md#change-art-number-arc-script-1735-e5-a-tail) |
 | Hero sight and dialog scripts (ARC-SCRIPT-1863) | `DAT_ROOT` = the installed game folder | Scripting project, `FullyQualifiedName~ScrHeroSightCensusRealData&TestCategory=RealData` (the installed clauses of conditions 26, 28, 29); terrain viewer tests, `FullyQualifiedName~AreaHeroSightScriptRealData&TestCategory=RealData` (scripts 2602 and 1130 run under the use host; under a second each); [ledger CS17](../research/ledger/scripts.md) |
 | Bed census (ARC-WORLD-1162) | `DAT_ROOT` = the installed game folder | World project, `FullyQualifiedName~BedCensusRealData&TestCategory=RealData` (about 1 min); the placed beds of the 80 whole maps with their use scripts, pinned (191, 19 scripted), and the main map's, read sector by sector (ARC-WORLD-1262: 275 beds, 32 scripted, 1556 NPC rows with a route, 150 on a bed); [sleep window](../world/sleep-window-runtime.md#the-bed-arc-world-1162-ledger-swb1-swb3-swb5-swb14swb16) |
