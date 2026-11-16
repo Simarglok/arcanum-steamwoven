@@ -74,6 +74,11 @@ public sealed class AreaObjectBreakHostTests
             Write("scr/00709trap.scr", Program(0x1, Do(new(ScrCatalogue.Action.SetGlobalFlag, N(2302))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
             Write("scr/00830bust.scr", Program(0, Do(new(ScrCatalogue.Action.SetGlobalFlag, N(BustFlag))),
                 Do(new(ScrCatalogue.Action.Damage, (Triggerer, 0), N(4), N(0))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
+            // 832 (ARC-SCRIPT-2338, BS1): a BUST script with the commands of the installed script 1734: set PC quest state for the triggerer, a script eye candy on the attachee and the story's rumor and reputation commands.
+            Write("scr/00832story.scr", Program(0, Do(new(ScrCatalogue.Action.SetPcQuestState, (Triggerer, 0), N(1016), N(2))), Do(new(ScrCatalogue.Action.PlayScriptEyeCandy, N(7), (Attachee, -1))),
+                Do(new(ScrCatalogue.Action.SetRumor, N(1100), (Triggerer, 0))), Do(new(ScrCatalogue.Action.AddReputation, (Triggerer, 0), N(1005))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
+            // 833 (ARC-SCRIPT-2338, BS2): a script that sets flag 2301 and then destroys its own scenery.
+            Write("scr/00833destroy.scr", Program(0, Do(new(ScrCatalogue.Action.SetGlobalFlag, N(BustFlag))), Do(new(ScrCatalogue.Action.Destroy, (Attachee, 0))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
             Write("scr/00831local.scr", Program(0, Do(new(ScrCatalogue.Action.SetLocalFlag, N(1))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
             using var content = ScriptContent.Open(ContentMountPlan.Discover(root.FullName, "Syn").Plan!).Content!;
             test(content);
@@ -123,6 +128,59 @@ public sealed class AreaObjectBreakHostTests
             CollectionAssert.AreEqual(new[] { $"{Arcanum.Simulation.Ai.AiSchedulerRules.Pc}:4" }, probe.Damaged, "the breaker is the triggerer of the script's action");
             Assert.AreEqual(0, host.RunBust("oid:nobody", host.Pc, rules).Run?.Script ?? 0, "not a row of the shown map");
             Assert.AreEqual("no script at the point", host.RunBust(AreaUseScriptHost.EntityId(Row(2, Scenery, 0, 0)), host.Pc, rules).Detail);
+        });
+    }
+
+    // ARC-SCRIPT-2338 (BS1): the bust host applies the story effects of the run as the use host does (the quest, rumor and reputation requests for the PC, a script eye candy for the viewer); the heartbeat set alone refuses them.
+    [TestMethod]
+    public void A_bust_script_applies_the_quest_rumor_and_reputation_commands_and_the_eye_candy_of_its_run()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var statue = Row(1, Scenery, 0, 832);
+            var (host, _) = Hosts(session, content, new Probe(), true, statue);
+            var ran = host.RunBust(AreaUseScriptHost.EntityId(statue), host.Pc, session.Rules.Scripts);
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, ran.Outcome, ran.Detail);
+            Assert.AreEqual(SessionQuestState.Accepted, session.QueryQuest(1016)!.Value.State);
+            Assert.IsNotNull(session.QueryRumor(1100));
+            Assert.IsTrue(session.HeroHasReputation(1005));
+            var candies = host.TakeEyeCandies();
+            Assert.AreEqual(1, candies.Count, "the play script eye candy of the run reaches the viewer's request list");
+            Assert.IsFalse(ScrAdmission.Admit(Read(content, 832), AreaUseScriptHost.HeartbeatAdmission).IsAdmitted, "the narrow heartbeat set stays without the quest commands");
+            Assert.IsTrue(ScrAdmission.Admit(Read(content, 832), AreaUseScriptHost.BustAdmission).IsAdmitted);
+            Assert.IsTrue(AreaUseScriptHost.BustAdmission.Actions.IsSupersetOf(AreaUseScriptHost.HeartbeatAdmission.Actions), "the bust set only adds");
+        });
+        // A bust with no attacker has no PC triggerer, so the quest, rumor and reputation requests that name the triggerer ask for nobody (fresh session: nothing set before).
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var statue = Row(1, Scenery, 0, 832);
+            var (host, _) = Hosts(session, content, new Probe(), true, statue);
+            var nobody = host.RunBust(AreaUseScriptHost.EntityId(statue), null, session.Rules.Scripts);
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, nobody.Outcome, nobody.Detail);
+            Assert.IsNull(session.QueryQuest(1016));
+            Assert.IsNull(session.QueryRumor(1100));
+            Assert.IsFalse(session.HeroHasReputation(1005));
+        });
+    }
+
+    private static ScrProgram Read(ScriptContent content, int number) => content.Script(number).Program!;
+
+    // ARC-SCRIPT-2338 (BS2): no host destroys a scenery, so the destroy point (2) of a scenery with a script of its own (installed script 1734 holds one) is never reached: a script's destroy of a scenery is refused whole, with the reason, before
+    // anything of the run applies.
+    [TestMethod]
+    public void A_script_that_destroys_a_scenery_is_refused_whole_and_its_destroy_point_is_not_run()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var statue = Row(1, Scenery, 833, 832);
+            var (host, _) = Hosts(session, content, new Probe(), true, statue);
+            var ran = host.Run(statue, session.Rules.Scripts);
+            Assert.AreEqual(AreaScriptedUseOutcome.EffectsRejected, ran.Outcome, ran.Detail);
+            StringAssert.Contains(ran.Detail, "is not modelled (only an NPC of the shown map)");
+            Assert.IsFalse(host.GlobalFlag(BustFlag), "nothing of the refused run applied");
         });
     }
 
