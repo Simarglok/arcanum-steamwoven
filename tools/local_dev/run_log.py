@@ -70,24 +70,38 @@ SHUTDOWN_LEAK = re.compile(r"Leaked unsafe reference|ObjectDB instances were lea
 PASS_LINE = re.compile(r"\bPASS\b")
 
 
+CRASH_SIGNALS = (signal.SIGSEGV, signal.SIGABRT, signal.SIGBUS, signal.SIGILL, signal.SIGFPE)
+
+
 def signal_note(lines: Sequence[str], exit_code: int) -> str | None:
-    """ARC-DEV-2360: a command killed by a signal (the exit code is the negative signal number) after its PASS lines
-    and Godot's shutdown leak lines is a crash at engine shutdown, not a failed check: it was seen once in 31 headless
-    self-tests (SIGSEGV, 2026-11-16) and did not come back. The exit code stays as it is; the note tells the reader to
-    look at the last PASS line and retry once, and that a repeat is a real failure."""
-    if exit_code >= 0:
+    """ARC-DEV-2360: a command a signal ended, with exit code -N (the command itself died on it) or 128+N (a shell or
+    wrapper passing its child's status on), gets a `note:` line. For a crash signal (SIGSEGV, SIGABRT, SIGBUS, SIGILL,
+    SIGFPE) it says where the log's last PASS line is, and when only Godot's shutdown leak lines follow it (no other
+    error line) that this looks like a crash at engine shutdown, seen once in 31 headless self-tests and gone on the
+    retry. The exit code stays as it is. The note claims no more than the log shows: it does not say the checks passed."""
+    number = -exit_code if exit_code < 0 else exit_code - 128
+    crash = next((item for item in CRASH_SIGNALS if item.value == number), None)
+    if exit_code >= 0 and crash is None:
         return None
     try:
-        name = signal.Signals(-exit_code).name
+        name = signal.Signals(number).name
     except ValueError:
-        name = f"signal {-exit_code}"
+        name = f"signal {number}"
+    if crash is None:
+        return f"note: ended by {name}, not a crash signal"
     passes = [index for index, line in enumerate(lines) if PASS_LINE.search(line)]
     if not passes:
-        return f"note: killed by {name} and no PASS line in the log: a crash, not a shutdown crash"
+        return f"note: killed by {name} and the log has no PASS line: a crash, not a shutdown crash"
     last = passes[-1]
-    if any(SHUTDOWN_LEAK.search(line) for line in lines[last + 1:]):
-        return (f"note: killed by {name} after the last PASS line (line {last + 1}) and Godot's shutdown leak lines: "
-                "a shutdown crash after the checks passed (ARC-DEV-2360); retry once, a repeat is a real failure")
+    after = lines[last + 1:]
+    others = [line for line in after if is_error(line) and not SHUTDOWN_LEAK.search(line)]
+    if others:
+        return (f"note: killed by {name}; an error line follows the last PASS line (line {last + 1}), so this is not a "
+                "shutdown crash alone: read it")
+    if any(SHUTDOWN_LEAK.search(line) for line in after):
+        return (f"note: killed by {name} after the last PASS line (line {last + 1}) and Godot's shutdown leak lines, with "
+                "no other error line between them: looks like a crash at engine shutdown (ARC-DEV-2360); retry once, "
+                "a repeat is a real failure")
     return f"note: killed by {name} after the last PASS line (line {last + 1}) with no shutdown leak line: read what follows it"
 
 

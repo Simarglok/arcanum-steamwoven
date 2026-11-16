@@ -95,18 +95,29 @@ class SummaryTests(unittest.TestCase):
         lines = self.summary(text, -11)
         self.assertEqual(lines[0], f"FAIL exit=-11 ran=3s lines=5 log={self.log}")
         self.assertEqual(lines[1], "note: killed by SIGSEGV after the last PASS line (line 2) and Godot's shutdown leak "
-                                   "lines: a shutdown crash after the checks passed (ARC-DEV-2360); retry once, a repeat "
-                                   "is a real failure")
+                                   "lines, with no other error line between them: looks like a crash at engine shutdown "
+                                   "(ARC-DEV-2360); retry once, a repeat is a real failure")
         self.assertEqual(lines[2], "first error at line 3 of 5 (1 error line(s)):")  # the usual failure lines still follow
+        self.assertEqual(self.summary(text, 139)[1], lines[1])  # a wrapper's 128 + 11 is the same signal
 
-    def test_a_signal_without_a_pass_line_or_with_an_ordinary_failure_gets_no_shutdown_claim(self) -> None:
-        crash = self.summary("start\nstage 1\n", -11)
-        self.assertEqual(crash[1], "note: killed by SIGSEGV and no PASS line in the log: a crash, not a shutdown crash")
-        quiet = self.summary("stage PASS\nstage 2\n", -6)
-        self.assertEqual(quiet[1], "note: killed by SIGABRT after the last PASS line (line 1) with no shutdown leak line: "
-                                   "read what follows it")
+    def test_a_signal_note_claims_no_more_than_the_log_shows(self) -> None:
+        self.assertEqual(self.summary("start\nstage 1\n", -11)[1],
+                         "note: killed by SIGSEGV and the log has no PASS line: a crash, not a shutdown crash")
+        self.assertEqual(self.summary("stage PASS\nstage 2\n", -6)[1],
+                         "note: killed by SIGABRT after the last PASS line (line 1) with no shutdown leak line: "
+                         "read what follows it")
+        # an error line after the last PASS, or a leak line before it, is not a shutdown crash alone
+        self.assertEqual(self.summary("stage PASS\nERROR: boom\nERROR: Leaked unsafe reference to object: X\n", -11)[1],
+                         "note: killed by SIGSEGV; an error line follows the last PASS line (line 1), so this is not a "
+                         "shutdown crash alone: read it")
+        self.assertIn("no shutdown leak line",
+                      self.summary("ERROR: Leaked unsafe reference to object: X\nstage PASS\n", -11)[1])
+        # SIGKILL and an unknown number are not crashes; a plain failure gets no note
+        self.assertEqual(self.summary("stage PASS\n", -9)[1], "note: ended by SIGKILL, not a crash signal")
+        self.assertEqual(self.summary("stage PASS\n", -200)[1], "note: ended by signal 200, not a crash signal")
         self.assertNotIn("note: killed", " ".join(self.summary("stage PASS\nERROR: boom\n", 1)))
-        self.assertEqual(run_log.signal_note([], 124), None)
+        self.assertIsNone(run_log.signal_note([], 124))
+        self.assertIsNone(run_log.signal_note([], 0))
 
     def test_a_failure_without_an_error_line_shows_the_tail(self) -> None:
         lines = self.summary("".join(f"line {number}\n" for number in range(60)), 124)

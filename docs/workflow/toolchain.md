@@ -963,14 +963,18 @@ on each later step, so `./arcanum run` keeps the command's output out of it by d
   `dotnet` `error CS…`/`MSB…`/`NU…`/`NETSDK…`, failed tests and non-zero error counts, Python tracebacks and
   `…Error:` lines, .NET exceptions, `fatal:`/`error:` lines, `command not found`, `Segmentation fault`, `FAIL`/`FAILED`
   markers, `failure mode=`/`failure stage=` and `..._FAILED` codes; counts of zero errors are not.
-- **Killed by a signal (ARC-DEV-2360).** A command that a signal ended has a negative exit code (`-11` is SIGSEGV).
-  The summary then adds a `note:` line after `FAIL`: with the signal's name, the last `PASS` line's number, and, when
-  Godot's shutdown leak lines (`Leaked unsafe reference`, `ObjectDB instances were leaked`) follow it, the words that
-  this is a crash at engine shutdown after the checks passed; with no `PASS` line it says it is a plain crash. The exit
-  code stays as it was and the run is still red: retry once, and a repeat is a real failure. Seen once in 31 headless
-  self-tests (2026-11-16, load average above 30 on the Mac, other Godot runs queued), 12 loaded reruns passed; the
-  cause is not found (the leaked `InputEventKey` objects the self-test sends through its quick-key route were
-  finalized by the mono module at exit), so it is recorded as not reproducible.
+- **Killed by a signal (ARC-DEV-2360).** A command a signal ended has the exit code `-N` when the command itself died
+  on it (`-11` is SIGSEGV) and `128+N` when a shell or wrapper passes its child's status on (139). For a crash signal
+  (SIGSEGV, SIGABRT, SIGBUS, SIGILL, SIGFPE) the summary adds a `note:` line after `FAIL` with the signal's name and the
+  last `PASS` line's number, and says so when only Godot's shutdown leak lines (`Leaked unsafe reference`,
+  `ObjectDB instances were leaked`) follow it: this looks like a crash at engine shutdown. It never says the checks
+  passed (the log may hold an earlier failed stage); an error line after the last `PASS` line, no `PASS` line or no leak
+  line gets its own wording, and another signal (SIGKILL, SIGTERM, SIGINT) is "not a crash signal". The exit code stays
+  as it was and the run is still red: retry once, and a repeat is a real failure. Seen once in 31 headless
+  self-tests (2026-11-16, run #30494; the Mac was busy with other Godot runs); 12 reruns in a busy queue passed. The
+  cause is not found: that log held two leaked `InputEventKey` objects (F8, the self-test's quick-key route) reported
+  by the mono module at exit and none of the 30 other logs did, which fits a Godot shutdown crash but is a
+  hypothesis, so the issue is recorded as not reproducible.
 - **Reading the log.** Check the start in the log (`rg -n -m 20 'stage|ERROR' PATH`, `tail -n 20 PATH`), and read
   more of it only in small ranges, as [small search and read output](tasks.md#small-search-and-read-output) says.
 - **`--verbose`** streams the command's output to the terminal as before, with no log file, no summary and no
