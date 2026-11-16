@@ -178,9 +178,10 @@ public sealed class HeroItemThrowStateTests
         Assert.IsTrue(Holds(owner, "kit:2"));
         var dead = owner.ApplyDamage(owner.Version, Rat().Target, new LifeDamage { HitPoints = 100_000 });
         Assert.AreEqual(GameSessionDisposition.Changed, dead.Disposition);
+        // ARC-COMBAT-2392 (TW8): a throw flies at a corpse too, with the normal hit or miss roll and no damage.
         var corpse = owner.ThrowHeroItem(owner.Version, AtRat(owner));
-        Assert.AreEqual((GameSessionDisposition.NoChange, AttackRefusal.TargetDead, 0), (corpse.Disposition, corpse.Attack!.Resolution!.Refusal, corpse.Shots.Count));
-        Assert.IsTrue(Holds(owner, "kit:2"), "a refused attack throws nothing");
+        Assert.AreEqual((GameSessionDisposition.Changed, AttackRefusal.None, 1, true), (corpse.Disposition, corpse.Attack!.Resolution!.Refusal, corpse.Shots.Count, corpse.Attack.Resolution.Damage is null));
+        Assert.IsFalse(Holds(owner, "kit:2"), "the item is thrown");
     }
 
     [TestMethod]

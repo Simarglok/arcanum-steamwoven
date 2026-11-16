@@ -148,6 +148,23 @@ public sealed class NpcThrowStateTests
         Assert.AreEqual(result.Landed, Lying(owner, Dagger));
     }
 
+    // ARC-COMBAT-2392 (TW8): an NPC's throw flies at a corpse too, rolled as at a living critter; a hit does no damage.
+    [TestMethod]
+    public void AThrowAtACorpseRollsAndDoesNoDamage()
+    {
+        using var owner = Owner(7);
+        var victim = Combat(Other, armed: false);
+        var cell = new CellCoord(99, 200);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.ApplyDamage(owner.Version, victim.Target, new LifeDamage { HitPoints = 100_000 }).Disposition);
+        var result = owner.ThrowByNpc(owner.Version, new(Combat(), Dagger, 15, ThrowerCell, cell)
+        {
+            Struck = victim, StruckCell = cell, ThrowerWorn = Wielded(), LineOfFire = new(0, false),
+        });
+        Assert.AreEqual((GameSessionDisposition.Changed, GameSessionFailure.None, AttackRefusal.None), (result.Disposition, result.Failure, result.Attack!.Resolution!.Refusal));
+        Assert.IsNull(result.Attack.Resolution.Damage, "a corpse takes no damage");
+        Assert.AreEqual(result.Landed, Lying(owner, Dagger));
+    }
+
     [TestMethod]
     public void TheRefusalsComeBeforeAnyRoll()
     {
