@@ -24,6 +24,8 @@ public partial class TerrainViewerApp
     {
         if (_inventoryHost?.Maps.FirstOrDefault(m => m.RuntimeMap == CurrentAreaMap) is not { } map) return new HashSet<string>(StringComparer.Ordinal);
         var own = _ownCompanionTemplates.Select(t => t.Entity).ToHashSet(StringComparer.Ordinal);
+        // ARC-WORLD-2177: a dialog speaker the plan draws nothing for is not a led map NPC (its body is its own, and the destination's home read leaves speakers out too): it stays on the body-less path.
+        if (_readyArea is { } shown) own.UnionWith(AreaConversationHost.FindSpeakers(shown.Snapshot).Select(s => AreaConversationState.EntityId(s.Row)));
         if (_ledMapNpcEver is not { } ever || !ReferenceEquals(ever.Session, session) || ever.Map != CurrentAreaMap)
         {
             var seeded = session.QueryMapChanges(new SessionMapId(CurrentAreaMap))
@@ -53,7 +55,7 @@ public partial class TerrainViewerApp
             if (AreaCompanionPlacement.SeedFromNpcPlace(session, template, new(CurrentAreaMap)) is var failure && failure != GameSessionFailure.None)
                 GD.Print($"ARC-AI-1622 led-map-npc entity={template.Entity} place not seeded ({failure})");
         foreach (var missing in entities.Where(e => templates.All(t => t.Entity != e)))
-            GD.Print($"ARC-AI-1622 led-map-npc entity={missing} has no body template (the scene does not draw it, or its AI row or fields do not read)");
+            GD.Print($"ARC-AI-1622 led-map-npc entity={missing} has no body template (its AI row or fields do not read; the scene drawing nothing for it does not stop one since ARC-WORLD-2177)");
         return templates;
     }
 

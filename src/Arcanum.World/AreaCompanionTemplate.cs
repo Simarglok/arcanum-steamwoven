@@ -12,7 +12,7 @@ namespace Arcanum.World;
 
 /// <summary>
 /// ARC-WORLD-017: the home-map T0 data of one roster companion, enough to stand, draw, light and pick it on any loaded
-/// map: its speaker row, its T0 body commands with their visuals, and its T0 chart cell on the home map. The body keeps
+/// map (ARC-WORLD-2177: an undrawn led NPC's template has no body command, so it stands and walks but shows nothing): its speaker row, its T0 body commands with their visuals, and its T0 chart cell on the home map. The body keeps
 /// the T0 frame, flip and alpha wherever it stands. ARC-MAGIC-050: <paramref name="Created"/> marks the template of a critter the session
 /// created (<see cref="ForCreated"/>): its "home" is the map it stands on, and a change of map moves the whole object in the session
 /// (the original moves an object whole, FM1/FM3), so its placement keeps no away change and no stored home cell.
@@ -49,7 +49,7 @@ public sealed record AreaCompanionTemplate(AreaSpeaker Speaker, AreaCompanionFac
     /// ARC-AI-1622: the body templates of the map's NPC rows that have no dialog script and that the hero leads now (a Dominate Will target, a script's join): the
     /// original's follower array holds any critter, so such an NPC follows, fights and catches up through the same companion group as a dialog NPC (its speaker
     /// has script 0, as a created critter's). Only the rows whose entity is in <paramref name="entities"/> are built, so the scan costs nothing for the NPCs
-    /// nobody leads; a row the plan does not draw, or whose follow facts do not read, gets no template (<see cref="From"/>).
+    /// nobody leads; a row whose follow facts do not read gets no template; a row the plan draws nothing for gets one with no body command (ARC-WORLD-2177, <see cref="From"/>).
     /// </summary>
     public static IReadOnlyList<AreaCompanionTemplate> ForLedMapNpcs(IEnumerable<AreaObjectRecord> objects, IEnumerable<AreaVisualRecord> visuals, IReadOnlySet<string> entities,
         AreaScenePlan plan, AreaChart chart, SessionMapId home, Func<AreaSpeaker, AreaCompanionFacts?> facts)
@@ -65,7 +65,8 @@ public sealed record AreaCompanionTemplate(AreaSpeaker Speaker, AreaCompanionFac
             if (row.Type != 16 || row.Scope != AreaScope.Core || row.WorldX is not { } x || row.WorldY is not { } y || !entities.Contains(AreaConversationState.EntityId(row))) continue;
             speakers.Add(new AreaSpeaker(LedMapNpcIndexBase + index, row, 0, x, y));
         }
-        return From(speakers, plan, visuals, chart, home, facts);
+        // ARC-WORLD-2177: a led NPC the plan draws nothing for still follows (the original's follower array holds the object, drawn or not), so its template keeps no body command.
+        return From(speakers, plan, visuals, chart, home, facts, undrawn: true);
     }
 
     public string Entity => AreaConversationState.EntityId(Speaker.Row);
@@ -74,8 +75,10 @@ public sealed record AreaCompanionTemplate(AreaSpeaker Speaker, AreaCompanionFac
     /// <summary>The roster speakers of <paramref name="speakers"/> on home map <paramref name="home"/>, with their body
     /// commands from <paramref name="plan"/> and the visuals those commands draw.</summary>
     /// <param name="facts">ARC-WORLD-037: the follow facts of a speaker that can join (null skips it); by default the roster.</param>
+    /// <param name="undrawn">ARC-WORLD-2177: keep a speaker the plan draws nothing for as a template with no body command (it stands, walks and follows in the group like a drawn one and shows nothing);
+    /// false (a dialog NPC's roster) skips it, as before.</param>
     public static IReadOnlyList<AreaCompanionTemplate> From(IEnumerable<AreaSpeaker> speakers, AreaScenePlan plan,
-        IEnumerable<AreaVisualRecord> visuals, AreaChart chart, SessionMapId home, Func<AreaSpeaker, AreaCompanionFacts?>? facts = null)
+        IEnumerable<AreaVisualRecord> visuals, AreaChart chart, SessionMapId home, Func<AreaSpeaker, AreaCompanionFacts?>? facts = null, bool undrawn = false)
     {
         facts ??= AreaCompanionRoster.For;
         ArgumentNullException.ThrowIfNull(speakers); ArgumentNullException.ThrowIfNull(plan);
@@ -87,8 +90,8 @@ public sealed record AreaCompanionTemplate(AreaSpeaker Speaker, AreaCompanionFac
         {
             if (facts(speaker) is not { } known) continue;
             var commands = plan.Commands.Where(command => command.Identity == speaker.Row.Key).ToArray();
-            // A speaker the plan does not draw has no body to follow with.
-            if (commands.Length == 0) continue;
+            // A dialog speaker the plan does not draw has no body to follow with; an undrawn led NPC (ARC-WORLD-2177) follows without one.
+            if (commands.Length == 0 && !undrawn) continue;
             var drawn = new Dictionary<AreaVisualKey, AreaVisualRecord>();
             foreach (var command in commands)
                 drawn[command.Visual] = catalog.TryGetValue(command.Visual, out var visual) ? visual : throw new InvalidOperationException("AREA_COMPANION_VISUAL_REQUIRED");
