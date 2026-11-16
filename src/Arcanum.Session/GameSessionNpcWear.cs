@@ -66,7 +66,7 @@ public sealed partial class GameSessionOwner
 
     /// <summary>
     /// ARC-SCRIPT-2351 (ledger AR8): whether the body armour (slot 1006) the NPC's map data wears has been taken off since, for an NPC the session never dressed (no <see cref="QueryNpcWorn"/> record): a seed item of the NPC at
-    /// slot 1006 is no longer in its current list (a script take or steal, the loot of its body, a barter take, a second break that deletes it) or no longer worn there, or the session's durability record of it says broken (the first break takes a worn item off, ItemDamageOutcome.TakeOffAndRunBust). The original's removal (0x467860 → wield-off hook 0x467CB0) then sets the armour part of the NPC's
+    /// slot 1006 is no longer in its current list (a script take or steal, the loot of its body, a barter take, a second break that deletes it) or no longer worn there, or the session's durability record of it says broken (the first break takes a worn item off, ItemDamageOutcome.TakeOffAndRunBust). The original's removal and its wield-off hook (ledger AR2) then set the armour part of the NPC's
     /// art to 0 (AR2), which the stored art does not show. False for a dressed NPC (its record answers), an NPC whose map data wore no body armour, or one no attached seed lists. Throws for an invalid entity id.
     /// </summary>
     public bool QueryNpcBodyArmorTakenOff(string npc)
