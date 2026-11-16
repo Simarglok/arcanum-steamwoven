@@ -37,10 +37,12 @@ public sealed class AreaHeldThrowTests
     [TestMethod]
     public void AnAmmunitionStackTakesTheStackPathOfTheLift()
     {
-        // ARC-UI-086 (QW5): the stack path runs no remove check and no remove-item event, so only the throw script refuses a stack.
+        // ARC-UI-086 (QW5): the stack path runs no remove check and no remove-item event, so a stack is refused only for the throw script with an insert-item script.
         Assert.AreEqual(GameSessionFailure.None, AreaHeldThrow.Lift(Facts(SessionItemType.Ammo)));
         Assert.AreEqual(GameSessionFailure.None, AreaHeldThrow.Lift(Facts(SessionItemType.Ammo, true, SessionScriptPoint.RemoveItem)), "no-drop and remove-item do not apply");
-        Assert.AreEqual(GameSessionFailure.ItemScriptUnsupported, AreaHeldThrow.Lift(Facts(SessionItemType.Ammo, false, SessionScriptPoint.Throw)));
+        // ARC-COMBAT-2182: the stack's throw script runs at the throw, so it no longer refuses the lift; only the insert-item mix does.
+        Assert.AreEqual(GameSessionFailure.None, AreaHeldThrow.Lift(Facts(SessionItemType.Ammo, false, SessionScriptPoint.Throw)));
+        Assert.AreEqual(GameSessionFailure.ItemScriptUnsupported, AreaHeldThrow.Lift(Facts(SessionItemType.Ammo, false, SessionScriptPoint.Throw, SessionScriptPoint.InsertItem)));
     }
 
     [TestMethod]
@@ -49,7 +51,7 @@ public sealed class AreaHeldThrowTests
         // ARC-UI-094 (HG1, QW5): the hero's gold pile is lifted by its coins; no remove check applies.
         Assert.AreEqual(GameSessionFailure.None, AreaHeldThrow.Lift(Facts(SessionItemType.Gold)));
         Assert.AreEqual(GameSessionFailure.None, AreaHeldThrow.Lift(Facts(SessionItemType.Gold, true, SessionScriptPoint.RemoveItem)));
-        Assert.AreEqual(GameSessionFailure.ItemScriptUnsupported, AreaHeldThrow.Lift(Facts(SessionItemType.Gold, false, SessionScriptPoint.Throw)));
+        Assert.AreEqual(GameSessionFailure.None, AreaHeldThrow.Lift(Facts(SessionItemType.Gold, false, SessionScriptPoint.Throw)), "ARC-COMBAT-2182: the throw script of the split coins runs at the throw");
     }
 
     private static byte[] Solid(int width, int height, byte r, byte a = 255) =>
