@@ -289,8 +289,8 @@ that list is frozen (items or spells, the fatigue and combat mode at that time,
 the spells known then, the PC leader for the identification rule) until the
 slot is cleared: when an item is inserted into or force-removed from the critter
 (0x4CCC00 from item insert 0x466640 and item force-remove 0x467860, call at
-0x467BF1), when one of the slot's listed items runs out of mana (0x4CCC40 from
-0x450420, call at 0x45062B), at a reset, or when round-robin reuse takes
+0x467BF1), when one of the slot's listed items has its worn mana store (field 92) drained to 0 by a payment (0x4CCC40 from
+0x450420, the only call site 0x45062B; not the charges of field 105), at a reset, or when round-robin reuse takes
 the slot. The lists built on the third path are never freed (the release
 function 0x4CCBF0 does nothing) (SP11). Which list is first depends on the
 pass: in a fight it is often the summon or offensive list of the danger update,

@@ -1309,10 +1309,26 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
         var after = item.ManaStore < 0 || drain.Drained < 0 ? drain.StoreAfter : Math.Max(0, item.ManaStore - drain.Drained);
         var taken = item.ManaStore < 0 || drain.Drained < 0 ? drain.Drained : item.ManaStore - after;
         var written = _owner.WriteItemManaStore(_owner.Version, wornId, item.ManaStore, after);
-        if (written.Disposition == GameSessionDisposition.Rejected) { _log.Add(new(SpellCastEventKind.ManaStoreNotSaved, run, (int)written.Failure, wornId)); return; }
+        if (written.Disposition == GameSessionDisposition.Rejected)
+        {
+            _log.Add(new(SpellCastEventKind.ManaStoreNotSaved, run, (int)written.Failure, wornId));
+            // The original drops the cached lists whatever the write did (0x4CCC40 at 0x45062B, ARC-AI-2402).
+            if (after == 0) ManaStoreEmptied?.Invoke(payer, wornId);
+            return;
+        }
         if (written.Disposition == GameSessionDisposition.Changed) _log.Add(new(SpellCastEventKind.ManaStoreDrained, run, after, wornId, taken));
         _owner.ScheduleManaRecharge(wornId, taken, merge: true);
+        if (after == 0) ManaStoreEmptied?.Invoke(payer, wornId);
     }
+
+    /// <summary>
+    /// ARC-AI-2402 (ledger BC10, SP11): the host's AI, told after a payment drained a worn item's mana store (field 92) to 0 for <c>payer</c>
+    /// (the caster's object id) and <c>item</c> (the worn item's id). The payment 0x450420 calls 0x4CCC40 at 0x45062B for every worn item whose store
+    /// it leaves at 0, after the write-back, the recharge event and the bar refresh: a store that was already 0 is skipped (no call), a store the
+    /// cost does not exhaust is not told. The viewer drops the payer's slot of its AI list cache when one of the slot's lists holds the item
+    /// (<see cref="Arcanum.Simulation.Ai.AiListCache.ItemExhausted"/>). Null: no AI, nothing happens.
+    /// </summary>
+    public Action<string, string>? ManaStoreEmptied { get; set; }
 
     private void ApplyDamage(SpellRun run, SpellDamageComponent data, SpellRunObject target)
     {
