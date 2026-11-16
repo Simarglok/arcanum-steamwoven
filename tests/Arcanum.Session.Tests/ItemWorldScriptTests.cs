@@ -14,10 +14,16 @@ namespace Arcanum.Session.Tests;
 [TestClass]
 public sealed class ItemWorldScriptTests
 {
+<<<<<<< HEAD
     private const byte Triggerer = 0, Attachee = 1, LocalVariable = 2, Number = 3, Looped = 10, LocalObject = 11, EveryContainer = 17, AnyContainer = 18, EveryFollower = 2, AnyFollower = 3;
     private const int Every = 810, Any = 811, Twice = 812, EveryFollowerScript = 813, AnyFollowerScript = 814, ToggleSelf = 815, ToggleSelfTwice = 816, ToggleHero = 817, Quest = 820, Typed = 821, Assigned = 822, DeadGated = 823, GeneratorGated = 824, GeneratorSlot = 7, CaseName = 1205, NewArt = 4, BaselineArt = 100, QuestNumber = 1005, ContainerType = 2,
         SetQuest = 830, CompleteQuest = 831, GiveSmall = 832, GiveBig = 833, GiveTwice = 834, SetThenRead = 835, SetOnItem = 836, SetInvalid = 837, CompleteBig = 838, SetThenGive = 839;
     private const int StoryRaise = 840, StoryReadBack = 841, RumorOfHero = 842, RumorOfItem = 843, RumorOutOfRange = 844, RenameSelf = 845, RenameSelfTwice = 846, RenameHero = 847, RumorNumber = 1500, RenamedTo = 2805, DataName = 3100;
+=======
+    private const byte Counter = 0, Triggerer = 0, Attachee = 1, LocalVariable = 2, Number = 3, Looped = 10, LocalObject = 11, EveryContainer = 17, AnyContainer = 18, EveryFollower = 2, AnyFollower = 3, EveryScenery = 15, AnyScenery = 16, Everyone = 8, Anyone = 9;
+    private const int Every = 810, Any = 811, Twice = 812, EveryFollowerScript = 813, AnyFollowerScript = 814, ToggleSelf = 815, ToggleSelfTwice = 816, ToggleHero = 817, Quest = 820, Typed = 821, Assigned = 822, DeadGated = 823, GeneratorGated = 824, GeneratorSlot = 7, ScenerySweep = 850, ScenerySweepAny = 851, CritterCalls = 852, CritterCallsAny = 853, Callee = 3500, CalleeLine = 4, ScenerySwitch = 854, CaseName = 1205, NewArt = 4, BaselineArt = 100, QuestNumber = 1005, ContainerType = 2,
+        SetQuest = 830, CompleteQuest = 831, GiveSmall = 832, GiveBig = 833, GiveTwice = 834, SetThenRead = 835, SetOnItem = 836, SetInvalid = 837, CompleteBig = 838, SetThenGive = 839, GiveThenStat = 840, StatThenGive = 841, GiveThenRatio = 842, RatioThenGive = 843;
+>>>>>>> origin/main
     private static readonly SessionInsertCheck Accept = _ => SessionInsertVerdict.Accepted;
 
     private sealed record Clause(int Type, (byte Kind, int Value)[] Operands);
@@ -40,6 +46,11 @@ public sealed class ItemWorldScriptTests
             }
         return ScrProgram.Read(bytes).Program!;
     }
+
+    // ARC-SCRIPT-2376 (IV25): the dialog loops of the installed scripts: the looped critter that carries the name is sent a deferred call into a dialog script (call script in: script, line, the hero as triggerer, the looped one as attachee, 2 seconds).
+    private static ScrProgram CallLoop(byte listKind) => Program(Do(C(ScrCatalogue.Action.LoopFor, (listKind, 0))),
+        If(C(ScrCatalogue.Condition.IsNamed, (Looped, 0), N(CaseName)), C(ScrCatalogue.Action.CallScriptIn, N(Callee), N(CalleeLine), (Triggerer, 0), (Looped, 0), N(2))),
+        Do(C(ScrCatalogue.Action.LoopEnd)), Do(C(ScrCatalogue.Action.ReturnRunDefault)));
 
     private static ScrProgram Loop(byte listKind, byte testKind, int times = 1)
     {
@@ -88,6 +99,22 @@ public sealed class ItemWorldScriptTests
     private static ScrProgram SetAndGive(int quest, int state, int level) => Program(Do(C(ScrCatalogue.Action.SetPcQuestState, (Triggerer, 0), N(quest), N(state))),
         Do(C(ScrCatalogue.Action.GiveQuestExperience, (Triggerer, 0), N(level))), Do(C(ScrCatalogue.Action.ReturnRunDefault)));
 
+    // ARC-SCRIPT-2394: the hero's level (get stat 17) read after / before a quest experience award of the same run.
+    private static ScrProgram GiveAndStat(int level, bool statFirst)
+    {
+        var give = Do(C(ScrCatalogue.Action.GiveQuestExperience, (Triggerer, 0), N(level)));
+        var read = Do(C(ScrCatalogue.Action.GetStat, (Number, GameSessionOwner.ScriptStatLevel), (Triggerer, 0), (Counter, 0)));
+        return statFirst ? Program(read, give, Do(C(ScrCatalogue.Action.ReturnRunDefault))) : Program(give, read, Do(C(ScrCatalogue.Action.ReturnRunDefault)));
+    }
+
+    // ARC-SCRIPT-2394: the power ratio (aptitude) read after / before the award: an auto-level scheme may buy the magick and tech points the aptitude derives from.
+    private static ScrProgram GiveAndRatio(int level, bool ratioFirst)
+    {
+        var give = Do(C(ScrCatalogue.Action.GiveQuestExperience, (Triggerer, 0), N(level)));
+        var read = Do(C(ScrCatalogue.Action.MagickTechAdjustment, N(10), (Attachee, 0), (Triggerer, 0), (Counter, 0)));
+        return ratioFirst ? Program(read, give, Do(C(ScrCatalogue.Action.ReturnRunDefault))) : Program(give, read, Do(C(ScrCatalogue.Action.ReturnRunDefault)));
+    }
+
     // ARC-SCRIPT-2346: toggle state (56) of one object, `times` times.
     private static ScrProgram Toggle(byte kind, int times = 1)
     {
@@ -97,7 +124,7 @@ public sealed class ItemWorldScriptTests
         return Program([.. lines]);
     }
 
-    // ARC-SCRIPT-2375 (IV23-IV25): the story-state, set rumor and rename shapes of the installed point 21 scripts (1094, 1103, 1566, 1573), with invented numbers.
+    // ARC-SCRIPT-2375 (IV28-IV30): the story-state, set rumor and rename shapes of the installed point 21 scripts (1094, 1103, 1566, 1573), with invented numbers.
     private static ScrProgram StoryRaiseProgram() => Program(Do(C(ScrCatalogue.Action.GetStoryState, (LocalVariable, 0))), Do(C(ScrCatalogue.Action.SetStoryState, N(19))), Do(C(ScrCatalogue.Action.ReturnRunDefault)));
 
     // A raise the same run reads back, then a rumor gated on what it read (5).
@@ -119,12 +146,18 @@ public sealed class ItemWorldScriptTests
         public Dictionary<int, ScrProgram> Programs { get; } = new() { [Every] = Loop(EveryContainer, Looped), [Any] = Loop(EveryContainer, AnyContainer), [Twice] = Loop(EveryContainer, Looped, 2),
             [Quest] = QuestGated(2), [Typed] = TypeGated(ContainerType), [Assigned] = AssignGated(),
             [DeadGated] = Gated(C(ScrCatalogue.Condition.IsDead, (Looped, 0))), [GeneratorGated] = Gated(C(ScrCatalogue.Condition.MonsterGenDisabled, N(GeneratorSlot))),
+            [ScenerySweep] = Loop(EveryScenery, Looped), [ScenerySwitch] = Program(Do(C(ScrCatalogue.Action.LoopFor, (EveryScenery, 0))), Do(C(ScrCatalogue.Action.ToggleState, (Looped, 0))), Do(C(ScrCatalogue.Action.LoopEnd)), Do(C(ScrCatalogue.Action.ReturnRunDefault))), [ScenerySweepAny] = Loop(EveryScenery, AnyScenery), [CritterCalls] = CallLoop(Everyone), [CritterCallsAny] = CallLoop(Anyone),
             [EveryFollowerScript] = Loop(EveryFollower, Looped), [AnyFollowerScript] = Loop(EveryFollower, AnyFollower),
             [SetQuest] = SetQuestOf(Triggerer, 1004, 2), [CompleteQuest] = SetQuestOf(Triggerer, 1004, 4), [GiveSmall] = Give(1), [GiveBig] = Give(5), [GiveTwice] = Give(1, 2),
+<<<<<<< HEAD
             [SetThenRead] = SetAndRead(1004, 2), [SetOnItem] = SetQuestOf(Attachee, 1004, 4), [SetInvalid] = SetQuestOf(Triggerer, 5, 2), [CompleteBig] = SetQuestOf(Triggerer, 1003, 4), [SetThenGive] = SetAndGive(1004, 4, 1),
             [ToggleSelf] = Toggle(Attachee), [ToggleSelfTwice] = Toggle(Attachee, 2), [ToggleHero] = Toggle(Triggerer),
             [StoryRaise] = StoryRaiseProgram(), [StoryReadBack] = StoryReadBackProgram(), [RumorOfHero] = RumorProgram(Triggerer), [RumorOfItem] = RumorProgram(Attachee), [RumorOutOfRange] = RumorProgram(Triggerer, 3000),
             [RenameSelf] = RenameProgram(Attachee), [RenameSelfTwice] = RenameProgram(Attachee, 2), [RenameHero] = RenameProgram(Triggerer) };
+=======
+            [SetThenRead] = SetAndRead(1004, 2), [SetOnItem] = SetQuestOf(Attachee, 1004, 4), [SetInvalid] = SetQuestOf(Triggerer, 5, 2), [CompleteBig] = SetQuestOf(Triggerer, 1003, 4), [SetThenGive] = SetAndGive(1004, 4, 1), [GiveThenStat] = GiveAndStat(5, false), [StatThenGive] = GiveAndStat(5, true), [GiveThenRatio] = GiveAndRatio(5, false), [RatioThenGive] = GiveAndRatio(5, true),
+            [ToggleSelf] = Toggle(Attachee), [ToggleSelfTwice] = Toggle(Attachee, 2), [ToggleHero] = Toggle(Triggerer) };
+>>>>>>> origin/main
         public Dictionary<string, int> Names { get; set; } = new() { ["case"] = CaseName, ["other"] = 3000 };
         public string[]? Vicinity { get; set; } = ["case", "other"];
         public bool? DeadCase { get; set; } = true;
@@ -138,6 +171,10 @@ public sealed class ItemWorldScriptTests
         public SessionOpenableBaseline? Openable { get; set; }
         public List<ScrObjectRef> Centres { get; } = [];
         public string[]? Followers { get; set; } = ["case", "other"];
+        public string[]? Scenery { get; set; } = ["case", "other"];
+        public string[]? Critters { get; set; } = ["case", "other"];
+        public List<ScrObjectRef> SceneryCentres { get; } = [];
+        public List<ScrObjectRef> CritterCentres { get; } = [];
         public List<ScrObjectRef> Leaders { get; } = [];
 
         public ScrSlot? Slot(ScrObjectRef attachee, int point) => attachee.Code == "oid:tome" && point == SessionScriptPoint.InsertItem ? new ScrSlot(script, 0, 0) : null;
@@ -159,6 +196,18 @@ public sealed class ItemWorldScriptTests
         {
             Centres.Add(item);
             return Vicinity?.Select(code => new ScrObjectRef(item.Map, code)).ToArray();
+        }
+
+        public IReadOnlyList<ScrObjectRef>? SceneryInVicinity(ScrObjectRef item)
+        {
+            SceneryCentres.Add(item);
+            return Scenery?.Select(code => new ScrObjectRef(item.Map, code)).ToArray();
+        }
+
+        public IReadOnlyList<ScrObjectRef>? CrittersInVicinity(ScrObjectRef item)
+        {
+            CritterCentres.Add(item);
+            return Critters?.Select(code => new ScrObjectRef(item.Map, code)).ToArray();
         }
 
         public IReadOnlyList<ScrObjectRef>? FollowersOf(ScrObjectRef leader)
@@ -224,6 +273,66 @@ public sealed class ItemWorldScriptTests
         Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, "oid:tome", Accept, new Host(Any)).Disposition);
         // The list condition (kind 18, "any") is true because "case" is named, so every looped container changes, "other" too.
         Assert.AreEqual((NewArt, NewArt), ((int?)Art(owner, "case"), (int?)Art(owner, "other")));
+    }
+
+    // ARC-SCRIPT-2376 (IV25, PG3): the scenery kinds 15 and 16 list the scenery around the item, asked of the host's world part.
+    [TestMethod]
+    public void Every_scenery_loop_changes_the_art_of_the_named_scenery_around_the_item()
+    {
+        using var owner = Owner();
+        var host = new Host(ScenerySweep);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, "oid:tome", Accept, host).Disposition);
+        Assert.AreEqual(new ScrObjectRef(Exterior.RuntimeMap, "oid:tome"), host.SceneryCentres.Single(), "the scenery is asked of the item, the attachee");
+        Assert.AreEqual(NewArt, (int?)Art(owner, "case"));
+        Assert.IsNull(Art(owner, "other"), "scenery with another name keeps its art");
+        Assert.AreEqual(0, host.CritterCentres.Count + host.Centres.Count);
+    }
+
+    [TestMethod]
+    public void An_any_scenery_condition_is_true_when_one_scenery_in_the_vicinity_passes()
+    {
+        using var owner = Owner();
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, "oid:tome", Accept, new Host(ScenerySweepAny)).Disposition);
+        Assert.AreEqual((NewArt, NewArt), ((int?)Art(owner, "case"), (int?)Art(owner, "other")));
+    }
+
+    // ARC-SCRIPT-2376 (IV25, TG4): everyone and anyone in the vicinity list the PCs and NPCs around the item; the looped critter that passes the name test gets a deferred call into a dialog script (call script in), kept in the event queue.
+    [TestMethod]
+    public void The_critter_loop_schedules_a_dialog_call_for_the_named_critter_around_the_item()
+    {
+        foreach (var script in new[] { CritterCalls, CritterCallsAny })
+        {
+            using var owner = Owner();
+            var host = new Host(script);
+            var picked = owner.PickUpItem(owner.Version, "oid:tome", Accept, host);
+            Assert.AreEqual((GameSessionDisposition.Changed, GameSessionFailure.None), (picked.Disposition, picked.Failure));
+            Assert.AreEqual(new ScrObjectRef(Exterior.RuntimeMap, "oid:tome"), host.CritterCentres.Single(), "the critters are asked of the item, the attachee");
+            var call = owner.QueryScriptCalls().Single();
+            Assert.AreEqual(new SessionScriptCall(Callee, CalleeLine, new(Exterior, SessionEventKinds.PlayerEntity), new(Exterior, "case")), call.Call, "only the named critter is called, with the hero as triggerer and itself as attachee");
+            using var restored = Restore(Decode(GameSessionSnapshotCodec.Encode(owner.Capture())));
+            Assert.AreEqual(call, restored.QueryScriptCalls().Single(), "the call survives a save");
+        }
+    }
+
+    // Script 1239 toggles the looped scenery: the item set admits the loop, but the session keeps the off flag of an item of the move only, so the move is refused whole (IV25).
+    [TestMethod]
+    public void A_toggle_of_the_looped_scenery_is_refused_and_changes_nothing()
+    {
+        using var owner = Owner();
+        var before = owner.Version;
+        var refused = owner.PickUpItem(before, "oid:tome", Accept, new Host(ScenerySwitch));
+        Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.ItemScriptUnsupported, before), (refused.Disposition, refused.Failure, owner.Version));
+    }
+
+    [TestMethod]
+    public void A_critter_loop_without_a_named_critter_schedules_nothing()
+    {
+        using var owner = Owner();
+        var picked = owner.PickUpItem(owner.Version, "oid:tome", Accept, new Host(CritterCalls) { Critters = ["other"] });
+        Assert.AreEqual((GameSessionDisposition.Changed, GameSessionFailure.None, 0), (picked.Disposition, picked.Failure, owner.QueryScriptCalls().Count));
+        using var empty = Owner();
+        Assert.AreEqual(GameSessionDisposition.Changed, empty.PickUpItem(empty.Version, "oid:tome", Accept, new Host(CritterCalls) { Critters = [] }).Disposition);
+        Assert.AreEqual(0, empty.QueryScriptCalls().Count);
     }
 
     // ARC-SCRIPT-2336 (FK8): the follower focus kinds 2 and 3 of a point 21 script list the triggerer's direct followers, asked of the host's world part.
@@ -364,15 +473,70 @@ public sealed class ItemWorldScriptTests
         using var none = Owner();
         Assert.AreEqual(GameSessionDisposition.Changed, none.PickUpItem(none.Version, "oid:tome", Accept, new Host(GiveSmall)).Disposition);
 
-        foreach (var script in new[] { GiveBig, GiveTwice, CompleteBig, SetThenGive })
+        foreach (var script in new[] { GiveTwice, SetThenGive })
         {
             using var owner = Owner(withExperience: true);
             var before = owner.Version;
             var refused = owner.PickUpItem(before, "oid:tome", Accept, new Host(script));
-            Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.ItemScriptUnsupported, before, 0), (refused.Disposition, refused.Failure, owner.Version, Points(owner)), $"script {script}: a level-up, a second award or the quest's own award plus a given one refuses the move");
+            Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.ItemScriptUnsupported, before, 0), (refused.Disposition, refused.Failure, owner.Version, Points(owner)), $"script {script}: a second award, or the quest's own award plus a given one, refuses the move");
             Assert.IsNull(owner.QueryQuest(1003));
             Assert.IsNull(owner.QueryQuest(1004));
         }
+    }
+
+    // ARC-SCRIPT-2394 (IV20): an award that raises the hero's level is applied with the level written and queued for the host (the level-up messages, the followers' step); one that does not raise a level queues its follower step too.
+    [TestMethod]
+    public void An_award_that_raises_a_level_is_applied_and_queued_for_the_host()
+    {
+        foreach (var script in new[] { GiveBig, CompleteBig })
+        {
+            using var owner = Owner(withExperience: true);
+            var before = owner.Version.Revision;
+            var moved = owner.PickUpItem(owner.Version, "oid:tome", Accept, new Host(script));
+            Assert.AreEqual((GameSessionDisposition.Changed, GameSessionFailure.None, before + 1), (moved.Disposition, moved.Failure, owner.Version.Revision), $"script {script}: the pickup is the move's one revision");
+            var hero = owner.QueryHeroExperience()!;
+            Assert.AreEqual((1300, 2), (hero.Experience, hero.Level), $"script {script}: the experience is added and the level written");
+            var awards = owner.TakeItemScriptAwards();
+            Assert.AreEqual(1, awards.Count);
+            Assert.IsTrue(awards[0].LevelsGained == 1 && awards[0].Followers is not null && awards[0].LevelUps is { Count: 1 }, "the level step and the level-up message reach the host");
+            Assert.AreEqual(0, owner.TakeItemScriptAwards().Count, "taken once");
+            using var restored = Restore(Decode(GameSessionSnapshotCodec.Encode(owner.Capture())), RestoreOptions() with { Experience = ExperienceStateTests.Rules() });
+            Assert.AreEqual(2, restored.QueryHeroExperience()!.Level, "the level survives a save");
+        }
+        using var small = Owner(withExperience: true);
+        Assert.AreEqual(GameSessionDisposition.Changed, small.PickUpItem(small.Version, "oid:tome", Accept, new Host(GiveSmall)).Disposition);
+        Assert.IsTrue(small.TakeItemScriptAwards().All(award => award.LevelsGained == 0 && award.LevelUps is null), "an award that writes no level carries no message");
+    }
+
+    [TestMethod]
+    public void A_refused_or_unchanged_move_queues_no_award()
+    {
+        using var owner = Owner(withExperience: true);
+        Assert.AreEqual(GameSessionFailure.ItemScriptUnsupported, owner.PickUpItem(owner.Version, "oid:tome", Accept, new Host(GiveTwice)).Failure);
+        Assert.AreEqual(0, owner.TakeItemScriptAwards().Count);
+    }
+
+    [TestMethod]
+    public void A_stat_read_after_a_level_raising_award_refuses_the_move_and_one_before_it_passes()
+    {
+        using var after = Owner(withExperience: true);
+        var before = after.Version;
+        var refused = after.PickUpItem(before, "oid:tome", Accept, new Host(GiveThenStat));
+        Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.ItemScriptUnsupported, before, 0), (refused.Disposition, refused.Failure, after.Version, Points(after)), "the run read the level the award has raised in the original");
+        Assert.AreEqual(0, after.TakeItemScriptAwards().Count);
+
+        using var first = Owner(withExperience: true);
+        var passed = first.PickUpItem(first.Version, "oid:tome", Accept, new Host(StatThenGive));
+        Assert.AreEqual((GameSessionDisposition.Changed, GameSessionFailure.None, 2), (passed.Disposition, passed.Failure, first.QueryHeroExperience()!.Level), "a read before the award sees the level the session holds");
+
+        // The power ratio is the aptitude, which the points an auto-level scheme buys move: the same order rule.
+        using var ratio = Owner(withExperience: true);
+        var ratioBefore = ratio.Version;
+        var ratioRefused = ratio.PickUpItem(ratioBefore, "oid:tome", Accept, new Host(GiveThenRatio));
+        Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.ItemScriptUnsupported, ratioBefore), (ratioRefused.Disposition, ratioRefused.Failure, ratio.Version));
+        using var ratioFirst = Owner(withExperience: true);
+        var ratioPassed = ratioFirst.PickUpItem(ratioFirst.Version, "oid:tome", Accept, new Host(RatioThenGive));
+        Assert.AreEqual((GameSessionDisposition.Changed, GameSessionFailure.None), (ratioPassed.Disposition, ratioPassed.Failure), "a ratio read before the award is the move's order");
     }
 
     [TestMethod]
@@ -400,7 +564,7 @@ public sealed class ItemWorldScriptTests
     [TestMethod]
     public void A_move_the_host_cannot_answer_is_refused_and_changes_nothing()
     {
-        foreach (var host in new Host[] { new(Every) { Vicinity = null }, new(EveryFollowerScript) { Followers = null }, new(Every) { Plans = false }, new(Every) { Names = [] }, new(Twice) })
+        foreach (var host in new Host[] { new(Every) { Vicinity = null }, new(ScenerySweep) { Scenery = null }, new(CritterCalls) { Critters = null }, new(EveryFollowerScript) { Followers = null }, new(Every) { Plans = false }, new(Every) { Names = [] }, new(Twice) })
         {
             using var owner = Owner();
             var before = owner.Version;
@@ -488,14 +652,18 @@ public sealed class ItemWorldScriptTests
         foreach (var condition in new[] { ScrCatalogue.Condition.HasItemNamed, ScrCatalogue.Condition.WithinRange })
             Assert.IsFalse(set.Conditions.Contains(condition), $"condition {condition}");
         // The adapter answers IScrGroupQueries for the follower kinds only (ARC-SCRIPT-2336): the group kinds 13 and 14 (followers plus the triggerer) stay out until a slice reads them for the item host.
-        foreach (var kind in new[] { ScrFocusKind.EverySceneryInVicinity, ScrFocusKind.AnySceneryInVicinity, ScrFocusKind.EveryoneInVicinity, ScrFocusKind.AnyoneInVicinity, ScrFocusKind.EveryoneInGroup, ScrFocusKind.AnyoneInGroup })
+        foreach (var kind in new[] { ScrFocusKind.EveryoneInGroup, ScrFocusKind.AnyoneInGroup })
             Assert.IsFalse(set.FocusKinds.Contains(kind), $"focus {kind}");
+        // ARC-SCRIPT-2376 (IV25): the scenery and critter vicinity kinds are answered by the host's world part now, and call script in stays admitted.
+        foreach (var kind in new[] { ScrFocusKind.EverySceneryInVicinity, ScrFocusKind.AnySceneryInVicinity, ScrFocusKind.EveryoneInVicinity, ScrFocusKind.AnyoneInVicinity })
+            Assert.IsTrue(set.FocusKinds.Contains(kind), $"focus {kind}");
+        Assert.IsTrue(set.Actions.Contains(ScrCatalogue.Action.CallScriptIn));
         // ARC-SCRIPT-2347 (IV13): the quest state condition, assign object and get object type are answered by the host's world part now.
         Assert.IsTrue(set.Conditions.Contains(ScrCatalogue.Condition.PcQuestState) && set.Actions.Contains(ScrCatalogue.Action.AssignObject) && set.Actions.Contains(ScrCatalogue.Action.GetObjectType));
         Assert.IsTrue(set.IsSubsetOf(ScrAdmissionSet.S65));
     }
 
-    // ARC-SCRIPT-2375 (IV23): get and set story state of a point 21 script.
+    // ARC-SCRIPT-2375 (IV28): get and set story state of a point 21 script.
     [TestMethod]
     public void A_set_story_state_raises_the_number_in_the_moves_revision_and_the_save_keeps_it()
     {
@@ -527,7 +695,7 @@ public sealed class ItemWorldScriptTests
         Assert.IsNotNull(owner.QueryRumor(RumorNumber), "the condition that read 5 held");
     }
 
-    // ARC-SCRIPT-2375 (IV24): set rumor (SS4): the hero learns it at the game time; any other object's request does nothing.
+    // ARC-SCRIPT-2375 (IV29): set rumor (SS4): the hero learns it at the game time; any other object's request does nothing.
     [TestMethod]
     public void A_set_rumor_for_the_hero_is_learned_in_the_moves_revision_and_the_save_keeps_it()
     {
@@ -560,7 +728,7 @@ public sealed class ItemWorldScriptTests
         Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.ItemScriptUnsupported, before), (refused.Disposition, refused.Failure, owner.Version));
     }
 
-    // ARC-SCRIPT-2375 (IV25): rename (92, CQ5) writes the name number of an item of the move.
+    // ARC-SCRIPT-2375 (IV30): rename (92, CQ5) writes the name number of an item of the move.
     private static long? Renamed(GameSessionOwner owner) => owner.QueryObjectChange(Exterior, SessionItemName.Key("oid:tome"));
 
     [TestMethod]

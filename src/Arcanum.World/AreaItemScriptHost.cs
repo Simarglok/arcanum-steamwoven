@@ -64,6 +64,12 @@ public sealed class AreaItemScriptHost : ISessionItemScriptHost, ISessionItemWor
     /// <summary>ARC-SCRIPT-2335 (IV2): the containers around the item's own tile, from the shown map's rows.</summary>
     public IReadOnlyList<ScrObjectRef>? ContainersInVicinity(ScrObjectRef item) => _shown?.Invoke()?.ContainersNearItem(item);
 
+    /// <summary>ARC-SCRIPT-2376 (IV25, PG3): the scenery around the item's own tile, from the shown map's rows.</summary>
+    public IReadOnlyList<ScrObjectRef>? SceneryInVicinity(ScrObjectRef item) => _shown?.Invoke()?.SceneryNearItem(item);
+
+    /// <summary>ARC-SCRIPT-2376 (IV25, TG4): the PCs and NPCs around the item's own tile, from the shown map's rows and the live cells.</summary>
+    public IReadOnlyList<ScrObjectRef>? CrittersInVicinity(ScrObjectRef item) => _shown?.Invoke()?.CrittersNearItem(item);
+
     /// <summary>ARC-SCRIPT-2336 (FK8): the triggerer's direct followers from the shown map's use host (the hero's party followers; an NPC leader's session followers, the NPC being on the shown map). A leader the shown map has no row for makes the run unanswerable (null), as the name test does.</summary>
     public IReadOnlyList<ScrObjectRef>? FollowersOf(ScrObjectRef leader) => _shown?.Invoke() is { } host && Known(host, leader) ? host.FollowersOf(leader) : null;
 
@@ -97,7 +103,7 @@ public sealed class AreaItemScriptHost : ISessionItemScriptHost, ISessionItemWor
         return row.EffectiveFields.FirstOrDefault(field => field.Slot == ObjectFlagsSlot) is { Presence: Arcanum.Data.Area.AreaPresence.Value, Number: { } flags } ? (flags & AreaUseScriptHost.OffObjectFlagBit) != 0 : false;
     }
 
-    /// <summary>ARC-SCRIPT-2375 (IV25): the item's own name number (field 22) in the loaded maps' rows, without a script's rename; null for an item no loaded row names (a made item).</summary>
+    /// <summary>ARC-SCRIPT-2375 (IV30): the item's own name number (field 22) in the loaded maps' rows, without a script's rename; null for an item no loaded row names (a made item).</summary>
     public int? ItemNameInData(ScrObjectRef item)
     {
         var map = _maps.FirstOrDefault(candidate => candidate.RuntimeMap == item.Map);
@@ -119,7 +125,7 @@ public sealed class AreaItemScriptHost : ISessionItemScriptHost, ISessionItemWor
         return read.Status == GlobalFlagReadStatus.Known && read.Value is { } value ? value : throw new InvalidOperationException("AREA_ITEM_SCRIPT_FLAG_UNREADABLE");
     }
 
-    /// <summary>ARC-SCRIPT-2375 (IV23): the session's story-state number. The session's run host answers its own reads (the move's earlier runs may have raised it), so the session does not ask this.</summary>
+    /// <summary>ARC-SCRIPT-2375 (IV28): the session's story-state number. The session's run host answers its own reads (the move's earlier runs may have raised it), so the session does not ask this.</summary>
     public int StoryState() => _session.QueryStoryState();
     public bool IsMonsterGenerator(ScrObjectRef attachee) => false;
     public ScrDialogState DialogState(ScrObjectRef attachee) => ScrDialogState.Normal;

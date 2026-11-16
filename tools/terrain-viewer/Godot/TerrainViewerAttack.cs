@@ -1018,6 +1018,9 @@ public partial class TerrainViewerApp
         FlushLevelUps(TimeSpan.Zero);
         if (_conversationHost is { } talk)
             foreach (var award in talk.State.TakeAwards()) LevelAreaFollowers(award);
+        // ARC-SCRIPT-2394: the awards an item move's script gave (a completed quest, give quest experience), taken in the frame the move was made in.
+        if (_areaSession is { } items)
+            foreach (var award in items.TakeItemScriptAwards()) LevelAreaFollowers(award);
     }
 
     private void LevelAreaFollowers(SessionExperienceAward? award)
