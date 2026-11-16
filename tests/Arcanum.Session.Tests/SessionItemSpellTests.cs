@@ -189,6 +189,19 @@ public sealed class SessionItemSpellTests
         Assert.AreEqual(7, owner.QueryItemCharges("npcitem:99"));
     }
 
+    // ARC-MAGIC-2443: the original's recharge handler writes field 105 of any item, so a count the session holds none for is recharged for an untracked item too, and it survives a restore.
+    [TestMethod]
+    public void A_recharge_is_written_for_an_item_the_session_does_not_track_and_holds_no_count_for()
+    {
+        var (owner, _, _) = Session();
+        using var _ = owner;
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.RechargeItemCharges(owner.Version, "npcitem:99", 4, 5, 20).Disposition);
+        Assert.AreEqual(9, owner.QueryItemCharges("npcitem:99"));
+        var text = GameSessionSnapshotCodec.Encode(owner.Capture());
+        using var restored = Restore(Decode(text));
+        Assert.AreEqual(9, restored.QueryItemCharges("npcitem:99"));
+    }
+
     [TestMethod]
     public void A_deleted_items_charge_is_still_refused()
     {
