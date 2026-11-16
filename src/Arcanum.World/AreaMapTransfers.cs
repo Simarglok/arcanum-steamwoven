@@ -18,6 +18,10 @@ public sealed record AreaMapTransfer(MapTransitionSite Site, int FromMap, AreaMa
     /// <summary>ARC-DEV-113: the extras of a script's fade-and-teleport (action 102, ledger TR2), or null for a jump point, a plain
     /// teleport (action 44) and an unconditional site, which request with flags 0 (TR1, TR3).</summary>
     public ScrTeleportFade? Fade { get; init; }
+
+    /// <summary>ARC-WORLD-2261 (ledger TT20): the hero's teleport a dialog script or a deferred call asked for (<see cref="AreaMapTransfers.QueueScriptTeleport"/>). The original's ping (0x4D3330) runs the slot at the next frame under every
+    /// interface mode, so such a transfer applies while the conversation the same run opened is open, and a change of map ends that conversation (0x4D3E20 → 0x4601D0 → 0x568830 → 0x5678D0).</summary>
+    public bool ByTalkScript { get; init; }
 }
 
 /// <summary>The answer to one map-mode use of an object or entry of a tile.</summary>
@@ -154,7 +158,9 @@ public sealed class AreaMapTransfers
         LastScripted = null;
         var site = ScriptSite();
         if (Pending is not null) return new(AreaUseOutcome.TransitionPending, Teleported(site, teleport), 0, "TRANSITION_PENDING");
-        return Queue(Teleported(site, teleport), null, 0, teleport.Fade);
+        var queued = Queue(Teleported(site, teleport), null, 0, teleport.Fade);
+        if (Pending is { } pending) Pending = pending with { ByTalkScript = true };
+        return queued;
     }
 
     /// <summary>Why the teleport of a dialog script or a deferred call cannot be queued (<see cref="Refusal"/> of its resolved site), or null; a pending transfer drops it instead (<see cref="QueueScriptTeleport"/>), so it is no refusal.</summary>

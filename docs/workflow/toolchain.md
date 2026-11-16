@@ -255,7 +255,7 @@ history held about 500 runs of such copies of one template).
   are several, `stages` when there is one), a *portable* stage (`map`, `resources`, `report`, `knockdown`, `inv-arrange`,
   `created-*`, `summon-*`, `disarm`) rides in a process that already exists on its map (else it gets one), and the stages that end a game, move
   the window, leave state behind or run long (the menu family, `walk`, `census`, `container-click`, `perf`,
-  `dead-window`, `critter-fall`, `tech-craft`, `tech-products`, `debug-travel`, `follower-far`, `teleport-follow`, `inv-carry`) each get a process of
+  `dead-window`, `critter-fall`, `tech-craft`, `tech-products`, `debug-travel`, `follower-far`, `teleport-follow`, `talk-teleport`, `inv-carry`) each get a process of
   their own (`stages-main-walk`). `--map`, `--sector` and `--main-menu` pin that dimension for every stage; a pinned
   value a stage cannot pass in is refused before anything waits for the queue (`stage plants does not run at --sector
   1452,1291: it needs map ... at sector 1384,239`), and so is `--main-menu` with a stage that needs a hero or a session.

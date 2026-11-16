@@ -37,6 +37,24 @@ public sealed class AreaMapTransfersTests
     };
 
     // ARC-WORLD-1805 (TT18, TT20): a door or window is no use trigger of the map transfers; the door's use node queues the teleport its script asked for.
+    // ARC-WORLD-2261 (TT20): the hero's teleport of a dialog script or a deferred call is a script transfer (the viewer takes it with the dialog open); a door's is not.
+    [TestMethod]
+    public void A_dialog_or_call_teleport_of_the_hero_is_queued_as_a_script_transfer_and_a_doors_is_not()
+    {
+        var (map, row) = Load();
+        var transfers = new AreaMapTransfers(map, Set(map), Destinations(map));
+        var pc = new ScrObjectRef(map.RuntimeMap, "pc");
+        var queued = transfers.QueueScriptTeleport(new ScrTeleport(pc, 5076, 5, 6));
+        Assert.AreEqual(AreaUseOutcome.Accepted, queued.Outcome, queued.Reason);
+        Assert.IsTrue(transfers.Pending!.ByTalkScript);
+        // TR4: a second request while one is pending is dropped and leaves the first as it was.
+        Assert.AreEqual(AreaUseOutcome.TransitionPending, transfers.QueueScriptTeleport(new ScrTeleport(pc, 5076, 7, 8)).Outcome);
+        Assert.AreEqual(new AreaStepCell(5, 6), transfers.Pending!.Arrival);
+        transfers.Clear();
+        Assert.AreEqual(AreaUseOutcome.Accepted, transfers.QueueDoorTeleport(row, 710, new ScrTeleport(pc, 5076, 5, 6)).Outcome);
+        Assert.IsFalse(transfers.Pending!.ByTalkScript);
+    }
+
     [TestMethod]
     public void A_door_is_no_use_trigger_and_its_scripts_teleport_is_queued_through_the_door_entry()
     {
