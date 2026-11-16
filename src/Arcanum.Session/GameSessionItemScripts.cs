@@ -484,6 +484,8 @@ public sealed partial class GameSessionOwner
             if (_awardRaisesLevel) return GameSessionFailure.ItemScriptUnsupported;
             var award = _owner.GiveGain(gain, _questHero);
             _awardRaisesLevel = award.Award.LevelsGained > 0;
+            // A level-raising award's auto-level scheme buys over the hero as the session holds it; an effect change of an earlier run of the move (applied after the awards at the commit) would have moved the stats it reads in the original.
+            if (_awardRaisesLevel && WearsHero && _steps.Count > 0) return GameSessionFailure.ItemScriptUnsupported;
             _questHero = award.Hero;
             _questGains.Add(gain);
             _awardsInRun++;

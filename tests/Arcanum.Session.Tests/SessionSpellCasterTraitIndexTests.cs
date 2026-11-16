@@ -1456,7 +1456,7 @@ public sealed partial class SessionSpellCasterTraitIndexTests
     }
     // ARC-MAGIC-1644 (ledger RM3c, IE7, WE6, TI7; exe read 0x465530, 0x441980): an NPC's rewield runs the wield scripts of its worn items, wield off (25) and then wield on (24), the item as the attachee and the NPC as the
     // triggerer, with the condition "items are being rewielded" true. Script numbers, programs, effects and values are invented (the installed shape of the technological items, TI7).
-    private const int NpcWieldOn = 710, NpcWieldOff = 711, Gate = 712, Charm = 50, QuestOnRewield = 717, XpOnRewieldOff = 718, XpOnRewieldOn = 719, XpEffect = 61;
+    private const int NpcWieldOn = 710, NpcWieldOff = 711, Gate = 712, Charm = 50, QuestOnRewield = 717, XpOnRewieldOff = 718, XpOnRewieldOn = 719, XpRaiseOnRewieldOn = 720, XpEffect = 61;
     private static readonly SessionEffectDefinition CharmEffect = new(Charm, [new(EffectAttributeKind.Stat, 0, EffectChangeOperator.Add, 1)]);
 
     private sealed class NpcScriptHost : ISessionItemScriptHost
@@ -1482,6 +1482,7 @@ public sealed partial class SessionSpellCasterTraitIndexTests
                 WieldEventScriptTests.If(WieldEventScriptTests.C(ScrCatalogue.Condition.ItemsBeingRewielded), WieldEventScriptTests.C(ScrCatalogue.Action.GiveQuestExperience, (WieldEventScriptTests.Triggerer, 0), WieldEventScriptTests.N(1)))),
             // ARC-SCRIPT-2410: wield off adds an experience gain effect (+50), wield on (rewielding) gives the quest experience of level 1: the award of a later run reads the list the earlier run left.
             [XpOnRewieldOff] = WieldEventScriptTests.Program(WieldEventScriptTests.Do(WieldEventScriptTests.C(ScrCatalogue.Action.AddEffect, (WieldEventScriptTests.Triggerer, 0), WieldEventScriptTests.N(XpEffect), WieldEventScriptTests.N(5)))),
+            [XpRaiseOnRewieldOn] = WieldEventScriptTests.Program(WieldEventScriptTests.If(WieldEventScriptTests.C(ScrCatalogue.Condition.ItemsBeingRewielded), WieldEventScriptTests.C(ScrCatalogue.Action.GiveQuestExperience, (WieldEventScriptTests.Triggerer, 0), WieldEventScriptTests.N(5)))),
             [XpOnRewieldOn] = WieldEventScriptTests.Program(WieldEventScriptTests.If(WieldEventScriptTests.C(ScrCatalogue.Condition.ItemsBeingRewielded), WieldEventScriptTests.C(ScrCatalogue.Action.GiveQuestExperience, (WieldEventScriptTests.Triggerer, 0), WieldEventScriptTests.N(1)))),
             [713] = WieldEventScriptTests.Program(WieldEventScriptTests.Do(WieldEventScriptTests.C(ScrCatalogue.Action.AddEffect, (WieldEventScriptTests.Attachee, 0), WieldEventScriptTests.N(Charm), WieldEventScriptTests.N(5)))),
         };
@@ -1750,6 +1751,18 @@ public sealed partial class SessionSpellCasterTraitIndexTests
         Assert.AreEqual(12, owner.QueryHeroStoredStat(22));
         Assert.AreEqual(150, owner.QueryHeroExperience()!.Experience, "the award read the list the wield off run left: 100 + 50");
         Assert.IsTrue(owner.QueryHeroEffects()!.Effects.Any(e => e.Number == XpEffect));
+    }
+
+    // ARC-SCRIPT-2410: an award that raises a level (1300 passes 1010) after an earlier run's effect change is refused: its auto-level scheme would read the stats the change moved, which the commit applies after the award.
+    [TestMethod]
+    public void A_heros_rewield_level_raising_award_after_an_earlier_runs_effect_change_is_refused()
+    {
+        var (owner, caster, _) = WornHero(XpRaiseOnRewieldOn, XpOnRewieldOff, rules: ExperienceStateTests.Rules());
+        using var o = owner;
+        var version = owner.Version;
+        Assert.IsNull(CastOnHero(caster, HeroPointsPlus).JumpTo);
+        Assert.IsTrue(NotReady(caster));
+        Assert.AreEqual((version, 5, 0), (owner.Version, owner.QueryHeroStoredStat(22), owner.QueryHeroExperience()!.Experience), "nothing applied");
     }
 
     [TestMethod]
