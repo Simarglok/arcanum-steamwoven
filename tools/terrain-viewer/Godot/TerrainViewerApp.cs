@@ -289,6 +289,8 @@ public partial class TerrainViewerApp : Node
                                 if (only?.Contains("sleep") == true) await RunAreaSleepSmokeAsync();
                                 // ARC-WORLD-1162 (E3-d): only when named, the beds of the Crash Site cave (--hero, the cave): a bed with no script refuses the hero (message 8), an occupied one (10), the scripted bed seats him in a sleep window that heals twice the ground and empties on the close.
                                 if (only?.Contains("bed") == true) await RunAreaBedSmokeAsync();
+                                // ARC-COMBAT-2167: only when named, the hero's blow on an occupied bed (--hero, the Crash Site cave): the sleeper leaves the bed and is struck with the check modifier -30, the next blow strikes the empty bed.
+                                if (only?.Contains("bed-blow") == true) await RunAreaBedBlowSmokeAsync();
                                 // ARC-DEV-347 (E1-a): only when named, a scenery and an eye-candy object the session creates by prototype are drawn, picked or not, resident, saved and destroyed (--hero, a map window).
                                 if (only?.Contains("created-scenery") == true) await RunAreaCreatedSceneryStageAsync();
                                 // ARC-SCRIPT-1735 (E5-a tail): only when named, a scenery takes another art id the way change art number writes it: kept by the session, drawn from the new art, saved, cleared by the data's id (--hero).

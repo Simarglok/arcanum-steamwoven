@@ -76,6 +76,7 @@ class PureTests(unittest.TestCase):
         self.assertEqual(main_smoke.area_label(["menu-death"]), "area:ui-media-lifecycle")
         self.assertEqual(main_smoke.area_label(["cast"]), "area:combat-magic-tech")
         self.assertEqual(main_smoke.area_label(["barter", "walk"]), "area:items-economy")
+        self.assertEqual(main_smoke.area_label(["bed-blow"]), "area:combat-magic-tech")
         self.assertEqual(main_smoke.area_label(["something-new"]), main_smoke.DEFAULT_AREA)
         self.assertEqual(main_smoke.area_label([]), main_smoke.DEFAULT_AREA)
         self.assertEqual(main_smoke.area_label(["stages-main"]), main_smoke.DEFAULT_AREA)  # "ai" is not in "main"
