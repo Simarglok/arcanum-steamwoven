@@ -94,16 +94,49 @@ public sealed class HeroStackThrowScriptTests
         Assert.AreEqual(0, owner.QueryPlacedItems().Count);
     }
 
+    // ARC-COMBAT-2413 (TW3, QW5; exe 0x578EA0, 0x4658E0, 0x466640): the lift of the whole stack destroys the source and makes a new object, which the give-back finds no stack to merge into, so the list's stack has a new entity.
     [TestMethod]
-    public void ASkippedThrowOfTheWholeStackKeepsItToo()
+    public void ASkippedThrowOfTheWholeStackLeavesTheMadeStackWithItsSlotInThePlaceOfTheSource()
+    {
+        using var owner = Hero();
+        var host = new Host();
+        host.Programs[ThrowScript] = Program(C(ScrCatalogue.Action.SetLocalFlag, (Number, 1)), C(ScrCatalogue.Action.ReturnSkipDefault));
+        var (draws, revision) = (owner.QueryRandom().Draws, owner.Version.Revision);
+        var sourceCell = owner.QueryHeroGrid().Items.Single(item => item.Entity == "made:2");
+        var result = owner.ThrowHeroItem(owner.Version, Ammo(owner, host, 30));
+        Assert.AreEqual((GameSessionDisposition.Changed, GameSessionFailure.None, true, 0), (result.Disposition, result.Failure, result.ScriptDeclined, result.Shots.Count));
+        Assert.IsTrue(owner.IsItemDestroyed("made:2"), "the lift destroyed the source");
+        Assert.IsNull(owner.QueryAmmo("made:2"));
+        Assert.AreEqual(30, owner.QueryAmmo("made:3")!.Value.Units, "the units are in the made stack");
+        Assert.AreEqual("made:3", owner.QueryMadeItems().Last().Entity, "appended to the list's end");
+        Assert.AreEqual(sourceCell.Slot, owner.QueryHeroGrid().Items.Single(item => item.Entity == "made:3").Slot, "and takes the first free cell, the one the source frees (it lay on the first-fit cell)");
+        Assert.IsFalse(owner.QueryHeroGrid().Items.Any(item => item.Entity == "made:2"));
+        Assert.AreEqual(new SessionItemScriptSlot("made:3", SessionScriptPoint.Throw, ThrowScript, 1u << 1, 0), owner.QueryItemScriptSlots().Single(), "the slot the run wrote stays with the made stack and the source's is gone");
+        Assert.AreEqual((draws, revision + 1), (owner.QueryRandom().Draws, owner.Version.Revision));
+    }
+
+    [TestMethod]
+    public void ACallTheScriptSchedulesStaysWithTheMadeStackOfAWholeStackSkip()
+    {
+        using var owner = Hero();
+        var host = new Host();
+        host.Programs[ThrowScript] = Schedule(ScrCatalogue.Action.ReturnSkipDefault);
+        Assert.IsTrue(owner.ThrowHeroItem(owner.Version, Ammo(owner, host, 30)).ScriptDeclined);
+        Assert.AreEqual("made:3", owner.QueryScriptCalls().Single().Call.Attachee?.Entity);
+    }
+
+    [TestMethod]
+    public void AWholeStackSkipLeavesNothingForTheNextMadeItemAndKeepsTheStackInTheList()
     {
         using var owner = Hero();
         var host = new Host();
         host.Programs[ThrowScript] = Program(C(ScrCatalogue.Action.ReturnSkipDefault));
-        var result = owner.ThrowHeroItem(owner.Version, Ammo(owner, host, 30));
-        Assert.AreEqual((GameSessionDisposition.Changed, true), (result.Disposition, result.ScriptDeclined));
-        Assert.IsFalse(owner.IsItemDestroyed("made:2"));
-        Assert.AreEqual(30, owner.QueryAmmo("made:2")!.Value.Units);
+        Assert.IsTrue(owner.ThrowHeroItem(owner.Version, Ammo(owner, host, 30)).ScriptDeclined);
+        // The made stack is the one stack now: throwing it again (a new entity for the units' flying stack) works from it.
+        host.Programs[ThrowScript] = Program(C(ScrCatalogue.Action.ReturnRunDefault));
+        var again = owner.ThrowHeroItem(owner.Version, new("made:3", new(Bullets, false, [SessionScriptPoint.Throw]), At(owner, 3)) { Count = 10, SplitKind = Bullets, Scripts = host });
+        Assert.AreEqual((GameSessionDisposition.Changed, GameSessionFailure.None, 20), (again.Disposition, again.Failure, owner.QueryAmmo("made:3")!.Value.Units));
+        Assert.AreEqual("made:4", again.Scripts.Single().Attachee);
     }
 
     [TestMethod]
