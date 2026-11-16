@@ -15,9 +15,9 @@ namespace Arcanum.Session.Tests;
 [TestClass]
 public sealed class ItemWorldScriptTests
 {
-    private const byte Triggerer = 0, Attachee = 1, LocalVariable = 2, Number = 3, Looped = 10, LocalObject = 11, EveryContainer = 17, AnyContainer = 18, EveryFollower = 2, AnyFollower = 3;
+    private const byte Counter = 0, Triggerer = 0, Attachee = 1, LocalVariable = 2, Number = 3, Looped = 10, LocalObject = 11, EveryContainer = 17, AnyContainer = 18, EveryFollower = 2, AnyFollower = 3;
     private const int Every = 810, Any = 811, Twice = 812, EveryFollowerScript = 813, AnyFollowerScript = 814, ToggleSelf = 815, ToggleSelfTwice = 816, ToggleHero = 817, Quest = 820, Typed = 821, Assigned = 822, DeadGated = 823, GeneratorGated = 824, GeneratorSlot = 7, CaseName = 1205, NewArt = 4, BaselineArt = 100, QuestNumber = 1005, ContainerType = 2,
-        SetQuest = 830, CompleteQuest = 831, GiveSmall = 832, GiveBig = 833, GiveTwice = 834, SetThenRead = 835, SetOnItem = 836, SetInvalid = 837, CompleteBig = 838, SetThenGive = 839, SetCallRead = 840, GiveThenXp = 841, XpThenGive = 842, SetThenStop = 843, XpEffect = 60;
+        SetQuest = 830, CompleteQuest = 831, GiveSmall = 832, GiveBig = 833, GiveTwice = 834, SetThenRead = 835, SetOnItem = 836, SetInvalid = 837, CompleteBig = 838, SetThenGive = 839, GiveThenStat = 840, StatThenGive = 841, GiveThenRatio = 842, RatioThenGive = 843, SetCallRead = 844, GiveThenXp = 845, XpThenGive = 846, SetThenStop = 847, XpEffect = 60;
     private static readonly SessionInsertCheck Accept = _ => SessionInsertVerdict.Accepted;
 
     private sealed record Clause(int Type, (byte Kind, int Value)[] Operands);
@@ -106,6 +106,22 @@ public sealed class ItemWorldScriptTests
     private static ScrProgram SetAndGive(int quest, int state, int level) => Program(Do(C(ScrCatalogue.Action.SetPcQuestState, (Triggerer, 0), N(quest), N(state))),
         Do(C(ScrCatalogue.Action.GiveQuestExperience, (Triggerer, 0), N(level))), Do(C(ScrCatalogue.Action.ReturnRunDefault)));
 
+    // ARC-SCRIPT-2394: the hero's level (get stat 17) read after / before a quest experience award of the same run.
+    private static ScrProgram GiveAndStat(int level, bool statFirst)
+    {
+        var give = Do(C(ScrCatalogue.Action.GiveQuestExperience, (Triggerer, 0), N(level)));
+        var read = Do(C(ScrCatalogue.Action.GetStat, (Number, GameSessionOwner.ScriptStatLevel), (Triggerer, 0), (Counter, 0)));
+        return statFirst ? Program(read, give, Do(C(ScrCatalogue.Action.ReturnRunDefault))) : Program(give, read, Do(C(ScrCatalogue.Action.ReturnRunDefault)));
+    }
+
+    // ARC-SCRIPT-2394: the power ratio (aptitude) read after / before the award: an auto-level scheme may buy the magick and tech points the aptitude derives from.
+    private static ScrProgram GiveAndRatio(int level, bool ratioFirst)
+    {
+        var give = Do(C(ScrCatalogue.Action.GiveQuestExperience, (Triggerer, 0), N(level)));
+        var read = Do(C(ScrCatalogue.Action.MagickTechAdjustment, N(10), (Attachee, 0), (Triggerer, 0), (Counter, 0)));
+        return ratioFirst ? Program(read, give, Do(C(ScrCatalogue.Action.ReturnRunDefault))) : Program(give, read, Do(C(ScrCatalogue.Action.ReturnRunDefault)));
+    }
+
     // ARC-SCRIPT-2346: toggle state (56) of one object, `times` times.
     private static ScrProgram Toggle(byte kind, int times = 1)
     {
@@ -122,7 +138,7 @@ public sealed class ItemWorldScriptTests
             [DeadGated] = Gated(C(ScrCatalogue.Condition.IsDead, (Looped, 0))), [GeneratorGated] = Gated(C(ScrCatalogue.Condition.MonsterGenDisabled, N(GeneratorSlot))),
             [EveryFollowerScript] = Loop(EveryFollower, Looped), [AnyFollowerScript] = Loop(EveryFollower, AnyFollower),
             [SetQuest] = SetQuestOf(Triggerer, 1004, 2), [CompleteQuest] = SetQuestOf(Triggerer, 1004, 4), [GiveSmall] = Give(1), [GiveBig] = Give(5), [GiveTwice] = Give(1, 2),
-            [SetThenRead] = SetAndRead(1004, 2), [SetOnItem] = SetQuestOf(Attachee, 1004, 4), [SetInvalid] = SetQuestOf(Triggerer, 5, 2), [CompleteBig] = SetQuestOf(Triggerer, 1003, 4), [SetThenGive] = SetAndGive(1004, 4, 1), [SetCallRead] = SetCallAndRead(1004, 2), [GiveThenXp] = GiveThenAddXp(), [XpThenGive] = AddXpThenGive(), [SetThenStop] = SetThenCallOutsidePoints(),
+            [SetThenRead] = SetAndRead(1004, 2), [SetOnItem] = SetQuestOf(Attachee, 1004, 4), [SetInvalid] = SetQuestOf(Triggerer, 5, 2), [CompleteBig] = SetQuestOf(Triggerer, 1003, 4), [SetThenGive] = SetAndGive(1004, 4, 1), [GiveThenStat] = GiveAndStat(5, false), [StatThenGive] = GiveAndStat(5, true), [GiveThenRatio] = GiveAndRatio(5, false), [RatioThenGive] = GiveAndRatio(5, true), [SetCallRead] = SetCallAndRead(1004, 2), [GiveThenXp] = GiveThenAddXp(), [XpThenGive] = AddXpThenGive(), [SetThenStop] = SetThenCallOutsidePoints(),
             [ToggleSelf] = Toggle(Attachee), [ToggleSelfTwice] = Toggle(Attachee, 2), [ToggleHero] = Toggle(Triggerer) };
         public Dictionary<string, int> Names { get; set; } = new() { ["case"] = CaseName, ["other"] = 3000 };
         public string[]? Vicinity { get; set; } = ["case", "other"];
@@ -367,7 +383,7 @@ public sealed class ItemWorldScriptTests
     }
 
     [TestMethod]
-    public void Give_quest_experience_gives_the_level_experience_and_refuses_what_the_session_cannot_carry()
+    public void Give_quest_experience_gives_the_level_experience_and_a_second_award_in_the_move_follows()
     {
         using var small = Owner(withExperience: true);
         Assert.AreEqual(GameSessionDisposition.Changed, small.PickUpItem(small.Version, "oid:tome", Accept, new Host(GiveSmall)).Disposition);
@@ -377,20 +393,18 @@ public sealed class ItemWorldScriptTests
         using var none = Owner();
         Assert.AreEqual(GameSessionDisposition.Changed, none.PickUpItem(none.Version, "oid:tome", Accept, new Host(GiveSmall)).Disposition);
 
-        foreach (var script in new[] { GiveBig, GiveTwice, CompleteBig, SetThenGive })
+        // Two awards in a move (700 and 700) apply in order over the hero as the first left it: the second passes the level (1010), the move's last award (ARC-SCRIPT-2410, ARC-SCRIPT-2394).
+        foreach (var script in new[] { GiveTwice, SetThenGive })
         {
             using var owner = Owner(withExperience: true);
-            var before = owner.Version;
-            var refused = owner.PickUpItem(before, "oid:tome", Accept, new Host(script));
-            Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.ItemScriptUnsupported, before, 0), (refused.Disposition, refused.Failure, owner.Version, Points(owner)), $"script {script}: a level-up, or a second award that raises the level the first left (700 + 700 passes 1010), refuses the move");
-            Assert.IsNull(owner.QueryQuest(1003));
-            Assert.IsNull(owner.QueryQuest(1004));
+            Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, "oid:tome", Accept, new Host(script)).Disposition, $"script {script}");
+            Assert.AreEqual((1400, 2, 1), (Points(owner), owner.QueryHero()!.Level, owner.TakeItemScriptAwards().Count), $"script {script}: both awards are given, the level written once");
         }
     }
 
-    // ARC-SCRIPT-2410 (IV20): a second award is planned over the hero as the first left it, level-free awards apply in order; one that raises the level the first award left refuses the move, though each alone would not.
+    // ARC-SCRIPT-2410 (IV20): a second award is planned over the hero as the first left it, level-free awards apply in order; the second reads the hero as the first left it (it may raise the level, as the move's last award), and none is planned over a level-raising one.
     [TestMethod]
-    public void A_second_award_in_one_move_applies_in_order_and_one_that_raises_the_level_refuses_the_move()
+    public void A_second_award_in_one_move_applies_in_order_and_none_follows_one_that_raises_the_level()
     {
         var rules = ExperienceStateTests.SmallQuestRules();
         foreach (var script in new[] { GiveTwice, SetThenGive })
@@ -404,11 +418,16 @@ public sealed class ItemWorldScriptTests
         Assert.AreEqual(GameSessionDisposition.Changed, done.PickUpItem(done.Version, "oid:tome", Accept, new Host(SetThenGive)).Disposition);
         Assert.AreEqual(SessionQuestState.Completed, done.QueryQuest(1004)!.Value.Effective);
 
-        // At 900 points the first award (to 1000) is level-free and the second (to 1100) raises the level: refused, nothing applied.
+        // At 900 points the first award (to 1000) is level-free and the second (to 1100) raises the level, the move's last award: applied, and queued for the host (ARC-SCRIPT-2394).
         using var edge = Owner(rules: rules, experience: 900);
-        var version = edge.Version;
-        var refused = edge.PickUpItem(version, "oid:tome", Accept, new Host(GiveTwice));
-        Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.ItemScriptUnsupported, version, 900), (refused.Disposition, refused.Failure, edge.Version, Points(edge)));
+        Assert.AreEqual(GameSessionDisposition.Changed, edge.PickUpItem(edge.Version, "oid:tome", Accept, new Host(GiveTwice)).Disposition);
+        Assert.AreEqual((1100, 2, 1), (Points(edge), edge.QueryHero()!.Level, edge.TakeItemScriptAwards().Count), "the second award read the hero as the first left it (1000) and wrote the level");
+
+        // At 950 the first award raises the level: a further award is not planned over it (the scheme's purchases read the stats the first changed), refused with nothing applied.
+        using var raised = Owner(rules: rules, experience: 950);
+        var version = raised.Version;
+        var refused = raised.PickUpItem(version, "oid:tome", Accept, new Host(GiveTwice));
+        Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.ItemScriptUnsupported, version, 950), (refused.Disposition, refused.Failure, raised.Version, Points(raised)));
         using var single = Owner(rules: rules, experience: 900);
         Assert.AreEqual(GameSessionDisposition.Changed, single.PickUpItem(single.Version, "oid:tome", Accept, new Host(GiveSmall)).Disposition);
         Assert.AreEqual(1000, Points(single), "one award alone stays under the level");
@@ -429,7 +448,62 @@ public sealed class ItemWorldScriptTests
         var refused = before.PickUpItem(version, "oid:tome", Accept, new Host(XpThenGive));
         Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.ItemScriptUnsupported, version, 0), (refused.Disposition, refused.Failure, before.Version, Points(before)), "the effect comes before the award in the same run: the run's collected change is not known to the award");
         Assert.IsFalse(before.QueryHeroEffects()!.Effects.Any(e => e.Number == XpEffect));
+    }
 
+    // ARC-SCRIPT-2394 (IV20): an award that raises the hero's level is applied with the level written and queued for the host (the level-up messages, the followers' step); one that does not raise a level queues its follower step too.
+    [TestMethod]
+    public void An_award_that_raises_a_level_is_applied_and_queued_for_the_host()
+    {
+        foreach (var script in new[] { GiveBig, CompleteBig })
+        {
+            using var owner = Owner(withExperience: true);
+            var before = owner.Version.Revision;
+            var moved = owner.PickUpItem(owner.Version, "oid:tome", Accept, new Host(script));
+            Assert.AreEqual((GameSessionDisposition.Changed, GameSessionFailure.None, before + 1), (moved.Disposition, moved.Failure, owner.Version.Revision), $"script {script}: the pickup is the move's one revision");
+            var hero = owner.QueryHeroExperience()!;
+            Assert.AreEqual((1300, 2), (hero.Experience, hero.Level), $"script {script}: the experience is added and the level written");
+            var awards = owner.TakeItemScriptAwards();
+            Assert.AreEqual(1, awards.Count);
+            Assert.IsTrue(awards[0].LevelsGained == 1 && awards[0].Followers is not null && awards[0].LevelUps is { Count: 1 }, "the level step and the level-up message reach the host");
+            Assert.AreEqual(0, owner.TakeItemScriptAwards().Count, "taken once");
+            using var restored = Restore(Decode(GameSessionSnapshotCodec.Encode(owner.Capture())), RestoreOptions() with { Experience = ExperienceStateTests.Rules() });
+            Assert.AreEqual(2, restored.QueryHeroExperience()!.Level, "the level survives a save");
+        }
+        using var small = Owner(withExperience: true);
+        Assert.AreEqual(GameSessionDisposition.Changed, small.PickUpItem(small.Version, "oid:tome", Accept, new Host(GiveSmall)).Disposition);
+        Assert.IsTrue(small.TakeItemScriptAwards().All(award => award.LevelsGained == 0 && award.LevelUps is null), "an award that writes no level carries no message");
+    }
+
+    [TestMethod]
+    public void A_refused_or_unchanged_move_queues_no_award()
+    {
+        // The first award (950 + 100) raises the level: a further award is not planned over it and the move is refused.
+        using var owner = Owner(rules: ExperienceStateTests.SmallQuestRules(), experience: 950);
+        Assert.AreEqual(GameSessionFailure.ItemScriptUnsupported, owner.PickUpItem(owner.Version, "oid:tome", Accept, new Host(GiveTwice)).Failure);
+        Assert.AreEqual(0, owner.TakeItemScriptAwards().Count);
+    }
+
+    [TestMethod]
+    public void A_stat_read_after_a_level_raising_award_refuses_the_move_and_one_before_it_passes()
+    {
+        using var after = Owner(withExperience: true);
+        var before = after.Version;
+        var refused = after.PickUpItem(before, "oid:tome", Accept, new Host(GiveThenStat));
+        Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.ItemScriptUnsupported, before, 0), (refused.Disposition, refused.Failure, after.Version, Points(after)), "the run read the level the award has raised in the original");
+        Assert.AreEqual(0, after.TakeItemScriptAwards().Count);
+
+        using var first = Owner(withExperience: true);
+        var passed = first.PickUpItem(first.Version, "oid:tome", Accept, new Host(StatThenGive));
+        Assert.AreEqual((GameSessionDisposition.Changed, GameSessionFailure.None, 2), (passed.Disposition, passed.Failure, first.QueryHeroExperience()!.Level), "a read before the award sees the level the session holds");
+
+        // The power ratio is the aptitude, which the points an auto-level scheme buys move: the same order rule.
+        using var ratio = Owner(withExperience: true);
+        var ratioBefore = ratio.Version;
+        var ratioRefused = ratio.PickUpItem(ratioBefore, "oid:tome", Accept, new Host(GiveThenRatio));
+        Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.ItemScriptUnsupported, ratioBefore), (ratioRefused.Disposition, ratioRefused.Failure, ratio.Version));
+        using var ratioFirst = Owner(withExperience: true);
+        var ratioPassed = ratioFirst.PickUpItem(ratioFirst.Version, "oid:tome", Accept, new Host(RatioThenGive));
+        Assert.AreEqual((GameSessionDisposition.Changed, GameSessionFailure.None), (ratioPassed.Disposition, ratioPassed.Failure), "a ratio read before the award is the move's order");
     }
 
     [TestMethod]
