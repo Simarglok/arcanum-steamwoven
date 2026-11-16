@@ -351,7 +351,7 @@ public partial class TerrainViewerApp
                         if (kind == AreaWorldMapKind.Map && System.Environment.GetEnvironmentVariable("ARC_WORLDMAP_SMOKE_SHOT") is { Length: > 0 } typeShot)
                         {
                             var first = notes.Items[0];
-                            for (int t = 0, slot = 0; t < 4; t++) if (t != first.Type) Require(notes.AddByQuill(first.PixelX + new[] { -80, -40, 40 }[slot++], first.PixelY, "type " + t, t), "the type look note was added");
+                            for (int t = 0, slot = 0; t < 4; t++) if (t != first.Type) Require(notes.AddByQuill(Math.Max(0, first.PixelX + new[] { -80, -40, 40 }[slot++]), first.PixelY, "type " + t, t), "the type look note was added");
                             for (var pass = 0; pass < 2; pass++)
                             {
                                 artView.NoteArtOverrideForSelfTest = pass == 0 ? null : AreaWorldMapArtLayout.NoteArt;

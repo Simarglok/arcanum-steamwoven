@@ -748,6 +748,7 @@ public partial class AreaWorldMapArtView : Control
         get
         {
             if (_kind != AreaWorldMapKind.Continent) return AreaWorldMapArtLayout.HoverHalf;
+            // The largest of the four note arts, not the drawn note's own (a safe bound; the arts are about the same size).
             var artHalf = 0;
             foreach (var art in AreaWorldMapArtLayout.NoteTypeArts)
                 if (_look?.Art.TryGetValue(art, out var frames) == true && frames.Length > 0) artHalf = Math.Max(artHalf, Math.Max(frames[0].GetWidth(), frames[0].GetHeight()) / 2);
@@ -899,7 +900,7 @@ public partial class AreaWorldMapArtView : Control
                 canvas.DrawPolygon([at, at + new Vector2(w, 0), at + new Vector2(w, h), at + new Vector2(0, h)],
                     [Corner(8), Corner(4), Corner(2), Corner(1)], [new(0, 0), new(1, 0), new(1, 1), new(0, 1)], texture);
             }
-        // WM82: the notes next, each with the art of its type (ARC-UI-2330; the original's WM79 draws all with 143, but only type 3 notes exist there) centred on its pixel
+        // WM82: the notes next, each with the art of its type (ARC-UI-2330; the original's town map draws all with 143, WM79, WM142, but the scenery notes are the only ones it makes there) centred on its pixel
         // (no label: the text shows on hover, WM59).
         if (town.Notes is { } notes)
             foreach (var note in notes.Items) MarkerAt(canvas, NoteArtFor(note), new Vector2(note.PixelX - _townOffset.X, note.PixelY - _townOffset.Y));

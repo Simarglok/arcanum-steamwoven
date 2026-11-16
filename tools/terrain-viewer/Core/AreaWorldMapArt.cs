@@ -30,9 +30,9 @@ public static class AreaWorldMapArtLayout
     public const int PartyArt = 204, AreaArt = 205, WaypointArt = 206, NewAreaArt = 814;
     /// <summary>ARC-UI-103: the note marker, art 143 <c>mm_ques</c> (marker slot 3, WM79): every town-map note is drawn with it.</summary>
     public const int NoteArt = 143;
-    /// <summary>ARC-UI-2330 (BM4d, WM79, WM132): the marker arts of the note types the quill's radio group gives (table 0x5C9160 rows 0-2: 142 note, 144 skull,
-    /// 141 chest; row 3 is the question art 143 of scenery notes). Steamwoven rules draw a note with the art of its type; the original draws every one with 143
-    /// (WM79), which cannot be seen there: the retail game only makes type 3 notes, the other types come from the Steamwoven-only quill.</summary>
+    /// <summary>ARC-UI-2330 (BM4d, WM79, WM142): the marker arts of the note types (table 0x5C9160 rows 0-2: 142 note, 144 skull, 141 chest; row 3 is the question art 143
+    /// of scenery notes). The original's map view draws a quill note with the art of its row; its town map draws every note with 143 (WM79) and its continent view a red
+    /// dot (WM142). Steamwoven rules draw the art of the type in all three views, where the quill (project-only there) makes notes of other types.</summary>
     public static readonly IReadOnlyList<int> NoteTypeArts = [142, 144, 141, NoteArt];
 
     /// <summary>The art a note of this type is drawn with; a type outside the table keeps the question art.</summary>
