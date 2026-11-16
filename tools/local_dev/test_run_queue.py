@@ -784,15 +784,29 @@ class QueueRunTests(unittest.TestCase):
 
     def queued(self, kind: str, name: str, seconds: float, *, timeout: str | None = None,
                estimate: float | None = None, cwd: Path | None = None) -> subprocess.Popen:
-        code = (f"import time; open({str(self.log)!r}, 'a').write('start {name} %f\\n' % time.time()); time.sleep({seconds}); "
+        code = (f"import time; open({str(self.log)!r}, 'a').write('start {name} %f\\n' % time.time()); "
+                f"{self.ticket_note(name)}time.sleep({seconds}); "
                 f"open({str(self.log)!r}, 'a').write('end {name} %f\\n' % time.time())")
         return self.wrapper(kind, name, [sys.executable, "-c", code], timeout=timeout, estimate=estimate, cwd=cwd)
+
+    def ticket_note(self, name: str) -> str:
+        """Code for a command to log its own ticket: `turn` is when the wrapper took its place (its own start event) and
+        `waited` is that minus when its ticket was queued. A timed assertion on these leaves out the process start of the
+        wrapper and of the command, which took seconds on a loaded Mac (ARC-DEV-2257)."""
+        ticket = str(run_queue.folder())
+        return (f"import json, os; t = None\n"
+                f"for _ in range(100):\n"
+                f"    try: t = json.load(open(os.path.join({ticket!r}, 't-%012d.json' % int(os.environ[{run_queue.TICKET_ENV!r}]))))\n"
+                f"    except (OSError, ValueError): time.sleep(0.02)\n"
+                f"    else: break\n"
+                f"open({str(self.log)!r}, 'a').write('turn {name} %f\\nwaited {name} %f\\n' % (t['startedAt'], t['startedAt'] - t['enqueuedAt']))\n")
 
     def held(self, kind: str, name: str, *, cwd: Path | None = None, environment: dict | None = None,
              estimate: float | None = None) -> subprocess.Popen:
         """A run that holds its place until `release()`, so a test's overlap and order do not depend on how fast the
         machine starts the next wrapper (a loaded Mac took seconds, which broke fixed run lengths)."""
         code = (f"import os, time; open({str(self.log)!r}, 'a').write('start {name} %f\\n' % time.time()); "
+                f"{self.ticket_note(name)}"
                 f"deadline = time.time() + 90\n"
                 f"while not os.path.exists({str(self.root / 'release')!r}) and time.time() < deadline: time.sleep(0.05)\n"
                 f"open({str(self.log)!r}, 'a').write('end {name} %f\\n' % time.time())")
@@ -853,9 +867,9 @@ class QueueRunTests(unittest.TestCase):
         order = sorted(["a", *names], key=lambda name: found[f"start {name}"])
         self.assertEqual(order, ["a", *names])
         for earlier, later in zip(order, order[1:]):
-            gap = found[f"start {later}"] - found[f"end {earlier}"]
+            gap = found[f"turn {later}"] - found[f"end {earlier}"]  # to the later wrapper taking its place, not its command's start
             self.assertGreaterEqual(gap, 0.0)
-            self.assertLess(gap, 2.5)  # the poll interval plus interpreter start, not a lock-retry back-off
+            self.assertLess(gap, 2.5)  # the poll interval, not a lock-retry back-off
 
     def test_a_short_run_that_arrived_later_starts_before_a_long_one_and_the_ticket_keeps_the_estimate(self) -> None:
         self.held("window", "running")
@@ -932,14 +946,13 @@ class QueueRunTests(unittest.TestCase):
 
     def test_a_killed_wrapper_frees_the_place_when_its_command_ends_even_if_a_descendant_kept_the_lock(self) -> None:
         # The command leaves a background process that inherits the ticket's descriptor and outlives everything.
-        first = self.wrapper("window", "crash", ["sh", "-c", f"echo started >> {self.root / 'crash'}; sleep 8 & sleep 1"])
+        first = self.wrapper("window", "crash", ["sh", "-c", f"echo started >> {self.root / 'crash'}; sleep 20 & sleep 1"])  # the descendant outlives any slow start of the next wrapper (ARC-DEV-2257)
         self.until(lambda: (self.root / "crash").exists())
         os.kill(first.pid, signal.SIGKILL)
         first.wait()
-        began = time.time()
         self.queued("window", "next", 0.1)
         self.finish()
-        self.assertLess(self.events()["start next"] - began, 5.0)
+        self.assertLess(self.events()["waited next"], 5.0)  # queued to taking its place: the wrapper's own start is left out
 
     def test_a_run_out_of_time_has_its_process_group_stopped(self) -> None:
         pid_file = self.root / "bg.pid"
@@ -1010,10 +1023,9 @@ class QueueRunTests(unittest.TestCase):
         child = next(item["childPid"] for item in self.live())
         os.kill(first.pid, signal.SIGKILL)
         first.wait()
-        began = time.time()
         self.queued("window", "after", 0.1)
         self.finish()
-        self.assertLess(self.events()["start after"] - began, run_queue.KILL_GRACE_SECONDS + 5)
+        self.assertLess(self.events()["waited after"], run_queue.KILL_GRACE_SECONDS + 5)
         self.until(lambda: subprocess.run(["ps", "-p", str(child)], capture_output=True).returncode != 0)
 
     def test_numbering_survives_a_lost_counter(self) -> None:

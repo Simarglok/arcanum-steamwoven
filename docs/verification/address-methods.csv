@@ -990,6 +990,7 @@ tools/terrain-viewer/Godot/TerrainViewerMapNoteEntry.cs,AcceptMapNote,exempt,hos
 tools/terrain-viewer/Godot/TerrainViewerMapNoteEntry.cs,HandleMapNoteKey,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerOrderLine.cs,AcceptOrderLine,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerOrderLine.cs,HandleOrderLineKey,exempt,host
+tools/terrain-viewer/Godot/TerrainViewerOrderLine.cs,HeroSpeechState,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerOrderLine.cs,RouteOrderLineKey,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerPortraitHover.cs,FollowerPortraitHoverLeft,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerProjectiles.cs,BoomerangReturned,pending,
