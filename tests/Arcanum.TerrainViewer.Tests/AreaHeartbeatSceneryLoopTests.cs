@@ -290,8 +290,9 @@ public sealed class AreaHeartbeatSceneryLoopTests
             var at = new ScrObjectRef(1, AreaUseScriptHost.EntityId(item));
             CollectionAssert.AreEqual(new[] { AreaUseScriptHost.EntityId(near) }, host.SceneryNearItem(at)!.Select(o => o.Code).ToArray(), "no container, far or gone scenery");
             CollectionAssert.AreEqual(new[] { AreaUseScriptHost.EntityId(critter), host.Pc.Code }, host.CrittersNearItem(at)!.Select(o => o.Code).ToArray(), "the near NPC, then the hero (the host's world puts it at (12, 21), next to the item); no far critter, no scenery");
-            foreach (var around in new Func<ScrObjectRef, IReadOnlyList<ScrObjectRef>?>[] { host.SceneryNearItem, host.CrittersNearItem })
+            foreach (var around in new Func<ScrObjectRef, IReadOnlyList<ScrObjectRef>?>[] { host.SceneryNearItem, host.CrittersNearItem, host.ContainersNearItem })
             {
+                Assert.IsNull(around(new(1, AreaUseScriptHost.EntityId(critter))), "an NPC is no item: no centre from its map row");
                 Assert.IsNull(around(new(1, "made:3")), "a made item has no row and so no known tile");
                 Assert.IsNull(around(new(2, AreaUseScriptHost.EntityId(item))), "another map");
             }

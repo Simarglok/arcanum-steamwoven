@@ -523,7 +523,8 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     {
         if (item.Map != _shownMap) return null;
         var placed = _session.QueryPlacedItems().FirstOrDefault(p => p.Entity == item.Code && p.Map.RuntimeMap == item.Map);
-        return placed is not null ? placed.Cell : (Row(item) ?? CarriedItemRow(item)) is { WorldX: { } x, WorldY: { } y } && x is >= int.MinValue and <= int.MaxValue && y is >= int.MinValue and <= int.MaxValue ? new CellCoord((int)x, (int)y) : null;
+        // Only an item has this centre: a callee a call script ex runs for an NPC or scenery asks the use host's own scans (live cells), so such an attachee has no answer here and the session refuses the move.
+        return placed is not null ? placed.Cell : (Row(item) ?? CarriedItemRow(item)) is { Type: >= FirstItemType and <= LastItemType, WorldX: { } x, WorldY: { } y } && x is >= int.MinValue and <= int.MaxValue && y is >= int.MinValue and <= int.MaxValue ? new CellCoord((int)x, (int)y) : null;
     }
 
     private IReadOnlyList<ScrObjectRef> ContainersAround(CellCoord at)
