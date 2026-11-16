@@ -38,7 +38,8 @@ implemented yet.
 - **SWI-LAY-6** W × H are device (backing) pixels, including the macOS backing scale.
 - **SWI-LAY-7** Every master length and offset is a multiple of 6 px, so it is a whole number of pixels at every step
   (6 px = 4, 3 and 2 px). A device position is `round(master position · f)`, computed per edge (not per size), so
-  neighbouring parts share their edges; halves round up.
+  neighbouring parts share their edges; halves round up. The two panel heights are the exception: each is `round(height · f)`
+  from the frame's own top or bottom edge, as the reference table below shows (1600 × 900: bottom panel 238, middle 599).
 
 Reference table (band heights at their provisional values; "bars" are per side, horizontal / vertical). The layout
 model's unit tests use these numbers ([#2450](https://github.com/Simarglok/arcanum-steamwoven/issues/2450)):
