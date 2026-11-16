@@ -591,7 +591,7 @@ public sealed partial class GameSessionOwner
     {
         // ARC-SCRIPT-2335 (IV1–IV4): the world questions of the loop for, the container vicinity kinds and the name condition go to the host's world part. A host without it, an object or a centre it does not know makes the run unanswerable
         // (UnknownObject: the session refuses the move). The set admits no scenery, critter, random, location, held-item, wielded-item or reputation question, so none is asked (ARC-SCRIPT-2347 added the quest state and object type answers).
-        // Implementing these interfaces also switches off the dispatcher's guard that a set's commands have a host answer: a later widening of the admission (random, within range, the guard conditions, get object type, the scenery
+        // Implementing these interfaces also switches off the dispatcher's guard that a set's commands have a host answer: a later widening of the admission (random, within range, the held-item, wielded-item and reputation guard conditions, the scenery
         // and critter vicinity kinds) must answer here first (ItemWorldScriptTests pins what the stubs below assume).
         private ISessionItemWorldHost? World => host as ISessionItemWorldHost;
 

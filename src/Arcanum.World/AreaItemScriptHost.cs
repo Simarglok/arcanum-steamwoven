@@ -78,7 +78,7 @@ public sealed class AreaItemScriptHost : ISessionItemScriptHost, ISessionItemWor
     /// <summary>ARC-SCRIPT-2347 (IV9, OV3): an object's type field from the shown map's rows (the hero is 15).</summary>
     public int? ObjectType(ScrObjectRef obj) => _shown?.Invoke() is { } host && Known(host, obj) ? host.ObjectType(obj) : null;
 
-    /// <summary>ARC-SCRIPT-2347 (IV10, HW1): the death of the hero or of an NPC of the shown map as the use host reads it; null for any other object.</summary>
+    /// <summary>ARC-SCRIPT-2347 (IV10, HW1): the death of the hero or of an NPC the use host holds a row of, as it reads it; null for any other object.</summary>
     public bool? IsDead(ScrObjectRef obj) => _shown?.Invoke()?.IsDead(obj);
 
     /// <summary>ARC-SCRIPT-2335 (IV5): the use host's plan of a change art number.</summary>
