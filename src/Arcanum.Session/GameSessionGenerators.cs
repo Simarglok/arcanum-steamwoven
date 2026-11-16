@@ -143,7 +143,7 @@ public sealed partial class GameSessionOwner
 
     /// <summary>
     /// ARC-WORLD-1157 (PO8, script action 110 <c>toggle_monster_generator</c>): toggles the blocked bit of a slot (0..255); the spawner and condition 46 read it. One revision.
-    /// The script action itself is not admitted yet (E5-b); this is the session's half of it. A slot outside 0..255 is refused with <see cref="GameSessionFailure.InvalidCreatedObject"/> (the session has no failure of its own for a generator slot; the script action's validation, E5-b, will say it first).
+    /// The script action reaches it through the use host (WO9) and, planned in the move's own revision, through the item set (ARC-SCRIPT-2378, ledger IV32–IV35). A slot outside 0..255 is refused with <see cref="GameSessionFailure.InvalidCreatedObject"/> (the session has no failure of its own for a generator slot; the script action's validation, E5-b, will say it first).
     /// </summary>
     public GameSessionMutationResult ToggleGeneratorBlock(GameSessionVersion expected, int slot)
     {
