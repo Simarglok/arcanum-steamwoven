@@ -15,7 +15,8 @@ namespace Arcanum.Session.Tests;
 public sealed class ItemWorldScriptTests
 {
     private const byte Triggerer = 0, Attachee = 1, LocalVariable = 2, Number = 3, Looped = 10, LocalObject = 11, EveryContainer = 17, AnyContainer = 18, EveryFollower = 2, AnyFollower = 3;
-    private const int Every = 810, Any = 811, Twice = 812, EveryFollowerScript = 813, AnyFollowerScript = 814, ToggleSelf = 815, ToggleSelfTwice = 816, ToggleHero = 817, Quest = 820, Typed = 821, Assigned = 822, DeadGated = 823, GeneratorGated = 824, GeneratorSlot = 7, CaseName = 1205, NewArt = 4, BaselineArt = 100, QuestNumber = 1005, ContainerType = 2;
+    private const int Every = 810, Any = 811, Twice = 812, EveryFollowerScript = 813, AnyFollowerScript = 814, ToggleSelf = 815, ToggleSelfTwice = 816, ToggleHero = 817, Quest = 820, Typed = 821, Assigned = 822, DeadGated = 823, GeneratorGated = 824, GeneratorSlot = 7, CaseName = 1205, NewArt = 4, BaselineArt = 100, QuestNumber = 1005, ContainerType = 2,
+        SetQuest = 830, CompleteQuest = 831, GiveSmall = 832, GiveBig = 833, GiveTwice = 834, SetThenRead = 835, SetOnItem = 836, SetInvalid = 837, CompleteBig = 838, SetThenGive = 839;
     private static readonly SessionInsertCheck Accept = _ => SessionInsertVerdict.Accepted;
 
     private sealed record Clause(int Type, (byte Kind, int Value)[] Operands);
@@ -66,6 +67,26 @@ public sealed class ItemWorldScriptTests
     private static ScrProgram Gated(Clause condition) => Program(Do(C(ScrCatalogue.Action.LoopFor, (EveryContainer, 0))),
         If(condition, C(ScrCatalogue.Action.ChangeArtNumber, (Looped, 0), N(NewArt))), Do(C(ScrCatalogue.Action.LoopEnd)), Do(C(ScrCatalogue.Action.ReturnRunDefault)));
 
+    // ARC-SCRIPT-2374 (IV18–IV21): set PC quest state (16) of the triggerer and give quest experience (63), in the shapes the installed scripts use.
+    private static ScrProgram SetQuestOf(byte kind, int quest, int state) => Program(Do(C(ScrCatalogue.Action.SetPcQuestState, (kind, 0), N(quest), N(state))), Do(C(ScrCatalogue.Action.ReturnRunDefault)));
+
+    private static ScrProgram Give(int level, int times = 1)
+    {
+        var lines = new List<(Clause, Clause, Clause)>();
+        for (var i = 0; i < times; i++) lines.Add(Do(C(ScrCatalogue.Action.GiveQuestExperience, (Triggerer, 0), N(level))));
+        lines.Add(Do(C(ScrCatalogue.Action.ReturnRunDefault)));
+        return Program([.. lines]);
+    }
+
+    // The write, then the same quest read back in the same run: the later read sees the earlier write (the original applies as it goes).
+    private static ScrProgram SetAndRead(int quest, int state) => Program(Do(C(ScrCatalogue.Action.SetPcQuestState, (Triggerer, 0), N(quest), N(state))),
+        Do(C(ScrCatalogue.Action.LoopFor, (EveryContainer, 0))),
+        If(C(ScrCatalogue.Condition.PcQuestState, (Triggerer, 0), N(quest), N(state)), C(ScrCatalogue.Action.ChangeArtNumber, (Looped, 0), N(NewArt))),
+        Do(C(ScrCatalogue.Action.LoopEnd)), Do(C(ScrCatalogue.Action.ReturnRunDefault)));
+
+    private static ScrProgram SetAndGive(int quest, int state, int level) => Program(Do(C(ScrCatalogue.Action.SetPcQuestState, (Triggerer, 0), N(quest), N(state))),
+        Do(C(ScrCatalogue.Action.GiveQuestExperience, (Triggerer, 0), N(level))), Do(C(ScrCatalogue.Action.ReturnRunDefault)));
+
     // ARC-SCRIPT-2346: toggle state (56) of one object, `times` times.
     private static ScrProgram Toggle(byte kind, int times = 1)
     {
@@ -81,6 +102,8 @@ public sealed class ItemWorldScriptTests
             [Quest] = QuestGated(2), [Typed] = TypeGated(ContainerType), [Assigned] = AssignGated(),
             [DeadGated] = Gated(C(ScrCatalogue.Condition.IsDead, (Looped, 0))), [GeneratorGated] = Gated(C(ScrCatalogue.Condition.MonsterGenDisabled, N(GeneratorSlot))),
             [EveryFollowerScript] = Loop(EveryFollower, Looped), [AnyFollowerScript] = Loop(EveryFollower, AnyFollower),
+            [SetQuest] = SetQuestOf(Triggerer, 1004, 2), [CompleteQuest] = SetQuestOf(Triggerer, 1004, 4), [GiveSmall] = Give(1), [GiveBig] = Give(5), [GiveTwice] = Give(1, 2),
+            [SetThenRead] = SetAndRead(1004, 2), [SetOnItem] = SetQuestOf(Attachee, 1004, 4), [SetInvalid] = SetQuestOf(Triggerer, 5, 2), [CompleteBig] = SetQuestOf(Triggerer, 1003, 4), [SetThenGive] = SetAndGive(1004, 4, 1),
             [ToggleSelf] = Toggle(Attachee), [ToggleSelfTwice] = Toggle(Attachee, 2), [ToggleHero] = Toggle(Triggerer) };
         public Dictionary<string, int> Names { get; set; } = new() { ["case"] = CaseName, ["other"] = 3000 };
         public string[]? Vicinity { get; set; } = ["case", "other"];
@@ -144,9 +167,12 @@ public sealed class ItemWorldScriptTests
             : new(new SessionMapId(obj.Map), obj.Code, PlanBaseline ? BaselineArt : (uint)number, BaselineArt, Openable is null ? null : new SessionOpenable(new SessionMapId(obj.Map), obj.Code), Openable);
     }
 
-    private static GameSessionOwner Owner()
+    // withExperience: the session holds experience tables (ExperienceStateTests.Rules: level 2 at 1010 points, quest experience level 1 gives 700 and level 5 1300, quest 1003 is level 5, every other quest level 1).
+    private static GameSessionOwner Owner(bool withExperience = false)
     {
-        var owner = CreateWith(HalfElf([8, 8, 8, 8, 14, 8, 8, 8, 0, 0]));
+        var created = GameSessionOwner.Create(Descriptor() with { Hero = HalfElf([8, 8, 8, 8, 14, 8, 8, 8, 0, 0]), Experience = withExperience ? ExperienceStateTests.Rules() : null });
+        Assert.AreEqual(GameSessionFailure.None, created.Failure);
+        var owner = created.Owner!;
         var seed = InventoryStateTests.Seed();
         var tome = new SessionSeedItem("oid:tome", InventoryStateTests.Facts(SessionItemType.Generic, 5700, 0, 0, null, SessionScriptPoint.InsertItem), new Arcanum.Simulation.Movement.CellCoord(300, 200));
         Assert.AreEqual(GameSessionDisposition.Changed, owner.AttachMapInventory(Exterior, seed with { Items = [.. seed.Items, tome] }).Disposition);
@@ -257,6 +283,83 @@ public sealed class ItemWorldScriptTests
         Assert.AreEqual(GameSessionDisposition.Changed, blocked.ToggleGeneratorBlock(blocked.Version, GeneratorSlot).Disposition);
         Assert.AreEqual(GameSessionDisposition.Changed, blocked.PickUpItem(blocked.Version, "oid:tome", Accept, new Host(GeneratorGated)).Disposition);
         Assert.AreEqual((NewArt, NewArt), ((int?)Art(blocked, "case"), (int?)Art(blocked, "other")), "a blocked slot passes it for every looped container");
+    }
+
+    private static int Points(GameSessionOwner owner) => owner.QueryHeroExperience()!.Experience;
+
+    // ARC-SCRIPT-2374 (IV18, IV19): set PC quest state of the hero in a pickup's insert-item run changes the quest log in the move's own revision, survives a save, and a completion pays the quest's experience.
+    [TestMethod]
+    public void Set_pc_quest_state_writes_the_hero_quest_in_the_moves_own_revision()
+    {
+        using var owner = Owner(withExperience: true);
+        var before = owner.Version.Revision;
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, "oid:tome", Accept, new Host(SetQuest)).Disposition);
+        Assert.AreEqual((SessionQuestState.Accepted, before + 1), (owner.QueryQuest(1004)!.Value.Effective, owner.Version.Revision), "one revision for the pickup and the quest write");
+        Assert.AreEqual(0, Points(owner));
+        using var restored = Restore(Decode(GameSessionSnapshotCodec.Encode(owner.Capture())), RestoreOptions() with { Experience = ExperienceStateTests.Rules() });
+        Assert.AreEqual(SessionQuestState.Accepted, restored.QueryQuest(1004)!.Value.Effective, "the quest survives a save");
+
+        using var done = Owner(withExperience: true);
+        Assert.AreEqual(GameSessionDisposition.Changed, done.PickUpItem(done.Version, "oid:tome", Accept, new Host(CompleteQuest)).Disposition);
+        Assert.AreEqual((SessionQuestState.Completed, SessionQuestState.Completed, 700), (done.QueryQuest(1004)!.Value.Effective, done.QueryGlobalQuest(1004), Points(done)), "a completion completes it for everyone and pays the quest's experience");
+    }
+
+    [TestMethod]
+    public void A_quest_read_after_a_quest_write_of_the_same_run_refuses_the_move()
+    {
+        // The run's reads come before its writes are applied, so a read after a write would answer what the original does not: the move is refused, nothing applied.
+        using var owner = Owner();
+        var before = owner.Version;
+        var refused = owner.PickUpItem(before, "oid:tome", Accept, new Host(SetThenRead) { QuestStateOfHero = 0 });
+        Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.ItemScriptUnsupported, before), (refused.Disposition, refused.Failure, owner.Version));
+        Assert.IsNull(owner.QueryQuest(1004));
+        Assert.IsNull(Art(owner, "case"));
+    }
+
+    [TestMethod]
+    public void A_quest_write_names_the_hero_only_and_a_botched_or_ended_quest_stays()
+    {
+        using var item = Owner();
+        Assert.AreEqual(GameSessionDisposition.Changed, item.PickUpItem(item.Version, "oid:tome", Accept, new Host(SetOnItem)).Disposition);
+        Assert.IsNull(item.QueryQuest(1004), "an item is no PC: the original's function does nothing for it");
+        Assert.AreEqual(SessionQuestState.Accepted, item.QueryGlobalQuest(1004));
+
+        using var ended = Owner();
+        Assert.AreEqual(GameSessionDisposition.Changed, ended.SetQuestState(ended.Version, 1004, SessionQuestState.Botched).Disposition);
+        var revision = ended.Version.Revision;
+        Assert.AreEqual(GameSessionDisposition.Changed, ended.PickUpItem(ended.Version, "oid:tome", Accept, new Host(CompleteQuest)).Disposition);
+        Assert.AreEqual((SessionQuestState.Botched, revision + 1), (ended.QueryQuest(1004)!.Value.Effective, ended.Version.Revision), "a botched quest takes no completion; the pickup is the move's one revision");
+    }
+
+    [TestMethod]
+    public void Give_quest_experience_gives_the_level_experience_and_refuses_what_the_session_cannot_carry()
+    {
+        using var small = Owner(withExperience: true);
+        Assert.AreEqual(GameSessionDisposition.Changed, small.PickUpItem(small.Version, "oid:tome", Accept, new Host(GiveSmall)).Disposition);
+        Assert.AreEqual(700, Points(small));
+
+        // Without tables the award is nothing (the use host skips it): the pickup goes on.
+        using var none = Owner();
+        Assert.AreEqual(GameSessionDisposition.Changed, none.PickUpItem(none.Version, "oid:tome", Accept, new Host(GiveSmall)).Disposition);
+
+        foreach (var script in new[] { GiveBig, GiveTwice, CompleteBig, SetThenGive })
+        {
+            using var owner = Owner(withExperience: true);
+            var before = owner.Version;
+            var refused = owner.PickUpItem(before, "oid:tome", Accept, new Host(script));
+            Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.ItemScriptUnsupported, before, 0), (refused.Disposition, refused.Failure, owner.Version, Points(owner)), $"script {script}: a level-up, a second award or the quest's own award plus a given one refuses the move");
+            Assert.IsNull(owner.QueryQuest(1003));
+            Assert.IsNull(owner.QueryQuest(1004));
+        }
+    }
+
+    [TestMethod]
+    public void A_quest_number_outside_the_log_refuses_the_move()
+    {
+        using var owner = Owner();
+        var before = owner.Version;
+        var refused = owner.PickUpItem(before, "oid:tome", Accept, new Host(SetInvalid));
+        Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.ItemScriptUnsupported, before), (refused.Disposition, refused.Failure, owner.Version));
     }
 
     [TestMethod]
