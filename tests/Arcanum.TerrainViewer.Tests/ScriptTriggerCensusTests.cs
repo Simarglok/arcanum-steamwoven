@@ -120,7 +120,7 @@ public sealed class ScriptTriggerCensusTests
         // monster generator (110), set PC quest state (16), get story state (42) and the scenery and critter vicinity kinds (15, 8), one each.
         // ARC-SCRIPT-2374 (ledger IV21): set PC quest state (16) and give quest experience (63) free the row that stopped on action 16: 24 of the 28; the 4 left stop on toggle monster generator (110), get story state (42) and the scenery and critter vicinity kinds (15, 8), one row each.
         
-        // ARC-SCRIPT-2376 (ledger IV22): with the scenery and critter vicinity kinds (15, 8) the item set admits 26 of the 28 (24 before: the two rows that stopped on those kinds join); the 2 left stop on toggle monster generator (110) and get story state (42), one row each.
+        // ARC-SCRIPT-2376 (ledger IV25): with the scenery and critter vicinity kinds (15, 8) the item set admits 26 of the 28 (24 before: the two rows that stopped on those kinds join); the 2 left stop on toggle monster generator (110) and get story state (42), one row each.
         // The set only admits: the session still refuses the toggle state of script 1239 on the looped scenery (it flips the off flag of an item of the move only).
         Assert.AreEqual(26, admitted[SessionScriptPoint.InsertItem]);
         Assert.IsTrue(admitted[ScrPoint.Hit] >= 26 && admitted[ScrPoint.CritterHits] == 18 && admitted[ScrPoint.CriticalHit] >= 4, $"{admitted[ScrPoint.Hit]}, {admitted[ScrPoint.CritterHits]}, {admitted[ScrPoint.CriticalHit]}");

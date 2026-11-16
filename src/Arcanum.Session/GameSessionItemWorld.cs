@@ -16,13 +16,13 @@ public interface ISessionItemWorldHost
     IReadOnlyList<ScrObjectRef>? ContainersInVicinity(ScrObjectRef item);
 
     /// <summary>
-    /// ARC-SCRIPT-2376 (IV22, PG3): the scenery in the vicinity of <paramref name="item"/>, the attachee of the run (the focus kinds every and any scenery in the vicinity, 15 and 16): the same scan and centre as <see cref="ContainersInVicinity"/> with the scenery
+    /// ARC-SCRIPT-2376 (IV25, PG3): the scenery in the vicinity of <paramref name="item"/>, the attachee of the run (the focus kinds every and any scenery in the vicinity, 15 and 16): the same scan and centre as <see cref="ContainersInVicinity"/> with the scenery
     /// type. Null when the host does not know the item's location: the session then refuses the move.
     /// </summary>
     IReadOnlyList<ScrObjectRef>? SceneryInVicinity(ScrObjectRef item) => null;
 
     /// <summary>
-    /// ARC-SCRIPT-2376 (IV22, TG4): the PCs and NPCs in the vicinity of <paramref name="item"/>, the attachee of the run (the focus kinds everyone and anyone in the vicinity, 8 and 9), the hero and the dead included, around the same centre as
+    /// ARC-SCRIPT-2376 (IV25, TG4): the PCs and NPCs in the vicinity of <paramref name="item"/>, the attachee of the run (the focus kinds everyone and anyone in the vicinity, 8 and 9), the hero and the dead included, around the same centre as
     /// <see cref="ContainersInVicinity"/>. Null when the host does not know the item's location: the session then refuses the move.
     /// </summary>
     IReadOnlyList<ScrObjectRef>? CrittersInVicinity(ScrObjectRef item) => null;

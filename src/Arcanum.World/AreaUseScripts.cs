@@ -512,10 +512,10 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     /// </summary>
     public IReadOnlyList<ScrObjectRef>? ContainersNearItem(ScrObjectRef item) => ItemCentre(item) is { } cell ? ContainersAround(cell) : null;
 
-    /// <summary>ARC-SCRIPT-2376 (IV22, PG3): the scenery in the vicinity of an item, the attachee of its insert-item script, around the same centre as <see cref="ContainersNearItem"/> (null when the item has none).</summary>
+    /// <summary>ARC-SCRIPT-2376 (IV25, PG3): the scenery in the vicinity of an item, the attachee of its insert-item script, around the same centre as <see cref="ContainersNearItem"/> (null when the item has none).</summary>
     public IReadOnlyList<ScrObjectRef>? SceneryNearItem(ScrObjectRef item) => ItemCentre(item) is { } cell ? SceneryAround(cell) : null;
 
-    /// <summary>ARC-SCRIPT-2376 (IV22, TG4): the PCs and NPCs in the vicinity of an item, the attachee of its insert-item script, around the same centre as <see cref="ContainersNearItem"/> (null when the item has none).</summary>
+    /// <summary>ARC-SCRIPT-2376 (IV25, TG4): the PCs and NPCs in the vicinity of an item, the attachee of its insert-item script, around the same centre as <see cref="ContainersNearItem"/> (null when the item has none).</summary>
     public IReadOnlyList<ScrObjectRef>? CrittersNearItem(ScrObjectRef item) => ItemCentre(item) is { } cell ? CrittersAround(cell) : null;
 
     // The item's own location field as the host reads it (IV2): the placed cell of a session-dropped item, else the tile of its map data or of the carried item's row; null for an item of another map, or one without a tile.

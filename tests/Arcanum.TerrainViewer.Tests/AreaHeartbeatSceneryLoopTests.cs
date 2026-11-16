@@ -272,7 +272,7 @@ public sealed class AreaHeartbeatSceneryLoopTests
         });
     }
 
-    // ARC-SCRIPT-2376 (ledger IV22, PG3, TG4): the scenery and the critters of an insert-item script's vicinity are the scans around the item's own tile as well; an item without a known tile gets no answer (the session then refuses the move).
+    // ARC-SCRIPT-2376 (ledger IV25, PG3, TG4): the scenery and the critters of an insert-item script's vicinity are the scans around the item's own tile as well; an item without a known tile gets no answer (the session then refuses the move).
     [TestMethod]
     public void The_scenery_and_the_critters_around_an_item_are_those_near_its_own_tile()
     {

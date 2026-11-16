@@ -40,7 +40,7 @@ public sealed class ItemWorldScriptTests
         return ScrProgram.Read(bytes).Program!;
     }
 
-    // ARC-SCRIPT-2376 (IV22): the dialog loops of the installed scripts: the looped critter that carries the name is sent a deferred call into a dialog script (call script in: script, line, the hero as triggerer, the looped one as attachee, 2 seconds).
+    // ARC-SCRIPT-2376 (IV25): the dialog loops of the installed scripts: the looped critter that carries the name is sent a deferred call into a dialog script (call script in: script, line, the hero as triggerer, the looped one as attachee, 2 seconds).
     private static ScrProgram CallLoop(byte listKind) => Program(Do(C(ScrCatalogue.Action.LoopFor, (listKind, 0))),
         If(C(ScrCatalogue.Condition.IsNamed, (Looped, 0), N(CaseName)), C(ScrCatalogue.Action.CallScriptIn, N(Callee), N(CalleeLine), (Triggerer, 0), (Looped, 0), N(2))),
         Do(C(ScrCatalogue.Action.LoopEnd)), Do(C(ScrCatalogue.Action.ReturnRunDefault)));
@@ -226,7 +226,7 @@ public sealed class ItemWorldScriptTests
         Assert.AreEqual((NewArt, NewArt), ((int?)Art(owner, "case"), (int?)Art(owner, "other")));
     }
 
-    // ARC-SCRIPT-2376 (IV22, PG3): the scenery kinds 15 and 16 list the scenery around the item, asked of the host's world part.
+    // ARC-SCRIPT-2376 (IV25, PG3): the scenery kinds 15 and 16 list the scenery around the item, asked of the host's world part.
     [TestMethod]
     public void Every_scenery_loop_changes_the_art_of_the_named_scenery_around_the_item()
     {
@@ -247,7 +247,7 @@ public sealed class ItemWorldScriptTests
         Assert.AreEqual((NewArt, NewArt), ((int?)Art(owner, "case"), (int?)Art(owner, "other")));
     }
 
-    // ARC-SCRIPT-2376 (IV22, TG4): everyone and anyone in the vicinity list the PCs and NPCs around the item; the looped critter that passes the name test gets a deferred call into a dialog script (call script in), kept in the event queue.
+    // ARC-SCRIPT-2376 (IV25, TG4): everyone and anyone in the vicinity list the PCs and NPCs around the item; the looped critter that passes the name test gets a deferred call into a dialog script (call script in), kept in the event queue.
     [TestMethod]
     public void The_critter_loop_schedules_a_dialog_call_for_the_named_critter_around_the_item()
     {
@@ -265,7 +265,7 @@ public sealed class ItemWorldScriptTests
         }
     }
 
-    // Script 1239 toggles the looped scenery: the item set admits the loop, but the session keeps the off flag of an item of the move only, so the move is refused whole (IV22).
+    // Script 1239 toggles the looped scenery: the item set admits the loop, but the session keeps the off flag of an item of the move only, so the move is refused whole (IV25).
     [TestMethod]
     public void A_toggle_of_the_looped_scenery_is_refused_and_changes_nothing()
     {
@@ -550,7 +550,7 @@ public sealed class ItemWorldScriptTests
         // The adapter answers IScrGroupQueries for the follower kinds only (ARC-SCRIPT-2336): the group kinds 13 and 14 (followers plus the triggerer) stay out until a slice reads them for the item host.
         foreach (var kind in new[] { ScrFocusKind.EveryoneInGroup, ScrFocusKind.AnyoneInGroup })
             Assert.IsFalse(set.FocusKinds.Contains(kind), $"focus {kind}");
-        // ARC-SCRIPT-2376 (IV22): the scenery and critter vicinity kinds are answered by the host's world part now, and call script in stays admitted.
+        // ARC-SCRIPT-2376 (IV25): the scenery and critter vicinity kinds are answered by the host's world part now, and call script in stays admitted.
         foreach (var kind in new[] { ScrFocusKind.EverySceneryInVicinity, ScrFocusKind.AnySceneryInVicinity, ScrFocusKind.EveryoneInVicinity, ScrFocusKind.AnyoneInVicinity })
             Assert.IsTrue(set.FocusKinds.Contains(kind), $"focus {kind}");
         Assert.IsTrue(set.Actions.Contains(ScrCatalogue.Action.CallScriptIn));

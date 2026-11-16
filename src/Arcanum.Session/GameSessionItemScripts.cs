@@ -32,6 +32,9 @@ public sealed partial class GameSessionOwner
 
     private Func<int, IReadOnlyList<SessionPrototypeScript>?>? _prototypeScripts;
 
+    // ARC-COMBAT-2182: the made item (entity and kind) a hero's throw splits off a stack for, only while the throw's scripts run before the split creates it; null otherwise. Not state.
+    private (string Entity, SessionItemKind Kind)? _pendingThrowMade;
+
     /// <summary>
     /// ARC-DEV-097 (MIG8, TM9, GR7, SA4): attaches the host's prototype data for the script arrays of the objects the session creates from a
     /// prototype (<c>made:n</c> items): a created object owns no array and reads its prototype's until its first write, which copies every point
@@ -89,6 +92,8 @@ public sealed partial class GameSessionOwner
     // made items, the hero's kit, the ground, or an NPC's or container's list.
     private SessionItemKind? MadeKind(string entity)
     {
+        // ARC-COMBAT-2182: the stack a hero's throw is about to split off answers as the made item it will be while the throw's scripts run (it is created after them).
+        if (_pendingThrowMade is { } pending && pending.Entity == entity) return pending.Kind;
         var origin = ObjectOriginOf(entity);
         if (origin is not (SessionObjectOrigin.Made or SessionObjectOrigin.Kit)) return null;
         foreach (var made in _inventory.Made)
@@ -731,7 +736,7 @@ public sealed partial class GameSessionOwner
             return false;
         }
 
-        // ARC-SCRIPT-2376 (IV22): the scenery and the PCs and NPCs around the attachee item go to the host's world part as the container vicinity does (the centre is the item's own location).
+        // ARC-SCRIPT-2376 (IV25): the scenery and the PCs and NPCs around the attachee item go to the host's world part as the container vicinity does (the centre is the item's own location).
         public IReadOnlyList<ScrObjectRef> SceneryInVicinity(ScrObjectRef centre)
         {
             if (World?.SceneryInVicinity(centre) is { } list) return list;
