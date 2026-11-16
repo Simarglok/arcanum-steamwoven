@@ -1184,13 +1184,13 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
 
     /// <summary>
     /// ARC-SCRIPT-1772 (CQ5): <see cref="NameOf(AreaObjectRecord)"/> with the name number a script's rename gave an NPC (<see cref="SessionNpcName.Property"/>, kept only while it differs from the map data's), which the name conditions and the dialog's follower-named test
-    /// read; ARC-SCRIPT-2375 (IV20): and an item (<see cref="SessionItemName.Property"/>); every other row keeps its own.
+    /// read; ARC-SCRIPT-2375 (IV24): and an item (<see cref="SessionItemName.Property"/>); every other row keeps its own.
     /// </summary>
     public static int NameOf(GameSessionOwner session, AreaObjectRecord row)
     {
         ArgumentNullException.ThrowIfNull(session); ArgumentNullException.ThrowIfNull(row);
         if (row.Type == NpcType && session.QueryMapChange(new SessionMapId(row.Key.RuntimeMap), SessionNpcName.Key(EntityId(row))) is { } renamed) return unchecked((int)renamed);
-        // ARC-SCRIPT-2375 (IV20): an item's renamed number is the item's own field, found by its identity wherever the item is now.
+        // ARC-SCRIPT-2375 (IV24): an item's renamed number is the item's own field, found by its identity wherever the item is now.
         return row.Type is >= FirstItemType and <= LastItemType && session.QueryObjectChange(new SessionMapId(row.Key.RuntimeMap), SessionItemName.Key(EntityId(row))) is { } itemRenamed ? unchecked((int)itemRenamed) : NameOf(row);
     }
 
