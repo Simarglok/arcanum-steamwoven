@@ -35,7 +35,7 @@ public sealed class AreaInventoryHostTests
         new(new(type, 4000 + name, name, description), 5, 0, 0, null, scripts);
 
     // 0 apple on the ground, 1 knife and 2 charm (insert-item script) on dead body 3, 4 living NPC with 5, 6 chest with 7.
-    private static AreaInventoryMap Map(int runtimeMap = 1, bool withoutCharm = false, int knifeLocation = 0) => new(runtimeMap,
+    private static AreaInventoryMap Map(int runtimeMap = 1, bool withoutCharm = false, int knifeLocation = 0, bool appleOffInData = false) => new(runtimeMap,
         new(
             [
                 new(Entity(3), SessionHolderKind.Npc, true, false, [], withoutCharm ? [Entity(1)] : [Entity(1), Entity(2)]),
@@ -43,7 +43,7 @@ public sealed class AreaInventoryHostTests
                 new(Entity(6), SessionHolderKind.Container, false, false, [], [Entity(7)]),
             ],
             [
-                new(Entity(0), Facts(SessionItemType.Food, 10, 100), new CellCoord(10, 20)),
+                new(Entity(0), Facts(SessionItemType.Food, 10, 100) with { OffInData = appleOffInData }, new CellCoord(10, 20)),
                 new(Entity(1), Facts(SessionItemType.Weapon, 11, 101) with { InventoryLocation = knifeLocation }, null),
                 .. withoutCharm ? Array.Empty<SessionSeedItem>() : [new SessionSeedItem(Entity(2), Facts(SessionItemType.Armor, 12, 103, SessionScriptPoint.InsertItem), null)],
                 new(Entity(5), Facts(SessionItemType.Generic, 13, 103), null),
@@ -102,6 +102,21 @@ public sealed class AreaInventoryHostTests
         Assert.IsTrue(host.Taken(session, 1).Contains(Key(0)), "its T0 body is not drawn");
         Assert.AreEqual(GameSessionDisposition.Changed, session.ApplyChanges(session.Version, null, [new(new SessionMapId(1), SessionItemOff.Key(Entity(0)), null)]).Disposition);
         Assert.AreEqual((AreaInventoryTargetKind.GroundItem, Entity(0)), Pair(host.Target(session, 1, Key(0))));
+    }
+
+    // ARC-SCRIPT-2397 (IV18, hide mask 3): the map data's own off bit of an item lying on the ground hides and unpicks it like a script's toggle; a toggle (record 0) switches it on, as the original's flag flip does.
+    [TestMethod]
+    public void AnItemTheMapDataStoresOffIsNotPickedOnTheGroundAndItsBodyIsHidden()
+    {
+        using var session = ConversationSessionFixture.Create();
+        var host = new AreaInventoryHost([Map(appleOffInData: true)]);
+        host.Attach(session);
+        Assert.IsNull(host.Target(session, 1, Key(0)), "not picked");
+        Assert.IsTrue(host.Taken(session, 1).Contains(Key(0)), "its T0 body is not drawn");
+        Assert.IsTrue(session.QueryItemOff(new SessionMapId(1), Entity(0), dataOff: true));
+        Assert.AreEqual(GameSessionDisposition.Changed, session.ApplyChanges(session.Version, null, [new(new SessionMapId(1), SessionItemOff.Key(Entity(0)), 0)]).Disposition);
+        Assert.AreEqual((AreaInventoryTargetKind.GroundItem, Entity(0)), Pair(host.Target(session, 1, Key(0))), "a toggle switched it on");
+        Assert.IsFalse(host.Taken(session, 1).Contains(Key(0)));
     }
 
     // ARC-SCRIPT-2386 (IV13, 0x576520): a switched-off item worn by a body is not on its doll either (the slot shows empty); the flag going brings it back.

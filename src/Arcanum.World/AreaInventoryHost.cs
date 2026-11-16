@@ -316,7 +316,8 @@ public sealed class AreaInventoryHost
         }
         if (session.QueryMapInventory(new(runtimeMap)) is not { } current) return null;
         // ARC-SCRIPT-2386 (IV15, screen pick 0x43D9F0): a switched-off item lying on the ground (a script's toggle, a thrown one in flight) is not picked.
-        if (current.Ground.Any(ground => ground.Item.Entity == entity)) return session.QueryItemOff(new(runtimeMap), entity, dataOff: false) ? null : new(AreaInventoryTargetKind.GroundItem, entity, map.Row(entity));
+        // ARC-SCRIPT-2397 (IV18): the map data's own bit counts too (an NPC's drop or a spill keeps the flag word).
+        if (current.Ground.FirstOrDefault(ground => ground.Item.Entity == entity) is { } lying) return session.QueryItemOff(new(runtimeMap), entity, lying.Item.Facts.OffInData) ? null : new(AreaInventoryTargetKind.GroundItem, entity, map.Row(entity));
         return current.Holders.FirstOrDefault(holder => holder.Entity == entity) switch
         {
             { Kind: SessionHolderKind.Npc, Dead: true } => new(AreaInventoryTargetKind.DeadNpc, entity, map.Row(entity)),
@@ -335,7 +336,7 @@ public sealed class AreaInventoryHost
             .Select(item => map.Row(item.Entity).Key)
             .Concat(map.Seed.Items.Where(item => session.IsItemDestroyed(item.Entity) && map.TryGetRow(item.Entity, out _)).Select(item => map.Row(item.Entity).Key))
             // ARC-SCRIPT-2386 (IV15, hide mask 3): the seed's items lying on the ground that are switched off (a script's toggle, one thrown and in flight) are not drawn at their T0 cell either.
-            .Concat((session.QueryMapInventory(new(runtimeMap))?.Ground ?? []).Where(ground => session.QueryItemOff(new(runtimeMap), ground.Item.Entity, dataOff: false)
+            .Concat((session.QueryMapInventory(new(runtimeMap))?.Ground ?? []).Where(ground => session.QueryItemOff(new(runtimeMap), ground.Item.Entity, ground.Item.Facts.OffInData)
                 && map.TryGetRow(ground.Item.Entity, out _)).Select(ground => map.Row(ground.Item.Entity).Key))
             .ToHashSet();
     }

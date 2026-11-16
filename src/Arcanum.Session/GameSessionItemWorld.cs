@@ -31,7 +31,7 @@ public interface ISessionItemWorldHost
     bool? ItemOffInData(ScrObjectRef item);
 
     /// <summary>
-    /// ARC-SCRIPT-2375 (IV24): the name number (object field 0x16) the map data gives <paramref name="item"/>, without any rename a script wrote (<see cref="ISessionItemWorldHost.NameOf"/> includes it), or null when the host has no row for it (an item made at run
+    /// ARC-SCRIPT-2375 (IV25): the name number (object field 0x16) the map data gives <paramref name="item"/>, without any rename a script wrote (<see cref="ISessionItemWorldHost.NameOf"/> includes it), or null when the host has no row for it (an item made at run
     /// time has none): the session then refuses a rename of it. A host that does not answer leaves a rename unanswerable.
     /// </summary>
     int? ItemNameInData(ScrObjectRef item) => null;

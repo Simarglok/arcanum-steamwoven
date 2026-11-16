@@ -97,7 +97,7 @@ public sealed class AreaItemScriptHost : ISessionItemScriptHost, ISessionItemWor
         return row.EffectiveFields.FirstOrDefault(field => field.Slot == ObjectFlagsSlot) is { Presence: Arcanum.Data.Area.AreaPresence.Value, Number: { } flags } ? (flags & AreaUseScriptHost.OffObjectFlagBit) != 0 : false;
     }
 
-    /// <summary>ARC-SCRIPT-2375 (IV24): the item's own name number (field 22) in the loaded maps' rows, without a script's rename; null for an item no loaded row names (a made item).</summary>
+    /// <summary>ARC-SCRIPT-2375 (IV25): the item's own name number (field 22) in the loaded maps' rows, without a script's rename; null for an item no loaded row names (a made item).</summary>
     public int? ItemNameInData(ScrObjectRef item)
     {
         var map = _maps.FirstOrDefault(candidate => candidate.RuntimeMap == item.Map);
@@ -119,7 +119,7 @@ public sealed class AreaItemScriptHost : ISessionItemScriptHost, ISessionItemWor
         return read.Status == GlobalFlagReadStatus.Known && read.Value is { } value ? value : throw new InvalidOperationException("AREA_ITEM_SCRIPT_FLAG_UNREADABLE");
     }
 
-    /// <summary>ARC-SCRIPT-2375 (IV22): the session's story-state number. The session's run host answers its own reads (the move's earlier runs may have raised it), so the session does not ask this.</summary>
+    /// <summary>ARC-SCRIPT-2375 (IV23): the session's story-state number. The session's run host answers its own reads (the move's earlier runs may have raised it), so the session does not ask this.</summary>
     public int StoryState() => _session.QueryStoryState();
     public bool IsMonsterGenerator(ScrObjectRef attachee) => false;
     public ScrDialogState DialogState(ScrObjectRef attachee) => ScrDialogState.Normal;

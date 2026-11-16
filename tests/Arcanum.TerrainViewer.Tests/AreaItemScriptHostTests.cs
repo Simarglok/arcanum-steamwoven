@@ -184,7 +184,7 @@ public sealed class AreaItemScriptHostTests
         Assert.IsNull(new AreaItemScriptHost(session, [Map()], null, number => throw new ArgumentException("outside the tables")).EffectDefinition(5), "a number the tables refuse");
     }
 
-    // ARC-SCRIPT-2375 (IV24): the name number of an item row is the map data's until a script's rename wrote the item's own field; the host's data read ignores the record, the name readers do not.
+    // ARC-SCRIPT-2375 (IV25): the name number of an item row is the map data's until a script's rename wrote the item's own field; the host's data read ignores the record, the name readers do not.
     [TestMethod]
     public void An_items_data_name_and_its_renamed_number_are_read_apart()
     {

@@ -49,6 +49,9 @@ public sealed record SessionItemFacts(SessionItemKind Kind, int Weight, int Comp
     /// <summary>ARC-WORLD-066: the ammunition type (field 0x8F) of an ammunition item; null for any other item.</summary>
     public int? AmmoType { get; init; }
 
+    /// <summary>ARC-SCRIPT-2397 (ledger IV15, IV18): the map data's own off bit of the item (object flag 0x2 of field 0x13). The original keeps the flag word through every move, so an item the data stores off that reaches the ground (an NPC's drop, a spill) lies switched off there; a script's toggle (<see cref="GameSessionOwner.QueryItemOff"/>) flips it from this value.</summary>
+    public bool OffInData { get; init; }
+
     /// <summary>ARC-WORLD-123: the key number (field 0xBA) of a key item, which the key ring lists and a lock compares; null for any other item.</summary>
     public int? KeyId { get; init; }
 
@@ -436,7 +439,7 @@ public static class SessionItemScripts
     /// the same world part); ARC-SCRIPT-2346 (ledger IV9–IV11) adds toggle state (56), which flips the off flag of an item of the move (the attachee in the installed scripts).; ARC-SCRIPT-2347 (IV13–IV16) adds assign object (15, with the run's object variables as the focus kind 11), get object type (34), the quest state condition (6) and obj is dead (22), which the same part answers
     /// (as the use host reads them), and monster generator disabled (46), which the session answers from its generator table (IV13–IV15); ARC-SCRIPT-2374 (IV18–IV21) adds set PC quest state (16) and give quest experience (63), which the session applies in the move's own revision
     /// (a request for a PC only; at most one experience award, none that raises a level). A script outside it refuses the move.
-    /// ARC-SCRIPT-2375 (ledger IV22–IV25) adds get story state (42), set story state (43), set rumor (50) and rename (92), which the runs plan in the move (the story number and the rumor the PC learns, the name number of an item of the move).
+    /// ARC-SCRIPT-2375 (ledger IV23–IV26) adds get story state (42), set story state (43), set rumor (50) and rename (92), which the runs plan in the move (the story number and the rumor the PC learns, the name number of an item of the move).
     /// </summary>
     public static ScrAdmissionSet Admission { get; } = new("S14-item",
         ScrAdmissionSet.S6.Conditions.Concat([ScrCatalogue.Condition.Identified, ScrCatalogue.Condition.ItemsBeingRewielded, ScrCatalogue.Condition.IsNamed,

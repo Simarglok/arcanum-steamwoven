@@ -97,7 +97,7 @@ public sealed class ItemWorldScriptTests
         return Program([.. lines]);
     }
 
-    // ARC-SCRIPT-2375 (IV22-IV24): the story-state, set rumor and rename shapes of the installed point 21 scripts (1094, 1103, 1566, 1573), with invented numbers.
+    // ARC-SCRIPT-2375 (IV23-IV25): the story-state, set rumor and rename shapes of the installed point 21 scripts (1094, 1103, 1566, 1573), with invented numbers.
     private static ScrProgram StoryRaiseProgram() => Program(Do(C(ScrCatalogue.Action.GetStoryState, (LocalVariable, 0))), Do(C(ScrCatalogue.Action.SetStoryState, N(19))), Do(C(ScrCatalogue.Action.ReturnRunDefault)));
 
     // A raise the same run reads back, then a rumor gated on what it read (5).
@@ -495,7 +495,7 @@ public sealed class ItemWorldScriptTests
         Assert.IsTrue(set.IsSubsetOf(ScrAdmissionSet.S65));
     }
 
-    // ARC-SCRIPT-2375 (IV22): get and set story state of a point 21 script.
+    // ARC-SCRIPT-2375 (IV23): get and set story state of a point 21 script.
     [TestMethod]
     public void A_set_story_state_raises_the_number_in_the_moves_revision_and_the_save_keeps_it()
     {
@@ -527,7 +527,7 @@ public sealed class ItemWorldScriptTests
         Assert.IsNotNull(owner.QueryRumor(RumorNumber), "the condition that read 5 held");
     }
 
-    // ARC-SCRIPT-2375 (IV23): set rumor (SS4): the hero learns it at the game time; any other object's request does nothing.
+    // ARC-SCRIPT-2375 (IV24): set rumor (SS4): the hero learns it at the game time; any other object's request does nothing.
     [TestMethod]
     public void A_set_rumor_for_the_hero_is_learned_in_the_moves_revision_and_the_save_keeps_it()
     {
@@ -560,7 +560,7 @@ public sealed class ItemWorldScriptTests
         Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.ItemScriptUnsupported, before), (refused.Disposition, refused.Failure, owner.Version));
     }
 
-    // ARC-SCRIPT-2375 (IV24): rename (92, CQ5) writes the name number of an item of the move.
+    // ARC-SCRIPT-2375 (IV25): rename (92, CQ5) writes the name number of an item of the move.
     private static long? Renamed(GameSessionOwner owner) => owner.QueryObjectChange(Exterior, SessionItemName.Key("oid:tome"));
 
     [TestMethod]
