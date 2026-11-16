@@ -30,6 +30,11 @@ public sealed partial class GameSessionOwner
         HeroThrowScripted Stop(SessionHeroThrowResult done) => new(done, null, false);
         var item = request.Item;
         var scripts = request.Scripts!;
+        // ARC-COMBAT-2182 (TW3, QW5): a split stack's throw script runs for the stack the split makes. The original splits at the lift, so the script has its object; here the split comes after the scripts (a refusal leaves nothing made), so the script
+        // runs for the entity the split will take, which answers as that made item meanwhile (_pendingThrowMade).
+        var splitEntity = split ? NextObjectEntity(SessionObjectOrigin.Made) : null;
+        if (split && (splitEntity is null || request.SplitKind is null)) return Stop(Refused(GameSessionFailure.BudgetExceeded));
+        var attachee = splitEntity ?? item;
         // The refusals of the throw that no script changes are made before any script runs, so a refused throw leaves nothing applied.
         if (!ValidWear(new SessionWearSide { Life = SessionLifeTarget.Hero, Worn = request.HeroWorn }, new SessionWearSide(), targetBroken: false, wear: null)) return Stop(Refused(GameSessionFailure.InvalidWear));
         var life = _life.Hero!.Value.State;
@@ -43,40 +48,60 @@ public sealed partial class GameSessionOwner
         // A refusing throw script gives a worn item back to the list: there must be a cell for it.
         if (throwScript && worn is not null && !HeroGridRoom(item, null)) return Stop(Refused(GameSessionFailure.BudgetExceeded));
         var (revision, map, seeds, flagVersion) = (_revision, _actor.Map, _inventory.SeedGeneration, _flags.Version);
-        var complexity = worn?.Item.MagickTechComplexity ?? (_inventory.Weights.TryGetValue(item, out var weight) ? weight.Complexity : 0);
-        var runs = new ItemScriptRuns(this, scripts, map.RuntimeMap, new Dictionary<string, int>(StringComparer.Ordinal) { [item] = complexity });
-        // The removal 0x467860 for a worn item, then the throw script; a run the session cannot apply ends the sequence.
-        if (worn is not null && points.Contains(SessionScriptPoint.WieldOff)) runs.Run(SessionScriptPoint.WieldOff, item, SessionEventKinds.PlayerEntity, null);
-        if (runs.Failure == GameSessionFailure.None && !split && points.Contains(SessionScriptPoint.RemoveItem)) runs.Run(SessionScriptPoint.RemoveItem, item, SessionEventKinds.PlayerEntity, null);
-        ScrRunResult? answer = null;
-        if (runs.Failure == GameSessionFailure.None && throwScript) answer = runs.Run(SessionScriptPoint.Throw, item, SessionEventKinds.PlayerEntity, null);
-        ThrowIfDisposed();
-        // A host callback changed nothing the throw rests on: the revision, the attached seeds, the shown map, (for the runs that read them) the flags and the item.
-        if (_revision != revision || _actor.Map != map || _inventory.SeedGeneration != seeds || _flags.Version != flagVersion || HeldKind(item) != kind) return Stop(Refused(GameSessionFailure.StaleVersion, runs));
-        if (runs.Failure == GameSessionFailure.None) runs.Prepare();
-        if (runs.Failure != GameSessionFailure.None) return Stop(Refused(runs.Failure, runs));
-        if (answer?.Outcome == ScrOutcome.SkipDefault)
+        // A made stack has no complexity of its own (its weight row is made with none).
+        var complexity = worn?.Item.MagickTechComplexity ?? (!split && _inventory.Weights.TryGetValue(item, out var weight) ? weight.Complexity : 0);
+        var runs = new ItemScriptRuns(this, scripts, map.RuntimeMap, new Dictionary<string, int>(StringComparer.Ordinal) { [attachee] = complexity });
+        if (split) _pendingThrowMade = (splitEntity!, request.SplitKind!.Value);
+        try
         {
-            // The throw script refused: nothing is thrown, the item is back in the hero's list, not worn (0x4617F0 inserts it, it does not wield it).
-            runs.Commit();
-            var wornBefore = worn is not null;
-            if (worn is not null)
+            // The removal 0x467860 for a worn item, then the throw script; a run the session cannot apply ends the sequence.
+            if (worn is not null && points.Contains(SessionScriptPoint.WieldOff)) runs.Run(SessionScriptPoint.WieldOff, attachee, SessionEventKinds.PlayerEntity, null);
+            if (runs.Failure == GameSessionFailure.None && !split && points.Contains(SessionScriptPoint.RemoveItem)) runs.Run(SessionScriptPoint.RemoveItem, attachee, SessionEventKinds.PlayerEntity, null);
+            ScrRunResult? answer = null;
+            if (runs.Failure == GameSessionFailure.None && throwScript) answer = runs.Run(SessionScriptPoint.Throw, attachee, SessionEventKinds.PlayerEntity, null);
+            ThrowIfDisposed();
+            // A host callback changed nothing the throw rests on: the revision, the attached seeds, the shown map, (for the runs that read them) the flags and the item (a split stack: the source holds on and the planned entity is still the next made one).
+            if (_revision != revision || _actor.Map != map || _inventory.SeedGeneration != seeds || _flags.Version != flagVersion
+                || (split ? NextObjectEntity(SessionObjectOrigin.Made) != splitEntity : HeldKind(item) != kind)) return Stop(Refused(GameSessionFailure.StaleVersion, runs));
+            if (runs.Failure == GameSessionFailure.None) runs.Prepare();
+            if (runs.Failure != GameSessionFailure.None) return Stop(Refused(runs.Failure, runs));
+            if (answer?.Outcome == ScrOutcome.SkipDefault)
             {
-                _equipment.Worn.Remove(worn.Slot);
-                PlaceInGrid(item, null);
+                // The throw script refused: nothing is thrown, the item is back in the hero's list, not worn (0x4617F0 inserts it, it does not wield it). A split stack's units go back to the stack they came from (the insertion merges them, 0x466640) and the
+                // item that was to carry them is never made: the slots the runs wrote for it and the calls they scheduled on it are dropped.
+                runs.Commit();
+                var wornBefore = worn is not null;
+                if (worn is not null)
+                {
+                    _equipment.Worn.Remove(worn.Slot);
+                    PlaceInGrid(item, null);
+                }
+                if (split) ForgetNeverMadeThrowItem(splitEntity!);
+                Revise();
+                var spells = request.ItemTriggers is { } triggers && !split ? RemovalSpellSteps(triggers, item, wornBefore) : [];
+                return Stop(new SessionHeroThrowResult(GameSessionDisposition.Changed, GameSessionFailure.None, null, Version)
+                    { ScriptDeclined = true, RemovalSpells = spells, Messages = runs.Messages, EyeCandies = runs.EyeCandies, Scripts = runs.Runs, });
             }
-            Revise();
-            var spells = request.ItemTriggers is { } triggers && !split ? RemovalSpellSteps(triggers, item, wornBefore) : [];
-            return Stop(new SessionHeroThrowResult(GameSessionDisposition.Changed, GameSessionFailure.None, null, Version)
-                { ScriptDeclined = true, RemovalSpells = spells, Messages = runs.Messages, EyeCandies = runs.EyeCandies, Scripts = runs.Runs, });
+            var applied = runs.Changes;
+            if (applied)
+            {
+                runs.Commit();
+                Revise();
+            }
+            return new(null, runs, applied);
         }
-        var applied = runs.Changes;
-        if (applied)
+        finally
         {
-            runs.Commit();
-            Revise();
+            _pendingThrowMade = null;
         }
-        return new(null, runs, applied);
+    }
+
+    /// <summary>ARC-COMBAT-2182: drops what the throw script's runs left for the item of a split that is never made (a skipped throw, a later refusal): the script slots they wrote and the deferred calls they scheduled with it as the attachee, so the next
+    /// made item that takes the same entity inherits nothing.</summary>
+    private void ForgetNeverMadeThrowItem(string entity)
+    {
+        foreach (var key in _inventory.ScriptSlots.Keys.Where(key => key.Entity == entity).ToArray()) _inventory.ScriptSlots.Remove(key);
+        while (_events.RemoveFirst(SessionEventKinds.ScriptCall, e => SessionEventKinds.Call(e.Payload).Attachee?.Entity == entity) is not null) { }
     }
 
     /// <summary>

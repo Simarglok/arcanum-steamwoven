@@ -30,7 +30,26 @@ public sealed partial class GameSessionOwner
         return Array.AsReadOnly(_inventory.CaptureScriptSlots());
     }
 
+    // ARC-SCRIPT-2394 (IV20): the experience awards an item move's committed runs gave the hero (give quest experience, a completed quest), in order. Not state: never saved, and the host takes them in the frame the move was made in
+    // (TakeItemScriptAwards) to pass the follower level step and the level-up messages on, as it does for the awards of a talk or a use script.
+    private readonly List<SessionExperienceAward> _itemScriptAwards = [];
+
+    /// <summary>
+    /// ARC-SCRIPT-2394 (IV20): the experience awards the committed item moves gave the hero since the last call, in order (the awards that wrote no level and gave no follower step are not queued). The host passes each one's level-up messages and follower step on
+    /// (<see cref="SessionExperienceAward.LevelUps"/>, <see cref="SessionExperienceAward.Followers"/>), as for the awards of a talk. Not saved: a move whose awards are not taken before a save loses their follower steps.
+    /// </summary>
+    public IReadOnlyList<SessionExperienceAward> TakeItemScriptAwards()
+    {
+        ThrowIfDisposed();
+        var awards = _itemScriptAwards.ToArray();
+        _itemScriptAwards.Clear();
+        return Array.AsReadOnly(awards);
+    }
+
     private Func<int, IReadOnlyList<SessionPrototypeScript>?>? _prototypeScripts;
+
+    // ARC-COMBAT-2182: the made item (entity and kind) a hero's throw splits off a stack for, only while the throw's scripts run before the split creates it; null otherwise. Not state.
+    private (string Entity, SessionItemKind Kind)? _pendingThrowMade;
 
     /// <summary>
     /// ARC-DEV-097 (MIG8, TM9, GR7, SA4): attaches the host's prototype data for the script arrays of the objects the session creates from a
@@ -89,6 +108,8 @@ public sealed partial class GameSessionOwner
     // made items, the hero's kit, the ground, or an NPC's or container's list.
     private SessionItemKind? MadeKind(string entity)
     {
+        // ARC-COMBAT-2182: the stack a hero's throw is about to split off answers as the made item it will be while the throw's scripts run (it is created after them).
+        if (_pendingThrowMade is { } pending && pending.Entity == entity) return pending.Kind;
         var origin = ObjectOriginOf(entity);
         if (origin is not (SessionObjectOrigin.Made or SessionObjectOrigin.Kit)) return null;
         foreach (var made in _inventory.Made)
@@ -177,13 +198,15 @@ public sealed partial class GameSessionOwner
         private readonly List<MapChangeEdit> _artEdits = [];
         private readonly HashSet<string> _artEntities = new(StringComparer.Ordinal);
         // ARC-SCRIPT-2374 (IV18–IV21): the quest writes of the runs, planned over copies of what they touch (the PC's record, the quest's shared state) so the runs' later quest reads see them, and written by the commit without a revision
-        // of their own; the one experience award a move may give (a second one, or one that raises a level, refuses the move).
+        // of their own; the one experience award a move may give (a second one refuses the move; one that raises a level is queued for the host at the commit, ARC-SCRIPT-2394).
         private readonly Dictionary<int, SessionQuest> _questRecords = [];
         private readonly Dictionary<int, SessionQuestState> _questShared = [];
         private HeroAward? _questAward;
         // The amount that award gives: the commit gives it again to the hero as it is then (a hero rewield plans the runs, then writes the stat that caused it, then commits: a plan-time snapshot would revert that write). A level-free award changes
         // experience and unspent points only, which no stat write touches.
         private long _questAmount;
+        // ARC-SCRIPT-2394: the planned award raises a level, which changes the hero's level and stats: a get stat read after it (this run's trace, or any later run of the move) would have read the changed hero in the original.
+        private bool _awardRaisesLevel;
 
         internal ItemScriptRuns(GameSessionOwner owner, ISessionItemScriptHost host, int map, IReadOnlyDictionary<string, int> items, NpcWearer? npc = null)
         {
@@ -305,11 +328,16 @@ public sealed partial class GameSessionOwner
             // ARC-SCRIPT-2374 (IV19): the interpreter collects a run's state requests and the session applies them after it, so a quest state read after a quest write of the same run (or one a call-ex callee makes, whose order the trace does not show) would have
             // read the written state in the original; the run read the earlier one. Refused, as a ratio read after an effect change is.
             if (QuestReadHazard(run)) return GameSessionFailure.ItemScriptUnsupported;
+            // ARC-SCRIPT-2394 (IV20): a stat read or a power ratio read (the aptitude is derived from the magick and tech points an auto-level scheme may buy) of a run after an earlier run's level-raising award read the hero before it.
+            if (_awardRaisesLevel && (_reads.StatReads.Count > 0 || _reads.RatioReads > 0)) return GameSessionFailure.ItemScriptUnsupported;
+            var raisedBefore = _awardRaisesLevel;
             foreach (var request in effects.States)
             {
                 var failure = PlanQuest(request);
                 if (failure != GameSessionFailure.None) return failure;
             }
+            // The same run's own award: a get stat after it in the trace (or one a call-ex callee makes, whose order the trace does not show) read the hero before it.
+            if (!raisedBefore && _awardRaisesLevel && AwardReadHazard(run)) return GameSessionFailure.ItemScriptUnsupported;
             var aptitude = HazardOf(run, _reads.RatioReads, Arcanum.Data.Scripts.ScrCatalogue.Action.MagickTechAdjustment) ? Aptitude() : (int?)null;
             // ARC-DEV-366: the same for get stat, which reads the hero's stat; the stats it read are asked again after the run's changes.
             var statReads = HazardOf(run, _reads.StatReads.Count, Arcanum.Data.Scripts.ScrCatalogue.Action.GetStat) ? _reads.StatReads.ToArray() : [];
@@ -362,7 +390,7 @@ public sealed partial class GameSessionOwner
 
         // ARC-SCRIPT-2374 (IV18–IV21): one state request of a run, applied in action order as the use host applies it (AreaScriptStory.Apply): for a PC only (the original's functions do nothing for any other object), the quest rules of 0x4C4D20 over
         // the move's own copies, and the experience of a completion or of give quest experience (63) as 0x45F110 gives it. What the session refuses (a quest outside the log, an undefined state) or cannot carry (a request kind the set does not
-        // admit, a second experience award, an award that raises a level: its follower step and level-up messages are the host's) refuses the move.
+        // admit, a second experience award) refuses the move. An award that raises a level is kept with its level step: the commit queues the award (TakeItemScriptAwards) for the host's follower step and level-up messages.
         private GameSessionFailure PlanQuest(ScrStateRequest request)
         {
             if (request.Kind is not (ScrStateKind.QuestState or ScrStateKind.QuestExperience)) return GameSessionFailure.ItemScriptUnsupported;
@@ -396,10 +424,26 @@ public sealed partial class GameSessionOwner
                 _questShared[quest] = step.Shared;
             }
             if (award is null) return GameSessionFailure.None;
-            if (_questAward is not null || award.Award.LevelsGained > 0 || award.Award.Followers is not null) return GameSessionFailure.ItemScriptUnsupported;
+            if (_questAward is not null) return GameSessionFailure.ItemScriptUnsupported;
             _questAward = award;
+            _awardRaisesLevel = award.Award.LevelsGained > 0;
             _questAmount = questAmount;
             return GameSessionFailure.None;
+        }
+
+        private bool AwardReadHazard(ScrRunResult run)
+        {
+            if (_reads.StatReads.Count == 0 && _reads.RatioReads == 0) return false;
+            var trace = run.Trace;
+            var lastRead = -1; var firstAward = int.MaxValue; var callEx = false;
+            for (var i = 0; i < trace.Count; i++)
+            {
+                var action = trace[i].Action;
+                if (action is Arcanum.Data.Scripts.ScrCatalogue.Action.GetStat or Arcanum.Data.Scripts.ScrCatalogue.Action.MagickTechAdjustment) lastRead = i;
+                if (action is Arcanum.Data.Scripts.ScrCatalogue.Action.SetPcQuestState or Arcanum.Data.Scripts.ScrCatalogue.Action.GiveQuestExperience) firstAward = Math.Min(firstAward, i);
+                callEx |= action == Arcanum.Data.Scripts.ScrCatalogue.Action.CallScriptEx;
+            }
+            return callEx || firstAward < lastRead;
         }
 
         // A read (a power ratio, or get stat) that may come after an effect change of the same run: the trace shows the outer run's order,
@@ -571,7 +615,12 @@ public sealed partial class GameSessionOwner
             // ARC-SCRIPT-2374 (IV18–IV21): the quest records, the shared states a completion or botch moved (a state still Accepted is the default, not stored: as SetQuestState) and the award.
             foreach (var (quest, record) in _questRecords) _owner._story.Quests[quest] = record;
             foreach (var (quest, shared) in _questShared) if (shared != SessionQuestState.Accepted) _owner._story.GlobalQuests[quest] = shared;
-            if (_questAward is not null && _owner.Give(_questAmount) is { } questAward) _owner._hero!.Apply(questAward.Hero);
+            if (_questAward is not null && _owner.Give(_questAmount) is { } questAward)
+            {
+                _owner._hero!.Apply(questAward.Hero);
+                // ARC-SCRIPT-2394: what the host shows and passes on for an award (the level-up messages, the followers' level step).
+                if (questAward.Award.Followers is not null || questAward.Award.LevelUps is not null) _owner._itemScriptAwards.Add(questAward.Award);
+            }
             if (_prepared is not null) _owner.ApplyEffects(_prepared);
             if (_npc is { } npc && _npcOps.Count > 0 && _owner.ChangeNpcOps(_owner.Version, npc.Target, _npcOps, dryRun: false, revise: false).Failure != GameSessionFailure.None)
                 throw new InvalidOperationException("ITEM_SCRIPT_NPC_EFFECTS_COMMIT");

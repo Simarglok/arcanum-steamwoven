@@ -166,6 +166,35 @@ public sealed class NpcThrowStateTests
         Assert.AreEqual(result.Landed, Lying(owner, Dagger));
     }
 
+    // ARC-SCRIPT-2397 (IV15, IV18; throw node 0x42AB90 refuses flags & 3): an NPC's throw of an item switched off by a script's toggle or by the map data's own bit is refused before any roll, and the item stays in the thrower's list.
+    [TestMethod]
+    public void AnNpcDoesNotThrowASwitchedOffItem()
+    {
+        using var owner = Owner();
+        var draws = owner.QueryRandom().Draws;
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.ApplyChanges(owner.Version, null, [new MapChangeEdit(Exterior, SessionItemOff.Key(Dagger), 1)]).Disposition);
+        var refused = owner.ThrowByNpc(owner.Version, AtHero());
+        Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.ItemNotAvailable), (refused.Disposition, refused.Failure));
+        Assert.AreEqual(draws, owner.QueryRandom().Draws, "no roll");
+        Assert.IsNotNull(owner.QueryMapInventory(Exterior)!.Holders.Single(h => h.Entity == Thrower).Items.FirstOrDefault(i => i.Entity == Dagger), "the item stays in the list");
+        Assert.IsNull(Lying(owner, Dagger));
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.ApplyChanges(owner.Version, null, [new MapChangeEdit(Exterior, SessionItemOff.Key(Dagger), 0)]).Disposition);
+        Assert.AreEqual(GameSessionFailure.None, owner.ThrowByNpc(owner.Version, AtHero()).Failure, "switched on again, it is thrown");
+    }
+
+    [TestMethod]
+    public void AnNpcDoesNotThrowAnItemTheMapDataStoresOffUntilAToggleSwitchesItOn()
+    {
+        using var owner = GameSessionOwner.Create(Descriptor() with { Hero = HeroStateTests.HalfElf() }).Owner!;
+        Assert.AreEqual(GameSessionFailure.None, owner.AttachMapInventory(Exterior, new SessionMapInventorySeed(
+            [new(Thrower, SessionHolderKind.Npc, false, true, [], [Dagger]), new(Other, SessionHolderKind.Npc, false, true, [], [])],
+            [new(Dagger, Facts(SessionItemType.Weapon, 2001, location: 1004) with { OffInData = true }, null)])).Failure);
+        Assert.AreEqual(GameSessionFailure.ItemNotAvailable, owner.ThrowByNpc(owner.Version, AtHero()).Failure);
+        Assert.IsNotNull(owner.QueryMapInventory(Exterior)!.Holders.Single(h => h.Entity == Thrower).Items.FirstOrDefault(i => i.Entity == Dagger));
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.ApplyChanges(owner.Version, null, [new MapChangeEdit(Exterior, SessionItemOff.Key(Dagger), 0)]).Disposition);
+        Assert.AreEqual(GameSessionFailure.None, owner.ThrowByNpc(owner.Version, AtHero()).Failure, "the toggle flipped the data's bit");
+    }
+
     [TestMethod]
     public void TheRefusalsComeBeforeAnyRoll()
     {

@@ -148,6 +148,17 @@ public sealed class AreaAiThrowTests
         Assert.AreEqual(AiExecutorReason.Thrown, host.TraceOf(npc)!.Reason, "the goal ends through the end step after the throw");
     }
 
+    // ARC-SCRIPT-2397 (IV21, IV22): a switched-off default-throws weapon is refused by the throw node, so the starter attacks with it instead of repeating a throw that always fails.
+    [TestMethod]
+    public void A_switched_off_default_throws_dagger_is_not_a_throw_but_an_attack()
+    {
+        var (session, host, npc, dagger) = Open();
+        Assert.AreEqual(GameSessionDisposition.Changed, session.ApplyChanges(session.Version, null, [new(session.QueryActor().Map, SessionItemOff.Key(dagger), 1)]).Disposition);
+        Assert.IsNull(host.ThrowableWeapon(npc));
+        host.PerformAttack(npc, AiSchedulerRules.Pc);
+        Assert.AreEqual(GoalType.Attack, (host.RunOf(npc) ?? throw new AssertFailedException($"no run: {host.TraceOf(npc)?.Perform}")).Bottom.Goal, "an attack, not a throw");
+    }
+
     [TestMethod]
     public void A_weapon_without_the_default_throws_flag_is_not_thrown()
     {
