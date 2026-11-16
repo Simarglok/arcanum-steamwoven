@@ -61,6 +61,8 @@ public partial class AreaInventoryPanel : CanvasLayer
     /// <summary>ARC-UI-054: the window's holder on the screen for the round view: its foot point in canvas units and the game view's
     /// zoom (canvas units per game pixel); null when it is not drawn.</summary>
     public Func<(Vector2 Foot, float Zoom)?>? HolderView { get; set; }
+    /// <summary>ARC-UI-1908: the stored portraits' small images the frame draws where the original's image function answers a portrait.</summary>
+    public Func<int, Texture2D?>? PortraitTextures { get => _area.PortraitTextures; set => _area.PortraitTextures = value; }
     /// <summary>ARC-UI-029: the quantity window's Accept (or Enter) with the count shown, 0 too (QW4).</summary>
     public event Action<int>? QuantityAccepted;
     /// <summary>ARC-UI-029: the quantity window's Cancel: nothing moves.</summary>
