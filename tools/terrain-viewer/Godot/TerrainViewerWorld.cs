@@ -948,9 +948,11 @@ public partial class TerrainViewerApp
         var chart = _canvas.GetGlobalTransformWithCanvas().AffineInverse() * screen;
         if (AreaCellPicking.Pick(new(chart.X, chart.Y)) is not { } cell) return;
         // ARC-DEV-145: the click is a WalkRequest; the host decides the gait (0x4304C0) and the port replaces the approach intents and the route.
-        var accepted = HeroRequests.Apply(new WalkRequest(cell, ctrl)).Outcome == HeroRequestOutcome.Done;
+        // ARC-INPUT-1936 (GT107): with a Shift key held the tile press does nothing; the host answers Ignored and the hero stays as it was.
+        var walk = HeroRequests.Apply(new WalkRequest(cell, ctrl, Shift: shift));
+        var accepted = walk.Outcome == HeroRequestOutcome.Done;
         _worldRouteDiagnostic = DescribeWorldRoute(route);
-        _worldRouteClick = $"{cell.X},{cell.Y} {(accepted ? "goal set" : "same goal kept")}";
+        _worldRouteClick = $"{cell.X},{cell.Y} {(accepted ? "goal set" : walk.Outcome == HeroRequestOutcome.Ignored ? "ignored (Shift held)" : "same goal kept")}";
         GD.Print($"ARC-WORLD-007 route click cell={cell} accepted={accepted}");
         RefreshReadyStatus();
     }
