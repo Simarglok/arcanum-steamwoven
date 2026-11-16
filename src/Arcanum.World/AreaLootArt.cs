@@ -1,4 +1,5 @@
 using Arcanum.Data.Area;
+using Arcanum.Data.Characters;
 using Arcanum.Session;
 using Arcanum.Data.Combat;
 
@@ -126,11 +127,34 @@ public static class AreaLootArtLayout
         return field is { Presence: AreaPresence.Value, Number: { } number and > 0 and <= int.MaxValue } ? (int)number : null;
     }
 
+    private const int BaseStatsSlot = 38, GenderStat = 26, RaceStat = 27;
+
+    /// <summary>
+    /// ARC-UI-2444 (ledger PO10, CHW25, the portrait getter 0x4CEB80): the portrait number a draw shows for a critter record: its stored one
+    /// (<see cref="StoredPortrait"/>), except that an NPC (type 16) whose stored portrait equals the local PC's own (<paramref name="playerPortrait"/>,
+    /// the PC's raw field 0xE7: one level, no substitution on the PC side) shows the next portrait its own race and gender may take
+    /// (<see cref="PortraitCatalogue.Next"/>, the NPC code allowed), else the previous one, else none, so a follower never shows the PC's face.
+    /// The race and gender are the NPC's stored base stats 27 and 26 (the check 0x4CEAC0 reads them through 0x4B0740). The substitute is computed
+    /// on every call and never stored. A PC and any other type show their stored one; with no <paramref name="catalogue"/> (no game folder, nothing
+    /// can be drawn anyway) or a race or gender beyond the code table, the stored one. Null: nothing to draw.
+    /// </summary>
+    public static int? ShownPortrait(AreaObjectRecord record, PortraitCatalogue? catalogue, int? playerPortrait)
+    {
+        var stored = StoredPortrait(record);
+        if (stored is not { } id || record.Type != CombatFieldReader.NpcType || playerPortrait != id || catalogue is null) return stored;
+        // The base stats array (critter slot 38, sparse: a missing element reads 0), not the whole critter block, so a row only needs this field.
+        if (record.EffectiveFields.FirstOrDefault(value => value.Slot == BaseStatsSlot) is not { Presence: AreaPresence.Array } stats) return stored;
+        int Stat(int key) => stats.Elements.FirstOrDefault(element => element.Key == key) is { Words: [var word] } ? unchecked((int)(uint)word) : 0;
+        int race = Stat(RaceStat), gender = Stat(GenderStat);
+        if (race is < 0 or >= PortraitCatalogue.RaceCount || gender is not (PortraitCatalogue.FemaleGender or PortraitCatalogue.MaleGender)) return stored;
+        return catalogue.Shown(id, new PortraitSubject(race, gender, npc: true), id) is var shown and > 0 ? shown : null;
+    }
+
     /// <summary>
     /// ARC-UI-1908 (IW27, ledger BW2, IS8; the image function of the original): the portrait the item windows (loot, barter, identify, repair) draw instead of the
     /// <see cref="HolderImage"/> art. A PC takes its portrait; an NPC only when the chain of its leaders reaches the observing PC (followers
-    /// of followers too) and its stored portrait is not 0. Null: the art rule decides. NOT READY: the portrait clash rule (an NPC showing the
-    /// local player's own portrait takes the next or the previous available one), and a PC without a stored portrait (the original draws list
+    /// of followers too) and its stored portrait is not 0. Null: the art rule decides. The caller passes the portrait number to show
+    /// (<see cref="ShownPortrait"/>: the clash rule of 0x4CEB80 is applied before). NOT READY: a PC without a stored portrait (the original draws list
     /// entry 1000; the observer is the PC, so a window never holds one).
     /// </summary>
     public static int? HolderPortrait(int type, bool pcLeads, int? storedPortrait) => type switch

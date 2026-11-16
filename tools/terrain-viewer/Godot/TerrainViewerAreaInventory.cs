@@ -115,6 +115,8 @@ public partial class TerrainViewerApp
         // ARC-DEV-366: an item script's add-effect action (the tech books' effects 168 to 175) takes its rule from the hero's effect tables; the
         // field is read at each use, so the tables the character start loads later still answer.
         host.EffectRules = number => _areaEffectRules?.Invoke(number);
+        // ARC-UI-2444: the item windows' portrait of an NPC that stores the PC's own one takes the catalogue's next or previous (0x4CEB80).
+        host.PortraitCatalogueSource = PortraitCatalogueNow;
         // ARC-SCRIPT-2335: an insert-item script's container vicinity, name test and change art number read the shown map's use-script host.
         host.ShownScripts = () => _readyArea is { } shownArea ? UseScriptHost(shownArea.Snapshot) : null;
         // ARC-WORLD-2357: the substitute container reach (the dialog item hold, the restock merchant search) measures where the shown map's AI host has the NPC now.

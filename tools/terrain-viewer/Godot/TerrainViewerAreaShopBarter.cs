@@ -117,7 +117,7 @@ public partial class TerrainViewerApp
         if (created.Owner is not { } owner) { why = $"the session was not created ({created.Failure})"; return null; }
         if (creation.Apply(owner, hero.Effects ?? (_ => null)) is { } applied) { owner.Dispose(); why = applied; return null; }
         var catalog = _hoverNames?.Catalog;
-        var names = new AreaInventoryHost([map.Inventory]);
+        var names = new AreaInventoryHost([map.Inventory]) { PortraitCatalogueSource = PortraitCatalogueNow };
         // ARC-UI-2283: the session knows its items' art sizes before the shop opens, so the merchant container's regeneration (0x463E20) lays the
         // created wares out by their inventory art (0x461780) and not as 1 x 1 cells drawn over each other; the shop's host rows name their art.
         (_shopInventoryHost, _shopInventorySession) = (names, owner);

@@ -117,6 +117,10 @@ public sealed class AreaInventoryHost
     /// uses the same reach (project choice).</summary>
     public const int Reach = 1;
 
+    /// <summary>ARC-UI-2444: where the item windows find the portrait catalogue for the clash rule of 0x4CEB80 (the viewer reads it from the game
+    /// folder on first use); null or an answer of null: no catalogue, the stored portrait shows as it is.</summary>
+    public Func<PortraitCatalogue?>? PortraitCatalogueSource { get; set; }
+
     /// <summary>PROJECT diagnostic insert check: every item fits. Carry weight, Technophobia and grid room need the
     /// created character, which the viewer does not have yet (NOT READY).</summary>
     public static SessionInsertCheck DiagnosticInsertCheck { get; } = _ => SessionInsertVerdict.Accepted;
@@ -592,14 +596,16 @@ public sealed class AreaInventoryHost
     public int? HolderImage(int runtimeMap, string holder) => HolderLook(runtimeMap, holder ?? throw new ArgumentNullException(nameof(holder))).Image;
 
     /// <summary>ARC-UI-1908 (IW27): the portrait the item windows draw for a seed holder instead of its image: the stored portrait of a
-    /// critter whose leader chain reaches the PC (<see cref="GameSessionOwner.QueryPcLeader"/>); null for any other holder or row.</summary>
+    /// critter whose leader chain reaches the PC (<see cref="GameSessionOwner.QueryPcLeader"/>); null for any other holder or row. ARC-UI-2444: the
+    /// portrait is the one 0x4CEB80 shows (<see cref="AreaLootArtLayout.ShownPortrait"/>): an NPC that stores the PC's own portrait shows another,
+    /// found with <see cref="PortraitCatalogueSource"/> (none: the stored one).</summary>
     public int? HolderPortrait(GameSessionOwner session, int runtimeMap, string holder)
     {
         ArgumentNullException.ThrowIfNull(session);
         ArgumentNullException.ThrowIfNull(holder);
         var row = HolderRow(runtimeMap, holder);
         if (row is null || row.Type is not (CombatFieldReader.PcType or CombatFieldReader.NpcType)) return null;
-        return AreaLootArtLayout.HolderPortrait(row.Type, session.QueryPcLeader(holder) is not null, AreaLootArtLayout.StoredPortrait(row));
+        return AreaLootArtLayout.HolderPortrait(row.Type, session.QueryPcLeader(holder) is not null, AreaLootArtLayout.ShownPortrait(row, PortraitCatalogueSource?.Invoke(), session.QueryHero()?.Portrait));
     }
 
     private AreaObjectRecord? HolderRow(int runtimeMap, string holder)

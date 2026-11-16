@@ -998,8 +998,7 @@ the frame's art, place and portrait, with the bars the vials' art numbers (17 wh
 portrait and name in the message window when it has one (since ARC-UI-057 also the window's bars and another NPC's
 window). NOT READY: frames past six (the original scrolls them with its arrow buttons), the 50 % draw of the critter art
 the window shows for a follower without a portrait (the art by race or flags is drawn since ARC-UI-057), the PC's
-portrait (it is not session state, and the PC is not a hover target), the rule that gives an NPC sharing the PC's
-portrait another one (0x4CEB80, it needs the PC's), the hovered panel's art for anyone else, and the original's hide
+portrait (it is not session state, and the PC is not a hover target), the hovered panel's art for anyone else, and the original's hide
 toggle. Original visual parity NOT VERIFIED.
 
 ### Combat action points and turn order (ARC-UI-1114)
@@ -1964,7 +1963,7 @@ list keeps its place while the sheet stays open. The NPC sheet (mode 2) names th
 The creation editor (window 14) shows the same tab in the original look (ARC-UI-1792, ALP8): a release on a row writes the scheme into the draft hero (`AreaCreationEditor.PressScheme`), the choice is kept in `AreaNewCharacter.Scheme` and written into the started session by `ApplyChoices` (no cost, no points spent: the original ran its scheme before the editor, so it counts from the next level step); the diagnostic panel of an editor without the game's art keeps the NOT READY note. The age line and the race icon are built since ARC-UI-1791 (the creation editor's sheet gets the age line when the draft stores one). Native smoke: the sheet art stage (`--stages map`), the
 item-aim stage (NPC page) and the menu stage (the creation editor's page) print `PASS` lines for the page.
 
-**Not yet in the original's look:** the age is the stored base (no effect on stat 25 is modelled), the NPC icon reads the race the sheet names with no effects and the clash rule of an NPC portrait (0x4CEB80) is not built; a button takes the pointer on its rectangle, not on its opaque pixels. The creation editor (window 14) in the diagnostic look (its art did not read) shows the schemes tab's NOT READY note. Without a game folder (the synthetic self-tests) or when an art does not read, the whole sheet is the diagnostic panel above.
+**Not yet in the original's look:** the age is the stored base (no effect on stat 25 is modelled), the NPC icon reads the race the sheet names with no effects (the clash rule of an NPC portrait, 0x4CEB80, is built, ARC-UI-2444: an NPC that stores the PC's own portrait shows the catalogue's next or previous one in the follower frames, the hover, this sheet and the item windows); a button takes the pointer on its rectangle, not on its opaque pixels. The creation editor (window 14) in the diagnostic look (its art did not read) shows the schemes tab's NOT READY note. Without a game folder (the synthetic self-tests) or when an art does not read, the whole sheet is the diagnostic panel above.
 Native smoke: `./arcanum smoke pr --stages map --map "elven ruins" --hero elf-female` prints `ARC-UI-075 native-smoke sheet art PASS`
 (`ARC_AREA_SHEET_CAPTURE=PATH.png` saves readbacks `PATH-skills.png`, `PATH-tech.png`, `PATH-spells.png`).
 
