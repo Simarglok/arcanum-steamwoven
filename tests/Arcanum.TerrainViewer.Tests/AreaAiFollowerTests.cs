@@ -1675,6 +1675,23 @@ public sealed class AreaAiFollowerTests
         StringAssert.Contains(host.TraceOf(companion)!.Event, "Complain Good");
     }
 
+    // ARC-DEV-2367 (NLD7, 0x414370 → 0x418780): under an NPC leader the upset line is picked with the leader as listener (the bark path, the speech turns to it); under the hero nothing changes (the PC-listener path above).
+    [TestMethod]
+    public void The_complaint_of_a_follower_of_an_npc_leader_is_barked_with_the_leader_as_listener()
+    {
+        var (session, host, _, enemy, companion) = Open(companionAlignment: 5);
+        Assert.AreEqual(GameSessionDisposition.Changed, session.ForceJoinLeader(session.Version, companion, enemy).Disposition);
+        var barked = new List<(string Speaker, LoyaltyLines Lines, string? Listener)>();
+        var floated = new List<LoyaltyLines>();
+        host.AiBarks = (speaker, lines, listener) => barked.Add((speaker, lines, listener));
+        host.FollowerSpeaks = (_, lines) => floated.Add(lines);
+        // The attack event (not the attack start, which already puts the hero into combat mode and so makes the upset ignored) of the NPC leader on the hero.
+        host.SpellAttacked(enemy, Pc);
+        StringAssert.Contains(host.TraceOf(companion)!.Event, "Complain Good");
+        CollectionAssert.AreEqual(new[] { (companion, new LoyaltyLines(4900, 4999), (string?)enemy) }, barked.Where(b => b.Speaker == companion).ToArray());
+        Assert.AreEqual(0, floated.Count, "not the PC-listener path");
+    }
+
     // ARC-AI-1677 (AC2, 0x413A90): the refusal range of each reason the hit's follow check can give. The check ignores the follower limit and refuses facts that name another leader, so
     // the reasons "already grouped", "limit reached" and "not allowed" cannot come out of a hit (below); the range table itself is held by CompanionLoyaltyRulesTests.
     public static IEnumerable<object[]> HitRefusalReasons()

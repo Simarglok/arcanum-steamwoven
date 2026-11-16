@@ -216,9 +216,9 @@ public sealed class AreaEventsTests
             Assert.IsTrue(host.RunCall(new(790, 0, pc, npc), out detail), detail);
             Assert.IsTrue(host.RunCall(new(793, 0, pc, npc), out detail), detail);
             Assert.AreEqual(0, session.QueryScriptCalls().Count);
-            // A call that would start a conversation applies nothing.
+            // ARC-WORLD-2358: a call that starts a conversation with an object that is no dialog NPC of the host applies nothing.
             Assert.IsFalse(host.RunCall(new(794, 0, pc, npc), out detail));
-            StringAssert.Contains(detail, "starts a conversation");
+            StringAssert.Contains(detail, "no dialog NPC here");
 
             Assert.IsTrue(host.RunCall(new(790, 0, pc, null), out detail), detail);
             var ran = new FrameStep(session, world).AdvanceGame(80_000);

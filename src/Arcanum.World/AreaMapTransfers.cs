@@ -304,11 +304,20 @@ public sealed class AreaMapTransfers
         return ran.Outcome switch
         {
             AreaScriptedUseOutcome.Teleport when dropped => new(AreaUseOutcome.TransitionPending, Teleported(site, ran.Teleport!), 0, requestsRefused ? "REQUEST_REFUSED_DURING_CHANGE_OF_PLACE" : "TRANSITION_PENDING"),
-            AreaScriptedUseOutcome.Teleport => Queue(Teleported(site, ran.Teleport!), null, 0, ran.Teleport!.Fade),
+            AreaScriptedUseOutcome.Teleport => QueuePlaced(Teleported(site, ran.Teleport!), ran),
             AreaScriptedUseOutcome.TeleportRefused => new(AreaUseOutcome.DestinationUnavailable, Teleported(site, ran.Teleport!), 0, ran.Detail),
             AreaScriptedUseOutcome.NoTeleport => new(AreaUseOutcome.ScriptEnded, site, 0, ran.Detail),
             _ => new(AreaUseOutcome.ScriptRefused, site, 0, ran.Detail),
         };
+    }
+
+    /// <summary>ARC-WORLD-2358 (ledger TT20): a tile or sector script's hero teleport, queued as the transfer; one whose run also started a conversation (<see cref="AreaScriptedUse.Dialog"/>) is a <see cref="AreaMapTransfer.ByTalkScript"/> transfer,
+    /// since the dialog opens inside the run and the ping takes the request at the next frame with the dialog open.</summary>
+    private AreaMapUseResult QueuePlaced(MapTransitionSite site, AreaScriptedUse ran)
+    {
+        var queued = Queue(site, null, 0, ran.Teleport!.Fade);
+        if (ran.Dialog is not null && Pending is { } pending) Pending = pending with { ByTalkScript = true };
+        return queued;
     }
 
     /// <summary>The site as the script's teleport resolved it: its destination and arrival (a runtime −1 keeps this map, as a

@@ -113,6 +113,11 @@ public sealed class AreaUseScriptHostTests
             var called = Program(Do(new(ScrCatalogue.Action.Dialog, N(3))), Do(Skip));
             BinaryPrimitives.WriteUInt32LittleEndian(called, 0b10);
             Write("scr/00741called.scr", called);
+            // 742, 743 (ARC-WORLD-2358, ledger TT20): the same tile for the NPC named 9000 that first teleports the player (742) or itself (743) and then calls 741: the dialog action ends the run, the player's request stands with it.
+            Write("scr/00742player.scr", Program(If(new(ScrCatalogue.Condition.IsNamed, (Triggerer, 0), N(9000)), new(0), new(ScrCatalogue.Action.Goto, N(3))),
+                Do(new(ScrCatalogue.Action.Teleport, (21, 0), N(5076), N(5), N(6))), Do(new(ScrCatalogue.Action.CallScript, N(741), N(0), (21, 0), (Triggerer, 0))), Do(Skip)));
+            Write("scr/00743self.scr", Program(If(new(ScrCatalogue.Condition.IsNamed, (Triggerer, 0), N(9000)), new(0), new(ScrCatalogue.Action.Goto, N(3))),
+                Do(new(ScrCatalogue.Action.Teleport, (Triggerer, 0), N(4998), N(5), N(6))), Do(new(ScrCatalogue.Action.CallScript, N(741), N(0), (21, 0), (Triggerer, 0))), Do(Skip)));
             // 750 (ARC-SCRIPT-052, 1724's and 1779's shape): a tile that stops the NPC named 9000 who steps on it attacking and destroys him.
             Write("scr/00750exit.scr", Program(If(new(ScrCatalogue.Condition.IsNamed, (Triggerer, 0), N(9000)), new(0), new(ScrCatalogue.Action.Goto, N(3))),
                 Do(new(ScrCatalogue.Action.StopAttacking, (Triggerer, 0))), Do(new(ScrCatalogue.Action.Destroy, (Triggerer, 0))), Do(Skip)));
@@ -690,6 +695,38 @@ public sealed class AreaUseScriptHostTests
             Assert.AreEqual((AreaScriptedUseOutcome.EffectsRejected, (ScrDialogStart?)null), (unkept.Outcome, unkept.Dialog), unkept.Detail);
             StringAssert.Contains(unkept.Detail, "point 1 slot"); StringAssert.Contains(unkept.Detail, "no loaded element");
             Assert.AreEqual(held, session.Version);
+        });
+    }
+
+    // ARC-WORLD-2358 (ledger TT20): a tile run that teleports the player and then starts a conversation (the dialog action ends the run, the player's request stands with it) is no longer refused: the outcome is the teleport and the conversation
+    // is handed over with it; a teleport of an NPC together with a conversation stays refused (the speaker may be the one that moves).
+    [TestMethod]
+    public void A_tile_script_that_teleports_the_player_and_starts_a_conversation_hands_over_both()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var host = Host(session, content, Gate(0));
+            var npc = new ScrObjectRef(1, Entity(9));
+            var tile = new Arcanum.Data.Maps.MapPlacedScript(Arcanum.Data.Maps.MapTransitionTrigger.TileEntry, new(3, 4), 72, new(198, 257), 0, 0, 742);
+
+            var asked = new List<ScrTeleport>();
+            var ran = host.RunPlaced(tile, session.Rules.Scripts, t => { asked.Add(t); return null; }, npc);
+            Assert.AreEqual((AreaScriptedUseOutcome.Teleport, new ScrTeleport(host.Pc, 5076, 5, 6)), (ran.Outcome, ran.Teleport), ran.Detail);
+            Assert.AreEqual(new ScrDialogStart(host.Pc, npc, 741, 0, 3) { Point = ScrPoint.Use }, ran.Dialog);
+            Assert.AreEqual(asked.Single(), ran.Teleport, "the caller was asked about the teleport before anything applied");
+            Assert.AreEqual(new ScrSlot(0, 0b10, 0), host.Slot(npc, ScrPoint.Use), "the conversation's flags were stored as for a tile run without a teleport");
+
+            // A teleport the caller cannot take leaves the whole run unapplied.
+            var held = session.Version;
+            var refused = host.RunPlaced(tile, session.Rules.Scripts, _ => "NO", npc);
+            Assert.AreEqual((AreaScriptedUseOutcome.TeleportRefused, (ScrDialogStart?)null), (refused.Outcome, refused.Dialog), refused.Detail);
+            Assert.AreEqual(held, session.Version);
+
+            // A teleport of the NPC itself with the conversation stays refused.
+            var self = host.RunPlaced(tile with { Script = 743 }, session.Rules.Scripts, null, npc);
+            Assert.IsNull(self.Dialog, self.Detail);
+            Assert.AreNotEqual(AreaScriptedUseOutcome.Teleport, self.Outcome, self.Detail);
         });
     }
 
