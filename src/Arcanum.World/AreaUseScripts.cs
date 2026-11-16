@@ -768,6 +768,9 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
                 return Arcanum.Simulation.Sound.SoundCueRules.CritterArtArmor(wornArt ?? Arcanum.Simulation.Equipment.BodyArmorArtRules.WithArmor(stored, 0));
             }
         }
+        // ARC-SCRIPT-2351 (AR8): an NPC the session never dressed whose map-data body armour was taken off since (a script take or steal, loot, a break): the removal's wield-off hook set the part to 0 (AR2), which the stored art does not show.
+        if (row.Type == NpcType && _session.QueryNpcBodyArmorTakenOff(obj.Code))
+            return Arcanum.Simulation.Sound.SoundCueRules.CritterArtArmor(Arcanum.Simulation.Equipment.BodyArmorArtRules.WithArmor(stored, 0));
         return Arcanum.Simulation.Sound.SoundCueRules.CritterArtArmor(stored);
     }
 
