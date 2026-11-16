@@ -192,6 +192,7 @@ public sealed partial class GameSessionOwner
         // The quest requests are planned as the run makes them (IScrQuestWrites), so the run's later quest reads see them; the first refusal ends the move once the run is over. The awards the current run gave.
         private GameSessionFailure _questFailure;
         private int _awardsInRun;
+        private int _questRequestsInRun;
 
         internal ItemScriptRuns(GameSessionOwner owner, ISessionItemScriptHost host, int map, IReadOnlyDictionary<string, int> items, NpcWearer? npc = null)
         {
@@ -257,8 +258,8 @@ public sealed partial class GameSessionOwner
             if (Failure != GameSessionFailure.None) return null;
             _reads.RatioReads = 0;
             _reads.StatReads.Clear();
-            _reads.QuestReads = 0;
             _awardsInRun = 0;
+            _questRequestsInRun = 0;
             var run = ScrDispatcher.RunObject(new(point, new ScrObjectRef(_map, attachee), new ScrObjectRef(_map, triggerer),
                 extra is null ? null : new ScrObjectRef(_map, extra)), _reads, new() { Rules = _owner._rules.Scripts, Admission = SessionItemScripts.Admission });
             _owner.ThrowIfDisposed();
@@ -313,6 +314,8 @@ public sealed partial class GameSessionOwner
             }
             // ARC-SCRIPT-2410 (IV19): the run's quest requests were planned as the run made them (IScrQuestWrites, as the original applies them), so its quest reads saw the earlier writes of the run, a call-ex callee's included; a refusal of one is the move's.
             if (_questFailure != GameSessionFailure.None) return _questFailure;
+            // A run the dispatcher ended with its effects dropped (the line budget, a call-ex outside the points) keeps none of its requests, yet the ones planned as it ran were applied by the original as it went: not modelled, refused.
+            if (effects.States.Count(state => state.Kind is ScrStateKind.QuestState or ScrStateKind.QuestExperience) != _questRequestsInRun) return GameSessionFailure.ItemScriptUnsupported;
             if (effects.States.Any(state => state.Kind is not (ScrStateKind.QuestState or ScrStateKind.QuestExperience))) return GameSessionFailure.ItemScriptUnsupported;
             if (AwardOrderHazard(run)) return GameSessionFailure.ItemScriptUnsupported;
             var aptitude = HazardOf(run, _reads.RatioReads, Arcanum.Data.Scripts.ScrCatalogue.Action.MagickTechAdjustment) ? Aptitude() : (int?)null;
@@ -371,6 +374,7 @@ public sealed partial class GameSessionOwner
         /// <summary>ARC-SCRIPT-2410: one quest request of a run as the interpreter makes it (the original applies it at once); the first refusal is kept for the run's end.</summary>
         internal void QuestRequested(ScrStateRequest request)
         {
+            _questRequestsInRun++;
             if (_questFailure == GameSessionFailure.None) _questFailure = PlanQuest(request);
         }
 
@@ -756,7 +760,6 @@ public sealed partial class GameSessionOwner
 
         public int QuestState(ScrObjectRef obj, int quest)
         {
-            QuestReads++;
             if (runs.PlannedQuest(host.IsPc(obj), quest) is { } planned) return planned;
             if (World?.QuestState(obj, quest) is { } state) return state;
             UnknownObject = true;
@@ -865,7 +868,6 @@ public sealed partial class GameSessionOwner
         }
 
         /// <summary>ARC-SCRIPT-2374: how many quest state reads the current run made.</summary>
-        internal int QuestReads { get; set; }
 
         /// <summary>How many power ratios the current run read (call-ex callees included).</summary>
         internal int RatioReads { get; set; }

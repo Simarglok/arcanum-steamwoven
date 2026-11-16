@@ -17,7 +17,7 @@ public sealed class ItemWorldScriptTests
 {
     private const byte Triggerer = 0, Attachee = 1, LocalVariable = 2, Number = 3, Looped = 10, LocalObject = 11, EveryContainer = 17, AnyContainer = 18, EveryFollower = 2, AnyFollower = 3;
     private const int Every = 810, Any = 811, Twice = 812, EveryFollowerScript = 813, AnyFollowerScript = 814, ToggleSelf = 815, ToggleSelfTwice = 816, ToggleHero = 817, Quest = 820, Typed = 821, Assigned = 822, DeadGated = 823, GeneratorGated = 824, GeneratorSlot = 7, CaseName = 1205, NewArt = 4, BaselineArt = 100, QuestNumber = 1005, ContainerType = 2,
-        SetQuest = 830, CompleteQuest = 831, GiveSmall = 832, GiveBig = 833, GiveTwice = 834, SetThenRead = 835, SetOnItem = 836, SetInvalid = 837, CompleteBig = 838, SetThenGive = 839, SetCallRead = 840, GiveThenXp = 841, XpThenGive = 842, XpEffect = 60;
+        SetQuest = 830, CompleteQuest = 831, GiveSmall = 832, GiveBig = 833, GiveTwice = 834, SetThenRead = 835, SetOnItem = 836, SetInvalid = 837, CompleteBig = 838, SetThenGive = 839, SetCallRead = 840, GiveThenXp = 841, XpThenGive = 842, SetThenStop = 843, XpEffect = 60;
     private static readonly SessionInsertCheck Accept = _ => SessionInsertVerdict.Accepted;
 
     private sealed record Clause(int Type, (byte Kind, int Value)[] Operands);
@@ -96,6 +96,10 @@ public sealed class ItemWorldScriptTests
     private static ScrProgram GiveThenAddXp() => Program(Do(C(ScrCatalogue.Action.GiveQuestExperience, (Triggerer, 0), N(1))),
         Do(C(ScrCatalogue.Action.AddEffect, (Triggerer, 0), N(XpEffect), N(5))), Do(C(ScrCatalogue.Action.ReturnRunDefault)));
 
+    // ARC-SCRIPT-2410: a quest write, then a call-ex of a point outside the script points: the dispatcher ends the run with its effects dropped.
+    private static ScrProgram SetThenCallOutsidePoints() => Program(Do(C(ScrCatalogue.Action.SetPcQuestState, (Triggerer, 0), N(1004), N(4))),
+        Do(C(ScrCatalogue.Action.CallScriptEx, (Attachee, 0), N(99), N(0), (Triggerer, 0))), Do(C(ScrCatalogue.Action.ReturnRunDefault)));
+
     private static ScrProgram AddXpThenGive() => Program(Do(C(ScrCatalogue.Action.AddEffect, (Triggerer, 0), N(XpEffect), N(5))),
         Do(C(ScrCatalogue.Action.GiveQuestExperience, (Triggerer, 0), N(1))), Do(C(ScrCatalogue.Action.ReturnRunDefault)));
 
@@ -118,7 +122,7 @@ public sealed class ItemWorldScriptTests
             [DeadGated] = Gated(C(ScrCatalogue.Condition.IsDead, (Looped, 0))), [GeneratorGated] = Gated(C(ScrCatalogue.Condition.MonsterGenDisabled, N(GeneratorSlot))),
             [EveryFollowerScript] = Loop(EveryFollower, Looped), [AnyFollowerScript] = Loop(EveryFollower, AnyFollower),
             [SetQuest] = SetQuestOf(Triggerer, 1004, 2), [CompleteQuest] = SetQuestOf(Triggerer, 1004, 4), [GiveSmall] = Give(1), [GiveBig] = Give(5), [GiveTwice] = Give(1, 2),
-            [SetThenRead] = SetAndRead(1004, 2), [SetOnItem] = SetQuestOf(Attachee, 1004, 4), [SetInvalid] = SetQuestOf(Triggerer, 5, 2), [CompleteBig] = SetQuestOf(Triggerer, 1003, 4), [SetThenGive] = SetAndGive(1004, 4, 1), [SetCallRead] = SetCallAndRead(1004, 2), [GiveThenXp] = GiveThenAddXp(), [XpThenGive] = AddXpThenGive(),
+            [SetThenRead] = SetAndRead(1004, 2), [SetOnItem] = SetQuestOf(Attachee, 1004, 4), [SetInvalid] = SetQuestOf(Triggerer, 5, 2), [CompleteBig] = SetQuestOf(Triggerer, 1003, 4), [SetThenGive] = SetAndGive(1004, 4, 1), [SetCallRead] = SetCallAndRead(1004, 2), [GiveThenXp] = GiveThenAddXp(), [XpThenGive] = AddXpThenGive(), [SetThenStop] = SetThenCallOutsidePoints(),
             [ToggleSelf] = Toggle(Attachee), [ToggleSelfTwice] = Toggle(Attachee, 2), [ToggleHero] = Toggle(Triggerer) };
         public Dictionary<string, int> Names { get; set; } = new() { ["case"] = CaseName, ["other"] = 3000 };
         public string[]? Vicinity { get; set; } = ["case", "other"];
@@ -335,6 +339,16 @@ public sealed class ItemWorldScriptTests
             Assert.AreEqual((NewArt, NewArt), ((int?)Art(owner, "case"), (int?)Art(owner, "other")), $"script {script}: the read saw the write, so the art changed");
             Assert.AreEqual(0, host.QuestReads.Count, "the planned state answers, the host is not asked");
         }
+    }
+
+    [TestMethod]
+    public void A_run_ended_with_its_effects_dropped_after_a_quest_write_refuses_the_move()
+    {
+        using var owner = Owner(withExperience: true);
+        var before = owner.Version;
+        var refused = owner.PickUpItem(before, "oid:tome", Accept, new Host(SetThenStop));
+        Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.ItemScriptUnsupported, before, 0), (refused.Disposition, refused.Failure, owner.Version, Points(owner)));
+        Assert.IsNull(owner.QueryQuest(1004));
     }
 
     [TestMethod]
