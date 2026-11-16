@@ -308,8 +308,9 @@ public sealed class SupportRulesTests
         Assert.AreSame(AiListCache.Empty, AiListCache.Empty.ItemExhausted("mage", "wand"));
     }
 
-    // ARC-AI-2402 (BC10, SP11): a worn store the payment drained to 0 calls 0x4CCC40, so the Original setting's frozen list is rebuilt at the next request
-    // and no longer lists the wand; without the call the frozen list keeps it. Steamwoven builds fresh either way.
+    // ARC-AI-2402 (BC10, SP11): a worn store (field 92) a payment drained to 0 calls 0x4CCC40, so the Original setting's frozen list is rebuilt from the
+    // current state at the next request; without the call the frozen list stays as it was. (The list build reads the item's charges, field 105, not the
+    // worn store: the call only forces the rebuild.) Steamwoven builds fresh either way.
     [TestMethod]
     public void AnEmptiedStoreDropsTheFrozenListOnlyThroughTheExhaustedCall()
     {
@@ -321,11 +322,14 @@ public sealed class SupportRulesTests
         var frozen = AiListCache.Empty.Request(w, "mage", AiActionList.Offensive, Original);
         Assert.IsTrue(frozen.Entries.Any(e => e.Item == "wand"), "the wand is on the first list");
 
-        w.Items["wand"] = w.Items["wand"] with { ManaStore = 0 };
+        // The wand's listing changes after the list froze (here: its spell is gone).
+        w.Items["wand"] = w.Items["wand"] with { Spells = [-1, -1, -1, -1, -1] };
         Assert.IsTrue(frozen.Cache.Request(w, "mage", AiActionList.Offensive, Original).Entries.Any(e => e.Item == "wand"),
             "no call: the Original setting's slot keeps the old list (SP11)");
+        Assert.IsTrue(frozen.Cache.ItemExhausted("mage", "other").Request(w, "mage", AiActionList.Offensive, Original).Entries.Any(e => e.Item == "wand"),
+            "a call for an item no list holds drops nothing");
         Assert.IsFalse(frozen.Cache.ItemExhausted("mage", "wand").Request(w, "mage", AiActionList.Offensive, Original).Entries.Any(e => e.Item == "wand"),
-            "the call dropped the slot: the rebuilt list lists the emptied wand no more");
+            "the call dropped the slot: the rebuilt list follows the current state");
         Assert.IsFalse(frozen.Cache.Request(w, "mage", AiActionList.Offensive, Steamwoven).Entries.Any(e => e.Item == "wand"), "Steamwoven builds fresh");
     }
 
