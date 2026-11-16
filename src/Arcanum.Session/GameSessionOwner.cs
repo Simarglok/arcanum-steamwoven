@@ -2859,7 +2859,7 @@ public sealed partial class GameSessionOwner : IDisposable
         _events.Any(kind, e => entity is null || e.Payload.Entities[0].Code == entity);
 
     private static bool RechargePayload(System.Collections.Immutable.ImmutableArray<GameEventEntity> entities, System.Collections.Immutable.ImmutableArray<long> values) =>
-        values.Length == 2 && values[0] >= 0 && Math.Abs(values[1]) <= SessionItemUseLimits.MaxUses && SessionValidation.Entity(entities[0].Code) && entities[0].Code != SessionEventKinds.AbsentRole;
+        values.Length == 2 && values[0] >= 0 && values[1] is >= int.MinValue and <= int.MaxValue && SessionValidation.Entity(entities[0].Code) && entities[0].Code != SessionEventKinds.AbsentRole;
 
     private static LifeTimer TimerOf(string kind) => kind switch
     {

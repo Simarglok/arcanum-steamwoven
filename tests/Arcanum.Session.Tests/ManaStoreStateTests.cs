@@ -42,8 +42,6 @@ public sealed class ManaStoreStateTests
     {
         using var owner = Owner();
         Assert.AreEqual(GameSessionFailure.InvalidItem, owner.WriteItemManaStore(owner.Version, "", 1, 0).Failure);
-        Assert.AreEqual(GameSessionFailure.InvalidItem, owner.WriteItemManaStore(owner.Version, Staff, 1, -1).Failure);
-        Assert.AreEqual(GameSessionFailure.InvalidItem, owner.WriteItemManaStore(owner.Version, Staff, 1, SessionItemUseLimits.MaxUses + 1).Failure);
         Assert.AreEqual(GameSessionFailure.StaleVersion, owner.WriteItemManaStore(owner.Version with { Revision = 9 }, Staff, 1, 0).Failure);
         Assert.AreEqual(GameSessionFailure.ItemNotAvailable, owner.WriteItemManaStore(owner.Version, "kit:99", 1, 0).Failure);
         Assert.AreEqual(0, owner.Version.Revision, "a refusal changes nothing");
@@ -135,7 +133,7 @@ public sealed class ManaStoreStateTests
             Assert.AreEqual(failure, GameSessionSnapshotCodec.TryDecode(text.Replace(Listed, to, StringComparison.Ordinal)).Failure, to);
         Fails("\"manaStores\":[{\"entity\":\"kit:3\",\"store\":7},{\"entity\":\"kit:2\",\"store\":12}]", SnapshotDecodeFailure.NotCanonical);
         Fails("\"manaStores\":[{\"entity\":\"kit:2\"}]", SnapshotDecodeFailure.MissingField);
-        Fails("\"manaStores\":[{\"entity\":\"kit:2\",\"store\":-1}]", SnapshotDecodeFailure.OutOfRange);
+        Fails("\"manaStores\":[{\"entity\":\"kit:2\",\"store\":2147483648}]", SnapshotDecodeFailure.OutOfRange);
         Fails("\"manaStores\":[{\"entity\":\"kit:2\",\"store\":1,\"extra\":1}]", SnapshotDecodeFailure.UnknownField);
 
         Assert.AreEqual(GameSessionDisposition.Changed, owner.DestroyItem(owner.Version, Staff, new(20, 0, 0, false)).Disposition);
@@ -155,5 +153,69 @@ public sealed class ManaStoreStateTests
         Assert.AreEqual(0, upgraded.Snapshot.Durability.ManaStores.Count);
         var twice = older.Replace("\"charges\":[]", "\"charges\":[],\"manaStores\":[]");
         Assert.AreEqual(SnapshotDecodeFailure.UnknownField, GameSessionSnapshotCodec.TryDecode(twice).Failure, "a schema 102 text that already has the list");
+    }
+
+    // ARC-MAGIC-2401 (BC10): the store is the original's plain 32-bit value, not a count held within 0..1,000,000.
+    [TestMethod]
+    public void The_store_is_a_full_32_bit_value_a_negative_one_and_one_above_a_million_included()
+    {
+        using var owner = Owner();
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.WriteItemManaStore(owner.Version, Staff, 30, -5).Disposition);
+        Assert.AreEqual(-5, owner.QueryItemManaStore(Staff), "a negative store is held");
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.WriteItemManaStore(owner.Version, Staff, 30, SessionItemUseLimits.MaxUses + 1).Disposition);
+        Assert.AreEqual(1_000_001, owner.QueryItemManaStore(Staff), "no ceiling at a million");
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.WriteItemManaStore(owner.Version, Staff, 30, int.MinValue).Disposition);
+        Assert.AreEqual(int.MinValue, owner.QueryItemManaStore(Staff));
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.WriteItemManaStore(owner.Version, Staff, 30, int.MaxValue).Disposition);
+        Assert.AreEqual(int.MaxValue, owner.QueryItemManaStore(Staff));
+    }
+
+    [TestMethod]
+    public void A_negative_pending_amount_restores_the_old_negative_store_and_schedules_nothing()
+    {
+        using var owner = Owner();
+        // The payment wrote 0 over a store of -5 and passed -5 to the recharge (0x459590): the handler adds min(pending, 2 x units) = -5.
+        owner.WriteItemManaStore(owner.Version, Staff, -5, 0);
+        owner.ScheduleManaRecharge(Staff, -5, merge: true);
+        Assert.AreEqual(-5, owner.QueryManaRecharges().Single().Pending);
+        Advance(owner, 480_000);
+        owner.ProcessEvents(new World());
+        Assert.AreEqual(-5, owner.QueryItemManaStore(Staff), "the store is back at its old negative value");
+        Assert.AreEqual(0, owner.QueryManaRecharges().Count, "nothing is scheduled again for a negative rest");
+    }
+
+    [TestMethod]
+    public void A_negative_pending_amount_that_merges_with_a_positive_one_adds_as_32_bit_values()
+    {
+        using var owner = Owner();
+        owner.ScheduleManaRecharge(Staff, 6, merge: true);
+        owner.ScheduleManaRecharge(Staff, -9, merge: true);
+        Assert.AreEqual(-3, owner.QueryManaRecharges().Single().Pending);
+        owner.ScheduleManaRecharge(Ring, int.MaxValue, merge: true);
+        owner.ScheduleManaRecharge(Ring, 2, merge: true);
+        Assert.AreEqual(int.MinValue + 1, owner.QueryManaRecharges().Single(e => e.Entity == Ring).Pending, "the original's 32-bit add wraps (0x459640)");
+    }
+
+    [TestMethod]
+    public void A_recharge_above_a_million_is_held_and_a_negative_store_and_pending_amount_are_saved_and_restored()
+    {
+        using var owner = Owner();
+        owner.WriteItemManaStore(owner.Version, Staff, 30, -7);
+        owner.WriteItemManaStore(owner.Version, Ring, 30, 2_000_000);
+        owner.ScheduleManaRecharge(Staff, -4, merge: true);
+        owner.ScheduleManaRecharge(Ring, 3_000_000, merge: true);
+        var text = GameSessionSnapshotCodec.Encode(owner.Capture());
+        StringAssert.Contains(text, "\"manaStores\":[{\"entity\":\"kit:2\",\"store\":-7},{\"entity\":\"kit:3\",\"store\":2000000}]");
+        var restored = GameSessionOwner.Restore(Decode(text), RestoreOptions()).Owner!;
+        using var _ = restored;
+        Assert.AreEqual(-7, restored.QueryItemManaStore(Staff));
+        Assert.AreEqual(2_000_000, restored.QueryItemManaStore(Ring));
+        CollectionAssert.AreEqual(owner.QueryManaRecharges().ToArray(), restored.QueryManaRecharges().ToArray());
+        Assert.AreEqual(-4, restored.QueryManaRecharges().Single(e => e.Entity == Staff).Pending);
+        Assert.AreEqual(3_000_000, restored.QueryManaRecharges().Single(e => e.Entity == Ring).Pending);
+        // The ring recharges past a million: no ceiling.
+        Advance(restored, 480_000);
+        restored.ProcessEvents(new World());
+        Assert.AreEqual(2_000_008, restored.QueryItemManaStore(Ring));
     }
 }

@@ -764,9 +764,8 @@ public sealed partial class GameSessionOwner
     private sealed class SessionFlagReads(GameSessionOwner session, ISessionItemScriptHost host, ItemScriptRuns runs) : IScrHost, IScrItemQueries, IScrStoreQueries, IScrStatQueries, IScrWorldQueries, IScrContainerQueries, IScrGroupQueries, IScrObjectQueries, IScrObjectStateQueries, IScrWorldObjectQueries, IScrQuestWrites
     {
         // ARC-SCRIPT-2335 (IV1–IV4): the world questions of the loop for, the container vicinity kinds, the follower kinds (ARC-SCRIPT-2336) and the name condition go to the host's world part. A host without it, an object or a centre it does not know makes the run unanswerable
-        // (UnknownObject: the session refuses the move). The set admits no scenery, critter, random, location, held-item, wielded-item or reputation question, so none is asked (ARC-SCRIPT-2347 added the quest state and object type answers).
-        // Implementing these interfaces also switches off the dispatcher's guard that a set's commands have a host answer: a later widening of the admission (random, within range, the held-item, wielded-item and reputation guard conditions, the scenery
-        // and critter vicinity kinds) must answer here first (ItemWorldScriptTests pins what the stubs below assume).
+        // (UnknownObject: the session refuses the move). The set admits no random, location, held-item, wielded-item or reputation question, so none is asked (ARC-SCRIPT-2347 added the quest state and object type answers).
+        // Implementing these interfaces also switches off the dispatcher's guard that a set's commands have a host answer: a later widening of the admission (random, within range, the held-item, wielded-item and reputation guard conditions) must answer here first (ItemWorldScriptTests pins what the stubs below assume).
         private ISessionItemWorldHost? World => host as ISessionItemWorldHost;
 
         public IReadOnlyList<ScrObjectRef> ContainersInVicinity(ScrObjectRef centre)
@@ -798,8 +797,21 @@ public sealed partial class GameSessionOwner
             return false;
         }
 
-        public IReadOnlyList<ScrObjectRef> SceneryInVicinity(ScrObjectRef centre) => throw new InvalidOperationException("ITEM_SCRIPT_SCENERY_VICINITY_NOT_ADMITTED");
-        public IReadOnlyList<ScrObjectRef> CrittersInVicinity(ScrObjectRef centre) => throw new InvalidOperationException("ITEM_SCRIPT_CRITTER_VICINITY_NOT_ADMITTED");
+        // ARC-SCRIPT-2376 (IV25): the scenery and the PCs and NPCs around the attachee item go to the host's world part as the container vicinity does (the centre is the item's own location).
+        public IReadOnlyList<ScrObjectRef> SceneryInVicinity(ScrObjectRef centre)
+        {
+            if (World?.SceneryInVicinity(centre) is { } list) return list;
+            UnknownObject = true;
+            return [];
+        }
+
+        public IReadOnlyList<ScrObjectRef> CrittersInVicinity(ScrObjectRef centre)
+        {
+            if (World?.CrittersInVicinity(centre) is { } list) return list;
+            UnknownObject = true;
+            return [];
+        }
+
         public int Random(int low, int high) => throw new InvalidOperationException("ITEM_SCRIPT_RANDOM_NOT_ADMITTED");
         public (long X, long Y)? Location(ScrObjectRef obj) => throw new InvalidOperationException("ITEM_SCRIPT_LOCATION_NOT_ADMITTED");
         /// <summary>ARC-SCRIPT-2410: the interpreter tells each quest request as it makes it; the move's runs plan it at once.</summary>

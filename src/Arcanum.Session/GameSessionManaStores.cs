@@ -17,14 +17,14 @@ public sealed partial class GameSessionOwner
     /// <summary>
     /// ARC-MAGIC-2371: the item's mana store (field 92) is written, as the original's payment (0x450420, which writes the drained store back) and its
     /// recharge handler (0x459680, which adds to it with no cap at the prototype's value) write it. <paramref name="baseline"/> is the item's own field,
-    /// read only until the session holds a store; a store equal to the current one is <see cref="GameSessionDisposition.NoChange"/>. Refused for an invalid
-    /// entity, a store outside 0..<see cref="SessionItemUseLimits.MaxUses"/> (<see cref="GameSessionFailure.InvalidItem"/>), a stale version, an item the
-    /// session does not track or deleted (<see cref="GameSessionFailure.ItemNotAvailable"/>) and a full record budget. One revision.
+    /// read only until the session holds a store; a store equal to the current one is <see cref="GameSessionDisposition.NoChange"/>. The store is a plain
+    /// 32-bit value as in the original (ARC-MAGIC-2401): any int, a negative one included. Refused for an invalid entity (<see cref="GameSessionFailure.InvalidItem"/>),
+    /// a stale version, an item the session does not track or deleted (<see cref="GameSessionFailure.ItemNotAvailable"/>) and a full record budget. One revision.
     /// </summary>
     public GameSessionMutationResult WriteItemManaStore(GameSessionVersion expected, string entity, int baseline, int store)
     {
         ThrowIfDisposed();
-        if (!SessionValidation.Entity(entity) || store is < 0 or > SessionItemUseLimits.MaxUses) return new(GameSessionDisposition.Rejected, GameSessionFailure.InvalidItem, Version);
+        if (!SessionValidation.Entity(entity)) return new(GameSessionDisposition.Rejected, GameSessionFailure.InvalidItem, Version);
         if (!IsCurrent(expected)) return new(GameSessionDisposition.Rejected, GameSessionFailure.StaleVersion, Version);
         if (!TracksItem(entity)) return new(GameSessionDisposition.Rejected, GameSessionFailure.ItemNotAvailable, Version);
         var recorded = _durability.ManaStores.TryGetValue(entity, out var current);
@@ -42,6 +42,7 @@ public sealed partial class GameSessionOwner
     /// ARC-MAGIC-2400: the event is on the map the PC is on (the original's events live in memory until the PC leaves; TL33), and a merge finds only a pending event of that map: one parked on another map is not in memory.
     /// </summary>
     [OriginalFunction(0x459590, OriginalFunctionScope.Partial)]
+    [OriginalFunction(0x459640, OriginalFunctionScope.Partial)]
     internal void ScheduleManaRecharge(string entity, int amount, bool merge)
     {
         if (!SessionValidation.Entity(entity) || entity == SessionEventKinds.AbsentRole) return;
@@ -49,7 +50,8 @@ public sealed partial class GameSessionOwner
         if (merge && _events.QueryPending(SessionEventKinds.ItemRecharge).FirstOrDefault(e => e.Payload.Entities[0].Code == entity && e.Payload.Entities[0].Map == map) is { } pending)
         {
             if (_events.NextSequence == long.MaxValue) return;
-            var sum = (int)Math.Clamp(pending.Payload.Values[1] + amount, -SessionItemUseLimits.MaxUses, SessionItemUseLimits.MaxUses);
+            // The callback 0x459640 adds the amount to the pending event's 32-bit field (ARC-MAGIC-2401: it wraps, no bound).
+            var sum = unchecked((int)pending.Payload.Values[1] + amount);
             _events.RemoveFirst(SessionEventKinds.ItemRecharge, e => e.Sequence == pending.Sequence);
             _events.ScheduleAt(SessionEventKinds.ItemRecharge, GameEventPayload.Of([new(map, entity)], pending.Payload.Values[0], sum), pending.DeadlineMs);
             return;
@@ -95,7 +97,8 @@ public sealed partial class GameSessionOwner
 
     // The recharge event (kind 0x17; 0x459680): units = elapsed game seconds / 120 (at least 1), restored = min(pending, 2 × units) added to the store with no cap at the prototype's value,
     // the rest scheduled again without merging. An item the session deleted, or one whose store it never changed (a pending 0 only), has nothing to restore and the event ends.
-    // The store is kept within 0..MaxUses (a negative one the original would write back, a prototype's negative store, is not held).
+    // The store is a plain 32-bit value (ARC-MAGIC-2401): a negative pending amount is restored as it is (min(pending, 2 × units) is a signed compare), so the store goes back to its old negative value and nothing is
+    // scheduled again; the sum wraps as the original's 32-bit add does.
     internal GameEventHandlerOutcome FireItemRecharge(GameEventFiring firing)
     {
         var entity = firing.Event.Payload.Entities[0].Code;
@@ -103,7 +106,7 @@ public sealed partial class GameSessionOwner
         var pending = (int)firing.Event.Payload.Values[1];
         var elapsed = (int)Math.Min((firing.NowMs - firing.Event.Payload.Values[0]) / 1000, int.MaxValue);
         var (restored, remaining) = SpellCostRules.Recharge(elapsed, pending);
-        var written = WriteItemManaStore(Version, entity, store, (int)Math.Clamp((long)store + restored, 0, SessionItemUseLimits.MaxUses));
+        var written = WriteItemManaStore(Version, entity, store, unchecked(store + restored));
         // A store the session cannot write (the item is no longer tracked, a full record budget) ends the event: the points are not held anywhere else.
         if (written.Disposition == GameSessionDisposition.Rejected) return written.Failure == GameSessionFailure.RevisionExhausted ? GameEventHandlerOutcome.Refused : GameEventHandlerOutcome.Completed;
         if (remaining > 0) ScheduleManaRecharge(entity, remaining, merge: false);
