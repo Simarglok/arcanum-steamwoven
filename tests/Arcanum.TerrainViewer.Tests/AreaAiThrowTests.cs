@@ -196,7 +196,7 @@ public sealed class AreaAiThrowTests
         Assert.AreEqual((SessionAttackResult?)null, thrown.Throw.Attack, "no attack: the dispatcher's check is not ready for a thrown generic item");
         Assert.AreEqual(draws, session.QueryRandom().Draws);
         Assert.IsTrue(session.QueryItemInFlight(grenade), "the grenade flies, hidden");
-        // ARC-SCRIPT-2386 (IV13, 0x4B3C00 sets the off flag, 0x4B2690 clears it): the flight is the flag, with no record written.
+        // ARC-SCRIPT-2386 (IV15, 0x4B3C00 sets the off flag, 0x4B2690 clears it): the flight is the flag, with no record written.
         Assert.IsTrue(session.QueryItemOff(session.QueryActor().Map, grenade, dataOff: false), "a thrown item in flight is switched off");
         Assert.IsNull(session.QueryObjectChange(session.QueryActor().Map, SessionItemOff.Key(grenade)));
         Assert.IsTrue(host.TraceOf(npc)!.Throw!.Contains("flies shot=", StringComparison.Ordinal), host.TraceOf(npc)!.Throw);

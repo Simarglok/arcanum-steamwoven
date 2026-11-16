@@ -16,7 +16,7 @@ public sealed partial class GameSessionOwner
     /// <summary>
     /// ARC-SCRIPT-2346 (IV9): whether the item <paramref name="entity"/> is switched off now: the record of its off flag when a script toggled it, else what its map data stores (<paramref name="dataOff"/>). A read only; the readers that
     /// list an item (the viewer's inventory windows) ask it with the data's bit.
-    /// ARC-SCRIPT-2386 (IV13): a thrown item in flight is switched off too: the throw sets the flag (0x4B3C00) and the projectile's end clears it (0x4B2690), which is
+    /// ARC-SCRIPT-2386 (IV15): a thrown item in flight is switched off too: the throw sets the flag (0x4B3C00) and the projectile's end clears it (0x4B2690), which is
     /// the shot's own state here (<see cref="QueryItemInFlight"/>), so no record is written for it.
     /// </summary>
     public bool QueryItemOff(SessionMapId map, string entity, bool dataOff)

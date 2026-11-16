@@ -117,7 +117,7 @@ public sealed class AreaBarterTests
         Assert.AreEqual("vest", barter.View().WornWares.Single().Entity, "still worn");
     }
 
-    // ARC-SCRIPT-2386 (IV13, mode 1 of the inventory window: 0x576520 paints, 0x575FA0 hit-tests): a switched-off item is on no barter line, the hero's, the merchant's or its worn one, so it cannot be bought or sold.
+    // ARC-SCRIPT-2386 (IV14, mode 1 of the inventory window: 0x576520 paints, 0x575FA0 hit-tests): a switched-off item is on no barter line, the hero's, the merchant's or its worn one, so it cannot be bought or sold.
     [TestMethod]
     public void A_switched_off_item_is_on_no_barter_line()
     {

@@ -132,6 +132,8 @@ public sealed class AreaObjectTargets
         // An item on the ground (the seed's, not taken or deleted).
         if (_inventory is null || !_inventory.TryGetEntity(key, out var item) || !_inventory.TryGetRow(item, out var row)) return null;
         if (session.QueryMapInventory(_map)?.Ground.Any(g => g.Item.Entity == item) != true) return null;
+        // ARC-SCRIPT-2386 (IV15, screen pick 0x43D9F0): a switched-off item (a script's toggle, a thrown item in flight) is not a target.
+        if (session.QueryItemOff(_map, item, dataOff: false)) return null;
         if (CombatFieldReader.Read(row).Fields is not { } itemFields) return new(item, row, DamageableObjectKind.Item, null, null, null, "item fields do not read");
         return SessionWearItem.FromCombatFields(item, itemFields) is { } wear && SessionObjectFacts.ItemFacts(itemFields, trapped?.Invoke(row) == true) is { } facts
             ? new(item, row, DamageableObjectKind.Item, null, wear, facts, null)
@@ -150,7 +152,7 @@ public sealed class AreaObjectTargets
         var version = session.Version;
         if (_gone is { } known && known.Version == version) return known.Keys;
         var keys = _objects.Where(pair => session.QueryObjectCondition(_map, pair.Value.Entity, pair.Value.Kind) is SessionObjectCondition.Destroyed
-            or SessionObjectCondition.Off || pair.Value.Kind == DamageableObjectKind.Item && session.QueryItemOff(_map, pair.Value.Entity, dataOff: false)).Select(pair => pair.Key)
+            or SessionObjectCondition.Off).Select(pair => pair.Key)
             .Concat(_npcs.Where(pair => AreaUseScriptHost.NpcOff(session, _map.RuntimeMap, pair.Value.Entity, pair.Value.Flags)
                 || AreaUseScriptHost.Destroyed(session, _map.RuntimeMap, pair.Value.Entity)).Select(pair => pair.Key)).ToHashSet();
         // An unchanged set keeps its reference, so overlays cached on it stay valid across unrelated revisions.

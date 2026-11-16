@@ -87,7 +87,7 @@ public sealed class ThrowStateTests
             "nothing is wielded to throw now");
     }
 
-    // ARC-SCRIPT-2386 (IV13, 0x4B3C00 sets the off flag of the thrown item and 0x4B2690 clears it): the flight is the flag; the flight given up clears it too.
+    // ARC-SCRIPT-2386 (IV15, 0x4B3C00 sets the off flag of the thrown item and 0x4B2690 clears it): the flight is the flag; the flight given up clears it too.
     [TestMethod]
     public void AThrownItemIsSwitchedOffWhileItFliesAndOnAgainWhenTheShotEnds()
     {
@@ -101,7 +101,7 @@ public sealed class ThrowStateTests
         Assert.IsFalse(owner.QueryItemOff(map, "kit:1", dataOff: false), "the end clears it");
     }
 
-    // ARC-SCRIPT-2386 (IV13, throw node 0x42AB90 refuses an item whose flags & 3 is not 0): a switched-off weapon is not thrown, it stays in the hand.
+    // ARC-SCRIPT-2386 (IV15, throw node 0x42AB90 refuses an item whose flags & 3 is not 0): a switched-off weapon is not thrown, it stays in the hand.
     [TestMethod]
     public void ASwitchedOffWeaponIsNotThrown()
     {

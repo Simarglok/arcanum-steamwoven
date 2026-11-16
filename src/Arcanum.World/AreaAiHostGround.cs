@@ -60,7 +60,7 @@ public sealed partial class AreaAiHost
         _ => null,
     };
 
-    /// <summary>ARC-SCRIPT-2386 (IV13, hide mask 3 of the object lists 0x4407C0 and 0x440B40): whether the item is switched off (a script's toggle, a thrown item in flight): the pickup's source lists leave it out.</summary>
+    /// <summary>ARC-SCRIPT-2386 (IV15, hide mask 3 of the object lists 0x4407C0 and 0x440B40): whether the item is switched off (a script's toggle, a thrown item in flight): the pickup's source lists leave it out.</summary>
     private bool ItemOff(string item) => _session.QueryItemOff(new SessionMapId(_scene.RuntimeMap), item, dataOff: false);
 
     private static bool InSquare(CellCoord center, CellCoord cell, int halfSize) =>

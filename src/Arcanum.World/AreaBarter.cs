@@ -270,7 +270,7 @@ public sealed class AreaBarter
         var reaction = _reaction();
         var parties = Parties(haggle, training, reaction);
         var worn = _session.QueryEquipment().Worn.Select(item => item.Entity).ToHashSet(StringComparer.Ordinal);
-        // ARC-SCRIPT-2386 (IV13): barter is mode 1 of the inventory window (0x683464), which paints (0x576520) and hit-tests (0x575FA0) like it: a switched-off item (object flag 0x2) of the
+        // ARC-SCRIPT-2386 (IV14): barter is mode 1 of the inventory window (0x683464), which paints (0x576520) and hit-tests (0x575FA0) like it: a switched-off item (object flag 0x2) of the
         // hero's or the merchant's list is not offered and cannot be taken into the hand, so it is on no line (it keeps its cells, weight and stock). A deal prices an item when it is dropped, no list.
         var map = _session.QueryActor().Map.RuntimeMap;
         var hero = _session.QueryHeroKit().Select(item => (item.Entity, item.Kind))

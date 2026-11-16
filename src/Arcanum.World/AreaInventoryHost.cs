@@ -315,7 +315,8 @@ public sealed class AreaInventoryHost
             if (map is null || !map.TryGetEntity(key, out entity!)) return null;
         }
         if (session.QueryMapInventory(new(runtimeMap)) is not { } current) return null;
-        if (current.Ground.Any(ground => ground.Item.Entity == entity)) return new(AreaInventoryTargetKind.GroundItem, entity, map.Row(entity));
+        // ARC-SCRIPT-2386 (IV15, screen pick 0x43D9F0): a switched-off item lying on the ground (a script's toggle, a thrown one in flight) is not picked.
+        if (current.Ground.Any(ground => ground.Item.Entity == entity)) return session.QueryItemOff(new(runtimeMap), entity, dataOff: false) ? null : new(AreaInventoryTargetKind.GroundItem, entity, map.Row(entity));
         return current.Holders.FirstOrDefault(holder => holder.Entity == entity) switch
         {
             { Kind: SessionHolderKind.Npc, Dead: true } => new(AreaInventoryTargetKind.DeadNpc, entity, map.Row(entity)),
@@ -333,6 +334,9 @@ public sealed class AreaInventoryHost
         return session.QueryPcInventory().Where(item => item.Origin.RuntimeMap == runtimeMap && map.TryGetRow(item.Entity, out _))
             .Select(item => map.Row(item.Entity).Key)
             .Concat(map.Seed.Items.Where(item => session.IsItemDestroyed(item.Entity) && map.TryGetRow(item.Entity, out _)).Select(item => map.Row(item.Entity).Key))
+            // ARC-SCRIPT-2386 (IV15, hide mask 3): the seed's items lying on the ground that are switched off (a script's toggle, one thrown and in flight) are not drawn at their T0 cell either.
+            .Concat((session.QueryMapInventory(new(runtimeMap))?.Ground ?? []).Where(ground => session.QueryItemOff(new(runtimeMap), ground.Item.Entity, dataOff: false)
+                && map.TryGetRow(ground.Item.Entity, out _)).Select(ground => map.Row(ground.Item.Entity).Key))
             .ToHashSet();
     }
 
