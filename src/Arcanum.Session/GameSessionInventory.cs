@@ -434,8 +434,9 @@ public static class SessionItemScripts
     /// (18 to 20), the looped-object and container vicinity focus kinds (10, 17, 18), the name condition (20) and change art number (59), which the display-case scripts of the temple
     /// items use, answered by <see cref="ISessionItemWorldHost"/>; ARC-SCRIPT-2336 (ledger FK8) adds the follower focus kinds every follower and any follower (2, 3: the triggerer's direct followers, answered by
     /// the same world part); ARC-SCRIPT-2346 (ledger IV9–IV11) adds toggle state (56), which flips the off flag of an item of the move (the attachee in the installed scripts).; ARC-SCRIPT-2347 (IV13–IV16) adds assign object (15, with the run's object variables as the focus kind 11), get object type (34), the quest state condition (6) and obj is dead (22), which the same part answers
-    /// (as the use host reads them), and monster generator disabled (46), which the session answers from its generator table (IV13–IV15); ARC-SCRIPT-2376 (IV18) adds the scenery and critter vicinity kinds (15, 16, 8, 9: loop for and the like, the
-    /// scan around the attachee item's location, answered by the same part) with call script in (54), already kept, into a dialog script. A script outside it refuses the move.
+    /// (as the use host reads them), and monster generator disabled (46), which the session answers from its generator table (IV13–IV15); ARC-SCRIPT-2374 (IV18–IV21) adds set PC quest state (16) and give quest experience (63), which the session applies in the move's own revision
+    /// (a request for a PC only; at most one experience award, none that raises a level); ARC-SCRIPT-2376 (IV22) adds the scenery and critter vicinity kinds (15, 16, 8, 9: loop for and the like, the scan around the attachee item's location, answered by the same part)
+    /// with call script in (54), already kept, into a dialog script. A script outside it refuses the move.
     /// </summary>
     public static ScrAdmissionSet Admission { get; } = new("S14-item",
         ScrAdmissionSet.S6.Conditions.Concat([ScrCatalogue.Condition.Identified, ScrCatalogue.Condition.ItemsBeingRewielded, ScrCatalogue.Condition.IsNamed,
@@ -445,7 +446,7 @@ public static class SessionItemScripts
             .Concat([ScrCatalogue.Action.AddEffect, ScrCatalogue.Action.RemoveEffect, ScrCatalogue.Action.CallScriptEx,
                 ScrCatalogue.Action.MagickTechAdjustment, ScrCatalogue.Action.PlayScriptEyeCandy, ScrCatalogue.Action.PlaySound, ScrCatalogue.Action.GetStat,
                 ScrCatalogue.Action.LoopFor, ScrCatalogue.Action.LoopEnd, ScrCatalogue.Action.LoopBreak, ScrCatalogue.Action.ChangeArtNumber, ScrCatalogue.Action.ToggleState,
-                ScrCatalogue.Action.AssignObject, ScrCatalogue.Action.GetObjectType]),
+                ScrCatalogue.Action.AssignObject, ScrCatalogue.Action.GetObjectType, ScrCatalogue.Action.SetPcQuestState, ScrCatalogue.Action.GiveQuestExperience]),
         ScrAdmissionSet.S6.ValueKinds.Concat(ScrAdmissionSet.StoreValueKinds),
         ScrAdmissionSet.S6.FocusKinds.Concat([ScrFocusKind.CurrentLoopedObject, ScrFocusKind.EveryContainerInVicinity, ScrFocusKind.AnyContainerInVicinity,
             ScrFocusKind.LocalObject, ScrFocusKind.EveryFollower, ScrFocusKind.AnyFollower,
