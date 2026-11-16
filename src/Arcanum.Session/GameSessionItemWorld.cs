@@ -15,6 +15,12 @@ public interface ISessionItemWorldHost
     /// </summary>
     IReadOnlyList<ScrObjectRef>? ContainersInVicinity(ScrObjectRef item);
 
+    /// <summary>
+    /// ARC-SCRIPT-2336 (FK8): the direct followers of <paramref name="leader"/>, the triggerer of the run (the focus kinds every follower and any follower, 0x44B4E0 over 0x4411C0): the hero's party followers for the hero, an NPC leader's session followers
+    /// for an NPC the host knows, none for any other object. Null when the host cannot answer (no shown map): the session then refuses the move.
+    /// </summary>
+    IReadOnlyList<ScrObjectRef>? FollowersOf(ScrObjectRef leader);
+
     /// <summary>An object's name number (condition 20), or null for an object the host does not know.</summary>
     int? NameOf(ScrObjectRef obj);
 

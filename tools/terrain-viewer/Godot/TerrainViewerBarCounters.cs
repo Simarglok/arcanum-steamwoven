@@ -16,7 +16,7 @@ namespace Arcanum.TerrainViewer;
 public partial class TerrainViewerApp
 {
     private AreaBarCounterView? _barCountersView;
-    private ((GameSessionOwner, long, string?, bool, object?, object?) Stamp, AreaBarCounterLook Look)? _barCountersShown;
+    private ((GameSessionOwner, long, string?, bool, object?, object?, object?) Stamp, AreaBarCounterLook Look)? _barCountersShown;
 
     internal AreaBarCounterView? BarCountersForSelfTest => _barCountersView is { Visible: true } ? _barCountersView : null;
 
@@ -37,14 +37,15 @@ public partial class TerrainViewerApp
             return;
         }
         AdoptBarterData();
+        var font = TextFonts()?.Bar;
         var mode8 = _weaponBarShown is { Open: true } && _itemPaneItem is not null;
-        var stamp = (session, session.Version.Revision, mode8 ? _itemPaneItem : null, mode8, (object?)_hotkeyBarArt, (object?)_barterData?.Data);
+        var stamp = (session, session.Version.Revision, mode8 ? _itemPaneItem : null, mode8, (object?)_hotkeyBarArt, (object?)_barterData?.Data, (object?)font);
         if (_barCountersShown is { } known && known.Stamp.Equals(stamp))
         {
             if (!_barCountersView.Visible) _barCountersView.Visible = true;
             return;
         }
-        var look = BarCountersLook(session, mode8 ? _itemPaneItem : null);
+        var look = BarCountersLook(session, mode8 ? _itemPaneItem : null) with { Font = font };
         _barCountersShown = (stamp, look);
         _barCountersView.Bind(look);
         _barCountersView.Visible = true;

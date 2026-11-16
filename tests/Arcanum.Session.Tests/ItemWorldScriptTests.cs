@@ -14,8 +14,8 @@ namespace Arcanum.Session.Tests;
 [TestClass]
 public sealed class ItemWorldScriptTests
 {
-    private const byte Triggerer = 0, LocalVariable = 2, Number = 3, Looped = 10, LocalObject = 11, EveryContainer = 17, AnyContainer = 18;
-    private const int Every = 810, Any = 811, Twice = 812, Quest = 813, Typed = 814, Assigned = 815, DeadGated = 816, GeneratorGated = 817, GeneratorSlot = 7, CaseName = 1205, NewArt = 4, BaselineArt = 100, QuestNumber = 1005, ContainerType = 2;
+    private const byte Triggerer = 0, LocalVariable = 2, Number = 3, Looped = 10, LocalObject = 11, EveryContainer = 17, AnyContainer = 18, EveryFollower = 2, AnyFollower = 3;
+    private const int Every = 810, Any = 811, Twice = 812, EveryFollowerScript = 813, AnyFollowerScript = 814, Quest = 820, Typed = 821, Assigned = 822, DeadGated = 823, GeneratorGated = 824, GeneratorSlot = 7, CaseName = 1205, NewArt = 4, BaselineArt = 100, QuestNumber = 1005, ContainerType = 2;
     private static readonly SessionInsertCheck Accept = _ => SessionInsertVerdict.Accepted;
 
     private sealed record Clause(int Type, (byte Kind, int Value)[] Operands);
@@ -70,7 +70,8 @@ public sealed class ItemWorldScriptTests
     {
         public Dictionary<int, ScrProgram> Programs { get; } = new() { [Every] = Loop(EveryContainer, Looped), [Any] = Loop(EveryContainer, AnyContainer), [Twice] = Loop(EveryContainer, Looped, 2),
             [Quest] = QuestGated(2), [Typed] = TypeGated(ContainerType), [Assigned] = AssignGated(),
-            [DeadGated] = Gated(C(ScrCatalogue.Condition.IsDead, (Looped, 0))), [GeneratorGated] = Gated(C(ScrCatalogue.Condition.MonsterGenDisabled, N(GeneratorSlot))) };
+            [DeadGated] = Gated(C(ScrCatalogue.Condition.IsDead, (Looped, 0))), [GeneratorGated] = Gated(C(ScrCatalogue.Condition.MonsterGenDisabled, N(GeneratorSlot))),
+            [EveryFollowerScript] = Loop(EveryFollower, Looped), [AnyFollowerScript] = Loop(EveryFollower, AnyFollower) };
         public Dictionary<string, int> Names { get; set; } = new() { ["case"] = CaseName, ["other"] = 3000 };
         public string[]? Vicinity { get; set; } = ["case", "other"];
         public bool? DeadCase { get; set; } = true;
@@ -81,6 +82,8 @@ public sealed class ItemWorldScriptTests
         public bool PlanBaseline { get; set; }
         public SessionOpenableBaseline? Openable { get; set; }
         public List<ScrObjectRef> Centres { get; } = [];
+        public string[]? Followers { get; set; } = ["case", "other"];
+        public List<ScrObjectRef> Leaders { get; } = [];
 
         public ScrSlot? Slot(ScrObjectRef attachee, int point) => attachee.Code == "tome" && point == SessionScriptPoint.InsertItem ? new ScrSlot(script, 0, 0) : null;
         public ScrScriptLookup Script(int number) => Programs.TryGetValue(number, out var program) ? ScrScriptLookup.Of(program) : ScrScriptLookup.Missing;
@@ -101,6 +104,12 @@ public sealed class ItemWorldScriptTests
         {
             Centres.Add(item);
             return Vicinity?.Select(code => new ScrObjectRef(item.Map, code)).ToArray();
+        }
+
+        public IReadOnlyList<ScrObjectRef>? FollowersOf(ScrObjectRef leader)
+        {
+            Leaders.Add(leader);
+            return Followers?.Select(code => new ScrObjectRef(leader.Map, code)).ToArray();
         }
 
         public int? NameOf(ScrObjectRef obj) => Names.TryGetValue(obj.Code, out var name) ? name : null;
@@ -154,6 +163,34 @@ public sealed class ItemWorldScriptTests
         Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, "tome", Accept, new Host(Any)).Disposition);
         // The list condition (kind 18, "any") is true because "case" is named, so every looped container changes, "other" too.
         Assert.AreEqual((NewArt, NewArt), ((int?)Art(owner, "case"), (int?)Art(owner, "other")));
+    }
+
+    // ARC-SCRIPT-2336 (FK8): the follower focus kinds 2 and 3 of a point 21 script list the triggerer's direct followers, asked of the host's world part.
+    [TestMethod]
+    public void Every_follower_loop_changes_the_art_of_the_named_follower_of_the_triggerer()
+    {
+        using var owner = Owner();
+        var host = new Host(EveryFollowerScript);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, "tome", Accept, host).Disposition);
+        Assert.AreEqual(new ScrObjectRef(Exterior.RuntimeMap, SessionEventKinds.PlayerEntity), host.Leaders.Single(), "the followers are the triggerer's, the hero's for a pickup");
+        Assert.AreEqual(NewArt, (int?)Art(owner, "case"));
+        Assert.IsNull(Art(owner, "other"), "a follower with another name keeps its art");
+    }
+
+    [TestMethod]
+    public void An_any_follower_condition_is_true_when_one_follower_passes()
+    {
+        using var owner = Owner();
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, "tome", Accept, new Host(AnyFollowerScript)).Disposition);
+        Assert.AreEqual((NewArt, NewArt), ((int?)Art(owner, "case"), (int?)Art(owner, "other")), "kind 3 is true because \"case\" is named, so every looped follower changes");
+    }
+
+    [TestMethod]
+    public void A_triggerer_without_followers_leaves_the_loop_empty()
+    {
+        using var owner = Owner();
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, "tome", Accept, new Host(EveryFollowerScript) { Followers = [] }).Disposition);
+        Assert.IsNull(Art(owner, "case"));
     }
 
     [TestMethod]
@@ -225,7 +262,7 @@ public sealed class ItemWorldScriptTests
     [TestMethod]
     public void A_move_the_host_cannot_answer_is_refused_and_changes_nothing()
     {
-        foreach (var host in new Host[] { new(Every) { Vicinity = null }, new(Every) { Plans = false }, new(Every) { Names = [] }, new(Twice) })
+        foreach (var host in new Host[] { new(Every) { Vicinity = null }, new(EveryFollowerScript) { Followers = null }, new(Every) { Plans = false }, new(Every) { Names = [] }, new(Twice) })
         {
             using var owner = Owner();
             var before = owner.Version;
@@ -263,11 +300,12 @@ public sealed class ItemWorldScriptTests
             Assert.IsFalse(set.Actions.Contains(action), $"action {action}");
         foreach (var condition in new[] { ScrCatalogue.Condition.HasItemNamed, ScrCatalogue.Condition.WithinRange })
             Assert.IsFalse(set.Conditions.Contains(condition), $"condition {condition}");
-        foreach (var kind in new[] { ScrFocusKind.EverySceneryInVicinity, ScrFocusKind.AnySceneryInVicinity, ScrFocusKind.EveryoneInVicinity, ScrFocusKind.AnyoneInVicinity })
+        // The adapter answers IScrGroupQueries for the follower kinds only (ARC-SCRIPT-2336): the group kinds 13 and 14 (followers plus the triggerer) stay out until a slice reads them for the item host.
+        foreach (var kind in new[] { ScrFocusKind.EverySceneryInVicinity, ScrFocusKind.AnySceneryInVicinity, ScrFocusKind.EveryoneInVicinity, ScrFocusKind.AnyoneInVicinity, ScrFocusKind.EveryoneInGroup, ScrFocusKind.AnyoneInGroup })
             Assert.IsFalse(set.FocusKinds.Contains(kind), $"focus {kind}");
         // ARC-SCRIPT-2347 (IV9): the quest state condition, assign object and get object type are answered by the host's world part now.
         Assert.IsTrue(set.Conditions.Contains(ScrCatalogue.Condition.PcQuestState) && set.Actions.Contains(ScrCatalogue.Action.AssignObject) && set.Actions.Contains(ScrCatalogue.Action.GetObjectType));
-        Assert.IsTrue(set.IsSubsetOf(ScrAdmissionSet.S62));
+        Assert.IsTrue(set.IsSubsetOf(ScrAdmissionSet.S65));
     }
 
     // The same host with the world part hidden: the question is not answerable.

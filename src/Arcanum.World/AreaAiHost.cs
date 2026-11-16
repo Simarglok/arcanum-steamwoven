@@ -1226,7 +1226,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     /// (the hero's followers that follow it, or an NPC leader's followers this host runs), each through the follower rule (never ordered,
     /// never accidental here: the host's attacks are deliberate). A lock or focus and a complaint's −5 toward the hero go through the
     /// session (<see cref="GameSessionOwner.ApplyFollowerRule"/>; the −5 is written only toward a player character, so an NPC leader's follower complains in words alone); the reaction to an attack by the other (case 5) is
-    /// <see cref="MoraleRules.ReactToAttack"/> through the setter, as a victim's. The complaint's upset line is said through <see cref="FollowerSpeaks"/> (ARC-AI-1527).
+    /// <see cref="MoraleRules.ReactToAttack"/> through the setter, as a victim's. The complaint's upset line is said through <see cref="FollowerSpeaks"/> under the hero (ARC-AI-1527) and through <see cref="AiBarks"/> with the NPC leader as listener (ARC-DEV-2367).
     /// </summary>
     private void TellFollowers(string leader, string other, FollowerSide side)
     {
@@ -1247,7 +1247,12 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
                     break;
                 case FollowerRuleStep.Lock or FollowerRuleStep.Focus or FollowerRuleStep.Complain:
                     // ARC-AI-1527 (0x414370): the complaint's upset line is the follower's, said whether or not the reaction step below can run.
-                    if (outcome.Line is { } upset) Speak(follower, upset);
+                    // ARC-DEV-2367 (NLD7, 0x414370 → 0x418780): the float takes the follower's LEADER as listener, of any type: the hero's through the PC-listener path, an NPC leader's through the bark path (its gender pair, name and turn).
+                    if (outcome.Line is { } upset)
+                    {
+                        if (leader == Pc) Speak(follower, upset);
+                        else Bark(follower, upset, leader);
+                    }
                     var facts = ReactionFacts(follower);
                     if (outcome.Step == FollowerRuleStep.Complain && leader == Pc && facts is null) break;
                     var result = _session.ApplyFollowerRule(_session.Version, new SessionFollowerRuleRequest
