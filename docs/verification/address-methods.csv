@@ -508,6 +508,7 @@ src/Arcanum.World/AreaAiHost.cs,LineOfFire,pending,
 src/Arcanum.World/AreaAiHost.cs,LineOfFireBlocker,pending,
 src/Arcanum.World/AreaAiHost.cs,LineOfFireStruck,pending,
 src/Arcanum.World/AreaAiHost.cs,List,pending,
+src/Arcanum.World/AreaAiHost.cs,ManaStoreEmptied,exempt,host
 src/Arcanum.World/AreaAiHost.cs,MoveToLeader,pending,
 src/Arcanum.World/AreaAiHost.cs,NeedsAmmunition,exempt,host
 src/Arcanum.World/AreaAiHost.cs,NoticeKill,exempt,host

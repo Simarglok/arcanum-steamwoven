@@ -118,6 +118,25 @@ public sealed partial class SessionSpellCasterTests
         Assert.AreEqual(0, owner.QueryManaRecharges().Count);
     }
 
+    // ARC-AI-2402 (BC10, SP11): the payment calls 0x4CCC40 (0x45062B) for the caster and the worn item whose store it leaves at 0: a store above the cost
+    // (stays above 0) and a store already 0 (skipped) tell nothing; a store equal to the cost, one smaller and a negative one do.
+    [TestMethod]
+    [DataRow(100, 7, false, "a store above the cost keeps a rest: no call")]
+    [DataRow(0, 7, false, "a store already 0 is skipped: no call")]
+    [DataRow(7, 7, true, "a store equal to the cost becomes 0: the call")]
+    [DataRow(3, 7, true, "a smaller store is written as 0: the call")]
+    [DataRow(-3, 7, true, "a negative store is written as 0: the call")]
+    public void The_payment_tells_the_ai_only_of_a_store_it_leaves_at_0(int store, int cost, bool called, string why)
+    {
+        var record = SelfBolt(cost: cost);
+        var (owner, caster) = StoreSession(record, store);
+        using var _ = owner;
+        var told = new List<(string Payer, string Item)>();
+        caster.ManaStoreEmptied = (payer, item) => told.Add((payer, item));
+        Cast(owner, caster, record);
+        CollectionAssert.AreEqual(called ? new[] { (SessionSpellCaster.Hero, StoreStaff) } : Array.Empty<(string, string)>(), told, why);
+    }
+
     private static bool GameTimeResult(GameSessionOwner owner) =>
         owner.AdvanceGameTime(owner.QueryClockSnapshot().Token, 480_000, Arcanum.Simulation.Clock.ClockAdvanceReason.OrdinaryAdvance).Disposition == Arcanum.Simulation.Clock.ClockMutationDisposition.Changed;
 }
