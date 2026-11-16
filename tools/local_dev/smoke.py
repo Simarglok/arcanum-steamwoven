@@ -255,7 +255,7 @@ STAGE_NEEDS: dict[str, StageNeeds] = {
     "placement-census": _needs(),  # passes after the other AI stages (ARC-DEV-1187: baseline loads at the stage boundaries, a companion is no NPC row)
     "inv-carry": _needs(debug=True, own=True),  # a dead body with an item; NONE at the Crash Site was seen
     "spell-end": _needs(), "hold-hero": _needs(), "spell-effects": _needs(), "movement": _needs(), "spirit-talk": _needs(), "healer-talk": _needs(), "sleep": _needs(sector=WILD, own=True),  # moves the clock by days; the wilderness sector has no town map (the sleep window, not the wait window)
-    "bed-blow": _needs(map=CAVE, only_map=True, own=True),  # ARC-COMBAT-2167: a cave NPC seated in a bed, the hero's blow on it
+    "bed-blow": _needs(map=CAVE, only_map=True, own=True),  # ARC-COMBAT-2167: a cave NPC seated in a bed, the hero's blow on it; moves the clock
     "bed": _needs(map=CAVE, only_map=True, own=True),  # the cave's one scripted bed: the sleep window through it, kind-2 heal; moves the clock
     "created-scenery": _needs(portable=True), "object-art": _needs(portable=True), "created-critter": _needs(portable=True),
     "script-critters": _needs(**_MAIN_ONLY), "script-eye-candy": _needs(**_MAIN_ONLY), "weapon-hit": _needs(**_MAIN_ONLY), "encounters": _needs(sector=WILD, own=True),  # moves the clock by days and ends with the hero landed elsewhere; the wilderness sector has no named area or town map

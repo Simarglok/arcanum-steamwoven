@@ -11,7 +11,7 @@ namespace Arcanum.TerrainViewer;
 public partial class TerrainViewerApp
 {
     // ARC-COMBAT-2167 (stage "bed-blow", only when named, with --hero, on the Crash Site cave): the viewer glue of the hero's blow on an occupied bed (ARC-COMBAT-1942, 0x4B3170 SC16). A living cave NPC is seated in one of the cave's
-    // beds the way the AI host seats a sleeper (the occupancy's seat, the sleeping flags 0x1000 and 0x100), the hero stands next to the bed in combat mode and Alt-clicks it. The first blow takes the sleeper out of the bed
+    // beds with the occupancy's seat and the sleeping flags 0x1000 and 0x100 (what the host's standpoint seat writes; its bed record and latch are not), the hero stands next to the bed in combat mode and Alt-clicks it. The first blow takes the sleeper out of the bed
     // (the bed's occupied frame goes) and strikes the sleeper through the combat path with the check's invocation modifier -30 (no backstab); the next blows strike the empty bed as a scenery, whose damage changes. NONE
     // without a bed the hero can reach and see under the pointer, or without a living NPC with combat values. Numbers only; no original content in the output.
     private async Task RunAreaBedBlowSmokeAsync()
@@ -31,8 +31,8 @@ public partial class TerrainViewerApp
         var pickable = HoverIndex()?.Bodies.Select(body => body.Identity).ToHashSet() ?? [];
         var beds = transfers.Beds.Select(key => transfers.Object(key))
             .Where(row => row.Scope == AreaScope.Core && row.WorldX is not null && row.WorldY is not null && commands.ContainsKey(row.Key) && pickable.Contains(row.Key) && _canvas?.AreaRoofCovers(row.Key) != true
-                && targets.Target(session, row.Key) is { Refusal: null, Object: not null })
-            .OrderBy(row => targets.Target(session, row.Key)!.Object!.Baseline.Invulnerable).ToArray();
+                && targets.Target(session, row.Key, AreaTrapped) is { Refusal: null, Object: { } o } && !o.Baseline.Busted && !o.Baseline.JunkPile && session.QueryObject(o).HitPoints > 0)
+            .OrderBy(row => targets.Target(session, row.Key, AreaTrapped)!.Object!.Baseline.Invulnerable).ToArray();
         // The NPC with the most hit points that is no companion: one blow must leave it standing.
         var sleepers = session.QueryMapInventory(new(runtimeMap))?.Holders
             .Where(h => h.Kind == SessionHolderKind.Npc && !h.Dead && session.QueryCompanion(h.Entity).Standing == CompanionStanding.Free)
@@ -55,7 +55,7 @@ public partial class TerrainViewerApp
         {
             _worldFocused = true; SelectSimulatedPadForSelfTest();
             CalmNpcsForSmoke(session, [npc]);
-            session.Heal(session.Version, SessionLifeTarget.Hero, new LifeHeal { Fatigue = 1000 });
+            session.Heal(session.Version, SessionLifeTarget.Hero, new LifeHeal { Full = true, Fatigue = 1000 });
             session.Heal(session.Version, sleeper.Build.Combat!.Target, new LifeHeal { Full = true, Fatigue = 1000, Resurrect = true });
             if (!HeroInCombatMode) ToggleCombatMode();
             Require(HeroInCombatMode, "the hero is in combat mode");
@@ -80,13 +80,14 @@ public partial class TerrainViewerApp
                 break;
             }
             if (chosen is null) { GD.Print($"ARC-COMBAT-2167 native-smoke bed-blow NONE map={_readyMapName} (every bed skipped: {string.Join("; ", skipped)})"); return; }
-            var target = targets.Target(session, chosen.Key)!;
+            var target = targets.Target(session, chosen.Key, AreaTrapped)!;
             var bedKey = chosen.Key;
 
             // The AI host reconciles the occupancy with the NPCs' sleeping state on its first bed question (an empty bed answers nobody), so the seat comes after it.
             var host = AreaAiHostNow();
             Require(host is not null, "the AI host is built");
-            Require(host!.HeroBlowOccupant(target.Entity) is null, "an empty bed gives no occupant");
+            Require(host!.Tile(npc) is not null, "the AI host runs the sleeper");
+            Require(host.HeroBlowOccupant(target.Entity) is null, "an empty bed gives no occupant");
             Require(occupancy.Seat(bedKey, npc), "the sleeper takes the bed");
             seatedBed = bedKey;
             Require(session.WriteObjectFlag(session.Version, npc, SessionObjectFlagField.Critter, 0x1000, true, false).Failure == GameSessionFailure.None
@@ -122,6 +123,9 @@ public partial class TerrainViewerApp
             var invocation = firstBlow!.Resolution?.Difficulty?.Invocation;
             Require(invocation == -30, $"the check carries the bed modifier -30 (SC16): {invocation} {firstBlow.Resolution?.Outcome}");
             var hit = firstBlow.Resolution?.Outcome is AttackOutcome.Hit or AttackOutcome.CriticalHit;
+            // The struck sleeper fights back from here on (the host is on): calm again, and the hero healed, so the second blow is not cut short by the fight.
+            CalmNpcsForSmoke(session, [npc]);
+            session.Heal(session.Version, SessionLifeTarget.Hero, new LifeHeal { Full = true, Fatigue = 1000 });
             var hpAfter = session.QueryLife(sleeper.Build.Combat!.Target).View!.Record.State.HitPointDamage;
             Require(!hit || hpAfter > hpBefore || firstBlow.Resolution?.Damage?.Prevented > 0, $"a hit hurt the sleeper: {hpBefore} -> {hpAfter}");
             Require(session.QueryObject(target.Object!).Damage == bedBefore.Damage, "the bed itself took nothing from the first blow");
@@ -132,12 +136,13 @@ public partial class TerrainViewerApp
             var bedAfter = session.QueryObject(target.Object!);
             Require(goal.Attacks >= 2, $"a second blow landed (attacks {goal.Attacks}, notice {_attackNotice})");
             Require(ReferenceEquals(_lastCritterAttackForSelfTest, firstBlow), "the second blow struck no critter: the bed was empty");
+            Require(!goal.Stop && !string.IsNullOrEmpty(_attackNotice), $"the second blow went through the object path (notice '{_attackNotice}')");
             var invulnerable = target.Object!.Baseline.Invulnerable;
             Require(invulnerable || bedAfter.Damage > bedBefore.Damage || bedAfter.Condition != bedBefore.Condition, $"the next blow struck the empty bed (attacks {goal.Attacks}, notice {_attackNotice})");
             CancelAreaAttack(null);
             GD.Print("ARC-COMBAT-2167 native-smoke bed-blow PASS " + System.Text.Json.JsonSerializer.Serialize(new
             {
-                Map = _readyMapName, Bed = target.Entity, Invocation = invocation, Outcome = firstBlow.Resolution?.Outcome.ToString(), SleeperHp = new[] { hpBefore, hpAfter },
+                Map = _readyMapName, Bed = target.Entity, Invocation = invocation, Outcome = firstBlow.Resolution?.Outcome.ToString(), Hit = hit, SleeperHp = new[] { hpBefore, hpAfter },
                 BedDamage = new[] { bedBefore.Damage, bedAfter.Damage }, BedInvulnerable = invulnerable, Attacks = goal.Attacks, Frames = frames, Skipped = skipped.Count,
             }));
         }
