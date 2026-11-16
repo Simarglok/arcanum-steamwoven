@@ -56,4 +56,41 @@ public sealed class BarCountersTests
         Assert.AreEqual("??????", BarCounterRules.Text(-9, 6));
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => BarCounterRules.Text(1, 0));
     }
+
+    [TestMethod]
+    public void The_ammunition_icon_of_a_type_past_the_table_is_not_drawn()
+    {
+        Assert.AreEqual(250, BarCounterRules.AmmoIcon(0));
+        Assert.AreEqual(253, BarCounterRules.AmmoIcon(3));
+        Assert.IsNull(BarCounterRules.AmmoIcon(4));
+        Assert.IsNull(BarCounterRules.AmmoIcon(-1));
+    }
+
+    [TestMethod]
+    public void The_number_slots_fill_black_and_write_the_bar_font_in_white_with_a_one_pixel_shadow()
+    {
+        Assert.AreEqual(((byte)0, (byte)0, (byte)0), BarNumberRules.FillColour);
+        Assert.AreEqual(((byte)255, (byte)255, (byte)255), BarNumberRules.TextColour);
+        Assert.AreEqual(((byte)10, (byte)10, (byte)10), BarNumberRules.ShadowColour);
+        Assert.AreEqual((15, 578, 29, 12), BarNumberRules.Slot(BarNumberRules.Health));
+        Assert.AreEqual((755, 578, 27, 12), BarNumberRules.Slot(BarNumberRules.Fatigue));
+        Assert.AreEqual((15, 500, 29, 12), BarNumberRules.Slot(BarNumberRules.Poison));
+        Assert.AreEqual(BarCounterRules.Counter3Rect, BarNumberRules.Slot(BarNumberRules.Counter3));
+        Assert.IsTrue(new[] { 0, 1, 3, 4 }.All(BarNumberRules.Filled));
+        Assert.IsFalse(BarNumberRules.Filled(BarNumberRules.Poison), "the poison slot gets no fill");
+        Assert.AreEqual((104, 512, 50, 21), BarNumberRules.FillRect(BarCounterRules.Counter3Rect), "one row more than the slot");
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => BarNumberRules.Slot(2));
+    }
+
+    [TestMethod]
+    public void A_text_is_centred_by_the_free_width_and_height_halved_and_a_wide_one_starts_at_the_left()
+    {
+        Assert.AreEqual((4, 3), BarNumberRules.Place(50, 20, 42, 14), "narrower: (50 - 42) / 2, (20 - 14) / 2");
+        Assert.AreEqual((3, 0), BarNumberRules.Place(50, 20, 43, 20), "free width halved toward zero");
+        Assert.AreEqual((0, 3), BarNumberRules.Place(50, 20, 50, 14), "as wide as the slot: starts at the left");
+        Assert.AreEqual((0, 3), BarNumberRules.Place(50, 20, 70, 14), "wider");
+        Assert.IsNull(BarNumberRules.Place(50, 12, 70, 14), "a wide text taller than the slot is not drawn");
+        Assert.AreEqual((2, 0), BarNumberRules.Place(29, 12, 25, 13), "a narrower one is drawn even when taller; (12 - 13) / 2 truncates toward zero");
+        Assert.AreEqual((2, -1), BarNumberRules.Place(29, 12, 25, 15), "(12 - 15) / 2 truncates toward zero to -1");
+    }
 }
