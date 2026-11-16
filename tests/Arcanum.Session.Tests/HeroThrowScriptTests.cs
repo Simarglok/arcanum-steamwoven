@@ -2,6 +2,7 @@ using Arcanum.Data.Characters;
 using Arcanum.Data.Scripts;
 using Arcanum.Scripting.Dialog;
 using Arcanum.Scripting.Scr;
+using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Equipment;
 using Arcanum.Simulation.Movement;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -264,6 +265,23 @@ public sealed class HeroThrowScriptTests
         Assert.AreEqual(true, ReadFlag(owner, 7), "its change stays");
         Assert.IsFalse(Holds(owner, "kit:2"));
         Assert.AreEqual("kit:2", owner.QueryPlacedItems().Single().Entity);
+    }
+
+    // ARC-COMBAT-2392 (TW8): a critter that is dead at the press (the preflight lets it through) is still thrown at, after the scripts ran once, with the normal roll against the corpse and no damage.
+    [TestMethod]
+    public void AStruckCorpseIsThrownAtAfterTheScriptsRanOnce()
+    {
+        using var owner = Owner();
+        var host = new Host();
+        host.Programs[ThrowScript] = Program(C(ScrCatalogue.Action.SetGlobalFlag, (Number, 7)), C(ScrCatalogue.Action.PrintLine, (Number, 1), (Number, 6)), C(ScrCatalogue.Action.ReturnRunDefault));
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.ApplyDamage(owner.Version, SessionCritterCombat.From("oid:rat", AttackStateTests.Npc(hpAdjustment: 5000)).Combat!.Target, new LifeDamage { HitPoints = 100_000 }).Disposition);
+        var result = owner.ThrowHeroItem(owner.Version, AtRat(owner, host, SessionScriptPoint.Throw));
+        Assert.AreEqual((GameSessionDisposition.Changed, GameSessionFailure.None), (result.Disposition, result.Failure), result.Failure.ToString());
+        Assert.AreEqual((AttackRefusal.None, true), (result.Attack!.Resolution!.Refusal, result.Attack.Resolution.Damage is null), "the roll is against the corpse, which takes no damage");
+        Assert.AreEqual(1, result.Shots.Count);
+        Assert.AreEqual(1, result.Scripts.Count(run => run.Point == SessionScriptPoint.Throw), "the script ran once");
+        Assert.AreEqual(true, ReadFlag(owner, 7));
+        Assert.IsFalse(Holds(owner, "kit:2"));
     }
 
     [TestMethod]

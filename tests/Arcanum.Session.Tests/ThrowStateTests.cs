@@ -154,6 +154,19 @@ public sealed class ThrowStateTests
     }
 
     [TestMethod]
+    public void AHitOnACritterThatDiedInFlightDoesNoDamage()
+    {
+        // ARC-COMBAT-2392 (TW8): the landing's outcome step returns before the critter's hit points when it is dead by then; the hit stands, the shot is spent.
+        using var owner = Owner();
+        var rat = Rat();
+        var shot = ThrowUntil(owner, rat, hit: true);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.ApplyDamage(owner.Version, rat.Target, new LifeDamage { HitPoints = 100_000 }).Disposition);
+        var landed = owner.LandShot(owner.Version, shot.Shot!.Value, new(rat));
+        Assert.AreEqual((AttackRefusal.None, AttackOutcome.Hit, true), (landed.Resolution!.Refusal, landed.Resolution.Outcome is AttackOutcome.Hit or AttackOutcome.CriticalHit ? AttackOutcome.Hit : landed.Resolution.Outcome, landed.Resolution.Damage is null));
+        Assert.IsNull(landed.Life, "no damage to a corpse");
+    }
+
+    [TestMethod]
     public void AHitStrikesThenTheItemLandsOnTheStruckCellAndCanBePickedUp()
     {
         using var owner = Owner();
@@ -237,11 +250,11 @@ public sealed class ThrowStateTests
     {
         using var owner = Owner();
         var rat = Rat();
-        // The resolver refuses an attack on a dead target before any throw.
+        // ARC-COMBAT-2392 (TW8): the original's throw flies at a corpse too (a hit or miss roll, no damage).
         Assert.AreEqual(GameSessionDisposition.Changed, owner.ApplyDamage(owner.Version, rat.Target, new LifeDamage { HitPoints = 100_000 }).Disposition);
         var corpse = owner.AttackCritter(owner.Version, new(rat) { Distance = 3, Flight = true, Throw = Dagger });
-        Assert.AreEqual((GameSessionDisposition.NoChange, AttackRefusal.TargetDead, (SessionShot?)null), (corpse.Disposition, corpse.Resolution!.Refusal, corpse.Shot));
-        Assert.IsTrue(Wields(owner), "a refused attack throws nothing");
+        Assert.AreEqual((GameSessionDisposition.Changed, AttackRefusal.None, true, true), (corpse.Disposition, corpse.Resolution!.Refusal, corpse.Shot is not null, corpse.Resolution.Damage is null));
+        Assert.IsFalse(Wields(owner), "the dagger is thrown");
 
         using var archer = GameSessionOwner.Create(Descriptor() with { Hero = HalfElf() }).Owner!;
         var bow = new EquipmentItem

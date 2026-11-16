@@ -21,9 +21,9 @@ public sealed record SkillEffectivenessFacts
     public GameDifficulty Difficulty { get; init; }
 }
 
-/// <summary>The target critter's state an aware or unaware target gives (the source's awareness term).</summary>
+/// <summary>The target critter's state an aware or unaware target gives (the source's awareness term). ARC-COMBAT-2392: <see cref="Dead"/> is a corpse a thrown item still rolls against (0x4C8430: −50 like an unconscious target).</summary>
 [Flags]
-public enum SkillTargetConditions { None = 0, Paralyzed = 1, Unconscious = 2, FallingDown = 4, Stunned = 8, Sleeping = 16 }
+public enum SkillTargetConditions { None = 0, Paralyzed = 1, Unconscious = 2, FallingDown = 4, Stunned = 8, Sleeping = 16, Dead = 32 }
 
 /// <summary>The source critter's injuries the difficulty reads.</summary>
 [Flags]
