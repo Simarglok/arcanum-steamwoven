@@ -114,6 +114,8 @@ public sealed class AreaObjectTargets
         if (_objects.TryGetValue(key, out var found))
         {
             if (session.QueryObjectCondition(_map, found.Entity, found.Kind) is SessionObjectCondition.Destroyed or SessionObjectCondition.Off) return null;
+            // ARC-SCRIPT-2386 (IV13, screen pick 0x43D9F0): a switched-off item (a script's toggle) is not a target.
+            if (found.Kind == DamageableObjectKind.Item && session.QueryItemOff(_map, found.Entity, dataOff: false)) return null;
             var read = CombatFieldReader.ReadBreakable(found.Row);
             if (read.Fields is not { } fields) return new(found.Entity, found.Row, found.Kind, null, null, null, $"{read.Failure} {read.Detail}");
             var cell = new CellCoord(checked((int)found.Row.WorldX!.Value), checked((int)found.Row.WorldY!.Value));
@@ -148,7 +150,7 @@ public sealed class AreaObjectTargets
         var version = session.Version;
         if (_gone is { } known && known.Version == version) return known.Keys;
         var keys = _objects.Where(pair => session.QueryObjectCondition(_map, pair.Value.Entity, pair.Value.Kind) is SessionObjectCondition.Destroyed
-            or SessionObjectCondition.Off).Select(pair => pair.Key)
+            or SessionObjectCondition.Off || pair.Value.Kind == DamageableObjectKind.Item && session.QueryItemOff(_map, pair.Value.Entity, dataOff: false)).Select(pair => pair.Key)
             .Concat(_npcs.Where(pair => AreaUseScriptHost.NpcOff(session, _map.RuntimeMap, pair.Value.Entity, pair.Value.Flags)
                 || AreaUseScriptHost.Destroyed(session, _map.RuntimeMap, pair.Value.Entity)).Select(pair => pair.Key)).ToHashSet();
         // An unchanged set keeps its reference, so overlays cached on it stay valid across unrelated revisions.

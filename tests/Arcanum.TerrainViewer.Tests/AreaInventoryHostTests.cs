@@ -88,6 +88,20 @@ public sealed class AreaInventoryHostTests
 
     private static (AreaInventoryTargetKind, string)? Pair(AreaInventoryTarget? target) => target is null ? null : (target.Kind, target.Entity);
 
+    // ARC-SCRIPT-2386 (IV13, 0x576520): a switched-off item worn by a body is not on its doll either (the slot shows empty); the flag going brings it back.
+    [TestMethod]
+    public void ASwitchedOffWornItemOfABodyIsNotOnItsDoll()
+    {
+        using var session = ConversationSessionFixture.Create();
+        var host = new AreaInventoryHost([Map(knifeLocation: 1004)]);
+        host.Attach(session);
+        Assert.AreEqual(1, host.View(session, Catalog, 1, Entity(3)).BodyDoll.Count(slot => slot.Entity is not null));
+        Assert.AreEqual(GameSessionDisposition.Changed, session.ApplyChanges(session.Version, null, [new(new SessionMapId(1), SessionItemOff.Key(Entity(1)), 1)]).Disposition);
+        Assert.IsTrue(host.View(session, Catalog, 1, Entity(3)).BodyDoll.All(slot => slot.Entity is null));
+        Assert.AreEqual(GameSessionDisposition.Changed, session.ApplyChanges(session.Version, null, [new(new SessionMapId(1), SessionItemOff.Key(Entity(1)), null)]).Disposition);
+        Assert.AreEqual(1, host.View(session, Catalog, 1, Entity(3)).BodyDoll.Count(slot => slot.Entity is not null));
+    }
+
     [TestMethod]
     public void ABodysWornItemsAreItsDollAndItsGridLeavesThemOutAndTheLootTakesThem()
     {

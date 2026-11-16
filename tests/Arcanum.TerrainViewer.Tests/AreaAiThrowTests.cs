@@ -196,11 +196,15 @@ public sealed class AreaAiThrowTests
         Assert.AreEqual((SessionAttackResult?)null, thrown.Throw.Attack, "no attack: the dispatcher's check is not ready for a thrown generic item");
         Assert.AreEqual(draws, session.QueryRandom().Draws);
         Assert.IsTrue(session.QueryItemInFlight(grenade), "the grenade flies, hidden");
+        // ARC-SCRIPT-2386 (IV13, 0x4B3C00 sets the off flag, 0x4B2690 clears it): the flight is the flag, with no record written.
+        Assert.IsTrue(session.QueryItemOff(session.QueryActor().Map, grenade, dataOff: false), "a thrown item in flight is switched off");
+        Assert.IsNull(session.QueryObjectChange(session.QueryActor().Map, SessionItemOff.Key(grenade)));
         Assert.IsTrue(host.TraceOf(npc)!.Throw!.Contains("flies shot=", StringComparison.Ordinal), host.TraceOf(npc)!.Throw);
         // The viewer lands it where its flight ends.
         var landing = new CellCoord(13, 20);
         Assert.AreEqual(GameSessionDisposition.Changed, session.LandThrownItem(session.Version, shot, landing).Disposition);
         Assert.IsFalse(session.QueryItemInFlight(grenade));
+        Assert.IsFalse(session.QueryItemOff(session.QueryActor().Map, grenade, dataOff: false), "the landing clears it");
     }
 
     // ARC-COMBAT-1761: the scene's item script host reaches the session's throw. The dagger's throw script (point 6) prints a line and answers skip default, so nothing is thrown, the dagger stays with the NPC and the line is in the notice.

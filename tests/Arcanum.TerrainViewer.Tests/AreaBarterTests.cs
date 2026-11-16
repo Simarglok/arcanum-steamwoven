@@ -117,6 +117,25 @@ public sealed class AreaBarterTests
         Assert.AreEqual("vest", barter.View().WornWares.Single().Entity, "still worn");
     }
 
+    // ARC-SCRIPT-2386 (IV13, mode 1 of the inventory window: 0x576520 paints, 0x575FA0 hit-tests): a switched-off item is on no barter line, the hero's, the merchant's or its worn one, so it cannot be bought or sold.
+    [TestMethod]
+    public void A_switched_off_item_is_on_no_barter_line()
+    {
+        using var session = Session(masterHaggle: true);
+        var barter = Barter(session, Data(), []);
+        var map = session.QueryActor().Map;
+        var before = barter.View();
+        Assert.IsTrue(before.Hero.Count > 0 && before.Wares.Count > 0 && before.WornWares.Count == 1);
+        var items = before.Hero.Concat(before.Wares).Concat(before.WornWares).Select(line => line.Entity).ToArray();
+        var changes = items.Select(entity => new MapChangeEdit(map, SessionItemOff.Key(entity), 1)).ToArray();
+        Assert.AreEqual(GameSessionDisposition.Changed, session.ApplyChanges(session.Version, null, changes).Disposition);
+        var view = barter.View();
+        Assert.AreEqual((0, 0, 0), (view.Hero.Count, view.Wares.Count, view.WornWares.Count));
+        Assert.IsFalse(barter.Buy("vest").Moved, "an item the window does not offer is not bought");
+        Assert.AreEqual(GameSessionDisposition.Changed, session.ApplyChanges(session.Version, null, items.Select(entity => new MapChangeEdit(map, SessionItemOff.Key(entity), null)).ToArray()).Disposition);
+        Assert.AreEqual(before.Hero.Count + before.Wares.Count + before.WornWares.Count, barter.View().Hero.Count + barter.View().Wares.Count + barter.View().WornWares.Count);
+    }
+
     [TestMethod]
     public void A_master_of_haggle_buys_a_worn_item_which_leaves_the_merchants_slot_and_is_paid_for()
     {
