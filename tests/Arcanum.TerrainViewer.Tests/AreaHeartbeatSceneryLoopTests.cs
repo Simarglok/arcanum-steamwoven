@@ -272,6 +272,29 @@ public sealed class AreaHeartbeatSceneryLoopTests
         });
     }
 
+    // ARC-SCRIPT-2426 (ledger IV36-IV39, HW3): distance between on an insert-item run reads each object's location field: an item its own tile (never the holder's), a critter its tile, the hero its live cell; an object without a place (a made item, an item of
+    // another map, an unknown entity) has no answer, and the item host passes the shown map's answers on (without a shown map none).
+    [TestMethod]
+    public void Distance_between_reads_an_items_own_tile_a_critters_tile_and_the_heros_cell()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var item = AreaHeartbeatScriptTests.Row(9, 11, 0) with { WorldX = 12 };
+            var critter = Npc(0) with { WorldX = 15 };
+            var host = Host(session, content, _ => false, item, critter);
+            Assert.AreEqual((12L, 20L), host.LocationOfObject(new(1, AreaUseScriptHost.EntityId(item))), "the item's own tile");
+            Assert.AreEqual((15L, 20L), host.LocationOfObject(new(1, AreaUseScriptHost.EntityId(critter))), "the critter's row tile");
+            Assert.AreEqual((12L, 21L), host.LocationOfObject(host.Pc), "the hero's live cell");
+            Assert.IsNull(host.LocationOfObject(new(1, "made:3")), "a made item has no row and so no known tile");
+            Assert.IsNull(host.LocationOfObject(new(2, AreaUseScriptHost.EntityId(item))), "another map");
+            Assert.IsNull(host.LocationOfObject(new(1, "nothing")), "an unknown entity");
+            var items = new AreaItemScriptHost(session, [], null, null, () => host);
+            Assert.AreEqual((12L, 21L), items.LocationOf(host.Pc));
+            Assert.IsNull(new AreaItemScriptHost(session, [], null, null, () => null).LocationOf(host.Pc), "no shown map");
+        });
+    }
+
     // ARC-SCRIPT-2376 (ledger IV25, PG3, TG4): the scenery and the critters of an insert-item script's vicinity are the scans around the item's own tile as well; an item without a known tile gets no answer (the session then refuses the move).
     [TestMethod]
     public void The_scenery_and_the_critters_around_an_item_are_those_near_its_own_tile()

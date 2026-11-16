@@ -62,6 +62,12 @@ public interface ISessionItemWorldHost
 
     /// <summary>ARC-SCRIPT-2347 (IV14, HW1): the obj is dead condition (22) as the use host reads it (the hero's death, an NPC's death as the session holds it), or null for any other object and one the host reads no row for (the move is refused).</summary>
     bool? IsDead(ScrObjectRef obj);
+
+    /// <summary>
+    /// ARC-SCRIPT-2426 (IV36–IV39, HW3): an object's location field (field 2, the tile) as distance between reads it from any object type, without a null test: a critter's live tile, the hero's cell, a placed object's tile and, for an item, the stale tile
+    /// of its own location field (IV2: where the map put it, or the tile a dropped item lies on; never the holder's). Null for an object the host cannot place: the session then refuses the move. The default places nothing.
+    /// </summary>
+    (long X, long Y)? LocationOf(ScrObjectRef obj) => null;
 }
 
 /// <summary>
