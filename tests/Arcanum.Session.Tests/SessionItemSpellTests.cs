@@ -203,6 +203,14 @@ public sealed class SessionItemSpellTests
     }
 
     [TestMethod]
+    public void The_charge_budget_refuses_a_recharge_of_an_untracked_item_with_no_count()
+    {
+        using var owner = CreateWith(HalfElf(), new GameSessionLimits(maxItemCharges: 1));
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.RechargeItemCharges(owner.Version, "npcitem:99", 4, 5, 20).Disposition);
+        Assert.AreEqual(GameSessionFailure.BudgetExceeded, owner.RechargeItemCharges(owner.Version, "npcitem:98", 4, 5, 20).Failure);
+    }
+
+    [TestMethod]
     public void A_deleted_items_charge_is_still_refused()
     {
         var (owner, _, _) = Session();
