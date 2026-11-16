@@ -207,7 +207,8 @@ public sealed class ItemWorldScriptTests
             Assert.IsFalse(set.Actions.Contains(action), $"action {action}");
         foreach (var condition in new[] { ScrCatalogue.Condition.PcQuestState, ScrCatalogue.Condition.HasItemNamed, ScrCatalogue.Condition.WithinRange })
             Assert.IsFalse(set.Conditions.Contains(condition), $"condition {condition}");
-        foreach (var kind in new[] { ScrFocusKind.EverySceneryInVicinity, ScrFocusKind.AnySceneryInVicinity, ScrFocusKind.EveryoneInVicinity, ScrFocusKind.AnyoneInVicinity })
+        // The adapter answers IScrGroupQueries for the follower kinds only (ARC-SCRIPT-2336): the group kinds 13 and 14 (followers plus the triggerer) stay out until a slice reads them for the item host.
+        foreach (var kind in new[] { ScrFocusKind.EverySceneryInVicinity, ScrFocusKind.AnySceneryInVicinity, ScrFocusKind.EveryoneInVicinity, ScrFocusKind.AnyoneInVicinity, ScrFocusKind.EveryoneInGroup, ScrFocusKind.AnyoneInGroup })
             Assert.IsFalse(set.FocusKinds.Contains(kind), $"focus {kind}");
         Assert.IsTrue(set.IsSubsetOf(ScrAdmissionSet.S65));
     }
