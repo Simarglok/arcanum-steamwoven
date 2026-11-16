@@ -322,7 +322,7 @@ dialog start), [BW6](../research/ledger/ui-audio.md#barter-window-art-arc-ui-064
   0x126) and measures the 20 tiles between the speaker's live cell and the container's T0 cell (0x45F650 measures where they are now;
   ARC-WORLD-2245: the speaker's cell is the talk reach's, `AreaSpeakerCells.Live`: a companion's committed cell, else the AI host's cell of the NPC,
   else its T0 cell; a container does not move in the session, so its T0 cell is where it is; the dialog item-hold's substitute and the restock
-  host's merchant search still measure the T0 cells, issue #2356);
+  host's merchant search still measure the T0 cells, issue #2357);
   a leader the session gave the NPC other than the hero is not seen. A container's coins move only at a barter open (no other container
   gold move is modelled). The items sales put into a container are not part of its spill when an attack breaks it: they stay in the
   session's store, shown nowhere (not modelled). A broken container is no substitute: the open refuses it and the viewer opens the
