@@ -148,6 +148,32 @@ public sealed class SpellCensusRealDataTests
         Assert.AreEqual(0, differences.Count, "the census changed; the rows as they are now (a row of two empty lists is removed):\n" + string.Join("\n", differences));
     }
 
+    /// <summary>ARC-AI-2125 (ledger GW10, UO2 and UO5): goal 43 starts only from an AGoal component (GT59) and tests no object type itself, so what can be pushed is what the component's area admits. Every installed
+    /// spell and technology record with such a component targets with the critter bit (0x40) or with the item-weight-below-5 bit (0x4000000, no critter bit): a portal, container or scenery is never pushed, so the
+    /// pusher-as-actor guard-witness call of a pushed non-critter (GW10) never happens in the original with the installed data. Numbers only.</summary>
+    [TestMethod, TestCategory("RealData")]
+    public void Every_knockback_component_targets_a_critter_or_a_light_item()
+    {
+        var root = Environment.GetEnvironmentVariable("DAT_ROOT");
+        if (string.IsNullOrWhiteSpace(root)) Assert.Inconclusive("DAT_ROOT is required for the opt-in knockback target check; this is not a synthetic pass.");
+        using var stack = ContentStack.Open(ContentMountPlan.Discover(root).Plan!).Stack!;
+        var spells = SpellData.Open(stack, SpellRecordMode.LikeOriginal);
+        Assert.AreEqual(SpellDataStatus.Read, spells.Status, $"{spells.Refusal}");
+        var records = new SortedSet<int>();
+        for (var number = 0; number < SpellRecord.Count; number++)
+        {
+            foreach (var component in SessionSpellRecords.Translate(spells.Data!.Records[number]).Components.Where(c => c.AnimationGoal == SessionSpellCaster.KnockbackGoal))
+            {
+                records.Add(number);
+                var low = (uint)component.Area.Targets;
+                var critter = (low & 0x40) != 0;
+                var lightItem = (low & 0x4000000) != 0;
+                Assert.IsTrue(critter || lightItem, $"record {number}: a knockback component whose area (0x{component.Area.Targets:X}) admits other objects than critters and items of weight below 5");
+            }
+        }
+        CollectionAssert.AreEqual(new[] { 2, 12, 131, 132, 175, 176, 185, 201, 208, 219, 220 }, records.ToArray(), "the records with a knockback component changed; check their areas and update ledger GW10 and UO5");
+    }
+
     /// <summary>ARC-MAGIC-1361: the installed Harm (record 55) is one Damage component, normal, 3 to 40, <c>Scaled</c>, for 5 fatigue; the numbers that follow (aptitude 40: 17, easy 25) are pinned by
     /// <c>SpellDamageRulesTests</c>.</summary>
     [TestMethod, TestCategory("RealData")]
