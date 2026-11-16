@@ -946,7 +946,7 @@ class QueueRunTests(unittest.TestCase):
 
     def test_a_killed_wrapper_frees_the_place_when_its_command_ends_even_if_a_descendant_kept_the_lock(self) -> None:
         # The command leaves a background process that inherits the ticket's descriptor and outlives everything.
-        first = self.wrapper("window", "crash", ["sh", "-c", f"echo started >> {self.root / 'crash'}; sleep 8 & sleep 1"])
+        first = self.wrapper("window", "crash", ["sh", "-c", f"echo started >> {self.root / 'crash'}; sleep 20 & sleep 1"])  # the descendant outlives any slow start of the next wrapper (ARC-DEV-2257)
         self.until(lambda: (self.root / "crash").exists())
         os.kill(first.pid, signal.SIGKILL)
         first.wait()
