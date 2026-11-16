@@ -64,6 +64,12 @@ public sealed class AreaItemScriptHost : ISessionItemScriptHost, ISessionItemWor
     /// <summary>ARC-SCRIPT-2335 (IV2): the containers around the item's own tile, from the shown map's rows.</summary>
     public IReadOnlyList<ScrObjectRef>? ContainersInVicinity(ScrObjectRef item) => _shown?.Invoke()?.ContainersNearItem(item);
 
+    /// <summary>ARC-SCRIPT-2376 (IV25, PG3): the scenery around the item's own tile, from the shown map's rows.</summary>
+    public IReadOnlyList<ScrObjectRef>? SceneryInVicinity(ScrObjectRef item) => _shown?.Invoke()?.SceneryNearItem(item);
+
+    /// <summary>ARC-SCRIPT-2376 (IV25, TG4): the PCs and NPCs around the item's own tile, from the shown map's rows and the live cells.</summary>
+    public IReadOnlyList<ScrObjectRef>? CrittersInVicinity(ScrObjectRef item) => _shown?.Invoke()?.CrittersNearItem(item);
+
     /// <summary>ARC-SCRIPT-2336 (FK8): the triggerer's direct followers from the shown map's use host (the hero's party followers; an NPC leader's session followers, the NPC being on the shown map). A leader the shown map has no row for makes the run unanswerable (null), as the name test does.</summary>
     public IReadOnlyList<ScrObjectRef>? FollowersOf(ScrObjectRef leader) => _shown?.Invoke() is { } host && Known(host, leader) ? host.FollowersOf(leader) : null;
 
