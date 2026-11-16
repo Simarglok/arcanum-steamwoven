@@ -115,11 +115,13 @@ public sealed partial class GameSessionOwner
     /// two holders neither of which is the hero is refused, as is an item the move would run a script for (without <paramref name="itemScripts"/> the session runs no item script here; with it the move runs them, ARC-MAGIC-1823, ARC-MAGIC-2252; a hero's item counts the points of the seed row it came from and of its slot, an item of another map's NPC the points of its row), a worn
     /// item leaving an NPC or container or carrying item spells, an item that is the source of a running spell, a new holder with a transfer script (point 32), a container off the actor's map or spilled, a holder no attached
     /// map lists, and for a move to the hero a gold pile or a key the key ring cannot take. The item's insert check and the room and weight tests are answered when the move applies.
-    /// ARC-MAGIC-2252: with <paramref name="itemScripts"/> the plan also makes a dry run of the move (the item scripts and the hero's transfer script it would run, read from the host and applied nowhere, the insert check taken as accepting):
-    /// a run the session could not apply is the plan's refusal, so the calling script is not left half applied by a nested run found only when the move applies. The dry run reads the session as it is before the calling script's earlier
-    /// effects apply, so a nested run that only fails after them is still found when the move applies.
+    /// ARC-MAGIC-2252: with <paramref name="itemScripts"/> the plan also makes a dry run of the move (the item scripts and the hero's transfer script it would run, read from the host and applied nowhere):
+    /// a run the session could not apply is the plan's refusal, so the calling script is not left half applied by a nested run found only when the move applies. ARC-MAGIC-2266: the dry run asks the caller's real
+    /// <paramref name="insertCheck"/> (the host's, as <see cref="TransferNamedItem"/> will; accepting everything when null), so a move that check would refuse (room, weight, Technophobia), which runs no item script, is
+    /// not refused for a script it would never run. The dry run reads the session as it is before the calling script's earlier
+    /// effects apply, so a nested run that only fails after them is still found when the move applies (recorded limit).
     /// </summary>
-    public SessionNamedItemPlan QueryNamedItemTransfer(string? from, string? to, int name, ISessionItemScriptHost? itemScripts = null)
+    public SessionNamedItemPlan QueryNamedItemTransfer(string? from, string? to, int name, ISessionItemScriptHost? itemScripts = null, SessionInsertCheck? insertCheck = null)
     {
         ThrowIfDisposed();
         if (from is not null && !SessionValidation.Entity(from) || to is not null && !SessionValidation.Entity(to)) throw new ArgumentException("Invalid entity id.");
@@ -170,7 +172,7 @@ public sealed partial class GameSessionOwner
         // ARC-MAGIC-2252: the dry run of the move through the host: the failures a script run can end the move with (the insert check's and the lists' budgets are no run's: the script command goes on after them).
         if (itemScripts is not null)
         {
-            var dry = DryRunTransfer(from, to, item.Entity, itemScripts);
+            var dry = DryRunTransfer(from, to, item.Entity, itemScripts, insertCheck);
             if (dry.Disposition == GameSessionDisposition.Rejected && dry.Failure is not (GameSessionFailure.BudgetExceeded or GameSessionFailure.InsertRefused))
                 return new(item, $"transfer item of {item.Entity}: its item scripts or the hero's transfer script cannot be applied ({dry.Failure})", dry.Failure);
         }
@@ -180,11 +182,11 @@ public sealed partial class GameSessionOwner
     // ARC-MAGIC-2252: set while a move is only tried (QueryNamedItemTransfer): the scripts are run and prepared as the move runs them and the move returns before anything applies.
     private bool _transferDryRun;
 
-    private InventoryMutationResult DryRunTransfer(string? from, string? to, string item, ISessionItemScriptHost scripts)
+    private InventoryMutationResult DryRunTransfer(string? from, string? to, string item, ISessionItemScriptHost scripts, SessionInsertCheck? insertCheck)
     {
         var before = _transferDryRun;
         _transferDryRun = true;
-        try { return MoveListedItem(Version, from, to, item, static _ => SessionInsertVerdict.Accepted, scripts); }
+        try { return MoveListedItem(Version, from, to, item, insertCheck ?? (static _ => SessionInsertVerdict.Accepted), scripts); }
         finally { _transferDryRun = before; }
     }
 
@@ -217,7 +219,7 @@ public sealed partial class GameSessionOwner
         ArgumentNullException.ThrowIfNull(insertCheck);
         if (from is not null && !SessionValidation.Entity(from) || to is not null && !SessionValidation.Entity(to)) return RejectItem(GameSessionFailure.InvalidItem);
         if (!IsCurrent(expected)) return RejectItem(GameSessionFailure.StaleVersion);
-        var plan = QueryNamedItemTransfer(from, to, name, scripts);
+        var plan = QueryNamedItemTransfer(from, to, name, scripts, insertCheck);
         if (plan.Item is not { } item) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, null, null, Version);
         if (plan.Refusal is not null) return RejectItem(plan.Failure);
         return MoveListedItem(expected, from, to, item.Entity, insertCheck, scripts);
