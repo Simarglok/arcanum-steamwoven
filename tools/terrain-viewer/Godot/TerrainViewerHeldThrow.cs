@@ -365,7 +365,7 @@ public partial class TerrainViewerApp
 
     /// <summary>
     /// The session's throw of <paramref name="held"/> at <paramref name="tile"/> (TT2 → <see cref="GameSessionOwner.ThrowHeroItem"/>): the struck critter is the
-    /// line of fire's living NPC blocker, else the living NPC on the tile (TW4); a companion there is NOT READY (the item stays). The viewer never names a dead critter as the struck object (the pick skips it, so the item flies to the location); the session itself rolls against a corpse (ARC-COMBAT-2392), the pick is NOT READY (issue #2416). On success each shot flies.
+    /// line of fire's living NPC blocker, else the living NPC on the tile (TW4); a companion there is NOT READY (the item stays). <see cref="HeldThrowStruck"/> never names a dead critter as the struck object (the line of fire passes it and the tile fallback skips it, so the item flies to the location), as the original's line of fire never does (ARC-COMBAT-2416, TW9); the press itself still takes an object's tile with no dead filter, and the original's click-through of corpses in combat mode is not reproduced. The session rolls against a corpse only for a struck critter that died before the roll (ARC-COMBAT-2392). The living critter on the tile as the struck object is TW10's open question (#2425). On success each shot flies.
     /// </summary>
     private SessionHeroThrowResult? PerformHeroThrow(GameCursorItem held, CellCoord tile)
     {
@@ -447,7 +447,7 @@ public partial class TerrainViewerApp
         return result;
     }
 
-    // The struck critter of a throw at the tile (TW4): the line of fire's blocker when it is a living NPC with combat values, else the
+    // The struck critter of a throw at the tile (TW4; the tile fallback is NOT RECONCILED with TW10, #2425): the line of fire's blocker when it is a living NPC with combat values, else the
     // living one on the tile; a companion is named so the throw can refuse it.
     private (AttackGoal? Goal, bool Companion)? HeldThrowStruck(GameSessionOwner owner, CellCoord from, CellCoord tile)
     {

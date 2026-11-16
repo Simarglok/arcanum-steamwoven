@@ -123,6 +123,8 @@ public sealed class ScriptTriggerCensusTests
         // The set only admits: the session still refuses the toggle state of script 1239 on the looped scenery (it flips the off flag of an item of the move only).
         // ARC-SCRIPT-2375 (ledger IV31): and get and set story state (42, 43) free the row that stopped on get story state (1094): 27 of the 28; the one left stops on toggle monster generator (110). The set rumor and rename scripts (1103, 1566, 1573)
         // have no placed row on these maps (they are prototype scripts); the next test reads them whole.
+        // ARC-SCRIPT-2378 (ledger IV34): toggle monster generator (110) is admitted too, but the count stays 27: the one row left (script 2103: everyone in the vicinity, condition 46, 110, call script in) stops on distance between (71) now,
+        // which the item set keeps out (ARC-SCRIPT-2426 admits it: 28 of 28 expected).
         Assert.AreEqual(27, admitted[SessionScriptPoint.InsertItem]);
         Assert.IsTrue(admitted[ScrPoint.Hit] >= 26 && admitted[ScrPoint.CritterHits] == 18 && admitted[ScrPoint.CriticalHit] >= 4, $"{admitted[ScrPoint.Hit]}, {admitted[ScrPoint.CritterHits]}, {admitted[ScrPoint.CriticalHit]}");
     }
