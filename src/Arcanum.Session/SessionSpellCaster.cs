@@ -152,6 +152,10 @@ public enum SpellCastEventKind
     /// <summary>ARC-MAGIC-022: the session refused to save a payment's spent charge of the item <see cref="SpellCastEvent.Object"/>
     /// (the value is the <see cref="GameSessionFailure"/>): the spell was paid without it.</summary>
     ChargeNotSaved,
+    /// <summary>ARC-MAGIC-2371: a payment drained the mana store (field 92) of the worn item <see cref="SpellCastEvent.Object"/> to <see cref="SpellCastEvent.Value"/> (the points it paid are the detail).</summary>
+    ManaStoreDrained,
+    /// <summary>ARC-MAGIC-2371: the session refused to save a payment's drained mana store of the worn item <see cref="SpellCastEvent.Object"/> (the value is the <see cref="GameSessionFailure"/>): the spell was paid without it.</summary>
+    ManaStoreNotSaved,
     /// <summary>ARC-MAGIC-024: this many item events were dropped unfired (<see cref="SessionSpellCaster.FireItemEvents"/>): beyond
     /// <see cref="SessionSpellCaster.MaxItemEventsPerFiring"/> in one firing.</summary>
     ItemEventsDropped,
@@ -428,6 +432,13 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
 
     public bool PlayerPerceptionExtraordinary => HeroStat(CharacterStat.Perception) >= CharacterStatRules.ExtraordinaryThreshold;
 
+    // The items a critter wears by slot number (1000..1008): the hero's from the session's equipment (any worn item, not only the starting kit's), an NPC's from the host's map.
+    private IEnumerable<(int Slot, string Id)> WornOf(string critter) => critter == Hero
+        ? _owner.QueryEquipment().Worn.Select(worn => ((int)worn.Slot, worn.Entity))
+        : _map.WornItems(critter).Select(worn => (worn.Slot, worn.Id));
+
+    private const int WornSlotFirst = (int)Arcanum.Simulation.Equipment.EquipmentSlot.Helmet;
+
     public SpellPayer? Payer(SpellRunObject who)
     {
         ArgumentNullException.ThrowIfNull(who);
@@ -435,8 +446,11 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
         if (!who.IsCritter) return Item(who.Id) is { } item ? new(SpellPayerKind.Item, ItemCharges: item.Charges) : new(SpellPayerKind.Other);
         if (Life(who.Id) is not { } life) return null;
         var limiting = who.Id != Hero && _map.Critter(who.Id) is { } npc && (npc.CritterFlags & unchecked((int)0x80000000)) != 0;
-        // Worn mana stores are not modelled yet (no item store state): the fatigue pays all.
-        return new(SpellPayerKind.Critter, limiting, null, life.Status.Fatigue, life.Record.State.FatigueDamage);
+        // ARC-MAGIC-2371 (BC10): the mana store (field 92) of the item worn in each of the nine slots, from the session's copy or else the item's own field.
+        var stores = new int[SpellPaymentRules.WornSlots];
+        foreach (var (slot, id) in WornOf(who.Id))
+            if (slot is >= WornSlotFirst and < WornSlotFirst + SpellPaymentRules.WornSlots && Item(id) is { } item) stores[slot - WornSlotFirst] = item.ManaStore;
+        return new(SpellPayerKind.Critter, limiting, stores, life.Status.Fatigue, life.Record.State.FatigueDamage);
     }
 
     public SpellResistRecord ResistRecord(int spell) => _records(spell)?.Resist ?? new(spell, false, false, false, 0, SpellResistanceRules.NoSave, 0);
@@ -1230,7 +1244,7 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
 
     /// <summary>
     /// Applies what the run rules left for the host (<see cref="SpellRunNote"/>): a payment's fatigue (the stage's from the run's
-    /// source, a reflection's from its payer; worn mana stores are not modelled yet), and records the local player's messages,
+    /// source, a reflection's from its payer; the payer's worn mana stores drain first, ARC-MAGIC-2371), and records the local player's messages,
     /// resisting targets and freed runs in <see cref="Log"/>.
     /// </summary>
     public void Apply(IReadOnlyList<SpellRunNote> notes, Func<int, SpellRun?> runs)
@@ -1275,10 +1289,26 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
                 : new(SpellCastEventKind.ChargeNotSaved, run, (int)spent.Failure, payer));
             return;
         }
+        // ARC-MAGIC-2371 (BC10): the worn mana stores the payment drained are written back and each gets its recharge event, also when the store is already settled (a paid 0 merges a 0).
+        // The stores drain first and stay drained when the fatigue part refuses (MG20).
+        foreach (var drain in payment.Drains) DrainWornStore(run, payer, drain);
         if (payment.FatigueDamageAdded <= 0 || LifeTarget(payer) is not { } target) return;
         var result = _owner.PaySpellFatigue(_owner.Version, target, payment.FatigueDamageAdded);
         if (result.Disposition == GameSessionDisposition.Changed) _log.Add(new(SpellCastEventKind.FatiguePaid, run, payment.FatigueDamageAdded, payer));
         _itemEvents.AddRange(result.ItemEvents);
+    }
+
+    // The notes of an event pass are applied after the pass, so a store a second payment drains is read again: a drain takes at most what is there (a store above 0 loses the drained points, never below 0; a negative one, which
+    // the plan emptied, is written as the plan says).
+    private void DrainWornStore(int run, string payer, ManaStoreDrain drain)
+    {
+        var slot = WornSlotFirst + drain.Slot;
+        if (WornOf(payer).FirstOrDefault(worn => worn.Slot == slot) is not { Id: { } wornId } worn || Item(wornId) is not { } item) return;
+        var after = item.ManaStore < 0 || drain.Drained < 0 ? drain.StoreAfter : Math.Max(0, item.ManaStore - drain.Drained);
+        var written = _owner.WriteItemManaStore(_owner.Version, wornId, item.ManaStore, after);
+        if (written.Disposition == GameSessionDisposition.Rejected) { _log.Add(new(SpellCastEventKind.ManaStoreNotSaved, run, (int)written.Failure, wornId)); return; }
+        if (written.Disposition == GameSessionDisposition.Changed) _log.Add(new(SpellCastEventKind.ManaStoreDrained, run, after, wornId, drain.Drained));
+        _owner.ScheduleManaRecharge(wornId, drain.Drained, merge: true);
     }
 
     private void ApplyDamage(SpellRun run, SpellDamageComponent data, SpellRunObject target)

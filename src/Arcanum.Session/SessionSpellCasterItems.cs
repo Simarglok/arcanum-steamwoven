@@ -14,7 +14,7 @@ namespace Arcanum.Session;
 /// the item flags (field 0x57: 0x4 magical, 0x100 needs a target); the cast host reads the charges and the magical flag through the
 /// session's spent charges (<see cref="GameSessionOwner.QueryItemCharges"/>).
 /// </summary>
-public sealed record SessionItemSpells(string Entity, string Holder, int Type, IReadOnlyList<int> Spells, int Charges, int Complexity, uint Flags = 0)
+public sealed record SessionItemSpells(string Entity, string Holder, int Type, IReadOnlyList<int> Spells, int Charges, int Complexity, uint Flags = 0, int ManaStore = 0)
 {
     private const int NoSpell = 10000;
 
@@ -35,7 +35,7 @@ public sealed record SessionItemSpells(string Entity, string Holder, int Type, I
     {
         ArgumentNullException.ThrowIfNull(fields);
         return fields.Item is { } item
-            ? new(entity, holder, fields.Object.Type, Array.AsReadOnly(item.Spells.ToArray()), item.SpellManaStore, item.MagickTechComplexity, item.Flags)
+            ? new(entity, holder, fields.Object.Type, Array.AsReadOnly(item.Spells.ToArray()), item.SpellManaStore, item.MagickTechComplexity, item.Flags, item.ManaStore)
             : null;
     }
 }
@@ -114,6 +114,8 @@ public sealed partial class SessionSpellCaster
         if (_heldBy is { } held && held.Item == id) item = item with { Holder = held.Holder };
         // ARC-MAGIC-032: the session's identification mark (a barter window's, Divine Magick's) counts as the item flag 0x1 the pane reads (0x464370, 0x5506C0).
         if (SessionValidation.Entity(id) && _owner.QueryItemIdentified(id)) item = item with { Flags = item.Flags | ItemSpellPaneRules.IdentifiedFlag };
+        // ARC-MAGIC-2371: the session's mana store (field 92) of the item, once a payment drained it or a recharge restored it.
+        if (SessionValidation.Entity(id) && _owner.QueryItemManaStore(id) is { } store) item = item with { ManaStore = store };
         return _owner.QueryItemCharges(id) is { } left ? item with { Charges = left, Flags = item.Flags | SessionItemSpells.MagicalFlag } : item;
     }
 

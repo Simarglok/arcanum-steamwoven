@@ -681,7 +681,7 @@ public sealed class GameSessionSnapshot
     /// Schema 100 adds the native traps' shots in flight to the flights section (<see cref="SessionFlightState.TrapShots"/>, ARC-TECHNOLOGY-1635).
     /// Schema 101 adds the saved gambling roll (<see cref="GamblingRoll"/>, ARC-UI-1740). Schema 102 adds the followers of NPC leaders (<see cref="SessionPartyState.NpcLed"/>, ARC-WORLD-1840).
     /// Schemas 1..55 are refused, not migrated; schemas 56 to 101 are upgraded on decode (ARC-UI-037).</summary>
-    public const int CurrentSchemaVersion = 102;
+    public const int CurrentSchemaVersion = 103;
 
     internal GameSessionSnapshot(int schemaVersion, GlobalFlagIdentity identity, long revision,
         SessionClockState clock, SessionFlagState flags, ActorPlacement actor, SessionMapState[] maps, SessionStoryState story,

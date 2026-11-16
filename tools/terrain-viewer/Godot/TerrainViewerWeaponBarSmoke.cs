@@ -27,7 +27,7 @@ public partial class TerrainViewerApp
     {
         var type = worn.Item.Weapon?.AmmoType;
         var count = type is { } t ? session.QueryHeroAmmo().Where(a => a.AmmoType == t).Select(a => a.Units).FirstOrDefault() : 0;
-        var store = type is null && HeroWeaponPrototype(session, null) is { } prototype ? CombatPrototype(prototype)?.Item?.ManaStore ?? 0 : 0;
+        var store = type is null ? WieldedManaStore(session, worn) : 0;
         return BarCounterRules.Counter3(true, type, count, store, session.QueryGold());
     }
 
@@ -108,6 +108,22 @@ public partial class TerrainViewerApp
             if (expected3.Icon is { } icon3 && Art(icon3) is { } icon3Frames)
                 Require(counters.IconForSelfTest is { } shown3 && icon3Frames.Contains(shown3)
                     && counters.IconPositionForSelfTest == new Vector2(BarCounterRules.IconX, BarCounterRules.IconY - AreaGameBarLayout.BottomTop), $"counter 3's icon {icon3} stands at (61, 509)");
+
+            // ARC-MAGIC-2371 (BC7, BC10): counter 3 follows the weapon's mana store the session keeps (a payment drains it, the recharge event restores it): a written store shows at once, and the old value comes back.
+            if (worn.Item.Weapon?.AmmoType is null)
+            {
+                var storeBefore = WieldedManaStore(session, worn);
+                var baseline = session.QueryItemManaStore(worn.Entity) ?? storeBefore;
+                var changed = session.WriteItemManaStore(session.Version, worn.Entity, baseline, storeBefore + 7);
+                Require(changed.Disposition == GameSessionDisposition.Changed, $"the weapon's store is written: {changed.Disposition} {changed.Failure}");
+                await frames(3);
+                Require(counters.Counter3ForSelfTest == BarCounterRules.Text(storeBefore + 7, BarCounterRules.Counter3Digits),
+                    $"counter 3 follows the session's store {storeBefore + 7}: '{counters.Counter3ForSelfTest}'");
+                var drain = session.WriteItemManaStore(session.Version, worn.Entity, baseline, storeBefore);
+                Require(drain.Disposition == GameSessionDisposition.Changed, $"the store is put back: {drain.Disposition} {drain.Failure}");
+                await frames(3);
+                Require(counters.Counter3ForSelfTest == BarCounterRules.Text(expected3.Value, BarCounterRules.Counter3Digits), $"counter 3 follows the store back: '{counters.Counter3ForSelfTest}'");
+            }
 
             // ARC-UI-2368: with the game folder the numbers are written in the bar font (art 171), centred in the slot (BC5, BC9), the vials' too.
             if (TextFonts()?.Bar is { } barFont)
