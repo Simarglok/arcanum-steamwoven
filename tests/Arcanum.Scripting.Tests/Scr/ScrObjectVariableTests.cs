@@ -129,8 +129,7 @@ public sealed class ScrObjectVariableTests
         var types = new ScrAdmissionSet("types", ScrAdmissionSet.S5.Conditions, ScrAdmissionSet.S5.Actions.Append(34), ScrAdmissionSet.S5.ValueKinds, ScrAdmissionSet.S5.FocusKinds);
         Assert.ThrowsExactly<ArgumentException>(() => Use(plain, new() { Admission = types }));
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => Use(With(Program(Do(C(1)))), S12 with { MaxCallDepth = 0 }));
-        // A dialog-point event never runs call script (the callee's dialog gates E6 are not modelled).
-        Assert.ThrowsExactly<ArgumentException>(() => ScrDispatcher.RunObject(new(ScrPoint.Dialog, Chest, Pc, null), With(Program(Do(C(1)))), S12));
+        // ARC-SCRIPT-2198: a dialog-point event runs call script now; the callee meets the dialog gates of its attachee (ScrHeartbeatTalkTests).
     }
 
     [TestMethod]

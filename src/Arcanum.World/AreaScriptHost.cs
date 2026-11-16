@@ -52,6 +52,17 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
     public static ScrAdmissionSet SkillAdmission { get; } = new("S3-area-sound-calls-scheme-schematic-reading-skill", Admission.Conditions,
         Admission.Actions.Append(ScrCatalogue.Action.GetSkill), Admission.ValueKinds, Admission.FocusKinds);
 
+    /// <summary>ARC-SCRIPT-2198: the focus kinds the loops of <see cref="TalkStateActions"/> need: the vicinity's critters (8, 9; the use host's <see cref="IScrWorldQueries.CrittersInVicinity"/> answers) and the current looped object (10).</summary>
+    public static IReadOnlyList<ScrFocusKind> TalkStateFocusKinds { get; } = [ScrFocusKind.EveryoneInVicinity, ScrFocusKind.AnyoneInVicinity, ScrFocusKind.CurrentLoopedObject];
+
+    /// <summary>
+    /// ARC-SCRIPT-2198 (Kerghan's dialog script 1105, docs/research/bink-movies.md section 7): the actions the talk set holds besides the queries while the shown map's use host answers: the loop of a focus list (18, 19, 20; the interpreter runs it), play script eye candy
+    /// (120, a presentation request <see cref="Apply"/> already collects), call script (7) and call script ex (81; the callee's slot answers are <see cref="Slot"/>'s), change script (99; a slot of another object is stored through the use host), critter disband (22) and
+    /// create item (66; the use host's plan and apply), and transform (40), which the use host's plan refuses whole (no critter changes its prototype in place yet).
+    /// </summary>
+    public static IReadOnlyList<int> TalkStateActions { get; } = [ScrCatalogue.Action.LoopFor, ScrCatalogue.Action.LoopEnd, ScrCatalogue.Action.LoopBreak, ScrCatalogue.Action.PlayScriptEyeCandy,
+        ScrCatalogue.Action.CallScript, ScrCatalogue.Action.CallScriptEx, ScrCatalogue.Action.ChangeScript, ScrCatalogue.Action.CritterDisband, ScrCatalogue.Action.CreateItem, ScrCatalogue.Action.TransformObject];
+
     /// <summary>
     /// ARC-SCRIPT-050 (slice 2 of the script trigger audit): <see cref="Admission"/> plus what the shown map's use host answers for a talk
     /// (<see cref="QueryHost"/>): the guard conditions of <see cref="ScrAdmissionSet.S4"/> (PC quest state, holds an item named, is named,
@@ -74,7 +85,8 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
         set.Actions.Concat(ScrAdmissionSet.CritterFieldActions).Concat(ScrAdmissionSet.CritterArtActions).Concat([ScrCatalogue.Action.Random, ScrCatalogue.Action.FloatLine, ScrCatalogue.Action.GetArea, ScrCatalogue.Action.GetReaction, ScrCatalogue.Action.GiveSpellMastery,
             ScrCatalogue.Action.Damage, ScrCatalogue.Action.DamageUnresistable, ScrCatalogue.Action.HealHitPoints, ScrCatalogue.Action.Attack,
             ScrCatalogue.Action.CastSpell, ScrCatalogue.Action.CastSpellOn, ScrCatalogue.Action.CastFreeSpell, ScrCatalogue.Action.CastUnresistableSpellBy, ScrCatalogue.Action.CastFreeUnresistableSpell,
-            ScrCatalogue.Action.CastUnresistableSpellOn]), set.ValueKinds, set.FocusKinds.Concat(ScrAdmissionSet.GroupFocusKinds));
+            ScrCatalogue.Action.CastUnresistableSpellOn]).Concat(TalkStateActions), set.ValueKinds, set.FocusKinds.Concat(ScrAdmissionSet.GroupFocusKinds).Concat(TalkStateFocusKinds));
+
 
     /// <summary>The set a run of this host uses: <see cref="SkillAdmission"/> with a session hero, else <see cref="Admission"/>; ARC-SCRIPT-050:
     /// with the query commands of <see cref="TalkAdmission"/> while <see cref="QueryHost"/> gives a use host of this host's map.</summary>
@@ -341,7 +353,9 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
     {
         // ARC-WORLD-2382: the use slot is the shown map's use host's to answer (a deferred call's dialog action compares the run's flags with it); null without such a host.
         if (point == ScrPoint.Use) return Queries?.Slot(attachee, point);
-        if (point != ScrPoint.Dialog || Speaker(attachee) is not { } speaker || LoadedSlot(speaker) is not { } loaded) return null;
+        // ARC-SCRIPT-2198: an object this host holds no speaker for (a call-ex or change script on another object of the shown map, at any point) is the use host's to answer.
+        if (point != ScrPoint.Dialog || Speaker(attachee) is null) return Queries?.Slot(attachee, point);
+        if (LoadedSlot(Speaker(attachee)!) is not { } loaded) return null;
         // ARC-DEV-081: a carried companion's slot is its home map's key (AreaConversationState.MapOf).
         var stateMap = _state.MapOfEntity(attachee.Code);
         long? Read(string property) => _session.QueryObjectChange(stateMap, MapChangeKey.ForEntity(attachee.Code, property));
@@ -497,6 +511,10 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
         var useWrite = effects.Writeback is { Source: ScrSource.Object, Point: ScrPoint.Use } useRequest ? useRequest : null;
         var useHost = Queries;   // captured once: a victim's script or a death can move what the delegate answers before the write below
         if (useWrite is not null && useHost?.CanWriteUseSlot(useWrite) != true) return false;
+        // ARC-SCRIPT-2198: the slots of other objects the run wrote, a disband, a create item and a transform go through the shown map's use host; the whole run is refused before anything applies when it cannot place them (a transform always).
+        var stateHost = useHost;
+        if (stateHost is null ? effects.SlotWrites.Count > 0 || effects.ObjectStates.Any(r => r.Change is ScrObjectStateChange.Disband or ScrObjectStateChange.CreateItem or ScrObjectStateChange.Transform)
+            : stateHost.TalkStateRefusal(effects) is not null) return false;
         if (effects.Writeback is { } slotRequest && useWrite is null)
         {
             if (slotRequest.Source != ScrSource.Object || slotRequest.Point != ScrPoint.Dialog || slotRequest.Attachee is not { } slotAttachee
@@ -588,10 +606,13 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
             if (request.Change == ScrObjectStateChange.HealHitPoints) { damageHost!.ApplyScriptHeal(request); LastHeal = damageHost.LastHeal; continue; }
             if (request.Change == ScrObjectStateChange.Attack) { damageHost!.ApplyScriptAttack(request); LastAttack = damageHost.LastAttack; continue; }
             if (request.Change == ScrObjectStateChange.CastSpell) { damageHost!.ApplyScriptCast(request); LastCast = damageHost.LastCast; continue; }
+            if (request.Change is ScrObjectStateChange.Disband or ScrObjectStateChange.CreateItem) { if (!stateHost!.ApplyTalkObjectState(request)) return false; continue; }
             if (request.Change != ScrObjectStateChange.GiveSpellMastery) continue;
             if (request.Object == Pc) { if (!AreaScriptSpells.GiveMastery(_session, null, request.Value)) return false; }
             else if (request.Object.Map == _map.RuntimeMap && _npcAdvancement?.Invoke(request.Object.Code) is { } npc && !AreaScriptSpells.GiveMastery(_session, npc, request.Value)) return false;
         }
+        foreach (var write in effects.SlotWrites)
+            if (!stateHost!.WriteObjectSlot(write)) return false;
         // ARC-TECHNOLOGY-005 (SW8, TC2 both fixed): each start schematic UI request in action order, resolved now (the PC, or an NPC
         // and its PC leader); it changes no session state, so it neither stops nor is stopped by a later step.
         foreach (var request in effects.Schematics)
