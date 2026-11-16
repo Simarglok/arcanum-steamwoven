@@ -399,8 +399,11 @@ public partial class TerrainViewerApp
         // ARC-DEV-204: a change that waits for its fade-out is the only one: another request met meanwhile is dropped, not queued behind it.
         if (TransitionFadePending) { _mapTransfers.Clear(); return false; }
         if (_mapTransfers.Pending is null) ProcessAreaMapStream(session);
-        if (_mapTransfers.Pending is not { } transfer || WorldModal || session.State.Phase != MovementPhase.Settled) return false;
+        // ARC-WORLD-2261 (TT20): the original's ping applies a script's teleport at the next frame under any interface mode, so the hero's teleport a dialog script asked for waits for no window but the dialog the same run opened.
+        if (_mapTransfers.Pending is not { } transfer || (WorldModal && !(transfer.ByTalkScript && ConversationOnlyModal)) || session.State.Phase != MovementPhase.Settled) return false;
         _mapTransfers.Clear();
+        // ARC-WORLD-2261 (TT20): a change to another map ends the dialog before anything moves (0x4D3E20 → 0x4601D0 → 0x568830 → 0x5678D0), while the old host, session and companions are still the dialog's own.
+        if (transfer.ByTalkScript && !transfer.SameMap && ConversationOpen) EndConversation();
         // A map change leaves combat mode, as the source's teleport does (ARC-COMBAT-004).
         LeaveCombatModeForMapChange();
         // ARC-DEV-113 (MIG11 S2): with a session the transfer is the session's change of place, requested and run by this frame's ping.

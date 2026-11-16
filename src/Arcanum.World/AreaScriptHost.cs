@@ -464,8 +464,8 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
     {
         if (effects.Teleports.Count == 0) return null;
         var heroAsked = effects.Teleports.Any(t => IsPc(t.Object));
-        // A conversation the same run starts is not modelled together with the hero's change of place (the use host and the tile scripts refuse it too): the dialog window would open over a pending map transfer.
-        if (heroAsked && effects.Dialog is not null) return "a run that teleports the hero and starts a conversation is not modelled";
+        // ARC-WORLD-2261 (TT20): a conversation the same run starts is no reason to refuse the hero's teleport. The original opens the dialog inside the run (0x567460, which ends the run: only a teleport before the dialog action is recorded) and
+        // the ping applies the request at the next frame whatever mode is open; the transfer is a ByTalkScript one, which the viewer takes with the dialog window open.
         if (heroAsked && effects.Teleports.Any(t => !IsPc(t.Object))) return "a run that teleports the hero and another object is not modelled";
         foreach (var teleport in effects.Teleports)
         {

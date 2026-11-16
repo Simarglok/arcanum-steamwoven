@@ -272,14 +272,14 @@ public sealed class AreaWorldObjectScriptTests
         }
     }
 
-    private static SessionItemFacts ItemFacts(SessionItemType type, int name, int location = 0) => new(new(type, 1000 + name, name, 30000 + name), 5, 0, location, null, []);
+    private static SessionItemFacts ItemFacts(SessionItemType type, int name, int location = 0, int[]? scriptPoints = null) => new(new(type, 1000 + name, name, 30000 + name), 5, 0, location, null, scriptPoints ?? []);
 
     // An NPC holding two items (a ring named 7001, a sword named 7002) in a seed of map 1.
-    private static string SeedNpc(GameSessionOwner session, AreaObjectRecord npc, int ringLocation = 0)
+    private static string SeedNpc(GameSessionOwner session, AreaObjectRecord npc, int ringLocation = 0, int[]? ringScriptPoints = null)
     {
         var entity = AreaUseScriptHost.EntityId(npc);
         var seed = new SessionMapInventorySeed([new(entity, SessionHolderKind.Npc, false, false, [], ["ring", "sword"])],
-            [new("ring", ItemFacts(SessionItemType.Armor, 7001, ringLocation), null), new("sword", ItemFacts(SessionItemType.Weapon, 7002), null)]);
+            [new("ring", ItemFacts(SessionItemType.Armor, 7001, ringLocation, ringScriptPoints), null), new("sword", ItemFacts(SessionItemType.Weapon, 7002), null)]);
         Assert.AreEqual(GameSessionFailure.None, session.AttachMapInventory(new(1), seed).Failure);
         return entity;
     }
@@ -374,6 +374,53 @@ public sealed class AreaWorldObjectScriptTests
             var worn = Host(other, content, null, npc).RunHeartbeat(npc, ScrPoint.Heartbeat, other.Rules.Scripts);
             Assert.AreEqual(AreaScriptedUseOutcome.EffectsRejected, worn.Outcome, "a worn item's move would run the wield-off events the session does not");
             Assert.AreEqual(version, other.Version, "nothing applied");
+        });
+    }
+
+    // ARC-MAGIC-2356: an item script host whose insert-item script for the ring is a run the session cannot apply (an effect it has no definition of).
+    private sealed class RefusingInsertHost : ISessionItemScriptHost
+    {
+        private const int InsertScript = 703;
+        private static readonly ScrProgram Refusing = ScrProgram.Read(Program(Do(new(ScrCatalogue.Action.AddEffect, (0, 0), N(999), N(5))))).Program!;
+
+        public ScrSlot? Slot(ScrObjectRef attachee, int point) => attachee.Code == "ring" && point == SessionScriptPoint.InsertItem ? new ScrSlot(InsertScript, 0, 0) : null;
+        public ScrScriptLookup Script(int number) => number == InsertScript ? ScrScriptLookup.Of(Refusing) : ScrScriptLookup.Missing;
+        public bool GlobalFlag(int index) => false;
+        public int StoryState() => throw new InvalidOperationException("not admitted");
+        public bool IsMonsterGenerator(ScrObjectRef attachee) => false;
+        public ScrDialogState DialogState(ScrObjectRef attachee) => ScrDialogState.Normal;
+        public ScrTrapCheck CheckTrapBeforeUse(ScrObjectRef triggerer, ScrObjectRef attachee) => ScrTrapCheck.NoTrap;
+        public bool IsTrapObject(ScrObjectRef attachee) => false;
+        public ScrObjectRef? Player() => new(1, SessionEventKinds.PlayerEntity);
+        public ScrObjectRef? Leader(ScrObjectRef critter) => null;
+        public bool IsJilted(ScrObjectRef critter) => false;
+        public bool IsPc(ScrObjectRef critter) => critter.Code == SessionEventKinds.PlayerEntity;
+        public SessionPrintedLine PrintedLine(int script, int line) => new(SessionPrintedLineStatus.Shown, "line", "test");
+    }
+
+    // ARC-MAGIC-2356 (leftover of ARC-MAGIC-2266): the host passes its real insert check and its item script host to the session's transfer plan, whose dry run asks that check before any insert-item run.
+    [TestMethod]
+    public void A_transfer_the_real_insert_check_declines_is_not_refused_for_an_insert_item_script_the_session_cannot_apply()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.CreateWithHero();
+            var npc = Row(2, NpcType, ScrPoint.Heartbeat, 851);
+            var entity = SeedNpc(session, npc, ringScriptPoints: [SessionScriptPoint.InsertItem]);
+            // The check declines before the insert-item run: the plan does not refuse the calling script, the move declines and the run goes on.
+            var declining = new AreaUseScriptHost(session, 1, [npc], [], content, World()) { InsertCheck = _ => SessionInsertVerdict.NoRoom, ItemScripts = new RefusingInsertHost() };
+            var run = declining.RunHeartbeat(npc, ScrPoint.Heartbeat, session.Rules.Scripts);
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, run.Outcome, run.Detail);
+            Assert.AreEqual(GameSessionFailure.InsertRefused, declining.LastNamedItem!.Value.Failure);
+            Assert.AreEqual(2, session.QueryMapInventory(new(1))!.Holders.Single(h => h.Entity == entity).Items.Count, "nothing moved");
+
+            // An accepting check reaches the insert-item run the session cannot apply: the plan refuses and the run applies nothing.
+            var version = session.Version;
+            var accepting = new AreaUseScriptHost(session, 1, [npc], [], content, World()) { InsertCheck = _ => SessionInsertVerdict.Accepted, ItemScripts = new RefusingInsertHost() };
+            var refused = accepting.RunHeartbeat(npc, ScrPoint.Heartbeat, session.Rules.Scripts);
+            Assert.AreEqual(AreaScriptedUseOutcome.EffectsRejected, refused.Outcome, refused.Detail);
+            StringAssert.Contains(refused.Detail, "item scripts", "the plan's dry run refused over the insert-item script");
+            Assert.AreEqual(version, session.Version, "nothing applied");
         });
     }
 
