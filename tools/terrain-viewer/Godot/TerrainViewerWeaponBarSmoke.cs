@@ -109,6 +109,20 @@ public partial class TerrainViewerApp
                 Require(counters.IconForSelfTest is { } shown3 && icon3Frames.Contains(shown3)
                     && counters.IconPositionForSelfTest == new Vector2(BarCounterRules.IconX, BarCounterRules.IconY - AreaGameBarLayout.BottomTop), $"counter 3's icon {icon3} stands at (61, 509)");
 
+            // ARC-UI-2368: with the game folder the numbers are written in the bar font (art 171), centred in the slot (BC5, BC9), the vials' too.
+            if (TextFonts()?.Bar is { } barFont)
+            {
+                Require(ReferenceEquals(counters.FontForSelfTest, barFont), "counter 3 draws in the bar font (art 171)");
+                var layout = barFont.Font.Layout(counters.Counter3ForSelfTest!);
+                var (textWidth, textHeight) = barFont.Font.Measure(counters.Counter3ForSelfTest!);
+                var expectedAt = BarNumberRules.Place(BarCounterRules.Counter3Rect.Width, BarCounterRules.Counter3Rect.Height,
+                    textWidth + BarNumberRules.ShadowOffset, textHeight + BarNumberRules.ShadowOffset);
+                Require(layout.Count == counters.Counter3ForSelfTest!.Length && counters.Counter3PlacementForSelfTest == expectedAt,
+                    $"counter 3's text is placed by the digit writer's centring: {counters.Counter3PlacementForSelfTest} expected {expectedAt}");
+                if (_heroGauges is { ShownForSelfTest: true } gauges && gauges.PlacementForSelfTest.InBars)
+                    Require(ReferenceEquals(gauges.FontForSelfTest, barFont), "the vials' numbers draw in the bar font");
+            }
+
             _gameBarSoundsForSelfTest.Clear();
             await click(view.ButtonCentreForSelfTest!.Value);
             await frames(2);

@@ -30,6 +30,10 @@ public static class BarCounterRules
     /// <summary>Every interface art the counters draw.</summary>
     public static IReadOnlyList<int> ArtNumbers { get; } = [.. AmmoIcons, ManaStoreIcon, GoldIcon];
 
+    /// <summary>A type above 3 reads past the exe's four-entry table (0x5C728C, no bounds check; ledger BC11): type 4 would draw art 0 and 5..8 four unrelated values,
+    /// so no retail weapon (types 0..3 and none) reaches it and no icon is drawn.</summary>
+    public static int? AmmoIcon(int type) => type >= 0 && type < AmmoIcons.Count ? AmmoIcons[type] : null;
+
     /// <summary>
     /// What counter 3 shows (0x54B3C0): the wielded weapon's ammunition count with its type's icon when the weapon has an ammunition type
     /// (<paramref name="ammoType"/>, null for none; <paramref name="ammoCount"/> is the hero's first ammunition item of that type, 0 for
@@ -40,7 +44,7 @@ public static class BarCounterRules
     public static BarCounter3 Counter3(bool hasHero, int? ammoType, int ammoCount, int manaStore, int gold)
     {
         if (!hasHero) return new(0, GoldIcon);
-        if (ammoType is { } type) return new(ammoCount, type >= 0 && type < AmmoIcons.Count ? AmmoIcons[type] : null);
+        if (ammoType is { } type) return new(ammoCount, AmmoIcon(type));
         return manaStore > 0 ? new(manaStore, ManaStoreIcon) : new(gold, GoldIcon);
     }
 

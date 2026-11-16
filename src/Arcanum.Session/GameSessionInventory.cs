@@ -432,7 +432,8 @@ public static class SessionItemScripts
     /// move's global flags are); ARC-DEV-366 adds get stat (33, ledger GS1), which the session answers for the hero from the effect list the
     /// move's earlier runs left (the tech books' insert script reads the holder's intelligence, XA9); ARC-SCRIPT-2335 (ledger IV1–IV8) adds the loop for, loop end and loop break
     /// (18 to 20), the looped-object and container vicinity focus kinds (10, 17, 18), the name condition (20) and change art number (59), which the display-case scripts of the temple
-    /// items use, answered by <see cref="ISessionItemWorldHost"/>; ARC-SCRIPT-2346 (ledger IV9–IV11) adds toggle state (56), which flips the off flag of an item of the move (the attachee in the installed scripts). A script outside it refuses the move.
+    /// items use, answered by <see cref="ISessionItemWorldHost"/>; ARC-SCRIPT-2336 (ledger FK8) adds the follower focus kinds every follower and any follower (2, 3: the triggerer's direct followers, answered by
+    /// the same world part); ARC-SCRIPT-2346 (ledger IV9–IV11) adds toggle state (56), which flips the off flag of an item of the move (the attachee in the installed scripts). A script outside it refuses the move.
     /// </summary>
     public static ScrAdmissionSet Admission { get; } = new("S14-item",
         ScrAdmissionSet.S6.Conditions.Concat([ScrCatalogue.Condition.Identified, ScrCatalogue.Condition.ItemsBeingRewielded, ScrCatalogue.Condition.IsNamed]),
@@ -442,7 +443,8 @@ public static class SessionItemScripts
                 ScrCatalogue.Action.MagickTechAdjustment, ScrCatalogue.Action.PlayScriptEyeCandy, ScrCatalogue.Action.PlaySound, ScrCatalogue.Action.GetStat,
                 ScrCatalogue.Action.LoopFor, ScrCatalogue.Action.LoopEnd, ScrCatalogue.Action.LoopBreak, ScrCatalogue.Action.ChangeArtNumber, ScrCatalogue.Action.ToggleState]),
         ScrAdmissionSet.S6.ValueKinds.Concat(ScrAdmissionSet.StoreValueKinds),
-        ScrAdmissionSet.S6.FocusKinds.Concat([ScrFocusKind.CurrentLoopedObject, ScrFocusKind.EveryContainerInVicinity, ScrFocusKind.AnyContainerInVicinity]));
+        ScrAdmissionSet.S6.FocusKinds.Concat([ScrFocusKind.CurrentLoopedObject, ScrFocusKind.EveryContainerInVicinity, ScrFocusKind.AnyContainerInVicinity,
+            ScrFocusKind.EveryFollower, ScrFocusKind.AnyFollower]));
 
     /// <summary>ARC-SCRIPT-042: how many item script slots a session keeps (<see cref="GameSessionLimits.PolicyMaxPcItems"/> items with
     /// all eight item event points each).</summary>

@@ -610,9 +610,9 @@ public sealed partial class GameSessionOwner
     /// from the host; the identified test is the host's, the power ratio the session's, and the items are being rewielded only
     /// in the runs of an NPC's rewield (ARC-MAGIC-1644).
     /// </summary>
-    private sealed class SessionFlagReads(GameSessionOwner session, ISessionItemScriptHost host, ItemScriptRuns runs) : IScrHost, IScrItemQueries, IScrStoreQueries, IScrStatQueries, IScrWorldQueries, IScrContainerQueries, IScrObjectQueries
+    private sealed class SessionFlagReads(GameSessionOwner session, ISessionItemScriptHost host, ItemScriptRuns runs) : IScrHost, IScrItemQueries, IScrStoreQueries, IScrStatQueries, IScrWorldQueries, IScrContainerQueries, IScrGroupQueries, IScrObjectQueries
     {
-        // ARC-SCRIPT-2335 (IV1–IV4): the world questions of the loop for, the container vicinity kinds and the name condition go to the host's world part. A host without it, an object or a centre it does not know makes the run unanswerable
+        // ARC-SCRIPT-2335 (IV1–IV4): the world questions of the loop for, the container vicinity kinds, the follower kinds (ARC-SCRIPT-2336) and the name condition go to the host's world part. A host without it, an object or a centre it does not know makes the run unanswerable
         // (UnknownObject: the session refuses the move). The set admits no scenery, critter, random, location, quest, held-item, wielded-item, reputation or object-type question, so none is asked.
         // Implementing these interfaces also switches off the dispatcher's guard that a set's commands have a host answer: a later widening of the admission (random, within range, the guard conditions, get object type, the scenery
         // and critter vicinity kinds) must answer here first (ItemWorldScriptTests pins what the stubs below assume).
@@ -621,6 +621,14 @@ public sealed partial class GameSessionOwner
         public IReadOnlyList<ScrObjectRef> ContainersInVicinity(ScrObjectRef centre)
         {
             if (World?.ContainersInVicinity(centre) is { } list) return list;
+            UnknownObject = true;
+            return [];
+        }
+
+        // ARC-SCRIPT-2336 (FK8): the follower focus kinds 2 and 3 ask the triggerer's direct followers from the host's world part; without an answer the run is unanswerable, as for the container vicinity.
+        public IReadOnlyList<ScrObjectRef> FollowersOf(ScrObjectRef leader)
+        {
+            if (World?.FollowersOf(leader) is { } list) return list;
             UnknownObject = true;
             return [];
         }
