@@ -114,6 +114,8 @@ public sealed class AreaObjectTargets
         if (_objects.TryGetValue(key, out var found))
         {
             if (session.QueryObjectCondition(_map, found.Entity, found.Kind) is SessionObjectCondition.Destroyed or SessionObjectCondition.Off) return null;
+            // ARC-SCRIPT-2386 (IV13, screen pick 0x43D9F0): a switched-off item (a script's toggle) is not a target.
+            if (found.Kind == DamageableObjectKind.Item && session.QueryItemOff(_map, found.Entity, dataOff: false)) return null;
             var read = CombatFieldReader.ReadBreakable(found.Row);
             if (read.Fields is not { } fields) return new(found.Entity, found.Row, found.Kind, null, null, null, $"{read.Failure} {read.Detail}");
             var cell = new CellCoord(checked((int)found.Row.WorldX!.Value), checked((int)found.Row.WorldY!.Value));
@@ -130,6 +132,8 @@ public sealed class AreaObjectTargets
         // An item on the ground (the seed's, not taken or deleted).
         if (_inventory is null || !_inventory.TryGetEntity(key, out var item) || !_inventory.TryGetRow(item, out var row)) return null;
         if (session.QueryMapInventory(_map)?.Ground.Any(g => g.Item.Entity == item) != true) return null;
+        // ARC-SCRIPT-2386 (IV15, screen pick 0x43D9F0): a switched-off item (a script's toggle, a thrown item in flight) is not a target.
+        if (session.QueryItemOff(_map, item, dataOff: false)) return null;
         if (CombatFieldReader.Read(row).Fields is not { } itemFields) return new(item, row, DamageableObjectKind.Item, null, null, null, "item fields do not read");
         return SessionWearItem.FromCombatFields(item, itemFields) is { } wear && SessionObjectFacts.ItemFacts(itemFields, trapped?.Invoke(row) == true) is { } facts
             ? new(item, row, DamageableObjectKind.Item, null, wear, facts, null)

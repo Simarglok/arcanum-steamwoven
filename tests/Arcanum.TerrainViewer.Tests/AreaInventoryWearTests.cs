@@ -53,6 +53,27 @@ public sealed class AreaInventoryWearTests
     private static EquipmentMutationResult Wear(GameSessionOwner session, AreaInventoryHost host, string entity, EquipmentSlot slot) =>
         session.Equip(session.Version, entity, slot, host.Wearable(session, entity, KitWear)!, (_, _) => true, host.InsertCheck);
 
+    // ARC-SCRIPT-2386 (IV13, 0x576520 paint, 0x575FA0 hit): a switched-off item in a worn slot is not on the doll (the slot shows empty) and not in the list; it is worn still.
+    [TestMethod]
+    public void ASwitchedOffWornItemLeavesTheDollEmptyAndComesBackWithTheFlag()
+    {
+        using var session = HeroSession();
+        var host = Host();
+        Assert.AreEqual(GameSessionFailure.None, host.Attach(session));
+        Assert.AreEqual(GameSessionDisposition.Changed, host.PickUp(session, Entity(1)).Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, Wear(session, host, Entity(1), EquipmentSlot.Shield).Disposition);
+        Assert.AreEqual(Entity(1), host.View(session, null, 1, kitWear: KitWear).Doll.Single(slot => slot.Slot == EquipmentSlot.Shield).Entity);
+
+        Assert.AreEqual(GameSessionDisposition.Changed, session.ApplyChanges(session.Version, null, [new(new SessionMapId(1), SessionItemOff.Key(Entity(1)), 1)]).Disposition);
+        var view = host.View(session, null, 1, kitWear: KitWear);
+        Assert.IsTrue(view.Doll.All(slot => slot.Slot != EquipmentSlot.Shield || slot.Entity is null), "the shield slot shows empty");
+        Assert.IsFalse(view.Pc.Any(line => line.Entity == Entity(1)), "no list line");
+        Assert.IsTrue(session.QueryEquipment().Worn.Any(item => item.Entity == Entity(1)), "the equipment logic still has it worn");
+
+        Assert.AreEqual(GameSessionDisposition.Changed, session.ApplyChanges(session.Version, null, [new(new SessionMapId(1), SessionItemOff.Key(Entity(1)), null)]).Disposition);
+        Assert.AreEqual(Entity(1), host.View(session, null, 1, kitWear: KitWear).Doll.Single(slot => slot.Slot == EquipmentSlot.Shield).Entity);
+    }
+
     [TestMethod]
     public void TheDollListsTheWornItemsAndWearSwapsTheOccupantBackToThePack()
     {

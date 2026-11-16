@@ -193,6 +193,8 @@ public sealed partial class GameSessionOwner
         var gold = request.Item == SessionHeroGrid.GoldEntity;
         if ((gold ? _inventory.Gold > 0 ? SessionHeroGrid.GoldKind : (SessionItemKind?)null : HeldKind(request.Item)) is not { } kind) return Refused(GameSessionFailure.ItemNotAvailable);
         if (kind != facts.Kind) return Refused(GameSessionFailure.InventoryMismatch);
+        // ARC-SCRIPT-2386 (IV15, throw node 0x42AB90): an item that is switched off (a script's toggle; the map data's own bit is not read here) is not thrown; the window does not offer it either.
+        if (!gold && QueryItemOff(_actor.Map, request.Item, dataOff: false)) return Refused(GameSessionFailure.ItemNotAvailable);
         var worn = _equipment.SlotOf(request.Item) is { } slot ? _equipment.Worn[slot] : null;
         var combat = worn?.Item ?? request.Combat;
         var weapon = kind.Type == SessionItemType.Weapon;

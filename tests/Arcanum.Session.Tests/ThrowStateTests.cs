@@ -87,6 +87,34 @@ public sealed class ThrowStateTests
             "nothing is wielded to throw now");
     }
 
+    // ARC-SCRIPT-2386 (IV15, 0x4B3C00 sets the off flag of the thrown item and 0x4B2690 clears it): the flight is the flag; the flight given up clears it too.
+    [TestMethod]
+    public void AThrownItemIsSwitchedOffWhileItFliesAndOnAgainWhenTheShotEnds()
+    {
+        using var owner = Owner();
+        var map = owner.QueryActor().Map;
+        Assert.IsFalse(owner.QueryItemOff(map, "kit:1", dataOff: false));
+        var shot = owner.AttackCritter(owner.Version, new(Rat()) { Distance = 3, Flight = true, Throw = Dagger });
+        Assert.IsTrue(owner.QueryItemOff(map, "kit:1", dataOff: false), "in flight: off");
+        Assert.IsNull(owner.QueryObjectChange(map, SessionItemOff.Key("kit:1")), "no record is written: the shot is the state");
+        Assert.IsTrue(owner.EndShot(shot.Shot!.Value));
+        Assert.IsFalse(owner.QueryItemOff(map, "kit:1", dataOff: false), "the end clears it");
+    }
+
+    // ARC-SCRIPT-2386 (IV15, throw node 0x42AB90 refuses an item whose flags & 3 is not 0): a switched-off weapon is not thrown, it stays in the hand.
+    [TestMethod]
+    public void ASwitchedOffWeaponIsNotThrown()
+    {
+        using var owner = Owner();
+        var map = owner.QueryActor().Map;
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.ApplyChanges(owner.Version, null, [new MapChangeEdit(map, SessionItemOff.Key("kit:1"), 1)]).Disposition);
+        var shot = owner.AttackCritter(owner.Version, new(Rat()) { Distance = 3, Flight = true, Throw = Dagger });
+        Assert.AreEqual(GameSessionFailure.None, shot.Failure);
+        Assert.IsTrue(Wields(owner), "the weapon stays in the hand");
+        Assert.AreEqual(0, owner.QueryPlacedItems().Count, "nothing lies on the ground");
+        Assert.IsFalse(owner.QueryItemInFlight("kit:1"));
+    }
+
     // ARC-MAGIC-025 (IC12, IC14): the thrown item is the projectile's item of its location event; its strike is its end.
     [TestMethod]
     public void AThrownShotsLocationEventNamesTheThrownItemUntilItStrikes()
