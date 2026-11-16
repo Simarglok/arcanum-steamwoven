@@ -30,9 +30,9 @@ public sealed partial class SessionSpellCasterTests
         public bool DamageObject(string id, AttackDamage damage) => false;
     }
 
-    private static (GameSessionOwner Owner, SessionSpellCaster Caster) StoreSession(SessionSpellRecord record, int store = 10)
+    private static (GameSessionOwner Owner, SessionSpellCaster Caster) StoreSession(SessionSpellRecord record, int store = 10, GameSessionLimits? limits = null)
     {
-        var owner = HeroStateTests.CreateWith(HeroStateTests.HalfElf());
+        var owner = HeroStateTests.CreateWith(HeroStateTests.HalfElf(), limits);
         owner.SelectRules(RuleMode.Steamwoven);
         // The hero wears the starting kit's weapon; its store is the item's own field here.
         Assert.AreEqual(GameSessionDisposition.Changed, owner.Equip(owner.Version, StoreStaff, Arcanum.Simulation.Equipment.EquipmentSlot.Weapon,

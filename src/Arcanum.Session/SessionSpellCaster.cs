@@ -1256,10 +1256,10 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
             switch (note.Kind)
             {
                 case SpellRunNoteKind.Payments when runs(note.Run)?.Source is { } source:
-                    foreach (var payment in note.Payments ?? []) Pay(note.Run, source.Id, payment);
+                    foreach (var payment in note.Payments ?? []) Pay(note.Run, source.Id, Replanned(source.Id, payment));
                     break;
                 case SpellRunNoteKind.ReflectionPayment when note.Target?.Object is { } payer:
-                    foreach (var payment in note.Payments ?? []) Pay(note.Run, payer.Id, payment);
+                    foreach (var payment in note.Payments ?? []) Pay(note.Run, payer.Id, Replanned(payer.Id, payment));
                     break;
                 case SpellRunNoteKind.Message: _log.Add(new(SpellCastEventKind.Message, note.Run, note.Value)); break;
                 case SpellRunNoteKind.Resisted:
@@ -1298,27 +1298,33 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
         _itemEvents.AddRange(result.ItemEvents);
     }
 
-    // The notes of an event pass are applied after the pass, so a store a second payment drains is read again: a drain takes at most what is there (a store above 0 loses the drained points, never below 0; a negative one, which
-    // the plan emptied, is written as the plan says).
+    // ARC-MAGIC-2403 (BC10): the notes of an event pass are applied after the pass, but the original pays at once, so a second payment of the pass sees the stores and the fatigue the first left. The plan a run step made
+    // against the state before the pass is made again against the state now, with the same cost (the plan's last cost; a half cost of a limited critter is halved again by the payer's flag), and that plan is what the host writes.
+    // A plan that is no critter's (cells, a charge, a payer that is no critter now) stays as it was. The plan's status is not re-read: it already decided the run, and the writes read only the drains and the fatigue.
+    private SpellPayment Replanned(string payerId, SpellPayment planned)
+    {
+        if (planned.Cells is not null || planned.ChargeSpent || planned.MarksItemMagical || planned.LastCost is not { } cost || cost <= 0) return planned;
+        if (RunObject(payerId) is not { IsCritter: true } who || Payer(who) is not { Kind: SpellPayerKind.Critter } payer) return planned;
+        return SpellPaymentRules.Pay(payer, cost, true, SpellPaymentRules.NoSpell, default, Cells);
+    }
+
+    // The plan names the stores it drained against the stores now (a payment is planned just before it is written, or made again by Replanned): the store left is the plan's, written whatever the session's budget or tracking of the
+    // item, since the worn item is named by the payer's slot. A write that is still refused (a deleted item cannot be worn; the revision counter at its end) is logged.
     private void DrainWornStore(int run, string payer, ManaStoreDrain drain)
     {
         var slot = WornSlotFirst + drain.Slot;
-        if (WornOf(payer).FirstOrDefault(worn => worn.Slot == slot) is not { Id: { } wornId } worn || Item(wornId) is not { } item) return;
-        // A store already 0 (a second payment of the pass planned against the store before it) is skipped, as the original's loop skips it.
-        if (item.ManaStore == 0) return;
-        var after = item.ManaStore < 0 || drain.Drained < 0 ? drain.StoreAfter : Math.Max(0, item.ManaStore - drain.Drained);
-        var taken = item.ManaStore < 0 || drain.Drained < 0 ? drain.Drained : item.ManaStore - after;
-        var written = _owner.WriteItemManaStore(_owner.Version, wornId, item.ManaStore, after);
+        if (WornOf(payer).FirstOrDefault(worn => worn.Slot == slot) is not { Id: { } wornId } || Item(wornId) is not { } item) return;
+        var written = _owner.WriteItemManaStore(_owner.Version, wornId, item.ManaStore, drain.StoreAfter, worn: true);
         if (written.Disposition == GameSessionDisposition.Rejected)
         {
             _log.Add(new(SpellCastEventKind.ManaStoreNotSaved, run, (int)written.Failure, wornId));
             // The original drops the cached lists whatever the write did (0x4CCC40 at 0x45062B, ARC-AI-2402).
-            if (after == 0) ManaStoreEmptied?.Invoke(payer, wornId);
+            if (drain.StoreAfter == 0) ManaStoreEmptied?.Invoke(payer, wornId);
             return;
         }
-        if (written.Disposition == GameSessionDisposition.Changed) _log.Add(new(SpellCastEventKind.ManaStoreDrained, run, after, wornId, taken));
-        _owner.ScheduleManaRecharge(wornId, taken, merge: true);
-        if (after == 0) ManaStoreEmptied?.Invoke(payer, wornId);
+        if (written.Disposition == GameSessionDisposition.Changed) _log.Add(new(SpellCastEventKind.ManaStoreDrained, run, drain.StoreAfter, wornId, drain.Drained));
+        _owner.ScheduleManaRecharge(wornId, drain.Drained, merge: true);
+        if (drain.StoreAfter == 0) ManaStoreEmptied?.Invoke(payer, wornId);
     }
 
     /// <summary>

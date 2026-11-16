@@ -19,17 +19,20 @@ public sealed partial class GameSessionOwner
     /// recharge handler (0x459680, which adds to it with no cap at the prototype's value) write it. <paramref name="baseline"/> is the item's own field,
     /// read only until the session holds a store; a store equal to the current one is <see cref="GameSessionDisposition.NoChange"/>. The store is a plain
     /// 32-bit value as in the original (ARC-MAGIC-2401): any int, a negative one included. Refused for an invalid entity (<see cref="GameSessionFailure.InvalidItem"/>),
-    /// a stale version, an item the session does not track or deleted (<see cref="GameSessionFailure.ItemNotAvailable"/>) and a full record budget. One revision.
+    /// a stale version, an item the session deleted (<see cref="GameSessionFailure.ItemNotAvailable"/>), an item it does not track (unless <paramref name="worn"/>, or the
+    /// session already holds its store) and a full store budget (<see cref="GameSessionLimits.MaxManaStores"/>, which no other record shares). One revision.
+    /// ARC-MAGIC-2403: <paramref name="worn"/> is the payment's mark that a critter wears the item (the host's map names it in one of the payer's slots), which the original needs no
+    /// other fact for: its store is written whatever seed the session has attached for the item's map. A store the session holds is written on too (the recharge event), tracked or not.
     /// </summary>
-    public GameSessionMutationResult WriteItemManaStore(GameSessionVersion expected, string entity, int baseline, int store)
+    public GameSessionMutationResult WriteItemManaStore(GameSessionVersion expected, string entity, int baseline, int store, bool worn = false)
     {
         ThrowIfDisposed();
         if (!SessionValidation.Entity(entity)) return new(GameSessionDisposition.Rejected, GameSessionFailure.InvalidItem, Version);
         if (!IsCurrent(expected)) return new(GameSessionDisposition.Rejected, GameSessionFailure.StaleVersion, Version);
-        if (!TracksItem(entity)) return new(GameSessionDisposition.Rejected, GameSessionFailure.ItemNotAvailable, Version);
         var recorded = _durability.ManaStores.TryGetValue(entity, out var current);
+        if (IsItemDestroyed(entity) || !(recorded || worn || TracksItem(entity))) return new(GameSessionDisposition.Rejected, GameSessionFailure.ItemNotAvailable, Version);
         if ((recorded ? current : baseline) == store) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, Version);
-        if (!recorded && _durability.Count >= _limits.MaxDurabilityRecords) return new(GameSessionDisposition.Rejected, GameSessionFailure.BudgetExceeded, Version);
+        if (!recorded && _durability.ManaStores.Count >= _limits.MaxManaStores) return new(GameSessionDisposition.Rejected, GameSessionFailure.BudgetExceeded, Version);
         if (_revision == long.MaxValue) return new(GameSessionDisposition.Rejected, GameSessionFailure.RevisionExhausted, Version);
         _durability.ManaStores[entity] = store;
         Revise();
@@ -107,7 +110,7 @@ public sealed partial class GameSessionOwner
         var elapsed = (int)Math.Min((firing.NowMs - firing.Event.Payload.Values[0]) / 1000, int.MaxValue);
         var (restored, remaining) = SpellCostRules.Recharge(elapsed, pending);
         var written = WriteItemManaStore(Version, entity, store, unchecked(store + restored));
-        // A store the session cannot write (the item is no longer tracked, a full record budget) ends the event: the points are not held anywhere else.
+        // A store the session cannot write (the item was deleted, a stale revision counter) ends the event: the points are not held anywhere else.
         if (written.Disposition == GameSessionDisposition.Rejected) return written.Failure == GameSessionFailure.RevisionExhausted ? GameEventHandlerOutcome.Refused : GameEventHandlerOutcome.Completed;
         if (remaining > 0) ScheduleManaRecharge(entity, remaining, merge: false);
         return GameEventHandlerOutcome.Completed;
