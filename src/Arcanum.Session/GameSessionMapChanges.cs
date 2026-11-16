@@ -27,6 +27,9 @@ internal static class ObjectStateVocabulary
     /// <summary>The prefix of a mobile map object's entity.</summary>
     internal const string EntityPrefix = "oid:";
 
+    /// <summary>The object field "off" (the object flag 0x2 of the original): 1 is off, 0 is on, no record is what the map data says.</summary>
+    internal const string OffProperty = "obj.off";
+
     /// <summary>The prefix of a static map object's positional entity (<c>sector:S:I</c>).</summary>
     internal const string StaticEntityPrefix = "sector:";
 
@@ -53,7 +56,8 @@ internal static class ObjectStateVocabulary
     internal static bool Mobile(string? entity, string property) =>
         entity is not null && (entity.StartsWith(EntityPrefix, StringComparison.Ordinal) && (Properties.Contains(property) || Attachment(property) || SessionCritterIndexedWrites.Owns(property))
             // ARC-SCRIPT-1826 (ledger AN18): a made or script-created item (made:n) is a mobile object too: its art id a script wrote follows it from holder to holder and from map to map. Only this field is kept for it.
-            || property == SessionObjectArt.Property && SessionMadeItem.Number(entity) is not null);
+            // ARC-SCRIPT-2346: and so is its off flag (a script's toggle state on the item, IV9).
+            || (property == SessionObjectArt.Property || property == OffProperty) && SessionMadeItem.Number(entity) is not null);
 
     /// <summary>Whether the key is a field of a static object (one record per map, entity and property).</summary>
     internal static bool Static(MapChangeKey key) => key.Scope == MapChangeScope.Entity && Static(key.Entity, key.Property);

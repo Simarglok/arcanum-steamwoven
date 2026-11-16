@@ -27,19 +27,22 @@ public interface ISessionItemWorldHost
     /// <summary>Whether the object is mind-controlled (condition 20 never takes such an object as named), or null for an object the host does not know.</summary>
     bool? IsMindControlled(ScrObjectRef obj);
 
+    /// <summary>ARC-SCRIPT-2346 (IV9): whether the map data of the item stores its off flag (object flag 0x2) set, or null when the host has no row for it (an item made at run time has none: the host answers false for it); the session then refuses a toggle state on it.</summary>
+    bool? ItemOffInData(ScrObjectRef item);
+
     /// <summary>The plan of a change art number of the object to <paramref name="number"/> (the host's reading of the art files and of the object's lock identity); null when the host cannot plan it (the move is refused).</summary>
     SessionObjectArtPlan? ArtPlan(ScrObjectRef obj, int number);
 
     /// <summary>
-    /// ARC-SCRIPT-2347 (IV9): the state of <paramref name="quest"/> the quest state condition (6) compares, as the use host reads it (SG1: the hero's own entry, 6 when it is botched; any other object the quest's global state), or null
+    /// ARC-SCRIPT-2347 (IV13): the state of <paramref name="quest"/> the quest state condition (6) compares, as the use host reads it (SG1: the hero's own entry, 6 when it is botched; any other object the quest's global state), or null
     /// when the host cannot answer (the move is refused). Only a read: the item set admits no quest write yet.
     /// </summary>
     int? QuestState(ScrObjectRef obj, int quest);
 
-    /// <summary>ARC-SCRIPT-2347 (IV9): an object's type field (get object type, OV3: 15 for the hero), or null for an object the host reads no row for.</summary>
+    /// <summary>ARC-SCRIPT-2347 (IV13): an object's type field (get object type, OV3: 15 for the hero), or null for an object the host reads no row for.</summary>
     int? ObjectType(ScrObjectRef obj);
 
-    /// <summary>ARC-SCRIPT-2347 (IV10, HW1): the obj is dead condition (22) as the use host reads it (the hero's death, an NPC's death as the session holds it), or null for any other object and one the host reads no row for (the move is refused).</summary>
+    /// <summary>ARC-SCRIPT-2347 (IV14, HW1): the obj is dead condition (22) as the use host reads it (the hero's death, an NPC's death as the session holds it), or null for any other object and one the host reads no row for (the move is refused).</summary>
     bool? IsDead(ScrObjectRef obj);
 }
 

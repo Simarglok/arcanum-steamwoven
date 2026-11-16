@@ -80,9 +80,11 @@ public sealed class ObjectArtStateTests
         Assert.AreEqual(0x6060_0040u, restored.QueryObjectArt(Exterior, Made));
         Assert.AreEqual(GameSessionDisposition.Changed, restored.SetObjectArt(restored.Version, Exterior, Made, 0x6020_0040, baseline: 0x6020_0040).Disposition);
         Assert.IsNull(restored.QueryObjectArt(Cave, Made));
-        // No other field is a made item's own: it is a per-map change, as before.
-        Assert.AreEqual(GameSessionDisposition.Changed, owner.SetMapChange(owner.Version, Exterior, MapChangeKey.ForEntity(Made, "obj.off"), 1).Disposition);
+        // No other field is a made item's own: it is a per-map change, as before (ARC-SCRIPT-2346: but the off flag of the item, which a script's toggle state writes).
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.SetMapChange(owner.Version, Exterior, MapChangeKey.ForEntity(Made, "obj.destroyed"), 1).Disposition);
         Assert.AreEqual(1, owner.Capture().Maps.Count);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.SetMapChange(owner.Version, Cave, SessionItemOff.Key(Made), 1).Disposition);
+        Assert.AreEqual(1, owner.Capture().Maps.Count, "the off flag is an object field of the made item: no per-map change");
     }
 
     [TestMethod]

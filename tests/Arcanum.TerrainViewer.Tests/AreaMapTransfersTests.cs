@@ -340,4 +340,30 @@ public sealed class AreaMapTransfersTests
         Assert.AreEqual(AreaUseOutcome.ScriptEnded, transfers.Enter(other).Single().Outcome, "a run that happened decides, teleport or not");
         Assert.IsNull(transfers.Pending);
     }
+
+    // ARC-WORLD-2358 (TT20): a tile script's hero teleport whose run also started a conversation is a script transfer (the dialog opens inside the run, the ping takes the request at the next frame with it open); one without a conversation is not.
+    [TestMethod]
+    public void A_tile_scripts_teleport_with_a_conversation_is_a_script_transfer()
+    {
+        var (map, row) = Load();
+        var cell = new AreaStepCell(row.WorldX!.Value, row.WorldY!.Value);
+        var sector = WorldSectorCoordinate.Containing(new(cell.X, cell.Y));
+        var arrival = map.Snapshot.Terrain.Select(t => new AreaStepCell(t.WorldX, t.WorldY)).First(c => map.Steps.IsAdmitted(c) && c != cell);
+        var placed = new MapPlacedScript(MapTransitionTrigger.TileEntry, sector, 0, new(cell.X, cell.Y), 0, 0, 600);
+        var set = new MapTransitionSet(new WorldMap("test", new(2, 0, 64, 64), null, null, null, [], [], [], null, []), new(map.RuntimeMap + 4999, "test", null), [], [], [placed]);
+        var transfers = new AreaMapTransfers(map, set, Destinations(map));
+        var pc = new ScrObjectRef(map.RuntimeMap, "pc");
+        var teleport = new ScrTeleport(pc, map.RuntimeMap + 4999, (int)arrival.X, (int)arrival.Y);
+        var talk = new ScrDialogStart(pc, new ScrObjectRef(map.RuntimeMap, "npc"), 741, 0, 3);
+        var answer = new AreaScriptedUse(AreaScriptedUseOutcome.Teleport, teleport, [], null, "teleport") { Dialog = talk };
+        transfers.PlacedRunner = (_, _) => answer;
+
+        Assert.AreEqual(AreaUseOutcome.Accepted, transfers.Enter(cell).Single().Outcome);
+        Assert.IsTrue(transfers.Pending!.ByTalkScript);
+        Assert.AreEqual(talk, transfers.LastScripted!.Dialog, "the viewer opens the conversation after the run");
+        transfers.Clear();
+        answer = answer with { Dialog = null };
+        Assert.AreEqual(AreaUseOutcome.Accepted, transfers.Enter(cell).Single().Outcome);
+        Assert.IsFalse(transfers.Pending!.ByTalkScript);
+    }
 }

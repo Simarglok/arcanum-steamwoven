@@ -380,9 +380,8 @@ public sealed partial class GameSessionOwner
         if (_transferDryRun) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, item, verdict, Version);
         if (into is { } target)
         {
-            var units = _inventory.Ammo[item].Units;
-            DestroyObject(item);
-            _inventory.Ammo[target.Entity] = target with { Units = target.Units + units };
+            // The merged item is destroyed after the runs commit (ARC-SCRIPT-2346: a toggle state its insert-item script ran leaves no off record behind it).
+            _inventory.Ammo[target.Entity] = target with { Units = target.Units + _inventory.Ammo[item].Units };
         }
         else
         {
@@ -405,6 +404,7 @@ public sealed partial class GameSessionOwner
             if (identify) _inventory.Identified.Add(item);
         }
         runs?.Commit();
+        if (into is not null) DestroyObject(item);
         Revise();
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, into?.Entity ?? item, verdict, Version)
             { InsertScript = insertRun, Scripts = runs?.Runs ?? [], Messages = runs?.Messages ?? [] };

@@ -27,7 +27,11 @@ public partial class TerrainViewerApp
         () => LootWindowOnContainer, () => _aiHost is { } ai && ReferenceEquals(ai.Session, _areaSession) ? ai : null,
         () => _combatHost is not null && _worldActor.Session is AreaGridSession ? AreaCombatWorldNow() : null, RestockHostNow, EncounterHostNow, () => _readingData?.Data?.Texts,
         // ARC-MAGIC-1684: an NPC's best-items wield (its regeneration, the AI gate's re-wield) runs its items' move scripts through the shown map's item script host.
-        () => _areaSession is { } session ? _inventoryHost?.ItemScripts(session) : null);
+        () => _areaSession is { } session ? _inventoryHost?.ItemScripts(session) : null,
+        // ARC-WORLD-2358 (TT20): the conversation a deferred call's run started waits for the next frame (the original opens it inside the run, the ping applies the run's teleport a frame later).
+        callDialog: dialog => _callDialogs.Enqueue(dialog));
+
+    private readonly Queue<Arcanum.Scripting.Scr.ScrDialogStart> _callDialogs = new();
 
     // MIG12 S8: the host of the real-time steps the frame step hands out (the world-map journey's travel step, the turn-based event).
     private AreaRealStepHost? _realStepHost;
