@@ -280,6 +280,17 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         ScrAdmissionSet.S3.FocusKinds.Concat([ScrFocusKind.CurrentLoopedObject, ScrFocusKind.EveryoneInVicinity, ScrFocusKind.AnyoneInVicinity, ScrFocusKind.EverySceneryInVicinity, ScrFocusKind.AnySceneryInVicinity, ScrFocusKind.LocalObject,
             ScrFocusKind.EveryContainerInVicinity, ScrFocusKind.AnyContainerInVicinity, ScrFocusKind.EveryFollower, ScrFocusKind.AnyFollower]));
 
+    /// <summary>
+    /// ARC-SCRIPT-2338 (ledger BS1, BS2): the set a BUST script (attachment point 30) runs under (<see cref="RunBust"/>): <see cref="HeartbeatAdmission"/> plus the story actions of <see cref="ScrAdmissionSet.S13"/> (set PC quest
+    /// state 16, mark map location 49, set rumor 50, add and remove reputation 72 and 73) and play script eye candy (120). The original's script executor (0x447220) has no per-point restriction, so a bust script runs the same commands a use
+    /// script does; the heartbeat set stays narrow because it runs every few seconds for every NPC near the PC, and a break runs once. The installed bust script 1734 (main map, the scenery that stops the script eye candy
+    /// of its neighbours) sets a PC quest state and plays a script eye candy; the run applies them through the same <see cref="Apply"/> as a use click (<see cref="AreaScriptStory.Apply"/>, the eye candy requests for the viewer).
+    /// </summary>
+    public static ScrAdmissionSet BustAdmission { get; } = new("S2-area-bust-heartbeat-story-eye-candy",
+        HeartbeatAdmission.Conditions,
+        HeartbeatAdmission.Actions.Union(ScrAdmissionSet.S13.Actions.Where(a => !ScrAdmissionSet.S12.Actions.Contains(a))).Append(ScrCatalogue.Action.PlayScriptEyeCandy),
+        HeartbeatAdmission.ValueKinds, HeartbeatAdmission.FocusKinds, HeartbeatAdmission.CounterIndexWraps);
+
     /// <summary>ARC-WORLD-114: whether a script switched the NPC <paramref name="entity"/> of map <paramref name="map"/> off
     /// (<see cref="OffProperty"/>).</summary>
     public static bool SwitchedOff(GameSessionOwner session, int map, string entity) =>
@@ -1565,7 +1576,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     /// <summary>
     /// ARC-DEV-260 (ledger OD4, OD15): the BUST script (attachment point 30) of <paramref name="victim"/>, an object of the shown map, which the break
     /// (0x43F1C0) runs through the script dispatcher (0x441980) with <paramref name="breaker"/> as the triggerer (null: a break with no attacker,
-    /// the null handle), the object as the attachee and no extra object, under <see cref="HeartbeatAdmission"/>. The break ignores the answer, so
+    /// the null handle), the object as the attachee and no extra object, under <see cref="BustAdmission"/>. The break ignores the answer, so
     /// the caller reads nothing from it; its slot is kept as map changes (<see cref="SlotProperty"/>). An object that is not a row of the shown
     /// map, or has no script at the point, runs nothing.
     /// </summary>
@@ -1579,7 +1590,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         _clicked = (victim, row);
         try
         {
-            var run = ScrDispatcher.RunObject(new(ScrPoint.Bust, attachee, breaker, null), this, new() { Rules = rules, Admission = HeartbeatAdmission });
+            var run = ScrDispatcher.RunObject(new(ScrPoint.Bust, attachee, breaker, null), this, new() { Rules = rules, Admission = BustAdmission });
             return Finish(run, _ => "a teleport from a bust script is not modelled", writeback => WriteObjectSlot(writeback, attachee));
         }
         finally { _clicked = previous; }

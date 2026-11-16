@@ -344,7 +344,7 @@ public sealed class AreaScriptEyeCandyTests
 
     // ARC-SCRIPT-2321 (AS3, issue #2321 census of #2262): the two installed roots that wait on the focus kind any scenery in the vicinity (16): the tile script 2561 (20 tile sites on the k'na tha map) is admitted whole by the
     // placed set; the script 1734 (the destroy point 2 and the bust point 30 of the main map) is admitted whole by the heartbeat and dying sets' own focus kinds with the commands of S64, and the heartbeat set
-    // still refuses it for a command (set PC quest state, 16) that the bust host does not hold.
+    // still refuses it for a command (set PC quest state, 16) that only the bust host's own set holds (ARC-SCRIPT-2338).
     [TestMethod, TestCategory("RealData")]
     public void The_installed_scripts_that_loop_over_any_scenery_are_freed_by_the_focus_kind_in_the_hosts_that_run_them()
     {
@@ -365,8 +365,12 @@ public sealed class AreaScriptEyeCandyTests
             Assert.IsTrue(result.IsAdmitted, $"{number} by the {name} set: {result.Refusal?.Code}@{result.Refusal?.Line}/{result.Refusal?.Type}/{result.Refusal?.Kind}");
             Assert.IsFalse(ScrAdmission.Admit(program, ScrAdmissionSet.S61).IsAdmitted, $"{number} is refused without kind 16");
         }
-        var bust = ScrAdmission.Admit(content.Script(1734).Program!, AreaUseScriptHost.HeartbeatAdmission);
-        Console.WriteLine($"ANY-SCENERY-ADMISSION|script 1734|heartbeat as built|{bust.Refusal?.Code}@{bust.Refusal?.Line}/{bust.Refusal?.Type}/{bust.Refusal?.Kind}");
-        Assert.AreNotEqual(ScrRefusalCode.FocusKindNotAdmitted, bust.Refusal?.Code, "the kind is not what stops the bust script");
+        // ARC-SCRIPT-2338 (BS1): the heartbeat set as built still refuses it for set PC quest state (16), not for the focus kind; the bust host's own set admits it whole.
+        var heartbeat = ScrAdmission.Admit(content.Script(1734).Program!, AreaUseScriptHost.HeartbeatAdmission);
+        Console.WriteLine($"ANY-SCENERY-ADMISSION|script 1734|heartbeat as built|{heartbeat.Refusal?.Code}@{heartbeat.Refusal?.Line}/{heartbeat.Refusal?.Type}/{heartbeat.Refusal?.Kind}");
+        Assert.AreEqual((ScrRefusalCode.ActionNotAdmitted, 0, ScrCatalogue.Action.SetPcQuestState), (heartbeat.Refusal?.Code, heartbeat.Refusal?.Line, heartbeat.Refusal?.Type), "the quest state, not the kind, stops the heartbeat set");
+        var bust = ScrAdmission.Admit(content.Script(1734).Program!, AreaUseScriptHost.BustAdmission);
+        Console.WriteLine($"ANY-SCENERY-ADMISSION|script 1734|bust|admitted {bust.IsAdmitted}|{bust.Refusal?.Code}@{bust.Refusal?.Line}/{bust.Refusal?.Type}/{bust.Refusal?.Kind}");
+        Assert.IsTrue(bust.IsAdmitted, $"1734 by the bust set: {bust.Refusal?.Code}@{bust.Refusal?.Line}/{bust.Refusal?.Type}/{bust.Refusal?.Kind}");
     }
 }
