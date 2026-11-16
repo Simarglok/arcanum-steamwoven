@@ -97,7 +97,7 @@ agent that saw only the questions (method step 6). Both agree on every row; the 
 
 | ID | Function (address) | Original 1.0.7.4 | Verdict |
 | --- | --- | --- | --- |
-| FC1 | step objects (0x43FD70, 0x43FDC0, 0x43FE00) | The step's object test lists the objects through 0x4407C0: walls and portals (mask 0x3) on the edge of the tile left, then walls, portals, containers, scenery, projectiles, PCs, NPCs and traps (mask 0x3801F) on the tile stepped onto, and skips an object with the no-block flag 0x400 itself. | Original |
+| FC1 | step objects (0x43FD70, 0x43FDC0, 0x43FE00) | The step's object test lists the objects through 0x4407C0: walls and portals (mask 0x3) on the edge of the tile left, then walls, portals, containers, scenery, projectiles, PCs, NPCs and traps (mask 0x3801F) on the tile stepped onto, and skips an object with the no-block flag 0x400 itself (for a step with none of the flags 0x08, 0x10, 0x20; with the line of fire's flags 0x0C the jump lands on the cover test and changes nothing, [AW7](npc-ai.md)). | Original |
 | FC2 | tile objects (0x4407C0) and its filter (global 0x5E2F88) | Every object whose object flags share a bit with the global filter is skipped, before its type is matched. The object module's init sets the filter to 3 (destroyed 0x1, off 0x2) unless the editor flag is set (then 0); the game's startup passes the editor flag 0, and the filter toggle (0x43AAB0) is reached by nothing in the executable. So in the game destroyed and switched-off objects are never listed for a step. | Original |
 | FC3 | tile blocking (0x4D7110) | The sector's block mask, a facade tile's bit or the tile name's blocking flag; no object is read, so a removed object leaves its tile's own blocking as it was. | Original |
 

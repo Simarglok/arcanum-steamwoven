@@ -706,9 +706,9 @@ public partial class TerrainViewerApp
         // ARC-COMBAT-2168 (0x4B3170, SC16): the record's first step turns an occupied bed into its occupant, and only then does the ranged path trace the line (RA4), so the sleeper is out of the bed before
         // a blocker is looked for. The trace still ends at the bed's tile (0x4B2210 set the record's location from the click), where the last step skips every object but walls and portals: the bed never blocks
         // or covers. A blocker strikes in place of the occupant, who keeps the -30 of being pulled out.
-        var occupantGoal = BedOccupantGoal(goal);
+        var (pulledOut, occupantGoal) = BedOccupantGoal(goal);
         var trace = RangedPath(owner.QueryHeroAttack()) ? LoggedLineOfFire(session, goal.Row) : null;
-        if (trace?.Blocker is { } blocker && blocker.Key != goal.Row.Key) { StrikeBlocker(goal, blocker, session, occupantGoal is not null); return; }
+        if (trace?.Blocker is { } blocker && blocker.Key != goal.Row.Key) { StrikeBlocker(goal, blocker, session, pulledOut); return; }
         if (occupantGoal is not null) { HitCritter(goal, occupantGoal, (int)distance, ShotLine(trace, goal.Row), inBed: true); return; }
         if (goal.Object is { } struck) { RunObjectAttackHit(goal, struck, (int)distance); return; }
         if (goal.Wall) { StrikeWall(goal, goal.Row, (int)distance, false); return; }
@@ -717,19 +717,20 @@ public partial class TerrainViewerApp
 
     /// <summary>
     /// ARC-COMBAT-1942 (0x4B3170, SC16): the hero's blow on the scenery <paramref name="goal"/> targets, when it is a bed with an occupant: the occupant leaves the bed through the unseat 0x45F3A0 and is returned as the target of the
-    /// blow, whose check carries -30 (TargetWasInBed). The goal keeps the bed, so the next blow strikes the empty bed. Null for any other target, and for an occupant the combat host has no values for, who stays pulled out
+    /// blow, whose check carries -30 (TargetWasInBed). The goal keeps the bed, so the next blow strikes the empty bed. ARC-COMBAT-2171: PulledOut says an occupant left the bed, whether or not the combat host has values for it
+    /// (0x4B3170 keeps the -30 of a blow that struck something else on the line whenever the occupant was pulled out); Goal is the occupant's goal, null for any other target, and for an occupant the combat host has no values for, who stays pulled out
     /// while the bed takes the blow.
     /// </summary>
-    private AttackGoal? BedOccupantGoal(AttackGoal goal)
+    private (bool PulledOut, AttackGoal? Goal) BedOccupantGoal(AttackGoal goal)
     {
-        if (goal.Object is not { Row.Type: 3 } bed || _aiHost?.HeroBlowOccupant(bed.Entity) is not { } occupant) return null;
+        if (goal.Object is not { Row.Type: 3 } bed || _aiHost?.HeroBlowOccupant(bed.Entity) is not { } occupant) return (false, null);
         if (_combatHost!.Target(_areaSession!, occupant) is { Dead: false, Build.Combat: { } combat } npc)
         {
             GD.Print($"ARC-COMBAT-1942 bed-blow bed={bed.Entity} occupant={occupant}");
-            return new AttackGoal(npc, combat, goal.Aim);
+            return (true, new AttackGoal(npc, combat, goal.Aim));
         }
         GD.Print($"ARC-COMBAT-1942 bed-blow bed={bed.Entity} occupant={occupant} has no combat values: the bed takes the blow");
-        return null;
+        return (true, null);
     }
 
     /// <summary>ARC-COMBAT-012/015: the attack takes the original's ranged path (RA1: the throwing skill or a reach above 1).</summary>

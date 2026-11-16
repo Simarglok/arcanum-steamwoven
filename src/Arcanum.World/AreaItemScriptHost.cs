@@ -76,6 +76,15 @@ public sealed class AreaItemScriptHost : ISessionItemScriptHost, ISessionItemWor
     // The hero has no row (its name is not modelled and reads 0, as in the use host), any other object needs the row the use host reads.
     private bool Known(AreaUseScriptHost host, ScrObjectRef obj) => host.IsPc(obj) || host.KnowsObject(obj);
 
+    /// <summary>ARC-SCRIPT-2347 (IV13, SG1): the quest state the use host reads (the hero's own entry, any other object the quest's global state); it needs no row, so only a missing shown map leaves it unanswered.</summary>
+    public int? QuestState(ScrObjectRef obj, int quest) => _shown?.Invoke() is { } host ? host.QuestState(obj, quest) : null;
+
+    /// <summary>ARC-SCRIPT-2347 (IV13, OV3): an object's type field from the shown map's rows (the hero is 15).</summary>
+    public int? ObjectType(ScrObjectRef obj) => _shown?.Invoke() is { } host && Known(host, obj) ? host.ObjectType(obj) : null;
+
+    /// <summary>ARC-SCRIPT-2347 (IV14, HW1): the death of the hero or of an NPC the use host holds a row of, as it reads it; null for any other object.</summary>
+    public bool? IsDead(ScrObjectRef obj) => _shown?.Invoke()?.IsDead(obj);
+
     /// <summary>
     /// ARC-SCRIPT-2346 (IV9): the item's off flag (bit 0x2 of the object flags, slot 18) in the loaded maps' rows; false for an item the session made (<c>made:n</c>: the original creates it on); null for an item no loaded row names. Only
     /// the data's bit: a script's toggle is the session's field (<see cref="GameSessionOwner.QueryItemOff"/>).

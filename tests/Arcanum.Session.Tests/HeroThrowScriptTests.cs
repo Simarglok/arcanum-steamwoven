@@ -193,4 +193,46 @@ public sealed class HeroThrowScriptTests
         Assert.AreEqual((GameSessionFailure.StaleVersion, false), (result.Failure, ReadFlag(owner, 3) == true), "a stale version refuses before the scripts run");
         Assert.AreEqual(0, result.Scripts.Count);
     }
+
+    // ARC-COMBAT-2176: the refusals of the struck critter's attack come before any script runs (the preflight, as NpcThrowPreflight does for an NPC).
+    private static SessionHeroThrow AtRat(GameSessionOwner owner, Host host, params int[] points) =>
+        At(owner, host, points) with { Struck = SessionCritterCombat.From("oid:rat", AttackStateTests.Npc(hpAdjustment: 5000)).Combat!, StruckCell = Here(owner, 3) };
+
+    private static void AssertRefusedBeforeScripts(GameSessionOwner owner, Host host, SessionHeroThrow request, GameSessionFailure expected, string why)
+    {
+        var (version, draws) = (owner.Version, owner.QueryRandom().Draws);
+        var result = owner.ThrowHeroItem(owner.Version, request);
+        Assert.AreEqual((GameSessionDisposition.Rejected, expected), (result.Disposition, result.Failure), why);
+        Assert.AreEqual(0, result.Scripts.Count, $"{why}: no script ran");
+        Assert.AreEqual(false, ReadFlag(owner, 3), $"{why}: no script change applied");
+        Assert.AreEqual((version, draws), (owner.Version, owner.QueryRandom().Draws), $"{why}: nothing changed");
+        Assert.IsTrue(Holds(owner, "kit:2"), why);
+    }
+
+    [TestMethod]
+    public void AStruckThrowTheAttackWouldRefuseIsRefusedBeforeTheScriptsRun()
+    {
+        using var owner = Owner();
+        var host = new Host();
+        host.Programs[ThrowScript] = Program(C(ScrCatalogue.Action.SetGlobalFlag, (Number, 3)), C(ScrCatalogue.Action.ReturnRunDefault));
+        var request = AtRat(owner, host, SessionScriptPoint.Throw);
+        AssertRefusedBeforeScripts(owner, host, request with { StruckLight = 300 }, GameSessionFailure.InvalidAttack, "a light level outside 0..255");
+        AssertRefusedBeforeScripts(owner, host, request with { StruckCell = Here(owner, 200_000), Target = Here(owner, 200_000) }, GameSessionFailure.InvalidAttack, "a distance beyond the thrown range");
+        Assert.IsTrue(owner.RestoreRandom(new(owner.QueryRandom().Seed, long.MaxValue)));
+        AssertRefusedBeforeScripts(owner, host, request, GameSessionFailure.RandomExhausted, "the rolls of the attack run out");
+    }
+
+    [TestMethod]
+    public void AStruckThrowTheAttackAcceptsRunsItsScriptsAndStrikes()
+    {
+        using var owner = Owner();
+        var host = new Host();
+        host.Programs[RemoveScript] = Program(C(ScrCatalogue.Action.SetGlobalFlag, (Number, 3)), C(ScrCatalogue.Action.ReturnRunDefault));
+        host.Programs[ThrowScript] = Program(C(ScrCatalogue.Action.SetGlobalFlag, (Number, 7)), C(ScrCatalogue.Action.ReturnRunDefault));
+        var result = owner.ThrowHeroItem(owner.Version, AtRat(owner, host, SessionScriptPoint.RemoveItem, SessionScriptPoint.Throw));
+        Assert.AreEqual((GameSessionDisposition.Changed, GameSessionFailure.None), (result.Disposition, result.Failure));
+        Assert.IsNotNull(result.Attack?.Resolution, "the critter was attacked");
+        CollectionAssert.AreEqual(new[] { SessionScriptPoint.RemoveItem, SessionScriptPoint.Throw }, result.Scripts.Select(run => run.Point).ToArray());
+        Assert.AreEqual((true, true), (ReadFlag(owner, 3), ReadFlag(owner, 7)));
+    }
 }
