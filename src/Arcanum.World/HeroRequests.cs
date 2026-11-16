@@ -13,9 +13,10 @@ public abstract record HeroRequest;
 
 /// <summary>
 /// A left click on a tile: the hero walks, or runs by the always-run rule (0x4304C0). <paramref name="Ctrl"/> is the Ctrl key at the press. <paramref name="Held"/> marks a repeat of an input that is held down (the held button of
-/// the original, the stick of the gamepad: ARC-DEV-147, Q7): the walk is the same starter, and the run it asks for is marked as a held walk.
+/// the original, the stick of the gamepad: ARC-DEV-147, Q7): the walk is the same starter, and the run it asks for is marked as a held walk. <paramref name="Shift"/> is either Shift key at the press: the original's
+/// tile press does nothing then (0x54DE50, mode 0 and 3, GT107, SA47; ARC-INPUT-1936), so the request is <see cref="HeroRequestOutcome.Ignored"/> and sets no walk and no held flag.
 /// </summary>
-public sealed record WalkRequest(CellCoord Tile, bool Ctrl, bool Held = false) : HeroRequest;
+public sealed record WalkRequest(CellCoord Tile, bool Ctrl, bool Held = false, bool Shift = false) : HeroRequest;
 
 /// <summary>The right button's release (0x54DE50, subtype 3), after its combat-mode or concealment part: interrupts the hero at level 3 and turns it toward <paramref name="Pointer"/>, the tile under the pointer (null when the pointer is off the game view or off the map).</summary>
 public sealed record StopRequest(CellCoord? Pointer) : HeroRequest;
@@ -161,6 +162,8 @@ public sealed class HeroRequestHost
 
     private HeroRequestResult Walk(WalkRequest request)
     {
+        // GT107: after the can-act test a Shift key (scan codes 0x2A, 0x36) returns at once: no walk, no run choice, no held flag.
+        if (request.Shift) return new(HeroRequestOutcome.Ignored);
         var options = _hero.Options();
         var run = HeroInputRules.AlwaysRun(options.AlwaysRunOption, request.Ctrl, options.NumLockRun);
         return new(_hero.SetWalkTarget(request.Tile, run, request.Held) ? HeroRequestOutcome.Done : HeroRequestOutcome.Unchanged, run);

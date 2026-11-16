@@ -89,9 +89,16 @@ public partial class TerrainViewerApp
             Require(expected.Count == 8, $"the far cell is at least 8 cells away, so the walk is the request's whole cap of 8 tiles: {expected.Count}");
             Require(expected[^1] != farWorld, "the hero is not taken to the far cell, only eight tiles of the way");
 
+            // ---- ARC-INPUT-1936 (GT107): a press with a Shift key held does nothing on the ground; the plain press walks ----
+            WorldRouteClick(Screen(far.Value), shift: true);
+            Require(HeroRunsHost()?.WalkRun is null && HeroWalkGoal is null && HeroWorld() == startWorld, $"a Shift press sets no walk: {_worldRouteClick}");
+
             // ---- a walk under way ends, and a resisted run moves nothing ----
             WorldRouteClick(Screen(far.Value));
             Require(HeroRunsHost()?.WalkRun is not null && HeroWalkGoal == far, $"a press walks the hero toward {far}: {_worldRouteClick}");
+            // ARC-INPUT-1936: a Shift press on the ground elsewhere changes nothing of the walk under way (the original returns before any cancel or retarget).
+            WorldRouteClick(Screen(start), shift: true);
+            Require(HeroRunsHost()?.WalkRun is not null && HeroWalkGoal == far, $"a Shift press leaves the walk toward {far} as it was: {_worldRouteClick}");
             for (var i = 0; i < 40; i++) Frame();
             var walking = HeroWorld();
             Require(walking != startWorld && HeroRunsHost()?.WalkRun is not null, "the hero is on its way");
