@@ -16,7 +16,8 @@ public sealed class ItemWorldScriptTests
 {
     private const byte Counter = 0, Triggerer = 0, Attachee = 1, LocalVariable = 2, Number = 3, Looped = 10, LocalObject = 11, EveryContainer = 17, AnyContainer = 18, EveryFollower = 2, AnyFollower = 3, EveryScenery = 15, AnyScenery = 16, Everyone = 8, Anyone = 9;
     private const int Every = 810, Any = 811, Twice = 812, EveryFollowerScript = 813, AnyFollowerScript = 814, ToggleSelf = 815, ToggleSelfTwice = 816, ToggleHero = 817, Quest = 820, Typed = 821, Assigned = 822, DeadGated = 823, GeneratorGated = 824, GeneratorSlot = 7, ScenerySweep = 850, ScenerySweepAny = 851, CritterCalls = 852, CritterCallsAny = 853, Callee = 3500, CalleeLine = 4, ScenerySwitch = 854, CaseName = 1205, NewArt = 4, BaselineArt = 100, QuestNumber = 1005, ContainerType = 2,
-        SetQuest = 830, CompleteQuest = 831, GiveSmall = 832, GiveBig = 833, GiveTwice = 834, SetThenRead = 835, SetOnItem = 836, SetInvalid = 837, CompleteBig = 838, SetThenGive = 839, GiveThenStat = 840, StatThenGive = 841, GiveThenRatio = 842, RatioThenGive = 843;
+        SetQuest = 830, CompleteQuest = 831, GiveSmall = 832, GiveBig = 833, GiveTwice = 834, SetThenRead = 835, SetOnItem = 836, SetInvalid = 837, CompleteBig = 838, SetThenGive = 839, GiveThenStat = 840, StatThenGive = 841, GiveThenRatio = 842, RatioThenGive = 843,
+        ToggleGen = 860, ToggleGenTwice = 861, ToggleGenThenRead = 862, ToggleGenOutside = 863, ToggleGenThenSector = 864, ToggleTwoSlots = 865;
     private static readonly SessionInsertCheck Accept = _ => SessionInsertVerdict.Accepted;
 
     private sealed record Clause(int Type, (byte Kind, int Value)[] Operands);
@@ -108,6 +109,22 @@ public sealed class ItemWorldScriptTests
         return ratioFirst ? Program(read, give, Do(C(ScrCatalogue.Action.ReturnRunDefault))) : Program(give, read, Do(C(ScrCatalogue.Action.ReturnRunDefault)));
     }
 
+    // ARC-SCRIPT-2378 (IV26–IV29): toggle monster generator (110) of the given slots in order, then optionally the condition 46 of `slot` read on the looped containers (the later read sees the toggle).
+    private static ScrProgram ToggleGenerators(int[] slots, bool read = false, bool sector = false)
+    {
+        var lines = new List<(Clause, Clause, Clause)>();
+        foreach (var slot in slots) lines.Add(Do(C(ScrCatalogue.Action.ToggleMonsterGenerator, N(slot))));
+        if (sector) lines.Add(Do(C(ScrCatalogue.Action.ToggleSectorBlocked, N(1), N(1))));
+        if (read)
+        {
+            lines.Add(Do(C(ScrCatalogue.Action.LoopFor, (EveryContainer, 0))));
+            lines.Add(If(C(ScrCatalogue.Condition.MonsterGenDisabled, N(GeneratorSlot)), C(ScrCatalogue.Action.ChangeArtNumber, (Looped, 0), N(NewArt))));
+            lines.Add(Do(C(ScrCatalogue.Action.LoopEnd)));
+        }
+        lines.Add(Do(C(ScrCatalogue.Action.ReturnRunDefault)));
+        return Program([.. lines]);
+    }
+
     // ARC-SCRIPT-2346: toggle state (56) of one object, `times` times.
     private static ScrProgram Toggle(byte kind, int times = 1)
     {
@@ -126,6 +143,8 @@ public sealed class ItemWorldScriptTests
             [EveryFollowerScript] = Loop(EveryFollower, Looped), [AnyFollowerScript] = Loop(EveryFollower, AnyFollower),
             [SetQuest] = SetQuestOf(Triggerer, 1004, 2), [CompleteQuest] = SetQuestOf(Triggerer, 1004, 4), [GiveSmall] = Give(1), [GiveBig] = Give(5), [GiveTwice] = Give(1, 2),
             [SetThenRead] = SetAndRead(1004, 2), [SetOnItem] = SetQuestOf(Attachee, 1004, 4), [SetInvalid] = SetQuestOf(Triggerer, 5, 2), [CompleteBig] = SetQuestOf(Triggerer, 1003, 4), [SetThenGive] = SetAndGive(1004, 4, 1), [GiveThenStat] = GiveAndStat(5, false), [StatThenGive] = GiveAndStat(5, true), [GiveThenRatio] = GiveAndRatio(5, false), [RatioThenGive] = GiveAndRatio(5, true),
+            [ToggleGen] = ToggleGenerators([GeneratorSlot]), [ToggleGenTwice] = ToggleGenerators([GeneratorSlot, GeneratorSlot]), [ToggleGenThenRead] = ToggleGenerators([GeneratorSlot], read: true),
+            [ToggleGenOutside] = ToggleGenerators([300, -1]), [ToggleGenThenSector] = ToggleGenerators([GeneratorSlot], sector: true), [ToggleTwoSlots] = ToggleGenerators([GeneratorSlot, GeneratorSlot + 1, GeneratorSlot]),
             [ToggleSelf] = Toggle(Attachee), [ToggleSelfTwice] = Toggle(Attachee, 2), [ToggleHero] = Toggle(Triggerer) };
         public Dictionary<string, int> Names { get; set; } = new() { ["case"] = CaseName, ["other"] = 3000 };
         public string[]? Vicinity { get; set; } = ["case", "other"];
@@ -381,6 +400,60 @@ public sealed class ItemWorldScriptTests
         Assert.AreEqual(GameSessionDisposition.Changed, blocked.ToggleGeneratorBlock(blocked.Version, GeneratorSlot).Disposition);
         Assert.AreEqual(GameSessionDisposition.Changed, blocked.PickUpItem(blocked.Version, "oid:tome", Accept, new Host(GeneratorGated)).Disposition);
         Assert.AreEqual((NewArt, NewArt), ((int?)Art(blocked, "case"), (int?)Art(blocked, "other")), "a blocked slot passes it for every looped container");
+    }
+
+    private static bool? Blocked(GameSessionOwner owner, int slot = GeneratorSlot) => owner.QueryGeneratorSlot(slot)?.Blocked;
+
+    // ARC-SCRIPT-2378 (IV26–IV29): toggle monster generator (110) in a pickup's insert-item run flips the slot's blocked bit in the move's own revision and survives a save.
+    [TestMethod]
+    public void Toggle_monster_generator_flips_the_slot_in_the_moves_own_revision()
+    {
+        using var owner = Owner();
+        var before = owner.Version.Revision;
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, "oid:tome", Accept, new Host(ToggleGen)).Disposition);
+        Assert.AreEqual((true, before + 1), (Blocked(owner), owner.Version.Revision), "one revision for the pickup and the toggle");
+        using var restored = Restore(Decode(GameSessionSnapshotCodec.Encode(owner.Capture())));
+        Assert.AreEqual(true, Blocked(restored), "the blocked bit survives a save");
+
+        using var blocked = Owner();
+        Assert.AreEqual(GameSessionDisposition.Changed, blocked.ToggleGeneratorBlock(blocked.Version, GeneratorSlot).Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, blocked.PickUpItem(blocked.Version, "oid:tome", Accept, new Host(ToggleGen)).Disposition);
+        Assert.AreEqual(false, Blocked(blocked), "a blocked slot is cleared");
+    }
+
+    [TestMethod]
+    public void A_second_toggle_of_the_same_slot_in_one_move_puts_it_back_and_other_slots_are_kept()
+    {
+        using var twice = Owner();
+        Assert.AreEqual(GameSessionDisposition.Changed, twice.PickUpItem(twice.Version, "oid:tome", Accept, new Host(ToggleGenTwice)).Disposition);
+        Assert.AreEqual(false, Blocked(twice), "two toggles end where they began");
+
+        using var two = Owner();
+        Assert.AreEqual(GameSessionDisposition.Changed, two.PickUpItem(two.Version, "oid:tome", Accept, new Host(ToggleTwoSlots)).Disposition);
+        Assert.AreEqual((false, true), (Blocked(two), Blocked(two, GeneratorSlot + 1)), "the first slot toggled twice, the second once");
+    }
+
+    [TestMethod]
+    public void A_later_read_in_the_run_sees_the_toggle_and_a_slot_outside_the_table_changes_nothing()
+    {
+        using var owner = Owner();
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, "oid:tome", Accept, new Host(ToggleGenThenRead)).Disposition);
+        Assert.AreEqual((true, NewArt, NewArt), (Blocked(owner), (int)Art(owner, "case")!, (int)Art(owner, "other")!), "condition 46 read after the toggle sees the blocked slot");
+
+        using var outside = Owner();
+        Assert.AreEqual(GameSessionDisposition.Changed, outside.PickUpItem(outside.Version, "oid:tome", Accept, new Host(ToggleGenOutside)).Disposition);
+        Assert.IsNull(outside.QueryGeneratorSlot(300), "a slot outside 0..255 changes nothing (0x4BABF0 and 0x4BABD0 test the range)");
+    }
+
+    [TestMethod]
+    public void A_move_the_session_cannot_apply_stays_refused_and_leaves_the_slot()
+    {
+        using var owner = Owner();
+        var before = owner.Version;
+        var refused = owner.PickUpItem(before, "oid:tome", Accept, new Host(ToggleGenThenSector));
+        Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.ItemScriptUnsupported, before), (refused.Disposition, refused.Failure, owner.Version), "toggle sector blocked is not in the set");
+        Assert.AreEqual(false, Blocked(owner));
+        Assert.IsTrue(SessionItemScripts.Admission.Actions.Contains(ScrCatalogue.Action.ToggleMonsterGenerator) && !SessionItemScripts.Admission.Actions.Contains(ScrCatalogue.Action.ToggleSectorBlocked));
     }
 
     private static int Points(GameSessionOwner owner) => owner.QueryHeroExperience()!.Experience;
