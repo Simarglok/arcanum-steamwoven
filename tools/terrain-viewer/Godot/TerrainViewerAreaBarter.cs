@@ -163,6 +163,7 @@ public partial class TerrainViewerApp
             _barterPanel.CycleRequested += BarterCycle;
             _barterPanel.SoundRequested += id => PlayInterfaceSound(id, "barter arrange button");
             _barterPanel.HolderView = InventoryHolderView;
+            _barterPanel.PortraitTextures = HolderPortraitTexture;
         }
         // A quick key held across the window must not act on its release afterwards (its press predates the window).
         QuarantineWorld(); _quickKeys.Reset();
@@ -259,7 +260,7 @@ public partial class TerrainViewerApp
         if (_barterInShop) return ShopBarterArt(view);
         if (_inventoryHost is null || _areaSession is not { } session || !ReferenceEquals(_barterSession, session)) return null;
         var merchant = view.Merchant;
-        var inventory = WithMerchantDoll(InventoryView(merchant.Container ?? merchant.Entity) with { HolderImage = _inventoryHost.HolderImage(CurrentAreaMap, merchant.Entity) },
+        var inventory = WithMerchantDoll(InventoryView(merchant.Container ?? merchant.Entity) with { HolderImage = _inventoryHost.HolderImage(CurrentAreaMap, merchant.Entity), HolderPortrait = _inventoryHost.HolderPortrait(session, CurrentAreaMap, merchant.Entity) },
             merchant.Container is null ? null : InventoryView(merchant.Entity));
         var frame = new AreaBarterFrame(AreaBarterArtLayout.Background(merchant.Follower, session.QueryParty().Followers.Count), merchant.Name, _barterMessage ?? string.Empty);
         return (inventory, frame);

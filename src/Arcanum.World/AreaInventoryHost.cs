@@ -97,6 +97,9 @@ public sealed record AreaInventoryView(IReadOnlyList<AreaInventoryLine> Pc, stri
     /// <summary>ARC-UI-052: the interface art of the looted holder's image (<see cref="AreaLootArtLayout.HolderImage"/>); null when its facts
     /// do not decide it.</summary>
     public int? HolderImage { get; init; }
+    /// <summary>ARC-UI-1908 (IW27): the stored portrait the item windows draw for the holder in place of <see cref="HolderImage"/> (<see cref="AreaLootArtLayout.HolderPortrait"/>:
+    /// a critter the observing PC leads, directly or through its followers, that stores one); null when the art decides.</summary>
+    public int? HolderPortrait { get; init; }
     /// <summary>ARC-UI-052: the looted holder is a container (a junk pile too): its grid scrolls further.</summary>
     public bool HolderContainer { get; init; }
 }
@@ -572,7 +575,7 @@ public sealed class AreaInventoryHost
             ? (AreaLootArtLayout.HolderImage(CombatFieldReader.ContainerType, 0, -1, ObjectDamageRules.JunkPilePrototype), true)
             : HolderLook(runtimeMap, holder);
         return new(Array.AsReadOnly(pc), holder, pile is not null ? JunkPileTitle : Name(holder, catalog), Array.AsReadOnly(loot))
-            { Gold = gold, Doll = doll, Carry = carry, Grid = grid, Unplaced = unplaced, Ammo = ammo, Speed = speed, LootGrid = lootGrid, HolderImage = image,
+            { Gold = gold, Doll = doll, Carry = carry, Grid = grid, Unplaced = unplaced, Ammo = ammo, Speed = speed, LootGrid = lootGrid, HolderImage = image, HolderPortrait = pile is not null ? null : HolderPortrait(session, runtimeMap, holder),
               HolderContainer = container, BodyDoll = bodyDoll };
 
         // ARC-UI-029: a gold pile shows its coins as an ammunition stack shows its units.
@@ -588,15 +591,30 @@ public sealed class AreaInventoryHost
     /// row or fields do not read.</summary>
     public int? HolderImage(int runtimeMap, string holder) => HolderLook(runtimeMap, holder ?? throw new ArgumentNullException(nameof(holder))).Image;
 
+    /// <summary>ARC-UI-1908 (IW27): the portrait the item windows draw for a seed holder instead of its image: the stored portrait of a
+    /// critter whose leader chain reaches the PC (<see cref="GameSessionOwner.QueryPcLeader"/>); null for any other holder or row.</summary>
+    public int? HolderPortrait(GameSessionOwner session, int runtimeMap, string holder)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        ArgumentNullException.ThrowIfNull(holder);
+        var row = HolderRow(runtimeMap, holder);
+        if (row is null || row.Type is not (CombatFieldReader.PcType or CombatFieldReader.NpcType)) return null;
+        return AreaLootArtLayout.HolderPortrait(row.Type, session.QueryPcLeader(holder) is not null, AreaLootArtLayout.StoredPortrait(row));
+    }
+
+    private AreaObjectRecord? HolderRow(int runtimeMap, string holder)
+    {
+        if (_maps.TryGetValue(runtimeMap, out var map) && map.TryGetRow(holder, out var own)) return own;
+        return _resolver.CreatedMap(holder) is { } created && created.RuntimeMap == runtimeMap && created.TryGetRow(holder, out var made) ? made : null;
+    }
+
     /// <summary>ARC-UI-052: the loot window's image of a seed holder (<see cref="AreaLootArtLayout.HolderImage"/>) from its object row: a
     /// critter's flags and race, a container's description (its prototype file less 20, as the session's junk piles count it); and whether
     /// it is a container. No image when its row or fields do not read.</summary>
 
     private (int? Image, bool Container) HolderLook(int runtimeMap, string holder)
     {
-        AreaObjectRecord? row = null;
-        if (_maps.TryGetValue(runtimeMap, out var map) && map.TryGetRow(holder, out var own)) row = own;
-        else if (_resolver.CreatedMap(holder) is { } created && created.RuntimeMap == runtimeMap && created.TryGetRow(holder, out var made)) row = made;
+        var row = HolderRow(runtimeMap, holder);
         if (row is null) return (null, false);
         var container = row.Type == CombatFieldReader.ContainerType;
         if (container) return (AreaLootArtLayout.HolderImage(row.Type, 0, -1, row.PrototypeNumber - 20), true);

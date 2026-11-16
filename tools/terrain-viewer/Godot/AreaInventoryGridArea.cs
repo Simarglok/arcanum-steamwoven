@@ -127,6 +127,10 @@ public partial class AreaInventoryGridArea : Control
     /// <summary>ARC-UI-1765: an item of the hero was pressed in the service window's frame (its entity): the app quotes it, and pays on the next press of the same item (IS3).</summary>
     public event Action<string>? ServiceItemPressed;
 
+    /// <summary>ARC-UI-1908: the stored portrait's small image by portrait number (the viewer reads and decodes it on first use; null: it did not read). The windows draw it where
+    /// the original's image function 0x553D10 answers a portrait (<see cref="AreaInventoryView.HolderPortrait"/>).</summary>
+    public Func<int, Texture2D?>? PortraitTextures { get; set; }
+
     /// <summary>ARC-UI-1765: the grid draws the item service window's frame with <paramref name="frame"/>'s parts (null: the own window's).</summary>
     public void SetService(AreaServiceFrame? frame)
     {
@@ -730,7 +734,13 @@ public partial class AreaInventoryGridArea : Control
         var service = ServiceLook ? _service : null;
         if (service is not null)
         {
-            if (service.Image is { } image && look.Art.GetValueOrDefault(image) is { } picture)
+            // ARC-UI-1908 (0x576520 modes 5 and 6): a portrait is drawn by 0x4CE680 forced to 32 by 32 at the corner (the art is halved); PROJECT: a portrait file that did not read leaves the halved art.
+            if (service.Portrait is { } portraitId && PortraitTextures?.Invoke(portraitId) is { } portrait)
+            {
+                var (ix, iy, iw, ih) = AreaServiceArtLayout.PortraitRect;
+                DrawTextureRect(portrait, Scaled(ix, iy, iw, ih), false);
+            }
+            else if (service.Image is { } image && look.Art.GetValueOrDefault(image) is { } picture)
             {
                 var (ix, iy, iw, ih) = AreaServiceArtLayout.ImageRect(picture.GetWidth(), picture.GetHeight());
                 DrawTextureRect(picture, Scaled(ix, iy, iw, ih), false);
@@ -856,7 +866,14 @@ public partial class AreaInventoryGridArea : Control
         Background(look, barter?.Background ?? AreaLootArtLayout.LootArt, LookMode);
         var (holeX, holeY) = AreaInventoryHole.Corner(LookMode);
         if (!_menuUp) Art(AreaInventoryHole.Art(LookMode), holeX, holeY);
-        if (view.HolderImage is { } image) Art(image, AreaLootArtLayout.Image.X, AreaLootArtLayout.Image.Y);
+        // ARC-UI-1908 (0x576520 modes 1-4, IW27): a portrait the image function answers is drawn at its own size at the image's corner by 0x4CE470; PROJECT: a portrait file that
+        // did not read leaves the flag-and-race art in its place, so the window is not empty.
+        if (view.HolderPortrait is { } portraitId && PortraitTextures?.Invoke(portraitId) is { } portrait)
+        {
+            var (px, py) = AreaLootArtLayout.Image;
+            DrawTextureRect(portrait, Scaled(px, py, portrait.GetWidth(), portrait.GetHeight()), false);
+        }
+        else if (view.HolderImage is { } image) Art(image, AreaLootArtLayout.Image.X, AreaLootArtLayout.Image.Y);
         var font = GetThemeDefaultFont();
         var size = Math.Max(6, (int)Math.Round(12 * _scale));
         if (barter is not null)
