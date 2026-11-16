@@ -12,7 +12,7 @@ namespace Arcanum.World;
 
 /// <summary>
 /// ARC-WORLD-017: the home-map T0 data of one roster companion, enough to stand, draw, light and pick it on any loaded
-/// map: its speaker row, its T0 body commands with their visuals, and its T0 chart cell on the home map. The body keeps
+/// map (ARC-WORLD-2177: an undrawn led NPC's template has no body command, so it stands and walks but shows nothing): its speaker row, its T0 body commands with their visuals, and its T0 chart cell on the home map. The body keeps
 /// the T0 frame, flip and alpha wherever it stands. ARC-MAGIC-050: <paramref name="Created"/> marks the template of a critter the session
 /// created (<see cref="ForCreated"/>): its "home" is the map it stands on, and a change of map moves the whole object in the session
 /// (the original moves an object whole, FM1/FM3), so its placement keeps no away change and no stored home cell.
@@ -49,7 +49,7 @@ public sealed record AreaCompanionTemplate(AreaSpeaker Speaker, AreaCompanionFac
     /// ARC-AI-1622: the body templates of the map's NPC rows that have no dialog script and that the hero leads now (a Dominate Will target, a script's join): the
     /// original's follower array holds any critter, so such an NPC follows, fights and catches up through the same companion group as a dialog NPC (its speaker
     /// has script 0, as a created critter's). Only the rows whose entity is in <paramref name="entities"/> are built, so the scan costs nothing for the NPCs
-    /// nobody leads; a row the plan does not draw, or whose follow facts do not read, gets no template (<see cref="From"/>).
+    /// nobody leads; a row whose follow facts do not read gets no template; a row the plan draws nothing for gets one with no body command (ARC-WORLD-2177, <see cref="From"/>).
     /// </summary>
     public static IReadOnlyList<AreaCompanionTemplate> ForLedMapNpcs(IEnumerable<AreaObjectRecord> objects, IEnumerable<AreaVisualRecord> visuals, IReadOnlySet<string> entities,
         AreaScenePlan plan, AreaChart chart, SessionMapId home, Func<AreaSpeaker, AreaCompanionFacts?> facts)

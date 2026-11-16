@@ -24,6 +24,8 @@ public partial class TerrainViewerApp
     {
         if (_inventoryHost?.Maps.FirstOrDefault(m => m.RuntimeMap == CurrentAreaMap) is not { } map) return new HashSet<string>(StringComparer.Ordinal);
         var own = _ownCompanionTemplates.Select(t => t.Entity).ToHashSet(StringComparer.Ordinal);
+        // ARC-WORLD-2177: a dialog speaker the plan draws nothing for is not a led map NPC (its body is its own, and the destination's home read leaves speakers out too): it stays on the body-less path.
+        if (_readyArea is { } shown) own.UnionWith(AreaConversationHost.FindSpeakers(shown.Snapshot).Select(s => AreaConversationState.EntityId(s.Row)));
         if (_ledMapNpcEver is not { } ever || !ReferenceEquals(ever.Session, session) || ever.Map != CurrentAreaMap)
         {
             var seeded = session.QueryMapChanges(new SessionMapId(CurrentAreaMap))
