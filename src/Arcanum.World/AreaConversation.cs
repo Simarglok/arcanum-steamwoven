@@ -379,11 +379,12 @@ public sealed class AreaConversationHost
     /// ARC-WORLD-039: runs a deferred SCR call the session's event pass hands over (<see cref="ISessionScriptWorld.RunScriptCall"/>)
     /// through the SCR dispatcher with this area's script host and the session's current rules, and applies its effects.
     /// False, with the reason, when the content is missing or changed, the run is refused, the session refuses an effect,
-    /// or the run would start a conversation (the viewer opens talks only on the player's request; nothing is applied).
+    /// or the run starts a conversation with an object that is no dialog NPC of this host (nothing is applied); a conversation it starts is <see cref="LastCallDialog"/> (ARC-WORLD-2358).
     /// </summary>
     public bool RunCall(SessionScriptCall call, out string detail)
     {
         ArgumentNullException.ThrowIfNull(call);
+        LastCallDialog = null;
         if (_content is null) { detail = _contentDetail; return false; }
         if (!_content.VerifySeen()) { detail = "a script or dialog file changed since it was first read"; return false; }
         var result = ScrDispatcher.RunCall(new(call.Script, call.Line, Scripts.Local(call.Triggerer), Scripts.Local(call.Attachee)), Scripts,
@@ -396,11 +397,26 @@ public sealed class AreaConversationHost
             return false;
         }
         if (result.Stop == ScrStop.NotModelled) { detail = $"script {call.Script}: NotModelled (a question the host cannot answer: get area on the start map GA3, or the vitals of an object it does not know VT1, VT2)"; return false; }
-        if (result.Effects.Dialog is not null) { detail = $"script {call.Script}: a call that starts a conversation is not run by the viewer"; return false; }
+        // ARC-WORLD-2358 (ledger TT20): the dialog action opens the dialog inside the run (0x567460) and ends it, so the conversation is the run's last effect. It goes to an NPC of this host (a speaker of the shown map or a carried companion) or the run
+        // is left unapplied whole, as a tile script's is (AreaUseScriptHost); the caller opens it after the run applied (LastCallDialog), with the speaker rules of any scripted talk start.
+        if (result.Effects.Dialog is { } dialog)
+        {
+            if (dialog.Npc is not { } talker || !Speakers.Any(speaker => AreaConversationState.EntityId(speaker.Row) == talker.Code))
+            { detail = $"script {call.Script}: a conversation of script {dialog.Script} with {dialog.Npc?.Code ?? "no NPC"}, which is no dialog NPC here, is not modelled"; return false; }
+        }
+        // The dialog action stores the run's changed flags or counters into the speaker's use slot (0x447282, point 1); this host writes the dialog point's slot only, so such a run is left unapplied whole and says why (the use-slot write is not built).
+        if (result.Effects.Dialog is not null && result.Effects.Writeback is { } slotWrite && slotWrite.Point != ScrPoint.Dialog)
+        { detail = $"script {call.Script}: a conversation after the run changed the speaker's use-slot flags or counters is not modelled"; return false; }
         if (!Scripts.Apply(result.Effects)) { detail = $"script {call.Script} {result.Stop}: the session refused its effects"; return false; }
-        detail = $"script {call.Script} {result.Stop} at SCR line {result.StopLine}";
+        // The speaker destroyed by this very run has no view to talk in (ARC-SCRIPT-052 for a tile run): the run stands, the conversation is not offered.
+        LastCallDialog = result.Effects.Dialog is { Npc: { } speaking } start
+            && !result.Effects.ObjectStates.Any(r => r.Change == ScrObjectStateChange.Destroy && r.Object == speaking) ? start : null;
+        detail = $"script {call.Script} {result.Stop} at SCR line {result.StopLine}" + (LastCallDialog is { } offered ? $": conversation of script {offered.Script} node {offered.Node}" : "");
         return true;
     }
+
+    /// <summary>ARC-WORLD-2358: the conversation the last applied <see cref="RunCall"/> started with its dialog action (null when it started none); the caller opens it as a scripted talk start (the viewer's <c>BeginScriptedConversation</c>).</summary>
+    public ScrDialogStart? LastCallDialog { get; private set; }
 
     /// <summary>
     /// ARC-WORLD-043: closes the reaction conversation slot a started conversation opened (the original's dialog end, 0x413280,
