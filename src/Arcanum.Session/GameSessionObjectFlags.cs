@@ -167,8 +167,12 @@ public sealed partial class GameSessionOwner
             (set & bit) != 0 ? traits | trait : (cleared & bit) != 0 ? traits & ~trait : traits;
         traits = Trait(traits, LifeTraits.Stoned, written.SpellSet, written.SpellCleared, SessionSpellCaster.StonedSpellFlag);
         traits = Trait(traits, LifeTraits.Paralyzed, written.CritterSet, written.CritterCleared, SessionSpellCaster.ParalysedCritterFlag);
+        // ARC-COMBAT-1832: the object flag 0x400000 (invulnerable, field 0x13) a script's toggle wrote lies over the data's, so the damage step (0x4B4390) and the life's damage read it.
+        traits = Trait(traits, LifeTraits.Invulnerable, written.ObjectSet, written.ObjectCleared, InvulnerableObjectFlag);
         return traits == facts.Traits ? facts : facts with { Traits = traits };
     }
+
+    private const int InvulnerableObjectFlag = 0x400000;
 
     // A save's written flags: ascending distinct entities of the kinds above, each change well formed and not empty, at most MaxObjectFlagCritters.
     private static GameSessionFailure ImportObjectFlags(IReadOnlyList<SessionObjectFlagRecord> saved, out ImmutableSortedDictionary<string, SessionObjectFlags> flags)

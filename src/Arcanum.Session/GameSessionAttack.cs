@@ -142,6 +142,11 @@ public sealed class SessionCritterCombat
     private CharacterStatContext StatContext(LifeState state) => new(0, Math.Clamp(state.PoisonLevel, 0, CharacterStatRules.MaxPoisonLevel),
         state.Conditions.HasFlag(LifeConditions.CrippledLegsBoth), SpeedShift: SpeedShift);
 
+    /// <summary>ARC-COMBAT-1832: the same NPC with the invulnerable trait (object flag 0x400000) set or cleared as the session's written flags have it over the map data's.</summary>
+    internal SessionCritterCombat WithInvulnerable(bool on) => on == Facts.Traits.HasFlag(LifeTraits.Invulnerable) ? this : new(Entity, _stats, _worn, _basicSkills, _techSkills, _baseArmorClass,
+        _storedResistances, _ownLight, _flags, _material, _criticalBody, _race, _gender, Facts with { Traits = on ? Facts.Traits | LifeTraits.Invulnerable : Facts.Traits & ~LifeTraits.Invulnerable },
+        Loaded, Experience, Monstrous, Level, _natural, KillFacts, _sheetSkills, StoredEffects, _effectResistances) { UnarmedBody = UnarmedBody, DataSpellFlags = DataSpellFlags, SpeedShift = SpeedShift };
+
     internal SessionCritterCombat WithUnarmedBody(UnarmedBodySpell body) => body == UnarmedBody ? this : new(Entity, _stats, _worn, _basicSkills, _techSkills, _baseArmorClass,
         _storedResistances, _ownLight, _flags, _material, _criticalBody, _race, _gender, Facts, Loaded, Experience, Monstrous, Level,
         _natural, KillFacts, _sheetSkills, StoredEffects, _effectResistances) { UnarmedBody = body, DataSpellFlags = DataSpellFlags, SpeedShift = SpeedShift };
