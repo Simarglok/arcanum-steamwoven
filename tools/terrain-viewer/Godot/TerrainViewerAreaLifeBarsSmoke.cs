@@ -104,7 +104,7 @@ public partial class TerrainViewerApp
             // Its portrait's bars (CH9), then a hit-point packet that leaves it below 20 %: the red tint.
             // ARC-UI-024: the frame is the original's (art 503, bars 505/616 and 504) in slot 0 at 11, 50, with the follower's
             // stored portrait when it has one that reads.
-            var storedPortrait = AreaPortraits.Stored(companion!.Speaker.Row);
+            var storedPortrait = ShownPortrait(companion!.Speaker.Row);
             void CheckPortrait(string when, bool tinted)
             {
                 RefreshFollowerPortraits();

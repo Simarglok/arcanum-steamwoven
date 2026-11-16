@@ -57,8 +57,7 @@ public sealed record AreaPortraitFile(int Id, AreaPortraitStatus Status, string?
 /// ARC-UI-024: portrait images for the viewer's panels. A critter's stored portrait is its field 0xE7 (critter slot 49, as the
 /// pre-made heroes' reader names it); its image is the portrait catalogue's file for the drawn size (ARC-DATA-045: under 128 the
 /// small <c>portrait\&lt;stem&gt;.bmp</c>, from 128 the large one, falling back to the small one as the original's draw does),
-/// read from the content stack's winner. NOT READY: the clash rule of 0x4CEB80 (an NPC showing the PC's own portrait takes another),
-/// which needs the PC's portrait in the session. Godot-free.
+/// read from the content stack's winner. ARC-UI-2444: <see cref="Shown"/> applies the clash rule of 0x4CEB80 (an NPC showing the PC's own portrait takes another). Godot-free.
 /// </summary>
 public static class AreaPortraits
 {
@@ -74,6 +73,12 @@ public static class AreaPortraits
         var field = record.EffectiveFields.FirstOrDefault(value => value.Slot == PortraitSlot);
         return field is { Presence: AreaPresence.Value, Number: { } number and > 0 and <= int.MaxValue } ? (int)number : null;
     }
+
+    /// <summary>ARC-UI-2444 (ledger PO10, 0x4CEB80): the portrait number a draw shows for a critter record: <see cref="Stored"/>, but an NPC that
+    /// stores the local PC's own portrait (<paramref name="playerPortrait"/>) shows the next portrait its race and gender may take, else the previous
+    /// one, else none. Null: nothing to draw. Every portrait draw of the viewer (follower frames, hover, character sheet, item windows) uses it.</summary>
+    public static int? Shown(AreaObjectRecord record, PortraitCatalogue? catalogue, int? playerPortrait) =>
+        Arcanum.World.AreaLootArtLayout.ShownPortrait(record, catalogue, playerPortrait);
 
     /// <summary>Reads the images of <paramref name="ids"/> drawn at <paramref name="size"/>; each id gets its own outcome.</summary>
     public static IReadOnlyDictionary<int, AreaPortraitFile> Load(ContentStack stack, PortraitCatalogue? catalogue, IEnumerable<int> ids, int size)

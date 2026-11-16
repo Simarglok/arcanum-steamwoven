@@ -1,4 +1,6 @@
 using Arcanum.Data.Area;
+using Arcanum.Data.Characters;
+using Arcanum.Data.Messages;
 using Arcanum.Session;
 using Arcanum.TerrainViewer.Core;
 using Arcanum.World;
@@ -308,5 +310,73 @@ public sealed class AreaLootArtTests
         }
         Assert.IsTrue(AreaLootArtLayout.DamageRatingBox.X + AreaLootArtLayout.DamageRatingBox.Width < AreaLootArtLayout.ArmourRatingBox.X, "the damage rating is left of the armour rating");
         Assert.AreEqual((0x40, 0, 0), AreaLootArtLayout.TooHeavyFill);
+    }
+
+    // ARC-UI-2444 (ledger PO10, 0x4CEB80): races 0 human, 2 elf; genders 0 female, 1 male. The first three letters of a portrait's text are its compatibility code.
+    private static PortraitCatalogue Catalogue(string text)
+    {
+        var parsed = MesFile.Parse(System.Text.Encoding.Latin1.GetBytes(text));
+        Assert.AreEqual(MesParseStatus.Parsed, parsed.Status);
+        return PortraitCatalogue.Create(parsed.File!);
+    }
+
+    private static AreaObjectRecord Critter(int type, long portrait, char key = 'a', int race = 0, int gender = 1, bool stats = true)
+    {
+        var fields = new List<AreaFieldValue> { new(AreaLootArtLayout.PortraitSlot, AreaPresence.Value, AreaValueOrigin.Prototype, portrait, [], null) };
+        if (stats) fields.Add(new(38, AreaPresence.Array, AreaValueOrigin.Prototype, null, [new(26, [gender]), new(27, [race])], null));
+        return new(new(new string(key, 64), 1, AreaSourceKind.Mobile, 1, 3, 300, new string('b', 64), 100), 0, type, 0, "p", "p", "r", "s", AreaScope.Core,
+            null, 10, 20, Arcanum.Data.Area.AreaDisposition.BodyEligibleConditionally, [], fields, true, true, true);
+    }
+
+    [TestMethod]
+    public void AnNpcShowingThePlayersPortraitShowsAnother()
+    {
+        var catalogue = Catalogue("{1000}{HUM1}{1001}{HUM2}{1002}{ELF1}{1003}{HUM3}{1004}{NPC1}");
+        Assert.AreEqual(1001, AreaLootArtLayout.ShownPortrait(Critter(16, 1000), catalogue, 1000), "the next portrait the NPC's race and gender may take");
+        Assert.AreEqual(1003, AreaLootArtLayout.ShownPortrait(Critter(16, 1001), catalogue, 1001), "the elf portrait between is skipped");
+        Assert.AreEqual(1004, AreaLootArtLayout.ShownPortrait(Critter(16, 1003), catalogue, 1003), "the NPC code is allowed for an NPC");
+        Assert.AreEqual(1003, AreaLootArtLayout.ShownPortrait(Critter(16, 1004), catalogue, 1004), "none after the last: the previous one");
+    }
+
+    [TestMethod]
+    public void TheClashRuleLeavesEveryOtherPortraitAlone()
+    {
+        var catalogue = Catalogue("{1000}{HUM1}{1001}{HUM2}");
+        Assert.AreEqual(1001, AreaLootArtLayout.ShownPortrait(Critter(16, 1001), catalogue, 1000), "a portrait that differs from the player's");
+        Assert.AreEqual(1000, AreaLootArtLayout.ShownPortrait(Critter(15, 1000), catalogue, 1000), "a PC shows its raw portrait, one level deep");
+        Assert.AreEqual(1000, AreaLootArtLayout.ShownPortrait(Critter(16, 1000), catalogue, 0), "the player's portrait 0 is none");
+        Assert.AreEqual(1000, AreaLootArtLayout.ShownPortrait(Critter(16, 1000), catalogue, null), "no player portrait");
+        Assert.AreEqual(1000, AreaLootArtLayout.ShownPortrait(Critter(16, 1000), null, 1000), "no catalogue (no game folder): nothing can be drawn, the stored number");
+        Assert.AreEqual(1000, AreaLootArtLayout.ShownPortrait(Critter(16, 1000, race: 11), catalogue, 1000), "a race beyond the code table (the original reads past it)");
+        Assert.AreEqual(1000, AreaLootArtLayout.ShownPortrait(Critter(16, 1000, stats: false), catalogue, 1000), "no stats field to decide the race");
+        Assert.AreEqual(1000, AreaLootArtLayout.ShownPortrait(Critter(16, 1000, gender: 2), catalogue, 1000), "a gender beyond the code table");
+        Assert.AreEqual(1001, AreaLootArtLayout.ShownPortrait(Critter(16, 1000, race: 0, gender: 1), catalogue, 1000), "stats present");
+        Assert.IsNull(AreaLootArtLayout.ShownPortrait(Critter(16, 0), catalogue, 0), "a critter that stores none");
+        Assert.IsNull(AreaLootArtLayout.ShownPortrait(Critter(2, 1000), catalogue, 1000), "not a critter");
+    }
+
+    [TestMethod]
+    public void AnNpcWithNoOtherPortraitShowsNone()
+    {
+        // 0x4CEB80: next ?? previous ?? 0; the draw then takes the flag and race art.
+        Assert.IsNull(AreaLootArtLayout.ShownPortrait(Critter(16, 1000), Catalogue("{1000}{HUM1}{1001}{ELF1}"), 1000));
+        Assert.IsNull(AreaLootArtLayout.ShownPortrait(Critter(16, 1000, race: 2, gender: 0), Catalogue("{1000}{ELF1}"), 1000), "a lone portrait of its own code");
+    }
+
+    [TestMethod]
+    public void TheHostShowsTheClashFreePortraitInTheItemWindows()
+    {
+        using var session = ConversationSessionFixture.CreateWithHero(portrait: 1050);
+        Assert.AreEqual(1050, session.QueryHero()!.Portrait);
+        var led = "oid:" + new string('1', 64);
+        var map = new AreaInventoryMap(1, new([new SessionSeedHolder(led, SessionHolderKind.Npc, false, false, [], [])], []),
+            new Dictionary<string, AreaObjectRecord> { [led] = Critter(16, 1050, '1') });
+        var host = new AreaInventoryHost([map]);
+        Assert.AreEqual(GameSessionDisposition.Changed, session.ForceJoinParty(session.Version, led).Disposition);
+        Assert.AreEqual(1050, host.HolderPortrait(session, 1, led), "no catalogue source: the stored portrait");
+        host.PortraitCatalogueSource = () => Catalogue("{1050}{HUM1}{1051}{HUM2}");
+        Assert.AreEqual(1051, host.HolderPortrait(session, 1, led), "a follower that stores the PC's own portrait shows the next one");
+        host.PortraitCatalogueSource = () => Catalogue("{1050}{HUM1}");
+        Assert.IsNull(host.HolderPortrait(session, 1, led), "none to take: the art decides");
     }
 }

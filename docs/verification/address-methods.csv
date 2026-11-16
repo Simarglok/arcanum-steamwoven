@@ -633,6 +633,7 @@ src/Arcanum.World/AreaHeroRunsHost.cs,UseItem,pending,
 src/Arcanum.World/AreaHeroRunsHost.cs,UseItemOnTile,pending,
 src/Arcanum.World/AreaHeroRunsHost.cs,UseObject,pending,
 src/Arcanum.World/AreaInventoryArtLayout.cs,Place,pending,
+src/Arcanum.World/AreaInventoryHost.cs,HolderPortrait,exempt,host
 src/Arcanum.World/AreaInventoryHost.cs,Name,pending,
 src/Arcanum.World/AreaInventoryHost.cs,SubstituteContainer,pending,
 src/Arcanum.World/AreaItemAiming.cs,ApplyOnTile,pending,
@@ -644,8 +645,10 @@ src/Arcanum.World/AreaLifeBars.cs,Unconscious,pending,
 src/Arcanum.World/AreaLineOfFire.cs,Step,pending,
 src/Arcanum.World/AreaLootArt.cs,Arrange,pending,
 src/Arcanum.World/AreaLootArt.cs,HolderImage,pending,
+src/Arcanum.World/AreaLootArt.cs,HolderPortrait,exempt,host
 src/Arcanum.World/AreaLootArt.cs,Release,pending,
 src/Arcanum.World/AreaLootArt.cs,RightRelease,pending,
+src/Arcanum.World/AreaLootArt.cs,ShownPortrait,exempt,host
 src/Arcanum.World/AreaMapTransfers.cs,QueueDoorTeleport,exempt,reference
 src/Arcanum.World/AreaNewCharacter.cs,BeginName,pending,
 src/Arcanum.World/AreaNewCharacter.cs,WieldStart,pending,
@@ -801,6 +804,7 @@ tools/terrain-viewer/Core/AreaMessageLog.cs,ShowTransient,pending,
 tools/terrain-viewer/Core/AreaMessageLog.cs,public,pending,
 tools/terrain-viewer/Core/AreaNewCharacterArt.cs,Hover,pending,
 tools/terrain-viewer/Core/AreaNewCharacterArt.cs,NameLine,pending,
+tools/terrain-viewer/Core/AreaPanelArt.cs,Shown,exempt,host
 tools/terrain-viewer/Core/AreaPremadeBrowserArt.cs,Break,pending,
 tools/terrain-viewer/Core/AreaPremadeBrowserArt.cs,Button,pending,
 tools/terrain-viewer/Core/AreaPremadeBrowserArt.cs,Centred,pending,
@@ -893,6 +897,7 @@ tools/terrain-viewer/Godot/TerrainViewerAreaMapTransfer.cs,NoteScriptCreations,p
 tools/terrain-viewer/Godot/TerrainViewerAreaMapTransfer.cs,QueueCreationNotice,pending,
 tools/terrain-viewer/Godot/TerrainViewerAreaMapTransfer.cs,RunMapEnteredSteps,pending,
 tools/terrain-viewer/Godot/TerrainViewerAreaPanelArt.cs,HoverPortrait,pending,
+tools/terrain-viewer/Godot/TerrainViewerAreaPanelArt.cs,ShownPortrait,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAreaPickPocket.cs,ArmPickPocketFromBar,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAreaPickPocket.cs,HeroFaceSkill,pending,
 tools/terrain-viewer/Godot/TerrainViewerAreaPickPocket.cs,PickPocketOn,exempt,reference
