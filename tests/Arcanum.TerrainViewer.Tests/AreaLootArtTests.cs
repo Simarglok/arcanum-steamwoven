@@ -349,6 +349,8 @@ public sealed class AreaLootArtTests
         Assert.AreEqual(1000, AreaLootArtLayout.ShownPortrait(Critter(16, 1000), null, 1000), "no catalogue (no game folder): nothing can be drawn, the stored number");
         Assert.AreEqual(1000, AreaLootArtLayout.ShownPortrait(Critter(16, 1000, race: 11), catalogue, 1000), "a race beyond the code table (the original reads past it)");
         Assert.AreEqual(1000, AreaLootArtLayout.ShownPortrait(Critter(16, 1000, stats: false), catalogue, 1000), "no stats field to decide the race");
+        Assert.AreEqual(1000, AreaLootArtLayout.ShownPortrait(Critter(16, 1000, gender: 2), catalogue, 1000), "a gender beyond the code table");
+        Assert.AreEqual(1001, AreaLootArtLayout.ShownPortrait(Critter(16, 1000, race: 0, gender: 1), catalogue, 1000), "stats present");
         Assert.IsNull(AreaLootArtLayout.ShownPortrait(Critter(16, 0), catalogue, 0), "a critter that stores none");
         Assert.IsNull(AreaLootArtLayout.ShownPortrait(Critter(2, 1000), catalogue, 1000), "not a critter");
     }

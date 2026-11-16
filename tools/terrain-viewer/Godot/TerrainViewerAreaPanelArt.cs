@@ -61,7 +61,12 @@ public partial class TerrainViewerApp
 
     /// <summary>ARC-UI-2444 (ledger PO10, 0x4CEB80): the portrait number a draw shows for a critter row: its stored one, but an NPC that stores the
     /// local PC's own portrait shows the catalogue's next or previous one. Reads the catalogue on first use.</summary>
-    private int? ShownPortrait(AreaObjectRecord row) => AreaPortraits.Shown(row, PortraitCatalogueNow(), _areaSession?.QueryHero()?.Portrait);
+    private int? ShownPortrait(AreaObjectRecord row)
+    {
+        var player = _areaSession?.QueryHero()?.Portrait;
+        // The catalogue is read only when a clash is possible (an NPC storing the PC's own portrait).
+        return AreaPortraits.Shown(row, AreaPortraits.Stored(row) is { } stored && stored == player ? PortraitCatalogueNow() : null, player);
+    }
 
     /// <summary>ARC-UI-2444: the portrait catalogue (read with the panel content on first use); null with no game folder.</summary>
     private PortraitCatalogue? PortraitCatalogueNow()

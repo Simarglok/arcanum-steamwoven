@@ -134,7 +134,7 @@ public static class AreaLootArtLayout
     /// (<see cref="StoredPortrait"/>), except that an NPC (type 16) whose stored portrait equals the local PC's own (<paramref name="playerPortrait"/>,
     /// the PC's raw field 0xE7: one level, no substitution on the PC side) shows the next portrait its own race and gender may take
     /// (<see cref="PortraitCatalogue.Next"/>, the NPC code allowed), else the previous one, else none, so a follower never shows the PC's face.
-    /// The race and gender are the NPC's stored base stats 27 and 26 (the check 0x4CEAC0 reads them through 0x4B0740). The substitute is computed
+    /// The race and gender are the NPC's stored base stats 27 and 26 (the check 0x4CEAC0 reads them through 0x4B0740). The race and gender are read from the row's stored fields (a base stat a spell wrote into the NPC is not applied: issue #2492). The substitute is computed
     /// on every call and never stored. A PC and any other type show their stored one; with no <paramref name="catalogue"/> (no game folder, nothing
     /// can be drawn anyway) or a race or gender beyond the code table, the stored one. Null: nothing to draw.
     /// </summary>
