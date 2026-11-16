@@ -156,8 +156,7 @@ public sealed partial class GameSessionOwner
     /// (the host names none), the struck critter's alert and the landing's item event (PF10). Steamwoven differences: the item leaves
     /// at the throw, not at the lift, so a worn item's own values (its armour, its effects on the hero's strength) still count for the
     /// throw's range and check; a critical miss's weapon and ammunition steps read the weapon the hero still wields (as CW3; not read for
-    /// a pack throw). A struck critter that is dead refuses the attack (NoChange, the item stays): the host throws again without one, as
-    /// the original's press throws at the location anyway. ARC-COMBAT-2390: once item scripts ran, a struck critter whose attack is refused (dead, or a refusal the scripts' runs brought about) is thrown at as the location by the session itself, so the scripts do not run twice.
+    /// a pack throw). A struck critter that is dead is thrown at like a living one (ARC-COMBAT-2392, TW8: the roll is against the corpse, no dodge, no damage). ARC-COMBAT-2390: once item scripts ran, a struck critter whose attack is refused (a refusal the scripts' runs brought about) is thrown at as the location by the session itself, so the scripts do not run twice.
     /// Refused before any effect, in order: no hero (<see cref="GameSessionFailure.AttackUnavailable"/>), invalid item facts
     /// (<see cref="GameSessionFailure.InvalidItem"/>), a location or struck cell outside 0 .. 2^24 − 1, a struck critter without its cell
     /// or the reverse, a line-of-fire cost outside 0 .. 100,000 (<see cref="GameSessionFailure.InvalidAttack"/>), an item the hero does not
@@ -247,7 +246,7 @@ public sealed partial class GameSessionOwner
             // ARC-DEV-261: no TakingDamage here: the throw always flies and its hit is deferred, so the script is asked at the landing (LandShot with the host's SessionAttack).
             var attack = HeroThrowAttack(request, triggers);
             var attacked = CritterAttack(expected, attack, null, new PackThrow(request.Item, request.Target, hero) { Split = split ? (request.Count!.Value, request.SplitKind!.Value) : null });
-            // ARC-COMBAT-1955: a struck critter that is dead refuses the attack; the host would throw again without it, but the scripts ran already and must not run twice, so after them the session throws at the location itself.
+            // ARC-COMBAT-1955: a struck critter that is dead no longer refuses the attack (ARC-COMBAT-2392); the host would throw again without it, but the scripts ran already and must not run twice, so after them the session throws at the location itself.
             // ARC-COMBAT-2390: so does any other refusal of the attack that only the scripts' runs could bring about (the preflight judged the throw before them): the original's throw flies in any case (its hit is
             // deferred, ARC-DEV-261), so the item is thrown at the location below, whose own checks (worn items, an inactive hero, the budget, the version, the revision) refuse what binds a throw of any kind.
             var late = runs is not null && attacked.Disposition is GameSessionDisposition.NoChange or GameSessionDisposition.Rejected;

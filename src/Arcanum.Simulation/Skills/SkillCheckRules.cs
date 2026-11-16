@@ -156,7 +156,7 @@ public static class SkillCheckRules
         if (flags.HasFlag(SkillFlags.Awareness) && facts.TargetCritter)
         {
             var conditions = facts.TargetConditions;
-            if (conditions.HasFlag(SkillTargetConditions.Paralyzed) || conditions.HasFlag(SkillTargetConditions.Unconscious)) awareness = -50;
+            if ((conditions & (SkillTargetConditions.Paralyzed | SkillTargetConditions.Unconscious | SkillTargetConditions.Dead)) != 0) awareness = -50;
             else if ((conditions & (SkillTargetConditions.FallingDown | SkillTargetConditions.Stunned)) != 0) awareness = -30;
             else if (conditions.HasFlag(SkillTargetConditions.Sleeping)) awareness = -50;
             else if (skill != Skill.Prowling && facts.TargetUnaware) awareness = -30;
@@ -413,7 +413,7 @@ public static class SkillCheckRules
     }
 
     private const SkillTargetConditions AllConditions = SkillTargetConditions.Paralyzed | SkillTargetConditions.Unconscious
-        | SkillTargetConditions.FallingDown | SkillTargetConditions.Stunned | SkillTargetConditions.Sleeping;
+        | SkillTargetConditions.FallingDown | SkillTargetConditions.Stunned | SkillTargetConditions.Sleeping | SkillTargetConditions.Dead;
     private const SkillSourceInjuries AllInjuries = SkillSourceInjuries.Blinded | SkillSourceInjuries.CrippledArmOne
         | SkillSourceInjuries.CrippledArmsBoth | SkillSourceInjuries.CrippledLegsBoth;
 

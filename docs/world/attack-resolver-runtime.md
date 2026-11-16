@@ -91,7 +91,7 @@ critical's item drop draws a distance and a direction that are not
 ([below](#critical-effects-arc-combat-009)).
 
 1. **Refusal** without rolls: an inactive attacker (dead, unconscious,
-   paralysed, stunned, stoned) or a dead target critter.
+   paralysed, stunned, stoned) or a dead target critter; ARC-COMBAT-2392: a throw (skill Throwing) is not refused for a dead target but rolled against it (−50 as an unconscious target, no dodge rolled, a hit carries no damage), as the original's throw resolve asks nothing of the target's life.
 2. **Location**: aimed, or rolled (d100 ≤ 70 torso, ≤ 85 leg, ≤ 95 arm, else head).
    ARC-COMBAT-012: a request with `AmmunitionShort` (the attacker holds fewer units of the weapon's ammunition
    type than one shot takes) is then refused with `AttackRefusal.OutOfAmmunition`, no later roll
@@ -220,7 +220,7 @@ fix). `LifeDamage.FromStep` turns the result into the life state's packet, with 
 `AttackRequest.DeferHit` resolves a shot that flies as a projectile (ledger PF1): every roll up to the outcome runs, a miss and a
 critical miss resolve as usual, and a hit or critical hit returns without its damage packet or wear. `AttackResolver.LandHit` rolls
 that hit's damage when the projectile strikes (PF5, PF8): on the request's target as it is then, with the carried location, aim,
-critical and weapon magic, only the damage's rolls (its `Rolls`), and the wear; a target dead by then is refused (`TargetDead`).
+critical and weapon magic, only the damage's rolls (its `Rolls`), and the wear; a target dead by then is refused (`TargetDead`), except for a thrown item, whose carried hit stands with no damage (ARC-COMBAT-2392).
 `AttackResolver.ForcedHit` is a stray strike's or an obstruction's carried hit (PF6, PF7): torso, not aimed, no critical, no roll.
 The session's use is in the [hero attack runtime](hero-attack-runtime.md#projectiles-in-flight-arc-combat-016).
 
