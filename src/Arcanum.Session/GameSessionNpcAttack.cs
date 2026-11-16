@@ -604,6 +604,9 @@ public sealed partial class GameSessionOwner
         ArgumentNullException.ThrowIfNull(npc);
         // ARC-DEV-358: the body spell its spell flags hold (the session's written flags) feeds its unarmed attacks.
         npc = npc.WithUnarmedBody(UnarmedBodyOf(npc.Entity, npc.DataSpellFlags));
+        // ARC-COMBAT-1832: the invulnerable flag a script's toggle wrote (the written object flags over the data's) reaches the combatant the damage step reads.
+        if (QueryObjectFlags(npc.Entity) is { IsEmpty: false } written)
+            npc = npc.WithInvulnerable((written.Object(npc.Facts.Traits.HasFlag(LifeTraits.Invulnerable) ? InvulnerableObjectFlag : 0) & InvulnerableObjectFlag) != 0);
         // ARC-MAGIC-056 (MA-9): the speed change of Tempus Fugit, from the spell flags held now.
         npc = npc.WithSpeedShift(TempusFugitShiftOf(npc.Entity, npc.DataSpellFlags));
         // No session list and no host rules for the loaded one: its entries have no changes, nothing to apply (the common case, kept cheap).
