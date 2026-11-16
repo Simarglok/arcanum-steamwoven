@@ -1,0 +1,825 @@
+art_id	name	size	frames	kit_kind	batch	windows	windows_n	status	baked_text	baked_text_seen	note
+0	cursor	24x27	1	cursor	B-CURSORS	H13	1	drawn	no		cursor
+1	cur_del	16x22	1	cursor	B-CURSORS			no window row (kind proposed by name and size)	no		
+2	Black	800x600	1	backdrop	BD-H	M13	1	drawn	no		solid black fill, no kit part needed
+3	intrface	800x600	1	backdrop	BD-H			no window row (kind proposed by name and size)	no		
+4	bar	34x146	1	gauge	B-GAUGES			no window row (kind proposed by name and size)	no		
+5	amocnt_s	90x56	1	gauge	B-GAUGES			no window row (kind proposed by name and size)	no		
+6	bgrn_but	37x36	2	plate	B-BUTTONS	G15	1	drawn	no		button body (plate + ring + glyph + states)
+7	mess_rot	410x107	1	hardware	B-HARDWARE			no window row (kind proposed by name and size)	no		
+8	spell_ro	410x107	1	plate	B-BUTTONS	H09	1	drawn	no		button body (plate + ring + glyph + states)
+9	m_dnbut	38x36	3	plate	B-BUTTONS			no window row (kind proposed by name and size)	no		
+10	m_upbut	38x36	3	plate	B-BUTTONS			no window row (kind proposed by name and size)	no		
+11	s_conveyance	24x24	3	plate	B-BUTTONS	G08,H09,M09	3	drawn	no		college tab button
+12	s_conveyance1	32x32	2	picture	B-ICONS-SPELL	H09,M09	2	drawn	no		spell icon
+13	s_conveyance2	32x32	2	picture	B-ICONS-SPELL	H09	1	drawn	no		spell icon
+14	s_conveyance3	32x32	2	picture	B-ICONS-SPELL	H09	1	drawn	no		spell icon
+15	s_conveyance4	32x32	2	picture	B-ICONS-SPELL	H09	1	drawn	no		spell icon
+16	s_conveyance5	32x32	2	picture	B-ICONS-SPELL	H09	1	drawn	no		spell icon
+17	yelovial	28x96	1	gauge	B-GAUGES	H03	1	drawn	no		gauge or readout parts
+18	redvial	28x96	15	gauge	B-GAUGES	H03	1	drawn	no		gauge or readout parts
+19	bluvial	28x96	15	gauge	B-GAUGES	H03	1	drawn	no		gauge or readout parts
+20	clrvial	34x90	1	gauge	B-GAUGES	H03	1	drawn	no		gauge or readout parts
+21	spellcur	25x27	7	cursor	B-CURSORS	G12,G14,H13	3	drawn	no		cursor
+22	char_maint	800x400	1	backdrop	BD-B	G05,G10,M09	3	drawn	yes	ST CN DX BE IN WP PE CH; E&G; ruler 75 50 25 0 25 50 75	window backdrop layer
+23	char_minus	19x19	4	plate	B-BUTTONS	G05,M09	2	drawn	no		button body (plate + ring + glyph + states)
+24	char_plus	19x19	4	plate	B-BUTTONS	G05,M09	2	drawn	no		button body (plate + ring + glyph + states)
+25	rollerfont	4x20	225	font		H05	1	drawn	n/a		bitmap font, drawn text; slice #2462
+26	arial10font	2x10	225	font				font (not a kit part)	n/a		bitmap font
+27	morph15font	2x19	225	font		G05,G06,G08,G10,G11,H04,H19,H21,M04,M07,M08,M09	12	drawn	n/a		bitmap font, drawn text; slice #2462
+28	pork12font	1x18	225	font		G08,M09	2	drawn	n/a		bitmap font, drawn text; slice #2462
+29	Skills_Window	235x325	1	sheet	BD-B	G06,M09	2	drawn	no		right panel of the character sheet laid over its backdrop
+30	Disciplines_Window	235x325	1	sheet	BD-B	G07,M09	2	drawn	no		right panel of the character sheet laid over its backdrop
+31	char_spells	235x325	1	sheet	BD-B	G08,M09	2	drawn	no		right panel of the character sheet laid over its backdrop
+32	cncl_big	38x37	3	plate	B-BUTTONS	H05,M05,M06	3	drawn	no		button body (plate + ring + glyph + states)
+33	done_big	38x37	3	plate	B-BUTTONS	H05	1	drawn	no		button body (plate + ring + glyph + states)
+34	char_Common_Skills	39x39	3	plate	B-BUTTONS	G05,G10,M09	3	drawn	no		button body (plate + ring + glyph + states)
+35	char_Tech_Skills	39x39	3	plate	B-BUTTONS	G05,G10,H09,M09	4	drawn	no		button body (plate + ring + glyph + states)
+36	char_Spells_Skills	39x39	3	plate	B-BUTTONS	G05,G10,H09,M09	4	drawn	no		button body (plate + ring + glyph + states)
+37	casablanca16font	1x15	225	font				font (not a kit part)	n/a		bitmap font
+38	s_air	24x24	3	plate	B-BUTTONS	G08,H09	2	drawn	no		college tab button
+39	s_air1	32x32	2	picture	B-ICONS-SPELL	H09	1	drawn	no		spell icon (grey frame for not yet learned)
+40	s_air2	32x32	2	picture	B-ICONS-SPELL	H09	1	drawn	no		spell icon (grey frame for not yet learned)
+41	s_air3	32x32	2	picture	B-ICONS-SPELL	H09	1	drawn	no		spell icon (grey frame for not yet learned)
+42	s_air4	32x32	2	picture	B-ICONS-SPELL	H09	1	drawn	no		spell icon (grey frame for not yet learned)
+43	s_air5	32x32	2	picture	B-ICONS-SPELL	H09	1	drawn	no		spell icon (grey frame for not yet learned)
+44	s_divination	24x24	3	plate	B-BUTTONS	G08,H09	2	drawn	no		college tab button
+45	s_divination1	32x32	2	picture	B-ICONS-SPELL	H09	1	drawn	no		spell icon (grey frame for not yet learned)
+46	s_divination2	32x32	2	picture	B-ICONS-SPELL	H09	1	drawn	no		spell icon (grey frame for not yet learned)
+47	s_divination3	32x32	2	picture	B-ICONS-SPELL	H09	1	drawn	no		spell icon (grey frame for not yet learned)
+48	s_divination4	32x32	2	picture	B-ICONS-SPELL	H09	1	drawn	no		spell icon (grey frame for not yet learned)
+49	s_divination5	32x32	2	picture	B-ICONS-SPELL	H09	1	drawn	no		spell icon (grey frame for not yet learned)
+50	s_fire	24x24	3	plate	B-BUTTONS	G08,H09	2	drawn	no		college tab button
+51	s_fire1	32x32	2	picture	B-ICONS-SPELL	H09	1	drawn	no		spell icon (grey frame for not yet learned)
+52	s_fire2	32x32	2	picture	B-ICONS-SPELL	H09	1	drawn	no		spell icon (grey frame for not yet learned)
+53	s_fire3	32x32	2	picture	B-ICONS-SPELL	H09	1	drawn	no		spell icon (grey frame for not yet learned)
+54	s_fire4	32x32	2	picture	B-ICONS-SPELL	H09	1	drawn	no		spell icon (grey frame for not yet learned)
+55	s_fire5	32x32	2	picture	B-ICONS-SPELL	H09	1	drawn	no		spell icon (grey frame for not yet learned)
+56	s_forc	24x24	3	plate	B-BUTTONS	G08,H09	2	drawn	no		college tab button
+57	s_force1	32x32	2	picture	B-ICONS-SPELL	H09	1	drawn	no		spell icon (grey frame for not yet learned)
+58	s_force2	32x32	2	picture	B-ICONS-SPELL	H09	1	drawn	no		spell icon (grey frame for not yet learned)
+59	s_force3	32x32	2	picture	B-ICONS-SPELL	H09	1	drawn	no		spell icon (grey frame for not yet learned)
+60	s_force4	32x32	2	picture	B-ICONS-SPELL	H09	1	drawn	no		spell icon (grey frame for not yet learned)
+61	s_force5	32x32	2	picture	B-ICONS-SPELL	H09	1	drawn	no		spell icon (grey frame for not yet learned)
+62	s_meta	24x24	3	plate	B-BUTTONS	G08,H09	2	drawn	no		college tab button
+63	s_meta1	32x32	2	picture	B-ICONS-SPELL	H09	1	drawn	no		spell icon (grey frame for not yet learned)
+64	s_meta2	32x32	2	picture	B-ICONS-SPELL	H09	1	drawn	no		spell icon (grey frame for not yet learned)
+65	s_meta3	32x32	2	picture	B-ICONS-SPELL	H09	1	drawn	no		spell icon (grey frame for not yet learned)
+66	s_meta4	32x32	2	picture	B-ICONS-SPELL	H09	1	drawn	no		spell icon (grey frame for not yet learned)
+67	s_meta5	32x32	2	picture	B-ICONS-SPELL	H09	1	drawn	no		spell icon (grey frame for not yet learned)
+68	s_morph	24x24	3	plate	B-BUTTONS	G08,H09	2	drawn	no		college tab button
+69	s_morph1	32x32	2	picture	B-ICONS-SPELL	H09	1	drawn	no		spell icon (grey frame for not yet learned)
+70	s_morph2	32x32	2	picture	B-ICONS-SPELL	H09	1	drawn	no		spell icon (grey frame for not yet learned)
+71	s_morph3	32x32	2	picture	B-ICONS-SPELL	H09	1	drawn	no		spell icon (grey frame for not yet learned)
+72	s_morph4	32x32	2	picture	B-ICONS-SPELL	H09	1	drawn	no		spell icon (grey frame for not yet learned)
+73	s_morph5	32x32	2	picture	B-ICONS-SPELL	H09	1	drawn	no		spell icon (grey frame for not yet learned)
+74	s_nature	24x24	3	plate	B-BUTTONS	G08,H09	2	drawn	no		college tab button
+75	s_nature1	32x32	2	picture	B-ICONS-SPELL	H09	1	drawn	no		spell icon (grey frame for not yet learned)
+76	s_nature2	32x32	2	picture	B-ICONS-SPELL	H09	1	drawn	no		spell icon (grey frame for not yet learned)
+77	s_nature3	32x32	2	picture	B-ICONS-SPELL	H09	1	drawn	no		spell icon (grey frame for not yet learned)
+78	s_nature4	32x32	2	picture	B-ICONS-SPELL	H09	1	drawn	no		spell icon (grey frame for not yet learned)
+79	s_nature5	32x32	2	picture	B-ICONS-SPELL	H09	1	drawn	no		spell icon (grey frame for not yet learned)
+80	s_phantasm	24x24	3	plate	B-BUTTONS	G08,H09	2	drawn	no		college tab button
+81	s_phantasm1	32x32	2	picture	B-ICONS-SPELL	H09	1	drawn	no		spell icon (grey frame for not yet learned)
+82	s_phantasm2	32x32	2	picture	B-ICONS-SPELL	H09	1	drawn	no		spell icon (grey frame for not yet learned)
+83	s_phantasm3	32x32	2	picture	B-ICONS-SPELL	H09	1	drawn	no		spell icon (grey frame for not yet learned)
+84	s_phantasm4	32x32	2	picture	B-ICONS-SPELL	H09	1	drawn	no		spell icon (grey frame for not yet learned)
+85	s_phantasm5	32x32	2	picture	B-ICONS-SPELL	H09	1	drawn	no		spell icon (grey frame for not yet learned)
+86	s_water	24x24	3	plate	B-BUTTONS	G08,H09	2	drawn	no		college tab button
+87	s_water1	32x32	2	picture	B-ICONS-SPELL	H09	1	drawn	no		spell icon (grey frame for not yet learned)
+88	s_water2	32x32	2	picture	B-ICONS-SPELL	H09	1	drawn	no		spell icon (grey frame for not yet learned)
+89	s_water3	32x32	2	picture	B-ICONS-SPELL	H09	1	drawn	no		spell icon (grey frame for not yet learned)
+90	s_water4	32x32	2	picture	B-ICONS-SPELL	H09	1	drawn	no		spell icon (grey frame for not yet learned)
+91	s_water5	32x32	2	picture	B-ICONS-SPELL	H09	1	drawn	no		spell icon (grey frame for not yet learned)
+92	s_earth	24x24	3	plate	B-BUTTONS	G08,H09	2	drawn	no		college tab button
+93	s_earth1	32x32	2	picture	B-ICONS-SPELL	H09	1	drawn	no		spell icon (grey frame for not yet learned)
+94	s_earth2	32x32	2	picture	B-ICONS-SPELL	H09	1	drawn	no		spell icon (grey frame for not yet learned)
+95	s_earth3	32x32	2	picture	B-ICONS-SPELL	H09	1	drawn	no		spell icon (grey frame for not yet learned)
+96	s_earth4	32x32	2	picture	B-ICONS-SPELL	H09	1	drawn	no		spell icon (grey frame for not yet learned)
+97	s_earth5	32x32	2	picture	B-ICONS-SPELL	H09	1	drawn	no		spell icon (grey frame for not yet learned)
+98	s_mental	24x24	3	plate	B-BUTTONS	G08,H09	2	drawn	no		college tab button
+99	s_mental1	32x32	2	picture	B-ICONS-SPELL	H09	1	drawn	no		spell icon (grey frame for not yet learned)
+100	s_mental2	32x32	2	picture	B-ICONS-SPELL	H09	1	drawn	no		spell icon (grey frame for not yet learned)
+101	s_mental3	32x32	2	picture	B-ICONS-SPELL	H09	1	drawn	no		spell icon (grey frame for not yet learned)
+102	s_mental4	32x32	2	picture	B-ICONS-SPELL	H09	1	drawn	no		spell icon (grey frame for not yet learned)
+103	s_mental5	32x32	2	picture	B-ICONS-SPELL	H09	1	drawn	no		spell icon (grey frame for not yet learned)
+104	s_evilnecro	24x24	3	plate	B-BUTTONS	G08,H09	2	drawn	no		college tab button
+105	s_evilnecro1	32x32	2	picture	B-ICONS-SPELL	H09	1	drawn	no		spell icon (grey frame for not yet learned)
+106	s_evilnecro2	32x32	2	picture	B-ICONS-SPELL	H09	1	drawn	no		spell icon (grey frame for not yet learned)
+107	s_evilnecro3	32x32	2	picture	B-ICONS-SPELL	H09	1	drawn	no		spell icon (grey frame for not yet learned)
+108	s_evilnecro4	32x32	2	picture	B-ICONS-SPELL	H09	1	drawn	no		spell icon (grey frame for not yet learned)
+109	s_evilnecro5	32x32	2	picture	B-ICONS-SPELL	H09	1	drawn	no		spell icon (grey frame for not yet learned)
+110	s_goodnecro	24x24	3	plate	B-BUTTONS	G08,H09	2	drawn	no		college tab button
+111	s_goodnecro1	32x32	2	picture	B-ICONS-SPELL	H09	1	drawn	no		spell icon (grey frame for not yet learned)
+112	s_goodnecro2	32x32	2	picture	B-ICONS-SPELL	H09	1	drawn	no		spell icon (grey frame for not yet learned)
+113	s_goodnecro3	32x32	2	picture	B-ICONS-SPELL	H09	1	drawn	no		spell icon (grey frame for not yet learned)
+114	s_goodnecro4	32x32	2	picture	B-ICONS-SPELL	H09	1	drawn	no		spell icon (grey frame for not yet learned)
+115	s_goodnecro5	32x32	2	picture	B-ICONS-SPELL	H09	1	drawn	no		spell icon (grey frame for not yet learned)
+116	s_summoning	24x24	3	plate	B-BUTTONS	G08,H09	2	drawn	no		college tab button
+117	s_summoning1	32x32	2	picture	B-ICONS-SPELL	H09	1	drawn	no		spell icon (grey frame for not yet learned)
+118	s_summoning2	32x32	2	picture	B-ICONS-SPELL	H09	1	drawn	no		spell icon (grey frame for not yet learned)
+119	s_summoning3	32x32	2	picture	B-ICONS-SPELL	H09	1	drawn	no		spell icon (grey frame for not yet learned)
+120	s_summoning4	32x32	2	picture	B-ICONS-SPELL	H09	1	drawn	no		spell icon (grey frame for not yet learned)
+121	s_summoning5	32x32	2	picture	B-ICONS-SPELL	H09	1	drawn	no		spell icon (grey frame for not yet learned)
+122	s_temporal	24x24	3	plate	B-BUTTONS	G08,H09	2	drawn	no		college tab button
+123	s_temporal1	32x32	2	picture	B-ICONS-SPELL	H09	1	drawn	no		spell icon (grey frame for not yet learned)
+124	s_temporal2	32x32	2	picture	B-ICONS-SPELL	H09	1	drawn	no		spell icon (grey frame for not yet learned)
+125	s_temporal3	32x32	2	picture	B-ICONS-SPELL	H09	1	drawn	no		spell icon (grey frame for not yet learned)
+126	s_temporal4	32x32	2	picture	B-ICONS-SPELL	H09	1	drawn	no		spell icon (grey frame for not yet learned)
+127	s_temporal5	32x32	2	picture	B-ICONS-SPELL	H09	1	drawn	no		spell icon (grey frame for not yet learned)
+128	skill_ro	410x105	1	hardware	B-HARDWARE			no window row (kind proposed by name and size)	no		
+129	tech_sk_small	16x16	2	plate	B-BUTTONS			no window row (kind proposed by name and size)	no		
+130	comm_sk_small	16x16	2	plate	B-BUTTONS			no window row (kind proposed by name and size)	no		
+131	hotkeybk	32x32	1	hardware	B-HARDWARE	H02	1	drawn	no		slot or frame housing
+132	empty	48x48	1	picture	B-ICONS			no window row (kind proposed by name and size)	yes	Empty	
+133	intcedit	27x15	2	plate	B-BUTTONS			no window row (kind proposed by name and size)	yes	CeD	
+134	intinven	33x15	2	plate	B-BUTTONS			no window row (kind proposed by name and size)	yes	Inven	
+135	intlog	27x15	2	plate	B-BUTTONS			no window row (kind proposed by name and size)	yes	Log	
+136	intmap	28x15	2	plate	B-BUTTONS			no window row (kind proposed by name and size)	yes	Map	
+137	lilgrnbut	23x23	2	plate	B-BUTTONS	H01	1	drawn	no		button body (plate + ring + glyph + states)
+138	mapmain	800x400	1	backdrop	BD-E	G12,G13,G14	3	drawn	yes	N E S W	window backdrop layer
+139	navbutton	45x45	2	plate	B-BUTTONS	G12,G14	2	drawn	no		button body (plate + ring + glyph + states)
+140	wp_main	130x152	1	hardware	B-HARDWARE			no window row (kind proposed by name and size)	no		
+141	mm_chest	16x18	1	glyph	B-BUTTONS	G12	1	drawn	no		map marker
+142	mm_note	13x17	1	glyph	B-BUTTONS	G12	1	drawn	no		map marker
+143	mm_ques	11x14	1	glyph	B-BUTTONS	G12,G13,G14	3	drawn	no		map marker
+144	mm_skull	19x18	1	glyph	B-BUTTONS	G12	1	drawn	no		map marker
+145	mmb_chest	23x23	2	plate	B-BUTTONS	H09	1	drawn	no		button body (plate + ring + glyph + states)
+146	mmb_note	23x23	2	plate	B-BUTTONS	H09	1	drawn	no		button body (plate + ring + glyph + states)
+147	mmb_ques	23x23	2	plate	B-BUTTONS			no window row (kind proposed by name and size)	no		
+148	mmb_skull	23x23	2	plate	B-BUTTONS	H09	1	drawn	no		button body (plate + ring + glyph + states)
+165	AmoCnt_B	90x56	1	gauge	B-GAUGES			no window row (kind proposed by name and size)	no		
+167	Amo_Rol	49x21	1	gauge	B-GAUGES			no window row (kind proposed by name and size)	no		
+168	Amo_RolX	49x21	1	gauge	B-GAUGES			no window row (kind proposed by name and size)	no		
+169	Char_But	34x34	3	plate	B-BUTTONS	H01	1	drawn	no		button body (plate + ring + glyph + states)
+170	Char_ON	34x34	1	state	B-BUTTONS			no window row (kind proposed by name and size)	no		
+171	Cloister18Font	2x18	225	font		G05,G10,H02,H03,M09	5	drawn	n/a		bitmap font, drawn text; slice #2462
+172	HKSlt0	32x32	1	hardware	B-HARDWARE	H02	1	drawn (family of 173 HKSlt1)	no		hotkey slot housing; slot 1 is the window row, the rest are the same art family
+173	HKSlt1	32x32	1	hardware	B-HARDWARE	H02	1	drawn	no		slot or frame housing
+174	HKSlt2	32x32	1	hardware	B-HARDWARE	H02	1	drawn (family of 173 HKSlt1)	no		hotkey slot housing; slot 1 is the window row, the rest are the same art family
+175	HKSlt3	32x32	1	hardware	B-HARDWARE	H02	1	drawn (family of 173 HKSlt1)	no		hotkey slot housing; slot 1 is the window row, the rest are the same art family
+176	HKSlt4	32x32	1	hardware	B-HARDWARE	H02	1	drawn (family of 173 HKSlt1)	no		hotkey slot housing; slot 1 is the window row, the rest are the same art family
+177	HKSlt5	32x32	1	hardware	B-HARDWARE	H02	1	drawn (family of 173 HKSlt1)	no		hotkey slot housing; slot 1 is the window row, the rest are the same art family
+178	HKSlt6	32x32	1	hardware	B-HARDWARE	H02	1	drawn (family of 173 HKSlt1)	no		hotkey slot housing; slot 1 is the window row, the rest are the same art family
+179	HKSlt7	32x32	1	hardware	B-HARDWARE	H02	1	drawn (family of 173 HKSlt1)	no		hotkey slot housing; slot 1 is the window row, the rest are the same art family
+180	HKSlt8	32x32	1	hardware	B-HARDWARE	H02	1	drawn (family of 173 HKSlt1)	no		hotkey slot housing; slot 1 is the window row, the rest are the same art family
+181	HKSlt9	32x32	1	hardware	B-HARDWARE	H02	1	drawn (family of 173 HKSlt1)	no		hotkey slot housing; slot 1 is the window row, the rest are the same art family
+182	HKTshOFF	14x14	1	plate	B-BUTTONS	H02	1	drawn	no		button body (plate + ring + glyph + states)
+183	HKTshON	14x14	1	plate	B-BUTTONS	H02	1	drawn	no		button body (plate + ring + glyph + states)
+184	IntBotom	800x159	1	board	B-BOARD	H02	1	drawn	no		panel strip board; hardware and controls are separate layers
+185	IntTop	800x41	1	board	B-BOARD	H01	1	drawn	no		panel strip board; hardware and controls are separate layers
+186	Invn_But	34x34	3	plate	B-BUTTONS	H01	1	drawn	no		button body (plate + ring + glyph + states)
+187	Log_But	34x34	3	plate	B-BUTTONS	H01	1	drawn	no		button body (plate + ring + glyph + states)
+188	SplSlt1	32x32	1	hardware	B-HARDWARE	H01	1	drawn	no		slot or frame housing
+189	SplSlt2	32x32	1	hardware	B-HARDWARE	H01	1	drawn	no		slot or frame housing
+190	SplSlt3	32x32	1	hardware	B-HARDWARE	H01	1	drawn	no		slot or frame housing
+191	SplSlt4	32x32	1	hardware	B-HARDWARE	H01	1	drawn	no		slot or frame housing
+192	SplSlt5	32x32	1	hardware	B-HARDWARE	H01	1	drawn	no		slot or frame housing
+193	TMap_But	34x34	3	plate	B-BUTTONS	H01	1	drawn	no		button body (plate + ring + glyph + states)
+194	WMap_But	34x34	3	plate	B-BUTTONS	H01	1	drawn	no		button body (plate + ring + glyph + states)
+195	WMap_ON	34x34	2	state	B-BUTTONS	H01	1	drawn	no		lit or on/refused state of a button
+196	Cmps_Bse	81x81	1	picture	B-ICONS			no window row (kind proposed by name and size)	yes	N E S W	
+197	CompassN	75x73	16	picture	B-ICONS			no window row (kind proposed by name and size)	yes	N E S W	
+198	PCWinCvr	89x89	1	hardware	B-HARDWARE	G05,G10,G11,G12,G13,G14,H22	7	drawn	no		lens ring or cover frame
+199	WP_Cover	130x152	1	hardware	B-HARDWARE			no window row (kind proposed by name and size)	no		
+200	MpWt_Rot	410x107	1	hardware	B-HARDWARE	H09	1	drawn	no		framed pop-up panel over the board or world
+201	Cler_Big	38x37	3	plate	B-BUTTONS	H09	1	drawn	no		button body (plate + ring + glyph + states)
+202	cncl_big	38x37	3	plate	B-BUTTONS	H09	1	drawn	no		button body (plate + ring + glyph + states)
+203	done_big	38x37	3	plate	B-BUTTONS	H09	1	drawn	no		button body (plate + ring + glyph + states)
+204	MM_Cross	11x11	2	glyph	B-BUTTONS	G12,G14	2	drawn	no		map marker
+205	MM_Loc	9x9	2	glyph	B-BUTTONS	G12	1	drawn	no		map marker
+206	MM_WayP	9x9	2	glyph	B-BUTTONS	G12,G14	2	drawn	no		map marker
+207	Clk_timestrip	384x29	1	gauge	B-GAUGES	H01	1	drawn	no		gauge or readout parts
+208	Clk_Moon1	128x29	1	gauge	B-GAUGES	H01	1	drawn	no		gauge or readout parts
+209	Clk_Moon2	128x29	1	gauge	B-GAUGES	H01	1	drawn	no		gauge or readout parts
+210	Clk_Moon3	128x29	1	gauge	B-GAUGES	H01	1	drawn	no		gauge or readout parts
+211	Clk_Moon4	128x29	1	gauge	B-GAUGES	H01	1	drawn	no		gauge or readout parts
+212	Clk_Moon5	128x29	1	gauge	B-GAUGES	H01	1	drawn	no		gauge or readout parts
+213	Clk_Moon6	128x29	1	gauge	B-GAUGES	H01	1	drawn	no		gauge or readout parts
+214	Clk_Moon7	128x29	1	gauge	B-GAUGES	H01	1	drawn	no		gauge or readout parts
+215	Clk_Moon8	128x29	1	gauge	B-GAUGES	H01	1	drawn	no		gauge or readout parts
+216	TimePnts	5x29	1	gauge	B-GAUGES	H01	1	drawn	no		gauge or readout parts
+217	Nav_Cvr	207x35	1	hardware	B-HARDWARE	G12,G13,G14	3	drawn	no		lens ring or cover frame
+218	Slp_Main	800x400	1	hardware	B-HARDWARE			no window row (kind proposed by name and size)	no		
+219	Tmp_Day	501x365	1	hardware	B-HARDWARE			no window row (kind proposed by name and size)	no		
+220	Tmp_Nght	501x365	1	hardware	B-HARDWARE			no window row (kind proposed by name and size)	no		
+221	Inventor	442x400	1	backdrop	BD-A	G01,G02,G03,G04,G17,M10	6	drawn	no		window backdrop layer
+222	Char_PCC	89x89	1	hardware	B-HARDWARE			no window row (kind proposed by name and size)	no		
+223	PDoll	358x400	1	backdrop	BD-A	G01,G17	2	drawn	no		window backdrop layer
+224	Drop_OFF	80x43	1	plate	B-BUTTONS	G01,G02,G03,G04,M10	5	drawn	no		button body (plate + ring + glyph + states)
+225	Drop_ON	80x43	1	state	B-BUTTONS	G01,G02,G03,G04	4	drawn	no		lit or on/refused state of a button
+226	ArialB12Font	1x14	225	font				font (not a kit part)	n/a		bitmap font
+227	Comic12Font	1x16	225	font				font (not a kit part)	n/a		bitmap font
+228	Elga12Font	2x13	225	font				font (not a kit part)	n/a		bitmap font
+229	Flare12Font	2x15	225	font		G05,G07,G09,G10,G11,G15,H04,H15,H16,H18,H19,H21,M04,M05,M06,M07,M08,M09,M11	19	drawn	n/a		bitmap font, drawn text; slice #2462
+230	Flare14Font	2x16	225	font		H21	1	drawn	n/a		bitmap font, drawn text; slice #2462
+231	Lns_Bart	89x89	1	hardware	B-HARDWARE	G03,G15,G16,H22,M10	5	drawn	no		lens ring or cover frame
+232	Lns_Loot	89x89	1	hardware	B-HARDWARE	G02,G04,H22	3	drawn	no		lens ring or cover frame
+233	Lns_Papr	89x89	1	hardware	B-HARDWARE	G01,G17,H22	3	drawn	no		lens ring or cover frame
+234	Loot	358x400	1	backdrop	BD-A	G02,G04	2	drawn	no		window backdrop layer
+235	Barter	358x400	1	backdrop	BD-A	G03,M10	2	drawn	no		window backdrop layer
+236	Scrll_UP	17x18	2	plate	B-BUTTONS			no window row (kind proposed by name and size)	no		
+237	Scrll_DWN	17x18	2	plate	B-BUTTONS			no window row (kind proposed by name and size)	no		
+238	ScrllSlideT	11x5	1	gauge	B-GAUGES	G09,M09	2	drawn	no		gauge or readout parts
+239	ScrllSlideM	11x5	1	gauge	B-GAUGES			no window row (kind proposed by name and size)	no		
+240	ScrllSlideB	11x7	1	gauge	B-GAUGES	G09,M09	2	drawn	no		gauge or readout parts
+241	CVR_Helmet	62x64	1	glyph	B-BUTTONS	G01,G02,G03,G04,G17,M10	6	drawn	no		silhouette cover of an empty worn slot
+242	CVR_Boot	64x63	1	glyph	B-BUTTONS	G01,G02,G03,G04,G17	5	drawn	no		silhouette cover of an empty worn slot
+243	CVR_Gauntlet	63x64	1	glyph	B-BUTTONS	G01,G02,G03,G04,G17	5	drawn	no		silhouette cover of an empty worn slot
+244	CVR_Armor	128x160	1	glyph	B-BUTTONS	G01,G02,G03,G04,G17	5	drawn	no		silhouette cover of an empty worn slot
+245	CVR_Medalion	64x31	1	glyph	B-BUTTONS	G01,G02,G03,G04,G17	5	drawn	no		silhouette cover of an empty worn slot
+246	CVR_Ring1	32x32	1	glyph	B-BUTTONS	G01,G02,G03,G04,G17	5	drawn	no		silhouette cover of an empty worn slot
+247	CVR_Ring2	32x32	1	glyph	B-BUTTONS	G01,G02,G03,G04,G17	5	drawn	no		silhouette cover of an empty worn slot
+248	CVR_Shield	95x127	1	glyph	B-BUTTONS	G01,G02,G03,G04,G17	5	drawn	no		silhouette cover of an empty worn slot
+249	CVR_Weapon	96x129	1	glyph	B-BUTTONS	G01,G02,G03,G04,G17	5	drawn	no		silhouette cover of an empty worn slot
+250	Ammo_Icon_Arrows	37x24	1	picture	B-ICONS	H02	1	drawn	no		icon
+251	Ammo_Icon_Bullets	37x24	1	picture	B-ICONS	H02	1	drawn	no		icon
+252	Ammo_Icon_Charges	37x24	1	picture	B-ICONS	H02	1	drawn	no		icon
+253	Ammo_Icon_Fuel	37x24	1	picture	B-ICONS	H02	1	drawn	no		icon
+254	align	27x9	21	gauge	B-GAUGES	G05,G10,M09	3	drawn	no		gauge or readout parts
+255	MT_Apt	14x6	1	gauge	B-GAUGES	G05,G10,M09	3	drawn	no		gauge or readout parts
+256	Item_Dam	31x31	9	gauge	B-GAUGES			no window row (kind proposed by name and size)	no		
+257	SP_Minus	22x13	2	plate	B-BUTTONS			no window row (kind proposed by name and size)	no		
+258	SP_Plus	22x13	2	plate	B-BUTTONS			no window row (kind proposed by name and size)	no		
+259	Book_Karma	561x355	1	sheet	BD-C			no window row (kind proposed by name and size)	no		
+260	Book_Main	635x400	1	backdrop	BD-C	G11	1	drawn	no		window backdrop layer
+261	Book_Quests	561x355	1	sheet	BD-C	G11	1	drawn	no		document laid over a backdrop
+262	Book_Rumors	561x355	1	sheet	BD-C			no window row (kind proposed by name and size)	no		
+263	Book_Side	165x400	1	sheet	BD-C			no window row (kind proposed by name and size)	no		
+264	LogBooks_Side	165x400	1	backdrop	BD-C	G11	1	drawn	no		window backdrop layer
+265	Tab_Note	46x41	2	plate	B-BUTTONS	G11	1	drawn	no		button body (plate + ring + glyph + states)
+266	Tab_BlessCurse	46x41	2	plate	B-BUTTONS	G11	1	drawn	no		button body (plate + ring + glyph + states)
+267	Tab_Quest	46x41	2	plate	B-BUTTONS	G11	1	drawn	no		button body (plate + ring + glyph + states)
+268	Tab_BackGrnd	46x41	2	plate	B-BUTTONS	G11	1	drawn	no		button body (plate + ring + glyph + states)
+269	Tab_Keys	46x41	2	plate	B-BUTTONS	G11	1	drawn	no		button body (plate + ring + glyph + states)
+270	Tab_EgoInjure	46x41	2	plate	B-BUTTONS	G11	1	drawn	no		button body (plate + ring + glyph + states)
+271	Tab_Rep	46x41	2	plate	B-BUTTONS	G11	1	drawn	no		button body (plate + ring + glyph + states)
+272	PageTurn_L	18x22	3	plate	B-BUTTONS	G11	1	drawn	no		button body (plate + ring + glyph + states)
+273	PageTurn_R	18x22	3	plate	B-BUTTONS	G11	1	drawn	no		button body (plate + ring + glyph + states)
+274	Skill_Rot	410x107	1	hardware	B-HARDWARE	H09	1	drawn	no		framed pop-up panel over the board or world
+275	SKL_PickLock	32x32	2	picture	B-ICONS-SPELL			no window row (kind proposed by name and size)	no		
+276	SKL_Heal	32x32	2	picture	B-ICONS-SPELL			no window row (kind proposed by name and size)	no		
+277	SKL_Combine	32x32	2	picture	B-ICONS-SPELL			no window row (kind proposed by name and size)	no		
+278	SKL_Repair	32x32	2	picture	B-ICONS-SPELL	H02,H09	2	drawn	no		icon or item/critter picture
+279	SKL_Conceal	32x32	2	picture	B-ICONS-SPELL	H02,H09	2	drawn	no		icon or item/critter picture
+280	SKL_PickPocket	32x32	2	picture	B-ICONS-SPELL	H02,H09	2	drawn	no		icon or item/critter picture
+281	SKL_SilentMove	32x32	2	picture	B-ICONS-SPELL			no window row (kind proposed by name and size)	no		
+282	SKL_Traps	32x32	2	picture	B-ICONS-SPELL	H02,H09	2	drawn	no		icon or item/critter picture
+283	Big_Grn_L	34x33	3	plate	B-BUTTONS	M07,M08	2	drawn	no		button body (plate + ring + glyph + states)
+284	Big_Grn_R	34x33	3	plate	B-BUTTONS	M07,M08	2	drawn	no		button body (plate + ring + glyph + states)
+285	Comb_I1_cov	96x64	1	hardware	B-HARDWARE			no window row (kind proposed by name and size)	no		
+286	Comb_I2_cov	96x64	1	hardware	B-HARDWARE			no window row (kind proposed by name and size)	no		
+287	Comb_Result_cov	96x64	1	hardware	B-HARDWARE			no window row (kind proposed by name and size)	no		
+288	Combine_Rot	410x107	1	hardware	B-HARDWARE			no window row (kind proposed by name and size)	no		
+289	Trap_Button	64x64	2	plate	B-BUTTONS			no window row (kind proposed by name and size)	no		
+290	Trap_Rot	410x107	1	hardware	B-HARDWARE	H09	1	drawn	no		framed pop-up panel over the board or world
+291	Broadcast_Rot	410x107	1	hardware	B-HARDWARE	H09	1	drawn	no		framed pop-up panel over the board or world
+292	Fate_Base	250x237	1	hardware	B-HARDWARE	H15	1	drawn	no		framed pop-up panel over the board or world
+293	FateBut	18x13	2	plate	B-BUTTONS	H15,H16	2	drawn	no		button body (plate + ring + glyph + states)
+294	AP_Bar	356x30	1	picture	B-ICONS	H06	1	drawn	no		icon or item/critter picture
+295	AP_Green	11x12	1	picture	B-ICONS	H06	1	drawn	no		icon or item/critter picture
+296	AP_Orange	11x12	1	picture	B-ICONS	H06	1	drawn	no		icon or item/critter picture
+297	EndTurn_But	31x15	3	plate	B-BUTTONS	H06	1	drawn	no		button body (plate + ring + glyph + states)
+298	MultiMove_Base	416x112	1	hardware	B-HARDWARE	H05	1	drawn	no		framed pop-up panel over the board or world
+299	Sm_RightArrow	23x23	3	plate	B-BUTTONS	H05	1	drawn	no		button body (plate + ring + glyph + states)
+300	Icons17Font	1x17	225	font		G07,G15,M09	3	drawn	n/a		bitmap font, drawn text; slice #2462
+301	Nick16Font	2x21	225	font		G07,M09	2	drawn	n/a		bitmap font, drawn text; slice #2462
+302	Combat_But	32x32	3	plate	B-BUTTONS	G06,M09	2	drawn	no		button body (plate + ring + glyph + states)
+303	Thieving_But	33x32	3	plate	B-BUTTONS	G06,M09	2	drawn	no		button body (plate + ring + glyph + states)
+304	Social_But	34x32	3	plate	B-BUTTONS	G06,M09	2	drawn	no		button body (plate + ring + glyph + states)
+305	Technological_But	32x32	3	plate	B-BUTTONS	G06,M09	2	drawn	no		button body (plate + ring + glyph + states)
+306	Anatomical_But	32x31	3	plate	B-BUTTONS	G07,M09	2	drawn	no		button body (plate + ring + glyph + states)
+307	Chemistry_But	32x31	3	plate	B-BUTTONS	G07	1	drawn	no		button body (plate + ring + glyph + states)
+308	Electrical_But	33x31	3	plate	B-BUTTONS	G07	1	drawn	no		button body (plate + ring + glyph + states)
+309	Explosives_But	32x31	3	plate	B-BUTTONS	G07	1	drawn	no		button body (plate + ring + glyph + states)
+310	GunSmithy_But	32x31	3	plate	B-BUTTONS	G07	1	drawn	no		button body (plate + ring + glyph + states)
+311	Mechanical_But	32x31	3	plate	B-BUTTONS	G07	1	drawn	no		button body (plate + ring + glyph + states)
+312	Smithy_But	32x31	3	plate	B-BUTTONS	G07	1	drawn	no		button body (plate + ring + glyph + states)
+313	Therapeutics_But	32x31	3	plate	B-BUTTONS	G07	1	drawn	no		button body (plate + ring + glyph + states)
+314	RollerTemplate	20x20	1	hardware	B-HARDWARE			no window row (kind proposed by name and size)	no		
+315	AP_Red	11x12	1	picture	B-ICONS	H06	1	drawn	no		icon or item/critter picture
+316	ScrllSLD_OFF	13x600	1	gauge	B-GAUGES			no window row (kind proposed by name and size)	no		
+317	ScrllUP	11x15	3	plate	B-BUTTONS	G09,M09	2	drawn	no		button body (plate + ring + glyph + states)
+318	ScrllDWN	11x14	3	plate	B-BUTTONS	G09,M09	2	drawn	no		button body (plate + ring + glyph + states)
+319	ScrllSLD_ON	13x600	1	gauge	B-GAUGES			no window row (kind proposed by name and size)	no		
+320	ChoosBack	129x59	1	plate	B-BUTTONS			no window row (kind proposed by name and size)	no		
+321	NextBut	61x61	3	plate	B-BUTTONS	M05,M06,M07,M08,M09,M10	6	drawn	no		button body (plate + ring + glyph + states)
+322	CharRace_Base	800x400	1	backdrop	BD-G			no window row (kind proposed by name and size)	no		
+323	BackBut	61x61	3	plate	B-BUTTONS	M05,M06,M07,M08,M09,M10	6	drawn	no		button body (plate + ring + glyph + states)
+324	ChoosCharRace	129x59	1	plate	B-BUTTONS			no window row (kind proposed by name and size)	no		
+325	ChoosPortCust	129x59	1	plate	B-BUTTONS			no window row (kind proposed by name and size)	no		
+327	Morph30Font	2x33	225	font		M01,M02,M03,M04	4	drawn	n/a		bitmap font, drawn text; slice #2462
+328	MenuPlaque	233x324	1	hardware	B-HARDWARE			no window row (kind proposed by name and size)	no		
+329	MainMenuBack	800x600	1	backdrop	BD-H	M01,M03,M11	3	drawn	no		full-screen menu backdrop 800x600
+330	MultiPlayerBack	800x600	1	backdrop	BD-H	M14	1	drawn	no		full-screen menu backdrop 800x600
+331	SinglePlayerBack	800x600	1	backdrop	BD-H	M02	1	drawn	no		full-screen menu backdrop 800x600
+332	PortSelect	66x66	1	hardware	B-HARDWARE			no window row (kind proposed by name and size)	no		
+333	PortName_Base	800x400	1	backdrop	BD-G			no window row (kind proposed by name and size)	no		
+334	CharGears	71x379	7	hardware	B-HARDWARE			no window row (kind proposed by name and size)	no		
+335	CharCreateBottomBar	800x159	1	board	B-BOARD	M05,M06,M07,M08,M09,M10	6	drawn	no		panel strip board; hardware and controls are separate layers
+336	CharCreateTopBar	800x41	1	board	B-BOARD	M05,M06,M07,M08,M09,M10	6	drawn	no		panel strip board; hardware and controls are separate layers
+337	Barter_PD	358x243	1	backdrop	BD-A	G03,M10	2	drawn	no		window backdrop layer
+338	PD_lil_butt	28x27	2	plate	B-BUTTONS	G02,G03,G04,M10	4	drawn	no		button body (plate + ring + glyph + states)
+339	Inven_lil_butt	28x27	2	plate	B-BUTTONS	G02,G03,G04,M10	4	drawn	no		button body (plate + ring + glyph + states)
+340	tiny_butt	28x27	2	plate	B-BUTTONS	G01,G02,G03,G04,G17	5	drawn	no		button body (plate + ring + glyph + states)
+341	PD_Cover4Inven	341x400	1	backdrop	BD-A	G02,G03,G04,M10	4	drawn	no		window backdrop layer
+342	Use_Box_OFF	80x43	1	plate	B-BUTTONS	G01,G02,G03,G04,M10	5	drawn	no		button body (plate + ring + glyph + states)
+343	Use_Box_ON	80x43	1	state	B-BUTTONS	G01,G02,G03,G04	4	drawn	no		lit or on/refused state of a button
+344	Gamble_Box_ON	80x43	1	state	B-BUTTONS	G03	1	drawn	no		lit or on/refused state of a button
+345	Gamble_Box_OFF	80x43	1	plate	B-BUTTONS	G03,M10	2	drawn	no		button body (plate + ring + glyph + states)
+346	Gamble_Box_ILL	80x43	1	state	B-BUTTONS	G03	1	drawn	no		lit or on/refused state of a button
+347	Use_Box_ILL	80x43	1	state	B-BUTTONS	G02,G03,G04	3	drawn	no		lit or on/refused state of a button
+348	Drop_ILL	80x43	1	state	B-BUTTONS	G02,G03,G04	3	drawn	no		lit or on/refused state of a button
+349	Loot_PD	358x266	1	backdrop	BD-A	G02,G04	2	drawn	no		window backdrop layer
+350	jmp_iso	78x40	1	picture	B-ICONS			no window row (kind proposed by name and size)	no		
+351	jmp_td	42x42	1	picture	B-ICONS			no window row (kind proposed by name and size)	no		
+352	skillcur	26x33	1	cursor	B-CURSORS	H13	1	drawn	no		cursor
+353	battlecur	24x27	1	cursor	B-CURSORS	H13	1	drawn	no		cursor
+354	DialogueWindow	410x107	1	hardware	B-HARDWARE	H04,H19	2	drawn	no		framed pop-up panel over the board or world
+355	Anatomical_Tab	27x40	2	plate	B-BUTTONS	G15	1	drawn	no		button body (plate + ring + glyph + states)
+356	Chemistry_Tab	27x40	2	plate	B-BUTTONS	G15	1	drawn	no		button body (plate + ring + glyph + states)
+357	CombineButt	51x51	2	plate	B-BUTTONS	G15	1	drawn	no		button body (plate + ring + glyph + states)
+358	CombineIndicator1	117x22	1	picture	B-ICONS	G15	1	drawn	no		overlay picture
+359	CombineIndicator2	117x22	1	picture	B-ICONS	G15	1	drawn	no		overlay picture
+360	CombineIndicator3	117x22	1	picture	B-ICONS	G15	1	drawn	no		overlay picture
+361	Electrical_Tab	27x40	2	plate	B-BUTTONS	G15	1	drawn	no		button body (plate + ring + glyph + states)
+362	Explosives_Tab	27x40	2	plate	B-BUTTONS	G15	1	drawn	no		button body (plate + ring + glyph + states)
+363	GunSmithy_Tab	27x40	2	plate	B-BUTTONS	G15	1	drawn	no		button body (plate + ring + glyph + states)
+364	Mechanical_Tab	27x40	2	plate	B-BUTTONS	G15	1	drawn	no		button body (plate + ring + glyph + states)
+365	Schematic_Base	800x400	1	backdrop	BD-F	G15	1	drawn	no		window backdrop layer
+366	Schm_MechAracnid	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+367	Schm_PC_Lens	89x89	1	hardware	B-HARDWARE			no window row (kind proposed by name and size)	no		
+368	Smithy_Tab	27x40	2	plate	B-BUTTONS	G15	1	drawn	no		button body (plate + ring + glyph + states)
+369	Theraputics_Tab	27x40	2	plate	B-BUTTONS	G15	1	drawn	no		button body (plate + ring + glyph + states)
+370	Icons32Font	1x32	225	font		G15	1	drawn	n/a		bitmap font, drawn text; slice #2462
+371	CasablancaAntique30Font	2x38	225	font		G15	1	drawn	n/a		bitmap font, drawn text; slice #2462
+372	Schm_LArrow	18x22	3	plate	B-BUTTONS	G15	1	drawn	no		button body (plate + ring + glyph + states)
+373	Schm_RArrow	18x22	3	plate	B-BUTTONS	G15	1	drawn	no		button body (plate + ring + glyph + states)
+375	RaceHumanIcon	64x64	1	picture	B-ICONS	G02,G05,H21	3	drawn	no		icon or item/critter picture
+376	RaceElfIcon	64x64	1	picture	B-ICONS	G02,G05,H21	3	drawn	no		icon or item/critter picture
+377	RaceHElfIcon	64x64	1	picture	B-ICONS	G02,G05,H21	3	drawn	no		icon or item/critter picture
+378	RaceDwarfIcon	64x64	1	picture	B-ICONS	G02,G05,H21	3	drawn	no		icon or item/critter picture
+379	RaceGnomeIcon	64x64	1	picture	B-ICONS	G02,G05,H21	3	drawn	no		icon or item/critter picture
+380	RaceHalflingIcon	64x64	1	picture	B-ICONS	G02,G05,H21	3	drawn	no		icon or item/critter picture
+381	RaceHOrcIcon	64x64	1	picture	B-ICONS	G02,G05,H21	3	drawn	no		icon or item/critter picture
+382	RaceHOgreIcon	64x64	1	picture	B-ICONS	G02,G05,H21	3	drawn	no		icon or item/critter picture
+383	MonsterIcon	64x64	1	picture	B-ICONS	G02,G05,H21,M09	4	drawn	no		icon or item/critter picture
+384	Undead	64x64	1	picture	B-ICONS	G02,G05,H21	3	drawn	no		icon or item/critter picture
+385	AnimalIcon	64x64	1	picture	B-ICONS	G02,G05,H21	3	drawn	no		icon or item/critter picture
+386	Icon_LawfulGood	64x64	1	picture	B-ICONS	H21	1	drawn	no		icon or item/critter picture
+387	Icon_Good	64x64	1	picture	B-ICONS	H21	1	drawn	no		icon or item/critter picture
+388	Icon_Lawful	64x64	1	picture	B-ICONS	H21	1	drawn	no		icon or item/critter picture
+389	Icon_Chaotic	64x64	1	picture	B-ICONS	H21	1	drawn	no		icon or item/critter picture
+390	Icon_Evil	64x64	1	picture	B-ICONS	H21	1	drawn	no		icon or item/critter picture
+391	GeneralMeleeIcon	64x64	1	picture	B-ICONS	H21	1	drawn	no		icon or item/critter picture
+392	MagicMeleeIcon	64x64	1	picture	B-ICONS	H21	1	drawn	no		icon or item/critter picture
+393	TechMeleeIcon	64x64	1	picture	B-ICONS	H21	1	drawn	no		icon or item/critter picture
+394	TechGunsIcon	64x64	1	picture	B-ICONS	H21	1	drawn	no		icon or item/critter picture
+395	GeneralBowsIcon	64x64	1	picture	B-ICONS	H21	1	drawn	no		icon or item/critter picture
+396	MagicBowsIcon	64x64	1	picture	B-ICONS	H21	1	drawn	no		icon or item/critter picture
+397	TechBowsIcon	64x64	1	picture	B-ICONS	H21	1	drawn	no		icon or item/critter picture
+398	Arrows_Icon	64x64	1	picture	B-ICONS	H21	1	drawn	no		icon or item/critter picture
+399	BulletsIcon	64x64	1	picture	B-ICONS	H21	1	drawn	no		icon or item/critter picture
+400	ChargesIcon	64x64	1	picture	B-ICONS	H21	1	drawn	no		icon or item/critter picture
+401	FuelIcon	64x64	1	picture	B-ICONS	H21	1	drawn	no		icon or item/critter picture
+402	GeneralClothes_Icon	64x64	1	picture	B-ICONS	H21	1	drawn	no		icon or item/critter picture
+403	MagicClothes_Icon	64x64	1	picture	B-ICONS	H21	1	drawn	no		icon or item/critter picture
+404	TechClothes_Icon	64x64	1	picture	B-ICONS	H21	1	drawn	no		icon or item/critter picture
+405	ShieldGeneralIcon	64x64	1	picture	B-ICONS	H21	1	drawn	no		icon or item/critter picture
+406	ShieldMagicalIcon	64x64	1	picture	B-ICONS	H21	1	drawn	no		icon or item/critter picture
+407	ShieldTechIcon	64x64	1	picture	B-ICONS	H21	1	drawn	no		icon or item/critter picture
+408	RobeGeneralIcon	64x64	1	picture	B-ICONS	H21	1	drawn	no		icon or item/critter picture
+409	RobeMagicalIcon	64x64	1	picture	B-ICONS	H21	1	drawn	no		icon or item/critter picture
+410	RobeTechIcon	64x64	1	picture	B-ICONS	H21	1	drawn	no		icon or item/critter picture
+411	GeneralRingIcon	64x64	1	picture	B-ICONS	H21	1	drawn	no		icon or item/critter picture
+412	MagicRingIcon	64x64	1	picture	B-ICONS	H21	1	drawn	no		icon or item/critter picture
+413	TechRingIcon	64x64	1	picture	B-ICONS	H21	1	drawn	no		icon or item/critter picture
+414	GeneralMedalionIcon	64x64	1	picture	B-ICONS	H21	1	drawn	no		icon or item/critter picture
+415	MagicMedalionIcon	64x64	1	picture	B-ICONS	H21	1	drawn	no		icon or item/critter picture
+416	TechMedalionIcon	64x64	1	picture	B-ICONS	H21	1	drawn	no		icon or item/critter picture
+417	CoinsIcon	64x64	1	picture	B-ICONS	H21	1	drawn	no		icon or item/critter picture
+418	IconPotions	64x64	1	picture	B-ICONS	H21	1	drawn	no		icon or item/critter picture
+419	IconTherapeutics	64x64	1	picture	B-ICONS	H21	1	drawn	no		icon or item/critter picture
+420	IconHerbal	64x64	1	picture	B-ICONS	H21	1	drawn	no		icon or item/critter picture
+421	Chemical_Icon	64x64	1	picture	B-ICONS	H21	1	drawn	no		icon or item/critter picture
+422	Spirits_Icon	64x64	1	picture	B-ICONS			no window row (kind proposed by name and size)	no		
+423	Food_Icon	64x64	1	picture	B-ICONS	H21	1	drawn	no		icon or item/critter picture
+424	IconPoison	64x64	1	picture	B-ICONS			no window row (kind proposed by name and size)	no		
+425	ScrollIcon	64x64	1	picture	B-ICONS	H21	1	drawn	no		icon or item/critter picture
+426	KeyIcon	64x64	1	picture	B-ICONS	H21	1	drawn	no		icon or item/critter picture
+427	Keyring_Icon	64x64	1	picture	B-ICONS	H21	1	drawn	no		icon or item/critter picture
+428	BooksIcon	64x64	1	picture	B-ICONS	H21	1	drawn	no		icon or item/critter picture
+429	Note_Icon	64x64	1	picture	B-ICONS	H21	1	drawn	unclear	letters unreadable	icon or item/critter picture
+430	Telegram_Icon	64x64	1	picture	B-ICONS	H21	1	drawn	unclear	letters unreadable	icon or item/critter picture
+431	Newpaper_Icon	64x64	1	picture	B-ICONS	H21	1	drawn	no		icon or item/critter picture
+432	LevelUpIcon	64x64	1	picture	B-ICONS	G02,G05,H21	3	drawn	no		icon or item/critter picture
+433	MagicksIcon	64x64	1	picture	B-ICONS	H21	1	drawn	no		icon or item/critter picture
+434	GeneralTechIcon	64x64	1	picture	B-ICONS	G02,G05,H21	3	drawn	no		icon or item/critter picture
+435	ContainerIcon	64x69	1	picture	B-ICONS	G02,H21	2	drawn	no		icon or item/critter picture
+436	Door_Icon	64x64	1	picture	B-ICONS	G02,H21	2	drawn	no		icon or item/critter picture
+437	LevelUpIcon	64x64	1	picture	B-ICONS	G02,H21	2	drawn	no		icon or item/critter picture
+438	LevelUpIcon	64x64	1	picture	B-ICONS	H04,H19	2	drawn	no		icon or item/critter picture
+439	Poisoned_Icon	64x64	1	picture	B-ICONS	H04,H19	2	drawn	no		icon or item/critter picture
+440	HexedIcon	64x64	1	picture	B-ICONS	H04,H19,H21	3	drawn	no		icon or item/critter picture
+441	BlessIcon	64x64	1	picture	B-ICONS	H04,H19	2	drawn	no		icon or item/critter picture
+442	Exclaimation_Icon	64x64	1	picture	B-ICONS	H04,H19	2	drawn	no		icon or item/critter picture
+443	Question_Icon	64x64	1	picture	B-ICONS	H04,H19	2	drawn	no		icon or item/critter picture
+444	LevelUpIcon	64x64	1	picture	B-ICONS	H04,H19	2	drawn	no		icon or item/critter picture
+445	LevelUpIcon	64x64	1	picture	B-ICONS			no window row (kind proposed by name and size)	no		
+446	ConveyanceIcon	64x64	1	picture	B-ICONS	H04	1	drawn	no		icon or item/critter picture
+447	DivinationIcon	64x64	1	picture	B-ICONS	H04	1	drawn	no		icon or item/critter picture
+448	E_AirIcon	64x64	1	picture	B-ICONS	H04	1	drawn	no		icon or item/critter picture
+449	E_EarthIcon	64x64	1	picture	B-ICONS	H04	1	drawn	no		icon or item/critter picture
+450	E_FireIcon	64x64	1	picture	B-ICONS	H04	1	drawn	no		icon or item/critter picture
+451	E_WaterIcon	64x64	1	picture	B-ICONS	H04	1	drawn	no		icon or item/critter picture
+452	ForceIcon	64x64	1	picture	B-ICONS	H04	1	drawn	no		icon or item/critter picture
+453	MentalIcon	64x64	1	picture	B-ICONS	H04	1	drawn	no		icon or item/critter picture
+454	MetaIcon	64x64	1	picture	B-ICONS	H04	1	drawn	no		icon or item/critter picture
+455	MorphIcon	64x64	1	picture	B-ICONS	H04	1	drawn	no		icon or item/critter picture
+456	NatureIcon	64x64	1	picture	B-ICONS	H04	1	drawn	no		icon or item/critter picture
+457	Necro_EvilIcon	64x64	1	picture	B-ICONS	H04	1	drawn	no		icon or item/critter picture
+458	Necro_GoodIcon	64x64	1	picture	B-ICONS	H04	1	drawn	no		icon or item/critter picture
+459	PhantasmIcon	64x64	1	picture	B-ICONS	H04	1	drawn	no		icon or item/critter picture
+460	SommoningIcon	64x64	1	picture	B-ICONS	H04	1	drawn	no		icon or item/critter picture
+461	TemporalIcon	64x64	1	picture	B-ICONS	H04	1	drawn	no		icon or item/critter picture
+462	Schematic_Icon	64x64	1	picture	B-ICONS	H21	1	drawn	unclear	letters unreadable	icon or item/critter picture
+463	MesHealthBar_Full	235x11	1	gauge	B-GAUGES	H21	1	drawn	no		gauge or readout parts
+464	MesHealthBar_Empty	235x11	1	gauge	B-GAUGES	H21	1	drawn	no		gauge or readout parts
+465	MesFatigueBar_Full	235x11	1	gauge	B-GAUGES	H21	1	drawn	no		gauge or readout parts
+466	MesFatigueBar_Empty	235x11	1	gauge	B-GAUGES	H21	1	drawn	no		gauge or readout parts
+467	hoverunder	39x27	15	picture	B-ICONS	H13	1	drawn	no		icon or item/critter picture
+468	hoverover	39x27	15	picture	B-ICONS	H13	1	drawn	no		icon or item/critter picture
+469	Ammo_Icon_Mana	37x24	1	picture	B-ICONS	H02	1	drawn	no		icon
+470	Combat_Button	39x39	3	plate	B-BUTTONS	H02	1	drawn	no		button body (plate + ring + glyph + states)
+471	Schematics_Button	39x39	3	plate	B-BUTTONS	H02	1	drawn	no		button body (plate + ring + glyph + states)
+472	Skills_Button	39x39	3	plate	B-BUTTONS	H02	1	drawn	no		button body (plate + ring + glyph + states)
+473	Spells_Button	39x39	3	plate	B-BUTTONS	H02	1	drawn	no		button body (plate + ring + glyph + states)
+474	Ammo_Icon_Gold	37x24	1	picture	B-ICONS	H02	1	drawn	no		icon
+475	ts_iso	78x40	1	picture	B-ICONS			no window row (kind proposed by name and size)	no		
+476	ts_td	42x42	1	picture	B-ICONS			no window row (kind proposed by name and size)	no		
+477	BookBackground	668x400	1	sheet	BD-D	G16	1	drawn	no		document laid over a backdrop
+478	BookmanOldBold18Font	2x20	225	font				font (not a kit part)	n/a		bitmap font
+479	ClarendonBLK18Font	2x21	225	font		G16	1	drawn	n/a		bitmap font, drawn text; slice #2462
+480	Courier10Font	2x12	225	font		G16	1	drawn	n/a		bitmap font, drawn text; slice #2462
+481	Garmond6Font	2x7	225	font		G16	1	drawn	n/a		bitmap font, drawn text; slice #2462
+482	Garmond8Font	2x10	225	font		G16	1	drawn	n/a		bitmap font, drawn text; slice #2462
+483	Garmond9Font	1x10	225	font		G07,M09	2	drawn	n/a		bitmap font, drawn text; slice #2462
+484	Georgia30Font	2x33	225	font		G16	1	drawn	n/a		bitmap font, drawn text; slice #2462
+485	Zurich20Font	2x24	225	font		G16	1	drawn	n/a		bitmap font, drawn text; slice #2462
+486	LatinXCN30Font	4x35	225	font				font (not a kit part)	n/a		bitmap font
+487	NewsBackground	668x400	1	sheet	BD-D	G16	1	drawn	no		document laid over a backdrop
+488	NewsIconsFont	4x81	225	font				font (not a kit part)	n/a		bitmap font
+489	NoteBackground	668x400	1	sheet	BD-D	G16	1	drawn	no		document laid over a backdrop
+490	Swiss921Font	2x37	225	font				font (not a kit part)	n/a		bitmap font
+491	TeleBackground	668x400	1	sheet	BD-D	G16	1	drawn	no		document laid over a backdrop
+492	Zurich16Font	3x17	225	font				font (not a kit part)	n/a		bitmap font
+494	WritenSideBar	132x400	1	backdrop	BD-D	G16	1	drawn	no		window backdrop layer
+495	WrtnBookLArro	18x22	3	plate	B-BUTTONS	G16	1	drawn	no		button body (plate + ring + glyph + states)
+496	WrtnBookRArro	18x22	3	plate	B-BUTTONS	G16	1	drawn	no		button body (plate + ring + glyph + states)
+497	Pepper20Font	2x19	225	font		G16	1	drawn	n/a		bitmap font, drawn text; slice #2462
+498	Cursor_UP	17x17	1	cursor	B-CURSORS	H13	1	drawn	no		cursor
+499	Cursor_DWN	17x17	1	cursor	B-CURSORS	H13	1	drawn	no		cursor
+500	BookBackground	668x400	1	backdrop	BD-D			no window row (kind proposed by name and size)	no		
+501	FollowerArrow_DWN	67x13	1	plate	B-BUTTONS	H07	1	drawn	no		button body (plate + ring + glyph + states)
+502	FollowerArrow_UP	67x13	1	plate	B-BUTTONS	H07	1	drawn	no		button body (plate + ring + glyph + states)
+503	FollowerFrame	40x49	1	hardware	B-HARDWARE	H07	1	drawn	no		slot or frame housing
+504	FollowerFrame_FT	34x3	1	gauge	B-GAUGES	H07	1	drawn	no		gauge or readout parts
+505	FollowerFrame_HP	34x3	1	gauge	B-GAUGES	H07	1	drawn	no		gauge or readout parts
+506	Follow_Scroll_up	33x13	2	plate	B-BUTTONS	H07	1	drawn	no		button body (plate + ring + glyph + states)
+507	Follow_Scroll_up_OFF	33x13	1	plate	B-BUTTONS	H07	1	drawn	no		button body (plate + ring + glyph + states)
+508	Follow_Scroll_dwn	34x13	2	plate	B-BUTTONS	H07	1	drawn	no		button body (plate + ring + glyph + states)
+509	Follow_Scroll_dwn_OFF	34x13	1	plate	B-BUTTONS	H07	1	drawn	no		button body (plate + ring + glyph + states)
+510	acid_scheme	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+511	animal_lure_scheme	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+512	animal_scent_scheme	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+513	boost_all_stats_scheme	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+514	boost_mental_faculties_scheme	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+515	clockwotk_decoy_scheme	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+516	cure_all_scheme	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+517	cure_poison_scheme	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+518	dwarven_gauntlet_scheme	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+519	electric_light_scheme	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+520	elephant_gun_scheme	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+521	ElitePlate_Schematic	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+522	energizer_scheme	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+523	explosive_grenade_scheme	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+524	fatigue_limiter_scheme	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+525	fatigue_restore_scheme	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+526	fine_pistol.scheme	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+527	fire_obstruction_scheme	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+528	flash_grenadescheme	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+529	folding_rifle_scheme	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+530	hallicinite_scheme	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+531	heal_accelerator_scheme	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+532	heal_lite_scheme	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+533	healing_jacket_scheme	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+534	hushed_pistol_scheme	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+535	intelligence_booster_scheme	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+536	inv_mag_hat_scheme	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+537	looking_glass_rifle_scheme	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+538	magic_detector_scheme	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+539	magic_detector02_scheme	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+540	mechanized_gun_scheme	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+541	perception_booster_scheme	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+542	poison_scheme	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+543	pure_ore_scheme	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+544	repeater_rifle_scheme	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+545	shocking_staff_scheme	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+546	smoke_grenade_scheme	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+547	strength_booster_scheme	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+548	stun_grenade_scheme	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+549	sword_of_balance_scheme	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+550	telsa_rod_scheme	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+551	ultralite_axe_scheme	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+552	ultralite_axe_scheme_2	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+553	ultralite_chain_mail_scheme	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+554	wonder_drug_scheme	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+555	hoverattack	44x34	14	picture	B-ICONS	H13	1	drawn	no		icon or item/critter picture
+556	OptionsMenuBack	800x600	1	backdrop	BD-H	M04	1	drawn	no		full-screen menu backdrop 800x600
+557	CreateYourOwn	267x361	1	hardware	B-HARDWARE			no window row (kind proposed by name and size)	no		
+558	TMap_ON	34x34	2	state	B-BUTTONS	H01	1	drawn	no		lit or on/refused state of a button
+559	Invn_ON	34x34	2	state	B-BUTTONS	H01	1	drawn	no		lit or on/refused state of a button
+560	Log_ON	34x34	2	state	B-BUTTONS	H01	1	drawn	no		lit or on/refused state of a button
+561	Char_ON	34x34	1	state	B-BUTTONS	H01	1	drawn	no		lit or on/refused state of a button
+562	Blank_scheme	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+563	MagickWeapon_Butt	35x36	3	plate	B-BUTTONS	H02,H09	2	drawn	no		button body (plate + ring + glyph + states)
+564	MagickWeapon_Rot	410x107	1	hardware	B-HARDWARE	H09	1	drawn	no		framed pop-up panel over the board or world
+565	Sleep_Base	227x152	1	hardware	B-HARDWARE	H16	1	drawn	no		framed pop-up panel over the board or world
+566	TarantSewer	668x400	1	sheet	BD-D	G16	1	drawn (family)	yes	place names	written-object picture given by a script (map, mural or plaque picture)
+567	Scheme_Rot	235x325	1	sheet	BD-B	G09,M09	2	drawn	no		right panel of the character sheet laid over its backdrop
+568	char_Schem_Skills	32x32	3	plate	B-BUTTONS	G05,G09,G10,M09	4	drawn	no		button body (plate + ring + glyph + states)
+569	Automaton_Schem	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+582	Pen_BullsEye	80x89	1	picture	B-ICONS	H21	1	drawn	no		icon or item/critter picture
+583	Pen_Cover	38x20	1	picture	B-ICONS	H21	1	drawn	no		icon or item/critter picture
+584	Pen_Injury	28x17	1	picture	B-ICONS	H21	1	drawn	no		icon or item/critter picture
+585	Pen_Light	27x20	1	picture	B-ICONS	H21	1	drawn	no		icon or item/critter picture
+586	Pen_MSR	29x20	1	picture	B-ICONS	H21	1	drawn	unclear	characters unreadable (white label, maybe digits)	icon or item/critter picture
+587	Pen_Perception	34x20	1	picture	B-ICONS	H21	1	drawn	no		icon or item/critter picture
+588	Pen_Range	38x20	1	picture	B-ICONS	H21	1	drawn	no		icon or item/critter picture
+589	Bullets_scheme	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+590	Charges_scheme	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+591	fuel_scheme	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+592	boost_all_stats_scheme	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+593	S_Auto_Skeleton_Key	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+594	S_bear_trap	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+595	S_charged_ring	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+596	S_dex_booster	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+597	S_dynamite	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+598	S_eye_gear	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+599	S_spike_trap	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+600	S_trap_springer	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+601	loadindicator	40x50	30	gauge	B-GAUGES	H10	1	drawn	no		gauge or readout parts
+614	tb_iso	78x40	1	picture	B-ICONS			no window row (kind proposed by name and size)	no		
+615	tb_td	42x42	1	picture	B-ICONS			no window row (kind proposed by name and size)	no		
+616	FollowerFrame_PO	34x3	1	gauge	B-GAUGES	H07	1	drawn	no		gauge or readout parts
+618	hushed_revolver_schem	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+619	Helmet_of_Vision_Schem	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+620	TechCur	24x28	1	cursor	B-CURSORS			no window row (kind proposed by name and size)	no		
+621	revolver_schem	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+622	Crude_Flintlock_schem	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+623	SkilGauge	120x27	1	gauge	B-GAUGES	G06,M04,M09	3	drawn	no		gauge or readout parts
+624	SkilAddBut	29x30	3	plate	B-BUTTONS	G06,M09	2	drawn	no		button body (plate + ring + glyph + states)
+625	SkilMinusBut	29x30	3	plate	B-BUTTONS	G06,M09	2	drawn	no		button body (plate + ring + glyph + states)
+626	TarantMap	668x400	1	sheet	BD-D	G16	1	drawn (family)	yes	place names	written-object picture given by a script (map, mural or plaque picture)
+627	Saltys_Map	668x400	1	sheet	BD-D	G16	1	drawn (family)	yes	place names	written-object picture given by a script (map, mural or plaque picture)
+628	SP_Plugged1	35x35	1	hardware	B-HARDWARE	H01	1	drawn	no		slot or frame housing
+629	SP_Plugged2	35x35	1	hardware	B-HARDWARE	H01	1	drawn	no		slot or frame housing
+630	SP_Plugged3	35x35	1	hardware	B-HARDWARE	H01	1	drawn	no		slot or frame housing
+631	SP_Plugged4	35x35	1	hardware	B-HARDWARE	H01	1	drawn	no		slot or frame housing
+632	SP_Plugged5	35x35	1	hardware	B-HARDWARE	H01	1	drawn	no		slot or frame housing
+633	Stone_Plaque	668x400	1	sheet	BD-D	G16	1	drawn	no		document laid over a backdrop
+634	Icon_LawfulEvil	64x64	1	picture	B-ICONS	G02,G05,H21	3	drawn	no		icon or item/critter picture
+635	BAN_Button	148x48	2					out of scope	no		network play windows (not built)
+636	Discon_Button	148x48	2					out of scope	no		network play windows (not built)
+637	Kick_BAN_Window	410x107	1					out of scope	no		network play windows (not built)
+638	MPly_AddBut	32x32	3					out of scope	no		network play windows (not built)
+639	MPly_KickBut	32x32	3					out of scope	no		network play windows (not built)
+640	MPly_PlaqueA	234x40	1					out of scope	no		network play windows (not built)
+641	PrivMes_ClsBut	27x27	3					out of scope	no		network play windows (not built)
+642	PrivMes_Window	410x107	1	hardware	B-HARDWARE	H09	1	drawn	no		framed pop-up panel over the board or world
+643	MPly_PlaqueB	234x40	1					out of scope	no		network play windows (not built)
+644	MultiPlay_DWN	29x29	3					out of scope	no		network play windows (not built)
+645	MultiPlay_UP	29x29	3					out of scope	no		network play windows (not built)
+646	Portrait_Highlight	32x32	1	hardware	B-HARDWARE			no window row (kind proposed by name and size)	no		
+647	SpellTech_Add	32x32	3	plate	B-BUTTONS	G07,G08,M09	3	drawn	no		button body (plate + ring + glyph + states)
+648	SpellTech_Minus	32x32	3	plate	B-BUTTONS	G07,G08,M09	3	drawn	no		button body (plate + ring + glyph + states)
+649	TTI_Chem	32x32	1	picture	B-ICONS	G07,M09	2	drawn	no		icon or item/critter picture
+650	TTI_Electric	32x32	1	picture	B-ICONS	G07	1	drawn	no		icon or item/critter picture
+651	TTI_Explosives	32x32	1	picture	B-ICONS	G07	1	drawn	no		icon or item/critter picture
+652	TTI_Gun	32x32	1	picture	B-ICONS	G07	1	drawn	no		icon or item/critter picture
+653	TTI_Herb	32x32	1	picture	B-ICONS	G07	1	drawn	no		icon or item/critter picture
+654	TTI_Mechanical	32x32	1	picture	B-ICONS	G07	1	drawn	no		icon or item/critter picture
+655	TTI_Smithy	32x32	1	picture	B-ICONS	G07	1	drawn	no		icon or item/critter picture
+656	TTI_Theru	32x32	1	picture	B-ICONS	G07	1	drawn	no		icon or item/critter picture
+657	SchemTitle_Chemical	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+658	SchemTitle_Electric	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+659	SchemTitle_Explosive	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+660	SchemTitle_GunSmith	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+661	SchemTitle_Herbal	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+662	SchemTitle_Mechanical	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+663	SchemTitle_Smithy	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+664	SchemTitle_Threu	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+665	MesPoisonedBar_Full	235x11	1	gauge	B-GAUGES	H21	1	drawn	no		gauge or readout parts
+666	MesPoisonedBar_Empty	235x11	1	gauge	B-GAUGES	H21	1	drawn	no		gauge or readout parts
+667	SldrButt_L_Arrow	29x30	3	plate	B-BUTTONS	M04	1	drawn	no		button body (plate + ring + glyph + states)
+668	SldrButt_R_Arrow	29x30	3	plate	B-BUTTONS	M04	1	drawn	no		button body (plate + ring + glyph + states)
+669	OptionsBase	800x400	1	backdrop	BD-H	M04	1	drawn	no		window backdrop layer
+670	OptionsPCLens	89x89	1	hardware	B-HARDWARE	M04	1	drawn	no		lens ring or cover frame
+671	OptionMultiChoice	213x56	1	hardware	B-HARDWARE	M04	1	drawn	no		option control plate frame
+672	wp_iso	78x40	16	picture	B-ICONS			no window row (kind proposed by name and size)	yes	0 1 2 3	
+673	wp_td	42x42	8	picture	B-ICONS			no window row (kind proposed by name and size)	no		
+674	Icon_TotalAttack	64x64	1	picture	B-ICONS	H04	1	drawn	no		icon or item/critter picture
+675	Icon_TotalDefens	64x64	1	picture	B-ICONS	H04	1	drawn	no		icon or item/critter picture
+676	TotalAttack	54x71	3	plate	B-BUTTONS	G01,G02,G03,G04,G17	5	drawn	no		button body (plate + ring + glyph + states)
+677	TotalDefens	83x71	3	plate	B-BUTTONS	G01,G02,G03,G04,G17	5	drawn	no		button body (plate + ring + glyph + states)
+678	scroll_not	25x26	1	picture	B-ICONS			no window row (kind proposed by name and size)	no		
+679	scroll-0	23x27	1	picture	B-ICONS			no window row (kind proposed by name and size)	no		
+680	scroll-1	21x21	1	picture	B-ICONS			no window row (kind proposed by name and size)	no		
+681	scroll-2	26x23	1	picture	B-ICONS			no window row (kind proposed by name and size)	no		
+682	scroll-3	21x20	1	picture	B-ICONS			no window row (kind proposed by name and size)	no		
+683	scroll-4	23x26	1	picture	B-ICONS			no window row (kind proposed by name and size)	no		
+684	scroll-5	21x21	1	picture	B-ICONS			no window row (kind proposed by name and size)	no		
+685	scroll-6	26x23	1	picture	B-ICONS			no window row (kind proposed by name and size)	no		
+686	scroll-7	21x21	1	picture	B-ICONS			no window row (kind proposed by name and size)	no		
+687	Thorvaldsmap	668x400	1	sheet	BD-D	G16	1	drawn (family)	yes	place names	written-object picture given by a script (map, mural or plaque picture)
+688	OptionSlider	213x56	1	hardware	B-HARDWARE	M04	1	drawn	no		option control plate frame
+689	S_Wheel_Clan_Spectacles	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+690	S_Invigorator	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+691	S_Reanimator	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+692	S_Clockwork_Physician	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+693	S_Miracle_Cure	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+694	S_Mental_Inhibitor	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+695	S_Necromizer	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+696	S_Fortifier	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+697	S_Sleep_Aid	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+698	S_Potion_of_Paralysis	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+699	S_Charged_Sword	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+700	S_Flow_Disruptor	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+701	S_Tesla_Gun	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+702	S_Bellringer	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+703	S_Electro_Armor	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+704	S_Pyrotechnic_Bow	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+705	S_Knock_Out_Gas	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+706	S_Hallucination_Grenade	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+707	S_Electrocution_Grenade	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+708	S_Grenade_Launcher	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+709	S_Time_Bomb	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+710	S_Concussion_Grenade	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+711	S_Paralysis_Grenade	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+712	S_Mustard_Gas_Grenade	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+713	S_Plastique	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+714	S_Detonator	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+715	S_Acid_Gun	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+716	S_Charged_Accelerator_Gun	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+717	S_Pyrotechnic_Gun	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+718	S_Blade_Launcher	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+719	S_High_Velocity_Pistol	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+720	S_Schrecks_Pistol	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+721	S_Bronwycks_Gun	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+722	S_Long_Range_Pistol	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+723	S_Tranquilizer_Gun	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+724	MachinedPlate_Schematic	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+725	S_Compound_Bow	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+726	S_Envenomed_Bow	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+727	S_Medical_Arachnid	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+728	S_Illuminated_Decoy	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+729	S_Explosive_Decoy	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+730	S_Automaton_Gunner	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+731	S_Goggled_Helmet	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+732	S_Envenomed_Sword	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+733	S_Envenomed_Axe	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+734	S_Miners_Helmet	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+735	S_Pyrotechnic_Axe	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+736	S_Rifled_Cannon	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+737	S_Mechanical_Dagger	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+738	S_Elixir_of_Hypnotic_Suggestion	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+739	S_Brain_Builder	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+740	S_Muscle_Maker	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+741	S_Flame_Thrower	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+742	S_Charges	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+743	s_hand_cannon	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+744	BookImagesFont	2x186	225	font				font (not a kit part)	n/a		bitmap font
+745	SaveLoadBackground	800x400	1	backdrop	BD-G	M05,M06	2	drawn	no		window backdrop layer
+746	SaveLoadPCLens	89x89	1	hardware	B-HARDWARE	M05,M06	2	drawn	no		lens ring or cover frame
+747	TextToggle	33x33	2	hardware	B-HARDWARE	M05,M06	2	drawn	no		option control plate frame
+748	SaveShotCover	468x300	1	hardware	B-HARDWARE	M05,M06	2	drawn	no		lens ring or cover frame
+749	qintarramap	668x400	1	sheet	BD-D	G16	1	drawn (family)	yes	place names	written-object picture given by a script (map, mural or plaque picture)
+750	MPServerListBackground	800x600	1					out of scope	no		network play windows (not built)
+751	BookmarkButt	23x23	3	plate	B-BUTTONS			no window row (kind proposed by name and size)	no		
+752	UnBookmarkButt	23x23	3	plate	B-BUTTONS			no window row (kind proposed by name and size)	no		
+753	MPCharacterSelectionBackground	800x600	1					out of scope	no		network play windows (not built)
+754	MPChatBackground	800x600	1					out of scope	no		network play windows (not built)
+755	MPConnectionSettingsCover	251x375	1					out of scope	no		network play windows (not built)
+756	MPCreateChatRoomBackground	286x394	1					out of scope	no		network play windows (not built)
+757	MPCycleLeftButton	23x23	3	plate	B-BUTTONS	G03,M08,M10	3	drawn	no		button body (plate + ring + glyph + states)
+758	MPCycleRightButton	23x23	3	plate	B-BUTTONS	G03,M08,M10	3	drawn	no		button body (plate + ring + glyph + states)
+759	MPMainMenu	800x600	1					out of scope	no		network play windows (not built)
+760	MPMessOfDayCover	333x236	1					out of scope	no		network play windows (not built)
+761	MPNewAccountCover	251x375	1					out of scope	no		network play windows (not built)
+762	MPRefreshButton	23x23	3					out of scope	no		network play windows (not built)
+763	SaltysMap	668x400	1	sheet	BD-D	G16	1	drawn (family)	yes	place names	written-object picture given by a script (map, mural or plaque picture)
+764	TollosMap	668x400	1	sheet	BD-D	G16	1	drawn (family)	yes	numerals	written-object picture given by a script (map, mural or plaque picture)
+765	CreateCharacterBase	800x400	1	backdrop	BD-G	M08	1	drawn	no		window backdrop layer
+766	PreGenCharacterBase	800x400	1	backdrop	BD-G	M07	1	drawn	no		window backdrop layer
+767	s_Drochs_Warbringer	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+768	s_vivifier	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+769	s_Vendigrothian_War_Guantlets	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+770	Char_HTFTMinus	21x21	4	plate	B-BUTTONS			no window row (kind proposed by name and size)	no		
+771	Char_HTFTPlus	21x21	4	plate	B-BUTTONS			no window row (kind proposed by name and size)	no		
+772	XP_GaugeMag	372x3	1	gauge	B-GAUGES	H02	1	drawn	no		experience strip piece
+773	XP_Pip1	38x10	1	gauge	B-GAUGES	H02	1	drawn	no		experience strip piece
+774	XP_Pip2	38x10	1	gauge	B-GAUGES	H02	1	drawn	no		experience strip piece
+775	XP_Pip3	40x10	1	gauge	B-GAUGES	H02	1	drawn	no		experience strip piece
+776	XP_Pip4	38x10	1	gauge	B-GAUGES	H02	1	drawn	no		experience strip piece
+777	XP_Pip5	38x10	1	gauge	B-GAUGES	H02	1	drawn	no		experience strip piece
+778	XP_Pip6	36x10	1	gauge	B-GAUGES	H02	1	drawn	no		experience strip piece
+779	XP_Pip7	39x10	1	gauge	B-GAUGES	H02	1	drawn	no		experience strip piece
+780	XP_Pip8	38x10	1	gauge	B-GAUGES	H02	1	drawn	no		experience strip piece
+781	XP_Pip9	39x10	1	gauge	B-GAUGES	H02	1	drawn	no		experience strip piece
+782	XP_Pip10	39x10	1	gauge	B-GAUGES	H02	1	drawn	no		experience strip piece
+786	IconWindow	64x64	1	picture	B-ICONS	G02,H21	2	drawn	no		icon or item/critter picture
+787	ScrllSlideM1	11x1	1	gauge	B-GAUGES	G09,M09	2	drawn	no		gauge or readout parts
+788	TullaMural	668x400	1	sheet	BD-D	G16	1	drawn (family)	unclear	rune-like decoration	written-object picture given by a script (map, mural or plaque picture)
+789	S_charged_axe	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+790	S_noise_maker_decoy	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+791	HexedMeleeicon	64x64	1	plate	B-BUTTONS	H21	1	drawn	no		button body (plate + ring + glyph + states)
+792	hexedBowIcon	64x64	1	plate	B-BUTTONS	H21	1	drawn	no		button body (plate + ring + glyph + states)
+793	HexedShieldicon	64x64	1	plate	B-BUTTONS	H21	1	drawn	no		button body (plate + ring + glyph + states)
+794	HexedClothesIcon	64x64	1	plate	B-BUTTONS	H21	1	drawn	no		button body (plate + ring + glyph + states)
+795	hexedMedalionIcon	64x64	1	plate	B-BUTTONS	H21	1	drawn	no		button body (plate + ring + glyph + states)
+796	HexedRingIcon	64x64	1	plate	B-BUTTONS	H21	1	drawn	no		button body (plate + ring + glyph + states)
+797	HexedRobesIcon	64x64	1	plate	B-BUTTONS	H21	1	drawn	no		button body (plate + ring + glyph + states)
+798	MPOptionsBackground	800x600	1					out of scope	no		network play windows (not built)
+799	CombatIcon	64x64	1	picture	B-ICONS			no window row (kind proposed by name and size)	no		
+800	ThievingIcon	64x64	1	picture	B-ICONS			no window row (kind proposed by name and size)	no		
+801	SocialIcon	64x64	1	picture	B-ICONS			no window row (kind proposed by name and size)	no		
+802	TechSkillIcon	64x64	1	picture	B-ICONS			no window row (kind proposed by name and size)	no		
+803	MazzerinsMystery	668x400	1	sheet	BD-D	G16	1	drawn (family)	no		written-object picture given by a script (map, mural or plaque picture)
+804	OldChar_Minus	13x10	4	plate	B-BUTTONS	H05	1	drawn	no		button body (plate + ring + glyph + states)
+805	OldChar_Plus	13x10	4	plate	B-BUTTONS	H05	1	drawn	no		button body (plate + ring + glyph + states)
+806	MusicBoxMap	668x400	1	sheet	BD-D	G16	1	drawn (family)	yes	place names	written-object picture given by a script (map, mural or plaque picture)
+807	Iron_Clan_Key_schematic	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+808	TakeAllButt	51x50	3	plate	B-BUTTONS	G02	1	drawn	no		button body (plate + ring + glyph + states)
+809	MP_TopOFF	31x34	1					out of scope	no		network play windows (not built)
+810	MP_TopON	31x34	1					out of scope	no		network play windows (not built)
+811	MapZoomBut	111x56	2	plate	B-BUTTONS	G12,G13,G14	3	drawn	no		button body (plate + ring + glyph + states)
+812	MapWholeBut	106x56	2	plate	B-BUTTONS	G12,G13,G14	3	drawn	no		button body (plate + ring + glyph + states)
+813	MapTravelBut	57x57	2	plate	B-BUTTONS	G12,G14	2	drawn	no		button body (plate + ring + glyph + states)
+814	MM_LocNew	11x11	2	glyph	B-BUTTONS	G12	1	drawn	no		map marker
+815	Euph30Font	2x33	225	font		G16	1	drawn	n/a		bitmap font, drawn text; slice #2462
+816	BloodStone	668x400	1	sheet	BD-D	G16	1	drawn (family)	yes	in-world script	written-object picture given by a script (map, mural or plaque picture)
+817	vendnewsback	668x400	1	sheet	BD-D	G16	1	drawn	no		document laid over a backdrop
+818	Cursor-Called-Head	32x37	1	cursor	B-CURSORS	H13	1	drawn	no		cursor
+819	Cursor-Called-Leg	32x37	1	cursor	B-CURSORS	H13	1	drawn	no		cursor
+820	Cursor-Called-Arm	32x37	1	cursor	B-CURSORS	H13	1	drawn	no		cursor
+821	Molitov_Schematic	295x225	1	picture	B-SCHEMATIC	G15	1	drawn (family)	no		schematic record picture 295x225 (item art of the record)
+822	DialogueBox	325x136	1	hardware	B-HARDWARE	H18,H20,M11	3	drawn	no		framed pop-up panel over the board or world
+823	Lil_Accept	28x29	3	plate	B-BUTTONS	H18,H20,M11	3	drawn	no		button body (plate + ring + glyph + states)
+824	Lil_Cancel	28x29	3	plate	B-BUTTONS	H18,H20,M11	3	drawn	no		button body (plate + ring + glyph + states)
+825	Barter_Follower	358x400	1	backdrop	BD-A	G03,M10	2	drawn	no		window backdrop layer
+826	FollwerComandMenu	136x148	1	hardware	B-HARDWARE	H08	1	drawn	no		framed pop-up panel over the board or world
+827	FollowerCycleLeft	12x19	3	plate	B-BUTTONS	G10	1	drawn	no		button body (plate + ring + glyph + states)
+828	FollowerCycleRight	12x19	3	plate	B-BUTTONS	G10	1	drawn	no		button body (plate + ring + glyph + states)
+829	Vorman	668x400	1	sheet	BD-D	G16	1	drawn (family)	no		written-object picture given by a script (map, mural or plaque picture)
+830	Schem_NO_Item	99x67	1	hardware	B-HARDWARE	G15	1	drawn	no		component slot overlay
+831	Schem_Have_Item	99x67	1	hardware	B-HARDWARE	G15	1	drawn	no		component slot overlay
+832	Cont_Junk	64x64	1	picture	B-ICONS	G02,H21	2	drawn	no		icon or item/critter picture
+833	Cont_Body	64x64	1	picture	B-ICONS	G02,H21	2	drawn	no		icon or item/critter picture
+834	Cont_Safe	64x64	1	picture	B-ICONS	G02,H21	2	drawn	no		icon or item/critter picture
+835	Cont_Trash	64x64	1	picture	B-ICONS	G02,H21	2	drawn	no		icon or item/critter picture
+836	Cont_Plant	64x64	1	picture	B-ICONS	G02,H21	2	drawn	no		icon or item/critter picture
+837	Cont_Altar_Good	64x64	1	picture	B-ICONS	G02,H21	2	drawn	no		icon or item/critter picture
+838	Cont_Altar_Neutral	64x64	1	picture	B-ICONS	G02,H21	2	drawn	no		icon or item/critter picture
+839	Cont_Altar_Evil	64x64	1	picture	B-ICONS	G02,H21	2	drawn	no		icon or item/critter picture
+840	NewTimes16Font	4x21	225	font		G12,G13	2	drawn	n/a		bitmap font, drawn text; slice #2462
+841	MPIconsFont	2x15	225	font				font (not a kit part)	n/a		bitmap font
+842	MP_KickBanRotWindow	410x107	1	hardware	B-HARDWARE	H09	1	drawn	no		framed pop-up panel over the board or world
+843	MP_KICK	59x59	2					out of scope	no		network play windows (not built)
+844	MP_BAN	59x59	2					out of scope	no		network play windows (not built)
+845	BlockedShot	37x20	1	picture	B-ICONS	H21	1	drawn	no		icon or item/critter picture
+846	Magic-Tech-Penalty	37x20	1	picture	B-ICONS	H21	1	drawn	no		icon or item/critter picture
+	amocnt_arrows	90x56	1	gauge	B-GAUGES			no window row (kind proposed by name and size)	no		
+	amocnt_bullets	90x56	1	gauge	B-GAUGES			no window row (kind proposed by name and size)	no		
+	amocnt_charges	90x56	1	gauge	B-GAUGES			no window row (kind proposed by name and size)	no		
+	amocnt_fuel	90x56	1	gauge	B-GAUGES			no window row (kind proposed by name and size)	no		
+	char_skill_comm	235x325	1	sheet	BD-B			no window row (kind proposed by name and size)	no		
+	char_skill_tech	235x325	1	sheet	BD-B			no window row (kind proposed by name and size)	no		
+	cursor-identify-item	22x23	1	cursor	B-CURSORS			no window row (kind proposed by name and size)	no		
+	followerframe_poison	34x3	1	gauge	B-GAUGES			no window row (kind proposed by name and size)	no		
+	hovercompass	114x78	15	picture	B-ICONS			no window row (kind proposed by name and size)	no		
+	mineentrancepiece	166x206	1	hardware	B-HARDWARE			no window row (kind proposed by name and size)	no		
+	optionminibackground	213x56	1	hardware	B-HARDWARE			no window row (kind proposed by name and size)	no		
+	racedarkelficon	64x64	1	picture	B-ICONS			no window row (kind proposed by name and size)	no		
+	raceogreicon	64x64	1	picture	B-ICONS			no window row (kind proposed by name and size)	no		
+	raceorcicon	64x64	1	picture	B-ICONS			no window row (kind proposed by name and size)	no		
+	splash2	800x600	1	backdrop	BD-H			no window row (kind proposed by name and size)	yes	ARCANUM	
+	tab_aquests	45x64	2	plate				unused	no		extra logbook tab art (the viewer uses 265-271)
+	tab_bless	49x64	2	plate				unused	no		extra logbook tab art (the viewer uses 265-271)
+	tab_cquests	54x64	2	plate				unused	no		extra logbook tab art (the viewer uses 265-271)
+	tab_curses	55x64	2	plate				unused	no		extra logbook tab art (the viewer uses 265-271)
+	tab_fquests	63x64	2	plate				unused	no		extra logbook tab art (the viewer uses 265-271)
+	tab_kills	61x64	2	plate				unused	no		extra logbook tab art (the viewer uses 265-271)
+	tab_reps	43x64	2	plate				unused	no		extra logbook tab art (the viewer uses 265-271)
+	tab_rumors	45x64	2	plate				unused	no		extra logbook tab art (the viewer uses 265-271)
+	tempicon	64x64	1	picture	B-ICONS			no window row (kind proposed by name and size)	yes	TEMP	
+	yelwvial	34x146	1	gauge	B-GAUGES			no window row (kind proposed by name and size)	no		
