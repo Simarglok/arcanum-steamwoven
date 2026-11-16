@@ -1,5 +1,6 @@
 using Arcanum.Data.Area;
 using Arcanum.Session;
+using Arcanum.Simulation.Movement;
 using Arcanum.TerrainViewer.Core;
 using Arcanum.World;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -44,6 +45,20 @@ public sealed class AreaItemHoldConversationTests
         Assert.IsNull(host.SubstituteContainer(session, Entity(2)), "35 tiles away");
         Assert.IsNull(host.SubstituteContainer(session, Entity(1)), "a container has none");
         Assert.IsNull(host.SubstituteContainer(session, "oid:" + new string('f', 64)), "an unknown NPC has none");
+    }
+
+    [TestMethod]
+    public void The_substitute_reach_measures_where_the_ai_has_the_npc_now()
+    {
+        using var session = ConversationSessionFixture.Create(14);
+        var host = new AreaInventoryHost([Map()]);
+        // The near merchant walked 35 tiles away and the far one walked next to its chest: the T0 cells give the opposite answers.
+        var live = new Dictionary<string, CellCoord> { [Entity(0)] = new(31, 60), [Entity(2)] = new(31, 26) };
+        host.NpcLiveCell = npc => live.TryGetValue(npc, out var cell) ? cell : null;
+        Assert.IsNull(host.SubstituteContainer(session, Entity(0)), "moved 35 tiles from its container");
+        Assert.AreEqual(Entity(3), host.SubstituteContainer(session, Entity(2)), "moved next to its container");
+        host.NpcLiveCell = _ => null;
+        Assert.AreEqual(Entity(1), host.SubstituteContainer(session, Entity(0)), "a host that does not know the NPC leaves its T0 cell");
     }
 
     [TestMethod]

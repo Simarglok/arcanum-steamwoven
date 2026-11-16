@@ -6,6 +6,7 @@ using Arcanum.Simulation.Clock;
 using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Equipment;
 using Arcanum.Simulation.Items;
+using Arcanum.Simulation.Movement;
 using Arcanum.TerrainViewer.Core;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Arcanum.World;
@@ -66,12 +67,13 @@ public sealed class AreaNpcSessionWearTests
 
     private static SessionItemFacts Facts(int location) => new(Torch, 1, 0, location, null, []);
 
-    private static (AreaCombatHost Host, AreaInventoryHost Inventory) Host(Func<int, CombatFields?>? prototypes)
+    // armour false: the NPC's map data lists no body armour (the armour row stays a lone item of the map's seed, in no list); dead: the NPC is a body that can be looted.
+    private static (AreaCombatHost Host, AreaInventoryHost Inventory) Host(Func<int, CombatFields?>? prototypes, bool armour = true, bool dead = false)
     {
         var map = new AreaInventoryMap(1,
-            new([new(Entity(0), SessionHolderKind.Npc, false, false, [], [Entity(1), Entity(2), Entity(3)])],
+            new([new(Entity(0), SessionHolderKind.Npc, dead, false, [], armour ? [Entity(1), Entity(2), Entity(3)] : [Entity(1), Entity(2)])],
                 [new SessionSeedItem(Entity(1), Facts(1005), null), new SessionSeedItem(Entity(2), Facts(0), null),
-                    new SessionSeedItem(Entity(3), new(new(SessionItemType.Armor, 8114, 6002, 6003), 1, 0, 1006, null, []), null)]),
+                    new SessionSeedItem(Entity(3), new(new(SessionItemType.Armor, 8114, 6002, 6003), 1, 0, 1006, null, []), armour ? null : new CellCoord(3, 3))]),
             new[] { Npc(0), Item(1, 1005), Item(2, 0), Armour(3) }.ToDictionary(row => Entity(row.Key.SourceIndex)));
         var inventory = new AreaInventoryHost([map]);
         return (new AreaCombatHost(inventory, prototypes), inventory);
@@ -261,5 +263,80 @@ public sealed class AreaNpcSessionWearTests
         read = true; use = (6u << 28) | (4u << 6);
         Assert.AreEqual(GameSessionDisposition.Changed, session.WriteTraitArt(session.Version, guard, new(5, 0)).Disposition);
         Assert.AreEqual(0, scripts.ArmorOf(who));
+    }
+
+    private sealed record Rig(GameSessionOwner Session, AreaCombatHost Host, AreaUseScriptHost Scripts) : IDisposable
+    {
+        public void Dispose() => Session.Dispose();
+    }
+
+    // ARC-SCRIPT-2351 (AR8): get armor of an NPC the session never dressed whose map-data body armour was taken off since. The removal's wield-off hook sets the art's armour part to 0 (AR2), so the stored part no longer stands;
+    // an NPC whose data never listed body armour keeps the stored part (its art may show armour its data does not list), and so does one that lost another item.
+    [TestMethod]
+    public void Get_armor_of_an_undressed_npc_answers_0_once_its_map_data_body_armour_is_taken_off()
+    {
+        var prototypes = new Dictionary<int, CombatFields> { [TorchPrototype] = CombatFieldReader.Read(Item(9, 0, spell: 171)).Fields!, [8114] = CombatFieldReader.Read(Armour(9)).Fields! };
+        var row = Npc(0);
+        row = row with { EffectiveFields = [.. row.EffectiveFields.Select(f => f.Slot == 0 ? f with { Number = (2u << 28) | (3u << 20) } : f)] };
+        var guard = Entity(0);
+        var who = new ScrObjectRef(1, guard);
+        var world = new AreaScriptWorld(() => null, _ => false, _ => null, () => null);
+
+        Rig Fresh(bool armour = true, bool dead = false)
+        {
+            var session = ConversationSessionFixture.CreateWithHero(1);
+            var (host, inventory) = Host(number => prototypes.GetValueOrDefault(number), armour, dead);
+            Assert.AreEqual(GameSessionFailure.None, inventory.Attach(session));
+            return new Rig(session, host, new AreaUseScriptHost(session, 1, [row], [], null, world));
+        }
+        SessionInsertCheck accept = _ => SessionInsertVerdict.Accepted;
+
+        using (var rig = Fresh())
+        {
+            var (session, _, scripts) = (rig.Session, rig.Host, rig.Scripts);
+            Assert.AreEqual(3, scripts.ArmorOf(who), "nothing taken off yet: the stored art stands");
+            Assert.IsFalse(session.QueryNpcBodyArmorTakenOff(guard));
+            Assert.AreEqual(GameSessionDisposition.Changed, session.TakeItemFromNpc(session.Version, guard, Entity(2), accept).Disposition, "its pack item taken (not worn)");
+            Assert.AreEqual(GameSessionDisposition.Changed, session.TakeItemFromNpc(session.Version, guard, Entity(1), accept, unwield: true).Disposition, "its shield-slot item taken off");
+            Assert.AreEqual(3, scripts.ArmorOf(who), "another worn item left: the part stands");
+            Assert.IsNull(session.QueryNpcWorn(guard), "the session never dressed it");
+            // A take (the barter doll view and a steal's move: unwield) of the body armour.
+            Assert.AreEqual(GameSessionDisposition.Changed, session.TakeItemFromNpc(session.Version, guard, Entity(3), accept, unwield: true).Disposition);
+            Assert.IsTrue(session.QueryNpcBodyArmorTakenOff(guard));
+            Assert.AreEqual(0, scripts.ArmorOf(who), "taken: the wield-off hook cleared the part");
+        }
+        using (var rig = Fresh())
+        {
+            var (session, _, scripts) = (rig.Session, rig.Host, rig.Scripts);
+            Assert.AreEqual(GameSessionDisposition.Changed, session.GiveItemToPc(session.Version, guard, 6002, accept).Disposition, "a script take by name");
+            Assert.AreEqual(0, scripts.ArmorOf(who));
+        }
+        using (var rig = Fresh(dead: true))
+        {
+            var (session, _, scripts) = (rig.Session, rig.Host, rig.Scripts);
+            Assert.AreEqual(GameSessionDisposition.Changed, session.LootItem(session.Version, guard, Entity(3), accept).Disposition, "the loot of its body");
+            Assert.AreEqual(0, scripts.ArmorOf(who));
+        }
+        using (var rig = Fresh())
+        {
+            var (session, host, scripts) = (rig.Session, rig.Host, rig.Scripts);
+            var wear = host.WornItems(session, 1, guard)!;
+            Assert.AreEqual(GameSessionDisposition.Changed, session.BreakItem(session.Version, Entity(3), wear[EquipmentSlot.Armor].Baseline).Disposition, "the first break takes the armour off (it stays in the list, broken)");
+            Assert.AreEqual(0, scripts.ArmorOf(who));
+            Assert.AreEqual(GameSessionDisposition.Changed, session.BreakItem(session.Version, Entity(3), wear[EquipmentSlot.Armor].Baseline).Disposition, "the second break deletes it");
+            Assert.AreEqual(0, scripts.ArmorOf(who));
+        }
+        using (var rig = Fresh(armour: false))
+        {
+            var (session, _, scripts) = (rig.Session, rig.Host, rig.Scripts);
+            Assert.AreEqual(GameSessionDisposition.Changed, session.TakeItemFromNpc(session.Version, guard, Entity(1), accept, unwield: true).Disposition);
+            Assert.IsFalse(session.QueryNpcBodyArmorTakenOff(guard));
+            Assert.AreEqual(3, scripts.ArmorOf(who), "its data listed no body armour: its stored art shows what it shows");
+        }
+        using (var rig = Fresh())
+        {
+            Assert.IsFalse(rig.Session.QueryNpcBodyArmorTakenOff(Entity(5)), "an entity no seed lists");
+            Assert.ThrowsExactly<ArgumentException>(() => rig.Session.QueryNpcBodyArmorTakenOff("not an entity id"));
+        }
     }
 }
