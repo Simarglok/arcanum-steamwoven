@@ -267,7 +267,7 @@ public sealed class HeroThrowScriptTests
         Assert.AreEqual("kit:2", owner.QueryPlacedItems().Single().Entity);
     }
 
-    // ARC-COMBAT-2392 (TW8): a critter that is dead at the press (the preflight lets it through) is still thrown at, after the scripts ran once,, with the normal roll against the corpse, no damage; the scripts run once.
+    // ARC-COMBAT-2392 (TW8): a critter that is dead at the press (the preflight lets it through) is still thrown at, after the scripts ran once, with the normal roll against the corpse and no damage.
     [TestMethod]
     public void AStruckCorpseIsThrownAtAfterTheScriptsRanOnce()
     {

@@ -162,6 +162,7 @@ public sealed class NpcThrowStateTests
         });
         Assert.AreEqual((GameSessionDisposition.Changed, GameSessionFailure.None, AttackRefusal.None), (result.Disposition, result.Failure, result.Attack!.Resolution!.Refusal));
         Assert.IsNull(result.Attack.Resolution.Damage, "a corpse takes no damage");
+        Assert.IsNull(result.Attack.Resolution.DodgeCheck, "a corpse never dodges");
         Assert.AreEqual(result.Landed, Lying(owner, Dagger));
     }
 
