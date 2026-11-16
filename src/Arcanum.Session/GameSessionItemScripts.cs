@@ -807,7 +807,7 @@ public sealed partial class GameSessionOwner
     private sealed class SessionFlagReads(GameSessionOwner session, ISessionItemScriptHost host, ItemScriptRuns runs) : IScrHost, IScrItemQueries, IScrStoreQueries, IScrStatQueries, IScrWorldQueries, IScrContainerQueries, IScrGroupQueries, IScrObjectQueries, IScrObjectStateQueries, IScrWorldObjectQueries
     {
         // ARC-SCRIPT-2335 (IV1–IV4): the world questions of the loop for, the container vicinity kinds, the follower kinds (ARC-SCRIPT-2336) and the name condition go to the host's world part. A host without it, an object or a centre it does not know makes the run unanswerable
-        // (UnknownObject: the session refuses the move). The set admits no random, location, held-item, wielded-item or reputation question, so none is asked (ARC-SCRIPT-2347 added the quest state and object type answers).
+        // (UnknownObject: the session refuses the move). The set admits no random, held-item, wielded-item or reputation question and asks a location for distance between only (ARC-SCRIPT-2426), so no other is asked (ARC-SCRIPT-2347 added the quest state and object type answers).
         // Implementing these interfaces also switches off the dispatcher's guard that a set's commands have a host answer: a later widening of the admission (random, within range, the held-item, wielded-item and reputation guard conditions) must answer here first (ItemWorldScriptTests pins what the stubs below assume).
         private ISessionItemWorldHost? World => host as ISessionItemWorldHost;
 
@@ -857,7 +857,14 @@ public sealed partial class GameSessionOwner
         }
 
         public int Random(int low, int high) => throw new InvalidOperationException("ITEM_SCRIPT_RANDOM_NOT_ADMITTED");
-        public (long X, long Y)? Location(ScrObjectRef obj) => throw new InvalidOperationException("ITEM_SCRIPT_LOCATION_NOT_ADMITTED");
+        // ARC-SCRIPT-2426 (IV36): distance between (71) asks the location of each of its two objects from the host's world part; an object it cannot place stops the run as an absent one does (UnknownObject: the session refuses the move). The condition
+        // within range (34) and get location (95) stay out of the set, so only distance between asks.
+        public (long X, long Y)? Location(ScrObjectRef obj)
+        {
+            var at = World?.LocationOf(obj);
+            UnknownObject |= at is null;
+            return at;
+        }
         public int QuestState(ScrObjectRef obj, int quest)
         {
             QuestReads++;
