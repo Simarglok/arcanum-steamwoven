@@ -40,7 +40,7 @@ public partial class TerrainViewerApp
             AreaSmokeFramesUntilConversation();
             Require(ConversationOpen, "a conversation with the speaker opened: " + _conversationNotice);
             var withDialog = await RunTalkTeleportAsync(conversation, TalkTeleportToKnaTha, Require);
-            Require(!ConversationOpen, "the change of map ended the open conversation");
+            Require(!ConversationOpen && conversation.ReactionOpen is null, "the change of map ended the open conversation and closed its reaction slot");
             // The hero is on another map now: the second move runs from its host, with no window open.
             Require(_conversationHost is { } arrivedHost && _mapTransfers is not null, "the new map has a conversation host and transfers");
             var withoutDialog = await RunTalkTeleportAsync(_conversationHost!, TalkTeleportToMain, Require);
