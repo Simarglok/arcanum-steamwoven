@@ -3243,8 +3243,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     /// <summary>
     /// The throw at goal 37's action frame (0x42AB90 → 0x4B3C00, ledger TW rows, TA rows): the session's <see cref="GameSessionOwner.ThrowByNpc"/>
     /// with the NPC's live cell, the item's weight as the thrower holds it (0x461370 with the thrower, TW5: its stored weight and its
-    /// magic adjustment under the thrower's aptitude) and the critter the line of fire to the tile names (TW4,
-    /// <see cref="StruckAt"/>), then the attack event on it for a resolved attack (the projectile's end alerts the struck object, PF8).
+    /// magic adjustment under the thrower's aptitude) and the critter the line of fire to the tile names (TW4 as corrected by TW10 and TW11,
+    /// <see cref="StruckAt"/>: never the critter on the tile itself), then the attack event on it for a resolved attack (the projectile's end alerts the struck object, PF8).
     /// The item must be one the NPC holds (an item gone or taken fails, AG10). A <see cref="AreaAiNoticeKind.Throw"/> notice tells the
     /// viewer. ARC-DEV-258: a generic item (a grenade) flies as a projectile the scene launches (<see cref="AreaAiScene.LaunchThrown"/>; without a viewer it lands
     /// on the location at once), the thrower the event's parent. ARC-COMBAT-1717: a thrown weapon flies the same way when the scene can fly it (<see cref="AreaAiScene.LaunchThrown"/>): to the struck critter's tile (a hit, the strike is <see cref="LandShot"/>'s at the viewer's crossing) or free to the scatter tile (a miss); a flight that does not launch resolves at once, a decided hit striking first. ARC-COMBAT-1761: the item's removal and throw scripts run through the scene's item script host before the throw is decided (the session's <see cref="SessionNpcThrow.Scripts"/>); a throw script that
@@ -3337,21 +3337,16 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         return result.Disposition != GameSessionDisposition.Rejected;
     }
 
-    /// <summary>The throw's struck critter (TW4): the first object the line of fire from <paramref name="from"/> to the tile stops at
-    /// when it is a living critter the host knows (a walked NPC or a companion), else the living critter on the tile (the hero, a walked
-    /// NPC, a companion), with its cell and map key (none for the hero); null when it strikes no critter (a scenery or wall blocker
-    /// among them: not ready).</summary>
+    /// <summary>The throw's struck critter (ARC-COMBAT-2425, ledger TW10, TW11): the original's throw goal built by an NPC (the attack starter, the grenade) holds a
+    /// location and no target object, so the only critter a throw is launched at is the first object the line of fire from <paramref name="from"/> to the tile
+    /// stops at (it skips every non-wall object of the target's own tile, so the critter standing on the tile, the hero included, is never named) when it is a living
+    /// critter the host knows (a walked NPC or a companion), with its cell and map key. Null when the line names no critter (a scenery or wall blocker among them: not ready):
+    /// the item then lands on the tile, striking nothing.</summary>
     private (string Who, CellCoord Cell, AreaObjectKey? Key)? StruckAt(string id, CellCoord from, CellCoord tile)
     {
         if (_scene.LineOfFire?.Invoke() is { } map && LineOfFireRules.Trace(from, 0, 0, tile, map, _session.Rules.Combat).Blocker is { } row)
             return EntityOf(row.Key) is { } blocker && blocker != id && Tile(blocker) is { } at && !DeadCritter(blocker)
                 && (Walks(blocker) || CompanionCell(blocker) is not null) ? (blocker, at, row.Key) : null;
-        if (Tile(Pc) == tile && !DeadCritter(Pc)) return (Pc, tile, null);
-        foreach (var npc in _scene.Npcs)
-            if (npc.Entity != id && Tile(npc.Entity) == tile && !DeadCritter(npc.Entity)) return (npc.Entity, tile, npc.Row.Key);
-        foreach (var (companion, key, cell) in _scene.Companions?.Invoke() ?? [])
-            if (cell == tile && companion != id && !DeadCritter(companion))
-                return (companion, tile, key);
         return null;
     }
 
