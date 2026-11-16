@@ -347,7 +347,7 @@ rules only: the viewer's game cursor holding the item and its press in the game 
 | Action points (TT4) | `TurnBasedRules.ThrowActionCost` / `QueryHeroThrowCost`: the throw goal charges 2 to every thrower but the local PC (0x433270), so the original PC throws for nothing in a round; Original switch `PcThrowCostsNothing`, Steamwoven charges the hero 2. The turn-based host charges it. |
 
 Steamwoven differences: the item leaves at the throw, so a worn item's own values still count for the range and check, and a critical
-miss's weapon and ammunition steps read the weapon the hero wields (CW3). A dead struck critter is thrown at like a living one (ARC-COMBAT-2392; the viewer's pick never names a corpse, NOT READY, #2416): the host throws
+miss's weapon and ammunition steps read the weapon the hero wields (CW3). A dead struck critter is thrown at like a living one (ARC-COMBAT-2392; the viewer's pick never names a corpse, as the original's line of fire never does, ARC-COMBAT-2416, TW9): the host throws
 again without one. A wielded boomerang away on its shot is refused (`WeaponInFlight`). Since ARC-UI-063 the viewer charges
 `ThrowActionCost` for both throws in a round, the inventory's and a "default throws" weapon's.
 

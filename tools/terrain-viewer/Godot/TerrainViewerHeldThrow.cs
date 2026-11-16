@@ -365,7 +365,7 @@ public partial class TerrainViewerApp
 
     /// <summary>
     /// The session's throw of <paramref name="held"/> at <paramref name="tile"/> (TT2 → <see cref="GameSessionOwner.ThrowHeroItem"/>): the struck critter is the
-    /// line of fire's living NPC blocker, else the living NPC on the tile (TW4); a companion there is NOT READY (the item stays). The viewer never names a dead critter as the struck object (the pick skips it, so the item flies to the location); the session itself rolls against a corpse (ARC-COMBAT-2392), the pick is NOT READY (issue #2416). On success each shot flies.
+    /// line of fire's living NPC blocker, else the living NPC on the tile (TW4); a companion there is NOT READY (the item stays). The viewer never names a dead critter as the struck object (the pick skips it and the line of fire passes it, so the item flies to the location): the original's line of fire never names a corpse either (ARC-COMBAT-2416, TW9); the session rolls against a corpse only for a struck critter that died before the roll (ARC-COMBAT-2392). The living critter on the tile as the struck object is TW10's open question (#2425). On success each shot flies.
     /// </summary>
     private SessionHeroThrowResult? PerformHeroThrow(GameCursorItem held, CellCoord tile)
     {
