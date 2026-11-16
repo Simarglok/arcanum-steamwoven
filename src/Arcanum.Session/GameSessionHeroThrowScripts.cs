@@ -107,7 +107,8 @@ public sealed partial class GameSessionOwner
         if (request.Item == SessionHeroGrid.GoldEntity || request.SplitKind is not { } kind || !_inventory.Ammo.TryGetValue(request.Item, out var source) || source.Units != request.Count) return false;
         var made = SplitAmmoForThrow(request.Item, source.Units, kind);
         if (made != splitEntity) throw new InvalidOperationException("The planned entity of a split must be the one it makes.");
-        PlaceInGrid(made, null);
+        // The source left the list first, so its cells count free for the first-fit scan (and its grid record goes).
+        PlaceInGrid(made, request.Item);
         return true;
     }
 

@@ -102,13 +102,14 @@ public sealed class HeroStackThrowScriptTests
         var host = new Host();
         host.Programs[ThrowScript] = Program(C(ScrCatalogue.Action.SetLocalFlag, (Number, 1)), C(ScrCatalogue.Action.ReturnSkipDefault));
         var (draws, revision) = (owner.QueryRandom().Draws, owner.Version.Revision);
+        var sourceCell = owner.QueryHeroGrid().Items.Single(item => item.Entity == "made:2");
         var result = owner.ThrowHeroItem(owner.Version, Ammo(owner, host, 30));
         Assert.AreEqual((GameSessionDisposition.Changed, GameSessionFailure.None, true, 0), (result.Disposition, result.Failure, result.ScriptDeclined, result.Shots.Count));
         Assert.IsTrue(owner.IsItemDestroyed("made:2"), "the lift destroyed the source");
         Assert.IsNull(owner.QueryAmmo("made:2"));
         Assert.AreEqual(30, owner.QueryAmmo("made:3")!.Value.Units, "the units are in the made stack");
         Assert.AreEqual("made:3", owner.QueryMadeItems().Last().Entity, "appended to the list's end");
-        Assert.IsTrue(owner.QueryHeroGrid().Items.Any(item => item.Entity == "made:3"), "and placed in the grid");
+        Assert.AreEqual(sourceCell.Slot, owner.QueryHeroGrid().Items.Single(item => item.Entity == "made:3").Slot, "and takes the first free cell, the one the source frees (it lay on the first-fit cell)");
         Assert.IsFalse(owner.QueryHeroGrid().Items.Any(item => item.Entity == "made:2"));
         Assert.AreEqual(new SessionItemScriptSlot("made:3", SessionScriptPoint.Throw, ThrowScript, 1u << 1, 0), owner.QueryItemScriptSlots().Single(), "the slot the run wrote stays with the made stack and the source's is gone");
         Assert.AreEqual((draws, revision + 1), (owner.QueryRandom().Draws, owner.Version.Revision));
