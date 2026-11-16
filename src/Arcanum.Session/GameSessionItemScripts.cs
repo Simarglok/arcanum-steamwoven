@@ -178,6 +178,8 @@ public sealed partial class GameSessionOwner
         private readonly HashSet<string> _artEntities = new(StringComparer.Ordinal);
         // ARC-SCRIPT-2375 (IV18, IV19): the story-state number the runs so far raised it to (the one global number, read by the later runs and raised by the commit), and the rumors the hero learns, in action order.
         private int? _storyRaised;
+        // ARC-SCRIPT-2375 (IV20): the name number each renamed item of the move has so far, which a later run of the move reads (NameOf) before the commit writes it.
+        private readonly Dictionary<string, int> _namePending = new(StringComparer.Ordinal);
         private readonly List<int> _rumors = [];
 
         internal ItemScriptRuns(GameSessionOwner owner, ISessionItemScriptHost host, int map, IReadOnlyDictionary<string, int> items, NpcWearer? npc = null)
@@ -240,6 +242,9 @@ public sealed partial class GameSessionOwner
         internal bool Changes => _writes.Count > 0 || _slots.Count > 0 || _steps.Count > 0 || _npcOps.Count > 0 || _owner.EffectiveChanges(_artEdits).Length > 0 || _owner.ScriptCallsChange(_calls) || _reads.StoreChanges
             || _storyRaised is { } raised && raised > _owner._story.StoryState || _rumors.Any(rumor => !_owner._story.Rumors.ContainsKey(rumor));
 
+        /// <summary>ARC-SCRIPT-2375 (IV20): the name number an earlier run of the move gave the item, or null.</summary>
+        internal int? PendingName(ScrObjectRef obj) => obj.Map == _map && _namePending.TryGetValue(obj.Code, out var number) ? number : null;
+
         /// <summary>ARC-SCRIPT-2375 (IV18): the story-state number as the next run reads it: the one the move's earlier runs raised it to, else the session's.</summary>
         internal int StoryNow => _storyRaised ?? _owner._story.StoryState;
 
@@ -280,6 +285,7 @@ public sealed partial class GameSessionOwner
         {
             if (item.Map != _map || !_items.ContainsKey(item.Code) || _host is not ISessionItemWorldHost world || !SessionValidation.Entity(item.Code)
                 || !ObjectStateVocabulary.Mobile(item.Code, SessionItemName.Property) || world.ItemNameInData(item) is not { } dataName) return false;
+            _namePending[item.Code] = number;
             var key = SessionItemName.Key(item.Code);
             var map = _owner.QueryObjectRecordMap(key) ?? new SessionMapId(item.Map);
             _artEdits.Add(new(map, key, number == dataName ? null : number));
@@ -674,6 +680,7 @@ public sealed partial class GameSessionOwner
 
         public int NameOf(ScrObjectRef obj)
         {
+            if (runs.PendingName(obj) is { } renamed) return renamed;
             if (World?.NameOf(obj) is { } name) return name;
             UnknownObject = true;
             return 0;
