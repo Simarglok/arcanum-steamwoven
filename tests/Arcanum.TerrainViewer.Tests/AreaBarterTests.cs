@@ -249,6 +249,32 @@ public sealed class AreaBarterTests
         Assert.IsNull(refused.QueryNpcWorn("merchant"));
     }
 
+    // ARC-UI-1824: the lines an item script printed during a trade follow the trade's text (as the loot window shows them), for a trade that moved and for a refused one.
+    [TestMethod]
+    public void The_lines_an_item_script_printed_during_a_trade_follow_the_trade_text()
+    {
+        using var session = Session();
+        var barter = Barter(session, Data(), []);
+        var line = barter.View().Wares.First(item => item.Entity == "axe");
+        InventoryMutationResult Result(GameSessionDisposition disposition, GameSessionFailure failure, params SessionScriptMessage[] printed) =>
+            new(disposition, failure, null, null, session.Version) { Messages = printed };
+        var said = new SessionScriptMessage(600, 2, 0, "The ring hums.");
+        var also = new SessionScriptMessage(600, 3, 0, " It cools. ");
+
+        var bought = barter.Settle(TradeDirection.PcBuys, line, Result(GameSessionDisposition.Changed, GameSessionFailure.None, said, also));
+        Assert.IsTrue(bought.Text.StartsWith("bought axe", StringComparison.Ordinal), bought.Text);
+        Assert.IsTrue(bought.Text.EndsWith(" — The ring hums. It cools.", StringComparison.Ordinal), bought.Text);
+
+        var sold = barter.Settle(TradeDirection.PcSells, line, Result(GameSessionDisposition.Changed, GameSessionFailure.None, said));
+        Assert.IsTrue(sold.Text.StartsWith("sold axe", StringComparison.Ordinal) && sold.Text.EndsWith(" — The ring hums.", StringComparison.Ordinal), sold.Text);
+
+        var refused = barter.Settle(TradeDirection.PcSells, line, Result(GameSessionDisposition.Rejected, GameSessionFailure.GoldShort, said));
+        Assert.AreEqual("the merchant cannot pay — The ring hums.", refused.Text, "a script that ran before the refusal may have printed");
+
+        var silent = barter.Settle(TradeDirection.PcBuys, line, Result(GameSessionDisposition.Changed, GameSessionFailure.None));
+        Assert.IsFalse(silent.Text.Contains('—', StringComparison.Ordinal), "no printed line, no suffix");
+    }
+
     [TestMethod]
     public void A_sale_pays_at_most_the_merchants_coins()
     {
