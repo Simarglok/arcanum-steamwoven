@@ -3760,21 +3760,34 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     /// first list, SP11; built fresh in Steamwoven). The cache is not saved: a load or a map change builds the host again.</summary>
     public ImmutableArray<AiListEntry> List(string critter, AiActionList list)
     {
-        // ARC-WORLD-108: an item the NPC used or cast from that is gone drops the NPC's slot (the force-removal 0x467860 → 0x4CCC00), one
-        // out of charges drops it when a list holds the item (0x450420 → 0x4CCC40), once each, so the Original setting's frozen list
-        // lists it no more.
+        // ARC-WORLD-108: an item the NPC used or cast from that is gone drops the NPC's slot (the force-removal 0x467860 → 0x4CCC00), once
+        // each, so the Original setting's frozen list lists it no more. ARC-AI-2402: an item out of spell charges (field 105) drops nothing
+        // (the charge branch of 0x450420 never calls 0x4CCC40); a worn store drained to 0 does, through ManaStoreEmptied.
         if (_usedItems.TryGetValue(critter, out var used))
             foreach (var item in used.ToArray())
             {
-                if (_session.IsItemDestroyed(item)) _listCache = _listCache.Clear(critter);
-                else if (_scene.Spells?.Invoke()?.Item(item) is { Charges: 0 }) _listCache = _listCache.ItemExhausted(critter, item);
-                else continue;
+                if (!_session.IsItemDestroyed(item)) continue;
+                _listCache = _listCache.Clear(critter);
                 used.Remove(item);
             }
         var request = _listCache.Request(this, critter, list, _session.Rules.Combat);
         _listCache = request.Cache;
         return request.Entries;
     }
+
+    /// <summary>ARC-AI-2402 (ledger BC10, SP11): a payment drained the worn item's mana store of <paramref name="critter"/> to 0 (the cast host's
+    /// <see cref="SessionSpellCaster.ManaStoreEmptied"/>; the original's 0x450420 → 0x4CCC40 at 0x45062B): the critter's slot of the list cache
+    /// drops when one of its lists holds the item (<see cref="AiListCache.ItemExhausted"/>), so the Original setting's frozen list is
+    /// rebuilt at the next request. Steamwoven builds every list fresh, so the call changes nothing there.</summary>
+    public void ManaStoreEmptied(string critter, string item)
+    {
+        ArgumentNullException.ThrowIfNull(critter);
+        ArgumentNullException.ThrowIfNull(item);
+        _listCache = _listCache.ItemExhausted(critter, item);
+    }
+
+    /// <summary>The list cache as it stands (read for tests and the trace).</summary>
+    public AiListCache ListCache => _listCache;
 
     /// <summary>ARC-WORLD-108: the NPC's wielded weapon (slot 1004, as the session shows what it wears) when it has item flag 0x40
     /// (hexed); null for the hero (the lists are an NPC's own) and without one.</summary>

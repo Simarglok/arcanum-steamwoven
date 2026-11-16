@@ -153,6 +153,8 @@ public partial class TerrainViewerApp
         _spellCaster.AiNotice = (attacker, victim) => _aiHost?.SpellAttacked(attacker, victim);
         // ARC-DEV-292: and a damage that took effect on an NPC gives it its immediate AI pass (0x4B52FC), after the life step.
         _spellCaster.AiStruck = victim => _aiHost?.Struck(victim);
+        // ARC-AI-2402: a worn mana store drained to 0 drops the payer's slot of the AI list cache (0x4CCC40), as the original's payment does.
+        _spellCaster.ManaStoreEmptied = (payer, item) => _aiHost?.ManaStoreEmptied(payer, item);
         // ARC-TECHNOLOGY-1635 (TT15): a trap's shot flies as a projectile and strikes where it meets the victim.
         _spellCaster.LaunchTrapShot = LaunchTrapShotFlight;
         // ARC-MAGIC-035 (MA-4): the social and AI flags (charm and mind control's reactions and peace, fear's flight) run through the AI host.
