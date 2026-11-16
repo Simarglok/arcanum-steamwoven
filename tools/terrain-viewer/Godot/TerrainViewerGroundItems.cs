@@ -152,7 +152,8 @@ public partial class TerrainViewerApp
             {
                 var entity = ground.Item.Entity;
                 // ARC-COMBAT-017: a thrown item in flight is hidden (object flag 0x2) until it lands; its projectile is drawn instead.
-                if (session.QueryItemInFlight(entity)) continue;
+                // ARC-SCRIPT-2386 (IV15): a switched-off item (object flag 0x2: a script's toggle, a thrown item in flight) lies invisible on the ground (hide mask 3, 0x43AEC0).
+                if (session.QueryItemOff(new SessionMapId(CurrentAreaMap), entity, dataOff: false)) continue;
                 AreaObjectRecord? row = null;
                 if (map?.TryGetRow(entity, out var own) == true) row = own;
                 else if (placedItems.GetValueOrDefault(entity) is { Origin: { } origin }

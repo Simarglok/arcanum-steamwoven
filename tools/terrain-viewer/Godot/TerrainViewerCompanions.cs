@@ -201,7 +201,7 @@ public partial class TerrainViewerApp
     private bool GroupHolds(string entity) => _areaCompanions?.Companions.Any(c => c.Entity == entity) == true;
 
     /// <summary>
-    /// ARC-WORLD-2161 (tail of #2132): the followers of the hero's change of place that the shown group holds no body for (a map NPC a companion leads whose body the scene does not draw or whose follow facts do not read,
+    /// ARC-WORLD-2161 (tail of #2132): the followers of the hero's change of place that the shown group holds no body for (a map NPC a companion leads whose follow facts do not read,
     /// a visitor whose body its home map could not give). The original's move list carries every object of the follower tree whole, so each is stood on the destination by the session's placement
     /// edits alone (<see cref="AreaCompanionGroup.Arrive(AreaBodylessFollower, SessionMapId, SessionMapId, CellCoord, NeighborDirection)"/>); one whose home the session cannot name stays behind and is said on the log.
     /// </summary>

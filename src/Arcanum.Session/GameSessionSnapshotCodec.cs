@@ -114,9 +114,10 @@ public static partial class GameSessionSnapshotCodec
     private static readonly string[] MadeItemFields = ["entity", "type", "prototype", "name", "description", "complexity"];
     private static readonly string[] PcItemFields = ["entity", "map", "type", "prototype", "name", "description"];
     private static readonly string[] WornFields = ["slot", "entity", "item", "scripts", "itemSpells"];
-    private static readonly string[] DurabilityFields = ["items", "destroyed", "uses", "charges"];
+    private static readonly string[] DurabilityFields = ["items", "destroyed", "uses", "charges", "manaStores"];
     private static readonly string[] ItemUseFields = ["entity", "uses"];
     private static readonly string[] ItemChargeFields = ["entity", "charges"];
+    private static readonly string[] ItemManaStoreFields = ["entity", "store"];
     private static readonly string[] SchematicsFields = ["found"];
     private static readonly string[] ItemConditionFields = ["entity", "points", "adjustment", "damage", "broken", "inventoryArtBroken"];
     private static readonly string[] EquipmentItemFields = ["kind", "complexity", "noDrop", "broken", "uber", "light", "usesShieldLocation",
@@ -799,6 +800,15 @@ public static partial class GameSessionSnapshotCodec
                 w.WriteStartObject();
                 w.WriteString("entity", item.Entity);
                 w.WriteNumber("charges", item.Charges);
+                w.WriteEndObject();
+            }
+            w.WriteEndArray();
+            w.WriteStartArray("manaStores");
+            foreach (var item in snapshot.Durability.ManaStores)
+            {
+                w.WriteStartObject();
+                w.WriteString("entity", item.Entity);
+                w.WriteNumber("store", item.Store);
                 w.WriteEndObject();
             }
             w.WriteEndArray();
@@ -2610,7 +2620,17 @@ public static partial class GameSessionSnapshotCodec
             if (i > 0 && string.CompareOrdinal(entity, charges[i - 1].Entity) <= 0) throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path + ".entity");
             charges[i] = new(entity, Int(item["charges"], path + ".charges", 0, SessionItemUseLimits.MaxUses));
         }
-        return new(items, destroyed, uses, charges);
+        var drained = Array(f["manaStores"], p + ".manaStores", GameSessionLimits.PolicyMaxDurabilityRecords);
+        var manaStores = new SessionItemManaStore[drained.Length];
+        for (var i = 0; i < drained.Length; i++)
+        {
+            var path = $"{p}.manaStores[{i}]";
+            var item = Fields(drained[i], path, ItemManaStoreFields);
+            var entity = Entity(item["entity"], path + ".entity");
+            if (i > 0 && string.CompareOrdinal(entity, manaStores[i - 1].Entity) <= 0) throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path + ".entity");
+            manaStores[i] = new(entity, Int(item["store"], path + ".store", 0, SessionItemUseLimits.MaxUses));
+        }
+        return new(items, destroyed, uses, charges, manaStores);
     }
 
     // Shapes, names and ranges, definitions by strictly ascending number; causes, rules in use and the hero's presence are Restore's.

@@ -9,7 +9,8 @@ namespace Arcanum.Session.Tests;
 [TestClass]
 public sealed class SnapshotUpgradeTests
 {
-    private const string Current = "\"schemaVersion\":102,\"world\"";
+    private const string Current = "\"schemaVersion\":103,\"world\"";
+    private const string Current102 = "\"schemaVersion\":102,\"world\"";
     private const string Current101 = "\"schemaVersion\":101,\"world\"";
     private const string Current100 = "\"schemaVersion\":100,\"world\"";
     private const string Current99 = "\"schemaVersion\":99,\"world\"";
@@ -310,9 +311,18 @@ public sealed class SnapshotUpgradeTests
     // ARC-WORLD-1840: the schema 101 text of a schema 102 one in which no NPC leads anyone: the party section loses its closing empty list. A text with a follower of an NPC has no older literal: no build before made one.
     internal static string Schema101(string text)
     {
-        StringAssert.Contains(text, Current);
+        text = Schema102(text);
+        StringAssert.Contains(text, Current102);
         Assert.AreEqual(1, text.Split(NoNpcLed).Length - 1, "no NPC leads anyone");
-        return text.Replace(NoNpcLed, "}").Replace(Current, Current101);
+        return text.Replace(NoNpcLed, "}").Replace(Current102, Current101);
+    }
+
+    // ARC-MAGIC-2371: the schema 102 text of a schema 103 one in which no payment drained a worn mana store: the durability section loses its closing empty list. A text with a drained store has no older literal: no build before saved one.
+    internal static string Schema102(string text)
+    {
+        StringAssert.Contains(text, Current);
+        Assert.AreEqual(1, text.Split(NoManaStores).Length - 1, "no worn mana store drained");
+        return text.Replace(NoManaStores, "").Replace(Current, Current102);
     }
 
     // ARC-MAGIC-1658: the schema 98 text of a schema 99 one whose hero (if any) has no resistance written and no age read: the hero section loses its two closing keys. A text with a written resistance or a read age has no older literal:
@@ -744,6 +754,6 @@ public sealed class SnapshotUpgradeTests
         Fails(With("\"format\":\"arcanum-steamwoven-session\"", "\"format\":\"other-save\""), SnapshotDecodeFailure.WrongFormat, "$.format");
         // Schemas older than the oldest readable one, and newer ones, stay refused.
         Fails(GoldenJson.Replace(Current, "\"schemaVersion\":55,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
-        Fails(GoldenJson.Replace(Current, "\"schemaVersion\":103,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
+        Fails(GoldenJson.Replace(Current, "\"schemaVersion\":104,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
     }
 }

@@ -60,6 +60,9 @@ public sealed partial class AreaAiHost
         _ => null,
     };
 
+    /// <summary>ARC-SCRIPT-2386 (IV15, hide mask 3 of the object lists 0x4407C0 and 0x440B40): whether the item is switched off (a script's toggle, a thrown item in flight): the pickup's source lists leave it out.</summary>
+    private bool ItemOff(string item) => _session.QueryItemOff(new SessionMapId(_scene.RuntimeMap), item, dataOff: false);
+
     private static bool InSquare(CellCoord center, CellCoord cell, int halfSize) =>
         Math.Abs((long)cell.X - center.X) <= halfSize && Math.Abs((long)cell.Y - center.Y) <= halfSize;
 
@@ -70,7 +73,7 @@ public sealed partial class AreaAiHost
         if (GroundView() is not { } view || Tile(npc) is not { } at) return [];
         var found = new List<AiGroundItem>();
         foreach (var ground in view.Ground)
-            if (KindOf(ground.Item.Facts.Kind.Type) == kind && InSquare(at, ground.Cell, halfSize) && !_session.QueryItemInFlight(ground.Item.Entity))
+            if (KindOf(ground.Item.Facts.Kind.Type) == kind && InSquare(at, ground.Cell, halfSize) && !ItemOff(ground.Item.Entity))
                 found.Add(Describe(npc, view, ground.Item, AiExecutorRules.Distance(at, ground.Cell), off: false));
         return found;
     }
@@ -108,7 +111,7 @@ public sealed partial class AreaAiHost
         }
         foreach (var item in found.Items)
             if (KindOf(item.Facts.Kind.Type) == kind)
-                return Describe(_searchNpc, view, item, 0, off: _session.QueryItemInFlight(item.Entity));
+                return Describe(_searchNpc, view, item, 0, off: ItemOff(item.Entity));
         return null;
     }
 

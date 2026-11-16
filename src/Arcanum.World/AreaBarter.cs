@@ -270,23 +270,26 @@ public sealed class AreaBarter
         var reaction = _reaction();
         var parties = Parties(haggle, training, reaction);
         var worn = _session.QueryEquipment().Worn.Select(item => item.Entity).ToHashSet(StringComparer.Ordinal);
+        // ARC-SCRIPT-2386 (IV14): barter is mode 1 of the inventory window (0x683464), which paints (0x576520) and hit-tests (0x575FA0) like it: a switched-off item (object flag 0x2) of the
+        // hero's or the merchant's list is not offered and cannot be taken into the hand, so it is on no line (it keeps its cells, weight and stock). A deal prices an item when it is dropped, no list.
+        var map = _session.QueryActor().Map.RuntimeMap;
         var hero = _session.QueryHeroKit().Select(item => (item.Entity, item.Kind))
             .Concat(_session.QueryPcInventory().Select(item => (item.Entity, item.Kind)))
             .Concat(_session.QueryMadeItems().Select(item => (item.Entity, item.Kind)))
-            .Where(item => !_session.IsItemDestroyed(item.Entity))
+            .Where(item => !_session.IsItemDestroyed(item.Entity) && !_inventory.IsOff(_session, map, item.Entity))
             .Select(item => Line(item.Entity, item.Kind, TradeDirection.PcSells, parties, worn.Contains(item.Entity), Units(item.Entity) ?? 1))
             .ToArray();
         var shown = Merchant.Container ?? Merchant.Entity;
         var holder = _session.QueryMapInventory(_session.QueryActor().Map)?.Holders.FirstOrDefault(h => h.Entity == shown);
         var wares = (holder?.Items ?? [])
-            .Where(item => !item.Facts.Worn && item.Facts.Kind.Type != SessionItemType.Gold)
+            .Where(item => !item.Facts.Worn && item.Facts.Kind.Type != SessionItemType.Gold && !_inventory.IsOff(_session, map, item.Entity))
             .Select(item => Line(item.Entity, item.Facts.Kind, TradeDirection.PcBuys, parties, false,
                 item.Facts.AmmoType is not null ? item.Facts.Quantity ?? 1 : 1))
             .ToArray();
         // ARC-UI-1926: the doll view's items are the real merchant's, even when a substitute container is the shown grid (0x575CB0 returns the merchant as owner).
         var merchantHolder = Merchant.Container is null ? holder : _session.QueryMapInventory(_session.QueryActor().Map)?.Holders.FirstOrDefault(h => h.Entity == Merchant.Entity);
         var wornWares = (merchantHolder?.Items ?? [])
-            .Where(item => item.Facts.Worn && item.Facts.Kind.Type != SessionItemType.Gold)
+            .Where(item => item.Facts.Worn && item.Facts.Kind.Type != SessionItemType.Gold && !_inventory.IsOff(_session, map, item.Entity))
             .Select(item => Line(item.Entity, item.Facts.Kind, TradeDirection.PcBuys, parties, true, 1))
             .ToArray();
         return new(Merchant, _session.QueryGold(), _session.QueryNpcGold(Merchant.Entity) ?? 0, haggle, training, reaction, hero, wares) { WornWares = wornWares };

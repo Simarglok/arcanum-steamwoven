@@ -89,7 +89,7 @@ The world the run rules ask (MT9a–MT12), for the hero and the map's NPCs:
   - the source's death and unconsciousness;
   - the parent's intelligence and willpower;
   - the local player;
-  - the payer: a critter pays with its fatigue; worn mana stores are not modelled yet;
+  - the payer: a critter pays with the mana stores of its worn items first (the session keeps each store, ARC-MAGIC-2371, [spell cost runtime](spell-cost-runtime.md#recharge-of-a-worn-mana-item)) and the rest with its fatigue;
   - the source's race and mastered college.
 - **Cells.** The hero's charge cells (ARC-TECHNOLOGY-007), for a payment the hero makes; any other payer's cells are not modelled
   and refuse.

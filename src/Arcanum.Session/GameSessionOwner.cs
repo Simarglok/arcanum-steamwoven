@@ -2856,6 +2856,9 @@ public sealed partial class GameSessionOwner : IDisposable
     private bool IsPending(string kind, string? entity) =>
         _events.Any(kind, e => entity is null || e.Payload.Entities[0].Code == entity);
 
+    private static bool RechargePayload(System.Collections.Immutable.ImmutableArray<GameEventEntity> entities, System.Collections.Immutable.ImmutableArray<long> values) =>
+        values.Length == 2 && values[0] >= 0 && Math.Abs(values[1]) <= SessionItemUseLimits.MaxUses && SessionValidation.Entity(entities[0].Code) && entities[0].Code != SessionEventKinds.AbsentRole;
+
     private static LifeTimer TimerOf(string kind) => kind switch
     {
         SessionEventKinds.HeroFatigue or SessionEventKinds.NpcFatigue => LifeTimer.Fatigue,
@@ -2994,6 +2997,16 @@ public sealed partial class GameSessionOwner : IDisposable
                 converted.Add(new(pending.Sequence, pending.Kind, kind.Domain, pending.DeadlineMs, pending.Entities[0].Map, new(pending.Entities, pending.Values)));
                 continue;
             }
+            if (pending.Kind == SessionEventKinds.ItemRecharge)
+            {
+                // A recharge event of a worn mana store (ARC-MAGIC-2371): one item, set no later than the saved clock, the fixed delay before its deadline (a merge keeps the first stamp and deadline). Whether the item
+                // still has a store copy is asked when it fires. Global: no map scope.
+                if (pending.Entities.Length != 1 || pending.Entities[0].Map != SessionEventKinds.RechargeMap ||
+                    !RechargePayload(pending.Entities, pending.Values) || pending.Values[0] > clockMs || pending.DeadlineMs != pending.Values[0] + SessionEventKinds.ItemRechargeDelayMs)
+                    return GameSessionFailure.InvalidEvents;
+                converted.Add(new(pending.Sequence, pending.Kind, kind.Domain, pending.DeadlineMs, 0, new(pending.Entities, pending.Values)));
+                continue;
+            }
             if (pending.Kind == SessionEventKinds.Restock)
             {
                 // A restock event (ARC-WORLD-094): one NPC or container on a map, set no later than the saved clock, a restock delay or
@@ -3104,6 +3117,7 @@ public sealed partial class GameSessionOwner : IDisposable
             converted.Count(e => e.Kind == SessionEventKinds.LockReset) > SessionEventKinds.MaxLockResets ||
             converted.Count(e => e.Kind == SessionEventKinds.ObjectRespawn) > SessionEventKinds.MaxObjectRespawns ||
             converted.Count(e => e.Kind == SessionEventKinds.ItemDecay) > SessionEventKinds.MaxItemDecays ||
+            converted.Count(e => e.Kind == SessionEventKinds.ItemRecharge) > SessionEventKinds.MaxItemRecharges ||
             converted.Count(e => e.Kind == SessionEventKinds.BodyDecay) > SessionEventKinds.MaxBodyDecays ||
             converted.Count(e => e.Kind == SessionEventKinds.RandomEncounter) > SessionEventKinds.MaxRandomEncounters ||
             converted.Count(e => e.Kind == SessionEventKinds.Newspaper) > SessionEventKinds.MaxNewspapers ||
