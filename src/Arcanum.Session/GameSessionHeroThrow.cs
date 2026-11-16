@@ -151,7 +151,7 @@ public sealed partial class GameSessionOwner
     /// pick up (<see cref="TakePlaced"/>). ARC-COMBAT-1955 (TT1, TT8, TW3): with <see cref="SessionHeroThrow.Scripts"/> the removal's wield-off script (25, a worn item) and remove-item script (28), then the item's throw script (point 6, the
     /// hero as the triggerer, no other object) run first (<see cref="RunHeroThrowScripts"/>); a throw script that answers skip default throws nothing and puts the item back in the hero's list unworn
     /// (<see cref="SessionHeroThrowResult.ScriptDeclined"/>). ARC-COMBAT-2182 (TW3, QW5): a split stack's throw script runs for the stack the split would make (no removal script: the stack path runs none), before anything is split; an answer of skip default throws
-    /// nothing and the units stay in the stack, the run's flag, store and message changes kept. NOT READY: a throw script together with an insert-item script (refused,
+    /// nothing and the units stay in the stack, the run's flag, store and message changes kept. ARC-COMBAT-2413: for the whole ammunition stack the source is destroyed and the made stack stays in its place (the lift's new object, merged into nothing, <see cref="GameSessionOwner.RemakeWholeAmmoStack"/>), keeping the slots and calls the runs left on it. NOT READY: a throw script together with an insert-item script (refused,
     /// <see cref="GameSessionFailure.ItemScriptUnsupported"/>; so is any of the scripts without the host), a non-critter blocker
     /// (the host names none), the struck critter's alert and the landing's item event (PF10). Steamwoven differences: the item leaves
     /// at the throw, not at the lift, so a worn item's own values (its armour, its effects on the hero's strength) still count for the
