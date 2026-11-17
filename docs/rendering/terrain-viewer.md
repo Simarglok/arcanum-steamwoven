@@ -2214,7 +2214,7 @@ and layout (below), the other windows the project's.
   pre-made browser (under New game); ARC-UI-068 the new-character window (its section); ARC-UI-069 the opening shop (its section). The editor window keeps
   the project's panel (plan); ARC-DEV-334: the in-play quit question is the original's dialog box (below, with the death load box); the synthetic self-tests (no game folder) keep the panel for every window. The menu stage checks it first
   (`ARC-UI-058 native-smoke menu art PASS`: the art read, the labels at their places, the pointer lighting Single Player and a click
-  opening it); `ARC_AREA_MENU_CAPTURE=PATH` saves the main window's picture to an ignored path.
+  opening it); `ARC_AREA_MENU_CAPTURE=PATH` saves the main window's picture to an ignored path. ARC-UI-2577: `ARC_AREA_MENU_STEAMWOVEN=1` adds the Steamwoven full-screen layout check at the TRD sizes (see the [TRD](../ui/steamwoven-interface-trd.md#prototype-of-the-play-screen-arc-ui-2452)).
 - **Art-font text blend (ARC-UI-070,** [ledger MW31](../research/ledger/ui-audio.md#menu-window-art-arc-ui-058);
   `AreaArtTextRules`, `AreaArtFontFace`, `AreaArtTextDraw`): every art-font text of the menus, the options controls, the save and
   load windows, the pre-made and new-character windows and the dialog box goes through one draw that blends as the original's
