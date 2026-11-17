@@ -598,8 +598,9 @@ public sealed class AreaConversationHost
     [OriginalFunction(0x413D40, OriginalFunctionScope.Partial)]
     public AreaSaidLine? SayRaceLine(AreaSpeaker speaker, int group, string? listener = AreaScriptHost.PcCode)
     {
+        var facts = ListenerFacts(listener);
         var said = SayLine(speaker, (greeting, query) => DialogFollowerComment.SayRace(greeting, query, group, Profile.Names, DialogTextEncoding.Windows1252, DialogConversationOptions.HardMaxTextBytes),
-            gender: listener is null ? null : ListenerFacts(listener).Gender);
+            facts, listener is null ? null : facts.Gender);
         if (said is not null) Scripts.Float(Scripts.Object(speaker), said.Text, listener is null ? null : Scripts.Entity(listener));
         return said;
     }
