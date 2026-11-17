@@ -37,8 +37,10 @@ public partial class TerrainViewerApp
     /// them. The dialog start's description is made only then (0x567460); the viewer asks the same of the barter window's still pointer (PROJECT).</summary>
     private bool InterfaceBarsOn => _areaSession is not null && _readyMode == TerrainViewerMode.Area && (!ViewerAutomatedStorage.Automated || _gameBarForSelfTest);
 
+    // ARC-UI-2576: in the Steamwoven layout the barter, identify and repair and reading windows keep the bars (every menu window of the middle band has its family's backdrop between them, SWI-BDR-1; the original hides the
+    // bars for these three); the screens with their own strips (the main menu, the save list) and the palette still hide them.
     private bool GameBarActive => InterfaceBarsOn
-        && !MainMenuOpen && !BarterOpen && !ItemServiceOpen && !SaveListOpen && !ReadingOpen && !PaletteOpen;
+        && !MainMenuOpen && !SaveListOpen && !PaletteOpen && (AreaGameBarPanel.SteamwovenOn || !BarterOpen && !ItemServiceOpen && !ReadingOpen);
 
     /// <summary>Per frame: shows the bars while an area session plays (reading their art once a run) and follows the spell pane.</summary>
     private void SyncGameBar()
