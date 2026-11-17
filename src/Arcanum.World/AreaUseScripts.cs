@@ -942,7 +942,9 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         if (IsPc(obj)) return false;
         if (Row(obj) is not { } row) return null;
         var data = Number(row, ObjectFlagsSlot) ?? 0;
-        return row.Type == NpcType ? NpcOff(_session, obj.Map, obj.Code, data) : (data & OffObjectFlag) != 0;
+        if (row.Type == NpcType) return NpcOff(_session, obj.Map, obj.Code, data);
+        // ARC-SCRIPT-2324 (OT8): a scenery's off flag is the map data's under a script's toggle state of it; any other object type reads the map data's.
+        return row.Type == Arcanum.Data.Combat.CombatFieldReader.SceneryType ? _session.QueryObjectOff(new SessionMapId(obj.Map), obj.Code, (data & OffObjectFlag) != 0) : (data & OffObjectFlag) != 0;
     }
 
     // ARC-MAGIC-030 (MT21b, SC1): the object's spell flags (field 20) as the original's field getter reads them for any object type: a row's effective value, and for a
@@ -2272,6 +2274,17 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
                 if (flipped.Disposition == GameSessionDisposition.Rejected) return false;
                 continue;
             }
+            // ARC-SCRIPT-2324 (OT8): a scenery of the shown map flips the off flag it reads now (the map data's, or an earlier toggle's record): the record keeps 1 for off and 0 for on over a data that stores it off,
+            // and is cleared when the flag is back to what the data stores, so an even number of toggles leaves no record.
+            if (ShownScenery(request.Object) && Row(request.Object) is { } toggledScenery)
+            {
+                var dataOff = ((Number(toggledScenery, ObjectFlagsSlot) ?? 0) & OffObjectFlag) != 0;
+                var willBeOff = !_session.QueryObjectOff(new SessionMapId(request.Object.Map), request.Object.Code, dataOff);
+                var flipped = _session.ApplyChanges(_session.Version, null,
+                    [new(new SessionMapId(request.Object.Map), SessionItemOff.Key(request.Object.Code), willBeOff == dataOff ? null : willBeOff ? 1 : 0)]);
+                if (flipped.Disposition == GameSessionDisposition.Rejected) return false;
+                continue;
+            }
             var key = MapChangeKey.ForEntity(request.Object.Code, OffProperty);
             var toggled = _session.ApplyChanges(_session.Version, null,
                 [new(new SessionMapId(request.Object.Map), key, SwitchedOff(_session, request.Object.Map, request.Object.Code) ? null : 1)]);
@@ -2875,6 +2888,8 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
                 continue;
             }
             var name = request.Change == ScrObjectStateChange.Kill ? "kill" : "toggle state";
+            // ARC-SCRIPT-2324 (OT8): a toggle state of a scenery of the shown map flips its off flag (the view reads it as gone); a destroyed or respawning-off scenery is out of the vicinity lists, so only an object named directly can reach here.
+            if (request.Change == ScrObjectStateChange.ToggleOff && ShownScenery(request.Object)) continue;
             if (request.Object.Map != _shownMap || IsPc(request.Object) || Row(request.Object) is not { Type: NpcType } row)
                 return $"{name} of {request.Object.Code} is not modelled (only an NPC of the shown map)";
             if (request.Change == ScrObjectStateChange.Kill && (_world?.Kill is null || _world.CanKill?.Invoke(request.Object) == false))
