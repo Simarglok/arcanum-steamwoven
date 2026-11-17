@@ -289,6 +289,14 @@ public partial class TerrainViewerApp
                     var contentsGrid = _inventoryPanel.GridAreaForSelfTest;
                     Require(contentsGrid.Mode == AreaInventoryMode.Contents && !AreaLootArtLayout.TakeAllShown(contentsGrid.Mode), "mode 4 has no Take all button");
                     Require(!_inventoryPanel.TakeAllForSelfTest.Visible, "the diagnostic window hides Take all too");
+                    // ARC-UI-2489 (G04): ARC_AREA_CONTENTS_CAPTURE=PATH.png saves a readback of the See Contents window (mode 4) in the original look.
+                    if (System.Environment.GetEnvironmentVariable("ARC_AREA_CONTENTS_CAPTURE") is { Length: > 0 } contentsCapture && _inventoryPanel.ArtMode && contentsGrid.LootLook)
+                    {
+                        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                        await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+                        using var contentsShot = GetViewport().GetTexture().GetImage();
+                        if (contentsShot.SavePng(contentsCapture) != Error.Ok) throw new InvalidOperationException("AREA_CONTENTS_CAPTURE_FAILED");
+                    }
                     var pressed = 0;
                     if (view.LootGrid.Count > 0)
                     {
