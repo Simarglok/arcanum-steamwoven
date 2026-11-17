@@ -163,6 +163,9 @@ public partial class AreaReadingArtView : Control
     /// nor taller than it with the window's 41 + 399 rows, and the window stands at (0, 41 × scale).</summary>
     internal static (float Scale, Vector2 Position) ReadingScale(Vector2 size, bool hd)
     {
+        // ARC-UI-2575: with the Steamwoven layout the screen's body lies in the window zone at the layout's unit scale.
+        if (AreaGameBarPanel.ZoneScreen(size, AreaReadingArtLayout.Window.Y) is { } zone)
+            return ((float)zone.Scale, new Vector2((float)zone.X, (float)Math.Round(zone.Y + AreaReadingArtLayout.Window.Y * zone.Scale)));
         var fit = MathF.Min(size.X / AreaGameBarLayout.ScreenWidth, size.Y / AreaGameBarLayout.ScreenHeight);
         var factor = AreaGameBarPanel.ScreenFactor(size);
         var whole = MathF.Min(MathF.Round(fit, MidpointRounding.AwayFromZero), MathF.Min(MathF.Floor(size.X / AreaGameBarLayout.ScreenWidth), MathF.Floor(size.Y / (AreaReadingArtLayout.Window.Y + AreaReadingArtLayout.Window.Height))));

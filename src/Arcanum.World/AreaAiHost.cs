@@ -4045,11 +4045,12 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     private const int ViewHalfTiles = 10;
 
     /// <summary>
-    /// ARC-WORLD-1160 (E3-a; ledger SWB9, the follower recursion): the life targets of the hero's followers the host runs, for the rest's heal (an NPC led by a follower is not a list this world
-    /// keeps: the original's recursion over the follower arrays reaches only the hero's own followers here).
+    /// ARC-WORLD-1160 (E3-a; ledger SWB9, the follower recursion), ARC-WORLD-2596: the life targets of the hero's follower tree the host runs, for the rest's heal, in the order of the original's follower walk (the
+    /// direct followers, then each one's own tree, <see cref="GameSessionOwner.QueryFollowerTree"/>): a follower of a follower (a companion's summon or a script group under a companion) is healed too. A critter the
+    /// host holds no record of is left out, as in <see cref="Followers"/>.
     /// </summary>
     public IReadOnlyList<SessionLifeTarget> FollowerLifeTargets() =>
-        [.. Followers(Pc).Select(RawBuild).Where(build => build is not null).Select(build => build!.Target)];
+        [.. _session.QueryFollowerTree(Pc).Where(id => Find(id) is not null).Select(RawBuild).Where(build => build is not null).Select(build => build!.Target)];
 
     /// <summary>
     /// ARC-COMBAT-1777 (0x441260, 0x4C9050; ledger OH4, PL5): the users the best-follower chooser scores after the PC, in the PC's all-followers list's order (<see cref="FollowerSkillRules.AllFollowers"/>): each follower of the hero this host
