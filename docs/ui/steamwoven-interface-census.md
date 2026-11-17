@@ -56,11 +56,11 @@ Anchor and family follow [ARC-RES-093 table A](../research/screen-size-and-ui-la
 | H07 | Follower portraits and frames (503-505) | play view, left edge | - | - | 10 | 6 |
 | H08 | Follower command window | play view, left edge (runtime table) | - | - | 1 | 5 |
 | H09 | Skills, spells and weapon panes in the bottom strip | bottom strip (replaces message window) | board | - | 117 | 13 |
-| H10 | Load indicator and other play-view overlays (601) | play view, top right | - | - | 1 | 0 |
+| H10 | Load indicator and other play-view overlays (601) | play view, top right | - | - | 1 | 1 |
 | H11 | Floaters | follows the object (text only) | - | - | 0 | 6 |
 | H12 | Text bubbles | follows the object (text only) | - | - | 0 | 5 |
-| H13 | Cursors and hovered-object highlight (467, 468) | follows the cursor / object | - | - | 12 | 2 |
-| H14 | Hidden-interface compact UI (-fullscreen) | hidden-interface mode (-fullscreen only) | - | - | 0 | 0 |
+| H13 | Cursors and hovered-object highlight (467, 468) | follows the cursor / object | - | - | 12 | 3 |
+| H14 | Hidden-interface compact UI (-fullscreen) | hidden-interface mode (-fullscreen only) | - | - | 0 | 1 |
 | H15 | Fate window (292) | pop-up, top left of the play view | - | - | 2 | 3 |
 | H16 | Sleep window (565) | pop-up, top right of the play view | - | - | 2 | 4 |
 | H17 | Dialog (talk) window and option area | play view (darkened view, text only) | - | - | 0 | 3 |
@@ -72,13 +72,13 @@ Anchor and family follow [ARC-RES-093 table A](../research/screen-size-and-ui-la
 | G01 | Inventory (own, mode 0) | play-view panel 800x400, two parts | BD-A | 221 Inventor, 223 PDoll | 19 | 9 |
 | G02 | Loot window and body's doll (mode 2) | play-view panel 800x400, two parts | BD-A | 221 Inventor, 234 Loot, 341 PD_Cover4Inven, 349 Loot_PD | 52 | 4 |
 | G03 | Barter window and merchant's doll (mode 1) | play-view panel 800x400, two parts | BD-A | 221 Inventor, 235 Barter, 337 Barter_PD, 341 PD_Cover4Inven, 825 Barter_Follower | 31 | 6 |
-| G04 | Steal window (mode 3) and See Contents (mode 4) | play-view panel 800x400, two parts | BD-A | 221 Inventor, 234 Loot, 341 PD_Cover4Inven, 349 Loot_PD | 25 | 1 |
+| G04 | Steal window (mode 3) and See Contents (mode 4) | play-view panel 800x400, two parts | BD-A | 221 Inventor, 234 Loot, 341 PD_Cover4Inven, 349 Loot_PD | 25 | 2 |
 | G05 | Character sheet, main page (22) | play-view panel 800x400 | BD-B | 22 char_maint | 24 | 2 |
 | G06 | Character sheet: skills page (29) | panel 235x325 over G05 | BD-B | - | 8 | 1 |
 | G07 | Character sheet: tech page (30) | panel 235x325 over G05 | BD-B | - | 19 | 1 |
 | G08 | Character sheet: spells page (31) | panel 235x325 over G05 | BD-B | - | 19 | 1 |
 | G09 | Character sheet: auto-level schemes page | panel 235x325 over G05 | BD-B | - | 7 | 1 |
-| G10 | NPC character sheet of the dialog (ce) | play-view panel 800x400 | BD-B | 22 char_maint | 10 | 0 |
+| G10 | NPC character sheet of the dialog (ce) | play-view panel 800x400 | BD-B | 22 char_maint | 10 | 3 |
 | G11 | Logbook (seven tabs) | play-view panel 800x400, two parts | BD-C | 260 Book_Main, 264 LogBooks_Side | 13 | 9 |
 | G12 | World map (map view) | play-view panel 800x400 with a hole | BD-E | 138 mapmain | 16 | 5 |
 | G13 | World map continent view | play-view panel 800x400 with a hole | BD-E | 138 mapmain | 6 | 1 |
@@ -87,8 +87,8 @@ Anchor and family follow [ARC-RES-093 table A](../research/screen-size-and-ui-la
 | G16 | Reading window (book, note, newspaper, telegram, plaque, picture) | play-view panel 800x399, two parts | BD-D | 494 WritenSideBar | 22 | 10 |
 | G17 | Identify and repair windows (modes 5, 6) and stat hot spots | play-view panel 800x400, two parts | BD-A | 221 Inventor, 223 PDoll | 15 | 8 |
 | M01 | Main menu (329 MainMenuBack) | full screen 800x600 | BD-H | 329 MainMenuBack | 1 | 2 |
-| M02 | Single-player menu (331) | full screen 800x600 | BD-H | 331 SinglePlayerBack | 1 | 0 |
-| M03 | New game menu | full screen 800x600 | BD-H | 329 MainMenuBack | 1 | 0 |
+| M02 | Single-player menu (331) | full screen 800x600 | BD-H | 331 SinglePlayerBack | 1 | 1 |
+| M03 | New game menu | full screen 800x600 | BD-H | 329 MainMenuBack | 1 | 1 |
 | M04 | Options (556), game / video / sound pages | full screen 800x600 | BD-H | 556 OptionsMenuBack, 669 OptionsBase | 8 | 4 |
 | M05 | Save window (745) | two strips + 800x400 | BD-G | 335 CharCreateBottomBar, 336 CharCreateTopBar, 745 SaveLoadBackground | 9 | 7 |
 | M06 | Load window (745) | two strips + 800x400 | BD-G | 335 CharCreateBottomBar, 336 CharCreateTopBar, 745 SaveLoadBackground | 9 | 8 |
@@ -96,7 +96,7 @@ Anchor and family follow [ARC-RES-093 table A](../research/screen-size-and-ui-la
 | M08 | New character (765) | two strips + 800x400 | BD-G | 335 CharCreateBottomBar, 336 CharCreateTopBar, 765 CreateCharacterBase | 9 | 1 |
 | M09 | Character editor (creation mode sheet) | two strips + character sheet | BD-B | 22 char_maint, 335 CharCreateBottomBar, 336 CharCreateTopBar | 36 | 3 |
 | M10 | Opening shop | two strips + barter window | BD-A | 221 Inventor, 235 Barter, 335 CharCreateBottomBar, 336 CharCreateTopBar, 337 Barter_PD, 341 PD_Cover4Inven, 825 Barter_Follower | 18 | 1 |
-| M11 | Quit box and other yes/no boxes | centred pop-up over the window | - | 329 MainMenuBack | 4 | 0 |
+| M11 | Quit box and other yes/no boxes | centred pop-up over the window | - | 329 MainMenuBack | 4 | 1 |
 | M12 | Slide show, ending and movie screens | full screen bitmaps | - | - | 0 | 8 |
 | M13 | Credits and View Intro (not built) | full screen (not built) | - | 2 Black | 1 | 0 |
 | M14 | Network lobby windows (out of scope) | full screen (out of scope) | - | 330 MultiPlayerBack | 1 | 0 |
@@ -224,21 +224,14 @@ All other arts (the strips, the inventory family, buttons, tabs, icons, the sche
 
 ## Screenshots
 
-188 Original-look screenshots of 45 windows are in `local/steamwoven-ui/census/shots/` with the index `shots/index.tsv` (window, file, size, how captured, notes); nothing is committed. They were taken with the existing smoke captures (`./arcanum smoke pr --stages ... --env ARC_AREA_*_CAPTURE=...`, HD option off, `ARC_AREA_WINDOW_ART=legacy`), mostly 1280 x 800, bars and strips as crops (800 x 41, 800 x 159). The smoke's diagnostic text overlay and, in the stages that run without bars, a "Diagnostic view" strip are visible in some frames; the index notes it per row. Windows with no screenshot and why:
+198 Original-look screenshots of 51 windows are in `local/steamwoven-ui/census/shots/` with the index `shots/index.tsv` (window, file, size, how captured, notes); nothing is committed. They were taken with the existing smoke captures (`./arcanum smoke pr --stages ... --env ARC_AREA_*_CAPTURE=...`, HD option off, `ARC_AREA_WINDOW_ART=legacy`), mostly 1280 x 800, bars and strips as crops (800 x 41, 800 x 159). The smoke's diagnostic text overlay and, in the stages that run without bars, a "Diagnostic view" strip are visible in some frames; the index notes it per row. Windows with no screenshot and why:
 
 | Window | Why |
 | --- | --- |
-| H10 load indicator | no capture hook |
-| H13 cursors | the framebuffer holds no cursors; only the hover ring is captured |
-| H14 hidden-interface compact UI | no capture hook (`-fullscreen` only; text only) |
-| G04 See Contents (mode 4) | no capture of mode 4; the steal window (mode 3) is captured |
-| G10 NPC character sheet | no capture hook |
-| M02 single-player menu, M03 new game menu | no capture hook (M01, M07, M08 are captured) |
-| M11 quit box | no capture hook (the box art is in H18, H20) |
 | M13 credits and View Intro | not built; credits need the slide table, View Intro plays only in the game build |
 | M14 network lobby | out of scope |
 
-The gaps are filed as [#2489](https://github.com/Simarglok/arcanum-steamwoven/issues/2489).
+[#2489](https://github.com/Simarglok/arcanum-steamwoven/issues/2489) added the capture switches for the other gaps (H10 load indicator, H13 cursor art sheet, H14 compact UI, G04 See Contents, G10 NPC sheet, M02 and M03 menus, M11 quit box) and their 10 screenshots; the switches, stages and file names are listed under *Census captures* in the [toolchain](../workflow/toolchain.md#smoke-runner-arc-dev-061). H13 is a sheet composed from the cursor art, not a framebuffer readback; H14 shows the compact life panel only (the 385 x 84 container and the message line are not built).
 
 
 ## Production batches

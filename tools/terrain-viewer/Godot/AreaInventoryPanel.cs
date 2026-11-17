@@ -552,6 +552,8 @@ public partial class AreaInventoryPanel : CanvasLayer
             // ARC-UI-051: the window's 800 × 400 at its place between the bars, scaled to the free part with room for what the panel
             // shows besides the frame (the switch, the message line, the quantity row; PROJECT: the original prints no message in the
             // window). ARC-UI-054: the message line is one line whether a message is shown or not, so a message keeps the scale.
+            // ARC-UI-2575: with the Steamwoven layout the frame lies in the window zone at the layout's unit scale (the switch, the message line and the quantity row hang around it).
+            if (AreaInventoryGridArea.PlaceInZone(_panel, _area, GetViewport().GetVisibleRect().Size)) return;
             var frameWidth = 0f;
             for (var pass = 0; pass < 2; pass++)
             {
