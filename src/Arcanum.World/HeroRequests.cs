@@ -134,8 +134,8 @@ public interface IHeroActions
     bool StartThrow(string item, CellCoord tile) => false;
     /// <summary>ARC-COMBAT-1949: what the start branch reads of the hero's runs for <paramref name="goal"/> at <paramref name="target"/> (the item: <paramref name="item"/> for a throw).</summary>
     HeroStartContext StartContext(HeroClickGoal goal, string? target, string? item = null) => default;
-    /// <summary>ARC-COMBAT-1949: queues the attack goal <paramref name="goal"/> (18 or 19) at <paramref name="target"/> beneath the hero's main run (0x44DBE0 -> 0x44D9B0); false when there is no such run or the table refused (nothing changed).</summary>
-    bool QueueAttack(HeroClickGoal goal, string target) => false;
+    /// <summary>ARC-COMBAT-1949: queues the click's goal <paramref name="goal"/> at <paramref name="target"/> beneath the hero's main run (0x44DBE0 -> 0x44D9B0); false when there is no such run or the table refused (nothing changed).</summary>
+    bool QueueGoal(HeroClickGoal goal, string target) => false;
     /// <summary>ARC-COMBAT-1949: applies the click's run flags to the hero's existing main run (label 0x54FB19): Shift sets the no-walk flag 0x100, otherwise running 0x40 (refused at encumbrance 4); <paramref name="nearOccupied"/> (use 38 and 81) adds 0x4000. No-op with no main run in the table.</summary>
     void ApplyClickFlags(bool shift, bool nearOccupied) { }
     /// <summary>ARC-DEV-183: starts the hero's casting goal 26 for the magic run <paramref name="run"/>; false when a run's refusal stopped it.</summary>
@@ -274,9 +274,9 @@ public sealed class HeroRequestHost
         var start = HeroClickRules.ClickStartOf(_hero.Options().AutoAttack, facts.InRound, facts.HighestRunPriority > 0, context.EqualGoalQueued, attack, context.MainDepth, context.MainTopIdle, context.FidgetMain);
         if (start == HeroClickStart.QueueBeneath)
         {
-            if (_hero.QueueAttack(decision.Goal, request.Target)) return new(HeroRequestOutcome.Done, run, Click: decision.Goal, Start: start);
-            // No main run in the table to queue under (a route the viewer follows): the click starts as it did.
-            start = HeroClickStart.InterruptAndStart;
+            if (_hero.QueueGoal(decision.Goal, request.Target)) return new(HeroRequestOutcome.Done, run, Click: decision.Goal, Start: start);
+            // The table refused (a full stack, the run being stepped) or the hero has no main run in the table to queue under (a route the viewer follows): nothing new is added, as when the stack is deep.
+            start = HeroClickStart.FlagsOnly;
         }
         if (start == HeroClickStart.FlagsOnly)
         {

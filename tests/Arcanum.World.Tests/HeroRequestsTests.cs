@@ -36,7 +36,7 @@ public sealed class HeroRequestsTests
         public HeroStartContext Context;
         public bool Queues = true;
         public HeroStartContext StartContext(HeroClickGoal goal, string? target, string? item = null) => Context;
-        public bool QueueAttack(HeroClickGoal goal, string target) { Calls.Add($"queue {goal} {target}"); return Queues; }
+        public bool QueueGoal(HeroClickGoal goal, string target) { Calls.Add($"queue {goal} {target}"); return Queues; }
         public void ApplyClickFlags(bool shift, bool nearOccupied) => Calls.Add($"flags shift={shift} near={nearOccupied}");
         public bool StartThrow(string item, CellCoord tile) { Calls.Add($"throw {item} {tile.X},{tile.Y}"); return TalkStarts; }
         public bool StartUseItem(string item, string target, bool run, bool noWalk) { Calls.Add($"use-item {item} {target} run={run} nowalk={noWalk}"); return TalkStarts; }
@@ -316,14 +316,14 @@ public sealed class HeroRequestsTests
     }
 
     [TestMethod]
-    public void AnAttackThatCannotBeQueuedStartsAsBefore()
+    public void AnAttackThatCannotBeQueuedAddsNothingAndTurnsTheFlagsOnTheMainRun()
     {
         var hero = new Hero { Click = new(true, false, false, false, true, HeroClickTarget.Critter), Context = new(true, 1, false, false), Queues = false };
         hero.State = hero.State with { HighestRunPriority = 3 };
         var result = new HeroRequestHost(hero).Apply(new ObjectClickRequest("npc:1"));
-        Assert.AreEqual(HeroRequestOutcome.Done, result.Outcome);
-        Assert.AreEqual(HeroClickStart.InterruptAndStart, result.Start);
-        CollectionAssert.AreEqual(new[] { "queue Attack npc:1", "attack npc:1 run=True" }, hero.Calls);
+        Assert.AreEqual(HeroRequestOutcome.Ignored, result.Outcome);
+        Assert.AreEqual(HeroClickStart.FlagsOnly, result.Start);
+        CollectionAssert.AreEqual(new[] { "queue Attack npc:1", "flags shift=False near=False" }, hero.Calls);
     }
 
     [TestMethod]
@@ -334,6 +334,16 @@ public sealed class HeroRequestsTests
         var result = new HeroRequestHost(hero).Apply(new ObjectClickRequest("npc:1"));
         Assert.AreEqual(HeroRequestOutcome.Done, result.Outcome);
         CollectionAssert.AreEqual(new[] { "talk npc:1 run=True" }, hero.Calls);
+    }
+
+    [TestMethod]
+    public void AUseClickInARoundBeneathAFidgetMainRunQueuesTheUseGoalNotAnAttack()
+    {
+        var hero = new Hero { Click = new(true, false, false, false, false, HeroClickTarget.Scenery), Context = new(false, 1, false, true) };
+        hero.State = hero.State with { HighestRunPriority = 1, InRound = true };
+        var result = new HeroRequestHost(hero).Apply(new ObjectClickRequest("obj:1"));
+        Assert.AreEqual(HeroClickStart.QueueBeneath, result.Start);
+        CollectionAssert.AreEqual(new[] { "queue UseObject obj:1" }, hero.Calls);
     }
 
     [TestMethod]

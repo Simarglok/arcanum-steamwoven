@@ -628,7 +628,7 @@ src/Arcanum.World/AreaHeroRunsHost.cs,PickLock,pending,
 src/Arcanum.World/AreaHeroRunsHost.cs,PickPocket,pending,
 src/Arcanum.World/AreaHeroRunsHost.cs,PickUpObject,pending,
 src/Arcanum.World/AreaHeroRunsHost.cs,Pickup,pending,
-src/Arcanum.World/AreaHeroRunsHost.cs,QueueAttack,exempt,host
+src/Arcanum.World/AreaHeroRunsHost.cs,QueueGoal,exempt,host
 src/Arcanum.World/AreaHeroRunsHost.cs,QueueCast,pending,
 src/Arcanum.World/AreaHeroRunsHost.cs,StartContext,exempt,host
 src/Arcanum.World/AreaHeroRunsHost.cs,StepTurn,pending,
@@ -739,7 +739,7 @@ src/Arcanum.World/GoalStepper.cs,Step,pending,
 src/Arcanum.World/GoalStepper.cs,StepOverlay,pending,
 src/Arcanum.World/HeroBody.cs,Armed,pending,
 src/Arcanum.World/HeroBody.cs,Wearing,pending,
-src/Arcanum.World/HeroRequests.cs,QueueAttack,exempt,host
+src/Arcanum.World/HeroRequests.cs,QueueGoal,exempt,host
 src/Arcanum.World/HeroRequests.cs,StartPickPocket,pending,
 src/Arcanum.World/InterfaceModes.cs,LeavePutsHeldItemBack,pending,
 src/Arcanum.World/InterfaceModes.cs,OpenerRefuses,pending,

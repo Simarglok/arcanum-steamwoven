@@ -75,7 +75,7 @@ public enum HeroClickStart
     InterruptAndStart,
     /// <summary>ARC-COMBAT-1949 (VC62): a repeated attack on the same target while the hero's main run goes on is put at the bottom of that run's stack (0x44DBE0 -> 0x44D9B0); nothing else changes.</summary>
     QueueBeneath,
-    /// <summary>ARC-COMBAT-1949 (VC62): nothing new is added (a round whose main run is not the fidget, a stack of four or more goals), so the click's run flags go to the hero's existing main run (label 0x54FB19).</summary>
+    /// <summary>ARC-COMBAT-1949 (VC62): nothing new is added (a round whose main run is not the fidget, a main run whose goal index is 4 or more), so the click's run flags go to the hero's existing main run (label 0x54FB19).</summary>
     FlagsOnly,
 }
 
@@ -148,7 +148,7 @@ public static class HeroClickRules
     /// caller may pass it as it is). <paramref name="mainDepth"/> is the main run's current-goal index (its goal count minus one), <paramref name="mainTopIdle"/> that its top goal is 1 or 2 (0x4373F0), <paramref name="fidgetMain"/> that
     /// the hero's first run is its main run with the fidget (2) as bottom goal (0x44E830), <paramref name="buildsAttack"/> that the goal is 18 or 19.
     /// <list type="bullet">
-    /// <item>In a round the option and the equal test are skipped: no main run starts; a fidget main run under four goals is interrupted (top idle) or gets the goal beneath; everything else adds nothing (<see cref="HeroClickStart.FlagsOnly"/>).</item>
+    /// <item>In a round the option and the equal test are skipped: no main run starts; a fidget main run whose goal index is under 4 is interrupted (top idle) or gets the goal beneath; everything else adds nothing (<see cref="HeroClickStart.FlagsOnly"/>).</item>
     /// <item>With the option on: an equal goal (0x44E6F0: the bottom goal of any run, the goal's alias counts, same objects) is ignored with no flags, otherwise the hero is interrupted and the goal starts.</item>
     /// <item>With it off: no main run starts at once; an equal attack while the main run is under four goals is queued beneath it (or, with its top idle, interrupts and starts); at four goals nothing is added; any other click interrupts and starts.</item>
     /// </list>

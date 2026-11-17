@@ -376,6 +376,17 @@ public sealed class AreaHeroRunsHost : IGoalStepHost
         return started.Started;
     }
 
+    private static GoalType ClickGoalType(HeroClickGoal goal) => goal switch
+    {
+        HeroClickGoal.Talk => GoalType.Talk,
+        HeroClickGoal.UseObject => GoalType.UseObject,
+        HeroClickGoal.UseContainer => GoalType.UseContainer,
+        HeroClickGoal.Pickup => GoalType.PickupItem,
+        HeroClickGoal.Attack => GoalType.Attack,
+        HeroClickGoal.AttemptAttack => GoalType.AttemptAttack,
+        _ => GoalType.ThrowItem,
+    };
+
     /// <summary>
     /// ARC-COMBAT-1949 (VC62): what the click's start branch (0x54ED30) reads of the hero's runs for a goal it is about to start: whether an equal goal is queued (0x44E6F0: the bottom goal of a run of the hero is the goal or its
     /// alias, the same objects), the main run's (0x423300) current-goal index and whether its top goal is 1 or 2 (0x4373F0), and whether the hero's first run is its main run with the fidget as bottom goal (0x44E830).
@@ -383,33 +394,25 @@ public sealed class AreaHeroRunsHost : IGoalStepHost
     /// </summary>
     public HeroStartContext StartContext(HeroClickGoal goal, string? target, string? item = null)
     {
-        var type = goal switch
-        {
-            HeroClickGoal.Talk => GoalType.Talk,
-            HeroClickGoal.UseObject => GoalType.UseObject,
-            HeroClickGoal.UseContainer => GoalType.UseContainer,
-            HeroClickGoal.Pickup => GoalType.PickupItem,
-            HeroClickGoal.Attack => GoalType.Attack,
-            HeroClickGoal.AttemptAttack => GoalType.AttemptAttack,
-            _ => GoalType.ThrowItem,
-        };
         var table = _session.QueryGoals();
-        var equal = table.EqualGoalQueued(Hero, new GoalFrame(type, target) { Item = item }) is not null;
+        var equal = table.EqualGoalQueued(Hero, new GoalFrame(ClickGoalType(goal), target) { Item = item }) is not null;
         if (table.MainRunOf(Hero) is not { } main) return new(equal, 0, false, false);
         var first = table.FirstRunOf(Hero);
         return new(equal, main.Depth - 1, main.Top.Goal is GoalType.AnimateLoop or GoalType.Fidget, first is not null && first.Handle == main.Handle && main.Bottom.Goal == GoalType.Fidget);
     }
 
     /// <summary>
-    /// ARC-COMBAT-1949 (VC62): a repeated attack queued beneath the hero's main run (0x44DBE0 through 0x44D9B0, as <see cref="QueueCast"/> queues a cast): the attack goal <paramref name="goal"/> at <paramref name="target"/> goes to
-    /// the bottom of the run's stack, so the table plays it when the goals above have popped; the run, its flags and its pending step stay. False when the hero has no main run or the table refused (eight goals, the run being stepped).
+    /// ARC-COMBAT-1949 (VC62): a click's goal queued beneath the hero's main run (0x44DBE0 through 0x44D9B0, as <see cref="QueueCast"/> queues a cast): the goal's frame goes to the bottom of the run's stack, so the table plays it when
+    /// the goals above have popped; the run, its flags and its pending step stay. False when the hero has no main run or the table refused (eight goals, the run being stepped).
     /// </summary>
-    public bool QueueAttack(HeroClickGoal goal, string target)
+    public bool QueueGoal(HeroClickGoal goal, string target)
     {
         if (_session.QueryGoals().MainRunOf(Hero) is not { } main) return false;
-        var frame = new GoalFrame(goal == HeroClickGoal.AttemptAttack ? GoalType.AttemptAttack : GoalType.Attack, target);
-        return _session.InsertGoalAtBottom(main.Handle, frame).Inserted;
+        return _session.InsertGoalAtBottom(main.Handle, new GoalFrame(ClickGoalType(goal), target)).Inserted;
     }
+
+    /// <summary>Whether the hero's attack run holds another attack goal beneath the one playing (a repeated click queued under it, ARC-COMBAT-1949): the viewer's attack stays for it.</summary>
+    public bool AttackQueuedBeneath => AttackRun is { } run && run.Frames.Any(f => !ReferenceEquals(f, run.Top) && f.Goal is GoalType.Attack or GoalType.AttemptAttack);
 
     /// <summary>
     /// ARC-COMBAT-1949 (VC62): the click's run flags on the hero's existing main run, where the click added nothing (label 0x54FB19): Shift (0x436C50) turns on the no-walk flag 0x100 and no running; otherwise running 0x40

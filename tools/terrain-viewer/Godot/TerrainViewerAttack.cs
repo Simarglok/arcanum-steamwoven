@@ -236,7 +236,11 @@ public partial class TerrainViewerApp
     {
         var request = HeroRequests.Apply(new ObjectClickRequest(AttackTargetOf(running), Alt: running.Object is not null || running.Wall, Shift: shift));
         GD.Print($"ARC-COMBAT-1949 attack-repeat outcome={request.Outcome} start={request.Start} target={running.Entity}");
-        if (request.Outcome == HeroRequestOutcome.Done && request.Start == Arcanum.Simulation.Goals.HeroClickStart.InterruptAndStart) running.NoWalk = shift;
+        // A run the click started again carries the click's Shift and begins from nothing (as StartAttackGoal sets the goal up); a queued attack or an ignored click leaves the goal as it is.
+        if (request.Outcome == HeroRequestOutcome.Done && request.Start is Arcanum.Simulation.Goals.HeroClickStart.InterruptAndStart or Arcanum.Simulation.Goals.HeroClickStart.Start)
+        {
+            running.NoWalk = shift; running.ClearShotStop = false; running.TestedCell = null;
+        }
     }
 
     // ARC-COMBAT-008: the attackable objects of the shown map, rebuilt when the map or its portals are bound again.
@@ -616,7 +620,8 @@ public partial class TerrainViewerApp
         var repeats = !goal.Stop && RealTimeCombatRules.Repeats(new(HeroInCombatMode, true, _gameSettings.AutoAttack,
             owner.QueryCombatRound() is not null, known is null, known is { Dead: true }, false, false, false, owner.QueryBoomerangInFlight()));
         GD.Print($"ARC-COMBAT-005 attack-end target={goal.Entity} attacks={goal.Attacks} repeat={repeats}");
-        if (!repeats) _attack = null;
+        // ARC-COMBAT-1949: a repeated click queued another attack beneath this one (the option off): the goal stays for the run's next frame, which swings at the same target.
+        if (!repeats && HeroRunsHost()?.AttackQueuedBeneath != true) _attack = null;
         PublishWorldSelection(); RefreshAreaStatus();
         return repeats;
     }

@@ -1140,18 +1140,33 @@ public sealed class AreaHeroRunsHostTests
     }
 
     [TestMethod]
-    public void ARepeatedAttackIsQueuedAtTheBottomOfTheRunningOnesStackAndNoRunStartsWithoutAMainRun()
+    public void ARepeatedAttackIsQueuedAtTheBottomOfTheRunningOnesStackAndNothingIsQueuedWithoutAMainRun()
     {
         using var f = new Fixture();
-        Assert.IsFalse(f.Host.QueueAttack(HeroClickGoal.Attack, "atk:npc:1"), "no main run to queue under");
+        Assert.IsFalse(f.Host.QueueGoal(HeroClickGoal.Attack, "atk:npc:1"), "no main run to queue under");
         f.Host.Attack("atk:npc:1", run: true);
         var handle = f.Host.AttackRun!.Handle;
-        Assert.IsTrue(f.Host.QueueAttack(HeroClickGoal.Attack, "atk:npc:1"));
+        Assert.IsTrue(f.Host.QueueGoal(HeroClickGoal.Attack, "atk:npc:1"));
         var run = f.Host.AttackRun!;
         Assert.AreEqual(handle, run.Handle, "the run stays");
         Assert.AreEqual(2, run.Depth);
         Assert.AreEqual(GoalType.Attack, run.Bottom.Goal);
         Assert.AreEqual(1, f.Host.StartContext(HeroClickGoal.Attack, "atk:npc:1").MainDepth);
+    }
+
+    [TestMethod]
+    public void AQueuedRepeatAttackSwingsAgainWhenTheFirstSwingIsOverAndThenTheRunEnds()
+    {
+        using var f = new Fixture();
+        f.Feet.Npc = new(101, 100);
+        f.Host.Attack("atk:npc:1", run: true);
+        f.Run(200);
+        Assert.IsTrue(f.Host.QueueGoal(HeroClickGoal.Attack, "atk:npc:1"));
+        Assert.IsTrue(f.Host.AttackQueuedBeneath);
+        f.Run(2500);
+        CollectionAssert.AreEqual(new[] { "swing", "hit", "swing", "hit" }, f.Feet.Attacks, "the queued attack plays after the first one pops");
+        Assert.IsNull(f.Host.AttackRun, "nothing repeats: the run is over");
+        Assert.IsFalse(f.Host.AttackQueuedBeneath);
     }
 
     [TestMethod]
