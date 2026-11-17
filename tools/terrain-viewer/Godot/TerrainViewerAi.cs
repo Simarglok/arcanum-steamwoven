@@ -692,6 +692,15 @@ public partial class TerrainViewerApp
         return hit.Disposition != GameSessionDisposition.Rejected;
     }
 
+    /// <summary>ARC-SCRIPT-2519 (TI5c): the facing an NPC of the shown map stands in now: its mover's (the AI walked or turned it), else the rotation of its map art (its T0 body's nominal facing); null when the host does not hold it or its body is unknown.</summary>
+    private Arcanum.Simulation.Movement.NeighborDirection? ScriptNpcFacing(string entity)
+    {
+        if (AreaAiHostNow() is not { } host) return null;
+        if (host.Movers.Of(entity) is { } mover) return mover.Facing;
+        return host.Scene.Npcs.FirstOrDefault(npc => npc.Entity == entity) is { } held && NpcT0Body(held.Row.Key) is { } command && TryBodyVisual(command.Visual, out var visual) && visual.NominalFacing is >= 0 and <= 7
+            ? (Arcanum.Simulation.Movement.NeighborDirection)visual.NominalFacing : null;
+    }
+
     /// <summary>ARC-SCRIPT-1562 (WE2, CP7, CP8): the effective magick-tech aptitude (stat 16) of an NPC of the shown map for a combat-point script's magick-tech adjustments (91, 80): its combat values under its effect list and its poison and crippled legs
     /// (<see cref="SessionCritterCombat.EffectiveStat"/>), the stat getter's range clamp left to the callers; null without combat values.</summary>
     private int? ScriptAptitude(string npc)
