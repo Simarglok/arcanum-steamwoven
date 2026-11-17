@@ -411,6 +411,15 @@ The Steam Deck is not measured ([#2000](https://github.com/Simarglok/arcanum-ste
 Checks: stage `relight` (Legacy byte-identical with the setting off, also after the look was on and off; the setting On with HD Off is byte-identical to Legacy; On with HD On equals the night-weighted mode at the look's strength;
 the setting's saved value; frame times), the launcher self-test (the line's default, its saved line, shown again by the next launcher, Reset leaving it alone) and `ViewerSettingsConfigTests`.
 
+## Relit look: light sources, cap and culling (ARC-RENDER-2207)
+
+The relit light list has three groups, in this order: the carried lights (the hero's, every critter's saved or recalculated primary light, and the lit eye candy of ARC-MAGIC-1229, all from `AreaLocalLighting.CarriedPlacements`, with the wisps' glows
+of ARC-RENDER-2064 appended), then the map's lights (`AreaLocalLighting.PosedPlacements`: sector stationary lights and the main map's object lights in the form of the shown hour, ARC-RENDER-030, each at its animation pose, ARC-RENDER-031), then
+a smoke's synthetic extras. A light flagged OFF or DARK adds no relit term. Before ARC-RENDER-2207 the map's lights stood at their loaded pose, so an animated light (a flickering or swaying one) lit the relit look from a fixed rectangle while the
+Legacy lattice moved it; the relit list now reads the posed rectangle (the frame's size and hot spot with the pose's offsets), pushed whenever the animation key changes (not while the lighting is toggled off or a rest holds the light). The radius cap and the culling stay as ARC-RES-2007 set them: of the lights whose disk
+meets the shown view the 32 nearest the view's centre are uploaded (`AreaRelight.SetView`); on the largest installed map (5,083 object lights in k'na tha, 109 nocturnal) only the ones reaching the view count; the cap stays a bound on the shader loop, and the two known edges of the rule (with more than 32 lights in view the hero's torch can be dropped, and lights cut in and out at the 32nd as the view pans, see the experiment's findings) are unchanged and not a new decision of this slice. Legacy is untouched (the Legacy lattice reads the same poses as before). Stage `relight` checks that the relit map lights equal the lit posed placements and, on a map with an animated light, that the list changes when the animation moves it;
+test `Posed_placements_follow_the_animation_pose_for_the_relit_light_list`.
+
 ## Open reads (F0)
 
 Not read in the executable yet (from the lights-on-all-maps research, ARC-RES-069, now ledger LT1-LT15): the lighter and darker buffers and their arithmetic (0x4DE900, which stay as the [time and lighting contract](../world/time-lighting-contract.md) reads them); what `OF_DONTLIGHT` (object flag 0x100000, carried by 3,152 sector objects) does in the object renderer; the shadow builder (0x4D9B20) and `art\light\shadowmap.bmp` (0x4DE5D0), read by the slice that draws shadows; whether a light listed twice (A2) is drawn twice; the light ART loading time.
