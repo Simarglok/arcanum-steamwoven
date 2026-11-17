@@ -212,6 +212,8 @@ public static class HeroBodyArt
                 // ARC-COMBAT-1865: the stunned ART (23, unarmed, N1) and the bloody dying ARTs (17 decapitation, 18 blown-out chunk, 19 severed leg), each optional: a species without one stuns at once / falls plain.
                 (ActorDiagnosticAction.Stunned, (int)HeroBody.StunnedAnimation, true), (ActorDiagnosticAction.Decapitation, 17, true),
                 (ActorDiagnosticAction.BlownOutChunk, 18, true), (ActorDiagnosticAction.SeveredLeg, 19, true),
+                // ARC-RENDER-2564: the stealth walk ART (animation 3, the body's weapon part), optional: a species without one draws the walk at the stealth rate (MA1 pair 3 to 1, as the human body without it).
+                (ActorDiagnosticAction.Sneak, (int)HeroBody.SneakAnimation, true),
             ];
             foreach (var (action, animation, optional) in wanted)
             {
@@ -244,7 +246,7 @@ public static class HeroBodyArt
                         || (Attacks(action) && real && (h.ActionFrame < 0 || h.ActionFrame >= h.FramesPerGroup))) continue;
                     var descriptor = new ActorDiagnosticResource(action, real ? selector : own | 0xFu, entries[0].Ordinal, palette, 8, h.FramesPerGroup, h.FramesPerSecond, h.FramesPerSecond)
                     {
-                        Stride = action is ActorDiagnosticAction.Walk or ActorDiagnosticAction.Run ? Stride(metadata) : null,
+                        Stride = action is ActorDiagnosticAction.Walk or ActorDiagnosticAction.Run or ActorDiagnosticAction.Sneak ? Stride(metadata) : null,
                         ActionFrame = Attacks(action) && real ? h.ActionFrame : 0,
                     };
                     if (descriptor.Stride is { IsValid: false }) continue;
