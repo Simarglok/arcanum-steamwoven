@@ -79,7 +79,7 @@ public sealed class AreaVitalScriptTests
                 Do(new(ScrCatalogue.Action.GetStat, N(24), (Extra, -1), (Local, 1))),
                 Do(new(ScrCatalogue.Action.HealPoison, (Extra, -1), (Local, 1))),
                 Do(new(ScrCatalogue.Action.ReturnRunDefault))));
-            // 813: a negative amount raises the poison level in the original, which the host does not model.
+            // 813: a negative amount raises the poison level in the original (ARC-SCRIPT-1593): the life step is asked with the negative amount.
             Write("scr/00813negative.scr", Program(Do(new(ScrCatalogue.Action.HealPoison, (Extra, -1), N(-4))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
             // 814: heal poison of the attachee by 6 only.
             Write("scr/00814poison.scr", Program(Do(new(ScrCatalogue.Action.HealPoison, (Attachee, -1), N(6))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
@@ -146,7 +146,7 @@ public sealed class AreaVitalScriptTests
     }
 
     [TestMethod]
-    public void A_heal_without_the_life_step_or_a_negative_heal_poison_leaves_the_run_unapplied_and_a_vitals_question_about_another_object_is_not_modelled()
+    public void A_heal_without_the_life_step_leaves_the_run_unapplied_and_a_vitals_question_about_another_object_is_not_modelled()
     {
         WithContent(content =>
         {
@@ -156,11 +156,26 @@ public sealed class AreaVitalScriptTests
             var door = Row(5, 3, ReadScript);
             var host = Host(session, content, World(null, (_, _, _) => "healed"), negative, poison, door);
             var pc = host.Pc;
-            Assert.AreEqual(AreaScriptedUseOutcome.EffectsRejected, host.RunUseScript(AreaUseScriptHost.EntityId(negative), pc, pc, session.Rules.Scripts).Outcome, "a negative amount");
             var none = Host(session, content, World(null, null), poison);
             Assert.AreEqual(AreaScriptedUseOutcome.EffectsRejected, none.RunUseScript(AreaUseScriptHost.EntityId(poison), pc, pc, session.Rules.Scripts).Outcome, "no life step");
             // A door has no vitals the host knows: the dispatch ends as not modelled, nothing applied.
             Assert.AreEqual(AreaScriptedUseOutcome.Refused, host.RunUseScript(AreaUseScriptHost.EntityId(door), pc, pc, session.Rules.Scripts).Outcome, "a door's hit points");
+        });
+    }
+
+    [TestMethod]
+    public void A_negative_heal_poison_amount_goes_to_the_life_step_as_it_is_to_raise_the_level()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.CreateWithHero();
+            var negative = Row(3, 2, NegativeScript);
+            var healed = new List<(string Victim, int Fatigue, int Poison)>();
+            var host = Host(session, content, World(null, (victim, fatigue, poison) => { healed.Add((victim, fatigue, poison)); return "healed"; }), negative);
+            var pc = host.Pc;
+            var ran = host.RunUseScript(AreaUseScriptHost.EntityId(negative), pc, pc, session.Rules.Scripts);
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, ran.Outcome, ran.Detail);
+            CollectionAssert.AreEqual(new[] { (Arcanum.Simulation.Ai.AiSchedulerRules.Pc, 0, -4) }, healed);
         });
     }
 
