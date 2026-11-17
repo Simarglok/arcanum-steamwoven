@@ -1,4 +1,5 @@
 using System.Text;
+using Arcanum.Data.Area;
 using Arcanum.Data.Characters;
 using Arcanum.Data.Messages;
 using Arcanum.Session;
@@ -81,5 +82,22 @@ public sealed class AreaTraitIdxReadersTests
         Assert.AreEqual((9, -40, 3), AreaHoverWindow.CritterStats(fields, null), "the written stats over the stored ones");
         Assert.AreEqual(12, AreaHoverWindow.CritterStats(fields, 12).Level, "a follower's saved level still wins");
         Assert.AreEqual((1, 0, 0), AreaHoverWindow.CritterStats(AreaWrittenCritterFields.Read(null, f.RowA)!, null), "no session: the stored stats");
+    }
+
+    [TestMethod]
+    public void The_portrait_clash_rule_sees_a_written_race_and_gender()
+    {
+        // ARC-UI-2492 (0x4CEB80 through 0x4B0740): an NPC storing the PC's own portrait takes the next one its race and gender may take; a spell-written race or gender decides, not the stored one.
+        using var f = AreaAiHostRebindTests.Open();
+        var parsed = MesFile.Parse(Encoding.Latin1.GetBytes("{1000}{HUM1}{1001}{ELM1}{1002}{HUM2}"));
+        Assert.AreEqual(MesParseStatus.Parsed, parsed.Status);
+        var catalogue = Arcanum.Data.Characters.PortraitCatalogue.Create(parsed.File!);
+        var row = f.RowA with { EffectiveFields = [.. f.RowA.EffectiveFields.Where(v => v.Slot != AreaLootArtLayout.PortraitSlot),
+            new(AreaLootArtLayout.PortraitSlot, AreaPresence.Value, AreaValueOrigin.Prototype, 1000, [], null)] };
+        Assert.AreEqual(1002, AreaLootArtLayout.ShownPortrait(row, catalogue, 1000, f.Session), "stored human male: the elf portrait between is skipped");
+        Write(f, 27, 2);
+        Assert.AreEqual(1001, AreaLootArtLayout.ShownPortrait(row, catalogue, 1000, f.Session), "a spell made the NPC an elf: the elf portrait is the next");
+        Assert.AreEqual(1002, AreaLootArtLayout.ShownPortrait(row, catalogue, 1000), "no session: the stored race");
+        Assert.AreEqual(1002, AreaLootArtLayout.ShownPortrait(row, catalogue, 1000, null), "a null session: the stored race");
     }
 }

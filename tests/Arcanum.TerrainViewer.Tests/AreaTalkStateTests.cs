@@ -23,9 +23,10 @@ public sealed class AreaTalkStateTests
 
     private static AreaObjectKey Key(int index) => new(new string('a', 64), 1, AreaSourceKind.Mobile, 1, index, index * 100L, new string((char)('a' + index), 64), 100);
 
-    private static AreaObjectRecord Row(int index, int dialog)
+    private static AreaObjectRecord Row(int index, int dialog, long spellFlags = 0)
     {
         var fields = new List<AreaFieldValue> { new(31, AreaPresence.Array, AreaValueOrigin.Instance, null, [new AreaSparseElement(ScrPoint.Dialog, [0, 0, dialog]), new AreaSparseElement(ScrPoint.Use, [0, 0, 5000])], null) };
+        if (spellFlags != 0) fields.Add(new(19, AreaPresence.Value, AreaValueOrigin.Instance, spellFlags, [], null));
         return new(Key(index), 0, 16, 0, "p", "p", "r", "s", AreaScope.Core, null, 10 + index, 20, Arcanum.Data.Area.AreaDisposition.BodyEligibleConditionally, [], fields, true, true, true);
     }
 
@@ -101,10 +102,10 @@ public sealed class AreaTalkStateTests
         public bool Flag => Host.GlobalFlag(AreaFlag);
     }
 
-    private static Talk Create(ScriptContent content, int dialog, bool useHost = true)
+    private static Talk Create(ScriptContent content, int dialog, bool useHost = true, long spellFlags = 0)
     {
         var session = ConversationSessionFixture.Create(Map);
-        var row = Row(1, dialog);
+        var row = Row(1, dialog, spellFlags);
         var speaker = new AreaSpeaker(0, row, dialog, row.WorldX!.Value, row.WorldY!.Value);
         var map = new SessionMapId(Map);
         var state = new AreaConversationState(session, map, [AreaConversationState.EntityId(row)], 50);
@@ -138,6 +139,30 @@ public sealed class AreaTalkStateTests
             var other = new ScrObjectRef(Map, "oid:" + new string('z', 64));
             Assert.AreEqual(ScrDialogState.Normal, talk.Host.DialogState(other), "no row on the shown map: normal");
             Assert.AreEqual(ScrDialogState.Normal, talk.Host.DialogState(talk.Host.Pc));
+        });
+    }
+
+    // ARC-SCRIPT-2464: the speaker meets the surrendered and mind-controlled gates as any NPC of the map, through the shown map's use host; without that host only its dead gate is modelled.
+    [TestMethod]
+    public void The_speaker_meets_the_surrendered_and_mind_controlled_gates_through_the_use_host()
+    {
+        WithContent(content =>
+        {
+            using var talk = Create(content, 800, spellFlags: AreaUseScriptHost.MindControlledFlag);
+            var speaker = talk.Host.Object(talk.Speaker);
+            Assert.AreEqual(ScrDialogState.MindControlled, talk.Host.DialogState(speaker));
+            Assert.AreEqual(GameSessionDisposition.Changed, talk.Session.SetDangerState(talk.Session.Version, new SessionDangerRequest { Entity = speaker.Code, State = DangerState.Surrender, Target = SessionCombatant.Hero }).Disposition);
+            Assert.AreEqual(ScrDialogState.Surrendered | ScrDialogState.MindControlled, talk.Host.DialogState(speaker));
+            Assert.AreEqual(GameSessionDisposition.Changed, talk.Session.Kill(talk.Session.Version, SessionLifeTarget.Critter(speaker.Code, new Arcanum.Simulation.Combat.LifeFacts(), default)).Disposition);
+            Assert.AreEqual(ScrDialogState.Dead | ScrDialogState.Surrendered | ScrDialogState.MindControlled, talk.Host.DialogState(speaker));
+            Assert.AreEqual(ScrDialogState.Normal, talk.Host.DialogState(talk.Host.Pc));
+        });
+        WithContent(content =>
+        {
+            using var talk = Create(content, 800, useHost: false, spellFlags: AreaUseScriptHost.MindControlledFlag);
+            var speaker = talk.Host.Object(talk.Speaker);
+            Assert.AreEqual(GameSessionDisposition.Changed, talk.Session.Kill(talk.Session.Version, SessionLifeTarget.Critter(speaker.Code, new Arcanum.Simulation.Combat.LifeFacts(), default)).Disposition);
+            Assert.AreEqual(ScrDialogState.Dead, talk.Host.DialogState(speaker), "no use host of the map: the dead gate alone");
         });
     }
 

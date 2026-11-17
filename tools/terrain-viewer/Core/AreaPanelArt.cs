@@ -77,8 +77,8 @@ public static class AreaPortraits
     /// <summary>ARC-UI-2444 (ledger PO10, 0x4CEB80): the portrait number a draw shows for a critter record: <see cref="Stored"/>, but an NPC that
     /// stores the local PC's own portrait (<paramref name="playerPortrait"/>) shows the next portrait its race and gender may take, else the previous
     /// one, else none. Null: nothing to draw. Every portrait draw of the viewer (follower frames, hover, character sheet, item windows) uses it.</summary>
-    public static int? Shown(AreaObjectRecord record, PortraitCatalogue? catalogue, int? playerPortrait) =>
-        Arcanum.World.AreaLootArtLayout.ShownPortrait(record, catalogue, playerPortrait);
+    public static int? Shown(AreaObjectRecord record, PortraitCatalogue? catalogue, int? playerPortrait, Arcanum.Session.GameSessionOwner? session = null) =>
+        Arcanum.World.AreaLootArtLayout.ShownPortrait(record, catalogue, playerPortrait, session);
 
     /// <summary>Reads the images of <paramref name="ids"/> drawn at <paramref name="size"/>; each id gets its own outcome.</summary>
     public static IReadOnlyDictionary<int, AreaPortraitFile> Load(ContentStack stack, PortraitCatalogue? catalogue, IEnumerable<int> ids, int size)

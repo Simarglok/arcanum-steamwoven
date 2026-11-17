@@ -179,8 +179,9 @@ The call-site table of section 2 comes from one full disassembly of `.text` into
   kinds are admitted in actions only.
 - **U3** Whether mode 1 of the location change (same tile, TS2) really re-runs the tile script on every sub-tile offset change was
   not observed in the running game.
-- **U4** The surrender and mind-control states of an NPC are not modelled by the viewer's use host (it answers dead only), so their
-  dialog gates never trigger there.
+- **U4** ~~The surrender and mind-control states of an NPC are not modelled by the viewer's use host (it answers dead only), so their
+  dialog gates never trigger there.~~ Closed by ARC-SCRIPT-2464: the use host and the talk host answer dead, surrendered (the session's danger record) and
+  mind-controlled (spell flag 0x8000000) for an NPC of the shown map.
 - **U5** What the original does with a heartbeat's talk while the PC is in another dialog, a window is open or the PC is under
   attack is not read (the dialog start refuses a second dialog of the PC, G3, but whether the talk is lost or retried is not known);
   Steamwoven keeps it pending until it can open.
