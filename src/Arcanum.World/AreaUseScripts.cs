@@ -2007,8 +2007,11 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
                 }
                 // TD2: an NPC already destroyed is left as it is.
                 if (AlreadyDestroyed(request.Object)) continue;
-                var destroyed = _session.ApplyChanges(_session.Version, null,
-                    [new(new SessionMapId(request.Object.Map), MapChangeKey.ForEntity(request.Object.Code, DestroyedProperty), 1)]);
+                // ARC-WORLD-2493 (0x43CCA0 → 0x4639E0): the NPC's invulnerable items are dropped on its cell with the destroy; an NPC with no cell of its own is destroyed with its list.
+                var destroyed = Place(request.Object) is { } cell
+                    ? _session.DestroyMapNpc(_session.Version, new SessionMapId(request.Object.Map), request.Object.Code, cell)
+                    : _session.ApplyChanges(_session.Version, null,
+                        [new(new SessionMapId(request.Object.Map), MapChangeKey.ForEntity(request.Object.Code, DestroyedProperty), 1)]);
                 if (destroyed.Disposition == GameSessionDisposition.Rejected) return false;
                 continue;
             }
@@ -2563,6 +2566,9 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
                     return $"destroy of {request.Object.Code} is not modelled (only an NPC of the shown map)";
                 // TD2: one destroyed in its map data, or by an earlier run, is left as it is.
                 if (AlreadyDestroyed(request.Object)) continue;
+                // ARC-WORLD-2493: the destroy drops the NPC's invulnerable items (0x4639E0), which the session's budgets may refuse; checked before any effect applies.
+                if (Place(request.Object) is { } dropCell && _session.DestroyMapNpcRefusal(new SessionMapId(request.Object.Map), request.Object.Code, dropCell) is { } dropWhy)
+                    return $"destroy of {request.Object.Code} is refused by the session ({dropWhy})";
                 if (FollowsPc(request.Object)) return $"destroy of {request.Object.Code}, a follower of the PC, is not modelled";
                 // ARC-SCRIPT-1842: the map change does not reach the session's destroy (which unlinks, 0x45E180), so a leader or follower of an NPC is left as it is.
                 if (_session.QueryLeader(request.Object.Code) is not null || _session.QueryFollowers(request.Object.Code).Count > 0)
