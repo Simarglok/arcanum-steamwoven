@@ -48,6 +48,7 @@ namespace Arcanum.World;
 /// ARC-WORLD-1837 (ledger TT20): <see cref="NpcTeleportRefusal"/> names why a script's teleport (44, 102) of an NPC of the shown map to a cell of the shown map cannot be requested (the AI host does not hold it, it is a follower, the cell is not held), or null,
 /// and <see cref="RequestNpcTeleport"/> records the request in the session's one slot (the original's 0x4D3380; the object moves at the next ping), called only after the run applied; without them a run that teleports an object other than the hero is left unapplied.
 /// ARC-SCRIPT-2326 (AR2): <see cref="BodyArmorUseArt"/> answers the use art of the body armour the hero wears (item field 0x5F, the one the hero's drawn body takes its armour part from), null when it is not read; without it get armor of the hero stops the run while armour is worn.
+/// ARC-SCRIPT-2505 (GR1): <see cref="StandardReaction"/> answers the standard effective reaction (0x4C0CC0) of an NPC of the shown map toward the hero (null: not known; without it get reaction of an NPC that is no dialog speaker is not modelled).
 /// ARC-SCRIPT-2342 (AR2, AR7): <see cref="NpcBodyArmor"/> answers what an NPC the session dressed wears on its body-armour slot now (null: not read; without it get armor of such an NPC is not modelled).
 /// </summary>
 public sealed record AreaScriptWorld(Func<CellCoord?> PcCell, Func<AreaObjectRecord, bool> Gone, Func<int, AreaPrototypeItem?> Item, Func<IDropMap?> DropMap,
@@ -61,7 +62,7 @@ public sealed record AreaScriptWorld(Func<CellCoord?> PcCell, Func<AreaObjectRec
     Func<string, int, string>? ScriptStopSpell = null, Func<string, AreaScriptVitals?>? Vitals = null, Func<string, int, int, string>? ScriptHealLife = null,
     Func<string, string, string>? ScriptAttack = null, Func<string, int?>? Aptitude = null, Func<string, string, bool?>? CanSee = null, Func<string, string, bool?>? CanHear = null,
     Func<uint, bool>? ArtExists = null, Func<ScrTeleport, string?>? NpcTeleportRefusal = null, Action<ScrTeleport>? RequestNpcTeleport = null,
-    Func<uint?>? BodyArmorUseArt = null, Func<string, AreaScriptWornArmor?>? NpcBodyArmor = null);
+    Func<uint?>? BodyArmorUseArt = null, Func<string, AreaScriptWornArmor?>? NpcBodyArmor = null, Func<string, int?>? StandardReaction = null);
 
 /// <summary>ARC-SCRIPT-2342 (AR2): the use art (item field 0x5F) of the item an NPC wears in the body-armour slot (1006), or null when it wears none (<see cref="AreaScriptWorld.NpcBodyArmor"/>).</summary>
 public sealed record AreaScriptWornArmor(uint? UseArt);
@@ -290,6 +291,16 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     public static ScrAdmissionSet BustAdmission { get; } = new("S2-area-bust-heartbeat-story-eye-candy",
         HeartbeatAdmission.Conditions,
         HeartbeatAdmission.Actions.Union(ScrAdmissionSet.S13.Actions.Where(a => !ScrAdmissionSet.S12.Actions.Contains(a))).Append(ScrCatalogue.Action.PlayScriptEyeCandy).Append(ScrCatalogue.Action.Destroy),
+        HeartbeatAdmission.ValueKinds, HeartbeatAdmission.FocusKinds, HeartbeatAdmission.CounterIndexWraps);
+
+    /// <summary>
+    /// ARC-SCRIPT-2513 (ledger BS3d): the set a taking-damage script (attachment point 23) runs under (<see cref="RunTakingDamage"/>): <see cref="HeartbeatAdmission"/> plus play script eye candy (120) and destroy (68), which the container script
+    /// 2827 (the one installed site, on the main map) uses to destroy the sceneries around it and play their eye candy. The original's executor (0x447220) has no per-point restriction (ledger BS3, BS1); the narrow set only keeps the
+    /// scripts this host can apply whole, so a script that holds anything else is still refused at the plan. A destroy of a scenery is applied by <see cref="DestroyScenery"/>.
+    /// </summary>
+    public static ScrAdmissionSet TakingDamageAdmission { get; } = new("S2-area-taking-damage-heartbeat-eye-candy-destroy",
+        HeartbeatAdmission.Conditions,
+        HeartbeatAdmission.Actions.Append(ScrCatalogue.Action.PlayScriptEyeCandy).Append(ScrCatalogue.Action.Destroy),
         HeartbeatAdmission.ValueKinds, HeartbeatAdmission.FocusKinds, HeartbeatAdmission.CounterIndexWraps);
 
     /// <summary>ARC-WORLD-114: whether a script switched the NPC <paramref name="entity"/> of map <paramref name="map"/> off
@@ -683,6 +694,20 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         if (Row(npc) is not { } row) return null;
         return row.Type == NpcType && _session.QueryReactionRecord(npc.Code) is { MetBefore: true };
     }
+
+    /// <summary>ARC-SCRIPT-2505 (ledger GR1): get reaction of the first object toward the second. A first object that is no NPC (the PC, or a row of the shown map that is not an NPC) gives 50 whatever the second object is: the
+    /// enemy-list test reads only an NPC's list and the type tests that follow end at 50 (Kerghan's script 1105 line 57 loops over the vicinity, which holds the PC). An NPC of the shown map toward the PC is the standard effective reaction
+    /// the world reads for it (the AI host's, the same session query the dialog's reaction conditions read), whether or not it is a dialog speaker. Null (not modelled) for a first object this host has no row for, an NPC toward a second
+    /// object that is not the PC (its enemy list is not read here), or a world without the answer.</summary>
+    public int? ReactionOf(ScrObjectRef npc, ScrObjectRef pc)
+    {
+        if (IsPc(npc)) return NonNpcReaction;
+        if (Row(npc) is not { } row) return null;
+        if (row.Type != NpcType) return NonNpcReaction;
+        return IsPc(pc) && _world?.StandardReaction is { } ask ? ask(npc.Code) : null;
+    }
+
+    private const int NonNpcReaction = 50;
 
     /// <summary>ARC-SCRIPT-1733 (CS2, case 15): bit 0x1 of the spell flags (<see cref="SpellFlags"/>, field 0x14) of any object, the flags the session's spells wrote included.</summary>
     public bool? IsInvisible(ScrObjectRef obj) => SpellFlags(obj) is { } flags ? (unchecked((uint)flags) & InvisibleSpellFlag) != 0 : null;
@@ -1383,7 +1408,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     /// <summary>
     /// ARC-DEV-254 (MIG13 S14j, GT198–GT203): the taking-damage script (attachment point 0x17, 23) of <paramref name="victim"/>, an object of the shown map (any type: the original runs it for portals, containers, scenery and items too), run by the
     /// damage apply 0x4B4390 before the destroyed, invulnerable and wall gates and before the resistance step. The triggerer is the damage's attacker (<paramref name="attacker"/>, null for a damage without one: a script's own damage,
-    /// the null handle), the extra object none, line 0, under <see cref="HeartbeatAdmission"/>; its slot is kept as map changes (<see cref="SlotProperty"/>). A nested damage dealt while the script runs (the guard, which brackets the script
+    /// the null handle), the extra object none, line 0, under <see cref="TakingDamageAdmission"/> (ARC-SCRIPT-2513: the heartbeat set plus play script eye candy and destroy); its slot is kept as map changes (<see cref="SlotProperty"/>). A nested damage dealt while the script runs (the guard, which brackets the script
     /// call only) skips it: no run. The caller reads <see cref="TakingDamageVetoes"/>. An object that is not a row of the shown map, or has no slot at the point, has no script (the step goes on).
     /// </summary>
     public AreaScriptedUse RunTakingDamage(string victim, ScrObjectRef? attacker, ScrRuleProfile rules)
@@ -1398,7 +1423,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         _inTakingDamage = true;
         try
         {
-            var run = ScrDispatcher.RunObject(new(ScrPoint.TakingDamage, attachee, attacker, null), this, new() { Rules = Remember(rules), Admission = HeartbeatAdmission });
+            var run = ScrDispatcher.RunObject(new(ScrPoint.TakingDamage, attachee, attacker, null), this, new() { Rules = Remember(rules), Admission = TakingDamageAdmission });
             return Finish(run, _ => "a teleport from a taking-damage script is not modelled", writeback => WriteObjectSlot(writeback, attachee));
         }
         finally { _inTakingDamage = false; _clicked = previous; }
@@ -1878,14 +1903,13 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
 
     /// <summary>
     /// ARC-WORLD-2038 (ledger TT20): why a script's teleport of an object other than the hero cannot be recorded as the NPC request (<see cref="AreaScriptWorld.RequestNpcTeleport"/>), or null: no world seam, an object that is no NPC of the shown map,
-    /// a destination on another map (FM1: only its record would move, not built) or the AI host's own refusal (a follower, a cell it does not hold). The use host's finish and the talk and call host's apply (<see cref="AreaScriptHost.Apply"/>) both ask it before anything applies.
+    /// the AI host's own refusal (a follower, a cell it does not hold on the shown map, a map the viewer does not list; a destination on another map is ARC-WORLD-2039: only the NPC's record moves, FM1). The use host's finish and the talk and call host's apply (<see cref="AreaScriptHost.Apply"/>) both ask it before anything applies.
     /// </summary>
     public string? NpcTeleportRefusedBecause(ScrTeleport other)
     {
         ArgumentNullException.ThrowIfNull(other);
         if (_world?.NpcTeleportRefusal is not { } npcRefusal || _world.RequestNpcTeleport is null) return $"a teleport of {other.Object.Code} is not modelled";
         if (other.Object.Map != _shownMap || Row(other.Object) is not { Type: NpcType }) return $"a teleport of {other.Object.Code}, which is no NPC of the shown map, is not modelled";
-        if (other.RuntimeMap != -1 && other.RuntimeMap != _shownMap) return $"a teleport of {other.Object.Code} to another map (catalogue {other.CatalogueMap}) is not modelled";
         return npcRefusal(other);
     }
 

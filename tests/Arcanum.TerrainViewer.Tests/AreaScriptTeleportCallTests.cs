@@ -16,7 +16,7 @@ namespace Arcanum.TerrainViewer.Tests;
 [TestClass]
 public sealed class AreaScriptTeleportCallTests
 {
-    private const int HeroTeleport = 920, HeroFade = 921, NpcTeleport = 922, Both = 923, HeroTeleportThenDialog = 924, DialogThenHeroTeleport = 925, FlagThenDialog = 926;
+    private const int HeroTeleport = 920, HeroFade = 921, NpcTeleport = 922, Both = 923, HeroTeleportThenDialog = 924, DialogThenHeroTeleport = 925, FlagThenDialog = 926, NpcToOtherMap = 927;
 
     private static byte[] Program(params (int Action, (byte Kind, int Value)[] Operands)[] lines)
     {
@@ -60,6 +60,8 @@ public sealed class AreaScriptTeleportCallTests
             File.WriteAllBytes(Path.Combine(root.FullName, "scr", "00925late.scr"), Program((ScrCatalogue.Action.Dialog, [(Number, 1)]), (ScrCatalogue.Action.Teleport, [(Triggerer, 0), (Number, 4999 + snapshot.RuntimeMap), (Number, 34), (Number, 44)])));
             // 926 (ARC-WORLD-2358): a local flag set before the dialog action, which the action would store into the speaker's use slot.
             File.WriteAllBytes(Path.Combine(root.FullName, "scr", "00926flag.scr"), Program((ScrCatalogue.Action.SetLocalFlag, [(Number, 2)]), (ScrCatalogue.Action.Dialog, [(Number, 1)])));
+            // 927 (ARC-WORLD-2039): the attachee to catalogue map 5008 (runtime 9), the shape of script 3019's tile teleport of an NPC to another map.
+            File.WriteAllBytes(Path.Combine(root.FullName, "scr", "00927away.scr"), Program((ScrCatalogue.Action.Teleport, [(Attachee, 0), (Number, 5008), (Number, 60), (Number, 70)]), (ScrCatalogue.Action.ReturnRunDefault, [])));
             using var content = AreaContentRoot.OpenScripts(Path.Combine(root.FullName, "modules", "Syn.dat")).Content!;
             using var session = ConversationSessionFixture.CreateWithHero(snapshot.RuntimeMap);
             var host = new AreaConversationHost(snapshot, content, session);
@@ -211,6 +213,31 @@ public sealed class AreaScriptTeleportCallTests
             host.Scripts.HeroTeleportRefusal = _ => null; host.Scripts.RequestHeroTeleport = _ => log.Add("hero");
             Assert.IsFalse(host.RunCall(new(Both, 0, pc, attachee), out _));
             CollectionAssert.AreEqual(Array.Empty<string>(), log);
+        });
+    }
+    // ARC-WORLD-2039 (ledger TT20, FM1): a deferred call's teleport of an NPC of the shown map to another map is asked of the world's seam (which owns the map rules) and recorded with the map the script named.
+    [TestMethod]
+    public void A_deferred_calls_teleport_of_an_npc_to_another_map_is_asked_and_recorded_with_that_map()
+    {
+        With((host, session, snapshot, content, pc) =>
+        {
+            var key = new AreaObjectKey(new string('a', 64), snapshot.RuntimeMap, AreaSourceKind.Mobile, 1, 1, 100L, new string('b', 64), 100);
+            var npc = new AreaObjectRecord(key, 0, 16, 0, "p", "p", "r", "s", AreaScope.Core, null, 11, 20, Arcanum.Data.Area.AreaDisposition.BodyEligibleConditionally, [], [], true, true, true);
+            var log = new List<string>();
+            var refused = false;
+            var world = new AreaScriptWorld(() => null, _ => false, _ => null, () => null,
+                NpcTeleportRefusal: t => { log.Add($"check {t.Object.Code} map={t.RuntimeMap}"); return refused ? "map not listed" : null; },
+                RequestNpcTeleport: t => log.Add($"request {t.Object.Code} map={t.RuntimeMap} {t.X},{t.Y}"));
+            var use = new AreaUseScriptHost(session, snapshot.RuntimeMap, [npc], [], content, world);
+            host.Scripts.QueryHost = () => use;
+            var entity = AreaUseScriptHost.EntityId(npc);
+            var attachee = new SessionScriptRole(new(snapshot.RuntimeMap), entity);
+            Assert.IsTrue(host.RunCall(new(NpcToOtherMap, 0, pc, attachee), out var detail), detail);
+            CollectionAssert.AreEqual(new[] { $"check {entity} map=9", $"request {entity} map=9 60,70" }, log);
+            // The world's seam decides: a map it does not list leaves the call unapplied.
+            log.Clear(); refused = true;
+            Assert.IsFalse(host.RunCall(new(NpcToOtherMap, 0, pc, attachee), out _));
+            CollectionAssert.AreEqual(new[] { $"check {entity} map=9" }, log);
         });
     }
 }

@@ -96,6 +96,24 @@ public sealed class AreaObjectTargetsTests
             .Target(session, stone.Key)!.Refusal, "bounds");
     }
 
+    // ARC-WORLD-2039 (FM1): an NPC a script's teleport moved to another map is gone from the shown map's lists; an away change naming the shown map itself (another window of it) is not.
+    [TestMethod]
+    public void AnNpcAwayOnAnotherMapIsGoneFromTheShownMap()
+    {
+        using var session = ConversationSessionFixture.Create();
+        var npc = AreaHeartbeatScriptTests.Row(1, 16, 781);
+        var targets = new AreaObjectTargets(1, [npc], new Dictionary<AreaObjectKey, (string, SessionOpenableBaseline)>(), null);
+        var entity = AreaHeartbeatScriptTests.Entity(1);
+        Assert.AreEqual(0, targets.Gone(session).Count);
+        void Away(long map) => Assert.AreEqual(GameSessionDisposition.Changed, session.ApplyChanges(session.Version, null, [new(new(1), AreaCompanionPlacement.MapKey(entity), map)]).Disposition);
+        Away(1);
+        Assert.AreEqual(0, targets.Gone(session).Count, "standing on the shown map's own number is not away");
+        Away(9);
+        CollectionAssert.AreEqual(new[] { npc.Key }, targets.Gone(session).ToArray());
+        Away(1);
+        Assert.AreEqual(0, targets.Gone(session).Count, "back on the map");
+    }
+
     [TestMethod]
     public void ADestroyedOrSwitchedOffObjectIsGoneAndNoLongerATarget()
     {
