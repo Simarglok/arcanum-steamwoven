@@ -564,7 +564,12 @@ public partial class TerrainViewerApp
         else if (struck.Type == 0)
         {
             var result = owner.LandShotOnObject(owner.Version, projectile.Shot,
-                new SessionObjectAttack { Wall = true, HeroWorn = AreaCombatHost.HeroWorn(owner, _areaKitDurability), DropMap = AreaDropMapNow() });
+                new SessionObjectAttack
+                {
+                    Wall = true, HeroWorn = AreaCombatHost.HeroWorn(owner, _areaKitDurability), DropMap = AreaDropMapNow(),
+                    // ARC-COMBAT-1973 (RH5): the strike offers the weapon's hit scripts and the wall's taking-damage script as any object's.
+                    TakingDamage = () => TakingDamageGoesOn(AreaUseScriptHost.EntityId(struck), SessionSpellCaster.Hero), HitScripts = HeroHitScripts(AreaUseScriptHost.EntityId(struck)),
+                });
             Ended(projectile, kind, $"wall:{struck.Key.SourceIndex}", $"disposition={result.Disposition} failure={result.Failure} prevented={result.Resolution?.Damage?.Prevented}");
             end = StruckEnd(projectile);
             if (result.Disposition != GameSessionDisposition.Rejected)
