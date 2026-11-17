@@ -679,6 +679,7 @@ src/Arcanum.World/AreaRestock.cs,Vicinity,pending,
 src/Arcanum.World/AreaRestock.cs,Wielder,pending,
 src/Arcanum.World/AreaScenePlan.cs,BodyRanks,pending,
 src/Arcanum.World/AreaSceneryHost.cs,AddCreated,pending,
+src/Arcanum.World/AreaSceneryHost.cs,ObjectDestroyed,exempt,host
 src/Arcanum.World/AreaSceneryHost.cs,Reframe,exempt,host
 src/Arcanum.World/AreaSceneryHost.cs,Restart,pending,
 src/Arcanum.World/AreaSceneryHost.cs,TakeSoundBegins,exempt,host
@@ -1037,6 +1038,7 @@ tools/terrain-viewer/Godot/TerrainViewerProjectiles.cs,RunShotEndScripts,exempt,
 tools/terrain-viewer/Godot/TerrainViewerProjectiles.cs,Strike,pending,
 tools/terrain-viewer/Godot/TerrainViewerProjectiles.cs,TurnBack,pending,
 tools/terrain-viewer/Godot/TerrainViewerSceneryAnimation.cs,AddOccupiedBeds,exempt,host
+tools/terrain-viewer/Godot/TerrainViewerSceneryAnimation.cs,EndDestroyedObjectRuns,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerScriptEyeCandy.cs,StopScriptEyeCandy,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerSkillBar.cs,RouteSkillKey,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerSkillBar.cs,SkillBarDrag,exempt,host

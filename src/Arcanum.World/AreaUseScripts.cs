@@ -52,6 +52,7 @@ namespace Arcanum.World;
 /// ARC-SCRIPT-2342 (AR2, AR7): <see cref="NpcBodyArmor"/> answers what an NPC the session dressed wears on its body-armour slot now (null: not read; without it get armor of such an NPC is not modelled).
 /// ARC-SCRIPT-2506 (TI5): <see cref="CarryVitals"/> (created critter entity, hit-point percentage, fatigue percentage) sets the new critter of a script's transform (40) to the old one's percentages through the session's life
 /// (<see cref="AreaUseScriptHost.TransformDamage"/> makes the damage from the new critter's own maxima) and answers whether it did; without it a transform of an NPC below full hit points or fatigue is refused whole.
+/// ARC-SCRIPT-2514 (BS3c, 0x43CCA0 → 0x423FF0, 0x459740): <see cref="ObjectDestroyed"/> is told each shown-map scenery or container a script's destroy applied, right after the session recorded it, so the viewer ends the object's goal runs (its loop, eye-candy overlays and hover) and the spell runs aimed at or cast from it; without it the runs stay as before.
 /// ARC-SCRIPT-2519 (TI5c, F2, 0x502880, 0x502930): <see cref="NpcFacing"/> answers the facing an NPC of the shown map stands in now (its mover's, else its map art's rotation) so the made critter of a transform takes it; without it (or for an NPC it does not know) the made critter keeps its prototype's art facing.
 /// </summary>
 public sealed record AreaScriptWorld(Func<CellCoord?> PcCell, Func<AreaObjectRecord, bool> Gone, Func<int, AreaPrototypeItem?> Item, Func<IDropMap?> DropMap,
@@ -66,7 +67,7 @@ public sealed record AreaScriptWorld(Func<CellCoord?> PcCell, Func<AreaObjectRec
     Func<string, string, string>? ScriptAttack = null, Func<string, int?>? Aptitude = null, Func<string, string, bool?>? CanSee = null, Func<string, string, bool?>? CanHear = null,
     Func<uint, bool>? ArtExists = null, Func<ScrTeleport, string?>? NpcTeleportRefusal = null, Action<ScrTeleport>? RequestNpcTeleport = null,
     Func<uint?>? BodyArmorUseArt = null, Func<string, AreaScriptWornArmor?>? NpcBodyArmor = null, Func<string, int?>? StandardReaction = null, Func<string, int, int, bool>? CarryVitals = null,
-    Func<string, NeighborDirection?>? NpcFacing = null);
+    Func<string, NeighborDirection?>? NpcFacing = null, Action<ScrObjectRef>? ObjectDestroyed = null);
 
 /// <summary>ARC-SCRIPT-2342 (AR2): the use art (item field 0x5F) of the item an NPC wears in the body-armour slot (1006), or null when it wears none (<see cref="AreaScriptWorld.NpcBodyArmor"/>).</summary>
 public sealed record AreaScriptWornArmor(uint? UseArt);
@@ -1694,7 +1695,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     /// <summary>
     /// ARC-SCRIPT-2501 (ledger TD2, BS3): a script's destroy of a scenery of the shown map. An object already destroyed (its map data's flag 0x1, or an earlier destroy) is left as it is; otherwise the scenery's destroy point (2) runs first, and
     /// a return of 0 (skip default, <see cref="DyingStops"/>) keeps it; else the session records it destroyed (the object condition, which the view reads as gone: not drawn, not picked, out of the vicinity lists). A script that destroys the
-    /// scenery whose destroy point is running leaves it to that run (the original would run the point again, as flag 0x1 is set last). The runs the original ends at once (0x423FF0) and the other clean-up are not modelled (BS3).
+    /// scenery whose destroy point is running leaves it to that run (the original would run the point again, as flag 0x1 is set last). The runs the original ends at once (0x423FF0, 0x459740) are ended through <see cref="AreaScriptWorld.ObjectDestroyed"/> (ARC-SCRIPT-2514); the other clean-up is not modelled (BS3).
     /// </summary>
     private bool DestroyScenery(ScrObjectRef obj)
     {
@@ -1713,10 +1714,13 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
             if (AlreadyDestroyed(obj)) return true;
         }
         // ARC-WORLD-2502 (0x43CCA0 → 0x4639E0): a container's invulnerable items are dropped on its cell with the destroy (a junk pile only destroyed, a never generated 0x200 container regenerated first).
-        if (ShownContainer(obj) && Place(obj) is { } cell)
-            return _session.DestroyMapContainer(_session.Version, new SessionMapId(obj.Map), obj.Code, cell, IsJunkPile(obj)).Disposition != GameSessionDisposition.Rejected;
-        return _session.ApplyChanges(_session.Version, null,
-            [new(new SessionMapId(obj.Map), MapChangeKey.ForEntity(obj.Code, GameSessionOwner.ObjectConditionProperty), (long)SessionObjectCondition.Destroyed)]).Disposition != GameSessionDisposition.Rejected;
+        var applied = ShownContainer(obj) && Place(obj) is { } cell
+            ? _session.DestroyMapContainer(_session.Version, new SessionMapId(obj.Map), obj.Code, cell, IsJunkPile(obj)).Disposition != GameSessionDisposition.Rejected
+            : _session.ApplyChanges(_session.Version, null,
+                [new(new SessionMapId(obj.Map), MapChangeKey.ForEntity(obj.Code, GameSessionOwner.ObjectConditionProperty), (long)SessionObjectCondition.Destroyed)]).Disposition != GameSessionDisposition.Rejected;
+        // ARC-SCRIPT-2514 (BS3c): the destroy (0x43CCA0) kills every goal run of the object (0x423FF0) and tells the spell runs (0x459740): the viewer's hosts end them.
+        if (applied) _world?.ObjectDestroyed?.Invoke(obj);
+        return applied;
     }
 
     private readonly HashSet<string> _destroyingScenery = new(StringComparer.Ordinal);
