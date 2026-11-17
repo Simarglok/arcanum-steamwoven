@@ -81,9 +81,20 @@ Why this range (Steam Hardware Survey, primary display, October 2026, read 2026-
   [#2453](https://github.com/Simarglok/arcanum-steamwoven/issues/2453), after the [prototype](#prototype-of-the-play-screen-arc-ui-2452)'s comparison of this pair with the original strips' own 150 and 570: the original's
   41 and 159 units × 3.6 = 147.6 and 572.4, rounded to the grid), and the middle band = frame height − top − bottom. Both heights are multiples of 6 and together at most 720, so the window zone of SWI-BDR-2 always fits
   a 16:9 middle band; at 120 and 456 the middle band is 1584 px at 16:9 and 1824 px at 16:10, and the zone has 72 px above and below it at 16:9. The layout model's options hold the pair in one place.
-- **SWI-LAY-11** Each panel spans the whole frame width. The centre block (2880 px) is centred; the sides take the
-  rest. Controls in the centre block sit at their original offsets × 3.6, snapped to the 6 px grid (shift at most
-  3 px, under one unit); with the 120 and 456 px bands the vertical offsets cannot be the original's ([open question](#open-questions)).
+- **SWI-LAY-11** Each panel spans the whole frame width. The centre block (2880 px, the width of the window zone of SWI-BDR-2) is centred; the sides take the
+  rest. **Owner choice 2026-11-17 ([#2526](https://github.com/Simarglok/arcanum-steamwoven/issues/2526), variant B; the alternative was one centre scale k = 0.8 with a 2304 px block):** the centre block keeps its
+  width, so every horizontal offset and width of a control is the original's × 3.6 snapped to the 6 px grid, and the HUD text (message window, clock, counters) has the scale `f · 3.6` of the windows' text. Only the vertical
+  placement fits the band, because the bands cannot hold the original strips (147.6 and 572.4 px at that scale): the kit's hardware is drawn for them. The rule per band (G = the 6 px grid; centred = `floor_G((band − height) / 2)`,
+  a shift of at most 3 px; the numbers are for 120 and 456; the layout model, `SteamwovenControls`, holds the same rule for any pair):
+  - top panel T: a button (Character, Logbook, Map, Inventory) is a square of `min(120, T − 24)` = 96 (12 px above and below), Fate Points and Sleep `min(84, T − 48)` = 72, the clock window 462 wide and `min(108, T − 36)` = 84 high, all
+    centred; the experience strip hangs over the band's lower edge, 1380 × 48 with its top `T − 12`;
+  - bottom panel B: the three right-hand buttons (Skills, Spells, Schematics) are squares of `min(138, floor_G((B − 96) / 3))` = 120 at tops 18, 18 + side + 30 and 18 + 2 · (side + 30) (the original's stagger of x kept); the Combat button is the same square, centred; the two
+    vials (102 wide, `min(318, floor_G(B − 36))` = 318 high) and the message window (1380 wide, `min(294, floor_G(B − 36))` = 294 high) are centred, the hover image is `min(228, message height − 48)` = 228 square at (24, 24) in the message window.
+  The rectangles at 120 / 456, in master px from the centre block's left edge and the band's top edge (x, y, width × height):
+  top: Character 12, 12, 96; Logbook 150, 12, 96; Map 282, 12, 96; Inventory 414, 12, 96; Fate Points 564, 24, 72; Sleep 2178, 24, 72; clock 2334, 18, 462 × 84; experience strip 762, 108, 1380 × 48;
+  bottom: Combat 312, 168, 120; Skills 2496, 18, 120; Spells 2334, 168, 120; Schematics 2496, 318, 120; health vial 48, 66, 102 × 318; fatigue vial 2712, 66, 102 × 318; message window 762, 78, 1380 × 294; hover image 786, 102, 228.
+  A control's device rectangle takes each edge from its own exact master position, from the centre block's left edge and the band's top edge, halves up (SWI-LAY-7). The original positions the model reads are the bar layout's
+  (the viewer's test compares them).
 - **SWI-LAY-12** A panel is the panel board (one continuous material for both panels) plus hardware layers (sockets,
   rings, vial housings, the message window frame, rails, buttons). The sides show the same board: same material, tone
   and texture, no visible join at the centre block's edges (measured by SWI-VER-5). At this stage the sides have no controls and no decor.
@@ -102,17 +113,22 @@ Codex art. It is on while the HD option and the generated interface are both on 
 bars' captures are pixel-identical to `origin/main`; only the changing text of the diagnostic palette differs).
 
 - **Scale.** The two strips keep the original's 800-unit layout and are drawn at one fractional scale, `f · 3.6 · k` (`SteamwovenHud.Plan`); `k` is 1 for the original strips' own heights (150 and 570 master px) and the smaller of
-  `top / 150` and `bottom / 570` for another pair (0.8 for 120 and 456, the owner's choice), so thinner panels give a smaller centre block (2304 px) and wider sides, not a squashed strip: the prototype's stand-in for art that will be drawn to fit the panel. The top strip stands on the lower edge of the top band and the bottom strip hangs
+  `top / 150` and `bottom / 570` for another pair (0.8 for 120 and 456, the prototype's stand-in), so thinner panels give a smaller centre block (2304 px) and wider sides, not a squashed strip: the prototype's stand-in for art that will be drawn to fit the panel (the owner's choice of #2526 is SWI-LAY-11's 2880 px centre block with controls placed by the layout model; the prototype's strips keep this stand-in scale until the runtime composition, [#2461](https://github.com/Simarglok/arcanum-steamwoven/issues/2461), or the viewer's own HUD issue lays the controls by it). The top strip stands on the lower edge of the top band and the bottom strip hangs
   from the upper edge of the bottom band, so each strip's rim meets the board's rim. At k = 1 a 41-unit strip is 147.6 · f px in a 150 · f band (the board shows above it) and a 159-unit strip is 572.4 · f px in a 570 · f band (its last
   2.4 · f px lie beyond the frame's bottom edge); at k = 0.8 they are 118.1 · f in 120 · f and 457.9 · f in 456 · f.
 - **Boards.** The band beside each strip is a generated board of the strip's own wood (colours tuned from the strip frame, grain continued from the strip's position, the rim on the edge facing the world), painted off
   the main thread (`InterfaceChromeRenderer.RenderBoard`, `SteamwovenBoardView`). The world is still drawn behind the panels over the whole frame, as in the original; the bars of a letterboxed or pillarboxed
   window are black rectangles over it.
-- **Menus.** `AreaGameBarPanel.TopInset` and `BottomInset` are now the middle band's, so every window that docks between the strips docks in it (windows keep their own whole or fitted scale until
-  [#2461](https://github.com/Simarglok/arcanum-steamwoven/issues/2461) integrates each). While a menu window is open a generated dark-wood backdrop fills the whole middle band (layer 3, under the windows).
-- **Not yet laid out by the model** (follow-ups of the per-window integration): the two-part split backdrops (SWI-BDR-5), the barter and loot windows, which hide the bars, the 800 × 600
-  windows' own scale (the inventory stays at its fitted scale on the generated backdrop), the follower portraits and the floaters (still placed on the whole-factor screen), and the sleep and fate views (their textures take the
-  strips' fractional scale while the bars show). The windows' free width is still the whole window (a window wider than the 16:9 frame can lie under a pillarbox bar). The strips are not snapped to the 6 px grid and are sampled
+- **Menus.** `AreaGameBarPanel.TopInset` and `BottomInset` are now the middle band's, so every window that docks between the strips docks in it (the windows stand in the window zone, see below). While a menu window is open a generated dark-wood backdrop fills the whole middle band (layer 3, under the windows).
+- **Windows in the window zone (ARC-UI-2575).** Every menu window of the middle band takes its place from one hook, `AreaGameBarPanel.ZoneWindow` / `ZoneScreen` (`SteamwovenWindowZone`, Godot-free, unit-tested): the window is drawn at
+  the layout's unit scale `f · 3.6` (1.8 at 1920 × 1080, 2.4 at 2560 × 1440, 3.6 at 3840 × 2160) and its 800 × 400 body is the window zone of SWI-BDR-2, centred in the middle band, so the free width is the frame and a window never lies under a
+  pillarbox bar. It covers the inventory, loot, barter (docked and undocked), character sheet (also the creation editor's screen), logbook, world map, schematics, reading, save/load and the shop strips; the pre-made browser and the
+  new-character screen take the same hook (the screen views place the 800 × 600 screen so its body lies in the zone). The hook reads the window size alone, so the windows that hide the bars (loot, barter, reading, save/load) follow the same zone. A
+  screen (an 800 × 600 original screen with its own two strips) is kept inside the frame: at 16:9 it is as high as the frame, so its body lies a little above the zone's place; at 16:10 it lies exactly in it. With the HD option or the
+  generated interface off the windows keep their own whole or fitted scale (pixel-identical). The smoke `bar --env ARC_AREA_BAR_STEAMWOVEN=1` opens the inventory, sheet, logbook, map, schematics and the save list at each size and checks each
+  drawn body against the hook, saving `…-hud-steamwoven-VARIANT-WxH-WINDOW.png`.
+- **Not yet laid out by the model** (follow-ups of the per-window integration): the two-part split backdrops (SWI-BDR-5, [#2576](https://github.com/Simarglok/arcanum-steamwoven/issues/2576)), the follower portraits and the floaters (still placed on the whole-factor screen), and the sleep and fate views (their textures take the
+  strips' fractional scale while the bars show). The strips are not snapped to the 6 px grid and are sampled
   Linear; the boards are painted at the logical scale (the prototype assumes a content scale of 1). The backdrop is for the menu windows, not for the dialog or sleep.
 - **Full-screen menus** ([#2577](https://github.com/Simarglok/arcanum-steamwoven/issues/2577), SWI-BDR-6; `SteamwovenFullScreen`, `AreaMenuArtView`, `AreaMainMenuPanel`). With the same switch (the HD option and the generated interface on) the main, single-player, new-game, in-play and options windows
   (the census' BD-H: the windows of `AreaMenuArtView`) are laid out by the model's full-screen zone: the 800 × 600 plate stands in the 2880 × 2160 · f zone centred in the frame at `f · 3.6` (sampled Linear; the pack's 16:9 plate is not used), a generated dark-wood backdrop
@@ -130,7 +146,7 @@ bars' captures are pixel-identical to `origin/main`; only the changing text of t
 - **SWI-BDR-1** An open menu window fills the whole middle band (full width and height) with its backdrop.
 - **SWI-BDR-2** The window zone, 2880 × 1440 px (the original 800 × 400 units), is centred in the middle band
   (vertical placement: [open questions](#open-questions)); window content (paper doll, grids, pages, buttons) sits in
-  it at the original offsets × 3.6, snapped to the grid.
+  it at the original offsets × 3.6, snapped to the grid. The zone scale is `f · 3.6` and so is the HUD's horizontal scale and text scale (SWI-LAY-11, #2526): the HUD and the windows share one text scale and the zone is as wide as the centre block.
 - **SWI-BDR-3** A backdrop master is 3840 × 1824 px (the middle band of a 16:10 frame at ×1: 2400 − 120 − 456). A shorter middle band
   shows its centred crop (16:9: 1584 px). A middle band a few pixels taller than 16:10 allows (a bar under 4 px dropped by
   SWI-LAY-3) gets the backdrop scaled uniformly to cover it, centred.
@@ -294,8 +310,6 @@ Ready now: #2450; the census (#2451) is done and unblocks #2454 and #2455 (#2462
 
 ## Open questions
 
-- How the controls of the centre block fit the thinner panels: SWI-LAY-11 puts them at the original offsets × 3.6, which the 120 and 456 px bands cannot hold (the original strips are 147.6 and 572.4 px high at that scale),
-  so the kit's hardware is drawn for these bands (vertical offsets compressed) or the centre block is scaled by `k` as in the prototype (2304 px); to settle in the kit design ([#2454](https://github.com/Simarglok/arcanum-steamwoven/issues/2454), [#2461](https://github.com/Simarglok/arcanum-steamwoven/issues/2461)).
 - The player's `uiScale` setting (50–300 %) in the Steamwoven look: ignored (the interface is proportional by design)
   or a multiplier on `f` with the run-time scale absorbing it.
 - Screens above ×1 (5K): scale the ×1 set up (current requirement) or add a ×4/3 set.

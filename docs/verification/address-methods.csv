@@ -913,6 +913,7 @@ tools/terrain-viewer/Godot/TerrainViewerAreaItemUse.cs,DropToGround,pending,
 tools/terrain-viewer/Godot/TerrainViewerAreaMainMenu.cs,OpenInPlayMenuOverWindows,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAreaMainMenu.cs,RouteOptionsKey,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAreaMapCompanionSmoke.cs,RequireCompanionAttackClick,exempt,reference
+tools/terrain-viewer/Godot/TerrainViewerAreaMapCompanionSmoke.cs,RequireCompanionOnLineOfFire,exempt,reference
 tools/terrain-viewer/Godot/TerrainViewerAreaMapTransfer.cs,NoteScriptCreations,pending,
 tools/terrain-viewer/Godot/TerrainViewerAreaMapTransfer.cs,QueueCreationNotice,pending,
 tools/terrain-viewer/Godot/TerrainViewerAreaMapTransfer.cs,RunMapEnteredSteps,pending,

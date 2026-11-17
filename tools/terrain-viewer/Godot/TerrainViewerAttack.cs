@@ -888,14 +888,15 @@ public partial class TerrainViewerApp
 
     /// <summary>ARC-COMBAT-012: the shot strikes the object that stopped the line of fire: an NPC through the critter attack (its own
     /// rolls), a door, window, container, scenery or trap through the object attack, and since ARC-COMBAT-015 a wall, which takes the
-    /// shot and nothing else (ledger RH5); striking a companion or an NPC without combat values is not ready, and the goal ends without
-    /// a hit. The goal's reach test (RH1) admits only a clear line, so a blocker shows up here only when the line changed after it.</summary>
+    /// shot and nothing else (ledger RH5); striking an NPC without combat values is not ready, and the goal ends without
+    /// a hit. A companion on the line is struck like any critter (ARC-COMBAT-2568, RH6). The goal's reach test (RH1) admits only a clear line, so a blocker shows up here only when the line changed after it.</summary>
     private void StrikeBlocker(AttackGoal goal, AreaObjectRecord blocker, AreaGridSession session, bool inBed = false)
     {
         var owner = _areaSession!;
         var cell = session.Chart.ToWorld(session.State.CommittedCell);
         var distance = (int)Chebyshev(blocker, (cell.X, cell.Y));
-        if (!IsAreaCompanion(blocker.Key) && _combatHost!.Target(owner, blocker.Key) is { Dead: false, Build.Combat: { } combat } npc)
+        // ARC-COMBAT-2568 (RH6, 0x4B3170, 0x4B2F60): a companion on the line of fire is struck like any critter (no leader or self test), by its identity and its live cell.
+        if (AreaTargetOf(blocker.Key) is { Dead: false, Build.Combat: { } combat } npc)
         {
             GD.Print($"ARC-COMBAT-012 line-of-fire strikes npc={npc.Entity} instead of {goal.Entity}");
             _lineOfFireStruck = npc.Entity;
@@ -913,7 +914,7 @@ public partial class TerrainViewerApp
         }
         if (blocker.Type == 0) { StrikeWall(goal, blocker, distance, true); return; }
         goal.Stop = true;
-        _attackNotice = $"the line of fire stops at {(IsAreaCompanion(blocker.Key) ? "a companion" : $"an object of type {blocker.Type}")}: striking it is not ready";
+        _attackNotice = $"the line of fire stops at {(IsAreaCompanion(blocker.Key) ? "a companion without combat values" : $"an object of type {blocker.Type}")}: striking it is not ready";
         GD.Print($"ARC-COMBAT-012 line-of-fire stopped type={blocker.Type} (not ready)");
         RefreshAreaStatus();
     }

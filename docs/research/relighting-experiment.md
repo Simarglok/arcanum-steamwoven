@@ -249,9 +249,9 @@ The owner said go (night-weighted, under the HD option). Full coverage is these 
 
 1. **Category tuning** (open, optional polish: [#2208](https://github.com/Simarglok/arcanum-steamwoven/issues/2208)): ground, wall, scenery, item, critter and roof gains and blur, per light type (torch, lantern,
    spell); tuning rounds with the owner's eye. The shader already knows the kind of each item.
-2. **Light sources** (open: [#2207](https://github.com/Simarglok/arcanum-steamwoven/issues/2207)): the map's stationary lights and the carried lights are done; object lights of the main map's scenery
-   (ARC-RENDER-030), lit eye candy (ARC-MAGIC-1229) and animated lights would feed the same list, the radius cap (32 lights) and a
-   culling by view need a decision.
+2. **Light sources** (done, [#2207](https://github.com/Simarglok/arcanum-steamwoven/issues/2207), ARC-RENDER-2207): the relit list takes the map's sector and object lights of the shown hour (the night or day form of the
+   scenery's lights, ARC-RENDER-030) where their animation poses stand (ARC-RENDER-031), and the carried lights (hero, critters, recalculated lights, and lit eye candy, ARC-MAGIC-1229); the radius cap and the view culling are
+   decided: [relit look](../rendering/area-lighting.md#relit-look-light-sources-cap-and-culling-arc-render-2207).
 3. **HD frames**: **dropped** (owner decision 2026-11-15, #2063, #2173): HD sprites of the world are not made and are out of the plan until the owner reopens it, so world frames stay 1x under the HD option; the N× path is dormant, built (gain and bevel stride) and covered by the lab twin only.
 4. **Optional stored normals**: **deferred** (it needs HD world frames, which are out of the plan; owner decision 2026-11-15): only if per-pixel derivation proves too noisy or too slow on the Deck; the lab generator is the batch
    tool, about 168 ms per megapixel in Debug.

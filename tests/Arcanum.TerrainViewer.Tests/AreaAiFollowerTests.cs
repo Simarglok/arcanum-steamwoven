@@ -288,6 +288,28 @@ public sealed class AreaAiFollowerTests
         }
     }
 
+    // ARC-WORLD-2596 (0x57B7F0 step (b), 0x441260; ledger SWB9, VC20): the rest step heals the hero's whole follower tree, a follower of a follower included, in the walk's order.
+    [TestMethod]
+    public void The_rest_step_heals_the_hero_a_companion_and_an_npc_under_the_companion()
+    {
+        var scene = Open(enemyAt: new(4, 20));
+        var (session, host, enemy, companion) = (scene.Session, scene.Host, scene.Enemy, scene.Companion);
+        Assert.AreEqual(1, host.FollowerLifeTargets().Count, "before the join only the companion");
+        Assert.AreEqual(GameSessionDisposition.Changed, session.ForceJoinLeader(session.Version, enemy, companion).Disposition);
+        var targets = host.FollowerLifeTargets();
+        CollectionAssert.AreEqual(new[] { companion, enemy }, targets.Select(target => target.Entity).ToArray(), "the direct follower, then its own tree");
+        int Damage(string entity) => session.QueryLife(targets.Single(target => target.Entity == entity)).View!.Record.State.HitPointDamage;
+        foreach (var entity in new[] { companion, enemy })
+            Assert.AreEqual(GameSessionDisposition.Changed, session.ApplyDamage(session.Version, targets.Single(target => target.Entity == entity), new LifeDamage { HitPoints = 5 }).Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, session.ApplyDamage(session.Version, SessionLifeTarget.Hero, new LifeDamage { HitPoints = 5 }).Disposition);
+        var hurt = (Damage(companion), Damage(enemy), session.QueryHeroLife()!.Record.State.HitPointDamage);
+        Assert.IsTrue(hurt.Item1 > 0 && hurt.Item2 > 0 && hurt.Item3 > 0, $"{hurt}");
+        var healed = AreaRestParty.Step(session, host, 2, heal: true);
+        Assert.AreEqual(3, healed.Healed, "the hero, the companion and the NPC under it");
+        Assert.IsTrue(Damage(companion) < hurt.Item1 && Damage(enemy) < hurt.Item2, "both followers lost hit-point damage");
+        Assert.IsTrue(session.QueryHeroLife()!.Record.State.HitPointDamage < hurt.Item3);
+    }
+
     // ARC-WORLD-2117: the leader read is the direct one, never the chain: an NPC led by a companion that is led by the hero reads the companion's charisma, a leaderless NPC reads none.
     [TestMethod]
     public void The_leader_charisma_is_the_direct_leaders_and_none_without_a_leader()

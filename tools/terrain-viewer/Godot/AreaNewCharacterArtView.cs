@@ -16,6 +16,10 @@ public partial class AreaNewCharacterArtView : Control
 {
     private static readonly AreaNewCharacterArtButton[] AllButtons = Enum.GetValues<AreaNewCharacterArtButton>();
     private IReadOnlyDictionary<int, Texture2D[]> _art = new Dictionary<int, Texture2D[]>();
+    // ARC-UI-2575: the generated frames are painted at this view's own device scale (the unit scale of the Steamwoven layout).
+    private AreaDeviceScale? _claim;
+    private AreaDeviceScale Claim => _claim ??= new(this);
+    private bool _zoned;
     private AreaPremadeBrowserFonts? _fonts;
     private AreaNewCharacterView? _view;
     private Texture2D? _portrait;
@@ -56,6 +60,7 @@ public partial class AreaNewCharacterArtView : Control
     /// <summary>The art's frames by number and the two fonts.</summary>
     public void SetArt(IReadOnlyDictionary<int, Texture2D[]> art, AreaPremadeBrowserFonts fonts)
     {
+        Claim.Release();
         _art = art ?? throw new ArgumentNullException(nameof(art));
         _fonts = fonts ?? throw new ArgumentNullException(nameof(fonts));
     }
@@ -85,6 +90,16 @@ public partial class AreaNewCharacterArtView : Control
     public void Place()
     {
         var size = GetViewportRect().Size;
+        // ARC-UI-2575: with the Steamwoven layout the screen's 800 × 400 body lies in the window zone at the layout's unit scale.
+        if (AreaGameBarPanel.ZoneScreen(size, AreaShopArtLayout.Window.Y) is { } zone)
+        {
+            Scale = new Vector2((float)zone.Scale, (float)zone.Scale);
+            Position = new Vector2((float)zone.X, (float)zone.Y);
+            _zoned = true;
+            Claim.RedrawIfScaleChanged();
+            return;
+        }
+        if (_zoned) { _zoned = false; Claim.Release(); QueueRedraw(); }
         var factor = AreaGameBarPanel.ScreenFactor(size);
         Scale = new Vector2(factor, factor);
         Position = new Vector2(AreaGameBarPanel.ScreenLeft(size, factor), MathF.Round((size.Y - AreaPremadeBrowserArtLayout.ScreenHeight * factor) / 2));
@@ -99,6 +114,8 @@ public partial class AreaNewCharacterArtView : Control
 
     public override void _Draw()
     {
+        // ARC-UI-2575: the art is shared among the screens of the pre-made family, so the view on screen claims its frames at every draw (only while the Steamwoven layout places it).
+        if (_zoned) Claim.Claim(_art.Values.SelectMany(frames => frames));
         if (_fonts is not { } fonts || _view is not { } view) return;
         AreaCharacterArtDraw.Window(this, _art, AreaNewCharacterArtLayout.BackgroundArt);
         AreaCharacterArtDraw.Character(this, fonts, view.Character, _portrait, AreaNewCharacterArtLayout.Description(view, _hover));

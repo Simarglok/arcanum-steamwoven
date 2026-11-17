@@ -167,9 +167,29 @@ public partial class AreaLogbookArtView : Control
     public void Place()
     {
         var size = GetViewportRect().Size;
+        // ARC-UI-2575: with the Steamwoven layout the window lies in the window zone at the layout's unit scale.
+        if (AreaGameBarPanel.ZoneWindow(size, AreaLogbookArtLayout.Window.Width, AreaLogbookArtLayout.Window.Height) is { } zone)
+        {
+            Scale = new Vector2((float)zone.Scale, (float)zone.Scale);
+            Position = new Vector2((float)zone.X, (float)zone.Y);
+            RedrawOnScaleChange();
+            return;
+        }
         var factor = AreaGameBarPanel.ScreenFactor(size);
         Scale = new Vector2(factor, factor);
         Position = new Vector2(AreaGameBarPanel.ScreenLeft(size, factor), AreaLogbookArtLayout.Window.Y * factor);
+        RedrawOnScaleChange();
+    }
+
+    // The generated frames are painted at the window's device scale: a new scale draws them again.
+    private float _drawnScale;
+
+    private void RedrawOnScaleChange()
+    {
+        var device = DeviceScale();
+        if (Math.Abs(device - _drawnScale) < 0.0005f) return;
+        _drawnScale = device;
+        QueueRedraw();
     }
 
     private Texture2D? Texture(int art, int frame = 0) => AreaCharacterArtDraw.Art(_art, art, frame);
