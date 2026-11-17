@@ -166,7 +166,7 @@ public sealed partial class AreaAiHost
         if (cell.X < 0 || cell.Y < 0) return "outside the cell range";
         var request = new GoalStartRequest(npc, GoalStarters.Generic, new GoalFrame(run ? GoalType.RunNearTile : GoalType.MoveNearTile, tile: cell, range: ScriptWalkRange));
         if (!StartGatePasses(request)) return "refused by the movement gate";
-        var turnsRun = run && Mover(npc).Encumbrance < AiExecutorRules.RunRefusedEncumbrance;
+        var turnsRun = run && AiExecutorRules.RunPermitted(Mover(npc));
         if (_session.QueryGoals().RunRunningGoal(npc, GoalType.RunToTile) is { } running)
         {
             if (turnsRun && (running.Flags & GoalRunFlags.Running) == 0) _session.TurnOnRunFlags(running.Handle, GoalRunFlags.Running);
