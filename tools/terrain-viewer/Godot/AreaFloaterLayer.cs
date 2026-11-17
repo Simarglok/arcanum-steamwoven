@@ -47,6 +47,10 @@ public partial class AreaFloaterLayer : CanvasLayer
     public int? FactorOverride { get; set; }
     public int Factor => FactorOverride is { } fixedFactor ? Math.Max(1, fixedFactor)
         : IsInsideTree() ? AreaGameBarPanel.ScreenFactor(GetViewport().GetVisibleRect().Size) : 1;
+    /// <summary>ARC-UI-2510: the scale the screen's pixels are drawn at: the whole <see cref="Factor"/>, or in the Steamwoven layout the strips' scale where they put the 800 × 600 screen
+    /// (<see cref="AreaGameBarPanel.ScreenScale"/>), so a line's size and rise follow the strips; a test may fix the factor.</summary>
+    public float DrawScale => FactorOverride is { } fixedFactor ? Math.Max(1, fixedFactor)
+        : IsInsideTree() ? AreaGameBarPanel.ScreenScale(GetViewport().GetVisibleRect().Size) : 1;
 
     /// <summary>Whether the original's font art draws the lines.</summary>
     internal bool ArtFontForSelfTest => _face is not null;
@@ -77,6 +81,18 @@ public partial class AreaFloaterLayer : CanvasLayer
         AddChild(_surface);
     }
 
+    // ARC-UI-2510: the strips' scale changed (the layout turned on or off, a new window size): the lines and bubbles are laid out again.
+    public override void _EnterTree() => AreaGameBarPanel.TopScreenChanged += Redraw;
+
+    public override void _ExitTree() => AreaGameBarPanel.TopScreenChanged -= Redraw;
+
+    // ARC-UI-2510: a whole scale keeps the Legacy glyphs' whole pixels (Nearest); the strips' fractional scale samples Linear, as the strips do.
+    private static void FilterFor(Control surface, float scale)
+    {
+        var filter = MathF.Abs(scale - MathF.Round(scale)) < 0.001f ? CanvasItem.TextureFilterEnum.Nearest : CanvasItem.TextureFilterEnum.Linear;
+        if (surface.TextureFilter != filter) surface.TextureFilter = filter;
+    }
+
     public void Redraw() { if (IsInsideTree()) { _surface.QueueRedraw(); _bubbleSurface.QueueRedraw(); } }
 
     /// <summary>The width of a bubble's text in the layer's font.</summary>
@@ -98,7 +114,7 @@ public partial class AreaFloaterLayer : CanvasLayer
     {
         var drawn = new List<(string, BubbleColor, int, Rect2, IReadOnlyList<(string, Vector2)>)>();
         var view = BubbleView?.Invoke() ?? _bubbleSurface.GetRect();
-        var factor = Factor;
+        var factor = DrawScale;
         foreach (var bubble in Bubbles.Bubbles.ToArray())
         {
             if (BubbleAnchor(bubble.Owner) is not { } anchor) continue;
@@ -117,7 +133,8 @@ public partial class AreaFloaterLayer : CanvasLayer
     {
         var ascent = _font.GetAscent(FontSize);
         // ARC-UI-2278: drawn in the original's pixels at the screen's whole factor; the layout returned screen pixels, so each position goes back by the factor.
-        var factor = Factor;
+        var factor = DrawScale;
+        FilterFor(_bubbleSurface, factor);
         _bubbleSurface.DrawSetTransform(Vector2.Zero, 0, new Vector2(factor, factor));
         foreach (var (_, color, _, _, scaled) in LayOutBubbles())
         {
@@ -129,8 +146,8 @@ public partial class AreaFloaterLayer : CanvasLayer
                 if (_face is { } face)
                 {
                     // The shadow first at +1,+1 (font flag 0x08), then the line.
-                    AreaArtTextDraw.Text(_bubbleSurface, face, text, (int)position.X + TextBubbleRules.ShadowOffset, (int)position.Y + TextBubbleRules.ShadowOffset, (sr, sg, sb));
-                    AreaArtTextDraw.Text(_bubbleSurface, face, text, (int)position.X, (int)position.Y, (r, g, b));
+                    AreaArtTextDraw.Text(_bubbleSurface, face, text, (int)MathF.Round(position.X) + TextBubbleRules.ShadowOffset, (int)MathF.Round(position.Y) + TextBubbleRules.ShadowOffset, (sr, sg, sb));
+                    AreaArtTextDraw.Text(_bubbleSurface, face, text, (int)MathF.Round(position.X), (int)MathF.Round(position.Y), (r, g, b));
                     continue;
                 }
                 var baseline = position + new Vector2(0, ascent);
@@ -146,7 +163,7 @@ public partial class AreaFloaterLayer : CanvasLayer
     {
         var drawn = new List<(string, string, FloaterColor, Vector2, int)>();
         if (Level == FloaterRules.Never) return drawn;
-        var factor = Factor;
+        var factor = DrawScale;
         foreach (var owner in Field.Owners)
         {
             if (Anchor(owner) is not { } anchor) continue;
@@ -165,7 +182,8 @@ public partial class AreaFloaterLayer : CanvasLayer
     {
         var ascent = _font.GetAscent(FontSize);
         // ARC-UI-2289: drawn in the original's pixels at the screen's whole factor; the layout returned screen pixels, so each position goes back by the factor.
-        var factor = Factor;
+        var factor = DrawScale;
+        FilterFor(_surface, factor);
         _surface.DrawSetTransform(Vector2.Zero, 0, new Vector2(factor, factor));
         foreach (var (_, text, color, scaledPosition, alpha) in DrawnForSelfTest())
         {
@@ -173,7 +191,7 @@ public partial class AreaFloaterLayer : CanvasLayer
             var (r, g, b) = FloaterRules.Rgb(color);
             if (_face is { } face)
             {
-                AreaArtTextDraw.Text(_surface, face, text, (int)position.X, (int)position.Y, (r, g, b), alpha: (byte)alpha);
+                AreaArtTextDraw.Text(_surface, face, text, (int)MathF.Round(position.X), (int)MathF.Round(position.Y), (r, g, b), alpha: (byte)alpha);
                 continue;
             }
             var tint = Color.Color8(r, g, b, (byte)alpha);
