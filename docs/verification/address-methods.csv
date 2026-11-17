@@ -869,6 +869,7 @@ tools/terrain-viewer/Godot/AreaWorldMapArtView.cs,AcceptNoteEdit,pending,
 tools/terrain-viewer/Godot/AreaWorldMapArtView.cs,CancelNoteEdit,exempt,host
 tools/terrain-viewer/Godot/AreaWorldMapArtView.cs,SetNoteText,exempt,host
 tools/terrain-viewer/Godot/TerrainCanvasArea.cs,AreaBodyRect,pending,
+tools/terrain-viewer/Godot/TerrainViewerAi.cs,AiItemUseScript,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAi.cs,AiObjectFacts,exempt,reference
 tools/terrain-viewer/Godot/TerrainViewerAi.cs,CarryTransformVitals,exempt,host
 tools/terrain-viewer/Godot/TerrainViewerAi.cs,RunHitScripts,exempt,host

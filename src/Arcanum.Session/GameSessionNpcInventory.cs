@@ -106,20 +106,30 @@ public sealed partial class GameSessionOwner
         if (!SessionValidation.Entity(npc) || npc.StartsWith(SessionMadeItem.Prefix, StringComparison.Ordinal) || !SessionValidation.Entity(item))
             return RejectItem(GameSessionFailure.InvalidItem);
         if (!IsCurrent(expected)) return RejectItem(GameSessionFailure.StaleVersion);
-        if (!KnownNpc(npc)) return RejectItem(GameSessionFailure.UnknownHolder);
-        if (_inventory.NpcOf(item) != npc)
-        {
-            var listed = SeedListing(npc, item);
-            if (listed is null) return RejectItem(GameSessionFailure.ItemNotAvailable);
-            if (NpcWears(npc, item, listed.Facts)) return RejectItem(GameSessionFailure.WornItemUnsupported);
-        }
-        // ARC-WORLD-103: a made item a regeneration's wield put on.
-        else if (NpcWears(npc, item, InventoryDomain.MadeFacts(default))) return RejectItem(GameSessionFailure.WornItemUnsupported);
-        if (!_durability.Records.ContainsKey(item) && _durability.Count >= _limits.MaxDurabilityRecords) return RejectItem(GameSessionFailure.BudgetExceeded);
-        if (_revision == long.MaxValue) return RejectItem(GameSessionFailure.RevisionExhausted);
+        if (NpcItemRemovalRefusal(npc, item) is { } refusal) return RejectItem(refusal);
         DestroyObject(item);
         Revise();
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, item, null, Version);
+    }
+
+    /// <summary>ARC-SCRIPT-1590: why <see cref="RemoveItemFromNpc"/> would refuse the item of the NPC, ignoring the version (an unknown holder, an item not in its current list, a worn item, a full durability budget, the revision), or null when it would delete it;
+    /// changes nothing. A use script an NPC runs for its own item checks it before it applies any effect, as <see cref="UsedItemDestructionRefusal"/> does for the hero.</summary>
+    public GameSessionFailure? NpcItemRemovalRefusal(string npc, string item)
+    {
+        ThrowIfDisposed();
+        if (!SessionValidation.Entity(npc) || npc.StartsWith(SessionMadeItem.Prefix, StringComparison.Ordinal) || !SessionValidation.Entity(item)) return GameSessionFailure.InvalidItem;
+        if (!KnownNpc(npc)) return GameSessionFailure.UnknownHolder;
+        if (_inventory.NpcOf(item) != npc)
+        {
+            var listed = SeedListing(npc, item);
+            if (listed is null) return GameSessionFailure.ItemNotAvailable;
+            if (NpcWears(npc, item, listed.Facts)) return GameSessionFailure.WornItemUnsupported;
+        }
+        // ARC-WORLD-103: a made item a regeneration's wield put on.
+        else if (NpcWears(npc, item, InventoryDomain.MadeFacts(default))) return GameSessionFailure.WornItemUnsupported;
+        if (!_durability.Records.ContainsKey(item) && _durability.Count >= _limits.MaxDurabilityRecords) return GameSessionFailure.BudgetExceeded;
+        if (_revision == long.MaxValue) return GameSessionFailure.RevisionExhausted;
+        return null;
     }
 
     /// <summary>An NPC holder of an attached seed, a party record, or an NPC holding added items (ARC-WORLD-090: not a container).</summary>
