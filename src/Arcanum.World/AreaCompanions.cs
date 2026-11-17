@@ -216,6 +216,8 @@ public sealed class AreaCompanion
     public AreaBodyCycle Cycle { get; } = new();
     /// <summary>ARC-WORLD-115: whether the AI host's last step of it runs (its gait while the host holds it).</summary>
     public bool AiRunning { get; internal set; }
+    /// <summary>ARC-RENDER-2539: whether the step the AI host gave was the stealth walk (a concealed follower below prowling expert, 0x42EDC0).</summary>
+    public bool AiSneaking { get; internal set; }
 }
 
 /// <summary>
@@ -301,7 +303,8 @@ public sealed class AreaCompanionGroup
                 actorId: ActorPrefix + template.Speaker.Index, capabilities: Capabilities) { Occupancy = Admission, CrittersPass = Passes, Timing = timing };
             var source = new AreaRouteSource(steps, chart, Planning, crittersPass: Passes, dead: key => group!.Dead?.Invoke(key) == true);
             var companion = new AreaCompanion(template, grid, new CompanionFollower(source, segmentEndCritterCheck: () => group!._segmentEndCritter));
-            grid.Gait = () => companion.LastUpdate.Action == FollowAction.Run ? MovementGait.Run : MovementGait.Walk;
+            grid.Gait = () => companion.LastUpdate.Action == FollowAction.Run ? MovementGait.Run
+                : companion.AiSneaking && group!.HeldByAi?.Invoke(companion.Entity) == true ? MovementGait.Sneak : MovementGait.Walk;
             // ARC-MAGIC-1189 (ledger TT10, SP2): the walk check before each of its steps (0x427110): a trap the companion spots on the next tile refuses the step.
             var entityId = companion.Entity;
             // A companion the AI host holds takes the host's steps, whose own walk check (AreaAiHost.StepBlocked) already rolled for this step.
@@ -349,10 +352,11 @@ public sealed class AreaCompanionGroup
     /// <paramref name="next"/>: its walk's ordered goal to that cell (<see cref="CompanionFollower.WalkTo"/>, observed at its grid's
     /// time), driven by <see cref="Drive"/>. False for a companion not here or a cell outside the step evidence.
     /// </summary>
-    public bool StepTo(string entity, CellCoord next, bool running)
+    public bool StepTo(string entity, CellCoord next, bool running, bool sneaking = false)
     {
         if (_companions.FirstOrDefault(c => c.Entity == entity) is not { } companion) return false;
         companion.AiRunning = running;
+        companion.AiSneaking = sneaking && !running;
         return companion.Follow.WalkTo(next, companion.Grid.State.Time);
     }
 

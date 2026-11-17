@@ -78,8 +78,10 @@ public partial class TerrainViewerApp
         var training = session.QueryHeroSkills()![Arcanum.Simulation.Skills.Skill.Prowling].Training;
         var (gait, origin) = (_worldGait, _gaitOrigin); SetObjectApproachGait();
         var stepped = StepGait();
-        Require(stepped == (StealthAllowsRun() ? MovementGait.Run : MovementGait.Walk), $"the stealth gait: {training} {stepped}");
-        Require(training == Arcanum.Simulation.Combat.SkillTraining.Master || stepped == MovementGait.Walk, $"below master a run is a walk: {training} {stepped}");
+        // ARC-RENDER-2539 (0x42EDC0): below expert the stealth walk (a run wanted ignored), an expert walks, a master runs while fatigue is left.
+        var below = training < Arcanum.Simulation.Combat.SkillTraining.Expert;
+        Require(stepped == (below ? MovementGait.Sneak : StealthAllowsRun() ? MovementGait.Run : MovementGait.Walk), $"the stealth gait: {training} {stepped}");
+        Require(training == Arcanum.Simulation.Combat.SkillTraining.Master || stepped != MovementGait.Run, $"below master a run is no run: {training} {stepped}");
         var followers = session.QueryConcealment().Npcs.Count;
         PaletteProwlToggle();
         // A waiting NPC keeps its own state (HK2), so only the following ones are checked.

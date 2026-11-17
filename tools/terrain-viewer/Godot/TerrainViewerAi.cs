@@ -276,7 +276,7 @@ public partial class TerrainViewerApp
         public IReadOnlyList<AreaAiNpc> Npcs { get; } = group.Companions
             .Select(c => new AreaAiNpc(c.Entity, c.Speaker.Row, World(chart.ToWorld(c.Origin)))).ToArray();
 
-        public bool Step(string entity, CellCoord next, bool running) => now()?.StepTo(entity, chart.ToChart(new(next.X, next.Y)), running) == true;
+        public bool Step(string entity, CellCoord next, bool running, bool sneaking = false) => now()?.StepTo(entity, chart.ToChart(new(next.X, next.Y)), running, sneaking) == true;
 
         public void Face(string entity, CellCoord toward) => now()?.FaceTo(entity, chart.ToChart(new(toward.X, toward.Y)));
 

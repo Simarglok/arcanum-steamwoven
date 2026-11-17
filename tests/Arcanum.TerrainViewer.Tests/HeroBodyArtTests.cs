@@ -35,6 +35,18 @@ public sealed class HeroBodyArtTests
         Assert.AreEqual(HeroBody.HumanFemale, HeroBody.For(CharacterRace.Human, CharacterGender.Female));
     }
 
+    // ARC-RENDER-2539 (MA2, 0x41D510): the stealth walk (animation 3) keeps the weapon and shield of the stand, but weapon 1 becomes weapon 0.
+    [TestMethod]
+    public void TheStealthWalkKeepsTheWeaponAndShieldAndWeaponOneBecomesZero()
+    {
+        var elf = HeroBody.For(CharacterRace.Elf, CharacterGender.Male)!.Value;
+        Assert.AreEqual(0x2C0000C0u, elf.Selector(ActorDiagnosticProfile.HumanSneakSelector));
+        Assert.AreEqual(0x2C0000C3u, (elf with { Weapon = 3 }).Selector(ActorDiagnosticProfile.HumanSneakSelector), "a weapon stays");
+        Assert.AreEqual(0x2C0000C0u, (elf with { Weapon = 1 }).Selector(ActorDiagnosticProfile.HumanSneakSelector), "weapon 1 becomes 0");
+        Assert.AreEqual(0x2C0800C3u, (elf with { Weapon = 3, Shield = 1 }).Selector(ActorDiagnosticProfile.HumanSneakSelector), "the shield stays");
+        Assert.AreEqual("art/critter/EFM/EFMUWXAd.art", elf.ArtPath(elf.Selector(ActorDiagnosticProfile.HumanSneakSelector)));
+    }
+
     [TestMethod]
     public void TheBodyRewritesOnlyTheBodyAndGenderBitsOfTheHumanSelectors()
     {
