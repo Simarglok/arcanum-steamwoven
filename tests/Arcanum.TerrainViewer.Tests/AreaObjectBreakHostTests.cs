@@ -23,12 +23,13 @@ public sealed class AreaObjectBreakHostTests
     private static AreaObjectKey Key(int index) => new(new string('a', 64), 1, AreaSourceKind.Mobile, 1, index, index * 100L, new string((char)('a' + index), 64), 100);
 
     // A row on (10 + index, 20) with a use slot (point 1) and a BUST slot (point 30); a script of 0 leaves the slot out.
-    private static AreaObjectRecord Row(int index, int type, int use, int bust, int destroy = 0)
+    private static AreaObjectRecord Row(int index, int type, int use, int bust, int destroy = 0, int taking = 0)
     {
         var slots = new List<AreaSparseElement>();
         if (use != 0) slots.Add(new(TrapUse, [0, 0, use]));
         if (destroy != 0) slots.Add(new(ScrPoint.Destroy, [0, 0, destroy]));
         if (bust != 0) slots.Add(new(BustPoint, [0, 0, bust]));
+        if (taking != 0) slots.Add(new(ScrPoint.TakingDamage, [0, 0, taking]));
         var fields = new List<AreaFieldValue> { new(31, AreaPresence.Array, AreaValueOrigin.Instance, null, slots, null) };
         return new(Key(index), 0, type, 0, "p", "p", "r", "s", AreaScope.Core, null, 10 + index, 20, Arcanum.Data.Area.AreaDisposition.BodyEligibleConditionally,
             [], fields, true, true, true);
@@ -90,6 +91,8 @@ public sealed class AreaObjectBreakHostTests
             // 839: a destroy point that sets a local flag and skips the default (its slot is kept, the object stays); 840: a destroy point that teleports its scenery (a nested effect no host models: the point's own run is not applied).
             Write("scr/00839localskip.scr", Program(0, Do(new(ScrCatalogue.Action.SetLocalFlag, N(1))), Do(new(skip))));
             Write("scr/00840nestedrefused.scr", Program(0, Do(new(ScrCatalogue.Action.Teleport, (Attachee, -1), N(5000), N(30), N(40))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
+            // ARC-SCRIPT-2513 (BS3d): a taking-damage script with the commands of the installed container script 2827: set a global flag, play a script eye candy on the attachee and destroy a scenery (here its own attachee).
+            Write("scr/00841taking.scr", Program(0, Do(new(ScrCatalogue.Action.SetGlobalFlag, N(2306))), Do(new(ScrCatalogue.Action.PlayScriptEyeCandy, N(7), (Attachee, -1))), Do(new(ScrCatalogue.Action.Destroy, (Attachee, 0))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
             Write("scr/00831local.scr", Program(0, Do(new(ScrCatalogue.Action.SetLocalFlag, N(1))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
             using var content = ScriptContent.Open(ContentMountPlan.Discover(root.FullName, "Syn").Plan!).Content!;
             test(content);
@@ -180,6 +183,42 @@ public sealed class AreaObjectBreakHostTests
 
     private static bool Destroyed(GameSessionOwner session, AreaObjectRecord row) =>
         session.QueryObjectCondition(new SessionMapId(1), AreaUseScriptHost.EntityId(row), Arcanum.Simulation.Combat.DamageableObjectKind.Scenery) == SessionObjectCondition.Destroyed;
+
+    // ARC-SCRIPT-2513 (BS3d): the taking-damage point runs under a set of its own, which holds play script eye candy (120) and destroy (68) like the bust set, so the container script 2827's commands apply whole.
+    [TestMethod]
+    public void A_taking_damage_script_may_play_an_eye_candy_and_destroy_a_scenery_and_the_run_applies()
+    {
+        Assert.IsTrue(AreaUseScriptHost.TakingDamageAdmission.Actions.Contains(ScrCatalogue.Action.Destroy));
+        Assert.IsTrue(AreaUseScriptHost.TakingDamageAdmission.Actions.Contains(ScrCatalogue.Action.PlayScriptEyeCandy));
+        Assert.IsFalse(AreaUseScriptHost.HeartbeatAdmission.Actions.Contains(ScrCatalogue.Action.PlayScriptEyeCandy), "the heartbeat set stays narrow");
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var chest = Row(1, Scenery, 0, 0, taking: 841);
+            var (host, _) = Hosts(session, content, new Probe(), true, chest);
+            var ran = host.RunTakingDamage(AreaUseScriptHost.EntityId(chest), null, session.Rules.Scripts);
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, ran.Outcome, ran.Detail);
+            Assert.IsTrue(host.GlobalFlag(2306), "the run's flag applied with the rest");
+            Assert.IsTrue(Destroyed(session, chest), "the destroy of the scenery applied");
+            var candies = host.TakeEyeCandies();
+            Assert.AreEqual(1, candies.Count, "the script eye candy was queued for the viewer");
+        });
+    }
+
+    // ARC-SCRIPT-2513 (BS3d): the taking-damage set admits the commands, but a destroy of an object other than a scenery or an NPC of the shown map is still refused whole, nothing of the run applied.
+    [TestMethod]
+    public void A_taking_damage_script_that_destroys_a_container_is_refused_whole()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var chest = Row(1, Container, 0, 0, taking: 841);
+            var (host, _) = Hosts(session, content, new Probe(), true, chest);
+            var ran = host.RunTakingDamage(AreaUseScriptHost.EntityId(chest), null, session.Rules.Scripts);
+            Assert.AreEqual(AreaScriptedUseOutcome.EffectsRejected, ran.Outcome, ran.Detail);
+            Assert.IsFalse(host.GlobalFlag(2306), "nothing applied before the refusal");
+        });
+    }
 
     // ARC-SCRIPT-2501 (BS3, TD2): a script's destroy of a scenery of the shown map is applied: the session records the scenery destroyed (the view reads it as gone), and the rest of the run applies.
     [TestMethod]
