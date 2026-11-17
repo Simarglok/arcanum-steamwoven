@@ -1127,7 +1127,7 @@ design (the chance is 5 per cent of each firing, one firing per 300 to 700 game 
 
 ## ARC-SCRIPT-1481 — food that heals and cures poison (2026-11-13)
 
-The food use script 30282 (the generic magic potion on 729 food items, most of them in the main map's chests and on its NPCs) runs when the hero eats the item ([VT1–VT8](../research/ledger/scripts.md#vitals-commands-and-the-food-use-script-arc-script-1481)). Use a food item that holds a potion in the hero's own inventory window (right click).
+The food use script 30282 (the generic magic potion on 729 food items, most of them in the main map's chests and on its NPCs) runs when the hero eats the item ([VT1–VT8](../research/ledger/scripts.md#vitals-commands-and-the-food-use-script-arc-script-1481)). Use a food item that holds a potion in the hero's own inventory window (right click). Since ARC-SCRIPT-1590 an NPC that holds such a food and chooses an AI-action item to heal itself runs the same script (heals, cures, loses the food); watch for the `ARC-SCRIPT-1590 item-use` lines in the viewer output.
 
 | # | Step | Expected (from the original executable and data) | Status |
 | --- | --- | --- | --- |

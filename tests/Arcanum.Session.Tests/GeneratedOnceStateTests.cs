@@ -357,6 +357,56 @@ public sealed class GeneratedOnceStateTests
         Assert.IsFalse(plain.IsItemDestroyed("axe"));
     }
 
+    // ARC-WORLD-2502 (DD2, RK13): the script destroy of a container with flag 0x200 never generated regenerates it first (0x4639E0 → 0x463E20): the clear destroys every item but the persistent ones, so only a persistent
+    // invulnerable item (the ring) is dropped; the goods the generation makes carry no flag and stay in the destroyed container.
+    [TestMethod]
+    public void A_script_destroyed_container_with_flag_0x200_generates_first_and_drops_only_the_persistent_invulnerable_item()
+    {
+        var seed = Seed();
+        var flagged = new SessionMapInventorySeed(seed.Holders, seed.Items.Select(item => item.Entity is "axe" or "ring" ? item with { Facts = item.Facts with { Invulnerable = true } } : item).ToArray());
+        var owner = GameSessionOwner.Create(Descriptor() with { Hero = HeroStateTests.HalfElf() with { Background = HeroBackground } }).Owner!;
+        using var _ = owner;
+        Assert.AreEqual(GameSessionFailure.None, owner.AttachMapInventory(Exterior, flagged).Failure);
+        owner.GenerateOnceWorld = () => new World();
+        var revision = owner.Version.Revision;
+        Assert.IsNull(owner.DestroyMapContainerRefusal(Exterior, "crate", CrateCell, junkPile: false));
+        var destroyed = owner.DestroyMapContainer(owner.Version, Exterior, "crate", CrateCell, junkPile: false);
+        Assert.AreEqual(GameSessionDisposition.Changed, destroyed.Disposition);
+        Assert.AreEqual(SessionObjectCondition.Destroyed, owner.QueryObjectCondition(Exterior, "crate", DamageableObjectKind.Container));
+        Assert.IsTrue(owner.QueryContainerGenerated(Exterior, "crate"), "recorded as generated");
+        Assert.IsTrue(owner.IsItemDestroyed("axe") && owner.IsItemDestroyed("gold-a"), "the clear destroys the invulnerable axe too: it is not persistent");
+        CollectionAssert.AreEqual(new[] { "ring" }, OnTheGround(owner), "the persistent invulnerable ring lies on the container's cell: ");
+        Assert.AreEqual(CrateCell, Lying(owner).Single().Cell);
+        Assert.IsTrue(Items(owner, "crate").Length > 0, "the generated goods stay in the destroyed container's list");
+        Assert.AreEqual(revision + 3, owner.Version.Revision, "the generation, the destroy and the drops");
+        // Without the host's world the container is not generated and nothing but the flagged items is dropped.
+        var plain = GameSessionOwner.Create(Descriptor() with { Hero = HeroStateTests.HalfElf() with { Background = HeroBackground } }).Owner!;
+        using var _2 = plain;
+        Assert.AreEqual(GameSessionFailure.None, plain.AttachMapInventory(Exterior, flagged).Failure);
+        Assert.AreEqual(GameSessionDisposition.Changed, plain.DestroyMapContainer(plain.Version, Exterior, "crate", CrateCell, junkPile: false).Disposition);
+        Assert.IsFalse(plain.QueryContainerGenerated(Exterior, "crate"));
+        CollectionAssert.AreEquivalent(new[] { "axe", "ring" }, OnTheGround(plain));
+    }
+
+    // ARC-WORLD-2502: a refused drop (the cell does not fit) comes before the generation: the container stays whole and ungenerated.
+    [TestMethod]
+    public void A_refused_destroy_of_a_container_with_flag_0x200_generates_nothing()
+    {
+        var seed = Seed();
+        var flagged = new SessionMapInventorySeed(seed.Holders, seed.Items.Select(item => item.Entity is "ring" ? item with { Facts = item.Facts with { Invulnerable = true } } : item).ToArray());
+        var owner = GameSessionOwner.Create(Descriptor() with { Hero = HeroStateTests.HalfElf() with { Background = HeroBackground } }).Owner!;
+        using var _ = owner;
+        Assert.AreEqual(GameSessionFailure.None, owner.AttachMapInventory(Exterior, flagged).Failure);
+        owner.GenerateOnceWorld = () => new World();
+        var bad = new CellCoord(-1, 5);
+        Assert.AreEqual(GameSessionFailure.DropTileUnfit, owner.DestroyMapContainerRefusal(Exterior, "crate", bad, junkPile: false));
+        var revision = owner.Version.Revision;
+        Assert.AreEqual(GameSessionDisposition.Rejected, owner.DestroyMapContainer(owner.Version, Exterior, "crate", bad, junkPile: false).Disposition);
+        Assert.AreEqual(revision, owner.Version.Revision, "nothing changed");
+        Assert.IsFalse(owner.QueryContainerGenerated(Exterior, "crate"));
+        Assert.IsFalse(owner.IsItemDestroyed("axe"));
+    }
+
     [TestMethod]
     public void Without_the_hosts_seed_facts_a_broken_container_spills_the_stored_items_and_stays_ungenerated()
     {

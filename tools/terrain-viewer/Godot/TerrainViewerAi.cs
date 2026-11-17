@@ -217,6 +217,8 @@ public partial class TerrainViewerApp
             Traps = AreaTrapsNow,
             // ARC-WORLD-114: the NPCs' first-heartbeat and heartbeat scripts (the Crash Site's unchosen pre-made heroes die by theirs).
             Heartbeat = AiHeartbeat,
+            // ARC-SCRIPT-1590: an NPC's item use runs the item's use script (the food script 30282 heals the eater and destroys the food).
+            ItemUseScript = AiItemUseScript,
             CatchingThief = AiCatchingThief,
             GuardCatchingThief = AiGuardCatchingThief,
             // ARC-DEV-258 (MIG13 S14n): an NPC's thrown grenade flies as a projectile.
@@ -374,6 +376,22 @@ public partial class TerrainViewerApp
             GD.Print($"ARC-WORLD-114 heartbeat npc={npc} point={scrPoint} script={ran.Run.Script} outcome={ran.Run.Outcome} states="
                 + string.Join(",", states.Select(s => $"{s.Change}:{s.Object.Code}")));
         }
+        return ran.Run.Outcome == Arcanum.Scripting.Scr.ScrOutcome.RunDefault;
+    }
+
+    /// <summary>ARC-SCRIPT-1590 (item use 0x462CC0 → 0x441980, ledger IU2, VT8): the use script of an item an NPC of the shown map holds, through the shown map's use-script host with the NPC as the user and triggerer and the target as the extra object ("pc" is the hero).
+    /// True lets the use go on (the script ran default, or none that runs: a refused or unapplied run goes on as without a script, logged once); false when the script skipped the default.</summary>
+    private bool AiItemUseScript(string npc, string item, string? target)
+    {
+        if (_readyArea is not { } area || _areaSession is not { } session || UseScriptHost(area.Snapshot) is not { } host) return true;
+        var ran = Awarded(host, host.RunItemUse(CurrentAreaMap, item, session.Rules.Scripts, target, new(CurrentAreaMap, npc)));
+        if (ran.Outcome != AreaScriptedUseOutcome.NoTeleport)
+        {
+            if (_heartbeatRefusalsLogged.Add($"use|{npc}|{item}|{ran.Outcome}|{ran.Run?.Script}"))
+                GD.Print($"ARC-SCRIPT-1590 item-use-refused npc={npc} item={item} outcome={ran.Outcome} detail={ran.Detail}");
+            return true;
+        }
+        GD.Print($"ARC-SCRIPT-1590 item-use npc={npc} item={item} script={ran.Run!.Script} outcome={ran.Run.Outcome} states={string.Join(",", ran.Run.Effects.ObjectStates.Select(s => $"{s.Change}:{s.Object.Code}"))}");
         return ran.Run.Outcome == Arcanum.Scripting.Scr.ScrOutcome.RunDefault;
     }
 
@@ -660,6 +678,18 @@ public partial class TerrainViewerApp
         if (_areaSession is not { } session || _combatHost?.Build(session, CurrentAreaMap, npc).Combat?.Target is not { } target) return null;
         return session.QueryLife(target).View is { } life
             ? new(life.Status.HitPoints, life.Status.MaxHitPoints, life.Status.Fatigue, life.Status.MaxFatigue, life.Record.State.PoisonLevel) : null;
+    }
+
+    /// <summary>ARC-SCRIPT-2506 (TI5, F3, 0x43D530): sets the critter a script's transform made to the old NPC's hit-point and fatigue percentages: the new critter is synced into the hosts first, its maxima come from its own life facts and the
+    /// damage (<see cref="AreaUseScriptHost.TransformDamage"/>) goes through the session's life step as a plain packet (no resistance, no script, no floater). False when the critter has no combat values or the session refuses.</summary>
+    private bool CarryTransformVitals(GameSessionOwner session, string entity, int hitPointPercent, int fatiguePercent)
+    {
+        if (AreaAiHostNow() is { } ai) SyncCreatedCritters(session, ai);
+        if (_combatHost?.Build(session, CurrentAreaMap, entity).Combat?.Target is not { } target || session.QueryLife(target).View is not { } life) return false;
+        var (hitPoints, fatigue) = AreaUseScriptHost.TransformDamage(hitPointPercent, life.Status.MaxHitPoints, fatiguePercent, life.Status.MaxFatigue);
+        var hit = session.ApplyDamage(session.Version, target, new LifeDamage { HitPoints = hitPoints, Fatigue = fatigue });
+        GD.Print($"ARC-SCRIPT-2506 transform-vitals entity={entity} hp%={hitPointPercent} fatigue%={fatiguePercent} damage={hitPoints}/{fatigue} disposition={hit.Disposition} failure={hit.Failure}");
+        return hit.Disposition != GameSessionDisposition.Rejected;
     }
 
     /// <summary>ARC-SCRIPT-1562 (WE2, CP7, CP8): the effective magick-tech aptitude (stat 16) of an NPC of the shown map for a combat-point script's magick-tech adjustments (91, 80): its combat values under its effect list and its poison and crippled legs

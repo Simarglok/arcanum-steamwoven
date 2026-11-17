@@ -3,6 +3,7 @@ using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Equipment;
 using Arcanum.Simulation.Magic;
 using Arcanum.Simulation.Movement;
+using Arcanum.Simulation.Randomness;
 
 namespace Arcanum.Session;
 
@@ -33,6 +34,8 @@ public sealed record SessionHeroThrow(string Item, SessionGridMoveItem Facts, Ce
     public IReadOnlyDictionary<EquipmentSlot, SessionWearItem>? StruckWorn { get; init; }
     /// <summary>ARC-WORLD-1149: the light level 0..255 (255: full light) at the struck critter's cell (as <see cref="SessionAttack.TargetLight"/>); null: full light.</summary>
     public int? StruckLight { get; init; }
+    /// <summary>ARC-COMBAT-2435 (ledger TW11): the light level 0..255 at the target tile of a throw that names no struck critter (the location throw's hit roll reads it, 0x4C7160); null: full light. The line of fire of such a throw is <see cref="LineOfFire"/> (its cost; a blocker would be the struck critter).</summary>
+    public int? TargetLight { get; init; }
     public Arcanum.Simulation.Items.IDropMap? DropMap { get; init; }
     public ISessionItemTriggers? ItemTriggers { get; init; }
     /// <summary>ARC-COMBAT-1955 (0x466E00 → 0x467860, 0x4B3C00 → 0x441980): the host that runs the item's removal scripts (wield off 25 for a worn item, remove-item 28) and its throw script (point 6) before the throw; without it an
@@ -52,6 +55,8 @@ public sealed record SessionHeroThrowResult(GameSessionDisposition Disposition, 
 {
     public IReadOnlyList<SessionShot> Shots => Attack?.Shots ?? [];
     public CellCoord? Destination { get; init; }
+    /// <summary>ARC-COMBAT-2435: the session threw the item at the location (a throw that named no struck critter, or one whose struck critter's attack was refused after the scripts ran): the host treats no critter as aimed at.</summary>
+    public bool AtLocation { get; init; }
     private readonly IReadOnlyList<SessionItemTriggerResult>? _removalSpells;
     public IReadOnlyList<SessionItemTriggerResult> RemovalSpells { get => _removalSpells ?? []; init => _removalSpells = value; }
     /// <summary>ARC-COMBAT-1955 (0x4B3C00): the item's throw script (point 6) answered skip default, so nothing was thrown: the item is back in the hero's list unworn (the original puts it on the hero's tile and inserts it again, 0x4415C0,
@@ -194,7 +199,7 @@ public sealed partial class GameSessionOwner
             facts.ScriptPoints.Any(point => point is < 0 or > SessionScriptPoint.Last)) return Refused(GameSessionFailure.InvalidItem);
         var struck = request.Struck is not null;
         if (!DropCellFits(request.Target) || struck != request.StruckCell.HasValue || request.StruckCell is { } at && !DropCellFits(at) ||
-            request.LineOfFire is { Cost: < 0 or > AttackResolver.MaxMagnitude }) return Refused(GameSessionFailure.InvalidAttack);
+            request.LineOfFire is { Cost: < 0 or > AttackResolver.MaxMagnitude } || request.TargetLight is < 0 or > AttackRules.MaxLightLevel) return Refused(GameSessionFailure.InvalidAttack);
         var gold = request.Item == SessionHeroGrid.GoldEntity;
         if ((gold ? _inventory.Gold > 0 ? SessionHeroGrid.GoldKind : (SessionItemKind?)null : HeldKind(request.Item)) is not { } kind) return Refused(GameSessionFailure.ItemNotAvailable);
         if (kind != facts.Kind) return Refused(GameSessionFailure.InventoryMismatch);
@@ -268,17 +273,98 @@ public sealed partial class GameSessionOwner
             if (ShotsInFlight > MaxShotsInFlight - 1) return Refused(GameSessionFailure.BudgetExceeded);
             if (!IsCurrent(expected)) return Refused(GameSessionFailure.StaleVersion);
             if (_revision == long.MaxValue) return Refused(GameSessionFailure.RevisionExhausted);
-            var thrownItem = split ? SplitForThrow(request.Item, request.Count!.Value, request.SplitKind!.Value) : request.Item;
-            Throw(thrownItem, null);
-            // A shot without a target: any critter it strikes on the way takes a forced hit (LandShot), its item lands where it ends.
-            var shots = Launch(new PendingShot(ShotFacts.Of(hero), AttackResolver.ForcedHit(false), false, null, null)
-                { Thrown = new SessionThrownShot(thrownItem, range), WeaponItem = thrownItem }, 1);
-            result = new(GameSessionDisposition.Changed, GameSessionFailure.None,
-                new(GameSessionDisposition.Changed, GameSessionFailure.None, null, null, null, null, null, GameSessionFailure.None, Version) { Shots = shots },
-                Version) { Destination = request.Target };
+            var located = ThrowAtLocation(request, hero, range, split);
+            if (located.Failure != GameSessionFailure.None) return Refused(located.Failure);
+            result = located.Result!;
         }
         if (triggers is null || split) return With(result);
         return With(result with { RemovalSpells = RemovalSpellSteps(triggers, request.Item, wornBefore), Version = Version });
+    }
+
+    /// <summary>
+    /// ARC-COMBAT-2435 (ledger TW11, 0x4C7160 with no defender, 0x4B39B0): the hero's throw that names no struck critter (a tile press, the default-throw click, a clear line of fire) rolls as a throw at a location: the hit location, the technology
+    /// failure and magick cancel rolls (they cannot succeed for a throw), the hit and the critical (<see cref="AttackRequest.NoDefender"/>: only the distance, the line of fire's cost, the light at the tile and the thrower's own flags count, no dodge),
+    /// the critical miss's own rolls and, for any miss, the scatter direction. A hit flies to the tile and lands striking nothing; a miss flies toward its scattered tile and strikes the critters it passes (the shot's landing); a critical miss turns
+    /// on the hero as for any attack (its damage step and the item steps after it).
+    /// </summary>
+    private (GameSessionFailure Failure, SessionHeroThrowResult? Result) ThrowAtLocation(SessionHeroThrow request, SessionHeroAttack hero, int range, bool split)
+    {
+        // The hero's own checks, as the attack's: its worn items; an inactive hero throws nothing (the press puts it back, 0x54E021).
+        var heroSide = new SessionWearSide { Life = SessionLifeTarget.Hero, Worn = request.HeroWorn };
+        if (!ValidWear(heroSide, new SessionWearSide(), targetBroken: false, wear: null)) return (GameSessionFailure.InvalidWear, null);
+        var life = _life.Hero!.Value.State;
+        if (!LifeRules.Evaluate(life, HeroLifeFacts(life)).IsActive) return (GameSessionFailure.None, new(GameSessionDisposition.NoChange, GameSessionFailure.None, null, Version));
+        if (ShotsInFlight > MaxShotsInFlight - 1) return (GameSessionFailure.BudgetExceeded, null);
+        // A location throw may take three revisions before the damage (the fate, the item leaving the hand, the self-hit).
+        if (_revision >= long.MaxValue - 2) return (GameSessionFailure.RevisionExhausted, null);
+        var distance = ProjectileRules.Distance(_actor.Cell, request.Target);
+        if (distance < 0) return (GameSessionFailure.InvalidAttack, null);
+        // A throw whose struck critter's attack was refused after the scripts ran flies to the location: the line carried is the struck critter's, not the location's, so it counts for nothing.
+        var line = request.Struck is null ? request.LineOfFire : null;
+        var check = new AttackRequest
+        {
+            Attacker = hero.Combatant, Target = hero.Combatant with { LightLevel = request.TargetLight ?? AttackRules.MaxLightLevel }, TargetKind = AttackTargetKind.Critter,
+            Weapon = hero.Weapon, Skill = hero.Skill, SkillLevel = hero.SkillLevel, Training = hero.Training,
+            Distance = distance, CoverRating = line?.Cost ?? 0, LineOfFireBlocked = line?.Blocked ?? false,
+            Difficulty = _difficulty, DeferHit = true, NoDefender = true,
+        };
+        var rolls = new TrialCombatRolls(new SeededRandom(_random.Seed, _random.Draws));
+        AttackResolution? resolved = null;
+        int? scatterRotation = null;
+        try
+        {
+            resolved = AttackResolver.Resolve(check, rolls, OriginalCriticalEffects.Instance, _rules.Combat);
+            // 0x4B39B0 (0x4CEF00(0, 7)): a missed throw's direction follows the dispatcher's decisions.
+            if (resolved.Refusal == AttackRefusal.None && resolved.Outcome is not (AttackOutcome.Hit or AttackOutcome.CriticalHit))
+                scatterRotation = rolls.Roll(CombatRollPurpose.ThrowScatter, 0, ThrowRules.ScatterDirections - 1);
+        }
+        // The project's random stream is bounded and the original's is not: a throw whose rolls the stream cannot give flies to its tile unrolled (a thrown item is never refused for it once a script ran).
+        catch (TrialCombatRolls.ExhaustedException) { resolved = null; scatterRotation = null; }
+        catch (ArgumentException) { return (GameSessionFailure.InvalidAttack, null); }
+        if (resolved is null)
+        {
+            var legacyItem = split ? SplitForThrow(request.Item, request.Count!.Value, request.SplitKind!.Value) : request.Item;
+            Throw(legacyItem, null);
+            var flying = Launch(new PendingShot(ShotFacts.Of(hero), AttackResolver.ForcedHit(false), false, null, null)
+                { Thrown = new SessionThrownShot(legacyItem, range), WeaponItem = legacyItem }, 1);
+            return (GameSessionFailure.None, new(GameSessionDisposition.Changed, GameSessionFailure.None,
+                new(GameSessionDisposition.Changed, GameSessionFailure.None, null, null, null, null, null, GameSessionFailure.None, Version) { Shots = flying }, Version) { Destination = request.Target, AtLocation = true });
+        }
+        var resolution = resolved;
+        if (resolution.Refusal != AttackRefusal.None) return (GameSessionFailure.InvalidAttack, null);
+        _random = rolls.Trial;
+        // The fate the resolver used (FT6) is cleared at once, in a revision of its own before the item leaves.
+        if (resolution.Fate != FateUse.None)
+        {
+            ClearUsedAttackFate(resolution.Fate);
+            Revise();
+        }
+        var thrownItem = split ? SplitForThrow(request.Item, request.Count!.Value, request.SplitKind!.Value) : request.Item;
+        heroSide = heroSide with { Worn = Throw(thrownItem, request.HeroWorn) };
+        var scatter = scatterRotation is { } rotation ? ScatterThrow(request.Target, hero.SkillLevel, rotation, request.DropMap) : (CellCoord?)null;
+        var hit = resolution.Outcome is AttackOutcome.Hit or AttackOutcome.CriticalHit;
+        var shots = Launch(new PendingShot(ShotFacts.Of(hero), resolution, hit, null, null)
+            { Thrown = new SessionThrownShot(thrownItem, range), WeaponItem = thrownItem }, 1);
+        var destination = scatter ?? request.Target;
+        if (resolution.Damage is null || LifeDamage.FromAttack(resolution) is not { } damage)
+            return (GameSessionFailure.None, new(GameSessionDisposition.Changed, GameSessionFailure.None,
+                new(GameSessionDisposition.Changed, GameSessionFailure.None, resolution, null, null, null, null, GameSessionFailure.None, Version) { Shots = shots, Scatter = scatter }, Version) { Destination = destination, AtLocation = true });
+
+        // A critical miss: the throw turns on the hero (the attacker is the victim, as in any attack's critical-miss procedure).
+        var applied = ApplyDamage(Version, SessionLifeTarget.Hero, damage, killer: null);
+        var recipient = resolution.Damage.Recipient;
+        if (applied.Disposition == GameSessionDisposition.Rejected)
+            return (GameSessionFailure.None, new(GameSessionDisposition.Changed, GameSessionFailure.None,
+                new(GameSessionDisposition.Changed, GameSessionFailure.None, resolution, recipient, null, null, null, applied.Failure, Version) { Shots = shots, Scatter = scatter }, Version) { Destination = destination, AtLocation = true });
+        var outcome = applied.Outcome!;
+        var stepFailure = RecordHeroInjuries(outcome.Events, SelfInflictedCause);
+        SessionAttackWearResult? wear = null;
+        var criticals = new List<SessionCriticalStep>();
+        if (stepFailure == GameSessionFailure.None)
+            (wear, stepFailure) = CriticalAndWearSteps(resolution, outcome, heroSide, new SessionWearSide(), null, null, request.DropMap, criticals);
+        return (GameSessionFailure.None, new(GameSessionDisposition.Changed, GameSessionFailure.None,
+            new(GameSessionDisposition.Changed, GameSessionFailure.None, resolution, recipient, outcome, null, null, stepFailure, Version)
+            { Wear = wear, Criticals = criticals, Shots = shots, Scatter = scatter, ItemEvents = applied.ItemEvents }, Version) { Destination = destination, AtLocation = true });
     }
 
     // The hero as it throws: the throwing skill, the item's thrown range (the check's and the flight's, PF9) and, as the attack's weapon range (0x465E30: a weapon's range field and magic adjustment, anything else 1), its reach.
