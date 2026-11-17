@@ -146,6 +146,26 @@ public sealed class AreaCritterStateScriptTests
     }
 
     [TestMethod]
+    public void Reaction_of_an_NPC_toward_the_PC_is_the_worlds_standard_reaction_and_not_modelled_for_other_pairs()
+    {
+        using var session = ConversationSessionFixture.CreateWithHero(1);
+        var npc = Npc(1);
+        var scenery = Plain(2, ScenerySlotType);
+        var asked = new List<string>();
+        var world = new AreaScriptWorld(() => null, _ => false, _ => null, () => null, StandardReaction: entity => { asked.Add(entity); return 61; });
+        var host = Host(session, world, npc, scenery);
+        Assert.AreEqual(61, host.ReactionOf(Ref(npc), host.Pc), "an NPC of the shown map, speaker or not");
+        CollectionAssert.AreEqual(new[] { AreaUseScriptHost.EntityId(npc) }, asked);
+        Assert.AreEqual(50, host.ReactionOf(host.Pc, host.Pc), "the PC as the first object is no NPC: 50");
+        Assert.AreEqual(50, host.ReactionOf(host.Pc, Ref(npc)), "a first object that is no NPC gives 50 for any second object");
+        Assert.IsNull(host.ReactionOf(Ref(npc), Ref(npc)), "an NPC toward an object that is not the PC (its enemy list) is not modelled");
+        Assert.AreEqual(50, host.ReactionOf(Ref(scenery), host.Pc), "a scenery is no NPC: 50");
+        Assert.IsNull(host.ReactionOf(new(1, "oid:nobody"), host.Pc), "an NPC the host has no row for");
+        Assert.AreEqual(1, asked.Count, "only the NPC toward the PC was asked");
+        Assert.IsNull(Host(session, null, npc).ReactionOf(Ref(npc), host.Pc), "a world without the answer");
+    }
+
+    [TestMethod]
     public void Obj_is_in_dialog_reads_the_conversation_slot_of_an_NPC_and_the_PC_s_dialog_slot_for_every_other_object()
     {
         using var session = ConversationSessionFixture.CreateWithHero(1);

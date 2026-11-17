@@ -114,7 +114,7 @@ public sealed class AreaEndingScriptsRealDataTests
         var rows = new List<AreaObjectRecord> { kerghan };
         for (var i = 0; i < nearNames.Length; i++) rows.Add(Npc(2 + i, 0, nearNames[i]));
         var made = new List<string>(); var attacks = new List<string>();
-        var world = new AreaScriptWorld(() => new(12, 20), _ => false, prototype => prototype == 8278 ? new AreaPrototypeItem(new(SessionItemType.Food, 8278, 7001, 8278), 0x1234, new(1)) : null, () => null, Critter: prototype => prototype == 27368, CritterMade: made.Add, Vitals: _ => new AreaScriptVitals(40, 40, 20, 20, 0),
+        var world = new AreaScriptWorld(() => new(12, 20), _ => false, prototype => prototype == 8278 ? new AreaPrototypeItem(new(SessionItemType.Food, 8278, 7001, 8278), 0x1234, new(1)) : null, () => null, Critter: prototype => prototype == 27368, StandardReaction: npc => session.QueryReaction(npc, new(50, Arcanum.Simulation.Character.CharacterRace.Human, false, false), session.QueryHeroReactionFacts(0, 0)!).View?.Effective, CritterMade: made.Add, Vitals: _ => new AreaScriptVitals(40, 40, 20, 20, 0),
             ScriptAttack: (attacker, victim) => { attacks.Add(attacker + ">" + victim); return "ok"; });
         var map = new SessionMapId(1);
         var speaker = new AreaSpeaker(0, kerghan, 1105, kerghan.WorldX!.Value, kerghan.WorldY!.Value);
@@ -179,7 +179,7 @@ public sealed class AreaEndingScriptsRealDataTests
             if (run.Outcome == ScrOutcome.Refused || run.Stop is ScrStop.Refused or ScrStop.NotModelled) { failures.Add($"line {line}: {run.Outcome}/{run.Stop} {run.Refusal} stop line {run.StopLine} trace {string.Join(" ", run.Trace.Select(t => $"{t.Line}:c{t.Condition}/a{t.Action}"))}"); continue; }
             if (!scene.Host.Apply(run.Effects)) failures.Add($"line {line}: the host refused the run ({scene.Use.TalkStateRefusal(run.Effects)})");
         }
-        // Line 57 (a loop over the vicinity that reads each critter's reaction, action 29) stops NotModelled at an NPC that is no dialog speaker: issue #2505. Nothing else refuses.
-        CollectionAssert.AreEqual(new[] { 57 }, failures.Select(f => int.Parse(f.Split(' ')[1].TrimEnd(':'))).ToArray(), string.Join("\n", failures));
+        // Line 57 (a loop over the vicinity that reads each critter's reaction, action 29) reads an NPC that is no dialog speaker through the use host (ARC-SCRIPT-2505, #2505): nothing refuses.
+        Assert.AreEqual(0, failures.Count, string.Join("\n", failures));
     }
 }

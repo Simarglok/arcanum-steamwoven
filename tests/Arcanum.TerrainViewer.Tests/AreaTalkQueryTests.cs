@@ -132,18 +132,35 @@ public sealed class AreaTalkQueryTests
     // The PC stands next to the NPC (row cell (11, 20)); the shown map's map-list row has the given area.
     private static Talk Create(ScriptContent content, int dialog, (int Area, bool StartMap)? mapArea, int useMap = Map, Func<CellCoord, int?>? startMapAreaAt = null, int reaction = 50,
         Func<string, int, int, bool, string>? damage = null, Func<string, int, string>? heal = null, Func<string, string, string>? attack = null,
-        Func<string?, string, int, bool, bool, string>? cast = null)
+        Func<string?, string, int, bool, bool, string>? cast = null, AreaObjectRecord? neighbour = null, Func<string, int?>? standardReaction = null)
     {
         var session = ConversationSessionFixture.Create(Map);
         var row = Row(1, dialog);
         var speaker = new AreaSpeaker(0, row, dialog, row.WorldX!.Value, row.WorldY!.Value);
         var map = new SessionMapId(Map);
         var state = new AreaConversationState(session, map, [AreaConversationState.EntityId(row)], reaction);
-        var use = new AreaUseScriptHost(session, useMap, [row], [], content,
+        var use = new AreaUseScriptHost(session, useMap, neighbour is null ? [row] : [row, neighbour], [], content,
             new AreaScriptWorld(() => new(12, 20), _ => false, _ => null, () => null, MapArea: () => mapArea,
-                StartMapAreaAt: startMapAreaAt, ScriptDamage: damage, ScriptHeal: heal, ScriptAttack: attack, ScriptCast: cast));
+                StartMapAreaAt: startMapAreaAt, ScriptDamage: damage, ScriptHeal: heal, ScriptAttack: attack, ScriptCast: cast, StandardReaction: standardReaction));
         var host = new AreaScriptHost(session, map, [speaker], state, content) { QueryHost = () => use };
         return new(session, speaker, host);
+    }
+
+    [TestMethod]
+    public void Get_reaction_of_an_NPC_that_is_no_speaker_reads_the_worlds_standard_reaction_through_the_dialog_host()
+    {
+        // ARC-SCRIPT-2505: the vicinity loop of Kerghan's script reads every critter's reaction; a neighbour that is no speaker is the use host's answer, the PC (no NPC) gives 50.
+        WithContent(content =>
+        {
+            var neighbour = Row(2, 0);
+            using var talk = Create(content, 792, (7, false), reaction: 62, neighbour: neighbour, standardReaction: _ => 71);
+            var other = new ScrObjectRef(Map, AreaConversationState.EntityId(neighbour));
+            Assert.AreEqual(71, talk.Host.ReactionOf(other, talk.Host.Pc), "a neighbour that is no dialog speaker");
+            Assert.AreEqual(62, talk.Host.ReactionOf(talk.Host.Object(talk.Speaker), talk.Host.Pc), "the speaker keeps the dialog state's reaction");
+            Assert.AreEqual(50, talk.Host.ReactionOf(talk.Host.Pc, talk.Host.Pc), "the PC as the looped object");
+            using var without = Create(content, 792, (7, false), neighbour: neighbour);
+            Assert.IsNull(without.Host.ReactionOf(other, without.Host.Pc), "a world without the answer is not modelled");
+        });
     }
 
     [TestMethod]
@@ -241,7 +258,7 @@ public sealed class AreaTalkQueryTests
             Assert.IsTrue(talk.Host.Apply(run.Effects));
             Assert.IsTrue(talk.Flag, "the speaker's reaction is the state's 62");
             Assert.AreEqual(62, talk.Host.ReactionOf(talk.Host.Object(talk.Speaker), talk.Host.Pc));
-            Assert.IsNull(talk.Host.ReactionOf(talk.Host.Pc, talk.Host.Pc), "the PC is no speaker");
+            Assert.AreEqual(50, talk.Host.ReactionOf(talk.Host.Pc, talk.Host.Pc), "the PC is no NPC: 50");
             Assert.IsNull(talk.Host.ReactionOf(talk.Host.Object(talk.Speaker), talk.Host.Object(talk.Speaker)), "the second object is not the PC");
             Assert.IsNull(talk.Host.ReactionOf(new ScrObjectRef(Map + 1, "npc"), talk.Host.Pc), "an object of another map");
             // Without the query host the set has no get reaction and the talk is refused at it.
