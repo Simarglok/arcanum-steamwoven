@@ -58,6 +58,17 @@ public sealed record UseItemRequest(string Item, string Target, bool Ctrl, bool 
 /// <summary>ARC-DEV-365 (T-g, ledger IA9, IA11): the item cursor's apply of a trap device on a tile: the goal 41 starts with the item and the tile (walks next to the tile, then uses the device).</summary>
 public sealed record UseItemOnTileRequest(string Item, CellCoord Tile) : HeroRequest;
 
+/// <summary>ARC-INPUT-1946: what the Alt action 0x4445A0 did to its target.</summary>
+public enum HeroImmediateResult
+{
+    /// <summary>The target is no item or body the action takes (an item in an inventory, nothing the viewer holds): nothing happened.</summary>
+    None,
+    /// <summary>The target was within one tile of the hero and was moved onto the hero's tile.</summary>
+    Moved,
+    /// <summary>The target lies farther than one tile away: the original tells its UI hook (0x4606C0, not modelled) and moves nothing.</summary>
+    TooFar,
+}
+
 /// <summary>What a request did.</summary>
 public enum HeroRequestOutcome
 {
@@ -120,6 +131,8 @@ public interface IHeroActions
     bool EndHeldWalk();
     /// <summary>ARC-DEV-169: the facts of an object click on <paramref name="target"/> (the class of the object, the hero's and the target's state) for the click decision.</summary>
     HeroClickFacts ClickFacts(string target, bool alt, bool shift) => new(false, false, false, false, false, HeroClickTarget.Other);
+    /// <summary>ARC-INPUT-1946 (0x4445A0): the Alt click's immediate action on <paramref name="target"/>, a loose item or a body: within one tile of the hero (Chebyshev) it is moved onto the hero's tile with no offset, farther nothing moves; builds no goal and costs no action points.</summary>
+    HeroImmediateResult ImmediateAction(string target) => HeroImmediateResult.None;
     /// <summary>ARC-DEV-169: starts the hero's talk goal 21 at <paramref name="target"/>, running when <paramref name="run"/> (ARC-AI-1137: with <paramref name="noWalk"/>, the click had Shift, the run flag 0x100 is set and no approach steps: GT122); false when the movement gate or a run's refusal stopped it.</summary>
     bool StartTalk(string target, bool run, bool noWalk) => false;
     /// <summary>ARC-DEV-174: starts the hero's use goal 38 (<paramref name="container"/>: 81) at <paramref name="target"/>, running when <paramref name="run"/>; false when the movement gate or a run's refusal stopped it.</summary>
@@ -259,9 +272,15 @@ public sealed class HeroRequestHost
         return new(_hero.StartThrow(request.Item, request.Tile) ? HeroRequestOutcome.Done : HeroRequestOutcome.Refused, Start: start);
     }
 
+    /// <summary>ARC-INPUT-1946: the goal the click rules would decide for a press on <paramref name="target"/> now, so a caller can tell the Alt action (<see cref="HeroClickGoal.Immediate"/>, which replaces nothing the hero does) before it clears what a goal would replace.</summary>
+    public HeroClickGoal ClickGoalOf(string target, bool alt, bool shift) => HeroClickRules.Decide(_hero.ClickFacts(target, alt, shift)).Goal;
+
     private HeroRequestResult ObjectClick(ObjectClickRequest request)
     {
         var decision = HeroClickRules.Decide(_hero.ClickFacts(request.Target, request.Alt, request.Shift));
+        // ARC-INPUT-1946 (0x4445A0): the Alt action builds no goal and runs no start branch; it moves the target at once.
+        if (decision.Goal == HeroClickGoal.Immediate)
+            return new(_hero.ImmediateAction(request.Target) == HeroImmediateResult.Moved ? HeroRequestOutcome.Done : HeroRequestOutcome.Ignored, Click: decision.Goal);
         if (decision.Goal is not (HeroClickGoal.Talk or HeroClickGoal.UseObject or HeroClickGoal.UseContainer or HeroClickGoal.Pickup or HeroClickGoal.Attack or HeroClickGoal.AttemptAttack)) return new(HeroRequestOutcome.Ignored, Click: decision.Goal);
         var facts = _hero.Facts();
         // GS27: after the decision, running is turned on (refused at encumbrance 4 by the walk itself); Shift sets the no-walk flag 0x100 instead (the attempt attack 19, ARC-DEV-270), and no run.

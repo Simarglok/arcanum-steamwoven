@@ -50,7 +50,11 @@ public sealed class AreaAiRouteTests
             Field(78, At(day.X, day.Y)), Field(79, At(night.X, night.Y)), Field(81, 0), Field(82, 0), Field(84, 0), Field(85, 0), Field(89, 0), Array(92),
         ], true, true, true);
 
-    internal sealed record Scene(GameSessionOwner Session, AreaAiHost Host, AreaEventWorld Events, Func<AreaAiHost> Rebuild, string Npc, Walks Walks);
+    internal sealed record Scene(GameSessionOwner Session, AreaAiHost Host, AreaEventWorld Events, Func<AreaAiHost> Rebuild, string Npc, Walks Walks)
+    {
+        /// <summary>ARC-INPUT-1946: the combat host the scene's NPC builds its life from (a test kills it through <see cref="GameSessionOwner.Kill"/>).</summary>
+        public AreaCombatHost? Combat { get; init; }
+    }
 
     /// <summary>ARC-DEV-116: the companion's own walk as the host sees it (a jump moves it at once).</summary>
     internal sealed class Walks(AreaAiNpc companion) : IAreaAiFollowers
@@ -99,7 +103,30 @@ public sealed class AreaAiRouteTests
         var events = new AreaEventWorld(() => combat, () => null, ai: () => host);
         AreaAiHost Build() => new(session, scene, events, new AreaCombatWorld(Map, () => [], _ => null));
         host = Build();
-        return new(session, host, events, Build, Entity(0), walks);
+        return new(session, host, events, Build, Entity(0), walks) { Combat = combat };
+    }
+
+    // ARC-INPUT-1946 (0x4445A0): the AI host stands the body of a dead NPC on the hero's own cell (a live one and a far cell are refused), records the place, and a host built again keeps the body there.
+    [TestMethod]
+    public void The_hero_pulls_a_dead_npcs_body_onto_its_own_cell_and_a_rebuilt_host_keeps_it_there()
+    {
+        var scene = Open(Npc(0, [], 0, (1, 1), (1, 1)));
+        Assert.IsFalse(scene.Host.PlaceBody(scene.Npc, HeroCell), "a living NPC is not pulled");
+        var target = scene.Combat!.Build(scene.Session, scene.Npc).Combat?.Target ?? throw new AssertFailedException("the NPC has no combat build");
+        Assert.AreEqual(GameSessionDisposition.Changed, scene.Session.Kill(scene.Session.Version, target).Disposition);
+        Assert.IsFalse(scene.Host.PlaceBody(scene.Npc, new(99, 99)), "a cell the map does not hold is refused");
+        Assert.IsFalse(scene.Host.PlaceBody(Entity(7), HeroCell), "an id the host does not hold");
+        Assert.AreEqual(HeroImmediateResult.TooFar, AreaHeroPull.PullBody(scene.Host, scene.Npc, NpcCell, HeroCell), "four tiles away");
+        Assert.AreEqual(NpcCell, Cell(scene));
+        var near = new CellCoord(13, 21);
+        Assert.IsTrue(scene.Host.PlaceBody(scene.Npc, near), "the body of the dead NPC may lie anywhere the map holds");
+        scene.Host.DrainNotices();
+        Assert.AreEqual(HeroImmediateResult.Moved, AreaHeroPull.PullBody(scene.Host, scene.Npc, near, HeroCell));
+        Assert.AreEqual(HeroCell, Cell(scene), "the hero's own cell holds the body");
+        Assert.AreEqual(HeroCell, scene.Session.QueryNpcPlace(scene.Npc)!.Value.World, "the place is the session's");
+        Assert.IsFalse(scene.Host.DrainNotices().Any(n => n.Kind == AreaAiNoticeKind.Entered), "no tile script is told for a body");
+        Assert.AreEqual(HeroCell, scene.Rebuild().Tile(scene.Npc), "a host built again restores the body on the hero's cell");
+        Assert.AreEqual(HeroImmediateResult.None, AreaHeroPull.PullBody(null, scene.Npc, HeroCell, HeroCell), "no AI host, no body");
     }
 
     private static CellCoord Cell(Scene scene) => scene.Host.Tile(scene.Npc)!.Value;

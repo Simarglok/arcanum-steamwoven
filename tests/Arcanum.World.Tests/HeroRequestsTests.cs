@@ -25,6 +25,8 @@ public sealed class HeroRequestsTests
         public HeroClickFacts Click = new(true, false, false, false, false, HeroClickTarget.Critter);
         public bool TalkStarts = true;
         public HeroClickFacts ClickFacts(string target, bool alt, bool shift) => Click with { Alt = alt, Shift = shift };
+        public HeroImmediateResult ImmediateResult = HeroImmediateResult.Moved;
+        public HeroImmediateResult ImmediateAction(string target) { Calls.Add("immediate " + target); return ImmediateResult; }
         public bool StartTalk(string target, bool run, bool noWalk) { Calls.Add($"talk {target} run={run}{(noWalk ? " nowalk" : "")}"); return TalkStarts; }
         public bool StartUse(string target, bool container, bool run) { Calls.Add($"use {target} container={container} run={run}"); return TalkStarts; }
         public bool StartPickup(string target, bool run) { Calls.Add($"pickup {target} run={run}"); return TalkStarts; }
@@ -482,6 +484,30 @@ public sealed class HeroRequestsTests
         Assert.AreEqual(0, hero.Calls.Count);
         Assert.AreEqual(HeroClickGoal.UseContainer, new HeroRequestHost(hero).Apply(new ObjectClickRequest("obj:4", Alt: true)).Click, "with Alt it is looted");
     }
+
+    // ARC-INPUT-1946 (0x4445A0): the Alt click on a loose item or a body out of combat mode builds no goal and runs no start branch; the port moves the target.
+    [TestMethod]
+    public void AnAltClickOnAnItemOrABodyOutOfCombatModeIsTheImmediateActionAndStartsNoGoal()
+    {
+        foreach (var click in new[] { new HeroClickFacts(true, false, false, false, false, HeroClickTarget.Item), new(true, false, false, false, false, HeroClickTarget.Critter, TargetDead: true) })
+        {
+            var hero = new Hero { Click = click, Context = new(true, 3, false, false) };
+            var result = new HeroRequestHost(hero).Apply(new ObjectClickRequest("inv:5", Alt: true));
+            Assert.AreEqual((HeroRequestOutcome.Done, HeroClickGoal.Immediate, (HeroClickStart?)null), (result.Outcome, result.Click, result.Start));
+            CollectionAssert.AreEqual(new[] { "immediate inv:5" }, hero.Calls, "no goal, no queue, no flags, no interrupt");
+            hero.ImmediateResult = HeroImmediateResult.TooFar;
+            Assert.AreEqual(HeroRequestOutcome.Ignored, new HeroRequestHost(hero).Apply(new ObjectClickRequest("inv:5", Alt: true)).Outcome, "out of reach: nothing moved");
+            hero.ImmediateResult = HeroImmediateResult.None;
+            Assert.AreEqual(HeroRequestOutcome.Ignored, new HeroRequestHost(hero).Apply(new ObjectClickRequest("inv:5", Alt: true)).Outcome);
+        }
+        var inCombat = new Hero { Click = new(true, false, false, false, true, HeroClickTarget.Item) };
+        Assert.AreEqual(HeroClickGoal.Pickup, new HeroRequestHost(inCombat).Apply(new ObjectClickRequest("inv:5", Alt: true)).Click, "in combat mode Alt on an item still picks it up");
+        Assert.IsFalse(inCombat.Calls.Any(c => c.StartsWith("immediate")));
+        var plain = new Hero { Click = new(true, false, false, false, false, HeroClickTarget.Item) };
+        Assert.AreEqual(HeroClickGoal.Pickup, new HeroRequestHost(plain).ClickGoalOf("inv:5", alt: false, shift: false));
+        Assert.AreEqual(HeroClickGoal.Immediate, new HeroRequestHost(plain).ClickGoalOf("inv:5", alt: true, shift: false));
+    }
+
     // ---- ARC-DEV-365 (T-g): the item use goals 39 and 41 ----
 
     [TestMethod]

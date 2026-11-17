@@ -581,6 +581,7 @@ src/Arcanum.World/AreaAiHostLoyalty.cs,NpcLedConsent,exempt,host
 src/Arcanum.World/AreaAiHostLoyalty.cs,NpcLoyaltyStep,exempt,host
 src/Arcanum.World/AreaAiHostRedirect.cs,SpellRedirect,exempt,host
 src/Arcanum.World/AreaAiHostRedirect.cs,Vicinity,exempt,host
+src/Arcanum.World/AreaAiHostRoutes.cs,PlaceBody,exempt,host
 src/Arcanum.World/AreaAiHostRoutes.cs,RelocateAlongPath,pending,
 src/Arcanum.World/AreaAiHostRoutes.cs,RelocateToRandomTile,pending,
 src/Arcanum.World/AreaAiHostRoutes.cs,ScriptProne,pending,
@@ -619,6 +620,7 @@ src/Arcanum.World/AreaGreeting.cs,FactsFor,pending,
 src/Arcanum.World/AreaHeldThrow.cs,Lift,pending,
 src/Arcanum.World/AreaHeroDeath.cs,BeginShow,exempt,reference
 src/Arcanum.World/AreaHeroDeath.cs,StartCredits,exempt,reference
+src/Arcanum.World/AreaHeroPull.cs,Distance,exempt,reference
 src/Arcanum.World/AreaHeroRunsHost.cs,ApplyClickFlags,exempt,host
 src/Arcanum.World/AreaHeroRunsHost.cs,Attack,pending,
 src/Arcanum.World/AreaHeroRunsHost.cs,Cast,pending,
@@ -742,6 +744,7 @@ src/Arcanum.World/GoalStepper.cs,Step,pending,
 src/Arcanum.World/GoalStepper.cs,StepOverlay,pending,
 src/Arcanum.World/HeroBody.cs,Armed,pending,
 src/Arcanum.World/HeroBody.cs,Wearing,pending,
+src/Arcanum.World/HeroRequests.cs,ImmediateAction,exempt,host
 src/Arcanum.World/HeroRequests.cs,QueueGoal,exempt,host
 src/Arcanum.World/HeroRequests.cs,StartPickPocket,pending,
 src/Arcanum.World/InterfaceModes.cs,LeavePutsHeldItemBack,pending,
