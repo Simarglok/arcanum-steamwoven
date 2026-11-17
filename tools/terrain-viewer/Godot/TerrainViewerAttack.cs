@@ -192,12 +192,24 @@ public partial class TerrainViewerApp
             return true;
         }
         CancelTalkApproach("an attack replaced it"); CancelAreaUseApproach("an attack replaced it"); CancelInventoryApproach("an attack replaced it");
-        // The same target clicked again keeps its goal (the original adds no second attack goal on that target).
-        if (_attack is { } running && running.Entity == target.Entity && !running.Stop && running.NoWalk == shift) return true; // ARC-DEV-270: a Shift click on a plain attack's target (or the reverse) restarts it as the other goal
+        // ARC-COMBAT-1949 (VC62): the same target clicked again goes through the start branch of 0x54ED30 (an equal goal is ignored with the auto attack option on, queued beneath the running attack with it off).
+        if (_attack is { } running && running.Entity == target.Entity && !running.Stop) { RepeatAttackClick(running, shift); return true; }
         CancelAreaAttack(null);
         _attack = new(target, combat, HeldAim()) { NoWalk = shift };
         StartAttackGoal(_attack);
         return true;
+    }
+
+    /// <summary>
+    /// ARC-COMBAT-1949 (VC62): a left click on the target the hero already attacks. The click is an <see cref="ObjectClickRequest"/> like the first one: the start branch of 0x54ED30 ignores it with the auto attack option on (an equal
+    /// goal is queued; 18 and 19 count as equal, so a Shift click on a plain attack's target is ignored too), queues a repeated attack beneath the running one with the option off, or (the run's top goal being idle, or the run gone) restarts it,
+    /// which carries the click's Shift into the viewer's goal. The goal the viewer holds stays: its ports find it by the target.
+    /// </summary>
+    private void RepeatAttackClick(AttackGoal running, bool shift)
+    {
+        var request = HeroRequests.Apply(new ObjectClickRequest(AttackTargetOf(running), Alt: running.Object is not null || running.Wall, Shift: shift));
+        GD.Print($"ARC-COMBAT-1949 attack-repeat outcome={request.Outcome} start={request.Start} target={running.Entity}");
+        if (request.Outcome == HeroRequestOutcome.Done && request.Start == Arcanum.Simulation.Goals.HeroClickStart.InterruptAndStart) running.NoWalk = shift;
     }
 
     // ARC-COMBAT-008: the attackable objects of the shown map, rebuilt when the map or its portals are bound again.
@@ -246,8 +258,8 @@ public partial class TerrainViewerApp
         }
         CancelTalkApproach("an attack replaced it"); CancelAreaUseApproach("an attack replaced it"); CancelInventoryApproach("an attack replaced it");
         var entity = target?.Entity ?? AttackGoal.WallEntity(wall!);
-        // ARC-COMBAT-1941: the same target clicked again keeps its goal, a Shift click on a plain attack's target (or the reverse) restarts it as the other goal (as for a creature, ARC-DEV-270).
-        if (_attack is { } running && running.Entity == entity && !running.Stop && running.NoWalk == shift) return true;
+        // ARC-COMBAT-1949 (VC62): the same target clicked again goes through the start branch of 0x54ED30, as for a creature.
+        if (_attack is { } running && running.Entity == entity && !running.Stop) { RepeatAttackClick(running, shift); return true; }
         CancelAreaAttack(null);
         _attack = target is not null ? new(target, HeldAim()) { NoWalk = shift } : new(wall!, HeldAim()) { NoWalk = shift };
         StartAttackGoal(_attack);

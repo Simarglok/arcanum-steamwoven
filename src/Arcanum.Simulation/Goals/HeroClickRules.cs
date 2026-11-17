@@ -73,6 +73,10 @@ public enum HeroClickStart
     Start,
     /// <summary>The hero's runs are interrupted at level 3, then the goal starts (a different order, or a repeated one: it restarts).</summary>
     InterruptAndStart,
+    /// <summary>ARC-COMBAT-1949 (VC62): a repeated attack on the same target while the hero's main run goes on is put at the bottom of that run's stack (0x44DBE0 -> 0x44D9B0); nothing else changes.</summary>
+    QueueBeneath,
+    /// <summary>ARC-COMBAT-1949 (VC62): nothing new is added (a round whose main run is not the fidget, a stack of four or more goals), so the click's run flags go to the hero's existing main run (label 0x54FB19).</summary>
+    FlagsOnly,
 }
 
 /// <summary>
@@ -133,5 +137,33 @@ public static class HeroClickRules
         if (inRound) return !hasMainRun ? HeroClickStart.Start : heroIdle ? HeroClickStart.InterruptAndStart : HeroClickStart.Ignored;
         if (autoAttack) return equalGoalQueued ? HeroClickStart.Ignored : HeroClickStart.InterruptAndStart;
         return hasMainRun ? HeroClickStart.InterruptAndStart : HeroClickStart.Start;
+    }
+
+    /// <summary>The depth from which a repeated attack is no longer queued: the main run's current-goal index, which counts from 0, must be under 4 (signed compare, 0x54F9AC).</summary>
+    public const int QueueDepthLimit = 4;
+
+    /// <summary>
+    /// ARC-COMBAT-1949 (VC62, GS27): the start branch of the click for a goal the decision built, as the exe reads it (0x54ED30 tail). <paramref name="autoAttack"/> is the "auto attack" option (0x4B8230; a round never reads it, so the
+    /// caller may pass it as it is). <paramref name="mainDepth"/> is the main run's current-goal index (its goal count minus one), <paramref name="mainTopIdle"/> that its top goal is 1 or 2 (0x4373F0), <paramref name="fidgetMain"/> that
+    /// the hero's first run is its main run with the fidget (2) as bottom goal (0x44E830), <paramref name="buildsAttack"/> that the goal is 18 or 19.
+    /// <list type="bullet">
+    /// <item>In a round the option and the equal test are skipped: no main run starts; a fidget main run under four goals is interrupted (top idle) or gets the goal beneath; everything else adds nothing (<see cref="HeroClickStart.FlagsOnly"/>).</item>
+    /// <item>With the option on: an equal goal (0x44E6F0: the bottom goal of any run, the goal's alias counts, same objects) is ignored with no flags, otherwise the hero is interrupted and the goal starts.</item>
+    /// <item>With it off: no main run starts at once; an equal attack while the main run is under four goals is queued beneath it (or, with its top idle, interrupts and starts); at four goals nothing is added; any other click interrupts and starts.</item>
+    /// </list>
+    /// </summary>
+    public static HeroClickStart ClickStartOf(bool autoAttack, bool inRound, bool hasMainRun, bool equalGoalQueued, bool buildsAttack, int mainDepth, bool mainTopIdle, bool fidgetMain)
+    {
+        if (inRound)
+        {
+            if (!hasMainRun) return HeroClickStart.Start;
+            if (!fidgetMain || mainDepth >= QueueDepthLimit) return HeroClickStart.FlagsOnly;
+            return mainTopIdle ? HeroClickStart.InterruptAndStart : HeroClickStart.QueueBeneath;
+        }
+        if (autoAttack) return equalGoalQueued ? HeroClickStart.Ignored : HeroClickStart.InterruptAndStart;
+        if (!hasMainRun) return HeroClickStart.Start;
+        if (!equalGoalQueued || !buildsAttack) return HeroClickStart.InterruptAndStart;
+        if (mainDepth >= QueueDepthLimit) return HeroClickStart.FlagsOnly;
+        return mainTopIdle ? HeroClickStart.InterruptAndStart : HeroClickStart.QueueBeneath;
     }
 }

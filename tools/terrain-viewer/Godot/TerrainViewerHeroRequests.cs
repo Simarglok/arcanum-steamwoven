@@ -228,7 +228,12 @@ public partial class TerrainViewerApp
             return host.Use(target, container, run);
         }
 
-        public HeroInputOptions Options() => new(app._alwaysRunOption, app._numLockRun);
+        public HeroInputOptions Options() => new(app._alwaysRunOption, app._numLockRun, app._gameSettings.AutoAttack);
+
+        // ARC-COMBAT-1949 (VC62): the start branch's reads of the hero's runs, the repeated attack queued beneath the main run and the click's flags on the existing main run.
+        public HeroStartContext StartContext(HeroClickGoal goal, string? target, string? item = null) => app.HeroRunsHost()?.StartContext(goal, target, item) ?? default;
+        public bool QueueAttack(HeroClickGoal goal, string target) => app.HeroRunsHost()?.QueueAttack(goal, target) == true;
+        public void ApplyClickFlags(bool shift, bool nearOccupied) => app.HeroRunsHost()?.ApplyClickFlags(shift, nearOccupied);
 
         public bool SetWalkTarget(CellCoord tile, bool run, bool held)
         {
