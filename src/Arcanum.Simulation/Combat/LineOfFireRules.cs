@@ -254,16 +254,17 @@ public static class LineOfFireRules
         distance >= 0 && distance <= Math.Max(range, 1) && ClearShot(trace, target);
 
     /// <summary>
-    /// The step cost of one tile step with the projectile flags (0x43FDC0 → 0x43FE00, flags 0x0C, no mover): an edge step (odd
+    /// The step cost of one tile step with the projectile flags (0x43FDC0 → 0x43FE00, flags 0x0C, or 0x0D with <paramref name="portalsBlock"/>): an edge step (odd
     /// rotation) prices the source tile's walls and portals on the crossed edge, then the neighbour (none: cost 1, the sum so far
     /// dropped), then the neighbour's walls and portals on the opposite edge and, unless <paramref name="intoTarget"/>, its other
-    /// objects; the first blocker ends the step. With <paramref name="portalsBlock"/> (the step cost flag 0x1 of the projectile's own
-    /// call, flags 0x0D, ARC-COMBAT-1725) a closed, unbroken portal on a crossed edge stops the step outright, before its cover test, so
-    /// a portal that shoots through still stops a missed shot flying free; the line of fire's flags 0x0C leave it to the cover test. A corner step (even rotation) sums four edge steps around the corner: to the
+    /// objects; the first blocker ends the step. A corner step (even rotation) sums four edge steps around the corner: to the
     /// counter-clockwise side tile and on to the corner tile, then to the clockwise side tile and on to the corner tile (a side tile
     /// off the map: cost 1). <see cref="CombatAnomalyProfile.CornerStepCountsBothRoutes"/> keeps the original's double count (AW13,
     /// AW14): the corner tile's objects count on both routes and <paramref name="intoTarget"/> skips the side tiles' objects too;
     /// otherwise the second route counts only the corner tile's walls and portals, and only the target tile's objects are skipped.
+    /// With <paramref name="portalsBlock"/> (the step cost flag 0x1 of the projectile's own call, ARC-COMBAT-1725) a closed, unbroken
+    /// portal on a crossed edge stops the step outright, before its cover test, so a portal that shoots through still stops a missed
+    /// shot flying free; the line of fire's flags 0x0C leave it to the cover test.
     /// </summary>
     [OriginalFunction(0x43FE00, OriginalFunctionScope.Partial)]
     public static LineOfFireCost<TObject> StepCost<TObject>(CellCoord from, int rotation, bool intoTarget, ILineOfFireMap<TObject> map,
