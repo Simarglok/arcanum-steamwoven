@@ -179,8 +179,8 @@ public partial class TerrainViewerApp
         var (freeTop, free) = AreaGameBarPanel.FreeArea(new Vector2(size.X, size.Y));
         require(free.X == frame.Width && AreaGameBarPanel.FreeLeft == frame.X && freeTop == plan.TopInset, $"[{tag}] the free width is the frame's {frame.Width} at x {frame.X} (got {free.X} at {AreaGameBarPanel.FreeLeft})");
         var scale = (float)plan.StripScale;
-        require(AreaGameBarPanel.TopScreen is { } screen && screen.Origin == new Vector2(plan.StripLeft, plan.TopStripY) && Math.Abs(screen.Scale - scale) < 1e-4f
-            && Math.Abs(screen.BottomEdge - (plan.BottomStripY + AreaGameBarLayout.BottomHeight * scale)) < 1e-2f, $"[{tag}] the screen hangs from the top strip at the strips' scale ({AreaGameBarPanel.TopScreen})");
+        require(AreaGameBarPanel.TopScreen is { } screen && screen.Origin == new Vector2(plan.StripLeft, plan.Layout.Top.Band.Bottom - (int)Math.Round(AreaGameBarLayout.TopHeight * plan.StripScale, MidpointRounding.AwayFromZero)) && Math.Abs(screen.Scale - scale) < 1e-4f
+            && Math.Abs(screen.BottomEdge - plan.Layout.Bottom.Band.Bottom) < 1e-2f, $"[{tag}] the screen hangs from the top frame at the HUD's unit scale and ends at the bottom band's lower edge ({AreaGameBarPanel.TopScreen})");
         var origin = AreaGameBarPanel.TopScreen!.Value.Origin;
         var floaters = new AreaFloaterLayer(); var portraits = new AreaFollowerPortraits(); var sleep = new AreaSleepView(); var fate = new AreaFateView();
         try
@@ -213,7 +213,7 @@ public partial class TerrainViewerApp
                     _gameBarPanel!.Relayout();
                     await frames(2);
                     var otherScale = (float)other.StripScale;
-                    var otherOrigin = new Vector2(other.StripLeft, other.TopStripY);
+                    var otherOrigin = new Vector2(other.StripLeft, other.Layout.Top.Band.Bottom - (int)Math.Round(AreaGameBarLayout.TopHeight * other.StripScale, MidpointRounding.AwayFromZero));
                     require(Math.Abs(floaters.DrawScale - otherScale) < 1e-4f && portraits.OriginForSelfTest == otherOrigin && Math.Abs(portraits.ScaleForSelfTest - otherScale) < 1e-4f,
                         $"[{tag}] the floaters and the portraits follow a new layout by themselves: scale {otherScale}, origin {otherOrigin} (got {floaters.DrawScale}, {portraits.OriginForSelfTest} at {portraits.ScaleForSelfTest})");
                     require((sleep.Position - (otherOrigin + new Vector2(AreaSleepLayout.ScreenX, AreaSleepLayout.ScreenY) * otherScale)).Length() <= 1e-2f

@@ -493,8 +493,8 @@ public partial class AreaGameBarPanel : CanvasLayer
         _sideLeft = 0; _sideRight = 0;
         foreach (var strip in _strips)
             strip.Value.GetNode<AreaStripSidesView>("Sides").Set(strip.Value.GetNode<TextureRect>("Art").Texture, 0, 0);
-        // ARC-UI-2510: the screen the portraits hang in (the top strip's top left, its bottom edge) and the frame the windows are centred in. ARC-UI-2608: the screen's bottom edge is y 600 of the screen frame.
-        SetTopScreen((new Vector2(plan.StripLeft, plan.TopStripY), scale, plan.ScreenOriginY + AreaGameBarLayout.ScreenHeight * scale));
+        // ARC-UI-2510: the screen the portraits hang in (the screen's top left stands so that its y 41 meets the top band's lower edge, as the strip did; the bottom band's lower edge is its bottom) and the frame the windows are centred in.
+        SetTopScreen((new Vector2(plan.StripLeft, plan.Layout.Top.Band.Bottom - (int)Math.Round(AreaGameBarLayout.TopHeight * plan.StripScale, MidpointRounding.AwayFromZero)), scale, plan.Layout.Bottom.Band.Bottom));
         SetInsets(Visible ? plan.TopInset : 0, Visible ? plan.BottomInset : 0, Visible ? plan.Layout.Frame.X : 0, Visible ? plan.Layout.Frame.Width : 0);
         ApplyControlRects(plan);
         UpdateSteamwovenParts(plan);
