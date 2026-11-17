@@ -631,8 +631,8 @@ src/Arcanum.World/AreaHeroRunsHost.cs,PickLock,pending,
 src/Arcanum.World/AreaHeroRunsHost.cs,PickPocket,pending,
 src/Arcanum.World/AreaHeroRunsHost.cs,PickUpObject,pending,
 src/Arcanum.World/AreaHeroRunsHost.cs,Pickup,pending,
-src/Arcanum.World/AreaHeroRunsHost.cs,QueueGoal,exempt,host
 src/Arcanum.World/AreaHeroRunsHost.cs,QueueCast,pending,
+src/Arcanum.World/AreaHeroRunsHost.cs,QueueGoal,exempt,host
 src/Arcanum.World/AreaHeroRunsHost.cs,StartContext,exempt,host
 src/Arcanum.World/AreaHeroRunsHost.cs,StepTurn,pending,
 src/Arcanum.World/AreaHeroRunsHost.cs,Turn,pending,
