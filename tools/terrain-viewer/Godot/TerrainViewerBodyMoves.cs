@@ -58,7 +58,7 @@ public partial class TerrainViewerApp
             }
             drawn.Add(AnimateBody(command, companion.Speaker.Row, visual, state.Action, state.Facing, now, companion.Cycle, keepT0Until: true,
                 gait: (k, r, a, f) => NoteGaitFrame(k, r, a, f, WorldCellCoord(companionGrid)),
-                walkArt: host is not null && state.Action is ActorDiagnosticAction.Walk or ActorDiagnosticAction.Run ? ArmedWalk(host, companion.Entity, visual) : null));
+                walkArt: host is not null && state.Action is ActorDiagnosticAction.Walk or ActorDiagnosticAction.Run or ActorDiagnosticAction.Sneak ? ArmedWalk(host, companion.Entity, visual) : null));
         }
         return drawn.AsReadOnly();
     }
@@ -116,13 +116,13 @@ public partial class TerrainViewerApp
             // ARC-DEV-370: a created critter's visual is not in the map's own (TryBodyVisual).
             if (command.Identity is not { } key || _fallenBodies.ContainsKey(key) || host.Scene.Npcs.FirstOrDefault(n => n.Row.Key == key) is not { } npc
                 || host.Movers.Of(npc.Entity) is not { } mover || !TryBodyVisual(command.Visual, out var visual)) { drawn.Add(command); continue; }
-            var action = mover.Stepping(now) ? mover.Running ? ActorDiagnosticAction.Run : ActorDiagnosticAction.Walk : ActorDiagnosticAction.Idle;
+            var action = mover.Stepping(now) ? mover.Running ? ActorDiagnosticAction.Run : mover.Sneaking ? ActorDiagnosticAction.Sneak : ActorDiagnosticAction.Walk : ActorDiagnosticAction.Idle;
             if (!_bodyCycles.TryGetValue(key, out var cycle)) _bodyCycles[key] = cycle = new AreaBodyCycle();
             var octant = DiagnosticGridActor.Octant(mover.Facing);
             if (action == ActorDiagnosticAction.Idle && ArmedBody(host, npc.Entity, npc.Row, command, visual, octant, now) is { } armed) { cycle.Observe(action, now); drawn.Add(armed); continue; }
             var cell = mover.Cell;
             drawn.Add(AnimateBody(command, npc.Row, visual, action, octant, now, cycle, keepT0Until: false, gait: (k, r, a, f) => NoteGaitFrame(k, r, a, f, cell),
-                walkArt: action is ActorDiagnosticAction.Walk or ActorDiagnosticAction.Run ? ArmedWalk(host, npc.Entity, visual) : null));
+                walkArt: action is ActorDiagnosticAction.Walk or ActorDiagnosticAction.Run or ActorDiagnosticAction.Sneak ? ArmedWalk(host, npc.Entity, visual) : null));
         }
         return drawn.AsReadOnly();
     }
@@ -240,7 +240,7 @@ public partial class TerrainViewerApp
         }
         // ARC-RENDER-1485: the walk of the weapon the NPC shows (the move ARTs kept are the body's own).
         // A run the body has no ART for is drawn as its walk (MA1), so the armed walk too.
-        var drawnMoves = walkArt is not null && moves.Status == AreaBodyMoveStatus.Ready && (action == ActorDiagnosticAction.Walk || action == ActorDiagnosticAction.Run && moves.Run is null)
+        var drawnMoves = walkArt is not null && moves.Status == AreaBodyMoveStatus.Ready && (action == ActorDiagnosticAction.Walk || action == ActorDiagnosticAction.Run && moves.Run is null || action == ActorDiagnosticAction.Sneak && moves.Sneak is null)
             ? moves with { Walk = walkArt } : moves;
         // ARC-RENDER-1126 (0x4305D0): the walk or run frame the cycle is on, for the footsteps (frames 3 and 8).
         if (gait is not null && moves.Status == AreaBodyMoveStatus.Ready && drawnMoves.For(action) is { } gaitArt)
