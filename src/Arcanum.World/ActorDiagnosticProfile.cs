@@ -29,8 +29,10 @@ public sealed class ActorDiagnosticProfile
         ActorDiagnosticResource idle, ActorDiagnosticResource walk, ActorDiagnosticResource? run, ActorDiagnosticResource? vault,
         ActorDiagnosticResource? attack, int coverage, long? rgbaBytes, ActorDiagnosticResource? fallDown = null, ActorDiagnosticResource? getUp = null,
         ActorDiagnosticResource? lowAttack = null, ActorDiagnosticResource? @throw = null, ActorDiagnosticResource? stunned = null,
-        ActorDiagnosticResource? decapitation = null, ActorDiagnosticResource? blownOutChunk = null, ActorDiagnosticResource? severedLeg = null)
+        ActorDiagnosticResource? decapitation = null, ActorDiagnosticResource? blownOutChunk = null, ActorDiagnosticResource? severedLeg = null,
+        ActorDiagnosticResource? sneak = null)
     {
+        Sneak = sneak;
         Id = id; Clock = clock; Idle = idle; Walk = walk; Run = run; Vault = vault; Attack = attack; FallDown = fallDown; GetUp = getUp;
         LowAttack = lowAttack; Throw = @throw; Stunned = stunned;
         Decapitation = decapitation; BlownOutChunk = blownOutChunk; SeveredLeg = severedLeg;
@@ -48,6 +50,7 @@ public sealed class ActorDiagnosticProfile
             if (decapitation is not null) actions.Add(ActorDiagnosticAction.Decapitation);
             if (blownOutChunk is not null) actions.Add(ActorDiagnosticAction.BlownOutChunk);
             if (severedLeg is not null) actions.Add(ActorDiagnosticAction.SeveredLeg);
+            if (sneak is not null) actions.Add(ActorDiagnosticAction.Sneak);
         }
         Actions = actions.AsReadOnly();
     }
@@ -69,6 +72,8 @@ public sealed class ActorDiagnosticProfile
     public const uint HumanLowAttackSelector = 0x20000541, HumanThrowSelector = 0x20000380;
     /// <summary>ARC-COMBAT-1741: the fixed human's selector of the stunned ART (animation 23, weapon 1: N1 forces the unarmed letter and no shield); only a hero body reads it.</summary>
     public const uint HumanStunnedSelector = 0x200005C1;
+    /// <summary>ARC-RENDER-2539: the fixed human's selector of the stealth walk ART (animation 3, which keeps the weapon and shield like the stand); only a hero body reads it.</summary>
+    public const uint HumanSneakSelector = 0x200000C0;
     /// <summary>ARC-COMBAT-1793: the fixed human's selectors of the bloody dying ARTs (animations 17 decapitation, 18 blown-out chunk, 19 severed leg, weapon part 0 like the fall); only a hero body reads them.</summary>
     public const uint HumanDecapitationSelector = 0x20000440, HumanBlownOutChunkSelector = 0x20000480, HumanSeveredLegSelector = 0x200004C0;
     /// <summary>The fixed human's selector of an action (a hero body's selectors are its body bits over these).</summary>
@@ -82,6 +87,7 @@ public sealed class ActorDiagnosticProfile
         ActorDiagnosticAction.Decapitation => HumanDecapitationSelector,
         ActorDiagnosticAction.BlownOutChunk => HumanBlownOutChunkSelector,
         ActorDiagnosticAction.SeveredLeg => HumanSeveredLegSelector,
+        ActorDiagnosticAction.Sneak => HumanSneakSelector,
         _ => HumanFixedArea.Resource(action).Selector,
     };
     public static ActorDiagnosticProfile HumanFixed { get; } = new(ActorDiagnosticProfileId.HumanFixed, ActorDiagnosticClock.ArtMetadata,
@@ -99,10 +105,11 @@ public sealed class ActorDiagnosticProfile
     internal static ActorDiagnosticProfile ForHeroBody(ActorDiagnosticResource idle, ActorDiagnosticResource walk, ActorDiagnosticResource run,
         ActorDiagnosticResource vault, ActorDiagnosticResource attack, int keys, ActorDiagnosticResource? fallDown = null, ActorDiagnosticResource? getUp = null,
         ActorDiagnosticResource? lowAttack = null, ActorDiagnosticResource? @throw = null, ActorDiagnosticResource? stunned = null,
-        ActorDiagnosticResource? decapitation = null, ActorDiagnosticResource? blownOutChunk = null, ActorDiagnosticResource? severedLeg = null) =>
+        ActorDiagnosticResource? decapitation = null, ActorDiagnosticResource? blownOutChunk = null, ActorDiagnosticResource? severedLeg = null,
+        ActorDiagnosticResource? sneak = null) =>
         new(ActorDiagnosticProfileId.HeroBody, ActorDiagnosticClock.ArtMetadata, idle, walk, run, vault, attack, keys, null,
             fallDown is not null && getUp is not null ? fallDown : null, fallDown is not null && getUp is not null ? getUp : null, lowAttack, @throw, stunned,
-            decapitation, blownOutChunk, severedLeg);
+            decapitation, blownOutChunk, severedLeg, sneak);
     public static ActorDiagnosticProfile MonsterRegression { get; } = new(ActorDiagnosticProfileId.MonsterRegression, ActorDiagnosticClock.LegacyOverride,
         new(ActorDiagnosticAction.Idle, 0xc9001810, 4753, 1, 8, 15, 8, 6),
         new(ActorDiagnosticAction.Walk, 0xc9001850, 4754, 1, 8, 8, 15, 10), null, null, null, 184, null);
@@ -133,6 +140,8 @@ public sealed class ActorDiagnosticProfile
     public ActorDiagnosticResource? Decapitation { get; }
     public ActorDiagnosticResource? BlownOutChunk { get; }
     public ActorDiagnosticResource? SeveredLeg { get; }
+    /// <summary>ARC-RENDER-2539: the stealth walk ART (animation 3) a hero body draws a concealed step below prowling expert with, or null (missing, or left out over the key cap: the step then draws the walk ART at the stealth rate, the repair of ledger MA1).</summary>
+    public ActorDiagnosticResource? Sneak { get; }
 
     /// <summary>ARC-COMBAT-1793: the action and ART a hero body shows for the dying animation the dying goal (31) names (7, 17, 18 or 19): the bloody one when this body loaded it, else the plain fall (null when the body has no fall either).</summary>
     public (ActorDiagnosticAction Action, ActorDiagnosticResource Resource)? DyingArt(int animation) => animation switch
@@ -170,6 +179,8 @@ public sealed class ActorDiagnosticProfile
         ActorDiagnosticAction.Decapitation => Decapitation ?? throw MetadataFailure(),
         ActorDiagnosticAction.BlownOutChunk => BlownOutChunk ?? throw MetadataFailure(),
         ActorDiagnosticAction.SeveredLeg => SeveredLeg ?? throw MetadataFailure(),
+        // ARC-RENDER-2539: a body without the stealth ART draws the walk ART (the repair of ledger MA1, pair 3 to 1).
+        ActorDiagnosticAction.Sneak => Sneak ?? Walk,
         _ => throw MetadataFailure()
     };
     public ActorDiagnosticAction ActionFor(uint selector) => selector == Idle.Selector ? ActorDiagnosticAction.Idle
@@ -183,7 +194,8 @@ public sealed class ActorDiagnosticProfile
         : Stunned is not null && selector == Stunned.Selector ? ActorDiagnosticAction.Stunned
         : Decapitation is not null && selector == Decapitation.Selector ? ActorDiagnosticAction.Decapitation
         : BlownOutChunk is not null && selector == BlownOutChunk.Selector ? ActorDiagnosticAction.BlownOutChunk
-        : SeveredLeg is not null && selector == SeveredLeg.Selector ? ActorDiagnosticAction.SeveredLeg : throw MetadataFailure();
+        : SeveredLeg is not null && selector == SeveredLeg.Selector ? ActorDiagnosticAction.SeveredLeg
+        : Sneak is not null && selector == Sneak.Selector ? ActorDiagnosticAction.Sneak : throw MetadataFailure();
 
     public ActorDiagnosticFacing Facing(ActorDiagnosticAction action, int projectOctant)
     {

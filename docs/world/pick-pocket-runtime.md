@@ -42,8 +42,7 @@ whether the hero summoned it), the direction, the item (a listed item of the vic
 for ammunition, the kind of a new stack. Refused before anything is charged or rolled: no hero or a dead one (`PickPocketUnavailable`),
 victim facts out of bounds or a victim that is no living NPC of the actor's map seed (`InvalidPickPocketVictim`), the version, no seed
 (`InventoryUnavailable`), an item the side does not hold (`ItemNotAvailable`; the hero's coins too, a count and not a pile), a gold pile
-with an insert-item script (`ItemScriptUnsupported`), an item the victim wears (`WornItemUnsupported`: the original steals it, the
-session does not unequip an NPC), ammunition without a stack kind (`InvalidAmmo`), a key or key ring (`ItemTypeUnsupported`). With a world in a turn-based round, another's subturn or an inactive
+with an insert-item script (`ItemScriptUnsupported`), ammunition without a stack kind (`InvalidAmmo`), a key or key ring (`ItemTypeUnsupported`). With a world in a turn-based round, another's subturn or an inactive
 hero is `PickPocketOutOfTurn`; in the hero's subturn it charges 4 action points first (its own revision), and a charge the hero
 cannot pay ends its subturn and refuses the attempt (`PickPocketOutOfTurn` with the charge). The draws come from the session generator: the check's two d100, then the
 perception die when it is rolled. On a success the move runs through `TakeGoldFromNpc`, `TakeAmmoFromNpc`, `TakeItemFromNpc`,
@@ -83,8 +82,12 @@ there each drag across the two grids, or a right release on an item, is the atte
   (one cell of slack, as the smoke tolerates).
 - **The thief's own script** (point 33) is not run: the viewer's hero carries no scripts. A victim's catching-thief script that the
   script host cannot run (an action outside its admission set, no content) stops the consequences as Not ready, with nothing applied.
-- **Worn items:** the original steals a worn item (its slot raises the difficulty, SC11); the session refuses it, as it does not
-  unequip an NPC (the slot's difficulty term is in the check for the day it does).
+- **Worn items** (ARC-DEV-1338, [PP12](../research/ledger/skills.md#pick-pocket-arc-skills-010)): the original steals a worn item (its slot raises the difficulty, SC11), and so does the session. The steal's move
+  is `TakeItemFromNpc` with `unwield`, as the loot of a body and the barter window's doll take one: the insert check sees the item unwielded (inventory location −1), wield-off (25) and
+  remove-item (28) run with the victim as triggerer (a script host is needed for an item that has them, else the attempt is refused with `ItemScriptUnsupported` after the charge, nothing rolled or moved), over the victim's own wield
+  context when the viewer gives it (`AreaInventoryHost.NpcWearer`, the optional `npcWearer` argument of `PickPocket`), the victim's wear record drops the item and it is marked to re-wield (flag 0x40; the running AI
+  puts on its best items again, ARC-AI-1139). A worn item with the no-drop flag fails on the remove check (`ItemNotDroppable`, quiet). Test: `PickPocketStateTests`,
+  `AMasterStealsAWornItemOffTheVictimAndTheInsertCheckSeesItUnwielded`.
 - **Not modelled:** the victim's "item stolen" mark (critter flags 2 bit 0x01, PP6; its one reader found is a PC victim's inventory
   window, and no NPC steals from the hero here), NPC thieves and script action 115 (PP8, SX5), the plant of the hero's coins, summoned
   victims (the viewer has none), the floating text over the thief (the status line shows it), the skill bar's button and the hotkey

@@ -39,6 +39,40 @@ public sealed class ActorGaitTests
         Assert.AreEqual(800, GaitTiming.FrameMilliseconds(1));
     }
 
+    // ARC-RENDER-2539 (research L6, 0x437990): the stealth walk's rate is 10 at Speed 8, 4 below and 16 at the top; a dwarf or halfling adds 4 to each.
+    [TestMethod]
+    public void TheStealthWalkRateIs10With4AndSixteenAtTheEnds()
+    {
+        Assert.AreEqual(4, GaitTiming.FramesPerSecond(MovementGait.Sneak, 0));
+        Assert.AreEqual(9, GaitTiming.FramesPerSecond(MovementGait.Sneak, 7));
+        Assert.AreEqual(10, GaitTiming.FramesPerSecond(MovementGait.Sneak, 8));
+        Assert.AreEqual(13, GaitTiming.FramesPerSecond(MovementGait.Sneak, 15));
+        Assert.AreEqual(16, GaitTiming.FramesPerSecond(MovementGait.Sneak, 30));
+        Assert.AreEqual(14, GaitTiming.FramesPerSecond(MovementGait.Sneak, 8, 4), "a dwarf or halfling body adds 4");
+        Assert.AreEqual("GAIT_SNEAK", GaitTiming.Provenance(MovementGait.Sneak));
+        Assert.IsFalse(GaitTiming.Provenance(MovementGait.Sneak).Contains(GaitTiming.RunProvenance, StringComparison.Ordinal));
+    }
+
+    [TestMethod]
+    public void TheStealthWalkStepIsSlowerThanTheWalkAndUsesItsOwnStrideWhenGiven()
+    {
+        var timing = GaitTiming.HumanFixed;
+        // Without a stealth ART the walk's stride goes at the stealth rate: 10 fps against 17.
+        Assert.AreEqual(timing.Walk, timing.Sneak);
+        foreach (var direction in Enum.GetValues<NeighborDirection>())
+            Assert.IsTrue(timing.For(MovementGait.Sneak, direction).Value > timing.For(MovementGait.Walk, direction).Value);
+        Assert.AreEqual(StepDuration.Of(1000 * 2000, 1000 * 2120), timing.For(MovementGait.Sneak, NeighborDirection.XPlus), "10 frames of 100 ms over the 1.06-tile axis stride");
+        Assert.AreEqual(10, timing.ArtRate(MovementGait.Sneak));
+        // The stealth ART's own stride replaces it.
+        var own = new GaitStride(8, 10, 30, 15, 45);
+        var custom = new GaitTiming(timing.Walk, timing.Run, 8, sneak: own);
+        Assert.AreEqual(own, custom.Sneak);
+        Assert.AreNotEqual(timing.For(MovementGait.Sneak, NeighborDirection.XPlus), custom.For(MovementGait.Sneak, NeighborDirection.XPlus));
+        Assert.Throws<ArgumentException>(() => new GaitTiming(timing.Walk, timing.Run, 8, sneak: own with { AxisDx = 0, AxisDy = 0 }));
+        // The step costs the walk's action points (ledger ST3).
+        Assert.AreEqual(AreaTurnBased.StepCost(MovementGait.Walk, 5), AreaTurnBased.StepCost(MovementGait.Sneak, 5));
+    }
+
     [TestMethod]
     public void HumanStepDurationsAreTheResearchAverages()
     {
@@ -141,6 +175,37 @@ public sealed class ActorGaitTests
         actor.Advance(new SimulationTime(next.Value + ExactScalar.Integer(1)), [new InputBatch(release, [MovementInput.Set(1, ActorIntent.Neutral)])]);
         Assert.AreEqual(ActorDiagnosticAction.Idle, actor.State.Action);
         Assert.AreEqual(new CellCoord(8, 1), session.State.CommittedCell);
+    }
+
+    // ARC-RENDER-2539: a stealth-walk step times at the stealth rate; a profile without the stealth ART (the fixed human, a monster body) draws the walk ART, so its plan is the walk's.
+    [TestMethod]
+    public void SneakGaitPermitsSlowerStepsAndAProfileWithoutTheStealthArtDrawsTheWalk()
+    {
+        var actor = new DiagnosticGridActor { AreaGaitTiming = GaitTiming.HumanFixed, AreaGait = () => MovementGait.Sneak };
+        actor.Configure(Steps(), SimulationTime.At(0));
+        Assert.IsNull(actor.Profile.Sneak);
+        var step = GaitTiming.HumanFixed.For(MovementGait.Sneak, NeighborDirection.XPlus);
+        Assert.IsTrue(step.Value > GaitTiming.HumanFixed.For(MovementGait.Walk, NeighborDirection.XPlus).Value);
+        var half = new SimulationTime(step.Value / ExactScalar.Integer(2));
+        var selected = new List<ActorDiagnosticAction>();
+        var started = actor.Advance(half, [new InputBatch(SimulationTime.At(0), [MovementInput.Set(0, ActorIntent.Toward(NeighborDirection.XPlus))])], placement => selected.Add(placement.Action));
+        var permit = started.Movement.Events.Single(e => e.Kind == MovementEventKind.StepStarted).Assessment!;
+        Assert.AreEqual(step, permit.Duration);
+        CollectionAssert.Contains(permit.Provenance.ToArray(), GaitTiming.SneakProvenance);
+        Assert.AreEqual(ActorDiagnosticAction.Walk, actor.State.Action, "the walk ART is drawn");
+        Assert.AreEqual(ActorDiagnosticAction.Walk, actor.Placement().Action);
+        Assert.IsTrue(selected.Count > 0 && selected.All(action => action == ActorDiagnosticAction.Walk), "the plan is asked for walk frames");
+        Assert.IsTrue(actor.IsPlaying);
+        // The clock runs at the stealth rate: 10 fps, so half-way through the 0.94 s step it is on frame 4 (the walk's 17 fps would be on frame 8).
+        Assert.AreEqual(4, actor.CurrentFrame);
+        // A profile with the stealth ART draws Sneak.
+        var human = ActorDiagnosticProfile.HumanFixedArea;
+        var sneakResource = new ActorDiagnosticResource(ActorDiagnosticAction.Sneak, ActorDiagnosticProfile.HumanSneakSelector, 2669, 0, 8, 10, 10, 10) { Stride = new(10, 10, 20, 10, 30) };
+        var body = ActorDiagnosticProfile.ForHeroBody(human.Idle, human.Walk, human.Run!, human.Vault!, human.Attack!, human.DistinctKeys, sneak: sneakResource);
+        actor.UseProfile(body, GaitTiming.HumanFixed);
+        Assert.AreSame(sneakResource, body.Resource(ActorDiagnosticAction.Sneak));
+        Assert.AreEqual(ActorDiagnosticAction.Sneak, body.ActionFor(ActorDiagnosticProfile.HumanSneakSelector));
+        CollectionAssert.Contains(body.Actions.ToArray(), ActorDiagnosticAction.Sneak);
     }
 
     [TestMethod, TestCategory("RealData")]
