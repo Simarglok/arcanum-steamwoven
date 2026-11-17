@@ -1,3 +1,4 @@
+using Arcanum.Presentation.Steamwoven;
 using Arcanum.TerrainViewer.Core;
 using Arcanum.World;
 using Godot;
@@ -28,6 +29,14 @@ public partial class AreaGameBarPanel : CanvasLayer
     // ARC-UI-1365: the experience progress strip of the bottom strip (GB13) and the progress the host last gave it.
     private AreaExperienceStripView _experience = null!;
     private int? _experienceProgress;
+    // ARC-UI-2452: the Steamwoven prototype layout (generated interface on): the plan in use (null: the whole-factor layout), the boards that continue the two strips to the frame's
+    // sides, the black bars of a letterboxed or pillarboxed window and the backdrop an open menu gets over the middle band.
+    private SteamwovenHudPlan? _plan;
+    private Control _boards = null!, _bars = null!;
+    private SteamwovenBoardView _topBoard = null!, _bottomBoard = null!, _backdrop = null!;
+    private CanvasLayer _backdropLayer = null!;
+    private readonly ColorRect[] _barRects = [new() { Name = "BarLeft" }, new() { Name = "BarRight" }, new() { Name = "BarTop" }, new() { Name = "BarBottom" }];
+    private bool _menuOpen;
 
     /// <summary>A pointer event on the bars changed something: the host plays the sounds and runs the button's function.</summary>
     public event Action<AreaBarEffect>? Effect;
@@ -139,6 +148,11 @@ public partial class AreaGameBarPanel : CanvasLayer
             _strips[strip] = root;
             AddChild(root);
         }
+        // ARC-UI-2452: under the strips, the boards of the Steamwoven layout (shown only while that layout is in use).
+        _boards = new Control { Name = "Boards", MouseFilter = Control.MouseFilterEnum.Ignore, Visible = false };
+        _topBoard = new SteamwovenBoardView { Name = "TopBoard" }; _bottomBoard = new SteamwovenBoardView { Name = "BottomBoard" };
+        _boards.AddChild(_topBoard); _boards.AddChild(_bottomBoard);
+        AddChild(_boards); MoveChild(_boards, 0);
         // Under the buttons: the message window's scroll areas lie between them (ARC-UI-023).
         _messageLog = new AreaMessageLogView();
         _strips[AreaBarStrip.Bottom].AddChild(_messageLog);
@@ -169,7 +183,17 @@ public partial class AreaGameBarPanel : CanvasLayer
             Size = new Vector2(AreaGameBarLayout.HoverPortraitSize, AreaGameBarLayout.HoverPortraitSize), Visible = false,
         };
         _strips[AreaBarStrip.Bottom].AddChild(_hoverImage);
+        // ARC-UI-2452: over everything of the panel, the bars that leave the world out of the frame; a menu's backdrop is its own layer under the windows (layer 3).
+        _bars = new Control { Name = "Bars", MouseFilter = Control.MouseFilterEnum.Ignore, Visible = false };
+        foreach (var bar in _barRects) { bar.Color = Colors.Black; bar.MouseFilter = Control.MouseFilterEnum.Stop; _bars.AddChild(bar); }
+        AddChild(_bars);
+        _backdropLayer = new CanvasLayer { Name = "MenuBackdrop", Layer = 3, Visible = false };
+        _backdrop = new SteamwovenBoardView { Name = "Backdrop", MouseFilter = Control.MouseFilterEnum.Ignore };
+        _backdropLayer.AddChild(_backdrop);
+        _backdrop.Painted += () => { if (_plan is { } painted) UpdateSteamwovenParts(painted); };
+        AddChild(_backdropLayer);
         GetViewport().SizeChanged += Place;
+        InterfaceHd.Changed += Place;
         VisibilityChanged += OnVisibilityChanged;
         RenderingServer.Singleton.FramePostDraw += RecordDownDraw;
         Place();
@@ -325,11 +349,58 @@ public partial class AreaGameBarPanel : CanvasLayer
         RenderClock();
         _experience.Set(_experienceProgress, _art);
         _messageLog.Render();
+        if (_plan is { } plan) UpdateSteamwovenParts(plan);
     }
+
+    /// <summary>ARC-UI-2452: true while the Steamwoven layout (the layout model of docs/ui/steamwoven-interface-trd.md) is the one in use: the HD option with the generated interface on.</summary>
+    public static bool SteamwovenOn => InterfaceHd.Enabled && InterfaceHd.Generated && !SteamwovenHud.Suspended;
+
+    /// <summary>
+    /// ARC-UI-2452: where the original's 800 × 600 screen lies while the bars are shown, for the gauges and lamps drawn over the strips in their coordinates: its top left and its scale
+    /// (the whole factor with the screen centred and standing on the window's bottom, or the Steamwoven strip scale with the screen where the strips put it).
+    /// </summary>
+    public (Vector2 Origin, float Scale) ScreenFrame(Vector2 size)
+    {
+        if (_plan is { } plan)
+        {
+            var scale = (float)plan.StripScale;
+            return (new Vector2(plan.StripLeft, plan.BottomStripY - AreaGameBarLayout.BottomTop * scale), scale);
+        }
+        return (new Vector2(ScreenLeft(size, Factor), size.Y - AreaGameBarLayout.ScreenHeight * Factor), Factor);
+    }
+
+    /// <summary>ARC-UI-2452: the plan the panel is laid out by now (null: the original's whole-factor layout).</summary>
+    internal SteamwovenHudPlan? PlanForSelfTest => _plan;
+    /// <summary>The scale the strips are drawn at, the same in both strips (the whole <see cref="Factor"/> unless the Steamwoven layout is on).</summary>
+    public float StripScale => _strips[AreaBarStrip.Top].Scale.X;
+    /// <summary>True while a board of the Steamwoven layout is painted on a worker.</summary>
+    internal bool BoardsPendingForSelfTest => _topBoard.Pending || _bottomBoard.Pending || _backdrop.Pending;
+    internal (SteamwovenBoardView Top, SteamwovenBoardView Bottom, SteamwovenBoardView Backdrop, bool BackdropShown) BoardsForSelfTest => (_topBoard, _bottomBoard, _backdrop, _backdropLayer.Visible);
+    internal IReadOnlyList<ColorRect> BarsForSelfTest => _barRects;
+    internal bool BoardsShownForSelfTest => _boards.Visible;
+
+    /// <summary>ARC-UI-2452: an open menu window gets a generated backdrop over the whole middle band (layer 3, under the windows); the host says it every frame.</summary>
+    public void SetMenuBackdrop(bool open)
+    {
+        if (_menuOpen == open) return;
+        _menuOpen = open;
+        if (_plan is { } plan) UpdateSteamwovenParts(plan); else _backdropLayer.Visible = false;
+    }
+
+    /// <summary>ARC-UI-2452: places the bars again (the self-test turned the Steamwoven layout on or off, or gave it other panel heights).</summary>
+    internal void Relayout() => Place();
 
     private void Place()
     {
         var size = GetViewport().GetVisibleRect().Size;
+        // Only while the bars show: windows that hide them (the full-screen views) keep the whole-factor scale for their own textures.
+        var plan = SteamwovenOn && Visible ? SteamwovenHud.Plan((int)size.X, (int)size.Y) : null;
+        _plan = plan;
+        if (plan is not null) { PlaceSteamwoven(size, plan); return; }
+        // Not the Steamwoven layout (the HD option off, or the generated interface off): nothing of it shows and the original's whole-factor layout stands.
+        InterfaceHd.SetFractionalScale(null);
+        if (_boards.Visible) { _boards.Visible = false; _bars.Visible = false; _backdropLayer.Visible = false; }
+        foreach (var strip in _strips.Values) strip.TextureFilter = CanvasItem.TextureFilterEnum.Nearest;
         Factor = ScreenFactor(size);
         var left = ScreenLeft(size, Factor);
         _strips[AreaBarStrip.Top].Position = new Vector2(left, 0);
@@ -344,6 +415,67 @@ public partial class AreaGameBarPanel : CanvasLayer
         SetInsets(Visible ? AreaGameBarLayout.TopHeight * Factor : 0, Visible ? AreaGameBarLayout.BottomHeight * Factor : 0);
     }
 
+    /// <summary>
+    /// ARC-UI-2452: the strips on the layout model: one fractional scale for both (<see cref="SteamwovenHudPlan.StripScale"/>), the top strip on the bottom edge of the top band and the bottom strip
+    /// hanging from the top edge of the bottom band, both centred; the insets are the middle band's, so every window that docks between the strips docks in the middle band.
+    /// </summary>
+    private void PlaceSteamwoven(Vector2 size, SteamwovenHudPlan plan)
+    {
+        Factor = ScreenFactor(size);
+        var scale = (float)plan.StripScale;
+        InterfaceHd.SetFractionalScale(plan.StripScale * GetViewport().GetFinalTransform().Scale.X);
+        _strips[AreaBarStrip.Top].Position = new Vector2(plan.StripLeft, plan.TopStripY);
+        _strips[AreaBarStrip.Bottom].Position = new Vector2(plan.StripLeft, plan.BottomStripY);
+        foreach (var strip in _strips.Values) { strip.Scale = new Vector2(scale, scale); strip.TextureFilter = CanvasItem.TextureFilterEnum.Linear; }
+        // The sides beside a strip are the boards' (no strip tiles).
+        _sideLeft = 0; _sideRight = 0;
+        foreach (var strip in _strips)
+            strip.Value.GetNode<AreaStripSidesView>("Sides").Set(strip.Value.GetNode<TextureRect>("Art").Texture, 0, 0);
+        SetInsets(Visible ? plan.TopInset : 0, Visible ? plan.BottomInset : 0);
+        UpdateSteamwovenParts(plan);
+    }
+
+    private (ChromeRecipe? Recipe, byte[]? Legacy, int Width, int Height) ToneOf(AreaBarStrip strip)
+    {
+        var frame = (ArtFrame(AreaGameBarLayout.StripArt(strip)) as HdInterfaceTexture)?.FrameForBoard;
+        var recipe = frame?.Hd is { } query ? InterfaceChromeRecipes.For(query) : null;
+        return (recipe, frame?.Rgba, frame?.Width ?? 0, frame?.Height ?? 0);
+    }
+
+    private static Rect2I Device(PixelRect rect) => new(rect.X, rect.Y, rect.Width, rect.Height);
+
+    private void UpdateSteamwovenParts(SteamwovenHudPlan plan)
+    {
+        _boards.Visible = Visible;
+        _bars.Visible = Visible;
+        var layout = plan.Layout;
+        var scale = plan.StripScale;
+        // The grain continues the strips': a board's top left is where the strip's own top left lies, in units, from the strip (negative to its left and above).
+        var originX = (layout.Frame.X - plan.StripLeft) / scale;
+        var (topRecipe, topLegacy, topW, topH) = ToneOf(AreaBarStrip.Top);
+        var (bottomRecipe, bottomLegacy, bottomW, bottomH) = ToneOf(AreaBarStrip.Bottom);
+        var top = layout.Top.Band; var bottom = layout.Bottom.Band; var middle = layout.Middle.Band;
+        if (top.Height > 0)
+            _topBoard.Request(new(ChromeMaterial.Wood, ChromeSides.Bottom, Device(top), scale, originX, (top.Y - plan.TopStripY) / scale, topRecipe, topLegacy, topW, topH));
+        if (bottom.Height > 0)
+            _bottomBoard.Request(new(ChromeMaterial.Wood, ChromeSides.Top, Device(bottom), scale, originX, (bottom.Y - plan.BottomStripY) / scale, bottomRecipe, bottomLegacy, bottomW, bottomH));
+        var bars = layout.Bars; var (width, height) = ((int)GetViewport().GetVisibleRect().Size.X, (int)GetViewport().GetVisibleRect().Size.Y);
+        SetBar(_barRects[0], 0, 0, bars.Left, height);
+        SetBar(_barRects[1], width - bars.Right, 0, bars.Right, height);
+        SetBar(_barRects[2], bars.Left, 0, width - bars.Left - bars.Right, bars.Top);
+        SetBar(_barRects[3], bars.Left, height - bars.Bottom, width - bars.Left - bars.Right, bars.Bottom);
+        // Shown once its first paint is in (an unpainted backdrop would show the world through for the paint time).
+        _backdropLayer.Visible = _menuOpen && Visible && middle.Height > 0 && _backdrop.Texture is not null;
+        if (_menuOpen && middle.Height > 0)
+            _backdrop.Request(new(ChromeMaterial.WoodDark, ChromeSides.None, Device(middle), scale, originX, 0, bottomRecipe, bottomLegacy, bottomW, bottomH));
+    }
+
+    private static void SetBar(ColorRect bar, int x, int y, int width, int height)
+    {
+        bar.Visible = width > 0 && height > 0;
+        bar.Position = new Vector2(x, y); bar.Size = new Vector2(Math.Max(0, width), Math.Max(0, height));
+    }
+
     private static void SetInsets(float top, float bottom)
     {
         if (TopInset == top && BottomInset == bottom) return;
@@ -355,6 +487,8 @@ public partial class AreaGameBarPanel : CanvasLayer
     {
         RenderingServer.Singleton.FramePostDraw -= RecordDownDraw;
         GetViewport().SizeChanged -= Place;
+        InterfaceHd.Changed -= Place;
+        if (_plan is not null) InterfaceHd.SetFractionalScale(null);
         SetInsets(0, 0);
     }
 }

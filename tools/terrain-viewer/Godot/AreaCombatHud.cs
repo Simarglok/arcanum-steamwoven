@@ -212,8 +212,10 @@ public partial class AreaCombatHud : CanvasLayer
         // As the PC's gauges: over the bars (layer 6) when they are shown, else under the hover tooltip and the windows.
         Layer = _inBars ? 6 : 2;
         var factor = _inBars ? _bars!.Factor : AreaGameBarPanel.ScreenFactor(size);
-        _root.Position = new(AreaGameBarPanel.ScreenLeft(size, factor), size.Y - AreaGameBarLayout.ScreenHeight * factor);
-        _root.Scale = new(factor, factor);
+        // ARC-UI-2452: in the Steamwoven layout the screen lies where the strips put it, at the strips' fractional scale.
+        var (origin, scale) = _inBars ? _bars!.ScreenFrame(size) : (new Vector2(AreaGameBarPanel.ScreenLeft(size, factor), size.Y - AreaGameBarLayout.ScreenHeight * factor), (float)factor);
+        _root.Position = origin;
+        _root.Scale = new(scale, scale);
         if (_artShown)
         {
             // ARC-UI-1888: the original's places (table 0x5CAA48 and the window table 0x5CAA38).
