@@ -23,9 +23,11 @@ public sealed class AreaTalkStateTests
 
     private static AreaObjectKey Key(int index) => new(new string('a', 64), 1, AreaSourceKind.Mobile, 1, index, index * 100L, new string((char)('a' + index), 64), 100);
 
-    private static AreaObjectRecord Row(int index, int dialog)
+    private static AreaObjectRecord Row(int index, int dialog, int destroy = 0)
     {
-        var fields = new List<AreaFieldValue> { new(31, AreaPresence.Array, AreaValueOrigin.Instance, null, [new AreaSparseElement(ScrPoint.Dialog, [0, 0, dialog]), new AreaSparseElement(ScrPoint.Use, [0, 0, 5000])], null) };
+        var scripts = new List<AreaSparseElement> { new(ScrPoint.Dialog, [0, 0, dialog]), new(ScrPoint.Use, [0, 0, 5000]) };
+        if (destroy != 0) scripts.Add(new(ScrPoint.Destroy, [0, 0, destroy]));
+        var fields = new List<AreaFieldValue> { new(31, AreaPresence.Array, AreaValueOrigin.Instance, null, scripts, null) };
         return new(Key(index), 0, 16, 0, "p", "p", "r", "s", AreaScope.Core, null, 10 + index, 20, Arcanum.Data.Area.AreaDisposition.BodyEligibleConditionally, [], fields, true, true, true);
     }
 
@@ -72,6 +74,20 @@ public sealed class AreaTalkStateTests
                 Do(new(ScrCatalogue.Action.SetGlobalFlag, N(AreaFlag))),
                 Do(new(ScrCatalogue.Action.TransformObject, N(27368))),
                 Do(new(ScrCatalogue.Action.ReturnSkipDefault))));
+            // 805: the transform of the speaker, then eye candy 31 on the attachee and a call script in (script 806, line 0, 5 s) naming the attachee: both name the object the transform made (the installed 1105 lines 80-84's shape).
+            Write("scr/00805after.scr", Program(
+                Do(new(ScrCatalogue.Action.TransformObject, N(27368))),
+                Do(new(ScrCatalogue.Action.PlayScriptEyeCandy, N(31), (Attachee, -1))),
+                Do(new(ScrCatalogue.Action.CallScriptIn, N(806), N(0), (Triggerer, -1), (Attachee, -1), N(5))),
+                Do(new(ScrCatalogue.Action.ReturnSkipDefault))));
+            // 807: an attack by the attachee on the triggerer, then the transform (the attack lands before the old NPC is destroyed); 808: the transform, then a dialog action (the run is refused whole).
+            Write("scr/00807order.scr", Program(
+                Do(new(ScrCatalogue.Action.Attack, (Triggerer, -1), (Attachee, -1))),
+                Do(new(ScrCatalogue.Action.TransformObject, N(27368))),
+                Do(new(ScrCatalogue.Action.ReturnSkipDefault))));
+            Write("scr/00808dialog.scr", Program(
+                Do(new(ScrCatalogue.Action.TransformObject, N(27368))),
+                Do(new(ScrCatalogue.Action.Dialog, N(1), N(1)))));
             // 802: create item 8278 in the PC (the installed 1105 line 68's shape), skip default; the invented world holds no item prototype.
             Write("scr/00802create.scr", Program(
                 Do(new(ScrCatalogue.Action.SetGlobalFlag, N(AreaFlag))),
@@ -95,22 +111,23 @@ public sealed class AreaTalkStateTests
 
     private sealed record Talk(GameSessionOwner Session, AreaSpeaker Speaker, AreaScriptHost Host) : IDisposable
     {
+        public AreaUseScriptHost Use { get; init; } = null!;
         public void Dispose() => Session.Dispose();
         public ScrRunResult Run() => ScrDispatcher.RunObject(new(ScrPoint.Dialog, Host.Object(Speaker), Host.Pc, null), Host,
             new() { Rules = Session.Rules.Scripts, Admission = Host.RunAdmission });
         public bool Flag => Host.GlobalFlag(AreaFlag);
     }
 
-    private static Talk Create(ScriptContent content, int dialog, bool useHost = true)
+    private static Talk Create(ScriptContent content, int dialog, bool useHost = true, Func<int, bool>? critter = null, Action<string>? made = null, Func<string, AreaScriptVitals?>? vitals = null, int destroyScript = 0, Func<string, string, string>? attack = null)
     {
         var session = ConversationSessionFixture.Create(Map);
-        var row = Row(1, dialog);
+        var row = Row(1, dialog, destroyScript);
         var speaker = new AreaSpeaker(0, row, dialog, row.WorldX!.Value, row.WorldY!.Value);
         var map = new SessionMapId(Map);
         var state = new AreaConversationState(session, map, [AreaConversationState.EntityId(row)], 50);
-        var use = new AreaUseScriptHost(session, Map, [row], [], content, new AreaScriptWorld(() => new(12, 20), _ => false, _ => null, () => null));
+        var use = new AreaUseScriptHost(session, Map, [row], [], content, new AreaScriptWorld(() => new(12, 20), _ => false, _ => null, () => null, Critter: critter, CritterMade: made, Vitals: vitals, ScriptAttack: attack));
         var host = new AreaScriptHost(session, map, [speaker], state, content) { QueryHost = useHost ? () => use : null };
-        return new(session, speaker, host);
+        return new(session, speaker, host) { Use = use };
     }
 
     [TestMethod]
@@ -142,15 +159,110 @@ public sealed class AreaTalkStateTests
     }
 
     [TestMethod]
-    public void A_transform_refuses_the_run_whole_before_anything_applies()
+    public void A_transform_of_the_speaker_makes_a_critter_on_its_tile_and_destroys_the_npc()
     {
         WithContent(content =>
         {
-            using var talk = Create(content, 801);
+            var made = new List<string>();
+            using var talk = Create(content, 801, critter: prototype => prototype == 27368, made: made.Add, vitals: _ => new AreaScriptVitals(40, 40, 20, 20, 0));
             var run = talk.Run();
             Assert.AreEqual(ScrOutcome.SkipDefault, run.Outcome, run.Refusal?.ToString());
-            Assert.IsFalse(talk.Host.Apply(run.Effects), "no host changes a critter's prototype in place");
-            Assert.IsFalse(talk.Flag, "the flag before the transform was not applied: the run is refused whole");
+            Assert.IsTrue(talk.Host.Apply(run.Effects));
+            Assert.IsTrue(talk.Flag, "the run's other effects apply");
+            var critter = talk.Use.LastTransformed ?? throw new AssertFailedException("no critter made");
+            Assert.AreEqual(new CellCoord(11, 20), critter.Cell, "on the old NPC's tile");
+            Assert.AreEqual(27368 + AreaPrototypeItems.PrototypeOffset, critter.Prototype, "the prototype file is the script's number + 20 (F1)");
+            CollectionAssert.AreEqual(new[] { critter.Entity }, made, "the host is told of the made critter");
+            Assert.IsTrue(AreaUseScriptHost.Destroyed(talk.Session, Map, AreaConversationState.EntityId(talk.Speaker.Row)), "the old NPC is destroyed");
+        });
+    }
+
+    [TestMethod]
+    public void The_later_requests_of_a_run_after_a_transform_name_the_made_critter()
+    {
+        WithContent(content =>
+        {
+            using var talk = Create(content, 805, critter: prototype => prototype == 27368, vitals: _ => new AreaScriptVitals(40, 40, 20, 20, 0));
+            var run = talk.Run();
+            Assert.AreEqual(ScrOutcome.SkipDefault, run.Outcome, run.Refusal?.ToString());
+            Assert.IsTrue(ScrTransformedObject.Is(run.Effects.EyeCandies.Single().Object), "the run names the placeholder after the transform");
+            Assert.IsTrue(talk.Host.Apply(run.Effects));
+            var critter = talk.Use.LastTransformed!;
+            Assert.AreEqual(critter.Entity, talk.Host.TakeEyeCandies().Single().Object.Code, "the eye candy plays on the new critter");
+            var call = talk.Session.QueryScriptCalls().Single().Call;
+            Assert.AreEqual(critter.Entity, call.Attachee?.Entity, "the deferred call names the new critter (F11, F12)");
+            Assert.AreEqual(806, call.Script);
+        });
+    }
+
+    [TestMethod]
+    public void The_requests_before_a_transform_apply_before_the_old_npc_is_destroyed()
+    {
+        WithContent(content =>
+        {
+            Talk? talk = null;
+            var destroyedAtAttack = new List<bool>();
+            talk = Create(content, 807, critter: prototype => prototype == 27368, vitals: _ => new AreaScriptVitals(40, 40, 20, 20, 0),
+                attack: (attacker, victim) => { destroyedAtAttack.Add(AreaUseScriptHost.Destroyed(talk!.Session, Map, AreaConversationState.EntityId(talk.Speaker.Row))); return "ok"; });
+            using (talk)
+            {
+                var run = talk.Run();
+                Assert.AreEqual(ScrOutcome.SkipDefault, run.Outcome, run.Refusal?.ToString());
+                Assert.IsTrue(talk.Host.Apply(run.Effects), talk.Use.TalkStateRefusal(run.Effects));
+                CollectionAssert.AreEqual(new[] { false }, destroyedAtAttack, "the attack of the old NPC lands while it still stands");
+                Assert.IsTrue(AreaUseScriptHost.Destroyed(talk.Session, Map, AreaConversationState.EntityId(talk.Speaker.Row)));
+            }
+        });
+    }
+
+    [TestMethod]
+    public void A_dialog_action_in_the_run_of_a_transform_leaves_the_run_unapplied()
+    {
+        WithContent(content =>
+        {
+            using var talk = Create(content, 808, critter: prototype => prototype == 27368, vitals: _ => new AreaScriptVitals(40, 40, 20, 20, 0));
+            var run = talk.Run();
+            Assert.IsNotNull(run.Effects.Dialog, run.Refusal?.ToString());
+            Assert.IsFalse(talk.Host.Apply(run.Effects));
+            Assert.IsNull(talk.Use.LastTransformed, "nothing was made");
+        });
+    }
+
+    [TestMethod]
+    public void A_transform_the_host_cannot_make_refuses_the_run_whole_before_anything_applies()
+    {
+        WithContent(content =>
+        {
+            AreaScriptVitals? Full(string _) => new AreaScriptVitals(40, 40, 20, 20, 0);
+            // No critter prototype the world knows.
+            using (var talk = Create(content, 801, vitals: Full))
+            {
+                var run = talk.Run();
+                Assert.AreEqual(ScrOutcome.SkipDefault, run.Outcome, run.Refusal?.ToString());
+                Assert.IsFalse(talk.Host.Apply(run.Effects));
+                Assert.IsFalse(talk.Flag, "the flag before the transform was not applied: the run is refused whole");
+                Assert.IsNull(talk.Use.LastTransformed);
+            }
+            // A speaker that is hurt: the hit-point share is not carried yet.
+            using (var talk = Create(content, 801, critter: prototype => true, vitals: _ => new AreaScriptVitals(39, 40, 20, 20, 0)))
+            {
+                var run = talk.Run();
+                Assert.IsFalse(talk.Host.Apply(run.Effects));
+                Assert.IsFalse(AreaUseScriptHost.Destroyed(talk.Session, Map, AreaConversationState.EntityId(talk.Speaker.Row)));
+            }
+            // Vitals the world cannot give: the shares cannot be carried either.
+            using (var talk = Create(content, 801, critter: prototype => true))
+                Assert.IsFalse(talk.Host.Apply(talk.Run().Effects));
+            // A speaker whose own destroy script would run first (the original keeps the old object when that script refuses).
+            using (var talk = Create(content, 801, critter: prototype => true, vitals: Full, destroyScript: 4002))
+            {
+                var run = talk.Run();
+                StringAssert.Contains(talk.Use.TalkStateRefusal(run.Effects) ?? "", "destroy script 4002");
+                Assert.IsFalse(talk.Host.Apply(run.Effects));
+            }
+            // Without the shown map's use host the set does not hold the action at all: the run is refused before it runs.
+            using (var talk = Create(content, 801, useHost: false))
+                Assert.AreEqual(ScrCatalogue.Action.TransformObject, talk.Run().Refusal?.Type);
         });
     }
 

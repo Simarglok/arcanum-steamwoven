@@ -2763,16 +2763,66 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     }
 
     /// <summary>ARC-SCRIPT-2198: the first reason the dialog host cannot apply the state requests of a talk run through this host, or null. A talk run holds disband (22) and create item (66) of the shown map's objects (the same plan as a use run's:
-    /// the party, the item prototype and the holder's list), and the slots of other objects its change script (99) and call-ex callees wrote (<see cref="CanWriteObjectSlot"/>); a transform of an object (40) is not modelled here (no host changes
-    /// a critter's prototype in place yet).</summary>
+    /// the party, the item prototype and the holder's list), and the slots of other objects its change script (99) and call-ex callees wrote (<see cref="CanWriteObjectSlot"/>). ARC-SCRIPT-2440: and one transform of a placed NPC (40,
+    /// <see cref="TransformRefusal"/>); any other transform is refused whole.</summary>
     internal string? TalkStateRefusal(ScrEffects effects)
     {
-        foreach (var request in effects.ObjectStates)
-            if (request.Change == ScrObjectStateChange.Transform) return $"transform of {request.Object.Code} into prototype {request.Value} is not modelled (no critter changes its prototype in place)";
+        var transforms = effects.ObjectStates.Where(request => request.Change == ScrObjectStateChange.Transform).ToArray();
+        if (transforms.Length > 1) return "a second transform in one run is not modelled";
+        foreach (var request in transforms)
+            if (TransformRefusal(request) is { } refusal) return refusal;
         foreach (var write in effects.SlotWrites)
             if (!CanWriteObjectSlot(write)) return $"the slot of point {write.Point} of {write.Attachee?.Code} cannot be stored (no loaded element on the shown map)";
         var planned = effects.ObjectStates.Where(request => request.Change == ScrObjectStateChange.CreateItem).ToArray();
         return planned.Length == 0 ? null : ObjectStateRefusal([], planned);
+    }
+
+    /// <summary>
+    /// ARC-SCRIPT-2440 (ledger TI5, exe read 2026-11-17, F1–F12): why a transform (40) of <paramref name="request"/>'s object into critter prototype <see cref="ScrObjectStateRequest.Value"/> cannot be applied here, or null. Modelled: a placed NPC of the shown map
+    /// (no created critter, not already destroyed, no follower of the PC, no leader or follower of an NPC, no destroy script of its own: the original runs that script first and a refusal of it keeps the old object, F6) that stands at full hit points and fatigue
+    /// (the original carries both shares, F2: below full, or unknown, they are not carried yet), becomes a created critter of the prototype's file (the script's number + 20, F1) on its tile in the session, and the old NPC is destroyed as a script destroy does (the map change,
+    /// F5). The new critter starts from its prototype alone (F2; its inventory is the host's restock of a created critter, F4); the old rotation and the old inventory (which stays in the destroyed holder) are not carried.
+    /// </summary>
+    internal string? TransformRefusal(ScrObjectStateRequest request)
+    {
+        var obj = request.Object;
+        string Not(string why) => $"transform of {obj.Code} into prototype {request.Value} is not modelled ({why})";
+        if (ScrTransformedObject.Is(obj)) return Not("the object a transform made");
+        if (IsPc(obj) || obj.Map != _shownMap || Row(obj) is not { Type: NpcType } npc) return Not("only an NPC of the shown map");
+        if (_session.QueryCreatedObject(obj.Code) is not null) return Not("a created critter");
+        if (AlreadyDestroyed(obj)) return Not("the NPC is destroyed already");
+        if (FollowsPc(obj)) return Not("a follower of the PC");
+        if (_session.QueryLeader(obj.Code) is not null || _session.QueryFollowers(obj.Code).Count > 0) return Not("it leads or follows an NPC");
+        if (LoadedSlot(npc, ScrPoint.Destroy) is { Script: not 0 } own) return Not($"its destroy script {own.Script} runs first");
+        if (_world?.Critter is not { } critter || !critter(request.Value)) return Not("no critter prototype the session can create");
+        if (Place(obj) is not { } cell) return Not("it has no tile");
+        if (_world.Vitals?.Invoke(obj.Code) is not { } vitals) return Not("its hit points and fatigue are unknown: the shares are not carried yet");
+        if (vitals.HitPoints < vitals.MaxHitPoints || vitals.Fatigue < vitals.MaxFatigue) return Not("its hit points or fatigue are below full: the shares are not carried yet");
+        if (_session.QueryCreateObjectRefusal(SessionCreatedKind.Critter, request.Value + AreaPrototypeItems.PrototypeOffset, new SessionMapId(_shownMap), cell) is { } why) return Not($"the session would refuse it ({why})");
+        return null;
+    }
+
+    /// <summary>ARC-SCRIPT-2440 (ledger TI5): the critter the last <see cref="ApplyTalkTransform"/> made (test and smoke seam; null before any).</summary>
+    public SessionCreatedObject? LastTransformed { get; private set; }
+
+    /// <summary>
+    /// ARC-SCRIPT-2440 (ledger TI5; <see cref="TransformRefusal"/> planned it): the transform of a placed NPC, in the original's order: the new critter of the prototype's file is created on the old one's tile (a failure ends the action, nothing else
+    /// happens), then the old NPC is destroyed (the destroy map change of a script destroy); the host is told of the made critter (<see cref="AreaScriptWorld.CritterMade"/>). Returns the made object, or null when the session refused.
+    /// </summary>
+    internal ScrObjectRef? ApplyTalkTransform(ScrObjectStateRequest request)
+    {
+        LastTransformed = null;
+        var cell = Place(request.Object)!.Value;
+        var made = _session.CreateObject(_session.Version, SessionCreatedKind.Critter, request.Value + AreaPrototypeItems.PrototypeOffset, new SessionMapId(_shownMap), cell);
+        if (made.Object is not { } critter) return null;
+        LastTransformed = critter;
+        _world!.CritterMade?.Invoke(critter.Entity);
+        var destroyed = _session.ApplyChanges(_session.Version, null, [new(new SessionMapId(request.Object.Map), MapChangeKey.ForEntity(request.Object.Code, DestroyedProperty), 1)]);
+        if (destroyed.Disposition != GameSessionDisposition.Rejected) return new ScrObjectRef(_shownMap, critter.Entity);
+        // The old NPC stays: the made critter goes again, so the refusal never leaves two of them (the host's sync of it is the viewer's own, as for any created critter that is destroyed).
+        _session.DestroyCreatedObject(_session.Version, critter.Entity);
+        LastTransformed = null;
+        return null;
     }
 
     /// <summary>ARC-SCRIPT-2198: one disband or create item request of a talk run, in action order (<see cref="TalkStateRefusal"/> planned it); false when the session refuses. Any other request is not this host's and does nothing.</summary>
