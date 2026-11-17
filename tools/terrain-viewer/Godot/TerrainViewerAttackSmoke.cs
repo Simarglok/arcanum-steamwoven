@@ -10,6 +10,9 @@ namespace Arcanum.TerrainViewer;
 
 public partial class TerrainViewerApp
 {
+    // ARC-COMBAT-2435: the random seed the held-throw smoke starts from (a throw of the smoke hero at its tile hits at it; the 4th draw of the seed, the hit roll, is 1; ARC_SMOKE_THROW_SEED overrides it).
+    private const ulong ThrowSmokeSeed = 727;
+
     // Native observation (ARC-COMBAT-005) with --hero, after the combat-mode stage, on the exterior or a whole map: in combat mode
     // the hero clicks the living NPC with the fewest hit points from a few cells away, walks within reach, plays its attack
     // ART, and the auto-attack repeats until the NPC dies; the session then holds its death, the experience it paid and makes it
@@ -306,12 +309,16 @@ public partial class TerrainViewerApp
             bool Throwing(GameSessionOwner owner) => owner.QueryGoals().RunsOf(AreaHeroRunsHost.Hero).Any(r => r.Top is { Goal: Arcanum.Simulation.Goals.GoalType.ThrowItem, Node: 2 });
             for (var i = 0; i < 200 && !Throwing(loaded) && HeroRunsHost() is { ThrowRun: not null }; i++) Frame();
             require(Throwing(loaded), "the throw's swing began");
+            // ARC-COMBAT-2435: a throw at a tile rolls as a throw at a location, so a miss would scatter the item to a tile the pickup below may not reach: the session's random stream starts at a seed whose throw hits (the smoke checks the outcome below).
+            require(loaded.RestoreRandom(new SessionRandomState(ulong.TryParse(System.Environment.GetEnvironmentVariable("ARC_SMOKE_THROW_SEED"), out var envSeed) ? envSeed : ThrowSmokeSeed, 0)), "the throw's random seed was set");
+            GD.Print($"ARC-COMBAT-2435 smoke throw-seed draws={loaded.QueryRandom().Draws}");
             QuickKey(Key.F7);
             require(_quickSaveStatus?.StartsWith("F7 quick saved", StringComparison.Ordinal) == true, "F7 saved the throwing hero: " + _quickSaveStatus);
             for (var i = 0; i < 1500 && (HeroRunsHost() is { ThrowRun: not null } || _projectiles.Count > 0); i++) Frame();
             CellCoord? Landed(GameSessionOwner owner) => owner.QueryPlacedItems().FirstOrDefault(p => p.Entity == item)?.Cell;
             var liveLanding = Landed(loaded);
             require(liveLanding is not null, "the live throw landed the item");
+            require(liveLanding == aim, $"the throw hit and landed on its tile ({liveLanding} for {aim}; the seed of the smoke's throw may need another)");
             QuickKey(Key.F8);
             require(_mapHandoff is not null || _quickSaveStatus?.StartsWith("F8 quick loaded", StringComparison.Ordinal) == true, "F8 loaded the throwing hero: " + _quickSaveStatus);
             if (_mapHandoff is not null) await (_lastLoad ?? Task.CompletedTask);

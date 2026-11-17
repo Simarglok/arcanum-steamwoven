@@ -457,8 +457,8 @@ public partial class TerrainViewerApp
         // time is the accepted deviation A) with the thrown item's loudness as a weapon (0x4B2810); a throw decided a miss never strikes its aimed target and alerts none.
         if (aimed is not null && hit && result.Attack?.Resolution?.Refusal == AttackRefusal.None) _aiHost?.HeroAttacked(aimed.Entity, KitItemNoise(held.Item));
         foreach (var shot in result.Shots)
-            // ARC-COMBAT-2435: a hit with no struck critter flies to its tile and strikes nothing (the shot is the targetless one); a miss flies toward its scattered tile.
-            FlyShot(shot, result.Destination ?? tile, art, unfaced, range, hit && aimed is not null, aimed?.Row ?? HeroRow, aimed, null, result.Destination is not null,
+            // ARC-COMBAT-2435: a hit with no struck critter flies to its tile and strikes nothing (the targetless hit shot, ProjectileRules.Cross); a miss flies toward its scattered tile and strikes what it passes.
+            FlyShot(shot, result.Destination ?? tile, art, unfaced, range, hit, aimed?.Row ?? HeroRow, aimed, null, result.Destination is not null,
                 sizeArc: facts.Kind.Type != SessionItemType.Weapon);
         SetHeldThrowNotice($"{held.Name} thrown at {tile.X},{tile.Y}" + (aimed is null ? (result.Attack?.Resolution is null ? "" : hit ? ": it lands there" : result.Destination is { } scattered ? $": it missed and flies to {scattered.X},{scattered.Y}" : ": it missed") : hit ? $": it will hit {aimed.Entity}" : ": it missed"));
         // A critical miss turned on the hero at once (its result is the attack's); a strike waits for the flight.

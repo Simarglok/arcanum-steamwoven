@@ -256,7 +256,8 @@ public static class ProjectileRules
         if (shot.Returning) return new(shot, crossing.Left == destination ? ProjectileStrikeKind.DestinationEnd : ProjectileStrikeKind.None, null);
         // ARC-COMBAT-018: a shot without a target (a missed throw's scatter cleared it and set flag 0x20, 0x4B39B0) flies free and
         // ends on leaving its destination.
-        if (target is null && (shot.Hit || !shot.FreeFlight)) throw new ArgumentException("A shot without a target is a miss flying free.", nameof(shot));
+        // ARC-COMBAT-2435 (ledger TW11): a throw that hit with no struck object (a throw at a location) carries the hit flag and no target: it strikes nothing on the way (a hit record strikes only the object chosen at launch) and ends on leaving its destination.
+        if (target is null && !shot.Hit && !shot.FreeFlight) throw new ArgumentException("A shot without a target is a miss flying free or a hit at a location.", nameof(shot));
         if (crossing.Left == destination && target is null) return new(shot, ProjectileStrikeKind.DestinationEnd, null);
         // The stored flags change when the destination is left; the rest of this crossing reads the shot as it was.
         var next = crossing.Left == destination && target is not null ? shot with { Hit = false, FreeFlight = true } : shot;
