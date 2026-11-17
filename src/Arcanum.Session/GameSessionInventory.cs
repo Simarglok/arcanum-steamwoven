@@ -759,7 +759,8 @@ internal sealed class InventoryDomain
             // (Placed below); only a save made before that fix can still hold some in a spilled container's list, and they stay hidden.
             .Concat(seed.Source.Holders.Where(holder => holder.Kind == SessionHolderKind.Container).SelectMany(holder =>
                 spilled(holder.Entity) is { } cell ? Current(seed, holder, dropped, added: false).Select(item => new SessionGroundItem(item, moved?.Invoke(item.Entity) ?? cell)) : []))
-            .Concat(seed.Source.Holders.Where(holder => holder.Kind == SessionHolderKind.Npc).SelectMany(holder => holder.Items
+            // ARC-WORLD-2502: a container's seed items the script destroy of the container took out (0x4639E0) lie where they dropped, as an NPC's do.
+            .Concat(seed.Source.Holders.Where(holder => holder.Kind is SessionHolderKind.Npc or SessionHolderKind.Container).SelectMany(holder => holder.Items
                 .Where(entity => !Taken.Contains(entity) && dropped(entity) is not null)
                 .Select(entity => new SessionGroundItem(new(entity, WithAmmo(entity, seed.Items[entity].Facts)), moved?.Invoke(entity) ?? dropped(entity)!.Value))))
             .Concat(Placed.Where(item => item.Map == map).Select(item => new SessionGroundItem(new(item.Entity, WithAmmo(item.Entity, MadeFacts(item.Kind, PlacedComplexity(item)))), item.Cell)))
