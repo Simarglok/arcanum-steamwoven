@@ -23,6 +23,7 @@ public sealed class SteamwovenLayoutTests
         (2880, 1800, 2880, 1800, 0.7500, SteamwovenStep.One, 0.750, 90, 1368, 342, 2160, 360, 0, 0),
         (1366, 768, 1366, 768, 0.3556, SteamwovenStep.Half, 0.711, 43, 563, 162, 1024, 171, 0, 0),
         (1600, 900, 1600, 900, 0.4167, SteamwovenStep.Half, 0.833, 50, 660, 190, 1200, 200, 0, 0),
+        (1680, 945, 1680, 945, 0.4375, SteamwovenStep.Half, 0.875, 53, 692, 200, 1260, 210, 0, 0),
         (3440, 1440, 2560, 1440, 0.6667, SteamwovenStep.TwoThirds, 1.000, 80, 1056, 304, 1920, 320, 440, 0),
         (5120, 1440, 2560, 1440, 0.6667, SteamwovenStep.TwoThirds, 1.000, 80, 1056, 304, 1920, 320, 1280, 0),
         (1024, 768, 1024, 640, 0.2667, SteamwovenStep.Third, 0.800, 32, 486, 122, 768, 128, 0, 64),
@@ -324,6 +325,11 @@ public sealed class SteamwovenLayoutTests
         Assert.AreEqual(62, l.Top.Band.Height);
         Assert.AreEqual(234, l.Bottom.Band.Height);
         Assert.AreEqual(811, l.Middle.Band.Height);
+        // 1680 x 945: f = 0.4375; the bottom panel 199.5 rounds up as a size (200; rounding its top edge would give 199), the top panel 52.5 to 53.
+        var tie = Layout(1680, 945);
+        Assert.AreEqual(53, tie.Top.Band.Height);
+        Assert.AreEqual(200, tie.Bottom.Band.Height);
+        Assert.AreEqual(945 - 200, tie.Bottom.Band.Y);
         Assert.AreEqual(1, new Ratio(1, 2).RoundHalfUp());
         Assert.AreEqual(0, new Ratio(-1, 2).RoundHalfUp());
         Assert.AreEqual(-1, new Ratio(-3, 4).RoundHalfUp());

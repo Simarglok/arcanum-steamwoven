@@ -39,7 +39,7 @@ implemented yet.
 - **SWI-LAY-7** Every master length and offset is a multiple of 6 px, so it is a whole number of pixels at every step
   (6 px = 4, 3 and 2 px). A device position is `round(master position · f)`, computed per edge (not per size), so
   neighbouring parts share their edges; halves round up. The two panel heights are the exception: each is `round(height · f)`
-  from the frame's own top or bottom edge, as the reference table below shows (1600 × 900: bottom panel 238, middle 599).
+  from the frame's own top or bottom edge, as the reference table below shows (1680 × 945: bottom panel 200, where rounding the bottom panel's top edge would give 199).
 
 Reference table (band heights at the default values of SWI-LAY-10; "bars" are per side, horizontal / vertical). The layout
 model's unit tests use these numbers ([#2450](https://github.com/Simarglok/arcanum-steamwoven/issues/2450)):
@@ -59,6 +59,7 @@ model's unit tests use these numbers ([#2450](https://github.com/Simarglok/arcan
 | 2880 × 1800 | 2880 × 1800 | 0.7500 | 1 | 0.750 | 90 | 1368 | 342 | 2160 | 360 | 0 / 0 |
 | 1366 × 768 | 1366 × 768 | 0.3556 | 1/2 | 0.711 | 43 | 563 | 162 | 1024 | 171 | 0 / 0 |
 | 1600 × 900 | 1600 × 900 | 0.4167 | 1/2 | 0.833 | 50 | 660 | 190 | 1200 | 200 | 0 / 0 |
+| 1680 × 945 | 1680 × 945 | 0.4375 | 1/2 | 0.875 | 53 | 692 | 200 | 1260 | 210 | 0 / 0 |
 | 3440 × 1440 | 2560 × 1440 | 0.6667 | 2/3 | 1.000 | 80 | 1056 | 304 | 1920 | 320 | 440 / 0 |
 | 5120 × 1440 | 2560 × 1440 | 0.6667 | 2/3 | 1.000 | 80 | 1056 | 304 | 1920 | 320 | 1280 / 0 |
 | 1024 × 768 | 1024 × 640 | 0.2667 | 1/3 | 0.800 | 32 | 486 | 122 | 768 | 128 | 0 / 64 |
@@ -82,7 +83,7 @@ Why this range (Steam Hardware Survey, primary display, October 2026, read 2026-
   a 16:9 middle band; at 120 and 456 the middle band is 1584 px at 16:9 and 1824 px at 16:10, and the zone has 72 px above and below it at 16:9. The layout model's options hold the pair in one place.
 - **SWI-LAY-11** Each panel spans the whole frame width. The centre block (2880 px) is centred; the sides take the
   rest. Controls in the centre block sit at their original offsets × 3.6, snapped to the 6 px grid (shift at most
-  3 px, under one unit).
+  3 px, under one unit); with the 120 and 456 px bands the vertical offsets cannot be the original's ([open question](#open-questions)).
 - **SWI-LAY-12** A panel is the panel board (one continuous material for both panels) plus hardware layers (sockets,
   rings, vial housings, the message window frame, rails, buttons). The sides show the same board: same material, tone
   and texture, no visible join at the centre block's edges (measured by SWI-VER-5). At this stage the sides have no controls and no decor.
