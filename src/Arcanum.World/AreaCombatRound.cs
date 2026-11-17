@@ -340,7 +340,7 @@ public static class AreaTurnBased
     /// <summary>Whether the charged action goes ahead.</summary>
     public static bool Proceeds(AreaHeroCharge charge) => charge is AreaHeroCharge.Free or AreaHeroCharge.Paid or AreaHeroCharge.Overexerted;
 
-    /// <summary>The action points of a step in the gait it starts with (walk 2, run 1 while the hero has fatigue left).</summary>
+    /// <summary>The action points of a step in the gait it starts with (walk 2, run 1 while the hero has fatigue left; ARC-RENDER-2539: the stealth walk costs the walk's 2, ledger ST3).</summary>
     public static int StepCost(MovementGait gait, int currentFatigue) => TurnBasedRules.StepCost(gait == MovementGait.Run, currentFatigue);
 
     /// <summary>Why an action did not happen, for the status line.</summary>

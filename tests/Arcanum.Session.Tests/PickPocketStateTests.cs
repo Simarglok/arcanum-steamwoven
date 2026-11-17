@@ -20,7 +20,7 @@ public sealed class PickPocketStateTests
     private static readonly SessionItemKind NoStack = default;
 
     // Dexterity 20 (pick pocket's key stat), pick-pocket points and training as asked, the synthetic seed attached.
-    private static GameSessionOwner Thief(int points, SkillTraining training, ulong seed = 0)
+    private static GameSessionOwner Thief(int points, SkillTraining training, ulong seed = 0, Func<SessionItemFacts, SessionItemFacts>? vest = null)
     {
         var stats = Defaults(); stats[2] = 20;
         int[] basic = new int[12];
@@ -29,7 +29,7 @@ public sealed class PickPocketStateTests
         var created = GameSessionOwner.Create(Descriptor() with { Hero = hero, RandomSeed = seed });
         Assert.AreEqual(GameSessionFailure.None, created.Failure);
         var owner = created.Owner!;
-        Assert.AreEqual(GameSessionFailure.None, owner.AttachMapInventory(Exterior, Seed()).Failure);
+        Assert.AreEqual(GameSessionFailure.None, owner.AttachMapInventory(Exterior, vest is null ? Seed() : Seed() with { Items = [.. Seed().Items.Select(item => item.Entity == "vest" ? item with { Facts = vest(item.Facts) } : item)] }).Failure);
         return owner;
     }
 
@@ -57,6 +57,60 @@ public sealed class PickPocketStateTests
         // A theft from a victim the hero summoned changes no alignment.
         var summoned = Steal(owner, "ring", Victim(alignment: 200) with { SummonedByHero = true });
         Assert.AreEqual((1, (int?)null, -5), (summoned.Moved, summoned.Alignment, owner.QueryHeroPartySide()!.Alignment));
+    }
+
+    // ARC-DEV-1338 (PP3, PP12): the pick-pocket case refuses no worn item (its slot only raises the difficulty); the move is the transfer 0x4617F0 → 0x461CA0, whose removal 0x466E00 → 0x467860 takes a worn
+    // item off its slot and marks an NPC giver to re-wield (WL3, NT3). A fated theft (a critical success) keeps the tests off the armour slot's higher difficulty.
+    private static void ArmFate(GameSessionOwner owner)
+    {
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.GrantHeroFatePoint(owner.Version).Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.ArmHeroFate(owner.Version, FateKind.PickPocket).Disposition);
+    }
+
+    [TestMethod]
+    public void AMasterStealsAWornItemOffTheVictimAndTheInsertCheckSeesItUnwielded()
+    {
+        using var owner = Thief(20, SkillTraining.Master);
+        ArmFate(owner);
+        var revision = owner.Version.Revision;
+        SessionInventoryItem? seen = null;
+        var result = Steal(owner, "vest", check: item => { seen = item; return SessionInsertVerdict.Accepted; });
+        Assert.AreEqual((GameSessionDisposition.Changed, GameSessionFailure.None, true, 1), (result.Disposition, result.Failure, result.Check!.Success, result.Moved));
+        Assert.AreEqual(-1, seen!.Facts.InventoryLocation, "the insert check sees the item unwielded");
+        Assert.IsTrue(owner.QueryPcInventory().Any(item => item.Entity == "vest"));
+        CollectionAssert.AreEqual(new[] { "ring", "sword", "ring-copy" }, List(owner, "virgil"));
+        Assert.AreEqual(revision + 1, owner.Version.Revision, "the check, the move and the alignment: one revision");
+    }
+
+    [TestMethod]
+    public void ARefusedInsertOfAStolenWornItemLeavesItWornAndUnnoticed()
+    {
+        using var owner = Thief(20, SkillTraining.Master);
+        ArmFate(owner);
+        var result = Steal(owner, "vest", check: Refuse);
+        Assert.AreEqual((GameSessionDisposition.Changed, true, 0, false, GameSessionFailure.InsertRefused), (result.Disposition, result.Check!.Success, result.Moved, result.Noticed, result.Move!.Value.Failure));
+        Assert.IsFalse(owner.QueryPcInventory().Any(item => item.Entity == "vest"));
+        var vest = owner.QueryMapInventory(Exterior)!.Holders.Single(h => h.Entity == "virgil").Items.Single(item => item.Entity == "vest");
+        Assert.AreEqual(1006, vest.Facts.InventoryLocation, "it stays on the slot");
+        Assert.IsTrue(vest.Facts.Worn);
+    }
+
+    // A worn no-drop item fails at the move's remove check (quiet, as any refused move); a worn item with a wield-off script and no script host refuses the attempt after the charge, nothing moved or noticed.
+    [TestMethod]
+    public void AWornNoDropVestIsAQuietFailureAndOneWithAWieldOffScriptNeedsAHost()
+    {
+        using var sticky = Thief(20, SkillTraining.Master, vest: facts => facts with { NoDrop = true });
+        ArmFate(sticky);
+        var failed = Steal(sticky, "vest");
+        Assert.AreEqual((GameSessionDisposition.Changed, true, 0, false, GameSessionFailure.ItemNotDroppable), (failed.Disposition, failed.Check!.Success, failed.Moved, failed.Noticed, failed.Move!.Value.Failure));
+        CollectionAssert.Contains(List(sticky, "virgil"), "vest");
+
+        using var scripted = Thief(20, SkillTraining.Master, vest: facts => facts with { ScriptPoints = [SessionScriptPoint.WieldOff] });
+        ArmFate(scripted);
+        var refused = Steal(scripted, "vest");
+        Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.ItemScriptUnsupported), (refused.Disposition, refused.Failure));
+        CollectionAssert.Contains(List(scripted, "virgil"), "vest");
+        Assert.IsFalse(scripted.QueryPcInventory().Any(item => item.Entity == "vest"));
     }
 
     [TestMethod]
@@ -203,7 +257,6 @@ public sealed class PickPocketStateTests
         Refused(Steal(owner, "sword", Victim(alignment: -1001)), GameSessionFailure.InvalidPickPocketVictim);
         Refused(Steal(owner, "sword", Victim() with { Conditions = (SkillTargetConditions)64 }), GameSessionFailure.InvalidPickPocketVictim);
         Refused(Steal(owner, "cup"), GameSessionFailure.ItemNotAvailable);
-        Refused(Steal(owner, "vest"), GameSessionFailure.WornItemUnsupported);
         Refused(owner.PickPocket(owner.Version, Victim(), PickPocketDirection.Plant, "sword", NoStack, Accept), GameSessionFailure.ItemNotAvailable);
         Refused(owner.PickPocket(new GameSessionVersion(owner.Identity, 7), Victim(), PickPocketDirection.Steal, "sword", NoStack, Accept), GameSessionFailure.StaleVersion);
         using var nobody = InventoryStateTests.Attached();

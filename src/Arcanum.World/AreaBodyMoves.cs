@@ -89,11 +89,15 @@ public sealed record AreaBodyArmedLoad(AreaBodyMoveStatus Status, AreaBodyArt? A
 /// <summary>A body's move set: the stand, walk and run ARTs found next to its ART (null when absent).</summary>
 public sealed record AreaBodyMoves(AreaBodyMoveStatus Status, AreaBodyArt? Stand, AreaBodyArt? Walk, AreaBodyArt? Run, string Detail)
 {
+    /// <summary>ARC-RENDER-2539: the stealth walk ART (animation 3, which keeps the weapon and shield like the stand) next to the body's ART, or null when the body has none (the walk is drawn, MA1 pair 3 to 1).</summary>
+    public AreaBodyArt? Sneak { get; init; }
+
     /// <summary>The ART drawn for <paramref name="action"/>: the run ART (the walk without one, the missing-art repair), the walk ART
     /// for a walk or a vault, the stand ART standing; null when there is none.</summary>
     public AreaBodyArt? For(ActorDiagnosticAction action) => action switch
     {
         ActorDiagnosticAction.Run => Run ?? Walk,
+        ActorDiagnosticAction.Sneak => Sneak ?? Walk,
         ActorDiagnosticAction.Walk or ActorDiagnosticAction.Vault => Walk,
         ActorDiagnosticAction.Idle => Stand,
         _ => null,
@@ -111,7 +115,7 @@ public sealed record AreaBodyMoves(AreaBodyMoveStatus Status, AreaBodyArt? Stand
 /// </summary>
 public static class AreaBodyMoveArt
 {
-    public const int Stand = 0, Walk = 1, Run = 6;
+    public const int Stand = 0, Walk = 1, Sneak = 3, Run = 6;
     public const string Policy = "steamwoven-body-move-v1";
     private static readonly DatReaderOptions Options = new() { MaxArchiveBytes = 536870912, MaxStoredEntryBytes = 1048576, MaxDecodedEntryBytes = 1048576 };
     private const uint DirectoryRecord = 0x400, IgnoredRecord = 0x800;
@@ -156,9 +160,11 @@ public static class AreaBodyMoveArt
             var walk = weapon == 'a' ? Find(Walk, ('x', 'a')) : Find(Walk, ('x', weapon), ('x', 'a'));
             if (walk is null) return Refused(refused.Count == 0 ? AreaBodyMoveStatus.WalkMissing : AreaBodyMoveStatus.Unreadable, string.Join("; ", ["walk", .. refused]));
             var run = Find(Run, ('x', 'a'));
+            // ARC-RENDER-2539: the stealth walk (animation 3) is outside the 6..19 range that clears weapon and shield, so it keeps the body's own letters like the stand, except weapon 1 (letter b) becomes weapon 0 (MA2, 0x41D510); missing, the walk is drawn (MA1 pair 3 to 1).
+            var sneak = Find(Sneak, (shield, weapon == 'b' ? 'a' : weapon));
             var stand = weapon == 'a' ? Find(Stand, (shield, 'a'), (shield, 'b')) : Find(Stand, (shield, weapon));
-            return new(AreaBodyMoveStatus.Ready, stand, walk, run, $"{stand?.Name ?? "no stand"}, {walk.Name}, {run?.Name ?? "no run"}"
-                + (refused.Count == 0 ? "" : "; unreadable " + string.Join(", ", refused)));
+            return new(AreaBodyMoveStatus.Ready, stand, walk, run, $"{stand?.Name ?? "no stand"}, {walk.Name}, {run?.Name ?? "no run"}, {sneak?.Name ?? "no sneak"}"
+                + (refused.Count == 0 ? "" : "; unreadable " + string.Join(", ", refused))) { Sneak = sneak };
         }
         catch (Exception error) when (error is DatException or ArtException or IOException or UnauthorizedAccessException or ArgumentException)
         {

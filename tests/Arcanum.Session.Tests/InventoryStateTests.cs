@@ -241,7 +241,7 @@ public sealed class InventoryStateTests
         using var heavy = Attached();
         Refused(heavy.LootItem(heavy.Version, "corpse", "helmet", _ => SessionInsertVerdict.TooHeavy), heavy, GameSessionFailure.InsertRefused, 0, SessionInsertVerdict.TooHeavy);
         Assert.IsTrue(heavy.QueryMapInventory(Exterior)!.Holders.Single(h => h.Entity == "corpse").Items.Any(i => i.Entity == "helmet" && i.Facts.Worn));
-        // The living NPC's worn vest: a purchase or a steal keeps its refusal (not read for those paths).
+        // The living NPC's worn vest: a purchase keeps its refusal (the barter window's doll takes it with `unwield`; the steal does since ARC-DEV-1338).
         using var other = Attached();
         Assert.AreEqual(GameSessionFailure.WornItemUnsupported, other.TakeItemFromNpc(other.Version, "virgil", "vest", Accept).Failure);
     }

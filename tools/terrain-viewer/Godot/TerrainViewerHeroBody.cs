@@ -220,6 +220,10 @@ public partial class TerrainViewerApp
             "the drawn frame is the body's and uploaded: " + _readyActor?.TextureKey);
         Require(_worldActor.AreaGaitTiming is { } timing && timing.RateBonus == body.GaitRateBonus
             && (_worldActor.Session as AreaGridSession)?.Timing == timing, "the steps take the body's gait timing");
+        // ARC-RENDER-2539: the stealth walk ART (animation 3) is read when the body has it, its stride is the timing's, else the walk's goes at the stealth rate.
+        Require(profile.Sneak is { } sneakArt ? _worldActor.AreaGaitTiming!.Sneak == sneakArt.Stride && ((sneakArt.Selector >> 6) & 31) == 3 : _worldActor.AreaGaitTiming!.Sneak == profile.Walk.Stride,
+            $"{body.Label}: the stealth walk's stride");
+        GD.Print($"ARC-RENDER-2539 hero body sneak art={(profile.Sneak is { } art ? $"0x{art.Selector:x8} frames={art.FramesPerGroup} fps={art.RawFramesPerSecond} stride={art.Stride}" : "none (walk drawn)")} sneakRate={_worldActor.AreaGaitTiming!.ArtRate(MovementGait.Sneak)}");
         GD.Print($"ARC-UI-039 native-smoke hero body PASS race={hero.Race} gender={hero.Gender} body={body.Label} armor={body.Armor} palette={body.Palette} profile={profile.Id} "
             + $"idle=0x{profile.Idle.Selector:x8} walkRate={_worldActor.AreaGaitTiming!.ArtRate(MovementGait.Walk)}");
         RunBodyArmorSmoke(bare, body);

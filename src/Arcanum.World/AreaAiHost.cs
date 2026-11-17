@@ -202,7 +202,7 @@ public interface IAreaAiFollowers
     IReadOnlyList<AreaAiNpc> Npcs { get; }
     /// <summary>Walks the companion one step onto the world cell <paramref name="next"/> (a neighbour of its cell); false when its walk
     /// refuses it.</summary>
-    bool Step(string entity, CellCoord next, bool running);
+    bool Step(string entity, CellCoord next, bool running, bool sneaking = false);
     /// <summary>Turns the companion toward the world cell <paramref name="toward"/>.</summary>
     void Face(string entity, CellCoord toward);
     /// <summary>ARC-DEV-105 (MIG9 S5): moves the companion onto the world cell <paramref name="cell"/> at once (the follower catch-up, 0x4AD4D0);
@@ -2232,12 +2232,15 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         _startedStep = null;
         if (!TryNpc(id, out var npc) || Tile(id) is not { } from) return 1;
         if (InRound && RoundActor != id) OffTurnSteps++;
-        var gait = running ? MovementGait.Run : MovementGait.Walk;
+        // ARC-RENDER-2539 (0x42EDC0): a flagged critter below prowling expert steps the stealth walk, a run wanted ignored (the goals' RunPermitted already refuses it).
+        var sneaking = id != Pc && _session.IsConcealed(SessionCombatant.Critter(id)) && AiExecutorRules.Sneaks(Mover(id));
+        if (sneaking) running = false;
+        var gait = running ? MovementGait.Run : sneaking ? MovementGait.Sneak : MovementGait.Walk;
         var direction = AreaCombatHost.Facing(from, next) ?? NeighborDirection.XPlus;
         var duration = _scene.Timing?.For(gait, direction) ?? DiagnosticGridSession.LiveDuration;
         var ms = (int)Int128.Clamp(duration.Value.Numerator * 1000 / duration.Value.Denominator, 1, 10_000);
-        if (_followers.ContainsKey(id)) { if (_scene.Followers!.Step(id, next, running)) _startedStep = id; else Trace(id).Step = $"walk refused the step to {next.X},{next.Y}"; }
-        else { Movers.Step(id, npc.Row.Key, npc.Origin, next, _nowMs, ms, running); RecordPlace(id); NoteEntered(id, next); _startedStep = id; }
+        if (_followers.ContainsKey(id)) { if (_scene.Followers!.Step(id, next, running, sneaking)) _startedStep = id; else Trace(id).Step = $"walk refused the step to {next.X},{next.Y}"; }
+        else { Movers.Step(id, npc.Row.Key, npc.Origin, next, _nowMs, ms, running, sneaking: sneaking); RecordPlace(id); NoteEntered(id, next); _startedStep = id; }
         _notices.Add(new(AreaAiNoticeKind.Step, id, null));
         return ms;
     }

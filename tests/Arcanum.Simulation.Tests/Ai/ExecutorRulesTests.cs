@@ -539,6 +539,13 @@ public sealed class ExecutorRulesTests
             Assert.AreEqual(runs, steps.All(c => c.EndsWith(" run", StringComparison.Ordinal)), $"flagged {flagged}, {training}");
         }
         Assert.IsTrue(AiExecutorRules.RunPermitted(new(Pc: true, Prowling: true)), "the PC's stealth gait is the viewer's");
+        // ARC-RENDER-2539 (0x42EDC0): a flagged critter below prowling expert steps the stealth walk; an expert walks, a master runs; an unflagged one and the PC never sneak.
+        Assert.IsTrue(AiExecutorRules.Sneaks(new(Prowling: true, ProwlingTraining: SkillTraining.None)));
+        Assert.IsTrue(AiExecutorRules.Sneaks(new(Prowling: true, ProwlingTraining: SkillTraining.Apprentice)));
+        Assert.IsFalse(AiExecutorRules.Sneaks(new(Prowling: true, ProwlingTraining: SkillTraining.Expert)));
+        Assert.IsFalse(AiExecutorRules.Sneaks(new(Prowling: true, ProwlingTraining: SkillTraining.Master)));
+        Assert.IsFalse(AiExecutorRules.Sneaks(new(Prowling: false, ProwlingTraining: SkillTraining.None)));
+        Assert.IsFalse(AiExecutorRules.Sneaks(new(Pc: true, Prowling: true, ProwlingTraining: SkillTraining.None)));
         Assert.IsFalse(AiExecutorRules.RunPermitted(new(Encumbrance: 4, Prowling: true, ProwlingTraining: SkillTraining.Master)));
     }
 
