@@ -678,28 +678,29 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     }
 
     /// <summary>
-    /// ARC-SCRIPT-1661 (CP12), ARC-SCRIPT-1705: this host adjusts the alignment (stat 19) of the hero, which the session stores as a base stat, and of an NPC of the shown map (the entry the stat setter writes into the NPC's stored base stats, kept as the written entry
-    /// <c>npc.stat.19</c>; <see cref="NpcStoredAlignment"/>); every other stat, a created critter, an NPC of another map and a scenery, portal or container stop the dispatch as not modelled.
+    /// ARC-SCRIPT-1661 (CP12), ARC-SCRIPT-1705, ARC-SCRIPT-2574: this host adjusts the alignment (stat 19) of the hero, which the session stores as a base stat, and of an NPC row it reads: one of the shown map or of another map it was given, or a critter created at run time
+    /// (the entry the stat setter writes into the NPC's stored base stats, kept as the written entry <c>npc.stat.19</c>; <see cref="NpcStoredAlignment"/>); every other stat and a scenery, portal or container stop the dispatch as not modelled.
     /// </summary>
     /// <remarks>Exe read 2026-11-13: action 137 at 0x447220 case 0x89, base stat 0x4B0740, stat setter 0x4B0980 with the range tables 0x5B5194 and 0x5B5204.</remarks>
     public bool CanAdjustStat(ScrObjectRef obj, int stat) =>
         stat == AreaScriptStory.AlignmentStat && (IsPc(obj) ? _session.QueryHero() is not null : NpcStoredAlignment(obj) is not null);
 
-    // ARC-SCRIPT-1705: the stored base alignment (0x4B0740) of an NPC row of the shown map with the entries the session wrote over the row's fields; null for a created critter, an object that is no NPC, or fields that do not read.
+    // ARC-SCRIPT-1705, ARC-SCRIPT-2574: the stored base alignment (0x4B0740) of an NPC row (the shown map's, another given map's or a created critter's) with the entries the session wrote over the row's fields; null for an object that is no NPC, one with no row here, or fields that do not read.
     private int? NpcStoredAlignment(ScrObjectRef obj)
     {
-        if (obj.Map != _shownMap || Row(obj) is not { } row || row.Type != NpcType || _world?.CreatedRow?.Invoke(obj.Code) is not null) return null;
+        if (Row(obj) is not { } row || row.Type != NpcType) return null;
         var stats = AreaWrittenCritterFields.Read(_session, row)?.Critter?.BaseStats;
         return stats is { Count: Arcanum.Session.SessionCritterIndexedWrites.StatCount } ? stats[AreaScriptStory.AlignmentStat] : null;
     }
 
-    // ARC-SCRIPT-1705 (0x4B0980 for an NPC, stat 19): the stored base alignment plus the number, clamped to -1000..1000, written as the object's base stat; the followers' re-check is the PC's only, so none is armed. A request the session refuses refuses the run.
+    // ARC-SCRIPT-1705, ARC-SCRIPT-2574 (0x4B0980 for an NPC, stat 19): the stored base alignment plus the number, clamped to -1000..1000, written as the object's base stat; the followers' re-check is the PC's only, so none is armed. A request the session refuses refuses the run.
     private bool AdjustNpcStat(ScrObjectRef who, int stat, int delta)
     {
         if (stat != AreaScriptStory.AlignmentStat || NpcStoredAlignment(who) is not { } stored) return false;
         var next = (int)Math.Clamp((long)stored + delta, AreaCompanionData.MinAlignment, AreaCompanionData.MaxAlignment);
         if (next == stored) return true;
-        return _session.WriteCritterStat(_session.Version, _session.QueryActor().Map, AreaConversationState.EntityId(Row(who)!), AreaScriptStory.AlignmentStat, next).Disposition != GameSessionDisposition.Rejected;
+        // The record is kept on the NPC's own map (a created critter's is the shown one); the written entries are read by identity wherever the NPC stands.
+        return _session.WriteCritterStat(_session.Version, new SessionMapId(who.Map), AreaConversationState.EntityId(Row(who)!), AreaScriptStory.AlignmentStat, next).Disposition != GameSessionDisposition.Rejected;
     }
 
     private const uint ProwlingCritterFlag = 0x1, UndeadCritterFlag = 0x4, InvulnerableObjectFlag = 0x400000, InvisibleSpellFlag = 0x1,
