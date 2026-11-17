@@ -79,6 +79,8 @@ public partial class TerrainViewerApp
                     $"{when}: the compact panel at the screen's bottom right {placed.Health} at factor {factor}");
             }
             CheckGauges("start");
+            // ARC-UI-2489 (H14): the hidden-interface compact UI: the bars are off, only the compact life panel stands (saved as PREFIX-compact.png).
+            await Capture("compact");
             var heroBefore = AreaLife.From(session.QueryHeroLife()!);
             var poisoned = session.ApplyDamage(session.Version, SessionLifeTarget.Hero, new LifeDamage { Poison = 12, Fatigue = 3 });
             Require(poisoned.Disposition != GameSessionDisposition.Rejected, "the poison packet landed: " + poisoned.Failure);
