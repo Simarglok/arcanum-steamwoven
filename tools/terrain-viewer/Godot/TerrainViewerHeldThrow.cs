@@ -2,6 +2,7 @@ using Arcanum.Data.Area;
 using Arcanum.Presentation.Hud;
 using Arcanum.Session;
 using Arcanum.Simulation.Combat;
+using Arcanum.Simulation.Goals;
 using Arcanum.Simulation.Movement;
 using Arcanum.TerrainViewer.Core;
 using Arcanum.World;
@@ -176,6 +177,8 @@ public partial class TerrainViewerApp
     {
         if (_worldActor.Session is not AreaGridSession grid || _canvas is null) return;
         if (_areaSession!.QueryHeroLife() is not { Status.IsActive: true }) { PutBackGameCursorItem("the hero cannot act"); return; }
+        // ARC-COMBAT-1943 (0x54ED30): a polymorphed hero's press with an item on the cursor is refused silently (the item stays held).
+        if (HeroClickRules.ThrowRefused(HeroClickSpells().Polymorphed)) return;
         CellCoord tile;
         AreaObjectKey? pressed = null;
         if (AreaObjectAtScreen(screen) is { } key && _readyArea?.Snapshot.Objects.FirstOrDefault(row => row.Key == key) is { } row
