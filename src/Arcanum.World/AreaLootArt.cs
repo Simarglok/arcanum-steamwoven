@@ -134,17 +134,21 @@ public static class AreaLootArtLayout
     /// (<see cref="StoredPortrait"/>), except that an NPC (type 16) whose stored portrait equals the local PC's own (<paramref name="playerPortrait"/>,
     /// the PC's raw field 0xE7: one level, no substitution on the PC side) shows the next portrait its own race and gender may take
     /// (<see cref="PortraitCatalogue.Next"/>, the NPC code allowed), else the previous one, else none, so a follower never shows the PC's face.
-    /// The race and gender are the NPC's stored base stats 27 and 26 (the check 0x4CEAC0 reads them through 0x4B0740). The race and gender are read from the row's stored fields (a base stat a spell wrote into the NPC is not applied: issue #2492). The substitute is computed
+    /// The race and gender are the NPC's stored base stats 27 and 26 (the check 0x4CEAC0 reads them through 0x4B0740). ARC-UI-2492: with a <paramref name="session"/> the race and gender are the base stats a TraitIdx spell wrote into the NPC over the stored ones (<see cref="SessionCritterIndexedWrites"/>,
+    /// the way the hover window reads the race, ARC-MAGIC-1551; 0x4B0740 reads the object's base stat, which the spell's write 0x4B0980 changed); without one, the stored ones. The substitute is computed
     /// on every call and never stored. A PC and any other type show their stored one; with no <paramref name="catalogue"/> (no game folder, nothing
     /// can be drawn anyway) or a race or gender beyond the code table, the stored one. Null: nothing to draw.
     /// </summary>
-    public static int? ShownPortrait(AreaObjectRecord record, PortraitCatalogue? catalogue, int? playerPortrait)
+    public static int? ShownPortrait(AreaObjectRecord record, PortraitCatalogue? catalogue, int? playerPortrait, GameSessionOwner? session = null)
     {
         var stored = StoredPortrait(record);
         if (stored is not { } id || record.Type != CombatFieldReader.NpcType || playerPortrait != id || catalogue is null) return stored;
         // The base stats array (critter slot 38, sparse: a missing element reads 0), not the whole critter block, so a row only needs this field.
         if (record.EffectiveFields.FirstOrDefault(value => value.Slot == BaseStatsSlot) is not { Presence: AreaPresence.Array } stats) return stored;
-        int Stat(int key) => stats.Elements.FirstOrDefault(element => element.Key == key) is { Words: [var word] } ? unchecked((int)(uint)word) : 0;
+        // ARC-UI-2492: the written entries (asked only on a clash, here) win over the stored element.
+        var written = session?.QueryCritterIndexedWrites(AreaConversationState.EntityId(record)).Stats;
+        int Stat(int key) => written is not null && written.TryGetValue(key, out var over) ? over
+            : stats.Elements.FirstOrDefault(element => element.Key == key) is { Words: [var word] } ? unchecked((int)(uint)word) : 0;
         int race = Stat(RaceStat), gender = Stat(GenderStat);
         if (race is < 0 or >= PortraitCatalogue.RaceCount || gender is not (PortraitCatalogue.FemaleGender or PortraitCatalogue.MaleGender)) return stored;
         return catalogue.Shown(id, new PortraitSubject(race, gender, npc: true), id) is var shown and > 0 ? shown : null;

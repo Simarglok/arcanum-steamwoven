@@ -423,12 +423,12 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
     public int PcVariable(ScrObjectRef pc, int index) => SessionScriptLimits.IsHero(pc) ? _session.QueryPcVariable(index) : 0;
     public bool PcFlag(ScrObjectRef pc, int index) => SessionScriptLimits.IsHero(pc) && _session.QueryPcFlag(index);
     public bool IsMonsterGenerator(ScrObjectRef attachee) => false;
-    // ARC-DEV-304 (SU15, E6): the dialog gates of an NPC of this map: dead as the session holds it (map data or killed), so point 9 of a dead NPC whose dialog file
-    // lacks the death-speech flag 0x8 runs default; surrender and mind control are not modelled here (normal).
-    // ARC-SCRIPT-2198: an NPC this host holds no speaker for (a call script or call-ex callee's attachee on another NPC of the shown map) meets the gates as the use host answers them.
+    // ARC-DEV-304 (SU15, E6), ARC-SCRIPT-2464: the dialog gates of an NPC of this map: dead as the session holds it (map data or killed), so point 9 of a dead NPC whose dialog file lacks the death-speech flag 0x8 runs default;
+    // surrendered (0x4AF210, flag 0x10) and mind-controlled (spell flag 0x8000000, which runs 2188) as the shown map's use host answers them, for the speaker as for any other NPC of the map (a callee's attachee on another
+    // NPC, ARC-SCRIPT-2198, is not a speaker at all). Without a use host of this map the speaker's gates are dead alone.
     public ScrDialogState DialogState(ScrObjectRef attachee) => IsPc(attachee) ? ScrDialogState.Normal
-        : Speaker(attachee) is null ? Queries?.DialogState(attachee) ?? ScrDialogState.Normal
-        : _session.QueryNpcDead(attachee.Code) ? ScrDialogState.Dead : ScrDialogState.Normal;
+        : (Queries?.DialogState(attachee) ?? ScrDialogState.Normal)
+            | (Speaker(attachee) is not null && _session.QueryNpcDead(attachee.Code) ? ScrDialogState.Dead : ScrDialogState.Normal);
     public ScrTrapCheck CheckTrapBeforeUse(ScrObjectRef triggerer, ScrObjectRef attachee) => ScrTrapCheck.NoTrap;
     public bool IsTrapObject(ScrObjectRef attachee) => false;
     public ScrObjectRef? Player() => Pc;
