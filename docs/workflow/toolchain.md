@@ -354,6 +354,20 @@ history held about 500 runs of such copies of one template).
   environment, and Godot starts as `godot_canonical` does (the sentinel, the pinned SDK, a plain `PATH`). `--env
   NAME=VALUE` adds one variable (a capture or probe switch) to the stages' smoke (not `PATH`, `DOTNET_ROOT`, `HOME`,
   `GODOT`, the stage list or the settings paths).
+- **Census captures** (ARC-UI-2489, the windows of the [Steamwoven interface census](../ui/steamwoven-interface-census.md#screenshots); each is a
+  local PNG through `--env`, never committed; run with `--env ARC_AREA_WINDOW_ART=legacy` and the HD option off for the Original look; all but
+  the cursor sheet read the viewport, so the smoke's diagnostic text overlay is in the frame):
+
+  | Window | Switch | Stage and configuration | File |
+  | --- | --- | --- | --- |
+  | H10 load indicator (clock art 601 on the load screen) | `ARC_AREA_LOAD_SCREEN_CAPTURE=PATH.png` | `transfer` (hero, main map); saves only while the load is still going, else prints `load screen capture skipped` | `PATH.png` |
+  | H13 cursors | `ARC_AREA_CURSOR_CAPTURE=PATH.png` | `hover` (hero, main map); the cursor art sheet composed from the game's art (the framebuffer holds no cursors): one row per art, its frames left to right, a red cross on each hot point; prints `cursor sheet NONE` without the game folder | `PATH.png` |
+  | H14 hidden-interface compact UI | `ARC_AREA_LIFE_CAPTURE=PREFIX` | `life` (hero, main map); the bars off, only the compact life panel | `PREFIX-compact.png` |
+  | G04 See Contents (mode 4) | `ARC_AREA_CONTENTS_CAPTURE=PATH.png` | `item-aim` (hero, `--sector 1409,1314`, the town); the Identify-container step; nothing saved when the town has no container | `PATH.png` |
+  | G10 NPC character sheet of the dialog | `ARC_AREA_SHEET_CAPTURE=PATH.png` | `map` (hero, main map; not together with `bar`, which reads the same variable as a folder) | `PATH-npc.png`, `PATH-npc-spells.png`, `PATH-npc-schemes.png` |
+  | M02 single-player menu, M03 new-game menu | `ARC_AREA_MENU_CAPTURE=PATH.png` | `menu` (`--main-menu`, main map) | `PATH.png` (main window), `PATH-before.png`, `PATH-single.png`, `PATH-newgame.png` |
+  | M11 quit box | `ARC_AREA_QUIT_CAPTURE=PATH.png` | `scene` (`--main-menu`, `--map "crematorium-lev 1"`) | `PATH.png` |
+
 - **Limits.** A whole map battery (`full`, `map` without `--stages`) may run 60 minutes, any other step the queue's
   default for its kind (30 for a smoke).
 - **Result.** A failed smoke does not stop the chain; a failed build or import, or a stopped run, does. Each step
