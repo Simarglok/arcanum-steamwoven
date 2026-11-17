@@ -2,6 +2,7 @@ using Arcanum.Data.Area;
 using Arcanum.Session;
 using Arcanum.Simulation.Ai;
 using Arcanum.Simulation.Combat;
+using Arcanum.Simulation.Goals;
 using Arcanum.Simulation.Movement;
 using Arcanum.Simulation.Navigation;
 using Arcanum.TerrainViewer.Core;
@@ -150,6 +151,32 @@ public partial class TerrainViewerApp
     private AreaCombatTarget? AreaTargetOf(AreaObjectKey key) =>
         _combatHost!.Target(_areaSession!, key)
         ?? (_areaCompanions?.Companions.FirstOrDefault(c => c.Key == key) is { } visitor ? _combatHost.Target(_areaSession!, visitor.Entity) : null);
+
+    /// <summary>
+    /// ARC-COMBAT-1944 (VC62): out of combat mode, a living NPC whose first run is an attack aimed at the hero or, through the leader chain, a follower puts the hero into combat mode
+    /// before the click resolves, even when the decision then builds nothing. The click rules decide (<see cref="HeroClickRules.Decide"/>: <c>EntersCombatMode</c>); the hero's own refusals (stoned, stunned, dead) keep it out.
+    /// True when the hero entered combat mode (the caller's attack branch then takes the press).
+    /// </summary>
+    // (The original does it before the type switch of its click decision, 0x54ED30.)
+    private bool EnterCombatModeForAttacker(Vector2 screen, bool alt, bool shift)
+    {
+        if (HeroInCombatMode || !AttackMapActive || _areaSession is not { } session || _combatHost is null || session.QueryHero() is null) return false;
+        if (AreaObjectAtScreen(screen) is not { } key || AreaTargetOf(key) is not { } target) return false;
+        var facts = new HeroClickFacts(HeroActing(session), false, false, false, false, HeroClickTarget.Critter, TargetDead: target.Dead,
+            TargetAttacksHero: NpcAttacksHero(session, target.Entity), Alt: alt, Shift: shift);
+        if (!HeroClickRules.Decide(facts).EntersCombatMode) return false;
+        ToggleCombatMode();
+        GD.Print($"ARC-COMBAT-1944 click on an attacker entered combat mode target={target.Entity} in={HeroInCombatMode}");
+        return HeroInCombatMode;
+    }
+
+    /// <summary>ARC-COMBAT-1944: the NPC's first run attacks the hero, or a creature whose chain of PC leaders ends at the hero (the goal table's first-run-attacks test, compared through the PC leader).</summary>
+    private static bool NpcAttacksHero(GameSessionOwner session, string npc) =>
+        session.QueryGoals().FirstRunAttacks(npc, AreaHeroRunsHost.Hero, id =>
+        {
+            try { return session.QueryPcLeader(id); }
+            catch (ArgumentException) { return null; } // an id that is no session entity has no leader
+        }) is not null;
 
     /// <summary>A guarded left press (see <c>WorldRouteClick</c>) in combat mode on an NPC: true when the press belongs to combat
     /// (an attack, a refused one). ARC-INPUT-1937: with no Alt key held the pick has already seen through the followers and the dead, so a corpse or follower reaches here only with an Alt key (a corpse with Alt is looted, a follower attacked with left Alt; right Alt gets the refusal below, FA2).</summary>
