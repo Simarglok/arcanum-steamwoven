@@ -224,8 +224,9 @@ public partial class TerrainViewerApp
         return Math.Max(Math.Abs(at.X - cell.X), Math.Abs(at.Y - cell.Y));
     }
 
-    /// <summary>ARC-WORLD-092: where a map row stands now: an NPC the AI walked on its cell, anything else on its map data's.</summary>
+    /// <summary>ARC-WORLD-092: where a map row stands now: a companion on its own actor's committed cell (ARC-COMBAT-1945), an NPC the AI walked on its cell, anything else on its map data's.</summary>
     private (long X, long Y) LiveWorldCell(AreaObjectRecord row) =>
+        _areaCompanions?.Companions.FirstOrDefault(c => c.Speaker.Row.Key == row.Key) is { } companion ? _areaCompanions.WorldCell(companion.Speaker) :
         _aiHost?.Scene.Npcs.FirstOrDefault(n => n.Row.Key == row.Key) is { } npc && _aiHost.Movers.IsMoved(npc.Entity) && _aiHost.Movers.Of(npc.Entity) is { } mover
             ? (mover.Cell.X, mover.Cell.Y) : (row.WorldX!.Value, row.WorldY!.Value);
 

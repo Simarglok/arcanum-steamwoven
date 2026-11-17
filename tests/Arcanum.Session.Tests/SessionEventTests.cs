@@ -196,6 +196,24 @@ public sealed class SessionEventTests
     }
 
     [TestMethod]
+    public void RestingSkipsAnNpcThatFollowsAFollowerOfTheHero()
+    {
+        // ARC-COMBAT-1927 (VC21): the original gate climbs every leader, not only the direct one; a creature of a companion is not healed by the hourly event.
+        using var owner = Session(hero: false);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.ForceJoinParty(owner.Version, "virgil").Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.ForceJoinLeader(owner.Version, "oid:wolf", "virgil").Disposition);
+        Damage(owner, Npc("oid:wolf"), new LifeDamage { HitPoints = 5 });
+        Assert.AreEqual(1, owner.QueryEvents().Count(e => e.Kind == SessionEventKinds.NpcResting));
+
+        var world = new World { Present = { [(79, "virgil")] = Wolf, [(79, "oid:wolf")] = Wolf } };
+        Advance(owner, 3_600_000);
+        var pass = Pass(owner, world);
+        Assert.AreEqual(0, pass.Life.Count);
+        Assert.AreEqual(5, owner.QueryLifeRecord("oid:wolf")!.Value.State.HitPointDamage, "the damage stays");
+        Assert.AreEqual(0, owner.QueryEvents().Count(e => e.Kind == SessionEventKinds.NpcResting), "no next timer");
+    }
+
+    [TestMethod]
     public void APassFiresDueTimersWhilePausedAndRefusesABadBudget()
     {
         using var owner = Session();
