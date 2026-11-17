@@ -1670,7 +1670,7 @@ with Always Run on); Num Lock flips the always-run lock; the palette's **Always 
 (the `always run` line of `user://arcanum.cfg`, `ALWAYS_RUN_TEST_PATH`); clicking an object always runs the approach. A following
 Virgil runs while he is farther than range + 2. Since ARC-SKILLS-008 the palette's **Prowl (stealth) on/off** toggles the
 hero's and its followers' concealment ([stealth](../world/stealth-runtime.md)); while concealed, a run becomes a walk unless the
-hero is a master of prowling with fatigue left (the crouch and the stealth walk animations are not drawn). HUD: `Gait: Always Run …, Num Lock run …; next ground click …;
+hero is a master of prowling with fatigue left (since ARC-RENDER-2539 a concealed hero below prowling expert steps the stealth walk, animation 3, at the stealth rate; the crouch is not drawn). HUD: `Gait: Always Run …, Num Lock run …; next ground click …;
 current gait …` (with `prowling: walks only` or `prowling: a master, runs allowed` while concealed) (in `world-diagnostic` the palette row says it is unavailable and Num Lock stays a reserved key). On macOS a physical
 Ctrl+click arrives as a right press with Ctrl held and counts as Ctrl+LMB. Native smoke `ARC-WORLD-020 native-smoke run PASS` (after the quick-save phase, before the follow
 stage; `ARC_AREA_RUN_CAPTURE=PATH.png`). ARC-WORLD-021 adds the window vault (a window step takes 1.125 s and draws the

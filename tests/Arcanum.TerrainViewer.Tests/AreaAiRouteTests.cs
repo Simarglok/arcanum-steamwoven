@@ -61,7 +61,7 @@ public sealed class AreaAiRouteTests
     {
         public readonly Dictionary<string, CellCoord> Cells = new() { [companion.Entity] = companion.Origin };
         public IReadOnlyList<AreaAiNpc> Npcs { get; } = [companion];
-        public bool Step(string entity, CellCoord next, bool running) { Cells[entity] = next; return true; }
+        public bool Step(string entity, CellCoord next, bool running, bool sneaking = false) { Cells[entity] = next; return true; }
         public void Face(string entity, CellCoord toward) { }
         public bool Jump(string entity, CellCoord cell) { Cells[entity] = cell; return true; }
     }

@@ -209,7 +209,7 @@ public partial class TerrainViewerApp
         var stack = line?.StackKind is { Type: SessionItemType.Ammo } kind ? kind : default;
         ResumeLoadedRound();
         var world = session.QueryCombatRound() is not null ? AreaCombatWorldNow() : null;
-        var result = session.PickPocket(session.Version, victim, direction, item, stack, _inventoryHost.InsertCheck, world, _inventoryHost.ItemScripts(session), ItemTriggersNow());
+        var result = session.PickPocket(session.Version, victim, direction, item, stack, _inventoryHost.InsertCheck, world, _inventoryHost.ItemScripts(session), ItemTriggersNow(), _inventoryHost.NpcWearer?.Invoke(session.QueryActor().Map, npc));
         // ARC-COMBAT-020: the charge's round events (a refused charge's next subturn) go to the round log.
         if (result.Charge is { } charge) LogRound(charge.Events);
         var itemName = _inventoryHost.Name(item, _hoverNames?.Catalog);
