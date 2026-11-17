@@ -39,6 +39,8 @@ public partial class AreaGameBarPanel : CanvasLayer
     private CanvasLayer _backdropLayer = null!;
     private readonly ColorRect[] _barRects = [new() { Name = "BarLeft" }, new() { Name = "BarRight" }, new() { Name = "BarTop" }, new() { Name = "BarBottom" }];
     private SteamwovenBackdropFamily? _backdropFamily;
+    // ARC-UI-2608: a full-width hit area for each band of the Steamwoven layout (the boards and the gaps between the controls take the pointer, as a panel does).
+    private readonly Control[] _bandHits = [new() { Name = "TopHit" }, new() { Name = "BottomHit" }];
 
     /// <summary>A pointer event on the bars changed something: the host plays the sounds and runs the button's function.</summary>
     public event Action<AreaBarEffect>? Effect;
@@ -66,6 +68,8 @@ public partial class AreaGameBarPanel : CanvasLayer
     public static float TopInset { get; private set; }
     /// <summary>Raised after the insets changed (the bars shown, hidden or scaled): the panels placed by them place themselves again.</summary>
     public static event Action? InsetsChanged;
+    /// <summary>ARC-UI-2608: raised at the end of every placement of the bars (the plan and the screen frame are current): the parts that read the screen frame place themselves again.</summary>
+    public static event Action? Placed;
 
     /// <summary>ARC-UI-2510: the left edge of the frame the Steamwoven layout lays the play screen out in, while the bars are shown (0 otherwise, and in a window with no pillarbox bar).</summary>
     public static float FreeLeft { get; private set; }
@@ -207,6 +211,7 @@ public partial class AreaGameBarPanel : CanvasLayer
         _topBoard = new SteamwovenBoardView { Name = "TopBoard" }; _bottomBoard = new SteamwovenBoardView { Name = "BottomBoard" };
         _boards.AddChild(_topBoard); _boards.AddChild(_bottomBoard);
         AddChild(_boards); MoveChild(_boards, 0);
+        foreach (var hit in _bandHits) { hit.MouseFilter = Control.MouseFilterEnum.Stop; hit.Visible = false; AddChild(hit); MoveChild(hit, 1); }
         // Under the buttons: the message window's scroll areas lie between them (ARC-UI-023).
         _messageLog = new AreaMessageLogView();
         _strips[AreaBarStrip.Bottom].AddChild(_messageLog);
@@ -291,6 +296,8 @@ public partial class AreaGameBarPanel : CanvasLayer
     public override void _Input(InputEvent input)
     {
         if (input is not InputEventMouseMotion motion || !Visible) return;
+        // ARC-UI-2608: in the Steamwoven layout the original's screen is the screen frame (y 441 at the bottom band's upper edge), not the strip frame that follows the message window.
+        if (_plan is not null) { var (origin, scale) = ScreenFrame(GetViewport().GetVisibleRect().Size); PointerMoved?.Invoke((motion.Position - origin) / scale); return; }
         var strip = _strips[AreaBarStrip.Bottom];
         PointerMoved?.Invoke(strip.GetGlobalTransform().AffineInverse() * motion.Position + new Vector2(0, AreaGameBarLayout.BottomTop));
     }
@@ -399,14 +406,15 @@ public partial class AreaGameBarPanel : CanvasLayer
                 ? AreaBarButtonLook.Down : _bar.Look(spec.Button);
             var frame = AreaGameBarLayout.Frame(look, frames.Length);
             rect.Texture = frames[frame];
-            rect.Size = frames[frame].GetSize();
+            // ARC-UI-2608: in the Steamwoven layout the button's rectangle is the layout's (stretched art); otherwise the art's own size.
+            if (_plan is null) rect.Size = frames[frame].GetSize();
             rect.SetMeta(FrameMeta, frame);
             rect.SetMeta(ArtMeta, shown);
         }
         RenderClock();
         _experience.Set(_experienceProgress, _art);
         _messageLog.Render();
-        if (_plan is { } plan) UpdateSteamwovenParts(plan);
+        if (_plan is { } plan) { ApplyControlRects(plan); UpdateSteamwovenParts(plan); }
     }
 
     /// <summary>ARC-UI-2452: true while the Steamwoven layout (the layout model of docs/ui/steamwoven-interface-trd.md) is the one in use: the HD option with the generated interface on.</summary>
@@ -414,14 +422,13 @@ public partial class AreaGameBarPanel : CanvasLayer
 
     /// <summary>
     /// ARC-UI-2452: where the original's 800 × 600 screen lies while the bars are shown, for the gauges and lamps drawn over the strips in their coordinates: its top left and its scale
-    /// (the whole factor with the screen centred and standing on the window's bottom, or the Steamwoven strip scale with the screen where the strips put it).
+    /// (the whole factor with the screen centred and standing on the window's bottom, or the Steamwoven unit scale with the screen's y 441 on the bottom band's upper edge).
     /// </summary>
     public (Vector2 Origin, float Scale) ScreenFrame(Vector2 size)
     {
         if (_plan is { } plan)
         {
-            var scale = (float)plan.StripScale;
-            return (new Vector2(plan.StripLeft, plan.BottomStripY - AreaGameBarLayout.BottomTop * scale), scale);
+            return (new Vector2(plan.StripLeft, plan.ScreenOriginY), (float)plan.StripScale);
         }
         return (new Vector2(ScreenLeft(size, Factor), size.Y - AreaGameBarLayout.ScreenHeight * Factor), Factor);
     }
@@ -456,8 +463,9 @@ public partial class AreaGameBarPanel : CanvasLayer
         // Only while the bars show: windows that hide them (the full-screen views) keep the whole-factor scale for their own textures.
         var plan = SteamwovenOn && Visible ? SteamwovenHud.Plan((int)size.X, (int)size.Y) : null;
         _plan = plan;
-        if (plan is not null) { PlaceSteamwoven(size, plan); return; }
+        if (plan is not null) { PlaceSteamwoven(size, plan); Placed?.Invoke(); return; }
         // Not the Steamwoven layout (the HD option off, or the generated interface off): nothing of it shows and the original's whole-factor layout stands.
+        ResetControlRects();
         InterfaceHd.SetFractionalScale(null);
         SetTopScreen(null);
         if (_boards.Visible) { _boards.Visible = false; _bars.Visible = false; _backdropLayer.Visible = false; }
@@ -474,6 +482,7 @@ public partial class AreaGameBarPanel : CanvasLayer
         foreach (var strip in _strips)
             strip.Value.GetNode<AreaStripSidesView>("Sides").Set(strip.Value.GetNode<TextureRect>("Art").Texture, _sideLeft, _sideRight);
         SetInsets(Visible ? AreaGameBarLayout.TopHeight * Factor : 0, Visible ? AreaGameBarLayout.BottomHeight * Factor : 0, 0, 0);
+        Placed?.Invoke();
     }
 
     /// <summary>
@@ -492,10 +501,135 @@ public partial class AreaGameBarPanel : CanvasLayer
         _sideLeft = 0; _sideRight = 0;
         foreach (var strip in _strips)
             strip.Value.GetNode<AreaStripSidesView>("Sides").Set(strip.Value.GetNode<TextureRect>("Art").Texture, 0, 0);
-        // ARC-UI-2510: the screen the portraits hang in (the top strip's top left, its bottom edge) and the frame the windows are centred in.
-        SetTopScreen((new Vector2(plan.StripLeft, plan.TopStripY), scale, plan.BottomStripY + AreaGameBarLayout.BottomHeight * scale));
+        // ARC-UI-2510: the screen the portraits hang in (the screen's top left stands so that its y 41 meets the top band's lower edge, as the strip did; the bottom band's lower edge is its bottom) and the frame the windows are centred in.
+        SetTopScreen((new Vector2(plan.StripLeft, plan.Layout.Top.Band.Bottom - (int)Math.Round(AreaGameBarLayout.TopHeight * plan.StripScale, MidpointRounding.AwayFromZero)), scale, plan.Layout.Bottom.Band.Bottom));
         SetInsets(Visible ? plan.TopInset : 0, Visible ? plan.BottomInset : 0, Visible ? plan.Layout.Frame.X : 0, Visible ? plan.Layout.Frame.Width : 0);
+        ApplyControlRects(plan);
         UpdateSteamwovenParts(plan);
+    }
+
+    // ARC-UI-2608: the button and the layout control each one stands in (the clock window is the clock control).
+    private static readonly (AreaBarButton Button, SteamwovenControlId Id)[] ButtonControls =
+    [
+        (AreaBarButton.Character, SteamwovenControlId.Character), (AreaBarButton.Logbook, SteamwovenControlId.Logbook), (AreaBarButton.Map, SteamwovenControlId.Map),
+        (AreaBarButton.Inventory, SteamwovenControlId.Inventory), (AreaBarButton.FatePoints, SteamwovenControlId.FatePoints), (AreaBarButton.Sleep, SteamwovenControlId.Sleep),
+        (AreaBarButton.Combat, SteamwovenControlId.Combat), (AreaBarButton.Skills, SteamwovenControlId.Skills), (AreaBarButton.Spells, SteamwovenControlId.Spells),
+        (AreaBarButton.Schematics, SteamwovenControlId.Schematics),
+    ];
+    private bool _controlsPlaced;
+
+    /// <summary>
+    /// ARC-UI-2608 (SWI-LAY-11, variant B of #2526): each control of the HUD is drawn and hit in the rectangle of <see cref="SteamwovenLayout.Control"/>. The strips stay the frames of the
+    /// original's units (`f · 3.6` per unit); a control placed by the model is moved and stretched inside its strip frame: the buttons and the hover image stretch their art to the rectangle, the clock, the
+    /// experience strip and the message window scale their own unit drawings to it (the message window and the experience strip by factors near 1, the clock by its shorter band). The strips' art is a
+    /// stand-in stretched over the centre block of its band, and a full-width hit area stands over each band.
+    /// </summary>
+    private void ApplyControlRects(SteamwovenHudPlan plan)
+    {
+        var layout = plan.Layout;
+        var unit = (float)plan.StripScale;
+        Vector2 At(AreaBarStrip strip, PixelRect rect) => (new Vector2(rect.X, rect.Y) - _strips[strip].Position) / unit;
+        Vector2 Dim(PixelRect rect) => new Vector2(rect.Width, rect.Height) / unit;
+        foreach (var (button, id) in ButtonControls)
+        {
+            var spec = AreaGameBarLayout.Spec(button);
+            var device = layout.Control(id).Device;
+            var rect = _buttons[button];
+            rect.ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize; rect.StretchMode = TextureRect.StretchModeEnum.Scale;
+            rect.Position = At(spec.Strip, device); rect.Size = Dim(device);
+        }
+        var clock = layout.Control(SteamwovenControlId.Clock).Device;
+        _clock.Scale = Dim(clock) / new Vector2(AreaClockLayout.WindowWidth, AreaClockLayout.WindowHeight);
+        _clock.Position = At(AreaBarStrip.Top, clock);
+        var message = layout.Control(SteamwovenControlId.MessageWindow).Device;
+        var (mx, my, mw, mh) = AreaMessageLayout.Window;
+        var messageScale = Dim(message) / new Vector2(mw, mh);
+        _messageLog.Scale = messageScale;
+        _messageLog.Position = At(AreaBarStrip.Bottom, message) - messageScale * new Vector2(mx, my - AreaGameBarLayout.BottomTop);
+        var experience = layout.Control(SteamwovenControlId.ExperienceStrip).Device;
+        var experienceScale = Dim(experience) / new Vector2(AreaExperienceStripLayout.ClearWidth, AreaExperienceStripLayout.ClearHeight);
+        _experience.Scale = experienceScale;
+        _experience.Position = At(AreaBarStrip.Bottom, experience) - experienceScale * new Vector2(AreaExperienceStripLayout.ClearX, AreaExperienceStripLayout.ClearY);
+        var hover = layout.Control(SteamwovenControlId.HoverImage).Device;
+        _hoverImage.ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize; _hoverImage.StretchMode = TextureRect.StretchModeEnum.Scale;
+        _hoverImage.Position = At(AreaBarStrip.Bottom, hover); _hoverImage.Size = Dim(hover);
+        // The strips' own art: a stand-in stretched over the centre block of the band; the strip frame itself takes no pointer (the full-width hit areas do).
+        foreach (var (strip, centre, hit, band) in new[] { (AreaBarStrip.Top, layout.Top.Centre, _bandHits[0], layout.Top.Band), (AreaBarStrip.Bottom, layout.Bottom.Centre, _bandHits[1], layout.Bottom.Band) })
+        {
+            var root = _strips[strip];
+            root.MouseFilter = Control.MouseFilterEnum.Ignore;
+            var black = root.GetChild<ColorRect>(0);
+            black.Position = At(strip, centre); black.Size = Dim(centre);
+            var art = root.GetNode<TextureRect>("Art");
+            art.ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize; art.StretchMode = TextureRect.StretchModeEnum.Scale;
+            art.Position = At(strip, centre); art.Size = Dim(centre);
+            hit.Visible = Visible; hit.Position = new Vector2(band.X, band.Y); hit.Size = new Vector2(band.Width, band.Height);
+        }
+        _controlsPlaced = true;
+    }
+
+    /// <summary>ARC-UI-2608: puts every control back to the original's own place and size (the Steamwoven layout went off).</summary>
+    private void ResetControlRects()
+    {
+        foreach (var hit in _bandHits) hit.Visible = false;
+        if (!_controlsPlaced) return;
+        _controlsPlaced = false;
+        foreach (var spec in AreaGameBarLayout.Buttons)
+        {
+            var (left, top, _, _) = AreaGameBarLayout.StripRect(spec.Strip);
+            var rect = _buttons[spec.Button];
+            rect.ExpandMode = TextureRect.ExpandModeEnum.KeepSize; rect.StretchMode = TextureRect.StretchModeEnum.Scale;
+            rect.Position = new Vector2(spec.X - left, spec.Y - top);
+            rect.Size = rect.Texture?.GetSize() ?? new Vector2(32, 32);
+        }
+        _clock.Scale = Vector2.One; _clock.Position = new Vector2(AreaClockLayout.WindowX, AreaClockLayout.WindowY);
+        _messageLog.Scale = Vector2.One; _messageLog.Position = Vector2.Zero;
+        _experience.Scale = Vector2.One; _experience.Position = Vector2.Zero;
+        var (ix, iy) = AreaGameBarLayout.HoverImage;
+        _hoverImage.ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize; _hoverImage.StretchMode = TextureRect.StretchModeEnum.Keep;
+        _hoverImage.Position = new Vector2(ix, iy - AreaGameBarLayout.BottomTop);
+        _hoverImage.Size = new Vector2(AreaGameBarLayout.HoverPortraitSize, AreaGameBarLayout.HoverPortraitSize);
+        foreach (var strip in _strips)
+        {
+            var (_, _, width, height) = AreaGameBarLayout.StripRect(strip.Key);
+            strip.Value.MouseFilter = Control.MouseFilterEnum.Stop;
+            var black = strip.Value.GetChild<ColorRect>(0);
+            black.Position = Vector2.Zero; black.Size = new Vector2(width, height);
+            var art = strip.Value.GetNode<TextureRect>("Art");
+            art.ExpandMode = TextureRect.ExpandModeEnum.KeepSize; art.StretchMode = TextureRect.StretchModeEnum.Scale;
+            art.Position = Vector2.Zero; art.Size = new Vector2(width, height);
+        }
+    }
+
+    /// <summary>
+    /// ARC-UI-2608: the rectangle of a control in the units of <see cref="ScreenFrame"/> (the original's 800 × 600 screen at the HUD's unit scale), for the parts drawn over the strips in the screen's
+    /// coordinates (the vials' gauges); null when the Steamwoven layout is not in use.
+    /// </summary>
+    public Rect2? ScreenRect(SteamwovenControlId id)
+    {
+        if (_plan is not { } plan) return null;
+        var (origin, scale) = ScreenFrame(GetViewport().GetVisibleRect().Size);
+        var device = plan.Layout.Control(id).Device;
+        return new Rect2((new Vector2(device.X, device.Y) - origin) / scale, new Vector2(device.Width, device.Height) / scale);
+    }
+
+    internal IReadOnlyList<Control> BandHitsForSelfTest => _bandHits;
+
+    /// <summary>ARC-UI-2608: the lower edge of the bottom band in the units of <see cref="ScreenFrame"/> (null without the Steamwoven layout): what a number under a vial may not pass.</summary>
+    public float? ScreenBandEnd => _plan is { } plan ? (plan.Layout.Bottom.Band.Bottom - ScreenFrame(GetViewport().GetVisibleRect().Size).Origin.Y) / (float)plan.StripScale : null;
+
+    /// <summary>ARC-UI-2608: where a control the panel draws really lies in the window (its node's rectangle after every scale), for the smoke; null for a control another part draws (the vials).</summary>
+    internal Rect2? ControlRectForSelfTest(SteamwovenControlId id)
+    {
+        foreach (var (button, control) in ButtonControls) if (control == id) return _buttons[button].GetGlobalTransform() * new Rect2(Vector2.Zero, _buttons[button].Size);
+        return id switch
+        {
+            SteamwovenControlId.Clock => _clock.GetGlobalTransform() * new Rect2(Vector2.Zero, _clock.Size),
+            SteamwovenControlId.HoverImage => _hoverImage.GetGlobalTransform() * new Rect2(Vector2.Zero, _hoverImage.Size),
+            SteamwovenControlId.MessageWindow => _messageLog.GetGlobalTransform() * new Rect2(AreaMessageLayout.Window.X, AreaMessageLayout.Window.Y - AreaGameBarLayout.BottomTop, AreaMessageLayout.Window.Width, AreaMessageLayout.Window.Height),
+            SteamwovenControlId.ExperienceStrip => _experience.GetGlobalTransform() * new Rect2(AreaExperienceStripLayout.ClearX, AreaExperienceStripLayout.ClearY, AreaExperienceStripLayout.ClearWidth, AreaExperienceStripLayout.ClearHeight),
+            _ => null,
+        };
     }
 
     private (ChromeRecipe? Recipe, byte[]? Legacy, int Width, int Height) ToneOf(AreaBarStrip strip)
