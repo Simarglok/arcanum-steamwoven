@@ -81,6 +81,18 @@ public sealed class LifeStateTests
         Assert.AreEqual(5, owner.QueryHeroLife()!.Record.State.HitPointDamage);
     }
 
+    // ARC-SCRIPT-1593 (VT3): a heal poison of a negative amount raises the level by its size, clamped to 0..1000, with the poison timers of every positive write.
+    [TestMethod]
+    public void ARaisePoisonLevelWriteAddsTheAmountAndClampsIt()
+    {
+        using var owner = Seeded(HalfElf());
+        Changed(owner.RaisePoisonLevel(owner.Version, SessionLifeTarget.Hero, 4), owner, 1);
+        Assert.AreEqual(4, owner.QueryHeroLife()!.Record.State.PoisonLevel);
+        Assert.IsTrue(owner.QueryEvents().Any(e => e.Kind == SessionEventKinds.HeroPoisonDamage), "a positive level sets the poison timers");
+        Changed(owner.RaisePoisonLevel(owner.Version, SessionLifeTarget.Hero, 5000), owner, 2);
+        Assert.AreEqual(LifeLimits.MaxPoisonLevel, owner.QueryHeroLife()!.Record.State.PoisonLevel);
+    }
+
     [TestMethod]
     public void AnAttackOnAnNpcIsResolvedAndAppliedWithTheSessionGenerator()
     {
