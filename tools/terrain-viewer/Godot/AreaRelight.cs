@@ -108,6 +108,8 @@ internal static class AreaRelight
     /// <summary>Steps off, add, night, delight, off ... (the diagnostic palette action).</summary>
     internal static Mode Cycle() { _developerMode = (Mode)(((int)_developerMode + 1) % 4); return _developerMode; }
 
+    /// <summary>ARC-RENDER-2207: the map lights of the last push (world pixels), for the smoke.</summary>
+    internal static IReadOnlyList<Light> MapLightList => MapLights;
     internal static void SetMapLights(IEnumerable<Light> lights) { MapLights.Clear(); MapLights.AddRange(lights); }
     internal static void SetCarriedLights(IEnumerable<Light> lights) { CarriedLights.Clear(); CarriedLights.AddRange(lights); }
 

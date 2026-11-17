@@ -114,6 +114,9 @@ public sealed class AreaLocalLighting
     /// <summary>The critters' carried lights of this view (0 for none).</summary>
     public int CarriedLightCount => _carried?.Source.Lights.Count ?? 0;
 
+    /// <summary>ARC-RENDER-2207: the sector and object lights of this view with their chart screen rectangles where the animation time of this view puts them (read only; the loaded poses when the view is not posed).</summary>
+    public IReadOnlyList<(StationaryLight Light, TerrainRect Rect)> PosedPlacements => Field.PlacementsAt(_poses);
+
     /// <summary>ARC-RES-1978 (presentation experiment): the carried lights with their chart screen rectangles, read only (empty for none).</summary>
     public IReadOnlyList<(StationaryLight Light, TerrainRect Rect)> CarriedPlacements => _carried?.Placements ?? [];
 
