@@ -630,6 +630,15 @@ public partial class TerrainViewerApp
         // ARC-UI-029: a question still up goes with the window; nothing moves (ARC-DEV-110: the window's close pops the quantity picker
         // above it, mode 13, and its leave step drops the question).
         CloseWindowMode(mode);
+        FinishInventoryClose(holder);
+    }
+
+    /// <summary>
+    /// The close of the inventory family's window after the stack took it off: the theft goes on, a junk pile dissolves, the container's lid closes, the input gate closes. ARC-MAGIC-1336: also the tail of a
+    /// loot window a spell's cursor took with it when it was cancelled (SA38: the leave case of mode 1 pops the window below it too, and the stack's hide step only hides the panel).
+    /// </summary>
+    private void FinishInventoryClose(string? holder)
+    {
         // ARC-DEV-323 (SL13): the window's close ends no goal. The original's close (0x573440, the steal mode's leave case) calls nothing of the goal table, so a Steal or Plant
         // that walks to the victim (goal 33) or waits for its attempt (86) goes on without the window and makes its attempt as it does after a load (ProcessPickPocketPending);
         // ARC-DEV-184 ended it here. What ends such a run is a new order, a cancel or its own end.

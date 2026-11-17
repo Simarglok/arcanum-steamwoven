@@ -27,7 +27,18 @@ public static class AreaCompanionOrders
     /// spread out" goal, whose move-away distance is not read).</summary>
     public const int SpreadStep = 3;
 
-    /// <summary>The viewer's menu label of an item (Steamwoven words; the original reads its labels from <c>mes\follower_ui.mes</c>).</summary>
+    /// <summary>
+    /// ARC-UI-1975 (FP10, OL1): the label a portrait menu row sends. The original reads the row's message of <c>mes\follower_ui.mes</c> (the words the menu draws,
+    /// <see cref="AreaFollowerMenuTexts"/>), joins the follower's display name with it and sends that text; the Original name addressing compares the rest after the name with the same label.
+    /// Null when the row's message is missing: the original skips the row, so no order goes out. Without the file the texts hold the project's English words.
+    /// </summary>
+    public static string? OrderLabel(FollowerMenuItem item, AreaFollowerMenuTexts texts)
+    {
+        ArgumentNullException.ThrowIfNull(texts);
+        return texts.Text(item);
+    }
+
+    /// <summary>The viewer's own lower-case word of an item for its notices and the log (not the order text: that is <see cref="OrderLabel"/>).</summary>
     public static string Label(FollowerMenuItem item) => item switch
     {
         FollowerMenuItem.Walk => "walk",

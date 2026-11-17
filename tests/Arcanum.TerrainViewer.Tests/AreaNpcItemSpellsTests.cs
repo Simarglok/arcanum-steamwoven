@@ -80,6 +80,23 @@ public sealed class AreaNpcItemSpellsTests
         Assert.IsNull(combat.NpcItemSpells(session, 2, Entity(1)), "a map the host does not cover");
     }
 
+    // ARC-MAGIC-1336 (ledger IW44): an item of a container's list is a target of a spell on an item in an inventory; the cast host's lookup asks the container's list after the NPCs'.
+    [TestMethod]
+    public void An_item_a_container_holds_has_the_spell_facts_of_its_row_with_the_container_as_holder()
+    {
+        using var session = ConversationSessionFixture.Create();
+        var (combat, inventory, _) = Host();
+        Assert.AreEqual(GameSessionFailure.None, inventory.Attach(session));
+        var ring = combat.ContainerItemSpells(session, Entity(3))!;
+        Assert.AreEqual((Entity(3), Entity(2), 14, 172, 1), (ring.Entity, ring.Holder, ring.Type, ring.Spells[0], ring.Charges));
+        Assert.IsNull(combat.ContainerItemSpells(session, Entity(1)), "an NPC's item is no container's");
+        Assert.IsNull(combat.ContainerItemSpells(session, Entity(2)), "the container itself is no item");
+        Assert.IsNull(combat.ContainerItemSpells(session, "kit:1"), "an item no container holds");
+        var looted = session.LootItem(session.Version, Entity(2), Entity(3), _ => SessionInsertVerdict.Accepted);
+        Assert.AreEqual(GameSessionDisposition.Changed, looted.Disposition, looted.Failure.ToString());
+        Assert.IsNull(combat.ContainerItemSpells(session, Entity(3)), "the session's next revision shows the item as the hero's");
+    }
+
     // ARC-DEV-262: an item its NPC threw (or a critical dropped) lies loose and has left the NPC's list, but its spells are still its own: a thrown
     // grenade's explosion at the end of its flight reads them with the NPC that held it as the holder.
     [TestMethod]

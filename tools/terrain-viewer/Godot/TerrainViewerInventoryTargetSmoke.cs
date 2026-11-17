@@ -50,6 +50,60 @@ public partial class TerrainViewerApp
     {
         await InventoryItemCastPathAsync(session, wand, viaItem: false);
         await InventoryItemCastPathAsync(session, wand, viaItem: true);
+        await InventoryLootCastPathAsync(session, wand);
+    }
+
+    // ARC-MAGIC-1336 (0x57BC70 keeps a loot window, IW44): with a loot window open the spell's cursor stands over it, a press on an item of the holder's grid is the cast at it, and the cancel takes the loot window with it.
+    private async Task InventoryLootCastPathAsync(GameSessionOwner session, string wand)
+    {
+        static void Require(bool value, string why) { if (!value) throw new InvalidOperationException("ARC-MAGIC-1336 loot-target smoke: " + why); }
+        if (_inventoryHost?.Map(CurrentAreaMap) is not { } map || SpellCasterNow() is not { } caster) { GD.Print("ARC-MAGIC-1336 native-smoke loot-target SKIP (no inventory map or cast host)"); return; }
+        var identify = SpellRecordsNow()?.FirstOrDefault(r => r.Data.Number == 9 && r.Areas.Length > 0);
+        // A container (else an NPC: a body's or a living one's list is a loot window too) of the map with an item the cast host resolves as a target of spell 9 (the holder is a map object, the item is not identified yet), laid out in the first eight rows the window shows.
+        (string Holder, string Item) found = identify is null ? default : map.Seed.Holders.OrderBy(h => h.Kind == SessionHolderKind.Container ? 0 : 1)
+            .SelectMany(h => h.Items.Select(item => (Holder: h.Entity, Item: item)))
+            .FirstOrDefault(pair => !session.QueryItemIdentified(pair.Item)
+                && caster.PickTarget(SessionSpellCaster.Hero, 9, identify.Areas[0].Targets, pair.Item, null).Test.Passes);
+        if (found.Item is null)
+        {
+            var all = map.Seed.Holders.SelectMany(h => h.Items).ToArray();
+            GD.Print($"ARC-MAGIC-1336 native-smoke loot-target SKIP (no holder item the cast host resolves on this map: {all.Length} holder items, {all.Count(i => caster.Item(i) is not null)} known to the host, {all.Count(session.QueryItemIdentified)} identified)");
+            return;
+        }
+        if (InventoryOpen) EndInventory();
+        OpenInventory(found.Holder);
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        if (!WindowOpen(InterfaceMode.Loot) || _inventoryPanel is not { ArtMode: true }) { if (InventoryOpen) EndInventory(); GD.Print("ARC-MAGIC-1336 native-smoke loot-target SKIP (the loot window did not open in its original look)"); return; }
+        var view = _inventoryPanel.ViewForSelfTest!;
+        var listed = view.LootGrid.FirstOrDefault(g => g.Entity == found.Item && g.Location < AreaLootArtLayout.Columns * AreaLootArtLayout.ShownRows);
+        if (listed is null) { EndInventory(); GD.Print("ARC-MAGIC-1336 native-smoke loot-target SKIP (the item is not in the shown rows of the grid)"); return; }
+        session.Heal(session.Version, SessionLifeTarget.Hero, new LifeHeal { Fatigue = 1000 });
+        ActivateSpell(9, wand);
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        Require(_spellTargeting is not null && StackText() == "Game>Loot>SpellTarget" && TargetsMatchStack && WindowPanelsMatchStack && _inventoryPanel is { TargetPicking: true },
+            $"the activation kept the loot window with the cursor over it: {StackText()} {_spellNotice}");
+        var casts = _spellCasts;
+        var logStart = caster.Log.Count;
+        var cell = new Vector2(AreaLootArtLayout.GridX + (listed.Location % AreaLootArtLayout.Columns + .5f) * AreaLootArtLayout.CellPixels,
+            AreaLootArtLayout.GridY + (listed.Location / AreaLootArtLayout.Columns + .5f) * AreaLootArtLayout.CellPixels);
+        _inventoryPanel.GridAreaForSelfTest.PressAt(cell);
+        for (var i = 0; i < 30 && _spellCasts == casts; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        Require(_inventoryPanel.GridAreaForSelfTest.Held is null, "the press lifted nothing");
+        for (var frames = 0; frames < 800 && (_spellGoal is not null || _spellMissiles.Count > 0); frames++)
+        {
+            _areaSmokeTime++;
+            SpellSmokeTick();
+            WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .05, true, SimulationTime.At(_areaSmokeTime, 20));
+        }
+        var log = caster.Log.Skip(logStart).Select(e => e.Kind).ToArray();
+        Require(session.QueryItemIdentified(found.Item), $"the container's item {found.Item} is identified: {_spellNotice} log={string.Join(",", log)}");
+        Require(log.Contains(SpellCastEventKind.ItemIdentified), "the cast host logged the identification: " + string.Join(",", log));
+        Require(_spellTargeting is not null && StackText() == "Game>Loot>SpellTarget", "the cursor and the loot window stay after the cast: " + StackText());
+        _inventoryPanel.GridAreaForSelfTest.RightReleaseAt(new(AreaLootArtLayout.GridX + 2, AreaLootArtLayout.GridY + 2));
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        Require(_spellTargeting is null && !InventoryOpen && StackText() == "Game" && TargetsMatchStack && WindowPanelsMatchStack && !_inventoryPanel.TargetPicking,
+            "a right release cancelled the cursor and closed the loot window: " + StackText());
+        GD.Print($"ARC-MAGIC-1336 native-smoke loot-target PASS holder={found.Holder} item={found.Item} log={string.Join(",", log)}");
     }
 
     private async Task InventoryItemCastPathAsync(GameSessionOwner session, string wand, bool viaItem)
