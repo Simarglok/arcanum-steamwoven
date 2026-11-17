@@ -419,7 +419,7 @@ public sealed partial class GameSessionOwner
     /// it (<see cref="GameSessionFailure.UnknownHolder"/>), an item not in its current list (<see cref="GameSessionFailure.ItemNotAvailable"/>),
     /// gold (<see cref="TakeGoldFromNpc"/>) or, for a session without a hero, a key (<see cref="GameSessionFailure.ItemTypeUnsupported"/>; a key otherwise folds into the hero's key list, ARC-WORLD-123), and the rules of
     /// <see cref="LootItem"/>. One revision. ARC-UI-1926: a worn item is refused unless <paramref name="unwield"/> takes it off its slot as the loot of a body does (the barter window's doll
-    /// view: 0x575200 → 0x5788C0 → 0x461CA0, whose removal 0x466E00 → 0x467860 unwields), over the NPC's own wield context when <paramref name="npcWearer"/> gives it. ARC-MAGIC-022: with <paramref name="triggers"/> the pickup executor runs after the move
+    /// view: 0x575200 → 0x5788C0 → 0x461CA0, whose removal 0x466E00 → 0x467860 unwields; ARC-DEV-1338: the pick-pocket steal), over the NPC's own wield context when <paramref name="npcWearer"/> gives it. ARC-MAGIC-022: with <paramref name="triggers"/> the pickup executor runs after the move
     /// (<see cref="InventoryMutationResult.ItemSpells"/>).
     /// </summary>
     public InventoryMutationResult TakeItemFromNpc(GameSessionVersion expected, string npc, string item, SessionInsertCheck insertCheck,
