@@ -253,7 +253,7 @@ public sealed partial class GameSessionOwner
     /// (the record a dressed NPC keeps, ARC-WORLD-103; for an NPC the session never dressed it starts from what its map data has worn), in the sale's one revision. The wear test (0x464D20) is the caller's, as <see cref="QueryWearRefusal"/>'s is for the hero. Refused
     /// before any effect: a slot that is not a wear slot or that the NPC's list shows filled (the original puts the item back, no swap for an NPC), a first worn record past the saved budget, and an item the session cannot wear for the NPC: one with item spells (<see cref="GameSessionFailure.ItemEffectUnsupported"/>; NOT READY: the NPC's item spells are not modelled, as in its best-items wield) or one with item event
     /// scripts on the move when the host gives no script host or no wield context of the merchant (<see cref="GameSessionFailure.ItemScriptUnsupported"/>). ARC-UI-2159: with them the hero's removal runs (wield off, remove item; the hero the wearer) and the merchant's wield on (24)
-    /// and insert item (21) run (<paramref name="npcWearer"/>: the merchant is their wearer and triggerer, its effect list the runs change), planned in two run sets, one commit and the sale's one revision (a flag one set writes is not read by the other's runs: NOT READY). NOT READY: the art and
+    /// and insert item (21) run (<paramref name="npcWearer"/>: the merchant is their wearer and triggerer, its effect list the runs change), planned in two run sets, one commit and the sale's one revision (NOT READY: the two sets do not share pending state, so a global variable, flag, quest, story or item slot one set writes is not read by the other's runs, and when both write the same one the later commit wins). NOT READY: the art and
     /// light of the NPC's wear. The room test the executor runs for the NPC (0x466510, its carry weight: code 1, no grid room for a slot) is <paramref name="npcInsert"/>. A sale refused in the sale rules leaves the NPC's record as it was; a payment refused after the move leaves the item on the NPC's slot, as the original leaves a moved item.
     /// </summary>
     public InventoryMutationResult BarterSellWorn(GameSessionVersion expected, string npc, string item, EquipmentSlot slot, SessionWearableItem wearable, int unitPrice,
@@ -269,7 +269,7 @@ public sealed partial class GameSessionOwner
         // ARC-UI-2159 (IE4): an item with item event scripts is worn by the merchant through the item script host, as the NPC best-items wield does (the merchant is the wearer and the triggerer of the wield on and insert item runs); without the host or the
         // merchant's wield context the sale is refused.
         var points = EquipmentDomain.MovePoints(wearable.ScriptPoints);
-        if (points.Count > 0 && (scripts is null || npcWearer is null || !KnownNpc(npc))) return RejectItem(GameSessionFailure.ItemScriptUnsupported);
+        if (points.Count > 0 && (scripts is null || npcWearer is null)) return RejectItem(GameSessionFailure.ItemScriptUnsupported);
         if (wearable.HasItemSpells) return RejectItem(GameSessionFailure.ItemEffectUnsupported);
         if (QueryHolderItems(npc) is not { } listed) return RejectItem(GameSessionFailure.UnknownHolder);
         var record = new SortedDictionary<EquipmentSlot, string>();

@@ -63,6 +63,21 @@ public sealed class BarterSellWornScriptTests
     }
 
     [TestMethod]
+    public void Wield_on_and_insert_item_run_for_the_merchant_in_that_order_and_the_insert_run_is_reported()
+    {
+        using var owner = Open();
+        var host = new NpcWieldItemScriptTests.Host();
+        host.Slots[("kit:3", SessionScriptPoint.WieldOn)] = NpcWieldItemScriptTests.AddCharm;
+        host.Slots[("kit:3", SessionScriptPoint.InsertItem)] = NpcWieldItemScriptTests.Say;
+        var sold = owner.BarterSellWorn(owner.Version, Merchant, "kit:3", EquipmentSlot.Ring1, Ring(SessionScriptPoint.WieldOn, SessionScriptPoint.InsertItem), 0, default, Accept, scripts: host, npcWearer: Wield(host));
+        Assert.AreEqual((GameSessionDisposition.Changed, GameSessionFailure.None), (sold.Disposition, sold.Failure));
+        CollectionAssert.AreEqual(new[] { (SessionScriptPoint.WieldOn, "kit:3"), (SessionScriptPoint.InsertItem, "kit:3") }, sold.Scripts.Select(run => (run.Point, run.Attachee)).ToArray());
+        Assert.IsNotNull(sold.InsertScript);
+        Assert.AreEqual(1, sold.Messages.Count, "the insert script's printed line");
+        Assert.AreEqual(1, Charms(owner));
+    }
+
+    [TestMethod]
     public void A_run_the_session_cannot_apply_refuses_the_sale_and_leaves_no_worn_record()
     {
         using var owner = Open();
