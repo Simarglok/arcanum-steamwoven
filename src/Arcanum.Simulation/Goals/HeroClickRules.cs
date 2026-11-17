@@ -40,7 +40,7 @@ public enum HeroClickGoal
     Pickup,
     /// <summary>Goal 3 to the trap's tile.</summary>
     WalkToTrap,
-    /// <summary>The Alt action 0x4445A0 (not read): an immediate action on the target.</summary>
+    /// <summary>The Alt action 0x4445A0 (ARC-INPUT-1946): no goal; a loose item or a body within one tile of the hero is moved onto the hero's tile, farther away nothing moves.</summary>
     Immediate,
 }
 
