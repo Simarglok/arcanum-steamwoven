@@ -97,7 +97,7 @@ public static class AttackResolver
                 }
             }
 
-            if (proceed && !targetIsCritter)
+            if (proceed && !targetIsCritter && !request.NoDefender)
             {
                 hit = true;
             }
@@ -112,7 +112,7 @@ public static class AttackResolver
                 if (!hit) missCause = AttackMissCause.SkillCheck;
 
                 // A corpse never dodges (0x4C7160 skill 1 fails at once for a dead defender: nothing is rolled).
-                if (hit && !corpse)
+                if (hit && !corpse && !request.NoDefender)
                 {
                     dodgeCheck = DodgeCheck(target, request.Difficulty, rolls, profile);
                     if (dodgeCheck.Success)
@@ -276,8 +276,8 @@ public static class AttackResolver
                 WeaponToHit = weapon.ToHitBonus + (magic ? weapon.MagicToHitAdjustment : 0),
                 WeaponMinimumStrength = weapon.MinimumStrength,
                 SourceStrength = attacker.Strength,
-                Target = true,
-                TargetCritter = true,
+                Target = !request.NoDefender,
+                TargetCritter = !request.NoDefender,
                 TargetConditions = TargetConditionsOf(target.Conditions),
                 TargetUnaware = request.TargetUnaware,
                 TargetArmorClass = target.ArmorClass,

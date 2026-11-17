@@ -413,15 +413,20 @@ public partial class TerrainViewerApp
                 LineOfFire = ShotLine(TraceLineOfFire(from, aimed.Row), aimed.Row),
             };
         }
+        // ARC-COMBAT-2435 (TW11): a throw that names no critter rolls as a throw at the location: the light of the tile and the line of fire's cost are its terms (the blocker, if any, is no living critter, or it would be the struck one); the light
+        // also serves a throw that falls back to the location after its scripts ran.
+        var locationLine = new SessionLineOfFire(from != tile && AreaLineOfFireNow() is { } lineMap ? Math.Min(LineOfFireRules.Trace(from, 0, 0, tile, lineMap, owner.Rules.Combat).Cost, AttackResolver.MaxMagnitude) : 0, false);
+        request = request with { TargetLight = AreaCellLightLevel(tile.X, tile.Y) };
+        if (aimed is null) request = request with { LineOfFire = locationLine };
         var result = owner.ThrowHeroItem(owner.Version, request);
         // A struck critter that died meanwhile refuses the attack: the original's press throws at the location anyway.
         if (aimed is not null && result.Disposition == GameSessionDisposition.NoChange && owner.QueryHeroLife() is { Status.IsActive: true })
         {
             aimed = null;
-            result = owner.ThrowHeroItem(owner.Version, request with { Struck = null, StruckCell = null, StruckWorn = null, LineOfFire = null });
+            result = owner.ThrowHeroItem(owner.Version, request with { Struck = null, StruckCell = null, StruckWorn = null, LineOfFire = locationLine });
         }
         // ARC-COMBAT-1955: the scripts ran, the session threw at the location itself because the struck critter refused: no struck critter is left.
-        if (aimed is not null && result.Attack?.Resolution is null && result.Shots.Count > 0) aimed = null;
+        if (aimed is not null && result.AtLocation) aimed = null;
         _lastHeldThrowForSelfTest = result;
         GD.Print($"ARC-UI-063 throw item={held.Item} tile={tile.X},{tile.Y} struck={aimed?.Entity ?? "none"} disposition={result.Disposition}"
             + $" failure={result.Failure} outcome={result.Attack?.Resolution?.Outcome.ToString() ?? "-"} shots={result.Shots.Count}"
@@ -452,13 +457,28 @@ public partial class TerrainViewerApp
         // time is the accepted deviation A) with the thrown item's loudness as a weapon (0x4B2810); a throw decided a miss never strikes its aimed target and alerts none.
         if (aimed is not null && hit && result.Attack?.Resolution?.Refusal == AttackRefusal.None) _aiHost?.HeroAttacked(aimed.Entity, KitItemNoise(held.Item));
         foreach (var shot in result.Shots)
-            FlyShot(shot, result.Destination ?? tile, art, unfaced, range, hit, aimed?.Row ?? HeroRow, aimed, null, result.Destination is not null,
+            // ARC-COMBAT-2435: a hit with no struck critter flies to its tile and strikes nothing (the shot is the targetless one); a miss flies toward its scattered tile.
+            FlyShot(shot, result.Destination ?? tile, art, unfaced, range, hit && aimed is not null, aimed?.Row ?? HeroRow, aimed, null, result.Destination is not null,
                 sizeArc: facts.Kind.Type != SessionItemType.Weapon);
-        SetHeldThrowNotice($"{held.Name} thrown at {tile.X},{tile.Y}" + (aimed is null ? "" : hit ? $": it will hit {aimed.Entity}" : ": it missed"));
+        SetHeldThrowNotice($"{held.Name} thrown at {tile.X},{tile.Y}" + (aimed is null ? (result.Attack?.Resolution is null ? "" : hit ? ": it lands there" : result.Destination is { } scattered ? $": it missed and flies to {scattered.X},{scattered.Y}" : ": it missed") : hit ? $": it will hit {aimed.Entity}" : ": it missed"));
         // A critical miss turned on the hero at once (its result is the attack's); a strike waits for the flight.
         if (aimed is not null && result.Attack is { } attack && (result.Shots.Count == 0 || attack.Life is not null)) FinishCritterHit(aimed, attack, selfHitReachesTaunt: false, thrownItem: held.Item); // ARC-AI-1639: a held throw has weapon type 3 (0x465D80), which skips the attack end's taunt call
+        // ARC-COMBAT-2435: a critical miss of a throw at a location turns on the hero (its damage was applied by the session): the hero's lines, its worn-out weapon and its stun.
+        if (aimed is null && result.Attack is { Recipient: Arcanum.Simulation.Combat.DamageRecipient.Attacker } turned) FinishLocationThrow(owner, turned);
         SyncAreaInventory(); RefreshAreaStatus();
         return result;
+    }
+
+    // ARC-COMBAT-2435: the reaction to a critical miss of a throw at a location: the self-hit's floaters, the hero's weapon that wore out and its stun (the attacker is the victim, no struck critter).
+    private void FinishLocationThrow(GameSessionOwner owner, SessionAttackResult result)
+    {
+        HeroWeaponWornOut(result.Wear, HeroRow, false);
+        FloatCritterAttack(result, HeroFloater, HeroFloater);
+        _attackNotice = "critical miss: the throw turned on the hero";
+        GD.Print($"ARC-COMBAT-2435 location-throw-critical-miss damage={result.Life?.HitPointDamage} events={result.Life?.Events} step={result.StepFailure}"
+            + $" wear={string.Join(",", result.Wear?.Steps.Select(s => $"{s.Kind}:{s.Entity}:{s.Amount}:{s.Skip}") ?? [])}");
+        if (result.Life is { } took && took.Events.HasFlag(LifeEvents.Stunned)) HeroStunned(owner);
+        SyncAreaCombatBodies();
     }
 
     // The struck critter of a throw at the tile (ARC-COMBAT-2425, TW4 as corrected by TW10 and TW11): the line of fire's blocker when it is a living NPC with combat values (a blocker replaces the target, RA4),

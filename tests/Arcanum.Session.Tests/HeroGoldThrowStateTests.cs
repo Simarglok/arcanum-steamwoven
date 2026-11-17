@@ -33,10 +33,11 @@ public sealed class HeroGoldThrowStateTests
         Assert.AreEqual((GameSessionDisposition.Changed, GameSessionFailure.None), (thrown.Disposition, thrown.Failure));
         var shot = thrown.Shots.Single();
         Assert.AreEqual(("made:1", 285), (owner.QueryThrownShot(shot)!.Value.Item, owner.QueryGold()), "the new pile flies, the rest stays in the counter");
-        Assert.AreEqual(At(owner, 3), thrown.Destination);
-        Assert.AreEqual(GameSessionDisposition.Changed, owner.LandThrownItem(owner.Version, shot, At(owner, 3)).Disposition);
+        // ARC-COMBAT-2435: a throw at a tile rolls as a throw at a location, so it lands on the tile or, after a miss, on its scattered tile.
+        var landing = thrown.Destination!.Value;
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.LandThrownItem(owner.Version, shot, landing).Disposition);
         var placed = owner.QueryPlacedItems().Single();
-        Assert.AreEqual(("made:1", At(owner, 3)), (placed.Entity, placed.Cell));
+        Assert.AreEqual(("made:1", landing), (placed.Entity, placed.Cell));
         Assert.AreEqual(0, owner.QueryItemDecays().Count, "a thrown pile schedules no decay");
         // The pickup turns it back into coins (HG4).
         Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, "made:1", Accept).Disposition);
