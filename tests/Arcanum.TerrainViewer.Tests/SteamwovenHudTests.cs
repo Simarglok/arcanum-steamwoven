@@ -133,4 +133,30 @@ public sealed class SteamwovenHudTests
         var plain = InterfaceChromeRenderer.RenderBoard(ChromeMaterial.Wood, ChromeSides.None, 20, 20, 1, 0, 0, null, [], 0, 0);
         Assert.IsFalse(tuned.AsSpan().SequenceEqual(plain));
     }
+
+    [TestMethod]
+    public void The_layout_models_control_offsets_are_the_original_bars_positions()
+    {
+        // ARC-UI-2526: SteamwovenControls.OriginalX duplicates the original's unit positions; the viewer's own layout classes are the source.
+        var expected = new Dictionary<SteamwovenControlId, int>
+        {
+            [SteamwovenControlId.Character] = AreaGameBarLayout.Spec(AreaBarButton.Character).X,
+            [SteamwovenControlId.Logbook] = AreaGameBarLayout.Spec(AreaBarButton.Logbook).X,
+            [SteamwovenControlId.Map] = AreaGameBarLayout.Spec(AreaBarButton.Map).X,
+            [SteamwovenControlId.Inventory] = AreaGameBarLayout.Spec(AreaBarButton.Inventory).X,
+            [SteamwovenControlId.FatePoints] = AreaGameBarLayout.Spec(AreaBarButton.FatePoints).X,
+            [SteamwovenControlId.Sleep] = AreaGameBarLayout.Spec(AreaBarButton.Sleep).X,
+            [SteamwovenControlId.Clock] = AreaClockLayout.WindowX,
+            [SteamwovenControlId.ExperienceStrip] = AreaExperienceStripLayout.ClearX,
+            [SteamwovenControlId.Combat] = AreaGameBarLayout.Spec(AreaBarButton.Combat).X,
+            [SteamwovenControlId.Skills] = AreaGameBarLayout.Spec(AreaBarButton.Skills).X,
+            [SteamwovenControlId.Spells] = AreaGameBarLayout.Spec(AreaBarButton.Spells).X,
+            [SteamwovenControlId.Schematics] = AreaGameBarLayout.Spec(AreaBarButton.Schematics).X,
+            [SteamwovenControlId.HealthVial] = AreaGameBarLayout.HealthGauge.X,
+            [SteamwovenControlId.FatigueVial] = AreaGameBarLayout.FatigueGauge.X,
+            [SteamwovenControlId.MessageWindow] = AreaMessageLayout.Window.X,
+        };
+        Assert.AreEqual(expected.Count, SteamwovenControls.OriginalX.Count);
+        foreach (var (id, x) in SteamwovenControls.OriginalX) Assert.AreEqual(expected[id], x, id.ToString());
+    }
 }
