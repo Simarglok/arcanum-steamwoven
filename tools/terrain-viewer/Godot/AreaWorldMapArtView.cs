@@ -370,7 +370,7 @@ public partial class AreaWorldMapArtView : Control
         var fit = MathF.Min(free.X / AreaWorldMapArtLayout.WindowWidth, free.Y / AreaWorldMapArtLayout.WindowHeight);
         var factor = fit >= 1 ? MathF.Floor(fit) : MathF.Max(.25f, fit);
         Scale = new Vector2(factor, factor);
-        Position = new Vector2(MathF.Round((free.X - AreaWorldMapArtLayout.WindowWidth * factor) / 2),
+        Position = new Vector2(AreaGameBarPanel.FreeLeft + MathF.Round((free.X - AreaWorldMapArtLayout.WindowWidth * factor) / 2),
             top + MathF.Round((free.Y - AreaWorldMapArtLayout.WindowHeight * factor) / 2));
         RedrawOnScaleChange();
     }

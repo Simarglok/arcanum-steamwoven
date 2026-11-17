@@ -165,6 +165,8 @@ public partial class AreaFollowerPortraits : CanvasLayer
 
     /// <summary>The whole factor the panel is drawn at (the interface bars').</summary>
     internal float ScaleForSelfTest => _root.Scale.X;
+    /// <summary>ARC-UI-2510: the window position of the screen's top left the panel is drawn from (the self-test).</summary>
+    internal Vector2 OriginForSelfTest => _root.Position;
 
     // The screen rectangle and centre of a control under the panel's scale (Control.GetGlobalRect ignores the scale).
     private static Rect2 RectOf(Control control) { var transform = control.GetGlobalTransform(); return new(transform.Origin, transform.BasisXform(control.Size)); }
@@ -213,11 +215,15 @@ public partial class AreaFollowerPortraits : CanvasLayer
         _menu.GuiInput += input => { if (input is InputEventMouseButton { Pressed: false, ButtonIndex: MouseButton.Left or MouseButton.Right }) CloseMenu(); };
         GetViewport().SizeChanged += Resized;
         AreaGameBarPanel.InsetsChanged += PlaceChrome;
+        AreaGameBarPanel.TopScreenChanged += ScreenMoved;
         Place();
         Hide();
     }
 
     private void Resized() { CloseMenu(); Place(); EdgeChanged?.Invoke(); }
+
+    // ARC-UI-2510: the layout turned on or off, or the window was laid out again: the screen the portraits hang in moved (the bars place themselves after this panel's own resize handler may have run).
+    private void ScreenMoved() { if (_root is null) return; Place(); EdgeChanged?.Invoke(); }
 
     /// <summary>ARC-UI-1817: device pixels per Legacy pixel of this panel and its menu (what the generated frames are painted at): the scale of the panel's root, the canvas transform's
     /// and the viewport's stretch.</summary>
@@ -381,7 +387,9 @@ public partial class AreaFollowerPortraits : CanvasLayer
         var barsDrawn = BarsDrawn;
         if (_root is null) return;
         // ARC-UI-2284: the strip's bottom is the window's bottom, so the buttons stand a table's distance above it, not at the table's y from the top.
-        var heightUnits = GetViewport().GetVisibleRect().Size.Y / _root.Scale.Y;
+        // ARC-UI-2510: in the Steamwoven layout the screen hangs from the top strip and ends at the bottom strip's bottom edge, not at the window's bottom.
+        var bottom = AreaGameBarPanel.TopScreen?.BottomEdge ?? GetViewport().GetVisibleRect().Size.Y;
+        var heightUnits = (bottom - _root.Position.Y) / _root.Scale.Y;
         foreach (var (button, rect) in new[] { (_toggle, AreaFollowerPanelRules.ToggleRectFor(barsDrawn)), (_up, AreaFollowerPanelRules.UpRectFor(barsDrawn)), (_down, AreaFollowerPanelRules.DownRectFor(barsDrawn)) })
             if (button is not null) button.Position = new Vector2(rect.X, AreaFollowerPanelRules.AnchoredY(rect.Y, heightUnits));
     }
@@ -491,15 +499,27 @@ public partial class AreaFollowerPortraits : CanvasLayer
     {
         GetViewport().SizeChanged -= Resized;
         AreaGameBarPanel.InsetsChanged -= PlaceChrome;
+        AreaGameBarPanel.TopScreenChanged -= ScreenMoved;
     }
 
     private void Place()
     {
         if (_root is null) return;
         var size = GetViewport().GetVisibleRect().Size;
-        var factor = AreaGameBarPanel.ScreenFactor(size);
-        _root.Position = new(AreaGameBarPanel.ScreenLeft(size, factor), 0);
-        _root.Scale = new(factor, factor);
+        // ARC-UI-2510: where the strips put the 800 × 600 screen (the Steamwoven layout: its top left under the top band's strip, at the strips' scale), else the whole factor centred at the window's top.
+        if (AreaGameBarPanel.TopScreen is { } screen)
+        {
+            _root.Position = screen.Origin;
+            _root.Scale = new(screen.Scale, screen.Scale);
+            _root.TextureFilter = CanvasItem.TextureFilterEnum.Linear;
+        }
+        else
+        {
+            var factor = AreaGameBarPanel.ScreenFactor(size);
+            _root.Position = new(AreaGameBarPanel.ScreenLeft(size, factor), 0);
+            _root.Scale = new(factor, factor);
+            _root.TextureFilter = CanvasItem.TextureFilterEnum.Nearest;
+        }
         PlaceChrome();
         PlaceMenu();
     }
@@ -509,6 +529,7 @@ public partial class AreaFollowerPortraits : CanvasLayer
     {
         if (_menu is null) return;
         _menu.Scale = _root.Scale;
+        _menu.TextureFilter = _root.TextureFilter;
         _menu.Position = _root.Position + _menuOrigin * _root.Scale.X;
         if (IsInsideTree() && MathF.Abs(DeviceScale() - _drawnScale) > 0.001f) RedrawTextures();
     }

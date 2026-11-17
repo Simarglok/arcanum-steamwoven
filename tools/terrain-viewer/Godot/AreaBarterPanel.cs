@@ -296,7 +296,7 @@ public partial class AreaBarterPanel : CanvasLayer
                 _panel.Size = new(frameWidth, 0);
             }
             _panel.Size = new(frameWidth, Math.Min(_panel.GetCombinedMinimumSize().Y, free.Y));
-            _panel.Position = new((free.X - frameWidth) / 2, top);
+            _panel.Position = new(AreaGameBarPanel.FreeLeft + (free.X - frameWidth) / 2, top);
             return;
         }
         var size = GetViewport().GetVisibleRect().Size;

@@ -1,5 +1,6 @@
 using Arcanum.Presentation.Steamwoven;
 using Arcanum.TerrainViewer.Core;
+using Arcanum.World;
 using Godot;
 
 namespace Arcanum.TerrainViewer;
@@ -105,6 +106,8 @@ public partial class TerrainViewerApp
                     // The bars and the frame cover the window exactly once.
                     long barArea = panel.BarsForSelfTest.Where(bar => bar.Visible).Sum(bar => (long)bar.Size.X * (long)bar.Size.Y);
                     Require(barArea + (long)layout.Frame.Width * layout.Frame.Height == (long)size.X * size.Y, $"[{tag}] the bars ({barArea}) and the frame {layout.Frame} fill the window");
+                    await CheckSteamwovenScreenPartsAsync(tag, plan, size, frames, Require);
+                    await CaptureSteamwovenPartsAsync(tag, frames);
                     await CaptureHudAsync("steamwoven-" + tag, frames);
                     await CheckSteamwovenPixelsAsync(tag, layout, Require);
                     // An open menu: the backdrop fills the whole middle band, the window docks in it.
@@ -146,6 +149,42 @@ public partial class TerrainViewerApp
         await frames(3);
         await WaitBarArtGeneratedAsync(panel, frames);
         GD.Print($"ARC-UI-2452 native steamwoven layout PASS sizes={checkedSizes}");
+    }
+
+    // ARC-UI-2510: the parts the layout model leaves to the screen's own units follow the strips: the free area is the frame's, the screen the follower portraits hang in and the floaters' scale are where the strips
+    // put them, the sleep and fate views keep their own whole scale (placed on that screen), and the generated textures of the views paint at the view's own scale, not the strips'.
+    private async Task CheckSteamwovenScreenPartsAsync(string tag, SteamwovenHudPlan plan, Vector2I size, Func<int, Task> frames, Action<bool, string> require)
+    {
+        var frame = plan.Layout.Frame;
+        var (freeTop, free) = AreaGameBarPanel.FreeArea(new Vector2(size.X, size.Y));
+        require(free.X == frame.Width && AreaGameBarPanel.FreeLeft == frame.X && freeTop == plan.TopInset, $"[{tag}] the free width is the frame's {frame.Width} at x {frame.X} (got {free.X} at {AreaGameBarPanel.FreeLeft})");
+        var scale = (float)plan.StripScale;
+        require(AreaGameBarPanel.TopScreen is { } screen && screen.Origin == new Vector2(plan.StripLeft, plan.TopStripY) && Math.Abs(screen.Scale - scale) < 1e-4f
+            && Math.Abs(screen.BottomEdge - (plan.BottomStripY + AreaGameBarLayout.BottomHeight * scale)) < 1e-2f, $"[{tag}] the screen hangs from the top strip at the strips' scale ({AreaGameBarPanel.TopScreen})");
+        var origin = AreaGameBarPanel.TopScreen!.Value.Origin;
+        var floaters = new AreaFloaterLayer(); var portraits = new AreaFollowerPortraits(); var sleep = new AreaSleepView(); var fate = new AreaFateView();
+        try
+        {
+            foreach (var node in new Node[] { floaters, portraits, sleep, fate }) AddChild(node);
+            await frames(2);
+            require(Math.Abs(floaters.DrawScale - scale) < 1e-4f, $"[{tag}] the floaters are laid out at the strips' scale {scale} (got {floaters.DrawScale})");
+            portraits.Show(Enumerable.Range(0, 2).Select(i => ($"smoke:{i}", $"F{i}", (AreaLife?)new AreaLife(100, 100, 50, 60, 0), (Texture2D?)null)).ToArray());
+            await frames(2);
+            require(portraits.OriginForSelfTest == origin && Math.Abs(portraits.ScaleForSelfTest - scale) < 1e-4f, $"[{tag}] the follower portraits are drawn on the screen from {origin} at {scale} (got {portraits.OriginForSelfTest} at {portraits.ScaleForSelfTest})");
+            var firstSlot = origin.Y + AreaFollowerFrameLayout.FirstY * scale;
+            require(Math.Abs(firstSlot - (plan.TopInset + (AreaFollowerFrameLayout.FirstY - AreaGameBarLayout.TopHeight) * scale)) <= 1f, $"[{tag}] the first portrait stands under the top strip ({firstSlot})");
+            var toggle = AreaFollowerPanelRules.ToggleRectFor(true);
+            var expectedY = AreaGameBarPanel.TopScreen!.Value.BottomEdge - (AreaGameBarLayout.ScreenHeight - (toggle.Y + toggle.Height / 2f)) * scale;
+            require(portraits.Visible && Math.Abs(portraits.ButtonCentreForSelfTest("toggle")!.Value.Y - expectedY) <= 1f, $"[{tag}] the toggle button hangs from the bottom strip's edge: y {portraits.ButtonCentreForSelfTest("toggle")!.Value.Y} expected {expectedY:F1}");
+            sleep.Place(); fate.Place();
+            var whole = AreaGameBarPanel.ScreenFactor(new Vector2(size.X, size.Y));
+            foreach (var (name, view, x, y) in new[] { ("sleep", (Control)sleep, AreaSleepLayout.ScreenX, AreaSleepLayout.ScreenY), ("fate", fate, AreaFateLayout.ScreenX, AreaFateLayout.ScreenY) })
+            {
+                var expected = origin + new Vector2(x, y) * scale;
+                require(view.Scale.X == whole && view.Scale.Y == whole && (view.Position - expected).Length() <= 1e-2f, $"[{tag}] the {name} view keeps its own whole scale {whole} at {expected} (got {view.Scale.X} at {view.Position})");
+            }
+        }
+        finally { foreach (var node in new Node[] { floaters, portraits, sleep, fate }) { RemoveChild(node); node.QueueFree(); } }
     }
 
     // Both strips and every frame of every bar button draw generated chrome (asking for it paints it on a worker).

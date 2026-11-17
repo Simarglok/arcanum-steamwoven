@@ -53,6 +53,8 @@ public partial class AreaFateView : Control
         TextureFilter = TextureFilterEnum.Nearest;
         Visible = false;
         AreaArtTextDraw.Prepare(this);
+        // ARC-UI-2510: the window keeps its own whole scale; where the strips put the screen is what moves it.
+        AreaGameBarPanel.TopScreenChanged += Place;
     }
 
     public void SetArt(IReadOnlyDictionary<int, Texture2D[]> art, AreaArtFontFace font, AreaFateTexts texts)
@@ -62,6 +64,8 @@ public partial class AreaFateView : Control
         _font = font ?? throw new ArgumentNullException(nameof(font));
         _texts = texts ?? throw new ArgumentNullException(nameof(texts));
         if (_art.TryGetValue(AreaFateLayout.BackgroundArt, out var window) && window.Length > 0) Size = new Vector2(window[0].GetWidth(), window[0].GetHeight());
+        // ARC-UI-2510: the textures are the window's own from the moment they are handed over, so none of them ever paints at the strips' fractional scale (the draw claims them again).
+        Claim.Claim(_art, AreaFateLayout.BackgroundArt, AreaFateLayout.ButtonArt);
         QueueRedraw();
     }
 
@@ -87,13 +91,12 @@ public partial class AreaFateView : Control
         Visible = false;
     }
 
-    /// <summary>The window at (0, 41) of the original's screen at the bars' whole factor.</summary>
+    /// <summary>The window at (0, 41) of the original's screen at the whole factor (ARC-UI-2510: the screen is where the strips put it in the Steamwoven layout; the scale stays the window's own).</summary>
     public void Place()
     {
-        var size = GetViewportRect().Size;
-        var factor = AreaGameBarPanel.ScreenFactor(size);
-        Scale = new Vector2(factor, factor);
-        Position = new Vector2(AreaGameBarPanel.ScreenLeft(size, factor) + AreaFateLayout.ScreenX * factor, AreaFateLayout.ScreenY * factor);
+        var (position, scale) = AreaGameBarPanel.OwnScaleWindow(GetViewportRect().Size, AreaFateLayout.ScreenX, AreaFateLayout.ScreenY);
+        Scale = new Vector2(scale, scale);
+        Position = position;
     }
 
     /// <summary>Sets every button from the hero's armed kinds and redraws when one changed.</summary>
@@ -133,7 +136,11 @@ public partial class AreaFateView : Control
         }
     }
 
-    public override void _ExitTree() => _claim?.Release();
+    public override void _ExitTree()
+    {
+        AreaGameBarPanel.TopScreenChanged -= Place;
+        _claim?.Release();
+    }
 
     public override void _Notification(int what)
     {
