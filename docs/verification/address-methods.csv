@@ -267,6 +267,7 @@ src/Arcanum.Session/SessionSpellCasterAi.cs,AiFailChance,pending,
 src/Arcanum.Session/SessionSpellCasterAi.cs,AiFreeMaintainSlots,pending,
 src/Arcanum.Session/SessionSpellCasterAi.cs,AiItemFailChance,pending,
 src/Arcanum.Session/SessionSpellCasterAi.cs,AiKnows,pending,
+src/Arcanum.Session/SessionSpellCasterAi.cs,AiMindController,exempt,host
 src/Arcanum.Session/SessionSpellCasterAi.cs,AiSpell,pending,
 src/Arcanum.Session/SessionSpellCasterAi.cs,AiUnderInfluence,pending,
 src/Arcanum.Session/SessionSpellCasterAi.cs,CastByAi,pending,
@@ -510,6 +511,8 @@ src/Arcanum.World/AreaAiHost.cs,LineOfFireBlocker,pending,
 src/Arcanum.World/AreaAiHost.cs,LineOfFireStruck,pending,
 src/Arcanum.World/AreaAiHost.cs,List,pending,
 src/Arcanum.World/AreaAiHost.cs,ManaStoreEmptied,exempt,host
+src/Arcanum.World/AreaAiHost.cs,MindControlAcceptance,exempt,host
+src/Arcanum.World/AreaAiHost.cs,MindController,exempt,host
 src/Arcanum.World/AreaAiHost.cs,MoveToLeader,pending,
 src/Arcanum.World/AreaAiHost.cs,NeedsAmmunition,exempt,host
 src/Arcanum.World/AreaAiHost.cs,NoticeKill,exempt,host
