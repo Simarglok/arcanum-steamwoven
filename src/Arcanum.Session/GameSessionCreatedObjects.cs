@@ -191,9 +191,10 @@ public sealed partial class GameSessionOwner
 
     /// <summary>
     /// ARC-DEV-347 (E1-a, TM4): destroys a created scenery or eye-candy object (the one destroy path, <see cref="DestroyObject"/>; the number stays used). NoChange for an entity the
-    /// session holds no such object under; Rejected for a stale version. One revision. The run that created it (a spell's END, a dispel) calls this.
+    /// session holds no such object under; Rejected for a stale version. One revision. The run that created it (a spell's END, a dispel) calls this. ARC-WORLD-2503 (0x4639E0, DD10): a critter's items with object flag 0x400000 are taken out and dropped first
+    /// on <paramref name="cell"/> (the cell it stands on now, when the caller knows it; else the cell it was made on) with their decay, planned before anything changes: a refused drop (<see cref="GameSessionFailure.DropTileUnfit"/>, <see cref="GameSessionFailure.BudgetExceeded"/>) destroys nothing.
     /// </summary>
-    public SessionCreatedObjectResult DestroyCreatedObject(GameSessionVersion expected, string entity)
+    public SessionCreatedObjectResult DestroyCreatedObject(GameSessionVersion expected, string entity, CellCoord? cell = null)
     {
         ThrowIfDisposed();
         SessionCreatedObjectResult Reject(GameSessionFailure failure) => new(GameSessionDisposition.Rejected, failure, null, new(_identity, _revision));
@@ -201,6 +202,10 @@ public sealed partial class GameSessionOwner
         if (!IsCurrent(expected)) return Reject(GameSessionFailure.StaleVersion);
         if (_inventory.Objects.CreatedObject(entity) is not { } held) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, null, new(_identity, _revision));
         if (_revision == long.MaxValue) return Reject(GameSessionFailure.RevisionExhausted);
+        // ARC-WORLD-2503: a critter's invulnerable items are taken out and dropped first (planned before anything changes, so a refusal destroys nothing).
+        var drops = PlanCreatedCritterDrops([held], cell);
+        if (drops.Refusal != GameSessionFailure.None) return Reject(drops.Refusal);
+        DropCreatedCritterItems(drops);
         DestroyObject(entity);
         Revise();
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, held, new(_identity, _revision));
@@ -222,6 +227,10 @@ public sealed partial class GameSessionOwner
         var held = entities.Distinct(StringComparer.Ordinal).Select(entity => _inventory.Objects.CreatedObject(entity)).OfType<SessionCreatedObject>().ToArray();
         if (held.Length == 0) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, [], new(_identity, _revision));
         if (_revision == long.MaxValue) return Reject(GameSessionFailure.RevisionExhausted);
+        // ARC-WORLD-2503: the critters' invulnerable items are dropped first, all planned before anything changes (the budgets count the whole list's drops).
+        var drops = PlanCreatedCritterDrops(held, null);
+        if (drops.Refusal != GameSessionFailure.None) return Reject(drops.Refusal);
+        DropCreatedCritterItems(drops);
         foreach (var made in held) DestroyObject(made.Entity);
         Revise();
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, Array.AsReadOnly(held), new(_identity, _revision));

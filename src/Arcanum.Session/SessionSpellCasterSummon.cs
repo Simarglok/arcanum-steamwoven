@@ -116,7 +116,8 @@ public sealed partial class SessionSpellCaster
 
     private bool DestroyCreated(int run, string entity)
     {
-        var destroyed = _owner.DestroyCreatedObject(_owner.Version, entity);
+        // ARC-WORLD-2503: the critter's items drop where it stands now (its live cell), not where it was made.
+        var destroyed = _owner.DestroyCreatedObject(_owner.Version, entity, _map.Object(entity) is { Location: { IsNone: false } at } ? new CellCoord(checked((int)at.X), checked((int)at.Y)) : null);
         if (destroyed.Disposition == GameSessionDisposition.NoChange) return true;
         if (destroyed.Disposition != GameSessionDisposition.Changed) return false;
         _goneObjects.Add((SessionSpellRunActionKind.ObjectGone, entity, run));

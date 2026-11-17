@@ -132,7 +132,7 @@ public sealed partial class GameSessionOwner
     /// pile no longer stays by a path that skipped the check).</item>
     /// <item><b>A junk pile</b>: the pile's record only; its items stay on the ground where they lie.</item>
     /// <item><b>A pool of blood</b>: the pool's record (a decayed pool is purged here; its number is never given again).</item>
-    /// <item><b>A created scenery or eye-candy object</b> (ARC-DEV-347): its record; its number is never given again. <b>A created critter</b> (ARC-DEV-359, ARC-DEV-371): its record and its written flags.</item>
+    /// <item><b>A created scenery or eye-candy object</b> (ARC-DEV-347): its record; its number is never given again. <b>A created critter</b> (ARC-DEV-359, ARC-DEV-371): its record and its written flags; the items of its list with object flag 0x400000 are taken out and dropped before it by <see cref="DestroyCreatedObject"/> (ARC-WORLD-2503), which every public destroy of a critter goes through.</item>
     /// </list>
     /// <paramref name="windowShowsContainer"/> is a caller that knows the host's loot window shows a container (the check then waits for
     /// the close); the session also reads it from the event world of the pass it runs in (the decay), and outside a pass it knows none, so
