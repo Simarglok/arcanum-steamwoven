@@ -94,7 +94,7 @@ public partial class TerrainViewerApp
     private void DropDestroyedSceneryLoops(GameSessionOwner session, AreaSceneryHost host, int map)
     {
         foreach (var loop in host.Animation.Loops.ToArray())
-            if (AreaUseScripts.Destroyed(session, map, loop.Entity)
+            if (AreaUseScriptHost.Destroyed(session, map, loop.Entity)
                 || session.QueryObjectCondition(new SessionMapId(map), loop.Entity, Arcanum.Simulation.Combat.DamageableObjectKind.Scenery) == SessionObjectCondition.Destroyed)
                 host.ObjectDestroyed(loop.Entity);
     }
