@@ -97,7 +97,7 @@ public partial class TerrainViewerApp
                     Require(plan.TopStripY >= layout.Top.Band.Y && plan.TopStripY + (int)Math.Round(41 * plan.StripScale) == layout.Top.Band.Bottom, $"[{tag}] the top strip stands on its band's lower edge");
                     Require(plan.BottomStripY == layout.Bottom.Band.Y, $"[{tag}] the bottom strip hangs from its band's upper edge");
                     // The boards fill each band over the whole frame width in the strips' own device pixels, one texel per pixel.
-                    var (topBoard, bottomBoard, backdrop, backdropShown) = panel.BoardsForSelfTest;
+                    var (topBoard, bottomBoard, backdropShown) = panel.BoardsForSelfTest;
                     Require(panel.BoardsShownForSelfTest && !backdropShown, $"[{tag}] the boards show and no backdrop shows with no menu");
                     Require(topBoard.PixelSizeForSelfTest == new Vector2I(layout.Top.Band.Width, layout.Top.Band.Height) && topBoard.Position == new Vector2(layout.Top.Band.X, layout.Top.Band.Y),
                         $"[{tag}] the top board is the top band {layout.Top.Band} (pixels {topBoard.PixelSizeForSelfTest})");
@@ -113,9 +113,7 @@ public partial class TerrainViewerApp
                     await frames(3);
                     Require(InventoryOpen, $"[{tag}] the inventory opened");
                     await WaitPaintedAsync();
-                    (_, _, backdrop, backdropShown) = panel.BoardsForSelfTest;
-                    Require(backdropShown && backdrop.Position == new Vector2(layout.Middle.Band.X, layout.Middle.Band.Y) && backdrop.PixelSizeForSelfTest == new Vector2I(layout.Middle.Band.Width, layout.Middle.Band.Height),
-                        $"[{tag}] the open menu has its backdrop over the middle band {layout.Middle.Band} (pixels {backdrop.PixelSizeForSelfTest})");
+                    CheckBackdrop(tag, "inventory", SteamwovenBackdropFamily.Inventory, plan, panel, Require);
                     await CaptureHudAsync("steamwoven-" + tag + "-menu", frames);
                     EndInventory();
                     await frames(3);
@@ -156,16 +154,16 @@ public partial class TerrainViewerApp
     // (unit tests of the hook) and are captured with the window hooks of #2489.
     private async Task VerifySteamwovenWindowsAsync(string tag, SteamwovenHudPlan? plan, AreaGameBarPanel panel, Func<int, Task> frames, Func<Task> waitPainted, Action<bool, string> require)
     {
-        var windows = new (string Name, Action Open, Func<bool> IsOpen, Action Close, Func<(Vector2 Origin, float Scale, int BodyTop)?> View)[]
+        var windows = new (string Name, Action Open, Func<bool> IsOpen, Action Close, Func<(Vector2 Origin, float Scale, int BodyTop)?> View, SteamwovenBackdropFamily? Family)[]
         {
-            ("inventory", () => OpenInventory(), () => InventoryOpen, EndInventory, () => _inventoryPanel is { } p ? (p.GridAreaForSelfTest.GetGlobalRect().Position, p.GridAreaForSelfTest.FrameScale, 0) : null),
-            ("sheet", OpenSheet, () => SheetOpen, EndSheet, () => _sheetPanel?.ArtViewForSelfTest is { } v ? (v.Position, v.Scale.X, 0) : null),
-            ("logbook", OpenLogbook, () => LogbookOpen, CloseLogbookByPlayer, () => _logbookPanel?.ArtViewForSelfTest is { } v ? (v.Position, v.Scale.X, 0) : null),
-            ("map", OpenWorldMap, () => WorldMapOpen, CloseWorldMapByPlayer, () => _worldMapPanel?.ArtViewForSelfTest is { } v ? (v.Position, v.Scale.X, 0) : null),
-            ("schematics", () => OpenSchematics(), () => SchematicsOpen, CloseSchematicsByPlayer, () => _schematicsPanel?.ArtViewForSelfTest is { } v ? (v.Position, v.Scale.X, 0) : null),
-            ("saves", () => OpenSaveList(AreaSaveListMode.Load), () => SaveListOpen, () => EndSaveList(), () => _saveListPanel?.ArtForSelfTest is { } v ? (v.Position, v.Scale.X, AreaShopArtLayout.Window.Y) : null),
+            ("inventory", () => OpenInventory(), () => InventoryOpen, EndInventory, () => _inventoryPanel is { } p ? (p.GridAreaForSelfTest.GetGlobalRect().Position, p.GridAreaForSelfTest.FrameScale, 0) : null, SteamwovenBackdropFamily.Inventory),
+            ("sheet", OpenSheet, () => SheetOpen, EndSheet, () => _sheetPanel?.ArtViewForSelfTest is { } v ? (v.Position, v.Scale.X, 0) : null, SteamwovenBackdropFamily.CharacterSheet),
+            ("logbook", OpenLogbook, () => LogbookOpen, CloseLogbookByPlayer, () => _logbookPanel?.ArtViewForSelfTest is { } v ? (v.Position, v.Scale.X, 0) : null, SteamwovenBackdropFamily.Logbook),
+            ("map", OpenWorldMap, () => WorldMapOpen, CloseWorldMapByPlayer, () => _worldMapPanel?.ArtViewForSelfTest is { } v ? (v.Position, v.Scale.X, 0) : null, SteamwovenBackdropFamily.WorldMap),
+            ("schematics", () => OpenSchematics(), () => SchematicsOpen, CloseSchematicsByPlayer, () => _schematicsPanel?.ArtViewForSelfTest is { } v ? (v.Position, v.Scale.X, 0) : null, SteamwovenBackdropFamily.Schematic),
+            ("saves", () => OpenSaveList(AreaSaveListMode.Load), () => SaveListOpen, () => EndSaveList(), () => _saveListPanel?.ArtForSelfTest is { } v ? (v.Position, v.Scale.X, AreaShopArtLayout.Window.Y) : null, null),
         };
-        foreach (var (name, open, isOpen, close, view) in windows)
+        foreach (var (name, open, isOpen, close, view, family) in windows)
         {
             if (isOpen()) close();
             await frames(2);
@@ -183,11 +181,53 @@ public partial class TerrainViewerApp
                 var (ex, ey) = (expected.X, expected.Y);
                 require(Math.Abs(scale - expected.Scale) < 0.002 && Math.Abs(origin.X - ex) <= 1.01 && Math.Abs(origin.Y - ey) <= 1.01,
                     $"[{tag}] the {name} window is at the zone place ({ex:F1}, {ey:F1}) scale {expected.Scale:F4}, got ({origin.X:F1}, {origin.Y:F1}) scale {scale:F4}");
+                CheckBackdrop(tag, name, family, plan, panel, require);
                 GD.Print($"ARC-UI-2575 steamwoven window [{tag}] {name} origin=({origin.X:F1},{origin.Y:F1}) scale={scale:F4} zone={plan.Layout.WindowZone}");
             }
             await CaptureHudAsync("steamwoven-" + tag + "-" + name, frames);
             close();
             await frames(3);
+        }
+    }
+
+    // ARC-UI-2576: the open menu window has the backdrop of its family (the census's, SWI-BDR-4): the pieces of SteamwovenBackdrops over the middle band, the two parts of a two-part window meeting at the split
+    // of the layout model (SWI-BDR-5), each drawn at its own rectangle with its texels one to one; a window with no family (the save list, whose screen hides the bars) has none. On the viewport read back, the join at
+    // each edge of the window zone has the seam ratio of SWI-VER-5 (the mean neighbour difference in a ±8 px band at the join over the one beside it, R ≤ 1.5); a join with no room for the bands outside it is skipped.
+    // The ratios are printed (ARC-UI-2576 seam) so a capture's numbers can be read; the gate is R ≤ SteamwovenSeam.Limit.
+    private void CheckBackdrop(string tag, string name, SteamwovenBackdropFamily? family, SteamwovenHudPlan plan, AreaGameBarPanel panel, Action<bool, string> require)
+    {
+        var (shownFamily, shown) = panel.BackdropForSelfTest;
+        var shownLayer = panel.BoardsForSelfTest.BackdropShown;
+        if (family is not { } expectedFamily)
+        {
+            require(shownFamily is null && !shownLayer, $"[{tag}] the {name} window has no backdrop (family {shownFamily}, layer shown {shownLayer})");
+            return;
+        }
+        var pieces = SteamwovenBackdrops.Pieces(expectedFamily, plan);
+        require(shownFamily == expectedFamily && shownLayer && shown.Count == pieces.Count, $"[{tag}] the {name} window has the backdrop of {expectedFamily} in {pieces.Count} piece(s) (family {shownFamily}, shown {shown.Count}, layer {shownLayer})");
+        for (var i = 0; i < pieces.Count; i++)
+            require(shown[i].Position == new Vector2(pieces[i].Rect.X, pieces[i].Rect.Y) && shown[i].Pixels == new Vector2I(pieces[i].Rect.Width, pieces[i].Rect.Height),
+                $"[{tag}] the {name} backdrop piece {i} fills {pieces[i].Rect} one texel per pixel (at {shown[i].Position}, pixels {shown[i].Pixels})");
+        if (pieces.Count == 2) require(pieces[0].Rect.Right == pieces[1].Rect.X, $"[{tag}] the {name} backdrop parts meet at the split {pieces[0].Rect.Right} / {pieces[1].Rect.X}");
+        using var captured = GetViewport().GetTexture().GetImage();
+        if (captured is null) return;
+        captured.Convert(Image.Format.Rgba8);
+        var rgba = captured.GetData();
+        var (width, height) = (captured.GetWidth(), captured.GetHeight());
+        var zone = plan.Layout.WindowZone;
+        var band = plan.Layout.Middle.Band;
+        var reach = 3 * SteamwovenSeam.Band + 16;
+        var seams = new (string Edge, double? Ratio)[]
+        {
+            ("left", SteamwovenSeam.ColumnRatio(rgba, width, height, zone.X, zone.Y, zone.Bottom, zone.X - reach)),
+            ("right", SteamwovenSeam.ColumnRatio(rgba, width, height, zone.Right, zone.Y, zone.Bottom, zone.Right + reach)),
+            ("top", SteamwovenSeam.RowRatio(rgba, width, height, zone.Y, zone.X, zone.Right, zone.Y - reach)),
+            ("bottom", SteamwovenSeam.RowRatio(rgba, width, height, zone.Bottom, zone.X, zone.Right, zone.Bottom + reach)),
+        };
+        foreach (var (edge, ratio) in seams)
+        {
+            GD.Print($"ARC-UI-2576 seam [{tag}] {name} {edge} R={(ratio is { } r ? r.ToString("F2") : "n/a")} zone={zone} band={band}");
+            if (ratio is { } measured) require(measured <= SteamwovenSeam.Limit, $"[{tag}] the {name} window's {edge} join of the zone has seam ratio {measured:F2} > {SteamwovenSeam.Limit}");
         }
     }
 
