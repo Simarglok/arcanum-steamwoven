@@ -56,7 +56,8 @@ public sealed partial class GameSessionOwner
         var shown = _equipment.Items().ToDictionary(pair => pair.Key, pair => pair.Value is { MagickTechComplexity: > 0, Armor: { } armor } item && !identified(pair.Key)
             ? item with { Armor = armor with { MagicAcAdjustment = 0, MagicResistances = EquipmentResistances.None } } : pair.Value);
         var equipment = EquipmentRules.Evaluate(shown, HeroAptitude(), HeroWeaponTraining(HeroSkills()));
-        var armorClass = AttackRules.ArmorClass(0, equipment.ArmorClassAdjustment, snapshot.GetEffective(CharacterStat.AcAdjustment), value => value, _rules.Combat);
+        var armorClass = AttackRules.ArmorClass(0, equipment.ArmorClassAdjustment, snapshot.GetEffective(CharacterStat.AcAdjustment),
+            value => snapshot.ApplyEffects(CharacterStat.AcAdjustment, value), _rules.Combat);
         var effects = HeroEffectResistances();
         var stored = HeroStoredResistances();
         var resistances = CombatantRules.Resistances(stored.Damage, equipment.Resistances, snapshot.GetEffective(CharacterStat.Constitution), false, effects);
