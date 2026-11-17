@@ -47,7 +47,12 @@ public sealed class DiagnosticGridActor
     /// <summary>ARC-MAGIC-018: the octant a settled actor was turned to in place (the casting goal's facing turn, 0x42C850) and the
     /// movement facing it was turned from; drawn while the actor stays settled with that facing, dropped when it moves. Null otherwise.</summary>
     public (int Octant, NeighborDirection From)? TurnedFacing { get; set; }
-    private DiagnosticActorState Render(MovementState state) => Pose is { } pose && state.Phase == MovementPhase.Settled
+    // ARC-RENDER-2539: a stealth-walk step of a body without the stealth ART is drawn with the walk ART (MA1 pair 3 to 1); its plan and frames are keyed by the Walk action,
+    // while the step's timeline keeps the stealth rate (the raw action).
+    private ActorDiagnosticAction Draw(ActorDiagnosticAction action) => action == ActorDiagnosticAction.Sneak && Profile.Sneak is null ? ActorDiagnosticAction.Walk : action;
+    private ActorDiagnosticPlacementInput Drawn(ActorDiagnosticPlacementInput placement) => placement with { Action = Draw(placement.Action) };
+    private DiagnosticActorState Render(MovementState state) { var raw = RenderRaw(state); return raw with { Action = Draw(raw.Action) }; }
+    private DiagnosticActorState RenderRaw(MovementState state) => Pose is { } pose && state.Phase == MovementPhase.Settled
         ? RenderState(state) with { Facing = pose.Octant, Action = pose.Action }
         : TurnedFacing is { } turned && state.Phase == MovementPhase.Settled && state.Facing == turned.From
             ? RenderState(state) with { Facing = turned.Octant } : RenderState(state);
@@ -109,7 +114,7 @@ public sealed class DiagnosticGridActor
                 // The action clock stays continuous for Walk->Walk, Run->Run and turns.
             }
             trial.Advance(Seconds(state.Time.Value - cursor.Value));
-            validateSelection?.Invoke(Placement(session, state, trial.CurrentFrame));
+            validateSelection?.Invoke(Drawn(Placement(session, state, trial.CurrentFrame)));
         });
         if (result.Movement.Status == MovementStatus.Completed) _timeline = trial;
         // ARC-MAGIC-018: a turn in place lasts until the actor moves.
@@ -119,7 +124,7 @@ public sealed class DiagnosticGridActor
     public ActorDiagnosticPlacementInput Placement() => Session is AreaGridSession area
         ? DiagnosticActorMotion.ToPlacement(Render(area.State), CurrentFrame, area.Chart.MinimumCell, area.Chart.MaximumCell, (area.State.CommittedCell.X, area.State.CommittedCell.Y))
             with { CameraOriginX = AreaGridSession.LocationOriginX, CameraOriginY = AreaGridSession.LocationOriginY }
-        : Placement(Session!, Session!.State, CurrentFrame);
+        : Drawn(Placement(Session!, Session!.State, CurrentFrame));
     /// <summary>The continuous foot point the camera follows: the projected position plus the drawn anchor offset,
     /// <c>(40,20)</c> on the AREA chart (the diamond centre, ARC-RENDER-011) and <c>(0,20)</c> in WORLD.</summary>
     public Vec2 FootAnchor => DiagnosticActorMotion.Project(State.Position)

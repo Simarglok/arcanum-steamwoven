@@ -2232,8 +2232,9 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         _startedStep = null;
         if (!TryNpc(id, out var npc) || Tile(id) is not { } from) return 1;
         if (InRound && RoundActor != id) OffTurnSteps++;
-        // ARC-RENDER-2539 (0x42EDC0): a flagged critter below prowling expert steps the stealth walk, a run wanted ignored (RunPermitted already refuses it).
-        var sneaking = !running && id != Pc && _session.IsConcealed(SessionCombatant.Critter(id)) && AiExecutorRules.Sneaks(Mover(id));
+        // ARC-RENDER-2539 (0x42EDC0): a flagged critter below prowling expert steps the stealth walk, a run wanted ignored (the goals' RunPermitted already refuses it).
+        var sneaking = id != Pc && _session.IsConcealed(SessionCombatant.Critter(id)) && AiExecutorRules.Sneaks(Mover(id));
+        if (sneaking) running = false;
         var gait = running ? MovementGait.Run : sneaking ? MovementGait.Sneak : MovementGait.Walk;
         var direction = AreaCombatHost.Facing(from, next) ?? NeighborDirection.XPlus;
         var duration = _scene.Timing?.For(gait, direction) ?? DiagnosticGridSession.LiveDuration;

@@ -137,6 +137,8 @@ public readonly record struct HeroBody(int Body, int Gender, int Armor = 0, int 
 
     /// <summary>ARC-COMBAT-1741: the stunned animation (goal 57).</summary>
     public const uint StunnedAnimation = 23;
+    /// <summary>ARC-RENDER-2539: the stealth walk's animation number (the gait function 0x42EDC0 picks it for a concealed critter below prowling expert).</summary>
+    public const uint SneakAnimation = 3;
 
     /// <summary>
     /// The fixed human's art selector with this body, gender, armour part and palette, the same animation, and the weapon and shield the
@@ -144,9 +146,6 @@ public readonly record struct HeroBody(int Body, int Gender, int Armor = 0, int 
     /// human's bare hands when the body shows no weapon: out of combat mode nothing attacks), the animations 6..19 (run, fall, get up,
     /// vault, and since ARC-RENDER-039 the throw, 14) neither.
     /// </summary>
-    /// <summary>ARC-RENDER-2539: the stealth walk's animation number (the gait function 0x42EDC0 picks it for a concealed critter below prowling expert).</summary>
-    public const uint SneakAnimation = 3;
-
     public uint Selector(uint humanSelector)
     {
         var animation = (humanSelector >> 6) & 31;
