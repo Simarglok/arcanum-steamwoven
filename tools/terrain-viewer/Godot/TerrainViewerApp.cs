@@ -285,6 +285,8 @@ public partial class TerrainViewerApp : Node
                                 if (only?.Contains("spirit-talk") == true) await RunAreaSpiritTalkSmokeAsync(result);
                                 // ARC-SCRIPT-1790 (HLR1-HLR11): only when named, an installed healer's talk (the h: reply) buys a spell: the quote is paid to the NPC, the cast starts through the AI host (free flag exactly when no PC leads it) and the hero's hit points rise with the talk open (--hero, the Crash Site).
                                 if (only?.Contains("healer-talk") == true) await RunAreaHealerTalkSmokeAsync(result);
+                                // ARC-SCRIPT-2504: only when named, a real conversation with Kerghan (dialog script 1105) on his castle map (--hero).
+                                if (only?.Contains("kerghan-talk") == true) await RunAreaKerghanTalkSmokeAsync(result);
                                 // ARC-WORLD-1160 (E3-a): only when named, the sleep window on the hero (--hero): a rest of one hour, until healed and until morning jumps the clock and heals him, the window closes at the end, the screen fades and the key toggles it.
                                 if (only?.Contains("sleep") == true) await RunAreaSleepSmokeAsync();
                                 // ARC-WORLD-1162 (E3-d): only when named, the beds of the Crash Site cave (--hero, the cave): a bed with no script refuses the hero (message 8), an occupied one (10), the scripted bed seats him in a sleep window that heals twice the ground and empties on the close.
