@@ -211,7 +211,12 @@ public sealed partial class GameSessionOwner
     /// (<see cref="GiveItemToNpc"/>); without a host it is refused (<see cref="GameSessionFailure.ItemScriptUnsupported"/>).
     /// </summary>
     public InventoryMutationResult BarterSell(GameSessionVersion expected, string npc, string item, int count, int unitPrice, SessionItemKind newStackKind,
-        SessionInsertCheck npcInsert, string? container = null, bool identify = false, ISessionItemScriptHost? scripts = null)
+        SessionInsertCheck npcInsert, string? container = null, bool identify = false, ISessionItemScriptHost? scripts = null) =>
+        SellCore(expected, npc, item, count, unitPrice, newStackKind, npcInsert, container, identify, scripts, null, null);
+
+    // BarterSell's body; ARC-UI-2159: slotWearer (with the item's listed points) is the merchant as the wearer of a sale onto a slot of its doll.
+    private InventoryMutationResult SellCore(GameSessionVersion expected, string npc, string item, int count, int unitPrice, SessionItemKind newStackKind,
+        SessionInsertCheck npcInsert, string? container, bool identify, ISessionItemScriptHost? scripts, NpcWearer? slotWearer, IReadOnlyList<int>? slotPoints)
     {
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(npcInsert);
@@ -235,7 +240,7 @@ public sealed partial class GameSessionOwner
         }
         var into = container ?? npc;
         var kind = container is null ? SessionHolderKind.Npc : SessionHolderKind.Container;
-        var moved = stack ? GiveAmmoTo(into, kind, item, count, newStackKind, npcInsert) : GiveItemTo(into, kind, item, npcInsert, identify, scripts: scripts);
+        var moved = stack ? GiveAmmoTo(into, kind, item, count, newStackKind, npcInsert) : GiveItemTo(into, kind, item, npcInsert, identify, scripts: scripts, slotWearer: slotWearer, slotPoints: slotPoints);
         if (moved.Disposition != GameSessionDisposition.Changed || total == 0) return moved;
         var paid = TakeGoldFromNpc(Version, npc, (int)total);
         return paid.Disposition == GameSessionDisposition.Changed ? moved with { Version = Version }
@@ -246,12 +251,13 @@ public sealed partial class GameSessionOwner
     /// ARC-UI-2138 (0x575360 → 0x5788C0 → 0x578EA0 with the location 1000 + slot, executor 0x461810 → 0x461CA0 → 0x466640, ledger IW35, BW5): the hero's item, worn or in its pack, is sold onto a slot of the merchant's doll and the merchant
     /// wears it. <see cref="BarterSell"/>'s sale of one whole item into the NPC itself (never the substitute container: the executor puts a slot location on the merchant, 0x57934B), then the NPC's worn record names the item in <paramref name="slot"/>
     /// (the record a dressed NPC keeps, ARC-WORLD-103; for an NPC the session never dressed it starts from what its map data has worn), in the sale's one revision. The wear test (0x464D20) is the caller's, as <see cref="QueryWearRefusal"/>'s is for the hero. Refused
-    /// before any effect: a slot that is not a wear slot or that the NPC's list shows filled (the original puts the item back, no swap for an NPC), a first worn record past the saved budget, and an item the session cannot wear for the NPC: one with item event
-    /// scripts on the move (<see cref="GameSessionFailure.ItemScriptUnsupported"/>) or item spells (<see cref="GameSessionFailure.ItemEffectUnsupported"/>); NOT READY (the original runs the wield scripts, art and light of the NPC's wear). PROJECT: the room test the executor
-    /// runs for the NPC (0x466510, its carry weight) is <paramref name="npcInsert"/>. A sale refused in the sale rules leaves the NPC's record as it was; a payment refused after the move leaves the item on the NPC's slot, as the original leaves a moved item.
+    /// before any effect: a slot that is not a wear slot or that the NPC's list shows filled (the original puts the item back, no swap for an NPC), a first worn record past the saved budget, and an item the session cannot wear for the NPC: one with item spells (<see cref="GameSessionFailure.ItemEffectUnsupported"/>; NOT READY: the NPC's item spells are not modelled, as in its best-items wield) or one with item event
+    /// scripts on the move when the host gives no script host or no wield context of the merchant (<see cref="GameSessionFailure.ItemScriptUnsupported"/>). ARC-UI-2159: with them the hero's removal runs (wield off, remove item; the hero the wearer) and the merchant's wield on (24)
+    /// and insert item (21) run (<paramref name="npcWearer"/>: the merchant is their wearer and triggerer, its effect list the runs change), planned in two run sets, one commit and the sale's one revision (a flag one set writes is not read by the other's runs: NOT READY). NOT READY: the art and
+    /// light of the NPC's wear. The room test the executor runs for the NPC (0x466510, its carry weight: code 1, no grid room for a slot) is <paramref name="npcInsert"/>. A sale refused in the sale rules leaves the NPC's record as it was; a payment refused after the move leaves the item on the NPC's slot, as the original leaves a moved item.
     /// </summary>
     public InventoryMutationResult BarterSellWorn(GameSessionVersion expected, string npc, string item, EquipmentSlot slot, SessionWearableItem wearable, int unitPrice,
-        SessionItemKind newStackKind, SessionInsertCheck npcInsert, bool identify = false, ISessionItemScriptHost? scripts = null)
+        SessionItemKind newStackKind, SessionInsertCheck npcInsert, bool identify = false, ISessionItemScriptHost? scripts = null, SessionNpcWieldScripts? npcWearer = null)
     {
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(wearable);
@@ -260,7 +266,10 @@ public sealed partial class GameSessionOwner
         if (!IsCurrent(expected)) return RejectItem(GameSessionFailure.StaleVersion);
         if (!KnownNpc(npc)) return RejectItem(GameSessionFailure.UnknownHolder);
         if (EquipmentRules.WearSlot(wearable.Item) is not { } own || own != slot && !(own is EquipmentSlot.Ring1 && slot is EquipmentSlot.Ring2)) return RejectItem(GameSessionFailure.InvalidEquipment);
-        if (EquipmentDomain.MovePoints(wearable.ScriptPoints).Count > 0) return RejectItem(GameSessionFailure.ItemScriptUnsupported);
+        // ARC-UI-2159 (IE4): an item with item event scripts is worn by the merchant through the item script host, as the NPC best-items wield does (the merchant is the wearer and the triggerer of the wield on and insert item runs); without the host or the
+        // merchant's wield context the sale is refused.
+        var points = EquipmentDomain.MovePoints(wearable.ScriptPoints);
+        if (points.Count > 0 && (scripts is null || npcWearer is null || !KnownNpc(npc))) return RejectItem(GameSessionFailure.ItemScriptUnsupported);
         if (wearable.HasItemSpells) return RejectItem(GameSessionFailure.ItemEffectUnsupported);
         if (QueryHolderItems(npc) is not { } listed) return RejectItem(GameSessionFailure.UnknownHolder);
         var record = new SortedDictionary<EquipmentSlot, string>();
@@ -272,7 +281,11 @@ public sealed partial class GameSessionOwner
         record[slot] = item;
         _inventory.NpcWorn[npc] = record;
         InventoryMutationResult result;
-        try { result = BarterSell(expected, npc, item, 1, unitPrice, newStackKind, npcInsert, null, identify, scripts); }
+        try
+        {
+            result = SellCore(expected, npc, item, 1, unitPrice, newStackKind, npcInsert, null, identify, scripts,
+                points.Count > 0 ? new NpcWearer(npc, npcWearer!.Target, NpcStatsOverSheet(npc, npcWearer.Stored)) : null, points);
+        }
         catch
         {
             // A host callback that throws leaves the item with the hero: the record is as it was.

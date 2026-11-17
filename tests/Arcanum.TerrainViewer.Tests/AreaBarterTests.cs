@@ -67,8 +67,8 @@ public sealed class AreaBarterTests
     }
 
     private static AreaBarter Barter(GameSessionOwner session, AreaBarterData data, List<int> changes, int reaction = 50, bool follower = false,
-        int set = 1, bool wearer = false) =>
-        new(session, new AreaInventoryHost([]) { NpcWearerFacts = wearer ? (_, _) => new EquipmentWearer() : null }, data, new AreaBarterMerchant("merchant", "Smith", 100, false, false, data.BuyList(set), follower),
+        int set = 1, bool wearer = false, SessionInsertCheck? slotCheck = null) =>
+        new(session, new AreaInventoryHost([]) { NpcWearerFacts = wearer ? (_, _) => new EquipmentWearer() : null, NpcSlotInsertCheck = slotCheck is null ? null : _ => slotCheck }, data, new AreaBarterMerchant("merchant", "Smith", 100, false, false, data.BuyList(set), follower),
             () => reaction, change => { changes.Add(change); return true; }, (entity, _) => entity);
 
     [TestMethod]
@@ -233,6 +233,21 @@ public sealed class AreaBarterTests
         var spelled = session.BarterSellWorn(session.Version, "merchant", "kit:1", EquipmentSlot.Weapon, Sword with { HasItemSpells = true }, 55, default, AreaInventoryHost.DiagnosticInsertCheck);
         Assert.AreEqual(GameSessionFailure.ItemEffectUnsupported, spelled.Failure);
         Assert.AreEqual(version, session.Version, "still nothing changed");
+    }
+
+    // ARC-UI-2159 (0x466510 in 0x466640): the weight test of the merchant's carry weight refuses the sale onto a slot as it refuses a grid sale: the item stays with the hero, nothing is paid and no worn record is made.
+    [TestMethod]
+    public void A_sale_onto_a_slot_the_merchant_cannot_carry_is_refused_by_the_weight_test()
+    {
+        using var session = Session(vest: false);
+        var version = session.Version;
+        var heavy = Barter(session, Data(), [], wearer: true, slotCheck: _ => SessionInsertVerdict.TooHeavy).SellOnSlot("kit:1", EquipmentSlot.Weapon, Sword);
+        Assert.IsFalse(heavy.Moved, heavy.Text);
+        StringAssert.StartsWith(heavy.Text, "refused:");
+        Assert.AreEqual((version, 1000, 100), (session.Version, session.QueryGold(), session.QueryNpcGold("merchant")));
+        Assert.IsNull(session.QueryNpcWorn("merchant"));
+        var light = Barter(session, Data(), [], wearer: true, slotCheck: _ => SessionInsertVerdict.Accepted).SellOnSlot("kit:1", EquipmentSlot.Weapon, Sword);
+        Assert.IsTrue(light.Moved, light.Text);
     }
 
     [TestMethod]

@@ -124,6 +124,8 @@ public partial class TerrainViewerApp
         host.NpcLiveCell = npc => _aiHost is { } ai && ReferenceEquals(ai.Session, _areaSession) ? ai.Tile(npc) : null;
         host.NpcWearer = (map, npc) => AreaEvents.NpcWieldScripts(map, npc);
         host.NpcWearerFacts = (map, npc) => AreaEvents.RestockWielder(map, npc)?.Wearer;
+        // ARC-UI-2159: the weight test of a sale onto a slot of a merchant's doll reads the merchant's build and life state from the shown map's AI host.
+        host.NpcSlotInsertCheck = npc => _aiHost is { } ai && ReferenceEquals(ai.Session, _areaSession) ? ai.SlotInsertCheck(npc) : null;
         _inventoryHost = host;
         // ARC-DEV-354: the carried items whose row neither the new host's maps nor the rows handed over from the last one give (a fresh run, a load
         // into another window or map) are read by identity from their origin map.
