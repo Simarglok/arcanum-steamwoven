@@ -29,6 +29,9 @@ public sealed partial class SessionSpellCaster
     /// <summary>The hold flags (GT145): entangled and stoned among the spell flags, paralysed among the critter flags.</summary>
     public const int EntangledSpellFlag = 0x1000000, StonedSpellFlag = 0x10000, ParalysedCritterFlag = 0x40, SleepingCritterFlag = 0x1000;
 
+    /// <summary>ARC-COMBAT-1943 (0x54ED30): the spell flags the hero's click reads: Body of Air (0x4, no attack goal) and polymorphed (0x20000, silent refusals).</summary>
+    public const int BodyOfAirSpellFlag = 0x4, PolymorphedSpellFlag = 0x20000;
+
     /// <summary>ARC-MAGIC-045 (SFR3): the spell flags the hit effect (0x459A30) plays an eye candy for: shielded (0x400, Shield of Protection) and magnetic inversion (0x400000).</summary>
     public const int ShieldedSpellFlag = 0x400, MagneticInversionSpellFlag = 0x400000;
 
