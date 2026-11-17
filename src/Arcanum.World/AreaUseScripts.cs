@@ -48,6 +48,7 @@ namespace Arcanum.World;
 /// ARC-WORLD-1837 (ledger TT20): <see cref="NpcTeleportRefusal"/> names why a script's teleport (44, 102) of an NPC of the shown map to a cell of the shown map cannot be requested (the AI host does not hold it, it is a follower, the cell is not held), or null,
 /// and <see cref="RequestNpcTeleport"/> records the request in the session's one slot (the original's 0x4D3380; the object moves at the next ping), called only after the run applied; without them a run that teleports an object other than the hero is left unapplied.
 /// ARC-SCRIPT-2326 (AR2): <see cref="BodyArmorUseArt"/> answers the use art of the body armour the hero wears (item field 0x5F, the one the hero's drawn body takes its armour part from), null when it is not read; without it get armor of the hero stops the run while armour is worn.
+/// ARC-SCRIPT-2505 (GR1): <see cref="StandardReaction"/> answers the standard effective reaction (0x4C0CC0) of an NPC of the shown map toward the hero (null: not known; without it get reaction of an NPC that is no dialog speaker is not modelled).
 /// ARC-SCRIPT-2342 (AR2, AR7): <see cref="NpcBodyArmor"/> answers what an NPC the session dressed wears on its body-armour slot now (null: not read; without it get armor of such an NPC is not modelled).
 /// </summary>
 public sealed record AreaScriptWorld(Func<CellCoord?> PcCell, Func<AreaObjectRecord, bool> Gone, Func<int, AreaPrototypeItem?> Item, Func<IDropMap?> DropMap,
@@ -61,7 +62,7 @@ public sealed record AreaScriptWorld(Func<CellCoord?> PcCell, Func<AreaObjectRec
     Func<string, int, string>? ScriptStopSpell = null, Func<string, AreaScriptVitals?>? Vitals = null, Func<string, int, int, string>? ScriptHealLife = null,
     Func<string, string, string>? ScriptAttack = null, Func<string, int?>? Aptitude = null, Func<string, string, bool?>? CanSee = null, Func<string, string, bool?>? CanHear = null,
     Func<uint, bool>? ArtExists = null, Func<ScrTeleport, string?>? NpcTeleportRefusal = null, Action<ScrTeleport>? RequestNpcTeleport = null,
-    Func<uint?>? BodyArmorUseArt = null, Func<string, AreaScriptWornArmor?>? NpcBodyArmor = null);
+    Func<uint?>? BodyArmorUseArt = null, Func<string, AreaScriptWornArmor?>? NpcBodyArmor = null, Func<string, int?>? StandardReaction = null);
 
 /// <summary>ARC-SCRIPT-2342 (AR2): the use art (item field 0x5F) of the item an NPC wears in the body-armour slot (1006), or null when it wears none (<see cref="AreaScriptWorld.NpcBodyArmor"/>).</summary>
 public sealed record AreaScriptWornArmor(uint? UseArt);
@@ -693,6 +694,20 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         if (Row(npc) is not { } row) return null;
         return row.Type == NpcType && _session.QueryReactionRecord(npc.Code) is { MetBefore: true };
     }
+
+    /// <summary>ARC-SCRIPT-2505 (ledger GR1): get reaction of the first object toward the second. A first object that is no NPC (the PC, or a row of the shown map that is not an NPC) gives 50 whatever the second object is: the
+    /// enemy-list test reads only an NPC's list and the type tests that follow end at 50 (Kerghan's script 1105 line 57 loops over the vicinity, which holds the PC). An NPC of the shown map toward the PC is the standard effective reaction
+    /// the world reads for it (the AI host's, the same session query the dialog's reaction conditions read), whether or not it is a dialog speaker. Null (not modelled) for a first object this host has no row for, an NPC toward a second
+    /// object that is not the PC (its enemy list is not read here), or a world without the answer.</summary>
+    public int? ReactionOf(ScrObjectRef npc, ScrObjectRef pc)
+    {
+        if (IsPc(npc)) return NonNpcReaction;
+        if (Row(npc) is not { } row) return null;
+        if (row.Type != NpcType) return NonNpcReaction;
+        return IsPc(pc) && _world?.StandardReaction is { } ask ? ask(npc.Code) : null;
+    }
+
+    private const int NonNpcReaction = 50;
 
     /// <summary>ARC-SCRIPT-1733 (CS2, case 15): bit 0x1 of the spell flags (<see cref="SpellFlags"/>, field 0x14) of any object, the flags the session's spells wrote included.</summary>
     public bool? IsInvisible(ScrObjectRef obj) => SpellFlags(obj) is { } flags ? (unchecked((uint)flags) & InvisibleSpellFlag) != 0 : null;

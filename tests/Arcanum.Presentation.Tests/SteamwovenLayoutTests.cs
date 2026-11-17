@@ -10,23 +10,24 @@ public sealed class SteamwovenLayoutTests
     // Window, frame, f, step, run-time scale, top, middle, bottom, centre, side, horizontal bar, vertical bar (TRD "Screen frame and scale").
     private static readonly (int W, int H, int FW, int FH, double F, SteamwovenStep Step, double Run, int Top, int Middle, int Bottom, int Centre, int Side, int BarX, int BarY)[] Table =
     [
-        (3840, 2160, 3840, 2160, 1.0000, SteamwovenStep.One, 1.000, 150, 1440, 570, 2880, 480, 0, 0),
-        (2560, 1440, 2560, 1440, 0.6667, SteamwovenStep.TwoThirds, 1.000, 100, 960, 380, 1920, 320, 0, 0),
-        (1920, 1080, 1920, 1080, 0.5000, SteamwovenStep.Half, 1.000, 75, 720, 285, 1440, 240, 0, 0),
-        (1280, 720, 1280, 720, 0.3333, SteamwovenStep.Third, 1.000, 50, 480, 190, 960, 160, 0, 0),
-        (3840, 2400, 3840, 2400, 1.0000, SteamwovenStep.One, 1.000, 150, 1680, 570, 2880, 480, 0, 0),
-        (2560, 1600, 2560, 1600, 0.6667, SteamwovenStep.TwoThirds, 1.000, 100, 1120, 380, 1920, 320, 0, 0),
-        (1920, 1200, 1920, 1200, 0.5000, SteamwovenStep.Half, 1.000, 75, 840, 285, 1440, 240, 0, 0),
-        (1280, 800, 1280, 800, 0.3333, SteamwovenStep.Third, 1.000, 50, 560, 190, 960, 160, 0, 0),
-        (3024, 1964, 3024, 1890, 0.7875, SteamwovenStep.One, 0.787, 118, 1323, 449, 2268, 378, 0, 37),
-        (3456, 2234, 3456, 2160, 0.9000, SteamwovenStep.One, 0.900, 135, 1512, 513, 2592, 432, 0, 37),
-        (2880, 1800, 2880, 1800, 0.7500, SteamwovenStep.One, 0.750, 113, 1259, 428, 2160, 360, 0, 0),
-        (1366, 768, 1366, 768, 0.3556, SteamwovenStep.Half, 0.711, 53, 512, 203, 1024, 171, 0, 0),
-        (1600, 900, 1600, 900, 0.4167, SteamwovenStep.Half, 0.833, 63, 599, 238, 1200, 200, 0, 0),
-        (3440, 1440, 2560, 1440, 0.6667, SteamwovenStep.TwoThirds, 1.000, 100, 960, 380, 1920, 320, 440, 0),
-        (5120, 1440, 2560, 1440, 0.6667, SteamwovenStep.TwoThirds, 1.000, 100, 960, 380, 1920, 320, 1280, 0),
-        (1024, 768, 1024, 640, 0.2667, SteamwovenStep.Third, 0.800, 40, 448, 152, 768, 128, 0, 64),
-        (5120, 2880, 5120, 2880, 1.3333, SteamwovenStep.One, 1.333, 200, 1920, 760, 3840, 640, 0, 0),
+        (3840, 2160, 3840, 2160, 1.0000, SteamwovenStep.One, 1.000, 120, 1584, 456, 2880, 480, 0, 0),
+        (2560, 1440, 2560, 1440, 0.6667, SteamwovenStep.TwoThirds, 1.000, 80, 1056, 304, 1920, 320, 0, 0),
+        (1920, 1080, 1920, 1080, 0.5000, SteamwovenStep.Half, 1.000, 60, 792, 228, 1440, 240, 0, 0),
+        (1280, 720, 1280, 720, 0.3333, SteamwovenStep.Third, 1.000, 40, 528, 152, 960, 160, 0, 0),
+        (3840, 2400, 3840, 2400, 1.0000, SteamwovenStep.One, 1.000, 120, 1824, 456, 2880, 480, 0, 0),
+        (2560, 1600, 2560, 1600, 0.6667, SteamwovenStep.TwoThirds, 1.000, 80, 1216, 304, 1920, 320, 0, 0),
+        (1920, 1200, 1920, 1200, 0.5000, SteamwovenStep.Half, 1.000, 60, 912, 228, 1440, 240, 0, 0),
+        (1280, 800, 1280, 800, 0.3333, SteamwovenStep.Third, 1.000, 40, 608, 152, 960, 160, 0, 0),
+        (3024, 1964, 3024, 1890, 0.7875, SteamwovenStep.One, 0.787, 95, 1436, 359, 2268, 378, 0, 37),
+        (3456, 2234, 3456, 2160, 0.9000, SteamwovenStep.One, 0.900, 108, 1642, 410, 2592, 432, 0, 37),
+        (2880, 1800, 2880, 1800, 0.7500, SteamwovenStep.One, 0.750, 90, 1368, 342, 2160, 360, 0, 0),
+        (1366, 768, 1366, 768, 0.3556, SteamwovenStep.Half, 0.711, 43, 563, 162, 1024, 171, 0, 0),
+        (1600, 900, 1600, 900, 0.4167, SteamwovenStep.Half, 0.833, 50, 660, 190, 1200, 200, 0, 0),
+        (1680, 945, 1680, 945, 0.4375, SteamwovenStep.Half, 0.875, 53, 692, 200, 1260, 210, 0, 0),
+        (3440, 1440, 2560, 1440, 0.6667, SteamwovenStep.TwoThirds, 1.000, 80, 1056, 304, 1920, 320, 440, 0),
+        (5120, 1440, 2560, 1440, 0.6667, SteamwovenStep.TwoThirds, 1.000, 80, 1056, 304, 1920, 320, 1280, 0),
+        (1024, 768, 1024, 640, 0.2667, SteamwovenStep.Third, 0.800, 32, 486, 122, 768, 128, 0, 64),
+        (5120, 2880, 5120, 2880, 1.3333, SteamwovenStep.One, 1.333, 160, 2112, 608, 3840, 640, 0, 0),
     ];
 
     private static SteamwovenLayout Layout(int w, int h, SteamwovenLayoutOptions? options = null)
@@ -99,25 +100,25 @@ public sealed class SteamwovenLayoutTests
             Assert.AreEqual(l.WindowZone.Y - l.Middle.Band.Y, l.Middle.Band.Bottom - l.WindowZone.Bottom, 1, tag + " centred vertically");
         }
         var wide = Layout(1920, 1080);
-        Assert.AreEqual(new PixelRect(240, 75, 1440, 720), wide.WindowZone, "on a 16:9 frame the zone is the whole middle band's centre block");
+        Assert.AreEqual(new PixelRect(240, 96, 1440, 720), wide.WindowZone, "on a 16:9 frame the zone is the centre block, 36 px above and below in the 792 px band");
         var tall = Layout(1920, 1200);
-        Assert.AreEqual(new PixelRect(240, 135, 1440, 720), tall.WindowZone, "on 16:10 the zone has 60 px above and below");
+        Assert.AreEqual(new PixelRect(240, 156, 1440, 720), tall.WindowZone, "on 16:10 the zone has 96 px above and below");
     }
 
     [TestMethod]
     public void TheMiddleBackdropIsTheCentredCropOfTheMasterOrTheMasterScaledToCover()
     {
         var native = Layout(3840, 2400).MiddleBackdrop;
-        Assert.AreEqual(new PixelRect(0, 150, 3840, 1680), native.Target);
+        Assert.AreEqual(new PixelRect(0, 120, 3840, 1824), native.Target);
         Assert.AreEqual(native.Target, native.Master, "16:10 at x1: the master exactly");
         Assert.AreEqual(Ratio.One, native.Scale);
 
         var sixteenNine = Layout(3840, 2160).MiddleBackdrop;
-        Assert.AreEqual(new PixelRect(0, 150, 3840, 1440), sixteenNine.Target);
-        Assert.AreEqual(new PixelRect(0, 30, 3840, 1680), sixteenNine.Master, "16:9: the centred crop, 120 px off the top and bottom");
+        Assert.AreEqual(new PixelRect(0, 120, 3840, 1584), sixteenNine.Target);
+        Assert.AreEqual(new PixelRect(0, 0, 3840, 1824), sixteenNine.Master, "16:9: the centred crop, 120 px off the top and bottom");
 
         var small = Layout(1920, 1080).MiddleBackdrop;
-        Assert.AreEqual(new PixelRect(0, 15, 1920, 840), small.Master);
+        Assert.AreEqual(new PixelRect(0, 0, 1920, 912), small.Master);
         Assert.AreEqual(new Ratio(1, 2), small.Scale);
 
         // 1366 x 768: the frame is 1 px wider than 3840 f; the master is scaled up to cover, centred.
@@ -160,8 +161,8 @@ public sealed class SteamwovenLayoutTests
     {
         var l = Layout(3840, 2160);
         Assert.AreEqual(480 + 1290, l.Split.SplitX);
-        Assert.AreEqual(new PixelRect(0, 150, 1770, 1440), l.Split.Left, "the left material runs from the frame's left edge");
-        Assert.AreEqual(new PixelRect(1770, 150, 2070, 1440), l.Split.Right, "the right material to the frame's right edge");
+        Assert.AreEqual(new PixelRect(0, 120, 1770, 1584), l.Split.Left, "the left material runs from the frame's left edge");
+        Assert.AreEqual(new PixelRect(1770, 120, 2070, 1584), l.Split.Right, "the right material to the frame's right edge");
 
         var half = Layout(1920, 1080);
         Assert.AreEqual(240 + 645, half.Split.SplitX);
@@ -264,7 +265,7 @@ public sealed class SteamwovenLayoutTests
             new SteamwovenLayoutOptions { BottomPanelMaster = -6 },
             new SteamwovenLayoutOptions { TopPanelMaster = 151 },
             new SteamwovenLayoutOptions { BottomPanelMaster = 571 },
-            new SteamwovenLayoutOptions { TopPanelMaster = 156 },
+            new SteamwovenLayoutOptions { TopPanelMaster = 270 },
             new SteamwovenLayoutOptions { TopPanelMaster = 2147483640, BottomPanelMaster = 12 },
             new SteamwovenLayoutOptions { TopPanelMaster = 720, BottomPanelMaster = 6 },
         })
@@ -279,7 +280,7 @@ public sealed class SteamwovenLayoutTests
         int[] masters =
         [
             SteamwovenGrid.ReferenceWidth, SteamwovenGrid.ReferenceHeight, SteamwovenGrid.TallReferenceHeight, SteamwovenGrid.CentreWidth,
-            SteamwovenGrid.WindowZoneHeight, SteamwovenGrid.BackdropHeight, SteamwovenGrid.FullScreenHeight, SteamwovenGrid.FullScreenZoneHeight,
+            SteamwovenGrid.WindowZoneHeight, SteamwovenLayoutOptions.Default.BackdropHeight, SteamwovenGrid.FullScreenHeight, SteamwovenGrid.FullScreenZoneHeight,
             SteamwovenGrid.SplitFromCentreLeft, SteamwovenGrid.DefaultTopPanel, SteamwovenGrid.DefaultBottomPanel,
             (SteamwovenGrid.ReferenceWidth - SteamwovenGrid.CentreWidth) / 2,
         ];
@@ -319,11 +320,16 @@ public sealed class SteamwovenLayoutTests
     [TestMethod]
     public void PanelHeightsAreRoundedAsSizesHalvesUpAndRatiosBehave()
     {
-        // 2880 x 1800: f = 3/4; the top panel 112.5 and the bottom panel 427.5 both round up (113 and 428).
-        var l = Layout(2880, 1800);
-        Assert.AreEqual(113, l.Top.Band.Height);
-        Assert.AreEqual(428, l.Bottom.Band.Height);
-        Assert.AreEqual(1259, l.Middle.Band.Height);
+        // 1968 x 1107: f = 0.5125; the top panel 61.5 rounds up to 62 and the bottom panel 233.7 to 234.
+        var l = Layout(1968, 1107);
+        Assert.AreEqual(62, l.Top.Band.Height);
+        Assert.AreEqual(234, l.Bottom.Band.Height);
+        Assert.AreEqual(811, l.Middle.Band.Height);
+        // 1680 x 945: f = 0.4375; the bottom panel 199.5 rounds up as a size (200; rounding its top edge would give 199), the top panel 52.5 to 53.
+        var tie = Layout(1680, 945);
+        Assert.AreEqual(53, tie.Top.Band.Height);
+        Assert.AreEqual(200, tie.Bottom.Band.Height);
+        Assert.AreEqual(945 - 200, tie.Bottom.Band.Y);
         Assert.AreEqual(1, new Ratio(1, 2).RoundHalfUp());
         Assert.AreEqual(0, new Ratio(-1, 2).RoundHalfUp());
         Assert.AreEqual(-1, new Ratio(-3, 4).RoundHalfUp());
@@ -352,24 +358,24 @@ public sealed class SteamwovenLayoutTests
     [TestMethod]
     public void ALetterboxedFrameWithADroppedBarGetsTheBackdropScaledToCoverAndTheFramePositionsAreExact()
     {
-        // 1280 x 807: 7 px over 16:10, the bar is dropped; the middle band (807 - 50 - 190 = 567) is 7 px taller than 1680 f = 560.
+        // 1280 x 807: 7 px over 16:10, the bar is dropped; the middle band (807 - 40 - 152 = 615) is 7 px taller than 1824 f = 608.
         var l = Layout(1280, 807);
         Assert.AreEqual(new PixelRect(0, 0, 1280, 807), l.Frame);
-        Assert.AreEqual(567, l.Middle.Band.Height);
-        Assert.AreEqual(new Ratio(567, 1680), l.MiddleBackdrop.Scale);
-        Assert.AreEqual(new PixelRect(0, 50, 1280, 567), l.MiddleBackdrop.Target);
-        Assert.AreEqual(new PixelRect(-8, 50, 1296, 567), l.MiddleBackdrop.Master, "3840 x 1680 at 567/1680 is 1296 x 567, centred: 8 px off each side");
+        Assert.AreEqual(615, l.Middle.Band.Height);
+        Assert.AreEqual(new Ratio(615, 1824), l.MiddleBackdrop.Scale);
+        Assert.AreEqual(new PixelRect(0, 40, 1280, 615), l.MiddleBackdrop.Target);
+        Assert.AreEqual(new PixelRect(-7, 40, 1294, 615), l.MiddleBackdrop.Master, "3840 x 1824 at 615/1824 is 1294.7 x 615, centred: 7 px off the left, 7 off the right");
         Assert.AreEqual(new PixelRect(0, 0, 1280, 807), l.FullScreenBackdrop.Target);
         Assert.IsTrue(l.FullScreenBackdrop.Scale > l.Scale, "a frame taller than 16:10 scales the full-screen master up");
 
         // Frame and centre positions of the rows with bars.
         var pillar = Layout(3440, 1440);
-        Assert.AreEqual(new PixelRect(760, 0, 1920, 100), pillar.Top.Centre, "x of the centre block: bar + side");
-        Assert.AreEqual(new PixelRect(440, 100, 2560, 960), pillar.Middle.Band);
-        Assert.AreEqual(new PixelRect(760, 100, 1920, 960), pillar.Middle.Centre);
-        Assert.AreEqual(new PixelRect(1280 + 320, 100, 1920, 960), Layout(5120, 1440).Middle.Centre);
-        Assert.AreEqual(new PixelRect(0, 37, 3024, 118), Layout(3024, 1964).Top.Band);
-        Assert.AreEqual(new PixelRect(378, 37 + 118, 2268, 1323), Layout(3024, 1964).Middle.Centre);
-        Assert.AreEqual(new PixelRect(0, 64 + 40, 1024, 448), Layout(1024, 768).Middle.Band);
+        Assert.AreEqual(new PixelRect(760, 0, 1920, 80), pillar.Top.Centre, "x of the centre block: bar + side");
+        Assert.AreEqual(new PixelRect(440, 80, 2560, 1056), pillar.Middle.Band);
+        Assert.AreEqual(new PixelRect(760, 80, 1920, 1056), pillar.Middle.Centre);
+        Assert.AreEqual(new PixelRect(1280 + 320, 80, 1920, 1056), Layout(5120, 1440).Middle.Centre);
+        Assert.AreEqual(new PixelRect(0, 37, 3024, 95), Layout(3024, 1964).Top.Band);
+        Assert.AreEqual(new PixelRect(378, 37 + 95, 2268, 1436), Layout(3024, 1964).Middle.Centre);
+        Assert.AreEqual(new PixelRect(0, 64 + 32, 1024, 486), Layout(1024, 768).Middle.Band);
     }
 }
