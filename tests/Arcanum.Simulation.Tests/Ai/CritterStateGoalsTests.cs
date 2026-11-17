@@ -291,6 +291,35 @@ public sealed class CritterStateGoalsTests
     }
 
     [TestMethod]
+    public void TheStandArtEndNodesOfTheWalkAndActionGoalsCrouchAFlaggedNpcAgain()
+    {
+        // ARC-AI-1711 (0x42B090 of goals 2, 4, 5, 6, 9, 10, 19, 20, 21, 26, 33, 34, 52, 55, 56, 67, 68, 79, 82, 86; 0x42B440 of goal 37): the flag, not the pose, decides.
+        foreach (var goal in new[] { GoalType.RunToTile, GoalType.AttemptMove, GoalType.MoveToPause, GoalType.RunNearTile, GoalType.RunNear, GoalType.MoveStraight, GoalType.AttemptMoveStraight,
+            GoalType.Talk, GoalType.UseSkill, GoalType.ThrowItem, GoalType.CastSpell, GoalType.MoveAway })
+        {
+            var world = Arena();
+            world.Movers[Npc] = new(Prowling: true, Fatigue: 20, MaxFatigue: 20);
+            AiExecutorRules.EndRun(Run(new GoalFrame(goal)), world);
+            Assert.AreEqual((AiExecutorRules.ConcealedAnimation, 0), world.Arts[Npc], goal.ToString());
+
+            world = Arena();
+            AiExecutorRules.EndRun(Run(new GoalFrame(goal)), world);
+            Assert.IsFalse(world.Arts.ContainsKey(Npc), $"{goal}: an unflagged critter keeps its standing art");
+
+            world = Arena();
+            world.Movers[Npc] = new(Prowling: true, Fatigue: 20, MaxFatigue: 20);
+            world.Arts[Npc] = (DyingAnimationRules.FallDown, 3);
+            AiExecutorRules.EndRun(Run(new GoalFrame(goal)), world);
+            Assert.AreEqual((DyingAnimationRules.FallDown, 3), world.Arts[Npc], $"{goal}: a fallen critter keeps its fall");
+        }
+        // The goals the original's walks of a path do not end with 0x42B090 (3, 7, 61, 80) leave the art alone.
+        var plain = Arena();
+        plain.Movers[Npc] = new(Prowling: true, Fatigue: 20, MaxFatigue: 20);
+        AiExecutorRules.EndRun(Run(new GoalFrame(GoalType.MoveNearTile)), plain);
+        Assert.IsFalse(plain.Arts.ContainsKey(Npc));
+    }
+
+    [TestMethod]
     public void TheFrameBuildersCarryTheStartersParameters()
     {
         Assert.AreEqual(3, AiExecutorRules.StunFrame(14).Count);

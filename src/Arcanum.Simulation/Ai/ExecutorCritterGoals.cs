@@ -238,6 +238,16 @@ public static partial class AiExecutorRules
             case GoalType.AnimateReverse:
                 world.ShowArt(owner, StandingAnimation(world, owner), 0);
                 break;
+            // ARC-AI-1711 (0x42B090 for goals 2, 4, 5, 6, 9, 10, 19, 20, 21, 26, 33, 34, 52, 55, 56, 67, 68, 79, 82, 86; 0x42B440 for goal 37): the stand-art end node puts a critter whose concealment
+            // flag is set back in the crouch art (a walk's end crouches a follower the unconceal goal stood up). An unflagged critter's end node writes the standing art, which the host's absent art
+            // entry already is, so only the flagged case is written; a critter lying in its fall (dead, unconscious, knocked down) keeps it.
+            case GoalType.Fidget or GoalType.RunToTile or GoalType.AttemptMove or GoalType.MoveToPause or GoalType.MoveStraight or GoalType.AttemptMoveStraight
+                or GoalType.AttemptAttack or GoalType.Kill or GoalType.Talk or GoalType.CastSpell or GoalType.UseSkill or GoalType.AttemptSkill or GoalType.MoveAway
+                or GoalType.RunNearTile or GoalType.RunNear or GoalType.AttemptPickLocks or GoalType.PleaseMove or GoalType.CombatApproach or GoalType.CastSpellWithAnimation
+                or GoalType.AttemptPickpocket or GoalType.ThrowItem:
+                if (world.Mover(owner) is { Prowling: true, Pc: false } && world.ShownAnimation(owner) != DyingAnimationRules.FallDown)
+                    world.ShowArt(owner, ConcealedAnimation, 0);
+                break;
         }
     }
 }
