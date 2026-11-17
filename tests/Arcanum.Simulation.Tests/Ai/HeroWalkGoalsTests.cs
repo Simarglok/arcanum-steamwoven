@@ -210,6 +210,26 @@ public sealed class HeroWalkGoalsTests
     }
 
     [TestMethod]
+    public void NoWalkFlagStopsTheWalkAtItsNextStepAndBeginsNoStep()
+    {
+        var w = new World { Facing = 5 };
+        var steps = Drive(Run(new(14, 10)) with { Flags = GoalRunFlags.NoWalk }, w);
+        Assert.AreEqual(AiRunEnd.EndStep, steps[^1].Step.End);
+        Assert.AreEqual(AiExecutorReason.NoWalkStep, steps[^1].Step.Reason);
+        Assert.IsFalse(w.Log.Any(l => l.StartsWith("walk") || l.StartsWith("run")), "no step began");
+
+        // The flag arrives while the walk is under way (a Shift click in a round): the walk ends at its next step; the step already begun completes.
+        var live = new World { Facing = 5 };
+        var step = AiExecutorRules.StepHeroWalk(Run(new(14, 10)), live);
+        Assert.IsFalse(step.Ended);
+        Assert.AreEqual(new CellCoord(11, 10), live.At);
+        var flagged = step.Run! with { Flags = step.Run.Flags | GoalRunFlags.NoWalk };
+        var next = Drive(flagged, live);
+        Assert.AreEqual(AiExecutorReason.NoWalkStep, next[^1].Step.Reason);
+        Assert.AreEqual(new CellCoord(11, 10), live.At, "no further step");
+    }
+
+    [TestMethod]
     public void ARefusedStepEndsTheRunAndAHeroLeftBehindEndsItAtTheNextStep()
     {
         var w = new World { Facing = 5, RefuseStep = true };

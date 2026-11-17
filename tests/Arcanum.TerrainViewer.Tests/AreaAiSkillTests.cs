@@ -329,6 +329,29 @@ public sealed class AreaAiSkillTests
     }
 
     [TestMethod]
+    public void A_skill_with_no_case_of_its_own_answers_the_sessions_plain_roll_and_one_with_a_handler_not_built_answers_false()
+    {
+        // ARC-AI-1854 (0x4C7160): bow, melee, ... are the shared check alone; gambling, repair and pick locks through goal 33 are not built here.
+        var (session, host, npc, _) = Open(hero: true);
+        var before = session.Version.Revision;
+        var answer = host.AttemptSkill(npc, AiSchedulerRules.Pc, (int)Skill.Melee, null);
+        var notice = host.DrainNotices().Single(n => n.Kind == AreaAiNoticeKind.Skill);
+        var roll = notice.PlainRoll ?? throw new AssertFailedException(host.TraceOf(npc)?.Skill ?? "no roll");
+        Assert.AreEqual((GameSessionDisposition.Changed, roll.Success), (roll.Disposition, answer), "the answer is the roll's success (run flag 0x40000)");
+        Assert.AreEqual(before + 1, session.Version.Revision, "the roll is one revision");
+        StringAssert.StartsWith(host.TraceOf(npc)!.Skill, $"skill {(int)Skill.Melee} on {AiSchedulerRules.Pc} Changed");
+        foreach (var skill in new[] { Skill.Gambling, Skill.Repair, Skill.PickLocks })
+        {
+            var revision = session.Version.Revision;
+            Assert.IsFalse(host.AttemptSkill(npc, AiSchedulerRules.Pc, (int)skill, null), skill.ToString());
+            Assert.IsNull(host.DrainNotices().Single(n => n.Kind == AreaAiNoticeKind.Skill).PlainRoll);
+            Assert.AreEqual(revision, session.Version.Revision, "nothing is rolled");
+            StringAssert.EndsWith(host.TraceOf(npc)!.Skill, "not ready");
+        }
+        Assert.IsFalse(host.AttemptSkill(npc, AiSchedulerRules.Pc, 99, null), "a number outside the 16 skills");
+    }
+
+    [TestMethod]
     public void A_speaking_idle_npc_faces_its_listener_and_a_busy_or_unable_one_does_not()
     {
         // ARC-UI-2029 (TB26): the speech display turns a living speaker that runs no animation of its own to its listener (the dialog's NPC line, the greeting).

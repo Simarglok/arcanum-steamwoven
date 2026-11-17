@@ -69,8 +69,44 @@ public partial class AreaGameBarPanel : CanvasLayer
     /// <summary>ARC-UI-2608: raised at the end of every placement of the bars (the plan and the screen frame are current): the parts that read the screen frame place themselves again.</summary>
     public static event Action? Placed;
 
-    /// <summary>The part of a window of <paramref name="size"/> the bars leave free: its top and its size.</summary>
-    public static (float Top, Vector2 Size) FreeArea(Vector2 size) => (TopInset, new(size.X, Math.Max(1, size.Y - TopInset - BottomInset)));
+    /// <summary>ARC-UI-2510: the left edge of the frame the Steamwoven layout lays the play screen out in, while the bars are shown (0 otherwise, and in a window with no pillarbox bar).</summary>
+    public static float FreeLeft { get; private set; }
+    private static float _freeWidth;
+
+    /// <summary>The part of a window of <paramref name="size"/> the bars leave free: its top and its size. ARC-UI-2510: in the Steamwoven layout the free width is the frame's (a window wider than the
+    /// 16:9 frame has a pillarbox bar on each side, which a window must not lie under); it starts at <see cref="FreeLeft"/>. Without the layout it is the whole window's width.</summary>
+    public static (float Top, Vector2 Size) FreeArea(Vector2 size) => (TopInset, new(_freeWidth > 0 ? _freeWidth : size.X, Math.Max(1, size.Y - TopInset - BottomInset)));
+
+    /// <summary>ARC-UI-2510: where the original's 800 × 600 screen lies for what hangs from its top strip (the follower portraits and their buttons): the screen's top left, the strips' scale, and
+    /// the window y of the bottom strip's bottom edge (the screen's bottom edge). Null while the layout is not the Steamwoven one or the bars are hidden: the whole-factor screen centred at the
+    /// window's top stands. <see cref="ScreenFrame"/> is the same screen with its origin counted from the bottom strip (for what sits on that strip).</summary>
+    public static (Vector2 Origin, float Scale, float BottomEdge)? TopScreen { get; private set; }
+
+    /// <summary>ARC-UI-2510: raised after <see cref="TopScreen"/> changed (the layout turned on or off, a new window size): parts placed by it place themselves again.</summary>
+    public static event Action? TopScreenChanged;
+
+    private static void SetTopScreen((Vector2, float, float)? next)
+    {
+        if (TopScreen == next) return;
+        TopScreen = next;
+        TopScreenChanged?.Invoke();
+    }
+
+    /// <summary>
+    /// ARC-UI-2510: where a window of the original's screen that keeps its own whole scale (the sleep and fate views) lies: its top left at (<paramref name="screenX"/>, <paramref name="screenY"/>)
+    /// of the screen where the strips put it, and the whole factor as its scale (the strips' fractional scale is theirs: the window's textures are painted at the window's own).
+    /// Without the Steamwoven layout: the whole-factor screen centred at the window's top.
+    /// </summary>
+    public static (Vector2 Position, float Scale) OwnScaleWindow(Vector2 size, int screenX, int screenY)
+    {
+        var factor = ScreenFactor(size);
+        return TopScreen is { } screen
+            ? (screen.Origin + new Vector2(screenX, screenY) * screen.Scale, factor)
+            : (new Vector2(ScreenLeft(size, factor) + screenX * factor, screenY * factor), factor);
+    }
+
+    /// <summary>ARC-UI-2510: the scale the original's screen pixels (floating lines, text bubbles, the follower portraits) are drawn at: the strips' scale in the Steamwoven layout, else the whole factor.</summary>
+    public static float ScreenScale(Vector2 size) => TopScreen?.Scale ?? ScreenFactor(size);
     internal string HoverTextForSelfTest => _messageLog.HoverTextForSelfTest;
     /// <summary>The message window's hovered portrait (its texture, null none).</summary>
     internal (Texture2D? Image, Rect2 Rect) HoverPortraitForSelfTest => (_hoverImage.Visible ? _hoverImage.Texture : null, _hoverImage.GetGlobalRect());
@@ -101,9 +137,11 @@ public partial class AreaGameBarPanel : CanvasLayer
         if (ZoneWindow(size, widthUnits, heightUnits) is { } zone) return ((float)zone.Scale, new Vector2((float)zone.X, (float)zone.Y));
         var factor = ScreenFactor(size);
         if (BottomInset <= 0) return (factor, new Vector2(ScreenLeft(size, factor), TopInset));
-        var fit = MathF.Min((size.Y - TopInset - BottomInset) / heightUnits, size.X / widthUnits);
+        // ARC-UI-2510: the free width is the frame's, from its left edge.
+        var (_, free) = FreeArea(size);
+        var fit = MathF.Min((size.Y - TopInset - BottomInset) / heightUnits, free.X / widthUnits);
         var scale = MathF.Max(factor, fractional ? fit : MathF.Floor(fit));
-        return (scale, new Vector2(MathF.Round((size.X - widthUnits * scale) / 2), DockedWindowTop(size, scale, heightUnits)));
+        return (scale, new Vector2(FreeLeft + MathF.Round((free.X - widthUnits * scale) / 2), DockedWindowTop(size, scale, heightUnits)));
     }
 
     /// <summary>
@@ -421,6 +459,7 @@ public partial class AreaGameBarPanel : CanvasLayer
         // Not the Steamwoven layout (the HD option off, or the generated interface off): nothing of it shows and the original's whole-factor layout stands.
         ResetControlRects();
         InterfaceHd.SetFractionalScale(null);
+        SetTopScreen(null);
         if (_boards.Visible) { _boards.Visible = false; _bars.Visible = false; _backdropLayer.Visible = false; }
         foreach (var strip in _strips.Values) strip.TextureFilter = CanvasItem.TextureFilterEnum.Nearest;
         Factor = ScreenFactor(size);
@@ -434,7 +473,7 @@ public partial class AreaGameBarPanel : CanvasLayer
         _sideLeft = left / Factor; _sideRight = (size.X - left - AreaGameBarLayout.ScreenWidth * Factor) / Factor;
         foreach (var strip in _strips)
             strip.Value.GetNode<AreaStripSidesView>("Sides").Set(strip.Value.GetNode<TextureRect>("Art").Texture, _sideLeft, _sideRight);
-        SetInsets(Visible ? AreaGameBarLayout.TopHeight * Factor : 0, Visible ? AreaGameBarLayout.BottomHeight * Factor : 0);
+        SetInsets(Visible ? AreaGameBarLayout.TopHeight * Factor : 0, Visible ? AreaGameBarLayout.BottomHeight * Factor : 0, 0, 0);
         Placed?.Invoke();
     }
 
@@ -454,7 +493,9 @@ public partial class AreaGameBarPanel : CanvasLayer
         _sideLeft = 0; _sideRight = 0;
         foreach (var strip in _strips)
             strip.Value.GetNode<AreaStripSidesView>("Sides").Set(strip.Value.GetNode<TextureRect>("Art").Texture, 0, 0);
-        SetInsets(Visible ? plan.TopInset : 0, Visible ? plan.BottomInset : 0);
+        // ARC-UI-2510: the screen the portraits hang in (the top strip's top left, its bottom edge) and the frame the windows are centred in. ARC-UI-2608: the screen's bottom edge is y 600 of the screen frame.
+        SetTopScreen((new Vector2(plan.StripLeft, plan.TopStripY), scale, plan.ScreenOriginY + AreaGameBarLayout.ScreenHeight * scale));
+        SetInsets(Visible ? plan.TopInset : 0, Visible ? plan.BottomInset : 0, Visible ? plan.Layout.Frame.X : 0, Visible ? plan.Layout.Frame.Width : 0);
         ApplyControlRects(plan);
         UpdateSteamwovenParts(plan);
     }
@@ -624,10 +665,10 @@ public partial class AreaGameBarPanel : CanvasLayer
         bar.Position = new Vector2(x, y); bar.Size = new Vector2(Math.Max(0, width), Math.Max(0, height));
     }
 
-    private static void SetInsets(float top, float bottom)
+    private static void SetInsets(float top, float bottom, float left, float width)
     {
-        if (TopInset == top && BottomInset == bottom) return;
-        TopInset = top; BottomInset = bottom;
+        if (TopInset == top && BottomInset == bottom && FreeLeft == left && _freeWidth == width) return;
+        TopInset = top; BottomInset = bottom; FreeLeft = left; _freeWidth = width;
         InsetsChanged?.Invoke();
     }
 
@@ -637,6 +678,7 @@ public partial class AreaGameBarPanel : CanvasLayer
         GetViewport().SizeChanged -= Place;
         InterfaceHd.Changed -= Place;
         if (_plan is not null) InterfaceHd.SetFractionalScale(null);
-        SetInsets(0, 0);
+        SetTopScreen(null);
+        SetInsets(0, 0, 0, 0);
     }
 }
