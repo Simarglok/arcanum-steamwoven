@@ -1915,10 +1915,13 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     public AiMoverFacts Mover(string id)
     {
         var status = Status(id);
+        var prowling = id != Pc && _session.IsConcealed(SessionCombatant.Critter(id));
         // ARC-AI-1653 (0x426E80): the goals' unconceal test reads the shown art (animation 5, the crouch), not the flag; the end nodes' standing art reads the flag (0x45EDE0).
         return new(Pc: id == Pc, KnockedDown: id != Pc && status is { IsDead: false, IsUnconscious: false } && ShownAnimation(id) == DyingAnimationRules.FallDown,
-            Concealed: id != Pc && ShownAnimation(id) == AiExecutorRules.ConcealedAnimation, Prowling: id != Pc && _session.IsConcealed(SessionCombatant.Critter(id)), Fatigue: status?.Fatigue ?? 0, MaxFatigue: status?.MaxFatigue ?? 0, CannotTurn: !Active(id),
-            SpreadOut: id != Pc && _session.QueryCompanion(id).SpreadOut);
+            Concealed: id != Pc && ShownAnimation(id) == AiExecutorRules.ConcealedAnimation, Prowling: prowling, Fatigue: status?.Fatigue ?? 0, MaxFatigue: status?.MaxFatigue ?? 0, CannotTurn: !Active(id),
+            SpreadOut: id != Pc && _session.QueryCompanion(id).SpreadOut,
+            // ARC-AI-1711 (0x42EDC0, 0x4C60C0 with skill 6): a flagged critter runs only as a prowling master; no sheet reads as untrained.
+            ProwlingTraining: prowling ? NpcSkill(id, Skill.Prowling)?.Training ?? SkillTraining.None : SkillTraining.None);
     }
 
     /// <summary>The terrain step from the object's tile toward the other's: walls, doors and objects other than critters decide
@@ -4245,7 +4248,9 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
             record.HitBy is { } hit ? Id(hit) : null, record.Enemies.Select(Id).ToArray());
     }
 
-    public string? MindController(string npc) => null;
+    /// <summary>ARC-WORLD-2144 (0x459040, mask OSF_MIND_CONTROLLED): the controller of a mind-controlled NPC, the parent of the spell run that holds it (see <see cref="SessionSpellCaster.AiMindController"/>); null when the NPC is not mind controlled or no cast host is built.</summary>
+    public string? MindController(string npc) => _scene.Spells?.Invoke() is { } spells && Fields(npc)?.Object is { } o
+        ? spells.AiMindController(npc, unchecked((int)SpellFlagsOf(npc, o.SpellFlags))) : null;
 
     /// <summary>The critters of the square of half-size <paramref name="halfSize"/> around the object, in the map's scan order.</summary>
     public IReadOnlyList<string> Square(string npc, int halfSize) => Tile(npc) is { } center ? SquareAt(center, halfSize) : [];
@@ -4389,16 +4394,25 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
 
     /// <summary>
     /// ARC-WORLD-2127: the facts of the unforced unwait (0x4AA8C0 → 0x4AD950 with the NPC leader as the player) of a follower waiting under an NPC leader, read here: the leader's side, the follower's alignment,
-    /// level and the thresholds of its AI row, and the mind-control acceptance (no controller is tracked, so the first check accepts a mind-controlled follower whose chain of leaders reaches a player character,
-    /// the join's second check none). Null when the NPC has no NPC leader, no AI row or the leader's stats are not readable here.
+    /// level and the thresholds of its AI row, and the mind-control acceptance (a controller equal to the leader accepts both checks; with no controller record the first check accepts a mind-controlled follower whose chain of leaders reaches a player character,
+    /// the join's second check none; another controller accepts neither). Null when the NPC has no NPC leader, no AI row or the leader's stats are not readable here.
     /// </summary>
     internal NpcLeaderUnwaitFacts? LeaderUnwaitFacts(string npc)
     {
         if (Leader(npc) is not { } leader || leader == Pc || NpcLeaderSide(leader) is not { } side || Fields(npc) is not { } fields || AlignmentOf(npc) is not { } alignment || Row(npc) is not { } row || Build(npc) is not { } build) return null;
+        // ARC-WORLD-2144 (0x4AD950): a controller equal to the leader accepts in both checks; with no controller found the chain walk to a PC accepts the first check only (the handle is cleared at the second); another controller accepts neither.
         var mind = (SpellFlagsOf(npc, fields.Object.SpellFlags) & MindControlledSpell) != 0;
+        var (first, second) = MindControlAcceptance(mind, MindController(npc), leader, () => PcLeader(npc) is not null);
         return new(side.Persuasion, side.Alignment, side.Level, side.MaxFollowers, new(row.FollowReaction, row.FollowAlignmentAbove, row.FollowAlignmentBelow, row.JoinLevelGap),
-            alignment, build.Level, mind && PcLeader(npc) is not null, false, side.Charisma);
+            alignment, build.Level, first, second, side.Charisma);
     }
+
+    /// <summary>
+    /// ARC-WORLD-2144 (0x4AD950's mind-control branch): whether a mind-controlled follower is accepted by the first check and by the join's second one (the handle is cleared, so the chain walk 0x45DDA0 cannot see a PC): a controller equal
+    /// to the leader accepts both; no controller record accepts the first when a PC leads it up its chain; another controller accepts neither (the ordinary tests follow). Not mind controlled: neither.
+    /// </summary>
+    internal static (bool First, bool Second) MindControlAcceptance(bool mindControlled, string? controller, string leader, Func<bool> pcChain) =>
+        !mindControlled ? (false, false) : controller is null ? (pcChain(), false) : (controller == leader, controller == leader);
 
     /// <summary>The unforced unwait of a follower waiting under an NPC leader with the facts read here (<see cref="LeaderUnwaitFacts"/>); null when they cannot be read.</summary>
     internal PartyMutationResult? UnwaitUnforced(string npc) =>

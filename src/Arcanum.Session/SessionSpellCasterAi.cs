@@ -58,6 +58,20 @@ public sealed partial class SessionSpellCaster
         return SpellRunRules.FreeMaintainSlots(_owner.QuerySpellRuns(), who, intelligence, Record, Profile);
     }
 
+    /// <summary>
+    /// ARC-WORLD-2144 (0x459040 with the mask OSF_MIND_CONTROLLED): the controller of a mind-controlled critter: the parent (the caster) of the first run in slot order that sets the flag and holds the critter as its target, in its
+    /// object list or in its summoned list (a summon's creature); null when the critter's spell flags (<paramref name="spellFlags"/>, the object-flag layer's) lack the bit or no run holds it. A PC controller is the hero's id.
+    /// </summary>
+    public string? AiMindController(string critter, int spellFlags)
+    {
+        ArgumentNullException.ThrowIfNull(critter);
+        var table = _owner.QuerySpellRuns();
+        // The run's set-flags word (+0x138) is what its ObjFlag line ORs in; this host's ObjFlag component does not write that word, so the word is read as the run's record states it (the record's SpellFlagsSet, as 0x455100's count
+        // here does, ProvidingRuns) laid over the stored one.
+        return SpellTargetStage.FlagCaster(table, run => run.Target?.Id == critter || run.ObjectList.Holds(critter) || ((ISpellRunHost)this).SummonedListHolds(run, critter),
+            run => run.SetSpellFlags | (_records(run.Spell) is { } record ? unchecked((int)record.Data.SpellFlagsSet) : 0), spellFlags, MindControlledSpellFlag)?.Id;
+    }
+
     /// <summary>Whether the target is under the influence of the spell (0x459380, <see cref="SpellRunRules.UnderInfluence"/>).</summary>
     public bool AiUnderInfluence(string target, int spell) => SpellRunRules.UnderInfluence(_owner.QuerySpellRuns(), target, spell);
 

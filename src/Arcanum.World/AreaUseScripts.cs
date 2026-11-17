@@ -52,6 +52,7 @@ namespace Arcanum.World;
 /// ARC-SCRIPT-2342 (AR2, AR7): <see cref="NpcBodyArmor"/> answers what an NPC the session dressed wears on its body-armour slot now (null: not read; without it get armor of such an NPC is not modelled).
 /// ARC-SCRIPT-2506 (TI5): <see cref="CarryVitals"/> (created critter entity, hit-point percentage, fatigue percentage) sets the new critter of a script's transform (40) to the old one's percentages through the session's life
 /// (<see cref="AreaUseScriptHost.TransformDamage"/> makes the damage from the new critter's own maxima) and answers whether it did; without it a transform of an NPC below full hit points or fatigue is refused whole.
+/// ARC-SCRIPT-2519 (TI5c, F2, 0x502880, 0x502930): <see cref="NpcFacing"/> answers the facing an NPC of the shown map stands in now (its mover's, else its map art's rotation) so the made critter of a transform takes it; without it (or for an NPC it does not know) the made critter keeps its prototype's art facing.
 /// </summary>
 public sealed record AreaScriptWorld(Func<CellCoord?> PcCell, Func<AreaObjectRecord, bool> Gone, Func<int, AreaPrototypeItem?> Item, Func<IDropMap?> DropMap,
     Func<ScrObjectRef, bool>? Kill = null, Func<ScrObjectRef, bool>? CanKill = null, Func<ScrObjectRef, CellCoord?>? CritterCell = null,
@@ -64,7 +65,8 @@ public sealed record AreaScriptWorld(Func<CellCoord?> PcCell, Func<AreaObjectRec
     Func<string, int, string>? ScriptStopSpell = null, Func<string, AreaScriptVitals?>? Vitals = null, Func<string, int, int, string>? ScriptHealLife = null,
     Func<string, string, string>? ScriptAttack = null, Func<string, int?>? Aptitude = null, Func<string, string, bool?>? CanSee = null, Func<string, string, bool?>? CanHear = null,
     Func<uint, bool>? ArtExists = null, Func<ScrTeleport, string?>? NpcTeleportRefusal = null, Action<ScrTeleport>? RequestNpcTeleport = null,
-    Func<uint?>? BodyArmorUseArt = null, Func<string, AreaScriptWornArmor?>? NpcBodyArmor = null, Func<string, int?>? StandardReaction = null, Func<string, int, int, bool>? CarryVitals = null);
+    Func<uint?>? BodyArmorUseArt = null, Func<string, AreaScriptWornArmor?>? NpcBodyArmor = null, Func<string, int?>? StandardReaction = null, Func<string, int, int, bool>? CarryVitals = null,
+    Func<string, NeighborDirection?>? NpcFacing = null);
 
 /// <summary>ARC-SCRIPT-2342 (AR2): the use art (item field 0x5F) of the item an NPC wears in the body-armour slot (1006), or null when it wears none (<see cref="AreaScriptWorld.NpcBodyArmor"/>).</summary>
 public sealed record AreaScriptWornArmor(uint? UseArt);
@@ -2930,7 +2932,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
     /// Modelled: a placed NPC of the shown map (no created critter, not already destroyed) becomes a created critter of the prototype's file (the script's number + 20, F1) on its tile in the session; it starts from its prototype alone (F2; its inventory
     /// is the host's restock of a created critter, F4) and carries the old NPC's hit-point and fatigue percentages (F2, F3: <see cref="TransformDamage"/>, through <see cref="AreaScriptWorld.CarryVitals"/> when either is below 100); the old NPC's destroy
     /// script (point 2) runs first and a refusal of it keeps the old NPC while the made critter stands (F6); then the old NPC is destroyed as a script destroy does (the map change, its invulnerable items dropped on its tile, F4), a follower of the PC
-    /// leaves the party and an NPC's leader and followers are unlinked (F5). Not modelled (ledger TI5c): the old rotation (a created critter has no stored facing), the AI focus and combat references to the old handle, turn-based combat entries.
+    /// leaves the party and an NPC's leader and followers are unlinked (F5). The old art's rotation goes to the made critter as its recorded place (ARC-SCRIPT-2519, <see cref="AreaScriptWorld.NpcFacing"/>). The AI focus, enemy list, combat entries and items left in the destroyed holder need no code (ledger TI5c: the original leaves the handle in place and its readers refuse a destroyed object, as ours do).
     /// </summary>
     internal string? TransformRefusal(ScrObjectStateRequest request)
     {
@@ -2983,6 +2985,10 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         if (made.Object is not { } critter) return null;
         LastTransformed = critter;
         _world.CritterMade?.Invoke(critter.Entity);
+        // ARC-SCRIPT-2519 (TI5c, F2, 0x502880 and 0x502930): the made critter takes the old object's art rotation, read now while the old NPC stands. Steamwoven keeps a critter's facing as its recorded place (npc.pos: the AI host
+        // stands a created critter there when it hosts it and a save keeps it), written once nothing can take the critter away again. A follower of the PC has no mover facing of its own in the AI host (its body is the companion's): not carried.
+        var facing = FollowsPc(old) ? null : _world.NpcFacing?.Invoke(old.Code);
+        void CarryFacing() { if (facing is { } turned) _session.RecordNpcPlace(_session.Version, new SessionMapId(_shownMap), critter.Entity, cell, turned); }
         // The old NPC stays on any refusal below: the made critter goes again (the host's sync of it is the viewer's own, as for any created critter that is destroyed).
         ScrObjectRef? Undo()
         {
@@ -2998,7 +3004,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
         {
             var ran = RunDestroyPoint(old.Code, _lastRules ?? _session.Rules.Scripts);
             if (ran.Outcome != AreaScriptedUseOutcome.NoTeleport) return Undo();
-            if (DyingStops(ran)) return new ScrObjectRef(_shownMap, critter.Entity);
+            if (DyingStops(ran)) { CarryFacing(); return new ScrObjectRef(_shownMap, critter.Entity); }
         }
         // F5: a follower of the PC leaves the party (the same forced leave as a disband, NS1); an NPC's leader and followers are unlinked by the session's destroy.
         if (FollowsPc(old))
@@ -3007,7 +3013,9 @@ public sealed class AreaUseScriptHost : IScrHost, IScrWorldObjectQueries, IScrOb
             if (left.Disposition == GameSessionDisposition.Rejected && left.Failure != GameSessionFailure.InvalidCompanion) return Undo();
         }
         var destroyed = _session.DestroyMapNpc(_session.Version, new SessionMapId(old.Map), old.Code, cell, leaveLeaders: true);
-        return destroyed.Disposition == GameSessionDisposition.Rejected ? Undo() : new ScrObjectRef(_shownMap, critter.Entity);
+        if (destroyed.Disposition == GameSessionDisposition.Rejected) return Undo();
+        CarryFacing();
+        return new ScrObjectRef(_shownMap, critter.Entity);
     }
 
     /// <summary>ARC-SCRIPT-2198: one disband or create item request of a talk run, in action order (<see cref="TalkStateRefusal"/> planned it); false when the session refuses. Any other request is not this host's and does nothing.</summary>

@@ -526,6 +526,23 @@ public sealed class ExecutorRulesTests
     }
 
     [TestMethod]
+    public void AFlaggedNpcRunsOnlyAsAProwlingMaster()
+    {
+        // ARC-AI-1711 (0x42EDC0, 0x42E9B0): a critter whose concealment flag is set sneaks or walks below master and runs as a master; an unflagged one is not asked.
+        foreach (var (flagged, training, runs) in new[] { (true, SkillTraining.None, false), (true, SkillTraining.Apprentice, false), (true, SkillTraining.Expert, false), (true, SkillTraining.Master, true), (false, SkillTraining.None, true) })
+        {
+            var world = Arena(1);
+            world.Movers[Npc] = new(Prowling: flagged, ProwlingTraining: training, Fatigue: 20, MaxFatigue: 20);
+            Drive(new GoalRun(Npc, default, new GoalFrame(GoalType.Flee, Foe), GoalRunFlags.Flight), world, Steamwoven);
+            var steps = world.Calls.Where(c => c.StartsWith("step", StringComparison.Ordinal)).ToArray();
+            Assert.IsTrue(steps.Length > 0);
+            Assert.AreEqual(runs, steps.All(c => c.EndsWith(" run", StringComparison.Ordinal)), $"flagged {flagged}, {training}");
+        }
+        Assert.IsTrue(AiExecutorRules.RunPermitted(new(Pc: true, Prowling: true)), "the PC's stealth gait is the viewer's");
+        Assert.IsFalse(AiExecutorRules.RunPermitted(new(Encumbrance: 4, Prowling: true, ProwlingTraining: SkillTraining.Master)));
+    }
+
+    [TestMethod]
     public void ACorneredNpcFacesItsSourceAndNeverFleesAgain()
     {
         var world = Arena(1);

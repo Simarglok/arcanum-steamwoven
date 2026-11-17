@@ -295,6 +295,8 @@ public partial class TerrainViewerApp
             Vitals: ScriptVitals, ScriptHealLife: HealLifeByScript,
             // ARC-SCRIPT-2506 (TI5): the made critter of a script's transform takes the old NPC's hit-point and fatigue percentages through the session's life.
             CarryVitals: (entity, hitPointPercent, fatiguePercent) => CarryTransformVitals(owner, entity, hitPointPercent, fatiguePercent),
+            // ARC-SCRIPT-2519 (TI5c): the made critter of a script's transform takes the old NPC's facing (its mover's, else its map art's rotation).
+            NpcFacing: ScriptNpcFacing,
             // ARC-SCRIPT-1620 (TI6): a script's attack (36) raises the attack event of the attacker on the victim in the AI host, no fan-out (flags 2).
             ScriptAttack: (attacker, victim) =>
             {

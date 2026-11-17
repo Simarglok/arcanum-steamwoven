@@ -146,7 +146,7 @@ public sealed record AiPath(ImmutableArray<CellCoord> Steps, bool StraightStoppe
 /// What the executor reads about the object that runs: <see cref="Pc"/> the local PC; knocked down and concealed (the goals get
 /// it up and unconceal it first, a PC is not unconcealed: <see cref="Concealed"/> is the test 0x426E80, the critter shows the crouch art, animation 5, and
 /// <see cref="Prowling"/> is the critter flag 0x1 the end nodes' standing art reads, 0x45EDE0); the encumbrance level (4 is "significant"); current and maximum
-/// fatigue; <see cref="CannotTurn"/> stoned, stunned or paralysed; <see cref="Entangled"/>; <see cref="SpreadOut"/> NPC flag
+/// fatigue; <see cref="ProwlingTraining"/> the prowling training the gait reads for a flagged critter (0x42EDC0, 0x4C60C0 with skill 6; None for an unflagged one); <see cref="CannotTurn"/> stoned, stunned or paralysed; <see cref="Entangled"/>; <see cref="SpreadOut"/> NPC flag
 /// "spread out".
 /// </summary>
 public readonly record struct AiMoverFacts(
@@ -159,7 +159,8 @@ public readonly record struct AiMoverFacts(
     int MaxFatigue = 0,
     bool CannotTurn = false,
     bool Entangled = false,
-    bool SpreadOut = false);
+    bool SpreadOut = false,
+    SkillTraining ProwlingTraining = SkillTraining.None);
 
 /// <summary>
 /// The attack-possible test's facts (0x4294F0): the attacker not active, in Body of Air, elemental; the target destroyed or off,
