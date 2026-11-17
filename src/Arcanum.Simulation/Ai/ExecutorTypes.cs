@@ -85,6 +85,8 @@ public enum AiExecutorReason
     CastNotReleased,
     /// <summary>ARC-AI-1137 (GT122): the hero's talk was started with Shift (the no-walk flag) and the NPC is 5 or more cells away: the approach never steps, the run ends at once, silently.</summary>
     NoWalkOutOfRange,
+    /// <summary>ARC-COMBAT-2561 (GT148, GT213): the hero's walk step 0x42E9B0 answers false at once while run flag 0x100 (no-walk, a Shift click) is set, and every walk failure ends the whole run.</summary>
+    NoWalkStep,
     /// <summary>A skill, item-use or pickup goal walks to its object.</summary>
     ActionApproach,
     /// <summary>A skill's attempt ran.</summary>

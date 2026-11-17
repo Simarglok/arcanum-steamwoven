@@ -468,7 +468,7 @@ public partial class AreaCharacterSheetPanel : CanvasLayer
         _panel.Size = new(width, 0);
         var height = Math.Min(_panel.GetCombinedMinimumSize().Y, Math.Max(1, size.Y - 48));
         _panel.Size = new(width, height);
-        _panel.Position = new((size.X - width) / 2, top + Math.Max(24, (size.Y - height) / 2));
+        _panel.Position = new(AreaGameBarPanel.FreeLeft + (size.X - width) / 2, top + Math.Max(24, (size.Y - height) / 2));
     }
 
     public override void _Process(double delta) { if (IsOpen) ResizePanel(); }

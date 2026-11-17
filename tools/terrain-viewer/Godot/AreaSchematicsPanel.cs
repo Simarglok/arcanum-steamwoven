@@ -211,7 +211,7 @@ public partial class AreaSchematicsPanel : CanvasLayer
         if (_panel is null) return;
         // ARC-UI-018: inside the part the interface bars leave free.
         var (top, size) = AreaGameBarPanel.FreeArea(GetViewport().GetVisibleRect().Size);
-        _panel.Position = new Vector2(size.X * .1f, top + size.Y * .08f);
+        _panel.Position = new Vector2(AreaGameBarPanel.FreeLeft + size.X * .1f, top + size.Y * .08f);
         _panel.Size = new Vector2(size.X * .8f, size.Y * .8f);
     }
 }
