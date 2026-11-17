@@ -116,7 +116,10 @@ public sealed partial class SessionSpellCaster
 
     private bool DestroyCreated(int run, string entity)
     {
-        var destroyed = _owner.DestroyCreatedObject(_owner.Version, entity);
+        // ARC-WORLD-2503: the critter's items drop where it stands now (its live cell, read from the shown map, so only for a critter of the summon's map), not where it was made; a cell out of range is refused by the drop's own test.
+        var live = SummonMap is { } shown && _owner.QueryCreatedObject(entity) is { } made && made.Map == shown && _map.Object(entity) is { Location: { IsNone: false } at }
+            ? new CellCoord(unchecked((int)at.X), unchecked((int)at.Y)) : (CellCoord?)null;
+        var destroyed = _owner.DestroyCreatedObject(_owner.Version, entity, live);
         if (destroyed.Disposition == GameSessionDisposition.NoChange) return true;
         if (destroyed.Disposition != GameSessionDisposition.Changed) return false;
         _goneObjects.Add((SessionSpellRunActionKind.ObjectGone, entity, run));
