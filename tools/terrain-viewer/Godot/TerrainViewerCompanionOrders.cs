@@ -390,7 +390,7 @@ public partial class TerrainViewerApp
         {
             if (PortraitOrderLabel(FollowerMenuItem.Attack) is not { } attackLabel)
             {
-                _companionNotice = "attack: order not sent (no message for the row)"; RefreshReadyStatus(); return true;
+                _companionNotice = $"attack: order not sent (no message for the row in {AreaFollowerMenuTexts.MesPath})"; RefreshReadyStatus(); return true;
             }
             IssueAreaOrder("portrait", new(CompanionOrderType.Attack, CompanionOrderAddressing.Portrait, [], entity, attackLabel) { Target = OrderTarget(AreaObjectAtScreen(screen)) });
             return true;
@@ -399,7 +399,7 @@ public partial class TerrainViewerApp
         if (AreaCellPicking.Pick(new(chart.X, chart.Y)) is not { } cell) { _companionNotice = "walk: no tile there"; RefreshReadyStatus(); return true; }
         if (PortraitOrderLabel(FollowerMenuItem.Walk) is not { } walkLabel)
         {
-            _companionNotice = "walk: order not sent (no message for the row)"; RefreshReadyStatus(); return true;
+            _companionNotice = $"walk: order not sent (no message for the row in {AreaFollowerMenuTexts.MesPath})"; RefreshReadyStatus(); return true;
         }
         IssueAreaOrder("portrait", new(CompanionOrderType.WalkHere, CompanionOrderAddressing.Portrait, [], entity, walkLabel, cell));
         return true;
