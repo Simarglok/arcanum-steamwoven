@@ -1,4 +1,7 @@
+using Arcanum.Data.Area;
+using Arcanum.Data.Written;
 using Arcanum.Presentation.Steamwoven;
+using Arcanum.Session;
 using Arcanum.TerrainViewer.Core;
 using Arcanum.World;
 using Godot;
@@ -209,43 +212,111 @@ public partial class TerrainViewerApp
         finally { foreach (var node in new Node[] { floaters, portraits, sleep, fate }) { RemoveChild(node); node.QueueFree(); } }
     }
 
-    // ARC-UI-2575: every menu window the smoke can open (inventory, character sheet, logbook, world map, schematics, the save list) stands in the window zone of the layout at the layout's unit scale:
-    // the drawn body (its top left and its scale) is what SteamwovenWindowZone says, and the window is captured as steamwoven-VARIANT-WxH-WINDOW.png (local). With a null plan (the "before" variant, the old
-    // layout) only the captures are made. The loot, barter, reading, pre-made and new-character windows need an NPC, a container, a written item or the main menu: they take the same hook
-    // (unit tests of the hook) and are captured with the window hooks of #2489.
+    // ARC-UI-2575 / ARC-UI-2614: every menu window the smoke can open (inventory, character sheet, logbook, world map, schematics, the save list, and since ARC-UI-2614 the loot window of a container, the
+    // barter window of an NPC, a book's reading window and the main menu's pre-made and new-character screens) stands in the window zone of the layout at the layout's unit scale: the drawn body (its top
+    // left and its scale) is what SteamwovenWindowZone says, and the window is captured as steamwoven-VARIANT-WxH-WINDOW.png (local). With a null plan (the "before" variant, the old layout) only the
+    // captures are made. A window whose data the map lacks (no container, no NPC to trade with, no readable book) is reported as not captured; the main menu screens come from the in-play menu.
+    private sealed record SteamwovenWindowProbe(string Name, Action Open, Func<bool> IsOpen, Action Close, Func<(Vector2 Origin, float Scale)?> View, Func<SteamwovenHudPlan, SteamwovenWindowPlace> Expected);
+
+    private static SteamwovenWindowPlace ZoneBody(SteamwovenHudPlan plan) => SteamwovenWindowZone.Body(plan, 800, 400);
+    private static SteamwovenWindowPlace ZoneScreen(SteamwovenHudPlan plan) => SteamwovenWindowZone.Screen(plan, AreaShopArtLayout.Window.Y);
+    // The reading window is the screen's body: its top left is the body's, 41 units below the screen's.
+    private static SteamwovenWindowPlace ZoneReading(SteamwovenHudPlan plan)
+    {
+        var screen = ZoneScreen(plan);
+        return screen with { Y = Math.Round(screen.Y + AreaReadingArtLayout.Window.Y * screen.Scale, MidpointRounding.AwayFromZero) };
+    }
+
+    // ARC-UI-2614: a container of the map for the loot window (See Contents: no open attempt, a locked one shows its items too), null when the map has none.
+    private AreaInventoryTarget? SteamwovenLootTarget()
+    {
+        if (_areaSession is not { } session || _readyArea is not { } area || _inventoryHost?.Map(CurrentAreaMap) is not { } map) return null;
+        return area.Snapshot.Objects.Where(row => row.Scope == AreaScope.Core && row.Type == ContainerType && map.TryGetEntity(row.Key, out _))
+            .Select(row => _inventoryHost.Target(session, CurrentAreaMap, row.Key)).OfType<AreaInventoryTarget>()
+            .Where(target => target.Kind == AreaInventoryTargetKind.Container).OrderBy(target => target.Entity, StringComparer.Ordinal).FirstOrDefault();
+    }
+
+    // ARC-UI-2614: the barter model of the first speaker of the map's talk host that can trade, null when none can.
+    private AreaBarter? SteamwovenBarter()
+    {
+        if (_conversationHost is not { } host) return null;
+        for (var index = 0; index < host.Speakers.Count; index++)
+            if (BarterModel(host, AreaConversationState.EntityId(host.Speakers[index].Row), index, substitute: true, "ARC-UI-2614 steamwoven barter").Barter is { } barter) return barter;
+        return null;
+    }
+
+    // ARC-UI-2614: a readable written document without a use script (a book first), null when the map's data has none.
+    private WrittenDocument? SteamwovenReading()
+    {
+        if (_areaSession is not { } session || _readingData?.Data is not { } data) return null;
+        return data.Prototypes.OrderBy(p => p.Key).Where(p => !p.Value.UseScript && !p.Value.ItemSpell && ReadingKinds.Contains((WrittenSubtype)p.Value.Subtype))
+            .Select(p => (p.Value.Subtype, Document: session.QueryWrittenDocument(p.Value, data.Texts))).Where(p => p.Document is { Readable: true, Body.Count: > 0 })
+            .OrderBy(p => p.Subtype != (int)WrittenSubtype.Book).Select(p => p.Document).FirstOrDefault();
+    }
+
+    // The main menu opened over the game (root Main: Single Player, New Game), where the pre-made browser (420) and the new character window (421) open. The menu's music replaces the scene's sounds
+    // for the rest of the run (as it does when the owner opens the menu from play); the smoke's later checks do not depend on them.
+    private void SteamwovenOpenMenuWindow(int message, Action<bool, string> require)
+    {
+        if (MainMenuOpen) EndMainMenu("steamwoven smoke");
+        OpenMainMenu(MainMenuTexts(_arguments ?? _launchArguments!));
+        foreach (var press in new[] { 10, 50, message })
+        {
+            var index = _mainMenu is null ? -1 : _mainMenu.Shown.ToList().FindIndex(shown => shown.Message == press);
+            require(index >= 0, $"the main menu offers button {press} (window {_mainMenu?.Window})");
+            MainMenuCommand(() => _mainMenu!.Activate(index));
+        }
+    }
     private async Task VerifySteamwovenWindowsAsync(string tag, SteamwovenHudPlan? plan, AreaGameBarPanel panel, Func<int, Task> frames, Func<Task> waitPainted, Action<bool, string> require)
     {
-        var windows = new (string Name, Action Open, Func<bool> IsOpen, Action Close, Func<(Vector2 Origin, float Scale, int BodyTop)?> View)[]
+        for (var wait = 0; wait < 1800 && (_barterData is null || _readingData is null); wait++) { AdoptBarterData(); AdoptReadingData(); await frames(1); }
+        var windows = new SteamwovenWindowProbe[]
         {
-            ("inventory", () => OpenInventory(), () => InventoryOpen, EndInventory, () => _inventoryPanel is { } p ? (p.GridAreaForSelfTest.GetGlobalRect().Position, p.GridAreaForSelfTest.FrameScale, 0) : null),
-            ("sheet", OpenSheet, () => SheetOpen, EndSheet, () => _sheetPanel?.ArtViewForSelfTest is { } v ? (v.Position, v.Scale.X, 0) : null),
-            ("logbook", OpenLogbook, () => LogbookOpen, CloseLogbookByPlayer, () => _logbookPanel?.ArtViewForSelfTest is { } v ? (v.Position, v.Scale.X, 0) : null),
-            ("map", OpenWorldMap, () => WorldMapOpen, CloseWorldMapByPlayer, () => _worldMapPanel?.ArtViewForSelfTest is { } v ? (v.Position, v.Scale.X, 0) : null),
-            ("schematics", () => OpenSchematics(), () => SchematicsOpen, CloseSchematicsByPlayer, () => _schematicsPanel?.ArtViewForSelfTest is { } v ? (v.Position, v.Scale.X, 0) : null),
-            ("saves", () => OpenSaveList(AreaSaveListMode.Load), () => SaveListOpen, () => EndSaveList(), () => _saveListPanel?.ArtForSelfTest is { } v ? (v.Position, v.Scale.X, AreaShopArtLayout.Window.Y) : null),
+            new("inventory", () => OpenInventory(), () => InventoryOpen, EndInventory, () => _inventoryPanel is { } p ? (p.GridAreaForSelfTest.GetGlobalRect().Position, p.GridAreaForSelfTest.FrameScale) : null, ZoneBody),
+            new("sheet", OpenSheet, () => SheetOpen, EndSheet, () => _sheetPanel?.ArtViewForSelfTest is { } v ? (v.Position, v.Scale.X) : null, ZoneBody),
+            new("logbook", OpenLogbook, () => LogbookOpen, CloseLogbookByPlayer, () => _logbookPanel?.ArtViewForSelfTest is { } v ? (v.Position, v.Scale.X) : null, ZoneBody),
+            new("map", OpenWorldMap, () => WorldMapOpen, CloseWorldMapByPlayer, () => _worldMapPanel?.ArtViewForSelfTest is { } v ? (v.Position, v.Scale.X) : null, ZoneBody),
+            new("schematics", () => OpenSchematics(), () => SchematicsOpen, CloseSchematicsByPlayer, () => _schematicsPanel?.ArtViewForSelfTest is { } v ? (v.Position, v.Scale.X) : null, ZoneBody),
+            new("saves", () => OpenSaveList(AreaSaveListMode.Load), () => SaveListOpen, () => EndSaveList(), () => _saveListPanel?.ArtForSelfTest is { } v ? (v.Position, v.Scale.X) : null, ZoneScreen),
+            new("loot", () => { if (SteamwovenLootTarget() is { } target) OpenContainerContents(target); }, () => ContainerLootOpen, EndInventory,
+                () => _inventoryPanel is { } p ? (p.GridAreaForSelfTest.GetGlobalRect().Position, p.GridAreaForSelfTest.FrameScale) : null, ZoneBody),
+            new("barter", () => { if (SteamwovenBarter() is { } barter) OpenBarterWindow(barter); }, () => BarterOpen, CloseBarterByPlayer,
+                () => _barterPanel is { } p ? (p.GridAreaForSelfTest.GetGlobalRect().Position, p.GridAreaForSelfTest.FrameScale) : null, ZoneBody),
+            new("reading", () => { if (SteamwovenReading() is { } document) OpenReading(document, "steamwoven", replaceWindows: true); }, () => ReadingOpen, CloseReadingByPlayer,
+                () => _readingPanel?.ArtViewForSelfTest is { } v ? (v.Position, v.Scale.X) : null, ZoneReading),
+            new("premade", () => SteamwovenOpenMenuWindow(420, require), () => _mainMenu is { Window: AreaMenuWindow.PickCharacter }, () => EndMainMenu("steamwoven smoke"),
+                () => _mainMenuPanel is { PremadeArtMode: true } m ? (m.PremadeArtForSelfTest.Position, m.PremadeArtForSelfTest.Scale.X) : null, ZoneScreen),
+            new("newcharacter", () => SteamwovenOpenMenuWindow(421, require), () => _mainMenu is { Window: AreaMenuWindow.NewCharacter }, () => EndMainMenu("steamwoven smoke"),
+                () => _mainMenuPanel is { NewCharacterArtMode: true } m ? (m.NewCharacterArtForSelfTest.Position, m.NewCharacterArtForSelfTest.Scale.X) : null, ZoneScreen),
         };
-        foreach (var (name, open, isOpen, close, view) in windows)
+        foreach (var window in windows)
         {
-            if (isOpen()) close();
+            var name = window.Name;
+            if (window.IsOpen()) window.Close();
             await frames(2);
-            open();
+            window.Open();
             await frames(3);
-            if (!isOpen()) { GD.Print($"ARC-UI-2575 steamwoven window [{tag}] {name} did not open (not captured)"); continue; }
+            // With a plan (the layout checks) every window must open: the loot, barter and reading windows need a container, a trading NPC and a readable book of the map, which the smoke's map has.
+            if (!window.IsOpen())
+            {
+                require(plan is null, $"[{tag}] the {name} window opened (the map has no data for it?)");
+                GD.Print($"ARC-UI-2614 steamwoven window [{tag}] {name} did not open (not captured)");
+                continue;
+            }
             await waitPainted();
+            for (var wait = 0; wait < 600 && window.View() is null; wait++) await frames(1);
             await frames(2);
             if (plan is not null)
             {
-                require(view() is not null, $"[{tag}] the {name} window shows the original's look (a view to measure)");
-                var (origin, scale, bodyTop) = view()!.Value;
-                // A window that docks between the strips stands with its body in the zone; a screen (the save list) has its body at 41 units from the screen's top.
-                var expected = bodyTop > 0 ? SteamwovenWindowZone.Screen(plan, bodyTop) : SteamwovenWindowZone.Body(plan, 800, 400);
-                var (ex, ey) = (expected.X, expected.Y);
-                require(Math.Abs(scale - expected.Scale) < 0.002 && Math.Abs(origin.X - ex) <= 1.01 && Math.Abs(origin.Y - ey) <= 1.01,
-                    $"[{tag}] the {name} window is at the zone place ({ex:F1}, {ey:F1}) scale {expected.Scale:F4}, got ({origin.X:F1}, {origin.Y:F1}) scale {scale:F4}");
+                require(window.View() is not null, $"[{tag}] the {name} window shows the original's look (a view to measure)");
+                var (origin, scale) = window.View()!.Value;
+                var expected = window.Expected(plan);
+                require(Math.Abs(scale - expected.Scale) < 0.002 && Math.Abs(origin.X - expected.X) <= 1.01 && Math.Abs(origin.Y - expected.Y) <= 1.01,
+                    $"[{tag}] the {name} window is at the zone place ({expected.X:F1}, {expected.Y:F1}) scale {expected.Scale:F4}, got ({origin.X:F1}, {origin.Y:F1}) scale {scale:F4}");
                 GD.Print($"ARC-UI-2575 steamwoven window [{tag}] {name} origin=({origin.X:F1},{origin.Y:F1}) scale={scale:F4} zone={plan.Layout.WindowZone}");
             }
             await CaptureHudAsync("steamwoven-" + tag + "-" + name, frames);
-            close();
+            window.Close();
             await frames(3);
         }
     }
